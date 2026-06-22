@@ -109,12 +109,6 @@ void ConcurrentBlockManagerImpl::reset_prefix_cache() {
   inner_->reset_prefix_cache();
 }
 
-void ConcurrentBlockManagerImpl::get_merged_kvcache_event(
-    KvCacheEvent* event) const {
-  std::lock_guard<std::recursive_mutex> lock(mutex_);
-  inner_->get_merged_kvcache_event(event);
-}
-
 size_t ConcurrentBlockManagerImpl::num_blocks_in_prefix_cache() const {
   std::lock_guard<std::recursive_mutex> lock(mutex_);
   return inner_->num_blocks_in_prefix_cache();

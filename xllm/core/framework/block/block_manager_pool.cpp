@@ -40,10 +40,6 @@ BlockManagerPool::BlockManagerPool(const Options& options, int32_t dp_size)
       .block_size(options_.block_size())
       .enable_prefix_cache(options_.enable_prefix_cache())
       .enable_disagg_pd(options_.enable_disagg_pd())
-      .enable_cache_upload(options_.host_num_blocks() > 0
-                               ? false
-                               : options_.enable_cache_upload())
-      .enable_kvcache_store(options_.enable_kvcache_store())
       .sliding_window_size(options_.sliding_window_size())
       .swa_blocks_per_seq(options_.swa_blocks_per_seq())
       .max_tokens_per_batch(options_.max_tokens_per_batch())
@@ -319,12 +315,6 @@ void BlockManagerPool::cache(Sequence* sequence, size_t num_tokens) {
   // for shapes without a prefix-capable KV leaf (DSV4 / xtensor).
   static_cast<CompositeBlockManager*>(block_managers_[dp_rank].get())
       ->cache_for_sequence(sequence, num_tokens);
-}
-
-void BlockManagerPool::get_merged_kvcache_event(KvCacheEvent* event) const {
-  for (int32_t i = 0; i < block_managers_.size(); ++i) {
-    block_managers_[i]->get_merged_kvcache_event(event);
-  }
 }
 
 float BlockManagerPool::get_gpu_cache_usage_perc() const {

@@ -26,7 +26,7 @@ cc_library(
     # hierarchy_block_manager_pool.h
     sliding_window_block_manager.h
     composite_block_manager.h
-  SRCS 
+  SRCS
     block.cpp
     single_block_manager.cpp
     block_manager_pool.cpp

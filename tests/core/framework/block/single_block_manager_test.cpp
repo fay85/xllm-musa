@@ -79,8 +79,9 @@ TEST(SingleBlockManagerTest, PrefixCacheApisAreNotImplemented) {
 
   std::vector<Block> blocks = manager.allocate(1);
   ASSERT_EQ(blocks.size(), 1u);
-  EXPECT_DEATH(manager.cache(token_ids, blocks), "not implemented");
-  EXPECT_DEATH(manager.cache(blocks), "not implemented");
+  // cache() overloads should be safe no-ops.
+  EXPECT_NO_FATAL_FAILURE(manager.cache(token_ids, blocks));
+  EXPECT_NO_FATAL_FAILURE(manager.cache(blocks));
 }
 
 TEST(SingleBlockManagerTest, UsedBlocksAccountingRoundTrips) {

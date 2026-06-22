@@ -22,7 +22,6 @@ limitations under the License.
 #include "block_manager_impl.h"
 #include "concurrent_block_manager_impl.h"
 #include "core/framework/config/kv_cache_config.h"
-#include "framework/kv_cache/kv_cache_event.h"
 #include "framework/xtensor/xtensor_block_manager_impl.h"
 #include "single_block_manager.h"
 #include "sliding_window_block_manager.h"
@@ -378,14 +377,6 @@ void CompositeBlockManager::cache(const std::vector<Block>& /*blocks*/) {
 void CompositeBlockManager::reset_prefix_cache() {
   for (auto& [type, entry] : leaves_) {
     entry.leaf->reset_prefix_cache();
-  }
-}
-
-void CompositeBlockManager::get_merged_kvcache_event(
-    KvCacheEvent* event) const {
-  for (const auto& [type, entry] : leaves_) {
-    (void)type;
-    entry.leaf->get_merged_kvcache_event(event);
   }
 }
 

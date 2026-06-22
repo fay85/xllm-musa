@@ -63,8 +63,6 @@ class ConcurrentBlockManagerImpl : public BlockManager {
 
   void reset_prefix_cache() override;
 
-  void get_merged_kvcache_event(KvCacheEvent* event) const override;
-
   size_t num_blocks_in_prefix_cache() const override;
   size_t num_free_blocks() const override;
   size_t num_used_blocks() const override;

@@ -31,7 +31,6 @@ BlockManager::Options make_single_block_options(uint32_t num_blocks) {
   options.block_size(/*unused, one id == one block=*/1);
   options.enable_prefix_cache(false);
   options.enable_disagg_pd(false);
-  options.enable_cache_upload(false);
   options.block_type(BlockType::SINGLE);
   return options;
 }
@@ -97,11 +96,11 @@ void SingleBlockManager::cache(const Slice<int32_t>& /*token_ids*/,
                                size_t /*existed_shared_blocks_num*/,
                                const MMData& /*mm_data*/,
                                const Slice<XXH3Key>& /*block_hashes*/) {
-  NOT_IMPLEMENTED();
+  // Prefix cache is disabled in this manager: no-op.
 }
 
 void SingleBlockManager::cache(const std::vector<Block>& /*blocks*/) {
-  NOT_IMPLEMENTED();
+  // Prefix cache is disabled in this manager: no-op.
 }
 
 }  // namespace xllm

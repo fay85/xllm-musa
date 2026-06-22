@@ -82,8 +82,6 @@ class CompositeBlockManager : public BlockManager {
              const MMData& mm_data = MMData(),
              const Slice<XXH3Key>& block_hashes = {}) override;
   void cache(const std::vector<Block>& blocks) override;
-  void get_merged_kvcache_event(KvCacheEvent* event) const override;
-
   // RL sleep/wakeup: fan out to every leaf (non-prefix leaves are a no-op).
   void reset_prefix_cache() override;
 
