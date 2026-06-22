@@ -21,6 +21,7 @@ limitations under the License.
 
 #include "core/common/global_flags.h"
 #include "core/platform/device.h"
+#include "core/platform/platform.h"
 #include "core/util/utils.h"
 #include "flashinfer_workspace.h"
 #include "kernels/cuda/utils.h"
@@ -128,7 +129,7 @@ void update_prefill_plan_info(std::shared_ptr<PlanInfo> plan_info,
   VLOG(kGraphExecutorLogVerboseLevel)
       << "[FFI-TRACE] prefill plan() uri=" << plan_info->uri
       << " layer_id=" << plan_info->layer_id
-      << " sm90a=" << Device::is_support_sm90a()
+      << " sm90a=" << Platform::is_support_sm90a()
       << " enable_cuda_graph=" << enable_cuda_graph
       << " total_num_rows=" << total_num_rows
       << " batch_size=" << batch_size << " num_qo_heads=" << num_qo_heads
@@ -139,7 +140,7 @@ void update_prefill_plan_info(std::shared_ptr<PlanInfo> plan_info,
     // For sm90 architecture, the plan function doesn't accept
     // fixed_split_size / disable_split_kv / num_colocated_ctas
     plan_result =
-        Device::is_support_sm90a()
+        Platform::is_support_sm90a()
             ? plan_func(float_workspace_buffer,
                         int_workspace_buffer,
                         page_locked_int_workspace_buffer,

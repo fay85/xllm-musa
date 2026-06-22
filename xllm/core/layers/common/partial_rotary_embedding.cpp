@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "kernels/ops_api.h"
 #include "platform/device.h"
+#include "platform/platform.h"
 namespace xllm {
 namespace layer {
 

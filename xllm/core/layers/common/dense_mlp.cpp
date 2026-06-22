@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "kernels/ops_api.h"
 #include "platform/device.h"
+#include "platform/platform.h"
 
 namespace xllm {
 namespace layer {
@@ -102,7 +103,7 @@ torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
     return down_proj_->forward(gate_up);
   } else {
     torch::Tensor output;
-    if (Device::type_str() != "npu") {
+    if (!Platform::is_npu()) {
       const int64_t batch_size = gate_up.size(0);
       const int64_t out_features =
           intermediate_size_ / process_group_->world_size();
