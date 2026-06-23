@@ -107,7 +107,10 @@ void ModelContext::derive_optimization_config() {
 
   // determine whether to enable fused kernel based on backend
   std::string backend = Device::type_str();
-  if (backend == "mlu") {
+  if (backend == "dcu") {
+    // DCU currently uses the unfused speculative sampling path.
+    optimization_config_.enable_fused_spec_kernel = false;
+  } else if (backend == "mlu") {
     // TODO: enable fused spec kernel for mlu backend
     // The current implementation of fused spec kernel is not stable.
     optimization_config_.enable_fused_spec_kernel = false;
