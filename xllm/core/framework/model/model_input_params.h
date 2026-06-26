@@ -914,6 +914,7 @@ struct GraphInput {
 #if defined(USE_NPU)
   std::shared_ptr<npu::AclGraphTaskUpdateContext> acl_graph_task_update_context;
 #endif
+  torch::Tensor input_tokens_override;
 
   GraphInput to(const torch::Device& device) const {
     GraphInput out;
@@ -928,6 +929,8 @@ struct GraphInput {
 #if defined(USE_NPU)
     out.acl_graph_task_update_context = acl_graph_task_update_context;
 #endif
+    out.input_tokens_override =
+        safe_to(input_tokens_override, device, /*non_blocking=*/true);
     return out;
   }
 };
