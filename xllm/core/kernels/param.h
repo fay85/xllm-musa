@@ -1578,6 +1578,7 @@ struct CausalConv1dUpdateParams {
   int32_t pad_slot_id = -1;
   std::optional<torch::Tensor> block_idx_last_scheduled_token;
   std::optional<torch::Tensor> initial_state_idx;
+  std::optional<torch::Tensor> initial_state_mode;
   bool validate_data = false;
   // Optional pre-allocated output buffer [num_tokens, dim] in input dtype.
   // Required for CUDA/MUSA graph capture: when present, the kernel writes
