@@ -256,6 +256,9 @@ torch::Tensor mate_gated_delta_rule_decode(
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
+std::pair<torch::Tensor, torch::Tensor> mega_chunk_gdn(
+    MegaChunkGdnParams& params);
+
 torch::Tensor recurrent_gated_delta_rule(
     const torch::Tensor& query,
     const torch::Tensor& key,
