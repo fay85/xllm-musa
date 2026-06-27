@@ -493,6 +493,26 @@ int run() {
   return 0;
 }
 
+#if defined(XLLM_TORCH_MUSA)
+// torch_musa registers its PrivateUse1 (musa) backend hooks lazily inside
+// at::detail::getMUSAHooks() (guarded by call_once). When xLLM runs as a pure
+// C++ binary the torch_musa Python module is never imported, so that
+// registration never runs and the first MUSA tensor allocation aborts with
+// "Please register PrivateUse1HooksInterface ...". Trigger it explicitly.
+namespace at {
+struct MUSAHooksInterface;
+namespace detail {
+const MUSAHooksInterface& getMUSAHooks();
+}  // namespace detail
+}  // namespace at
+namespace {
+void xllm_musa_backend_init() {
+  (void)at::detail::getMUSAHooks();
+  LOG(INFO) << "[xllm_musa_backend_init] registered torch_musa PrivateUse1 hooks";
+}
+}  // namespace
+#endif
+
 int main(int argc, char** argv) {
   // Check for --help flag before parsing other flags
   for (int i = 1; i < argc; ++i) {
@@ -507,6 +527,9 @@ int main(int argc, char** argv) {
   FLAGS_minloglevel = 0;
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging("xllm");
+#if defined(XLLM_TORCH_MUSA)
+  xllm_musa_backend_init();
+#endif
   initialize_configs();
 
   // Check if model path is provided

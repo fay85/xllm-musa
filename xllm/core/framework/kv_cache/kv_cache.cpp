@@ -127,27 +127,27 @@ std::vector<KVCacheTensor> KVCache::get_cache_tensors() const {
 
   const torch::Tensor key_cache = get_k_cache();
   if (key_cache.defined() && key_cache.numel() > 0) {
-    tensors.emplace_back(KVCacheTensorRole::KEY, key_cache);
+    tensors.push_back(KVCacheTensor{KVCacheTensorRole::KEY, key_cache});
   }
 
   const torch::Tensor value_cache = get_v_cache();
   if (value_cache.defined() && value_cache.numel() > 0) {
-    tensors.emplace_back(KVCacheTensorRole::VALUE, value_cache);
+    tensors.push_back(KVCacheTensor{KVCacheTensorRole::VALUE, value_cache});
   }
 
   const torch::Tensor index_cache = get_index_cache();
   if (index_cache.defined() && index_cache.numel() > 0) {
-    tensors.emplace_back(KVCacheTensorRole::INDEX, index_cache);
+    tensors.push_back(KVCacheTensor{KVCacheTensorRole::INDEX, index_cache});
   }
 
   const torch::Tensor conv_cache = get_conv_cache();
   if (conv_cache.defined() && conv_cache.numel() > 0) {
-    tensors.emplace_back(KVCacheTensorRole::CONV, conv_cache);
+    tensors.push_back(KVCacheTensor{KVCacheTensorRole::CONV, conv_cache});
   }
 
   const torch::Tensor ssm_cache = get_ssm_cache();
   if (ssm_cache.defined() && ssm_cache.numel() > 0) {
-    tensors.emplace_back(KVCacheTensorRole::SSM, ssm_cache);
+    tensors.push_back(KVCacheTensor{KVCacheTensorRole::SSM, ssm_cache});
   }
 
   return tensors;

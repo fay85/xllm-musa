@@ -92,11 +92,24 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
       }
     }
 
+#if defined(USE_CUDA) || defined(USE_MUSA)
+    // CUDA/MUSA: let FlashInfer apply causal masking internally. Passing the
+    // 2D mask from build_attention_mask() incorrectly enables the eager
+    // custom-mask path and breaks prefill (expand shape mismatch).
+    // Graph capture/replay supplies pre-built AttentionMetadata; rebuilding
+    // here would call graph-unsafe ops during capture.
+    layer::AttentionMetadata attn_metadata =
+        input_params.attn_metadata
+            ? *(input_params.attn_metadata)
+            : layer::AttentionMetadataBuilder::build(input_params,
+                                                     model_args_.enable_mla());
+#else
     layer::AttentionMetadata attn_metadata =
         layer::AttentionMetadataBuilder::build(
             input_params,
             model_args_.enable_mla(),
             build_attention_mask(input_params));
+#endif
     torch::Tensor h;
     if (input_params.embedding.input_embedding.defined()) {
       h = input_params.embedding.input_embedding;
@@ -112,6 +125,17 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
 
     std::optional<torch::Tensor> residual = std::nullopt;
     for (size_t i = 0; i < layers_.size(); i++) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+      if (attn_metadata.plan_info != nullptr) {
+        attn_metadata.plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.shared_plan_info != nullptr) {
+        attn_metadata.shared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.unshared_plan_info != nullptr) {
+        attn_metadata.unshared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+#endif
       auto& layer = layers_[i];
       h = layer->forward(h,
                          residual,

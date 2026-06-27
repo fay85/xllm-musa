@@ -351,6 +351,19 @@ struct AttentionHostInput {
   std::vector<int32_t> ring_cur_seqlen;
   std::vector<int32_t> ring_cache_seqlen;
   torch::Tensor block_tables;
+
+  // CPU mirrors of the paged-KV index tensors below. They are populated by the
+  // input builder at the same time as the device tensors (cheap: the source is
+  // a std::vector that already lives on host) and are kept alive across the
+  // input -> ModelInputParams::to(device) hop. Downstream attention metadata
+  // builders consume them via attention.host.paged_kv_* without any D2H sync.
+  // The Mate FFI batch_decode bridge consumes the host pointers directly (it
+  // requires kDLCPU for these three tensors), so this avoids 48 implicit
+  // .to(kCPU) per output token on Qwen3.5-27B (16 full-attn layers x 3 tensors)
+  // and unblocks the CUDA graph capture path which forbids host syncs entirely.
+  torch::Tensor paged_kv_indptr;
+  torch::Tensor paged_kv_indices;
+  torch::Tensor paged_kv_last_page_len;
 };
 
 struct AttentionDeviceInput {
@@ -803,6 +816,12 @@ struct ParallelInput {
   std::vector<int64_t> query_start_loc;
   std::vector<int64_t> has_initial_state;
 #endif
+#if defined(USE_CUDA)
+  // Linear-attention (Qwen3.5 gated delta net) host metadata, mirrored from the
+  // NPU path so the torch_musa fallback kernels can consume them.
+  std::vector<int64_t> query_start_loc;
+  std::vector<int64_t> has_initial_state;
+#endif
 
   ParallelInput to(const torch::Device& device) const {
     ParallelInput out;
@@ -838,6 +857,10 @@ struct ParallelInput {
 #if defined(USE_NPU)
     out.layers_per_bacth_copy = layers_per_bacth_copy;
     out.layer_wise_load_synchronizer = layer_wise_load_synchronizer;
+    out.query_start_loc = query_start_loc;
+    out.has_initial_state = has_initial_state;
+#endif
+#if defined(USE_CUDA)
     out.query_start_loc = query_start_loc;
     out.has_initial_state = has_initial_state;
 #endif

@@ -115,6 +115,23 @@ struct AttentionMetadata {
   // cache. Since pages are fixed-size (block_size), the last page may be
   // partially filled. Shape: [batch_size]. Type: int32.
   torch::Tensor paged_kv_last_page_len;
+
+  // Host (CPU) mirrors of the three paged_kv tensors above. These are the same
+  // CPU tensors that the input builder constructed from std::vector<int32_t>
+  // sources (see batch_input_builder.cpp's paged_kv_*_cpu and the matching
+  // attention.host fields) before ModelInputParams::to(device) copied a device
+  // version into attention.device. Plumbing them through AttentionMetadata
+  // here is a zero-cost handoff (shared TensorImpl, no D2H) and lets the Mate
+  // FFI batch_decode bridge consume kDLCPU pointers without 48 implicit
+  // per-token .to(kCPU) syncs on Qwen3.5-27B. Also a prerequisite for CUDA
+  // graph capture of decode (host syncs would otherwise abort capture). Left
+  // undefined when the input builder did not populate attention.host.*; in
+  // that case the batch_decode wrapper falls back to a lazy .to(kCPU) so
+  // legacy paths keep working.
+  torch::Tensor paged_kv_indptr_host;
+  torch::Tensor paged_kv_indices_host;
+  torch::Tensor paged_kv_last_page_len_host;
+
   // Query/Output index pointer tensor for decode mode with tensor core.
   // Similar to row_splits in ragged tensor: cumulative sum of sequence lengths.
   // qo_indptr[i] is the start index of sequence i in the packed query/output

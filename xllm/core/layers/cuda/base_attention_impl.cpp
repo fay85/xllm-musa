@@ -33,6 +33,13 @@ BaseAttentionImpl::BaseAttentionImpl(int64_t num_heads,
   // we only support bf16 kvcache for now
   decode_use_tensor_core_ = xllm::kernel::cuda::should_use_tensor_core(
       /*kv_cache_dtype=*/torch::ScalarType::BFloat16, num_heads, num_kv_heads);
+#ifdef XLLM_TORCH_MUSA
+  // MUSA/Mate FlashInfer does not support the tensor-core decode path
+  // (paged_run on prefill URI throws "Back optional access" for decode
+  // shapes). Force the dedicated decode URI ("run" on batch_decode_*) which
+  // matches the working 0526 reference path.
+  decode_use_tensor_core_ = false;
+#endif
 }
 
 }  // namespace layer

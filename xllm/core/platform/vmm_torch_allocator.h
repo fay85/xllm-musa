@@ -26,6 +26,11 @@ limitations under the License.
 
 #include "shared_vmm_allocator.h"
 
+#if defined(XLLM_TORCH_MUSA)
+#pragma push_macro("cuda")
+#undef cuda
+#endif
+
 namespace xllm {
 
 /**
@@ -299,6 +304,10 @@ class VMMTorchAllocator
   size_t total_allocated_ = 0;  // Total bytes allocated (for logging)
   size_t alloc_count_ = 0;      // Number of allocations (for logging)
 };
+
+#if defined(XLLM_TORCH_MUSA)
+#pragma pop_macro("cuda")
+#endif
 
 }  // namespace xllm
 

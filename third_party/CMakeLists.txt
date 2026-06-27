@@ -4,7 +4,18 @@ add_subdirectory(sentencepiece)
 add_subdirectory(minja)
 add_subdirectory(brpc)
 add_subdirectory(smhasher/src)
+# mcc_wrapper: suppress sign-conversion noise in cpprestsdk (see 0526).
+if(USE_CUDA AND XLLM_TORCH_MUSA)
+  set(_XLLM_CXX_FLAGS_BEFORE_CPPREST "${CMAKE_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-sign-conversion -Wno-error=sign-conversion -w")
+endif()
 add_subdirectory(cpprestsdk)
+if(USE_CUDA AND XLLM_TORCH_MUSA)
+  set(CMAKE_CXX_FLAGS "${_XLLM_CXX_FLAGS_BEFORE_CPPREST}")
+  if(TARGET cpprest)
+    target_compile_options(cpprest PRIVATE -Wno-sign-conversion -Wno-error=sign-conversion -w)
+  endif()
+endif()
 set(CPPREST_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/cpprestsdk/Release/include)
 set(CPPREST_LIB ${CMAKE_BINARY_DIR}/third_party/cpprestsdk/Release/Binaries/libcpprest.a)
 
@@ -24,6 +35,8 @@ add_subdirectory(spdlog)
 if(USE_NPU)
   add_subdirectory(torch_npu_ops)
 endif()
+
+# XLLM_TORCH_MUSA: mcc_wrapper is set in root CMakeLists.txt before project().
 add_subdirectory(Mooncake)
 
 target_include_directories(mooncake_store PUBLIC

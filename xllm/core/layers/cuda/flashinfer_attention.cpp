@@ -342,7 +342,10 @@ void FlashInferAttentionImpl::decoder_forward(
                                    output,
                                    output_lse,
                                    decode_use_tensor_core_,
-                                   attn_metadata.qo_indptr);
+                                   attn_metadata.qo_indptr,
+                                   attn_metadata.paged_kv_indptr_host,
+                                   attn_metadata.paged_kv_indices_host,
+                                   attn_metadata.paged_kv_last_page_len_host);
 }
 
 }  // namespace layer

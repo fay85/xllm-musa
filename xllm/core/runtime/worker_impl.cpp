@@ -28,7 +28,7 @@ limitations under the License.
 #include "kernels/npu/xllm_ops/xllm_ops_api.h"
 #elif defined(USE_MLU)
 #include <framework/core/caching_allocator.h>
-#elif defined(USE_CUDA) || defined(USE_ILU)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
 #include <c10/cuda/CUDACachingAllocator.h>
 #endif
 
@@ -54,8 +54,20 @@ limitations under the License.
 #if defined(USE_NPU)
 #include "platform/npu/device_capture_lock.h"
 #elif defined(USE_CUDA) || defined(USE_DCU)
+#if defined(XLLM_TORCH_MUSA)
+namespace xllm::kernel::cuda {
+void block_copy(torch::Tensor key_cache_ptrs,
+                torch::Tensor value_cache_ptrs,
+                torch::Tensor src_block_indices,
+                torch::Tensor dst_block_indices,
+                torch::Tensor cum_sum,
+                int64_t numel_per_block,
+                torch::ScalarType cache_dtype);
+}
+#else
 #include "kernels/cuda/cuda_ops_api.h"
 #include "platform/cuda_profiler.h"
+#endif
 #include "platform/torch_profiler.h"
 #endif
 #include "core/distributed_runtime/master.h"
@@ -154,7 +166,7 @@ void ensure_forward_input_device_tensors(ForwardInput& input,
                                   device);
 }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_CUDA)
 void prepare_input_params_for_linear_attention(ModelInputParams& input_params) {
   const std::vector<int32_t>& host_q_seq_lens =
       input_params.attention.host.q_seq_lens;
@@ -881,6 +893,11 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
       prepare_input_params_for_linear_attention(processed_input.input_params);
     }
 #endif
+#if defined(USE_CUDA)
+    if (has_linear_attention_layers(context_.get_model_args())) {
+      prepare_input_params_for_linear_attention(processed_input.input_params);
+    }
+#endif
   };
 
   prepare_device_on_stream();
@@ -1127,8 +1144,13 @@ bool WorkerImpl::start_profile() {
 #if defined(USE_CUDA)
   const auto& cfg = ProfileConfig::get_instance();
   if (cfg.profile_backend() == "cuda") {
+#if defined(XLLM_TORCH_MUSA)
+    LOG(WARNING) << "CudaProfiler is not available with XLLM_TORCH_MUSA; use torch backend.";
+    return false;
+#else
     // Capture-range only; requires the server to run under nsys.
     return CudaProfiler::get_instance().start();
+#endif
   }
   // Default "torch" backend records in-process via Kineto. CPU-op capture uses
   // thread-local callbacks, so enable it on the compute thread that runs the
@@ -1149,7 +1171,11 @@ bool WorkerImpl::stop_profile() {
 #if defined(USE_CUDA)
   const auto& cfg = ProfileConfig::get_instance();
   if (cfg.profile_backend() == "cuda") {
+#if defined(XLLM_TORCH_MUSA)
+    return false;
+#else
     return CudaProfiler::get_instance().stop();
+#endif
   }
   const std::string profile_dir = cfg.profile_dir();
   const int32_t rank = parallel_args_.rank();

@@ -46,6 +46,18 @@ cc_test(
 
 cc_test(
   NAME
+    fused_gdn_decode_test
+  SRCS
+    fused_gdn_decode_test.cpp
+  DEPS
+    :cuda_kernels
+    torch
+    GTest::gtest_main
+    glog::glog
+)
+
+cc_test(
+  NAME
     cutlass_scaled_mm_test
   SRCS
     cutlass_scaled_mm_test.cpp

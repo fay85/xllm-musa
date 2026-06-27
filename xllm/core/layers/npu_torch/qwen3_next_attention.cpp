@@ -126,6 +126,31 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
 
 torch::Tensor Qwen3NextAttentionImpl::build_mrope_cos_sin(
     const torch::Tensor& positions) const {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  // The fused split_qkv_rmsnorm_mrope kernel is currently NPU-only via
+  // TileLang -- `has_split_qkv_rmsnorm_mrope_specialization()` returns false
+  // on USE_CUDA + XLLM_TORCH_MUSA (see ops_api.cpp), so `use_fused_qkv_` is
+  // always false on this platform and the precomputed mrope_cos_sin tensor
+  // produced here is never consulted by forward() -- it falls through to the
+  // standalone `rotary_emb_->forward(positions, q, k)` path instead.
+  //
+  // Returning an undefined tensor short-circuits the per-step host gather
+  // (`cos_sin_cache.permute().contiguous().index_select(...)`) which would
+  // otherwise issue at::musa::IndexSelect -> EmptyMUSA inside a captured
+  // MUSA stream and abort with
+  //   "operation not permitted when stream is capturing".
+  //
+  // The caller loop in Qwen3HybridModelImplBase::forward keeps an undefined
+  // mrope_cos_sin and propagates it through every layer's forward, where
+  // each Qwen3NextAttentionImpl::forward only reads `mrope_cos_sin` from
+  // inside `if (use_fused_qkv_) { ... }`; the value is therefore never
+  // dereferenced. When the MUSA tilelang specialization lands we should
+  // revisit this and route through persistent buffers + a custom gather
+  // kernel that does not call EmptyMUSA.
+  if (!use_fused_qkv_) {
+    return {};
+  }
+#endif
   auto cos_sin_cache = rotary_emb_->get_cos_sin_cache();
   if (positions.dim() == 1) {
     return cos_sin_cache.index_select(0, positions).repeat({1, 3});
@@ -196,7 +221,27 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
   auto out = std::get<0>(attn_->forward(attn_metadata, q, k, v, kv_cache));
 
   if (attn_output_gate_) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+    // Capture-safe gating: `torch::sigmoid(gate)` allocates via
+    // `empty_like(gate)` -> EmptyMUSA (forbidden mid-stream-capture), and
+    // `out * sigmoid_result` allocates again. Replace with two purely
+    // elementwise in-place kernels:
+    //   * `gate.sigmoid_()`  -- writes back into `gate`, a view of the
+    //     ColumnParallelLinear persistent qkv buffer. Safe because `gate`
+    //     is not consumed again in this function (and the persistent
+    //     qkv buffer is rewritten on every forward by qkv_proj_).
+    //   * `out.mul_(gate)`   -- modifies the AttentionImpl persistent
+    //     output buffer slice in place; the next layer's attn_->forward
+    //     overwrites that slot before any other consumer reads it.
+    // Both ops are pure elementwise kernels with no host-side allocation.
+    // Neither sglang nor xllm-musa fuses this on torch_musa; sglang relies
+    // on libtorch's MemPoolContext-aware allocator (not honoured by
+    // torch_musa 2.7.1) to put the implicit allocations in the captured
+    // pool, so on this stack we have to bypass them entirely.
+    out.mul_(gate.sigmoid_());
+#else
     out = out * torch::sigmoid(gate);
+#endif
   }
   return o_proj_->forward(out);
 }

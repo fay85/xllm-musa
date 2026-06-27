@@ -372,12 +372,27 @@ ForwardInput RecMultiRoundBatchInputBuilder::state_to_forward_input() {
       torch::tensor(state.new_token_slot_ids, torch::kInt);
 
   // for flashinfer
-  input_params.attention.device.paged_kv_indptr =
+  // Stash the CPU tensor into both attention.host (kept on host across
+  // ModelInputParams::to(device)) and attention.device (later moved to the
+  // target device). The host mirror lets AttentionMetadataBuilder hand CPU
+  // pointers to the Mate FFI batch_decode bridge without paying a per-layer
+  // D2H sync. See batch_input_builder.cpp for the matching change.
+  auto paged_kv_indptr_cpu =
       torch::tensor(state.paged_kv_indptr, torch::kInt);
-  input_params.attention.device.paged_kv_indices =
+  auto paged_kv_indices_cpu =
       torch::tensor(state.paged_kv_indices, torch::kInt);
-  input_params.attention.device.paged_kv_last_page_len =
+  auto paged_kv_last_page_len_cpu =
       torch::tensor(state.paged_kv_last_page_len, torch::kInt);
+  input_params.attention.host.paged_kv_indptr = paged_kv_indptr_cpu;
+  input_params.attention.host.paged_kv_indices = paged_kv_indices_cpu;
+  input_params.attention.host.paged_kv_last_page_len =
+      paged_kv_last_page_len_cpu;
+  input_params.attention.device.paged_kv_indptr =
+      std::move(paged_kv_indptr_cpu);
+  input_params.attention.device.paged_kv_indices =
+      std::move(paged_kv_indices_cpu);
+  input_params.attention.device.paged_kv_last_page_len =
+      std::move(paged_kv_last_page_len_cpu);
 
   // Setup multimodal data
   input_params.multimodal.mm_data.batch(mm_data_vec_);

@@ -42,6 +42,17 @@ class Qwen3NextRMSNormImpl : public torch::nn::Module {
   DEFINE_WEIGHT(weight);
   int64_t norm_dim_;
   double eps_;
+
+  // Persistent output buffer for the no-residual path. We pre-allocate this
+  // on the first forward() call (which happens during warmup, OUTSIDE the
+  // CUDA graph capture region) and reuse it for every subsequent call. This
+  // is required for MUSA graph capture safety on torch_musa 2.7.1, where
+  // calling `EmptyStridedMUSA` mid-capture raises "operation not permitted
+  // when stream is capturing" -- the allocator is not capture-aware. The
+  // buffer is grown on demand if a later call sees a larger shape (only
+  // possible during eager prefill / warmup; once the largest decode bucket
+  // has run, no further growth happens during capture).
+  mutable torch::Tensor norm_out_buf_;
 };
 TORCH_MODULE(Qwen3NextRMSNorm);
 

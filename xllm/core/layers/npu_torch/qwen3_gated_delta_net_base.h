@@ -21,8 +21,9 @@ limitations under the License.
 #include <tuple>
 #include <utility>
 
-#include "attention.h"
+#include "layers/common/attention.h"
 #include "framework/kv_cache/kv_cache.h"
+#include "framework/model/model_input_params.h"
 #include "framework/model/model_args.h"
 #include "framework/parallel_state/parallel_args.h"
 #include "framework/quant_args.h"
@@ -92,6 +93,36 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
 
   DEFINE_WEIGHT(dt_bias);
   DEFINE_WEIGHT(A_log);
+
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  // Persistent output buffers consumed by xllm::kernel::
+  // fused_qkvzba_split_reshape_cat in lieu of the libtorch
+  // `reshape().contiguous() ... torch::cat()` chain. Same lazy / grow-only
+  // pattern used by ColumnParallelLinearImpl::output_buf_ and
+  // AttentionImpl::output_buf_: sized on the first forward (during graph
+  // warmup), reused on every replay via narrow() views. Eager calls also
+  // benefit (one allocation per process instead of per-step).
+  mutable torch::Tensor mixed_qkv_out_buf_;
+  mutable torch::Tensor z_out_buf_;
+  mutable torch::Tensor b_out_buf_;
+  mutable torch::Tensor a_out_buf_;
+
+  // Persistent output buffer for the decode-path causal_conv1d_update call.
+  // Without this, the kernel falls through to its libtorch slow path
+  // (`weight.to(fp32)` / `x.to(fp32)` / `torch::empty_like(x_f32)`) which
+  // triggers EmptyStridedMUSA -> MUSA stream-capture abort. Providing a
+  // pre-allocated buffer unlocks the in-house `causal_conv1d_decode_fused`
+  // fast path (see gdn_ops.cpp::causal_conv1d_update fast-path guard).
+  mutable torch::Tensor conv1d_decode_out_buf_;
+
+  // Persistent output buffer for the in-house fused_gated_delta_rule_decode
+  // kernel. Wired into `MateGatedDeltaRuleDecodeParams::decode_output` so
+  // the kernel skips its `torch::empty({B, Hv, V}, ...)` fallback (which
+  // hits EmptyMUSA mid-capture) and writes directly into pre-allocated
+  // storage. Reused across replays; same lazy / grow-only contract as the
+  // other graph-safe buffers above.
+  mutable torch::Tensor fused_gdn_decode_out_buf_;
+#endif
 };
 
 }  // namespace layer

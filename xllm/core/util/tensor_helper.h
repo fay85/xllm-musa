@@ -22,7 +22,6 @@ limitations under the License.
 #include <algorithm>
 #include <fstream>
 #include <optional>
-#include <source_location>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -83,10 +82,11 @@ inline void print_tensor(
     int num = 10,
     bool part = true,
     bool print_value = true,
-    const std::source_location& loc = std::source_location::current()) {
+    const char* file = __builtin_FILE(),
+    int line = __builtin_LINE()) {
   auto& log_stream =
       google::LogMessage(
-          loc.file_name(), static_cast<int>(loc.line()), google::GLOG_INFO)
+          file, line, google::GLOG_INFO)
           .stream();
   if (!tensor.defined()) {
     log_stream << tensor_name << ", Undefined tensor." << std::endl;
@@ -358,7 +358,7 @@ inline torch::Tensor get_tensor_from_blob(const std::vector<int64_t>& dims,
 #elif defined(USE_CUDA) || defined(USE_MLU)
   auto options = torch::TensorOptions()
                      .dtype(dtype)
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)
                      .device(torch::kCUDA)
 #else
                      .device(torch::kPrivateUse1)
@@ -381,7 +381,7 @@ inline torch::Tensor get_tensor_from_blob(const std::vector<int64_t>& dims,
 
   auto options = torch::TensorOptions()
                      .dtype(dtype)
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)
                      .device(torch::kCUDA)
 #else
                      .device(torch::kPrivateUse1)

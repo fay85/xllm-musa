@@ -19,6 +19,7 @@ limitations under the License.
 #include <c10/core/TensorOptions.h>
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <c10/cuda/CUDAGuard.h>
+#include <cuda_runtime_api.h>
 #include <glog/logging.h>
 #include <torch/torch.h>
 
@@ -36,10 +37,10 @@ limitations under the License.
 #include "core/layers/cuda/flashinfer_planinfo.h"
 #include "core/layers/cuda/xattention_planinfo.h"
 #include "core/platform/cuda/device_capture_lock.h"
-#include "core/platform/device.h"
+#if !defined(XLLM_TORCH_MUSA)
 #include "core/platform/shared_vmm_allocator.h"
-#include "core/platform/stream.h"
 #include "core/platform/vmm_torch_allocator.h"
+#endif
 #include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
 #include "kernels/cuda/global_capture_instance.h"
@@ -98,9 +99,33 @@ size_t get_allocator_reserved_bytes(c10::DeviceIndex device_index) {
   return static_cast<size_t>(device_stats.reserved_bytes[stat_index].current);
 }
 
-bool is_cuda_contiguous_int32_tensor(const torch::Tensor& tensor) {
-  return tensor.defined() && tensor.is_cuda() &&
-         tensor.scalar_type() == torch::kInt32 && tensor.is_contiguous();
+// Accepts CUDA / torch_musa tensors of either int32 OR int64 dtype. Returns
+// true iff the tensor is suitable for the LLM-decode fast path (we'll cast
+// any int64 input down to int32 inside the fast-path host wrapper before the
+// kernel call). int64 acceptance is necessary because PyTorch's default
+// integer dtype is int64, and torch_musa returns positions / tokens as int64
+// without an explicit cast at the upstream metadata-builder boundary -- the
+// values are tiny (positions <= max_position_embeddings, vocab ids, block
+// ids) and always fit in int32, but the containers come in 8-byte.
+//
+// Without this relaxation the fast path was always rejected in graph mode on
+// torch_musa, forcing the slow path's per-call `.slice(0, 0, N).copy_(...)`
+// chain for the persistent paged-KV mirrors (correct functionally but adds
+// a per-layer-per-step host overhead).
+bool is_cuda_contiguous_int_tensor(const torch::Tensor& tensor) {
+  if (!tensor.defined() || !tensor.is_contiguous()) {
+    return false;
+  }
+  const auto sc = tensor.scalar_type();
+  if (sc != torch::kInt32 && sc != torch::kInt64) {
+    return false;
+  }
+  // Accept CUDA tensors as well as torch_musa's MUSA tensors. On torch_musa
+  // 2.7/2.9 the MUSA backend uses device_type=PrivateUse1, so `is_cuda()`
+  // returns false and the legacy check would unconditionally fall back to
+  // the slow path.
+  const auto dt = tensor.device().type();
+  return dt == c10::DeviceType::CUDA || dt == c10::DeviceType::PrivateUse1;
 }
 
 }  // namespace
@@ -198,20 +223,19 @@ bool CudaGraphPersistentParam::can_use_llm_decode_fast_path(
     const torch::Tensor& positions,
     const ModelInputParams& params) const {
   if (!params.meta.batch_forward_type.is_decode() ||
-      is_rec_multi_round_mode() || params.has_llmrec_params() ||
-      params.embedding.input_embedding.defined()) {
+      is_rec_multi_round_mode() || params.has_llmrec_params()) {
     return false;
   }
-  return is_cuda_contiguous_int32_tensor(tokens) &&
-         is_cuda_contiguous_int32_tensor(positions) &&
-         is_cuda_contiguous_int32_tensor(
+  return is_cuda_contiguous_int_tensor(tokens) &&
+         is_cuda_contiguous_int_tensor(positions) &&
+         is_cuda_contiguous_int_tensor(
              params.attention.device.new_cache_slots) &&
-         is_cuda_contiguous_int32_tensor(params.attention.device.kv_seq_lens) &&
-         is_cuda_contiguous_int32_tensor(
+         is_cuda_contiguous_int_tensor(params.attention.device.kv_seq_lens) &&
+         is_cuda_contiguous_int_tensor(
              params.attention.device.paged_kv_indptr) &&
-         is_cuda_contiguous_int32_tensor(
+         is_cuda_contiguous_int_tensor(
              params.attention.device.paged_kv_indices) &&
-         is_cuda_contiguous_int32_tensor(
+         is_cuda_contiguous_int_tensor(
              params.attention.device.paged_kv_last_page_len);
 }
 
@@ -224,21 +248,45 @@ void CudaGraphPersistentParam::update_llm_decode_metadata_fast_path(
     int64_t actual_num_tokens) {
   CHECK_GE(actual_batch_size, 0) << "actual_batch_size must be >= 0";
   CHECK_GE(actual_num_tokens, 0) << "actual_num_tokens must be >= 0";
-  const int64_t actual_indices_size =
-      params.attention.device.paged_kv_indices.size(0);
+
+  // The fast-path kernel reads all metadata as `int32_t*` (small indices --
+  // block ids, positions, vocab ids, etc. always fit in int32, and int32
+  // halves the metadata bandwidth + register pressure in the captured
+  // attention loop). On torch_musa positions / tokens / paged_kv_* may arrive
+  // as int64 (PyTorch's default integer dtype). Cast eagerly here, before
+  // graph capture/replay, so the captured forward sees a stable int32
+  // device pointer with valid data. The cast tensors are small (worst case
+  // `bucket_num_tokens` ints, ~tens of bytes per step for decode bucket=1)
+  // and allocated outside any captured region.
+  auto to_int32 = [](const torch::Tensor& t) -> torch::Tensor {
+    if (!t.defined() || t.scalar_type() == torch::kInt32) {
+      return t;
+    }
+    return t.to(torch::kInt32);
+  };
+  const torch::Tensor tokens_i32 = to_int32(tokens);
+  const torch::Tensor positions_i32 = to_int32(positions);
+  const torch::Tensor new_cache_slots_i32 =
+      to_int32(params.attention.device.new_cache_slots);
+  const torch::Tensor kv_seq_lens_i32 =
+      to_int32(params.attention.device.kv_seq_lens);
+  const torch::Tensor paged_kv_indptr_i32 =
+      to_int32(params.attention.device.paged_kv_indptr);
+  const torch::Tensor paged_kv_indices_i32 =
+      to_int32(params.attention.device.paged_kv_indices);
+  const torch::Tensor paged_kv_last_page_len_i32 =
+      to_int32(params.attention.device.paged_kv_last_page_len);
+
+  const int64_t actual_indices_size = paged_kv_indices_i32.size(0);
   xllm::kernel::cuda::LlmDecodeMetadataUpdateParams update_params{
-      .src_tokens = tokens.data_ptr<int32_t>(),
-      .src_positions = positions.data_ptr<int32_t>(),
-      .src_new_cache_slots =
-          params.attention.device.new_cache_slots.data_ptr<int32_t>(),
-      .src_kv_seq_lens =
-          params.attention.device.kv_seq_lens.data_ptr<int32_t>(),
-      .src_paged_kv_indptr =
-          params.attention.device.paged_kv_indptr.data_ptr<int32_t>(),
-      .src_paged_kv_indices =
-          params.attention.device.paged_kv_indices.data_ptr<int32_t>(),
+      .src_tokens = tokens_i32.data_ptr<int32_t>(),
+      .src_positions = positions_i32.data_ptr<int32_t>(),
+      .src_new_cache_slots = new_cache_slots_i32.data_ptr<int32_t>(),
+      .src_kv_seq_lens = kv_seq_lens_i32.data_ptr<int32_t>(),
+      .src_paged_kv_indptr = paged_kv_indptr_i32.data_ptr<int32_t>(),
+      .src_paged_kv_indices = paged_kv_indices_i32.data_ptr<int32_t>(),
       .src_paged_kv_last_page_len =
-          params.attention.device.paged_kv_last_page_len.data_ptr<int32_t>(),
+          paged_kv_last_page_len_i32.data_ptr<int32_t>(),
       .dst_tokens = persistent_tokens_.data_ptr<int32_t>(),
       .dst_positions = persistent_positions_.data_ptr<int32_t>(),
       .dst_new_cache_slots = persistent_new_cache_slots_.data_ptr<int32_t>(),
@@ -253,6 +301,15 @@ void CudaGraphPersistentParam::update_llm_decode_metadata_fast_path(
       .padded_num_tokens = static_cast<int64_t>(padded_num_tokens),
       .actual_batch_size = actual_batch_size,
       .actual_indices_size = actual_indices_size,
+      // Worst-case paged_kv_indices count this graph instance can serve.
+      // The kernel uses this to size its strided loop so that, when captured
+      // into a CUDA graph and replayed at a later decode step that has grown
+      // the KV cache to more blocks than the warmup-time bucket, the loop
+      // still iterates far enough to copy every paged_kv_indices entry. See
+      // llm_decode_metadata_update_kernel for the matching dynamic-bound
+      // read from indptr.
+      .max_indices_size_for_graph_capacity =
+          persistent_paged_kv_indices_.numel(),
   };
   const cudaStream_t stream = c10::cuda::getCurrentCUDAStream(device_.index());
   xllm::kernel::cuda::update_llm_decode_metadata(update_params, stream);
@@ -331,6 +388,54 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
           layer::AttentionMetadataBuilder::build(params, args_.enable_mla()));
   CHECK(attn_metadata) << "attn_metadata should not be null";
   attn_metadata->enable_cuda_graph = true;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  // SGLang-style host-mirror staging for the Mate FFI decode kernel under
+  // CUDA/MUSA stream capture.
+  //
+  // The Mate FFI batch_decode wrapper requires kDLCPU pointers for the three
+  // paged-KV index tensors (indptr / indices / last_page_len). When the input
+  // builder pre-stages them in `params.attention.host.paged_kv_*`, the
+  // AttentionMetadataBuilder forwards them verbatim and batch_decode reuses
+  // the CPU storage at zero cost (this is the common LLM-engine path; see
+  // batch_input_builder.cpp lines 928-937).
+  //
+  // The warmup/profile path (profile_manager -> run_graph_decode_request)
+  // currently lands in batch_decode with all three host mirrors undefined --
+  // batch_decode's lazy `.to(kCPU)` fallback is fatal during stream capture
+  // ("operation not permitted when stream is capturing"). Rather than
+  // depending on which input builder populated the host mirrors, we stage
+  // them here unconditionally for the decode path, *outside* the captured
+  // region: the host copy lives across capture begin / replay because we
+  // assign back into `attn_metadata->paged_kv_*_host` and the same shared
+  // AttentionMetadata is what every full-attention layer's decoder_forward
+  // reads. Mirrors sglang's pattern of building CPU-resident kv_indptr from
+  // CPU-resident seq_lens before calling FlashInfer's plan/run (see
+  // flashinfer_backend.py:1128-1182 `global_override_indptr_cpu`).
+  //
+  // Cheap when the input builder already pre-staged (just a shared_ptr ref);
+  // a single per-step D2H per index tensor in the fallback case (3 D2H total,
+  // batch-sized, runs once before capture begin).
+  const bool decode_path = !attn_metadata->is_prefill &&
+                           !attn_metadata->is_chunked_prefill;
+  if (decode_path) {
+    auto ensure_host_mirror = [](torch::Tensor& host_field,
+                                 const torch::Tensor& device_field) {
+      if (host_field.defined()) {
+        return;
+      }
+      if (!device_field.defined()) {
+        return;
+      }
+      host_field = device_field.to(torch::kCPU);
+    };
+    ensure_host_mirror(attn_metadata->paged_kv_indptr_host,
+                       attn_metadata->paged_kv_indptr);
+    ensure_host_mirror(attn_metadata->paged_kv_indices_host,
+                       attn_metadata->paged_kv_indices);
+    ensure_host_mirror(attn_metadata->paged_kv_last_page_len_host,
+                       attn_metadata->paged_kv_last_page_len);
+  }
+#endif
   auto build_capture_params_if_needed =
       [&]() -> std::optional<ModelInputParams> {
     if (!return_capture_params) {
@@ -538,6 +643,19 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
 
   bool use_tensor_core =
       xllm::kernel::cuda::should_use_tensor_core(dtype, n_heads, n_kv_heads);
+#ifdef XLLM_TORCH_MUSA
+  // Keep in sync with BaseAttentionImpl::decode_use_tensor_core_ on MUSA:
+  // the Mate FFI ships the dedicated `batch_decode_*` kernel (exporting the
+  // "run" symbol) for our paged-KV layouts, while the chunked-prefill
+  // `batch_prefill_*` kernel only exports "paged_run". When this graph-mode
+  // planner picks the chunked-prefill URI but `FlashInferAttentionImpl::
+  // decoder_forward` calls `batch_decode(..., decode_use_tensor_core_=false)`,
+  // `batch_decode` falls into the else branch and tries to look up
+  // get_function(prefill_uri, "run") which doesn't exist in the .so. Force
+  // the same value here so the planner and the runtime caller agree on the
+  // URI scheme.
+  use_tensor_core = false;
+#endif
   if (use_two_stage_decode) {
     if (params.attention.device.q_seq_lens.defined() &&
         params.attention.device.q_seq_lens.numel() > 0) {
@@ -782,6 +900,17 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
           static_cast<int32_t>(n_kv_heads),  // num_kv_heads
           /*enable_cuda_graph=*/true);
     } else if (attn_metadata->is_chunked_prefill) {
+      // Worst-case KV blocks per sequence for graph capture: plan_info is
+      // computed once (cached on PlanInfo) and reused for all replays. Make
+      // sure the cached plan covers any future block count by computing it
+      // against ceil(max_position_embeddings / block_size) blocks per
+      // sequence. See update_chunked_prefill_plan_info comment.
+      const int32_t max_kv_blocks_per_seq_for_capture =
+          block_size > 0
+              ? static_cast<int32_t>(
+                    (args_.max_position_embeddings() + block_size - 1) /
+                    block_size)
+              : 0;
       layer::flashinfer::update_chunked_prefill_plan_info(
           attn_metadata->plan_info,
           /*backend=*/"fa2",  // flashinfer paged fa3 is slow, use fa2 instead
@@ -795,8 +924,17 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
           static_cast<int32_t>(n_kv_heads),  // num_kv_heads
           static_cast<int32_t>(block_size),  // block_size
           sliding_window,                    // window_size_left
-          /*enable_cuda_graph=*/true);
+          /*enable_cuda_graph=*/true,
+          /*causal=*/true,
+          max_kv_blocks_per_seq_for_capture);
     } else {
+      // Same rationale as chunked_prefill above.
+      const int32_t max_kv_blocks_per_seq_for_capture =
+          block_size > 0
+              ? static_cast<int32_t>(
+                    (args_.max_position_embeddings() + block_size - 1) /
+                    block_size)
+              : 0;
       layer::flashinfer::update_decode_plan_info(
           attn_metadata->plan_info,
           /*backend=*/"fa2",  // flashinfer paged fa3 is slow, use fa2 instead
@@ -811,7 +949,8 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
           static_cast<int32_t>(block_size),  // block_size
           sliding_window,                    // window_size_left
           /*enable_cuda_graph=*/true,
-          use_tensor_core);
+          use_tensor_core,
+          max_kv_blocks_per_seq_for_capture);
     }
 
     VLOG(kGraphExecutorLogVerboseLevel)
@@ -825,6 +964,100 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
 
   // Return ModelInputParams with persistent buffer references if requested
   return build_capture_params_if_needed();
+}
+
+void CudaGraph::refresh_persistent_paged_kv_host_mirrors(
+    const std::shared_ptr<layer::AttentionMetadata>& attn_metadata) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  // Only applies to the Mate FFI decode path. Prefill/chunked-prefill and MLA
+  // attention do not pass host pointers through the FFI run() boundary, so
+  // there is nothing to stabilize there.
+  if (!attn_metadata) {
+    return;
+  }
+  if (attn_metadata->is_prefill || attn_metadata->is_chunked_prefill) {
+    return;
+  }
+
+  // Helper: lazily allocate / grow a pinned host buffer to cover `device_src`,
+  // copy device contents into the buffer, then re-point `host_field` at the
+  // owning slice of that buffer. The buffer's underlying storage pointer must
+  // be STABLE across the lifetime of this CudaGraph (captured FFI run() bakes
+  // it into the graph).
+  //
+  // CRITICAL: when allocating for the first time, size to max(numel,
+  // min_alloc_numel). The captured graph cannot tolerate a later realloc:
+  // if the KV cache crosses a block boundary mid-replay (e.g., decode 38 of
+  // a question with prefill=27, block_size=64), the device-side
+  // paged_kv_indices numel grows from 1 to 2 entries. With min_alloc_numel
+  // set to the worst case at capture time, the first allocation is already
+  // large enough and subsequent refresh calls hit the same storage.
+  // Otherwise the realloc returns fresh memory and the captured kernel
+  // dereferences a stale (freed) pointer, producing silently-wrong
+  // attention outputs from L3 onward. See refresh-call-site comment.
+  auto refresh_one = [](torch::Tensor& host_buf,
+                        torch::Tensor& host_field,
+                        const torch::Tensor& device_src,
+                        int64_t min_alloc_numel) {
+    if (!device_src.defined()) {
+      return;
+    }
+    const int64_t numel = device_src.numel();
+    const torch::ScalarType src_dtype = device_src.scalar_type();
+    const bool needs_alloc =
+        !host_buf.defined() || host_buf.scalar_type() != src_dtype ||
+        host_buf.numel() < numel ||
+        host_buf.numel() < min_alloc_numel;
+    if (needs_alloc) {
+      // Pinned so cudaMemcpyAsync from device is a real async copy that can
+      // be captured into the graph (the Mate FFI submits H2D internally on
+      // some shapes; pinning ensures the captured operation refreshes the
+      // device buffer from our stable host pointer on every replay). Sized
+      // to max(numel, min_alloc_numel) so the first allocation already
+      // covers the worst-case KV cache layout for this CudaGraph instance.
+      auto opts = torch::TensorOptions()
+                      .dtype(src_dtype)
+                      .device(torch::kCPU)
+                      .pinned_memory(true);
+      const int64_t alloc_numel = std::max<int64_t>(numel, min_alloc_numel);
+      host_buf = torch::empty({alloc_numel}, opts);
+    }
+    auto dst = host_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/numel);
+    // device_src may have a non-1D shape (e.g., [bs+1]); view as flat for the
+    // copy and let host_field carry the original shape via a view-back.
+    //
+    // BLOCKING D2H is REQUIRED here -- the Mate FFI batch_decode wrapper
+    // reads the paged_kv_* host tensors on the *host* side (e.g. to compute
+    // per-block offsets that are then baked into the kernel parameter
+    // struct as derived device pointers). With non_blocking=true the D2H
+    // is queued on the stream and host data is only valid after stream
+    // sync; the FFI's submit-time host read would otherwise see whatever
+    // bytes torch::empty() left in the pinned page, the kernel would
+    // dereference a garbage block id, and the resulting page fault crashes
+    // the GPU mid-replay (see core_*.mudmp showing
+    // FmhaFwdKernelWarpSpecialized writing to an unmapped 0x08be...
+    // address). Pay the H2D sync once per refresh (kilobytes, in the
+    // outer setup) rather than read uninit data on every step.
+    dst.copy_(device_src.contiguous().view({numel}), /*non_blocking=*/false);
+    // Re-point host_field at the persistent storage; preserve the original
+    // logical shape so downstream callers that interrogate sizes still see
+    // the same view they did before this rewrite.
+    host_field = dst.view(device_src.sizes());
+  };
+
+  refresh_one(paged_kv_indptr_host_buf_,
+              attn_metadata->paged_kv_indptr_host,
+              attn_metadata->paged_kv_indptr,
+              paged_kv_indptr_host_max_numel_);
+  refresh_one(paged_kv_indices_host_buf_,
+              attn_metadata->paged_kv_indices_host,
+              attn_metadata->paged_kv_indices,
+              paged_kv_indices_host_max_numel_);
+  refresh_one(paged_kv_last_page_len_host_buf_,
+              attn_metadata->paged_kv_last_page_len_host,
+              attn_metadata->paged_kv_last_page_len,
+              paged_kv_last_page_len_host_max_numel_);
+#endif
 }
 
 // CudaGraph implementation
@@ -842,6 +1075,29 @@ bool CudaGraph::capture(CausalLM* model,
   const uint32_t actual_num_tokens = tokens.size(0);
   CHECK_GE(padded_num_tokens_, actual_num_tokens)
       << "bucket_num_tokens >= actual_num_tokens";
+
+  // Compute worst-case pinned-host-mirror sizes for paged-KV metadata so the
+  // FIRST allocation inside refresh_persistent_paged_kv_host_mirrors already
+  // covers the largest layout this CudaGraph instance can ever see. Without
+  // this, the captured graph bakes in a host pointer whose underlying buffer
+  // gets reallocated mid-replay when the KV cache crosses a block boundary
+  // (e.g., decode step 38 of a 27-token-prefill question with block_size=64
+  // grows paged_kv_indices from 1 -> 2 entries), causing the captured Mate
+  // FFI batch_decode kernel to dereference stale memory and silently corrupt
+  // attention output. See refresh_persistent_paged_kv_host_mirrors comment.
+  //
+  // For a decode bucket of N input tokens, at most N sequences are active and
+  // each can hold up to ceil(max_position_embeddings / block_size) blocks.
+  {
+    const int64_t block_size = options.block_size();
+    const int64_t max_pos = args.max_position_embeddings();
+    const int64_t max_blocks_per_seq =
+        block_size > 0 ? (max_pos + block_size - 1) / block_size : 0;
+    const int64_t max_seqs = static_cast<int64_t>(bucket_num_tokens);
+    paged_kv_indptr_host_max_numel_ = max_seqs + 1;
+    paged_kv_indices_host_max_numel_ = max_seqs * max_blocks_per_seq;
+    paged_kv_last_page_len_host_max_numel_ = max_seqs;
+  }
 
   // Guard CUDA graph capture region with a device-level exclusive lock to
   // prevent conflicting GPU work from other streams (e.g., prepare streams) on
@@ -889,6 +1145,18 @@ bool CudaGraph::capture(CausalLM* model,
   CHECK(graph_params_opt.has_value())
       << "update() should return ModelInputParams when "
          "return_capture_params=true";
+
+  // SGLang-pattern persistent host mirrors for the Mate FFI batch_decode
+  // run() call. CudaGraphPersistentParam::update() built the attn_metadata's
+  // host fields as fresh `.to(kCPU)` tensors -- their .data_ptr() would
+  // change on every step, but the captured graph bakes whatever pointer it
+  // saw at capture time. Swap them out for views into per-CudaGraph stable
+  // pinned host buffers so the captured pointer remains valid forever and
+  // every replay sees fresh values via in-place `copy_`. Mirrors SGLang's
+  // FlashInfer MLA backend treatment of `cuda_graph_kv_indptr_cpu` (see
+  // python/sglang/srt/layers/attention/flashinfer_mla_backend.py:365-477).
+  refresh_persistent_paged_kv_host_mirrors(
+      graph_params_opt.value().attn_metadata);
 
   LOG(INFO) << "CUDA graph capture begin, bucket_num_tokens: "
             << bucket_num_tokens << ", actual_num_tokens: " << actual_num_tokens
@@ -954,6 +1222,59 @@ bool CudaGraph::capture(CausalLM* model,
   } else {
     // Normal capture mode (for decode)
 
+    // Two pre-capture warmup passes, each preceded by a stream sync. This
+    // mirrors sglang/python/sglang/srt/model_executor/cuda_graph_runner.py
+    // (capture_one_batch_size: `for _ in range(2): synchronize(); barrier();
+    // run_once()`). Goals:
+    //
+    //   1. Allocate every per-op output buffer (embedding/index_select,
+    //      cuBLAS workspace, attention scratch, ...) into the caching pool
+    //      before capture_begin(). MUSA's stream-capture rejects any allocator
+    //      growth call (musaMalloc / VMM map) with "operation not permitted
+    //      when stream is capturing", so these must be pre-warmed.
+    //
+    //   2. Synchronize BEFORE the capture so warmup buffers are returned to
+    //      the pool with no pending stream dependency. Without the sync, when
+    //      the captured forward later reuses one of those buffers, the caching
+    //      allocator inserts a stream-wait (cudaStreamWaitEvent) to honor the
+    //      cross-stream dep -- which itself is illegal during capture and
+    //      surfaces as the same MUSA "operation not permitted" error inside
+    //      at::musa::IndexSelect even though the buffer was already mapped.
+    //
+    //   3. The second warmup catches any allocations the first pass left in
+    //      a transient state (e.g. tvm-ffi workspace expansion on first call)
+    //      so the pool reaches a steady size before capture_begin().
+    //
+    // Reuses the outer `capture_stream` (set up at the top of this function
+    // and active via stream_guard) so the warmup runs on the exact stream
+    // about to be captured -- syncing a different stream would leave the
+    // capture stream with stale pending work.
+    for (int warmup_iter = 0; warmup_iter < 2; ++warmup_iter) {
+      capture_stream.synchronize();
+      model->forward(persistent_param_.persistent_tokens(padded_num_tokens_),
+                     persistent_param_.persistent_positions(padded_num_tokens_),
+                     kv_cache,
+                     graph_params_opt.value());
+    }
+    capture_stream.synchronize();
+
+    // Record Mate FFI internal scratch allocations on one extra eager forward.
+    // The Mate decode .so allocates via TVM-FFI's DLPackManagedTensorAllocator
+    // hook (torch::empty), which MUSA rejects under stream capture. We capture
+    // the exact sequence of tensors here and replay them during capture_begin.
+    recorded_ffi_allocs_.clear();
+    xllm::kernel::cuda::begin_ffi_alloc_record();
+    model->forward(persistent_param_.persistent_tokens(padded_num_tokens_),
+                   persistent_param_.persistent_positions(padded_num_tokens_),
+                   kv_cache,
+                   graph_params_opt.value());
+    recorded_ffi_allocs_ = xllm::kernel::cuda::end_ffi_alloc_record();
+    capture_stream.synchronize();
+    LOG(INFO) << "Recorded " << recorded_ffi_allocs_.size()
+              << " Mate FFI scratch tensors for decode graph capture, "
+                 "bucket_num_tokens="
+              << bucket_num_tokens;
+
     // MemPoolContext has been deprecated in torch >= 2.8
 #if TORCH_VERSION_MAJOR <= 2 && TORCH_VERSION_MINOR <= 7
     // Activate VMM mempool only for the actual capture to keep plan_info
@@ -969,6 +1290,7 @@ bool CudaGraph::capture(CausalLM* model,
     // graph_.capture_begin(pool);
     graph_.capture_begin(pool, cudaStreamCaptureModeThreadLocal);
 
+    xllm::kernel::cuda::begin_ffi_alloc_replay(&recorded_ffi_allocs_);
     // Execute forward pass - CUDA graph will capture this
     auto forward_result = model->forward(
         persistent_param_.persistent_tokens(padded_num_tokens_),
@@ -985,6 +1307,7 @@ bool CudaGraph::capture(CausalLM* model,
 
     // End graph capture
     graph_.capture_end();
+    xllm::kernel::cuda::end_ffi_alloc_replay();
   }
 
   // Synchronize to ensure graph capture is completed.
@@ -1069,14 +1392,30 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
     // Replay piecewise graphs and attention runners
     piecewise_graph_.replay(replay_params);
   } else {
-    // Normal replay mode (for decode)
-    persistent_param_.update(tokens,
-                             k_cache,
-                             v_cache,
-                             positions,
-                             params,
-                             padded_num_tokens_,
-                             /*return_capture_params=*/false);
+    // Normal replay mode (for decode).
+    //
+    // Request the metadata back from update() so we can refresh the
+    // per-CudaGraph persistent host mirrors of paged_kv_* before replaying.
+    // The captured graph holds (stable) pointers to our pinned host buffers
+    // from capture time; the data inside those buffers must reflect the
+    // current step's paged-KV layout, which is what update() just materialized
+    // on the corresponding persistent *device* tensors. The returned
+    // ModelInputParams is otherwise unused in the replay branch -- it is a
+    // single small per-step allocation that pays for itself by avoiding the
+    // page fault inside the captured Mate decode kernel (see .mudmp under
+    // repro logs and refresh_persistent_paged_kv_host_mirrors() for the
+    // pointer-stability rationale).
+    auto replay_params_opt = persistent_param_.update(tokens,
+                                                      k_cache,
+                                                      v_cache,
+                                                      positions,
+                                                      params,
+                                                      padded_num_tokens_,
+                                                      /*return_capture_params=*/true);
+    CHECK(replay_params_opt.has_value())
+        << "update() should return ModelInputParams for decode replay";
+    refresh_persistent_paged_kv_host_mirrors(
+        replay_params_opt.value().attn_metadata);
     graph_.replay();
   }
 
@@ -1139,9 +1478,6 @@ CudaGraphExecutorImpl::find_first_full_attention_cache(
   return std::nullopt;
 }
 
-// ============== VMM Allocator Support ==============
-// These functions provide VMM-based memory pool for CUDA Graph capture,
-// enabling memory reuse across different shape captures.
 
 namespace {
 // Physical pool id: same id => reuse across different shapes (prefill vs decode
@@ -1149,6 +1485,11 @@ namespace {
 constexpr uint32_t kPhysicalPoolIdPrefill = 0;
 constexpr uint32_t kPhysicalPoolIdDecode = 1;
 }  // namespace
+
+#if !defined(XLLM_TORCH_MUSA)
+// ============== VMM Allocator Support ==============
+// These functions provide VMM-based memory pool for CUDA Graph capture,
+// enabling memory reuse across different shape captures.
 
 struct CudaGraphExecutorImpl::VmmPoolState {
   std::unique_ptr<xllm::SharedVMMAllocator> allocator;
@@ -1260,6 +1601,7 @@ CudaGraphExecutorImpl::get_graph_memory_usage_stats() {
       }
     }
   } else {
+#if !defined(XLLM_TORCH_MUSA)
     std::lock_guard<std::mutex> lock(vmm_mutex_);
     for (const auto& kv : vmm_pools_) {
       const VmmPoolState& pool_state = *kv.second;
@@ -1268,6 +1610,7 @@ CudaGraphExecutorImpl::get_graph_memory_usage_stats() {
       stats.active_pool_bytes += pool_state.allocator->current_offset();
     }
     stats.pool_high_water_mark_bytes = stats.allocated_pool_bytes;
+#endif
   }
 
   stats.persistent_param_bytes =
@@ -1318,6 +1661,61 @@ void CudaGraphExecutorImpl::reset_vmm_allocator_offset(
       << "Reset VMM allocator for device " << device_.index()
       << ", physical_pool_id: " << physical_pool_id;
 }
+
+
+#else
+struct CudaGraphExecutorImpl::VmmPoolState {};
+
+CudaGraphExecutorImpl::~CudaGraphExecutorImpl() {
+  prefill_graphs_.clear();
+  graphs_.clear();
+}
+
+CudaGraphExecutorImpl::VmmPoolState&
+CudaGraphExecutorImpl::get_or_create_vmm_pool_state(uint32_t physical_pool_id) {
+  LOG(FATAL) << "Graph VMM pool is not enabled for XLLM_TORCH_MUSA builds";
+}
+
+TorchMemPool* CudaGraphExecutorImpl::get_or_create_vmm_mempool(
+    uint32_t physical_pool_id,
+    uint32_t shape_id) {
+  (void)physical_pool_id;
+  (void)shape_id;
+  LOG(FATAL) << "Graph VMM pool is not enabled for XLLM_TORCH_MUSA builds";
+  return nullptr;
+}
+
+TorchMemPool* CudaGraphExecutorImpl::get_vmm_mempool(uint32_t physical_pool_id,
+                                                     uint32_t shape_id) {
+  (void)physical_pool_id;
+  (void)shape_id;
+  return nullptr;
+}
+
+void CudaGraphExecutorImpl::reset_vmm_allocator_offset(
+    uint32_t physical_pool_id) {
+  (void)physical_pool_id;
+}
+
+// Stubs for the graph memory usage reporters. The implementations in the
+// !XLLM_TORCH_MUSA branch read torch's private/active pool counters via
+// c10::cuda::CUDACachingAllocator, which is not available on torch_musa. The
+// call sites (run / run_piecewise) still invoke these unconditionally after a
+// successful capture, so we provide zero-returning stubs to keep the link
+// satisfied without changing call-site behavior. log_graph_memory_after_capture
+// is a no-op here; the captured-bytes diagnostic logging is skipped on MUSA.
+CudaGraphExecutorImpl::GraphMemoryUsageStats
+CudaGraphExecutorImpl::get_graph_memory_usage_stats() {
+  return GraphMemoryUsageStats{};
+}
+
+size_t CudaGraphExecutorImpl::get_graph_memory_usage_bytes() {
+  return 0;
+}
+
+void CudaGraphExecutorImpl::log_graph_memory_after_capture() {}
+
+#endif  // !XLLM_TORCH_MUSA
 
 // Get graph memory pool id for capture. When VMM is enabled, uses per-shape
 // MemPool under (physical_pool_id, shape_id).
@@ -1380,6 +1778,65 @@ ModelOutput CudaGraphExecutorImpl::attach_aux_hidden_states_if_needed(
     }
   }
   return ModelOutput(hidden_states);
+}
+
+ModelInputParams CudaGraphExecutorImpl::maybe_precompute_embedding_for_graph(
+    const torch::Tensor& tokens,
+    const ModelInputParams& params) const {
+#ifdef XLLM_TORCH_MUSA
+  // Only intervene on the decode whole-graph path. Piecewise prefill already
+  // breaks the graph at attention boundaries; the embedding lookup in piece 0
+  // still allocates, but it sits OUTSIDE the captured pieces in the prefill
+  // path so it is unaffected. Eager prefill is also unaffected.
+  if (!params.meta.batch_forward_type.is_decode()) {
+    return params;
+  }
+  // Caller already provided pre-computed embeddings (multimodal encoder path).
+  // The existing CudaGraphPersistentParam::update() will copy this through to
+  // persistent_embedding_ exactly as it does today; do not double-compute.
+  if (params.embedding.input_embedding.defined()) {
+    return params;
+  }
+  // Skip when the model doesn't expose a generic WordEmbedding layer. Some
+  // backends (e.g. raw NPU) use a custom embedding op that lives behind a
+  // different interface, in which case we have nothing to hoist out of the
+  // graph and fall through to existing behavior.
+  auto embed_layer = model_->get_word_embedding();
+  if (embed_layer.is_empty()) {
+    return params;
+  }
+
+  // Compute the embedding eagerly while still outside the captured stream
+  // region. On torch_musa 2.7.1 the underlying at::musa::IndexSelect calls
+  // EmptyMUSA -> musaMemMap to allocate its output, which is illegal during
+  // stream capture ("operation not permitted when stream is capturing"); by
+  // running the lookup here the allocation goes through the normal caching
+  // allocator path and stays out of the capture region.
+  //
+  // The downstream wiring is already in place:
+  //   * CudaGraphPersistentParam::update() copies `params.embedding
+  //     .input_embedding` into `persistent_embedding_` (see the update path
+  //     under "Update persistent embedding from input_embedding if
+  //     available").
+  //   * For capture, `build_capture_params_if_needed` rewrites
+  //     `params_for_capture->embedding.input_embedding` to a view of
+  //     `persistent_embedding_`, so the captured forward references the
+  //     persistent buffer's stable address.
+  //   * For replay, the captured graph already references that same
+  //     persistent address; refreshing the buffer contents here is sufficient
+  //     to feed each step with the correct per-token embeddings.
+  //
+  // Qwen3Next-family models (including Qwen3.5) already honour
+  // `input_params.embedding.input_embedding` in their forward, branching
+  // around the in-graph `embed_tokens_(tokens)` call when the field is
+  // defined (see xllm/models/llm/qwen3_next_hybrid_base.h).
+  ModelInputParams new_params = params;
+  new_params.embedding.input_embedding = embed_layer(tokens);
+  return new_params;
+#else
+  (void)tokens;
+  return params;
+#endif
 }
 
 ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
@@ -1495,13 +1952,23 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
       return model_->forward(tokens, positions, kv_caches, params);
     }
 
+    // On MUSA the in-graph IndexSelect (embedding lookup) is the only known
+    // capture blocker. Compute the embedding here, outside the captured
+    // stream region, and pass it through `params.embedding.input_embedding`
+    // so both capture and replay paths read from the persistent embedding
+    // buffer. No-op on other platforms / non-decode forwards. See
+    // maybe_precompute_embedding_for_graph() for the full rationale.
+    const ModelInputParams graph_params =
+        maybe_precompute_embedding_for_graph(tokens, params);
+
     // Check if captured graph exists for this bucket num_tokens
     auto it = graphs_.find(bucket_num_tokens);
     if (it != graphs_.end()) {
       // Replay the existing graph
       VLOG(kGraphExecutorLogVerboseLevel)
           << "CudaGraphExecutorImpl::run() in decode replay mode";
-      auto result = it->second->replay(tokens, positions, kv_caches, params);
+      auto result =
+          it->second->replay(tokens, positions, kv_caches, graph_params);
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
 
@@ -1527,7 +1994,7 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                           options_,
                                           tokens,
                                           positions,
-                                          params,
+                                          graph_params,
                                           kv_caches,
                                           bucket_num_tokens,
                                           mem_pool,
@@ -1544,9 +2011,14 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
       graphs_[bucket_num_tokens] = std::move(graph);
 
       // Run replay after capture so first request uses same execution path as
-      // subsequent requests.
+      // subsequent requests. Recompute the embedding so the persistent buffer
+      // reflects the current token batch (the capture-time embedding above
+      // would otherwise be reused unchanged, which is only correct in the
+      // unlikely case the post-capture request happens to match exactly).
+      const ModelInputParams replay_params =
+          maybe_precompute_embedding_for_graph(tokens, params);
       auto result = graphs_[bucket_num_tokens]->replay(
-          tokens, positions, kv_caches, params);
+          tokens, positions, kv_caches, replay_params);
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
 
@@ -1588,5 +2060,11 @@ uint32_t CudaGraphExecutorImpl::get_bucket_num_tokens(uint32_t num_tokens,
     return ((num_tokens + 15) / 16) * 16;
   }
 }
+
+// NOTE: REGISTER_EXECUTOR for CudaGraphExecutorImpl lives in
+// cuda_graph_executor_impl.h. Keeping it in this .cpp meant the static
+// initializer's TU was referenced only via runtime factory lookup, and the
+// linker dropped libcuda_graph_executor.a's only .o as unused. Putting the
+// macro in the header matches base/vlm/acl/mlu/dcu graph executors.
 
 }  // namespace xllm::runtime::cuda

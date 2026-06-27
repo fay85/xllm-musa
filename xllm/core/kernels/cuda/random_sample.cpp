@@ -13,78 +13,53 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <ATen/cuda/CUDAGeneratorImpl.h>
-
 #include <cstdint>
-#include <mutex>
-#include <tuple>
-#include <unordered_map>
 
 #include "cuda_ops_api.h"
 
-namespace {
-
-at::Generator get_default_generator(c10::DeviceIndex device_index) {
-  static std::unordered_map<c10::DeviceIndex, at::Generator> cache;
-  static std::mutex mu;
-  std::lock_guard<std::mutex> lock(mu);
-  auto it = cache.find(device_index);
-  if (it != cache.end()) {
-    return it->second;
-  }
-  at::globalContext().lazyInitCUDA();
-  at::Generator gen = at::cuda::detail::getDefaultCUDAGenerator(device_index);
-  cache.emplace(device_index, gen);
-  return gen;
-}
-
-std::tuple<int64_t, int64_t> get_seed_and_offset(
-    int64_t increment,
-    const torch::Device& device,
-    c10::optional<at::Generator> generator = c10::nullopt) {
-  at::Generator gen = generator.has_value()
-                          ? generator.value()
-                          : get_default_generator(device.index());
-  std::lock_guard<std::mutex> lock(gen.mutex());
-  auto* cuda_gen = at::check_generator<at::CUDAGeneratorImpl>(gen);
-
-  int64_t seed = static_cast<int64_t>(cuda_gen->current_seed());
-  int64_t offset = static_cast<int64_t>(cuda_gen->get_offset());
-  offset += (increment + 3) / 4 * 4;
-  cuda_gen->set_offset(static_cast<uint64_t>(offset));
-
-  return std::make_tuple(seed, offset);
-}
-}  // namespace
-
 namespace xllm::kernel::cuda {
 
+// Categorical sampling from a probability distribution.
+//
+// NOTE (MUSA bring-up): the previous implementation called the mate
+// `sampling_from_probs` SO and obtained a philox seed/offset from the CUDA
+// default generator. Both are unavailable on MUSA-as-CUDA:
+//   * at::globalContext().lazyInitCUDA() / getDefaultCUDAGenerator() abort with
+//     "Cannot initialize CUDA without ATen_cuda library";
+//   * mate_cached_ops/sampling/sampling.so is not deployed.
+// We instead perform inverse-CDF sampling with plain torch ops and draw the
+// uniforms on the HOST (CPU generator), which works on every backend.
 torch::Tensor random_sample(const torch::Tensor& probs) {
   CHECK(probs.dim() == 2 || probs.dim() == 3)
       << "probs must be a 2D or 3D tensor";
 
-  torch::Tensor flat_probs;
-  if (probs.dim() == 3) {
-    flat_probs = probs.reshape({-1, probs.size(2)});
-  } else {
-    flat_probs = probs;
-  }
+  torch::Tensor flat_probs =
+      (probs.dim() == 3) ? probs.reshape({-1, probs.size(2)}) : probs;
 
   const torch::Device device = flat_probs.device();
-  int64_t batch_size = flat_probs.size(0);
-  torch::ScalarType out_dtype = torch::kInt64;
-  torch::Tensor samples =
-      torch::empty({batch_size}, torch::dtype(out_dtype).device(device));
-  auto [seed, offset] = get_seed_and_offset(batch_size, device);
+  // Input is already the softmax distribution (float32, normalized to sum=1 by
+  // the sampler), so we skip the redundant cast/renormalization passes.
+  auto p = (flat_probs.scalar_type() == torch::kFloat32)
+               ? flat_probs
+               : flat_probs.to(torch::kFloat32);
 
-  get_function(/*uri=*/"sampling",
-               /*func_name=*/"sampling_from_probs")(
-      to_ffi_tensor(flat_probs),
-      to_ffi_tensor(samples),
-      /*maybe_indices=*/ffi::Optional<ffi::Tensor>(),
-      /*deterministic=*/true,
-      /*philox_seed=*/seed,
-      /*philox_offset=*/offset);
+  const int64_t batch_size = p.size(0);
+  const int64_t vocab_size = p.size(1);
+
+  auto cdf = p.cumsum(/*dim=*/-1);
+
+  // Uniforms drawn on the host to avoid device RNG init (lazyInitCUDA aborts on
+  // MUSA). Scale by the total mass (last cdf column) instead of a separate
+  // normalization pass; also stays robust if probs don't sum to exactly 1.
+  auto u = torch::rand({batch_size, 1},
+                       torch::TensorOptions().dtype(torch::kFloat32))
+               .to(device);
+  u = u * cdf.narrow(/*dim=*/-1, vocab_size - 1, 1);
+
+  // Inverse-CDF sample = first index i with cdf[i] >= u, via binary search
+  // (O(log vocab)) instead of an O(vocab) compare-and-sum.
+  auto samples = torch::searchsorted(cdf, u).squeeze(-1).to(torch::kInt64);
+  samples = samples.clamp(/*min=*/0, /*max=*/vocab_size - 1);
 
   if (probs.dim() == 3) {
     return samples.reshape({probs.size(0), probs.size(1)});

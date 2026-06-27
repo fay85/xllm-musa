@@ -50,8 +50,13 @@ class ScopeGuard final {
 template <typename Fun>
 ScopeGuard(Fun&&) -> ScopeGuard<std::decay_t<Fun>>;
 
+template <typename Fun>
+ScopeGuard<std::decay_t<Fun>> make_scope_guard(Fun&& f) {
+  return ScopeGuard<std::decay_t<Fun>>(std::forward<Fun>(f));
+}
+
 }  // namespace xllm
 
 // Declares a ScopeGuard object with the given callback.
 // Example: SCOPE_GUARD([&]{...});
-#define SCOPE_GUARD xllm::ScopeGuard SAFE_CONCAT(scope_guard, __LINE__)
+#define SCOPE_GUARD(callback)   const auto SAFE_CONCAT(scope_guard_, __LINE__) =       xllm::make_scope_guard(callback)

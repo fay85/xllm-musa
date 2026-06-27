@@ -39,6 +39,35 @@ DEFINE_bool(enable_prefill_piecewise_graph,
             "use eager mode while other operations are captured in device "
             "graphs.");
 
+#if defined(USE_CUDA)
+DEFINE_bool(enable_mate_gdn_prefill,
+            false,
+            "Use MATE TileLang GDN prefill kernels from FLASHINFER_OPS_PATH "
+            "instead of chunk_gated_delta_rule. Default off; xllm_0526 uses "
+            "chunk_gated_delta_rule for prefill and only enables mate decode.");
+
+DEFINE_bool(enable_mate_gdn_decode,
+            false,
+            "Use MATE TileLang GDN decode kernels from FLASHINFER_OPS_PATH "
+            "instead of the torch reference path. Enable explicitly on the "
+            "command line for Qwen3.5 MUSA serving (see run_xllm_musa.sh).");
+
+DEFINE_bool(enable_fused_gdn_decode,
+            true,
+            "Use the in-house single-launch fused GDN decode CUDA kernel "
+            "(xllm::kernel::cuda::fused_gated_delta_rule_decode), which fuses "
+            "QKV split from mixed_qkv, sigmoid/softplus gating, QK L2-norm, Q "
+            "scale, the recurrent delta-rule step, and the fp32 state I/O. "
+            "Default on -- this is the production decode path for Qwen3.5-"
+            "style hybrid GDN models, and a no-op for models that do not take "
+            "the GDN decode path. Takes precedence over enable_mate_gdn_decode "
+            "when both are set; pass --noenable_fused_gdn_decode to fall back "
+            "to the mate FFI decode kernel for A/B testing or rollback. "
+            "Decode-only (single-token); the layer falls back to mate or the "
+            "torch reference path when the kernel's prerequisites are not "
+            "met.");
+#endif
+
 constexpr bool kEnableGraphVmmPoolDefault = true;
 
 DEFINE_bool(enable_graph_vmm_pool,

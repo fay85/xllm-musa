@@ -1,0 +1,3 @@
+[submodule "third_party/brpc"]
+	path = third_party/brpc
+	url = git@coding.jd.com:9n_thirdparty/brpc_4_xllm.git

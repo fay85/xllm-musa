@@ -64,6 +64,12 @@ class DenseMLPImpl : public torch::nn::Module {
   bool is_smoothquant_;
   std::string hidden_act_;
   double swiglu_limit_ = 0.0;
+
+  // CUDA/MUSA scratch that holds the silu_and_mul output between gate_up_proj
+  // and down_proj. Cached on the layer so we (a) skip a `torch::empty` per
+  // forward and (b) keep the activation output's device pointer stable across
+  // CUDA-graph captures. Grown on demand (never shrunk) and unused on NPU.
+  torch::Tensor act_output_cache_;
 };
 TORCH_MODULE(DenseMLP);
 

@@ -28,6 +28,9 @@ limitations under the License.
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/execution_config.h"
 #include "platform/stream.h"
+#if defined(USE_CUDA) && defined(XLLM_TORCH_MUSA)
+#include <musa_runtime.h>
+#endif
 #if defined(USE_CUDA)
 #include <cuda_runtime_api.h>
 #endif
@@ -1291,6 +1294,23 @@ inline torch::Tensor materialize_tensor_from_current_cursor(
 
   auto options = torch::TensorOptions().dtype(meta.dtype).device(torch::kCUDA);
   auto tensor = torch::empty(meta.shape, options);
+#if defined(XLLM_TORCH_MUSA)
+  musaError_t err;
+  if (stream != nullptr) {
+    err = musaMemcpyAsync(tensor.data_ptr(),
+                          device_buffer,
+                          meta.data_bytes,
+                          musaMemcpyDeviceToDevice,
+                          stream->get_stream()->stream());
+  } else {
+    err = musaMemcpy(tensor.data_ptr(),
+                     device_buffer,
+                     meta.data_bytes,
+                     musaMemcpyDeviceToDevice);
+  }
+  CHECK_EQ(err, musaSuccess)
+      << "MUSA device buffer copy failed: " << musaGetErrorString(err);
+#else
   cudaError_t err;
   if (stream != nullptr) {
     err = cudaMemcpyAsync(tensor.data_ptr(),
@@ -1306,6 +1326,7 @@ inline torch::Tensor materialize_tensor_from_current_cursor(
   }
   CHECK_EQ(err, cudaSuccess)
       << "CUDA device buffer copy failed: " << cudaGetErrorString(err);
+#endif
   return tensor;
 #elif defined(USE_MLU)
   if (session.owner_buffer.defined()) {

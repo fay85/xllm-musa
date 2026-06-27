@@ -276,6 +276,22 @@ class CudaGraph {
   // Print graph held tensors for debugging
   void print_graph_tensors() const;
 
+  // Refresh the persistent host mirrors used by the Mate FFI batch_decode
+  // run() call. Lazily allocates pinned CPU buffers sized to worst case (set
+  // by CudaGraphPersistentParam at executor construction), then copies the
+  // current device-tensor contents into them and overwrites
+  // `attn_metadata->paged_kv_*_host` to reference those persistent buffers.
+  //
+  // Called once after persistent_param_.update() returns, for the warmup
+  // forward, the FFI record pass, AND the captured pass -- they all reuse the
+  // same shared_ptr<AttentionMetadata>.
+  //
+  // On replay (graph_.replay() path), the captured graph already references
+  // the persistent host buffer pointers from capture time; this method
+  // refreshes their *contents* so the captured H2D copy sees fresh values.
+  void refresh_persistent_paged_kv_host_mirrors(
+      const std::shared_ptr<layer::AttentionMetadata>& attn_metadata);
+
   // CUDA graph for capturing and replaying (decode mode)
   at::cuda::CUDAGraph graph_;
   // Piecewise graphs for prefill mode
@@ -292,6 +308,64 @@ class CudaGraph {
   // CUDA stream for graph capture (reference, owned by CudaGraphExecutorImpl)
   at::cuda::CUDAStream capture_stream_;
   at::DeviceIndex device_index_;
+
+  // Mate FFI scratch tensors recorded during an eager warmup pass and replayed
+  // during graph capture so the hook never calls torch::empty under capture.
+  // Must outlive graph_ (destruction order: graph_ first, then this vector).
+  std::vector<torch::Tensor> recorded_ffi_allocs_;
+
+  // Persistent host (CPU) mirrors of paged_kv_* tensors, owned by this graph.
+  //
+  // Why these exist: the Mate FFI batch_decode `run` function takes
+  // kDLCPU pointers for paged_kv_indptr / paged_kv_indices /
+  // paged_kv_last_page_len. Inside the FFI those host buffers are read at
+  // submit time *and* their pointers may be baked into captured device
+  // operations (e.g., for the FmhaFwdKernelWarpSpecialized parameter
+  // struct). If we let `.to(kCPU)` create a fresh per-call tensor, then on
+  // every replay the captured graph holds a dangling pointer to the
+  // previous-step host buffer (already freed). On torch_musa 2.7.1 this
+  // surfaces as a GPU page fault inside the captured Mate decode kernel
+  // ("ExceptionType: IllegalAddress ... Reading from 0x... Fault (Page
+  // Directory)"; see the .mudmp under repro logs).
+  //
+  // SGLang's MUSA FA3 backend resolves the analogous problem for
+  // scheduler_metadata by keeping a persistent captured tensor and
+  // `copy_`ing fresh values into it on every replay (see
+  // python/sglang/srt/hardware_backend/musa/attention/flashattention_backend.py
+  // ::_copy_fresh_metadata_to_cuda_graph_tensors). We mirror that pattern
+  // here: the captured graph references the stable .data_ptr() of these
+  // host buffers, and the replay path refreshes their contents in-place.
+  //
+  // Grow-only across captures so smaller-bucket graphs keep referencing
+  // the same storage even when a larger bucket later expands the buffer.
+  //
+  // PRE-CAPTURE PRE-ALLOCATION (set in capture(), enforced inside
+  // refresh_persistent_paged_kv_host_mirrors):
+  //   The first allocation MUST size the buffer to the maximum possible
+  //   numel for this CudaGraph instance, not the warmup-time numel. If
+  //   we sized to warmup-time (typically 1 block per sequence), then
+  //   when the KV cache crosses a block boundary (e.g., decode step 38
+  //   of a 27-token-prefill question with block_size=64), the helper's
+  //   `host_buf.numel() < numel` check would trigger a realloc to a new
+  //   storage. The captured graph still references the OLD storage's
+  //   data_ptr (baked into the FmhaFwdKernelWarpSpecialized param
+  //   struct), so it reads stale/freed memory and produces a small but
+  //   nonzero divergence at L3 (first full-attention layer). That
+  //   divergence cascades through all downstream layers and surfaces as
+  //   silently-wrong arithmetic in the generated text. Pre-allocating
+  //   to the worst-case size makes subsequent refresh_one() calls a
+  //   no-op for the alloc branch and keeps the captured pointer stable.
+  torch::Tensor paged_kv_indptr_host_buf_;
+  torch::Tensor paged_kv_indices_host_buf_;
+  torch::Tensor paged_kv_last_page_len_host_buf_;
+
+  // Pre-computed max numel for each host buf (set in capture()).
+  // 0 means "no pre-allocation hint", and refresh_one() falls back to its
+  // legacy "alloc to current device numel" behavior. Non-zero means the
+  // first allocation will be max(device_numel, hint).
+  int64_t paged_kv_indptr_host_max_numel_{0};
+  int64_t paged_kv_indices_host_max_numel_{0};
+  int64_t paged_kv_last_page_len_host_max_numel_{0};
 };
 
 // Executor implementation using CUDA graph optimization
@@ -358,6 +432,22 @@ class CudaGraphExecutorImpl : public ExecutorImpl {
       const torch::Tensor& hidden_states,
       uint32_t n_tokens) const;
 
+  // Returns a copy of `params` with `embedding.input_embedding` pre-populated
+  // for MUSA decode-graph capture/replay. The embedding is computed by
+  // calling the model's word-embedding layer outside the captured stream
+  // region. The captured graph then reads from the persistent embedding
+  // buffer (populated by CudaGraphPersistentParam::update()) instead of
+  // running IndexSelect inside the capture region -- on torch_musa 2.7.1
+  // that IndexSelect triggers EmptyMUSA -> musaMemMap and surfaces as
+  // "MUSA driver error: operation not permitted when stream is capturing".
+  //
+  // No-op on non-MUSA builds and on non-decode forwards. Also a no-op when
+  // the caller already supplied an `input_embedding` (multimodal pipeline)
+  // or when the model does not expose a word-embedding layer.
+  ModelInputParams maybe_precompute_embedding_for_graph(
+      const torch::Tensor& tokens,
+      const ModelInputParams& params) const;
+
   // Get CUDA graph memory pool id for capture. When VMM is enabled, uses
   // per-shape MemPool under (physical_pool_id, shape_id). Same physical_pool_id
   // => reuse across different shapes (e.g. prefill vs decode are different
@@ -403,6 +493,20 @@ class CudaGraphExecutorImpl : public ExecutorImpl {
   static c10::cuda::CUDAStream get_capture_stream(
       c10::DeviceIndex device_index);
 };
+
+// REGISTER_EXECUTOR generates a static initializer in an anonymous namespace.
+// Putting it in the header (matching base/vlm/acl/mlu/dcu graph executors)
+// means each TU that includes this header emits its own initializer copy, so
+// the static initializer is guaranteed to run from at least one .o file that
+// IS linked into the final executable (the cuda_graph_executor_impl.cpp .o is
+// otherwise referenced only via runtime factory lookup, and the linker drops
+// the whole TU as unused). At runtime the factory's emplace() dedupes the
+// duplicates so only the first registration takes effect. Picking the backend
+// key at compile time avoids the macro's class##_registered symbol collision.
+#if defined(XLLM_TORCH_MUSA)
+REGISTER_EXECUTOR("musa", CudaGraphExecutorImpl);
+#else
 REGISTER_EXECUTOR("cuda", CudaGraphExecutorImpl);
+#endif
 
 }  // namespace xllm::runtime::cuda

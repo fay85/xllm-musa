@@ -1,0 +1,4 @@
+#!/bin/bash
+# Final link via mcc_wrapper -> g++: libtorch_cpu needs MKL DSOs at runtime only.
+set -euo pipefail
+exec /usr/bin/g++ "$@" -Wl,--allow-shlib-undefined

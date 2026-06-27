@@ -40,6 +40,9 @@ void act_and_mul(torch::Tensor out,
                  torch::Tensor input,
                  const std::string& act_mode);
 
+// out[i] *= sigmoid(gate[i]) in-place. No allocations (graph-capture safe).
+void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate);
+
 void reshape_paged_cache(
     torch::Tensor slot_ids,   // [n_tokens]
     torch::Tensor keys,       // [n_tokens, n_kv_heads, head_dim]
@@ -125,6 +128,11 @@ void batch_chunked_prefill(
     std::optional<torch::Tensor> qo_indptr = std::nullopt,
     bool causal = true);
 
+// `paged_kv_*_host` are optional pre-staged CPU mirrors of the corresponding
+// device tensors. When defined, the Mate FFI bridge consumes them directly
+// and skips an internal .to(kCPU) sync. AttentionMetadataBuilder fills these
+// once per forward step (see attention_metadata.h); callers that do not have
+// pre-staged hosts can leave them undefined and the legacy lazy D2H runs.
 void batch_decode(const std::string& uri,
                   ffi::Array<int64_t> plan_info,
                   torch::Tensor float_workspace_buffer,
@@ -141,7 +149,11 @@ void batch_decode(const std::string& uri,
                   torch::Tensor output,
                   std::optional<torch::Tensor>& output_lse,
                   bool use_tensor_core,
-                  std::optional<torch::Tensor> qo_indptr = std::nullopt);
+                  std::optional<torch::Tensor> qo_indptr = std::nullopt,
+                  const torch::Tensor& paged_kv_indptr_host = torch::Tensor(),
+                  const torch::Tensor& paged_kv_indices_host = torch::Tensor(),
+                  const torch::Tensor& paged_kv_last_page_len_host =
+                      torch::Tensor());
 #endif  // !defined(USE_DCU)
 void rms_norm(torch::Tensor output,
               torch::Tensor input,
@@ -153,9 +165,124 @@ void fused_add_rms_norm(torch::Tensor& input,     // [..., hidden_size]
                         torch::Tensor& weight,    // [hidden_size]
                         double epsilon);
 
+// Gemma-style RMS norm: same as `rms_norm` but applies `(weight + 1.0)` as
+// the per-element scale, fusing the `+1.0` into the kernel so the caller
+// does NOT need to materialize `(1.0 + weight)` on the host. Required for
+// MUSA graph capture safety -- the pure-torch fallback at
+// `cuda_fallback::gemma_rms_norm` allocates 9 intermediate tensors per call,
+// any of which can trigger `musaMemMap` mid-capture.
+void gemma_rms_norm(torch::Tensor output,
+                    torch::Tensor input,
+                    torch::Tensor weight,
+                    double eps);
+
+// Fused-add Gemma RMS norm: residual = input + residual (in-place), then
+// input = (residual / RMS(residual)) * (weight + 1.0). Same fusion idea as
+// the no-residual variant; lets callers skip the `(1.0 + weight)` tensor
+// allocation entirely.
+void fused_add_gemma_rms_norm(torch::Tensor& input,     // [..., hidden_size]
+                              torch::Tensor& residual,  // [..., hidden_size]
+                              torch::Tensor& weight,    // [hidden_size]
+                              double epsilon);
+
 torch::Tensor matmul(torch::Tensor a,
                      torch::Tensor b,
-                     std::optional<torch::Tensor> bias);
+                     std::optional<torch::Tensor> bias,
+                     std::optional<torch::Tensor> output_buf = std::nullopt);
+
+// Fused split / reshape / cat for Qwen3.5 Gated-DeltaNet input projection.
+// Ports sglang's TileLang `qkvzba_contiguous` kernel: one launch scatters the
+// fused [Q|K|V|Z|B|A] projection into four pre-allocated output buffers.
+//
+// Required to keep the input-projection stage inside MUSA CUDA graphs, since
+// the previous .contiguous() / cat path allocated four intermediate tensors
+// per call and torch_musa rejects at::empty on a capture stream.
+//
+// Caller (Qwen3.5 GDN layer) owns persistent buffers for mixed_qkv / z / b / a
+// and must size them for the largest decode bucket before capture. The
+// function does NOT allocate.
+void gdn_fused_qkvzba_split_contiguous(torch::Tensor fused,
+                                       torch::Tensor mixed_qkv,
+                                       torch::Tensor z,
+                                       torch::Tensor b,
+                                       torch::Tensor a,
+                                       int64_t num_heads_qk,
+                                       int64_t num_heads_v,
+                                       int64_t head_qk,
+                                       int64_t head_v);
+
+// Fused single-token causal-conv1d decode update.
+//
+// Replaces the libtorch op chain (index_select -> .to(fp32) -> cat -> mul ->
+// sum -> silu -> index_copy_) in the gdn_ops.cpp reference impl with a
+// single CUDA kernel launch. Required for CUDA-graph capture on MUSA, where
+// the libtorch chain triggers ~12 at::empty calls per call.
+//
+// Preconditions (graph-safe):
+//   * x: [num_tokens, dim], num_tokens == batch (one token per sequence).
+//   * weight: [dim, width], width in [2, 5].
+//   * conv_state: [num_cache_lines, dim, state_len], state_len == width-1.
+//     Updated in-place: ring shift + new x append.
+//   * cache_indices: [batch], int32.
+//   * output_buf: [num_tokens, dim], same dtype as x, stride(-1) == 1.
+//     The kernel writes directly into this caller-owned buffer (no
+//     allocations).
+void causal_conv1d_decode_fused(const torch::Tensor& x,
+                                const torch::Tensor& weight,
+                                const std::optional<torch::Tensor>& bias,
+                                torch::Tensor conv_state,
+                                const torch::Tensor& cache_indices,
+                                torch::Tensor output_buf,
+                                int pad_slot_id,
+                                bool silu_activation);
+
+// Fused gated RMSNorm, single launch:
+//   y[m, n] = (x[m, n] * rsqrt(mean(x[m,:]^2) + eps) * w[n])
+//             * (z[m, n] * sigmoid(z[m, n]))
+//
+// Replaces the libtorch chain in cuda::gated_layer_norm_ref for the common
+// Qwen3.5 case (RmsNormGated). Required for CUDA-graph capture: the ref impl
+// allocates ~8 intermediate tensors per call (pow, mean, rsqrt, mul, sigmoid,
+// mul, ...). Writes directly into a caller-owned output buffer; the call
+// site checks `params.output_buf.has_value()` and that the layer config
+// matches (is_rms_norm + norm_before_gate + z defined + single group + no
+// bias). All compute happens in fp32 internally.
+//
+// Preconditions:
+//   * x, z, output: 2D [M, N], same dtype/device, stride(-1) == 1.
+//   * weight: 1D [N], same dtype as x, contiguous.
+//   * dtype: fp32 / fp16 / bf16.
+void gated_rms_norm_fused(const torch::Tensor& x,
+                          const torch::Tensor& weight,
+                          const torch::Tensor& z,
+                          torch::Tensor output,
+                          double eps);
+
+// CUDA-graph-safe partial rotary embedding (in-place).
+//
+// Rotates the first `rotary_dim` elements of every (token, head) slot in
+// `query`/`key` in place, leaving the remaining `head_size - rotary_dim`
+// elements unchanged. Replaces the libtorch reference in
+// gdn_ops.cpp::partial_rotary_embedding which uses slice + .contiguous() +
+// torch::cat -- all allocation primitives that torch_musa 2.7.1 rejects
+// during stream capture. The underlying `rotary_embedding_kernel` already
+// supports partial rotary natively (its inner loop only touches
+// `num_heads * (rotary_dim / 2)` lanes).
+//
+// Preconditions:
+//   * query/key: contiguous in the last dim, layout
+//     `[num_tokens, num_heads * head_size]` or
+//     `[num_tokens, num_heads, head_size]` (matching `rotary_embedding`).
+//   * cos_sin_cache: 2D `[max_position, rotary_dim]`, contiguous.
+//   * positions: int32 or int64.
+//   * `rotary_dim` <= `head_size`, even.
+void partial_rotary_embedding_inplace(torch::Tensor& positions,
+                                      torch::Tensor& query,
+                                      torch::Tensor& key,
+                                      torch::Tensor& cos_sin_cache,
+                                      int64_t head_size,
+                                      int64_t rotary_dim,
+                                      bool is_neox);
 
 void cutlass_scaled_mm(torch::Tensor& c,
                        torch::Tensor const& a,

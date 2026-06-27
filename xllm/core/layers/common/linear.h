@@ -137,6 +137,13 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
   at::ScalarType output_dtype_;
   LinearExtraArgs linear_extra_args_;
   std::optional<std::string> resolved_weight_quant_method_;
+
+  // Persistent output buffer for graph-capture-safe matmul on USE_CUDA +
+  // XLLM_TORCH_MUSA. Lazily allocated for small batch sizes (<=
+  // kMatmulOutputBufMaxRows) and grown-only, so the same memory address is
+  // reused across decode buckets captured largest-first. Larger inputs
+  // (e.g. prefill) skip the buffer and use F::linear normally.
+  mutable torch::Tensor output_buf_;
 };
 TORCH_MODULE(ColumnParallelLinear);
 
@@ -214,6 +221,10 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   QuantArgs quant_args_;
   at::ScalarType output_dtype_;
   std::optional<std::string> resolved_weight_quant_method_;
+
+  // Persistent output buffer for graph-capture-safe matmul; see
+  // ColumnParallelLinearImpl::output_buf_ for the contract.
+  mutable torch::Tensor output_buf_;
 };
 TORCH_MODULE(QKVParallelLinear);
 
@@ -308,6 +319,10 @@ class RowParallelLinearImpl : public torch::nn::Module {
   at::ScalarType output_dtype_;
   LinearExtraArgs linear_extra_args_;
   std::optional<std::string> resolved_weight_quant_method_;
+
+  // Persistent output buffer for graph-capture-safe matmul; see
+  // ColumnParallelLinearImpl::output_buf_ for the contract.
+  mutable torch::Tensor output_buf_;
 };
 TORCH_MODULE(RowParallelLinear);
 
@@ -354,6 +369,10 @@ class ReplicatedLinearImpl : public torch::nn::Module {
   torch::TensorOptions options_;
   at::ScalarType output_dtype_;
   std::optional<std::string> resolved_weight_quant_method_;
+
+  // Persistent output buffer for graph-capture-safe matmul; see
+  // ColumnParallelLinearImpl::output_buf_ for the contract.
+  mutable torch::Tensor output_buf_;
 };
 TORCH_MODULE(ReplicatedLinear);
 

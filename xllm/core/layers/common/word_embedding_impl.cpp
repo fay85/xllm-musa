@@ -48,6 +48,35 @@ WordEmbeddingImpl::WordEmbeddingImpl(int64_t num_embeddings,
 // corresponding word embeddings.
 torch::Tensor WordEmbeddingImpl::forward(torch::Tensor input) {
   namespace F = torch::nn::functional;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  // Capture-safe path: write the lookup result directly into a persistent
+  // output buffer via `at::index_select_out`, bypassing the implicit
+  // `EmptyMUSA` allocation that `F::embedding` performs.
+  //
+  // Only active on the single-rank (no all-gather) path. With tp > 1, the
+  // subsequent `parallel_state::gather` would allocate anyway and there is
+  // no per-shard captured graph to worry about; we fall back to the eager
+  // branch below.
+  if (world_size_ <= 1 && input.dim() == 1) {
+    const int64_t M = input.size(0);
+    const int64_t N = weight_.size(1);
+    const bool needs_realloc =
+        !output_buf_.defined() || output_buf_.size(0) < M ||
+        output_buf_.size(1) != N ||
+        output_buf_.scalar_type() != weight_.scalar_type() ||
+        output_buf_.device() != weight_.device();
+    if (needs_realloc) {
+      // Grow-only: never shrink, so narrow() views handed out for
+      // already-captured smaller-bucket graphs stay valid forever.
+      const int64_t target_M =
+          output_buf_.defined() ? std::max(M, output_buf_.size(0)) : M;
+      output_buf_ = torch::empty({target_M, N}, weight_.options());
+    }
+    auto out_view = output_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M);
+    at::index_select_out(out_view, weight_, /*dim=*/0, input);
+    return out_view;
+  }
+#endif
   auto output = F::embedding(input, weight_);
   if (world_size_ > 1) {
     output = xllm::parallel_state::gather(output, parallel_args_.tp_group_);

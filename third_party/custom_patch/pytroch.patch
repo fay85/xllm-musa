@@ -1,0 +1,28 @@
+diff --git a/aten/src/ATen/DLConvertor.cpp b/aten/src/ATen/DLConvertor.cpp
+index 07b13ee..fa2c0d2 100644
+--- a/aten/src/ATen/DLConvertor.cpp
++++ b/aten/src/ATen/DLConvertor.cpp
+@@ -118,6 +118,10 @@ static DLDevice getDLDevice(const Tensor& tensor, c10::DeviceIndex device_id) {
+     case DeviceType::MAIA:
+       ctx.device_type = DLDeviceType::kDLMAIA;
+       break;
++    case DeviceType::PrivateUse1:
++      // ctx.device_type = DLDeviceType::kDLExtDev;
++      ctx.device_type = DLDeviceType::kDLCUDA;
++      break;
+     default:
+       TORCH_CHECK(false, "Cannot pack tensors on " + tensor.device().str());
+   }
+diff --git a/torch/csrc/autograd/profiler_kineto.cpp b/torch/csrc/autograd/profiler_kineto.cpp
+index bb5a795..c6bccda 100644
+--- a/torch/csrc/autograd/profiler_kineto.cpp
++++ b/torch/csrc/autograd/profiler_kineto.cpp
+@@ -587,7 +587,7 @@ void prepareProfiler(
+   torch::profiler::impl::kineto::prepareTrace(
+       /*cpuOnly=*/!(
+           at::hasCUDA() || at::hasXPU() || at::hasMTIA() ||
+-          c10::get_privateuse1_backend() != "privateuseone"),
++          c10::get_privateuse1_backend() == "privateuseone"),
+       activities,
+       config.experimental_config);
+ 

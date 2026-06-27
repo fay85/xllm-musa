@@ -35,7 +35,7 @@ limitations under the License.
 #include "framework/model/model_input_params.h"
 #include "framework/sampling/beam_searcher.h"
 #include "framework/sampling/sampling_params.h"
-#include "platform/device.h"
+#include "platform/stream_event.h"
 #include "runtime/dit_forward_params.h"
 
 namespace xllm {
@@ -198,11 +198,11 @@ inline bool add_sampling_to_plan(const SamplingParameters& source,
 
 inline torch::Tensor normalize_positions_for_device(
     const torch::Tensor& positions) {
-  const auto dev = Device::type_str();
-  if ((dev == "cuda" || dev == "ilu" || dev == "musa") && positions.defined() &&
-      positions.scalar_type() != torch::kInt64) {
+#if defined(USE_CUDA) || defined(USE_ILU) || defined(USE_MUSA)
+  if (positions.defined() && positions.scalar_type() != torch::kInt64) {
     return positions.to(torch::kInt64);
   }
+#endif
   return positions;
 }
 

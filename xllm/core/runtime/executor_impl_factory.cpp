@@ -15,18 +15,22 @@ limitations under the License.
 
 #include "executor_impl_factory.h"
 
-#include "platform/device.h"
 #include "runtime/base_executor_impl.h"
 #include "runtime/vlm_executor_impl.h"
 #if defined(USE_NPU)
 #include "runtime/acl_graph_executor_impl.h"
 #elif defined(USE_MLU)
 #include "runtime/mlu_graph_executor_impl.h"
-#elif defined(USE_CUDA)
-#include "runtime/cuda_graph_executor_impl.h"
 #elif defined(USE_DCU)
 #include "runtime/dcu_graph_executor_impl.h"
 #endif
+// NOTE: cuda_graph_executor_impl.h is NOT included here because it transitively
+// pulls in <c10/cuda/CUDAStream.h> et al. which require the musamapping
+// plugin's identifier rewriting to compile under XLLM_TORCH_MUSA. This TU
+// builds with plain g++ so the cuda* types are undefined. The registration
+// linkage problem (cuda_graph_executor_impl.cpp.o being unreferenced and
+// dropped by the linker) is solved instead by wrapping libcuda_graph_executor
+// in --whole-archive in xllm/core/runtime/CMakeLists.txt.
 
 namespace xllm {
 

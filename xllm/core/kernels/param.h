@@ -310,6 +310,16 @@ struct MatmulParams {
   // Scaling factor for tensor c (if provided). Default: 0.0
   // Result: alpha * (a @ b) + beta * c (if c provided)
   double beta = 0.0;
+  // Optional pre-allocated output buffer (USE_CUDA path only). When set, the
+  // CUDA matmul implementation writes directly into this buffer via
+  // at::mm_out / at::addmm_out instead of letting torch allocate a fresh
+  // output tensor. Required during MUSA CUDA-graph capture, where any call
+  // to at::empty on the capture stream raises
+  //   "MUSA error: operation not permitted when stream is capturing"
+  // because torch_musa's allocator does not honor c10::cuda::MemPoolContext.
+  // Shape must match the matmul output: [M, N] for 2D inputs. Ignored on
+  // non-CUDA backends.
+  std::optional<torch::Tensor> output_buf;
 };
 
 // Quantized matmul parameters (NPU aclnnQuantMatmulV4 path).
@@ -1569,6 +1579,12 @@ struct CausalConv1dUpdateParams {
   std::optional<torch::Tensor> block_idx_last_scheduled_token;
   std::optional<torch::Tensor> initial_state_idx;
   bool validate_data = false;
+  // Optional pre-allocated output buffer [num_tokens, dim] in input dtype.
+  // Required for CUDA/MUSA graph capture: when present, the kernel writes
+  // results directly into this buffer instead of calling at::empty_like.
+  // Must satisfy: same dtype as `x`, same shape as expected output, and
+  // last dim must be contiguous (stride == 1).
+  std::optional<torch::Tensor> output_buf = std::nullopt;
 };
 
 struct GatedLayerNormParams {
@@ -1580,6 +1596,12 @@ struct GatedLayerNormParams {
   int64_t group_size = -1;
   bool norm_before_gate = true;
   bool is_rms_norm = true;
+  // Optional pre-allocated output buffer with same shape/dtype/device as `x`.
+  // Required for CUDA/MUSA graph capture: when present, the kernel writes
+  // results into this buffer instead of letting libtorch ops allocate
+  // intermediate / output tensors (which torch_musa rejects during stream
+  // capture). Falls back to the allocating reference impl when unset.
+  std::optional<torch::Tensor> output_buf = std::nullopt;
 };
 
 struct PartialRotaryEmbeddingParams {
@@ -1599,6 +1621,21 @@ struct FusedQkvzbaSplitReshapeParams {
   int32_t num_heads_v;
   int32_t head_qk;
   int32_t head_v;
+
+  // Optional caller-owned output buffers for CUDA-graph-safe operation on
+  // torch_musa. When all four are provided and large enough, the kernel
+  // writes its results into them via strided `copy_` calls (zero
+  // allocation), avoiding the `reshape(..).contiguous()` + `torch::cat`
+  // chain that otherwise triggers `EmptyMUSA` -> "operation not permitted
+  // when stream is capturing" inside graph capture.
+  //
+  // Each buffer is grow-only: callers preallocate the largest shape they
+  // need (largest decode bucket) before graph capture; replays reuse the
+  // same storage via `narrow()`.
+  torch::Tensor mixed_qkv_out_buf;  // [max_M, qkv_dim]
+  torch::Tensor z_out_buf;          // [max_M, num_heads_v * head_v]
+  torch::Tensor b_out_buf;          // [max_M, num_heads_v]
+  torch::Tensor a_out_buf;          // [max_M, num_heads_v]
 };
 
 struct GemmaRMSNormParams {
@@ -1607,6 +1644,15 @@ struct GemmaRMSNormParams {
   double epsilon;
   torch::Tensor rstd_out;
   torch::Tensor norm_out;
+  // Optional residual branch (Gemma-style fused-add + rmsnorm). When defined,
+  // backends with native support compute `residual_out = x + residual` and
+  // then `norm_out = (residual_out / RMS(residual_out)) * (gamma + 1.0)`,
+  // fusing the `+1.0` weight scale inside the kernel so callers do not need
+  // to materialize `(1.0 + gamma)` on the host. Currently only the USE_CUDA
+  // backend honors this field; NPU / MLU paths assert residual is undefined
+  // and continue using their existing fused_layernorm route.
+  torch::Tensor residual;
+  torch::Tensor residual_out;
 };
 
 struct SplitQkvRmsnormMropeParams {
@@ -1648,6 +1694,46 @@ struct ChunkGatedDeltaRuleParams {
   // Whether to apply L2 norm to q and k inside the kernel. Default: false.
   bool use_qk_l2norm_in_kernel = false;
 };
+
+struct MateGatedDeltaRulePrefillParams {
+  // Query tensor. Shape: [B, T, Hqk, K]. Dtype: bfloat16/float16.
+  torch::Tensor q;
+  // Key tensor. Shape: [B, T, Hqk, K]. Dtype: bfloat16/float16.
+  torch::Tensor k;
+  // Value tensor. Shape: [B, T, Hv, V]. Dtype: bfloat16/float16.
+  torch::Tensor v;
+  // Log-alpha gating tensor from fused_gdn_gating. Shape: [B, T, Hv]. Dtype:
+  // float32.
+  torch::Tensor g;
+  // Beta gate tensor. Shape: [B, T, Hv]. Dtype: float32.
+  torch::Tensor beta;
+  // Optional attention scale. Default: K^(-0.5).
+  std::optional<float> scale = std::nullopt;
+  // Whether to L2-normalize q/k before launching the MATE kernel.
+  bool use_qk_l2norm_in_kernel = true;
+};
+
+struct MateGatedDeltaRuleDecodeParams {
+  // Flat mixed QKV after conv. Shape: [B, 2*Hqk*K + Hv*V].
+  torch::Tensor mixed_qkv;
+  // SSM cache pool in VK layout. Shape: [pool, Hv, V, K].
+  torch::Tensor state;
+  torch::Tensor A_log;
+  // Per-token gate inputs. Shape: [B, Hv] or [Hv] for single-token decode.
+  torch::Tensor a;
+  torch::Tensor dt_bias;
+  torch::Tensor b;
+  // Cache line indices. Shape: [B]. Dtype: int32/int64.
+  torch::Tensor state_indices;
+  int64_t num_k_heads = 0;
+  int64_t num_v_heads = 0;
+  int64_t head_k_dim = 0;
+  int64_t head_v_dim = 0;
+  double scale = 0.0;
+  bool use_qk_l2norm = true;
+  std::optional<torch::Tensor> decode_output = std::nullopt;
+};
+
 struct HcPostParams {
   torch::Tensor x;
   torch::Tensor residual;

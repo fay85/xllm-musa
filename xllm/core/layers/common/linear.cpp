@@ -31,6 +31,65 @@ namespace layer {
 namespace {
 
 // ============================================================================
+// Persistent Matmul Output Buffer (CUDA-graph capture safety)
+// ============================================================================
+// On USE_CUDA + XLLM_TORCH_MUSA, F::linear inside cuda::matmul calls at::empty
+// to allocate the output tensor. During MUSA CUDA-graph capture, that
+// allocation surfaces as
+//   "MUSA error: operation not permitted when stream is capturing"
+// because torch_musa's allocator does not honor c10::cuda::MemPoolContext set
+// by xLLM's graph executor (unlike libtorch's c10 CUDA allocator that sglang
+// relies on).
+//
+// We sidestep the problem by pre-allocating the matmul output once during the
+// pre-capture warmup pass and re-using the same buffer in subsequent
+// captured forwards via at::mm_out / at::addmm_out. This requires:
+//   1. The buffer is allocated during the FIRST warmup forward (still on the
+//      capture stream but BEFORE graph_.capture_begin()), then freed by the
+//      caching allocator on the next stream sync, and re-acquired (same
+//      address) for the captured forward.
+//   2. Captures occur largest-bucket-first so the buffer never grows after a
+//      smaller-bucket graph has been captured. For Qwen3.5-27B with
+//      MAX_SEQS_PER_BATCH=4 the only decode bucket is 4, so this is
+//      trivially satisfied. For configs with multiple decode buckets the
+//      executor must warm up the max bucket first (sglang's
+//      capture_one_batch_size does this implicitly via reverse order).
+//
+// Buffer sizing: we cap each layer at kMatmulOutputBufMaxRows rows. Decode
+// bucket sizes coming out of get_bucket_num_tokens() top out at
+// max_seqs_per_batch (<=128 in practice). Larger inputs (prefill, eager) skip
+// the buffer and fall back to F::linear, which is safe outside graph capture.
+constexpr int64_t kMatmulOutputBufMaxRows = 128;
+
+inline void maybe_set_persistent_output_buf(
+    xllm::kernel::MatmulParams& params,
+    torch::Tensor& output_buf,
+    const torch::Tensor& input,
+    const torch::Tensor& weight) {
+  if (input.dim() != 2 || weight.dim() != 2) {
+    return;
+  }
+  const int64_t M = input.size(0);
+  if (M <= 0 || M > kMatmulOutputBufMaxRows) {
+    return;
+  }
+  const int64_t N = weight.size(0);
+  const bool needs_realloc =
+      !output_buf.defined() || output_buf.size(0) < M ||
+      output_buf.size(1) != N ||
+      output_buf.scalar_type() != input.scalar_type() ||
+      output_buf.device() != input.device();
+  if (needs_realloc) {
+    // Grow-only: never shrink, so views handed out for already-captured
+    // smaller-bucket graphs stay valid.
+    const int64_t target_M =
+        output_buf.defined() ? std::max(M, output_buf.size(0)) : M;
+    output_buf = torch::empty({target_M, N}, input.options());
+  }
+  params.output_buf = output_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/M);
+}
+
+// ============================================================================
 // FP8 Fused Weight Utilities
 // ============================================================================
 // Unlike INT8/SmoothQuant (per-channel), FP8 usually uses per-tensor scaling.
@@ -698,6 +757,7 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
     matmul_params.a = input;
     matmul_params.b = weight_;
     matmul_params.bias = bias;
+    maybe_set_persistent_output_buf(matmul_params, output_buf_, input, weight_);
     output = xllm::kernel::matmul(matmul_params);
   }
 
@@ -1127,6 +1187,7 @@ torch::Tensor QKVParallelLinearImpl::forward(torch::Tensor input) {
     matmul_params.a = input;
     matmul_params.b = weight_;
     matmul_params.bias = bias;
+    maybe_set_persistent_output_buf(matmul_params, output_buf_, input, weight_);
 
     output = xllm::kernel::matmul(matmul_params);
   }
@@ -1505,6 +1566,7 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
     matmul_params.a = input;
     matmul_params.b = weight_;
     matmul_params.bias = bias;
+    maybe_set_persistent_output_buf(matmul_params, output_buf_, input, weight_);
     output = xllm::kernel::matmul(matmul_params);
   }
   if (enable_result_reduction_ && world_size_ > 1) {
@@ -1657,6 +1719,7 @@ torch::Tensor ReplicatedLinearImpl::forward(torch::Tensor input) {
   matmul_params.a = input;
   matmul_params.b = weight_;
   matmul_params.bias = bias;
+  maybe_set_persistent_output_buf(matmul_params, output_buf_, input, weight_);
 
   auto output = xllm::kernel::matmul(matmul_params);
   return output;

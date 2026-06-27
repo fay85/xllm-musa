@@ -354,7 +354,10 @@ def _validate_submodules_or_exit(repo_root: str) -> None:
             logger.error(f"   - {path}: {issues[path]}")
         logger.error("Please align submodules and try again:")
         logger.error("   git submodule update --init --recursive [-f|--force]")
-        exit(1)
+        import os as _os
+        if _os.environ.get("XLLM_SKIP_SUBMODULE_CHECK", "0") != "1":
+            exit(1)
+        logger.warning("XLLM_SKIP_SUBMODULE_CHECK=1; continuing despite submodule mismatch")
 
 
 def _ensure_prebuild_dependencies_installed(script_path: str) -> None:

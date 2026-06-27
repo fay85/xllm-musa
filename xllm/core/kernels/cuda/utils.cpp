@@ -25,6 +25,7 @@ limitations under the License.
 
 #include <cstdlib>
 #include <mutex>
+#include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
@@ -247,6 +248,9 @@ torch::Device dl_device_to_torch_device_for_dlpack_v1(DLDevice device) {
     case DLDeviceType::kDLROCM:
       return torch::Device(torch::kHIP,
                            static_cast<c10::DeviceIndex>(device.device_id));
+    case DLDeviceType::kDLExtDev:
+      return torch::Device(torch::kPrivateUse1,
+                           static_cast<c10::DeviceIndex>(device.device_id));
     default:
       LOG(FATAL) << "Unsupported DLPack device type: "
                  << std::to_string(device.device_type);
@@ -299,6 +303,64 @@ T* to_dlpack_impl(const torch::Tensor& src) {
   return &(atDLMTensor->tensor);
 }
 
+// [TVM-FFI allocator hook] Backs Mate FFI internal scratch tensor allocations.
+//
+// Two orthogonal features live on top of this hook:
+//
+//   1. Diagnostic dump (XLLM_DUMP_FFI_ALLOC=1)
+//      Logs every requested (shape, dtype, device, bytes) so allocation
+//      patterns under different code paths can be analysed offline. No-op
+//      and zero overhead (single static bool branch) when the env var is
+//      unset.
+//
+//   2. Record / replay (see utils.h)
+//      The hook can be switched into a thread-local record mode (still
+//      backed by torch::empty, but the resulting Tensor is appended to a
+//      caller-owned buffer) or replay mode (returns the next pre-recorded
+//      Tensor, with shape / dtype CHECKs). This is what makes Mate FFI
+//      compatible with MUSA / CUDA graph capture.
+namespace {
+const char* dlpack_device_to_string(DLDeviceType t) {
+  switch (t) {
+    case DLDeviceType::kDLCPU:
+      return "cpu";
+    case DLDeviceType::kDLCUDA:
+      return "cuda";
+    case DLDeviceType::kDLCUDAHost:
+      return "cuda_host";
+    case DLDeviceType::kDLROCM:
+      return "rocm";
+    case DLDeviceType::kDLExtDev:
+      return "extdev";
+    default:
+      return "other";
+  }
+}
+
+bool ffi_alloc_dump_enabled() {
+  // Cache so we only stat env once per process.
+  static const bool v = ([]() {
+    const char* env = std::getenv("XLLM_DUMP_FFI_ALLOC");
+    return env != nullptr && env[0] != '0' && env[0] != '\0';
+  })();
+  return v;
+}
+
+// Thread-local state for the FFI alloc hook. Default mode is kPassthrough,
+// matching the legacy torch::empty behavior. The CudaGraph capture path
+// transitions: kPassthrough -> kRecord (during recording warmup) ->
+// kPassthrough -> kReplay (during graph capture) -> kPassthrough.
+struct FfiAllocState {
+  ::xllm::kernel::cuda::FfiAllocMode mode =
+      ::xllm::kernel::cuda::FfiAllocMode::kPassthrough;
+  std::vector<torch::Tensor> record_buf;
+  const std::vector<torch::Tensor>* replay_buf = nullptr;
+  size_t replay_idx = 0;
+};
+
+thread_local FfiAllocState g_ffi_alloc_state;
+}  // namespace
+
 int32_t torch_dlpack_managed_tensor_allocator(
     DLTensor* prototype,
     DLManagedTensorVersioned** out,
@@ -316,7 +378,89 @@ int32_t torch_dlpack_managed_tensor_allocator(
         torch::TensorOptions()
             .dtype(at::toScalarType(prototype->dtype))
             .device(dl_device_to_torch_device_for_dlpack_v1(prototype->device));
-    torch::Tensor tensor = torch::empty(shape, options);
+
+    if (ffi_alloc_dump_enabled()) {
+      thread_local int64_t call_idx = 0;
+      const int64_t this_call = call_idx++;
+
+      // Compute payload bytes from prototype shape and dtype size in bits.
+      const int64_t dtype_bits =
+          static_cast<int64_t>(prototype->dtype.bits) *
+          static_cast<int64_t>(prototype->dtype.lanes);
+      int64_t numel = 1;
+      for (int i = 0; i < prototype->ndim; ++i) {
+        numel *= prototype->shape[i];
+      }
+      const int64_t bytes = (numel * dtype_bits + 7) / 8;
+
+      std::ostringstream shape_oss;
+      shape_oss << "[";
+      for (int i = 0; i < prototype->ndim; ++i) {
+        if (i) shape_oss << ",";
+        shape_oss << prototype->shape[i];
+      }
+      shape_oss << "]";
+
+      LOG(INFO) << "[TVMFFI-ALLOC #" << this_call << "] shape=" << shape_oss.str()
+                << " dtype=" << at::toString(at::toScalarType(prototype->dtype))
+                << " device=" << dlpack_device_to_string(prototype->device.device_type)
+                << ":" << static_cast<int>(prototype->device.device_id)
+                << " bytes=" << bytes;
+    }
+
+    torch::Tensor tensor;
+    switch (g_ffi_alloc_state.mode) {
+      case ::xllm::kernel::cuda::FfiAllocMode::kReplay: {
+        // Hand back the next pre-recorded tensor instead of calling
+        // torch::empty(); the captured kernels reuse its device pointer on
+        // every replay so we MUST NOT allocate anything new here.
+        CHECK(g_ffi_alloc_state.replay_buf != nullptr)
+            << "[TVMFFI-ALLOC] kReplay with null recording";
+        const size_t idx = g_ffi_alloc_state.replay_idx;
+        CHECK_LT(idx, g_ffi_alloc_state.replay_buf->size())
+            << "[TVMFFI-ALLOC] kReplay overrun: requested alloc #" << idx
+            << " but recording only has " << g_ffi_alloc_state.replay_buf->size()
+            << " entries -- Mate FFI emitted more allocs under capture than "
+               "during the recording warmup (non-determinism?). prototype "
+               "shape rank=" << prototype->ndim;
+        tensor = (*g_ffi_alloc_state.replay_buf)[idx];
+        // Sanity: shape / dtype / device must match what was recorded; a
+        // mismatch indicates the FFI is not deterministic w.r.t. the bucket,
+        // which would silently corrupt captured kernels.
+        CHECK_EQ(static_cast<int>(tensor.dim()), prototype->ndim)
+            << "[TVMFFI-ALLOC] kReplay rank mismatch at idx=" << idx
+            << " (recorded=" << tensor.dim()
+            << ", requested=" << prototype->ndim << ")";
+        for (int i = 0; i < prototype->ndim; ++i) {
+          CHECK_EQ(tensor.size(i), prototype->shape[i])
+              << "[TVMFFI-ALLOC] kReplay shape dim " << i
+              << " mismatch at idx=" << idx;
+        }
+        CHECK_EQ(tensor.scalar_type(), at::toScalarType(prototype->dtype))
+            << "[TVMFFI-ALLOC] kReplay dtype mismatch at idx=" << idx;
+        // Device equality: torch::Tensor device vs DLDevice -- compare by
+        // converting prototype->device through the same dispatch we used to
+        // build the original tensor.
+        CHECK_EQ(tensor.device(),
+                 dl_device_to_torch_device_for_dlpack_v1(prototype->device))
+            << "[TVMFFI-ALLOC] kReplay device mismatch at idx=" << idx;
+        ++g_ffi_alloc_state.replay_idx;
+        break;
+      }
+      case ::xllm::kernel::cuda::FfiAllocMode::kRecord: {
+        // Allocate as usual but also append the handle to the recording so
+        // the subsequent capture phase can replay against the same device
+        // pointers.
+        tensor = torch::empty(shape, options);
+        g_ffi_alloc_state.record_buf.push_back(tensor);
+        break;
+      }
+      case ::xllm::kernel::cuda::FfiAllocMode::kPassthrough:
+      default: {
+        tensor = torch::empty(shape, options);
+        break;
+      }
+    }
     *out = to_dlpack_impl<DLManagedTensorVersioned>(tensor);
     return 0;
   } catch (const std::exception& e) {
@@ -344,6 +488,52 @@ void ensure_tvm_ffi_tensor_allocator() {
 }  // namespace
 
 namespace xllm::kernel::cuda {
+
+// ---- FFI alloc record/replay API (see utils.h for full design rationale) ----
+
+void begin_ffi_alloc_record() {
+  CHECK(g_ffi_alloc_state.mode == FfiAllocMode::kPassthrough)
+      << "begin_ffi_alloc_record: must be entered from kPassthrough; current="
+      << static_cast<int>(g_ffi_alloc_state.mode)
+      << " (nested record/replay is not supported)";
+  g_ffi_alloc_state.record_buf.clear();
+  g_ffi_alloc_state.mode = FfiAllocMode::kRecord;
+}
+
+std::vector<torch::Tensor> end_ffi_alloc_record() {
+  CHECK(g_ffi_alloc_state.mode == FfiAllocMode::kRecord)
+      << "end_ffi_alloc_record: not currently recording (mode="
+      << static_cast<int>(g_ffi_alloc_state.mode) << ")";
+  g_ffi_alloc_state.mode = FfiAllocMode::kPassthrough;
+  return std::move(g_ffi_alloc_state.record_buf);
+}
+
+void begin_ffi_alloc_replay(const std::vector<torch::Tensor>* recorded) {
+  CHECK(g_ffi_alloc_state.mode == FfiAllocMode::kPassthrough)
+      << "begin_ffi_alloc_replay: must be entered from kPassthrough; current="
+      << static_cast<int>(g_ffi_alloc_state.mode);
+  CHECK(recorded != nullptr) << "begin_ffi_alloc_replay: recording is null";
+  g_ffi_alloc_state.replay_buf = recorded;
+  g_ffi_alloc_state.replay_idx = 0;
+  g_ffi_alloc_state.mode = FfiAllocMode::kReplay;
+}
+
+void end_ffi_alloc_replay() {
+  CHECK(g_ffi_alloc_state.mode == FfiAllocMode::kReplay)
+      << "end_ffi_alloc_replay: not currently replaying (mode="
+      << static_cast<int>(g_ffi_alloc_state.mode) << ")";
+  // We intentionally do NOT compare replay_idx against the recording size:
+  // FFI consumers may legitimately allocate fewer scratch tensors on some
+  // captured replays than on the recording warmup (e.g. when a layer is
+  // skipped). The recording is sized at the upper bound observed during
+  // warmup, so under-consumption is benign; over-consumption is rejected
+  // loudly inside the hook itself.
+  g_ffi_alloc_state.replay_buf = nullptr;
+  g_ffi_alloc_state.replay_idx = 0;
+  g_ffi_alloc_state.mode = FfiAllocMode::kPassthrough;
+}
+
+FfiAllocMode get_ffi_alloc_mode() { return g_ffi_alloc_state.mode; }
 
 bool should_use_tensor_core(torch::ScalarType kv_cache_dtype,
                             int64_t num_attention_heads,

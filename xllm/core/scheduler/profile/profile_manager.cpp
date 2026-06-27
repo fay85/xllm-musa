@@ -941,6 +941,22 @@ void ProfileManager::warmup_for_graph() {
 }
 
 void ProfileManager::warmup_prefill_for_graph() {
+  // Skip the prefill warmup when piecewise prefill capture is disabled.
+  // CudaGraphExecutorImpl::run() executes prefill in eager mode when
+  // enable_prefill_piecewise_graph is false (see cuda_graph_executor_impl.cpp),
+  // so the warmup never produces a captured graph; it only runs a single
+  // max_tokens_per_batch-sized forward pass. On memory-constrained backends
+  // (notably MUSA, where the model weights + KV cache + persistent graph
+  // tensors already consume most of the device memory) this prefill spike
+  // can exceed the activation headroom left by max_memory_utilization and
+  // OOM before the server can accept any request. This mirrors sglang's
+  // behavior of only warming up graphs that will actually be captured.
+  if (!::xllm::ExecutionConfig::get_instance().enable_prefill_piecewise_graph()) {
+    LOG(INFO) << "Skipping prefill graph warmup: "
+              << "enable_prefill_piecewise_graph=false (prefill runs eager).";
+    return;
+  }
+
   auto& model_args = engine_->model_args();
   int32_t max_context_len = model_args.max_position_embeddings();
 

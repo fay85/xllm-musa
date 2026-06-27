@@ -126,6 +126,6 @@ class ForwardSharedMemoryManager : public SharedMemoryManager {
   uint64_t last_version_ = 0;
   void* metadata_addr_ = nullptr;
   ControlMetadata* control_ptr_ = nullptr;
-  std::unique_ptr<Stream> stream_ = nullptr;
+  std::unique_ptr<Stream> stream_;
 };
 }  // namespace xllm

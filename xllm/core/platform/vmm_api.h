@@ -23,9 +23,9 @@ limitations under the License.
 #include "acl/acl.h"
 #elif defined(USE_MLU)
 #include <cn_api.h>
-#elif defined(USE_CUDA) || defined(USE_ILU)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
 #include <cuda.h>
-#elif defined(USE_MUSA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
 #include <musa.h>
 #elif defined(USE_DCU)
 #include <hip/hip_runtime_api.h>
@@ -39,10 +39,10 @@ using PhyMemHandle = aclrtDrvMemHandle;
 #elif defined(USE_MLU)
 using VirPtr = CNaddr;
 using PhyMemHandle = CNmemGenericAllocationHandle;
-#elif defined(USE_CUDA) || defined(USE_ILU)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
 using VirPtr = CUdeviceptr;
 using PhyMemHandle = CUmemGenericAllocationHandle;
-#elif defined(USE_MUSA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
 using VirPtr = MUdeviceptr;
 using PhyMemHandle = MUmemGenericAllocationHandle;
 #elif defined(USE_DCU)

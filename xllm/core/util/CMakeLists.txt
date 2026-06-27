@@ -25,6 +25,7 @@ cc_library(
     spin_lock.h
     spin_rw_lock.h
     int32_map.h
+    layer_hidden_dumper.h
     linalg.h
     suffix_decoding_cache.h
     suffix_tree.h
@@ -42,6 +43,7 @@ cc_library(
     http_downloader.cpp
     # TODO. add following at next pr.
     json_reader.cpp
+    layer_hidden_dumper.cpp
     linalg.cpp
     model_config_utils.cpp
     net.cpp

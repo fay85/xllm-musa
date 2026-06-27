@@ -19,7 +19,7 @@ limitations under the License.
 
 #include <vector>
 
-#include "attention.h"
+#include "layers/common/attention.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_args.h"
 #include "framework/parallel_state/parallel_args.h"

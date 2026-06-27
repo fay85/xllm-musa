@@ -123,7 +123,7 @@ const ParallelInfo& DiTMapping::get_parallel_info(
   } else if (group_type == "dp") {
     return dp_;
   } else {
-    LOG(ERROR) << "get unexpected group_type: " << group_type;
+    LOG(FATAL) << "get unexpected group_type: " << group_type;
   }
 }
 

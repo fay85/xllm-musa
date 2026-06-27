@@ -1,7 +1,39 @@
+if(USE_CUDA)
+  if(DEFINED ENV{MUSA_HOME})
+    set(_XLLM_MUSA_HOME "$ENV{MUSA_HOME}")
+  else()
+    set(_XLLM_MUSA_HOME "/usr/local/musa")
+  endif()
+  if(XLLM_TORCH_MUSA)
+    set(CMAKE_CXX_COMPILER "${_XLLM_MUSA_HOME}/tools/musamapping/mcc_wrapper")
+  else()
+    set(CMAKE_CXX_COMPILER "${_XLLM_MUSA_HOME}/bin/mcc")
+  endif()
+endif()
+
 include(cc_binary)
 include(cc_shared_library)
 
 include_directories(.)
+
+# xllm-musa: musify only on kernel + cuda-graph targets (not server/Mooncake TUs).
+if(XLLM_TORCH_MUSA)
+  if(DEFINED ENV{MUSAMAPPING_PATH} AND NOT "$ENV{MUSAMAPPING_PATH}" STREQUAL "")
+    set(_XLLM_MUSAMAPPING_PATH "$ENV{MUSAMAPPING_PATH}")
+  elseif(DEFINED _XLLM_MUSA_HOME)
+    set(_XLLM_MUSAMAPPING_PATH "${_XLLM_MUSA_HOME}/tools/musamapping")
+  else()
+    set(_XLLM_MUSAMAPPING_PATH "/usr/local/musa/tools/musamapping")
+  endif()
+  set(_XLLM_MUSIFY_COPTS
+    "-fplugin=${_XLLM_MUSAMAPPING_PATH}/libMusaMapping.so"
+    "-x" "musa"
+    "-I."
+  )
+else()
+  set(_XLLM_MUSIFY_COPTS "")
+endif()
+
 
 # Generate build-time version header from version.txt.
 file(READ "${CMAKE_SOURCE_DIR}/version.txt" XLLM_BUILD_VERSION_RAW)
@@ -19,17 +51,36 @@ configure_file(
   @ONLY)
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
-# Set warning-as-error for xllm code (third-party headers are marked as SYSTEM)
+# 0526 reference: mcc_wrapper build skips -Werror; suppress known mcc noise only.
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  add_compile_options(
-    $<$<COMPILE_LANGUAGE:CXX>:-Werror>
-    $<$<COMPILE_LANGUAGE:C>:-Werror>
-  )
+  if(NOT XLLM_TORCH_MUSA)
+    add_compile_options(
+      $<$<COMPILE_LANGUAGE:CXX>:-Werror>
+      $<$<COMPILE_LANGUAGE:C>:-Werror>
+    )
+  else()
+    add_compile_options(
+      $<$<COMPILE_LANGUAGE:CXX>:-Wno-defaulted-function-deleted>
+      $<$<COMPILE_LANGUAGE:CXX>:-Wno-sign-conversion>
+      $<$<COMPILE_LANGUAGE:CXX>:-Wno-inconsistent-missing-override>
+    )
+  endif()
 
   if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_compile_options(
       $<$<COMPILE_LANGUAGE:CXX>:-Wno-macro-redefined>
       $<$<COMPILE_LANGUAGE:C>:-Wno-macro-redefined>
+    )
+  endif()
+
+  if(XLLM_TORCH_MUSA OR DEFINED ENV{MUSAMAPPING_PATH} OR CMAKE_CXX_COMPILER MATCHES "mcc_wrapper")
+    add_compile_options(
+      -Wno-sign-conversion
+      -Wno-conversion
+      -Wno-error=sign-conversion
+      -Wno-error=conversion
+      "$<$<COMPILE_LANG_AND_ID:CXX,Clang>:-Wno-macro-redefined>"
+      "$<$<COMPILE_LANG_AND_ID:CXX,Clang>:-Wno-error=macro-redefined>"
     )
   endif()
 endif()
@@ -109,6 +160,21 @@ endif()
 target_link_libraries(xllm PUBLIC ${COMMON_LIBS})
 if (USE_MUSA)
   target_link_libraries(xllm PUBLIC atomic musa_python torch_cpu c10)
+elseif(XLLM_TORCH_MUSA)
+  target_link_libraries(xllm PUBLIC atomic musa_python torch_cpu c10)
+endif()
+
+if(USE_CUDA AND XLLM_TORCH_MUSA)
+  # cuda_graph_executor_impl.cpp's only externally-observable effect is the
+  # REGISTER_EXECUTOR static initializer in cuda_graph_executor_impl.h. With
+  # normal lazy static-archive linking, no symbol references it so the linker
+  # drops the whole .o and ENABLE_GRAPH=1 silently falls back to
+  # BaseExecutorImpl (factory throws "No valid backend found: musa" at
+  # runtime). Wrap libcuda_graph_executor in --whole-archive at the executable
+  # link to force the .o (and thus the registration) into the binary.
+  target_link_options(xllm PRIVATE
+    "LINKER:--whole-archive,$<TARGET_FILE:cuda_graph_executor>,--no-whole-archive"
+  )
 endif()
 
 # install xllm

@@ -317,11 +317,14 @@ void KVCacheShape::init_conv_cache_shape(const KVCacheCapacity& kv_cache_cap,
                                      ? kv_cache_cap.linear_conv_state_len()
                                      : model_args.linear_conv_kernel_dim() - 1;
 
+  // Layout: [num_blocks, dim, state_len]. Matches xllm_0526 reference (working
+  // in xllm_0623_build) and the causal_conv1d_update kernel's expectation
+  // (conv_state.size(1) == dim, conv_state.size(2) == state_len).
   conv_cache_shape_ = std::vector<int64_t>{
       kv_cache_cap.num_linear_state_blocks(),
-      conv_state_len,
       model_args.linear_key_head_dim() * local_linear_k_head_count * 2 +
-          model_args.linear_key_head_dim() * local_linear_v_head_count};
+          model_args.linear_key_head_dim() * local_linear_v_head_count,
+      conv_state_len};
 }
 
 void KVCacheShape::init_ssm_cache_shape(const KVCacheCapacity& kv_cache_cap,

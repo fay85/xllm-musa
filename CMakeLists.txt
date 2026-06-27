@@ -11,6 +11,7 @@ add_compile_definitions(YLT_ENABLE_IBV)
 add_definitions(-DYLT_ENABLE_IBV)
 set(YLT_ENABLE_IBV ON)
 
+
 if(DEVICE_ARCH STREQUAL "ARM")
     set(CMAKE_SYSTEM_PROCESSOR aarch64)
     set(RUST_TARGET aarch64-unknown-linux-gnu)
@@ -238,6 +239,25 @@ endif()
 set(CPPREST_EXCLUDE_WEBSOCKETS ON CACHE BOOL "Exclude websockets functionality." FORCE)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-truncation")
 
+# Reuse vcpkg_installed; do not reinstall on every cmake reconfigure.
+set(VCPKG_MANIFEST_INSTALL OFF CACHE BOOL "Disable vcpkg manifest install" FORCE)
+
+option(XLLM_TORCH_MUSA "Build USE_CUDA path with torch_musa (mcc_wrapper as CUDA compiler)" OFF)
+
+# mcc_wrapper must be set before project(). Late set() in add_subdirectory()
+# (e.g. Mooncake) invalidates the cache and drops USE_CUDA on reconfigure.
+if(USE_CUDA AND XLLM_TORCH_MUSA)
+  if(DEFINED ENV{MUSAMAPPING_PATH} AND NOT "$ENV{MUSAMAPPING_PATH}" STREQUAL "")
+    set(_XLLM_MCC_WRAPPER "$ENV{MUSAMAPPING_PATH}/mcc_wrapper")
+  elseif(DEFINED ENV{MUSA_HOME} AND NOT "$ENV{MUSA_HOME}" STREQUAL "")
+    set(_XLLM_MCC_WRAPPER "$ENV{MUSA_HOME}/tools/musamapping/mcc_wrapper")
+  else()
+    set(_XLLM_MCC_WRAPPER "/usr/local/musa/tools/musamapping/mcc_wrapper")
+  endif()
+  set(CMAKE_CXX_COMPILER "${_XLLM_MCC_WRAPPER}" CACHE FILEPATH "C++ compiler" FORCE)
+  message(STATUS "XLLM_TORCH_MUSA: CMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER} (pre-project)")
+endif()
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 if(USE_CUDA)
   project("xllm" LANGUAGES C CXX CUDA)
@@ -318,7 +338,7 @@ find_package(benchmark CONFIG REQUIRED)
 find_package(nlohmann_json CONFIG REQUIRED)
 find_package(OpenCV CONFIG REQUIRED)
 find_package(FFMPEG REQUIRED)
-find_package(Python COMPONENTS Development REQUIRED)
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
 find_package(pybind11 CONFIG REQUIRED)
 
 if (USE_CXX11_ABI)
@@ -557,6 +577,7 @@ if(USE_MUSA)
     ${TorchMusa_INSTALL_PREFIX}/lib
     )
   set(MUSA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -O3)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=parentheses")
 endif()
 
 if(USE_CUDA)
@@ -565,52 +586,73 @@ if(USE_CUDA)
   add_compile_definitions(TORCH_CUDA=1)
   set(CMAKE_VERBOSE_MAKEFILE ON)
   include_directories($ENV{PYTHON_INCLUDE_PATH})
-  include_directories(SYSTEM
-      $ENV{PYTORCH_INSTALL_PATH}/include
-      $ENV{PYTORCH_INSTALL_PATH}/include/torch/csrc/api/include
-  )
 
-  link_directories(
-    $ENV{PYTHON_LIB_PATH}
-    $ENV{PYTORCH_INSTALL_PATH}/lib
-    $ENV{CUDA_TOOLKIT_ROOT_DIR}/lib64
-  )
-
-  # To reduce compilation time during development, use fewer architectures:
-  #   export TORCH_CUDA_ARCH_LIST="9.0"
-  option(CUDA_DEV_MODE "Use -O1 instead of -O3 for faster CUDA compilation during development" OFF)
-  if(CUDA_DEV_MODE)
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O1")
+  if(XLLM_TORCH_MUSA)
+    # Align with reference xllm (0526): rely on musamapping modules (found via
+    # CMAKE_MODULE_PATH) for mcc_wrapper .cu compilation. Do NOT inject
+    # -x musa/--offload-arch/-fplugin here (that broke CUDA detection + looped).
+    add_compile_definitions(XLLM_TORCH_MUSA=1)
+    message(STATUS "XLLM_TORCH_MUSA enabled: CUDA graph path via mcc_wrapper + musamapping")
+    include_directories(
+        /usr/local/lib/python3.10/dist-packages/tvm_ffi/include/
+        /usr/local/musa/include
+        /usr/local/lib/python3.10/dist-packages/torch_musa/share/torch_musa_codegen
+        /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include
+        /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include
+        /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/musa
+        /usr/include/python3.10
+        /usr/local/lib/python3.10/dist-packages
+        $ENV{PYTHON_INCLUDE_PATH}
+    )
+    link_directories(
+        /usr/local/musa/lib
+        /usr/local/lib/python3.10/dist-packages/tvm_ffi/lib
+        /usr/local/lib/python3.10/dist-packages/torch_musa/lib
+        /opt/intel/oneapi/mkl/lib/intel64
+        $ENV{PYTHON_LIB_PATH}
+        $ENV{PYTORCH_INSTALL_PATH}/lib
+    )
+    set(CUDA_NVCC_FLAGS ${CUDA_NVCC_FLAGS} -Od3)
   else()
-    set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3")
-  endif()
+    include_directories(SYSTEM
+        $ENV{PYTORCH_INSTALL_PATH}/include
+        $ENV{PYTORCH_INSTALL_PATH}/include/torch/csrc/api/include
+    )
 
-  # The following definitions must be undefined since half-precision operation is required.
-  string(APPEND CMAKE_CUDA_FLAGS
-    " -U__CUDA_NO_HALF_OPERATORS__"
-    " -U__CUDA_NO_HALF_CONVERSIONS__"
-    " -U__CUDA_NO_HALF2_OPERATORS__"
-    " -U__CUDA_NO_BFLOAT16_CONVERSIONS__"
-    " --use_fast_math"
-    " -Xfatbin -compress-all")
+    link_directories(
+      $ENV{PYTHON_LIB_PATH}
+      $ENV{PYTORCH_INSTALL_PATH}/lib
+      $ENV{CUDA_TOOLKIT_ROOT_DIR}/lib64
+    )
 
-  # Parallel nvcc compilation: compile multiple GPU architectures simultaneously within each .cu
-  # file. --threads 0 = auto-detect CPU core count. Requires CUDA >= 11.2.
-  if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.2)
-    string(APPEND CMAKE_CUDA_FLAGS " --threads 0")
+    option(CUDA_DEV_MODE "Use -O1 instead of -O3 for faster CUDA compilation during development" OFF)
+    if(CUDA_DEV_MODE)
+      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O1")
+    else()
+      set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3")
+    endif()
+
+    string(APPEND CMAKE_CUDA_FLAGS
+      " -U__CUDA_NO_HALF_OPERATORS__"
+      " -U__CUDA_NO_HALF_CONVERSIONS__"
+      " -U__CUDA_NO_HALF2_OPERATORS__"
+      " -U__CUDA_NO_BFLOAT16_CONVERSIONS__"
+      " --use_fast_math"
+      " -Xfatbin -compress-all")
+
+    if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.2)
+      string(APPEND CMAKE_CUDA_FLAGS " --threads 0")
+    endif()
+
+    execute_process(COMMAND python -c "import nvidia.cudnn; print(nvidia.cudnn.__file__)" OUTPUT_VARIABLE CUDNN_PYTHON_PATH)
+    get_filename_component(CUDNN_ROOT_DIR "${CUDNN_PYTHON_PATH}" DIRECTORY)
+    link_directories(
+        ${CUDNN_ROOT_DIR}/lib64
+        ${CUDNN_ROOT_DIR}/lib
+    )
   endif()
 
   message(STATUS "CMAKE_CUDA_FLAGS: ${CMAKE_CUDA_FLAGS}")
-
-  # find_package(NCCL REQUIRED)
-
-  # find cudnn
-  execute_process(COMMAND python -c "import nvidia.cudnn; print(nvidia.cudnn.__file__)" OUTPUT_VARIABLE CUDNN_PYTHON_PATH)
-  get_filename_component(CUDNN_ROOT_DIR "${CUDNN_PYTHON_PATH}" DIRECTORY)
-  link_directories(
-      ${CUDNN_ROOT_DIR}/lib64
-      ${CUDNN_ROOT_DIR}/lib
-  )
 endif()
 
 if(USE_ILU)
@@ -715,8 +757,8 @@ include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/Mooncake/moon
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/Mooncake/mooncake-transfer-engine/include)
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/Mooncake/mooncake-store/include)
 
-# CUTLASS - CUDA kernel library for scaled matmul
-if(USE_CUDA)
+# CUTLASS - CUDA kernel library for scaled matmul (not used on torch_musa)
+if(USE_CUDA AND NOT XLLM_TORCH_MUSA)
   set(CUTLASS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cutlass)
   set(CUTLASS_INCLUDE_DIR ${CUTLASS_DIR}/include)
   set(CUTLASS_TOOLS_UTIL_INCLUDE_DIR ${CUTLASS_DIR}/tools/util/include)
@@ -736,12 +778,14 @@ endif()
 
 # add subdirectories
 # Configure third_party first so xllm can link against real CMake targets.
-# add subdirectories
-# Configure third_party first so xllm can link against real CMake targets.
-
 add_subdirectory(third_party)
 if(TARGET brpc-static AND NOT TARGET brpc)
   add_library(brpc ALIAS brpc-static)
 endif()
 add_subdirectory(xllm)
+
+# Optional benchmark targets (compile only if explicitly enabled or always; cheap).
+if(USE_CUDA AND XLLM_TORCH_MUSA)
+  add_subdirectory(tools/bench_norm)
+endif()
 add_subdirectory(tests)

@@ -108,7 +108,10 @@ void XAttentionImpl::run_single_stage_decode(
                                    output,
                                    unshared_lse,
                                    decode_use_tensor_core_,
-                                   attn_metadata.qo_indptr);
+                                   attn_metadata.qo_indptr,
+                                   attn_metadata.paged_kv_indptr_host,
+                                   attn_metadata.paged_kv_indices_host,
+                                   attn_metadata.paged_kv_last_page_len_host);
 }
 
 void XAttentionImpl::run_two_stage_decode(

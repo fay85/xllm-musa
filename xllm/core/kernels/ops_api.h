@@ -28,6 +28,9 @@ void apply_rotary(RotaryParams& params);
 
 void active(ActivationParams& params);
 
+// In-place out *= sigmoid(gate). CUDA/MUSA only; no allocations.
+void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate);
+
 void reshape_paged_cache(ReshapePagedCacheParams& params);
 
 void reshape_from_cache(ReshapeFromCacheParams& params);
@@ -243,6 +246,15 @@ torch::Tensor build_split_qkv_rmsnorm_mrope_gather_pattern(
 
 std::pair<torch::Tensor, torch::Tensor> chunk_gated_delta_rule(
     ChunkGatedDeltaRuleParams& params);
+
+std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
+    MateGatedDeltaRulePrefillParams& params);
+
+torch::Tensor mate_gated_delta_rule_decode(
+    MateGatedDeltaRuleDecodeParams& params);
+
+torch::Tensor fused_gated_delta_rule_decode(
+    MateGatedDeltaRuleDecodeParams& params);
 
 torch::Tensor recurrent_gated_delta_rule(
     const torch::Tensor& query,

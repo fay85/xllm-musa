@@ -28,9 +28,13 @@ limitations under the License.
 #elif defined(USE_MUSA)
 #include "musa_process_group.h"
 #endif
+#if defined(USE_CUDA) || defined(USE_MUSA)
+#include <musa.h>
+#elif defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || defined(USE_ILU)
+#include "platform/device.h"
+#endif
 #include "common/global_flags.h"
 #include "parallel_args.h"
-#include "platform/device.h"
 #include "process_group.h"
 #include "util/net.h"
 namespace xllm {
@@ -61,8 +65,12 @@ DiTCollectiveCommunicator::DiTCollectiveCommunicator(int32_t global_rank,
 void DiTCollectiveCommunicator::create_process_groups(
     const std::string& master_addr,
     const torch::Device& device) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  musaSetDevice(device.index());
+#else
   Device device_(device);
   device_.set_device();
+#endif
   std::string host;
   int32_t port;
   net::parse_host_port_from_addr(master_addr, host, port);

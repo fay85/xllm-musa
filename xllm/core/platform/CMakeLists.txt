@@ -19,7 +19,7 @@ cc_library(
     $<$<BOOL:${USE_DCU}>:dcu/dcu_layer_synchronizer.h>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_tensor_alloc.h>
     $<$<BOOL:${USE_CUDA}>:cuda/cuda_utils.h>
-    $<$<BOOL:${USE_CUDA}>:cuda_profiler.h>
+    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>>:cuda_profiler.h>
     $<$<BOOL:${USE_CUDA}>:torch_profiler.h>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:numa_utils.h>
   SRCS
@@ -30,7 +30,7 @@ cc_library(
     shared_vmm_allocator.cpp
     $<$<BOOL:${USE_MLU}>:mlu/mlu_layer_synchronizer.cpp>
     $<$<BOOL:${USE_MLU}>:mlu/mlu_tensor_alloc.cpp>
-    $<$<BOOL:${USE_CUDA}>:cuda_profiler.cpp>
+    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>>:cuda_profiler.cpp>
     $<$<BOOL:${USE_CUDA}>:torch_profiler.cpp>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_layer_synchronizer.cpp>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_tensor_alloc.cpp>
@@ -46,8 +46,10 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:torch_mlu>
     $<$<BOOL:${USE_MLU}>:cnrt>
     $<$<BOOL:${USE_MLU}>:cndrv>
-    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_ILU}>>:cuda>
-    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_ILU}>>:cudart>
+    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>>:cuda>
+    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>>:cudart>
+    $<$<BOOL:${XLLM_TORCH_MUSA}>:musa>
+    $<$<BOOL:${XLLM_TORCH_MUSA}>:musart>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_ILU}>,$<BOOL:${USE_DCU}>>:numa>
     $<$<BOOL:${USE_MUSA}>:musa>
     $<$<BOOL:${USE_MUSA}>:musart>

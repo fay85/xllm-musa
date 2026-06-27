@@ -103,10 +103,27 @@ torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
   } else {
     torch::Tensor output;
     if (Device::type_str() != "npu") {
-      int64_t batch_size = gate_up.sizes()[0];
-      output = torch::empty(
-          {batch_size, intermediate_size_ / process_group_->world_size()},
-          gate_up.options());
+      const int64_t batch_size = gate_up.size(0);
+      const int64_t out_features =
+          intermediate_size_ / process_group_->world_size();
+      // Reuse a persistent activation-output scratch instead of allocating a
+      // fresh `torch::empty` per call. With the CUDA caching allocator this
+      // already returns the same block most of the time, but we still save
+      // ~1us of tensor-construction / refcount / stream-binding overhead per
+      // layer per token (64 layers * ~16 tok/s ~ 1 ms/s reclaimed at TPOT
+      // scale on Qwen3.5-27B) and -- more importantly -- the device pointer
+      // is now stable across CUDA-graph captures and replays.
+      if (!act_output_cache_.defined() ||
+          act_output_cache_.size(0) < batch_size ||
+          act_output_cache_.size(-1) != out_features ||
+          act_output_cache_.scalar_type() != gate_up.scalar_type() ||
+          act_output_cache_.device() != gate_up.device()) {
+        act_output_cache_ =
+            torch::empty({batch_size, out_features}, gate_up.options());
+      }
+      // narrow() returns a contiguous metadata-only view of the leading
+      // `batch_size` rows; down_proj_'s GEMM accepts it as-is.
+      output = act_output_cache_.narrow(/*dim=*/0, /*start=*/0, batch_size);
     }
 
     act_->forward(gate_up, output);

@@ -32,19 +32,20 @@ PartialRotaryEmbeddingImpl::PartialRotaryEmbeddingImpl(
       rotary_dim_(rotary_dim),
       is_neox_style_(is_neox_style),
       interleaved_(interleaved) {
-  auto dev_options = torch::TensorOptions().device(Device::type_torch());
-
+  // Build the rope cos/sin cache on CPU and only move the final cache to the
+  // target device. Computing inv_freq/freqs directly on the torch_musa device
+  // would invoke pow(scalar, tensor) whose internal .item() needs a pinned host
+  // allocator that is not registered in the pure-C++ binary. (Mirrors the
+  // reference xllm rotary::compute_inv_freq, which stays on CPU.)
   auto inv_freq_t = torch::arange(/*start=*/0,
                                   /*end=*/rotary_dim_,
                                   /*step=*/2,
                                   torch::TensorOptions().dtype(torch::kFloat));
-  inv_freq_t = inv_freq_t.to(dev_options);
   auto inv_freq =
       1.0 /
       torch::pow(rope_theta, inv_freq_t / static_cast<double>(rotary_dim_));
 
   auto t = torch::arange(0, max_position_embeddings, 1, torch::kFloat32);
-  t = t.to(dev_options);
 
   const auto freqs = torch::einsum("i,j->ij", {t, inv_freq});
   const auto cos_sin =

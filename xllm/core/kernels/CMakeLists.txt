@@ -1,5 +1,21 @@
 include(cc_library)
 
+if(XLLM_TORCH_MUSA)
+  if(DEFINED ENV{MUSAMAPPING_PATH} AND NOT "$ENV{MUSAMAPPING_PATH}" STREQUAL "")
+    set(_XLLM_MUSAMAPPING_PATH "$ENV{MUSAMAPPING_PATH}")
+  else()
+    set(_XLLM_MUSAMAPPING_PATH "/usr/local/musa/tools/musamapping")
+  endif()
+  set(_XLLM_MUSIFY_COPTS
+    "-fplugin=${_XLLM_MUSAMAPPING_PATH}/libMusaMapping.so"
+    "-x" "musa"
+    "-I."
+  )
+else()
+  set(_XLLM_MUSIFY_COPTS "")
+endif()
+
+
 if(USE_NPU)
   add_subdirectory(npu)
 endif()
@@ -38,6 +54,8 @@ cc_library(
     ops_api.h
   SRCS
     ops_api.cpp
+  COPTS
+    ${_XLLM_MUSIFY_COPTS}
   DEPS
     torch
     $<$<BOOL:${USE_NPU}>:triton_adapter>

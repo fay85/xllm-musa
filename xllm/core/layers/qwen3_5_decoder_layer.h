@@ -17,6 +17,9 @@ limitations under the License.
 
 #if defined(USE_NPU)
 #include "layers/npu_torch/qwen3_5_decoder_layer_impl.h"
+#elif defined(USE_CUDA)
+// torch_musa / CUDA-graph path reuses the platform-neutral torch C++ impl.
+#include "layers/npu_torch/qwen3_5_decoder_layer_impl.h"
 #elif defined(USE_MLU)
 #include "layers/mlu/qwen3_5_decoder_layer.h"
 #endif
