@@ -18,7 +18,9 @@ limitations under the License.
 #include <tuple>
 
 #include "xllm/core/kernels/ops_api.h"
+#if defined(USE_NPU)
 #include "xllm/core/platform/npu/acl_graph_task_update_context.h"
+#endif
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
 #include "core/common/global_flags.h"
@@ -432,37 +434,6 @@ torch::Tensor run_causal_conv1d_graph_update(
 #endif
 
 
-  c10_npu::graph_task_group_begin(stream);
-  xllm::kernel::causal_conv1d_out(output,
-                                  x,
-                                  weight,
-                                  conv_state,
-                                  bias,
-                                  torch::IntArrayRef(query_start_loc),
-                                  torch::IntArrayRef(cache_indices),
-                                  torch::IntArrayRef(empty_host_args),
-                                  torch::IntArrayRef(num_accepted_tokens),
-                                  xllm::npu::kCausalConv1dActivationSilu,
-                                  xllm::npu::kCausalConv1dGraphPadSlotId,
-                                  xllm::npu::kCausalConv1dRunModeUpdate);
-  c10_npu::NPUTaskGroupHandle handle = c10_npu::graph_task_group_end(stream);
-
-  xllm::npu::CausalConv1dGraphTask task;
-  task.output = output;
-  task.x = x;
-  task.weight = weight;
-  task.conv_state = conv_state;
-  task.bias = bias;
-  task.activation_mode = xllm::npu::kCausalConv1dActivationSilu;
-  task.pad_slot_id = xllm::npu::kCausalConv1dGraphPadSlotId;
-  task.run_mode = xllm::npu::kCausalConv1dRunModeUpdate;
-  task.branch = branch;
-  task.handle = handle;
-  task.event = std::move(event);
-  graph_context->causal_conv1d_tasks.emplace_back(std::move(task));
-  return output;
-}
-
 torch::Tensor run_spec_verify_gated_delta_rule(
     torch::Tensor query,
     torch::Tensor key,
@@ -764,9 +735,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
         torch::IntArrayRef(linear_state_indices_vec),
         torch::IntArrayRef(input_params.parallel.has_initial_state),
         num_accepted_tokens_opt,
-        xllm::npu::kCausalConv1dActivationSilu,
-        xllm::npu::kCausalConv1dGraphPadSlotId,
-        xllm::npu::kCausalConv1dRunModeForward);
+        1,   // activation_mode (silu)
+        -1,  // pad_slot_id
+        0);  // run_mode forward
 
     mixed_qkv = reshape_qkvz_with_pad(attn_metadata, mixed_qkv);
     mixed_qkv = mixed_qkv.transpose(1, 2);
