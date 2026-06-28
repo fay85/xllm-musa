@@ -40,7 +40,8 @@ limitations under the License.
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/service_config.h"
 #include "framework/block/block_utils.h"
-#include "framework/block/hierarchy_block_manager_pool.h"
+// hierarchy temporarily disabled during the block-manager refactor
+// #include "framework/block/hierarchy_block_manager_pool.h"
 #include "framework/kv_cache/kv_cache_estimation.h"
 #include "framework/kv_cache/kv_cache_shape.h"
 #include "framework/model/model_args.h"
@@ -561,8 +562,11 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
   }
 
   if (options_.host_blocks_factor() > 1.0 || options_.enable_kvcache_store()) {
-    kv_cache_manager_ =
-        std::make_unique<HierarchyBlockManagerPool>(options, this, dp_size_);
+    // hierarchy temporarily disabled during the block-manager refactor.
+    LOG(FATAL) << "host-offload / kvcache-store is temporarily disabled during "
+                  "the block-manager refactor (hierarchy rebuild in progress). "
+               << "host_blocks_factor=" << options_.host_blocks_factor()
+               << " enable_kvcache_store=" << options_.enable_kvcache_store();
   } else {
     kv_cache_manager_ = std::make_unique<BlockManagerPool>(options, dp_size_);
   }
