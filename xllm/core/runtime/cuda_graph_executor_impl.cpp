@@ -581,6 +581,8 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
                                       /*non_blocking=*/true);
   if (!attn_metadata->is_prefill || args_.enable_mla()) {
     attn_metadata->block_table = slice_persistent_block_tables;
+    // FA3 decode fills this persistent buffer from CSR paged_kv metadata.
+    attn_metadata->fa3_page_table = slice_persistent_block_tables;
   }
 
   // Update persistent embedding from input_embedding if available

@@ -154,6 +154,62 @@ void batch_decode(const std::string& uri,
                   const torch::Tensor& paged_kv_indices_host = torch::Tensor(),
                   const torch::Tensor& paged_kv_last_page_len_host =
                       torch::Tensor());
+// FA3 unified attention decode (single-pass, warp-specialized). Calls the
+// JIT-built `fmha_fwd_<hash>.so` from mate's cached_ops. See fa3_fwd.cpp.
+//
+// Inputs:
+//   query:              [total_q, num_qo_heads, head_dim_qk]   bf16 device
+//   k_cache, v_cache:   [n_pages, page_size, num_kv_heads, head_dim]  bf16
+//   cu_seqlens_q:       [batch + 1]   int32 device
+//   seqused_k:          [batch]       int32 device (per-seq kv length)
+//   page_table:         [batch, max_pages_per_seq] int32 device
+//   scheduler_metadata: int32 metadata tensor produced by
+//                       update_fa3_decode_plan_info() at layer 0
+//   max_seqlen_q:       1 for plain decode; >1 for MTP spec-verify
+//   window_left:        sliding-window left edge (-1 disables)
+//   window_right:       sliding-window right edge (0 = causal mask only)
+//   sm_scale:           softmax scale = 1 / sqrt(head_dim)
+// Outputs (preallocated):
+//   output:    [total_q, num_qo_heads, head_dim_vo] bf16
+//   output_lse:[num_qo_heads, total_q]              fp32
+void fa3_decode(const torch::Tensor& query,
+                const torch::Tensor& k_cache,
+                const torch::Tensor& v_cache,
+                const torch::Tensor& cu_seqlens_q,
+                const torch::Tensor& seqused_k,
+                const torch::Tensor& page_table,
+                const torch::Tensor& scheduler_metadata,
+                int64_t max_seqlen_q,
+                int64_t window_left,
+                int64_t window_right,
+                double sm_scale,
+                torch::Tensor& output,
+                torch::Tensor& output_lse);
+
+// Precompute scheduler_metadata for fa3_decode. Call once per shape (per
+// PlanInfo) at layer 0; reuse the returned tensor across all decode layers.
+torch::Tensor fa3_decode_scheduler_metadata(
+    const torch::Device& device,
+    int32_t batch_size,
+    int32_t num_heads_q,
+    int32_t num_heads_kv,
+    int32_t head_dim_qk,
+    int32_t head_dim_vo,
+    int32_t max_seqlen_q,
+    int32_t max_seqlen_k,
+    int32_t window_size_left,
+    int32_t window_size_right,
+    const torch::Tensor& cu_seqlens_q,
+    const torch::Tensor& seqused_k);
+
+// Build a rectangular FA3 page_table [batch, max_pages_per_row] from CSR
+// paged_kv_indptr / paged_kv_indices. Output must be pre-allocated int32 on
+// device; unused columns are filled with -1.
+void build_page_table_from_paged_kv(
+    torch::Tensor& page_table,
+    const torch::Tensor& paged_kv_indptr,
+    const torch::Tensor& paged_kv_indices);
+
 #endif  // !defined(USE_DCU)
 void rms_norm(torch::Tensor output,
               torch::Tensor input,
