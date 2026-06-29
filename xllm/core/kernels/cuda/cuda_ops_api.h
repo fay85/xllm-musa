@@ -162,7 +162,8 @@ void batch_decode(const std::string& uri,
 //   k_cache, v_cache:   [n_pages, page_size, num_kv_heads, head_dim]  bf16
 //   cu_seqlens_q:       [batch + 1]   int32 device
 //   seqused_k:          [batch]       int32 device (per-seq kv length)
-//   page_table:         [batch, max_pages_per_seq] int32 device
+//   page_table:         [batch, max_pages_per_seq] int32 device (-1 padded;
+//                       built by batch_input_builder from allocated KV blocks)
 //   scheduler_metadata: int32 metadata tensor produced by
 //                       update_fa3_decode_plan_info() at layer 0
 //   max_seqlen_q:       1 for plain decode; >1 for MTP spec-verify
@@ -201,14 +202,6 @@ torch::Tensor fa3_decode_scheduler_metadata(
     int32_t window_size_right,
     const torch::Tensor& cu_seqlens_q,
     const torch::Tensor& seqused_k);
-
-// Build a rectangular FA3 page_table [batch, max_pages_per_row] from CSR
-// paged_kv_indptr / paged_kv_indices. Output must be pre-allocated int32 on
-// device; unused columns are filled with -1.
-void build_page_table_from_paged_kv(
-    torch::Tensor& page_table,
-    const torch::Tensor& paged_kv_indptr,
-    const torch::Tensor& paged_kv_indices);
 
 #endif  // !defined(USE_DCU)
 void rms_norm(torch::Tensor output,

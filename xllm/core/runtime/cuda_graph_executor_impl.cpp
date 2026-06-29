@@ -175,8 +175,9 @@ CudaGraphPersistentParam::CudaGraphPersistentParam(
   const int64_t max_block_table_len =
       (max_seq_len + block_size - 1) / block_size + 1;
   persistent_block_tables_ =
-      torch::zeros({max_seqs_per_batch, max_block_table_len},
-                   torch::dtype(torch::kInt).device(device));
+      torch::full({max_seqs_per_batch, max_block_table_len},
+                  -1,
+                  torch::dtype(torch::kInt).device(device));
 
   // Output tensor for hidden states
   torch::ScalarType dtype = util::parse_dtype(args.dtype(), device);
@@ -581,8 +582,6 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
                                       /*non_blocking=*/true);
   if (!attn_metadata->is_prefill || args_.enable_mla()) {
     attn_metadata->block_table = slice_persistent_block_tables;
-    // FA3 decode fills this persistent buffer from CSR paged_kv metadata.
-    attn_metadata->fa3_page_table = slice_persistent_block_tables;
   }
 
   // Update persistent embedding from input_embedding if available

@@ -306,9 +306,9 @@ void FlashInferAttentionImpl::decoder_forward(
       return env && std::string(env) == "1";
     }();
     if (use_fa3) {
-      const int64_t batch_size = attn_metadata.paged_kv_last_page_len.size(0);
-      const int64_t block_size_local =
-          (k_cache.defined() && k_cache.dim() >= 2) ? k_cache.size(1) : 1;
+      CHECK(attn_metadata.block_table.defined())
+          << "FA3 decode requires block_table (rectangular page_table)";
+      const int64_t batch_size = attn_metadata.block_table.size(0);
 
       // seqused_k = per-seq kv length (NOT cumulative). attn_metadata
       // already keeps it under `kv_seq_lens`; if undefined fall back to
@@ -323,51 +323,10 @@ void FlashInferAttentionImpl::decoder_forward(
       }
       seqused_k = seqused_k.contiguous();
 
-      CHECK(attn_metadata.paged_kv_indptr.defined())
-          << "FA3 decode requires paged_kv_indptr";
-      CHECK(attn_metadata.paged_kv_indices.defined())
-          << "FA3 decode requires paged_kv_indices";
-
-      // page_table: rectangular [batch, max_pages_per_row] int32. Build from
-      // CSR paged_kv metadata so multi-seq decode and graph warmup (batch>1)
-      // work. Prefer a pre-allocated persistent buffer (fa3_page_table or
-      // block_table from graph executor); otherwise allocate per call.
-      int64_t max_pages_per_row = 1;
-      if (attn_metadata.fa3_page_table.defined()) {
-        max_pages_per_row = attn_metadata.fa3_page_table.size(1);
-      } else if (attn_metadata.block_table.defined()) {
-        max_pages_per_row = attn_metadata.block_table.size(1);
-      } else {
-        max_pages_per_row =
-            (attn_metadata.max_seq_len + block_size_local - 1) / block_size_local +
-            1;
-      }
-      CHECK_GT(max_pages_per_row, 0);
-
-      torch::Tensor page_table;
-      if (attn_metadata.fa3_page_table.defined() &&
-          attn_metadata.fa3_page_table.size(0) >= batch_size &&
-          attn_metadata.fa3_page_table.size(1) >= max_pages_per_row) {
-        page_table = attn_metadata.fa3_page_table
-                         .slice(/*dim=*/0, /*start=*/0, /*end=*/batch_size)
-                         .slice(/*dim=*/1, /*start=*/0, /*end=*/max_pages_per_row);
-      } else if (attn_metadata.block_table.defined() &&
-                 attn_metadata.block_table.size(0) >= batch_size &&
-                 attn_metadata.block_table.size(1) >= max_pages_per_row) {
-        page_table = attn_metadata.block_table
-                         .slice(/*dim=*/0, /*start=*/0, /*end=*/batch_size)
-                         .slice(/*dim=*/1, /*start=*/0, /*end=*/max_pages_per_row);
-      } else {
-        page_table = torch::empty(
-            {batch_size, max_pages_per_row},
-            torch::TensorOptions()
-                .dtype(torch::kInt32)
-                .device(query.device()));
-      }
-      xllm::kernel::cuda::build_page_table_from_paged_kv(
-          page_table,
-          attn_metadata.paged_kv_indptr,
-          attn_metadata.paged_kv_indices);
+      // page_table: native rectangular block_table built by the input builder
+      // from allocated KV blocks (sglang req_to_token style). Unused slots are
+      // -1; graph mode reuses persistent_block_tables_ updated each step.
+      const torch::Tensor page_table = attn_metadata.block_table;
 
       // Use the host-side max KV length tracked by AttentionMetadata, not
       // the (over-estimated) page-aligned bound. The metadata kernel uses

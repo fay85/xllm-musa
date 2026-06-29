@@ -108,7 +108,6 @@ set(CUDA_SOURCE_FILES
   air_log_softmax_last_dim.cu
   attention_runner.cpp
   batch_decode.cpp
-  build_page_table_from_paged_kv.cu
   fa3_fwd.cpp
   fa3_metadata.cpp
   batch_prefill.cpp

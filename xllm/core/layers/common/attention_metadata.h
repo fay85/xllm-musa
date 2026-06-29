@@ -136,11 +136,6 @@ struct AttentionMetadata {
   // plan call, then reused across all decode layers for the same shape.
   // Empty when not using FA3 path (default).
   torch::Tensor fa3_scheduler_metadata;
-  // FA3 page_table [batch, max_pages_per_row] int32 on device. When set (e.g.
-  // by cuda_graph_executor from persistent_block_tables_), the FA3 decode path
-  // fills this buffer in-place from CSR paged_kv metadata instead of
-  // allocating each step. Empty when not using FA3 (default).
-  torch::Tensor fa3_page_table;
 
   // Query/Output index pointer tensor for decode mode with tensor core.
   // Similar to row_splits in ragged tensor: cumulative sum of sequence lengths.

@@ -397,8 +397,8 @@ ForwardInput RecMultiRoundBatchInputBuilder::state_to_forward_input() {
   // Setup multimodal data
   input_params.multimodal.mm_data.batch(mm_data_vec_);
 
-  // Setup block tables
-  util::pad_2d_vector(state.block_tables_vec, /*pad_value=*/0);
+  // Setup block tables (-1 padded; see batch_input_builder.cpp).
+  util::pad_2d_vector(state.block_tables_vec, /*pad_value=*/-1);
   input_params.attention.device.block_tables =
       create_2d_tensor(state.block_tables_vec, torch::kInt);
   input_params.attention.host.block_tables =

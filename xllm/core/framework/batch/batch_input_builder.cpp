@@ -945,8 +945,9 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
   // Setup multimodal data
   input_params.multimodal.mm_data.batch(mm_data_vec_);
 
-  // Setup block tables
-  util::pad_2d_vector(state_.block_tables_vec, /*pad_value=*/0);
+  // Setup block tables. Unused slots are -1 (sglang req_to_token / FA3
+  // page_table convention); valid page IDs are always non-negative.
+  util::pad_2d_vector(state_.block_tables_vec, /*pad_value=*/-1);
   input_params.attention.device.block_tables =
       create_2d_tensor(state_.block_tables_vec, torch::kInt);
   input_params.attention.host.block_tables =
