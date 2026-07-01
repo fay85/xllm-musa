@@ -24,11 +24,7 @@ limitations under the License.
 #include "triton_npu/torch_api/triton_ops_api.h"
 #elif defined(USE_CUDA)
 #if defined(XLLM_TORCH_MUSA)
-#include "musa/attention_runner.h"
-#include "musa/cuda_ops_api.h"
-#include "musa/gated_delta_fallback.h"
-#include "musa/gdn_ops.h"
-#include "musa/mate_gdn_ops.h"
+#include "musa/torch_musa_ops_api.h"
 #else
 #include "cuda/attention_runner.h"
 #include "cuda/cuda_ops_api.h"

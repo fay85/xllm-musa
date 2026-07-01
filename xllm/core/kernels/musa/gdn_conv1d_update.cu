@@ -13,44 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-// Fused causal-conv1d single-token decode update for the USE_CUDA path
-// (also MUSA-as-CUDA via mcc -x musa + libMusaMapping.so).
-//
-// The xLLM gdn_ops.cpp `causal_conv1d_update` reference impl uses a chain of
-// libtorch ops (index_select -> to(fp32) -> cat -> mul -> sum -> silu ->
-// index_copy_) for the fast decode path. Each op triggers an at::empty /
-// EmptyMUSA allocation, which is forbidden during CUDA-graph capture on
-// torch_musa 2.7.1 (the allocator does not honor c10::cuda::MemPoolContext).
-//
-// This kernel is a 1:1 port of sglang's MUSA TileLang causal_conv1d decode
-// kernel (`_causal_conv1d_decode_width4_batched_kernel` in
-// sglang_qwen35/python/sglang/srt/hardware_backend/musa/jit_kernel/tilelang/
-// causal_conv1d.py). It performs the entire decode step in one launch:
-//   1. Reads conv_state[cache_idx][feat][0..state_len) into registers.
-//   2. Reads the new input token x[seq][feat].
-//   3. Computes acc = sum(state[i] * weight[i]) + x * weight[state_len].
-//   4. Optionally adds bias[feat].
-//   5. Optionally applies silu/swish: acc / (1 + exp(-acc)).
-//   6. Writes the result into a CALLER-OWNED output buffer
-//      (`output_buf` in CausalConv1dUpdateParams).
-//   7. Shifts conv_state left by one and stores x into the last slot
-//      (in-place update of the conv_state ring buffer).
-//
-// All intermediate arithmetic is in fp32 even for bf16/fp16 weights/inputs,
-// matching sglang's behavior and the original reference impl's behavior
-// (cf. weight_f32 = weight.to(kFloat32) + x_f32 in gdn_ops.cpp:268-269).
-//
-// Hot-path constraints encoded in the host wrapper (graph-safe):
-//   * `x` is [num_tokens, dim] and num_tokens == batch (one token per seq).
-//   * state_len > 0 (Qwen3.5 uses width=4 => state_len=3).
-//   * pad_slot_id is allowed; entries with cache_idx == pad_slot_id are
-//     silently skipped (output left as caller-initialized garbage; matching
-//     the reference impl's vLLM-style behavior).
-//   * conv_state stride along the last dim must be 1 (canonical layout from
-//     model loading; the GDN base layer guarantees this).
-//   * output_buf, when provided, must have shape [num_tokens, dim], dtype
-//     matching x, and stride(-1) == 1.
-
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>

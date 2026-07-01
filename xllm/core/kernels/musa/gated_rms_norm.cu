@@ -13,33 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-// Fused gated RMSNorm for the USE_CUDA path (also covers MUSA-as-CUDA builds
-// via mcc -x musa + libMusaMapping.so).
-//
-// Replaces the libtorch reference impl (cuda::gated_layer_norm_ref in
-// gdn_ops.cpp lines 56-105) for the dominant call pattern used by Qwen3.5
-// `Qwen3GatedDeltaNetBaseImpl::norm_` (RmsNormGated with norm_dim=head_v_dim,
-// is_rms_norm=true, norm_before_gate=true, single group, gated by sigmoid(z),
-// no bias). The reference impl chains ~8 torch ops (pow, mean, rsqrt, mul,
-// sigmoid, mul, etc.) and each one triggers an at::empty allocation, which
-// torch_musa 2.7.1 rejects during CUDA-graph capture (the allocator does not
-// honor c10::cuda::MemPoolContext set by xLLM's graph executor).
-//
-// 1:1 port of sglang's MUSA TileLang `_rms_norm_gated_kernel_cta` (see
-// sglang_qwen35/python/sglang/srt/hardware_backend/musa/jit_kernel/tilelang/
-// fla/layernorm_gated.py L116-180). One CTA per row, shared-memory cross-warp
-// reduction (MUSA-safe across SIMD widths). Math:
-//
-//   inv_rms[m] = rsqrt(mean(x[m, :]^2) + eps)
-//   y[m, n]    = (x[m, n] * inv_rms[m] * w[n]) * (z[m, n] * sigmoid(z[m, n]))
-//
-// with sigmoid expanded via the fast exp2 identity (matches sglang exactly):
-//   sigmoid(z) = 1 / (1 + exp(-z)) = 1 / (1 + exp2(-z * log2(e)))
-//
-// All intermediate compute happens in fp32; reads/writes are in the tensor's
-// native dtype (bf16/fp16/fp32). Output is written into a caller-owned buffer
-// (no allocations inside the kernel host wrapper).
-
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>

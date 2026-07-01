@@ -13,29 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-// Fused split / reshape / cat for the Qwen3.5 Gated-DeltaNet input projection
-// on the USE_CUDA path (also covers MUSA-as-CUDA via mcc -x musa).
-//
-// xLLM emits a single fused projection
-//     fused = in_proj_fused_(x)   layout: [M, Q | K | V | Z | B | A]
-// where the QKVZ region is the same global-block layout that sglang's
-// MergedColumnParallelLinear in_proj_qkvz produces, and the BA region is the
-// same as in_proj_ba's output. The downstream Gated-DeltaNet consumer needs
-// four contiguous tensors:
-//     mixed_qkv [M, qkv_dim],  z [M, num_v_heads, head_v],
-//     b         [M, num_v_heads],  a [M, num_v_heads]
-//
-// The textbook way to derive those four tensors is four .contiguous() calls
-// on strided slices. On MUSA each .contiguous() runs at::empty followed by a
-// strided copy; at::empty is rejected during CUDA-graph capture because
-// torch_musa's allocator does not honor c10::cuda::MemPoolContext.
-//
-// This kernel ports sglang's `qkvzba_contiguous` TileLang routine (see
-// sglang_qwen35/python/sglang/srt/hardware_backend/musa/jit_kernel/tilelang/
-// fla/gdn_fused_proj.py) verbatim: one launch, no intermediate allocations,
-// writes directly into caller-owned pre-allocated buffers. The block layout
-// matches the TileLang version (grid: (M, num_heads_qk), 128 threads).
-
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
