@@ -1,6 +1,5 @@
 include(cc_library)
 
-# Native USE_MUSA path (MTTOplib) — unchanged from upstream.
 if(USE_MUSA)
   file(GLOB_RECURSE MUSA_HEADER_FILES
     "${CMAKE_CURRENT_LIST_DIR}/*.h"
@@ -36,8 +35,6 @@ if(USE_MUSA)
   )
 endif()
 
-# XLLM_TORCH_MUSA: CUDA sources compiled via mcc_wrapper + musamapping.
-# All implementation lives under kernels/musa/; kernels/cuda/ stays identical to HEAD.
 if(XLLM_TORCH_MUSA)
   include_directories(${CMAKE_CURRENT_LIST_DIR})
   include_directories(${CMAKE_CURRENT_LIST_DIR}/../cuda)
