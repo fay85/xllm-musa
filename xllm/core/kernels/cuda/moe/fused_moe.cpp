@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "kernels/cuda/cuda_ops_api.h"
-#include "kernels/cuda/musa_tvmffi_stream.h"
 #include "kernels/cuda/utils.h"
 #include "platform/device.h"
 #include "platform/platform.h"
@@ -79,7 +78,7 @@ torch::Tensor cutlass_fused_moe(
     LOG(FATAL) << "FusedMoE is only supported on sm90, sm100, sm120.";
   }
 
-  MusaTvmffiStreamGuard stream_guard(input.device());
+  bind_tvmffi_stream_to_current_torch_stream(input.device());
 
   ffi::Module fused_moe_runner =
       get_function(fused_moe_uri, "init")(

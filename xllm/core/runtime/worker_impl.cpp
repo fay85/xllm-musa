@@ -56,17 +56,11 @@ limitations under the License.
 #include "platform/npu/device_capture_lock.h"
 #elif defined(USE_CUDA) || defined(USE_DCU)
 #if defined(XLLM_TORCH_MUSA)
-namespace xllm::kernel::cuda {
-void block_copy(torch::Tensor key_cache_ptrs,
-                torch::Tensor value_cache_ptrs,
-                torch::Tensor src_block_indices,
-                torch::Tensor dst_block_indices,
-                torch::Tensor cum_sum,
-                int64_t numel_per_block,
-                torch::ScalarType cache_dtype);
-}
+#include "kernels/musa/block_copy_api.h"
 #else
 #include "kernels/cuda/cuda_ops_api.h"
+#endif
+#if !defined(XLLM_TORCH_MUSA)
 #include "platform/cuda_profiler.h"
 #endif
 #include "platform/torch_profiler.h"
@@ -167,7 +161,7 @@ void ensure_forward_input_device_tensors(ForwardInput& input,
                                   device);
 }
 
-#if defined(USE_NPU) || defined(USE_CUDA)
+#if defined(USE_NPU)
 void prepare_input_params_for_linear_attention(ModelInputParams& input_params) {
   const std::vector<int32_t>& host_q_seq_lens =
       input_params.attention.host.q_seq_lens;
@@ -953,11 +947,6 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
     }
 
 #endif
-#if defined(USE_CUDA)
-    if (has_linear_attention_layers(context_.get_model_args())) {
-      prepare_input_params_for_linear_attention(processed_input.input_params);
-    }
-#endif
   };
 
   prepare_device_on_stream();
@@ -1079,7 +1068,11 @@ bool WorkerImpl::can_use_cuda_block_copy_kernel(
 void WorkerImpl::execute_cuda_block_copy_kernel(
     const ModelInputParams& input_params) {
   CHECK(!kv_caches_.empty());
+#if defined(XLLM_TORCH_MUSA)
+  xllm::kernel::musa::block_copy(
+#else
   xllm::kernel::cuda::block_copy(
+#endif
       cuda_block_copy_runtime_state_.k_cache_ptrs_device,
       cuda_block_copy_runtime_state_.v_cache_ptrs_device,
       input_params.block_copy.src_block_indices,

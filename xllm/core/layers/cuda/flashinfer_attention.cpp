@@ -21,7 +21,11 @@ limitations under the License.
 #include "flashinfer_planinfo.h"
 #include "flashinfer_workspace.h"
 #include "framework/kv_cache/kv_cache.h"
+#if defined(XLLM_TORCH_MUSA)
+#include "kernels/musa/cuda_ops_api.h"
+#else
 #include "kernels/cuda/cuda_ops_api.h"
+#endif
 #include "kernels/ops_api.h"
 #include "layers/common/attention_metadata.h"
 

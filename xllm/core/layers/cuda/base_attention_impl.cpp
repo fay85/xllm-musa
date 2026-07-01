@@ -15,7 +15,11 @@ limitations under the License.
 
 #include "base_attention_impl.h"
 
+#if defined(XLLM_TORCH_MUSA)
+#include "kernels/musa/utils.h"
+#else
 #include "kernels/cuda/utils.h"
+#endif
 
 namespace xllm {
 namespace layer {

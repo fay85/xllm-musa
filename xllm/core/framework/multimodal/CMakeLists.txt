@@ -34,6 +34,9 @@ cc_library(
     absl::time
     proto::xllm_proto
     torch
-    ${OpenCV_LIBS}
     ${FFMPEG_LIBRARIES}
 )
+
+if(NOT XLLM_TORCH_MUSA)
+  target_link_libraries(multimodal PRIVATE ${OpenCV_LIBS})
+endif()

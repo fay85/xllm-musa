@@ -50,8 +50,8 @@ limitations under the License.
 
 #include <cmath>
 
-#include "core/kernels/cuda/cuda_ops_api.h"
-#include "core/kernels/cuda/mate_gdn_ops.h"
+#include "core/kernels/musa/cuda_ops_api.h"
+#include "core/kernels/musa/mate_gdn_ops.h"
 #include "core/kernels/param.h"
 
 namespace xllm::kernel::cuda {

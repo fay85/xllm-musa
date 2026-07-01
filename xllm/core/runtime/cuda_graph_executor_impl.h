@@ -36,8 +36,13 @@ limitations under the License.
 #include "core/framework/kv_cache/kv_cache.h"
 #include "core/framework/model/causal_lm.h"
 #include "core/framework/model/model_input_params.h"
+#if defined(XLLM_TORCH_MUSA)
+#include "core/kernels/musa/llm_decode_metadata_update.h"
+#include "core/kernels/musa/piecewise_graphs.h"
+#else
 #include "core/kernels/cuda/llm_decode_metadata_update.h"
 #include "core/kernels/cuda/piecewise_graphs.h"
+#endif
 #include "executor_impl.h"
 #include "executor_impl_factory.h"
 #include "options.h"

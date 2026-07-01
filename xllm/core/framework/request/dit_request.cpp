@@ -22,7 +22,9 @@ limitations under the License.
 
 #include <cstdint>
 #include <cstring>
+#ifndef XLLM_SKIP_OPENCV
 #include <opencv2/opencv.hpp>
+#endif
 #include <string>
 #include <vector>
 

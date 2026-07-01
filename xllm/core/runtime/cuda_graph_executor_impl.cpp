@@ -44,7 +44,11 @@ limitations under the License.
 #include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
 #include "kernels/cuda/global_capture_instance.h"
+#if defined(XLLM_TORCH_MUSA)
+#include "kernels/musa/utils.h"
+#else
 #include "kernels/cuda/utils.h"
+#endif
 
 namespace xllm::runtime::cuda {
 

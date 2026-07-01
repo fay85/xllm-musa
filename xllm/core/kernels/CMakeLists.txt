@@ -31,10 +31,11 @@ if(USE_MUSA)
   -Wno-error=defaulted-function-deleted -x musa --offload-arch=mp_31 \
   -fplugin=$ENV{MUSAMAPPING_PATH}/libMusaMapping.so")
   set(CMAKE_MUSA_FLAGS "${CMAKE_MUSA_FLAGS} -fplugin=$ENV{MUSAMAPPING_PATH}/libMusaMapping.so")
-  add_subdirectory(musa)
 endif()
 
-if(USE_CUDA)
+if(XLLM_TORCH_MUSA OR USE_MUSA)
+  add_subdirectory(musa)
+elseif(USE_CUDA)
   add_subdirectory(cuda)
 endif()
 

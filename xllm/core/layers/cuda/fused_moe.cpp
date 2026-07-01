@@ -21,7 +21,11 @@ limitations under the License.
 #include <vector>
 
 #include "framework/parallel_state/parallel_state.h"
+#if defined(XLLM_TORCH_MUSA)
+#include "kernels/musa/cuda_ops_api.h"
+#else
 #include "kernels/cuda/cuda_ops_api.h"
+#endif
 
 namespace xllm {
 namespace layer {

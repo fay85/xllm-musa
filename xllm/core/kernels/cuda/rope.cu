@@ -98,16 +98,10 @@ inline __device__ void apply_rotary_embedding(
   }
 }
 
-// Template the position index type so callers may pass either int32_t
-// (xllm's graph-mode persistent positions buffer) or int64_t (eager-mode
-// positions and sglang's convention). The kernel only ever widens the value
-// to int64_t internally before computing the cache offset, so int32 indices
-// are safe as long as positions stay within int32 range (true for
-// max_position_embeddings well below 2^31).
-template <typename scalar_t, typename idx_t, bool IS_NEOX>
+template <typename scalar_t, bool IS_NEOX>
 __global__ void XLLM_KERNEL_ATTR(512) rotary_embedding_kernel(
-    const idx_t* __restrict__ positions,  // [batch_size, seq_len] or
-                                          // [num_tokens]
+    const int64_t* __restrict__ positions,  // [batch_size, seq_len] or
+                                            // [num_tokens]
     scalar_t* __restrict__ query,           // [batch_size, seq_len, num_heads,
                                    // head_size] or [num_tokens, num_heads,
                                    // head_size]
@@ -126,7 +120,7 @@ __global__ void XLLM_KERNEL_ATTR(512) rotary_embedding_kernel(
     const int head_size) {
   // Each thread block is responsible for one token.
   const int token_idx = blockIdx.x;
-  int64_t pos = static_cast<int64_t>(positions[token_idx]);
+  int64_t pos = positions[token_idx];
   const scalar_t* cache_ptr = cos_sin_cache + pos * rot_dim;
 
   apply_rotary_embedding<scalar_t, IS_NEOX>(query,
@@ -223,218 +217,34 @@ void rotary_embedding(
   dim3 block(std::min<int64_t>(num_heads * rot_dim / 2, 512));
   const at::cuda::OptionalCUDAGuard device_guard(device_of(query));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  // Accept both int32 and int64 positions. Eager-mode callers (qwen2,
-  // deepseek_v4) pre-cast to int64 via positions.to(torch::kInt64), but the
-  // graph-mode persistent positions buffer in CudaGraphPersistentParam stays
-  // int32 to share dtype with the metadata fast-path kernel. Inside a CUDA
-  // graph capture region the .to(kInt64) cast would have to allocate a new
-  // tensor, which the caching allocator forbids during capture; dispatching
-  // on the input dtype here keeps the kernel graph-safe without forcing the
-  // persistent buffer (or the metadata copy kernel) to widen to int64.
-  CHECK(positions.scalar_type() == torch::kInt32 ||
-        positions.scalar_type() == torch::kInt64)
-      << "positions must be int32 or int64, got " << positions.scalar_type();
-  const bool positions_is_int64 = positions.scalar_type() == torch::kInt64;
   DISPATCH_FLOATING_TYPES(
       query.scalar_type(), "apply_rope_pos_ids_cos_sin_cache", [&] {
-        scalar_t* query_ptr = query.data_ptr<scalar_t>();
-        scalar_t* key_ptr =
-            key.has_value() ? key->data_ptr<scalar_t>() : nullptr;
-        const scalar_t* cache_ptr = cos_sin_cache.data_ptr<scalar_t>();
-        if (positions_is_int64) {
-          const int64_t* pos_ptr = positions.data_ptr<int64_t>();
-          if (is_neox) {
-            rotary_embedding_kernel<scalar_t, int64_t, true>
-                <<<grid, block, 0, stream>>>(pos_ptr,
-                                             query_ptr,
-                                             key_ptr,
-                                             cache_ptr,
-                                             rot_dim,
-                                             query_stride,
-                                             key_stride,
-                                             head_stride,
-                                             num_heads,
-                                             num_kv_heads,
-                                             head_size);
-          } else {
-            rotary_embedding_kernel<scalar_t, int64_t, false>
-                <<<grid, block, 0, stream>>>(pos_ptr,
-                                             query_ptr,
-                                             key_ptr,
-                                             cache_ptr,
-                                             rot_dim,
-                                             query_stride,
-                                             key_stride,
-                                             head_stride,
-                                             num_heads,
-                                             num_kv_heads,
-                                             head_size);
-          }
+        if (is_neox) {
+          rotary_embedding_kernel<scalar_t, true><<<grid, block, 0, stream>>>(
+              positions.data_ptr<int64_t>(),
+              query.data_ptr<scalar_t>(),
+              key.has_value() ? key->data_ptr<scalar_t>() : nullptr,
+              cos_sin_cache.data_ptr<scalar_t>(),
+              rot_dim,
+              query_stride,
+              key_stride,
+              head_stride,
+              num_heads,
+              num_kv_heads,
+              head_size);
         } else {
-          const int32_t* pos_ptr = positions.data_ptr<int32_t>();
-          if (is_neox) {
-            rotary_embedding_kernel<scalar_t, int32_t, true>
-                <<<grid, block, 0, stream>>>(pos_ptr,
-                                             query_ptr,
-                                             key_ptr,
-                                             cache_ptr,
-                                             rot_dim,
-                                             query_stride,
-                                             key_stride,
-                                             head_stride,
-                                             num_heads,
-                                             num_kv_heads,
-                                             head_size);
-          } else {
-            rotary_embedding_kernel<scalar_t, int32_t, false>
-                <<<grid, block, 0, stream>>>(pos_ptr,
-                                             query_ptr,
-                                             key_ptr,
-                                             cache_ptr,
-                                             rot_dim,
-                                             query_stride,
-                                             key_stride,
-                                             head_stride,
-                                             num_heads,
-                                             num_kv_heads,
-                                             head_size);
-          }
-        }
-      });
-}
-
-// CUDA-graph-safe partial rotary embedding (in-place).
-//
-// Applies rotary embedding to the first `rotary_dim` elements of every
-// (token, head) slot in `query` and `key`, leaving the remaining
-// `head_size - rotary_dim` "pass-through" elements untouched. Replaces the
-// libtorch chain in gdn_ops.cpp::partial_rotary_embedding which materialised
-// q_rot/k_rot via `slice(-1, 0, rotary_dim).contiguous()` and then re-joined
-// the pass-through suffix with `torch::cat({...rot, ...pass}, -1).reshape(...)`
-// -- both `.contiguous()` and `torch::cat` invoke `at::empty`-class allocators
-// which torch_musa 2.7.1 rejects during CUDA-graph capture.
-//
-// The underlying `rotary_embedding_kernel` already supports partial rotary
-// natively: its inner loop runs over `num_heads * (rotary_dim / 2)` indices,
-// touching only offsets `[0, rotary_dim)` within each head_size slot. We just
-// expose a host wrapper that lets callers pass `head_size` explicitly (the
-// public `rotary_embedding` derives both `head_size` and `rot_dim` from
-// `cos_sin_cache.size(-1)`, which conflates them and is correct only for
-// full rotary).
-//
-// Preconditions enforced via TORCH_CHECK:
-//   * query / key: 2D `[num_tokens, num_heads * head_size]` (or higher-rank
-//     where everything but `num_tokens` flattens to `num_heads * head_size`).
-//     Both must be contiguous in the head/feature axis (`stride(-1) == 1`).
-//   * cos_sin_cache: 2D `[max_position, rotary_dim]`, contiguous.
-//   * positions: int32 or int64. Same shape contract as `rotary_embedding`.
-//   * `rotary_dim <= head_size` and `rotary_dim` is even.
-void partial_rotary_embedding_inplace(torch::Tensor& positions,
-                                      torch::Tensor& query,
-                                      torch::Tensor& key,
-                                      torch::Tensor& cos_sin_cache,
-                                      int64_t head_size,
-                                      int64_t rotary_dim,
-                                      bool is_neox) {
-  TORCH_CHECK(head_size > 0, "partial_rotary_embedding_inplace: head_size must be > 0");
-  TORCH_CHECK(rotary_dim > 0 && rotary_dim <= head_size,
-              "partial_rotary_embedding_inplace: 0 < rotary_dim <= head_size");
-  TORCH_CHECK(rotary_dim % 2 == 0,
-              "partial_rotary_embedding_inplace: rotary_dim must be even");
-  TORCH_CHECK(cos_sin_cache.size(-1) == rotary_dim,
-              "partial_rotary_embedding_inplace: cos_sin_cache last dim (",
-              cos_sin_cache.size(-1), ") must equal rotary_dim (",
-              rotary_dim, ")");
-
-  const int64_t num_tokens = positions.numel();
-  const int positions_ndim = positions.dim();
-  TORCH_CHECK(positions_ndim == 1 || positions_ndim == 2,
-              "positions must have shape [num_tokens] or [batch_size, seq_len]");
-
-  const int64_t query_hidden_size = query.numel() / num_tokens;
-  const int64_t key_hidden_size = key.numel() / num_tokens;
-  TORCH_CHECK(query_hidden_size % head_size == 0,
-              "partial_rotary_embedding_inplace: query hidden_size must be "
-              "divisible by head_size");
-  TORCH_CHECK(key_hidden_size % head_size == 0,
-              "partial_rotary_embedding_inplace: key hidden_size must be "
-              "divisible by head_size");
-  TORCH_CHECK(query.stride(-1) == 1 && key.stride(-1) == 1,
-              "partial_rotary_embedding_inplace: query/key last dim must be "
-              "contiguous (stride==1)");
-  TORCH_CHECK(cos_sin_cache.is_contiguous(),
-              "partial_rotary_embedding_inplace: cos_sin_cache must be contiguous");
-
-  const int num_heads = static_cast<int>(query_hidden_size / head_size);
-  const int num_kv_heads = static_cast<int>(key_hidden_size / head_size);
-  TORCH_CHECK(num_kv_heads > 0 && num_heads % num_kv_heads == 0,
-              "partial_rotary_embedding_inplace: num_heads must be a multiple "
-              "of num_kv_heads");
-
-  const int seq_dim_idx = positions_ndim - 1;
-  const int64_t query_stride = query.stride(seq_dim_idx);
-  const int64_t key_stride = key.stride(seq_dim_idx);
-  const int query_ndim = query.dim();
-  // Mirror `rotary_embedding`: for an explicit per-head layout (one more dim
-  // than positions) use the actual stride; for a flat [tokens, heads*head]
-  // layout, heads occupy contiguous blocks of `head_size`.
-  const int64_t head_stride =
-      (query_ndim == positions_ndim + 2) ? query.stride(-2) : head_size;
-
-  dim3 grid(static_cast<unsigned>(num_tokens));
-  const int rot_dim_i = static_cast<int>(rotary_dim);
-  const int head_size_i = static_cast<int>(head_size);
-  dim3 block(std::min<int64_t>(static_cast<int64_t>(num_heads) * (rot_dim_i / 2),
-                                512));
-
-  const at::cuda::OptionalCUDAGuard device_guard(device_of(query));
-  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-
-  TORCH_CHECK(positions.scalar_type() == torch::kInt32 ||
-                  positions.scalar_type() == torch::kInt64,
-              "partial_rotary_embedding_inplace: positions must be int32 or "
-              "int64, got ", positions.scalar_type());
-  const bool positions_is_int64 = positions.scalar_type() == torch::kInt64;
-
-  DISPATCH_FLOATING_TYPES(
-      query.scalar_type(), "partial_rotary_embedding_inplace", [&] {
-        scalar_t* query_ptr = query.data_ptr<scalar_t>();
-        scalar_t* key_ptr = key.data_ptr<scalar_t>();
-        const scalar_t* cache_ptr = cos_sin_cache.data_ptr<scalar_t>();
-        if (positions_is_int64) {
-          const int64_t* pos_ptr = positions.data_ptr<int64_t>();
-          if (is_neox) {
-            rotary_embedding_kernel<scalar_t, int64_t, true>
-                <<<grid, block, 0, stream>>>(pos_ptr, query_ptr, key_ptr,
-                                             cache_ptr, rot_dim_i,
-                                             query_stride, key_stride,
-                                             head_stride, num_heads,
-                                             num_kv_heads, head_size_i);
-          } else {
-            rotary_embedding_kernel<scalar_t, int64_t, false>
-                <<<grid, block, 0, stream>>>(pos_ptr, query_ptr, key_ptr,
-                                             cache_ptr, rot_dim_i,
-                                             query_stride, key_stride,
-                                             head_stride, num_heads,
-                                             num_kv_heads, head_size_i);
-          }
-        } else {
-          const int32_t* pos_ptr = positions.data_ptr<int32_t>();
-          if (is_neox) {
-            rotary_embedding_kernel<scalar_t, int32_t, true>
-                <<<grid, block, 0, stream>>>(pos_ptr, query_ptr, key_ptr,
-                                             cache_ptr, rot_dim_i,
-                                             query_stride, key_stride,
-                                             head_stride, num_heads,
-                                             num_kv_heads, head_size_i);
-          } else {
-            rotary_embedding_kernel<scalar_t, int32_t, false>
-                <<<grid, block, 0, stream>>>(pos_ptr, query_ptr, key_ptr,
-                                             cache_ptr, rot_dim_i,
-                                             query_stride, key_stride,
-                                             head_stride, num_heads,
-                                             num_kv_heads, head_size_i);
-          }
+          rotary_embedding_kernel<scalar_t, false><<<grid, block, 0, stream>>>(
+              positions.data_ptr<int64_t>(),
+              query.data_ptr<scalar_t>(),
+              key.has_value() ? key->data_ptr<scalar_t>() : nullptr,
+              cos_sin_cache.data_ptr<scalar_t>(),
+              rot_dim,
+              query_stride,
+              key_stride,
+              head_stride,
+              num_heads,
+              num_kv_heads,
+              head_size);
         }
       });
 }

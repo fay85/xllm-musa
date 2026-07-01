@@ -24,7 +24,11 @@ limitations under the License.
 #include "core/platform/platform.h"
 #include "core/util/utils.h"
 #include "flashinfer_workspace.h"
+#if defined(XLLM_TORCH_MUSA)
+#include "kernels/musa/utils.h"
+#else
 #include "kernels/cuda/utils.h"
+#endif
 #include "xattention_workspace.h"
 
 using namespace xllm::kernel::cuda;

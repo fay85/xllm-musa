@@ -29,7 +29,11 @@ limitations under the License.
 #include "logits_utils.h"
 #include "sampler.h"
 #if defined(USE_CUDA)
+#if defined(XLLM_TORCH_MUSA)
+#include "kernels/musa/cuda_ops_api.h"
+#else
 #include "kernels/cuda/cuda_ops_api.h"
+#endif
 #endif
 
 namespace xllm {

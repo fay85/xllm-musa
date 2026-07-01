@@ -32,7 +32,11 @@ limitations under the License.
 #include "core/layers/common/lm_head.h"
 #include "core/layers/common/qwen3_next_rms_norm.h"
 #include "core/layers/common/word_embedding.h"
+#if defined(USE_CUDA)
+#include "core/layers/musa_torch/qwen3_next_hybrid_decoder_layer_base.h"
+#elif defined(USE_NPU)
 #include "core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.h"
+#endif
 
 namespace xllm {
 

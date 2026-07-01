@@ -157,83 +157,9 @@ void gelu_tanh_and_mul(torch::Tensor& out,    // [..., d]
 {
   LAUNCH_ACTIVATION_GATE_KERNEL(gelu_tanh_kernel, true);
 }
-
-// Row-major 2D in-place sigmoid-gated multiply.
-// `out` and `gate` share logical shape [M, N] with stride(-1) == 1 on both
-// (so each row is contiguous in memory) but may have differing row strides.
-// One CTA per row, threads stride across the N columns.
-template <typename scalar_t>
-__global__ void XLLM_KERNEL_ATTR(1024) mul_sigmoid_gate_strided_2d_kernel(
-    scalar_t* __restrict__ out,
-    const scalar_t* __restrict__ gate,
-    const int64_t n,
-    const int64_t out_row_stride,
-    const int64_t gate_row_stride) {
-  const int64_t row = blockIdx.x;
-  scalar_t* out_row = out + row * out_row_stride;
-  const scalar_t* gate_row = gate + row * gate_row_stride;
-  for (int64_t col = threadIdx.x; col < n; col += blockDim.x) {
-    // __ldg ok on gate (read-only); out is read+written so use regular load.
-    const float g = static_cast<float>(xllm_ldg(&gate_row[col]));
-    const float s = 1.0f / (1.0f + expf(-g));
-    out_row[col] =
-        static_cast<scalar_t>(static_cast<float>(out_row[col]) * s);
-  }
-}
-
-void launch_mul_sigmoid_gate_inplace(torch::Tensor& out,
-                                     const torch::Tensor& gate) {
-  const int64_t n = out.numel();
-  if (n == 0) {
-    return;
-  }
-  const at::cuda::OptionalCUDAGuard device_guard(device_of(out));
-  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-
-  // Collapse to row-major 2D [M, N] where N is the size of the last dim.
-  const int64_t last_dim = out.size(-1);
-  const int64_t M = n / last_dim;
-  const int64_t out_row_stride = (out.dim() <= 1) ? last_dim : out.stride(-2);
-  const int64_t gate_row_stride = (gate.dim() <= 1) ? last_dim : gate.stride(-2);
-
-  const int threads = std::min<int64_t>(last_dim, 1024);
-  dim3 grid(static_cast<unsigned int>(M));
-  dim3 block(static_cast<unsigned int>(threads));
-  DISPATCH_FLOATING_TYPES(out.scalar_type(), "mul_sigmoid_gate_inplace", [&] {
-    mul_sigmoid_gate_strided_2d_kernel<scalar_t>
-        <<<grid, block, 0, stream>>>(out.data_ptr<scalar_t>(),
-                                     gate.data_ptr<scalar_t>(),
-                                     last_dim,
-                                     out_row_stride,
-                                     gate_row_stride);
-  });
-}
 }  // namespace
 
 namespace xllm::kernel::cuda {
-
-void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate) {
-  TORCH_CHECK(out.defined() && gate.defined(), "out and gate must be defined");
-  TORCH_CHECK(out.sizes() == gate.sizes(), "out and gate must have same shape");
-  TORCH_CHECK(out.scalar_type() == gate.scalar_type(), "dtype mismatch");
-  TORCH_CHECK(out.device() == gate.device(), "device mismatch");
-  TORCH_CHECK(out.dim() >= 1, "out must be at least 1D");
-  TORCH_CHECK(out.stride(-1) == 1 && gate.stride(-1) == 1,
-              "out and gate must have last-dim stride == 1");
-  // For dim > 2 the kernel collapses leading dims into the row index using
-  // out.stride(-2)/gate.stride(-2), which is only valid when those leading
-  // dims are themselves row-major over the inner [last_dim] block. That is
-  // true for the call sites we care about (qkv slices) where everything but
-  // the last dim is dense.
-  if (out.dim() > 2) {
-    const int64_t numel_per_row = out.size(-1);
-    TORCH_CHECK(out.numel() % numel_per_row == 0,
-                "out shape not collapsible to 2D");
-    TORCH_CHECK(gate.numel() % numel_per_row == 0,
-                "gate shape not collapsible to 2D");
-  }
-  launch_mul_sigmoid_gate_inplace(out, gate);
-}
 
 void act_and_mul(torch::Tensor out,
                  torch::Tensor input,

@@ -36,22 +36,10 @@ torch::Tensor fp8_scaled_matmul(
 
   // Transpose weight for CUTLASS: [N, K] -> [K, N] (column-major)
   // NOTE: Do NOT call .contiguous() - .t() makes it column-major (stride(0)==1)
-#if defined(XLLM_TORCH_MUSA)
-  const auto a_f = a.to(output_dtype) * a_scale;
-  const auto b_f = b.to(output_dtype) * b_scale;
-  auto out = at::matmul(a_f, b_f.t());
-  if (bias.has_value() && bias.value().defined()) {
-    out = out + bias.value();
-  }
-  if (output.has_value() && output.value().defined()) {
-    result_output.copy_(out);
-  } else {
-    result_output = std::move(out);
-  }
-#else
   auto b_t = b.t();
+
+  // Call underlying kernel
   cutlass_scaled_mm(result_output, a, b_t, a_scale, b_scale, bias);
-#endif
 
   return result_output;
 }

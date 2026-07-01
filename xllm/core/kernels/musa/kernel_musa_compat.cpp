@@ -1,47 +1,8 @@
 #if defined(XLLM_TORCH_MUSA)
 
-#include "cuda_ops_api.h"
-#include "xattention/xattention_ops_api.h"
-
-namespace xllm::kernel::musa {
-void block_copy(torch::Tensor key_cache_ptrs,
-                torch::Tensor value_cache_ptrs,
-                torch::Tensor src_block_indices,
-                torch::Tensor dst_block_indices,
-                torch::Tensor cum_sum,
-                int64_t numel_per_block,
-                torch::ScalarType cache_dtype);
-void cache_select(const torch::Tensor& beam_index,
-                  std::vector<torch::Tensor>& unshared_k_cache,
-                  std::vector<torch::Tensor>& unshared_v_cache,
-                  const torch::Tensor& block_table,
-                  int64_t decode_step,
-                  int64_t beam_size,
-                  int64_t layer_num);
-void fused_qk_norm_rope(torch::Tensor& qkv,
-                        int64_t num_heads_q,
-                        int64_t num_heads_k,
-                        int64_t num_heads_v,
-                        int64_t head_dim,
-                        double eps,
-                        const torch::Tensor& q_weight,
-                        const torch::Tensor& k_weight,
-                        const torch::Tensor& cos_sin_cache,
-                        bool interleaved,
-                        const torch::Tensor& position_ids);
-void beam_search(torch::Tensor acc_logprob,
-                 torch::Tensor in_sequence_group,
-                 torch::Tensor top_tokens,
-                 torch::Tensor top_logprobs,
-                 torch::Tensor out_acc_logprob,
-                 torch::Tensor out_token_ids,
-                 torch::Tensor out_token_index,
-                 torch::Tensor out_beam_count_prefix_sums,
-                 torch::Tensor out_sequence_group,
-                 uint32_t batch_size,
-                 uint32_t num_return_sequences,
-                 uint32_t current_step);
-}
+#include "kernels/musa/block_copy_api.h"
+#include "kernels/musa/fused_qknorm_rope_api.h"
+#include "kernels/musa/xattention_ops_api.h"
 
 #include "kernel_cuda_ns_open.inc"
 

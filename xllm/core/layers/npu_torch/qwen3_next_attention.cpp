@@ -63,7 +63,8 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
                         /*bias=*/args.attention_bias(),
                         /*gather_output=*/false,
                         parallel_args,
-                        options));
+                        options,
+                        quant_args));
 
   // 2. O proj
   o_proj_ = register_module("o_proj",
@@ -126,31 +127,6 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
 
 torch::Tensor Qwen3NextAttentionImpl::build_mrope_cos_sin(
     const torch::Tensor& positions) const {
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  // The fused split_qkv_rmsnorm_mrope kernel is currently NPU-only via
-  // TileLang -- `has_split_qkv_rmsnorm_mrope_specialization()` returns false
-  // on USE_CUDA + XLLM_TORCH_MUSA (see ops_api.cpp), so `use_fused_qkv_` is
-  // always false on this platform and the precomputed mrope_cos_sin tensor
-  // produced here is never consulted by forward() -- it falls through to the
-  // standalone `rotary_emb_->forward(positions, q, k)` path instead.
-  //
-  // Returning an undefined tensor short-circuits the per-step host gather
-  // (`cos_sin_cache.permute().contiguous().index_select(...)`) which would
-  // otherwise issue at::musa::IndexSelect -> EmptyMUSA inside a captured
-  // MUSA stream and abort with
-  //   "operation not permitted when stream is capturing".
-  //
-  // The caller loop in Qwen3HybridModelImplBase::forward keeps an undefined
-  // mrope_cos_sin and propagates it through every layer's forward, where
-  // each Qwen3NextAttentionImpl::forward only reads `mrope_cos_sin` from
-  // inside `if (use_fused_qkv_) { ... }`; the value is therefore never
-  // dereferenced. When the MUSA tilelang specialization lands we should
-  // revisit this and route through persistent buffers + a custom gather
-  // kernel that does not call EmptyMUSA.
-  if (!use_fused_qkv_) {
-    return {};
-  }
-#endif
   auto cos_sin_cache = rotary_emb_->get_cos_sin_cache();
   if (positions.dim() == 1) {
     return cos_sin_cache.index_select(0, positions).repeat({1, 3});
@@ -221,27 +197,7 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
   auto out = std::get<0>(attn_->forward(attn_metadata, q, k, v, kv_cache));
 
   if (attn_output_gate_) {
-#if defined(USE_CUDA) || defined(USE_MUSA)
-    // Capture-safe gating: `torch::sigmoid(gate)` allocates via
-    // `empty_like(gate)` -> EmptyMUSA (forbidden mid-stream-capture), and
-    // `out * sigmoid_result` allocates again. Replace with two purely
-    // elementwise in-place kernels:
-    //   * `gate.sigmoid_()`  -- writes back into `gate`, a view of the
-    //     ColumnParallelLinear persistent qkv buffer. Safe because `gate`
-    //     is not consumed again in this function (and the persistent
-    //     qkv buffer is rewritten on every forward by qkv_proj_).
-    //   * `out.mul_(gate)`   -- modifies the AttentionImpl persistent
-    //     output buffer slice in place; the next layer's attn_->forward
-    //     overwrites that slot before any other consumer reads it.
-    // Both ops are pure elementwise kernels with no host-side allocation.
-    // Neither sglang nor xllm-musa fuses this on torch_musa; sglang relies
-    // on libtorch's MemPoolContext-aware allocator (not honoured by
-    // torch_musa 2.7.1) to put the implicit allocations in the captured
-    // pool, so on this stack we have to bypass them entirely.
-    out.mul_(gate.sigmoid_());
-#else
     out = out * torch::sigmoid(gate);
-#endif
   }
   return o_proj_->forward(out);
 }
@@ -263,6 +219,31 @@ void Qwen3NextAttentionImpl::load_state_dict(const StateDict& state_dict) {
         {q_part.reshape({q_size_, hidden}), g_part.reshape({q_size_, hidden})},
         0);
     qg_rows.copy_(reordered);
+
+    // Reorder weight_scale and weight_offset for W8A8 dynamic quantization.
+    // These are per-channel (per output row) tensors that must match the
+    // reordered weight layout for correct dequantization.
+    const int64_t qg_size = q_size_ * 2;
+    auto reorder_per_channel = [this, qg_size](torch::Tensor tensor) {
+      if (!tensor.defined() || tensor.numel() == 0) {
+        return;
+      }
+      auto qg_part = tensor.slice(0, 0, qg_size);
+      auto qg_2d = qg_part.view({num_heads_, 2 * head_dim_});
+      auto q_scale = qg_2d.slice(1, 0, head_dim_);
+      auto g_scale = qg_2d.slice(1, head_dim_, 2 * head_dim_);
+      auto reordered_scale = torch::cat(
+          {q_scale.reshape({q_size_}), g_scale.reshape({q_size_})}, 0);
+      qg_part.copy_(reordered_scale);
+    };
+
+    if (qkv_proj_->is_weight_scale_loaded()) {
+      reorder_per_channel(qkv_proj_->weight_scale());
+    }
+    if (qkv_proj_->is_weight_offset_loaded()) {
+      reorder_per_channel(qkv_proj_->weight_offset());
+    }
+
     qkv_weight_reordered_ = true;
   }
 

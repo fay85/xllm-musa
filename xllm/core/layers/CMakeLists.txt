@@ -9,7 +9,9 @@ elseif(USE_ILU)
   add_subdirectory(ilu)
 elseif(USE_CUDA)
   add_subdirectory(cuda)
-  add_subdirectory(npu_torch)
+  if(XLLM_TORCH_MUSA)
+    add_subdirectory(musa_torch)
+  endif()
   if(USE_MUSA)
     add_subdirectory(musa)
   endif()
@@ -65,7 +67,7 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:mlu_layers>
     $<$<BOOL:${USE_ILU}>:ilu_layers>
     $<$<BOOL:${USE_CUDA}>:cuda_layers>
-    $<$<BOOL:${USE_CUDA}>:npu_torch_layers>
+    $<$<BOOL:${XLLM_TORCH_MUSA}>:musa_torch_layers>
     :common_layers
     :parallel_state
     :state_dict

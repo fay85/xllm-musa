@@ -6,9 +6,7 @@ include_directories(${CMAKE_CURRENT_LIST_DIR})
 #
 # CUDA feature detection
 #
-if(XLLM_TORCH_MUSA)
-  message(STATUS "Skipping CUTLASS SM90+ libs for XLLM_TORCH_MUSA")
-elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
+if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
   # SM90+ (Hopper/Blackwell) scaled matmul support
   add_compile_definitions(
     ENABLE_SCALED_MM_SM90=1
@@ -17,7 +15,7 @@ elseif(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
   )
 endif()
 
-if(NOT XLLM_TORCH_MUSA AND CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.8)
+if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.8)
   add_compile_definitions(ENABLE_FP8)
 endif()
 
@@ -25,8 +23,6 @@ set(CUDA_HEADER_FILES
   arch_condition.h
   attention_runner.h
   cuda_ops_api.h
-  gdn_ops.h
-  mate_gdn_ops.h
   cutlass_w8a8/c3x/cutlass_gemm_caller.cuh
   cutlass_w8a8/c3x/scaled_mm.cuh
   cutlass_w8a8/c3x/sm120_fp8_kernel_configs.cuh
@@ -40,7 +36,6 @@ set(CUDA_HEADER_FILES
   piecewise_graphs.h
   topk_last_dim.cuh
   type_convert.cuh
-  musa_tvmffi_stream.h
   utils.h
   device_utils.cuh
   xattention/xattention_ops_api.h
@@ -58,7 +53,7 @@ set(CUDA_HEADER_FILES
 
 set(_CUTLASS_SM_LIBS "")
 
-if(NOT XLLM_TORCH_MUSA AND CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
+if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 12.0)
   # --- SM90 (Hopper) ---
   cc_library(
     NAME cutlass_sm90
@@ -102,14 +97,9 @@ endif()
 # NOTE: SM-specific CUTLASS sources are compiled via the per-arch libraries above.
 set(CUDA_SOURCE_FILES
   activation.cu
-  gdn_ops.cpp
-  mate_gdn_prefill.cpp
-  mate_gdn_decode.cpp
   air_log_softmax_last_dim.cu
   attention_runner.cpp
   batch_decode.cpp
-  fa3_fwd.cpp
-  fa3_metadata.cpp
   batch_prefill.cpp
   batch_chunked_prefill.cpp
   block_copy.cu
@@ -119,12 +109,6 @@ set(CUDA_SOURCE_FILES
   fp8_scaled_matmul.cpp
   fp8_scaled_quantize.cpp
   fused_qknorm_rope.cu
-  fused_gdn_decode.cu
-  gated_rms_norm.cu
-  gdn_conv1d_update.cu
-  gdn_gating.cu
-  gdn_split_fused.cu
-  gemma_norm.cu
   global_capture_instance.cpp
   llm_decode_metadata_update.cu
   matmul.cpp
@@ -134,7 +118,6 @@ set(CUDA_SOURCE_FILES
   reshape_paged_cache.cu
   rope.cu
   random_sample.cpp
-  musa_tvmffi_stream.cpp
   utils.cpp
   xattention/beam_search.cpp
   xattention/cache_select.cu
@@ -143,34 +126,7 @@ set(CUDA_SOURCE_FILES
   xattention/prefill_reshape_and_cache.cu
   moe/moe_fused_topk.cu
   moe/fused_moe.cpp
-  kernel_musa_compat.cpp
 )
-
-
-set(_XLLM_CUTLASS_HDRS
-  cutlass_w8a8/c3x/cutlass_gemm_caller.cuh
-  cutlass_w8a8/c3x/scaled_mm.cuh
-  cutlass_w8a8/c3x/sm120_fp8_kernel_configs.cuh
-  cutlass_w8a8/c3x/sm120_fp8_dispatch_policy.hpp
-  cutlass_w8a8/c3x/scaled_mm_sm100_fp8_dispatch.cuh
-  cutlass_w8a8/c3x/scaled_mm_sm120_fp8_dispatch.cuh
-  cutlass_w8a8/c3x/scaled_mm_sm90_fp8_dispatch.cuh
-)
-set(_XLLM_CUTLASS_SRCS
-  cutlass_extensions/common.cpp
-  cutlass_w8a8/scaled_mm_entry.cu
-)
-if(XLLM_TORCH_MUSA)
-  foreach(_item IN LISTS _XLLM_CUTLASS_HDRS)
-    list(REMOVE_ITEM CUDA_HEADER_FILES ${_item})
-  endforeach()
-  foreach(_item IN LISTS _XLLM_CUTLASS_SRCS)
-    list(REMOVE_ITEM CUDA_SOURCE_FILES ${_item})
-  endforeach()
-  set(_CUDA_KERNELS_MUSA_DEPS musa musart)
-else()
-  set(_CUDA_KERNELS_MUSA_DEPS "")
-endif()
 
 cc_library(
   NAME
@@ -179,15 +135,12 @@ cc_library(
     ${CUDA_HEADER_FILES}
   SRCS
     ${CUDA_SOURCE_FILES}
-  COPTS
-    ${_XLLM_MUSIFY_COPTS}
   DEPS
     tvm_ffi
     torch
     :util
     :platform
     ${_CUTLASS_SM_LIBS}
-    ${_CUDA_KERNELS_MUSA_DEPS}
 )
 
 # Keep CUDA benchmarks behind a plain CMake cache option instead of adding

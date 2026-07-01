@@ -145,7 +145,10 @@ else()
 endif()
 
 # link brpc
-target_link_libraries(xllm PRIVATE glog::glog brpc leveldb::leveldb protobuf::libprotobuf ${OpenCV_LIBS} ${FFMPEG_LIBRARIES})
+target_link_libraries(xllm PRIVATE glog::glog brpc leveldb::leveldb protobuf::libprotobuf ${FFMPEG_LIBRARIES})
+if(NOT XLLM_TORCH_MUSA)
+  target_link_libraries(xllm PRIVATE ${OpenCV_LIBS})
+endif()
 add_dependencies(xllm brpc-static)
 
 if(USE_NPU)
@@ -172,8 +175,14 @@ if(USE_CUDA AND XLLM_TORCH_MUSA)
   # BaseExecutorImpl (factory throws "No valid backend found: musa" at
   # runtime). Wrap libcuda_graph_executor in --whole-archive at the executable
   # link to force the .o (and thus the registration) into the binary.
+  # Same problem applies to base_executor_impl.cpp in libruntime.a: it carries
+  # REGISTER_EXECUTOR("llm", BaseExecutorImpl) / REGISTER_EXECUTOR("rec", ...)
+  # static initializers and has no external symbol referenced, so the linker
+  # drops the TU and backend="llm" lookups fall through to "vlm" with a null
+  # model encode (segfault on first forward). Force libruntime in as well.
   target_link_options(xllm PRIVATE
     "LINKER:--whole-archive,$<TARGET_FILE:cuda_graph_executor>,--no-whole-archive"
+    "LINKER:--whole-archive,$<TARGET_FILE:runtime>,--no-whole-archive"
   )
 endif()
 

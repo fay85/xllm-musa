@@ -26,17 +26,7 @@ limitations under the License.
 #include "framework/state_dict/state_dict.h"
 #include "layers/common/dense_mlp.h"
 #include "layers/common/qwen3_next_rms_norm.h"
-#if defined(USE_MLU)
-#include "layers/mlu/fused_moe.h"
-#elif defined(USE_ILU)
-#include "layers/ilu/fused_moe.h"
-#elif defined(USE_CUDA)
-#include "layers/cuda/fused_moe.h"
-#elif defined(USE_NPU)
 #include "layers/npu_torch/fused_moe.h"
-#else
-#include "layers/common/fused_moe.h"
-#endif
 #include "layers/npu_torch/qwen3_gated_delta_net_base.h"
 #include "layers/npu_torch/qwen3_next_attention.h"
 

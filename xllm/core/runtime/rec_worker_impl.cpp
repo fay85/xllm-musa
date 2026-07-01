@@ -36,9 +36,6 @@ limitations under the License.
 #include "framework/model/model_input_params.h"
 #include "util/rec_model_utils.h"
 #if defined(USE_CUDA)
-#if !defined(XLLM_TORCH_MUSA)
-#include "kernels/cuda/cuda_ops_api.h"
-#endif
 #include "kernels/cuda/xattention/xattention_ops_api.h"
 #include "layers/cuda/flashinfer_workspace.h"
 #include "layers/cuda/xattention_workspace.h"

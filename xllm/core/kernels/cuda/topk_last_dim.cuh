@@ -1283,21 +1283,14 @@ __device__ __forceinline__ T negativeInfinity() {
 
 template <>
 __device__ __forceinline__ half negativeInfinity<half>() {
-#if defined(XLLM_TORCH_MUSA) || defined(USE_DCU)
-  return static_cast<half>(-INFINITY);
-#elif !defined(USE_DCU)
+#if !defined(USE_DCU)
   return -CUDART_INF_FP16;
 #else
   return static_cast<half>(-INFINITY);
 #endif
 }
 
-#if defined(XLLM_TORCH_MUSA)
-template <>
-__device__ __forceinline__ __nv_bfloat16 negativeInfinity<__nv_bfloat16>() {
-  return static_cast<__nv_bfloat16>(-INFINITY);
-}
-#elif !defined(USE_DCU)
+#if !defined(USE_DCU)
 template <>
 __device__ __forceinline__ __nv_bfloat16 negativeInfinity<__nv_bfloat16>() {
   return -CUDART_INF_BF16;
