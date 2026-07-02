@@ -13,17 +13,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "global_capture_instance.h"
+#include "core/kernels/musa/global_capture_instance.h"
 
 #include <glog/logging.h>
 
-#include "attention_runner.h"
+#include "core/kernels/musa/attention_runner.h"
 #include "core/common/global_flags.h"
-#include "piecewise_graphs.h"
+#include "core/kernels/musa/piecewise_graphs.h"
 
 namespace xllm::runtime::cuda {
 
-// Define static mutex
 std::mutex GlobalCaptureInstance::capture_mutex_;
 
 GlobalCaptureInstance& GlobalCaptureInstance::get_instance() {
@@ -32,7 +31,15 @@ GlobalCaptureInstance& GlobalCaptureInstance::get_instance() {
 }
 
 GlobalCaptureInstance::GlobalCaptureInstance() = default;
-GlobalCaptureInstance::~GlobalCaptureInstance() = default;
+
+GlobalCaptureInstance::~GlobalCaptureInstance() {
+  if (is_capturing_) {
+    LOG(WARNING) << "GlobalCaptureInstance destroyed while capturing; "
+                    "releasing capture state";
+    cleanup_capture_state();
+  }
+  capture_lock_ = std::unique_lock<std::mutex>();
+}
 
 void GlobalCaptureInstance::cleanup_capture_state() {
   is_capturing_ = false;
@@ -43,16 +50,13 @@ void GlobalCaptureInstance::cleanup_capture_state() {
 void GlobalCaptureInstance::begin_capture(const at::cuda::MempoolId_t& pool) {
   CHECK(!is_capturing_) << "Already capturing, call end_capture() first";
 
-  // Acquire global lock to ensure only one instance captures at a time
-  capture_lock_ = std::make_unique<std::lock_guard<std::mutex>>(capture_mutex_);
+  capture_lock_ = std::unique_lock<std::mutex>(capture_mutex_);
   LOG(INFO) << "GlobalCaptureInstance::begin_capture()";
   is_capturing_ = true;
   graph_pool_ = pool;
 
-  // Reset current_piecewise_graph_
   current_piecewise_graph_ = std::make_unique<PiecewiseGraphs>();
 
-  // Create first graph and begin capture
   current_graph_ = std::make_unique<at::cuda::CUDAGraph>();
   current_graph_->capture_begin(pool, cudaStreamCaptureModeThreadLocal);
 }
@@ -64,21 +68,18 @@ std::unique_ptr<PiecewiseGraphs> GlobalCaptureInstance::end_capture() {
       << "Did you call temporarily_end_graph() without "
          "temporarily_begin_graph()?";
 
-  // End last graph and add to piecewise_graph
   current_graph_->capture_end();
   current_piecewise_graph_->add_graph(std::move(current_graph_));
 
   is_capturing_ = false;
 
   LOG(INFO) << "GlobalCaptureInstance::end_capture(), total graphs: "
-            << current_piecewise_graph_->size()
+            << current_piecewise_graph_->num_graphs()
             << ", total runners: " << current_piecewise_graph_->num_runners();
 
-  // Move the result before releasing the lock
   auto result = std::move(current_piecewise_graph_);
 
-  // Release global lock to allow next instance to capture
-  capture_lock_.reset();
+  capture_lock_ = std::unique_lock<std::mutex>();
 
   return result;
 }
@@ -98,13 +99,12 @@ void GlobalCaptureInstance::temporarily_end_graph_locked() {
                         << "Did you call temporarily_end_graph() twice?";
   CHECK(current_piecewise_graph_) << "Current piecewise graph is null";
 
-  // End current graph capture and add to piecewise_graph
   current_graph_->capture_end();
   current_piecewise_graph_->add_graph(std::move(current_graph_));
 
   VLOG(kGraphExecutorLogVerboseLevel)
       << "GlobalCaptureInstance::temporarily_end_graph(), total graphs: "
-      << current_piecewise_graph_->size();
+      << current_piecewise_graph_->num_graphs();
 }
 
 void GlobalCaptureInstance::temporarily_begin_graph_locked() {
@@ -112,7 +112,6 @@ void GlobalCaptureInstance::temporarily_begin_graph_locked() {
       << "Current graph already exists, cannot begin new graph. "
       << "Did you call temporarily_begin_graph() twice?";
 
-  // Create new graph and begin capture
   current_graph_ = std::make_unique<at::cuda::CUDAGraph>();
   current_graph_->capture_begin(graph_pool_, cudaStreamCaptureModeThreadLocal);
 
@@ -131,4 +130,4 @@ void GlobalCaptureInstance::register_attention_runner(
       << current_piecewise_graph_->num_runners();
 }
 
-}  // namespace xllm::runtime::cuda
+}

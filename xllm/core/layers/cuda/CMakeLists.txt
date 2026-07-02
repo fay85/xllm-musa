@@ -23,8 +23,6 @@ cc_library(
     flashinfer_workspace.cpp
     xattention_workspace.cpp
     flashinfer_planinfo.cpp
-  COPTS
-    ${_XLLM_MUSIFY_COPTS}
   DEPS
     :cuda_kernels
     :common_layers

@@ -36,7 +36,9 @@ limitations under the License.
 #include "runtime/llm_worker_impl.h"
 #include "runtime/mm_embed_vlm_worker_impl.h"
 #include "runtime/mtp_worker_impl.h"
+#if !defined(XLLM_TORCH_MUSA)
 #include "runtime/rec_worker_impl.h"
+#endif
 #include "runtime/suffix_worker_impl.h"
 #include "runtime/vlm_worker_impl.h"
 #include "util/timer.h"
@@ -66,7 +68,11 @@ Worker::Worker(const ParallelArgs& parallel_args,
   } else if (worker_type == WorkerType::EVLM) {
     impl_ = new EmbedVLMWorkerImpl(parallel_args, device, options);
   } else if (worker_type == WorkerType::REC) {
+#if defined(XLLM_TORCH_MUSA)
+    LOG(FATAL) << "REC worker is not supported in XLLM_TORCH_MUSA builds.";
+#else
     impl_ = new RecWorkerImpl(parallel_args, device, options);
+#endif
   } else if (worker_type == WorkerType::MMEVLM) {
     impl_ = new MMEmbedVLMWorkerImpl(parallel_args, device, options);
   } else if (worker_type == WorkerType::DIT) {

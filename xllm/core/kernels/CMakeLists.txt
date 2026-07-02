@@ -15,7 +15,6 @@ else()
   set(_XLLM_MUSIFY_COPTS "")
 endif()
 
-
 if(USE_NPU)
   add_subdirectory(npu)
 endif()
@@ -35,7 +34,9 @@ endif()
 
 if(XLLM_TORCH_MUSA OR USE_MUSA)
   add_subdirectory(musa)
-elseif(USE_CUDA)
+endif()
+
+if(USE_CUDA AND NOT XLLM_TORCH_MUSA)
   add_subdirectory(cuda)
 endif()
 

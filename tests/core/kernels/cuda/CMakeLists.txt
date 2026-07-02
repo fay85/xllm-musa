@@ -46,18 +46,6 @@ cc_test(
 
 cc_test(
   NAME
-    fused_gdn_decode_test
-  SRCS
-    fused_gdn_decode_test.cpp
-  DEPS
-    :cuda_kernels
-    torch
-    GTest::gtest_main
-    glog::glog
-)
-
-cc_test(
-  NAME
     cutlass_scaled_mm_test
   SRCS
     cutlass_scaled_mm_test.cpp
@@ -81,3 +69,21 @@ cc_test(
     glog::glog
 )
 target_link_libraries(fp8_quant_test PRIVATE brpc)
+
+if(XLLM_TORCH_MUSA)
+  cc_test(
+    NAME gemma_norm_test
+    SRCS gemma_norm_test.cpp
+    DEPS :cuda_kernels torch GTest::gtest_main glog::glog
+  )
+  cc_test(
+    NAME fused_gdn_decode_test
+    SRCS fused_gdn_decode_test.cpp
+    DEPS :cuda_kernels torch GTest::gtest_main glog::glog
+  )
+  cc_test(
+    NAME piecewise_graphs_test
+    SRCS piecewise_graphs_test.cpp
+    DEPS :cuda_kernels torch GTest::gtest_main glog::glog
+  )
+endif()

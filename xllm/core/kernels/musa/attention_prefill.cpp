@@ -13,8 +13,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "cuda_ops_api.h"
-#include "utils.h"
+
+#include <glog/logging.h>
+
+#include <optional>
+#include <string>
+
+#include "core/common/global_flags.h"
+#include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::kernel::cuda {
 namespace {
@@ -35,8 +42,6 @@ void batch_prefill_impl(const std::string& uri,
                         std::optional<torch::Tensor>& output_lse,
                         bool is_causal,
                         const std::optional<torch::Tensor>& mask) {
-  // Optional custom mask (e.g. for Qwen2_5_VL padding) -> FlashInfer packed
-  // format.
   std::optional<torch::Tensor> processed_mask;
   std::optional<torch::Tensor> mask_indptr_opt;
   if (mask.has_value()) {
@@ -51,7 +56,6 @@ void batch_prefill_impl(const std::string& uri,
       }
 
       int64_t seq_len = m.size(0);
-      // causal AND padding: attend only where j<=i and m[j]==1
       auto causal_mask = torch::tril(torch::ones(
           {seq_len, seq_len},
           torch::TensorOptions().dtype(torch::kFloat32).device(device)));
@@ -60,7 +64,6 @@ void batch_prefill_impl(const std::string& uri,
 
       const int64_t n = seq_len * seq_len;
       const int64_t num_bytes = (n + 7) / 8;
-      // Pack to uint8 bitmap (8 bits/byte) for FlashInfer
       auto flat = combined_mask.contiguous().view({-1});
       if (flat.device().type() != torch::kCPU) {
         flat = flat.cpu();
@@ -81,8 +84,6 @@ void batch_prefill_impl(const std::string& uri,
       }
       processed_mask = packed.contiguous();
 
-      // mask_indptr: [0, num_bytes] for single batch (FlashInfer batch
-      // boundary)
       auto mask_indptr = torch::zeros(
           {2}, torch::TensorOptions().dtype(torch::kInt32).device(device));
       mask_indptr[0] = 0;
@@ -112,7 +113,7 @@ void batch_prefill_impl(const std::string& uri,
         output_lse.has_value() ? to_ffi_tensor(output_lse.value())
                                : ffi::Optional<ffi::Tensor>(),
         /*mask_mode_code=*/is_causal ? 1 : 0,
-        /*kv_layout_code=*/0,  // NHD layout
+        /*kv_layout_code=*/0,
         window_left,
         support_pdl(),
         processed_mask.has_value() ? to_ffi_tensor(processed_mask.value())
@@ -129,7 +130,6 @@ void batch_prefill_impl(const std::string& uri,
         /*rope_rcp_theta=*/1.0 / 10000.0,
         /*token_pos_in_items_len=*/0);
   } else if (backend == "fa3") {
-    // for fp8 attention, append scale tensors
     torch::Tensor v_scale = torch::Tensor();
 
     auto [scale_v_tensor, scale_v_scalar] = split_scale_param(v_scale);
@@ -148,7 +148,7 @@ void batch_prefill_impl(const std::string& uri,
         output_lse.has_value() ? to_ffi_tensor(output_lse.value())
                                : ffi::Optional<ffi::Tensor>(),
         /*mask_mode_code=*/is_causal ? 1 : 0,
-        /*kv_layout_code=*/0,  // NHD layout
+        /*kv_layout_code=*/0,
         window_left,
         support_pdl(),
         /*maybe_prefix_len_ptr=*/ffi::Optional<ffi::Tensor>(),
@@ -163,7 +163,7 @@ void batch_prefill_impl(const std::string& uri,
   }
 }
 
-}  // namespace
+}
 
 void batch_prefill(const std::string& uri,
                    ffi::Array<int64_t> plan_info,
@@ -231,4 +231,70 @@ void batch_prefill_non_causal(const std::string& uri,
                      mask);
 }
 
-}  // namespace xllm::kernel::cuda
+void batch_chunked_prefill(const std::string& uri,
+                           ffi::Array<int64_t> plan_info,
+                           torch::Tensor float_workspace_buffer,
+                           torch::Tensor int_workspace_buffer,
+                           torch::Tensor page_locked_int_workspace_buffer,
+                           torch::Tensor query,
+                           torch::Tensor k_cache,
+                           torch::Tensor v_cache,
+                           torch::Tensor paged_kv_indptr,
+                           torch::Tensor paged_kv_indices,
+                           torch::Tensor paged_kv_last_page_len,
+                           int64_t window_left,
+                           double sm_scale,
+                           torch::Tensor output,
+                           std::optional<torch::Tensor>& output_lse,
+                           std::optional<torch::Tensor> qo_indptr,
+                           bool causal) {
+  VLOG(kGraphExecutorLogVerboseLevel) << "plan_info: " << plan_info;
+
+  torch::Tensor qo_indptr_to_use;
+  if (qo_indptr.has_value()) {
+    qo_indptr_to_use = qo_indptr.value();
+    VLOG(kGraphExecutorLogVerboseLevel)
+        << "use provided qo_indptr in CUDA graph execution";
+  } else {
+    const int64_t batch_size = paged_kv_last_page_len.size(0);
+    torch::Tensor qo_indptr_host =
+        get_cache_buffer(static_cast<int32_t>(batch_size + 1), torch::kCPU);
+    qo_indptr_to_use = qo_indptr_host.to(torch::kCUDA);
+  }
+
+  torch::Tensor v_scale = torch::Tensor();
+  auto [scale_v_tensor, scale_v_scalar] = split_scale_param(v_scale);
+
+  MusaTvmffiStreamGuard stream_guard(query.device());
+  get_function(uri, "paged_run")(
+      to_ffi_tensor(float_workspace_buffer),
+      to_ffi_tensor(int_workspace_buffer),
+      plan_info,
+      to_ffi_tensor(query),
+      to_ffi_tensor(k_cache),
+      to_ffi_tensor(v_cache),
+      to_ffi_tensor(qo_indptr_to_use),
+      to_ffi_tensor(paged_kv_indptr),
+      to_ffi_tensor(paged_kv_indices),
+      to_ffi_tensor(paged_kv_last_page_len),
+      to_ffi_tensor(output),
+      output_lse.has_value() ? to_ffi_tensor(output_lse.value())
+                             : ffi::Optional<ffi::Tensor>(),
+      /*mask_mode_code=*/causal ? 1 : 0,
+      /*kv_layout_code=*/0,
+      window_left,
+      support_pdl(),
+      /*maybe_custom_mask=*/ffi::Optional<ffi::Tensor>(),
+      /*maybe_mask_indptr=*/ffi::Optional<ffi::Tensor>(),
+      /*maybe_alibi_slopes=*/ffi::Optional<ffi::Tensor>(),
+      /*maybe_prefix_len_ptr=*/ffi::Optional<ffi::Tensor>(),
+      /*maybe_token_pos_in_items_ptr=*/ffi::Optional<ffi::Tensor>(),
+      /*maybe_max_item_len_ptr=*/ffi::Optional<ffi::Tensor>(),
+      /*logits_soft_cap=*/0.0,
+      sm_scale,
+      /*rope_rcp_scale=*/1.0,
+      /*rope_rcp_theta=*/1.0 / 10000.0,
+      /*token_pos_in_items_len=*/0);
+}
+
+}

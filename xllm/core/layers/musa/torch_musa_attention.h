@@ -28,6 +28,7 @@ namespace layer {
 
 class BaseAttentionImpl;
 
+// CUDA-graph attention entry for XLLM_TORCH_MUSA (FlashInfer-only backend).
 class AttentionImpl : public torch::nn::Module {
  public:
   AttentionImpl() = default;
@@ -47,6 +48,14 @@ class AttentionImpl : public torch::nn::Module {
 
  private:
   std::shared_ptr<BaseAttentionImpl> attention_impl_;
+
+  // Caller-owned output scratch so the underlying FlashInfer backend can fill
+  // its result without a per-call `at::empty_strided` call. The libtorch
+  // allocation path is forbidden during MUSA stream capture; the buffer
+  // lazily grows on the leading row dim (see forward() for the realloc rule),
+  // then narrow()-slices for every smaller call so captured graphs hold stable
+  // storage across replays.
+  mutable torch::Tensor output_buf_;
 };
 TORCH_MODULE(Attention);
 

@@ -26,9 +26,11 @@ limitations under the License.
 #include "framework/state_dict/state_dict.h"
 #include "layers/common/dense_mlp.h"
 #include "layers/common/qwen3_next_rms_norm.h"
+#if !defined(XLLM_TORCH_MUSA)
 #include "layers/cuda/fused_moe.h"
-#include "layers/musa_torch/qwen3_gated_delta_net_base.h"
-#include "layers/musa_torch/qwen3_next_attention.h"
+#endif
+#include "layers/musa/qwen3_gated_delta_net_base.h"
+#include "layers/musa/qwen3_next_attention.h"
 
 namespace xllm {
 namespace layer {
@@ -80,7 +82,9 @@ class Qwen3HybridDecoderLayerImplBase : public Qwen3HybridDecoderLayerModule {
   std::shared_ptr<Qwen3GatedDeltaNetBaseImpl> linear_attention_;
 
   DenseMLP mlp_{nullptr};
+#if !defined(XLLM_TORCH_MUSA)
   FusedMoE moe_mlp_{nullptr};
+#endif
 
   Qwen3NextRMSNorm input_norm_{nullptr};
   Qwen3NextRMSNorm post_norm_{nullptr};

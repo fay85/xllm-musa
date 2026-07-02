@@ -34,8 +34,14 @@ limitations under the License.
 #include "core/framework/config/rec_config.h"
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
+#if defined(XLLM_TORCH_MUSA)
+#include "core/layers/musa/flashinfer_planinfo.h"
+#else
 #include "core/layers/cuda/flashinfer_planinfo.h"
+#endif
+#if !defined(XLLM_TORCH_MUSA)
 #include "core/layers/cuda/xattention_planinfo.h"
+#endif
 #include "core/platform/cuda/device_capture_lock.h"
 #if !defined(XLLM_TORCH_MUSA)
 #include "core/platform/shared_vmm_allocator.h"
@@ -45,7 +51,7 @@ limitations under the License.
 #include "core/util/utils.h"
 #include "kernels/cuda/global_capture_instance.h"
 #if defined(XLLM_TORCH_MUSA)
-#include "kernels/musa/utils.h"
+#include "kernels/musa/musa_tvmffi_stream.h"
 #else
 #include "kernels/cuda/utils.h"
 #endif
@@ -661,6 +667,12 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
   // URI scheme.
   use_tensor_core = false;
 #endif
+#if defined(XLLM_TORCH_MUSA)
+  if (use_two_stage_decode) {
+    LOG(FATAL) << "two-stage xattention decode is not supported in "
+                  "XLLM_TORCH_MUSA builds.";
+  }
+#else
   if (use_two_stage_decode) {
     if (params.attention.device.q_seq_lens.defined() &&
         params.attention.device.q_seq_lens.numel() > 0) {
@@ -801,6 +813,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
         /*is_shared_stage_plan*/ false);
     return build_capture_params_if_needed();
   }
+#endif
   if (use_llm_decode_fast_path) {
     const uint32_t slot_mapping_tokens =
         padded_num_tokens > 0 ? padded_num_tokens : actual_num_tokens;

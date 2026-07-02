@@ -13,26 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-// Qwen3.5 hybrid Gated DeltaNet + partial-RoPE + gated-norm op declarations
-// on the CUDA (incl. MUSA-as-CUDA) backend.
-//
-// These are the kernels invoked by ``xllm::kernel::ops_api`` dispatchers
-// when the model is one of the Qwen3.5 / Qwen3-Next hybrid architectures.
-// Two backing implementations are envisaged:
-//
-//   1. FlashInfer-style mate bridge SOs loaded via TVM-FFI under
-//      ``FLASHINFER_OPS_PATH`` (preferred; see ``mate/csrc/integrations/
-//      flashinfer/``).
-//   2. Hand-written MUSA kernels shipped through the same SO layout
-//      (fallback / baseline).
-//
-// At M1 these are libtorch reference kernels (correctness-first). M2 can
-// replace hot paths with mate TVM-FFI SOs (``gated_delta_rule_decode``, etc.).
 #pragma once
 
 #include <torch/torch.h>
 
 #include <optional>
+#include <string>
 #include <tuple>
 #include <utility>
 
@@ -45,7 +31,10 @@ struct FusedGdnGatingParams;
 struct FusedQkvzbaSplitReshapeParams;
 struct FusedRecurrentGatedDeltaRuleParams;
 struct GatedLayerNormParams;
+struct MateGatedDeltaRuleDecodeParams;
+struct MateGatedDeltaRulePrefillParams;
 struct PartialRotaryEmbeddingParams;
+struct FusedSigmoidGatingDeltaRuleUpdateParams;
 
 namespace cuda {
 
@@ -90,6 +79,55 @@ torch::Tensor recurrent_gated_delta_rule(
     const std::optional<torch::Tensor>& g,
     const std::optional<torch::Tensor>& gk);
 
-}  // namespace cuda
-}  // namespace kernel
-}  // namespace xllm
+std::string get_mate_gdn_prefill_uri(int64_t num_q_heads,
+                                     int64_t num_v_heads,
+                                     torch::ScalarType dtype);
+
+std::string get_mate_gdn_decode_uri(int64_t num_q_heads,
+                                    int64_t num_v_heads,
+                                    torch::ScalarType dtype);
+
+std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
+    MateGatedDeltaRulePrefillParams& params);
+
+torch::Tensor mate_gated_delta_rule_decode(
+    MateGatedDeltaRuleDecodeParams& params);
+
+torch::Tensor fused_gated_delta_rule_decode(
+    MateGatedDeltaRuleDecodeParams& params);
+
+torch::Tensor causal_conv1d(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    const torch::Tensor& conv_state,
+    const std::optional<torch::Tensor>& bias_opt,
+    const torch::IntArrayRef query_start_loc_opt,
+    const torch::IntArrayRef cache_indices_opt,
+    const torch::IntArrayRef initial_state_mode_opt,
+    const torch::IntArrayRef num_accepted_tokens_opt,
+    int64_t activation_mode,
+    int64_t pad_slot_id,
+    int64_t run_mode);
+
+torch::Tensor fused_sigmoid_gating_delta_rule_update(
+    FusedSigmoidGatingDeltaRuleUpdateParams& params);
+
+
+void causal_conv1d_decode_fused(const torch::Tensor& x,
+                                const torch::Tensor& weight,
+                                const std::optional<torch::Tensor>& bias,
+                                torch::Tensor conv_state,
+                                const torch::Tensor& cache_indices,
+                                torch::Tensor output_buf,
+                                int pad_slot_id,
+                                bool silu_activation);
+
+void gated_rms_norm_fused(const torch::Tensor& x,
+                          const torch::Tensor& weight,
+                          const torch::Tensor& z,
+                          torch::Tensor output,
+                          double eps);
+
+}
+}
+}

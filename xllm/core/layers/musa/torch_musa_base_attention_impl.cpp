@@ -13,9 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "base_attention_impl.h"
-
-#include "kernels/cuda/utils.h"
+#include "layers/cuda/base_attention_impl.h"
 
 namespace xllm {
 namespace layer {
@@ -30,9 +28,11 @@ BaseAttentionImpl::BaseAttentionImpl(int64_t num_heads,
       scale_(scale),
       num_kv_heads_(num_kv_heads),
       sliding_window_(sliding_window) {
-  // we only support bf16 kvcache for now
-  decode_use_tensor_core_ = xllm::kernel::cuda::should_use_tensor_core(
-      /*kv_cache_dtype=*/torch::ScalarType::BFloat16, num_heads, num_kv_heads);
+  // MUSA/Mate FlashInfer does not support the tensor-core decode path
+  // (paged_run on prefill URI throws "Back optional access" for decode
+  // shapes). Force the dedicated decode URI ("run" on batch_decode_*) which
+  // matches the working 0526 reference path.
+  decode_use_tensor_core_ = false;
 }
 
 }  // namespace layer

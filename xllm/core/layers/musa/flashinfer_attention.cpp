@@ -13,12 +13,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "flashinfer_attention.h"
+#include <cstdlib>
+#include <string>
 
-#include "flashinfer_planinfo.h"
-#include "flashinfer_workspace.h"
+#include "layers/cuda/flashinfer_attention.h"
+
+#include "layers/cuda/flashinfer_workspace.h"
+#include "layers/musa/flashinfer_planinfo.h"
 #include "framework/kv_cache/kv_cache.h"
-#include "kernels/cuda/cuda_ops_api.h"
+#include "kernels/musa/musa_ops_api.h"
 #include "kernels/ops_api.h"
 #include "layers/common/attention_metadata.h"
 
@@ -291,6 +294,99 @@ void FlashInferAttentionImpl::decoder_forward(
     std::optional<at::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
+  // FA3 fast path. Opt-in via env var XLLM_USE_FA3=1. Requires the JIT-built
+  // fmha_fwd_<hash>.so for the current shape to live under
+  // FLASHINFER_OPS_PATH (see /workspace/mate_cached_ops/). When this path is
+  // taken we bypass the FlashInfer fa2 BatchDecode and instead invoke MATE's
+  // FA3 unified attention kernel (warp-specialized, single-pass), which
+  // typically saves ~5-7 ms / decode on Qwen3.5-27B (TP=1).
+  {
+    static const bool use_fa3 = [] {
+      const char* env = std::getenv("XLLM_USE_FA3");
+      return env && std::string(env) == "1";
+    }();
+    if (use_fa3) {
+      CHECK(attn_metadata.block_table.defined())
+          << "FA3 decode requires block_table (rectangular page_table)";
+      const int64_t batch_size = attn_metadata.block_table.size(0);
+
+      // seqused_k = per-seq kv length (NOT cumulative). attn_metadata
+      // already keeps it under `kv_seq_lens`; if undefined fall back to
+      // torch::diff of the cumulative form.
+      torch::Tensor seqused_k = attn_metadata.kv_seq_lens;
+      if (!seqused_k.defined() || seqused_k.numel() == 0) {
+        CHECK(attn_metadata.kv_cu_seq_lens.defined())
+            << "FA3 decode requires kv_seq_lens or kv_cu_seq_lens";
+        seqused_k = torch::diff(attn_metadata.kv_cu_seq_lens).to(torch::kInt32);
+      } else if (seqused_k.scalar_type() != torch::kInt32) {
+        seqused_k = seqused_k.to(torch::kInt32);
+      }
+      seqused_k = seqused_k.contiguous();
+
+      // page_table: native rectangular block_table built by the input builder
+      // from allocated KV blocks (sglang req_to_token style). Unused slots are
+      // -1; graph mode reuses persistent_block_tables_ updated each step.
+      const torch::Tensor page_table = attn_metadata.block_table;
+
+      // Use the host-side max KV length tracked by AttentionMetadata, not
+      // the (over-estimated) page-aligned bound. The metadata kernel uses
+      // this to partition work; an inflated value pushes the scheduler to
+      // over-allocate splits and confuses causal masking, producing subtly
+      // drifted attention even though the kernel runs to completion.
+      const int32_t max_seqlen_k = static_cast<int32_t>(attn_metadata.max_seq_len);
+      const int32_t max_seqlen_q = static_cast<int32_t>(
+          std::max<int64_t>(attn_metadata.max_query_len, 1));
+      CHECK_GT(max_seqlen_k, 0)
+          << "FA3 decode requires attn_metadata.max_seq_len > 0";
+
+      // Allocate / get scheduler_metadata. Cached on PlanInfo so it is
+      // computed once per shape per layer-0 prepare.
+      torch::Tensor scheduler_metadata = attn_metadata.fa3_scheduler_metadata;
+      if (!scheduler_metadata.defined()) {
+        scheduler_metadata = xllm::kernel::cuda::fa3_decode_scheduler_metadata(
+            query.device(),
+            /*batch_size=*/static_cast<int32_t>(batch_size),
+            /*num_heads_q=*/static_cast<int32_t>(num_heads_),
+            /*num_heads_kv=*/static_cast<int32_t>(num_kv_heads_),
+            /*head_dim_qk=*/static_cast<int32_t>(head_size_),
+            /*head_dim_vo=*/static_cast<int32_t>(head_size_),
+            /*max_seqlen_q=*/max_seqlen_q,
+            /*max_seqlen_k=*/max_seqlen_k,
+            /*window_size_left=*/static_cast<int32_t>(sliding_window_),
+            /*window_size_right=*/0,
+            /*cu_seqlens_q=*/attn_metadata.q_cu_seq_lens,
+            /*seqused_k=*/seqused_k);
+      }
+
+      // FA3 lse output: [num_qo_heads, total_q] fp32. Always present.
+      const int64_t total_q = query.size(0);
+      torch::Tensor lse_tensor =
+          output_lse.has_value() && output_lse->defined()
+              ? *output_lse
+              : torch::empty({static_cast<int64_t>(num_heads_), total_q},
+                             torch::TensorOptions()
+                                 .dtype(torch::kFloat32)
+                                 .device(query.device()));
+
+      xllm::kernel::cuda::fa3_decode(
+          query,
+          k_cache,
+          v_cache,
+          attn_metadata.q_cu_seq_lens,
+          seqused_k,
+          page_table,
+          scheduler_metadata,
+          /*max_seqlen_q=*/max_seqlen_q,
+          /*window_left=*/static_cast<int64_t>(sliding_window_),
+          /*window_right=*/0,
+          scale_,
+          output,
+          lse_tensor);
+      if (output_lse.has_value()) *output_lse = lse_tensor;
+      return;
+    }
+  }
+
   // Get block_size from k_cache if defined and has proper dimensions,
   // otherwise use a default value (for prefill without KV cache, e.g., LongCat)
   int64_t block_size = 1;
@@ -342,7 +438,10 @@ void FlashInferAttentionImpl::decoder_forward(
                                    output,
                                    output_lse,
                                    decode_use_tensor_core_,
-                                   attn_metadata.qo_indptr);
+                                   attn_metadata.qo_indptr,
+                                   attn_metadata.paged_kv_indptr_host,
+                                   attn_metadata.paged_kv_indices_host,
+                                   attn_metadata.paged_kv_last_page_len_host);
 }
 
 }  // namespace layer

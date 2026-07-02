@@ -31,7 +31,6 @@ if(USE_MUSA)
       torch
       :util
       :platform
-      MTTOplib
   )
 endif()
 
@@ -40,74 +39,40 @@ if(XLLM_TORCH_MUSA)
   include_directories(${CMAKE_CURRENT_LIST_DIR}/../cuda)
   include_directories(${CMAKE_CURRENT_LIST_DIR}/../cuda/moe)
 
+  # Qwen3.5-27B text serving path (bf16 dense, FlashInfer + GDN hybrid).
+
   set(_TORCH_MUSA_KERNEL_HDRS
-    arch_condition.h
     attention_runner.h
-    block_copy_api.h
-    cuda_graph_compat.h
-    cuda_ops_api.h
-    device_utils.cuh
-    fused_qknorm_rope_api.h
-    gated_delta_fallback.h
+    musa_ops_api.h
+    musa_tvmffi_stream.h
     gdn_ops.h
     global_capture_instance.h
     llm_decode_metadata_update.h
-    mate_gdn_ops.h
-    musa_tvmffi_stream.h
     piecewise_graphs.h
-    preserve_cuda_namespace.h
-    topk_last_dim.cuh
-    type_convert.cuh
-    utils.h
-    xattention_ops_api.h
-    xattention/xattention_ops_api.h
     ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk.cuh
     ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk_sigmoid_kernels.cuh
     ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk_softmax_kernels.cuh
   )
 
   set(_TORCH_MUSA_KERNEL_SRCS
-    activation.cu
-    air_log_softmax_last_dim.cu
+    # FlashInfer attention (12 full-attn layers)
     attention_runner.cpp
-    batch_decode.cpp
-    batch_prefill.cpp
-    batch_chunked_prefill.cpp
-    block_copy.cu
-    beam_search.cpp
-    cache_select.cu
-    fa3_fwd.cpp
-    fa3_metadata.cpp
-    fp8_quant.cu
-    fp8_scaled_matmul.cpp
-    fp8_scaled_quantize.cpp
-    fused_qknorm_rope.cu
-    fused_gdn_decode.cu
-    gated_rms_norm.cu
-    gdn_conv1d_update.cu
-    gdn_gating.cu
-    gdn_split_fused.cu
-    gdn_ops.cpp
+    attention_decode.cpp
+    attention_prefill.cpp
+    # GDN hybrid layers (36 linear-attn layers)
+    gdn_decode.cu
+    gdn_prefill.cpp
+    # Norm / MLP / projections
     gemma_norm.cu
-    global_capture_instance.cpp
-    kernel_musa_compat.cpp
-    llm_decode_metadata_update.cu
-    mate_gdn_prefill.cpp
-    mate_gdn_decode.cpp
-    matmul.cpp
-    musa_tvmffi_stream.cpp
-    norm.cu
-    piecewise_graphs.cpp
-    rec_beam_search.cu
-    reshape_paged_cache.cu
+    activation.cu
     rope.cu
+    paged_cache.cu
     random_sample.cpp
-    utils.cpp
-    xattention/decoder_reshape_and_cache.cu
-    xattention/lse_combine.cu
-    xattention/prefill_reshape_and_cache.cu
-    moe/moe_fused_topk.cu
-    moe/fused_moe.cpp
+    # Mate FFI + graph helpers
+    musa_tvmffi_stream.cpp
+    global_capture_instance.cpp
+    piecewise_graphs.cpp
+    llm_decode_metadata_update.cu
   )
 
   cc_library(

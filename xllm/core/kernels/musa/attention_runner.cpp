@@ -13,14 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "attention_runner.h"
+#include "core/kernels/musa/attention_runner.h"
 
 #include <glog/logging.h>
 
 #include "core/common/global_flags.h"
 #include "core/framework/config/execution_config.h"
-#include "cuda_ops_api.h"
-#include "global_capture_instance.h"
+#include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/global_capture_instance.h"
 
 namespace xllm {
 namespace kernel {
@@ -42,14 +42,14 @@ void AttentionRunner::run_capture(
     torch::Tensor output,
     std::optional<torch::Tensor>& output_lse,
     uint32_t padded_num_tokens) {
-  // Temporarily end graph capture
+  // plan_info is supplied per replay via AttentionReplayParams; not stored here.
+  (void)plan_info;
+
   ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
       .temporarily_end_graph();
 
-  // Save uri for replay
   uri_ = uri;
 
-  // Save all necessary tensors and parameters
   float_workspace_buffer_ = float_workspace_buffer;
   int_workspace_buffer_ = int_workspace_buffer;
   page_locked_int_workspace_buffer_ = page_locked_int_workspace_buffer;
@@ -61,17 +61,12 @@ void AttentionRunner::run_capture(
   scale_ = sm_scale;
   padded_num_tokens_ = padded_num_tokens;
 
-  // During piecewise graph capture, we don't execute attention here.
-  // The attention will be executed in the replay phase together with the
-  // captured MLP graphs to ensure correct execution order.
 
-  // Resume graph capture
   ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
       .temporarily_begin_graph();
 }
 
 void AttentionRunner::run_replay(const AttentionReplayParams& params) {
-  // Slice query and output based on actual_num_tokens
   torch::Tensor query_slice =
       query_.slice(/*dim=*/0, /*start=*/0, /*end=*/params.actual_num_tokens);
   torch::Tensor key_slice =
@@ -81,10 +76,9 @@ void AttentionRunner::run_replay(const AttentionReplayParams& params) {
   torch::Tensor output_slice =
       output_.slice(/*dim=*/0, /*start=*/0, /*end=*/params.actual_num_tokens);
 
-  // Execute attention with sliced tensors
   // TODO: support output_lse for replay
   std::optional<torch::Tensor> output_lse = std::nullopt;
-  batch_prefill(uri_,  // Use captured uri
+  batch_prefill(uri_,
                 params.plan_info,
                 float_workspace_buffer_,
                 int_workspace_buffer_,
@@ -115,19 +109,15 @@ void batch_prefill_with_optional_piecewise_capture(
     double sm_scale,
     torch::Tensor output,
     std::optional<torch::Tensor>& output_lse) {
-  // This function is only called for prefill, so is_prefill is always true
   if (::xllm::ExecutionConfig::get_instance().enable_graph() &&
       ::xllm::ExecutionConfig::get_instance()
           .enable_prefill_piecewise_graph() &&
       ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
           .is_capturing()) {
-    // Create temporary runner
     AttentionRunner runner;
 
-    // Get padded_num_tokens from query tensor shape (query is already padded)
     uint32_t padded_num_tokens = static_cast<uint32_t>(query.size(0));
 
-    // Run capture
     runner.run_capture(uri,
                        plan_info,
                        float_workspace_buffer,
@@ -144,12 +134,10 @@ void batch_prefill_with_optional_piecewise_capture(
                        output_lse,
                        padded_num_tokens);
 
-    // Register to GlobalCaptureInstance
     ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
         .register_attention_runner(std::move(runner));
     return;
   }
-  // Non-piecewise mode: directly call batch_prefill
   batch_prefill(uri,
                 plan_info,
                 float_workspace_buffer,
@@ -166,6 +154,6 @@ void batch_prefill_with_optional_piecewise_capture(
                 output_lse);
 }
 
-}  // namespace cuda
-}  // namespace kernel
-}  // namespace xllm
+}
+}
+}

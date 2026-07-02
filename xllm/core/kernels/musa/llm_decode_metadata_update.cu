@@ -33,19 +33,6 @@ __global__ void llm_decode_metadata_update_kernel(
       static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   const int64_t step = static_cast<int64_t>(blockDim.x) * gridDim.x;
 
-  // Read the runtime paged-KV indices count from device memory rather than
-  // using `params.actual_indices_size` (which is baked into the kernel's
-  // parameter buffer at CUDA-graph capture time). At capture, the warmup
-  // batch typically uses 1 KV-cache block per sequence, so the baked
-  // `actual_indices_size` is 1. When the captured graph is later replayed at
-  // a decode step that has crossed a block boundary (e.g., position 64 with
-  // block_size=64), the actual indices count grows to 2+, but the captured
-  // kernel would still copy only 1 entry, leaving subsequent entries in
-  // `dst_paged_kv_indices` stale from warmup. The attention kernel that
-  // reads `dst_paged_kv_indices[0..indptr[bs]-1]` then dereferences a wrong
-  // block ID and produces silently-wrong attention output starting at the
-  // first full-attention layer. Read the count from indptr so the loop
-  // bound tracks the runtime KV cache layout instead.
   const int64_t dyn_indices_size =
       (params.src_paged_kv_indptr != nullptr && params.actual_batch_size > 0)
           ? static_cast<int64_t>(
@@ -78,7 +65,7 @@ __global__ void llm_decode_metadata_update_kernel(
   }
 }
 
-}  // namespace
+}
 
 void update_llm_decode_metadata(const LlmDecodeMetadataUpdateParams& params,
                                 LlmDecodeMetadataUpdateStream stream) {
@@ -92,23 +79,12 @@ void update_llm_decode_metadata(const LlmDecodeMetadataUpdateParams& params,
   if (params.actual_indices_size > max_work_size) {
     max_work_size = params.actual_indices_size;
   }
-  // When this kernel is invoked under CUDA-graph capture, the
-  // `max_work_size` value is baked into the captured launch's grid geometry
-  // and loop bound. The runtime paged_kv_indices count can grow between
-  // capture and replay (block boundary crossing during decode); use the
-  // caller-provided worst-case capacity so the captured strided loop
-  // iterates far enough at replay time to cover the grown indices array.
-  // Callers that don't run under graph capture leave this 0 and the
-  // ordinary actual_* sizing wins.
   if (params.max_indices_size_for_graph_capacity > max_work_size) {
     max_work_size = params.max_indices_size_for_graph_capacity;
   }
   if (max_work_size <= 0) {
     return;
   }
-  // Cap the grid size because the kernel already uses a strided loop.
-  // This keeps launch overhead bounded for large inputs without reducing
-  // coverage.
   const int64_t num_blocks = std::min<int64_t>(
       (max_work_size + kThreadsPerBlock - 1) / kThreadsPerBlock,
       kMaxBlocksPerLaunch);
@@ -122,4 +98,4 @@ void update_llm_decode_metadata(const LlmDecodeMetadataUpdateParams& params,
       << cudaGetErrorString(error);
 }
 
-}  // namespace xllm::kernel::cuda
+}

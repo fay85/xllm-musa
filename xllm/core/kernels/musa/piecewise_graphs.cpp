@@ -1,31 +1,34 @@
 /* Copyright 2025-2026 The xLLM Authors.
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
     https://github.com/jd-opensource/xllm/blob/main/LICENSE
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
-#include "piecewise_graphs.h"
+#include "core/kernels/musa/piecewise_graphs.h"
 
-#include "attention_runner.h"
+#include "core/kernels/musa/attention_runner.h"
 
 namespace xllm::runtime::cuda {
 
 void PiecewiseGraphs::add_graph(std::unique_ptr<at::cuda::CUDAGraph>&& graph) {
-  graphs_.push_back(std::move(graph));
-  instructions_.push_back(InstructionType::kGraph);
+  graphs_.emplace_back(std::move(graph));
+  instructions_.emplace_back(InstructionType::kGraph);
 }
 
 void PiecewiseGraphs::add_attention_runner(
     ::xllm::kernel::cuda::AttentionRunner&& runner) {
-  attention_runners_.push_back(
+  attention_runners_.emplace_back(
       std::make_unique<::xllm::kernel::cuda::AttentionRunner>(
           std::move(runner)));
-  instructions_.push_back(InstructionType::kRunner);
+  instructions_.emplace_back(InstructionType::kRunner);
 }
 
 size_t PiecewiseGraphs::num_runners() const {
@@ -34,9 +37,9 @@ size_t PiecewiseGraphs::num_runners() const {
 
 void PiecewiseGraphs::replay(
     const ::xllm::kernel::cuda::AttentionReplayParams& runner_params) {
-  CHECK_GT(attention_runners_.size(), 0)
-      << "Piecewise graph must have at least one attention runner";
-  CHECK_GT(graphs_.size(), 0) << "Piecewise graph must have at least one graph";
+  if (instructions_.empty()) {
+    return;
+  }
 
   size_t graph_idx = 0;
   size_t runner_idx = 0;
@@ -59,4 +62,4 @@ void PiecewiseGraphs::replay(
       << "Not all runners were replayed";
 }
 
-}  // namespace xllm::runtime::cuda
+}

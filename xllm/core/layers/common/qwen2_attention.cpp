@@ -36,7 +36,7 @@ void fused_qk_norm_rope(torch::Tensor& qkv,
 }
 #else
 #if defined(XLLM_TORCH_MUSA)
-#include "kernels/musa/cuda_ops_api.h"
+#include "kernels/musa/musa_ops_api.h"
 #else
 #include "kernels/cuda/cuda_ops_api.h"
 #endif

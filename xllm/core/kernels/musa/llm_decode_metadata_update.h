@@ -15,21 +15,13 @@ limitations under the License.
 
 #pragma once
 
-#if defined(USE_DCU)
-#include <hip/hip_runtime.h>
-#else
 #include <cuda_runtime.h>
-#endif
 
 #include <cstdint>
 
 namespace xllm::kernel::cuda {
 
-#if defined(USE_DCU)
-using LlmDecodeMetadataUpdateStream = hipStream_t;
-#else
 using LlmDecodeMetadataUpdateStream = cudaStream_t;
-#endif
 
 struct LlmDecodeMetadataUpdateParams {
   const int32_t* src_tokens;
@@ -50,23 +42,11 @@ struct LlmDecodeMetadataUpdateParams {
   int64_t actual_num_tokens;
   int64_t padded_num_tokens;
   int64_t actual_batch_size;
-  // Static upper-bound on the paged_kv_indices count for the current decode
-  // batch. Used only on the host side to size launch geometry; the kernel
-  // reads the actual indices count dynamically from
-  // src_paged_kv_indptr[actual_batch_size] so CUDA-graph replay sees the
-  // correct count even when the KV cache crosses a block boundary between
-  // capture and replay.
   int64_t actual_indices_size;
-  // Worst-case paged_kv_indices count this captured graph instance will ever
-  // need to handle (typically `max_seqs_per_batch * max_block_table_len`).
-  // 0 means "treat as eager mode" -- launcher falls back to
-  // `actual_indices_size` for grid sizing. When non-zero, the launcher uses
-  // this as the kernel's `max_work_size` so the captured strided loop
-  // iterates far enough to cover any runtime indices growth.
   int64_t max_indices_size_for_graph_capacity;
 };
 
 void update_llm_decode_metadata(const LlmDecodeMetadataUpdateParams& params,
                                 LlmDecodeMetadataUpdateStream stream);
 
-}  // namespace xllm::kernel::cuda
+}

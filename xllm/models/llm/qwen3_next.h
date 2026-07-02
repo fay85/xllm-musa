@@ -20,7 +20,7 @@ limitations under the License.
 #include <vector>
 
 #if defined(USE_CUDA)
-#include "core/layers/musa_torch/qwen3_next_decoder_layer_impl.h"
+#include "core/layers/musa/qwen3_next_decoder_layer_impl.h"
 #elif defined(USE_NPU)
 #include "core/layers/npu_torch/qwen3_next_decoder_layer_impl.h"
 #endif

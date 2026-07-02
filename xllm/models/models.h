@@ -89,8 +89,11 @@ limitations under the License.
 #include "llm/qwen2.h"      // IWYU pragma: keep
 #include "llm/qwen3.h"      // IWYU pragma: keep
 #include "llm/qwen3_moe.h"  // IWYU pragma: keep
+#elif defined(USE_CUDA) && defined(XLLM_TORCH_MUSA)
+#include "llm/qwen3_5.h"      // IWYU pragma: keep
+#include "llm/qwen3_5_mtp.h"  // IWYU pragma: keep
+#include "llm/qwen3_next.h"   // IWYU pragma: keep
 #elif defined(USE_CUDA)
-#include "dit/pipelines/pipeline_longcat_audiodit.h"    // IWYU pragma: keep
 #include "dit/pipelines/pipeline_longcat_image.h"       // IWYU pragma: keep
 #include "dit/pipelines/pipeline_longcat_image_edit.h"  // IWYU pragma: keep
 #include "llm/mimo.h"                                   // IWYU pragma: keep

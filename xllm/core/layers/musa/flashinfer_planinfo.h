@@ -44,8 +44,19 @@ void update_chunked_prefill_plan_info(std::shared_ptr<PlanInfo> plan_info,
                                       int32_t block_size,
                                       int32_t window_size_left,
                                       bool enable_cuda_graph,
-                                      bool causal = true);
+                                      bool causal = true,
+                                      int32_t max_kv_blocks_per_seq = 0);
 
+// `max_kv_blocks_per_seq`: when non-zero AND `enable_cuda_graph=true`, the
+// plan is computed against a synthetic worst-case `paged_kv_indptr_host =
+// [0, max, 2*max, ..., bs*max]`. This makes the cached plan_info valid for
+// any future runtime block count <= max_kv_blocks_per_seq, which is required
+// for CUDA-graph replay correctness: the captured kernel reuses the plan_info
+// recorded at warmup time, so a plan computed for a 1-block warmup layout
+// would only dispatch attention work for 1 block per sequence, silently
+// underreading the KV cache once the sequence crosses a block boundary
+// during replay. Computed as
+// ceil(max_position_embeddings / block_size) at the call site.
 void update_decode_plan_info(std::shared_ptr<PlanInfo> plan_info,
                              const std::string& backend,
                              const AttentionMetadata& attn_meta,
@@ -59,6 +70,7 @@ void update_decode_plan_info(std::shared_ptr<PlanInfo> plan_info,
                              int32_t block_size,
                              int32_t window_size_left,
                              bool enable_cuda_graph,
-                             bool use_tensor_core);
+                             bool use_tensor_core,
+                             int32_t max_kv_blocks_per_seq = 0);
 
 }  // namespace xllm::layer::flashinfer

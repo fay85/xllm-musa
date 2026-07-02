@@ -15,8 +15,8 @@ limitations under the License.
 
 #pragma once
 
-#include "layers/musa_torch/qwen3_next_gated_delta_net.h"
-#include "layers/musa_torch/qwen3_next_hybrid_decoder_layer_base.h"
+#include "layers/musa/qwen3_next_gated_delta_net.h"
+#include "layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 
 namespace xllm {
 namespace layer {

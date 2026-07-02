@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
@@ -23,9 +24,78 @@ limitations under the License.
 #include <cstdint>
 #include <type_traits>
 
-#include "utils.h"
+#include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
+#include "core/kernels/cuda/device_utils.cuh"
 
-namespace xllm::kernel::musa {
+namespace xllm::kernel::cuda {
+
+template <typename T>
+__global__ void XLLM_KERNEL_ATTR(1024) reshape_paged_cache_kernel(
+    const int* __restrict__ slot_ids,
+    const T* __restrict__ keys,
+    const T* __restrict__ values,
+    T* __restrict__ key_cache,
+    T* __restrict__ value_cache,
+    int64_t k_stride,
+    int64_t v_stride,
+    int64_t n_kv_heads,
+    int64_t head_dim,
+    int64_t block_size) {
+  const int64_t bid = blockIdx.x;
+  const int64_t slot_id = slot_ids[bid];
+  if (slot_id < 0) {
+    return;
+  }
+  const int64_t block_idx = slot_id / block_size;
+  const int64_t block_offset = slot_id % block_size;
+  const int64_t block_base_idx = block_idx * block_size * n_kv_heads * head_dim;
+  for (int64_t i = threadIdx.x; i < n_kv_heads * head_dim; i += blockDim.x) {
+    const int64_t k_src_idx = bid * k_stride + i;
+    const int64_t v_src_idx = bid * v_stride + i;
+    const int64_t head_base_idx =
+        block_base_idx + block_offset * n_kv_heads * head_dim;
+    const int64_t dst_idx = head_base_idx + i;
+    key_cache[dst_idx] = keys[k_src_idx];
+    value_cache[dst_idx] = values[v_src_idx];
+  }
+}
+
+void reshape_paged_cache(
+    torch::Tensor slot_ids,
+    torch::Tensor keys,
+    torch::Tensor values,
+    torch::Tensor key_cache,
+    torch::Tensor value_cache) {
+  CHECK(keys.stride(-1) == 1 && keys.stride(-2) == keys.size(-1));
+  CHECK(values.stride(-1) == 1 && values.stride(-2) == values.size(-1));
+  const int64_t n_tokens = keys.size(-3);
+  const int64_t n_kv_heads = keys.size(-2);
+  const int64_t head_dim = keys.size(-1);
+  const int64_t block_size = key_cache.size(-3);
+  const int64_t k_stride = keys.stride(-3);
+  const int64_t v_stride = values.stride(-3);
+  const int64_t n = n_kv_heads * head_dim;
+  dim3 grid(n_tokens);
+  dim3 block(std::min<int>(n, 1024));
+  DISPATCH_FLOATING_TYPES(
+      keys.scalar_type(), "reshape_paged_cache_kernel", [&] {
+        reshape_paged_cache_kernel<scalar_t>
+            <<<grid, block, 0, c10::cuda::getCurrentCUDAStream()>>>(
+                slot_ids.data_ptr<int>(),
+                keys.data_ptr<scalar_t>(),
+                values.data_ptr<scalar_t>(),
+                key_cache.data_ptr<scalar_t>(),
+                value_cache.data_ptr<scalar_t>(),
+                k_stride,
+                v_stride,
+                n_kv_heads,
+                head_dim,
+                block_size);
+      });
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
 namespace {
 
 template <typename scalar_t>
@@ -119,7 +189,7 @@ __global__ void block_copy_kernel(const int64_t* __restrict__ key_cache_ptrs,
   }
 }
 
-}  // namespace
+}
 
 void block_copy(torch::Tensor key_cache_ptrs,
                 torch::Tensor value_cache_ptrs,
@@ -205,4 +275,4 @@ void block_copy(torch::Tensor key_cache_ptrs,
   });
 }
 
-}  // namespace xllm::kernel::musa
+}

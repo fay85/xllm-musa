@@ -24,11 +24,7 @@ limitations under the License.
 #include "core/platform/platform.h"
 #include "core/util/utils.h"
 #include "flashinfer_workspace.h"
-#if defined(XLLM_TORCH_MUSA)
-#include "kernels/musa/utils.h"
-#else
 #include "kernels/cuda/utils.h"
-#endif
 #include "xattention_workspace.h"
 
 using namespace xllm::kernel::cuda;
@@ -84,12 +80,12 @@ void update_xattention_plan_info(std::shared_ptr<PlanInfo> plan_info,
                                  bool use_tensor_core,
                                  bool is_shared_stage_plan) {
   CHECK(plan_info->layer_id != -1) << "Need to set layer_id to PlanInfo.";
-  if (plan_info->plan_info.size() > 0) return;
+  if (plan_info->layer_id != 0) return;
 
   const auto device = flashinfer::FlashinferWorkspace::get_instance()
                           .get_float_workspace_buffer()
                           .device();
-  MusaTvmffiStreamGuard stream_guard(device);
+  bind_tvmffi_stream_to_current_torch_stream(device);
 
   VLOG(kGraphExecutorLogVerboseLevel)
       << "update_plan_info: layer_id=" << plan_info->layer_id

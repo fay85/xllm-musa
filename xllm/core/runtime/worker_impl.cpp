@@ -56,7 +56,7 @@ limitations under the License.
 #include "platform/npu/device_capture_lock.h"
 #elif defined(USE_CUDA) || defined(USE_DCU)
 #if defined(XLLM_TORCH_MUSA)
-#include "kernels/musa/block_copy_api.h"
+#include "kernels/musa/musa_ops_api.h"
 #else
 #include "kernels/cuda/cuda_ops_api.h"
 #endif

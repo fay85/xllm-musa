@@ -24,13 +24,8 @@ limitations under the License.
 #include "flashinfer_planinfo.h"
 #include "flashinfer_workspace.h"
 #include "framework/kv_cache/kv_cache.h"
-#if defined(XLLM_TORCH_MUSA)
-#include "kernels/musa/cuda_ops_api.h"
-#include "kernels/musa/xattention/xattention_ops_api.h"
-#else
 #include "kernels/cuda/cuda_ops_api.h"
 #include "kernels/cuda/xattention/xattention_ops_api.h"
-#endif
 #include "layers/common/attention_metadata.h"
 #include "xattention_planinfo.h"
 #include "xattention_workspace.h"
@@ -113,10 +108,7 @@ void XAttentionImpl::run_single_stage_decode(
                                    output,
                                    unshared_lse,
                                    decode_use_tensor_core_,
-                                   attn_metadata.qo_indptr,
-                                   attn_metadata.paged_kv_indptr_host,
-                                   attn_metadata.paged_kv_indices_host,
-                                   attn_metadata.paged_kv_last_page_len_host);
+                                   attn_metadata.qo_indptr);
 }
 
 void XAttentionImpl::run_two_stage_decode(

@@ -124,26 +124,23 @@ __global__ void fused_qknorm_rope_kernel(
     T_cache const* cos_sin_cache =
         reinterpret_cast<T_cache const*>(cos_sin_cache_void);
 
-    int const warpsPerBlock = blockDim.x / 32;
-    int const warpId = threadIdx.x / 32;
-    int const laneId = threadIdx.x % 32;
+    int const warps_per_block = blockDim.x / 32;
+    int const warp_id = threadIdx.x / 32;
+    int const lane_id = threadIdx.x % 32;
 
-    // Calculate global warp index to determine which head/token this warp
-    // processes
-    int const globalWarpIdx = blockIdx.x * warpsPerBlock + warpId;
+    int const global_warp_idx = blockIdx.x * warps_per_block + warp_id;
 
-    // Total number of attention heads (Q and K)
     int const total_qk_heads = num_heads_q + num_heads_k;
 
-    // Determine which token and head type (Q or K) this warp processes
-    int const tokenIdx = globalWarpIdx / total_qk_heads;
-    int const localHeadIdx = globalWarpIdx % total_qk_heads;
+    int const token_idx = global_warp_idx / total_qk_heads;
+    int const local_head_idx = global_warp_idx % total_qk_heads;
 
-    // Skip if this warp is assigned beyond the number of tokens
-    if (tokenIdx >= num_tokens) return;
+    if (token_idx >= num_tokens) {
+      return;
+    }
 
-    bool const isQ = localHeadIdx < num_heads_q;
-    int const headIdx = isQ ? localHeadIdx : localHeadIdx - num_heads_q;
+    bool const is_q = local_head_idx < num_heads_q;
+    int const head_idx = is_q ? local_head_idx : local_head_idx - num_heads_q;
 
     int const num_heads = num_heads_q + num_heads_k + num_heads_v;
 
@@ -161,24 +158,20 @@ __global__ void fused_qknorm_rope_kernel(
         4;  // Use packed_as<uint, kVecSize> to perform loading/saving.
     using vec_T = typename packed_as<uint, kVecSize>::type;
 
-    int offsetWarp;  // Offset for the warp
-    if (isQ) {
-      // Q segment: token offset + head offset within Q segment
-      offsetWarp = tokenIdx * num_heads * head_dim + headIdx * head_dim;
+    int offset_warp;
+    if (is_q) {
+      offset_warp = token_idx * num_heads * head_dim + head_idx * head_dim;
     } else {
-      // K segment: token offset + entire Q segment + head offset within K
-      // segment
-      offsetWarp = tokenIdx * num_heads * head_dim + num_heads_q * head_dim +
-                   headIdx * head_dim;
+      offset_warp = token_idx * num_heads * head_dim + num_heads_q * head_dim +
+                    head_idx * head_dim;
     }
-    int offsetThread = offsetWarp + laneId * kNumElemsPerThread;
+    int offset_thread = offset_warp + lane_id * kNumElemsPerThread;
 
-    // Sum of squares for RMSNorm
-    float sumOfSquares = 0.0f;
+    float sum_of_squares = 0.0f;
 
     // Load.
     {
-      vec_T vec = *reinterpret_cast<vec_T const*>(&qkv[offsetThread]);
+      vec_T vec = *reinterpret_cast<vec_T const*>(&qkv[offset_thread]);
       constexpr int kNumPackedElems = kElemSizeBytes / sizeof(T2_in);
 #pragma unroll
       for (int i = 0; i < kNumPackedElems; i++) {
@@ -186,8 +179,8 @@ __global__ void fused_qknorm_rope_kernel(
         T2_in packed_val = *(reinterpret_cast<T2_in*>(&vec) + i);
         // Convert to float2 for computation
         float2 vals = Converter::convert(packed_val);
-        sumOfSquares += vals.x * vals.x;
-        sumOfSquares += vals.y * vals.y;
+        sum_of_squares += vals.x * vals.x;
+        sum_of_squares += vals.y * vals.y;
 
         elements[2 * i] = vals.x;
         elements[2 * i + 1] = vals.y;
@@ -195,17 +188,16 @@ __global__ void fused_qknorm_rope_kernel(
     }
 
     // Reduce sum across warp using the utility function
-    sumOfSquares = warp_reduce_sum(sumOfSquares);
+    sum_of_squares = warp_reduce_sum(sum_of_squares);
 
-    // Compute RMS normalization factor
-    float rms_rcp = rsqrtf(sumOfSquares / static_cast<float>(head_dim) + eps);
+    float rms_rcp = rsqrtf(sum_of_squares / static_cast<float>(head_dim) + eps);
 
     // Normalize elements
 #pragma unroll
     for (int i = 0; i < kNumElemsPerThread; i++) {
-      int dim = laneId * kNumElemsPerThread + i;
-      float weight = isQ ? Converter::convert(q_weight[dim])
-                         : Converter::convert(k_weight[dim]);
+      int dim = lane_id * kNumElemsPerThread + i;
+      float weight = is_q ? Converter::convert(q_weight[dim])
+                          : Converter::convert(k_weight[dim]);
       elements[i] *= rms_rcp * weight;
     }
 
@@ -213,7 +205,7 @@ __global__ void fused_qknorm_rope_kernel(
     float
         elements2[kNumElemsPerThread];  // Additional buffer required for RoPE.
 
-    int64_t pos_id = position_ids[tokenIdx];
+    int64_t pos_id = position_ids[token_idx];
 
     // Calculate cache pointer for this position - similar to
     // pos_encoding_kernels.cu
@@ -222,7 +214,7 @@ __global__ void fused_qknorm_rope_kernel(
     T_cache const* cos_ptr = cache_ptr;
     T_cache const* sin_ptr = cache_ptr + embed_dim;
     int const rotary_lanes = rotary_dim / kNumElemsPerThread;  // rotary range
-    if (laneId < rotary_lanes) {
+    if (lane_id < rotary_lanes) {
       if constexpr (interleave) {
         // Perform interleaving. Use pre-computed cos/sin values.
 #pragma unroll
@@ -230,7 +222,7 @@ __global__ void fused_qknorm_rope_kernel(
           int const idx0 = 2 * i;
           int const idx1 = 2 * i + 1;
           // Global dimension index in the head
-          int const dim_idx = laneId * kNumElemsPerThread + idx0;
+          int const dim_idx = lane_id * kNumElemsPerThread + idx0;
 
           float const val0 = elements[idx0];
           float const val1 = elements[idx1];
@@ -247,17 +239,17 @@ __global__ void fused_qknorm_rope_kernel(
       } else {
         // Before data exchange with in warp, we need to sync.
         __syncwarp();
-        int pairOffset = (rotary_dim / 2) / kNumElemsPerThread;
+        int pair_offset = (rotary_dim / 2) / kNumElemsPerThread;
         // Get the data from the other half of the warp. Use pre-computed
         // cos/sin values.
 #pragma unroll
         for (int i = 0; i < kNumElemsPerThread; i++) {
-          elements2[i] = __shfl_xor_sync(kFinalMask, elements[i], pairOffset);
+          elements2[i] = __shfl_xor_sync(kFinalMask, elements[i], pair_offset);
 
-          if (laneId < pairOffset) {
+          if (lane_id < pair_offset) {
             elements2[i] = -elements2[i];
           }
-          int dim_idx = laneId * kNumElemsPerThread + i;
+          int dim_idx = lane_id * kNumElemsPerThread + i;
 
           dim_idx = (dim_idx * 2) % rotary_dim;
           int half_dim = dim_idx / 2;
@@ -282,7 +274,7 @@ __global__ void fused_qknorm_rope_kernel(
         // Place it into the generic vector
         *(reinterpret_cast<T2_in*>(&vec) + i) = packed_val;
       }
-      *reinterpret_cast<vec_T*>(&qkv[offsetThread]) = vec;
+      *reinterpret_cast<vec_T*>(&qkv[offset_thread]) = vec;
     }
 
 #if (!defined(__CUDA_ARCH__) || __CUDA_ARCH__ < 800) && !defined(USE_DCU)
@@ -318,12 +310,12 @@ void launch_fused_qknorm_rope(void* qkv,
                               cudaStream_t stream) {
   constexpr int kBlockSize = 256;
 
-  int const warpsPerBlock = kBlockSize / 32;
-  int const totalQKHeads = num_heads_q + num_heads_k;
-  int const totalWarps = num_tokens * totalQKHeads;
+  int const warps_per_block = kBlockSize / 32;
+  int const total_qk_heads = num_heads_q + num_heads_k;
+  int const total_warps = num_tokens * total_qk_heads;
 
-  int const gridSize = div_up(totalWarps, warpsPerBlock);
-  dim3 gridDim(gridSize);
+  int const grid_size = div_up(total_warps, warps_per_block);
+  dim3 gridDim(grid_size);
   dim3 blockDim(kBlockSize);
 
   switch (head_dim) {
