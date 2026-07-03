@@ -68,7 +68,8 @@ torch::Tensor get_kv_len_arr_host(const AttentionMetadata& attn_meta) {
   CHECK(attn_meta.kv_cu_seq_lens.defined())
       << "kv_seq_lens or kv_cu_seq_lens must be defined.";
   torch::Tensor kv_cu_seq_lens_host = attn_meta.kv_cu_seq_lens.to(torch::kCPU);
-  return kv_cu_seq_lens_host.slice(0, 1) - kv_cu_seq_lens_host.slice(0, 0, -1);
+  return kv_cu_seq_lens_host.slice(/*dim=*/0, /*start=*/1) -
+         kv_cu_seq_lens_host.slice(/*dim=*/0, /*start=*/0, /*end=*/-1);
 }
 
 }  // namespace
@@ -122,7 +123,8 @@ void update_prefill_plan_info(std::shared_ptr<PlanInfo> plan_info,
   torch::Tensor qo_indptr_host = attn_meta.q_cu_seq_lens.to(torch::kCPU);
   torch::Tensor kv_cu_seq_lens_host = attn_meta.kv_cu_seq_lens.to(torch::kCPU);
   torch::Tensor kv_len_arr_host =
-      kv_cu_seq_lens_host.slice(0, 1) - kv_cu_seq_lens_host.slice(0, 0, -1);
+      kv_cu_seq_lens_host.slice(/*dim=*/0, /*start=*/1) -
+      kv_cu_seq_lens_host.slice(/*dim=*/0, /*start=*/0, /*end=*/-1);
   const int64_t total_num_rows = qo_indptr_host[-1].item<int64_t>();
   const int64_t batch_size = qo_indptr_host.size(0) - 1;
 
