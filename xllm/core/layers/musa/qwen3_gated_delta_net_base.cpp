@@ -10,7 +10,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "qwen3_gated_delta_net_base.h"
+#include "layers/musa/qwen3_gated_delta_net_base.h"
 
 #include <glog/logging.h>
 #include <torch/torch.h>
@@ -57,7 +57,7 @@ void qwen35_mtp_debug_sync(const char*) {}
 #endif
 
 torch::Tensor l2norm(const torch::Tensor& x, int64_t dim, double eps = 1e-6) {
-  auto norm = torch::sqrt(torch::sum(torch::square(x), dim, true) + eps);
+  auto norm = torch::sqrt(torch::sum(torch::square(x), dim, /*keepdim=*/true) + eps);
   return x / norm;
 }
 
@@ -98,8 +98,8 @@ std::tuple<torch::Tensor, torch::Tensor> torch_recurrent_gated_delta_rule(
   auto initial_dtype = query.dtype();
 
   if (use_qk_l2norm_in_kernel) {
-    query = l2norm(query, -1, 1e-6);
-    key = l2norm(key, -1, 1e-6);
+    query = l2norm(query, /*dim=*/-1, /*eps=*/1e-6);
+    key = l2norm(key, /*dim=*/-1, /*eps=*/1e-6);
   }
 
   auto to_float32_and_transpose = [](torch::Tensor x) {
@@ -111,8 +111,8 @@ std::tuple<torch::Tensor, torch::Tensor> torch_recurrent_gated_delta_rule(
   beta = to_float32_and_transpose(beta);
   g = to_float32_and_transpose(g);
   const int64_t value_num_heads = value.size(1);
-  query = repeat_tensor_heads(query, value_num_heads, 1);
-  key = repeat_tensor_heads(key, value_num_heads, 1);
+  query = repeat_tensor_heads(query, value_num_heads, /*head_dim=*/1);
+  key = repeat_tensor_heads(key, value_num_heads, /*head_dim=*/1);
 
   int64_t batch_size = key.size(0);
   int64_t num_heads = key.size(1);
@@ -168,8 +168,8 @@ std::tuple<torch::Tensor, torch::Tensor> torch_chunk_gated_delta_rule(
     bool use_qk_l2norm_in_kernel = true) {
   auto initial_dtype = query.dtype();
   if (use_qk_l2norm_in_kernel) {
-    query = l2norm(query, -1, 1e-6);
-    key = l2norm(key, -1, 1e-6);
+    query = l2norm(query, /*dim=*/-1, /*eps=*/1e-6);
+    key = l2norm(key, /*dim=*/-1, /*eps=*/1e-6);
   }
   auto to_float32 = [](torch::Tensor x) {
     return x.transpose(1, 2).contiguous().to(torch::kFloat32);
@@ -181,8 +181,8 @@ std::tuple<torch::Tensor, torch::Tensor> torch_chunk_gated_delta_rule(
   beta = to_float32(beta);
   g = to_float32(g);
   const int64_t value_num_heads = value.size(1);
-  query = repeat_tensor_heads(query, value_num_heads, 1);
-  key = repeat_tensor_heads(key, value_num_heads, 1);
+  query = repeat_tensor_heads(query, value_num_heads, /*head_dim=*/1);
+  key = repeat_tensor_heads(key, value_num_heads, /*head_dim=*/1);
 
   int64_t batch_size = query.size(0);
   int64_t num_heads = query.size(1);
@@ -576,8 +576,8 @@ torch::Tensor run_spec_verify_gated_delta_rule(
                      .select(0, token_idx)
                      .unsqueeze(0)
                      .to(torch::kFloat32);
-      q_t = l2norm(q_t, -1, l2_eps).to(torch::kFloat32);
-      k_t = l2norm(k_t, -1, l2_eps).to(torch::kFloat32);
+      q_t = l2norm(q_t, /*dim=*/-1, /*eps=*/l2_eps).to(torch::kFloat32);
+      k_t = l2norm(k_t, /*dim=*/-1, /*eps=*/l2_eps).to(torch::kFloat32);
       q_t = repeat_tensor_heads(q_t, value_num_heads, /*head_dim=*/1) *
             static_cast<float>(scale);
       k_t = repeat_tensor_heads(k_t, value_num_heads, /*head_dim=*/1);

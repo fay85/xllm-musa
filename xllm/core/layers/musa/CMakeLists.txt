@@ -34,9 +34,9 @@ endif()
 if(XLLM_TORCH_MUSA)
   list(APPEND _MUSA_LAYERS_HDRS
     attention.h
+    flashinfer_attention.h
     flashinfer_planinfo.h
     ../cuda/base_attention_impl.h
-    ../cuda/flashinfer_attention.h
     ../cuda/flashinfer_workspace.h
     qwen3_gated_delta_net_base.h
     qwen3_next_attention.h

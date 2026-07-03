@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "lm_head_impl.h"
+#include "layers/musa/lm_head_impl.h"
 
 #include "MTTOplib/Ops.h"
 #include "MTTOplib/WeightReorder.h"

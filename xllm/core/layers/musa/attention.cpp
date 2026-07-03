@@ -13,12 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "attention.h"
+#include "layers/musa/attention.h"
 
 #if defined(XLLM_TORCH_MUSA)
 
 #include "layers/cuda/base_attention_impl.h"
-#include "layers/cuda/flashinfer_attention.h"
+#include "layers/musa/flashinfer_attention.h"
 
 namespace xllm {
 namespace layer {
