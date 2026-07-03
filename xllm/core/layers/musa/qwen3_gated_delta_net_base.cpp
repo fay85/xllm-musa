@@ -136,11 +136,12 @@ std::tuple<torch::Tensor, torch::Tensor> torch_recurrent_gated_delta_rule(
   }
 
   for (int64_t i = 0; i < sequence_length; ++i) {
-    torch::Tensor q_t = query.select(2, i);
-    torch::Tensor k_t = key.select(2, i);
-    torch::Tensor v_t = value.select(2, i);
-    torch::Tensor g_t = g.select(2, i).exp().unsqueeze(-1).unsqueeze(-1);
-    torch::Tensor beta_t = beta.select(2, i).unsqueeze(-1);
+    torch::Tensor q_t = query.select(/*dim=*/2, i);
+    torch::Tensor k_t = key.select(/*dim=*/2, i);
+    torch::Tensor v_t = value.select(/*dim=*/2, i);
+    torch::Tensor g_t =
+        g.select(/*dim=*/2, i).exp().unsqueeze(/*dim=*/-1).unsqueeze(/*dim=*/-1);
+    torch::Tensor beta_t = beta.select(/*dim=*/2, i).unsqueeze(/*dim=*/-1);
     last_recurrent_state = last_recurrent_state * g_t;
     torch::Tensor kv_mem =
         torch::sum(last_recurrent_state * k_t.unsqueeze(-1), -2);
@@ -233,15 +234,17 @@ std::tuple<torch::Tensor, torch::Tensor> torch_chunk_gated_delta_rule(
   auto g_diff = g.unsqueeze(-1) - g.unsqueeze(-2);
   auto decay_mask = g_diff.tril().exp().to(torch::kFloat32);
   decay_mask = decay_mask.tril();
-  auto attn = -(torch::matmul(k_beta, key.transpose(-1, -2)) * decay_mask)
-                   .masked_fill(mask, 0.0);
+  auto attn =
+      -(torch::matmul(k_beta, key.transpose(/*dim0=*/-1, /*dim1=*/-2)) *
+        decay_mask)
+          .masked_fill(mask, /*value=*/0.0);
   for (int64_t i = 1; i < chunk_size; ++i) {
     if (!attn.is_contiguous()) {
       attn = attn.contiguous();
     }
-    auto row = attn.slice(-2, i, i + 1)
-                   .slice(-1, 0, i)
-                   .squeeze(-2)
+    auto row = attn.slice(/*dim=*/-2, /*start=*/i, /*end=*/i + 1)
+                   .slice(/*dim=*/-1, /*start=*/0, /*end=*/i)
+                   .squeeze(/*dim=*/-2)
                    .clone()
                    .contiguous();
     auto sub = attn.slice(-2, 0, i).slice(-1, 0, i).clone().contiguous();
@@ -1364,7 +1367,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_unpad(
   for (int64_t b = 0; b < bs; ++b) {
     int64_t ori_len = has_host_lens
                           ? attn_metadata.q_seq_lens_vec[b]
-                          : host_seq_lens[b].template item<int64_t>();
+                          : host_seq_lens[b].item<int64_t>();
     torch::Tensor valid_batch =
         reshaped_qkvz[b].slice(/*dim=*/0, /*start=*/0, ori_len);
     valid_batches.emplace_back(valid_batch);
@@ -1419,7 +1422,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_with_pad(
   for (int64_t b = 0; b < bs; ++b) {
     int64_t cur_len = has_host_lens
                           ? attn_metadata.q_seq_lens_vec[b]
-                          : host_seq_lens[b].template item<int64_t>();
+                          : host_seq_lens[b].item<int64_t>();
     torch::Tensor batch =
         qkvz.slice(/*dim=*/0, idx, idx + cur_len).contiguous();
     idx = idx + cur_len;

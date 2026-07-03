@@ -201,14 +201,20 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
   torch::Tensor gate;
 
   if (attn_output_gate_) {
-    q = qkv.slice(-1, 0, q_size_);
-    gate = qkv.slice(-1, q_size_, q_size_ * 2);
-    k = qkv.slice(-1, q_size_ * 2, q_size_ * 2 + kv_size_);
-    v = qkv.slice(-1, q_size_ * 2 + kv_size_, q_size_ * 2 + kv_size_ * 2);
+    q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
+    gate = qkv.slice(/*dim=*/-1, /*start=*/q_size_, /*end=*/q_size_ * 2);
+    k = qkv.slice(/*dim=*/-1,
+                  /*start=*/q_size_ * 2,
+                  /*end=*/q_size_ * 2 + kv_size_);
+    v = qkv.slice(/*dim=*/-1,
+                  /*start=*/q_size_ * 2 + kv_size_,
+                  /*end=*/q_size_ * 2 + kv_size_ * 2);
   } else {
-    q = qkv.slice(-1, 0, q_size_);
-    k = qkv.slice(-1, q_size_, q_size_ + kv_size_);
-    v = qkv.slice(-1, q_size_ + kv_size_, q_size_ + 2 * kv_size_);
+    q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
+    k = qkv.slice(/*dim=*/-1, /*start=*/q_size_, /*end=*/q_size_ + kv_size_);
+    v = qkv.slice(/*dim=*/-1,
+                  /*start=*/q_size_ + kv_size_,
+                  /*end=*/q_size_ + 2 * kv_size_);
   }
 
   const int64_t T = q.size(0);

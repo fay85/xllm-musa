@@ -182,7 +182,9 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_qkvz_from_split_activations(
   const int64_t head_v_part = num_v_heads_per_k * head_v_dim_;
 
   auto qkv_split = torch::split(
-      qkv, {k_size_ / tp_size_, k_size_ / tp_size_, v_size_ / tp_size_}, 2);
+      qkv,
+      {k_size_ / tp_size_, k_size_ / tp_size_, v_size_ / tp_size_},
+      /*dim=*/2);
   auto q = qkv_split[0].view({bs, seqlen, local_k_heads, head_k_dim_});
   auto k = qkv_split[1].view({bs, seqlen, local_k_heads, head_k_dim_});
   auto v = qkv_split[2].view({bs, seqlen, local_v_heads, head_v_dim_});
