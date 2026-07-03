@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "layers/cuda/flashinfer_attention.h"
+#include "layers/musa/flashinfer_attention.h"
 
 #include <c10/cuda/CUDAException.h>
 #include <cuda_runtime.h>
@@ -419,15 +419,34 @@ void FlashInferAttentionImpl::decoder_forward(
             /*seqused_k=*/seqused_k);
       }
 
-      // FA3 lse output: [num_qo_heads, total_q] fp32. Always present.
+      // FA3 lse output: [num_qo_heads, total_q] fp32. The kernel requires it
+      // even though the decode path discards its contents (output_lse stays
+      // nullopt). Serve it from a persistent grow-only buffer instead of
+      // torch::empty so no allocation happens under MUSA stream capture
+      // (forbidden; see AttentionImpl::forward output_buf_ rationale). Store
+      // flat and view() to a contiguous [num_qo_heads, total_q] slice whose
+      // base pointer stays stable across captured replays. Descending decode
+      // bucket capture order grows the buffer to the max total_q on the first
+      // eager warmup, so no realloc occurs during capture.
       const int64_t total_q = query.size(0);
-      torch::Tensor lse_tensor =
-          output_lse.has_value() && output_lse->defined()
-              ? *output_lse
-              : torch::empty({static_cast<int64_t>(num_heads_), total_q},
-                             torch::TensorOptions()
-                                 .dtype(torch::kFloat32)
-                                 .device(query.device()));
+      torch::Tensor lse_tensor;
+      if (output_lse.has_value() && output_lse->defined()) {
+        lse_tensor = *output_lse;
+      } else {
+        const int64_t required = num_heads_ * total_q;
+        const auto lse_options = torch::TensorOptions()
+                                     .dtype(torch::kFloat32)
+                                     .device(query.device());
+        const bool need_realloc = !lse_buf_.defined() ||
+                                  lse_buf_.dtype() != lse_options.dtype() ||
+                                  lse_buf_.device() != lse_options.device() ||
+                                  lse_buf_.numel() < required;
+        if (need_realloc) {
+          lse_buf_ = torch::empty({required}, lse_options);
+        }
+        lse_tensor =
+            lse_buf_.narrow(0, 0, required).view({num_heads_, total_q});
+      }
 
       xllm::kernel::cuda::fa3_decode(
           query,

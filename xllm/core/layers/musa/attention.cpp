@@ -18,7 +18,7 @@ limitations under the License.
 #if defined(XLLM_TORCH_MUSA)
 
 #include "layers/cuda/base_attention_impl.h"
-#include "layers/cuda/flashinfer_attention.h"
+#include "layers/musa/flashinfer_attention.h"
 
 namespace xllm {
 namespace layer {
