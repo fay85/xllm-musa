@@ -1502,6 +1502,19 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
         LOG(INFO) << "Overriding draft model_type from " << current_type
                   << " to " << it->second << " for speculative decoding";
         args.model_type(it->second);
+      } else if (current_type == "qwen3_5_text" ||
+                 current_type == "qwen3_5_moe_text") {
+        const char* mtp_model_type = current_type == "qwen3_5_text"
+                                         ? "qwen3_5_mtp"
+                                         : "qwen3_5_moe_mtp";
+        LOG(INFO) << "Overriding draft model_type from " << current_type
+                  << " to " << mtp_model_type << " for speculative decoding";
+        args.model_type(mtp_model_type);
+        const int32_t mtp_layers = args.num_nextn_predict_layers();
+        args.n_layers(mtp_layers);
+        args.layer_types(
+            std::vector<std::string>(mtp_layers, "full_attention"));
+        args.full_attention_interval(1);
       }
     }
   }

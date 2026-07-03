@@ -18,9 +18,17 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include <vector>
+
+#if defined(XLLM_TORCH_MUSA)
+#include <musa_runtime_api.h>
+#elif defined(USE_CUDA)
+#include <c10/cuda/CUDAException.h>
+#include <cuda_runtime.h>
+#endif
 
 #include "core/framework/model/model_input_params.h"
 #include "core/layers/common/linear.h"
@@ -30,6 +38,33 @@ limitations under the License.
 namespace xllm {
 
 namespace {
+
+#if defined(USE_CUDA) || defined(USE_MUSA)
+bool qwen35_mtp_model_debug_enabled() {
+  static const bool enabled = std::getenv("XLLM_DEBUG_QWEN35_MTP") != nullptr;
+  return enabled;
+}
+
+void qwen35_mtp_model_debug_sync(const char* stage) {
+  if (!qwen35_mtp_model_debug_enabled()) {
+    return;
+  }
+  LOG(INFO) << "[Qwen3.5 MTP model debug] sync begin: " << stage;
+#if defined(XLLM_TORCH_MUSA)
+  const musaError_t err = musaDeviceSynchronize();
+  CHECK_EQ(err, musaSuccess) << musaGetErrorString(err);
+#else
+  C10_CUDA_CHECK(cudaDeviceSynchronize());
+#endif
+  LOG(INFO) << "[Qwen3.5 MTP model debug] sync end: " << stage;
+}
+#else
+bool qwen35_mtp_model_debug_enabled() {
+  return false;
+}
+
+void qwen35_mtp_model_debug_sync(const char*) {}
+#endif
 
 StateDict find_lm_head_state_dict(const StateDict& state_dict) {
   static const std::vector<std::string> kLmHeadPrefixes = {
@@ -111,20 +146,54 @@ class Qwen3_5MtpModelImpl : public Qwen3HybridModelImplBase {
       positions = torch::tensor({0}).to(torch::kInt32).to(device_);
     }
 
+#if defined(USE_CUDA) || defined(USE_MUSA)
+    auto attn_metadata = layer::AttentionMetadataBuilder::build(
+        input_params, model_args_.enable_mla());
+#else
     auto attn_metadata = layer::AttentionMetadataBuilder::build(
         input_params,
         model_args_.enable_mla(),
         build_attention_mask(input_params));
+#endif
+    if (qwen35_mtp_model_debug_enabled()) {
+      LOG(INFO) << "[Qwen3.5 MTP model debug] forward enter: tokens="
+                << tokens.sizes() << ", positions=" << positions.sizes()
+                << ", input_embedding="
+                << input_params.embedding.input_embedding.sizes()
+                << ", slot_mapping=" << attn_metadata.slot_mapping.sizes()
+                << ", q_cu_seq_lens=" << attn_metadata.q_cu_seq_lens.sizes()
+                << ", kv_cu_seq_lens=" << attn_metadata.kv_cu_seq_lens.sizes()
+                << ", paged_kv_indptr="
+                << attn_metadata.paged_kv_indptr.sizes()
+                << ", paged_kv_indices="
+                << attn_metadata.paged_kv_indices.sizes()
+                << ", paged_kv_last_page_len="
+                << attn_metadata.paged_kv_last_page_len.sizes()
+                << ", is_prefill=" << attn_metadata.is_prefill
+                << ", is_chunked_prefill=" << attn_metadata.is_chunked_prefill
+                << ", max_query_len=" << attn_metadata.max_query_len
+                << ", max_seq_len=" << attn_metadata.max_seq_len;
+    }
+    qwen35_mtp_model_debug_sync("mtp_model_after_metadata");
 
     torch::Tensor embedding = embed_tokens_(tokens);
+    qwen35_mtp_model_debug_sync("mtp_model_after_embed");
     torch::Tensor hidden = input_params.embedding.input_embedding;
     if (hidden.defined() == false) {
       hidden = embedding;
     }
 
     embedding = std::get<0>(pre_fc_norm_embedding_->forward(embedding));
+    qwen35_mtp_model_debug_sync("mtp_model_after_embedding_norm");
     hidden = std::get<0>(pre_fc_norm_hidden_->forward(hidden));
+    qwen35_mtp_model_debug_sync("mtp_model_after_hidden_norm");
     torch::Tensor mtp_hidden = fc_(torch::cat({embedding, hidden}, -1));
+    if (qwen35_mtp_model_debug_enabled()) {
+      LOG(INFO) << "[Qwen3.5 MTP model debug] after fc: embedding="
+                << embedding.sizes() << ", hidden=" << hidden.sizes()
+                << ", mtp_hidden=" << mtp_hidden.sizes();
+    }
+    qwen35_mtp_model_debug_sync("mtp_model_after_fc");
 
     CHECK_EQ(kv_caches.size(), layers_.size());
     torch::Tensor mrope_cos_sin;
@@ -137,6 +206,18 @@ class Qwen3_5MtpModelImpl : public Qwen3HybridModelImplBase {
 
     std::optional<torch::Tensor> residual = std::nullopt;
     for (size_t i = 0; i < layers_.size(); ++i) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+      if (attn_metadata.plan_info != nullptr) {
+        attn_metadata.plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.shared_plan_info != nullptr) {
+        attn_metadata.shared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.unshared_plan_info != nullptr) {
+        attn_metadata.unshared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+#endif
+      qwen35_mtp_model_debug_sync("mtp_model_before_layer");
       mtp_hidden = layers_[i]->forward(mtp_hidden,
                                        residual,
                                        positions,
@@ -144,9 +225,11 @@ class Qwen3_5MtpModelImpl : public Qwen3HybridModelImplBase {
                                        kv_caches[i],
                                        input_params,
                                        mrope_cos_sin);
+      qwen35_mtp_model_debug_sync("mtp_model_after_layer");
     }
     auto [new_mtp_hidden, new_res] = norm_->forward(mtp_hidden, residual);
     mtp_hidden = new_mtp_hidden;
+    qwen35_mtp_model_debug_sync("mtp_model_after_final_norm");
     return ModelOutput(mtp_hidden);
   }
 

@@ -19,6 +19,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <memory>
 
 #include "common/metrics.h"
@@ -480,7 +481,7 @@ bool is_mimo_target_model_type(const std::string& model_type) {
   return model_type == "mimo";
 }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(XLLM_TORCH_MUSA)
 std::string read_model_type_from_config(const std::string& model_weights_path) {
   JsonReader reader;
   const std::string config_path = model_weights_path + "/config.json";
@@ -544,7 +545,7 @@ bool MTPWorkerImpl::init_model(const std::string& model_weights_path,
   bool result = true;
   const bool loading_target =
       impl_->get_status() == WorkerImpl::Status::UNINITIALIZED;
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(XLLM_TORCH_MUSA)
   if (loading_target) {
     force_atb_spec_kernel_for_qwen3_5_mtp(model_weights_path);
   }

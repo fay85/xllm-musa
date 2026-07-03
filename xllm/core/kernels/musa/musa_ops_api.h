@@ -140,7 +140,10 @@ void batch_chunked_prefill(
     torch::Tensor output,
     std::optional<torch::Tensor>& output_lse,
     std::optional<torch::Tensor> qo_indptr = std::nullopt,
-    bool causal = true);
+    bool causal = true,
+    const torch::Tensor& paged_kv_indptr_host = torch::Tensor(),
+    const torch::Tensor& paged_kv_indices_host = torch::Tensor(),
+    const torch::Tensor& paged_kv_last_page_len_host = torch::Tensor());
 
 void batch_decode(const std::string& uri,
                   ffi::Array<int64_t> plan_info,

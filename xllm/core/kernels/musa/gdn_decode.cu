@@ -221,6 +221,11 @@ torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params) {
     return token_out.to(x.scalar_type());
   }
 
+  LOG_FIRST_N(WARNING, 5)
+      << "causal_conv1d_update: fell into the D2H host-loop fallback (batch="
+      << batch << ", tokens=" << conv_num_tokens << ", state_len=" << state_len
+      << "). This copies cache_indices/query_start_loc to host and stalls the "
+         "decode stream; expected only for non-decode shapes.";
   auto cache_indices_cpu =
       cache_indices.to(torch::kCPU, torch::kLong).contiguous();
   auto query_start_loc_cpu =
@@ -459,6 +464,12 @@ torch::Tensor recurrent_gated_delta_rule(
     return out_v.to(orig_dtype);
   }
 
+  LOG_FIRST_N(WARNING, 5)
+      << "recurrent_gated_delta_rule: fell into the D2H host-loop fallback "
+         "(batch_size="
+      << batch_size << ", num_tokens=" << num_tokens
+      << "). This copies seq/state indices to host and stalls the decode "
+         "stream; expected only for non-decode shapes.";
   std::optional<torch::Tensor> actual_seq_lengths_cpu;
   if (actual_seq_lengths.has_value()) {
     actual_seq_lengths_cpu =
