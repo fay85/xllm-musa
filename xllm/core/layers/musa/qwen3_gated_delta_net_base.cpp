@@ -738,7 +738,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   // whenever a larger bucket is seen.
   const int64_t local_nk = num_k_heads_ / tp_size_;
   const int64_t local_nv = num_v_heads_ / tp_size_;
-  const int64_t expected_M = batch_size * seq_len;
+  const int64_t expected_m = batch_size * seq_len;
   const int64_t expected_qkv_dim =
       2 * local_nk * head_k_dim_ + local_nv * head_v_dim_;
   const int64_t expected_z_dim = local_nv * head_v_dim_;
