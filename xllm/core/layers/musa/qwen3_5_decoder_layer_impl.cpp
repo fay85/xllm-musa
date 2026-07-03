@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "qwen3_5_decoder_layer_impl.h"
 
+#include <memory>
+
 namespace xllm {
 namespace layer {
 

@@ -15,6 +15,9 @@ limitations under the License.
 
 #include "qwen3_next_decoder_layer_impl.h"
 
+#include <memory>
+#include <utility>
+
 namespace xllm {
 namespace layer {
 

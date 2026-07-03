@@ -136,7 +136,7 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
                                  torch::Tensor& value,
                                  torch::Tensor& output,
                                  KVCache& kv_cache) {
-  std::optional<at::Tensor> output_lse = std::nullopt;
+  std::optional<torch::Tensor> output_lse = std::nullopt;
   if (attn_metadata.max_seq_len == 0) {
     output = output.view({-1, num_heads_ * head_size_});
     return std::make_tuple(output, output_lse);
@@ -222,7 +222,7 @@ void FlashInferAttentionImpl::prefill_forward(
     torch::Tensor& key,
     torch::Tensor& value,
     torch::Tensor& output,
-    std::optional<at::Tensor>& output_lse) {
+    std::optional<torch::Tensor>& output_lse) {
   bool use_custom_mask = attn_metadata.attn_mask.defined();
 
   std::string backend = xllm::kernel::cuda::determine_attention_backend(
@@ -286,7 +286,7 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
     torch::Tensor& query,
     const torch::Tensor& key,
     torch::Tensor& output,
-    std::optional<at::Tensor>& output_lse,
+    std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
   // Get block_size from k_cache if defined and has proper dimensions,
@@ -352,7 +352,7 @@ void FlashInferAttentionImpl::decoder_forward(
     torch::Tensor& query,
     const torch::Tensor& key,
     torch::Tensor& output,
-    std::optional<at::Tensor>& output_lse,
+    std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
   // FA3 fast path. Opt-in via env var XLLM_USE_FA3=1. Requires the JIT-built
@@ -443,7 +443,9 @@ void FlashInferAttentionImpl::decoder_forward(
           scale_,
           output,
           lse_tensor);
-      if (output_lse.has_value()) *output_lse = lse_tensor;
+      if (output_lse.has_value()) {
+        *output_lse = lse_tensor;
+      }
       return;
     }
   }

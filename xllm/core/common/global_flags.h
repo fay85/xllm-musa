@@ -143,14 +143,6 @@ DECLARE_bool(enable_graph_mode_decode_no_padding);
 
 DECLARE_bool(enable_prefill_piecewise_graph);
 
-#if defined(USE_CUDA)
-DECLARE_bool(enable_mate_gdn_prefill);
-
-DECLARE_bool(enable_mate_gdn_decode);
-
-DECLARE_bool(enable_fused_gdn_decode);
-#endif
-
 DECLARE_bool(enable_graph_vmm_pool);
 
 DECLARE_int32(max_tokens_for_graph_mode);

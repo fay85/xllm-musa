@@ -405,25 +405,7 @@ run_xllm() {
   fi
 
   if [[ "$MODEL_NAME" == Qwen3.5-* || "$MODEL_NAME" == qwen3.5-* ]]; then
-    cmd+=("--enable_mate_gdn_decode")
-    echo "==> Qwen3.5 GDN: mate decode enabled (prefill uses chunk_gated_delta_rule)"
-    # The in-house single-launch fused decode kernel is now ON BY DEFAULT
-    # (--enable_fused_gdn_decode=true in execution_config.cpp) and takes
-    # precedence over the mate path at the layer level. Keep the mate flag
-    # above so ENABLE_FUSED_GDN_DECODE=0 (the rollback path below) silently
-    # lands on mate.
-    if [[ "${ENABLE_FUSED_GDN_DECODE:-1}" -eq 0 ]]; then
-      cmd+=("--noenable_fused_gdn_decode")
-      echo "==> Qwen3.5 GDN: in-house fused decode DISABLED via ENABLE_FUSED_GDN_DECODE=0 (falling back to mate FFI decode)"
-    else
-      echo "==> Qwen3.5 GDN: in-house fused decode kernel enabled by default (overrides mate)"
-    fi
-    # A/B bisection hook: switch the GDN *prefill* kernel from the default
-    # chunk_gated_delta_rule to the MATE TileLang prefill kernel.
-    if [[ "${ENABLE_MATE_GDN_PREFILL:-0}" -eq 1 ]]; then
-      cmd+=("--enable_mate_gdn_prefill")
-      echo "==> Qwen3.5 GDN: mate TileLang prefill ENABLED via ENABLE_MATE_GDN_PREFILL=1"
-    fi
+    echo "==> Qwen3.5 GDN: fused decode enabled by default (chunk_gated_delta_rule prefill)"
   fi
 
   if [[ "$BACKGROUND" -eq 1 ]]; then
