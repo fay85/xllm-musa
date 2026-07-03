@@ -379,10 +379,13 @@ run_xllm() {
     echo "==> Graph mode: enable_graph=true vmm_pool=${ENABLE_GRAPH_VMM_POOL:-0}"
   fi
 
-  # Speculative decoding. Defaults: off. To enable MTP for a model with
-  # bundled draft weights (e.g. Qwen3.5-27B):
+  # Speculative decoding. Defaults: off. Qwen3.5 MTP requires exporting draft
+  # weights first:
+  #   python3 tools/export_mtp.py --input-dir Qwen3.5-27B --output-dir Qwen3.5-27B-mtp
+  # Then launch with separate draft checkpoint (graph mode is auto-disabled):
   #   NUM_SPECULATIVE_TOKENS=1 SPECULATIVE_ALGORITHM=MTP \
-  #   DRAFT_MODEL_PATH="$model_path" DRAFT_DEVICES="musa:${DEVICE_INDEX}" \
+  #   DRAFT_MODEL_PATH=/path/to/Qwen3.5-27B-mtp \
+  #   DRAFT_DEVICES="musa:${DEVICE_INDEX}" \
   #     bash run_xllm_musa.sh ...
   # Suffix decoding needs no draft model; just set NUM_SPECULATIVE_TOKENS>0
   # and SPECULATIVE_ALGORITHM=Suffix.
