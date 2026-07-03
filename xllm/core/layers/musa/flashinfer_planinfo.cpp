@@ -413,7 +413,7 @@ void update_decode_plan_info(std::shared_ptr<PlanInfo> plan_info,
       torch::Tensor synth_indptr_host = torch::empty({batch_size + 1}, opts);
       // Fill [0, max, 2*max, ..., bs*max]. Use int32 view since plan() and the
       // upstream pinned-host buffers all use int32 for indptr.
-      auto* p = synth_indptr_host.data_ptr<int32_t>();
+      int32_t* p = synth_indptr_host.data_ptr<int32_t>();
       for (int64_t i = 0; i <= batch_size; ++i) {
         p[i] = static_cast<int32_t>(i * max_kv_blocks_per_seq);
       }
