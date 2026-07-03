@@ -19,7 +19,7 @@ limitations under the License.
 #include <cstdlib>
 #include <tuple>
 
-#include "core/kernels/ops_api.h"
+#include "xllm/core/kernels/ops_api.h"
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
 #include <c10/cuda/CUDAException.h>
@@ -1341,9 +1341,15 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_unpad(
   int64_t max_len = attn_metadata.max_query_len;
   const auto& ori_seq_lens = attn_metadata.q_seq_lens;
   auto reshaped_qkvz = padded_qkvz.view({bs, max_len, -1});
+  // Fallback when host lengths are absent: stage the device q_seq_lens to the
+  // host once. Calling .item() per batch on a device tensor issues a separate
+  // synchronous device->host copy each iteration, stalling schedule/execute
+  // overlap; a single bulk copy avoids the per-iteration syncs.
+  const torch::Tensor host_seq_lens =
+      has_host_lens ? torch::Tensor() : ori_seq_lens.to(torch::kCPU);
   for (int64_t b = 0; b < bs; ++b) {
     int64_t ori_len = has_host_lens ? attn_metadata.q_seq_lens_vec[b]
-                                    : ori_seq_lens[b].template item<int64_t>();
+                                    : host_seq_lens[b].template item<int64_t>();
     torch::Tensor valid_batch =
         reshaped_qkvz[b].slice(/*dim=*/0, /*start=*/0, ori_len);
     valid_batches.emplace_back(valid_batch);
@@ -1391,9 +1397,13 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_with_pad(
   std::vector<torch::Tensor> batches;
   batches.reserve(bs);
   int64_t idx = 0;
+  // See reshape_qkvz_unpad: stage device lengths to host once when host
+  // lengths are absent to avoid a per-batch .item() device->host sync.
+  const torch::Tensor host_seq_lens =
+      has_host_lens ? torch::Tensor() : start_loc.to(torch::kCPU);
   for (int64_t b = 0; b < bs; ++b) {
     int64_t cur_len = has_host_lens ? attn_metadata.q_seq_lens_vec[b]
-                                    : start_loc[b].template item<int64_t>();
+                                    : host_seq_lens[b].template item<int64_t>();
     torch::Tensor batch =
         qkvz.slice(/*dim=*/0, idx, idx + cur_len).contiguous();
     idx = idx + cur_len;

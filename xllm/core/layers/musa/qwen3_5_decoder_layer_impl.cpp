@@ -21,7 +21,7 @@ namespace xllm {
 namespace layer {
 
 Qwen35DecoderLayerImpl::Qwen35DecoderLayerImpl(const ModelContext& context,
-                                                 int32_t layer_id)
+                                               int32_t layer_id)
     : Qwen3NextDecoderLayerImpl(context,
                                 layer_id,
                                 std::make_shared<Qwen35GatedDeltaNetImpl>(
