@@ -21,12 +21,11 @@ limitations under the License.
 namespace xllm {
 namespace layer {
 
-class Qwen35DecoderLayerImpl final : public Qwen3NextDecoderLayerImpl {
+class Qwen3_5DecoderLayerImpl final : public Qwen3NextDecoderLayerImpl {
  public:
-  explicit Qwen35DecoderLayerImpl(const ModelContext& context,
-                                  int32_t layer_id);
+  explicit Qwen3_5DecoderLayerImpl(const ModelContext& context,
+                                   int32_t layer_id);
 };
-TORCH_MODULE(Qwen35DecoderLayer);
 TORCH_MODULE(Qwen3_5DecoderLayer);
 
 }  // namespace layer
