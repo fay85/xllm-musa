@@ -264,7 +264,7 @@ void update_chunked_prefill_plan_info(std::shared_ptr<PlanInfo> plan_info,
   if (enable_cuda_graph && max_kv_blocks_per_seq > 0 && batch_size > 0 &&
       paged_kv_indptr_host.defined()) {
     auto opts = torch::TensorOptions()
-                    .dtype(paged_kv_indptr_host.scalar_type())
+                    .dtype(torch::kInt32)
                     .device(torch::kCPU);
     torch::Tensor synth_indptr_host = torch::empty({batch_size + 1}, opts);
     auto* p = synth_indptr_host.data_ptr<int32_t>();
@@ -411,7 +411,7 @@ void update_decode_plan_info(std::shared_ptr<PlanInfo> plan_info,
     // those at runtime.
     if (enable_cuda_graph && max_kv_blocks_per_seq > 0 && batch_size > 0) {
       auto opts = torch::TensorOptions()
-                      .dtype(paged_kv_indptr_host.scalar_type())
+                      .dtype(torch::kInt32)
                       .device(torch::kCPU);
       torch::Tensor synth_indptr_host =
           torch::empty({batch_size + 1}, opts);
