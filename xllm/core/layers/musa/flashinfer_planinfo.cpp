@@ -265,7 +265,7 @@ void update_chunked_prefill_plan_info(std::shared_ptr<PlanInfo> plan_info,
       paged_kv_indptr_host.defined()) {
     auto opts = torch::TensorOptions().dtype(torch::kInt32).device(torch::kCPU);
     torch::Tensor synth_indptr_host = torch::empty({batch_size + 1}, opts);
-    auto* p = synth_indptr_host.data_ptr<int32_t>();
+    int32_t* p = synth_indptr_host.data_ptr<int32_t>();
     for (int64_t i = 0; i <= batch_size; ++i) {
       p[i] = static_cast<int32_t>(i * max_kv_blocks_per_seq);
     }
