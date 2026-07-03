@@ -253,7 +253,7 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_ba_from_split_activations(
   auto a_view = a.view({bs, seqlen, local_k_heads, num_v_heads_per_k});
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
-  // Graph-capture-safe replacement for `torch::cat({b_view, a_view}, -1)`.
+    const int64_t m = bs * seqlen;
   const int64_t M = bs * seqlen;
   const int64_t total_last_dim = 2 * num_v_heads_per_k;
   const int64_t flat_dim = local_k_heads * total_last_dim;
