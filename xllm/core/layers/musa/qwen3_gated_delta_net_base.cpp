@@ -745,8 +745,8 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const auto opts = qkvz_flat.options();
   const auto opts_ba = ba_flat.options();
   const auto grow_2d = [](torch::Tensor& buf,
-                          int64_t M,
-                          int64_t D,
+                          int64_t m,
+                          int64_t d,
                           const torch::TensorOptions& options) {
     const bool needs = !buf.defined() || buf.size(0) < M || buf.size(1) != D ||
                        buf.scalar_type() != options.dtype().toScalarType() ||
