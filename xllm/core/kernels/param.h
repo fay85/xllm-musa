@@ -1466,6 +1466,28 @@ struct Fp8ScaledMatmulParams {
   std::optional<std::vector<int64_t>> input_shape;
 };
 
+// DeepSeek-style block-wise FP8 GEMM parameters (native path).
+// Computes out[m,n] = sum_k a[m,k]*a_scale[m,k/bk] * b[n,k]*b_scale[n/bn,k/bk]
+// with per-token-group activation scales and a 128x128 weight-block scale grid.
+// Unlike Fp8ScaledMatmulParams (per-tensor CUTLASS), this carries 2D scale grids
+// and maps to the mate/muDNN groupwise GEMM on MUSA.
+struct Fp8BlockMatmulParams {
+  // Quantized activation A. Shape: [M, K]. Dtype: float8_e4m3fn. Contiguous.
+  torch::Tensor a;
+  // Quantized weight B in NT layout. Shape: [N, K]. Dtype: float8_e4m3fn.
+  // Contiguous (same K as A; no internal transpose).
+  torch::Tensor b;
+  // Per-token-group activation scale. Shape: [M, ceil(K/128)]. Dtype: float32.
+  torch::Tensor a_scale;
+  // Weight block inverse-scale grid. Shape: [ceil(N/128), ceil(K/128)].
+  // Dtype: float32 (K-major).
+  torch::Tensor b_scale;
+  // Output data type. Typically bfloat16 or float16.
+  torch::ScalarType output_dtype;
+  // Optional pre-allocated output tensor. Shape: [M, N].
+  std::optional<torch::Tensor> output;
+};
+
 // Static scaled FP8 quantization parameters
 // Quantizes input tensor to FP8 using a pre-computed scale factor
 struct StaticScaledFp8QuantParams {

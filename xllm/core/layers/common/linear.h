@@ -117,6 +117,9 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
   // FP8 quantization parameters
   DEFINE_FUSED_WEIGHT(weight_scale);  // FP8 weight scale
   DEFINE_FUSED_WEIGHT(
+      weight_scale_inv);  // Block-wise FP8 inverse-scale grid
+                          // [ceil(N/bn), ceil(K/bk)] (DeepSeek-style).
+  DEFINE_FUSED_WEIGHT(
       input_scale);  // FP8 input (activation) scale for static quantization
 
   // NPU static W8A8 parameters.
@@ -146,6 +149,14 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
   at::ScalarType output_dtype_;
   LinearExtraArgs linear_extra_args_;
   std::optional<std::string> resolved_weight_quant_method_;
+  // Sticky result of the per-shard block-fp8 quantized-vs-plain-BF16
+  // detection (see load_state_dict). Sharded/fused checkpoints may deliver a
+  // module's weight and weight_scale_inv shards across different files, so
+  // this decision must be made once (the first time we observe a shard's own
+  // weight without its co-located scale) and never re-evaluated from
+  // per-call "not fully accumulated yet" state, or we would corrupt the
+  // fused FP8 accumulator with a premature dtype retype mid-accumulation.
+  bool block_fp8_resolved_unquantized_ = false;
 
   // Persistent output buffer for graph-capture-safe matmul on USE_CUDA +
   // XLLM_TORCH_MUSA. Lazily allocated for small batch sizes (<=
@@ -200,6 +211,9 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   // FP8 quantization parameters
   DEFINE_FUSED_WEIGHT(weight_scale);  // FP8 weight scale
   DEFINE_FUSED_WEIGHT(
+      weight_scale_inv);  // Block-wise FP8 inverse-scale grid
+                          // [ceil(N/bn), ceil(K/bk)] (DeepSeek-style).
+  DEFINE_FUSED_WEIGHT(
       input_scale);  // FP8 input (activation) scale for static quantization
 
   // NPU static W8A8 parameters.
@@ -230,6 +244,8 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   QuantArgs quant_args_;
   at::ScalarType output_dtype_;
   std::optional<std::string> resolved_weight_quant_method_;
+  // See ColumnParallelLinearImpl::block_fp8_resolved_unquantized_.
+  bool block_fp8_resolved_unquantized_ = false;
 
   // Persistent output buffer for graph-capture-safe matmul; see
   // ColumnParallelLinearImpl::output_buf_ for the contract.
@@ -297,6 +313,9 @@ class RowParallelLinearImpl : public torch::nn::Module {
 
   // FP8 quantization parameters
   DEFINE_FUSED_WEIGHT(weight_scale);  // FP8 weight scale
+  DEFINE_WEIGHT(
+      weight_scale_inv);  // Block-wise FP8 inverse-scale grid
+                          // [ceil(N/bn), ceil(K/bk)] (DeepSeek-style).
   DEFINE_FUSED_WEIGHT(
       input_scale);  // FP8 input (activation) scale for static quantization
 
@@ -328,6 +347,8 @@ class RowParallelLinearImpl : public torch::nn::Module {
   at::ScalarType output_dtype_;
   LinearExtraArgs linear_extra_args_;
   std::optional<std::string> resolved_weight_quant_method_;
+  // See ColumnParallelLinearImpl::block_fp8_resolved_unquantized_.
+  bool block_fp8_resolved_unquantized_ = false;
 
   // Persistent output buffer for graph-capture-safe matmul; see
   // ColumnParallelLinearImpl::output_buf_ for the contract.

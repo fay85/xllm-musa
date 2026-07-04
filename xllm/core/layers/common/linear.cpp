@@ -19,6 +19,8 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <atomic>
+#include <cstdlib>
 #include <cctype>
 
 #include "framework/parallel_state/parallel_args.h"
@@ -246,6 +248,160 @@ std::string to_lower_copy(std::string value) {
         return static_cast<char>(std::tolower(c));
       });
   return value;
+}
+
+// DeepSeek-style block-wise FP8 (W8A8, weight_block_size e.g. [128,128]): the
+// weight is stored as float8_e4m3fn [N,K] with a sibling weight_scale_inv
+// [ceil(N/bn), ceil(K/bk)] (one inverse scale per bn x bk block). Distinguished
+// from per-tensor FP8 by a non-empty weight_block_size.
+bool is_block_fp8_quant(const QuantArgs& quant_args) {
+  return quant_args.quant_method() == kQuantMethodFp8 &&
+         quant_args.weight_block_size().size() == 2 &&
+         quant_args.weight_block_size()[0] > 0 &&
+         quant_args.weight_block_size()[1] > 0;
+}
+
+// Dequantize a block-wise FP8 weight to BF16 using its inverse-scale grid.
+// Mirrors the DeepSeek/minimax reference: w_bf16[n,k] = w_fp8[n,k] *
+// scale_inv[n/bn, k/bk]. block_n/block_k default [128,128].
+torch::Tensor dequantize_fp8_block_weight(const torch::Tensor& fp8_weight,
+                                          const torch::Tensor& weight_scale_inv,
+                                          int64_t block_n,
+                                          int64_t block_k) {
+  CHECK_EQ(fp8_weight.dim(), 2)
+      << "block-fp8 weight must be 2D, got " << fp8_weight.sizes();
+  CHECK_EQ(weight_scale_inv.dim(), 2)
+      << "block-fp8 weight_scale_inv must be 2D, got "
+      << weight_scale_inv.sizes();
+  const int64_t n = fp8_weight.size(0);
+  const int64_t k = fp8_weight.size(1);
+  const int64_t n_tiles = (n + block_n - 1) / block_n;
+  const int64_t k_tiles = (k + block_k - 1) / block_k;
+  CHECK_EQ(weight_scale_inv.size(0), n_tiles)
+      << "block-fp8 scale rows " << weight_scale_inv.sizes()
+      << " mismatch weight " << fp8_weight.sizes();
+  CHECK_EQ(weight_scale_inv.size(1), k_tiles)
+      << "block-fp8 scale cols " << weight_scale_inv.sizes()
+      << " mismatch weight " << fp8_weight.sizes();
+
+  if (n % block_n == 0 && k % block_k == 0) {
+    auto w = fp8_weight.to(torch::kBFloat16)
+                 .reshape({n_tiles, block_n, k_tiles, block_k});
+    auto s = weight_scale_inv.to(torch::kBFloat16)
+                 .reshape({n_tiles, 1, k_tiles, 1});
+    return (w * s).reshape({n, k});
+  }
+  auto expanded = weight_scale_inv.repeat_interleave(block_n, /*dim=*/0)
+                      .repeat_interleave(block_k, /*dim=*/1)
+                      .slice(/*dim=*/0, /*start=*/0, /*end=*/n)
+                      .slice(/*dim=*/1, /*start=*/0, /*end=*/k)
+                      .to(torch::kBFloat16);
+  return fp8_weight.to(torch::kBFloat16) * expanded;
+}
+
+// Step-1 (semi-FP8) block-fp8 linear: dequantize the FP8 weight to BF16 on the
+// fly and run the standard BF16 matmul. Keeps weights FP8 in device memory
+// (memory win) while computing in BF16 (correctness gate before native FP8).
+torch::Tensor block_fp8_dequant_forward(
+    const torch::Tensor& input,
+    const torch::Tensor& weight_fp8,
+    const torch::Tensor& weight_scale_inv,
+    const std::vector<int64_t>& weight_block_size,
+    const std::optional<torch::Tensor>& bias,
+    torch::Tensor& output_buf) {
+  const int64_t block_n = weight_block_size[0];
+  const int64_t block_k = weight_block_size[1];
+  auto weight_bf16 = dequantize_fp8_block_weight(
+      weight_fp8, weight_scale_inv, block_n, block_k);
+  if (std::getenv("XLLM_DEBUG_FP8") != nullptr) {
+    static std::atomic<int> dbg_count{0};
+    int idx = dbg_count.fetch_add(1);
+    if (idx < 24) {
+      auto sf = weight_scale_inv.to(torch::kFloat32);
+      auto wf = weight_bf16.to(torch::kFloat32);
+      LOG(INFO) << "[FP8 dequant #" << idx << "] w=" << weight_fp8.sizes() << " "
+                << weight_fp8.scalar_type() << ", scale=" << weight_scale_inv.sizes()
+                << " " << weight_scale_inv.scalar_type() << " defined="
+                << weight_scale_inv.defined() << ", scale[min="
+                << sf.min().item<float>() << ",max=" << sf.max().item<float>()
+                << ",mean=" << sf.mean().item<float>() << "], dequant[min="
+                << wf.min().item<float>() << ",max=" << wf.max().item<float>()
+                << ",std=" << wf.std().item<float>() << "]";
+    }
+  }
+  xllm::kernel::MatmulParams matmul_params;
+  matmul_params.a = input;
+  matmul_params.b = weight_bf16;
+  matmul_params.bias = bias;
+  maybe_set_persistent_output_buf(matmul_params, output_buf, input, weight_bf16);
+  return xllm::kernel::matmul(matmul_params);
+}
+
+// Step-2 (native) block-fp8 linear: dynamically quantize the activation to FP8
+// per token-group (group = block_k along K) and run the mate/muDNN block-wise
+// FP8 GEMM directly against the FP8 weight. No BF16 weight is ever
+// materialized, so per-token memory traffic drops from ~135 GB (dequant path)
+// to ~27 GB for Qwen3.5-27B -- roughly the FP8 memory-bandwidth roofline.
+torch::Tensor block_fp8_native_forward(
+    const torch::Tensor& input,
+    const torch::Tensor& weight_fp8,
+    const torch::Tensor& weight_scale_inv,
+    const std::vector<int64_t>& weight_block_size,
+    const std::optional<torch::Tensor>& bias) {
+  const int64_t block_k = weight_block_size[1];
+
+  auto in_shape = input.sizes().vec();
+  const int64_t k = input.size(-1);
+  CHECK_EQ(k % block_k, 0) << "native block-fp8 GEMM requires K % " << block_k
+                           << " == 0, got K=" << k;
+
+  const auto input_2d = input.reshape({-1, k}).contiguous();
+
+  // Fused per-token-group dynamic FP8 activation quantization (absmax / 448) via
+  // the MUSA-native kernel: one pass produces a_fp8 [M,K] e4m3 and a_scale
+  // [M, K/128] fp32 (K-major), matching the mate groupwise GEMM (1,128,128).
+  auto [a_fp8, a_scale] =
+      xllm::kernel::per_token_group_quant_fp8(input_2d, block_k);
+
+  xllm::kernel::Fp8BlockMatmulParams params;
+  params.a = a_fp8;
+  params.b = weight_fp8;
+  params.a_scale = a_scale;
+  params.b_scale = weight_scale_inv.to(torch::kFloat32).contiguous();
+  params.output_dtype = (input.scalar_type() == torch::kFloat16)
+                            ? torch::kFloat16
+                            : torch::kBFloat16;
+  auto out = xllm::kernel::fp8_block_matmul(params);  // [m, n]
+
+  if (bias.has_value() && bias.value().defined()) {
+    out = out + bias.value().to(out.scalar_type());
+  }
+
+  in_shape.back() = weight_fp8.size(0);
+  return out.reshape(in_shape);
+}
+
+// Dispatch the block-fp8 linear forward. Native mate/muDNN groupwise GEMM is the
+// default; set XLLM_FP8_DEQUANT=1 to fall back to the semi-FP8 dequant-to-BF16
+// path (slower; kept for debugging / numerical bisection only).
+torch::Tensor block_fp8_forward(
+    const torch::Tensor& input,
+    const torch::Tensor& weight_fp8,
+    const torch::Tensor& weight_scale_inv,
+    const std::vector<int64_t>& weight_block_size,
+    const std::optional<torch::Tensor>& bias,
+    torch::Tensor& output_buf) {
+  static const bool use_dequant = std::getenv("XLLM_FP8_DEQUANT") != nullptr;
+  if (use_dequant) {
+    return block_fp8_dequant_forward(input,
+                                     weight_fp8,
+                                     weight_scale_inv,
+                                     weight_block_size,
+                                     bias,
+                                     output_buf);
+  }
+  return block_fp8_native_forward(
+      input, weight_fp8, weight_scale_inv, weight_block_size, bias);
 }
 
 void resolve_weight_quant_method_for_linear_load(
@@ -628,6 +784,22 @@ ColumnParallelLinearImpl::ColumnParallelLinearImpl(
         /*requires_grad=*/false);
     // output dtype for scaled_matmul
     output_dtype_ = c10::typeMetaToScalarType(options.dtype());
+  } else if (is_block_fp8_quant(quant_args_)) {
+    // Block-wise FP8 (DeepSeek-style): FP8 weight [N,K] + BF16 inverse-scale
+    // grid [ceil(N/bn), ceil(K/bk)]. Scale kept BF16 (checkpoint-native).
+    const int64_t block_n = quant_args_.weight_block_size()[0];
+    const int64_t block_k = quant_args_.weight_block_size()[1];
+    weight_ = register_parameter(
+        "weight",
+        torch::empty({out_features_per_partition, in_features},
+                     options.dtype(torch::kFloat8_e4m3fn)),
+        /*requires_grad=*/false);
+    const int64_t n_tiles = (out_features_per_partition + block_n - 1) / block_n;
+    const int64_t k_tiles = (in_features + block_k - 1) / block_k;
+    weight_scale_inv_ = register_parameter(
+        "weight_scale_inv",
+        torch::empty({n_tiles, k_tiles}, options.dtype(torch::kBFloat16)),
+        /*requires_grad=*/false);
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 W8A8 quantization - weight is stored as FP8 (float8_e4m3fn)
     weight_ = register_parameter(
@@ -721,6 +893,28 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
     matmul_params.output = std::nullopt;
 
     output = xllm::kernel::scaled_matmul(matmul_params);
+  } else if (is_block_fp8_quant(quant_args_)) {
+    if (weight_.scalar_type() == torch::kFloat8_e4m3fn) {
+      // Native block-FP8 GEMM (per-token-group activation quant + mate/muDNN
+      // groupwise matmul); XLLM_FP8_DEQUANT=1 forces the slower
+      // dequant-to-BF16 fallback.
+      output = block_fp8_forward(input,
+                                 weight_,
+                                 weight_scale_inv_,
+                                 quant_args_.weight_block_size(),
+                                 bias,
+                                 output_buf_);
+    } else {
+      // Module not actually quantized (no weight_scale_inv in checkpoint):
+      // weight was re-registered to BF16 at load; run the standard matmul.
+      xllm::kernel::MatmulParams matmul_params;
+      matmul_params.a = input;
+      matmul_params.b = weight_;
+      matmul_params.bias = bias;
+      maybe_set_persistent_output_buf(
+          matmul_params, output_buf_, input, weight_);
+      output = xllm::kernel::matmul(matmul_params);
+    }
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     CHECK(!quant_args_.activation_dynamic())
         << "FP8 quantization does not support activation_dynamic yet";
@@ -832,6 +1026,24 @@ void ColumnParallelLinearImpl::load_state_dict(const StateDict& state_dict) {
     LOAD_SHARDED_WEIGHT(per_channel_scale, 0);
     // for input, there is one smooth value
     LOAD_WEIGHT(smooth);
+  } else if (is_block_fp8_quant(quant_args_)) {
+    // Block-wise FP8: FP8 weight + BF16 inverse-scale grid. Column parallel
+    // shards output (dim 0) for both the weight and the N-block scale grid.
+    // See QKVParallelLinearImpl::load_state_dict for why this must be a
+    // sticky, per-shard-presence decision rather than a per-call "scale not
+    // loaded yet" check (this single-prefix module isn't fused across
+    // siblings, but weight_scale_inv_is_loaded_ can still read false on an
+    // unrelated call, e.g. one only carrying this module's bias).
+    if (!block_fp8_resolved_unquantized_ && !weight_scale_inv_is_loaded_ &&
+        state_dict.has("weight") && !state_dict.has("weight_scale_inv")) {
+      block_fp8_resolved_unquantized_ = true;
+      weight_.set_data(torch::empty(weight_.sizes(), options_));
+      weight_is_loaded_ = false;
+    }
+    if (!block_fp8_resolved_unquantized_) {
+      LOAD_SHARDED_WEIGHT(weight_scale_inv, 0);
+    }
+    LOAD_SHARDED_WEIGHT(weight, 0);
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 quantization: load FP8 weight and scales
     LOAD_SHARDED_WEIGHT(weight, 0);
@@ -912,6 +1124,32 @@ void ColumnParallelLinearImpl::load_state_dict(
     }
     LOAD_FUSED_WEIGHT(qweight, 0);
     LOAD_FUSED_WEIGHT(per_channel_scale, 0);
+  } else if (is_block_fp8_quant(quant_args_)) {
+    // Block-wise FP8 fused (e.g. gate_proj+up_proj): concatenate the FP8
+    // weights and their N-block inverse-scale grids along dim 0. Each partition
+    // N is a multiple of block_n, so the grids concatenate cleanly.
+    // See QKVParallelLinearImpl::load_state_dict for why the quantized-vs-BF16
+    // decision must be sticky and based on per-shard weight/scale
+    // co-presence in a single call, not on "the fused accumulator hasn't
+    // finished collecting all sibling shards yet" (siblings may arrive from
+    // different shard files).
+    if (!block_fp8_resolved_unquantized_ && !weight_scale_inv_is_loaded_) {
+      for (const auto& prefix : prefixes) {
+        if (state_dict.has(prefix + "weight") &&
+            !state_dict.has(prefix + "weight_scale_inv")) {
+          block_fp8_resolved_unquantized_ = true;
+          break;
+        }
+      }
+      if (block_fp8_resolved_unquantized_) {
+        weight_.set_data(torch::empty(weight_.sizes(), options_));
+        weight_is_loaded_ = false;
+      }
+    }
+    if (!block_fp8_resolved_unquantized_) {
+      LOAD_FUSED_WEIGHT(weight_scale_inv, 0);
+    }
+    LOAD_FUSED_WEIGHT(weight, 0);
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 fused layer loading: each partition may have its own per-tensor scale
     // (unfused checkpoint). We must requantize all partitions with max_scale.
@@ -1051,6 +1289,29 @@ void ColumnParallelLinearImpl::load_state_dict(
       if (weight_offset_.defined()) {
         LOAD_MERGED_WEIGHT_V2(weight_offset, 0);
       }
+    } else if (is_block_fp8_quant(quant_args_)) {
+      // Merged-variable-shard block-fp8 path is used by GDN in_proj_qkv
+      // (quantized: fused FP8 weight + fused block scale) and conv1d (NOT
+      // quantized: plain BF16). The checkpoint stores in_proj_qkv already
+      // fused, so its block scale grid is a single tensor (LOAD_WEIGHT). At
+      // TP=1 it loads whole; TP>1 would need the scale grid split along the
+      // N-block dim.
+      // See QKVParallelLinearImpl::load_state_dict for why this decision
+      // must be sticky and based on per-call weight/scale co-presence.
+      if (!block_fp8_resolved_unquantized_ && !weight_scale_inv_is_loaded_ &&
+          state_dict.has("weight") && !state_dict.has("weight_scale_inv")) {
+        block_fp8_resolved_unquantized_ = true;
+        weight_.set_data(torch::empty(weight_.sizes(), options_));
+        weight_is_loaded_ = false;
+      }
+      if (!block_fp8_resolved_unquantized_) {
+        LOAD_WEIGHT(weight_scale_inv);
+        if (weight_scale_inv_is_loaded_) {
+          CHECK_EQ(world_size, 1) << "block-fp8 merged-variable-shard TP>1 "
+                                     "scale sharding is a TODO";
+        }
+      }
+      LOAD_MERGED_WEIGHT_V2(weight, 0);
     } else {
       // For regular weights, use the new merged weight loading with variable
       // shard sizes
@@ -1095,7 +1356,23 @@ QKVParallelLinearImpl::QKVParallelLinearImpl(
   (void)linear_extra_args;
   // Note: torch.nn.functional.linear performs XA^T + b and as a result
   // we allocate the transpose.
-  if (quant_args_.quant_method() == kQuantMethodFp8) {
+  if (is_block_fp8_quant(quant_args_)) {
+    // Block-wise FP8: fused QKV FP8 weight [out,hidden] + BF16 inverse-scale
+    // grid [ceil(out/bn), ceil(hidden/bk)].
+    const int64_t block_n = quant_args_.weight_block_size()[0];
+    const int64_t block_k = quant_args_.weight_block_size()[1];
+    weight_ = register_parameter(
+        "weight",
+        torch::empty({out_features_per_partition, hidden_size},
+                     options.dtype(torch::kFloat8_e4m3fn)),
+        /*requires_grad=*/false);
+    const int64_t n_tiles = (out_features_per_partition + block_n - 1) / block_n;
+    const int64_t k_tiles = (hidden_size + block_k - 1) / block_k;
+    weight_scale_inv_ = register_parameter(
+        "weight_scale_inv",
+        torch::empty({n_tiles, k_tiles}, options.dtype(torch::kBFloat16)),
+        /*requires_grad=*/false);
+  } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 W8A8 quantization - weight is stored as FP8 (float8_e4m3fn)
     weight_ = register_parameter(
         "weight",
@@ -1147,7 +1424,27 @@ torch::Tensor QKVParallelLinearImpl::forward(torch::Tensor input) {
       bias_.defined() ? std::optional<torch::Tensor>(bias_) : std::nullopt;
 
   torch::Tensor output;
-  if (quant_args_.quant_method() == kQuantMethodFp8) {
+  if (is_block_fp8_quant(quant_args_)) {
+    if (weight_.scalar_type() == torch::kFloat8_e4m3fn) {
+      // Native block-FP8 GEMM on the QKV weight (per-token-group activation
+      // quant + mate/muDNN groupwise matmul); XLLM_FP8_DEQUANT=1 forces the
+      // slower dequant-to-BF16 fallback.
+      output = block_fp8_forward(input,
+                                 weight_,
+                                 weight_scale_inv_,
+                                 quant_args_.weight_block_size(),
+                                 bias,
+                                 output_buf_);
+    } else {
+      xllm::kernel::MatmulParams matmul_params;
+      matmul_params.a = input;
+      matmul_params.b = weight_;
+      matmul_params.bias = bias;
+      maybe_set_persistent_output_buf(
+          matmul_params, output_buf_, input, weight_);
+      output = xllm::kernel::matmul(matmul_params);
+    }
+  } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 W8A8 quantization
     CHECK(!quant_args_.activation_dynamic())
         << "FP8 quantization does not support activation_dynamic yet";
@@ -1236,12 +1533,52 @@ void QKVParallelLinearImpl::load_state_dict(
                           weight_scale_is_loaded_,
                           weight_offset_,
                           weight_offset_is_loaded_});
+  // Block-wise FP8: the checkpoint may deliver the Q/K/V shards for this
+  // fused module across *different* safetensors files (e.g. q_proj in one
+  // shard file, k_proj/v_proj in another). weight_/weight_scale_inv_ are
+  // accumulated incrementally across load_state_dict calls (see
+  // load_fused_weight), so we must decide "is this module actually
+  // quantized in this checkpoint" without waiting for all 3 shards to be
+  // present simultaneously in one call -- otherwise we'd wrongly conclude
+  // "not quantized yet" while e.g. Q's shard is legitimately still pending
+  // and prematurely retype weight_ to BF16, corrupting the accumulator: a
+  // later call that completes accumulation would then numerically cast the
+  // still-quantized (unscaled) FP8 shards into BF16 instead of dequantizing
+  // them, producing garbage attention.
+  //
+  // Instead: each individual shard's own weight_scale_inv (if it exists)
+  // always lives in the same shard file as that shard's own weight tensor
+  // (HF safetensors never splits a single named tensor's data from a
+  // sibling scale it doesn't own). So the first time we observe *any*
+  // prefix's weight present without its own co-located scale, this fused
+  // module is definitively unquantized in this checkpoint -- decide that
+  // once, stickily, and only then retype/reload as BF16.
+  if (is_block_fp8_quant(quant_args_) && !block_fp8_resolved_unquantized_ &&
+      !weight_scale_inv_is_loaded_) {
+    for (const auto& prefix : prefixes) {
+      if (state_dict.has(prefix + "weight") &&
+          !state_dict.has(prefix + "weight_scale_inv")) {
+        block_fp8_resolved_unquantized_ = true;
+        break;
+      }
+    }
+    if (block_fp8_resolved_unquantized_) {
+      weight_.set_data(torch::empty(weight_.sizes(), options_));
+      weight_is_loaded_ = false;
+    }
+  }
   LOAD_QKV_WEIGHT(weight, 0, num_kv_head_replicas_);
   if (bias_.defined()) {
     LOAD_QKV_WEIGHT(bias, 0, num_kv_head_replicas_);
   }
-  // FP8: load weight_scale and input_scale, requantize if needed
-  if (quant_args_.quant_method() == kQuantMethodFp8) {
+  if (is_block_fp8_quant(quant_args_)) {
+    if (!block_fp8_resolved_unquantized_) {
+      // Fuse the Q/K/V N-block inverse-scale grids along dim 0 (same
+      // KV-replica handling as the weight); accumulates across shard files
+      // exactly like the weight above.
+      LOAD_QKV_WEIGHT(weight_scale_inv, 0, num_kv_head_replicas_);
+    }
+  } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // Build partition info for Q/K/V
     Fp8PartitionInfo partition_info;
     int64_t num_heads_per_partition = num_heads_ / world_size_;
@@ -1420,6 +1757,23 @@ RowParallelLinearImpl::RowParallelLinearImpl(
                                  /*requires_grad=*/false);
     // Output dtype for scaled_matmul
     output_dtype_ = c10::typeMetaToScalarType(options.dtype());
+  } else if (is_block_fp8_quant(quant_args_)) {
+    // Block-wise FP8: FP8 weight [N, K_pp] + BF16 inverse-scale grid
+    // [ceil(N/bn), ceil(K_pp/bk)]. Row parallel shards input (dim 1).
+    const int64_t block_n = quant_args_.weight_block_size()[0];
+    const int64_t block_k = quant_args_.weight_block_size()[1];
+    weight_ = register_parameter(
+        "weight",
+        torch::empty({out_features, in_features_per_partition},
+                     options.dtype(torch::kFloat8_e4m3fn)),
+        /*requires_grad=*/false);
+    const int64_t n_tiles = (out_features + block_n - 1) / block_n;
+    const int64_t k_tiles =
+        (in_features_per_partition + block_k - 1) / block_k;
+    weight_scale_inv_ = register_parameter(
+        "weight_scale_inv",
+        torch::empty({n_tiles, k_tiles}, options.dtype(torch::kBFloat16)),
+        /*requires_grad=*/false);
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 W8A8 quantization - weight is stored as FP8 (float8_e4m3fn)
     weight_ = register_parameter(
@@ -1516,6 +1870,29 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
     matmul_params.output = std::nullopt;
 
     output = xllm::kernel::scaled_matmul(matmul_params);
+  } else if (is_block_fp8_quant(quant_args_)) {
+    if (!input_is_parallelized_) {
+      input = xllm::parallel_state::scatter(input, process_group_);
+    }
+    if (weight_.scalar_type() == torch::kFloat8_e4m3fn) {
+      // Native block-FP8 GEMM (per-token-group activation quant + mate/muDNN
+      // groupwise matmul); XLLM_FP8_DEQUANT=1 forces the slower
+      // dequant-to-BF16 fallback.
+      output = block_fp8_forward(input,
+                                 weight_,
+                                 weight_scale_inv_,
+                                 quant_args_.weight_block_size(),
+                                 bias,
+                                 output_buf_);
+    } else {
+      xllm::kernel::MatmulParams matmul_params;
+      matmul_params.a = input;
+      matmul_params.b = weight_;
+      matmul_params.bias = bias;
+      maybe_set_persistent_output_buf(
+          matmul_params, output_buf_, input, weight_);
+      output = xllm::kernel::matmul(matmul_params);
+    }
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 W8A8 quantization
     CHECK(!quant_args_.activation_dynamic())
@@ -1619,6 +1996,21 @@ void RowParallelLinearImpl::load_state_dict(const StateDict& state_dict) {
     LOAD_SHARDED_WEIGHT(qweight, 1);
     LOAD_WEIGHT(per_channel_scale);
     LOAD_SHARDED_WEIGHT(smooth, 0);
+  } else if (is_block_fp8_quant(quant_args_)) {
+    // Block-wise FP8: Row parallel shards input (dim 1) for both the FP8
+    // weight and the K-block inverse-scale grid.
+    // See QKVParallelLinearImpl::load_state_dict for why this decision must
+    // be sticky and based on per-call weight/scale co-presence.
+    if (!block_fp8_resolved_unquantized_ && !weight_scale_inv_is_loaded_ &&
+        state_dict.has("weight") && !state_dict.has("weight_scale_inv")) {
+      block_fp8_resolved_unquantized_ = true;
+      weight_.set_data(torch::empty(weight_.sizes(), options_));
+      weight_is_loaded_ = false;
+    }
+    if (!block_fp8_resolved_unquantized_) {
+      LOAD_SHARDED_WEIGHT(weight_scale_inv, 1);
+    }
+    LOAD_SHARDED_WEIGHT(weight, 1);
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 quantization: load FP8 weight and scales
     LOAD_SHARDED_WEIGHT(weight, 1);

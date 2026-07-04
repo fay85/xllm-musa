@@ -61,7 +61,8 @@ static ffi::Array<int64_t> deep_copy_plan_info(const ffi::Array<int64_t>& src) {
   return ffi::Array<int64_t>(temp_vec.begin(), temp_vec.end());
 }
 
-static torch::Tensor get_kv_len_arr_host(const AttentionMetadata& attn_meta) {
+static torch::Tensor get_kv_len_arr_host(
+    const xllm::layer::AttentionMetadata& attn_meta) {
   if (attn_meta.kv_seq_lens.defined()) {
     return attn_meta.kv_seq_lens.to(torch::kCPU);
   }

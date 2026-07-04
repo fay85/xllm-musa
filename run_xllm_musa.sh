@@ -252,7 +252,10 @@ model_runtime_flags() {
   MAX_MEMORY_UTILIZATION="${MAX_MEMORY_UTILIZATION:-0.8}"
 
   case "$model_name" in
-    Qwen3.5-27B|Qwen3.5-27b|qwen3.5-27b)
+    Qwen3.5-27B|Qwen3.5-27b|qwen3.5-27b|Qwen3.5-27B-FP8|Qwen3.5-27B-fp8|qwen3.5-27b-fp8)
+      # Block-wise FP8 (Qwen3.5-27B-FP8) shares the exact architecture/caps of
+      # the BF16 Qwen3.5-27B; only the linear weights are FP8 (dequant to BF16
+      # at compute time in the step-1 semi-FP8 path). Same concurrency caps.
       # Default raised from 1 to 4 so multi-concurrency perf runs (conc_eval.sh
       # C>=2) don't see HTTP 500 rejections out of the box. Override with the
       # env var (e.g. MAX_CONCURRENT_REQUESTS=16) for higher concurrency sweeps.

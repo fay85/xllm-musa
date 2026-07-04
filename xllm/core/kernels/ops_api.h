@@ -155,6 +155,16 @@ std::tuple<torch::Tensor, torch::Tensor> fp8_scaled_quantize(
 // Performs: c = (a @ b.T) with scales applied
 torch::Tensor fp8_scaled_matmul(Fp8ScaledMatmulParams& params);
 
+// Native DeepSeek block-wise FP8 GEMM (per-token-group activation scale +
+// 128x128 weight-block scale grid). MUSA-only (mate/muDNN groupwise GEMM).
+torch::Tensor fp8_block_matmul(Fp8BlockMatmulParams& params);
+
+// Fused per-token-group FP8 activation quantization (bf16 -> e4m3, group=128).
+// Returns {q [M,K] e4m3, scale [M, K/group] fp32}. MUSA-only.
+std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size);
+
 // Static scaled FP8 quantization helper
 // Quantizes input tensor to FP8 using a pre-computed scale factor
 void static_scaled_fp8_quant(StaticScaledFp8QuantParams& params);

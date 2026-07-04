@@ -278,6 +278,23 @@ torch::Tensor fp8_scaled_matmul(
     const std::optional<torch::Tensor>& bias = std::nullopt,
     const std::optional<torch::Tensor>& output = std::nullopt);
 
+// Native DeepSeek block-wise FP8 GEMM (mate/muDNN groupwise, GROUP_BLOCK
+// (1,128,128)). See kernels/musa/fp8_block_gemm.cpp for the layout contract.
+torch::Tensor gemm_fp8_nt_groupwise(
+    const torch::Tensor& a,
+    const torch::Tensor& b,
+    const torch::Tensor& a_scale,
+    const torch::Tensor& b_scale,
+    torch::ScalarType output_dtype,
+    const std::optional<torch::Tensor>& output = std::nullopt);
+
+// Fused DeepSeek per-token-group FP8 activation quantization (bf16 -> e4m3,
+// group=128 along K). Returns {q [M,K] e4m3, scale [M, K/128] fp32}. See
+// kernels/musa/fp8_act_quant.cu.
+std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size);
+
 std::pair<torch::Tensor, torch::Tensor> compute_topk_for_beam_search(
     torch::Tensor combined_probs,
     uint32_t batch_size,
