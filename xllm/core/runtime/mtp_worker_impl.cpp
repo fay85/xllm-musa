@@ -28,6 +28,9 @@ limitations under the License.
 #endif
 #include "core/framework/block/block_utils.h"
 #include "core/framework/config/disagg_pd_config.h"
+#if defined(USE_CUDA) || defined(USE_MUSA)
+#include "layers/musa/qwen3_gated_delta_net_base.h"
+#endif
 #include "core/framework/config/kernel_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/speculative_config.h"
@@ -1166,6 +1169,24 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_validate(
   COUNTER_ADD(speculative_execution_latency_seconds_validation,
               timer.elapsed_seconds());
 
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  if (validate_input.input_params.gdn_mtp_verify_cache.has_value() &&
+      validate_input.input_params.gdn_mtp_verify_cache->enabled) {
+    // Mate GDN MTP verify stashes per-layer intermediate states on
+    // compute_stream_; scatter must run on the same stream after those writes
+    // complete (debug mode masked this via global cudaDeviceSynchronize).
+    c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+    compute_stream_->synchronize();
+    layer::scatter_gdn_mtp_verify_ssm_states(
+        validate_input.input_params.gdn_mtp_verify_cache.value(),
+        impl_->kv_caches(),
+        validate_input.input_params,
+        val_output.next_tokens,
+        /*fla_ssm_state_layout=*/true);
+    validate_input.input_params.gdn_mtp_verify_cache->enabled = false;
+  }
+#endif
+
   // Catch-all for cross-rank RNG divergence: unify the accepted next_tokens to
   // the consensus group's rank 0 so all_draft_accepted and the next
   // draft-extend row layout agree across ranks.
@@ -1471,6 +1492,12 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
         torch::tensor(accepted_prefix_lengths, token_options);
     input_params.num_accepted_tokens_host.assign(
         accepted_prefix_lengths.begin(), accepted_prefix_lengths.end());
+#if defined(USE_CUDA) || defined(USE_MUSA)
+    if (layer::use_mate_gdn_mtp_kernel()) {
+      input_params.gdn_mtp_verify_cache.emplace();
+      input_params.gdn_mtp_verify_cache->enabled = true;
+    }
+#endif
   }
 
   input_params.attention.rebuild_device_buffer(device_);

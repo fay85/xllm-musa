@@ -608,6 +608,57 @@ torch::Tensor mate_gated_delta_rule_decode(
   return output;
 }
 
+std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
+                                 int64_t num_v_heads,
+                                 torch::ScalarType dtype) {
+  std::ostringstream oss;
+  oss << "mate_gdn_mtp_hq" << num_q_heads << "_hv" << num_v_heads << "_"
+      << mate_gdn_dtype_suffix(dtype);
+  return oss.str();
+}
+
+torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params) {
+  auto q = params.q.contiguous();
+  auto k = params.k.contiguous();
+  auto v = params.v.contiguous();
+  CHECK(q.dim() == 4) << "mate GDN mtp expects q [B, T, Hqk, K]";
+  CHECK(v.dim() == 4) << "mate GDN mtp expects v [B, T, Hv, V]";
+  const int64_t num_k_heads = params.num_k_heads;
+  const int64_t num_v_heads = params.num_v_heads;
+
+  // The compiled kernel bakes in bfloat16 q/k/v/a/b and float32 A_log/dt_bias/
+  // state/intermediate, so coerce to the exact dtypes the ABI expects.
+  const auto io_dtype = q.scalar_type();
+  auto a = params.a.to(io_dtype).contiguous();
+  auto b = params.b.to(io_dtype).contiguous();
+  auto A_log = params.A_log.to(torch::kFloat32).contiguous();
+  auto dt_bias = params.dt_bias.to(torch::kFloat32).contiguous();
+  auto state_f32 = params.state.to(torch::kFloat32).contiguous();
+  auto state_indices = params.state_indices.to(torch::kInt32).contiguous();
+  auto intermediate = params.intermediate.contiguous();
+  auto output = params.output;
+
+  const std::string uri =
+      get_mate_gdn_mtp_uri(num_k_heads, num_v_heads, q.scalar_type());
+  bind_tvmffi_stream_to_current_torch_stream(q.device());
+  auto run = get_function(uri, "run");
+
+  run(to_ffi_tensor(q),
+      to_ffi_tensor(k),
+      to_ffi_tensor(v),
+      to_ffi_tensor(A_log),
+      to_ffi_tensor(a),
+      to_ffi_tensor(dt_bias),
+      to_ffi_tensor(b),
+      to_ffi_tensor(state_indices),
+      to_ffi_tensor(state_f32),
+      to_ffi_tensor(intermediate),
+      to_ffi_tensor(output),
+      static_cast<double>(params.scale));
+
+  return output;
+}
+
 namespace {
 
 torch::Tensor l2norm_dim(const torch::Tensor& x, int64_t dim, double eps) {

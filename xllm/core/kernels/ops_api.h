@@ -259,6 +259,9 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
+torch::Tensor mate_gated_delta_rule_mtp(
+    MateGatedDeltaRuleMtpParams& params);
+
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 

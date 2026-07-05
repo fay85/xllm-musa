@@ -32,6 +32,7 @@ struct FusedQkvzbaSplitReshapeParams;
 struct FusedRecurrentGatedDeltaRuleParams;
 struct GatedLayerNormParams;
 struct MateGatedDeltaRuleDecodeParams;
+struct MateGatedDeltaRuleMtpParams;
 struct MateGatedDeltaRulePrefillParams;
 struct PartialRotaryEmbeddingParams;
 struct FusedSigmoidGatingDeltaRuleUpdateParams;
@@ -87,11 +88,18 @@ std::string get_mate_gdn_decode_uri(int64_t num_q_heads,
                                     int64_t num_v_heads,
                                     torch::ScalarType dtype);
 
+std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
+                                 int64_t num_v_heads,
+                                 torch::ScalarType dtype);
+
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     MateGatedDeltaRulePrefillParams& params);
 
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
+
+torch::Tensor mate_gated_delta_rule_mtp(
+    MateGatedDeltaRuleMtpParams& params);
 
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);

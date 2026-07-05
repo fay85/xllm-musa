@@ -1710,6 +1710,32 @@ struct MateGatedDeltaRuleDecodeParams {
   std::optional<torch::Tensor> decode_output = std::nullopt;
 };
 
+// Parameters for the fused mate GDN multi-token speculative-verify kernel
+// (mate_gdn_mtp). The kernel runs the gated-delta-rule recurrence over the
+// `seq_len` validate tokens starting from a per-sequence initial state, writing
+// the per-token attention output and (optionally) the per-token intermediate
+// states used for speculative rollback. It computes qk L2-norm and the
+// softplus/sigmoid gating internally, so `a`/`b` are the raw gating projections
+// (not the precomputed g/beta). State I/O uses the mate [Hv, V, K] layout.
+struct MateGatedDeltaRuleMtpParams {
+  torch::Tensor q;              // [B, T, Hqk, K]
+  torch::Tensor k;              // [B, T, Hqk, K]
+  torch::Tensor v;              // [B, T, Hv,  V]
+  torch::Tensor A_log;          // [Hv], float32
+  torch::Tensor a;              // [B, T, Hv], raw decay projection
+  torch::Tensor dt_bias;        // [Hv], float32
+  torch::Tensor b;              // [B, T, Hv], raw update-gate projection
+  torch::Tensor state;          // [B, Hv, V, K] float32, gathered initial states
+  torch::Tensor state_indices;  // [B], int32
+  torch::Tensor intermediate;   // [B, T, Hv, V, K] float32, per-token states out
+  torch::Tensor output;         // [B, T, Hv, V], per-token attention output out
+  int64_t num_k_heads = 0;
+  int64_t num_v_heads = 0;
+  int64_t head_k_dim = 0;
+  int64_t head_v_dim = 0;
+  double scale = 0.0;
+};
+
 struct MegaChunkGdnParams {
   // Query tensor. Shape: [B, T, Hqk, K]. Dtype: bfloat16 input, converted to
   // float16 before aclnnMegaChunkGdn.

@@ -182,6 +182,9 @@ class WorkerImpl {
 
   torch::ScalarType dtype() const { return dtype_; }
 
+  std::vector<KVCache>& kv_caches() { return kv_caches_; }
+  const std::vector<KVCache>& kv_caches() const { return kv_caches_; }
+
   int32_t hidden_size() const {
     return context_.get_model_args().hidden_size();
   }

@@ -1904,6 +1904,15 @@ torch::Tensor mate_gated_delta_rule_decode(
 #endif
 }
 
+torch::Tensor mate_gated_delta_rule_mtp(
+    MateGatedDeltaRuleMtpParams& params) {
+#if defined(USE_CUDA)
+  return cuda::mate_gated_delta_rule_mtp(params);
+#else
+  NOT_IMPLEMENTED();
+#endif
+}
+
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params) {
 #if defined(USE_CUDA)

@@ -903,6 +903,17 @@ struct ExpertInput {
   }
 };
 
+// Per-layer mate GDN / conv intermediate states captured during MTP target
+// verify. Post-verify scatter commits `*_intermediate[seq, accepted_step]` into
+// the live linear cache (sglang `update_mamba_state_after_mtp_verify` pattern).
+struct GdnMtpVerifyCache {
+  bool enabled = false;
+  std::vector<int32_t> layer_ids;
+  std::vector<torch::Tensor> ssm_intermediate;
+  // [batch, seq_len, dim, conv_state_len] per layer.
+  std::vector<torch::Tensor> conv_intermediate;
+};
+
 struct GraphInput {
   torch::Tensor attn_mask;
   torch::Tensor tiling_data;
@@ -957,6 +968,15 @@ struct ModelInputParams {
           safe_to(table, table.options().device(torch::kCPU), true));
     }
     params.mtp_shifted_token_ids = safe_to(mtp_shifted_token_ids, device, true);
+    if (gdn_mtp_verify_cache.has_value()) {
+      params.gdn_mtp_verify_cache = gdn_mtp_verify_cache;
+      for (auto& tensor : params.gdn_mtp_verify_cache->ssm_intermediate) {
+        tensor = safe_to(tensor, device, true);
+      }
+      for (auto& tensor : params.gdn_mtp_verify_cache->conv_intermediate) {
+        tensor = safe_to(tensor, device, true);
+      }
+    }
     if (!params.embedding.linear_state_indices.defined() &&
         !params.embedding.linear_state_ids.empty()) {
       params.embedding.linear_state_indices =
@@ -1083,6 +1103,10 @@ struct ModelInputParams {
   torch::Tensor num_accepted_tokens;
   torch::Tensor dsa_topk_indices;
   std::vector<int64_t> num_accepted_tokens_host;
+
+  // Populated during mate-GDN MTP verify forward; consumed after rejection
+  // sampling to commit the accepted intermediate state into ssm_cache.
+  std::optional<GdnMtpVerifyCache> gdn_mtp_verify_cache;
 
   RecModelInputParams rec_params;
 
