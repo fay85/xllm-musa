@@ -144,6 +144,36 @@ bool is_cuda_contiguous_int_tensor(const torch::Tensor& tensor) {
   return dt == c10::DeviceType::CUDA || dt == c10::DeviceType::PrivateUse1;
 }
 
+
+bool is_cpu_int_tensor(const torch::Tensor& tensor) {
+  if (!tensor.defined() || !tensor.device().is_cpu() || tensor.numel() == 0) {
+    return false;
+  }
+  const auto sc = tensor.scalar_type();
+  return sc == torch::kInt32 || sc == torch::kInt64;
+}
+
+const int32_t* host_int32_data_ptr(const torch::Tensor& tensor,
+                                   std::vector<int32_t>* cast_buf) {
+  if (!is_cpu_int_tensor(tensor)) {
+    return nullptr;
+  }
+  if (tensor.scalar_type() == torch::kInt32) {
+    return tensor.contiguous().data_ptr<int32_t>();
+  }
+  CHECK(cast_buf != nullptr) << "host int64 tensor requires cast buffer";
+  const torch::Tensor i32 = tensor.to(torch::kInt32).contiguous();
+  cast_buf->assign(i32.data_ptr<int32_t>(),
+                   i32.data_ptr<int32_t>() + i32.numel());
+  return cast_buf->data();
+}
+
+bool has_llm_decode_host_metadata(const AttentionHostInput& host) {
+  return !host.kv_seq_lens.empty() && is_cpu_int_tensor(host.paged_kv_indptr) &&
+         is_cpu_int_tensor(host.paged_kv_indices) &&
+         is_cpu_int_tensor(host.paged_kv_last_page_len);
+}
+
 }  // namespace
 
 // CudaGraphPersistentParam implementation
@@ -258,11 +288,17 @@ bool CudaGraphPersistentParam::can_use_llm_decode_fast_path(
       is_rec_multi_round_mode() || params.has_llmrec_params()) {
     return false;
   }
-  return is_cuda_contiguous_int_tensor(tokens) &&
-         is_cuda_contiguous_int_tensor(positions) &&
-         is_cuda_contiguous_int_tensor(
-             params.attention.device.new_cache_slots) &&
-         is_cuda_contiguous_int_tensor(params.attention.device.kv_seq_lens) &&
+  const bool device_token_metadata_ok =
+      is_cuda_contiguous_int_tensor(tokens) &&
+      is_cuda_contiguous_int_tensor(positions) &&
+      is_cuda_contiguous_int_tensor(params.attention.device.new_cache_slots);
+  if (!device_token_metadata_ok) {
+    return false;
+  }
+  if (has_llm_decode_host_metadata(params.attention.host)) {
+    return true;
+  }
+  return is_cuda_contiguous_int_tensor(params.attention.device.kv_seq_lens) &&
          is_cuda_contiguous_int_tensor(
              params.attention.device.paged_kv_indptr) &&
          is_cuda_contiguous_int_tensor(
@@ -302,13 +338,61 @@ void CudaGraphPersistentParam::update_llm_decode_metadata_fast_path(
       to_int32(params.attention.device.new_cache_slots);
   const torch::Tensor kv_seq_lens_i32 =
       to_int32(params.attention.device.kv_seq_lens);
+
+  const cudaStream_t stream = c10::cuda::getCurrentCUDAStream(device_.index());
+  if (has_llm_decode_host_metadata(params.attention.host)) {
+    const auto& host = params.attention.host;
+    std::vector<int32_t> indptr_cast;
+    std::vector<int32_t> indices_cast;
+    std::vector<int32_t> last_page_cast;
+    const int32_t* host_indptr =
+        host_int32_data_ptr(host.paged_kv_indptr, &indptr_cast);
+    const int32_t* host_indices =
+        host_int32_data_ptr(host.paged_kv_indices, &indices_cast);
+    const int32_t* host_last_page =
+        host_int32_data_ptr(host.paged_kv_last_page_len, &last_page_cast);
+    CHECK(host_indptr != nullptr && host_indices != nullptr &&
+          host_last_page != nullptr)
+        << "host paged-KV mirrors must be int32/int64 CPU tensors";
+    CHECK_GE(static_cast<int64_t>(host.kv_seq_lens.size()),
+             actual_batch_size + 1)
+        << "host kv_seq_lens too small for batch";
+    const int64_t actual_indices_size =
+        host.paged_kv_indices.defined() ? host.paged_kv_indices.numel() : 0;
+    xllm::kernel::cuda::LlmDecodeMetadataHostUpdateParams host_update_params{
+        .src_tokens = tokens_i32.data_ptr<int32_t>(),
+        .src_positions = positions_i32.data_ptr<int32_t>(),
+        .src_new_cache_slots = new_cache_slots_i32.data_ptr<int32_t>(),
+        .host_kv_seq_lens = host.kv_seq_lens.data(),
+        .host_paged_kv_indptr = host_indptr,
+        .host_paged_kv_indices = host_indices,
+        .host_paged_kv_last_page_len = host_last_page,
+        .dst_tokens = persistent_tokens_.data_ptr<int32_t>(),
+        .dst_positions = persistent_positions_.data_ptr<int32_t>(),
+        .dst_new_cache_slots = persistent_new_cache_slots_.data_ptr<int32_t>(),
+        .dst_kv_seq_lens = kv_seq_lens_.data_ptr<int32_t>(),
+        .dst_kv_seq_lens_delta =
+            persistent_kv_seq_lens_delta_.data_ptr<int32_t>(),
+        .dst_paged_kv_indptr = persistent_paged_kv_indptr_.data_ptr<int32_t>(),
+        .dst_paged_kv_indices = persistent_paged_kv_indices_.data_ptr<int32_t>(),
+        .dst_paged_kv_last_page_len =
+            persistent_paged_kv_last_page_len_.data_ptr<int32_t>(),
+        .actual_num_tokens = actual_num_tokens,
+        .padded_num_tokens = static_cast<int64_t>(padded_num_tokens),
+        .actual_batch_size = actual_batch_size,
+        .actual_indices_size = actual_indices_size,
+    };
+    xllm::kernel::cuda::update_llm_decode_metadata_from_host(host_update_params,
+                                                             stream);
+    return;
+  }
+
   const torch::Tensor paged_kv_indptr_i32 =
       to_int32(params.attention.device.paged_kv_indptr);
   const torch::Tensor paged_kv_indices_i32 =
       to_int32(params.attention.device.paged_kv_indices);
   const torch::Tensor paged_kv_last_page_len_i32 =
       to_int32(params.attention.device.paged_kv_last_page_len);
-
   const int64_t actual_indices_size = paged_kv_indices_i32.size(0);
   xllm::kernel::cuda::LlmDecodeMetadataUpdateParams update_params{
       .src_tokens = tokens_i32.data_ptr<int32_t>(),
@@ -333,17 +417,9 @@ void CudaGraphPersistentParam::update_llm_decode_metadata_fast_path(
       .padded_num_tokens = static_cast<int64_t>(padded_num_tokens),
       .actual_batch_size = actual_batch_size,
       .actual_indices_size = actual_indices_size,
-      // Worst-case paged_kv_indices count this graph instance can serve.
-      // The kernel uses this to size its strided loop so that, when captured
-      // into a CUDA graph and replayed at a later decode step that has grown
-      // the KV cache to more blocks than the warmup-time bucket, the loop
-      // still iterates far enough to copy every paged_kv_indices entry. See
-      // llm_decode_metadata_update_kernel for the matching dynamic-bound
-      // read from indptr.
       .max_indices_size_for_graph_capacity =
           persistent_paged_kv_indices_.numel(),
   };
-  const cudaStream_t stream = c10::cuda::getCurrentCUDAStream(device_.index());
   xllm::kernel::cuda::update_llm_decode_metadata(update_params, stream);
 }
 
