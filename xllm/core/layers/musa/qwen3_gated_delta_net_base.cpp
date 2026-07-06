@@ -48,12 +48,6 @@ void qwen35_mtp_debug_sync(const char* stage) {
   C10_CUDA_CHECK(cudaDeviceSynchronize());
   LOG(INFO) << "[Qwen3.5 MTP debug] sync end: " << stage;
 }
-
-// Mate MTP verify mixes compute-stream kernels with libtorch gating ops that
-// may enqueue on the default stream; barrier before/after the fused kernel.
-void sync_spec_verify_mate_device() {
-  C10_CUDA_CHECK(cudaDeviceSynchronize());
-}
 #else
 bool qwen35_mtp_debug_enabled() {
   return false;
@@ -383,7 +377,8 @@ torch::Tensor run_spec_verify_conv(const torch::Tensor& mixed_qkv,
                                    const torch::Tensor& q_cu_seq_lens,
                                    const torch::Tensor& conv_weight,
                                    int32_t conv_kernel_size,
-                                   GdnMtpVerifyCache* verify_cache) {
+                                   GdnMtpVerifyCache* verify_cache,
+                                   int32_t layer_id) {
   const int64_t batch_size = mixed_qkv.size(0);
   const int64_t dim = mixed_qkv.size(1);
   const int64_t seq_len = mixed_qkv.size(2);
@@ -518,7 +513,8 @@ torch::Tensor run_spec_verify_conv(const torch::Tensor& mixed_qkv,
 
   if (defer_conv_commit) {
     CHECK(verify_cache != nullptr);
-    verify_cache->conv_intermediate.push_back(std::move(conv_intermediate));
+    verify_cache->layer_states[layer_id].conv_intermediate =
+        std::move(conv_intermediate);
   } else {
     qwen35_mtp_debug_sync("spec_conv_before_cache_write");
     conv_cache.index_copy_(/*dim=*/0, state_indices, next_states);
@@ -688,7 +684,9 @@ torch::Tensor run_spec_verify_gated_delta_rule_mate(
     int64_t head_v_dim,
     double scale,
     GdnMtpVerifyCache* verify_cache,
-    int32_t layer_id) {
+    int32_t layer_id,
+    torch::Tensor* intermediate_buf,
+    torch::Tensor* output_buf) {
   const auto device = value.device();
   const int64_t B = value.size(0);
   const int64_t T = value.size(1);
@@ -702,10 +700,25 @@ torch::Tensor run_spec_verify_gated_delta_rule_mate(
       ssm_cache.index_select(0, init_slots).to(torch::kFloat32).contiguous();
   auto state_indices = torch::arange(
       B, torch::TensorOptions().dtype(torch::kInt32).device(device));
-  auto intermediate =
-      torch::empty({B, T, num_v_heads, head_v_dim, head_k_dim},
-                   torch::TensorOptions().dtype(torch::kFloat32).device(device));
-  auto output = torch::empty_like(value);
+  const int64_t intermediate_numel =
+      B * T * num_v_heads * head_v_dim * head_k_dim;
+  torch::Tensor intermediate;
+  if (intermediate_buf != nullptr && intermediate_buf->defined() &&
+      intermediate_buf->numel() >= intermediate_numel) {
+    intermediate = intermediate_buf->narrow(0, 0, intermediate_numel)
+                       .view({B, T, num_v_heads, head_v_dim, head_k_dim});
+  } else {
+    intermediate =
+        torch::empty({B, T, num_v_heads, head_v_dim, head_k_dim},
+                     torch::TensorOptions().dtype(torch::kFloat32).device(device));
+  }
+  torch::Tensor output;
+  if (output_buf != nullptr && output_buf->defined() &&
+      output_buf->sizes() == value.sizes()) {
+    output = *output_buf;
+  } else {
+    output = torch::empty_like(value);
+  }
 
   xllm::kernel::MateGatedDeltaRuleMtpParams params;
   params.q = query;
@@ -725,15 +738,16 @@ torch::Tensor run_spec_verify_gated_delta_rule_mate(
   params.head_v_dim = head_v_dim;
   params.scale = scale;
   xllm::kernel::mate_gated_delta_rule_mtp(params);
-  sync_spec_verify_mate_device();
 
   // sglang pattern: disable_state_update during verify; stash intermediate for
-  // post-rejection scatter instead of writing ssm_cache in-layer.
+  // post-rejection scatter instead of writing ssm_cache in-layer. Keyed by
+  // layer id (overwritten, not appended) so the recorded set is stable across
+  // eager steps and CUDA-graph replays; `intermediate` aliases the per-layer
+  // persistent buffer, so the replayed kernel refreshes its contents in place.
   CHECK(verify_cache != nullptr)
       << "gdn_mtp_verify_cache must be enabled for mate GDN MTP verify";
   CHECK(verify_cache->enabled);
-  verify_cache->layer_ids.push_back(layer_id);
-  verify_cache->ssm_intermediate.push_back(std::move(intermediate));
+  verify_cache->layer_states[layer_id].ssm_intermediate = std::move(intermediate);
 
   return output;
 }
@@ -757,14 +771,8 @@ void scatter_gdn_mtp_verify_ssm_states(
     const ModelInputParams& input_params,
     const torch::Tensor& accepted_tokens,
     bool fla_ssm_state_layout) {
-  if (!cache.enabled || cache.layer_ids.empty()) {
+  if (!cache.enabled || cache.layer_states.empty()) {
     return;
-  }
-  CHECK_EQ(cache.layer_ids.size(), cache.ssm_intermediate.size())
-      << "GDN MTP verify cache layer/ssm mismatch";
-  if (!cache.conv_intermediate.empty()) {
-    CHECK_EQ(cache.layer_ids.size(), cache.conv_intermediate.size())
-        << "GDN MTP verify cache layer/conv mismatch";
   }
 
   torch::Tensor accepted_cpu =
@@ -789,7 +797,8 @@ void scatter_gdn_mtp_verify_ssm_states(
     accepted_steps[static_cast<size_t>(seq_idx)] = accepted_len - 1;
   }
 
-  const torch::Device device = cache.ssm_intermediate.front().device();
+  const torch::Device device =
+      cache.layer_states.begin()->second.ssm_intermediate.device();
   torch::Tensor linear_state_indices =
       input_params.embedding.linear_state_indices;
   if (!linear_state_indices.defined()) {
@@ -800,17 +809,15 @@ void scatter_gdn_mtp_verify_ssm_states(
             .to(device);
   }
 
-  for (size_t cache_idx = 0; cache_idx < cache.layer_ids.size(); ++cache_idx) {
-    const int32_t layer_id = cache.layer_ids[cache_idx];
+  for (const auto& [layer_id, state] : cache.layer_states) {
     CHECK_GE(layer_id, 0);
     CHECK_LT(static_cast<size_t>(layer_id), kv_caches.size())
         << "GDN MTP verify layer_id out of range";
     const KVCache& kv_cache = kv_caches[static_cast<size_t>(layer_id)];
     torch::Tensor ssm_cache = kv_cache.get_ssm_cache();
     torch::Tensor conv_cache = kv_cache.get_conv_cache();
-    const bool scatter_conv =
-        !cache.conv_intermediate.empty() && conv_cache.defined() &&
-        conv_cache.numel() > 0;
+    const bool scatter_conv = state.conv_intermediate.defined() &&
+                              conv_cache.defined() && conv_cache.numel() > 0;
     if (!ssm_cache.defined() || ssm_cache.numel() == 0) {
       if (!scatter_conv) {
         continue;
@@ -818,7 +825,7 @@ void scatter_gdn_mtp_verify_ssm_states(
     }
     const int64_t checkpoint_stride =
         get_checkpoint_stride(conv_cache, ssm_cache);
-    const torch::Tensor intermediate = cache.ssm_intermediate[cache_idx];
+    const torch::Tensor intermediate = state.ssm_intermediate;
     const int64_t batch_size = intermediate.size(0);
     const int64_t seq_len = intermediate.size(1);
     CHECK_EQ(batch_size, num_sequences)
@@ -831,7 +838,7 @@ void scatter_gdn_mtp_verify_ssm_states(
 
     torch::Tensor conv_intermediate;
     if (scatter_conv) {
-      conv_intermediate = cache.conv_intermediate[cache_idx];
+      conv_intermediate = state.conv_intermediate;
       CHECK_EQ(conv_intermediate.size(0), batch_size)
           << "conv MTP intermediate batch must match accepted-token batch";
       CHECK_EQ(conv_intermediate.size(1), seq_len)
@@ -1045,10 +1052,13 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const bool use_spec_verify = input_params.is_spec_verify;
   GdnMtpVerifyCache* gdn_mtp_verify_cache = nullptr;
   if (use_spec_verify && use_mate_gdn_mtp_kernel() && seq_len == 2 &&
-      input_params.gdn_mtp_verify_cache.has_value() &&
+      input_params.gdn_mtp_verify_cache != nullptr &&
       input_params.gdn_mtp_verify_cache->enabled) {
-    gdn_mtp_verify_cache = &const_cast<ModelInputParams&>(input_params)
-                                .gdn_mtp_verify_cache.value();
+    gdn_mtp_verify_cache = input_params.gdn_mtp_verify_cache.get();
+  }
+  int32_t gdn_layer_id = 0;
+  if (attn_metadata.plan_info != nullptr) {
+    gdn_layer_id = attn_metadata.plan_info->layer_id;
   }
   const bool is_any_prefill =
       attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
@@ -1157,11 +1167,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                              attn_metadata.q_cu_seq_lens,
                              conv_weight,
                              conv_kernel_size_,
-                             gdn_mtp_verify_cache);
+                             gdn_mtp_verify_cache,
+                             gdn_layer_id);
     qwen35_mtp_debug_sync("forward_after_spec_conv");
-    if (use_mate_gdn_mtp_kernel()) {
-      sync_spec_verify_mate_device();
-    }
   } else {
     // xllm_0526 (xllm_0623_build container) decode fast path: standard
     // single-token causal_conv1d_update with conv_state = conv_cache directly.
@@ -1243,9 +1251,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                 << ", beta=" << beta.sizes();
     }
     qwen35_mtp_debug_sync("forward_after_gating");
-    if (use_spec_verify && use_mate_gdn_mtp_kernel()) {
-      sync_spec_verify_mate_device();
-    }
   } else if (attn_metadata.is_prefill) {
     xllm::kernel::FusedGdnGatingParams gdn_params;
     gdn_params.A_log = A_log_;
@@ -1356,9 +1361,22 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
         ssm_clone = ssm_cache.clone();
       }
       GdnMtpVerifyCache* verify_cache = gdn_mtp_verify_cache;
-      int32_t layer_id = 0;
-      if (attn_metadata.plan_info != nullptr) {
-        layer_id = attn_metadata.plan_info->layer_id;
+      int32_t layer_id = gdn_layer_id;
+      const int64_t mate_intermediate_numel =
+          batch_size * seq_len * (num_v_heads_ / tp_size_) * head_v_dim_ *
+          head_k_dim_;
+      if (!mate_gdn_mtp_intermediate_buf_.defined() ||
+          mate_gdn_mtp_intermediate_buf_.numel() < mate_intermediate_numel) {
+        mate_gdn_mtp_intermediate_buf_ =
+            torch::empty({std::max(mate_intermediate_numel,
+                                   mate_gdn_mtp_intermediate_buf_.defined()
+                                       ? mate_gdn_mtp_intermediate_buf_.numel()
+                                       : mate_intermediate_numel)},
+                         processed_v.options().dtype(torch::kFloat32));
+      }
+      if (!mate_gdn_mtp_output_buf_.defined() ||
+          mate_gdn_mtp_output_buf_.sizes() != processed_v.sizes()) {
+        mate_gdn_mtp_output_buf_ = torch::empty_like(processed_v);
       }
       core_attn_out = run_spec_verify_gated_delta_rule_mate(
           processed_q,
@@ -1377,7 +1395,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
           head_v_dim_,
           scale,
           verify_cache,
-          layer_id);
+          layer_id,
+          &mate_gdn_mtp_intermediate_buf_,
+          &mate_gdn_mtp_output_buf_);
       if (mtp_cmp) {
         auto out_host = run_spec_verify_gated_delta_rule(
             processed_q, processed_k, processed_v, g, beta, ssm_clone,

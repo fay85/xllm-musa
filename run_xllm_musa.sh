@@ -385,14 +385,19 @@ run_xllm() {
   # Speculative decoding. Defaults: off. Qwen3.5 MTP requires exporting draft
   # weights first:
   #   python3 tools/export_mtp.py --input-dir Qwen3.5-27B --output-dir Qwen3.5-27B-mtp
-  # Then launch with separate draft checkpoint (graph mode is auto-disabled):
+  # Then launch with separate draft checkpoint (graph MTP is not ready yet):
   #   NUM_SPECULATIVE_TOKENS=1 SPECULATIVE_ALGORITHM=MTP \
   #   DRAFT_MODEL_PATH=/path/to/Qwen3.5-27B-mtp \
   #   DRAFT_DEVICES="musa:${DEVICE_INDEX}" \
-  #     bash run_xllm_musa.sh ...
+  #     ENABLE_GRAPH=0 bash run_xllm_musa.sh ...
   # Suffix decoding needs no draft model; just set NUM_SPECULATIVE_TOKENS>0
   # and SPECULATIVE_ALGORITHM=Suffix.
   local num_spec="${NUM_SPECULATIVE_TOKENS:-0}"
+  if [[ "${ENABLE_GRAPH:-0}" == "1" && "$num_spec" -gt 0 ]]; then
+    echo "==> WARNING: speculative decoding (MTP) is disabled while ENABLE_GRAPH=1"
+    echo "==>          (graph-mode MTP is not ready). Set ENABLE_GRAPH=0 to use MTP."
+    num_spec=0
+  fi
   if [[ "$num_spec" -gt 0 ]]; then
     cmd+=("--num_speculative_tokens=${num_spec}")
     cmd+=("--speculative_algorithm=${SPECULATIVE_ALGORITHM:-MTP}")

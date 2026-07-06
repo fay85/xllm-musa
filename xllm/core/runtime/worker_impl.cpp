@@ -581,14 +581,8 @@ ForwardInput WorkerImpl::update_input_by_last_step_output(
   auto& flatten_tokens = inputs.token_ids;
   auto neg_mask = (flatten_tokens < 0);
   auto clamped_neg_indices = torch::clamp(-flatten_tokens, 0);
-#if defined(USE_MUSA)
-  auto cpu = clamped_neg_indices.cpu() - 1;
-  auto replacement =
-      last_step_output_.sample_output.next_tokens.index({cpu.musa()});
-#else
   auto replacement = last_step_output_.sample_output.next_tokens.index(
       {clamped_neg_indices - 1});
-#endif
   inputs.token_ids = torch::where(neg_mask, replacement, flatten_tokens);
 #endif
   return inputs;

@@ -22,8 +22,13 @@ mkdir -p "$ANSWER_DIR"
 
 export MUSA_VISIBLE_DEVICES="${MUSA_VISIBLE_DEVICES:-1}"
 export MODEL_NAME="${MODEL_NAME:-Qwen3.5-27B}"
-export MODEL_ROOT="${MODEL_ROOT:-/data/models/models}"
+export MODEL_ROOT="${MODEL_ROOT:-/workspace/model_weights}"
 export ENABLE_SCHEDULE_OVERLAP="${ENABLE_SCHEDULE_OVERLAP:-true}"
+# Graph-mode bring-up: MTP off by default (graph MTP is buggy). Override with env.
+export NUM_SPECULATIVE_TOKENS="${NUM_SPECULATIVE_TOKENS:-0}"
+export ENABLE_GRAPH="${ENABLE_GRAPH:-1}"
+export ENABLE_GRAPH_VMM_POOL="${ENABLE_GRAPH_VMM_POOL:-0}"
+export XLLM_USE_FA3="${XLLM_USE_FA3:-1}"
 INPUT_LEN="${INPUT_LEN:-128}"
 OUTPUT_LEN="${OUTPUT_LEN:-256}"
 # Throughput runs need full-length decode; Qwen3.5 may EOS early otherwise.

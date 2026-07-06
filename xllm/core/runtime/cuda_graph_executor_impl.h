@@ -49,6 +49,9 @@ limitations under the License.
 
 namespace xllm::runtime::cuda {
 
+constexpr uint64_t kSpecVerifyGraphKeyMask = 1ull << 63;
+constexpr uint64_t kSpecVerifyQMaxSeqLenShift = 32;
+
 #if TORCH_VERSION_MAJOR >= 2 && TORCH_VERSION_MINOR >= 10
 using TorchMemPool = at::cuda::MemPool;
 #else
@@ -151,6 +154,14 @@ class CudaGraphPersistentParam {
     }
     return persistent_linear_state_indices_;
   }
+  torch::Tensor persistent_num_accepted_tokens(
+      uint32_t actual_batch_size) const {
+    if (actual_batch_size > 0) {
+      return persistent_num_accepted_tokens_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
+    }
+    return persistent_num_accepted_tokens_;
+  }
   torch::Tensor aux_hidden_states(uint32_t actual_tokens) const {
     if (!aux_hidden_states_.defined() || aux_hidden_states_.numel() == 0) {
       return aux_hidden_states_;
@@ -201,8 +212,50 @@ class CudaGraphPersistentParam {
     }
     return persistent_kv_seq_lens_delta_;
   }
+  torch::Tensor persistent_expanded_block_tables(uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return persistent_expanded_block_tables_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+    }
+    return persistent_expanded_block_tables_;
+  }
+  torch::Tensor expanded_kv_seq_lens(uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return expanded_kv_seq_lens_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+    }
+    return expanded_kv_seq_lens_;
+  }
+  torch::Tensor persistent_expanded_paged_kv_indptr(
+      uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return persistent_expanded_paged_kv_indptr_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens + 1);
+    }
+    return persistent_expanded_paged_kv_indptr_;
+  }
+  torch::Tensor persistent_expanded_paged_kv_indices(
+      uint32_t actual_size) const {
+    if (actual_size > 0) {
+      return persistent_expanded_paged_kv_indices_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_size);
+    }
+    return persistent_expanded_paged_kv_indices_;
+  }
+  torch::Tensor persistent_expanded_paged_kv_last_page_len(
+      uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return persistent_expanded_paged_kv_last_page_len_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+    }
+    return persistent_expanded_paged_kv_last_page_len_;
+  }
 
  private:
+  std::vector<int32_t> update_expanded_spec_decode_attention(
+      const ModelInputParams& input_params,
+      uint32_t actual_num_tokens,
+      uint32_t padded_num_tokens);
   bool can_use_llm_decode_fast_path(const torch::Tensor& tokens,
                                     const torch::Tensor& positions,
                                     const ModelInputParams& params) const;
@@ -227,6 +280,7 @@ class CudaGraphPersistentParam {
   torch::Tensor kv_seq_lens_;
   torch::Tensor persistent_embedding_;
   torch::Tensor persistent_linear_state_indices_;
+  torch::Tensor persistent_num_accepted_tokens_;
   torch::Tensor aux_hidden_states_;
 
   // FlashInfer decode mode parameters
@@ -238,6 +292,13 @@ class CudaGraphPersistentParam {
 
   // TODO maybe not used. or use q_cu_seq_lens instead.
   torch::Tensor persistent_chunked_prefill_qo_indptr_;
+
+  // Qwen3.5 MTP spec-verify expanded decode attention (per validate token).
+  torch::Tensor persistent_expanded_block_tables_;
+  torch::Tensor expanded_kv_seq_lens_;
+  torch::Tensor persistent_expanded_paged_kv_indptr_;
+  torch::Tensor persistent_expanded_paged_kv_indices_;
+  torch::Tensor persistent_expanded_paged_kv_last_page_len_;
 };
 
 // CUDA graph executor using libtorch CUDAGraph for memory management
@@ -294,8 +355,11 @@ class CudaGraph {
   // On replay (graph_.replay() path), the captured graph already references
   // the persistent host buffer pointers from capture time; this method
   // refreshes their *contents* so the captured H2D copy sees fresh values.
+  // When attention.host paged-KV mirrors are populated (normal LLM-engine
+  // path), copies CPU->pinned host directly and avoids per-step D2H sync.
   void refresh_persistent_paged_kv_host_mirrors(
-      const std::shared_ptr<layer::AttentionMetadata>& attn_metadata);
+      const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
+      const AttentionHostInput& host_src);
 
   // CUDA graph for capturing and replaying (decode mode)
   at::cuda::CUDAGraph graph_;
@@ -409,6 +473,9 @@ class CudaGraphExecutorImpl : public ExecutorImpl {
   // Lazy-loaded CUDA graphs for decode phase (by bucket_num_tokens)
   absl::flat_hash_map<uint32_t, std::unique_ptr<CudaGraph>> graphs_;
 
+  // Lazy-loaded CUDA graphs for MTP spec-verify validate (composite key)
+  absl::flat_hash_map<uint64_t, std::unique_ptr<CudaGraph>> spec_verify_graphs_;
+
   // Lazy-loaded CUDA graphs for prefill phase with piecewise capture
   // (by bucket_num_tokens)
   absl::flat_hash_map<uint32_t, std::unique_ptr<CudaGraph>> prefill_graphs_;
@@ -432,6 +499,9 @@ class CudaGraphExecutorImpl : public ExecutorImpl {
   // When is_prefill=true, no_padding is disabled (prefill requires padding)
   uint32_t get_bucket_num_tokens(uint32_t num_tokens,
                                  bool is_prefill = false) const;
+
+  uint64_t get_graph_key(uint32_t bucket_num_tokens,
+                         const ModelInputParams& params) const;
 
   ModelOutput attach_aux_hidden_states_if_needed(
       const torch::Tensor& hidden_states,

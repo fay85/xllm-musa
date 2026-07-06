@@ -245,7 +245,8 @@ void update_chunked_prefill_plan_info(std::shared_ptr<PlanInfo> plan_info,
                             /*use_fp16_qk_reduction=*/false);
   const int64_t batch_size = attn_meta.paged_kv_last_page_len.size(0);
   torch::Tensor qo_indptr_host;
-  if (causal) {
+  if (causal && attn_meta.qo_indptr.has_value() &&
+      attn_meta.qo_indptr->defined()) {
     qo_indptr_host = attn_meta.qo_indptr.value().to(torch::kCPU);
   } else {
     qo_indptr_host = get_cache_buffer(batch_size + 1, torch::kCPU);

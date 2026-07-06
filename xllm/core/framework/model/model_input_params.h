@@ -21,6 +21,7 @@ limitations under the License.
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -906,12 +907,25 @@ struct ExpertInput {
 // Per-layer mate GDN / conv intermediate states captured during MTP target
 // verify. Post-verify scatter commits `*_intermediate[seq, accepted_step]` into
 // the live linear cache (sglang `update_mamba_state_after_mtp_verify` pattern).
+//
+// This object is shared (shared_ptr) across every copy of ModelInputParams so
+// that (a) the on-device copy the worker builds via ModelInputParams::to() and
+// the original validate input observe the same recorded intermediates, and (b)
+// under CUDA graph the entries recorded during capture (which point at the
+// per-layer persistent grow-only buffers) remain valid across replays -- the
+// replayed kernels refresh the buffer *contents* while the entries themselves
+// (keyed by layer id, overwritten each eager forward) stay put.
 struct GdnMtpVerifyCache {
+  struct LayerState {
+    // [batch, seq_len, num_v_heads, head_v_dim, head_k_dim], per-step SSM state
+    torch::Tensor ssm_intermediate;
+    // [batch, seq_len, dim, conv_state_len], per-step conv window state
+    torch::Tensor conv_intermediate;
+  };
   bool enabled = false;
-  std::vector<int32_t> layer_ids;
-  std::vector<torch::Tensor> ssm_intermediate;
-  // [batch, seq_len, dim, conv_state_len] per layer.
-  std::vector<torch::Tensor> conv_intermediate;
+  // Keyed by layer id and overwritten (not appended) on every forward so the
+  // set is stable across eager steps and graph replays.
+  std::map<int32_t, LayerState> layer_states;
 };
 
 struct GraphInput {
@@ -922,6 +936,11 @@ struct GraphInput {
   torch::Tensor expanded_block_tables;
   torch::Tensor expanded_tiling_data;
   std::vector<int32_t> expanded_kv_seq_lens_vec;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  torch::Tensor expanded_paged_kv_indptr;
+  torch::Tensor expanded_paged_kv_indices;
+  torch::Tensor expanded_paged_kv_last_page_len;
+#endif
 #if defined(USE_NPU)
   std::shared_ptr<npu::AclGraphTaskUpdateContext> acl_graph_task_update_context;
 #endif
@@ -937,6 +956,13 @@ struct GraphInput {
     out.expanded_block_tables = safe_to(expanded_block_tables, device, true);
     out.expanded_tiling_data = safe_to(expanded_tiling_data, device, true);
     out.expanded_kv_seq_lens_vec = expanded_kv_seq_lens_vec;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+    out.expanded_paged_kv_indptr = safe_to(expanded_paged_kv_indptr, device, true);
+    out.expanded_paged_kv_indices =
+        safe_to(expanded_paged_kv_indices, device, true);
+    out.expanded_paged_kv_last_page_len =
+        safe_to(expanded_paged_kv_last_page_len, device, true);
+#endif
 #if defined(USE_NPU)
     out.acl_graph_task_update_context = acl_graph_task_update_context;
 #endif
@@ -968,15 +994,10 @@ struct ModelInputParams {
           safe_to(table, table.options().device(torch::kCPU), true));
     }
     params.mtp_shifted_token_ids = safe_to(mtp_shifted_token_ids, device, true);
-    if (gdn_mtp_verify_cache.has_value()) {
-      params.gdn_mtp_verify_cache = gdn_mtp_verify_cache;
-      for (auto& tensor : params.gdn_mtp_verify_cache->ssm_intermediate) {
-        tensor = safe_to(tensor, device, true);
-      }
-      for (auto& tensor : params.gdn_mtp_verify_cache->conv_intermediate) {
-        tensor = safe_to(tensor, device, true);
-      }
-    }
+    // Share the same verify-cache object across device/graph copies so the
+    // states recorded inside the model forward are visible to the post-verify
+    // scatter regardless of which ModelInputParams copy the layer wrote into.
+    params.gdn_mtp_verify_cache = gdn_mtp_verify_cache;
     if (!params.embedding.linear_state_indices.defined() &&
         !params.embedding.linear_state_ids.empty()) {
       params.embedding.linear_state_indices =
@@ -1105,8 +1126,10 @@ struct ModelInputParams {
   std::vector<int64_t> num_accepted_tokens_host;
 
   // Populated during mate-GDN MTP verify forward; consumed after rejection
-  // sampling to commit the accepted intermediate state into ssm_cache.
-  std::optional<GdnMtpVerifyCache> gdn_mtp_verify_cache;
+  // sampling to commit the accepted intermediate state into ssm_cache. Shared
+  // across ModelInputParams copies (device copy + graph capture/replay copies)
+  // so the recorded per-layer states are observed by the post-verify scatter.
+  std::shared_ptr<GdnMtpVerifyCache> gdn_mtp_verify_cache;
 
   RecModelInputParams rec_params;
 

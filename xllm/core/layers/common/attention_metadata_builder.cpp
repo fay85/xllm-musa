@@ -152,8 +152,10 @@ AttentionMetadata build_attention_metadata(
   }
 #endif
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA)
   attn_metadata.is_spec_verify = params.is_spec_verify;
+#endif
+#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA)
   attn_metadata.use_expanded_decode_for_spec_verify_attention =
       params.graph.use_expanded_decode_for_spec_verify_attention;
   if (attn_metadata.use_expanded_decode_for_spec_verify_attention) {
@@ -165,8 +167,17 @@ AttentionMetadata build_attention_metadata(
       attn_metadata.expanded_kv_seq_lens_host =
           torch::tensor(params.graph.expanded_kv_seq_lens_vec, torch::kInt);
     }
+#if defined(USE_CUDA) || defined(USE_MUSA)
+    attn_metadata.expanded_paged_kv_indptr =
+        params.graph.expanded_paged_kv_indptr;
+    attn_metadata.expanded_paged_kv_indices =
+        params.graph.expanded_paged_kv_indices;
+    attn_metadata.expanded_paged_kv_last_page_len =
+        params.graph.expanded_paged_kv_last_page_len;
+#endif
   }
-  // Determine if we should use ACL graph mode:
+#endif
+#if defined(USE_NPU)
   // - --enable_graph=true
   // - Must be decode phase or spec-verify chunked prefill
   // - tiling_data must be available
@@ -316,7 +327,8 @@ AttentionMetadata build_attention_metadata(
   attn_metadata.enable_cuda_graph = params.enable_graph;
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
-  if (attn_metadata.is_causal && !attn_metadata.enable_cuda_graph) {
+  if (attn_metadata.is_causal && !attn_metadata.enable_cuda_graph &&
+      attn_metadata.q_cu_seq_lens.defined()) {
 #if defined(XLLM_TORCH_MUSA)
     attn_metadata.qo_indptr =
         attn_metadata.q_cu_seq_lens.to(torch::kPrivateUse1);

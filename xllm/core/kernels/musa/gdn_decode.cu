@@ -656,6 +656,12 @@ torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params) {
       to_ffi_tensor(output),
       static_cast<double>(params.scale));
 
+  // Eager (non-capturing) binds the FFI to a dedicated pool stream, so the
+  // caller's compute stream must wait for the kernel before reading `output`
+  // /`intermediate`. This is a no-op under CUDA-graph capture (kernel runs on
+  // the capture stream) and during replay (C++ does not execute).
+  sync_musa_ffi_stream(q.device());
+
   return output;
 }
 

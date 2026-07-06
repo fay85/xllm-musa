@@ -24,6 +24,7 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <chrono>
 #include <numeric>
 #include <shared_mutex>
 #include <unordered_map>
@@ -59,6 +60,11 @@ limitations under the License.
 namespace xllm::runtime::cuda {
 
 namespace {
+
+const bool s_enable_graph_timing = [] {
+  const char* env = std::getenv("XLLM_GRAPH_TIMING");
+  return env != nullptr && std::string(env) == "1";
+}();
 
 struct GraphPoolMemoryUsage {
   size_t reserved_bytes = 0;
@@ -172,6 +178,8 @@ CudaGraphPersistentParam::CudaGraphPersistentParam(
       {max_tokens_per_batch}, torch::dtype(torch::kInt).device(device));
   persistent_linear_state_indices_ = torch::zeros(
       {max_seqs_per_batch}, torch::dtype(torch::kInt).device(device));
+  persistent_num_accepted_tokens_ = torch::ones(
+      {max_seqs_per_batch}, torch::dtype(torch::kInt).device(device));
 
   // q_seq_lens is q_cu_seq_lens in GPU Model.
   // kv_seq_lens is kv_cu_seq_lens in GPU Model.
@@ -227,6 +235,19 @@ CudaGraphPersistentParam::CudaGraphPersistentParam(
   persistent_chunked_prefill_qo_indptr_ = torch::zeros(
       {max_seqs_per_batch + 1}, torch::dtype(torch::kInt).device(device));
   // aux_hidden_states will be lazily initialized when needed
+
+  expanded_kv_seq_lens_ = torch::zeros(
+      {max_tokens_per_batch}, torch::dtype(torch::kInt).device(device));
+  persistent_expanded_block_tables_ =
+      torch::full({max_tokens_per_batch, max_block_table_len},
+                  -1,
+                  torch::dtype(torch::kInt).device(device));
+  persistent_expanded_paged_kv_indptr_ = torch::zeros(
+      {max_tokens_per_batch + 1}, torch::dtype(torch::kInt).device(device));
+  persistent_expanded_paged_kv_indices_ = torch::zeros(
+      {max_paged_kv_indices_size}, torch::dtype(torch::kInt).device(device));
+  persistent_expanded_paged_kv_last_page_len_ = torch::zeros(
+      {max_tokens_per_batch}, torch::dtype(torch::kInt).device(device));
 }
 
 bool CudaGraphPersistentParam::can_use_llm_decode_fast_path(
@@ -363,6 +384,7 @@ size_t CudaGraphPersistentParam::get_persistent_tensor_bytes() const {
   total += bytes(persistent_positions_);
   total += bytes(persistent_new_cache_slots_);
   total += bytes(persistent_linear_state_indices_);
+  total += bytes(persistent_num_accepted_tokens_);
   total += bytes(persistent_block_tables_);
   total += bytes(hidden_states_);
   total += bytes(q_seq_lens_);
@@ -375,7 +397,105 @@ size_t CudaGraphPersistentParam::get_persistent_tensor_bytes() const {
   total += bytes(persistent_decode_qo_indptr_);
   total += bytes(persistent_kv_seq_lens_delta_);
   total += bytes(persistent_chunked_prefill_qo_indptr_);
+  total += bytes(expanded_kv_seq_lens_);
+  total += bytes(persistent_expanded_block_tables_);
+  total += bytes(persistent_expanded_paged_kv_indptr_);
+  total += bytes(persistent_expanded_paged_kv_indices_);
+  total += bytes(persistent_expanded_paged_kv_last_page_len_);
   return total;
+}
+
+std::vector<int32_t> CudaGraphPersistentParam::update_expanded_spec_decode_attention(
+    const ModelInputParams& input_params,
+    uint32_t actual_num_tokens,
+    uint32_t padded_num_tokens) {
+  CHECK(input_params.is_spec_verify)
+      << "expanded spec decode attention is only for spec verify";
+  CHECK(input_params.meta.batch_forward_type.is_chunked_prefill())
+      << "expanded spec decode attention expects chunked prefill";
+  CHECK(input_params.graph.use_expanded_decode_for_spec_verify_attention)
+      << "MTP worker must prepare expanded spec-verify graph input";
+  CHECK(input_params.graph.expanded_kv_seq_lens.defined())
+      << "expanded spec-verify kv seq lens must be defined";
+  CHECK(input_params.graph.expanded_block_tables.defined())
+      << "expanded spec-verify block tables must be defined";
+  CHECK_EQ(input_params.graph.expanded_kv_seq_lens_vec.size(),
+           static_cast<size_t>(actual_num_tokens))
+      << "expanded kv seq lens size must match validate tokens";
+  CHECK_EQ(input_params.graph.expanded_block_tables.size(0),
+           static_cast<int64_t>(actual_num_tokens))
+      << "expanded block table rows must match validate tokens";
+
+  std::vector<int32_t> expanded_kv_seq_lens_vec =
+      input_params.graph.expanded_kv_seq_lens_vec;
+  expanded_kv_seq_lens_vec.reserve(padded_num_tokens);
+  if (padded_num_tokens > actual_num_tokens) {
+    const int64_t pad_count = padded_num_tokens - actual_num_tokens;
+    for (int64_t i = 0; i < pad_count; ++i) {
+      expanded_kv_seq_lens_vec.emplace_back(1);
+    }
+  }
+
+  torch::Tensor expanded_kv_tensor =
+      torch::tensor(expanded_kv_seq_lens_vec, torch::kInt).to(device_);
+  expanded_kv_seq_lens_.slice(/*dim=*/0, /*start=*/0, /*end=*/padded_num_tokens)
+      .copy_(expanded_kv_tensor, /*non_blocking=*/true);
+
+  const int64_t block_table_len =
+      input_params.graph.expanded_block_tables.size(1);
+  persistent_expanded_block_tables_
+      .slice(/*dim=*/0, /*start=*/0, /*end=*/padded_num_tokens)
+      .zero_();
+  persistent_expanded_block_tables_
+      .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_num_tokens)
+      .slice(/*dim=*/1, /*start=*/0, /*end=*/block_table_len)
+      .copy_(input_params.graph.expanded_block_tables, /*non_blocking=*/true);
+
+  CHECK(input_params.graph.expanded_paged_kv_indptr.defined())
+      << "expanded spec-verify paged_kv_indptr must be defined";
+  CHECK(input_params.graph.expanded_paged_kv_indices.defined())
+      << "expanded spec-verify paged_kv_indices must be defined";
+  CHECK(input_params.graph.expanded_paged_kv_last_page_len.defined())
+      << "expanded spec-verify paged_kv_last_page_len must be defined";
+
+  const int64_t actual_indptr_size =
+      input_params.graph.expanded_paged_kv_indptr.size(0);
+  persistent_expanded_paged_kv_indptr_
+      .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_indptr_size)
+      .copy_(input_params.graph.expanded_paged_kv_indptr,
+             /*non_blocking=*/true);
+  if (padded_num_tokens + 1 > static_cast<uint32_t>(actual_indptr_size)) {
+    persistent_expanded_paged_kv_indptr_
+        .slice(/*dim=*/0,
+               /*start=*/actual_indptr_size,
+               /*end=*/static_cast<int64_t>(padded_num_tokens + 1))
+        .fill_(persistent_expanded_paged_kv_indptr_
+                   .slice(/*dim=*/0,
+                          /*start=*/actual_indptr_size - 1,
+                          /*end=*/actual_indptr_size)
+                   .item<int32_t>());
+  }
+
+  const int64_t actual_indices_size =
+      input_params.graph.expanded_paged_kv_indices.size(0);
+  persistent_expanded_paged_kv_indices_
+      .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_indices_size)
+      .copy_(input_params.graph.expanded_paged_kv_indices,
+             /*non_blocking=*/true);
+
+  persistent_expanded_paged_kv_last_page_len_
+      .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_num_tokens)
+      .copy_(input_params.graph.expanded_paged_kv_last_page_len,
+             /*non_blocking=*/true);
+  if (padded_num_tokens > actual_num_tokens) {
+    persistent_expanded_paged_kv_last_page_len_
+        .slice(/*dim=*/0,
+               /*start=*/actual_num_tokens,
+               /*end=*/static_cast<int64_t>(padded_num_tokens))
+        .fill_(1);
+  }
+
+  return expanded_kv_seq_lens_vec;
 }
 
 std::optional<ModelInputParams> CudaGraphPersistentParam::update(
@@ -399,6 +519,25 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
           layer::AttentionMetadataBuilder::build(params, args_.enable_mla()));
   CHECK(attn_metadata) << "attn_metadata should not be null";
   attn_metadata->enable_cuda_graph = true;
+
+  const uint32_t actual_num_tokens = tokens.size(0);
+  const int64_t actual_batch_size = params.meta.num_sequences;
+  // Match ACL graph persistent param: the expanded-decode graph input is
+  // authoritative once MTP worker prepared it; do not additionally require
+  // is_spec_verify here (capture/replay params may arrive without it set).
+  const bool use_expanded_spec_decode_attention =
+      params.graph.use_expanded_decode_for_spec_verify_attention &&
+      (params.meta.batch_forward_type.is_chunked_prefill() ||
+       attn_metadata->is_chunked_prefill);
+  std::vector<int32_t> expanded_kv_seq_lens_vec;
+  if (use_expanded_spec_decode_attention) {
+    expanded_kv_seq_lens_vec = update_expanded_spec_decode_attention(
+        params, actual_num_tokens, padded_num_tokens);
+  }
+  const bool use_llm_decode_fast_path =
+      !use_expanded_spec_decode_attention &&
+      can_use_llm_decode_fast_path(tokens, positions, params);
+
 #if defined(USE_CUDA) || defined(USE_MUSA)
   // SGLang-style host-mirror staging for the Mate FFI decode kernel under
   // CUDA/MUSA stream capture.
@@ -428,7 +567,9 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
   // batch-sized, runs once before capture begin).
   const bool decode_path = !attn_metadata->is_prefill &&
                            !attn_metadata->is_chunked_prefill;
-  if (decode_path) {
+  const bool expanded_decode_attention_path =
+      use_expanded_spec_decode_attention;
+  if (decode_path || expanded_decode_attention_path) {
     auto ensure_host_mirror = [](torch::Tensor& host_field,
                                  const torch::Tensor& device_field) {
       if (host_field.defined()) {
@@ -439,6 +580,14 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
       }
       host_field = device_field.to(torch::kCPU);
     };
+    if (s_enable_graph_timing) {
+      LOG(INFO) << "GRAPH_TIMING ensure_host_mirror: indptr_host_defined="
+                << attn_metadata->paged_kv_indptr_host.defined()
+                << " indices_host_defined="
+                << attn_metadata->paged_kv_indices_host.defined()
+                << " last_page_len_host_defined="
+                << attn_metadata->paged_kv_last_page_len_host.defined();
+    }
     ensure_host_mirror(attn_metadata->paged_kv_indptr_host,
                        attn_metadata->paged_kv_indptr);
     ensure_host_mirror(attn_metadata->paged_kv_indices_host,
@@ -466,14 +615,38 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
       params_for_capture->embedding.linear_state_indices =
           persistent_linear_state_indices(params.meta.num_sequences);
     }
+    if (params.num_accepted_tokens.defined()) {
+      params_for_capture->num_accepted_tokens = persistent_num_accepted_tokens(
+          static_cast<uint32_t>(actual_batch_size));
+      torch::Tensor nat_host = params.num_accepted_tokens.to(torch::kCPU)
+                                   .to(torch::kLong)
+                                   .contiguous();
+      const int64_t copy_size =
+          std::min<int64_t>(actual_batch_size, nat_host.numel());
+      const int64_t* data = nat_host.data_ptr<int64_t>();
+      params_for_capture->num_accepted_tokens_host.assign(data,
+                                                           data + copy_size);
+    }
     params_for_capture->attn_metadata = attn_metadata;
+    params_for_capture->is_spec_verify = params.is_spec_verify;
+    if (use_expanded_spec_decode_attention) {
+      params_for_capture->graph.use_expanded_decode_for_spec_verify_attention =
+          true;
+      params_for_capture->graph.expanded_kv_seq_lens =
+          expanded_kv_seq_lens(padded_num_tokens);
+      params_for_capture->graph.expanded_block_tables =
+          persistent_expanded_block_tables(padded_num_tokens);
+      params_for_capture->graph.expanded_kv_seq_lens_vec =
+          expanded_kv_seq_lens_vec;
+      params_for_capture->graph.expanded_paged_kv_indptr =
+          persistent_expanded_paged_kv_indptr(padded_num_tokens);
+      params_for_capture->graph.expanded_paged_kv_indices =
+          persistent_expanded_paged_kv_indices_;
+      params_for_capture->graph.expanded_paged_kv_last_page_len =
+          persistent_expanded_paged_kv_last_page_len(padded_num_tokens);
+    }
     return params_for_capture;
   };
-
-  const uint32_t actual_num_tokens = tokens.size(0);
-  const int64_t actual_batch_size = params.meta.num_sequences;
-  const bool use_llm_decode_fast_path =
-      can_use_llm_decode_fast_path(tokens, positions, params);
 
   // Copy data from input parameters to persistent graph tensors
   if (use_llm_decode_fast_path) {
@@ -569,6 +742,14 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
                      .to(device_),
                  /*non_blocking=*/true);
     }
+  }
+
+  if (params.num_accepted_tokens.defined()) {
+    persistent_num_accepted_tokens_
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_batch_size)
+        .copy_(params.num_accepted_tokens.slice(
+                   /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size),
+               /*non_blocking=*/true);
   }
 
   // Copy block table data. In rec multi-round, block_tables may already be
@@ -814,7 +995,53 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
     return build_capture_params_if_needed();
   }
 #endif
-  if (use_llm_decode_fast_path) {
+  if (use_expanded_spec_decode_attention) {
+    const int64_t expanded_batch = static_cast<int64_t>(padded_num_tokens);
+    attn_metadata->use_expanded_decode_for_spec_verify_attention = true;
+    attn_metadata->expanded_kv_seq_lens =
+        expanded_kv_seq_lens(static_cast<uint32_t>(expanded_batch));
+    attn_metadata->expanded_block_table =
+        persistent_expanded_block_tables(static_cast<uint32_t>(expanded_batch));
+    if (!expanded_kv_seq_lens_vec.empty()) {
+      attn_metadata->expanded_kv_seq_lens_host =
+          torch::tensor(expanded_kv_seq_lens_vec, torch::kInt);
+    }
+    attn_metadata->paged_kv_indptr =
+        persistent_expanded_paged_kv_indptr(
+            static_cast<uint32_t>(expanded_batch));
+    attn_metadata->paged_kv_indices = persistent_expanded_paged_kv_indices_;
+    attn_metadata->paged_kv_last_page_len =
+        persistent_expanded_paged_kv_last_page_len(
+            static_cast<uint32_t>(expanded_batch));
+    attn_metadata->qo_indptr =
+        persistent_decode_qo_indptr(static_cast<uint32_t>(expanded_batch));
+    attn_metadata->expanded_paged_kv_indptr =
+        persistent_expanded_paged_kv_indptr(
+            static_cast<uint32_t>(expanded_batch));
+    attn_metadata->expanded_paged_kv_indices =
+        persistent_expanded_paged_kv_indices_;
+    attn_metadata->expanded_paged_kv_last_page_len =
+        persistent_expanded_paged_kv_last_page_len(
+            static_cast<uint32_t>(expanded_batch));
+#if defined(USE_CUDA) || defined(USE_MUSA)
+    auto ensure_host_mirror = [](torch::Tensor& host_field,
+                                 const torch::Tensor& device_field) {
+      if (host_field.defined()) {
+        return;
+      }
+      if (!device_field.defined()) {
+        return;
+      }
+      host_field = device_field.to(torch::kCPU);
+    };
+    ensure_host_mirror(attn_metadata->paged_kv_indptr_host,
+                       attn_metadata->paged_kv_indptr);
+    ensure_host_mirror(attn_metadata->paged_kv_indices_host,
+                       attn_metadata->paged_kv_indices);
+    ensure_host_mirror(attn_metadata->paged_kv_last_page_len_host,
+                       attn_metadata->paged_kv_last_page_len);
+#endif
+  } else if (use_llm_decode_fast_path) {
     const uint32_t slot_mapping_tokens =
         padded_num_tokens > 0 ? padded_num_tokens : actual_num_tokens;
     attn_metadata->q_cu_seq_lens =
@@ -917,6 +1144,32 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
           static_cast<int32_t>(n_heads),     // num_qo_heads
           static_cast<int32_t>(n_kv_heads),  // num_kv_heads
           /*enable_cuda_graph=*/true);
+    } else if (use_expanded_spec_decode_attention ||
+               !attn_metadata->is_chunked_prefill) {
+      // Spec-verify validate uses per-token batch_decode for full-attention
+      // layers; regular decode uses the same decode plan path.
+      const int32_t max_kv_blocks_per_seq_for_capture =
+          block_size > 0
+              ? static_cast<int32_t>(
+                    (args_.max_position_embeddings() + block_size - 1) /
+                    block_size)
+              : 0;
+      layer::flashinfer::update_decode_plan_info(
+          attn_metadata->plan_info,
+          /*backend=*/"fa2",  // flashinfer paged fa3 is slow, use fa2 instead
+          *attn_metadata,
+          dtype,                             // query_dtype
+          dtype,                             // key_dtype
+          dtype,                             // output_dtype
+          head_dim,                          // head_dim_qk
+          head_dim,                          // head_dim_vo
+          static_cast<int32_t>(n_heads),     // num_qo_heads
+          static_cast<int32_t>(n_kv_heads),  // num_kv_heads
+          static_cast<int32_t>(block_size),  // block_size
+          sliding_window,                    // window_size_left
+          /*enable_cuda_graph=*/true,
+          use_tensor_core,
+          max_kv_blocks_per_seq_for_capture);
     } else if (attn_metadata->is_chunked_prefill) {
       // Worst-case KV blocks per sequence for graph capture: plan_info is
       // computed once (cached on PlanInfo) and reused for all replays. Make
@@ -945,30 +1198,6 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
           /*enable_cuda_graph=*/true,
           /*causal=*/true,
           max_kv_blocks_per_seq_for_capture);
-    } else {
-      // Same rationale as chunked_prefill above.
-      const int32_t max_kv_blocks_per_seq_for_capture =
-          block_size > 0
-              ? static_cast<int32_t>(
-                    (args_.max_position_embeddings() + block_size - 1) /
-                    block_size)
-              : 0;
-      layer::flashinfer::update_decode_plan_info(
-          attn_metadata->plan_info,
-          /*backend=*/"fa2",  // flashinfer paged fa3 is slow, use fa2 instead
-          *attn_metadata,
-          dtype,                             // query_dtype
-          dtype,                             // key_dtype
-          dtype,                             // output_dtype
-          head_dim,                          // head_dim_qk
-          head_dim,                          // head_dim_vo
-          static_cast<int32_t>(n_heads),     // num_qo_heads
-          static_cast<int32_t>(n_kv_heads),  // num_kv_heads
-          static_cast<int32_t>(block_size),  // block_size
-          sliding_window,                    // window_size_left
-          /*enable_cuda_graph=*/true,
-          use_tensor_core,
-          max_kv_blocks_per_seq_for_capture);
     }
 
     VLOG(kGraphExecutorLogVerboseLevel)
@@ -985,7 +1214,8 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
 }
 
 void CudaGraph::refresh_persistent_paged_kv_host_mirrors(
-    const std::shared_ptr<layer::AttentionMetadata>& attn_metadata) {
+    const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
+    const AttentionHostInput& host_src) {
 #if defined(USE_CUDA) || defined(USE_MUSA)
   // Only applies to the Mate FFI decode path. Prefill/chunked-prefill and MLA
   // attention do not pass host pointers through the FFI run() boundary, so
@@ -993,15 +1223,22 @@ void CudaGraph::refresh_persistent_paged_kv_host_mirrors(
   if (!attn_metadata) {
     return;
   }
-  if (attn_metadata->is_prefill || attn_metadata->is_chunked_prefill) {
+  if (attn_metadata->is_prefill ||
+      (attn_metadata->is_chunked_prefill &&
+       !attn_metadata->use_expanded_decode_for_spec_verify_attention)) {
     return;
   }
 
-  // Helper: lazily allocate / grow a pinned host buffer to cover `device_src`,
-  // copy device contents into the buffer, then re-point `host_field` at the
-  // owning slice of that buffer. The buffer's underlying storage pointer must
-  // be STABLE across the lifetime of this CudaGraph (captured FFI run() bakes
-  // it into the graph).
+  // Helper: lazily allocate / grow a pinned host buffer, copy fresh metadata
+  // into it, then re-point `host_field` at the owning slice. The buffer's
+  // underlying storage pointer must be STABLE across the lifetime of this
+  // CudaGraph (captured FFI run() bakes it into the graph).
+  //
+  // Prefer copying from attention.host CPU mirrors (batch_input_builder path):
+  // the values are already on host, so a CPU->pinned memcpy avoids the extra
+  // device round-trip and the musaStreamSync that blocking D2H would insert.
+  // Fall back to blocking D2H from persistent device tensors for callers that
+  // did not pre-stage host mirrors (profile / warmup paths).
   //
   // CRITICAL: when allocating for the first time, size to max(numel,
   // min_alloc_numel). The captured graph cannot tolerate a later realloc:
@@ -1016,6 +1253,7 @@ void CudaGraph::refresh_persistent_paged_kv_host_mirrors(
   auto refresh_one = [](torch::Tensor& host_buf,
                         torch::Tensor& host_field,
                         const torch::Tensor& device_src,
+                        const torch::Tensor& cpu_src,
                         int64_t min_alloc_numel) {
     if (!device_src.defined()) {
       return;
@@ -1044,19 +1282,20 @@ void CudaGraph::refresh_persistent_paged_kv_host_mirrors(
     // device_src may have a non-1D shape (e.g., [bs+1]); view as flat for the
     // copy and let host_field carry the original shape via a view-back.
     //
-    // BLOCKING D2H is REQUIRED here -- the Mate FFI batch_decode wrapper
-    // reads the paged_kv_* host tensors on the *host* side (e.g. to compute
-    // per-block offsets that are then baked into the kernel parameter
-    // struct as derived device pointers). With non_blocking=true the D2H
-    // is queued on the stream and host data is only valid after stream
-    // sync; the FFI's submit-time host read would otherwise see whatever
-    // bytes torch::empty() left in the pinned page, the kernel would
-    // dereference a garbage block id, and the resulting page fault crashes
-    // the GPU mid-replay (see core_*.mudmp showing
-    // FmhaFwdKernelWarpSpecialized writing to an unmapped 0x08be...
-    // address). Pay the H2D sync once per refresh (kilobytes, in the
-    // outer setup) rather than read uninit data on every step.
-    dst.copy_(device_src.contiguous().view({numel}), /*non_blocking=*/false);
+    // The Mate FFI batch_decode wrapper reads paged_kv_* host tensors on the
+    // CPU at submit time, so destination bytes must be valid before replay.
+    // CPU->pinned and blocking D2H both satisfy that; async D2H would not.
+    const bool use_cpu_src = cpu_src.defined() && cpu_src.device().is_cpu() &&
+                           cpu_src.numel() == numel;
+    if (use_cpu_src) {
+      torch::Tensor cpu_flat = cpu_src.contiguous().view({numel});
+      if (cpu_flat.scalar_type() != src_dtype) {
+        cpu_flat = cpu_flat.to(src_dtype);
+      }
+      dst.copy_(cpu_flat);
+    } else {
+      dst.copy_(device_src.contiguous().view({numel}), /*non_blocking=*/false);
+    }
     // Re-point host_field at the persistent storage; preserve the original
     // logical shape so downstream callers that interrogate sizes still see
     // the same view they did before this rewrite.
@@ -1066,14 +1305,17 @@ void CudaGraph::refresh_persistent_paged_kv_host_mirrors(
   refresh_one(paged_kv_indptr_host_buf_,
               attn_metadata->paged_kv_indptr_host,
               attn_metadata->paged_kv_indptr,
+              host_src.paged_kv_indptr,
               paged_kv_indptr_host_max_numel_);
   refresh_one(paged_kv_indices_host_buf_,
               attn_metadata->paged_kv_indices_host,
               attn_metadata->paged_kv_indices,
+              host_src.paged_kv_indices,
               paged_kv_indices_host_max_numel_);
   refresh_one(paged_kv_last_page_len_host_buf_,
               attn_metadata->paged_kv_last_page_len_host,
               attn_metadata->paged_kv_last_page_len,
+              host_src.paged_kv_last_page_len,
               paged_kv_last_page_len_host_max_numel_);
 #endif
 }
@@ -1174,7 +1416,7 @@ bool CudaGraph::capture(CausalLM* model,
   // FlashInfer MLA backend treatment of `cuda_graph_kv_indptr_cpu` (see
   // python/sglang/srt/layers/attention/flashinfer_mla_backend.py:365-477).
   refresh_persistent_paged_kv_host_mirrors(
-      graph_params_opt.value().attn_metadata);
+      graph_params_opt.value().attn_metadata, params.attention.host);
 
   LOG(INFO) << "CUDA graph capture begin, bucket_num_tokens: "
             << bucket_num_tokens << ", actual_num_tokens: " << actual_num_tokens
@@ -1410,6 +1652,7 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
     // Replay piecewise graphs and attention runners
     piecewise_graph_.replay(replay_params);
   } else {
+    fprintf(stderr, "DEBUG_REPLAY_ENTERED s_enable_graph_timing=%d\n", s_enable_graph_timing);
     // Normal replay mode (for decode).
     //
     // Request the metadata back from update() so we can refresh the
@@ -1423,6 +1666,10 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
     // page fault inside the captured Mate decode kernel (see .mudmp under
     // repro logs and refresh_persistent_paged_kv_host_mirrors() for the
     // pointer-stability rationale).
+    static auto s_last_launch = std::chrono::steady_clock::now();
+    static int s_step_count = 0;
+    auto t_update_start = std::chrono::steady_clock::now();
+
     auto replay_params_opt = persistent_param_.update(tokens,
                                                       k_cache,
                                                       v_cache,
@@ -1432,8 +1679,29 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
                                                       /*return_capture_params=*/true);
     CHECK(replay_params_opt.has_value())
         << "update() should return ModelInputParams for decode replay";
+    auto t_refresh_start = std::chrono::steady_clock::now();
     refresh_persistent_paged_kv_host_mirrors(
-        replay_params_opt.value().attn_metadata);
+        replay_params_opt.value().attn_metadata, params.attention.host);
+    auto t_replay_start = std::chrono::steady_clock::now();
+
+    if (s_enable_graph_timing) {
+      c10::cuda::getCurrentCUDAStream(device_index_).synchronize();
+      auto t_sync_end = std::chrono::steady_clock::now();
+      auto step_ms = std::chrono::duration<double, std::milli>(
+                         t_sync_end - s_last_launch).count();
+      auto update_ms = std::chrono::duration<double, std::milli>(
+                           t_refresh_start - t_update_start).count();
+      auto refresh_ms = std::chrono::duration<double, std::milli>(
+                            t_replay_start - t_refresh_start).count();
+      auto sync_ms = std::chrono::duration<double, std::milli>(
+                         t_sync_end - t_replay_start).count();
+      LOG(INFO) << "GRAPH_TIMING step=" << s_step_count
+                << " total=" << step_ms << " update=" << update_ms
+                << " refresh=" << refresh_ms << " sync=" << sync_ms;
+      s_step_count++;
+      s_last_launch = t_sync_end;
+    }
+
     graph_.replay();
   }
 
@@ -1802,11 +2070,13 @@ ModelInputParams CudaGraphExecutorImpl::maybe_precompute_embedding_for_graph(
     const torch::Tensor& tokens,
     const ModelInputParams& params) const {
 #ifdef XLLM_TORCH_MUSA
-  // Only intervene on the decode whole-graph path. Piecewise prefill already
-  // breaks the graph at attention boundaries; the embedding lookup in piece 0
-  // still allocates, but it sits OUTSIDE the captured pieces in the prefill
-  // path so it is unaffected. Eager prefill is also unaffected.
-  if (!params.meta.batch_forward_type.is_decode()) {
+  // Only intervene on decode or MTP spec-verify validate graph paths.
+  // Piecewise prefill already breaks the graph at attention boundaries.
+  const bool in_spec_verify_embedding_phase =
+      params.is_spec_verify &&
+      params.meta.batch_forward_type.is_chunked_prefill();
+  if (!params.meta.batch_forward_type.is_decode() &&
+      !in_spec_verify_embedding_phase) {
     return params;
   }
   // Caller already provided pre-computed embeddings (multimodal encoder path).
@@ -2048,12 +2318,132 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
                << bucket_num_tokens << " (actual num_tokens: " << n_tokens
                << ")";
   }
+
+  // MTP spec-verify validate phase (Qwen3.5 hybrid linear attention).
+  const bool in_spec_verify_phase =
+      params.is_spec_verify &&
+      params.meta.batch_forward_type.is_chunked_prefill();
+  if (in_spec_verify_phase) {
+    static const bool force_spec_verify_eager =
+        std::getenv("XLLM_SPEC_VERIFY_EAGER") != nullptr;
+    if (force_spec_verify_eager) {
+      COUNTER_INC(num_model_execution_total_eager);
+      return model_->forward(tokens, positions, kv_caches, params);
+    }
+    if (!model_->is_hybrid_linear_attention()) {
+      LOG_FIRST_N(WARNING, 1)
+          << "Falling back to eager mode for spec verify because the "
+             "chunked-prefill validate graph path is currently only adapted "
+             "for hybrid linear attention models.";
+      COUNTER_INC(num_model_execution_total_eager);
+      return model_->forward(tokens, positions, kv_caches, params);
+    }
+    if (!params.graph.use_expanded_decode_for_spec_verify_attention) {
+      LOG_FIRST_N(WARNING, 1)
+          << "Falling back to eager mode for spec verify because expanded "
+             "decode attention graph input was not prepared.";
+      COUNTER_INC(num_model_execution_total_eager);
+      return model_->forward(tokens, positions, kv_caches, params);
+    }
+
+    const auto max_seq_len = args_.max_position_embeddings();
+    if (params.meta.kv_max_seq_len > max_seq_len) {
+      COUNTER_INC(num_model_execution_total_eager);
+      return model_->forward(tokens, positions, kv_caches, params);
+    }
+
+    const ModelInputParams graph_params =
+        maybe_precompute_embedding_for_graph(tokens, params);
+    const uint64_t graph_key = get_graph_key(bucket_num_tokens, graph_params);
+
+    auto it = spec_verify_graphs_.find(graph_key);
+    if (it != spec_verify_graphs_.end()) {
+      VLOG(kGraphExecutorLogVerboseLevel)
+          << "CudaGraphExecutorImpl::run() in spec-verify replay mode";
+      auto result =
+          it->second->replay(tokens, positions, kv_caches, graph_params);
+      return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+    }
+
+    auto graph =
+        std::make_unique<CudaGraph>(*persistent_param_,
+                                    device_.index(),
+                                    get_capture_stream(device_.index()));
+    VLOG(kGraphExecutorLogVerboseLevel)
+        << "CudaGraphExecutorImpl::run() in spec-verify capture mode";
+
+    TorchMemPool* pool_ptr = nullptr;
+    if (::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool()) {
+      reset_vmm_allocator_offset(kPhysicalPoolIdDecode);
+      const uint32_t shape_id = bucket_num_tokens;
+      pool_ptr = get_or_create_vmm_mempool(kPhysicalPoolIdDecode, shape_id);
+    }
+    const at::cuda::MempoolId_t mem_pool =
+        get_mem_pool(kPhysicalPoolIdDecode, bucket_num_tokens);
+
+    bool capture_success = graph->capture(model_,
+                                          args_,
+                                          options_,
+                                          tokens,
+                                          positions,
+                                          graph_params,
+                                          kv_caches,
+                                          bucket_num_tokens,
+                                          mem_pool,
+                                          pool_ptr);
+
+    if (capture_success) {
+      LOG(INFO) << "Lazy capturing CUDA spec-verify graph for bucket "
+                   "num_tokens: "
+                << bucket_num_tokens << " (actual num_tokens: " << n_tokens
+                << ", q_max_seq_len: " << graph_params.meta.q_max_seq_len
+                << ") done";
+      log_graph_memory_after_capture();
+      spec_verify_graphs_[graph_key] = std::move(graph);
+      const ModelInputParams replay_params =
+          maybe_precompute_embedding_for_graph(tokens, params);
+      auto result = spec_verify_graphs_[graph_key]->replay(
+          tokens, positions, kv_caches, replay_params);
+      return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+    }
+
+    LOG_FIRST_N(WARNING, 1)
+        << "Failed to capture CUDA spec-verify graph for bucket num_tokens: "
+        << bucket_num_tokens << ", falling back to eager mode.";
+    COUNTER_INC(num_model_execution_total_eager);
+    return model_->forward(tokens, positions, kv_caches, params);
+  }
+
+  // Chunked prefill without a spec-verify graph path (e.g. draft extend) runs
+  // eager: only MTP validate expanded-decode has a captured graph today.
+  if (params.meta.batch_forward_type.is_chunked_prefill()) {
+    LOG_FIRST_N(WARNING, 1)
+        << "Falling back to eager mode for chunked prefill without a CUDA "
+           "graph path (bucket num_tokens="
+        << bucket_num_tokens << ").";
+    COUNTER_INC(num_model_execution_total_eager);
+    return model_->forward(tokens, positions, kv_caches, params);
+  }
+
   // Defensive fallback for unsupported forward types (should be unreachable for
   // normal prefill/decode paths).
   LOG(ERROR) << "Failed to capture CUDA graph for bucket num_tokens: "
              << bucket_num_tokens;
   COUNTER_INC(num_model_execution_total_eager);
   return model_->forward(tokens, positions, kv_caches, params);
+}
+
+uint64_t CudaGraphExecutorImpl::get_graph_key(
+    uint32_t bucket_num_tokens,
+    const ModelInputParams& params) const {
+  if (params.is_spec_verify &&
+      params.meta.batch_forward_type.is_chunked_prefill()) {
+    const uint64_t q_max_seq_len =
+        static_cast<uint64_t>(std::max<int32_t>(params.meta.q_max_seq_len, 1));
+    return static_cast<uint64_t>(bucket_num_tokens) | kSpecVerifyGraphKeyMask |
+           (q_max_seq_len << kSpecVerifyQMaxSeqLenShift);
+  }
+  return static_cast<uint64_t>(bucket_num_tokens);
 }
 
 // bucket will be [1, 2, 4, 8, 16, 32, 48, 64, ..., max_seqs_per_batch]

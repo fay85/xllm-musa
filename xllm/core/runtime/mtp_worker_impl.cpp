@@ -137,17 +137,23 @@ void wait_metadata_ready_event(const ForwardInput& input, Stream& stream) {
       << "failed to wait speculative metadata ready event";
 }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA)
 void clear_expanded_spec_verify_graph_input(ModelInputParams& input_params) {
   input_params.graph.use_expanded_decode_for_spec_verify_attention = false;
   input_params.graph.expanded_kv_seq_lens = torch::Tensor();
   input_params.graph.expanded_block_tables = torch::Tensor();
   input_params.graph.expanded_tiling_data = torch::Tensor();
   input_params.graph.expanded_kv_seq_lens_vec.clear();
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  input_params.graph.expanded_paged_kv_indptr = torch::Tensor();
+  input_params.graph.expanded_paged_kv_indices = torch::Tensor();
+  input_params.graph.expanded_paged_kv_last_page_len = torch::Tensor();
+#endif
 }
 
 void build_expanded_spec_verify_graph_input(ModelInputParams& input_params,
-                                            const torch::Device& device) {
+                                            const torch::Device& device,
+                                            int32_t block_size) {
   clear_expanded_spec_verify_graph_input(input_params);
   if (!input_params.is_spec_verify ||
       !input_params.meta.batch_forward_type.is_chunked_prefill()) {
@@ -161,20 +167,36 @@ void build_expanded_spec_verify_graph_input(ModelInputParams& input_params,
   if (q_seq_lens.empty() || kv_seq_lens.empty()) {
     return;
   }
-  CHECK_EQ(q_seq_lens.size(), kv_seq_lens.size())
-      << "spec verify q/kv seq lens must both be sequence-scoped";
   CHECK(input_params.attention.device.block_tables.defined())
       << "spec verify block tables must be rebuilt before graph input";
 
-  const int64_t batch_size = static_cast<int64_t>(q_seq_lens.size());
-  CHECK_GE(input_params.attention.device.block_tables.size(0), batch_size)
+  const int64_t num_sequences = input_params.meta.num_sequences;
+  CHECK_GT(num_sequences, 0) << "spec verify requires positive num_sequences";
+
+  auto per_sequence_length =
+      [](const std::vector<int32_t>& lens, int64_t seq_idx) -> int32_t {
+#if defined(USE_NPU)
+    CHECK_LT(static_cast<size_t>(seq_idx), lens.size());
+    return lens[static_cast<size_t>(seq_idx)];
+#else
+    if (lens.size() == 1) {
+      return lens.front();
+    }
+    CHECK_LT(static_cast<size_t>(seq_idx + 1), lens.size())
+        << "spec verify seq lens vector is too short for cumulative layout";
+    return lens[static_cast<size_t>(seq_idx + 1)] -
+           lens[static_cast<size_t>(seq_idx)];
+#endif
+  };
+
+  CHECK_GE(input_params.attention.device.block_tables.size(0), num_sequences)
       << "spec verify block table rows are fewer than sequences";
 
   std::vector<int32_t> expanded_kv_seq_lens;
   std::vector<torch::Tensor> expanded_block_rows;
-  for (int64_t seq_idx = 0; seq_idx < batch_size; ++seq_idx) {
-    const int32_t q_len = q_seq_lens[static_cast<size_t>(seq_idx)];
-    const int32_t kv_len = kv_seq_lens[static_cast<size_t>(seq_idx)];
+  for (int64_t seq_idx = 0; seq_idx < num_sequences; ++seq_idx) {
+    const int32_t q_len = per_sequence_length(q_seq_lens, seq_idx);
+    const int32_t kv_len = per_sequence_length(kv_seq_lens, seq_idx);
     CHECK_GE(q_len, 1) << "spec verify q_len must be positive";
     CHECK_GE(kv_len, q_len) << "kv_len must include validate query tokens";
     for (int32_t token_idx = 0; token_idx < q_len; ++token_idx) {
@@ -200,6 +222,29 @@ void build_expanded_spec_verify_graph_input(ModelInputParams& input_params,
   input_params.graph.expanded_block_tables =
       torch::stack(expanded_block_rows, 0);
   input_params.graph.expanded_kv_seq_lens_vec = std::move(expanded_kv_seq_lens);
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  std::vector<int32_t> expanded_paged_kv_indptr;
+  std::vector<int32_t> expanded_paged_kv_indices;
+  std::vector<int32_t> expanded_paged_kv_last_page_len;
+  specBuilder::build_expanded_decode_paged_kv(
+      input_params.graph.expanded_block_tables,
+      input_params.graph.expanded_kv_seq_lens_vec,
+      block_size,
+      expanded_paged_kv_indptr,
+      expanded_paged_kv_indices,
+      expanded_paged_kv_last_page_len);
+  auto int_cpu_options =
+      torch::TensorOptions().dtype(torch::kInt).device(torch::kCPU);
+  input_params.graph.expanded_paged_kv_indptr =
+      torch::tensor(expanded_paged_kv_indptr, int_cpu_options)
+          .to(device, /*non_blocking=*/true);
+  input_params.graph.expanded_paged_kv_indices =
+      torch::tensor(expanded_paged_kv_indices, int_cpu_options)
+          .to(device, /*non_blocking=*/true);
+  input_params.graph.expanded_paged_kv_last_page_len =
+      torch::tensor(expanded_paged_kv_last_page_len, int_cpu_options)
+          .to(device, /*non_blocking=*/true);
+#endif
 }
 #endif
 
@@ -1170,15 +1215,18 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_validate(
               timer.elapsed_seconds());
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
-  if (validate_input.input_params.gdn_mtp_verify_cache.has_value() &&
+  if (validate_input.input_params.gdn_mtp_verify_cache != nullptr &&
       validate_input.input_params.gdn_mtp_verify_cache->enabled) {
     // Mate GDN MTP verify stashes per-layer intermediate states on
     // compute_stream_; scatter must run on the same stream after those writes
     // complete (debug mode masked this via global cudaDeviceSynchronize).
+    // The verify cache is a shared_ptr, so the entries recorded inside the
+    // model forward (on the device copy of ModelInputParams, or the graph
+    // capture/replay copies) are observed here through the same object.
     c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
     compute_stream_->synchronize();
     layer::scatter_gdn_mtp_verify_ssm_states(
-        validate_input.input_params.gdn_mtp_verify_cache.value(),
+        *validate_input.input_params.gdn_mtp_verify_cache,
         impl_->kv_caches(),
         validate_input.input_params,
         val_output.next_tokens,
@@ -1494,16 +1542,18 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
         accepted_prefix_lengths.begin(), accepted_prefix_lengths.end());
 #if defined(USE_CUDA) || defined(USE_MUSA)
     if (layer::use_mate_gdn_mtp_kernel()) {
-      input_params.gdn_mtp_verify_cache.emplace();
+      input_params.gdn_mtp_verify_cache =
+          std::make_shared<GdnMtpVerifyCache>();
       input_params.gdn_mtp_verify_cache->enabled = true;
     }
 #endif
   }
 
   input_params.attention.rebuild_device_buffer(device_);
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA)
   if (use_qwen3_5_spec_verify_path()) {
-    build_expanded_spec_verify_graph_input(input_params, device_);
+    build_expanded_spec_verify_graph_input(
+        input_params, device_, block_size);
   }
 #endif
   validate_input.device_tensors_ready = true;

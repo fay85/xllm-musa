@@ -91,11 +91,17 @@ struct AttentionMetadata {
 
   // Spec-verify ACL graph can run full attention as expanded decode while GDN
   // layers keep the original spec-verify metadata.
+  bool is_spec_verify = false;
   bool use_expanded_decode_for_spec_verify_attention = false;
   torch::Tensor expanded_kv_seq_lens;
   torch::Tensor expanded_block_table;
   torch::Tensor expanded_paged_attention_tiling_data;
   torch::Tensor expanded_kv_seq_lens_host;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  torch::Tensor expanded_paged_kv_indptr;
+  torch::Tensor expanded_paged_kv_indices;
+  torch::Tensor expanded_paged_kv_last_page_len;
+#endif
 
   // for mrope
   torch::Tensor mrope_cos;
@@ -185,7 +191,6 @@ struct AttentionMetadata {
 
 #if defined(USE_NPU)
   // for npu
-  bool is_spec_verify = false;
   torch::Tensor q_seq_lens_host;
   torch::Tensor kv_seq_lens_host;
   // For ACL graph execution - fixed-address device tiling data for

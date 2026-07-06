@@ -107,6 +107,50 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
             ? *(input_params.attn_metadata)
             : layer::AttentionMetadataBuilder::build(input_params,
                                                      model_args_.enable_mla());
+    const bool use_expanded_spec_verify_attention =
+        input_params.graph.use_expanded_decode_for_spec_verify_attention ||
+        (input_params.attn_metadata &&
+         input_params.attn_metadata
+             ->use_expanded_decode_for_spec_verify_attention);
+    if (use_expanded_spec_verify_attention) {
+      attn_metadata.use_expanded_decode_for_spec_verify_attention = true;
+      attn_metadata.is_spec_verify = input_params.is_spec_verify;
+      if (input_params.graph.expanded_kv_seq_lens.defined()) {
+        attn_metadata.expanded_kv_seq_lens =
+            input_params.graph.expanded_kv_seq_lens;
+      } else if (input_params.attn_metadata &&
+                 input_params.attn_metadata->expanded_kv_seq_lens.defined()) {
+        attn_metadata.expanded_kv_seq_lens =
+            input_params.attn_metadata->expanded_kv_seq_lens;
+      }
+      if (input_params.graph.expanded_block_tables.defined()) {
+        attn_metadata.expanded_block_table =
+            input_params.graph.expanded_block_tables;
+      } else if (input_params.attn_metadata &&
+                 input_params.attn_metadata->expanded_block_table.defined()) {
+        attn_metadata.expanded_block_table =
+            input_params.attn_metadata->expanded_block_table;
+      }
+#if defined(USE_CUDA) || defined(USE_MUSA)
+      if (input_params.graph.expanded_paged_kv_indptr.defined()) {
+        attn_metadata.expanded_paged_kv_indptr =
+            input_params.graph.expanded_paged_kv_indptr;
+        attn_metadata.expanded_paged_kv_indices =
+            input_params.graph.expanded_paged_kv_indices;
+        attn_metadata.expanded_paged_kv_last_page_len =
+            input_params.graph.expanded_paged_kv_last_page_len;
+      } else if (input_params.attn_metadata &&
+                 input_params.attn_metadata->expanded_paged_kv_indptr
+                     .defined()) {
+        attn_metadata.expanded_paged_kv_indptr =
+            input_params.attn_metadata->expanded_paged_kv_indptr;
+        attn_metadata.expanded_paged_kv_indices =
+            input_params.attn_metadata->expanded_paged_kv_indices;
+        attn_metadata.expanded_paged_kv_last_page_len =
+            input_params.attn_metadata->expanded_paged_kv_last_page_len;
+      }
+#endif
+    }
 #else
     layer::AttentionMetadata attn_metadata =
         layer::AttentionMetadataBuilder::build(

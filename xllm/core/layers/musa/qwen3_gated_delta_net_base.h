@@ -135,6 +135,10 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
   // storage. Reused across replays; same lazy / grow-only contract as the
   // other graph-safe buffers above.
   mutable torch::Tensor fused_gdn_decode_out_buf_;
+
+  // Persistent buffers for mate GDN MTP spec-verify (seq_len == 2).
+  mutable torch::Tensor mate_gdn_mtp_intermediate_buf_;
+  mutable torch::Tensor mate_gdn_mtp_output_buf_;
 #endif
 };
 

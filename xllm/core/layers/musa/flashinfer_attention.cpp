@@ -33,6 +33,36 @@ namespace layer {
 
 namespace {
 
+bool use_expanded_spec_decode_attention(const AttentionMetadata& attn_metadata) {
+  return attn_metadata.use_expanded_decode_for_spec_verify_attention &&
+         attn_metadata.expanded_paged_kv_indptr.defined() &&
+         attn_metadata.expanded_paged_kv_indptr.numel() >= 2;
+}
+
+AttentionMetadata build_expanded_decode_metadata(
+    const AttentionMetadata& attn_metadata) {
+  AttentionMetadata decode_meta = attn_metadata;
+  const int64_t expanded_batch =
+      attn_metadata.expanded_paged_kv_indptr.size(0) - 1;
+  const torch::Device expanded_device =
+      attn_metadata.expanded_paged_kv_indptr.device();
+  const torch::TensorOptions expanded_int_options =
+      torch::TensorOptions().dtype(torch::kInt32).device(expanded_device);
+  decode_meta.paged_kv_indptr = attn_metadata.expanded_paged_kv_indptr;
+  decode_meta.paged_kv_indices = attn_metadata.expanded_paged_kv_indices;
+  decode_meta.paged_kv_last_page_len =
+      attn_metadata.expanded_paged_kv_last_page_len;
+  decode_meta.block_table = attn_metadata.expanded_block_table;
+  decode_meta.kv_seq_lens = attn_metadata.expanded_kv_seq_lens;
+  decode_meta.qo_indptr =
+      torch::arange(0, expanded_batch + 1, expanded_int_options);
+  decode_meta.max_query_len = 1;
+  decode_meta.paged_kv_indptr_host = torch::Tensor();
+  decode_meta.paged_kv_indices_host = torch::Tensor();
+  decode_meta.paged_kv_last_page_len_host = torch::Tensor();
+  return decode_meta;
+}
+
 bool qwen35_mtp_attention_debug_enabled() {
   static const bool enabled = std::getenv("XLLM_DEBUG_QWEN35_MTP") != nullptr;
   return enabled;
@@ -201,8 +231,16 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
   }
 
   qwen35_mtp_attention_debug_sync("attention_before_core");
+  const bool spec_verify_expanded_decode =
+      attn_metadata.is_chunked_prefill &&
+      (attn_metadata.use_expanded_decode_for_spec_verify_attention ||
+       use_expanded_spec_decode_attention(attn_metadata) ||
+       attn_metadata.is_spec_verify);
   if (attn_metadata.is_prefill) {
     prefill_forward(attn_metadata, query, key, value, output, output_lse);
+  } else if (spec_verify_expanded_decode) {
+    decoder_forward(
+        attn_metadata, query, key, output, output_lse, k_cache, v_cache);
   } else if (attn_metadata.is_chunked_prefill) {
     chunked_prefill_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
@@ -289,6 +327,15 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
     std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
+  // Graph capture plans expanded spec-verify as batch_decode (exports "run").
+  // batch_chunked_prefill looks up "paged_run" on the same URI and fatals.
+  if (attn_metadata.plan_info &&
+      (attn_metadata.plan_info->uri.find("batch_decode") != std::string::npos ||
+       attn_metadata.is_spec_verify)) {
+    decoder_forward(
+        attn_metadata, query, key, output, output_lse, k_cache, v_cache);
+    return;
+  }
   // Get block_size from k_cache if defined and has proper dimensions,
   // otherwise use a default value (for prefill without KV cache, e.g., LongCat)
   int64_t block_size = 1;
@@ -324,6 +371,12 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
         attn_metadata.enable_cuda_graph);
   }
 
+  std::optional<torch::Tensor> qo_indptr_arg;
+  if (attn_metadata.qo_indptr.has_value() &&
+      attn_metadata.qo_indptr->defined()) {
+    qo_indptr_arg = attn_metadata.qo_indptr;
+  }
+
   xllm::kernel::cuda::batch_chunked_prefill(
       attn_metadata.plan_info->uri,
       attn_metadata.plan_info->plan_info,
@@ -340,7 +393,7 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
       scale_,
       output,
       output_lse,
-      attn_metadata.qo_indptr,
+      qo_indptr_arg,
       /*causal=*/true,
       attn_metadata.paged_kv_indptr_host,
       attn_metadata.paged_kv_indices_host,
@@ -355,6 +408,12 @@ void FlashInferAttentionImpl::decoder_forward(
     std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
+  std::optional<AttentionMetadata> expanded_decode_meta;
+  if (use_expanded_spec_decode_attention(attn_metadata)) {
+    expanded_decode_meta = build_expanded_decode_metadata(attn_metadata);
+  }
+  const AttentionMetadata& decode_attn =
+      expanded_decode_meta.has_value() ? *expanded_decode_meta : attn_metadata;
   // FA3 fast path. Opt-in via env var XLLM_USE_FA3=1. Requires the JIT-built
   // fmha_fwd_<hash>.so for the current shape to live under
   // FLASHINFER_OPS_PATH (see /workspace/mate_cached_ops/). When this path is
@@ -367,18 +426,18 @@ void FlashInferAttentionImpl::decoder_forward(
       return env && std::string(env) == "1";
     }();
     if (use_fa3) {
-      CHECK(attn_metadata.block_table.defined())
+      CHECK(decode_attn.block_table.defined())
           << "FA3 decode requires block_table (rectangular page_table)";
-      const int64_t batch_size = attn_metadata.block_table.size(0);
+      const int64_t batch_size = decode_attn.block_table.size(0);
 
       // seqused_k = per-seq kv length (NOT cumulative). attn_metadata
       // already keeps it under `kv_seq_lens`; if undefined fall back to
       // torch::diff of the cumulative form.
-      torch::Tensor seqused_k = attn_metadata.kv_seq_lens;
+      torch::Tensor seqused_k = decode_attn.kv_seq_lens;
       if (!seqused_k.defined() || seqused_k.numel() == 0) {
-        CHECK(attn_metadata.kv_cu_seq_lens.defined())
+        CHECK(decode_attn.kv_cu_seq_lens.defined())
             << "FA3 decode requires kv_seq_lens or kv_cu_seq_lens";
-        seqused_k = torch::diff(attn_metadata.kv_cu_seq_lens).to(torch::kInt32);
+        seqused_k = torch::diff(decode_attn.kv_cu_seq_lens).to(torch::kInt32);
       } else if (seqused_k.scalar_type() != torch::kInt32) {
         seqused_k = seqused_k.to(torch::kInt32);
       }
@@ -387,22 +446,26 @@ void FlashInferAttentionImpl::decoder_forward(
       // page_table: native rectangular block_table built by the input builder
       // from allocated KV blocks (sglang req_to_token style). Unused slots are
       // -1; graph mode reuses persistent_block_tables_ updated each step.
-      const torch::Tensor page_table = attn_metadata.block_table;
+      const torch::Tensor page_table = decode_attn.block_table;
 
       // Use the host-side max KV length tracked by AttentionMetadata, not
       // the (over-estimated) page-aligned bound. The metadata kernel uses
       // this to partition work; an inflated value pushes the scheduler to
       // over-allocate splits and confuses causal masking, producing subtly
       // drifted attention even though the kernel runs to completion.
-      const int32_t max_seqlen_k = static_cast<int32_t>(attn_metadata.max_seq_len);
+      const int32_t max_seqlen_k = static_cast<int32_t>(decode_attn.max_seq_len);
       const int32_t max_seqlen_q = static_cast<int32_t>(
-          std::max<int64_t>(attn_metadata.max_query_len, 1));
+          std::max<int64_t>(decode_attn.max_query_len, 1));
       CHECK_GT(max_seqlen_k, 0)
           << "FA3 decode requires attn_metadata.max_seq_len > 0";
 
       // Allocate / get scheduler_metadata. Cached on PlanInfo so it is
       // computed once per shape per layer-0 prepare.
       torch::Tensor scheduler_metadata = attn_metadata.fa3_scheduler_metadata;
+      const torch::Tensor cu_seqlens_q =
+          decode_attn.qo_indptr.has_value() && decode_attn.qo_indptr->defined()
+              ? *decode_attn.qo_indptr
+              : decode_attn.q_cu_seq_lens;
       if (!scheduler_metadata.defined()) {
         scheduler_metadata = xllm::kernel::cuda::fa3_decode_scheduler_metadata(
             query.device(),
@@ -415,7 +478,7 @@ void FlashInferAttentionImpl::decoder_forward(
             /*max_seqlen_k=*/max_seqlen_k,
             /*window_size_left=*/static_cast<int32_t>(sliding_window_),
             /*window_size_right=*/0,
-            /*cu_seqlens_q=*/attn_metadata.q_cu_seq_lens,
+            /*cu_seqlens_q=*/cu_seqlens_q,
             /*seqused_k=*/seqused_k);
       }
 
@@ -452,7 +515,7 @@ void FlashInferAttentionImpl::decoder_forward(
           query,
           k_cache,
           v_cache,
-          attn_metadata.q_cu_seq_lens,
+          cu_seqlens_q,
           seqused_k,
           page_table,
           scheduler_metadata,
@@ -481,16 +544,16 @@ void FlashInferAttentionImpl::decoder_forward(
   // using "fa3" backend.
   std::string backend = "fa2";
 
-  if (attn_metadata.enable_cuda_graph) {
-    CHECK(attn_metadata.plan_info->plan_info.defined())
+  if (decode_attn.enable_cuda_graph) {
+    CHECK(decode_attn.plan_info->plan_info.defined())
         << "plan_info plan_info should not be null when enable_cuda_graph is "
            "true";
     VLOG(kGraphExecutorLogVerboseLevel)
         << "no need to update plan_info for CUDA graph";
   } else {
-    flashinfer::update_decode_plan_info(attn_metadata.plan_info,
+    flashinfer::update_decode_plan_info(decode_attn.plan_info,
                                         backend,
-                                        attn_metadata,
+                                        decode_attn,
                                         query.scalar_type(),
                                         key.scalar_type(),
                                         output.scalar_type(),
@@ -500,30 +563,30 @@ void FlashInferAttentionImpl::decoder_forward(
                                         num_kv_heads_,
                                         block_size,
                                         sliding_window_,
-                                        attn_metadata.enable_cuda_graph,
+                                        decode_attn.enable_cuda_graph,
                                         decode_use_tensor_core_);
   }
 
-  xllm::kernel::cuda::batch_decode(attn_metadata.plan_info->uri,
-                                   attn_metadata.plan_info->plan_info,
+  xllm::kernel::cuda::batch_decode(decode_attn.plan_info->uri,
+                                   decode_attn.plan_info->plan_info,
                                    float_workspace_buffer_,
                                    int_workspace_buffer_,
                                    page_locked_int_workspace_buffer_,
                                    query,
                                    k_cache,
                                    v_cache,
-                                   attn_metadata.paged_kv_indptr,
-                                   attn_metadata.paged_kv_indices,
-                                   attn_metadata.paged_kv_last_page_len,
+                                   decode_attn.paged_kv_indptr,
+                                   decode_attn.paged_kv_indices,
+                                   decode_attn.paged_kv_last_page_len,
                                    sliding_window_,
                                    scale_,
                                    output,
                                    output_lse,
                                    decode_use_tensor_core_,
-                                   attn_metadata.qo_indptr,
-                                   attn_metadata.paged_kv_indptr_host,
-                                   attn_metadata.paged_kv_indices_host,
-                                   attn_metadata.paged_kv_last_page_len_host);
+                                   decode_attn.qo_indptr,
+                                   decode_attn.paged_kv_indptr_host,
+                                   decode_attn.paged_kv_indices_host,
+                                   decode_attn.paged_kv_last_page_len_host);
 }
 
 }  // namespace layer
