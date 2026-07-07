@@ -779,31 +779,20 @@ torch::Tensor mate_gated_delta_rule_decode(
   const int64_t v_cols = num_v_heads * head_v_dim;
   CHECK(mixed_qkv.size(1) == 2 * qk_cols + v_cols) << "mate GDN decode mixed_qkv dim mismatch";
 
-  auto query_view = mixed_qkv.slice(/*dim=*/1, /*start=*/0, /*end=*/qk_cols)
-                        .reshape({batch_size, num_k_heads, head_k_dim});
-  auto key_view =
+  // Pass strided views directly to the FFI kernel — no copy needed.
+  // The TileLang kernel uses T.StridedTensor with explicit stride parameters,
+  // and the FFI bridge has been relaxed to accept last-dim-contiguous tensors.
+  // Strided layout: stride_b = 2*qk_cols+v_cols (full mixed_qkv row),
+  //                  stride_h = head_dim, stride_d = 1.
+  auto query = mixed_qkv.slice(/*dim=*/1, /*start=*/0, /*end=*/qk_cols)
+                   .reshape({batch_size, num_k_heads, head_k_dim});
+  auto key =
       mixed_qkv.slice(/*dim=*/1, /*start=*/qk_cols, /*end=*/2 * qk_cols)
           .reshape({batch_size, num_k_heads, head_k_dim});
-  auto value_view =
+  auto value =
       mixed_qkv
-          .slice(/*dim=*/1, /*start=*/2 * qk_cols, /*end=*/2 * qk_cols + v_cols)
+          .slice(/*dim=*/1, /*start=*/2 * qk_cols, /*end=*/2 * qk_cols + v_cols})
           .reshape({batch_size, num_v_heads, head_v_dim});
-
-  torch::Tensor query, key, value;
-  if (params.q_buf.has_value() && params.q_buf.value().defined() &&
-      params.k_buf.has_value() && params.k_buf.value().defined() &&
-      params.v_buf.has_value() && params.v_buf.value().defined()) {
-    query = params.q_buf.value().narrow(/*dim=*/0, /*start=*/0, /*length=*/batch_size);
-    key = params.k_buf.value().narrow(/*dim=*/0, /*start=*/0, /*length=*/batch_size);
-    value = params.v_buf.value().narrow(/*dim=*/0, /*start=*/0, /*length=*/batch_size);
-    query.copy_(query_view);
-    key.copy_(key_view);
-    value.copy_(value_view);
-  } else {
-    query = query_view.contiguous();
-    key = key_view.contiguous();
-    value = value_view.contiguous();
-  }
 
   // The compiled MATE decode kernel applies QK L2-norm internally
   // (build_gdn_decode_op.py passes use_qk_l2norm=True to the TileLang
