@@ -62,7 +62,7 @@ live_xllm_pid() {
   ps -o pid=,stat= -C xllm 2>/dev/null | awk '$2!="Z"{print $1; exit}'
 }
 
-kill_zombie_xllm "$PORT" "$MASTER_PORT"
+kill_zombie_xllm "$PORT" "$MASTER_PORT" "$((MASTER_PORT + 1))" || { echo "FAIL: requested ports are still busy; aborting startup" | tee -a "$LOG"; exit 1; }
 bash run_xllm_musa.sh --background --port "$PORT" >>"$LOG" 2>&1
 expected_pid=$(grep '==> PID:' "$LOG" | tail -1 | awk '{print $NF}')
 w=0
@@ -340,9 +340,10 @@ def warmup():
     )
     r = ask(0, LONG_PROMPT, OUTPUT_LEN, temperature=0.0)
     tag = "ERR " if r["error"] else ("GARB" if is_garbage(r["content"]) else "ok  ")
+    tpot_ms = 1000.0 * r["latency_s"] / max(1, r["completion_tokens"])
     print(
         f"  [{tag}] warmup: pt={r['prompt_tokens']} ct={r['completion_tokens']} "
-        f"lat={r['latency_s']:.1f}s"
+        f"lat={r['latency_s']:.1f}s TPOT={tpot_ms:.1f}ms"
     )
     if r["error"]:
         raise RuntimeError(f"warmup failed: {r['error']}")
@@ -394,17 +395,22 @@ def run(c: int):
         tag = "ERR " if r["error"] else ("GARB" if is_garbage(r["content"]) else "ok  ")
         snip = (r["error"] if r["error"] else (r["content"] or "")).replace("\n", " ")[:90]
         out_path = save_answer(c, i + 1, r)
+        tpot_ms = 1000.0 * r["latency_s"] / max(1, r["completion_tokens"])
         print(
             f"  [{tag}] req{i + 1:>3}: pt={r['prompt_tokens']:>4} ct={r['completion_tokens']:>3} "
-            f"lat={r['latency_s']:5.1f}s | {snip} | saved={out_path.name}"
+            f"lat={r['latency_s']:5.1f}s TPOT={tpot_ms:5.1f}ms | {snip} | saved={out_path.name}"
         )
 
     ok_count = max(1, c - ne)
+    tpots = [1000.0 * results[i]["latency_s"] / max(1, results[i]["completion_tokens"]) for i in results if not results[i]["error"] and results[i]["completion_tokens"] > 0]
+    mean_tpot_ms = sum(tpots) / len(tpots) if tpots else float("nan")
+    decode_tpot_batch_ms = 1000.0 * wall / max(1, total_ct)
     print(
         f"  >>> C={c}: wall={wall:.2f}s  total_prompt_tokens={total_pt}  "
         f"total_completion_tokens={total_ct}  "
         f"AGGREGATE={(total_pt + total_ct) / wall:.1f} tok/s  "
         f"per-req-avg={(total_ct / ok_count) / (sum(lats) / len(lats)):.2f} tok/s  "
+        f"mean_TPOT={mean_tpot_ms:.1f}ms  batch_decode_TPOT={decode_tpot_batch_ms:.1f}ms  "
         f"garbage={ng}/{c}  errors={ne}"
     )
 
