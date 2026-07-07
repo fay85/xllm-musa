@@ -81,6 +81,13 @@ if(XLLM_TORCH_MUSA)
     SRCS fused_gdn_decode_test.cpp
     DEPS :cuda_kernels torch GTest::gtest_main glog::glog
   )
+  if(XLLM_TORCH_MUSA)
+    cc_test(
+      NAME fused_gdn_decode_bench_test
+      SRCS fused_gdn_decode_bench_test.cpp
+      DEPS :cuda_kernels torch GTest::gtest_main glog::glog
+    )
+  endif()
   cc_test(
     NAME piecewise_graphs_test
     SRCS piecewise_graphs_test.cpp

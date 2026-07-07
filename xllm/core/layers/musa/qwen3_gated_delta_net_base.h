@@ -70,6 +70,7 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
   virtual std::pair<torch::Tensor, torch::Tensor> project_flat_inputs(
       const torch::Tensor& hidden_states) = 0;
   virtual bool use_fla_ssm_state_layout() const { return false; }
+  virtual bool uses_contiguous_qkvzba_layout() const { return false; }
 
   void load_common_state_dict(const StateDict& state_dict);
   void verify_common_loaded_weights(const std::string& prefix) const;
@@ -135,6 +136,15 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
   // storage. Reused across replays; same lazy / grow-only contract as the
   // other graph-safe buffers above.
   mutable torch::Tensor fused_gdn_decode_out_buf_;
+
+  // Persistent q/k/v split buffers for the mate GDN decode path. The mate
+  // kernel expects contiguous q/k/v tensors, but mixed_qkv is a flat [B, D]
+  // row. Without these buffers the wrapper calls .contiguous() on each
+  // strided slice, which allocates inside MUSA graph capture and aborts.
+  // Pre-allocated here (lazy / grow-only) and filled via .copy_() at replay.
+  mutable torch::Tensor mate_gdn_decode_q_buf_;
+  mutable torch::Tensor mate_gdn_decode_k_buf_;
+  mutable torch::Tensor mate_gdn_decode_v_buf_;
 
   // Persistent buffers for mate GDN MTP spec-verify (seq_len == 2).
   mutable torch::Tensor mate_gdn_mtp_intermediate_buf_;

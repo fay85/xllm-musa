@@ -31,6 +31,7 @@ cc_library(
     tensor_helper.h
     threadpool.h
     timer.h
+    xllm_kineto_profiler.h
     type_traits.h
     utils.h
     uuid.h
@@ -51,6 +52,7 @@ cc_library(
     suffix_tree.cpp
     threadpool.cpp
     timer.cpp
+    xllm_kineto_profiler.cpp
     utils.cpp
     uuid.cpp
     shared_memory_manager.cpp

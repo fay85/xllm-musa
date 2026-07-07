@@ -53,7 +53,7 @@ readyprobe() {
 stop_xllm() { kill_zombie_xllm "$@"; }
 
 if [[ "$START_SERVER" == "1" ]]; then
-  kill_zombie_xllm "$PORT" "$MASTER_PORT" || { echo "FAIL: requested ports are still busy; aborting startup"; exit 1; }
+  kill_zombie_xllm "$PORT" "$MASTER_PORT" "$((MASTER_PORT + 1))" || { echo "FAIL: requested ports are still busy; aborting startup"; exit 1; }
   echo "==> starting xLLM on port ${PORT} (GPU ${MUSA_VISIBLE_DEVICES})"
   bash run_xllm_musa.sh --background --port "$PORT"
   w=0

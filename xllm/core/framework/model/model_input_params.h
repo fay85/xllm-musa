@@ -46,6 +46,9 @@ limitations under the License.
 #include "runtime/dit_forward_params.h"
 #include "util/hash_util.h"
 #include "util/tensor_helper.h"
+#if defined(USE_CUDA) || defined(USE_MUSA)
+#include "core/framework/config/execution_config.h"
+#endif
 
 namespace xllm {
 namespace npu {
@@ -371,6 +374,29 @@ struct AttentionHostInput {
   torch::Tensor paged_kv_last_page_len;
 };
 
+#if defined(USE_CUDA) || defined(USE_MUSA)
+namespace {
+inline bool is_cpu_int_tensor(const torch::Tensor& tensor) {
+  return tensor.defined() && tensor.device().is_cpu() &&
+         (tensor.scalar_type() == torch::kInt32 ||
+          tensor.scalar_type() == torch::kInt64);
+}
+
+inline bool should_skip_graph_decode_metadata_h2h(
+    const AttentionHostInput& host,
+    const BatchForwardType& batch_forward_type) {
+  if (!ExecutionConfig::get_instance().enable_graph() ||
+      !batch_forward_type.is_decode()) {
+    return false;
+  }
+  return !host.kv_seq_lens.empty() &&
+         is_cpu_int_tensor(host.paged_kv_indptr) &&
+         is_cpu_int_tensor(host.paged_kv_indices) &&
+         is_cpu_int_tensor(host.paged_kv_last_page_len);
+}
+}  // namespace
+#endif
+
 struct AttentionDeviceInput {
   torch::Tensor q_seq_lens;
   torch::Tensor kv_seq_lens;
@@ -397,10 +423,13 @@ struct AttentionDeviceInput {
   // nested worker paths skip recomputation when cp_partitioned is true.
   torch::Tensor in_prefix_slots;
 
-  AttentionDeviceInput to(const torch::Device& device) const {
+  AttentionDeviceInput to(const torch::Device& device,
+                          bool skip_graph_metadata_h2h = false) const {
     AttentionDeviceInput out;
     out.q_seq_lens = safe_to(q_seq_lens, device, true);
-    out.kv_seq_lens = safe_to(kv_seq_lens, device, true);
+    if (!skip_graph_metadata_h2h) {
+      out.kv_seq_lens = safe_to(kv_seq_lens, device, true);
+    }
 #if !defined(USE_CUDA)
     out.q_cu_seq_lens = safe_to(q_cu_seq_lens, device, true);
 #else
@@ -408,9 +437,11 @@ struct AttentionDeviceInput {
 #endif
     out.new_cache_slots = safe_to(new_cache_slots, device, true);
     out.block_tables = safe_to(block_tables, device, true);
-    out.paged_kv_indptr = safe_to(paged_kv_indptr, device);
-    out.paged_kv_indices = safe_to(paged_kv_indices, device);
-    out.paged_kv_last_page_len = safe_to(paged_kv_last_page_len, device);
+    if (!skip_graph_metadata_h2h) {
+      out.paged_kv_indptr = safe_to(paged_kv_indptr, device);
+      out.paged_kv_indices = safe_to(paged_kv_indices, device);
+      out.paged_kv_last_page_len = safe_to(paged_kv_last_page_len, device);
+    }
     out.new_cache_slot_offsets = safe_to(new_cache_slot_offsets, device);
     out.kv_cache_start_offsets = safe_to(kv_cache_start_offsets, device);
     out.kv_cache_tokens_nums = safe_to(kv_cache_tokens_nums, device);
@@ -432,10 +463,11 @@ struct AttentionInput {
   uint64_t attention_buffer_capacity = 0;
   std::shared_ptr<int> attention_buffer_owner = std::make_shared<int>(0);
 
-  AttentionInput to(const torch::Device& target_device) const {
+  AttentionInput to(const torch::Device& target_device,
+                    bool skip_graph_metadata_h2h = false) const {
     AttentionInput out;
     out.host = host;
-    out.device = device.to(target_device);
+    out.device = device.to(target_device, skip_graph_metadata_h2h);
     out.attention_host_buffer = attention_host_buffer;
     out.attention_device_buffer = attention_device_buffer;
     out.attention_buffer_bytes = attention_buffer_bytes;
@@ -976,7 +1008,14 @@ struct ModelInputParams {
   ModelInputParams to(const torch::Device& device) const {
     ModelInputParams params;
     params.meta = meta;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+    const bool skip_graph_metadata_h2h =
+        should_skip_graph_decode_metadata_h2h(attention.host,
+                                              meta.batch_forward_type);
+    params.attention = attention.to(device, skip_graph_metadata_h2h);
+#else
     params.attention = attention.to(device);
+#endif
     params.embedding = embedding.to(device);
     params.block_copy = block_copy.to(device);
     params.multimodal = multimodal.to(device);

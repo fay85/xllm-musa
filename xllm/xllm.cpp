@@ -19,6 +19,8 @@ limitations under the License.
 #include <pybind11/embed.h>
 #include <torch/torch.h>
 
+#include "core/util/xllm_kineto_profiler.h"
+
 #include <csignal>
 #include <filesystem>
 #include <memory>
@@ -526,6 +528,13 @@ int main(int argc, char** argv) {
 #if defined(XLLM_TORCH_MUSA)
   xllm_musa_backend_init();
 #endif
+  if (XllmKinetoProfiler::is_enabled()) {
+    LOG(INFO) << "XllmKinetoProfiler enabled:"
+              << " torch_kineto="
+              << XllmKinetoProfiler::is_torch_kineto_enabled()
+              << " libkineto_trace="
+              << XllmKinetoProfiler::is_libkineto_trace_enabled();
+  }
   initialize_configs();
 
   // Check if model path is provided

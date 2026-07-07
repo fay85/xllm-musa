@@ -8,7 +8,14 @@ xLLM provides the equivalent capability with two backends, selected by `--profil
 - **`torch` (default)** — records CPU and CUDA activities in-process via libtorch's Kineto profiler (the C++ equivalent of `torch.profiler.profile`) and writes a Chrome trace to disk on `/stop_profile`. No external profiler is required: just launch the server normally and drive the two endpoints. This mirrors vLLM's default `TorchProfilerWrapper`.
 - **`cuda`** — only toggles the CUDA profiler capture range (`cudaProfilerStart()` / `cudaProfilerStop()`). It records nothing on its own and must be paired with NVIDIA Nsight Systems (`nsys`): the server is launched under `nsys profile` with a capture range tied to the CUDA Profiler API, and the two endpoints open and close the window that `nsys` records.
 
-Both backends are CUDA only for now. Support for other backends will be added later.
+On **CUDA** and **MUSA** (`XLLM_TORCH_MUSA`), the `torch` backend records device activity via Kineto (`ActivityType::CUDA` or `PrivateUse1` respectively). The `cuda` capture-range backend is CUDA-only (it calls `cudaProfilerStart`/`cudaProfilerStop`).
+
+For **decode-step profiling without HTTP endpoints**, set one of:
+
+- `XLLM_ENABLE_TORCH_KINETO_PROFILE=1` — recommended; libtorch Kineto (CPU + GPU in one Chrome trace)
+- `XLLM_ENABLE_KINETO_TRACE=1` — direct libkineto API (GPU-focused timeline)
+
+Optional: `XLLM_KINETO_WARMUP_DECODE_STEPS`, `XLLM_KINETO_TRACE_DECODE_STEPS`, `XLLM_TORCH_KINETO_TRACE_PATH` (default `logs/xllm_torch_kineto_trace.json`). See `xllm/core/util/xllm_kineto_profiler.h`.
 
 ## Introduction
 The control flow mirrors the existing `sleep`/`wakeup` broadcast path:
@@ -93,7 +100,7 @@ nsys stats xllm_profile.nsys-rep
 ```
 
 ## Notice
-- Profiling is currently supported on **CUDA only**. On other backends the endpoints return an error.
+- Online `/start_profile` and `/stop_profile` are supported on **CUDA and MUSA** when using `--profile_backend=torch`. The `cuda` capture-range backend is **CUDA only**. Other device backends return an error from the endpoints.
 - The two endpoints are only active when `--enable_online_profile=true`; otherwise they respond with an error explaining how to enable the feature.
 - With `--profile_backend=cuda`, `cudaProfilerStart`/`cudaProfilerStop` only have an effect when the server is running under a profiler such as `nsys` (or `ncu`) configured with `--capture-range=cudaProfilerApi`. Calling the endpoints without such a profiler attached is harmless but produces no trace. For multi-process / multi-GPU runs, `nsys` recommends launching with `--trace-fork-before-exec=true` so child worker processes are traced.
 - Profiling adds runtime overhead. Enable it only for diagnosis, not in steady-state production serving, and keep the capture window short.

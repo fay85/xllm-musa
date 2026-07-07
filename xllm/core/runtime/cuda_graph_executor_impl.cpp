@@ -1728,7 +1728,6 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
     // Replay piecewise graphs and attention runners
     piecewise_graph_.replay(replay_params);
   } else {
-    fprintf(stderr, "DEBUG_REPLAY_ENTERED s_enable_graph_timing=%d\n", s_enable_graph_timing);
     // Normal replay mode (for decode).
     //
     // Request the metadata back from update() so we can refresh the
@@ -1742,10 +1741,6 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
     // page fault inside the captured Mate decode kernel (see .mudmp under
     // repro logs and refresh_persistent_paged_kv_host_mirrors() for the
     // pointer-stability rationale).
-    static auto s_last_launch = std::chrono::steady_clock::now();
-    static int s_step_count = 0;
-    auto t_update_start = std::chrono::steady_clock::now();
-
     auto replay_params_opt = persistent_param_.update(tokens,
                                                       k_cache,
                                                       v_cache,
@@ -1755,25 +1750,19 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
                                                       /*return_capture_params=*/true);
     CHECK(replay_params_opt.has_value())
         << "update() should return ModelInputParams for decode replay";
-    auto t_refresh_start = std::chrono::steady_clock::now();
     refresh_persistent_paged_kv_host_mirrors(
         replay_params_opt.value().attn_metadata, params.attention.host);
-    auto t_replay_start = std::chrono::steady_clock::now();
 
     if (s_enable_graph_timing) {
+      static auto s_last_launch = std::chrono::steady_clock::now();
+      static int s_step_count = 0;
       c10::cuda::getCurrentCUDAStream(device_index_).synchronize();
-      auto t_sync_end = std::chrono::steady_clock::now();
-      auto step_ms = std::chrono::duration<double, std::milli>(
-                         t_sync_end - s_last_launch).count();
-      auto update_ms = std::chrono::duration<double, std::milli>(
-                           t_refresh_start - t_update_start).count();
-      auto refresh_ms = std::chrono::duration<double, std::milli>(
-                            t_replay_start - t_refresh_start).count();
-      auto sync_ms = std::chrono::duration<double, std::milli>(
-                         t_sync_end - t_replay_start).count();
+      const auto t_sync_end = std::chrono::steady_clock::now();
+      const auto step_ms = std::chrono::duration<double, std::milli>(
+                               t_sync_end - s_last_launch)
+                               .count();
       LOG(INFO) << "GRAPH_TIMING step=" << s_step_count
-                << " total=" << step_ms << " update=" << update_ms
-                << " refresh=" << refresh_ms << " sync=" << sync_ms;
+                << " total=" << step_ms;
       s_step_count++;
       s_last_launch = t_sync_end;
     }

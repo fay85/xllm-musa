@@ -1625,6 +1625,10 @@ struct FusedQkvzbaSplitReshapeParams {
   int32_t num_heads_v;
   int32_t head_qk;
   int32_t head_v;
+  // When true, mixed_qkvz is [all_q | all_k | all_v | all_z] and mixed_ba is
+  // [all_b | all_a] (Qwen3.5 split projections). Otherwise the per-head-group
+  // interleaved layout from a single merged projection is assumed.
+  bool contiguous_input_layout = false;
 
   torch::Tensor mixed_qkv_out_buf;
   torch::Tensor z_out_buf;
@@ -1708,6 +1712,9 @@ struct MateGatedDeltaRuleDecodeParams {
   double scale = 0.0;
   bool use_qk_l2norm = true;
   std::optional<torch::Tensor> decode_output = std::nullopt;
+  std::optional<torch::Tensor> q_buf = std::nullopt;
+  std::optional<torch::Tensor> k_buf = std::nullopt;
+  std::optional<torch::Tensor> v_buf = std::nullopt;
 };
 
 // Parameters for the fused mate GDN multi-token speculative-verify kernel

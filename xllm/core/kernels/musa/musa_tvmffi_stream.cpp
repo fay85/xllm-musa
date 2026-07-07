@@ -78,6 +78,17 @@ bool is_current_stream_capturing() {
          c10::musa::CaptureStatus::None;
 }
 
+// Returns true when the current per-thread MUSA stream has a valid
+// (non-null) handle.  In eager mode on worker threads that have not yet
+// executed any PyTorch MUSA op, the stream pool is uninitialized and
+// getCurrentMUSAStream returns a null handle.
+bool current_musa_stream_is_valid(c10::DeviceIndex device_index) {
+  c10::musa::MUSAGuard device_guard(device_index);
+  void* const stream = reinterpret_cast<void*>(
+      c10::musa::getCurrentMUSAStream(device_index).stream());
+  return stream != nullptr;
+}
+
 }
 
 void bind_musa_tvmffi_stream(const torch::Device& device) {
@@ -86,15 +97,24 @@ void bind_musa_tvmffi_stream(const torch::Device& device) {
   }
   c10::musa::MUSAGuard device_guard(device.index());
   c10::musa::MUSAStream musa_stream =
-      is_current_stream_capturing()
-          ? c10::musa::getCurrentMUSAStream(device.index())
-          : get_or_create_tvmffi_musa_stream(device.index());
+      c10::musa::getCurrentMUSAStream(device.index());
   void* const stream = reinterpret_cast<void*>(musa_stream.stream());
-  if (stream == nullptr) {
+  if (stream != nullptr) {
+    set_tvmffi_stream_handle(device.index(), stream);
+    return;
+  }
+  // Eager-mode fallback: the per-thread MUSA stream pool is not yet
+  // initialized on this thread, so getCurrentMUSAStream returns null.
+  // Fall back to the dedicated FFI pool stream.  Callers that use the
+  // guard must sync before/after because the FFI kernel now runs on a
+  // different stream from the PyTorch compute stream.
+  musa_stream = get_or_create_tvmffi_musa_stream(device.index());
+  void* const pool_stream = reinterpret_cast<void*>(musa_stream.stream());
+  if (pool_stream == nullptr) {
     LOG(ERROR) << "[tvmffi.stream] MUSA stream handle is null on " << device;
     return;
   }
-  set_tvmffi_stream_handle(device.index(), stream);
+  set_tvmffi_stream_handle(device.index(), pool_stream);
 }
 
 void sync_current_musa_stream(const torch::Device& device) {
@@ -124,7 +144,19 @@ MusaTvmffiStreamGuard::MusaTvmffiStreamGuard(const torch::Device& device)
   if (!active_) {
     return;
   }
-  sync_current_musa_stream(device_);
+  // When the current MUSA stream is valid (graph capture or eager mode on
+  // the main inference thread), the FFI kernel runs on the same stream as
+  // PyTorch ops.  Stream ordering guarantees correctness without syncs.
+  // When the current stream is null (eager mode on a worker thread without
+  // an initialized stream pool), bind_musa_tvmffi_stream falls back to the
+  // pool stream.  In that case we must sync the compute stream before the
+  // FFI kernel so it sees prior PyTorch outputs, and sync the FFI stream
+  // after (in the destructor) so subsequent ops see FFI results.
+  const bool capturing = is_current_stream_capturing();
+  needs_sync_ = !capturing && !current_musa_stream_is_valid(device_.index());
+  if (needs_sync_) {
+    sync_current_musa_stream(device_);
+  }
   bind_musa_tvmffi_stream(device_);
 }
 
@@ -132,7 +164,9 @@ MusaTvmffiStreamGuard::~MusaTvmffiStreamGuard() {
   if (!active_) {
     return;
   }
-  sync_musa_ffi_stream(device_);
+  if (needs_sync_) {
+    sync_musa_ffi_stream(device_);
+  }
 }
 
 }
@@ -600,7 +634,6 @@ FfiAllocMode get_ffi_alloc_mode() { return g_ffi_alloc_state.mode; }
 
 void bind_tvmffi_stream_to_current_torch_stream(const torch::Device& device) {
   if (is_torch_musa_device(device)) {
-    sync_current_musa_stream(device);
     bind_musa_tvmffi_stream(device);
     return;
   }

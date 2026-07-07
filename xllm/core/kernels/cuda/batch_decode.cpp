@@ -18,6 +18,7 @@ limitations under the License.
 #include <unordered_map>
 
 #include "core/common/global_flags.h"
+#include "core/util/xllm_kineto_profiler.h"
 #include "cuda_ops_api.h"
 #include "utils.h"
 
@@ -59,6 +60,7 @@ void batch_decode(const std::string& uri,
                           qo_indptr,
                           /*causal=*/false);
   } else {
+    XLLM_KINETO_USER_SCOPE("xllm/mate_fmha_decode");
     VLOG(kGraphExecutorLogVerboseLevel) << "plan_info: " << plan_info;
 
     get_function(uri, "run")(

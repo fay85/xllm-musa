@@ -66,6 +66,10 @@ class MusaTvmffiStreamGuard final {
  private:
   torch::Device device_;
   bool active_ = false;
+  // True when the FFI kernel was bound to the pool stream (eager-mode
+  // fallback). In that case the destructor must sync the FFI stream so
+  // subsequent PyTorch ops on the compute stream see the FFI results.
+  bool needs_sync_ = false;
 };
 
 template <typename T>

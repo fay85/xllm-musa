@@ -14,11 +14,13 @@ limitations under the License.
 ==============================================================================*/
 
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 
 #include <glog/logging.h>
 
 #include <cmath>
 #include <cstdint>
+#include <algorithm>
 #include <sstream>
 #include <vector>
 
@@ -30,6 +32,7 @@ limitations under the License.
 
 #include "core/common/macros.h"
 #include "core/kernels/param.h"
+#include "core/util/xllm_kineto_profiler.h"
 
 namespace xllm {
 namespace kernel {
@@ -317,8 +320,232 @@ std::pair<torch::Tensor, torch::Tensor> partial_rotary_embedding(
   return {params.query, params.key};
 }
 
+namespace {
+
+template <typename scalar_t>
+__global__ void gdn_fused_qkvzba_split_contiguous_kernel(
+    scalar_t* __restrict__ mixed_qkv,
+    scalar_t* __restrict__ z,
+    scalar_t* __restrict__ b,
+    scalar_t* __restrict__ a,
+    const scalar_t* __restrict__ mixed_qkvz,
+    const scalar_t* __restrict__ mixed_ba,
+    int64_t m,
+    int32_t num_heads_qk,
+    int32_t num_heads_v,
+    int32_t head_qk,
+    int32_t head_v,
+    int32_t v_per_group) {
+  const int64_t row = static_cast<int64_t>(blockIdx.x);
+  const int32_t hq = static_cast<int32_t>(blockIdx.y);
+  if (row >= m) {
+    return;
+  }
+
+  const int32_t total_q = num_heads_qk * head_qk;
+  const int32_t total_k = total_q;
+  const int32_t total_v = num_heads_v * head_v;
+  const int32_t qkv_dim = total_q + total_k + total_v;
+  const int32_t total_qkvz = qkv_dim + total_v;
+  const int32_t v_group_dim = v_per_group * head_v;
+
+  const int64_t qkvz_base = row * total_qkvz;
+  const int64_t qkv_base = row * qkv_dim;
+  const int64_t z_base = row * num_heads_v * head_v;
+  const int64_t ba_base = row * (2 * num_heads_v);
+
+  for (int32_t d = static_cast<int32_t>(threadIdx.x); d < head_qk;
+       d += blockDim.x) {
+    mixed_qkv[qkv_base + hq * head_qk + d] =
+        mixed_qkvz[qkvz_base + hq * head_qk + d];
+    mixed_qkv[qkv_base + total_q + hq * head_qk + d] =
+        mixed_qkvz[qkvz_base + total_q + hq * head_qk + d];
+  }
+
+  for (int32_t d = static_cast<int32_t>(threadIdx.x); d < v_group_dim;
+       d += blockDim.x) {
+    const int32_t v_offset = hq * v_group_dim + d;
+    mixed_qkv[qkv_base + total_q + total_k + v_offset] =
+        mixed_qkvz[qkvz_base + total_q + total_k + v_offset];
+    z[z_base + hq * v_group_dim + d] =
+        mixed_qkvz[qkvz_base + qkv_dim + v_offset];
+  }
+
+  for (int32_t d = static_cast<int32_t>(threadIdx.x); d < v_per_group;
+       d += blockDim.x) {
+    const int32_t v_head = hq * v_per_group + d;
+    b[row * num_heads_v + v_head] = mixed_ba[ba_base + v_head];
+    a[row * num_heads_v + v_head] =
+        mixed_ba[ba_base + num_heads_v + v_head];
+  }
+}
+
+void launch_gdn_fused_qkvzba_split_contiguous(
+    const torch::Tensor& mixed_qkvz,
+    const torch::Tensor& mixed_ba,
+    torch::Tensor& mixed_qkv,
+    torch::Tensor& z,
+    torch::Tensor& b,
+    torch::Tensor& a,
+    int64_t num_heads_qk,
+    int64_t num_heads_v,
+    int64_t head_qk,
+    int64_t head_v) {
+  const int64_t m = mixed_qkvz.size(0);
+  const int32_t nk = static_cast<int32_t>(num_heads_qk);
+  const int32_t nv = static_cast<int32_t>(num_heads_v);
+  const int32_t hk = static_cast<int32_t>(head_qk);
+  const int32_t hv = static_cast<int32_t>(head_v);
+  const int32_t vpk = nv / nk;
+
+  const at::cuda::CUDAGuard device_guard(mixed_qkvz.device());
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+  const dim3 grid(static_cast<unsigned int>(m),
+                static_cast<unsigned int>(nk));
+  const int threads = std::min(128, std::max(hk, vpk * hv));
+
+  switch (mixed_qkvz.scalar_type()) {
+    case torch::kBFloat16:
+      gdn_fused_qkvzba_split_contiguous_kernel<__nv_bfloat16>
+          <<<grid, threads, 0, stream>>>(
+              reinterpret_cast<__nv_bfloat16*>(mixed_qkv.data_ptr()),
+              reinterpret_cast<__nv_bfloat16*>(z.data_ptr()),
+              reinterpret_cast<__nv_bfloat16*>(b.data_ptr()),
+              reinterpret_cast<__nv_bfloat16*>(a.data_ptr()),
+              reinterpret_cast<const __nv_bfloat16*>(mixed_qkvz.data_ptr()),
+              reinterpret_cast<const __nv_bfloat16*>(mixed_ba.data_ptr()),
+              m,
+              nk,
+              nv,
+              hk,
+              hv,
+              vpk);
+      break;
+    case torch::kHalf:
+      gdn_fused_qkvzba_split_contiguous_kernel<__half>
+          <<<grid, threads, 0, stream>>>(
+              reinterpret_cast<__half*>(mixed_qkv.data_ptr()),
+              reinterpret_cast<__half*>(z.data_ptr()),
+              reinterpret_cast<__half*>(b.data_ptr()),
+              reinterpret_cast<__half*>(a.data_ptr()),
+              reinterpret_cast<const __half*>(mixed_qkvz.data_ptr()),
+              reinterpret_cast<const __half*>(mixed_ba.data_ptr()),
+              m,
+              nk,
+              nv,
+              hk,
+              hv,
+              vpk);
+      break;
+    default:
+      LOG(FATAL) << "gdn_fused_qkvzba_split_contiguous: unsupported dtype "
+                 << mixed_qkvz.scalar_type();
+  }
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+}  // namespace
+
+void gdn_fused_qkvzba_split_contiguous(const torch::Tensor& mixed_qkvz,
+                                       const torch::Tensor& mixed_ba,
+                                       torch::Tensor& mixed_qkv,
+                                       torch::Tensor& z,
+                                       torch::Tensor& b,
+                                       torch::Tensor& a,
+                                       int64_t num_heads_qk,
+                                       int64_t num_heads_v,
+                                       int64_t head_qk,
+                                       int64_t head_v) {
+  launch_gdn_fused_qkvzba_split_contiguous(mixed_qkvz,
+                                           mixed_ba,
+                                           mixed_qkv,
+                                           z,
+                                           b,
+                                           a,
+                                           num_heads_qk,
+                                           num_heads_v,
+                                           head_qk,
+                                           head_v);
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+fused_qkvzba_split_reshape_cat_contiguous(
+    FusedQkvzbaSplitReshapeParams& params) {
+  const int64_t nk = static_cast<int64_t>(params.num_heads_qk);
+  const int64_t nv = static_cast<int64_t>(params.num_heads_v);
+  const int64_t hk = static_cast<int64_t>(params.head_qk);
+  const int64_t hv = static_cast<int64_t>(params.head_v);
+  CHECK(nk > 0 && nv > 0 && nv % nk == 0)
+      << "fused_qkvzba_split_reshape_cat_contiguous: invalid head counts nk="
+      << nk << " nv=" << nv;
+
+  const auto& qkvz = params.mixed_qkvz;
+  const int64_t n = qkvz.size(0);
+  const int64_t qkv_dim = 2 * nk * hk + nv * hv;
+  const int64_t z_dim = nv * hv;
+  CHECK(qkvz.size(-1) == qkv_dim + z_dim)
+      << "fused_qkvzba_split_reshape_cat_contiguous: mixed_qkvz last dim "
+         "mismatch, got "
+      << qkvz.size(-1) << " expected " << (qkv_dim + z_dim);
+
+  const auto& ba = params.mixed_ba;
+  CHECK(ba.size(-1) == 2 * nv)
+      << "fused_qkvzba_split_reshape_cat_contiguous: mixed_ba last dim "
+         "mismatch, got "
+      << ba.size(-1) << " expected " << (2 * nv);
+
+  if (params.mixed_qkv_out_buf.defined() && params.z_out_buf.defined() &&
+      params.b_out_buf.defined() && params.a_out_buf.defined() &&
+      params.mixed_qkv_out_buf.size(0) >= n &&
+      params.mixed_qkv_out_buf.size(1) == qkv_dim &&
+      params.z_out_buf.size(0) >= n && params.z_out_buf.size(1) == z_dim &&
+      params.b_out_buf.size(0) >= n && params.b_out_buf.size(1) == nv &&
+      params.a_out_buf.size(0) >= n && params.a_out_buf.size(1) == nv) {
+    auto mixed_qkv_buf =
+        params.mixed_qkv_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto z_buf =
+        params.z_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto b_buf =
+        params.b_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto a_buf =
+        params.a_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+
+    gdn_fused_qkvzba_split_contiguous(qkvz.contiguous(),
+                                      ba.contiguous(),
+                                      mixed_qkv_buf,
+                                      z_buf,
+                                      b_buf,
+                                      a_buf,
+                                      nk,
+                                      nv,
+                                      hk,
+                                      hv);
+    return {mixed_qkv_buf, z_buf, b_buf, a_buf};
+  }
+
+  auto mixed_qkv = torch::empty({n, qkv_dim}, qkvz.options());
+  auto z = torch::empty({n, z_dim}, qkvz.options());
+  auto b = torch::empty({n, nv}, ba.options());
+  auto a = torch::empty({n, nv}, ba.options());
+  gdn_fused_qkvzba_split_contiguous(qkvz.contiguous(),
+                                    ba.contiguous(),
+                                    mixed_qkv,
+                                    z,
+                                    b,
+                                    a,
+                                    nk,
+                                    nv,
+                                    hk,
+                                    hv);
+  return {mixed_qkv, z, b, a};
+}
+
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params) {
+  if (params.contiguous_input_layout) {
+    return fused_qkvzba_split_reshape_cat_contiguous(params);
+  }
   const int64_t nk = static_cast<int64_t>(params.num_heads_qk);
   const int64_t nv = static_cast<int64_t>(params.num_heads_v);
   const int64_t hk = static_cast<int64_t>(params.head_qk);
@@ -540,6 +767,7 @@ std::string get_mate_gdn_decode_uri(int64_t num_q_heads,
 
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params) {
+  XLLM_KINETO_USER_SCOPE("xllm/mate_gdn_decode");
   auto mixed_qkv = params.mixed_qkv.contiguous();
   CHECK(mixed_qkv.dim() == 2) << "mate GDN decode expects mixed_qkv [B, D]";
   const int64_t batch_size = mixed_qkv.size(0);
@@ -551,21 +779,44 @@ torch::Tensor mate_gated_delta_rule_decode(
   const int64_t v_cols = num_v_heads * head_v_dim;
   CHECK(mixed_qkv.size(1) == 2 * qk_cols + v_cols) << "mate GDN decode mixed_qkv dim mismatch";
 
-  auto query = mixed_qkv.slice(/*dim=*/1, /*start=*/0, /*end=*/qk_cols)
-                   .reshape({batch_size, num_k_heads, head_k_dim})
-                   .contiguous();
-  auto key =
+  auto query_view = mixed_qkv.slice(/*dim=*/1, /*start=*/0, /*end=*/qk_cols)
+                        .reshape({batch_size, num_k_heads, head_k_dim});
+  auto key_view =
       mixed_qkv.slice(/*dim=*/1, /*start=*/qk_cols, /*end=*/2 * qk_cols)
-          .reshape({batch_size, num_k_heads, head_k_dim})
-          .contiguous();
-  auto value =
+          .reshape({batch_size, num_k_heads, head_k_dim});
+  auto value_view =
       mixed_qkv
           .slice(/*dim=*/1, /*start=*/2 * qk_cols, /*end=*/2 * qk_cols + v_cols)
-          .reshape({batch_size, num_v_heads, head_v_dim})
-          .contiguous();
+          .reshape({batch_size, num_v_heads, head_v_dim});
 
-  auto a = params.a.contiguous();
-  auto b = params.b.contiguous();
+  torch::Tensor query, key, value;
+  if (params.q_buf.has_value() && params.q_buf.value().defined() &&
+      params.k_buf.has_value() && params.k_buf.value().defined() &&
+      params.v_buf.has_value() && params.v_buf.value().defined()) {
+    query = params.q_buf.value().narrow(/*dim=*/0, /*start=*/0, /*length=*/batch_size);
+    key = params.k_buf.value().narrow(/*dim=*/0, /*start=*/0, /*length=*/batch_size);
+    value = params.v_buf.value().narrow(/*dim=*/0, /*start=*/0, /*length=*/batch_size);
+    query.copy_(query_view);
+    key.copy_(key_view);
+    value.copy_(value_view);
+  } else {
+    query = query_view.contiguous();
+    key = key_view.contiguous();
+    value = value_view.contiguous();
+  }
+
+  // The compiled MATE decode kernel applies QK L2-norm internally
+  // (build_gdn_decode_op.py passes use_qk_l2norm=True to the TileLang
+  // kernel factory, which fuses the norm via warp-shuffle reduction).
+  // No external normalization is needed — doing so would be a redundant
+  // double-norm that wastes GPU cycles.
+
+  // The compiled MATE kernel bakes in bfloat16 q/k/v/a/b and float32
+  // A_log/dt_bias/state (same ABI as the MTP kernel — see line 876-877).
+  // Coerce a/b to the q/k/v dtype to satisfy the ABI.
+  const auto io_dtype = query.scalar_type();
+  auto a = params.a.to(io_dtype).contiguous();
+  auto b = params.b.to(io_dtype).contiguous();
   if (a.dim() == 1) {
     a = a.unsqueeze(0);
   }
@@ -577,6 +828,8 @@ torch::Tensor mate_gated_delta_rule_decode(
 
   auto state_f32 = params.state.to(torch::kFloat32).contiguous();
   auto state_indices = params.state_indices.to(torch::kInt32).contiguous();
+  auto A_log_f32 = params.A_log.to(torch::kFloat32).contiguous();
+  auto dt_bias_f32 = params.dt_bias.to(torch::kFloat32).contiguous();
   auto output =
       params.decode_output.has_value() && params.decode_output.value().defined()
           ? params.decode_output.value()
@@ -588,22 +841,40 @@ torch::Tensor mate_gated_delta_rule_decode(
   bind_tvmffi_stream_to_current_torch_stream(query.device());
   auto run = get_function(uri, "run");
 
+  // The TVM FFI wrapper (MateGdnDecodeRun) expects arguments in this order
+  // (it internally reorders to match the kernel ABI).  Confirmed by the type
+  // check error when the order was changed.
   run(to_ffi_tensor(query),
       to_ffi_tensor(key),
       to_ffi_tensor(value),
-      to_ffi_tensor(params.A_log.contiguous()),
+      to_ffi_tensor(A_log_f32),
       to_ffi_tensor(a),
-      to_ffi_tensor(params.dt_bias.contiguous()),
+      to_ffi_tensor(dt_bias_f32),
       to_ffi_tensor(b),
       to_ffi_tensor(state_indices),
       to_ffi_tensor(state_f32),
       to_ffi_tensor(output));
 
-  auto updated_state =
-      state_f32.index_select(/*dim=*/0, state_indices.to(torch::kLong));
-  params.state.index_copy_(
-      /*dim=*/0, state_indices.to(torch::kLong),
-      updated_state.to(params.state.scalar_type()));
+  // Eager (non-capturing) mode: when the FFI stream binding fails (null
+  // stream handle), the kernel runs on a separate FFI pool stream.  Sync
+  // that stream so `output` and `state_f32` are visible to the PyTorch
+  // compute stream.  This mirrors the MTP wrapper's sync at line 910.
+  // Under MUSA graph capture the kernel runs on the capture stream, so
+  // the sync is a no-op (is_current_stream_capturing() early-return).
+  sync_musa_ffi_stream(query.device());
+
+  // The mate kernel updates state_f32 in-place. When state_f32 IS
+  // params.state (already fp32 contiguous — the production case), the
+  // index_select + index_copy_ below is a redundant self-writeback. Skip
+  // it to avoid two extra allocations (index_select result + int64 index
+  // cast) that abort MUSA graph capture.
+  if (state_f32.data_ptr() != params.state.data_ptr()) {
+    auto updated_state =
+        state_f32.index_select(/*dim=*/0, state_indices.to(torch::kLong));
+    params.state.index_copy_(
+        /*dim=*/0, state_indices.to(torch::kLong),
+        updated_state.to(params.state.scalar_type()));
+  }
 
   return output;
 }
@@ -1567,6 +1838,7 @@ void launch(const torch::Tensor& mixed_qkv,
 
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params) {
+  XLLM_KINETO_USER_SCOPE("xllm/gdn_packed_decode");
   auto mixed_qkv = params.mixed_qkv.contiguous();
   CHECK(mixed_qkv.dim() == 2)
       << "fused GDN decode expects mixed_qkv [B, D], got "

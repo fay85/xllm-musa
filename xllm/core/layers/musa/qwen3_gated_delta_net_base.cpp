@@ -32,7 +32,7 @@ namespace layer {
 namespace {
 #if defined(USE_CUDA) || defined(USE_MUSA)
 constexpr bool kEnableFusedGdnDecode = true;
-constexpr bool kEnableMateGdnDecode = false;
+constexpr bool kEnableMateGdnDecode = true;
 constexpr bool kEnableMateGdnPrefill = false;
 
 bool qwen35_mtp_debug_enabled() {
@@ -992,6 +992,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   fused_params.num_heads_v = static_cast<int32_t>(num_v_heads_ / tp_size_);
   fused_params.head_qk = static_cast<int32_t>(head_k_dim_);
   fused_params.head_v = static_cast<int32_t>(head_v_dim_);
+  fused_params.contiguous_input_layout = uses_contiguous_qkvzba_layout();
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
   // Lazily size grow-only persistent output buffers so the kernel can
@@ -1066,10 +1067,19 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const bool decode_eligible =
       !attn_metadata.is_prefill && !use_spec_verify && seq_len == 1 &&
       checkpoint_stride == 1;
-  // Production defaults: fused decode on, mate decode/prefill off.
-  const bool use_fused_gdn_decode = kEnableFusedGdnDecode && decode_eligible;
+  // Runtime backend selection via env var XLLM_GDN_DECODE_BACKEND.
+  //   "fused" (default): in-house single-launch kernel.
+  //   "mate": MATE-compiled kernel (same compiler framework as FA3).
+  const bool use_mate_gdn_decode_requested = [] {
+    const char* env = std::getenv("XLLM_GDN_DECODE_BACKEND");
+    return env != nullptr && std::string(env) == "mate";
+  }();
+  const bool use_fused_gdn_decode =
+      kEnableFusedGdnDecode && decode_eligible &&
+      !use_mate_gdn_decode_requested;
   const bool use_mate_gdn_decode =
-      kEnableMateGdnDecode && decode_eligible && !use_fused_gdn_decode;
+      kEnableMateGdnDecode && decode_eligible &&
+      use_mate_gdn_decode_requested;
 #else
   const bool use_fused_gdn_decode = false;
   const bool use_mate_gdn_decode = false;
@@ -1593,6 +1603,46 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     mate_params.head_v_dim = head_v_dim_;
     mate_params.scale = 1.0 / std::sqrt(static_cast<double>(head_k_dim_));
     mate_params.use_qk_l2norm = true;
+    // Provide persistent, grow-only output + q/k/v split buffers so the
+    // mate wrapper avoids torch::empty / .contiguous() allocations that
+    // abort MUSA graph capture. Same lazy contract as
+    // fused_gdn_decode_out_buf_.
+    {
+      const int64_t B = mixed_qkv.size(0);
+      const int64_t Hv = num_v_heads_ / tp_size_;
+      const int64_t Hk = num_k_heads_ / tp_size_;
+      const int64_t V = head_v_dim_;
+      const int64_t K = head_k_dim_;
+      const auto opts = mixed_qkv.options();
+      auto ensure_buf = [&opts](torch::Tensor& buf,
+                                int64_t need_B,
+                                int64_t dim1,
+                                int64_t dim2) {
+        const bool needs = !buf.defined() ||
+                           buf.size(0) < need_B ||
+                           buf.size(1) != dim1 ||
+                           buf.size(2) != dim2 ||
+                           buf.scalar_type() != opts.dtype().toScalarType() ||
+                           buf.device() != opts.device();
+        if (needs) {
+          const int64_t target_B =
+              buf.defined() ? std::max(need_B, buf.size(0)) : need_B;
+          buf = torch::empty({target_B, dim1, dim2}, opts);
+        }
+      };
+      ensure_buf(fused_gdn_decode_out_buf_, B, Hv, V);
+      ensure_buf(mate_gdn_decode_q_buf_, B, Hk, K);
+      ensure_buf(mate_gdn_decode_k_buf_, B, Hk, K);
+      ensure_buf(mate_gdn_decode_v_buf_, B, Hv, V);
+      mate_params.decode_output =
+          fused_gdn_decode_out_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/B);
+      mate_params.q_buf =
+          mate_gdn_decode_q_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/B);
+      mate_params.k_buf =
+          mate_gdn_decode_k_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/B);
+      mate_params.v_buf =
+          mate_gdn_decode_v_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/B);
+    }
     core_attn_out =
         xllm::kernel::mate_gated_delta_rule_decode(mate_params).unsqueeze(0);
 #endif

@@ -28,6 +28,7 @@ limitations under the License.
 #include "common/device_monitor.h"
 #include "common/metrics.h"
 #include "common/types.h"
+#include "core/util/xllm_kineto_profiler.h"
 #include "core/common/global_flags.h"
 #include "core/framework/config/beam_search_config.h"
 #include "core/framework/config/eplb_config.h"
@@ -214,6 +215,13 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     const ForwardInput& input,
     ForwardSyncPolicy sync_policy) {
   MULTI_MODEL_STEP_LOCK(::xllm::KVCacheConfig::get_instance().enable_xtensor());
+
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  const bool is_decode_step =
+      input.input_params.meta.batch_forward_type.is_decode();
+  XllmKinetoProfiler::StepScope kineto_step_scope(is_decode_step);
+  XLLM_KINETO_USER_SCOPE("xllm/decode_step");
+#endif
 
   Timer timer;
   auto& sampling_params = input.sampling_params;
