@@ -52,36 +52,45 @@ torch::Tensor RmsNormGatedImpl::forward(torch::Tensor& input,
   // shape must otherwise match `input`. Stays inert on other backends
   // (the kernel dispatch ignores `output_buf` when it falls back to the
   // libtorch ref impl).
+  //
+  // Cap at kRmsNormGatedBufMaxRows so prefill (large M) does not grow the
+  // buffer to prefill-batch size and hold that memory permanently across
+  // all 48 GDN layers. When target_rows exceeds the cap the buffer is
+  // skipped and the kernel falls back to its reference implementation
+  // (safe outside graph capture).
+  constexpr int64_t kRmsNormGatedBufMaxRows = 128;
   if (input.dim() >= 1 && input.numel() > 0 && input.stride(-1) == 1) {
     const auto target_sizes = input.sizes();
     const int64_t last_dim = target_sizes.back();
     const int64_t target_rows = input.numel() / last_dim;
-    auto desired_options = input.options();
+    if (target_rows <= kRmsNormGatedBufMaxRows) {
+      auto desired_options = input.options();
 
-    const bool need_realloc = !out_buf_.defined() ||
-                              out_buf_.dtype() != desired_options.dtype() ||
-                              out_buf_.device() != desired_options.device() ||
-                              out_buf_.dim() != input.dim() ||
-                              out_buf_.size(-1) != last_dim ||
-                              (out_buf_.numel() / last_dim) < target_rows;
-    if (need_realloc) {
-      std::vector<int64_t> alloc_shape(target_sizes.begin(),
-                                       target_sizes.end());
-      // Pre-allocate up to the maximum decode-graph row count we currently
-      // capture (32). Smaller-than-32 rows reuse the same allocation via
-      // narrow(); >32 rows fall through to a one-time re-grow.
-      const int64_t kMaxRowsHint = 32;
-      alloc_shape[0] = std::max<int64_t>(target_rows, kMaxRowsHint);
-      out_buf_ = torch::empty(alloc_shape, desired_options);
-    }
-    // Narrow on the leading row dim so the view's shape exactly matches
-    // `input.sizes()`. Underlying storage is preserved across replays.
-    torch::Tensor view = out_buf_;
-    if (out_buf_.size(0) != target_rows) {
-      view = out_buf_.narrow(0, 0, target_rows);
-    }
-    if (view.sizes() == target_sizes && view.stride(-1) == 1) {
-      params.output_buf = view;
+      const bool need_realloc = !out_buf_.defined() ||
+                                out_buf_.dtype() != desired_options.dtype() ||
+                                out_buf_.device() != desired_options.device() ||
+                                out_buf_.dim() != input.dim() ||
+                                out_buf_.size(-1) != last_dim ||
+                                (out_buf_.numel() / last_dim) < target_rows;
+      if (need_realloc) {
+        std::vector<int64_t> alloc_shape(target_sizes.begin(),
+                                         target_sizes.end());
+        // Pre-allocate up to the maximum decode-graph row count we currently
+        // capture (32). Smaller-than-32 rows reuse the same allocation via
+        // narrow(); >32 rows fall through to a one-time re-grow.
+        const int64_t kMaxRowsHint = 32;
+        alloc_shape[0] = std::max<int64_t>(target_rows, kMaxRowsHint);
+        out_buf_ = torch::empty(alloc_shape, desired_options);
+      }
+      // Narrow on the leading row dim so the view's shape exactly matches
+      // `input.sizes()`. Underlying storage is preserved across replays.
+      torch::Tensor view = out_buf_;
+      if (out_buf_.size(0) != target_rows) {
+        view = out_buf_.narrow(0, 0, target_rows);
+      }
+      if (view.sizes() == target_sizes && view.stride(-1) == 1) {
+        params.output_buf = view;
+      }
     }
   }
 #endif

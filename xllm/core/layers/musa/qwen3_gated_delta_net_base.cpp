@@ -1000,6 +1000,13 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   // tensors mid-stream-capture. Allocation only happens on the first
   // forward (executed eagerly before MUSA graph capture begins) and
   // whenever a larger bucket is seen.
+  //
+  // Cap at kGdnBufMaxRows so prefill (large M) does not grow the buffers
+  // to prefill-batch size and hold that memory permanently across all 48
+  // GDN layers. When M exceeds the cap the buffers stay undefined and the
+  // kernel falls back to its own torch::empty allocation (safe outside
+  // graph capture).
+  constexpr int64_t kGdnBufMaxRows = 128;
   const int64_t local_nk = num_k_heads_ / tp_size_;
   const int64_t local_nv = num_v_heads_ / tp_size_;
   const int64_t expected_M = batch_size * seq_len;
@@ -1008,23 +1015,25 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const int64_t expected_z_dim = local_nv * head_v_dim_;
   const auto opts = qkvz_flat.options();
   const auto opts_ba = ba_flat.options();
-  const auto grow_2d =
-      [](torch::Tensor& buf, int64_t M, int64_t D,
-         const torch::TensorOptions& options) {
-        const bool needs =
-            !buf.defined() || buf.size(0) < M || buf.size(1) != D ||
-            buf.scalar_type() != options.dtype().toScalarType() ||
-            buf.device() != options.device();
-        if (needs) {
-          const int64_t target_M =
-              buf.defined() ? std::max(M, buf.size(0)) : M;
-          buf = torch::empty({target_M, D}, options);
-        }
-      };
-  grow_2d(mixed_qkv_out_buf_, expected_M, expected_qkv_dim, opts);
-  grow_2d(z_out_buf_, expected_M, expected_z_dim, opts);
-  grow_2d(b_out_buf_, expected_M, local_nv, opts_ba);
-  grow_2d(a_out_buf_, expected_M, local_nv, opts_ba);
+  if (expected_M <= kGdnBufMaxRows) {
+    const auto grow_2d =
+        [](torch::Tensor& buf, int64_t M, int64_t D,
+           const torch::TensorOptions& options) {
+          const bool needs =
+              !buf.defined() || buf.size(0) < M || buf.size(1) != D ||
+              buf.scalar_type() != options.dtype().toScalarType() ||
+              buf.device() != options.device();
+          if (needs) {
+            const int64_t target_M =
+                buf.defined() ? std::max(M, buf.size(0)) : M;
+            buf = torch::empty({target_M, D}, options);
+          }
+        };
+    grow_2d(mixed_qkv_out_buf_, expected_M, expected_qkv_dim, opts);
+    grow_2d(z_out_buf_, expected_M, expected_z_dim, opts);
+    grow_2d(b_out_buf_, expected_M, local_nv, opts_ba);
+    grow_2d(a_out_buf_, expected_M, local_nv, opts_ba);
+  }
   fused_params.mixed_qkv_out_buf = mixed_qkv_out_buf_;
   fused_params.z_out_buf = z_out_buf_;
   fused_params.b_out_buf = b_out_buf_;

@@ -114,17 +114,27 @@ torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
       // layer per token (64 layers * ~16 tok/s ~ 1 ms/s reclaimed at TPOT
       // scale on Qwen3.5-27B) and -- more importantly -- the device pointer
       // is now stable across CUDA-graph captures and replays.
-      if (!act_output_cache_.defined() ||
-          act_output_cache_.size(0) < batch_size ||
-          act_output_cache_.size(-1) != out_features ||
-          act_output_cache_.scalar_type() != gate_up.scalar_type() ||
-          act_output_cache_.device() != gate_up.device()) {
-        act_output_cache_ =
-            torch::empty({batch_size, out_features}, gate_up.options());
+      //
+      // Cap at kActOutputBufMaxRows so prefill (large M) does not grow the
+      // buffer to prefill-batch size and hold that memory permanently across
+      // all 64 layers. Large-batch calls fall back to eager torch::empty,
+      // which the caching allocator recycles anyway.
+      constexpr int64_t kActOutputBufMaxRows = 128;
+      if (batch_size <= kActOutputBufMaxRows) {
+        if (!act_output_cache_.defined() ||
+            act_output_cache_.size(0) < batch_size ||
+            act_output_cache_.size(-1) != out_features ||
+            act_output_cache_.scalar_type() != gate_up.scalar_type() ||
+            act_output_cache_.device() != gate_up.device()) {
+          act_output_cache_ =
+              torch::empty({batch_size, out_features}, gate_up.options());
+        }
+        // narrow() returns a contiguous metadata-only view of the leading
+        // `batch_size` rows; down_proj_'s GEMM accepts it as-is.
+        output = act_output_cache_.narrow(/*dim=*/0, /*start=*/0, batch_size);
+      } else {
+        output = torch::empty({batch_size, out_features}, gate_up.options());
       }
-      // narrow() returns a contiguous metadata-only view of the leading
-      // `batch_size` rows; down_proj_'s GEMM accepts it as-is.
-      output = act_output_cache_.narrow(/*dim=*/0, /*start=*/0, batch_size);
     }
 
     act_->forward(gate_up, output);

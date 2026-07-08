@@ -42,17 +42,27 @@ Qwen3NextRMSNormImpl::forward(torch::Tensor& input,
     //
     // If a later forward sees a larger shape we re-allocate; this can only
     // happen outside capture (capture always replays the warmup's shape).
-    if (!norm_out_buf_.defined() ||
-        norm_out_buf_.sizes() != input.sizes() ||
-        norm_out_buf_.scalar_type() != input.scalar_type() ||
-        norm_out_buf_.device() != input.device()) {
-      norm_out_buf_ = torch::empty_like(input);
-    }
+    //
+    // Cap at kRmsNormBufMaxRows so prefill (large M) does not grow the buffer
+    // to prefill-batch size and hold that memory permanently across all layers.
+    // When input_rows exceeds the cap, norm_out is left undefined and the
+    // dispatch allocates torch::empty_like(input) internally.
+    constexpr int64_t kRmsNormBufMaxRows = 128;
+    const int64_t input_rows =
+        input.size(-1) > 0 ? input.numel() / input.size(-1) : 0;
     xllm::kernel::GemmaRMSNormParams norm_params;
     norm_params.x = input;
     norm_params.gamma = weight_;
     norm_params.epsilon = eps_;
-    norm_params.norm_out = norm_out_buf_;
+    if (input_rows <= kRmsNormBufMaxRows) {
+      if (!norm_out_buf_.defined() ||
+          norm_out_buf_.sizes() != input.sizes() ||
+          norm_out_buf_.scalar_type() != input.scalar_type() ||
+          norm_out_buf_.device() != input.device()) {
+        norm_out_buf_ = torch::empty_like(input);
+      }
+      norm_params.norm_out = norm_out_buf_;
+    }
     xllm::kernel::gemma_rms_norm(norm_params);
     return std::make_tuple(norm_params.norm_out, std::nullopt);
   }
