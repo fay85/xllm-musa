@@ -791,7 +791,7 @@ torch::Tensor mate_gated_delta_rule_decode(
           .reshape({batch_size, num_k_heads, head_k_dim});
   auto value =
       mixed_qkv
-          .slice(/*dim=*/1, /*start=*/2 * qk_cols, /*end=*/2 * qk_cols + v_cols})
+          .slice(/*dim=*/1, /*start=*/2 * qk_cols, /*end=*/2 * qk_cols + v_cols)
           .reshape({batch_size, num_v_heads, head_v_dim});
 
   // The compiled MATE decode kernel applies QK L2-norm internally

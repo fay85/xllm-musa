@@ -417,10 +417,10 @@ torch::Tensor causal_conv1d(
     int64_t /*pad_slot_id*/,
     int64_t /*run_mode*/) {
   const int64_t dim = x.size(-1);
-  const int64_t width = weight.size(0);
-  const int64_t state_len = width - 1;
   auto x_f = x.to(torch::kFloat32);
-  auto w_f = weight.to(torch::kFloat32);
+  auto w_f = weight.to(torch::kFloat32).t().contiguous();
+  const int64_t width = w_f.size(0);
+  const int64_t state_len = width - 1;
   torch::Tensor bias_f;
   const bool has_bias = bias_opt.has_value() && bias_opt.value().defined();
   if (has_bias) {
@@ -441,7 +441,7 @@ torch::Tensor causal_conv1d(
     auto seq = x_f.narrow(0, start, seq_len);
     torch::Tensor prefix;
     if (has_init) {
-      prefix = conv_state[slot].to(torch::kFloat32);
+      prefix = conv_state[slot].to(torch::kFloat32).t().contiguous();
     } else {
       prefix = torch::zeros({state_len, dim}, x_f.options());
     }
@@ -459,7 +459,7 @@ torch::Tensor causal_conv1d(
     }
     output.narrow(0, start, seq_len).copy_(out_seq);
     auto tail = padded.narrow(0, padded.size(0) - state_len, state_len);
-    conv_state[slot].copy_(tail.to(conv_state.dtype()));
+    conv_state[slot].copy_(tail.t().contiguous().to(conv_state.dtype()));
   }
   return output.to(x.dtype());
 }

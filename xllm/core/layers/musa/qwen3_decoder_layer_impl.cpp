@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "layers/musa/qwen3_decoder_layer_impl.h"
 
+#if !defined(XLLM_TORCH_MUSA)
+
 #include "layers/musa/attention.h"
 #include "layers/common/rotary_embedding.h"
 #include "layers/musa/mlp.h"
@@ -68,3 +70,5 @@ torch::Tensor Qwen3DecoderLayerImpl::forward(
   return x;
 }
 }  // namespace xllm::layer
+
+#endif  // !defined(XLLM_TORCH_MUSA)

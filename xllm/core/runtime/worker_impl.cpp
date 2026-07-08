@@ -161,7 +161,7 @@ void ensure_forward_input_device_tensors(ForwardInput& input,
                                   device);
 }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(XLLM_TORCH_MUSA)
 void prepare_input_params_for_linear_attention(ModelInputParams& input_params) {
   const std::vector<int32_t>& host_q_seq_lens =
       input_params.attention.host.q_seq_lens;
@@ -949,6 +949,11 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
                                            processed_input.input_params);
     }
 
+#endif
+#if defined(XLLM_TORCH_MUSA)
+    if (has_linear_attention_layers(context_.get_model_args())) {
+      prepare_input_params_for_linear_attention(processed_input.input_params);
+    }
 #endif
   };
 

@@ -338,10 +338,18 @@ run_xllm() {
     "--node_rank=0"
     "--block_size=${BLOCK_SIZE}"
     "--max_memory_utilization=${MAX_MEMORY_UTILIZATION}"
-    "--enable_prefix_cache=false"
-    "--enable_chunked_prefill=false"
+    "--enable_prefix_cache=${ENABLE_PREFIX_CACHE:-false}"
+    "--enable_chunked_prefill=${ENABLE_CHUNKED_PREFILL:-false}"
     "--enable_schedule_overlap=${ENABLE_SCHEDULE_OVERLAP:-true}"
   )
+
+  if [[ -n "${MAX_TOKENS_PER_CHUNK_FOR_PREFILL:-}" ]]; then
+    cmd+=("--max_tokens_per_chunk_for_prefill=${MAX_TOKENS_PER_CHUNK_FOR_PREFILL}")
+  fi
+
+  if [[ -n "${MAX_TOKENS_PER_BATCH:-}" ]]; then
+    cmd+=("--max_tokens_per_batch=${MAX_TOKENS_PER_BATCH}")
+  fi
 
   if [[ -n "$MAX_SEQS_PER_BATCH" ]]; then
     cmd+=("--max-seqs-per-batch=${MAX_SEQS_PER_BATCH}")
@@ -379,7 +387,10 @@ run_xllm() {
     if [[ -n "${MAX_TOKENS_FOR_GRAPH_MODE:-}" ]]; then
       cmd+=("--max_tokens_for_graph_mode=${MAX_TOKENS_FOR_GRAPH_MODE}")
     fi
-    echo "==> Graph mode: enable_graph=true vmm_pool=${ENABLE_GRAPH_VMM_POOL:-0}"
+    if [[ "${ENABLE_PREFILL_PIECEWISE_GRAPH:-0}" == "1" ]]; then
+      cmd+=("--enable_prefill_piecewise_graph=true")
+    fi
+    echo "==> Graph mode: enable_graph=true vmm_pool=${ENABLE_GRAPH_VMM_POOL:-0} prefill_piecewise=${ENABLE_PREFILL_PIECEWISE_GRAPH:-0}"
   fi
 
   # Speculative decoding. Defaults: off. Qwen3.5 MTP requires exporting draft
