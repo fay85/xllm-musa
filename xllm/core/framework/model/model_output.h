@@ -30,6 +30,9 @@ struct ModelOutput {
   torch::Tensor aux_hidden_states;
   // DSA top-k indices reused across MTP draft forwards.
   torch::Tensor dsa_topk_indices;
+  // [num_seqs, vocab_size] - logits captured inside the graph (D1).
+  // When defined, the worker skips eager lm_head computation.
+  torch::Tensor logits;
 
   ModelOutput() = default;
 

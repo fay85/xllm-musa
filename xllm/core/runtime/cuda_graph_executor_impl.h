@@ -125,6 +125,27 @@ class CudaGraphPersistentParam {
     hidden_states_.slice(/*dim=*/0, /*start=*/0, /*end=*/result_tokens)
         .copy_(value, /*non_blocking=*/true);
   }
+  // Logits captured inside the graph (D1). [num_seqs, vocab_size].
+  torch::Tensor logits(uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return logits_.slice(/*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+    }
+    return logits_;
+  }
+  void set_logits(const torch::Tensor& value) {
+    const uint32_t result_tokens = value.size(0);
+    logits_.slice(/*dim=*/0, /*start=*/0, /*end=*/result_tokens)
+        .copy_(value, /*non_blocking=*/true);
+  }
+  bool has_logits_buffer() const { return logits_.defined(); }
+  const torch::Device& device() const { return device_; }
+  void ensure_logits_buffer(int64_t vocab_size, torch::ScalarType dtype,
+                            const torch::Device& device) {
+    if (!logits_.defined()) {
+      logits_ = torch::empty({options_.max_tokens_per_batch(), vocab_size},
+                             torch::TensorOptions().dtype(dtype).device(device));
+    }
+  }
   torch::Tensor q_seq_lens(uint32_t actual_batch_size) const {
     if (actual_batch_size > 0) {
       return q_seq_lens_.slice(
@@ -282,6 +303,8 @@ class CudaGraphPersistentParam {
   torch::Tensor persistent_linear_state_indices_;
   torch::Tensor persistent_num_accepted_tokens_;
   torch::Tensor aux_hidden_states_;
+  // [max_tokens_per_batch, vocab_size] - persistent logits output for D1.
+  torch::Tensor logits_;
 
   // FlashInfer decode mode parameters
   torch::Tensor persistent_paged_kv_indptr_;
@@ -369,6 +392,10 @@ class CudaGraph {
   bool is_piecewise_ = false;
 
   uint32_t padded_num_tokens_;
+
+  // D1: when true, lm_head GEMM was captured inside the graph. On replay,
+  // persistent_param_.logits() holds the computed logits.
+  bool capture_logits_ = false;
 
   // Reference to persistent parameters (shared across multiple CudaGraph
   // instances)

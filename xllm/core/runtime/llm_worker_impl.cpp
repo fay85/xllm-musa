@@ -267,7 +267,10 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
 
   torch::Tensor logits;
   torch::Tensor selected_hidden_from_lm_head;
-  if (sampling_params.selected_token_idxes.defined()) {
+  if (model_output.logits.defined()) {
+    // D1: logits were captured inside the graph; skip eager lm_head.
+    logits = model_output.logits;
+  } else if (sampling_params.selected_token_idxes.defined()) {
     torch::Tensor selected_token_idxes = sampling_params.selected_token_idxes;
     if (model_output.hidden_states.defined() &&
         selected_token_idxes.device() != model_output.hidden_states.device()) {
