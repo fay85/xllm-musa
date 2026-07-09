@@ -804,8 +804,12 @@ torch::Tensor mate_gated_delta_rule_decode(
   // A_log/dt_bias/state (same ABI as the MTP kernel — see line 876-877).
   // Coerce a/b to the q/k/v dtype to satisfy the ABI.
   const auto io_dtype = query.scalar_type();
-  auto a = params.a.to(io_dtype).contiguous();
-  auto b = params.b.to(io_dtype).contiguous();
+  auto a = (params.a.scalar_type() == io_dtype && params.a.is_contiguous())
+               ? params.a
+               : params.a.to(io_dtype).contiguous();
+  auto b = (params.b.scalar_type() == io_dtype && params.b.is_contiguous())
+               ? params.b
+               : params.b.to(io_dtype).contiguous();
   if (a.dim() == 1) {
     a = a.unsqueeze(0);
   }
@@ -815,7 +819,11 @@ torch::Tensor mate_gated_delta_rule_decode(
   CHECK(a.dim() == 2 && b.dim() == 2)
       << "mate GDN decode expects a/b shaped [B, Hv]";
 
-  auto state_f32 = params.state.to(torch::kFloat32).contiguous();
+  auto state_f32 =
+      (params.state.scalar_type() == torch::kFloat32 &&
+       params.state.is_contiguous())
+          ? params.state
+          : params.state.to(torch::kFloat32).contiguous();
   auto state_indices = params.state_indices.to(torch::kInt32).contiguous();
   auto A_log_f32 = params.A_log.to(torch::kFloat32).contiguous();
   auto dt_bias_f32 = params.dt_bias.to(torch::kFloat32).contiguous();
