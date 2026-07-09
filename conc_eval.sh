@@ -29,6 +29,7 @@ export NUM_SPECULATIVE_TOKENS="${NUM_SPECULATIVE_TOKENS:-0}"
 export ENABLE_GRAPH="${ENABLE_GRAPH:-1}"
 export ENABLE_GRAPH_VMM_POOL="${ENABLE_GRAPH_VMM_POOL:-0}"
 export XLLM_USE_FA3="${XLLM_USE_FA3:-1}"
+export XLLM_GDN_DECODE_BACKEND="${XLLM_GDN_DECODE_BACKEND:-mate}"
 INPUT_LEN="${INPUT_LEN:-128}"
 OUTPUT_LEN="${OUTPUT_LEN:-256}"
 # Throughput runs need full-length decode; Qwen3.5 may EOS early otherwise.
@@ -87,7 +88,7 @@ import json
 import os
 import re
 import time
-import urllib.request
+import requests
 import concurrent.futures as cf
 from pathlib import Path
 
@@ -266,32 +267,61 @@ if INPUT_LEN >= LONG_CONTEXT_THRESHOLD and BUILT_PROMPT_TOKENS < int(INPUT_LEN *
 
 
 def ask(i: int, prompt: str, max_tokens: int, temperature: float = 0.7):
-    body = json.dumps(
-        {
-            "model": MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "max_tokens": max_tokens,
-            "temperature": temperature,
-            "ignore_eos": os.environ.get("IGNORE_EOS", "0") == "1",
-        }
-    ).encode()
+    payload = {
+        "model": MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": temperature,
+        "ignore_eos": os.environ.get("IGNORE_EOS", "0") == "1",
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    top_k = int(os.environ.get("TOP_K", "0"))
+    top_p = float(os.environ.get("TOP_P", "1.0"))
+    if top_k > 0:
+        payload["top_k"] = top_k
+    if top_p < 1.0:
+        payload["top_p"] = top_p
     t0 = time.perf_counter()
+    ttft = None
     try:
-        with urllib.request.urlopen(
-            urllib.request.Request(
-                URL, data=body, headers={"Content-Type": "application/json"}
-            ),
+        resp = requests.post(
+            URL,
+            json=payload,
+            stream=True,
             timeout=int(os.environ.get("HTTP_TIMEOUT", "1800")),
-        ) as resp:
-            data = json.loads(resp.read())
-        usage = data.get("usage") or {}
-        content = (data.get("choices") or [{}])[0].get("message", {}).get("content") or ""
+        )
+        resp.raise_for_status()
+        content_parts = []
+        usage = {}
+        for line in resp.iter_lines(decode_unicode=True):
+            if not line or not line.startswith("data: "):
+                continue
+            data_str = line[6:]
+            if data_str == "[DONE]":
+                break
+            try:
+                chunk = json.loads(data_str)
+            except json.JSONDecodeError:
+                continue
+            if chunk.get("choices"):
+                delta = chunk["choices"][0].get("delta", {})
+                if delta.get("content"):
+                    if ttft is None:
+                        ttft = time.perf_counter() - t0
+                    content_parts.append(delta["content"])
+            if chunk.get("usage"):
+                usage = chunk["usage"]
+        resp.close()
+        content = "".join(content_parts)
+        latency = time.perf_counter() - t0
         return {
             "i": i,
             "content": content,
             "prompt_tokens": int(usage.get("prompt_tokens", 0)),
             "completion_tokens": int(usage.get("completion_tokens", 0)),
-            "latency_s": time.perf_counter() - t0,
+            "latency_s": latency,
+            "ttft_s": ttft if ttft is not None else 0.0,
             "error": None,
         }
     except Exception as exc:
@@ -301,6 +331,7 @@ def ask(i: int, prompt: str, max_tokens: int, temperature: float = 0.7):
             "prompt_tokens": 0,
             "completion_tokens": 0,
             "latency_s": time.perf_counter() - t0,
+            "ttft_s": 0.0,
             "error": repr(exc),
         }
 
@@ -325,6 +356,7 @@ def save_answer(c: int, req_idx: int, result: dict) -> Path:
         f.write(f"request={req_idx}\n")
         f.write(f"prompt_tokens={result['prompt_tokens']}\n")
         f.write(f"completion_tokens={result['completion_tokens']}\n")
+        f.write(f"ttft_s={result['ttft_s']:.3f}\n")
         f.write(f"latency_s={result['latency_s']:.3f}\n")
         if result["error"]:
             f.write(f"error={result['error']}\n")
@@ -340,10 +372,10 @@ def warmup():
     )
     r = ask(0, LONG_PROMPT, OUTPUT_LEN, temperature=0.0)
     tag = "ERR " if r["error"] else ("GARB" if is_garbage(r["content"]) else "ok  ")
-    tpot_ms = 1000.0 * r["latency_s"] / max(1, r["completion_tokens"])
+    tpot_ms = 1000.0 * (r["latency_s"] - r["ttft_s"]) / max(1, r["completion_tokens"] - 1)
     print(
         f"  [{tag}] warmup: pt={r['prompt_tokens']} ct={r['completion_tokens']} "
-        f"lat={r['latency_s']:.1f}s TPOT={tpot_ms:.1f}ms"
+        f"ttft={r['ttft_s']:.2f}s lat={r['latency_s']:.1f}s TPOT={tpot_ms:.1f}ms"
     )
     if r["error"]:
         raise RuntimeError(f"warmup failed: {r['error']}")
@@ -386,6 +418,7 @@ def run(c: int):
     ng = sum(is_garbage(results[i]["content"]) for i in results)
     ne = sum(1 for i in results if results[i]["error"])
     lats = [results[i]["latency_s"] for i in results]
+    ttfts = [results[i]["ttft_s"] for i in results]
 
     print(
         f"\n######## C={c}  input_len~={INPUT_LEN}  output_len={OUTPUT_LEN}  temp=0.7 ########"
@@ -395,22 +428,27 @@ def run(c: int):
         tag = "ERR " if r["error"] else ("GARB" if is_garbage(r["content"]) else "ok  ")
         snip = (r["error"] if r["error"] else (r["content"] or "")).replace("\n", " ")[:90]
         out_path = save_answer(c, i + 1, r)
-        tpot_ms = 1000.0 * r["latency_s"] / max(1, r["completion_tokens"])
+        tpot_ms = 1000.0 * (r["latency_s"] - r["ttft_s"]) / max(1, r["completion_tokens"] - 1)
         print(
             f"  [{tag}] req{i + 1:>3}: pt={r['prompt_tokens']:>4} ct={r['completion_tokens']:>3} "
-            f"lat={r['latency_s']:5.1f}s TPOT={tpot_ms:5.1f}ms | {snip} | saved={out_path.name}"
+            f"ttft={r['ttft_s']:.2f}s lat={r['latency_s']:5.1f}s TPOT={tpot_ms:5.1f}ms | {snip} | saved={out_path.name}"
         )
 
     ok_count = max(1, c - ne)
-    tpots = [1000.0 * results[i]["latency_s"] / max(1, results[i]["completion_tokens"]) for i in results if not results[i]["error"] and results[i]["completion_tokens"] > 0]
+    ok_results = [results[i] for i in results if not results[i]["error"] and results[i]["completion_tokens"] > 1]
+    tpots = [1000.0 * (r["latency_s"] - r["ttft_s"]) / max(1, r["completion_tokens"] - 1) for r in ok_results]
     mean_tpot_ms = sum(tpots) / len(tpots) if tpots else float("nan")
-    decode_tpot_batch_ms = 1000.0 * wall / max(1, total_ct)
+    total_decode_time = sum(r["latency_s"] - r["ttft_s"] for r in ok_results)
+    total_decode_tokens = sum(max(1, r["completion_tokens"] - 1) for r in ok_results)
+    weighted_tpot_ms = 1000.0 * total_decode_time / max(1, total_decode_tokens)
+    mean_ttft_ms = 1000.0 * sum(ttfts) / max(1, len(ttfts))
+    e2e_per_tok_ms = 1000.0 * wall / max(1, total_ct)
     print(
         f"  >>> C={c}: wall={wall:.2f}s  total_prompt_tokens={total_pt}  "
         f"total_completion_tokens={total_ct}  "
         f"AGGREGATE={(total_pt + total_ct) / wall:.1f} tok/s  "
         f"per-req-avg={(total_ct / ok_count) / (sum(lats) / len(lats)):.2f} tok/s  "
-        f"mean_TPOT={mean_tpot_ms:.1f}ms  batch_decode_TPOT={decode_tpot_batch_ms:.1f}ms  "
+        f"mean_TTFT={mean_ttft_ms:.0f}ms  mean_TPOT={mean_tpot_ms:.1f}ms  weighted_TPOT={weighted_tpot_ms:.1f}ms  e2e_per_tok={e2e_per_tok_ms:.1f}ms  "
         f"garbage={ng}/{c}  errors={ne}"
     )
 
