@@ -28,10 +28,15 @@ limitations under the License.
 #include <sstream>
 
 #include "common/global_flags.h"
+#include "core/platform/device.h"
+#if defined(USE_CUDA) || defined(USE_MUSA)
+#include <musa_runtime_api.h>
+#endif
 #include "core/framework/config/disagg_pd_config.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/scheduler_config.h"
+#include "core/framework/config/service_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "framework/batch/batch_factory.h"
 #include "framework/request/request_state.h"
@@ -929,15 +934,21 @@ void ProfileManager::warmup_for_graph() {
   if (plan == GraphWarmupPlan::PREFILL_ONLY) {
     LOG(INFO) << "PREFILL graph warmup: prefill only";
     warmup_prefill_for_graph();
+    xllm::Device::empty_cache(/*device_index=*/-1);
+    LOG(INFO) << "Empty_cache after graph warmup";
     return;
   }
   if (plan == GraphWarmupPlan::DECODE_ONLY) {
     LOG(INFO) << "DECODE graph warmup: decode buckets only";
     warmup_decode_for_graph();
+    xllm::Device::empty_cache(/*device_index=*/-1);
+    LOG(INFO) << "Empty_cache after graph warmup";
     return;
   }
 
   warmup_unified_for_graph();
+  xllm::Device::empty_cache(/*device_index=*/-1);
+  LOG(INFO) << "Empty_cache after graph warmup";
 }
 
 void ProfileManager::warmup_prefill_for_graph() {
@@ -960,8 +971,10 @@ void ProfileManager::warmup_prefill_for_graph() {
   auto& model_args = engine_->model_args();
   int32_t max_context_len = model_args.max_position_embeddings();
 
-  int32_t prefill_tokens =
-      std::min(options_.max_tokens_per_batch(), max_context_len);
+  int32_t prefill_tokens = std::min(
+      {options_.max_tokens_per_batch(),
+       ::xllm::ExecutionConfig::get_instance().max_tokens_for_graph_mode(),
+       max_context_len});
   double prefill_latency =
       run_request(prefill_tokens, /*prefix_length=*/0, /*batch_size=*/1);
   LOG(INFO) << "Prefill warmup completed: tokens=" << prefill_tokens
@@ -976,11 +989,17 @@ void ProfileManager::warmup_unified_for_graph() {
 void ProfileManager::warmup_decode_for_graph() {
   auto& model_args = engine_->model_args();
   int32_t max_context_len = model_args.max_position_embeddings();
-  int32_t max_seqs_per_batch = options_.max_seqs_per_batch();
+  int32_t max_decode_batch_size = options_.max_seqs_per_batch();
+  const int32_t max_concurrent_requests =
+      ::xllm::ServiceConfig::get_instance().max_concurrent_requests();
+  if (max_concurrent_requests > 0) {
+    max_decode_batch_size =
+        std::min(max_decode_batch_size, max_concurrent_requests);
+  }
   int32_t decode_seq_len = std::min(16, max_context_len);
 
   std::vector<int32_t> decode_batch_sizes =
-      graph_decode_buckets(max_seqs_per_batch, options_.dp_size());
+      graph_decode_buckets(max_decode_batch_size, options_.dp_size());
   const int32_t decode_bucket_count =
       static_cast<int32_t>(decode_batch_sizes.size());
 
@@ -998,8 +1017,29 @@ void ProfileManager::warmup_decode_for_graph() {
     const int32_t batch_size =
         decode_batch_sizes[static_cast<size_t>(bucket_index)];
     std::vector<int32_t> total_length_vec(batch_size, decode_seq_len);
+
+    // Log free memory before each bucket capture
+    xllm::Device::empty_cache(/*device_index=*/-1);
+    size_t mem_before_free = 0, mem_before_total = 0;
+    musaMemGetInfo(&mem_before_free, &mem_before_total);
+    LOG(INFO) << "Graph warmup bucket=" << batch_size
+              << " free_mem_before="
+              << (mem_before_free / (1024.0 * 1024.0 * 1024.0)) << " GB";
+
     const double decode_latency = run_graph_decode_request(total_length_vec);
     decode_total_latency += decode_latency;
+
+    // Log free memory after each bucket capture
+    xllm::Device::empty_cache(/*device_index=*/-1);
+    size_t mem_after_free = 0, mem_after_total = 0;
+    musaMemGetInfo(&mem_after_free, &mem_after_total);
+    LOG(INFO) << "Graph warmup bucket=" << batch_size
+              << " free_mem_after="
+              << (mem_after_free / (1024.0 * 1024.0 * 1024.0))
+              << " GB (delta="
+              << ((mem_before_free - mem_after_free) / (1024.0 * 1024.0 * 1024.0))
+              << " GB)";
+
     LOG(INFO) << graph_warmup_progress(
         /*completed=*/decode_bucket_count - bucket_index,
         /*total=*/decode_bucket_count,
