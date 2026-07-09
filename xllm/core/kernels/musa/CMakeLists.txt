@@ -69,6 +69,7 @@ if(XLLM_TORCH_MUSA)
     paged_cache.cu
     random_sample.cpp
     replace_token.cu
+    fused_qknorm_rope.cu
     # Native block-wise FP8 GEMM (mate/muDNN groupwise)
     fp8_block_gemm.cpp
     # Fused per-token-group FP8 activation quant (MUSA-native intrinsics)

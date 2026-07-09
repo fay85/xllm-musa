@@ -224,6 +224,19 @@ void fused_add_gemma_rms_norm(torch::Tensor& input,
                               torch::Tensor& weight,
                               double epsilon);
 
+void fused_qk_norm_rope(torch::Tensor& qkv,
+                        int64_t num_heads_q,
+                        int64_t num_heads_k,
+                        int64_t num_heads_v,
+                        int64_t head_dim,
+                        double eps,
+                        const torch::Tensor& q_weight,
+                        const torch::Tensor& k_weight,
+                        const torch::Tensor& cos_sin_cache,
+                        bool interleaved,
+                        const torch::Tensor& position_ids,
+                        int64_t k_head_offset = 0);
+
 torch::Tensor matmul(torch::Tensor a,
                      torch::Tensor b,
                      std::optional<torch::Tensor> bias,

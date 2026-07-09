@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include "core/kernels/musa/musa_ops_api.h"
+
 #include <tuple>
 #include <vector>
 
@@ -219,12 +221,42 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
   }
 
   const int64_t T = q.size(0);
-  auto q_3d = q.view({T, num_heads_, head_dim_});
-  q = std::get<0>(q_norm_->forward(q_3d)).view({T, q_size_});
-  auto k_3d = k.view({T, num_kv_heads_, head_dim_});
-  k = std::get<0>(k_norm_->forward(k_3d)).view({T, kv_size_});
 
-  rotary_emb_->forward(positions, q, k);
+#if defined(XLLM_TORCH_MUSA)
+  // Fused QK-norm + RoPE: collapse 3 kernel launches into 1 for decode
+  // (1D positions). Writes norm+rope results back into qkv in-place.
+  if (positions.dim() == 1 && positions.scalar_type() == torch::kInt32 &&
+      (head_dim_ == 64 || head_dim_ == 128 || head_dim_ == 256)) {
+    auto cos_sin_cache = rotary_emb_->get_cos_sin_cache();
+    int64_t k_head_offset = attn_output_gate_ ? num_heads_ * 2 : num_heads_;
+    xllm::kernel::cuda::fused_qk_norm_rope(
+        qkv,
+        num_heads_,
+        num_kv_heads_,
+        num_kv_heads_,
+        head_dim_,
+        rms_norm_eps_,
+        q_norm_->weight(),
+        k_norm_->weight(),
+        cos_sin_cache,
+        /*interleaved=*/false,
+        positions,
+        k_head_offset);
+    q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
+    k = qkv.slice(/*dim=*/-1,
+                  /*start=*/attn_output_gate_ ? q_size_ * 2 : q_size_,
+                  /*end=*/attn_output_gate_ ? q_size_ * 2 + kv_size_
+                                            : q_size_ + kv_size_);
+  } else
+#endif
+  {
+    auto q_3d = q.view({T, num_heads_, head_dim_});
+    q = std::get<0>(q_norm_->forward(q_3d)).view({T, q_size_});
+    auto k_3d = k.view({T, num_kv_heads_, head_dim_});
+    k = std::get<0>(k_norm_->forward(k_3d)).view({T, kv_size_});
+
+    rotary_emb_->forward(positions, q, k);
+  }
   auto out = std::get<0>(attn_->forward(attn_metadata, q, k, v, kv_cache));
 
   if (attn_output_gate_) {
