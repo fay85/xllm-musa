@@ -42,6 +42,16 @@ void block_copy(torch::Tensor key_cache_ptrs,
                 int64_t numel_per_block,
                 torch::ScalarType cache_dtype);
 
+// Fused token-replace for schedule-overlap decode path.
+// For each position i: if dst[i] < 0, set dst[i] = src[(-dst[i]) - 1].
+// Otherwise dst[i] is left unchanged.  Modifies dst in-place.
+// Declared in the musa namespace (not cuda) because the call site
+// (worker_impl.cpp) is compiled without the musamapping plugin, so
+// the cuda->musa token rewrite would not apply there.
+void replace_token(torch::Tensor& dst,
+                   torch::Tensor& src,
+                   bool synchronize_stream = true);
+
 }
 
 namespace xllm::kernel::cuda {
