@@ -17,6 +17,10 @@ limitations under the License.
 
 #include <torch/torch.h>
 
+#if defined(XLLM_TORCH_MUSA)
+#include <musa_runtime_api.h>
+#endif
+
 #include <algorithm>
 #include <memory>
 #include <string>
@@ -191,7 +195,7 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
                          attn_metadata,
                          kv_caches[i],
                          input_params,
-                         mrope_cos_sin);
+                          mrope_cos_sin);
 #if defined(USE_NPU)
       if (input_params.parallel.layer_synchronizer != nullptr &&
           !input_params.parallel.layer_synchronizer->record_event(
