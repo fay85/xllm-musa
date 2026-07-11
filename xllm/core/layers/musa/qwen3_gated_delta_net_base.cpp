@@ -1490,7 +1490,11 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
         initial_state_tensor.select(0, static_cast<int64_t>(i)).fill_(0.0);
       }
     }
-    if (!fla_ssm_state_layout && attn_metadata.is_chunked_prefill) {
+    // Mate prefill / decode use k-last state (B, H, V, K) in the ssm cache
+    // slots. chunk_gated_delta_rule expects (B, H, K, V). Qwen3.5 sets
+    // fla_ssm_state_layout=true but the cache still carries mate k-last data
+    // after the first prefill chunk, so always transpose on chunked steps.
+    if (attn_metadata.is_chunked_prefill) {
       initial_state_tensor =
           initial_state_tensor.transpose(-1, -2).contiguous();
     }
@@ -1534,9 +1538,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       per_seq_states.emplace_back(seq_last_state[0]);
     }
     last_recurrent_state = torch::stack(per_seq_states, /*dim=*/0);
-    torch::Tensor state_to_store = fla_ssm_state_layout
-                                       ? last_recurrent_state
-                                       : last_recurrent_state.transpose(-1, -2);
+    // Write back in mate k-last layout so mate decode keeps a consistent view.
+    torch::Tensor state_to_store =
+        last_recurrent_state.transpose(-1, -2).contiguous();
     ssm_cache.index_put_({linear_state_base_indices},
                          state_to_store.to(ssm_cache.dtype()));
   } else if (checkpoint_stride > 1) {

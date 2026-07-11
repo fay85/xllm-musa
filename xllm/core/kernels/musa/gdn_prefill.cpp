@@ -295,32 +295,81 @@ void l2norm_last_dim(torch::Tensor& tensor) {
   tensor = tensor.to(orig_dtype);
 }
 
-// Cumulative log-decay within each chunk along the time axis. Input g is
-// log(alpha) from fused_gdn_gating (same semantics as FLA/Triton and mate
-// is_log_space=True). Do not round-trip through exp/log: large negative g
-// values underflow to zero and corrupt the cumsum.
-torch::Tensor chunk_local_cumsum_log_space(const torch::Tensor& g_log,
-                                           int64_t chunk_size) {
-  auto g = g_log.to(torch::kFloat32).contiguous();
-  const int64_t batch_size = g.size(0);
-  const int64_t num_heads = g.size(2);
-  const int64_t pad_size = chunk_pad_size(g.size(1), chunk_size);
-  if (pad_size > 0) {
-    // Pad log-g with 0 so padded positions contribute no extra decay (alpha=1).
-    g = pad_time_dim_3d(g, pad_size, 0.0);
-  }
-  const int64_t padded_len = g.size(1);
-  g = g.reshape({batch_size, padded_len / chunk_size, chunk_size, num_heads});
-  g = g.cumsum(/*dim=*/2);
-  return g.reshape({batch_size, padded_len, num_heads}).contiguous();
-}
-
 bool mate_gdn_debug_enabled() {
   static const bool enabled = [] {
     const char* env = std::getenv("XLLM_MATE_GDN_DEBUG");
     return env != nullptr && env[0] == '1';
   }();
   return enabled;
+}
+
+// Compute A = (I + lower_tri(beta * K @ K^T))^{-1} matching SGLang mate.kkt_solve.
+// The Mate prefill kernel expects this as the `a` parameter (not zeros).
+// Decay/gating is not included here. The Mate `_log1` specialization consumes
+// raw log(alpha) and computes its chunk-local cumulative sum internally.
+//
+// key:  [B, T, Hqk, D]  (already L2-normalized, post-padding)
+// beta: [B, T, Hv]      (float32, sigmoid output)
+// returns: [B, T, Hv, chunk_size]  (same dtype as key)
+torch::Tensor kkt_solve(const torch::Tensor& key,
+                        const torch::Tensor& beta,
+                        int64_t chunk_size) {
+  const int64_t batch_size = key.size(0);
+  const int64_t num_tokens = key.size(1);
+  const int64_t Hqk = key.size(2);
+  const int64_t DK = key.size(3);
+  const int64_t Hv = beta.size(2);
+
+  auto k_f32 = key.to(torch::kFloat32).contiguous();
+  auto beta_f32 = beta.to(torch::kFloat32).contiguous();
+
+  if (Hv != Hqk) {
+    CHECK(Hv % Hqk == 0) << "kkt_solve: Hv (" << Hv
+                         << ") must be a multiple of Hqk (" << Hqk << ")";
+    const int64_t repeat = Hv / Hqk;
+    k_f32 = k_f32.repeat_interleave(repeat, /*dim=*/2);
+  }
+
+  auto k_beta = k_f32 * beta_f32.unsqueeze(-1);
+
+  const int64_t num_chunks = num_tokens / chunk_size;
+
+  auto k_chunks = k_f32.reshape({batch_size, num_chunks, chunk_size, Hv, DK})
+                       .permute({0, 3, 1, 2, 4})
+                       .contiguous();
+  auto kb_chunks = k_beta.reshape({batch_size, num_chunks, chunk_size, Hv, DK})
+                         .permute({0, 3, 1, 2, 4})
+                         .contiguous();
+
+  auto gram = torch::matmul(kb_chunks, k_chunks.transpose(-1, -2));
+
+  auto mask = torch::triu(
+      torch::ones({chunk_size, chunk_size},
+                  torch::TensorOptions().dtype(torch::kBool).device(key.device())),
+      0);
+  auto attn = (-gram).masked_fill(mask, 0.0);
+
+  for (int64_t i = 1; i < chunk_size; ++i) {
+    if (!attn.is_contiguous()) {
+      attn = attn.contiguous();
+    }
+    auto row = attn.slice(-2, i, i + 1).slice(-1, 0, i).squeeze(-2).clone();
+    auto sub = attn.slice(-2, 0, i).slice(-1, 0, i).clone();
+    auto row_final = row + (row.unsqueeze(-1) * sub).sum(-2);
+    attn.index_put_({torch::indexing::Ellipsis,
+                     torch::indexing::Slice(i, i + 1),
+                     torch::indexing::Slice(0, i)},
+                    row_final.unsqueeze(-2));
+  }
+
+  attn = attn + torch::eye(chunk_size, torch::TensorOptions()
+                                            .dtype(attn.dtype())
+                                            .device(attn.device()));
+
+  attn = attn.permute({0, 2, 3, 1, 4}).contiguous();
+  attn = attn.reshape({batch_size, num_tokens, Hv, chunk_size});
+
+  return attn.to(key.scalar_type());
 }
 
 }
@@ -380,14 +429,16 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   if (pad_size > 0) {
     g_log = pad_time_dim_3d(g_log, pad_size, 0.0);
   }
-  auto g_cumsum = chunk_local_cumsum_log_space(g_log, kGdnChunkSize);
-  g_cumsum = g_cumsum.clamp(-80.0, 0.0);
+  // Match SGLang's mate.gdn_prefill call with is_log_space=true. The deployed
+  // `_log1` kernel performs the chunk-local cumulative sum itself. Passing a
+  // precomputed cumulative tensor here would apply the decay integration
+  // twice and corrupt every token after the first one.
 
   const std::string uri =
       get_mate_gdn_prefill_uri(num_q_heads, num_v_heads, query.scalar_type());
   if (mate_gdn_debug_enabled()) {
     LOG(INFO) << "[MateGdnPrefill] q=" << query.sizes() << " k=" << key.sizes()
-              << " v=" << value.sizes() << " g=" << g_cumsum.sizes()
+              << " v=" << value.sizes() << " g=" << g_log.sizes()
               << " beta=" << beta.sizes() << " uri=" << uri
               << " pad_size=" << pad_size << " seq_len=" << seq_len
               << " num_tokens=" << num_tokens;
@@ -395,10 +446,17 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   bind_tvmffi_stream_to_current_torch_stream(query.device());
   auto run = get_function(uri, "run");
 
-  auto a_dummy = torch::zeros(
-      {batch_size, num_tokens, num_v_heads, kGdnChunkSize}, query.options());
+  auto a = kkt_solve(key, beta, kGdnChunkSize).contiguous();
+  if (mate_gdn_debug_enabled()) {
+    auto a_f32 = a.to(torch::kFloat32);
+    LOG(INFO) << "[MateGdnPrefill] a(kkt): min=" << a_f32.min().item<float>()
+              << " max=" << a_f32.max().item<float>()
+              << " has_nan=" << a_f32.isnan().any().item<bool>()
+              << " has_inf=" << a_f32.isinf().any().item<bool>();
+  }
   torch::Tensor h0;
   if (params.initial_state.has_value() && params.initial_state->defined()) {
+    // xLLM and the Mate kernel both use k-last state layout (B, H, V, K).
     h0 = params.initial_state->to(torch::kFloat32).contiguous();
     CHECK_EQ(h0.dim(), 4) << "mate GDN prefill initial_state must be 4D";
     CHECK_EQ(h0.size(0), batch_size)
@@ -417,6 +475,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   }
   auto output = torch::empty({batch_size, num_tokens, num_v_heads, head_v_dim},
                              value.options());
+  // Kernel writes final_state in k-last layout (B, H, V, K), same as xLLM cache.
   auto final_state = torch::empty(
       {batch_size, num_v_heads, head_v_dim, head_k_dim},
       torch::TensorOptions().dtype(torch::kFloat32).device(query.device()));
@@ -424,8 +483,8 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   run(to_ffi_tensor(query),
       to_ffi_tensor(key),
       to_ffi_tensor(value),
-      to_ffi_tensor(a_dummy),
-      to_ffi_tensor(g_cumsum),
+      to_ffi_tensor(a),
+      to_ffi_tensor(g_log),
       to_ffi_tensor(beta),
       to_ffi_tensor(h0),
       to_ffi_tensor(output),
@@ -451,8 +510,8 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
               << " | state: min=" << st_min << " max=" << st_max
               << " has_nan=" << st_has_nan << " has_inf=" << st_has_inf
               << " | q_norm=" << query.to(torch::kFloat32).abs().max().item<float>()
-              << " g_cumsum_min=" << g_cumsum.min().item<float>()
-              << " g_cumsum_max=" << g_cumsum.max().item<float>()
+              << " g_log_min=" << g_log.min().item<float>()
+              << " g_log_max=" << g_log.max().item<float>()
               << " beta_min=" << beta.min().item<float>()
               << " beta_max=" << beta.max().item<float>();
   }
@@ -474,6 +533,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       ref_params.scale = params.scale;
       if (params.initial_state.has_value() &&
           params.initial_state->defined()) {
+        // PyTorch reference uses (B, H, K, V); xLLM cache is k-last (B, H, V, K).
         ref_params.initial_state =
             params.initial_state->transpose(-1, -2).contiguous();
       }
@@ -488,7 +548,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   }
 
   if (pad_size > 0) {
-    output = output.slice(/*dim=*/1, /*start=*/0, /*end=*/seq_len);
+    output = output.slice(/*dim=*/1, /*start=*/0, /*end=*/seq_len).contiguous();
   }
   return {output, final_state};
 }
