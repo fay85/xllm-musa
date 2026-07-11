@@ -104,6 +104,18 @@ torch::Tensor mate_gated_delta_rule_mtp(
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
+void causal_conv1d_fwd(
+    const torch::Tensor &x,
+    const torch::Tensor &weight,
+    torch::Tensor &out,
+    const std::optional<torch::Tensor> &bias,
+    const std::optional<torch::Tensor> &conv_states,
+    const std::optional<torch::Tensor> &query_start_loc,
+    const std::optional<torch::Tensor> &cache_indices,
+    const std::optional<torch::Tensor> &has_initial_state,
+    bool silu_activation,
+    int64_t pad_slot_id);
+
 torch::Tensor causal_conv1d(
     const torch::Tensor& x,
     const torch::Tensor& weight,

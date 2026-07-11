@@ -1694,6 +1694,9 @@ struct MateGatedDeltaRulePrefillParams {
   torch::Tensor g;
   torch::Tensor beta;
   std::optional<float> scale = std::nullopt;
+  // Initial recurrent state in mate k-last layout [B, Hv, V, K], float32.
+  std::optional<torch::Tensor> initial_state = std::nullopt;
+  bool output_final_state = true;
   bool use_qk_l2norm_in_kernel = true;
 };
 

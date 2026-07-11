@@ -15,9 +15,7 @@ export CUDAToolkit_ROOT=/usr/local/musa
 export MUSA_TOOLKIT_ROOT_DIR=/usr/local/musa
 export MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping
 export MUSA_INCLUDE_PATH=/usr/local/musa/include
-# MTTOplib lives under /workspace/MTTOplib in this container (not under
-# $MUSA_HOME/tools/MTTOplib that the CMake default expects).
-export MTT_OPLIB_PATH=/workspace/MTTOplib
+# XLLM_TORCH_MUSA builds use FlashInfer/Mate kernels, not native MTTOplib.
 
 export PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch
 export LIBTORCH_ROOT=/usr/local/lib/python3.10/dist-packages/torch

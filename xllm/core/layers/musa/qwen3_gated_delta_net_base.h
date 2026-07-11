@@ -37,6 +37,7 @@ namespace layer {
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
 bool use_mate_gdn_mtp_kernel();
+bool use_mate_gdn_prefill_kernel();
 
 // After MTP rejection sampling, scatter per-layer intermediate SSM/conv states
 // into the live linear cache slots (sglang post-verify commit).

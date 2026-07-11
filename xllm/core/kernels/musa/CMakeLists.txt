@@ -62,6 +62,7 @@ if(XLLM_TORCH_MUSA)
     # GDN hybrid layers (36 linear-attn layers)
     gdn_decode.cu
     gdn_prefill.cpp
+    causal_conv1d.cu
     # Norm / MLP / projections
     gemma_norm.cu
     activation.cu

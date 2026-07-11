@@ -119,19 +119,6 @@ size_t get_allocator_reserved_bytes(c10::DeviceIndex device_index) {
   return static_cast<size_t>(device_stats.reserved_bytes[stat_index].current);
 }
 
-// Accepts CUDA / torch_musa tensors of either int32 OR int64 dtype. Returns
-// true iff the tensor is suitable for the LLM-decode fast path (we'll cast
-// any int64 input down to int32 inside the fast-path host wrapper before the
-// kernel call). int64 acceptance is necessary because PyTorch's default
-// integer dtype is int64, and torch_musa returns positions / tokens as int64
-// without an explicit cast at the upstream metadata-builder boundary -- the
-// values are tiny (positions <= max_position_embeddings, vocab ids, block
-// ids) and always fit in int32, but the containers come in 8-byte.
-//
-// Without this relaxation the fast path was always rejected in graph mode on
-// torch_musa, forcing the slow path's per-call `.slice(0, 0, N).copy_(...)`
-// chain for the persistent paged-KV mirrors (correct functionally but adds
-// a per-layer-per-step host overhead).
 bool is_cuda_contiguous_int_tensor(const torch::Tensor& tensor) {
   if (!tensor.defined() || !tensor.is_contiguous()) {
     return false;
@@ -321,15 +308,6 @@ void CudaGraphPersistentParam::update_llm_decode_metadata_fast_path(
   CHECK_GE(actual_batch_size, 0) << "actual_batch_size must be >= 0";
   CHECK_GE(actual_num_tokens, 0) << "actual_num_tokens must be >= 0";
 
-  // The fast-path kernel reads all metadata as `int32_t*` (small indices --
-  // block ids, positions, vocab ids, etc. always fit in int32, and int32
-  // halves the metadata bandwidth + register pressure in the captured
-  // attention loop). On torch_musa positions / tokens / paged_kv_* may arrive
-  // as int64 (PyTorch's default integer dtype). Cast eagerly here, before
-  // graph capture/replay, so the captured forward sees a stable int32
-  // device pointer with valid data. The cast tensors are small (worst case
-  // `bucket_num_tokens` ints, ~tens of bytes per step for decode bucket=1)
-  // and allocated outside any captured region.
   auto to_int32 = [](const torch::Tensor& t) -> torch::Tensor {
     if (!t.defined() || t.scalar_type() == torch::kInt32) {
       return t;
@@ -642,29 +620,6 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
       can_use_llm_decode_fast_path(tokens, positions, params);
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
-  // SGLang-style host-mirror staging for the Mate FFI decode kernel under
-  // CUDA/MUSA stream capture.
-  //
-  // The Mate FFI batch_decode wrapper requires kDLCPU pointers for the three
-  // paged-KV index tensors (indptr / indices / last_page_len). When the input
-  // builder pre-stages them in `params.attention.host.paged_kv_*`, the
-  // AttentionMetadataBuilder forwards them verbatim and batch_decode reuses
-  // the CPU storage at zero cost (this is the common LLM-engine path; see
-  // batch_input_builder.cpp lines 928-937).
-  //
-  // The warmup/profile path (profile_manager -> run_graph_decode_request)
-  // currently lands in batch_decode with all three host mirrors undefined --
-  // batch_decode's lazy `.to(kCPU)` fallback is fatal during stream capture
-  // ("operation not permitted when stream is capturing"). Rather than
-  // depending on which input builder populated the host mirrors, we stage
-  // them here unconditionally for the decode path, *outside* the captured
-  // region: the host copy lives across capture begin / replay because we
-  // assign back into `attn_metadata->paged_kv_*_host` and the same shared
-  // AttentionMetadata is what every full-attention layer's decoder_forward
-  // reads. Mirrors sglang's pattern of building CPU-resident kv_indptr from
-  // CPU-resident seq_lens before calling FlashInfer's plan/run (see
-  // flashinfer_backend.py:1128-1182 `global_override_indptr_cpu`).
-  //
   // Cheap when the input builder already pre-staged (just a shared_ptr ref);
   // a single per-step D2H per index tensor in the fallback case (3 D2H total,
   // batch-sized, runs once before capture begin).
@@ -1567,15 +1522,6 @@ bool CudaGraph::capture(CausalLM* model,
       << "update() should return ModelInputParams when "
          "return_capture_params=true";
 
-  // SGLang-pattern persistent host mirrors for the Mate FFI batch_decode
-  // run() call. CudaGraphPersistentParam::update() built the attn_metadata's
-  // host fields as fresh `.to(kCPU)` tensors -- their .data_ptr() would
-  // change on every step, but the captured graph bakes whatever pointer it
-  // saw at capture time. Swap them out for views into per-CudaGraph stable
-  // pinned host buffers so the captured pointer remains valid forever and
-  // every replay sees fresh values via in-place `copy_`. Mirrors SGLang's
-  // FlashInfer MLA backend treatment of `cuda_graph_kv_indptr_cpu` (see
-  // python/sglang/srt/layers/attention/flashinfer_mla_backend.py:365-477).
   refresh_persistent_paged_kv_host_mirrors(
       graph_params_opt.value().attn_metadata, params.attention.host);
 
@@ -1642,30 +1588,6 @@ bool CudaGraph::capture(CausalLM* model,
               << ", num_runners: " << piecewise_graph_.num_runners();
   } else {
     // Normal capture mode (for decode)
-
-    // Two pre-capture warmup passes, each preceded by a stream sync. This
-    // mirrors sglang/python/sglang/srt/model_executor/cuda_graph_runner.py
-    // (capture_one_batch_size: `for _ in range(2): synchronize(); barrier();
-    // run_once()`). Goals:
-    //
-    //   1. Allocate every per-op output buffer (embedding/index_select,
-    //      cuBLAS workspace, attention scratch, ...) into the caching pool
-    //      before capture_begin(). MUSA's stream-capture rejects any allocator
-    //      growth call (musaMalloc / VMM map) with "operation not permitted
-    //      when stream is capturing", so these must be pre-warmed.
-    //
-    //   2. Synchronize BEFORE the capture so warmup buffers are returned to
-    //      the pool with no pending stream dependency. Without the sync, when
-    //      the captured forward later reuses one of those buffers, the caching
-    //      allocator inserts a stream-wait (cudaStreamWaitEvent) to honor the
-    //      cross-stream dep -- which itself is illegal during capture and
-    //      surfaces as the same MUSA "operation not permitted" error inside
-    //      at::musa::IndexSelect even though the buffer was already mapped.
-    //
-    //   3. The second warmup catches any allocations the first pass left in
-    //      a transient state (e.g. tvm-ffi workspace expansion on first call)
-    //      so the pool reaches a steady size before capture_begin().
-    //
     // Reuses the outer `capture_stream` (set up at the top of this function
     // and active via stream_guard) so the warmup runs on the exact stream
     // about to be captured -- syncing a different stream would leave the
@@ -2192,13 +2114,6 @@ void CudaGraphExecutorImpl::reset_vmm_allocator_offset(
   (void)physical_pool_id;
 }
 
-// Stubs for the graph memory usage reporters. The implementations in the
-// !XLLM_TORCH_MUSA branch read torch's private/active pool counters via
-// c10::cuda::CUDACachingAllocator, which is not available on torch_musa. The
-// call sites (run / run_piecewise) still invoke these unconditionally after a
-// successful capture, so we provide zero-returning stubs to keep the link
-// satisfied without changing call-site behavior. log_graph_memory_after_capture
-// is a no-op here; the captured-bytes diagnostic logging is skipped on MUSA.
 CudaGraphExecutorImpl::GraphMemoryUsageStats
 CudaGraphExecutorImpl::get_graph_memory_usage_stats() {
   return GraphMemoryUsageStats{};
@@ -2288,28 +2203,15 @@ ModelInputParams CudaGraphExecutorImpl::maybe_precompute_embedding_for_graph(
       !in_spec_verify_embedding_phase) {
     return params;
   }
-  // Caller already provided pre-computed embeddings (multimodal encoder path).
-  // The existing CudaGraphPersistentParam::update() will copy this through to
-  // persistent_embedding_ exactly as it does today; do not double-compute.
+
   if (params.embedding.input_embedding.defined()) {
     return params;
   }
-  // Skip when the model doesn't expose a generic WordEmbedding layer. Some
-  // backends (e.g. raw NPU) use a custom embedding op that lives behind a
-  // different interface, in which case we have nothing to hoist out of the
-  // graph and fall through to existing behavior.
   auto embed_layer = model_->get_word_embedding();
   if (embed_layer.is_empty()) {
     return params;
   }
 
-  // Compute the embedding eagerly while still outside the captured stream
-  // region. On torch_musa 2.7.1 the underlying at::musa::IndexSelect calls
-  // EmptyMUSA -> musaMemMap to allocate its output, which is illegal during
-  // stream capture ("operation not permitted when stream is capturing"); by
-  // running the lookup here the allocation goes through the normal caching
-  // allocator path and stays out of the capture region.
-  //
   // The downstream wiring is already in place:
   //   * CudaGraphPersistentParam::update() copies `params.embedding
   //     .input_embedding` into `persistent_embedding_` (see the update path

@@ -295,20 +295,32 @@ void l2norm_last_dim(torch::Tensor& tensor) {
   tensor = tensor.to(orig_dtype);
 }
 
-torch::Tensor chunk_local_cumsum_log_alpha(const torch::Tensor& g_log,
+// Cumulative log-decay within each chunk along the time axis. Input g is
+// log(alpha) from fused_gdn_gating (same semantics as FLA/Triton and mate
+// is_log_space=True). Do not round-trip through exp/log: large negative g
+// values underflow to zero and corrupt the cumsum.
+torch::Tensor chunk_local_cumsum_log_space(const torch::Tensor& g_log,
                                            int64_t chunk_size) {
-  auto alpha = g_log.to(torch::kFloat32).exp().contiguous();
-  const int64_t batch_size = alpha.size(0);
-  const int64_t pad_size = chunk_pad_size(alpha.size(1), chunk_size);
+  auto g = g_log.to(torch::kFloat32).contiguous();
+  const int64_t batch_size = g.size(0);
+  const int64_t num_heads = g.size(2);
+  const int64_t pad_size = chunk_pad_size(g.size(1), chunk_size);
   if (pad_size > 0) {
-    alpha = pad_time_dim_3d(alpha, pad_size, 1.0);
+    // Pad log-g with 0 so padded positions contribute no extra decay (alpha=1).
+    g = pad_time_dim_3d(g, pad_size, 0.0);
   }
-  const int64_t padded_len = alpha.size(1);
-  auto log_alpha = alpha.clamp_min(1e-20f).log();
-  log_alpha =
-      log_alpha.reshape({batch_size, padded_len / chunk_size, chunk_size, -1});
-  log_alpha = log_alpha.cumsum(/*dim=*/2);
-  return log_alpha.reshape({batch_size, padded_len, alpha.size(2)}).contiguous();
+  const int64_t padded_len = g.size(1);
+  g = g.reshape({batch_size, padded_len / chunk_size, chunk_size, num_heads});
+  g = g.cumsum(/*dim=*/2);
+  return g.reshape({batch_size, padded_len, num_heads}).contiguous();
+}
+
+bool mate_gdn_debug_enabled() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_MATE_GDN_DEBUG");
+    return env != nullptr && env[0] == '1';
+  }();
+  return enabled;
 }
 
 }
@@ -364,24 +376,45 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   if (pad_size > 0) {
     beta = pad_time_dim_3d(beta, pad_size, 0.0);
   }
-  auto g_cumsum = chunk_local_cumsum_log_alpha(
-      pad_size > 0 ? pad_time_dim_3d(params.g.to(torch::kFloat32).contiguous(),
-                                     pad_size,
-                                     0.0)
-                   : params.g.to(torch::kFloat32).contiguous(),
-      kGdnChunkSize);
+  auto g_log = params.g.to(torch::kFloat32).contiguous();
+  if (pad_size > 0) {
+    g_log = pad_time_dim_3d(g_log, pad_size, 0.0);
+  }
+  auto g_cumsum = chunk_local_cumsum_log_space(g_log, kGdnChunkSize);
+  g_cumsum = g_cumsum.clamp(-80.0, 0.0);
 
   const std::string uri =
       get_mate_gdn_prefill_uri(num_q_heads, num_v_heads, query.scalar_type());
+  if (mate_gdn_debug_enabled()) {
+    LOG(INFO) << "[MateGdnPrefill] q=" << query.sizes() << " k=" << key.sizes()
+              << " v=" << value.sizes() << " g=" << g_cumsum.sizes()
+              << " beta=" << beta.sizes() << " uri=" << uri
+              << " pad_size=" << pad_size << " seq_len=" << seq_len
+              << " num_tokens=" << num_tokens;
+  }
   bind_tvmffi_stream_to_current_torch_stream(query.device());
   auto run = get_function(uri, "run");
 
-  auto a_dummy = torch::empty(
+  auto a_dummy = torch::zeros(
       {batch_size, num_tokens, num_v_heads, kGdnChunkSize}, query.options());
-  auto h0 = torch::zeros({batch_size, num_v_heads, head_v_dim, head_k_dim},
-                         torch::TensorOptions()
-                             .dtype(torch::kFloat32)
-                             .device(query.device()));
+  torch::Tensor h0;
+  if (params.initial_state.has_value() && params.initial_state->defined()) {
+    h0 = params.initial_state->to(torch::kFloat32).contiguous();
+    CHECK_EQ(h0.dim(), 4) << "mate GDN prefill initial_state must be 4D";
+    CHECK_EQ(h0.size(0), batch_size)
+        << "mate GDN prefill initial_state batch mismatch";
+    CHECK_EQ(h0.size(1), num_v_heads)
+        << "mate GDN prefill initial_state head mismatch";
+    CHECK_EQ(h0.size(2), head_v_dim)
+        << "mate GDN prefill initial_state V dim mismatch";
+    CHECK_EQ(h0.size(3), head_k_dim)
+        << "mate GDN prefill initial_state K dim mismatch";
+  } else {
+    h0 = torch::zeros({batch_size, num_v_heads, head_v_dim, head_k_dim},
+                      torch::TensorOptions()
+                          .dtype(torch::kFloat32)
+                          .device(query.device()));
+  }
   auto output = torch::empty({batch_size, num_tokens, num_v_heads, head_v_dim},
                              value.options());
   auto final_state = torch::empty(
@@ -397,6 +430,62 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       to_ffi_tensor(h0),
       to_ffi_tensor(output),
       to_ffi_tensor(final_state));
+
+  sync_musa_ffi_stream(query.device());
+
+  if (mate_gdn_debug_enabled()) {
+    auto out_f32 = output.to(torch::kFloat32);
+    auto out_min = out_f32.min().item<float>();
+    auto out_max = out_f32.max().item<float>();
+    auto out_mean = out_f32.mean().item<float>();
+    auto out_has_nan = out_f32.isnan().any().item<bool>();
+    auto out_has_inf = out_f32.isinf().any().item<bool>();
+    auto st_f32 = final_state.to(torch::kFloat32);
+    auto st_min = st_f32.min().item<float>();
+    auto st_max = st_f32.max().item<float>();
+    auto st_has_nan = st_f32.isnan().any().item<bool>();
+    auto st_has_inf = st_f32.isinf().any().item<bool>();
+    LOG(INFO) << "[MateGdnPrefill] output: min=" << out_min << " max=" << out_max
+              << " mean=" << out_mean << " has_nan=" << out_has_nan
+              << " has_inf=" << out_has_inf
+              << " | state: min=" << st_min << " max=" << st_max
+              << " has_nan=" << st_has_nan << " has_inf=" << st_has_inf
+              << " | q_norm=" << query.to(torch::kFloat32).abs().max().item<float>()
+              << " g_cumsum_min=" << g_cumsum.min().item<float>()
+              << " g_cumsum_max=" << g_cumsum.max().item<float>()
+              << " beta_min=" << beta.min().item<float>()
+              << " beta_max=" << beta.max().item<float>();
+  }
+
+  {
+    auto out_bad = (output.isnan().any() | output.isinf().any() |
+                    final_state.isnan().any() | final_state.isinf().any())
+                       .item<bool>();
+    if (out_bad) {
+      if (mate_gdn_debug_enabled()) {
+        LOG(INFO) << "[MateGdnPrefill] Mate output has NaN/Inf, falling back to chunk_gated_delta_rule";
+      }
+      ChunkGatedDeltaRuleParams ref_params;
+      ref_params.q = params.q;
+      ref_params.k = params.k;
+      ref_params.v = params.v;
+      ref_params.g = params.g;
+      ref_params.beta = params.beta;
+      ref_params.scale = params.scale;
+      if (params.initial_state.has_value() &&
+          params.initial_state->defined()) {
+        ref_params.initial_state =
+            params.initial_state->transpose(-1, -2).contiguous();
+      }
+      ref_params.output_final_state = true;
+      ref_params.use_qk_l2norm_in_kernel = params.use_qk_l2norm_in_kernel;
+      torch::Tensor ref_out, ref_state;
+      std::tie(ref_out, ref_state) = chunk_gated_delta_rule(ref_params);
+      output = ref_out.to(output.options());
+      final_state =
+          ref_state.transpose(-1, -2).contiguous().to(torch::kFloat32);
+    }
+  }
 
   if (pad_size > 0) {
     output = output.slice(/*dim=*/1, /*start=*/0, /*end=*/seq_len);
@@ -416,52 +505,46 @@ torch::Tensor causal_conv1d(
     int64_t activation_mode,
     int64_t /*pad_slot_id*/,
     int64_t /*run_mode*/) {
-  const int64_t dim = x.size(-1);
-  auto x_f = x.to(torch::kFloat32);
-  auto w_f = weight.to(torch::kFloat32).t().contiguous();
-  const int64_t width = w_f.size(0);
-  const int64_t state_len = width - 1;
-  torch::Tensor bias_f;
-  const bool has_bias = bias_opt.has_value() && bias_opt.value().defined();
-  if (has_bias) {
-    bias_f = bias_opt.value().to(torch::kFloat32);
+  const auto device = x.device();
+
+  auto x_t = x.t().contiguous();
+  auto out_t = torch::empty_like(x_t);
+
+  auto qsl_cpu = torch::empty(
+      {static_cast<int64_t>(query_start_loc_opt.size())}, torch::kInt32);
+  for (size_t i = 0; i < query_start_loc_opt.size(); ++i)
+    qsl_cpu.data_ptr<int32_t>()[i] =
+        static_cast<int32_t>(query_start_loc_opt[i]);
+  auto query_start_loc = qsl_cpu.to(device);
+
+  torch::Tensor cache_indices;
+  if (!cache_indices_opt.empty()) {
+    auto ci_cpu = torch::empty(
+        {static_cast<int64_t>(cache_indices_opt.size())}, torch::kInt32);
+    for (size_t i = 0; i < cache_indices_opt.size(); ++i)
+      ci_cpu.data_ptr<int32_t>()[i] =
+          static_cast<int32_t>(cache_indices_opt[i]);
+    cache_indices = ci_cpu.to(device);
   }
-  auto output = torch::empty_like(x_f);
-  const int64_t num_seq = static_cast<int64_t>(query_start_loc_opt.size()) - 1;
-  for (int64_t s = 0; s < num_seq; ++s) {
-    const int64_t start = query_start_loc_opt[s];
-    const int64_t end = query_start_loc_opt[s + 1];
-    const int64_t seq_len = end - start;
-    if (seq_len <= 0) {
-      continue;
-    }
-    const int64_t slot = cache_indices_opt.empty() ? s : cache_indices_opt[s];
-    const bool has_init =
-        !initial_state_mode_opt.empty() && initial_state_mode_opt[s] != 0;
-    auto seq = x_f.narrow(0, start, seq_len);
-    torch::Tensor prefix;
-    if (has_init) {
-      prefix = conv_state[slot].to(torch::kFloat32).t().contiguous();
-    } else {
-      prefix = torch::zeros({state_len, dim}, x_f.options());
-    }
-    auto padded = torch::cat({prefix, seq}, 0);
-    auto out_seq = torch::zeros({seq_len, dim}, x_f.options());
-    for (int64_t j = 0; j < width; ++j) {
-      auto shifted = padded.narrow(0, j, seq_len);
-      out_seq += shifted * w_f.select(0, j).unsqueeze(0);
-    }
-    if (has_bias) {
-      out_seq += bias_f.unsqueeze(0);
-    }
-    if (activation_mode != 0) {
-      out_seq = torch::silu(out_seq);
-    }
-    output.narrow(0, start, seq_len).copy_(out_seq);
-    auto tail = padded.narrow(0, padded.size(0) - state_len, state_len);
-    conv_state[slot].copy_(tail.t().contiguous().to(conv_state.dtype()));
+
+  torch::Tensor has_initial_state;
+  if (!initial_state_mode_opt.empty()) {
+    auto his_cpu = torch::empty(
+        {static_cast<int64_t>(initial_state_mode_opt.size())}, torch::kBool);
+    for (size_t i = 0; i < initial_state_mode_opt.size(); ++i)
+      his_cpu.data_ptr<bool>()[i] = (initial_state_mode_opt[i] != 0);
+    has_initial_state = his_cpu.to(device);
   }
-  return output.to(x.dtype());
+
+  const bool silu_activation = (activation_mode != 0);
+  const int64_t pad_slot_id = -1;
+
+  causal_conv1d_fwd(
+      x_t, weight, out_t, bias_opt, conv_state,
+      query_start_loc, cache_indices, has_initial_state,
+      silu_activation, pad_slot_id);
+
+  return out_t.t().contiguous().to(x.dtype());
 }
 
 }

@@ -532,13 +532,17 @@ if(USE_MUSA)
   list(APPEND CMAKE_MODULE_PATH "${MUSA_PATH}/cmake")
   find_package(MUSA REQUIRED)
 
-  if(NOT DEFINED ENV{MTT_OPLIB_PATH})
-    set(ENV{MTT_OPLIB_PATH} $ENV{MUSA_HOME}/tools/MTTOplib)
-  endif()
+  if(NOT XLLM_TORCH_MUSA)
+    if(NOT DEFINED ENV{MTT_OPLIB_PATH})
+      set(ENV{MTT_OPLIB_PATH} $ENV{MUSA_HOME}/tools/MTTOplib)
+    endif()
 
-  message(STATUS  "using MTT Oplib at: $ENV{MTT_OPLIB_PATH}")
-  set(MTTOplib_DIR $ENV{MTT_OPLIB_PATH}/cmake)
-  find_package(MTTOplib REQUIRED)
+    message(STATUS  "using MTT Oplib at: $ENV{MTT_OPLIB_PATH}")
+    set(MTTOplib_DIR $ENV{MTT_OPLIB_PATH}/cmake)
+    find_package(MTTOplib REQUIRED)
+  else()
+    message(STATUS "XLLM_TORCH_MUSA: skipping MTTOplib (native USE_MUSA path disabled)")
+  endif()
 
   find_package(Python COMPONENTS Interpreter REQUIRED)
   list(APPEND CMAKE_PREFIX_PATH $ENV{TORCH_MUSA_PYTHONPATH})
@@ -568,9 +572,11 @@ if(USE_MUSA)
       $ENV{PYTHON_INCLUDE_PATH}
       $ENV{PYTORCH_INSTALL_PATH}/include
       $ENV{PYTORCH_INSTALL_PATH}/include/torch/csrc/api/include
-      ${MTTOplib_INCLUDE_DIRS}
       ${tvm_ffi_INCLUDE_DIR}
   )
+  if(NOT XLLM_TORCH_MUSA)
+    include_directories(${MTTOplib_INCLUDE_DIRS})
+  endif()
 
   link_directories(
     ${MUSA_LIB_PATH}

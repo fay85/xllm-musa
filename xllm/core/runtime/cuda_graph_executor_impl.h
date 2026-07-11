@@ -423,15 +423,7 @@ class CudaGraph {
   // surfaces as a GPU page fault inside the captured Mate decode kernel
   // ("ExceptionType: IllegalAddress ... Reading from 0x... Fault (Page
   // Directory)"; see the .mudmp under repro logs).
-  //
-  // SGLang's MUSA FA3 backend resolves the analogous problem for
-  // scheduler_metadata by keeping a persistent captured tensor and
-  // `copy_`ing fresh values into it on every replay (see
-  // python/sglang/srt/hardware_backend/musa/attention/flashattention_backend.py
-  // ::_copy_fresh_metadata_to_cuda_graph_tensors). We mirror that pattern
-  // here: the captured graph references the stable .data_ptr() of these
-  // host buffers, and the replay path refreshes their contents in-place.
-  //
+
   // Grow-only across captures so smaller-bucket graphs keep referencing
   // the same storage even when a larger bucket later expands the buffer.
   //
@@ -534,18 +526,6 @@ class CudaGraphExecutorImpl : public ExecutorImpl {
       const torch::Tensor& hidden_states,
       uint32_t n_tokens) const;
 
-  // Returns a copy of `params` with `embedding.input_embedding` pre-populated
-  // for MUSA decode-graph capture/replay. The embedding is computed by
-  // calling the model's word-embedding layer outside the captured stream
-  // region. The captured graph then reads from the persistent embedding
-  // buffer (populated by CudaGraphPersistentParam::update()) instead of
-  // running IndexSelect inside the capture region -- on torch_musa 2.7.1
-  // that IndexSelect triggers EmptyMUSA -> musaMemMap and surfaces as
-  // "MUSA driver error: operation not permitted when stream is capturing".
-  //
-  // No-op on non-MUSA builds and on non-decode forwards. Also a no-op when
-  // the caller already supplied an `input_embedding` (multimodal pipeline)
-  // or when the model does not expose a word-embedding layer.
   ModelInputParams maybe_precompute_embedding_for_graph(
       const torch::Tensor& tokens,
       const ModelInputParams& params) const;
