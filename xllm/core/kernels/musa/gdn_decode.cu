@@ -835,30 +835,29 @@ torch::Tensor mate_gated_delta_rule_decode(
 
   const std::string uri = get_mate_gdn_decode_uri(
       num_k_heads, num_v_heads, query.scalar_type());
-  bind_tvmffi_stream_to_current_torch_stream(query.device());
   auto run = get_function(uri, "run");
 
-  // The TVM FFI wrapper (MateGdnDecodeRun) expects arguments in this order
-  // (it internally reorders to match the kernel ABI).  Confirmed by the type
-  // check error when the order was changed.
-  run(to_ffi_tensor(query),
-      to_ffi_tensor(key),
-      to_ffi_tensor(value),
-      to_ffi_tensor(A_log_f32),
-      to_ffi_tensor(a),
-      to_ffi_tensor(dt_bias_f32),
-      to_ffi_tensor(b),
-      to_ffi_tensor(state_indices),
-      to_ffi_tensor(state_f32),
-      to_ffi_tensor(output));
+  {
+    // If the worker's current MUSA stream has no native handle, TVM FFI falls
+    // back to a pool stream. The guard synchronizes both boundaries so the FFI
+    // kernel sees preceding projection/conv results and subsequent PyTorch
+    // kernels see the updated output/state.
+    MusaTvmffiStreamGuard stream_guard(query.device());
 
-  // Eager (non-capturing) mode: when the FFI stream binding fails (null
-  // stream handle), the kernel runs on a separate FFI pool stream.  Sync
-  // that stream so `output` and `state_f32` are visible to the PyTorch
-  // compute stream.  This mirrors the MTP wrapper's sync at line 910.
-  // Under MUSA graph capture the kernel runs on the capture stream, so
-  // the sync is a no-op (is_current_stream_capturing() early-return).
-  sync_musa_ffi_stream(query.device());
+    // The TVM FFI wrapper (MateGdnDecodeRun) expects arguments in this order
+    // (it internally reorders to match the kernel ABI). Confirmed by the type
+    // check error when the order was changed.
+    run(to_ffi_tensor(query),
+        to_ffi_tensor(key),
+        to_ffi_tensor(value),
+        to_ffi_tensor(A_log_f32),
+        to_ffi_tensor(a),
+        to_ffi_tensor(dt_bias_f32),
+        to_ffi_tensor(b),
+        to_ffi_tensor(state_indices),
+        to_ffi_tensor(state_f32),
+        to_ffi_tensor(output));
+  }
 
   // The mate kernel updates state_f32 in-place. When state_f32 IS
   // params.state (already fp32 contiguous — the production case), the
