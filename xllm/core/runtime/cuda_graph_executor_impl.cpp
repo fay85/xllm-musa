@@ -593,14 +593,27 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
       return_capture_params && attn_metadata->is_prefill &&
       padded_num_tokens > actual_num_tokens;
   if (piecewise_prefill_pad) {
-    attn_metadata->max_query_len = padded_num_tokens;
+    const uint32_t padding = padded_num_tokens - actual_num_tokens;
     if (attn_metadata->q_seq_lens_vec.size() == 1) {
+      attn_metadata->max_query_len = padded_num_tokens;
       attn_metadata->q_seq_lens_vec[0] =
           static_cast<int32_t>(padded_num_tokens);
-    }
-    if (attn_metadata->kv_seq_lens_vec.size() == 1) {
-      attn_metadata->kv_seq_lens_vec[0] =
-          static_cast<int32_t>(padded_num_tokens);
+      if (attn_metadata->kv_seq_lens_vec.size() == 1) {
+        attn_metadata->kv_seq_lens_vec[0] =
+            static_cast<int32_t>(padded_num_tokens);
+      }
+    } else {
+      const int32_t last =
+          static_cast<int32_t>(attn_metadata->q_seq_lens_vec.size()) - 1;
+      attn_metadata->q_seq_lens_vec[last] +=
+          static_cast<int32_t>(padding);
+      if (last < static_cast<int32_t>(attn_metadata->kv_seq_lens_vec.size())) {
+        attn_metadata->kv_seq_lens_vec[last] +=
+            static_cast<int32_t>(padding);
+      }
+      attn_metadata->max_query_len =
+          *std::max_element(attn_metadata->q_seq_lens_vec.begin(),
+                            attn_metadata->q_seq_lens_vec.end());
     }
   }
   // Match ACL graph persistent param: the expanded-decode graph input is
@@ -827,15 +840,20 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
     attn_metadata->kv_cu_seq_lens = kv_seq_lens(/*actual_batch_size=*/
                                                 actual_batch_size + 1);
 
-    // For piecewise prefill: override q_cu_seq_lens and kv_cu_seq_lens to
-    // [0, padded_num_tokens] so FlashInfer processes all padded tokens and
-    // outputs [padded, dim] — matching GDN output size. The persistent
+    // For piecewise prefill: override the last element of q_cu_seq_lens and
+    // kv_cu_seq_lens to padded_num_tokens so FlashInfer processes all padded
+    // tokens.  For single-request (bs=1) this yields [0, padded]; for
+    // multi-request (bs=N) it yields [0, q0, ..., padded].  The persistent
     // buffers are updated in-place so the eager FlashInfer plan/attention
     // sees the padded values.
     if (piecewise_prefill_pad) {
-      q_seq_lens_.slice(/*dim=*/0, /*start=*/1, /*end=*/2)
+      q_seq_lens_.slice(/*dim=*/0,
+                        /*start=*/actual_batch_size,
+                        /*end=*/actual_batch_size + 1)
           .fill_(static_cast<int32_t>(padded_num_tokens));
-      kv_seq_lens_.slice(/*dim=*/0, /*start=*/1, /*end=*/2)
+      kv_seq_lens_.slice(/*dim=*/0,
+                         /*start=*/actual_batch_size,
+                         /*end=*/actual_batch_size + 1)
           .fill_(static_cast<int32_t>(padded_num_tokens));
     }
 
