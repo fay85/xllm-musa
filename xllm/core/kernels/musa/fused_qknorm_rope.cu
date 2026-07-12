@@ -68,6 +68,7 @@ __global__ void fused_qknorm_rope_kernel(
     int const total_heads_per_token,
     int const k_head_offset,
     float const eps,
+    float const weight_offset,
     void const* q_weight_void,
     void const* k_weight_void,
     void const* cos_sin_cache_void,
@@ -141,6 +142,7 @@ __global__ void fused_qknorm_rope_kernel(
     int dim = lane_id * kNumElemsPerThread + i;
     float weight = is_q ? static_cast<float>(q_weight[dim])
                         : static_cast<float>(k_weight[dim]);
+    weight += weight_offset;
     elements[i] *= rms_rcp * weight;
   }
 
@@ -225,6 +227,7 @@ void launch_fused_qknorm_rope(void* qkv,
                               int const head_dim,
                               int const rotary_dim,
                               float const eps,
+                              float const weight_offset,
                               void const* q_weight,
                               void const* k_weight,
                               void const* cos_sin_cache,
@@ -251,6 +254,7 @@ void launch_fused_qknorm_rope(void* qkv,
                                                 total_heads_per_token,
                                                 k_head_offset,
                                                 eps,
+                                                weight_offset,
                                                 q_weight,
                                                 k_weight,
                                                 cos_sin_cache,
@@ -268,6 +272,7 @@ void launch_fused_qknorm_rope(void* qkv,
                                                 total_heads_per_token,
                                                 k_head_offset,
                                                 eps,
+                                                weight_offset,
                                                 q_weight,
                                                 k_weight,
                                                 cos_sin_cache,
@@ -285,6 +290,7 @@ void launch_fused_qknorm_rope(void* qkv,
                                                 total_heads_per_token,
                                                 k_head_offset,
                                                 eps,
+                                                weight_offset,
                                                 q_weight,
                                                 k_weight,
                                                 cos_sin_cache,
@@ -341,6 +347,10 @@ void fused_qk_norm_rope(
 
   const at::cuda::OptionalCUDAGuard device_guard(device_of(qkv));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  // Qwen3.5's [Q|G|K|V] layout passes a nonzero K-head offset and uses
+  // Gemma RMSNorm semantics, whose effective scale is (1 + weight).
+  // Standard Qwen2 attention passes offset zero and keeps regular RMSNorm.
+  const float weight_offset = k_head_offset > 0 ? 1.0f : 0.0f;
 
   if (qkv.scalar_type() == at::ScalarType::BFloat16) {
     launch_fused_qknorm_rope<__nv_bfloat16>(
@@ -350,6 +360,7 @@ void fused_qk_norm_rope(
         static_cast<int>(k_head_offset > 0 ? k_head_offset : num_heads_q),
         static_cast<int>(head_dim),
         static_cast<int>(cos_sin_cache.size(1)), static_cast<float>(eps),
+        weight_offset,
         q_weight.data_ptr(), k_weight.data_ptr(),
         cos_sin_cache.data_ptr(), interleaved,
         reinterpret_cast<int32_t const*>(position_ids.data_ptr()), stream);
@@ -361,6 +372,7 @@ void fused_qk_norm_rope(
         static_cast<int>(k_head_offset > 0 ? k_head_offset : num_heads_q),
         static_cast<int>(head_dim),
         static_cast<int>(cos_sin_cache.size(1)), static_cast<float>(eps),
+        weight_offset,
         q_weight.data_ptr(), k_weight.data_ptr(),
         cos_sin_cache.data_ptr(), interleaved,
         reinterpret_cast<int32_t const*>(position_ids.data_ptr()), stream);
