@@ -499,6 +499,11 @@ class CudaGraphExecutorImpl : public ExecutorImpl {
   // (by bucket_num_tokens)
   absl::flat_hash_map<uint32_t, std::unique_ptr<CudaGraph>> prefill_graphs_;
 
+  // Chunked-prefill piecewise graphs require an exact host-shape key because
+  // Qwen3.5 GDN control flow depends on per-sequence query lengths.
+  absl::flat_hash_map<uint64_t, std::unique_ptr<CudaGraph>>
+      chunked_prefill_graphs_;
+
   // Persistent parameters shared across all CudaGraph instances
   std::unique_ptr<CudaGraphPersistentParam> persistent_param_;
 
@@ -521,6 +526,10 @@ class CudaGraphExecutorImpl : public ExecutorImpl {
 
   uint64_t get_graph_key(uint32_t bucket_num_tokens,
                          const ModelInputParams& params) const;
+
+  uint64_t get_chunked_prefill_graph_key(
+      uint32_t bucket_num_tokens,
+      const ModelInputParams& params) const;
 
   ModelOutput attach_aux_hidden_states_if_needed(
       const torch::Tensor& hidden_states,

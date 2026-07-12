@@ -30,6 +30,13 @@ struct AttentionReplayParams {
   ffi::Array<int64_t> plan_info;
   torch::Tensor q_cu_seq_lens;
   torch::Tensor kv_cu_seq_lens;
+  torch::Tensor paged_kv_indptr;
+  torch::Tensor paged_kv_indices;
+  torch::Tensor paged_kv_last_page_len;
+  torch::Tensor paged_kv_indptr_host;
+  torch::Tensor paged_kv_indices_host;
+  torch::Tensor paged_kv_last_page_len_host;
+  std::optional<torch::Tensor> qo_indptr;
   uint32_t actual_num_tokens;
 };
 
@@ -53,9 +60,34 @@ class AttentionRunner final {
                    std::optional<torch::Tensor>& output_lse,
                    uint32_t padded_num_tokens);
 
+  void run_chunked_prefill_capture(
+      const std::string& uri,
+      ffi::Array<int64_t> plan_info,
+      torch::Tensor float_workspace_buffer,
+      torch::Tensor int_workspace_buffer,
+      torch::Tensor page_locked_int_workspace_buffer,
+      torch::Tensor query,
+      torch::Tensor k_cache,
+      torch::Tensor v_cache,
+      torch::Tensor paged_kv_indptr,
+      torch::Tensor paged_kv_indices,
+      torch::Tensor paged_kv_last_page_len,
+      int64_t window_left,
+      double sm_scale,
+      torch::Tensor output,
+      std::optional<torch::Tensor>& output_lse,
+      std::optional<torch::Tensor> qo_indptr,
+      bool causal,
+      const torch::Tensor& paged_kv_indptr_host,
+      const torch::Tensor& paged_kv_indices_host,
+      const torch::Tensor& paged_kv_last_page_len_host,
+      uint32_t padded_num_tokens);
+
   void run_replay(const AttentionReplayParams& params);
 
  private:
+  enum class RunnerType { PREFILL, CHUNKED_PREFILL };
+
   torch::Tensor float_workspace_buffer_;
   torch::Tensor int_workspace_buffer_;
   torch::Tensor page_locked_int_workspace_buffer_;
@@ -63,12 +95,16 @@ class AttentionRunner final {
   torch::Tensor query_;
   torch::Tensor key_;
   torch::Tensor value_;
+  torch::Tensor k_cache_;
+  torch::Tensor v_cache_;
   torch::Tensor output_;
 
   std::string uri_;
   int64_t window_size_left_;
   double scale_;
   uint32_t padded_num_tokens_;
+  RunnerType runner_type_ = RunnerType::PREFILL;
+  bool causal_ = true;
 };
 
 }

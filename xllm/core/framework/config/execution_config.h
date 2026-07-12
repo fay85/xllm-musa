@@ -55,17 +55,17 @@ class ExecutionConfig final {
     return kOptionCategory;
   }
 
-  PROPERTY(bool, enable_graph) = false;
+  PROPERTY(bool, enable_graph) = true;
 
   PROPERTY(bool, enable_graph_double_buffer) = true;
 
-  PROPERTY(bool, enable_graph_mode_decode_no_padding) = false;
+  PROPERTY(bool, enable_graph_mode_decode_no_padding) = true;
 
-  PROPERTY(bool, enable_prefill_piecewise_graph) = false;
+  PROPERTY(bool, enable_prefill_piecewise_graph) = true;
 
-  PROPERTY(bool, enable_graph_vmm_pool) = true;
+  PROPERTY(bool, enable_graph_vmm_pool) = false;
 
-  PROPERTY(int32_t, max_tokens_for_graph_mode) = 2048;
+  PROPERTY(int32_t, max_tokens_for_graph_mode) = 8192;
 
   PROPERTY(int32_t, acl_graph_decode_batch_size_limit) = 16;
 

@@ -69,7 +69,7 @@ class SchedulerConfig final {
 
   PROPERTY(bool, enable_chunked_prefill) = true;
 
-  PROPERTY(int32_t, max_tokens_per_chunk_for_prefill) = -1;
+  PROPERTY(int32_t, max_tokens_per_chunk_for_prefill) = 8192;
 
   PROPERTY(int32_t, chunked_match_frequency) = 2;
 

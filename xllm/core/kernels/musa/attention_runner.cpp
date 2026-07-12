@@ -60,7 +60,60 @@ void AttentionRunner::run_capture(
   window_size_left_ = window_left;
   scale_ = sm_scale;
   padded_num_tokens_ = padded_num_tokens;
+  runner_type_ = RunnerType::PREFILL;
 
+  ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+      .temporarily_begin_graph();
+}
+
+void AttentionRunner::run_chunked_prefill_capture(
+    const std::string& uri,
+    ffi::Array<int64_t> plan_info,
+    torch::Tensor float_workspace_buffer,
+    torch::Tensor int_workspace_buffer,
+    torch::Tensor page_locked_int_workspace_buffer,
+    torch::Tensor query,
+    torch::Tensor k_cache,
+    torch::Tensor v_cache,
+    torch::Tensor paged_kv_indptr,
+    torch::Tensor paged_kv_indices,
+    torch::Tensor paged_kv_last_page_len,
+    int64_t window_left,
+    double sm_scale,
+    torch::Tensor output,
+    std::optional<torch::Tensor>& output_lse,
+    std::optional<torch::Tensor> qo_indptr,
+    bool causal,
+    const torch::Tensor& paged_kv_indptr_host,
+    const torch::Tensor& paged_kv_indices_host,
+    const torch::Tensor& paged_kv_last_page_len_host,
+    uint32_t padded_num_tokens) {
+  (void)plan_info;
+  (void)paged_kv_indptr;
+  (void)paged_kv_indices;
+  (void)paged_kv_last_page_len;
+  (void)output_lse;
+  (void)qo_indptr;
+  (void)paged_kv_indptr_host;
+  (void)paged_kv_indices_host;
+  (void)paged_kv_last_page_len_host;
+
+  ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+      .temporarily_end_graph();
+
+  uri_ = uri;
+  float_workspace_buffer_ = float_workspace_buffer;
+  int_workspace_buffer_ = int_workspace_buffer;
+  page_locked_int_workspace_buffer_ = page_locked_int_workspace_buffer;
+  query_ = query;
+  k_cache_ = k_cache;
+  v_cache_ = v_cache;
+  output_ = output;
+  window_size_left_ = window_left;
+  scale_ = sm_scale;
+  padded_num_tokens_ = padded_num_tokens;
+  runner_type_ = RunnerType::CHUNKED_PREFILL;
+  causal_ = causal;
 
   ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
       .temporarily_begin_graph();
@@ -69,15 +122,39 @@ void AttentionRunner::run_capture(
 void AttentionRunner::run_replay(const AttentionReplayParams& params) {
   torch::Tensor query_slice =
       query_.slice(/*dim=*/0, /*start=*/0, /*end=*/params.actual_num_tokens);
-  torch::Tensor key_slice =
-      key_.slice(/*dim=*/0, /*start=*/0, /*end=*/params.actual_num_tokens);
-  torch::Tensor value_slice =
-      value_.slice(/*dim=*/0, /*start=*/0, /*end=*/params.actual_num_tokens);
   torch::Tensor output_slice =
       output_.slice(/*dim=*/0, /*start=*/0, /*end=*/params.actual_num_tokens);
 
   // TODO: support output_lse for replay
   std::optional<torch::Tensor> output_lse = std::nullopt;
+  if (runner_type_ == RunnerType::CHUNKED_PREFILL) {
+    batch_chunked_prefill(uri_,
+                          params.plan_info,
+                          float_workspace_buffer_,
+                          int_workspace_buffer_,
+                          page_locked_int_workspace_buffer_,
+                          query_slice,
+                          k_cache_,
+                          v_cache_,
+                          params.paged_kv_indptr,
+                          params.paged_kv_indices,
+                          params.paged_kv_last_page_len,
+                          window_size_left_,
+                          scale_,
+                          output_slice,
+                          output_lse,
+                          params.qo_indptr,
+                          causal_,
+                          params.paged_kv_indptr_host,
+                          params.paged_kv_indices_host,
+                          params.paged_kv_last_page_len_host);
+    return;
+  }
+
+  torch::Tensor key_slice =
+      key_.slice(/*dim=*/0, /*start=*/0, /*end=*/params.actual_num_tokens);
+  torch::Tensor value_slice =
+      value_.slice(/*dim=*/0, /*start=*/0, /*end=*/params.actual_num_tokens);
   batch_prefill(uri_,
                 params.plan_info,
                 float_workspace_buffer_,
@@ -92,6 +169,83 @@ void AttentionRunner::run_replay(const AttentionReplayParams& params) {
                 scale_,
                 output_slice,
                 output_lse);
+}
+
+void batch_chunked_prefill_with_optional_piecewise_capture(
+    const std::string& uri,
+    ffi::Array<int64_t> plan_info,
+    torch::Tensor float_workspace_buffer,
+    torch::Tensor int_workspace_buffer,
+    torch::Tensor page_locked_int_workspace_buffer,
+    torch::Tensor query,
+    torch::Tensor k_cache,
+    torch::Tensor v_cache,
+    torch::Tensor paged_kv_indptr,
+    torch::Tensor paged_kv_indices,
+    torch::Tensor paged_kv_last_page_len,
+    int64_t window_left,
+    double sm_scale,
+    torch::Tensor output,
+    std::optional<torch::Tensor>& output_lse,
+    std::optional<torch::Tensor> qo_indptr,
+    bool causal,
+    const torch::Tensor& paged_kv_indptr_host,
+    const torch::Tensor& paged_kv_indices_host,
+    const torch::Tensor& paged_kv_last_page_len_host) {
+  if (::xllm::ExecutionConfig::get_instance().enable_graph() &&
+      ::xllm::ExecutionConfig::get_instance()
+          .enable_prefill_piecewise_graph() &&
+      ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+          .is_capturing()) {
+    AttentionRunner runner;
+    const uint32_t padded_num_tokens =
+        static_cast<uint32_t>(query.size(/*dim=*/0));
+    runner.run_chunked_prefill_capture(uri,
+                                       plan_info,
+                                       float_workspace_buffer,
+                                       int_workspace_buffer,
+                                       page_locked_int_workspace_buffer,
+                                       query,
+                                       k_cache,
+                                       v_cache,
+                                       paged_kv_indptr,
+                                       paged_kv_indices,
+                                       paged_kv_last_page_len,
+                                       window_left,
+                                       sm_scale,
+                                       output,
+                                       output_lse,
+                                       qo_indptr,
+                                       causal,
+                                       paged_kv_indptr_host,
+                                       paged_kv_indices_host,
+                                       paged_kv_last_page_len_host,
+                                       padded_num_tokens);
+    ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+        .register_attention_runner(std::move(runner));
+    return;
+  }
+
+  batch_chunked_prefill(uri,
+                        plan_info,
+                        float_workspace_buffer,
+                        int_workspace_buffer,
+                        page_locked_int_workspace_buffer,
+                        query,
+                        k_cache,
+                        v_cache,
+                        paged_kv_indptr,
+                        paged_kv_indices,
+                        paged_kv_last_page_len,
+                        window_left,
+                        sm_scale,
+                        output,
+                        output_lse,
+                        qo_indptr,
+                        causal,
+                        paged_kv_indptr_host,
+                        paged_kv_indices_host,
+                        paged_kv_last_page_len_host);
 }
 
 void batch_prefill_with_optional_piecewise_capture(

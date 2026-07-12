@@ -4,7 +4,8 @@ set(_MUSA_LAYERS_HDRS)
 set(_MUSA_LAYERS_SRCS)
 set(_MUSA_LAYERS_DEPS)
 
-if(USE_MUSA)
+if(USE_MUSA AND NOT XLLM_TORCH_MUSA)
+  # Native MTTOplib attention/MLP path (not used with Mate/FlashInfer).
   list(APPEND _MUSA_LAYERS_HDRS
     ../cuda/flashinfer_workspace.h
     layer_base.h

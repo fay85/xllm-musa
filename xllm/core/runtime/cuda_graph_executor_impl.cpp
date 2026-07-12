@@ -52,6 +52,7 @@ limitations under the License.
 #include "core/platform/shared_vmm_allocator.h"
 #include "core/platform/vmm_torch_allocator.h"
 #endif
+#include "core/util/layer_hidden_dumper.h"
 #include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
 #include "kernels/cuda/global_capture_instance.h"
@@ -65,10 +66,13 @@ namespace xllm::runtime::cuda {
 
 namespace {
 
-const bool s_enable_graph_timing = [] {
-  const char* env = std::getenv("XLLM_GRAPH_TIMING");
-  return env != nullptr && std::string(env) == "1";
-}();
+bool s_enable_graph_timing() {
+  static const bool val = [] {
+    const char* env = std::getenv("XLLM_GRAPH_TIMING");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return val;
+}
 
 struct GraphPoolMemoryUsage {
   size_t reserved_bytes = 0;
@@ -163,6 +167,53 @@ bool has_llm_decode_host_metadata(const AttentionHostInput& host) {
   return !host.kv_seq_lens.empty() && is_cpu_int_tensor(host.paged_kv_indptr) &&
          is_cpu_int_tensor(host.paged_kv_indices) &&
          is_cpu_int_tensor(host.paged_kv_last_page_len);
+}
+
+struct IndexedTensorSnapshot {
+  torch::Tensor target;
+  torch::Tensor rows;
+};
+
+torch::Tensor get_linear_state_snapshot_indices(
+    const ModelInputParams& params,
+    const torch::Device& device) {
+  if (params.embedding.linear_state_indices.defined()) {
+    return params.embedding.linear_state_indices.to(
+        torch::TensorOptions().dtype(torch::kLong).device(device));
+  }
+  CHECK(!params.embedding.linear_state_ids.empty())
+      << "chunked prefill graph capture requires linear state ids";
+  return torch::tensor(
+      params.embedding.linear_state_ids,
+      torch::TensorOptions().dtype(torch::kLong).device(device));
+}
+
+std::vector<IndexedTensorSnapshot> snapshot_linear_attention_state(
+    std::vector<KVCache>& kv_caches,
+    const torch::Tensor& indices) {
+  std::vector<IndexedTensorSnapshot> snapshots;
+  snapshots.reserve(kv_caches.size() * 2);
+  for (KVCache& kv_cache : kv_caches) {
+    torch::Tensor conv_cache = kv_cache.get_conv_cache();
+    if (conv_cache.defined() && conv_cache.numel() > 0) {
+      snapshots.emplace_back(IndexedTensorSnapshot{
+          conv_cache, torch::index_select(conv_cache, /*dim=*/0, indices)});
+    }
+    torch::Tensor ssm_cache = kv_cache.get_ssm_cache();
+    if (ssm_cache.defined() && ssm_cache.numel() > 0) {
+      snapshots.emplace_back(IndexedTensorSnapshot{
+          ssm_cache, torch::index_select(ssm_cache, /*dim=*/0, indices)});
+    }
+  }
+  return snapshots;
+}
+
+void restore_linear_attention_state(
+    std::vector<IndexedTensorSnapshot>& snapshots,
+    const torch::Tensor& indices) {
+  for (IndexedTensorSnapshot& snapshot : snapshots) {
+    snapshot.target.index_copy_(/*dim=*/0, indices, snapshot.rows);
+  }
 }
 
 }  // namespace
@@ -651,7 +702,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
       }
       host_field = device_field.to(torch::kCPU);
     };
-    if (s_enable_graph_timing) {
+    if (s_enable_graph_timing()) {
       LOG(INFO) << "GRAPH_TIMING ensure_host_mirror: indptr_host_defined="
                 << attn_metadata->paged_kv_indptr_host.defined()
                 << " indices_host_defined="
@@ -1243,7 +1294,13 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
     attn_metadata->paged_kv_indices = persistent_paged_kv_indices_;
     attn_metadata->paged_kv_last_page_len =
         persistent_paged_kv_last_page_len(actual_batch_size);
-    attn_metadata->qo_indptr = persistent_decode_qo_indptr(actual_batch_size);
+    if (attn_metadata->is_chunked_prefill) {
+      attn_metadata->qo_indptr =
+          q_seq_lens(/*actual_batch_size=*/actual_batch_size + 1);
+    } else {
+      attn_metadata->qo_indptr =
+          persistent_decode_qo_indptr(actual_batch_size);
+    }
   }
   // Update plan_info if attn_metadata exists and enable_cuda_graph is true
   // This ensures plan_info is updated before CUDA graph capture/replay
@@ -1540,6 +1597,23 @@ bool CudaGraph::capture(CausalLM* model,
       << "update() should return ModelInputParams when "
          "return_capture_params=true";
 
+  // Chunked-prefill capture executes a warmup forward and a capture forward
+  // before the real replay. Both mutate GDN convolution and recurrent state.
+  // Snapshot the live sequence rows so each pass starts from the same state and
+  // the first replay observes exactly one application of the current chunk.
+  const bool snapshot_chunked_linear_state =
+      is_piecewise_ &&
+      params.meta.batch_forward_type.is_chunked_prefill() &&
+      !params.embedding.linear_state_ids.empty();
+  torch::Tensor linear_state_snapshot_indices;
+  std::vector<IndexedTensorSnapshot> linear_state_snapshots;
+  if (snapshot_chunked_linear_state) {
+    linear_state_snapshot_indices =
+        get_linear_state_snapshot_indices(params, persistent_param_.device());
+    linear_state_snapshots = snapshot_linear_attention_state(
+        kv_cache, linear_state_snapshot_indices);
+  }
+
   refresh_persistent_paged_kv_host_mirrors(
       graph_params_opt.value().attn_metadata, params.attention.host);
 
@@ -1556,6 +1630,11 @@ bool CudaGraph::capture(CausalLM* model,
                    persistent_param_.persistent_positions(padded_num_tokens_),
                    kv_cache,
                    graph_params_opt.value());
+    if (snapshot_chunked_linear_state) {
+      restore_linear_attention_state(linear_state_snapshots,
+                                     linear_state_snapshot_indices);
+      capture_stream.synchronize();
+    }
 
     // MemPoolContext has been deprecated in torch >= 2.8
 #if TORCH_VERSION_MAJOR <= 2 && TORCH_VERSION_MINOR <= 7
@@ -1604,6 +1683,10 @@ bool CudaGraph::capture(CausalLM* model,
               << bucket_num_tokens
               << ", num_graphs: " << piecewise_graph_.size()
               << ", num_runners: " << piecewise_graph_.num_runners();
+    if (snapshot_chunked_linear_state) {
+      restore_linear_attention_state(linear_state_snapshots,
+                                     linear_state_snapshot_indices);
+    }
   } else {
     // Normal capture mode (for decode)
     // Reuses the outer `capture_stream` (set up at the top of this function
@@ -1784,6 +1867,19 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
         updated_params.attn_metadata->plan_info->plan_info;
     replay_params.q_cu_seq_lens = updated_params.attn_metadata->q_cu_seq_lens;
     replay_params.kv_cu_seq_lens = updated_params.attn_metadata->kv_cu_seq_lens;
+    replay_params.paged_kv_indptr =
+        updated_params.attn_metadata->paged_kv_indptr;
+    replay_params.paged_kv_indices =
+        updated_params.attn_metadata->paged_kv_indices;
+    replay_params.paged_kv_last_page_len =
+        updated_params.attn_metadata->paged_kv_last_page_len;
+    replay_params.paged_kv_indptr_host =
+        updated_params.attn_metadata->paged_kv_indptr_host;
+    replay_params.paged_kv_indices_host =
+        updated_params.attn_metadata->paged_kv_indices_host;
+    replay_params.paged_kv_last_page_len_host =
+        updated_params.attn_metadata->paged_kv_last_page_len_host;
+    replay_params.qo_indptr = updated_params.attn_metadata->qo_indptr;
 
     // Replay piecewise graphs and attention runners
     piecewise_graph_.replay(replay_params);
@@ -1833,7 +1929,7 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
           replay_params_opt.value().attn_metadata, params.attention.host);
     }
 
-    if (s_enable_graph_timing) {
+    if (s_enable_graph_timing()) {
       static auto s_last_launch = std::chrono::steady_clock::now();
       static int s_step_count = 0;
       c10::cuda::getCurrentCUDAStream(device_index_).synchronize();
@@ -1847,8 +1943,20 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
       s_last_launch = t_sync_end;
     }
 
+    static auto s_replay_start = std::chrono::steady_clock::now();
     graph_.replay();
+    if (s_enable_graph_timing()) {
+      c10::cuda::getCurrentCUDAStream(device_index_).synchronize();
+      const auto t_replay_end = std::chrono::steady_clock::now();
+      const auto replay_ms = std::chrono::duration<double, std::milli>(
+                                 t_replay_end - s_replay_start)
+                                 .count();
+      LOG(INFO) << "GRAPH_TIMING replay_ms=" << replay_ms;
+    }
+    s_replay_start = std::chrono::steady_clock::now();
   }
+
+  debug::LayerHiddenDumper::instance().flush(actual_num_tokens);
 
   // Return the actual num_tokens portion of ModelOutput
   // Note: aux_hidden_states handling is done in CudaGraphExecutorImpl::run()
@@ -1935,6 +2043,7 @@ struct CudaGraphExecutorImpl::VmmPoolState {
 CudaGraphExecutorImpl::~CudaGraphExecutorImpl() {
   // Release captured graphs before MemPool objects to avoid PyTorch MemPool
   // use_count assertion during destruction.
+  chunked_prefill_graphs_.clear();
   prefill_graphs_.clear();
   graphs_.clear();
   vmm_pools_.clear();
@@ -2102,6 +2211,7 @@ void CudaGraphExecutorImpl::reset_vmm_allocator_offset(
 struct CudaGraphExecutorImpl::VmmPoolState {};
 
 CudaGraphExecutorImpl::~CudaGraphExecutorImpl() {
+  chunked_prefill_graphs_.clear();
   prefill_graphs_.clear();
   graphs_.clear();
 }
@@ -2262,12 +2372,20 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                        const ModelInputParams& params) {
   torch::NoGradGuard no_grad;
   const bool is_prefill = params.meta.batch_forward_type.is_prefill();
+  const bool is_chunked_prefill =
+      params.meta.batch_forward_type.is_chunked_prefill();
+  const bool is_mixed = params.meta.batch_forward_type.is_mixed();
   const bool is_decode = params.meta.batch_forward_type.is_decode();
 
   // Get actual num_tokens from tokens shape
   const uint32_t n_tokens = tokens.size(/*dim=*/0);
+  // Chunked/mixed GDN control flow is specialized to the exact packed query
+  // shape. Unlike pure prefill, it cannot safely append padding tokens because
+  // those tokens would mutate recurrent state and paged-KV state.
   const uint32_t bucket_num_tokens =
-      get_bucket_num_tokens(n_tokens, is_prefill);
+      (is_chunked_prefill || is_mixed)
+          ? n_tokens
+          : get_bucket_num_tokens(n_tokens, is_prefill);
 
   // Prefill phase with piecewise graph
   if (is_prefill && enable_prefill_piecewise_graph_) {
@@ -2362,6 +2480,75 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
     LOG(FATAL)
         << "Failed to capture piecewise CUDA graph for bucket num_tokens: "
         << bucket_num_tokens << " (actual num_tokens: " << n_tokens << ")";
+  }
+
+  // Chunked-prefill batches use paged attention rather than ragged prefill
+  // attention. They still use piecewise capture, but require an exact packed
+  // query shape because Qwen3.5 GDN host control flow is specialized to each
+  // sequence's query length and initial-state presence. MIXED is intentionally
+  // excluded: the graph-compatible chunked scheduler emits homogeneous
+  // prefill/chunked or decode batches to avoid unbounded mixed-shape captures.
+  if (is_chunked_prefill && enable_prefill_piecewise_graph_ &&
+      !params.is_spec_verify) {
+    CHECK_LE(n_tokens, max_tokens_for_graph_mode_)
+        << "Chunked-prefill graph batch exceeds max_tokens_for_graph_mode: "
+        << n_tokens << " > " << max_tokens_for_graph_mode_;
+
+    const uint64_t graph_key =
+        get_chunked_prefill_graph_key(bucket_num_tokens, params);
+    auto it = chunked_prefill_graphs_.find(graph_key);
+    if (it != chunked_prefill_graphs_.end()) {
+      VLOG(kGraphExecutorLogVerboseLevel)
+          << "CudaGraphExecutorImpl::run() in chunked-prefill piecewise "
+             "replay mode";
+      auto result = it->second->replay(tokens, positions, kv_caches, params);
+      return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+    }
+
+    auto graph =
+        std::make_unique<CudaGraph>(*persistent_param_,
+                                    device_.index(),
+                                    get_capture_stream(device_.index()),
+                                    /*is_piecewise=*/true);
+    VLOG(kGraphExecutorLogVerboseLevel)
+        << "CudaGraphExecutorImpl::run() in chunked-prefill piecewise "
+           "capture mode";
+
+    TorchMemPool* pool_ptr = nullptr;
+    if (::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool()) {
+      reset_vmm_allocator_offset(kPhysicalPoolIdPrefill);
+      const uint32_t shape_id = bucket_num_tokens;
+      pool_ptr = get_or_create_vmm_mempool(kPhysicalPoolIdPrefill, shape_id);
+    }
+    const at::cuda::MempoolId_t mem_pool =
+        get_mem_pool(kPhysicalPoolIdPrefill, bucket_num_tokens);
+
+    const bool capture_success = graph->capture(model_,
+                                                args_,
+                                                options_,
+                                                tokens,
+                                                positions,
+                                                params,
+                                                kv_caches,
+                                                bucket_num_tokens,
+                                                mem_pool,
+                                                pool_ptr);
+    if (capture_success) {
+      LOG(INFO) << "Lazy capturing piecewise CUDA graph for "
+                << params.meta.batch_forward_type.to_string()
+                << " bucket num_tokens: " << bucket_num_tokens
+                << " (actual num_tokens: " << n_tokens << ") done";
+      log_graph_memory_after_capture();
+      chunked_prefill_graphs_[graph_key] = std::move(graph);
+      auto result = chunked_prefill_graphs_[graph_key]->replay(
+          tokens, positions, kv_caches, params);
+      return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
+    }
+
+    LOG(FATAL) << "Failed to capture piecewise CUDA graph for "
+               << params.meta.batch_forward_type.to_string()
+               << " bucket num_tokens: " << bucket_num_tokens
+               << " (actual num_tokens: " << n_tokens << ")";
   }
 
   // Prefill without piecewise graph: use eager mode
@@ -2604,6 +2791,44 @@ uint64_t CudaGraphExecutorImpl::get_graph_key(
            (q_max_seq_len << kSpecVerifyQMaxSeqLenShift);
   }
   return static_cast<uint64_t>(bucket_num_tokens);
+}
+
+uint64_t CudaGraphExecutorImpl::get_chunked_prefill_graph_key(
+    uint32_t bucket_num_tokens,
+    const ModelInputParams& params) const {
+  constexpr uint64_t kFnvOffsetBasis = 1469598103934665603ULL;
+  constexpr uint64_t kFnvPrime = 1099511628211ULL;
+  uint64_t hash = kFnvOffsetBasis;
+  const auto mix = [&hash](uint64_t value) {
+    hash ^= value;
+    hash *= kFnvPrime;
+  };
+
+  mix(static_cast<uint64_t>(bucket_num_tokens));
+  mix(static_cast<uint64_t>(params.meta.batch_forward_type.value()));
+  mix(static_cast<uint64_t>(params.meta.num_sequences));
+
+  const std::vector<int32_t>& q_seq_lens =
+      params.attention.host.q_seq_lens;
+  mix(static_cast<uint64_t>(q_seq_lens.size()));
+  for (int32_t q_seq_len : q_seq_lens) {
+    mix(static_cast<uint64_t>(q_seq_len));
+  }
+
+  const std::vector<int64_t>& query_start_loc =
+      params.parallel.query_start_loc;
+  mix(static_cast<uint64_t>(query_start_loc.size()));
+  for (int64_t query_start : query_start_loc) {
+    mix(static_cast<uint64_t>(query_start));
+  }
+
+  const std::vector<int64_t>& has_initial_state =
+      params.parallel.has_initial_state;
+  mix(static_cast<uint64_t>(has_initial_state.size()));
+  for (int64_t has_state : has_initial_state) {
+    mix(static_cast<uint64_t>(has_state));
+  }
+  return hash;
 }
 
 // bucket will be [1, 2, 4, 8, 16, 32, 48, 64, ..., max_seqs_per_batch]

@@ -76,7 +76,7 @@ class Options {
   PROPERTY(int32_t, max_seqs_per_batch) = 256;
 
   // the max tokens per chunk for request in prefill stage.
-  PROPERTY(int32_t, max_tokens_per_chunk_for_prefill);
+  PROPERTY(int32_t, max_tokens_per_chunk_for_prefill) = 8192;
 
   // sps tokens
   PROPERTY(int32_t, num_speculative_tokens) = 0;
@@ -196,13 +196,13 @@ class Options {
   // true if enable forward interruption
   PROPERTY(bool, enable_forward_interruption) = false;
   // enable CUDA graph/ACL graph for performance optimization
-  PROPERTY(bool, enable_graph) = false;
+  PROPERTY(bool, enable_graph) = true;
   // enable graph-mode decode without padding
-  PROPERTY(bool, enable_graph_mode_decode_no_padding) = false;
+  PROPERTY(bool, enable_graph_mode_decode_no_padding) = true;
   // enable piecewise graph for prefill
-  PROPERTY(bool, enable_prefill_piecewise_graph) = false;
+  PROPERTY(bool, enable_prefill_piecewise_graph) = true;
   // maximum number of tokens for graph execution
-  PROPERTY(int32_t, max_tokens_for_graph_mode) = 2048;
+  PROPERTY(int32_t, max_tokens_for_graph_mode) = 8192;
   // all requests use single global ttft
   PROPERTY(int32_t, max_global_ttft_ms) = std::numeric_limits<int32_t>::max();
   // all requests use single global tpot

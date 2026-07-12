@@ -253,7 +253,7 @@ class ExtBuild(build_ext):
                     )
                 cmake_args += [
                     "-DUSE_CUDA:BOOL=ON",
-                    "-DUSE_MUSA:BOOL=OFF",
+                    "-DUSE_MUSA:BOOL=ON",
                     "-DXLLM_TORCH_MUSA:BOOL=ON",
                     f"-DTORCH_CUDA_ARCH_LIST={torch_cuda_architectures}",
                     "-DCMAKE_CUDA_ARCHITECTURES=80;89;90",

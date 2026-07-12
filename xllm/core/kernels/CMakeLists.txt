@@ -23,7 +23,7 @@ if(USE_MLU)
   add_subdirectory(mlu)
 endif()
 
-if(USE_MUSA)
+if(USE_MUSA AND NOT XLLM_TORCH_MUSA)
   set(CMAKE_CXX_COMPILER ${CMAKE_MUSA_COMPILER})
   string(REPLACE "-Wno-format-truncation" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-error=macro-redefined \
@@ -64,7 +64,7 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:npu_kernels>
     $<$<BOOL:${USE_NPU}>:xllm_ops>
     $<$<BOOL:${USE_MLU}>:mlu_kernels>
-    $<$<BOOL:${USE_MUSA}>:musa_kernels>
+    $<$<AND:$<BOOL:${USE_MUSA}>,$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>>:musa_kernels>
     $<$<BOOL:${USE_CUDA}>:cuda_kernels>
     $<$<BOOL:${USE_ILU}>:ilu_kernels>
     $<$<BOOL:${USE_DCU}>:dcu_kernels>

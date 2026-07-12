@@ -20,6 +20,7 @@ limitations under the License.
 #include <tuple>
 
 #include "kernels/ops_api.h"
+#include "kernels/musa/gdn_ops.h"
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
 #include <c10/cuda/CUDAException.h>
@@ -753,6 +754,17 @@ torch::Tensor run_spec_verify_gated_delta_rule_mate(
   return output;
 }
 
+bool use_mate_gdn_prefill_graph_capture() {
+  // Mate KKT and prefill bind to the active MUSA stream and write to explicit
+  // output tensors, so both kernels are safe to include in piecewise graphs.
+  // Keep an opt-out for older MUSA stacks with broken external-kernel capture.
+  static const bool enabled = [] {
+    const char* value = std::getenv("XLLM_MATE_GDN_PREFILL_GRAPH");
+    return value == nullptr || value[0] != '0';
+  }();
+  return enabled;
+}
+
 #endif  // USE_CUDA || USE_MUSA
 
 }  // namespace
@@ -1107,8 +1119,12 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const bool use_flat_mixed_qkv_decode =
       use_fused_gdn_decode || use_mate_gdn_decode;
 
-  if (!use_spec_verify && attn_metadata.is_prefill &&
-      !attn_metadata.is_chunked_prefill) {
+  static const bool use_custom_prefill_conv = [] {
+    const char* env = std::getenv("XLLM_USE_CUSTOM_PREFILL_CONV");
+    return env == nullptr || env[0] != '0';
+  }();
+  if (!use_custom_prefill_conv && !use_spec_verify &&
+      attn_metadata.is_prefill && !attn_metadata.is_chunked_prefill) {
     // xllm_0526 (xllm_0623_build container) prefill fast path: depthwise causal
     // conv via torch::conv1d for the output, and index_put_ on conv_cache to
     // store the post-prefill conv state. Does NOT call causal_conv1d_update on
@@ -1153,23 +1169,18 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                       /*groups=*/static_cast<int64_t>(conv_in.size(1)));
     mixed_qkv = torch::silu(conv_output.slice(2, 0, seq_len));
   } else if (!use_spec_verify && is_any_prefill) {
-    torch::IntArrayRef num_accepted_tokens_opt;
-    std::vector<int64_t> linear_state_indices_vec(
-        input_params.embedding.linear_state_ids.begin(),
-        input_params.embedding.linear_state_ids.end());
     torch::Tensor conv_input = reshape_qkvz_unpad(attn_metadata, mixed_qkv);
-    mixed_qkv = xllm::kernel::causal_conv1d(
+    torch::Tensor has_initial_state =
+        input_params.attention.device.kv_cache_tokens_nums > 0;
+    mixed_qkv = xllm::kernel::cuda::causal_conv1d_prefill(
         conv_input,
         conv_weight,
         conv_cache,
         std::optional<torch::Tensor>(),  // bias (no bias for qwen3)
-        torch::IntArrayRef(input_params.parallel.query_start_loc),
-        torch::IntArrayRef(linear_state_indices_vec),
-        torch::IntArrayRef(input_params.parallel.has_initial_state),
-        num_accepted_tokens_opt,
-        1,   // activation_mode (silu)
-        -1,  // pad_slot_id
-        0);  // run_mode forward
+        attn_metadata.q_cu_seq_lens,
+        logical_state_indices,
+        has_initial_state,
+        /*silu_activation=*/true);
 
     mixed_qkv = reshape_qkvz_with_pad(attn_metadata, mixed_qkv);
     mixed_qkv = mixed_qkv.transpose(1, 2);
@@ -1309,11 +1320,15 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   torch::Tensor core_attn_out;
   torch::Tensor last_recurrent_state;
 #if defined(USE_CUDA) || defined(USE_MUSA)
+  const bool is_piecewise_graph_capture =
+      xllm::runtime::cuda::GlobalCaptureInstance::get_instance().is_capturing();
+  const bool mate_prefill_shape_supported =
+      attn_metadata.is_prefill ||
+      (attn_metadata.is_chunked_prefill && batch_size == 1);
   const bool use_mate_gdn_prefill =
       kEnableMateGdnPrefill && use_mate_gdn_prefill_kernel() &&
-      attn_metadata.is_prefill && !use_spec_verify &&
-      !xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
-           .is_capturing();
+      mate_prefill_shape_supported && !use_spec_verify &&
+      (!is_piecewise_graph_capture || use_mate_gdn_prefill_graph_capture());
 #else
   const bool use_mate_gdn_prefill = false;
 #endif
@@ -1323,7 +1338,19 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     // Mate returns final state in k-last layout [B, Hv, V, K].
     torch::Tensor initial_state_tensor =
         torch::index_select(ssm_cache, 0, linear_state_base_indices);
-    initial_state_tensor.fill_(0.0);
+    if (attn_metadata.is_prefill) {
+      initial_state_tensor.fill_(0.0);
+    } else {
+      CHECK_EQ(input_params.parallel.has_initial_state.size(),
+               static_cast<size_t>(batch_size))
+          << "chunked prefill initial-state metadata must match batch size";
+      for (int64_t batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
+        if (input_params.parallel
+                .has_initial_state[static_cast<size_t>(batch_idx)] == 0) {
+          initial_state_tensor.select(/*dim=*/0, batch_idx).fill_(0.0);
+        }
+      }
+    }
 
     xllm::kernel::MateGatedDeltaRulePrefillParams mate_params;
     mate_params.q = processed_q;

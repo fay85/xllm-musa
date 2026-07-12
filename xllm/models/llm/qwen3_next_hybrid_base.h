@@ -36,6 +36,7 @@ limitations under the License.
 #include "core/layers/common/lm_head.h"
 #include "core/layers/common/qwen3_next_rms_norm.h"
 #include "core/layers/common/word_embedding.h"
+#include "core/util/layer_hidden_dumper.h"
 #if defined(USE_CUDA)
 #include "core/layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 #elif defined(USE_NPU)
@@ -169,6 +170,17 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
       h = embed_tokens_(tokens);
     }
 
+    auto& hidden_dumper = debug::LayerHiddenDumper::instance();
+    if (hidden_dumper.enabled()) {
+      const int num_dump_slots = static_cast<int>(layers_.size() + 2);
+      hidden_dumper.ensure_buffers(num_dump_slots,
+                                   h.size(0),
+                                   h.size(-1),
+                                   h.device(),
+                                   h.scalar_type());
+      hidden_dumper.record(/*slot=*/0, h);
+    }
+
     torch::Tensor mrope_cos_sin;
     for (const auto& layer : layers_) {
       mrope_cos_sin = layer->build_mrope_cos_sin(positions);
@@ -196,6 +208,9 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
                          kv_caches[i],
                          input_params,
                           mrope_cos_sin);
+      if (hidden_dumper.enabled()) {
+        hidden_dumper.record(static_cast<int>(i + 1), h);
+      }
 #if defined(USE_NPU)
       if (input_params.parallel.layer_synchronizer != nullptr &&
           !input_params.parallel.layer_synchronizer->record_event(
@@ -206,6 +221,9 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
     }
     auto [hidden_states, residual_out] = norm_->forward(h, residual);
     h = hidden_states;
+    if (hidden_dumper.enabled()) {
+      hidden_dumper.record(static_cast<int>(layers_.size() + 1), h);
+    }
     return ModelOutput(h);
   }
 

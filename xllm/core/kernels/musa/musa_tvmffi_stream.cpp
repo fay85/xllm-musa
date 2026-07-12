@@ -594,6 +594,50 @@ void ensure_tvm_ffi_tensor_allocator() {
 
 namespace xllm::kernel::cuda {
 
+bool ensure_tilelang_musa_loader() {
+  static const bool loaded = []() {
+    std::vector<std::string> candidates;
+    const char* explicit_lib = std::getenv("XLLM_TILELANG_LIB");
+    if (explicit_lib != nullptr && explicit_lib[0] != '\0') {
+      candidates.emplace_back(explicit_lib);
+    }
+
+    const char* tvm_library_path = std::getenv("TVM_LIBRARY_PATH");
+    if (tvm_library_path != nullptr && tvm_library_path[0] != '\0') {
+      std::stringstream paths(tvm_library_path);
+      std::string path;
+      while (std::getline(paths, path, ':')) {
+        if (!path.empty()) {
+          candidates.emplace_back(path + "/libtilelang.so");
+        }
+      }
+    }
+    candidates.emplace_back("libtilelang.so");
+
+    std::string last_error;
+    for (const std::string& candidate : candidates) {
+      dlerror();
+      void* handle = dlopen(candidate.c_str(), RTLD_NOW | RTLD_GLOBAL);
+      if (handle != nullptr) {
+        VLOG(1) << "[tvmffi] registered TileLang MUSA module loader from "
+                << candidate;
+        return true;
+      }
+      const char* error = dlerror();
+      if (error != nullptr) {
+        last_error = error;
+      }
+    }
+
+    LOG_FIRST_N(WARNING, 1)
+        << "[tvmffi] failed to load libtilelang; TileLang FFI kernels are "
+           "unavailable. Set XLLM_TILELANG_LIB to libtilelang.so. dlerror="
+        << (last_error.empty() ? "unknown" : last_error);
+    return false;
+  }();
+  return loaded;
+}
+
 void begin_ffi_alloc_record() {
   CHECK(g_ffi_alloc_state.mode == FfiAllocMode::kPassthrough)
       << "begin_ffi_alloc_record: must be entered from kPassthrough; current="

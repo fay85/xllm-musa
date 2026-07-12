@@ -33,6 +33,8 @@ MASTER_NODE_ADDR="${MASTER_NODE_ADDR:-127.0.0.1:9748}"
 DEVICE_INDEX="${DEVICE_INDEX:-0}"
 MUSA_VISIBLE_DEVICES="${MUSA_VISIBLE_DEVICES:-1}"
 LOG_DIR="${LOG_DIR:-log}"
+XLLM_TILELANG_LIB="${XLLM_TILELANG_LIB:-/usr/local/lib/python3.10/dist-packages/tilelang/lib/libtilelang.so}"
+export XLLM_TILELANG_LIB
 BACKGROUND=0
 MODEL_PATH="${MODEL_PATH:-}"
 
@@ -249,7 +251,7 @@ model_runtime_flags() {
   BLOCK_SIZE="${BLOCK_SIZE:-64}"
   MAX_SEQS_PER_BATCH=""
   MAX_CONCURRENT_REQUESTS="${MAX_CONCURRENT_REQUESTS:-}"
-  MAX_MEMORY_UTILIZATION="${MAX_MEMORY_UTILIZATION:-0.8}"
+  MAX_MEMORY_UTILIZATION="${MAX_MEMORY_UTILIZATION:-0.70}"
 
   case "$model_name" in
     Qwen3.5-27B|Qwen3.5-27b|qwen3.5-27b|Qwen3.5-27B-FP8|Qwen3.5-27B-fp8|qwen3.5-27b-fp8)
@@ -372,7 +374,7 @@ run_xllm() {
   #   ENABLE_GRAPH=1 bash run_xllm_musa.sh ...
   # Disable VMM pool on first bring-up if capture fails:
   #   ENABLE_GRAPH=1 ENABLE_GRAPH_VMM_POOL=0 bash run_xllm_musa.sh ...
-  if [[ "${ENABLE_GRAPH:-0}" == "1" ]]; then
+  if [[ "${ENABLE_GRAPH:-1}" == "1" ]]; then
     cmd+=("--enable_graph=true")
     if [[ "${ENABLE_GRAPH_DECODE_NO_PADDING:-1}" == "1" ]]; then
       cmd+=("--enable_graph_mode_decode_no_padding=true")
@@ -400,7 +402,7 @@ run_xllm() {
   # Suffix decoding needs no draft model; just set NUM_SPECULATIVE_TOKENS>0
   # and SPECULATIVE_ALGORITHM=Suffix.
   local num_spec="${NUM_SPECULATIVE_TOKENS:-0}"
-  if [[ "${ENABLE_GRAPH:-0}" == "1" && "$num_spec" -gt 0 ]]; then
+  if [[ "${ENABLE_GRAPH:-1}" == "1" && "$num_spec" -gt 0 ]]; then
     echo "==> WARNING: speculative decoding (MTP) is disabled while ENABLE_GRAPH=1"
     echo "==>          (graph-mode MTP is not ready). Set ENABLE_GRAPH=0 to use MTP."
     num_spec=0

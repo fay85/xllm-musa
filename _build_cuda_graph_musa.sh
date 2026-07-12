@@ -33,7 +33,7 @@ export MATE_HOME="${MATE_HOME:-/workspace/mate_feihu}"
 MATE_FFI_ROOT="${MATE_HOME}/build/flashinfer_ffi_hd256"
 export LD_LIBRARY_PATH="${MATE_FFI_ROOT}/mate_flashinfer_prefill_ffi:${MATE_FFI_ROOT}/mate_flashinfer_batch_attention_ffi:${MATE_FFI_ROOT}/mate_flashinfer_decode_ffi:/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/opt/intel/oneapi/mkl/lib/intel64:/usr/lib:/usr/lib/x86_64-linux-gnu:/usr/local/openmpi/lib:${LD_LIBRARY_PATH:-}"
 
-export CMAKE_ARGS="-DCMAKE_CUDA_COMPILER=/usr/local/musa/tools/musamapping/mcc_wrapper -DCMAKE_MODULE_PATH=/usr/local/musa/tools/musamapping/cmake/Modules -DCUDAToolkit_ROOT=/usr/local/musa -DCUDA_HOME=/usr/local/musa -DUSE_CXX11_ABI=ON -D_GLIBCXX_USE_CXX11_ABI=1 -DGENERATE_SO=OFF -DVCPKG_MANIFEST_INSTALL=OFF -DUSE_MUSA=OFF -DXLLM_TORCH_MUSA=ON -DCMAKE_CUDA_ARCHITECTURES=90 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_EXPERIMENTAL_RUST=3cc9b32c-47d3-4056-8953-d74e69fc0d6c"
+export CMAKE_ARGS="-DCMAKE_CUDA_COMPILER=/usr/local/musa/tools/musamapping/mcc_wrapper -DCMAKE_MODULE_PATH=/usr/local/musa/tools/musamapping/cmake/Modules -DCUDAToolkit_ROOT=/usr/local/musa -DCUDA_HOME=/usr/local/musa -DUSE_CXX11_ABI=ON -D_GLIBCXX_USE_CXX11_ABI=1 -DGENERATE_SO=OFF -DVCPKG_MANIFEST_INSTALL=OFF -DUSE_CUDA:BOOL=ON -DUSE_MUSA:BOOL=ON -DXLLM_TORCH_MUSA:BOOL=ON -DCMAKE_CUDA_ARCHITECTURES=90 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_EXPERIMENTAL_RUST=3cc9b32c-47d3-4056-8953-d74e69fc0d6c"
 
 export GIT_CONFIG_COUNT=1
 export GIT_CONFIG_KEY_0=safe.directory
@@ -163,7 +163,7 @@ echo "==> Logging to ${LOG}"
 # NINJA_TARGET: default xllm; set to specific .o targets for incremental rebuilds.
 NINJA_TARGET="${NINJA_TARGET:-xllm}"
 NINJA_SAFE="${SCRIPT_DIR}/scripts/ninja_safe.sh"
-if [ -f "${BD}/build.ninja" ]; then
+if [ -f "${BD}/build.ninja" ] && [ "${FORCE_CMAKE:-0}" != "1" ]; then
   # USE_CUDA+USE_MUSA builds may emit -lmusa_layers without the musa/ subdir in
   # the cmake graph; point the linker at the static archive directly.
   MUSA_LAYERS_A="${SCRIPT_DIR}/${BD}/xllm/core/layers/musa/libmusa_layers.a"

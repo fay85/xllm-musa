@@ -541,7 +541,7 @@ if(USE_MUSA)
     set(MTTOplib_DIR $ENV{MTT_OPLIB_PATH}/cmake)
     find_package(MTTOplib REQUIRED)
   else()
-    message(STATUS "XLLM_TORCH_MUSA: skipping MTTOplib (native USE_MUSA path disabled)")
+    message(STATUS "XLLM_TORCH_MUSA: skipping MTTOplib (Mate/FlashInfer path)")
   endif()
 
   find_package(Python COMPONENTS Interpreter REQUIRED)

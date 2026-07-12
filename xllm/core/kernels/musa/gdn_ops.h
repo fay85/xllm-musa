@@ -129,6 +129,16 @@ torch::Tensor causal_conv1d(
     int64_t pad_slot_id,
     int64_t run_mode);
 
+torch::Tensor causal_conv1d_prefill(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    const torch::Tensor& conv_state,
+    const std::optional<torch::Tensor>& bias,
+    const torch::Tensor& query_start_loc,
+    const torch::Tensor& cache_indices,
+    const torch::Tensor& has_initial_state,
+    bool silu_activation);
+
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params);
 

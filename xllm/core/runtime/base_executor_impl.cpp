@@ -18,6 +18,7 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include "common/metrics.h"
+#include "core/util/layer_hidden_dumper.h"
 
 namespace xllm {
 
@@ -37,7 +38,9 @@ ModelOutput BaseExecutorImpl::run(const torch::Tensor& tokens,
                                   std::vector<KVCache>& kv_caches,
                                   const ModelInputParams& params) {
   COUNTER_INC(num_model_execution_total_eager);
-  return model_->forward(tokens, positions, kv_caches, params);
+  ModelOutput output = model_->forward(tokens, positions, kv_caches, params);
+  debug::LayerHiddenDumper::instance().flush(tokens.size(0));
+  return output;
 }
 
 }  // namespace xllm

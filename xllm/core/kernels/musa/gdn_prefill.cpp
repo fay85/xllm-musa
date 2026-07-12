@@ -17,11 +17,15 @@ limitations under the License.
 #include "core/kernels/musa/musa_ops_api.h"
 
 #include <glog/logging.h>
+#include <unistd.h>
 
+#include <cstdlib>
 #include <sstream>
 
 #include "core/common/macros.h"
 #include "core/kernels/param.h"
+#include "core/util/env_var.h"
+#include "core/util/xllm_kineto_profiler.h"
 
 namespace xllm {
 namespace kernel {
@@ -303,17 +307,55 @@ bool mate_gdn_debug_enabled() {
   return enabled;
 }
 
-// Compute A = (I + lower_tri(beta * K @ K^T))^{-1} matching SGLang mate.kkt_solve.
-// The Mate prefill kernel expects this as the `a` parameter (not zeros).
-// Decay/gating is not included here. The Mate `_log1` specialization consumes
-// raw log(alpha) and computes its chunk-local cumulative sum internally.
+bool mate_gdn_validation_enabled() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_MATE_GDN_VALIDATE");
+    return env != nullptr && env[0] == '1';
+  }();
+  return enabled;
+}
+
+bool mate_kkt_enabled() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_MATE_KKT");
+    // Default on: the host PyTorch KKT path is a major TTFT hotspot.
+    if (env == nullptr) {
+      return true;
+    }
+    return env[0] != '0';
+  }();
+  return enabled;
+}
+
+std::string get_mate_kkt_solve_uri(int64_t num_q_heads,
+                                   int64_t num_v_heads,
+                                   torch::ScalarType dtype) {
+  std::ostringstream oss;
+  oss << "mate_kkt_solve_hq" << num_q_heads << "_hv" << num_v_heads << "_"
+      << mate_gdn_dtype_suffix(dtype);
+  return oss.str();
+}
+
+bool mate_kkt_module_available(const std::string& uri) {
+  const std::string ops_path = util::get_string_env("FLASHINFER_OPS_PATH");
+  if (ops_path.empty()) {
+    return false;
+  }
+  const std::string so_path = ops_path + "/" + uri + "/" + uri + ".so";
+  return ::access(so_path.c_str(), R_OK) == 0;
+}
+
+// Host fallback matching SGLang mate.kkt_solve numerically. Prefer the Mate
+// TileLang FFI path below: the per-row PyTorch loop is a major TTFT hotspot
+// across 48 GDN layers.
 //
 // key:  [B, T, Hqk, D]  (already L2-normalized, post-padding)
 // beta: [B, T, Hv]      (float32, sigmoid output)
 // returns: [B, T, Hv, chunk_size]  (same dtype as key)
-torch::Tensor kkt_solve(const torch::Tensor& key,
-                        const torch::Tensor& beta,
-                        int64_t chunk_size) {
+torch::Tensor kkt_solve_torch(const torch::Tensor& key,
+                              const torch::Tensor& beta,
+                              int64_t chunk_size) {
+  XLLM_KINETO_USER_SCOPE("xllm/kkt_solve_torch");
   const int64_t batch_size = key.size(0);
   const int64_t num_tokens = key.size(1);
   const int64_t Hqk = key.size(2);
@@ -372,6 +414,64 @@ torch::Tensor kkt_solve(const torch::Tensor& key,
   return attn.to(key.scalar_type());
 }
 
+// Mate TileLang KKT solve via TVM FFI (same kernel SGLang uses).
+// ABI: main(k, b, a, num_chunks) with
+//   k: [B, T, Hq, K], b: [B, T, Hv], a: [B, T, Hv, 64],
+//   num_chunks: B * ceil_div(T, 64)
+torch::Tensor kkt_solve_mate_ffi(const torch::Tensor& key,
+                                 const torch::Tensor& beta,
+                                 int64_t chunk_size) {
+  XLLM_KINETO_USER_SCOPE("xllm/kkt_solve_mate");
+  CHECK_EQ(chunk_size, kGdnChunkSize)
+      << "mate KKT solve currently requires chunk_size=" << kGdnChunkSize;
+  CHECK_EQ(key.size(3), 128) << "mate KKT solve currently requires K=128";
+  CHECK_EQ(key.size(1) % chunk_size, 0)
+      << "mate KKT solve expects T padded to chunk_size";
+
+  const int64_t batch_size = key.size(0);
+  const int64_t num_tokens = key.size(1);
+  const int64_t num_q_heads = key.size(2);
+  const int64_t num_v_heads = beta.size(2);
+  const std::string uri =
+      get_mate_kkt_solve_uri(num_q_heads, num_v_heads, key.scalar_type());
+
+  auto key_contig = key.contiguous();
+  auto beta_contig = beta.to(torch::kFloat32).contiguous();
+  auto a = torch::empty({batch_size, num_tokens, num_v_heads, chunk_size},
+                        key.options());
+  const int32_t num_chunks = static_cast<int32_t>(
+      batch_size * (num_tokens / chunk_size));
+
+  auto main = get_function(uri, "main");
+  main(to_ffi_tensor(key_contig),
+       to_ffi_tensor(beta_contig),
+       to_ffi_tensor(a),
+       num_chunks);
+  return a;
+}
+
+torch::Tensor kkt_solve(const torch::Tensor& key,
+                        const torch::Tensor& beta,
+                        int64_t chunk_size) {
+  if (mate_kkt_enabled()) {
+    const std::string uri = get_mate_kkt_solve_uri(
+        key.size(2), beta.size(2), key.scalar_type());
+    if (mate_kkt_module_available(uri)) {
+      if (ensure_tilelang_musa_loader()) {
+        return kkt_solve_mate_ffi(key, beta, chunk_size);
+      }
+      LOG_FIRST_N(WARNING, 1)
+          << "[MateKktSolve] TileLang MUSA module loader unavailable; "
+             "falling back to torch KKT";
+    } else {
+      LOG_FIRST_N(WARNING, 1)
+          << "[MateKktSolve] module not found for uri=" << uri
+          << " under FLASHINFER_OPS_PATH; falling back to torch KKT";
+    }
+  }
+  return kkt_solve_torch(key, beta, chunk_size);
+}
+
 }
 
 std::string get_mate_gdn_prefill_uri(int64_t num_q_heads,
@@ -385,6 +485,7 @@ std::string get_mate_gdn_prefill_uri(int64_t num_q_heads,
 
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     MateGatedDeltaRulePrefillParams& params) {
+  XLLM_KINETO_USER_SCOPE("xllm/mate_gdn_prefill");
   auto query = params.q.contiguous();
   auto key = params.k.contiguous();
   auto value = params.v.contiguous();
@@ -443,54 +544,61 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
               << " pad_size=" << pad_size << " seq_len=" << seq_len
               << " num_tokens=" << num_tokens;
   }
-  bind_tvmffi_stream_to_current_torch_stream(query.device());
-  auto run = get_function(uri, "run");
 
-  auto a = kkt_solve(key, beta, kGdnChunkSize).contiguous();
-  if (mate_gdn_debug_enabled()) {
-    auto a_f32 = a.to(torch::kFloat32);
-    LOG(INFO) << "[MateGdnPrefill] a(kkt): min=" << a_f32.min().item<float>()
-              << " max=" << a_f32.max().item<float>()
-              << " has_nan=" << a_f32.isnan().any().item<bool>()
-              << " has_inf=" << a_f32.isinf().any().item<bool>();
-  }
+  torch::Tensor a;
   torch::Tensor h0;
-  if (params.initial_state.has_value() && params.initial_state->defined()) {
-    // xLLM and the Mate kernel both use k-last state layout (B, H, V, K).
-    h0 = params.initial_state->to(torch::kFloat32).contiguous();
-    CHECK_EQ(h0.dim(), 4) << "mate GDN prefill initial_state must be 4D";
-    CHECK_EQ(h0.size(0), batch_size)
-        << "mate GDN prefill initial_state batch mismatch";
-    CHECK_EQ(h0.size(1), num_v_heads)
-        << "mate GDN prefill initial_state head mismatch";
-    CHECK_EQ(h0.size(2), head_v_dim)
-        << "mate GDN prefill initial_state V dim mismatch";
-    CHECK_EQ(h0.size(3), head_k_dim)
-        << "mate GDN prefill initial_state K dim mismatch";
-  } else {
-    h0 = torch::zeros({batch_size, num_v_heads, head_v_dim, head_k_dim},
-                      torch::TensorOptions()
-                          .dtype(torch::kFloat32)
-                          .device(query.device()));
+  torch::Tensor output;
+  torch::Tensor final_state;
+  {
+    // Bind once for KKT + Mate prefill. MusaTvmffiStreamGuard adds the
+    // missing pre-launch dependency when FFI falls back to a pool stream.
+    MusaTvmffiStreamGuard stream_guard(query.device());
+    auto run = get_function(uri, "run");
+
+    a = kkt_solve(key, beta, kGdnChunkSize).contiguous();
+    if (mate_gdn_debug_enabled()) {
+      auto a_f32 = a.to(torch::kFloat32);
+      LOG(INFO) << "[MateGdnPrefill] a(kkt): min=" << a_f32.min().item<float>()
+                << " max=" << a_f32.max().item<float>()
+                << " has_nan=" << a_f32.isnan().any().item<bool>()
+                << " has_inf=" << a_f32.isinf().any().item<bool>();
+    }
+    if (params.initial_state.has_value() && params.initial_state->defined()) {
+      // xLLM and the Mate kernel both use k-last state layout (B, H, V, K).
+      h0 = params.initial_state->to(torch::kFloat32).contiguous();
+      CHECK_EQ(h0.dim(), 4) << "mate GDN prefill initial_state must be 4D";
+      CHECK_EQ(h0.size(0), batch_size)
+          << "mate GDN prefill initial_state batch mismatch";
+      CHECK_EQ(h0.size(1), num_v_heads)
+          << "mate GDN prefill initial_state head mismatch";
+      CHECK_EQ(h0.size(2), head_v_dim)
+          << "mate GDN prefill initial_state V dim mismatch";
+      CHECK_EQ(h0.size(3), head_k_dim)
+          << "mate GDN prefill initial_state K dim mismatch";
+    } else {
+      h0 = torch::zeros({batch_size, num_v_heads, head_v_dim, head_k_dim},
+                        torch::TensorOptions()
+                            .dtype(torch::kFloat32)
+                            .device(query.device()));
+    }
+    output = torch::empty({batch_size, num_tokens, num_v_heads, head_v_dim},
+                          value.options());
+    // Kernel writes final_state in k-last layout (B, H, V, K), same as xLLM
+    // cache.
+    final_state = torch::empty(
+        {batch_size, num_v_heads, head_v_dim, head_k_dim},
+        torch::TensorOptions().dtype(torch::kFloat32).device(query.device()));
+
+    run(to_ffi_tensor(query),
+        to_ffi_tensor(key),
+        to_ffi_tensor(value),
+        to_ffi_tensor(a),
+        to_ffi_tensor(g_log),
+        to_ffi_tensor(beta),
+        to_ffi_tensor(h0),
+        to_ffi_tensor(output),
+        to_ffi_tensor(final_state));
   }
-  auto output = torch::empty({batch_size, num_tokens, num_v_heads, head_v_dim},
-                             value.options());
-  // Kernel writes final_state in k-last layout (B, H, V, K), same as xLLM cache.
-  auto final_state = torch::empty(
-      {batch_size, num_v_heads, head_v_dim, head_k_dim},
-      torch::TensorOptions().dtype(torch::kFloat32).device(query.device()));
-
-  run(to_ffi_tensor(query),
-      to_ffi_tensor(key),
-      to_ffi_tensor(value),
-      to_ffi_tensor(a),
-      to_ffi_tensor(g_log),
-      to_ffi_tensor(beta),
-      to_ffi_tensor(h0),
-      to_ffi_tensor(output),
-      to_ffi_tensor(final_state));
-
-  sync_musa_ffi_stream(query.device());
 
   if (mate_gdn_debug_enabled()) {
     auto out_f32 = output.to(torch::kFloat32);
@@ -516,7 +624,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
               << " beta_max=" << beta.max().item<float>();
   }
 
-  {
+  if (mate_gdn_validation_enabled()) {
     auto out_bad = (output.isnan().any() | output.isinf().any() |
                     final_state.isnan().any() | final_state.isinf().any())
                        .item<bool>();
@@ -605,6 +713,40 @@ torch::Tensor causal_conv1d(
       silu_activation, pad_slot_id);
 
   return out_t.t().contiguous().to(x.dtype());
+}
+
+torch::Tensor causal_conv1d_prefill(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    const torch::Tensor& conv_state,
+    const std::optional<torch::Tensor>& bias,
+    const torch::Tensor& query_start_loc,
+    const torch::Tensor& cache_indices,
+    const torch::Tensor& has_initial_state,
+    bool silu_activation) {
+  CHECK(query_start_loc.defined() &&
+        is_torch_musa_device(query_start_loc.device()))
+      << "causal_conv1d_prefill requires device query_start_loc";
+  CHECK(cache_indices.defined() &&
+        is_torch_musa_device(cache_indices.device()))
+      << "causal_conv1d_prefill requires device cache_indices";
+  CHECK(has_initial_state.defined() &&
+        is_torch_musa_device(has_initial_state.device()))
+      << "causal_conv1d_prefill requires device has_initial_state";
+
+  auto x_t = x.t().contiguous();
+  auto out_t = torch::empty_like(x_t);
+  causal_conv1d_fwd(x_t,
+                    weight,
+                    out_t,
+                    bias,
+                    conv_state,
+                    query_start_loc,
+                    cache_indices,
+                    has_initial_state,
+                    silu_activation,
+                    /*pad_slot_id=*/-1);
+  return out_t.t().contiguous();
 }
 
 }

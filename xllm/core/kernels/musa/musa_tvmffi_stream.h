@@ -159,6 +159,9 @@ ffi::Module get_module(const std::string& uri);
 ffi::Function get_function(const std::string& uri,
                            const std::string& func_name);
 
+// Registers TileLang's embedded MUSA-module loader with TVM FFI. Returns false
+// when libtilelang is unavailable so callers can use a non-TileLang fallback.
+bool ensure_tilelang_musa_loader();
 
 enum class FfiAllocMode { kPassthrough, kRecord, kReplay };
 

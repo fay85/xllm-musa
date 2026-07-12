@@ -1,6 +1,6 @@
 include(cc_library)
 
-if(USE_MUSA)
+if(USE_MUSA AND NOT XLLM_TORCH_MUSA)
   file(GLOB_RECURSE MUSA_HEADER_FILES
     "${CMAKE_CURRENT_LIST_DIR}/*.h"
     "${CMAKE_CURRENT_LIST_DIR}/cuda/*.h"

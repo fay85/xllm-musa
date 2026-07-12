@@ -61,7 +61,8 @@ class ChunkedPrefillScheduler : public ContinuousScheduler {
       std::vector<Sequence*>& prefill_stage_sequences,
       std::unique_ptr<RequestPriorityQueue>& running_queue,
       bool& budget_exhausted,
-      bool& blocks_exhausted);
+      bool& blocks_exhausted,
+      bool require_homogeneous_batch);
   void handle_prefill_requests(
       const size_t max_tokens_per_chunk_for_prefill,
       double& latency_budget,
@@ -74,11 +75,13 @@ class ChunkedPrefillScheduler : public ContinuousScheduler {
       bool& budget_exhausted,
       bool& blocks_exhausted,
       std::vector<std::shared_ptr<Request>>& finished_requests);
-  void handle_remaining_budget(double& latency_budget,
-                               double& estimate_latency,
-                               size_t& remaining_token_budget,
-                               std::vector<Sequence*>& prefill_stage_sequences,
-                               bool& blocks_exhausted);
+  void handle_remaining_budget(
+      const size_t max_tokens_per_chunk_for_prefill,
+      double& latency_budget,
+      double& estimate_latency,
+      size_t& remaining_token_budget,
+      std::vector<Sequence*>& prefill_stage_sequences,
+      bool& blocks_exhausted);
 };
 
 }  // namespace xllm

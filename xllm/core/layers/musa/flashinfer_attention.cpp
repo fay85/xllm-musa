@@ -377,7 +377,7 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
     qo_indptr_arg = attn_metadata.qo_indptr;
   }
 
-  xllm::kernel::cuda::batch_chunked_prefill(
+  xllm::kernel::cuda::batch_chunked_prefill_with_optional_piecewise_capture(
       attn_metadata.plan_info->uri,
       attn_metadata.plan_info->plan_info,
       float_workspace_buffer_,
