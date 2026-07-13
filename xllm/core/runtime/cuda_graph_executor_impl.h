@@ -31,6 +31,7 @@ limitations under the License.
 #include <mutex>
 #include <optional>
 #include <unordered_map>
+#include <vector>
 
 #include "core/common/macros.h"
 #include "core/framework/kv_cache/kv_cache.h"
@@ -515,12 +516,18 @@ class CudaGraphExecutorImpl : public ExecutorImpl {
   at::cuda::MempoolId_t graph_pool_;
   // Whether to enable prefill piecewise graph
   bool enable_prefill_piecewise_graph_;
+  // Whether to route pure-prefill batches to eager (bypassing piecewise
+  // graph) so the scheduler can pack multiple prefills per batch.
+  bool enable_packed_prefill_;
   int64_t max_tokens_for_graph_mode_ = 0;
 
-  // Get bucket num_tokens for given num_tokens
-  // For num_tokens < 8: use 1, 2, 4, 8
-  // For num_tokens >= 8: use multiples of 8
-  // When is_prefill=true, no_padding is disabled (prefill requires padding)
+  // Fixed prefill pad ladder aligned with SGLang piecewise_cuda_graph_tokens.
+  // Pure-prefill graphs pad up to the next entry instead of ceil-to-16.
+  std::vector<uint32_t> prefill_graph_token_buckets_;
+
+  // Get bucket num_tokens for given num_tokens.
+  // Prefill: nearest SGLang-style ladder size (>= num_tokens).
+  // Decode: 1/2/4/8 then multiples of 16, or exact when no_padding is enabled.
   uint32_t get_bucket_num_tokens(uint32_t num_tokens,
                                  bool is_prefill = false) const;
 

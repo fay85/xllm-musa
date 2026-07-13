@@ -102,6 +102,10 @@ bool require_homogeneous_graph_batch() {
          execution_config.enable_prefill_piecewise_graph();
 }
 
+bool enable_packed_prefill() {
+  return ExecutionConfig::get_instance().enable_packed_prefill();
+}
+
 }  // namespace
 
 ChunkedPrefillScheduler::ChunkedPrefillScheduler(Engine* engine,
@@ -149,8 +153,10 @@ void ChunkedPrefillScheduler::handle_running_queue_requests(
       break;
     }
     // One independent prefill request per piecewise-graph batch. Multiple
-    // decode requests remain allowed.
-    if (require_homogeneous_batch && request_is_prefill &&
+    // decode requests remain allowed. When packed prefill is enabled,
+    // multiple prefill requests are admitted up to the token budget.
+    if (require_homogeneous_batch && !enable_packed_prefill() &&
+        request_is_prefill &&
         batch_is_prefill.has_value() && batch_is_prefill.value()) {
       break;
     }
@@ -358,10 +364,10 @@ void ChunkedPrefillScheduler::handle_prefill_requests(
     bool& blocks_exhausted,
     std::vector<std::shared_ptr<Request>>& finished_requests) {
   const bool require_homogeneous_batch = require_homogeneous_graph_batch();
-  // Under graph + piecewise, keep each prefill batch to a single request:
-  // packing N×~2.5k prefills creates unique ~5k/~7k capture buckets that
-  // crash MUSA on capture_end under memory pressure. Also refuse to mix
-  // waiting prefills into an already-scheduled decode batch.
+  // Refuse to mix waiting prefills into an already-scheduled decode (or
+  // other) batch under homogeneous graph mode. When enable_packed_prefill
+  // is on, multiple pure prefills are still packed in the loop below as
+  // long as running_sequences_ starts empty for this call.
   if (require_homogeneous_batch && !running_sequences_.empty()) {
     return;
   }
@@ -370,7 +376,8 @@ void ChunkedPrefillScheduler::handle_prefill_requests(
   // they may contian many sequences, so we should check here.
   while (!waiting_priority_queue->empty() && remaining_token_budget > 0 &&
          latency_budget > estimate_latency && remaining_seq_budget > 0) {
-    if (require_homogeneous_batch && !running_sequences_.empty()) {
+    if (require_homogeneous_batch && !enable_packed_prefill() &&
+        !running_sequences_.empty()) {
       break;
     }
 

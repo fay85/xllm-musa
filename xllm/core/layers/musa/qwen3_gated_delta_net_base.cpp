@@ -18,6 +18,7 @@ limitations under the License.
 #include <algorithm>
 #include <cstdlib>
 #include <tuple>
+#include <vector>
 
 #include "kernels/ops_api.h"
 #include "kernels/musa/gdn_ops.h"
@@ -1300,6 +1301,24 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     std::tie(g, beta) = xllm::kernel::fused_gdn_gating(gdn_params);
     g = g.squeeze(0).contiguous().view({batch_size, seq_len, a.size(-1)});
     beta = beta.squeeze(0).contiguous().view({batch_size, seq_len, b.size(-1)});
+    // Zero g/beta for inter-sequence padding tokens so the Mate kernel's
+    // recurrent state is not corrupted. When batch_size > 1, shorter
+    // sequences are padded to max_query_len by reshape_qkvz_with_pad;
+    // fused_gdn_gating produces non-zero g/beta for those padding tokens
+    // (dt_bias makes softplus(0) != 0). With g=0 (alpha=1, full retention)
+    // and beta=0 (no update), the recurrent state is unchanged for padding.
+    if (batch_size > 1 && !attn_metadata.q_seq_lens_vec.empty()) {
+      for (int64_t b = 0; b < batch_size; ++b) {
+        const int64_t valid_len =
+            attn_metadata.q_seq_lens_vec[static_cast<size_t>(b)];
+        if (valid_len < seq_len) {
+          g.select(/*dim=*/0, b).slice(/*dim=*/0, valid_len, seq_len).zero_();
+          beta.select(/*dim=*/0, b)
+              .slice(/*dim=*/0, valid_len, seq_len)
+              .zero_();
+        }
+      }
+    }
   } else if (!use_flat_mixed_qkv_decode) {
     xllm::kernel::FusedGdnGatingParams gdn_params;
     gdn_params.A_log = A_log_;
@@ -1362,6 +1381,23 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
         1.0 / std::sqrt(static_cast<double>(processed_q.size(-1)));
     mate_params.initial_state = initial_state_tensor;
     mate_params.output_final_state = true;
+    mate_params.use_qk_l2norm_in_kernel = true;
+    // Varlen Mate simple kernel needs cu_seqlens. Prefer host lengths built
+    // from q_seq_lens_vec so gdn_prefill pack/unpack/cumsum never D2H-syncs
+    // the stream once per GDN layer. Full warp path ignores packing and uses
+    // padded [B, T] + KKT (SGLang Mate).
+    if (!attn_metadata.q_seq_lens_vec.empty()) {
+      std::vector<int32_t> cu_host(attn_metadata.q_seq_lens_vec.size() + 1);
+      cu_host[0] = 0;
+      for (size_t i = 0; i < attn_metadata.q_seq_lens_vec.size(); ++i) {
+        cu_host[i + 1] =
+            cu_host[i] + attn_metadata.q_seq_lens_vec[i];
+      }
+      mate_params.cu_seqlens_host = std::move(cu_host);
+    }
+    if (attn_metadata.q_cu_seq_lens.defined()) {
+      mate_params.cu_seqlens = attn_metadata.q_cu_seq_lens.to(torch::kInt32);
+    }
     torch::Tensor mate_final_state;
     std::tie(core_attn_out, mate_final_state) =
         xllm::kernel::mate_gated_delta_rule_prefill(mate_params);

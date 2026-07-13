@@ -1696,6 +1696,15 @@ struct MateGatedDeltaRulePrefillParams {
   std::optional<float> scale = std::nullopt;
   // Initial recurrent state in mate k-last layout [B, Hv, V, K], float32.
   std::optional<torch::Tensor> initial_state = std::nullopt;
+  // Optional packed-varlen cumulative sequence lengths [num_seqs+1], int32.
+  // When set, q/k/v/g/beta must be the packed layout [1, total_tokens, ...]
+  // (or [B, max_T, ...] which is packed on the fly when B > 1).
+  // When unset, B == 1 is required and cu_seqlens=[0, T] is synthesized.
+  std::optional<torch::Tensor> cu_seqlens = std::nullopt;
+  // Host-side copy of cu_seqlens. Prefer this for pack/unpack/cumsum so the
+  // multi-seq path does not D2H-sync the GPU stream once per helper call
+  // (and once per GDN layer). Built from q_seq_lens_vec when available.
+  std::optional<std::vector<int32_t>> cu_seqlens_host = std::nullopt;
   bool output_final_state = true;
   bool use_qk_l2norm_in_kernel = true;
 };

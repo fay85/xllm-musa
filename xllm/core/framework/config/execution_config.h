@@ -40,11 +40,12 @@ class ExecutionConfig final {
   [[nodiscard]] static const OptionCategory& option_category() {
     static const OptionCategory kOptionCategory = {
         "EXECUTION OPTIONS",
-        {"enable_graph",
-         "enable_graph_double_buffer",
-         "enable_graph_mode_decode_no_padding",
-         "enable_prefill_piecewise_graph",
-         "enable_graph_vmm_pool",
+         {"enable_graph",
+          "enable_graph_double_buffer",
+          "enable_graph_mode_decode_no_padding",
+          "enable_prefill_piecewise_graph",
+          "enable_packed_prefill",
+          "enable_graph_vmm_pool",
          "max_tokens_for_graph_mode",
          "acl_graph_decode_batch_size_limit",
          "enable_shm",
@@ -62,6 +63,8 @@ class ExecutionConfig final {
   PROPERTY(bool, enable_graph_mode_decode_no_padding) = true;
 
   PROPERTY(bool, enable_prefill_piecewise_graph) = true;
+
+  PROPERTY(bool, enable_packed_prefill) = false;
 
   PROPERTY(bool, enable_graph_vmm_pool) = false;
 

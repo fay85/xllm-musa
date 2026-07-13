@@ -30,7 +30,9 @@ limitations under the License.
 #include <chrono>
 #include <numeric>
 #include <shared_mutex>
+#include <sstream>
 #include <unordered_map>
+#include <vector>
 
 #include "core/common/global_flags.h"
 #include "core/common/metrics.h"
@@ -1969,6 +1971,36 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
 }
 
 // CudaGraphExecutorImpl implementation
+namespace {
+
+// Match SGLang ServerArgs._generate_piecewise_cuda_graph_tokens so pure-prefill
+// batches reuse a small fixed set of pad sizes instead of ceil-to-16 buckets.
+std::vector<uint32_t> generate_piecewise_prefill_graph_tokens(
+    uint32_t max_tokens) {
+  std::vector<uint32_t> capture_sizes;
+  auto append_range = [&](uint32_t start,
+                          uint32_t end_inclusive,
+                          uint32_t step) {
+    for (uint32_t size = start; size <= end_inclusive && size <= max_tokens;
+         size += step) {
+      capture_sizes.push_back(size);
+    }
+  };
+  append_range(/*start=*/4, /*end_inclusive=*/32, /*step=*/4);
+  append_range(/*start=*/48, /*end_inclusive=*/256, /*step=*/16);
+  append_range(/*start=*/288, /*end_inclusive=*/512, /*step=*/32);
+  append_range(/*start=*/576, /*end_inclusive=*/1024, /*step=*/64);
+  append_range(/*start=*/1280, /*end_inclusive=*/4096, /*step=*/256);
+  append_range(/*start=*/4608, /*end_inclusive=*/max_tokens, /*step=*/512);
+  if (max_tokens > 0 &&
+      (capture_sizes.empty() || capture_sizes.back() < max_tokens)) {
+    capture_sizes.push_back(max_tokens);
+  }
+  return capture_sizes;
+}
+
+}  // namespace
+
 CudaGraphExecutorImpl::CudaGraphExecutorImpl(CausalLM* model,
                                              const ModelArgs& args,
                                              const torch::Device& device,
@@ -1978,11 +2010,27 @@ CudaGraphExecutorImpl::CudaGraphExecutorImpl(CausalLM* model,
       device_(device),
       options_(options),
       enable_prefill_piecewise_graph_(::xllm::ExecutionConfig::get_instance()
-                                          .enable_prefill_piecewise_graph()) {
+                                          .enable_prefill_piecewise_graph()),
+      enable_packed_prefill_(::xllm::ExecutionConfig::get_instance()
+                                 .enable_packed_prefill()) {
   max_tokens_for_graph_mode_ =
       ::xllm::ExecutionConfig::get_instance().max_tokens_for_graph_mode();
   if (max_tokens_for_graph_mode_ < options_.max_seqs_per_batch()) {
     max_tokens_for_graph_mode_ = options_.max_seqs_per_batch();
+  }
+  prefill_graph_token_buckets_ = generate_piecewise_prefill_graph_tokens(
+      static_cast<uint32_t>(max_tokens_for_graph_mode_));
+  {
+    std::ostringstream oss;
+    for (size_t i = 0; i < prefill_graph_token_buckets_.size(); ++i) {
+      if (i > 0) {
+        oss << ",";
+      }
+      oss << prefill_graph_token_buckets_[i];
+    }
+    LOG(INFO) << "Prefill piecewise graph token buckets ("
+              << prefill_graph_token_buckets_.size()
+              << "): [" << oss.str() << "]";
   }
   // Keep one pool per executor instance so all captured graphs can reuse it,
   // while avoiding cross-instance stale-handle reuse.
@@ -2388,7 +2436,8 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
           : get_bucket_num_tokens(n_tokens, is_prefill);
 
   // Prefill phase with piecewise graph
-  if (is_prefill && enable_prefill_piecewise_graph_) {
+  if (is_prefill && enable_prefill_piecewise_graph_ &&
+      !enable_packed_prefill_) {
     // Check if token count is within limit
     const bool graph_mode_supported = n_tokens <= max_tokens_for_graph_mode_;
 
@@ -2831,13 +2880,27 @@ uint64_t CudaGraphExecutorImpl::get_chunked_prefill_graph_key(
   return hash;
 }
 
-// bucket will be [1, 2, 4, 8, 16, 32, 48, 64, ..., max_seqs_per_batch]
 uint32_t CudaGraphExecutorImpl::get_bucket_num_tokens(uint32_t num_tokens,
                                                       bool is_prefill) const {
-  // no_padding only works for decode, prefill requires padding for graph reuse
+  // Prefill pads to the SGLang-aligned fixed ladder so nearby prompt lengths
+  // share one captured graph (e.g. 2558..2560 -> 2560, 2561..2816 -> 2816).
+  if (is_prefill) {
+    if (prefill_graph_token_buckets_.empty()) {
+      return num_tokens;
+    }
+    auto it = std::lower_bound(prefill_graph_token_buckets_.begin(),
+                               prefill_graph_token_buckets_.end(),
+                               num_tokens);
+    if (it != prefill_graph_token_buckets_.end()) {
+      return *it;
+    }
+    // Above the ladder: keep exact size; caller already gates on max tokens.
+    return num_tokens;
+  }
+
+  // no_padding only works for decode
   if (::xllm::ExecutionConfig::get_instance()
-          .enable_graph_mode_decode_no_padding() &&
-      !is_prefill) {
+          .enable_graph_mode_decode_no_padding()) {
     return num_tokens;
   }
   if (num_tokens <= 1) {
