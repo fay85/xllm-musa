@@ -875,6 +875,12 @@ ffi::Module get_module(const std::string& uri) {
 
   ensure_tvm_ffi_global_symbols();
   ensure_tvm_ffi_tensor_allocator();
+  // TileLang device kernels are packaged as ffi.Module.load_from_bytes.musa;
+  // without this registration LoadFromFile aborts the process.
+  CHECK(ensure_tilelang_musa_loader())
+      << "TileLang MUSA FFI loader unavailable; set XLLM_TILELANG_LIB to "
+         "libtilelang.so before loading Mate/FlashInfer ops (uri="
+      << uri << ")";
   std::string so_file_path = path_to_uri_so_lib(uri);
   auto mod = ffi::Module::LoadFromFile(so_file_path);
   module_cache.emplace(uri, mod);

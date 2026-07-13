@@ -18,9 +18,12 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 #include <numeric>
 #include <optional>
+#include <sstream>
+#include <string>
 
 #include "common/metrics.h"
 #include "core/framework/config/execution_config.h"
@@ -106,6 +109,54 @@ bool enable_packed_prefill() {
   return ExecutionConfig::get_instance().enable_packed_prefill();
 }
 
+// Opt-in Phase D instrumentation: packed-group composition per prepare_batch.
+bool sched_pack_log_enabled() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_SCHED_PACK_LOG");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return enabled;
+}
+
+// Cap how many pure-prefill requests may share one packed step.
+// 0 / unset = no cap (admit until token/seq budget). Useful to A/B 2+2+1
+// vs greedy 3+2 packing under rate=5 C=5.
+size_t max_packed_prefill_seqs() {
+  static const size_t limit = [] {
+    const char* env = std::getenv("XLLM_MAX_PACKED_PREFILL_SEQS");
+    if (env == nullptr || env[0] == '\0') {
+      return static_cast<size_t>(0);
+    }
+    const long parsed = std::strtol(env, nullptr, 10);
+    return parsed > 0 ? static_cast<size_t>(parsed) : static_cast<size_t>(0);
+  }();
+  return limit;
+}
+
+size_t count_prefill_sequences(
+    const std::vector<Sequence*>& running_sequences) {
+  size_t n = 0;
+  for (Sequence* seq : running_sequences) {
+    if (seq != nullptr && seq->stage() != SequenceStage::DECODE) {
+      ++n;
+    }
+  }
+  return n;
+}
+
+const char* sequence_stage_name(SequenceStage stage) {
+  switch (stage) {
+    case SequenceStage::PREFILL:
+      return "PREFILL";
+    case SequenceStage::CHUNKED_PREFILL:
+      return "CHUNKED";
+    case SequenceStage::DECODE:
+      return "DECODE";
+    default:
+      return "UNKNOWN";
+  }
+}
+
 }  // namespace
 
 ChunkedPrefillScheduler::ChunkedPrefillScheduler(Engine* engine,
@@ -158,6 +209,12 @@ void ChunkedPrefillScheduler::handle_running_queue_requests(
     if (require_homogeneous_batch && !enable_packed_prefill() &&
         request_is_prefill &&
         batch_is_prefill.has_value() && batch_is_prefill.value()) {
+      break;
+    }
+    const size_t packed_prefill_cap = max_packed_prefill_seqs();
+    if (enable_packed_prefill() && request_is_prefill &&
+        packed_prefill_cap > 0 &&
+        count_prefill_sequences(running_sequences_) >= packed_prefill_cap) {
       break;
     }
 
@@ -378,6 +435,11 @@ void ChunkedPrefillScheduler::handle_prefill_requests(
          latency_budget > estimate_latency && remaining_seq_budget > 0) {
     if (require_homogeneous_batch && !enable_packed_prefill() &&
         !running_sequences_.empty()) {
+      break;
+    }
+    const size_t packed_prefill_cap = max_packed_prefill_seqs();
+    if (enable_packed_prefill() && packed_prefill_cap > 0 &&
+        count_prefill_sequences(running_sequences_) >= packed_prefill_cap) {
       break;
     }
 
@@ -895,6 +957,46 @@ std::vector<Batch> ChunkedPrefillScheduler::prepare_batch() {
   if (!is_batches_empty) {
     // only update the scheduling latency when there are requests to process
     COUNTER_ADD(scheduling_latency_seconds, timer.elapsed_seconds());
+  }
+
+  if (sched_pack_log_enabled() && !is_batches_empty) {
+    size_t n_prefill = 0;
+    size_t n_chunked = 0;
+    size_t n_decode = 0;
+    size_t token_budget_sum = 0;
+    std::ostringstream seq_oss;
+    for (size_t i = 0; i < running_sequences_.size(); ++i) {
+      Sequence* seq = running_sequences_[i];
+      const size_t budget = running_sequences_budgets_[i];
+      token_budget_sum += budget;
+      const SequenceStage stage = seq->stage();
+      if (stage == SequenceStage::PREFILL) {
+        ++n_prefill;
+      } else if (stage == SequenceStage::CHUNKED_PREFILL) {
+        ++n_chunked;
+      } else {
+        ++n_decode;
+      }
+      if (i > 0) {
+        seq_oss << ',';
+      }
+      seq_oss << sequence_stage_name(stage) << ':' << budget << '/'
+              << seq->num_tokens() << '@' << seq->kv_cache_tokens_num();
+    }
+    // Decode-only steps are extremely frequent; keep Phase D logs on
+    // batches that actually contain prefill/chunked work.
+    if (n_prefill > 0 || n_chunked > 0) {
+      LOG(INFO) << "[SCHED_PACK] n_seq=" << running_sequences_.size()
+                << " n_prefill=" << n_prefill << " n_chunked=" << n_chunked
+                << " n_decode=" << n_decode
+                << " token_budget=" << token_budget_sum
+                << " prioritize_waiting=" << prioritize_waiting_prefill
+                << " packed_prefill=" << enable_packed_prefill()
+                << " waiting=" << waiting_priority_queue_->size()
+                << " running_q=" << running_queue_->size()
+                << " sched_ms=" << timer.elapsed_milliseconds()
+                << " seqs=[" << seq_oss.str() << "]";
+    }
   }
 
   GAUGE_SET(num_pending_requests,

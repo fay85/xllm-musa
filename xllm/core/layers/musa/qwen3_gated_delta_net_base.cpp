@@ -20,6 +20,7 @@ limitations under the License.
 #include <tuple>
 #include <vector>
 
+#include "core/framework/config/execution_config.h"
 #include "kernels/ops_api.h"
 #include "kernels/musa/gdn_ops.h"
 
@@ -766,6 +767,181 @@ bool use_mate_gdn_prefill_graph_capture() {
   return enabled;
 }
 
+// Match Mate's padded-waste gate (gdn_prefill.cpp).
+constexpr double kGdnPackedPaddedWasteThreshold = 0.05;
+
+bool gdn_packed_layout_env_enabled() {
+  static const int mode = [] {
+    const char* env = std::getenv("XLLM_GDN_PACKED_LAYOUT");
+    if (env == nullptr) {
+      return -1;  // default: follow enable_packed_prefill
+    }
+    return (env[0] == '0') ? 0 : 1;
+  }();
+  if (mode == 0) {
+    return false;
+  }
+  if (mode == 1) {
+    return true;
+  }
+  return ::xllm::ExecutionConfig::get_instance().enable_packed_prefill();
+}
+
+bool gdn_packed_layout_debug_enabled() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_GDN_PACKED_DEBUG");
+    return env != nullptr && env[0] == '1';
+  }();
+  return enabled;
+}
+
+bool use_custom_prefill_conv_kernel() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_USE_CUSTOM_PREFILL_CONV");
+    return env == nullptr || env[0] != '0';
+  }();
+  return enabled;
+}
+
+double gdn_padded_waste_ratio(const std::vector<int32_t>& cu,
+                              int64_t max_len) {
+  const int64_t num_seqs = static_cast<int64_t>(cu.size()) - 1;
+  if (num_seqs <= 0 || max_len <= 0) {
+    return 0.0;
+  }
+  const int64_t real_tokens =
+      static_cast<int64_t>(cu.back()) - static_cast<int64_t>(cu.front());
+  const int64_t padded_tokens = num_seqs * max_len;
+  if (padded_tokens <= 0 || real_tokens >= padded_tokens) {
+    return 0.0;
+  }
+  return static_cast<double>(padded_tokens - real_tokens) /
+         static_cast<double>(padded_tokens);
+}
+
+bool cu_seqlens_all_full(c10::ArrayRef<int32_t> cu, int64_t max_len) {
+  const int64_t num_seqs = static_cast<int64_t>(cu.size()) - 1;
+  for (int64_t i = 0; i < num_seqs; ++i) {
+    const int64_t len = static_cast<int64_t>(cu[static_cast<size_t>(i) + 1] -
+                                             cu[static_cast<size_t>(i)]);
+    if (len != max_len) {
+      return false;
+    }
+  }
+  return true;
+}
+
+torch::Tensor pad_packed_4d_to_rect(const torch::Tensor& packed,
+                                    c10::ArrayRef<int32_t> cu,
+                                    int64_t max_len) {
+  CHECK_EQ(packed.dim(), 4);
+  CHECK_EQ(packed.size(0), 1);
+  const int64_t num_seqs = static_cast<int64_t>(cu.size()) - 1;
+  if (cu_seqlens_all_full(cu, max_len)) {
+    CHECK_EQ(packed.size(1), num_seqs * max_len);
+    return packed.reshape(
+        {num_seqs, max_len, packed.size(2), packed.size(3)});
+  }
+  auto out = torch::zeros(
+      {num_seqs, max_len, packed.size(2), packed.size(3)}, packed.options());
+  for (int64_t seq_idx = 0; seq_idx < num_seqs; ++seq_idx) {
+    const int64_t start =
+        static_cast<int64_t>(cu[static_cast<size_t>(seq_idx)]);
+    const int64_t end =
+        static_cast<int64_t>(cu[static_cast<size_t>(seq_idx) + 1]);
+    const int64_t len = end - start;
+    out.select(/*dim=*/0, seq_idx)
+        .narrow(/*dim=*/0, /*start=*/0, /*length=*/len)
+        .copy_(packed.select(/*dim=*/0, 0).narrow(
+            /*dim=*/0, /*start=*/start, /*length=*/len));
+  }
+  return out;
+}
+
+torch::Tensor pad_packed_3d_to_rect(const torch::Tensor& packed,
+                                    c10::ArrayRef<int32_t> cu,
+                                    int64_t max_len) {
+  CHECK_EQ(packed.dim(), 3);
+  CHECK_EQ(packed.size(0), 1);
+  const int64_t num_seqs = static_cast<int64_t>(cu.size()) - 1;
+  if (cu_seqlens_all_full(cu, max_len)) {
+    CHECK_EQ(packed.size(1), num_seqs * max_len);
+    return packed.reshape({num_seqs, max_len, packed.size(2)});
+  }
+  auto out =
+      torch::zeros({num_seqs, max_len, packed.size(2)}, packed.options());
+  for (int64_t seq_idx = 0; seq_idx < num_seqs; ++seq_idx) {
+    const int64_t start =
+        static_cast<int64_t>(cu[static_cast<size_t>(seq_idx)]);
+    const int64_t end =
+        static_cast<int64_t>(cu[static_cast<size_t>(seq_idx) + 1]);
+    const int64_t len = end - start;
+    out.select(/*dim=*/0, seq_idx)
+        .narrow(/*dim=*/0, /*start=*/0, /*length=*/len)
+        .copy_(packed.select(/*dim=*/0, 0).narrow(
+            /*dim=*/0, /*start=*/start, /*length=*/len));
+  }
+  return out;
+}
+
+torch::Tensor unpad_rect_4d_to_packed(const torch::Tensor& padded,
+                                      c10::ArrayRef<int32_t> cu) {
+  CHECK_EQ(padded.dim(), 4);
+  const int64_t num_seqs = static_cast<int64_t>(cu.size()) - 1;
+  CHECK_EQ(padded.size(0), num_seqs);
+  const int64_t max_len = padded.size(1);
+  if (cu_seqlens_all_full(cu, max_len)) {
+    return padded.reshape(
+        {1, num_seqs * max_len, padded.size(2), padded.size(3)});
+  }
+  std::vector<torch::Tensor> parts;
+  parts.reserve(static_cast<size_t>(num_seqs));
+  for (int64_t seq_idx = 0; seq_idx < num_seqs; ++seq_idx) {
+    const int64_t len = static_cast<int64_t>(
+        cu[static_cast<size_t>(seq_idx) + 1] - cu[static_cast<size_t>(seq_idx)]);
+    parts.push_back(padded.select(/*dim=*/0, seq_idx).narrow(
+        /*dim=*/0, /*start=*/0, /*length=*/len));
+  }
+  return torch::cat(parts, /*dim=*/0).unsqueeze(0).contiguous();
+}
+
+bool should_use_gdn_packed_prefill(
+    const AttentionMetadata& attn_metadata,
+    const ModelInputParams& input_params,
+    const torch::Tensor& hidden_states) {
+  if (!gdn_packed_layout_env_enabled()) {
+    return false;
+  }
+  if (!attn_metadata.is_prefill || attn_metadata.is_chunked_prefill) {
+    return false;
+  }
+  if (input_params.is_spec_verify) {
+    return false;
+  }
+  if (attn_metadata.q_seq_lens_vec.size() <= 1) {
+    return false;
+  }
+  if (!use_custom_prefill_conv_kernel()) {
+    return false;
+  }
+  if (!use_mate_gdn_prefill_kernel()) {
+    return false;
+  }
+  if (xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+          .is_capturing()) {
+    return false;
+  }
+  if (attn_metadata.q_cu_seq_lens_host_vec.empty()) {
+    return false;
+  }
+  const int64_t total_T = hidden_states.size(0);
+  if (static_cast<int64_t>(attn_metadata.q_cu_seq_lens_host_vec.back()) !=
+      total_T) {
+    return false;
+  }
+  return true;
+}
+
 #endif  // USE_CUDA || USE_MUSA
 
 }  // namespace
@@ -991,11 +1167,197 @@ Qwen3GatedDeltaNetBaseImpl::project_padded_inputs(
   return project_decode_inputs(hidden_states);
 }
 
+#if defined(USE_CUDA) || defined(USE_MUSA)
+torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
+    const torch::Tensor& hidden_states,
+    const AttentionMetadata& attn_metadata,
+    KVCache& kv_cache,
+    const ModelInputParams& input_params) {
+  const int64_t total_T = hidden_states.size(0);
+  const auto& cu_host = attn_metadata.q_cu_seq_lens_host_vec;
+  const int64_t num_seqs = static_cast<int64_t>(cu_host.size()) - 1;
+  const int64_t max_T = attn_metadata.max_query_len;
+  CHECK_GT(num_seqs, 1);
+  CHECK_EQ(static_cast<int64_t>(cu_host.back()), total_T);
+
+  auto [qkvz_flat, ba_flat] = project_flat_inputs(hidden_states);
+  CHECK_EQ(qkvz_flat.size(0), total_T);
+
+  xllm::kernel::FusedQkvzbaSplitReshapeParams fused_params;
+  fused_params.mixed_qkvz = qkvz_flat;
+  fused_params.mixed_ba = ba_flat;
+  fused_params.num_heads_qk = static_cast<int32_t>(num_k_heads_ / tp_size_);
+  fused_params.num_heads_v = static_cast<int32_t>(num_v_heads_ / tp_size_);
+  fused_params.head_qk = static_cast<int32_t>(head_k_dim_);
+  fused_params.head_v = static_cast<int32_t>(head_v_dim_);
+  fused_params.contiguous_input_layout = uses_contiguous_qkvzba_layout();
+
+  // Prefill token counts exceed the decode graph buffer cap; leave buffers
+  // undefined so the kernel allocates (eager-safe).
+  fused_params.mixed_qkv_out_buf = mixed_qkv_out_buf_;
+  fused_params.z_out_buf = z_out_buf_;
+  fused_params.b_out_buf = b_out_buf_;
+  fused_params.a_out_buf = a_out_buf_;
+
+  torch::Tensor mixed_qkv, z, b, a;
+  std::tie(mixed_qkv, z, b, a) =
+      xllm::kernel::fused_qkvzba_split_reshape_cat(fused_params);
+
+  const int64_t local_nv = num_v_heads_ / tp_size_;
+  mixed_qkv = mixed_qkv.view({total_T, mixed_qkv.size(-1)});
+  z = z.view({total_T, local_nv, head_v_dim_});
+  b = b.view({total_T, local_nv});
+  a = a.view({total_T, local_nv});
+
+  torch::Tensor conv_cache = kv_cache.get_conv_cache();
+  torch::Tensor ssm_cache = kv_cache.get_ssm_cache();
+  torch::Device device = mixed_qkv.device();
+  torch::Tensor conv_weight = conv1d_->weight();
+  torch::Tensor logical_state_indices =
+      get_linear_state_indices(input_params, device);
+  const int64_t checkpoint_stride =
+      get_checkpoint_stride(conv_cache, ssm_cache);
+  torch::Tensor linear_state_base_indices =
+      build_linear_state_base_indices(logical_state_indices, checkpoint_stride);
+  CHECK_EQ(checkpoint_stride, 1)
+      << "packed GDN prefill does not support checkpointed SSM layouts";
+
+  torch::Tensor has_initial_state =
+      input_params.attention.device.kv_cache_tokens_nums > 0;
+  mixed_qkv = xllm::kernel::cuda::causal_conv1d_prefill(
+      mixed_qkv,
+      conv_weight,
+      conv_cache,
+      std::optional<torch::Tensor>(),
+      attn_metadata.q_cu_seq_lens,
+      logical_state_indices,
+      has_initial_state,
+      /*silu_activation=*/true);
+
+  xllm::kernel::FusedGdnGatingParams gdn_params;
+  gdn_params.A_log = A_log_;
+  gdn_params.a = a.contiguous();
+  gdn_params.b = b.contiguous();
+  gdn_params.dt_bias = dt_bias_;
+  gdn_params.beta = 1.0f;
+  gdn_params.threshold = 20.0f;
+  torch::Tensor g;
+  torch::Tensor beta;
+  std::tie(g, beta) = xllm::kernel::fused_gdn_gating(gdn_params);
+  g = g.squeeze(0).contiguous().view({1, total_T, local_nv});
+  beta = beta.squeeze(0).contiguous().view({1, total_T, local_nv});
+
+  // process_mixed_qkv expects [B, dim, T]; packed tokens use B=1.
+  torch::Tensor mixed_for_split = mixed_qkv.unsqueeze(0).transpose(1, 2);
+  torch::Tensor processed_q;
+  torch::Tensor processed_k;
+  torch::Tensor processed_v;
+  std::tie(processed_q, processed_k, processed_v) =
+      process_mixed_qkv(mixed_for_split);
+  // Guaranteed [1, total_T, H, D].
+
+  static const bool force_varlen = [] {
+    const char* env = std::getenv("XLLM_MATE_GDN_PREFILL_VARLEN");
+    return env != nullptr && env[0] == '1';
+  }();
+  const double waste = gdn_padded_waste_ratio(cu_host, max_T);
+  const bool use_varlen_mate =
+      force_varlen || waste > kGdnPackedPaddedWasteThreshold;
+
+  int32_t gdn_layer_id = 0;
+  if (attn_metadata.plan_info != nullptr) {
+    gdn_layer_id = attn_metadata.plan_info->layer_id;
+  }
+  if (gdn_layer_id == 0 && gdn_packed_layout_debug_enabled()) {
+    LOG(INFO) << "[GDN packed] B=" << num_seqs << " max_T=" << max_T
+              << " total_T=" << total_T << " waste=" << waste
+              << " mate=" << (use_varlen_mate ? "varlen" : "padded")
+              << " layout=packed_layer path="
+              << (use_varlen_mate ? "A" : "B");
+  }
+
+  torch::Tensor initial_state_tensor =
+      torch::index_select(ssm_cache, 0, linear_state_base_indices);
+  initial_state_tensor.fill_(0.0);
+
+  xllm::kernel::MateGatedDeltaRulePrefillParams mate_params;
+  mate_params.scale =
+      1.0 / std::sqrt(static_cast<double>(processed_q.size(-1)));
+  mate_params.initial_state = initial_state_tensor;
+  mate_params.output_final_state = true;
+  mate_params.use_qk_l2norm_in_kernel = true;
+  mate_params.cu_seqlens_host = cu_host;
+  if (attn_metadata.q_cu_seq_lens.defined()) {
+    mate_params.cu_seqlens = attn_metadata.q_cu_seq_lens.to(torch::kInt32);
+  }
+
+  torch::Tensor core_attn_out;
+  torch::Tensor mate_final_state;
+  if (use_varlen_mate) {
+    // Path 3.A: already packed [1, total_T, ...] — Mate varlen skips pack.
+    mate_params.q = processed_q;
+    mate_params.k = processed_k;
+    mate_params.v = processed_v;
+    mate_params.g = g;
+    mate_params.beta = beta;
+    std::tie(core_attn_out, mate_final_state) =
+        xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+    // core_attn_out: [1, total_T, Hv, V]
+    core_attn_out = core_attn_out.squeeze(0);
+  } else {
+    // Path 3.B: one-boundary pad → Mate padded warp → unpad once.
+    mate_params.q = pad_packed_4d_to_rect(processed_q, cu_host, max_T);
+    mate_params.k = pad_packed_4d_to_rect(processed_k, cu_host, max_T);
+    mate_params.v = pad_packed_4d_to_rect(processed_v, cu_host, max_T);
+    mate_params.g = pad_packed_3d_to_rect(g, cu_host, max_T);
+    mate_params.beta = pad_packed_3d_to_rect(beta, cu_host, max_T);
+    // Zero pad-token g/beta so recurrent state is unchanged on padding.
+    if (num_seqs > 1) {
+      for (int64_t b = 0; b < num_seqs; ++b) {
+        const int64_t valid_len =
+            static_cast<int64_t>(cu_host[static_cast<size_t>(b) + 1] -
+                                 cu_host[static_cast<size_t>(b)]);
+        if (valid_len < max_T) {
+          mate_params.g.select(/*dim=*/0, b)
+              .slice(/*dim=*/0, valid_len, max_T)
+              .zero_();
+          mate_params.beta.select(/*dim=*/0, b)
+              .slice(/*dim=*/0, valid_len, max_T)
+              .zero_();
+        }
+      }
+    }
+    std::tie(core_attn_out, mate_final_state) =
+        xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+    core_attn_out = unpad_rect_4d_to_packed(core_attn_out, cu_host).squeeze(0);
+  }
+
+  ssm_cache.index_put_({linear_state_base_indices},
+                       mate_final_state.to(ssm_cache.dtype()));
+
+  auto z_reshaped = z.view({-1, z.size(-1)});
+  auto core_attn_out_reshaped =
+      core_attn_out.view({-1, core_attn_out.size(-1)});
+  auto norm_out = norm_->forward(core_attn_out_reshaped, z_reshaped);
+  norm_out = norm_out.view({total_T, local_nv, head_v_dim_});
+  auto rearranged_norm =
+      norm_out.reshape({total_T, local_nv * head_v_dim_});
+  return o_proj_->forward(rearranged_norm);
+}
+#endif  // USE_CUDA || USE_MUSA
+
 torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     const torch::Tensor& hidden_states,
     const AttentionMetadata& attn_metadata,
     KVCache& kv_cache,
     const ModelInputParams& input_params) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  if (should_use_gdn_packed_prefill(
+          attn_metadata, input_params, hidden_states)) {
+    return forward_packed_prefill(
+        hidden_states, attn_metadata, kv_cache, input_params);
+  }
+#endif
   // Save original hidden_states size for potential padding later
   const int64_t original_num_tokens = hidden_states.size(0);
   auto [qkvz_padded, ba_padded] =
@@ -1382,11 +1744,12 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     mate_params.initial_state = initial_state_tensor;
     mate_params.output_final_state = true;
     mate_params.use_qk_l2norm_in_kernel = true;
-    // Varlen Mate simple kernel needs cu_seqlens. Prefer host lengths built
-    // from q_seq_lens_vec so gdn_prefill pack/unpack/cumsum never D2H-syncs
-    // the stream once per GDN layer. Full warp path ignores packing and uses
-    // padded [B, T] + KKT (SGLang Mate).
-    if (!attn_metadata.q_seq_lens_vec.empty()) {
+    // Varlen Mate needs cu_seqlens. Prefer host lengths filled once at
+    // metadata build (q_cu_seq_lens_host_vec) so every GDN layer avoids
+    // rebuilding the prefix sum from q_seq_lens_vec.
+    if (!attn_metadata.q_cu_seq_lens_host_vec.empty()) {
+      mate_params.cu_seqlens_host = attn_metadata.q_cu_seq_lens_host_vec;
+    } else if (!attn_metadata.q_seq_lens_vec.empty()) {
       std::vector<int32_t> cu_host(attn_metadata.q_seq_lens_vec.size() + 1);
       cu_host[0] = 0;
       for (size_t i = 0; i < attn_metadata.q_seq_lens_vec.size(); ++i) {

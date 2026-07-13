@@ -77,8 +77,11 @@ AttentionMetadata build_attention_metadata(
   // q_seq_lens_vec.size() as the batch count, so flatten it back to per-
   // sequence raw lengths here. This matches the layout the NPU path already
   // delivers via batch_input_builder.
+  // Keep the cumulative form in q_cu_seq_lens_host_vec once so every GDN
+  // layer can reuse it for Mate pack/waste decisions without rebuilding.
   if (attn_metadata.q_seq_lens_vec.size() >= 2 &&
       attn_metadata.q_seq_lens_vec.front() == 0) {
+    attn_metadata.q_cu_seq_lens_host_vec = attn_metadata.q_seq_lens_vec;
     std::vector<int32_t> per_seq;
     per_seq.reserve(attn_metadata.q_seq_lens_vec.size() - 1);
     for (size_t i = 1; i < attn_metadata.q_seq_lens_vec.size(); ++i) {
@@ -86,6 +89,16 @@ AttentionMetadata build_attention_metadata(
                            attn_metadata.q_seq_lens_vec[i - 1]);
     }
     attn_metadata.q_seq_lens_vec = std::move(per_seq);
+  } else if (!attn_metadata.q_seq_lens_vec.empty()) {
+    attn_metadata.q_cu_seq_lens_host_vec.clear();
+    attn_metadata.q_cu_seq_lens_host_vec.reserve(
+        attn_metadata.q_seq_lens_vec.size() + 1);
+    attn_metadata.q_cu_seq_lens_host_vec.emplace_back(0);
+    int32_t total = 0;
+    for (int32_t len : attn_metadata.q_seq_lens_vec) {
+      total += len;
+      attn_metadata.q_cu_seq_lens_host_vec.emplace_back(total);
+    }
   }
   if (attn_metadata.kv_seq_lens_vec.size() >= 2 &&
       attn_metadata.kv_seq_lens_vec.front() == 0) {

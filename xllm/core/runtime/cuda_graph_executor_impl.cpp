@@ -76,6 +76,20 @@ bool s_enable_graph_timing() {
   return val;
 }
 
+// Phase D: wall+device time for packed/eager pure-prefill forwards.
+bool s_enable_prefill_fwd_timing() {
+  static const bool val = [] {
+    const char* env = std::getenv("XLLM_PREFILL_FWD_TIMING");
+    if (env != nullptr && std::string(env) == "1") {
+      return true;
+    }
+    // Reuse the scheduler pack log flag so one env enables both views.
+    env = std::getenv("XLLM_SCHED_PACK_LOG");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return val;
+}
+
 struct GraphPoolMemoryUsage {
   size_t reserved_bytes = 0;
   size_t allocated_bytes = 0;
@@ -2603,6 +2617,21 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
   // Prefill without piecewise graph: use eager mode
   if (is_prefill) {
     COUNTER_INC(num_model_execution_total_eager);
+    if (s_enable_prefill_fwd_timing()) {
+      c10::cuda::getCurrentCUDAStream(device_.index()).synchronize();
+      const auto t0 = std::chrono::steady_clock::now();
+      auto result = model_->forward(tokens, positions, kv_caches, params);
+      c10::cuda::getCurrentCUDAStream(device_.index()).synchronize();
+      const auto t1 = std::chrono::steady_clock::now();
+      const double ms =
+          std::chrono::duration<double, std::milli>(t1 - t0).count();
+      LOG(INFO) << "[PREFILL_FWD] n_tokens=" << n_tokens
+                << " batch_bs=" << params.meta.num_sequences
+                << " packed_prefill=" << enable_packed_prefill_
+                << " fwd_ms=" << ms;
+      Device::empty_cache(/*device_index=*/-1);
+      return result;
+    }
     auto result = model_->forward(tokens, positions, kv_caches, params);
     Device::empty_cache(/*device_index=*/-1);
     return result;

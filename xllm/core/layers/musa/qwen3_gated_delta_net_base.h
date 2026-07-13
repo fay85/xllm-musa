@@ -66,6 +66,15 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
                         const ModelInputParams& input_params);
 
  protected:
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  // Eager multi-seq pure-prefill path that keeps tokens packed through
+  // proj/conv/gating, then either feeds Mate varlen (high waste) or pads
+  // once at the Mate boundary for the padded warp (low waste).
+  torch::Tensor forward_packed_prefill(const torch::Tensor& hidden_states,
+                                       const AttentionMetadata& attn_metadata,
+                                       KVCache& kv_cache,
+                                       const ModelInputParams& input_params);
+#endif
   virtual std::pair<torch::Tensor, torch::Tensor> project_decode_inputs(
       const torch::Tensor& hidden_states) = 0;
   virtual std::pair<torch::Tensor, torch::Tensor> project_flat_inputs(

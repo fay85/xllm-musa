@@ -137,6 +137,12 @@ struct AttentionMetadata {
   torch::Tensor paged_kv_indptr_host;
   torch::Tensor paged_kv_indices_host;
   torch::Tensor paged_kv_last_page_len_host;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  // Host cumulative query lengths [num_seqs+1], filled once at metadata build
+  // (from host cu or prefix-sum of q_seq_lens_vec). GDN/Mate reuse this across
+  // all layers instead of rebuilding from q_seq_lens_vec every layer.
+  std::vector<int32_t> q_cu_seq_lens_host_vec;
+#endif
   // FA3 scheduler_metadata tensor (shape [batch_size*4] int32 on device).
   // Built once per shape by fa3_decode_scheduler_metadata() at the layer-0
   // plan call, then reused across all decode layers for the same shape.
