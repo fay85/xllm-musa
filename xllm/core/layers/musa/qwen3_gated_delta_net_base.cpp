@@ -1374,7 +1374,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
     auto z_reshaped = z.view({-1, z.size(-1)});
     auto core_attn_out_reshaped =
         core_attn_out.view({-1, core_attn_out.size(-1)});
-    auto norm_out = norm_->forward(core_attn_out_reshaped, z_reshaped);
+    auto norm_out = norm_->forward(core_attn_out_reshaped,
+                                   z_reshaped,
+                                   /*use_transient_output=*/true);
     norm_out = norm_out.view({total_T, local_nv, head_v_dim_});
     auto rearranged_norm =
         norm_out.reshape({total_T, local_nv * head_v_dim_});
@@ -2204,7 +2206,11 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   auto z_reshaped = z.view({-1, z.size(-1)});
   auto core_attn_out_reshaped =
       core_attn_out.view({-1, core_attn_out.size(-1)});
-  auto norm_out = norm_->forward(core_attn_out_reshaped, z_reshaped);
+  const bool use_transient_norm_output =
+      is_any_prefill && !is_piecewise_graph_capture;
+  auto norm_out = norm_->forward(core_attn_out_reshaped,
+                                 z_reshaped,
+                                 use_transient_norm_output);
   auto z_shape_og = z.sizes().vec();
   norm_out = norm_out.view(z_shape_og);
   norm_out = norm_out.view({-1, norm_out.size(2), norm_out.size(3)});

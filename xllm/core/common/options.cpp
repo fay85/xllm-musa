@@ -35,6 +35,8 @@ std::string Options::to_string() const {
      << ", max_seqs_per_batch: " << max_seqs_per_batch()
      << ", max_tokens_per_chunk_for_prefill: "
      << max_tokens_per_chunk_for_prefill()
+     << ", enable_adaptive_prefill_oneshot: "
+     << enable_adaptive_prefill_oneshot()
      << ", num_speculative_tokens: " << num_speculative_tokens()
      << ", speculative_algorithm: " << speculative_algorithm()
      << ", speculative_suffix_cache_max_depth: "

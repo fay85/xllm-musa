@@ -342,6 +342,7 @@ run_xllm() {
     "--max_memory_utilization=${MAX_MEMORY_UTILIZATION}"
     "--enable_prefix_cache=${ENABLE_PREFIX_CACHE:-false}"
     "--enable_chunked_prefill=${ENABLE_CHUNKED_PREFILL:-true}"
+    "--enable_adaptive_prefill_oneshot=${ENABLE_ADAPTIVE_PREFILL_ONESHOT:-false}"
     "--enable_schedule_overlap=${ENABLE_SCHEDULE_OVERLAP:-true}"
   )
 
@@ -394,7 +395,7 @@ run_xllm() {
     if [[ "${ENABLE_PACKED_PREFILL:-0}" == "1" ]]; then
       cmd+=("--enable_packed_prefill=true")
     fi
-    echo "==> Graph mode: enable_graph=true vmm_pool=${ENABLE_GRAPH_VMM_POOL:-0} prefill_piecewise=${ENABLE_PREFILL_PIECEWISE_GRAPH:-1} packed_prefill=${ENABLE_PACKED_PREFILL:-0}"
+    echo "==> Graph mode: enable_graph=true vmm_pool=${ENABLE_GRAPH_VMM_POOL:-0} prefill_piecewise=${ENABLE_PREFILL_PIECEWISE_GRAPH:-1} packed_prefill=${ENABLE_PACKED_PREFILL:-0} adaptive_oneshot=${ENABLE_ADAPTIVE_PREFILL_ONESHOT:-false}"
   fi
 
   # Speculative decoding. Defaults: off. Qwen3.5 MTP requires exporting draft

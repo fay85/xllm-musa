@@ -116,6 +116,18 @@ void causal_conv1d_fwd(
     bool silu_activation,
     int64_t pad_slot_id);
 
+void causal_conv1d_fwd_token_major(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    torch::Tensor& out,
+    const std::optional<torch::Tensor>& bias,
+    const torch::Tensor& conv_states,
+    const torch::Tensor& query_start_loc,
+    const torch::Tensor& cache_indices,
+    const torch::Tensor& has_initial_state,
+    bool silu_activation,
+    int64_t pad_slot_id);
+
 torch::Tensor causal_conv1d(
     const torch::Tensor& x,
     const torch::Tensor& weight,

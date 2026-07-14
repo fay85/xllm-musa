@@ -24,6 +24,7 @@ limitations under the License.
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <iomanip>
 #include <limits>
 #include <memory>
@@ -45,6 +46,14 @@ limitations under the License.
 
 namespace xllm {
 namespace {
+
+bool request_timing_enabled() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_REQUEST_TIMING");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return enabled;
+}
 
 size_t estimate_decode_extra_blocks(Sequence* sequence,
                                     size_t updated_num_tokens,
@@ -1358,6 +1367,11 @@ void ContinuousScheduler::update_token_latency_metrics(
     }
     int64_t tbt_milliseconds = sequence->tbt(now);
     if (sequence->is_first_token()) {
+      if (request_timing_enabled()) {
+        LOG(INFO) << "[REQUEST_HOST] stage=first_token_internal request_id="
+                  << sequence->request_id()
+                  << " elapsed_ms=" << tbt_milliseconds;
+      }
       HISTOGRAM_OBSERVE(time_to_first_token_latency_milliseconds,
                         tbt_milliseconds);
       sequence->set_time_to_first_token_latency_seconds(

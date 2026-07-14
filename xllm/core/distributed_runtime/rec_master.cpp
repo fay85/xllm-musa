@@ -543,6 +543,8 @@ RecMaster::RecMaster(const Options& options)
       .max_seqs_per_batch(options_.max_seqs_per_batch())
       .max_tokens_per_chunk_for_prefill(
           options_.max_tokens_per_chunk_for_prefill())
+      .enable_adaptive_prefill_oneshot(
+          options_.enable_adaptive_prefill_oneshot())
       .num_speculative_tokens(options_.num_speculative_tokens())
       .dp_size(options_.dp_size())
       .enable_disagg_pd(options_.enable_disagg_pd())

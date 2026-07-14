@@ -51,6 +51,8 @@ class ChunkedPrefillScheduler : public ContinuousScheduler {
   void allocate_shared_blocks_for(Sequence* sequence);
 
  private:
+  size_t effective_prefill_chunk_limit(size_t batch_token_budget) const;
+
   void handle_running_queue_requests(
       const size_t max_tokens_per_chunk_for_prefill,
       double& latency_budget,

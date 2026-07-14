@@ -86,13 +86,17 @@ class StartupConfigGuard final {
         old_enable_prefix_cache_(kv_cache_config_.enable_prefix_cache()),
         old_max_tokens_per_batch_(scheduler_config_.max_tokens_per_batch()),
         old_enable_chunked_prefill_(
-            scheduler_config_.enable_chunked_prefill()) {}
+            scheduler_config_.enable_chunked_prefill()),
+        old_enable_adaptive_prefill_oneshot_(
+            scheduler_config_.enable_adaptive_prefill_oneshot()) {}
 
   ~StartupConfigGuard() {
     kv_cache_config_.block_size(old_block_size_)
         .enable_prefix_cache(old_enable_prefix_cache_);
     scheduler_config_.max_tokens_per_batch(old_max_tokens_per_batch_)
-        .enable_chunked_prefill(old_enable_chunked_prefill_);
+        .enable_chunked_prefill(old_enable_chunked_prefill_)
+        .enable_adaptive_prefill_oneshot(
+            old_enable_adaptive_prefill_oneshot_);
   }
 
  private:
@@ -102,6 +106,7 @@ class StartupConfigGuard final {
   bool old_enable_prefix_cache_;
   int32_t old_max_tokens_per_batch_;
   bool old_enable_chunked_prefill_;
+  bool old_enable_adaptive_prefill_oneshot_;
 };
 
 void write_config_file(const std::filesystem::path& config_path,
@@ -181,6 +186,7 @@ TEST(ConfigJsonTest, LoadJsonFileReadsConfigFixture) {
   EXPECT_DOUBLE_EQ(scheduler_config.prefill_scheduling_memory_usage_threshold(),
                    0.75);
   EXPECT_FALSE(scheduler_config.enable_chunked_prefill());
+  EXPECT_TRUE(scheduler_config.enable_adaptive_prefill_oneshot());
   EXPECT_EQ(scheduler_config.max_tokens_per_chunk_for_prefill(), 512);
   EXPECT_EQ(scheduler_config.chunked_match_frequency(), 3);
   EXPECT_TRUE(scheduler_config.use_zero_evict());
@@ -298,7 +304,8 @@ TEST(ConfigJsonTest, DumpStartupConfigWritesNonDefaultValuesOnly) {
   KVCacheConfig::get_instance().block_size(256).enable_prefix_cache(false);
   SchedulerConfig::get_instance()
       .max_tokens_per_batch(2048)
-      .enable_chunked_prefill(false);
+      .enable_chunked_prefill(false)
+      .enable_adaptive_prefill_oneshot(true);
   FLAGS_enable_dump_config_json = true;
 
   config::dump_startup_config();
@@ -309,6 +316,7 @@ TEST(ConfigJsonTest, DumpStartupConfigWritesNonDefaultValuesOnly) {
   EXPECT_FALSE(config_json.at("enable_prefix_cache").get<bool>());
   EXPECT_EQ(config_json.at("max_tokens_per_batch").get<int32_t>(), 2048);
   EXPECT_FALSE(config_json.at("enable_chunked_prefill").get<bool>());
+  EXPECT_TRUE(config_json.at("enable_adaptive_prefill_oneshot").get<bool>());
 
   EXPECT_FALSE(config_json.contains("max_cache_size"));
   EXPECT_FALSE(config_json.contains("kv_cache_dtype"));

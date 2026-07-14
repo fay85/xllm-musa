@@ -175,6 +175,50 @@ ChunkedPrefillScheduler::~ChunkedPrefillScheduler() {
   }
 }
 
+size_t ChunkedPrefillScheduler::effective_prefill_chunk_limit(
+    size_t batch_token_budget) const {
+  const size_t configured_chunk_limit =
+      static_cast<size_t>(options_.max_tokens_per_chunk_for_prefill());
+  if (!options_.enable_adaptive_prefill_oneshot()) {
+    return configured_chunk_limit;
+  }
+
+  // One-shot is a latency optimization for an idle instance. Preserve normal
+  // chunking whenever decode/chunked work is already active or another request
+  // is waiting, so fairness and decode inter-token latency do not change.
+  if (!running_queue_->empty() || !running_queue_offline_->empty()) {
+    return configured_chunk_limit;
+  }
+  const size_t online_waiting = waiting_priority_queue_->size();
+  const size_t offline_waiting = waiting_priority_queue_offline_->size();
+  if (online_waiting + offline_waiting != 1) {
+    return configured_chunk_limit;
+  }
+
+  const RequestPriorityQueue* waiting_queue =
+      online_waiting == 1 ? waiting_priority_queue_.get()
+                          : waiting_priority_queue_offline_.get();
+  const std::shared_ptr<Request> request = waiting_queue->top();
+  if (request->finished() || request->cancelled() || request->preempted() ||
+      request->sequences().size() != 1) {
+    return configured_chunk_limit;
+  }
+
+  Sequence* sequence = request->sequences().front().get();
+  const size_t cached_tokens = sequence->kv_state().kv_cache_tokens_num();
+  if (sequence->finished() || sequence->stage() != SequenceStage::PREFILL ||
+      cached_tokens != 0 || sequence->num_tokens() <= cached_tokens) {
+    return configured_chunk_limit;
+  }
+
+  const size_t remaining_tokens = sequence->num_tokens() - cached_tokens;
+  if (remaining_tokens <= configured_chunk_limit ||
+      remaining_tokens > batch_token_budget) {
+    return configured_chunk_limit;
+  }
+  return remaining_tokens;
+}
+
 void ChunkedPrefillScheduler::handle_running_queue_requests(
     const size_t max_tokens_per_chunk_for_prefill,
     double& latency_budget,
@@ -824,8 +868,8 @@ std::vector<Batch> ChunkedPrefillScheduler::prepare_batch() {
   // blocked by the first extremely long request.
   //
 
-  const size_t max_tokens_per_chunk_for_prefill =
-      options_.max_tokens_per_chunk_for_prefill();
+  const size_t configured_prefill_chunk_limit =
+      static_cast<size_t>(options_.max_tokens_per_chunk_for_prefill());
 
   // maintain estimate_latency for current batch for support requests with
   // different tpot. Currently only support one unified tpot for ChunkedPrefill.
@@ -840,6 +884,10 @@ std::vector<Batch> ChunkedPrefillScheduler::prepare_batch() {
   size_t remaining_token_budget = options_.enable_profile_token_budget()
                                       ? profile_manager_->get_token_budget()
                                       : options_.max_tokens_per_batch();
+  const size_t max_tokens_per_chunk_for_prefill =
+      effective_prefill_chunk_limit(remaining_token_budget);
+  const bool adaptive_oneshot =
+      max_tokens_per_chunk_for_prefill > configured_prefill_chunk_limit;
   size_t remaining_seq_budget = options_.max_seqs_per_batch();
   size_t num_preempted_requests = 0;
   bool budget_exhausted = false;
@@ -990,6 +1038,7 @@ std::vector<Batch> ChunkedPrefillScheduler::prepare_batch() {
                 << " n_prefill=" << n_prefill << " n_chunked=" << n_chunked
                 << " n_decode=" << n_decode
                 << " token_budget=" << token_budget_sum
+                << " adaptive_oneshot=" << adaptive_oneshot
                 << " prioritize_waiting=" << prioritize_waiting_prefill
                 << " packed_prefill=" << enable_packed_prefill()
                 << " waiting=" << waiting_priority_queue_->size()

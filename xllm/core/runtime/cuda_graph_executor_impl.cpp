@@ -92,6 +92,35 @@ bool s_enable_prefill_fwd_timing() {
   return val;
 }
 
+bool s_enable_prefill_empty_cache() {
+  static const bool val = [] {
+    const char* env = std::getenv("XLLM_PREFILL_EMPTY_CACHE");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return val;
+}
+
+void maybe_empty_prefill_cache() {
+  // The caching allocator only releases already-free blocks here. Reclaiming
+  // them unconditionally adds driver work to the first-token path without
+  // affecting the lifetime of the forward result or live KV-cache tensors.
+  // Keep reclamation as an explicit operator/recovery policy.
+  if (!s_enable_prefill_empty_cache()) {
+    return;
+  }
+  if (!s_enable_prefill_fwd_timing()) {
+    Device::empty_cache(/*device_index=*/-1);
+    return;
+  }
+
+  const auto start = std::chrono::steady_clock::now();
+  Device::empty_cache(/*device_index=*/-1);
+  const auto end = std::chrono::steady_clock::now();
+  const double elapsed_ms =
+      std::chrono::duration<double, std::milli>(end - start).count();
+  LOG(INFO) << "[PREFILL_POST] empty_cache_ms=" << elapsed_ms;
+}
+
 // Phase G: run pure-prefill piecewise CUDA graphs even under
 // enable_packed_prefill. Multi-seq packs use exact token counts (no ladder
 // pad) so GDN recurrent state is not corrupted by padding tokens.
@@ -2520,7 +2549,7 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
       musaMemGetInfo(&free_a, &total_a);
       LOG(INFO) << "PREFILL_EAGER mem_after_forward: free=" << (double)free_a / 1e9
                 << " GB (delta=" << (double)(free_a - free_b) / 1e9 << " GB)";
-      Device::empty_cache(/*device_index=*/-1);
+      maybe_empty_prefill_cache();
       size_t free_c = 0, total_c = 0;
       musaMemGetInfo(&free_c, &total_c);
       LOG(INFO) << "PREFILL_EAGER mem_after_empty_cache: free=" << (double)free_c / 1e9
@@ -2721,11 +2750,11 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
           static_cast<int64_t>(n_tokens),
           params.meta.num_sequences,
           ms);
-      Device::empty_cache(/*device_index=*/-1);
+      maybe_empty_prefill_cache();
       return result;
     }
     auto result = model_->forward(tokens, positions, kv_caches, params);
-    Device::empty_cache(/*device_index=*/-1);
+    maybe_empty_prefill_cache();
     return result;
   }
 

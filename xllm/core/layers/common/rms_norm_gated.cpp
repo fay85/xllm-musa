@@ -32,7 +32,8 @@ RmsNormGatedImpl::RmsNormGatedImpl(int64_t dim,
 }
 
 torch::Tensor RmsNormGatedImpl::forward(torch::Tensor& input,
-                                        std::optional<torch::Tensor> gate) {
+                                        std::optional<torch::Tensor> gate,
+                                        bool use_transient_output) {
   xllm::kernel::GatedLayerNormParams params;
   params.x = input;
   params.weight = weight_;
@@ -54,11 +55,11 @@ torch::Tensor RmsNormGatedImpl::forward(torch::Tensor& input,
   // libtorch ref impl).
   //
   // Cap at kRmsNormGatedBufMaxRows so prefill (large M) does not grow the
-  // buffer to prefill-batch size and hold that memory permanently across
-  // all 48 GDN layers. When target_rows exceeds the cap the buffer is
-  // skipped and the kernel falls back to its reference implementation
-  // (safe outside graph capture).
+  // persistent buffer to prefill-batch size and hold that memory across all
+  // 48 GDN layers. Eager prefill callers can opt into the transient buffer
+  // below; other large shapes fall back to the reference implementation.
   constexpr int64_t kRmsNormGatedBufMaxRows = 128;
+  torch::Tensor transient_output;
   if (input.dim() >= 1 && input.numel() > 0 && input.stride(-1) == 1) {
     const auto target_sizes = input.sizes();
     const int64_t last_dim = target_sizes.back();
@@ -91,6 +92,18 @@ torch::Tensor RmsNormGatedImpl::forward(torch::Tensor& input,
       if (view.sizes() == target_sizes && view.stride(-1) == 1) {
         params.output_buf = view;
       }
+    }
+
+    // A caller that owns an eager-only path can request a short-lived output
+    // and still use the fused kernel without retaining one large buffer per
+    // GDN layer. The returned tensor keeps the storage alive until its
+    // downstream projection has consumed it. Graph paths must leave this off
+    // because the allocation is not capture-safe.
+    if (use_transient_output && target_rows > kRmsNormGatedBufMaxRows &&
+        input.dim() == 2 && gate.has_value() && gate->defined() &&
+        gate->dim() == 2 && input.is_contiguous() && gate->is_contiguous()) {
+      transient_output = torch::empty_like(input);
+      params.output_buf = transient_output;
     }
   }
 #endif

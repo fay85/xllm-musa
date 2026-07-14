@@ -78,6 +78,9 @@ class Options {
   // the max tokens per chunk for request in prefill stage.
   PROPERTY(int32_t, max_tokens_per_chunk_for_prefill) = 8192;
 
+  // Allow one-shot prefill for an isolated request that fits the batch budget.
+  PROPERTY(bool, enable_adaptive_prefill_oneshot) = false;
+
   // sps tokens
   PROPERTY(int32_t, num_speculative_tokens) = 0;
 

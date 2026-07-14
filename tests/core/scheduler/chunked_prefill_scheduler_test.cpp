@@ -21,6 +21,7 @@ limitations under the License.
 #include <cmath>
 #include <optional>
 
+#include "core/framework/config/execution_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "distributed_runtime/engine.h"
 #include "util/utils.h"
@@ -101,7 +102,8 @@ ContinuousScheduler::Options create_scheduler_options(
     bool enable_profile_kv_blocks = true,
     bool enable_latency_aware_schedule = false,
     int32_t max_global_ttft_ms = std::numeric_limits<int32_t>::max(),
-    int32_t max_global_tpot_ms = std::numeric_limits<int32_t>::max()) {
+    int32_t max_global_tpot_ms = std::numeric_limits<int32_t>::max(),
+    bool enable_adaptive_prefill_oneshot = false) {
   ContinuousScheduler::Options opt;
   opt.num_speculative_tokens_ = num_speculative_tokens;
   opt.max_tokens_per_chunk_for_prefill_ = max_tokens_per_chunk_for_prefill;
@@ -113,6 +115,7 @@ ContinuousScheduler::Options create_scheduler_options(
   opt.enable_latency_aware_schedule_ = enable_latency_aware_schedule;
   opt.max_global_ttft_ms_ = max_global_ttft_ms;
   opt.max_global_tpot_ms_ = max_global_tpot_ms;
+  opt.enable_adaptive_prefill_oneshot_ = enable_adaptive_prefill_oneshot;
   return opt;
 }
 
@@ -228,6 +231,149 @@ TEST(ChunkedPrefillSchedulerTest, AddNewRequestBase) {
       EXPECT_TRUE(allowed_max_tokens[i] == validate_allowed_max_tokens[idx]);
     }
   }
+}
+
+TEST(ChunkedPrefillSchedulerTest,
+     AdaptiveOneShotSchedulesIsolatedPromptWithinBatchBudget) {
+  ScopedConfigValue<bool> disable_graph(
+      ExecutionConfig::get_instance().enable_graph(), false);
+  constexpr int32_t kPromptLength = 20500;
+  ContinuousScheduler::Options opt =
+      create_scheduler_options(22000,
+                               256,
+                               0,
+                               8192,
+                               1,
+                               "fcfs",
+                               true,
+                               false,
+                               std::numeric_limits<int32_t>::max(),
+                               std::numeric_limits<int32_t>::max(),
+                               true);
+  auto engine = std::make_unique<FakeEngine>(2048, 16);
+  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
+
+  auto requests = generate_request(
+      {kPromptLength}, {10}, std::nullopt, std::nullopt, 30000);
+  scheduler->add_request(requests.front());
+
+  auto batch = scheduler->prepare_batch_test();
+  ASSERT_EQ(batch.size(), 1);
+  ASSERT_EQ(batch.front().size(), 1);
+  ASSERT_EQ(batch.front().get_allowed_max_tokens().size(), 1);
+  EXPECT_EQ(batch.front().get_allowed_max_tokens().front(), kPromptLength);
+}
+
+TEST(ChunkedPrefillSchedulerTest,
+     AdaptiveOneShotKeepsChunkLimitWhenBatchBudgetIsInsufficient) {
+  ScopedConfigValue<bool> disable_graph(
+      ExecutionConfig::get_instance().enable_graph(), false);
+  constexpr int32_t kPromptLength = 20500;
+  constexpr int32_t kPrefillChunkLimit = 8192;
+  ContinuousScheduler::Options opt =
+      create_scheduler_options(16000,
+                               256,
+                               0,
+                               kPrefillChunkLimit,
+                               1,
+                               "fcfs",
+                               true,
+                               false,
+                               std::numeric_limits<int32_t>::max(),
+                               std::numeric_limits<int32_t>::max(),
+                               true);
+  auto engine = std::make_unique<FakeEngine>(2048, 16);
+  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
+
+  auto requests = generate_request(
+      {kPromptLength}, {10}, std::nullopt, std::nullopt, 30000);
+  scheduler->add_request(requests.front());
+
+  auto batch = scheduler->prepare_batch_test();
+  ASSERT_EQ(batch.size(), 1);
+  ASSERT_EQ(batch.front().size(), 1);
+  ASSERT_EQ(batch.front().get_allowed_max_tokens().size(), 1);
+  EXPECT_EQ(batch.front().get_allowed_max_tokens().front(), kPrefillChunkLimit);
+}
+
+TEST(ChunkedPrefillSchedulerTest,
+     AdaptiveOneShotKeepsChunkLimitWhenAnotherRequestIsWaiting) {
+  ScopedConfigValue<bool> disable_graph(
+      ExecutionConfig::get_instance().enable_graph(), false);
+  constexpr int32_t kPrefillChunkLimit = 8192;
+  ContinuousScheduler::Options opt =
+      create_scheduler_options(22000,
+                               256,
+                               0,
+                               kPrefillChunkLimit,
+                               1,
+                               "fcfs",
+                               true,
+                               false,
+                               std::numeric_limits<int32_t>::max(),
+                               std::numeric_limits<int32_t>::max(),
+                               true);
+  auto engine = std::make_unique<FakeEngine>(4096, 16);
+  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
+
+  auto requests = generate_request(
+      {20500, 100}, {10, 10}, std::nullopt, std::nullopt, 30000);
+  scheduler->add_request(requests[0]);
+  scheduler->add_request(requests[1]);
+
+  auto batch = scheduler->prepare_batch_test();
+  ASSERT_EQ(batch.size(), 1);
+  ASSERT_EQ(batch.front().size(), 2);
+  for (uint32_t allowed_tokens : batch.front().get_allowed_max_tokens()) {
+    EXPECT_LE(allowed_tokens, kPrefillChunkLimit);
+  }
+}
+
+TEST(ChunkedPrefillSchedulerTest,
+     AdaptiveOneShotKeepsChunkLimitWhenDecodeIsRunning) {
+  ScopedConfigValue<bool> disable_graph(
+      ExecutionConfig::get_instance().enable_graph(), false);
+  constexpr int32_t kPrefillChunkLimit = 8192;
+  ContinuousScheduler::Options opt =
+      create_scheduler_options(22000,
+                               256,
+                               0,
+                               kPrefillChunkLimit,
+                               1,
+                               "fcfs",
+                               true,
+                               false,
+                               std::numeric_limits<int32_t>::max(),
+                               std::numeric_limits<int32_t>::max(),
+                               true);
+  auto engine = std::make_unique<FakeEngine>(4096, 16);
+  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
+
+  auto decode_request =
+      generate_request({100}, {10}, std::nullopt, std::nullopt, 30000);
+  scheduler->add_request(decode_request.front());
+  auto batch = scheduler->prepare_batch_test();
+  ASSERT_EQ(batch.size(), 1);
+  ASSERT_EQ(batch.front().size(), 1);
+  update_requests(decode_request);
+
+  auto prefill_request =
+      generate_request({20500}, {10}, std::nullopt, std::nullopt, 30000);
+  scheduler->add_request(prefill_request.front());
+  batch = scheduler->prepare_batch_test();
+
+  ASSERT_EQ(batch.size(), 1);
+  ASSERT_EQ(batch.front().size(), 2);
+  const std::vector<uint32_t>& allowed_tokens =
+      batch.front().get_allowed_max_tokens();
+  for (size_t i = 0; i < batch.front().size(); ++i) {
+    if (batch.front()[i] ==
+        prefill_request.front()->sequences().front().get()) {
+      EXPECT_EQ(allowed_tokens[i], kPrefillChunkLimit);
+      return;
+    }
+  }
+  FAIL() << "The waiting prefill sequence was not scheduled.";
 }
 
 // TEST-2:

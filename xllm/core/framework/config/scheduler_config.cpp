@@ -32,6 +32,11 @@ DEFINE_double(prefill_scheduling_memory_usage_threshold,
 
 DEFINE_bool(enable_chunked_prefill, true, "Whether to enable chunked prefill.");
 
+DEFINE_bool(enable_adaptive_prefill_oneshot,
+            false,
+            "Allow an isolated prefill request to run in one shot when its "
+            "prompt fits max_tokens_per_batch.");
+
 DEFINE_int32(max_tokens_per_chunk_for_prefill,
              8192,
              "Max number of token per chunk in prefill stage.");
@@ -81,6 +86,7 @@ void SchedulerConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_schedule_overlap);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(prefill_scheduling_memory_usage_threshold);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_chunked_prefill);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_adaptive_prefill_oneshot);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(max_tokens_per_chunk_for_prefill);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(chunked_match_frequency);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(use_zero_evict);
@@ -99,6 +105,7 @@ void SchedulerConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_schedule_overlap);
   XLLM_CONFIG_ASSIGN_FROM_JSON(prefill_scheduling_memory_usage_threshold);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_chunked_prefill);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_adaptive_prefill_oneshot);
   XLLM_CONFIG_ASSIGN_FROM_JSON(max_tokens_per_chunk_for_prefill);
   XLLM_CONFIG_ASSIGN_FROM_JSON(chunked_match_frequency);
   XLLM_CONFIG_ASSIGN_FROM_JSON(use_zero_evict);
@@ -124,6 +131,8 @@ void SchedulerConfig::append_config_json(
       config_json, default_config, prefill_scheduling_memory_usage_threshold);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_chunked_prefill);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_adaptive_prefill_oneshot);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, max_tokens_per_chunk_for_prefill);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(

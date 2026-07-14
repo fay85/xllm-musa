@@ -1235,6 +1235,65 @@ __global__ void __launch_bounds__(BLOCK_THREADS, 1)
   }
 }
 
+template <typename T>
+__global__ void __launch_bounds__(256, 1)
+    gated_rms_norm_h128_rows_kernel(const T* __restrict__ x,
+                                    const T* __restrict__ w,
+                                    const T* __restrict__ z,
+                                    T* __restrict__ y,
+                                    int64_t x_stride_row,
+                                    int64_t z_stride_row,
+                                    int64_t y_stride_row,
+                                    int rows,
+                                    float eps) {
+  // Long prefill flattens [tokens, heads, 128] into many short rows. Packing
+  // eight rows into one block avoids the one-block-per-row launch used by the
+  // general kernel and keeps each row's reduction inside one 32-lane warp.
+  constexpr int kLanesPerRow = 32;
+  constexpr int kValuesPerLane = 4;
+  constexpr int kRowsPerBlock = 8;
+  static_assert(kLanesPerRow * kValuesPerLane == 128);
+
+  const int lane = threadIdx.x % kLanesPerRow;
+  const int row_in_block = threadIdx.x / kLanesPerRow;
+  const int row = blockIdx.x * kRowsPerBlock + row_in_block;
+  if (row >= rows) {
+    return;
+  }
+
+  const T* __restrict__ x_row =
+      x + static_cast<int64_t>(row) * x_stride_row;
+  const T* __restrict__ z_row =
+      z + static_cast<int64_t>(row) * z_stride_row;
+  T* __restrict__ y_row = y + static_cast<int64_t>(row) * y_stride_row;
+
+  const int column_base = lane * kValuesPerLane;
+  float x_values[kValuesPerLane];
+  float local_sum = 0.0f;
+#pragma unroll
+  for (int index = 0; index < kValuesPerLane; ++index) {
+    const int column = column_base + index;
+    x_values[index] = to_f32<T>(x_row[column]);
+    local_sum += x_values[index] * x_values[index];
+  }
+
+#pragma unroll
+  for (int offset = kLanesPerRow / 2; offset > 0; offset >>= 1) {
+    local_sum +=
+        __shfl_xor_sync(0xffffffffu, local_sum, offset, kLanesPerRow);
+  }
+  const float inv_rms = rsqrtf(local_sum * (1.0f / 128.0f) + eps);
+
+#pragma unroll
+  for (int index = 0; index < kValuesPerLane; ++index) {
+    const int column = column_base + index;
+    const float z_value = to_f32<T>(z_row[column]);
+    const float gated = z_value * fast_sigmoid_f32(z_value);
+    y_row[column] = from_f32<T>(x_values[index] * inv_rms *
+                                to_f32<T>(w[column]) * gated);
+  }
+}
+
 inline int pick_block_threads(int N) {
   int bt = 32;
   while (bt < N && bt < 1024) {
@@ -1267,6 +1326,24 @@ void launch_gated_rms_norm(const torch::Tensor& x,
                            double eps,
                            cudaStream_t stream) {
   const int rows = static_cast<int>(x.size(0));
+  if (N == 128 && rows > 128) {
+    constexpr int kRowsPerBlock = 8;
+    constexpr int kThreads = 256;
+    const int blocks = (rows + kRowsPerBlock - 1) / kRowsPerBlock;
+    gated_rms_norm_h128_rows_kernel<T><<<blocks, kThreads, 0, stream>>>(
+        reinterpret_cast<const T*>(x.data_ptr()),
+        reinterpret_cast<const T*>(weight.data_ptr()),
+        reinterpret_cast<const T*>(z.data_ptr()),
+        reinterpret_cast<T*>(output.data_ptr()),
+        x.stride(0),
+        z.stride(0),
+        output.stride(0),
+        rows,
+        static_cast<float>(eps));
+    C10_CUDA_KERNEL_LAUNCH_CHECK();
+    return;
+  }
+
   const int block_threads = pick_block_threads(N);
   const float inv_N = 1.0f / static_cast<float>(N);
   switch (block_threads) {

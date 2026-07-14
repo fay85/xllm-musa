@@ -12,6 +12,7 @@
   "enable_schedule_overlap": true,
   "prefill_scheduling_memory_usage_threshold": 0.75,
   "enable_chunked_prefill": false,
+  "enable_adaptive_prefill_oneshot": true,
   "max_tokens_per_chunk_for_prefill": 512,
   "chunked_match_frequency": 3,
   "use_zero_evict": true,

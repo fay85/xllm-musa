@@ -21,8 +21,10 @@ limitations under the License.
 #include <glog/logging.h>
 #include <torch/torch.h>
 
+#include <cstdlib>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 
 #include "common/device_monitor.h"
@@ -60,6 +62,19 @@ StreamEventPtr record_current_stream_event(const Device& device) {
     stream->synchronize();
   }
   return event;
+}
+
+bool s_enable_prefill_step_timing() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_PREFILL_STEP_TIMING");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return enabled;
+}
+
+void synchronize_current_stream(const Device& device) {
+  std::unique_ptr<Stream> stream = device.current_stream();
+  stream->synchronize();
 }
 
 }  // namespace
@@ -225,6 +240,13 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
 
   Timer timer;
   auto& sampling_params = input.sampling_params;
+  const bool time_prefill_step =
+      s_enable_prefill_step_timing() &&
+      input.input_params.meta.batch_forward_type.is_prefill();
+  Timer prefill_stage_timer;
+  double model_executor_ms = 0.0;
+  double logits_ms = 0.0;
+  double sampler_ms = 0.0;
 
   std::vector<folly::SemiFuture<bool>> futures;
 
@@ -261,6 +283,11 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
   // call model executor forward to get hidden states
   auto model_output = model_executor_->forward(
       input.token_ids, input.positions, kv_caches_, input.input_params);
+  if (time_prefill_step) {
+    synchronize_current_stream(device_);
+    model_executor_ms = prefill_stage_timer.elapsed_milliseconds();
+    prefill_stage_timer.reset();
+  }
   if (!model_output.hidden_states.defined()) {
     return std::nullopt;
   }
@@ -286,6 +313,11 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     } else {
       logits = model_->logits(model_output.hidden_states, selected_token_idxes);
     }
+  }
+  if (time_prefill_step) {
+    synchronize_current_stream(device_);
+    logits_ms = prefill_stage_timer.elapsed_milliseconds();
+    prefill_stage_timer.reset();
   }
 
   ForwardOutput output;
@@ -333,6 +365,10 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     output.max_top_logprobs = sampling_params.max_top_logprobs;
     if (!input.skip_sampling_for_logits_only) {
       auto sample_output = sampler_->forward(logits, sampling_params);
+      if (time_prefill_step) {
+        synchronize_current_stream(device_);
+        sampler_ms = prefill_stage_timer.elapsed_milliseconds();
+      }
 
       // beam search kernel
       BeamSearchOutput beam_search_output;
@@ -350,6 +386,13 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
       // set beam search output to output
       output.beam_search_output = beam_search_output;
     }
+  }
+
+  if (time_prefill_step) {
+    LOG(INFO) << "[PREFILL_STEP] model_executor_ms=" << model_executor_ms
+              << " logits_ms=" << logits_ms << " sampler_ms=" << sampler_ms
+              << " measured_total_ms="
+              << model_executor_ms + logits_ms + sampler_ms;
   }
 
   if (options_.enable_speculative_decode()) {

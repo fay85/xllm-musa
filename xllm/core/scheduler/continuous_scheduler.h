@@ -56,6 +56,10 @@ class ContinuousScheduler : public Scheduler {
     // the max tokens per chunk for request in prefill stage.
     PROPERTY(int32_t, max_tokens_per_chunk_for_prefill);
 
+    // Allow one-shot prefill for an isolated request that fits the batch
+    // budget.
+    PROPERTY(bool, enable_adaptive_prefill_oneshot) = false;
+
     // the number of speculative tokens per step
     PROPERTY(int32_t, num_speculative_tokens) = 0;
 
