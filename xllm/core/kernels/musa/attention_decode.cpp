@@ -36,11 +36,21 @@ constexpr int32_t kFa3TileM = 32;
 constexpr int32_t kFa3TileN = 64;
 
 
+// Paged-KV FA3 (decode / with_kvcache). head_dim=256, GQA=6, packgqa+metadata.
 constexpr const char* kFa3FwdUriHash =
     "9e4f4b2e6574a7a45a93fef39cf9b0485651e39052d9dfd88c2e1439137a9374";
 
+// Dense ragged FA3 prefill (SGLang flash_attn_varlen_func). bf16, head_dim=256,
+// GQA ratio=6, causal, no packgqa/metadata. Built into FLASHINFER_OPS_PATH.
+constexpr const char* kFa3PrefillFwdUriHash =
+    "7ee83f6c1e99c1e66180d62c666ae3683127d3e048aeda12e77ee4569f9912c9";
+
 std::string fa3_fwd_uri() {
   return std::string("fmha_fwd_") + kFa3FwdUriHash;
+}
+
+std::string fa3_prefill_fwd_uri() {
+  return std::string("fmha_fwd_") + kFa3PrefillFwdUriHash;
 }
 
 ffi::Optional<ffi::Tensor> none_tensor() {
@@ -178,6 +188,75 @@ void fa3_decode(const torch::Tensor& query,
       to_ffi_tensor(batch_table),
       to_ffi_tensor(num_m_blocks),
       none_tensor(),
+      to_ffi_tensor(output),
+      to_ffi_tensor(output_lse),
+      /*cp_world_size=*/static_cast<int64_t>(1),
+      /*cp_rank=*/static_cast<int64_t>(0),
+      none_tensor());
+}
+
+void fa3_prefill(const torch::Tensor& query,
+                 const torch::Tensor& key,
+                 const torch::Tensor& value,
+                 const torch::Tensor& cu_seqlens_q,
+                 const torch::Tensor& cu_seqlens_k,
+                 int64_t max_seqlen_q,
+                 int64_t max_seqlen_k,
+                 int64_t window_left,
+                 int64_t window_right,
+                 double sm_scale,
+                 torch::Tensor& output,
+                 torch::Tensor& output_lse) {
+  CHECK(query.defined() && key.defined() && value.defined());
+  CHECK(cu_seqlens_q.defined() && cu_seqlens_q.scalar_type() == torch::kInt32);
+  CHECK(cu_seqlens_k.defined() && cu_seqlens_k.scalar_type() == torch::kInt32);
+  CHECK_EQ(query.scalar_type(), torch::kBFloat16)
+      << "fa3_prefill: only bf16 is supported for the cached dense FA3 URI";
+  CHECK_EQ(query.size(-1), 256) << "fa3_prefill: head_dim must be 256";
+  CHECK_EQ(query.size(-2), key.size(-2) * 6)
+      << "fa3_prefill: requires GQA ratio 6 (nq=" << query.size(-2)
+      << ", nkv=" << key.size(-2) << ")";
+  CHECK_GT(max_seqlen_q, 0);
+  CHECK_GT(max_seqlen_k, 0);
+
+  const std::string uri = fa3_prefill_fwd_uri();
+  MusaTvmffiStreamGuard stream_guard(query.device());
+
+  // Arg order matches mate jit `_fmha_fwd` / flash_attn_varlen_func mutlass
+  // path for dense ragged Q/K (has_metadata=False).
+  get_function(uri, uri)(
+      to_ffi_tensor(query),
+      to_ffi_tensor(key),
+      to_ffi_tensor(value),
+      none_tensor(),  // k_new
+      none_tensor(),  // v_new
+      none_tensor(),  // q_v
+      to_ffi_tensor(cu_seqlens_q),
+      to_ffi_tensor(cu_seqlens_k),
+      none_tensor(),  // cu_seqlens_k_new
+      none_tensor(),  // seqused_q
+      none_tensor(),  // seqused_k
+      max_seqlen_q,
+      max_seqlen_k,
+      none_tensor(),  // page_table
+      none_tensor(),  // kv_batch_idx
+      none_tensor(),  // leftpad_k
+      none_tensor(),  // rotary_cos
+      none_tensor(),  // rotary_sin
+      none_tensor(),  // seqlens_rotary
+      none_tensor(),  // q_descale
+      none_tensor(),  // k_descale
+      none_tensor(),  // v_descale
+      sm_scale,
+      /*is_causal=*/true,
+      window_left,
+      window_right,
+      /*attention_chunk=*/static_cast<int64_t>(0),
+      /*softcap=*/0.0,
+      /*mp_margin=*/static_cast<int64_t>(0),
+      /*num_splits=*/static_cast<int64_t>(0),
+      none_tensor(),  // scheduler_metadata
+      none_tensor(),  // learnable_sink
       to_ffi_tensor(output),
       to_ffi_tensor(output_lse),
       /*cp_world_size=*/static_cast<int64_t>(1),

@@ -20,6 +20,7 @@ limitations under the License.
 #include "kernels/ops_api.h"
 #include "platform/device.h"
 #include "platform/platform.h"
+#include "util/prefill_breakdown.h"
 
 namespace xllm {
 namespace layer {
@@ -96,10 +97,15 @@ DenseMLPImpl::DenseMLPImpl(int64_t hidden_size,
 
 torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
   // input shape: [num_tokens, hidden_size]
-  auto gate_up = gate_up_proj_->forward(hidden_states);
+  torch::Tensor gate_up;
+  {
+    PrefillBreakdown::Scope gate_scope(PrefillBreakdown::Bucket::kMlpGateUp);
+    gate_up = gate_up_proj_->forward(hidden_states);
+  }
 
   if (is_smoothquant_) {
     // For w8a8 quantization, the active operation is fused with the down_proj
+    PrefillBreakdown::Scope down_scope(PrefillBreakdown::Bucket::kMlpDown);
     return down_proj_->forward(gate_up);
   } else {
     torch::Tensor output;
@@ -137,7 +143,11 @@ torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
       }
     }
 
-    act_->forward(gate_up, output);
+    {
+      PrefillBreakdown::Scope act_scope(PrefillBreakdown::Bucket::kMlpAct);
+      act_->forward(gate_up, output);
+    }
+    PrefillBreakdown::Scope down_scope(PrefillBreakdown::Bucket::kMlpDown);
     return down_proj_->forward(output);
   }
 }

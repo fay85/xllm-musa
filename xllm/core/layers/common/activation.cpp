@@ -18,6 +18,12 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <cmath>
+#include <cstdlib>
+#include <string>
+
+#if defined(XLLM_TORCH_MUSA)
+#include <ATen/ops/swish_glu.h>
+#endif
 
 #include "kernels/ops_api.h"
 namespace xllm {
@@ -65,6 +71,23 @@ void ActivationImpl::forward(torch::Tensor& input, torch::Tensor& output) {
     output = swiglu_with_clamp(input, swiglu_limit_);
     return;
   }
+
+#if defined(XLLM_TORCH_MUSA)
+  // MUSA muDNN SwishGLU (aten::swish_glu) is ~4x faster than the custom
+  // silu_and_mul kernel at Qwen3.5-27B prefill M≈2560 (≈0.19 vs ≈0.83 ms/layer;
+  // ≈41 ms of the C=5 TTFT residual vs SGLang). SGLang's paired MUSA path uses
+  // the same op via nn.SwishGLU. Opt out with XLLM_DISABLE_SWISH_GLU=1.
+  if (is_gated_ && (act_mode_ == "silu" || act_mode_ == "swiglu")) {
+    static const bool use_swish_glu = [] {
+      const char* env = std::getenv("XLLM_DISABLE_SWISH_GLU");
+      return !(env && std::string(env) == "1");
+    }();
+    if (use_swish_glu) {
+      output = at::swish_glu(input);
+      return;
+    }
+  }
+#endif
 
   xllm::kernel::ActivationParams activation_params;
   activation_params.input = input;

@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "cuda_graph_executor_impl.h"
 
+#include "util/prefill_breakdown.h"
+
 #include <c10/core/Device.h>
 #include <c10/core/TensorOptions.h>
 #include <c10/cuda/CUDACachingAllocator.h>
@@ -89,6 +91,44 @@ bool s_enable_prefill_fwd_timing() {
   }();
   return val;
 }
+
+// Phase G: run pure-prefill piecewise CUDA graphs even under
+// enable_packed_prefill. Multi-seq packs use exact token counts (no ladder
+// pad) so GDN recurrent state is not corrupted by padding tokens.
+bool s_enable_packed_prefill_piecewise() {
+  static const bool val = [] {
+    const char* env = std::getenv("XLLM_PACKED_PREFILL_PIECEWISE");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return val;
+}
+
+// Time a prefill graph replay when Phase D/E timing envs are on. Breakdown
+// scopes are eager-only (events during CUDA-graph replay are not meaningful).
+template <typename ReplayFn>
+auto timed_prefill_graph_replay(int device_index,
+                                uint32_t n_tokens,
+                                int32_t batch_bs,
+                                bool packed_prefill,
+                                const char* mode,
+                                ReplayFn&& replay_fn) {
+  const bool time_fwd = s_enable_prefill_fwd_timing();
+  if (!time_fwd) {
+    return replay_fn();
+  }
+  c10::cuda::getCurrentCUDAStream(device_index).synchronize();
+  const auto t0 = std::chrono::steady_clock::now();
+  auto result = replay_fn();
+  c10::cuda::getCurrentCUDAStream(device_index).synchronize();
+  const auto t1 = std::chrono::steady_clock::now();
+  const double ms =
+      std::chrono::duration<double, std::milli>(t1 - t0).count();
+  LOG(INFO) << "[PREFILL_FWD] n_tokens=" << n_tokens
+            << " batch_bs=" << batch_bs << " packed_prefill=" << packed_prefill
+            << " mode=" << mode << " fwd_ms=" << ms;
+  return result;
+}
+
 
 struct GraphPoolMemoryUsage {
   size_t reserved_bytes = 0;
@@ -2441,17 +2481,27 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
   // Get actual num_tokens from tokens shape
   const uint32_t n_tokens = tokens.size(/*dim=*/0);
+  // Packed multi-seq piecewise must use exact tokens (same reason as
+  // chunked/mixed): ladder padding would mutate GDN recurrent state.
+  const bool packed_multi_piecewise =
+      is_prefill && enable_packed_prefill_ &&
+      s_enable_packed_prefill_piecewise() &&
+      params.meta.num_sequences > 1 && !params.is_spec_verify;
   // Chunked/mixed GDN control flow is specialized to the exact packed query
   // shape. Unlike pure prefill, it cannot safely append padding tokens because
   // those tokens would mutate recurrent state and paged-KV state.
   const uint32_t bucket_num_tokens =
-      (is_chunked_prefill || is_mixed)
+      (is_chunked_prefill || is_mixed || packed_multi_piecewise)
           ? n_tokens
           : get_bucket_num_tokens(n_tokens, is_prefill);
 
-  // Prefill phase with piecewise graph
+  // Prefill phase with piecewise graph.
+  // Under enable_packed_prefill, piecewise is opt-in only
+  // (XLLM_PACKED_PREFILL_PIECEWISE=1). Default stays eager: measured B=1
+  // ladder PCG (~613 ms @ ~2500 tok) is slower than eager (~526 ms).
   if (is_prefill && enable_prefill_piecewise_graph_ &&
-      !enable_packed_prefill_) {
+      (!enable_packed_prefill_ || s_enable_packed_prefill_piecewise()) &&
+      !packed_multi_piecewise) {
     // Check if token count is within limit
     const bool graph_mode_supported = n_tokens <= max_tokens_for_graph_mode_;
 
@@ -2484,7 +2534,13 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
       // Replay existing piecewise graph
       VLOG(kGraphExecutorLogVerboseLevel)
           << "CudaGraphExecutorImpl::run() in prefill piecewise replay mode";
-      auto result = it->second->replay(tokens, positions, kv_caches, params);
+      auto result = timed_prefill_graph_replay(
+          device_.index(),
+          n_tokens,
+          params.meta.num_sequences,
+          enable_packed_prefill_,
+          "piecewise_replay",
+          [&]() { return it->second->replay(tokens, positions, kv_caches, params); });
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
 
@@ -2529,8 +2585,16 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
       // Run replay after capture so first request uses same execution path as
       // subsequent requests.
-      auto result = prefill_graphs_[bucket_num_tokens]->replay(
-          tokens, positions, kv_caches, params);
+      auto result = timed_prefill_graph_replay(
+          device_.index(),
+          n_tokens,
+          params.meta.num_sequences,
+          enable_packed_prefill_,
+          "piecewise_capture_replay",
+          [&]() {
+            return prefill_graphs_[bucket_num_tokens]->replay(
+                tokens, positions, kv_caches, params);
+          });
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
 
@@ -2551,8 +2615,10 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
   // sequence's query length and initial-state presence. MIXED is intentionally
   // excluded: the graph-compatible chunked scheduler emits homogeneous
   // prefill/chunked or decode batches to avoid unbounded mixed-shape captures.
-  if (is_chunked_prefill && enable_prefill_piecewise_graph_ &&
-      !params.is_spec_verify) {
+  // Also serves packed multi-seq pure-prefill when
+  // XLLM_PACKED_PREFILL_PIECEWISE=1 (exact token shape, hash-keyed graphs).
+  if ((is_chunked_prefill || packed_multi_piecewise) &&
+      enable_prefill_piecewise_graph_ && !params.is_spec_verify) {
     CHECK_LE(n_tokens, max_tokens_for_graph_mode_)
         << "Chunked-prefill graph batch exceeds max_tokens_for_graph_mode: "
         << n_tokens << " > " << max_tokens_for_graph_mode_;
@@ -2564,7 +2630,14 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
       VLOG(kGraphExecutorLogVerboseLevel)
           << "CudaGraphExecutorImpl::run() in chunked-prefill piecewise "
              "replay mode";
-      auto result = it->second->replay(tokens, positions, kv_caches, params);
+      auto result = timed_prefill_graph_replay(
+          device_.index(),
+          n_tokens,
+          params.meta.num_sequences,
+          enable_packed_prefill_,
+          packed_multi_piecewise ? "packed_piecewise_replay"
+                                 : "chunked_piecewise_replay",
+          [&]() { return it->second->replay(tokens, positions, kv_caches, params); });
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
 
@@ -2603,8 +2676,17 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
                 << " (actual num_tokens: " << n_tokens << ") done";
       log_graph_memory_after_capture();
       chunked_prefill_graphs_[graph_key] = std::move(graph);
-      auto result = chunked_prefill_graphs_[graph_key]->replay(
-          tokens, positions, kv_caches, params);
+      auto result = timed_prefill_graph_replay(
+          device_.index(),
+          n_tokens,
+          params.meta.num_sequences,
+          enable_packed_prefill_,
+          packed_multi_piecewise ? "packed_piecewise_capture_replay"
+                                 : "chunked_piecewise_capture_replay",
+          [&]() {
+            return chunked_prefill_graphs_[graph_key]->replay(
+                tokens, positions, kv_caches, params);
+          });
       return attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);
     }
 
@@ -2617,7 +2699,10 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
   // Prefill without piecewise graph: use eager mode
   if (is_prefill) {
     COUNTER_INC(num_model_execution_total_eager);
-    if (s_enable_prefill_fwd_timing()) {
+    const bool time_fwd =
+        s_enable_prefill_fwd_timing() || PrefillBreakdown::enabled();
+    if (time_fwd) {
+      PrefillBreakdown::begin();
       c10::cuda::getCurrentCUDAStream(device_.index()).synchronize();
       const auto t0 = std::chrono::steady_clock::now();
       auto result = model_->forward(tokens, positions, kv_caches, params);
@@ -2625,10 +2710,17 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
       const auto t1 = std::chrono::steady_clock::now();
       const double ms =
           std::chrono::duration<double, std::milli>(t1 - t0).count();
-      LOG(INFO) << "[PREFILL_FWD] n_tokens=" << n_tokens
-                << " batch_bs=" << params.meta.num_sequences
-                << " packed_prefill=" << enable_packed_prefill_
-                << " fwd_ms=" << ms;
+      if (s_enable_prefill_fwd_timing()) {
+        LOG(INFO) << "[PREFILL_FWD] n_tokens=" << n_tokens
+                  << " batch_bs=" << params.meta.num_sequences
+                  << " packed_prefill=" << enable_packed_prefill_
+                  << " mode=eager"
+                  << " fwd_ms=" << ms;
+      }
+      PrefillBreakdown::end_and_log(
+          static_cast<int64_t>(n_tokens),
+          params.meta.num_sequences,
+          ms);
       Device::empty_cache(/*device_index=*/-1);
       return result;
     }

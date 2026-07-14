@@ -263,6 +263,79 @@ void FlashInferAttentionImpl::prefill_forward(
     std::optional<torch::Tensor>& output_lse) {
   bool use_custom_mask = attn_metadata.attn_mask.defined();
 
+  if (use_custom_mask) {
+    auto [result, _] =
+        run_eager_causal_padded_attention(query,
+                                          key,
+                                          value,
+                                          attn_metadata.attn_mask,
+                                          scale_,
+                                          num_heads_,
+                                          num_kv_heads_,
+                                          head_size_);
+    output = result;
+    return;
+  }
+
+  // Dense FA3 prefill (SGLang flash_attn_varlen_func / mate mutlass). Opt-in
+  // via XLLM_USE_FA3=1. Falls back to FlashInfer FA2 when the shape is not
+  // covered by the cached dense fmha URI (bf16, hd=256, GQA=6, no SWA).
+  {
+    static const bool use_fa3 = [] {
+      const char* env = std::getenv("XLLM_USE_FA3");
+      return env && std::string(env) == "1";
+    }();
+    // Cached dense URI is global-causal (is_local=False). FlashInfer planinfo
+    // also hardcodes use_swa=False for this backend; do not gate on the
+    // ModelArgs sliding_window default (often 4096 → window_left=4095).
+    const bool fa3_shape_ok =
+        use_fa3 && head_size_ == 256 && num_kv_heads_ > 0 &&
+        num_heads_ == num_kv_heads_ * 6 &&
+        query.scalar_type() == torch::kBFloat16 &&
+        attn_metadata.q_cu_seq_lens.defined() &&
+        attn_metadata.kv_cu_seq_lens.defined() &&
+        attn_metadata.max_query_len > 0 && attn_metadata.max_seq_len > 0;
+    if (fa3_shape_ok) {
+      const int64_t total_q = query.size(0);
+      torch::Tensor lse_tensor;
+      if (output_lse.has_value() && output_lse->defined()) {
+        lse_tensor = *output_lse;
+      } else {
+        const int64_t required = num_heads_ * total_q;
+        const auto lse_options = torch::TensorOptions()
+                                     .dtype(torch::kFloat32)
+                                     .device(query.device());
+        const bool need_realloc = !lse_buf_.defined() ||
+                                  lse_buf_.dtype() != lse_options.dtype() ||
+                                  lse_buf_.device() != lse_options.device() ||
+                                  lse_buf_.numel() < required;
+        if (need_realloc) {
+          lse_buf_ = torch::empty({required}, lse_options);
+        }
+        lse_tensor =
+            lse_buf_.narrow(0, 0, required).view({num_heads_, total_q});
+      }
+
+      xllm::kernel::cuda::fa3_prefill(
+          query.contiguous(),
+          key.contiguous(),
+          value.contiguous(),
+          attn_metadata.q_cu_seq_lens.contiguous(),
+          attn_metadata.kv_cu_seq_lens.contiguous(),
+          /*max_seqlen_q=*/attn_metadata.max_query_len,
+          /*max_seqlen_k=*/attn_metadata.max_seq_len,
+          /*window_left=*/-1,
+          /*window_right=*/-1,
+          scale_,
+          output,
+          lse_tensor);
+      if (output_lse.has_value()) {
+        *output_lse = lse_tensor;
+      }
+      return;
+    }
+  }
+
   std::string backend = xllm::kernel::cuda::determine_attention_backend(
       /*pos_encoding_mode=*/0,
       /*use_fp16_qk_reduction=*/false,
@@ -286,20 +359,6 @@ void FlashInferAttentionImpl::prefill_forward(
                                          num_heads_,
                                          num_kv_heads_,
                                          attn_metadata.enable_cuda_graph);
-  }
-
-  if (use_custom_mask) {
-    auto [result, _] =
-        run_eager_causal_padded_attention(query,
-                                          key,
-                                          value,
-                                          attn_metadata.attn_mask,
-                                          scale_,
-                                          num_heads_,
-                                          num_kv_heads_,
-                                          head_size_);
-    output = result;
-    return;
   }
 
   xllm::kernel::cuda::batch_prefill_with_optional_piecewise_capture(
@@ -414,12 +473,9 @@ void FlashInferAttentionImpl::decoder_forward(
   }
   const AttentionMetadata& decode_attn =
       expanded_decode_meta.has_value() ? *expanded_decode_meta : attn_metadata;
-  // FA3 fast path. Opt-in via env var XLLM_USE_FA3=1. Requires the JIT-built
-  // fmha_fwd_<hash>.so for the current shape to live under
-  // FLASHINFER_OPS_PATH (see /workspace/mate_cached_ops/). When this path is
-  // taken we bypass the FlashInfer fa2 BatchDecode and instead invoke MATE's
-  // FA3 unified attention kernel (warp-specialized, single-pass), which
-  // typically saves ~5-7 ms / decode on Qwen3.5-27B (TP=1).
+  // FA3 decode fast path. Opt-in via env var XLLM_USE_FA3=1. Requires the
+  // JIT-built fmha_fwd_<hash>.so under FLASHINFER_OPS_PATH. Prefill uses a
+  // separate dense ragged URI when the same env is set (see prefill_forward).
   {
     static const bool use_fa3 = [] {
       const char* env = std::getenv("XLLM_USE_FA3");

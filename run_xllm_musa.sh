@@ -387,6 +387,9 @@ run_xllm() {
     cmd+=("--max_tokens_for_graph_mode=${MAX_TOKENS_FOR_GRAPH_MODE:-8192}")
     if [[ "${ENABLE_PREFILL_PIECEWISE_GRAPH:-1}" == "1" ]]; then
       cmd+=("--enable_prefill_piecewise_graph=true")
+    else
+      # Must pass false explicitly — flag default is true.
+      cmd+=("--enable_prefill_piecewise_graph=false")
     fi
     if [[ "${ENABLE_PACKED_PREFILL:-0}" == "1" ]]; then
       cmd+=("--enable_packed_prefill=true")

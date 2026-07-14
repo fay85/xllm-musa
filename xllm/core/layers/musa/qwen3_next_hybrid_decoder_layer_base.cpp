@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 
+#include "util/prefill_breakdown.h"
+
 #include <algorithm>
 #include <optional>
 #include <tuple>
@@ -123,27 +125,36 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
     const ModelInputParams& input_params,
     const torch::Tensor& mrope_cos_sin) {
   // Pre-attention norm
-  if (!residual.has_value()) {
-    residual = x;
-    x = std::get<0>(input_norm_->forward(x));
-  } else {
-    std::tie(x, residual) = input_norm_->forward(x, residual);
+  {
+    PrefillBreakdown::Scope norm_scope(PrefillBreakdown::Bucket::kNorm);
+    if (!residual.has_value()) {
+      residual = x;
+      x = std::get<0>(input_norm_->forward(x));
+    } else {
+      std::tie(x, residual) = input_norm_->forward(x, residual);
+    }
   }
 
   // Attention
   if (attention_) {
+    PrefillBreakdown::Scope attn_scope(PrefillBreakdown::Bucket::kFullAttn);
     x = attention_->forward(
         positions, x, attn_metadata, kv_cache, mrope_cos_sin);
   } else {
+    PrefillBreakdown::Scope attn_scope(PrefillBreakdown::Bucket::kGdnAttn);
     x = linear_attention_->forward(x, attn_metadata, kv_cache, input_params);
   }
 
   // Post-attention norm
-  std::tie(x, residual) = post_norm_->forward(x, residual);
+  {
+    PrefillBreakdown::Scope norm_scope(PrefillBreakdown::Bucket::kNorm);
+    std::tie(x, residual) = post_norm_->forward(x, residual);
+  }
 
-  // MLP forward
+  // MLP forward (sub-buckets live inside DenseMLPImpl::forward).
 #if !defined(XLLM_TORCH_MUSA)
   if (moe_mlp_) {
+    PrefillBreakdown::Scope mlp_scope(PrefillBreakdown::Bucket::kMlpGateUp);
     x = moe_mlp_(x, input_params);
   } else {
 #endif

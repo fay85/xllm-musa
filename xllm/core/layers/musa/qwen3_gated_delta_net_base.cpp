@@ -12,6 +12,8 @@ limitations under the License.
 
 #include "layers/musa/qwen3_gated_delta_net_base.h"
 
+#include "util/prefill_breakdown.h"
+
 #include <glog/logging.h>
 #include <torch/torch.h>
 
@@ -1180,7 +1182,12 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
   CHECK_GT(num_seqs, 1);
   CHECK_EQ(static_cast<int64_t>(cu_host.back()), total_T);
 
-  auto [qkvz_flat, ba_flat] = project_flat_inputs(hidden_states);
+  torch::Tensor qkvz_flat;
+  torch::Tensor ba_flat;
+  {
+    PrefillBreakdown::Scope proj_scope(PrefillBreakdown::Bucket::kGdnProj);
+    std::tie(qkvz_flat, ba_flat) = project_flat_inputs(hidden_states);
+  }
   CHECK_EQ(qkvz_flat.size(0), total_T);
 
   xllm::kernel::FusedQkvzbaSplitReshapeParams fused_params;
@@ -1200,8 +1207,11 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
   fused_params.a_out_buf = a_out_buf_;
 
   torch::Tensor mixed_qkv, z, b, a;
-  std::tie(mixed_qkv, z, b, a) =
-      xllm::kernel::fused_qkvzba_split_reshape_cat(fused_params);
+  {
+    PrefillBreakdown::Scope split_scope(PrefillBreakdown::Bucket::kGdnSplit);
+    std::tie(mixed_qkv, z, b, a) =
+        xllm::kernel::fused_qkvzba_split_reshape_cat(fused_params);
+  }
 
   const int64_t local_nv = num_v_heads_ / tp_size_;
   mixed_qkv = mixed_qkv.view({total_T, mixed_qkv.size(-1)});
@@ -1224,36 +1234,45 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
 
   torch::Tensor has_initial_state =
       input_params.attention.device.kv_cache_tokens_nums > 0;
-  mixed_qkv = xllm::kernel::cuda::causal_conv1d_prefill(
-      mixed_qkv,
-      conv_weight,
-      conv_cache,
-      std::optional<torch::Tensor>(),
-      attn_metadata.q_cu_seq_lens,
-      logical_state_indices,
-      has_initial_state,
-      /*silu_activation=*/true);
+  {
+    PrefillBreakdown::Scope conv_scope(PrefillBreakdown::Bucket::kGdnConv);
+    mixed_qkv = xllm::kernel::cuda::causal_conv1d_prefill(
+        mixed_qkv,
+        conv_weight,
+        conv_cache,
+        std::optional<torch::Tensor>(),
+        attn_metadata.q_cu_seq_lens,
+        logical_state_indices,
+        has_initial_state,
+        /*silu_activation=*/true);
+  }
 
-  xllm::kernel::FusedGdnGatingParams gdn_params;
-  gdn_params.A_log = A_log_;
-  gdn_params.a = a.contiguous();
-  gdn_params.b = b.contiguous();
-  gdn_params.dt_bias = dt_bias_;
-  gdn_params.beta = 1.0f;
-  gdn_params.threshold = 20.0f;
   torch::Tensor g;
   torch::Tensor beta;
-  std::tie(g, beta) = xllm::kernel::fused_gdn_gating(gdn_params);
-  g = g.squeeze(0).contiguous().view({1, total_T, local_nv});
-  beta = beta.squeeze(0).contiguous().view({1, total_T, local_nv});
+  {
+    PrefillBreakdown::Scope gate_scope(PrefillBreakdown::Bucket::kGdnGate);
+    xllm::kernel::FusedGdnGatingParams gdn_params;
+    gdn_params.A_log = A_log_;
+    gdn_params.a = a.contiguous();
+    gdn_params.b = b.contiguous();
+    gdn_params.dt_bias = dt_bias_;
+    gdn_params.beta = 1.0f;
+    gdn_params.threshold = 20.0f;
+    std::tie(g, beta) = xllm::kernel::fused_gdn_gating(gdn_params);
+    g = g.squeeze(0).contiguous().view({1, total_T, local_nv});
+    beta = beta.squeeze(0).contiguous().view({1, total_T, local_nv});
+  }
 
-  // process_mixed_qkv expects [B, dim, T]; packed tokens use B=1.
-  torch::Tensor mixed_for_split = mixed_qkv.unsqueeze(0).transpose(1, 2);
   torch::Tensor processed_q;
   torch::Tensor processed_k;
   torch::Tensor processed_v;
-  std::tie(processed_q, processed_k, processed_v) =
-      process_mixed_qkv(mixed_for_split);
+  {
+    PrefillBreakdown::Scope layout_scope(PrefillBreakdown::Bucket::kGdnLayout);
+    // process_mixed_qkv expects [B, dim, T]; packed tokens use B=1.
+    torch::Tensor mixed_for_split = mixed_qkv.unsqueeze(0).transpose(1, 2);
+    std::tie(processed_q, processed_k, processed_v) =
+        process_mixed_qkv(mixed_for_split);
+  }
   // Guaranteed [1, total_T, H, D].
 
   static const bool force_varlen = [] {
@@ -1300,49 +1319,67 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
     mate_params.v = processed_v;
     mate_params.g = g;
     mate_params.beta = beta;
-    std::tie(core_attn_out, mate_final_state) =
-        xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+    {
+      PrefillBreakdown::Scope mate_scope(PrefillBreakdown::Bucket::kMate);
+      std::tie(core_attn_out, mate_final_state) =
+          xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+    }
     // core_attn_out: [1, total_T, Hv, V]
     core_attn_out = core_attn_out.squeeze(0);
   } else {
     // Path 3.B: one-boundary pad → Mate padded warp → unpad once.
-    mate_params.q = pad_packed_4d_to_rect(processed_q, cu_host, max_T);
-    mate_params.k = pad_packed_4d_to_rect(processed_k, cu_host, max_T);
-    mate_params.v = pad_packed_4d_to_rect(processed_v, cu_host, max_T);
-    mate_params.g = pad_packed_3d_to_rect(g, cu_host, max_T);
-    mate_params.beta = pad_packed_3d_to_rect(beta, cu_host, max_T);
-    // Zero pad-token g/beta so recurrent state is unchanged on padding.
-    if (num_seqs > 1) {
-      for (int64_t b = 0; b < num_seqs; ++b) {
-        const int64_t valid_len =
-            static_cast<int64_t>(cu_host[static_cast<size_t>(b) + 1] -
-                                 cu_host[static_cast<size_t>(b)]);
-        if (valid_len < max_T) {
-          mate_params.g.select(/*dim=*/0, b)
-              .slice(/*dim=*/0, valid_len, max_T)
-              .zero_();
-          mate_params.beta.select(/*dim=*/0, b)
-              .slice(/*dim=*/0, valid_len, max_T)
-              .zero_();
+    {
+      PrefillBreakdown::Scope layout_scope(
+          PrefillBreakdown::Bucket::kGdnLayout);
+      mate_params.q = pad_packed_4d_to_rect(processed_q, cu_host, max_T);
+      mate_params.k = pad_packed_4d_to_rect(processed_k, cu_host, max_T);
+      mate_params.v = pad_packed_4d_to_rect(processed_v, cu_host, max_T);
+      mate_params.g = pad_packed_3d_to_rect(g, cu_host, max_T);
+      mate_params.beta = pad_packed_3d_to_rect(beta, cu_host, max_T);
+      // Zero pad-token g/beta so recurrent state is unchanged on padding.
+      if (num_seqs > 1) {
+        for (int64_t b = 0; b < num_seqs; ++b) {
+          const int64_t valid_len =
+              static_cast<int64_t>(cu_host[static_cast<size_t>(b) + 1] -
+                                   cu_host[static_cast<size_t>(b)]);
+          if (valid_len < max_T) {
+            mate_params.g.select(/*dim=*/0, b)
+                .slice(/*dim=*/0, valid_len, max_T)
+                .zero_();
+            mate_params.beta.select(/*dim=*/0, b)
+                .slice(/*dim=*/0, valid_len, max_T)
+                .zero_();
+          }
         }
       }
     }
-    std::tie(core_attn_out, mate_final_state) =
-        xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
-    core_attn_out = unpad_rect_4d_to_packed(core_attn_out, cu_host).squeeze(0);
+    {
+      PrefillBreakdown::Scope mate_scope(PrefillBreakdown::Bucket::kMate);
+      std::tie(core_attn_out, mate_final_state) =
+          xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+    }
+    {
+      PrefillBreakdown::Scope layout_scope(
+          PrefillBreakdown::Bucket::kGdnLayout);
+      core_attn_out =
+          unpad_rect_4d_to_packed(core_attn_out, cu_host).squeeze(0);
+    }
   }
 
   ssm_cache.index_put_({linear_state_base_indices},
                        mate_final_state.to(ssm_cache.dtype()));
 
-  auto z_reshaped = z.view({-1, z.size(-1)});
-  auto core_attn_out_reshaped =
-      core_attn_out.view({-1, core_attn_out.size(-1)});
-  auto norm_out = norm_->forward(core_attn_out_reshaped, z_reshaped);
-  norm_out = norm_out.view({total_T, local_nv, head_v_dim_});
-  auto rearranged_norm =
-      norm_out.reshape({total_T, local_nv * head_v_dim_});
-  return o_proj_->forward(rearranged_norm);
+  {
+    PrefillBreakdown::Scope o_scope(PrefillBreakdown::Bucket::kGdnOProj);
+    auto z_reshaped = z.view({-1, z.size(-1)});
+    auto core_attn_out_reshaped =
+        core_attn_out.view({-1, core_attn_out.size(-1)});
+    auto norm_out = norm_->forward(core_attn_out_reshaped, z_reshaped);
+    norm_out = norm_out.view({total_T, local_nv, head_v_dim_});
+    auto rearranged_norm =
+        norm_out.reshape({total_T, local_nv * head_v_dim_});
+    return o_proj_->forward(rearranged_norm);
+  }
 }
 #endif  // USE_CUDA || USE_MUSA
 
@@ -1360,8 +1397,13 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
 #endif
   // Save original hidden_states size for potential padding later
   const int64_t original_num_tokens = hidden_states.size(0);
-  auto [qkvz_padded, ba_padded] =
-      project_padded_inputs(hidden_states, attn_metadata);
+  torch::Tensor qkvz_padded;
+  torch::Tensor ba_padded;
+  {
+    PrefillBreakdown::Scope proj_scope(PrefillBreakdown::Bucket::kGdnProj);
+    std::tie(qkvz_padded, ba_padded) =
+        project_padded_inputs(hidden_states, attn_metadata);
+  }
   int64_t batch_size = qkvz_padded.size(0);
   int64_t seq_len = qkvz_padded.size(1);
 
@@ -1425,8 +1467,11 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
 #endif
 
   torch::Tensor mixed_qkv, z, b, a;
-  std::tie(mixed_qkv, z, b, a) =
-      xllm::kernel::fused_qkvzba_split_reshape_cat(fused_params);
+  {
+    PrefillBreakdown::Scope split_scope(PrefillBreakdown::Bucket::kGdnSplit);
+    std::tie(mixed_qkv, z, b, a) =
+        xllm::kernel::fused_qkvzba_split_reshape_cat(fused_params);
+  }
 
   mixed_qkv = mixed_qkv.view({batch_size, seq_len, mixed_qkv.size(-1)});
   z = z.view({batch_size, seq_len, num_v_heads_ / tp_size_, head_v_dim_});
@@ -1532,6 +1577,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                       /*groups=*/static_cast<int64_t>(conv_in.size(1)));
     mixed_qkv = torch::silu(conv_output.slice(2, 0, seq_len));
   } else if (!use_spec_verify && is_any_prefill) {
+    PrefillBreakdown::Scope conv_scope(PrefillBreakdown::Bucket::kGdnConv);
     torch::Tensor conv_input = reshape_qkvz_unpad(attn_metadata, mixed_qkv);
     torch::Tensor has_initial_state =
         input_params.attention.device.kv_cache_tokens_nums > 0;
@@ -1653,6 +1699,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     }
     qwen35_mtp_debug_sync("forward_after_gating");
   } else if (is_any_prefill) {
+    PrefillBreakdown::Scope gate_scope(PrefillBreakdown::Bucket::kGdnGate);
     xllm::kernel::FusedGdnGatingParams gdn_params;
     gdn_params.A_log = A_log_;
     gdn_params.a = a.contiguous().view({-1, a.size(-1)});
@@ -1695,6 +1742,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   torch::Tensor processed_k;
   torch::Tensor processed_v;
   if (!use_flat_mixed_qkv_decode) {
+    PrefillBreakdown::Scope layout_scope(PrefillBreakdown::Bucket::kGdnLayout);
     std::tie(processed_q, processed_k, processed_v) =
         process_mixed_qkv(mixed_qkv);
   }
@@ -1762,8 +1810,11 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       mate_params.cu_seqlens = attn_metadata.q_cu_seq_lens.to(torch::kInt32);
     }
     torch::Tensor mate_final_state;
-    std::tie(core_attn_out, mate_final_state) =
-        xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+    {
+      PrefillBreakdown::Scope mate_scope(PrefillBreakdown::Bucket::kMate);
+      std::tie(core_attn_out, mate_final_state) =
+          xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+    }
 
     ssm_cache.index_put_({linear_state_base_indices},
                          mate_final_state.to(ssm_cache.dtype()));
@@ -2149,6 +2200,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                           .contiguous();
     }
   }
+  PrefillBreakdown::Scope o_scope(PrefillBreakdown::Bucket::kGdnOProj);
   auto z_reshaped = z.view({-1, z.size(-1)});
   auto core_attn_out_reshaped =
       core_attn_out.view({-1, core_attn_out.size(-1)});

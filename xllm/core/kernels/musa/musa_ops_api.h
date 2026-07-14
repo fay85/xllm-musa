@@ -212,6 +212,21 @@ void fa3_decode(const torch::Tensor& query,
                 torch::Tensor& output,
                 torch::Tensor& output_lse);
 
+// Dense ragged FA3 prefill (SGLang flash_attn_varlen_func / mate mutlass).
+// Specialized for bf16, head_dim=256, GQA ratio=6 (Qwen3.5-27B TP=1).
+void fa3_prefill(const torch::Tensor& query,
+                 const torch::Tensor& key,
+                 const torch::Tensor& value,
+                 const torch::Tensor& cu_seqlens_q,
+                 const torch::Tensor& cu_seqlens_k,
+                 int64_t max_seqlen_q,
+                 int64_t max_seqlen_k,
+                 int64_t window_left,
+                 int64_t window_right,
+                 double sm_scale,
+                 torch::Tensor& output,
+                 torch::Tensor& output_lse);
+
 torch::Tensor fa3_decode_scheduler_metadata(
     const torch::Device& device,
     int32_t batch_size,
