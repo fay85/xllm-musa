@@ -301,6 +301,26 @@ void restore_linear_attention_state(
   }
 }
 
+int64_t get_decode_graph_bucket_num_tokens(int64_t num_tokens) {
+  if (::xllm::ExecutionConfig::get_instance()
+          .enable_graph_mode_decode_no_padding()) {
+    return num_tokens;
+  }
+  if (num_tokens <= 1) {
+    return 1;
+  }
+  if (num_tokens <= 2) {
+    return 2;
+  }
+  if (num_tokens <= 4) {
+    return 4;
+  }
+  if (num_tokens <= 8) {
+    return 8;
+  }
+  return ((num_tokens + 15) / 16) * 16;
+}
+
 }  // namespace
 
 // CudaGraphPersistentParam implementation
@@ -311,7 +331,8 @@ CudaGraphPersistentParam::CudaGraphPersistentParam(
     : args_(args), device_(device), options_(options) {
   // Use max_tokens_per_batch for first dimension size
   const int64_t max_tokens_per_batch = options.max_tokens_per_batch();
-  // num_sequences
+  // Round the sequence capacity to the same bucket used by graph execution so
+  // the largest configured decode batch can be padded safely.
   int64_t max_seqs_per_batch;
   if (is_rec_multi_round_mode()) {
     // max_seqs_per_batch is the max sequence count per Batch in a scheduler
@@ -322,6 +343,8 @@ CudaGraphPersistentParam::CudaGraphPersistentParam(
   } else {
     max_seqs_per_batch = options.max_seqs_per_batch();
   }
+  max_seqs_per_batch =
+      get_decode_graph_bucket_num_tokens(max_seqs_per_batch);
   auto tensor_options = torch::TensorOptions().device(device);
 
   const int64_t max_seq_len = args_.max_position_embeddings();
@@ -902,7 +925,6 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
     persistent_positions_
         .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_num_tokens)
         .copy_(positions, /*non_blocking=*/true);
-
     if (piecewise_prefill_pad) {
       // Fill padding positions with last actual token's position so RoPE
       // produces the same output for padding tokens as the last actual
@@ -917,6 +939,12 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
                             /*end=*/actual_num_tokens)
                      .expand({static_cast<int64_t>(padded_num_tokens -
                                                    actual_num_tokens)}));
+    } else if (padded_num_tokens > actual_num_tokens) {
+      persistent_positions_
+          .slice(/*dim=*/0,
+                 /*start=*/actual_num_tokens,
+                 /*end=*/padded_num_tokens)
+          .fill_(0);
     }
   }
 
@@ -936,6 +964,20 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
         << actual_batch_size + 1 << "]";
     kv_seq_lens_.slice(/*dim=*/0, /*start=*/0, /*end=*/actual_batch_size + 1)
         .copy_(params.attention.device.kv_seq_lens, /*non_blocking=*/true);
+    if (params.meta.batch_forward_type.is_decode() &&
+        padded_num_tokens > actual_num_tokens) {
+      kv_seq_lens_
+          .slice(/*dim=*/0,
+                 /*start=*/actual_batch_size + 1,
+                 /*end=*/padded_num_tokens + 1)
+          .copy_(params.attention.device.kv_seq_lens
+                     .slice(/*dim=*/0,
+                            /*start=*/actual_batch_size,
+                            /*end=*/actual_batch_size + 1)
+                     .expand({static_cast<int64_t>(padded_num_tokens) -
+                              actual_batch_size}),
+                 /*non_blocking=*/true);
+    }
 
     VLOG(kGraphExecutorLogVerboseLevel)
         << "copy_ new_cache_slots: src shape="
@@ -964,7 +1006,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
             .slice(/*dim=*/0,
                    /*start=*/actual_num_tokens,
                    /*end=*/padded_num_tokens)
-            .fill_(0);
+            .fill_(params.meta.batch_forward_type.is_decode() ? -1 : 0);
       }
     }
 
@@ -1314,21 +1356,21 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
   } else if (use_llm_decode_fast_path) {
     const uint32_t slot_mapping_tokens =
         padded_num_tokens > 0 ? padded_num_tokens : actual_num_tokens;
-    attn_metadata->q_cu_seq_lens =
-        persistent_decode_qo_indptr(static_cast<uint32_t>(actual_batch_size));
-    attn_metadata->kv_cu_seq_lens =
-        kv_seq_lens(static_cast<uint32_t>(actual_batch_size + 1));
-    attn_metadata->kv_seq_lens =
-        persistent_kv_seq_lens_delta(static_cast<uint32_t>(actual_batch_size));
+    // Decode has one query token per sequence, so its graph-facing metadata
+    // must describe the padded token bucket rather than only the real batch.
+    const uint32_t metadata_batch =
+        padded_num_tokens > 0 ? padded_num_tokens
+                              : static_cast<uint32_t>(actual_batch_size);
+    attn_metadata->q_cu_seq_lens = persistent_decode_qo_indptr(metadata_batch);
+    attn_metadata->kv_cu_seq_lens = kv_seq_lens(metadata_batch + 1);
+    attn_metadata->kv_seq_lens = persistent_kv_seq_lens_delta(metadata_batch);
     attn_metadata->slot_mapping =
         persistent_new_cache_slots(slot_mapping_tokens);
-    attn_metadata->paged_kv_indptr =
-        persistent_paged_kv_indptr(static_cast<uint32_t>(actual_batch_size));
+    attn_metadata->paged_kv_indptr = persistent_paged_kv_indptr(metadata_batch);
     attn_metadata->paged_kv_indices = persistent_paged_kv_indices_;
-    attn_metadata->paged_kv_last_page_len = persistent_paged_kv_last_page_len(
-        static_cast<uint32_t>(actual_batch_size));
-    attn_metadata->qo_indptr =
-        persistent_decode_qo_indptr(static_cast<uint32_t>(actual_batch_size));
+    attn_metadata->paged_kv_last_page_len =
+        persistent_paged_kv_last_page_len(metadata_batch);
+    attn_metadata->qo_indptr = persistent_decode_qo_indptr(metadata_batch);
   } else {
     CHECK(params.attention.device.paged_kv_indptr.defined())
         << "paged_kv_indptr should not be null";
@@ -1347,6 +1389,22 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
                /*start=*/0,
                /*end=*/actual_batch_size + 1)
         .copy_(params.attention.device.paged_kv_indptr, /*non_blocking=*/true);
+    const bool pad_decode_metadata =
+        params.meta.batch_forward_type.is_decode() &&
+        padded_num_tokens > actual_num_tokens;
+    if (pad_decode_metadata) {
+      persistent_paged_kv_indptr_
+          .slice(/*dim=*/0,
+                 /*start=*/actual_batch_size + 1,
+                 /*end=*/padded_num_tokens + 1)
+          .copy_(params.attention.device.paged_kv_indptr
+                     .slice(/*dim=*/0,
+                            /*start=*/actual_batch_size,
+                            /*end=*/actual_batch_size + 1)
+                     .expand({static_cast<int64_t>(padded_num_tokens) -
+                              actual_batch_size}),
+                 /*non_blocking=*/true);
+    }
     CHECK(params.attention.device.paged_kv_indices.defined())
         << "paged_kv_indices should not be null";
     const int64_t actual_indices_size =
@@ -1372,19 +1430,40 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
                /*end=*/actual_batch_size)
         .copy_(params.attention.device.paged_kv_last_page_len,
                /*non_blocking=*/true);
-    attn_metadata->kv_seq_lens =
-        torch::diff(kv_seq_lens(/*actual_batch_size=*/actual_batch_size + 1));
-    attn_metadata->paged_kv_indptr =
-        persistent_paged_kv_indptr(actual_batch_size);
+    if (pad_decode_metadata) {
+      persistent_paged_kv_last_page_len_
+          .slice(/*dim=*/0,
+                 /*start=*/actual_batch_size,
+                 /*end=*/padded_num_tokens)
+          .fill_(1);
+    }
+    const int64_t metadata_batch =
+        params.meta.batch_forward_type.is_decode() && padded_num_tokens > 0
+            ? padded_num_tokens
+            : actual_batch_size;
+    if (params.meta.batch_forward_type.is_decode()) {
+      attn_metadata->q_cu_seq_lens =
+          persistent_decode_qo_indptr(metadata_batch);
+      attn_metadata->kv_cu_seq_lens = kv_seq_lens(metadata_batch + 1);
+      torch::Tensor kv_seq_lens_delta =
+          persistent_kv_seq_lens_delta(metadata_batch);
+      kv_seq_lens_delta.copy_(torch::diff(attn_metadata->kv_cu_seq_lens),
+                              /*non_blocking=*/true);
+      attn_metadata->kv_seq_lens = kv_seq_lens_delta;
+    } else {
+      attn_metadata->kv_seq_lens =
+          torch::diff(kv_seq_lens(/*actual_batch_size=*/metadata_batch + 1));
+    }
+    attn_metadata->paged_kv_indptr = persistent_paged_kv_indptr(metadata_batch);
     attn_metadata->paged_kv_indices = persistent_paged_kv_indices_;
     attn_metadata->paged_kv_last_page_len =
-        persistent_paged_kv_last_page_len(actual_batch_size);
+        persistent_paged_kv_last_page_len(metadata_batch);
     if (attn_metadata->is_chunked_prefill) {
       attn_metadata->qo_indptr =
           q_seq_lens(/*actual_batch_size=*/actual_batch_size + 1);
     } else {
       attn_metadata->qo_indptr =
-          persistent_decode_qo_indptr(actual_batch_size);
+          persistent_decode_qo_indptr(metadata_batch);
     }
   }
   // Update plan_info if attn_metadata exists and enable_cuda_graph is true
@@ -3047,24 +3126,8 @@ uint32_t CudaGraphExecutorImpl::get_bucket_num_tokens(uint32_t num_tokens,
     // Above the ladder: keep exact size; caller already gates on max tokens.
     return num_tokens;
   }
-
-  // no_padding only works for decode
-  if (::xllm::ExecutionConfig::get_instance()
-          .enable_graph_mode_decode_no_padding()) {
-    return num_tokens;
-  }
-  if (num_tokens <= 1) {
-    return 1;
-  } else if (num_tokens <= 2) {
-    return 2;
-  } else if (num_tokens <= 4) {
-    return 4;
-  } else if (num_tokens <= 8) {
-    return 8;
-  } else {
-    // For num_tokens > 8, use multiples of 16
-    return ((num_tokens + 15) / 16) * 16;
-  }
+  return static_cast<uint32_t>(
+      get_decode_graph_bucket_num_tokens(num_tokens));
 }
 
 // NOTE: REGISTER_EXECUTOR for CudaGraphExecutorImpl lives in
