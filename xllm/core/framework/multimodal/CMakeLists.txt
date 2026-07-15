@@ -37,6 +37,6 @@ cc_library(
     ${FFMPEG_LIBRARIES}
 )
 
-if(NOT XLLM_TORCH_MUSA)
+if(NOT USE_MUSA)
   target_link_libraries(multimodal PRIVATE ${OpenCV_LIBS})
 endif()

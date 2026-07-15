@@ -23,7 +23,7 @@ limitations under the License.
 #include <string>
 #include <vector>
 
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include <musa_runtime_api.h>
 #elif defined(USE_CUDA)
 #include <c10/cuda/CUDAException.h>
@@ -50,7 +50,7 @@ void qwen35_mtp_model_debug_sync(const char* stage) {
     return;
   }
   LOG(INFO) << "[Qwen3.5 MTP model debug] sync begin: " << stage;
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   const musaError_t err = musaDeviceSynchronize();
   CHECK_EQ(err, musaSuccess) << musaGetErrorString(err);
 #else

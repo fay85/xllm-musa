@@ -29,7 +29,7 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/model_config.h"
 #include "platform/stream.h"
-#if defined(USE_CUDA) && defined(XLLM_TORCH_MUSA)
+#if defined(USE_CUDA) && defined(USE_MUSA)
 #include <musa_runtime.h>
 #endif
 #if defined(USE_CUDA)
@@ -1295,7 +1295,7 @@ inline torch::Tensor materialize_tensor_from_current_cursor(
 
   auto options = torch::TensorOptions().dtype(meta.dtype).device(torch::kCUDA);
   auto tensor = torch::empty(meta.shape, options);
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   musaError_t err;
   if (stream != nullptr) {
     err = musaMemcpyAsync(tensor.data_ptr(),

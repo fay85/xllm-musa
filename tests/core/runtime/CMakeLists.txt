@@ -105,7 +105,7 @@ if(USE_MLU)
 endif()
 
 if(USE_CUDA)
-  if(XLLM_TORCH_MUSA)
+  if(USE_MUSA)
     set(CUDA_GRAPH_EXECUTOR_TEST_PLATFORM_DEPS :musa_layers torch_musa)
   else()
     set(CUDA_GRAPH_EXECUTOR_TEST_PLATFORM_DEPS :cuda_layers)

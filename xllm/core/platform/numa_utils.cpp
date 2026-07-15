@@ -15,7 +15,7 @@ limitations under the License.
 
 #include "numa_utils.h"
 
-#if defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)
+#if defined(USE_CUDA) && !defined(USE_MUSA)
 #include <cuda_runtime.h>
 #elif defined(USE_CUDA)
 #include <musa_runtime.h>
@@ -183,7 +183,7 @@ int32_t get_device_numa_node(int32_t device_index) {
     return -1;
   }
 
-#if defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)
+#if defined(USE_CUDA) && !defined(USE_MUSA)
   char pci_bus_id[32] = {0};
   cudaError_t ret =
       cudaDeviceGetPCIBusId(pci_bus_id, sizeof(pci_bus_id), device_index);

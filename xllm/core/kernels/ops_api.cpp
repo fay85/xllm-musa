@@ -23,7 +23,7 @@ limitations under the License.
 #include "npu/xllm_ops/xllm_ops_api.h"
 #include "triton_npu/torch_api/triton_ops_api.h"
 #elif defined(USE_CUDA)
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include "musa/musa_ops_api.h"
 #else
 #include "cuda/attention_runner.h"
@@ -352,7 +352,7 @@ void fused_layernorm(FusedLayerNormParams& params) {
     params.output += params.beta.value();
   }
 #elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   if (params.mode != "rmsnorm") {
     NOT_IMPLEMENTED();
   }
@@ -612,7 +612,7 @@ std::tuple<torch::Tensor, torch::Tensor> moe_active_topk(
                               params.route_scale,
                               params.e_score_correction_bias);
 #elif (defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)) && \
-    !defined(XLLM_TORCH_MUSA)
+    !defined(USE_MUSA)
   return cuda::moe_fused_topk(params.input,
                               params.topk,
                               params.normalize,
@@ -1188,7 +1188,7 @@ torch::Tensor hc_post(HcPostParams& params) {
 
 std::tuple<torch::Tensor, torch::Tensor> fp8_scaled_quantize(
     Fp8ScaledQuantizeParams& params) {
-#if defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)
+#if defined(USE_CUDA) && !defined(USE_MUSA)
   return cuda::fp8_scaled_quantize(params.input, params.output, params.scale);
 #else
   LOG(FATAL) << "fp8_scaled_quantize is only supported on CUDA";
@@ -1303,7 +1303,7 @@ torch::Tensor fused_sigmoid_gating_delta_rule_update(
 }
 
 torch::Tensor fp8_scaled_matmul(Fp8ScaledMatmulParams& params) {
-#if defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)
+#if defined(USE_CUDA) && !defined(USE_MUSA)
   auto out_2d = cuda::fp8_scaled_matmul(params.a,
                                         params.b,
                                         params.a_scale,
@@ -1325,7 +1325,7 @@ torch::Tensor fp8_scaled_matmul(Fp8ScaledMatmulParams& params) {
 }
 
 torch::Tensor fp8_block_matmul(Fp8BlockMatmulParams& params) {
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   return cuda::gemm_fp8_nt_groupwise(params.a,
                                      params.b,
                                      params.a_scale,
@@ -1342,7 +1342,7 @@ torch::Tensor fp8_block_matmul(Fp8BlockMatmulParams& params) {
 std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size) {
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   return cuda::per_token_group_quant_fp8(input, group_size);
 #else
   LOG(FATAL) << "per_token_group_quant_fp8 is only supported on MUSA "
@@ -1352,7 +1352,7 @@ std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
 }
 
 void static_scaled_fp8_quant(StaticScaledFp8QuantParams& params) {
-#if defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)
+#if defined(USE_CUDA) && !defined(USE_MUSA)
   cuda::static_scaled_fp8_quant(params.output, params.input, params.scale);
 #else
   LOG(FATAL) << "static_scaled_fp8_quant is only supported on CUDA";
@@ -1360,7 +1360,7 @@ void static_scaled_fp8_quant(StaticScaledFp8QuantParams& params) {
 }
 
 torch::Tensor rms_norm_static_fp8_quant(RmsNormStaticFp8QuantParams& params) {
-#if defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)
+#if defined(USE_CUDA) && !defined(USE_MUSA)
   auto org_shape = params.input.sizes().vec();
   auto hidden_size = params.input.size(-1);
 
@@ -1382,7 +1382,7 @@ torch::Tensor rms_norm_static_fp8_quant(RmsNormStaticFp8QuantParams& params) {
 
 std::tuple<torch::Tensor, torch::Tensor> fused_add_rms_norm_static_fp8_quant(
     FusedAddRmsNormStaticFp8QuantParams& params) {
-#if defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)
+#if defined(USE_CUDA) && !defined(USE_MUSA)
   auto org_shape = params.input.sizes().vec();
   auto hidden_size = params.input.size(-1);
 

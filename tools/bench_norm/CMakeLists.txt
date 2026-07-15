@@ -6,7 +6,7 @@ include(cc_library)
 # include headers (c10/cuda/*) are read raw and reference cudaError_t /
 # cudaStream_t -- the musamapping plugin is what rewrites those to musa-prefixed
 # variants and path-redirects c10/cuda/ to torch_musa/csrc/core/.
-if(XLLM_TORCH_MUSA)
+if(USE_MUSA)
   if(DEFINED ENV{MUSAMAPPING_PATH} AND NOT "$ENV{MUSAMAPPING_PATH}" STREQUAL "")
     set(_XLLM_MUSAMAPPING_PATH "$ENV{MUSAMAPPING_PATH}")
   elseif(DEFINED _XLLM_MUSA_HOME)

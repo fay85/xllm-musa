@@ -37,7 +37,7 @@ limitations under the License.
 #include "core/framework/kv_cache/kv_cache.h"
 #include "core/framework/model/causal_lm.h"
 #include "core/framework/model/model_input_params.h"
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include "core/kernels/musa/llm_decode_metadata_update.h"
 #include "core/kernels/musa/piecewise_graphs.h"
 #else
@@ -601,7 +601,7 @@ class CudaGraphExecutorImpl : public ExecutorImpl {
 // the whole TU as unused). At runtime the factory's emplace() dedupes the
 // duplicates so only the first registration takes effect. Picking the backend
 // key at compile time avoids the macro's class##_registered symbol collision.
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 REGISTER_EXECUTOR("musa", CudaGraphExecutorImpl);
 #else
 REGISTER_EXECUTOR("cuda", CudaGraphExecutorImpl);

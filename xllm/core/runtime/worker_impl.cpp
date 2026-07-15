@@ -28,7 +28,7 @@ limitations under the License.
 #include "kernels/npu/xllm_ops/xllm_ops_api.h"
 #elif defined(USE_MLU)
 #include <framework/core/caching_allocator.h>
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
 #include <c10/cuda/CUDACachingAllocator.h>
 #endif
 
@@ -55,12 +55,12 @@ limitations under the License.
 #if defined(USE_NPU)
 #include "platform/npu/device_capture_lock.h"
 #elif defined(USE_CUDA) || defined(USE_DCU)
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include "kernels/musa/musa_ops_api.h"
 #else
 #include "kernels/cuda/cuda_ops_api.h"
 #endif
-#if !defined(XLLM_TORCH_MUSA)
+#if !defined(USE_MUSA)
 #include "platform/cuda_profiler.h"
 #endif
 #include "platform/torch_profiler.h"
@@ -161,7 +161,7 @@ void ensure_forward_input_device_tensors(ForwardInput& input,
                                   device);
 }
 
-#if defined(USE_NPU) || defined(XLLM_TORCH_MUSA)
+#if defined(USE_NPU) || defined(USE_MUSA)
 void prepare_input_params_for_linear_attention(ModelInputParams& input_params) {
   const std::vector<int32_t>& host_q_seq_lens =
       input_params.attention.host.q_seq_lens;
@@ -577,7 +577,7 @@ ForwardInput WorkerImpl::update_input_by_last_step_output(
   xllm::kernel::npu::replace_token(inputs.token_ids,
                                    last_step_output_.sample_output.next_tokens,
                                    /*synchronize_stream=*/true);
-#elif defined(XLLM_TORCH_MUSA)
+#elif defined(USE_MUSA)
   xllm::kernel::musa::replace_token(
       inputs.token_ids,
       last_step_output_.sample_output.next_tokens,
@@ -955,7 +955,7 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
     }
 
 #endif
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
     if (has_linear_attention_layers(context_.get_model_args())) {
       prepare_input_params_for_linear_attention(processed_input.input_params);
     }
@@ -1081,7 +1081,7 @@ bool WorkerImpl::can_use_cuda_block_copy_kernel(
 void WorkerImpl::execute_cuda_block_copy_kernel(
     const ModelInputParams& input_params) {
   CHECK(!kv_caches_.empty());
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   xllm::kernel::musa::block_copy(
 #else
   xllm::kernel::cuda::block_copy(
@@ -1270,8 +1270,8 @@ bool WorkerImpl::start_profile() {
 #if defined(USE_CUDA)
   const auto& cfg = ProfileConfig::get_instance();
   if (cfg.profile_backend() == "cuda") {
-#if defined(XLLM_TORCH_MUSA)
-    LOG(WARNING) << "CudaProfiler is not available with XLLM_TORCH_MUSA; use torch backend.";
+#if defined(USE_MUSA)
+    LOG(WARNING) << "CudaProfiler is not available with USE_MUSA; use torch backend.";
     return false;
 #else
     // Capture-range only; requires the server to run under nsys.
@@ -1297,7 +1297,7 @@ bool WorkerImpl::stop_profile() {
 #if defined(USE_CUDA)
   const auto& cfg = ProfileConfig::get_instance();
   if (cfg.profile_backend() == "cuda") {
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
     return false;
 #else
     return CudaProfiler::get_instance().stop();

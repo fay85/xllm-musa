@@ -111,7 +111,7 @@ void apply_top_k_top_p(torch::Tensor& logits,
   }
 #endif
 
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   if (top_k.defined() || top_p.defined()) {
     const int64_t vocab = logits.size(-1);
     const float ninf = -std::numeric_limits<float>::infinity();

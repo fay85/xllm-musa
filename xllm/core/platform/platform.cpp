@@ -21,7 +21,7 @@ limitations under the License.
 #include <torch_npu/csrc/core/npu/NPUCachingAllocator.h>
 #elif defined(USE_MLU)
 #include <framework/core/device.h>
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
 #include <c10/cuda/CUDACachingAllocator.h>
 
 #include "core/platform/cuda/cuda_utils.h"
@@ -54,7 +54,7 @@ std::string Platform::type_str() {
   return "npu";
 #elif defined(USE_MLU)
   return "mlu";
-#elif defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)
+#elif defined(USE_CUDA) && !defined(USE_MUSA)
   return "cuda";
 #elif defined(USE_ILU)
   return "ilu";
@@ -68,7 +68,7 @@ std::string Platform::type_str() {
 torch::DeviceType Platform::type_torch() {
 #if defined(USE_NPU) || defined(USE_MLU)
   return torch::kPrivateUse1;
-#elif (defined(USE_CUDA) || defined(USE_ILU) || defined(USE_DCU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU) || defined(USE_DCU)) && !defined(USE_MUSA)
   return torch::kCUDA;
 #elif defined(USE_CUDA) || defined(USE_MUSA)
   return torch::kMUSA;
@@ -80,7 +80,7 @@ int32_t Platform::device_count() {
   return static_cast<int32_t>(c10_npu::device_count());
 #elif defined(USE_MLU)
   return static_cast<int32_t>(torch_mlu::device_count());
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
   return static_cast<int32_t>(c10::cuda::device_count());
 #elif defined(USE_CUDA) || defined(USE_MUSA)
   return static_cast<int32_t>(c10::musa::device_count());

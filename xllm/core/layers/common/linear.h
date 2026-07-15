@@ -159,7 +159,7 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
   bool block_fp8_resolved_unquantized_ = false;
 
   // Persistent output buffer for graph-capture-safe matmul on USE_CUDA +
-  // XLLM_TORCH_MUSA. Lazily allocated for small batch sizes (<=
+  // USE_MUSA. Lazily allocated for small batch sizes (<=
   // kMatmulOutputBufMaxRows) and grown-only, so the same memory address is
   // reused across decode buckets captured largest-first. Larger inputs
   // (e.g. prefill) skip the buffer and use F::linear normally.

@@ -57,7 +57,7 @@ size_t get_recommended_granularity(int32_t device_id) {
   int ret = cnMemGetAllocationGranularity(
       &granularity_size, &prop, CN_MEM_ALLOC_GRANULARITY_RECOMMENDED);
   CHECK_EQ(ret, 0) << "Failed to get allocation granularity";
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
   CUmemAllocationProp prop = {};
   prop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
   prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
@@ -150,7 +150,7 @@ void create_phy_mem_handle(PhyMemHandle& phy_mem_handle,
   accessDesc.location.id = device_id;
   accessDesc.accessFlags = CN_MEM_ACCESS_FLAGS_PROT_READWRITE;
   ret = cnMemSetAccess(phy_mem_handle, size, &accessDesc, /*count=*/1);
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
   CUmemAllocationProp prop = {};
   prop.type = CU_MEM_ALLOCATION_TYPE_PINNED;
   prop.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
@@ -185,7 +185,7 @@ void create_vir_ptr(VirPtr& vir_ptr, size_t aligned_size) {
   ret = aclrtReserveMemAddress(&vir_ptr, aligned_size, 0, nullptr, 0);
 #elif defined(USE_MLU)
   ret = cnMemAddressReserve(&vir_ptr, aligned_size, 0, 0, 0);
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
   ret = cuMemAddressReserve(&vir_ptr, aligned_size, 0, 0, 0);
 #elif defined(USE_DCU)
   ret = hipMemAddressReserve(&vir_ptr, aligned_size, 0, 0, 0);
@@ -201,7 +201,7 @@ void release_phy_mem_handle(PhyMemHandle& phy_mem_handle) {
   ret = aclrtFreePhysical(phy_mem_handle);
 #elif defined(USE_MLU)
   ret = cnMemRelease(phy_mem_handle);
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
   ret = cuMemRelease(phy_mem_handle);
 #elif defined(USE_DCU)
   ret = hipMemRelease(phy_mem_handle);
@@ -217,7 +217,7 @@ void release_vir_ptr(VirPtr& vir_ptr, size_t aligned_size) {
   ret = aclrtReleaseMemAddress(vir_ptr);
 #elif defined(USE_MLU)
   ret = cnMemAddressFree(vir_ptr, aligned_size);
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
   ret = cuMemAddressFree(vir_ptr, aligned_size);
 #elif defined(USE_DCU)
   ret = hipMemAddressFree(vir_ptr, aligned_size);
@@ -244,7 +244,7 @@ void map(VirPtr& vir_ptr,
   ret = aclrtMapMem(vir_ptr, granularity_size, 0, phy_mem_handle, 0);
 #elif defined(USE_MLU)
   ret = cnMemMap(vir_ptr, granularity_size, 0, phy_mem_handle, 0);
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
   ret = cuMemMap(vir_ptr, granularity_size, 0, phy_mem_handle, 0);
   CHECK_EQ(ret, 0) << "Failed to map virtual memory to physical memory";
 
@@ -300,7 +300,7 @@ void unmap(VirPtr& vir_ptr, size_t aligned_size) {
   int ret = 0;
   ret = cnMemUnmap(vir_ptr, aligned_size);
   CHECK_EQ(ret, 0) << "Failed to unmap virtual memory from physical memory";
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
   int ret = 0;
   ret = cuMemUnmap(vir_ptr, aligned_size);
   CHECK_EQ(ret, 0) << "Failed to unmap virtual memory from physical memory";

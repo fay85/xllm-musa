@@ -15,7 +15,7 @@ limitations under the License.
 
 #pragma once
 
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include <torch_musa/csrc/distributed/ProcessGroupMCCL.h>
 #else
 #include <torch/csrc/distributed/c10d/ProcessGroupNCCL.hpp>
@@ -36,7 +36,7 @@ class ProcessGroupImpl : public ProcessGroup {
                    const std::string& group_name,
                    const torch::Device& device)
       : ProcessGroup(global_rank, world_size, device) {
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
     c10::intrusive_ptr<c10d::ProcessGroupMCCL::Options> pg_options =
         c10d::ProcessGroupMCCL::Options::create();
 #else
@@ -50,14 +50,14 @@ class ProcessGroupImpl : public ProcessGroup {
     if (world_size != rank_size) {
       auto [local_rank, group_ranks] =
           get_group_rank(world_size, global_rank, rank_size, trans);
-#if !defined(XLLM_TORCH_MUSA)
+#if !defined(USE_MUSA)
       pg_options->global_ranks_in_group = group_ranks;
 #endif
       rank = local_rank;
     }
 
     auto store = create_tcp_store(host, port, rank);
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
     pg_ = std::make_unique<c10d::ProcessGroupMCCL>(
         store, rank, rank_size, pg_options);
 #else

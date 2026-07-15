@@ -1,14 +1,11 @@
-if(USE_CUDA)
+# MUSA uses mcc_wrapper with musamapping plugin for CUDA compatibility
+if(USE_MUSA)
   if(DEFINED ENV{MUSA_HOME})
     set(_XLLM_MUSA_HOME "$ENV{MUSA_HOME}")
   else()
     set(_XLLM_MUSA_HOME "/usr/local/musa")
   endif()
-  if(XLLM_TORCH_MUSA)
-    set(CMAKE_CXX_COMPILER "${_XLLM_MUSA_HOME}/tools/musamapping/mcc_wrapper")
-  else()
-    set(CMAKE_CXX_COMPILER "${_XLLM_MUSA_HOME}/bin/mcc")
-  endif()
+  set(CMAKE_CXX_COMPILER "${_XLLM_MUSA_HOME}/tools/musamapping/mcc_wrapper")
 endif()
 
 include(cc_binary)
@@ -16,8 +13,8 @@ include(cc_shared_library)
 
 include_directories(.)
 
-# xllm-musa: musify only on kernel + cuda-graph targets (not server/Mooncake TUs).
-if(XLLM_TORCH_MUSA)
+# MUSA: musify only on kernel + cuda-graph targets (not server/Mooncake TUs).
+if(USE_MUSA)
   if(DEFINED ENV{MUSAMAPPING_PATH} AND NOT "$ENV{MUSAMAPPING_PATH}" STREQUAL "")
     set(_XLLM_MUSAMAPPING_PATH "$ENV{MUSAMAPPING_PATH}")
   elseif(DEFINED _XLLM_MUSA_HOME)
@@ -53,7 +50,7 @@ include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
 # 0526 reference: mcc_wrapper build skips -Werror; suppress known mcc noise only.
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-  if(NOT XLLM_TORCH_MUSA)
+  if(NOT USE_MUSA)
     add_compile_options(
       $<$<COMPILE_LANGUAGE:CXX>:-Werror>
       $<$<COMPILE_LANGUAGE:C>:-Werror>
@@ -73,7 +70,7 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     )
   endif()
 
-  if(XLLM_TORCH_MUSA OR DEFINED ENV{MUSAMAPPING_PATH} OR CMAKE_CXX_COMPILER MATCHES "mcc_wrapper")
+  if(USE_MUSA OR DEFINED ENV{MUSAMAPPING_PATH} OR CMAKE_CXX_COMPILER MATCHES "mcc_wrapper")
     add_compile_options(
       -Wno-sign-conversion
       -Wno-conversion
@@ -146,7 +143,7 @@ endif()
 
 # link brpc
 target_link_libraries(xllm PRIVATE glog::glog brpc leveldb::leveldb protobuf::libprotobuf ${FFMPEG_LIBRARIES})
-if(NOT XLLM_TORCH_MUSA)
+if(NOT USE_MUSA)
   target_link_libraries(xllm PRIVATE ${OpenCV_LIBS})
 endif()
 add_dependencies(xllm brpc-static)
@@ -161,13 +158,11 @@ if(USE_MSPTI)
   list(APPEND COMMON_LIBS mspti)
 endif()
 target_link_libraries(xllm PUBLIC ${COMMON_LIBS})
-if (USE_MUSA)
-  target_link_libraries(xllm PUBLIC atomic musa_python torch_cpu c10)
-elseif(XLLM_TORCH_MUSA)
+if(USE_MUSA)
   target_link_libraries(xllm PUBLIC atomic musa_python torch_cpu c10)
 endif()
 
-if(USE_CUDA AND XLLM_TORCH_MUSA)
+if(USE_MUSA)
   # cuda_graph_executor_impl.cpp's only externally-observable effect is the
   # REGISTER_EXECUTOR static initializer in cuda_graph_executor_impl.h. With
   # normal lazy static-archive linking, no symbol references it so the linker

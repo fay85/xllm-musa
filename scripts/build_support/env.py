@@ -219,10 +219,8 @@ def set_ilu_envs() -> None:
     os.environ["IXFORMER_INSTALL_PATH"] = get_ixformer_root_path() or ""
 
 
-
-
-def set_torch_musa_cuda_envs() -> None:
-    """Configure USE_CUDA + mcc_wrapper build on MUSA hardware."""
+def set_musa_envs() -> None:
+    """Configure MUSA build with mcc_wrapper + musamapping plugin for CUDA compatibility."""
     set_common_envs()
     musa_home = os.getenv("MUSA_HOME", "/usr/local/musa")
     os.environ["MUSA_HOME"] = musa_home
@@ -232,6 +230,7 @@ def set_torch_musa_cuda_envs() -> None:
     os.environ["MUSA_TOOLKIT_ROOT_DIR"] = musa_home
     os.environ["MUSAMAPPING_PATH"] = os.path.join(musa_home, "tools/musamapping")
     os.environ["PYTORCH_MUSA_INSTALL_PATH"] = get_torch_musa_root_path() or ""
+
     import torch_musa
     from torch_musa.utils.musa_extension import MUSA_HOME as _MUSA_HOME
 
@@ -239,6 +238,9 @@ def set_torch_musa_cuda_envs() -> None:
     os.environ["TorchMusa_DIR"] = (
         torch_musa.core.cmake_prefix_path + "/TorchMusa"
     )
+    os.environ["MKL_DIR"] = "/opt/intel/oneapi/mkl/lib/cmake/mkl"
+    os.environ["MKLROOT"] = "/opt/intel/oneapi/mkl"
+
     if not os.getenv("MUSA_HOME"):
         os.environ["MUSA_HOME"] = _MUSA_HOME
 
@@ -251,15 +253,3 @@ def set_torch_musa_cuda_envs() -> None:
     ):
         if path and os.path.isdir(path):
             prepend_path_env("LD_LIBRARY_PATH", path)
-
-def set_musa_envs() -> None:
-    set_common_envs()
-    os.environ["PYTORCH_MUSA_INSTALL_PATH"] = get_torch_musa_root_path() or ""
-    import torch_musa
-    from torch_musa.utils.musa_extension import MUSA_HOME
-    os.environ["TORCH_MUSA_PYTHONPATH"] = torch_musa.core.cmake_prefix_path
-    os.environ["MUSA_TOOLKIT_ROOT_DIR"] = MUSA_HOME
-    os.environ["MKL_DIR"] = "/opt/intel/oneapi/mkl/lib/cmake/mkl"
-    os.environ["MKLROOT"] = "/opt/intel/oneapi/mkl"
-    os.environ["TorchMusa_DIR"] = torch_musa.core.cmake_prefix_path + "/TorchMusa"
-    os.environ["MUSAMAPPING_PATH"] = MUSA_HOME + "/tools/musamapping"

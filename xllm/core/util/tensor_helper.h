@@ -358,7 +358,7 @@ inline torch::Tensor get_tensor_from_blob(const std::vector<int64_t>& dims,
 #elif defined(USE_CUDA) || defined(USE_MLU) || defined(USE_DCU)
   auto options = torch::TensorOptions()
                      .dtype(dtype)
-#if (defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)) || defined(USE_DCU)
+#if (defined(USE_CUDA) && !defined(USE_MUSA)) || defined(USE_DCU)
                      .device(torch::kCUDA)
 #else
                      .device(torch::kPrivateUse1)
@@ -381,7 +381,7 @@ inline torch::Tensor get_tensor_from_blob(const std::vector<int64_t>& dims,
 
   auto options = torch::TensorOptions()
                      .dtype(dtype)
-#if (defined(USE_CUDA) && !defined(XLLM_TORCH_MUSA)) || defined(USE_DCU)
+#if (defined(USE_CUDA) && !defined(USE_MUSA)) || defined(USE_DCU)
                      .device(torch::kCUDA)
 #else
                      .device(torch::kPrivateUse1)

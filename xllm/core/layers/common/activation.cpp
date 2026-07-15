@@ -21,7 +21,7 @@ limitations under the License.
 #include <cstdlib>
 #include <string>
 
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include <ATen/ops/swish_glu.h>
 #endif
 
@@ -72,7 +72,7 @@ void ActivationImpl::forward(torch::Tensor& input, torch::Tensor& output) {
     return;
   }
 
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   // MUSA muDNN SwishGLU (aten::swish_glu) is ~4x faster than the custom
   // silu_and_mul kernel at Qwen3.5-27B prefill M≈2560 (≈0.19 vs ≈0.83 ms/layer;
   // ≈41 ms of the C=5 TTFT residual vs SGLang). SGLang's paired MUSA path uses

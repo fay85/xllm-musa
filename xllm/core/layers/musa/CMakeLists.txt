@@ -1,39 +1,8 @@
 include(cc_library)
 
-set(_MUSA_LAYERS_HDRS)
-set(_MUSA_LAYERS_SRCS)
-set(_MUSA_LAYERS_DEPS)
-
-if(USE_MUSA AND NOT XLLM_TORCH_MUSA)
-  # Native MTTOplib attention/MLP path (not used with Mate/FlashInfer).
-  list(APPEND _MUSA_LAYERS_HDRS
-    ../cuda/flashinfer_workspace.h
-    layer_base.h
-    qwen3_decoder_layer_impl.h
-    lm_head_impl.h
-    attention.h
-    mlp.h
-  )
-  list(APPEND _MUSA_LAYERS_SRCS
-    ../cuda/flashinfer_workspace.cpp
-    qwen3_decoder_layer_impl.cpp
-    lm_head_impl.cpp
-    attention.cpp
-    mlp.cpp
-  )
-  list(APPEND _MUSA_LAYERS_DEPS
-    kv_cache
-    state_dict
-    model
-    common
-    torch
-    torch_musa
-    MTTOplib
-  )
-endif()
-
-if(XLLM_TORCH_MUSA)
-  list(APPEND _MUSA_LAYERS_HDRS
+# MUSA layers - FlashInfer/Mate path (MTTOplib removed)
+if(USE_MUSA)
+  set(_MUSA_LAYERS_HDRS
     attention.h
     flashinfer_attention.h
     flashinfer_planinfo.h
@@ -46,7 +15,7 @@ if(XLLM_TORCH_MUSA)
     qwen3_next_decoder_layer_impl.h
     qwen3_5_decoder_layer_impl.h
   )
-  list(APPEND _MUSA_LAYERS_SRCS
+  set(_MUSA_LAYERS_SRCS
     attention.cpp
     flashinfer_attention.cpp
     flashinfer_planinfo.cpp
@@ -58,7 +27,7 @@ if(XLLM_TORCH_MUSA)
     qwen3_next_decoder_layer_impl.cpp
     qwen3_5_decoder_layer_impl.cpp
   )
-  list(APPEND _MUSA_LAYERS_DEPS
+  set(_MUSA_LAYERS_DEPS
     :cuda_kernels
     :common_layers
     :parallel_state
@@ -70,9 +39,7 @@ if(XLLM_TORCH_MUSA)
     gflags::gflags
     torch
   )
-endif()
 
-if(_MUSA_LAYERS_HDRS)
   cc_library(
     NAME
       musa_layers
@@ -81,7 +48,7 @@ if(_MUSA_LAYERS_HDRS)
     SRCS
       ${_MUSA_LAYERS_SRCS}
     COPTS
-      $<$<BOOL:${XLLM_TORCH_MUSA}>:${_XLLM_MUSIFY_COPTS}>
+      ${_XLLM_MUSIFY_COPTS}
     DEPS
       "-Wl,--whole-archive"
       "-Wl,--no-whole-archive"

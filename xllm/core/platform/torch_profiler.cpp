@@ -33,7 +33,7 @@ namespace tp = torch::profiler::impl;
 namespace ap = torch::autograd::profiler;
 
 tp::ActivityType gpu_activity_type() {
-#if defined(USE_MUSA) || defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA) || defined(USE_MUSA)
   return tp::ActivityType::PrivateUse1;
 #else
   return tp::ActivityType::CUDA;

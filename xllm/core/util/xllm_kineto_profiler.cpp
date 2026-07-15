@@ -29,7 +29,7 @@ limitations under the License.
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
 #include <ATen/record_function.h>
-#if defined(USE_MUSA) || defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA) || defined(USE_MUSA)
 #include <c10/musa/MUSAFunctions.h>
 #else
 #include <c10/cuda/CUDAFunctions.h>
@@ -105,7 +105,7 @@ void ensure_parent_dir(const std::string& path) {
 }
 
 void sync_gpu() {
-#if defined(USE_MUSA) || defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA) || defined(USE_MUSA)
   c10::musa::device_synchronize();
 #else
   c10::cuda::device_synchronize();
@@ -113,7 +113,7 @@ void sync_gpu() {
 }
 
 torch::profiler::impl::ActivityType gpu_activity_type() {
-#if defined(USE_MUSA) || defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA) || defined(USE_MUSA)
   return torch::profiler::impl::ActivityType::PrivateUse1;
 #else
   return torch::profiler::impl::ActivityType::CUDA;

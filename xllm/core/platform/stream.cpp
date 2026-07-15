@@ -35,7 +35,7 @@ PlatformStream get_stream_from_pool() {
 }
 #elif defined(USE_MLU)
 PlatformStream get_stream_from_pool() { return torch_mlu::getStreamFromPool(); }
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
 PlatformStream get_stream_from_pool() { return c10::cuda::getStreamFromPool(); }
 #elif defined(USE_CUDA) || defined(USE_MUSA)
 PlatformStream get_stream_from_pool() { return c10::musa::getStreamFromPool(); }
@@ -168,7 +168,7 @@ std::ostream& operator<<(std::ostream& os, const Stream& stream) {
   // MLUStream output: device index and stream id
   os << "MLUStream[device=" << stream.stream_.device_index()
      << ", stream_id=" << stream.stream_.id() << "]";
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(XLLM_TORCH_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
   // For CUDA, use the existing operator<< from c10::cuda::CUDAStream
   os << stream.stream_;
 #elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)

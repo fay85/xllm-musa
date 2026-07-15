@@ -1,6 +1,7 @@
 include(cc_library)
 
-if(USE_CUDA AND XLLM_TORCH_MUSA)
+# MUSA graph executor
+if(USE_MUSA)
   cc_library(
     NAME
       cuda_graph_executor
@@ -57,7 +58,7 @@ cc_library(
     dit_worker_impl.h
     embed_worker_impl.h
     embed_vlm_worker_impl.h
-    $<$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>:rec_worker_impl.h>
+    $<$<NOT:$<BOOL:${USE_MUSA}>>:rec_worker_impl.h>
     mm_embed_vlm_worker_impl.h
     worker_client.h
     xservice_client.h
@@ -78,7 +79,7 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:acl_graph_executor_impl.cpp>
     $<$<BOOL:${USE_NPU}>:acl_graph_persistent_param.cpp>
     $<$<BOOL:${USE_MLU}>:mlu_graph_executor_impl.cpp>
-    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>>:cuda_graph_executor_impl.cpp>
+    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cuda_graph_executor_impl.cpp>
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.cpp>
     worker.cpp
     worker_impl.cpp
@@ -88,7 +89,7 @@ cc_library(
     dit_worker_impl.cpp
     embed_worker_impl.cpp
     embed_vlm_worker_impl.cpp
-    $<$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>:rec_worker_impl.cpp>
+    $<$<NOT:$<BOOL:${USE_MUSA}>>:rec_worker_impl.cpp>
     mm_embed_vlm_worker_impl.cpp
     worker_client.cpp
     xservice_client.cpp
@@ -122,7 +123,7 @@ cc_library(
     :util
     :worker_service
     :xllm_server
-    $<$<AND:$<BOOL:${USE_CUDA}>,$<BOOL:${XLLM_TORCH_MUSA}>>:cuda_graph_executor>
+    $<$<BOOL:${USE_MUSA}>:cuda_graph_executor>
     $<$<BOOL:${USE_NPU}>:xllm_ops>
     $<$<BOOL:${USE_NPU}>:atb_customize>
     $<$<BOOL:${USE_NPU}>:platform_npu>

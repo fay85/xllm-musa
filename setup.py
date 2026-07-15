@@ -24,7 +24,6 @@ from scripts.build_support.env import (
     set_ilu_envs,
     set_mlu_envs,
     set_musa_envs,
-    set_torch_musa_cuda_envs,
     set_npu_envs,
     set_dcu_envs,
 )
@@ -239,14 +238,14 @@ class ExtBuild(build_ext):
             cmake_args += ["-DUSE_MLU=ON"]
             set_mlu_envs()
         elif self.device == "cuda":
-            use_torch_musa = os.getenv("XLLM_TORCH_MUSA", "").lower() in (
+            use_musa = os.getenv("USE_MUSA", "").lower() in (
                 "1",
                 "on",
                 "true",
                 "yes",
-            )
+            ) or "-DUSE_MUSA" in os.getenv("CMAKE_ARGS", "")
             torch_cuda_architectures = os.getenv("TORCH_CUDA_ARCH_LIST")
-            if use_torch_musa:
+            if use_musa:
                 if not torch_cuda_architectures:
                     torch_cuda_architectures = os.getenv(
                         "TORCH_MUSA_ARCH_LIST", "9.0"
@@ -254,11 +253,11 @@ class ExtBuild(build_ext):
                 cmake_args += [
                     "-DUSE_CUDA:BOOL=ON",
                     "-DUSE_MUSA:BOOL=ON",
-                    "-DXLLM_TORCH_MUSA:BOOL=ON",
                     f"-DTORCH_CUDA_ARCH_LIST={torch_cuda_architectures}",
-                    "-DCMAKE_CUDA_ARCHITECTURES=80;89;90",
+                    "-DCMAKE_CUDA_ARCHITECTURES=90",
+                    "-DBUILD_TESTING=OFF",
                 ]
-                set_torch_musa_cuda_envs()
+                set_musa_envs()
             else:
                 if not torch_cuda_architectures:
                     raise ValueError(

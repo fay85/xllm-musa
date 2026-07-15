@@ -148,14 +148,14 @@ AttentionMetadata build_attention_metadata(
   // torch_musa / FlashInfer: only accept 1D padding masks. Dense 2D/3D masks
   // from graph buffers trigger the eager custom-mask path and crash prefill.
   std::optional<torch::Tensor> mask_to_use = attn_mask;
-#if !defined(XLLM_TORCH_MUSA)
+#if !defined(USE_MUSA)
   if (!mask_to_use.has_value() && params.graph.attn_mask.defined()) {
     mask_to_use = params.graph.attn_mask;
   }
 #endif
   if (mask_to_use.has_value()) {
     const auto& mask = mask_to_use.value();
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
     if (mask.dim() == 1) {
       attn_metadata.attn_mask = mask;
     }
@@ -342,7 +342,7 @@ AttentionMetadata build_attention_metadata(
 #if defined(USE_CUDA) || defined(USE_MUSA)
   if (attn_metadata.is_causal && !attn_metadata.enable_cuda_graph &&
       attn_metadata.q_cu_seq_lens.defined()) {
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
     attn_metadata.qo_indptr =
         attn_metadata.q_cu_seq_lens.to(torch::kPrivateUse1);
 #else

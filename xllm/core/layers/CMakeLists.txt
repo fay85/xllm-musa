@@ -7,15 +7,10 @@ elseif(USE_MLU)
   add_subdirectory(mlu)
 elseif(USE_ILU)
   add_subdirectory(ilu)
-elseif(USE_CUDA)
-  if(NOT XLLM_TORCH_MUSA)
-    add_subdirectory(cuda)
-  endif()
-  if(XLLM_TORCH_MUSA OR USE_MUSA)
-    add_subdirectory(musa)
-  endif()
 elseif(USE_MUSA)
   add_subdirectory(musa)
+elseif(USE_CUDA)
+  add_subdirectory(cuda)
 elseif(USE_DCU)
   add_subdirectory(dcu)
 endif()
@@ -51,23 +46,23 @@ cc_library(
     qwen2_5_vision_layer.h
     qwen3_vision_layer.h
     qwen3_decoder_layer.h
-    $<$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>:qwen3_moe_decoder_layer.h>
+    $<$<NOT:$<BOOL:${USE_MUSA}>>:qwen3_moe_decoder_layer.h>
   SRCS
     oxygen_vision_layer.cpp
     $<$<BOOL:${USE_NPU}>:deepseek_v4_decoder_layer.cpp>
     qwen2_vision_layer.cpp
-    $<$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>:qwen2_decoder_layer.cpp>
+    $<$<NOT:$<BOOL:${USE_MUSA}>>:qwen2_decoder_layer.cpp>
     qwen2_5_vision_layer.cpp
     qwen3_vision_layer.cpp
-    $<$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>:qwen3_moe_decoder_layer.cpp>
+    $<$<NOT:$<BOOL:${USE_MUSA}>>:qwen3_moe_decoder_layer.cpp>
   DEPS
     $<$<BOOL:${USE_NPU}>:npu_layers>
     $<$<BOOL:${USE_NPU}>:npu_torch_layers>
     $<$<BOOL:${USE_MLU}>:mlu_layers>
     $<$<BOOL:${USE_ILU}>:ilu_layers>
-    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>>:cuda_layers>
-    $<$<BOOL:${XLLM_TORCH_MUSA}>:cuda_kernels>
-    $<$<OR:$<BOOL:${USE_MUSA}>,$<BOOL:${XLLM_TORCH_MUSA}>>:musa_layers>
+    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cuda_layers>
+    $<$<BOOL:${USE_MUSA}>:cuda_kernels>
+    $<$<BOOL:${USE_MUSA}>:musa_layers>
     :common_layers
     :parallel_state
     :state_dict

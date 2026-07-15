@@ -35,7 +35,7 @@ namespace {
 // ============================================================================
 // Persistent Matmul Output Buffer (CUDA-graph capture safety)
 // ============================================================================
-// On USE_CUDA + XLLM_TORCH_MUSA, F::linear inside cuda::matmul calls at::empty
+// On USE_CUDA + USE_MUSA, F::linear inside cuda::matmul calls at::empty
 // to allocate the output tensor. During MUSA CUDA-graph capture, that
 // allocation surfaces as
 //   "MUSA error: operation not permitted when stream is capturing"

@@ -1,11 +1,13 @@
 #!/bin/bash
-# Build xllm-git-master on MUSA via CUDA graph path:
-#   USE_CUDA + XLLM_TORCH_MUSA + mcc_wrapper (FlashInfer / CudaGraphExecutorImpl)
+# Build xllm-git-master on MUSA via the CUDA-compatibility graph path:
+#   USE_MUSA + mcc_wrapper (FlashInfer / CudaGraphExecutorImpl)
+#
+# This path intentionally uses mcc_wrapper; it does not require nvcc.
 set -euo pipefail
 #
 # Notes:
 #   - Graph logic unchanged; validate vs sglang later.
-#   - XLLM_TORCH_MUSA: no CUTLASS; use MUSA libs (see docs/cuda_graph_musa_port.md).
+#   - USE_MUSA: no CUTLASS; use MUSA libs (see docs/cuda_graph_musa_port.md).
 #   - All ninja invocations go through scripts/ninja_guard (flock + .ninja_log backup).
 #     Never run bare "ninja -C ..." or "pkill -9 ninja" on this build dir.
 
@@ -15,7 +17,7 @@ export CUDAToolkit_ROOT=/usr/local/musa
 export MUSA_TOOLKIT_ROOT_DIR=/usr/local/musa
 export MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping
 export MUSA_INCLUDE_PATH=/usr/local/musa/include
-# XLLM_TORCH_MUSA builds use FlashInfer/Mate kernels, not native MTTOplib.
+# USE_MUSA builds use FlashInfer/Mate kernels, not native MTTOplib.
 
 export PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch
 export LIBTORCH_ROOT=/usr/local/lib/python3.10/dist-packages/torch
@@ -25,7 +27,6 @@ export TorchMusa_DIR=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cm
 export TORCH_MUSA_PYTHONPATH=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake
 export TORCH_MUSA_ARCH_LIST=31
 export TORCH_CUDA_ARCH_LIST="9.0"
-export XLLM_TORCH_MUSA=1
 
 export FLASHINFER_OPS_PATH=/workspace/mate_cached_ops
 export MATE_HOME="${MATE_HOME:-/workspace/mate_feihu}"
@@ -33,7 +34,7 @@ export MATE_HOME="${MATE_HOME:-/workspace/mate_feihu}"
 MATE_FFI_ROOT="${MATE_HOME}/build/flashinfer_ffi_hd256"
 export LD_LIBRARY_PATH="${MATE_FFI_ROOT}/mate_flashinfer_prefill_ffi:${MATE_FFI_ROOT}/mate_flashinfer_batch_attention_ffi:${MATE_FFI_ROOT}/mate_flashinfer_decode_ffi:/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/opt/intel/oneapi/mkl/lib/intel64:/usr/lib:/usr/lib/x86_64-linux-gnu:/usr/local/openmpi/lib:${LD_LIBRARY_PATH:-}"
 
-export CMAKE_ARGS="-DCMAKE_CUDA_COMPILER=/usr/local/musa/tools/musamapping/mcc_wrapper -DCMAKE_MODULE_PATH=/usr/local/musa/tools/musamapping/cmake/Modules -DCUDAToolkit_ROOT=/usr/local/musa -DCUDA_HOME=/usr/local/musa -DUSE_CXX11_ABI=ON -D_GLIBCXX_USE_CXX11_ABI=1 -DGENERATE_SO=OFF -DVCPKG_MANIFEST_INSTALL=OFF -DUSE_CUDA:BOOL=ON -DUSE_MUSA:BOOL=ON -DXLLM_TORCH_MUSA:BOOL=ON -DCMAKE_CUDA_ARCHITECTURES=90 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_EXPERIMENTAL_RUST=3cc9b32c-47d3-4056-8953-d74e69fc0d6c"
+export CMAKE_ARGS="-DCMAKE_CUDA_COMPILER=/usr/local/musa/tools/musamapping/mcc_wrapper -DCMAKE_MODULE_PATH=/usr/local/musa/tools/musamapping/cmake/Modules -DCUDAToolkit_ROOT=/usr/local/musa -DCUDA_HOME=/usr/local/musa -DUSE_CXX11_ABI=ON -D_GLIBCXX_USE_CXX11_ABI=1 -DGENERATE_SO=OFF -DVCPKG_MANIFEST_INSTALL=OFF -DUSE_MUSA:BOOL=ON -DCMAKE_CUDA_ARCHITECTURES=90 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_EXPERIMENTAL_RUST=3cc9b32c-47d3-4056-8953-d74e69fc0d6c"
 
 export GIT_CONFIG_COUNT=1
 export GIT_CONFIG_KEY_0=safe.directory
@@ -171,7 +172,16 @@ if [ -f "${BD}/build.ninja" ] && [ "${FORCE_CMAKE:-0}" != "1" ]; then
     sed -i "s|-lmusa_layers|${MUSA_LAYERS_A}|g" "${BD}/build.ninja"
   fi
   echo "==> Incremental: ninja only (skip cmake reconfigure), target=${NINJA_TARGET}"
-  "${NINJA_SAFE}" "${BD}" -j"${MAX_JOBS}" ${NINJA_TARGET} 2>&1 | tee "${LOG}"
+  # A failed/aborted CMake probe can leave the generated cache newer than the
+  # manifest.  In that case callers may provide the already validated graph
+  # (for example, NINJA_FILE=build.ninja.noregen) while still using this
+  # guarded build procedure.  No CUDA toolkit compiler is introduced here.
+  NINJA_ARGS=(-j"${MAX_JOBS}")
+  if [ -n "${NINJA_FILE:-}" ]; then
+    NINJA_ARGS=(-f "${NINJA_FILE}" "${NINJA_ARGS[@]}")
+  fi
+  NINJA_ARGS+=("${NINJA_TARGET}")
+  "${NINJA_SAFE}" "${BD}" "${NINJA_ARGS[@]}" 2>&1 | tee "${LOG}"
 else
   echo "==> Configure + build via setup.py"
   exec python3 setup.py build --device cuda 2>&1 | tee "${LOG}"

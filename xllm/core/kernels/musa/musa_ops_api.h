@@ -15,7 +15,7 @@ limitations under the License.
 
 #pragma once
 
-// XLLM_TORCH_MUSA builds place torch_musa kernel sources under kernels/musa/ but
+// USE_MUSA builds place torch_musa kernel sources under kernels/musa/ but
 // expose them in the xllm::kernel::cuda namespace so layers/runtime can share
 // the CUDA graph code path. Native USE_MUSA symbols live in xllm::kernel::musa.
 

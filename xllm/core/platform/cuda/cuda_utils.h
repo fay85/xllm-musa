@@ -15,14 +15,14 @@ limitations under the License.
 
 #pragma once
 
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include <musa_runtime.h>
 #else
 #include <cuda.h>
 #include <cuda_runtime.h>
 #endif
 #include <glog/logging.h>
-#if !defined(XLLM_TORCH_MUSA)
+#if !defined(USE_MUSA)
 #include <nvtx3/nvToolsExt.h>
 #endif
 #include <torch/torch.h>
@@ -31,7 +31,7 @@ limitations under the License.
 
 namespace xllm::cuda {
 
-#if !defined(XLLM_TORCH_MUSA)
+#if !defined(USE_MUSA)
 class NvtxRange {
  public:
   NvtxRange(const std::string& name) { nvtxRangePush(name.c_str()); }
@@ -47,7 +47,7 @@ class NvtxRange {
 #endif
 
 inline int32_t get_device_sm_count(int32_t device_id) {
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   musaDeviceProp prop;
   musaError_t err = musaGetDeviceProperties(&prop, device_id);
   if (err != musaSuccess) {
@@ -64,7 +64,7 @@ inline int32_t get_device_sm_count(int32_t device_id) {
 }
 
 inline std::pair<int32_t, int32_t> get_compute_capability(int32_t device_id) {
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   musaDeviceProp prop;
   musaError_t err = musaGetDeviceProperties(&prop, device_id);
   if (err != musaSuccess) {
@@ -82,7 +82,7 @@ inline std::pair<int32_t, int32_t> get_compute_capability(int32_t device_id) {
 
 inline int32_t get_cuda_version() {
   int32_t version;
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   musaError_t err = musaRuntimeGetVersion(&version);
   if (err != musaSuccess) {
     LOG(FATAL) << "Failed to get MUSA runtime version!";

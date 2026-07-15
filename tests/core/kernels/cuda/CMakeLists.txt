@@ -70,7 +70,7 @@ cc_test(
 )
 target_link_libraries(fp8_quant_test PRIVATE brpc)
 
-if(XLLM_TORCH_MUSA)
+if(USE_MUSA)
   cc_test(
     NAME gemma_norm_test
     SRCS gemma_norm_test.cpp
@@ -81,7 +81,7 @@ if(XLLM_TORCH_MUSA)
     SRCS fused_gdn_decode_test.cpp
     DEPS :cuda_kernels torch GTest::gtest_main glog::glog
   )
-  if(XLLM_TORCH_MUSA)
+  if(USE_MUSA)
     cc_test(
       NAME fused_gdn_decode_bench_test
       SRCS fused_gdn_decode_bench_test.cpp

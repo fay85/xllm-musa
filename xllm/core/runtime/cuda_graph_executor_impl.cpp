@@ -22,7 +22,7 @@ limitations under the License.
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_runtime_api.h>
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include <musa_runtime_api.h>
 #endif
 #include <glog/logging.h>
@@ -42,17 +42,17 @@ limitations under the License.
 #include "core/framework/config/rec_config.h"
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include "core/layers/musa/flashinfer_planinfo.h"
 #else
 #include "core/layers/cuda/flashinfer_planinfo.h"
 #endif
-#if !defined(XLLM_TORCH_MUSA)
+#if !defined(USE_MUSA)
 #include "core/layers/cuda/xattention_planinfo.h"
 #endif
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
-#if !defined(XLLM_TORCH_MUSA)
+#if !defined(USE_MUSA)
 #include "core/platform/shared_vmm_allocator.h"
 #include "core/platform/vmm_torch_allocator.h"
 #endif
@@ -60,7 +60,7 @@ limitations under the License.
 #include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
 #include "kernels/cuda/global_capture_instance.h"
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include "kernels/musa/musa_tvmffi_stream.h"
 #else
 #include "kernels/cuda/utils.h"
@@ -1147,7 +1147,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
 
   bool use_tensor_core =
       xllm::kernel::cuda::should_use_tensor_core(dtype, n_heads, n_kv_heads);
-#ifdef XLLM_TORCH_MUSA
+#ifdef USE_MUSA
   // Keep in sync with BaseAttentionImpl::decode_use_tensor_core_ on MUSA:
   // the Mate FFI ships the dedicated `batch_decode_*` kernel (exporting the
   // "run" symbol) for our paged-KV layouts, while the chunked-prefill
@@ -1160,10 +1160,10 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
   // URI scheme.
   use_tensor_core = false;
 #endif
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   if (use_two_stage_decode) {
     LOG(FATAL) << "two-stage xattention decode is not supported in "
-                  "XLLM_TORCH_MUSA builds.";
+                  "USE_MUSA builds.";
   }
 #else
   if (use_two_stage_decode) {
@@ -2239,7 +2239,7 @@ constexpr uint32_t kPhysicalPoolIdPrefill = 0;
 constexpr uint32_t kPhysicalPoolIdDecode = 1;
 }  // namespace
 
-#if !defined(XLLM_TORCH_MUSA)
+#if !defined(USE_MUSA)
 // ============== VMM Allocator Support ==============
 // These functions provide VMM-based memory pool for CUDA Graph capture,
 // enabling memory reuse across different shape captures.
@@ -2355,7 +2355,7 @@ CudaGraphExecutorImpl::get_graph_memory_usage_stats() {
       }
     }
   } else {
-#if !defined(XLLM_TORCH_MUSA)
+#if !defined(USE_MUSA)
     std::lock_guard<std::mutex> lock(vmm_mutex_);
     for (const auto& kv : vmm_pools_) {
       const VmmPoolState& pool_state = *kv.second;
@@ -2428,7 +2428,7 @@ CudaGraphExecutorImpl::~CudaGraphExecutorImpl() {
 
 CudaGraphExecutorImpl::VmmPoolState&
 CudaGraphExecutorImpl::get_or_create_vmm_pool_state(uint32_t physical_pool_id) {
-  LOG(FATAL) << "Graph VMM pool is not enabled for XLLM_TORCH_MUSA builds";
+  LOG(FATAL) << "Graph VMM pool is not enabled for USE_MUSA builds";
 }
 
 TorchMemPool* CudaGraphExecutorImpl::get_or_create_vmm_mempool(
@@ -2436,7 +2436,7 @@ TorchMemPool* CudaGraphExecutorImpl::get_or_create_vmm_mempool(
     uint32_t shape_id) {
   (void)physical_pool_id;
   (void)shape_id;
-  LOG(FATAL) << "Graph VMM pool is not enabled for XLLM_TORCH_MUSA builds";
+  LOG(FATAL) << "Graph VMM pool is not enabled for USE_MUSA builds";
   return nullptr;
 }
 
@@ -2463,7 +2463,7 @@ size_t CudaGraphExecutorImpl::get_graph_memory_usage_bytes() {
 
 void CudaGraphExecutorImpl::log_graph_memory_after_capture() {}
 
-#endif  // !XLLM_TORCH_MUSA
+#endif  // !USE_MUSA
 
 // Get graph memory pool id for capture. When VMM is enabled, uses per-shape
 // MemPool under (physical_pool_id, shape_id).
@@ -2531,7 +2531,7 @@ ModelOutput CudaGraphExecutorImpl::attach_aux_hidden_states_if_needed(
 ModelInputParams CudaGraphExecutorImpl::maybe_precompute_embedding_for_graph(
     const torch::Tensor& tokens,
     const ModelInputParams& params) const {
-#ifdef XLLM_TORCH_MUSA
+#ifdef USE_MUSA
   // Only intervene on decode or MTP spec-verify validate graph paths.
   // Piecewise prefill already breaks the graph at attention boundaries.
   const bool in_spec_verify_embedding_phase =

@@ -20,7 +20,7 @@ limitations under the License.
 #include <tuple>
 
 #if defined(USE_CUDA) || defined(USE_DCU)
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 namespace xllm::kernel::cuda {
 void fused_qk_norm_rope(torch::Tensor& qkv,
                         int64_t num_heads_q,
@@ -35,7 +35,7 @@ void fused_qk_norm_rope(torch::Tensor& qkv,
                         const torch::Tensor& position_ids);
 }
 #else
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include "kernels/musa/musa_ops_api.h"
 #else
 #include "kernels/cuda/cuda_ops_api.h"

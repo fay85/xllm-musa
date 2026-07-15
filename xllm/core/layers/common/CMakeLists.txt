@@ -30,7 +30,7 @@ cc_library(
     moe_fused_topk.h
   SRCS
     oxygen_vision_attention.cpp
-    $<$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>:qwen2_attention.cpp>
+    $<$<NOT:$<BOOL:${USE_MUSA}>>:qwen2_attention.cpp>
     qwen2_vision_attention.cpp
     qwen3_next_rms_norm.cpp
     deepseek_v4_rotary_embedding.cpp
@@ -49,7 +49,7 @@ cc_library(
     dsa_metadata_builder.cpp
     dp_utils.cpp
     add_matmul.cpp
-    $<$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>:moe_fused_topk.cpp>
+    $<$<NOT:$<BOOL:${USE_MUSA}>>:moe_fused_topk.cpp>
   DEPS
     "-Wl,--whole-archive"
     "-Wl,--no-whole-archive"
@@ -65,10 +65,10 @@ cc_library(
     torch
     :platform
     $<$<BOOL:${USE_MLU}>:mlu_layers>
-    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${XLLM_TORCH_MUSA}>>>:cuda_layers>
-    $<$<BOOL:${XLLM_TORCH_MUSA}>:cuda_kernels>
+    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cuda_layers>
+    $<$<BOOL:${USE_MUSA}>:cuda_kernels>
     $<$<BOOL:${USE_ILU}>:ilu_layers>
     $<$<BOOL:${USE_NPU}>:npu_torch_layers>
-    $<$<OR:$<BOOL:${USE_MUSA}>,$<BOOL:${XLLM_TORCH_MUSA}>>:musa_layers>
+    $<$<BOOL:${USE_MUSA}>:musa_layers>
     $<$<BOOL:${USE_DCU}>:dcu_layers>
 )

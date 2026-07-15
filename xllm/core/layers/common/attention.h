@@ -19,7 +19,7 @@ limitations under the License.
 #include "layers/mlu/attention.h"
 #elif defined(USE_NPU)
 #include "layers/npu_torch/attention.h"
-#elif defined(USE_CUDA) && defined(XLLM_TORCH_MUSA)
+#elif defined(USE_CUDA) && defined(USE_MUSA)
 #include "layers/musa/attention.h"
 #elif defined(USE_CUDA)
 #include "layers/cuda/attention.h"

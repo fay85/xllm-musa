@@ -1,4 +1,6 @@
 #!/bin/bash
+# NOTE: This script is deprecated. Use _build_cuda_graph_musa.sh instead.
+# MTTOplib is no longer supported - all MUSA builds now use FlashInfer/Mate path.
 set -euo pipefail
 
 export MUSA_HOME=/usr/local/musa
@@ -23,7 +25,6 @@ export CPATH=/usr/local/openmpi/include:${CPATH:-}
 export VCPKG_ROOT=/workspace/vcpkg-xllm
 export VCPKG_FORCE_SYSTEM_BINARIES=1
 export VCPKG_MAX_CONCURRENCY=16
-export MTT_OPLIB_PATH=/workspace/MTTOplib
 
 export CMAKE_PREFIX_PATH=/usr/local/yalantinglibs
 export PYTHON_INCLUDE_PATH=/usr/include/python3.10

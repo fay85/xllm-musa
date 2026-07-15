@@ -175,7 +175,7 @@ setup_runtime_env() {
   export MATE_HOME="${MATE_HOME:-/workspace/xllm_qwen3.5/mate_feihu}"
   MATE_FFI_HD="${MATE_FFI_HD:-256}"
   MATE_FFI_ROOT="${MATE_HOME}/build/flashinfer_ffi_hd${MATE_FFI_HD}"
-  export LD_LIBRARY_PATH="${MATE_FFI_ROOT}/mate_flashinfer_prefill_ffi:${MATE_FFI_ROOT}/mate_flashinfer_batch_attention_ffi:${MATE_FFI_ROOT}/mate_flashinfer_decode_ffi:/workspace/MTTOplib/lib:/opt/intel/oneapi/mkl/lib/intel64:/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/usr/local/mudnn/lib:${MCCL_HOME}/lib:/usr/local/openmpi/lib:${LD_LIBRARY_PATH:-}"
+  export LD_LIBRARY_PATH="${MATE_FFI_ROOT}/mate_flashinfer_prefill_ffi:${MATE_FFI_ROOT}/mate_flashinfer_batch_attention_ffi:${MATE_FFI_ROOT}/mate_flashinfer_decode_ffi:/opt/intel/oneapi/mkl/lib/intel64:/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/usr/local/mudnn/lib:${MCCL_HOME}/lib:/usr/local/openmpi/lib:${LD_LIBRARY_PATH:-}"
   # libtorch_cpu -> MKL thread DSO needs libmkl_core loaded first (oneAPI layout).
   export LD_PRELOAD="/opt/intel/oneapi/mkl/lib/intel64/libmkl_core.so.2${LD_PRELOAD:+:$LD_PRELOAD}"
   local shim

@@ -17,7 +17,7 @@ limitations under the License.
 
 #include <torch/torch.h>
 
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 #include <musa_runtime_api.h>
 #endif
 

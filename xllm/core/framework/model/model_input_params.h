@@ -620,7 +620,7 @@ struct AttentionInput {
         continue;
       }
 #endif
-#if defined(USE_MLU) || defined(USE_MUSA) || defined(XLLM_TORCH_MUSA)
+#if defined(USE_MLU) || defined(USE_MUSA) || defined(USE_MUSA)
       if (target_device.type() == torch::kPrivateUse1) {
         *entry.target = get_tensor_from_blob(
             entry.sizes, entry.dtype, ptr, attention_device_buffer);

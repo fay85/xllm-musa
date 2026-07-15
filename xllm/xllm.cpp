@@ -493,7 +493,7 @@ int run() {
   return 0;
 }
 
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
 // torch_musa registers its PrivateUse1 (musa) backend hooks lazily inside
 // at::detail::getMUSAHooks() (guarded by call_once). When xLLM runs as a pure
 // C++ binary the torch_musa Python module is never imported, so that
@@ -527,7 +527,7 @@ int main(int argc, char** argv) {
   FLAGS_minloglevel = 0;
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging("xllm");
-#if defined(XLLM_TORCH_MUSA)
+#if defined(USE_MUSA)
   xllm_musa_backend_init();
 #endif
   if (XllmKinetoProfiler::is_enabled()) {
