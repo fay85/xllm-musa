@@ -367,7 +367,11 @@ torch::Tensor block_fp8_native_forward(
   params.a = a_fp8;
   params.b = weight_fp8;
   params.a_scale = a_scale;
-  params.b_scale = weight_scale_inv.to(torch::kFloat32).contiguous();
+  CHECK_EQ(weight_scale_inv.scalar_type(), torch::kFloat32)
+      << "native block-fp8 GEMM requires FP32 weight scales";
+  CHECK(weight_scale_inv.is_contiguous())
+      << "native block-fp8 GEMM requires contiguous weight scales";
+  params.b_scale = weight_scale_inv;
   params.output_dtype = (input.scalar_type() == torch::kFloat16)
                             ? torch::kFloat16
                             : torch::kBFloat16;
@@ -785,8 +789,9 @@ ColumnParallelLinearImpl::ColumnParallelLinearImpl(
     // output dtype for scaled_matmul
     output_dtype_ = c10::typeMetaToScalarType(options.dtype());
   } else if (is_block_fp8_quant(quant_args_)) {
-    // Block-wise FP8 (DeepSeek-style): FP8 weight [N,K] + BF16 inverse-scale
-    // grid [ceil(N/bn), ceil(K/bk)]. Scale kept BF16 (checkpoint-native).
+    // Block-wise FP8 (DeepSeek-style): FP8 weight [N,K] + FP32 inverse-scale
+    // grid [ceil(N/bn), ceil(K/bk)]. Checkpoint BF16 scales are converted once
+    // while loading so each forward can pass the GEMM-ready scale directly.
     const int64_t block_n = quant_args_.weight_block_size()[0];
     const int64_t block_k = quant_args_.weight_block_size()[1];
     weight_ = register_parameter(
@@ -798,7 +803,7 @@ ColumnParallelLinearImpl::ColumnParallelLinearImpl(
     const int64_t k_tiles = (in_features + block_k - 1) / block_k;
     weight_scale_inv_ = register_parameter(
         "weight_scale_inv",
-        torch::empty({n_tiles, k_tiles}, options.dtype(torch::kBFloat16)),
+        torch::empty({n_tiles, k_tiles}, options.dtype(torch::kFloat32)),
         /*requires_grad=*/false);
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 W8A8 quantization - weight is stored as FP8 (float8_e4m3fn)
@@ -1357,8 +1362,9 @@ QKVParallelLinearImpl::QKVParallelLinearImpl(
   // Note: torch.nn.functional.linear performs XA^T + b and as a result
   // we allocate the transpose.
   if (is_block_fp8_quant(quant_args_)) {
-    // Block-wise FP8: fused QKV FP8 weight [out,hidden] + BF16 inverse-scale
-    // grid [ceil(out/bn), ceil(hidden/bk)].
+    // Block-wise FP8: fused QKV FP8 weight [out,hidden] + FP32 inverse-scale
+    // grid [ceil(out/bn), ceil(hidden/bk)]. Checkpoint BF16 scales are
+    // converted once while loading.
     const int64_t block_n = quant_args_.weight_block_size()[0];
     const int64_t block_k = quant_args_.weight_block_size()[1];
     weight_ = register_parameter(
@@ -1370,7 +1376,7 @@ QKVParallelLinearImpl::QKVParallelLinearImpl(
     const int64_t k_tiles = (hidden_size + block_k - 1) / block_k;
     weight_scale_inv_ = register_parameter(
         "weight_scale_inv",
-        torch::empty({n_tiles, k_tiles}, options.dtype(torch::kBFloat16)),
+        torch::empty({n_tiles, k_tiles}, options.dtype(torch::kFloat32)),
         /*requires_grad=*/false);
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 W8A8 quantization - weight is stored as FP8 (float8_e4m3fn)
@@ -1758,8 +1764,9 @@ RowParallelLinearImpl::RowParallelLinearImpl(
     // Output dtype for scaled_matmul
     output_dtype_ = c10::typeMetaToScalarType(options.dtype());
   } else if (is_block_fp8_quant(quant_args_)) {
-    // Block-wise FP8: FP8 weight [N, K_pp] + BF16 inverse-scale grid
+    // Block-wise FP8: FP8 weight [N, K_pp] + FP32 inverse-scale grid
     // [ceil(N/bn), ceil(K_pp/bk)]. Row parallel shards input (dim 1).
+    // Checkpoint BF16 scales are converted once while loading.
     const int64_t block_n = quant_args_.weight_block_size()[0];
     const int64_t block_k = quant_args_.weight_block_size()[1];
     weight_ = register_parameter(
@@ -1772,7 +1779,7 @@ RowParallelLinearImpl::RowParallelLinearImpl(
         (in_features_per_partition + block_k - 1) / block_k;
     weight_scale_inv_ = register_parameter(
         "weight_scale_inv",
-        torch::empty({n_tiles, k_tiles}, options.dtype(torch::kBFloat16)),
+        torch::empty({n_tiles, k_tiles}, options.dtype(torch::kFloat32)),
         /*requires_grad=*/false);
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 W8A8 quantization - weight is stored as FP8 (float8_e4m3fn)
