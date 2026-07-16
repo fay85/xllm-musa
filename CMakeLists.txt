@@ -9,7 +9,6 @@ option(USE_MUSA "Enable MUSA support" OFF)
 option(USE_DCU "Enable DCU support" OFF)
 option(USE_MACA "Enable MACA support" OFF)
 
-# MUSA reuses the CUDA language/toolchain path (mcc_wrapper). Implies USE_CUDA.
 if(USE_MUSA)
   set(USE_CUDA ON CACHE BOOL "Enable CUDA support" FORCE)
 endif()
@@ -261,8 +260,6 @@ endif()
 set(CPPREST_EXCLUDE_WEBSOCKETS ON CACHE BOOL "Exclude websockets functionality." FORCE)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-truncation")
 
-# mcc_wrapper must be selected before project() initializes the C++ and CUDA
-# toolchains. Setting it from a subdirectory invalidates the generated cache.
 if(USE_MUSA)
   if(DEFINED ENV{MUSAMAPPING_PATH} AND
      NOT "$ENV{MUSAMAPPING_PATH}" STREQUAL "")
