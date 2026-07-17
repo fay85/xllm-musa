@@ -48,6 +48,8 @@ class KVCacheImpl {
   virtual torch::Tensor get_compress_score_state() const;
   virtual torch::Tensor get_compress_index_kv_state() const;
   virtual torch::Tensor get_compress_index_score_state() const;
+  virtual torch::Tensor get_compress_state() const;
+  virtual torch::Tensor get_compress_index_state() const;
 
   virtual bool empty() const;
 

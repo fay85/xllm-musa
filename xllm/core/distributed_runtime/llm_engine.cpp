@@ -466,7 +466,7 @@ KVCacheCapacity LLMEngine::estimate_kv_cache_capacity() {
       static_cast<int64_t>(options_.num_speculative_tokens());
   estimate_options.max_tokens_per_batch =
       static_cast<int64_t>(options_.max_tokens_per_batch());
-  estimate_options.max_concurrent_requests = static_cast<int64_t>(
+  estimate_options.max_linear_state_cache_slots = static_cast<int64_t>(
       ::xllm::ServiceConfig::get_instance().max_concurrent_requests());
   estimate_options.is_draft_engine = options_.is_draft_engine();
   estimate_options.enable_prefix_cache =
@@ -544,7 +544,8 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
       .model_id(options_.model_id())
       .max_seqs_per_batch(options_.max_seqs_per_batch())
       .max_concurrent_requests(
-          ::xllm::ServiceConfig::get_instance().max_concurrent_requests());
+          ::xllm::ServiceConfig::get_instance().max_concurrent_requests())
+      .num_speculative_tokens(options_.num_speculative_tokens());
   if (util::is_deepseek_v4_model_type(args_.model_type())) {
     constexpr uint32_t kManagerTypeBlockManagerImpl = 0;
     constexpr uint32_t kManagerTypeSlidingWindowBlockManager = 1;

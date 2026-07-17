@@ -511,7 +511,9 @@ void set_positions_tensor(ForwardInput& input,
 
 runtime::Options MTPTargetOptions(const runtime::Options& options) {
   auto opts = options;
-  opts.enable_schedule_overlap(false).is_draft_engine(false);
+  opts.enable_schedule_overlap(false)
+      .is_draft_engine(false)
+      .enable_graph_aux_hidden_states(true);
   return opts;
 }
 
@@ -703,6 +705,17 @@ std::tuple<int64_t, int64_t> MTPWorkerImpl::estimate_kv_cache_capacity() {
 }
 
 int64_t MTPWorkerImpl::get_embedding_placeholder_size() {
+  // DeepSeek-V4 MTP stashes the pre-hc_head 3D hidden flattened to
+  // [num_tokens, hc_mult*hidden] (see mlu/deepseekV4ModelImpl::forward), so the
+  // cache placeholder must cover hc_mult*hidden per row.
+#if defined(USE_MLU)
+  if (impl_ != nullptr) {
+    const ModelArgs& args = impl_->context_.get_model_args();
+    if (util::is_deepseek_v4_model_type(args.model_type())) {
+      return args.hc_mult() * args.hidden_size();
+    }
+  }
+#endif
   return static_cast<int64_t>(embedding_size_);
 }
 
