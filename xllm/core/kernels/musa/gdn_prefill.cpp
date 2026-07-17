@@ -1454,9 +1454,10 @@ torch::Tensor causal_conv1d_prefill(
     const char* env = std::getenv("XLLM_TOKEN_MAJOR_PREFILL_CONV");
     return env == nullptr || std::string(env) != "0";
   }();
-  const bool single_sequence = query_start_loc.size(0) == 2;
-  if (use_token_major && single_sequence && x.is_contiguous() &&
-      weight.dim() == 2 && weight.size(1) == 4) {
+  // The token-major kernel uses query_start_loc for ragged sequence bounds
+  // and assigns each sequence a disjoint output and cache-state row.
+  if (use_token_major && x.is_contiguous() && weight.dim() == 2 &&
+      weight.size(1) == 4) {
     torch::Tensor out = torch::empty_like(x);
     causal_conv1d_fwd_token_major(x,
                                   weight,
