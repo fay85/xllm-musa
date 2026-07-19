@@ -20,6 +20,7 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <memory>
+#include <vector>
 
 #include "common/global_flags.h"
 #include "common/metrics.h"
@@ -28,7 +29,6 @@ limitations under the License.
 #include "framework/request/request.h"
 #include "framework/request/sequence.h"
 #include "util/blocking_counter.h"
-#include "util/env_var.h"
 
 namespace xllm {
 
@@ -54,7 +54,23 @@ AsyncResponseProcessor::AsyncResponseProcessor(
       role_(role.value_or(InstanceRole::DEFAULT)),
       enable_batch_response_(enable_service_routing),
       disable_log_stats_(disable_log_stats),
-      cancel_request_(std::move(cancel_request)) {}
+      cancel_request_(std::move(cancel_request)) {
+  // TokenizerProxy lazily creates one tokenizer clone per response worker.
+  // Loading the Qwen tokenizer on the first callback costs hundreds of
+  // milliseconds and appears directly in TTFT.  Warm every worker once at
+  // startup so requests only pay the incremental decode cost.
+  std::vector<int32_t> warmup_token_ids{0};
+  BlockingCounter counter(static_cast<int32_t>(response_threadpool_.size()));
+  for (size_t tid = 0; tid < response_threadpool_.size(); ++tid) {
+    response_threadpool_.schedule_with_tid(
+        [this, &counter, &warmup_token_ids]() {
+          tokenizer_->decode(warmup_token_ids, true);
+          counter.decrement_count();
+        },
+        tid);
+  }
+  counter.wait();
+}
 
 AsyncResponseProcessor::~AsyncResponseProcessor() { wait_completion(); }
 
