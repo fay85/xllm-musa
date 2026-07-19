@@ -398,6 +398,11 @@ class CudaGraph {
   // persistent_param_.logits() holds the computed logits.
   bool capture_logits_ = false;
 
+  // FA3 scheduler metadata consumed by the captured full-attention kernels.
+  // Its address is fixed at capture time; replay copies freshly generated
+  // values into the same storage before graph launch.
+  torch::Tensor captured_fa3_scheduler_metadata_;
+
   // Reference to persistent parameters (shared across multiple CudaGraph
   // instances)
   CudaGraphPersistentParam& persistent_param_;

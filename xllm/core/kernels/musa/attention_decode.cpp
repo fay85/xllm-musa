@@ -143,7 +143,10 @@ torch::Tensor fa3_decode_scheduler_metadata(
         static_cast<int64_t>(window_size_right),
         none_tensor(),
         to_ffi_tensor(metadata),
-        /*num_splits=*/static_cast<int64_t>(1),
+        // Match SGLang's FA3 decode policy: let Mate choose the split count
+        // from the current KV length. A fixed single split leaves long-context
+        // decode severely under-parallelized.
+        /*num_splits=*/static_cast<int64_t>(0),
         static_cast<int64_t>(kFa3TileM),
         static_cast<int64_t>(kFa3TileN),
         /*mp_margin=*/static_cast<int64_t>(0));

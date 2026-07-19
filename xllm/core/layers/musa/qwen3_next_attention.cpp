@@ -102,12 +102,14 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
                                              options));
 
   // 6. Attention
+  const int64_t sliding_window =
+      args.use_sliding_window() ? args.sliding_window() : -1;
   attn_ = register_module("attn",
                           Attention(num_heads_,
                                     head_dim_,
                                     scaling_,
                                     num_kv_heads_,
-                                    args.sliding_window()));
+                                    sliding_window));
 
   // 7. Fused split_qkv_rmsnorm_mrope kernel setup
   rotary_dim_ = static_cast<int64_t>(head_dim_ * args.partial_rotary_factor());

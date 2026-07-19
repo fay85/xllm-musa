@@ -112,11 +112,14 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
             ? *(input_params.attn_metadata)
             : layer::AttentionMetadataBuilder::build(input_params,
                                                      model_args_.enable_mla());
-    // Scheduler metadata depends on the current sequence lengths. Generate it
-    // once in the first FA3 layer below, then share it only within this model
-    // forward instead of inheriting a tensor from an earlier decode step.
+    // Graph execution prepares FA3 scheduler metadata outside capture and
+    // refreshes its stable tensor before every replay. Eager execution leaves
+    // it empty here, so the first FA3 layer generates it as before.
     attn_metadata.share_fa3_scheduler_metadata = true;
-    attn_metadata.fa3_scheduler_metadata = torch::Tensor();
+    attn_metadata.fa3_scheduler_metadata =
+        input_params.attn_metadata
+            ? input_params.attn_metadata->fa3_scheduler_metadata
+            : torch::Tensor();
     const bool use_expanded_spec_verify_attention =
         input_params.graph.use_expanded_decode_for_spec_verify_attention ||
         (input_params.attn_metadata &&

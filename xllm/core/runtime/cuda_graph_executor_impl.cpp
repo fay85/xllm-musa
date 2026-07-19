@@ -43,6 +43,7 @@ limitations under the License.
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
 #if defined(USE_MUSA)
+#include "core/kernels/musa/musa_ops_api.h"
 #include "core/layers/musa/flashinfer_planinfo.h"
 #else
 #include "core/layers/cuda/flashinfer_planinfo.h"
@@ -77,6 +78,16 @@ bool s_enable_graph_timing() {
   }();
   return val;
 }
+
+#if defined(USE_MUSA)
+bool s_use_musa_fa3_decode() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_USE_FA3");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return enabled;
+}
+#endif
 
 // Phase D: wall+device time for packed/eager pure-prefill forwards.
 bool s_enable_prefill_fwd_timing() {
@@ -1564,6 +1575,47 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
                 : 0);
   }
 
+  // MUSA FA3 graph replay must not capture scheduler-metadata generation.
+  // The optimal split count depends on the live KV length, while decode
+  // graphs are initially captured with a short synthetic sequence. Generate
+  // fresh metadata here, outside capture/replay, and let CudaGraph::replay()
+  // copy it into the tensor address retained by the captured attention calls.
+#if defined(USE_MUSA)
+  const bool is_qwen3_5 = args_.model_type() == "qwen3_5_text" ||
+                          args_.model_type() == "qwen3_5_moe_text";
+  if (s_use_musa_fa3_decode() && is_qwen3_5 &&
+      !attn_metadata->is_prefill &&
+      !attn_metadata->is_chunked_prefill &&
+      !use_expanded_spec_decode_attention &&
+      attn_metadata->block_table.defined()) {
+    const int64_t batch_size = attn_metadata->block_table.size(0);
+    const int64_t gqa_ratio = n_heads / n_kv_heads;
+    if (batch_size > 0 && (gqa_ratio == 6 || gqa_ratio == 8)) {
+      const torch::Tensor cu_seqlens_q =
+          attn_metadata->qo_indptr.has_value() &&
+                  attn_metadata->qo_indptr->defined()
+              ? *attn_metadata->qo_indptr
+              : attn_metadata->q_cu_seq_lens;
+      CHECK(attn_metadata->kv_seq_lens.defined())
+          << "FA3 graph decode requires per-sequence KV lengths";
+      attn_metadata->fa3_scheduler_metadata =
+          xllm::kernel::cuda::fa3_decode_scheduler_metadata(
+              device_,
+              static_cast<int32_t>(batch_size),
+              static_cast<int32_t>(n_heads),
+              static_cast<int32_t>(n_kv_heads),
+              head_dim,
+              head_dim,
+              std::max<int32_t>(attn_metadata->max_query_len, 1),
+              std::max<int32_t>(attn_metadata->max_seq_len, 1),
+              args_.use_sliding_window() ? args_.sliding_window() : -1,
+              /*window_size_right=*/0,
+              cu_seqlens_q,
+              attn_metadata->kv_seq_lens);
+    }
+  }
+#endif
+
   // Return ModelInputParams with persistent buffer references if requested
   return build_capture_params_if_needed();
 }
@@ -1760,6 +1812,9 @@ bool CudaGraph::capture(CausalLM* model,
   CHECK(graph_params_opt.has_value())
       << "update() should return ModelInputParams when "
          "return_capture_params=true";
+
+  captured_fa3_scheduler_metadata_ =
+      graph_params_opt.value().attn_metadata->fa3_scheduler_metadata;
 
   // Chunked-prefill capture executes a warmup forward and a capture forward
   // before the real replay. Both mutate GDN convolution and recurrent state.
@@ -2070,6 +2125,18 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
                                                       /*return_capture_params=*/true);
     CHECK(replay_params_opt.has_value())
         << "update() should return ModelInputParams for decode replay";
+
+    const torch::Tensor& fresh_fa3_scheduler_metadata =
+        replay_params_opt.value().attn_metadata->fa3_scheduler_metadata;
+    if (captured_fa3_scheduler_metadata_.defined()) {
+      CHECK(fresh_fa3_scheduler_metadata.defined())
+          << "FA3 scheduler metadata disappeared after graph capture";
+      CHECK_EQ(captured_fa3_scheduler_metadata_.sizes(),
+               fresh_fa3_scheduler_metadata.sizes())
+          << "FA3 scheduler metadata shape changed after graph capture";
+      captured_fa3_scheduler_metadata_.copy_(fresh_fa3_scheduler_metadata,
+                                             /*non_blocking=*/true);
+    }
 
     // During graph replay, the captured graph reads paged-KV metadata from
     // persistent *device* tensors (updated by update_llm_decode_metadata_fast
