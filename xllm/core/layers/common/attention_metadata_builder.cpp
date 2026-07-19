@@ -269,7 +269,16 @@ AttentionMetadata build_attention_metadata(
         torch::diff(params.attention.device.q_seq_lens);  // q seqlens
 #endif
   }
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_MUSA)
+  // MUSA FA3 prefill uses Mate's paged flash_attn_with_kvcache path.  The
+  // regular prefill path historically omitted block_table because FlashInfer
+  // consumed dense K/V; keep the rectangular table available on MUSA so the
+  // attention layer can select the paged kernel after reshape_paged_cache.
+  if (params.attention.device.block_tables.defined()) {
+    attn_metadata.block_table = params.attention.device.block_tables;
+  }
+#endif
+#if defined(USE_CUDA)
   // Hybrid (Qwen3.5 / Qwen3-Next) GDN layers need per-sequence q/kv lengths
   // (not cumulative). Populate them from the cumulative versions for both
   // prefill and decode so reshape_qkvz_with_pad and other helpers in

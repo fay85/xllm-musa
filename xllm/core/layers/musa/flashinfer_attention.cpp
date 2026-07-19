@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <algorithm>
 #include <cstdlib>
 #include <string>
 
@@ -237,7 +238,8 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
        use_expanded_spec_decode_attention(attn_metadata) ||
        attn_metadata.is_spec_verify);
   if (attn_metadata.is_prefill) {
-    prefill_forward(attn_metadata, query, key, value, output, output_lse);
+    prefill_forward(
+        attn_metadata, query, key, value, output, output_lse, k_cache, v_cache);
   } else if (spec_verify_expanded_decode) {
     decoder_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
@@ -260,8 +262,207 @@ void FlashInferAttentionImpl::prefill_forward(
     torch::Tensor& key,
     torch::Tensor& value,
     torch::Tensor& output,
-    std::optional<torch::Tensor>& output_lse) {
+    std::optional<torch::Tensor>& output_lse,
+    const torch::Tensor& k_cache,
+    const torch::Tensor& v_cache) {
   bool use_custom_mask = attn_metadata.attn_mask.defined();
+
+  static const bool use_fa3 = [] {
+    const char* env = std::getenv("XLLM_USE_FA3");
+    return env && std::string(env) == "1";
+  }();
+
+  // FA3 is an explicit opt-in. Do not silently route an unsupported shape to
+  // FA2: that masks deployment mistakes and can make graph/perf behavior
+  // differ from the requested backend.
+  if (use_fa3) {
+    CHECK(!use_custom_mask)
+        << "XLLM_USE_FA3=1 does not support custom attention masks";
+    CHECK_EQ(head_size_, 256)
+        << "XLLM_USE_FA3=1 requires head_dim=256, got " << head_size_;
+    CHECK_GT(num_kv_heads_, 0)
+        << "XLLM_USE_FA3=1 requires at least one KV head";
+    const int64_t gqa_ratio = num_heads_ / num_kv_heads_;
+    CHECK(num_heads_ == num_kv_heads_ * 6 ||
+          num_heads_ == num_kv_heads_ * 8)
+        << "XLLM_USE_FA3=1 requires GQA ratio 6 or 8 (nq=" << num_heads_
+        << ", nkv=" << num_kv_heads_ << ", ratio=" << gqa_ratio << ")";
+    CHECK_EQ(query.scalar_type(), torch::kBFloat16)
+        << "XLLM_USE_FA3=1 requires bf16 query";
+    CHECK(attn_metadata.q_cu_seq_lens.defined())
+        << "XLLM_USE_FA3=1 requires q_cu_seq_lens";
+    CHECK(attn_metadata.kv_cu_seq_lens.defined())
+        << "XLLM_USE_FA3=1 requires kv_cu_seq_lens";
+    CHECK_GT(attn_metadata.max_query_len, 0)
+        << "XLLM_USE_FA3=1 requires max_query_len > 0";
+    CHECK_GT(attn_metadata.max_seq_len, 0)
+        << "XLLM_USE_FA3=1 requires max_seq_len > 0";
+
+    // SGLang's MUSA FA3 path uses Mate's paged
+    // flash_attn_with_kvcache for extend/prefill.  xLLM has already written
+    // the projected K/V into the same [block, page, kv_head, head_dim] cache
+    // before entering this function, so use that path for regular paged
+    // prefill instead of rereading the dense K/V tensors.  The opt-out is
+    // intentionally explicit for bring-up/debugging; the default follows the
+    // fast path whenever its metadata is available.
+    static const bool use_paged_fa3_prefill = [] {
+      const char* env = std::getenv("XLLM_FA3_PREFILL_PAGED");
+      return env == nullptr || std::string(env) != "0";
+    }();
+    // Match SGLang's ordinary-prefill dispatch: a fresh request has no
+    // existing prefix and uses the dense ragged FA3 kernel; paged
+    // flash_attn_with_kvcache is reserved for an actual cached prefix (or a
+    // later chunk). Merely having a block table is not evidence of a prefix --
+    // xLLM allocates one for every request before the first forward.
+    bool has_cached_prefix = true;
+    if (attn_metadata.q_seq_lens_vec.size() ==
+            attn_metadata.kv_seq_lens_vec.size() &&
+        !attn_metadata.q_seq_lens_vec.empty()) {
+      has_cached_prefix = false;
+      for (size_t i = 0; i < attn_metadata.q_seq_lens_vec.size(); ++i) {
+        if (attn_metadata.kv_seq_lens_vec[i] >
+            attn_metadata.q_seq_lens_vec[i]) {
+          has_cached_prefix = true;
+          break;
+        }
+      }
+    }
+    const bool paged_prefill_supported =
+        use_paged_fa3_prefill && k_cache.defined() && v_cache.defined() &&
+        attn_metadata.block_table.defined() &&
+        attn_metadata.kv_seq_lens.defined() &&
+        attn_metadata.kv_cu_seq_lens.defined() && has_cached_prefix;
+    if (paged_prefill_supported) {
+      CHECK_EQ(k_cache.dim(), 4)
+          << "FA3 paged prefill requires a 4D key cache";
+      CHECK_EQ(v_cache.dim(), 4)
+          << "FA3 paged prefill requires a 4D value cache";
+      CHECK_EQ(attn_metadata.block_table.scalar_type(), torch::kInt32)
+          << "FA3 paged prefill requires int32 block_table";
+      CHECK(attn_metadata.block_table.is_contiguous())
+          << "FA3 paged prefill requires contiguous block_table";
+      CHECK_EQ(attn_metadata.block_table.size(0),
+               attn_metadata.kv_seq_lens.numel())
+          << "FA3 paged prefill batch metadata mismatch";
+
+      torch::Tensor seqused_k = attn_metadata.kv_seq_lens;
+      if (seqused_k.scalar_type() != torch::kInt32) {
+        seqused_k = seqused_k.to(torch::kInt32);
+      }
+      seqused_k = seqused_k.contiguous();
+      const torch::Tensor cu_seqlens_q =
+          attn_metadata.q_cu_seq_lens.contiguous();
+      const torch::Tensor cu_seqlens_k_new =
+          attn_metadata.kv_cu_seq_lens.contiguous();
+      const int32_t batch_size =
+          static_cast<int32_t>(attn_metadata.block_table.size(0));
+      torch::Tensor scheduler_metadata;
+      if (attn_metadata.share_fa3_scheduler_metadata &&
+          attn_metadata.fa3_scheduler_metadata.defined()) {
+        CHECK_EQ(attn_metadata.fa3_scheduler_metadata.numel(),
+                 static_cast<int64_t>(batch_size) * 4)
+            << "FA3 prefill scheduler metadata shape changed within one forward";
+        scheduler_metadata = attn_metadata.fa3_scheduler_metadata;
+      }
+      if (!scheduler_metadata.defined()) {
+        scheduler_metadata =
+            xllm::kernel::cuda::fa3_prefill_scheduler_metadata(
+                query.device(),
+                batch_size,
+                static_cast<int32_t>(num_heads_),
+                static_cast<int32_t>(num_kv_heads_),
+                static_cast<int32_t>(head_size_),
+                static_cast<int32_t>(head_size_),
+                static_cast<int32_t>(attn_metadata.max_query_len),
+                static_cast<int32_t>(attn_metadata.max_seq_len),
+                static_cast<int32_t>(sliding_window_),
+                /*window_size_right=*/0,
+                cu_seqlens_q,
+                cu_seqlens_k_new,
+                seqused_k);
+        if (attn_metadata.share_fa3_scheduler_metadata) {
+          attn_metadata.fa3_scheduler_metadata = scheduler_metadata;
+        }
+      }
+
+      torch::Tensor lse_tensor;
+      if (output_lse.has_value() && output_lse->defined()) {
+        lse_tensor = *output_lse;
+      } else {
+        const int64_t required = num_heads_ * query.size(0);
+        const auto lse_options = torch::TensorOptions()
+                                     .dtype(torch::kFloat32)
+                                     .device(query.device());
+        const bool need_realloc = !lse_buf_.defined() ||
+                                  lse_buf_.dtype() != lse_options.dtype() ||
+                                  lse_buf_.device() != lse_options.device() ||
+                                  lse_buf_.numel() < required;
+        if (need_realloc) {
+          lse_buf_ = torch::empty({required}, lse_options);
+        }
+        lse_tensor =
+            lse_buf_.narrow(0, 0, required).view({num_heads_, query.size(0)});
+      }
+
+      xllm::kernel::cuda::fa3_prefill_paged(
+          query,
+          k_cache,
+          v_cache,
+          cu_seqlens_q,
+          cu_seqlens_k_new,
+          seqused_k,
+          attn_metadata.block_table,
+          scheduler_metadata,
+          /*max_seqlen_q=*/attn_metadata.max_query_len,
+          /*window_left=*/sliding_window_,
+          /*window_right=*/0,
+          scale_,
+          output,
+          lse_tensor);
+      if (output_lse.has_value()) {
+        *output_lse = lse_tensor;
+      }
+      return;
+    }
+
+    const int64_t total_q = query.size(0);
+    torch::Tensor lse_tensor;
+    if (output_lse.has_value() && output_lse->defined()) {
+      lse_tensor = *output_lse;
+    } else {
+      const int64_t required = num_heads_ * total_q;
+      const auto lse_options = torch::TensorOptions()
+                                   .dtype(torch::kFloat32)
+                                   .device(query.device());
+      const bool need_realloc = !lse_buf_.defined() ||
+                                lse_buf_.dtype() != lse_options.dtype() ||
+                                lse_buf_.device() != lse_options.device() ||
+                                lse_buf_.numel() < required;
+      if (need_realloc) {
+        lse_buf_ = torch::empty({required}, lse_options);
+      }
+      lse_tensor =
+          lse_buf_.narrow(0, 0, required).view({num_heads_, total_q});
+    }
+
+    xllm::kernel::cuda::fa3_prefill_with_optional_piecewise_capture(
+        query,
+        key,
+        value,
+        attn_metadata.q_cu_seq_lens,
+        attn_metadata.kv_cu_seq_lens,
+        /*max_seqlen_q=*/attn_metadata.max_query_len,
+        /*max_seqlen_k=*/attn_metadata.max_seq_len,
+        /*window_left=*/-1,
+        /*window_right=*/-1,
+        scale_,
+        output,
+        lse_tensor);
+    if (output_lse.has_value()) {
+      *output_lse = lse_tensor;
+    }
+    return;
+  }
 
   if (use_custom_mask) {
     auto [result, _] =
@@ -275,65 +476,6 @@ void FlashInferAttentionImpl::prefill_forward(
                                           head_size_);
     output = result;
     return;
-  }
-
-  // Dense FA3 prefill (SGLang flash_attn_varlen_func / mate mutlass). Opt-in
-  // via XLLM_USE_FA3=1. Falls back to FlashInfer FA2 when the shape is not
-  // covered by the cached dense fmha URI (bf16, hd=256, GQA=6, no SWA).
-  {
-    static const bool use_fa3 = [] {
-      const char* env = std::getenv("XLLM_USE_FA3");
-      return env && std::string(env) == "1";
-    }();
-    // Cached dense URI is global-causal (is_local=False). FlashInfer planinfo
-    // also hardcodes use_swa=False for this backend; do not gate on the
-    // ModelArgs sliding_window default (often 4096 → window_left=4095).
-    const bool fa3_shape_ok =
-        use_fa3 && head_size_ == 256 && num_kv_heads_ > 0 &&
-        num_heads_ == num_kv_heads_ * 6 &&
-        query.scalar_type() == torch::kBFloat16 &&
-        attn_metadata.q_cu_seq_lens.defined() &&
-        attn_metadata.kv_cu_seq_lens.defined() &&
-        attn_metadata.max_query_len > 0 && attn_metadata.max_seq_len > 0;
-    if (fa3_shape_ok) {
-      const int64_t total_q = query.size(0);
-      torch::Tensor lse_tensor;
-      if (output_lse.has_value() && output_lse->defined()) {
-        lse_tensor = *output_lse;
-      } else {
-        const int64_t required = num_heads_ * total_q;
-        const auto lse_options = torch::TensorOptions()
-                                     .dtype(torch::kFloat32)
-                                     .device(query.device());
-        const bool need_realloc = !lse_buf_.defined() ||
-                                  lse_buf_.dtype() != lse_options.dtype() ||
-                                  lse_buf_.device() != lse_options.device() ||
-                                  lse_buf_.numel() < required;
-        if (need_realloc) {
-          lse_buf_ = torch::empty({required}, lse_options);
-        }
-        lse_tensor =
-            lse_buf_.narrow(0, 0, required).view({num_heads_, total_q});
-      }
-
-      xllm::kernel::cuda::fa3_prefill(
-          query.contiguous(),
-          key.contiguous(),
-          value.contiguous(),
-          attn_metadata.q_cu_seq_lens.contiguous(),
-          attn_metadata.kv_cu_seq_lens.contiguous(),
-          /*max_seqlen_q=*/attn_metadata.max_query_len,
-          /*max_seqlen_k=*/attn_metadata.max_seq_len,
-          /*window_left=*/-1,
-          /*window_right=*/-1,
-          scale_,
-          output,
-          lse_tensor);
-      if (output_lse.has_value()) {
-        *output_lse = lse_tensor;
-      }
-      return;
-    }
   }
 
   std::string backend = xllm::kernel::cuda::determine_attention_backend(
@@ -515,9 +657,16 @@ void FlashInferAttentionImpl::decoder_forward(
       CHECK_GT(max_seqlen_k, 0)
           << "FA3 decode requires attn_metadata.max_seq_len > 0";
 
-      // Allocate / get scheduler_metadata. Cached on PlanInfo so it is
-      // computed once per shape per layer-0 prepare.
-      torch::Tensor scheduler_metadata = attn_metadata.fa3_scheduler_metadata;
+      // Qwen hybrid explicitly scopes this cache to one model forward. Other
+      // models retain per-layer generation so shared graph-capture metadata
+      // cannot accidentally keep scheduler values from a previous step.
+      torch::Tensor scheduler_metadata;
+      if (attn_metadata.share_fa3_scheduler_metadata &&
+          attn_metadata.fa3_scheduler_metadata.defined()) {
+        CHECK_EQ(attn_metadata.fa3_scheduler_metadata.numel(), batch_size * 4)
+            << "FA3 scheduler metadata shape changed within one forward";
+        scheduler_metadata = attn_metadata.fa3_scheduler_metadata;
+      }
       const torch::Tensor cu_seqlens_q =
           decode_attn.qo_indptr.has_value() && decode_attn.qo_indptr->defined()
               ? *decode_attn.qo_indptr
@@ -536,6 +685,9 @@ void FlashInferAttentionImpl::decoder_forward(
             /*window_size_right=*/0,
             /*cu_seqlens_q=*/cu_seqlens_q,
             /*seqused_k=*/seqused_k);
+        if (attn_metadata.share_fa3_scheduler_metadata) {
+          attn_metadata.fa3_scheduler_metadata = scheduler_metadata;
+        }
       }
 
       // FA3 lse output: [num_qo_heads, total_q] fp32. The kernel requires it

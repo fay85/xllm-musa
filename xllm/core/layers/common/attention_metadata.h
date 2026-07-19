@@ -144,10 +144,12 @@ struct AttentionMetadata {
   std::vector<int32_t> q_cu_seq_lens_host_vec;
 #endif
   // FA3 scheduler_metadata tensor (shape [batch_size*4] int32 on device).
-  // Built once per shape by fa3_decode_scheduler_metadata() at the layer-0
-  // plan call, then reused across all decode layers for the same shape.
-  // Empty when not using FA3 path (default).
-  torch::Tensor fa3_scheduler_metadata;
+  // When sharing is enabled, built once per forward and reused across all
+  // matching decode layers. Empty when not using FA3 (default).
+  // Mutable because decoder_forward receives logically read-only metadata but
+  // populates this per-forward execution cache on the first FA3 layer.
+  bool share_fa3_scheduler_metadata = false;
+  mutable torch::Tensor fa3_scheduler_metadata;
 
   // Query/Output index pointer tensor for decode mode with tensor core.
   // Similar to row_splits in ragged tensor: cumulative sum of sequence lengths.

@@ -212,8 +212,9 @@ void fa3_decode(const torch::Tensor& query,
                 torch::Tensor& output,
                 torch::Tensor& output_lse);
 
-// Dense ragged FA3 prefill (SGLang flash_attn_varlen_func / mate mutlass).
-// Specialized for bf16, head_dim=256, GQA ratio=6 (Qwen3.5-27B TP=1).
+// Dense ragged FA3 prefill (SGLang flash_attn_varlen_func / Mate mutlass).
+// Specialized for bf16, head_dim=256, GQA ratios 6 and 8
+// (Qwen3.5-27B/35B TP=1).
 void fa3_prefill(const torch::Tensor& query,
                  const torch::Tensor& key,
                  const torch::Tensor& value,
@@ -227,7 +228,11 @@ void fa3_prefill(const torch::Tensor& query,
                  torch::Tensor& output,
                  torch::Tensor& output_lse);
 
-torch::Tensor fa3_decode_scheduler_metadata(
+// Paged-KV FA3 prefill (SGLang/Mate flash_attn_with_kvcache). Unlike the
+// dense-ragged variant above, this consumes the KV cache populated by
+// reshape_paged_cache and the rectangular page table. It is used when a
+// prefill extends an existing cached prefix.
+torch::Tensor fa3_prefill_scheduler_metadata(
     const torch::Device& device,
     int32_t batch_size,
     int32_t num_heads_q,
@@ -239,7 +244,52 @@ torch::Tensor fa3_decode_scheduler_metadata(
     int32_t window_size_left,
     int32_t window_size_right,
     const torch::Tensor& cu_seqlens_q,
+    const torch::Tensor& cu_seqlens_k_new,
     const torch::Tensor& seqused_k);
+
+void fa3_prefill_paged(const torch::Tensor& query,
+                       const torch::Tensor& k_cache,
+                       const torch::Tensor& v_cache,
+                       const torch::Tensor& cu_seqlens_q,
+                       const torch::Tensor& cu_seqlens_k_new,
+                       const torch::Tensor& seqused_k,
+                       const torch::Tensor& page_table,
+                       const torch::Tensor& scheduler_metadata,
+                       int64_t max_seqlen_q,
+                       int64_t window_left,
+                       int64_t window_right,
+                       double sm_scale,
+                       torch::Tensor& output,
+                       torch::Tensor& output_lse);
+
+// Piecewise-graph-aware dense ragged FA3 prefill. During capture this splits
+// the graph and registers a replay runner; eager calls dispatch directly.
+void fa3_prefill_with_optional_piecewise_capture(
+    const torch::Tensor& query,
+    const torch::Tensor& key,
+    const torch::Tensor& value,
+    const torch::Tensor& cu_seqlens_q,
+    const torch::Tensor& cu_seqlens_k,
+    int64_t max_seqlen_q,
+    int64_t max_seqlen_k,
+    int64_t window_left,
+    int64_t window_right,
+    double sm_scale,
+    torch::Tensor& output,
+    torch::Tensor& output_lse);
+
+torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
+                                            int32_t batch_size,
+                                            int32_t num_heads_q,
+                                            int32_t num_heads_kv,
+                                            int32_t head_dim_qk,
+                                            int32_t head_dim_vo,
+                                            int32_t max_seqlen_q,
+                                            int32_t max_seqlen_k,
+                                            int32_t window_size_left,
+                                            int32_t window_size_right,
+                                            const torch::Tensor& cu_seqlens_q,
+                                            const torch::Tensor& seqused_k);
 
 void rms_norm(torch::Tensor output,
               torch::Tensor input,

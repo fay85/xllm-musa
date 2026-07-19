@@ -56,7 +56,9 @@ class FlashInferAttentionImpl final : public BaseAttentionImpl {
                        torch::Tensor& key,
                        torch::Tensor& value,
                        torch::Tensor& output,
-                       std::optional<torch::Tensor>& output_lse);
+                       std::optional<torch::Tensor>& output_lse,
+                       const torch::Tensor& k_cache,
+                       const torch::Tensor& v_cache);
 
   void chunked_prefill_forward(const AttentionMetadata& attn_metadata,
                                torch::Tensor& query,
