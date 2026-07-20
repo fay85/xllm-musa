@@ -17,13 +17,17 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstddef>
+#if defined(USE_MLU)
 #include <limits>
+#endif
 #include <vector>
 
 #include "framework/block/block_utils.h"
 #include "framework/kv_cache/deepseek_v4_cache_policy.h"
 #include "framework/model/model_args.h"
+#if defined(USE_MLU)
 #include "platform/mlu/mlu_rdma_memory_plan.h"
+#endif
 #include "util/pretty_print.h"
 #include "util/tensor_helper.h"
 #include "util/utils.h"
@@ -33,6 +37,7 @@ namespace xllm {
 namespace {
 
 constexpr int32_t kNzAlignment = 16;
+constexpr int64_t kPaddingLinearStateBlocks = 2;
 
 int64_t kv_cache_dtype_size(const std::string& kv_cache_dtype,
                             int64_t model_dtype_size) {
@@ -112,6 +117,7 @@ bool use_rdma_indexer_scale_padding(const KVCacheEstimateOptions& options,
 #endif
 }
 
+#if defined(USE_MLU)
 size_t checked_product(size_t lhs, size_t rhs, const char* description) {
   if (lhs > static_cast<size_t>(0)) {
     CHECK_LE(rhs, std::numeric_limits<size_t>::max() / lhs)
@@ -162,6 +168,7 @@ size_t standard_full_cache_allocation_bytes(const KVCacheCapacity& kv_cache_cap,
       << "full cache allocation bytes overflow";
   return logical_bytes + total_padding;
 }
+#endif
 
 bool is_qwen3_5_target_model_type(const std::string& model_type) {
   return model_type == "qwen3_5" || model_type == "qwen3_5_moe" ||
@@ -492,7 +499,11 @@ void init_standard_counts(const ModelArgs& model_args,
                                     kv_cache_cap->num_full_attention_layers(),
                                     block_size_in_bytes,
                                     options.max_seqs_per_batch,
+#if defined(USE_MLU)
                                     options.max_linear_state_cache_slots,
+#else
+                                    options.max_concurrent_requests,
+#endif
                                     options.enable_prefix_cache));
   kv_cache_cap->linear_cache_size_in_bytes(
       kv_cache_cap->num_linear_attention_layers() *
@@ -521,6 +532,7 @@ void init_standard_counts(const ModelArgs& model_args,
   const int64_t logical_n_blocks =
       available_full_cache_size_in_bytes /
       (full_attention_layers * block_size_in_bytes);
+#if defined(USE_MLU)
   const bool enable_rdma_scale_padding =
       use_rdma_indexer_scale_padding(options, *kv_cache_cap);
   if (!enable_rdma_scale_padding) {
@@ -574,6 +586,9 @@ void init_standard_counts(const ModelArgs& model_args,
             << scale_plan.logical_bytes << ", scale_registered_bytes_per_layer="
             << scale_plan.registered_bytes
             << ", full_attention_layers=" << full_attention_layers;
+#else
+  kv_cache_cap->n_blocks(logical_n_blocks);
+#endif
   CHECK_GT(kv_cache_cap->n_blocks(), 0) << "no n_blocks for kv cache";
 }
 
@@ -602,17 +617,23 @@ KVCacheCapacity estimate_kv_cache_capacity(
       torch::scalarTypeToTypeMeta(options.dtype).itemsize());
   const int64_t cache_dtype_size =
       kv_cache_dtype_size(options.kv_cache_dtype, dtype_size);
+#if defined(USE_MLU)
   const bool enable_indexer_cache_quantization =
       options.indexer_cache_dtype == "int8";
+#else
+  const bool enable_indexer_cache_quantization = false;
+#endif
 
   kv_cache_cap.slot_size(kv_slot_size(model_args, options, cache_dtype_size))
       .index_slot_size(index_slot_size(
           model_args, enable_indexer_cache_quantization, dtype_size))
-      .enable_indexer_cache_quant(enable_indexer_cache_quantization)
       .scale_slot_size(scale_slot_size(model_args, options))
       .linear_slot_size(linear_slot_size(model_args, options, dtype_size))
       .n_layers(model_args.n_layers())
       .block_size(options.block_size);
+#if defined(USE_MLU)
+  kv_cache_cap.enable_indexer_cache_quant(enable_indexer_cache_quantization);
+#endif
   const int64_t num_speculative_tokens =
       enable_qwen3_5_spec_verify(model_args, options)
           ? options.num_speculative_tokens
