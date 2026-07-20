@@ -17,6 +17,7 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <cstdint>
+#include <cstdlib>
 #include <optional>
 #include <string>
 
@@ -35,6 +36,7 @@ constexpr const char* kFa3MetadataUriGqa8 =
 
 constexpr int32_t kFa3TileM = 32;
 constexpr int32_t kFa3TileN = 64;
+constexpr int32_t kFa3Gqa6MultiBatchDynamicSplitMinKvLength = 8192;
 
 // Paged-KV FA3 (decode / with_kvcache). head_dim=256, GQA=6/8,
 // packgqa+metadata.
@@ -74,6 +76,29 @@ std::string fa3_prefill_fwd_uri(int64_t gqa_ratio) {
   const char* hash = gqa_ratio == 6 ? kFa3PrefillFwdUriHashGqa6
                                     : kFa3PrefillFwdUriHashGqa8;
   return std::string("fmha_fwd_") + hash;
+}
+
+bool enable_fa3_gqa6_dynamic_split() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_FA3_GQA6_DYNAMIC_SPLIT");
+    return env == nullptr || std::string(env) != "0";
+  }();
+  return enabled;
+}
+
+int64_t fa3_gqa6_num_splits(int32_t batch_size, int32_t max_seqlen_k) {
+  if (!enable_fa3_gqa6_dynamic_split()) {
+    return 1;
+  }
+
+  // Split-K exposes useful parallelism for isolated decode. With a larger
+  // batch, the heads and sequences already fill the device; defer the extra
+  // reduction until the KV length is large enough to amortize it.
+  if (batch_size <= 2 ||
+      max_seqlen_k >= kFa3Gqa6MultiBatchDynamicSplitMinKvLength) {
+    return 0;
+  }
+  return 1;
 }
 
 ffi::Optional<ffi::Tensor> none_tensor() {
@@ -174,7 +199,10 @@ torch::Tensor fa3_decode_scheduler_metadata(
       to_ffi_tensor(batch_table),
       to_ffi_tensor(num_m_blocks),
       to_ffi_tensor(num_nheads_in_l2),
-      /*num_splits=*/static_cast<int64_t>(1),
+      // This older four-output metadata ABI supports the same Mate split
+      // heuristic as the current contiguous ABI. Keep a runtime rollback for
+      // A/B validation and deployments with different cached artifacts.
+      /*num_splits=*/fa3_gqa6_num_splits(batch_size, max_seqlen_k),
       static_cast<int64_t>(kFa3TileM),
       static_cast<int64_t>(kFa3TileN),
       /*mp_margin=*/static_cast<int64_t>(0));
