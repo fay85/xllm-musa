@@ -59,3 +59,18 @@ compile_commands.json
 /local
 /logs
 /log
+
+# documentation site (mkdocs) — not built by CMake, kept local only
+/docs/
+/mkdocs_en.yml
+/mkdocs_zh.yml
+
+# vendored transfer engine + build patches (not wired into the dev CMake build)
+/third_party/hccl_transfer/
+/third_party/custom_patch/
+
+# stale MLU (Cambricon) subsystem — dev carries the pre-JIT AOT path; upstream
+# replaced it with triton_jit (#1908). MLU is mutually exclusive with USE_MUSA
+# and not built on this branch; master's JIT version wins at merge time.
+/xllm/core/kernels/mlu/
+/xllm/core/layers/mlu/
