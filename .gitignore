@@ -74,3 +74,32 @@ compile_commands.json
 # and not built on this branch; master's JIT version wins at merge time.
 /xllm/core/kernels/mlu/
 /xllm/core/layers/mlu/
+
+# crash dumps, temp/probe scripts, debug log + profile output dirs
+*.mudmp
+core_*
+/.tmp_*
+/log_*/
+/hidden_dumps/
+/profile_results/
+
+# benchmark run outputs and dated investigation notes
+/bench_result*
+/TPOT_bench_*.txt
+conc_eval_full_answer/
+/handoff*.md
+/*_0[0-9][0-9][0-9].md
+/phase_[0-9]*.md
+/prefill_ttft_*.md
+/sglang_long_ISL_prefill.md
+/ttft_*.md
+/tools/prefill_ttft_baseline.md
+/docker_build_status.md
+
+# editor / local / merge-investigation scratch
+/xllm-git-master.code-workspace
+/test_write_perm
+/merge_plan/
+/xllm/core/runtime/_merge_diff_report/
+/xllm/core/runtime/MUSA_MERGE_HANDOFF.md
+/.agents/skills/musa-container-build/
