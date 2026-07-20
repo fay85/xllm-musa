@@ -290,24 +290,10 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
   {
     PrefillBreakdown::Scope o_scope(PrefillBreakdown::Bucket::kFullOProj);
     if (attn_output_gate_) {
-#if defined(USE_CUDA) || defined(USE_MUSA)
-      // Capture-safe gating: `torch::sigmoid(gate)` allocates via
-      // `empty_like(gate)` -> EmptyMUSA (forbidden mid-stream-capture), and
-      // `out * sigmoid_result` allocates again. Replace with two purely
-      // elementwise in-place kernels:
-      //   * `gate.sigmoid_()`  -- writes back into `gate`, a view of the
-      //     ColumnParallelLinear persistent qkv buffer. Safe because `gate`
-      //     is not consumed again in this function (and the persistent
-      //     qkv buffer is rewritten on every forward by qkv_proj_).
-      //   * `out.mul_(gate)`   -- modifies the AttentionImpl persistent
-      //     output buffer slice in place; the next layer's attn_->forward
-      //     overwrites that slot before any other consumer reads it.
-      // Both ops are pure elementwise kernels with no host-side allocation.
-      // Neither sglang nor xllm-musa fuses this on torch_musa; sglang relies
-      // on libtorch's MemPoolContext-aware allocator (not honoured by
-      // torch_musa 2.7.1) to put the implicit allocations in the captured
-      // pool, so on this stack we have to bypass them entirely.
-      out.mul_(gate.sigmoid_());
+#if defined(USE_CUDA)
+      // Capture-safe fused gating: compute sigmoid(gate) and multiply `out`
+      // in one launch without a temporary allocation or mutating `gate`.
+      xllm::kernel::cuda::mul_sigmoid_gate_inplace(out, gate);
 #else
       out = out * torch::sigmoid(gate);
 #endif
