@@ -1,4 +1,4 @@
-/* Copyright 2026 The xLLM Authors. All Rights Reserved.
+/* Copyright 2026 The xLLM Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -51,6 +51,10 @@ class Platform final {
     return false;
 #endif
   }
+
+  // Temporary compatibility boundary for MLU CP. Remove this capability
+  // after MLU moves CP input preparation into WorkerImpl.
+  static constexpr bool uses_model_cp_partition() { return is_mlu(); }
 
   static constexpr bool is_ilu() {
 #if defined(USE_ILU)
