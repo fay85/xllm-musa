@@ -2227,6 +2227,11 @@ inline void deserialize_forward_input_payload(
   read_vector(context, input_params.embedding.linear_state_ids);
   normalize_linear_state_ids(input_params.embedding.linear_state_ids,
                              input_params.meta.num_sequences);
+  if (!input_params.embedding.linear_state_ids.empty()) {
+    input_params.embedding.linear_state_indices =
+        torch::tensor(input_params.embedding.linear_state_ids, torch::kInt)
+            .to(device, /*non_blocking=*/true);
+  }
   read_string_vector(context, input_params.embedding.request_ids);
   read_vector(context, input_params.embedding.extra_token_ids);
   // Keep upstream's root mtp_shifted_token_ids serialization (consumed by
