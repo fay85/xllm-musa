@@ -41,7 +41,6 @@ limitations under the License.
 #include "framework/request/sequence.h"
 #include "framework/xtensor/page_allocator.h"
 #include "runtime/xservice_client.h"
-#include "scheduler/chunked_prefill_scheduler.h"
 #include "scheduler/continuous_scheduler.h"
 #include "util/env_var.h"
 #include "util/utils.h"
@@ -49,7 +48,7 @@ limitations under the License.
 namespace xllm {
 
 DisaggPDScheduler::DisaggPDScheduler(Engine* engine, const Options& options)
-    : ChunkedPrefillScheduler(engine, options), server_name_("DisaggPDServer") {
+    : ContinuousScheduler(engine, options), server_name_("DisaggPDServer") {
   if (!options_.instance_role().has_value()) {
     LOG(FATAL) << "Instance type is not set in disagg pd mode.";
   }
@@ -288,10 +287,10 @@ void DisaggPDScheduler::start_rpc_server() {
 void DisaggPDScheduler::step(const absl::Duration& timeout) {
   ContinuousScheduler::step(timeout);
   // Send first generation token to decode instance.
-  // Always check (not gated on last_step_prefill_) because
-  // ChunkedPrefillScheduler does not set that flag and a chunked prefill
-  // may complete at any step. prefill_send_first_generation() internally
-  // checks num_generated_tokens() == 1 so spurious calls are harmless.
+  // Always check (not gated on last_step_prefill_) because chunked prefill
+  // mode does not set that flag and a chunked prefill may complete at any step.
+  // prefill_send_first_generation() internally checks
+  // num_generated_tokens() == 1 so spurious calls are harmless.
   if (options_.instance_role() != InstanceRole::DECODE) {
     prefill_send_first_generation();
   }
@@ -313,11 +312,7 @@ std::vector<Batch> DisaggPDScheduler::prepare_batch() {
     while (request_queue_.read(request)) {
       CHECK(request);
       if (request->sequences()[0]->kv_state().kv_cache_tokens_num() == 0) {
-        if (request->offline()) {
-          waiting_priority_queue_offline_->push(request);
-        } else {
-          waiting_priority_queue_->push(request);
-        }
+        prefill_queue_->push(request);
       } else {
         // request from prefill instance in disagge pd mode.
         running_requests_.emplace_back(request);
@@ -325,9 +320,8 @@ std::vector<Batch> DisaggPDScheduler::prepare_batch() {
     }
   }
 
-  if (options_.enable_chunked_prefill()) {
-    return ChunkedPrefillScheduler::prepare_batch();
-  }
+  // The BatchMode config (resolved from options) routes scheduling correctly
+  // for both chunked-prefill and exclusive modes.
   return ContinuousScheduler::prepare_batch();
 }
 

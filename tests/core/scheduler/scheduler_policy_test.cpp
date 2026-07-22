@@ -13,22 +13,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "chunked_prefill_scheduler.h"
-
-#include <absl/time/clock.h>
 #include <gtest/gtest.h>
 
 #include <cmath>
+#include <limits>
+#include <memory>
 #include <optional>
+#include <string>
+#include <string_view>
+#include <vector>
 
-#include "core/framework/config/execution_config.h"
+#include "continuous_scheduler.h"
 #include "core/framework/config/scheduler_config.h"
 #include "distributed_runtime/engine.h"
+#include "framework/model/model_args.h"
 #include "util/utils.h"
 
 namespace xllm {
 
 namespace {
+
 class FakeTokenizer : public Tokenizer {
  public:
   bool encode(const std::string_view& text,
@@ -56,26 +60,26 @@ class FakeEngine : public Engine {
     BlockManagerPool::Options opt;
     opt.num_blocks_ = num_blocks;
     opt.block_size_ = block_size;
-    opt.enable_prefix_cache_ = false;  // we dont consider prefix cache here
+    opt.max_seqs_per_batch_ = 1024;
+    opt.enable_prefix_cache_ = false;
     fake_tokenizer_ = std::make_unique<FakeTokenizer>();
     fake_block_manager_ = std::make_unique<BlockManagerPool>(opt, 1);
   }
-  ForwardOutput step(std::vector<Batch>& batch) { NOT_IMPLEMENTED(); }
+  ForwardOutput step(std::vector<Batch>& batch) { return {}; }
   void update_last_step_result(std::vector<Batch>& batch) { NOT_IMPLEMENTED(); }
   const Tokenizer* tokenizer() const { return fake_tokenizer_.get(); }
   BlockManagerPool* block_manager_pool() const {
     return fake_block_manager_.get();
   }
-  const ModelArgs& model_args() const { NOT_IMPLEMENTED(); }
+  const ModelArgs& model_args() const override { return model_args_; }
   const TokenizerArgs& tokenizer_args() const { NOT_IMPLEMENTED(); }
-  std::vector<int64_t> get_active_activation_memory() const {
-    NOT_IMPLEMENTED();
-  }
+  std::vector<int64_t> get_active_activation_memory() const { return {0}; }
   bool init() override { return true; }
 
  private:
   std::unique_ptr<Tokenizer> fake_tokenizer_;
   std::unique_ptr<BlockManagerPool> fake_block_manager_;
+  ModelArgs model_args_;
 };
 
 template <typename T>
@@ -102,8 +106,7 @@ ContinuousScheduler::Options create_scheduler_options(
     bool enable_profile_kv_blocks = true,
     bool enable_latency_aware_schedule = false,
     int32_t max_global_ttft_ms = std::numeric_limits<int32_t>::max(),
-    int32_t max_global_tpot_ms = std::numeric_limits<int32_t>::max(),
-    bool enable_adaptive_prefill_oneshot = false) {
+    int32_t max_global_tpot_ms = std::numeric_limits<int32_t>::max()) {
   ContinuousScheduler::Options opt;
   opt.num_speculative_tokens_ = num_speculative_tokens;
   opt.max_tokens_per_chunk_for_prefill_ = max_tokens_per_chunk_for_prefill;
@@ -115,7 +118,6 @@ ContinuousScheduler::Options create_scheduler_options(
   opt.enable_latency_aware_schedule_ = enable_latency_aware_schedule;
   opt.max_global_ttft_ms_ = max_global_ttft_ms;
   opt.max_global_tpot_ms_ = max_global_tpot_ms;
-  opt.enable_adaptive_prefill_oneshot_ = enable_adaptive_prefill_oneshot;
   return opt;
 }
 
@@ -201,7 +203,7 @@ void update_requests(std::vector<std::shared_ptr<Request>> requests) {
 // TEST-1:
 // Three independent prefill requests, according to the configs,
 // verify how many tokens are processed in one scheduling.
-TEST(ChunkedPrefillSchedulerTest, AddNewRequestBase) {
+TEST(SchedulerPolicyTest, AddNewRequestBase) {
   std::vector<int32_t> prompt_len{10, 1024, 2048};
   std::vector<int32_t> num_blocks{16, 128, 128};
   std::vector<int32_t> block_size{16, 16, 16};
@@ -211,8 +213,7 @@ TEST(ChunkedPrefillSchedulerTest, AddNewRequestBase) {
         create_scheduler_options(10000, 256, 0, 1024, 1);
     auto engine =
         std::make_unique<FakeEngine>(num_blocks[idx], block_size[idx]);
-    auto scheduler =
-        std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
+    auto scheduler = std::make_unique<ContinuousScheduler>(engine.get(), opt);
     EXPECT_TRUE(scheduler != nullptr);
 
     // create requests
@@ -233,160 +234,16 @@ TEST(ChunkedPrefillSchedulerTest, AddNewRequestBase) {
   }
 }
 
-TEST(ChunkedPrefillSchedulerTest,
-     AdaptiveOneShotSchedulesIsolatedPromptWithinBatchBudget) {
-  ScopedConfigValue<bool> disable_graph(
-      ExecutionConfig::get_instance().enable_graph(), false);
-  constexpr int32_t kPromptLength = 20500;
-  ContinuousScheduler::Options opt =
-      create_scheduler_options(22000,
-                               256,
-                               0,
-                               8192,
-                               1,
-                               "fcfs",
-                               true,
-                               false,
-                               std::numeric_limits<int32_t>::max(),
-                               std::numeric_limits<int32_t>::max(),
-                               true);
-  auto engine = std::make_unique<FakeEngine>(2048, 16);
-  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
-
-  auto requests = generate_request(
-      {kPromptLength}, {10}, std::nullopt, std::nullopt, 30000);
-  scheduler->add_request(requests.front());
-
-  auto batch = scheduler->prepare_batch_test();
-  ASSERT_EQ(batch.size(), 1);
-  ASSERT_EQ(batch.front().size(), 1);
-  ASSERT_EQ(batch.front().get_allowed_max_tokens().size(), 1);
-  EXPECT_EQ(batch.front().get_allowed_max_tokens().front(), kPromptLength);
-}
-
-TEST(ChunkedPrefillSchedulerTest,
-     AdaptiveOneShotKeepsChunkLimitWhenBatchBudgetIsInsufficient) {
-  ScopedConfigValue<bool> disable_graph(
-      ExecutionConfig::get_instance().enable_graph(), false);
-  constexpr int32_t kPromptLength = 20500;
-  constexpr int32_t kPrefillChunkLimit = 8192;
-  ContinuousScheduler::Options opt =
-      create_scheduler_options(16000,
-                               256,
-                               0,
-                               kPrefillChunkLimit,
-                               1,
-                               "fcfs",
-                               true,
-                               false,
-                               std::numeric_limits<int32_t>::max(),
-                               std::numeric_limits<int32_t>::max(),
-                               true);
-  auto engine = std::make_unique<FakeEngine>(2048, 16);
-  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
-
-  auto requests = generate_request(
-      {kPromptLength}, {10}, std::nullopt, std::nullopt, 30000);
-  scheduler->add_request(requests.front());
-
-  auto batch = scheduler->prepare_batch_test();
-  ASSERT_EQ(batch.size(), 1);
-  ASSERT_EQ(batch.front().size(), 1);
-  ASSERT_EQ(batch.front().get_allowed_max_tokens().size(), 1);
-  EXPECT_EQ(batch.front().get_allowed_max_tokens().front(), kPrefillChunkLimit);
-}
-
-TEST(ChunkedPrefillSchedulerTest,
-     AdaptiveOneShotKeepsChunkLimitWhenAnotherRequestIsWaiting) {
-  ScopedConfigValue<bool> disable_graph(
-      ExecutionConfig::get_instance().enable_graph(), false);
-  constexpr int32_t kPrefillChunkLimit = 8192;
-  ContinuousScheduler::Options opt =
-      create_scheduler_options(22000,
-                               256,
-                               0,
-                               kPrefillChunkLimit,
-                               1,
-                               "fcfs",
-                               true,
-                               false,
-                               std::numeric_limits<int32_t>::max(),
-                               std::numeric_limits<int32_t>::max(),
-                               true);
-  auto engine = std::make_unique<FakeEngine>(4096, 16);
-  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
-
-  auto requests = generate_request(
-      {20500, 100}, {10, 10}, std::nullopt, std::nullopt, 30000);
-  scheduler->add_request(requests[0]);
-  scheduler->add_request(requests[1]);
-
-  auto batch = scheduler->prepare_batch_test();
-  ASSERT_EQ(batch.size(), 1);
-  ASSERT_EQ(batch.front().size(), 2);
-  for (uint32_t allowed_tokens : batch.front().get_allowed_max_tokens()) {
-    EXPECT_LE(allowed_tokens, kPrefillChunkLimit);
-  }
-}
-
-TEST(ChunkedPrefillSchedulerTest,
-     AdaptiveOneShotKeepsChunkLimitWhenDecodeIsRunning) {
-  ScopedConfigValue<bool> disable_graph(
-      ExecutionConfig::get_instance().enable_graph(), false);
-  constexpr int32_t kPrefillChunkLimit = 8192;
-  ContinuousScheduler::Options opt =
-      create_scheduler_options(22000,
-                               256,
-                               0,
-                               kPrefillChunkLimit,
-                               1,
-                               "fcfs",
-                               true,
-                               false,
-                               std::numeric_limits<int32_t>::max(),
-                               std::numeric_limits<int32_t>::max(),
-                               true);
-  auto engine = std::make_unique<FakeEngine>(4096, 16);
-  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
-
-  auto decode_request =
-      generate_request({100}, {10}, std::nullopt, std::nullopt, 30000);
-  scheduler->add_request(decode_request.front());
-  auto batch = scheduler->prepare_batch_test();
-  ASSERT_EQ(batch.size(), 1);
-  ASSERT_EQ(batch.front().size(), 1);
-  update_requests(decode_request);
-
-  auto prefill_request =
-      generate_request({20500}, {10}, std::nullopt, std::nullopt, 30000);
-  scheduler->add_request(prefill_request.front());
-  batch = scheduler->prepare_batch_test();
-
-  ASSERT_EQ(batch.size(), 1);
-  ASSERT_EQ(batch.front().size(), 2);
-  const std::vector<uint32_t>& allowed_tokens =
-      batch.front().get_allowed_max_tokens();
-  for (size_t i = 0; i < batch.front().size(); ++i) {
-    if (batch.front()[i] ==
-        prefill_request.front()->sequences().front().get()) {
-      EXPECT_EQ(allowed_tokens[i], kPrefillChunkLimit);
-      return;
-    }
-  }
-  FAIL() << "The waiting prefill sequence was not scheduled.";
-}
-
 // TEST-2:
 // memory or budget not enough
-TEST(ChunkedPrefillSchedulerTest, ResourceNotEnough) {
+TEST(SchedulerPolicyTest, ResourceNotEnough) {
   // case1: max tokens budget not enough
   {
-    // max token budget: 0
+    // max token budget: 1
     ContinuousScheduler::Options opt =
         create_scheduler_options(1, 256, 0, 1024, 1);
     auto engine = std::make_unique<FakeEngine>(16, 16);
-    auto scheduler =
-        std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
+    auto scheduler = std::make_unique<ContinuousScheduler>(engine.get(), opt);
     EXPECT_TRUE(scheduler != nullptr);
 
     // request prompt len: 100
@@ -406,8 +263,7 @@ TEST(ChunkedPrefillSchedulerTest, ResourceNotEnough) {
         create_scheduler_options(1000, 256, 0, 1024, 1);
     // free block slot: 1
     auto engine = std::make_unique<FakeEngine>(2, 8);
-    auto scheduler =
-        std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
+    auto scheduler = std::make_unique<ContinuousScheduler>(engine.get(), opt);
     EXPECT_TRUE(scheduler != nullptr);
 
     // request prompt len: 1000
@@ -423,8 +279,8 @@ TEST(ChunkedPrefillSchedulerTest, ResourceNotEnough) {
 }
 
 // TEST-3:
-// schdule decoding requests + some prefill requests
-TEST(ChunkedPrefillSchedulerTest, NormalSchedule) {
+// schedule decoding requests + some prefill requests
+TEST(SchedulerPolicyTest, NormalSchedule) {
   // set max free blocks: 512, support 512*32=16384 tokens
   int block_num = 512;
   int block_size = 32;
@@ -433,7 +289,7 @@ TEST(ChunkedPrefillSchedulerTest, NormalSchedule) {
   ContinuousScheduler::Options opt = create_scheduler_options(
       10000, 256, 0, max_tokens_per_chunk_for_prefill, 1);
   auto engine = std::make_unique<FakeEngine>(block_num, block_size);
-  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
+  auto scheduler = std::make_unique<ContinuousScheduler>(engine.get(), opt);
   EXPECT_TRUE(scheduler != nullptr);
 
   // 1. schedule some new prefill requests
@@ -453,7 +309,7 @@ TEST(ChunkedPrefillSchedulerTest, NormalSchedule) {
               (total_blocks - seq_use_blocks));
   update_requests(requests);
 
-  // 2. schedule decoding requets
+  // 2. schedule decoding requests
   batch = scheduler->prepare_batch_test();
   EXPECT_TRUE(batch.size() == 1);
   EXPECT_TRUE(batch[0].size() == 3);
@@ -509,7 +365,7 @@ TEST(ChunkedPrefillSchedulerTest, NormalSchedule) {
 
 // TEST-4:
 // test preempt
-TEST(ChunkedPrefillSchedulerTest, PreemptSchedule) {
+TEST(SchedulerPolicyTest, PreemptSchedule) {
   // set max free blocks: 9, support 9*32=288 tokens
   // actually only 8 free blocks , because default 1 block is for padding
   int block_num = 9;
@@ -519,7 +375,7 @@ TEST(ChunkedPrefillSchedulerTest, PreemptSchedule) {
   ContinuousScheduler::Options opt = create_scheduler_options(
       10000, 256, 0, max_tokens_per_chunk_for_prefill, 1);
   auto engine = std::make_unique<FakeEngine>(block_num, block_size);
-  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
+  auto scheduler = std::make_unique<ContinuousScheduler>(engine.get(), opt);
   EXPECT_TRUE(scheduler != nullptr);
 
   std::vector<std::shared_ptr<Request>> running_requests;
@@ -568,169 +424,8 @@ TEST(ChunkedPrefillSchedulerTest, PreemptSchedule) {
 }
 
 // TEST-5:
-// test on/offline preempt
-TEST(ChunkedPrefillSchedulerTest, OnDecodePreemptOffDecode) {
-  // set max free blocks: 9, support 9*32=288 tokens
-  // actually only 8 free blocks , because default 1 block is for padding
-  int block_num = 9;
-  int block_size = 32;
-  int max_tokens_per_chunk_for_prefill = 1024;
-  // set chunked max_tokens budgets 10000 per step
-  ContinuousScheduler::Options opt = create_scheduler_options(
-      10000, 256, 0, max_tokens_per_chunk_for_prefill, 1);
-  auto engine = std::make_unique<FakeEngine>(block_num, block_size);
-  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
-  BlockManagerPool* block_manager_pool = engine->block_manager_pool();
-  EXPECT_TRUE(scheduler != nullptr);
-
-  std::vector<std::shared_ptr<Request>> running_requests;
-
-  // 1. schedule one online and one prefill prefill requests
-  auto requests = generate_request({127, 127},
-                                   {10, 10},
-                                   std::vector<bool>{true, false},
-                                   std::vector<int32_t>{2, 2},
-                                   30000);
-  running_requests = requests;
-  for (auto req : requests) {
-    scheduler->add_request(req);
-  }
-  auto batch = scheduler->prepare_batch_test();
-  EXPECT_TRUE(batch.size() == 1);
-  EXPECT_TRUE(batch[0].size() == 2);
-  update_requests(running_requests);
-
-  batch = scheduler->prepare_batch_test();
-
-  EXPECT_TRUE(batch.size() == 1);
-  EXPECT_TRUE(batch[0].size() == 2);
-  update_requests(running_requests);
-
-  int free_blocks_before_preempt =
-      util::max(block_manager_pool->num_free_blocks());
-  // 2. after 2 step, preemption should happen
-  batch = scheduler->prepare_batch_test();
-  EXPECT_TRUE(batch.size() == 1);
-  EXPECT_TRUE(batch[0].size() == 1);
-  int free_blocks_after_preempt =
-      util::max(block_manager_pool->num_free_blocks());
-  EXPECT_TRUE(free_blocks_after_preempt > free_blocks_before_preempt);
-  // check the running request is online request
-  EXPECT_TRUE(scheduler->get_running_requests().size() == 1);
-  EXPECT_TRUE(scheduler->get_running_requests()[0]->offline() == false);
-  EXPECT_TRUE(scheduler->get_waiting_requests_num() == 1);
-}
-
-// TEST-6:
-// test on/offline preempt
-TEST(ChunkedPrefillSchedulerTest, OnPrefillPreemptOffDecode) {
-  // set max free blocks: 9, support 9*32=288 tokens
-  // actually only 8 free blocks , because default 1 block is for padding
-  int block_num = 9;
-  int block_size = 32;
-  int max_tokens_per_chunk_for_prefill = 1024;
-  // set chunked max_tokens budgets 10000 per step
-  ContinuousScheduler::Options opt = create_scheduler_options(
-      10000, 256, 0, max_tokens_per_chunk_for_prefill, 1);
-  ScopedConfigValue<double> memory_threshold(
-      SchedulerConfig::get_instance()
-          .prefill_scheduling_memory_usage_threshold(),
-      2.0);
-
-  {
-    // 1. two offline decode requests then one online prefill request preempt
-    // them
-    auto engine = std::make_unique<FakeEngine>(block_num, block_size);
-    auto scheduler =
-        std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
-    BlockManagerPool* block_manager_pool = engine->block_manager_pool();
-    EXPECT_TRUE(scheduler != nullptr);
-
-    std::vector<std::shared_ptr<Request>> running_requests;
-
-    auto requests = generate_request({100, 100},
-                                     {10, 10},
-                                     std::vector<bool>{true, true},
-                                     std::vector<int32_t>{2, 2},
-                                     30000);
-    running_requests = requests;
-    for (auto req : requests) {
-      scheduler->add_request(req);
-    }
-    auto batch = scheduler->prepare_batch_test();
-    EXPECT_TRUE(batch.size() == 1);
-    EXPECT_TRUE(batch[0].size() == 2);
-    EXPECT_TRUE(util::max(block_manager_pool->num_free_blocks()) == 0);
-    update_requests(running_requests);
-
-    batch = scheduler->prepare_batch_test();
-    EXPECT_TRUE(batch.size() == 1);
-    EXPECT_TRUE(batch[0].size() == 2);
-    EXPECT_TRUE(util::max(block_manager_pool->num_free_blocks()) == 0);
-    update_requests(running_requests);
-
-    auto new_requests = generate_request({80},
-                                         {10},
-                                         std::vector<bool>{false},
-                                         std::vector<int32_t>{2},
-                                         30000);  // use 3 blocks
-    scheduler->add_request(new_requests[0]);
-    batch = scheduler->prepare_batch_test();
-    EXPECT_TRUE(batch.size() == 1);
-    EXPECT_TRUE(batch[0].size() == 2);
-
-    // online prefill request preempt offline decode request
-    EXPECT_TRUE(scheduler->get_running_requests().size() == 2);
-    EXPECT_TRUE(scheduler->get_running_requests()[0]->offline() == false);
-    EXPECT_TRUE(scheduler->get_waiting_requests_num() == 1);
-
-    // offline is evicted
-    EXPECT_TRUE(util::max(block_manager_pool->num_free_blocks()) == 1);
-  }
-
-  // 2. another case: longer online prefill request arrives, but can not evict
-  // offline because evicting offline is not enough
-  {
-    auto engine = std::make_unique<FakeEngine>(block_num, block_size);
-    auto scheduler =
-        std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
-    BlockManagerPool* block_manager_pool = engine->block_manager_pool();
-    EXPECT_TRUE(scheduler != nullptr);
-
-    std::vector<std::shared_ptr<Request>> running_requests;
-    // 1. schedule one online and one offline
-    auto requests = generate_request({100, 100},
-                                     {10, 10},
-                                     std::vector<bool>{true, false},
-                                     std::vector<int32_t>{2, 2},
-                                     30000);
-    running_requests = requests;
-    for (auto req : requests) {
-      scheduler->add_request(req);
-    }
-    auto batch = scheduler->prepare_batch_test();
-    EXPECT_TRUE(batch.size() == 1);
-    EXPECT_TRUE(batch[0].size() == 2);
-    EXPECT_TRUE(util::max(block_manager_pool->num_free_blocks()) == 0);
-    update_requests(running_requests);
-
-    auto new_requests = generate_request(
-        {200}, {10}, std::vector<bool>{false}, std::vector<int32_t>{2}, 30000);
-    scheduler->add_request(new_requests[0]);
-    batch = scheduler->prepare_batch_test();
-
-    // 2. online is still waiting
-    EXPECT_TRUE(batch.size() == 1);
-    EXPECT_TRUE(batch[0].size() == 2);
-    EXPECT_TRUE(scheduler->get_waiting_requests().size() == 1);
-    EXPECT_TRUE(scheduler->get_waiting_requests()[0].get() ==
-                new_requests[0].get());
-  }
-}
-
-// TEST-7:
 // test priority schedule
-TEST(ChunkedPrefillSchedulerTest, PrioritySchedule) {
+TEST(SchedulerPolicyTest, PrioritySchedule) {
   // set max free blocks: 12
   // actually only 11 free blocks , because default 1 block is for padding
   int block_num = 12;
@@ -740,7 +435,7 @@ TEST(ChunkedPrefillSchedulerTest, PrioritySchedule) {
   ContinuousScheduler::Options opt = create_scheduler_options(
       10000, 256, 0, max_tokens_per_chunk_for_prefill, 1, "priority");
   auto engine = std::make_unique<FakeEngine>(block_num, block_size);
-  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
+  auto scheduler = std::make_unique<ContinuousScheduler>(engine.get(), opt);
   EXPECT_TRUE(scheduler != nullptr);
 
   std::vector<std::shared_ptr<Request>> running_requests;
@@ -791,11 +486,9 @@ TEST(ChunkedPrefillSchedulerTest, PrioritySchedule) {
               RequestPriority::NORMAL /*NORMAL*/);
 }
 
-// TEST-8:
+// TEST-6:
 // test latency budget
-TEST(ChunkedPrefillSchedulerTest, LatencySchedule) {
-  // set max free blocks: 3
-  // actually only 2 free blocks , because default 1 block is for padding
+TEST(SchedulerPolicyTest, LatencySchedule) {
   int block_num = 12;
   int block_size = 32;
   int max_tokens_per_chunk_for_prefill = 4;
@@ -812,10 +505,10 @@ TEST(ChunkedPrefillSchedulerTest, LatencySchedule) {
                                350,
                                150);
   auto engine = std::make_unique<FakeEngine>(block_num, block_size);
-  auto scheduler = std::make_unique<ChunkedPrefillScheduler>(engine.get(), opt);
+  auto scheduler = std::make_unique<ContinuousScheduler>(engine.get(), opt);
   EXPECT_TRUE(scheduler != nullptr);
 
-  // mannuly created profile data for y=0.5x^2+10x
+  // manually created profile data for y=0.5x^2+10x
   std::vector<std::pair<int32_t, double>> created_profile_data = {
       {2, 22}, {4, 48}, {6, 78}, {8, 112}};
   auto profile_manager = scheduler->get_profile_manager();
