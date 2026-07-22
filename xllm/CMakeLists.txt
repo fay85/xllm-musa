@@ -37,7 +37,7 @@ configure_file(
   @ONLY)
 include_directories("${CMAKE_CURRENT_BINARY_DIR}")
 
-# mcc_wrapper emits warnings that are not actionable in translated sources.
+#Set warning-as-error for xllm code (third-party headers are marked as SYSTEM)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   if(USE_MUSA)
     add_compile_options(

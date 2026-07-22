@@ -524,7 +524,6 @@ if(USE_MUSA)
   add_definitions(-DUSE_MUSA)
   add_definitions(-DUSE_CUDA)
   add_compile_definitions(TORCH_CUDA=1)
-
   if(NOT DEFINED MUSA_PATH)
     if(DEFINED ENV{MUSA_HOME} AND NOT "$ENV{MUSA_HOME}" STREQUAL "")
       set(MUSA_PATH "$ENV{MUSA_HOME}")
@@ -534,7 +533,6 @@ if(USE_MUSA)
   endif()
   list(APPEND CMAKE_MODULE_PATH "${MUSA_PATH}/cmake")
   find_package(MUSA REQUIRED)
-
   # MUSA builds use the FlashInfer/Mate TVM-FFI path; MTTOplib is not needed.
   if(NOT DEFINED ENV{TORCH_MUSA_PYTHONPATH} OR
      "$ENV{TORCH_MUSA_PYTHONPATH}" STREQUAL "")

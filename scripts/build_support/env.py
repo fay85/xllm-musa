@@ -272,12 +272,9 @@ def set_ilu_envs() -> None:
 def set_musa_envs() -> None:
     """Configure MUSA through mcc_wrapper and the CUDA compatibility path."""
     from sysconfig import get_paths
-
     set_common_envs()
     import torch_musa
-
     from torch_musa.utils.musa_extension import MUSA_HOME as _MUSA_HOME
-
     musa_home = os.getenv("MUSA_HOME") or _MUSA_HOME or "/usr/local/musa"
     os.environ["MUSA_HOME"] = musa_home
     os.environ["CUDA_HOME"] = musa_home
