@@ -281,9 +281,7 @@ class ExtBuild(build_ext):
             exit(1)
 
     def build_extension(self, ext: CMakeExtension) -> None:
-        ninja_path = shutil.which("ninja")
-        if ninja_path is None:
-            raise RuntimeError("Ninja is required to build xLLM.")
+        ninja_dir = shutil.which("ninja")
         # the output dir for the extension
         extdir: str = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.path)))
 
@@ -315,7 +313,7 @@ class ExtBuild(build_ext):
         cmake_args: list[str] = [
             "-G",
             "Ninja",
-            f"-DCMAKE_MAKE_PROGRAM={ninja_path}",
+            f"-DCMAKE_MAKE_PROGRAM={ninja_dir}",
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={extdir}",
             "-DUSE_CCACHE=ON",
