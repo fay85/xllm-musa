@@ -32,12 +32,10 @@ limitations under the License.
 #include <torch_npu/torch_npu.h>
 #elif defined(USE_MLU)
 #include <framework/core/MLUStream.h>
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
-#include <c10/cuda/CUDAStream.h>
-#elif defined(USE_CUDA)
-#include <c10/musa/MUSAGuard.h>  // 0526: do not include MUSAStream.h
 #elif defined(USE_MUSA)
-#include <torch_musa/csrc/core/MUSAStream.h>
+#include <c10/musa/MUSAGuard.h>
+#elif defined(USE_CUDA) || defined(USE_ILU)
+#include <c10/cuda/CUDAStream.h>
 #elif defined(USE_DCU)
 #include <c10/hip/HIPStream.h>
 #endif
@@ -50,10 +48,10 @@ namespace xllm {
 using PlatformStream = c10_npu::NPUStream;
 #elif defined(USE_MLU)
 using PlatformStream = torch_mlu::MLUStream;
-#elif (defined(USE_CUDA) || defined(USE_ILU)) && !defined(USE_MUSA)
-using PlatformStream = c10::cuda::CUDAStream;
-#elif defined(USE_CUDA) || defined(USE_MUSA)
+#elif defined(USE_MUSA)
 using PlatformStream = c10::musa::MUSAStream;
+#elif defined(USE_CUDA) || defined(USE_ILU)
+using PlatformStream = c10::cuda::CUDAStream;
 #elif defined(USE_DCU)
 using PlatformStream = c10::hip::HIPStream;
 #endif

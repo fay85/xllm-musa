@@ -15,10 +15,10 @@ limitations under the License.
 
 #include "numa_utils.h"
 
-#if defined(USE_CUDA) && !defined(USE_MUSA)
-#include <cuda_runtime.h>
-#elif defined(USE_CUDA)
+#if defined(USE_MUSA)
 #include <musa_runtime.h>
+#elif defined(USE_CUDA)
+#include <cuda_runtime.h>
 #elif defined(USE_MLU)
 #include <cnrt.h>
 #elif defined(USE_DCU)
@@ -183,18 +183,7 @@ int32_t get_device_numa_node(int32_t device_index) {
     return -1;
   }
 
-#if defined(USE_CUDA) && !defined(USE_MUSA)
-  char pci_bus_id[32] = {0};
-  cudaError_t ret =
-      cudaDeviceGetPCIBusId(pci_bus_id, sizeof(pci_bus_id), device_index);
-  if (ret == cudaSuccess) {
-    return get_numa_node_from_sysfs("CUDA", device_index, pci_bus_id);
-  }
-
-  LOG(WARNING) << "Failed to query PCI bus ID for CUDA device " << device_index
-               << " via cudaDeviceGetPCIBusId: " << cudaGetErrorString(ret)
-               << ", skipping NUMA binding";
-#elif defined(USE_CUDA)
+#if defined(USE_MUSA)
   char pci_bus_id[32] = {0};
   musaError_t ret =
       musaDeviceGetPCIBusId(pci_bus_id, sizeof(pci_bus_id), device_index);
@@ -204,6 +193,17 @@ int32_t get_device_numa_node(int32_t device_index) {
 
   LOG(WARNING) << "Failed to query PCI bus ID for MUSA device " << device_index
                << " via musaDeviceGetPCIBusId: " << musaGetErrorString(ret)
+               << ", skipping NUMA binding";
+#elif defined(USE_CUDA)
+  char pci_bus_id[32] = {0};
+  cudaError_t ret =
+      cudaDeviceGetPCIBusId(pci_bus_id, sizeof(pci_bus_id), device_index);
+  if (ret == cudaSuccess) {
+    return get_numa_node_from_sysfs("CUDA", device_index, pci_bus_id);
+  }
+
+  LOG(WARNING) << "Failed to query PCI bus ID for CUDA device " << device_index
+               << " via cudaDeviceGetPCIBusId: " << cudaGetErrorString(ret)
                << ", skipping NUMA binding";
 #elif defined(USE_MLU)
   char pci_bus_id[32] = {0};
