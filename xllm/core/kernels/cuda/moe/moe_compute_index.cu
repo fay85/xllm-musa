@@ -116,7 +116,10 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
   int64_t N = expert_id.numel();
   int32_t E = static_cast<int32_t>(num_experts);
   CHECK_LE(E, kMoeIndexBlock) << "num_experts cannot exceed " << kMoeIndexBlock;
-  auto expert_id_i32 = expert_id.to(torch::kInt32).contiguous();
+  auto expert_id_i32 =
+      (expert_id.scalar_type() == torch::kInt32 && expert_id.is_contiguous())
+          ? expert_id
+          : expert_id.to(torch::kInt32).contiguous();
   auto opt_i32 = expert_id_i32.options();
 
   auto expert_sizes = torch::zeros({num_experts}, opt_i32);

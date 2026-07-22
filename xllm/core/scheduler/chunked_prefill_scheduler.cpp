@@ -29,6 +29,7 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/scheduler_config.h"
+#include "distributed_runtime/engine.h"
 #include "framework/batch/batch_factory.h"
 #include "util/timer.h"
 #include "util/utils.h"
@@ -99,10 +100,25 @@ inline size_t maybe_align_cp_chunk_tokens(size_t num_tokens,
   return (num_tokens / alignment) * alignment;
 }
 
-bool require_homogeneous_graph_batch() {
+bool graph_requires_homogeneous_batch() {
   const ExecutionConfig& execution_config = ExecutionConfig::get_instance();
   return execution_config.enable_graph() &&
          execution_config.enable_prefill_piecewise_graph();
+}
+
+bool should_require_homogeneous_batch(const Engine* engine) {
+#if defined(USE_MUSA)
+  // MUSA does not have the NPU mega_chunk_gdn equivalent that consumes a
+  // mixed prefill/decode batch with per-sequence cu_seqlens. Keep hybrid
+  // linear-attention batches homogeneous until that backend exists. SGLang
+  // likewise mixes extend and decode only when enable_mixed_chunk is set.
+  const bool musa_hybrid_requires_homogeneous_batch =
+      engine != nullptr && has_linear_attention_layers(engine->model_args());
+  return graph_requires_homogeneous_batch() ||
+         musa_hybrid_requires_homogeneous_batch;
+#else
+  return graph_requires_homogeneous_batch();
+#endif
 }
 
 bool enable_packed_prefill() {
@@ -250,7 +266,7 @@ void ChunkedPrefillScheduler::handle_running_queue_requests(
     // One independent prefill request per piecewise-graph batch. Multiple
     // decode requests remain allowed. When packed prefill is enabled,
     // multiple prefill requests are admitted up to the token budget.
-    if (require_homogeneous_batch && !enable_packed_prefill() &&
+    if (graph_requires_homogeneous_batch() && !enable_packed_prefill() &&
         request_is_prefill &&
         batch_is_prefill.has_value() && batch_is_prefill.value()) {
       break;
@@ -464,11 +480,11 @@ void ChunkedPrefillScheduler::handle_prefill_requests(
     bool& budget_exhausted,
     bool& blocks_exhausted,
     std::vector<std::shared_ptr<Request>>& finished_requests) {
-  const bool require_homogeneous_batch = require_homogeneous_graph_batch();
+  const bool require_homogeneous_batch =
+      should_require_homogeneous_batch(engine_);
   // Refuse to mix waiting prefills into an already-scheduled decode (or
-  // other) batch under homogeneous graph mode. When enable_packed_prefill
-  // is on, multiple pure prefills are still packed in the loop below as
-  // long as running_sequences_ starts empty for this call.
+  // other) batch when the backend requires homogeneous execution. Packed
+  // prefill may still admit multiple pure prefills in one batch.
   if (require_homogeneous_batch && !running_sequences_.empty()) {
     return;
   }
@@ -477,7 +493,7 @@ void ChunkedPrefillScheduler::handle_prefill_requests(
   // they may contian many sequences, so we should check here.
   while (!waiting_priority_queue->empty() && remaining_token_budget > 0 &&
          latency_budget > estimate_latency && remaining_seq_budget > 0) {
-    if (require_homogeneous_batch && !enable_packed_prefill() &&
+    if (graph_requires_homogeneous_batch() && !enable_packed_prefill() &&
         !running_sequences_.empty()) {
       break;
     }
@@ -894,7 +910,8 @@ std::vector<Batch> ChunkedPrefillScheduler::prepare_batch() {
   bool blocks_exhausted = false;
   // keep the requests in prefill stage
   std::vector<Sequence*> prefill_stage_sequences;
-  const bool require_homogeneous_batch = require_homogeneous_graph_batch();
+  const bool require_homogeneous_batch =
+      should_require_homogeneous_batch(engine_);
   const bool prioritize_waiting_prefill =
       require_homogeneous_batch &&
       (!waiting_priority_queue_->empty() ||

@@ -27,7 +27,7 @@ limitations under the License.
 
 #include "core/util/env_var.h"
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 #include <ATen/record_function.h>
 #if defined(USE_MUSA) || defined(USE_MUSA)
 #include <c10/musa/MUSAFunctions.h>
@@ -42,7 +42,7 @@ limitations under the License.
 namespace xllm {
 namespace {
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 
 enum class CapturePhase {
   kIdle = 0,
@@ -53,7 +53,7 @@ enum class CapturePhase {
 };
 
 std::mutex g_mu;
-int64_t g_decode_steps = 0;
+int64_t g_profile_steps = 0;
 CapturePhase g_phase = CapturePhase::kIdle;
 bool g_libkineto_initialized = false;
 bool g_libkineto_prepared = false;
@@ -63,12 +63,26 @@ bool g_libkineto_capture_active = false;
 bool g_child_profiler_joined = false;
 int64_t g_capture_window_start_step = 0;
 
-int64_t warmup_decode_steps() {
+bool profile_prefill_steps() {
+  return util::get_bool_env("XLLM_KINETO_PROFILE_PREFILL", false);
+}
+
+int64_t warmup_steps() {
+  if (profile_prefill_steps()) {
+    return util::get_int_env("XLLM_KINETO_WARMUP_PREFILL_STEPS", 1);
+  }
   return util::get_int_env("XLLM_KINETO_WARMUP_DECODE_STEPS", 1);
 }
 
-int64_t trace_decode_steps() {
+int64_t trace_steps() {
+  if (profile_prefill_steps()) {
+    return util::get_int_env("XLLM_KINETO_TRACE_PREFILL_STEPS", 1);
+  }
   return util::get_int_env("XLLM_KINETO_TRACE_DECODE_STEPS", 128);
+}
+
+const char* profile_step_label() {
+  return profile_prefill_steps() ? "prefill" : "decode";
 }
 
 std::string torch_trace_path() {
@@ -317,8 +331,8 @@ void start_torch_capture() {
   const auto activities = default_torch_activities();
   torch::autograd::profiler::enableProfiler(make_torch_config(), activities);
   g_torch_capture_active = true;
-  LOG(INFO) << "XllmKinetoProfiler: torch capture started at decode step "
-            << g_decode_steps;
+  LOG(INFO) << "XllmKinetoProfiler: torch capture started at "
+            << profile_step_label() << " step " << g_profile_steps;
 }
 
 void start_libkineto_capture() {
@@ -329,15 +343,15 @@ void start_libkineto_capture() {
   auto& profiler = libkineto::api().activityProfiler();
   profiler.startTrace();
   g_libkineto_capture_active = true;
-  g_capture_window_start_step = g_decode_steps;
-  LOG(INFO) << "XllmKinetoProfiler: libkineto capture started at decode step "
-            << g_decode_steps;
+  g_capture_window_start_step = g_profile_steps;
+  LOG(INFO) << "XllmKinetoProfiler: libkineto capture started at "
+            << profile_step_label() << " step " << g_profile_steps;
 }
 
 void finish_all_profiling() {
   g_phase = CapturePhase::kDone;
-  LOG(INFO) << "XllmKinetoProfiler: profiling complete after " << g_decode_steps
-            << " decode steps";
+  LOG(INFO) << "XllmKinetoProfiler: profiling complete after "
+            << g_profile_steps << " " << profile_step_label() << " steps";
 }
 
 void on_warmup_complete() {
@@ -352,8 +366,8 @@ void on_warmup_complete() {
 }
 
 void maybe_advance_capture() {
-  const int64_t warmup = warmup_decode_steps();
-  const int64_t window = trace_decode_steps();
+  const int64_t warmup = warmup_steps();
+  const int64_t window = trace_steps();
   const bool want_torch = XllmKinetoProfiler::is_torch_kineto_enabled();
   const bool want_libkineto = XllmKinetoProfiler::is_libkineto_trace_enabled();
 
@@ -361,8 +375,8 @@ void maybe_advance_capture() {
     return;
   }
 
-  if (g_decode_steps <= warmup) {
-    if (g_decode_steps == warmup) {
+  if (g_profile_steps <= warmup) {
+    if (g_profile_steps == warmup) {
       on_warmup_complete();
       if (want_torch) {
         g_phase = CapturePhase::kTorchCapture;
@@ -377,7 +391,7 @@ void maybe_advance_capture() {
     return;
   }
 
-  const int64_t steps_after_warmup = g_decode_steps - warmup;
+  const int64_t steps_after_warmup = g_profile_steps - warmup;
 
   if (g_phase == CapturePhase::kTorchCapture) {
     if (steps_after_warmup >= window) {
@@ -396,7 +410,7 @@ void maybe_advance_capture() {
 
   if (g_phase == CapturePhase::kLibkinetoCapture) {
     const int64_t steps_in_window =
-        g_decode_steps - g_capture_window_start_step;
+        g_profile_steps - g_capture_window_start_step;
     if (steps_in_window >= window) {
       stop_libkineto_capture_and_save();
       finish_all_profiling();
@@ -404,12 +418,12 @@ void maybe_advance_capture() {
   }
 }
 
-#endif  // USE_CUDA || USE_MUSA
+#endif  // USE_CUDA
 
 }  // namespace
 
 bool XllmKinetoProfiler::is_torch_kineto_enabled() {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   return util::get_bool_env("XLLM_ENABLE_TORCH_KINETO_PROFILE", false);
 #else
   return false;
@@ -417,7 +431,7 @@ bool XllmKinetoProfiler::is_torch_kineto_enabled() {
 }
 
 bool XllmKinetoProfiler::is_libkineto_trace_enabled() {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   return util::get_bool_env("XLLM_ENABLE_KINETO_TRACE", false);
 #else
   return false;
@@ -428,15 +442,15 @@ bool XllmKinetoProfiler::is_enabled() {
   return is_torch_kineto_enabled() || is_libkineto_trace_enabled();
 }
 
-void XllmKinetoProfiler::on_decode_step_begin() {
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  // Decode runs on the worker thread that also calls enableProfiler; do not
-  // call enableProfilerInChildThread on the same thread.
+void XllmKinetoProfiler::on_profile_step_begin() {
+#if defined(USE_CUDA)
+  // Model execution runs on the worker thread that also calls enableProfiler;
+  // do not call enableProfilerInChildThread on the same thread.
 #endif
 }
 
-void XllmKinetoProfiler::on_decode_step_end() {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+void XllmKinetoProfiler::on_profile_step_end() {
+#if defined(USE_CUDA)
   if (!is_enabled()) {
     return;
   }
@@ -444,27 +458,36 @@ void XllmKinetoProfiler::on_decode_step_end() {
   if (g_phase == CapturePhase::kDone) {
     return;
   }
-  g_decode_steps += 1;
+  g_profile_steps += 1;
   maybe_advance_capture();
 #endif
 }
 
-XllmKinetoProfiler::StepScope::StepScope(bool is_decode_step)
-    : is_decode_step_(is_decode_step && is_enabled()) {
-  if (!is_decode_step_) {
+XllmKinetoProfiler::StepScope::StepScope(bool is_decode_step,
+                                         bool is_prefill_step)
+    : is_profile_step_(false) {
+#if defined(USE_CUDA)
+  is_profile_step_ =
+      is_enabled() &&
+      (profile_prefill_steps() ? is_prefill_step : is_decode_step);
+#else
+  (void)is_decode_step;
+  (void)is_prefill_step;
+#endif
+  if (!is_profile_step_) {
     return;
   }
-  on_decode_step_begin();
+  on_profile_step_begin();
 }
 
 XllmKinetoProfiler::StepScope::~StepScope() {
-  if (!is_decode_step_) {
+  if (!is_profile_step_) {
     return;
   }
-  on_decode_step_end();
+  on_profile_step_end();
 }
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 struct XllmKinetoProfiler::UserScope::TorchGuard {
   at::RecordFunction guard;
 
@@ -479,12 +502,12 @@ struct XllmKinetoProfiler::UserScope::TorchGuard {
 
 XllmKinetoProfiler::UserScope::UserScope(const char* name)
     : name_(name)
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
       ,
       torch_guard_(nullptr)
 #endif
 {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   if (!is_enabled()) {
     return;
   }
@@ -496,7 +519,7 @@ XllmKinetoProfiler::UserScope::UserScope(const char* name)
 }
 
 XllmKinetoProfiler::UserScope::~UserScope() {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   delete torch_guard_;
 #endif
 }

@@ -179,13 +179,9 @@ class ExtBuild(build_ext):
             exit(1)
 
     def build_extension(self, ext: CMakeExtension) -> None:
-        guard_ninja = os.path.join(self.base_dir, "scripts", "ninja_guard", "ninja")
-        if os.environ.get("XLLM_NINJA_GUARD"):
-            ninja_dir = os.environ["XLLM_NINJA_GUARD"]
-        elif os.path.isfile(guard_ninja):
-            ninja_dir = guard_ninja
-        else:
-            ninja_dir = shutil.which("ninja")
+        ninja_path = shutil.which("ninja")
+        if ninja_path is None:
+            raise RuntimeError("Ninja is required to build xLLM.")
         # the output dir for the extension
         extdir: str = os.path.abspath(os.path.dirname(self.get_ext_fullpath(ext.path)))
 
@@ -217,7 +213,7 @@ class ExtBuild(build_ext):
         cmake_args: list[str] = [
             "-G",
             "Ninja",
-            f"-DCMAKE_MAKE_PROGRAM={ninja_dir}",
+            f"-DCMAKE_MAKE_PROGRAM={ninja_path}",
             f"-DCMAKE_LIBRARY_OUTPUT_DIRECTORY={extdir}",
             f"-DCMAKE_RUNTIME_OUTPUT_DIRECTORY={extdir}",
             "-DUSE_CCACHE=ON",
@@ -237,38 +233,27 @@ class ExtBuild(build_ext):
         elif self.device == "mlu":
             cmake_args += ["-DUSE_MLU=ON"]
             set_mlu_envs()
-        elif self.device == "cuda":
-            use_musa = os.getenv("USE_MUSA", "").lower() in (
-                "1",
-                "on",
-                "true",
-                "yes",
-            ) or "-DUSE_MUSA" in os.getenv("CMAKE_ARGS", "")
+        elif self.device == "musa":
             torch_cuda_architectures = os.getenv("TORCH_CUDA_ARCH_LIST")
-            if use_musa:
-                if not torch_cuda_architectures:
-                    torch_cuda_architectures = os.getenv(
-                        "TORCH_MUSA_ARCH_LIST", "9.0"
-                    )
-                cmake_args += [
-                    "-DUSE_CUDA:BOOL=ON",
-                    "-DUSE_MUSA:BOOL=ON",
-                    f"-DTORCH_CUDA_ARCH_LIST={torch_cuda_architectures}",
-                    "-DCMAKE_CUDA_ARCHITECTURES=90",
-                    "-DBUILD_TESTING=OFF",
-                ]
-                set_musa_envs()
-            else:
-                if not torch_cuda_architectures:
-                    raise ValueError(
-                        'Please set TORCH_CUDA_ARCH_LIST environment variable, '
-                        'e.g. export TORCH_CUDA_ARCH_LIST="8.0 8.9 9.0 10.0 12.0"'
-                    )
-                cmake_args += [
-                    "-DUSE_CUDA=ON",
-                    f"-DTORCH_CUDA_ARCH_LIST={torch_cuda_architectures}",
-                ]
-                set_cuda_envs()
+            if not torch_cuda_architectures:
+                torch_cuda_architectures = "9.0"
+            cmake_args += [
+                "-DUSE_MUSA=ON",
+                "-DUSE_CUDA=ON",
+                f"-DTORCH_CUDA_ARCH_LIST={torch_cuda_architectures}",
+                "-DCMAKE_CUDA_ARCHITECTURES=90",
+                "-DBUILD_TESTING=OFF",
+            ]
+            set_musa_envs()
+            global BUILD_TEST_FILE
+            BUILD_TEST_FILE = False
+        elif self.device == "cuda":
+            torch_cuda_architectures = os.getenv("TORCH_CUDA_ARCH_LIST")
+            if not torch_cuda_architectures:
+                raise ValueError("Please set TORCH_CUDA_ARCH_LIST environment variable, e.g. export TORCH_CUDA_ARCH_LIST=\"8.0 8.9 9.0 10.0 12.0\"")
+            cmake_args += ["-DUSE_CUDA=ON",
+                           f"-DTORCH_CUDA_ARCH_LIST={torch_cuda_architectures}"]
+            set_cuda_envs()
 
         elif self.device == "dcu":
             import torch
@@ -303,11 +288,6 @@ class ExtBuild(build_ext):
         elif self.device == "ilu":
             cmake_args += ["-DUSE_ILU=ON"]
             set_ilu_envs()
-        elif self.device == "musa":
-            cmake_args += ["-DUSE_MUSA=ON"]
-            set_musa_envs()
-            global BUILD_TEST_FILE
-            BUILD_TEST_FILE = False
         else:
             raise ValueError("Please set --device to npu, mlu, cuda, dcu, ilu or musa.")
 

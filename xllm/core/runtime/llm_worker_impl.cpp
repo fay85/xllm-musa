@@ -30,6 +30,7 @@ limitations under the License.
 #include "common/device_monitor.h"
 #include "common/metrics.h"
 #include "common/types.h"
+#include "core/util/prefill_breakdown.h"
 #include "core/util/xllm_kineto_profiler.h"
 #include "core/common/global_flags.h"
 #include "core/framework/config/beam_search_config.h"
@@ -85,7 +86,7 @@ LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
                              const runtime::Options& options)
     : WorkerImpl(parallel_args, device, options) {
   device_.set_device();
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   threadpool_.schedule([this]() mutable {
     // initialize flashinfer workspace
     ::xllm::layer::flashinfer::FlashinferWorkspace::get_instance().initialize(
@@ -134,8 +135,16 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_no_sync(
     const ForwardInput& input) {
   ForwardInput input_on_device;
   prepare_work_before_execute(input, input_on_device);
+#if defined(USE_MUSA)
+  // Keep the worker on the stream created with the worker.  Mate/TVM-FFI
+  // kernels are launched on the current Torch stream; creating a fresh
+  // current_stream() on this thread can return a null handle and forces the
+  // FFI guard to synchronize before and after every grouped GEMM.
+  return execute_no_sync_on_stream(input_on_device, *compute_stream_);
+#else
   std::unique_ptr<Stream> current_stream = device_.current_stream();
   return execute_no_sync_on_stream(input_on_device, *current_stream);
+#endif
 }
 
 std::optional<ForwardOutput> LLMWorkerImpl::execute_no_sync_on_stream(
@@ -185,9 +194,17 @@ std::optional<ForwardOutput> LLMWorkerImpl::step(const ForwardInput& input) {
   }
 #endif
 
+#if defined(USE_MUSA)
+  // As in the no-sync path, use the persistent worker stream so MUSA FFI
+  // grouped GEMMs stay ordered with Torch ops without host synchronizations.
+  c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+  wait_input_ready_events(input, *compute_stream_);
+  return step_internal(input, ForwardSyncPolicy::LEGACY);
+#else
   std::unique_ptr<Stream> stream = device_.current_stream();
   wait_input_ready_events(input, *stream);
   return step_internal(input, ForwardSyncPolicy::LEGACY);
+#endif
 }
 
 folly::SemiFuture<std::optional<ForwardOutput>>
@@ -234,11 +251,20 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     bool record_ready_event) {
   MULTI_MODEL_STEP_LOCK(::xllm::KVCacheConfig::get_instance().enable_xtensor());
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   const bool is_decode_step =
       input.input_params.meta.batch_forward_type.is_decode();
-  XllmKinetoProfiler::StepScope kineto_step_scope(is_decode_step);
-  XLLM_KINETO_USER_SCOPE("xllm/decode_step");
+  const bool is_prefill_step =
+      input.input_params.meta.batch_forward_type.is_prefill();
+  XllmKinetoProfiler::StepScope kineto_step_scope(is_decode_step,
+                                                  is_prefill_step);
+  const char* kineto_step_name = "xllm/mixed_step";
+  if (is_decode_step) {
+    kineto_step_name = "xllm/decode_step";
+  } else if (is_prefill_step) {
+    kineto_step_name = "xllm/prefill_step";
+  }
+  XllmKinetoProfiler::UserScope kineto_user_scope(kineto_step_name);
 #endif
 
   Timer timer;
@@ -287,12 +313,29 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
   }
 
   // call model executor forward to get hidden states
+  const bool collect_prefill_breakdown =
+      PrefillBreakdown::enabled() &&
+      input.input_params.meta.batch_forward_type.is_prefill();
+  if (collect_prefill_breakdown) {
+    PrefillBreakdown::begin();
+  }
   auto model_output = model_executor_->forward(
       input.token_ids, input.positions, kv_caches_, input.input_params);
   if (time_prefill_step) {
     synchronize_current_stream(device_);
     model_executor_ms = prefill_stage_timer.elapsed_milliseconds();
     prefill_stage_timer.reset();
+  }
+  if (collect_prefill_breakdown) {
+    if (!time_prefill_step) {
+      synchronize_current_stream(device_);
+      model_executor_ms = prefill_stage_timer.elapsed_milliseconds();
+      prefill_stage_timer.reset();
+    }
+    PrefillBreakdown::end_and_log(
+        input.token_ids.numel(),
+        input.input_params.meta.num_sequences,
+        model_executor_ms);
   }
   if (!model_output.hidden_states.defined()) {
     wait_kv_push();

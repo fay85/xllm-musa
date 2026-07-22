@@ -6,8 +6,6 @@ if(USE_MUSA)
   include_directories(${CMAKE_CURRENT_LIST_DIR}/../cuda)
   include_directories(${CMAKE_CURRENT_LIST_DIR}/../cuda/moe)
 
-  # Qwen3.5-27B text serving path (bf16 dense, FlashInfer + GDN hybrid).
-
   set(_TORCH_MUSA_KERNEL_HDRS
     attention_runner.h
     musa_ops_api.h
@@ -22,15 +20,12 @@ if(USE_MUSA)
   )
 
   set(_TORCH_MUSA_KERNEL_SRCS
-    # FlashInfer attention (12 full-attn layers)
     attention_runner.cpp
     attention_decode.cpp
     attention_prefill.cpp
-    # GDN hybrid layers (36 linear-attn layers)
     gdn_decode.cu
     gdn_prefill.cpp
     causal_conv1d.cu
-    # Norm / MLP / projections
     gemma_norm.cu
     activation.cu
     rope.cu
@@ -40,6 +35,14 @@ if(USE_MUSA)
     fused_qknorm_rope.cu
     # Native block-wise FP8 GEMM (mate/muDNN groupwise)
     fp8_block_gemm.cpp
+    # Mate masked grouped GEMM used by the Qwen3.5 routed experts.
+    musa_moe_gemm.cpp
+    # SGLang-compatible MP31 AOT fused-MoE decode dataflow.
+    musa_fused_moe_aot.cpp
+    # Graph-safe expert histogram/prefix/placement used by Qwen3.5 routing.
+    ../cuda/moe/moe_compute_index.cu
+    # Fused reorder/weighted reduction shared with the NPU MoE combine stage.
+    ../cuda/moe/moe_combine.cu
     # Fused per-token-group FP8 activation quant (MUSA-native intrinsics)
     fp8_act_quant.cu
     # Mate FFI + graph helpers
@@ -47,6 +50,14 @@ if(USE_MUSA)
     global_capture_instance.cpp
     piecewise_graphs.cpp
     llm_decode_metadata_update.cu
+  )
+
+  # Match the SGLang MUSA quantizer's fast-math code generation without
+  # changing floating-point flags for the other kernels in this library.
+  set_source_files_properties(
+    fp8_act_quant.cu
+    PROPERTIES
+      COMPILE_OPTIONS "-ffast-math"
   )
 
   cc_library(

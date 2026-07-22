@@ -41,6 +41,11 @@ namespace cuda {
 
 torch::Tensor l2_norm(torch::Tensor& x, double eps);
 
+std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
+    const torch::Tensor& query,
+    const torch::Tensor& key,
+    double eps);
+
 std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
     FusedGdnGatingParams& params);
 

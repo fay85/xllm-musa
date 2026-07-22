@@ -20,6 +20,7 @@ limitations under the License.
 #include <unistd.h>
 #include <algorithm>
 
+#include <atomic>
 #include <cstdlib>
 #include <optional>
 #include <sstream>
@@ -301,6 +302,47 @@ void l2norm_last_dim(torch::Tensor& tensor) {
   constexpr double kEps = 1e-6;
   tensor = tensor /
            (tensor.pow(2).sum(/*dim=*/-1, /*keepdim=*/true) + kEps).sqrt();
+}
+
+void l2norm_qk_last_dim(torch::Tensor& query, torch::Tensor& key) {
+  static const bool use_fused_pair = [] {
+    const char* env = std::getenv("XLLM_FUSED_GDN_QK_L2NORM");
+    return env == nullptr || std::string(env) != "0";
+  }();
+  const bool pair_supported =
+      query.sizes() == key.sizes() && query.scalar_type() == key.scalar_type() &&
+      query.is_contiguous() && key.is_contiguous() && query.size(-1) == 128;
+  if (use_fused_pair && pair_supported) {
+    torch::Tensor normalized_query;
+    torch::Tensor normalized_key;
+    std::tie(normalized_query, normalized_key) =
+        l2_norm_pair_fused(query, key, /*eps=*/1e-6);
+
+    static const bool validate_fused_pair = [] {
+      const char* env =
+          std::getenv("XLLM_VALIDATE_FUSED_GDN_QK_L2NORM");
+      return env != nullptr && std::string(env) == "1";
+    }();
+    static std::atomic<bool> validation_pending{true};
+    if (validate_fused_pair && validation_pending.exchange(false)) {
+      torch::Tensor reference_query = query;
+      torch::Tensor reference_key = key;
+      l2norm_last_dim(reference_query);
+      l2norm_last_dim(reference_key);
+      const double query_max_diff =
+          (normalized_query - reference_query).abs().max().item<double>();
+      const double key_max_diff =
+          (normalized_key - reference_key).abs().max().item<double>();
+      LOG(INFO) << "[GDN_QK_L2NORM_VALIDATE] query_max_diff="
+                << query_max_diff << " key_max_diff=" << key_max_diff;
+    }
+
+    query = std::move(normalized_query);
+    key = std::move(normalized_key);
+    return;
+  }
+  l2norm_last_dim(query);
+  l2norm_last_dim(key);
 }
 
 // Grow-only scratch reused across GDN layers within a forward (eager only).
@@ -687,8 +729,6 @@ torch::Tensor kkt_solve_mate_ffi_varlen(const torch::Tensor& key,
       << "mate KKT solve currently requires chunk_size=" << kGdnChunkSize;
   CHECK_EQ(key.size(0), 1) << "varlen KKT expects packed batch dim == 1";
   CHECK_EQ(key.size(3), 128) << "mate KKT solve currently requires K=128";
-  CHECK_EQ(key.size(1) % chunk_size, 0)
-      << "mate KKT solve expects T padded to chunk_size";
   CHECK_EQ(cu_seqlens.dim(), 1);
   CHECK_GE(cu_seqlens.size(0), 2);
 
@@ -786,6 +826,14 @@ bool mate_gdn_force_varlen_kernel() {
   static const bool enabled = [] {
     const char* env = std::getenv("XLLM_MATE_GDN_PREFILL_VARLEN");
     return env != nullptr && env[0] == '1';
+  }();
+  return enabled;
+}
+
+bool mate_gdn_unpadded_c1_enabled() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_MATE_GDN_UNPADDED_C1");
+    return env == nullptr || env[0] != '0';
   }();
   return enabled;
 }
@@ -921,9 +969,18 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   // while capturing even for packed shapes (packed prefill is eager).
   const bool capturing =
       xllm::runtime::cuda::GlobalCaptureInstance::get_instance().is_capturing();
+  // SGLang's full-varlen Mate path handles a partial final chunk directly.
+  // Keep XLLM_MATE_GDN_UNPADDED_C1=0 as a runtime rollback switch.
+  const bool use_unpadded_c1_varlen =
+      !capturing && mate_gdn_unpadded_c1_enabled() && input_batch == 1 &&
+      input_seq_len >= kGdnChunkSize &&
+      input_seq_len % kGdnChunkSize != 0 && varlen_available &&
+      mate_kkt_module_available(get_mate_kkt_solve_uri(
+          num_q_heads, num_v_heads, query.scalar_type(), /*is_varlen=*/true));
   const bool use_full_varlen =
       varlen_available && !capturing &&
-      mate_gdn_needs_varlen_packing(params, input_batch, input_seq_len);
+      (mate_gdn_needs_varlen_packing(params, input_batch, input_seq_len) ||
+       use_unpadded_c1_varlen);
   const bool use_full_padded =
       !use_full_varlen && !mate_gdn_force_simple_kernel() &&
       mate_gdn_module_available(full_uri);
@@ -987,7 +1044,11 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     }
 
     const int64_t packed_seq_len = query.size(1);
-    const int64_t pad_size = chunk_pad_size(packed_seq_len, kGdnChunkSize);
+    const bool skip_chunk_padding =
+        use_unpadded_c1_varlen && num_seqs == 1 && !need_unpack;
+    const int64_t pad_size =
+        skip_chunk_padding ? 0
+                           : chunk_pad_size(packed_seq_len, kGdnChunkSize);
     if (pad_size > 0) {
       query = pad_time_dim_4d(query, pad_size);
       key = pad_time_dim_4d(key, pad_size);
@@ -998,8 +1059,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     CHECK_EQ(query.size(0), 1);
 
     if (params.use_qk_l2norm_in_kernel) {
-      l2norm_last_dim(query);
-      l2norm_last_dim(key);
+      l2norm_qk_last_dim(query, key);
     }
     query = query.contiguous();
     key = key.contiguous();
@@ -1100,8 +1160,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     auto& scratch = mate_gdn_prefill_scratch();
 
     if (params.use_qk_l2norm_in_kernel) {
-      l2norm_last_dim(query);
-      l2norm_last_dim(key);
+      l2norm_qk_last_dim(query, key);
     }
     if (!query.is_contiguous()) {
       query = query.contiguous();
@@ -1297,8 +1356,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   }
 
   if (params.use_qk_l2norm_in_kernel) {
-    l2norm_last_dim(query);
-    l2norm_last_dim(key);
+    l2norm_qk_last_dim(query, key);
   }
   query = query.contiguous();
   key = key.contiguous();

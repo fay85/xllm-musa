@@ -93,11 +93,6 @@ bool s_use_musa_fa3_decode() {
 bool s_enable_prefill_fwd_timing() {
   static const bool val = [] {
     const char* env = std::getenv("XLLM_PREFILL_FWD_TIMING");
-    if (env != nullptr && std::string(env) == "1") {
-      return true;
-    }
-    // Reuse the scheduler pack log flag so one env enables both views.
-    env = std::getenv("XLLM_SCHED_PACK_LOG");
     return env != nullptr && std::string(env) == "1";
   }();
   return val;
@@ -802,7 +797,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
       !use_expanded_spec_decode_attention &&
       can_use_llm_decode_fast_path(tokens, positions, params);
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   // Cheap when the input builder already pre-staged (just a shared_ptr ref);
   // a single per-step D2H per index tensor in the fallback case (3 D2H total,
   // batch-sized, runs once before capture begin).
@@ -1346,7 +1341,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
     attn_metadata->expanded_paged_kv_last_page_len =
         persistent_expanded_paged_kv_last_page_len(
             static_cast<uint32_t>(expanded_batch));
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
     auto ensure_host_mirror = [](torch::Tensor& host_field,
                                  const torch::Tensor& device_field) {
       if (host_field.defined()) {
@@ -1623,7 +1618,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
 void CudaGraph::refresh_persistent_paged_kv_host_mirrors(
     const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
     const AttentionHostInput& host_src) {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   // Only applies to the Mate FFI decode path. Prefill/chunked-prefill and MLA
   // attention do not pass host pointers through the FFI run() boundary, so
   // there is nothing to stabilize there.

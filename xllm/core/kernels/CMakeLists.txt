@@ -1,21 +1,5 @@
 include(cc_library)
 
-# Musify copts for MUSA builds (mcc_wrapper with musamapping plugin)
-if(USE_MUSA)
-  if(DEFINED ENV{MUSAMAPPING_PATH} AND NOT "$ENV{MUSAMAPPING_PATH}" STREQUAL "")
-    set(_XLLM_MUSAMAPPING_PATH "$ENV{MUSAMAPPING_PATH}")
-  else()
-    set(_XLLM_MUSAMAPPING_PATH "/usr/local/musa/tools/musamapping")
-  endif()
-  set(_XLLM_MUSIFY_COPTS
-    "-fplugin=${_XLLM_MUSAMAPPING_PATH}/libMusaMapping.so"
-    "-x" "musa"
-    "-I."
-  )
-else()
-  set(_XLLM_MUSIFY_COPTS "")
-endif()
-
 if(USE_NPU)
   add_subdirectory(npu)
 endif()
@@ -54,7 +38,6 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:npu_kernels>
     $<$<BOOL:${USE_NPU}>:xllm_ops>
     $<$<BOOL:${USE_MLU}>:mlu_kernels>
-    $<$<BOOL:${USE_MUSA}>:cuda_kernels>
     $<$<BOOL:${USE_CUDA}>:cuda_kernels>
     $<$<BOOL:${USE_ILU}>:ilu_kernels>
     $<$<BOOL:${USE_DCU}>:dcu_kernels>

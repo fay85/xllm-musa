@@ -1,36 +1,7 @@
-# MUSA uses mcc_wrapper with musamapping plugin for CUDA compatibility
-if(USE_MUSA)
-  if(DEFINED ENV{MUSA_HOME})
-    set(_XLLM_MUSA_HOME "$ENV{MUSA_HOME}")
-  else()
-    set(_XLLM_MUSA_HOME "/usr/local/musa")
-  endif()
-  set(CMAKE_CXX_COMPILER "${_XLLM_MUSA_HOME}/tools/musamapping/mcc_wrapper")
-endif()
-
 include(cc_binary)
 include(cc_shared_library)
 
 include_directories(.)
-
-# MUSA: musify only on kernel + cuda-graph targets (not server/Mooncake TUs).
-if(USE_MUSA)
-  if(DEFINED ENV{MUSAMAPPING_PATH} AND NOT "$ENV{MUSAMAPPING_PATH}" STREQUAL "")
-    set(_XLLM_MUSAMAPPING_PATH "$ENV{MUSAMAPPING_PATH}")
-  elseif(DEFINED _XLLM_MUSA_HOME)
-    set(_XLLM_MUSAMAPPING_PATH "${_XLLM_MUSA_HOME}/tools/musamapping")
-  else()
-    set(_XLLM_MUSAMAPPING_PATH "/usr/local/musa/tools/musamapping")
-  endif()
-  set(_XLLM_MUSIFY_COPTS
-    "-fplugin=${_XLLM_MUSAMAPPING_PATH}/libMusaMapping.so"
-    "-x" "musa"
-    "-I."
-  )
-else()
-  set(_XLLM_MUSIFY_COPTS "")
-endif()
-
 
 # Generate build-time version header from version.txt.
 file(READ "${CMAKE_SOURCE_DIR}/version.txt" XLLM_BUILD_VERSION_RAW)

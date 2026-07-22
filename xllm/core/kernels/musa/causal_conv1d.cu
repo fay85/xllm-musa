@@ -509,17 +509,22 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
                                  reinterpret_cast<const weight_t*>(
                                      params.bias_ptr)[feature]);
     const int segment_len = min(kBlockTokens, seq_len - token_offset);
-    for (int token_i = 0; token_i < segment_len; ++token_i) {
-        const float current = load_x(token_offset + token_i);
-        float value = bias + col0 * w0 + col1 * w1 + col2 * w2 + current * w3;
-        col0 = col1;
-        col1 = col2;
-        col2 = current;
-        if (params.silu_activation) {
-            value = value / (1.0f + expf(-value));
+#pragma unroll
+    for (int token_i = 0; token_i < kBlockTokens; ++token_i) {
+        if (token_i < segment_len) {
+            const float current = load_x(token_offset + token_i);
+            float value =
+                bias + col0 * w0 + col1 * w1 + col2 * w2 + current * w3;
+            col0 = col1;
+            col1 = col2;
+            col2 = current;
+            if (params.silu_activation) {
+                constexpr float kLog2e = 1.4426950408889634f;
+                value = value / (1.0f + exp2f(-value * kLog2e));
+            }
+            out[(seq_start + token_offset + token_i) * params.out_l_stride +
+                feature * params.out_c_stride] = input_t(value);
         }
-        out[(seq_start + token_offset + token_i) * params.out_l_stride +
-            feature * params.out_c_stride] = input_t(value);
     }
 }
 

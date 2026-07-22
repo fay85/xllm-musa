@@ -61,7 +61,6 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:mlu_layers>
     $<$<BOOL:${USE_ILU}>:ilu_layers>
     $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cuda_layers>
-    $<$<BOOL:${USE_MUSA}>:cuda_kernels>
     $<$<BOOL:${USE_MUSA}>:musa_layers>
     :common_layers
     :parallel_state

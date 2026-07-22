@@ -28,6 +28,8 @@ limitations under the License.
 #include "layers/common/qwen3_next_rms_norm.h"
 #if !defined(USE_MUSA)
 #include "layers/cuda/fused_moe.h"
+#else
+#include "layers/musa/qwen3_5_fused_moe.h"
 #endif
 #include "layers/musa/qwen3_gated_delta_net_base.h"
 #include "layers/musa/qwen3_next_attention.h"
@@ -84,6 +86,8 @@ class Qwen3HybridDecoderLayerImplBase : public Qwen3HybridDecoderLayerModule {
   DenseMLP mlp_{nullptr};
 #if !defined(USE_MUSA)
   FusedMoE moe_mlp_{nullptr};
+#else
+  Qwen3_5MusaFusedMoE moe_mlp_{nullptr};
 #endif
 
   Qwen3NextRMSNorm input_norm_{nullptr};

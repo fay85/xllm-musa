@@ -78,10 +78,6 @@ bool is_current_stream_capturing() {
          c10::musa::CaptureStatus::None;
 }
 
-// Returns true when the current per-thread MUSA stream has a valid
-// (non-null) handle.  In eager mode on worker threads that have not yet
-// executed any PyTorch MUSA op, the stream pool is uninitialized and
-// getCurrentMUSAStream returns a null handle.
 bool current_musa_stream_is_valid(c10::DeviceIndex device_index) {
   c10::musa::MUSAGuard device_guard(device_index);
   void* const stream = reinterpret_cast<void*>(
@@ -103,11 +99,6 @@ void bind_musa_tvmffi_stream(const torch::Device& device) {
     set_tvmffi_stream_handle(device.index(), stream);
     return;
   }
-  // Eager-mode fallback: the per-thread MUSA stream pool is not yet
-  // initialized on this thread, so getCurrentMUSAStream returns null.
-  // Fall back to the dedicated FFI pool stream.  Callers that use the
-  // guard must sync before/after because the FFI kernel now runs on a
-  // different stream from the PyTorch compute stream.
   musa_stream = get_or_create_tvmffi_musa_stream(device.index());
   void* const pool_stream = reinterpret_cast<void*>(musa_stream.stream());
   if (pool_stream == nullptr) {
@@ -118,10 +109,7 @@ void bind_musa_tvmffi_stream(const torch::Device& device) {
 }
 
 void sync_current_musa_stream(const torch::Device& device) {
-  if (!is_torch_musa_device(device)) {
-    return;
-  }
-  if (is_current_stream_capturing()) {
+  if (!is_torch_musa_device(device) || is_current_stream_capturing()) {
     return;
   }
   c10::musa::MUSAGuard device_guard(device.index());
@@ -129,10 +117,7 @@ void sync_current_musa_stream(const torch::Device& device) {
 }
 
 void sync_musa_ffi_stream(const torch::Device& device) {
-  if (!is_torch_musa_device(device)) {
-    return;
-  }
-  if (is_current_stream_capturing()) {
+  if (!is_torch_musa_device(device) || is_current_stream_capturing()) {
     return;
   }
   c10::musa::MUSAGuard device_guard(device.index());
@@ -144,14 +129,6 @@ MusaTvmffiStreamGuard::MusaTvmffiStreamGuard(const torch::Device& device)
   if (!active_) {
     return;
   }
-  // When the current MUSA stream is valid (graph capture or eager mode on
-  // the main inference thread), the FFI kernel runs on the same stream as
-  // PyTorch ops.  Stream ordering guarantees correctness without syncs.
-  // When the current stream is null (eager mode on a worker thread without
-  // an initialized stream pool), bind_musa_tvmffi_stream falls back to the
-  // pool stream.  In that case we must sync the compute stream before the
-  // FFI kernel so it sees prior PyTorch outputs, and sync the FFI stream
-  // after (in the destructor) so subsequent ops see FFI results.
   const bool capturing = is_current_stream_capturing();
   needs_sync_ = !capturing && !current_musa_stream_is_valid(device_.index());
   if (needs_sync_) {
@@ -161,10 +138,7 @@ MusaTvmffiStreamGuard::MusaTvmffiStreamGuard(const torch::Device& device)
 }
 
 MusaTvmffiStreamGuard::~MusaTvmffiStreamGuard() {
-  if (!active_) {
-    return;
-  }
-  if (needs_sync_) {
+  if (active_ && needs_sync_) {
     sync_musa_ffi_stream(device_);
   }
 }
@@ -409,9 +383,19 @@ struct ATenDLMTensor {
   T tensor{};
 };
 
+struct BorrowedDLMTensor {
+  std::vector<int64_t> shape;
+  std::vector<int64_t> strides;
+  DLManagedTensorVersioned tensor{};
+};
+
 template <class T>
 void deleter(T* arg) {
   delete static_cast<ATenDLMTensor<T>*>(arg->manager_ctx);
+}
+
+void borrowed_deleter(DLManagedTensorVersioned* arg) {
+  delete static_cast<BorrowedDLMTensor*>(arg->manager_ctx);
 }
 
 template <class T>
@@ -836,6 +820,43 @@ ffi::Tensor to_ffi_tensor(const torch::Tensor& torch_tensor) {
 
   auto dlpack = to_dlpack_impl<DLManagedTensorVersioned>(torch_tensor);
   return ffi::Tensor::FromDLPackVersioned(dlpack);
+}
+
+ffi::Tensor to_ffi_borrowed_tensor(const torch::Tensor& torch_tensor) {
+  CHECK(torch_tensor.defined()) << "torch_tensor is not defined";
+
+  auto* managed = new BorrowedDLMTensor;
+  managed->shape.assign(torch_tensor.sizes().begin(),
+                        torch_tensor.sizes().end());
+  managed->strides.assign(torch_tensor.strides().begin(),
+                          torch_tensor.strides().end());
+  managed->tensor.manager_ctx = managed;
+  managed->tensor.deleter = &borrowed_deleter;
+  managed->tensor.dl_tensor.data = torch_tensor.data_ptr();
+  managed->tensor.dl_tensor.device =
+      torch_device_to_dl_device_for_dlpack_v1(torch_tensor.device());
+  managed->tensor.dl_tensor.ndim = static_cast<int32_t>(torch_tensor.dim());
+  managed->tensor.dl_tensor.dtype = get_data_type_for_dlpack_v1(torch_tensor);
+  managed->tensor.dl_tensor.shape = managed->shape.data();
+  managed->tensor.dl_tensor.strides = managed->strides.data();
+  managed->tensor.dl_tensor.byte_offset = 0;
+  fill_version(&managed->tensor);
+  return ffi::Tensor::FromDLPackVersioned(&managed->tensor);
+}
+
+ffi::TensorView to_ffi_tensor_view(const torch::Tensor& torch_tensor) {
+  CHECK(torch_tensor.defined()) << "torch_tensor is not defined";
+
+  DLTensor dl_tensor{};
+  dl_tensor.data = torch_tensor.data_ptr();
+  dl_tensor.device =
+      torch_device_to_dl_device_for_dlpack_v1(torch_tensor.device());
+  dl_tensor.ndim = static_cast<int32_t>(torch_tensor.dim());
+  dl_tensor.dtype = get_data_type_for_dlpack_v1(torch_tensor);
+  dl_tensor.shape = const_cast<int64_t*>(torch_tensor.sizes().data());
+  dl_tensor.strides = const_cast<int64_t*>(torch_tensor.strides().data());
+  dl_tensor.byte_offset = 0;
+  return ffi::TensorView(&dl_tensor);
 }
 
 ffi::Optional<ffi::Tensor> to_ffi_optional_tensor(

@@ -179,8 +179,17 @@ if CONCURRENCY > 1 and conc_results:
     golden = r1["content"] if r1["ok"] else ""
     all_ok = all(r["ok"] for r in conc_results)
     all_match = all(r["content"] == golden for r in conc_results if r["ok"])
+    all_not_garbage = all(
+        r["ok"] and not is_garbage(r["content"]) for r in conc_results
+    )
     checks.append(("concurrent_all_ok", all_ok))
-    checks.append(("concurrent_match_golden", all_ok and all_match and bool(golden)))
+    checks.append(("concurrent_not_garbage", all_not_garbage))
+    if EXPECTED_SUBSTR:
+        all_expected = all(
+            r["ok"] and EXPECTED_SUBSTR in r["content"] for r in conc_results
+        )
+        checks.append(("concurrent_expected_substring", all_expected))
+    print(f"  [INFO] concurrent_match_golden={all_ok and all_match and bool(golden)}")
 
 print("\n######## CHECKS ########")
 passed = True

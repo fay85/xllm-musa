@@ -123,11 +123,26 @@ torch::Tensor clone_cpu_tensor_view(const torch::Tensor& tensor) {
   return tensor.contiguous().clone();
 }
 
+torch::Tensor clone_paged_kv_host_view(const torch::Tensor& tensor) {
+  if (!tensor.defined() || !tensor.device().is_cpu() ||
+      tensor.scalar_type() != torch::kInt32) {
+    return torch::Tensor();
+  }
+  return tensor.contiguous().clone();
+}
+
 void stabilize_schedule_overlap_host_views(ForwardInput& input) {
   input.token_ids_host = clone_cpu_tensor_view(input.token_ids_host);
   input.positions_host = clone_cpu_tensor_view(input.positions_host);
   input.input_params.attention.host.block_tables =
       clone_cpu_tensor_view(input.input_params.attention.host.block_tables);
+  input.input_params.attention.host.paged_kv_indptr = clone_paged_kv_host_view(
+      input.input_params.attention.host.paged_kv_indptr);
+  input.input_params.attention.host.paged_kv_indices = clone_paged_kv_host_view(
+      input.input_params.attention.host.paged_kv_indices);
+  input.input_params.attention.host.paged_kv_last_page_len =
+      clone_paged_kv_host_view(
+          input.input_params.attention.host.paged_kv_last_page_len);
 }
 
 }  // namespace

@@ -26,7 +26,7 @@ limitations under the License.
 #include "kernels/ops_api.h"
 #include "kernels/musa/gdn_ops.h"
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 #include <c10/cuda/CUDAException.h>
 #include <cuda_runtime.h>
 #include "kernels/musa/global_capture_instance.h"
@@ -36,7 +36,7 @@ namespace xllm {
 namespace layer {
 
 namespace {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 constexpr bool kEnableFusedGdnDecode = true;
 constexpr bool kEnableMateGdnDecode = true;
 constexpr bool kEnableMateGdnPrefill = true;
@@ -672,7 +672,7 @@ torch::Tensor run_spec_verify_gated_delta_rule(
   return output;
 }
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 torch::Tensor run_spec_verify_gated_delta_rule_mate(
     const torch::Tensor& query,
     const torch::Tensor& key,
@@ -948,7 +948,7 @@ bool should_use_gdn_packed_prefill(
 
 }  // namespace
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 bool use_mate_gdn_mtp_kernel() {
   static const bool enabled = [] {
     const char* v = std::getenv("XLLM_MATE_GDN_MTP");
@@ -1169,7 +1169,7 @@ Qwen3GatedDeltaNetBaseImpl::project_padded_inputs(
   return project_decode_inputs(hidden_states);
 }
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
     const torch::Tensor& hidden_states,
     const AttentionMetadata& attn_metadata,
@@ -1390,7 +1390,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     const AttentionMetadata& attn_metadata,
     KVCache& kv_cache,
     const ModelInputParams& input_params) {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   if (should_use_gdn_packed_prefill(
           attn_metadata, input_params, hidden_states)) {
     return forward_packed_prefill(
@@ -1422,7 +1422,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   fused_params.head_v = static_cast<int32_t>(head_v_dim_);
   fused_params.contiguous_input_layout = uses_contiguous_qkvzba_layout();
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   // Lazily size grow-only persistent output buffers so the kernel can
   // populate them via in-place `copy_` calls instead of allocating new
   // tensors mid-stream-capture. Allocation only happens on the first
@@ -1503,23 +1503,27 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   }
   const bool is_any_prefill =
       attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   const bool decode_eligible =
       !attn_metadata.is_prefill && !use_spec_verify && seq_len == 1 &&
       checkpoint_stride == 1;
   // Runtime backend selection via env var XLLM_GDN_DECODE_BACKEND.
   //   "mate" (default): MATE-compiled kernel (faster, ~2ms/step less).
-  //   "fused": in-house single-launch kernel (fallback).
-  const bool use_mate_gdn_decode_requested = [] {
+  //   "fused": in-house single-launch kernel.
+  //   "reference": decomposed Torch implementation for diagnostics.
+  const std::string gdn_decode_backend = [] {
     const char* env = std::getenv("XLLM_GDN_DECODE_BACKEND");
-    return env == nullptr || std::string(env) != "fused";
+    return env == nullptr ? std::string("mate") : std::string(env);
   }();
+  CHECK(gdn_decode_backend == "mate" || gdn_decode_backend == "fused" ||
+        gdn_decode_backend == "reference")
+      << "Unsupported XLLM_GDN_DECODE_BACKEND=" << gdn_decode_backend;
   const bool use_fused_gdn_decode =
       kEnableFusedGdnDecode && decode_eligible &&
-      !use_mate_gdn_decode_requested;
+      gdn_decode_backend == "fused";
   const bool use_mate_gdn_decode =
       kEnableMateGdnDecode && decode_eligible &&
-      use_mate_gdn_decode_requested;
+      gdn_decode_backend == "mate";
 #else
   const bool use_fused_gdn_decode = false;
   const bool use_mate_gdn_decode = false;
@@ -1635,7 +1639,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     conv1d_params.initial_state_idx = std::optional<torch::Tensor>();
     conv1d_params.query_start_loc = attn_metadata.q_cu_seq_lens;
     conv1d_params.max_query_len = attn_metadata.max_query_len;
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
     // Provide a persistent, grow-only output buffer so the kernel takes its
     // graph-safe fused fast path (causal_conv1d_decode_fused) instead of the
     // libtorch `.to(fp32) ... torch::empty_like` slow path that aborts
@@ -1750,7 +1754,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   }
   torch::Tensor core_attn_out;
   torch::Tensor last_recurrent_state;
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   const bool is_piecewise_graph_capture =
       xllm::runtime::cuda::GlobalCaptureInstance::get_instance().is_capturing();
   const bool mate_prefill_shape_supported =
@@ -1765,7 +1769,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
 #endif
   // Apply chunked or recurrent gated-delta attention and update caches.
   if (use_mate_gdn_prefill) {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
     // Mate returns final state in k-last layout [B, Hv, V, K].
     torch::Tensor initial_state_tensor =
         torch::index_select(ssm_cache, 0, linear_state_base_indices);
@@ -2038,7 +2042,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     ssm_cache.index_put_({linear_state_base_indices},
                          state_to_store.to(ssm_cache.dtype()));
   } else if (use_fused_gdn_decode) {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
     // In-house single-launch fused GDN decode kernel: fuses QKV split from
     // mixed_qkv, gating, L2-norm, scale, recurrent step, and in-place fp32
     // state I/O (Qwen3.5 mamba_ssm_dtype). Reuses MateGatedDeltaRuleDecodeParams.
@@ -2087,7 +2091,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
         xllm::kernel::fused_gated_delta_rule_decode(fused_params).unsqueeze(0);
 #endif
   } else if (use_mate_gdn_decode) {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
     xllm::kernel::MateGatedDeltaRuleDecodeParams mate_params;
     mate_params.mixed_qkv = mixed_qkv;
     mate_params.state = ssm_cache;
@@ -2189,7 +2193,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                           ssm_cache,
                           beta.squeeze(0).contiguous(),
                           scale,
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
                           std::nullopt,
 #else
                           actual_seq_lengths,
@@ -2300,6 +2304,12 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_with_pad(
       attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
   if (!need_padding) {
     return qkvz.view({bs, -1, qkvz.size(-1)});
+  }
+  // A single sequence already occupies the complete rectangular extent.
+  // Preserve its storage as a view instead of copying the full activation
+  // through slice(), stack(), and contiguous() in every GDN layer.
+  if (bs == 1 && qkvz.is_contiguous() && qkvz.size(0) == max_len) {
+    return qkvz.view({1, max_len, qkvz.size(-1)});
   }
   std::vector<torch::Tensor> batches;
   batches.reserve(bs);

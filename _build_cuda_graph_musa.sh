@@ -11,30 +11,33 @@ set -euo pipefail
 #   - All ninja invocations go through scripts/ninja_guard (flock + .ninja_log backup).
 #     Never run bare "ninja -C ..." or "pkill -9 ninja" on this build dir.
 
+# Canonical toolkit + torch_musa cmake prefix. CUDA_* / MUSAMAPPING_PATH /
+# TorchMusa_DIR are derived in scripts/build_support/env.py::set_musa_envs().
 export MUSA_HOME=/usr/local/musa
-export CUDA_HOME=/usr/local/musa
-export CUDAToolkit_ROOT=/usr/local/musa
-export MUSA_TOOLKIT_ROOT_DIR=/usr/local/musa
-export MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping
-export MUSA_INCLUDE_PATH=/usr/local/musa/include
+export CUDA_HOME="${MUSA_HOME}"
+export CUDAToolkit_ROOT="${MUSA_HOME}"
+export MUSAMAPPING_PATH="${MUSA_HOME}/tools/musamapping"
 # USE_MUSA builds use FlashInfer/Mate kernels, not native MTTOplib.
 
 export PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch
-export LIBTORCH_ROOT=/usr/local/lib/python3.10/dist-packages/torch
-export PYTHON_LIB_PATH=/usr/local/lib/python3.10/dist-packages/torch
-export PYTORCH_MUSA_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch_musa
-export TorchMusa_DIR=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa
+export LIBTORCH_ROOT="${PYTORCH_INSTALL_PATH}"
+export PYTHON_LIB_PATH="${PYTORCH_INSTALL_PATH}"
 export TORCH_MUSA_PYTHONPATH=/usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake
-export TORCH_MUSA_ARCH_LIST=31
+export MKLROOT="${MKLROOT:-/opt/intel/oneapi/mkl}"
+export MKL_DIR="${MKL_DIR:-${MKLROOT}/lib/cmake/mkl}"
+export TVM_FFI_LIB_DIR="${TVM_FFI_LIB_DIR:-$(tvm-ffi-config --libdir)}"
+export TorchMusa_DIR="${TORCH_MUSA_PYTHONPATH}/TorchMusa"
+# Prefer CUDA-language arch list for the mcc graph path; drop stale MUSA ISA export.
+unset TORCH_MUSA_ARCH_LIST || true
 export TORCH_CUDA_ARCH_LIST="9.0"
 
 export FLASHINFER_OPS_PATH=/workspace/mate_cached_ops
 export MATE_HOME="${MATE_HOME:-/workspace/mate_feihu}"
 # mate_feihu TVM-FFI deps (0526 uses mate_feihu build tree, NOT pip mate / mate_0.2.3)
 MATE_FFI_ROOT="${MATE_HOME}/build/flashinfer_ffi_hd256"
-export LD_LIBRARY_PATH="${MATE_FFI_ROOT}/mate_flashinfer_prefill_ffi:${MATE_FFI_ROOT}/mate_flashinfer_batch_attention_ffi:${MATE_FFI_ROOT}/mate_flashinfer_decode_ffi:/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/opt/intel/oneapi/mkl/lib/intel64:/usr/lib:/usr/lib/x86_64-linux-gnu:/usr/local/openmpi/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="${MATE_FFI_ROOT}/mate_flashinfer_prefill_ffi:${MATE_FFI_ROOT}/mate_flashinfer_batch_attention_ffi:${MATE_FFI_ROOT}/mate_flashinfer_decode_ffi:${TVM_FFI_LIB_DIR}:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/opt/intel/oneapi/mkl/lib/intel64:/usr/lib:/usr/lib/x86_64-linux-gnu:/usr/local/openmpi/lib:${LD_LIBRARY_PATH:-}"
 
-export CMAKE_ARGS="-DCMAKE_CUDA_COMPILER=/usr/local/musa/tools/musamapping/mcc_wrapper -DCMAKE_MODULE_PATH=/usr/local/musa/tools/musamapping/cmake/Modules -DCUDAToolkit_ROOT=/usr/local/musa -DCUDA_HOME=/usr/local/musa -DUSE_CXX11_ABI=ON -D_GLIBCXX_USE_CXX11_ABI=1 -DGENERATE_SO=OFF -DVCPKG_MANIFEST_INSTALL=OFF -DUSE_MUSA:BOOL=ON -DCMAKE_CUDA_ARCHITECTURES=90 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_EXPERIMENTAL_RUST=3cc9b32c-47d3-4056-8953-d74e69fc0d6c"
+export CMAKE_ARGS="-DCMAKE_CUDA_COMPILER=${MUSAMAPPING_PATH}/mcc_wrapper -DCMAKE_MODULE_PATH=${MUSAMAPPING_PATH}/cmake/Modules -DCUDAToolkit_ROOT=${MUSA_HOME} -DCUDA_HOME=${MUSA_HOME} -DUSE_CXX11_ABI=ON -D_GLIBCXX_USE_CXX11_ABI=1 -DGENERATE_SO=OFF -DVCPKG_MANIFEST_INSTALL=OFF -DUSE_MUSA:BOOL=ON -DUSE_CUDA:BOOL=ON -DCMAKE_CUDA_ARCHITECTURES=90 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_EXPERIMENTAL_RUST=3cc9b32c-47d3-4056-8953-d74e69fc0d6c"
 
 export GIT_CONFIG_COUNT=1
 export GIT_CONFIG_KEY_0=safe.directory
@@ -81,7 +84,6 @@ GXXWRAP
 fi
 export PATH="${SCRIPT_DIR}/scripts/musa_link_wrapper:${PATH}"
 export PATH="${NINJA_GUARD_DIR}:${PATH}"
-export XLLM_NINJA_GUARD="${NINJA_GUARD_DIR}/ninja"
 
 ln -sf libmudnncxx.so /usr/local/musa/lib/libmudnn.so 2>/dev/null || true
 # cmake 4.2 CUDA toolkit detection requires ${ROOT}/nvvm/libdevice to exist
@@ -184,5 +186,5 @@ if [ -f "${BD}/build.ninja" ] && [ "${FORCE_CMAKE:-0}" != "1" ]; then
   "${NINJA_SAFE}" "${BD}" "${NINJA_ARGS[@]}" 2>&1 | tee "${LOG}"
 else
   echo "==> Configure + build via setup.py"
-  exec python3 setup.py build --device cuda 2>&1 | tee "${LOG}"
+  exec python3 setup.py build --device musa 2>&1 | tee "${LOG}"
 fi

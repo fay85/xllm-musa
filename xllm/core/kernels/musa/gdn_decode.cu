@@ -17,10 +17,13 @@ limitations under the License.
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
 #include <glog/logging.h>
+#include <unistd.h>
 
 #include <cmath>
+#include <cstdlib>
 #include <cstdint>
 #include <algorithm>
+#include <limits>
 #include <sstream>
 #include <vector>
 
@@ -765,6 +768,37 @@ std::string get_mate_gdn_decode_uri(int64_t num_q_heads,
   return oss.str();
 }
 
+namespace {
+
+std::string get_mate_gdn_decode_tvmffi_uri(int64_t num_q_heads,
+                                           int64_t num_v_heads,
+                                           torch::ScalarType dtype,
+                                           int64_t batch_size) {
+  std::ostringstream oss;
+  oss << "mate_gdn_decode_tvmffi_hq" << num_q_heads << "_hv" << num_v_heads
+      << "_" << mate_gdn_dtype_suffix(dtype);
+  if (batch_size > 16) {
+    oss << "_blarge";
+  } else if (batch_size > 4) {
+    oss << "_b16";
+  } else if (batch_size > 2) {
+    oss << "_b4";
+  }
+  return oss.str();
+}
+
+bool mate_gdn_decode_module_available(const std::string& uri) {
+  const char* ops_path = std::getenv("FLASHINFER_OPS_PATH");
+  if (ops_path == nullptr || ops_path[0] == '\0') {
+    return false;
+  }
+  const std::string so_path =
+      std::string(ops_path) + "/" + uri + "/" + uri + ".so";
+  return ::access(so_path.c_str(), R_OK) == 0;
+}
+
+}  // namespace
+
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params) {
   XLLM_KINETO_USER_SCOPE("xllm/mate_gdn_decode");
@@ -833,9 +867,21 @@ torch::Tensor mate_gated_delta_rule_decode(
           : torch::empty({batch_size, num_v_heads, head_v_dim},
                          value.options());
 
-  const std::string uri = get_mate_gdn_decode_uri(
-      num_k_heads, num_v_heads, query.scalar_type());
-  auto run = get_function(uri, "run");
+  const std::string direct_uri = get_mate_gdn_decode_tvmffi_uri(
+      num_k_heads, num_v_heads, query.scalar_type(), batch_size);
+  const bool use_direct_tvmffi =
+      mate_gdn_decode_module_available(direct_uri);
+  CHECK(use_direct_tvmffi || batch_size <= 2)
+      << "Mate GDN decode requires the batch-tuned TVM-FFI module "
+      << direct_uri << " for batch_size=" << batch_size
+      << "; refusing to reuse the B<=2 module because its TileLang grid "
+         "configuration is incorrect for this batch bucket";
+  const std::string uri =
+      use_direct_tvmffi
+          ? direct_uri
+          : get_mate_gdn_decode_uri(
+                num_k_heads, num_v_heads, query.scalar_type());
+  auto run = get_function(uri, use_direct_tvmffi ? "main" : "run");
 
   {
     // If the worker's current MUSA stream has no native handle, TVM FFI falls
@@ -844,19 +890,35 @@ torch::Tensor mate_gated_delta_rule_decode(
     // kernels see the updated output/state.
     MusaTvmffiStreamGuard stream_guard(query.device());
 
-    // The TVM FFI wrapper (MateGdnDecodeRun) expects arguments in this order
-    // (it internally reorders to match the kernel ABI). Confirmed by the type
-    // check error when the order was changed.
-    run(to_ffi_tensor(query),
-        to_ffi_tensor(key),
-        to_ffi_tensor(value),
-        to_ffi_tensor(A_log_f32),
-        to_ffi_tensor(a),
-        to_ffi_tensor(dt_bias_f32),
-        to_ffi_tensor(b),
-        to_ffi_tensor(state_indices),
-        to_ffi_tensor(state_f32),
-        to_ffi_tensor(output));
+    if (use_direct_tvmffi) {
+      // Current Mate exposes a native TVM-FFI entry and keeps scale as a
+      // runtime scalar. Calling it directly avoids the legacy Cython bridge
+      // ABI (init/call/get_last_error), which is not emitted by new TileLang.
+      run(to_ffi_tensor(query),
+          to_ffi_tensor(key),
+          to_ffi_tensor(value),
+          to_ffi_tensor(A_log_f32),
+          to_ffi_tensor(a),
+          to_ffi_tensor(dt_bias_f32),
+          to_ffi_tensor(b),
+          static_cast<float>(params.scale),
+          to_ffi_tensor(state_indices),
+          to_ffi_tensor(state_f32),
+          to_ffi_tensor(output));
+    } else {
+      // Legacy MateGdnDecodeRun internally reorders these arguments to match
+      // the Cython kernel ABI used by existing deployed artifacts.
+      run(to_ffi_tensor(query),
+          to_ffi_tensor(key),
+          to_ffi_tensor(value),
+          to_ffi_tensor(A_log_f32),
+          to_ffi_tensor(a),
+          to_ffi_tensor(dt_bias_f32),
+          to_ffi_tensor(b),
+          to_ffi_tensor(state_indices),
+          to_ffi_tensor(state_f32),
+          to_ffi_tensor(output));
+    }
   }
 
   // The mate kernel updates state_f32 in-place. When state_f32 IS
@@ -922,12 +984,6 @@ torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params) {
       to_ffi_tensor(intermediate),
       to_ffi_tensor(output),
       static_cast<double>(params.scale));
-
-  // Eager (non-capturing) binds the FFI to a dedicated pool stream, so the
-  // caller's compute stream must wait for the kernel before reading `output`
-  // /`intermediate`. This is a no-op under CUDA-graph capture (kernel runs on
-  // the capture stream) and during replay (C++ does not execute).
-  sync_musa_ffi_stream(q.device());
 
   return output;
 }
@@ -1096,6 +1152,79 @@ __device__ __forceinline__ float fast_sigmoid_f32(float z) {
 
 namespace {
 
+template <typename T>
+__global__ void __launch_bounds__(256, 1)
+    l2_norm_pair_h128_rows_kernel(const T* __restrict__ query,
+                                  const T* __restrict__ key,
+                                  T* __restrict__ query_out,
+                                  T* __restrict__ key_out,
+                                  int rows,
+                                  float eps) {
+  constexpr int kColumns = 128;
+  constexpr int kLanesPerRow = 32;
+  constexpr int kValuesPerLane = kColumns / kLanesPerRow;
+  constexpr int kRowsPerBlock = 8;
+
+  const int lane = threadIdx.x % kLanesPerRow;
+  const int row_in_block = threadIdx.x / kLanesPerRow;
+  const int row = blockIdx.x * kRowsPerBlock + row_in_block;
+  if (row >= rows) {
+    return;
+  }
+
+  const int64_t row_offset = static_cast<int64_t>(row) * kColumns;
+  const int column_base = lane * kValuesPerLane;
+  float query_values[kValuesPerLane];
+  float key_values[kValuesPerLane];
+  float query_sum = 0.0f;
+  float key_sum = 0.0f;
+#pragma unroll
+  for (int index = 0; index < kValuesPerLane; ++index) {
+    const int64_t offset = row_offset + column_base + index;
+    query_values[index] = to_f32<T>(query[offset]);
+    key_values[index] = to_f32<T>(key[offset]);
+    query_sum += query_values[index] * query_values[index];
+    key_sum += key_values[index] * key_values[index];
+  }
+
+#pragma unroll
+  for (int offset = kLanesPerRow / 2; offset > 0; offset >>= 1) {
+    query_sum +=
+        __shfl_xor_sync(0xffffffffu, query_sum, offset, kLanesPerRow);
+    key_sum += __shfl_xor_sync(0xffffffffu, key_sum, offset, kLanesPerRow);
+  }
+  const float query_inv_norm = rsqrtf(query_sum + eps);
+  const float key_inv_norm = rsqrtf(key_sum + eps);
+
+#pragma unroll
+  for (int index = 0; index < kValuesPerLane; ++index) {
+    const int64_t offset = row_offset + column_base + index;
+    query_out[offset] = from_f32<T>(query_values[index] * query_inv_norm);
+    key_out[offset] = from_f32<T>(key_values[index] * key_inv_norm);
+  }
+}
+
+template <typename T>
+void launch_l2_norm_pair_h128(const torch::Tensor& query,
+                              const torch::Tensor& key,
+                              torch::Tensor& query_out,
+                              torch::Tensor& key_out,
+                              int rows,
+                              double eps,
+                              cudaStream_t stream) {
+  constexpr int kRowsPerBlock = 8;
+  constexpr int kThreads = 256;
+  const int blocks = (rows + kRowsPerBlock - 1) / kRowsPerBlock;
+  l2_norm_pair_h128_rows_kernel<T><<<blocks, kThreads, 0, stream>>>(
+      reinterpret_cast<const T*>(query.data_ptr()),
+      reinterpret_cast<const T*>(key.data_ptr()),
+      reinterpret_cast<T*>(query_out.data_ptr()),
+      reinterpret_cast<T*>(key_out.data_ptr()),
+      rows,
+      static_cast<float>(eps));
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
 template <typename scalar_t>
 __global__ void gdn_gating_kernel(const scalar_t* __restrict__ a,
                                   const scalar_t* __restrict__ b,
@@ -1146,6 +1275,47 @@ void launch(const torch::Tensor& a,
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
+}
+
+std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
+    const torch::Tensor& query,
+    const torch::Tensor& key,
+    double eps) {
+  CHECK(query.sizes() == key.sizes())
+      << "l2_norm_pair_fused requires matching Q/K shapes";
+  CHECK(query.scalar_type() == key.scalar_type())
+      << "l2_norm_pair_fused requires matching Q/K dtypes";
+  CHECK(query.is_contiguous() && key.is_contiguous())
+      << "l2_norm_pair_fused requires contiguous Q/K tensors";
+  CHECK_EQ(query.size(-1), 128)
+      << "l2_norm_pair_fused currently supports head dimension 128";
+
+  torch::Tensor query_out = torch::empty_like(query);
+  torch::Tensor key_out = torch::empty_like(key);
+  const int64_t rows_i64 = query.numel() / query.size(-1);
+  CHECK_LE(rows_i64, std::numeric_limits<int>::max());
+  const int rows = static_cast<int>(rows_i64);
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(query));
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+
+  switch (query.scalar_type()) {
+    case torch::kBFloat16:
+      launch_l2_norm_pair_h128<__nv_bfloat16>(
+          query, key, query_out, key_out, rows, eps, stream);
+      break;
+    case torch::kHalf:
+      launch_l2_norm_pair_h128<__half>(
+          query, key, query_out, key_out, rows, eps, stream);
+      break;
+    case torch::kFloat32:
+      launch_l2_norm_pair_h128<float>(
+          query, key, query_out, key_out, rows, eps, stream);
+      break;
+    default:
+      LOG(FATAL) << "l2_norm_pair_fused: unsupported dtype "
+                 << query.scalar_type();
+  }
+  return {query_out, key_out};
 }
 
 std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,

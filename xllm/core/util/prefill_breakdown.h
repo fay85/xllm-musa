@@ -58,7 +58,21 @@ class PrefillBreakdown final {
     kFullPrep = 15,  // slice + QK-norm + RoPE (+ optional gate slice)
     kFullFa = 16,    // FlashInfer FA2/FA3 / AttentionImpl::forward
     kFullOProj = 17, // output gate + o_proj
-    kCount = 18,
+    // Nested inside the projection buckets above. These isolate the native
+    // block-FP8 preparation, activation quantizer, and Mate GEMM.
+    kFp8Prepare = 18,
+    kFp8Quant = 19,
+    kFp8Gemm = 20,
+    // Nested under the Qwen3.5 routed-MoE layer scope. These distinguish the
+    // routed expert path from the shared expert and from the outer MoE total.
+    kMoeRoute = 21,
+    kMoePreprocess = 22,
+    kMoeGateUp = 23,
+    kMoeAct = 24,
+    kMoeDown = 25,
+    kMoeCombine = 26,
+    kMoeShared = 27,
+    kCount = 28,
   };
 
   static bool enabled() {
@@ -114,7 +128,12 @@ class PrefillBreakdown final {
              b == Bucket::kGdnGate || b == Bucket::kGdnLayout ||
              b == Bucket::kGdnOProj || b == Bucket::kFullQkv ||
              b == Bucket::kFullPrep || b == Bucket::kFullFa ||
-             b == Bucket::kFullOProj;
+             b == Bucket::kFullOProj || b == Bucket::kFp8Prepare ||
+             b == Bucket::kFp8Quant || b == Bucket::kFp8Gemm ||
+             b == Bucket::kMoeRoute || b == Bucket::kMoePreprocess ||
+             b == Bucket::kMoeGateUp || b == Bucket::kMoeAct ||
+             b == Bucket::kMoeDown || b == Bucket::kMoeCombine ||
+             b == Bucket::kMoeShared;
     };
     double accounted = 0.0;
     for (size_t i = 0; i < sums.size(); ++i) {
@@ -155,6 +174,30 @@ class PrefillBreakdown final {
               << " full_fa_ms=" << sums[static_cast<size_t>(Bucket::kFullFa)]
               << " full_o_proj_ms="
               << sums[static_cast<size_t>(Bucket::kFullOProj)]
+              << " fp8_prepare_ms="
+              << sums[static_cast<size_t>(Bucket::kFp8Prepare)]
+              << " fp8_quant_ms="
+              << sums[static_cast<size_t>(Bucket::kFp8Quant)]
+              << " fp8_gemm_ms="
+              << sums[static_cast<size_t>(Bucket::kFp8Gemm)]
+              << " n_fp8_quant="
+              << counts[static_cast<size_t>(Bucket::kFp8Quant)]
+              << " n_fp8_gemm="
+              << counts[static_cast<size_t>(Bucket::kFp8Gemm)]
+              << " moe_route_ms="
+              << sums[static_cast<size_t>(Bucket::kMoeRoute)]
+              << " moe_preprocess_ms="
+              << sums[static_cast<size_t>(Bucket::kMoePreprocess)]
+              << " moe_gate_up_ms="
+              << sums[static_cast<size_t>(Bucket::kMoeGateUp)]
+              << " moe_act_ms="
+              << sums[static_cast<size_t>(Bucket::kMoeAct)]
+              << " moe_down_ms="
+              << sums[static_cast<size_t>(Bucket::kMoeDown)]
+              << " moe_combine_ms="
+              << sums[static_cast<size_t>(Bucket::kMoeCombine)]
+              << " moe_shared_ms="
+              << sums[static_cast<size_t>(Bucket::kMoeShared)]
               << " mlp_ms=" << mlp_ms
               << " mlp_gate_up_ms="
               << sums[static_cast<size_t>(Bucket::kMlpGateUp)]
@@ -182,7 +225,17 @@ class PrefillBreakdown final {
                                    "full_qkv",
                                    "full_prep",
                                    "full_fa",
-                                   "full_o_proj"};
+                                   "full_o_proj",
+                                   "fp8_prepare",
+                                   "fp8_quant",
+                                   "fp8_gemm",
+                                   "moe_route",
+                                   "moe_preprocess",
+                                   "moe_gate_up",
+                                   "moe_act",
+                                   "moe_down",
+                                   "moe_combine",
+                                   "moe_shared"};
     for (size_t i = 0; i < sums.size(); ++i) {
       if (counts[i] == 0) {
         continue;

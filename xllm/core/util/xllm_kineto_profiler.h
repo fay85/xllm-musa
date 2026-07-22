@@ -20,7 +20,7 @@ limitations under the License.
 
 namespace xllm {
 
-// In-process Kineto profiling for xLLM decode.
+// In-process Kineto profiling for xLLM decode or prefill steps.
 //
 // Option B (recommended): XLLM_ENABLE_TORCH_KINETO_PROFILE=1
 //   Uses libtorch Kineto profiler (aten ops + GPU kernels in one Chrome trace).
@@ -29,11 +29,14 @@ namespace xllm {
 //   Direct libkineto API (GPU timeline; useful when torch profiler is off).
 //
 // When both are set, torch capture runs first, then a standalone libkineto
-// capture on the next decode-step window (two JSON files).
+// capture on the next selected step window (two JSON files).
 //
 // Common env:
 //   XLLM_KINETO_WARMUP_DECODE_STEPS=1
 //   XLLM_KINETO_TRACE_DECODE_STEPS=128
+//   XLLM_KINETO_PROFILE_PREFILL=1
+//   XLLM_KINETO_WARMUP_PREFILL_STEPS=1
+//   XLLM_KINETO_TRACE_PREFILL_STEPS=1
 //   XLLM_TORCH_KINETO_TRACE_PATH=logs/xllm_torch_kineto_trace.json
 //   XLLM_KINETO_TRACE_PATH=logs/xllm_libkineto_trace.json
 //   XLLM_KINETO_SUMMARY_PATH=logs/xllm_kineto_summary.txt
@@ -43,19 +46,19 @@ class XllmKinetoProfiler {
   static bool is_libkineto_trace_enabled();
   static bool is_enabled();
 
-  static void on_decode_step_begin();
-  static void on_decode_step_end();
+  static void on_profile_step_begin();
+  static void on_profile_step_end();
 
   class StepScope {
    public:
-    explicit StepScope(bool is_decode_step);
+    StepScope(bool is_decode_step, bool is_prefill_step);
     ~StepScope();
 
     StepScope(const StepScope&) = delete;
     StepScope& operator=(const StepScope&) = delete;
 
    private:
-    bool is_decode_step_;
+    bool is_profile_step_;
   };
 
   class UserScope {
@@ -68,7 +71,7 @@ class XllmKinetoProfiler {
 
    private:
     const char* name_;
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
     struct TorchGuard;
     TorchGuard* torch_guard_;
 #endif

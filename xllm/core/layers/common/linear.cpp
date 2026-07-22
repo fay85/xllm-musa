@@ -26,6 +26,7 @@ limitations under the License.
 #include "framework/parallel_state/parallel_args.h"
 #include "framework/parallel_state/parallel_state.h"
 #include "kernels/ops_api.h"
+#include "core/util/prefill_breakdown.h"
 
 namespace xllm {
 namespace layer {
@@ -355,13 +356,23 @@ torch::Tensor block_fp8_native_forward(
   CHECK_EQ(k % block_k, 0) << "native block-fp8 GEMM requires K % " << block_k
                            << " == 0, got K=" << k;
 
-  const auto input_2d = input.reshape({-1, k}).contiguous();
+  torch::Tensor input_2d;
+  {
+    PrefillBreakdown::Scope prepare_scope(
+        PrefillBreakdown::Bucket::kFp8Prepare);
+    input_2d = input.reshape({-1, k}).contiguous();
+  }
 
   // Fused per-token-group dynamic FP8 activation quantization (absmax / 448) via
   // the MUSA-native kernel: one pass produces a_fp8 [M,K] e4m3 and a_scale
   // [M, K/128] fp32 (K-major), matching the mate groupwise GEMM (1,128,128).
-  auto [a_fp8, a_scale] =
-      xllm::kernel::per_token_group_quant_fp8(input_2d, block_k);
+  torch::Tensor a_fp8;
+  torch::Tensor a_scale;
+  {
+    PrefillBreakdown::Scope quant_scope(PrefillBreakdown::Bucket::kFp8Quant);
+    std::tie(a_fp8, a_scale) =
+        xllm::kernel::per_token_group_quant_fp8(input_2d, block_k);
+  }
 
   xllm::kernel::Fp8BlockMatmulParams params;
   params.a = a_fp8;

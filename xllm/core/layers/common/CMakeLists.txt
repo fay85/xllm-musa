@@ -49,7 +49,7 @@ cc_library(
     dsa_metadata_builder.cpp
     dp_utils.cpp
     add_matmul.cpp
-    $<$<NOT:$<BOOL:${USE_MUSA}>>:moe_fused_topk.cpp>
+    moe_fused_topk.cpp
   DEPS
     "-Wl,--whole-archive"
     "-Wl,--no-whole-archive"
@@ -66,7 +66,6 @@ cc_library(
     :platform
     $<$<BOOL:${USE_MLU}>:mlu_layers>
     $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cuda_layers>
-    $<$<BOOL:${USE_MUSA}>:cuda_kernels>
     $<$<BOOL:${USE_ILU}>:ilu_layers>
     $<$<BOOL:${USE_NPU}>:npu_torch_layers>
     $<$<BOOL:${USE_MUSA}>:musa_layers>

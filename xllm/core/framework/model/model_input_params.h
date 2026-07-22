@@ -46,7 +46,7 @@ limitations under the License.
 #include "runtime/dit_forward_params.h"
 #include "util/hash_util.h"
 #include "util/tensor_helper.h"
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 #include "core/framework/config/execution_config.h"
 #endif
 
@@ -374,12 +374,11 @@ struct AttentionHostInput {
   torch::Tensor paged_kv_last_page_len;
 };
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
 namespace {
-inline bool is_cpu_int_tensor(const torch::Tensor& tensor) {
+inline bool is_cpu_int32_tensor(const torch::Tensor& tensor) {
   return tensor.defined() && tensor.device().is_cpu() &&
-         (tensor.scalar_type() == torch::kInt32 ||
-          tensor.scalar_type() == torch::kInt64);
+         tensor.scalar_type() == torch::kInt32;
 }
 
 inline bool should_skip_graph_decode_metadata_h2h(
@@ -390,9 +389,9 @@ inline bool should_skip_graph_decode_metadata_h2h(
     return false;
   }
   return !host.kv_seq_lens.empty() &&
-         is_cpu_int_tensor(host.paged_kv_indptr) &&
-         is_cpu_int_tensor(host.paged_kv_indices) &&
-         is_cpu_int_tensor(host.paged_kv_last_page_len);
+         is_cpu_int32_tensor(host.paged_kv_indptr) &&
+         is_cpu_int32_tensor(host.paged_kv_indices) &&
+         is_cpu_int32_tensor(host.paged_kv_last_page_len);
 }
 }  // namespace
 #endif
@@ -429,6 +428,8 @@ struct AttentionDeviceInput {
     out.q_seq_lens = safe_to(q_seq_lens, device, true);
     if (!skip_graph_metadata_h2h) {
       out.kv_seq_lens = safe_to(kv_seq_lens, device, true);
+    } else {
+      out.kv_seq_lens = kv_seq_lens;
     }
 #if !defined(USE_CUDA)
     out.q_cu_seq_lens = safe_to(q_cu_seq_lens, device, true);
@@ -441,6 +442,13 @@ struct AttentionDeviceInput {
       out.paged_kv_indptr = safe_to(paged_kv_indptr, device);
       out.paged_kv_indices = safe_to(paged_kv_indices, device);
       out.paged_kv_last_page_len = safe_to(paged_kv_last_page_len, device);
+    } else {
+      // Preserve the original tensors for graph-decode compatibility. The
+      // host fast path ignores them, while a non-fast fallback still requires
+      // defined sources for its persistent-buffer copies.
+      out.paged_kv_indptr = paged_kv_indptr;
+      out.paged_kv_indices = paged_kv_indices;
+      out.paged_kv_last_page_len = paged_kv_last_page_len;
     }
     out.new_cache_slot_offsets = safe_to(new_cache_slot_offsets, device);
     out.kv_cache_start_offsets = safe_to(kv_cache_start_offsets, device);
@@ -968,7 +976,7 @@ struct GraphInput {
   torch::Tensor expanded_block_tables;
   torch::Tensor expanded_tiling_data;
   std::vector<int32_t> expanded_kv_seq_lens_vec;
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   torch::Tensor expanded_paged_kv_indptr;
   torch::Tensor expanded_paged_kv_indices;
   torch::Tensor expanded_paged_kv_last_page_len;
@@ -988,7 +996,7 @@ struct GraphInput {
     out.expanded_block_tables = safe_to(expanded_block_tables, device, true);
     out.expanded_tiling_data = safe_to(expanded_tiling_data, device, true);
     out.expanded_kv_seq_lens_vec = expanded_kv_seq_lens_vec;
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
     out.expanded_paged_kv_indptr = safe_to(expanded_paged_kv_indptr, device, true);
     out.expanded_paged_kv_indices =
         safe_to(expanded_paged_kv_indices, device, true);
@@ -1008,7 +1016,7 @@ struct ModelInputParams {
   ModelInputParams to(const torch::Device& device) const {
     ModelInputParams params;
     params.meta = meta;
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
     const bool skip_graph_metadata_h2h =
         should_skip_graph_decode_metadata_h2h(attention.host,
                                               meta.batch_forward_type);

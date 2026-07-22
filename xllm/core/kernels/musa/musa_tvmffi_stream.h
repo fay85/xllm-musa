@@ -145,6 +145,12 @@ DLDataType to_dl_data_type(torch::ScalarType scalar_type);
 
 ffi::Tensor to_ffi_tensor(const torch::Tensor& torch_tensor);
 
+// Creates an FFI tensor that owns only its DLPack metadata.  The caller must
+// keep the Torch storage alive until the launched device work completes.
+ffi::Tensor to_ffi_borrowed_tensor(const torch::Tensor& torch_tensor);
+
+ffi::TensorView to_ffi_tensor_view(const torch::Tensor& torch_tensor);
+
 ffi::Optional<ffi::Tensor> to_ffi_optional_tensor(
     const std::optional<torch::Tensor>& optional);
 

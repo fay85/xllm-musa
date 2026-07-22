@@ -99,10 +99,13 @@ class StreamCall : public Call {
     } else {
       io_buf_.clear();
       io_buf_.append(error_message);
-      pa_->Write(io_buf_);
+      if (pa_) {
+        connection_status_ |= pa_->Write(io_buf_);
+        pa_.reset();
+      }
     }
 
-    return true;
+    return connection_status_ == 0;
   }
 
   // For stream response
@@ -124,11 +127,18 @@ class StreamCall : public Call {
 
   // For stream response
   bool finish() {
+    if (!pa_) {
+      return connection_status_ == 0;
+    }
+
     io_buf_.clear();
     io_buf_.append("data: [DONE]\n\n");
 
-    pa_->Write(io_buf_);
-    return true;
+    connection_status_ |= pa_->Write(io_buf_);
+    // The last writer release emits the chunked terminator immediately while
+    // keeping the underlying HTTP connection reusable.
+    pa_.reset();
+    return connection_status_ == 0;
   }
 
   bool is_disconnected() const override {

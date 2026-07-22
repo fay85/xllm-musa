@@ -22,13 +22,12 @@ limitations under the License.
 #include <ATen/DynamicLibrary.h>
 #include <ATen/core/dispatch/Dispatcher.h>
 #include <glog/logging.h>
+#include <torch/torch.h>
 
 #include <cstdint>
 #include <optional>
 #include <tuple>
 #include <vector>
-
-#include <torch/torch.h>
 
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
@@ -52,7 +51,7 @@ void replace_token(torch::Tensor& dst,
                    torch::Tensor& src,
                    bool synchronize_stream = true);
 
-}
+}  // namespace xllm::kernel::musa
 
 namespace xllm::kernel::cuda {
 
@@ -69,12 +68,11 @@ void act_and_mul(torch::Tensor out,
 
 void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate);
 
-void reshape_paged_cache(
-    torch::Tensor slot_ids,
-    torch::Tensor keys,
-    torch::Tensor values,
-    torch::Tensor key_cache,
-    torch::Tensor value_cache);
+void reshape_paged_cache(torch::Tensor slot_ids,
+                         torch::Tensor keys,
+                         torch::Tensor values,
+                         torch::Tensor key_cache,
+                         torch::Tensor value_cache);
 
 void block_copy(torch::Tensor key_cache_ptrs,
                 torch::Tensor value_cache_ptrs,
@@ -177,27 +175,27 @@ void batch_chunked_prefill_with_optional_piecewise_capture(
     const torch::Tensor& paged_kv_indices_host = torch::Tensor(),
     const torch::Tensor& paged_kv_last_page_len_host = torch::Tensor());
 
-void batch_decode(const std::string& uri,
-                  ffi::Array<int64_t> plan_info,
-                  torch::Tensor float_workspace_buffer,
-                  torch::Tensor int_workspace_buffer,
-                  torch::Tensor page_locked_int_workspace_buffer,
-                  torch::Tensor query,
-                  torch::Tensor k_cache,
-                  torch::Tensor v_cache,
-                  torch::Tensor paged_kv_indptr,
-                  torch::Tensor paged_kv_indices,
-                  torch::Tensor paged_kv_last_page_len,
-                  int64_t window_left,
-                  double sm_scale,
-                  torch::Tensor output,
-                  std::optional<torch::Tensor>& output_lse,
-                  bool use_tensor_core,
-                  std::optional<torch::Tensor> qo_indptr = std::nullopt,
-                  const torch::Tensor& paged_kv_indptr_host = torch::Tensor(),
-                  const torch::Tensor& paged_kv_indices_host = torch::Tensor(),
-                  const torch::Tensor& paged_kv_last_page_len_host =
-                      torch::Tensor());
+void batch_decode(
+    const std::string& uri,
+    ffi::Array<int64_t> plan_info,
+    torch::Tensor float_workspace_buffer,
+    torch::Tensor int_workspace_buffer,
+    torch::Tensor page_locked_int_workspace_buffer,
+    torch::Tensor query,
+    torch::Tensor k_cache,
+    torch::Tensor v_cache,
+    torch::Tensor paged_kv_indptr,
+    torch::Tensor paged_kv_indices,
+    torch::Tensor paged_kv_last_page_len,
+    int64_t window_left,
+    double sm_scale,
+    torch::Tensor output,
+    std::optional<torch::Tensor>& output_lse,
+    bool use_tensor_core,
+    std::optional<torch::Tensor> qo_indptr = std::nullopt,
+    const torch::Tensor& paged_kv_indptr_host = torch::Tensor(),
+    const torch::Tensor& paged_kv_indices_host = torch::Tensor(),
+    const torch::Tensor& paged_kv_last_page_len_host = torch::Tensor());
 void fa3_decode(const torch::Tensor& query,
                 const torch::Tensor& k_cache,
                 const torch::Tensor& v_cache,
@@ -364,21 +362,18 @@ std::tuple<torch::Tensor, torch::Tensor> fp8_scaled_quantize(
     const std::optional<torch::Tensor>& output = std::nullopt,
     const std::optional<torch::Tensor>& scale = std::nullopt);
 
+void rms_norm_static_fp8_quant(torch::Tensor& out,
+                               torch::Tensor& input,
+                               torch::Tensor& weight,
+                               torch::Tensor& scale,
+                               double epsilon);
 
-void rms_norm_static_fp8_quant(
-    torch::Tensor& out,
-    torch::Tensor& input,
-    torch::Tensor& weight,
-    torch::Tensor& scale,
-    double epsilon);
-
-void fused_add_rms_norm_static_fp8_quant(
-    torch::Tensor& out,
-    torch::Tensor& input,
-    torch::Tensor& residual,
-    torch::Tensor& weight,
-    torch::Tensor& scale,
-    double epsilon);
+void fused_add_rms_norm_static_fp8_quant(torch::Tensor& out,
+                                         torch::Tensor& input,
+                                         torch::Tensor& residual,
+                                         torch::Tensor& weight,
+                                         torch::Tensor& scale,
+                                         double epsilon);
 
 torch::Tensor fp8_scaled_matmul(
     const torch::Tensor& a,
@@ -406,6 +401,90 @@ std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size);
 
+// MUSA-specific Qwen3.5 MoE preprocess. Following SGLang's token-major
+// contiguous preprocess, this returns {fp8_rows, scales, src_to_dst,
+// expert_counts} while fusing expert placement, hidden-state replication, and
+// g128 FP8 quantization.
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+fused_moe_preprocess_fp8(const torch::Tensor& input,
+                         const torch::Tensor& topk_ids,
+                         int64_t num_experts,
+                         int64_t group_size);
+
+// BF16 token-major contiguous MoE preprocess. Returns
+// {padded_hidden, row_expert_ids, original_to_padded, group_m_counts}; each
+// expert occupies an aligned block and padding rows in row_expert_ids are -1.
+// group_m_counts sums to the padded M and can be passed directly to Mate's
+// m-grouped contiguous GEMM. This mirrors SGLang's fused MUSA preprocess and
+// avoids the per-layer sort/index/cumsum sequence in the long-prefill path.
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+fused_moe_preprocess_bf16(const torch::Tensor& input,
+                          const torch::Tensor& topk_ids,
+                          int64_t num_experts,
+                          int64_t alignment);
+
+// Decode-only fixed-block Ragged MoE helpers. Each routed assignment owns one
+// 128-row block and stores its valid row at the block start. This keeps graph
+// shapes static while allowing Mate's Ragged kernel to skip all padding rows.
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+fused_moe_ragged_preprocess_fp8(const torch::Tensor& input,
+                                const torch::Tensor& topk_ids,
+                                int64_t group_size,
+                                int64_t alignment);
+
+std::tuple<torch::Tensor, torch::Tensor> fused_moe_ragged_preprocess_bf16(
+    const torch::Tensor& input,
+    const torch::Tensor& topk_ids,
+    int64_t alignment);
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+fused_moe_decode_preprocess_bf16(const torch::Tensor& input,
+                                 const torch::Tensor& topk_ids,
+                                 int64_t num_experts,
+                                 int64_t alignment);
+
+torch::Tensor fused_moe_ragged_swiglu_bf16(const torch::Tensor& input,
+                                            int64_t alignment);
+
+torch::Tensor fused_moe_indexed_swiglu_bf16(
+    const torch::Tensor& input,
+    const torch::Tensor& valid_rows);
+
+std::tuple<torch::Tensor, torch::Tensor> fused_moe_ragged_swiglu_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size,
+    int64_t alignment);
+
+torch::Tensor fused_moe_ragged_combine(const torch::Tensor& down,
+                                       const torch::Tensor& topk_weights,
+                                       int64_t num_tokens,
+                                       int64_t alignment);
+
+// SGLang/TorchAda-compatible token-major FP8 MoE decode path. The AOT MUBINs
+// are specialized for MP31 and decode batch sizes 1 through 8; helper artifacts
+// provide routing alignment, SwiGLU, and final top-k reduction.
+bool musa_fused_moe_aot_available(int64_t num_tokens);
+
+bool musa_fused_moe_bf16_aot_available(int64_t num_tokens);
+
+void prepare_musa_fused_moe_aot(const torch::Device& device);
+
+void prepare_musa_fused_moe_bf16_aot(const torch::Device& device);
+
+torch::Tensor musa_fused_moe_aot_fp8(const torch::Tensor& hidden_states,
+                                     const torch::Tensor& w13,
+                                     const torch::Tensor& w13_scale,
+                                     const torch::Tensor& w2,
+                                     const torch::Tensor& w2_scale,
+                                     const torch::Tensor& topk_weights,
+                                     const torch::Tensor& topk_ids);
+
+torch::Tensor musa_fused_moe_aot_bf16(const torch::Tensor& hidden_states,
+                                      const torch::Tensor& w13,
+                                      const torch::Tensor& w2,
+                                      const torch::Tensor& topk_weights,
+                                      const torch::Tensor& topk_ids);
+
 std::pair<torch::Tensor, torch::Tensor> compute_topk_for_beam_search(
     torch::Tensor combined_probs,
     uint32_t batch_size,
@@ -423,20 +502,17 @@ std::pair<torch::Tensor, torch::Tensor> compute_topk_general(
 torch::Tensor air_log_softmax_last_dim(const torch::Tensor& input,
                                        const torch::Tensor& temperatures);
 
-void fused_qk_norm_rope(
-    torch::Tensor& qkv,
-    int64_t num_heads_q,
-    int64_t num_heads_k,
-    int64_t num_heads_v,
-    int64_t head_dim,
-    double eps,
-    const torch::Tensor& q_weight,
-    const torch::Tensor& k_weight,
-    const torch::Tensor&
-        cos_sin_cache,
-    bool interleaved,
-    const torch::Tensor& position_ids
-);
+void fused_qk_norm_rope(torch::Tensor& qkv,
+                        int64_t num_heads_q,
+                        int64_t num_heads_k,
+                        int64_t num_heads_v,
+                        int64_t head_dim,
+                        double eps,
+                        const torch::Tensor& q_weight,
+                        const torch::Tensor& k_weight,
+                        const torch::Tensor& cos_sin_cache,
+                        bool interleaved,
+                        const torch::Tensor& position_ids);
 
 std::tuple<torch::Tensor, torch::Tensor> moe_fused_topk(
     torch::Tensor& gating_output,
@@ -447,38 +523,71 @@ std::tuple<torch::Tensor, torch::Tensor> moe_fused_topk(
 
 torch::Tensor random_sample(const torch::Tensor& probs);
 
-torch::Tensor cutlass_fused_moe(
-    const torch::Tensor& input,
-    const torch::Tensor& token_selected_experts,
-    const torch::Tensor& token_final_scales,
-    const torch::Tensor&
-        fc1_expert_weights,
-    const torch::Tensor&
-        fc2_expert_weights,
-    torch::ScalarType output_dtype,
-    const std::vector<torch::Tensor>& quant_scales,
-    int32_t tp_size,
-    int32_t tp_rank,
-    int32_t ep_size,
-    int32_t ep_rank,
-    int32_t cluster_size,
-    int32_t cluster_rank,
-    const std::optional<torch::Tensor>& fc1_expert_biases = std::nullopt,
-    const std::optional<torch::Tensor>& fc2_expert_biases = std::nullopt,
-    const std::optional<torch::Tensor>& input_sf = std::nullopt,
-    const std::optional<torch::Tensor>& swiglu_alpha = std::nullopt,
-    const std::optional<torch::Tensor>& swiglu_beta = std::nullopt,
-    const std::optional<torch::Tensor>& swiglu_limit = std::nullopt,
-    const std::optional<torch::Tensor>& output = std::nullopt,
-    bool enable_alltoall = false,
-    bool use_deepseek_fp8_block_scale = false,
-    bool use_w4_group_scaling = false,
-    bool use_mxfp8_act_scaling = false,
-    bool min_latency_mode = false,
-    bool use_packed_weights = false,
-    int32_t tune_max_num_tokens = 8192,
-    ActivationType activation_type = ActivationType::SWIGLU);
+// Mate grouped MoE GEMM entry points.  The MUSA Qwen3.5 MoE path uses the
+// masked layout for both BF16 and block-wise FP8 expert weights.  Keeping the
+// wrapper in the MUSA API makes the layer independent of the Python Mate
+// package while still using the same production kernels as SGLang.
+torch::Tensor masked_moe_gemm_bf16(const torch::Tensor& input,
+                                   const torch::Tensor& weights,
+                                   const torch::Tensor& token_counts,
+                                   torch::ScalarType output_dtype,
+                                   int64_t expected_tokens);
 
+torch::Tensor masked_moe_gemm_fp8(const torch::Tensor& input,
+                                  const torch::Tensor& input_scale,
+                                  const torch::Tensor& weights,
+                                  const torch::Tensor& weight_scale,
+                                  const torch::Tensor& token_counts,
+                                  torch::ScalarType output_dtype,
+                                  int64_t expected_tokens);
+
+// Compact BF16 grouped GEMM. Input rows must be sorted by expert and
+// token_counts must contain the number of consecutive rows for each expert.
+torch::Tensor contiguous_moe_gemm_bf16(const torch::Tensor& input,
+                                       const torch::Tensor& weights,
+                                       const torch::Tensor& token_counts,
+                                       torch::ScalarType output_dtype);
+
+// Fixed-block BF16 Ragged GEMM. row_expert_ids has one entry per input row;
+// valid expert ids occur in aligned blocks and padding rows contain -1.
+torch::Tensor ragged_moe_gemm_bf16(const torch::Tensor& input,
+                                  const torch::Tensor& weights,
+                                  const torch::Tensor& row_expert_ids,
+                                  torch::ScalarType output_dtype,
+                                  int64_t alignment);
+
+// Compact FP8 grouped GEMM. Input rows must be sorted by expert and
+// token_counts must contain the number of consecutive rows for each expert.
+// Unlike the masked layout, this path allocates and computes only valid routed
+// assignments.
+torch::Tensor contiguous_moe_gemm_fp8(const torch::Tensor& input,
+                                      const torch::Tensor& input_scale,
+                                      const torch::Tensor& weights,
+                                      const torch::Tensor& weight_scale,
+                                      const torch::Tensor& token_counts,
+                                      torch::ScalarType output_dtype);
+
+// Fixed-block FP8 Ragged GEMM. row_expert_ids has one entry per input row;
+// valid expert ids occur at aligned block starts and padding rows contain -1.
+torch::Tensor ragged_moe_gemm_fp8(const torch::Tensor& input,
+                                  const torch::Tensor& input_scale,
+                                  const torch::Tensor& weights,
+                                  const torch::Tensor& weight_scale,
+                                  const torch::Tensor& row_expert_ids,
+                                  torch::ScalarType output_dtype,
+                                  int64_t alignment);
+
+// SGLang's MUSA top-k kernel fuses softmax, top-k selection, and selected
+// weight renormalization. This is intended for small decode graph buckets;
+// large prefill continues to use the existing route.
+std::tuple<torch::Tensor, torch::Tensor> musa_moe_topk_softmax(
+    const torch::Tensor& router_logits,
+    int64_t topk);
+bool musa_moe_topk_softmax_available();
+
+// Graph-safe routed-index construction. Returns {src_dst, dst_src,
+// expert_sizes}, where src_dst maps each original assignment to its compact
+// expert-grouped row and dst_src is the inverse mapping.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
     const torch::Tensor& expert_id,
     int64_t num_experts);
@@ -488,7 +597,13 @@ torch::Tensor moe_combine_result(const torch::Tensor& gemm2,
                                  int64_t N,
                                  int32_t topk);
 
-}
+torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
+                                         const torch::Tensor& sorted_positions,
+                                         const torch::Tensor& reduce_weight,
+                                         int64_t N,
+                                         int32_t topk);
+
+}  // namespace xllm::kernel::cuda
 
 #include "core/kernels/musa/attention_runner.h"
 #include "core/kernels/musa/gdn_ops.h"

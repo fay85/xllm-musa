@@ -303,4 +303,11 @@ torch::Tensor moe_combine_result(const torch::Tensor& gemm2,
                                  int64_t N,
                                  int32_t topk);
 
+torch::Tensor moe_combine_result_indexed(
+    const torch::Tensor& gemm2_sorted,
+    const torch::Tensor& sorted_positions,
+    const torch::Tensor& reduce_weight,
+    int64_t N,
+    int32_t topk);
+
 }  // namespace xllm::kernel::cuda

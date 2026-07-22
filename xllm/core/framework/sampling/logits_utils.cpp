@@ -49,19 +49,7 @@ void apply_repetition_penalties(torch::Tensor& logits,
 
 void apply_temperatures(torch::Tensor& logits,
                         const torch::Tensor& temperatures) {
-  auto unsqueezed_temperatures = temperatures.unsqueeze(1);
-  // Cache device-side scalar to avoid synchronous H2D copy that forces
-  // aclrtSynchronizeStream per forward.
-  static thread_local torch::Tensor one_scalar;
-  const torch::Device& target_device = unsqueezed_temperatures.device();
-  if (!one_scalar.defined() || one_scalar.device() != target_device) {
-    one_scalar =
-        torch::full({}, 1.0, torch::TensorOptions().device(target_device));
-  }
-  unsqueezed_temperatures = torch::where(
-      unsqueezed_temperatures == 0, one_scalar, unsqueezed_temperatures);
-
-  logits.div_(unsqueezed_temperatures);
+  logits.div_(temperatures.unsqueeze(1));
 }
 
 void apply_top_k_top_p_torch_impl(torch::Tensor& logits,
