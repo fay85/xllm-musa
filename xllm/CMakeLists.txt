@@ -122,7 +122,6 @@ endif()
 
 if(USE_MUSA)
   target_link_options(xllm PRIVATE
-    "LINKER:--whole-archive,$<TARGET_FILE:cuda_graph_executor>,--no-whole-archive"
     "LINKER:--whole-archive,$<TARGET_FILE:runtime>,--no-whole-archive"
   )
 endif()
