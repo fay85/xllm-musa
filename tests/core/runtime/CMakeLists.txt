@@ -105,11 +105,6 @@ if(USE_MLU)
 endif()
 
 if(USE_CUDA)
-  if(USE_MUSA)
-    set(CUDA_GRAPH_EXECUTOR_TEST_PLATFORM_DEPS :musa_layers torch_musa)
-  else()
-    set(CUDA_GRAPH_EXECUTOR_TEST_PLATFORM_DEPS :cuda_layers)
-  endif()
   cc_test(
     NAME
       cuda_graph_executor_test
@@ -118,7 +113,7 @@ if(USE_CUDA)
     DEPS
       :config
       :runtime
-      ${CUDA_GRAPH_EXECUTOR_TEST_PLATFORM_DEPS}
+      :cuda_layers
       :batch
       :block
       :kv_cache

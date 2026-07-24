@@ -134,12 +134,12 @@ if(USE_MUSA)
 endif()
 
 if(USE_MUSA)
-  # cuda_graph_executor_impl.cpp's only externally-observable effect is the
-  # REGISTER_EXECUTOR static initializer in cuda_graph_executor_impl.h. With
+  # musa_graph_executor_impl.cpp's only externally-observable effect is the
+  # REGISTER_EXECUTOR static initializer in musa_graph_executor_impl.h. With
   # normal lazy static-archive linking, no symbol references it so the linker
   # drops the whole .o and ENABLE_GRAPH=1 silently falls back to
   # BaseExecutorImpl (factory throws "No valid backend found: musa" at
-  # runtime). Wrap libcuda_graph_executor in --whole-archive at the executable
+  # runtime). Wrap libmusa_graph_executor in --whole-archive at the executable
   # link to force the .o (and thus the registration) into the binary.
   # Same problem applies to base_executor_impl.cpp in libruntime.a: it carries
   # REGISTER_EXECUTOR("llm", BaseExecutorImpl) / REGISTER_EXECUTOR("rec", ...)
@@ -147,7 +147,7 @@ if(USE_MUSA)
   # drops the TU and backend="llm" lookups fall through to "vlm" with a null
   # model encode (segfault on first forward). Force libruntime in as well.
   target_link_options(xllm PRIVATE
-    "LINKER:--whole-archive,$<TARGET_FILE:cuda_graph_executor>,--no-whole-archive"
+    "LINKER:--whole-archive,$<TARGET_FILE:musa_graph_executor>,--no-whole-archive"
     "LINKER:--whole-archive,$<TARGET_FILE:runtime>,--no-whole-archive"
   )
 endif()

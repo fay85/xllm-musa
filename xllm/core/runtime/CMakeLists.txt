@@ -1,32 +1,7 @@
 include(cc_library)
 
-# MUSA graph executor
 if(USE_MUSA)
-  cc_library(
-    NAME
-      cuda_graph_executor
-    HDRS
-      cuda_graph_executor_impl.h
-    SRCS
-      cuda_graph_executor_impl.cpp
-    COPTS
-      ${_XLLM_MUSIFY_COPTS}
-    DEPS
-      torch
-      glog::glog
-      absl::flat_hash_map
-      :common
-      :platform
-      :util
-      :cuda_kernels
-      :kv_cache
-      :model
-      :layers
-      :request
-      :parallel_state
-      :model_context
-      :sampler
-  )
+  add_subdirectory(musa)
 endif()
 
 include(cc_binary)
@@ -49,7 +24,8 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:acl_graph_executor_impl.h>
     $<$<BOOL:${USE_NPU}>:acl_graph_persistent_param.h>
     $<$<BOOL:${USE_MLU}>:mlu_graph_executor_impl.h>
-    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>>:cuda_graph_executor_impl.h>
+    $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.h>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_graph_executor_impl.h>
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.h>
     worker.h
     worker_impl.h
@@ -79,7 +55,7 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:acl_graph_executor_impl.cpp>
     $<$<BOOL:${USE_NPU}>:acl_graph_persistent_param.cpp>
     $<$<BOOL:${USE_MLU}>:mlu_graph_executor_impl.cpp>
-    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cuda_graph_executor_impl.cpp>
+    $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.cpp>
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.cpp>
     worker.cpp
     worker_impl.cpp
@@ -123,7 +99,7 @@ cc_library(
     :util
     :worker_service
     :xllm_server
-    $<$<BOOL:${USE_MUSA}>:cuda_graph_executor>
+    $<$<BOOL:${USE_MUSA}>:musa_graph_executor>
     $<$<BOOL:${USE_NPU}>:xllm_ops>
     $<$<BOOL:${USE_NPU}>:atb_customize>
     $<$<BOOL:${USE_NPU}>:platform_npu>
