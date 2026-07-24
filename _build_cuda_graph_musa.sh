@@ -167,8 +167,8 @@ echo "==> Logging to ${LOG}"
 NINJA_TARGET="${NINJA_TARGET:-xllm}"
 NINJA_SAFE="${SCRIPT_DIR}/scripts/ninja_safe.sh"
 if [ -f "${BD}/build.ninja" ] && [ "${FORCE_CMAKE:-0}" != "1" ]; then
-  # USE_CUDA+USE_MUSA builds may emit -lmusa_layers without the musa/ subdir in
-  # the cmake graph; point the linker at the static archive directly.
+  # MUSA builds may emit -lmusa_layers without the musa/ subdir in the cmake
+  # graph; point the linker at the static archive directly.
   MUSA_LAYERS_A="${SCRIPT_DIR}/${BD}/xllm/core/layers/musa/libmusa_layers.a"
   if [ -f "${MUSA_LAYERS_A}" ] && grep -q -- '-lmusa_layers' "${BD}/build.ninja" 2>/dev/null; then
     sed -i "s|-lmusa_layers|${MUSA_LAYERS_A}|g" "${BD}/build.ninja"
