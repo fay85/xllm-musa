@@ -1,6 +1,6 @@
 #!/bin/bash
 # Build xllm-git-master on MUSA via the CUDA-compatibility graph path:
-#   USE_MUSA + mcc_wrapper (FlashInfer / CudaGraphExecutorImpl)
+#   USE_MUSA + mcc_wrapper (FlashInfer / MusaGraphExecutorImpl)
 #
 # This path intentionally uses mcc_wrapper; it does not require nvcc.
 set -euo pipefail
