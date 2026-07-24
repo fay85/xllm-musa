@@ -47,17 +47,6 @@ constexpr uint64_t MBUF_SIZE = 128 * 1024 * 1024;
 
 namespace {
 
-bool use_selected_only_validate_probs(bool configured_value) {
-#if defined(USE_MUSA)
-  // The MUSA target-only rejection kernel consumes only the selected draft
-  // probability and avoids reconstructing a [batch, steps, vocab] tensor.
-  static_cast<void>(configured_value);
-  return true;
-#else
-  return configured_value;
-#endif
-}
-
 ProcessGroup* spec_broadcast_group(const ParallelArgs& parallel_args) {
   return parallel_args.tp_group_ != nullptr ? parallel_args.tp_group_
                                             : parallel_args.process_group_;
@@ -313,26 +302,6 @@ void clear_selected_embeddings(ForwardOutput& output) {
 void clear_all_output_embeddings(ForwardOutput& output) {
   clear_sample_embeddings(output);
   clear_selected_embeddings(output);
-}
-
-torch::Tensor get_prefill_bootstrap_embeddings(
-    const ForwardInput& input,
-    const SampleOutput& sample_output) {
-  const torch::Tensor& target_hidden =
-      sample_output.selected_embeddings.defined()
-          ? sample_output.selected_embeddings
-          : sample_output.embeddings;
-  torch::Tensor bootstrap_embeddings = target_hidden;
-  if (bootstrap_embeddings.size(0) !=
-      static_cast<int64_t>(
-          input.input_params.embedding.embedding_ids.size())) {
-    torch::Tensor bootstrap_idxes =
-        input.sampling_params.selected_token_idxes.to(
-            torch::dtype(torch::kLong).device(bootstrap_embeddings.device()));
-    bootstrap_embeddings =
-        bootstrap_embeddings.index_select(/*dim=*/0, bootstrap_idxes);
-  }
-  return bootstrap_embeddings;
 }
 
 void clear_ready_events(ForwardInput& input) {
@@ -624,8 +593,7 @@ MTPWorkerImpl::MTPWorkerImpl(const ParallelArgs& parallel_args,
                              const runtime::Options& draft_options,
                              bool enable_opt_validate_probs)
     : SpeculativeWorkerImpl(parallel_args, device, options, target_options),
-      enable_opt_validate_probs_(
-          use_selected_only_validate_probs(enable_opt_validate_probs)) {
+      enable_opt_validate_probs_(enable_opt_validate_probs) {
   draft_impl_ =
       std::make_unique<LLMWorkerImpl>(parallel_args, device, draft_options);
 }
@@ -926,6 +894,7 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
     const ForwardInput& input) {
   Timer timer;
   ForwardInput target_prepared;
+  ForwardInput draft_prepared;
 
   // run the target model to get first token and hidden states
   ForwardOutput output =
@@ -935,115 +904,40 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
   COUNTER_ADD(speculative_execution_latency_seconds_target,
               timer.elapsed_seconds());
 
-#if defined(USE_MUSA)
-  if (enable_schedule_overlap()) {
-    CHECK(!deferred_prefill_work_.has_value())
-        << "previous MTP draft prefill has not completed";
-    ForwardOutput deferred_target_output = output;
-    if (options_.enable_disagg_pd() &&
-        input.sampling_params.selected_token_idxes.defined()) {
-      c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
-      output.sample_output.embeddings =
-          get_prefill_bootstrap_embeddings(input, output.sample_output)
-              .detach();
-      clear_selected_embeddings(output);
-    } else {
-      // Monolithic MUSA decode reads this context from the worker-local
-      // embedding cache populated by deferred prefill work. Avoid copying the
-      // bootstrap hidden to the master only to send it back on the next step.
-      clear_all_output_embeddings(output);
-    }
-    output.ready_event = compute_stream_->record_event();
-    CHECK(output.ready_event != nullptr)
-        << "failed to record MTP target-prefill ready event";
-    deferred_prefill_work_ =
-        DeferredPrefillWork{input, std::move(deferred_target_output)};
-  } else {
-    ForwardInput prefill_input = prepare_draft_prefill_work(input, output);
-    ForwardOutput draft_output = run_draft_prefill(prefill_input);
-    transfer_retained_inputs(output, draft_output);
-    finalize_output_on_stream(output, *compute_stream_, /*allow_async=*/false);
-  }
-#else
-  ForwardInput prefill_input = prepare_draft_prefill_work(input, output);
-  ForwardOutput draft_output = run_draft_prefill(prefill_input);
-  transfer_retained_inputs(output, draft_output);
-  finalize_output_on_stream(
-      output, *compute_stream_, enable_schedule_overlap());
-#endif
-
-  if (!enable_schedule_overlap() && !driver_ && !dp_driver_) {
-    return std::nullopt;
-  }
-  return output;
-}
-
-ForwardInput MTPWorkerImpl::prepare_draft_prefill_work(
-    const ForwardInput& input,
-    ForwardOutput& target_output) {
+  // MTP path that depends on hidden states.
   ForwardInput prefill_input;
   prepare_prefill_inputs(input, prefill_input);
 
-  torch::Tensor& embeddings = target_output.sample_output.embeddings;
+  // prepare input for draft model
+  auto& embeddings = output.sample_output.embeddings;
+
   {
     c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
     if (embeddings.defined()) {
       prefill_input.input_params.embedding.input_embedding = embeddings.clone();
     }
-    if (target_output.sample_output.next_tokens.defined()) {
+    if (output.sample_output.next_tokens.defined()) {
       const auto& extra_token_ids =
           prefill_input.input_params.embedding.extra_token_ids;
       if (options_.cp_size() > 1 &&
           has_mtp_prefill_placeholder_extra_token(extra_token_ids, -1)) {
-        apply_cp_mtp_prefill_target_tokens(
-            prefill_input,
-            target_output.sample_output.next_tokens,
-            -1,
-            prefill_input.token_ids.options());
+        apply_cp_mtp_prefill_target_tokens(prefill_input,
+                                           output.sample_output.next_tokens,
+                                           -1,
+                                           prefill_input.token_ids.options());
       } else {
         replace_host_token_placeholders(prefill_input,
                                         -1,
-                                        target_output.sample_output.next_tokens,
+                                        output.sample_output.next_tokens,
                                         prefill_input.token_ids.options());
       }
     }
-    if (embeddings.defined() ||
-        target_output.sample_output.next_tokens.defined()) {
+    if (embeddings.defined() || output.sample_output.next_tokens.defined()) {
       record_current_metadata_ready_event(prefill_input, *compute_stream_);
     }
   }
-
-  if (input.sampling_params.selected_token_idxes.defined()) {
-    c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
-    // Under CP the target prefill `embeddings` is the full local token shard,
-    // which cannot be indexed by the CP all-gather-space selected indices.
-    // Prefer the LmHead-gathered per-sequence hidden when present so the cache
-    // stores it directly; fall back to the full hidden for the non-CP path,
-    // where index_select on the complete local sequence is valid.
-    torch::Tensor target_hidden =
-        target_output.sample_output.selected_embeddings.defined()
-            ? target_output.sample_output.selected_embeddings
-            : embeddings;
-    target_output.sample_output.embeddings =
-        get_prefill_bootstrap_embeddings(input, target_output.sample_output)
-            .detach();
-    embedding_cache_->write_prefill_target_context(
-        input.input_params.embedding.embedding_ids,
-        input.input_params.embedding.request_ids,
-        target_output.sample_output.next_tokens,
-        target_hidden,
-        input.sampling_params.selected_token_idxes);
-    clear_selected_embeddings(target_output);
-  } else {
-    clear_all_output_embeddings(target_output);
-  }
-  return prefill_input;
-}
-
-ForwardOutput MTPWorkerImpl::run_draft_prefill(
-    const ForwardInput& prefill_input) {
-  Timer timer;
-  ForwardInput draft_prepared;
+  // generate kv cache for draft model
+  timer.reset();
   ForwardOutput draft_output = run_llm_no_sync_impl(*draft_impl_,
                                                     prefill_input,
                                                     *prepare_stream_,
@@ -1056,25 +950,48 @@ ForwardOutput MTPWorkerImpl::run_draft_prefill(
   }
   COUNTER_ADD(speculative_execution_latency_seconds_draft,
               timer.elapsed_seconds());
-  return draft_output;
-}
 
-void MTPWorkerImpl::run_deferred_step_work() {
-#if defined(USE_MUSA)
-  if (!deferred_prefill_work_.has_value()) {
-    return;
+  if (input.sampling_params.selected_token_idxes.defined()) {
+    c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+    // Under CP the target prefill `embeddings` is the full local token shard,
+    // which cannot be indexed by the CP all-gather-space selected indices.
+    // Prefer the LmHead-gathered per-sequence hidden when present so the cache
+    // stores it directly; fall back to the full hidden for the non-CP path,
+    // where index_select on the complete local sequence is valid.
+    const torch::Tensor& target_hidden =
+        output.sample_output.selected_embeddings.defined()
+            ? output.sample_output.selected_embeddings
+            : embeddings;
+    torch::Tensor bootstrap_embeddings = target_hidden;
+    if (bootstrap_embeddings.size(0) !=
+        static_cast<int64_t>(
+            input.input_params.embedding.embedding_ids.size())) {
+      torch::Tensor bootstrap_idxes =
+          input.sampling_params.selected_token_idxes.to(
+              torch::dtype(torch::kLong).device(bootstrap_embeddings.device()));
+      bootstrap_embeddings =
+          bootstrap_embeddings.index_select(/*dim=*/0, bootstrap_idxes);
+    }
+    output.sample_output.embeddings = bootstrap_embeddings.detach();
+    embedding_cache_->write_prefill_target_context(
+        input.input_params.embedding.embedding_ids,
+        input.input_params.embedding.request_ids,
+        output.sample_output.next_tokens,
+        target_hidden,
+        input.sampling_params.selected_token_idxes);
+    clear_selected_embeddings(output);
+  } else {
+    clear_all_output_embeddings(output);
   }
-  DeferredPrefillWork work = std::move(deferred_prefill_work_.value());
-  deferred_prefill_work_.reset();
-  ForwardInput prefill_input =
-      prepare_draft_prefill_work(work.input, work.target_output);
-  ForwardOutput draft_output = run_draft_prefill(prefill_input);
-  const int32_t ret = compute_stream_->synchronize();
-  CHECK_EQ(ret, 0)
-      << "failed to synchronize deferred MTP draft prefill, ret=" << ret;
-  release_retained_inputs(work.target_output);
-  release_retained_inputs(draft_output);
-#endif
+
+  transfer_retained_inputs(output, draft_output);
+  finalize_output_on_stream(
+      output, *compute_stream_, enable_schedule_overlap());
+
+  if (!enable_schedule_overlap() && !driver_ && !dp_driver_) {
+    return std::nullopt;
+  }
+  return output;
 }
 
 void MTPWorkerImpl::prepare_prefill_inputs(const ForwardInput& input,
@@ -1331,14 +1248,14 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_validate(
 #if defined(USE_CUDA) || defined(USE_MUSA)
   if (validate_input.input_params.gdn_mtp_verify_cache != nullptr &&
       validate_input.input_params.gdn_mtp_verify_cache->enabled) {
-    // Mate GDN MTP verify stashes per-layer intermediate states on the compute
-    // stream.  The device-side commit runs on that same stream, so stream
-    // ordering is sufficient and no pre-scatter host synchronization is
-    // required.
+    // Mate GDN MTP verify stashes per-layer intermediate states on
+    // compute_stream_; scatter must run on the same stream after those writes
+    // complete (debug mode masked this via global cudaDeviceSynchronize).
     // The verify cache is a shared_ptr, so the entries recorded inside the
     // model forward (on the device copy of ModelInputParams, or the graph
     // capture/replay copies) are observed here through the same object.
     c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+    compute_stream_->synchronize();
     layer::scatter_gdn_mtp_verify_ssm_states(
         *validate_input.input_params.gdn_mtp_verify_cache,
         impl_->kv_caches(),
@@ -1657,11 +1574,8 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
         accepted_prefix_lengths.begin(), accepted_prefix_lengths.end());
 #if defined(USE_CUDA) || defined(USE_MUSA)
     if (layer::use_mate_gdn_mtp_kernel()) {
-      auto& verify_cache = gdn_mtp_verify_caches_[total_num_val_tokens];
-      if (verify_cache == nullptr) {
-        verify_cache = std::make_shared<GdnMtpVerifyCache>();
-      }
-      input_params.gdn_mtp_verify_cache = verify_cache;
+      input_params.gdn_mtp_verify_cache =
+          std::make_shared<GdnMtpVerifyCache>();
       input_params.gdn_mtp_verify_cache->enabled = true;
     }
 #endif

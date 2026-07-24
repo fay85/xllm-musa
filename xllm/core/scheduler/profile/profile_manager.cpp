@@ -931,6 +931,23 @@ void ProfileManager::generate_random_decode_batch(
 
 void ProfileManager::warmup_for_graph() {
   const GraphWarmupPlan plan = graph_warmup_plan(options_.instance_role());
+#if defined(USE_MUSA)
+  // MTP has a separate target decode and speculative-verify graph.  The
+  // generic synthetic decode request below enters the scheduler-level MTP
+  // validation path before those graphs have been captured and can wait for
+  // a real draft/target bootstrap state indefinitely on MUSA.  Prefill graph
+  // capture is still safe here; decode and verify graphs are captured lazily
+  // from the first real MTP batch, where all of the per-request state exists.
+  if (::xllm::SpeculativeConfig::get_instance().num_speculative_tokens() > 0 &&
+      plan != GraphWarmupPlan::PREFILL_ONLY) {
+    LOG(INFO) << "MUSA MTP graph warmup: prefill only; target decode and "
+              << "speculative-verify graphs use independent lazy capture";
+    warmup_prefill_for_graph();
+    xllm::Device::empty_cache(/*device_index=*/-1);
+    LOG(INFO) << "Empty_cache after MUSA MTP prefill graph warmup";
+    return;
+  }
+#endif
   if (plan == GraphWarmupPlan::PREFILL_ONLY) {
     LOG(INFO) << "PREFILL graph warmup: prefill only";
     warmup_prefill_for_graph();

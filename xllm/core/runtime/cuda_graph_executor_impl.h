@@ -168,6 +168,13 @@ class CudaGraphPersistentParam {
     }
     return persistent_embedding_;
   }
+  torch::Tensor persistent_mtp_token_embedding(uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return persistent_mtp_token_embedding_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+    }
+    return persistent_mtp_token_embedding_;
+  }
   torch::Tensor persistent_linear_state_indices(
       uint32_t actual_batch_size) const {
     if (actual_batch_size > 0) {
@@ -301,6 +308,7 @@ class CudaGraphPersistentParam {
   torch::Tensor q_seq_lens_;
   torch::Tensor kv_seq_lens_;
   torch::Tensor persistent_embedding_;
+  torch::Tensor persistent_mtp_token_embedding_;
   torch::Tensor persistent_linear_state_indices_;
   torch::Tensor persistent_num_accepted_tokens_;
   torch::Tensor aux_hidden_states_;

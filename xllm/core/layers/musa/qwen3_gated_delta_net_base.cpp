@@ -380,6 +380,7 @@ torch::Tensor run_spec_verify_conv(const torch::Tensor& mixed_qkv,
                                    torch::Tensor& conv_cache,
                                    const torch::Tensor& logical_state_indices,
                                    const std::vector<int64_t>& num_accepted_host,
+                                   const torch::Tensor& accepted_tokens,
                                    const torch::Tensor& q_cu_seq_lens,
                                    const torch::Tensor& conv_weight,
                                    int32_t conv_kernel_size,
@@ -421,6 +422,43 @@ torch::Tensor run_spec_verify_conv(const torch::Tensor& mixed_qkv,
   CHECK_EQ(weight.size(0), dim) << "spec conv weight dim mismatch";
   CHECK_EQ(weight.size(1), conv_kernel_size)
       << "spec conv weight width mismatch";
+
+#if defined(USE_MUSA)
+  // The decomposed implementation below branches on accepted_count on the
+  // host.  That branch is captured once by a MUSA graph and is therefore
+  // stale on replay.  Keep the accepted count on device and let the fused
+  // kernel generate both the verify output and deferred state snapshots.
+  static const bool use_fused_musa_mtp_conv = [] {
+    const char* env = std::getenv("XLLM_MTP_CONV_FUSED");
+    return env == nullptr || env[0] != '0';
+  }();
+  if (use_fused_musa_mtp_conv && verify_cache != nullptr &&
+      verify_cache->enabled && accepted_tokens.defined()) {
+    auto state_indices =
+        expand_sequence_tensor_to_batch(logical_state_indices, batch_size,
+                                        "logical_state_indices")
+            .to(mixed_qkv.device(), torch::kInt32)
+            .contiguous();
+    auto accepted_tokens_device =
+        accepted_tokens.to(mixed_qkv.device()).contiguous();
+    auto x_contiguous = mixed_qkv.contiguous();
+    auto fused_output = torch::empty(x_contiguous.sizes(), x_contiguous.options());
+    auto fused_intermediate = torch::empty(
+        {batch_size, seq_len, dim, expanded_state_len}, conv_cache.options());
+    xllm::kernel::cuda::causal_conv1d_mtp_verify(
+        x_contiguous,
+        weight.contiguous(),
+        conv_cache,
+        state_indices,
+        accepted_tokens_device,
+        fused_output,
+        fused_intermediate,
+        /*silu_activation=*/true);
+    verify_cache->layer_states[layer_id].conv_intermediate =
+        std::move(fused_intermediate);
+    return fused_output;
+  }
+#endif
 
   auto state_indices =
       expand_sequence_tensor_to_batch(
@@ -969,36 +1007,18 @@ void scatter_gdn_mtp_verify_ssm_states(
     const GdnMtpVerifyCache& cache,
     const std::vector<KVCache>& kv_caches,
     const ModelInputParams& input_params,
-    const torch::Tensor& accepted_tokens,
-    bool fla_ssm_state_layout) {
+    const torch::Tensor& accepted_tokens) {
   if (!cache.enabled || cache.layer_states.empty()) {
     return;
   }
 
-  torch::Tensor accepted_cpu =
-      accepted_tokens.to(torch::kCPU, torch::kLong).contiguous();
-  CHECK_EQ(accepted_cpu.dim(), 2) << "accepted tokens must be [batch, width]";
-  const int64_t num_sequences = accepted_cpu.size(0);
-  const int64_t token_width = accepted_cpu.size(1);
-  const int64_t* accepted_data = accepted_cpu.const_data_ptr<int64_t>();
-
-  std::vector<int32_t> accepted_steps(static_cast<size_t>(num_sequences));
-  for (int64_t seq_idx = 0; seq_idx < num_sequences; ++seq_idx) {
-    int32_t accepted_len = 0;
-    const int64_t row_offset = seq_idx * token_width;
-    for (int64_t token_idx = 0; token_idx < token_width; ++token_idx) {
-      if (accepted_data[row_offset + token_idx] < 0) {
-        break;
-      }
-      ++accepted_len;
-    }
-    CHECK_GT(accepted_len, 0)
-        << "each sequence must accept at least one target token";
-    accepted_steps[static_cast<size_t>(seq_idx)] = accepted_len - 1;
-  }
-
   const torch::Device device =
       cache.layer_states.begin()->second.ssm_intermediate.device();
+  torch::Tensor accepted_device =
+      accepted_tokens.to(device, torch::kLong).contiguous();
+  CHECK_EQ(accepted_device.dim(), 2)
+      << "accepted tokens must be [batch, width]";
+  const int64_t num_sequences = accepted_device.size(0);
   torch::Tensor linear_state_indices =
       input_params.embedding.linear_state_indices;
   if (!linear_state_indices.defined()) {
@@ -1008,6 +1028,9 @@ void scatter_gdn_mtp_verify_ssm_states(
         torch::tensor(input_params.embedding.linear_state_ids, torch::kInt32)
             .to(device);
   }
+  torch::Tensor logical_indices = expand_sequence_tensor_to_batch(
+      linear_state_indices, num_sequences, "linear_state_indices");
+  logical_indices = logical_indices.to(device, torch::kLong).contiguous();
 
   for (const auto& [layer_id, state] : cache.layer_states) {
     CHECK_GE(layer_id, 0);
@@ -1031,50 +1054,20 @@ void scatter_gdn_mtp_verify_ssm_states(
     CHECK_EQ(batch_size, num_sequences)
         << "GDN MTP intermediate batch must match accepted-token batch";
 
-    torch::Tensor logical_indices = expand_sequence_tensor_to_batch(
-        linear_state_indices, batch_size, "linear_state_indices");
-    torch::Tensor base_indices =
-        build_linear_state_base_indices(logical_indices, checkpoint_stride);
-
-    torch::Tensor conv_intermediate;
+    const torch::Tensor conv_intermediate = state.conv_intermediate;
     if (scatter_conv) {
-      conv_intermediate = state.conv_intermediate;
       CHECK_EQ(conv_intermediate.size(0), batch_size)
           << "conv MTP intermediate batch must match accepted-token batch";
       CHECK_EQ(conv_intermediate.size(1), seq_len)
           << "conv MTP intermediate seq_len mismatch";
     }
-
-    for (int64_t seq_idx = 0; seq_idx < batch_size; ++seq_idx) {
-      const int32_t step =
-          accepted_steps[static_cast<size_t>(seq_idx)];
-      CHECK_GE(step, 0);
-      CHECK_LT(step, seq_len)
-          << "accepted step must fit intermediate verify length";
-      if (ssm_cache.defined() && ssm_cache.numel() > 0) {
-        const int64_t dst_slot =
-            base_indices[seq_idx].item<int64_t>() + static_cast<int64_t>(step);
-        torch::Tensor state_vk =
-            intermediate.select(0, seq_idx).select(0, step);
-        torch::Tensor state_to_store =
-            fla_ssm_state_layout ? state_vk.transpose(-1, -2).contiguous()
-                                 : state_vk;
-        ssm_cache.index_copy_(
-            /*dim=*/0,
-            torch::tensor({dst_slot}, torch::kLong).to(device),
-            state_to_store.unsqueeze(0).to(ssm_cache.scalar_type()));
-      }
-      if (scatter_conv) {
-        const int64_t conv_dst =
-            logical_indices[seq_idx].item<int64_t>();
-        torch::Tensor conv_state =
-            conv_intermediate.select(0, seq_idx).select(0, step);
-        conv_cache.index_copy_(
-            /*dim=*/0,
-            torch::tensor({conv_dst}, torch::kLong).to(device),
-            conv_state.unsqueeze(0).to(conv_cache.scalar_type()));
-      }
-    }
+    xllm::kernel::cuda::scatter_gdn_mtp_verify_states(ssm_cache,
+                                                       intermediate,
+                                                       conv_cache,
+                                                       conv_intermediate,
+                                                       logical_indices,
+                                                       accepted_device,
+                                                       checkpoint_stride);
   }
 }
 #endif  // USE_CUDA || USE_MUSA
@@ -1618,6 +1611,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                              conv_cache,
                              logical_state_indices,
                              input_params.num_accepted_tokens_host,
+                             input_params.num_accepted_tokens,
                              attn_metadata.q_cu_seq_lens,
                              conv_weight,
                              conv_kernel_size_,
@@ -1896,7 +1890,10 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       }
       if (!mate_gdn_mtp_output_buf_.defined() ||
           mate_gdn_mtp_output_buf_.sizes() != processed_v.sizes()) {
-        mate_gdn_mtp_output_buf_ = torch::empty_like(processed_v);
+        // empty_like preserves a non-contiguous view layout.  Mate's MTP
+        // output ABI requires a contiguous buffer during graph capture.
+        mate_gdn_mtp_output_buf_ =
+            torch::empty(processed_v.sizes(), processed_v.options());
       }
       core_attn_out = run_spec_verify_gated_delta_rule_mate(
           processed_q,

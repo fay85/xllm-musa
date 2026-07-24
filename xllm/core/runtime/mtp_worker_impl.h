@@ -15,6 +15,9 @@ limitations under the License.
 
 #pragma once
 
+#include <optional>
+#include <unordered_map>
+
 #include "framework/kv_cache/embedding_cache.h"
 #include "framework/kv_cache_transfer/kv_cache_transfer.h"
 #if defined(USE_NPU)
@@ -73,6 +76,7 @@ class MTPWorkerImpl : public SpeculativeWorkerImpl {
   std::optional<ForwardOutput> step_prefill(const ForwardInput& input) override;
   std::optional<ForwardOutput> step_decode(const ForwardInput& inputs) override;
   std::optional<ForwardOutput> step_empty(const ForwardInput& inputs) override;
+  void run_deferred_step_work() override;
 
   void fill_validate_input_from_draft_outputs(
       const std::vector<ForwardOutput>& draft_outputs,
@@ -90,6 +94,10 @@ class MTPWorkerImpl : public SpeculativeWorkerImpl {
   // Hook for algorithm-specific draft output post-processing during decode.
   // Default MTP behavior always compresses probs for cache storage.
   virtual void process_draft_sample_output(SampleOutput& sample_output);
+
+  ForwardInput prepare_draft_prefill_work(const ForwardInput& input,
+                                          ForwardOutput& target_output);
+  ForwardOutput run_draft_prefill(const ForwardInput& prefill_input);
 
   SampleOutput validate(const SamplingParameters& sampling_params,
                         const torch::Tensor& draft_token_ids,
@@ -137,9 +145,28 @@ class MTPWorkerImpl : public SpeculativeWorkerImpl {
   // Embedding cache for speculative decoding
   std::shared_ptr<EmbeddingCache> embedding_cache_;
 
+  struct DeferredPrefillWork {
+    ForwardInput input;
+    ForwardOutput target_output;
+  };
+
+  // MUSA schedule overlap publishes the target token before preparing and
+  // submitting draft prefill. The one-threaded worker queue completes this
+  // work immediately after publication and before the next model step.
+  std::optional<DeferredPrefillWork> deferred_prefill_work_;
+
   // Whether validation directly uses selected-only draft_probs [B, S].
   // If false, selected-only cache values are restored to dense [B, S, V].
   bool enable_opt_validate_probs_ = false;
+
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  // A captured verify graph retains the addresses of every layer's deferred
+  // GDN state tensors. Keep one cache object per validation-token bucket so a
+  // later input preparation neither disconnects post-validate scatter from
+  // the captured tensors nor overwrites another bucket's tensor addresses.
+  std::unordered_map<int64_t, std::shared_ptr<GdnMtpVerifyCache>>
+      gdn_mtp_verify_caches_;
+#endif
 
 #if defined(USE_NPU) || defined(USE_MLU)
   std::shared_ptr<KVCacheTransfer> kv_cache_transfer_;

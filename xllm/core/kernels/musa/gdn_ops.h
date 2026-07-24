@@ -109,6 +109,15 @@ torch::Tensor mate_gated_delta_rule_mtp(
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
+void scatter_gdn_mtp_verify_states(
+    torch::Tensor& ssm_cache,
+    const torch::Tensor& ssm_intermediate,
+    torch::Tensor& conv_cache,
+    const torch::Tensor& conv_intermediate,
+    const torch::Tensor& logical_state_indices,
+    const torch::Tensor& accepted_tokens,
+    int64_t checkpoint_stride);
+
 void causal_conv1d_fwd(
     const torch::Tensor &x,
     const torch::Tensor &weight,
@@ -168,6 +177,18 @@ void causal_conv1d_decode_fused(const torch::Tensor& x,
                                 torch::Tensor output_buf,
                                 int pad_slot_id,
                                 bool silu_activation);
+
+// Graph-safe Qwen3.5 MTP verify convolution.  Unlike the generic
+// causal-conv path, this kernel reads the per-sequence accepted-token count on
+// device, so replay does not capture a host-side acceptance branch.
+void causal_conv1d_mtp_verify(const torch::Tensor& x,
+                              const torch::Tensor& weight,
+                              const torch::Tensor& conv_state,
+                              const torch::Tensor& cache_indices,
+                              const torch::Tensor& num_accepted_tokens,
+                              torch::Tensor output_buf,
+                              torch::Tensor intermediate_buf,
+                              bool silu_activation);
 
 void gated_rms_norm_fused(const torch::Tensor& x,
                           const torch::Tensor& weight,

@@ -23,6 +23,9 @@ limitations under the License.
 
 #include "kernels/ops_api.h"
 #include "sampler.h"
+#if defined(USE_MUSA)
+#include "kernels/musa/musa_ops_api.h"
+#endif
 
 namespace xllm {
 
@@ -256,6 +259,21 @@ std::tuple<torch::Tensor, torch::Tensor> RejectionSampler::random_sample_fused(
     const torch::Tensor& uniform_rand,
     const torch::Tensor& bonus_token_ids,
     bool mask_out_rejected_tokens) {
+#if defined(USE_MUSA)
+  if (draft_probs.dim() == 2 && draft_token_ids.size(1) == 1) {
+    auto recovery_exponential =
+        torch::empty_like(target_probs, torch::kFloat32).exponential_();
+    auto fused_output = kernel::cuda::rejection_sample_target_only_k1(
+        draft_token_ids,
+        draft_probs,
+        target_probs,
+        uniform_rand,
+        recovery_exponential,
+        bonus_token_ids);
+    return {fused_output, fused_output};
+  }
+#endif
+
   CHECK_EQ(draft_probs.dim(), 3)
       << "Fused rejection sampler requires dense draft_probs [batch, n_spec, "
          "vocab]. Ensure validate passes dense draft_probs, for example with "

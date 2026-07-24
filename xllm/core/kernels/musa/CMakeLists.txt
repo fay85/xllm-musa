@@ -24,6 +24,7 @@ if(USE_MUSA)
     attention_decode.cpp
     attention_prefill.cpp
     gdn_decode.cu
+    gdn_state_commit.cu
     gdn_prefill.cpp
     causal_conv1d.cu
     gemma_norm.cu
@@ -31,6 +32,7 @@ if(USE_MUSA)
     rope.cu
     paged_cache.cu
     random_sample.cpp
+    rejection_sample.cu
     replace_token.cu
     fused_qknorm_rope.cu
     # Native block-wise FP8 GEMM (mate/muDNN groupwise)

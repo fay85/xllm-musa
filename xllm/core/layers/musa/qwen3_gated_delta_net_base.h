@@ -45,8 +45,7 @@ void scatter_gdn_mtp_verify_ssm_states(
     const GdnMtpVerifyCache& cache,
     const std::vector<KVCache>& kv_caches,
     const ModelInputParams& input_params,
-    const torch::Tensor& accepted_tokens,
-    bool fla_ssm_state_layout);
+    const torch::Tensor& accepted_tokens);
 #endif
 
 class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {

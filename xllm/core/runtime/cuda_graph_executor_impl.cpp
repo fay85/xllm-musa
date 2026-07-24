@@ -349,6 +349,16 @@ CudaGraphPersistentParam::CudaGraphPersistentParam(
   } else {
     max_seqs_per_batch = options.max_seqs_per_batch();
   }
+#if defined(USE_MUSA)
+  const bool is_qwen35_mtp = args_.model_type() == "qwen3_5_mtp" ||
+                             args_.model_type() == "qwen3_5_moe_mtp";
+  if (is_qwen35_mtp) {
+    // prepare_draft_extend_inputs can emit the previous and current token for
+    // every live request after a fully accepted draft.  Give the independent
+    // draft graph enough persistent attention metadata for both rows.
+    max_seqs_per_batch *= 2;
+  }
+#endif
   max_seqs_per_batch =
       get_decode_graph_bucket_num_tokens(max_seqs_per_batch);
   auto tensor_options = torch::TensorOptions().device(device);
@@ -613,6 +623,7 @@ size_t CudaGraphPersistentParam::get_persistent_tensor_bytes() const {
   total += bytes(q_seq_lens_);
   total += bytes(kv_seq_lens_);
   total += bytes(persistent_embedding_);
+  total += bytes(persistent_mtp_token_embedding_);
   total += bytes(aux_hidden_states_);
   total += bytes(persistent_paged_kv_indptr_);
   total += bytes(persistent_paged_kv_indices_);
@@ -744,7 +755,35 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
   attn_metadata->enable_cuda_graph = true;
 
   const uint32_t actual_num_tokens = tokens.size(0);
-  const int64_t actual_batch_size = params.meta.num_sequences;
+  // Decode has exactly one query token per attention row.  Schedule-overlap
+  // forward buffers can retain a bucket-capacity num_sequences value (for
+  // example 8 for a live C=5 batch), while tokens and all logical outputs
+  // contain only the active rows.  Use the token count for ordinary decode so
+  // persistent graph tensors never copy padded buffer rows as live requests.
+  int64_t actual_batch_size = params.meta.num_sequences;
+  if (params.meta.actual_num_sequences > 0) {
+    actual_batch_size = params.meta.actual_num_sequences;
+  } else if (params.is_spec_verify && params.meta.q_max_seq_len > 0) {
+    actual_batch_size =
+        (static_cast<int64_t>(actual_num_tokens) +
+         params.meta.q_max_seq_len - 1) /
+        params.meta.q_max_seq_len;
+  } else if (params.meta.batch_forward_type.is_decode() &&
+             !is_rec_multi_round_mode()) {
+    actual_batch_size = static_cast<int64_t>(actual_num_tokens);
+  }
+  const int64_t accepted_batch_size =
+      params.num_accepted_tokens.defined()
+          ? std::min<int64_t>(params.num_accepted_tokens.numel(),
+                              persistent_num_accepted_tokens_.numel())
+          : 0;
+  const int64_t linear_state_batch_size =
+      params.embedding.linear_state_indices.defined()
+          ? std::min<int64_t>(
+                params.embedding.linear_state_indices.numel(),
+                persistent_linear_state_indices_.numel())
+          : std::min<int64_t>(params.embedding.linear_state_ids.size(),
+                              persistent_linear_state_indices_.numel());
 
   // Piecewise prefill graph capture/replay: when padding is needed, all
   // layers must process padded_num_tokens tokens so tensor sizes are
@@ -845,23 +884,26 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
       params_for_capture->embedding.input_embedding =
           persistent_embedding(padded_num_tokens);
     }
+    if (params.embedding.mtp_token_embedding.defined()) {
+      params_for_capture->embedding.mtp_token_embedding =
+          persistent_mtp_token_embedding(padded_num_tokens);
+    }
     if (!params.embedding.linear_state_ids.empty()) {
       params_for_capture->embedding.linear_state_ids =
           params.embedding.linear_state_ids;
       params_for_capture->embedding.linear_state_indices =
-          persistent_linear_state_indices(params.meta.num_sequences);
+          persistent_linear_state_indices(
+              static_cast<uint32_t>(linear_state_batch_size));
     }
     if (params.num_accepted_tokens.defined()) {
       params_for_capture->num_accepted_tokens = persistent_num_accepted_tokens(
-          static_cast<uint32_t>(actual_batch_size));
+          static_cast<uint32_t>(accepted_batch_size));
       torch::Tensor nat_host = params.num_accepted_tokens.to(torch::kCPU)
                                    .to(torch::kLong)
                                    .contiguous();
-      const int64_t copy_size =
-          std::min<int64_t>(actual_batch_size, nat_host.numel());
       const int64_t* data = nat_host.data_ptr<int64_t>();
       params_for_capture->num_accepted_tokens_host.assign(data,
-                                                           data + copy_size);
+                                                           data + accepted_batch_size);
     }
     params_for_capture->attn_metadata = attn_metadata;
     params_for_capture->is_spec_verify = params.is_spec_verify;
@@ -1051,11 +1093,13 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
       !params.embedding.linear_state_ids.empty()) {
     if (params.embedding.linear_state_indices.defined()) {
       persistent_linear_state_indices_
-          .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_batch_size)
-          .copy_(params.embedding.linear_state_indices, /*non_blocking=*/true);
+          .slice(/*dim=*/0, /*start=*/0, /*end=*/linear_state_batch_size)
+          .copy_(params.embedding.linear_state_indices.slice(
+                     /*dim=*/0, /*start=*/0, /*end=*/linear_state_batch_size),
+                 /*non_blocking=*/true);
     } else {
       persistent_linear_state_indices_
-          .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_batch_size)
+          .slice(/*dim=*/0, /*start=*/0, /*end=*/linear_state_batch_size)
           .copy_(torch::tensor(params.embedding.linear_state_ids, torch::kInt)
                      .to(device_),
                  /*non_blocking=*/true);
@@ -1064,9 +1108,9 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
 
   if (params.num_accepted_tokens.defined()) {
     persistent_num_accepted_tokens_
-        .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_batch_size)
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/accepted_batch_size)
         .copy_(params.num_accepted_tokens.slice(
-                   /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size),
+                   /*dim=*/0, /*start=*/0, /*end=*/accepted_batch_size),
                /*non_blocking=*/true);
   }
 
@@ -1074,10 +1118,23 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
   // expanded to batch_size * beam_width rows while num_sequences still tracks
   // the logical request count. Use the tensor's real row count here.
   const int64_t actual_block_table_batch =
-      is_rec_multi_round_mode() ? params.attention.device.block_tables.size(0)
-                                : actual_batch_size;
+      is_rec_multi_round_mode()
+          ? params.attention.device.block_tables.size(0)
+          : std::min<int64_t>(actual_batch_size,
+                              persistent_block_tables_.size(0));
+  CHECK_GE(params.attention.device.block_tables.size(0),
+           actual_block_table_batch)
+      << "block_tables has fewer rows than the logical graph batch";
   const int64_t actual_block_table_len =
       params.attention.device.block_tables.size(1);
+  const torch::Tensor source_block_tables =
+      params.attention.device.block_tables
+          .slice(/*dim=*/0,
+                 /*start=*/0,
+                 /*end=*/actual_block_table_batch)
+          .slice(/*dim=*/1,
+                 /*start=*/0,
+                 /*end=*/actual_block_table_len);
   torch::Tensor slice_persistent_block_tables =
       persistent_block_tables_
           .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_block_table_batch)
@@ -1085,12 +1142,27 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
 
   VLOG(kGraphExecutorLogVerboseLevel)
       << "copy_ block_tables: src shape="
-      << params.attention.device.block_tables.sizes()
+      << source_block_tables.sizes()
       << ", dst slice shape=" << slice_persistent_block_tables.sizes();
-  slice_persistent_block_tables.copy_(params.attention.device.block_tables,
+  slice_persistent_block_tables.copy_(source_block_tables,
                                       /*non_blocking=*/true);
+  const bool pad_decode_block_tables =
+      params.meta.batch_forward_type.is_decode() &&
+      padded_num_tokens > static_cast<uint32_t>(actual_block_table_batch);
+  if (pad_decode_block_tables) {
+    persistent_block_tables_
+        .slice(/*dim=*/0,
+               /*start=*/actual_block_table_batch,
+               /*end=*/padded_num_tokens)
+        .fill_(-1);
+  }
   if (!attn_metadata->is_prefill || args_.enable_mla()) {
-    attn_metadata->block_table = slice_persistent_block_tables;
+    const uint32_t graph_block_table_batch =
+        pad_decode_block_tables
+            ? padded_num_tokens
+            : static_cast<uint32_t>(actual_block_table_batch);
+    attn_metadata->block_table =
+        persistent_block_tables(graph_block_table_batch);
   }
 
   // Update persistent embedding from input_embedding if available
@@ -1116,6 +1188,22 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
     persistent_embedding_
         .slice(/*dim=*/0, /*start=*/0, /*end=*/embedding_tokens)
         .copy_(embedding, /*non_blocking=*/true);
+  }
+
+  const torch::Tensor& mtp_token_embedding =
+      params.embedding.mtp_token_embedding;
+  if (mtp_token_embedding.defined()) {
+    const int64_t embedding_tokens = mtp_token_embedding.size(0);
+    if (!persistent_mtp_token_embedding_.defined()) {
+      const int64_t max_tokens_per_batch = options_.max_tokens_per_batch();
+      const int64_t embedding_dim = mtp_token_embedding.size(1);
+      persistent_mtp_token_embedding_ = torch::zeros(
+          {max_tokens_per_batch, embedding_dim},
+          mtp_token_embedding.options().device(device_));
+    }
+    persistent_mtp_token_embedding_
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/embedding_tokens)
+        .copy_(mtp_token_embedding, /*non_blocking=*/true);
   }
 
   const bool is_decode_with_llmrec =
@@ -1815,8 +1903,13 @@ bool CudaGraph::capture(CausalLM* model,
   // before the real replay. Both mutate GDN convolution and recurrent state.
   // Snapshot the live sequence rows so each pass starts from the same state and
   // the first replay observes exactly one application of the current chunk.
+  // Spec-verify uses the chunked-prefill model path even when it is captured
+  // by the normal CUDA-graph runner (rather than the piecewise runner).  Both
+  // the eager warmup and the recorded FFI forward execute the GDN recurrent
+  // update, so they must start from the same live state as the eventual graph
+  // replay.  Restricting this guard to is_piecewise_ advances conv/SSM state
+  // three times before the first replay and produces a low MTP acceptance rate.
   const bool snapshot_chunked_linear_state =
-      is_piecewise_ &&
       params.meta.batch_forward_type.is_chunked_prefill() &&
       !params.embedding.linear_state_ids.empty();
   torch::Tensor linear_state_snapshot_indices;
@@ -1931,6 +2024,14 @@ bool CudaGraph::capture(CausalLM* model,
             model->logits(warmup_result.hidden_states, torch::Tensor());
         persistent_param_.set_logits(warmup_logits);
       }
+      if (snapshot_chunked_linear_state) {
+        // The warmup is an eager forward and therefore mutates the live
+        // recurrent state. Restore it before the next warmup so every warmup
+        // observes the same input state as the captured replay.
+        capture_stream.synchronize();
+        restore_linear_attention_state(linear_state_snapshots,
+                                       linear_state_snapshot_indices);
+      }
     }
     capture_stream.synchronize();
 
@@ -1951,6 +2052,13 @@ bool CudaGraph::capture(CausalLM* model,
             model->logits(ffi_forward.hidden_states, torch::Tensor());
         persistent_param_.set_logits(ffi_logits);
       }
+    }
+    if (snapshot_chunked_linear_state) {
+      // The FFI recording pass is eager as well; leave the live cache at the
+      // pre-capture state before beginning graph capture.
+      capture_stream.synchronize();
+      restore_linear_attention_state(linear_state_snapshots,
+                                     linear_state_snapshot_indices);
     }
     recorded_ffi_allocs_ = xllm::kernel::cuda::end_ffi_alloc_record();
     capture_stream.synchronize();
@@ -2156,30 +2264,21 @@ ModelOutput CudaGraph::replay(const torch::Tensor& tokens,
     }
 
     if (s_enable_graph_timing()) {
-      static auto s_last_launch = std::chrono::steady_clock::now();
-      static int s_step_count = 0;
-      c10::cuda::getCurrentCUDAStream(device_index_).synchronize();
-      const auto t_sync_end = std::chrono::steady_clock::now();
-      const auto step_ms = std::chrono::duration<double, std::milli>(
-                               t_sync_end - s_last_launch)
-                               .count();
-      LOG(INFO) << "GRAPH_TIMING step=" << s_step_count
-                << " total=" << step_ms;
-      s_step_count++;
-      s_last_launch = t_sync_end;
-    }
-
-    static auto s_replay_start = std::chrono::steady_clock::now();
-    graph_.replay();
-    if (s_enable_graph_timing()) {
-      c10::cuda::getCurrentCUDAStream(device_index_).synchronize();
-      const auto t_replay_end = std::chrono::steady_clock::now();
+      auto stream = c10::cuda::getCurrentCUDAStream(device_index_);
+      stream.synchronize();
+      const auto replay_start = std::chrono::steady_clock::now();
+      graph_.replay();
+      stream.synchronize();
+      const auto replay_end = std::chrono::steady_clock::now();
       const auto replay_ms = std::chrono::duration<double, std::milli>(
-                                 t_replay_end - s_replay_start)
+                                 replay_end - replay_start)
                                  .count();
-      LOG(INFO) << "GRAPH_TIMING replay_ms=" << replay_ms;
+      LOG(INFO) << "GRAPH_TIMING actual_num_tokens=" << actual_num_tokens
+                << " padded_num_tokens=" << padded_num_tokens_
+                << " replay_ms=" << replay_ms;
+    } else {
+      graph_.replay();
     }
-    s_replay_start = std::chrono::steady_clock::now();
   }
 
   debug::LayerHiddenDumper::instance().flush(actual_num_tokens);
@@ -2223,6 +2322,22 @@ std::vector<uint32_t> generate_piecewise_prefill_graph_tokens(
   return capture_sizes;
 }
 
+bool should_enable_prefill_piecewise_graph(
+    const runtime::Options& options) {
+  const bool configured = ::xllm::ExecutionConfig::get_instance()
+                              .enable_prefill_piecewise_graph();
+#if defined(USE_MUSA)
+  // The one-layer MTP draft model uses FlashInfer prefill plan updates that
+  // allocate/copy metadata.  Those operations are intentionally outside the
+  // independent draft-decode and target-verify graphs and are not capturable
+  // on MUSA.  Keep piecewise prefill graph capture for the target model only.
+  return configured && !options.is_draft_engine();
+#else
+  static_cast<void>(options);
+  return configured;
+#endif
+}
+
 }  // namespace
 
 CudaGraphExecutorImpl::CudaGraphExecutorImpl(CausalLM* model,
@@ -2233,8 +2348,8 @@ CudaGraphExecutorImpl::CudaGraphExecutorImpl(CausalLM* model,
       args_(args),
       device_(device),
       options_(options),
-      enable_prefill_piecewise_graph_(::xllm::ExecutionConfig::get_instance()
-                                          .enable_prefill_piecewise_graph()),
+      enable_prefill_piecewise_graph_(
+          should_enable_prefill_piecewise_graph(options)),
       enable_packed_prefill_(::xllm::ExecutionConfig::get_instance()
                                  .enable_packed_prefill()) {
   max_tokens_for_graph_mode_ =
@@ -2604,11 +2719,21 @@ ModelInputParams CudaGraphExecutorImpl::maybe_precompute_embedding_for_graph(
     return params;
   }
 
-  if (params.embedding.input_embedding.defined()) {
-    return params;
-  }
   auto embed_layer = model_->get_word_embedding();
   if (embed_layer.is_empty()) {
+    return params;
+  }
+
+  const bool is_qwen35_mtp =
+      args_.model_type() == "qwen3_5_mtp" ||
+      args_.model_type() == "qwen3_5_moe_mtp";
+  if (is_qwen35_mtp && params.embedding.input_embedding.defined()) {
+    ModelInputParams new_params = params;
+    new_params.embedding.mtp_token_embedding = embed_layer(tokens);
+    return new_params;
+  }
+
+  if (params.embedding.input_embedding.defined()) {
     return params;
   }
 
@@ -2657,13 +2782,22 @@ ModelOutput CudaGraphExecutorImpl::run(const torch::Tensor& tokens,
       is_prefill && enable_packed_prefill_ &&
       s_enable_packed_prefill_piecewise() &&
       params.meta.num_sequences > 1 && !params.is_spec_verify;
+  const bool fixed_qwen35_mtp_draft_decode =
+      is_decode && (args_.model_type() == "qwen3_5_mtp" ||
+                    args_.model_type() == "qwen3_5_moe_mtp");
   // Chunked/mixed GDN control flow is specialized to the exact packed query
   // shape. Unlike pure prefill, it cannot safely append padding tokens because
   // those tokens would mutate recurrent state and paged-KV state.
-  const uint32_t bucket_num_tokens =
+  uint32_t bucket_num_tokens =
       (is_chunked_prefill || is_mixed || packed_multi_piecewise)
           ? n_tokens
           : get_bucket_num_tokens(n_tokens, is_prefill);
+  if (fixed_qwen35_mtp_draft_decode) {
+    bucket_num_tokens = static_cast<uint32_t>(
+        options_.max_seqs_per_batch() * 2);
+    CHECK_LE(n_tokens, bucket_num_tokens)
+        << "Qwen3.5 MTP draft rows exceed fixed graph capacity";
+  }
 
   // Prefill phase with piecewise graph.
   // Under enable_packed_prefill, piecewise is opt-in only

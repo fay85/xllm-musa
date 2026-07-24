@@ -598,6 +598,8 @@ std::optional<ForwardOutput> WorkerImpl::step_for_schedule_overlap(
   return step(input);
 }
 
+void WorkerImpl::run_deferred_step_work() {}
+
 ForwardInput WorkerImpl::update_input_by_last_step_output_for_schedule_overlap(
     ForwardInput& input) {
   return update_input_by_last_step_output(input);
@@ -1146,6 +1148,7 @@ folly::SemiFuture<std::optional<ForwardOutput>> WorkerImpl::step_async(
         }
       }
       promise.setValue(output);
+      run_deferred_step_work();
     }
   });
   return future;

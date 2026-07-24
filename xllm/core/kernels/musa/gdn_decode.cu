@@ -969,21 +969,26 @@ torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params) {
 
   const std::string uri =
       get_mate_gdn_mtp_uri(num_k_heads, num_v_heads, q.scalar_type());
-  bind_tvmffi_stream_to_current_torch_stream(q.device());
   auto run = get_function(uri, "run");
-
-  run(to_ffi_tensor(q),
-      to_ffi_tensor(k),
-      to_ffi_tensor(v),
-      to_ffi_tensor(A_log),
-      to_ffi_tensor(a),
-      to_ffi_tensor(dt_bias),
-      to_ffi_tensor(b),
-      to_ffi_tensor(state_indices),
-      to_ffi_tensor(state_f32),
-      to_ffi_tensor(intermediate),
-      to_ffi_tensor(output),
-      static_cast<double>(params.scale));
+  {
+    // Worker compute streams do not always expose a native MUSA handle. In
+    // that case TVM FFI falls back to its pool stream, so both stream
+    // boundaries must be synchronized to keep the temporary inputs alive and
+    // make the output visible to the following target layers.
+    MusaTvmffiStreamGuard stream_guard(q.device());
+    run(to_ffi_tensor(q),
+        to_ffi_tensor(k),
+        to_ffi_tensor(v),
+        to_ffi_tensor(A_log),
+        to_ffi_tensor(a),
+        to_ffi_tensor(dt_bias),
+        to_ffi_tensor(b),
+        to_ffi_tensor(state_indices),
+        to_ffi_tensor(state_f32),
+        to_ffi_tensor(intermediate),
+        to_ffi_tensor(output),
+        static_cast<double>(params.scale));
+  }
 
   return output;
 }
@@ -1588,6 +1593,110 @@ void gated_rms_norm_fused(const torch::Tensor& x,
 
 namespace {
 
+template <typename scalar_t, typename accepted_t>
+void launch_causal_conv1d_mtp_verify(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    const torch::Tensor& conv_state,
+    const torch::Tensor& cache_indices,
+    const torch::Tensor& num_accepted_tokens,
+    torch::Tensor& output,
+    torch::Tensor& intermediate,
+    bool silu_activation,
+    cudaStream_t stream);
+
+}  // namespace
+
+void causal_conv1d_mtp_verify(const torch::Tensor& x,
+                              const torch::Tensor& weight,
+                              const torch::Tensor& conv_state,
+                              const torch::Tensor& cache_indices,
+                              const torch::Tensor& num_accepted_tokens,
+                              torch::Tensor output_buf,
+                              torch::Tensor intermediate_buf,
+                              bool silu_activation) {
+  CHECK(x.dim() == 3) << "MTP conv x must be [batch, dim, seq_len]";
+  CHECK(weight.dim() == 2) << "MTP conv weight must be [dim, width]";
+  CHECK(conv_state.dim() == 3)
+      << "MTP conv state must be [cache, dim, state_len]";
+  CHECK(cache_indices.dim() == 1 &&
+        cache_indices.scalar_type() == torch::kInt32)
+      << "MTP conv cache indices must be contiguous int32 [batch]";
+  CHECK(num_accepted_tokens.dim() == 1)
+      << "MTP conv accepted tokens must be [batch]";
+  CHECK(num_accepted_tokens.scalar_type() == torch::kInt32 ||
+        num_accepted_tokens.scalar_type() == torch::kInt64)
+      << "MTP conv accepted tokens must be int32 or int64";
+  CHECK(x.is_contiguous() && weight.is_contiguous() &&
+        conv_state.is_contiguous() && cache_indices.is_contiguous() &&
+        num_accepted_tokens.is_contiguous())
+      << "MTP conv inputs must be contiguous";
+  CHECK(weight.scalar_type() == x.scalar_type() &&
+        conv_state.scalar_type() == x.scalar_type())
+      << "MTP conv inputs must have the same dtype";
+  CHECK(x.size(1) == weight.size(0) && conv_state.size(1) == x.size(1))
+      << "MTP conv dimension mismatch";
+  CHECK_GE(weight.size(1), 2) << "MTP conv width must be at least 2";
+  CHECK_LE(weight.size(1), 5) << "MTP conv width must be at most 5";
+  CHECK_EQ(conv_state.size(2), weight.size(1) - 1 + x.size(2) - 1)
+      << "MTP conv state length mismatch";
+  CHECK_EQ(cache_indices.size(0), x.size(0))
+      << "MTP conv cache index batch mismatch";
+  CHECK(intermediate_buf.dim() == 4 &&
+        intermediate_buf.size(0) == x.size(0) &&
+        intermediate_buf.size(1) == x.size(2) &&
+        intermediate_buf.size(2) == x.size(1) &&
+        intermediate_buf.size(3) == conv_state.size(2))
+      << "MTP conv intermediate shape mismatch";
+  CHECK(output_buf.sizes() == x.sizes() && output_buf.is_contiguous())
+      << "MTP conv output shape/layout mismatch";
+  CHECK(intermediate_buf.is_contiguous() &&
+        intermediate_buf.scalar_type() == x.scalar_type())
+      << "MTP conv intermediate must be contiguous and match x dtype";
+
+  const at::cuda::OptionalCUDAGuard guard(device_of(x));
+  const auto stream = at::cuda::getCurrentCUDAStream();
+  switch (x.scalar_type()) {
+    case torch::kBFloat16:
+      if (num_accepted_tokens.scalar_type() == torch::kInt32) {
+        launch_causal_conv1d_mtp_verify<__nv_bfloat16, int32_t>(
+            x, weight, conv_state, cache_indices, num_accepted_tokens,
+            output_buf, intermediate_buf, silu_activation, stream);
+      } else {
+        launch_causal_conv1d_mtp_verify<__nv_bfloat16, int64_t>(
+            x, weight, conv_state, cache_indices, num_accepted_tokens,
+            output_buf, intermediate_buf, silu_activation, stream);
+      }
+      break;
+    case torch::kHalf:
+      if (num_accepted_tokens.scalar_type() == torch::kInt32) {
+        launch_causal_conv1d_mtp_verify<__half, int32_t>(
+            x, weight, conv_state, cache_indices, num_accepted_tokens,
+            output_buf, intermediate_buf, silu_activation, stream);
+      } else {
+        launch_causal_conv1d_mtp_verify<__half, int64_t>(
+            x, weight, conv_state, cache_indices, num_accepted_tokens,
+            output_buf, intermediate_buf, silu_activation, stream);
+      }
+      break;
+    case torch::kFloat32:
+      if (num_accepted_tokens.scalar_type() == torch::kInt32) {
+        launch_causal_conv1d_mtp_verify<float, int32_t>(
+            x, weight, conv_state, cache_indices, num_accepted_tokens,
+            output_buf, intermediate_buf, silu_activation, stream);
+      } else {
+        launch_causal_conv1d_mtp_verify<float, int64_t>(
+            x, weight, conv_state, cache_indices, num_accepted_tokens,
+            output_buf, intermediate_buf, silu_activation, stream);
+      }
+      break;
+    default:
+      LOG(FATAL) << "MTP conv unsupported dtype: " << x.scalar_type();
+  }
+}
+
+namespace {
+
 template <typename T>
 __global__ void __launch_bounds__(256, 1) conv1d_decode_kernel(
     const T* __restrict__ x,
@@ -1751,6 +1860,184 @@ void launch_conv1d_decode(const torch::Tensor& x,
 }
 
 }
+
+namespace {
+
+template <typename scalar_t, typename accepted_t>
+__global__ void causal_conv1d_mtp_verify_kernel(
+    const scalar_t* __restrict__ x,
+    int64_t x_batch_stride,
+    int64_t x_dim_stride,
+    int64_t x_time_stride,
+    const scalar_t* __restrict__ weight,
+    int64_t weight_dim_stride,
+    int64_t weight_width_stride,
+    const scalar_t* __restrict__ conv_state,
+    int64_t conv_state_batch_stride,
+    int64_t conv_state_dim_stride,
+    int64_t conv_state_time_stride,
+    const int32_t* __restrict__ cache_indices,
+    const accepted_t* __restrict__ accepted_tokens,
+    scalar_t* __restrict__ output,
+    int64_t output_batch_stride,
+    int64_t output_dim_stride,
+    int64_t output_time_stride,
+    scalar_t* __restrict__ intermediate,
+    int64_t intermediate_batch_stride,
+    int64_t intermediate_time_stride,
+    int64_t intermediate_dim_stride,
+    int64_t intermediate_state_stride,
+    int batch,
+    int dim,
+    int seq_len,
+    int width,
+    int state_len,
+    bool silu_activation) {
+  const int batch_idx = blockIdx.x;
+  if (batch_idx >= batch) {
+    return;
+  }
+  const int cache_idx = cache_indices[batch_idx];
+  const int accepted = max(1, min(seq_len, static_cast<int>(
+                                               accepted_tokens[batch_idx]))) -
+                       1;
+  const int old_prefix_len = state_len - seq_len;
+
+  for (int dim_idx = threadIdx.x; dim_idx < dim; dim_idx += blockDim.x) {
+    float history[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    if (cache_idx >= 0) {
+      for (int history_idx = 0; history_idx < width - 1; ++history_idx) {
+        history[history_idx] = to_f32(
+            conv_state[static_cast<int64_t>(cache_idx) *
+                           conv_state_batch_stride +
+                       static_cast<int64_t>(dim_idx) * conv_state_dim_stride +
+                       static_cast<int64_t>(accepted + history_idx) *
+                           conv_state_time_stride]);
+      }
+    }
+
+    for (int time_idx = 0; time_idx < seq_len; ++time_idx) {
+      float value = 0.0f;
+      if (cache_idx >= 0) {
+        for (int width_idx = 0; width_idx < width - 1; ++width_idx) {
+          value += history[width_idx] *
+                   to_f32(weight[static_cast<int64_t>(dim_idx) *
+                                     weight_dim_stride +
+                                 static_cast<int64_t>(width_idx) *
+                                     weight_width_stride]);
+        }
+        value += to_f32(x[static_cast<int64_t>(batch_idx) * x_batch_stride +
+                          static_cast<int64_t>(dim_idx) * x_dim_stride +
+                          static_cast<int64_t>(time_idx) * x_time_stride]) *
+                 to_f32(weight[static_cast<int64_t>(dim_idx) *
+                                   weight_dim_stride +
+                               static_cast<int64_t>(width - 1) *
+                                   weight_width_stride]);
+        if (silu_activation) {
+          value = silu_f32(value);
+        }
+      }
+      output[static_cast<int64_t>(batch_idx) * output_batch_stride +
+             static_cast<int64_t>(dim_idx) * output_dim_stride +
+             static_cast<int64_t>(time_idx) * output_time_stride] =
+          from_f32<scalar_t>(value);
+
+      for (int state_idx = 0; state_idx < state_len; ++state_idx) {
+        float state_value = 0.0f;
+        if (cache_idx >= 0 && state_idx < old_prefix_len) {
+          state_value = to_f32(
+              conv_state[static_cast<int64_t>(cache_idx) *
+                             conv_state_batch_stride +
+                         static_cast<int64_t>(dim_idx) *
+                             conv_state_dim_stride +
+                         static_cast<int64_t>(accepted + 1 + state_idx) *
+                             conv_state_time_stride]);
+        } else if (cache_idx >= 0 &&
+                   state_idx < old_prefix_len + time_idx + 1) {
+          state_value = to_f32(
+              x[static_cast<int64_t>(batch_idx) * x_batch_stride +
+                static_cast<int64_t>(dim_idx) * x_dim_stride +
+                static_cast<int64_t>(state_idx - old_prefix_len) *
+                    x_time_stride]);
+        }
+        intermediate[static_cast<int64_t>(batch_idx) *
+                         intermediate_batch_stride +
+                     static_cast<int64_t>(time_idx) *
+                         intermediate_time_stride +
+                     static_cast<int64_t>(dim_idx) * intermediate_dim_stride +
+                     static_cast<int64_t>(state_idx) *
+                         intermediate_state_stride] =
+            from_f32<scalar_t>(state_value);
+      }
+
+      for (int history_idx = 0; history_idx < width - 2; ++history_idx) {
+        history[history_idx] = history[history_idx + 1];
+      }
+      if (width >= 2) {
+        history[width - 2] = cache_idx >= 0
+                                 ? to_f32(x[static_cast<int64_t>(batch_idx) *
+                                                x_batch_stride +
+                                            static_cast<int64_t>(dim_idx) *
+                                                x_dim_stride +
+                                            static_cast<int64_t>(time_idx) *
+                                                x_time_stride])
+                                 : 0.0f;
+      }
+    }
+  }
+}
+
+template <typename scalar_t, typename accepted_t>
+void launch_causal_conv1d_mtp_verify(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    const torch::Tensor& conv_state,
+    const torch::Tensor& cache_indices,
+    const torch::Tensor& num_accepted_tokens,
+    torch::Tensor& output,
+    torch::Tensor& intermediate,
+    bool silu_activation,
+    cudaStream_t stream) {
+  const int batch = static_cast<int>(x.size(0));
+  const int dim = static_cast<int>(x.size(1));
+  const int seq_len = static_cast<int>(x.size(2));
+  const int width = static_cast<int>(weight.size(1));
+  const int state_len = static_cast<int>(conv_state.size(2));
+  constexpr int kThreads = 256;
+  causal_conv1d_mtp_verify_kernel<scalar_t, accepted_t>
+      <<<batch, kThreads, 0, stream>>>(
+          reinterpret_cast<const scalar_t*>(x.data_ptr()),
+          x.stride(0),
+          x.stride(1),
+          x.stride(2),
+          reinterpret_cast<const scalar_t*>(weight.data_ptr()),
+          weight.stride(0),
+          weight.stride(1),
+          reinterpret_cast<const scalar_t*>(conv_state.data_ptr()),
+          conv_state.stride(0),
+          conv_state.stride(1),
+          conv_state.stride(2),
+          reinterpret_cast<const int32_t*>(cache_indices.data_ptr()),
+          reinterpret_cast<const accepted_t*>(num_accepted_tokens.data_ptr()),
+          reinterpret_cast<scalar_t*>(output.data_ptr()),
+          output.stride(0),
+          output.stride(1),
+          output.stride(2),
+          reinterpret_cast<scalar_t*>(intermediate.data_ptr()),
+          intermediate.stride(0),
+          intermediate.stride(1),
+          intermediate.stride(2),
+          intermediate.stride(3),
+          batch,
+          dim,
+          seq_len,
+          width,
+          state_len,
+          silu_activation);
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+}  // namespace
 
 void causal_conv1d_decode_fused(const torch::Tensor& x,
                                 const torch::Tensor& weight,

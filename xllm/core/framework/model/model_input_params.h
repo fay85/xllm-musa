@@ -767,6 +767,11 @@ struct ModelEmbeddingInput {
   // input embedding
   mutable torch::Tensor input_embedding;
 
+  // Precomputed token embedding for Qwen3.5 MTP CUDA-graph decode.  The MTP
+  // model keeps input_embedding for the target hidden state, so token and
+  // hidden inputs need separate persistent graph buffers.
+  torch::Tensor mtp_token_embedding;
+
   // embedding ids of each sequence
   std::vector<int32_t> embedding_ids;
 
@@ -793,6 +798,7 @@ struct ModelEmbeddingInput {
   ModelEmbeddingInput to(const torch::Device& device) const {
     ModelEmbeddingInput out;
     out.input_embedding = safe_to(input_embedding, device);
+    out.mtp_token_embedding = safe_to(mtp_token_embedding, device, true);
     out.embedding_ids = embedding_ids;
     out.linear_state_ids = linear_state_ids;
     out.linear_state_indices = safe_to(linear_state_indices, device, true);

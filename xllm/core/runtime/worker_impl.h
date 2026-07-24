@@ -214,6 +214,9 @@ class WorkerImpl {
       const ForwardInput& input);
   virtual ForwardInput update_input_by_last_step_output_for_schedule_overlap(
       ForwardInput& input);
+  // Runs on the worker thread after the current output becomes visible. The
+  // single-threaded queue guarantees completion before the next step starts.
+  virtual void run_deferred_step_work();
   // Only used for deepseek chunked prefill ops on npu device
   void prepare_mla_prefixcache_inputs(ModelInputParams& input_params);
 

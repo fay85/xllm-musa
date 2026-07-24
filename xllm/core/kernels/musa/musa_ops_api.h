@@ -523,6 +523,18 @@ std::tuple<torch::Tensor, torch::Tensor> moe_fused_topk(
 
 torch::Tensor random_sample(const torch::Tensor& probs);
 
+// Target-only speculative rejection sampling for the common MTP K=1 case.
+// draft_probs contains the selected draft-token probability with shape [B, 1]
+// and target_probs has shape [B, 1, V].  The returned tensor is [B, 2] with
+// rejected suffix positions masked to -1.
+torch::Tensor rejection_sample_target_only_k1(
+    const torch::Tensor& draft_token_ids,
+    const torch::Tensor& draft_probs,
+    const torch::Tensor& target_probs,
+    const torch::Tensor& uniform_rand,
+    const torch::Tensor& recovery_exponential,
+    const torch::Tensor& bonus_token_ids);
+
 // Mate grouped MoE GEMM entry points.  The MUSA Qwen3.5 MoE path uses the
 // masked layout for both BF16 and block-wise FP8 expert weights.  Keeping the
 // wrapper in the MUSA API makes the layer independent of the Python Mate
