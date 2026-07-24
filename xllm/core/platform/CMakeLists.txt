@@ -20,10 +20,10 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:mlu/mlu_tensor_alloc.h>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_layer_synchronizer.h>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_tensor_alloc.h>
-    $<$<BOOL:${USE_CUDA}>:cuda/cuda_utils.h>
+    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>>:cuda/cuda_utils.h>
     $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cuda_profiler.h>
     $<$<OR:$<BOOL:${USE_MUSA}>,$<BOOL:${USE_CUDA}>>:torch_profiler.h>
-    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:numa_utils.h>
+    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:numa_utils.h>
   SRCS
     stream.cpp
     device.cpp
@@ -38,7 +38,7 @@ cc_library(
     $<$<OR:$<BOOL:${USE_MUSA}>,$<BOOL:${USE_CUDA}>>:torch_profiler.cpp>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_layer_synchronizer.cpp>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_tensor_alloc.cpp>
-    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:numa_utils.cpp>
+    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:numa_utils.cpp>
   DEPS
     :config
     absl::strings
@@ -54,7 +54,7 @@ cc_library(
     $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cudart>
     $<$<BOOL:${USE_MUSA}>:musa>
     $<$<BOOL:${USE_MUSA}>:musart>
-    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_ILU}>,$<BOOL:${USE_DCU}>>:numa>
+    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_ILU}>,$<BOOL:${USE_DCU}>>:numa>
     $<$<BOOL:${USE_NPU}>:platform_npu>
     $<$<BOOL:${USE_DCU}>:hip::host>
 )
