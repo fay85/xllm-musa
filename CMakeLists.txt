@@ -245,11 +245,12 @@ set(VCPKG_MANIFEST_INSTALL OFF CACHE BOOL "Disable vcpkg manifest install" FORCE
 
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 set(_XLLM_MUSIFY_COPTS "")
-if(USE_MUSA)
-  if(NOT USE_CUDA)
-    message(FATAL_ERROR "USE_MUSA requires USE_CUDA=ON")
-  endif()
 
+if(USE_CUDA AND USE_MUSA)
+  message(FATAL_ERROR "USE_CUDA and USE_MUSA are mutually exclusive")
+endif()
+
+if(USE_MUSA)
   # MUSA uses CUDA language with mcc_wrapper + musamapping plugin.
   # mcc_wrapper must be set before project().
   if(DEFINED ENV{MUSAMAPPING_PATH} AND NOT "$ENV{MUSAMAPPING_PATH}" STREQUAL "")
@@ -529,7 +530,6 @@ endif()
 
 if(USE_MUSA)
   add_definitions(-DUSE_MUSA)
-  add_definitions(-DUSE_CUDA)
   add_compile_definitions(TORCH_CUDA=1)
 
   if(NOT DEFINED MUSA_PATH)
