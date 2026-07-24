@@ -254,7 +254,7 @@ class WorkerImpl {
   // Original xtensor (PageAllocator) sleep path.
   bool xtensor_sleep(MasterStatus master_status);
 
-#if defined(USE_CUDA) || defined(USE_DCU)
+#if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   void refresh_cuda_block_copy_runtime_state();
   bool can_use_cuda_block_copy_kernel(
       const ModelInputParams& input_params) const;
@@ -339,7 +339,7 @@ class WorkerImpl {
   // std::unique_ptr<HierarchyKVCacheTransfer> hierarchy_kv_cache_transfer_;
   std::unique_ptr<WorkerRendezvous> worker_rendezvous_;
 
-#if defined(USE_CUDA) || defined(USE_DCU)
+#if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   CudaBlockCopyRuntimeState cuda_block_copy_runtime_state_;
 #endif
 

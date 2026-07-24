@@ -144,8 +144,8 @@ void RecMultiRoundBatchInputBuilder::process_single_sequence(
 #if defined(USE_NPU)
   base_state.seq_lens.push_back(seq_len);
   base_state.q_seq_lens.push_back(q_seq_len);
-#elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_ILU) || \
-    defined(USE_DCU)
+#elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_MUSA) || \
+    defined(USE_ILU) || defined(USE_DCU)
   base_state.seq_lens.push_back(base_state.seq_lens.back() + seq_len);
   base_state.q_seq_lens.push_back(base_state.q_seq_lens.back() + q_seq_len);
 #endif

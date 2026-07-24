@@ -141,7 +141,8 @@ AttentionMetadata build_attention_metadata(
       params.attention.host.paged_kv_last_page_len;
 #endif
 
-#if defined(USE_CUDA) || defined(USE_NPU) || defined(USE_MLU)
+#if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_NPU) || \
+    defined(USE_MLU)
   // Use explicit attn_mask if provided; otherwise fall back to
   // graph_buffer.attn_mask (e.g. Qwen2_5_VL sets graph_buffer.attn_mask for
   // LongCat text encoding).
@@ -262,7 +263,7 @@ AttentionMetadata build_attention_metadata(
   // MLA-family MLU paths require per-sequence q/kv lengths during prefill.
   if (!attn_metadata.is_prefill || enable_mla) {
     attn_metadata.block_table = params.attention.device.block_tables;
-#if !defined(USE_NPU) && !defined(USE_CUDA)
+#if !defined(USE_NPU) && !defined(USE_CUDA) && !defined(USE_MUSA)
     attn_metadata.kv_seq_lens =
         torch::diff(params.attention.device.kv_seq_lens);  // kv seqlens
     attn_metadata.q_seq_lens =
@@ -278,7 +279,7 @@ AttentionMetadata build_attention_metadata(
     attn_metadata.block_table = params.attention.device.block_tables;
   }
 #endif
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   // Hybrid (Qwen3.5 / Qwen3-Next) GDN layers need per-sequence q/kv lengths
   // (not cumulative). Populate them from the cumulative versions for both
   // prefill and decode so reshape_qkvz_with_pad and other helpers in

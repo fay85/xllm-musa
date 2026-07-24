@@ -54,7 +54,7 @@ limitations under the License.
 #include "core/platform/sleepable_allocator.h"
 #if defined(USE_NPU)
 #include "platform/npu/device_capture_lock.h"
-#elif defined(USE_CUDA) || defined(USE_DCU)
+#elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
 #if defined(USE_MUSA)
 #include "kernels/musa/musa_ops_api.h"
 #else
@@ -248,10 +248,11 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
   compute_stream_ = device_.current_stream();
   sampler_ = std::make_unique<Sampler>();
 
-#if !defined(USE_NPU) && !defined(USE_CUDA) && !defined(USE_DCU)
+#if !defined(USE_NPU) && !defined(USE_CUDA) && !defined(USE_MUSA) && \
+    !defined(USE_DCU)
   if (::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel()) {
     LOG(WARNING)
-        << "enable_block_copy_kernel is only supported on NPU/CUDA/DCU; "
+        << "enable_block_copy_kernel is only supported on NPU/CUDA/MUSA/DCU; "
            "forcing enable_block_copy_kernel=false.";
     ::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel(false);
   }
@@ -351,7 +352,7 @@ bool WorkerImpl::allocate_kv_cache_storage(const KVCacheShape& kv_cache_shape,
   // sleep()/wake_up() can release / re-acquire it.
   allocate_kv_caches(kv_caches_, kv_cache_shape, create_options);
 
-#if defined(USE_CUDA) || defined(USE_DCU)
+#if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   refresh_cuda_block_copy_runtime_state();
 #endif
 
@@ -974,7 +975,7 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
 }
 
 void WorkerImpl::apply_kv_block_swaps(const ModelInputParams& input_params) {
-#if defined(USE_CUDA) || defined(USE_DCU)
+#if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   if (::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel() &&
       can_use_cuda_block_copy_kernel(input_params)) {
     execute_cuda_block_copy_kernel(input_params);
@@ -987,7 +988,7 @@ void WorkerImpl::apply_kv_block_swaps(const ModelInputParams& input_params) {
       ::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel()) {
     return;
   }
-#elif defined(USE_CUDA) || defined(USE_DCU)
+#elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   if (input_params.block_copy.swap_blocks.size() == 0) {
     return;
   }
@@ -995,7 +996,8 @@ void WorkerImpl::apply_kv_block_swaps(const ModelInputParams& input_params) {
   return;
 #endif
 
-#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA) || \
+    defined(USE_DCU)
   std::vector<int64_t> src_indices, dst_indices;
   src_indices.reserve(input_params.block_copy.swap_blocks.size());
   dst_indices.reserve(input_params.block_copy.swap_blocks.size());
@@ -1015,7 +1017,7 @@ void WorkerImpl::apply_kv_block_swaps(const ModelInputParams& input_params) {
 #endif
 }
 
-#if defined(USE_CUDA) || defined(USE_DCU)
+#if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
 void WorkerImpl::refresh_cuda_block_copy_runtime_state() {
   cuda_block_copy_runtime_state_ = {};
   if (!::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel() ||
@@ -1026,10 +1028,19 @@ void WorkerImpl::refresh_cuda_block_copy_runtime_state() {
   const auto& first_kv_cache = kv_caches_.front();
   auto key_cache = first_kv_cache.get_k_cache();
   auto value_cache = first_kv_cache.get_v_cache();
-  if (!key_cache.defined() || !value_cache.defined() || !key_cache.is_cuda() ||
-      !value_cache.is_cuda()) {
+  if (!key_cache.defined() || !value_cache.defined()) {
     return;
   }
+#if defined(USE_MUSA)
+  if (!key_cache.device().is_privateuseone() ||
+      !value_cache.device().is_privateuseone()) {
+    return;
+  }
+#else
+  if (!key_cache.is_cuda() || !value_cache.is_cuda()) {
+    return;
+  }
+#endif
 
   CHECK(key_cache.is_contiguous())
       << "CUDA block copy kernel expects contiguous key cache";
@@ -1046,7 +1057,12 @@ void WorkerImpl::refresh_cuda_block_copy_runtime_state() {
     auto layer_k_cache = kv_cache.get_k_cache();
     auto layer_v_cache = kv_cache.get_v_cache();
     CHECK(layer_k_cache.defined() && layer_v_cache.defined());
+#if defined(USE_MUSA)
+    CHECK(layer_k_cache.device().is_privateuseone() &&
+          layer_v_cache.device().is_privateuseone());
+#else
     CHECK(layer_k_cache.is_cuda() && layer_v_cache.is_cuda());
+#endif
     CHECK(layer_k_cache.is_contiguous());
     CHECK(layer_v_cache.is_contiguous());
     CHECK(layer_k_cache.scalar_type() == cache_dtype);
@@ -1270,7 +1286,7 @@ bool WorkerImpl::update_weights(const std::string& weights_path) {
 }
 
 bool WorkerImpl::start_profile() {
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   const auto& cfg = ProfileConfig::get_instance();
   if (cfg.profile_backend() == "cuda") {
 #if defined(USE_MUSA)
@@ -1297,7 +1313,7 @@ bool WorkerImpl::start_profile() {
 }
 
 bool WorkerImpl::stop_profile() {
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   const auto& cfg = ProfileConfig::get_instance();
   if (cfg.profile_backend() == "cuda") {
 #if defined(USE_MUSA)

@@ -28,7 +28,7 @@ limitations under the License.
 #include "core/framework/config/rec_config.h"
 #include "logits_utils.h"
 #include "sampler.h"
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
 #if defined(USE_MUSA)
 #include "kernels/musa/musa_ops_api.h"
 #else

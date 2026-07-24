@@ -46,7 +46,7 @@ limitations under the License.
 #include "runtime/dit_forward_params.h"
 #include "util/hash_util.h"
 #include "util/tensor_helper.h"
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
 #include "core/framework/config/execution_config.h"
 #endif
 
@@ -374,7 +374,7 @@ struct AttentionHostInput {
   torch::Tensor paged_kv_last_page_len;
 };
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
 namespace {
 inline bool is_cpu_int32_tensor(const torch::Tensor& tensor) {
   return tensor.defined() && tensor.device().is_cpu() &&
@@ -431,7 +431,7 @@ struct AttentionDeviceInput {
     } else {
       out.kv_seq_lens = kv_seq_lens;
     }
-#if !defined(USE_CUDA)
+#if !defined(USE_CUDA) && !defined(USE_MUSA)
     out.q_cu_seq_lens = safe_to(q_cu_seq_lens, device, true);
 #else
     out.q_cu_seq_lens = q_cu_seq_lens;
@@ -628,7 +628,7 @@ struct AttentionInput {
         continue;
       }
 #endif
-#if defined(USE_MLU) || defined(USE_MUSA) || defined(USE_MUSA)
+#if defined(USE_MLU) || defined(USE_MUSA)
       if (target_device.type() == torch::kPrivateUse1) {
         *entry.target = get_tensor_from_blob(
             entry.sizes, entry.dtype, ptr, attention_device_buffer);
@@ -867,7 +867,7 @@ struct ParallelInput {
   std::vector<int64_t> query_start_loc;
   std::vector<int64_t> has_initial_state;
 #endif
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   // Linear-attention (Qwen3.5 gated delta net) host metadata, mirrored from the
   // NPU path so the torch_musa fallback kernels can consume them.
   std::vector<int64_t> query_start_loc;
@@ -911,7 +911,7 @@ struct ParallelInput {
     out.query_start_loc = query_start_loc;
     out.has_initial_state = has_initial_state;
 #endif
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
     out.query_start_loc = query_start_loc;
     out.has_initial_state = has_initial_state;
 #endif
@@ -982,7 +982,7 @@ struct GraphInput {
   torch::Tensor expanded_block_tables;
   torch::Tensor expanded_tiling_data;
   std::vector<int32_t> expanded_kv_seq_lens_vec;
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   torch::Tensor expanded_paged_kv_indptr;
   torch::Tensor expanded_paged_kv_indices;
   torch::Tensor expanded_paged_kv_last_page_len;
@@ -1002,7 +1002,7 @@ struct GraphInput {
     out.expanded_block_tables = safe_to(expanded_block_tables, device, true);
     out.expanded_tiling_data = safe_to(expanded_tiling_data, device, true);
     out.expanded_kv_seq_lens_vec = expanded_kv_seq_lens_vec;
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
     out.expanded_paged_kv_indptr = safe_to(expanded_paged_kv_indptr, device, true);
     out.expanded_paged_kv_indices =
         safe_to(expanded_paged_kv_indices, device, true);
@@ -1022,7 +1022,7 @@ struct ModelInputParams {
   ModelInputParams to(const torch::Device& device) const {
     ModelInputParams params;
     params.meta = meta;
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
     const bool skip_graph_metadata_h2h =
         should_skip_graph_decode_metadata_h2h(attention.host,
                                               meta.batch_forward_type);

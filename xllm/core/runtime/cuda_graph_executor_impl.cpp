@@ -836,7 +836,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
       !use_expanded_spec_decode_attention &&
       can_use_llm_decode_fast_path(tokens, positions, params);
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   // Cheap when the input builder already pre-staged (just a shared_ptr ref);
   // a single per-step D2H per index tensor in the fallback case (3 D2H total,
   // batch-sized, runs once before capture begin).
@@ -1429,7 +1429,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
     attn_metadata->expanded_paged_kv_last_page_len =
         persistent_expanded_paged_kv_last_page_len(
             static_cast<uint32_t>(expanded_batch));
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
     auto ensure_host_mirror = [](torch::Tensor& host_field,
                                  const torch::Tensor& device_field) {
       if (host_field.defined()) {
@@ -1706,7 +1706,7 @@ std::optional<ModelInputParams> CudaGraphPersistentParam::update(
 void CudaGraph::refresh_persistent_paged_kv_host_mirrors(
     const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
     const AttentionHostInput& host_src) {
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   // Only applies to the Mate FFI decode path. Prefill/chunked-prefill and MLA
   // attention do not pass host pointers through the FFI run() boundary, so
   // there is nothing to stabilize there.

@@ -67,7 +67,7 @@ Qwen3NextRMSNormImpl::forward(torch::Tensor& input,
     return std::make_tuple(norm_params.norm_out, std::nullopt);
   }
 
-#if defined(USE_CUDA) && !defined(USE_DCU)
+#if (defined(USE_CUDA) || defined(USE_MUSA)) && !defined(USE_DCU)
   // CUDA / MUSA-as-CUDA: dispatch to the fused gemma add+rmsnorm kernel
   // through the gemma_rms_norm API (which folds `weight + 1.0` inside the
   // device kernel). This avoids the host-side `(1.0 + weight_)` tensor

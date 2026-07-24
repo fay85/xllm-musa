@@ -86,7 +86,7 @@ LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
                              const runtime::Options& options)
     : WorkerImpl(parallel_args, device, options) {
   device_.set_device();
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   threadpool_.schedule([this]() mutable {
     // initialize flashinfer workspace
     ::xllm::layer::flashinfer::FlashinferWorkspace::get_instance().initialize(
@@ -98,7 +98,7 @@ LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
 bool LLMWorkerImpl::init_model(ModelContext& context) {
   CHECK(model_ == nullptr) << "Model is already initialized.";
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   // Ensure FlashinferWorkspace is initialized on the calling thread before
   // constructing model layers. When called synchronously from
   // SpeculativeWorkerImpl (e.g. MTP target/draft setup), init_model runs on

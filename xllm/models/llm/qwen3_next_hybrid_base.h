@@ -37,7 +37,7 @@ limitations under the License.
 #include "core/layers/common/qwen3_next_rms_norm.h"
 #include "core/layers/common/word_embedding.h"
 #include "core/util/layer_hidden_dumper.h"
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
 #include "core/layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 #elif defined(USE_NPU)
 #include "core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.h"

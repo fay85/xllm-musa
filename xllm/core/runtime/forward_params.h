@@ -59,7 +59,7 @@ inline bool supports_contiguous_forward_input_buffer(
     const torch::Device& device) {
 #if defined(USE_CUDA)
   return device.type() == torch::kCUDA;
-#elif defined(USE_MLU)
+#elif defined(USE_MLU) || defined(USE_MUSA)
   return device.type() == torch::kPrivateUse1;
 #elif defined(USE_NPU)
   (void)device;
@@ -159,7 +159,7 @@ struct ForwardInputBufferPlan {
         continue;
       }
 #endif
-#if defined(USE_MLU)
+#if defined(USE_MLU) || defined(USE_MUSA)
       if (device.type() == torch::kPrivateUse1) {
         *entry.target = get_tensor_from_blob(entry.host_tensor.sizes().vec(),
                                              entry.host_tensor.scalar_type(),
