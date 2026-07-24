@@ -132,11 +132,10 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
 
 torch::Tensor Qwen3NextAttentionImpl::build_mrope_cos_sin(
     const torch::Tensor& positions) const {
-#if defined(USE_CUDA) || defined(USE_MUSA)
   // The fused split_qkv_rmsnorm_mrope kernel is currently NPU-only via
   // TileLang -- `has_split_qkv_rmsnorm_mrope_specialization()` returns false
-  // on USE_CUDA + USE_MUSA (see ops_api.cpp), so `use_fused_qkv_` is
-  // always false on this platform and the precomputed mrope_cos_sin tensor
+  // in the MUSA build (see ops_api.cpp), so `use_fused_qkv_` is always false
+  // on this platform and the precomputed mrope_cos_sin tensor
   // produced here is never consulted by forward() -- it falls through to the
   // standalone `rotary_emb_->forward(positions, q, k)` path instead.
   //
@@ -156,7 +155,6 @@ torch::Tensor Qwen3NextAttentionImpl::build_mrope_cos_sin(
   if (!use_fused_qkv_) {
     return {};
   }
-#endif
   auto cos_sin_cache = rotary_emb_->get_cos_sin_cache();
   if (positions.dim() == 1) {
     return cos_sin_cache.index_select(0, positions).repeat({1, 3});
@@ -244,7 +242,6 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
 
     const int64_t T = q.size(0);
 
-#if defined(USE_MUSA)
     // Fused QK-norm + RoPE: collapse 3 kernel launches into 1 for decode
     // (1D positions). Writes norm+rope results back into qkv in-place.
     if (positions.dim() == 1 && positions.scalar_type() == torch::kInt32 &&
@@ -269,9 +266,7 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
                     /*start=*/attn_output_gate_ ? q_size_ * 2 : q_size_,
                     /*end=*/attn_output_gate_ ? q_size_ * 2 + kv_size_
                                               : q_size_ + kv_size_);
-    } else
-#endif
-    {
+    } else {
       auto q_3d = q.view({T, num_heads_, head_dim_});
       q = std::get<0>(q_norm_->forward(q_3d)).view({T, q_size_});
       auto k_3d = k.view({T, num_kv_heads_, head_dim_});
@@ -290,13 +285,9 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
   {
     PrefillBreakdown::Scope o_scope(PrefillBreakdown::Bucket::kFullOProj);
     if (attn_output_gate_) {
-#if defined(USE_CUDA)
       // Capture-safe fused gating: compute sigmoid(gate) and multiply `out`
       // in one launch without a temporary allocation or mutating `gate`.
       xllm::kernel::cuda::mul_sigmoid_gate_inplace(out, gate);
-#else
-      out = out * torch::sigmoid(gate);
-#endif
     }
     return o_proj_->forward(out);
   }

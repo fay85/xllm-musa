@@ -95,7 +95,6 @@ class Qwen3_5GatedDeltaNetImpl final : public Qwen3NextGatedDeltaNetImpl {
   ColumnParallelLinear in_proj_b_{nullptr};
   ColumnParallelLinear in_proj_a_{nullptr};
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
   // Persistent buffers that replace the two `torch::cat` calls in
   // merge_qkvz_from_split_activations / merge_ba_from_split_activations.
   // Only used on the TP>1 fallback path (4 separate projections); the TP=1
@@ -103,7 +102,6 @@ class Qwen3_5GatedDeltaNetImpl final : public Qwen3NextGatedDeltaNetImpl {
   // directly from a single matmul, so no merge is needed.
   mutable torch::Tensor qkvz_merge_buf_;
   mutable torch::Tensor ba_merge_buf_;
-#endif
 };
 TORCH_MODULE(Qwen3_5GatedDeltaNet);
 

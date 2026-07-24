@@ -66,7 +66,6 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
           0 &&
       model_args.n_routed_experts() > 0 &&
       (layer_id + 1) % model_args.decoder_sparse_step() == 0;
-#if defined(USE_MUSA)
   const bool use_qwen35_moe =
       is_moe_layer && model_args.model_type() == "qwen3_5_moe_text";
   if (use_qwen35_moe) {
@@ -78,16 +77,6 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
                             parallel_args,
                             options));
   } else {
-#else
-  if (is_moe_layer) {
-    moe_mlp_ = register_module("mlp",
-                               FusedMoE(model_args,
-                                        FusedMoEArgs{.is_gated = true},
-                                        quant_args,
-                                        parallel_args,
-                                        options));
-  } else {
-#endif
     mlp_ = register_module("mlp",
                            DenseMLP(model_args.hidden_size(),
                                     model_args.intermediate_size(),
@@ -113,15 +102,9 @@ void Qwen3HybridDecoderLayerImplBase::load_state_dict(
       state_dict.get_dict_with_prefix("input_layernorm."));
   post_norm_->load_state_dict(
       state_dict.get_dict_with_prefix("post_attention_layernorm."));
-#if !defined(USE_MUSA)
   if (moe_mlp_) {
     moe_mlp_->load_state_dict(state_dict.get_dict_with_prefix("mlp."));
   } else {
-#else
-  if (moe_mlp_) {
-    moe_mlp_->load_state_dict(state_dict.get_dict_with_prefix("mlp."));
-  } else {
-#endif
     mlp_->load_state_dict(state_dict.get_dict_with_prefix("mlp."));
   }
 }
@@ -131,11 +114,9 @@ void Qwen3HybridDecoderLayerImplBase::verify_loaded_weights(
   if (linear_attention_) {
     linear_attention_->verify_loaded_weights(prefix + "linear_attn.");
   }
-#if defined(USE_MUSA)
   if (moe_mlp_) {
     moe_mlp_->verify_loaded_weights();
   }
-#endif
 }
 
 torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
@@ -174,18 +155,10 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   }
 
   // MLP forward (sub-buckets live inside DenseMLPImpl::forward).
-#if !defined(USE_MUSA)
-  if (moe_mlp_) {
-    PrefillBreakdown::Scope mlp_scope(PrefillBreakdown::Bucket::kMlpGateUp);
-    x = moe_mlp_(x, input_params);
-  } else {
-#endif
-#if defined(USE_MUSA)
   if (moe_mlp_) {
     PrefillBreakdown::Scope mlp_scope(PrefillBreakdown::Bucket::kMlpGateUp);
     x = moe_mlp_->forward(x, input_params);
   } else {
-#endif
     x = mlp_(x);
   }
 

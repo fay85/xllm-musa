@@ -35,7 +35,6 @@ limitations under the License.
 namespace xllm {
 namespace layer {
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
 bool use_mate_gdn_mtp_kernel();
 bool use_mate_gdn_prefill_kernel();
 
@@ -46,7 +45,6 @@ void scatter_gdn_mtp_verify_ssm_states(
     const std::vector<KVCache>& kv_caches,
     const ModelInputParams& input_params,
     const torch::Tensor& accepted_tokens);
-#endif
 
 class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
  public:
@@ -65,7 +63,6 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
                         const ModelInputParams& input_params);
 
  protected:
-#if defined(USE_CUDA) || defined(USE_MUSA)
   // Eager multi-seq pure-prefill path that keeps tokens packed through
   // proj/conv/gating, then either feeds Mate varlen (high waste) or pads
   // once at the Mate boundary for the padded warp (low waste).
@@ -73,7 +70,6 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
                                        const AttentionMetadata& attn_metadata,
                                        KVCache& kv_cache,
                                        const ModelInputParams& input_params);
-#endif
   virtual std::pair<torch::Tensor, torch::Tensor> project_decode_inputs(
       const torch::Tensor& hidden_states) = 0;
   virtual std::pair<torch::Tensor, torch::Tensor> project_flat_inputs(
@@ -117,7 +113,6 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
   DEFINE_WEIGHT(dt_bias);
   DEFINE_WEIGHT(A_log);
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
   // Persistent output buffers consumed by xllm::kernel::
   // fused_qkvzba_split_reshape_cat in lieu of the libtorch
   // `reshape().contiguous() ... torch::cat()` chain. Same lazy / grow-only
@@ -158,7 +153,6 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
   // Persistent buffers for mate GDN MTP spec-verify (seq_len == 2).
   mutable torch::Tensor mate_gdn_mtp_intermediate_buf_;
   mutable torch::Tensor mate_gdn_mtp_output_buf_;
-#endif
 };
 
 }  // namespace layer

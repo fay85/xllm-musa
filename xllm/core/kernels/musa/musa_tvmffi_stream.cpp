@@ -19,14 +19,13 @@ limitations under the License.
 #include <c10/core/Device.h>
 #include <glog/logging.h>
 #include <tvm/ffi/extra/c_env_api.h>
-#if !defined(USE_MUSA)
-#include <c10/cuda/CUDAGuard.h>
-#endif
 #include <dlfcn.h>
 #include <dlpack/dlpack.h>
 
+#include <array>
 #include <cstdlib>
 #include <mutex>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
@@ -36,11 +35,6 @@ limitations under the License.
 #include "core/platform/platform.h"
 #include "core/util/env_var.h"
 #include "core/util/utils.h"
-
-#if defined(USE_MUSA)
-
-#include <array>
-#include <optional>
 
 namespace xllm::kernel::cuda {
 namespace {
@@ -144,24 +138,6 @@ MusaTvmffiStreamGuard::~MusaTvmffiStreamGuard() {
 }
 
 }
-
-#else
-
-namespace xllm::kernel::cuda {
-
-void bind_musa_tvmffi_stream(const torch::Device& /*device*/) {}
-
-void sync_current_musa_stream(const torch::Device& /*device*/) {}
-
-void sync_musa_ffi_stream(const torch::Device& /*device*/) {}
-
-MusaTvmffiStreamGuard::MusaTvmffiStreamGuard(const torch::Device& /*device*/) {}
-
-MusaTvmffiStreamGuard::~MusaTvmffiStreamGuard() {}
-
-}
-
-#endif
 
 namespace {
 const std::unordered_map<torch::ScalarType, std::string_view>
@@ -665,28 +641,6 @@ void bind_tvmffi_stream_to_current_torch_stream(const torch::Device& device) {
     bind_musa_tvmffi_stream(device);
     return;
   }
-
-#if !defined(USE_MUSA)
-  const c10::cuda::CUDAStream cur =
-      c10::cuda::getCurrentCUDAStream(device.index());
-  void* const stream = reinterpret_cast<void*>(cur.stream());
-  if (stream == nullptr) {
-    LOG(WARNING) << "[tvmffi.stream] current torch stream handle is null on "
-                 << device;
-  }
-
-  constexpr int32_t kDlCuda = 2;
-  constexpr int32_t kDlExtDev = 12;
-  for (const int32_t device_type : {kDlCuda, kDlExtDev}) {
-    void* original_stream = nullptr;
-    const int rc = TVMFFIEnvSetStream(device_type, device.index(), stream,
-                                      &original_stream);
-    if (rc != 0) {
-      LOG(WARNING) << "[tvmffi.stream] failed to set stream, rc=" << rc
-                   << " dev_type=" << device_type << " dev=" << device.index();
-    }
-  }
-#endif
 }
 
 bool should_use_tensor_core(torch::ScalarType kv_cache_dtype,

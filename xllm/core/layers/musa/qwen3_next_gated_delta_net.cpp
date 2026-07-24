@@ -191,7 +191,6 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_qkvz_from_split_activations(
   const int64_t qkv_cols = qkv.size(2);
   const int64_t z_cols = z.size(2);
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
   // Contiguous layout: [all_q | all_k | all_v | all_z]. qkv projection already
   // stores [all_q | all_k | all_v]; append z with two copy_ writes instead of
   // interleaving per head group.
@@ -215,9 +214,6 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_qkvz_from_split_activations(
   buf.narrow(/*dim=*/1, qkv_cols, z_cols)
       .copy_(z.reshape({M, z_cols}));
   return buf.view({bs, seqlen, flat_dim});
-#else
-  return torch::cat({qkv, z}, -1).view({bs, seqlen, -1}).contiguous();
-#endif
 }
 
 torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_ba_from_split_activations(
@@ -239,7 +235,6 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_ba_from_split_activations(
   const int64_t seqlen = b.size(1);
   const int64_t nv = b.size(2);
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
   // Contiguous layout: [all_b | all_a].
   const int64_t M = bs * seqlen;
   const int64_t flat_dim = 2 * nv;
@@ -259,9 +254,6 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_ba_from_split_activations(
       .copy_(b.reshape({M, nv}));
   buf.narrow(/*dim=*/1, nv, nv).copy_(a.reshape({M, nv}));
   return buf.view({bs, seqlen, flat_dim});
-#else
-  return torch::cat({b, a}, -1).view({bs, seqlen, -1}).contiguous();
-#endif
 }
 
 std::pair<torch::Tensor, torch::Tensor>

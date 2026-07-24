@@ -26,17 +26,14 @@ limitations under the License.
 #include "kernels/ops_api.h"
 #include "kernels/musa/gdn_ops.h"
 
-#if defined(USE_CUDA)
 #include <c10/cuda/CUDAException.h>
 #include <cuda_runtime.h>
 #include "kernels/musa/global_capture_instance.h"
-#endif
 
 namespace xllm {
 namespace layer {
 
 namespace {
-#if defined(USE_CUDA)
 constexpr bool kEnableFusedGdnDecode = true;
 constexpr bool kEnableMateGdnDecode = true;
 constexpr bool kEnableMateGdnPrefill = true;
@@ -54,13 +51,6 @@ void qwen35_mtp_debug_sync(const char* stage) {
   C10_CUDA_CHECK(cudaDeviceSynchronize());
   LOG(INFO) << "[Qwen3.5 MTP debug] sync end: " << stage;
 }
-#else
-bool qwen35_mtp_debug_enabled() {
-  return false;
-}
-
-void qwen35_mtp_debug_sync(const char*) {}
-#endif
 
 torch::Tensor l2norm(const torch::Tensor& x, int64_t dim, double eps = 1e-6) {
   auto norm = torch::sqrt(torch::sum(torch::square(x), dim, /*keepdim=*/true) + eps);
@@ -423,7 +413,6 @@ torch::Tensor run_spec_verify_conv(const torch::Tensor& mixed_qkv,
   CHECK_EQ(weight.size(1), conv_kernel_size)
       << "spec conv weight width mismatch";
 
-#if defined(USE_MUSA)
   // The decomposed implementation below branches on accepted_count on the
   // host.  That branch is captured once by a MUSA graph and is therefore
   // stale on replay.  Keep the accepted count on device and let the fused
@@ -458,7 +447,6 @@ torch::Tensor run_spec_verify_conv(const torch::Tensor& mixed_qkv,
         std::move(fused_intermediate);
     return fused_output;
   }
-#endif
 
   auto state_indices =
       expand_sequence_tensor_to_batch(
@@ -710,7 +698,6 @@ torch::Tensor run_spec_verify_gated_delta_rule(
   return output;
 }
 
-#if defined(USE_CUDA)
 torch::Tensor run_spec_verify_gated_delta_rule_mate(
     const torch::Tensor& query,
     const torch::Tensor& key,
@@ -982,11 +969,8 @@ bool should_use_gdn_packed_prefill(
   return true;
 }
 
-#endif  // USE_CUDA || USE_MUSA
-
 }  // namespace
 
-#if defined(USE_CUDA)
 bool use_mate_gdn_mtp_kernel() {
   static const bool enabled = [] {
     const char* v = std::getenv("XLLM_MATE_GDN_MTP");
@@ -1070,8 +1054,6 @@ void scatter_gdn_mtp_verify_ssm_states(
                                                        checkpoint_stride);
   }
 }
-#endif  // USE_CUDA || USE_MUSA
-
 Qwen3GatedDeltaNetBaseImpl::Qwen3GatedDeltaNetBaseImpl(
     const ModelArgs& args,
     const QuantArgs& quant_args,
@@ -1162,7 +1144,6 @@ Qwen3GatedDeltaNetBaseImpl::project_padded_inputs(
   return project_decode_inputs(hidden_states);
 }
 
-#if defined(USE_CUDA)
 torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
     const torch::Tensor& hidden_states,
     const AttentionMetadata& attn_metadata,
@@ -1376,20 +1357,16 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
     return o_proj_->forward(rearranged_norm);
   }
 }
-#endif  // USE_CUDA || USE_MUSA
-
 torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     const torch::Tensor& hidden_states,
     const AttentionMetadata& attn_metadata,
     KVCache& kv_cache,
     const ModelInputParams& input_params) {
-#if defined(USE_CUDA)
   if (should_use_gdn_packed_prefill(
           attn_metadata, input_params, hidden_states)) {
     return forward_packed_prefill(
         hidden_states, attn_metadata, kv_cache, input_params);
   }
-#endif
   // Save original hidden_states size for potential padding later
   const int64_t original_num_tokens = hidden_states.size(0);
   torch::Tensor qkvz_padded;
@@ -1415,7 +1392,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   fused_params.head_v = static_cast<int32_t>(head_v_dim_);
   fused_params.contiguous_input_layout = uses_contiguous_qkvzba_layout();
 
-#if defined(USE_CUDA)
   // Lazily size grow-only persistent output buffers so the kernel can
   // populate them via in-place `copy_` calls instead of allocating new
   // tensors mid-stream-capture. Allocation only happens on the first
@@ -1459,7 +1435,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   fused_params.z_out_buf = z_out_buf_;
   fused_params.b_out_buf = b_out_buf_;
   fused_params.a_out_buf = a_out_buf_;
-#endif
 
   torch::Tensor mixed_qkv, z, b, a;
   {
@@ -1496,7 +1471,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   }
   const bool is_any_prefill =
       attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
-#if defined(USE_CUDA)
   const bool decode_eligible =
       !attn_metadata.is_prefill && !use_spec_verify && seq_len == 1 &&
       checkpoint_stride == 1;
@@ -1517,10 +1491,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const bool use_mate_gdn_decode =
       kEnableMateGdnDecode && decode_eligible &&
       gdn_decode_backend == "mate";
-#else
-  const bool use_fused_gdn_decode = false;
-  const bool use_mate_gdn_decode = false;
-#endif
   // Both fused and mate decode paths consume the flat [tokens, dim] mixed_qkv
   // and split q/k/v via strided reads (no contiguous() copies).
   const bool use_flat_mixed_qkv_decode =
@@ -1633,7 +1603,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     conv1d_params.initial_state_idx = std::optional<torch::Tensor>();
     conv1d_params.query_start_loc = attn_metadata.q_cu_seq_lens;
     conv1d_params.max_query_len = attn_metadata.max_query_len;
-#if defined(USE_CUDA)
     // Provide a persistent, grow-only output buffer so the kernel takes its
     // graph-safe fused fast path (causal_conv1d_decode_fused) instead of the
     // libtorch `.to(fp32) ... torch::empty_like` slow path that aborts
@@ -1659,7 +1628,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       conv1d_params.output_buf =
           conv1d_decode_out_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M);
     }
-#endif
     mixed_qkv = xllm::kernel::causal_conv1d_update(conv1d_params);
     if (use_flat_mixed_qkv_decode) {
       // Keep flat [tokens, dim] for the packed mate / in-house fused decode
@@ -1748,7 +1716,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   }
   torch::Tensor core_attn_out;
   torch::Tensor last_recurrent_state;
-#if defined(USE_CUDA)
   const bool is_piecewise_graph_capture =
       xllm::runtime::cuda::GlobalCaptureInstance::get_instance().is_capturing();
   const bool mate_prefill_shape_supported =
@@ -1758,12 +1725,8 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       kEnableMateGdnPrefill && use_mate_gdn_prefill_kernel() &&
       mate_prefill_shape_supported && !use_spec_verify &&
       (!is_piecewise_graph_capture || use_mate_gdn_prefill_graph_capture());
-#else
-  const bool use_mate_gdn_prefill = false;
-#endif
   // Apply chunked or recurrent gated-delta attention and update caches.
   if (use_mate_gdn_prefill) {
-#if defined(USE_CUDA)
     // Mate returns final state in k-last layout [B, Hv, V, K].
     torch::Tensor initial_state_tensor =
         torch::index_select(ssm_cache, 0, linear_state_base_indices);
@@ -1818,7 +1781,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
 
     ssm_cache.index_put_({linear_state_base_indices},
                          mate_final_state.to(ssm_cache.dtype()));
-#endif
   } else if (!use_spec_verify && attn_metadata.is_prefill &&
              !attn_metadata.is_chunked_prefill) {
     // xllm_0526 prefill path: chunk_gated_delta_rule (MATE-backed on MUSA).
@@ -2039,7 +2001,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     ssm_cache.index_put_({linear_state_base_indices},
                          state_to_store.to(ssm_cache.dtype()));
   } else if (use_fused_gdn_decode) {
-#if defined(USE_CUDA)
     // In-house single-launch fused GDN decode kernel: fuses QKV split from
     // mixed_qkv, gating, L2-norm, scale, recurrent step, and in-place fp32
     // state I/O (Qwen3.5 mamba_ssm_dtype). Reuses MateGatedDeltaRuleDecodeParams.
@@ -2086,9 +2047,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     }
     core_attn_out =
         xllm::kernel::fused_gated_delta_rule_decode(fused_params).unsqueeze(0);
-#endif
   } else if (use_mate_gdn_decode) {
-#if defined(USE_CUDA)
     xllm::kernel::MateGatedDeltaRuleDecodeParams mate_params;
     mate_params.mixed_qkv = mixed_qkv;
     mate_params.state = ssm_cache;
@@ -2145,7 +2104,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     }
     core_attn_out =
         xllm::kernel::mate_gated_delta_rule_decode(mate_params).unsqueeze(0);
-#endif
   } else {
     double scale = 1.0 / std::sqrt(static_cast<float>(processed_q.size(-1)));
     if (fla_ssm_state_layout) {
@@ -2173,13 +2131,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       // The kernel ignores actual_seq_lengths for the standard 1-token decode
       // (uses slot index b..b+1); pass c10::nullopt to avoid extra .item()
       // syncs that fail on MUSA ("operation not permitted").
-#if !defined(USE_CUDA) && !defined(USE_MUSA)
-      processed_q = xllm::kernel::l2_norm(processed_q, /*eps=*/1e-6);
-      processed_k = xllm::kernel::l2_norm(processed_k, /*eps=*/1e-6);
-      auto zero = torch::zeros({1}, attn_metadata.q_seq_lens.options());
-      torch::Tensor actual_seq_lengths =
-          torch::cat({zero, attn_metadata.q_seq_lens}, 0);
-#endif
       core_attn_out = xllm::kernel::recurrent_gated_delta_rule(
                           processed_q.reshape(
                               {-1, processed_q.size(-2), processed_q.size(-1)}),
@@ -2190,11 +2141,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                           ssm_cache,
                           beta.squeeze(0).contiguous(),
                           scale,
-#if defined(USE_CUDA)
                           std::nullopt,
-#else
-                          actual_seq_lengths,
-#endif
                           logical_state_indices,
                           std::nullopt,
                           g.squeeze(0).contiguous(),
