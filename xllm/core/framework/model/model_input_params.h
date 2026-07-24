@@ -388,7 +388,7 @@ struct AttentionDeviceInput {
     AttentionDeviceInput out;
     out.q_seq_lens = safe_to(q_seq_lens, device, true);
     out.kv_seq_lens = safe_to(kv_seq_lens, device, true);
-#if !defined(USE_CUDA)
+#if !defined(USE_CUDA) && !defined(USE_MUSA)
     out.q_cu_seq_lens = safe_to(q_cu_seq_lens, device, true);
 #else
     out.q_cu_seq_lens = q_cu_seq_lens;
@@ -575,7 +575,7 @@ struct AttentionInput {
         continue;
       }
 #endif
-#if defined(USE_MLU)
+#if defined(USE_MLU) || defined(USE_MUSA)
       if (target_device.type() == torch::kPrivateUse1) {
         *entry.target = get_tensor_from_blob(
             entry.sizes, entry.dtype, ptr, attention_device_buffer);

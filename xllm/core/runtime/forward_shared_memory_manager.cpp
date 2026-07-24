@@ -34,7 +34,7 @@ limitations under the License.
 #endif
 #if defined(USE_NPU)
 #include "platform/npu/device_capture_lock.h"
-#elif defined(USE_CUDA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
 #include "platform/cuda/device_capture_lock.h"
 #endif
 #include "core/util/net.h"
@@ -1168,7 +1168,7 @@ struct DeviceBufferSession final {
   bool need_finalize_sync = false;
 #if defined(USE_NPU)
   std::optional<std::unique_lock<std::mutex>> capture_lock_guard;
-#elif defined(USE_CUDA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
   std::optional<std::shared_lock<std::shared_mutex>> capture_lock_guard;
 #endif
 };
@@ -1369,14 +1369,20 @@ inline torch::Tensor materialize_tensor_from_current_cursor(
   const char* device_buffer = session.device_cursor;
 #if defined(USE_NPU)
   return get_tensor_from_blob(meta.shape, meta.dtype, device_buffer);
-#elif defined(USE_CUDA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
   if (session.owner_buffer.defined() &&
       is_aligned_for_cuda_zero_copy(device_buffer)) {
     return get_tensor_from_blob(
         meta.shape, meta.dtype, device_buffer, session.owner_buffer);
   }
 
-  auto options = torch::TensorOptions().dtype(meta.dtype).device(torch::kCUDA);
+  auto options = torch::TensorOptions()
+                     .dtype(meta.dtype)
+#if defined(USE_MUSA)
+                     .device(torch::kPrivateUse1);
+#else
+                     .device(torch::kCUDA);
+#endif
   auto tensor = torch::empty(meta.shape, options);
   cudaError_t err;
   if (stream != nullptr) {
@@ -2209,7 +2215,8 @@ inline void initialize_device_buffer_session(ReadContext& context,
     return;
   }
 
-#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA) || \
+    defined(USE_MLU)
   if (!materialize_device_buffer ||
       !::xllm::ExecutionConfig::get_instance().use_contiguous_input_buffer()) {
     return;
@@ -2217,6 +2224,10 @@ inline void initialize_device_buffer_session(ReadContext& context,
 
 #if defined(USE_CUDA)
   if (device.type() != torch::kCUDA) {
+    return;
+  }
+#elif defined(USE_MUSA)
+  if (device.type() != torch::kPrivateUse1) {
     return;
   }
 #elif defined(USE_MLU)
@@ -2242,7 +2253,7 @@ inline void initialize_device_buffer_session(ReadContext& context,
     auto& capture_lock =
         ::xllm::npu::DeviceCaptureLock::get_instance().get_lock(device.index());
     session.capture_lock_guard.emplace(capture_lock);
-#elif defined(USE_CUDA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
     if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
       auto& replay_lock =
           ::xllm::cuda::DeviceCaptureLock::get_instance().get_read_lock(
@@ -2278,7 +2289,8 @@ inline void initialize_device_buffer_session(ReadContext& context,
 
 inline void finalize_device_buffer_session(DeviceBufferSession& session,
                                            Stream* stream) {
-#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA) || \
+    defined(USE_MLU)
   if (session.need_finalize_sync && stream != nullptr) {
     stream->synchronize();
   }
@@ -3166,6 +3178,8 @@ void ForwardSharedMemoryManager::input_read(ForwardInput& input,
   materialize_device_buffer = true;
 #elif defined(USE_CUDA)
   materialize_device_buffer = device.type() == torch::kCUDA;
+#elif defined(USE_MUSA)
+  materialize_device_buffer = device.type() == torch::kPrivateUse1;
 #elif defined(USE_MLU)
   materialize_device_buffer = device.type() == torch::kPrivateUse1;
 #endif

@@ -86,7 +86,7 @@ bool LLMWorkerImpl::init_model(ModelContext& context) {
   CHECK(model_ == nullptr) << "Model is already initialized.";
   const auto& model_config = ModelConfig::get_instance();
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   // Ensure FlashinferWorkspace is initialized on the calling thread before
   // constructing model layers. When called synchronously from
   // SpeculativeWorkerImpl (e.g. MTP target/draft setup), init_model runs on

@@ -188,7 +188,7 @@ AttentionMetadata build_attention_metadata(
   // MLA-family MLU paths require per-sequence q/kv lengths during prefill.
   if (!attn_metadata.is_prefill || enable_mla) {
     attn_metadata.block_table = params.attention.device.block_tables;
-#if !defined(USE_NPU) && !defined(USE_CUDA)
+#if !defined(USE_NPU) && !defined(USE_CUDA) && !defined(USE_MUSA)
     attn_metadata.kv_seq_lens =
         torch::diff(params.attention.device.kv_seq_lens);  // kv seqlens
     attn_metadata.q_seq_lens =
