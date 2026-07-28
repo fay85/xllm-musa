@@ -68,6 +68,10 @@ void act_and_mul(torch::Tensor out,
 
 void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate);
 
+void fused_shared_expert_gate_inplace(torch::Tensor& shared_output,
+                                      const torch::Tensor& hidden_states,
+                                      const torch::Tensor& gate_weight);
+
 void reshape_paged_cache(torch::Tensor slot_ids,
                          torch::Tensor keys,
                          torch::Tensor values,

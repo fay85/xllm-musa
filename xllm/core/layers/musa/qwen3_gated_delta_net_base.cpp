@@ -1475,12 +1475,17 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       !attn_metadata.is_prefill && !use_spec_verify && seq_len == 1 &&
       checkpoint_stride == 1;
   // Runtime backend selection via env var XLLM_GDN_DECODE_BACKEND.
-  //   "mate" (default): MATE-compiled kernel (faster, ~2ms/step less).
-  //   "fused": in-house single-launch kernel.
+  //   "mate": MATE-compiled kernel (faster, ~2ms/step less in eager mode).
+  //   "fused": graph-safe in-house single-launch kernel.
   //   "reference": decomposed Torch implementation for diagnostics.
   const std::string gdn_decode_backend = [] {
     const char* env = std::getenv("XLLM_GDN_DECODE_BACKEND");
-    return env == nullptr ? std::string("mate") : std::string(env);
+    if (env != nullptr) {
+      return std::string(env);
+    }
+    return ::xllm::ExecutionConfig::get_instance().enable_graph()
+               ? std::string("fused")
+               : std::string("mate");
   }();
   CHECK(gdn_decode_backend == "mate" || gdn_decode_backend == "fused" ||
         gdn_decode_backend == "reference")

@@ -2313,6 +2313,215 @@ __global__ void fused_gdn_decode_kernel(
   }
 }
 
+constexpr int kFusedGdnH128Threads = 128;
+constexpr int kFusedGdnH128LanesPerWarp = 32;
+constexpr int kFusedGdnH128ValuesPerLane = 4;
+constexpr int kFusedGdnH128RowsPerBlock = 16;
+constexpr int kFusedGdnH128BlocksPerState = 8;
+static_assert(kFusedGdnH128LanesPerWarp *
+                  kFusedGdnH128ValuesPerLane ==
+              128);
+static_assert(kFusedGdnH128RowsPerBlock *
+                  kFusedGdnH128BlocksPerState ==
+              128);
+
+template <typename scalar_t>
+__global__ void __launch_bounds__(kFusedGdnH128Threads, 1)
+    fused_gdn_decode_h128_tiled_kernel(
+        const scalar_t* __restrict__ mixed_qkv,
+        int64_t mixed_qkv_row_stride,
+        float* __restrict__ state,
+        const float* __restrict__ A_log_f32,
+        const scalar_t* __restrict__ a,
+        const float* __restrict__ dt_bias_f32,
+        const scalar_t* __restrict__ b,
+        const int32_t* __restrict__ state_indices,
+        scalar_t* __restrict__ output,
+        int64_t num_k_heads,
+        int64_t num_v_heads,
+        int64_t qk_cols,
+        float scale,
+        float softplus_beta,
+        float softplus_threshold) {
+  constexpr uint32_t kFullWarpMask = 0xffffffffu;
+  constexpr int kHeadDim = 128;
+
+  const int batch = blockIdx.x;
+  const int hv = blockIdx.y;
+  const int v_block = blockIdx.z;
+  const int lane = threadIdx.x % kFusedGdnH128LanesPerWarp;
+  const int warp = threadIdx.x / kFusedGdnH128LanesPerWarp;
+  const int v_block_start = v_block * kFusedGdnH128RowsPerBlock;
+
+  const int64_t slot = static_cast<int64_t>(state_indices[batch]);
+  if (slot < 0) {
+    for (int v_offset = warp; v_offset < kFusedGdnH128RowsPerBlock;
+         v_offset += kFusedGdnH128Threads /
+                     kFusedGdnH128LanesPerWarp) {
+      const int v = v_block_start + v_offset;
+      if (lane == 0) {
+        const int64_t out_offset =
+            (static_cast<int64_t>(batch) * num_v_heads + hv) * kHeadDim + v;
+        output[out_offset] = static_cast<scalar_t>(0);
+      }
+    }
+    return;
+  }
+
+  const int head_group_size = static_cast<int>(num_v_heads / num_k_heads);
+  const int hk = hv / head_group_size;
+  const scalar_t* qkv_row =
+      mixed_qkv + static_cast<int64_t>(batch) * mixed_qkv_row_stride;
+  const int64_t query_base = static_cast<int64_t>(hk) * kHeadDim;
+  const int64_t key_base = qk_cols + static_cast<int64_t>(hk) * kHeadDim;
+  const int64_t value_base =
+      2 * qk_cols + static_cast<int64_t>(hv) * kHeadDim;
+
+  float query_values[kFusedGdnH128ValuesPerLane];
+  float key_values[kFusedGdnH128ValuesPerLane];
+  float query_sum = 0.0f;
+  float key_sum = 0.0f;
+#pragma unroll
+  for (int index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
+    const int k = lane + index * kFusedGdnH128LanesPerWarp;
+    query_values[index] = static_cast<float>(qkv_row[query_base + k]);
+    key_values[index] = static_cast<float>(qkv_row[key_base + k]);
+    query_sum += query_values[index] * query_values[index];
+    key_sum += key_values[index] * key_values[index];
+  }
+#pragma unroll
+  for (int offset = kFusedGdnH128LanesPerWarp / 2; offset > 0;
+       offset >>= 1) {
+    query_sum += __shfl_xor_sync(
+        kFullWarpMask, query_sum, offset, kFusedGdnH128LanesPerWarp);
+    key_sum += __shfl_xor_sync(
+        kFullWarpMask, key_sum, offset, kFusedGdnH128LanesPerWarp);
+  }
+  const float query_norm = rsqrtf(query_sum + 1e-6f) * scale;
+  const float key_norm = rsqrtf(key_sum + 1e-6f);
+#pragma unroll
+  for (int index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
+    query_values[index] *= query_norm;
+    key_values[index] *= key_norm;
+  }
+
+  float alpha = 0.0f;
+  float beta = 0.0f;
+  if (lane == 0) {
+    const int64_t gate_offset =
+        static_cast<int64_t>(batch) * num_v_heads + hv;
+    const float a_value = static_cast<float>(a[gate_offset]);
+    const float b_value = static_cast<float>(b[gate_offset]);
+    const float pre = a_value + dt_bias_f32[hv];
+    const float scaled_pre = softplus_beta * pre;
+    const float softplus = scaled_pre > softplus_threshold
+                               ? pre
+                               : log1pf(expf(scaled_pre)) / softplus_beta;
+    alpha = expf(-expf(A_log_f32[hv]) * softplus);
+    beta = 1.0f / (1.0f + expf(-b_value));
+  }
+  alpha = __shfl_sync(
+      kFullWarpMask, alpha, 0, kFusedGdnH128LanesPerWarp);
+  beta = __shfl_sync(
+      kFullWarpMask, beta, 0, kFusedGdnH128LanesPerWarp);
+
+  constexpr int kWarpsPerBlock =
+      kFusedGdnH128Threads / kFusedGdnH128LanesPerWarp;
+  for (int v_offset = warp; v_offset < kFusedGdnH128RowsPerBlock;
+       v_offset += kWarpsPerBlock) {
+    const int v = v_block_start + v_offset;
+    const int64_t state_row =
+        ((slot * num_v_heads + hv) * kHeadDim + v) * kHeadDim;
+    float state_values[kFusedGdnH128ValuesPerLane];
+    float state_key_sum = 0.0f;
+#pragma unroll
+    for (int index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
+      const int k = lane + index * kFusedGdnH128LanesPerWarp;
+      state_values[index] = alpha * state[state_row + k];
+      state_key_sum += state_values[index] * key_values[index];
+    }
+#pragma unroll
+    for (int offset = kFusedGdnH128LanesPerWarp / 2; offset > 0;
+         offset >>= 1) {
+      state_key_sum += __shfl_xor_sync(
+          kFullWarpMask,
+          state_key_sum,
+          offset,
+          kFusedGdnH128LanesPerWarp);
+    }
+
+    float value = lane == 0
+                      ? static_cast<float>(qkv_row[value_base + v])
+                      : 0.0f;
+    value = __shfl_sync(
+        kFullWarpMask, value, 0, kFusedGdnH128LanesPerWarp);
+    const float delta = (value - state_key_sum) * beta;
+    float state_query_sum = 0.0f;
+#pragma unroll
+    for (int index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
+      const int k = lane + index * kFusedGdnH128LanesPerWarp;
+      state_values[index] += key_values[index] * delta;
+      state_query_sum += state_values[index] * query_values[index];
+      state[state_row + k] = state_values[index];
+    }
+#pragma unroll
+    for (int offset = kFusedGdnH128LanesPerWarp / 2; offset > 0;
+         offset >>= 1) {
+      state_query_sum += __shfl_xor_sync(
+          kFullWarpMask,
+          state_query_sum,
+          offset,
+          kFusedGdnH128LanesPerWarp);
+    }
+    if (lane == 0) {
+      const int64_t output_offset =
+          (static_cast<int64_t>(batch) * num_v_heads + hv) * kHeadDim + v;
+      output[output_offset] = static_cast<scalar_t>(state_query_sum);
+    }
+  }
+}
+
+template <typename scalar_t>
+void launch_fused_gdn_h128_tiled(
+    const torch::Tensor& mixed_qkv,
+    torch::Tensor& state,
+    const torch::Tensor& A_log_f32,
+    const torch::Tensor& a,
+    const torch::Tensor& dt_bias_f32,
+    const torch::Tensor& b,
+    const torch::Tensor& state_indices_i32,
+    torch::Tensor& output,
+    int64_t num_k_heads,
+    int64_t num_v_heads,
+    int64_t qk_cols,
+    int64_t batch_size,
+    float scale,
+    float softplus_beta,
+    float softplus_threshold,
+    cudaStream_t stream) {
+  const dim3 grid(static_cast<unsigned int>(batch_size),
+                  static_cast<unsigned int>(num_v_heads),
+                  kFusedGdnH128BlocksPerState);
+  fused_gdn_decode_h128_tiled_kernel<scalar_t>
+      <<<grid, kFusedGdnH128Threads, 0, stream>>>(
+          mixed_qkv.data_ptr<scalar_t>(),
+          mixed_qkv.stride(0),
+          state.data_ptr<float>(),
+          A_log_f32.data_ptr<float>(),
+          a.data_ptr<scalar_t>(),
+          dt_bias_f32.data_ptr<float>(),
+          b.data_ptr<scalar_t>(),
+          state_indices_i32.data_ptr<int32_t>(),
+          output.data_ptr<scalar_t>(),
+          num_k_heads,
+          num_v_heads,
+          qk_cols,
+          scale,
+          softplus_beta,
+          softplus_threshold);
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
 template <typename scalar_t>
 void launch(const torch::Tensor& mixed_qkv,
             torch::Tensor& state,

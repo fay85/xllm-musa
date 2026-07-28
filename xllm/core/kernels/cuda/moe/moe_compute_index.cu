@@ -33,6 +33,16 @@ namespace xllm::kernel::cuda {
 
 constexpr int32_t kMoeIndexBlock = 256;
 
+__device__ __forceinline__ int32_t normalize_expert_id(int32_t expert_id,
+                                                       int32_t num_experts) {
+  // Graph padding can carry non-finite router logits. Some fused top-k
+  // kernels encode that row with an out-of-range id. Route such assignments
+  // to expert 0 so dst_src/src_dst remain a complete permutation; the padded
+  // row is discarded by the graph runner and must never leave an uninitialized
+  // gather index behind.
+  return expert_id >= 0 && expert_id < num_experts ? expert_id : 0;
+}
+
 // ---- Phase 1: histogram ----
 __global__ void
 #ifdef USE_DCU
@@ -44,10 +54,8 @@ __launch_bounds__(kMoeIndexBlock, 1)
                          int32_t num_experts) {
   int64_t tid = int64_t(blockIdx.x) * kMoeIndexBlock + threadIdx.x;
   if (tid < num_elements) {
-    int32_t eid = expert_id[tid];
-    if (eid >= 0 && eid < num_experts) {
-      atomicAdd(&expert_sizes[eid], 1);
-    }
+    const int32_t eid = normalize_expert_id(expert_id[tid], num_experts);
+    atomicAdd(&expert_sizes[eid], 1);
   }
 }
 
@@ -98,8 +106,8 @@ __launch_bounds__(kMoeIndexBlock, 1)
   int64_t flat_idx = int64_t(blockIdx.x) * kMoeIndexBlock + threadIdx.x;
   if (flat_idx >= num_elements) return;
 
-  int32_t eid = expert_id[flat_idx];
-  if (eid < 0 || eid >= num_experts) return;
+  const int32_t eid =
+      normalize_expert_id(expert_id[flat_idx], num_experts);
 
   int32_t pos = atomicAdd(&expert_offsets[eid], 1);
   dst_src[pos] = static_cast<int32_t>(flat_idx);

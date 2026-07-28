@@ -50,6 +50,7 @@ constexpr int64_t kMaxCompactPrefillTokens = 16384;
 // the complete long-context prefill in one routed batch. This matches
 // SGLang's fused-experts chunk limit and avoids repeating routing per layer.
 constexpr int64_t kMaxCompactBf16PrefillTokens = 65536;
+constexpr int64_t kMaxMusaMoeTopkTokens = 2048;
 constexpr int64_t kMaskedGemmMAlignment = 256;
 constexpr int64_t kCompactBf16MAlignment = 128;
 constexpr int64_t kRaggedDecodeAlignment = 128;
@@ -131,8 +132,13 @@ bool use_musa_moe_topk(int64_t num_tokens,
                        int64_t topk) {
   static const bool enabled =
       util::get_bool_env("XLLM_MUSA_FUSED_MOE_TOPK_SMALL", true);
+  static const int64_t max_tokens = std::clamp(
+      util::get_int_env("XLLM_MUSA_FUSED_MOE_TOPK_MAX_TOKENS",
+                        kMaxMusaMoeTopkTokens),
+      int64_t{1},
+      kMaxMusaMoeTopkTokens);
   const bool shape_supported =
-      num_tokens <= 32 && num_experts == 256 && topk == 8 &&
+      num_tokens <= max_tokens && num_experts == 256 && topk == 8 &&
       router_logits.scalar_type() == torch::kBFloat16 &&
       router_logits.is_contiguous();
   if (!enabled || !shape_supported) {
@@ -144,6 +150,10 @@ bool use_musa_moe_topk(int64_t num_tokens,
   LOG_FIRST_N(WARNING, 1)
       << "SGLang MUSA top-k artifact is unavailable; using Torch top-k.";
   return false;
+}
+
+bool use_fused_shared_expert_gate(int64_t num_tokens) {
+  return num_tokens == 1;
 }
 
 }  // namespace
@@ -815,9 +825,14 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward(
     PrefillBreakdown::Scope shared_scope(
         PrefillBreakdown::Bucket::kMoeShared);
     shared = shared_experts_->forward(hidden_states);
-    auto shared_gate =
-        torch::sigmoid(shared_expert_gate_->forward(hidden_states));
-    shared = shared * shared_gate;
+    if (use_fused_shared_expert_gate(hidden_states.size(0))) {
+      xllm::kernel::cuda::fused_shared_expert_gate_inplace(
+          shared, hidden_states, shared_expert_gate_->weight);
+    } else {
+      auto shared_gate =
+          torch::sigmoid(shared_expert_gate_->forward(hidden_states));
+      shared = shared * shared_gate;
+    }
   }
   return routed + shared;
 }
