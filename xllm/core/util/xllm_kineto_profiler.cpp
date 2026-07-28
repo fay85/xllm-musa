@@ -27,9 +27,9 @@ limitations under the License.
 
 #include "core/util/env_var.h"
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
 #include <ATen/record_function.h>
-#if defined(USE_MUSA) || defined(USE_MUSA)
+#if defined(USE_MUSA)
 #include <c10/musa/MUSAFunctions.h>
 #else
 #include <c10/cuda/CUDAFunctions.h>
@@ -42,7 +42,7 @@ limitations under the License.
 namespace xllm {
 namespace {
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
 
 enum class CapturePhase {
   kIdle = 0,
@@ -119,7 +119,7 @@ void ensure_parent_dir(const std::string& path) {
 }
 
 void sync_gpu() {
-#if defined(USE_MUSA) || defined(USE_MUSA)
+#if defined(USE_MUSA)
   c10::musa::device_synchronize();
 #else
   c10::cuda::device_synchronize();
@@ -127,7 +127,7 @@ void sync_gpu() {
 }
 
 torch::profiler::impl::ActivityType gpu_activity_type() {
-#if defined(USE_MUSA) || defined(USE_MUSA)
+#if defined(USE_MUSA)
   return torch::profiler::impl::ActivityType::PrivateUse1;
 #else
   return torch::profiler::impl::ActivityType::CUDA;
@@ -418,12 +418,12 @@ void maybe_advance_capture() {
   }
 }
 
-#endif  // USE_CUDA
+#endif  // defined(USE_CUDA) || defined(USE_MUSA)
 
 }  // namespace
 
 bool XllmKinetoProfiler::is_torch_kineto_enabled() {
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   return util::get_bool_env("XLLM_ENABLE_TORCH_KINETO_PROFILE", false);
 #else
   return false;
@@ -431,7 +431,7 @@ bool XllmKinetoProfiler::is_torch_kineto_enabled() {
 }
 
 bool XllmKinetoProfiler::is_libkineto_trace_enabled() {
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   return util::get_bool_env("XLLM_ENABLE_KINETO_TRACE", false);
 #else
   return false;
@@ -443,14 +443,14 @@ bool XllmKinetoProfiler::is_enabled() {
 }
 
 void XllmKinetoProfiler::on_profile_step_begin() {
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   // Model execution runs on the worker thread that also calls enableProfiler;
   // do not call enableProfilerInChildThread on the same thread.
 #endif
 }
 
 void XllmKinetoProfiler::on_profile_step_end() {
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   if (!is_enabled()) {
     return;
   }
@@ -466,7 +466,7 @@ void XllmKinetoProfiler::on_profile_step_end() {
 XllmKinetoProfiler::StepScope::StepScope(bool is_decode_step,
                                          bool is_prefill_step)
     : is_profile_step_(false) {
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   is_profile_step_ =
       is_enabled() &&
       (profile_prefill_steps() ? is_prefill_step : is_decode_step);
@@ -487,7 +487,7 @@ XllmKinetoProfiler::StepScope::~StepScope() {
   on_profile_step_end();
 }
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
 struct XllmKinetoProfiler::UserScope::TorchGuard {
   at::RecordFunction guard;
 
@@ -502,12 +502,12 @@ struct XllmKinetoProfiler::UserScope::TorchGuard {
 
 XllmKinetoProfiler::UserScope::UserScope(const char* name)
     : name_(name)
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
       ,
       torch_guard_(nullptr)
 #endif
 {
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   if (!is_enabled()) {
     return;
   }
@@ -519,7 +519,7 @@ XllmKinetoProfiler::UserScope::UserScope(const char* name)
 }
 
 XllmKinetoProfiler::UserScope::~UserScope() {
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   delete torch_guard_;
 #endif
 }

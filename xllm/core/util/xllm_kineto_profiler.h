@@ -71,7 +71,7 @@ class XllmKinetoProfiler {
 
    private:
     const char* name_;
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
     struct TorchGuard;
     TorchGuard* torch_guard_;
 #endif
