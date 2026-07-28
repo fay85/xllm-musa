@@ -26,6 +26,7 @@ limitations under the License.
 #include "layers/musa/flashinfer_planinfo.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "kernels/musa/musa_ops_api.h"
+#include "kernels/musa/musa_tvmffi_stream.h"
 #include "kernels/ops_api.h"
 #include "layers/common/attention_metadata.h"
 
@@ -66,11 +67,12 @@ AttentionMetadata build_expanded_decode_metadata(
 
 bool qwen35_mtp_attention_debug_enabled() {
   static const bool enabled = std::getenv("XLLM_DEBUG_QWEN35_MTP") != nullptr;
-  return enabled;
+  return enabled && !xllm::kernel::cuda::is_musa_stream_capturing();
 }
 
 void qwen35_mtp_attention_debug_sync(const char* stage) {
-  if (!qwen35_mtp_attention_debug_enabled()) {
+  if (!qwen35_mtp_attention_debug_enabled() ||
+      xllm::kernel::cuda::is_musa_stream_capturing()) {
     return;
   }
   LOG(INFO) << "[Qwen3.5 MTP attention debug] sync begin: " << stage;
@@ -150,7 +152,7 @@ FlashInferAttentionImpl::FlashInferAttentionImpl(int64_t num_heads,
                         head_size,
                         scale,
                         num_kv_heads,
-                        sliding_window - 1) {
+                        sliding_window > 0 ? sliding_window - 1 : -1) {
   float_workspace_buffer_ = flashinfer::FlashinferWorkspace::get_instance()
                                 .get_float_workspace_buffer();
   int_workspace_buffer_ = flashinfer::FlashinferWorkspace::get_instance()
@@ -267,14 +269,23 @@ void FlashInferAttentionImpl::prefill_forward(
     const torch::Tensor& v_cache) {
   bool use_custom_mask = attn_metadata.attn_mask.defined();
 
-  static const bool use_fa3 = [] {
+  static const int32_t fa3_setting = [] {
     const char* env = std::getenv("XLLM_USE_FA3");
-    return env && std::string(env) == "1";
+    if (env == nullptr) {
+      return int32_t{-1};
+    }
+    return std::string(env) == "1" ? int32_t{1} : int32_t{0};
   }();
+  const int64_t gqa_ratio =
+      num_kv_heads_ > 0 ? num_heads_ / num_kv_heads_ : 0;
+  const bool default_to_fa3 = query.scalar_type() == torch::kBFloat16 &&
+                              head_size_ == 256 && gqa_ratio == 8;
+  const bool use_fa3 =
+      fa3_setting < 0 ? default_to_fa3 : fa3_setting == 1;
 
-  // FA3 is an explicit opt-in. Do not silently route an unsupported shape to
-  // FA2: that masks deployment mistakes and can make graph/perf behavior
-  // differ from the requested backend.
+  // GQA=8 defaults to FA3 because the MUSA FA2 prefill path does not safely
+  // reuse its workspace across requests. GQA=6 keeps the established FA2
+  // default unless XLLM_USE_FA3=1 explicitly opts in.
   if (use_fa3) {
     CHECK(!use_custom_mask)
         << "XLLM_USE_FA3=1 does not support custom attention masks";
@@ -282,7 +293,6 @@ void FlashInferAttentionImpl::prefill_forward(
         << "XLLM_USE_FA3=1 requires head_dim=256, got " << head_size_;
     CHECK_GT(num_kv_heads_, 0)
         << "XLLM_USE_FA3=1 requires at least one KV head";
-    const int64_t gqa_ratio = num_heads_ / num_kv_heads_;
     CHECK(num_heads_ == num_kv_heads_ * 6 ||
           num_heads_ == num_kv_heads_ * 8)
         << "XLLM_USE_FA3=1 requires GQA ratio 6 or 8 (nq=" << num_heads_
@@ -615,15 +625,35 @@ void FlashInferAttentionImpl::decoder_forward(
   }
   const AttentionMetadata& decode_attn =
       expanded_decode_meta.has_value() ? *expanded_decode_meta : attn_metadata;
-  // FA3 decode fast path. Opt-in via env var XLLM_USE_FA3=1. Requires the
-  // JIT-built fmha_fwd_<hash>.so under FLASHINFER_OPS_PATH. Prefill uses a
-  // separate dense ragged URI when the same env is set (see prefill_forward).
+  // FA3 decode fast path. Supported Qwen3.5 shapes use FA3 by default;
+  // XLLM_USE_FA3_DECODE=0 provides an explicit rollback to FA2. The shared
+  // XLLM_USE_FA3 switch remains an override when the decode-specific setting
+  // is absent. Requires the JIT-built fmha_fwd_<hash>.so under
+  // FLASHINFER_OPS_PATH.
   {
-    static const bool use_fa3 = [] {
+    static const int32_t fa3_setting = [] {
+      const char* decode_env = std::getenv("XLLM_USE_FA3_DECODE");
+      if (decode_env != nullptr) {
+        return std::string(decode_env) == "1" ? int32_t{1} : int32_t{0};
+      }
       const char* env = std::getenv("XLLM_USE_FA3");
-      return env && std::string(env) == "1";
+      if (env == nullptr) {
+        return int32_t{-1};
+      }
+      return std::string(env) == "1" ? int32_t{1} : int32_t{0};
     }();
-    if (use_fa3) {
+    const int64_t gqa_ratio =
+        num_kv_heads_ > 0 ? num_heads_ / num_kv_heads_ : 0;
+    const bool default_to_fa3 = query.scalar_type() == torch::kBFloat16 &&
+                                head_size_ == 256 && gqa_ratio == 8;
+    const bool use_fa3 =
+        fa3_setting < 0 ? default_to_fa3 : fa3_setting == 1;
+    const bool fa3_shape_supported =
+        query.scalar_type() == torch::kBFloat16 && head_size_ == 256 &&
+        num_kv_heads_ > 0 &&
+        (num_heads_ == num_kv_heads_ * 6 ||
+         num_heads_ == num_kv_heads_ * 8);
+    if (use_fa3 && fa3_shape_supported) {
       CHECK(decode_attn.block_table.defined())
           << "FA3 decode requires block_table (rectangular page_table)";
       const int64_t batch_size = decode_attn.block_table.size(0);

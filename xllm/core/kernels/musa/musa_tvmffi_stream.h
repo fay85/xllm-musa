@@ -47,9 +47,27 @@ inline bool is_torch_musa_device(const torch::Device& device) {
 
 void bind_musa_tvmffi_stream(const torch::Device& device);
 
+bool is_musa_stream_capturing();
+
 void sync_current_musa_stream(const torch::Device& device);
 
 void sync_musa_ffi_stream(const torch::Device& device);
+
+void sync_musa_graph_preparation_stage(const torch::Device& device);
+
+class MusaTvmffiPreparationSyncGuard final {
+ public:
+  MusaTvmffiPreparationSyncGuard();
+  ~MusaTvmffiPreparationSyncGuard();
+
+  MusaTvmffiPreparationSyncGuard(const MusaTvmffiPreparationSyncGuard&) =
+      delete;
+  MusaTvmffiPreparationSyncGuard& operator=(
+      const MusaTvmffiPreparationSyncGuard&) = delete;
+
+ private:
+  bool previous_ = false;
+};
 
 class MusaTvmffiStreamGuard final {
  public:

@@ -21,10 +21,20 @@ limitations under the License.
 #include <vector>
 
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/util/env_var.h"
 #include "core/util/prefill_breakdown.h"
 
 namespace xllm {
 namespace layer {
+namespace {
+
+bool fused_qk_norm_rope_enabled() {
+  static const bool enabled =
+      util::get_bool_env("XLLM_MUSA_FUSED_QK_NORM_ROPE", true);
+  return enabled;
+}
+
+}  // namespace
 
 Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
     const ModelArgs& args,
@@ -178,7 +188,6 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     PrefillBreakdown::Scope qkv_scope(PrefillBreakdown::Bucket::kFullQkv);
     qkv = qkv_proj_->forward(hidden_states);
   }
-
   if (use_fused_qkv_) {
     torch::Tensor q_flat;
     torch::Tensor k_flat;
@@ -244,7 +253,8 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
 
     // Fused QK-norm + RoPE: collapse 3 kernel launches into 1 for decode
     // (1D positions). Writes norm+rope results back into qkv in-place.
-    if (positions.dim() == 1 && positions.scalar_type() == torch::kInt32 &&
+    if (fused_qk_norm_rope_enabled() && positions.dim() == 1 &&
+        positions.scalar_type() == torch::kInt32 &&
         (head_dim_ == 64 || head_dim_ == 128 || head_dim_ == 256)) {
       auto cos_sin_cache = rotary_emb_->get_cos_sin_cache();
       int64_t k_head_offset = attn_output_gate_ ? num_heads_ * 2 : num_heads_;
@@ -275,13 +285,13 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
       rotary_emb_->forward(positions, q, k);
     }
   }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(q.device());
 
   torch::Tensor out;
   {
     PrefillBreakdown::Scope fa_scope(PrefillBreakdown::Bucket::kFullFa);
     out = std::get<0>(attn_->forward(attn_metadata, q, k, v, kv_cache));
   }
-
   {
     PrefillBreakdown::Scope o_scope(PrefillBreakdown::Bucket::kFullOProj);
     if (attn_output_gate_) {

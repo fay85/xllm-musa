@@ -39,6 +39,8 @@ limitations under the License.
 namespace xllm::kernel::cuda {
 namespace {
 
+thread_local bool s_force_ffi_preparation_sync = false;
+
 c10::musa::MUSAStream& get_or_create_tvmffi_musa_stream(
     c10::DeviceIndex device_index) {
   static thread_local std::array<std::optional<c10::musa::MUSAStream>, 8> slots;
@@ -81,6 +83,10 @@ bool current_musa_stream_is_valid(c10::DeviceIndex device_index) {
 
 }
 
+bool is_musa_stream_capturing() {
+  return is_current_stream_capturing();
+}
+
 void bind_musa_tvmffi_stream(const torch::Device& device) {
   if (!is_torch_musa_device(device)) {
     return;
@@ -118,6 +124,47 @@ void sync_musa_ffi_stream(const torch::Device& device) {
   get_or_create_tvmffi_musa_stream(device.index()).synchronize();
 }
 
+// During MUSA graph preparation, the executor deliberately runs eager
+// warmup/FFI-record forwards on the stream that will be captured next.  Some
+// torch_musa releases report that stream as "capturing" before
+// cudaGraph/capture_begin is entered.  The public sync helpers correctly
+// avoid synchronizing a genuinely active capture, but that early status would
+// otherwise skip the preparation barriers and let MoE/FFI work race the next
+// full-attention kernel.  Keep a preparation-only variant that bypasses the
+// status check; the guard is never held while the real graph is active.
+void sync_current_musa_stream_for_preparation(const torch::Device& device) {
+  if (!is_torch_musa_device(device)) {
+    return;
+  }
+  c10::musa::MUSAGuard device_guard(device.index());
+  c10::musa::getCurrentMUSAStream(device.index()).synchronize();
+}
+
+void sync_musa_ffi_stream_for_preparation(const torch::Device& device) {
+  if (!is_torch_musa_device(device)) {
+    return;
+  }
+  c10::musa::MUSAGuard device_guard(device.index());
+  get_or_create_tvmffi_musa_stream(device.index()).synchronize();
+}
+
+void sync_musa_graph_preparation_stage(const torch::Device& device) {
+  if (!s_force_ffi_preparation_sync) {
+    return;
+  }
+  sync_current_musa_stream_for_preparation(device);
+  sync_musa_ffi_stream_for_preparation(device);
+}
+
+MusaTvmffiPreparationSyncGuard::MusaTvmffiPreparationSyncGuard()
+    : previous_(s_force_ffi_preparation_sync) {
+  s_force_ffi_preparation_sync = true;
+}
+
+MusaTvmffiPreparationSyncGuard::~MusaTvmffiPreparationSyncGuard() {
+  s_force_ffi_preparation_sync = previous_;
+}
+
 MusaTvmffiStreamGuard::MusaTvmffiStreamGuard(const torch::Device& device)
     : device_(device), active_(is_torch_musa_device(device)) {
   if (!active_) {
@@ -132,7 +179,10 @@ MusaTvmffiStreamGuard::MusaTvmffiStreamGuard(const torch::Device& device)
 }
 
 MusaTvmffiStreamGuard::~MusaTvmffiStreamGuard() {
-  if (active_ && needs_sync_) {
+  if (active_ && s_force_ffi_preparation_sync) {
+    sync_current_musa_stream_for_preparation(device_);
+    sync_musa_ffi_stream_for_preparation(device_);
+  } else if (active_ && needs_sync_) {
     sync_musa_ffi_stream(device_);
   }
 }
@@ -457,10 +507,10 @@ int32_t torch_dlpack_managed_tensor_allocator(
             .dtype(at::toScalarType(prototype->dtype))
             .device(dl_device_to_torch_device_for_dlpack_v1(prototype->device));
 
-    if (ffi_alloc_dump_enabled()) {
-      thread_local int64_t call_idx = 0;
-      const int64_t this_call = call_idx++;
-
+    const bool dump_alloc = ffi_alloc_dump_enabled();
+    thread_local int64_t call_idx = 0;
+    const int64_t this_call = dump_alloc ? call_idx++ : -1;
+    if (dump_alloc) {
       const int64_t dtype_bits =
           static_cast<int64_t>(prototype->dtype.bits) *
           static_cast<int64_t>(prototype->dtype.lanes);
@@ -525,6 +575,15 @@ int32_t torch_dlpack_managed_tensor_allocator(
         tensor = torch::empty(shape, options);
         break;
       }
+    }
+    if (dump_alloc) {
+      const uintptr_t address =
+          reinterpret_cast<uintptr_t>(tensor.data_ptr());
+      LOG(INFO) << "[TVMFFI-ALLOC-PTR #" << this_call
+                << "] mode=" << static_cast<int>(g_ffi_alloc_state.mode)
+                << " data=" << tensor.data_ptr()
+                << " mod4k=" << address % 4096
+                << " mod16k=" << address % 16384;
     }
     *out = to_dlpack_impl<DLManagedTensorVersioned>(tensor);
     return 0;

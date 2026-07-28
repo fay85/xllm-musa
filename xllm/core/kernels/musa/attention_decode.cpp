@@ -44,6 +44,12 @@ constexpr const char* kFa3FwdUriHashGqa6 =
     "9e4f4b2e6574a7a45a93fef39cf9b0485651e39052d9dfd88c2e1439137a9374";
 constexpr const char* kFa3FwdUriHashGqa8 =
     "94150355c74bdc57b0ec3f0a18926ec238aa401b7a6506ec460120ca8726277b";
+constexpr const char* kFa3FwdCombine16Uri =
+    "fmha_fwd_combine_bf16_16x64x16_ragged_q_metadata";
+constexpr const char* kFa3FwdCombine32Uri =
+    "fmha_fwd_combine_bf16_16x64x32_ragged_q_metadata";
+constexpr const char* kFa3FwdCombine64Uri =
+    "fmha_fwd_combine_bf16_16x64x64_ragged_q_metadata";
 
 // Dense ragged FA3 prefill (SGLang flash_attn_varlen_func). bf16, head_dim=256,
 // GQA ratio=6, causal, no packgqa/metadata. Built into FLASHINFER_OPS_PATH.
@@ -109,7 +115,40 @@ ffi::Optional<int64_t> none_int() {
   return ffi::Optional<int64_t>();
 }
 
+void combine_fa3_split_k(const ffi::Any& fwd_result,
+                         const torch::Tensor& cu_seqlens_q,
+                         int64_t max_seqlen_q,
+                         const torch::Tensor& scheduler_metadata,
+                         torch::Tensor& output,
+                         torch::Tensor& output_lse) {
+  auto result_values = fwd_result.cast<ffi::Array<ffi::Any>>();
+  CHECK_EQ(result_values.size(), 2)
+      << "FA3 forward must return [accumulators, num_splits]";
+  auto accumulators = result_values[0].cast<ffi::Array<ffi::Tensor>>();
+  CHECK_EQ(accumulators.size(), 2)
+      << "FA3 forward must return output and LSE accumulators";
+  const int64_t num_splits = result_values[1].cast<int64_t>();
+  CHECK_GT(num_splits, 0) << "FA3 forward returned invalid split count";
+  CHECK_LE(num_splits, 64)
+      << "deployed FA3 combine artifacts support at most 64 splits";
+  const char* combine_uri =
+      num_splits <= 16 ? kFa3FwdCombine16Uri
+                       : (num_splits <= 32 ? kFa3FwdCombine32Uri
+                                           : kFa3FwdCombine64Uri);
+
+  get_function(combine_uri, combine_uri)(
+      to_ffi_tensor(cu_seqlens_q),
+      none_tensor(),
+      ffi::Optional<int64_t>(max_seqlen_q),
+      to_ffi_tensor(output),
+      to_ffi_tensor(output_lse),
+      accumulators[0],
+      accumulators[1],
+      to_ffi_tensor(scheduler_metadata),
+      num_splits);
 }
+
+}  // namespace
 
 torch::Tensor fa3_decode_scheduler_metadata(
     const torch::Device& device,
@@ -223,11 +262,17 @@ void fa3_decode(const torch::Tensor& query,
                 double sm_scale,
                 torch::Tensor& output,
                 torch::Tensor& output_lse) {
-  CHECK(scheduler_metadata.defined() && scheduler_metadata.numel() >= 3)
-      << "fa3_decode: scheduler_metadata must be precomputed (size >= 3*B)";
+  CHECK(scheduler_metadata.defined())
+      << "fa3_decode: scheduler_metadata must be precomputed";
   CHECK(cu_seqlens_q.defined() && cu_seqlens_q.scalar_type() == torch::kInt32);
   CHECK(seqused_k.defined() && seqused_k.scalar_type() == torch::kInt32);
   CHECK(page_table.defined() && page_table.scalar_type() == torch::kInt32);
+  const int64_t batch_size = seqused_k.numel();
+  CHECK_GT(batch_size, 0);
+  CHECK_EQ(cu_seqlens_q.numel(), batch_size + 1);
+  CHECK_EQ(page_table.size(0), batch_size);
+  CHECK_EQ(scheduler_metadata.numel(), batch_size * 4)
+      << "fa3_decode: scheduler_metadata size must be 4*batch_size";
 
   CHECK_GT(k_cache.size(-2), 0);
   CHECK_EQ(query.size(-2) % k_cache.size(-2), 0);
@@ -238,7 +283,7 @@ void fa3_decode(const torch::Tensor& query,
   // Match the current SGLang/Mate ABI used by the GQA=8 artifact: one
   // scheduler_metadata tensor followed by the optional learnable sink.
   if (gqa_ratio == 8) {
-    get_function(uri, uri)(
+    auto fwd_result = get_function(uri, uri)(
         to_ffi_tensor(query),
         to_ffi_tensor(k_cache),
         to_ffi_tensor(v_cache),
@@ -276,17 +321,25 @@ void fa3_decode(const torch::Tensor& query,
         /*cp_world_size=*/static_cast<int64_t>(1),
         /*cp_rank=*/static_cast<int64_t>(0),
         none_tensor());
+
+    // Metadata-enabled FA3 writes split-K partials. Keep the returned tensors
+    // alive through combine; graph capture's FFI allocation replay owns their
+    // backing storage across subsequent graph replays.
+    combine_fa3_split_k(fwd_result,
+                        cu_seqlens_q,
+                        max_seqlen_q,
+                        scheduler_metadata,
+                        output,
+                        output_lse);
     return;
   }
 
-  const int64_t b = scheduler_metadata.numel() / 4;
-  CHECK_GT(b, 0)
-      << "fa3_decode: scheduler_metadata size must be 4*batch_size";
+  const int64_t b = batch_size;
   auto num_splits_dynamic = scheduler_metadata.slice(0, 0, b);
   auto batch_table = scheduler_metadata.slice(0, b, 2 * b);
   auto num_m_blocks = scheduler_metadata.slice(0, 2 * b, 3 * b);
 
-  get_function(uri, uri)(
+  auto fwd_result = get_function(uri, uri)(
       to_ffi_tensor(query),
       to_ffi_tensor(k_cache),
       to_ffi_tensor(v_cache),
@@ -326,6 +379,15 @@ void fa3_decode(const torch::Tensor& query,
       /*cp_world_size=*/static_cast<int64_t>(1),
       /*cp_rank=*/static_cast<int64_t>(0),
       none_tensor());
+
+  // The older GQA=6 forward ABI exposes scheduler metadata as tensor views,
+  // but its split-K result contract matches GQA=8.
+  combine_fa3_split_k(fwd_result,
+                      cu_seqlens_q,
+                      max_seqlen_q,
+                      scheduler_metadata,
+                      output,
+                      output_lse);
 }
 
 void fa3_prefill(const torch::Tensor& query,
@@ -590,7 +652,7 @@ void fa3_prefill_paged(const torch::Tensor& query,
   // This is the same Mate ABI used by SGLang's MUSA FA3
   // flash_attn_with_kvcache call.  The KV values are already in k_cache/v_cache;
   // cu_seqlens_k_new supplies the causal position of each query token.
-  get_function(uri, uri)(
+  auto fwd_result = get_function(uri, uri)(
       to_ffi_tensor(query),
       to_ffi_tensor(k_cache),
       to_ffi_tensor(v_cache),
@@ -628,6 +690,12 @@ void fa3_prefill_paged(const torch::Tensor& query,
       /*cp_world_size=*/static_cast<int64_t>(1),
       /*cp_rank=*/static_cast<int64_t>(0),
       none_tensor());
+  combine_fa3_split_k(fwd_result,
+                      cu_seqlens_q,
+                      max_seqlen_q,
+                      scheduler_metadata,
+                      output,
+                      output_lse);
 }
 
 void batch_decode(const std::string& uri,

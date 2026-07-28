@@ -73,6 +73,14 @@ torch::Tensor gemm_fp8_nt_groupwise(
       to_ffi_tensor(out),
       /*backend=*/std::string("mudnn"));
 
+  // muDNN may complete the eager FP8 GEMM after the TVM-FFI call returns.
+  // Ensure PyTorch consumers cannot reuse or read `out` before that write is
+  // visible. Both helpers are capture-aware no-ops, so graph capture/replay
+  // remains asynchronous; the pool-stream sync covers the null-current-stream
+  // fallback selected by MusaTvmffiStreamGuard.
+  sync_current_musa_stream(a.device());
+  sync_musa_ffi_stream(a.device());
+
   return out;
 }
 

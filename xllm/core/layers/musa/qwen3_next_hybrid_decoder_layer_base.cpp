@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 
+#include "kernels/musa/musa_tvmffi_stream.h"
 #include "util/prefill_breakdown.h"
 
 #include <algorithm>
@@ -137,6 +138,7 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
       std::tie(x, residual) = input_norm_->forward(x, residual);
     }
   }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
   // Attention
   if (attention_) {
@@ -147,12 +149,14 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
     PrefillBreakdown::Scope attn_scope(PrefillBreakdown::Bucket::kGdnAttn);
     x = linear_attention_->forward(x, attn_metadata, kv_cache, input_params);
   }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
   // Post-attention norm
   {
     PrefillBreakdown::Scope norm_scope(PrefillBreakdown::Bucket::kNorm);
     std::tie(x, residual) = post_norm_->forward(x, residual);
   }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
   // MLP forward (sub-buckets live inside DenseMLPImpl::forward).
   if (moe_mlp_) {
@@ -161,6 +165,7 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   } else {
     x = mlp_(x);
   }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
   return x;
 }

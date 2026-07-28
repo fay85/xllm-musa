@@ -63,12 +63,19 @@ bool s_enable_graph_timing() {
   return val;
 }
 
-bool s_use_musa_fa3_decode() {
-  static const bool enabled = [] {
+bool s_use_musa_fa3_decode(int64_t gqa_ratio) {
+  static const int32_t setting = [] {
+    const char* decode_env = std::getenv("XLLM_USE_FA3_DECODE");
+    if (decode_env != nullptr) {
+      return std::string(decode_env) == "1" ? int32_t{1} : int32_t{0};
+    }
     const char* env = std::getenv("XLLM_USE_FA3");
-    return env != nullptr && std::string(env) == "1";
+    if (env == nullptr) {
+      return int32_t{-1};
+    }
+    return std::string(env) == "1" ? int32_t{1} : int32_t{0};
   }();
-  return enabled;
+  return setting < 0 ? gqa_ratio == 8 : setting == 1;
 }
 
 // Phase D: wall+device time for packed/eager pure-prefill forwards.
@@ -256,7 +263,7 @@ torch::Tensor get_linear_state_snapshot_indices(
         torch::TensorOptions().dtype(torch::kLong).device(device));
   }
   CHECK(!params.embedding.linear_state_ids.empty())
-      << "chunked prefill graph capture requires linear state ids";
+      << "MUSA graph capture requires linear state ids";
   return torch::tensor(
       params.embedding.linear_state_ids,
       torch::TensorOptions().dtype(torch::kLong).device(device));
@@ -1201,14 +1208,13 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
           : 1;
   const int64_t block_size = options_.block_size();
 
-  // Get sliding_window from ModelArgs (default to -1 if not available)
-  // Note: sliding_window in ModelArgs is the actual window size, but in
-  // attention it's used as window_size_left which is typically sliding_window
-  // - 1. This matches the behavior in attention.cpp where sliding_window_ is
-  // initialized as sliding_window - 1 regardless of the value.
-  int32_t sliding_window = args_.sliding_window();
-  sliding_window =
-      sliding_window - 1;  // Convert to window_size_left (always subtract 1)
+  // ModelArgs stores the window length, while the attention kernels consume
+  // the inclusive left-window offset. Preserve -1 as the disabled sentinel.
+  const int32_t model_sliding_window = args_.sliding_window();
+  const int32_t sliding_window =
+      args_.use_sliding_window() && model_sliding_window > 0
+          ? model_sliding_window - 1
+          : -1;
 
   // Get dtype from k_cache
   const auto dtype = k_cache.scalar_type();
@@ -1497,13 +1503,14 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   // copy it into the tensor address retained by the captured attention calls.
   const bool is_qwen3_5 = args_.model_type() == "qwen3_5_text" ||
                           args_.model_type() == "qwen3_5_moe_text";
-  if (s_use_musa_fa3_decode() && is_qwen3_5 &&
+  const int64_t gqa_ratio =
+      n_kv_heads > 0 ? n_heads / n_kv_heads : int64_t{0};
+  if (s_use_musa_fa3_decode(gqa_ratio) && is_qwen3_5 &&
       !attn_metadata->is_prefill &&
       !attn_metadata->is_chunked_prefill &&
       !use_expanded_spec_decode_attention &&
       attn_metadata->block_table.defined()) {
     const int64_t batch_size = attn_metadata->block_table.size(0);
-    const int64_t gqa_ratio = n_heads / n_kv_heads;
     if (batch_size > 0 && (gqa_ratio == 6 || gqa_ratio == 8)) {
       const torch::Tensor cu_seqlens_q =
           attn_metadata->qo_indptr.has_value() &&
@@ -1512,6 +1519,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
               : attn_metadata->q_cu_seq_lens;
       CHECK(attn_metadata->kv_seq_lens.defined())
           << "FA3 graph decode requires per-sequence KV lengths";
+      attn_metadata->share_fa3_scheduler_metadata = true;
       attn_metadata->fa3_scheduler_metadata =
           xllm::kernel::cuda::fa3_decode_scheduler_metadata(
               device_,
@@ -1522,7 +1530,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
               head_dim,
               std::max<int32_t>(attn_metadata->max_query_len, 1),
               std::max<int32_t>(attn_metadata->max_seq_len, 1),
-              args_.use_sliding_window() ? args_.sliding_window() : -1,
+              sliding_window,
               /*window_size_right=*/0,
               cu_seqlens_q,
               attn_metadata->kv_seq_lens);
@@ -1727,22 +1735,17 @@ bool MusaGraph::capture(CausalLM* model,
   captured_fa3_scheduler_metadata_ =
       graph_params_opt.value().attn_metadata->fa3_scheduler_metadata;
 
-  // Chunked-prefill capture executes a warmup forward and a capture forward
-  // before the real replay. Both mutate GDN convolution and recurrent state.
-  // Snapshot the live sequence rows so each pass starts from the same state and
-  // the first replay observes exactly one application of the current chunk.
-  // Spec-verify uses the chunked-prefill model path even when it is captured
-  // by the normal CUDA-graph runner (rather than the piecewise runner).  Both
-  // the eager warmup and the recorded FFI forward execute the GDN recurrent
-  // update, so they must start from the same live state as the eventual graph
-  // replay.  Restricting this guard to is_piecewise_ advances conv/SSM state
-  // three times before the first replay and produces a low MTP acceptance rate.
-  const bool snapshot_chunked_linear_state =
-      params.meta.batch_forward_type.is_chunked_prefill() &&
+  // Graph preparation executes eager warmup and FFI-record forwards before
+  // the real replay. Each forward mutates GDN convolution and recurrent state,
+  // including ordinary decode capture. Snapshot the live sequence rows so
+  // every preparation pass starts from the same state and the first replay
+  // applies the current token or chunk exactly once.
+  const bool snapshot_linear_state =
+      params.embedding.linear_state_indices.defined() ||
       !params.embedding.linear_state_ids.empty();
   torch::Tensor linear_state_snapshot_indices;
   std::vector<IndexedTensorSnapshot> linear_state_snapshots;
-  if (snapshot_chunked_linear_state) {
+  if (snapshot_linear_state) {
     linear_state_snapshot_indices =
         get_linear_state_snapshot_indices(params, persistent_param_.device());
     linear_state_snapshots = snapshot_linear_attention_state(
@@ -1761,11 +1764,19 @@ bool MusaGraph::capture(CausalLM* model,
     // Warmup: execute forward once without capture to initialize cuBLAS handles
     // and other CUDA resources. This is necessary because these resources
     // cannot be created during CUDA graph capture mode.
-    model->forward(persistent_param_.persistent_tokens(padded_num_tokens_),
-                   persistent_param_.persistent_positions(padded_num_tokens_),
-                   kv_cache,
-                   graph_params_opt.value());
-    if (snapshot_chunked_linear_state) {
+    {
+      xllm::kernel::cuda::MusaTvmffiPreparationSyncGuard ffi_sync_guard;
+      model->forward(persistent_param_.persistent_tokens(padded_num_tokens_),
+                     persistent_param_.persistent_positions(padded_num_tokens_),
+                     kv_cache,
+                     graph_params_opt.value());
+    }
+    // MUSA TVM-FFI/AOT operators may finish initialization work on their
+    // thread-local pool stream even when the model forward runs on the capture
+    // stream. Drain that stream before restoring state or beginning capture;
+    // synchronizing only capture_stream leaves initialization racing capture.
+    xllm::kernel::cuda::sync_musa_ffi_stream(persistent_param_.device());
+    if (snapshot_linear_state) {
       restore_linear_attention_state(linear_state_snapshots,
                                      linear_state_snapshot_indices);
       capture_stream.synchronize();
@@ -1818,7 +1829,7 @@ bool MusaGraph::capture(CausalLM* model,
               << bucket_num_tokens
               << ", num_graphs: " << piecewise_graph_.size()
               << ", num_runners: " << piecewise_graph_.num_runners();
-    if (snapshot_chunked_linear_state) {
+    if (snapshot_linear_state) {
       restore_linear_attention_state(linear_state_snapshots,
                                      linear_state_snapshot_indices);
     }
@@ -1841,22 +1852,28 @@ bool MusaGraph::capture(CausalLM* model,
     }
     for (int warmup_iter = 0; warmup_iter < 2; ++warmup_iter) {
       capture_stream.synchronize();
-      auto warmup_result = model->forward(
-          persistent_param_.persistent_tokens(padded_num_tokens_),
-          persistent_param_.persistent_positions(padded_num_tokens_),
-          kv_cache,
-          graph_params_opt.value());
-      if (capture_logits_) {
-        // Pre-warm lm_head output_buf_ so no torch::empty fires under capture.
-        auto warmup_logits =
-            model->logits(warmup_result.hidden_states, torch::Tensor());
-        persistent_param_.set_logits(warmup_logits);
+      {
+        xllm::kernel::cuda::MusaTvmffiPreparationSyncGuard ffi_sync_guard;
+        auto warmup_result = model->forward(
+            persistent_param_.persistent_tokens(padded_num_tokens_),
+            persistent_param_.persistent_positions(padded_num_tokens_),
+            kv_cache,
+            graph_params_opt.value());
+        if (capture_logits_) {
+          // Pre-warm lm_head output_buf_ so no torch::empty fires under capture.
+          auto warmup_logits =
+              model->logits(warmup_result.hidden_states, torch::Tensor());
+          persistent_param_.set_logits(warmup_logits);
+        }
       }
-      if (snapshot_chunked_linear_state) {
+      xllm::kernel::cuda::sync_musa_ffi_stream(persistent_param_.device());
+      if (snapshot_linear_state) {
         // The warmup is an eager forward and therefore mutates the live
         // recurrent state. Restore it before the next warmup so every warmup
         // observes the same input state as the captured replay.
         capture_stream.synchronize();
+      }
+      if (snapshot_linear_state) {
         restore_linear_attention_state(linear_state_snapshots,
                                        linear_state_snapshot_indices);
       }
@@ -1870,6 +1887,7 @@ bool MusaGraph::capture(CausalLM* model,
     recorded_ffi_allocs_.clear();
     xllm::kernel::cuda::begin_ffi_alloc_record();
     {
+      xllm::kernel::cuda::MusaTvmffiPreparationSyncGuard ffi_sync_guard;
       auto ffi_forward = model->forward(
           persistent_param_.persistent_tokens(padded_num_tokens_),
           persistent_param_.persistent_positions(padded_num_tokens_),
@@ -1881,10 +1899,13 @@ bool MusaGraph::capture(CausalLM* model,
         persistent_param_.set_logits(ffi_logits);
       }
     }
-    if (snapshot_chunked_linear_state) {
+    xllm::kernel::cuda::sync_musa_ffi_stream(persistent_param_.device());
+    if (snapshot_linear_state) {
       // The FFI recording pass is eager as well; leave the live cache at the
       // pre-capture state before beginning graph capture.
       capture_stream.synchronize();
+    }
+    if (snapshot_linear_state) {
       restore_linear_attention_state(linear_state_snapshots,
                                      linear_state_snapshot_indices);
     }
@@ -1937,6 +1958,16 @@ bool MusaGraph::capture(CausalLM* model,
     // End graph capture
     graph_.capture_end();
     xllm::kernel::cuda::end_ffi_alloc_replay();
+    if (snapshot_linear_state) {
+      capture_stream.synchronize();
+    }
+    if (snapshot_linear_state) {
+      // The captured forward executes once while recording and mutates the
+      // live convolution/SSM cache. Restore the pre-capture snapshot so the
+      // first replay applies the current decode input exactly once.
+      restore_linear_attention_state(linear_state_snapshots,
+                                     linear_state_snapshot_indices);
+    }
   }
 
   // Synchronize to ensure graph capture is completed.

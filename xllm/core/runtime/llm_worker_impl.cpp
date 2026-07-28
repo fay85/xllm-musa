@@ -37,6 +37,7 @@ limitations under the License.
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/load_config.h"
+#include "core/util/env_var.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/kv_cache_transfer/kv_transfer_completion.h"
 #include "framework/model/model_input_params.h"
@@ -86,6 +87,13 @@ LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
                              const runtime::Options& options)
     : WorkerImpl(parallel_args, device, options) {
   device_.set_device();
+#if defined(USE_MUSA)
+  static const bool use_pool_compute_stream =
+      util::get_bool_env("XLLM_MUSA_POOL_COMPUTE_STREAM", true);
+  if (use_pool_compute_stream) {
+    compute_stream_ = device_.get_stream_from_pool();
+  }
+#endif
 #if defined(USE_CUDA) || defined(USE_MUSA)
   threadpool_.schedule([this]() mutable {
     // initialize flashinfer workspace
@@ -251,7 +259,7 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     bool record_ready_event) {
   MULTI_MODEL_STEP_LOCK(::xllm::KVCacheConfig::get_instance().enable_xtensor());
 
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   const bool is_decode_step =
       input.input_params.meta.batch_forward_type.is_decode();
   const bool is_prefill_step =
