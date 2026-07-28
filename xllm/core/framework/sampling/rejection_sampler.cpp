@@ -23,6 +23,7 @@ limitations under the License.
 
 #include "kernels/ops_api.h"
 #include "sampler.h"
+#include "util/env_var.h"
 #if defined(USE_MUSA)
 #include "kernels/musa/musa_ops_api.h"
 #endif
@@ -90,6 +91,22 @@ SampleOutput RejectionSampler::forward(const torch::Tensor& draft_token_ids,
   //            mask_out_rejected_tokens is true.
   bool use_fused_kernel =
       enable_fused_kernel_ && (!logprobs_ && mask_out_rejected_tokens);
+
+  static const bool debug_mtp_acceptance =
+      util::get_bool_env("XLLM_DEBUG_MTP_ACCEPTANCE", false);
+  if (debug_mtp_acceptance) {
+    const char* sampler_path =
+        all_greedy_sample_
+            ? "greedy_unfused"
+            : (use_fused_kernel ? "random_fused" : "random_unfused");
+    LOG_FIRST_N(INFO, 1)
+        << "[MTP path] rejection_sampler=" << sampler_path
+        << " k=" << draft_token_ids.size(1)
+        << " draft_probs_dim=" << draft_probs.dim()
+        << " selected_only_draft_probs=" << (draft_probs.dim() == 2)
+        << " mask_rejected=" << mask_out_rejected_tokens
+        << " fused_kernel_enabled=" << enable_fused_kernel_;
+  }
 
   // select the random sampler function based on the use_fused_kernel flag
   auto random_sampler_func = use_fused_kernel

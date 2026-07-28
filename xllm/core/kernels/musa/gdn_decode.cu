@@ -969,25 +969,45 @@ torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params) {
 
   const std::string uri =
       get_mate_gdn_mtp_uri(num_k_heads, num_v_heads, q.scalar_type());
-  auto run = get_function(uri, "run");
+  auto direct_run = get_module(uri)->GetFunction("main");
+  auto run = direct_run.defined() ? direct_run.value()
+                                  : get_function(uri, "run");
   {
     // Worker compute streams do not always expose a native MUSA handle. In
     // that case TVM FFI falls back to its pool stream, so both stream
     // boundaries must be synchronized to keep the temporary inputs alive and
     // make the output visible to the following target layers.
     MusaTvmffiStreamGuard stream_guard(q.device());
-    run(to_ffi_tensor(q),
-        to_ffi_tensor(k),
-        to_ffi_tensor(v),
-        to_ffi_tensor(A_log),
-        to_ffi_tensor(a),
-        to_ffi_tensor(dt_bias),
-        to_ffi_tensor(b),
-        to_ffi_tensor(state_indices),
-        to_ffi_tensor(state_f32),
-        to_ffi_tensor(intermediate),
-        to_ffi_tensor(output),
-        static_cast<double>(params.scale));
+    if (direct_run.defined()) {
+      // New TileLang modules expose their generated kernel through main and
+      // take the runtime scale before state. This avoids the legacy wrapper's
+      // init/call/get_last_error ABI, which current Mate no longer emits.
+      run(to_ffi_tensor(q),
+          to_ffi_tensor(k),
+          to_ffi_tensor(v),
+          to_ffi_tensor(A_log),
+          to_ffi_tensor(a),
+          to_ffi_tensor(dt_bias),
+          to_ffi_tensor(b),
+          static_cast<float>(params.scale),
+          to_ffi_tensor(state_f32),
+          to_ffi_tensor(state_indices),
+          to_ffi_tensor(intermediate),
+          to_ffi_tensor(output));
+    } else {
+      run(to_ffi_tensor(q),
+          to_ffi_tensor(k),
+          to_ffi_tensor(v),
+          to_ffi_tensor(A_log),
+          to_ffi_tensor(a),
+          to_ffi_tensor(dt_bias),
+          to_ffi_tensor(b),
+          to_ffi_tensor(state_indices),
+          to_ffi_tensor(state_f32),
+          to_ffi_tensor(intermediate),
+          to_ffi_tensor(output),
+          static_cast<double>(params.scale));
+    }
   }
 
   return output;
@@ -2542,6 +2562,26 @@ void launch(const torch::Tensor& mixed_qkv,
             float softplus_beta,
             float softplus_threshold,
             cudaStream_t stream) {
+  if (num_k_heads == 16 && num_v_heads == 32 && head_k_dim == 128 &&
+      head_v_dim == 128) {
+    launch_fused_gdn_h128_tiled<scalar_t>(mixed_qkv,
+                                          state,
+                                          A_log_f32,
+                                          a,
+                                          dt_bias_f32,
+                                          b,
+                                          state_indices_i32,
+                                          output,
+                                          num_k_heads,
+                                          num_v_heads,
+                                          qk_cols,
+                                          batch_size,
+                                          scale,
+                                          softplus_beta,
+                                          softplus_threshold,
+                                          stream);
+    return;
+  }
   const int work_threads = static_cast<int>(
       head_v_dim < head_k_dim ? head_k_dim : head_v_dim);
   const int block_threads = next_power_of_two(work_threads);

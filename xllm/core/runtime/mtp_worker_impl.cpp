@@ -47,6 +47,12 @@ constexpr uint64_t MBUF_SIZE = 128 * 1024 * 1024;
 
 namespace {
 
+bool mtp_acceptance_debug_enabled() {
+  static const bool enabled =
+      util::get_bool_env("XLLM_DEBUG_MTP_ACCEPTANCE", false);
+  return enabled;
+}
+
 bool use_selected_only_validate_probs(bool configured_value) {
 #if defined(USE_MUSA)
   // The MUSA target-only rejection kernel consumes only the selected draft
@@ -1135,6 +1141,15 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
     stabilize_decode_host_tensors(input);
   }
   const int32_t num_speculative_tokens = options_.num_speculative_tokens();
+  if (mtp_acceptance_debug_enabled()) {
+    LOG_FIRST_N(INFO, 1)
+        << "[MTP path] step_decode k=" << num_speculative_tokens
+        << " schedule_overlap=" << enable_schedule_overlap()
+        << " chunked_spec_verify="
+        << use_chunked_prefill_spec_verify_path()
+        << " selected_only_validate_probs=" << enable_opt_validate_probs_
+        << " per_step_compute_stream_sync=1";
+  }
 
   std::vector<ForwardOutput> draft_outputs;
   ForwardInput current_draft_input, validate_input, next_step_input;
@@ -1331,6 +1346,10 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_validate(
 #if defined(USE_CUDA) || defined(USE_MUSA)
   if (validate_input.input_params.gdn_mtp_verify_cache != nullptr &&
       validate_input.input_params.gdn_mtp_verify_cache->enabled) {
+    if (mtp_acceptance_debug_enabled()) {
+      LOG_FIRST_N(INFO, 1)
+          << "[MTP path] state_commit=mate_gdn_intermediate_scatter";
+    }
     // Mate GDN MTP verify stashes per-layer intermediate states on the compute
     // stream.  The device-side commit runs on that same stream, so stream
     // ordering is sufficient and no pre-scatter host synchronization is

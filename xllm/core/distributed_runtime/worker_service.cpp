@@ -20,8 +20,10 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <algorithm>
-#include <boost/algorithm/string.hpp>
+#include <mutex>
 #include <vector>
+
+#include <boost/algorithm/string.hpp>
 
 #include "common/device_monitor.h"
 #include "common/global_flags.h"
@@ -35,6 +37,7 @@ limitations under the License.
 #include "framework/sampling/sampling_params.h"
 #include "runtime/forward_params.h"
 #include "runtime/params_utils.h"
+#include "util/env_var.h"
 #include "util/timer.h"
 
 namespace xllm {
@@ -70,6 +73,76 @@ int64_t count_negative_tokens(const torch::Tensor& tokens) {
     }
   }
   return count;
+}
+
+bool mtp_acceptance_debug_enabled() {
+  static const bool enabled =
+      util::get_bool_env("XLLM_DEBUG_MTP_ACCEPTANCE", false);
+  return enabled;
+}
+
+int64_t mtp_acceptance_debug_interval() {
+  static const int64_t interval = std::max<int64_t>(
+      util::get_int_env("XLLM_DEBUG_MTP_ACCEPTANCE_INTERVAL", 128), 1);
+  return interval;
+}
+
+void log_mtp_acceptance(int64_t batch_size,
+                        int64_t num_speculative_tokens,
+                        int64_t num_draft_tokens,
+                        int64_t num_accepted_tokens) {
+  if (!mtp_acceptance_debug_enabled()) {
+    return;
+  }
+
+  struct DebugState {
+    std::mutex mutex;
+    int64_t total_draft = 0;
+    int64_t total_accepted = 0;
+    int64_t reported_draft = 0;
+    int64_t reported_accepted = 0;
+    int64_t next_report = 0;
+  };
+  static DebugState state;
+
+  std::lock_guard<std::mutex> lock(state.mutex);
+  const int64_t interval = mtp_acceptance_debug_interval();
+  if (state.next_report == 0) {
+    state.next_report = interval;
+    LOG(INFO) << "[MTP acceptance] enabled, report_interval=" << interval
+              << " draft tokens";
+  }
+
+  state.total_draft += num_draft_tokens;
+  state.total_accepted += num_accepted_tokens;
+  if (state.total_draft < state.next_report) {
+    return;
+  }
+
+  const int64_t window_draft = state.total_draft - state.reported_draft;
+  const int64_t window_accepted =
+      state.total_accepted - state.reported_accepted;
+  const double window_rate =
+      window_draft > 0
+          ? static_cast<double>(window_accepted) / window_draft
+          : 0.0;
+  const double cumulative_rate =
+      state.total_draft > 0
+          ? static_cast<double>(state.total_accepted) / state.total_draft
+          : 0.0;
+  LOG(INFO) << "[MTP acceptance] batch=" << batch_size
+            << " k=" << num_speculative_tokens
+            << " step_accepted=" << num_accepted_tokens << "/"
+            << num_draft_tokens << " window=" << window_accepted << "/"
+            << window_draft << " (" << window_rate * 100.0
+            << "%) cumulative=" << state.total_accepted << "/"
+            << state.total_draft << " (" << cumulative_rate * 100.0 << "%)";
+
+  state.reported_draft = state.total_draft;
+  state.reported_accepted = state.total_accepted;
+  while (state.next_report <= state.total_draft) {
+    state.next_report += interval;
+  }
 }
 
 void record_speculative_metrics_from_output(const torch::Tensor& next_tokens,
@@ -110,9 +183,13 @@ void record_speculative_metrics_from_output(const torch::Tensor& next_tokens,
 
   const int64_t num_draft_tokens = batch_size * num_speculative_tokens;
   rejected_count = std::min(rejected_count, num_draft_tokens);
+  const int64_t num_accepted_tokens = num_draft_tokens - rejected_count;
   COUNTER_ADD(speculative_num_draft_tokens_total, num_draft_tokens);
-  COUNTER_ADD(speculative_num_accepted_tokens_total,
-              num_draft_tokens - rejected_count);
+  COUNTER_ADD(speculative_num_accepted_tokens_total, num_accepted_tokens);
+  log_mtp_acceptance(batch_size,
+                     num_speculative_tokens,
+                     num_draft_tokens,
+                     num_accepted_tokens);
 }
 
 torch::Tensor clone_cpu_tensor_view(const torch::Tensor& tensor) {
