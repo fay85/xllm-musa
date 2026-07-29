@@ -23,7 +23,10 @@ import shlex
 import signal
 import subprocess
 import sys
+import threading
 import time
+import urllib.error
+import urllib.request
 from typing import NoReturn, Sequence, TextIO
 
 from scripts.logger import logger
@@ -40,12 +43,37 @@ def _package_binary_path() -> str:
     return os.path.join(os.path.dirname(os.path.realpath(__file__)), "xllm")
 
 
+def _installed_binary_path() -> str | None:
+    # When `xllm serve` runs from the repo root, `import xllm` is shadowed by
+    # the source-tree `xllm/` package (cwd precedes site-packages on sys.path).
+    # That directory has no compiled binary -- it only exists in the installed
+    # wheel -- so _package_binary_path() misses. Scan sys.path for an installed
+    # `xllm/xllm` executable so the command still works from the source tree.
+    this_dir = os.path.dirname(os.path.realpath(__file__))
+    for entry in sys.path:
+        package_dir = os.path.realpath(os.path.join(entry or os.getcwd(), "xllm"))
+        if package_dir == this_dir:
+            continue
+        candidate = os.path.join(package_dir, "xllm")
+        if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+            return candidate
+    return None
+
+
 def _resolve_binary_path(binary_path: str | None) -> str:
-    path = (
-        os.path.realpath(os.path.expanduser(binary_path))
-        if binary_path
-        else _package_binary_path()
-    )
+    if binary_path:
+        path = os.path.realpath(os.path.expanduser(binary_path))
+    else:
+        path = _package_binary_path()
+        if not os.path.isfile(path):
+            fallback = _installed_binary_path()
+            if fallback is not None:
+                logger.info(
+                    "xllm binary not found next to the source-tree package; "
+                    "using the installed binary at %s.",
+                    fallback,
+                )
+                path = fallback
     if not os.path.isfile(path):
         raise FileNotFoundError(
             f"xllm server binary was not found: {path}. "
@@ -101,6 +129,18 @@ def _build_parser() -> argparse.ArgumentParser:
         help=(
             "JSON config file forwarded to xllm. port and nnodes are used by "
             "this launcher."
+        ),
+    )
+    parser.add_argument(
+        "--enable-auto-tuning-gflags",
+        "--enable_auto_tuning_gflags",
+        dest="enable_auto_tuning",
+        action="store_true",
+        help=(
+            "Generate an optimal JSON config for the model's model_type and "
+            "launch with it. The tuned config is written to the current "
+            "working directory and forwarded via --config_json_file. Mutually "
+            "exclusive with --config_json_file."
         ),
     )
     parser.add_argument(
@@ -306,6 +346,47 @@ def _close_logs(processes: Sequence[ServerProcess]) -> None:
             server_process.log_file.close()
 
 
+def _probe_server_ready(
+    port: int,
+    stop_event: threading.Event,
+    poll_interval_s: float = 2.0,
+) -> None:
+    # Only rank 0 (the master node) serves the HTTP API and /health, so this is
+    # the readiness signal for the whole cluster: /health returns 200 once the
+    # model is loaded and all workers report healthy. Poll indefinitely; a slow
+    # model load must not be reported as a failure. The thread is a daemon and
+    # also stops as soon as the main loop signals process exit.
+    health_url = f"http://127.0.0.1:{port}/health"
+    while not stop_event.is_set():
+        try:
+            with urllib.request.urlopen(health_url, timeout=2) as response:
+                if response.status == 200:
+                    logger.info(
+                        "xllm server started successfully, serving on port %s "
+                        "(health: %s).",
+                        port,
+                        health_url,
+                    )
+                    return
+        except (urllib.error.URLError, OSError):
+            # Not accepting connections yet, or /health still reporting 503
+            # (workers connecting / model loading). Keep waiting.
+            pass
+        stop_event.wait(poll_interval_s)
+
+
+def _start_readiness_probe(port: int) -> tuple[threading.Thread, threading.Event]:
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=_probe_server_ready,
+        args=(port, stop_event),
+        name="xllm-readiness-probe",
+        daemon=True,
+    )
+    thread.start()
+    return thread, stop_event
+
+
 def _wait_for_processes(processes: Sequence[ServerProcess]) -> int:
     try:
         while True:
@@ -363,6 +444,21 @@ def launch_server(argv: Sequence[str] | None = None) -> int:
         _print_binary_help(parser, binary_path)
         return 0
 
+    if args.enable_auto_tuning:
+        if args.config_json_file:
+            parser.error(
+                "--enable-auto-tuning-gflags and --config_json_file are "
+                "mutually exclusive"
+            )
+        # Imported lazily so the common launch path keeps a light import
+        # surface and never touches the auto_config package.
+        from xllm.auto_config.utils import AutoTuningError, generate_tuned_config
+
+        try:
+            args.config_json_file = generate_tuned_config(extra_args, os.getcwd())
+        except AutoTuningError as error:
+            parser.error(f"auto-tuning failed: {error}")
+
     config_json = _load_config_json(parser, args)
     _apply_config_json_overrides(parser, args, config_json)
     _validate_args(parser, args)
@@ -386,6 +482,7 @@ def launch_server(argv: Sequence[str] | None = None) -> int:
 
     _install_signal_handlers()
     processes: list[ServerProcess] = []
+    readiness_stop_event: threading.Event | None = None
     try:
         for rank, command in zip(ranks, commands):
             processes.append(_start_process(command, rank, args.log_dir))
@@ -395,11 +492,17 @@ def launch_server(argv: Sequence[str] | None = None) -> int:
                     rank,
                     os.path.join(args.log_dir, f"node_{rank}.log"),
                 )
+        # Only rank 0 serves the HTTP API, so probe its port for readiness.
+        if 0 in ranks:
+            rank_0_port = _resolve_port(args, 0, launches_all_local_ranks)
+            _, readiness_stop_event = _start_readiness_probe(rank_0_port)
         return _wait_for_processes(processes)
     except BaseException:
         _terminate_processes(processes)
         raise
     finally:
+        if readiness_stop_event is not None:
+            readiness_stop_event.set()
         _close_logs(processes)
 
 
