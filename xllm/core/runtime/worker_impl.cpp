@@ -57,11 +57,11 @@ limitations under the License.
 #include "core/platform/sleepable_allocator.h"
 #if defined(USE_NPU)
 #include "platform/npu/device_capture_lock.h"
-#elif defined(USE_CUDA) || defined(USE_DCU)
+#elif defined(USE_CUDA) || defined(USE_DCU) || defined(USE_MUSA)
+#if !defined(USE_MUSA)
 #include "kernels/cuda/cuda_ops_api.h"
+#endif
 #include "platform/torch_profiler.h"
-#elif defined(USE_MUSA)
-#include "platform/musa/torch_profiler.h"
 #endif
 #if defined(USE_CUDA)
 #include "platform/cuda_profiler.h"
