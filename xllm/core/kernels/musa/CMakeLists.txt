@@ -42,7 +42,6 @@ set(_TORCH_MUSA_KERNEL_SRCS
   musa_fused_moe_aot.cpp
   # Graph-safe expert histogram/prefix/placement used by Qwen3.5 routing.
   ../cuda/moe/moe_compute_index.cu
-  # Fused reorder/weighted reduction shared with the NPU MoE combine stage.
   ../cuda/moe/moe_combine.cu
   # Fused per-token-group FP8 activation quant (MUSA-native intrinsics)
   fp8_act_quant.cu
