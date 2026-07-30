@@ -685,7 +685,7 @@ void DisaggPDScheduler::prefill_send_first_generation() {
         }
         ADD_VECTOR_TO_PROTO(gen->mutable_block_ids(), block_ids);
         gen->set_linear_state_id(
-            request->sequences()[0]->get_single_block_id());
+            request->sequences()[0]->get_recurrent_state_slot_id());
         gen->set_dp_size(instance_info_.dp_size);
         gen->set_dp_rank(request->sequences()[0]->dp_rank());
       }
@@ -819,7 +819,7 @@ bool DisaggPDScheduler::decode_recv_first_generation(
   Sequence* sequence = request->sequences()[0].get();
   const bool need_mtp_bootstrap = options_.num_speculative_tokens() > 0;
   if (need_mtp_bootstrap) {
-    const int32_t slot_id = sequence->get_single_block_id();
+    const int32_t slot_id = sequence->get_embedding_block_id();
     if (slot_id < 0) {
       LOG(ERROR) << "Invalid MTP bootstrap slot, request_id: " << req_id;
       kv_cache_manager_->deallocate(request.get());
@@ -882,9 +882,11 @@ bool DisaggPDScheduler::decode_recv_first_generation(
     }
     std::vector<uint64_t> src_linear_state_ids;
     std::vector<uint64_t> dst_linear_state_ids;
-    if (src_linear_state_id >= 0 && sequence->get_single_block_id() >= 0) {
+    const int32_t dst_linear_state_id =
+        sequence->get_recurrent_state_slot_id();
+    if (src_linear_state_id >= 0 && dst_linear_state_id >= 0) {
       src_linear_state_ids.emplace_back(src_linear_state_id);
-      dst_linear_state_ids.emplace_back(sequence->get_single_block_id());
+      dst_linear_state_ids.emplace_back(dst_linear_state_id);
     }
 
     int32_t dst_dp_rank = sequence->dp_rank();

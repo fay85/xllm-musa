@@ -519,7 +519,10 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
       .model_id(options_.model_id())
       .max_seqs_per_batch(options_.max_seqs_per_batch())
       .max_concurrent_requests(
-          ::xllm::ServiceConfig::get_instance().max_concurrent_requests());
+          ::xllm::ServiceConfig::get_instance().max_concurrent_requests())
+      .num_speculative_tokens(options_.num_speculative_tokens())
+      .num_embedding_blocks(
+          static_cast<uint32_t>(kv_cache_shape.key_cache_shape()[0]));
   if (util::is_deepseek_v4_model_type(args_.model_type())) {
     constexpr uint32_t kManagerTypeBlockManagerImpl = 0;
     constexpr uint32_t kManagerTypeSlidingWindowBlockManager = 1;
@@ -556,10 +559,7 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
         .swa_blocks_per_seq(swa_blocks_per_seq)
         .max_tokens_per_batch(options_.max_tokens_per_batch())
         .manager_types(std::move(manager_types))
-        .compress_ratios(std::move(manager_compress_ratios))
-        .max_seqs_per_batch(options_.max_seqs_per_batch())
-        .num_single_blocks(static_cast<uint32_t>(std::min<int64_t>(
-            kv_cache_cap.swa_count(), std::numeric_limits<uint32_t>::max())));
+        .compress_ratios(std::move(manager_compress_ratios));
   }
 
   if (options_.host_blocks_factor() > 1.0 || options_.enable_kvcache_store()) {

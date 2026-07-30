@@ -175,7 +175,10 @@ void DisaggPDServiceImpl::decode_recv_new_requests(
 
       auto dp_rank = sequence->dp_rank();
       resp->set_dp_rank(dp_rank);
-      resp->set_linear_state_id(sequence->get_single_block_id());
+      // Recurrent state uses the dedicated LINEAR slot. Models without
+      // linear-attention layers report -1.
+      resp->set_linear_state_id(
+          sequence->get_recurrent_state_slot_id());
 
       size_t shared_num = sequence->kv_state().shared_blocks_num(BlockType::KV);
       auto blocks = sequence->kv_state().blocks(BlockType::KV);

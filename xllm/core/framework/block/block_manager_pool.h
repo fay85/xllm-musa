@@ -19,8 +19,8 @@ limitations under the License.
 #include <vector>
 
 #include "block_manager.h"
+#include "framework/block/embedding_block_manager.h"
 #include "framework/block/kv_cache_manager.h"
-#include "framework/block/single_block_manager.h"
 
 namespace xllm {
 
@@ -30,9 +30,8 @@ class BlockManagerPool : public KVCacheManager {
     PROPERTY(uint32_t, num_blocks) = 0;
     PROPERTY(uint32_t, host_num_blocks) = 0;
     PROPERTY(int32_t, block_size) = 0;
-    // Sizes the SINGLE-resource pool (max concurrent live sequences); consumed
-    // by the num_single_blocks derivation. The engine/worker wiring PR migrates
-    // this to the max_seqs_per_batch-based sizing (and adapts the tests).
+    // Kept for target-branch option compatibility; EMBEDDING capacity is now
+    // supplied explicitly through num_embedding_blocks.
     PROPERTY(uint32_t, max_concurrent_requests) = 0;
     PROPERTY(bool, enable_linear_state) = false;
     // Total physical linear-state slots [0, N) for the unified slot pool
@@ -62,7 +61,8 @@ class BlockManagerPool : public KVCacheManager {
     PROPERTY(uint32_t, max_seqs_per_batch) = 0;
     // Hasher type bound to the engine (TEXT for LLM, MM for VLM).
     PROPERTY(BlockHasherType, hasher_type) = BlockHasherType::TEXT;
-    PROPERTY(uint32_t, num_single_blocks) = 0;
+    PROPERTY(uint32_t, num_embedding_blocks) = 0;
+    PROPERTY(uint32_t, num_speculative_tokens) = 0;
   };
 
   explicit BlockManagerPool(const Options& options, int32_t dp_size = 1);

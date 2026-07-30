@@ -125,12 +125,12 @@ class CompositeBlockManager : public BlockManager {
   std::map<BlockType, LeafEntry> leaves_;
 };
 
-// Build the leaf map for one DP rank from the pool options (per-model:
-// normal/Qwen -> {KV, SINGLE}; DSV4 -> {SWA, C4, C128, SINGLE}; xtensor ->
-// {KV(XTensorBlockManagerImpl), SINGLE}). Leaves are wrapped in
+// Build the cache-bearing leaf map for one DP rank (normal/Qwen -> {KV},
+// DSV4 -> {SWA, C4, C128}, xtensor -> {KV(XTensorBlockManagerImpl)}).
+// A LINEAR leaf is added for GDN recurrent state. Leaves are wrapped in
 // ConcurrentBlockManagerImpl when disagg-PD / kvcache store is enabled. The
-// SINGLE entry is appended by the caller (pool). dp_rank is needed by the
-// xtensor KV leaf (per-rank VMM page pool).
+// EMBEDDING entry is appended by the caller only for speculative decode.
+// dp_rank is needed by the xtensor KV leaf (per-rank VMM page pool).
 std::map<BlockType, CompositeBlockManager::LeafEntry> build_composite_leaves(
     const BlockManager::Options& options,
     int32_t dp_rank = 0);

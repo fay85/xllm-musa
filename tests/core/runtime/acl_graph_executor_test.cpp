@@ -734,11 +734,20 @@ TEST_F(AclGraphExecutorTest, BatchInputCarriesLinearStateIds) {
   ASSERT_FALSE(batch->empty());
   ASSERT_FALSE(sequences_.empty());
 
+  // embedding_ids come from the EMBEDDING slot, while linear_state_ids come
+  // from the dedicated LINEAR slot; the two are decoupled and carry
+  // independent ids through transport.
   auto& seq = sequences_.back();
-  auto linear_state_block = block_manager_->allocate(1);
-  ASSERT_EQ(linear_state_block.size(), 1);
-  const int32_t expected_linear_state_id = linear_state_block[0].id();
-  seq.add_blocks(BlockType::SINGLE, linear_state_block);
+  auto embedding_block = block_manager_->allocate(1);
+  ASSERT_EQ(embedding_block.size(), 1);
+  const int32_t expected_embedding_id = embedding_block[0].id();
+  seq.add_blocks(BlockType::EMBEDDING, embedding_block);
+
+  auto linear_state_slot = block_manager_->allocate(1);
+  ASSERT_EQ(linear_state_slot.size(), 1);
+  const int32_t expected_linear_state_id = linear_state_slot[0].id();
+  seq.add_blocks(BlockType::LINEAR, linear_state_slot);
+  ASSERT_NE(expected_embedding_id, expected_linear_state_id);
 
   auto forward_input = batch->prepare_forward_input(
       options_.num_decoding_tokens(), 0, model_args_);
@@ -748,7 +757,7 @@ TEST_F(AclGraphExecutorTest, BatchInputCarriesLinearStateIds) {
             expected_linear_state_id);
   ASSERT_EQ(forward_input.input_params.embedding.embedding_ids.size(), 1);
   EXPECT_EQ(forward_input.input_params.embedding.embedding_ids[0],
-            expected_linear_state_id);
+            expected_embedding_id);
 }
 
 TEST_F(AclGraphExecutorTest, GraphDoubleBufferFlagControlsSlotCount) {

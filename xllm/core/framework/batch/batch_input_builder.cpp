@@ -698,7 +698,8 @@ void BatchInputBuilder::extract_tokens_and_positions(Sequence* sequence,
 
   // `linear_state_ids` is sequence-scoped metadata and must stay aligned with
   // logical batch rows even for non-terminal chunked-prefill slices.
-  state.linear_state_ids.emplace_back(sequence->get_single_block_id());
+  state.linear_state_ids.emplace_back(
+      sequence->get_linear_state_slot_id());
 
   // Add extra token id
   int32_t extra_token_id = -1;
@@ -706,7 +707,7 @@ void BatchInputBuilder::extract_tokens_and_positions(Sequence* sequence,
     // last chunk of prefill and decode
     // add -1 as extra token id
     state.extra_token_ids.emplace_back(-1);
-    state.embedding_ids.emplace_back(sequence->get_single_block_id());
+    state.embedding_ids.emplace_back(sequence->get_embedding_block_id());
     state.request_ids.emplace_back(sequence->request_id());
     torch::Tensor mtp_bootstrap = sequence->get_mtp_bootstrap_embedding();
     if (state.batch_forward_type.is_decode() && mtp_bootstrap.defined()) {

@@ -1595,7 +1595,7 @@ void PDOOCScheduler::prefill_send_first_generation() {
         }
         ADD_VECTOR_TO_PROTO(gen->mutable_block_ids(), block_ids);
         gen->set_linear_state_id(
-            request->sequences()[0]->get_single_block_id());
+            request->sequences()[0]->get_recurrent_state_slot_id());
         gen->set_dp_size(instance_info_.dp_size);
         gen->set_dp_rank(request->sequences()[0]->dp_rank());
       }
@@ -1738,11 +1738,11 @@ bool PDOOCScheduler::decode_recv_multi_generations(
     }
     std::vector<uint64_t> src_linear_state_ids;
     std::vector<uint64_t> dst_linear_state_ids;
-    if (src_linear_state_id >= 0 &&
-        request->sequences()[0]->get_single_block_id() >= 0) {
+    const int32_t dst_linear_state_id =
+        request->sequences()[0]->get_recurrent_state_slot_id();
+    if (src_linear_state_id >= 0 && dst_linear_state_id >= 0) {
       src_linear_state_ids.emplace_back(src_linear_state_id);
-      dst_linear_state_ids.emplace_back(
-          request->sequences()[0]->get_single_block_id());
+      dst_linear_state_ids.emplace_back(dst_linear_state_id);
     }
 
     int32_t dst_dp_rank = request->sequences()[0]->dp_rank();
@@ -2043,7 +2043,8 @@ void PDOOCScheduler::prefill_send_multi_generations() {
         for (const auto& block : blocks) {
           multi_req->mutable_block_ids()->Add(block.id());
         }
-        multi_req->set_linear_state_id(sequence->get_single_block_id());
+        multi_req->set_linear_state_id(
+            sequence->get_recurrent_state_slot_id());
         multi_req->set_dp_size(instance_info_.dp_size);
         multi_req->set_dp_rank(sequence->dp_rank());
       }

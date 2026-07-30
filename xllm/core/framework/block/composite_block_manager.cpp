@@ -23,8 +23,8 @@ limitations under the License.
 #include "concurrent_block_manager_impl.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "framework/xtensor/xtensor_block_manager_impl.h"
+#include "embedding_block_manager.h"
 #include "linear_state_block_manager.h"
-#include "single_block_manager.h"
 #include "sliding_window_block_manager.h"
 
 namespace xllm {
@@ -88,10 +88,10 @@ std::map<BlockType, CompositeBlockManager::LeafEntry> build_composite_leaves(
   // early-returning KV-family branches untouched. participates_in_admission
   // stays false -- a true here would let capacity_leaf() pick this
   // block_size==1 leaf and misreport pool capacity as the linear-slot pool.
-  // LINEAR is scheduler-thread only, so unlike the SINGLE leaf it is
+  // LINEAR is scheduler-thread only, so unlike the EMBEDDING leaf it is
   // deliberately NOT wrapped in ConcurrentBlockManagerImpl.
-  // TODO(refactor): fold the SINGLE leaf (still emplaced by BlockManagerPool)
-  // in here too, once num_single_blocks rides on BlockManager::Options.
+  // The EMBEDDING leaf remains appended by BlockManagerPool only when
+  // speculative decode needs it.
   if (options.enable_linear_state()) {
     CHECK_GT(options.linear_state_num_slots(), 0)
         << "linear_state_num_slots must be set when linear state is enabled";

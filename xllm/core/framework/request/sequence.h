@@ -200,9 +200,9 @@ class Sequence final {
   void clear_mtp_bootstrap_embedding() {
     mtp_bootstrap_embedding_ = torch::Tensor();
   }
-  // Single per-sequence resource block id (linear-state / embedding), or -1.
-  int32_t get_single_block_id() const {
-    return kv_state_.get_single_block_id();
+  // Per-sequence speculative embedding-row slot, or -1.
+  int32_t get_embedding_block_id() const {
+    return kv_state_.get_embedding_block_id();
   }
 
   // Linear-state (Qwen3.5 GDN) live slot, stored in composite_blocks_ under
@@ -213,6 +213,10 @@ class Sequence final {
   }
   int32_t get_linear_state_slot_id() const {
     return kv_state_.get_linear_block_id();
+  }
+
+  int32_t get_recurrent_state_slot_id() const {
+    return get_linear_state_slot_id();
   }
 
   void set_pending_linear_save(const XXH3Key& hash) {
