@@ -25,7 +25,6 @@ limitations under the License.
 #include "kernels/musa/musa_ops_api.h"
 #include "kernels/ops_api.h"
 #include "util/env_var.h"
-#include "util/prefill_breakdown.h"
 
 namespace xllm {
 namespace layer {
@@ -380,7 +379,6 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
   torch::Tensor topk_weights;
   torch::Tensor topk_ids;
   {
-    PrefillBreakdown::Scope route_scope(PrefillBreakdown::Bucket::kMoeRoute);
     auto router_logits = gate_->forward(hidden_states);
     if (use_musa_moe_topk(num_tokens, router_logits, num_experts_, topk_)) {
       std::tie(topk_weights, topk_ids) =
@@ -611,8 +609,6 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
         preprocess;
     {
-      PrefillBreakdown::Scope preprocess_scope(
-          PrefillBreakdown::Bucket::kMoePreprocess);
       preprocess = xllm::kernel::cuda::fused_moe_preprocess_bf16(
           hidden_states.contiguous(),
           topk_ids,
@@ -621,8 +617,6 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     }
     torch::Tensor gate_up;
     {
-      PrefillBreakdown::Scope gate_up_scope(
-          PrefillBreakdown::Bucket::kMoeGateUp);
       if (use_contiguous_bf16_prefill_gemm(num_tokens)) {
         gate_up = xllm::kernel::cuda::contiguous_moe_gemm_bf16(
             std::get<0>(preprocess),
@@ -641,14 +635,11 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
 
     torch::Tensor activated;
     {
-      PrefillBreakdown::Scope activation_scope(
-          PrefillBreakdown::Bucket::kMoeAct);
       activated = xllm::kernel::cuda::fused_moe_indexed_swiglu_bf16(
           gate_up, std::get<2>(preprocess));
     }
     torch::Tensor down;
     {
-      PrefillBreakdown::Scope down_scope(PrefillBreakdown::Bucket::kMoeDown);
       if (use_contiguous_bf16_prefill_gemm(num_tokens)) {
         down = xllm::kernel::cuda::contiguous_moe_gemm_bf16(
             activated,
@@ -666,8 +657,6 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     }
     torch::Tensor combined;
     {
-      PrefillBreakdown::Scope combine_scope(
-          PrefillBreakdown::Bucket::kMoeCombine);
       combined = xllm::kernel::cuda::moe_combine_result_indexed(
           down,
           std::get<2>(preprocess),
@@ -815,7 +804,6 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward(
 
   torch::Tensor shared;
   {
-    PrefillBreakdown::Scope shared_scope(PrefillBreakdown::Bucket::kMoeShared);
     shared = shared_experts_->forward(hidden_states);
     if (use_fused_shared_expert_gate(hidden_states.size(0))) {
       xllm::kernel::cuda::fused_shared_expert_gate_inplace(
