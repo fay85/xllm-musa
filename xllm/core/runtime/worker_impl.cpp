@@ -58,10 +58,10 @@ limitations under the License.
 #if defined(USE_NPU)
 #include "platform/npu/device_capture_lock.h"
 #elif defined(USE_CUDA) || defined(USE_DCU) || defined(USE_MUSA)
-#if !defined(USE_MUSA)
-#include "kernels/cuda/cuda_ops_api.h"
-#endif
 #include "platform/torch_profiler.h"
+#endif
+#if defined(USE_CUDA) || defined(USE_DCU)
+#include "kernels/cuda/cuda_ops_api.h"
 #endif
 #if defined(USE_CUDA)
 #include "platform/cuda_profiler.h"
