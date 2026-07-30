@@ -268,8 +268,7 @@ void Qwen3_5MusaFusedMoEImpl::load_routed_weights(
     return;
   }
 
-  // The state-dict load macros intentionally refer to a local named
-  // `state_dict` and to the un-suffixed sharding variables below.
+  // LOAD_MOE_* macros expect a local state_dict and sharding locals below.
   const auto state_dict = mlp_state_dict.get_dict_with_prefix("experts.");
   const int64_t rank = rank_;
   const int64_t world_size = world_size_;
@@ -321,10 +320,8 @@ void Qwen3_5MusaFusedMoEImpl::load_routed_weights(
     return;
   }
 
-  // BF16 Qwen3.5 checkpoints use packed gate_up_proj/down_proj tensors.  The
-  // loader is called once per safetensors shard, so each flag is deliberately
-  // independent: gate_up and down are in different files in the official
-  // checkpoint.
+  // BF16 Qwen3.5 checkpoints pack gate_up_proj/down_proj; shards may land in
+  // different safetensors files, so load flags are independent.
   auto packed_gate_up =
       get_tensor_with_weight_suffix(state_dict, "gate_up_proj");
   if (packed_gate_up.defined()) {
