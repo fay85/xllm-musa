@@ -38,9 +38,11 @@ set(_TORCH_MUSA_KERNEL_SRCS
   fp8_block_gemm.cpp
   # Mate masked grouped GEMM used by the Qwen3.5 routed experts.
   musa_moe_gemm.cpp
+  # MP31 AOT fused-MoE decode dataflow.
   musa_fused_moe_aot.cpp
   # Graph-safe expert histogram/prefix/placement used by Qwen3.5 routing.
   ../cuda/moe/moe_compute_index.cu
+  # Fused reorder/weighted reduction shared with the NPU MoE combine stage.
   ../cuda/moe/moe_combine.cu
   # Fused per-token-group FP8 activation quant (MUSA-native intrinsics)
   fp8_act_quant.cu
@@ -51,6 +53,8 @@ set(_TORCH_MUSA_KERNEL_SRCS
   llm_decode_metadata_update.cu
 )
 
+# Enable fast-math for fp8_act_quant.cu only, without changing
+# floating-point flags for the other kernels in this library.
 set_source_files_properties(
   fp8_act_quant.cu
   PROPERTIES
