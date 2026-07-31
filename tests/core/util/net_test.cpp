@@ -1,4 +1,4 @@
-/* Copyright 2025-2026 The xLLM Authors.
+/* Copyright 2026 The xLLM Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -13,24 +13,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#pragma once
-#include <cstdint>
-#include <string>
-#include <vector>
+#include "core/util/net.h"
+
+#include <gtest/gtest.h>
 
 namespace xllm {
 namespace net {
+namespace {
 
-std::string get_local_ip_addr();
-std::string get_route_ip(const std::string& remote_addr);
-int get_local_free_port();
-uint64_t convert_ip_port_to_uint64(const std::string& ip, uint16_t port);
-std::pair<std::string, uint16_t> convert_uint64_to_ip_port(uint64_t input);
-void parse_host_port_from_addr(const std::string& addr,
-                               std::string& host,
-                               int& port);
+TEST(NetTest, SelectsLoopbackForLoopbackRemote) {
+  EXPECT_EQ(get_route_ip("127.0.0.1:19888"), "127.0.0.1");
+}
 
-std::string extract_ip(const std::string& input);
-std::string extract_port(const std::string& input);
+TEST(NetTest, ResolvesRemoteHostname) {
+  EXPECT_EQ(get_route_ip("localhost:19888"), "127.0.0.1");
+}
+
+TEST(NetTest, ReturnsEmptyWhenRemoteHasNoUsableRoute) {
+  EXPECT_TRUE(get_route_ip("255.255.255.255:19888").empty());
+}
+
+TEST(NetTest, ReturnsEmptyWhenRemoteCannotBeResolved) {
+  EXPECT_TRUE(get_route_ip("worker.invalid:19888").empty());
+}
+
+}  // namespace
 }  // namespace net
 }  // namespace xllm
