@@ -124,38 +124,50 @@ Qwen3_5GatedDeltaNetImpl::Qwen3_5GatedDeltaNetImpl(
                                  parallel_args,
                                  options,
                                  /*init_projections=*/false) {
-  in_proj_qkv_ = register_module("in_proj_qkv",
+  if (tp_size_ == 1) {
+    // TP=1 fast path: use 2 merged projections (qkvz_proj_ + ba_proj_),
+    // using merged column-parallel projections. The fused weight loading
+    // (load_state_dict with prefixes) concatenates the 4 checkpoint weights
+    // into 2 merged weights at load time. This halves the number of matmul
+    // kernel launches and eliminates the merge copy_ overhead entirely.
+    init_next_projections(args, quant_args, parallel_args, options);
+  } else {
+    // TP>1 fallback: keep 4 separate projections because in_proj_qkv needs
+    // 3-shard TP partitioning (q/k/v split independently) which the fused
+    // loading path does not support.
+    in_proj_qkv_ = register_module("in_proj_qkv",
+                                   ColumnParallelLinear(args.hidden_size(),
+                                                        k_size_ * 2 + v_size_,
+                                                        /*bias=*/false,
+                                                        /*gather_output=*/false,
+                                                        quant_args,
+                                                        parallel_args.tp_group_,
+                                                        options));
+    in_proj_z_ = register_module("in_proj_z",
                                  ColumnParallelLinear(args.hidden_size(),
-                                                      k_size_ * 2 + v_size_,
+                                                      v_size_,
                                                       /*bias=*/false,
                                                       /*gather_output=*/false,
                                                       quant_args,
                                                       parallel_args.tp_group_,
                                                       options));
-  in_proj_z_ = register_module("in_proj_z",
-                               ColumnParallelLinear(args.hidden_size(),
-                                                    v_size_,
-                                                    /*bias=*/false,
-                                                    /*gather_output=*/false,
-                                                    quant_args,
-                                                    parallel_args.tp_group_,
-                                                    options));
-  in_proj_b_ = register_module("in_proj_b",
-                               ColumnParallelLinear(args.hidden_size(),
-                                                    num_v_heads_,
-                                                    /*bias=*/false,
-                                                    /*gather_output=*/false,
-                                                    quant_args,
-                                                    parallel_args.tp_group_,
-                                                    options));
-  in_proj_a_ = register_module("in_proj_a",
-                               ColumnParallelLinear(args.hidden_size(),
-                                                    num_v_heads_,
-                                                    /*bias=*/false,
-                                                    /*gather_output=*/false,
-                                                    quant_args,
-                                                    parallel_args.tp_group_,
-                                                    options));
+    in_proj_b_ = register_module("in_proj_b",
+                                 ColumnParallelLinear(args.hidden_size(),
+                                                      num_v_heads_,
+                                                      /*bias=*/false,
+                                                      /*gather_output=*/false,
+                                                      quant_args,
+                                                      parallel_args.tp_group_,
+                                                      options));
+    in_proj_a_ = register_module("in_proj_a",
+                                 ColumnParallelLinear(args.hidden_size(),
+                                                      num_v_heads_,
+                                                      /*bias=*/false,
+                                                      /*gather_output=*/false,
+                                                      quant_args,
+                                                      parallel_args.tp_group_,
+                                                      options));
+  }
 }
 
 torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_qkvz_from_split_activations(
@@ -176,57 +188,29 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_qkvz_from_split_activations(
 
   const int64_t bs = qkv.size(0);
   const int64_t seqlen = qkv.size(1);
-  const int64_t local_k_heads = num_k_heads_ / tp_size_;
-  const int64_t local_v_heads = num_v_heads_ / tp_size_;
-  const int64_t num_v_heads_per_k = num_v_heads_ / num_k_heads_;
-  const int64_t head_v_part = num_v_heads_per_k * head_v_dim_;
+  const int64_t qkv_cols = qkv.size(2);
+  const int64_t z_cols = z.size(2);
 
-  auto qkv_split =
-      torch::split(qkv,
-                   {k_size_ / tp_size_, k_size_ / tp_size_, v_size_ / tp_size_},
-                   /*dim=*/2);
-  auto q = qkv_split[0].view({bs, seqlen, local_k_heads, head_k_dim_});
-  auto k = qkv_split[1].view({bs, seqlen, local_k_heads, head_k_dim_});
-  auto v = qkv_split[2].view({bs, seqlen, local_v_heads, head_v_dim_});
-  auto z_view = z.view({bs, seqlen, local_v_heads, head_v_dim_});
-
-  v = v.view({bs, seqlen, local_k_heads, head_v_part});
-  z_view = z_view.view({bs, seqlen, local_k_heads, head_v_part});
-
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  // Graph-capture-safe replacement for `torch::cat({q,k,v,z_view}, -1)`.
-  // Pre-allocated `qkvz_merge_buf_` is reused across replays; each piece is
-  // written via a strided `copy_` into its slice along the last dim.
-  const int64_t m = bs * seqlen;
-  const int64_t total_last_dim = 2 * head_k_dim_ + 2 * head_v_part;
-  const int64_t flat_dim = local_k_heads * total_last_dim;
+  // Contiguous layout: [all_q | all_k | all_v | all_z]. qkv projection already
+  // stores [all_q | all_k | all_v]; append z with two copy_ writes instead of
+  // interleaving per head group.
+  const int64_t M = bs * seqlen;
+  const int64_t flat_dim = qkv_cols + z_cols;
   const bool needs_realloc =
       !qkvz_merge_buf_.defined() || qkvz_merge_buf_.size(0) < M ||
       qkvz_merge_buf_.size(1) != flat_dim ||
       qkvz_merge_buf_.scalar_type() != qkv.scalar_type() ||
       qkvz_merge_buf_.device() != qkv.device();
   if (needs_realloc) {
-    // Grow-only so views handed out for already-captured smaller-bucket
-    // graphs stay valid.
     const int64_t target_M =
         qkvz_merge_buf_.defined() ? std::max(M, qkvz_merge_buf_.size(0)) : M;
     qkvz_merge_buf_ = torch::empty({target_M, flat_dim}, qkv.options());
   }
-  auto buf_4d = qkvz_merge_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M)
-                    .view({M, local_k_heads, total_last_dim});
-  buf_4d.narrow(/*dim=*/-1, /*start=*/0, /*length=*/head_k_dim_)
-      .copy_(q.reshape({M, local_k_heads, head_k_dim_}));
-  buf_4d.narrow(/*dim=*/-1, head_k_dim_, head_k_dim_)
-      .copy_(k.reshape({M, local_k_heads, head_k_dim_}));
-  buf_4d.narrow(/*dim=*/-1, 2 * head_k_dim_, head_v_part)
-      .copy_(v.reshape({M, local_k_heads, head_v_part}));
-  buf_4d.narrow(/*dim=*/-1, 2 * head_k_dim_ + head_v_part, head_v_part)
-      .copy_(z_view.reshape({M, local_k_heads, head_v_part}));
-  return qkvz_merge_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M)
-      .view({bs, seqlen, flat_dim});
-#else
-  return torch::cat({q, k, v, z_view}, -1).view({bs, seqlen, -1}).contiguous();
-#endif
+  auto buf = qkvz_merge_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M);
+  buf.narrow(/*dim=*/1, /*start=*/0, /*length=*/qkv_cols)
+      .copy_(qkv.reshape({M, qkv_cols}));
+  buf.narrow(/*dim=*/1, qkv_cols, z_cols).copy_(z.reshape({M, z_cols}));
+  return buf.view({bs, seqlen, flat_dim});
 }
 
 torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_ba_from_split_activations(
@@ -246,17 +230,11 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_ba_from_split_activations(
 
   const int64_t bs = b.size(0);
   const int64_t seqlen = b.size(1);
-  const int64_t local_k_heads = num_k_heads_ / tp_size_;
-  const int64_t num_v_heads_per_k = num_v_heads_ / num_k_heads_;
+  const int64_t nv = b.size(2);
 
-  auto b_view = b.view({bs, seqlen, local_k_heads, num_v_heads_per_k});
-  auto a_view = a.view({bs, seqlen, local_k_heads, num_v_heads_per_k});
-
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  const int64_t m = bs * seqlen;
+  // Contiguous layout: [all_b | all_a].
   const int64_t M = bs * seqlen;
-  const int64_t total_last_dim = 2 * num_v_heads_per_k;
-  const int64_t flat_dim = local_k_heads * total_last_dim;
+  const int64_t flat_dim = 2 * nv;
   const bool needs_realloc = !ba_merge_buf_.defined() ||
                              ba_merge_buf_.size(0) < M ||
                              ba_merge_buf_.size(1) != flat_dim ||
@@ -267,22 +245,18 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_ba_from_split_activations(
         ba_merge_buf_.defined() ? std::max(M, ba_merge_buf_.size(0)) : M;
     ba_merge_buf_ = torch::empty({target_M, flat_dim}, b.options());
   }
-  auto buf_4d = ba_merge_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M)
-                    .view({M, local_k_heads, total_last_dim});
-  buf_4d.narrow(/*dim=*/-1, /*start=*/0, /*length=*/num_v_heads_per_k)
-      .copy_(b_view.reshape({M, local_k_heads, num_v_heads_per_k}));
-  buf_4d.narrow(/*dim=*/-1, num_v_heads_per_k, num_v_heads_per_k)
-      .copy_(a_view.reshape({M, local_k_heads, num_v_heads_per_k}));
-  return ba_merge_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M)
-      .view({bs, seqlen, flat_dim});
-#else
-  return torch::cat({b_view, a_view}, -1).view({bs, seqlen, -1}).contiguous();
-#endif
+  auto buf = ba_merge_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M);
+  buf.narrow(/*dim=*/1, /*start=*/0, /*length=*/nv).copy_(b.reshape({M, nv}));
+  buf.narrow(/*dim=*/1, nv, nv).copy_(a.reshape({M, nv}));
+  return buf.view({bs, seqlen, flat_dim});
 }
 
 std::pair<torch::Tensor, torch::Tensor>
 Qwen3_5GatedDeltaNetImpl::project_decode_inputs(
     const torch::Tensor& hidden_states) {
+  if (use_merged_projections()) {
+    return Qwen3NextGatedDeltaNetImpl::project_decode_inputs(hidden_states);
+  }
   const auto reshape_projection = [](const torch::Tensor& projection) {
     return projection.view({projection.size(0), -1, projection.size(-1)});
   };
@@ -297,6 +271,9 @@ Qwen3_5GatedDeltaNetImpl::project_decode_inputs(
 std::pair<torch::Tensor, torch::Tensor>
 Qwen3_5GatedDeltaNetImpl::project_flat_inputs(
     const torch::Tensor& hidden_states) {
+  if (use_merged_projections()) {
+    return Qwen3NextGatedDeltaNetImpl::project_flat_inputs(hidden_states);
+  }
   auto qkv = in_proj_qkv_->forward(hidden_states).unsqueeze(0);
   auto z_proj = in_proj_z_->forward(hidden_states).unsqueeze(0);
   auto b_proj = in_proj_b_->forward(hidden_states).unsqueeze(0);
@@ -309,6 +286,22 @@ Qwen3_5GatedDeltaNetImpl::project_flat_inputs(
 
 void Qwen3_5GatedDeltaNetImpl::load_projection_state_dict(
     const StateDict& state_dict) {
+  if (use_merged_projections()) {
+    // TP=1 merged path: fuse the 4 checkpoint weights into 2 merged
+    // projections via load_state_dict(prefixes). This concatenates the
+    // weights (and FP8 block-scale grids, if present) along dim 0.
+    if (!qkvz_proj_->is_weight_loaded()) {
+      qkvz_proj_->load_state_dict(state_dict,
+                                  /*prefixes=*/{"in_proj_qkv.", "in_proj_z."});
+    }
+    if (!ba_proj_->is_weight_loaded()) {
+      ba_proj_->load_state_dict(state_dict,
+                                /*prefixes=*/{"in_proj_b.", "in_proj_a."});
+    }
+    return;
+  }
+
+  // TP>1 fallback: load 4 separate projections.
   auto in_proj_qkv_state_dict = state_dict.get_dict_with_prefix("in_proj_qkv.");
   if (in_proj_qkv_state_dict.size() > 0 && !in_proj_qkv_->is_weight_loaded()) {
     in_proj_qkv_->load_state_dict(
@@ -336,6 +329,15 @@ void Qwen3_5GatedDeltaNetImpl::load_projection_state_dict(
 
 void Qwen3_5GatedDeltaNetImpl::verify_projection_weights(
     const std::string& prefix) const {
+  if (use_merged_projections()) {
+    CHECK(qkvz_proj_ && qkvz_proj_->is_weight_loaded())
+        << "Missing required weight after all shards loaded: " << prefix
+        << "in_proj_qkvz.weight (merged from in_proj_qkv + in_proj_z)";
+    CHECK(ba_proj_ && ba_proj_->is_weight_loaded())
+        << "Missing required weight after all shards loaded: " << prefix
+        << "in_proj_ba.weight (merged from in_proj_b + in_proj_a)";
+    return;
+  }
   CHECK(in_proj_qkv_ && in_proj_qkv_->is_weight_loaded())
       << "Missing required weight after all shards loaded: " << prefix
       << "in_proj_qkv.weight";

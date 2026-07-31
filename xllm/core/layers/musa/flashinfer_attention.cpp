@@ -66,21 +66,6 @@ AttentionMetadata build_expanded_decode_metadata(
   return decode_meta;
 }
 
-bool qwen35_mtp_attention_debug_enabled() {
-  static const bool enabled = std::getenv("XLLM_DEBUG_QWEN35_MTP") != nullptr;
-  return enabled && !xllm::kernel::cuda::is_musa_stream_capturing();
-}
-
-void qwen35_mtp_attention_debug_sync(const char* stage) {
-  if (!qwen35_mtp_attention_debug_enabled() ||
-      xllm::kernel::cuda::is_musa_stream_capturing()) {
-    return;
-  }
-  LOG(INFO) << "[Qwen3.5 MTP attention debug] sync begin: " << stage;
-  C10_CUDA_CHECK(cudaDeviceSynchronize());
-  LOG(INFO) << "[Qwen3.5 MTP attention debug] sync end: " << stage;
-}
-
 // Eager causal + padding attention fallback when custom mask is used (e.g.
 // LongCat text encoder). FlashInfer's custom mask path gives wrong token-0
 // output; this path matches diffusers.
@@ -196,33 +181,6 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
         << ", v_cache=" << v_cache.sizes()
         << ", is_prefill=" << attn_metadata.is_prefill
         << ", is_chunked_prefill=" << attn_metadata.is_chunked_prefill;
-    if (qwen35_mtp_attention_debug_enabled()) {
-      LOG(INFO) << "[Qwen3.5 MTP attention debug] before reshape_paged_cache:"
-                << " query=" << query.sizes() << ", key=" << key.sizes()
-                << ", value=" << value.sizes()
-                << ", slot_mapping=" << attn_metadata.slot_mapping.sizes()
-                << ", k_cache=" << k_cache.sizes()
-                << ", v_cache=" << v_cache.sizes()
-                << ", q_cu_seq_lens=" << attn_metadata.q_cu_seq_lens.sizes()
-                << ", kv_cu_seq_lens=" << attn_metadata.kv_cu_seq_lens.sizes()
-                << ", paged_kv_indptr=" << attn_metadata.paged_kv_indptr.sizes()
-                << ", paged_kv_indices="
-                << attn_metadata.paged_kv_indices.sizes()
-                << ", paged_kv_last_page_len="
-                << attn_metadata.paged_kv_last_page_len.sizes()
-                << ", is_prefill=" << attn_metadata.is_prefill
-                << ", is_chunked_prefill=" << attn_metadata.is_chunked_prefill
-                << ", max_query_len=" << attn_metadata.max_query_len
-                << ", max_seq_len=" << attn_metadata.max_seq_len;
-      auto slot_cpu =
-          attn_metadata.slot_mapping.to(torch::kCPU).to(torch::kInt32);
-      if (slot_cpu.numel() > 0) {
-        LOG(INFO) << "[Qwen3.5 MTP attention debug] slot range: min="
-                  << slot_cpu.min().item<int32_t>()
-                  << ", max=" << slot_cpu.max().item<int32_t>();
-      }
-    }
-    qwen35_mtp_attention_debug_sync("attention_before_reshape_paged_cache");
     xllm::kernel::ReshapePagedCacheParams reshape_paged_cache_params;
     reshape_paged_cache_params.key = key;
     reshape_paged_cache_params.value = value;
@@ -230,10 +188,8 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
     reshape_paged_cache_params.v_cache = v_cache;
     reshape_paged_cache_params.slot_mapping = attn_metadata.slot_mapping;
     xllm::kernel::reshape_paged_cache(reshape_paged_cache_params);
-    qwen35_mtp_attention_debug_sync("attention_after_reshape_paged_cache");
   }
 
-  qwen35_mtp_attention_debug_sync("attention_before_core");
   const bool spec_verify_expanded_decode =
       attn_metadata.is_chunked_prefill &&
       (attn_metadata.use_expanded_decode_for_spec_verify_attention ||
@@ -252,7 +208,6 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
     decoder_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
   }
-  qwen35_mtp_attention_debug_sync("attention_after_core");
 
   output = output.view({-1, num_heads_ * head_size_});
   return {output, output_lse};

@@ -32,6 +32,7 @@ struct FusedQkvzbaSplitReshapeParams;
 struct FusedRecurrentGatedDeltaRuleParams;
 struct GatedLayerNormParams;
 struct MateGatedDeltaRuleDecodeParams;
+struct MateGatedDeltaRuleMtpParams;
 struct MateGatedDeltaRulePrefillParams;
 struct PartialRotaryEmbeddingParams;
 struct FusedSigmoidGatingDeltaRuleUpdateParams;
@@ -39,6 +40,11 @@ struct FusedSigmoidGatingDeltaRuleUpdateParams;
 namespace cuda {
 
 torch::Tensor l2_norm(torch::Tensor& x, double eps);
+
+std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
+    const torch::Tensor& query,
+    const torch::Tensor& key,
+    double eps);
 
 std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
     FusedGdnGatingParams& params);
@@ -87,14 +93,50 @@ std::string get_mate_gdn_decode_uri(int64_t num_q_heads,
                                     int64_t num_v_heads,
                                     torch::ScalarType dtype);
 
+std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
+                                 int64_t num_v_heads,
+                                 torch::ScalarType dtype);
+
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     MateGatedDeltaRulePrefillParams& params);
 
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
+torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params);
+
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
+
+void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
+                                   const torch::Tensor& ssm_intermediate,
+                                   torch::Tensor& conv_cache,
+                                   const torch::Tensor& conv_intermediate,
+                                   const torch::Tensor& logical_state_indices,
+                                   const torch::Tensor& accepted_tokens,
+                                   int64_t checkpoint_stride);
+
+void causal_conv1d_fwd(const torch::Tensor& x,
+                       const torch::Tensor& weight,
+                       torch::Tensor& out,
+                       const std::optional<torch::Tensor>& bias,
+                       const std::optional<torch::Tensor>& conv_states,
+                       const std::optional<torch::Tensor>& query_start_loc,
+                       const std::optional<torch::Tensor>& cache_indices,
+                       const std::optional<torch::Tensor>& has_initial_state,
+                       bool silu_activation,
+                       int64_t pad_slot_id);
+
+void causal_conv1d_fwd_token_major(const torch::Tensor& x,
+                                   const torch::Tensor& weight,
+                                   torch::Tensor& out,
+                                   const std::optional<torch::Tensor>& bias,
+                                   const torch::Tensor& conv_states,
+                                   const torch::Tensor& query_start_loc,
+                                   const torch::Tensor& cache_indices,
+                                   const torch::Tensor& has_initial_state,
+                                   bool silu_activation,
+                                   int64_t pad_slot_id);
 
 torch::Tensor causal_conv1d(const torch::Tensor& x,
                             const torch::Tensor& weight,
@@ -108,6 +150,15 @@ torch::Tensor causal_conv1d(const torch::Tensor& x,
                             int64_t pad_slot_id,
                             int64_t run_mode);
 
+torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
+                                    const torch::Tensor& weight,
+                                    const torch::Tensor& conv_state,
+                                    const std::optional<torch::Tensor>& bias,
+                                    const torch::Tensor& query_start_loc,
+                                    const torch::Tensor& cache_indices,
+                                    const torch::Tensor& has_initial_state,
+                                    bool silu_activation);
+
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params);
 
@@ -119,6 +170,18 @@ void causal_conv1d_decode_fused(const torch::Tensor& x,
                                 torch::Tensor output_buf,
                                 int pad_slot_id,
                                 bool silu_activation);
+
+// Graph-safe Qwen3.5 MTP verify convolution.  Unlike the generic
+// causal-conv path, this kernel reads the per-sequence accepted-token count on
+// device, so replay does not capture a host-side acceptance branch.
+void causal_conv1d_mtp_verify(const torch::Tensor& x,
+                              const torch::Tensor& weight,
+                              const torch::Tensor& conv_state,
+                              const torch::Tensor& cache_indices,
+                              const torch::Tensor& num_accepted_tokens,
+                              torch::Tensor output_buf,
+                              torch::Tensor intermediate_buf,
+                              bool silu_activation);
 
 void gated_rms_norm_fused(const torch::Tensor& x,
                           const torch::Tensor& weight,
