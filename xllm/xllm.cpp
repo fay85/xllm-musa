@@ -427,15 +427,16 @@ int run() {
     model_config.backend(xllm::util::get_model_backend(model_path));
   }
 
+  const std::string local_ip = net::get_local_ip_addr();
   if (service_config.host().empty()) {
     // set the host to the local IP when the host is empty
-    service_config.host(net::get_local_ip_addr());
+    service_config.host(local_ip);
   }
 
-  const bool is_local =
-      !service_config.host().empty() &&
-      net::extract_ip(distributed_config.master_node_addr()) ==
-          service_config.host();
+  const std::string master_ip =
+      net::extract_ip(distributed_config.master_node_addr());
+  const bool is_local = !service_config.host().empty() &&
+                        master_ip == net::extract_ip(service_config.host());
 
   LOG(INFO) << "set worker role to "
             << (is_local ? "local worker" : "remote worker");
