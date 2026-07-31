@@ -29,6 +29,15 @@ TEST(NetTest, ResolvesRemoteHostname) {
   EXPECT_EQ(get_route_ip("localhost:19888"), "127.0.0.1");
 }
 
+TEST(NetTest, NormalizesLocalBindHosts) {
+  const std::string local_ip = get_local_ip_addr();
+  ASSERT_FALSE(local_ip.empty());
+
+  EXPECT_EQ(extract_ip("0.0.0.0"), local_ip);
+  EXPECT_EQ(extract_ip("127.0.0.1"), local_ip);
+  EXPECT_EQ(extract_ip("localhost"), local_ip);
+}
+
 TEST(NetTest, ReturnsEmptyWhenRemoteHasNoUsableRoute) {
   EXPECT_TRUE(get_route_ip("255.255.255.255:19888").empty());
 }
