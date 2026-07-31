@@ -43,6 +43,10 @@ limitations under the License.
 #include "core/runtime/executor_impl_factory.h"
 #include "core/runtime/options.h"
 
+namespace xllm::layer {
+class PiecewiseGraphMatmulBufferPool;
+}
+
 namespace xllm::runtime::musa {
 
 using PiecewiseGraphs = ::xllm::runtime::cuda::PiecewiseGraphs;
@@ -79,7 +83,8 @@ class MusaGraphPersistentParam final {
                                          const torch::Tensor& positions,
                                          const ModelInputParams& params,
                                          uint32_t padded_num_tokens = 0,
-                                         bool return_capture_params = false);
+                                         bool return_capture_params = false,
+                                         bool update_prefill_plan = true);
 
   // Getter methods for persistent tensors
   torch::Tensor persistent_tokens(uint32_t actual_tokens) const {
@@ -157,6 +162,28 @@ class MusaGraphPersistentParam final {
           /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
     }
     return kv_seq_lens_;
+  }
+  torch::Tensor gdn_cu_seq_lens(uint32_t actual_batch_size) const {
+    if (actual_batch_size > 0) {
+      return persistent_gdn_cu_seq_lens_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
+    }
+    return persistent_gdn_cu_seq_lens_;
+  }
+  torch::Tensor gdn_kkt_cu_seq_lens(uint32_t actual_batch_size) const {
+    if (actual_batch_size > 0) {
+      return persistent_gdn_kkt_cu_seq_lens_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
+    }
+    return persistent_gdn_kkt_cu_seq_lens_;
+  }
+  torch::Tensor persistent_kv_cache_tokens_nums(
+      uint32_t actual_batch_size) const {
+    if (actual_batch_size > 0) {
+      return persistent_kv_cache_tokens_nums_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
+    }
+    return persistent_kv_cache_tokens_nums_;
   }
   torch::Tensor persistent_embedding(uint32_t actual_tokens) const {
     if (actual_tokens > 0) {
@@ -304,9 +331,12 @@ class MusaGraphPersistentParam final {
   torch::Tensor hidden_states_;
   torch::Tensor q_seq_lens_;
   torch::Tensor kv_seq_lens_;
+  torch::Tensor persistent_gdn_cu_seq_lens_;
+  torch::Tensor persistent_gdn_kkt_cu_seq_lens_;
   torch::Tensor persistent_embedding_;
   torch::Tensor persistent_mtp_token_embedding_;
   torch::Tensor persistent_linear_state_indices_;
+  torch::Tensor persistent_kv_cache_tokens_nums_;
   torch::Tensor persistent_num_accepted_tokens_;
   torch::Tensor aux_hidden_states_;
   // [max_tokens_per_batch, vocab_size] - persistent logits output for D1.
@@ -400,6 +430,11 @@ class MusaGraph final {
 
   // Whether this graph uses piecewise capture
   bool is_piecewise_ = false;
+
+  // Stable intermediate storage for this exact piecewise-prefill bucket.
+  // It must outlive graph holders because runners retain its tensor addresses.
+  std::shared_ptr<layer::PiecewiseGraphMatmulBufferPool>
+      prefill_matmul_buffer_pool_;
 
   uint32_t padded_num_tokens_ = 0;
 
@@ -511,6 +546,12 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // (by bucket_num_tokens)
   absl::flat_hash_map<uint32_t, std::unique_ptr<MusaGraph>> prefill_graphs_;
 
+  // Packed pure-prefill graphs are reusable by token bucket and effective
+  // sequence count. Their live ragged lengths are replay metadata, not key
+  // material.
+  absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>>
+      packed_prefill_graphs_;
+
   // Chunked-prefill piecewise graphs require an exact host-shape key because
   // Qwen3.5 GDN control flow depends on per-sequence query lengths.
   absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>>
@@ -544,6 +585,10 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
 
   uint64_t get_graph_key(uint32_t bucket_num_tokens,
                          const ModelInputParams& params) const;
+
+  uint64_t get_packed_prefill_graph_key(
+      uint32_t bucket_num_tokens,
+      const ModelInputParams& params) const;
 
   uint64_t get_chunked_prefill_graph_key(
       uint32_t bucket_num_tokens,

@@ -17,19 +17,24 @@ limitations under the License.
 
 #include <ATen/DLConvertor.h>
 #include <c10/core/Device.h>
+#include <c10/core/Event.h>
 #include <glog/logging.h>
 #include <tvm/ffi/extra/c_env_api.h>
 #include <dlfcn.h>
 #include <dlpack/dlpack.h>
 
 #include <array>
+#include <atomic>
 #include <cstdlib>
+#include <exception>
 #include <mutex>
 #include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
+
+#include <unistd.h>
 
 #include "core/platform/device.h"
 #include "core/platform/platform.h"
@@ -40,6 +45,51 @@ namespace xllm::kernel::cuda {
 namespace {
 
 thread_local bool s_force_ffi_preparation_sync = false;
+
+void*& get_forced_tvmffi_stream(c10::DeviceIndex device_index) {
+  static thread_local std::array<void*, 8> streams{};
+  CHECK(device_index >= 0 &&
+        device_index < static_cast<c10::DeviceIndex>(streams.size()))
+      << "invalid MUSA device index: " << device_index;
+  return streams[static_cast<size_t>(device_index)];
+}
+
+constexpr int32_t kMaxTvmffiStreamDebugRecords = 4096;
+std::atomic<int32_t> s_tvmffi_stream_debug_record_count{0};
+
+bool tvmffi_stream_debug_enabled() {
+  static const bool enabled = []() {
+    const char* env = std::getenv("XLLM_TVMFFI_STREAM_DEBUG");
+    return env != nullptr && env[0] != '0' && env[0] != '\0';
+  }();
+  return enabled &&
+         access("/tmp/xllm_tvmffi_stream_debug_enabled", F_OK) == 0;
+}
+
+void log_tvmffi_stream_debug(const char* phase,
+                             c10::DeviceIndex device_index,
+                             bool capturing,
+                             void* stream,
+                             void* original_stream,
+                             int32_t device_type,
+                             int rc) {
+  if (!tvmffi_stream_debug_enabled()) {
+    return;
+  }
+  const int32_t record_index = s_tvmffi_stream_debug_record_count.fetch_add(
+      1, std::memory_order_relaxed);
+  if (record_index >= kMaxTvmffiStreamDebugRecords) {
+    return;
+  }
+  LOG(INFO) << "[tvmffi.stream.debug] n=" << record_index
+            << " phase=" << phase
+            << " dev=" << static_cast<int32_t>(device_index)
+            << " capturing=" << capturing << " stream=" << stream
+            << " original=" << original_stream << " dev_type=" << device_type
+            << " rc=" << rc;
+}
+
+bool is_current_stream_capturing();
 
 c10::musa::MUSAStream& get_or_create_tvmffi_musa_stream(
     c10::DeviceIndex device_index) {
@@ -55,6 +105,31 @@ c10::musa::MUSAStream& get_or_create_tvmffi_musa_stream(
   return slot.value();
 }
 
+class MusaTvmffiEventHandoff final {
+ public:
+  explicit MusaTvmffiEventHandoff(c10::DeviceType device_type)
+      : current_to_ffi_event_(device_type),
+        ffi_to_current_event_(device_type) {}
+
+  c10::Event current_to_ffi_event_;
+  c10::Event ffi_to_current_event_;
+};
+
+MusaTvmffiEventHandoff& get_or_create_tvmffi_event_handoff(
+    c10::DeviceIndex device_index, c10::DeviceType device_type) {
+  static thread_local std::array<std::optional<MusaTvmffiEventHandoff>, 8>
+      slots;
+  CHECK(device_index >= 0 &&
+        device_index < static_cast<c10::DeviceIndex>(slots.size()))
+      << "invalid MUSA device index: " << device_index;
+  std::optional<MusaTvmffiEventHandoff>& slot =
+      slots[static_cast<size_t>(device_index)];
+  if (!slot.has_value()) {
+    slot.emplace(device_type);
+  }
+  return slot.value();
+}
+
 void set_tvmffi_stream_handle(c10::DeviceIndex device_index, void* stream) {
   constexpr int32_t kDlCuda = 2;
   constexpr int32_t kDlExtDev = 12;
@@ -62,6 +137,13 @@ void set_tvmffi_stream_handle(c10::DeviceIndex device_index, void* stream) {
     void* original_stream = nullptr;
     const int rc = TVMFFIEnvSetStream(device_type, device_index, stream,
                                       &original_stream);
+    log_tvmffi_stream_debug(/*phase=*/"set",
+                            device_index,
+                            is_current_stream_capturing(),
+                            stream,
+                            original_stream,
+                            device_type,
+                            rc);
     if (rc != 0) {
       LOG(WARNING) << "[tvmffi.stream] failed to set stream, rc=" << rc
                    << " dev_type=" << device_type << " dev=" << device_index;
@@ -81,6 +163,27 @@ bool current_musa_stream_is_valid(c10::DeviceIndex device_index) {
   return stream != nullptr;
 }
 
+bool enqueue_musa_stream_dependency(
+    const torch::Device& device,
+    const c10::musa::MUSAStream& producer,
+    const c10::musa::MUSAStream& consumer,
+    c10::Event& event) {
+  try {
+    c10::musa::MUSAGuard device_guard(device.index());
+    event.record(producer.unwrap());
+    event.block(consumer.unwrap());
+    return true;
+  } catch (const std::exception& e) {
+    LOG(WARNING) << "[tvmffi.stream] failed to enqueue MUSA stream dependency; "
+                 << "falling back to host synchronization: " << e.what();
+  } catch (...) {
+    LOG(WARNING) << "[tvmffi.stream] failed to enqueue MUSA stream dependency "
+                 << "with an unknown error; falling back to host "
+                 << "synchronization.";
+  }
+  return false;
+}
+
 }
 
 bool is_musa_stream_capturing() {
@@ -96,7 +199,26 @@ void bind_musa_tvmffi_stream(const torch::Device& device) {
       c10::musa::getCurrentMUSAStream(device.index());
   void* const stream = reinterpret_cast<void*>(musa_stream.stream());
   if (stream != nullptr) {
+    log_tvmffi_stream_debug(/*phase=*/"bind-current",
+                            device.index(),
+                            is_current_stream_capturing(),
+                            stream,
+                            nullptr,
+                            /*device_type=*/-1,
+                            /*rc=*/0);
     set_tvmffi_stream_handle(device.index(), stream);
+    return;
+  }
+  void* const forced_stream = get_forced_tvmffi_stream(device.index());
+  if (forced_stream != nullptr) {
+    log_tvmffi_stream_debug(/*phase=*/"bind-forced",
+                            device.index(),
+                            is_current_stream_capturing(),
+                            forced_stream,
+                            nullptr,
+                            /*device_type=*/-1,
+                            /*rc=*/0);
+    set_tvmffi_stream_handle(device.index(), forced_stream);
     return;
   }
   musa_stream = get_or_create_tvmffi_musa_stream(device.index());
@@ -105,6 +227,13 @@ void bind_musa_tvmffi_stream(const torch::Device& device) {
     LOG(ERROR) << "[tvmffi.stream] MUSA stream handle is null on " << device;
     return;
   }
+  log_tvmffi_stream_debug(/*phase=*/"bind-pool",
+                          device.index(),
+                          is_current_stream_capturing(),
+                          pool_stream,
+                          nullptr,
+                          /*device_type=*/-1,
+                          /*rc=*/0);
   set_tvmffi_stream_handle(device.index(), pool_stream);
 }
 
@@ -165,15 +294,53 @@ MusaTvmffiPreparationSyncGuard::~MusaTvmffiPreparationSyncGuard() {
   s_force_ffi_preparation_sync = previous_;
 }
 
+MusaTvmffiStreamOverrideGuard::MusaTvmffiStreamOverrideGuard(
+    const torch::Device& device, void* stream)
+    : device_(device), active_(is_torch_musa_device(device)) {
+  if (!active_) {
+    return;
+  }
+  CHECK_NE(stream, nullptr)
+      << "MUSA graph capture stream must have a native handle";
+  c10::musa::MUSAGuard device_guard(device_.index());
+  void*& forced_stream = get_forced_tvmffi_stream(device_.index());
+  previous_forced_stream_ = forced_stream;
+  forced_stream = stream;
+}
+
+MusaTvmffiStreamOverrideGuard::~MusaTvmffiStreamOverrideGuard() {
+  if (!active_) {
+    return;
+  }
+  c10::musa::MUSAGuard device_guard(device_.index());
+  get_forced_tvmffi_stream(device_.index()) = previous_forced_stream_;
+}
+
 MusaTvmffiStreamGuard::MusaTvmffiStreamGuard(const torch::Device& device)
     : device_(device), active_(is_torch_musa_device(device)) {
   if (!active_) {
     return;
   }
   const bool capturing = is_current_stream_capturing();
-  needs_sync_ = !capturing && !current_musa_stream_is_valid(device_.index());
+  const bool has_forced_stream =
+      get_forced_tvmffi_stream(device_.index()) != nullptr;
+  needs_sync_ = !capturing && !has_forced_stream &&
+                !current_musa_stream_is_valid(device_.index());
   if (needs_sync_) {
-    sync_current_musa_stream(device_);
+    c10::musa::MUSAGuard device_guard(device_.index());
+    const c10::musa::MUSAStream current_stream =
+        c10::musa::getCurrentMUSAStream(device_.index());
+    const c10::musa::MUSAStream ffi_stream =
+        get_or_create_tvmffi_musa_stream(device_.index());
+    MusaTvmffiEventHandoff& event_handoff =
+        get_or_create_tvmffi_event_handoff(device_.index(),
+                                            current_stream.device_type());
+    uses_event_handoff_ = enqueue_musa_stream_dependency(
+        device_, current_stream, ffi_stream,
+        event_handoff.current_to_ffi_event_);
+    if (!uses_event_handoff_) {
+      sync_current_musa_stream(device_);
+    }
   }
   bind_musa_tvmffi_stream(device_);
 }
@@ -183,7 +350,22 @@ MusaTvmffiStreamGuard::~MusaTvmffiStreamGuard() {
     sync_current_musa_stream_for_preparation(device_);
     sync_musa_ffi_stream_for_preparation(device_);
   } else if (active_ && needs_sync_) {
-    sync_musa_ffi_stream(device_);
+    if (uses_event_handoff_) {
+      const c10::musa::MUSAStream current_stream =
+          c10::musa::getCurrentMUSAStream(device_.index());
+      const c10::musa::MUSAStream ffi_stream =
+          get_or_create_tvmffi_musa_stream(device_.index());
+      MusaTvmffiEventHandoff& event_handoff =
+          get_or_create_tvmffi_event_handoff(device_.index(),
+                                              current_stream.device_type());
+      if (!enqueue_musa_stream_dependency(
+              device_, ffi_stream, current_stream,
+              event_handoff.ffi_to_current_event_)) {
+        sync_musa_ffi_stream(device_);
+      }
+    } else {
+      sync_musa_ffi_stream(device_);
+    }
   }
 }
 

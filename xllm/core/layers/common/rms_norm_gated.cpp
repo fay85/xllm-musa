@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include "layers/common/linear.h"
 #include "framework/state_dict/utils.h"
 #include "xllm/core/kernels/ops_api.h"
 
@@ -59,8 +60,13 @@ torch::Tensor RmsNormGatedImpl::forward(torch::Tensor& input,
   // 48 GDN layers. Eager prefill callers can opt into the transient buffer
   // below; other large shapes fall back to the reference implementation.
   constexpr int64_t kRmsNormGatedBufMaxRows = 128;
+  if (auto* pool = PiecewiseGraphMatmulBufferScope::current_buffer_pool();
+      pool != nullptr) {
+    params.output_buf = pool->get_gated_rms_norm_output(input);
+  }
   torch::Tensor transient_output;
-  if (input.dim() >= 1 && input.numel() > 0 && input.stride(-1) == 1) {
+  if (!params.output_buf.has_value() && input.dim() >= 1 &&
+      input.numel() > 0 && input.stride(-1) == 1) {
     const auto target_sizes = input.sizes();
     const int64_t last_dim = target_sizes.back();
     const int64_t target_rows = input.numel() / last_dim;

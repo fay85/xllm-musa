@@ -1179,10 +1179,10 @@ namespace {
 
 template <typename T>
 __global__ void __launch_bounds__(256, 1)
-    l2_norm_pair_h128_rows_kernel(const T* __restrict__ query,
-                                  const T* __restrict__ key,
-                                  T* __restrict__ query_out,
-                                  T* __restrict__ key_out,
+    l2_norm_pair_h128_rows_kernel(const T* query,
+                                  const T* key,
+                                  T* query_out,
+                                  T* key_out,
                                   int rows,
                                   float eps) {
   constexpr int kColumns = 128;
@@ -1302,10 +1302,13 @@ void launch(const torch::Tensor& a,
 
 }
 
-std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
-    const torch::Tensor& query,
-    const torch::Tensor& key,
-    double eps) {
+namespace {
+
+void l2_norm_pair_fused_out(const torch::Tensor& query,
+                            const torch::Tensor& key,
+                            torch::Tensor& query_out,
+                            torch::Tensor& key_out,
+                            double eps) {
   CHECK(query.sizes() == key.sizes())
       << "l2_norm_pair_fused requires matching Q/K shapes";
   CHECK(query.scalar_type() == key.scalar_type())
@@ -1314,9 +1317,15 @@ std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
       << "l2_norm_pair_fused requires contiguous Q/K tensors";
   CHECK_EQ(query.size(-1), 128)
       << "l2_norm_pair_fused currently supports head dimension 128";
+  CHECK(query_out.sizes() == query.sizes() &&
+        key_out.sizes() == key.sizes())
+      << "l2_norm_pair_fused output shapes must match inputs";
+  CHECK(query_out.scalar_type() == query.scalar_type() &&
+        key_out.scalar_type() == key.scalar_type())
+      << "l2_norm_pair_fused output dtypes must match inputs";
+  CHECK(query_out.is_contiguous() && key_out.is_contiguous())
+      << "l2_norm_pair_fused outputs must be contiguous";
 
-  torch::Tensor query_out = torch::empty_like(query);
-  torch::Tensor key_out = torch::empty_like(key);
   const int64_t rows_i64 = query.numel() / query.size(-1);
   CHECK_LE(rows_i64, std::numeric_limits<int>::max());
   const int rows = static_cast<int>(rows_i64);
@@ -1340,7 +1349,24 @@ std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
       LOG(FATAL) << "l2_norm_pair_fused: unsupported dtype "
                  << query.scalar_type();
   }
+}
+
+}  // namespace
+
+std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
+    const torch::Tensor& query,
+    const torch::Tensor& key,
+    double eps) {
+  torch::Tensor query_out = torch::empty_like(query);
+  torch::Tensor key_out = torch::empty_like(key);
+  l2_norm_pair_fused_out(query, key, query_out, key_out, eps);
   return {query_out, key_out};
+}
+
+void l2_norm_pair_fused_inplace(torch::Tensor& query,
+                                torch::Tensor& key,
+                                double eps) {
+  l2_norm_pair_fused_out(query, key, query, key, eps);
 }
 
 std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,

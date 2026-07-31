@@ -18,6 +18,9 @@ limitations under the License.
 #include <glog/logging.h>
 #include <torch/torch.h>
 
+#include <optional>
+#include <vector>
+
 #include "core/framework/model_context.h"
 #include "framework/parallel_state/parallel_args.h"
 #include "framework/quant_args.h"
@@ -26,6 +29,78 @@ limitations under the License.
 
 namespace xllm {
 namespace layer {
+
+// Owns stable intermediate storage for one MUSA piecewise-prefill graph.
+// Buffers are allocated during the eager warmup and frozen before capture;
+// sequential layers reuse storage by shape so a large prefill does not retain
+// one allocation per linear/GDN layer in the graph memory pool.
+class PiecewiseGraphMatmulBufferPool final {
+ public:
+  torch::Tensor get(const torch::Tensor& input, const torch::Tensor& weight);
+  torch::Tensor get_gated_rms_norm_output(const torch::Tensor& input);
+
+  torch::Tensor get_gdn_query(const torch::Tensor& input);
+  torch::Tensor get_gdn_key(const torch::Tensor& input);
+  torch::Tensor get_gdn_value(const torch::Tensor& input);
+  torch::Tensor get_gdn_output(const torch::Tensor& input);
+  torch::Tensor get_gdn_gate(const torch::Tensor& input);
+  torch::Tensor get_gdn_beta(const torch::Tensor& input);
+  torch::Tensor get_gdn_initial_state(const torch::Tensor& reference);
+  torch::Tensor get_gdn_final_state(const torch::Tensor& reference);
+  torch::Tensor get_gdn_kkt(const torch::Tensor& key, int64_t num_v_heads);
+
+  void freeze();
+
+ private:
+  torch::Tensor get_tensor(std::vector<torch::Tensor>& buffers,
+                           c10::IntArrayRef sizes,
+                           const torch::TensorOptions& options,
+                           const char* name);
+
+  std::vector<torch::Tensor> output_bufs_;
+  std::vector<torch::Tensor> gated_rms_norm_output_bufs_;
+  std::vector<torch::Tensor> gdn_query_bufs_;
+  std::vector<torch::Tensor> gdn_key_bufs_;
+  std::vector<torch::Tensor> gdn_value_bufs_;
+  std::vector<torch::Tensor> gdn_output_bufs_;
+  std::vector<torch::Tensor> gdn_gate_bufs_;
+  std::vector<torch::Tensor> gdn_beta_bufs_;
+  std::vector<torch::Tensor> gdn_initial_state_bufs_;
+  std::vector<torch::Tensor> gdn_final_state_bufs_;
+  std::vector<torch::Tensor> gdn_kkt_bufs_;
+  bool frozen_ = false;
+};
+
+// Selects a graph-owned buffer pool while a MUSA piecewise-prefill graph is
+// warmed up and captured. The scope is thread-local because graph capture is
+// serialized per device by the executor.
+class PiecewiseGraphMatmulBufferScope final {
+ public:
+  explicit PiecewiseGraphMatmulBufferScope(
+      PiecewiseGraphMatmulBufferPool* buffer_pool);
+  ~PiecewiseGraphMatmulBufferScope();
+
+  PiecewiseGraphMatmulBufferScope(const PiecewiseGraphMatmulBufferScope&) =
+      delete;
+  PiecewiseGraphMatmulBufferScope& operator=(
+      const PiecewiseGraphMatmulBufferScope&) = delete;
+
+  static PiecewiseGraphMatmulBufferPool* current_buffer_pool();
+
+ private:
+  PiecewiseGraphMatmulBufferPool* previous_buffer_pool_;
+};
+
+// Keeps the existing per-linear decode buffer while allowing piecewise
+// prefill to redirect outputs to the graph-owned pool above.
+class MatmulOutputBuffers final {
+ public:
+  std::optional<torch::Tensor> get(const torch::Tensor& input,
+                                   const torch::Tensor& weight);
+
+ private:
+  torch::Tensor decode_output_buf_;
+};
 
 // extra args for parallel linear behavior.
 struct LinearExtraArgs {
@@ -158,12 +233,7 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
   // fused FP8 accumulator with a premature dtype retype mid-accumulation.
   bool block_fp8_resolved_unquantized_ = false;
 
-  // Persistent output buffer for graph-capture-safe matmul on USE_CUDA +
-  // USE_MUSA. Lazily allocated for small batch sizes (<=
-  // kMatmulOutputBufMaxRows) and grown-only, so the same memory address is
-  // reused across decode buckets captured largest-first. Larger inputs
-  // (e.g. prefill) skip the buffer and use F::linear normally.
-  mutable torch::Tensor output_buf_;
+  mutable MatmulOutputBuffers output_buffers_;
 };
 TORCH_MODULE(ColumnParallelLinear);
 
@@ -247,9 +317,7 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   // See ColumnParallelLinearImpl::block_fp8_resolved_unquantized_.
   bool block_fp8_resolved_unquantized_ = false;
 
-  // Persistent output buffer for graph-capture-safe matmul; see
-  // ColumnParallelLinearImpl::output_buf_ for the contract.
-  mutable torch::Tensor output_buf_;
+  mutable MatmulOutputBuffers output_buffers_;
 };
 TORCH_MODULE(QKVParallelLinear);
 
@@ -350,9 +418,7 @@ class RowParallelLinearImpl : public torch::nn::Module {
   // See ColumnParallelLinearImpl::block_fp8_resolved_unquantized_.
   bool block_fp8_resolved_unquantized_ = false;
 
-  // Persistent output buffer for graph-capture-safe matmul; see
-  // ColumnParallelLinearImpl::output_buf_ for the contract.
-  mutable torch::Tensor output_buf_;
+  mutable MatmulOutputBuffers output_buffers_;
 };
 TORCH_MODULE(RowParallelLinear);
 
@@ -400,9 +466,7 @@ class ReplicatedLinearImpl : public torch::nn::Module {
   at::ScalarType output_dtype_;
   std::optional<std::string> resolved_weight_quant_method_;
 
-  // Persistent output buffer for graph-capture-safe matmul; see
-  // ColumnParallelLinearImpl::output_buf_ for the contract.
-  mutable torch::Tensor output_buf_;
+  mutable MatmulOutputBuffers output_buffers_;
 };
 TORCH_MODULE(ReplicatedLinear);
 

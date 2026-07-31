@@ -420,6 +420,23 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
     const int seq_start = query_start_loc[seq_idx];
     const int seq_len = query_start_loc[seq_idx + 1] - seq_start;
     if (token_offset >= seq_len) {
+        // Packed piecewise graphs keep the token-major buffer at bucket
+        // capacity while query_start_loc ends at the live token count. Only
+        // the final sequence owns that otherwise-unassigned tail. Initialize
+        // it here so the graph remains deterministic without a separate
+        // full-buffer memset on every layer.
+        const int output_start = seq_start + token_offset;
+        if (seq_idx == params.batch - 1 && output_start < params.seqlen) {
+            input_t* out = reinterpret_cast<input_t*>(params.out_ptr);
+#pragma unroll
+            for (int token_i = 0; token_i < kBlockTokens; ++token_i) {
+                const int output_token = output_start + token_i;
+                if (output_token < params.seqlen) {
+                    out[output_token * params.out_l_stride +
+                        feature * params.out_c_stride] = input_t(0);
+                }
+            }
+        }
         return;
     }
 
@@ -524,6 +541,12 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
             }
             out[(seq_start + token_offset + token_i) * params.out_l_stride +
                 feature * params.out_c_stride] = input_t(value);
+        } else if (seq_idx == params.batch - 1) {
+            const int output_token = seq_start + token_offset + token_i;
+            if (output_token < params.seqlen) {
+                out[output_token * params.out_l_stride +
+                    feature * params.out_c_stride] = input_t(0);
+            }
         }
     }
 }

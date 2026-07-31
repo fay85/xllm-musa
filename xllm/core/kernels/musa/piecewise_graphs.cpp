@@ -25,6 +25,7 @@ void PiecewiseGraphs::add_graph(std::unique_ptr<at::cuda::CUDAGraph>&& graph) {
 
 void PiecewiseGraphs::add_attention_runner(
     ::xllm::kernel::cuda::AttentionRunner&& runner) {
+  requires_plan_info_ = requires_plan_info_ || runner.requires_plan_info();
   attention_runners_.emplace_back(
       std::make_unique<::xllm::kernel::cuda::AttentionRunner>(
           std::move(runner)));

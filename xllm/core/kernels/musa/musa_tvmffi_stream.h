@@ -21,6 +21,7 @@ limitations under the License.
 #include <tvm/ffi/extra/module.h>
 #include <tvm/ffi/optional.h>
 
+#include <optional>
 #include <string>
 #include <tuple>
 #include <type_traits>
@@ -69,6 +70,24 @@ class MusaTvmffiPreparationSyncGuard final {
   bool previous_ = false;
 };
 
+// During graph capture, replaces only an invalid current MUSA stream with the
+// capture stream. Individual FFI operators still rebind their stream handle.
+class MusaTvmffiStreamOverrideGuard final {
+ public:
+  MusaTvmffiStreamOverrideGuard(const torch::Device& device, void* stream);
+  ~MusaTvmffiStreamOverrideGuard();
+
+  MusaTvmffiStreamOverrideGuard(const MusaTvmffiStreamOverrideGuard&) =
+      delete;
+  MusaTvmffiStreamOverrideGuard& operator=(
+      const MusaTvmffiStreamOverrideGuard&) = delete;
+
+ private:
+  torch::Device device_;
+  bool active_ = false;
+  void* previous_forced_stream_ = nullptr;
+};
+
 class MusaTvmffiStreamGuard final {
  public:
   explicit MusaTvmffiStreamGuard(const torch::Device& device);
@@ -81,9 +100,10 @@ class MusaTvmffiStreamGuard final {
   torch::Device device_;
   bool active_ = false;
   // True when the FFI kernel was bound to the pool stream (eager-mode
-  // fallback). In that case the destructor must sync the FFI stream so
-  // subsequent PyTorch ops on the compute stream see the FFI results.
+  // fallback). In that case the destructor must establish ordering from the
+  // FFI stream to the compute stream before subsequent PyTorch operations.
   bool needs_sync_ = false;
+  bool uses_event_handoff_ = false;
 };
 
 template <typename T>

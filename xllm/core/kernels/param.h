@@ -1701,12 +1701,25 @@ struct MateGatedDeltaRulePrefillParams {
   // (or [B, max_T, ...] which is packed on the fly when B > 1).
   // When unset, B == 1 is required and cu_seqlens=[0, T] is synthesized.
   std::optional<torch::Tensor> cu_seqlens = std::nullopt;
+  // Optional KKT-only cumulative lengths. It has the same B+1 shape as
+  // cu_seqlens; for a bucketed packed graph its final endpoint may be the
+  // bucket capacity. The full recurrent kernel still consumes cu_seqlens.
+  std::optional<torch::Tensor> cu_seqlens_kkt = std::nullopt;
   // Host-side copy of cu_seqlens. Prefer this for pack/unpack/cumsum so the
   // multi-seq path does not D2H-sync the GPU stream once per helper call
   // (and once per GDN layer). Built from q_seq_lens_vec when available.
   std::optional<std::vector<int32_t>> cu_seqlens_host = std::nullopt;
+  // Optional graph-owned output buffers. Supplying them avoids per-layer
+  // allocations when the Mate varlen runner executes between graph segments.
+  std::optional<torch::Tensor> output = std::nullopt;
+  std::optional<torch::Tensor> final_state = std::nullopt;
+  std::optional<torch::Tensor> kkt_output = std::nullopt;
   bool output_final_state = true;
   bool use_qk_l2norm_in_kernel = true;
+  // The piecewise runner owns Q/K stable buffers that are overwritten by the
+  // preceding graph segment on every replay, so fused normalization may reuse
+  // those buffers in place instead of allocating normalized copies.
+  bool allow_inplace_qk_l2norm = false;
 };
 
 struct MateGatedDeltaRuleDecodeParams {

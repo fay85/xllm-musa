@@ -33,6 +33,9 @@ namespace layer {
 
 namespace {
 
+thread_local PiecewiseGraphMatmulBufferPool*
+    s_piecewise_graph_matmul_buffer_pool = nullptr;
+
 // ============================================================================
 // Persistent Matmul Output Buffer (CUDA-graph capture safety)
 // ============================================================================
@@ -58,38 +61,16 @@ namespace {
 //      executor must warm up the max bucket first (sglang's
 //      capture_one_batch_size does this implicitly via reverse order).
 //
-// Buffer sizing: we cap each layer at kMatmulOutputBufMaxRows rows. Decode
-// bucket sizes coming out of get_bucket_num_tokens() top out at
-// max_seqs_per_batch (<=128 in practice). Larger inputs (prefill, eager) skip
-// the buffer and fall back to F::linear, which is safe outside graph capture.
+// Decode buckets are kept small and use one grow-only buffer per linear module.
+// Piecewise prefill redirects all shapes to the graph-owned pool below.
 constexpr int64_t kMatmulOutputBufMaxRows = 128;
 
 inline void maybe_set_persistent_output_buf(
     xllm::kernel::MatmulParams& params,
-    torch::Tensor& output_buf,
+    MatmulOutputBuffers& output_buffers,
     const torch::Tensor& input,
     const torch::Tensor& weight) {
-  if (input.dim() != 2 || weight.dim() != 2) {
-    return;
-  }
-  const int64_t M = input.size(0);
-  if (M <= 0 || M > kMatmulOutputBufMaxRows) {
-    return;
-  }
-  const int64_t N = weight.size(0);
-  const bool needs_realloc =
-      !output_buf.defined() || output_buf.size(0) < M ||
-      output_buf.size(1) != N ||
-      output_buf.scalar_type() != input.scalar_type() ||
-      output_buf.device() != input.device();
-  if (needs_realloc) {
-    // Grow-only: never shrink, so views handed out for already-captured
-    // smaller-bucket graphs stay valid.
-    const int64_t target_M =
-        output_buf.defined() ? std::max(M, output_buf.size(0)) : M;
-    output_buf = torch::empty({target_M, N}, input.options());
-  }
-  params.output_buf = output_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/M);
+  params.output_buf = output_buffers.get(input, weight);
 }
 
 // ============================================================================
@@ -309,7 +290,7 @@ torch::Tensor block_fp8_dequant_forward(
     const torch::Tensor& weight_scale_inv,
     const std::vector<int64_t>& weight_block_size,
     const std::optional<torch::Tensor>& bias,
-    torch::Tensor& output_buf) {
+    MatmulOutputBuffers& output_buffers) {
   const int64_t block_n = weight_block_size[0];
   const int64_t block_k = weight_block_size[1];
   auto weight_bf16 = dequantize_fp8_block_weight(
@@ -334,7 +315,8 @@ torch::Tensor block_fp8_dequant_forward(
   matmul_params.a = input;
   matmul_params.b = weight_bf16;
   matmul_params.bias = bias;
-  maybe_set_persistent_output_buf(matmul_params, output_buf, input, weight_bf16);
+  maybe_set_persistent_output_buf(
+      matmul_params, output_buffers, input, weight_bf16);
   return xllm::kernel::matmul(matmul_params);
 }
 
@@ -348,7 +330,8 @@ torch::Tensor block_fp8_native_forward(
     const torch::Tensor& weight_fp8,
     const torch::Tensor& weight_scale_inv,
     const std::vector<int64_t>& weight_block_size,
-    const std::optional<torch::Tensor>& bias) {
+    const std::optional<torch::Tensor>& bias,
+    MatmulOutputBuffers& output_buffers) {
   const int64_t block_k = weight_block_size[1];
 
   auto in_shape = input.sizes().vec();
@@ -386,6 +369,7 @@ torch::Tensor block_fp8_native_forward(
   params.output_dtype = (input.scalar_type() == torch::kFloat16)
                             ? torch::kFloat16
                             : torch::kBFloat16;
+  params.output = output_buffers.get(input_2d, weight_fp8);
   auto out = xllm::kernel::fp8_block_matmul(params);  // [m, n]
 
   if (bias.has_value() && bias.value().defined()) {
@@ -405,7 +389,7 @@ torch::Tensor block_fp8_forward(
     const torch::Tensor& weight_scale_inv,
     const std::vector<int64_t>& weight_block_size,
     const std::optional<torch::Tensor>& bias,
-    torch::Tensor& output_buf) {
+    MatmulOutputBuffers& output_buffers) {
   static const bool use_dequant = std::getenv("XLLM_FP8_DEQUANT") != nullptr;
   if (use_dequant) {
     return block_fp8_dequant_forward(input,
@@ -413,10 +397,14 @@ torch::Tensor block_fp8_forward(
                                      weight_scale_inv,
                                      weight_block_size,
                                      bias,
-                                     output_buf);
+                                     output_buffers);
   }
-  return block_fp8_native_forward(
-      input, weight_fp8, weight_scale_inv, weight_block_size, bias);
+  return block_fp8_native_forward(input,
+                                  weight_fp8,
+                                  weight_scale_inv,
+                                  weight_block_size,
+                                  bias,
+                                  output_buffers);
 }
 
 void resolve_weight_quant_method_for_linear_load(
@@ -739,6 +727,159 @@ torch::Tensor dcu_w8a8_dynamic_linear_forward(
 
 }  // namespace
 
+torch::Tensor PiecewiseGraphMatmulBufferPool::get_tensor(
+    std::vector<torch::Tensor>& buffers,
+    c10::IntArrayRef sizes,
+    const torch::TensorOptions& options,
+    const char* name) {
+  for (const torch::Tensor& buffer : buffers) {
+    if (buffer.sizes().equals(sizes) &&
+        buffer.scalar_type() == options.dtype().toScalarType() &&
+        buffer.device() == options.device()) {
+      return buffer;
+    }
+  }
+  CHECK(!frozen_) << "Piecewise graph " << name
+                  << " shape was not prepared during eager warmup (rank="
+                  << sizes.size() << ")";
+  torch::Tensor buffer = torch::empty(sizes, options);
+  buffers.emplace_back(buffer);
+  return buffer;
+}
+
+torch::Tensor PiecewiseGraphMatmulBufferPool::get(
+    const torch::Tensor& input,
+    const torch::Tensor& weight) {
+  CHECK_EQ(input.dim(), 2);
+  CHECK_EQ(weight.dim(), 2);
+  return get_tensor(output_bufs_,
+                    {input.size(0), weight.size(0)},
+                    input.options(),
+                    "matmul buffer");
+}
+
+torch::Tensor PiecewiseGraphMatmulBufferPool::get_gated_rms_norm_output(
+    const torch::Tensor& input) {
+  CHECK_GE(input.dim(), 1);
+  CHECK_GT(input.numel(), 0);
+  const int64_t last_dim = input.size(-1);
+  return get_tensor(gated_rms_norm_output_bufs_,
+                    {input.numel() / last_dim, last_dim},
+                    input.options(),
+                    "gated RMSNorm buffer")
+      .view(input.sizes());
+}
+
+torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_query(
+    const torch::Tensor& input) {
+  return get_tensor(gdn_query_bufs_, input.sizes(), input.options(), "GDN Q");
+}
+
+torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_key(
+    const torch::Tensor& input) {
+  return get_tensor(gdn_key_bufs_, input.sizes(), input.options(), "GDN K");
+}
+
+torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_value(
+    const torch::Tensor& input) {
+  return get_tensor(gdn_value_bufs_, input.sizes(), input.options(), "GDN V");
+}
+
+torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_output(
+    const torch::Tensor& input) {
+  return get_tensor(gdn_output_bufs_, input.sizes(), input.options(),
+                    "GDN output");
+}
+
+torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_gate(
+    const torch::Tensor& input) {
+  return get_tensor(gdn_gate_bufs_,
+                    input.sizes(),
+                    input.options().dtype(torch::kFloat32),
+                    "GDN gate");
+}
+
+torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_beta(
+    const torch::Tensor& input) {
+  return get_tensor(gdn_beta_bufs_,
+                    input.sizes(),
+                    input.options().dtype(torch::kFloat32),
+                    "GDN beta");
+}
+
+torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_initial_state(
+    const torch::Tensor& reference) {
+  return get_tensor(gdn_initial_state_bufs_,
+                    reference.sizes(),
+                    reference.options().dtype(torch::kFloat32),
+                    "GDN initial state");
+}
+
+torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_final_state(
+    const torch::Tensor& reference) {
+  return get_tensor(gdn_final_state_bufs_,
+                    reference.sizes(),
+                    reference.options().dtype(torch::kFloat32),
+                    "GDN final state");
+}
+
+torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_kkt(
+    const torch::Tensor& key,
+    int64_t num_v_heads) {
+  const std::vector<int64_t> sizes = {
+      1, key.size(1), num_v_heads, 64};
+  return get_tensor(gdn_kkt_bufs_, sizes, key.options(), "GDN KKT");
+}
+
+void PiecewiseGraphMatmulBufferPool::freeze() { frozen_ = true; }
+
+PiecewiseGraphMatmulBufferScope::PiecewiseGraphMatmulBufferScope(
+    PiecewiseGraphMatmulBufferPool* buffer_pool)
+    : previous_buffer_pool_(s_piecewise_graph_matmul_buffer_pool) {
+  CHECK(buffer_pool != nullptr);
+  s_piecewise_graph_matmul_buffer_pool = buffer_pool;
+}
+
+PiecewiseGraphMatmulBufferScope::~PiecewiseGraphMatmulBufferScope() {
+  s_piecewise_graph_matmul_buffer_pool = previous_buffer_pool_;
+}
+
+PiecewiseGraphMatmulBufferPool*
+PiecewiseGraphMatmulBufferScope::current_buffer_pool() {
+  return s_piecewise_graph_matmul_buffer_pool;
+}
+
+std::optional<torch::Tensor> MatmulOutputBuffers::get(
+    const torch::Tensor& input,
+    const torch::Tensor& weight) {
+  if (input.dim() != 2 || weight.dim() != 2 || input.size(0) <= 0) {
+    return std::nullopt;
+  }
+
+  if (auto* pool = PiecewiseGraphMatmulBufferScope::current_buffer_pool();
+      pool != nullptr) {
+    return pool->get(input, weight);
+  }
+
+  const int64_t rows = input.size(0);
+  if (rows > kMatmulOutputBufMaxRows) {
+    return std::nullopt;
+  }
+  const int64_t columns = weight.size(0);
+  const bool needs_realloc =
+      !decode_output_buf_.defined() || decode_output_buf_.size(0) < rows ||
+      decode_output_buf_.size(1) != columns ||
+      decode_output_buf_.scalar_type() != input.scalar_type() ||
+      decode_output_buf_.device() != input.device();
+  if (needs_realloc) {
+    const int64_t target_rows = decode_output_buf_.defined()
+                                    ? std::max(rows, decode_output_buf_.size(0))
+                                    : rows;
+    decode_output_buf_ = torch::empty({target_rows, columns}, input.options());
+  }
+  return decode_output_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/rows);
+}
+
 ColumnParallelLinearImpl::ColumnParallelLinearImpl(const ModelContext& context)
     : ColumnParallelLinearImpl(
           context.get_model_args().hidden_size(),
@@ -919,7 +1060,7 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
                                  weight_scale_inv_,
                                  quant_args_.weight_block_size(),
                                  bias,
-                                 output_buf_);
+                                 output_buffers_);
     } else {
       // Module not actually quantized (no weight_scale_inv in checkpoint):
       // weight was re-registered to BF16 at load; run the standard matmul.
@@ -928,7 +1069,7 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
       matmul_params.b = weight_;
       matmul_params.bias = bias;
       maybe_set_persistent_output_buf(
-          matmul_params, output_buf_, input, weight_);
+          matmul_params, output_buffers_, input, weight_);
       output = xllm::kernel::matmul(matmul_params);
     }
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
@@ -975,7 +1116,8 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
     matmul_params.a = input;
     matmul_params.b = weight_;
     matmul_params.bias = bias;
-    maybe_set_persistent_output_buf(matmul_params, output_buf_, input, weight_);
+    maybe_set_persistent_output_buf(
+        matmul_params, output_buffers_, input, weight_);
     output = xllm::kernel::matmul(matmul_params);
   }
 
@@ -1451,14 +1593,14 @@ torch::Tensor QKVParallelLinearImpl::forward(torch::Tensor input) {
                                  weight_scale_inv_,
                                  quant_args_.weight_block_size(),
                                  bias,
-                                 output_buf_);
+                                 output_buffers_);
     } else {
       xllm::kernel::MatmulParams matmul_params;
       matmul_params.a = input;
       matmul_params.b = weight_;
       matmul_params.bias = bias;
       maybe_set_persistent_output_buf(
-          matmul_params, output_buf_, input, weight_);
+          matmul_params, output_buffers_, input, weight_);
       output = xllm::kernel::matmul(matmul_params);
     }
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
@@ -1509,7 +1651,8 @@ torch::Tensor QKVParallelLinearImpl::forward(torch::Tensor input) {
     matmul_params.a = input;
     matmul_params.b = weight_;
     matmul_params.bias = bias;
-    maybe_set_persistent_output_buf(matmul_params, output_buf_, input, weight_);
+    maybe_set_persistent_output_buf(
+        matmul_params, output_buffers_, input, weight_);
 
     output = xllm::kernel::matmul(matmul_params);
   }
@@ -1901,14 +2044,14 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
                                  weight_scale_inv_,
                                  quant_args_.weight_block_size(),
                                  bias,
-                                 output_buf_);
+                                 output_buffers_);
     } else {
       xllm::kernel::MatmulParams matmul_params;
       matmul_params.a = input;
       matmul_params.b = weight_;
       matmul_params.bias = bias;
       maybe_set_persistent_output_buf(
-          matmul_params, output_buf_, input, weight_);
+          matmul_params, output_buffers_, input, weight_);
       output = xllm::kernel::matmul(matmul_params);
     }
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
@@ -1969,7 +2112,8 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
     matmul_params.a = input;
     matmul_params.b = weight_;
     matmul_params.bias = bias;
-    maybe_set_persistent_output_buf(matmul_params, output_buf_, input, weight_);
+    maybe_set_persistent_output_buf(
+        matmul_params, output_buffers_, input, weight_);
     output = xllm::kernel::matmul(matmul_params);
   }
   if (enable_result_reduction_ && world_size_ > 1) {
@@ -2137,7 +2281,8 @@ torch::Tensor ReplicatedLinearImpl::forward(torch::Tensor input) {
   matmul_params.a = input;
   matmul_params.b = weight_;
   matmul_params.bias = bias;
-  maybe_set_persistent_output_buf(matmul_params, output_buf_, input, weight_);
+  maybe_set_persistent_output_buf(
+      matmul_params, output_buffers_, input, weight_);
 
   auto output = xllm::kernel::matmul(matmul_params);
   return output;

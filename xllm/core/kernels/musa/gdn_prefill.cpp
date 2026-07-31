@@ -304,7 +304,9 @@ void l2norm_last_dim(torch::Tensor& tensor) {
            (tensor.pow(2).sum(/*dim=*/-1, /*keepdim=*/true) + kEps).sqrt();
 }
 
-void l2norm_qk_last_dim(torch::Tensor& query, torch::Tensor& key) {
+void l2norm_qk_last_dim(torch::Tensor& query,
+                        torch::Tensor& key,
+                        bool allow_inplace) {
   static const bool use_fused_pair = [] {
     const char* env = std::getenv("XLLM_FUSED_GDN_QK_L2NORM");
     return env == nullptr || std::string(env) != "0";
@@ -313,32 +315,36 @@ void l2norm_qk_last_dim(torch::Tensor& query, torch::Tensor& key) {
       query.sizes() == key.sizes() && query.scalar_type() == key.scalar_type() &&
       query.is_contiguous() && key.is_contiguous() && query.size(-1) == 128;
   if (use_fused_pair && pair_supported) {
-    torch::Tensor normalized_query;
-    torch::Tensor normalized_key;
-    std::tie(normalized_query, normalized_key) =
-        l2_norm_pair_fused(query, key, /*eps=*/1e-6);
-
     static const bool validate_fused_pair = [] {
       const char* env =
           std::getenv("XLLM_VALIDATE_FUSED_GDN_QK_L2NORM");
       return env != nullptr && std::string(env) == "1";
     }();
     static std::atomic<bool> validation_pending{true};
+    torch::Tensor reference_query;
+    torch::Tensor reference_key;
     if (validate_fused_pair && validation_pending.exchange(false)) {
-      torch::Tensor reference_query = query;
-      torch::Tensor reference_key = key;
+      reference_query = query.clone();
+      reference_key = key.clone();
       l2norm_last_dim(reference_query);
       l2norm_last_dim(reference_key);
+    }
+
+    if (allow_inplace) {
+      l2_norm_pair_fused_inplace(query, key, /*eps=*/1e-6);
+    } else {
+      std::tie(query, key) =
+          l2_norm_pair_fused(query, key, /*eps=*/1e-6);
+    }
+
+    if (reference_query.defined()) {
       const double query_max_diff =
-          (normalized_query - reference_query).abs().max().item<double>();
+          (query - reference_query).abs().max().item<double>();
       const double key_max_diff =
-          (normalized_key - reference_key).abs().max().item<double>();
+          (key - reference_key).abs().max().item<double>();
       LOG(INFO) << "[GDN_QK_L2NORM_VALIDATE] query_max_diff="
                 << query_max_diff << " key_max_diff=" << key_max_diff;
     }
-
-    query = std::move(normalized_query);
-    key = std::move(normalized_key);
     return;
   }
   l2norm_last_dim(query);
@@ -614,7 +620,7 @@ bool mate_kkt_module_available(const std::string& uri) {
   return ::access(so_path.c_str(), R_OK) == 0;
 }
 
-// Host fallback matching SGLang mate.kkt_solve numerically. Prefer the Mate
+// Host fallback matching mate.kkt_solve numerically. Prefer the Mate
 // TileLang FFI path below: the per-row PyTorch loop is a major TTFT hotspot
 // across 48 GDN layers.
 //
@@ -683,7 +689,7 @@ torch::Tensor kkt_solve_torch(const torch::Tensor& key,
   return attn.to(key.scalar_type());
 }
 
-// Mate TileLang KKT solve via TVM FFI (same kernel SGLang uses).
+// Mate TileLang KKT solve via TVM FFI.
 // ABI: main(k, b, a, num_chunks) with
 //   k: [B, T, Hq, K], b: [B, T, Hv], a: [B, T, Hv, 64],
 //   num_chunks: B * ceil_div(T, 64)
@@ -721,9 +727,11 @@ torch::Tensor kkt_solve_mate_ffi(const torch::Tensor& key,
 
 // Varlen KKT ABI: main(k, b, cu_seqlens, a) for packed [1, T, ...] inputs.
 torch::Tensor kkt_solve_mate_ffi_varlen(const torch::Tensor& key,
-                                        const torch::Tensor& beta,
-                                        const torch::Tensor& cu_seqlens,
-                                        int64_t chunk_size) {
+                                         const torch::Tensor& beta,
+                                         const torch::Tensor& cu_seqlens,
+                                         int64_t chunk_size,
+                                         const std::optional<torch::Tensor>&
+                                             output = std::nullopt) {
   XLLM_KINETO_USER_SCOPE("xllm/kkt_solve_mate_varlen");
   CHECK_EQ(chunk_size, kGdnChunkSize)
       << "mate KKT solve currently requires chunk_size=" << kGdnChunkSize;
@@ -741,8 +749,18 @@ torch::Tensor kkt_solve_mate_ffi_varlen(const torch::Tensor& key,
   auto key_contig = key.contiguous();
   auto beta_contig = beta.to(torch::kFloat32).contiguous();
   auto cu_contig = cu_seqlens.to(torch::kInt32).contiguous();
-  auto a = torch::empty({1, num_tokens, num_v_heads, chunk_size},
-                        key.options());
+  torch::Tensor a;
+  if (output.has_value() && output->defined()) {
+    a = *output;
+    CHECK_EQ(a.dim(), 4);
+    CHECK_EQ(a.size(0), 1);
+    CHECK_EQ(a.size(1), num_tokens);
+    CHECK_EQ(a.size(2), num_v_heads);
+    CHECK_EQ(a.size(3), chunk_size);
+    CHECK(a.is_contiguous()) << "Mate KKT output must be contiguous";
+  } else {
+    a = torch::empty({1, num_tokens, num_v_heads, chunk_size}, key.options());
+  }
 
   auto main = get_function(uri, "main");
   main(to_ffi_tensor(key_contig),
@@ -756,6 +774,10 @@ torch::Tensor kkt_solve(const torch::Tensor& key,
                         const torch::Tensor& beta,
                         int64_t chunk_size,
                         const std::optional<torch::Tensor>& cu_seqlens =
+                            std::nullopt,
+                        const std::optional<torch::Tensor>& kkt_cu_seqlens =
+                            std::nullopt,
+                        const std::optional<torch::Tensor>& output =
                             std::nullopt) {
   const bool is_varlen =
       cu_seqlens.has_value() && cu_seqlens->defined();
@@ -765,8 +787,12 @@ torch::Tensor kkt_solve(const torch::Tensor& key,
     if (mate_kkt_module_available(uri)) {
       if (ensure_tilelang_musa_loader()) {
         if (is_varlen) {
+          const auto& kkt_cu = kkt_cu_seqlens.has_value() &&
+                                       kkt_cu_seqlens->defined()
+                                   ? *kkt_cu_seqlens
+                                   : *cu_seqlens;
           return kkt_solve_mate_ffi_varlen(
-              key, beta, *cu_seqlens, chunk_size);
+              key, beta, kkt_cu, chunk_size, output);
         }
         return kkt_solve_mate_ffi(key, beta, chunk_size);
       }
@@ -969,7 +995,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   // while capturing even for packed shapes (packed prefill is eager).
   const bool capturing =
       xllm::runtime::cuda::GlobalCaptureInstance::get_instance().is_capturing();
-  // SGLang's full-varlen Mate path handles a partial final chunk directly.
+  // Full-varlen Mate path handles a partial final chunk directly.
   // Keep XLLM_MATE_GDN_UNPADDED_C1=0 as a runtime rollback switch.
   const bool use_unpadded_c1_varlen =
       !capturing && mate_gdn_unpadded_c1_enabled() && input_batch == 1 &&
@@ -979,7 +1005,10 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
           num_q_heads, num_v_heads, query.scalar_type(), /*is_varlen=*/true));
   const bool use_full_varlen =
       varlen_available && !capturing &&
-      (mate_gdn_needs_varlen_packing(params, input_batch, input_seq_len) ||
+      ((params.output.has_value() && params.output->defined()) ||
+       (params.final_state.has_value() && params.final_state->defined()) ||
+       (params.kkt_output.has_value() && params.kkt_output->defined()) ||
+       mate_gdn_needs_varlen_packing(params, input_batch, input_seq_len) ||
        use_unpadded_c1_varlen);
   const bool use_full_padded =
       !use_full_varlen && !mate_gdn_force_simple_kernel() &&
@@ -1026,7 +1055,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       }
     } else {
       // Rectangular [B, T] without cu_seqlens: synthesize equal-length cu and
-      // pack to [1, B*T] (SGLang-style).
+      // pack to [1, B*T].
       CHECK_GE(input_batch, 1);
       num_seqs = input_batch;
       cu_host.assign(static_cast<size_t>(num_seqs) + 1, 0);
@@ -1059,7 +1088,8 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     CHECK_EQ(query.size(0), 1);
 
     if (params.use_qk_l2norm_in_kernel) {
-      l2norm_qk_last_dim(query, key);
+      l2norm_qk_last_dim(
+          query, key, params.allow_inplace_qk_l2norm);
     }
     query = query.contiguous();
     key = key.contiguous();
@@ -1089,15 +1119,38 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
           torch::TensorOptions().dtype(torch::kInt32).device(query.device()));
     }();
 
+    torch::Tensor kkt_cu_seqlens;
+    const bool has_device_kkt = params.cu_seqlens_kkt.has_value() &&
+                                params.cu_seqlens_kkt->defined();
+    if (has_device_kkt && !need_unpack && pad_size == 0) {
+      kkt_cu_seqlens = params.cu_seqlens_kkt->to(torch::kInt32).contiguous();
+      CHECK_EQ(kkt_cu_seqlens.size(0), cu_seqlens.size(0));
+    } else {
+      // Keep the KKT ABI's B+1 shape stable. A bucket endpoint is used only by
+      // KKT to cover the fixed launch tail; the recurrent kernel receives the
+      // live cu_seqlens above.
+      kkt_cu_seqlens = cu_seqlens.clone();
+      kkt_cu_seqlens.select(/*dim=*/0, /*index=*/num_seqs)
+          .fill_(static_cast<int32_t>(num_tokens));
+    }
+
     torch::Tensor a;
     torch::Tensor h0;
     torch::Tensor output;
     torch::Tensor final_state;
     {
       MusaTvmffiStreamGuard stream_guard(query.device());
-      a = kkt_solve(key, beta, kGdnChunkSize, cu_seqlens);
+      a = kkt_solve(key,
+                    beta,
+                    kGdnChunkSize,
+                    cu_seqlens,
+                    kkt_cu_seqlens,
+                    params.kkt_output);
       if (params.initial_state.has_value() && params.initial_state->defined()) {
-        h0 = params.initial_state->to(torch::kFloat32).contiguous();
+        h0 = params.initial_state->scalar_type() == torch::kFloat32 &&
+                     params.initial_state->is_contiguous()
+                 ? *params.initial_state
+                 : params.initial_state->to(torch::kFloat32).contiguous();
       } else {
         h0 = torch::zeros({num_seqs, num_v_heads, head_v_dim, head_k_dim},
                           torch::TensorOptions()
@@ -1108,11 +1161,33 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       CHECK_EQ(h0.size(1), num_v_heads);
       CHECK_EQ(h0.size(2), head_v_dim);
       CHECK_EQ(h0.size(3), head_k_dim);
-      output = torch::empty({1, num_tokens, num_v_heads, head_v_dim},
-                            value.options());
-      final_state = torch::empty(
-          {num_seqs, num_v_heads, head_v_dim, head_k_dim},
-          torch::TensorOptions().dtype(torch::kFloat32).device(query.device()));
+      if (params.output.has_value() && params.output->defined()) {
+        output = *params.output;
+        CHECK_EQ(output.dim(), 4);
+        CHECK_EQ(output.size(0), 1);
+        CHECK_EQ(output.size(1), num_tokens);
+        CHECK_EQ(output.size(2), num_v_heads);
+        CHECK_EQ(output.size(3), head_v_dim);
+        CHECK(output.is_contiguous()) << "Mate GDN output must be contiguous";
+      } else {
+        output = torch::empty({1, num_tokens, num_v_heads, head_v_dim},
+                              value.options());
+      }
+      if (params.final_state.has_value() && params.final_state->defined()) {
+        final_state = *params.final_state;
+        CHECK_EQ(final_state.dim(), 4);
+        CHECK_EQ(final_state.size(0), num_seqs);
+        CHECK_EQ(final_state.size(1), num_v_heads);
+        CHECK_EQ(final_state.size(2), head_v_dim);
+        CHECK_EQ(final_state.size(3), head_k_dim);
+        CHECK(final_state.is_contiguous() &&
+              final_state.scalar_type() == torch::kFloat32)
+            << "Mate GDN final_state must be contiguous FP32";
+      } else {
+        final_state = torch::empty(
+            {num_seqs, num_v_heads, head_v_dim, head_k_dim},
+            torch::TensorOptions().dtype(torch::kFloat32).device(query.device()));
+      }
 
       if (mate_gdn_debug_enabled()) {
         LOG(INFO) << "[MateGdnPrefillFullVarlen] q=" << query.sizes()
@@ -1160,7 +1235,8 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     auto& scratch = mate_gdn_prefill_scratch();
 
     if (params.use_qk_l2norm_in_kernel) {
-      l2norm_qk_last_dim(query, key);
+      l2norm_qk_last_dim(
+          query, key, params.allow_inplace_qk_l2norm);
     }
     if (!query.is_contiguous()) {
       query = query.contiguous();
@@ -1356,7 +1432,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   }
 
   if (params.use_qk_l2norm_in_kernel) {
-    l2norm_qk_last_dim(query, key);
+    l2norm_qk_last_dim(query, key, params.allow_inplace_qk_l2norm);
   }
   query = query.contiguous();
   key = key.contiguous();
@@ -1516,6 +1592,8 @@ torch::Tensor causal_conv1d_prefill(
   // and assigns each sequence a disjoint output and cache-state row.
   if (use_token_major && x.is_contiguous() && weight.dim() == 2 &&
       weight.size(1) == 4) {
+    // The token-major kernel initializes only the unassigned final-sequence
+    // tail when the live CU endpoint is shorter than this bucket.
     torch::Tensor out = torch::empty_like(x);
     causal_conv1d_fwd_token_major(x,
                                   weight,

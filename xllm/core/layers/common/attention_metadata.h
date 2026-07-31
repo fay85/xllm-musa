@@ -74,6 +74,11 @@ struct AttentionMetadata {
   torch::Tensor q_cu_seq_lens;
   torch::Tensor kv_cu_seq_lens;
   torch::Tensor kv_seq_lens;
+  // Packed MUSA GDN keeps live ragged endpoints separate from the attention
+  // CU. The KKT launcher may use the same B+1 shape with a bucket sentinel at
+  // its final endpoint; the recurrent kernel always uses gdn_cu_seq_lens.
+  torch::Tensor gdn_cu_seq_lens;
+  torch::Tensor gdn_kkt_cu_seq_lens;
   torch::Tensor q_seq_lens;
   std::vector<int32_t> kv_seq_lens_vec;
   std::vector<int32_t> q_seq_lens_vec;
