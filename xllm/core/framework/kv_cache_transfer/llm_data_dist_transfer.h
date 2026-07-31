@@ -28,6 +28,9 @@ struct RegisteredCache {
   int32_t group_id;
   bool sequence_scoped;
   Cache cache;
+  // Keep the tensor owner and layout available for heterogeneous-TP staging
+  // and decode-side merge. Cache only stores the raw address.
+  torch::Tensor tensor;
 };
 
 using LayerRegisteredCaches = std::vector<std::vector<RegisteredCache>>;
