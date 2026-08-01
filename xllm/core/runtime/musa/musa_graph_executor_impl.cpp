@@ -2331,13 +2331,13 @@ std::vector<uint32_t> generate_piecewise_prefill_graph_tokens(
   append_range(/*start=*/1280, /*end_inclusive=*/4096, /*step=*/256);
   append_range(/*start=*/4608, /*end_inclusive=*/max_tokens, /*step=*/512);
   // The coarse SGLang ladder leaves increasingly large padding gaps for
-  // packed batches of nominal 2k prompts. Keep the extra shoulders aligned to
-  // 256 tokens: MUSA prefill kernels use 256-token tiles for their longest
-  // paths, and 64-only alignment produced invalid output for bucket 8320.
-  // Bucket 2304 already covers B=1; these entries tighten B=2..7 without
-  // introducing a new shape for every exact host length.
-  constexpr std::array<uint32_t, 6> kPrefillShoulders = {
-      4352, 6400, 8448, 10496, 12544, 14592};
+  // nominal 2k prompts and packed multi-sequence batches. Keep the extra
+  // shoulders aligned to 64 tokens, the Mate GDN/KKT granularity. The 2112
+  // shoulder prevents a one-token crossing of 2048 from selecting 2304; the
+  // remaining entries tighten B=2..7 without introducing a shape for every
+  // exact host length.
+  constexpr std::array<uint32_t, 7> kPrefillShoulders = {
+      2112, 4352, 6400, 8448, 10496, 12544, 14592};
   for (uint32_t shoulder : kPrefillShoulders) {
     if (shoulder <= max_tokens) {
       capture_sizes.push_back(shoulder);
