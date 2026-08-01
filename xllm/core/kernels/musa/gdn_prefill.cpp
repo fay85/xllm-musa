@@ -614,6 +614,17 @@ bool mate_gdn_kkt_cu_alias_enabled() {
   return enabled;
 }
 
+bool mate_gdn_c1_partial_kkt_enabled() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_MATE_GDN_C1_PARTIAL_KKT");
+    // The fixed KKT kernel already masks a partial final chunk. For a packed
+    // single sequence it avoids the generic varlen sequence locator in every
+    // chunk/head block while preserving the unpadded recurrent path.
+    return env == nullptr || env[0] != '0';
+  }();
+  return enabled;
+}
+
 std::string get_mate_kkt_solve_uri(int64_t num_q_heads,
                                    int64_t num_v_heads,
                                    torch::ScalarType dtype,
@@ -713,17 +724,18 @@ torch::Tensor kkt_solve_torch(const torch::Tensor& key,
 // Mate TileLang KKT solve via TVM FFI.
 // ABI: main(k, b, a, num_chunks) with
 //   k: [B, T, Hq, K], b: [B, T, Hv], a: [B, T, Hv, 64],
-//   num_chunks: B * ceil_div(T, 64)
+//   num_chunks: B * ceil_div(T, 64). The TileLang kernel masks a partial
+//   final chunk, so T need not be padded when B == 1.
 torch::Tensor kkt_solve_mate_ffi(const torch::Tensor& key,
                                  const torch::Tensor& beta,
                                  int64_t chunk_size,
-                                 bool use_strided_abi) {
+                                 bool use_strided_abi,
+                                 const std::optional<torch::Tensor>& output =
+                                     std::nullopt) {
   XLLM_KINETO_USER_SCOPE("xllm/kkt_solve_mate");
   CHECK_EQ(chunk_size, kGdnChunkSize)
       << "mate KKT solve currently requires chunk_size=" << kGdnChunkSize;
   CHECK_EQ(key.size(3), 128) << "mate KKT solve currently requires K=128";
-  CHECK_EQ(key.size(1) % chunk_size, 0)
-      << "mate KKT solve expects T padded to chunk_size";
 
   const int64_t batch_size = key.size(0);
   const int64_t num_tokens = key.size(1);
@@ -737,10 +749,21 @@ torch::Tensor kkt_solve_mate_ffi(const torch::Tensor& key,
 
   torch::Tensor key_input = use_strided_abi ? key : key.contiguous();
   auto beta_contig = beta.to(torch::kFloat32).contiguous();
-  auto a = torch::empty({batch_size, num_tokens, num_v_heads, chunk_size},
-                        key.options());
+  torch::Tensor a;
+  if (output.has_value() && output->defined()) {
+    a = *output;
+    CHECK_EQ(a.dim(), 4);
+    CHECK_EQ(a.size(0), batch_size);
+    CHECK_EQ(a.size(1), num_tokens);
+    CHECK_EQ(a.size(2), num_v_heads);
+    CHECK_EQ(a.size(3), chunk_size);
+    CHECK(a.is_contiguous()) << "Mate KKT output must be contiguous";
+  } else {
+    a = torch::empty({batch_size, num_tokens, num_v_heads, chunk_size},
+                     key.options());
+  }
   const int32_t num_chunks = static_cast<int32_t>(
-      batch_size * (num_tokens / chunk_size));
+      batch_size * ((num_tokens + chunk_size - 1) / chunk_size));
 
   auto main = get_function(uri, "main");
   main(to_ffi_tensor(key_input),
@@ -809,15 +832,33 @@ torch::Tensor kkt_solve(
     bool use_strided_abi = false) {
   const bool is_varlen =
       cu_seqlens.has_value() && cu_seqlens->defined();
+  const bool c1_partial_kkt_candidate =
+      is_varlen && mate_gdn_c1_partial_kkt_enabled() && key.size(0) == 1 &&
+      cu_seqlens->size(0) == 2;
+  // Keep deployments fail-open: an older ops directory may contain only the
+  // varlen module. In that case retain the generic path instead of rejecting
+  // an otherwise supported packed request.
+  const bool use_c1_partial_kkt =
+      c1_partial_kkt_candidate &&
+      mate_kkt_module_available(get_mate_kkt_solve_uri(key.size(2),
+                                                       beta.size(2),
+                                                       key.scalar_type(),
+                                                       /*is_varlen=*/false,
+                                                       use_strided_abi));
+  const bool use_varlen_kkt = is_varlen && !use_c1_partial_kkt;
   if (mate_kkt_enabled()) {
     const std::string uri = get_mate_kkt_solve_uri(key.size(2),
                                                    beta.size(2),
                                                    key.scalar_type(),
-                                                   is_varlen,
+                                                   use_varlen_kkt,
                                                    use_strided_abi);
     if (mate_kkt_module_available(uri)) {
       if (ensure_tilelang_musa_loader()) {
         if (is_varlen) {
+          if (use_c1_partial_kkt) {
+            return kkt_solve_mate_ffi(
+                key, beta, chunk_size, use_strided_abi, output);
+          }
           const auto& kkt_cu = kkt_cu_seqlens.has_value() &&
                                        kkt_cu_seqlens->defined()
                                    ? *kkt_cu_seqlens
@@ -825,7 +866,8 @@ torch::Tensor kkt_solve(
           return kkt_solve_mate_ffi_varlen(
               key, beta, kkt_cu, chunk_size, use_strided_abi, output);
         }
-        return kkt_solve_mate_ffi(key, beta, chunk_size, use_strided_abi);
+        return kkt_solve_mate_ffi(
+            key, beta, chunk_size, use_strided_abi, output);
       }
       LOG_FIRST_N(WARNING, 1)
           << "[MateKktSolve] TileLang MUSA module loader unavailable; "

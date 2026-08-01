@@ -16,6 +16,30 @@ limitations under the License.
 #include "core/kernels/musa/attention_runner.h"
 
 #include <glog/logging.h>
+#include <cstdlib>
+#include <string>
+
+namespace {
+
+bool capture_fa3_in_piecewise_graph() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_PIECEWISE_CAPTURE_FA3");
+    return env == nullptr || std::string(env) != "0";
+  }();
+  return enabled;
+}
+
+int64_t capture_fa3_max_padding_tokens() {
+  static const int64_t max_padding = [] {
+    const char* env =
+        std::getenv("XLLM_PIECEWISE_CAPTURE_FA3_MAX_PADDING_TOKENS");
+    return env == nullptr ? int64_t{32}
+                          : static_cast<int64_t>(std::strtoll(env, nullptr, 10));
+  }();
+  return max_padding;
+}
+
+}  // namespace
 
 #include "core/common/global_flags.h"
 #include "core/framework/config/execution_config.h"
@@ -455,6 +479,37 @@ void fa3_prefill_with_optional_piecewise_capture(
           .enable_prefill_piecewise_graph() &&
       ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
           .is_capturing()) {
+    // For C1 with bounded bucket padding, record dense FA3 in the surrounding
+    // graph instead of splitting at every full-attention layer. Larger padding
+    // deltas keep the dynamic runner: captured FA3 launch geometry was verified
+    // only within the same <=32-token safety bound used by Qwen3.5 C1 routing.
+    const int64_t capture_padding = query.size(0) - max_seqlen_q;
+    const int64_t max_capture_padding = capture_fa3_max_padding_tokens();
+    const bool safe_c1_shape =
+        cu_seqlens_q.numel() == 2 && cu_seqlens_k.numel() == 2 &&
+        max_seqlen_q == max_seqlen_k && capture_padding >= 0 &&
+        (max_capture_padding < 0 || capture_padding <= max_capture_padding);
+    if (capture_fa3_in_piecewise_graph() && safe_c1_shape) {
+      torch::Tensor query_contiguous = query.contiguous();
+      torch::Tensor key_contiguous = key.contiguous();
+      torch::Tensor value_contiguous = value.contiguous();
+      torch::Tensor q_cu_seq_lens = cu_seqlens_q.contiguous();
+      torch::Tensor kv_cu_seq_lens = cu_seqlens_k.contiguous();
+      fa3_prefill(query_contiguous,
+                  key_contiguous,
+                  value_contiguous,
+                  q_cu_seq_lens,
+                  kv_cu_seq_lens,
+                  max_seqlen_q,
+                  max_seqlen_k,
+                  window_left,
+                  window_right,
+                  sm_scale,
+                  output,
+                  output_lse);
+      return;
+    }
+
     AttentionRunner runner;
     runner.run_fa3_prefill_capture(query,
                                    key,

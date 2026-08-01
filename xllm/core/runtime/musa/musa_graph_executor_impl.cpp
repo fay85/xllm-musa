@@ -2169,12 +2169,13 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
         << "update() should return ModelInputParams for piecewise replay";
 
     const auto& updated_params = updated_params_opt.value();
-    CHECK(piecewise_graph_.num_runners() > 0)
-        << "Piecewise graph must have attention runners";
+    CHECK(!piecewise_graph_.empty()) << "Piecewise graph must not be empty";
     CHECK(updated_params.attn_metadata)
         << "attn_metadata is required for piecewise replay";
-    CHECK(updated_params.attn_metadata->plan_info)
-        << "plan_info is required for piecewise replay";
+    if (piecewise_graph_.requires_plan_info()) {
+      CHECK(updated_params.attn_metadata->plan_info)
+          << "plan_info is required for piecewise replay";
+    }
 
     VLOG(kGraphExecutorLogVerboseLevel)
         << "MusaGraph::replay() piecewise replay with uri="
@@ -2185,8 +2186,10 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     // Build AttentionReplayParams from updated attn_metadata
     ::xllm::kernel::cuda::AttentionReplayParams replay_params;
     replay_params.actual_num_tokens = actual_num_tokens;
-    replay_params.plan_info =
-        updated_params.attn_metadata->plan_info->plan_info;
+    if (updated_params.attn_metadata->plan_info) {
+      replay_params.plan_info =
+          updated_params.attn_metadata->plan_info->plan_info;
+    }
     replay_params.q_cu_seq_lens = updated_params.attn_metadata->q_cu_seq_lens;
     replay_params.gdn_cu_seq_lens =
         updated_params.attn_metadata->gdn_cu_seq_lens;
