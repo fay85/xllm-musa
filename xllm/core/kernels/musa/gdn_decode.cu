@@ -1184,6 +1184,20 @@ __global__ void __launch_bounds__(256, 1)
                                   T* query_out,
                                   T* key_out,
                                   int rows,
+                                  int64_t num_tokens,
+                                  int64_t num_heads,
+                                  int64_t query_stride_b,
+                                  int64_t query_stride_t,
+                                  int64_t query_stride_h,
+                                  int64_t key_stride_b,
+                                  int64_t key_stride_t,
+                                  int64_t key_stride_h,
+                                  int64_t query_out_stride_b,
+                                  int64_t query_out_stride_t,
+                                  int64_t query_out_stride_h,
+                                  int64_t key_out_stride_b,
+                                  int64_t key_out_stride_t,
+                                  int64_t key_out_stride_h,
                                   float eps) {
   constexpr int kColumns = 128;
   constexpr int kLanesPerRow = 32;
@@ -1197,7 +1211,18 @@ __global__ void __launch_bounds__(256, 1)
     return;
   }
 
-  const int64_t row_offset = static_cast<int64_t>(row) * kColumns;
+  const int64_t rows_per_batch = num_tokens * num_heads;
+  const int64_t batch_idx = static_cast<int64_t>(row) / rows_per_batch;
+  const int64_t row_in_batch =
+      static_cast<int64_t>(row) - batch_idx * rows_per_batch;
+  const int64_t token_idx = row_in_batch / num_heads;
+  const int64_t head_idx = row_in_batch - token_idx * num_heads;
+  const int64_t query_row_offset = batch_idx * query_stride_b +
+                                   token_idx * query_stride_t +
+                                   head_idx * query_stride_h;
+  const int64_t key_row_offset = batch_idx * key_stride_b +
+                                 token_idx * key_stride_t +
+                                 head_idx * key_stride_h;
   const int column_base = lane * kValuesPerLane;
   float query_values[kValuesPerLane];
   float key_values[kValuesPerLane];
@@ -1205,9 +1230,9 @@ __global__ void __launch_bounds__(256, 1)
   float key_sum = 0.0f;
 #pragma unroll
   for (int index = 0; index < kValuesPerLane; ++index) {
-    const int64_t offset = row_offset + column_base + index;
-    query_values[index] = to_f32<T>(query[offset]);
-    key_values[index] = to_f32<T>(key[offset]);
+    const int64_t column = static_cast<int64_t>(column_base + index);
+    query_values[index] = to_f32<T>(query[query_row_offset + column]);
+    key_values[index] = to_f32<T>(key[key_row_offset + column]);
     query_sum += query_values[index] * query_values[index];
     key_sum += key_values[index] * key_values[index];
   }
@@ -1221,11 +1246,19 @@ __global__ void __launch_bounds__(256, 1)
   const float query_inv_norm = rsqrtf(query_sum + eps);
   const float key_inv_norm = rsqrtf(key_sum + eps);
 
+  const int64_t query_out_row_offset = batch_idx * query_out_stride_b +
+                                       token_idx * query_out_stride_t +
+                                       head_idx * query_out_stride_h;
+  const int64_t key_out_row_offset = batch_idx * key_out_stride_b +
+                                     token_idx * key_out_stride_t +
+                                     head_idx * key_out_stride_h;
 #pragma unroll
   for (int index = 0; index < kValuesPerLane; ++index) {
-    const int64_t offset = row_offset + column_base + index;
-    query_out[offset] = from_f32<T>(query_values[index] * query_inv_norm);
-    key_out[offset] = from_f32<T>(key_values[index] * key_inv_norm);
+    const int64_t column = static_cast<int64_t>(column_base + index);
+    query_out[query_out_row_offset + column] =
+        from_f32<T>(query_values[index] * query_inv_norm);
+    key_out[key_out_row_offset + column] =
+        from_f32<T>(key_values[index] * key_inv_norm);
   }
 }
 
@@ -1246,6 +1279,20 @@ void launch_l2_norm_pair_h128(const torch::Tensor& query,
       reinterpret_cast<T*>(query_out.data_ptr()),
       reinterpret_cast<T*>(key_out.data_ptr()),
       rows,
+      query.size(1),
+      query.size(2),
+      query.stride(0),
+      query.stride(1),
+      query.stride(2),
+      key.stride(0),
+      key.stride(1),
+      key.stride(2),
+      query_out.stride(0),
+      query_out.stride(1),
+      query_out.stride(2),
+      key_out.stride(0),
+      key_out.stride(1),
+      key_out.stride(2),
       static_cast<float>(eps));
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
@@ -1313,8 +1360,11 @@ void l2_norm_pair_fused_out(const torch::Tensor& query,
       << "l2_norm_pair_fused requires matching Q/K shapes";
   CHECK(query.scalar_type() == key.scalar_type())
       << "l2_norm_pair_fused requires matching Q/K dtypes";
-  CHECK(query.is_contiguous() && key.is_contiguous())
-      << "l2_norm_pair_fused requires contiguous Q/K tensors";
+  CHECK_EQ(query.dim(), 4) << "l2_norm_pair_fused requires 4D Q/K tensors";
+  CHECK_EQ(query.stride(-1), 1)
+      << "l2_norm_pair_fused requires contiguous Q last dimension";
+  CHECK_EQ(key.stride(-1), 1)
+      << "l2_norm_pair_fused requires contiguous K last dimension";
   CHECK_EQ(query.size(-1), 128)
       << "l2_norm_pair_fused currently supports head dimension 128";
   CHECK(query_out.sizes() == query.sizes() &&
@@ -1323,8 +1373,10 @@ void l2_norm_pair_fused_out(const torch::Tensor& query,
   CHECK(query_out.scalar_type() == query.scalar_type() &&
         key_out.scalar_type() == key.scalar_type())
       << "l2_norm_pair_fused output dtypes must match inputs";
-  CHECK(query_out.is_contiguous() && key_out.is_contiguous())
-      << "l2_norm_pair_fused outputs must be contiguous";
+  CHECK_EQ(query_out.stride(-1), 1)
+      << "l2_norm_pair_fused requires contiguous Q output last dimension";
+  CHECK_EQ(key_out.stride(-1), 1)
+      << "l2_norm_pair_fused requires contiguous K output last dimension";
 
   const int64_t rows_i64 = query.numel() / query.size(-1);
   CHECK_LE(rows_i64, std::numeric_limits<int>::max());
@@ -1357,8 +1409,8 @@ std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
     const torch::Tensor& query,
     const torch::Tensor& key,
     double eps) {
-  torch::Tensor query_out = torch::empty_like(query);
-  torch::Tensor key_out = torch::empty_like(key);
+  torch::Tensor query_out = torch::empty(query.sizes(), query.options());
+  torch::Tensor key_out = torch::empty(key.sizes(), key.options());
   l2_norm_pair_fused_out(query, key, query_out, key_out, eps);
   return {query_out, key_out};
 }
