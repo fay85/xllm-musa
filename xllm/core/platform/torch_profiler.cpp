@@ -19,12 +19,9 @@ limitations under the License.
 #include <torch/csrc/autograd/profiler.h>
 #include <unistd.h>
 
-#include <algorithm>
 #include <chrono>
 #include <filesystem>
-#include <fstream>
 #include <set>
-#include <vector>
 
 namespace xllm {
 namespace {
@@ -33,7 +30,7 @@ namespace tp = torch::profiler::impl;
 namespace ap = torch::autograd::profiler;
 
 tp::ActivityType gpu_activity_type() {
-#if defined(USE_MUSA) || defined(USE_MUSA)
+#if defined(USE_MUSA)
   return tp::ActivityType::PrivateUse1;
 #else
   return tp::ActivityType::CUDA;
@@ -55,100 +52,6 @@ std::string make_trace_path(const std::string& profile_dir, int32_t rank) {
     return file_name;
   }
   return (std::filesystem::path(profile_dir) / file_name).string();
-}
-
-tp::ProfilerConfig make_torch_config() {
-  return tp::ProfilerConfig(tp::ProfilerState::KINETO,
-                            /*report_input_shapes=*/true,
-                            /*profile_memory=*/false,
-                            /*with_stack=*/true,
-                            /*with_flops=*/true,
-                            /*with_modules=*/false);
-}
-
-void write_cuda_time_summary(
-    const torch::autograd::profiler::ProfilerResult& result,
-    const std::string& path) {
-  struct OpStat {
-    std::string name;
-    int64_t total_us = 0;
-    int64_t count = 0;
-  };
-
-  auto accumulate =
-      [](std::vector<OpStat>& stats, const std::string& name, int64_t us) {
-        if (us <= 0 || name.empty()) {
-          return;
-        }
-        auto it = std::find_if(stats.begin(),
-                               stats.end(),
-                               [&](const OpStat& s) { return s.name == name; });
-        if (it == stats.end()) {
-          stats.push_back({name, us, 1});
-        } else {
-          it->total_us += us;
-          it->count += 1;
-        }
-      };
-
-  std::vector<OpStat> gpu_stats;
-  std::vector<OpStat> cpu_stats;
-  for (const auto& event : result.events()) {
-    const int64_t duration_us = static_cast<int64_t>(event.durationNs() / 1000);
-    if (event.deviceType() == c10::DeviceType::PrivateUse1 ||
-        event.deviceType() == c10::DeviceType::CUDA) {
-      const int64_t us = event.privateuse1ElapsedUs() > 0
-                             ? event.privateuse1ElapsedUs()
-                             : event.cudaElapsedUs();
-      accumulate(gpu_stats, event.name(), us > 0 ? us : duration_us);
-      continue;
-    }
-    accumulate(cpu_stats, event.name(), duration_us);
-  }
-
-  auto sort_stats = [](std::vector<OpStat>& stats) {
-    std::sort(stats.begin(), stats.end(), [](const OpStat& a, const OpStat& b) {
-      return a.total_us > b.total_us;
-    });
-  };
-  sort_stats(gpu_stats);
-  sort_stats(cpu_stats);
-
-  std::ofstream out(path);
-  if (!out) {
-    LOG(WARNING) << "Failed to open torch profiler summary: " << path;
-    return;
-  }
-
-  int64_t gpu_total_us = 0;
-  for (const auto& stat : gpu_stats) {
-    gpu_total_us += stat.total_us;
-  }
-  out << "cuda_time_total_us=" << gpu_total_us << "\n\n";
-
-  constexpr int32_t top_k = 40;
-  out << "===== top GPU kernels =====\n";
-  int32_t rank = 0;
-  for (const auto& stat : gpu_stats) {
-    if (rank >= top_k) {
-      break;
-    }
-    out << rank + 1 << "\t" << stat.total_us << " us total\t" << stat.count
-        << " calls\t" << stat.name << "\n";
-    rank += 1;
-  }
-
-  out << "\n===== top CPU aten / user scopes =====\n";
-  rank = 0;
-  for (const auto& stat : cpu_stats) {
-    if (rank >= top_k) {
-      break;
-    }
-    out << rank + 1 << "\t" << stat.total_us << " us total\t" << stat.count
-        << " calls\t" << stat.name << "\n";
-    rank += 1;
-  }
-  LOG(INFO) << "Torch profiler wrote CUDA time summary to " << path;
 }
 
 }  // namespace
@@ -181,7 +84,12 @@ bool TorchProfiler::start() {
   try {
     const std::set<tp::ActivityType> activities = {tp::ActivityType::CPU,
                                                    gpu_activity_type()};
-    const tp::ProfilerConfig config = make_torch_config();
+    const tp::ProfilerConfig config(tp::ProfilerState::KINETO,
+                                    /*report_input_shapes=*/false,
+                                    /*profile_memory=*/false,
+                                    /*with_stack=*/false,
+                                    /*with_flops=*/false,
+                                    /*with_modules=*/false);
     ap::prepareProfiler(config, activities);
     ap::enableProfiler(config, activities);
   } catch (const std::exception& e) {
@@ -219,21 +127,13 @@ bool TorchProfiler::stop(const std::string& profile_dir, int32_t rank) {
       return false;
     }
     result->save(path);
-    const std::string summary_path = path + ".summary.txt";
-    write_cuda_time_summary(*result, summary_path);
-    const std::string gzip_cmd = "gzip -f " + path;
-    if (std::system(gzip_cmd.c_str()) != 0) {
-      LOG(WARNING) << "Failed to gzip torch profiler trace: " << path;
-    } else {
-      LOG(INFO) << "Torch profiler gzip trace: " << path << ".gz";
-    }
   } catch (const std::exception& e) {
     LOG(ERROR) << "Failed to stop torch profiler / save trace: " << e.what();
     return false;
   }
 
   LOG(INFO) << "Torch profiler stopped. Trace written to: "
-            << std::filesystem::absolute(path).string() << ".gz";
+            << std::filesystem::absolute(path).string();
   return true;
 }
 

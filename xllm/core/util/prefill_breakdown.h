@@ -26,6 +26,7 @@ limitations under the License.
 
 #if defined(USE_MUSA)
 #include <musa_runtime_api.h>
+#include "torch_musa/csrc/core/MUSAStream.h"
 #elif defined(USE_CUDA)
 #include <cuda_runtime_api.h>
 #endif
@@ -72,7 +73,11 @@ class PrefillBreakdown final {
     kMoeDown = 25,
     kMoeCombine = 26,
     kMoeShared = 27,
-    kCount = 28,
+    // Additional GDN-core attribution buckets.
+    kGdnStatePrep = 28,
+    kGdnStateWrite = 29,
+    kGdnNorm = 30,
+    kCount = 31,
   };
 
   static bool enabled() {
@@ -133,7 +138,8 @@ class PrefillBreakdown final {
              b == Bucket::kMoeRoute || b == Bucket::kMoePreprocess ||
              b == Bucket::kMoeGateUp || b == Bucket::kMoeAct ||
              b == Bucket::kMoeDown || b == Bucket::kMoeCombine ||
-             b == Bucket::kMoeShared;
+             b == Bucket::kMoeShared || b == Bucket::kGdnStatePrep ||
+             b == Bucket::kGdnStateWrite || b == Bucket::kGdnNorm;
     };
     double accounted = 0.0;
     for (size_t i = 0; i < sums.size(); ++i) {
@@ -168,6 +174,12 @@ class PrefillBreakdown final {
               << sums[static_cast<size_t>(Bucket::kGdnLayout)]
               << " gdn_o_proj_ms="
               << sums[static_cast<size_t>(Bucket::kGdnOProj)]
+              << " gdn_state_prep_ms="
+              << sums[static_cast<size_t>(Bucket::kGdnStatePrep)]
+              << " gdn_state_write_ms="
+              << sums[static_cast<size_t>(Bucket::kGdnStateWrite)]
+              << " gdn_norm_ms="
+              << sums[static_cast<size_t>(Bucket::kGdnNorm)]
               << " full_qkv_ms=" << sums[static_cast<size_t>(Bucket::kFullQkv)]
               << " full_prep_ms="
               << sums[static_cast<size_t>(Bucket::kFullPrep)]
@@ -235,7 +247,10 @@ class PrefillBreakdown final {
                                    "moe_act",
                                    "moe_down",
                                    "moe_combine",
-                                   "moe_shared"};
+                                   "moe_shared",
+                                   "gdn_state_prep",
+                                   "gdn_state_write",
+                                   "gdn_norm"};
     for (size_t i = 0; i < sums.size(); ++i) {
       if (counts[i] == 0) {
         continue;
@@ -365,7 +380,7 @@ class PrefillBreakdown final {
 
   static void record_event(Event event) {
 #if defined(USE_MUSA)
-    musaEventRecord(event, /*stream=*/nullptr);
+    musaEventRecord(event, c10::musa::getCurrentMUSAStream().stream());
 #elif defined(USE_CUDA)
     cudaEventRecord(event, /*stream=*/nullptr);
 #else

@@ -32,8 +32,8 @@ namespace {
 
 // DeepSeek block-FP8 activation quantization, specialized for the Qwen3.5
 // serving path: bf16 input, e4m3 output, group size 128 along K, row-major
-// scale grid [M, K/128]. The SGLang MUSA implementation uses 16 lanes per
-// group (8 bf16 elements per lane), and maps the two logical dimensions to a
+// scale grid [M, K/128]. Uses 16 lanes per group (8 bf16 elements per
+// lane), and maps the two logical dimensions to a
 // 2-D grid: blockIdx.x selects a tile of groups and blockIdx.y selects a row.
 constexpr int32_t kGroupSize = 128;
 constexpr int32_t kThreadsPerGroup = 16;
@@ -117,9 +117,9 @@ __global__ void per_token_group_quant_fp8_bf16_g128_kernel(
   const int64_t in_offset =
       group_offset + static_cast<int64_t>(lane) * kElemsPerThread;
 
-  // Every lane consumes 16 contiguous bytes (8 bf16 values), matching the
-  // SGLang vectorized path. Group starts and lane offsets are 16-byte aligned
-  // for the contiguous tensors produced by the caller.
+  // Every lane consumes 16 contiguous bytes (8 bf16 values). Group starts
+  // and lane offsets are 16-byte aligned for the contiguous tensors produced
+  // by the caller.
   const int4 input_vec = *reinterpret_cast<const int4*>(input + in_offset);
   const __mt_bfloat16* input_values =
       reinterpret_cast<const __mt_bfloat16*>(&input_vec);
@@ -287,8 +287,8 @@ __global__ void moe_preprocess_assign_bf16_kernel(
   }
 }
 
-// Token-major fused routing/gather/quant, following SGLang's
-// deep_gemm_contig_preprocess_fp8_assign_compact TileLang kernel. Each block
+// Token-major fused routing/gather/quant
+// (deep_gemm_contig_preprocess_fp8_assign_compact). Each block
 // reads one hidden row once per g128 group, quantizes it once, and writes the
 // same packed values into all selected expert-major destinations.
 __global__ void moe_preprocess_assign_quant_kernel(
@@ -645,8 +645,8 @@ union Bf16Pack8 {
   __mt_bfloat16 values[8];
 };
 
-// Flatten rows and 16-byte chunks into one grid, following SGLang's MUSA
-// act_and_mul_flat_vec8 path. This avoids launching one mostly idle block for
+// Flatten rows and 16-byte chunks into one grid (act_and_mul_flat_vec8).
+// This avoids launching one mostly idle block for
 // every routed assignment when the expert intermediate size is only 512.
 __global__ void moe_indexed_swiglu_bf16_vec8_kernel(
     const __mt_bfloat16* __restrict__ input,

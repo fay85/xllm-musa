@@ -51,7 +51,7 @@ constexpr const char* kFa3FwdCombine32Uri =
 constexpr const char* kFa3FwdCombine64Uri =
     "fmha_fwd_combine_bf16_16x64x64_ragged_q_metadata";
 
-// Dense ragged FA3 prefill (SGLang flash_attn_varlen_func). bf16, head_dim=256,
+// Dense ragged FA3 prefill (Mate flash_attn_varlen). bf16, head_dim=256,
 // GQA ratio=6, causal, no packgqa/metadata. Built into FLASHINFER_OPS_PATH.
 constexpr const char* kFa3PrefillFwdUriHashGqa6 =
     "7ee83f6c1e99c1e66180d62c666ae3683127d3e048aeda12e77ee4569f9912c9";
@@ -185,7 +185,7 @@ torch::Tensor fa3_decode_scheduler_metadata(
   const int64_t gqa_ratio = num_heads_q / num_heads_kv;
   const std::string uri = fa3_metadata_uri(gqa_ratio);
 
-  // The GQA=8 kernel comes directly from SGLang's current Mate cache. Its
+  // The GQA=8 kernel comes from the current Mate cache. Its
   // output contract is one contiguous [4 * batch] metadata tensor. The older
   // GQA=6 artifact below predates that ABI and accepts four output views.
   if (gqa_ratio == 8) {
@@ -207,7 +207,7 @@ torch::Tensor fa3_decode_scheduler_metadata(
         static_cast<int64_t>(window_size_right),
         none_tensor(),
         to_ffi_tensor(metadata),
-        // Match SGLang's FA3 decode policy: let Mate choose the split count
+        // FA3 decode policy: let Mate choose the split count
         // from the current KV length. A fixed single split leaves long-context
         // decode severely under-parallelized.
         /*num_splits=*/static_cast<int64_t>(0),
@@ -280,7 +280,7 @@ void fa3_decode(const torch::Tensor& query,
   const std::string uri = fa3_fwd_uri(gqa_ratio);
   MusaTvmffiStreamGuard stream_guard(query.device());
 
-  // Match the current SGLang/Mate ABI used by the GQA=8 artifact: one
+  // Match the current Mate ABI used by the GQA=8 artifact: one
   // scheduler_metadata tensor followed by the optional learnable sink.
   if (gqa_ratio == 8) {
     auto fwd_result = get_function(uri, uri)(
@@ -649,7 +649,7 @@ void fa3_prefill_paged(const torch::Tensor& query,
   const std::string uri = fa3_fwd_uri(gqa_ratio);
   MusaTvmffiStreamGuard stream_guard(query.device());
 
-  // This is the same Mate ABI used by SGLang's MUSA FA3
+  // This is the Mate ABI used by MUSA FA3
   // flash_attn_with_kvcache call.  The KV values are already in k_cache/v_cache;
   // cu_seqlens_k_new supplies the causal position of each query token.
   auto fwd_result = get_function(uri, uri)(

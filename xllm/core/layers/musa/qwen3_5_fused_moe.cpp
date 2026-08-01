@@ -41,14 +41,14 @@ torch::Tensor get_tensor_with_weight_suffix(const StateDict& state_dict,
 }
 
 constexpr int64_t kMaxChunkTokens = 1024;
-// Keep the compact FP8 prefill path aligned with SGLang's large prefill
-// batches.  Compact routing does not allocate the [experts, max_m, hidden]
+// Compact FP8 prefill path for large batches. Compact routing does not
+// allocate the [experts, max_m, hidden]
 // masked-GEMM buffer, so this size is safe for the 20k-token target while
 // avoiding one route/quantize/GEMM/synchronize sequence per 1k tokens.
 constexpr int64_t kMaxCompactPrefillTokens = 16384;
 // The BF16 compact path has no activation-quantization buffers and can process
-// the complete long-context prefill in one routed batch. This matches
-// SGLang's fused-experts chunk limit and avoids repeating routing per layer.
+// the complete long-context prefill in one routed batch and avoids
+// repeating routing per layer.
 constexpr int64_t kMaxCompactBf16PrefillTokens = 65536;
 constexpr int64_t kMaxMusaMoeTopkTokens = 2048;
 constexpr int64_t kMaskedGemmMAlignment = 256;
@@ -56,11 +56,10 @@ constexpr int64_t kCompactBf16MAlignment = 128;
 constexpr int64_t kRaggedDecodeAlignment = 128;
 // Mate Ragged changes the FP8 GEMM accumulation layout. B=1 passes the model
 // correctness gate and captures the long-ISL decode win; B>1 remains on the
-// established contiguous path until the SGLang TorchAda fused-MoE dataflow is
-// available in xLLM.
+// established contiguous path until a wider ragged decode path is ready.
 constexpr int64_t kMaxRaggedDecodeTokens = 1;
 constexpr int64_t kMaxRaggedBf16DecodeTokens = 32;
-// SGLang also separates large-token MoE reduction from its small-token path.
+// Separate large-token MoE reduction from the small-token path.
 // The fused combine kernel amortizes launch cost on prefill-sized batches;
 // eager Torch reduction is faster for decode-sized batches.
 constexpr int64_t kFusedCombineMinTokens = 128;
@@ -148,7 +147,7 @@ bool use_musa_moe_topk(int64_t num_tokens,
     return true;
   }
   LOG_FIRST_N(WARNING, 1)
-      << "SGLang MUSA top-k artifact is unavailable; using Torch top-k.";
+      << "MUSA top-k artifact is unavailable; using Torch top-k.";
   return false;
 }
 
@@ -279,7 +278,7 @@ void Qwen3_5MusaFusedMoEImpl::load_routed_weights(
   const int64_t num_experts_per_rank = num_experts_per_rank_;
   if (use_fp8_) {
     // FP8 Qwen3.5 checkpoints store one gate/up/down tensor per expert.  The
-    // Mate layout is [gate, up], matching SGLang's SwiGLU convention.
+    // Mate layout is [gate, up] (SwiGLU convention).
     const std::vector<std::string> prefixes = {"gate_proj.", "up_proj."};
     LOAD_MOE_FUSED_WEIGHT("weight", w1, w3, w13);
     LOAD_MOE_FUSED_WEIGHT(
@@ -612,7 +611,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
   }
 
   if (use_contiguous_bf16_moe_ && !is_decode) {
-    // Follow SGLang's MUSA path: fuse histogram, aligned-prefix, hidden-state
+    // Fuse histogram, aligned-prefix, hidden-state
     // fan-out, row expert ids, original-to-padded mapping, and contiguous
     // group sizes on device. Mate Ragged remains the small-prefill fallback;
     // large prefills use the contiguous grouped GEMM path.

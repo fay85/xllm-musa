@@ -59,8 +59,6 @@ limitations under the License.
 #include "kernels/musa/musa_ops_api.h"
 #else
 #include "kernels/cuda/cuda_ops_api.h"
-#endif
-#if !defined(USE_MUSA)
 #include "platform/cuda_profiler.h"
 #endif
 #include "platform/torch_profiler.h"

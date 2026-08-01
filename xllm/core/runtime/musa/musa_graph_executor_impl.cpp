@@ -66,6 +66,14 @@ bool s_enable_graph_timing() {
   return val;
 }
 
+bool s_enable_piecewise_profile() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_PIECEWISE_PROFILE");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return enabled;
+}
+
 bool s_use_musa_fa3_decode(int64_t gqa_ratio) {
   static const int32_t setting = [] {
     const char* decode_env = std::getenv("XLLM_USE_FA3_DECODE");
@@ -1923,9 +1931,10 @@ bool MusaGraph::capture(CausalLM* model,
     piecewise_graph_ = std::move(*piecewise_graphs);
 
     LOG(INFO) << "Piecewise graph capture end, bucket_num_tokens: "
-              << bucket_num_tokens
-              << ", num_graphs: " << piecewise_graph_.size()
-              << ", num_runners: " << piecewise_graph_.num_runners();
+              << bucket_num_tokens << ", num_graphs: "
+              << piecewise_graph_.num_graphs() << ", num_runners: "
+              << piecewise_graph_.num_runners() << ", num_instructions: "
+              << piecewise_graph_.size();
     if (snapshot_linear_state) {
       restore_linear_attention_state(linear_state_snapshots,
                                      linear_state_snapshot_indices);
@@ -2119,6 +2128,13 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
 
   if (is_piecewise_) {
     // Piecewise replay mode (for prefill)
+    const bool profile = s_enable_piecewise_profile();
+    std::chrono::steady_clock::time_point update_start;
+    if (profile) {
+      c10::cuda::getCurrentCUDAStream(device_index_).synchronize();
+      update_start = std::chrono::steady_clock::now();
+    }
+
     // Need to get updated params with attn_metadata for attention replay
     auto updated_params_opt =
         persistent_param_.update(tokens,
@@ -2130,6 +2146,17 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
                                  /*return_capture_params=*/true,
                                  /*update_prefill_plan=*/
                                      piecewise_graph_.requires_plan_info());
+    double update_ms = 0.0;
+    std::chrono::steady_clock::time_point replay_param_start;
+    if (profile) {
+      c10::cuda::getCurrentCUDAStream(device_index_).synchronize();
+      const std::chrono::steady_clock::time_point update_end =
+          std::chrono::steady_clock::now();
+      update_ms = std::chrono::duration<double, std::milli>(
+                      update_end - update_start)
+                      .count();
+      replay_param_start = update_end;
+    }
     CHECK(updated_params_opt.has_value())
         << "update() should return ModelInputParams for piecewise replay";
 
@@ -2176,8 +2203,23 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
         updated_params.attn_metadata->paged_kv_last_page_len_host;
     replay_params.qo_indptr = updated_params.attn_metadata->qo_indptr;
 
+    double replay_param_ms = 0.0;
+    if (profile) {
+      const std::chrono::steady_clock::time_point replay_param_end =
+          std::chrono::steady_clock::now();
+      replay_param_ms = std::chrono::duration<double, std::milli>(
+                            replay_param_end - replay_param_start)
+                            .count();
+    }
+
     // Replay piecewise graphs and attention runners
     piecewise_graph_.replay(replay_params);
+    if (profile) {
+      LOG(INFO) << "[PIECEWISE_REPLAY_PROFILE] actual_num_tokens="
+                << actual_num_tokens << " padded_num_tokens="
+                << padded_num_tokens_ << " update_ms=" << update_ms
+                << " replay_param_ms=" << replay_param_ms;
+    }
   } else {
     // Normal replay mode (for decode).
     //

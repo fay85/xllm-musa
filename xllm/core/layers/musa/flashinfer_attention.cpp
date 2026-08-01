@@ -308,8 +308,8 @@ void FlashInferAttentionImpl::prefill_forward(
     CHECK_GT(attn_metadata.max_seq_len, 0)
         << "XLLM_USE_FA3=1 requires max_seq_len > 0";
 
-    // SGLang's MUSA FA3 path uses Mate's paged
-    // flash_attn_with_kvcache for extend/prefill.  xLLM has already written
+    // MUSA FA3 path uses Mate's paged flash_attn_with_kvcache for
+    // extend/prefill.  xLLM has already written
     // the projected K/V into the same [block, page, kv_head, head_dim] cache
     // before entering this function, so use that path for regular paged
     // prefill instead of rereading the dense K/V tensors.  The opt-out is
@@ -319,7 +319,7 @@ void FlashInferAttentionImpl::prefill_forward(
       const char* env = std::getenv("XLLM_FA3_PREFILL_PAGED");
       return env == nullptr || std::string(env) != "0";
     }();
-    // Match SGLang's ordinary-prefill dispatch: a fresh request has no
+    // Ordinary-prefill dispatch: a fresh request has no
     // existing prefix and uses the dense ragged FA3 kernel; paged
     // flash_attn_with_kvcache is reserved for an actual cached prefix (or a
     // later chunk). Merely having a block table is not evidence of a prefix --
@@ -672,7 +672,7 @@ void FlashInferAttentionImpl::decoder_forward(
       seqused_k = seqused_k.contiguous();
 
       // page_table: native rectangular block_table built by the input builder
-      // from allocated KV blocks (sglang req_to_token style). Unused slots are
+      // from allocated KV blocks. Unused slots are
       // -1; graph mode reuses persistent_block_tables_ updated each step.
       const torch::Tensor page_table = decode_attn.block_table;
 

@@ -39,7 +39,7 @@ bool use_mate_gdn_mtp_kernel();
 bool use_mate_gdn_prefill_kernel();
 
 // After MTP rejection sampling, scatter per-layer intermediate SSM/conv states
-// into the live linear cache slots (sglang post-verify commit).
+// into the live linear cache slots (post-verify commit).
 void scatter_gdn_mtp_verify_ssm_states(
     const GdnMtpVerifyCache& cache,
     const std::vector<KVCache>& kv_caches,

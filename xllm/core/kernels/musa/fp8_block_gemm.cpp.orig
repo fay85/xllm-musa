@@ -17,7 +17,6 @@ limitations under the License.
 #include <tvm/ffi/extra/stl.h>
 #include <tvm/ffi/string.h>
 
-#include <cstdlib>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -74,18 +73,13 @@ torch::Tensor gemm_fp8_nt_groupwise(
       to_ffi_tensor(out),
       /*backend=*/std::string("mudnn"));
 
-  // The stream guard binds eager FFI work to the current compute stream, or
-  // establishes event handoffs for its pool-stream fallback. Preserve that
-  // asynchronous ordering by default; the legacy host barriers remain
-  // available only for debugging and numerical bisection.
-  static const bool force_host_sync = []() {
-    const char* value = std::getenv("XLLM_FP8_FORCE_HOST_SYNC");
-    return value != nullptr && value[0] != '\0' && value[0] != '0';
-  }();
-  if (force_host_sync) {
-    sync_current_musa_stream(a.device());
-    sync_musa_ffi_stream(a.device());
-  }
+  // muDNN may complete the eager FP8 GEMM after the TVM-FFI call returns.
+  // Ensure PyTorch consumers cannot reuse or read `out` before that write is
+  // visible. Both helpers are capture-aware no-ops, so graph capture/replay
+  // remains asynchronous; the pool-stream sync covers the null-current-stream
+  // fallback selected by MusaTvmffiStreamGuard.
+  sync_current_musa_stream(a.device());
+  sync_musa_ffi_stream(a.device());
 
   return out;
 }

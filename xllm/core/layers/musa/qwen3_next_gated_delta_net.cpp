@@ -126,7 +126,7 @@ Qwen3_5GatedDeltaNetImpl::Qwen3_5GatedDeltaNetImpl(
                                  /*init_projections=*/false) {
   if (tp_size_ == 1) {
     // TP=1 fast path: use 2 merged projections (qkvz_proj_ + ba_proj_),
-    // same as sglang's MergedColumnParallelLinear. The fused weight loading
+    // using merged column-parallel projections. The fused weight loading
     // (load_state_dict with prefixes) concatenates the 4 checkpoint weights
     // into 2 merged weights at load time. This halves the number of matmul
     // kernel launches and eliminates the merge copy_ overhead entirely.

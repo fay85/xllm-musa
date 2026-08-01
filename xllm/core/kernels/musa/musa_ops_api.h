@@ -214,7 +214,7 @@ void fa3_decode(const torch::Tensor& query,
                 torch::Tensor& output,
                 torch::Tensor& output_lse);
 
-// Dense ragged FA3 prefill (SGLang flash_attn_varlen_func / Mate mutlass).
+// Dense ragged FA3 prefill (Mate mutlass flash_attn_varlen).
 // Specialized for bf16, head_dim=256, GQA ratios 6 and 8
 // (Qwen3.5-27B/35B TP=1).
 void fa3_prefill(const torch::Tensor& query,
@@ -230,7 +230,7 @@ void fa3_prefill(const torch::Tensor& query,
                  torch::Tensor& output,
                  torch::Tensor& output_lse);
 
-// Paged-KV FA3 prefill (SGLang/Mate flash_attn_with_kvcache). Unlike the
+// Paged-KV FA3 prefill (Mate flash_attn_with_kvcache). Unlike the
 // dense-ragged variant above, this consumes the KV cache populated by
 // reshape_paged_cache and the rectangular page table. It is used when a
 // prefill extends an existing cached prefix.
@@ -405,8 +405,8 @@ std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size);
 
-// MUSA-specific Qwen3.5 MoE preprocess. Following SGLang's token-major
-// contiguous preprocess, this returns {fp8_rows, scales, src_to_dst,
+// MUSA-specific Qwen3.5 MoE preprocess. Token-major contiguous preprocess
+// returns {fp8_rows, scales, src_to_dst,
 // expert_counts} while fusing expert placement, hidden-state replication, and
 // g128 FP8 quantization.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
@@ -419,8 +419,8 @@ fused_moe_preprocess_fp8(const torch::Tensor& input,
 // {padded_hidden, row_expert_ids, original_to_padded, group_m_counts}; each
 // expert occupies an aligned block and padding rows in row_expert_ids are -1.
 // group_m_counts sums to the padded M and can be passed directly to Mate's
-// m-grouped contiguous GEMM. This mirrors SGLang's fused MUSA preprocess and
-// avoids the per-layer sort/index/cumsum sequence in the long-prefill path.
+// m-grouped contiguous GEMM. Fused preprocess avoids the per-layer
+// sort/index/cumsum sequence in the long-prefill path.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 fused_moe_preprocess_bf16(const torch::Tensor& input,
                           const torch::Tensor& topk_ids,
@@ -464,7 +464,7 @@ torch::Tensor fused_moe_ragged_combine(const torch::Tensor& down,
                                        int64_t num_tokens,
                                        int64_t alignment);
 
-// SGLang/TorchAda-compatible token-major FP8 MoE decode path. The AOT MUBINs
+// Token-major FP8 MoE decode path. The AOT MUBINs
 // are specialized for MP31 and decode batch sizes 1 through 8; helper artifacts
 // provide routing alignment, SwiGLU, and final top-k reduction.
 bool musa_fused_moe_aot_available(int64_t num_tokens);
@@ -542,7 +542,7 @@ torch::Tensor rejection_sample_target_only_k1(
 // Mate grouped MoE GEMM entry points.  The MUSA Qwen3.5 MoE path uses the
 // masked layout for both BF16 and block-wise FP8 expert weights.  Keeping the
 // wrapper in the MUSA API makes the layer independent of the Python Mate
-// package while still using the same production kernels as SGLang.
+// package while still using the production Mate grouped-GEMM kernels.
 torch::Tensor masked_moe_gemm_bf16(const torch::Tensor& input,
                                    const torch::Tensor& weights,
                                    const torch::Tensor& token_counts,
@@ -593,7 +593,7 @@ torch::Tensor ragged_moe_gemm_fp8(const torch::Tensor& input,
                                   torch::ScalarType output_dtype,
                                   int64_t alignment);
 
-// SGLang's MUSA top-k kernel fuses softmax, top-k selection, and selected
+// MUSA top-k kernel fuses softmax, top-k selection, and selected
 // weight renormalization. This is intended for small decode graph buckets;
 // large prefill continues to use the existing route.
 std::tuple<torch::Tensor, torch::Tensor> musa_moe_topk_softmax(

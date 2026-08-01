@@ -35,8 +35,8 @@ limitations under the License.
 namespace xllm {
 namespace layer {
 
-// Qwen3.5's routed block uses the same masked grouped-GEMM contract as the
-// SGLang MUSA runner.  This implementation intentionally keeps TP/EP at one
+// Qwen3.5's routed block uses the masked grouped-GEMM contract.
+// This implementation intentionally keeps TP/EP at one
 // rank for the first bring-up: the checkpoint and the local dev7 target are
 // both TP1, and silently replicating only a subset of experts would be worse
 // than an explicit error.  The route/GEMM layout is independent of that

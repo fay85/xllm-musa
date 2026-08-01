@@ -23,7 +23,7 @@ namespace xllm {
 // TorchProfiler drives online timeline collection through libtorch's in-process
 // Kineto profiler (the C++ equivalent of torch.profiler.profile). Unlike the
 // CUDA-profiler capture-range path (see CudaProfiler), this backend records CPU
-// and device (CUDA or MUSA PrivateUse1) activities itself and, on stop(),
+// and device activities (CUDA or MUSA PrivateUse1) itself and, on stop(),
 // writes a Chrome trace JSON to disk
 // without needing an external profiler such as nsys attached. This mirrors
 // vLLM's default TorchProfilerWrapper so that simply launching the server with
@@ -31,7 +31,7 @@ namespace xllm {
 // produces a timeline.
 //
 // xLLM runs one worker thread per device inside a single process and Kineto /
-// CUPTI/MUPTI is process-global, so the profiler is wrapped in a process-wide
+// CUPTI is process-global, so the profiler is wrapped in a process-wide
 // singleton: the first start() opens the collection window for the whole
 // process and repeated / overlapping start()/stop() calls are made idempotent
 // under a mutex.
@@ -39,7 +39,7 @@ namespace xllm {
 // IMPORTANT: Kineto captures CPU operators via thread-local RecordFunction
 // callbacks, so start() and stop() must be invoked on the same thread that runs
 // the model forward pass for the host-side timeline to be complete. CUDA kernel
-// activities are collected process-globally via CUPTI/MUPTI regardless of thread.
+// activities are collected process-globally via CUPTI regardless of thread.
 class TorchProfiler {
  public:
   static TorchProfiler& get_instance();

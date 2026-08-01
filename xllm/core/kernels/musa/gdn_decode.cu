@@ -405,7 +405,7 @@ void launch_gdn_fused_qkvzba_split_contiguous(
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
   const dim3 grid(static_cast<unsigned int>(m),
-                static_cast<unsigned int>(nk));
+                  static_cast<unsigned int>(nk));
   const int threads = std::min(128, std::max(hk, vpk * hv));
 
   switch (mixed_qkvz.scalar_type()) {
@@ -1250,13 +1250,13 @@ void launch_l2_norm_pair_h128(const torch::Tensor& query,
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-template <typename scalar_t>
-__global__ void gdn_gating_kernel(const scalar_t* __restrict__ a,
-                                  const scalar_t* __restrict__ b,
+template <typename input_t, typename output_t>
+__global__ void gdn_gating_kernel(const input_t* __restrict__ a,
+                                  const input_t* __restrict__ b,
                                   const float* __restrict__ A_log,
                                   const float* __restrict__ dt_bias,
-                                  scalar_t* __restrict__ g_out,
-                                  scalar_t* __restrict__ beta_out,
+                                  output_t* __restrict__ g_out,
+                                  output_t* __restrict__ beta_out,
                                   int64_t n_elem,
                                   int H,
                                   float sp_beta,
@@ -1274,11 +1274,11 @@ __global__ void gdn_gating_kernel(const scalar_t* __restrict__ a,
   const float g = -expf(A_log[h]) * sp;
   const float beta = 1.f / (1.f + expf(-static_cast<float>(b[idx])));
 
-  g_out[idx] = static_cast<scalar_t>(g);
-  beta_out[idx] = static_cast<scalar_t>(beta);
+  g_out[idx] = static_cast<output_t>(g);
+  beta_out[idx] = static_cast<output_t>(beta);
 }
 
-template <typename scalar_t>
+template <typename input_t, typename output_t>
 void launch(const torch::Tensor& a,
             const torch::Tensor& b,
             const torch::Tensor& A_log_f32,
@@ -1292,10 +1292,10 @@ void launch(const torch::Tensor& a,
             cudaStream_t stream) {
   const int threads = 256;
   const int blocks = static_cast<int>((n_elem + threads - 1) / threads);
-  gdn_gating_kernel<scalar_t><<<blocks, threads, 0, stream>>>(
-      a.data_ptr<scalar_t>(), b.data_ptr<scalar_t>(),
+  gdn_gating_kernel<input_t, output_t><<<blocks, threads, 0, stream>>>(
+      a.data_ptr<input_t>(), b.data_ptr<input_t>(),
       A_log_f32.data_ptr<float>(), dt_bias_f32.data_ptr<float>(),
-      g.data_ptr<scalar_t>(), beta.data_ptr<scalar_t>(), n_elem, H, sp_beta,
+      g.data_ptr<output_t>(), beta.data_ptr<output_t>(), n_elem, H, sp_beta,
       threshold);
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
@@ -1381,20 +1381,34 @@ std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,
   auto b_c = b.contiguous();
   auto A_log_f32 = A_log.to(torch::kFloat32).contiguous();
   auto dt_bias_f32 = dt_bias.to(torch::kFloat32).contiguous();
-  auto g = torch::empty_like(a_c);
-  auto beta = torch::empty_like(a_c);
+  static const bool gating_fp32 = [] {
+    const char* value = std::getenv("XLLM_GDN_DISABLE_GATING_FP32");
+    return value == nullptr || std::string(value) != "1";
+  }();
+  const auto output_options =
+      gating_fp32 ? a_c.options().dtype(torch::kFloat32) : a_c.options();
+  auto g = torch::empty(a_c.sizes(), output_options);
+  auto beta = torch::empty(a_c.sizes(), output_options);
 
   const at::cuda::OptionalCUDAGuard guard(device_of(a));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
   if (a_c.scalar_type() == torch::kFloat32) {
-    launch<float>(a_c, b_c, A_log_f32, dt_bias_f32, g, beta, n_elem,
-                  static_cast<int>(H), static_cast<float>(sp_beta),
-                  static_cast<float>(threshold), stream);
-  } else if (a_c.scalar_type() == torch::kBFloat16) {
-    launch<at::BFloat16>(a_c, b_c, A_log_f32, dt_bias_f32, g, beta, n_elem,
+    launch<float, float>(a_c, b_c, A_log_f32, dt_bias_f32, g, beta, n_elem,
                          static_cast<int>(H), static_cast<float>(sp_beta),
                          static_cast<float>(threshold), stream);
+  } else if (a_c.scalar_type() == torch::kBFloat16) {
+    if (gating_fp32) {
+      launch<at::BFloat16, float>(
+          a_c, b_c, A_log_f32, dt_bias_f32, g, beta, n_elem,
+          static_cast<int>(H), static_cast<float>(sp_beta),
+          static_cast<float>(threshold), stream);
+    } else {
+      launch<at::BFloat16, at::BFloat16>(
+          a_c, b_c, A_log_f32, dt_bias_f32, g, beta, n_elem,
+          static_cast<int>(H), static_cast<float>(sp_beta),
+          static_cast<float>(threshold), stream);
+    }
   } else {
     LOG(FATAL) << "gdn_gating: unsupported dtype " << a_c.scalar_type();
   }
