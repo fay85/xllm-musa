@@ -46,6 +46,7 @@ limitations under the License.
 #include "core/layers/musa/flashinfer_planinfo.h"
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
+#include "core/util/env_var.h"
 #include "core/util/layer_hidden_dumper.h"
 #include "core/util/prefill_breakdown.h"
 #include "core/util/rec_model_utils.h"
@@ -96,6 +97,13 @@ bool s_enable_prefill_fwd_timing() {
     return env != nullptr && std::string(env) == "1";
   }();
   return val;
+}
+
+int64_t s_qwen35_c1_piecewise_max_padding_tokens() {
+  // Negative disables the adaptive eager fallback for rollback/A-B.
+  static const int64_t value = util::get_int_env(
+      "XLLM_QWEN35_C1_PIECEWISE_MAX_PADDING_TOKENS", 32);
+  return value;
 }
 
 bool s_enable_prefill_empty_cache() {
@@ -2664,11 +2672,28 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   const bool qwen35_packed_bucket_too_small =
       qwen35_prefill && packed_multi_piecewise &&
       bucket_num_tokens < kMinQwen35PackedPiecewiseGraphTokens;
+  const int64_t qwen35_c1_max_padding =
+      s_qwen35_c1_piecewise_max_padding_tokens();
+  const uint32_t prefill_padding_tokens =
+      bucket_num_tokens >= n_tokens ? bucket_num_tokens - n_tokens : 0;
+  const bool qwen35_c1_padding_too_large =
+      qwen35_prefill && !packed_multi_piecewise &&
+      effective_num_sequences == 1 && qwen35_c1_max_padding >= 0 &&
+      static_cast<int64_t>(prefill_padding_tokens) >
+          qwen35_c1_max_padding;
   bool force_eager_prefill =
       !prefill_bucket_shape_supported ||
       qwen35_packed_bucket_too_small ||
+      qwen35_c1_padding_too_large ||
       (packed_multi_piecewise &&
        bucket_num_tokens > max_tokens_for_graph_mode_);
+  if (qwen35_c1_padding_too_large) {
+    LOG_FIRST_N(INFO, 10)
+        << "Qwen3.5 C1 prefill padding " << prefill_padding_tokens
+        << " exceeds piecewise threshold " << qwen35_c1_max_padding
+        << "; using eager for actual=" << n_tokens
+        << " bucket=" << bucket_num_tokens;
+  }
   // A packed graph currently contains B-shaped GDN state/scatter tensors.
   // Reusing a graph captured for another B would be incorrect, but capturing
   // another graph for every scheduler partition defeats the bucket win. If a
@@ -2704,9 +2729,10 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         << "Qwen3.5 MTP draft rows exceed fixed graph capacity";
   }
 
-  // Prefill phase with piecewise graph.  Single-sequence prefill keeps its
-  // established ladder behavior; packed multi-sequence prefill is enabled by
-  // XLLM_PACKED_PREFILL_PIECEWISE=1 and uses the bucket path below.
+  // Prefill phase with piecewise graph. Single-sequence Qwen3.5 prefill uses
+  // the ladder only while its bucket padding stays within the adaptive
+  // threshold above; packed multi-sequence prefill is enabled by
+  // XLLM_PACKED_PREFILL_PIECEWISE=1 and uses the bucket path below unchanged.
   if (is_prefill && enable_prefill_piecewise_graph_ &&
       (!enable_packed_prefill_ || s_enable_packed_prefill_piecewise()) &&
       !packed_multi_piecewise && !force_eager_prefill) {
