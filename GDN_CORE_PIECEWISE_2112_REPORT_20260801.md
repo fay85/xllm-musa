@@ -1,36 +1,47 @@
-# GDN Core and Piecewise 2112-Bucket Report (2026-08-01)
+# GDN Core and Piecewise Prefill Report (2026-08-01)
 
-## Scope
+## Authoritative scope
 
-This stage continued the Qwen3.5-27B-FP8 GDN prefill investigation on MUSA and re-tested eager versus piecewise graph replay on the same xLLM binary.
+This report supersedes the earlier provisional conclusion in this file. It uses fixed serialized prompts for all final sub-millisecond comparisons.
 
 - Host checkout: /data/feihu/xllm-git-master
 - Container: xllm-musa2.9.1-sdk5.1-dev
 - Model: /workspace/model_weights/Qwen3.5-27B-FP8
 - Device: physical MUSA GPU 3
-- Workload: C=1, nominal ISL=2000, OSL=16, temperature=0.9, top-k=20, top-p=0.95
-- Common runtime: FA3 on, packed prefill off, MATE GDN backend, graph on
+- Workload: C=1, nominal ISL=2000, OSL=16
+- Runtime: graph on, FA3 on, packed prefill off, MATE GDN backend
 - Evidence root: /workspace/bench_results/gdn_core_piecewise_20260801_175500
 
-## Finding 1: the old piecewise result was dominated by the 2304 bucket
+## Executive result
 
-A fresh same-binary reverse-ordered baseline with the stride-aware MATE implementation selected bucket 2304 for actual prefill lengths near 2040-2089.
+Two changes are retained:
+
+1. add a 2112-token piecewise shoulder so a prompt just above 2048 no longer jumps to 2304;
+2. remove a redundant per-GDN-layer KKT cu-seqlens clone in eager unpadded C1 varlen prefill.
+
+The GDN change improves fixed-prompt eager TTFT by 0.507 ms and server prefill forward by 0.361 ms. It removes 48 clone/copy/fill/select sequences and reduces the Kineto CPU scope for all 48 MATE wrappers from 8.151 ms to 5.442 ms.
+
+Piecewise replay is real and the original 10.499 ms regression is almost eliminated. However, on the final fixed-prompt protocol it is still 0.858 ms slower in TTFT and 0.315 ms slower in server forward than eager. Therefore the answer is: piecewise should eventually be faster in principle, but the current xLLM implementation is not yet measurably faster for this 2k C1 workload.
+
+## 1. Original piecewise bottleneck
+
+A same-binary reverse-ordered baseline selected bucket 2304 for actual prefill lengths near 2040-2089.
 
 | Mode | Mean TTFT (ms) | Mean server prefill forward (ms) |
 |---|---:|---:|
-| eager (2 trials) | 268.472 | 235.518 |
-| piecewise 2304 (2 trials) | 278.971 | 245.620 |
+| eager, 2 trials | 268.472 | 235.518 |
+| piecewise 2304, 2 trials | 278.971 | 245.620 |
 | piecewise - eager | +10.499 | about +10.1 |
 
-Piecewise profiling confirmed real graph replay: 17 graph segments and 16 FA3/MATE runners. Graph segments consumed about 236-243 ms and runners about 11 ms; metadata update was only about 0.4 ms. The bottleneck was graph compute on padded bucket work, not a fake replay path and not runner dispatch.
+Piecewise profiling showed 17 graph segments and 16 attention runners. Graph compute consumed about 236-243 ms, runner compute about 11 ms, and metadata update about 0.4 ms. The path was a real replay path; padded graph work was the dominant loss.
 
-Evidence: eager_r1, piecewise_r1, piecewise_r2, eager_r2, and piecewise_profile_2304 below the evidence root.
+Evidence: eager_r1, piecewise_r1, piecewise_r2, eager_r2, and piecewise_profile_2304.
 
-## Implemented fix: add a 2112-token shoulder
+## 2. Retained 2112 shoulder
 
-generate_piecewise_prefill_graph_tokens() now includes a 2112-token shoulder. This prevents a prompt crossing 2048 by one token from jumping directly to 2304, while preserving the 64-token MATE GDN/KKT granularity.
+generate_piecewise_prefill_graph_tokens() includes a 2112-token shoulder aligned to the 64-token MATE GDN/KKT granularity.
 
-The first warmup-4 paired validation selected bucket 2112 and recovered 8.852 ms of the prior TTFT gap:
+The initial warmup-4 paired result changed the piecewise gap from +10.499 ms to +1.647 ms and recovered 8.852 ms.
 
 | Mode | Mean TTFT (ms) | Mean server prefill forward (ms) |
 |---|---:|---:|
@@ -40,55 +51,109 @@ The first warmup-4 paired validation selected bucket 2112 and recovered 8.852 ms
 
 Evidence: after_2112/{piecewise_r1,eager_r1,eager_r2,piecewise_r2}.
 
-## Steady replay result
+Warmup=4 is not sufficient for final piecewise claims because generated prompts can land on both sides of 2048. One retained diagnostic first captured 2112 during warmup and then captured 2048 on measured request 3, producing a 540 ms TTFT outlier. This is a cold-capture artifact, not steady replay.
 
-Warmup=4 is not sufficient for this prompt generator because measured requests can land on both sides of 2048. One final run first captured 2112 during warmup, then lazily captured 2048 on measured request 3, producing a 540 ms TTFT outlier. That run is retained under final_validation but is not a valid steady-replay mean.
+## 3. Fixed-prompt benchmark correction
 
-The final protocol used warmup=20 and measure=20 so both 2048 and 2112 were captured before measurement. Two opposite orders were run on the same production binary:
+The original benchmark seeded Python random, but tokenizer.get_vocab() iteration differed across client processes. Consequently nominally identical trials had different actual token sequences. PYTHONHASHSEED did not stabilize the Rust tokenizer vocabulary order.
 
-| Order | eager TTFT (ms) | piecewise TTFT (ms) | piecewise - eager (ms) | eager forward (ms) | piecewise forward (ms) |
-|---|---:|---:|---:|---:|---:|
-| eager -> piecewise | 270.253 | 268.151 | -2.102 | 237.174 | 234.105 |
-| piecewise -> eager | 269.649 | 271.367 | +1.718 | 235.924 | 237.257 |
-| order-balanced mean | 269.951 | 269.759 | **-0.192** | 236.549 | 235.681 |
+A fixed-request benchmark was therefore created under gdn_kkt_cu_alias_ab_fixed_requests. It serializes the exact prompt strings once and reuses them across every server process. Final eager and piecewise trials have the same 20-token-length sequence and mean actual prefill length 2058.5.
 
-All 80 measured requests completed successfully. Piecewise processed about 1.25 more actual tokens on average across the two trials, yet its server-forward point estimate remained 0.868 ms faster.
+The final protocol uses warmup=20 and measure=20. Both 2048 and 2112 buckets are captured before measurement. Trial order is eager, piecewise, piecewise, eager.
 
-Conclusion: after the 2112 fix, steady piecewise replay is no longer materially slower than eager. It is at parity with a small favorable point estimate, not yet a statistically strong speedup. The expected graph advantage is currently almost completely consumed by residual bucket padding and 17 graph/16 runner boundaries.
+| Mode | Trial 1 TTFT | Trial 2 TTFT | Mean TTFT | Mean forward |
+|---|---:|---:|---:|---:|
+| eager | 268.277 | 268.065 | 268.171 | 235.068 |
+| piecewise | 269.020 | 269.038 | 269.029 | 235.383 |
+| piecewise - eager |  |  | **+0.858** | **+0.315** |
 
-Evidence: final_validation_warm20 and final_validation_warm20_reverse.
+All 80 measured requests completed successfully. These fixed-prompt results supersede the earlier non-fixed order-balanced point estimate that suggested piecewise was 0.192 ms faster.
 
-## GDN core investigation
+Evidence: final_alias_fixed_warm20.
 
-The current detailed breakdown and SGLang comparison indicate that the MUSA GDN primitives are already close to reference performance:
+## 4. Retained GDN KKT cu-seqlens alias
+
+Kineto isolated a concrete host-side GDN cost in eager unpadded C1 varlen prefill:
+
+- 48 xllm/mate_gdn_prefill CPU scopes totaled 8.151 ms.
+- Each layer cloned live cu_seqlens, copied it, selected its endpoint, and filled the endpoint.
+- For no-pack/no-pad C1, live cu_seqlens already ends at num_tokens and KKT only reads it.
+
+The optimized path aliases kkt_cu_seqlens to cu_seqlens only when:
+
+- no padded rectangular batch is being packed;
+- pad_size is zero; and
+- no dedicated device KKT cu-seqlens was supplied.
+
+All other layouts retain the old clone-and-fill behavior. Runtime rollback is XLLM_MATE_GDN_DISABLE_KKT_CU_ALIAS=1.
+
+### Fixed-prompt A/B
+
+Four legacy and four alias trials used the same serialized 20-request prompt list in both orders.
+
+| Mode | Mean TTFT (ms) | Mean server forward (ms) |
+|---|---:|---:|
+| legacy clone | 269.480 | 236.234 |
+| KKT cu alias | 268.973 | 235.873 |
+| alias - legacy | **-0.507** | **-0.361** |
+
+All 160 measured requests completed successfully.
+
+### Kineto confirmation
+
+| Metric across 48 GDN layers | Legacy | Alias |
+|---|---:|---:|
+| xllm/mate_gdn_prefill CPU scope | 8.151 ms | 5.442 ms |
+| aten::clone | 48 | 0 |
+| aten::copy_ inside wrapper | 48 | 0 |
+| aten::fill_ for KKT endpoint | 48 | 0 |
+| aten::select for KKT endpoint | 48 | 0 |
+
+The wrapper CPU scope fell by 2.709 ms, while end-to-end forward improved by 0.361 ms because much of the host work had overlapped queued GPU work.
+
+Temperature-zero validation used five fixed measured requests per mode. Legacy and alias generated texts were exactly equal for all 5/5 requests, with no errors.
+
+Evidence:
+
+- gdn_kkt_cu_alias_ab_fixed_requests
+- gdn_kkt_cu_alias_correctness
+- gdn_kineto_eager
+- gdn_kineto_eager_alias
+
+## 5. GDN core status versus SGLang
+
+The current kernel-level evidence does not show a large slow GDN primitive:
 
 - xLLM GDN projections are about 31 ms, similar to SGLang's 31-34 ms.
-- xLLM token-major causal conv is about 11.4 ms. Disabling it raises conv time to about 38.9 ms, so the optimized token-major path must remain enabled.
-- xLLM MATE is about 16.1 ms total across the GDN stack, and the nested GDN core components sum to about 32.7 ms, close to SGLang's approximately 32.4 ms GDN core.
-- The remaining eager GDN outer gap is distributed host/launch spacing across layers rather than one slow MATE or conv kernel.
+- xLLM token-major causal conv is about 11.4 ms. Disabling it raises conv to about 38.9 ms.
+- The eager Kineto trace reports 48 MATE main kernels totaling 7.191 ms and 48 KKT kernels totaling 4.286 ms.
+- Nested xLLM GDN core components are close to the SGLang MUSA GDN core total.
 
-Evidence: gdn_conv_ab and EAGER_GAP_XLLM_VS_SGLANG_20260801.md.
+The remaining gap is distributed host launch and wrapper work across layers, not one defective MATE math kernel.
 
-## Falsified optimizations (reverted)
+## 6. Falsified and reverted candidates
 
-1. **2080 bucket with relaxed 64-alignment coupling**: correctness smoke passed, but the regular GDN path internally padded/copied and replay was slower. The experiment was reverted.
-2. **C=1 packed-varlen GDN in piecewise**: 5/5 requests succeeded, but graph segmentation expanded from 17/16 to 65/64 and TTFT regressed to about 294 ms. The experiment was reverted. Evidence: gdn_packed_c1_smoke*.
-3. **Caching MATE module availability probes**: reverse-order A/B showed cache-on TTFT 269.252 ms versus cache-off 268.971 ms, with no forward improvement. The experiment was reverted. Evidence: gdn_module_cache_ab.
+1. 2080 bucket with relaxed alignment: correct output, but regular GDN internally padded/copied and replay slowed to about 242 ms forward.
+2. C1 packed-varlen piecewise GDN: 5/5 success, but graph/runner segmentation expanded from 17/16 to 65/64 and TTFT regressed to about 294 ms.
+3. MATE module-availability cache: cache-on TTFT 269.252 ms versus cache-off 268.971 ms; no benefit.
+4. FFI TensorView conversion: view TTFT 268.993 ms versus legacy 268.768 ms; no benefit.
+5. 2064 shoulder: invalid candidate because 2064 is not divisible by 64. Bucket selection aligns Qwen3.5 prefill tokens upward to 64 before lookup, so it was never selected. The source experiment was reverted.
+
+## 7. Piecewise next bottleneck
+
+A steady piecewise Kineto trace confirms:
+
+- 17 graph segments and 16 attention runners;
+- non-intrusive metadata update around 0.4 ms;
+- repeated slice/contiguous/temporary-buffer preparation between runner and graph launches;
+- residual 2048-to-2112 padding for prompts above 2048.
+
+The next piecewise optimization should change the runner ABI or make a partial final 64-token GDN chunk graph-safe. Adding a non-64-aligned bucket does not help because it reintroduces per-layer GDN padding work.
 
 ## Build and final state
 
-The retained source change is limited to xllm/core/runtime/musa/musa_graph_executor_impl.cpp.
-
-- Final build log: /workspace/xllm-git-master/build_logs/build_piecewise_2112_final_20260801.log
-- Final binary SHA256: bcab4a681a2b250fd663238a524cc3f40ab9ed6c5b12ca9c92fe1e1fc0aa01f3
+- Final source changes: xllm/core/kernels/musa/gdn_prefill.cpp plus the already committed 2112 shoulder.
+- Final build log: /workspace/xllm-git-master/build_logs/build_gdn_alias_piecewise_2112_final_20260801.log
+- Final binary SHA256: a667b36f51c0f2f6273de6db82e5444fead2e1a5609c0c67040fbdac62f16008
 - git diff --check: clean
 - No benchmark server remains listening on port 8092.
-
-## Next optimization target
-
-The next useful GDN/piecewise work should target one of these two measured costs:
-
-1. reduce the 17 graph / 16 runner boundaries without routing C=1 through the current packed-varlen path; or
-2. add capture prewarming/policy so neighboring 2048 and 2112 buckets cannot first-capture inside a measured or production request.
-
-Further work on MATE primitive math or the token-major conv is lower priority because those kernels are already near SGLang parity and the attempted host module cache produced no gain.

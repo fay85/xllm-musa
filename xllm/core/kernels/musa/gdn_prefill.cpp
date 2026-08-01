@@ -605,6 +605,15 @@ bool mate_gdn_strided_abi_enabled() {
   return enabled;
 }
 
+bool mate_gdn_kkt_cu_alias_enabled() {
+  static const bool enabled = [] {
+    const char* env =
+        std::getenv("XLLM_MATE_GDN_DISABLE_KKT_CU_ALIAS");
+    return env == nullptr || env[0] != '1';
+  }();
+  return enabled;
+}
+
 std::string get_mate_kkt_solve_uri(int64_t num_q_heads,
                                    int64_t num_v_heads,
                                    torch::ScalarType dtype,
@@ -1205,6 +1214,12 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     if (has_device_kkt && !need_unpack && pad_size == 0) {
       kkt_cu_seqlens = params.cu_seqlens_kkt->to(torch::kInt32).contiguous();
       CHECK_EQ(kkt_cu_seqlens.size(0), cu_seqlens.size(0));
+    } else if (mate_gdn_kkt_cu_alias_enabled() && !need_unpack &&
+               pad_size == 0) {
+      // With no pack/pad mutation, live cu_seqlens already ends at
+      // num_tokens. KKT only reads the tensor, so alias it instead of doing a
+      // redundant device clone and endpoint fill on every GDN layer.
+      kkt_cu_seqlens = cu_seqlens;
     } else {
       // Keep the KKT ABI's B+1 shape stable. A bucket endpoint is used only by
       // KKT to cover the fixed launch tail; the recurrent kernel receives the
