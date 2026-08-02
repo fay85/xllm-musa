@@ -50,7 +50,7 @@ export VCPKG_ROOT=/workspace/vcpkg-xllm
 export VCPKG_FORCE_SYSTEM_BINARIES=1
 export VCPKG_MAX_CONCURRENCY=16
 export VCPKG_CMAKE_CONFIGURE_OPTIONS=-DCMAKE_POLICY_VERSION_MINIMUM=3.5
-export CMAKE_PREFIX_PATH=/usr/local/yalantinglibs
+export CMAKE_PREFIX_PATH="/usr/local/yalantinglibs:${CMAKE_PREFIX_PATH:-}"
 export PYTHON_INCLUDE_PATH=/usr/include/python3.10
 export CPU_UNIFIED_FLAG=False
 export SKIP_TEST=1
