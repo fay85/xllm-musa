@@ -105,11 +105,11 @@ class BatchInputBuilder {
     // Tracking token counts in KV cache，only used for deepseek chunked prefill
     // ops on npu device
     std::vector<int32_t> kv_cache_tokens_nums;
-#if defined(USE_NPU) || defined(USE_MUSA)
+#if defined(USE_NPU)
     std::vector<int32_t> seq_lens;
     std::vector<int32_t> q_seq_lens;
 #elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_ILU) || \
-    defined(USE_DCU)
+    defined(USE_DCU) || defined(USE_MUSA)
     std::vector<int32_t> seq_lens = {0};    // cu_seq_lens
     std::vector<int32_t> q_seq_lens = {0};  // q_cu_seq_len
 #endif

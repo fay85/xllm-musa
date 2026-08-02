@@ -44,6 +44,12 @@ DEFINE_bool(enable_prefill_piecewise_graph,
             "use eager mode while other operations are captured in device "
             "graphs.");
 
+DEFINE_bool(enable_packed_prefill,
+            false,
+            "Whether to enable packed pure-prefill execution. When enabled, "
+            "the MUSA executor may process multiple prefill requests in one "
+            "batch while preserving decode graph execution.");
+
 constexpr bool kEnableGraphVmmPoolDefault = true;
 
 DEFINE_bool(enable_graph_vmm_pool,
@@ -95,6 +101,7 @@ void ExecutionConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_graph_double_buffer);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_graph_mode_decode_no_padding);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_prefill_piecewise_graph);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_packed_prefill);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_graph_vmm_pool);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(max_tokens_for_graph_mode);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(acl_graph_decode_batch_size_limit);
@@ -111,6 +118,7 @@ void ExecutionConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph_double_buffer);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph_mode_decode_no_padding);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_prefill_piecewise_graph);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_packed_prefill);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph_vmm_pool);
   XLLM_CONFIG_ASSIGN_FROM_JSON(max_tokens_for_graph_mode);
   XLLM_CONFIG_ASSIGN_FROM_JSON(acl_graph_decode_batch_size_limit);
@@ -133,6 +141,8 @@ void ExecutionConfig::append_config_json(
       config_json, default_config, enable_graph_mode_decode_no_padding);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_prefill_piecewise_graph);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_packed_prefill);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_graph_vmm_pool);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(

@@ -64,7 +64,7 @@ static inline torch::Tensor log_softmax_last_dim(
     const torch::Tensor& input,
     const torch::Tensor& temperatures) {
   const bool has_temps = temperatures.defined();
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA) && !defined(USE_MUSA)
   if (input.is_cuda() && use_air_log_softmax_env()) {
     return kernel::cuda::air_log_softmax_last_dim(input, temperatures);
   }

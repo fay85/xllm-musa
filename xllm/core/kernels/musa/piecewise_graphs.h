@@ -40,12 +40,14 @@ class PiecewiseGraphs final {
   bool empty() const { return instructions_.empty(); }
   size_t num_graphs() const { return graphs_.size(); }
   size_t num_runners() const;
+  bool requires_plan_info() const { return requires_plan_info_; }
 
  private:
   std::vector<std::unique_ptr<at::cuda::CUDAGraph>> graphs_;
   std::vector<std::unique_ptr<::xllm::kernel::cuda::AttentionRunner>>
       attention_runners_;
   std::vector<InstructionType> instructions_;
+  bool requires_plan_info_ = false;
 };
 
 }  // namespace xllm::runtime::cuda

@@ -47,7 +47,6 @@ limitations under the License.
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
 #include "core/util/env_var.h"
-#include "core/util/layer_hidden_dumper.h"
 #include "core/util/prefill_breakdown.h"
 #include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
@@ -2293,8 +2292,6 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
       graph_.replay();
     }
   }
-
-  debug::LayerHiddenDumper::instance().flush(actual_num_tokens);
 
   // Return the actual num_tokens portion of ModelOutput
   // Note: aux_hidden_states handling is done in MusaGraphExecutorImpl::run()

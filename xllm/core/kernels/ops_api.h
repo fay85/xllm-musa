@@ -159,6 +159,13 @@ std::tuple<torch::Tensor, torch::Tensor> fp8_scaled_quantize(
 // Performs: c = (a @ b.T) with scales applied
 torch::Tensor fp8_scaled_matmul(Fp8ScaledMatmulParams& params);
 
+// Native block-wise FP8 GEMM using the MUSA groupwise kernel.
+torch::Tensor fp8_block_matmul(Fp8BlockMatmulParams& params);
+
+std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size);
+
 // Static scaled FP8 quantization helper
 // Quantizes input tensor to FP8 using a pre-computed scale factor
 void static_scaled_fp8_quant(StaticScaledFp8QuantParams& params);
@@ -244,6 +251,18 @@ torch::Tensor build_split_qkv_rmsnorm_mrope_gather_pattern(
     const std::vector<int64_t>& mrope_section,
     bool is_interleaved,
     const torch::Device& device);
+void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate);
+
+std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
+    MateGatedDeltaRulePrefillParams& params);
+
+torch::Tensor mate_gated_delta_rule_decode(
+    MateGatedDeltaRuleDecodeParams& params);
+
+torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params);
+
+torch::Tensor fused_gated_delta_rule_decode(
+    MateGatedDeltaRuleDecodeParams& params);
 
 std::pair<torch::Tensor, torch::Tensor> chunk_gated_delta_rule(
     ChunkGatedDeltaRuleParams& params);

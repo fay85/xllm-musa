@@ -17,8 +17,35 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <cstdlib>
+#include <string>
+
+namespace {
+
+bool capture_fa3_in_piecewise_graph() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_PIECEWISE_CAPTURE_FA3");
+    return env == nullptr || std::string(env) != "0";
+  }();
+  return enabled;
+}
+
+int64_t capture_fa3_max_padding_tokens() {
+  static const int64_t max_padding = [] {
+    const char* env =
+        std::getenv("XLLM_PIECEWISE_CAPTURE_FA3_MAX_PADDING_TOKENS");
+    return env == nullptr
+               ? int64_t{32}
+               : static_cast<int64_t>(std::strtoll(env, nullptr, 10));
+  }();
+  return max_padding;
+}
+
+}  // namespace
+
 #include "core/common/global_flags.h"
 #include "core/framework/config/execution_config.h"
+#include "core/kernels/musa/gdn_ops.h"
 #include "core/kernels/musa/global_capture_instance.h"
 #include "core/kernels/musa/musa_ops_api.h"
 
@@ -153,6 +180,10 @@ void AttentionRunner::run_fa3_prefill_capture(torch::Tensor query,
 }
 
 void AttentionRunner::run_replay(const AttentionReplayParams& params) {
+  if (runner_type_ == RunnerType::GDN_PREFILL) {
+    run_gdn_prefill_replay(params);
+    return;
+  }
   torch::Tensor query_slice =
       query_.slice(/*dim=*/0, /*start=*/0, /*end=*/params.actual_num_tokens);
   torch::Tensor output_slice =
@@ -252,6 +283,104 @@ void AttentionRunner::run_replay(const AttentionReplayParams& params) {
                 output_lse);
 }
 
+bool AttentionRunner::requires_plan_info() const {
+  return runner_type_ == RunnerType::PREFILL ||
+         runner_type_ == RunnerType::CHUNKED_PREFILL;
+}
+
+void AttentionRunner::run_gdn_prefill_capture(torch::Tensor query,
+                                              torch::Tensor key,
+                                              torch::Tensor value,
+                                              torch::Tensor gate,
+                                              torch::Tensor beta,
+                                              torch::Tensor initial_state,
+                                              torch::Tensor cu_seqlens,
+                                              torch::Tensor output,
+                                              torch::Tensor final_state,
+                                              torch::Tensor kkt_output,
+                                              float scale) {
+  auto& capture = ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance();
+  capture.temporarily_end_graph();
+  query_ = std::move(query);
+  key_ = std::move(key);
+  value_ = std::move(value);
+  gdn_gate_ = std::move(gate);
+  gdn_beta_ = std::move(beta);
+  gdn_initial_state_ = std::move(initial_state);
+  gdn_cu_seq_lens_ = std::move(cu_seqlens);
+  gdn_output_ = std::move(output);
+  gdn_final_state_ = std::move(final_state);
+  gdn_kkt_output_ = std::move(kkt_output);
+  scale_ = scale;
+  runner_type_ = RunnerType::GDN_PREFILL;
+  capture.temporarily_begin_graph();
+}
+
+void AttentionRunner::run_gdn_prefill_replay(
+    const AttentionReplayParams& params) {
+  const torch::Tensor& live_cu = params.gdn_cu_seq_lens.defined()
+                                     ? params.gdn_cu_seq_lens
+                                     : params.q_cu_seq_lens;
+  const torch::Tensor& kkt_cu = params.gdn_kkt_cu_seq_lens.defined()
+                                    ? params.gdn_kkt_cu_seq_lens
+                                    : live_cu;
+  CHECK(live_cu.defined()) << "GDN runner requires live device cu_seqlens";
+  CHECK_EQ(live_cu.scalar_type(), torch::kInt32);
+  CHECK(live_cu.is_contiguous());
+  CHECK(kkt_cu.defined() && kkt_cu.is_contiguous());
+  CHECK(!params.q_cu_seq_lens_host.empty())
+      << "GDN runner requires host cu_seqlens";
+  CHECK_EQ(params.q_cu_seq_lens_host.front(), 0);
+  CHECK_EQ(static_cast<uint32_t>(params.q_cu_seq_lens_host.back()),
+           params.actual_num_tokens)
+      << "GDN host CU endpoint must match actual token count";
+  CHECK_EQ(live_cu.size(0),
+           static_cast<int64_t>(params.q_cu_seq_lens_host.size()));
+  CHECK_EQ(query_.size(1), key_.size(1));
+  CHECK_EQ(query_.size(1), value_.size(1));
+  CHECK_EQ(query_.size(1), gdn_gate_.size(1));
+  CHECK_EQ(query_.size(1), gdn_beta_.size(1));
+  CHECK_EQ(gdn_output_.size(1), query_.size(1));
+  CHECK_EQ(gdn_final_state_.size(0),
+           static_cast<int64_t>(params.q_cu_seq_lens_host.size()) - 1);
+
+  if (params.actual_num_tokens < gdn_output_.size(1)) {
+    gdn_output_
+        .narrow(/*dim=*/1,
+                /*start=*/params.actual_num_tokens,
+                /*length=*/gdn_output_.size(1) - params.actual_num_tokens)
+        .zero_();
+  }
+
+  MateGatedDeltaRulePrefillParams mate_params;
+  mate_params.q = query_;
+  mate_params.k = key_;
+  mate_params.v = value_;
+  mate_params.g = gdn_gate_;
+  mate_params.beta = gdn_beta_;
+  mate_params.scale = static_cast<float>(scale_);
+  mate_params.initial_state = gdn_initial_state_;
+  mate_params.cu_seqlens = live_cu;
+  mate_params.cu_seqlens_kkt = kkt_cu;
+  mate_params.cu_seqlens_host = params.q_cu_seq_lens_host;
+  mate_params.output = gdn_output_;
+  mate_params.final_state = gdn_final_state_;
+  mate_params.output_final_state = true;
+  mate_params.use_qk_l2norm_in_kernel = true;
+  mate_params.allow_inplace_qk_l2norm = true;
+  // KKT writes its own temporary `a` when no external buffer is supplied.
+  // The graph-owned output/final-state buffers are the critical stable outputs;
+  // kkt_output is populated by the layer when the pool supports it.
+  if (gdn_kkt_output_.defined()) {
+    mate_params.kkt_output = gdn_kkt_output_;
+  }
+  auto result = mate_gated_delta_rule_prefill(mate_params);
+  CHECK(result.first.defined()) << "GDN runner output is undefined";
+  CHECK(result.second.defined()) << "GDN runner final state is undefined";
+  CHECK_EQ(result.first.data_ptr(), gdn_output_.data_ptr());
+  CHECK_EQ(result.second.data_ptr(), gdn_final_state_.data_ptr());
+}
+
 void batch_chunked_prefill_with_optional_piecewise_capture(
     const std::string& uri,
     ffi::Array<int64_t> plan_info,
@@ -347,6 +476,37 @@ void fa3_prefill_with_optional_piecewise_capture(
           .enable_prefill_piecewise_graph() &&
       ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
           .is_capturing()) {
+    // For C1 with bounded bucket padding, record dense FA3 in the surrounding
+    // graph instead of splitting at every full-attention layer. Larger padding
+    // deltas keep the dynamic runner: captured FA3 launch geometry was verified
+    // only within the same <=32-token safety bound used by Qwen3.5 C1 routing.
+    const int64_t capture_padding = query.size(0) - max_seqlen_q;
+    const int64_t max_capture_padding = capture_fa3_max_padding_tokens();
+    const bool safe_c1_shape =
+        cu_seqlens_q.numel() == 2 && cu_seqlens_k.numel() == 2 &&
+        max_seqlen_q == max_seqlen_k && capture_padding >= 0 &&
+        (max_capture_padding < 0 || capture_padding <= max_capture_padding);
+    if (capture_fa3_in_piecewise_graph() && safe_c1_shape) {
+      torch::Tensor query_contiguous = query.contiguous();
+      torch::Tensor key_contiguous = key.contiguous();
+      torch::Tensor value_contiguous = value.contiguous();
+      torch::Tensor q_cu_seq_lens = cu_seqlens_q.contiguous();
+      torch::Tensor kv_cu_seq_lens = cu_seqlens_k.contiguous();
+      fa3_prefill(query_contiguous,
+                  key_contiguous,
+                  value_contiguous,
+                  q_cu_seq_lens,
+                  kv_cu_seq_lens,
+                  max_seqlen_q,
+                  max_seqlen_k,
+                  window_left,
+                  window_right,
+                  sm_scale,
+                  output,
+                  output_lse);
+      return;
+    }
+
     AttentionRunner runner;
     runner.run_fa3_prefill_capture(query,
                                    key,

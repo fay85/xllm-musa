@@ -337,6 +337,7 @@ struct MatmulParams {
   // Scaling factor for tensor c (if provided). Default: 0.0
   // Result: alpha * (a @ b) + beta * c (if c provided)
   double beta = 0.0;
+  std::optional<torch::Tensor> output_buf = std::nullopt;
 };
 
 struct MatmulReduceScatterParams {
@@ -1519,6 +1520,17 @@ struct Fp8ScaledMatmulParams {
   // If provided, output will be reshaped to match original input dimensions.
   // E.g., input_shape = [batch, seq, hidden] -> output = [batch, seq, N]
   std::optional<std::vector<int64_t>> input_shape;
+};
+
+// Native block-wise FP8 GEMM parameters. The activation uses per-token-group
+// scales and the weight uses a 2D block scale grid.
+struct Fp8BlockMatmulParams {
+  torch::Tensor a;
+  torch::Tensor b;
+  torch::Tensor a_scale;
+  torch::Tensor b_scale;
+  torch::ScalarType output_dtype;
+  std::optional<torch::Tensor> output;
 };
 
 // Static scaled FP8 quantization parameters

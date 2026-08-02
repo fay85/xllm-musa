@@ -19,6 +19,9 @@ limitations under the License.
 #include <optional>
 #include <tuple>
 
+#include "kernels/musa/musa_tvmffi_stream.h"
+#include "util/prefill_breakdown.h"
+
 namespace xllm {
 namespace layer {
 
@@ -54,8 +57,10 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
       Qwen3NextRMSNorm(
           model_args.hidden_size(), model_args.rms_norm_eps(), options));
 
-  // Initialize the feed-forward block. Qwen3.5 uses a routed block; select the
-  // MUSA MoE path only for qwen3_5_moe_text (generic Qwen3-Next MoE differs).
+  // Initialize the feed-forward block.  Qwen3.5 uses a routed block in every
+  // decoder layer; the MUSA implementation is deliberately selected only for
+  // the Qwen3.5 MoE model type because the generic Qwen3-Next MoE contract is
+  // different (and is not silently treated as a dense MLP).
   auto mlp_only_layers = model_args.mlp_only_layers();
   const bool is_moe_layer =
       std::count(mlp_only_layers.begin(), mlp_only_layers.end(), layer_id) ==
@@ -124,30 +129,43 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
     const ModelInputParams& input_params,
     const torch::Tensor& mrope_cos_sin) {
   // Pre-attention norm
-  if (!residual.has_value()) {
-    residual = x;
-    x = std::get<0>(input_norm_->forward(x));
-  } else {
-    std::tie(x, residual) = input_norm_->forward(x, residual);
+  {
+    PrefillBreakdown::Scope norm_scope(PrefillBreakdown::Bucket::kNorm);
+    if (!residual.has_value()) {
+      residual = x;
+      x = std::get<0>(input_norm_->forward(x));
+    } else {
+      std::tie(x, residual) = input_norm_->forward(x, residual);
+    }
   }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
   // Attention
   if (attention_) {
+    PrefillBreakdown::Scope attn_scope(PrefillBreakdown::Bucket::kFullAttn);
     x = attention_->forward(
         positions, x, attn_metadata, kv_cache, mrope_cos_sin);
   } else {
+    PrefillBreakdown::Scope attn_scope(PrefillBreakdown::Bucket::kGdnAttn);
     x = linear_attention_->forward(x, attn_metadata, kv_cache, input_params);
   }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
   // Post-attention norm
-  std::tie(x, residual) = post_norm_->forward(x, residual);
+  {
+    PrefillBreakdown::Scope norm_scope(PrefillBreakdown::Bucket::kNorm);
+    std::tie(x, residual) = post_norm_->forward(x, residual);
+  }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
-  // MLP forward
+  // MLP forward (sub-buckets live inside DenseMLPImpl::forward).
   if (moe_mlp_) {
+    PrefillBreakdown::Scope mlp_scope(PrefillBreakdown::Bucket::kMlpGateUp);
     x = moe_mlp_->forward(x, input_params);
   } else {
     x = mlp_(x);
   }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
   return x;
 }

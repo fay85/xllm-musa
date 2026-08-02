@@ -430,7 +430,9 @@ torch::Tensor matmul(MatmulParams& params) {
       params.a, params.b, params.bias, params.c, params.alpha, params.beta);
 #elif defined(USE_NPU)
   return npu::matmul(params.a, params.b, params.bias);
-#elif defined(USE_CUDA) || defined(USE_MUSA)
+#elif defined(USE_MUSA)
+  return cuda::matmul(params.a, params.b, params.bias, params.output_buf);
+#elif defined(USE_CUDA)
   return cuda::matmul(params.a, params.b, params.bias);
 #elif defined(USE_ILU)
   return ilu::matmul(params.a, params.b, params.bias);
@@ -656,7 +658,8 @@ std::tuple<torch::Tensor, torch::Tensor> moe_active_topk(
                               params.e_score_correction_bias,
                               params.scoring_func,
                               params.route_scale);
-#elif defined(USE_CUDA) || defined(USE_MUSA)
+#elif (defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)) && \
+    !defined(USE_MUSA)
   return cuda::moe_fused_topk(params.input,
                               params.topk,
                               params.normalize,
@@ -1417,6 +1420,21 @@ torch::Tensor fp8_scaled_matmul(Fp8ScaledMatmulParams& params) {
 #endif
 }
 
+torch::Tensor fp8_block_matmul(Fp8BlockMatmulParams& params) {
+#if defined(USE_MUSA)
+  return cuda::gemm_fp8_nt_groupwise(params.a,
+                                     params.b,
+                                     params.a_scale,
+                                     params.b_scale,
+                                     params.output_dtype,
+                                     params.output);
+#else
+  LOG(FATAL) << "fp8_block_matmul (native block-wise FP8) is only supported on "
+                "MUSA (torch_musa)";
+  return torch::Tensor();
+#endif
+}
+
 void static_scaled_fp8_quant(StaticScaledFp8QuantParams& params) {
 #if defined(USE_CUDA)
   cuda::static_scaled_fp8_quant(params.output, params.input, params.scale);
@@ -1977,6 +1995,60 @@ torch::Tensor sparse_attn_sharedkv_metadata(
                                             params.layout_kv,
                                             params.has_ori_kv,
                                             params.has_cmp_kv);
+#else
+  NOT_IMPLEMENTED();
+#endif
+}
+
+void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  cuda::mul_sigmoid_gate_inplace(out, gate);
+#else
+  out.mul_(torch::sigmoid(gate));
+#endif
+}
+
+std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size) {
+#if defined(USE_MUSA)
+  return cuda::per_token_group_quant_fp8(input, group_size);
+#else
+  LOG(FATAL) << "per_token_group_quant_fp8 is only supported on MUSA";
+  return std::make_tuple(torch::Tensor(), torch::Tensor());
+#endif
+}
+
+std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
+    MateGatedDeltaRulePrefillParams& params) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::mate_gated_delta_rule_prefill(params);
+#else
+  NOT_IMPLEMENTED();
+#endif
+}
+
+torch::Tensor mate_gated_delta_rule_decode(
+    MateGatedDeltaRuleDecodeParams& params) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::mate_gated_delta_rule_decode(params);
+#else
+  NOT_IMPLEMENTED();
+#endif
+}
+
+torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::mate_gated_delta_rule_mtp(params);
+#else
+  NOT_IMPLEMENTED();
+#endif
+}
+
+torch::Tensor fused_gated_delta_rule_decode(
+    MateGatedDeltaRuleDecodeParams& params) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::fused_gated_delta_rule_decode(params);
 #else
   NOT_IMPLEMENTED();
 #endif

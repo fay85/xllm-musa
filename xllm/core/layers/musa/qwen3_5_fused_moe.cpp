@@ -25,6 +25,7 @@ limitations under the License.
 #include "kernels/musa/musa_ops_api.h"
 #include "kernels/ops_api.h"
 #include "util/env_var.h"
+#include "util/prefill_breakdown.h"
 
 namespace xllm {
 namespace layer {
@@ -268,7 +269,8 @@ void Qwen3_5MusaFusedMoEImpl::load_routed_weights(
     return;
   }
 
-  // LOAD_MOE_* macros expect a local state_dict and sharding locals below.
+  // The state-dict load macros intentionally refer to a local named
+  // `state_dict` and to the un-suffixed sharding variables below.
   const auto state_dict = mlp_state_dict.get_dict_with_prefix("experts.");
   const int64_t rank = rank_;
   const int64_t world_size = world_size_;
@@ -320,8 +322,10 @@ void Qwen3_5MusaFusedMoEImpl::load_routed_weights(
     return;
   }
 
-  // BF16 Qwen3.5 checkpoints pack gate_up_proj/down_proj; shards may land in
-  // different safetensors files, so load flags are independent.
+  // BF16 Qwen3.5 checkpoints use packed gate_up_proj/down_proj tensors.  The
+  // loader is called once per safetensors shard, so each flag is deliberately
+  // independent: gate_up and down are in different files in the official
+  // checkpoint.
   auto packed_gate_up =
       get_tensor_with_weight_suffix(state_dict, "gate_up_proj");
   if (packed_gate_up.defined()) {
@@ -376,6 +380,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
   torch::Tensor topk_weights;
   torch::Tensor topk_ids;
   {
+    PrefillBreakdown::Scope route_scope(PrefillBreakdown::Bucket::kMoeRoute);
     auto router_logits = gate_->forward(hidden_states);
     if (use_musa_moe_topk(num_tokens, router_logits, num_experts_, topk_)) {
       std::tie(topk_weights, topk_ids) =
@@ -606,6 +611,8 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
         preprocess;
     {
+      PrefillBreakdown::Scope preprocess_scope(
+          PrefillBreakdown::Bucket::kMoePreprocess);
       preprocess = xllm::kernel::cuda::fused_moe_preprocess_bf16(
           hidden_states.contiguous(),
           topk_ids,
@@ -614,6 +621,8 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     }
     torch::Tensor gate_up;
     {
+      PrefillBreakdown::Scope gate_up_scope(
+          PrefillBreakdown::Bucket::kMoeGateUp);
       if (use_contiguous_bf16_prefill_gemm(num_tokens)) {
         gate_up = xllm::kernel::cuda::contiguous_moe_gemm_bf16(
             std::get<0>(preprocess),
@@ -632,11 +641,14 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
 
     torch::Tensor activated;
     {
+      PrefillBreakdown::Scope activation_scope(
+          PrefillBreakdown::Bucket::kMoeAct);
       activated = xllm::kernel::cuda::fused_moe_indexed_swiglu_bf16(
           gate_up, std::get<2>(preprocess));
     }
     torch::Tensor down;
     {
+      PrefillBreakdown::Scope down_scope(PrefillBreakdown::Bucket::kMoeDown);
       if (use_contiguous_bf16_prefill_gemm(num_tokens)) {
         down = xllm::kernel::cuda::contiguous_moe_gemm_bf16(
             activated,
@@ -654,6 +666,8 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     }
     torch::Tensor combined;
     {
+      PrefillBreakdown::Scope combine_scope(
+          PrefillBreakdown::Bucket::kMoeCombine);
       combined = xllm::kernel::cuda::moe_combine_result_indexed(
           down,
           std::get<2>(preprocess),
@@ -801,6 +815,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward(
 
   torch::Tensor shared;
   {
+    PrefillBreakdown::Scope shared_scope(PrefillBreakdown::Bucket::kMoeShared);
     shared = shared_experts_->forward(hidden_states);
     if (use_fused_shared_expert_gate(hidden_states.size(0))) {
       xllm::kernel::cuda::fused_shared_expert_gate_inplace(

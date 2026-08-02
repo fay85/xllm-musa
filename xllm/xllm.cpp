@@ -68,6 +68,18 @@ namespace py = pybind11;
 #include "server/xllm_server_registry.h"
 using namespace xllm;
 
+// Deprecated launch-script compatibility flags. Device selection now follows
+// the visible-device environment, and adaptive one-shot prefill is no longer
+// configured by the current scheduler. Keeping false/zero invocations
+// accepted lets older deployment scripts launch the current binary safely.
+DEFINE_int32(device_id,
+             0,
+             "Deprecated compatibility flag; device selection uses the "
+             "visible-device environment.");
+DEFINE_bool(enable_adaptive_prefill_oneshot,
+            false,
+            "Deprecated compatibility flag; must remain disabled.");
+
 static std::atomic<uint32_t> signal_received{0};
 
 namespace {

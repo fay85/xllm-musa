@@ -93,7 +93,7 @@ std::vector<int32_t> build_q_cu_seq_lens_vec(
   if (q_seq_lens.empty()) {
     return q_cu_seq_lens;
   }
-#if defined(USE_NPU) || defined(USE_MUSA)
+#if defined(USE_NPU)
   q_cu_seq_lens.reserve(q_seq_lens.size());
   int32_t cum_seq_len = 0;
   for (int32_t q_len : q_seq_lens) {
@@ -573,7 +573,7 @@ void BatchInputBuilder::process_sequences_multithreaded() {
                                         state.unique_token_lens_vec.end());
     state_.max_seq_len = std::max(state_.max_seq_len, state.max_seq_len);
     state_.q_max_seq_len = std::max(state_.q_max_seq_len, state.q_max_seq_len);
-#if defined(USE_NPU) || defined(USE_MUSA)
+#if defined(USE_NPU)
     state_.seq_lens.insert(
         state_.seq_lens.end(), state.seq_lens.begin(), state.seq_lens.end());
     state_.q_seq_lens.insert(state_.q_seq_lens.end(),
@@ -583,7 +583,7 @@ void BatchInputBuilder::process_sequences_multithreaded() {
                                        state.kv_cache_tokens_nums.begin(),
                                        state.kv_cache_tokens_nums.end());
 #elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_ILU) || \
-    defined(USE_DCU)
+    defined(USE_DCU) || defined(USE_MUSA)
     int32_t seq_len_offset = state_.seq_lens.back();
     // skip the first element which is 0
     for (size_t i = 1; i < state.seq_lens.size(); ++i) {
@@ -705,7 +705,7 @@ void BatchInputBuilder::process_single_sequence(
   state.seq_lens.push_back(seq_len);
   state.q_seq_lens.push_back(padded_q_seq_len);
 #elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_ILU) || \
-    defined(USE_DCU)
+    defined(USE_DCU) || defined(USE_MUSA)
   state.seq_lens.push_back(state.seq_lens.back() + seq_len);
   state.q_seq_lens.push_back(state.q_seq_lens.back() + padded_q_seq_len);
 #endif
@@ -1163,11 +1163,11 @@ void BatchInputBuilder::padding_decode_batch_size(
           }
           state_.new_token_slot_ids.emplace_back(0);
         }
-#if defined(USE_NPU) || defined(USE_MUSA)
+#if defined(USE_NPU)
         state_.seq_lens.push_back(num_decoding_tokens);
         state_.q_seq_lens.push_back(num_decoding_tokens);
 #elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_ILU) || \
-    defined(USE_DCU)
+    defined(USE_MUSA) || defined(USE_DCU)
         state_.seq_lens.push_back(state_.seq_lens.back() + num_decoding_tokens);
         state_.q_seq_lens.push_back(state_.q_seq_lens.back() +
                                     num_decoding_tokens);
@@ -1229,13 +1229,22 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
   input_params.attention.device.new_cache_slots =
       torch::tensor(state_.new_token_slot_ids, torch::kInt);
 
-  // for flashinfer
-  input_params.attention.device.paged_kv_indptr =
-      torch::tensor(state_.paged_kv_indptr, torch::kInt);
-  input_params.attention.device.paged_kv_indices =
+  // Keep the original CPU paged-KV tensors alive for graph-safe Mate FFI.
+  auto paged_kv_indptr_cpu = torch::tensor(state_.paged_kv_indptr, torch::kInt);
+  auto paged_kv_indices_cpu =
       torch::tensor(state_.paged_kv_indices, torch::kInt);
-  input_params.attention.device.paged_kv_last_page_len =
+  auto paged_kv_last_page_len_cpu =
       torch::tensor(state_.paged_kv_last_page_len, torch::kInt);
+  input_params.attention.host.paged_kv_indptr = paged_kv_indptr_cpu;
+  input_params.attention.host.paged_kv_indices = paged_kv_indices_cpu;
+  input_params.attention.host.paged_kv_last_page_len =
+      paged_kv_last_page_len_cpu;
+  input_params.attention.device.paged_kv_indptr =
+      std::move(paged_kv_indptr_cpu);
+  input_params.attention.device.paged_kv_indices =
+      std::move(paged_kv_indices_cpu);
+  input_params.attention.device.paged_kv_last_page_len =
+      std::move(paged_kv_last_page_len_cpu);
 
   // Setup multimodal data
   std::vector<MMData> batch_mm_data_vec = mm_data_vec_;

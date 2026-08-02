@@ -99,6 +99,14 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
       ::xllm::KVCacheConfig::get_instance().enable_prefix_cache();
   has_linear_attention_layers_ =
       ::xllm::has_linear_attention_layers(engine_->model_args());
+#if defined(USE_MUSA)
+  // MUSA hybrid GDN does not support a single model forward containing both
+  // prefill and decode rows. Keep those stages in homogeneous batches; this
+  // also matches the piecewise-graph execution contract.
+  if (has_linear_attention_layers_) {
+    batch_mode_.enable_mix_batch = false;
+  }
+#endif
   enable_in_batch_prefix_cache_ =
       ::xllm::KVCacheConfig::get_instance().enable_in_batch_prefix_cache();
 

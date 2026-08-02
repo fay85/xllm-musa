@@ -15,10 +15,12 @@ limitations under the License.
 
 #include "executor_impl_factory.h"
 
+#if !defined(USE_MUSA)
 #include "platform/device.h"
 #include "runtime/base_executor_impl.h"
 #include "runtime/py_executor_impl.h"
 #include "runtime/vlm_executor_impl.h"
+#endif
 #if defined(USE_NPU)
 #include "runtime/acl_graph_executor_impl.h"
 #elif defined(USE_MLU)

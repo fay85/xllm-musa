@@ -18,6 +18,9 @@ limitations under the License.
 #include <glog/logging.h>
 #include <torch/torch.h>
 
+#include <optional>
+#include <vector>
+
 #include "common/flash_comm1_context.h"
 #include "core/framework/model_context.h"
 #include "framework/parallel_state/parallel_args.h"
@@ -27,6 +30,66 @@ limitations under the License.
 
 namespace xllm {
 namespace layer {
+class PiecewiseGraphMatmulBufferPool final {
+ public:
+  torch::Tensor get(const torch::Tensor& input, const torch::Tensor& weight);
+  torch::Tensor get_gated_rms_norm_output(const torch::Tensor& input);
+  torch::Tensor get_gdn_query(const torch::Tensor& input);
+  torch::Tensor get_gdn_key(const torch::Tensor& input);
+  torch::Tensor get_gdn_value(const torch::Tensor& input);
+  torch::Tensor get_gdn_output(const torch::Tensor& input);
+  torch::Tensor get_gdn_gate(const torch::Tensor& input);
+  torch::Tensor get_gdn_beta(const torch::Tensor& input);
+  torch::Tensor get_gdn_initial_state(const torch::Tensor& reference);
+  torch::Tensor get_gdn_final_state(const torch::Tensor& reference);
+  torch::Tensor get_gdn_kkt(const torch::Tensor& key, int64_t num_v_heads);
+  void freeze();
+
+ private:
+  torch::Tensor get_tensor(std::vector<torch::Tensor>& buffers,
+                           c10::IntArrayRef sizes,
+                           const torch::TensorOptions& options,
+                           const char* name);
+
+  std::vector<torch::Tensor> output_bufs_;
+  std::vector<torch::Tensor> gated_rms_norm_output_bufs_;
+  std::vector<torch::Tensor> gdn_query_bufs_;
+  std::vector<torch::Tensor> gdn_key_bufs_;
+  std::vector<torch::Tensor> gdn_value_bufs_;
+  std::vector<torch::Tensor> gdn_output_bufs_;
+  std::vector<torch::Tensor> gdn_gate_bufs_;
+  std::vector<torch::Tensor> gdn_beta_bufs_;
+  std::vector<torch::Tensor> gdn_initial_state_bufs_;
+  std::vector<torch::Tensor> gdn_final_state_bufs_;
+  std::vector<torch::Tensor> gdn_kkt_bufs_;
+  bool frozen_ = false;
+};
+
+class PiecewiseGraphMatmulBufferScope final {
+ public:
+  explicit PiecewiseGraphMatmulBufferScope(
+      PiecewiseGraphMatmulBufferPool* buffer_pool);
+  ~PiecewiseGraphMatmulBufferScope();
+
+  PiecewiseGraphMatmulBufferScope(const PiecewiseGraphMatmulBufferScope&) =
+      delete;
+  PiecewiseGraphMatmulBufferScope& operator=(
+      const PiecewiseGraphMatmulBufferScope&) = delete;
+
+  static PiecewiseGraphMatmulBufferPool* current_buffer_pool();
+
+ private:
+  PiecewiseGraphMatmulBufferPool* previous_buffer_pool_;
+};
+
+class MatmulOutputBuffers final {
+ public:
+  std::optional<torch::Tensor> get(const torch::Tensor& input,
+                                   const torch::Tensor& weight);
+
+ private:
+  torch::Tensor decode_output_buf_;
+};
 
 // extra args for parallel linear behavior.
 struct LinearExtraArgs {
@@ -118,6 +181,9 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
   // FP8 quantization parameters
   DEFINE_FUSED_WEIGHT(weight_scale);  // FP8 weight scale
   DEFINE_FUSED_WEIGHT(
+      weight_scale_inv);  // Block-wise FP8 inverse-scale grid
+                          // [ceil(N/bn), ceil(K/bk)] (DeepSeek-style).
+  DEFINE_FUSED_WEIGHT(
       input_scale);  // FP8 input (activation) scale for static quantization
 
   // NPU static W8A8 parameters.
@@ -147,6 +213,8 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
   at::ScalarType output_dtype_;
   LinearExtraArgs linear_extra_args_;
   std::optional<std::string> resolved_weight_quant_method_;
+  bool block_fp8_resolved_unquantized_ = false;
+  mutable MatmulOutputBuffers output_buffers_;
 };
 TORCH_MODULE(ColumnParallelLinear);
 
@@ -202,6 +270,9 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   // FP8 quantization parameters
   DEFINE_FUSED_WEIGHT(weight_scale);  // FP8 weight scale
   DEFINE_FUSED_WEIGHT(
+      weight_scale_inv);  // Block-wise FP8 inverse-scale grid
+                          // [ceil(N/bn), ceil(K/bk)] (DeepSeek-style).
+  DEFINE_FUSED_WEIGHT(
       input_scale);  // FP8 input (activation) scale for static quantization
 
   // NPU static W8A8 parameters.
@@ -232,10 +303,13 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   QuantArgs quant_args_;
   at::ScalarType output_dtype_;
   std::optional<std::string> resolved_weight_quant_method_;
+  bool block_fp8_resolved_unquantized_ = false;
+  mutable MatmulOutputBuffers output_buffers_;
 };
 TORCH_MODULE(QKVParallelLinear);
 
 // Linear layer with row parallelism.
+
 //     The linear layer is defined as Y = XA + b. A is parallelized along
 //     its first dimension and X along its second dimension as:
 //                -   -
@@ -310,6 +384,9 @@ class RowParallelLinearImpl : public torch::nn::Module {
 
   // FP8 quantization parameters
   DEFINE_FUSED_WEIGHT(weight_scale);  // FP8 weight scale
+  DEFINE_WEIGHT(
+      weight_scale_inv);  // Block-wise FP8 inverse-scale grid
+                          // [ceil(N/bn), ceil(K/bk)] (DeepSeek-style).
   DEFINE_FUSED_WEIGHT(
       input_scale);  // FP8 input (activation) scale for static quantization
 
@@ -341,8 +418,11 @@ class RowParallelLinearImpl : public torch::nn::Module {
   at::ScalarType output_dtype_;
   LinearExtraArgs linear_extra_args_;
   std::optional<std::string> resolved_weight_quant_method_;
+  bool block_fp8_resolved_unquantized_ = false;
   mutable torch::Tensor mmrs_weight_t_;
+  mutable MatmulOutputBuffers output_buffers_;
 };
+
 TORCH_MODULE(RowParallelLinear);
 
 class ReplicatedLinearImpl : public torch::nn::Module {
@@ -388,6 +468,8 @@ class ReplicatedLinearImpl : public torch::nn::Module {
   torch::TensorOptions options_;
   at::ScalarType output_dtype_;
   std::optional<std::string> resolved_weight_quant_method_;
+
+  mutable MatmulOutputBuffers output_buffers_;
 };
 TORCH_MODULE(ReplicatedLinear);
 

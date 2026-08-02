@@ -1156,11 +1156,25 @@ namespace {
 
 template <typename T>
 __global__ void __launch_bounds__(256, 1)
-    l2_norm_pair_h128_rows_kernel(const T* __restrict__ query,
-                                  const T* __restrict__ key,
-                                  T* __restrict__ query_out,
-                                  T* __restrict__ key_out,
+    l2_norm_pair_h128_rows_kernel(const T* query,
+                                  const T* key,
+                                  T* query_out,
+                                  T* key_out,
                                   int rows,
+                                  int64_t num_tokens,
+                                  int64_t num_heads,
+                                  int64_t query_stride_b,
+                                  int64_t query_stride_t,
+                                  int64_t query_stride_h,
+                                  int64_t key_stride_b,
+                                  int64_t key_stride_t,
+                                  int64_t key_stride_h,
+                                  int64_t query_out_stride_b,
+                                  int64_t query_out_stride_t,
+                                  int64_t query_out_stride_h,
+                                  int64_t key_out_stride_b,
+                                  int64_t key_out_stride_t,
+                                  int64_t key_out_stride_h,
                                   float eps) {
   constexpr int kColumns = 128;
   constexpr int kLanesPerRow = 32;
@@ -1174,7 +1188,18 @@ __global__ void __launch_bounds__(256, 1)
     return;
   }
 
-  const int64_t row_offset = static_cast<int64_t>(row) * kColumns;
+  const int64_t rows_per_batch = num_tokens * num_heads;
+  const int64_t batch_idx = static_cast<int64_t>(row) / rows_per_batch;
+  const int64_t row_in_batch =
+      static_cast<int64_t>(row) - batch_idx * rows_per_batch;
+  const int64_t token_idx = row_in_batch / num_heads;
+  const int64_t head_idx = row_in_batch - token_idx * num_heads;
+  const int64_t query_row_offset = batch_idx * query_stride_b +
+                                   token_idx * query_stride_t +
+                                   head_idx * query_stride_h;
+  const int64_t key_row_offset = batch_idx * key_stride_b +
+                                 token_idx * key_stride_t +
+                                 head_idx * key_stride_h;
   const int column_base = lane * kValuesPerLane;
   float query_values[kValuesPerLane];
   float key_values[kValuesPerLane];
@@ -1182,9 +1207,9 @@ __global__ void __launch_bounds__(256, 1)
   float key_sum = 0.0f;
 #pragma unroll
   for (int index = 0; index < kValuesPerLane; ++index) {
-    const int64_t offset = row_offset + column_base + index;
-    query_values[index] = to_f32<T>(query[offset]);
-    key_values[index] = to_f32<T>(key[offset]);
+    const int64_t column = static_cast<int64_t>(column_base + index);
+    query_values[index] = to_f32<T>(query[query_row_offset + column]);
+    key_values[index] = to_f32<T>(key[key_row_offset + column]);
     query_sum += query_values[index] * query_values[index];
     key_sum += key_values[index] * key_values[index];
   }
@@ -1197,11 +1222,19 @@ __global__ void __launch_bounds__(256, 1)
   const float query_inv_norm = rsqrtf(query_sum + eps);
   const float key_inv_norm = rsqrtf(key_sum + eps);
 
+  const int64_t query_out_row_offset = batch_idx * query_out_stride_b +
+                                       token_idx * query_out_stride_t +
+                                       head_idx * query_out_stride_h;
+  const int64_t key_out_row_offset = batch_idx * key_out_stride_b +
+                                     token_idx * key_out_stride_t +
+                                     head_idx * key_out_stride_h;
 #pragma unroll
   for (int index = 0; index < kValuesPerLane; ++index) {
-    const int64_t offset = row_offset + column_base + index;
-    query_out[offset] = from_f32<T>(query_values[index] * query_inv_norm);
-    key_out[offset] = from_f32<T>(key_values[index] * key_inv_norm);
+    const int64_t column = static_cast<int64_t>(column_base + index);
+    query_out[query_out_row_offset + column] =
+        from_f32<T>(query_values[index] * query_inv_norm);
+    key_out[key_out_row_offset + column] =
+        from_f32<T>(key_values[index] * key_inv_norm);
   }
 }
 
@@ -1222,17 +1255,31 @@ void launch_l2_norm_pair_h128(const torch::Tensor& query,
       reinterpret_cast<T*>(query_out.data_ptr()),
       reinterpret_cast<T*>(key_out.data_ptr()),
       rows,
+      query.size(1),
+      query.size(2),
+      query.stride(0),
+      query.stride(1),
+      query.stride(2),
+      key.stride(0),
+      key.stride(1),
+      key.stride(2),
+      query_out.stride(0),
+      query_out.stride(1),
+      query_out.stride(2),
+      key_out.stride(0),
+      key_out.stride(1),
+      key_out.stride(2),
       static_cast<float>(eps));
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-template <typename scalar_t>
-__global__ void gdn_gating_kernel(const scalar_t* __restrict__ a,
-                                  const scalar_t* __restrict__ b,
+template <typename input_t, typename output_t>
+__global__ void gdn_gating_kernel(const input_t* __restrict__ a,
+                                  const input_t* __restrict__ b,
                                   const float* __restrict__ A_log,
                                   const float* __restrict__ dt_bias,
-                                  scalar_t* __restrict__ g_out,
-                                  scalar_t* __restrict__ beta_out,
+                                  output_t* __restrict__ g_out,
+                                  output_t* __restrict__ beta_out,
                                   int64_t n_elem,
                                   int H,
                                   float sp_beta,
@@ -1250,11 +1297,11 @@ __global__ void gdn_gating_kernel(const scalar_t* __restrict__ a,
   const float g = -expf(A_log[h]) * sp;
   const float beta = 1.f / (1.f + expf(-static_cast<float>(b[idx])));
 
-  g_out[idx] = static_cast<scalar_t>(g);
-  beta_out[idx] = static_cast<scalar_t>(beta);
+  g_out[idx] = static_cast<output_t>(g);
+  beta_out[idx] = static_cast<output_t>(beta);
 }
 
-template <typename scalar_t>
+template <typename input_t, typename output_t>
 void launch(const torch::Tensor& a,
             const torch::Tensor& b,
             const torch::Tensor& A_log_f32,
@@ -1268,13 +1315,13 @@ void launch(const torch::Tensor& a,
             cudaStream_t stream) {
   const int threads = 256;
   const int blocks = static_cast<int>((n_elem + threads - 1) / threads);
-  gdn_gating_kernel<scalar_t>
-      <<<blocks, threads, 0, stream>>>(a.data_ptr<scalar_t>(),
-                                       b.data_ptr<scalar_t>(),
+  gdn_gating_kernel<input_t, output_t>
+      <<<blocks, threads, 0, stream>>>(a.data_ptr<input_t>(),
+                                       b.data_ptr<input_t>(),
                                        A_log_f32.data_ptr<float>(),
                                        dt_bias_f32.data_ptr<float>(),
-                                       g.data_ptr<scalar_t>(),
-                                       beta.data_ptr<scalar_t>(),
+                                       g.data_ptr<output_t>(),
+                                       beta.data_ptr<output_t>(),
                                        n_elem,
                                        H,
                                        sp_beta,
@@ -1284,21 +1331,34 @@ void launch(const torch::Tensor& a,
 
 }  // namespace
 
-std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
-    const torch::Tensor& query,
-    const torch::Tensor& key,
-    double eps) {
+namespace {
+
+void l2_norm_pair_fused_out(const torch::Tensor& query,
+                            const torch::Tensor& key,
+                            torch::Tensor& query_out,
+                            torch::Tensor& key_out,
+                            double eps) {
   CHECK(query.sizes() == key.sizes())
       << "l2_norm_pair_fused requires matching Q/K shapes";
   CHECK(query.scalar_type() == key.scalar_type())
       << "l2_norm_pair_fused requires matching Q/K dtypes";
-  CHECK(query.is_contiguous() && key.is_contiguous())
-      << "l2_norm_pair_fused requires contiguous Q/K tensors";
+  CHECK_EQ(query.dim(), 4) << "l2_norm_pair_fused requires 4D Q/K tensors";
+  CHECK_EQ(query.stride(-1), 1)
+      << "l2_norm_pair_fused requires contiguous Q last dimension";
+  CHECK_EQ(key.stride(-1), 1)
+      << "l2_norm_pair_fused requires contiguous K last dimension";
   CHECK_EQ(query.size(-1), 128)
       << "l2_norm_pair_fused currently supports head dimension 128";
+  CHECK(query_out.sizes() == query.sizes() && key_out.sizes() == key.sizes())
+      << "l2_norm_pair_fused output shapes must match inputs";
+  CHECK(query_out.scalar_type() == query.scalar_type() &&
+        key_out.scalar_type() == key.scalar_type())
+      << "l2_norm_pair_fused output dtypes must match inputs";
+  CHECK_EQ(query_out.stride(-1), 1)
+      << "l2_norm_pair_fused requires contiguous Q output last dimension";
+  CHECK_EQ(key_out.stride(-1), 1)
+      << "l2_norm_pair_fused requires contiguous K output last dimension";
 
-  torch::Tensor query_out = torch::empty_like(query);
-  torch::Tensor key_out = torch::empty_like(key);
   const int64_t rows_i64 = query.numel() / query.size(-1);
   CHECK_LE(rows_i64, std::numeric_limits<int>::max());
   const int rows = static_cast<int>(rows_i64);
@@ -1322,7 +1382,24 @@ std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
       LOG(FATAL) << "l2_norm_pair_fused: unsupported dtype "
                  << query.scalar_type();
   }
+}
+
+}  // namespace
+
+std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
+    const torch::Tensor& query,
+    const torch::Tensor& key,
+    double eps) {
+  torch::Tensor query_out = torch::empty(query.sizes(), query.options());
+  torch::Tensor key_out = torch::empty(key.sizes(), key.options());
+  l2_norm_pair_fused_out(query, key, query_out, key_out, eps);
   return {query_out, key_out};
+}
+
+void l2_norm_pair_fused_inplace(torch::Tensor& query,
+                                torch::Tensor& key,
+                                double eps) {
+  l2_norm_pair_fused_out(query, key, query, key, eps);
 }
 
 std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,
@@ -1337,26 +1414,20 @@ std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,
   auto b_c = b.contiguous();
   auto A_log_f32 = A_log.to(torch::kFloat32).contiguous();
   auto dt_bias_f32 = dt_bias.to(torch::kFloat32).contiguous();
-  auto g = torch::empty_like(a_c);
-  auto beta = torch::empty_like(a_c);
+  static const bool gating_fp32 = [] {
+    const char* value = std::getenv("XLLM_GDN_DISABLE_GATING_FP32");
+    return value == nullptr || std::string(value) != "1";
+  }();
+  const auto output_options =
+      gating_fp32 ? a_c.options().dtype(torch::kFloat32) : a_c.options();
+  auto g = torch::empty(a_c.sizes(), output_options);
+  auto beta = torch::empty(a_c.sizes(), output_options);
 
   const at::cuda::OptionalCUDAGuard guard(device_of(a));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
   if (a_c.scalar_type() == torch::kFloat32) {
-    launch<float>(a_c,
-                  b_c,
-                  A_log_f32,
-                  dt_bias_f32,
-                  g,
-                  beta,
-                  n_elem,
-                  static_cast<int>(H),
-                  static_cast<float>(sp_beta),
-                  static_cast<float>(threshold),
-                  stream);
-  } else if (a_c.scalar_type() == torch::kBFloat16) {
-    launch<at::BFloat16>(a_c,
+    launch<float, float>(a_c,
                          b_c,
                          A_log_f32,
                          dt_bias_f32,
@@ -1367,6 +1438,32 @@ std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,
                          static_cast<float>(sp_beta),
                          static_cast<float>(threshold),
                          stream);
+  } else if (a_c.scalar_type() == torch::kBFloat16) {
+    if (gating_fp32) {
+      launch<at::BFloat16, float>(a_c,
+                                  b_c,
+                                  A_log_f32,
+                                  dt_bias_f32,
+                                  g,
+                                  beta,
+                                  n_elem,
+                                  static_cast<int>(H),
+                                  static_cast<float>(sp_beta),
+                                  static_cast<float>(threshold),
+                                  stream);
+    } else {
+      launch<at::BFloat16, at::BFloat16>(a_c,
+                                         b_c,
+                                         A_log_f32,
+                                         dt_bias_f32,
+                                         g,
+                                         beta,
+                                         n_elem,
+                                         static_cast<int>(H),
+                                         static_cast<float>(sp_beta),
+                                         static_cast<float>(threshold),
+                                         stream);
+    }
   } else {
     LOG(FATAL) << "gdn_gating: unsupported dtype " << a_c.scalar_type();
   }

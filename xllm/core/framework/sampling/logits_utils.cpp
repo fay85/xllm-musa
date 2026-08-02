@@ -114,6 +114,46 @@ void apply_top_k_top_p(torch::Tensor& logits,
   }
 #endif
 
+#if defined(USE_MUSA)
+  if (top_k.defined() || top_p.defined()) {
+    const int64_t vocab = logits.size(-1);
+    const float ninf = -std::numeric_limits<float>::infinity();
+    int64_t k;
+    if (top_k.defined()) {
+      k = top_k.max().item<int64_t>();
+      if (k <= 0) {
+        k = std::min<int64_t>(vocab, 1000);
+      }
+    } else {
+      k = std::min<int64_t>(vocab, 1000);
+    }
+    k = std::clamp(k, static_cast<int64_t>(1), vocab);
+
+    auto [sorted, idx] =
+        logits.topk(k, /*dim=*/-1, /*largest=*/true, /*sorted=*/true);
+    if (top_k.defined()) {
+      auto k_vals = top_k.clamp(1, vocab).unsqueeze(-1).to(torch::kLong);
+      auto k_mask =
+          torch::arange(k, sorted.device()).expand_as(sorted) >= k_vals;
+      sorted.masked_fill_(k_mask, ninf);
+    }
+    if (top_p.defined()) {
+      auto p = top_p.unsqueeze(-1);
+      auto probs = sorted.softmax(-1).to(torch::kFloat32);
+      auto cum = probs.cumsum(-1);
+      auto p_mask = cum > p;
+      p_mask.index_put_({torch::indexing::Ellipsis, 0}, false);
+      sorted.masked_fill_(p_mask, ninf);
+    }
+    logits.fill_(ninf);
+    logits.scatter_(/*dim=*/-1,
+                    /*index=*/idx,
+                    /*src=*/sorted.to(logits.scalar_type()));
+    return;
+  }
+  return;
+#endif
+
   if (top_k.defined() && top_p.defined()) {
 #if defined(USE_NPU)
     constexpr int64_t kMaxInt64 = std::numeric_limits<int64_t>::max();

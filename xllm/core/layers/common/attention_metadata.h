@@ -74,6 +74,8 @@ struct AttentionMetadata {
   torch::Tensor q_cu_seq_lens;
   torch::Tensor kv_cu_seq_lens;
   torch::Tensor kv_seq_lens;
+  torch::Tensor gdn_cu_seq_lens;
+  torch::Tensor gdn_kkt_cu_seq_lens;
   torch::Tensor q_seq_lens;
   std::vector<int32_t> kv_seq_lens_vec;
   std::vector<int32_t> q_seq_lens_vec;
@@ -94,11 +96,17 @@ struct AttentionMetadata {
 
   // Spec-verify ACL graph can run full attention as expanded decode while GDN
   // layers keep the original spec-verify metadata.
+  bool is_spec_verify = false;
   bool use_expanded_decode_for_spec_verify_attention = false;
   torch::Tensor expanded_kv_seq_lens;
   torch::Tensor expanded_block_table;
   torch::Tensor expanded_paged_attention_tiling_data;
   torch::Tensor expanded_kv_seq_lens_host;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  torch::Tensor expanded_paged_kv_indptr;
+  torch::Tensor expanded_paged_kv_indices;
+  torch::Tensor expanded_paged_kv_last_page_len;
+#endif
 
   // for mrope
   torch::Tensor mrope_cos;
@@ -118,6 +126,18 @@ struct AttentionMetadata {
   // cache. Since pages are fixed-size (block_size), the last page may be
   // partially filled. Shape: [batch_size]. Type: int32.
   torch::Tensor paged_kv_last_page_len;
+  // Host mirrors constructed by the input builder. Mate FFI consumes these
+  // without introducing device-to-host synchronization.
+  torch::Tensor paged_kv_indptr_host;
+  torch::Tensor paged_kv_indices_host;
+  torch::Tensor paged_kv_last_page_len_host;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  std::vector<int32_t> q_cu_seq_lens_host_vec;
+#endif
+  // Per-forward cache shared by matching FA3 decode layers.
+  bool share_fa3_scheduler_metadata = false;
+  mutable torch::Tensor fa3_scheduler_metadata;
+
   // Query/Output index pointer tensor for decode mode with tensor core.
   // Similar to row_splits in ragged tensor: cumulative sum of sequence lengths.
   // qo_indptr[i] is the start index of sequence i in the packed query/output
@@ -173,7 +193,6 @@ struct AttentionMetadata {
 
 #if defined(USE_NPU)
   // for npu
-  bool is_spec_verify = false;
   torch::Tensor q_seq_lens_host;
   torch::Tensor kv_seq_lens_host;
   // For ACL graph execution - fixed-address device tiling data for

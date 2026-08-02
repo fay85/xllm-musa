@@ -118,7 +118,7 @@ const std::string Sequence::DECODER_CONTEXT_EMBEDDING_NAME =
 void Sequence::init_onerec_sequence(
     const std::vector<int32_t>& prompt_token_ids,
     torch::Tensor input_embedding) {
-  auto& onerec_state = onerec_state_.emplace();
+  auto& onerec_state = onerec_state_.emplace(OneRecState{});
   if (!prompt_token_ids.empty()) {
     onerec_state.encoder_tokens.assign(prompt_token_ids.begin(),
                                        prompt_token_ids.end());

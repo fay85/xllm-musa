@@ -45,6 +45,7 @@ class ExecutionConfig final {
          "enable_graph_double_buffer",
          "enable_graph_mode_decode_no_padding",
          "enable_prefill_piecewise_graph",
+         "enable_packed_prefill",
          "enable_graph_vmm_pool",
          "max_tokens_for_graph_mode",
          "acl_graph_decode_batch_size_limit",
@@ -64,6 +65,7 @@ class ExecutionConfig final {
   PROPERTY(bool, enable_graph_mode_decode_no_padding) = false;
 
   PROPERTY(bool, enable_prefill_piecewise_graph) = false;
+  PROPERTY(bool, enable_packed_prefill) = false;
 
   PROPERTY(bool, enable_graph_vmm_pool) = true;
 

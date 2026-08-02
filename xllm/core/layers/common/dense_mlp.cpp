@@ -20,6 +20,7 @@ limitations under the License.
 #include "common/flash_comm1_context.h"
 #include "kernels/ops_api.h"
 #include "platform/platform.h"
+#include "util/prefill_breakdown.h"
 
 namespace xllm {
 namespace layer {
@@ -106,7 +107,11 @@ torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
     h = gather_sequence(hidden_states, *fc1_ctx);
   }
 
-  auto gate_up = gate_up_proj_->forward(h);
+  torch::Tensor gate_up;
+  {
+    PrefillBreakdown::Scope gate_scope(PrefillBreakdown::Bucket::kMlpGateUp);
+    gate_up = gate_up_proj_->forward(h);
+  }
 
   if (is_smoothquant_) {
     if (use_fc1_sequence_parallel) {
@@ -124,12 +129,16 @@ torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
         gate_up.options());
   }
 
-  act_->forward(gate_up, output);
+  {
+    PrefillBreakdown::Scope act_scope(PrefillBreakdown::Bucket::kMlpAct);
+    act_->forward(gate_up, output);
+  }
 
   if (use_fc1_sequence_parallel) {
     return down_proj_->forward(output,
                                row_parallel_reduce_mode_for_fc1(*fc1_ctx));
   }
+  PrefillBreakdown::Scope down_scope(PrefillBreakdown::Bucket::kMlpDown);
   return down_proj_->forward(output);
 }
 
