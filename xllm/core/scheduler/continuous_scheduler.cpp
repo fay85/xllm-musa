@@ -231,9 +231,17 @@ bool ContinuousScheduler::add_request(std::shared_ptr<Request>& request) {
 }
 
 void ContinuousScheduler::create_queues(const Options& options) {
-  if (options.priority_strategy() == "multi_slo_and_prio" ||
-      options.priority_strategy() == "fcfs") {
+  if (options.priority_strategy() == "multi_slo_and_prio") {
     prefill_queue_ = std::make_unique<DequeQueue>();
+    chunk_queue_ = std::make_unique<DequeQueue>();
+    decode_queue_ = std::make_unique<DequeQueue>();
+  } else if (options.priority_strategy() == "fcfs") {
+    // Preserve the pre-unification FCFS semantics for newly arrived prefill
+    // requests: order by Request::created_time(), not by the timing of the
+    // concurrent MPMC drain. Decode and chunk continuations still use deques
+    // so their explicit front/back requeue rules remain unchanged.
+    prefill_queue_ = std::make_unique<HeapQueue>(
+        create_comparator(options.priority_strategy(), false));
     chunk_queue_ = std::make_unique<DequeQueue>();
     decode_queue_ = std::make_unique<DequeQueue>();
   } else {
