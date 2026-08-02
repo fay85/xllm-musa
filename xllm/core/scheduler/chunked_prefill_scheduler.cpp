@@ -149,6 +149,21 @@ size_t max_packed_prefill_seqs() {
   return limit;
 }
 
+// Cap pure-prefill requests independently of decode batch size and packed
+// layout. This gives serving benchmarks the same semantics as SGLang's
+// prefill_max_requests without reducing max_seqs_per_batch for decode.
+size_t max_prefill_seqs() {
+  static const size_t limit = [] {
+    const char* env = std::getenv("XLLM_MAX_PREFILL_SEQS");
+    if (env == nullptr || env[0] == '\0') {
+      return static_cast<size_t>(0);
+    }
+    const long parsed = std::strtol(env, nullptr, 10);
+    return parsed > 0 ? static_cast<size_t>(parsed) : static_cast<size_t>(0);
+  }();
+  return limit;
+}
+
 size_t count_prefill_sequences(
     const std::vector<Sequence*>& running_sequences) {
   size_t n = 0;
@@ -271,9 +286,14 @@ void ChunkedPrefillScheduler::handle_running_queue_requests(
         batch_is_prefill.has_value() && batch_is_prefill.value()) {
       break;
     }
+    const size_t prefill_cap = max_prefill_seqs();
+    if (request_is_prefill && prefill_cap > 0 &&
+        count_prefill_sequences(running_sequences_) >= prefill_cap) {
+      break;
+    }
     const size_t packed_prefill_cap = max_packed_prefill_seqs();
     if (enable_packed_prefill() && request_is_prefill &&
-        packed_prefill_cap > 0 &&
+        prefill_cap == 0 && packed_prefill_cap > 0 &&
         count_prefill_sequences(running_sequences_) >= packed_prefill_cap) {
       break;
     }
@@ -497,8 +517,13 @@ void ChunkedPrefillScheduler::handle_prefill_requests(
         !running_sequences_.empty()) {
       break;
     }
+    const size_t prefill_cap = max_prefill_seqs();
+    if (prefill_cap > 0 &&
+        count_prefill_sequences(running_sequences_) >= prefill_cap) {
+      break;
+    }
     const size_t packed_prefill_cap = max_packed_prefill_seqs();
-    if (enable_packed_prefill() && packed_prefill_cap > 0 &&
+    if (enable_packed_prefill() && prefill_cap == 0 && packed_prefill_cap > 0 &&
         count_prefill_sequences(running_sequences_) >= packed_prefill_cap) {
       break;
     }

@@ -955,6 +955,14 @@ bool mate_gdn_unpadded_c1_enabled() {
   return enabled;
 }
 
+bool mate_gdn_c1_partial_fixed_enabled() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_MATE_GDN_C1_PARTIAL_FIXED");
+    return env == nullptr || env[0] != '0';
+  }();
+  return enabled;
+}
+
 bool mate_gdn_module_available(const std::string& uri) {
   const std::string ops_path = util::get_string_env("FLASHINFER_OPS_PATH");
   if (ops_path.empty()) {
@@ -1118,16 +1126,21 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
 
   // Host→device torch::tensor(cu_host) is not capture-safe; also skip varlen
   // while capturing even for packed shapes (packed prefill is eager).
+  const bool use_c1_partial_fixed =
+      mate_gdn_c1_partial_fixed_enabled() && input_batch == 1 &&
+      input_seq_len >= kGdnChunkSize && input_seq_len % kGdnChunkSize != 0 &&
+      (strided_padded_available || legacy_padded_available);
   const bool capturing =
       xllm::runtime::cuda::GlobalCaptureInstance::get_instance().is_capturing();
   // Full-varlen Mate path handles a partial final chunk directly.
   // Keep XLLM_MATE_GDN_UNPADDED_C1=0 as a runtime rollback switch.
   const bool use_unpadded_c1_varlen =
-      !capturing && mate_gdn_unpadded_c1_enabled() && input_batch == 1 &&
+      !use_c1_partial_fixed && !capturing &&
+      mate_gdn_unpadded_c1_enabled() && input_batch == 1 &&
       input_seq_len >= kGdnChunkSize && input_seq_len % kGdnChunkSize != 0 &&
       varlen_available;
   const bool use_full_varlen =
-      varlen_available && !capturing &&
+      !use_c1_partial_fixed && varlen_available && !capturing &&
       ((params.output.has_value() && params.output->defined()) ||
        (params.final_state.has_value() && params.final_state->defined()) ||
        (params.kkt_output.has_value() && params.kkt_output->defined()) ||
@@ -1362,7 +1375,9 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   // ------------------------------------------------------------------
   if (use_full_padded) {
     const int64_t batch_size = input_batch;
-    const int64_t pad_size = chunk_pad_size(input_seq_len, kGdnChunkSize);
+    const int64_t pad_size =
+        use_c1_partial_fixed ? 0
+                             : chunk_pad_size(input_seq_len, kGdnChunkSize);
     if (pad_size > 0) {
       query = pad_time_dim_4d(query, pad_size);
       key = pad_time_dim_4d(key, pad_size);
@@ -1420,7 +1435,8 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
             use_strided_abi || key.is_contiguous() ? key : key.contiguous();
         auto beta_contig = beta.is_contiguous() ? beta : beta.contiguous();
         const int32_t num_chunks = static_cast<int32_t>(
-            batch_size * (num_tokens / kGdnChunkSize));
+            batch_size *
+            ((num_tokens + kGdnChunkSize - 1) / kGdnChunkSize));
         const std::string kkt_uri = get_mate_kkt_solve_uri(num_q_heads,
                                                            num_v_heads,
                                                            key.scalar_type(),

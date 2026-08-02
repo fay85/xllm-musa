@@ -2347,8 +2347,8 @@ std::vector<uint32_t> generate_piecewise_prefill_graph_tokens(
   // shoulder prevents a one-token crossing of 2048 from selecting 2304; the
   // remaining entries tighten B=2..7 without introducing a shape for every
   // exact host length.
-  constexpr std::array<uint32_t, 7> kPrefillShoulders = {
-      2112, 4352, 6400, 8448, 10496, 12544, 14592};
+  constexpr std::array<uint32_t, 8> kPrefillShoulders = {
+      2080, 2112, 4352, 6400, 8448, 10496, 12544, 14592};
   for (uint32_t shoulder : kPrefillShoulders) {
     if (shoulder <= max_tokens) {
       capture_sizes.push_back(shoulder);
@@ -2658,7 +2658,11 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   const bool qwen35_prefill =
       is_prefill && args_.model_type().find("qwen3_5") != std::string::npos;
   bool prefill_bucket_shape_supported = true;
-  if (qwen35_prefill && bucket_num_tokens % 64 != 0) {
+  const bool qwen35_c1_partial_bucket =
+      qwen35_prefill && effective_num_sequences == 1 &&
+      bucket_num_tokens == 2080;
+  if (qwen35_prefill && !qwen35_c1_partial_bucket &&
+      bucket_num_tokens % 64 != 0) {
     const uint32_t aligned_bucket = ((bucket_num_tokens + 63) / 64) * 64;
     if (aligned_bucket <= max_tokens_for_graph_mode_) {
       bucket_num_tokens = aligned_bucket;

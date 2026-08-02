@@ -6,6 +6,8 @@ cd /workspace/xllm-git-master
 MODEL_NAME="${MODEL_NAME:-Qwen3.5-27B-FP8}"
 MODEL_PATH="${MODEL_PATH:-/workspace/model_weights/Qwen3.5-27B-FP8}"
 TOKENIZER="${TOKENIZER:-$MODEL_PATH}"
+CLIENT="${CLIENT:-benchmark_c5_barrier_waves.py}"
+BENCHMARK_LIB_DIR="${BENCHMARK_LIB_DIR:-/workspace}"
 OUT="${OUT:-/workspace/bench_results/xllm_fp8_c5_cap2_barrier_$(date +%Y%m%d_%H%M%S)}"
 PORT="${PORT:-8092}"
 INPUT_LEN="${INPUT_LEN:-2500}"
@@ -35,8 +37,8 @@ export MASTER_PORT=9748
 export LOG_DIR="$OUT"
 export ENABLE_GRAPH=1
 export ENABLE_GRAPH_VMM_POOL=0
-export ENABLE_PREFILL_PIECEWISE_GRAPH=1
-export ENABLE_PACKED_PREFILL=1
+export ENABLE_PREFILL_PIECEWISE_GRAPH="${ENABLE_PREFILL_PIECEWISE_GRAPH:-1}"
+export ENABLE_PACKED_PREFILL="${ENABLE_PACKED_PREFILL:-1}"
 export ENABLE_CHUNKED_PREFILL=true
 export ENABLE_SCHEDULE_OVERLAP=true
 export ENABLE_PREFIX_CACHE=false
@@ -58,8 +60,9 @@ export NUM_SPECULATIVE_TOKENS=0
 export IGNORE_EOS=1
 export XLLM_USE_FA3=1
 export XLLM_USE_CUSTOM_PREFILL_CONV=1
-export XLLM_PACKED_PREFILL_PIECEWISE=0
+export XLLM_PACKED_PREFILL_PIECEWISE="${XLLM_PACKED_PREFILL_PIECEWISE:-0}"
 export XLLM_MAX_PACKED_PREFILL_SEQS=2
+export XLLM_MAX_PREFILL_SEQS="${XLLM_MAX_PREFILL_SEQS:-0}"
 export XLLM_SCHED_PACK_LOG="${XLLM_SCHED_PACK_LOG:-1}"
 export XLLM_PREFILL_FWD_TIMING="${XLLM_PREFILL_FWD_TIMING:-0}"
 export XLLM_PREFILL_BREAKDOWN="${XLLM_PREFILL_BREAKDOWN:-0}"
@@ -95,7 +98,8 @@ if [[ -n "$RELEASE_PARTITION" ]]; then
   )
 fi
 
-python3 benchmark_c5_barrier_waves.py \
+python3 "$CLIENT" \
+  --benchmark-lib-dir "$BENCHMARK_LIB_DIR" \
   --host 127.0.0.1 \
   --port "$PORT" \
   --model "$MODEL_NAME" \
