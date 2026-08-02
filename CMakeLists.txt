@@ -342,6 +342,7 @@ find_package(Boost REQUIRED)
 find_package(Boost REQUIRED COMPONENTS serialization)
 find_package(Threads REQUIRED)
 # find all dependencies from vcpkg
+set(GFLAGS_USE_TARGET_NAMESPACE TRUE)
 find_package(gflags CONFIG REQUIRED)
 find_package(glog CONFIG REQUIRED)
 find_package(folly CONFIG REQUIRED)
