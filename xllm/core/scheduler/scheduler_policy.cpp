@@ -381,7 +381,7 @@ void SchedulerPolicy::schedule_prefill_from_queue(
 size_t SchedulerPolicy::effective_prefill_chunk_limit(
     const SchedulerState& state,
     size_t batch_token_budget,
-    const Sequence* sequence) const {
+    Sequence* sequence) const {
   const size_t configured_limit =
       static_cast<size_t>(options_.max_tokens_per_chunk_for_prefill());
   if (!options_.enable_adaptive_prefill_oneshot()) {
