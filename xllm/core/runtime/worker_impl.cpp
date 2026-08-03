@@ -188,7 +188,7 @@ void ensure_forward_input_device_tensors(ForwardInput& input,
                                   device);
 }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
 void prepare_input_params_for_linear_attention(ModelInputParams& input_params) {
   const std::vector<int32_t>& host_q_seq_lens =
       input_params.attention.host.q_seq_lens;
@@ -649,18 +649,16 @@ ForwardInput WorkerImpl::update_input_by_last_step_output(
   xllm::kernel::npu::replace_token(inputs.token_ids,
                                    last_step_output_.sample_output.next_tokens,
                                    /*synchronize_stream=*/true);
+#elif defined(USE_MUSA)
+  xllm::kernel::musa::replace_token(inputs.token_ids,
+                                    last_step_output_.sample_output.next_tokens,
+                                    /*synchronize_stream=*/false);
 #else
   auto& flatten_tokens = inputs.token_ids;
   auto neg_mask = (flatten_tokens < 0);
   auto clamped_neg_indices = torch::clamp(-flatten_tokens, 0);
-#if defined(USE_MUSA)
-  auto cpu = clamped_neg_indices.cpu() - 1;
-  auto replacement =
-      last_step_output_.sample_output.next_tokens.index({cpu.musa()});
-#else
   auto replacement = last_step_output_.sample_output.next_tokens.index(
       {clamped_neg_indices - 1});
-#endif
   inputs.token_ids = torch::where(neg_mask, replacement, flatten_tokens);
 #endif
   return inputs;
@@ -886,6 +884,11 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
     }
 
 #endif
+#if defined(USE_MUSA)
+    if (has_linear_attention_layers(context_.get_model_args())) {
+      prepare_input_params_for_linear_attention(processed_input.input_params);
+    }
+#endif
   };
 
   prepare_device_on_stream();
@@ -1031,7 +1034,11 @@ bool WorkerImpl::can_use_cuda_block_copy_kernel(
 void WorkerImpl::execute_cuda_block_copy_kernel(
     const ModelInputParams& input_params) {
   CHECK(!kv_caches_.empty());
+#if defined(USE_MUSA)
+  xllm::kernel::musa::block_copy(
+#else
   xllm::kernel::cuda::block_copy(
+#endif
       cuda_block_copy_runtime_state_.k_cache_ptrs_device,
       cuda_block_copy_runtime_state_.v_cache_ptrs_device,
       input_params.block_copy.src_block_indices,

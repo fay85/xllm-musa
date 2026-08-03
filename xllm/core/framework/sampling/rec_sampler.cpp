@@ -28,12 +28,8 @@ limitations under the License.
 #include "core/framework/config/rec_config.h"
 #include "logits_utils.h"
 #include "sampler.h"
-#if defined(USE_CUDA) || defined(USE_MUSA)
-#if defined(USE_MUSA)
-#include "kernels/musa/musa_ops_api.h"
-#else
+#if defined(USE_CUDA)
 #include "kernels/cuda/cuda_ops_api.h"
-#endif
 #endif
 
 namespace xllm {
@@ -64,7 +60,7 @@ static inline torch::Tensor log_softmax_last_dim(
     const torch::Tensor& input,
     const torch::Tensor& temperatures) {
   const bool has_temps = temperatures.defined();
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   if (input.is_cuda() && use_air_log_softmax_env()) {
     return kernel::cuda::air_log_softmax_last_dim(input, temperatures);
   }
