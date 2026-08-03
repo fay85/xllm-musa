@@ -111,7 +111,7 @@ bool Platform::is_support_sm100f() { return support_sm100f_; }
 bool Platform::is_support_sm120a() { return support_sm120a_; }
 
 void Platform::init_capabilities(int32_t device_index) {
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
   std::call_once(g_init_flag, [device_index]() {
     sm_count_ = cuda::get_device_sm_count(device_index);
     enable_pdl_ = cuda::support_pdl(device_index);
