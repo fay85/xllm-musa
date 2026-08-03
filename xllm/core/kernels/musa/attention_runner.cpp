@@ -51,7 +51,7 @@ int64_t capture_fa3_max_padding_tokens() {
 
 namespace xllm {
 namespace kernel {
-namespace cuda {
+namespace musa {
 
 void AttentionRunner::run_capture(
     const std::string& uri,
@@ -73,7 +73,7 @@ void AttentionRunner::run_capture(
   // here.
   (void)plan_info;
 
-  ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+  ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
       .temporarily_end_graph();
 
   uri_ = uri;
@@ -90,7 +90,7 @@ void AttentionRunner::run_capture(
   padded_num_tokens_ = padded_num_tokens;
   runner_type_ = RunnerType::PREFILL;
 
-  ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+  ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
       .temporarily_begin_graph();
 }
 
@@ -126,7 +126,7 @@ void AttentionRunner::run_chunked_prefill_capture(
   (void)paged_kv_indices_host;
   (void)paged_kv_last_page_len_host;
 
-  ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+  ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
       .temporarily_end_graph();
 
   uri_ = uri;
@@ -143,7 +143,7 @@ void AttentionRunner::run_chunked_prefill_capture(
   runner_type_ = RunnerType::CHUNKED_PREFILL;
   causal_ = causal;
 
-  ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+  ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
       .temporarily_begin_graph();
 }
 
@@ -160,7 +160,7 @@ void AttentionRunner::run_fa3_prefill_capture(torch::Tensor query,
   // FA3 is launched outside the graph during replay. End the current graph
   // segment before storing its tensors, then resume capture for downstream
   // layers; this is the same sequencing used by the FlashInfer runner.
-  ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+  ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
       .temporarily_end_graph();
 
   query_ = std::move(query);
@@ -175,7 +175,7 @@ void AttentionRunner::run_fa3_prefill_capture(torch::Tensor query,
   max_seqlen_k_ = max_seqlen_k;
   runner_type_ = RunnerType::FA3_PREFILL;
 
-  ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+  ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
       .temporarily_begin_graph();
 }
 
@@ -299,7 +299,7 @@ void AttentionRunner::run_gdn_prefill_capture(torch::Tensor query,
                                               torch::Tensor final_state,
                                               torch::Tensor kkt_output,
                                               float scale) {
-  auto& capture = ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance();
+  auto& capture = ::xllm::runtime::musa::GlobalCaptureInstance::get_instance();
   capture.temporarily_end_graph();
   query_ = std::move(query);
   key_ = std::move(key);
@@ -405,7 +405,7 @@ void batch_chunked_prefill_with_optional_piecewise_capture(
   if (::xllm::ExecutionConfig::get_instance().enable_graph() &&
       ::xllm::ExecutionConfig::get_instance()
           .enable_prefill_piecewise_graph() &&
-      ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+      ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
           .is_capturing()) {
     AttentionRunner runner;
     const uint32_t padded_num_tokens =
@@ -431,7 +431,7 @@ void batch_chunked_prefill_with_optional_piecewise_capture(
                                        paged_kv_indices_host,
                                        paged_kv_last_page_len_host,
                                        padded_num_tokens);
-    ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+    ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
         .register_attention_runner(std::move(runner));
     return;
   }
@@ -474,7 +474,7 @@ void fa3_prefill_with_optional_piecewise_capture(
   if (::xllm::ExecutionConfig::get_instance().enable_graph() &&
       ::xllm::ExecutionConfig::get_instance()
           .enable_prefill_piecewise_graph() &&
-      ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+      ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
           .is_capturing()) {
     // For C1 with bounded bucket padding, record dense FA3 in the surrounding
     // graph instead of splitting at every full-attention layer. Larger padding
@@ -518,7 +518,7 @@ void fa3_prefill_with_optional_piecewise_capture(
                                    sm_scale,
                                    output,
                                    output_lse);
-    ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+    ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
         .register_attention_runner(std::move(runner));
     return;
   }
@@ -560,7 +560,7 @@ void batch_prefill_with_optional_piecewise_capture(
   if (::xllm::ExecutionConfig::get_instance().enable_graph() &&
       ::xllm::ExecutionConfig::get_instance()
           .enable_prefill_piecewise_graph() &&
-      ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+      ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
           .is_capturing()) {
     AttentionRunner runner;
 
@@ -582,7 +582,7 @@ void batch_prefill_with_optional_piecewise_capture(
                        output_lse,
                        padded_num_tokens);
 
-    ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+    ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
         .register_attention_runner(std::move(runner));
     return;
   }
@@ -602,6 +602,6 @@ void batch_prefill_with_optional_piecewise_capture(
                 output_lse);
 }
 
-}  // namespace cuda
+}  // namespace musa
 }  // namespace kernel
 }  // namespace xllm

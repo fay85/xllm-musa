@@ -40,7 +40,7 @@ limitations under the License.
 
 namespace ffi = tvm::ffi;
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 
 inline bool is_torch_musa_device(const torch::Device& device) {
   return device.is_privateuseone() || device.is_cuda();
@@ -215,4 +215,4 @@ void end_ffi_alloc_replay();
 FfiAllocMode get_ffi_alloc_mode();
 
 void bind_tvmffi_stream_to_current_torch_stream(const torch::Device& device);
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa

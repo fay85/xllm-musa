@@ -31,7 +31,7 @@ limitations under the License.
 
 namespace xllm {
 namespace kernel {
-namespace cuda {
+namespace musa {
 
 namespace {
 
@@ -292,7 +292,7 @@ std::string mate_gdn_dtype_suffix(torch::ScalarType dtype) {
 }
 
 void l2norm_last_dim(torch::Tensor& tensor) {
-  // Same-dtype L2norm (matches cuda::l2_norm / decode path). Avoids the old
+  // Same-dtype L2norm (matches the decode l2_norm path). Avoids the old
   // bf16→fp32 normalize→bf16 roundtrip that dominated wrapper time ×48 layers.
   constexpr double kEps = 1e-6;
   tensor =
@@ -366,7 +366,7 @@ MateGdnPrefillScratch& mate_gdn_prefill_scratch() {
 bool mate_gdn_scratch_reuse_allowed() {
   // Capture-time allocations must stay address-stable for the recorded graph;
   // never reuse scratch while xLLM reports capture in progress.
-  return !xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+  return !xllm::runtime::musa::GlobalCaptureInstance::get_instance()
               .is_capturing();
 }
 
@@ -1122,7 +1122,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       input_seq_len >= kGdnChunkSize && input_seq_len % kGdnChunkSize != 0 &&
       (strided_padded_available || legacy_padded_available);
   const bool capturing =
-      xllm::runtime::cuda::GlobalCaptureInstance::get_instance().is_capturing();
+      xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
   // Full-varlen Mate path handles a partial final chunk directly.
   // Keep XLLM_MATE_GDN_UNPADDED_C1=0 as a runtime rollback switch.
   const bool use_unpadded_c1_varlen =
@@ -1780,6 +1780,6 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
   return out_t.t().contiguous();
 }
 
-}  // namespace cuda
+}  // namespace musa
 }  // namespace kernel
 }  // namespace xllm

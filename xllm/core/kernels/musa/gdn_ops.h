@@ -37,7 +37,7 @@ struct MateGatedDeltaRulePrefillParams;
 struct PartialRotaryEmbeddingParams;
 struct FusedSigmoidGatingDeltaRuleUpdateParams;
 
-namespace cuda {
+namespace musa {
 
 torch::Tensor l2_norm(torch::Tensor& x, double eps);
 
@@ -196,6 +196,6 @@ void gated_rms_norm_fused(const torch::Tensor& x,
                           torch::Tensor output,
                           double eps);
 
-}  // namespace cuda
+}  // namespace musa
 }  // namespace kernel
 }  // namespace xllm

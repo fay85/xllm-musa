@@ -24,7 +24,7 @@ limitations under the License.
 
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 
 // Native DeepSeek block-wise FP8 GEMM via the mate `gemm_ops` TVM-FFI module
 // (muDNN groupwise matmul, GROUP_BLOCK (1,128,128)). Avoids materializing a
@@ -90,4 +90,4 @@ torch::Tensor gemm_fp8_nt_groupwise(
   return out;
 }
 
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa

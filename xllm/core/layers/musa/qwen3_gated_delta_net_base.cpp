@@ -438,7 +438,7 @@ torch::Tensor run_spec_verify_conv(
         torch::empty(x_contiguous.sizes(), x_contiguous.options());
     auto fused_intermediate = torch::empty(
         {batch_size, seq_len, dim, expanded_state_len}, conv_cache.options());
-    xllm::kernel::cuda::causal_conv1d_mtp_verify(x_contiguous,
+    xllm::kernel::musa::causal_conv1d_mtp_verify(x_contiguous,
                                                  weight.contiguous(),
                                                  conv_cache,
                                                  state_indices,
@@ -950,7 +950,7 @@ bool should_use_gdn_packed_prefill(const AttentionMetadata& attn_metadata,
     return false;
   }
   const bool is_capturing =
-      xllm::runtime::cuda::GlobalCaptureInstance::get_instance().is_capturing();
+      xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
   if (is_capturing &&
       PiecewiseGraphMatmulBufferScope::current_buffer_pool() == nullptr) {
     return false;
@@ -1049,7 +1049,7 @@ void scatter_gdn_mtp_verify_ssm_states(const GdnMtpVerifyCache& cache,
       CHECK_EQ(conv_intermediate.size(1), seq_len)
           << "conv MTP intermediate seq_len mismatch";
     }
-    xllm::kernel::cuda::scatter_gdn_mtp_verify_states(ssm_cache,
+    xllm::kernel::musa::scatter_gdn_mtp_verify_states(ssm_cache,
                                                       intermediate,
                                                       conv_cache,
                                                       conv_intermediate,
@@ -1215,7 +1215,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
       input_params.attention.device.kv_cache_tokens_nums > 0;
   {
     PrefillBreakdown::Scope conv_scope(PrefillBreakdown::Bucket::kGdnConv);
-    mixed_qkv = xllm::kernel::cuda::causal_conv1d_prefill(
+    mixed_qkv = xllm::kernel::musa::causal_conv1d_prefill(
         mixed_qkv,
         conv_weight,
         conv_cache,
@@ -1256,7 +1256,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
   PiecewiseGraphMatmulBufferPool* const piecewise_buffer_pool =
       PiecewiseGraphMatmulBufferScope::current_buffer_pool();
   const bool is_piecewise_graph_capture =
-      xllm::runtime::cuda::GlobalCaptureInstance::get_instance().is_capturing();
+      xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
   if (piecewise_buffer_pool != nullptr) {
     // The preceding graph segment owns these copies. They are canonical,
     // bucket-sized tensors, so the GDN runner can pass them directly on every
@@ -1354,7 +1354,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
       mate_params.final_state = final_state;
       mate_params.kkt_output = kkt_output;
       if (is_piecewise_graph_capture) {
-        xllm::kernel::cuda::AttentionRunner runner;
+        xllm::kernel::musa::AttentionRunner runner;
         runner.run_gdn_prefill_capture(
             processed_q,
             processed_k,
@@ -1367,7 +1367,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
             final_state,
             kkt_output,
             static_cast<float>(mate_params.scale.value()));
-        xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
+        xllm::runtime::musa::GlobalCaptureInstance::get_instance()
             .register_attention_runner(std::move(runner));
       } else {
         PrefillBreakdown::Scope mate_scope(PrefillBreakdown::Bucket::kMate);
@@ -1661,7 +1661,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     torch::Tensor conv_input = reshape_qkvz_unpad(attn_metadata, mixed_qkv);
     torch::Tensor has_initial_state =
         input_params.attention.device.kv_cache_tokens_nums > 0;
-    mixed_qkv = xllm::kernel::cuda::causal_conv1d_prefill(
+    mixed_qkv = xllm::kernel::musa::causal_conv1d_prefill(
         conv_input,
         conv_weight,
         conv_cache,
@@ -1827,7 +1827,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   torch::Tensor core_attn_out;
   torch::Tensor last_recurrent_state;
   const bool is_piecewise_graph_capture =
-      xllm::runtime::cuda::GlobalCaptureInstance::get_instance().is_capturing();
+      xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
   const bool mate_prefill_shape_supported =
       attn_metadata.is_prefill ||
       (attn_metadata.is_chunked_prefill && batch_size == 1);

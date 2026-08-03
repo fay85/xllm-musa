@@ -22,7 +22,7 @@ limitations under the License.
 
 #include "core/kernels/musa/attention_runner.h"
 
-namespace xllm::runtime::cuda {
+namespace xllm::runtime::musa {
 
 class PiecewiseGraphs final {
  public:
@@ -34,8 +34,8 @@ class PiecewiseGraphs final {
   PiecewiseGraphs& operator=(PiecewiseGraphs&&) noexcept = default;
 
   void add_graph(std::unique_ptr<at::cuda::CUDAGraph>&& graph);
-  void add_attention_runner(::xllm::kernel::cuda::AttentionRunner&& runner);
-  void replay(const ::xllm::kernel::cuda::AttentionReplayParams& runner_params);
+  void add_attention_runner(::xllm::kernel::musa::AttentionRunner&& runner);
+  void replay(const ::xllm::kernel::musa::AttentionReplayParams& runner_params);
   size_t size() const { return instructions_.size(); }
   bool empty() const { return instructions_.empty(); }
   size_t num_graphs() const { return graphs_.size(); }
@@ -44,10 +44,10 @@ class PiecewiseGraphs final {
 
  private:
   std::vector<std::unique_ptr<at::cuda::CUDAGraph>> graphs_;
-  std::vector<std::unique_ptr<::xllm::kernel::cuda::AttentionRunner>>
+  std::vector<std::unique_ptr<::xllm::kernel::musa::AttentionRunner>>
       attention_runners_;
   std::vector<InstructionType> instructions_;
   bool requires_plan_info_ = false;
 };
 
-}  // namespace xllm::runtime::cuda
+}  // namespace xllm::runtime::musa

@@ -27,7 +27,7 @@ limitations under the License.
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 
 template <typename T>
 __global__ void XLLM_KERNEL_ATTR(1024)
@@ -273,4 +273,4 @@ void block_copy(torch::Tensor key_cache_ptrs,
   });
 }
 
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa

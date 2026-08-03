@@ -21,7 +21,7 @@ limitations under the License.
 #include "core/kernels/musa/attention_runner.h"
 #include "core/kernels/musa/piecewise_graphs.h"
 
-namespace xllm::runtime::cuda {
+namespace xllm::runtime::musa {
 
 std::mutex GlobalCaptureInstance::capture_mutex_;
 
@@ -120,7 +120,7 @@ void GlobalCaptureInstance::temporarily_begin_graph_locked() {
 }
 
 void GlobalCaptureInstance::register_attention_runner(
-    ::xllm::kernel::cuda::AttentionRunner&& runner) {
+    ::xllm::kernel::musa::AttentionRunner&& runner) {
   CHECK(is_capturing_) << "Not capturing, call begin_capture() first";
   CHECK(current_piecewise_graph_) << "Current piecewise graph is null";
 
@@ -130,4 +130,4 @@ void GlobalCaptureInstance::register_attention_runner(
       << current_piecewise_graph_->num_runners();
 }
 
-}  // namespace xllm::runtime::cuda
+}  // namespace xllm::runtime::musa

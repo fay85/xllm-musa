@@ -19,15 +19,15 @@ limitations under the License.
 #include <memory>
 #include <mutex>
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 class AttentionRunner;
 }
 
-namespace xllm::runtime::cuda {
+namespace xllm::runtime::musa {
 class PiecewiseGraphs;
 }
 
-namespace xllm::runtime::cuda {
+namespace xllm::runtime::musa {
 
 class GlobalCaptureInstance final {
  public:
@@ -37,7 +37,7 @@ class GlobalCaptureInstance final {
   void temporarily_end_graph();
   void temporarily_begin_graph();
   void register_attention_runner(
-      ::xllm::kernel::cuda::AttentionRunner&& runner);
+      ::xllm::kernel::musa::AttentionRunner&& runner);
 
   bool is_capturing() const { return is_capturing_; }
   at::cuda::CUDAGraph* get_current_graph() { return current_graph_.get(); }
@@ -59,4 +59,4 @@ class GlobalCaptureInstance final {
   at::cuda::MempoolId_t graph_pool_;
   std::unique_lock<std::mutex> capture_lock_;
 };
-}  // namespace xllm::runtime::cuda
+}  // namespace xllm::runtime::musa

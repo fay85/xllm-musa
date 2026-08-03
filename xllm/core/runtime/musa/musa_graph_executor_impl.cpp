@@ -53,8 +53,6 @@ limitations under the License.
 
 namespace xllm::runtime::musa {
 
-using GlobalCaptureInstance = ::xllm::runtime::cuda::GlobalCaptureInstance;
-
 namespace {
 
 bool s_enable_graph_timing() {
@@ -522,7 +520,7 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
         << "host kv_seq_lens too small for batch";
     const int64_t actual_indices_size =
         host.paged_kv_indices.defined() ? host.paged_kv_indices.numel() : 0;
-    xllm::kernel::cuda::LlmDecodeMetadataHostUpdateParams host_update_params{
+    xllm::kernel::musa::LlmDecodeMetadataHostUpdateParams host_update_params{
         .src_tokens = tokens_i32.data_ptr<int32_t>(),
         .src_positions = positions_i32.data_ptr<int32_t>(),
         .src_new_cache_slots = new_cache_slots_i32.data_ptr<int32_t>(),
@@ -546,7 +544,7 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
         .actual_batch_size = actual_batch_size,
         .actual_indices_size = actual_indices_size,
     };
-    xllm::kernel::cuda::update_llm_decode_metadata_from_host(host_update_params,
+    xllm::kernel::musa::update_llm_decode_metadata_from_host(host_update_params,
                                                              stream);
     return;
   }
@@ -558,7 +556,7 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
   const torch::Tensor paged_kv_last_page_len_i32 =
       to_int32(params.attention.device.paged_kv_last_page_len);
   const int64_t actual_indices_size = paged_kv_indices_i32.size(0);
-  xllm::kernel::cuda::LlmDecodeMetadataUpdateParams update_params{
+  xllm::kernel::musa::LlmDecodeMetadataUpdateParams update_params{
       .src_tokens = tokens_i32.data_ptr<int32_t>(),
       .src_positions = positions_i32.data_ptr<int32_t>(),
       .src_new_cache_slots = new_cache_slots_i32.data_ptr<int32_t>(),
@@ -584,7 +582,7 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
       .max_indices_size_for_graph_capacity =
           persistent_paged_kv_indices_.numel(),
   };
-  xllm::kernel::cuda::update_llm_decode_metadata(update_params, stream);
+  xllm::kernel::musa::update_llm_decode_metadata(update_params, stream);
 }
 
 void MusaGraphPersistentParam::set_aux_hidden_states(
@@ -1298,13 +1296,13 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   // Get dtype from k_cache
   const auto dtype = k_cache.scalar_type();
   // Determine backend
-  const std::string backend = xllm::kernel::cuda::determine_attention_backend(
+  const std::string backend = xllm::kernel::musa::determine_attention_backend(
       /*pos_encoding_mode=*/0,
       /*use_fp16_qk_reduction=*/false,
       /*use_custom_mask=*/false);
 
   bool use_tensor_core =
-      xllm::kernel::cuda::should_use_tensor_core(dtype, n_heads, n_kv_heads);
+      xllm::kernel::musa::should_use_tensor_core(dtype, n_heads, n_kv_heads);
   // Keep in sync with BaseAttentionImpl::decode_use_tensor_core_ on MUSA:
   // the Mate FFI ships the dedicated `batch_decode_*` kernel (exporting the
   // "run" symbol) for our paged-KV layouts, while the chunked-prefill
@@ -1602,7 +1600,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
           << "FA3 graph decode requires per-sequence KV lengths";
       attn_metadata->share_fa3_scheduler_metadata = true;
       attn_metadata->fa3_scheduler_metadata =
-          xllm::kernel::cuda::fa3_decode_scheduler_metadata(
+          xllm::kernel::musa::fa3_decode_scheduler_metadata(
               device_,
               static_cast<int32_t>(batch_size),
               static_cast<int32_t>(n_heads),
@@ -1772,7 +1770,7 @@ bool MusaGraph::capture(CausalLM* model,
   std::optional<std::unique_lock<std::shared_mutex>> capture_lock_guard;
   if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
     auto& capture_lock =
-        ::xllm::cuda::DeviceCaptureLock::get_instance().get_write_lock(
+        ::xllm::musa::DeviceCaptureLock::get_instance().get_write_lock(
             device_index_);
     capture_lock_guard.emplace(capture_lock);
   }
@@ -1852,7 +1850,7 @@ bool MusaGraph::capture(CausalLM* model,
     // and other CUDA resources. This is necessary because these resources
     // cannot be created during CUDA graph capture mode.
     {
-      xllm::kernel::cuda::MusaTvmffiPreparationSyncGuard ffi_sync_guard;
+      xllm::kernel::musa::MusaTvmffiPreparationSyncGuard ffi_sync_guard;
       model->forward(persistent_param_.persistent_tokens(padded_num_tokens_),
                      persistent_param_.persistent_positions(padded_num_tokens_),
                      kv_cache,
@@ -1862,7 +1860,7 @@ bool MusaGraph::capture(CausalLM* model,
     // thread-local pool stream even when the model forward runs on the capture
     // stream. Drain that stream before restoring state or beginning capture;
     // synchronizing only capture_stream leaves initialization racing capture.
-    xllm::kernel::cuda::sync_musa_ffi_stream(persistent_param_.device());
+    xllm::kernel::musa::sync_musa_ffi_stream(persistent_param_.device());
     if (snapshot_linear_state) {
       restore_linear_attention_state(linear_state_snapshots,
                                      linear_state_snapshot_indices);
@@ -1886,7 +1884,7 @@ bool MusaGraph::capture(CausalLM* model,
     // Begin piecewise capture via GlobalCaptureInstance.
     void* const capture_stream_handle =
         reinterpret_cast<void*>(capture_stream.stream());
-    std::optional<xllm::kernel::cuda::MusaTvmffiStreamOverrideGuard>
+    std::optional<xllm::kernel::musa::MusaTvmffiStreamOverrideGuard>
         ffi_capture_stream_guard;
     ffi_capture_stream_guard.emplace(persistent_param_.device(),
                                      capture_stream_handle);
@@ -1950,7 +1948,7 @@ bool MusaGraph::capture(CausalLM* model,
     for (int warmup_iter = 0; warmup_iter < 2; ++warmup_iter) {
       capture_stream.synchronize();
       {
-        xllm::kernel::cuda::MusaTvmffiPreparationSyncGuard ffi_sync_guard;
+        xllm::kernel::musa::MusaTvmffiPreparationSyncGuard ffi_sync_guard;
         auto warmup_result = model->forward(
             persistent_param_.persistent_tokens(padded_num_tokens_),
             persistent_param_.persistent_positions(padded_num_tokens_),
@@ -1964,7 +1962,7 @@ bool MusaGraph::capture(CausalLM* model,
           persistent_param_.set_logits(warmup_logits);
         }
       }
-      xllm::kernel::cuda::sync_musa_ffi_stream(persistent_param_.device());
+      xllm::kernel::musa::sync_musa_ffi_stream(persistent_param_.device());
       if (snapshot_linear_state) {
         // The warmup is an eager forward and therefore mutates the live
         // recurrent state. Restore it before the next warmup so every warmup
@@ -1983,9 +1981,9 @@ bool MusaGraph::capture(CausalLM* model,
     // hook (torch::empty), which MUSA rejects under stream capture. We capture
     // the exact sequence of tensors here and replay them during capture_begin.
     recorded_ffi_allocs_.clear();
-    xllm::kernel::cuda::begin_ffi_alloc_record();
+    xllm::kernel::musa::begin_ffi_alloc_record();
     {
-      xllm::kernel::cuda::MusaTvmffiPreparationSyncGuard ffi_sync_guard;
+      xllm::kernel::musa::MusaTvmffiPreparationSyncGuard ffi_sync_guard;
       auto ffi_forward = model->forward(
           persistent_param_.persistent_tokens(padded_num_tokens_),
           persistent_param_.persistent_positions(padded_num_tokens_),
@@ -1997,7 +1995,7 @@ bool MusaGraph::capture(CausalLM* model,
         persistent_param_.set_logits(ffi_logits);
       }
     }
-    xllm::kernel::cuda::sync_musa_ffi_stream(persistent_param_.device());
+    xllm::kernel::musa::sync_musa_ffi_stream(persistent_param_.device());
     if (snapshot_linear_state) {
       // The FFI recording pass is eager as well; leave the live cache at the
       // pre-capture state before beginning graph capture.
@@ -2007,7 +2005,7 @@ bool MusaGraph::capture(CausalLM* model,
       restore_linear_attention_state(linear_state_snapshots,
                                      linear_state_snapshot_indices);
     }
-    recorded_ffi_allocs_ = xllm::kernel::cuda::end_ffi_alloc_record();
+    recorded_ffi_allocs_ = xllm::kernel::musa::end_ffi_alloc_record();
     capture_stream.synchronize();
     LOG(INFO) << "Recorded " << recorded_ffi_allocs_.size()
               << " Mate FFI scratch tensors for decode graph capture, "
@@ -2029,13 +2027,13 @@ bool MusaGraph::capture(CausalLM* model,
     // graph_.capture_begin(pool);
     void* const capture_stream_handle =
         reinterpret_cast<void*>(capture_stream.stream());
-    std::optional<xllm::kernel::cuda::MusaTvmffiStreamOverrideGuard>
+    std::optional<xllm::kernel::musa::MusaTvmffiStreamOverrideGuard>
         ffi_capture_stream_guard;
     ffi_capture_stream_guard.emplace(persistent_param_.device(),
                                      capture_stream_handle);
     graph_.capture_begin(pool, cudaStreamCaptureModeThreadLocal);
 
-    xllm::kernel::cuda::begin_ffi_alloc_replay(&recorded_ffi_allocs_);
+    xllm::kernel::musa::begin_ffi_alloc_replay(&recorded_ffi_allocs_);
     // Execute forward pass - CUDA graph will capture this
     auto forward_result = model->forward(
         persistent_param_.persistent_tokens(padded_num_tokens_),
@@ -2062,7 +2060,7 @@ bool MusaGraph::capture(CausalLM* model,
     // End graph capture
     graph_.capture_end();
     ffi_capture_stream_guard.reset();
-    xllm::kernel::cuda::end_ffi_alloc_replay();
+    xllm::kernel::musa::end_ffi_alloc_replay();
     if (snapshot_linear_state) {
       capture_stream.synchronize();
     }
@@ -2105,7 +2103,7 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
   std::optional<std::shared_lock<std::shared_mutex>> replay_lock_guard;
   if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
     auto& replay_lock =
-        ::xllm::cuda::DeviceCaptureLock::get_instance().get_read_lock(
+        ::xllm::musa::DeviceCaptureLock::get_instance().get_read_lock(
             device_index_);
     replay_lock_guard.emplace(replay_lock);
   }
@@ -2168,7 +2166,7 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
         << updated_params.attn_metadata->plan_info->plan_info.defined();
 
     // Build AttentionReplayParams from updated attn_metadata
-    ::xllm::kernel::cuda::AttentionReplayParams replay_params;
+    ::xllm::kernel::musa::AttentionReplayParams replay_params;
     replay_params.actual_num_tokens = actual_num_tokens;
     if (updated_params.attn_metadata->plan_info) {
       replay_params.plan_info =

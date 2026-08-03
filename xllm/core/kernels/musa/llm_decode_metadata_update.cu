@@ -21,7 +21,7 @@ limitations under the License.
 
 #include "core/kernels/musa/llm_decode_metadata_update.h"
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 namespace {
 
 constexpr int32_t kThreadsPerBlock = 256;
@@ -240,4 +240,4 @@ void update_llm_decode_metadata(const LlmDecodeMetadataUpdateParams& params,
       << cudaGetErrorString(error);
 }
 
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa

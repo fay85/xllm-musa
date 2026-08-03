@@ -36,7 +36,7 @@ limitations under the License.
 
 namespace xllm {
 namespace kernel {
-namespace cuda {
+namespace musa {
 
 namespace {
 
@@ -2858,6 +2858,6 @@ torch::Tensor fused_gated_delta_rule_decode(
   return output;
 }
 
-}  // namespace cuda
+}  // namespace musa
 }  // namespace kernel
 }  // namespace xllm

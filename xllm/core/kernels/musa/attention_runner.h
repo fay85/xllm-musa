@@ -25,7 +25,7 @@ limitations under the License.
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/kernels/param.h"
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 
 struct AttentionReplayParams {
   ffi::Array<int64_t> plan_info;
@@ -158,4 +158,4 @@ class AttentionRunner final {
   bool causal_ = true;
 };
 
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa

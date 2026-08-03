@@ -15,9 +15,9 @@ limitations under the License.
 
 #pragma once
 
-// MUSA builds place torch_musa kernel sources under kernels/musa/ but expose
-// them in the xllm::kernel::cuda namespace so layers/runtime can share the
-// CUDA graph code path. Native MUSA symbols live in xllm::kernel::musa.
+// MUSA kernels and their internal consumers use the explicit project-owned
+// xllm::kernel::musa namespace. CUDA-compatible framework types keep their
+// external CUDA namespace names.
 
 #include <ATen/DynamicLibrary.h>
 #include <ATen/core/dispatch/Dispatcher.h>
@@ -44,16 +44,11 @@ void block_copy(torch::Tensor key_cache_ptrs,
 // Fused token-replace for schedule-overlap decode path.
 // For each position i: if dst[i] < 0, set dst[i] = src[(-dst[i]) - 1].
 // Otherwise dst[i] is left unchanged.  Modifies dst in-place.
-// Declared in the musa namespace (not cuda) because the call site
-// (worker_impl.cpp) is compiled without the musamapping plugin, so
-// the cuda->musa token rewrite would not apply there.
+// The common worker call site is compiled without the musamapping plugin, so
+// the declaration must use the explicit MUSA namespace.
 void replace_token(torch::Tensor& dst,
                    torch::Tensor& src,
                    bool synchronize_stream = true);
-
-}  // namespace xllm::kernel::musa
-
-namespace xllm::kernel::cuda {
 
 // TODO: add head_size parameter
 void rotary_embedding(torch::Tensor& positions,
@@ -77,14 +72,6 @@ void reshape_paged_cache(torch::Tensor slot_ids,
                          torch::Tensor values,
                          torch::Tensor key_cache,
                          torch::Tensor value_cache);
-
-void block_copy(torch::Tensor key_cache_ptrs,
-                torch::Tensor value_cache_ptrs,
-                torch::Tensor src_block_indices,
-                torch::Tensor dst_block_indices,
-                torch::Tensor cum_sum,
-                int64_t numel_per_block,
-                torch::ScalarType cache_dtype);
 
 void batch_prefill(const std::string& uri,
                    ffi::Array<int64_t> plan_info,
@@ -618,7 +605,7 @@ torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
                                          int64_t N,
                                          int32_t topk);
 
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa
 
 #include "core/kernels/musa/attention_runner.h"
 #include "core/kernels/musa/gdn_ops.h"

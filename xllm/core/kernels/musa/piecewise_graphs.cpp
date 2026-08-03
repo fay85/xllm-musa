@@ -16,7 +16,7 @@ limitations under the License.
 
 #include "core/kernels/musa/attention_runner.h"
 
-namespace xllm::runtime::cuda {
+namespace xllm::runtime::musa {
 
 void PiecewiseGraphs::add_graph(std::unique_ptr<at::cuda::CUDAGraph>&& graph) {
   graphs_.emplace_back(std::move(graph));
@@ -24,10 +24,10 @@ void PiecewiseGraphs::add_graph(std::unique_ptr<at::cuda::CUDAGraph>&& graph) {
 }
 
 void PiecewiseGraphs::add_attention_runner(
-    ::xllm::kernel::cuda::AttentionRunner&& runner) {
+    ::xllm::kernel::musa::AttentionRunner&& runner) {
   requires_plan_info_ = requires_plan_info_ || runner.requires_plan_info();
   attention_runners_.emplace_back(
-      std::make_unique<::xllm::kernel::cuda::AttentionRunner>(
+      std::make_unique<::xllm::kernel::musa::AttentionRunner>(
           std::move(runner)));
   instructions_.emplace_back(InstructionType::kRunner);
 }
@@ -37,7 +37,7 @@ size_t PiecewiseGraphs::num_runners() const {
 }
 
 void PiecewiseGraphs::replay(
-    const ::xllm::kernel::cuda::AttentionReplayParams& runner_params) {
+    const ::xllm::kernel::musa::AttentionReplayParams& runner_params) {
   if (instructions_.empty()) {
     return;
   }
@@ -63,4 +63,4 @@ void PiecewiseGraphs::replay(
       << "Not all runners were replayed";
 }
 
-}  // namespace xllm::runtime::cuda
+}  // namespace xllm::runtime::musa

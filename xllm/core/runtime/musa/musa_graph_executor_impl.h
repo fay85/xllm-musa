@@ -49,8 +49,6 @@ class PiecewiseGraphMatmulBufferPool;
 
 namespace xllm::runtime::musa {
 
-using PiecewiseGraphs = ::xllm::runtime::cuda::PiecewiseGraphs;
-
 constexpr uint64_t kSpecVerifyGraphKeyMask = 1ull << 63;
 constexpr uint64_t kSpecVerifyQMaxSeqLenShift = 32;
 
