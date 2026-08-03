@@ -1,5 +1,16 @@
 include(cc_library)
 
+cc_library(
+  NAME
+    mlu_rdma_memory_plan
+  HDRS
+    mlu/mlu_rdma_memory_plan.h
+  SRCS
+    mlu/mlu_rdma_memory_plan.cpp
+  DEPS
+    glog::glog
+)
+
 if(USE_NPU)
   add_subdirectory(npu)
 endif()
@@ -16,14 +27,16 @@ cc_library(
     shared_vmm_allocator.h
     vmm_torch_allocator.h
     sleepable_allocator.h
+    batch_memcpy.h
+    layer_synchronizer.h
     $<$<BOOL:${USE_MLU}>:mlu/mlu_layer_synchronizer.h>
     $<$<BOOL:${USE_MLU}>:mlu/mlu_tensor_alloc.h>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_layer_synchronizer.h>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_tensor_alloc.h>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>>:cuda/cuda_utils.h>
     $<$<BOOL:${USE_MUSA}>:musa/musa_csrc_guards.h>
-    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cuda_profiler.h>
-    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>>:torch_profiler.h>
+    $<$<BOOL:${USE_CUDA}>:cuda_profiler.h>
+    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_DCU}>,$<BOOL:${USE_MUSA}>>:torch_profiler.h>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:numa_utils.h>
   SRCS
     stream.cpp
@@ -33,15 +46,18 @@ cc_library(
     vmm_api.cpp
     shared_vmm_allocator.cpp
     sleepable_allocator.cpp
+    batch_memcpy.cpp
+    layer_synchronizer.cpp
     $<$<BOOL:${USE_MLU}>:mlu/mlu_layer_synchronizer.cpp>
     $<$<BOOL:${USE_MLU}>:mlu/mlu_tensor_alloc.cpp>
-    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cuda_profiler.cpp>
-    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>>:torch_profiler.cpp>
+    $<$<BOOL:${USE_CUDA}>:cuda_profiler.cpp>
+    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_DCU}>,$<BOOL:${USE_MUSA}>>:torch_profiler.cpp>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_layer_synchronizer.cpp>
     $<$<BOOL:${USE_DCU}>:dcu/dcu_tensor_alloc.cpp>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:numa_utils.cpp>
   DEPS
     :config
+    :mlu_rdma_memory_plan
     absl::strings
     torch
     glog::glog
@@ -51,11 +67,11 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:torch_mlu>
     $<$<BOOL:${USE_MLU}>:cnrt>
     $<$<BOOL:${USE_MLU}>:cndrv>
-    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cuda>
-    $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cudart>
+    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_ILU}>>:cuda>
+    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_ILU}>>:cudart>
+    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_ILU}>,$<BOOL:${USE_DCU}>>:numa>
     $<$<BOOL:${USE_MUSA}>:musa>
     $<$<BOOL:${USE_MUSA}>:musart>
-    $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_ILU}>,$<BOOL:${USE_DCU}>>:numa>
     $<$<BOOL:${USE_NPU}>:platform_npu>
     $<$<BOOL:${USE_DCU}>:hip::host>
 )

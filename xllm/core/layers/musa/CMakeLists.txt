@@ -1,6 +1,6 @@
 include(cc_library)
 
-# MUSA layers - FlashInfer/Mate path (MTTOplib removed)
+# MUSA layers - FlashInfer/Mate path
 set(_MUSA_LAYERS_HDRS
   attention.h
   flashinfer_attention.h

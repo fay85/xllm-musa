@@ -142,11 +142,13 @@ class MusaGraphPersistentParam final {
   }
   bool has_logits_buffer() const { return logits_.defined(); }
   const torch::Device& device() const { return device_; }
-  void ensure_logits_buffer(int64_t vocab_size, torch::ScalarType dtype,
+  void ensure_logits_buffer(int64_t vocab_size,
+                            torch::ScalarType dtype,
                             const torch::Device& device) {
     if (!logits_.defined()) {
-      logits_ = torch::empty({options_.max_tokens_per_batch(), vocab_size},
-                             torch::TensorOptions().dtype(dtype).device(device));
+      logits_ =
+          torch::empty({options_.max_tokens_per_batch(), vocab_size},
+                       torch::TensorOptions().dtype(dtype).device(device));
     }
   }
   torch::Tensor q_seq_lens(uint32_t actual_batch_size) const {
@@ -586,13 +588,11 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   uint64_t get_graph_key(uint32_t bucket_num_tokens,
                          const ModelInputParams& params) const;
 
-  uint64_t get_packed_prefill_graph_key(
-      uint32_t bucket_num_tokens,
-      const ModelInputParams& params) const;
+  uint64_t get_packed_prefill_graph_key(uint32_t bucket_num_tokens,
+                                        const ModelInputParams& params) const;
 
-  uint64_t get_chunked_prefill_graph_key(
-      uint32_t bucket_num_tokens,
-      const ModelInputParams& params) const;
+  uint64_t get_chunked_prefill_graph_key(uint32_t bucket_num_tokens,
+                                         const ModelInputParams& params) const;
 
   ModelOutput attach_aux_hidden_states_if_needed(
       const torch::Tensor& hidden_states,

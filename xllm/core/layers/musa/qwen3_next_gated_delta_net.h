@@ -81,9 +81,7 @@ class Qwen3_5GatedDeltaNetImpl final : public Qwen3NextGatedDeltaNetImpl {
   void verify_projection_weights(const std::string& prefix) const override;
 
  private:
-  bool use_merged_projections() const {
-    return static_cast<bool>(qkvz_proj_);
-  }
+  bool use_merged_projections() const { return static_cast<bool>(qkvz_proj_); }
 
   torch::Tensor merge_qkvz_from_split_activations(const torch::Tensor& qkv,
                                                   const torch::Tensor& z) const;

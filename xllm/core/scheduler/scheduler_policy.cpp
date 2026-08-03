@@ -21,7 +21,6 @@ limitations under the License.
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
-#include <numeric>
 #include <string>
 
 #include "async_response_processor.h"
@@ -33,7 +32,6 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "framework/batch/batch_factory.h"
 #include "framework/request/priority_comparator.h"
-#include "platform/platform.h"
 #include "util/timer.h"
 #include "util/utils.h"
 
@@ -41,22 +39,13 @@ namespace xllm {
 
 namespace {
 
-// LCM helper for size_t values. Returns 0 when either argument is 0.
-inline size_t lcm_size_t(size_t a, size_t b) {
-  if (a == 0 || b == 0) {
-    return 0;
-  }
-  return (a / std::gcd(a, b)) * b;
-}
-
-// Round a chunked-prefill chunk size DOWN to a multiple of
-// lcm(2 * cp_size, kv_split_size * block_size).
+// Align chunk down to kv_split_size*block_size.
+// TODO: refactor kv-split block mapping to remove this limitation.
 inline size_t maybe_align_cp_chunk_tokens(size_t num_tokens,
-                                          int32_t cp_size,
                                           int32_t kv_split_size,
                                           int32_t block_size,
                                           size_t remaining_in_seq) {
-  if (cp_size <= 1 && kv_split_size <= 1) {
+  if (kv_split_size <= 1) {
     return num_tokens;
   }
   if (block_size <= 0 || num_tokens == 0) {
@@ -65,17 +54,12 @@ inline size_t maybe_align_cp_chunk_tokens(size_t num_tokens,
   if (num_tokens >= remaining_in_seq) {
     return num_tokens;
   }
-  const size_t cp_term =
-      cp_size > 1 ? static_cast<size_t>(2) * static_cast<size_t>(cp_size) : 1;
   const size_t kv_term =
-      kv_split_size > 1
-          ? static_cast<size_t>(kv_split_size) * static_cast<size_t>(block_size)
-          : 1;
-  const size_t alignment = lcm_size_t(cp_term, kv_term);
-  if (alignment == 0 || num_tokens < alignment) {
+      static_cast<size_t>(kv_split_size) * static_cast<size_t>(block_size);
+  if (num_tokens < kv_term) {
     return num_tokens;
   }
-  return (num_tokens / alignment) * alignment;
+  return (num_tokens / kv_term) * kv_term;
 }
 
 bool graph_requires_homogeneous_batch() {
@@ -378,61 +362,17 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       queue, state, finished, budget_exhausted, blocks_exhausted);
 }
 
-size_t SchedulerPolicy::effective_prefill_chunk_limit(
-    const SchedulerState& state,
-    size_t batch_token_budget,
-    Sequence* sequence) const {
-  const size_t configured_limit =
-      static_cast<size_t>(options_.max_tokens_per_chunk_for_prefill());
-  if (!options_.enable_adaptive_prefill_oneshot()) {
-    return configured_limit;
-  }
-  if (sequence == nullptr || !state.running_sequences.empty() ||
-      !state.chunk_queue.empty() || !state.decode_queue.empty() ||
-      state.prefill_queue.size() != 1) {
-    return configured_limit;
-  }
-
-  const std::shared_ptr<Request> request = state.prefill_queue.top();
-  if (request->finished() || request->cancelled() || request->preempted() ||
-      request->sequences().size() != 1 ||
-      request->sequences().front().get() != sequence) {
-    return configured_limit;
-  }
-
-  const size_t cached_tokens = sequence->kv_state().kv_cache_tokens_num();
-  if (sequence->finished() || sequence->stage() != SequenceStage::PREFILL ||
-      cached_tokens != 0 || sequence->num_tokens() <= cached_tokens) {
-    return configured_limit;
-  }
-
-  const size_t remaining_tokens = sequence->num_tokens() - cached_tokens;
-  if (remaining_tokens <= configured_limit ||
-      remaining_tokens > batch_token_budget) {
-    return configured_limit;
-  }
-  return remaining_tokens;
-}
-
 size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
                                                size_t remaining_budget,
                                                const SchedulerState& state) {
   if (!batch_mode_.enable_chunked_prefill) {
     // Full prefill: compute all remaining tokens.
-    size_t num_tokens = seq->num_need_compute_tokens();
-    // CP alignment for full prefill (skip when model handles CP partition).
-    const int32_t worker_cp_size =
-        Platform::uses_model_cp_partition() ? 1 : state.options.cp_size();
-    if (worker_cp_size > 1 && seq->is_prefill_stage() && num_tokens > 0) {
-      const size_t alignment = static_cast<size_t>(worker_cp_size) * 2;
-      num_tokens = ((num_tokens + alignment - 1) / alignment) * alignment;
-    }
-    return num_tokens;
+    return seq->num_need_compute_tokens();
   }
 
   // Chunked prefill: compute min(remaining, max_chunk, budget).
-  const size_t max_tokens_per_chunk = effective_prefill_chunk_limit(
-      state, remaining_budget, seq);
+  const size_t max_tokens_per_chunk =
+      options_.max_tokens_per_chunk_for_prefill();
   size_t num_tokens = seq->num_tokens();
   size_t assume_max = std::min(max_tokens_per_chunk, remaining_budget);
   num_tokens = std::min(assume_max, num_tokens);
@@ -444,10 +384,7 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
                                       : 0;
   const int32_t kv_split_for_align =
       ::xllm::ParallelConfig::get_instance().kv_split_size_effective();
-  const int32_t worker_cp_size =
-      Platform::uses_model_cp_partition() ? 1 : options_.cp_size();
   num_tokens = maybe_align_cp_chunk_tokens(num_tokens,
-                                           worker_cp_size,
                                            kv_split_for_align,
                                            state.kv_cache_manager->block_size(),
                                            remaining_in_seq);
@@ -467,14 +404,6 @@ bool SchedulerPolicy::allocate_for_prefill(Sequence* seq,
     }
     // Full prefill: allocate for full prompt.
     *actual_tokens = seq->num_need_compute_tokens();
-    // CP alignment (skip when model handles CP partition internally).
-    const int32_t worker_cp_size =
-        Platform::uses_model_cp_partition() ? 1 : state.options.cp_size();
-    if (worker_cp_size > 1 && seq->is_prefill_stage() && *actual_tokens > 0) {
-      const size_t alignment = static_cast<size_t>(worker_cp_size) * 2;
-      *actual_tokens =
-          ((*actual_tokens + alignment - 1) / alignment) * alignment;
-    }
     const size_t target = seq->kv_cache_tokens_num() + *actual_tokens;
     return state.kv_cache_manager->allocate(seq, target);
   }
@@ -490,13 +419,15 @@ bool SchedulerPolicy::allocate_for_prefill(Sequence* seq,
       std::min(kv_cache_tokens_num + token_budget, seq->num_tokens());
 
   // Linear-state block alignment: for models with linear attention layers +
-  // prefix cache, chunk boundaries must align to block_size so linear-state
+  // prefix cache, chunk boundaries must align to chunk_stride so linear-state
   // checkpoints land at recoverable positions.
   if (state.has_linear_attention_layers && state.enable_prefix_cache &&
       seq->is_prefill_stage()) {
-    const size_t block_size =
-        static_cast<size_t>(state.kv_cache_manager->block_size());
-    const size_t aligned = (max_handle_num_tokens / block_size) * block_size;
+    const size_t chunk_stride =
+        static_cast<size_t>(::xllm::SchedulerConfig::get_instance()
+                                .max_tokens_per_chunk_for_prefill());
+    const size_t aligned =
+        (max_handle_num_tokens / chunk_stride) * chunk_stride;
     if (aligned <= kv_cache_tokens_num) {
       if (max_handle_num_tokens == seq->num_tokens()) {
         // Final chunk: allow unaligned to complete the sequence.
@@ -516,8 +447,15 @@ bool SchedulerPolicy::allocate_for_prefill(Sequence* seq,
 
 void SchedulerPolicy::allocate_shared_blocks_for(Sequence* seq,
                                                  SchedulerState& state) {
-  if (seq->kv_state().num_blocks(BlockType::KV) == 0) {
+  if (!seq->kv_state().has_any_blocks()) {
     state.kv_cache_manager->allocate_shared(seq);
+    return;
+  }
+  // DSV4 (SWA_COMPRESSED) holds SWA/C4/C128 but never a KV leaf, so a
+  // num_blocks(KV)==0 guard alone would treat an already-mounted DSV4 sequence
+  // as fresh and re-run allocate_shared -> mount_composite_shared CHECK. Skip
+  // re-match for the KV-less composite; only flat-KV shapes re-match below.
+  if (seq->kv_state().num_blocks(BlockType::KV) == 0) {
     return;
   }
   if (seq->is_chunked_prefill_stage()) {

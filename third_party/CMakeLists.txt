@@ -4,7 +4,7 @@ add_subdirectory(sentencepiece)
 add_subdirectory(minja)
 add_subdirectory(brpc)
 add_subdirectory(smhasher/src)
-# mcc_wrapper: suppress sign-conversion noise in cpprestsdk (see 0526).
+# mcc_wrapper: suppress sign-conversion noise in cpprestsdk.
 if(USE_MUSA)
   set(_XLLM_CXX_FLAGS_BEFORE_CPPREST "${CMAKE_CXX_FLAGS}")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-sign-conversion -Wno-error=sign-conversion -w")
@@ -20,7 +20,7 @@ set(CPPREST_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/cpprestsdk/Release/include)
 set(CPPREST_LIB ${CMAKE_BINARY_DIR}/third_party/cpprestsdk/Release/Binaries/libcpprest.a)
 
 # GCC 12+ strict check workaround for cpprestsdk
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND 
    CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 12)
     if(TARGET cpprest)
         target_compile_options(cpprest PRIVATE -Wno-restrict -Wno-attributes)
@@ -35,8 +35,6 @@ add_subdirectory(spdlog)
 if(USE_NPU)
   add_subdirectory(torch_npu_ops)
 endif()
-
-# USE_MUSA: mcc_wrapper is set in root CMakeLists.txt before project().
 add_subdirectory(Mooncake)
 
 target_include_directories(mooncake_store PUBLIC
@@ -76,9 +74,9 @@ if(USE_ILU)
   endif()
 endif()
 
-## The order of static libraries is important in the CMake build system because the linker processes them strictly from left to right.
+## The order of static libraries is important in the CMake build system because the linker processes them strictly from left to right. 
 ## -> The linker scans each library only once and extracts object files solely to resolve currently undefined symbols.
-## -> In modern CMake, the best practice is to explicitly declare a target's dependencies, allowing CMake to automatically determine the correct linking order.
+## -> In modern CMake, the best practice is to explicitly declare a target's dependencies, allowing CMake to automatically determine the correct linking order. 
 ## -> The following code is added to prevent symbol resolution errors when xllm links against mooncake-related static libraries.
 target_link_libraries(mooncake_store PUBLIC transfer_engine cachelib_memory_allocator)
 target_link_libraries(cachelib_memory_allocator PRIVATE Folly::folly glog::glog)

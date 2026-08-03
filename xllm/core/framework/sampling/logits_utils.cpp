@@ -31,7 +31,9 @@ void apply_frequency_presence_penalties(
   score.sub_(unique_token_counts * frequency_penalties.unsqueeze(1));
   score.sub_((unique_token_counts > 0) * presence_penalties.unsqueeze(1));
 
-  logits.scatter_(/*dim=*/1, /*index=*/unique_token_ids, /*core=*/score);
+  logits.scatter_(/*dim=*/1,
+                  /*index=*/unique_token_ids,
+                  /*core=*/score.to(logits.scalar_type()));
 }
 
 void apply_repetition_penalties(torch::Tensor& logits,
@@ -39,17 +41,30 @@ void apply_repetition_penalties(torch::Tensor& logits,
                                 const torch::Tensor& penalties) {
   auto unsqueezed_penalties = penalties.unsqueeze(1);
   auto score = logits.gather(/*dim=*/1, /*index=*/unique_token_ids);
-  logits.scatter_(/*dim=*/1,
-                  /*index=*/unique_token_ids,
-                  /*core=*/
-                  torch::where(score < 0,
-                               score * unsqueezed_penalties,
-                               score / unsqueezed_penalties));
+  logits.scatter_(
+      /*dim=*/1,
+      /*index=*/unique_token_ids,
+      /*core=*/
+      torch::where(
+          score < 0, score * unsqueezed_penalties, score / unsqueezed_penalties)
+          .to(logits.scalar_type()));
 }
 
 void apply_temperatures(torch::Tensor& logits,
                         const torch::Tensor& temperatures) {
-  logits.div_(temperatures.unsqueeze(1));
+  auto unsqueezed_temperatures = temperatures.unsqueeze(1);
+  // Cache device-side scalar to avoid synchronous H2D copy that forces
+  // aclrtSynchronizeStream per forward.
+  static thread_local torch::Tensor one_scalar;
+  const torch::Device& target_device = unsqueezed_temperatures.device();
+  if (!one_scalar.defined() || one_scalar.device() != target_device) {
+    one_scalar =
+        torch::full({}, 1.0, torch::TensorOptions().device(target_device));
+  }
+  unsqueezed_temperatures = torch::where(
+      unsqueezed_temperatures == 0, one_scalar, unsqueezed_temperatures);
+
+  logits.div_(unsqueezed_temperatures);
 }
 
 void apply_top_k_top_p_torch_impl(torch::Tensor& logits,
@@ -74,7 +89,7 @@ void apply_top_k_top_p_torch_impl(torch::Tensor& logits,
   p_mask.index_put_({torch::indexing::Ellipsis, 0}, false);
   sorted.masked_fill_(p_mask, inf);
 
-  logits.scatter_(-1, idx, sorted);
+  logits.scatter_(-1, idx, sorted.to(logits.scalar_type()));
 }
 
 void apply_top_k_top_p(torch::Tensor& logits,
@@ -103,7 +118,6 @@ void apply_top_k_top_p(torch::Tensor& logits,
   if (top_k.defined() || top_p.defined()) {
     const int64_t vocab = logits.size(-1);
     const float ninf = -std::numeric_limits<float>::infinity();
-
     int64_t k;
     if (top_k.defined()) {
       k = top_k.max().item<int64_t>();
@@ -113,18 +127,16 @@ void apply_top_k_top_p(torch::Tensor& logits,
     } else {
       k = std::min<int64_t>(vocab, 1000);
     }
-    k = std::clamp(k, (int64_t)1, vocab);
+    k = std::clamp(k, static_cast<int64_t>(1), vocab);
 
     auto [sorted, idx] =
         logits.topk(k, /*dim=*/-1, /*largest=*/true, /*sorted=*/true);
-
     if (top_k.defined()) {
       auto k_vals = top_k.clamp(1, vocab).unsqueeze(-1).to(torch::kLong);
       auto k_mask =
           torch::arange(k, sorted.device()).expand_as(sorted) >= k_vals;
       sorted.masked_fill_(k_mask, ninf);
     }
-
     if (top_p.defined()) {
       auto p = top_p.unsqueeze(-1);
       auto probs = sorted.softmax(-1).to(torch::kFloat32);
@@ -133,9 +145,10 @@ void apply_top_k_top_p(torch::Tensor& logits,
       p_mask.index_put_({torch::indexing::Ellipsis, 0}, false);
       sorted.masked_fill_(p_mask, ninf);
     }
-
     logits.fill_(ninf);
-    logits.scatter_(/*dim=*/-1, /*index=*/idx, /*src=*/sorted);
+    logits.scatter_(/*dim=*/-1,
+                    /*index=*/idx,
+                    /*src=*/sorted.to(logits.scalar_type()));
     return;
   }
   return;
@@ -194,9 +207,10 @@ void apply_top_k_top_p(torch::Tensor& logits,
 
       sorted_logits.masked_fill_(mask, filter_value);
     }
-    logits =
-        torch::empty_like(sorted_logits)
-            .scatter_(/*dim=*/-1, /*index=*/logits_idx, /*core=*/sorted_logits);
+    logits = torch::empty_like(sorted_logits)
+                 .scatter_(/*dim=*/-1,
+                           /*index=*/logits_idx,
+                           /*core=*/sorted_logits.to(logits.scalar_type()));
   }
 }
 

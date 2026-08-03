@@ -20,5 +20,7 @@ limitations under the License.
 #elif defined(USE_CUDA) || defined(USE_MUSA)
 #include "layers/musa/qwen3_5_decoder_layer_impl.h"
 #elif defined(USE_MLU)
-#include "layers/mlu/qwen3_5_decoder_layer.h"
+#include "layers/mlu/qwen3_5/qwen3_5_decoder_layer.h"
+#elif defined(USE_DCU)
+#include "layers/dcu/qwen3_5_decoder_layer.h"
 #endif

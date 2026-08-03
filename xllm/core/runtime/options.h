@@ -86,6 +86,8 @@ struct Options {
   // enable speculative decode
   PROPERTY(bool, enable_speculative_decode) = false;
 
+  PROPERTY(bool, enable_mtp_draft_body_tp1) = false;
+
   PROPERTY(bool, is_draft_engine) = false;
 
   PROPERTY(int32_t, world_size) = 1;
@@ -129,14 +131,24 @@ struct Options {
   // Default set as 1
   PROPERTY(int32_t, cfg_size) = 1;
 
+  // vae patch parallelism size
+  // Default set as 1
+  PROPERTY(int32_t, vae_size) = 1;
+
   // enable enable_schedule_overlap to improve runtime execution efficiency.
   PROPERTY(bool, enable_schedule_overlap) = true;
 
   // enable chunked prefill.
   PROPERTY(bool, enable_chunked_prefill) = true;
 
-  // enable prefill-only sequence parallel.
-  PROPERTY(bool, enable_prefill_sp) = false;
+  // Flash Communication 1 (FC1) sequence-parallel optimization.
+  PROPERTY(bool, enable_flashcomm1) = false;
+
+  PROPERTY(int32_t, flashcomm1_min_prefill_tokens) = 8192;
+
+  PROPERTY(bool, enable_mmrs_fusion) = false;
+
+  PROPERTY(std::string, mmrs_comm_mode) = "aiv";
 
   // enable returning aux_hidden_states in graph executor output.
   PROPERTY(bool, enable_graph_aux_hidden_states) = false;
@@ -145,7 +157,7 @@ struct Options {
   PROPERTY(int32_t, max_seqs_per_batch) = 256;
 
   // the max tokens per chunk for request in prefill stage.
-  PROPERTY(int32_t, max_tokens_per_chunk_for_prefill) = 8192;
+  PROPERTY(int32_t, max_tokens_per_chunk_for_prefill);
 
   // for master service, current instance name(ID).
   PROPERTY(std::optional<std::string>, instance_name);
@@ -236,13 +248,13 @@ struct Options {
   PROPERTY(int64_t, server_idx) = 0;
 
   // enable CUDA graph/ACL graph for performance optimization
-  PROPERTY(bool, enable_graph) = true;
+  PROPERTY(bool, enable_graph) = false;
   // enable graph-mode decode without padding
-  PROPERTY(bool, enable_graph_mode_decode_no_padding) = true;
+  PROPERTY(bool, enable_graph_mode_decode_no_padding) = false;
   // enable piecewise graph for prefill
-  PROPERTY(bool, enable_prefill_piecewise_graph) = true;
+  PROPERTY(bool, enable_prefill_piecewise_graph) = false;
   // maximum number of tokens for graph execution
-  PROPERTY(int32_t, max_tokens_for_graph_mode) = 8192;
+  PROPERTY(int32_t, max_tokens_for_graph_mode) = 2048;
 
   // beam width for beam search
   PROPERTY(int32_t, beam_width) = 128;

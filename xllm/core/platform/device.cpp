@@ -15,25 +15,26 @@ limitations under the License.
 
 #include "device.h"
 
+#include "core/framework/config/model_config.h"
 #include "core/platform/platform.h"
 #if defined(USE_NPU)
 #include <torch_npu/csrc/aten/NPUGeneratorImpl.h>
 #include <torch_npu/csrc/core/npu/NPUCachingAllocator.h>
+#include <torch_npu/csrc/core/npu/NPUFunctions.h>
+#include <torch_npu/csrc/libs/init_npu.h>
 #elif defined(USE_MLU)
 #include <cn_api.h>
 #include <framework/core/caching_allocator.h>
 #include <framework/core/device.h>
 #include <framework/core/device_utils.h>
 #include <framework/generator/generator_impl.h>
-#elif defined(USE_MUSA)
-#include <c10/musa/MUSAGuard.h>
-#include <musa.h>
 #elif defined(USE_CUDA) || defined(USE_ILU)
 #include <c10/cuda/CUDACachingAllocator.h>
 #include <c10/cuda/CUDAStream.h>
 #include <cuda.h>
-
-#include "cuda/cuda_utils.h"
+#elif defined(USE_MUSA)
+#include <c10/musa/MUSAGuard.h>
+#include <musa.h>
 #elif defined(USE_DCU)
 #include <c10/hip/HIPCachingAllocator.h>
 #include <c10/hip/HIPStream.h>
@@ -41,7 +42,6 @@ limitations under the License.
 #endif
 
 namespace xllm {
-
 
 Device::Device(const torch::Device& device) : device_(device) {
 #if defined(USE_CUDA) || defined(USE_MUSA)
@@ -63,10 +63,10 @@ void Device::set_device() const {
   c10_npu::set_device(index());
 #elif defined(USE_MLU)
   torch_mlu::setDevice(index());
-#elif defined(USE_MUSA)
-  c10::musa::set_device(index());
 #elif defined(USE_CUDA) || defined(USE_ILU)
   c10::cuda::set_device(index());
+#elif defined(USE_MUSA)
+  c10::musa::set_device(index());
 #elif defined(USE_DCU)
   c10::hip::set_device(index());
 #endif
@@ -83,10 +83,10 @@ void Device::set_seed(uint64_t seed) const {
     std::lock_guard<std::mutex> lock(gen.mutex());
     gen.set_current_seed(seed);
   }
-#elif defined(USE_MUSA)
-  torch::manual_seed(seed);
 #elif defined(USE_CUDA) || defined(USE_DCU)
   torch::cuda::manual_seed(seed);
+#elif defined(USE_MUSA)
+  torch::manual_seed(seed);
 #endif
 }
 
@@ -97,7 +97,14 @@ int32_t Device::index() const { return device_.index(); }
 // set device before init device context
 void Device::init_device_context() const {
 #if defined(USE_NPU)
-  torch_npu::init_npu(index());
+  if (ModelConfig::is_python_model_impl(
+          ModelConfig::get_instance().model_impl())) {
+    // Python path: full NPU runtime already initialized in main() via
+    // aclInit + torch_npu._C._npu_init(). Only switch device here.
+    c10_npu::SetDevice(index());
+  } else {
+    torch_npu::init_npu(index());
+  }
 #endif
 }
 
@@ -110,10 +117,10 @@ Device::DeviceMem Device::get_device_mem() const {
   aclrtGetMemInfo(ACL_HBM_MEM, &free_memory, &total_memory);
 #elif defined(USE_MLU)
   cnrtMemGetInfo(&free_memory, &total_memory);
-#elif defined(USE_MUSA)
-  musaMemGetInfo(&free_memory, &total_memory);
 #elif defined(USE_CUDA) || defined(USE_ILU)
   cudaMemGetInfo(&free_memory, &total_memory);
+#elif defined(USE_MUSA)
+  musaMemGetInfo(&free_memory, &total_memory);
 #elif defined(USE_DCU)
   hipMemGetInfo(&free_memory, &total_memory);
 #endif
@@ -131,10 +138,10 @@ void Device::empty_cache(int32_t device_index) {
   c10_npu::NPUCachingAllocator::FreeDeviceCachedMemory(device_index);
 #elif defined(USE_MLU)
   torch_mlu::MLUCachingAllocator::emptyCache();
-#elif defined(USE_MUSA)
-  c10::musa::MUSACachingAllocator::emptyCache();
 #elif defined(USE_CUDA) || defined(USE_ILU)
   c10::cuda::CUDACachingAllocator::emptyCache();
+#elif defined(USE_MUSA)
+  c10::musa::MUSACachingAllocator::emptyCache();
 #elif defined(USE_DCU)
   c10::hip::HIPCachingAllocator::emptyCache();
 #endif
@@ -147,10 +154,10 @@ int Device::synchronize_default_stream() {
   return aclrtSynchronizeStream(c10_npu::getCurrentNPUStream(index()).stream());
 #elif defined(USE_MLU)
   torch_mlu::getCurrentMLUStream(index()).synchronize();
-#elif defined(USE_MUSA)
-  c10::musa::getCurrentMUSAStream().synchronize();
 #elif defined(USE_CUDA) || defined(USE_ILU)
   c10::cuda::getCurrentCUDAStream().synchronize();
+#elif defined(USE_MUSA)
+  c10::musa::getCurrentMUSAStream().synchronize();
 #elif defined(USE_DCU)
   c10::hip::getCurrentHIPStream().synchronize();
 #endif
@@ -166,10 +173,10 @@ std::unique_ptr<Stream> Device::current_stream() const {
   auto current_s = c10_npu::getCurrentNPUStream(index());
 #elif defined(USE_MLU)
   auto current_s = torch_mlu::getCurrentMLUStream(index());
-#elif defined(USE_MUSA)
-  auto current_s = c10::musa::getCurrentMUSAStream(index());
 #elif defined(USE_CUDA) || defined(USE_ILU)
   auto current_s = c10::cuda::getCurrentCUDAStream(index());
+#elif defined(USE_MUSA)
+  auto current_s = c10::musa::getCurrentMUSAStream(index());
 #elif defined(USE_DCU)
   auto current_s = c10::hip::getCurrentHIPStream(index());
 #endif

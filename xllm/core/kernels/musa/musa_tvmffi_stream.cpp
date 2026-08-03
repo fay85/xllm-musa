@@ -18,10 +18,11 @@ limitations under the License.
 #include <ATen/DLConvertor.h>
 #include <c10/core/Device.h>
 #include <c10/core/Event.h>
-#include <glog/logging.h>
-#include <tvm/ffi/extra/c_env_api.h>
 #include <dlfcn.h>
 #include <dlpack/dlpack.h>
+#include <glog/logging.h>
+#include <tvm/ffi/extra/c_env_api.h>
+#include <unistd.h>
 
 #include <array>
 #include <atomic>
@@ -33,8 +34,6 @@ limitations under the License.
 #include <stdexcept>
 #include <unordered_map>
 #include <vector>
-
-#include <unistd.h>
 
 #include "core/platform/device.h"
 #include "core/platform/platform.h"
@@ -62,8 +61,7 @@ bool tvmffi_stream_debug_enabled() {
     const char* env = std::getenv("XLLM_TVMFFI_STREAM_DEBUG");
     return env != nullptr && env[0] != '0' && env[0] != '\0';
   }();
-  return enabled &&
-         access("/tmp/xllm_tvmffi_stream_debug_enabled", F_OK) == 0;
+  return enabled && access("/tmp/xllm_tvmffi_stream_debug_enabled", F_OK) == 0;
 }
 
 void log_tvmffi_stream_debug(const char* phase,
@@ -81,8 +79,7 @@ void log_tvmffi_stream_debug(const char* phase,
   if (record_index >= kMaxTvmffiStreamDebugRecords) {
     return;
   }
-  LOG(INFO) << "[tvmffi.stream.debug] n=" << record_index
-            << " phase=" << phase
+  LOG(INFO) << "[tvmffi.stream.debug] n=" << record_index << " phase=" << phase
             << " dev=" << static_cast<int32_t>(device_index)
             << " capturing=" << capturing << " stream=" << stream
             << " original=" << original_stream << " dev_type=" << device_type
@@ -116,7 +113,8 @@ class MusaTvmffiEventHandoff final {
 };
 
 MusaTvmffiEventHandoff& get_or_create_tvmffi_event_handoff(
-    c10::DeviceIndex device_index, c10::DeviceType device_type) {
+    c10::DeviceIndex device_index,
+    c10::DeviceType device_type) {
   static thread_local std::array<std::optional<MusaTvmffiEventHandoff>, 8>
       slots;
   CHECK(device_index >= 0 &&
@@ -135,8 +133,8 @@ void set_tvmffi_stream_handle(c10::DeviceIndex device_index, void* stream) {
   constexpr int32_t kDlExtDev = 12;
   for (const int32_t device_type : {kDlCuda, kDlExtDev}) {
     void* original_stream = nullptr;
-    const int rc = TVMFFIEnvSetStream(device_type, device_index, stream,
-                                      &original_stream);
+    const int rc =
+        TVMFFIEnvSetStream(device_type, device_index, stream, &original_stream);
     log_tvmffi_stream_debug(/*phase=*/"set",
                             device_index,
                             is_current_stream_capturing(),
@@ -163,11 +161,10 @@ bool current_musa_stream_is_valid(c10::DeviceIndex device_index) {
   return stream != nullptr;
 }
 
-bool enqueue_musa_stream_dependency(
-    const torch::Device& device,
-    const c10::musa::MUSAStream& producer,
-    const c10::musa::MUSAStream& consumer,
-    c10::Event& event) {
+bool enqueue_musa_stream_dependency(const torch::Device& device,
+                                    const c10::musa::MUSAStream& producer,
+                                    const c10::musa::MUSAStream& consumer,
+                                    c10::Event& event) {
   try {
     c10::musa::MUSAGuard device_guard(device.index());
     event.record(producer.unwrap());
@@ -184,11 +181,9 @@ bool enqueue_musa_stream_dependency(
   return false;
 }
 
-}
+}  // namespace
 
-bool is_musa_stream_capturing() {
-  return is_current_stream_capturing();
-}
+bool is_musa_stream_capturing() { return is_current_stream_capturing(); }
 
 void bind_musa_tvmffi_stream(const torch::Device& device) {
   if (!is_torch_musa_device(device)) {
@@ -295,7 +290,8 @@ MusaTvmffiPreparationSyncGuard::~MusaTvmffiPreparationSyncGuard() {
 }
 
 MusaTvmffiStreamOverrideGuard::MusaTvmffiStreamOverrideGuard(
-    const torch::Device& device, void* stream)
+    const torch::Device& device,
+    void* stream)
     : device_(device), active_(is_torch_musa_device(device)) {
   if (!active_) {
     return;
@@ -332,12 +328,13 @@ MusaTvmffiStreamGuard::MusaTvmffiStreamGuard(const torch::Device& device)
         c10::musa::getCurrentMUSAStream(device_.index());
     const c10::musa::MUSAStream ffi_stream =
         get_or_create_tvmffi_musa_stream(device_.index());
-    MusaTvmffiEventHandoff& event_handoff =
-        get_or_create_tvmffi_event_handoff(device_.index(),
-                                            current_stream.device_type());
-    uses_event_handoff_ = enqueue_musa_stream_dependency(
-        device_, current_stream, ffi_stream,
-        event_handoff.current_to_ffi_event_);
+    MusaTvmffiEventHandoff& event_handoff = get_or_create_tvmffi_event_handoff(
+        device_.index(), current_stream.device_type());
+    uses_event_handoff_ =
+        enqueue_musa_stream_dependency(device_,
+                                       current_stream,
+                                       ffi_stream,
+                                       event_handoff.current_to_ffi_event_);
     if (!uses_event_handoff_) {
       sync_current_musa_stream(device_);
     }
@@ -357,9 +354,11 @@ MusaTvmffiStreamGuard::~MusaTvmffiStreamGuard() {
           get_or_create_tvmffi_musa_stream(device_.index());
       MusaTvmffiEventHandoff& event_handoff =
           get_or_create_tvmffi_event_handoff(device_.index(),
-                                              current_stream.device_type());
+                                             current_stream.device_type());
       if (!enqueue_musa_stream_dependency(
-              device_, ffi_stream, current_stream,
+              device_,
+              ffi_stream,
+              current_stream,
               event_handoff.ffi_to_current_event_)) {
         sync_musa_ffi_stream(device_);
       }
@@ -369,7 +368,7 @@ MusaTvmffiStreamGuard::~MusaTvmffiStreamGuard() {
   }
 }
 
-}
+}  // namespace xllm::kernel::cuda
 
 namespace {
 const std::unordered_map<torch::ScalarType, std::string_view>
@@ -693,9 +692,8 @@ int32_t torch_dlpack_managed_tensor_allocator(
     thread_local int64_t call_idx = 0;
     const int64_t this_call = dump_alloc ? call_idx++ : -1;
     if (dump_alloc) {
-      const int64_t dtype_bits =
-          static_cast<int64_t>(prototype->dtype.bits) *
-          static_cast<int64_t>(prototype->dtype.lanes);
+      const int64_t dtype_bits = static_cast<int64_t>(prototype->dtype.bits) *
+                                 static_cast<int64_t>(prototype->dtype.lanes);
       int64_t numel = 1;
       for (int i = 0; i < prototype->ndim; ++i) {
         numel *= prototype->shape[i];
@@ -710,10 +708,12 @@ int32_t torch_dlpack_managed_tensor_allocator(
       }
       shape_oss << "]";
 
-      LOG(INFO) << "[TVMFFI-ALLOC #" << this_call << "] shape=" << shape_oss.str()
+      LOG(INFO) << "[TVMFFI-ALLOC #" << this_call
+                << "] shape=" << shape_oss.str()
                 << " dtype=" << at::toString(at::toScalarType(prototype->dtype))
-                << " device=" << dlpack_device_to_string(prototype->device.device_type)
-                << ":" << static_cast<int>(prototype->device.device_id)
+                << " device="
+                << dlpack_device_to_string(prototype->device.device_type) << ":"
+                << static_cast<int>(prototype->device.device_id)
                 << " bytes=" << bytes;
     }
 
@@ -725,10 +725,12 @@ int32_t torch_dlpack_managed_tensor_allocator(
         const size_t idx = g_ffi_alloc_state.replay_idx;
         CHECK_LT(idx, g_ffi_alloc_state.replay_buf->size())
             << "[TVMFFI-ALLOC] kReplay overrun: requested alloc #" << idx
-            << " but recording only has " << g_ffi_alloc_state.replay_buf->size()
+            << " but recording only has "
+            << g_ffi_alloc_state.replay_buf->size()
             << " entries -- Mate FFI emitted more allocs under capture than "
                "during the recording warmup (non-determinism?). prototype "
-               "shape rank=" << prototype->ndim;
+               "shape rank="
+            << prototype->ndim;
         tensor = (*g_ffi_alloc_state.replay_buf)[idx];
         CHECK_EQ(static_cast<int>(tensor.dim()), prototype->ndim)
             << "[TVMFFI-ALLOC] kReplay rank mismatch at idx=" << idx
@@ -759,12 +761,10 @@ int32_t torch_dlpack_managed_tensor_allocator(
       }
     }
     if (dump_alloc) {
-      const uintptr_t address =
-          reinterpret_cast<uintptr_t>(tensor.data_ptr());
+      const uintptr_t address = reinterpret_cast<uintptr_t>(tensor.data_ptr());
       LOG(INFO) << "[TVMFFI-ALLOC-PTR #" << this_call
                 << "] mode=" << static_cast<int>(g_ffi_alloc_state.mode)
-                << " data=" << tensor.data_ptr()
-                << " mod4k=" << address % 4096
+                << " data=" << tensor.data_ptr() << " mod4k=" << address % 4096
                 << " mod16k=" << address % 16384;
     }
     *out = to_dlpack_impl<DLManagedTensorVersioned>(tensor);
@@ -791,7 +791,7 @@ void ensure_tvm_ffi_tensor_allocator() {
     }
   });
 }
-}
+}  // namespace
 
 namespace xllm::kernel::cuda {
 
@@ -1126,4 +1126,4 @@ ffi::Function get_function(const std::string& uri,
   func_cache.emplace(key, func);
   return func;
 }
-}
+}  // namespace xllm::kernel::cuda

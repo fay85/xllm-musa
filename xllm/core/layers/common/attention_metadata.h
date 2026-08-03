@@ -74,9 +74,6 @@ struct AttentionMetadata {
   torch::Tensor q_cu_seq_lens;
   torch::Tensor kv_cu_seq_lens;
   torch::Tensor kv_seq_lens;
-  // Packed MUSA GDN keeps live ragged endpoints separate from the attention
-  // CU. The KKT launcher may use the same B+1 shape with a bucket sentinel at
-  // its final endpoint; the recurrent kernel always uses gdn_cu_seq_lens.
   torch::Tensor gdn_cu_seq_lens;
   torch::Tensor gdn_kkt_cu_seq_lens;
   torch::Tensor q_seq_lens;
@@ -93,6 +90,9 @@ struct AttentionMetadata {
   bool is_dummy;
   // Whether to apply causal mask. Default: true.
   bool is_causal = true;
+#if defined(USE_DCU)
+  bool use_dense_flash_attention = false;
+#endif
 
   // Spec-verify ACL graph can run full attention as expanded decode while GDN
   // layers keep the original spec-verify metadata.
@@ -126,33 +126,15 @@ struct AttentionMetadata {
   // cache. Since pages are fixed-size (block_size), the last page may be
   // partially filled. Shape: [batch_size]. Type: int32.
   torch::Tensor paged_kv_last_page_len;
-
-  // Host (CPU) mirrors of the three paged_kv tensors above. These are the same
-  // CPU tensors that the input builder constructed from std::vector<int32_t>
-  // sources (see batch_input_builder.cpp's paged_kv_*_cpu and the matching
-  // attention.host fields) before ModelInputParams::to(device) copied a device
-  // version into attention.device. Plumbing them through AttentionMetadata
-  // here is a zero-cost handoff (shared TensorImpl, no D2H) and lets the Mate
-  // FFI batch_decode bridge consume kDLCPU pointers without 48 implicit
-  // per-token .to(kCPU) syncs on Qwen3.5-27B. Also a prerequisite for CUDA
-  // graph capture of decode (host syncs would otherwise abort capture). Left
-  // undefined when the input builder did not populate attention.host.*; in
-  // that case the batch_decode wrapper falls back to a lazy .to(kCPU) so
-  // legacy paths keep working.
+  // Host mirrors constructed by the input builder. Mate FFI consumes these
+  // without introducing device-to-host synchronization.
   torch::Tensor paged_kv_indptr_host;
   torch::Tensor paged_kv_indices_host;
   torch::Tensor paged_kv_last_page_len_host;
 #if defined(USE_CUDA) || defined(USE_MUSA)
-  // Host cumulative query lengths [num_seqs+1], filled once at metadata build
-  // (from host cu or prefix-sum of q_seq_lens_vec). GDN/Mate reuse this across
-  // all layers instead of rebuilding from q_seq_lens_vec every layer.
   std::vector<int32_t> q_cu_seq_lens_host_vec;
 #endif
-  // FA3 scheduler_metadata tensor (shape [batch_size*4] int32 on device).
-  // When sharing is enabled, built once per forward and reused across all
-  // matching decode layers. Empty when not using FA3 (default).
-  // Mutable because decoder_forward receives logically read-only metadata but
-  // populates this per-forward execution cache on the first FA3 layer.
+  // Per-forward cache shared by matching FA3 decode layers.
   bool share_fa3_scheduler_metadata = false;
   mutable torch::Tensor fa3_scheduler_metadata;
 
@@ -194,6 +176,13 @@ struct AttentionMetadata {
   torch::Tensor unshared_k_cache;
   torch::Tensor unshared_v_cache;
   torch::Tensor step_tensor;
+
+  // for GDN attention
+  torch::Tensor chunk_indices;
+  torch::Tensor batch;
+  torch::Tensor token_block_offset;
+  torch::Tensor has_initial_states;
+  int32_t tot = 0;
 
   // custom attention mask
   torch::Tensor attn_mask;

@@ -13,15 +13,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 #include <ATen/ops/mv.h>
-#include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAException.h>
+#include <c10/cuda/CUDAGuard.h>
 #include <torch/cuda.h>
 
 #include <cstdint>
 
-#include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/cuda/device_utils.cuh"
-
+#include "core/kernels/musa/musa_ops_api.h"
 
 namespace {
 
@@ -130,39 +129,32 @@ __device__ __forceinline__ T gelu_tanh_kernel(const T& x) {
   });                                                                      \
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 
-void silu_and_mul(torch::Tensor out,
-                  torch::Tensor input)
-{
+void silu_and_mul(torch::Tensor out, torch::Tensor input) {
   LAUNCH_ACTIVATION_GATE_KERNEL(silu_kernel, true);
 }
 
-void gelu_and_mul(torch::Tensor& out,
-                  torch::Tensor& input)
-{
+void gelu_and_mul(torch::Tensor& out, torch::Tensor& input) {
   LAUNCH_ACTIVATION_GATE_KERNEL(gelu_kernel, true);
 }
 
-void gelu_tanh_and_mul(torch::Tensor& out,
-                       torch::Tensor& input)
-{
+void gelu_tanh_and_mul(torch::Tensor& out, torch::Tensor& input) {
   LAUNCH_ACTIVATION_GATE_KERNEL(gelu_tanh_kernel, true);
 }
 
 template <typename scalar_t>
-__global__ void XLLM_KERNEL_ATTR(1024) mul_sigmoid_gate_strided_2d_kernel(
-    scalar_t* __restrict__ out,
-    const scalar_t* __restrict__ gate,
-    const int64_t n,
-    const int64_t out_row_stride,
-    const int64_t gate_row_stride) {
+__global__ void XLLM_KERNEL_ATTR(1024)
+    mul_sigmoid_gate_strided_2d_kernel(scalar_t* __restrict__ out,
+                                       const scalar_t* __restrict__ gate,
+                                       const int64_t n,
+                                       const int64_t out_row_stride,
+                                       const int64_t gate_row_stride) {
   const int64_t row = blockIdx.x;
   scalar_t* out_row = out + row * out_row_stride;
   const scalar_t* gate_row = gate + row * gate_row_stride;
   for (int64_t col = threadIdx.x; col < n; col += blockDim.x) {
     const float g = static_cast<float>(xllm_ldg(&gate_row[col]));
     const float s = 1.0f / (1.0f + expf(-g));
-    out_row[col] =
-        static_cast<scalar_t>(static_cast<float>(out_row[col]) * s);
+    out_row[col] = static_cast<scalar_t>(static_cast<float>(out_row[col]) * s);
   }
 }
 
@@ -178,7 +170,8 @@ void launch_mul_sigmoid_gate_inplace(torch::Tensor& out,
   const int64_t last_dim = out.size(-1);
   const int64_t M = n / last_dim;
   const int64_t out_row_stride = (out.dim() <= 1) ? last_dim : out.stride(-2);
-  const int64_t gate_row_stride = (gate.dim() <= 1) ? last_dim : gate.stride(-2);
+  const int64_t gate_row_stride =
+      (gate.dim() <= 1) ? last_dim : gate.stride(-2);
 
   const int32_t threads =
       static_cast<int32_t>(std::min<int64_t>(last_dim, 1024));
@@ -221,14 +214,13 @@ __device__ __forceinline__ float stable_sigmoid(float value) {
 }
 
 template <typename scalar_t>
-__global__ void __launch_bounds__(
-    kSharedGateWarpsPerBlock * kSharedGateWarpSize, 1)
-    fused_shared_expert_gate_kernel(
-        scalar_t* __restrict__ shared_output,
-        const scalar_t* __restrict__ hidden_states,
-        const scalar_t* __restrict__ gate_weight,
-        int64_t num_tokens,
-        int64_t hidden_size) {
+__global__ void __launch_bounds__(kSharedGateWarpsPerBlock* kSharedGateWarpSize,
+                                  1)
+    fused_shared_expert_gate_kernel(scalar_t* __restrict__ shared_output,
+                                    const scalar_t* __restrict__ hidden_states,
+                                    const scalar_t* __restrict__ gate_weight,
+                                    int64_t num_tokens,
+                                    int64_t hidden_size) {
   const int32_t warp = threadIdx.x / kSharedGateWarpSize;
   const int32_t lane = threadIdx.x % kSharedGateWarpSize;
   const int64_t token =
@@ -242,12 +234,11 @@ __global__ void __launch_bounds__(
   float gate_value = 0.0f;
   for (int64_t vector = lane; vector < vector_count;
        vector += kSharedGateWarpSize) {
-    const int64_t offset = token_base +
-                           vector * kSharedGateValuesPerVector;
+    const int64_t offset = token_base + vector * kSharedGateValuesPerVector;
     SharedGateVector<scalar_t> hidden_vector;
     SharedGateVector<scalar_t> weight_vector;
-    hidden_vector.packed = *reinterpret_cast<const int4*>(
-        hidden_states + offset);
+    hidden_vector.packed =
+        *reinterpret_cast<const int4*>(hidden_states + offset);
     weight_vector.packed = *reinterpret_cast<const int4*>(
         gate_weight + vector * kSharedGateValuesPerVector);
 #pragma unroll
@@ -262,11 +253,10 @@ __global__ void __launch_bounds__(
       __shfl_sync(0xffffffffu, gate_value, 0, kSharedGateWarpSize));
   for (int64_t vector = lane; vector < vector_count;
        vector += kSharedGateWarpSize) {
-    const int64_t offset = token_base +
-                           vector * kSharedGateValuesPerVector;
+    const int64_t offset = token_base + vector * kSharedGateValuesPerVector;
     SharedGateVector<scalar_t> output_vector;
-    output_vector.packed = *reinterpret_cast<const int4*>(
-        shared_output + offset);
+    output_vector.packed =
+        *reinterpret_cast<const int4*>(shared_output + offset);
 #pragma unroll
     for (int32_t index = 0; index < kSharedGateValuesPerVector; ++index) {
       output_vector.values[index] = static_cast<scalar_t>(
@@ -276,18 +266,16 @@ __global__ void __launch_bounds__(
   }
 }
 
-void launch_fused_shared_expert_gate_inplace(
-    torch::Tensor& shared_output,
-    const torch::Tensor& hidden_states,
-    const torch::Tensor& gate_weight) {
+void launch_fused_shared_expert_gate_inplace(torch::Tensor& shared_output,
+                                             const torch::Tensor& hidden_states,
+                                             const torch::Tensor& gate_weight) {
   const int64_t num_tokens = shared_output.size(0);
   if (num_tokens == 0) {
     return;
   }
   const int64_t hidden_size = shared_output.size(1);
   const int64_t block_count =
-      (num_tokens + kSharedGateWarpsPerBlock - 1) /
-      kSharedGateWarpsPerBlock;
+      (num_tokens + kSharedGateWarpsPerBlock - 1) / kSharedGateWarpsPerBlock;
   const at::cuda::OptionalCUDAGuard device_guard(device_of(shared_output));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   DISPATCH_HALF_TYPES(
@@ -297,14 +285,14 @@ void launch_fused_shared_expert_gate_inplace(
                dim3(kSharedGateWarpsPerBlock * kSharedGateWarpSize),
                0,
                stream>>>(shared_output.data_ptr<scalar_t>(),
-                          hidden_states.data_ptr<scalar_t>(),
-                          gate_weight.data_ptr<scalar_t>(),
-                          num_tokens,
-                          hidden_size);
+                         hidden_states.data_ptr<scalar_t>(),
+                         gate_weight.data_ptr<scalar_t>(),
+                         num_tokens,
+                         hidden_size);
       });
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
-}
+}  // namespace
 
 namespace xllm::kernel::cuda {
 
@@ -371,7 +359,6 @@ void act_and_mul(torch::Tensor out,
                << ", only support silu, gelu, gelu_tanh, gelu_pytorch_tanh";
   }
 
-
   if (act_mode == "silu") {
     silu_and_mul(out, input);
   } else if (act_mode == "gelu") {
@@ -413,4 +400,4 @@ torch::Tensor matmul(torch::Tensor a,
   return F::linear(a, b, bias.value_or(torch::Tensor()));
 }
 
-}
+}  // namespace xllm::kernel::cuda

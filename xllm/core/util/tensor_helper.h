@@ -83,18 +83,14 @@ inline torch::Tensor load_tensor(std::string filename) {
   return my_tensor;
 }
 
-inline void print_tensor(
-    const torch::Tensor& tensor,
-    const std::string& tensor_name = "tensor",
-    int num = 10,
-    bool part = true,
-    bool print_value = true,
-    const char* file = __builtin_FILE(),
-    int line = __builtin_LINE()) {
-  auto& log_stream =
-      google::LogMessage(
-          file, line, google::GLOG_INFO)
-          .stream();
+inline void print_tensor(const torch::Tensor& tensor,
+                         const std::string& tensor_name = "tensor",
+                         int num = 10,
+                         bool part = true,
+                         bool print_value = true,
+                         const char* file = __builtin_FILE(),
+                         int line = __builtin_LINE()) {
+  auto& log_stream = google::LogMessage(file, line, google::GLOG_INFO).stream();
   if (!tensor.defined()) {
     log_stream << tensor_name << ", Undefined tensor." << std::endl;
     return;
@@ -134,6 +130,23 @@ inline void print_tensor(
 inline bool file_exists(const std::string& path) {
   std::ifstream file(path);
   return file.good();
+}
+
+inline bool tensor_batch_signature_matches(const torch::Tensor& lhs,
+                                           const torch::Tensor& rhs) {
+  if (!lhs.defined() || !rhs.defined()) {
+    return lhs.defined() == rhs.defined();
+  }
+  if (lhs.scalar_type() != rhs.scalar_type() || lhs.device() != rhs.device() ||
+      lhs.dim() != rhs.dim()) {
+    return false;
+  }
+  for (int64_t i = 0; i < lhs.dim(); ++i) {
+    if (lhs.size(i) != rhs.size(i)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 inline torch::Tensor safe_concat(const torch::Tensor& t1,

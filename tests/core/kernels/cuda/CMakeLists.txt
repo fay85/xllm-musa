@@ -70,27 +70,17 @@ cc_test(
 )
 target_link_libraries(fp8_quant_test PRIVATE brpc)
 
-if(USE_MUSA)
-  cc_test(
-    NAME gemma_norm_test
-    SRCS gemma_norm_test.cpp
-    DEPS :cuda_kernels torch GTest::gtest_main glog::glog
-  )
-  cc_test(
-    NAME fused_gdn_decode_test
-    SRCS fused_gdn_decode_test.cpp
-    DEPS :cuda_kernels torch GTest::gtest_main glog::glog
-  )
-  if(USE_MUSA)
-    cc_test(
-      NAME fused_gdn_decode_bench_test
-      SRCS fused_gdn_decode_bench_test.cpp
-      DEPS :cuda_kernels torch GTest::gtest_main glog::glog
-    )
-  endif()
-  cc_test(
-    NAME piecewise_graphs_test
-    SRCS piecewise_graphs_test.cpp
-    DEPS :cuda_kernels torch GTest::gtest_main glog::glog
-  )
-endif()
+cc_test(
+  NAME
+    xllm_ops_test
+  SRCS
+    xllm_ops_test.cpp
+  DEPS
+    :cuda_kernels
+    torch
+    GTest::gtest_main
+    glog::glog
+)
+# Embedded-interpreter test path: needs libtorch_python (THPVariable / at::Tensor
+# pybind caster) and libpython.
+target_link_libraries(xllm_ops_test PRIVATE torch_python Python::Python)

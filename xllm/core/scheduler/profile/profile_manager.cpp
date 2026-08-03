@@ -28,20 +28,18 @@ limitations under the License.
 #include <sstream>
 
 #include "common/global_flags.h"
-#include "core/platform/device.h"
-#if defined(USE_CUDA) || defined(USE_MUSA)
-#include <musa_runtime_api.h>
-#endif
 #include "core/framework/config/disagg_pd_config.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
 #include "core/framework/config/speculative_config.h"
+#include "core/framework/model/mtp_utils.h"
 #include "framework/batch/batch_factory.h"
 #include "framework/request/request_state.h"
 #include "scheduler/profile/graph_warmup.h"
 #include "util/rec_model_utils.h"
+#include "util/utils.h"
 
 namespace xllm {
 
@@ -694,8 +692,9 @@ std::shared_ptr<Request> ProfileManager::generate_single_decode_request(
   // per-token decode state. Inject a placeholder bootstrap embedding so the
   // synthetic warmup/profile request takes the same bootstrap path as a real
   // disagg PD decode request instead of reading stale recycled decode state.
+  const int64_t bootstrap_width = mtp_hidden_state_width(model_args);
   prepare_warmup_decode_sequence(
-      sequence, model_args.hidden_size(), num_speculative_tokens);
+      sequence, bootstrap_width, num_speculative_tokens);
 
   CHECK(sequence->stage() == SequenceStage::DECODE)
       << "Decode profiling request is not in DECODE stage. total_length: "
@@ -931,67 +930,34 @@ void ProfileManager::generate_random_decode_batch(
 
 void ProfileManager::warmup_for_graph() {
   const GraphWarmupPlan plan = graph_warmup_plan(options_.instance_role());
-#if defined(USE_MUSA)
-  // MTP has a separate target decode and speculative-verify graph.  The
-  // generic synthetic decode request below enters the scheduler-level MTP
-  // validation path before those graphs have been captured and can wait for
-  // a real draft/target bootstrap state indefinitely on MUSA.  Prefill graph
-  // capture is still safe here; decode and verify graphs are captured lazily
-  // from the first real MTP batch, where all of the per-request state exists.
-  if (::xllm::SpeculativeConfig::get_instance().num_speculative_tokens() > 0 &&
-      plan != GraphWarmupPlan::PREFILL_ONLY) {
-    LOG(INFO) << "MUSA MTP graph warmup: prefill only; target decode and "
-              << "speculative-verify graphs use independent lazy capture";
-    warmup_prefill_for_graph();
-    xllm::Device::empty_cache(/*device_index=*/-1);
-    LOG(INFO) << "Empty_cache after MUSA MTP prefill graph warmup";
-    return;
-  }
-#endif
   if (plan == GraphWarmupPlan::PREFILL_ONLY) {
     LOG(INFO) << "PREFILL graph warmup: prefill only";
     warmup_prefill_for_graph();
-    xllm::Device::empty_cache(/*device_index=*/-1);
-    LOG(INFO) << "Empty_cache after graph warmup";
     return;
   }
   if (plan == GraphWarmupPlan::DECODE_ONLY) {
     LOG(INFO) << "DECODE graph warmup: decode buckets only";
     warmup_decode_for_graph();
-    xllm::Device::empty_cache(/*device_index=*/-1);
-    LOG(INFO) << "Empty_cache after graph warmup";
     return;
   }
 
   warmup_unified_for_graph();
-  xllm::Device::empty_cache(/*device_index=*/-1);
-  LOG(INFO) << "Empty_cache after graph warmup";
 }
 
 void ProfileManager::warmup_prefill_for_graph() {
-  // Skip the prefill warmup when piecewise prefill capture is disabled.
-  // CudaGraphExecutorImpl::run() executes prefill in eager mode when
-  // enable_prefill_piecewise_graph is false (see the backend graph executor),
-  // so the warmup never produces a captured graph; it only runs a single
-  // max_tokens_per_batch-sized forward pass. On memory-constrained backends
-  // (notably MUSA, where the model weights + KV cache + persistent graph
-  // tensors already consume most of the device memory) this prefill spike
-  // can exceed the activation headroom left by max_memory_utilization and
-  // OOM before the server can accept any request. This mirrors sglang's
-  // behavior of only warming up graphs that will actually be captured.
-  if (!::xllm::ExecutionConfig::get_instance().enable_prefill_piecewise_graph()) {
+  if (!::xllm::ExecutionConfig::get_instance()
+           .enable_prefill_piecewise_graph()) {
     LOG(INFO) << "Skipping prefill graph warmup: "
-              << "enable_prefill_piecewise_graph=false (prefill runs eager).";
+              << "enable_prefill_piecewise_graph=false "
+              << "(prefill runs eager).";
     return;
   }
 
   auto& model_args = engine_->model_args();
   int32_t max_context_len = model_args.max_position_embeddings();
 
-  int32_t prefill_tokens = std::min(
-      {options_.max_tokens_per_batch(),
-       ::xllm::ExecutionConfig::get_instance().max_tokens_for_graph_mode(),
-       max_context_len});
+  int32_t prefill_tokens =
+      std::min(options_.max_tokens_per_batch(), max_context_len);
   double prefill_latency =
       run_request(prefill_tokens, /*prefix_length=*/0, /*batch_size=*/1);
   LOG(INFO) << "Prefill warmup completed: tokens=" << prefill_tokens
@@ -1034,29 +1000,8 @@ void ProfileManager::warmup_decode_for_graph() {
     const int32_t batch_size =
         decode_batch_sizes[static_cast<size_t>(bucket_index)];
     std::vector<int32_t> total_length_vec(batch_size, decode_seq_len);
-
-    // Log free memory before each bucket capture
-    xllm::Device::empty_cache(/*device_index=*/-1);
-    size_t mem_before_free = 0, mem_before_total = 0;
-    musaMemGetInfo(&mem_before_free, &mem_before_total);
-    LOG(INFO) << "Graph warmup bucket=" << batch_size
-              << " free_mem_before="
-              << (mem_before_free / (1024.0 * 1024.0 * 1024.0)) << " GB";
-
     const double decode_latency = run_graph_decode_request(total_length_vec);
     decode_total_latency += decode_latency;
-
-    // Log free memory after each bucket capture
-    xllm::Device::empty_cache(/*device_index=*/-1);
-    size_t mem_after_free = 0, mem_after_total = 0;
-    musaMemGetInfo(&mem_after_free, &mem_after_total);
-    LOG(INFO) << "Graph warmup bucket=" << batch_size
-              << " free_mem_after="
-              << (mem_after_free / (1024.0 * 1024.0 * 1024.0))
-              << " GB (delta="
-              << ((mem_before_free - mem_after_free) / (1024.0 * 1024.0 * 1024.0))
-              << " GB)";
-
     LOG(INFO) << graph_warmup_progress(
         /*completed=*/decode_bucket_count - bucket_index,
         /*total=*/decode_bucket_count,

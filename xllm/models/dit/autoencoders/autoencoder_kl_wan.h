@@ -33,6 +33,7 @@ limitations under the License.
 #include "core/framework/state_dict/state_dict.h"
 #include "framework/model_context.h"
 #include "models/dit/autoencoders/autoencoder_kl.h"
+#include "models/dit/utils/dit_parallel_mixin.h"
 #include "models/model_registry.h"
 
 namespace xllm {
@@ -140,14 +141,17 @@ class DupUp3DImpl : public torch::nn::Module {
 };
 TORCH_MODULE(DupUp3D);
 
-class WanCausalConv3DImpl : public torch::nn::Module {
+class WanCausalConv3DImpl : public torch::nn::Module,
+                            public dit::VaeParallelMixin {
  public:
-  WanCausalConv3DImpl(int64_t in_channels,
+  WanCausalConv3DImpl(const ModelContext& context,
+                      int64_t in_channels,
                       int64_t out_channels,
                       std::vector<int64_t> kernel_size,
                       std::vector<int64_t> stride = {1, 1, 1},
                       std::vector<int64_t> padding = {0, 0, 0})
-      : in_channels_(in_channels),
+      : dit::VaeParallelMixin(context),
+        in_channels_(in_channels),
         out_channels_(out_channels),
         kernel_size_(kernel_size),
         stride_(stride),
@@ -157,8 +161,16 @@ class WanCausalConv3DImpl : public torch::nn::Module {
         torch::nn::Conv3d(
             torch::nn::Conv3dOptions(in_channels, out_channels, kernel_size)
                 .stride(stride)
+                // Conv3d always gets 0 for temporal padding — causal temporal
+                // padding is handled separately via cache_x concatenation.
+                // padding_ layout: {temporal_pad, height_pad, width_pad}
                 .padding({0, padding[1], padding[2]})
                 .bias(true)));
+    // _padding_ is the 6-element format for F::pad:
+    //   {dim4_left, dim4_right, dim3_left, dim3_right, dim2_left, dim2_right}
+    // (dim4=W, dim3=H, dim2=T). Only the temporal (dim2) front padding is
+    // non-zero (2 * pad_t) for causal convolution; spatial padding is handled
+    // by Conv3d directly above.
     _padding_ = {0, 0, 0, 0, 2 * padding[0], 0};
   }
 
@@ -167,14 +179,41 @@ class WanCausalConv3DImpl : public torch::nn::Module {
       const torch::optional<torch::Tensor>& cache_x = torch::nullopt) {
     std::vector<int64_t> padding = _padding_;
     torch::Tensor input = x;
+
+    // Halo exchange is only needed for 3×3 spatial convolutions (kernel=3,
+    // pad=1). For 1×1 convolutions (e.g. quant_conv) padding_ is {0,0,0}
+    // so this condition is false and no exchange occurs.
+    // padding_ layout: {pad_temporal, pad_height, pad_width}
+    bool use_halo =
+        (vae_parallel_enabled() && padding_[1] == 1 && padding_[2] == 1);
+
+    // Temporal padding (causal) — must come BEFORE halo exchange so cache
+    // and input have matching spatial dims.
     if (cache_x.has_value() && cache_x.value().defined() && padding[4] > 0) {
       torch::Tensor cache = cache_x.value().to(x.device());
       input = torch::cat({cache, input}, 2);
       padding[4] -= cache.size(2);
     }
+
+    // Spatial parallel: halo exchange for conv3d with spatial padding
+    if (use_halo) {
+      input = vae_parallel_exchange(input, /*pad=*/true);
+    }
+
     input = torch::nn::functional::pad(
         input, torch::nn::functional::PadFuncOptions(padding));
-    return conv_->forward(input);
+
+    auto out = conv_->forward(input);
+
+    // Trim halo columns after conv:
+    //   exchange() added 1 column from left neighbor and 1 from right neighbor
+    //   (2 extra columns total). Conv3d with kernel=3, spatial pad=1 preserves
+    //   spatial size, so the output is 2 columns wider in W than the true local
+    //   result. Trim 1 column from each side (slice from column 1 to W-1).
+    if (use_halo) {
+      out = out.slice(/*dim=*/-1, 1, out.size(-1) - 1);
+    }
+    return out;
   }
 
   void load_state_dict(const StateDict& state_dict) {
@@ -192,6 +231,10 @@ class WanCausalConv3DImpl : public torch::nn::Module {
   bool is_weight_loaded_{false};
   bool is_bias_loaded_{false};
   int64_t in_channels_, out_channels_;
+  // padding_ layout: {temporal_pad, height_pad, width_pad}
+  // _padding_ layout: 6-element F::pad format {W_left, W_right, H_left,
+  // H_right, T_front, T_back}, where only T_front (2 * temporal_pad) is
+  // non-zero for causal temporal padding.
   std::vector<int64_t> kernel_size_, stride_, padding_, _padding_;
   torch::nn::Conv3d conv_{nullptr};
 };
@@ -284,12 +327,13 @@ class WanUpsampleImpl : public torch::nn::Module {
 
 TORCH_MODULE(WanUpsample);
 
-class WanResampleImpl : public torch::nn::Module {
+class WanResampleImpl : public torch::nn::Module, public dit::VaeParallelMixin {
  public:
-  WanResampleImpl(int64_t dim,
+  WanResampleImpl(const ModelContext& context,
+                  int64_t dim,
                   const std::string& mode,
                   int64_t upsample_out_dim = -1)
-      : dim_(dim), mode_(mode) {
+      : dit::VaeParallelMixin(context), dim_(dim), mode_(mode) {
     if (upsample_out_dim == -1) {
       upsample_out_dim = dim / 2;
     }
@@ -310,7 +354,8 @@ class WanResampleImpl : public torch::nn::Module {
               torch::nn::Conv2dOptions(dim, upsample_out_dim, 3).padding(1)));
       time_conv_ =
           register_module("time_conv",
-                          WanCausalConv3D(dim,
+                          WanCausalConv3D(context,
+                                          dim,
                                           dim * 2,
                                           std::vector<int64_t>{3, 1, 1},
                                           std::vector<int64_t>{1, 1, 1},
@@ -327,7 +372,8 @@ class WanResampleImpl : public torch::nn::Module {
                                 .stride(std::vector<int64_t>{2, 2})));
       time_conv_ =
           register_module("time_conv",
-                          WanCausalConv3D(dim,
+                          WanCausalConv3D(context,
+                                          dim,
                                           dim,
                                           std::vector<int64_t>{3, 1, 1},
                                           std::vector<int64_t>{2, 1, 1},
@@ -340,15 +386,17 @@ class WanResampleImpl : public torch::nn::Module {
     rep_tensor_ = register_parameter("rep_tensor", torch::tensor({-999.0}));
   }
 
-  torch::Tensor forward(
-      torch::Tensor x,
-      std::shared_ptr<std::vector<torch::Tensor>> feat_cache = nullptr,
-      std::shared_ptr<std::vector<int64_t>> feat_idx = nullptr) {
+  torch::Tensor forward(torch::Tensor x,
+                        std::shared_ptr<std::vector<torch::Tensor>> feat_cache,
+                        std::shared_ptr<std::vector<int64_t>> feat_idx) {
     if (!feat_idx) feat_idx = std::make_shared<std::vector<int64_t>>(1, 0);
 
     auto sizes = x.sizes();
     int64_t b = sizes[0], c = sizes[1], t = sizes[2], h = sizes[3],
             w = sizes[4];
+
+    bool is_upsample = (mode_ == "upsample2d" || mode_ == "upsample3d");
+    bool is_downsample = (mode_ == "downsample2d" || mode_ == "downsample3d");
 
     if (mode_ == "upsample3d" && feat_cache) {
       int64_t idx = (*feat_idx)[0];
@@ -407,11 +455,44 @@ class WanResampleImpl : public torch::nn::Module {
       }
     }
     t = x.size(2);
+
+    // Upsample: exchange halo columns before spatial upsampling
+    if (is_upsample) {
+      x = vae_parallel_exchange(x, /*pad=*/false);
+      w = x.size(-1);  // recalc after halo exchange changed width
+    }
+    // Downsample: merge spatial slices before spatial downsampling
+    if (is_downsample) {
+      x = vae_parallel_merge(x);
+      w = x.size(-1);  // recalc after merge: W is now global
+      h = x.size(-2);  // recalc H too (may change with 2D split)
+    }
+
     x = x.permute({0, 2, 1, 3, 4}).reshape({b * t, c, h, w});
 
     x = resample_->forward(x);
     x = x.view({b, t, x.size(1), x.size(2), x.size(3)})
             .permute({0, 2, 1, 3, 4});
+
+    // Upsample: trim excess columns introduced by halo exchange.
+    //
+    // Before upsample: exchange(pad=false) adds 1 neighbor column per side,
+    // making W_local → W_local + (has_left ? 1 : 0) + (has_right ? 1 : 0).
+    // The interpolate 2× doubles each column, and the following Conv2d(k=3,
+    // pad=1) preserves size. So the halo columns produce 2 excess columns per
+    // side in the output.
+    //
+    // Trim 2 columns from each side where a neighbor contributed halo:
+    //   - middle rank (has_left && has_right): trim 2 from left, 2 from right
+    //   - first rank  (!has_left):           trim 2 from right only
+    //   - last rank   (!has_right):          trim 2 from left only
+    if (is_upsample) {
+      x = vae_parallel_trim_halo(x, /*per_side=*/2);
+    }
+    // Downsample: split full result back to local slices
+    if (is_downsample) {
+      x = vae_parallel_split(x);
+    }
 
     if (mode_ == "downsample3d" && feat_cache) {
       int64_t idx = (*feat_idx)[0];
@@ -483,12 +564,16 @@ TORCH_MODULE(WanResample);
 
 class WanResidualBlockImpl : public torch::nn::Module {
  public:
-  WanResidualBlockImpl(int64_t in_dim, int64_t out_dim, float dropout = 0.0f)
+  WanResidualBlockImpl(const ModelContext& context,
+                       int64_t in_dim,
+                       int64_t out_dim,
+                       float dropout = 0.0f)
       : in_dim_(in_dim), out_dim_(out_dim) {
     nonlinearity_ = torch::nn::Functional(torch::silu);
     norm1_ = register_module("norm1", WanRMSNorm(in_dim, true, false, false));
     conv1_ = register_module("conv1",
-                             WanCausalConv3D(in_dim,
+                             WanCausalConv3D(context,
+                                             in_dim,
                                              out_dim,
                                              std::vector<int64_t>{3, 3, 3},
                                              std::vector<int64_t>{1, 1, 1},
@@ -496,7 +581,8 @@ class WanResidualBlockImpl : public torch::nn::Module {
     norm2_ = register_module("norm2", WanRMSNorm(out_dim, true, false, false));
     dropout_layer_ = register_module("dropout", torch::nn::Dropout(dropout));
     conv2_ = register_module("conv2",
-                             WanCausalConv3D(out_dim,
+                             WanCausalConv3D(context,
+                                             out_dim,
                                              out_dim,
                                              std::vector<int64_t>{3, 3, 3},
                                              std::vector<int64_t>{1, 1, 1},
@@ -504,7 +590,8 @@ class WanResidualBlockImpl : public torch::nn::Module {
     if (in_dim_ != out_dim_) {
       conv_shortcut_ =
           register_module("conv_shortcut",
-                          WanCausalConv3D(in_dim,
+                          WanCausalConv3D(context,
+                                          in_dim,
                                           out_dim,
                                           std::vector<int64_t>{1, 1, 1},
                                           std::vector<int64_t>{1, 1, 1},
@@ -512,10 +599,9 @@ class WanResidualBlockImpl : public torch::nn::Module {
     }
   }
 
-  torch::Tensor forward(
-      torch::Tensor x,
-      std::shared_ptr<std::vector<torch::Tensor>> feat_cache = nullptr,
-      std::shared_ptr<std::vector<int64_t>> feat_idx = nullptr) {
+  torch::Tensor forward(torch::Tensor x,
+                        std::shared_ptr<std::vector<torch::Tensor>> feat_cache,
+                        std::shared_ptr<std::vector<int64_t>> feat_idx) {
     if (!feat_idx) feat_idx = std::make_shared<std::vector<int64_t>>(1, 0);
 
     torch::Tensor h;
@@ -626,9 +712,11 @@ class WanResidualBlockImpl : public torch::nn::Module {
 };
 TORCH_MODULE(WanResidualBlock);
 
-class WanAttentionBlockImpl : public torch::nn::Module {
+class WanAttentionBlockImpl : public torch::nn::Module,
+                              public dit::VaeParallelMixin {
  public:
-  WanAttentionBlockImpl(int64_t dim) : dim_(dim) {
+  WanAttentionBlockImpl(const ModelContext& context, int64_t dim)
+      : dit::VaeParallelMixin(context), dim_(dim) {
     norm_ = register_module("norm", WanRMSNorm(dim, true, true, false));
     to_qkv_ = register_module(
         "to_qkv", torch::nn::Conv2d(torch::nn::Conv2dOptions(dim, dim * 3, 1)));
@@ -650,13 +738,34 @@ class WanAttentionBlockImpl : public torch::nn::Module {
     x = norm_->forward(x);
 
     auto qkv = to_qkv_->forward(x);
-    qkv = qkv.reshape({batch_size * time, 1, channels * 3, height * width});
-    qkv = qkv.permute({0, 1, 3, 2}).contiguous();
-    auto chunks = qkv.chunk(3, -1);
-    torch::Tensor q = chunks[0];
-    torch::Tensor k = chunks[1];
-    torch::Tensor v = chunks[2];
 
+    torch::Tensor q, k, v;
+    if (vae_parallel_enabled()) {
+      // Gather K/V in spatial domain before BNSD reshape
+      auto spatial_chunks = qkv.chunk(3, 1);
+      auto k_sp = vae_parallel_merge(spatial_chunks[1].unsqueeze(2)).squeeze(2);
+      auto v_sp = vae_parallel_merge(spatial_chunks[2].unsqueeze(2)).squeeze(2);
+      int64_t W_global = k_sp.size(-1);
+      q = spatial_chunks[0]
+              .reshape({batch_size * time, 1, channels, height * width})
+              .permute({0, 1, 3, 2})
+              .contiguous();
+      k = k_sp.reshape({batch_size * time, 1, channels, height * W_global})
+              .permute({0, 1, 3, 2})
+              .contiguous();
+      v = v_sp.reshape({batch_size * time, 1, channels, height * W_global})
+              .permute({0, 1, 3, 2})
+              .contiguous();
+    } else {
+      qkv = qkv.reshape({batch_size * time, 1, channels * 3, height * width});
+      qkv = qkv.permute({0, 1, 3, 2}).contiguous();
+      auto chunks = qkv.chunk(3, -1);
+      q = chunks[0];
+      k = chunks[1];
+      v = chunks[2];
+    }
+
+#if defined(USE_NPU)
     auto results = at_npu::native::custom_ops::npu_fusion_attention(
         q,
         k,
@@ -670,7 +779,16 @@ class WanAttentionBlockImpl : public torch::nn::Module {
         /*keep_prob=*/1.0,
         /*pre_tockens=*/65535,
         /*next_tockens=*/65535);
-    auto attn_output = std::get<0>(results);
+    torch::Tensor attn_output = std::get<0>(results);
+#else
+    torch::Tensor attn_output =
+        torch::scaled_dot_product_attention(q,
+                                            k,
+                                            v,
+                                            torch::nullopt,
+                                            /*dropout_p=*/0.0,
+                                            /*is_causal=*/false);
+#endif
 
     auto attn_out = attn_output.squeeze(1).permute({0, 2, 1}).reshape(
         {batch_size * time, channels, height, width});
@@ -721,21 +839,23 @@ TORCH_MODULE(WanAttentionBlock);
 
 class WanMidBlockImpl : public torch::nn::Module {
  public:
-  WanMidBlockImpl(int64_t dim, float dropout = 0.0f, int64_t num_layers = 1)
+  WanMidBlockImpl(const ModelContext& context,
+                  int64_t dim,
+                  float dropout = 0.0f,
+                  int64_t num_layers = 1)
       : dim_(dim) {
     resnets_ = register_module("resnets", torch::nn::ModuleList());
     attentions_ = register_module("attentions", torch::nn::ModuleList());
-    resnets_->push_back(WanResidualBlock(dim, dim, dropout));
+    resnets_->push_back(WanResidualBlock(context, dim, dim, dropout));
     for (int64_t i = 0; i < num_layers; ++i) {
-      attentions_->push_back(WanAttentionBlock(dim));
-      resnets_->push_back(WanResidualBlock(dim, dim, dropout));
+      attentions_->push_back(WanAttentionBlock(context, dim));
+      resnets_->push_back(WanResidualBlock(context, dim, dim, dropout));
     }
   }
 
-  torch::Tensor forward(
-      torch::Tensor x,
-      std::shared_ptr<std::vector<torch::Tensor>> feat_cache = nullptr,
-      std::shared_ptr<std::vector<int64_t>> feat_idx = nullptr) {
+  torch::Tensor forward(torch::Tensor x,
+                        std::shared_ptr<std::vector<torch::Tensor>> feat_cache,
+                        std::shared_ptr<std::vector<int64_t>> feat_idx) {
     if (!feat_idx) feat_idx = std::make_shared<std::vector<int64_t>>(1, 0);
 
     x = resnets_[0]->as<WanResidualBlock>()->forward(x, feat_cache, feat_idx);
@@ -787,7 +907,8 @@ TORCH_MODULE(WanMidBlock);
 
 class WanResidualDownBlockImpl : public torch::nn::Module {
  public:
-  WanResidualDownBlockImpl(int64_t in_dim,
+  WanResidualDownBlockImpl(const ModelContext& context,
+                           int64_t in_dim,
                            int64_t out_dim,
                            float dropout,
                            int64_t num_res_blocks,
@@ -804,22 +925,22 @@ class WanResidualDownBlockImpl : public torch::nn::Module {
     resnets_ = register_module("resnets", torch::nn::ModuleList());
     int64_t cur_in_dim = in_dim;
     for (int64_t i = 0; i < num_res_blocks; ++i) {
-      resnets_->push_back(WanResidualBlock(cur_in_dim, out_dim, dropout));
+      resnets_->push_back(
+          WanResidualBlock(context, cur_in_dim, out_dim, dropout));
       cur_in_dim = out_dim;
     }
     if (down_flag) {
       std::string mode = temperal_downsample ? "downsample3d" : "downsample2d";
       downsampler_ =
-          register_module("downsampler", WanResample(out_dim, mode, -1));
+          register_module("downsampler", WanResample(context, out_dim, mode));
     } else {
       downsampler_ = nullptr;
     }
   }
 
-  torch::Tensor forward(
-      torch::Tensor x,
-      std::shared_ptr<std::vector<torch::Tensor>> feat_cache = nullptr,
-      std::shared_ptr<std::vector<int64_t>> feat_idx = nullptr) {
+  torch::Tensor forward(torch::Tensor x,
+                        std::shared_ptr<std::vector<torch::Tensor>> feat_cache,
+                        std::shared_ptr<std::vector<int64_t>> feat_idx) {
     if (!feat_idx) feat_idx = std::make_shared<std::vector<int64_t>>(1, 0);
 
     torch::Tensor x_copy = x.clone();
@@ -869,7 +990,8 @@ TORCH_MODULE(WanResidualDownBlock);
 
 class WanVAEEncoder3DImpl : public torch::nn::Module {
  public:
-  WanVAEEncoder3DImpl(int64_t in_channels = 3,
+  WanVAEEncoder3DImpl(const ModelContext& context,
+                      int64_t in_channels = 3,
                       int64_t dim = 128,
                       int64_t z_dim = 4,
                       std::vector<int64_t> dim_mult = {1, 2, 4, 4},
@@ -886,7 +1008,8 @@ class WanVAEEncoder3DImpl : public torch::nn::Module {
     for (auto u : dim_mult) dims.push_back(dim * u);
     double scale = 1.0;
     conv_in_ = register_module("conv_in",
-                               WanCausalConv3D(in_channels,
+                               WanCausalConv3D(context,
+                                               in_channels,
                                                dims[0],
                                                std::vector<int64_t>{3, 3, 3},
                                                std::vector<int64_t>{1, 1, 1},
@@ -897,6 +1020,7 @@ class WanVAEEncoder3DImpl : public torch::nn::Module {
       int64_t out_dim = dims[i + 1];
       if (is_residual) {
         down_blocks_->push_back(WanResidualDownBlock(
+            context,
             in_dim,
             out_dim,
             dropout,
@@ -907,37 +1031,37 @@ class WanVAEEncoder3DImpl : public torch::nn::Module {
         int64_t current_dim = in_dim;
         for (int64_t j = 0; j < num_res_blocks; ++j) {
           down_blocks_->push_back(
-              WanResidualBlock(current_dim, out_dim, dropout));
+              WanResidualBlock(context, current_dim, out_dim, dropout));
           if (std::find(attn_scales.begin(), attn_scales.end(), scale) !=
               attn_scales.end()) {
-            down_blocks_->push_back(WanAttentionBlock(out_dim));
+            down_blocks_->push_back(WanAttentionBlock(context, out_dim));
           }
           current_dim = out_dim;
         }
         if (i != dim_mult.size() - 1) {
           std::string mode =
               temperal_downsample[i] ? "downsample3d" : "downsample2d";
-          down_blocks_->push_back(WanResample(out_dim, mode, -1));
+          down_blocks_->push_back(WanResample(context, out_dim, mode));
           scale /= 2.0;
         }
       }
     }
-    mid_block_ =
-        register_module("mid_block", WanMidBlock(dims.back(), dropout, 1));
+    mid_block_ = register_module("mid_block",
+                                 WanMidBlock(context, dims.back(), dropout, 1));
     norm_out_ = register_module("norm_out",
                                 WanRMSNorm(dims.back(), true, false, false));
     conv_out_ = register_module("conv_out",
-                                WanCausalConv3D(dims.back(),
+                                WanCausalConv3D(context,
+                                                dims.back(),
                                                 z_dim,
                                                 std::vector<int64_t>{3, 3, 3},
                                                 std::vector<int64_t>{1, 1, 1},
                                                 std::vector<int64_t>{1, 1, 1}));
   }
 
-  torch::Tensor forward(
-      torch::Tensor x,
-      std::shared_ptr<std::vector<torch::Tensor>> feat_cache = nullptr,
-      std::shared_ptr<std::vector<int64_t>> feat_idx = nullptr) {
+  torch::Tensor forward(torch::Tensor x,
+                        std::shared_ptr<std::vector<torch::Tensor>> feat_cache,
+                        std::shared_ptr<std::vector<int64_t>> feat_idx) {
     if (!feat_idx) feat_idx = std::make_shared<std::vector<int64_t>>(1, 0);
     if (feat_cache) {
       int64_t idx = (*feat_idx)[0];
@@ -973,12 +1097,12 @@ class WanVAEEncoder3DImpl : public torch::nn::Module {
         x = res_down->forward(x, feat_cache, feat_idx);
       } else if (auto down = down_blocks_[i]->as<WanResidualBlock>()) {
         x = feat_cache ? down->forward(x, feat_cache, feat_idx)
-                       : down->forward(x);
+                       : down->forward(x, nullptr, nullptr);
       } else if (auto attn = down_blocks_[i]->as<WanAttentionBlock>()) {
         x = attn->forward(x);
       } else if (auto resample = down_blocks_[i]->as<WanResample>()) {
         x = feat_cache ? resample->forward(x, feat_cache, feat_idx)
-                       : resample->forward(x);
+                       : resample->forward(x, nullptr, nullptr);
       }
     }
 
@@ -1073,7 +1197,8 @@ TORCH_MODULE(WanVAEEncoder3D);
 
 class WanResidualUpBlockImpl : public torch::nn::Module {
  public:
-  WanResidualUpBlockImpl(int64_t in_dim,
+  WanResidualUpBlockImpl(const ModelContext& context,
+                         int64_t in_dim,
                          int64_t out_dim,
                          int64_t num_res_blocks,
                          float dropout = 0.0f,
@@ -1091,24 +1216,24 @@ class WanResidualUpBlockImpl : public torch::nn::Module {
     resnets_ = register_module("resnets", torch::nn::ModuleList());
     int64_t current_dim = in_dim;
     for (int64_t i = 0; i < num_res_blocks + 1; ++i) {
-      resnets_->push_back(WanResidualBlock(current_dim, out_dim, dropout));
+      resnets_->push_back(
+          WanResidualBlock(context, current_dim, out_dim, dropout));
       current_dim = out_dim;
     }
     if (up_flag) {
       std::string upsample_mode =
           temperal_upsample ? "upsample3d" : "upsample2d";
       upsampler_ = register_module(
-          "upsampler", WanResample(out_dim, upsample_mode, out_dim));
+          "upsampler", WanResample(context, out_dim, upsample_mode, out_dim));
     } else {
       upsampler_ = nullptr;
     }
   }
 
-  torch::Tensor forward(
-      torch::Tensor x,
-      std::shared_ptr<std::vector<torch::Tensor>> feat_cache = nullptr,
-      std::shared_ptr<std::vector<int64_t>> feat_idx = nullptr,
-      bool first_chunk = false) {
+  torch::Tensor forward(torch::Tensor x,
+                        std::shared_ptr<std::vector<torch::Tensor>> feat_cache,
+                        std::shared_ptr<std::vector<int64_t>> feat_idx,
+                        bool first_chunk) {
     if (!feat_idx) feat_idx = std::make_shared<std::vector<int64_t>>(1, 0);
 
     torch::Tensor x_copy = x.clone();
@@ -1117,14 +1242,14 @@ class WanResidualUpBlockImpl : public torch::nn::Module {
         x = resnets_[i]->as<WanResidualBlock>()->forward(
             x, feat_cache, feat_idx);
       } else {
-        x = resnets_[i]->as<WanResidualBlock>()->forward(x);
+        x = resnets_[i]->as<WanResidualBlock>()->forward(x, nullptr, nullptr);
       }
     }
     if (upsampler_) {
       if (feat_cache) {
         x = upsampler_->as<WanResample>()->forward(x, feat_cache, feat_idx);
       } else {
-        x = upsampler_->as<WanResample>()->forward(x);
+        x = upsampler_->as<WanResample>()->forward(x, nullptr, nullptr);
       }
     }
     if (avg_shortcut_) {
@@ -1167,7 +1292,8 @@ TORCH_MODULE(WanResidualUpBlock);
 
 class WanUpBlockImpl : public torch::nn::Module {
  public:
-  WanUpBlockImpl(int64_t in_dim,
+  WanUpBlockImpl(const ModelContext& context,
+                 int64_t in_dim,
                  int64_t out_dim,
                  int64_t num_res_blocks,
                  float dropout = 0.0f,
@@ -1176,19 +1302,20 @@ class WanUpBlockImpl : public torch::nn::Module {
     resnets_ = register_module("resnets", torch::nn::ModuleList());
     int64_t current_dim = in_dim;
     for (int64_t i = 0; i < num_res_blocks + 1; ++i) {
-      resnets_->push_back(WanResidualBlock(current_dim, out_dim, dropout));
+      resnets_->push_back(
+          WanResidualBlock(context, current_dim, out_dim, dropout));
       current_dim = out_dim;
     }
     if (upsample_mode.has_value()) {
       upsamplers_ = register_module("upsamplers", torch::nn::ModuleList());
-      upsamplers_->push_back(WanResample(out_dim, upsample_mode.value()));
+      upsamplers_->push_back(
+          WanResample(context, out_dim, upsample_mode.value()));
     }
   }
 
-  torch::Tensor forward(
-      torch::Tensor x,
-      std::shared_ptr<std::vector<torch::Tensor>> feat_cache = nullptr,
-      std::shared_ptr<std::vector<int64_t>> feat_idx = nullptr) {
+  torch::Tensor forward(torch::Tensor x,
+                        std::shared_ptr<std::vector<torch::Tensor>> feat_cache,
+                        std::shared_ptr<std::vector<int64_t>> feat_idx) {
     if (!feat_idx) feat_idx = std::make_shared<std::vector<int64_t>>(1, 0);
 
     torch::Tensor h = x;
@@ -1197,7 +1324,7 @@ class WanUpBlockImpl : public torch::nn::Module {
       if (feat_cache) {
         h = resnet->forward(h, feat_cache, feat_idx);
       } else {
-        h = resnet->forward(h);
+        h = resnet->forward(h, nullptr, nullptr);
       }
     }
     if (upsamplers_ && upsamplers_->size() > 0) {
@@ -1205,7 +1332,7 @@ class WanUpBlockImpl : public torch::nn::Module {
       if (feat_cache) {
         h = upsampler->forward(h, feat_cache, feat_idx);
       } else {
-        h = upsampler->forward(h);
+        h = upsampler->forward(h, nullptr, nullptr);
       }
     }
     return h;
@@ -1251,7 +1378,8 @@ TORCH_MODULE(WanUpBlock);
 
 class WanVAEDecoder3DImpl : public torch::nn::Module {
  public:
-  WanVAEDecoder3DImpl(int64_t dim = 128,
+  WanVAEDecoder3DImpl(const ModelContext& context,
+                      int64_t dim = 128,
                       int64_t z_dim = 4,
                       const std::vector<int64_t>& dim_mult = {1, 2, 4, 4},
                       int64_t num_res_blocks = 2,
@@ -1268,12 +1396,14 @@ class WanVAEDecoder3DImpl : public torch::nn::Module {
       dims.push_back(dim * (*it));
     }
     conv_in_ = register_module("conv_in",
-                               WanCausalConv3D(z_dim,
+                               WanCausalConv3D(context,
+                                               z_dim,
                                                dims[0],
                                                std::vector<int64_t>{3, 3, 3},
                                                std::vector<int64_t>{1, 1, 1},
                                                std::vector<int64_t>{1, 1, 1}));
-    mid_block_ = register_module("mid_block", WanMidBlock(dims[0], dropout, 1));
+    mid_block_ =
+        register_module("mid_block", WanMidBlock(context, dims[0], dropout, 1));
     up_blocks_ = register_module("up_blocks", torch::nn::ModuleList());
     for (size_t i = 0; i < dims.size() - 1; ++i) {
       int64_t in_dim = dims[i];
@@ -1290,7 +1420,8 @@ class WanVAEDecoder3DImpl : public torch::nn::Module {
       }
       if (is_residual) {
         up_blocks_->push_back(
-            WanResidualUpBlock(in_dim,
+            WanResidualUpBlock(context,
+                               in_dim,
                                out_dim,
                                num_res_blocks,
                                dropout,
@@ -1298,7 +1429,8 @@ class WanVAEDecoder3DImpl : public torch::nn::Module {
                                up_flag));
       } else {
         up_blocks_->push_back(
-            WanUpBlock(in_dim,
+            WanUpBlock(context,
+                       in_dim,
                        out_dim,
                        num_res_blocks,
                        dropout,
@@ -1310,18 +1442,18 @@ class WanVAEDecoder3DImpl : public torch::nn::Module {
     norm_out_ = register_module("norm_out",
                                 WanRMSNorm(dims.back(), true, false, false));
     conv_out_ = register_module("conv_out",
-                                WanCausalConv3D(dims.back(),
+                                WanCausalConv3D(context,
+                                                dims.back(),
                                                 out_channels,
                                                 std::vector<int64_t>{3, 3, 3},
                                                 std::vector<int64_t>{1, 1, 1},
                                                 std::vector<int64_t>{1, 1, 1}));
   }
 
-  torch::Tensor forward(
-      torch::Tensor x,
-      std::shared_ptr<std::vector<torch::Tensor>> feat_cache = nullptr,
-      std::shared_ptr<std::vector<int64_t>> feat_idx = nullptr,
-      bool first_chunk = false) {
+  torch::Tensor forward(torch::Tensor x,
+                        std::shared_ptr<std::vector<torch::Tensor>> feat_cache,
+                        std::shared_ptr<std::vector<int64_t>> feat_idx,
+                        bool first_chunk) {
     if (!feat_idx) feat_idx = std::make_shared<std::vector<int64_t>>(1, 0);
 
     // conv_in
@@ -1356,7 +1488,7 @@ class WanVAEDecoder3DImpl : public torch::nn::Module {
     // mid_block
     x = mid_block_->forward(x, feat_cache, feat_idx);
 
-    // up_blocks : pass 'first_chunk'  to WanResidualUpBlock
+    // up_blocks : pass 'first_chunk' to WanResidualUpBlock
     for (size_t i = 0; i < up_blocks_->size(); ++i) {
       if (auto res_up = up_blocks_[i]->as<WanResidualUpBlock>()) {
         x = res_up->forward(x, feat_cache, feat_idx, first_chunk);
@@ -1446,14 +1578,17 @@ class WanVAEDecoder3DImpl : public torch::nn::Module {
 };
 TORCH_MODULE(WanVAEDecoder3D);
 
-class AutoencoderKLWanImpl : public torch::nn::Module {
+class AutoencoderKLWanImpl : public torch::nn::Module,
+                             public dit::VaeParallelMixin {
  public:
   AutoencoderKLWanImpl(const ModelContext& context)
-      : args_(context.get_model_args()),
+      : dit::VaeParallelMixin(context),
+        args_(context.get_model_args()),
         device_(context.get_tensor_options().device()),
         dtype_(context.get_tensor_options().dtype().toScalarType()) {
     encoder_ = register_module("encoder",
-                               WanVAEEncoder3D(args_.in_channels(),
+                               WanVAEEncoder3D(context,
+                                               args_.in_channels(),
                                                args_.base_dim(),
                                                args_.z_dim() * 2,
                                                args_.dim_mult(),
@@ -1467,7 +1602,8 @@ class AutoencoderKLWanImpl : public torch::nn::Module {
     std::reverse(decoder_temporal.begin(), decoder_temporal.end());
 
     decoder_ = register_module("decoder",
-                               WanVAEDecoder3D(args_.base_dim(),
+                               WanVAEDecoder3D(context,
+                                               args_.base_dim(),
                                                args_.z_dim(),
                                                args_.dim_mult(),
                                                args_.num_res_blocks(),
@@ -1479,14 +1615,21 @@ class AutoencoderKLWanImpl : public torch::nn::Module {
 
     quant_conv_ =
         register_module("quant_conv",
-                        WanCausalConv3D(2 * args_.z_dim(),
+                        WanCausalConv3D(context,
                                         2 * args_.z_dim(),
-                                        std::vector<int64_t>{1, 1, 1}));
+                                        2 * args_.z_dim(),
+                                        std::vector<int64_t>{1, 1, 1},
+                                        std::vector<int64_t>{1, 1, 1},
+                                        std::vector<int64_t>{0, 0, 0}));
 
-    post_quant_conv_ = register_module(
-        "post_quant_conv",
-        WanCausalConv3D(
-            args_.z_dim(), args_.z_dim(), std::vector<int64_t>{1, 1, 1}));
+    post_quant_conv_ =
+        register_module("post_quant_conv",
+                        WanCausalConv3D(context,
+                                        args_.z_dim(),
+                                        args_.z_dim(),
+                                        std::vector<int64_t>{1, 1, 1},
+                                        std::vector<int64_t>{1, 1, 1},
+                                        std::vector<int64_t>{0, 0, 0}));
     init_cached_conv_count();
   }
 
@@ -1506,15 +1649,17 @@ class AutoencoderKLWanImpl : public torch::nn::Module {
   torch::Tensor encode_(const torch::Tensor& videos) {
     auto orig_dtype = videos.dtype();
     auto x = videos.to(torch::kFloat32);
+    x = vae_parallel_split(x);
     int64_t num_frame = x.size(2);
     int64_t height = x.size(3);
     int64_t width = x.size(4);
     int64_t iter_ = 1 + (num_frame - 1) / 4;
     clear_cache();
-    torch::Tensor out;
     feat_map_ = std::make_shared<std::vector<torch::Tensor>>(
         std::vector<torch::Tensor>(conv_num_));
 
+    std::vector<torch::Tensor> enc_outputs;
+    enc_outputs.reserve(iter_);
     for (int64_t i = 0; i < iter_; ++i) {
       enc_conv_idx_ = {0};
       if (i == 0) {
@@ -1523,7 +1668,7 @@ class AutoencoderKLWanImpl : public torch::nn::Module {
                                 torch::indexing::Slice(0, 1),
                                 torch::indexing::Slice(),
                                 torch::indexing::Slice()});
-        out = encoder_(x_slice, enc_feat_map_, enc_conv_idx_);
+        enc_outputs.push_back(encoder_(x_slice, enc_feat_map_, enc_conv_idx_));
       } else {
         int64_t start = 1 + 4 * (i - 1);
         int64_t end = std::min(1 + 4 * i, num_frame);
@@ -1532,11 +1677,13 @@ class AutoencoderKLWanImpl : public torch::nn::Module {
                                 torch::indexing::Slice(start, end),
                                 torch::indexing::Slice(),
                                 torch::indexing::Slice()});
-        auto out_ = encoder_(x_slice, enc_feat_map_, enc_conv_idx_);
-        out = torch::cat({out, out_}, 2);
+        enc_outputs.push_back(encoder_(x_slice, enc_feat_map_, enc_conv_idx_));
       }
     }
-    out = quant_conv_(out);
+    torch::Tensor out = torch::cat(enc_outputs, 2);
+    out = quant_conv_->forward(out);
+    // Merge latent back to global W before passing to DiT transformer
+    out = vae_parallel_merge(out);
     clear_cache();
     return out.to(orig_dtype);
   }
@@ -1550,33 +1697,24 @@ class AutoencoderKLWanImpl : public torch::nn::Module {
   DecoderOutput decode_(const torch::Tensor& latents) {
     auto orig_dtype = latents.dtype();
     torch::Tensor processed_latents = latents.to(torch::kFloat32);
+    processed_latents = vae_parallel_split(processed_latents);
     int64_t num_frame = processed_latents.size(2);
     int64_t height = processed_latents.size(3);
     int64_t width = processed_latents.size(4);
     clear_cache();
-    torch::Tensor out;
-    processed_latents = post_quant_conv_(processed_latents);
+    processed_latents = post_quant_conv_->forward(processed_latents);
+    std::vector<torch::Tensor> dec_outputs;
+    dec_outputs.reserve(num_frame);
     for (int64_t i = 0; i < num_frame; ++i) {
       conv_idx_ = {0};
-      if (i == 0) {
-        auto x_slice =
-            processed_latents.index({torch::indexing::Slice(),
-                                     torch::indexing::Slice(),
-                                     torch::indexing::Slice(i, i + 1),
-                                     torch::indexing::Slice(),
-                                     torch::indexing::Slice()});
-        out = decoder_(x_slice, feat_map_, conv_idx_, true);  // first_chunk
-      } else {
-        auto x_slice =
-            processed_latents.index({torch::indexing::Slice(),
-                                     torch::indexing::Slice(),
-                                     torch::indexing::Slice(i, i + 1),
-                                     torch::indexing::Slice(),
-                                     torch::indexing::Slice()});
-        auto out_ = decoder_(x_slice, feat_map_, conv_idx_);
-        out = torch::cat({out, out_}, 2);
-      }
+      auto x_slice = processed_latents.slice(/*dim=*/2, i, i + 1);
+      dec_outputs.push_back(decoder_(x_slice,
+                                     feat_map_,
+                                     conv_idx_,
+                                     /*first_chunk=*/(i == 0)));
     }
+    torch::Tensor out = torch::cat(dec_outputs, 2);
+    out = vae_parallel_merge(out);
     auto dec = torch::clamp(out, -1.0f, 1.0f);
 
     clear_cache();

@@ -16,6 +16,7 @@ limitations under the License.
 #include "core/kernels/musa/attention_runner.h"
 
 #include <glog/logging.h>
+
 #include <cstdlib>
 #include <string>
 
@@ -33,8 +34,9 @@ int64_t capture_fa3_max_padding_tokens() {
   static const int64_t max_padding = [] {
     const char* env =
         std::getenv("XLLM_PIECEWISE_CAPTURE_FA3_MAX_PADDING_TOKENS");
-    return env == nullptr ? int64_t{32}
-                          : static_cast<int64_t>(std::strtoll(env, nullptr, 10));
+    return env == nullptr
+               ? int64_t{32}
+               : static_cast<int64_t>(std::strtoll(env, nullptr, 10));
   }();
   return max_padding;
 }
@@ -44,8 +46,8 @@ int64_t capture_fa3_max_padding_tokens() {
 #include "core/common/global_flags.h"
 #include "core/framework/config/execution_config.h"
 #include "core/kernels/musa/gdn_ops.h"
-#include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/global_capture_instance.h"
+#include "core/kernels/musa/musa_ops_api.h"
 
 namespace xllm {
 namespace kernel {
@@ -67,7 +69,8 @@ void AttentionRunner::run_capture(
     torch::Tensor output,
     std::optional<torch::Tensor>& output_lse,
     uint32_t padded_num_tokens) {
-  // plan_info is supplied per replay via AttentionReplayParams; not stored here.
+  // plan_info is supplied per replay via AttentionReplayParams; not stored
+  // here.
   (void)plan_info;
 
   ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
@@ -144,17 +147,16 @@ void AttentionRunner::run_chunked_prefill_capture(
       .temporarily_begin_graph();
 }
 
-void AttentionRunner::run_fa3_prefill_capture(
-    torch::Tensor query,
-    torch::Tensor key,
-    torch::Tensor value,
-    int64_t max_seqlen_q,
-    int64_t max_seqlen_k,
-    int64_t window_left,
-    int64_t window_right,
-    double sm_scale,
-    torch::Tensor output,
-    torch::Tensor output_lse) {
+void AttentionRunner::run_fa3_prefill_capture(torch::Tensor query,
+                                              torch::Tensor key,
+                                              torch::Tensor value,
+                                              int64_t max_seqlen_q,
+                                              int64_t max_seqlen_k,
+                                              int64_t window_left,
+                                              int64_t window_right,
+                                              double sm_scale,
+                                              torch::Tensor output,
+                                              torch::Tensor output_lse) {
   // FA3 is launched outside the graph during replay. End the current graph
   // segment before storing its tensors, then resume capture for downstream
   // layers; this is the same sequencing used by the FlashInfer runner.
@@ -198,22 +200,18 @@ void AttentionRunner::run_replay(const AttentionReplayParams& params) {
     CHECK(output_lse_.is_contiguous())
         << "FA3 prefill replay requires a contiguous output LSE buffer";
     const int64_t num_heads = output_lse_.size(0);
-    const int64_t required_lse_elements =
-        num_heads * params.actual_num_tokens;
+    const int64_t required_lse_elements = num_heads * params.actual_num_tokens;
     CHECK_GE(output_lse_.numel(), required_lse_elements);
-    torch::Tensor output_lse =
-        output_lse_.view({-1})
-            .narrow(/*dim=*/0,
-                    /*start=*/0,
-                    /*length=*/required_lse_elements)
-            .view({num_heads, params.actual_num_tokens});
+    torch::Tensor output_lse = output_lse_.view({-1})
+                                   .narrow(/*dim=*/0,
+                                           /*start=*/0,
+                                           /*length=*/required_lse_elements)
+                                   .view({num_heads, params.actual_num_tokens});
 
-    const int64_t max_seqlen_q = params.max_seqlen_q > 0
-                                     ? params.max_seqlen_q
-                                     : max_seqlen_q_;
-    const int64_t max_seqlen_k = params.max_seqlen_k > 0
-                                     ? params.max_seqlen_k
-                                     : max_seqlen_k_;
+    const int64_t max_seqlen_q =
+        params.max_seqlen_q > 0 ? params.max_seqlen_q : max_seqlen_q_;
+    const int64_t max_seqlen_k =
+        params.max_seqlen_k > 0 ? params.max_seqlen_k : max_seqlen_k_;
     CHECK_GT(max_seqlen_q, 0);
     CHECK_GT(max_seqlen_k, 0);
 
@@ -301,8 +299,7 @@ void AttentionRunner::run_gdn_prefill_capture(torch::Tensor query,
                                               torch::Tensor final_state,
                                               torch::Tensor kkt_output,
                                               float scale) {
-  auto& capture =
-      ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance();
+  auto& capture = ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance();
   capture.temporarily_end_graph();
   query_ = std::move(query);
   key_ = std::move(key);
@@ -322,8 +319,8 @@ void AttentionRunner::run_gdn_prefill_capture(torch::Tensor query,
 void AttentionRunner::run_gdn_prefill_replay(
     const AttentionReplayParams& params) {
   const torch::Tensor& live_cu = params.gdn_cu_seq_lens.defined()
-                                    ? params.gdn_cu_seq_lens
-                                    : params.q_cu_seq_lens;
+                                     ? params.gdn_cu_seq_lens
+                                     : params.q_cu_seq_lens;
   const torch::Tensor& kkt_cu = params.gdn_kkt_cu_seq_lens.defined()
                                     ? params.gdn_kkt_cu_seq_lens
                                     : live_cu;
@@ -605,6 +602,6 @@ void batch_prefill_with_optional_piecewise_capture(
                 output_lse);
 }
 
-}
-}
-}
+}  // namespace cuda
+}  // namespace kernel
+}  // namespace xllm

@@ -15,12 +15,12 @@ limitations under the License.
 
 #include "layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 
-#include "kernels/musa/musa_tvmffi_stream.h"
-#include "util/prefill_breakdown.h"
-
 #include <algorithm>
 #include <optional>
 #include <tuple>
+
+#include "kernels/musa/musa_tvmffi_stream.h"
+#include "util/prefill_breakdown.h"
 
 namespace xllm {
 namespace layer {
@@ -70,13 +70,13 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
   const bool use_qwen35_moe =
       is_moe_layer && model_args.model_type() == "qwen3_5_moe_text";
   if (use_qwen35_moe) {
-    moe_mlp_ = register_module(
-        "mlp",
-        Qwen3_5MusaFusedMoE(model_args,
-                            FusedMoEArgs{.is_gated = true},
-                            quant_args,
-                            parallel_args,
-                            options));
+    moe_mlp_ =
+        register_module("mlp",
+                        Qwen3_5MusaFusedMoE(model_args,
+                                            FusedMoEArgs{.is_gated = true},
+                                            quant_args,
+                                            parallel_args,
+                                            options));
   } else {
     mlp_ = register_module("mlp",
                            DenseMLP(model_args.hidden_size(),

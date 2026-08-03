@@ -17,8 +17,8 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include "common/flash_comm1_context.h"
 #include "kernels/ops_api.h"
-#include "platform/device.h"
 #include "platform/platform.h"
 #include "util/prefill_breakdown.h"
 
@@ -35,12 +35,14 @@ DenseMLPImpl::DenseMLPImpl(int64_t hidden_size,
                            ProcessGroup* process_group,
                            const torch::TensorOptions& options,
                            const std::string& module_prefix,
-                           double swiglu_limit)
+                           double swiglu_limit,
+                           bool apply_fc1_sequence_parallel)
     : is_gated_(is_gated),
       intermediate_size_(intermediate_size),
       process_group_(process_group),
       hidden_act_(hidden_act),
-      swiglu_limit_(swiglu_limit) {
+      swiglu_limit_(swiglu_limit),
+      apply_fc1_sequence_parallel_(apply_fc1_sequence_parallel) {
   // Check if using w8a8 smoothquant quantization
   is_smoothquant_ = quant_args.quant_method() == kQuantMethodSmoothquant;
 
@@ -96,60 +98,48 @@ DenseMLPImpl::DenseMLPImpl(int64_t hidden_size,
 }
 
 torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
-  // input shape: [num_tokens, hidden_size]
+  const FlashComm1Context* fc1_ctx = get_current_flash_comm1_context();
+  const bool use_fc1_sequence_parallel =
+      apply_fc1_sequence_parallel_ && fc1_ctx && is_sequence_sharded(*fc1_ctx);
+  torch::Tensor h = hidden_states;
+
+  if (use_fc1_sequence_parallel) {
+    h = gather_sequence(hidden_states, *fc1_ctx);
+  }
+
   torch::Tensor gate_up;
   {
     PrefillBreakdown::Scope gate_scope(PrefillBreakdown::Bucket::kMlpGateUp);
-    gate_up = gate_up_proj_->forward(hidden_states);
+    gate_up = gate_up_proj_->forward(h);
   }
 
   if (is_smoothquant_) {
-    // For w8a8 quantization, the active operation is fused with the down_proj
-    PrefillBreakdown::Scope down_scope(PrefillBreakdown::Bucket::kMlpDown);
+    if (use_fc1_sequence_parallel) {
+      return down_proj_->forward(gate_up,
+                                 row_parallel_reduce_mode_for_fc1(*fc1_ctx));
+    }
     return down_proj_->forward(gate_up);
-  } else {
-    torch::Tensor output;
-    if (!Platform::is_npu()) {
-      const int64_t batch_size = gate_up.size(0);
-      const int64_t out_features =
-          intermediate_size_ / process_group_->world_size();
-      // Reuse a persistent activation-output scratch instead of allocating a
-      // fresh `torch::empty` per call. With the CUDA caching allocator this
-      // already returns the same block most of the time, but we still save
-      // ~1us of tensor-construction / refcount / stream-binding overhead per
-      // layer per token (64 layers * ~16 tok/s ~ 1 ms/s reclaimed at TPOT
-      // scale on Qwen3.5-27B) and -- more importantly -- the device pointer
-      // is now stable across CUDA-graph captures and replays.
-      //
-      // Cap at kActOutputBufMaxRows so prefill (large M) does not grow the
-      // buffer to prefill-batch size and hold that memory permanently across
-      // all 64 layers. Large-batch calls fall back to eager torch::empty,
-      // which the caching allocator recycles anyway.
-      constexpr int64_t kActOutputBufMaxRows = 128;
-      if (batch_size <= kActOutputBufMaxRows) {
-        if (!act_output_cache_.defined() ||
-            act_output_cache_.size(0) < batch_size ||
-            act_output_cache_.size(-1) != out_features ||
-            act_output_cache_.scalar_type() != gate_up.scalar_type() ||
-            act_output_cache_.device() != gate_up.device()) {
-          act_output_cache_ =
-              torch::empty({batch_size, out_features}, gate_up.options());
-        }
-        // narrow() returns a contiguous metadata-only view of the leading
-        // `batch_size` rows; down_proj_'s GEMM accepts it as-is.
-        output = act_output_cache_.narrow(/*dim=*/0, /*start=*/0, batch_size);
-      } else {
-        output = torch::empty({batch_size, out_features}, gate_up.options());
-      }
-    }
-
-    {
-      PrefillBreakdown::Scope act_scope(PrefillBreakdown::Bucket::kMlpAct);
-      act_->forward(gate_up, output);
-    }
-    PrefillBreakdown::Scope down_scope(PrefillBreakdown::Bucket::kMlpDown);
-    return down_proj_->forward(output);
   }
+
+  torch::Tensor output;
+  if (!Platform::is_npu()) {
+    const int64_t batch_size = gate_up.sizes()[0];
+    output = torch::empty(
+        {batch_size, intermediate_size_ / process_group_->world_size()},
+        gate_up.options());
+  }
+
+  {
+    PrefillBreakdown::Scope act_scope(PrefillBreakdown::Bucket::kMlpAct);
+    act_->forward(gate_up, output);
+  }
+
+  if (use_fc1_sequence_parallel) {
+    return down_proj_->forward(output,
+                               row_parallel_reduce_mode_for_fc1(*fc1_ctx));
+  }
+  PrefillBreakdown::Scope down_scope(PrefillBreakdown::Bucket::kMlpDown);
+  return down_proj_->forward(output);
 }
 
 void DenseMLPImpl::load_state_dict(const StateDict& state_dict) {

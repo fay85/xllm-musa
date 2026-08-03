@@ -26,11 +26,6 @@ limitations under the License.
 
 #include "shared_vmm_allocator.h"
 
-#if defined(USE_MUSA)
-#pragma push_macro("cuda")
-#undef cuda
-#endif
-
 namespace xllm {
 
 /**
@@ -249,17 +244,19 @@ class VMMTorchAllocator
     return nullptr;
   }
 
-#if TORCH_VERSION_MAJOR >= 2 && TORCH_VERSION_MINOR >= 10
+#if (TORCH_VERSION_MAJOR >= 2 && TORCH_VERSION_MINOR >= 10) || defined(USE_MACA)
   void emptyCache(at::cuda::MempoolId_t /*mempool_id*/ = {0, 0}) override {
     LOG(FATAL) << "VMMTorchAllocator::emptyCache() called unexpectedly!";
   }
 
+#if TORCH_VERSION_MAJOR >= 2 && TORCH_VERSION_MINOR >= 10
   std::vector<c10::cuda::CUDACachingAllocator::StreamSegmentSize>
   getExpandableSegmentSizes(c10::DeviceIndex /*device*/) override {
     LOG(FATAL) << "VMMTorchAllocator::getExpandableSegmentSizes() called "
                   "unexpectedly!";
     return {};
   }
+#endif  // TORCH_VERSION_MAJOR >= 2 && TORCH_VERSION_MINOR >= 10
 
   c10::cuda::CUDACachingAllocator::SnapshotInfo snapshot(
       at::cuda::MempoolId_t /*mempool_id*/ = {0, 0}) override {
@@ -304,10 +301,6 @@ class VMMTorchAllocator
   size_t total_allocated_ = 0;  // Total bytes allocated (for logging)
   size_t alloc_count_ = 0;      // Number of allocations (for logging)
 };
-
-#if defined(USE_MUSA)
-#pragma pop_macro("cuda")
-#endif
 
 }  // namespace xllm
 

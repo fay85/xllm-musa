@@ -20,13 +20,14 @@ limitations under the License.
 
 #include <algorithm>
 #include <atomic>
-#include <cstdlib>
 #include <cctype>
+#include <cstdlib>
 
+#include "core/layers/common/quant_utils.h"
+#include "core/util/prefill_breakdown.h"
 #include "framework/parallel_state/parallel_args.h"
 #include "framework/parallel_state/parallel_state.h"
 #include "kernels/ops_api.h"
-#include "core/util/prefill_breakdown.h"
 
 namespace xllm {
 namespace layer {
@@ -36,40 +37,12 @@ namespace {
 thread_local PiecewiseGraphMatmulBufferPool*
     s_piecewise_graph_matmul_buffer_pool = nullptr;
 
-// ============================================================================
-// Persistent Matmul Output Buffer (CUDA-graph capture safety)
-// ============================================================================
-// On USE_CUDA + USE_MUSA, F::linear inside cuda::matmul calls at::empty
-// to allocate the output tensor. During MUSA CUDA-graph capture, that
-// allocation surfaces as
-//   "MUSA error: operation not permitted when stream is capturing"
-// because torch_musa's allocator does not honor c10::cuda::MemPoolContext set
-// by xLLM's graph executor (unlike libtorch's c10 CUDA allocator that sglang
-// relies on).
-//
-// We sidestep the problem by pre-allocating the matmul output once during the
-// pre-capture warmup pass and re-using the same buffer in subsequent
-// captured forwards via at::mm_out / at::addmm_out. This requires:
-//   1. The buffer is allocated during the FIRST warmup forward (still on the
-//      capture stream but BEFORE graph_.capture_begin()), then freed by the
-//      caching allocator on the next stream sync, and re-acquired (same
-//      address) for the captured forward.
-//   2. Captures occur largest-bucket-first so the buffer never grows after a
-//      smaller-bucket graph has been captured. For Qwen3.5-27B with
-//      MAX_SEQS_PER_BATCH=4 the only decode bucket is 4, so this is
-//      trivially satisfied. For configs with multiple decode buckets the
-//      executor must warm up the max bucket first (sglang's
-//      capture_one_batch_size does this implicitly via reverse order).
-//
-// Decode buckets are kept small and use one grow-only buffer per linear module.
-// Piecewise prefill redirects all shapes to the graph-owned pool below.
 constexpr int64_t kMatmulOutputBufMaxRows = 128;
 
-inline void maybe_set_persistent_output_buf(
-    xllm::kernel::MatmulParams& params,
-    MatmulOutputBuffers& output_buffers,
-    const torch::Tensor& input,
-    const torch::Tensor& weight) {
+inline void maybe_set_persistent_output_buf(xllm::kernel::MatmulParams& params,
+                                            MatmulOutputBuffers& output_buffers,
+                                            const torch::Tensor& input,
+                                            const torch::Tensor& weight) {
   params.output_buf = output_buffers.get(input, weight);
 }
 
@@ -102,6 +75,10 @@ inline float compute_max_scale(const std::vector<float>& scales) {
 inline bool is_unfused_checkpoint(const std::vector<float>& scales) {
   return scales.size() > 1 &&
          scales.back() > std::numeric_limits<float>::lowest();
+}
+
+bool is_fp8_dtype(torch::ScalarType dtype) {
+  return dtype == torch::kFloat8_e4m3fn || dtype == torch::kFloat8_e5m2;
 }
 
 // Realigns FP8 partitions to a unified global scale to enable fusion.
@@ -269,8 +246,8 @@ torch::Tensor dequantize_fp8_block_weight(const torch::Tensor& fp8_weight,
   if (n % block_n == 0 && k % block_k == 0) {
     auto w = fp8_weight.to(torch::kBFloat16)
                  .reshape({n_tiles, block_n, k_tiles, block_k});
-    auto s = weight_scale_inv.to(torch::kBFloat16)
-                 .reshape({n_tiles, 1, k_tiles, 1});
+    auto s =
+        weight_scale_inv.to(torch::kBFloat16).reshape({n_tiles, 1, k_tiles, 1});
     return (w * s).reshape({n, k});
   }
   auto expanded = weight_scale_inv.repeat_interleave(block_n, /*dim=*/0)
@@ -301,13 +278,16 @@ torch::Tensor block_fp8_dequant_forward(
     if (idx < 24) {
       auto sf = weight_scale_inv.to(torch::kFloat32);
       auto wf = weight_bf16.to(torch::kFloat32);
-      LOG(INFO) << "[FP8 dequant #" << idx << "] w=" << weight_fp8.sizes() << " "
-                << weight_fp8.scalar_type() << ", scale=" << weight_scale_inv.sizes()
-                << " " << weight_scale_inv.scalar_type() << " defined="
-                << weight_scale_inv.defined() << ", scale[min="
-                << sf.min().item<float>() << ",max=" << sf.max().item<float>()
-                << ",mean=" << sf.mean().item<float>() << "], dequant[min="
-                << wf.min().item<float>() << ",max=" << wf.max().item<float>()
+      LOG(INFO) << "[FP8 dequant #" << idx << "] w=" << weight_fp8.sizes()
+                << " " << weight_fp8.scalar_type()
+                << ", scale=" << weight_scale_inv.sizes() << " "
+                << weight_scale_inv.scalar_type()
+                << " defined=" << weight_scale_inv.defined()
+                << ", scale[min=" << sf.min().item<float>()
+                << ",max=" << sf.max().item<float>()
+                << ",mean=" << sf.mean().item<float>()
+                << "], dequant[min=" << wf.min().item<float>()
+                << ",max=" << wf.max().item<float>()
                 << ",std=" << wf.std().item<float>() << "]";
     }
   }
@@ -346,8 +326,8 @@ torch::Tensor block_fp8_native_forward(
     input_2d = input.reshape({-1, k}).contiguous();
   }
 
-  // Fused per-token-group dynamic FP8 activation quantization (absmax / 448) via
-  // the MUSA-native kernel: one pass produces a_fp8 [M,K] e4m3 and a_scale
+  // Fused per-token-group dynamic FP8 activation quantization (absmax / 448)
+  // via the MUSA-native kernel: one pass produces a_fp8 [M,K] e4m3 and a_scale
   // [M, K/128] fp32 (K-major), matching the mate groupwise GEMM (1,128,128).
   torch::Tensor a_fp8;
   torch::Tensor a_scale;
@@ -361,10 +341,8 @@ torch::Tensor block_fp8_native_forward(
   params.a = a_fp8;
   params.b = weight_fp8;
   params.a_scale = a_scale;
-  CHECK_EQ(weight_scale_inv.scalar_type(), torch::kFloat32)
-      << "native block-fp8 GEMM requires FP32 weight scales";
-  CHECK(weight_scale_inv.is_contiguous())
-      << "native block-fp8 GEMM requires contiguous weight scales";
+  CHECK_EQ(weight_scale_inv.scalar_type(), torch::kFloat32);
+  CHECK(weight_scale_inv.is_contiguous());
   params.b_scale = weight_scale_inv;
   params.output_dtype = (input.scalar_type() == torch::kFloat16)
                             ? torch::kFloat16
@@ -380,16 +358,15 @@ torch::Tensor block_fp8_native_forward(
   return out.reshape(in_shape);
 }
 
-// Dispatch the block-fp8 linear forward. Native mate/muDNN groupwise GEMM is the
-// default; set XLLM_FP8_DEQUANT=1 to fall back to the semi-FP8 dequant-to-BF16
-// path (slower; kept for debugging / numerical bisection only).
-torch::Tensor block_fp8_forward(
-    const torch::Tensor& input,
-    const torch::Tensor& weight_fp8,
-    const torch::Tensor& weight_scale_inv,
-    const std::vector<int64_t>& weight_block_size,
-    const std::optional<torch::Tensor>& bias,
-    MatmulOutputBuffers& output_buffers) {
+// Dispatch the block-fp8 linear forward. Native mate/muDNN groupwise GEMM is
+// the default; set XLLM_FP8_DEQUANT=1 to fall back to the semi-FP8
+// dequant-to-BF16 path (slower; kept for debugging / numerical bisection only).
+torch::Tensor block_fp8_forward(const torch::Tensor& input,
+                                const torch::Tensor& weight_fp8,
+                                const torch::Tensor& weight_scale_inv,
+                                const std::vector<int64_t>& weight_block_size,
+                                const std::optional<torch::Tensor>& bias,
+                                MatmulOutputBuffers& output_buffers) {
   static const bool use_dequant = std::getenv("XLLM_FP8_DEQUANT") != nullptr;
   if (use_dequant) {
     return block_fp8_dequant_forward(input,
@@ -406,52 +383,8 @@ torch::Tensor block_fp8_forward(
                                   bias,
                                   output_buffers);
 }
-
-void resolve_weight_quant_method_for_linear_load(
-    const QuantArgs& quant_args,
-    const StateDict& state_dict,
-    const std::vector<std::string>* local_prefixes,
-    std::optional<std::string>& resolved_weight_quant_method) {
-  const auto prefixes =
-      local_prefixes == nullptr ? std::vector<std::string>{} : *local_prefixes;
-  auto resolved =
-      quant_args.get_quant_method_from_prefixes(state_dict, prefixes);
-  if (resolved.has_value()) {
-    resolved_weight_quant_method = to_lower_copy(resolved.value());
-    return;
-  }
-  if (quant_args.is_compressed_tensors_w8a8_dynamic()) {
-    bool is_w8a8_dynamic = false;
-    if (prefixes.empty()) {
-      torch::Tensor weight = state_dict.get_tensor("weight");
-      is_w8a8_dynamic = state_dict.has("weight_scale") && weight.defined() &&
-                        weight.scalar_type() == torch::kInt8;
-    } else {
-      is_w8a8_dynamic = true;
-      for (const std::string& prefix : prefixes) {
-        torch::Tensor weight = state_dict.get_tensor(prefix + "weight");
-        if (!state_dict.has(prefix + "weight_scale") || !weight.defined() ||
-            weight.scalar_type() != torch::kInt8) {
-          is_w8a8_dynamic = false;
-          break;
-        }
-      }
-    }
-    if (is_w8a8_dynamic) {
-      resolved_weight_quant_method = "w8a8_dynamic";
-      return;
-    }
-  }
-  if (!quant_args.quant_descs().empty()) {
-    LOG(WARNING) << "[LinearLoad][QuantMethod] quant_descs is not empty but "
-                    "quant method was not resolved from state_dict prefixes. "
-                    "state_dict.prefix="
-                 << state_dict.prefix();
-  }
-  resolved_weight_quant_method = std::nullopt;
-}
-
 bool is_w8a8_dynamic_quant(
+
     const std::optional<std::string>& resolved_weight_quant_method) {
   return resolved_weight_quant_method.has_value() &&
          resolved_weight_quant_method.value() == "w8a8_dynamic";
@@ -461,6 +394,48 @@ bool is_w8a8_quant(
     const std::optional<std::string>& resolved_weight_quant_method) {
   return resolved_weight_quant_method.has_value() &&
          resolved_weight_quant_method.value() == "w8a8";
+}
+
+bool wants_mmrs(RowParallelReduceMode reduce_mode) {
+  return reduce_mode == RowParallelReduceMode::MATMUL_REDUCE_SCATTER;
+}
+
+void log_mmrs_quant_skip(RowParallelReduceMode reduce_mode,
+                         const FlashComm1Context* fc1_ctx,
+                         const char* quant_path,
+                         const torch::Tensor& input) {
+  if (!wants_mmrs(reduce_mode)) {
+    return;
+  }
+  LOG_FIRST_N(WARNING, 16)
+      << "FC1 MMRS skipped in row-parallel " << quant_path
+      << " path: fused matmul_reduce_scatter is currently wired only for "
+         "non-quant linear. input="
+      << input.sizes() << ", sequence_sharded="
+      << (fc1_ctx != nullptr && is_sequence_sharded(*fc1_ctx))
+      << ", enable_mmrs_fusion="
+      << (fc1_ctx != nullptr && fc1_ctx->enable_mmrs_fusion);
+}
+
+bool is_fp8_channelwise_w8a8(const QuantArgs& quant_args) {
+#if defined(USE_DCU)
+  // Compressed-tensors FP8 W8A8 currently pairs dynamic activations with
+  // per-output-channel weight scales on DCU.
+  return quant_args.quant_method() == kQuantMethodFp8 &&
+         quant_args.activation_dynamic();
+#else
+  (void)quant_args;
+  return false;
+#endif
+}
+
+void check_fp8_activation_dynamic_supported(const QuantArgs& quant_args) {
+  if (!quant_args.activation_dynamic()) {
+    return;
+  }
+  CHECK(is_fp8_channelwise_w8a8(quant_args))
+      << "DCU FP8 currently supports only compressed-tensors dynamic "
+         "channelwise W8A8.";
 }
 
 torch::Dtype get_w8a8_deq_scale_dtype(const torch::TensorOptions& options) {
@@ -664,37 +639,6 @@ torch::Tensor npu_w8a8_linear_forward(
   return xllm::kernel::quant_matmul(quant_matmul_params);
 }
 
-torch::Tensor npu_w8a8_dynamic_linear_forward(
-    const torch::Tensor& input,
-    const torch::Tensor& weight,
-    const torch::Tensor& weight_scale,
-    const std::optional<torch::Tensor>& bias,
-    at::ScalarType output_dtype) {
-  xllm::kernel::NpuQuantizeParams quant_params;
-  quant_params.input = input;
-  // quant_params.dst_type = at::kChar;
-
-  torch::Tensor quantized_input;
-  std::optional<torch::Tensor> pertoken_scale;
-  std::tie(quantized_input, pertoken_scale) =
-      xllm::kernel::dynamic_quant(quant_params);
-  CHECK(pertoken_scale.has_value() && pertoken_scale->defined())
-      << "dynamic_quant must return per-token scale for w8a8_dynamic.";
-
-  xllm::kernel::QuantMatmulParams quant_matmul_params;
-  quant_matmul_params.x1 = quantized_input;
-  quant_matmul_params.x2 = weight;
-  quant_matmul_params.transpose2 = true;
-  quant_matmul_params.scale = weight_scale;
-  quant_matmul_params.pertoken_scale = pertoken_scale;
-  quant_matmul_params.output_dtype = output_dtype;
-  if (bias.has_value() && bias->defined()) {
-    quant_matmul_params.bias = bias;
-  }
-  auto output = xllm::kernel::quant_matmul(quant_matmul_params);
-  return output;
-}
-
 #if defined(USE_DCU)
 torch::Tensor dcu_w8a8_dynamic_linear_forward(
     const torch::Tensor& input,
@@ -726,7 +670,6 @@ torch::Tensor dcu_w8a8_dynamic_linear_forward(
 #endif  // USE_DCU
 
 }  // namespace
-
 torch::Tensor PiecewiseGraphMatmulBufferPool::get_tensor(
     std::vector<torch::Tensor>& buffers,
     c10::IntArrayRef sizes,
@@ -740,16 +683,14 @@ torch::Tensor PiecewiseGraphMatmulBufferPool::get_tensor(
     }
   }
   CHECK(!frozen_) << "Piecewise graph " << name
-                  << " shape was not prepared during eager warmup (rank="
-                  << sizes.size() << ")";
+                  << " shape was not prepared during eager warmup";
   torch::Tensor buffer = torch::empty(sizes, options);
   buffers.emplace_back(buffer);
   return buffer;
 }
 
-torch::Tensor PiecewiseGraphMatmulBufferPool::get(
-    const torch::Tensor& input,
-    const torch::Tensor& weight) {
+torch::Tensor PiecewiseGraphMatmulBufferPool::get(const torch::Tensor& input,
+                                                  const torch::Tensor& weight) {
   CHECK_EQ(input.dim(), 2);
   CHECK_EQ(weight.dim(), 2);
   return get_tensor(output_bufs_,
@@ -787,8 +728,8 @@ torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_value(
 
 torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_output(
     const torch::Tensor& input) {
-  return get_tensor(gdn_output_bufs_, input.sizes(), input.options(),
-                    "GDN output");
+  return get_tensor(
+      gdn_output_bufs_, input.sizes(), input.options(), "GDN output");
 }
 
 torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_gate(
@@ -826,9 +767,10 @@ torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_final_state(
 torch::Tensor PiecewiseGraphMatmulBufferPool::get_gdn_kkt(
     const torch::Tensor& key,
     int64_t num_v_heads) {
-  const std::vector<int64_t> sizes = {
-      1, key.size(1), num_v_heads, 64};
-  return get_tensor(gdn_kkt_bufs_, sizes, key.options(), "GDN KKT");
+  return get_tensor(gdn_kkt_bufs_,
+                    {1, key.size(1), num_v_heads, 64},
+                    key.options(),
+                    "GDN KKT");
 }
 
 void PiecewiseGraphMatmulBufferPool::freeze() { frozen_ = true; }
@@ -855,7 +797,6 @@ std::optional<torch::Tensor> MatmulOutputBuffers::get(
   if (input.dim() != 2 || weight.dim() != 2 || input.size(0) <= 0) {
     return std::nullopt;
   }
-
   if (auto* pool = PiecewiseGraphMatmulBufferScope::current_buffer_pool();
       pool != nullptr) {
     return pool->get(input, weight);
@@ -877,7 +818,7 @@ std::optional<torch::Tensor> MatmulOutputBuffers::get(
                                     : rows;
     decode_output_buf_ = torch::empty({target_rows, columns}, input.options());
   }
-  return decode_output_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/rows);
+  return decode_output_buf_.narrow(0, 0, rows);
 }
 
 ColumnParallelLinearImpl::ColumnParallelLinearImpl(const ModelContext& context)
@@ -887,7 +828,9 @@ ColumnParallelLinearImpl::ColumnParallelLinearImpl(const ModelContext& context)
           /*bias=*/false,
           /*gather_output=*/true,
           QuantArgs{},  // do not use quantization for lm_head
-          context.get_parallel_args().tp_group_,
+          context.get_parallel_args().lm_head_group_ != nullptr
+              ? context.get_parallel_args().lm_head_group_
+              : context.get_parallel_args().tp_group_,
           context.get_tensor_options()) {}
 
 // Linear layer with column parallelism.
@@ -941,9 +884,8 @@ ColumnParallelLinearImpl::ColumnParallelLinearImpl(
     // output dtype for scaled_matmul
     output_dtype_ = c10::typeMetaToScalarType(options.dtype());
   } else if (is_block_fp8_quant(quant_args_)) {
-    // Block-wise FP8 (DeepSeek-style): FP8 weight [N,K] + FP32 inverse-scale
-    // grid [ceil(N/bn), ceil(K/bk)]. Checkpoint BF16 scales are converted once
-    // while loading so each forward can pass the GEMM-ready scale directly.
+    // Block-wise FP8 (DeepSeek-style): FP8 weight [N,K] + BF16 inverse-scale
+    // grid [ceil(N/bn), ceil(K/bk)]. Scale kept BF16 (checkpoint-native).
     const int64_t block_n = quant_args_.weight_block_size()[0];
     const int64_t block_k = quant_args_.weight_block_size()[1];
     weight_ = register_parameter(
@@ -951,7 +893,8 @@ ColumnParallelLinearImpl::ColumnParallelLinearImpl(
         torch::empty({out_features_per_partition, in_features},
                      options.dtype(torch::kFloat8_e4m3fn)),
         /*requires_grad=*/false);
-    const int64_t n_tiles = (out_features_per_partition + block_n - 1) / block_n;
+    const int64_t n_tiles =
+        (out_features_per_partition + block_n - 1) / block_n;
     const int64_t k_tiles = (in_features + block_k - 1) / block_k;
     weight_scale_inv_ = register_parameter(
         "weight_scale_inv",
@@ -964,11 +907,12 @@ ColumnParallelLinearImpl::ColumnParallelLinearImpl(
         torch::empty({out_features_per_partition, in_features},
                      options.dtype(torch::kFloat8_e4m3fn)),
         /*requires_grad=*/false);
-    // Weight scale is per-tensor (scalar)
-    weight_scale_ =
-        register_parameter("weight_scale",
-                           torch::empty({1}, options.dtype(torch::kFloat32)),
-                           /*requires_grad=*/false);
+    const int64_t weight_scale_size =
+        is_fp8_channelwise_w8a8(quant_args_) ? out_features_per_partition : 1;
+    weight_scale_ = register_parameter(
+        "weight_scale",
+        torch::empty({weight_scale_size}, options.dtype(torch::kFloat32)),
+        /*requires_grad=*/false);
     // For static activation quantization, input_scale is pre-computed
     if (!quant_args_.activation_dynamic()) {
       input_scale_ =
@@ -1052,9 +996,6 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
     output = xllm::kernel::scaled_matmul(matmul_params);
   } else if (is_block_fp8_quant(quant_args_)) {
     if (weight_.scalar_type() == torch::kFloat8_e4m3fn) {
-      // Native block-FP8 GEMM (per-token-group activation quant + mate/muDNN
-      // groupwise matmul); XLLM_FP8_DEQUANT=1 forces the slower
-      // dequant-to-BF16 fallback.
       output = block_fp8_forward(input,
                                  weight_,
                                  weight_scale_inv_,
@@ -1062,8 +1003,6 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
                                  bias,
                                  output_buffers_);
     } else {
-      // Module not actually quantized (no weight_scale_inv in checkpoint):
-      // weight was re-registered to BF16 at load; run the standard matmul.
       xllm::kernel::MatmulParams matmul_params;
       matmul_params.a = input;
       matmul_params.b = weight_;
@@ -1073,9 +1012,7 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
       output = xllm::kernel::matmul(matmul_params);
     }
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
-    CHECK(!quant_args_.activation_dynamic())
-        << "FP8 quantization does not support activation_dynamic yet";
-
+    check_fp8_activation_dynamic_supported(quant_args_);
     auto scale = input_scale_.defined()
                      ? std::optional<torch::Tensor>(input_scale_)
                      : std::nullopt;
@@ -1205,7 +1142,11 @@ void ColumnParallelLinearImpl::load_state_dict(const StateDict& state_dict) {
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
     // FP8 quantization: load FP8 weight and scales
     LOAD_SHARDED_WEIGHT(weight, 0);
-    LOAD_WEIGHT(weight_scale);
+    if (is_fp8_channelwise_w8a8(quant_args_)) {
+      LOAD_SHARDED_WEIGHT(weight_scale, 0);
+    } else {
+      LOAD_WEIGHT(weight_scale);
+    }
     // For static activation quantization, load input_scale
     if (!quant_args_.activation_dynamic() && input_scale_.defined()) {
       LOAD_WEIGHT(input_scale);
@@ -1283,14 +1224,6 @@ void ColumnParallelLinearImpl::load_state_dict(
     LOAD_FUSED_WEIGHT(qweight, 0);
     LOAD_FUSED_WEIGHT(per_channel_scale, 0);
   } else if (is_block_fp8_quant(quant_args_)) {
-    // Block-wise FP8 fused (e.g. gate_proj+up_proj): concatenate the FP8
-    // weights and their N-block inverse-scale grids along dim 0. Each partition
-    // N is a multiple of block_n, so the grids concatenate cleanly.
-    // See QKVParallelLinearImpl::load_state_dict for why the quantized-vs-BF16
-    // decision must be sticky and based on per-shard weight/scale
-    // co-presence in a single call, not on "the fused accumulator hasn't
-    // finished collecting all sibling shards yet" (siblings may arrive from
-    // different shard files).
     if (!block_fp8_resolved_unquantized_ && !weight_scale_inv_is_loaded_) {
       for (const auto& prefix : prefixes) {
         if (state_dict.has(prefix + "weight") &&
@@ -1309,52 +1242,58 @@ void ColumnParallelLinearImpl::load_state_dict(
     }
     LOAD_FUSED_WEIGHT(weight, 0);
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
-    // FP8 fused layer loading: each partition may have its own per-tensor scale
-    // (unfused checkpoint). We must requantize all partitions with max_scale.
+    if (is_fp8_channelwise_w8a8(quant_args_)) {
+      LOAD_FUSED_WEIGHT(weight, 0);
+      LOAD_FUSED_WEIGHT(weight_scale, 0);
+    } else {
+      // FP8 fused layer loading: each partition may have its own per-tensor
+      // scale (unfused checkpoint). We must requantize all partitions with
+      // max_scale.
 
-    // Step 1: Collect partition info BEFORE LOAD_FUSED_WEIGHT (clears list)
-    Fp8PartitionInfo partition_info;
-    if (!weight_scale_is_loaded_) {
-      for (const auto& prefix : prefixes) {
-        auto scale_tensor = state_dict.get_tensor(prefix + "weight_scale");
-        if (scale_tensor.defined()) {
-          partition_info.scales.push_back(scale_tensor.flatten().item<float>());
-        }
-        auto weight_tensor = state_dict.get_sharded_tensor(
-            prefix + "weight", 0, rank, world_size);
-        if (weight_tensor.defined()) {
-          partition_info.logical_widths.push_back(weight_tensor.size(0));
+      // Step 1: Collect partition info BEFORE LOAD_FUSED_WEIGHT (clears list)
+      Fp8PartitionInfo partition_info;
+      if (!weight_scale_is_loaded_) {
+        for (const auto& prefix : prefixes) {
+          auto scale_tensor = state_dict.get_tensor(prefix + "weight_scale");
+          if (scale_tensor.defined()) {
+            partition_info.scales.push_back(
+                scale_tensor.flatten().item<float>());
+          }
+          auto weight_tensor = state_dict.get_sharded_tensor(
+              prefix + "weight", 0, rank, world_size);
+          if (weight_tensor.defined()) {
+            partition_info.logical_widths.push_back(weight_tensor.size(0));
+          }
         }
       }
-    }
 
-    // Step 2: Load fused weight
-    LOAD_FUSED_WEIGHT(weight, 0);
+      // Step 2: Load fused weight
+      LOAD_FUSED_WEIGHT(weight, 0);
 
-    // Step 3: Requantize if needed (unfused checkpoint case)
-    if (!weight_scale_is_loaded_ && !partition_info.empty()) {
-      float max_scale = compute_max_scale(partition_info.scales);
+      // Step 3: Requantize if needed (unfused checkpoint case)
+      if (!weight_scale_is_loaded_ && !partition_info.empty()) {
+        float max_scale = compute_max_scale(partition_info.scales);
 
-      if (is_unfused_checkpoint(partition_info.scales) && weight_.defined() &&
-          partition_info.logical_widths.size() ==
-              partition_info.scales.size()) {
-        requantize_fp8_weight(weight_,
-                              partition_info.scales,
-                              partition_info.logical_widths,
-                              max_scale);
+        if (is_unfused_checkpoint(partition_info.scales) && weight_.defined() &&
+            partition_info.logical_widths.size() ==
+                partition_info.scales.size()) {
+          requantize_fp8_weight(weight_,
+                                partition_info.scales,
+                                partition_info.logical_widths,
+                                max_scale);
+        }
+
+        weight_scale_.fill_(max_scale);
+        weight_scale_is_loaded_ = true;
       }
 
-      weight_scale_.fill_(max_scale);
-      weight_scale_is_loaded_ = true;
-    }
-
-    // Step 4: Load input_scale for static activation quantization
-    if (!quant_args_.activation_dynamic() && input_scale_.defined() &&
-        !input_scale_is_loaded_) {
-      auto max_input_scale = load_max_input_scale(state_dict, prefixes);
-      if (max_input_scale.defined()) {
-        input_scale_.copy_(max_input_scale.view({1}));
-        input_scale_is_loaded_ = true;
+      // Step 4: Load input_scale for static activation quantization
+      if (input_scale_.defined() && !input_scale_is_loaded_) {
+        auto max_input_scale = load_max_input_scale(state_dict, prefixes);
+        if (max_input_scale.defined()) {
+          input_scale_.copy_(max_input_scale.view({1}));
+          input_scale_is_loaded_ = true;
+        }
       }
     }
   } else if (is_w8a8_quant(resolved_weight_quant_method_)) {
@@ -1515,9 +1454,8 @@ QKVParallelLinearImpl::QKVParallelLinearImpl(
   // Note: torch.nn.functional.linear performs XA^T + b and as a result
   // we allocate the transpose.
   if (is_block_fp8_quant(quant_args_)) {
-    // Block-wise FP8: fused QKV FP8 weight [out,hidden] + FP32 inverse-scale
-    // grid [ceil(out/bn), ceil(hidden/bk)]. Checkpoint BF16 scales are
-    // converted once while loading.
+    // Block-wise FP8: fused QKV FP8 weight [out,hidden] + BF16 inverse-scale
+    // grid [ceil(out/bn), ceil(hidden/bk)].
     const int64_t block_n = quant_args_.weight_block_size()[0];
     const int64_t block_k = quant_args_.weight_block_size()[1];
     weight_ = register_parameter(
@@ -1525,7 +1463,8 @@ QKVParallelLinearImpl::QKVParallelLinearImpl(
         torch::empty({out_features_per_partition, hidden_size},
                      options.dtype(torch::kFloat8_e4m3fn)),
         /*requires_grad=*/false);
-    const int64_t n_tiles = (out_features_per_partition + block_n - 1) / block_n;
+    const int64_t n_tiles =
+        (out_features_per_partition + block_n - 1) / block_n;
     const int64_t k_tiles = (hidden_size + block_k - 1) / block_k;
     weight_scale_inv_ = register_parameter(
         "weight_scale_inv",
@@ -1538,12 +1477,12 @@ QKVParallelLinearImpl::QKVParallelLinearImpl(
         torch::empty({out_features_per_partition, hidden_size},
                      options.dtype(torch::kFloat8_e4m3fn)),
         /*requires_grad=*/false);
-    // Weight scale: create {3} for Q/K/V, will use max() after loading
-    // load separate scales then merge with max
-    weight_scale_ =
-        register_parameter("weight_scale",
-                           torch::empty({3}, options.dtype(torch::kFloat32)),
-                           /*requires_grad=*/false);
+    const int64_t weight_scale_size =
+        is_fp8_channelwise_w8a8(quant_args_) ? out_features_per_partition : 3;
+    weight_scale_ = register_parameter(
+        "weight_scale",
+        torch::empty({weight_scale_size}, options.dtype(torch::kFloat32)),
+        /*requires_grad=*/false);
     // For static activation quantization, input_scale is pre-computed
     // Also create {3} for Q/K/V, will use max() after loading
     if (!quant_args_.activation_dynamic()) {
@@ -1585,9 +1524,6 @@ torch::Tensor QKVParallelLinearImpl::forward(torch::Tensor input) {
   torch::Tensor output;
   if (is_block_fp8_quant(quant_args_)) {
     if (weight_.scalar_type() == torch::kFloat8_e4m3fn) {
-      // Native block-FP8 GEMM on the QKV weight (per-token-group activation
-      // quant + mate/muDNN groupwise matmul); XLLM_FP8_DEQUANT=1 forces the
-      // slower dequant-to-BF16 fallback.
       output = block_fp8_forward(input,
                                  weight_,
                                  weight_scale_inv_,
@@ -1604,13 +1540,7 @@ torch::Tensor QKVParallelLinearImpl::forward(torch::Tensor input) {
       output = xllm::kernel::matmul(matmul_params);
     }
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
-    // FP8 W8A8 quantization
-    CHECK(!quant_args_.activation_dynamic())
-        << "FP8 quantization does not support activation_dynamic yet";
-
-    // Use max of Q/K/V scales as unified scale for fused projection
-    // Note: weight_scale_ and input_scale_ are already scalar tensors
-    // (replaced with max values in load_state_dict)
+    check_fp8_activation_dynamic_supported(quant_args_);
     auto a_scale = input_scale_.defined()
                        ? std::optional<torch::Tensor>(input_scale_)
                        : std::nullopt;
@@ -1693,26 +1623,7 @@ void QKVParallelLinearImpl::load_state_dict(
                           weight_scale_is_loaded_,
                           weight_offset_,
                           weight_offset_is_loaded_});
-  // Block-wise FP8: the checkpoint may deliver the Q/K/V shards for this
-  // fused module across *different* safetensors files (e.g. q_proj in one
-  // shard file, k_proj/v_proj in another). weight_/weight_scale_inv_ are
-  // accumulated incrementally across load_state_dict calls (see
-  // load_fused_weight), so we must decide "is this module actually
-  // quantized in this checkpoint" without waiting for all 3 shards to be
-  // present simultaneously in one call -- otherwise we'd wrongly conclude
-  // "not quantized yet" while e.g. Q's shard is legitimately still pending
-  // and prematurely retype weight_ to BF16, corrupting the accumulator: a
-  // later call that completes accumulation would then numerically cast the
-  // still-quantized (unscaled) FP8 shards into BF16 instead of dequantizing
-  // them, producing garbage attention.
-  //
-  // Instead: each individual shard's own weight_scale_inv (if it exists)
-  // always lives in the same shard file as that shard's own weight tensor
-  // (HF safetensors never splits a single named tensor's data from a
-  // sibling scale it doesn't own). So the first time we observe *any*
-  // prefix's weight present without its own co-located scale, this fused
-  // module is definitively unquantized in this checkpoint -- decide that
-  // once, stickily, and only then retype/reload as BF16.
+
   if (is_block_fp8_quant(quant_args_) && !block_fp8_resolved_unquantized_ &&
       !weight_scale_inv_is_loaded_) {
     for (const auto& prefix : prefixes) {
@@ -1731,14 +1642,17 @@ void QKVParallelLinearImpl::load_state_dict(
   if (bias_.defined()) {
     LOAD_QKV_WEIGHT(bias, 0, num_kv_head_replicas_);
   }
+  // FP8: load weight_scale and input_scale, requantize if needed
   if (is_block_fp8_quant(quant_args_)) {
     if (!block_fp8_resolved_unquantized_) {
-      // Fuse the Q/K/V N-block inverse-scale grids along dim 0 (same
-      // KV-replica handling as the weight); accumulates across shard files
-      // exactly like the weight above.
       LOAD_QKV_WEIGHT(weight_scale_inv, 0, num_kv_head_replicas_);
     }
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
+    if (is_fp8_channelwise_w8a8(quant_args_)) {
+      LOAD_QKV_WEIGHT(weight_scale, 0, num_kv_head_replicas_);
+      return;
+    }
+
     // Build partition info for Q/K/V
     Fp8PartitionInfo partition_info;
     int64_t num_heads_per_partition = num_heads_ / world_size_;
@@ -1918,9 +1832,8 @@ RowParallelLinearImpl::RowParallelLinearImpl(
     // Output dtype for scaled_matmul
     output_dtype_ = c10::typeMetaToScalarType(options.dtype());
   } else if (is_block_fp8_quant(quant_args_)) {
-    // Block-wise FP8: FP8 weight [N, K_pp] + FP32 inverse-scale grid
+    // Block-wise FP8: FP8 weight [N, K_pp] + BF16 inverse-scale grid
     // [ceil(N/bn), ceil(K_pp/bk)]. Row parallel shards input (dim 1).
-    // Checkpoint BF16 scales are converted once while loading.
     const int64_t block_n = quant_args_.weight_block_size()[0];
     const int64_t block_k = quant_args_.weight_block_size()[1];
     weight_ = register_parameter(
@@ -1929,8 +1842,7 @@ RowParallelLinearImpl::RowParallelLinearImpl(
                      options.dtype(torch::kFloat8_e4m3fn)),
         /*requires_grad=*/false);
     const int64_t n_tiles = (out_features + block_n - 1) / block_n;
-    const int64_t k_tiles =
-        (in_features_per_partition + block_k - 1) / block_k;
+    const int64_t k_tiles = (in_features_per_partition + block_k - 1) / block_k;
     weight_scale_inv_ = register_parameter(
         "weight_scale_inv",
         torch::empty({n_tiles, k_tiles}, options.dtype(torch::kFloat32)),
@@ -1942,11 +1854,12 @@ RowParallelLinearImpl::RowParallelLinearImpl(
         torch::empty({out_features, in_features_per_partition},
                      options.dtype(torch::kFloat8_e4m3fn)),
         /*requires_grad=*/false);
-    // Weight scale is per-tensor (scalar)
-    weight_scale_ =
-        register_parameter("weight_scale",
-                           torch::empty({1}, options.dtype(torch::kFloat32)),
-                           /*requires_grad=*/false);
+    const int64_t weight_scale_size =
+        is_fp8_channelwise_w8a8(quant_args_) ? out_features : 1;
+    weight_scale_ = register_parameter(
+        "weight_scale",
+        torch::empty({weight_scale_size}, options.dtype(torch::kFloat32)),
+        /*requires_grad=*/false);
     // For static activation quantization, input_scale is pre-computed
     if (!quant_args_.activation_dynamic()) {
       input_scale_ =
@@ -1979,11 +1892,57 @@ RowParallelLinearImpl::RowParallelLinearImpl(
 }
 
 torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
+  const RowParallelReduceMode reduce_mode =
+      enable_result_reduction_ ? RowParallelReduceMode::ALL_REDUCE
+                               : RowParallelReduceMode::NONE;
+  return forward_impl(input, reduce_mode);
+}
+
+torch::Tensor RowParallelLinearImpl::mmrs_weight_transposed() const {
+  CHECK(weight_.defined()) << "weight is required for MMRS.";
+  const bool valid = mmrs_weight_t_.defined() &&
+                     mmrs_weight_t_.device() == weight_.device() &&
+                     mmrs_weight_t_.scalar_type() == weight_.scalar_type() &&
+                     mmrs_weight_t_.size(0) == weight_.size(1) &&
+                     mmrs_weight_t_.size(1) == weight_.size(0);
+  if (!valid) {
+    mmrs_weight_t_ = weight_.transpose(0, 1).contiguous();
+  }
+  return mmrs_weight_t_;
+}
+
+torch::Tensor RowParallelLinearImpl::forward(
+    torch::Tensor input,
+    RowParallelReduceMode reduce_mode) {
+#if !defined(USE_NPU)
+  reduce_mode = enable_result_reduction_ ? RowParallelReduceMode::ALL_REDUCE
+                                         : RowParallelReduceMode::NONE;
+#endif
+  return forward_impl(input, reduce_mode);
+}
+
+torch::Tensor RowParallelLinearImpl::forward_impl(
+    torch::Tensor input,
+    RowParallelReduceMode reduce_mode) {
+#if defined(USE_NPU)
+  const bool use_fc1_reduce =
+      reduce_mode == RowParallelReduceMode::REDUCE_SCATTER ||
+      reduce_mode == RowParallelReduceMode::MATMUL_REDUCE_SCATTER;
+  const FlashComm1Context* fc1_ctx = get_current_flash_comm1_context();
+#else
+  const bool use_fc1_reduce = false;
+  const FlashComm1Context* fc1_ctx = nullptr;
+#endif
   auto bias = bias_.defined() && rank_ == 0
                   ? std::optional<torch::Tensor>(bias_)
                   : std::nullopt;
+
+  const bool skip_scatter =
+      use_fc1_reduce && fc1_ctx && is_sequence_sharded(*fc1_ctx);
+
   torch::Tensor output;
   if (quant_args_.quant_method() == kQuantMethodSmoothquant) {
+    log_mmrs_quant_skip(reduce_mode, fc1_ctx, "smoothquant", input);
     CHECK(smooth_.defined()) << "smooth is required for smoothquant.";
     CHECK(qweight_.defined()) << "qweight is required for smoothquant.";
     CHECK(per_channel_scale_.defined())
@@ -1992,7 +1951,7 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
     torch::Tensor quantized_input;
     torch::Tensor input_scale;
 
-    if (!input_is_parallelized_) {
+    if (!input_is_parallelized_ && !skip_scatter) {
       input = xllm::parallel_state::scatter(input, process_group_);
     }
 
@@ -2032,13 +1991,10 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
 
     output = xllm::kernel::scaled_matmul(matmul_params);
   } else if (is_block_fp8_quant(quant_args_)) {
-    if (!input_is_parallelized_) {
+    if (!input_is_parallelized_ && !skip_scatter) {
       input = xllm::parallel_state::scatter(input, process_group_);
     }
     if (weight_.scalar_type() == torch::kFloat8_e4m3fn) {
-      // Native block-FP8 GEMM (per-token-group activation quant + mate/muDNN
-      // groupwise matmul); XLLM_FP8_DEQUANT=1 forces the slower
-      // dequant-to-BF16 fallback.
       output = block_fp8_forward(input,
                                  weight_,
                                  weight_scale_inv_,
@@ -2055,11 +2011,10 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
       output = xllm::kernel::matmul(matmul_params);
     }
   } else if (quant_args_.quant_method() == kQuantMethodFp8) {
-    // FP8 W8A8 quantization
-    CHECK(!quant_args_.activation_dynamic())
-        << "FP8 quantization does not support activation_dynamic yet";
+    log_mmrs_quant_skip(reduce_mode, fc1_ctx, "fp8", input);
+    check_fp8_activation_dynamic_supported(quant_args_);
 
-    if (!input_is_parallelized_) {
+    if (!input_is_parallelized_ && !skip_scatter) {
       input = xllm::parallel_state::scatter(input, process_group_);
     }
 
@@ -2069,13 +2024,14 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
     output = fp8_linear_forward(
         input, weight_, weight_scale_, scale, bias, output_dtype_);
   } else if (is_w8a8_quant(resolved_weight_quant_method_)) {
+    log_mmrs_quant_skip(reduce_mode, fc1_ctx, "w8a8", input);
     CHECK(input_scale_is_loaded_ && input_scale_.defined())
         << "input_scale is required for w8a8 quant matmul.";
     CHECK(input_offset_is_loaded_ && input_offset_.defined())
         << "input_offset is required for w8a8 quant matmul.";
     CHECK(deq_scale_is_loaded_ && deq_scale_.defined())
         << "deq_scale is required for w8a8 quant matmul.";
-    if (!input_is_parallelized_) {
+    if (!input_is_parallelized_ && !skip_scatter) {
       input = xllm::parallel_state::scatter(input, process_group_);
     }
     auto quant_bias = quant_bias_is_loaded_ && quant_bias_.defined()
@@ -2089,7 +2045,7 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
                                      quant_bias,
                                      output_dtype_);
   } else if (is_w8a8_dynamic_quant(resolved_weight_quant_method_)) {
-    if (!input_is_parallelized_) {
+    if (!input_is_parallelized_ && !skip_scatter) {
       input = xllm::parallel_state::scatter(input, process_group_);
     }
     auto weight_scale = weight_scale_is_loaded_
@@ -2101,21 +2057,171 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
     output = dcu_w8a8_dynamic_linear_forward(
         input, weight_, weight_scale.value(), bias, output_dtype_);
 #elif defined(USE_NPU)
-    output = npu_w8a8_dynamic_linear_forward(
-        input, weight_, weight_scale.value(), bias, output_dtype_);
+    // FC1 fused int8 MMRS: per-token quantize the (padded) activation, then let
+    // torch_npu fuse matmul + reduce_scatter. Numerically equivalent to the
+    // symmetric w8a8_dynamic path (per-channel weight scale, no weight offset).
+    if (wants_mmrs(reduce_mode) && fc1_ctx && is_sequence_sharded(*fc1_ctx) &&
+        fc1_ctx->enable_mmrs_fusion && !bias.has_value() && input.defined() &&
+        input.dim() == 2 && input.size(0) == fc1_ctx->original_num_tokens) {
+      torch::Tensor mmrs_input = input;
+      if (fc1_ctx->pad_size > 0) {
+        mmrs_input = pad_rows_by_copy(input, fc1_ctx->padded_num_tokens);
+      }
+      xllm::kernel::NpuQuantizeParams q_params;
+      q_params.input = mmrs_input;
+      torch::Tensor q_input;
+      std::optional<torch::Tensor> pertoken_scale;
+      std::tie(q_input, pertoken_scale) = xllm::kernel::dynamic_quant(q_params);
+      if (pertoken_scale.has_value() && pertoken_scale->defined()) {
+        const std::vector<int64_t> output_shape = {
+            fc1_ctx->padded_local_num_tokens, weight_.size(0)};
+        xllm::kernel::MatmulReduceScatterParams mmrs_params;
+        mmrs_params.a = q_input;
+        mmrs_params.b = mmrs_weight_transposed();
+        mmrs_params.bias = std::nullopt;
+        mmrs_params.process_group = process_group_;
+        mmrs_params.comm_mode = fc1_ctx->mmrs_comm_mode;
+        mmrs_params.x1_scale = pertoken_scale->reshape({-1, 1}).to(at::kFloat);
+        mmrs_params.x2_scale =
+            weight_scale.value().reshape({1, -1}).to(at::kFloat);
+        mmrs_params.output_dtype = output_dtype_;
+        try {
+          output = xllm::kernel::matmul_reduce_scatter(mmrs_params);
+        } catch (const c10::Error& error) {
+          LOG_FIRST_N(WARNING, 8)
+              << "FC1 w8a8 MMRS call failed; fallback reduction will run: "
+              << error.what_without_backtrace();
+          output = torch::Tensor();
+        }
+        if (output.defined() &&
+            output.sizes() == torch::IntArrayRef(output_shape)) {
+          return output;
+        }
+        if (output.defined()) {
+          LOG_FIRST_N(WARNING, 8)
+              << "FC1 w8a8 MMRS returned unexpected shape; fallback reduction "
+                 "will run. returned="
+              << output.sizes() << ", expected_local=" << output_shape;
+          output = torch::Tensor();
+        }
+      }
+    }
+    if (!output.defined()) {
+      log_mmrs_quant_skip(reduce_mode, fc1_ctx, "w8a8_dynamic", input);
+      output = npu_w8a8_dynamic_linear_forward(
+          input, weight_, weight_scale.value(), bias, output_dtype_);
+    }
 #endif
   } else {
-    if (!input_is_parallelized_) {
+    if (!input_is_parallelized_ && !skip_scatter) {
       input = xllm::parallel_state::scatter(input, process_group_);
     }
+#if defined(USE_NPU)
+    if (wants_mmrs(reduce_mode) && fc1_ctx && is_sequence_sharded(*fc1_ctx) &&
+        fc1_ctx->enable_mmrs_fusion) {
+      bool can_try_mmrs = input.defined() && weight_.defined() &&
+                          input.dim() == 2 &&
+                          input.size(0) == fc1_ctx->original_num_tokens &&
+                          (!bias.has_value() || fc1_ctx->pad_size == 0);
+      if (can_try_mmrs) {
+        torch::Tensor mmrs_input = input;
+        if (fc1_ctx->pad_size > 0) {
+          mmrs_input = pad_rows_by_copy(input, fc1_ctx->padded_num_tokens);
+        }
+
+        auto output_shape = mmrs_input.sizes().vec();
+        output_shape[0] = fc1_ctx->padded_local_num_tokens;
+        output_shape[1] = weight_.size(0);
+
+        xllm::kernel::MatmulReduceScatterParams mmrs_params;
+        mmrs_params.a = mmrs_input;
+        mmrs_params.b = mmrs_weight_transposed();
+        mmrs_params.bias = bias;
+        mmrs_params.process_group = process_group_;
+        mmrs_params.comm_mode = fc1_ctx->mmrs_comm_mode;
+        try {
+          output = xllm::kernel::matmul_reduce_scatter(mmrs_params);
+        } catch (const c10::Error& error) {
+          LOG_FIRST_N(WARNING, 8)
+              << "FC1 MMRS call failed; fallback reduction will run: "
+              << error.what_without_backtrace();
+          output = torch::Tensor();
+        }
+        if (output.defined() &&
+            output.sizes() == torch::IntArrayRef(output_shape)) {
+          return output;
+        }
+        if (output.defined()) {
+          LOG_FIRST_N(WARNING, 8)
+              << "FC1 MMRS returned non-local shape; fallback reduction will "
+                 "run. input="
+              << input.sizes() << ", weight=" << weight_.sizes()
+              << ", returned_output=" << output.sizes()
+              << ", expected_local_output=" << output_shape;
+          output = torch::Tensor();
+        }
+      } else {
+        LOG_FIRST_N(WARNING, 8)
+            << "FC1 MMRS skipped for unsupported row-parallel shape; fallback "
+               "to matmul + reduce_scatter. input="
+            << input.sizes() << ", weight=" << weight_.sizes()
+            << ", original_num_tokens=" << fc1_ctx->original_num_tokens
+            << ", pad_size=" << fc1_ctx->pad_size
+            << ", has_bias=" << bias.has_value()
+            << ", input_dim=" << input.dim();
+      }
+
+      if (!output.defined()) {
+        xllm::kernel::MatmulParams matmul_params;
+        matmul_params.a = input;
+        matmul_params.b = weight_;
+        maybe_set_persistent_output_buf(
+            matmul_params, output_buffers_, input, weight_);
+        matmul_params.bias = bias;
+        output = xllm::kernel::matmul(matmul_params);
+      }
+    } else {
+      if (wants_mmrs(reduce_mode)) {
+        LOG_FIRST_N(WARNING, 16)
+            << "FC1 MMRS skipped before row-parallel matmul: fc1_ctx="
+            << (fc1_ctx != nullptr) << ", sequence_sharded="
+            << (fc1_ctx != nullptr && is_sequence_sharded(*fc1_ctx))
+            << ", enable_mmrs_fusion="
+            << (fc1_ctx != nullptr && fc1_ctx->enable_mmrs_fusion)
+            << ", reduce_mode=" << static_cast<int>(reduce_mode)
+            << ", input=" << input.sizes();
+      }
+      xllm::kernel::MatmulParams matmul_params;
+      matmul_params.a = input;
+      matmul_params.b = weight_;
+      maybe_set_persistent_output_buf(
+          matmul_params, output_buffers_, input, weight_);
+      matmul_params.bias = bias;
+      output = xllm::kernel::matmul(matmul_params);
+    }
+#else
     xllm::kernel::MatmulParams matmul_params;
     matmul_params.a = input;
     matmul_params.b = weight_;
-    matmul_params.bias = bias;
     maybe_set_persistent_output_buf(
         matmul_params, output_buffers_, input, weight_);
+    matmul_params.bias = bias;
     output = xllm::kernel::matmul(matmul_params);
+#endif
   }
+
+  if (reduce_mode == RowParallelReduceMode::NONE) {
+    return output;
+  }
+
+  if ((reduce_mode == RowParallelReduceMode::REDUCE_SCATTER ||
+       reduce_mode == RowParallelReduceMode::MATMUL_REDUCE_SCATTER) &&
+      fc1_ctx) {
+    FlashComm1Context ctx_copy = *fc1_ctx;
+    ctx_copy.tp_group = process_group_;
+    return maybe_pad_and_reduce(output, ctx_copy, reduce_mode);
+  }
+
   if (enable_result_reduction_ && world_size_ > 1) {
     output = xllm::parallel_state::reduce(output, process_group_);
   }
@@ -2127,6 +2233,8 @@ void RowParallelLinearImpl::load_state_dict(const StateDict& state_dict) {
   if (state_dict.size() == 0) {
     return;
   }
+  // The transposed weight is derived state and must be rebuilt after reload.
+  mmrs_weight_t_ = torch::Tensor();
   const int64_t rank = world_size_ == 1 ? 0 : rank_;
   const int64_t world_size = world_size_;
   resolve_weight_quant_method_for_linear_load(
@@ -2219,8 +2327,17 @@ ReplicatedLinearImpl::ReplicatedLinearImpl(
       options_(options),
       output_dtype_(c10::typeMetaToScalarType(options.dtype())) {
   (void)linear_extra_args;
-  if (!quant_args_.quant_descs().empty() ||
-      quant_args_.is_compressed_tensors_w8a8_dynamic()) {
+  if (quant_args_.quant_method() == kQuantMethodFp8) {
+    // Replicated projections are mixed in DeepSeek checkpoints: attention
+    // low-rank projections can be FP8, while router gates remain BF16. Keep the
+    // storage in runtime dtype initially and switch to FP8 lazily after seeing
+    // the checkpoint tensor dtype in load_state_dict().
+    weight_ =
+        register_parameter("weight",
+                           torch::empty({out_features, in_features}, options),
+                           /*requires_grad=*/false);
+  } else if (!quant_args_.quant_descs().empty() ||
+             quant_args_.is_compressed_tensors_w8a8_dynamic()) {
     // quant_descs is not empty: default initialize weight as kInt8.
     // During load_state_dict, the weight will be lazily re-registered to the
     // appropriate dtype based on the resolved quant method.
@@ -2245,6 +2362,16 @@ ReplicatedLinearImpl::ReplicatedLinearImpl(
 torch::Tensor ReplicatedLinearImpl::forward(torch::Tensor input) {
   auto bias =
       bias_.defined() ? std::optional<torch::Tensor>(bias_) : std::nullopt;
+  if (is_fp8_dtype(weight_.scalar_type())) {
+    check_fp8_activation_dynamic_supported(quant_args_);
+    CHECK(weight_scale_.defined())
+        << "weight_scale is required for FP8 replicated linear.";
+    auto scale = input_scale_.defined()
+                     ? std::optional<torch::Tensor>(input_scale_)
+                     : std::nullopt;
+    return fp8_linear_forward(
+        input, weight_, weight_scale_, scale, bias, output_dtype_);
+  }
   if (is_w8a8_quant(resolved_weight_quant_method_)) {
     CHECK(input_scale_is_loaded_ && input_scale_.defined())
         << "input_scale is required for w8a8 quant matmul.";
@@ -2280,9 +2407,9 @@ torch::Tensor ReplicatedLinearImpl::forward(torch::Tensor input) {
   xllm::kernel::MatmulParams matmul_params;
   matmul_params.a = input;
   matmul_params.b = weight_;
-  matmul_params.bias = bias;
   maybe_set_persistent_output_buf(
       matmul_params, output_buffers_, input, weight_);
+  matmul_params.bias = bias;
 
   auto output = xllm::kernel::matmul(matmul_params);
   return output;
@@ -2338,8 +2465,48 @@ void ReplicatedLinearImpl::load_state_dict(const StateDict& state_dict) {
                           weight_scale_is_loaded_,
                           weight_offset_,
                           weight_offset_is_loaded_});
+
+  if (quant_args_.quant_method() == kQuantMethodFp8) {
+    torch::Tensor checkpoint_weight = state_dict.get_tensor("weight");
+    if (checkpoint_weight.defined() &&
+        is_fp8_dtype(checkpoint_weight.scalar_type())) {
+      const int64_t out_features = weight_.size(0);
+      const int64_t in_features = weight_.size(1);
+      const int64_t weight_scale_size =
+          is_fp8_channelwise_w8a8(quant_args_) ? out_features : 1;
+      std::vector<weight::LazyParameterSpec> specs;
+      specs.reserve(quant_args_.activation_dynamic() ? 2 : 3);
+      specs.push_back(weight::LazyParameterSpec{
+          &weight_,
+          &weight_is_loaded_,
+          "weight",
+          {out_features, in_features},
+          options_.dtype(checkpoint_weight.scalar_type())});
+      specs.push_back(
+          weight::LazyParameterSpec{&weight_scale_,
+                                    &weight_scale_is_loaded_,
+                                    "weight_scale",
+                                    {weight_scale_size},
+                                    options_.dtype(torch::kFloat32)});
+      if (!quant_args_.activation_dynamic()) {
+        specs.push_back(
+            weight::LazyParameterSpec{&input_scale_,
+                                      &input_scale_is_loaded_,
+                                      "input_scale",
+                                      {1},
+                                      options_.dtype(torch::kFloat32)});
+      }
+      weight::ensure_parameter_storage(this, specs);
+    }
+  }
+
   LOAD_WEIGHT(weight);
-  if (is_w8a8_quant(resolved_weight_quant_method_)) {
+  if (is_fp8_dtype(weight_.scalar_type())) {
+    LOAD_WEIGHT(weight_scale);
+    if (!quant_args_.activation_dynamic() && input_scale_.defined()) {
+      LOAD_WEIGHT(input_scale);
+    }
+  } else if (is_w8a8_quant(resolved_weight_quant_method_)) {
     LOAD_WEIGHT(input_scale);
     LOAD_WEIGHT(input_offset);
     LOAD_WEIGHT(deq_scale);

@@ -24,16 +24,13 @@ limitations under the License.
 #include <atomic>
 #include <chrono>
 #include <cstdint>
-#include <cstdlib>
 #include <iomanip>
 #include <limits>
 #include <memory>
 #include <sstream>
-#include <string>
 #include <vector>
 
 #include "common/metrics.h"
-#include "core/framework/config/execution_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/rec_config.h"
@@ -51,39 +48,6 @@ limitations under the License.
 
 namespace xllm {
 
-namespace {
-
-bool request_timing_enabled() {
-  static const bool enabled = [] {
-    const char* value = std::getenv("XLLM_REQUEST_TIMING");
-    return value != nullptr && std::string(value) == "1";
-  }();
-  return enabled;
-}
-
-bool sched_pack_log_enabled() {
-  static const bool enabled = [] {
-    const char* value = std::getenv("XLLM_SCHED_PACK_LOG");
-    return value != nullptr && std::string(value) == "1";
-  }();
-  return enabled;
-}
-
-const char* sequence_stage_name(SequenceStage stage) {
-  switch (stage) {
-    case SequenceStage::PREFILL:
-      return "PREFILL";
-    case SequenceStage::CHUNKED_PREFILL:
-      return "CHUNKED";
-    case SequenceStage::DECODE:
-      return "DECODE";
-    default:
-      return "UNKNOWN";
-  }
-}
-
-}  // namespace
-
 void CancelRequestQueue::submit(std::shared_ptr<Request> request) {
   std::lock_guard<std::mutex> lock(mutex_);
   requests_.emplace_back(std::move(request));
@@ -96,8 +60,7 @@ std::vector<std::shared_ptr<Request>> CancelRequestQueue::take_all() {
   return requests;
 }
 
-BatchMode resolve_batch_mode(const Engine* engine,
-                             const ContinuousScheduler::Options& options) {
+BatchMode resolve_batch_mode(const ContinuousScheduler::Options& options) {
   BatchMode mode;
   mode.priority_strategy = options.priority_strategy();
   mode.enable_chunked_prefill = options.enable_chunked_prefill();
@@ -119,27 +82,12 @@ BatchMode resolve_batch_mode(const Engine* engine,
     mode.enable_mix_batch = false;
   }
 
-  const ExecutionConfig& execution_config = ExecutionConfig::get_instance();
-  const bool piecewise_requires_homogeneous =
-      execution_config.enable_graph() &&
-      execution_config.enable_prefill_piecewise_graph();
-  bool backend_requires_homogeneous = piecewise_requires_homogeneous;
-#if defined(USE_MUSA)
-  backend_requires_homogeneous =
-      backend_requires_homogeneous ||
-      (engine != nullptr &&
-       ::xllm::has_linear_attention_layers(engine->model_args()));
-#endif
-  if (backend_requires_homogeneous) {
-    mode.enable_mix_batch = false;
-  }
-
   return mode;
 }
 
 ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
     : options_(options),
-      batch_mode_(resolve_batch_mode(engine, options)),
+      batch_mode_(resolve_batch_mode(options)),
       engine_(engine),
       request_queue_(::xllm::RecConfig::get_instance().request_queue_size()) {
   CHECK(engine_ != nullptr);
@@ -151,6 +99,14 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
       ::xllm::KVCacheConfig::get_instance().enable_prefix_cache();
   has_linear_attention_layers_ =
       ::xllm::has_linear_attention_layers(engine_->model_args());
+#if defined(USE_MUSA)
+  // MUSA hybrid GDN does not support a single model forward containing both
+  // prefill and decode rows. Keep those stages in homogeneous batches; this
+  // also matches the piecewise-graph execution contract.
+  if (has_linear_attention_layers_) {
+    batch_mode_.enable_mix_batch = false;
+  }
+#endif
   enable_in_batch_prefix_cache_ =
       ::xllm::KVCacheConfig::get_instance().enable_in_batch_prefix_cache();
 
@@ -231,17 +187,9 @@ bool ContinuousScheduler::add_request(std::shared_ptr<Request>& request) {
 }
 
 void ContinuousScheduler::create_queues(const Options& options) {
-  if (options.priority_strategy() == "multi_slo_and_prio") {
+  if (options.priority_strategy() == "multi_slo_and_prio" ||
+      options.priority_strategy() == "fcfs") {
     prefill_queue_ = std::make_unique<DequeQueue>();
-    chunk_queue_ = std::make_unique<DequeQueue>();
-    decode_queue_ = std::make_unique<DequeQueue>();
-  } else if (options.priority_strategy() == "fcfs") {
-    // Preserve the pre-unification FCFS semantics for newly arrived prefill
-    // requests: order by Request::created_time(), not by the timing of the
-    // concurrent MPMC drain. Decode and chunk continuations still use deques
-    // so their explicit front/back requeue rules remain unchanged.
-    prefill_queue_ = std::make_unique<HeapQueue>(
-        create_comparator(options.priority_strategy(), false));
     chunk_queue_ = std::make_unique<DequeQueue>();
     decode_queue_ = std::make_unique<DequeQueue>();
   } else {
@@ -305,46 +253,6 @@ std::vector<Batch> ContinuousScheduler::prepare_batch() {
     kv_cache_manager_->transfer_blocks(batches);
   } else {
     kv_cache_manager_->transfer_blocks();
-  }
-
-  if (sched_pack_log_enabled() && !is_batches_empty) {
-    size_t n_prefill = 0;
-    size_t n_chunked = 0;
-    size_t n_decode = 0;
-    size_t token_budget_sum = 0;
-    std::ostringstream sequences;
-    for (size_t i = 0; i < running_sequences_.size(); ++i) {
-      const Sequence* sequence = running_sequences_[i];
-      const size_t sequence_budget = running_sequences_budgets_[i];
-      token_budget_sum += sequence_budget;
-      const SequenceStage stage = sequence->stage();
-      if (stage == SequenceStage::PREFILL) {
-        ++n_prefill;
-      } else if (stage == SequenceStage::CHUNKED_PREFILL) {
-        ++n_chunked;
-      } else {
-        ++n_decode;
-      }
-      if (i > 0) {
-        sequences << ',';
-      }
-      sequences << sequence_stage_name(stage) << ':' << sequence_budget << '/'
-                << sequence->num_tokens() << '@'
-                << sequence->kv_cache_tokens_num();
-    }
-    if (n_prefill > 0 || n_chunked > 0) {
-      LOG(INFO) << "[SCHED_PACK] n_seq=" << running_sequences_.size()
-                << " n_prefill=" << n_prefill << " n_chunked=" << n_chunked
-                << " n_decode=" << n_decode
-                << " token_budget=" << token_budget_sum
-                << " packed_prefill="
-                << ExecutionConfig::get_instance().enable_packed_prefill()
-                << " waiting=" << prefill_queue_->size()
-                << " chunked_q=" << chunk_queue_->size()
-                << " decode_q=" << decode_queue_->size()
-                << " sched_ms=" << timer.elapsed_milliseconds()
-                << " seqs=[" << sequences.str() << ']';
-    }
   }
 
   policy_->report_metrics(
@@ -546,11 +454,6 @@ void ContinuousScheduler::update_token_latency_metrics(
     const size_t committed_tokens = sequence->generated_tokens_since_latency();
     int64_t tbt_milliseconds = sequence->tbt(now);
     if (sequence->is_first_token()) {
-      if (request_timing_enabled()) {
-        LOG(INFO) << "[REQUEST_HOST] stage=first_token_internal request_id="
-                  << sequence->request_id()
-                  << " elapsed_ms=" << tbt_milliseconds;
-      }
       HISTOGRAM_OBSERVE(time_to_first_token_latency_milliseconds,
                         tbt_milliseconds);
       sequence->set_time_to_first_token_latency_seconds(

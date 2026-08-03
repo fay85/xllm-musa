@@ -613,7 +613,7 @@ bool OpenCVImageEncoder::valid(const torch::Tensor& t) {
   return true;
 }
 
-#else  // XLLM_SKIP_OPENCV
+#else   // XLLM_SKIP_OPENCV
 bool OpenCVImageDecoder::decode(const std::string&, torch::Tensor&) {
   LOG(ERROR) << "OpenCV disabled at build time (XLLM_SKIP_OPENCV)";
   return false;
@@ -622,9 +622,7 @@ bool OpenCVImageEncoder::encode(const torch::Tensor&, std::string&) {
   LOG(ERROR) << "OpenCV disabled at build time (XLLM_SKIP_OPENCV)";
   return false;
 }
-bool OpenCVImageEncoder::valid(const torch::Tensor&) {
-  return false;
-}
+bool OpenCVImageEncoder::valid(const torch::Tensor&) { return false; }
 #endif  // XLLM_SKIP_OPENCV
 
 bool FFmpegVideoDecoder::decode(const std::string& raw_data,

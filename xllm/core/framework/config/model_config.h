@@ -18,6 +18,7 @@ limitations under the License.
 #include <cstdint>
 #include <nlohmann/json_fwd.hpp>
 #include <string>
+#include <string_view>
 
 #include "core/common/macros.h"
 #include "core/framework/config/option_category.h"
@@ -39,15 +40,17 @@ class ModelConfig final {
   void initialize();
   void normalize_cpp_chat_template(const std::string& model_type);
 
+  [[nodiscard]] static bool is_python_model_impl(std::string_view model_impl);
+
   [[nodiscard]] static const OptionCategory& option_category() {
     static const OptionCategory kOptionCategory = {
         "MODEL OPTIONS",
         {"model_id",
          "model",
+         "model_impl",
          "backend",
          "task",
-         "device_id",
-         "devices",
+         "python_model_path",
          "limit_image_per_prompt",
          "max_encoder_cache_size",
          "reasoning_parser",
@@ -65,13 +68,13 @@ class ModelConfig final {
 
   PROPERTY(std::string, model);
 
+  PROPERTY(std::string, model_impl);
+
+  PROPERTY(std::string, python_model_path);
+
   PROPERTY(std::string, backend);
 
   PROPERTY(std::string, task) = "generate";
-
-  PROPERTY(int32_t, device_id) = -1;
-
-  PROPERTY(std::string, devices) = "";
 
   PROPERTY(int32_t, limit_image_per_prompt) = 8;
 

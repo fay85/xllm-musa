@@ -61,8 +61,7 @@ static ffi::Array<int64_t> deep_copy_plan_info(const ffi::Array<int64_t>& src) {
   return ffi::Array<int64_t>(temp_vec.begin(), temp_vec.end());
 }
 
-static torch::Tensor get_kv_len_arr_host(
-    const xllm::layer::AttentionMetadata& attn_meta) {
+static torch::Tensor get_kv_len_arr_host(const AttentionMetadata& attn_meta) {
   if (attn_meta.kv_seq_lens.defined()) {
     return attn_meta.kv_seq_lens.to(torch::kCPU);
   }
@@ -102,7 +101,6 @@ void update_prefill_plan_info(std::shared_ptr<PlanInfo> plan_info,
   auto page_locked_int_workspace_buffer =
       to_ffi_tensor(FlashinferWorkspace::get_instance()
                         .get_page_locked_int_workspace_buffer());
-
   plan_info->uri = get_batch_prefill_uri(backend,
                                          query_dtype,
                                          key_dtype,
@@ -199,7 +197,6 @@ void update_chunked_prefill_plan_info(std::shared_ptr<PlanInfo> plan_info,
   auto page_locked_int_workspace_buffer =
       to_ffi_tensor(FlashinferWorkspace::get_instance()
                         .get_page_locked_int_workspace_buffer());
-
   plan_info->uri =
       get_batch_prefill_uri(backend,
                             query_dtype,

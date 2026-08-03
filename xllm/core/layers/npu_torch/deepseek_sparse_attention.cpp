@@ -24,6 +24,7 @@ limitations under the License.
 #include <tuple>
 #include <vector>
 
+#include "common/flash_comm1_context.h"
 #include "kernels/ops_api.h"
 #include "xllm/core/kernels/npu/xllm_ops/xllm_ops_api.h"
 
@@ -768,7 +769,9 @@ DSAttentionImpl::forward(const DSAMetadata& attn_metadata,
   torch::Tensor compress_topk_idxs;
   if (compress_ratio_i == 4 && cmp_kv.defined()) {
     auto index_cache = kv_cache.get_index_cache();
-    auto indexer_cache_scale = kv_cache.get_indexer_cache_scale();
+    std::optional<torch::Tensor> indexer_cache_scale =
+        kv_cache.get_indexer_cache_scale();
+    torch::Tensor& indexer_cache_scale_tensor = indexer_cache_scale.value();
 
     std::tuple<torch::Tensor, torch::Tensor> indexer_states{index_kv_state,
                                                             index_score_state};
@@ -789,7 +792,7 @@ DSAttentionImpl::forward(const DSAMetadata& attn_metadata,
                              qr,
                              qr_pertoken_scale,
                              index_cache,
-                             &indexer_cache_scale,
+                             &indexer_cache_scale_tensor,
                              indexer_metadata,
                              cos,
                              sin,
@@ -869,7 +872,14 @@ DSAttentionImpl::forward(const DSAMetadata& attn_metadata,
   auto o_group = o.view({num_tokens, n_local_groups_, -1});
   auto wo_a = o_a_proj_->weight().view({n_local_groups_, o_lora_rank_, -1});
   auto o_low_rank = torch::einsum("tgd,grd->tgr", {o_group, wo_a});
-  auto output = o_b_proj_->forward(o_low_rank.reshape({num_tokens, -1}));
+  torch::Tensor output;
+  const FlashComm1Context* fc1_ctx = get_current_flash_comm1_context();
+  if (fc1_ctx && is_sequence_sharded(*fc1_ctx)) {
+    output = o_b_proj_->forward(o_low_rank.reshape({num_tokens, -1}),
+                                row_parallel_reduce_mode_for_fc1(*fc1_ctx));
+  } else {
+    output = o_b_proj_->forward(o_low_rank.reshape({num_tokens, -1}));
+  }
   std::optional<torch::Tensor> final_lse = std::nullopt;
   (void)output_lse;
 

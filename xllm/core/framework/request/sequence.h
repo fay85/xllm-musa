@@ -21,6 +21,7 @@ limitations under the License.
 #include <folly/futures/Future.h>
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -66,6 +67,10 @@ struct SequenceParams {
 
   // whether to skip special tokens in the output text. default = true.
   bool skip_special_tokens = true;
+
+  // whether to include stop strings or stop tokens in the output text.
+  // default = false.
+  bool include_stop_str_in_output = false;
 
   // whether to echo the prompt in the output text. default = false.
   bool echo = false;
@@ -186,7 +191,7 @@ class Sequence final {
   void update_token(size_t index, const Token& token);
   void update_last_step_token(const Token& token, size_t token_offset = 0);
   bool has_new_tokens_generated() const {
-    return num_tokens_ > decoder_.output_offset();
+    return num_tokens_ > stream_output_token_offset_;
   }
 
   // update mm embeddings to the sequence
@@ -200,7 +205,7 @@ class Sequence final {
   void clear_mtp_bootstrap_embedding() {
     mtp_bootstrap_embedding_ = torch::Tensor();
   }
-  // Per-sequence speculative embedding-row slot, or -1.
+
   int32_t get_embedding_block_id() const {
     return kv_state_.get_embedding_block_id();
   }
@@ -249,19 +254,24 @@ class Sequence final {
 
   // Precomputed chained block hashes used by the prefix cache. Covers all full
   // blocks of the current tokens; reused by match()/insert() so the hash is
-  // computed once per sequence instead of recomputed on every call.
-  Slice<XXH3Key> block_hashes() const { return block_hashes_; }
+  // computed once per sequence instead of recomputed on every call. Returns the
+  // chain for the stride set by the most recent update_block_hashes() call.
+  Slice<XXH3Key> block_hashes() const;
 
-  // Extend `block_hashes_` to cover any newly completed full blocks. Cheap
-  // (no-op) when no new full block is available, so it is safe to call before
-  // every match()/cache().
+  // Extend the per-stride chain for `block_size` to cover any newly completed
+  // full blocks, and select it as the one block_hashes() returns. Cheap (no-op)
+  // when no new full block is available, so it is safe to call before every
+  // match()/cache(). DSV4 admission probes SWA / C4 / C128 back-to-back with
+  // different strides (base / 4*base / 128*base); each stride keeps its own
+  // chain so switching strides no longer discards and rebuilds the whole chain.
   void update_block_hashes(uint32_t block_size, BlockHasherType hasher_type);
 
   // Precomputed chained per-chunk hashes for the linear-state checkpoint index.
-  // Separate hash domain from `block_hashes_`: the stride is one prefill chunk
-  // (a multiple of the KV block size), not a KV block, so a linear checkpoint
-  // is a sparse overlay on the per-block KV cache. Consumed by the batch
-  // builder (save/restore boundaries) and the LINEAR leaf's match probe.
+  // Separate hash domain from the KV block-hash chains: the stride is one
+  // prefill chunk (a multiple of the KV block size), not a KV block, so a
+  // linear checkpoint is a sparse overlay on the per-block KV cache. Consumed
+  // by the batch builder (save/restore boundaries) and the LINEAR leaf's match
+  // probe.
   Slice<XXH3Key> linear_state_hashes() const { return linear_state_hashes_; }
 
   // Extend `linear_state_hashes_` to cover any newly completed full chunks at
@@ -350,6 +360,11 @@ class Sequence final {
 
   KVCacheState& kv_state() { return kv_state_; }
 
+  // Host-side block state, per BlockType (mirrors kv_state_). Today only
+  // BlockType::KV is populated by HierarchyBlockManagerPool; when host
+  // offload is extended past the flat-KV shape (SWA / C4 / C128), the
+  // additional per-type slots land under the same KVCacheState here without
+  // touching this signature.
   KVCacheState& host_kv_state() { return host_kv_state_; }
 
   // for generated tokens
@@ -485,6 +500,11 @@ class Sequence final {
   // from the chunk containing `token_index` onward.
   void invalidate_linear_state_hashes_from(size_t token_index);
 
+  // Number of tokens available to the decoder after applying stop-output
+  // suppression and streaming buffering. The underlying sequence retains all
+  // generated tokens for usage and scheduling accounting.
+  size_t get_decodable_token_count(size_t size) const;
+
   SequenceOutputType output_type();
   void generate_embeddings_output(SequenceOutput& output);
   void generate_mm_embeddings_output(SequenceOutput& output);
@@ -538,6 +558,11 @@ class Sequence final {
   // incremental decoder to decode the tokens
   IncrementalDecoder decoder_;
 
+  // All tokens before this offset have been returned in streaming output.
+  // This is independent from the decoder offset because hidden stop tokens
+  // remain present in token_ids and logprobs.
+  size_t stream_output_token_offset_ = 0;
+
   // token ids generated for the sequence
   std::vector<int32_t> tokens_;
 
@@ -565,11 +590,17 @@ class Sequence final {
   // the length of the prompt tokens
   size_t num_prompt_tokens_ = 0;
 
-  // Precomputed chained block hashes covering all full blocks of `tokens_`.
-  // Extended incrementally; consumed by the prefix cache.
-  std::vector<XXH3Key> block_hashes_;
+  // Precomputed chained block hashes covering all full blocks of `tokens_`,
+  // keyed by block-size stride. DSV4 admission probes multiple strides (base /
+  // 4*base / 128*base) per tick; each keeps its own chain so a stride switch
+  // extends incrementally instead of discarding and rebuilding. Extended
+  // incrementally; consumed by the prefix cache. std::map node storage is
+  // pointer-stable, so a Slice handed out by block_hashes() survives inserts of
+  // other strides.
+  std::map<uint32_t, std::vector<XXH3Key>> block_hashes_by_stride_;
 
-  // Block size used to compute `block_hashes_` (0 until first computed).
+  // Stride selected by the most recent update_block_hashes() call; keys
+  // block_hashes() into `block_hashes_by_stride_` (0 until first computed).
   uint32_t hash_block_size_ = 0;
 
   // Precomputed chained per-chunk hashes for the linear-state checkpoint index
@@ -599,6 +630,11 @@ class Sequence final {
 
   // the reason why the sequence is finished
   mutable FinishReason finish_reason_ = FinishReason::NONE;
+
+  // Number of trailing tokens that matched the stopping criterion. These
+  // tokens remain in `tokens_` and are omitted from decoded output when
+  // `include_stop_str_in_output` is false.
+  mutable size_t matched_stop_token_count_ = 0;
 
   // is the sequence closed.
   bool closed_ = false;

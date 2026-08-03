@@ -42,7 +42,8 @@ class DenseMLPImpl : public torch::nn::Module {
                ProcessGroup* process_group,
                const torch::TensorOptions& options,
                const std::string& module_prefix = "",
-               double swiglu_limit = 0.0);
+               double swiglu_limit = 0.0,
+               bool apply_fc1_sequence_parallel = true);
 
   torch::Tensor forward(const torch::Tensor& hidden_states);
 
@@ -64,12 +65,7 @@ class DenseMLPImpl : public torch::nn::Module {
   bool is_smoothquant_;
   std::string hidden_act_;
   double swiglu_limit_ = 0.0;
-
-  // CUDA/MUSA scratch that holds the silu_and_mul output between gate_up_proj
-  // and down_proj. Cached on the layer so we (a) skip a `torch::empty` per
-  // forward and (b) keep the activation output's device pointer stable across
-  // CUDA-graph captures. Grown on demand (never shrunk) and unused on NPU.
-  torch::Tensor act_output_cache_;
+  bool apply_fc1_sequence_parallel_ = true;
 };
 TORCH_MODULE(DenseMLP);
 

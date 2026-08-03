@@ -101,16 +101,13 @@ void DecodeFirstPolicy::redistribute_remaining_budget(
     // Return previously allocated tokens to the pool.
     budget.remaining_token_budget += token_budget;
 
-    const size_t sequence_token_budget =
-        compute_prefill_tokens(sequence, budget.remaining_token_budget, state);
-
     if (options_.enable_latency_aware_schedule()) {
       double origin_latency =
           state.profile_manager->predict_step_time(sequence, false);
       budget.estimate_latency -= origin_latency;
 
       double cur_latency = state.profile_manager->predict_step_time(
-          sequence_token_budget,
+          budget.remaining_token_budget,
           sequence->kv_state().kv_cache_tokens_num(),
           false);
       if (budget.estimate_latency + cur_latency > budget.latency_budget) {
@@ -121,7 +118,7 @@ void DecodeFirstPolicy::redistribute_remaining_budget(
 
     size_t actual_tokens = 0;
     if (!allocate_for_prefill(sequence,
-                              sequence_token_budget,
+                              budget.remaining_token_budget,
                               &actual_tokens,
                               state,
                               /*skip_shared=*/true)) {

@@ -1,5 +1,36 @@
 include(cc_test)
 
+get_filename_component(_xllm_build_import_root
+  "${CMAKE_LIBRARY_OUTPUT_DIRECTORY}" DIRECTORY)
+
+# Add test for Qwen3.5 MLU layers (gated delta net operators, GDN layer, and
+# hybrid attention layer).
+cc_test(
+  NAME
+    qwen3_5_layer_test
+  SRCS
+    qwen3_5_gated_delta_net_ops_test.cpp
+    qwen3_5_gated_delta_net_test.cpp
+    qwen3_5_attention_test.cpp
+    qwen3_5_fused_moe_test.cpp
+    qwen3_next_rms_norm_test.cpp
+    tests_utils.cpp
+  DEPS
+    :config
+    :mlu_layers
+    :common_layers
+    :block
+    :parallel_state
+    :model
+    :model_context
+    :state_dict
+    glog::glog
+    torch
+    GTest::gtest_main
+  ENVIRONMENT
+    "PYTHONPATH=${_xllm_build_import_root}:$ENV{PYTHONPATH}"
+)
+
 # Add test for MLU layers
 cc_test(
   NAME
@@ -16,8 +47,8 @@ cc_test(
     qwen2_vision_attention_test.cpp
   DEPS
     :config
-    :common_layers
     :mlu_layers
+    :common_layers
     :block
     :parallel_state
     :model
@@ -112,11 +143,12 @@ cc_test(
     fused_moe_test.cpp
     moe_weight_loader_helper_test.cpp
     deepseek_v2_sparse_moe_block_test.cpp
+    deepseek_v4_sparse_moe_block_test.cpp
     tests_utils.cpp
   DEPS
     :config
-    :common_layers
     :mlu_layers
+    :common_layers
     :block
     :parallel_state
     :model
@@ -137,6 +169,7 @@ cc_test(
     deep_ep_test.cpp
     tests_utils.cpp
   DEPS
+    :mlu_layers
     :common_layers
     :parallel_state
     :model
@@ -158,8 +191,8 @@ cc_test(
     tests_utils.cpp
   DEPS
     :config
-    :common_layers
     :mlu_layers
+    :common_layers
     :block
     :parallel_state
     :model
@@ -182,6 +215,20 @@ cc_test(
     :mlu_layers
     :parallel_state
     :state_dict
+    GTest::gtest_main
+    torch
+    glog::glog
+)
+
+# Cross-layer DSA top-k relay state is pure CPU logic, but the protocol belongs
+# to the MLU decoder/attention boundary.
+cc_test(
+  NAME
+    dsa_topk_relay_test
+  SRCS
+    dsa_topk_relay_test.cpp
+  DEPS
+    :mlu_layers
     GTest::gtest_main
     torch
     glog::glog

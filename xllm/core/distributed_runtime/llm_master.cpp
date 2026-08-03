@@ -22,9 +22,7 @@ limitations under the License.
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 #include <csignal>
-#include <cstdlib>
 #include <memory>
-#include <string>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -42,6 +40,7 @@ limitations under the License.
 #include "util/net.h"
 #include "util/scope_guard.h"
 #include "util/timer.h"
+#include "util/utils.h"
 
 namespace xllm {
 namespace {
@@ -50,14 +49,6 @@ bool should_use_ssm_engine(const Options& options) {
   return !options.draft_model_path().value_or("").empty() ||
          (options.speculative_algorithm() == "Suffix" &&
           options.num_speculative_tokens() > 0);
-}
-
-bool request_timing_enabled() {
-  static const bool enabled = [] {
-    const char* env = std::getenv("XLLM_REQUEST_TIMING");
-    return env != nullptr && std::string(env) == "1";
-  }();
-  return enabled;
 }
 
 }  // namespace
@@ -89,8 +80,6 @@ LLMMaster::LLMMaster(const Options& options)
       .max_seqs_per_batch(options_.max_seqs_per_batch())
       .max_tokens_per_chunk_for_prefill(
           options_.max_tokens_per_chunk_for_prefill())
-      .enable_adaptive_prefill_oneshot(
-          options_.enable_adaptive_prefill_oneshot())
       .num_speculative_tokens(options_.num_speculative_tokens())
       .nnodes(options_.nnodes())
       .dp_size(options_.dp_size())
@@ -132,12 +121,6 @@ LLMMaster::LLMMaster(const Options& options)
   tokenizer_ = engine_->tokenizer()->clone();
   threadpool_ = std::make_unique<ThreadPool>(
       /*num_threads=*/options_.num_request_handling_threads(),
-      /*init_func=*/[this] {
-        // TokenizerProxy owns one tokenizer clone per calling thread. Force the
-        // request workers to construct their clones before the server becomes
-        // ready instead of charging that setup to their first requests.
-        tokenizer_->vocab_size();
-      },
       /*cpu_binding=*/false,
       /*pool_name=*/"LLMMaster.request");
 }
@@ -245,7 +228,6 @@ void LLMMaster::handle_request(std::vector<Message> messages,
                          callback = std::move(callback),
                          call]() mutable {
     AUTO_COUNTER(request_handling_latency_seconds_chat);
-    Timer request_handling_timer;
 
     // remove the pending request after scheduling
     SCOPE_GUARD([this] { scheduler_->decr_pending_requests(); });
@@ -259,13 +241,6 @@ void LLMMaster::handle_request(std::vector<Message> messages,
         generate_request(messages, std::move(prompt_token), sp, call, callback);
     if (!request) {
       return;
-    }
-
-    if (request_timing_enabled()) {
-      LOG(INFO) << "[REQUEST_HOST] stage=ready_to_enqueue request_id="
-                << request->request_id()
-                << " elapsed_ms="
-                << request_handling_timer.elapsed_milliseconds();
     }
 
     if (!scheduler_->add_request(request)) {
@@ -314,7 +289,10 @@ std::shared_ptr<Request> LLMMaster::generate_request(
     const RequestParams& sp,
     std::optional<Call*> call,
     OutputCallback callback) {
-  if (prompt.empty()) {
+  // A request is valid as long as it carries either text or pre-tokenized
+  // prompt tokens; pure-token input (no text) is a first-class input.
+  const bool has_prompt_tokens = prompt_tokens.has_value();
+  if (prompt.empty() && !has_prompt_tokens) {
     CALLBACK_WITH_ERROR(StatusCode::INVALID_ARGUMENT,
                         "Prompt is empty",
                         sp.service_request_id,
@@ -326,7 +304,7 @@ std::shared_ptr<Request> LLMMaster::generate_request(
   Timer timer;
   std::vector<int> local_prompt_tokens;
 
-  if (prompt_tokens.has_value()) {
+  if (has_prompt_tokens) {
     local_prompt_tokens = std::move(prompt_tokens.value());
   } else {
     if (!tokenizer_->encode(
@@ -340,12 +318,23 @@ std::shared_ptr<Request> LLMMaster::generate_request(
     }
   }
 
-  const double tokenization_ms = timer.elapsed_milliseconds();
   COUNTER_ADD(tokenization_latency_seconds, timer.elapsed_seconds());
-  if (request_timing_enabled()) {
-    LOG(INFO) << "[REQUEST_HOST] stage=tokenize request_id=" << sp.request_id
-              << " prompt_tokens=" << local_prompt_tokens.size()
-              << " elapsed_ms=" << tokenization_ms;
+
+  // Validate directly-supplied prompt tokens against the vocabulary range to
+  // avoid out-of-bounds embedding lookups. Encoded tokens are trusted, so only
+  // scan when tokens were provided and the vocab range is known.
+  const int64_t vocab_size = model_args_.vocab_size();
+  if (has_prompt_tokens && vocab_size > 0) {
+    const auto invalid_token =
+        util::find_out_of_vocab_token(local_prompt_tokens, vocab_size);
+    if (invalid_token.has_value()) {
+      CALLBACK_WITH_ERROR(StatusCode::INVALID_ARGUMENT,
+                          "Prompt token id out of vocabulary range: " +
+                              std::to_string(invalid_token.value()),
+                          sp.service_request_id,
+                          sp.source_xservice_addr);
+      return nullptr;
+    }
   }
 
   const int32_t max_context_len = model_args_.max_position_embeddings();
@@ -516,6 +505,7 @@ std::shared_ptr<Request> LLMMaster::generate_request(
                          batch_callback,
                          sp.decode_address,
                          call);
+  req_state.include_stop_str_in_output = sp.include_stop_str_in_output;
   req_state.sample_slots = sp.sample_slots;
 
   auto request = std::make_shared<Request>(sp.request_id,
@@ -549,10 +539,6 @@ std::shared_ptr<Request> LLMMaster::generate_request(
   }
 
   COUNTER_ADD(chat_template_latency_seconds, timer.elapsed_seconds());
-  if (request_timing_enabled()) {
-    LOG(INFO) << "[REQUEST_HOST] stage=chat_template request_id="
-              << sp.request_id << " elapsed_ms=" << timer.elapsed_milliseconds();
-  }
 
   return generate_request(
       std::move(prompt.value()), std::move(prompt_tokens), sp, call, callback);

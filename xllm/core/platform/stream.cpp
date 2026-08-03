@@ -35,15 +35,36 @@ PlatformStream get_stream_from_pool() {
 }
 #elif defined(USE_MLU)
 PlatformStream get_stream_from_pool() { return torch_mlu::getStreamFromPool(); }
-#elif defined(USE_MUSA)
-PlatformStream get_stream_from_pool() { return c10::musa::getStreamFromPool(); }
 #elif defined(USE_CUDA) || defined(USE_ILU)
 PlatformStream get_stream_from_pool() { return c10::cuda::getStreamFromPool(); }
+#elif defined(USE_MUSA)
+PlatformStream get_stream_from_pool() { return c10::musa::getStreamFromPool(); }
 #elif defined(USE_DCU)
 PlatformStream get_stream_from_pool() { return c10::hip::getStreamFromPool(); }
 #endif
 
 }  // namespace
+
+bool StreamEvent::synchronize() {
+#if defined(USE_NPU)
+  const aclError ret = aclrtSynchronizeEvent(npu_event_);
+  if (ret != ACL_SUCCESS) {
+    LOG(ERROR) << "Failed to synchronize NPU event: " << ret;
+    return false;
+  }
+  return true;
+#else
+  try {
+    c10_event_.synchronize();
+    return true;
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "Failed to synchronize event: " << e.what();
+  } catch (...) {
+    LOG(ERROR) << "Failed to synchronize event: unknown exception";
+  }
+  return false;
+#endif
+}
 
 Stream::Stream(const int32_t timeout)
     : stream_(get_stream_from_pool()), timeout_(timeout) {}

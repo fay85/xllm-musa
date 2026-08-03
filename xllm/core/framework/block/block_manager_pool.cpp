@@ -23,7 +23,6 @@ limitations under the License.
 #include "composite_block_manager.h"
 #include "concurrent_block_manager_impl.h"
 #include "core/framework/config/kv_cache_config.h"
-#include "core/framework/config/service_config.h"
 #include "framework/model/model_input_params.h"
 #include "framework/xtensor/page_allocator.h"
 #include "framework/xtensor/phy_page_pool.h"
@@ -42,6 +41,8 @@ BlockManagerPool::BlockManagerPool(const Options& options, int32_t dp_size)
       .block_size(options_.block_size())
       .enable_prefix_cache(options_.enable_prefix_cache())
       .enable_disagg_pd(options_.enable_disagg_pd())
+      .enable_kvcache_store(options_.enable_kvcache_store())
+      .enable_host_offload(options_.enable_host_offload())
       .sliding_window_size(options_.sliding_window_size())
       .swa_blocks_per_seq(options_.swa_blocks_per_seq())
       .max_tokens_per_batch(options_.max_tokens_per_batch())
@@ -55,24 +56,29 @@ BlockManagerPool::BlockManagerPool(const Options& options, int32_t dp_size)
       .model_id(options_.model_id())
       .enable_linear_state(options_.enable_linear_state())
       .linear_state_num_slots(options_.linear_state_num_slots())
-      .linear_chunk_stride(options_.linear_chunk_stride());
+      .num_speculative_tokens(options_.num_speculative_tokens())
+      .instance_is_decode(options_.instance_is_decode());
 
   for (int32_t i = 0; i < dp_size; ++i) {
     // The pool always holds a CompositeBlockManager. Its KV leaf is a flat
     // BlockManagerImpl, or an XTensorBlockManagerImpl when enable_xtensor (the
     // builder picks); SWA / C4 / C128 come from manager_types; the LINEAR leaf
     // is added by the builder when enable_linear_state. The per-sequence
-    // EMBEDDING resource leaf is appended here only for speculative decode.
+    // EMBEDDING resource leaf is appended here under the EMBEDDING key when
+    // spec decode needs it. Every leaf is routed by its BlockType.
     auto leaves = build_composite_leaves(block_options, /*dp_rank=*/i);
     if (options_.num_speculative_tokens() > 0) {
-      CHECK_GT(options_.num_embedding_blocks(), 0u)
-          << "num_embedding_blocks must be positive for speculative decode";
+      // EMBEDDING leaf needs the same concurrency wrapper as the other leaves
+      // when sequence-level entry points run off the scheduler thread (disagg
+      // PD / kvcache store prefill threadpools call try_allocate concurrently,
+      // and the host-offload D2H callback frees blocks off-thread).
       std::unique_ptr<BlockManager> embedding_leaf =
           std::make_unique<EmbeddingBlockManager>(
               /*num_blocks=*/options_.num_embedding_blocks(),
               /*resource_name=*/"embedding block",
               /*exhaustion_message=*/"No more embedding-block ids available");
-      if (options_.enable_disagg_pd() || options_.enable_kvcache_store()) {
+      if (options_.enable_disagg_pd() || options_.enable_kvcache_store() ||
+          options_.enable_host_offload()) {
         embedding_leaf = std::make_unique<ConcurrentBlockManagerImpl>(
             std::move(embedding_leaf));
       }
@@ -174,7 +180,7 @@ bool BlockManagerPool::allocate(Sequence* sequence, size_t num_tokens) {
   // failure, wrongly deallocate + reset the already-held SWA/C4/C128 blocks.
   const bool started_empty = !sequence->kv_state().has_any_blocks();
 
-  // The leaves (KV / SWA / C4 / C128 / EMBEDDING / LINEAR) apply their own
+  // The leaves (KV / SWA / C4 / C128 / EMBEDDING / LINEAR) each apply their own
   // strategy; the pool only orchestrates prefix-share-then-beam-then-grow,
   // which beam (KV copy-on-write) must sit between.
   auto* composite =

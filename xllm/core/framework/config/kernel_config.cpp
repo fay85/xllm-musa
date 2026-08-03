@@ -34,9 +34,10 @@ DEFINE_bool(enable_intralayer_addnorm,
 
 DEFINE_int32(enable_fused_mc2,
              -1,
-             "Fused MC2 mode for NPU EP MoE. -1 uses auto default, 0 "
-             "disables fused MC2, 1 uses DispatchFFNCombine, 2 uses "
-             "DispatchGmmCombineDecode.");
+             "Fused MC2 mode for NPU. -1 uses auto default, 0 disables fused "
+             "MC2, positive values enable dense matmul-allreduce, 1 uses "
+             "DispatchFFNCombine for MoE, 2 uses DispatchGmmCombineDecode for "
+             "MoE.");
 DEFINE_bool(enable_interlayer_addnorm,
             false,
             "enable fused interlayer addnorm ops.");
@@ -44,6 +45,32 @@ DEFINE_bool(enable_interlayer_addnorm,
 DEFINE_bool(enable_split_rmsnorm_rope,
             false,
             "enable fused split rmsnorm rope ops.");
+
+DEFINE_bool(enable_aclnn_matmul,
+            false,
+            "enable ACLNN matmul backend for supported NPU ATB layers.");
+
+DEFINE_bool(enable_aclnn_swiglu,
+            false,
+            "enable ACLNN SwiGLU backend for supported NPU ATB layers.");
+
+DEFINE_bool(enable_flashcomm1,
+            false,
+            "Enable Flash Communication 1 sequence-parallel optimization.");
+
+DEFINE_int32(flashcomm1_min_prefill_tokens,
+             8192,
+             "Minimum prefill token count to activate FC1.");
+
+DEFINE_bool(enable_mmrs_fusion,
+            false,
+            "Enable Matmul+ReduceScatter (MMRS) fusion for FlashComm1. Only "
+            "read when enable_flashcomm1=true. Currently off by default "
+            "because the fused kernel can fail on some shapes.");
+
+DEFINE_string(mmrs_comm_mode,
+              "aiv",
+              "Communication mode for torch_npu MMRS: ai_cpu, aiv, or none.");
 #endif
 
 namespace xllm {
@@ -74,6 +101,12 @@ void KernelConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_fused_mc2);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_interlayer_addnorm);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_split_rmsnorm_rope);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_aclnn_matmul);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_aclnn_swiglu);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_flashcomm1);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(flashcomm1_min_prefill_tokens);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_mmrs_fusion);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(mmrs_comm_mode);
 #endif
 }
 
@@ -85,6 +118,12 @@ void KernelConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_fused_mc2);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_interlayer_addnorm);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_split_rmsnorm_rope);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_aclnn_matmul);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_aclnn_swiglu);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_flashcomm1);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(flashcomm1_min_prefill_tokens);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_mmrs_fusion);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(mmrs_comm_mode);
 #endif
 }
 
@@ -100,6 +139,22 @@ void KernelConfig::append_config_json(
       config_json, default_config, enable_intralayer_addnorm);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_fused_mc2);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_interlayer_addnorm);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_split_rmsnorm_rope);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_aclnn_matmul);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_aclnn_swiglu);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_flashcomm1);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, flashcomm1_min_prefill_tokens);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_mmrs_fusion);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, mmrs_comm_mode);
 #endif
 }
 

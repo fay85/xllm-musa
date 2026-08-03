@@ -71,14 +71,8 @@ AttentionMetadata build_attention_metadata(
   attn_metadata.kv_seq_lens_vec = params.attention.host.kv_seq_lens;
   attn_metadata.q_seq_lens_vec = params.attention.host.q_seq_lens;
 #if defined(USE_CUDA) || defined(USE_MUSA)
-  // CUDA/MUSA batch_input_builder produces host.q_seq_lens as a cumulative
-  // array with a leading 0 (size = num_sequences + 1). Hybrid (Qwen3.5 GDN)
-  // layers and other helpers in qwen3_gated_delta_net_base.cpp use
-  // q_seq_lens_vec.size() as the batch count, so flatten it back to per-
-  // sequence raw lengths here. This matches the layout the NPU path already
-  // delivers via batch_input_builder.
-  // Keep the cumulative form in q_cu_seq_lens_host_vec once so every GDN
-  // layer can reuse it for Mate pack/waste decisions without rebuilding.
+  // CUDA/MUSA inputs carry cumulative lengths; expose raw per-sequence lengths
+  // to hybrid GDN layers while caching the cumulative query endpoints once.
   if (attn_metadata.q_seq_lens_vec.size() >= 2 &&
       attn_metadata.q_seq_lens_vec.front() == 0) {
     attn_metadata.q_cu_seq_lens_host_vec = attn_metadata.q_seq_lens_vec;
@@ -90,7 +84,6 @@ AttentionMetadata build_attention_metadata(
     }
     attn_metadata.q_seq_lens_vec = std::move(per_seq);
   } else if (!attn_metadata.q_seq_lens_vec.empty()) {
-    attn_metadata.q_cu_seq_lens_host_vec.clear();
     attn_metadata.q_cu_seq_lens_host_vec.reserve(
         attn_metadata.q_seq_lens_vec.size() + 1);
     attn_metadata.q_cu_seq_lens_host_vec.emplace_back(0);
@@ -113,6 +106,10 @@ AttentionMetadata build_attention_metadata(
 #endif
   attn_metadata.slot_mapping = params.attention.device.new_cache_slots;
   attn_metadata.compute_dtype = compute_dtype;
+#if defined(USE_DCU)
+  attn_metadata.use_dense_flash_attention =
+      params.graph.use_dense_flash_attention;
+#endif
 
   // for flashinfer
   attn_metadata.paged_kv_indptr = params.attention.device.paged_kv_indptr;
@@ -123,31 +120,16 @@ AttentionMetadata build_attention_metadata(
   attn_metadata.plan_info = std::make_shared<PlanInfo>();
   attn_metadata.shared_plan_info = std::make_shared<PlanInfo>();
   attn_metadata.unshared_plan_info = std::make_shared<PlanInfo>();
-
-  // Forward the CPU mirrors of the three paged_kv index tensors that the input
-  // builder already populated in attention.host. The Mate FFI batch_decode
-  // bridge requires kDLCPU pointers for these tensors, and the host mirrors
-  // are the same shared TensorImpl that was created on CPU before
-  // ModelInputParams::to(device), so there is no D2H sync here. On Qwen3.5-27B
-  // this saves 48 implicit .to(kCPU) per output token (16 full-attn layers x 3
-  // tensors) and is a prerequisite for capturing the decode forward as a CUDA
-  // graph (host syncs would otherwise abort capture). When the host mirrors
-  // are not populated (e.g. legacy callers / future input builders), the
-  // batch_decode wrapper falls back to a lazy .to(kCPU) so behavior is
-  // unchanged for paths that have not opted in.
   attn_metadata.paged_kv_indptr_host = params.attention.host.paged_kv_indptr;
   attn_metadata.paged_kv_indices_host = params.attention.host.paged_kv_indices;
   attn_metadata.paged_kv_last_page_len_host =
       params.attention.host.paged_kv_last_page_len;
 #endif
 
-#if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_NPU) || \
-    defined(USE_MLU)
-  // Use explicit attn_mask if provided; otherwise fall back to
-  // graph_buffer.attn_mask (e.g. Qwen2_5_VL sets graph_buffer.attn_mask for
-  // LongCat text encoding).
-  // torch_musa / FlashInfer: only accept 1D padding masks. Dense 2D/3D masks
-  // from graph buffers trigger the eager custom-mask path and crash prefill.
+#if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU) || \
+    defined(USE_NPU) || defined(USE_MLU)
+  // Use an explicit mask first. MUSA FlashInfer only accepts the 1D padding
+  // mask; dense graph-buffer masks must stay on the custom-mask path.
   std::optional<torch::Tensor> mask_to_use = attn_mask;
 #if !defined(USE_MUSA)
   if (!mask_to_use.has_value() && params.graph.attn_mask.defined()) {
@@ -155,21 +137,18 @@ AttentionMetadata build_attention_metadata(
   }
 #endif
   if (mask_to_use.has_value()) {
-    const auto& mask = mask_to_use.value();
 #if defined(USE_MUSA)
-    if (mask.dim() == 1) {
-      attn_metadata.attn_mask = mask;
+    if (mask_to_use->dim() == 1) {
+      attn_metadata.attn_mask = mask_to_use.value();
     }
 #else
-    attn_metadata.attn_mask = mask;
+    attn_metadata.attn_mask = mask_to_use.value();
 #endif
   }
 #endif
 
 #if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA)
   attn_metadata.is_spec_verify = params.is_spec_verify;
-#endif
-#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA)
   attn_metadata.use_expanded_decode_for_spec_verify_attention =
       params.graph.use_expanded_decode_for_spec_verify_attention;
   if (attn_metadata.use_expanded_decode_for_spec_verify_attention) {
@@ -192,6 +171,7 @@ AttentionMetadata build_attention_metadata(
   }
 #endif
 #if defined(USE_NPU)
+  // Determine if we should use ACL graph mode:
   // - --enable_graph=true
   // - Must be decode phase or spec-verify chunked prefill
   // - tiling_data must be available
@@ -271,23 +251,14 @@ AttentionMetadata build_attention_metadata(
 #endif
   }
 #if defined(USE_MUSA)
-  // MUSA FA3 prefill uses Mate's paged flash_attn_with_kvcache path.  The
-  // regular prefill path historically omitted block_table because FlashInfer
-  // consumed dense K/V; keep the rectangular table available on MUSA so the
-  // attention layer can select the paged kernel after reshape_paged_cache.
   if (params.attention.device.block_tables.defined()) {
     attn_metadata.block_table = params.attention.device.block_tables;
   }
 #endif
 #if defined(USE_CUDA) || defined(USE_MUSA)
-  // Hybrid (Qwen3.5 / Qwen3-Next) GDN layers need per-sequence q/kv lengths
-  // (not cumulative). Populate them from the cumulative versions for both
-  // prefill and decode so reshape_qkvz_with_pad and other helpers in
-  // qwen3_gated_delta_net_base.cpp see a non-empty list.
   if (params.attention.device.q_seq_lens.defined() &&
       params.attention.device.q_seq_lens.numel() >= 2) {
-    attn_metadata.q_seq_lens =
-        torch::diff(params.attention.device.q_seq_lens);
+    attn_metadata.q_seq_lens = torch::diff(params.attention.device.q_seq_lens);
   }
   if (params.attention.device.kv_seq_lens.defined() &&
       params.attention.device.kv_seq_lens.numel() >= 2) {

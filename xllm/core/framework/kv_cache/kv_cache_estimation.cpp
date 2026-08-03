@@ -17,17 +17,15 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstddef>
-#if defined(USE_MLU)
 #include <limits>
-#endif
 #include <vector>
 
+#include "core/layers/common/dsa_topk_share_plan.h"
+#include "core/platform/platform.h"
 #include "framework/block/block_utils.h"
 #include "framework/kv_cache/deepseek_v4_cache_policy.h"
 #include "framework/model/model_args.h"
-#if defined(USE_MLU)
 #include "platform/mlu/mlu_rdma_memory_plan.h"
-#endif
 #include "util/pretty_print.h"
 #include "util/tensor_helper.h"
 #include "util/utils.h"
@@ -37,7 +35,6 @@ namespace xllm {
 namespace {
 
 constexpr int32_t kNzAlignment = 16;
-constexpr int64_t kPaddingLinearStateBlocks = 2;
 
 int64_t kv_cache_dtype_size(const std::string& kv_cache_dtype,
                             int64_t model_dtype_size) {
@@ -117,7 +114,6 @@ bool use_rdma_indexer_scale_padding(const KVCacheEstimateOptions& options,
 #endif
 }
 
-#if defined(USE_MLU)
 size_t checked_product(size_t lhs, size_t rhs, const char* description) {
   if (lhs > static_cast<size_t>(0)) {
     CHECK_LE(rhs, std::numeric_limits<size_t>::max() / lhs)
@@ -126,24 +122,34 @@ size_t checked_product(size_t lhs, size_t rhs, const char* description) {
   return lhs * rhs;
 }
 
+int64_t standard_full_cache_block_size_in_bytes(
+    const KVCacheCapacity& kv_cache_cap) {
+  const int64_t full_attention_layers =
+      std::max<int64_t>(kv_cache_cap.num_full_attention_layers(), 1);
+  const int64_t indexer_layers = kv_cache_cap.num_indexer_layers();
+  CHECK_GE(indexer_layers, 0) << "num_indexer_layers must be non-negative";
+  CHECK_LE(indexer_layers, full_attention_layers)
+      << "num_indexer_layers cannot exceed full-attention layers";
+  const int64_t logical_block_bytes =
+      kv_cache_cap.block_size() *
+      (full_attention_layers *
+           (kv_cache_cap.slot_size() + kv_cache_cap.scale_slot_size()) +
+       indexer_layers * kv_cache_cap.index_slot_size());
+  CHECK_GT(logical_block_bytes, 0) << "logical block bytes must be positive";
+  return logical_block_bytes;
+}
+
 size_t standard_full_cache_allocation_bytes(const KVCacheCapacity& kv_cache_cap,
                                             int64_t n_blocks,
                                             bool enable_rdma_scale_padding) {
   CHECK_GT(n_blocks, 0) << "n_blocks must be positive";
-  const int64_t full_attention_layers =
-      std::max<int64_t>(kv_cache_cap.num_full_attention_layers(), 1);
   const int64_t logical_block_bytes =
-      kv_cache_cap.block_size() *
-      (kv_cache_cap.slot_size() + kv_cache_cap.index_slot_size() +
-       kv_cache_cap.scale_slot_size());
-  CHECK_GT(logical_block_bytes, 0) << "logical block bytes must be positive";
+      standard_full_cache_block_size_in_bytes(kv_cache_cap);
 
-  const size_t logical_bytes = checked_product(
+  const size_t logical_bytes =
       checked_product(static_cast<size_t>(n_blocks),
-                      static_cast<size_t>(full_attention_layers),
-                      "full cache block count"),
-      static_cast<size_t>(logical_block_bytes),
-      "full cache logical bytes");
+                      static_cast<size_t>(logical_block_bytes),
+                      "full cache logical bytes");
   if (!enable_rdma_scale_padding) {
     return logical_bytes;
   }
@@ -161,14 +167,13 @@ size_t standard_full_cache_allocation_bytes(const KVCacheCapacity& kv_cache_cap,
   const size_t padding_per_layer =
       scale_plan.registered_bytes - scale_plan.logical_bytes;
   const size_t total_padding =
-      checked_product(static_cast<size_t>(full_attention_layers),
+      checked_product(static_cast<size_t>(kv_cache_cap.num_indexer_layers()),
                       padding_per_layer,
                       "indexer scale RDMA padding");
   CHECK_LE(total_padding, std::numeric_limits<size_t>::max() - logical_bytes)
       << "full cache allocation bytes overflow";
   return logical_bytes + total_padding;
 }
-#endif
 
 bool is_qwen3_5_target_model_type(const std::string& model_type) {
   return model_type == "qwen3_5" || model_type == "qwen3_5_moe" ||
@@ -214,28 +219,23 @@ int64_t linear_slot_size(const ModelArgs& model_args,
 int64_t max_linear_state_blocks(int64_t cache_size_in_bytes,
                                 int64_t num_linear_attention_layers,
                                 int64_t linear_slot_size,
-                                int64_t num_full_attention_layers,
-                                int64_t full_attention_block_size) {
+                                int64_t full_cache_block_size_in_bytes) {
   if (linear_slot_size <= 0 || num_linear_attention_layers <= 0) {
     return kPaddingLinearStateBlocks;
   }
 
   CHECK_GT(cache_size_in_bytes, 0);
-  CHECK_GT(full_attention_block_size, 0);
+  CHECK_GT(full_cache_block_size_in_bytes, 0);
   const int64_t linear_bytes_per_block =
       num_linear_attention_layers * linear_slot_size;
-  const int64_t full_cache_bytes_per_block =
-      std::max<int64_t>(num_full_attention_layers, 1) *
-      full_attention_block_size;
   CHECK_GT(linear_bytes_per_block, 0);
-  CHECK_GT(full_cache_bytes_per_block, 0);
 
   int64_t max_linear_blocks =
       (cache_size_in_bytes - 1) / linear_bytes_per_block;
   const int64_t balanced_max_linear_blocks =
       (cache_size_in_bytes +
-       kPaddingLinearStateBlocks * full_cache_bytes_per_block) /
-      (linear_bytes_per_block + full_cache_bytes_per_block);
+       kPaddingLinearStateBlocks * full_cache_block_size_in_bytes) /
+      (linear_bytes_per_block + full_cache_block_size_in_bytes);
   max_linear_blocks = std::min(max_linear_blocks, balanced_max_linear_blocks);
 
   return std::max<int64_t>(max_linear_blocks, kPaddingLinearStateBlocks);
@@ -244,8 +244,7 @@ int64_t max_linear_state_blocks(int64_t cache_size_in_bytes,
 int64_t calculate_linear_state_blocks(int64_t cache_size_in_bytes,
                                       int64_t num_linear_attention_layers,
                                       int64_t linear_slot_size,
-                                      int64_t num_full_attention_layers,
-                                      int64_t full_attention_block_size,
+                                      int64_t full_cache_block_size_in_bytes,
                                       int64_t max_seqs_per_batch,
                                       int64_t max_linear_state_cache_slots,
                                       bool enable_prefix_cache) {
@@ -258,8 +257,7 @@ int64_t calculate_linear_state_blocks(int64_t cache_size_in_bytes,
       max_linear_state_blocks(cache_size_in_bytes,
                               num_linear_attention_layers,
                               linear_slot_size,
-                              num_full_attention_layers,
-                              full_attention_block_size);
+                              full_cache_block_size_in_bytes);
   if (max_linear_state_cache_slots > 0) {
     const int64_t requested_blocks =
         max_linear_state_cache_slots + kPaddingLinearStateBlocks;
@@ -487,23 +485,28 @@ void init_standard_counts(const ModelArgs& model_args,
     }
   }
 
+  if (kv_cache_cap->index_slot_size() > 0) {
+    int64_t num_indexer_layers = kv_cache_cap->num_full_attention_layers();
+    const std::vector<bool> indexer_layer_mask =
+        resolve_indexer_cache_enabled_layers(model_args,
+                                             kv_cache_cap->n_layers());
+    if (!indexer_layer_mask.empty()) {
+      num_indexer_layers = static_cast<int64_t>(std::count(
+          indexer_layer_mask.begin(), indexer_layer_mask.end(), true));
+    }
+    kv_cache_cap->num_indexer_layers(num_indexer_layers);
+  }
+
   const int64_t block_size = kv_cache_cap->block_size();
-  const int64_t block_size_in_bytes =
-      block_size *
-      (kv_cache_cap->slot_size() + kv_cache_cap->index_slot_size() +
-       kv_cache_cap->scale_slot_size());
+  const int64_t full_cache_block_size_in_bytes =
+      standard_full_cache_block_size_in_bytes(*kv_cache_cap);
   kv_cache_cap->num_linear_state_blocks(
       calculate_linear_state_blocks(kv_cache_cap->cache_size_in_bytes(),
                                     kv_cache_cap->num_linear_attention_layers(),
                                     kv_cache_cap->linear_slot_size(),
-                                    kv_cache_cap->num_full_attention_layers(),
-                                    block_size_in_bytes,
+                                    full_cache_block_size_in_bytes,
                                     options.max_seqs_per_batch,
-#if defined(USE_MLU)
                                     options.max_linear_state_cache_slots,
-#else
-                                    options.max_concurrent_requests,
-#endif
                                     options.enable_prefix_cache));
   kv_cache_cap->linear_cache_size_in_bytes(
       kv_cache_cap->num_linear_attention_layers() *
@@ -527,12 +530,8 @@ void init_standard_counts(const ModelArgs& model_args,
   CHECK_GT(available_full_cache_size_in_bytes, 0)
       << "no memory left for full-attention kv cache after reserving linear "
          "state cache";
-  const int64_t full_attention_layers =
-      std::max<int64_t>(kv_cache_cap->num_full_attention_layers(), 1);
   const int64_t logical_n_blocks =
-      available_full_cache_size_in_bytes /
-      (full_attention_layers * block_size_in_bytes);
-#if defined(USE_MLU)
+      available_full_cache_size_in_bytes / full_cache_block_size_in_bytes;
   const bool enable_rdma_scale_padding =
       use_rdma_indexer_scale_padding(options, *kv_cache_cap);
   if (!enable_rdma_scale_padding) {
@@ -555,7 +554,8 @@ void init_standard_counts(const ModelArgs& model_args,
       << "no memory for one KV cache block with RDMA-registerable indexer "
          "scales: available_bytes="
       << available_full_cache_size_in_bytes
-      << ", full_attention_layers=" << full_attention_layers
+      << ", full_attention_layers=" << kv_cache_cap->num_full_attention_layers()
+      << ", indexer_layers=" << kv_cache_cap->num_indexer_layers()
       << ", scale_registered_bytes_per_layer="
       << minimum_scale_plan.registered_bytes
       << ", minimum_allocation_bytes=" << minimum_allocation_bytes;
@@ -584,15 +584,22 @@ void init_standard_counts(const ModelArgs& model_args,
             << " to " << kv_cache_cap->n_blocks()
             << " blocks, scale_logical_bytes_per_layer="
             << scale_plan.logical_bytes << ", scale_registered_bytes_per_layer="
-            << scale_plan.registered_bytes
-            << ", full_attention_layers=" << full_attention_layers;
-#else
-  kv_cache_cap->n_blocks(logical_n_blocks);
-#endif
+            << scale_plan.registered_bytes << ", full_attention_layers="
+            << kv_cache_cap->num_full_attention_layers()
+            << ", indexer_layers=" << kv_cache_cap->num_indexer_layers();
   CHECK_GT(kv_cache_cap->n_blocks(), 0) << "no n_blocks for kv cache";
 }
 
 }  // namespace
+
+std::vector<bool> resolve_indexer_cache_enabled_layers(
+    const ModelArgs& model_args,
+    int64_t num_cache_layers) {
+  if (!Platform::supports_dsa_indexer_cache_elision()) {
+    return {};
+  }
+  return layer::get_dsa_indexer_layer_mask(model_args, num_cache_layers);
+}
 
 KVCacheCapacity estimate_kv_cache_capacity(
     const ModelArgs& model_args,
@@ -617,23 +624,17 @@ KVCacheCapacity estimate_kv_cache_capacity(
       torch::scalarTypeToTypeMeta(options.dtype).itemsize());
   const int64_t cache_dtype_size =
       kv_cache_dtype_size(options.kv_cache_dtype, dtype_size);
-#if defined(USE_MLU)
   const bool enable_indexer_cache_quantization =
       options.indexer_cache_dtype == "int8";
-#else
-  const bool enable_indexer_cache_quantization = false;
-#endif
 
   kv_cache_cap.slot_size(kv_slot_size(model_args, options, cache_dtype_size))
       .index_slot_size(index_slot_size(
           model_args, enable_indexer_cache_quantization, dtype_size))
+      .enable_indexer_cache_quant(enable_indexer_cache_quantization)
       .scale_slot_size(scale_slot_size(model_args, options))
       .linear_slot_size(linear_slot_size(model_args, options, dtype_size))
       .n_layers(model_args.n_layers())
       .block_size(options.block_size);
-#if defined(USE_MLU)
-  kv_cache_cap.enable_indexer_cache_quant(enable_indexer_cache_quantization);
-#endif
   const int64_t num_speculative_tokens =
       enable_qwen3_5_spec_verify(model_args, options)
           ? options.num_speculative_tokens

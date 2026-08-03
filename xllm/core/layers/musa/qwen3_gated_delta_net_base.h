@@ -21,14 +21,14 @@ limitations under the License.
 #include <tuple>
 #include <utility>
 
-#include "layers/common/attention.h"
 #include "framework/kv_cache/kv_cache.h"
-#include "framework/model/model_input_params.h"
 #include "framework/model/model_args.h"
+#include "framework/model/model_input_params.h"
 #include "framework/parallel_state/parallel_args.h"
 #include "framework/quant_args.h"
 #include "framework/state_dict/state_dict.h"
 #include "framework/state_dict/utils.h"
+#include "layers/common/attention.h"
 #include "layers/common/linear.h"
 #include "layers/common/rms_norm_gated.h"
 
@@ -40,11 +40,10 @@ bool use_mate_gdn_prefill_kernel();
 
 // After MTP rejection sampling, scatter per-layer intermediate SSM/conv states
 // into the live linear cache slots (post-verify commit).
-void scatter_gdn_mtp_verify_ssm_states(
-    const GdnMtpVerifyCache& cache,
-    const std::vector<KVCache>& kv_caches,
-    const ModelInputParams& input_params,
-    const torch::Tensor& accepted_tokens);
+void scatter_gdn_mtp_verify_ssm_states(const GdnMtpVerifyCache& cache,
+                                       const std::vector<KVCache>& kv_caches,
+                                       const ModelInputParams& input_params,
+                                       const torch::Tensor& accepted_tokens);
 
 class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
  public:

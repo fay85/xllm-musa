@@ -10,6 +10,7 @@ cc_library(
     qwen3_next_rms_norm.h
     deepseek_v4_rotary_embedding.h
     partial_rotary_embedding.h
+    ada_layer_norm.h
     rms_norm_gated.h
     rms_norm.h
     rotary_embedding.h
@@ -30,11 +31,12 @@ cc_library(
     moe_fused_topk.h
   SRCS
     oxygen_vision_attention.cpp
-    $<$<NOT:$<BOOL:${USE_MUSA}>>:qwen2_attention.cpp>
+    qwen2_attention.cpp
     qwen2_vision_attention.cpp
     qwen3_next_rms_norm.cpp
     deepseek_v4_rotary_embedding.cpp
     partial_rotary_embedding.cpp
+    ada_layer_norm.cpp
     rms_norm_gated.cpp
     rms_norm.cpp
     rotary_embedding.cpp

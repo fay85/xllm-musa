@@ -46,7 +46,6 @@ class SchedulerConfig final {
          "enable_schedule_overlap",
          "prefill_scheduling_memory_usage_threshold",
          "enable_chunked_prefill",
-         "enable_adaptive_prefill_oneshot",
          "max_tokens_per_chunk_for_prefill",
          "chunked_match_frequency",
          "use_zero_evict",
@@ -70,12 +69,7 @@ class SchedulerConfig final {
 
   PROPERTY(bool, enable_chunked_prefill) = true;
 
-  // Allow an isolated fresh prefill to consume its full prompt when it fits
-  // within max_tokens_per_batch. Multiple requests and active decode work keep
-  // the configured chunk limit.
-  PROPERTY(bool, enable_adaptive_prefill_oneshot) = false;
-
-  PROPERTY(int32_t, max_tokens_per_chunk_for_prefill) = 8192;
+  PROPERTY(int32_t, max_tokens_per_chunk_for_prefill) = -1;
 
   PROPERTY(int32_t, chunked_match_frequency) = 2;
 

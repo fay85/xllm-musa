@@ -21,6 +21,7 @@ limitations under the License.
 #include <optional>
 #include <vector>
 
+#include "common/flash_comm1_context.h"
 #include "core/framework/model_context.h"
 #include "framework/parallel_state/parallel_args.h"
 #include "framework/quant_args.h"
@@ -29,16 +30,10 @@ limitations under the License.
 
 namespace xllm {
 namespace layer {
-
-// Owns stable intermediate storage for one MUSA piecewise-prefill graph.
-// Buffers are allocated during the eager warmup and frozen before capture;
-// sequential layers reuse storage by shape so a large prefill does not retain
-// one allocation per linear/GDN layer in the graph memory pool.
 class PiecewiseGraphMatmulBufferPool final {
  public:
   torch::Tensor get(const torch::Tensor& input, const torch::Tensor& weight);
   torch::Tensor get_gated_rms_norm_output(const torch::Tensor& input);
-
   torch::Tensor get_gdn_query(const torch::Tensor& input);
   torch::Tensor get_gdn_key(const torch::Tensor& input);
   torch::Tensor get_gdn_value(const torch::Tensor& input);
@@ -48,7 +43,6 @@ class PiecewiseGraphMatmulBufferPool final {
   torch::Tensor get_gdn_initial_state(const torch::Tensor& reference);
   torch::Tensor get_gdn_final_state(const torch::Tensor& reference);
   torch::Tensor get_gdn_kkt(const torch::Tensor& key, int64_t num_v_heads);
-
   void freeze();
 
  private:
@@ -71,9 +65,6 @@ class PiecewiseGraphMatmulBufferPool final {
   bool frozen_ = false;
 };
 
-// Selects a graph-owned buffer pool while a MUSA piecewise-prefill graph is
-// warmed up and captured. The scope is thread-local because graph capture is
-// serialized per device by the executor.
 class PiecewiseGraphMatmulBufferScope final {
  public:
   explicit PiecewiseGraphMatmulBufferScope(
@@ -91,8 +82,6 @@ class PiecewiseGraphMatmulBufferScope final {
   PiecewiseGraphMatmulBufferPool* previous_buffer_pool_;
 };
 
-// Keeps the existing per-linear decode buffer while allowing piecewise
-// prefill to redirect outputs to the graph-owned pool above.
 class MatmulOutputBuffers final {
  public:
   std::optional<torch::Tensor> get(const torch::Tensor& input,
@@ -224,15 +213,7 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
   at::ScalarType output_dtype_;
   LinearExtraArgs linear_extra_args_;
   std::optional<std::string> resolved_weight_quant_method_;
-  // Sticky result of the per-shard block-fp8 quantized-vs-plain-BF16
-  // detection (see load_state_dict). Sharded/fused checkpoints may deliver a
-  // module's weight and weight_scale_inv shards across different files, so
-  // this decision must be made once (the first time we observe a shard's own
-  // weight without its co-located scale) and never re-evaluated from
-  // per-call "not fully accumulated yet" state, or we would corrupt the
-  // fused FP8 accumulator with a premature dtype retype mid-accumulation.
   bool block_fp8_resolved_unquantized_ = false;
-
   mutable MatmulOutputBuffers output_buffers_;
 };
 TORCH_MODULE(ColumnParallelLinear);
@@ -266,6 +247,14 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   // return the weight (for testing)
   torch::Tensor weight() const { return weight_; }
   bool is_weight_loaded() const { return weight_is_loaded_; }
+
+  // Accessors for W8A8 dynamic quantization parameters.
+  // Used by attention layers to reorder weight_scale/weight_offset
+  // when attn_output_gate is enabled.
+  torch::Tensor weight_scale() const { return weight_scale_; }
+  torch::Tensor weight_offset() const { return weight_offset_; }
+  bool is_weight_scale_loaded() const { return weight_scale_is_loaded_; }
+  bool is_weight_offset_loaded() const { return weight_offset_is_loaded_; }
 
   // Get FP8 input scale for fused RMSNorm+FP8 quantization
   // For QKV, returns max of Q/K/V scales (per-tensor)
@@ -314,14 +303,13 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   QuantArgs quant_args_;
   at::ScalarType output_dtype_;
   std::optional<std::string> resolved_weight_quant_method_;
-  // See ColumnParallelLinearImpl::block_fp8_resolved_unquantized_.
   bool block_fp8_resolved_unquantized_ = false;
-
   mutable MatmulOutputBuffers output_buffers_;
 };
 TORCH_MODULE(QKVParallelLinear);
 
 // Linear layer with row parallelism.
+
 //     The linear layer is defined as Y = XA + b. A is parallelized along
 //     its first dimension and X along its second dimension as:
 //                -   -
@@ -346,6 +334,8 @@ class RowParallelLinearImpl : public torch::nn::Module {
 
   torch::Tensor forward(torch::Tensor input);
 
+  torch::Tensor forward(torch::Tensor input, RowParallelReduceMode reduce_mode);
+
   // load the weight from the checkpoint
   void load_state_dict(const StateDict& state_dict);
 
@@ -369,7 +359,20 @@ class RowParallelLinearImpl : public torch::nn::Module {
   }
   ProcessGroup* process_group() const { return process_group_; }
 
+  bool is_weight_loaded() const {
+    if (quant_args_.quant_method() == kQuantMethodSmoothquant) {
+      return qweight_is_loaded_ && per_channel_scale_is_loaded_ &&
+             smooth_is_loaded_;
+    }
+    return weight_is_loaded_;
+  }
+
  private:
+  torch::Tensor forward_impl(torch::Tensor input,
+                             RowParallelReduceMode reduce_mode);
+
+  torch::Tensor mmrs_weight_transposed() const;
+
   // parameter members, must be registered
   // we allocate the transpose since linear performs XA^T.
   // A^T: [out_features, in_features_per_partition]
@@ -415,11 +418,11 @@ class RowParallelLinearImpl : public torch::nn::Module {
   at::ScalarType output_dtype_;
   LinearExtraArgs linear_extra_args_;
   std::optional<std::string> resolved_weight_quant_method_;
-  // See ColumnParallelLinearImpl::block_fp8_resolved_unquantized_.
   bool block_fp8_resolved_unquantized_ = false;
-
+  mutable torch::Tensor mmrs_weight_t_;
   mutable MatmulOutputBuffers output_buffers_;
 };
+
 TORCH_MODULE(RowParallelLinear);
 
 class ReplicatedLinearImpl : public torch::nn::Module {

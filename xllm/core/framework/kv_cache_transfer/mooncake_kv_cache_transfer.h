@@ -62,6 +62,12 @@ class MooncakeKVCacheTransferDefault final
                                  const uint16_t listen_port,
                                  const torch::Device& device,
                                  const std::string& model_type);
+  MooncakeKVCacheTransferDefault(
+      const int32_t device_id,
+      const uint16_t listen_port,
+      const torch::Device& device,
+      const std::string& model_type,
+      std::unique_ptr<MooncakeTransferEngine> engine);
 
   void allocate_kv_cache(std::vector<xllm::KVCache>& kv_caches,
                          const int64_t num_layers,
@@ -76,6 +82,10 @@ class MooncakeKVCacheTransferDefault final
   void register_kv_cache(std::vector<xllm::KVCache>& kv_caches,
                          const KVCacheShape& kv_cache_shape,
                          const torch::ScalarType dtype) override;
+
+  void register_kv_cache_spec(std::vector<xllm::KVCache>& kv_caches,
+                              const KVCacheShape& kv_cache_shape,
+                              torch::ScalarType dtype) override;
 
   bool pull_kv_blocks(
       const uint64_t src_cluster_id,
@@ -103,12 +113,23 @@ class MooncakeKVCacheTransferDefault final
   struct BufLayout {
     // Number of layers owned by this layout.
     int64_t num_layers = 0;
-    // Number of registered buffers per layer, such as K/V/index cache.
-    int64_t buf_cnt = 0;
     // Starting buffer id of this layout in the Mooncake registration table.
     int64_t offset = 0;
+    // Registration-order offsets for each layer plus one terminal offset.
+    // Shared DSA layers omit indexer buffers, so counts may vary by layer.
+    std::vector<int64_t> layer_offsets;
+    // Legacy uniform buffers-per-layer view. It is zero when buffer counts
+    // vary. Keep this for callers that construct a uniform layout directly.
+    int64_t buf_cnt = 0;
+    // Total buffers registered by this layout.
+    int64_t total_buf_cnt = 0;
     // True after the corresponding KV cache memory has been registered.
     bool registered = false;
+  };
+
+  enum class RegisterLengthPolicy : int8_t {
+    LOGICAL_BYTES = 0,
+    RDMA_REGISTERABLE_BYTES = 1,
   };
 
   void allocate_kv_cache_impl(std::vector<xllm::KVCache>& kv_caches,
@@ -119,7 +140,9 @@ class MooncakeKVCacheTransferDefault final
   void add_buf(const torch::Tensor& tensor,
                std::vector<void*>& addrs,
                std::vector<size_t>& lens,
-               std::vector<uint64_t>& buf_bytes) const;
+               std::vector<uint64_t>& buf_bytes,
+               RegisterLengthPolicy register_length_policy =
+                   RegisterLengthPolicy::LOGICAL_BYTES) const;
   std::vector<int64_t> get_buf_ids(const std::vector<int64_t>& layer_ids,
                                    bool is_spec_draft) const;
   std::vector<int64_t> get_buf_ids(const std::vector<int64_t>& layer_ids,

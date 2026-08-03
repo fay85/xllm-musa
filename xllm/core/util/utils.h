@@ -31,6 +31,7 @@ limitations under the License.
 #include "core/common/types.h"
 #include "core/framework/config/disagg_pd_config.h"
 #include "core/framework/config/parallel_config.h"
+#include "core/util/dit_model_discovery.h"
 #include "core/util/json_reader.h"
 #include "core/util/model_config_utils.h"
 #include "models/model_registry.h"
@@ -91,6 +92,20 @@ static inline int64_t align_up(int64_t value, int64_t alignment) {
     return value;
   }
   return ((value + alignment - 1) / alignment) * alignment;
+}
+
+// Returns the first token id in `token_ids` that falls outside the valid
+// vocabulary range [0, vocab_size); std::nullopt if all ids are in range.
+// Callers must skip the scan when vocab_size <= 0 (range unknown).
+inline std::optional<int32_t> find_out_of_vocab_token(
+    const std::vector<int32_t>& token_ids,
+    int64_t vocab_size) {
+  for (int32_t token_id : token_ids) {
+    if (token_id < 0 || token_id >= vocab_size) {
+      return token_id;
+    }
+  }
+  return std::nullopt;
 }
 
 bool match_suffix(const Slice<int32_t>& data, const Slice<int32_t>& suffix);
@@ -192,8 +207,20 @@ inline std::string get_model_backend(const std::filesystem::path& model_path) {
     if (reader.value<std::string>("_diffusers_version").has_value()) {
       return "dit";
     }
+    // DiT models that are not diffusers-based (e.g. Cola-DLM) may have
+    // _class_name but no _diffusers_version. Treat them as dit backend.
+    if (reader.value<std::string>("_class_name").has_value()) {
+      return "dit";
+    }
     LOG(FATAL) << "Please check model_index.json file in model path: "
                << model_path << ", it should contain _diffusers_version key.";
+  }
+
+  // Component-subdirectory layout (e.g. Cola-DLM with cola_dit/cola_vae).
+  if (auto components = discover_dit_components(model_path)) {
+    if (!components->empty()) {
+      return "dit";
+    }
   }
 
   return ModelRegistry::get_model_backend(get_model_type(model_path));

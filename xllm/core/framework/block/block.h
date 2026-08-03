@@ -46,8 +46,8 @@ enum class BlockType : int8_t {
   C4 = 2,         // DSV4 compressed, exported to multi_block_tables[1]
   C128 = 3,       // DSV4 compressed, exported to multi_block_tables[2]
   EMBEDDING = 4,  // per-sequence spec-decode embedding-row slot, exported via
-                  // get_embedding_block_id() (embedding_ids). The numeric
-                  // value remains 4 for cache-group compatibility.
+                  // get_embedding_block_id() (embedding_ids). Value kept at 4
+                  // for proto BlockType wire compatibility.
   LINEAR = 5,     // per-sequence linear-state (GDN recurrent) live slot, drawn
                   // from LinearStateBlockManager; exported via
   // get_linear_block_id() (linear_state_ids). Also the cache group

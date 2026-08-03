@@ -1,4 +1,0 @@
-interface:
-  display_name: "dev92 xLLM Environment"
-  short_description: "Operate xLLM safely on dev92 over SSH"
-  default_prompt: "Use $dev92-xllm-environment to inspect and work in the dev92 xLLM checkout safely over SSH."

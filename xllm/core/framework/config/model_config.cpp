@@ -19,11 +19,17 @@ limitations under the License.
 
 #include "core/common/global_flags.h"
 #include "core/framework/config/config_utils.h"
-#include "core/platform/device_name_utils.h"
 
 DEFINE_string(model_id, "", "hf model name.");
 
 DEFINE_string(model, "", "Name or path of the huggingface model to use.");
+
+DEFINE_string(python_model_path,
+              "",
+              "Filesystem directory that contains the 'xllm' package, "
+              "prepended to sys.path so the embedded interpreter can import "
+              "the 'xllm.python' model executor subpackage. Falls back to the "
+              "XLLM_PYTHON_MODEL_PATH env var when empty.");
 
 DEFINE_string(
     backend,
@@ -31,16 +37,15 @@ DEFINE_string(
     "Choose the backend model type. 'llm' for text-only, "
     "'vlm' for multimodal (text and images), 'dit' for diffusion models.");
 
+DEFINE_string(model_impl,
+              "",
+              "Model executor implementation. Empty/'native' uses the built-in "
+              "C++ model; 'python' runs the graph via the embedded Python "
+              "interpreter ('python' model package).");
+
 DEFINE_string(task,
               "generate",
               "The task to use the model for(e.g. generate, embed, mm_embed).");
-
-DEFINE_string(devices,
-              "",
-              "Deprecated. Use --device_id instead. Devices to run the model "
-              "on, e.g. npu:0, npu:0,npu:1.");
-
-DEFINE_int32(device_id, -1, "Device id to run the model on, e.g. 0.");
 
 DEFINE_int32(limit_image_per_prompt,
              8,
@@ -106,21 +111,10 @@ bool is_cpp_chat_template_supported_model(const std::string& model_type) {
 void ModelConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(model_id);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(model);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(model_impl);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(python_model_path);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(backend);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(task);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(device_id);
-  const bool devices_specified = config::is_flag_specified("devices");
-  const bool device_id_specified = config::is_flag_specified("device_id");
-  if (devices_specified) {
-    LOG(WARNING) << "--devices is deprecated and will be removed in a future "
-                    "release. Use --device_id instead.";
-  }
-  if (devices_specified && !device_id_specified) {
-    XLLM_CONFIG_ASSIGN_FROM_FLAG(devices);
-  } else {
-    CHECK(device_id() >= 0) << "--device_id must be >= 0.";
-    devices(DeviceNameUtils::to_device_string(device_id()));
-  }
   XLLM_CONFIG_ASSIGN_FROM_FLAG(limit_image_per_prompt);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(max_encoder_cache_size);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(reasoning_parser);
@@ -131,6 +125,13 @@ void ModelConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(flashinfer_workspace_buffer_size);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(use_audio_in_video);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(use_cpp_chat_template);
+}
+
+bool ModelConfig::is_python_model_impl(std::string_view model_impl) {
+  // Single place that tolerates the "py" alias for "python". All callers route
+  // their model_impl comparison through here, so the raw config value is never
+  // normalized: no separate canonicalization step is needed.
+  return model_impl == "python" || model_impl == "py";
 }
 
 void ModelConfig::normalize_cpp_chat_template(const std::string& model_type) {
@@ -150,11 +151,10 @@ void ModelConfig::normalize_cpp_chat_template(const std::string& model_type) {
 void ModelConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(model_id);
   XLLM_CONFIG_ASSIGN_FROM_JSON(model);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(model_impl);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(python_model_path);
   XLLM_CONFIG_ASSIGN_FROM_JSON(backend);
   XLLM_CONFIG_ASSIGN_FROM_JSON(task);
-  // don't read rank-related config
-  // XLLM_CONFIG_ASSIGN_FROM_JSON(device_id);
-  // XLLM_CONFIG_ASSIGN_FROM_JSON(devices);
   XLLM_CONFIG_ASSIGN_FROM_JSON(limit_image_per_prompt);
   XLLM_CONFIG_ASSIGN_FROM_JSON(max_encoder_cache_size);
   XLLM_CONFIG_ASSIGN_FROM_JSON(reasoning_parser);
@@ -173,13 +173,12 @@ void ModelConfig::append_config_json(
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, model_id);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(config_json, default_config, model);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, model_impl);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, python_model_path);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(config_json, default_config, backend);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(config_json, default_config, task);
-  // don't dump rank-related config
-  //  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(config_json, default_config,
-  //  device_id);
-  //  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(config_json, default_config,
-  //  devices);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, limit_image_per_prompt);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(

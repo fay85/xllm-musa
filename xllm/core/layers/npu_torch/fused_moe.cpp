@@ -434,7 +434,8 @@ FusedMoEImpl::FusedMoEImpl(const ModelArgs& model_args,
                                  tp_pg_,
                                  options,
                                  /*module_prefix=*/"",
-                                 swiglu_limit_));
+                                 swiglu_limit_,
+                                 /*apply_fc1_sequence_parallel=*/false));
     shared_expert_gate_ = register_module(
         "shared_expert_gate",
         torch::nn::Linear(

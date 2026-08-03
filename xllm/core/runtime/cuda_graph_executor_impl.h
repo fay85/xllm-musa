@@ -38,9 +38,9 @@ limitations under the License.
 #include "core/framework/model/model_input_params.h"
 #include "core/kernels/cuda/llm_decode_metadata_update.h"
 #include "core/kernels/cuda/piecewise_graphs.h"
-#include "core/runtime/executor_impl.h"
-#include "core/runtime/executor_impl_factory.h"
-#include "core/runtime/options.h"
+#include "executor_impl.h"
+#include "executor_impl_factory.h"
+#include "options.h"
 
 namespace xllm::runtime::cuda {
 
@@ -53,7 +53,7 @@ using TorchMemPool = c10::cuda::MemPool;
 // Helper class to hold persistent parameters for CUDA graph execution
 // Multiple CudaGraph instances can share the same CudaGraphPersistentParam
 // object
-class CudaGraphPersistentParam final {
+class CudaGraphPersistentParam {
  public:
   CudaGraphPersistentParam(const ModelArgs& args,
                            const torch::Device& device,
@@ -236,7 +236,7 @@ class CudaGraphPersistentParam final {
 };
 
 // CUDA graph executor using libtorch CUDAGraph for memory management
-class CudaGraph final {
+class CudaGraph {
  public:
   // is_piecewise: if true, use piecewise graph capture for prefill
   // capture_stream: the stream to use for CUDA graph capture
@@ -295,7 +295,7 @@ class CudaGraph final {
 };
 
 // Executor implementation using CUDA graph optimization
-class CudaGraphExecutorImpl final : public ExecutorImpl {
+class CudaGraphExecutorImpl : public ExecutorImpl {
  public:
   CudaGraphExecutorImpl(CausalLM* model,
                         const ModelArgs& args,

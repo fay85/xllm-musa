@@ -22,22 +22,22 @@ limitations under the License.
 #include "npu/npu_ops_api.h"
 #include "npu/xllm_ops/xllm_ops_api.h"
 #include "triton_npu/torch_api/triton_ops_api.h"
-#elif defined(USE_CUDA)
-#include "cuda/attention_runner.h"
-#include "cuda/cuda_ops_api.h"
-#include "cuda/gated_delta_fallback.h"
-#include "cuda/gdn_ops.h"
-#include "cuda/mate_gdn_ops.h"
-#elif defined(USE_ILU)
-#include "ilu/ilu_ops_api.h"
 #elif defined(USE_MUSA)
 #include "musa/gdn_ops.h"
 #include "musa/musa_ops_api.h"
+#elif defined(USE_CUDA)
+#include "cuda/attention_runner.h"
+#include "cuda/cuda_ops_api.h"
+#elif defined(USE_ILU)
+#include "ilu/ilu_ops_api.h"
 #elif defined(USE_DCU)
 #include "cuda/cuda_ops_api.h"
+#include "dcu/aiter_quant_adapter.h"
 #include "dcu/dcu_ops_api.h"
+#include "dcu/hipblaslt_fp8_adapter.h"
 #endif
 
+#include <cmath>
 #include <numeric>
 
 #include "common/macros.h"
@@ -46,6 +46,12 @@ limitations under the License.
 namespace xllm::kernel {
 
 namespace {
+#if defined(USE_NPU)
+bool is_supported_initial_state_dtype(torch::ScalarType dtype) {
+  return dtype == torch::kBFloat16 || dtype == torch::kFloat32;
+}
+#endif
+
 #if defined(USE_DCU)
 torch::Tensor pack_2d_position_ids(const torch::Tensor& position_ids,
                                    const torch::Tensor& cu_query_lens,
@@ -95,12 +101,7 @@ torch::Tensor pack_2d_position_ids(const torch::Tensor& position_ids,
 }
 
 #endif
-#if defined(USE_NPU)
-bool is_supported_initial_state_dtype(torch::ScalarType dtype) {
-  return dtype == torch::kBFloat16 || dtype == torch::kFloat32;
-}
-#endif
-}
+}  // namespace
 
 void apply_rotary(RotaryParams& params) {
 #if defined(USE_MLU)
@@ -123,6 +124,8 @@ void apply_rotary(RotaryParams& params) {
   torch::Tensor cos_sin;
 
   if (params.position_ids.has_value()) {
+    // positions is already int64 on CUDA/MUSA/DCU (pre-converted in
+    // ForwardInput::to).
     pos_ids = params.position_ids.value().to(torch::kInt64);
 #if defined(USE_DCU)
     if (pos_ids.dim() == 2 && params.q.dim() == 3) {
@@ -154,6 +157,10 @@ void apply_rotary(RotaryParams& params) {
                                 .device(params.q.device()))
                   .contiguous();
   } else {
+    // When neither position_ids nor cu_query_lens is provided,
+    // infer sequence length from q tensor and create default position IDs.
+    // This handles cases like LongCat-Image-Edit where rotary embedding
+    // is applied uniformly across all sequence positions.
     int64_t seq_len = params.q.size(0);
     CHECK(seq_len > 0) << "apply_rotary: cannot infer valid sequence "
                           "length from q tensor.";
@@ -197,6 +204,7 @@ void apply_rotary(RotaryParams& params) {
     auto cos_sin_vec = params.cos_sin.chunk(4, -1);
     ilu_cos_sin = torch::cat({cos_sin_vec[0], cos_sin_vec[2]}, -1);
   }
+  // positions is already int64 on ILU (pre-converted in ForwardInput::to).
   torch::Tensor long_position_ids = params.position_ids.value().to(at::kLong);
   ilu::apply_rope_pos_ids_cos_sin_cache(
       params.q, params.k, ilu_cos_sin, long_position_ids, params.interleaved);
@@ -226,14 +234,6 @@ void active(ActivationParams& params) {
 #endif
 }
 
-void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate) {
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  cuda::mul_sigmoid_gate_inplace(out, gate);
-#else
-  out.mul_(torch::sigmoid(gate));
-#endif
-}
-
 void reshape_paged_cache(ReshapePagedCacheParams& params) {
 #if defined(USE_MLU)
   mlu::reshape_paged_cache(params.key,
@@ -255,6 +255,7 @@ void reshape_paged_cache(ReshapePagedCacheParams& params) {
                             params.k_cache,
                             params.v_cache.value_or(torch::Tensor()));
 #elif defined(USE_ILU)
+  // auto v_cache = params.v_cache.value_or(torch::Tensor());
   ilu::reshape_paged_cache(params.key,
                            params.value,
                            params.k_cache,
@@ -335,20 +336,7 @@ void fused_layernorm(FusedLayerNormParams& params) {
                        params.store_output_before_norm,
                        params.store_output_after_norm,
                        params.dynamic_quant);
-#elif defined(USE_NPU)
-  if (params.residual.has_value()) {
-    std::tie(params.output, std::ignore, params.residual_out) =
-        npu::add_rms_norm(
-            params.input, params.residual.value(), params.weight, params.eps);
-  } else {
-    params.output =
-        npu::rms_norm(params.input, params.weight, params.eps, params.mode);
-  }
-  if (params.beta.has_value()) {
-    params.output += params.beta.value();
-  }
-#elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
-#if defined(USE_MUSA)
+#elif defined(USE_MUSA)
   if (params.mode != "rmsnorm") {
     NOT_IMPLEMENTED();
   }
@@ -366,7 +354,28 @@ void fused_layernorm(FusedLayerNormParams& params) {
     gemma_rms_norm(gemma_params);
     params.output = gemma_params.norm_out;
   }
-#else
+#elif defined(USE_NPU)
+  if (params.residual.has_value()) {
+    if (params.add_gamma_offset) {
+      std::tie(params.output, std::ignore, params.residual_out) =
+          npu::gamma_add_rms_norm(params.input,
+                                  params.residual.value(),
+                                  params.weight,
+                                  params.eps,
+                                  params.add_gamma_offset);
+    } else {
+      std::tie(params.output, std::ignore, params.residual_out) =
+          npu::add_rms_norm(
+              params.input, params.residual.value(), params.weight, params.eps);
+    }
+  } else {
+    params.output =
+        npu::rms_norm(params.input, params.weight, params.eps, params.mode);
+  }
+  if (params.beta.has_value()) {
+    params.output += params.beta.value();
+  }
+#elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   if (params.residual.has_value()) {
     cuda::fused_add_rms_norm(
         params.input, params.residual.value(), params.weight, params.eps);
@@ -375,14 +384,13 @@ void fused_layernorm(FusedLayerNormParams& params) {
   } else {
     cuda::rms_norm(params.output, params.input, params.weight, params.eps);
   }
-#endif
 #elif defined(USE_ILU)
   if (params.residual.has_value()) {
     ilu::residual_layer_norm(params.input,
                              params.output,
                              params.residual,
                              params.weight,
-                             params.bias,
+                             params.bias,  // residual_bias
                              params.residual_out,
                              params.eps);
   } else {
@@ -391,6 +399,20 @@ void fused_layernorm(FusedLayerNormParams& params) {
 #else
   NOT_IMPLEMENTED();
 #endif
+}
+
+torch::Tensor fused_adalayer_norm(AdaLayerNormParams& params) {
+#if defined(USE_NPU)
+  params.output = npu::fused_adalayer_norm(params.input,
+                                           params.scale,
+                                           params.shift,
+                                           params.weight,
+                                           params.bias,
+                                           params.eps);
+#else
+  NOT_IMPLEMENTED();
+#endif
+  return params.output;
 }
 
 std::tuple<torch::Tensor, torch::Tensor> rms_norm_dynamic_quant(
@@ -408,12 +430,31 @@ torch::Tensor matmul(MatmulParams& params) {
       params.a, params.b, params.bias, params.c, params.alpha, params.beta);
 #elif defined(USE_NPU)
   return npu::matmul(params.a, params.b, params.bias);
-#elif defined(USE_CUDA) || defined(USE_MUSA)
+#elif defined(USE_MUSA)
   return cuda::matmul(params.a, params.b, params.bias, params.output_buf);
+#elif defined(USE_CUDA)
+  return cuda::matmul(params.a, params.b, params.bias);
 #elif defined(USE_ILU)
   return ilu::matmul(params.a, params.b, params.bias);
 #elif defined(USE_DCU)
   return dcu::matmul(params.a, params.b, params.bias);
+#else
+  NOT_IMPLEMENTED();
+#endif
+}
+
+torch::Tensor matmul_reduce_scatter(MatmulReduceScatterParams& params) {
+#if defined(USE_NPU)
+  return npu::matmul_reduce_scatter(params.a,
+                                    params.b,
+                                    params.bias,
+                                    params.process_group,
+                                    params.reduce_op,
+                                    params.comm_turn,
+                                    params.comm_mode,
+                                    params.x1_scale,
+                                    params.x2_scale,
+                                    params.output_dtype);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -567,7 +608,8 @@ w4a8_dynamic_moe_preprocess(W4A8DynamicMoePreprocessParams& params) {
                                           params.w2_weight_scale_second,
                                           params.w13_scale_bias,
                                           params.w2_scale_bias,
-                                          params.group_size);
+                                          params.group_size,
+                                          params.pack_weight_to_int32);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -607,6 +649,15 @@ std::tuple<torch::Tensor, torch::Tensor> moe_active_topk(
                               params.scoring_func,
                               params.route_scale,
                               params.e_score_correction_bias);
+#elif defined(USE_DCU)
+  return dcu::moe_active_topk(params.input,
+                              params.topk,
+                              params.num_expert_group,
+                              params.topk_group,
+                              params.normalize,
+                              params.e_score_correction_bias,
+                              params.scoring_func,
+                              params.route_scale);
 #elif (defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)) && \
     !defined(USE_MUSA)
   return cuda::moe_fused_topk(params.input,
@@ -675,6 +726,7 @@ torch::Tensor moe_combine_result(MoeCombineResultParams& params) {
 #elif defined(USE_ILU)
   return ilu::moe_combine_result(params.input, params.reduce_weight);
 #elif defined(USE_MUSA) || defined(USE_DCU)
+  // N = params.reduce_weight.size(0), topk = params.reduce_weight.size(1)
   int64_t N = params.reduce_weight.size(0);
   int32_t topk = static_cast<int32_t>(params.reduce_weight.size(1));
   auto out =
@@ -1186,9 +1238,13 @@ std::tuple<torch::Tensor, torch::Tensor> fp8_scaled_quantize(
     Fp8ScaledQuantizeParams& params) {
 #if defined(USE_CUDA)
   return cuda::fp8_scaled_quantize(params.input, params.output, params.scale);
+#elif defined(USE_DCU)
+  CHECK(!params.scale.has_value() || !params.scale.value().defined())
+      << "DCU fp8_scaled_quantize currently supports only dynamic per-token "
+         "quantization.";
+  return dcu::aiter::per_token_quant_fp8(params.input, params.output);
 #else
-  LOG(FATAL) << "fp8_scaled_quantize is only supported on CUDA";
-  return std::make_tuple(torch::Tensor(), torch::Tensor());
+  NOT_IMPLEMENTED();
 #endif
 }
 
@@ -1208,6 +1264,12 @@ std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
                                          params.dt_bias,
                                          params.beta,
                                          params.threshold);
+  // return npu::npu_fused_gdn_gating(params.A_log,
+  //                                  params.a,
+  //                                  params.b,
+  //                                  params.dt_bias,
+  //                                  params.beta,
+  //                                  params.threshold);
 #elif defined(USE_CUDA) || defined(USE_MUSA)
   return cuda::fused_gdn_gating(params);
 #else
@@ -1275,7 +1337,30 @@ torch::Tensor hc_pre_inv_rms(HcPreInvRmsParams& params) {
 
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params) {
-#if defined(USE_NPU)
+#if defined(USE_MLU)
+  float scale = params.scale.has_value()
+                    ? params.scale.value()
+                    : 1.0f / std::sqrt(static_cast<float>(params.k.size(-1)));
+  auto outputs = mlu::fused_sigmoid_gating_delta_rule_update(
+      params.A_log,
+      params.a,
+      params.b,
+      params.dt_bias,
+      params.q,
+      params.k,
+      params.v,
+      params.initial_state_source,
+      params.initial_state_indices,
+      params.cu_seqlens,
+      scale,
+      params.use_qk_l2norm_in_kernel,
+      params.softplus_beta,
+      params.softplus_threshold,
+      params.num_accepted_tokens,
+      /*inplace_final_state=*/true,
+      params.is_kda);
+  return outputs.first;
+#elif defined(USE_NPU)
   return npu::npu_fused_sigmoid_gating_delta_rule_update(
       params.A_log,
       params.a,
@@ -1308,14 +1393,29 @@ torch::Tensor fp8_scaled_matmul(Fp8ScaledMatmulParams& params) {
                                         params.bias,
                                         params.output);
 
+  // Auto reshape output if original input shape is provided
   if (params.input_shape.has_value()) {
     auto out_shape = params.input_shape.value();
     out_shape.back() = params.b.size(0);
     return out_2d.view(out_shape);
   }
   return out_2d;
+#elif defined(USE_DCU)
+  torch::Tensor out_2d = dcu::hipblaslt_fp8::fp8_gemm_nt(params.a,
+                                                         params.b,
+                                                         params.a_scale,
+                                                         params.b_scale,
+                                                         params.output_dtype,
+                                                         params.bias,
+                                                         params.output);
+  if (params.input_shape.has_value()) {
+    std::vector<int64_t> out_shape = params.input_shape.value();
+    out_shape.back() = params.b.size(0);
+    return out_2d.view(out_shape);
+  }
+  return out_2d;
 #else
-  LOG(FATAL) << "fp8_scaled_matmul is only supported on CUDA";
+  LOG(FATAL) << "fp8_scaled_matmul is only supported on CUDA/DCU";
   return torch::Tensor();
 #endif
 }
@@ -1335,18 +1435,6 @@ torch::Tensor fp8_block_matmul(Fp8BlockMatmulParams& params) {
 #endif
 }
 
-std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
-    const torch::Tensor& input,
-    int64_t group_size) {
-#if defined(USE_MUSA)
-  return cuda::per_token_group_quant_fp8(input, group_size);
-#else
-  LOG(FATAL) << "per_token_group_quant_fp8 is only supported on MUSA "
-                "(torch_musa)";
-  return std::make_tuple(torch::Tensor(), torch::Tensor());
-#endif
-}
-
 void static_scaled_fp8_quant(StaticScaledFp8QuantParams& params) {
 #if defined(USE_CUDA)
   cuda::static_scaled_fp8_quant(params.output, params.input, params.scale);
@@ -1355,17 +1443,20 @@ void static_scaled_fp8_quant(StaticScaledFp8QuantParams& params) {
 #endif
 }
 
+// Fused RMSNorm + Static FP8 Quantization
 torch::Tensor rms_norm_static_fp8_quant(RmsNormStaticFp8QuantParams& params) {
 #if defined(USE_CUDA)
   auto org_shape = params.input.sizes().vec();
   auto hidden_size = params.input.size(-1);
 
+  // Flatten input to 2D. Use reshape to support non-contiguous tensors.
   auto input_2d = params.input.reshape({-1, hidden_size});
 
   torch::Tensor output =
       torch::empty({input_2d.size(0), hidden_size},
                    input_2d.options().dtype(torch::kFloat8_e4m3fn));
 
+  // Call fused kernel
   cuda::rms_norm_static_fp8_quant(
       output, input_2d, params.weight, params.scale, params.epsilon);
 
@@ -1382,6 +1473,7 @@ std::tuple<torch::Tensor, torch::Tensor> fused_add_rms_norm_static_fp8_quant(
   auto org_shape = params.input.sizes().vec();
   auto hidden_size = params.input.size(-1);
 
+  // Flatten tensors to 2D. Use reshape to support non-contiguous tensors.
   auto input_2d = params.input.reshape({-1, hidden_size});
   auto residual_2d = params.residual.reshape({-1, hidden_size});
 
@@ -1389,6 +1481,7 @@ std::tuple<torch::Tensor, torch::Tensor> fused_add_rms_norm_static_fp8_quant(
       torch::empty({input_2d.size(0), hidden_size},
                    input_2d.options().dtype(torch::kFloat8_e4m3fn));
 
+  // Call fused kernel (residual is updated in-place)
   cuda::fused_add_rms_norm_static_fp8_quant(output,
                                             input_2d,
                                             residual_2d,
@@ -1396,6 +1489,7 @@ std::tuple<torch::Tensor, torch::Tensor> fused_add_rms_norm_static_fp8_quant(
                                             params.scale,
                                             params.epsilon);
 
+  // Reshape outputs
   auto output_reshaped = output.reshape(org_shape);
   auto residual_reshaped = residual_2d.reshape(org_shape);
 
@@ -1407,7 +1501,20 @@ std::tuple<torch::Tensor, torch::Tensor> fused_add_rms_norm_static_fp8_quant(
 }
 
 torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params) {
-#if defined(USE_NPU)
+#if defined(USE_MLU)
+  return mlu::causal_conv1d_update_decode(params.x,
+                                          params.conv_state,
+                                          params.weight,
+                                          params.bias,
+                                          params.conv_state_indices,
+                                          params.activation,
+                                          params.pad_slot_id,
+                                          params.query_start_loc,
+                                          params.max_query_len,
+                                          params.num_accepted_tokens,
+                                          params.block_idx_last_scheduled_token,
+                                          params.initial_state_idx);
+#elif defined(USE_NPU)
   const bool has_silu = params.activation;
 
   auto x_work = params.x;
@@ -1499,6 +1606,7 @@ torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params) {
     return y;
   }
 
+  // Fallback: per-batch loop using causal_conv1d (batch=1 kernel, fp16).
   auto original_dtype = x_work.scalar_type();
   bool need_cast = (original_dtype != torch::kFloat16);
 
@@ -1615,16 +1723,24 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_gating_top_k_hash(
 
 torch::Tensor gated_layer_norm(GatedLayerNormParams& params) {
 #if defined(USE_NPU)
-  return npu::layer_norm_fwd(params.x,
-                             params.weight,
-                             params.bias,
-                             params.eps,
-                             params.z,
-                             params.group_size,
-                             params.norm_before_gate,
-                             params.is_rms_norm);
+  return npu::layer_norm_fwd_aclnn(params.x,
+                                   params.weight,
+                                   params.bias,
+                                   params.eps,
+                                   params.z,
+                                   params.group_size,
+                                   params.norm_before_gate,
+                                   params.is_rms_norm);
 #elif defined(USE_MLU)
   return mlu::gated_layer_norm(params.x,
+                               params.weight,
+                               params.bias,
+                               params.eps,
+                               params.z,
+                               params.group_size,
+                               params.norm_before_gate);
+#elif defined(USE_DCU)
+  return dcu::gated_layer_norm(params.x,
                                params.weight,
                                params.bias,
                                params.eps,
@@ -1725,22 +1841,24 @@ torch::Tensor sparse_flash_attention(SparseFlashAttentionParams& params) {
 
 void gemma_rms_norm(GemmaRMSNormParams& params) {
 #if defined(USE_NPU)
-  CHECK(!params.residual.defined())
-      << "GemmaRMSNorm residual branch not supported on NPU; "
-         "caller should keep using fused_layernorm for residual case.";
   npu::npu_gemma_rms_norm(
       params.x, params.gamma, params.epsilon, params.rstd_out, params.norm_out);
 #elif defined(USE_MLU)
-  CHECK(!params.residual.defined())
-      << "GemmaRMSNorm residual branch not supported on MLU; "
-         "caller should keep using fused_layernorm for residual case.";
-  mlu::gemma_rms_norm(params.x, params.gamma, params.epsilon, params.norm_out);
+  mlu::gemma_rms_norm(params.x,
+                      params.gamma,
+                      params.epsilon,
+                      params.norm_out,
+                      params.residual,
+                      params.residual_out);
+#elif defined(USE_DCU)
+  dcu::gemma_rms_norm(params.x, params.gamma, params.epsilon, params.norm_out);
 #elif defined(USE_CUDA) || defined(USE_MUSA)
-  if (params.residual.defined()) {
+  if (params.residual.has_value() && params.residual->defined()) {
+    auto residual = params.residual.value();
     cuda::fused_add_gemma_rms_norm(
-        params.x, params.residual, params.gamma, params.epsilon);
+        params.x, residual, params.gamma, params.epsilon);
     params.norm_out = params.x;
-    params.residual_out = params.residual;
+    params.residual_out = residual;
   } else {
     if (!params.norm_out.defined()) {
       params.norm_out = torch::empty_like(params.x);
@@ -1882,6 +2000,25 @@ torch::Tensor sparse_attn_sharedkv_metadata(
 #endif
 }
 
+void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  cuda::mul_sigmoid_gate_inplace(out, gate);
+#else
+  out.mul_(torch::sigmoid(gate));
+#endif
+}
+
+std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size) {
+#if defined(USE_MUSA)
+  return cuda::per_token_group_quant_fp8(input, group_size);
+#else
+  LOG(FATAL) << "per_token_group_quant_fp8 is only supported on MUSA";
+  return std::make_tuple(torch::Tensor(), torch::Tensor());
+#endif
+}
+
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     MateGatedDeltaRulePrefillParams& params) {
 #if defined(USE_CUDA) || defined(USE_MUSA)
@@ -1900,8 +2037,7 @@ torch::Tensor mate_gated_delta_rule_decode(
 #endif
 }
 
-torch::Tensor mate_gated_delta_rule_mtp(
-    MateGatedDeltaRuleMtpParams& params) {
+torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params) {
 #if defined(USE_CUDA) || defined(USE_MUSA)
   return cuda::mate_gated_delta_rule_mtp(params);
 #else
@@ -2026,6 +2162,7 @@ std::pair<torch::Tensor, torch::Tensor> mega_chunk_gdn(
                                  params.initial_state,
                                  params.output_final_state,
                                  params.cu_seqlens,
+                                 params.q_seq_lens,
                                  params.use_qk_l2norm_in_kernel);
 #else
   NOT_IMPLEMENTED();
@@ -2069,7 +2206,17 @@ torch::Tensor recurrent_gated_delta_rule(
                                              g,
                                              gk);
 #elif defined(USE_CUDA) || defined(USE_MUSA)
-  return cuda::recurrent_gated_delta_rule(query, key, value, state, beta, scale, actual_seq_lengths, ssm_state_indices, num_accepted_tokens, g, gk);
+  return cuda::recurrent_gated_delta_rule(query,
+                                          key,
+                                          value,
+                                          state,
+                                          beta,
+                                          scale,
+                                          actual_seq_lengths,
+                                          ssm_state_indices,
+                                          num_accepted_tokens,
+                                          g,
+                                          gk);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -2099,7 +2246,17 @@ torch::Tensor causal_conv1d(const torch::Tensor& x,
                             pad_slot_id,
                             run_mode);
 #elif defined(USE_CUDA) || defined(USE_MUSA)
-  return cuda::causal_conv1d(x, weight, conv_state, bias_opt, query_start_loc_opt, cache_indices_opt, initial_state_mode_opt, num_accepted_tokens_opt, activation_mode, pad_slot_id, run_mode);
+  return cuda::causal_conv1d(x,
+                             weight,
+                             conv_state,
+                             bias_opt,
+                             query_start_loc_opt,
+                             cache_indices_opt,
+                             initial_state_mode_opt,
+                             num_accepted_tokens_opt,
+                             activation_mode,
+                             pad_slot_id,
+                             run_mode);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -2134,4 +2291,4 @@ void causal_conv1d_out(const torch::Tensor& output,
   NOT_IMPLEMENTED();
 #endif
 }
-}
+}  // namespace xllm::kernel

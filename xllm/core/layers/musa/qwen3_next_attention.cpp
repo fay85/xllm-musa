@@ -114,12 +114,10 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
   // 6. Attention
   const int64_t sliding_window =
       args.use_sliding_window() ? args.sliding_window() : -1;
-  attn_ = register_module("attn",
-                          Attention(num_heads_,
-                                    head_dim_,
-                                    scaling_,
-                                    num_kv_heads_,
-                                    sliding_window));
+  attn_ = register_module(
+      "attn",
+      Attention(
+          num_heads_, head_dim_, scaling_, num_kv_heads_, sliding_window));
 
   // 7. Fused split_qkv_rmsnorm_mrope kernel setup
   rotary_dim_ = static_cast<int64_t>(head_dim_ * args.partial_rotary_factor());
@@ -258,24 +256,24 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
         (head_dim_ == 64 || head_dim_ == 128 || head_dim_ == 256)) {
       auto cos_sin_cache = rotary_emb_->get_cos_sin_cache();
       int64_t k_head_offset = attn_output_gate_ ? num_heads_ * 2 : num_heads_;
-      xllm::kernel::cuda::fused_qk_norm_rope(
-          qkv,
-          num_heads_,
-          num_kv_heads_,
-          num_kv_heads_,
-          head_dim_,
-          rms_norm_eps_,
-          q_norm_->weight(),
-          k_norm_->weight(),
-          cos_sin_cache,
-          /*interleaved=*/false,
-          positions,
-          k_head_offset);
+      xllm::kernel::cuda::fused_qk_norm_rope(qkv,
+                                             num_heads_,
+                                             num_kv_heads_,
+                                             num_kv_heads_,
+                                             head_dim_,
+                                             rms_norm_eps_,
+                                             q_norm_->weight(),
+                                             k_norm_->weight(),
+                                             cos_sin_cache,
+                                             /*interleaved=*/false,
+                                             positions,
+                                             k_head_offset);
       q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
-      k = qkv.slice(/*dim=*/-1,
-                    /*start=*/attn_output_gate_ ? q_size_ * 2 : q_size_,
-                    /*end=*/attn_output_gate_ ? q_size_ * 2 + kv_size_
-                                              : q_size_ + kv_size_);
+      k = qkv.slice(
+          /*dim=*/-1,
+          /*start=*/attn_output_gate_ ? q_size_ * 2 : q_size_,
+          /*end=*/
+          attn_output_gate_ ? q_size_ * 2 + kv_size_ : q_size_ + kv_size_);
     } else {
       auto q_3d = q.view({T, num_heads_, head_dim_});
       q = std::get<0>(q_norm_->forward(q_3d)).view({T, q_size_});

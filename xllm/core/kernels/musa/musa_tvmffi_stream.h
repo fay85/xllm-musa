@@ -77,8 +77,7 @@ class MusaTvmffiStreamOverrideGuard final {
   MusaTvmffiStreamOverrideGuard(const torch::Device& device, void* stream);
   ~MusaTvmffiStreamOverrideGuard();
 
-  MusaTvmffiStreamOverrideGuard(const MusaTvmffiStreamOverrideGuard&) =
-      delete;
+  MusaTvmffiStreamOverrideGuard(const MusaTvmffiStreamOverrideGuard&) = delete;
   MusaTvmffiStreamOverrideGuard& operator=(
       const MusaTvmffiStreamOverrideGuard&) = delete;
 
@@ -216,4 +215,4 @@ void end_ffi_alloc_replay();
 FfiAllocMode get_ffi_alloc_mode();
 
 void bind_tvmffi_stream_to_current_torch_stream(const torch::Device& device);
-}
+}  // namespace xllm::kernel::cuda

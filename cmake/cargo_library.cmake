@@ -75,25 +75,14 @@ function(cargo_library)
   
   message(STATUS "running: ${CARGO_ENV_COMMAND} ${CARGO_EXECUTABLE} ARGS ${CARGO_ARGS}")
 
-  # XLLM_PREBUILT_CARGO: skip rebuild when a pre-seeded static library exists.
-  if(EXISTS "${LIB_FILE}")
-    message(STATUS "Using prebuilt cargo library ${LIB_FILE}")
-    add_custom_target(${CARGO_NAME}_target ALL DEPENDS ${LIB_FILE})
-    add_custom_command(
-        OUTPUT ${LIB_FILE}
-        COMMAND ${CMAKE_COMMAND} -E echo "Prebuilt cargo library ${LIB_FILE}"
-        COMMENT "Prebuilt cargo library ${LIB_FILE}"
-    )
-  else()
-    add_custom_command(
-        OUTPUT ${LIB_FILE}
-        COMMAND ${CARGO_ENV_COMMAND} ${CARGO_EXECUTABLE} ARGS ${CARGO_ARGS}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        DEPENDS ${LIB_SOURCES}
-        COMMENT "Building cargo library ${LIB_FILE}"
-    )
-    add_custom_target(${CARGO_NAME}_target ALL DEPENDS ${LIB_FILE})
-  endif()
+  add_custom_command(
+      OUTPUT ${LIB_FILE}
+      COMMAND ${CARGO_ENV_COMMAND} ${CARGO_EXECUTABLE} ARGS ${CARGO_ARGS}
+      WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+      DEPENDS ${LIB_SOURCES}
+      COMMENT "Building cargo library ${LIB_FILE}"
+  )
+  add_custom_target(${CARGO_NAME}_target ALL DEPENDS ${LIB_FILE})
 
   # add the library target
   add_library(${CARGO_NAME} STATIC IMPORTED GLOBAL)

@@ -17,6 +17,7 @@ limitations under the License.
 
 #include "core/framework/model/model_output.h"
 #include "core/layers/common/lm_head.h"
+#include "core/layers/common/rotary_embedding_util.h"
 #include "models/model_registry.h"
 #include "models/vlm/mposition/mposition.h"
 #include "models/vlm/qwen3_vl_base.h"
@@ -28,7 +29,7 @@ limitations under the License.
 #if defined(USE_NPU)
 #include "models/llm/qwen3_5.h"
 #include "models/vlm/npu/qwen3_vl.h"
-#elif defined(USE_MLU)
+#elif defined(USE_MLU) || defined(USE_DCU)
 #include "core/layers/common/qwen3_next_rms_norm.h"
 #include "core/layers/common/rms_norm.h"
 #include "core/layers/qwen3_5_decoder_layer.h"
@@ -89,33 +90,7 @@ class Qwen3_5ModelImpl final
 
   std::pair<torch::Tensor, torch::Tensor> apply_mrope(
       const torch::Tensor positions) override {
-    auto target_cos_sin = cos_sin_.index({positions});
-    auto target_cos_sin_chunks = target_cos_sin.chunk(/*chunks=*/2, /*dim=*/-1);
-    auto cos_pos = target_cos_sin_chunks[0].contiguous();
-    auto sin_pos = target_cos_sin_chunks[1].contiguous();
-    auto apply = [this](torch::Tensor x) {
-      auto freqs_t = x[0].clone();
-      int64_t mrop_length = static_cast<int64_t>(freqs_t.size(-1) / 2);
-
-      for (int32_t dim_idx = 1; dim_idx <= 2; ++dim_idx) {
-        int64_t offset = dim_idx;
-        int64_t section_len = mrope_section_[dim_idx];
-        int64_t length = section_len * 3;
-
-        auto idx_first_half = torch::arange(offset, length, 3, torch::kLong);
-        auto idx_second_half = torch::arange(
-            offset + mrop_length, length + mrop_length, 3, torch::kLong);
-
-        auto idx_tensor =
-            torch::cat({idx_first_half, idx_second_half}, 0).to(x.device());
-        auto src = x[dim_idx].index_select(-1, idx_tensor);
-        freqs_t.index_copy_(-1, idx_tensor, src);
-      }
-      return freqs_t;
-    };
-    cos_pos = apply(cos_pos.reshape({positions.size(0), -1, cos_pos.size(-1)}));
-    sin_pos = apply(sin_pos.reshape({positions.size(0), -1, sin_pos.size(-1)}));
-    return std::make_pair(cos_pos, sin_pos);
+    return layer::rotary::apply_mrope(cos_sin_, positions, mrope_section_);
   }
 
   virtual ModelOutput forward(torch::Tensor tokens,
@@ -150,12 +125,8 @@ class Qwen3_5ModelImpl final
     }
 
     auto& attn_metadata = *(input_params_new.attn_metadata);
-    bool only_prefill =
-        (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill);
-    if (positions.dim() == 2 && only_prefill && !mrope_section_.empty()) {
-      std::tie(attn_metadata.mrope_cos, attn_metadata.mrope_sin) =
-          apply_mrope(positions);
-    }
+    std::tie(attn_metadata.mrope_cos, attn_metadata.mrope_sin) =
+        apply_mrope(positions);
 
     std::optional<torch::Tensor> residual;
     for (size_t i = 0; i < layers_.size(); i++) {
@@ -180,8 +151,76 @@ class Qwen3_5ModelImpl final
   layer::AttentionMetadata get_attention_metadata(
       const ModelInputParams& params,
       const torch::Tensor& h) {
-    auto attn_metadata = layer::AttentionMetadataBuilder::build(params, false);
-    // TODO: support linear attention
+    auto attn_metadata =
+        layer::AttentionMetadataBuilder::build(params, /*enable_mla=*/false);
+    // Init batch and token_block_offset for GDN attention
+    if (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill) {
+      constexpr int32_t kBlockM = 64;
+      constexpr int64_t pad_slot_id = -1;
+      constexpr int64_t default_max_num_programs = 1024;
+      constexpr int64_t chunk_size = 64;
+      auto seqlens = attn_metadata.q_cu_seq_lens.diff();
+      auto nums = (seqlens + kBlockM - 1) / kBlockM;
+      nums = nums.to(torch::kLong);
+      int32_t tot = nums.sum().item<int32_t>();
+      torch::Tensor range_batch = torch::arange(nums.size(0), nums.options());
+      torch::Tensor mlist_tensor = torch::repeat_interleave(range_batch, nums);
+      int64_t mlist_len = mlist_tensor.size(0);
+      int64_t max_num_programs =
+          std::max(default_max_num_programs, mlist_len) * 2;
+      torch::Tensor batch_ptr =
+          torch::full({max_num_programs},
+                      pad_slot_id,
+                      torch::dtype(torch::kInt32).device(seqlens.device()));
+      torch::Tensor token_block_offset_ptr =
+          torch::full({max_num_programs},
+                      pad_slot_id,
+                      torch::dtype(torch::kInt32).device(seqlens.device()));
+
+      std::vector<torch::Tensor> vec;
+      vec.reserve(nums.size(0));
+      for (int64_t i = 0; i < nums.size(0); ++i) {
+        vec.emplace_back(
+            torch::arange(nums[i].item<int64_t>(), nums.options()));
+      }
+      torch::Tensor offsetlist_tensor = torch::cat(vec, -1).to(torch::kInt32);
+      batch_ptr.narrow(0, 0, mlist_len).copy_(mlist_tensor);
+      token_block_offset_ptr.narrow(0, 0, mlist_len).copy_(offsetlist_tensor);
+
+      // Compute chunk indices for the chunked GDN kernel
+      {
+        torch::Tensor lengths = seqlens;
+        torch::Tensor num_chunks = (lengths + chunk_size - 1) / chunk_size;
+        num_chunks = num_chunks.to(torch::kLong);
+        torch::Tensor cumsum = torch::cumsum(num_chunks, 0);
+        int64_t total_chunks = cumsum[-1].item<int64_t>();
+        torch::Tensor arange_total =
+            torch::arange(total_chunks, attn_metadata.q_cu_seq_lens.options());
+        torch::Tensor zeros = torch::zeros({1}, cumsum.options());
+        torch::Tensor prefix = torch::cat(
+            {zeros, cumsum.slice(/*dim=*/0, /*start=*/0, /*end=*/-1)});
+        torch::Tensor repeats_prefix =
+            torch::repeat_interleave(prefix, num_chunks);
+        torch::Tensor indices = arange_total - repeats_prefix;
+        torch::Tensor mask = indices == 0;
+        torch::Tensor col0 = mask.cumsum(0) - 1;
+        attn_metadata.chunk_indices = torch::stack({col0, indices}, /*dim=*/1)
+                                          .to(attn_metadata.q_cu_seq_lens)
+                                          .to(torch::kInt32);
+      }
+      attn_metadata.tot = tot;
+      attn_metadata.batch = batch_ptr;
+      attn_metadata.token_block_offset = token_block_offset_ptr;
+      if (params.attention.device.kv_cache_tokens_nums.defined() &&
+          params.attention.device.kv_cache_tokens_nums.numel() > 0) {
+        attn_metadata.has_initial_states =
+            (params.attention.device.kv_cache_tokens_nums > 0).to(torch::kBool);
+      } else {
+        attn_metadata.has_initial_states =
+            torch::zeros({seqlens.size(0)},
+                         torch::dtype(torch::kBool).device(seqlens.device()));
+      }
+    }
     return attn_metadata;
   }
 };
@@ -355,6 +394,48 @@ REGISTER_MODEL_ARGS(qwen3_5_moe, [&] {
   SET_ARG(stop_token_ids,
           std::unordered_set<int32_t>({args->eos_token_id(), 248046}));
 });
+
+// Text-only model registrations. On NPU these are handled by llm/qwen3_5.h.
+#if !defined(USE_NPU)
+// qwen3_5 without vision config (text-only serving).
+// Model args are already registered by the VLM registration above.
+REGISTER_CAUSAL_MODEL_WITH_VARNAME(qwen3_5_lm, qwen3_5, Qwen3_5ForCausalLM);
+
+REGISTER_CAUSAL_MODEL(qwen3_5_text, Qwen3_5ForCausalLM);
+REGISTER_MODEL_ARGS(qwen3_5_text, [&] {
+  LOAD_QWEN3_5_COMMON_ARGS();
+  SET_ARG(num_experts, 0);
+  SET_ARG(n_routed_experts, 0);
+  SET_ARG(n_shared_experts, 0);
+  SET_ARG(decoder_sparse_step, 1);
+  SET_ARG(stop_token_ids,
+          std::unordered_set<int32_t>({args->eos_token_id(), 248046}));
+});
+
+REGISTER_CAUSAL_MODEL(qwen3_5_moe_text, Qwen3_5ForCausalLM);
+REGISTER_MODEL_ARGS(qwen3_5_moe_text, [&] {
+  LOAD_QWEN3_5_COMMON_ARGS();
+  LOAD_ARG_OR(decoder_sparse_step, "text_config.decoder_sparse_step", 1);
+  LOAD_ARG_OR(moe_intermediate_size, "text_config.moe_intermediate_size", 512);
+  LOAD_ARG_OR(num_experts, "text_config.num_experts", 512);
+  LOAD_ARG_OR(num_experts_per_tok, "text_config.num_experts_per_tok", 10);
+  LOAD_ARG_OR(shared_expert_intermediate_size,
+              "text_config.shared_expert_intermediate_size",
+              512);
+  LOAD_ARG_OR(norm_topk_prob, "text_config.norm_topk_prob", true);
+  LOAD_ARG_OR(
+      n_routed_experts, "text_config.n_routed_experts", args->num_experts());
+  SET_ARG(n_shared_experts,
+          args->shared_expert_intermediate_size() > 0 ? 1 : 0);
+  SET_ARG(scoring_func, "softmax");
+  SET_ARG(topk_method, "");
+  SET_ARG(n_group, -1);
+  SET_ARG(topk_group, 0);
+  SET_ARG(routed_scaling_factor, 1.0f);
+  SET_ARG(stop_token_ids,
+          std::unordered_set<int32_t>({args->eos_token_id(), 248046}));
+});
+#endif  // !defined(USE_NPU)
 
 #undef LOAD_QWEN3_5_VISION_ARGS
 #undef LOAD_QWEN3_5_COMMON_ARGS

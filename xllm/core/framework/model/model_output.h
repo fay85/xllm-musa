@@ -20,19 +20,20 @@ limitations under the License.
 
 #include <optional>
 
+#include "core/framework/model/mtp_topk_state.h"
+
 namespace xllm {
 struct ModelOutput {
   // [num_tokens, hidden_size]
   torch::Tensor hidden_states;
+  // Optional logits produced inside a graph-captured lm_head.
+  torch::Tensor logits;
   // [num_tokens, hidden_size]
   torch::Tensor residual;
   // [num_tokens, ...]
   torch::Tensor aux_hidden_states;
-  // DSA top-k indices reused across MTP draft forwards.
-  torch::Tensor dsa_topk_indices;
-  // [num_seqs, vocab_size] - logits captured inside the graph (D1).
-  // When defined, the worker skips eager lm_head computation.
-  torch::Tensor logits;
+  // Backend-neutral state emitted for the next MTP draft step.
+  MtpTopkStatePtr mtp_topk_state;
 
   ModelOutput() = default;
 

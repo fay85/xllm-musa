@@ -19,8 +19,6 @@ cc_library(
     rec_sampler.cpp
     beam_searcher.cpp
     rec_constrained_decoding.cpp
-  COPTS
-    ${_XLLM_MUSIFY_COPTS}
   DEPS
     :state_dict
     :common

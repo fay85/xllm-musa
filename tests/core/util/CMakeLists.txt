@@ -10,6 +10,7 @@ cc_test(
     net_test.cpp
     suffix_decoding_cache_test.cpp
     threadpool_test.cpp
+    vocab_validation_test.cpp
   DEPS
     util
     :platform

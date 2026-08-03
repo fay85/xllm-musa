@@ -6,7 +6,6 @@ endif()
 
 include(cc_binary)
 
-
 cc_library(
   NAME
     runtime
@@ -26,6 +25,7 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:mlu_graph_executor_impl.h>
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.h>
     $<$<BOOL:${USE_MUSA}>:musa/musa_graph_executor_impl.h>
+    py_executor_impl.h
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.h>
     worker.h
     worker_impl.h
@@ -34,18 +34,20 @@ cc_library(
     dit_worker_impl.h
     embed_worker_impl.h
     embed_vlm_worker_impl.h
-    $<$<NOT:$<BOOL:${USE_MUSA}>>:rec_worker_impl.h>
+    rec_worker_impl.h
     mm_embed_vlm_worker_impl.h
     worker_client.h
     xservice_client.h
     speculative_worker_impl.h
+    mtp_async_input_builder.h
     mtp_worker_impl.h
+    mtp_async_state.h
     suffix_worker_impl.h
     eagle3_worker_impl.h
+    dflash_worker_impl.h
     spec_input_builder.h
     forward_shared_memory_manager.h
     worker_rendezvous.h
-    cp_input_partition.h
   SRCS
     executor.cpp
     executor_impl_factory.cpp
@@ -56,6 +58,7 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:acl_graph_persistent_param.cpp>
     $<$<BOOL:${USE_MLU}>:mlu_graph_executor_impl.cpp>
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.cpp>
+    py_executor_impl.cpp
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.cpp>
     worker.cpp
     worker_impl.cpp
@@ -65,18 +68,20 @@ cc_library(
     dit_worker_impl.cpp
     embed_worker_impl.cpp
     embed_vlm_worker_impl.cpp
-    $<$<NOT:$<BOOL:${USE_MUSA}>>:rec_worker_impl.cpp>
+    rec_worker_impl.cpp
     mm_embed_vlm_worker_impl.cpp
     worker_client.cpp
     xservice_client.cpp
     params_utils.cpp
     speculative_worker_impl.cpp
+    mtp_async_input_builder.cpp
     mtp_worker_impl.cpp
+    mtp_async_state.cpp
     suffix_worker_impl.cpp
     eagle3_worker_impl.cpp
+    dflash_worker_impl.cpp
     spec_input_builder.cpp
     forward_shared_memory_manager.cpp
-    cp_input_partition.cpp
   DEPS
     torch
     $<$<BOOL:${USE_NPU}>:torch_npu>
@@ -90,7 +95,9 @@ cc_library(
     :model
     :parallel_state
     :kv_cache
+    :kv_cache_estimation
     :kv_cache_transfer
+    :linear_state_restore
     :kv_transfer_completion
     :models
     :sampler

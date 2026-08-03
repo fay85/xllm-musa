@@ -20,10 +20,8 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <algorithm>
-#include <mutex>
-#include <vector>
-
 #include <boost/algorithm/string.hpp>
+#include <vector>
 
 #include "common/device_monitor.h"
 #include "common/global_flags.h"
@@ -31,13 +29,12 @@ limitations under the License.
 #include "common/types.h"
 #include "core/distributed_runtime/comm_channel.h"
 #include "core/framework/config/eplb_config.h"
-#include "core/runtime/params_utils.h"
 #include "framework/kv_cache/kv_cache_shape.h"
+#include "framework/model/model_input_params.h"
 #include "framework/request/sequence.h"
 #include "framework/sampling/sampling_params.h"
 #include "runtime/forward_params.h"
 #include "runtime/params_utils.h"
-#include "util/env_var.h"
 #include "util/timer.h"
 
 namespace xllm {
@@ -73,76 +70,6 @@ int64_t count_negative_tokens(const torch::Tensor& tokens) {
     }
   }
   return count;
-}
-
-bool mtp_acceptance_debug_enabled() {
-  static const bool enabled =
-      util::get_bool_env("XLLM_DEBUG_MTP_ACCEPTANCE", false);
-  return enabled;
-}
-
-int64_t mtp_acceptance_debug_interval() {
-  static const int64_t interval = std::max<int64_t>(
-      util::get_int_env("XLLM_DEBUG_MTP_ACCEPTANCE_INTERVAL", 128), 1);
-  return interval;
-}
-
-void log_mtp_acceptance(int64_t batch_size,
-                        int64_t num_speculative_tokens,
-                        int64_t num_draft_tokens,
-                        int64_t num_accepted_tokens) {
-  if (!mtp_acceptance_debug_enabled()) {
-    return;
-  }
-
-  struct DebugState {
-    std::mutex mutex;
-    int64_t total_draft = 0;
-    int64_t total_accepted = 0;
-    int64_t reported_draft = 0;
-    int64_t reported_accepted = 0;
-    int64_t next_report = 0;
-  };
-  static DebugState state;
-
-  std::lock_guard<std::mutex> lock(state.mutex);
-  const int64_t interval = mtp_acceptance_debug_interval();
-  if (state.next_report == 0) {
-    state.next_report = interval;
-    LOG(INFO) << "[MTP acceptance] enabled, report_interval=" << interval
-              << " draft tokens";
-  }
-
-  state.total_draft += num_draft_tokens;
-  state.total_accepted += num_accepted_tokens;
-  if (state.total_draft < state.next_report) {
-    return;
-  }
-
-  const int64_t window_draft = state.total_draft - state.reported_draft;
-  const int64_t window_accepted =
-      state.total_accepted - state.reported_accepted;
-  const double window_rate =
-      window_draft > 0
-          ? static_cast<double>(window_accepted) / window_draft
-          : 0.0;
-  const double cumulative_rate =
-      state.total_draft > 0
-          ? static_cast<double>(state.total_accepted) / state.total_draft
-          : 0.0;
-  LOG(INFO) << "[MTP acceptance] batch=" << batch_size
-            << " k=" << num_speculative_tokens
-            << " step_accepted=" << num_accepted_tokens << "/"
-            << num_draft_tokens << " window=" << window_accepted << "/"
-            << window_draft << " (" << window_rate * 100.0
-            << "%) cumulative=" << state.total_accepted << "/"
-            << state.total_draft << " (" << cumulative_rate * 100.0 << "%)";
-
-  state.reported_draft = state.total_draft;
-  state.reported_accepted = state.total_accepted;
-  while (state.next_report <= state.total_draft) {
-    state.next_report += interval;
-  }
 }
 
 void record_speculative_metrics_from_output(const torch::Tensor& next_tokens,
@@ -183,13 +110,9 @@ void record_speculative_metrics_from_output(const torch::Tensor& next_tokens,
 
   const int64_t num_draft_tokens = batch_size * num_speculative_tokens;
   rejected_count = std::min(rejected_count, num_draft_tokens);
-  const int64_t num_accepted_tokens = num_draft_tokens - rejected_count;
   COUNTER_ADD(speculative_num_draft_tokens_total, num_draft_tokens);
-  COUNTER_ADD(speculative_num_accepted_tokens_total, num_accepted_tokens);
-  log_mtp_acceptance(batch_size,
-                     num_speculative_tokens,
-                     num_draft_tokens,
-                     num_accepted_tokens);
+  COUNTER_ADD(speculative_num_accepted_tokens_total,
+              num_draft_tokens - rejected_count);
 }
 
 torch::Tensor clone_cpu_tensor_view(const torch::Tensor& tensor) {
@@ -200,26 +123,11 @@ torch::Tensor clone_cpu_tensor_view(const torch::Tensor& tensor) {
   return tensor.contiguous().clone();
 }
 
-torch::Tensor clone_paged_kv_host_view(const torch::Tensor& tensor) {
-  if (!tensor.defined() || !tensor.device().is_cpu() ||
-      tensor.scalar_type() != torch::kInt32) {
-    return torch::Tensor();
-  }
-  return tensor.contiguous().clone();
-}
-
 void stabilize_schedule_overlap_host_views(ForwardInput& input) {
   input.token_ids_host = clone_cpu_tensor_view(input.token_ids_host);
   input.positions_host = clone_cpu_tensor_view(input.positions_host);
   input.input_params.attention.host.block_tables =
       clone_cpu_tensor_view(input.input_params.attention.host.block_tables);
-  input.input_params.attention.host.paged_kv_indptr = clone_paged_kv_host_view(
-      input.input_params.attention.host.paged_kv_indptr);
-  input.input_params.attention.host.paged_kv_indices = clone_paged_kv_host_view(
-      input.input_params.attention.host.paged_kv_indices);
-  input.input_params.attention.host.paged_kv_last_page_len =
-      clone_paged_kv_host_view(
-          input.input_params.attention.host.paged_kv_last_page_len);
 }
 
 }  // namespace
@@ -269,6 +177,7 @@ void WorkerService::step(ForwardInput& fwd_input,
                          torch::Tensor& embeddings,
                          std::vector<std::vector<torch::Tensor>>& mm_embeddings,
                          std::vector<torch::Tensor>& dit_images,
+                         std::vector<std::string>& dit_text_output,
                          torch::Tensor& expert_load_data,
                          int32_t& prepared_layer_id,
                          torch::Tensor& src_seq_idxes,
@@ -323,6 +232,7 @@ void WorkerService::step(ForwardInput& fwd_input,
             dit_images.emplace_back(
                 safe_to(dit_image, torch::kCPU, /*non_blocking=*/true));
           }
+          dit_text_output = dit_forward_output.text_output;
 
           // [num_seq]
           next_tokens = safe_to(sample_output.next_tokens,
@@ -415,6 +325,7 @@ void WorkerService::create_polling_shm_thread(
           torch::Tensor embeddings;
           std::vector<std::vector<torch::Tensor>> mm_embeddings;
           std::vector<torch::Tensor> dit_images;
+          std::vector<std::string> dit_text_output;
           torch::Tensor expert_load_data;
           int32_t prepared_layer_id = -1;
 
@@ -431,24 +342,28 @@ void WorkerService::create_polling_shm_thread(
                embeddings,
                mm_embeddings,
                dit_images,
+               dit_text_output,
                expert_load_data,
                prepared_layer_id,
                src_seq_idxes,
                out_tokens,
                out_logprobs);
 
-          output_shm_manager->raw_output_write(next_tokens,
-                                               logprobs,
-                                               top_tokens,
-                                               top_logprobs,
-                                               embeddings,
-                                               mm_embeddings,
-                                               dit_images,
-                                               expert_load_data,
-                                               prepared_layer_id,
-                                               src_seq_idxes,
-                                               out_tokens,
-                                               out_logprobs);
+          const bool shm_write_ok =
+              output_shm_manager->raw_output_write(next_tokens,
+                                                   logprobs,
+                                                   top_tokens,
+                                                   top_logprobs,
+                                                   embeddings,
+                                                   mm_embeddings,
+                                                   dit_images,
+                                                   dit_text_output,
+                                                   expert_load_data,
+                                                   prepared_layer_id,
+                                                   src_seq_idxes,
+                                                   out_tokens,
+                                                   out_logprobs);
+          CHECK(shm_write_ok) << "Worker output shared memory write failed.";
           COUNTER_ADD(worker_service_latency_seconds, timer.elapsed_seconds());
         }
       });
@@ -577,8 +492,6 @@ void WorkerService::PullKVCache(::google::protobuf::RpcController* controller,
                                 ::google::protobuf::Closure* done) {
   threadpool_->schedule([this, controller, req, resp, done]() mutable {
     brpc::ClosureGuard done_guard(done);
-    uint64_t src_cluster_id = req->cluster_id();
-    std::string addr = req->addr();
     std::vector<uint64_t> src_blocks(req->src_blocks().begin(),
                                      req->src_blocks().end());
     std::vector<uint64_t> dst_blocks(req->dst_blocks().begin(),
@@ -587,12 +500,26 @@ void WorkerService::PullKVCache(::google::protobuf::RpcController* controller,
         req->src_linear_state_ids().begin(), req->src_linear_state_ids().end());
     std::vector<uint64_t> dst_linear_state_ids(
         req->dst_linear_state_ids().begin(), req->dst_linear_state_ids().end());
-    auto future = worker_->pull_kv_blocks_async(src_cluster_id,
-                                                addr,
-                                                src_blocks,
-                                                dst_blocks,
-                                                src_linear_state_ids,
-                                                dst_linear_state_ids);
+    auto future = [&]() {
+      if (req->hetero_merge()) {
+        std::vector<uint64_t> src_cluster_ids(req->src_cluster_ids().begin(),
+                                              req->src_cluster_ids().end());
+        std::vector<std::string> src_addrs(req->src_addrs().begin(),
+                                           req->src_addrs().end());
+        return worker_->pull_hetero_kv_blocks_async(src_cluster_ids,
+                                                    src_addrs,
+                                                    src_blocks,
+                                                    dst_blocks,
+                                                    src_linear_state_ids,
+                                                    dst_linear_state_ids);
+      }
+      return worker_->pull_kv_blocks_async(req->cluster_id(),
+                                           req->addr(),
+                                           src_blocks,
+                                           dst_blocks,
+                                           src_linear_state_ids,
+                                           dst_linear_state_ids);
+    }();
     bool status = std::move(future).get();
     resp->set_ok(status);
   });
@@ -839,6 +766,7 @@ void WorkerService::ExecuteModel(::google::protobuf::RpcController* controller,
         torch::Tensor embeddings;
         std::vector<std::vector<torch::Tensor>> mm_embeddings;
         std::vector<torch::Tensor> dit_images;
+        std::vector<std::string> dit_text_output;
         torch::Tensor expert_load_data;
         int32_t prepared_layer_id = -1;
         // beam search kernel output
@@ -854,6 +782,7 @@ void WorkerService::ExecuteModel(::google::protobuf::RpcController* controller,
              embeddings,
              mm_embeddings,
              dit_images,
+             dit_text_output,
              expert_load_data,
              prepared_layer_id,
              src_seq_idxes,
@@ -872,6 +801,7 @@ void WorkerService::ExecuteModel(::google::protobuf::RpcController* controller,
                                 out_tokens,
                                 out_logprobs,
                                 dit_images,
+                                dit_text_output,
                                 pb_forward_output);
         COUNTER_ADD(worker_service_latency_seconds, timer.elapsed_seconds());
       });
@@ -905,6 +835,7 @@ void WorkerService::GetLastStepResult(
           torch::Tensor out_tokens;
           torch::Tensor out_logprobs;
           std::vector<torch::Tensor> dit_images;
+          std::vector<std::string> dit_text_output;
           auto copy_output_to_host = [&]() {
             if (options_.enable_schedule_overlap()) {
               CHECK(stream_->wait_event(forward_output.ready_event))
@@ -927,6 +858,8 @@ void WorkerService::GetLastStepResult(
             for (auto image : forward_output.dit_forward_output.tensors) {
               dit_images.emplace_back(image);
             }
+            dit_text_output =
+                forward_outputs.value().dit_forward_output.text_output;
 
             // [num_seq]
             next_tokens = safe_to(sample_output.next_tokens,
@@ -983,7 +916,8 @@ void WorkerService::GetLastStepResult(
           }
           record_speculative_metrics_from_output(next_tokens, options_);
 
-          if (next_tokens.defined() ||
+          if (next_tokens.defined() || !dit_images.empty() ||
+              !dit_text_output.empty() ||
               ::xllm::EPLBConfig::get_instance().enable_eplb()) {
             const std::vector<std::vector<torch::Tensor>> mm_embeddings;
             forward_output_to_proto(next_tokens,
@@ -998,6 +932,7 @@ void WorkerService::GetLastStepResult(
                                     out_tokens,
                                     out_logprobs,
                                     dit_images,
+                                    dit_text_output,
                                     pb_forward_output);
           }
         }

@@ -56,7 +56,7 @@ void SamplingParameters::init(
     frequency_penalties.push_back(p->frequency_penalty);
     presence_penalties.push_back(p->presence_penalty);
     repetition_penalties.push_back(p->repetition_penalty);
-    temperatures.push_back(p->temperature == 0.0f ? 1.0f : p->temperature);
+    temperatures.push_back(p->temperature);
     top_p.push_back(p->top_p);
     top_k.push_back(p->top_k);
     logprobs = logprobs || p->logprobs;

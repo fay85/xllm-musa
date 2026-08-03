@@ -75,6 +75,17 @@ class LLMEngine : public Engine {
       const std::vector<uint64_t>& src_linear_state_ids = {},
       const std::vector<uint64_t>& dst_linear_state_ids = {}) override;
 
+  bool pull_hetero_kv_blocks(
+      const int32_t src_dp_size,
+      const int32_t src_dp_rank,
+      const std::vector<uint64_t>& src_cluster_ids,
+      const std::vector<std::string>& src_addrs,
+      const std::vector<uint64_t>& src_blocks,
+      const int32_t dst_dp_rank,
+      const std::vector<uint64_t>& dst_blocks,
+      const std::vector<uint64_t>& src_linear_state_ids = {},
+      const std::vector<uint64_t>& dst_linear_state_ids = {}) override;
+
   std::vector<folly::SemiFuture<uint32_t>> transfer_kv_blocks(
       const uint32_t dp_rank,
       const std::vector<BlockTransferInfo>& block_transfer_info) override;
@@ -187,6 +198,7 @@ class LLMEngine : public Engine {
   uint32_t dp_size_ = 1;
   uint32_t cp_size_ = 1;
   uint32_t worker_clients_num_;
+  // Effective TP width (MLU=dp_local; NPU=dp_local/cp).
   uint32_t dp_local_tp_size_;
   uint32_t dp_local_size_;
 

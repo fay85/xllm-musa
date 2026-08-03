@@ -23,10 +23,6 @@ limitations under the License.
 
 #include "kernels/ops_api.h"
 #include "sampler.h"
-#include "util/env_var.h"
-#if defined(USE_MUSA)
-#include "kernels/musa/musa_ops_api.h"
-#endif
 
 namespace xllm {
 
@@ -73,15 +69,22 @@ SampleOutput RejectionSampler::forward(const torch::Tensor& draft_token_ids,
                                        bool mask_out_rejected_tokens) const {
   CHECK_EQ(draft_token_ids.size(0), do_sample_.size(0))
       << "batch size mismatch";
-  DCHECK_EQ(draft_token_ids.size(1), draft_probs.size(1));
+  if (!all_greedy_sample_) {
+    CHECK(draft_probs.defined())
+        << "draft_probs must be defined for random sampling";
+    CHECK_EQ(draft_token_ids.size(1), draft_probs.size(1));
+  }
   // DCHECK_EQ(draft_probs.sizes(), target_probs.sizes());
 
-  // [batch_size, n_speculative_tokens + 1, vocab_size] FloatTensor
-  auto target_probs =
-      torch::softmax(target_logits, /*dim=*/-1, /*dtype=*/torch::kFloat32);
-  // filter out probs for bonus tokens
-  target_probs = target_probs.slice(
-      /*dim=*/1, /*start=*/0, /*end=*/target_probs.size(1) - 1);
+  torch::Tensor target_probs;
+  if (!all_greedy_sample_) {
+    // The bonus row is sampled by the target worker and does not participate
+    // in random rejection sampling.
+    torch::Tensor target_draft_logits = target_logits.slice(
+        /*dim=*/1, /*start=*/0, /*end=*/target_logits.size(1) - 1);
+    target_probs = torch::softmax(
+        target_draft_logits, /*dim=*/-1, /*dtype=*/torch::kFloat32);
+  }
 
   // Determine whether we need to restore rejected tokens.
   // IMPORTANT: The fused kernel implementation only supports masking out
@@ -92,22 +95,6 @@ SampleOutput RejectionSampler::forward(const torch::Tensor& draft_token_ids,
   bool use_fused_kernel =
       enable_fused_kernel_ && (!logprobs_ && mask_out_rejected_tokens);
 
-  static const bool debug_mtp_acceptance =
-      util::get_bool_env("XLLM_DEBUG_MTP_ACCEPTANCE", false);
-  if (debug_mtp_acceptance) {
-    const char* sampler_path =
-        all_greedy_sample_
-            ? "greedy_unfused"
-            : (use_fused_kernel ? "random_fused" : "random_unfused");
-    LOG_FIRST_N(INFO, 1)
-        << "[MTP path] rejection_sampler=" << sampler_path
-        << " k=" << draft_token_ids.size(1)
-        << " draft_probs_dim=" << draft_probs.dim()
-        << " selected_only_draft_probs=" << (draft_probs.dim() == 2)
-        << " mask_rejected=" << mask_out_rejected_tokens
-        << " fused_kernel_enabled=" << enable_fused_kernel_;
-  }
-
   // select the random sampler function based on the use_fused_kernel flag
   auto random_sampler_func = use_fused_kernel
                                  ? &RejectionSampler::random_sample_fused
@@ -117,9 +104,11 @@ SampleOutput RejectionSampler::forward(const torch::Tensor& draft_token_ids,
   torch::Tensor accepted_token_ids;
   torch::Tensor masked_accepted_token_ids;
   if (all_greedy_sample_) {
+    torch::Tensor target_draft_logits = target_logits.slice(
+        /*dim=*/1, /*start=*/0, /*end=*/target_logits.size(1) - 1);
     std::tie(accepted_token_ids, masked_accepted_token_ids) =
         greedy_sample(draft_token_ids,
-                      target_probs,
+                      target_draft_logits,
                       bonus_token_ids,
                       mask_out_rejected_tokens);
   } else if (all_random_sample_) {
@@ -276,21 +265,6 @@ std::tuple<torch::Tensor, torch::Tensor> RejectionSampler::random_sample_fused(
     const torch::Tensor& uniform_rand,
     const torch::Tensor& bonus_token_ids,
     bool mask_out_rejected_tokens) {
-#if defined(USE_MUSA)
-  if (draft_probs.dim() == 2 && draft_token_ids.size(1) == 1) {
-    auto recovery_exponential =
-        torch::empty_like(target_probs, torch::kFloat32).exponential_();
-    auto fused_output = kernel::cuda::rejection_sample_target_only_k1(
-        draft_token_ids,
-        draft_probs,
-        target_probs,
-        uniform_rand,
-        recovery_exponential,
-        bonus_token_ids);
-    return {fused_output, fused_output};
-  }
-#endif
-
   CHECK_EQ(draft_probs.dim(), 3)
       << "Fused rejection sampler requires dense draft_probs [batch, n_spec, "
          "vocab]. Ensure validate passes dense draft_probs, for example with "
@@ -366,14 +340,27 @@ std::tuple<torch::Tensor, torch::Tensor> RejectionSampler::random_sample_fused(
 
 std::tuple<torch::Tensor, torch::Tensor> RejectionSampler::greedy_sample(
     const torch::Tensor& draft_token_ids,
-    const torch::Tensor& target_probs,
+    const torch::Tensor& target_scores,
     const torch::Tensor& bonus_token_ids,
     bool mask_out_rejected_tokens) {
-  auto target_token_ids = Sampler::greedy_sample(target_probs);
+  torch::Tensor target_token_ids = Sampler::greedy_sample(target_scores);
+  return greedy_sample_from_token_ids(draft_token_ids,
+                                      target_token_ids,
+                                      bonus_token_ids,
+                                      mask_out_rejected_tokens);
+}
 
+std::tuple<torch::Tensor, torch::Tensor>
+RejectionSampler::greedy_sample_from_token_ids(
+    const torch::Tensor& draft_token_ids,
+    const torch::Tensor& target_token_ids,
+    const torch::Tensor& bonus_token_ids,
+    bool mask_out_rejected_tokens) {
+  CHECK_EQ(target_token_ids.sizes(), draft_token_ids.sizes())
+      << "target and draft token shapes must match";
   // mask out the rejected tokens with -1
   // [batch_size, n_speculative_tokens + 1]
-  auto accepted_token_ids =
+  torch::Tensor accepted_token_ids =
       torch::cat({target_token_ids, bonus_token_ids}, /*dim=*/-1);
   torch::Tensor masked_accepted_token_ids;
   if (mask_out_rejected_tokens) {

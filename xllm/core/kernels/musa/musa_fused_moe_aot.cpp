@@ -136,8 +136,7 @@ std::string artifact_root() {
 }
 
 std::string bf16_artifact_root() {
-  const char* explicit_path =
-      std::getenv("XLLM_MUSA_FUSED_MOE_BF16_AOT_PATH");
+  const char* explicit_path = std::getenv("XLLM_MUSA_FUSED_MOE_BF16_AOT_PATH");
   if (explicit_path != nullptr && explicit_path[0] != '\0') {
     return explicit_path;
   }
@@ -145,13 +144,10 @@ std::string bf16_artifact_root() {
   if (ops_path == nullptr || ops_path[0] == '\0') {
     return {};
   }
-  return std::string(ops_path) +
-         "/xllm_musa_fused_moe_aot/bf16_mp31";
+  return std::string(ops_path) + "/xllm_musa_fused_moe_aot/bf16_mp31";
 }
 
-std::string artifact_path(int64_t batch_size,
-                          MoeStage stage,
-                          bool use_fp8) {
+std::string artifact_path(int64_t batch_size, MoeStage stage, bool use_fp8) {
   const std::string root = use_fp8 ? artifact_root() : bf16_artifact_root();
   if (root.empty()) {
     return {};
@@ -193,9 +189,8 @@ KernelHandle& get_kernel(int32_t device_index,
   static std::mutex mutex;
   static std::map<KernelKey, KernelHandle> handles;
 
-  const KernelKey key =
-      std::make_tuple(
-          device_index, batch_size, static_cast<int32_t>(stage), use_fp8);
+  const KernelKey key = std::make_tuple(
+      device_index, batch_size, static_cast<int32_t>(stage), use_fp8);
   std::lock_guard<std::mutex> lock(mutex);
   auto [iterator, inserted] = handles.try_emplace(key);
   if (!inserted) {
@@ -330,15 +325,13 @@ torch::Tensor launch_gemm(const torch::Tensor& input,
               ? checked_int32(input_scale.stride(0), "input_scale_row_stride")
               : 0,
       .weight_scale_expert_stride =
-          weight_scale.defined()
-              ? checked_int32(weight_scale.stride(0),
-                              "weight_scale_expert_stride")
-              : 0,
+          weight_scale.defined() ? checked_int32(weight_scale.stride(0),
+                                                 "weight_scale_expert_stride")
+                                 : 0,
       .weight_scale_output_stride =
-          weight_scale.defined()
-              ? checked_int32(weight_scale.stride(1),
-                              "weight_scale_output_stride")
-              : 0,
+          weight_scale.defined() ? checked_int32(weight_scale.stride(1),
+                                                 "weight_scale_output_stride")
+                                 : 0,
   };
   std::array<void*, 22> parameters = {
       &arguments.input,

@@ -543,8 +543,6 @@ RecMaster::RecMaster(const Options& options)
       .max_seqs_per_batch(options_.max_seqs_per_batch())
       .max_tokens_per_chunk_for_prefill(
           options_.max_tokens_per_chunk_for_prefill())
-      .enable_adaptive_prefill_oneshot(
-          options_.enable_adaptive_prefill_oneshot())
       .num_speculative_tokens(options_.num_speculative_tokens())
       .dp_size(options_.dp_size())
       .enable_disagg_pd(options_.enable_disagg_pd())
@@ -858,6 +856,7 @@ std::shared_ptr<Request> RecMaster::build_request_common(
                          callback,
                          nullptr,
                          sp.decode_address);
+  req_state.include_stop_str_in_output = sp.include_stop_str_in_output;
   req_state.rec_type = rec_type_;
   req_state.bos_token_id = model_args_.bos_token_id();
   auto request = std::make_shared<Request>(sp.request_id,

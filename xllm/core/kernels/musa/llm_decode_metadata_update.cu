@@ -115,8 +115,7 @@ void memcpy_async(void* dst,
   if (bytes == 0 || dst == nullptr || src == nullptr) {
     return;
   }
-  const cudaError_t error =
-      cudaMemcpyAsync(dst, src, bytes, kind, stream);
+  const cudaError_t error = cudaMemcpyAsync(dst, src, bytes, kind, stream);
   CHECK_EQ(error, cudaSuccess)
       << "llm_decode_metadata memcpy failed: " << cudaGetErrorString(error);
 }
@@ -198,11 +197,11 @@ void update_llm_decode_metadata_from_host(
     const int64_t num_blocks = std::min<int64_t>(
         (max_work_size + kThreadsPerBlock - 1) / kThreadsPerBlock,
         kMaxBlocksPerLaunch);
-    llm_decode_metadata_pad_from_host_kernel<<<
-        static_cast<uint32_t>(num_blocks),
-        kThreadsPerBlock,
-        /*shared_mem_bytes=*/0,
-        stream>>>(params, max_work_size);
+    llm_decode_metadata_pad_from_host_kernel<<<static_cast<uint32_t>(
+                                                   num_blocks),
+                                               kThreadsPerBlock,
+                                               /*shared_mem_bytes=*/0,
+                                               stream>>>(params, max_work_size);
     const cudaError_t error = cudaGetLastError();
     CHECK_EQ(error, cudaSuccess)
         << "llm_decode_metadata host padding kernel launch failed: "
@@ -241,4 +240,4 @@ void update_llm_decode_metadata(const LlmDecodeMetadataUpdateParams& params,
       << cudaGetErrorString(error);
 }
 
-}
+}  // namespace xllm::kernel::cuda

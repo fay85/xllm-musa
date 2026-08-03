@@ -26,9 +26,11 @@ limitations under the License.
 #include <utility>
 
 #include "common/metrics.h"
+#include "core/framework/config/speculative_config.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_input_params.h"
 #include "framework/state_dict/state_dict.h"
+#include "runtime/dflash_worker_impl.h"
 #include "runtime/dit_worker_impl.h"
 #include "runtime/eagle3_worker_impl.h"
 #include "runtime/embed_vlm_worker_impl.h"
@@ -36,9 +38,7 @@ limitations under the License.
 #include "runtime/llm_worker_impl.h"
 #include "runtime/mm_embed_vlm_worker_impl.h"
 #include "runtime/mtp_worker_impl.h"
-#if !defined(USE_MUSA)
 #include "runtime/rec_worker_impl.h"
-#endif
 #include "runtime/suffix_worker_impl.h"
 #include "runtime/vlm_worker_impl.h"
 #include "util/timer.h"
@@ -49,15 +49,18 @@ Worker::Worker(const ParallelArgs& parallel_args,
                const runtime::Options& options,
                WorkerType worker_type) {
   if (options.enable_speculative_decode()) {
-    auto algo = options.speculative_algorithm();
-    LOG(INFO) << "Speculative decode is enabled, algorithm: " << algo;
-    if (algo == "Eagle3") {
+    const std::string& algorithm = options.speculative_algorithm();
+    LOG(INFO) << "Speculative decode is enabled, algorithm: " << algorithm;
+    if (algorithm == "Eagle3") {
       impl_ = new Eagle3WorkerImpl(parallel_args, device, options);
-    } else if (algo == "Suffix") {
+    } else if (algorithm == "DFlash") {
+      impl_ = new DFlashWorkerImpl(parallel_args, device, options);
+    } else if (algorithm == "Suffix") {
       impl_ = new SuffixWorkerImpl(parallel_args, device, options);
-    } else {
-      // Default: MTP
+    } else if (SpeculativeConfig::is_mtp_algorithm(algorithm)) {
       impl_ = new MTPWorkerImpl(parallel_args, device, options);
+    } else {
+      LOG(FATAL) << "Unsupported speculative decoding algorithm: " << algorithm;
     }
   } else if (worker_type == WorkerType::LLM) {
     impl_ = new LLMWorkerImpl(parallel_args, device, options);
@@ -68,11 +71,7 @@ Worker::Worker(const ParallelArgs& parallel_args,
   } else if (worker_type == WorkerType::EVLM) {
     impl_ = new EmbedVLMWorkerImpl(parallel_args, device, options);
   } else if (worker_type == WorkerType::REC) {
-#if defined(USE_MUSA)
-    LOG(FATAL) << "REC worker is not supported in USE_MUSA builds.";
-#else
     impl_ = new RecWorkerImpl(parallel_args, device, options);
-#endif
   } else if (worker_type == WorkerType::MMEVLM) {
     impl_ = new MMEmbedVLMWorkerImpl(parallel_args, device, options);
   } else if (worker_type == WorkerType::DIT) {
@@ -180,6 +179,21 @@ folly::SemiFuture<bool> Worker::pull_kv_blocks_async(
                                      dst_blocks,
                                      src_linear_state_ids,
                                      dst_linear_state_ids);
+}
+
+folly::SemiFuture<bool> Worker::pull_hetero_kv_blocks_async(
+    const std::vector<uint64_t>& src_cluster_ids,
+    const std::vector<std::string>& src_addrs,
+    const std::vector<uint64_t>& src_blocks,
+    const std::vector<uint64_t>& dst_blocks,
+    const std::vector<uint64_t>& src_linear_state_ids,
+    const std::vector<uint64_t>& dst_linear_state_ids) {
+  return impl_->pull_hetero_kv_blocks_async(src_cluster_ids,
+                                            src_addrs,
+                                            src_blocks,
+                                            dst_blocks,
+                                            src_linear_state_ids,
+                                            dst_linear_state_ids);
 }
 
 uint32_t Worker::transfer_kv_blocks(

@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <cuda_runtime.h>
 #include <c10/cuda/CUDAGuard.h>
+#include <cuda_runtime.h>
 
 #include <cfloat>
 #include <cstdint>
@@ -56,9 +56,8 @@ __global__ void rejection_sample_target_only_k1_kernel(
             ? positive_probability(target_probs[row_offset + draft_token])
             : 0.0f;
     const float acceptance_probability =
-        draft_probability > 0.0f
-            ? target_probability / draft_probability
-            : (target_probability > 0.0f ? 1.0f : 0.0f);
+        draft_probability > 0.0f ? target_probability / draft_probability
+                                 : (target_probability > 0.0f ? 1.0f : 0.0f);
     rejected = uniform_rand[batch_index] >= acceptance_probability;
     if (!rejected) {
       output[output_offset] = draft_token;
@@ -150,10 +149,7 @@ torch::Tensor rejection_sample_target_only_k1(
 
   const at::cuda::OptionalCUDAGuard device_guard(ids.device());
   cudaStream_t stream = c10::cuda::getCurrentCUDAStream().stream();
-  rejection_sample_target_only_k1_kernel<<<batch_size,
-                                             kBlockSize,
-                                             0,
-                                             stream>>>(
+  rejection_sample_target_only_k1_kernel<<<batch_size, kBlockSize, 0, stream>>>(
       ids.data_ptr<int64_t>(),
       draft_probability.data_ptr<float>(),
       target_probability.data_ptr<float>(),

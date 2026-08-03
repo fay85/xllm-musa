@@ -91,17 +91,16 @@ class AttentionRunner final {
 
   // Piecewise mode: capture a dense ragged FA3 prefill call. FA3 is replayed
   // between graph segments, just like the FlashInfer attention runner.
-  void run_fa3_prefill_capture(
-      torch::Tensor query,
-      torch::Tensor key,
-      torch::Tensor value,
-      int64_t max_seqlen_q,
-      int64_t max_seqlen_k,
-      int64_t window_left,
-      int64_t window_right,
-      double sm_scale,
-      torch::Tensor output,
-      torch::Tensor output_lse);
+  void run_fa3_prefill_capture(torch::Tensor query,
+                               torch::Tensor key,
+                               torch::Tensor value,
+                               int64_t max_seqlen_q,
+                               int64_t max_seqlen_k,
+                               int64_t window_left,
+                               int64_t window_right,
+                               double sm_scale,
+                               torch::Tensor output,
+                               torch::Tensor output_lse);
 
   // Split packed GDN recurrence out of the graph. The graph writes all
   // bucket-sized inputs into stable buffers; replay supplies live CU metadata.
@@ -159,4 +158,4 @@ class AttentionRunner final {
   bool causal_ = true;
 };
 
-}
+}  // namespace xllm::kernel::cuda

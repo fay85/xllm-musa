@@ -91,17 +91,20 @@ class DeepseekV32DecoderLayerImpl : public torch::nn::Module {
     const bool topk_sharing_enabled = is_topk_sharing_enabled();
     const bool should_skip_topk = skip_topk();
     const bool should_output_topk = output_topk();
+    const bool use_mtp_topk_fallback = should_skip_topk &&
+                                       !topk_indices.defined() &&
+                                       decoder_layer_->has_mtp_topk_fallback();
     torch::Tensor current_topk_indices;
     torch::Tensor shared_topk_indices;
     torch::Tensor* output_topk_indices = nullptr;
     if (topk_sharing_enabled) {
-      if (should_skip_topk) {
+      if (should_skip_topk && !use_mtp_topk_fallback) {
         CHECK(topk_indices.defined())
             << "DSA top-k sharing requires previous top-k indices at MTP layer "
             << layer_index;
         shared_topk_indices = topk_indices;
       }
-      if (should_output_topk) {
+      if (should_output_topk || use_mtp_topk_fallback) {
         torch::Tensor index_cache = kv_cache.get_index_cache();
         CHECK(index_cache.defined())
             << "DSA top-k sharing requires index cache at MTP layer "
@@ -114,7 +117,17 @@ class DeepseekV32DecoderLayerImpl : public torch::nn::Module {
         output_topk_indices = &current_topk_indices;
       }
     }
-    if (topk_sharing_enabled) {
+    if (use_mtp_topk_fallback) {
+      decoder_layer_->forward_with_mtp_topk_fallback(x,
+                                                     cos_pos,
+                                                     sin_pos,
+                                                     attn_mask,
+                                                     kv_cache,
+                                                     input_params,
+                                                     output_topk_indices,
+                                                     event,
+                                                     event_flag);
+    } else if (topk_sharing_enabled) {
       forward_with_topk(x,
                         cos_pos,
                         sin_pos,
@@ -135,8 +148,10 @@ class DeepseekV32DecoderLayerImpl : public torch::nn::Module {
               event,
               event_flag);
     }
-    if (should_output_topk) {
+    if (use_mtp_topk_fallback || should_output_topk) {
       topk_indices = current_topk_indices;
+    } else if (should_skip_topk) {
+      topk_indices = shared_topk_indices;
     }
   }
 
@@ -236,12 +251,16 @@ class DeepseekV32ModelImpl : public torch::nn::Module {
     // dp_size_=4;
     dp_size_ = parallel_args.dp_size();
     std::vector<int64_t> indices;
-    dp_local_tp_size_ = parallel_args.world_size() / dp_size_;
-    dp_rank_ = parallel_args.rank() / dp_local_tp_size_;
+    // Orthogonal CP×TP: dp_local_tp = attn_tp; DP stride = tp*cp.
+    dp_local_tp_size_ =
+        parallel_args.world_size() / (dp_size_ * parallel_args.cp_size());
+    dp_rank_ =
+        parallel_args.rank() / (dp_local_tp_size_ * parallel_args.cp_size());
     rank_ = parallel_args.rank();
     mapping_data_ = parallel_args.mapping_data();
     num_experts_per_tok_ = model_args.num_experts_per_tok();
-    for (int i = 0; i < parallel_args.world_size(); i += dp_local_tp_size_) {
+    const int32_t dp_stride = dp_local_tp_size_ * parallel_args.cp_size();
+    for (int i = 0; i < parallel_args.world_size(); i += dp_stride) {
       indices.push_back(i);
     }
   }
@@ -258,6 +277,10 @@ class DeepseekV32ModelImpl : public torch::nn::Module {
     }
 
     auto h = npu_embed_tokens_(tokens, 0);
+    const NpuCpPlan& cp_plan = input_params.parallel.cp_plan;
+    if (cp_plan.enabled()) {
+      cp_plan.shard_model_input(h, positions);
+    }
     auto cos_sin = atb_pos_emb_(cos_sin_, positions, 0);
     auto cos_sin_chunks = cos_sin.chunk(/*chunks=*/2, /*dim=*/-1);
     auto cos_pos = cos_sin_chunks[0].contiguous();
@@ -340,6 +363,9 @@ class DeepseekV32ModelImpl : public torch::nn::Module {
         prev_topk_indices = current_topk_indices;
       }
       rolling_guard.after_layer(layer_index);
+    }
+    if (cp_plan.enabled()) {
+      h = cp_plan.merge_model_output(h);
     }
     auto hidden_states = norm_(h, 0);
     return ModelOutput(hidden_states);

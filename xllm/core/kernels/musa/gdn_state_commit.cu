@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <cuda_runtime.h>
 #include <c10/cuda/CUDAGuard.h>
+#include <cuda_runtime.h>
 
 #include <cstdint>
 
@@ -66,20 +66,18 @@ __global__ void scatter_selected_state_kernel(
 }
 
 template <typename CopyType>
-void launch_scatter_selected_state(
-    torch::Tensor& cache,
-    const torch::Tensor& intermediate,
-    const torch::Tensor& logical_state_indices,
-    const torch::Tensor& accepted_tokens,
-    int64_t checkpoint_stride,
-    bool add_step_to_destination,
-    cudaStream_t stream) {
+void launch_scatter_selected_state(torch::Tensor& cache,
+                                   const torch::Tensor& intermediate,
+                                   const torch::Tensor& logical_state_indices,
+                                   const torch::Tensor& accepted_tokens,
+                                   int64_t checkpoint_stride,
+                                   bool add_step_to_destination,
+                                   cudaStream_t stream) {
   const int64_t batch_size = intermediate.size(0);
   const int64_t verify_sequence_length = intermediate.size(1);
   const int64_t values_per_state =
       intermediate.numel() / batch_size / verify_sequence_length;
-  const int64_t blocks =
-      (values_per_state + kBlockSize - 1) / kBlockSize;
+  const int64_t blocks = (values_per_state + kBlockSize - 1) / kBlockSize;
   const dim3 grid(static_cast<uint32_t>(blocks),
                   static_cast<uint32_t>(batch_size));
   scatter_selected_state_kernel<CopyType><<<grid, kBlockSize, 0, stream>>>(
@@ -135,14 +133,13 @@ void scatter_selected_state(torch::Tensor& cache,
 
 }  // namespace
 
-void scatter_gdn_mtp_verify_states(
-    torch::Tensor& ssm_cache,
-    const torch::Tensor& ssm_intermediate,
-    torch::Tensor& conv_cache,
-    const torch::Tensor& conv_intermediate,
-    const torch::Tensor& logical_state_indices,
-    const torch::Tensor& accepted_tokens,
-    int64_t checkpoint_stride) {
+void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
+                                   const torch::Tensor& ssm_intermediate,
+                                   torch::Tensor& conv_cache,
+                                   const torch::Tensor& conv_intermediate,
+                                   const torch::Tensor& logical_state_indices,
+                                   const torch::Tensor& accepted_tokens,
+                                   int64_t checkpoint_stride) {
   CHECK(logical_state_indices.scalar_type() == torch::kInt64);
   CHECK(accepted_tokens.scalar_type() == torch::kInt64);
   CHECK(logical_state_indices.is_contiguous());

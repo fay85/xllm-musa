@@ -24,10 +24,14 @@ limitations under the License.
 
 namespace xllm {
 
+// Returns whether this rank may execute the multi-step speculative decode
+// plan for the current global DP batch.
+bool should_run_speculative_decode(const ModelInputParams& params);
+
 // Base class for all speculative decoding workers.
 // Provides common logic: target model management, step dispatch, and
 // sampling parameter updates. Subclasses implement algorithm-specific
-// draft generation and validation (MTP, Eagle3, Suffix, etc.).
+// draft generation and validation (MTP, Eagle3, Suffix, DFlash, etc.).
 class SpeculativeWorkerImpl : public WorkerImpl {
  public:
   ~SpeculativeWorkerImpl() override = default;
@@ -109,6 +113,21 @@ class SpeculativeWorkerImpl : public WorkerImpl {
                                        dst_blocks,
                                        src_linear_state_ids,
                                        dst_linear_state_ids);
+  };
+
+  folly::SemiFuture<bool> pull_hetero_kv_blocks_async(
+      const std::vector<uint64_t>& src_cluster_ids,
+      const std::vector<std::string>& src_addrs,
+      const std::vector<uint64_t>& src_blocks,
+      const std::vector<uint64_t>& dst_blocks,
+      const std::vector<uint64_t>& src_linear_state_ids = {},
+      const std::vector<uint64_t>& dst_linear_state_ids = {}) override {
+    return impl_->pull_hetero_kv_blocks_async(src_cluster_ids,
+                                              src_addrs,
+                                              src_blocks,
+                                              dst_blocks,
+                                              src_linear_state_ids,
+                                              dst_linear_state_ids);
   };
 
  protected:

@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include "common/flash_comm1_context.h"
 #include "kernels/ops_api.h"
 
 namespace xllm {
@@ -143,10 +144,16 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
   CHECK(attn_metadata.dsa_metadata)
       << "DeepseekV4DecoderLayer requires DSA metadata for DSAttention path.";
 
+  const FlashComm1Context* fc1_ctx = get_current_flash_comm1_context();
+
   auto residual_attn = x;
   auto [attn_input, post_attn, comb_attn] =
       hc_pre(x, hc_attn_fn_, hc_attn_scale_, hc_attn_base_);
   attn_input = std::get<0>(attn_norm_->forward(attn_input));
+
+  if (fc1_ctx && is_sequence_sharded(*fc1_ctx)) {
+    attn_input = gather_sequence(attn_input, *fc1_ctx);
+  }
 
   auto& dsa = *(attn_metadata.dsa_metadata);
   const auto compress_metadata = std::make_tuple(
@@ -173,6 +180,10 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
       hc_pre(x, hc_ffn_fn_, hc_ffn_scale_, hc_ffn_base_);
   ffn_input = std::get<0>(ffn_norm_->forward(ffn_input));
 
+  if (fc1_ctx && is_sequence_sharded(*fc1_ctx)) {
+    ffn_input = gather_sequence(ffn_input, *fc1_ctx);
+  }
+
   auto ffn_input_2d = ffn_input.reshape({-1, ffn_input.size(-1)});
   std::optional<torch::Tensor> gate_input_ids = std::nullopt;
   if (input_ids.has_value() && input_ids.value().defined()) {
@@ -196,6 +207,10 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
   auto [topk_weights, topk_ids] = gate_->forward(ffn_input_2d, gate_input_ids);
   ffn_input = moe_mlp_->forward_with_selected_experts(
       ffn_input, topk_weights, topk_ids, input_params);
+
+  if (fc1_ctx && is_sequence_sharded(*fc1_ctx)) {
+    ffn_input = shard_sequence(ffn_input, *fc1_ctx);
+  }
   x = hc_post(ffn_input, residual_ffn, post_ffn, comb_ffn);
 
   return x;

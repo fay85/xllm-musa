@@ -42,10 +42,14 @@ void dequant_from_paged_cache(ReshapeFromCacheParams& params);
 
 void fused_layernorm(FusedLayerNormParams& params);
 
+torch::Tensor fused_adalayer_norm(AdaLayerNormParams& params);
+
 std::tuple<torch::Tensor, torch::Tensor> rms_norm_dynamic_quant(
     RmsNormDynamicQuantParams& params);
 
 torch::Tensor matmul(MatmulParams& params);
+
+torch::Tensor matmul_reduce_scatter(MatmulReduceScatterParams& params);
 
 torch::Tensor quant_matmul(QuantMatmulParams& params);
 
@@ -155,12 +159,9 @@ std::tuple<torch::Tensor, torch::Tensor> fp8_scaled_quantize(
 // Performs: c = (a @ b.T) with scales applied
 torch::Tensor fp8_scaled_matmul(Fp8ScaledMatmulParams& params);
 
-// Native DeepSeek block-wise FP8 GEMM (per-token-group activation scale +
-// 128x128 weight-block scale grid). MUSA-only (mate/muDNN groupwise GEMM).
+// Native block-wise FP8 GEMM using the MUSA groupwise kernel.
 torch::Tensor fp8_block_matmul(Fp8BlockMatmulParams& params);
 
-// Fused per-token-group FP8 activation quantization (bf16 -> e4m3, group=128).
-// Returns {q [M,K] e4m3, scale [M, K/group] fp32}. MUSA-only.
 std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size);
@@ -250,7 +251,6 @@ torch::Tensor build_split_qkv_rmsnorm_mrope_gather_pattern(
     const std::vector<int64_t>& mrope_section,
     bool is_interleaved,
     const torch::Device& device);
-
 void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate);
 
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
@@ -259,8 +259,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
-torch::Tensor mate_gated_delta_rule_mtp(
-    MateGatedDeltaRuleMtpParams& params);
+torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params);
 
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);

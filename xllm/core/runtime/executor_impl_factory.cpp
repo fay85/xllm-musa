@@ -16,7 +16,9 @@ limitations under the License.
 #include "executor_impl_factory.h"
 
 #if !defined(USE_MUSA)
+#include "platform/device.h"
 #include "runtime/base_executor_impl.h"
+#include "runtime/py_executor_impl.h"
 #include "runtime/vlm_executor_impl.h"
 #endif
 #if defined(USE_NPU)
@@ -28,9 +30,6 @@ limitations under the License.
 #elif defined(USE_DCU)
 #include "runtime/dcu_graph_executor_impl.h"
 #endif
-// The MUSA graph executor header is owned by the separately musified target so
-// this backend-neutral factory does not expose its CUDA-compatibility types.
-// Whole-archive linkage in xllm/CMakeLists.txt retains its registration object.
 
 namespace xllm {
 

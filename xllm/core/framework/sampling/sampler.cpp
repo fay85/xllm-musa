@@ -129,7 +129,9 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
     samples = torch::where(params.do_sample, random, greedy);
   }
   auto sample_indices = samples.to(torch::kLong);
-  output.probs = probs.to(logits.dtype());
+  if (params.return_probs) {
+    output.probs = probs.to(logits.dtype());
+  }
   output.next_tokens = sample_indices;
 
   if (params.logprobs) {

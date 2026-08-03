@@ -8,6 +8,7 @@ cc_library(
     api_service_impl.h
     call.h
     chat_json_parser.h
+    completion_json_parser.h
     completion_service_impl.h
     rec_completion_service_impl.h
     chat_service_impl.h
@@ -17,6 +18,7 @@ cc_library(
     embedding_service_impl.h
     audio_generation_service_impl.h
     image_generation_service_impl.h
+    text_generation_service_impl.h
     video_generation_service_impl.h
     rerank_service_impl.h
     qwen3_rerank_service_impl.h
@@ -32,6 +34,7 @@ cc_library(
   SRCS
     api_service.cpp
     chat_json_parser.cpp
+    completion_json_parser.cpp
     service_impl_factory.cpp
     call.cpp
     completion_service_impl.cpp
@@ -43,6 +46,7 @@ cc_library(
     embedding_service_impl.cpp
     audio_generation_service_impl.cpp
     image_generation_service_impl.cpp
+    text_generation_service_impl.cpp
     video_generation_service_impl.cpp
     models_service_impl.cpp
     rerank_service_impl.cpp

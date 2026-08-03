@@ -17,30 +17,29 @@ limitations under the License.
 
 #include <torch/torch.h>
 
-#if defined(USE_MUSA)
-#include <musa_runtime_api.h>
-#endif
-
 #include <algorithm>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "core/common/flash_comm1_context.h"
 #include "core/framework/kv_cache/kv_cache.h"
 #include "core/framework/model/model_input_params.h"
 #include "core/framework/model/model_output.h"
 #include "core/framework/model_context.h"
 #include "core/framework/model_loader.h"
+#include "core/framework/parallel_state/parallel_args.h"
 #include "core/layers/common/attention_mask.h"
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/lm_head.h"
 #include "core/layers/common/qwen3_next_rms_norm.h"
 #include "core/layers/common/word_embedding.h"
-#include "core/util/layer_hidden_dumper.h"
 #if defined(USE_CUDA) || defined(USE_MUSA)
 #include "core/layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 #elif defined(USE_NPU)
 #include "core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.h"
+#elif defined(USE_MLU)
+#include "core/layers/mlu/qwen3_5/qwen3_5_hybrid_decoder_layer_base.h"
 #endif
 
 namespace xllm {
@@ -63,7 +62,14 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
  public:
   explicit Qwen3HybridModelImplBase(const ModelContext& context)
       : device_(context.get_tensor_options().device()),
-        model_args_(context.get_model_args()) {
+        model_args_(context.get_model_args()),
+        parallel_args_(context.get_parallel_args()),
+        flash_comm1_options_(context.get_flash_comm1_options()) {
+    if (model_args_.n_routed_experts() > 0) {
+      flash_comm1_options_.enable_flashcomm1 = false;
+      flash_comm1_options_.enable_mmrs_fusion = false;
+    }
+
     auto options = context.get_tensor_options();
     auto parallel_args = context.get_parallel_args();
 
@@ -101,69 +107,20 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
       }
     }
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
-    // CUDA/MUSA: let FlashInfer apply causal masking internally. Passing the
-    // 2D mask from build_attention_mask() incorrectly enables the eager
-    // custom-mask path and breaks prefill (expand shape mismatch).
-    // Graph capture/replay supplies pre-built AttentionMetadata; rebuilding
-    // here would call graph-unsafe ops during capture.
+#if defined(USE_MUSA)
+    // MUSA FlashInfer applies causal masking internally. Graph replay must
+    // reuse the graph executor's stable metadata and plan objects rather than
+    // rebuilding metadata (and a dense custom mask) inside model forward.
     layer::AttentionMetadata attn_metadata =
         input_params.attn_metadata
             ? *(input_params.attn_metadata)
             : layer::AttentionMetadataBuilder::build(input_params,
                                                      model_args_.enable_mla());
-    // Graph execution prepares FA3 scheduler metadata outside capture and
-    // refreshes its stable tensor before every replay. Eager execution leaves
-    // it empty here, so the first FA3 layer generates it as before.
     attn_metadata.share_fa3_scheduler_metadata = true;
     attn_metadata.fa3_scheduler_metadata =
         input_params.attn_metadata
             ? input_params.attn_metadata->fa3_scheduler_metadata
             : torch::Tensor();
-    const bool use_expanded_spec_verify_attention =
-        input_params.graph.use_expanded_decode_for_spec_verify_attention ||
-        (input_params.attn_metadata &&
-         input_params.attn_metadata
-             ->use_expanded_decode_for_spec_verify_attention);
-    if (use_expanded_spec_verify_attention) {
-      attn_metadata.use_expanded_decode_for_spec_verify_attention = true;
-      attn_metadata.is_spec_verify = input_params.is_spec_verify;
-      if (input_params.graph.expanded_kv_seq_lens.defined()) {
-        attn_metadata.expanded_kv_seq_lens =
-            input_params.graph.expanded_kv_seq_lens;
-      } else if (input_params.attn_metadata &&
-                 input_params.attn_metadata->expanded_kv_seq_lens.defined()) {
-        attn_metadata.expanded_kv_seq_lens =
-            input_params.attn_metadata->expanded_kv_seq_lens;
-      }
-      if (input_params.graph.expanded_block_tables.defined()) {
-        attn_metadata.expanded_block_table =
-            input_params.graph.expanded_block_tables;
-      } else if (input_params.attn_metadata &&
-                 input_params.attn_metadata->expanded_block_table.defined()) {
-        attn_metadata.expanded_block_table =
-            input_params.attn_metadata->expanded_block_table;
-      }
-#if defined(USE_CUDA) || defined(USE_MUSA)
-      if (input_params.graph.expanded_paged_kv_indptr.defined()) {
-        attn_metadata.expanded_paged_kv_indptr =
-            input_params.graph.expanded_paged_kv_indptr;
-        attn_metadata.expanded_paged_kv_indices =
-            input_params.graph.expanded_paged_kv_indices;
-        attn_metadata.expanded_paged_kv_last_page_len =
-            input_params.graph.expanded_paged_kv_last_page_len;
-      } else if (input_params.attn_metadata &&
-                 input_params.attn_metadata->expanded_paged_kv_indptr
-                     .defined()) {
-        attn_metadata.expanded_paged_kv_indptr =
-            input_params.attn_metadata->expanded_paged_kv_indptr;
-        attn_metadata.expanded_paged_kv_indices =
-            input_params.attn_metadata->expanded_paged_kv_indices;
-        attn_metadata.expanded_paged_kv_last_page_len =
-            input_params.attn_metadata->expanded_paged_kv_last_page_len;
-      }
-#endif
-    }
 #else
     layer::AttentionMetadata attn_metadata =
         layer::AttentionMetadataBuilder::build(
@@ -171,6 +128,13 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
             model_args_.enable_mla(),
             build_attention_mask(input_params));
 #endif
+    const int32_t num_tokens = static_cast<int32_t>(tokens.size(0));
+    const auto& batch_forward_type = input_params.meta.batch_forward_type;
+    const bool is_prefill_side = batch_forward_type.no_decode();
+    FlashComm1Context fc1_ctx = build_flash_comm1_context(
+        num_tokens, is_prefill_side, parallel_args_, flash_comm1_options_);
+    FlashComm1ContextScope fc1_scope(&fc1_ctx);
+
     torch::Tensor h;
     if (input_params.embedding.input_embedding.defined()) {
       h = input_params.embedding.input_embedding;
@@ -178,15 +142,8 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
       h = embed_tokens_(tokens);
     }
 
-    auto& hidden_dumper = debug::LayerHiddenDumper::instance();
-    if (hidden_dumper.enabled()) {
-      const int num_dump_slots = static_cast<int>(layers_.size() + 2);
-      hidden_dumper.ensure_buffers(num_dump_slots,
-                                   h.size(0),
-                                   h.size(-1),
-                                   h.device(),
-                                   h.scalar_type());
-      hidden_dumper.record(/*slot=*/0, h);
+    if (is_sequence_sharded(fc1_ctx)) {
+      h = shard_sequence(h, fc1_ctx);
     }
 
     torch::Tensor mrope_cos_sin;
@@ -215,10 +172,7 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
                          attn_metadata,
                          kv_caches[i],
                          input_params,
-                          mrope_cos_sin);
-      if (hidden_dumper.enabled()) {
-        hidden_dumper.record(static_cast<int>(i + 1), h);
-      }
+                         mrope_cos_sin);
 #if defined(USE_NPU)
       if (input_params.parallel.layer_synchronizer != nullptr &&
           !input_params.parallel.layer_synchronizer->record_event(
@@ -229,8 +183,8 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
     }
     auto [hidden_states, residual_out] = norm_->forward(h, residual);
     h = hidden_states;
-    if (hidden_dumper.enabled()) {
-      hidden_dumper.record(static_cast<int>(layers_.size() + 1), h);
+    if (is_sequence_sharded(fc1_ctx)) {
+      h = gather_sequence(h, fc1_ctx);
     }
     return ModelOutput(h);
   }
@@ -319,6 +273,8 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
   std::vector<layer::Qwen3HybridDecoderLayerModulePtr> layers_;
   int32_t max_seq_len_ = 0;
   int32_t dp_size_ = 1;
+  ParallelArgs parallel_args_;
+  FlashComm1Options flash_comm1_options_;
   torch::Device device_;
   torch::ScalarType dtype_ = torch::kFloat;
   layer::Qwen3NextRMSNorm norm_{nullptr};

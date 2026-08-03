@@ -61,13 +61,12 @@ __global__ void XLLM_KERNEL_ATTR(kCombineBlockSize) moe_combine_kernel(
 }
 
 template <typename scalar_t>
-__global__ void XLLM_KERNEL_ATTR(kCombineBlockSize)
-    moe_combine_indexed_kernel(
-        const scalar_t* __restrict__ gemm2_sorted,  // [N*topk, H]
-        const int32_t* __restrict__ sorted_positions,  // [N*topk]
-        const float* __restrict__ reduce_weight,       // [N, topk]
-        scalar_t* __restrict__ output,                 // [N, H]
-        int64_t N,
+__global__ void XLLM_KERNEL_ATTR(kCombineBlockSize) moe_combine_indexed_kernel(
+    const scalar_t* __restrict__ gemm2_sorted,     // [N*topk, H]
+    const int32_t* __restrict__ sorted_positions,  // [N*topk]
+    const float* __restrict__ reduce_weight,       // [N, topk]
+    scalar_t* __restrict__ output,                 // [N, H]
+    int64_t N,
     int32_t topk,
     int64_t gemm2_rows,
     int64_t H) {
@@ -81,10 +80,9 @@ __global__ void XLLM_KERNEL_ATTR(kCombineBlockSize)
       const int64_t flat_idx = token_id * topk + k;
       const int32_t sorted_idx = sorted_positions[flat_idx];
       if (sorted_idx >= 0 && static_cast<int64_t>(sorted_idx) < gemm2_rows) {
-        acc +=
-            reduce_weight[flat_idx] *
-            static_cast<float>(
-                gemm2_sorted[static_cast<int64_t>(sorted_idx) * H + h]);
+        acc += reduce_weight[flat_idx] *
+               static_cast<float>(
+                   gemm2_sorted[static_cast<int64_t>(sorted_idx) * H + h]);
       }
     }
     output[token_id * H + h] = static_cast<scalar_t>(acc);
@@ -186,12 +184,11 @@ torch::Tensor moe_combine_result(
   return output;
 }
 
-torch::Tensor moe_combine_result_indexed(
-    const torch::Tensor& gemm2_sorted,
-    const torch::Tensor& sorted_positions,
-    const torch::Tensor& reduce_weight,
-    int64_t N,
-    int32_t topk) {
+torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
+                                         const torch::Tensor& sorted_positions,
+                                         const torch::Tensor& reduce_weight,
+                                         int64_t N,
+                                         int32_t topk) {
   CHECK(gemm2_sorted.dim() == 2);
   CHECK(sorted_positions.dim() == 1);
   CHECK(reduce_weight.dim() == 2);
@@ -208,25 +205,22 @@ torch::Tensor moe_combine_result_indexed(
   auto stream = at::cuda::getCurrentCUDAStream();
   const int64_t H = gemm2_sorted.size(1);
   auto output = torch::empty({N, H}, gemm2_sorted.options());
-  auto rw = reduce_weight.to(gemm2_sorted.device(), torch::kFloat32).contiguous();
+  auto rw =
+      reduce_weight.to(gemm2_sorted.device(), torch::kFloat32).contiguous();
 
   if (gemm2_sorted.scalar_type() == torch::kFloat16) {
-    moe_combine_indexed_kernel<c10::Half>
-        <<<N, kCombineBlockSize, 0, stream>>>(
-            gemm2_sorted.data_ptr<c10::Half>(),
-            sorted_positions.data_ptr<int32_t>(),
-            rw.data_ptr<float>(),
-            output.data_ptr<c10::Half>(),
-            N,
-            topk,
-            gemm2_sorted.size(0),
-            H);
+    moe_combine_indexed_kernel<c10::Half><<<N, kCombineBlockSize, 0, stream>>>(
+        gemm2_sorted.data_ptr<c10::Half>(),
+        sorted_positions.data_ptr<int32_t>(),
+        rw.data_ptr<float>(),
+        output.data_ptr<c10::Half>(),
+        N,
+        topk,
+        gemm2_sorted.size(0),
+        H);
   } else if (gemm2_sorted.scalar_type() == torch::kBFloat16) {
     if (H % 8 == 0) {
-      moe_combine_indexed_bf16_vec8_kernel<<<N,
-                                              kCombineBlockSize,
-                                              0,
-                                              stream>>>(
+      moe_combine_indexed_bf16_vec8_kernel<<<N, kCombineBlockSize, 0, stream>>>(
           gemm2_sorted.data_ptr<c10::BFloat16>(),
           sorted_positions.data_ptr<int32_t>(),
           rw.data_ptr<float>(),
@@ -248,16 +242,15 @@ torch::Tensor moe_combine_result_indexed(
               H);
     }
   } else {
-    moe_combine_indexed_kernel<float>
-        <<<N, kCombineBlockSize, 0, stream>>>(
-            gemm2_sorted.data_ptr<float>(),
-            sorted_positions.data_ptr<int32_t>(),
-            rw.data_ptr<float>(),
-            output.data_ptr<float>(),
-            N,
-            topk,
-            gemm2_sorted.size(0),
-            H);
+    moe_combine_indexed_kernel<float><<<N, kCombineBlockSize, 0, stream>>>(
+        gemm2_sorted.data_ptr<float>(),
+        sorted_positions.data_ptr<int32_t>(),
+        rw.data_ptr<float>(),
+        output.data_ptr<float>(),
+        N,
+        topk,
+        gemm2_sorted.size(0),
+        H);
   }
   return output;
 }

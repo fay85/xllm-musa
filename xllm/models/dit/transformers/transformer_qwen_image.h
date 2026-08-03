@@ -17,17 +17,21 @@ limitations under the License.
 #include <glog/logging.h>
 #include <torch/nn/functional/linear.h>
 #include <torch/torch.h>
+#if defined(USE_NPU)
 #include <torch_npu/csrc/aten/CustomFunctions.h>
-#include <torch_npu/csrc/libs/init_npu.h>
+#endif
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 
+#include "core/framework/config/dit_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/dit_cache/dit_cache.h"
 #include "core/framework/dit_model_loader.h"
@@ -35,12 +39,16 @@ limitations under the License.
 #include "core/framework/state_dict/state_dict.h"
 #include "core/framework/state_dict/utils.h"
 #include "core/layers/common/add_matmul.h"
+#if defined(USE_DCU)
+#include "core/layers/dcu/flash_attention.h"
+#endif
 #include "framework/model_context.h"
 #include "framework/parallel_state/parallel_state.h"
 #include "models/dit/utils/dit_parallel_linear.h"
 #include "models/dit/utils/sequence_parallel_pad_manager.h"
 #include "models/model_registry.h"
 
+#if defined(USE_NPU)
 #ifdef TORCH_HIGHER_THAN_PTA6
 #include <torch_npu/csrc/framework/OpCommand.h>
 #else
@@ -50,9 +58,104 @@ limitations under the License.
 
 #include <torch_npu/csrc/libs/init_npu.h>
 #include <torch_npu/torch_npu.h>
+#endif
 
-#include <cstdlib>
 namespace xllm {
+
+inline bool use_dit_sp_communication_overlap() {
+  return DiTConfig::get_instance().dit_sp_communication_overlap() &&
+         ParallelConfig::get_instance().sp_size() > 1;
+}
+
+inline torch::Tensor qwen_image_scaled_dot_product_attention(
+    const torch::Tensor& query,
+    const torch::Tensor& key,
+    const torch::Tensor& value) {
+#if defined(USE_DCU)
+  CHECK_EQ(query.dim(), 4) << "Qwen-Image query must be [B,H,S,D]";
+  CHECK_EQ(key.dim(), 4) << "Qwen-Image key must be [B,H,S,D]";
+  CHECK_EQ(value.dim(), 4) << "Qwen-Image value must be [B,H,S,D]";
+  CHECK_EQ(query.size(0), key.size(0)) << "Qwen-Image q/k batch mismatch";
+  CHECK_EQ(query.size(0), value.size(0)) << "Qwen-Image q/v batch mismatch";
+  CHECK_EQ(query.size(1), key.size(1)) << "Qwen-Image q/k head mismatch";
+  CHECK_EQ(key.size(1), value.size(1)) << "Qwen-Image k/v head mismatch";
+  CHECK_EQ(query.size(3), key.size(3)) << "Qwen-Image q/k head dim mismatch";
+  CHECK_EQ(query.size(3), value.size(3)) << "Qwen-Image q/v head dim mismatch";
+  CHECK_EQ(key.size(2), value.size(2)) << "Qwen-Image k/v seq mismatch";
+
+  const int64_t batch_size = query.size(0);
+  const int64_t num_heads = query.size(1);
+  const int64_t q_seq_len = query.size(2);
+  const int64_t kv_seq_len = key.size(2);
+  const int64_t head_dim = query.size(3);
+
+  auto cu_options =
+      torch::TensorOptions().dtype(torch::kInt32).device(query.device());
+  auto cu_seqlens_q =
+      torch::arange(batch_size + 1, cu_options).mul_(q_seq_len).contiguous();
+  auto cu_seqlens_k =
+      torch::arange(batch_size + 1, cu_options).mul_(kv_seq_len).contiguous();
+
+  auto dense_query = query.transpose(1, 2).contiguous().view(
+      {batch_size * q_seq_len, num_heads, head_dim});
+  auto dense_key = key.transpose(1, 2).contiguous().view(
+      {batch_size * kv_seq_len, key.size(1), head_dim});
+  auto dense_value = value.transpose(1, 2).contiguous().view(
+      {batch_size * kv_seq_len, value.size(1), head_dim});
+
+  auto output = layer::dense_varlen_flash_attention(
+      dense_query,
+      dense_key,
+      dense_value,
+      cu_seqlens_q,
+      cu_seqlens_k,
+      std::pow(static_cast<double>(head_dim), -0.5),
+      /*is_causal=*/false);
+  return output.view({batch_size, q_seq_len, num_heads, head_dim})
+      .transpose(1, 2)
+      .contiguous();
+#else
+  return torch::scaled_dot_product_attention(query,
+                                             key,
+                                             value,
+                                             torch::nullopt,
+                                             /*dropout_p=*/0.0,
+                                             /*is_causal=*/false);
+#endif
+}
+
+inline torch::Tensor qwen_image_joint_attention(
+    const torch::Tensor& joint_query,
+    const torch::Tensor& joint_key,
+    const torch::Tensor& joint_value) {
+  constexpr int64_t kAttentionChunkSize = 512;
+  auto query = joint_query.transpose(1, 2);
+  auto key = joint_key.transpose(1, 2);
+  auto value = joint_value.transpose(1, 2);
+  auto attention_output_dtype = query.dtype();
+
+  torch::Tensor output;
+  if (query.size(2) <= kAttentionChunkSize) {
+    output = qwen_image_scaled_dot_product_attention(query, key, value);
+  } else {
+    std::vector<torch::Tensor> attention_chunks;
+    const int64_t num_chunks =
+        (query.size(2) + kAttentionChunkSize - 1) / kAttentionChunkSize;
+    attention_chunks.reserve(num_chunks);
+    for (int64_t start = 0; start < query.size(2);
+         start += kAttentionChunkSize) {
+      int64_t chunk_size = std::min(kAttentionChunkSize, query.size(2) - start);
+      auto query_chunk = query.narrow(2, start, chunk_size);
+      attention_chunks.emplace_back(
+          qwen_image_scaled_dot_product_attention(query_chunk, key, value));
+    }
+    output = torch::cat(attention_chunks, 2);
+  }
+  if (output.dtype() != attention_output_dtype) {
+    output = output.to(attention_output_dtype);
+  }
+  return output.transpose(1, 2);
+}
 
 namespace qwenimage {
 // TODO: This class should be extracted from dit class and integrated into a
@@ -72,8 +175,18 @@ class RMSNormImpl final : public torch::nn::Module {
   }
 
   torch::Tensor forward(const torch::Tensor& hidden_states) {
+#if defined(USE_NPU)
     auto [output, rstd] =
         at_npu::native::custom_ops::npu_rms_norm(hidden_states, weight_, eps_);
+#else
+    torch::Tensor output = hidden_states.to(torch::kFloat32);
+    output =
+        output * torch::rsqrt(output.pow(2).mean(-1, /*keepdim=*/true) + eps_);
+    if (elementwise_affine_) {
+      output = output * weight_.to(output.device(), output.dtype());
+    }
+    output = output.to(hidden_states.dtype());
+#endif
     if (is_bias_ && bias_.defined()) {
       output = output + bias_;
     }
@@ -119,11 +232,15 @@ class AdaLayerNormContinuousImpl final : public torch::nn::Module {
                                       bool bias = true)
       : options_(context.get_tensor_options()) {
     ModelArgs model_args = context.get_model_args();
+    quant_args_ = context.get_quant_args();
     silu_ = register_module("silu", torch::nn::SiLU());
     linear_ = register_module(
         "linear",
-        layer::AddMatmulWeightTransposed(
-            conditioning_embedding_dim, 2 * embedding_dim, bias, options_));
+        layer::AddMatmulWeightTransposed(conditioning_embedding_dim,
+                                         2 * embedding_dim,
+                                         bias,
+                                         options_,
+                                         quant_args_));
     norm_ = register_module(
         "norm",
         torch::nn::LayerNorm(torch::nn::LayerNormOptions({embedding_dim})
@@ -159,6 +276,7 @@ class AdaLayerNormContinuousImpl final : public torch::nn::Module {
   layer::AddMatmulWeightTransposed linear_{nullptr};
   torch::nn::SiLU silu_{nullptr};
   torch::nn::LayerNorm norm_{nullptr};
+  QuantArgs quant_args_;
   double eps_;
   std::string norm_type_;
   bool elementwise_affine_;
@@ -257,26 +375,33 @@ class TimestepEmbeddingImpl final : public torch::nn::Module {
                         int64_t cond_proj_dim = -1,
                         bool sample_proj_bias = true)
       : options_(context.get_tensor_options()) {
-    linear_1_ = register_module(
-        "linear_1",
-        layer::AddMatmulWeightTransposed(
-            in_channels, time_embed_dim, sample_proj_bias, options_));
+    quant_args_ = context.get_quant_args();
+    linear_1_ =
+        register_module("linear_1",
+                        layer::AddMatmulWeightTransposed(in_channels,
+                                                         time_embed_dim,
+                                                         sample_proj_bias,
+                                                         options_,
+                                                         quant_args_));
 
     if (cond_proj_dim > 0) {
-      cond_proj_ =
-          register_module("cond_proj",
-                          layer::AddMatmulWeightTransposed(
-                              cond_proj_dim, in_channels, false, options_));
+      cond_proj_ = register_module(
+          "cond_proj",
+          layer::AddMatmulWeightTransposed(
+              cond_proj_dim, in_channels, false, options_, quant_args_));
     }
 
     act_fn_ = register_module("act_fn", torch::nn::SiLU());
 
     int64_t time_embed_dim_out = (out_dim > 0) ? out_dim : time_embed_dim;
 
-    linear_2_ = register_module(
-        "linear_2",
-        layer::AddMatmulWeightTransposed(
-            time_embed_dim, time_embed_dim_out, sample_proj_bias, options_));
+    linear_2_ =
+        register_module("linear_2",
+                        layer::AddMatmulWeightTransposed(time_embed_dim,
+                                                         time_embed_dim_out,
+                                                         sample_proj_bias,
+                                                         options_,
+                                                         quant_args_));
   }
 
   torch::Tensor forward(const torch::Tensor& sample,
@@ -307,6 +432,7 @@ class TimestepEmbeddingImpl final : public torch::nn::Module {
 
  private:
   torch::TensorOptions options_;
+  QuantArgs quant_args_;
   torch::nn::SiLU act_fn_{nullptr};
   layer::AddMatmulWeightTransposed linear_1_{nullptr};
   layer::AddMatmulWeightTransposed linear_2_{nullptr};
@@ -347,7 +473,10 @@ class AttentionImpl final : public torch::nn::Module {
                 bool is_causal = false,
                 ProcessGroup* sp_group = nullptr)
       : options_(context.get_tensor_options()),
+        quant_args_(context.get_quant_args()),
         heads_(heads),
+        kv_heads_(kv_heads.has_value() ? kv_heads.value() : heads),
+        dim_head_(dim_head),
         bias_(bias),
         out_bias_(out_bias),
         added_proj_bias_(added_proj_bias),
@@ -424,22 +553,34 @@ class AttentionImpl final : public torch::nn::Module {
     out_context_dim =
         out_context_dim.has_value() ? out_context_dim.value() : query_dim;
 
-    xllm::dit::SpOptions q_sp_option(
-        /*head_num=*/heads,
-        /*head_dim=*/dim_head,
-        /*hidden_size=*/q_dim,
-        /*before_attention=*/true,
-        /*process_group=*/sp_group_);
-    xllm::dit::SpOptions kv_sp_option(
-        /*head_num=*/kv_heads.has_value() ? kv_heads.value() : heads,
-        /*head_dim=*/dim_head,
-        /*hidden_size=*/kv_dim,
-        /*before_attention=*/true,
-        /*process_group=*/sp_group_);
+    xllm::dit::SpOptions q_sp_option;
+    xllm::dit::SpOptions kv_sp_option;
+    xllm::dit::LinearType linear_type = xllm::dit::LinearType::Default;
+    if (::xllm::ParallelConfig::get_instance().sp_size() > 1 &&
+        !use_dit_sp_communication_overlap()) {
+      q_sp_option = xllm::dit::SpOptions(/*head_num=*/heads,
+                                         /*head_dim=*/dim_head,
+                                         /*hidden_size=*/q_dim,
+                                         /*before_attention=*/true,
+                                         /*process_group=*/sp_group_);
+
+      kv_sp_option = xllm::dit::SpOptions(
+          /*head_num=*/kv_heads.has_value() ? kv_heads.value() : heads,
+          /*head_dim=*/dim_head,
+          /*hidden_size=*/kv_dim,
+          /*before_attention=*/true,
+          /*process_group=*/sp_group_);
+      linear_type = xllm::dit::LinearType::SequenceParallel;
+    }
 
     to_q_ = register_module("q_linear",
-                            xllm::dit::DiTParallelLinear(
-                                query_dim, q_dim, bias, options_, q_sp_option));
+                            xllm::dit::DiTParallelLinear(query_dim,
+                                                         q_dim,
+                                                         bias,
+                                                         options_,
+                                                         q_sp_option,
+                                                         /*tp=*/std::nullopt,
+                                                         quant_args_));
 
     // Key-Value projections (if not only cross attention)
     if (!only_cross_attention) {
@@ -449,7 +590,9 @@ class AttentionImpl final : public torch::nn::Module {
                                        kv_dim,
                                        bias,
                                        options_,
-                                       kv_sp_option));
+                                       kv_sp_option,
+                                       /*tp=*/std::nullopt,
+                                       quant_args_));
 
       to_v_ = register_module(
           "v_linear",
@@ -457,7 +600,9 @@ class AttentionImpl final : public torch::nn::Module {
                                        kv_dim,
                                        bias,
                                        options_,
-                                       kv_sp_option));
+                                       kv_sp_option,
+                                       /*tp=*/std::nullopt,
+                                       quant_args_));
     }
 
     if (added_kv_proj_dim.has_value()) {
@@ -467,7 +612,9 @@ class AttentionImpl final : public torch::nn::Module {
                                        kv_dim,
                                        added_proj_bias,
                                        options_,
-                                       kv_sp_option));
+                                       kv_sp_option,
+                                       /*tp=*/std::nullopt,
+                                       quant_args_));
 
       add_v_proj_ = register_module(
           "add_v_linear",
@@ -475,7 +622,9 @@ class AttentionImpl final : public torch::nn::Module {
                                        kv_dim,
                                        added_proj_bias,
                                        options_,
-                                       kv_sp_option));
+                                       kv_sp_option,
+                                       /*tp=*/std::nullopt,
+                                       quant_args_));
       if (context_pre_only.has_value()) {
         add_q_proj_ = register_module(
             "add_q_linear",
@@ -483,23 +632,33 @@ class AttentionImpl final : public torch::nn::Module {
                                          q_dim,
                                          added_proj_bias,
                                          options_,
-                                         q_sp_option));
+                                         q_sp_option,
+                                         /*tp=*/std::nullopt,
+                                         quant_args_));
       }
     }
 
-    xllm::dit::SpOptions out_sp_option(
-        /*head_num=*/heads,
-        /*head_dim=*/dim_head,
-        /*hidden_size=*/q_dim,
-        /*before_attention=*/false,
-        /*process_group=*/sp_group_);
+    xllm::dit::SpOptions out_sp_option;
+    if (::xllm::ParallelConfig::get_instance().sp_size() > 1 &&
+        !use_dit_sp_communication_overlap()) {
+      out_sp_option = xllm::dit::SpOptions(/*head_num=*/heads,
+                                           /*head_dim=*/dim_head,
+                                           /*hidden_size=*/q_dim,
+                                           /*before_attention=*/false,
+                                           /*process_group=*/sp_group_);
+    }
 
     // Output projections
     if (!pre_only) {
       to_out_ = register_module("to_out", torch::nn::Sequential());
 
-      to_out_->push_back(xllm::dit::DiTParallelLinear(
-          q_dim, out_dim.value(), out_bias, options_, out_sp_option));
+      to_out_->push_back(xllm::dit::DiTParallelLinear(q_dim,
+                                                      out_dim.value(),
+                                                      out_bias,
+                                                      options_,
+                                                      out_sp_option,
+                                                      /*tp=*/std::nullopt,
+                                                      quant_args_));
       to_out_->push_back(
           torch::nn::Dropout(torch::nn::DropoutOptions(dropout)));
     }
@@ -512,7 +671,9 @@ class AttentionImpl final : public torch::nn::Module {
                                                        out_context_dim.value(),
                                                        out_bias,
                                                        options_,
-                                                       out_sp_option));
+                                                       out_sp_option,
+                                                       /*tp=*/std::nullopt,
+                                                       quant_args_));
     }
 
     // Added QK normalization for added KV projections
@@ -586,12 +747,15 @@ class AttentionImpl final : public torch::nn::Module {
 
  public:
   int64_t heads_;
+  int64_t kv_heads_;
+  int64_t dim_head_;
   bool bias_;
   bool out_bias_;
   bool added_proj_bias_;
   ProcessGroup* sp_group_;
 
   torch::TensorOptions options_;
+  QuantArgs quant_args_;
   torch::nn::LayerNorm layer_norm_q_{nullptr}, layer_norm_k_{nullptr},
       norm_cross_{nullptr};
   xllm::dit::DiTParallelLinear to_q_{nullptr}, to_k_{nullptr}, to_v_{nullptr};
@@ -615,12 +779,14 @@ class FeedForwardImpl final : public torch::nn::Module {
                            double dropout = 0.0)
       : options_(context.get_tensor_options()) {
     auto model_args = context.get_model_args();
+    quant_args_ = context.get_quant_args();
     int64_t inner_dim = dim * 4;
 
     // linear1
-    linear1_ = register_module(
-        "linear1",
-        layer::AddMatmulWeightTransposed(dim, inner_dim, true, options_));
+    linear1_ =
+        register_module("linear1",
+                        layer::AddMatmulWeightTransposed(
+                            dim, inner_dim, true, options_, quant_args_));
 
     // activation
     activation_ =
@@ -632,9 +798,10 @@ class FeedForwardImpl final : public torch::nn::Module {
                                 })));
 
     // linear2
-    linear2_ = register_module(
-        "linear2",
-        layer::AddMatmulWeightTransposed(inner_dim, dim_out, true, options_));
+    linear2_ =
+        register_module("linear2",
+                        layer::AddMatmulWeightTransposed(
+                            inner_dim, dim_out, true, options_, quant_args_));
   }
 
   torch::Tensor forward(const torch::Tensor& hidden_states) {
@@ -660,6 +827,7 @@ class FeedForwardImpl final : public torch::nn::Module {
   layer::AddMatmulWeightTransposed linear1_{nullptr};
   layer::AddMatmulWeightTransposed linear2_{nullptr};
   torch::nn::Functional activation_{nullptr};
+  QuantArgs quant_args_;
   torch::TensorOptions options_;
 };
 TORCH_MODULE(FeedForward);
@@ -765,9 +933,23 @@ torch::Tensor apply_rotary_emb_qwen(const torch::Tensor& x,
                           .unsqueeze(-1)
                           .expand({-1, -1, -1, -1, 2})
                           .reshape({1, seqlen, 1, -1});
+#if defined(USE_NPU)
   auto x_out = at_npu::native::custom_ops::npu_rotary_mul(
       x.to(torch::kFloat), cos_expanded, sin_expanded, "interleave");
   return x_out.to(x.dtype());
+#else
+  auto input_dtype = x.dtype();
+  auto x_float = x.to(torch::kFloat32);
+  auto x_flat = x_float.unflatten(-1, std::vector<int64_t>{-1, 2});
+  auto x1 = x_flat.select(-1, 0);
+  auto x2 = x_flat.select(-1, 1);
+  auto cos_half = cos.unsqueeze(0).unsqueeze(2);
+  auto sin_half = sin.unsqueeze(0).unsqueeze(2);
+  auto out1 = x1 * cos_half - x2 * sin_half;
+  auto out2 = x1 * sin_half + x2 * cos_half;
+  auto out = torch::stack({out1, out2}, -1).flatten(-2, -1);
+  return out.to(input_dtype);
+#endif
 }
 
 std::tuple<int64_t, std::optional<torch::Tensor>, std::optional<torch::Tensor>>
@@ -1436,18 +1618,18 @@ class QwenDoubleStreamAttnProcessor2_0Impl : public torch::nn::Module {
     auto img_freqs = std::get<0>(image_rotary_emb);
     auto txt_freqs = std::get<1>(image_rotary_emb);
 
-    xllm::dit::SequenceParallelPadManager::getInstance().unpad_tensor(
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
         txt_query, /*tensor_name=*/"encoder_hidden_states", /*dim=*/1);
-    xllm::dit::SequenceParallelPadManager::getInstance().unpad_tensor(
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
         txt_key, /*tensor_name=*/"encoder_hidden_states", /*dim=*/1);
-    xllm::dit::SequenceParallelPadManager::getInstance().unpad_tensor(
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
         txt_value, /*tensor_name=*/"encoder_hidden_states", /*dim=*/1);
 
-    xllm::dit::SequenceParallelPadManager::getInstance().unpad_tensor(
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
         img_query, /*tensor_name=*/"hidden_states", /*dim=*/1);
-    xllm::dit::SequenceParallelPadManager::getInstance().unpad_tensor(
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
         img_key, /*tensor_name=*/"hidden_states", /*dim=*/1);
-    xllm::dit::SequenceParallelPadManager::getInstance().unpad_tensor(
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
         img_value, /*tensor_name=*/"hidden_states", /*dim=*/1);
 
     img_query = apply_rotary_emb_qwen(img_query, img_freqs, false);
@@ -1460,6 +1642,7 @@ class QwenDoubleStreamAttnProcessor2_0Impl : public torch::nn::Module {
     auto joint_key = torch::cat({txt_key, img_key}, 1);
     auto joint_value = torch::cat({txt_value, img_value}, 1);
 
+#if defined(USE_NPU)
     auto results = at_npu::native::custom_ops::npu_fusion_attention(
         joint_query,
         joint_key,
@@ -1475,6 +1658,10 @@ class QwenDoubleStreamAttnProcessor2_0Impl : public torch::nn::Module {
         /*next_tockens=*/65535);
 
     auto joint_hidden_states = std::get<0>(results);
+#else
+    auto joint_hidden_states =
+        qwen_image_joint_attention(joint_query, joint_key, joint_value);
+#endif
     // Reshape back
     joint_hidden_states = joint_hidden_states.flatten(2, 3);
     joint_hidden_states = joint_hidden_states.to(joint_query.dtype());
@@ -1487,13 +1674,13 @@ class QwenDoubleStreamAttnProcessor2_0Impl : public torch::nn::Module {
     auto img_attn_output = chunks[1];
 
     txt_attn_output =
-        xllm::dit::SequenceParallelPadManager::getInstance().pad_tensor(
+        xllm::dit::SequenceParallelPadManager::get_instance().pad_tensor(
             txt_attn_output,
             /*tensor_name=*/"encoder_hidden_states",
             /*dim=*/1);
 
     img_attn_output =
-        xllm::dit::SequenceParallelPadManager::getInstance().pad_tensor(
+        xllm::dit::SequenceParallelPadManager::get_instance().pad_tensor(
             img_attn_output, /*tensor_name=*/"hidden_states", /*dim=*/1);
 
     // Apply output projections
@@ -1513,9 +1700,213 @@ class QwenDoubleStreamAttnProcessor2_0Impl : public torch::nn::Module {
 
  protected:
   qwenimage::Attention attn_{nullptr};
-  const ParallelArgs parallel_args_;
+  ParallelArgs parallel_args_;
 };
 TORCH_MODULE(QwenDoubleStreamAttnProcessor2_0);
+
+class QwenDoubleStreamAttnProcessorCMO2_0Impl : public torch::nn::Module {
+ public:
+  QwenDoubleStreamAttnProcessorCMO2_0Impl(qwenimage::Attention&& attn_module,
+                                          const ParallelArgs& parallel_args)
+      : parallel_args_(parallel_args) {
+    attn_ = register_module("attn", std::move(attn_module));
+    q_heads_ = attn_->heads_;
+    kv_heads_ = attn_->kv_heads_;
+    dim_head_ = attn_->dim_head_;
+    q_hidden_size_ = q_heads_ * dim_head_;
+  }
+
+  std::tuple<torch::Tensor, torch::Tensor> forward(
+      const torch::Tensor& hidden_states,
+      const torch::Tensor& encoder_hidden_states,
+      const torch::Tensor& encoder_hidden_states_mask = torch::Tensor(),
+      const torch::Tensor& attention_mask = torch::Tensor(),
+      const std::tuple<torch::Tensor, torch::Tensor>& image_rotary_emb = {}) {
+    const auto sp_size = ::xllm::ParallelConfig::get_instance().sp_size();
+    CHECK_GT(sp_size, 1) << "CMO attention requires sequence parallelism";
+
+    auto img_query = attn_->to_q_->forward(hidden_states);
+    auto img_query_handler = parallel_state::all_to_all_4D(
+        img_query.view({hidden_states.size(0), -1, q_heads_, dim_head_}),
+        /*scatter_idx=*/2,
+        /*gather_idx=*/1,
+        /*async_ops=*/true,
+        attn_->sp_group_);
+
+    auto img_key = attn_->to_k_->forward(hidden_states);
+    auto img_key_handler = parallel_state::all_to_all_4D(
+        img_key.view({hidden_states.size(0), -1, kv_heads_, dim_head_}),
+        /*scatter_idx=*/2,
+        /*gather_idx=*/1,
+        /*async_ops=*/true,
+        attn_->sp_group_);
+
+    auto img_value = attn_->to_v_->forward(hidden_states);
+    auto img_value_handler = parallel_state::all_to_all_4D(
+        img_value.view({hidden_states.size(0), -1, kv_heads_, dim_head_}),
+        /*scatter_idx=*/2,
+        /*gather_idx=*/1,
+        /*async_ops=*/true,
+        attn_->sp_group_);
+
+    auto txt_query = attn_->add_q_proj_->forward(encoder_hidden_states);
+    auto txt_query_handler = parallel_state::all_to_all_4D(
+        txt_query.view(
+            {encoder_hidden_states.size(0), -1, q_heads_, dim_head_}),
+        /*scatter_idx=*/2,
+        /*gather_idx=*/1,
+        /*async_ops=*/true,
+        attn_->sp_group_);
+
+    auto txt_key = attn_->add_k_proj_->forward(encoder_hidden_states);
+    auto txt_key_handler = parallel_state::all_to_all_4D(
+        txt_key.view({encoder_hidden_states.size(0), -1, kv_heads_, dim_head_}),
+        /*scatter_idx=*/2,
+        /*gather_idx=*/1,
+        /*async_ops=*/true,
+        attn_->sp_group_);
+
+    auto txt_value = attn_->add_v_proj_->forward(encoder_hidden_states);
+    auto txt_value_handler = parallel_state::all_to_all_4D(
+        txt_value.view(
+            {encoder_hidden_states.size(0), -1, kv_heads_, dim_head_}),
+        /*scatter_idx=*/2,
+        /*gather_idx=*/1,
+        /*async_ops=*/true,
+        attn_->sp_group_);
+
+    img_query = img_query_handler();
+    img_key = img_key_handler();
+    txt_query = txt_query_handler();
+    txt_key = txt_key_handler();
+
+    if (attn_->norm_q_) {
+      img_query = attn_->norm_q_->forward(img_query);
+    }
+    if (attn_->norm_k_) {
+      img_key = attn_->norm_k_->forward(img_key);
+    }
+    if (attn_->norm_added_q_) {
+      txt_query = attn_->norm_added_q_->forward(txt_query);
+    }
+    if (attn_->norm_added_k_) {
+      txt_key = attn_->norm_added_k_->forward(txt_key);
+    }
+
+    auto img_freqs = std::get<0>(image_rotary_emb);
+    auto txt_freqs = std::get<1>(image_rotary_emb);
+
+    img_value = img_value_handler();
+    txt_value = txt_value_handler();
+
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
+        txt_query, /*tensor_name=*/"encoder_hidden_states", /*dim=*/1);
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
+        txt_key, /*tensor_name=*/"encoder_hidden_states", /*dim=*/1);
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
+        txt_value, /*tensor_name=*/"encoder_hidden_states", /*dim=*/1);
+
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
+        img_query, /*tensor_name=*/"hidden_states", /*dim=*/1);
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
+        img_key, /*tensor_name=*/"hidden_states", /*dim=*/1);
+    xllm::dit::SequenceParallelPadManager::get_instance().unpad_tensor(
+        img_value, /*tensor_name=*/"hidden_states", /*dim=*/1);
+
+    img_query = apply_rotary_emb_qwen(img_query, img_freqs, false);
+    img_key = apply_rotary_emb_qwen(img_key, img_freqs, false);
+    txt_query = apply_rotary_emb_qwen(txt_query, txt_freqs, false);
+    txt_key = apply_rotary_emb_qwen(txt_key, txt_freqs, false);
+
+    auto joint_query = torch::cat({txt_query, img_query}, 1);
+    auto joint_key = torch::cat({txt_key, img_key}, 1);
+    auto joint_value = torch::cat({txt_value, img_value}, 1);
+
+#if defined(USE_NPU)
+    auto results = at_npu::native::custom_ops::npu_fusion_attention(
+        joint_query,
+        joint_key,
+        joint_value,
+        q_heads_ / sp_size,
+        /*input_layout=*/"BSND",
+        /*pse=*/torch::nullopt,
+        /*padding_mask=*/torch::nullopt,
+        /*atten_mask*/ torch::nullopt,
+        /*scale=*/pow(joint_query.size(3), -0.5),
+        /*keep_prob=*/1.0,
+        /*pre_tockens=*/65535,
+        /*next_tockens=*/65535);
+
+    auto joint_hidden_states = std::get<0>(results);
+#else
+    auto joint_hidden_states =
+        qwen_image_joint_attention(joint_query, joint_key, joint_value);
+#endif
+    joint_hidden_states = joint_hidden_states.flatten(2, 3);
+    joint_hidden_states = joint_hidden_states.to(joint_query.dtype());
+
+    int64_t seq_txt = txt_query.size(1);
+    int64_t seq_img = img_query.size(1);
+    auto chunks = torch::split(joint_hidden_states, {seq_txt, seq_img}, 1);
+    auto txt_attn_output = chunks[0];
+    auto img_attn_output = chunks[1];
+
+    txt_attn_output =
+        xllm::dit::SequenceParallelPadManager::get_instance().pad_tensor(
+            txt_attn_output,
+            /*tensor_name=*/"encoder_hidden_states",
+            /*dim=*/1);
+
+    img_attn_output =
+        xllm::dit::SequenceParallelPadManager::get_instance().pad_tensor(
+            img_attn_output, /*tensor_name=*/"hidden_states", /*dim=*/1);
+
+    auto img_out_handler = parallel_state::all_to_all_4D(
+        img_attn_output.view(
+            {hidden_states.size(0), -1, q_heads_ / sp_size, dim_head_}),
+        /*scatter_idx=*/1,
+        /*gather_idx=*/2,
+        /*async_ops=*/true,
+        attn_->sp_group_);
+
+    auto txt_out_handler = parallel_state::all_to_all_4D(
+        txt_attn_output.view(
+            {encoder_hidden_states.size(0), -1, q_heads_ / sp_size, dim_head_}),
+        /*scatter_idx=*/1,
+        /*gather_idx=*/2,
+        /*async_ops=*/true,
+        attn_->sp_group_);
+
+    img_attn_output = img_out_handler();
+    img_attn_output =
+        img_attn_output.view({hidden_states.size(0), -1, q_hidden_size_});
+    img_attn_output = attn_->to_out_->forward(img_attn_output);
+
+    txt_attn_output = txt_out_handler();
+    txt_attn_output = txt_attn_output.view(
+        {encoder_hidden_states.size(0), -1, q_hidden_size_});
+    txt_attn_output = attn_->to_add_out_->forward(txt_attn_output);
+
+    return std::make_tuple(img_attn_output, txt_attn_output);
+  }
+
+  void load_state_dict(const StateDict& state_dict) {
+    attn_->load_state_dict(state_dict);
+  }
+
+  void verify_loaded_weights(const std::string& prefix) {
+    attn_->verify_loaded_weights(prefix);
+  }
+
+ private:
+  qwenimage::Attention attn_{nullptr};
+  const ParallelArgs parallel_args_;
+  int64_t q_heads_ = 0;
+  int64_t kv_heads_ = 0;
+  int64_t dim_head_ = 0;
+  int64_t q_hidden_size_ = 0;
+};
+TORCH_MODULE(QwenDoubleStreamAttnProcessorCMO2_0);
 
 bool ADALN_FUSE = true;
 
@@ -1532,12 +1923,13 @@ class QwenImageTransformerBlockImpl : public torch::nn::Module {
       : options_(context.get_tensor_options()),
         zero_cond_t_(zero_cond_t),
         parallel_args_(parallel_args) {
+    quant_args_ = context.get_quant_args();
     // Image processing modules
     img_mod_ = register_module(
         "img_mod",
-        torch::nn::Sequential(
-            torch::nn::SiLU(),
-            layer::AddMatmulWeightTransposed(dim, 6 * dim, true, options_)));
+        torch::nn::Sequential(torch::nn::SiLU(),
+                              layer::AddMatmulWeightTransposed(
+                                  dim, 6 * dim, true, options_, quant_args_)));
 
     // Image normalization
     img_norm1_ = register_module("img_norm1", AdaLayerNorm(context, dim, eps));
@@ -1568,9 +1960,16 @@ class QwenImageTransformerBlockImpl : public torch::nn::Module {
                              /*elementwise_affine=*/true,
                              /*is_causal=*/false,
                              /*sp_group=*/parallel_args_.dit_sp_group_);
-    attn_processor_ = register_module(
-        "attn_processor_",
-        QwenDoubleStreamAttnProcessor2_0(std::move(attn_), parallel_args_));
+    if (use_dit_sp_communication_overlap()) {
+      attn_cmo_processor_ =
+          register_module("attn_processor_",
+                          QwenDoubleStreamAttnProcessorCMO2_0(std::move(attn_),
+                                                              parallel_args_));
+    } else {
+      attn_processor_ = register_module(
+          "attn_processor_",
+          QwenDoubleStreamAttnProcessor2_0(std::move(attn_), parallel_args_));
+    }
     // Image normalization 2
     img_norm2_ = register_module("img_norm2", AdaLayerNorm(context, dim, eps));
 
@@ -1581,9 +1980,9 @@ class QwenImageTransformerBlockImpl : public torch::nn::Module {
     // Text processing modules
     txt_mod_ = register_module(
         "txt_mod",
-        torch::nn::Sequential(
-            torch::nn::SiLU(),
-            layer::AddMatmulWeightTransposed(dim, 6 * dim, true, options_)));
+        torch::nn::Sequential(torch::nn::SiLU(),
+                              layer::AddMatmulWeightTransposed(
+                                  dim, 6 * dim, true, options_, quant_args_)));
 
     // Text normalization 1
     txt_norm1_ = register_module("txt_norm1", AdaLayerNorm(context, dim, eps));
@@ -1689,12 +2088,21 @@ class QwenImageTransformerBlockImpl : public torch::nn::Module {
     std::tie(txt_modulated, txt_gate1) =
         txt_norm1_->forward(encoder_hidden_states, txt_mod1);
 
+    std::tuple<torch::Tensor, torch::Tensor> attn_output;
     // Use QwenAttnProcessor2_0 for joint attention computation
-    auto attn_output = attn_processor_->forward(img_modulated,  // Image stream
-                                                txt_modulated,  // Text stream
-                                                encoder_hidden_states_mask,
-                                                torch::Tensor(),  // timestep
-                                                image_rotary_emb);
+    if (use_dit_sp_communication_overlap()) {
+      attn_output = attn_cmo_processor_->forward(img_modulated,  // Image stream
+                                                 txt_modulated,  // Text stream
+                                                 encoder_hidden_states_mask,
+                                                 torch::Tensor(),  // timestep
+                                                 image_rotary_emb);
+    } else {
+      attn_output = attn_processor_->forward(img_modulated,  // Image stream
+                                             txt_modulated,  // Text stream
+                                             encoder_hidden_states_mask,
+                                             torch::Tensor(),  // timestep
+                                             image_rotary_emb);
+    }
 
     // QwenAttnProcessor2_0 returns (img_output, txt_output)
     auto img_attn_output = std::get<0>(attn_output);
@@ -1741,7 +2149,13 @@ class QwenImageTransformerBlockImpl : public torch::nn::Module {
     txt_mod_[1]->as<layer::AddMatmulWeightTransposed>()->load_state_dict(
         state_dict.get_dict_with_prefix("txt_mod.1."));
     txt_mlp_->load_state_dict(state_dict.get_dict_with_prefix("txt_mlp."));
-    attn_processor_->load_state_dict(state_dict.get_dict_with_prefix("attn."));
+    if (use_dit_sp_communication_overlap()) {
+      attn_cmo_processor_->load_state_dict(
+          state_dict.get_dict_with_prefix("attn."));
+    } else {
+      attn_processor_->load_state_dict(
+          state_dict.get_dict_with_prefix("attn."));
+    }
   }
 
   void verify_loaded_weights(const std::string& prefix) {
@@ -1751,16 +2165,22 @@ class QwenImageTransformerBlockImpl : public torch::nn::Module {
     txt_mod_[1]->as<layer::AddMatmulWeightTransposed>()->verify_loaded_weights(
         prefix + "txt_mod.1.");
     txt_mlp_->verify_loaded_weights(prefix + "txt_mlp.");
-    attn_processor_->verify_loaded_weights(prefix + "attn.");
+    if (use_dit_sp_communication_overlap()) {
+      attn_cmo_processor_->verify_loaded_weights(prefix + "attn.");
+    } else {
+      attn_processor_->verify_loaded_weights(prefix + "attn.");
+    }
   }
 
  private:
   torch::TensorOptions options_;
+  QuantArgs quant_args_;
   torch::nn::Sequential img_mod_{nullptr};
   AdaLayerNorm img_norm1_{nullptr};
   AdaLayerNorm img_norm2_{nullptr};
   std::shared_ptr<qwenimage::Attention> attn_{nullptr};
   QwenDoubleStreamAttnProcessor2_0 attn_processor_{nullptr};
+  QwenDoubleStreamAttnProcessorCMO2_0 attn_cmo_processor_{nullptr};
   qwenimage::FeedForward img_mlp_{nullptr};
 
   torch::nn::Sequential txt_mod_{nullptr};
@@ -1768,7 +2188,7 @@ class QwenImageTransformerBlockImpl : public torch::nn::Module {
   AdaLayerNorm txt_norm2_{nullptr};
   qwenimage::FeedForward txt_mlp_{nullptr};
   bool zero_cond_t_;
-  const ParallelArgs parallel_args_;
+  ParallelArgs parallel_args_;
 };
 
 TORCH_MODULE(QwenImageTransformerBlock);
@@ -1778,11 +2198,11 @@ class QwenImageTransformer2DModelImpl : public torch::nn::Module {
   QwenImageTransformer2DModelImpl(const ModelContext& context,
                                   const ParallelArgs& parallel_args)
       : options_(context.get_tensor_options()), parallel_args_(parallel_args) {
+    quant_args_ = context.get_quant_args();
     auto model_args = context.get_model_args();
     int64_t num_attention_heads = model_args.n_heads();
     int64_t attention_head_dim = model_args.head_dim();
     int64_t joint_attention_dim = model_args.joint_attention_dim();
-    std::vector<int64_t> axes_dims_rope = model_args.axes_dims_rope();
     int64_t num_layers = model_args.num_layers();
     int64_t patch_size = model_args.mm_patch_size();
     int64_t in_channels = model_args.in_channels();
@@ -1794,17 +2214,6 @@ class QwenImageTransformer2DModelImpl : public torch::nn::Module {
     out_channels = (out_channels > 0) ? out_channels : in_channels;
     auto inner_dim = num_attention_heads * attention_head_dim;
 
-    // Positional embedding
-    if (use_layer3d_rope_) {
-      pos_embed_3d_rope_ = register_module(
-          "pos_embed",
-          QwenEmbedLayer3DRope(context, /*theta=*/10000, axes_dims_rope, true));
-    } else {
-      pos_embed_ = register_module(
-          "pos_embed",
-          QwenEmbedRope(context, /*theta=*/10000, axes_dims_rope, true));
-    }
-
     // Time-text embedding
     time_text_embed_ = register_module(
         "time_text_embed",
@@ -1815,13 +2224,14 @@ class QwenImageTransformer2DModelImpl : public torch::nn::Module {
         "txt_norm", qwenimage::RMSNorm(joint_attention_dim, 1e-6, true, false));
 
     // Input projections
-    img_in_ = register_module("img_in",
-                              layer::AddMatmulWeightTransposed(
-                                  in_channels, inner_dim, true, options_));
-    txt_in_ =
-        register_module("txt_in",
-                        layer::AddMatmulWeightTransposed(
-                            joint_attention_dim, inner_dim, true, options_));
+    img_in_ = register_module(
+        "img_in",
+        layer::AddMatmulWeightTransposed(
+            in_channels, inner_dim, true, options_, quant_args_));
+    txt_in_ = register_module(
+        "txt_in",
+        layer::AddMatmulWeightTransposed(
+            joint_attention_dim, inner_dim, true, options_, quant_args_));
     // Transformer blocks
     transformer_blocks_ =
         register_module("transformer_blocks", torch::nn::ModuleList());
@@ -1842,8 +2252,11 @@ class QwenImageTransformer2DModelImpl : public torch::nn::Module {
                             context, inner_dim, inner_dim, false, 1e-6));
     proj_out_ = register_module(
         "proj_out",
-        layer::AddMatmulWeightTransposed(
-            inner_dim, patch_size * patch_size * out_channels, true, options_));
+        layer::AddMatmulWeightTransposed(inner_dim,
+                                         patch_size * patch_size * out_channels,
+                                         true,
+                                         options_,
+                                         quant_args_));
 
     // Cache for conditional and unconditional
     cache_cond_ = false;
@@ -1858,6 +2271,7 @@ class QwenImageTransformer2DModelImpl : public torch::nn::Module {
       torch::Tensor timestep = torch::Tensor(),
       std::vector<std::vector<int64_t>> img_shapes = {},
       torch::Tensor txt_seq_lens = torch::Tensor(),
+      const std::tuple<torch::Tensor, torch::Tensor>& image_rotary_emb = {},
       bool use_cfg = false,
       int64_t step_idx = 0,
       torch::Tensor addition_t_cond = torch::Tensor(),
@@ -1892,27 +2306,25 @@ class QwenImageTransformer2DModelImpl : public torch::nn::Module {
       modulate_index = torch::Tensor();
     }
 
-    auto origin_text_seq_len = encoder_hidden_states.size(1);
-
     // padding mask for sequence parallel scene
     auto padded_encoder_hidden_states_mask =
-        xllm::dit::SequenceParallelPadManager::getInstance().pad_tensor(
+        xllm::dit::SequenceParallelPadManager::get_instance().pad_tensor(
             encoder_hidden_states_mask,
             /*tensor_name=*/"encoder_hidden_states_mask",
             /*dim=*/1);
 
     auto new_encoder_hidden_states =
-        xllm::dit::SequenceParallelPadManager::getInstance().pad_tensor(
+        xllm::dit::SequenceParallelPadManager::get_instance().pad_tensor(
             encoder_hidden_states,
             /*tensor_name=*/"encoder_hidden_states",
             /*dim=*/1);
 
     new_hidden_states =
-        xllm::dit::SequenceParallelPadManager::getInstance().pad_tensor(
+        xllm::dit::SequenceParallelPadManager::get_instance().pad_tensor(
             new_hidden_states, /*tensor_name=*/"hidden_states", /*dim=*/1);
 
     modulate_index =
-        xllm::dit::SequenceParallelPadManager::getInstance().pad_tensor(
+        xllm::dit::SequenceParallelPadManager::get_instance().pad_tensor(
             modulate_index, /*tensor_name=*/"modulate_index", /*dim=*/1);
 
     new_encoder_hidden_states = txt_norm_->forward(new_encoder_hidden_states);
@@ -1925,16 +2337,6 @@ class QwenImageTransformer2DModelImpl : public torch::nn::Module {
                                        padded_encoder_hidden_states_mask);
     auto temb = time_text_embed_->forward(
         new_timestep, new_hidden_states, addition_t_cond);
-    std::tuple<torch::Tensor, torch::Tensor> image_rotary_emb;
-    if (use_layer3d_rope_) {
-      image_rotary_emb = pos_embed_3d_rope_->forward(
-          img_shapes, origin_text_seq_len, new_hidden_states.device());
-    } else {
-      image_rotary_emb = pos_embed_->forward(img_shapes,
-                                             origin_text_seq_len,
-                                             new_hidden_states.device(),
-                                             /*max_txt_seq_len=*/std::nullopt);
-    }
 
     std::unordered_map<std::string, torch::Tensor> block_attention_kwargs;
     if (new_encoder_hidden_states_mask.has_value() &&
@@ -2079,8 +2481,7 @@ class QwenImageTransformer2DModelImpl : public torch::nn::Module {
 
  private:
   torch::TensorOptions options_;
-  QwenEmbedRope pos_embed_{nullptr};
-  QwenEmbedLayer3DRope pos_embed_3d_rope_{nullptr};
+  QuantArgs quant_args_;
   QwenTimestepProjEmbeddings time_text_embed_{nullptr};
   qwenimage::RMSNorm txt_norm_{nullptr};
   layer::AddMatmulWeightTransposed img_in_{nullptr};
@@ -2089,7 +2490,7 @@ class QwenImageTransformer2DModelImpl : public torch::nn::Module {
   qwenimage::AdaLayerNormContinuous norm_out_{nullptr};
   layer::AddMatmulWeightTransposed proj_out_{nullptr};
 
-  const ParallelArgs parallel_args_;
+  ParallelArgs parallel_args_;
 
   // Cache objects
   bool cache_cond_;

@@ -74,6 +74,20 @@ def get_dcu_root_path() -> Optional[str]:
         return None
 
 
+def _find_dcu_so(package: str, pattern: str) -> Optional[str]:
+    try:
+        import glob
+        import importlib.util
+        import os
+        spec = importlib.util.find_spec(package)
+    except Exception:
+        return None
+    if not spec or not spec.submodule_search_locations:
+        return None
+    files = glob.glob(os.path.join(spec.submodule_search_locations[0], pattern))
+    return files[0] if files else None
+
+
 def prepend_path_env(var_name: str, path: str, sep: str = os.pathsep) -> None:
     """Prepend a path into a path env var without duplicates."""
     if not path:
@@ -109,7 +123,34 @@ def set_common_envs() -> None:
 def set_npu_envs() -> None:
     PYTORCH_NPU_INSTALL_PATH = os.getenv("PYTORCH_NPU_INSTALL_PATH")
     if not PYTORCH_NPU_INSTALL_PATH:
-        os.environ["PYTORCH_NPU_INSTALL_PATH"] = "/usr/local/libtorch_npu"
+        # Use importlib.metadata instead of `import torch_npu` to avoid loading
+        # torch_npu .so into the build process. Loading torch_npu pollutes the
+        # ProcessPoolExecutor(spawn) child processes used by tilelang codegen,
+        # causing TVM to produce incorrect kernel source for small num_heads
+        # variants (nh4/nh6/nh8).
+        try:
+            import importlib.metadata
+            dist = importlib.metadata.distribution("torch_npu")
+            dist_loc = dist._path.parent
+            candidate = os.path.join(str(dist_loc), "torch_npu")
+            if os.path.isdir(candidate):
+                PYTORCH_NPU_INSTALL_PATH = candidate
+            else:
+                PYTORCH_NPU_INSTALL_PATH = "/usr/local/libtorch_npu"
+        except Exception:
+            PYTORCH_NPU_INSTALL_PATH = "/usr/local/libtorch_npu"
+        os.environ["PYTORCH_NPU_INSTALL_PATH"] = PYTORCH_NPU_INSTALL_PATH
+
+    # pip torch_npu wheel ships torch_npu.h under csrc/libs/ but not at the
+    # top-level include/torch_npu/. Create a symlink so #include
+    # <torch_npu/torch_npu.h> resolves correctly from the pip package.
+    top_header = os.path.join(
+        PYTORCH_NPU_INSTALL_PATH, "include", "torch_npu", "torch_npu.h")
+    csrc_header = os.path.join(
+        PYTORCH_NPU_INSTALL_PATH, "include", "torch_npu", "csrc", "libs",
+        "torch_npu.h")
+    if not os.path.exists(top_header) and os.path.exists(csrc_header):
+        os.symlink(csrc_header, top_header)
 
     set_common_envs()
     set_npu_torch_ld_library_path()
@@ -205,6 +246,50 @@ def set_cuda_envs() -> None:
 def set_dcu_envs() -> None:
     set_common_envs()
     os.environ["DCU_PATH"] = get_dcu_root_path() or ""
+    if not os.getenv("FLASH_ATTENTION_LIB"):
+        flash_attn_lib = _find_dcu_so("flash_attn", "lib/libflash_attention.so")
+        if flash_attn_lib:
+            os.environ["FLASH_ATTENTION_LIB"] = flash_attn_lib
+    if not os.getenv("FLASH_MLA_LIB"):
+        flash_mla_lib = _find_dcu_so("flash_mla", "cuda*.so")
+        if flash_mla_lib:
+            os.environ["FLASH_MLA_LIB"] = flash_mla_lib
+    if not os.getenv("AITER_CPP_API_LIB"):
+        aiter_cpp_api_lib = _find_dcu_so("aiter", "jit/module_cpp_api.so")
+        if aiter_cpp_api_lib:
+            os.environ["AITER_CPP_API_LIB"] = aiter_cpp_api_lib
+    if not os.getenv("AITER_MOE_C_KERNEL_LIB"):
+        aiter_moe_c_kernel_lib = _find_dcu_so(
+            "aiter", "jit/module_moe_c_kernel.so"
+        )
+        if aiter_moe_c_kernel_lib:
+            os.environ["AITER_MOE_C_KERNEL_LIB"] = aiter_moe_c_kernel_lib
+
+def set_maca_envs():
+    os.environ["PYTHON_INCLUDE_PATH"] = get_python_include_path()
+    os.environ["PYTHON_LIB_PATH"] = get_torch_root_path()
+    os.environ["LIBTORCH_ROOT"] = get_torch_root_path()
+    os.environ["PYTORCH_INSTALL_PATH"] = get_torch_root_path()
+
+    MACA_PATH = os.getenv("MACA_PATH", "/opt/maca")
+    os.environ["CUCC_CMAKE_ENTRY"] = "2"
+    os.environ["CUCC_PATH"] = MACA_PATH + "/tools/cu-bridge"
+    os.environ["CUDA_PATH"] = MACA_PATH + "/tools/cu-bridge"
+    PATH = os.getenv("PATH", "")
+    PATH = MACA_PATH + "/mxgpu_llvm/bin" + ":" + \
+        MACA_PATH + "/bin" + ":" + \
+        MACA_PATH + "/tools/cu-bridge/bin" + ":" + \
+        MACA_PATH + "/tools/cu-bridge/tools" + ":" + \
+        ":" + PATH
+    os.environ["PATH"] = PATH
+    LD_LIBRARY_PATH = os.getenv("LD_LIBRARY_PATH", "")
+    LD_LIBRARY_PATH = MACA_PATH + "/lib" + ":" + \
+        MACA_PATH + "/ompi/lib" + ":" + \
+        MACA_PATH + "/mxgpu_llvm/lib" + ":" + \
+        MACA_PATH + "/tools/cu-bridge/lib" + ":" + \
+        LD_LIBRARY_PATH
+    os.environ["LD_LIBRARY_PATH"] = LD_LIBRARY_PATH
+    os.environ["PYTHON_EXECUTABLE"] = "/opt/conda/bin/python"
 
 def set_ilu_envs() -> None:
     set_common_envs()
@@ -212,21 +297,13 @@ def set_ilu_envs() -> None:
 
 
 def set_musa_envs() -> None:
-    """Configure MUSA build with mcc_wrapper + musamapping plugin for CUDA compatibility.
-
-    Canonical envs: MUSA_HOME, TORCH_MUSA_PYTHONPATH (from torch_musa), and the
-    shared torch roots from set_common_envs(). CUDA_* toolkit names and
-    MUSAMAPPING_PATH / TorchMusa_DIR are derived aliases for CMake compat.
-    """
+    """Configure MUSA through mcc_wrapper and the CUDA compatibility path."""
     from sysconfig import get_paths
-
     set_common_envs()
     import torch_musa
     from torch_musa.utils.musa_extension import MUSA_HOME as _MUSA_HOME
-
     musa_home = os.getenv("MUSA_HOME") or _MUSA_HOME or "/usr/local/musa"
     os.environ["MUSA_HOME"] = musa_home
-    # CUDA-compat aliases (same root as MUSA_HOME on this path).
     os.environ["CUDA_HOME"] = musa_home
     os.environ["CUDAToolkit_ROOT"] = musa_home
     os.environ["CUDA_TOOLKIT_ROOT_DIR"] = musa_home
@@ -244,7 +321,6 @@ def set_musa_envs() -> None:
         os.path.join(torch_musa_root, "lib"),
         os.path.join(get_torch_root_path() or "", "lib"),
     ]
-
     python_platlib = get_paths()["platlib"]
     library_paths.append(os.path.join(python_platlib, "tvm_ffi", "lib"))
 

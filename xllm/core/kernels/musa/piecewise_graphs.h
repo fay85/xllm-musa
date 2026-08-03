@@ -50,4 +50,4 @@ class PiecewiseGraphs final {
   bool requires_plan_info_ = false;
 };
 
-}
+}  // namespace xllm::runtime::cuda

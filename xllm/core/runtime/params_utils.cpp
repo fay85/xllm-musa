@@ -94,9 +94,14 @@ void forward_output_to_proto(
     const torch::Tensor& out_tokens,
     const torch::Tensor& out_logprobs,
     const std::vector<torch::Tensor>& dit_images,
+    const std::vector<std::string>& dit_text_output,
     proto::ForwardOutput* pb_forward_output) {
   Timer timer;
-  int32_t num_seqs = next_tokens.size(0);
+  // LLM decode fills next_tokens; DiT text diffusion (e.g. Cola-DLM) may leave
+  // it undefined and only populate dit_text_output. Guard before
+  // .size()/.dim().
+  int32_t num_seqs =
+      next_tokens.defined() ? static_cast<int32_t>(next_tokens.size(0)) : 0;
   if (embeddings.defined() && embeddings.numel() > 0) {
     num_seqs = std::max(num_seqs, static_cast<int32_t>(embeddings.size(0)));
   }
@@ -105,7 +110,7 @@ void forward_output_to_proto(
   }
   pb_forward_output->mutable_outputs()->Reserve(num_seqs);
   for (int32_t output_idx = 0; output_idx < num_seqs; ++output_idx) {
-    if (next_tokens.dim() == 2) {
+    if (next_tokens.defined() && next_tokens.dim() == 2) {
       const auto curr_idx = output_idx;
       const auto curr_next_tokens = next_tokens[curr_idx];
       const auto curr_logprobs =
@@ -165,12 +170,6 @@ void forward_output_to_proto(
         }
         *pb_seq_out.mutable_tokens()->Add() = pb_token;
       }
-      if (output_idx < static_cast<int32_t>(mm_embeddings.size())) {
-        for (const auto& tensor : mm_embeddings[output_idx]) {
-          torch_tensor_to_proto_tensor(
-              tensor, pb_seq_out.mutable_mm_embeddings()->add_tensors());
-        }
-      }
       *pb_forward_output->mutable_outputs()->Add() = pb_seq_out;
     } else {
       proto::SquenceOutput pb_seq_out;
@@ -227,9 +226,9 @@ void forward_output_to_proto(
   if (::xllm::EPLBConfig::get_instance().enable_eplb()) {
     pb_forward_output->set_prepared_layer_id(prepared_layer_id);
 
-    torch::Tensor expert_load_data_flattened =
-        expert_load_data.view({-1}).contiguous();
-    if (expert_load_data_flattened.defined()) {
+    if (expert_load_data.defined()) {
+      torch::Tensor expert_load_data_flattened =
+          expert_load_data.view({-1}).contiguous();
       Slice<int64_t> expert_load_data_flattened_slice = {
           expert_load_data_flattened.data_ptr<int64_t>(),
           static_cast<size_t>(expert_load_data_flattened.size(0))};
@@ -262,6 +261,13 @@ void forward_output_to_proto(
     TORCH_TENSOR_VEC_TO_PROTO_TENSOR_LIST(
         pb_forward_output->mutable_dit_forward_output()->mutable_tensors(),
         dit_images);
+  }
+  if (!dit_text_output.empty()) {
+    // DiT text-only path: serialized even when next_tokens is undefined above.
+    auto* pb_dit_output = pb_forward_output->mutable_dit_forward_output();
+    for (const auto& text : dit_text_output) {
+      pb_dit_output->add_text_output(text);
+    }
   }
   COUNTER_ADD(proto_latency_seconds_o2proto, timer.elapsed_seconds());
   return;
@@ -297,7 +303,9 @@ uint64_t proto_to_block_transfer_info(
         pb_block_transfer_info.transfer_infos(i).dst_block_id(),
         reinterpret_cast<const uint8_t*>(
             pb_block_transfer_info.transfer_infos(i).hash_key().data()),
-        TransferType(pb_block_transfer_info.transfer_type()));
+        TransferType(pb_block_transfer_info.transfer_type()),
+        static_cast<BlockType>(
+            pb_block_transfer_info.transfer_infos(i).block_type()));
   }
 
   return pb_block_transfer_info.batch_id();
@@ -322,6 +330,8 @@ bool block_transfer_info_to_proto(
     pb_cache.set_src_block_id(info.src_block_id);
     pb_cache.set_dst_block_id(info.dst_block_id);
     pb_cache.set_hash_key(info.hash_key, XXH3_128BITS_HASH_VALUE_LEN);
+    pb_cache.set_block_type(
+        static_cast<proto::BlockType>(static_cast<int8_t>(info.block_type)));
 
     *pb_block_transfer_info->mutable_transfer_infos()->Add() =
         std::move(pb_cache);
@@ -422,7 +432,10 @@ bool generation_params_to_proto(
       dit_generation_params.guidance_scale);
   pb_dit_generation_params->set_num_images_per_prompt(
       dit_generation_params.num_images_per_prompt);
-  pb_dit_generation_params->set_seed(dit_generation_params.seed);
+  pb_dit_generation_params->set_seed_is_set(dit_generation_params.seed_is_set);
+  if (dit_generation_params.seed_is_set) {
+    pb_dit_generation_params->set_seed(dit_generation_params.seed);
+  }
   pb_dit_generation_params->set_max_sequence_length(
       dit_generation_params.max_sequence_length);
   pb_dit_generation_params->set_strength(dit_generation_params.strength);
@@ -442,6 +455,20 @@ bool generation_params_to_proto(
   pb_dit_generation_params->set_flow_shift(dit_generation_params.flow_shift);
   pb_dit_generation_params->set_num_videos_per_prompt(
       dit_generation_params.num_videos_per_prompt);
+  // Text diffusion params
+  if (dit_generation_params.max_new_tokens > 0) {
+    pb_dit_generation_params->set_max_new_tokens(
+        dit_generation_params.max_new_tokens);
+  }
+  if (dit_generation_params.diffusion_steps > 0) {
+    pb_dit_generation_params->set_diffusion_steps(
+        dit_generation_params.diffusion_steps);
+  }
+  pb_dit_generation_params->set_temperature(dit_generation_params.temperature);
+  pb_dit_generation_params->set_top_k(dit_generation_params.top_k);
+  pb_dit_generation_params->set_top_p(dit_generation_params.top_p);
+  pb_dit_generation_params->set_repetition_penalty(
+      dit_generation_params.repetition_penalty);
   return true;
 }
 
@@ -551,7 +578,18 @@ bool proto_to_generation_params(
       pb_dit_generation_params.guidance_scale();
   dit_generation_params.num_images_per_prompt =
       pb_dit_generation_params.num_images_per_prompt();
-  dit_generation_params.seed = pb_dit_generation_params.seed();
+  if (pb_dit_generation_params.seed_is_set()) {
+    dit_generation_params.seed_is_set = true;
+    if (pb_dit_generation_params.has_seed()) {
+      dit_generation_params.seed = pb_dit_generation_params.seed();
+    }
+  } else if (pb_dit_generation_params.has_seed()) {
+    // Backward compat: messages sent before seed_is_set existed.
+    dit_generation_params.seed = pb_dit_generation_params.seed();
+    dit_generation_params.seed_is_set = true;
+  } else {
+    dit_generation_params.seed_is_set = false;
+  }
   dit_generation_params.max_sequence_length =
       pb_dit_generation_params.max_sequence_length();
   dit_generation_params.strength = pb_dit_generation_params.strength();
@@ -571,6 +609,28 @@ bool proto_to_generation_params(
   dit_generation_params.flow_shift = pb_dit_generation_params.flow_shift();
   dit_generation_params.num_videos_per_prompt =
       pb_dit_generation_params.num_videos_per_prompt();
+  // Text diffusion params
+  if (pb_dit_generation_params.has_max_new_tokens()) {
+    dit_generation_params.max_new_tokens =
+        pb_dit_generation_params.max_new_tokens();
+  }
+  if (pb_dit_generation_params.has_diffusion_steps()) {
+    dit_generation_params.diffusion_steps =
+        pb_dit_generation_params.diffusion_steps();
+  }
+  if (pb_dit_generation_params.has_temperature()) {
+    dit_generation_params.temperature = pb_dit_generation_params.temperature();
+  }
+  if (pb_dit_generation_params.has_top_k()) {
+    dit_generation_params.top_k = pb_dit_generation_params.top_k();
+  }
+  if (pb_dit_generation_params.has_top_p()) {
+    dit_generation_params.top_p = pb_dit_generation_params.top_p();
+  }
+  if (pb_dit_generation_params.has_repetition_penalty()) {
+    dit_generation_params.repetition_penalty =
+        pb_dit_generation_params.repetition_penalty();
+  }
   return true;
 }
 
@@ -588,6 +648,11 @@ bool proto_to_dit_forward_output(const proto::DiTForwardOutput& pb_dit_outputs,
     torch_tensor_vec.emplace_back(std::move(torch_tensor));
   }
   dit_outputs.tensors = std::move(torch_tensor_vec);
+
+  // Deserialize text_output for text diffusion models
+  dit_outputs.text_output.assign(pb_dit_outputs.text_output().begin(),
+                                 pb_dit_outputs.text_output().end());
+
   return true;
 }
 

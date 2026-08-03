@@ -21,24 +21,20 @@ limitations under the License.
 #include <glog/logging.h>
 #include <torch/torch.h>
 
-#include <cstdlib>
 #include <memory>
 #include <optional>
-#include <string>
 #include <utility>
 
 #include "common/device_monitor.h"
 #include "common/metrics.h"
 #include "common/types.h"
-#include "core/util/prefill_breakdown.h"
-#include "core/util/xllm_kineto_profiler.h"
-#include "core/common/global_flags.h"
 #include "core/framework/config/beam_search_config.h"
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/load_config.h"
-#include "core/util/env_var.h"
+#include "core/framework/config/model_config.h"
 #include "framework/kv_cache/kv_cache.h"
+#include "framework/kv_cache/linear_state_restore.h"
 #include "framework/kv_cache_transfer/kv_transfer_completion.h"
 #include "framework/model/model_input_params.h"
 #include "framework/state_dict/state_dict.h"
@@ -46,6 +42,7 @@ limitations under the License.
 #include "layers/cuda/flashinfer_workspace.h"
 #endif
 #include "models/model_registry.h"
+#include "util/env_var.h"
 #include "util/threadpool.h"
 #include "util/timer.h"
 
@@ -54,8 +51,15 @@ namespace xllm {
 namespace {
 
 void wait_input_ready_events(const ForwardInput& input, const Stream& stream) {
+#if defined(USE_MUSA)
+  (void)stream;
+  CHECK(input.metadata_ready_event == nullptr ||
+        input.metadata_ready_event->synchronize())
+      << "failed to synchronize ForwardInput metadata ready event";
+#else
   CHECK(stream.wait_event(input.metadata_ready_event))
       << "failed to wait ForwardInput metadata ready event";
+#endif
 }
 
 StreamEventPtr record_current_stream_event(const Device& device) {
@@ -65,19 +69,6 @@ StreamEventPtr record_current_stream_event(const Device& device) {
     stream->synchronize();
   }
   return event;
-}
-
-bool s_enable_prefill_step_timing() {
-  static const bool enabled = [] {
-    const char* env = std::getenv("XLLM_PREFILL_STEP_TIMING");
-    return env != nullptr && std::string(env) == "1";
-  }();
-  return enabled;
-}
-
-void synchronize_current_stream(const Device& device) {
-  std::unique_ptr<Stream> stream = device.current_stream();
-  stream->synchronize();
 }
 
 }  // namespace
@@ -95,16 +86,20 @@ LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
   }
 #endif
 #if defined(USE_CUDA) || defined(USE_MUSA)
-  threadpool_.schedule([this]() mutable {
-    // initialize flashinfer workspace
-    ::xllm::layer::flashinfer::FlashinferWorkspace::get_instance().initialize(
-        device_);
-  });
+  const auto& model_config = ModelConfig::get_instance();
+  if (!ModelConfig::is_python_model_impl(model_config.model_impl())) {
+    threadpool_.schedule([this]() mutable {
+      // initialize flashinfer workspace
+      ::xllm::layer::flashinfer::FlashinferWorkspace::get_instance().initialize(
+          device_);
+    });
+  }
 #endif
 }
 
 bool LLMWorkerImpl::init_model(ModelContext& context) {
   CHECK(model_ == nullptr) << "Model is already initialized.";
+  const auto& model_config = ModelConfig::get_instance();
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
   // Ensure FlashinferWorkspace is initialized on the calling thread before
@@ -115,13 +110,20 @@ bool LLMWorkerImpl::init_model(ModelContext& context) {
   // FlashinferWorkspace is thread_local, so T_MTP's instance must be
   // explicitly initialized here; otherwise FlashInferAttentionImpl captures
   // an undefined int_workspace_buffer_ and crashes at prefill time.
-  auto& ws = ::xllm::layer::flashinfer::FlashinferWorkspace::get_instance();
-  if (!ws.get_int_workspace_buffer().defined()) {
-    ws.initialize(device_);
+  //
+  // Skip when model_impl=python: Python executor uses flashinfer's Python API
+  // directly; initializing the C++ workspace would conflict with Python-side
+  // TVM-FFI type registration.
+  if (!ModelConfig::is_python_model_impl(model_config.model_impl())) {
+    auto& ws = ::xllm::layer::flashinfer::FlashinferWorkspace::get_instance();
+    if (!ws.get_int_workspace_buffer().defined()) {
+      ws.initialize(device_);
+    }
   }
 #endif
 
   // Try to create a causal LM model
+  context.set_model_impl(model_config.model_impl());
   model_ = create_llm_model(context);
 
   // Dont find model in causal models
@@ -143,16 +145,8 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_no_sync(
     const ForwardInput& input) {
   ForwardInput input_on_device;
   prepare_work_before_execute(input, input_on_device);
-#if defined(USE_MUSA)
-  // Keep the worker on the stream created with the worker.  Mate/TVM-FFI
-  // kernels are launched on the current Torch stream; creating a fresh
-  // current_stream() on this thread can return a null handle and forces the
-  // FFI guard to synchronize before and after every grouped GEMM.
-  return execute_no_sync_on_stream(input_on_device, *compute_stream_);
-#else
   std::unique_ptr<Stream> current_stream = device_.current_stream();
   return execute_no_sync_on_stream(input_on_device, *current_stream);
-#endif
 }
 
 std::optional<ForwardOutput> LLMWorkerImpl::execute_no_sync_on_stream(
@@ -202,17 +196,9 @@ std::optional<ForwardOutput> LLMWorkerImpl::step(const ForwardInput& input) {
   }
 #endif
 
-#if defined(USE_MUSA)
-  // As in the no-sync path, use the persistent worker stream so MUSA FFI
-  // grouped GEMMs stay ordered with Torch ops without host synchronizations.
-  c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
-  wait_input_ready_events(input, *compute_stream_);
-  return step_internal(input, ForwardSyncPolicy::LEGACY);
-#else
   std::unique_ptr<Stream> stream = device_.current_stream();
   wait_input_ready_events(input, *stream);
   return step_internal(input, ForwardSyncPolicy::LEGACY);
-#endif
 }
 
 folly::SemiFuture<std::optional<ForwardOutput>>
@@ -241,6 +227,21 @@ LLMWorkerImpl::step_async_no_sync(const ForwardInput& input) {
 
 std::optional<ForwardOutput> LLMWorkerImpl::step_for_schedule_overlap(
     const ForwardInput& input) {
+#if defined(USE_NPU)
+  // Restore live recurrent-state slots from saved checkpoints here (worker
+  // thread, on compute_stream_) instead of in prepare_work_before_execute on
+  // prepare_stream_. The single-threaded worker pool guarantees the previous
+  // chunk's forward kernels are already enqueued on compute_stream_ before
+  // this task runs, so the restore copy is automatically stream-ordered
+  // after those writes without needing a cross-stream barrier.
+  if (has_linear_attention_layers(context_.get_model_args())) {
+    c10::StreamGuard restore_guard = compute_stream_->set_stream_guard();
+    auto& mutable_params = const_cast<ModelInputParams&>(input.input_params);
+    restore_linear_state_slots(kv_caches_,
+                               mutable_params.linear_state_cache_ops,
+                               mutable_params.parallel.has_initial_state);
+  }
+#endif
   return execute_no_sync_on_stream(input, *compute_stream_);
 }
 
@@ -248,8 +249,17 @@ ForwardInput
 LLMWorkerImpl::update_input_by_last_step_output_for_schedule_overlap(
     ForwardInput& input) {
   c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+#if defined(USE_MUSA)
+  // TorchMUSA's cross-thread event block can return before the sampler output
+  // is host-visible. The next-token replacement must consume that output, so
+  // synchronize the recorded event at this unavoidable dependency boundary.
+  CHECK(last_step_output_.ready_event == nullptr ||
+        last_step_output_.ready_event->synchronize())
+      << "failed to synchronize last step output ready event";
+#else
   CHECK(compute_stream_->wait_event(last_step_output_.ready_event))
       << "failed to wait last step output ready event";
+#endif
   return update_input_by_last_step_output(input);
 }
 
@@ -259,31 +269,8 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     bool record_ready_event) {
   MULTI_MODEL_STEP_LOCK(::xllm::KVCacheConfig::get_instance().enable_xtensor());
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  const bool is_decode_step =
-      input.input_params.meta.batch_forward_type.is_decode();
-  const bool is_prefill_step =
-      input.input_params.meta.batch_forward_type.is_prefill();
-  XllmKinetoProfiler::StepScope kineto_step_scope(is_decode_step,
-                                                  is_prefill_step);
-  const char* kineto_step_name = "xllm/mixed_step";
-  if (is_decode_step) {
-    kineto_step_name = "xllm/decode_step";
-  } else if (is_prefill_step) {
-    kineto_step_name = "xllm/prefill_step";
-  }
-  XllmKinetoProfiler::UserScope kineto_user_scope(kineto_step_name);
-#endif
-
   Timer timer;
   auto& sampling_params = input.sampling_params;
-  const bool time_prefill_step =
-      s_enable_prefill_step_timing() &&
-      input.input_params.meta.batch_forward_type.is_prefill();
-  Timer prefill_stage_timer;
-  double model_executor_ms = 0.0;
-  double logits_ms = 0.0;
-  double sampler_ms = 0.0;
 
   KVTransferCompletion kv_transfers;
 
@@ -321,39 +308,15 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
   }
 
   // call model executor forward to get hidden states
-  const bool collect_prefill_breakdown =
-      PrefillBreakdown::enabled() &&
-      input.input_params.meta.batch_forward_type.is_prefill();
-  if (collect_prefill_breakdown) {
-    PrefillBreakdown::begin();
-  }
   auto model_output = model_executor_->forward(
       input.token_ids, input.positions, kv_caches_, input.input_params);
-  if (time_prefill_step) {
-    synchronize_current_stream(device_);
-    model_executor_ms = prefill_stage_timer.elapsed_milliseconds();
-    prefill_stage_timer.reset();
-  }
-  if (collect_prefill_breakdown) {
-    if (!time_prefill_step) {
-      synchronize_current_stream(device_);
-      model_executor_ms = prefill_stage_timer.elapsed_milliseconds();
-      prefill_stage_timer.reset();
-    }
-    PrefillBreakdown::end_and_log(
-        input.token_ids.numel(),
-        input.input_params.meta.num_sequences,
-        model_executor_ms);
-  }
   if (!model_output.hidden_states.defined()) {
     wait_kv_push();
     return std::nullopt;
   }
 
   torch::Tensor logits;
-  torch::Tensor selected_hidden_from_lm_head;
   if (model_output.logits.defined()) {
-    // D1: logits were captured inside the graph; skip eager lm_head.
     logits = model_output.logits;
   } else if (sampling_params.selected_token_idxes.defined()) {
     torch::Tensor selected_token_idxes = sampling_params.selected_token_idxes;
@@ -364,22 +327,24 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
                                      /*non_blocking=*/false)
                                  .contiguous();
     }
-    if (options_.cp_size() > 1) {
-      logits = model_->logits(model_output.hidden_states,
-                              selected_token_idxes,
-                              selected_hidden_from_lm_head);
+#if defined(USE_MUSA)
+    // A pure decode batch has one hidden-state row per selected token, in the
+    // same sequence order. Avoid the redundant identity IndexSelect: besides
+    // saving a kernel, TorchMUSA IndexSelect can illegally access memory when
+    // the decode graph batch changes shape (for example B5 -> B4).
+    if (input.input_params.meta.batch_forward_type.is_decode() &&
+        selected_token_idxes.numel() == model_output.hidden_states.size(0)) {
+      logits = model_->logits(model_output.hidden_states, torch::Tensor());
     } else {
       logits = model_->logits(model_output.hidden_states, selected_token_idxes);
     }
-  }
-  if (time_prefill_step) {
-    synchronize_current_stream(device_);
-    logits_ms = prefill_stage_timer.elapsed_milliseconds();
-    prefill_stage_timer.reset();
+#else
+    logits = model_->logits(model_output.hidden_states, selected_token_idxes);
+#endif
   }
 
   ForwardOutput output;
-  output.dsa_topk_indices = model_output.dsa_topk_indices;
+  output.mtp_topk_state = std::move(model_output.mtp_topk_state);
   if (::xllm::EPLBConfig::get_instance().enable_eplb()) {
     output.expert_load_data = expert_load_data_;
     output.prepared_layer_id = eplb_executor_->get_ready_layer_id();
@@ -412,10 +377,6 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     output.max_top_logprobs = sampling_params.max_top_logprobs;
     if (!input.skip_sampling_for_logits_only) {
       auto sample_output = sampler_->forward(logits, sampling_params);
-      if (time_prefill_step) {
-        synchronize_current_stream(device_);
-        sampler_ms = prefill_stage_timer.elapsed_milliseconds();
-      }
 
       // beam search kernel
       BeamSearchOutput beam_search_output;
@@ -435,13 +396,6 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     }
   }
 
-  if (time_prefill_step) {
-    LOG(INFO) << "[PREFILL_STEP] model_executor_ms=" << model_executor_ms
-              << " logits_ms=" << logits_ms << " sampler_ms=" << sampler_ms
-              << " measured_total_ms="
-              << model_executor_ms + logits_ms + sampler_ms;
-  }
-
   if (options_.enable_speculative_decode()) {
     torch::Tensor embeddings;
     if (model_output.aux_hidden_states.defined()) {
@@ -451,26 +405,11 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     }
     if (!input.input_params.meta.batch_forward_type.is_decode() &&
         !is_spec_draft_) {
-      // Target prefill keeps the full hidden in `embeddings` for the draft
-      // input_embedding. Under CP this is the LOCAL token shard, whose rows
-      // cannot be indexed by the CP all-gather-space selected_token_idxes.
-      // Expose the LmHead-gathered per-sequence hidden (rows = num_seq)
-      // separately so the embedding cache stores it without re-selecting on
-      // the local shard.
+      // Target prefill: keep full embeddings (global-real under model-side CP).
       output.sample_output.embeddings = embeddings;
-      if (options_.cp_size() > 1 && selected_hidden_from_lm_head.defined()) {
-        output.sample_output.selected_embeddings = selected_hidden_from_lm_head;
-      }
     } else if (sampling_params.selected_token_idxes.defined()) {
-      if (options_.cp_size() > 1) {
-        CHECK(selected_hidden_from_lm_head.defined())
-            << "selected_hidden_from_lm_head must be defined when "
-               "selected_token_idxes is defined.";
-        output.sample_output.embeddings = selected_hidden_from_lm_head;
-      } else {
-        output.sample_output.embeddings = embeddings.index_select(
-            /*dim=*/0, sampling_params.selected_token_idxes);
-      }
+      output.sample_output.embeddings = embeddings.index_select(
+          /*dim=*/0, sampling_params.selected_token_idxes);
     }
   }
 

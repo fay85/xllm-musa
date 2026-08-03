@@ -14,6 +14,7 @@ cc_library(
     hash_util.h
     http_downloader.h
     json_reader.h
+    dit_model_discovery.h
     model_config_utils.h
     lightweightsemaphore.h
     net.h
@@ -24,14 +25,12 @@ cc_library(
     spin_lock.h
     spin_rw_lock.h
     int32_map.h
-    layer_hidden_dumper.h
     linalg.h
     suffix_decoding_cache.h
     suffix_tree.h
     tensor_helper.h
     threadpool.h
     timer.h
-    xllm_kineto_profiler.h
     type_traits.h
     utils.h
     uuid.h
@@ -43,7 +42,7 @@ cc_library(
     http_downloader.cpp
     # TODO. add following at next pr.
     json_reader.cpp
-    layer_hidden_dumper.cpp
+    dit_model_discovery.cpp
     linalg.cpp
     model_config_utils.cpp
     net.cpp
@@ -52,7 +51,6 @@ cc_library(
     suffix_tree.cpp
     threadpool.cpp
     timer.cpp
-    xllm_kineto_profiler.cpp
     utils.cpp
     uuid.cpp
     shared_memory_manager.cpp

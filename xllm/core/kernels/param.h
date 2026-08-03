@@ -21,6 +21,10 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+namespace xllm {
+class ProcessGroup;
+}  // namespace xllm
+
 namespace xllm::layer {
 struct AttentionMetadata;
 }  // namespace xllm::layer
@@ -265,6 +269,8 @@ struct FusedLayerNormParams {
   std::string mode;
   // Epsilon value for numerical stability in normalization computation.
   double eps;
+  // Apply the Gemma/Qwen3.5 gamma offset inside NPU residual RMSNorm.
+  bool add_gamma_offset = false;
   // Whether to store output before normalization to residual_out.
   // Not supported when both bias and residual are not provided.
   bool store_output_before_norm = false;
@@ -275,6 +281,27 @@ struct FusedLayerNormParams {
   // When true, uses per-token quantization scheme; otherwise uses per-channel
   // if quant_scale provided.
   bool dynamic_quant = false;
+};
+
+// Fused adaptive LayerNorm parameters.
+// Computes: LayerNorm(x) * (1 + scale) + shift in a single fused kernel.
+struct AdaLayerNormParams {
+  // Input tensor [B, S, H]. Last dimension is hidden_size.
+  torch::Tensor input;
+  // Scale modulation. Shape [B, H] or [B, 1, H] (broadcast over sequence)
+  // or [B, S, H] (token-wise). The (1 + scale) is applied inside the kernel,
+  // so pass the raw scale.
+  torch::Tensor scale;
+  // Shift modulation. Same shape constraints as scale.
+  torch::Tensor shift;
+  // Optional affine weight (gamma) [H]. Only used when elementwise_affine.
+  std::optional<torch::Tensor> weight;
+  // Optional affine bias (beta) [H]. Only used when elementwise_affine.
+  std::optional<torch::Tensor> bias;
+  // Output tensor. Same shape as input. Written back by the kernel.
+  torch::Tensor output;
+  // Epsilon for numerical stability.
+  double eps = 1e-6;
 };
 
 struct RmsNormDynamicQuantParams {
@@ -310,7 +337,28 @@ struct MatmulParams {
   // Scaling factor for tensor c (if provided). Default: 0.0
   // Result: alpha * (a @ b) + beta * c (if c provided)
   double beta = 0.0;
-  std::optional<torch::Tensor> output_buf;
+  std::optional<torch::Tensor> output_buf = std::nullopt;
+};
+
+struct MatmulReduceScatterParams {
+  torch::Tensor a;
+  torch::Tensor b;
+  std::optional<torch::Tensor> bias;
+  ProcessGroup* process_group = nullptr;
+
+  std::string reduce_op = "sum";
+  int64_t comm_turn = 0;
+  std::string comm_mode = "aiv";
+
+  // Optional per-token activation dequant scale, shape (m, 1), float32.
+  // When both x1_scale and x2_scale are set, the int8 quantized MMRS path is
+  // used (FC1 w8a8_dynamic): a/b are int8 and output is dequantized.
+  std::optional<torch::Tensor> x1_scale;
+  // Optional per-channel weight dequant scale, shape (1, n), float32.
+  std::optional<torch::Tensor> x2_scale;
+  // Optional output dtype for the quantized path (bf16/fp16). Ignored by the
+  // non-quant path.
+  std::optional<at::ScalarType> output_dtype;
 };
 
 // Quantized matmul parameters (NPU aclnnQuantMatmulV4 path).
@@ -477,9 +525,10 @@ struct DequantSwigluQuantParams {
 };
 
 // Ascend W4A8_DYNAMIC MoE weight post-load processing for version 1.0.0.
-// Mirrors vllm-ascend's Python path: transpose/NZ-convert int4 weights, pack
-// them to int32, and fold first-level + second-level scales into the int64
-// dtype/layout consumed by npu_grouped_matmul.
+// Transpose/NZ-convert int4 weights and fold first-level + second-level scales
+// into the int64 dtype/layout consumed by npu_grouped_matmul. Torch fused MoE
+// additionally packs weights to int32; the ATB grouped-matmul wrapper expects
+// the original int8-packed tensor.
 struct W4A8DynamicMoePreprocessParams {
   torch::Tensor w13_weight;
   torch::Tensor w2_weight;
@@ -490,6 +539,7 @@ struct W4A8DynamicMoePreprocessParams {
   std::optional<torch::Tensor> w13_scale_bias;
   std::optional<torch::Tensor> w2_scale_bias;
   int64_t group_size = 256;
+  bool pack_weight_to_int32 = true;
 };
 
 struct MoeFusedTopkParams {
@@ -984,10 +1034,16 @@ struct MaskedIndexerSelectPagedKVParams {
   // Query quantization scale tensor. Must be contiguous.
   // - Required (numel > 0) when query dtype is int8 or fp8
   // - Must be empty (numel == 0) when query dtype is bfloat16 or half
+  // - INT8 prefill shape: [total_q, head_num, 1]
+  // - INT8 decode shape: [batch, seq_q, head_num, 1]
   std::optional<torch::Tensor> q_scale;
   // Key cache quantization scale tensor. Must be contiguous.
   // - Required (numel > 0) when k_cache dtype is int8 or fp8
   // - Must be empty (numel == 0) when k_cache dtype is bfloat16 or half
+  // - Paged INT8 K scale is the cache scale shape with a trailing dim added
+  //   before select.
+  // - Dense INT8 K scale keeps the layout returned by
+  //   scaled_quantize(k.unsqueeze(-2)).
   std::optional<torch::Tensor> k_scale_cache;
   // New sparse block table output tensor. Must be contiguous.
   // - Prefill mode: 2D [total_seq_q, kv_cache_max_blkn]
@@ -1466,25 +1522,14 @@ struct Fp8ScaledMatmulParams {
   std::optional<std::vector<int64_t>> input_shape;
 };
 
-// DeepSeek-style block-wise FP8 GEMM parameters (native path).
-// Computes out[m,n] = sum_k a[m,k]*a_scale[m,k/bk] * b[n,k]*b_scale[n/bn,k/bk]
-// with per-token-group activation scales and a 128x128 weight-block scale grid.
-// Unlike Fp8ScaledMatmulParams (per-tensor CUTLASS), this carries 2D scale grids
-// and maps to the mate/muDNN groupwise GEMM on MUSA.
+// Native block-wise FP8 GEMM parameters. The activation uses per-token-group
+// scales and the weight uses a 2D block scale grid.
 struct Fp8BlockMatmulParams {
-  // Quantized activation A. Shape: [M, K]. Dtype: float8_e4m3fn. Contiguous.
   torch::Tensor a;
-  // Quantized weight B in NT layout. Shape: [N, K]. Dtype: float8_e4m3fn.
-  // Contiguous (same K as A; no internal transpose).
   torch::Tensor b;
-  // Per-token-group activation scale. Shape: [M, ceil(K/128)]. Dtype: float32.
   torch::Tensor a_scale;
-  // Weight block inverse-scale grid. Shape: [ceil(N/128), ceil(K/128)].
-  // Dtype: float32 (K-major).
   torch::Tensor b_scale;
-  // Output data type. Typically bfloat16 or float16.
   torch::ScalarType output_dtype;
-  // Optional pre-allocated output tensor. Shape: [M, N].
   std::optional<torch::Tensor> output;
 };
 
@@ -1571,8 +1616,10 @@ struct FusedSigmoidGatingDeltaRuleUpdateParams {
   torch::Tensor initial_state_source;
   torch::Tensor initial_state_indices;
   torch::Tensor cu_seqlens;
+  std::optional<torch::Tensor> num_accepted_tokens = std::nullopt;
   std::optional<float> scale = std::nullopt;
   bool use_qk_l2norm_in_kernel = false;
+  bool is_kda = false;
   float softplus_beta = 1.0f;
   float softplus_threshold = 20.0f;
 };
@@ -1626,8 +1673,8 @@ struct FusedQkvzbaSplitReshapeParams {
   int32_t head_qk;
   int32_t head_v;
   // When true, mixed_qkvz is [all_q | all_k | all_v | all_z] and mixed_ba is
-  // [all_b | all_a] (Qwen3.5 split projections). Otherwise the per-head-group
-  // interleaved layout from a single merged projection is assumed.
+  // [all_b | all_a]. Otherwise the per-head-group interleaved layout from a
+  // single merged projection is assumed.
   bool contiguous_input_layout = false;
 
   torch::Tensor mixed_qkv_out_buf;
@@ -1640,10 +1687,10 @@ struct GemmaRMSNormParams {
   torch::Tensor x;
   torch::Tensor gamma;
   double epsilon;
+  std::optional<torch::Tensor> residual;
+  std::optional<torch::Tensor> residual_out;
   torch::Tensor rstd_out;
   torch::Tensor norm_out;
-  torch::Tensor residual;
-  torch::Tensor residual_out;
 };
 
 struct SplitQkvRmsnormMropeParams {
@@ -1685,7 +1732,6 @@ struct ChunkGatedDeltaRuleParams {
   // Whether to apply L2 norm to q and k inside the kernel. Default: false.
   bool use_qk_l2norm_in_kernel = false;
 };
-
 
 struct MateGatedDeltaRulePrefillParams {
   torch::Tensor q;
@@ -1742,25 +1788,20 @@ struct MateGatedDeltaRuleDecodeParams {
   std::optional<torch::Tensor> v_buf = std::nullopt;
 };
 
-// Parameters for the fused mate GDN multi-token speculative-verify kernel
-// (mate_gdn_mtp). The kernel runs the gated-delta-rule recurrence over the
-// `seq_len` validate tokens starting from a per-sequence initial state, writing
-// the per-token attention output and (optionally) the per-token intermediate
-// states used for speculative rollback. It computes qk L2-norm and the
-// softplus/sigmoid gating internally, so `a`/`b` are the raw gating projections
-// (not the precomputed g/beta). State I/O uses the mate [Hv, V, K] layout.
+// Parameters for the fused mate GDN multi-token speculative-verify kernel.
+// The kernel computes qk L2-norm and softplus/sigmoid gating internally.
 struct MateGatedDeltaRuleMtpParams {
-  torch::Tensor q;              // [B, T, Hqk, K]
-  torch::Tensor k;              // [B, T, Hqk, K]
-  torch::Tensor v;              // [B, T, Hv,  V]
-  torch::Tensor A_log;          // [Hv], float32
-  torch::Tensor a;              // [B, T, Hv], raw decay projection
-  torch::Tensor dt_bias;        // [Hv], float32
-  torch::Tensor b;              // [B, T, Hv], raw update-gate projection
-  torch::Tensor state;          // [B, Hv, V, K] float32, gathered initial states
-  torch::Tensor state_indices;  // [B], int32
-  torch::Tensor intermediate;   // [B, T, Hv, V, K] float32, per-token states out
-  torch::Tensor output;         // [B, T, Hv, V], per-token attention output out
+  torch::Tensor q;
+  torch::Tensor k;
+  torch::Tensor v;
+  torch::Tensor A_log;
+  torch::Tensor a;
+  torch::Tensor dt_bias;
+  torch::Tensor b;
+  torch::Tensor state;
+  torch::Tensor state_indices;
+  torch::Tensor intermediate;
+  torch::Tensor output;
   int64_t num_k_heads = 0;
   int64_t num_v_heads = 0;
   int64_t head_k_dim = 0;
@@ -1794,6 +1835,9 @@ struct MegaChunkGdnParams {
   // Optional cumulative sequence lengths. Shape: [num_sequences + 1]. Dtype:
   // int32.
   std::optional<torch::Tensor> cu_seqlens = std::nullopt;
+  // Optional non-owning host sequence lengths. When provided, these avoid
+  // copying cu_seqlens from the device merely to derive the chunk count.
+  c10::ArrayRef<int32_t> q_seq_lens = {};
   // Whether to apply L2 norm to q and k inside the kernel. Default: false.
   bool use_qk_l2norm_in_kernel = false;
 };

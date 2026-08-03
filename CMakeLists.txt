@@ -7,15 +7,30 @@ option(USE_ILU "Enable ILU support" OFF)
 option(USE_CUDA "Enable CUDA support" OFF)
 option(USE_MUSA "Enable MUSA support" OFF)
 option(USE_DCU "Enable DCU support" OFF)
-
+option(USE_MACA "Enable MACA support" OFF)
 add_compile_definitions(YLT_ENABLE_IBV)
 add_definitions(-DYLT_ENABLE_IBV)
 set(YLT_ENABLE_IBV ON)
 
-
 if(DEVICE_ARCH STREQUAL "ARM")
     set(CMAKE_SYSTEM_PROCESSOR aarch64)
     set(RUST_TARGET aarch64-unknown-linux-gnu)
+endif()
+
+if(USE_MACA)
+    Set(Python_EXECUTABLE $ENV{PYTHON_EXECUTABLE})
+    add_definitions(-DUSE_MACA)
+    include_directories(
+      $ENV{CUDA_PATH}/include
+    )
+    include_directories(SYSTEM
+      $ENV{PYTORCH_INSTALL_PATH}/../tvm_ffi/include
+    )
+    link_directories(
+      $ENV{CUDA_PATH}/lib
+      $ENV{MACA_PATH}/lib
+      $ENV{PYTORCH_INSTALL_PATH}/../tvm_ffi/lib
+    )
 endif()
 
 if(USE_NPU)
@@ -55,7 +70,18 @@ if(USE_NPU)
       RESULT_VARIABLE XLLM_OPS_RESULT
     )
     if(NOT XLLM_OPS_RESULT EQUAL 0)
-      message(FATAL_ERROR "Failed to precompile xllm ops, error code: ${XLLM_OPS_RESULT}")
+      message(FATAL_ERROR
+        "Failed to precompile xllm ops, error code: ${XLLM_OPS_RESULT}.\n"
+        "This precompile ran because the xllm_ops git HEAD changed "
+        "(e.g. after switching commits/branches or updating the submodule).\n"
+        "A common cause of failure here is a stale incremental build cache: "
+        "removed or renamed operators leave dangling CMake targets and opc "
+        "reports 'xxx.json not generated'.\n"
+        "Fix by removing the stale xllm_ops build directory and re-running the "
+        "build. CMake re-triggers the xllm_ops precompile automatically (the "
+        "HEAD cache is only updated after a successful precompile), and the "
+        "main C++ incremental build is unaffected:\n"
+        "  rm -rf ${XLLM_OPS_BUILD_DIR}")
     endif()
 
     ## Adapt to the modification in DeekSeekV4 where the installation path of xllm_ops has been changed to custom_xllm_math
@@ -240,9 +266,6 @@ endif()
 set(CPPREST_EXCLUDE_WEBSOCKETS ON CACHE BOOL "Exclude websockets functionality." FORCE)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-format-truncation")
 
-# Reuse vcpkg_installed; do not reinstall on every cmake reconfigure.
-set(VCPKG_MANIFEST_INSTALL OFF CACHE BOOL "Disable vcpkg manifest install" FORCE)
-
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_LIST_DIR}/cmake)
 set(_XLLM_MUSIFY_COPTS "")
 
@@ -319,9 +342,10 @@ find_package(Boost REQUIRED)
 find_package(Boost REQUIRED COMPONENTS serialization)
 find_package(Threads REQUIRED)
 # find all dependencies from vcpkg
-find_package(folly CONFIG REQUIRED)
-find_package(glog CONFIG REQUIRED)
+set(GFLAGS_USE_TARGET_NAMESPACE TRUE)
 find_package(gflags CONFIG REQUIRED)
+find_package(glog CONFIG REQUIRED)
+find_package(folly CONFIG REQUIRED)
 find_package(leveldb CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(absl CONFIG REQUIRED)
@@ -350,6 +374,11 @@ else()
 endif()
 find_package(FFMPEG REQUIRED)
 find_package(Python COMPONENTS Development REQUIRED)
+
+if(Python_EXECUTABLE AND NOT Python3_EXECUTABLE)
+    set(Python3_EXECUTABLE "${Python_EXECUTABLE}")
+endif()
+find_package(Python3 COMPONENTS Interpreter Development.Module REQUIRED)
 find_package(pybind11 CONFIG REQUIRED)
 
 if (USE_CXX11_ABI)
@@ -531,7 +560,6 @@ endif()
 if(USE_MUSA)
   add_definitions(-DUSE_MUSA)
   add_compile_definitions(TORCH_CUDA=1)
-
   if(NOT DEFINED MUSA_PATH)
     if(DEFINED ENV{MUSA_HOME} AND NOT "$ENV{MUSA_HOME}" STREQUAL "")
       set(MUSA_PATH "$ENV{MUSA_HOME}")
@@ -541,13 +569,13 @@ if(USE_MUSA)
   endif()
   list(APPEND CMAKE_MODULE_PATH "${MUSA_PATH}/cmake")
   find_package(MUSA REQUIRED)
-
   # MUSA builds use the FlashInfer/Mate TVM-FFI path; MTTOplib is not needed.
   if(NOT DEFINED ENV{TORCH_MUSA_PYTHONPATH} OR
      "$ENV{TORCH_MUSA_PYTHONPATH}" STREQUAL "")
     message(FATAL_ERROR
             "TORCH_MUSA_PYTHONPATH is required for USE_MUSA builds")
   endif()
+
   find_package(Python COMPONENTS Interpreter REQUIRED)
   list(APPEND CMAKE_PREFIX_PATH "$ENV{TORCH_MUSA_PYTHONPATH}")
   find_package(TorchMusa REQUIRED CONFIG)
@@ -592,6 +620,7 @@ if(USE_MUSA)
     message(FATAL_ERROR
             "tvm_ffi is not installed under Python platlib: ${_PYTHON_PLATLIB}")
   endif()
+  
 
   include_directories(
       ${MUSA_INCLUDE_DIRS}
@@ -627,7 +656,6 @@ elseif(USE_CUDA)
   add_compile_definitions(TORCH_CUDA=1)
   set(CMAKE_VERBOSE_MAKEFILE ON)
   include_directories($ENV{PYTHON_INCLUDE_PATH})
-
   include_directories(SYSTEM
       $ENV{PYTORCH_INSTALL_PATH}/include
       $ENV{PYTORCH_INSTALL_PATH}/include/torch/csrc/api/include
@@ -639,6 +667,8 @@ elseif(USE_CUDA)
     $ENV{CUDA_TOOLKIT_ROOT_DIR}/lib64
   )
 
+  # To reduce compilation time during development, use fewer architectures:
+  #   export TORCH_CUDA_ARCH_LIST="9.0"
   option(CUDA_DEV_MODE "Use -O1 instead of -O3 for faster CUDA compilation during development" OFF)
   if(CUDA_DEV_MODE)
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O1")
@@ -646,6 +676,7 @@ elseif(USE_CUDA)
     set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -O3")
   endif()
 
+  # The following definitions must be undefined since half-precision operation is required.
   string(APPEND CMAKE_CUDA_FLAGS
     " -U__CUDA_NO_HALF_OPERATORS__"
     " -U__CUDA_NO_HALF_CONVERSIONS__"
@@ -654,18 +685,23 @@ elseif(USE_CUDA)
     " --use_fast_math"
     " -Xfatbin -compress-all")
 
+  # Parallel nvcc compilation: compile multiple GPU architectures simultaneously within each .cu
+  # file. --threads 0 = auto-detect CPU core count. Requires CUDA >= 11.2.
   if(CMAKE_CUDA_COMPILER_VERSION VERSION_GREATER_EQUAL 11.2)
     string(APPEND CMAKE_CUDA_FLAGS " --threads 0")
   endif()
 
+  message(STATUS "CMAKE_CUDA_FLAGS: ${CMAKE_CUDA_FLAGS}")
+
+  # find_package(NCCL REQUIRED)
+
+  # find cudnn
   execute_process(COMMAND python -c "import nvidia.cudnn; print(nvidia.cudnn.__file__)" OUTPUT_VARIABLE CUDNN_PYTHON_PATH)
   get_filename_component(CUDNN_ROOT_DIR "${CUDNN_PYTHON_PATH}" DIRECTORY)
   link_directories(
       ${CUDNN_ROOT_DIR}/lib64
       ${CUDNN_ROOT_DIR}/lib
   )
-
-  message(STATUS "CMAKE_CUDA_FLAGS: ${CMAKE_CUDA_FLAGS}")
 endif()
 
 if(USE_ILU)
@@ -770,7 +806,7 @@ include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/Mooncake/moon
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/Mooncake/mooncake-transfer-engine/include)
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/Mooncake/mooncake-store/include)
 
-# CUTLASS - CUDA kernel library for scaled matmul (not used on MUSA)
+# CUTLASS - CUDA kernel library for scaled matmul
 if(USE_CUDA)
   set(CUTLASS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cutlass)
   set(CUTLASS_INCLUDE_DIR ${CUTLASS_DIR}/include)
@@ -784,17 +820,19 @@ endif()
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/sentencepiece)
 # Also add other commonly used third_party directories as system headers
 include_directories(SYSTEM ${CMAKE_CURRENT_SOURCE_DIR}/third_party/minja)
+if(USE_MUSA)
+  set(CMAKE_MUSA_FLAGS_DEBUG "-g -std=gnu++20 -fPIC --offload-arch=mp_31")
+  set(CMAKE_MUSA_FLAGS_RELEASE "-O2 -DNDEBUG -std=gnu++20 -fPIC --offload-arch=mp_31")
+endif()
 
 # add subdirectories
 # Configure third_party first so xllm can link against real CMake targets.
+# add subdirectories
+# Configure third_party first so xllm can link against real CMake targets.
+
 add_subdirectory(third_party)
 if(TARGET brpc-static AND NOT TARGET brpc)
   add_library(brpc ALIAS brpc-static)
 endif()
 add_subdirectory(xllm)
-
-# Optional benchmark targets (compile only if explicitly enabled or always; cheap).
-if(USE_MUSA)
-  add_subdirectory(tools/bench_norm)
-endif()
 add_subdirectory(tests)

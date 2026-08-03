@@ -202,17 +202,14 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_qkvz_from_split_activations(
       qkvz_merge_buf_.scalar_type() != qkv.scalar_type() ||
       qkvz_merge_buf_.device() != qkv.device();
   if (needs_realloc) {
-    const int64_t target_M = qkvz_merge_buf_.defined()
-                                 ? std::max(M, qkvz_merge_buf_.size(0))
-                                 : M;
+    const int64_t target_M =
+        qkvz_merge_buf_.defined() ? std::max(M, qkvz_merge_buf_.size(0)) : M;
     qkvz_merge_buf_ = torch::empty({target_M, flat_dim}, qkv.options());
   }
-  auto buf =
-      qkvz_merge_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M);
+  auto buf = qkvz_merge_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M);
   buf.narrow(/*dim=*/1, /*start=*/0, /*length=*/qkv_cols)
       .copy_(qkv.reshape({M, qkv_cols}));
-  buf.narrow(/*dim=*/1, qkv_cols, z_cols)
-      .copy_(z.reshape({M, z_cols}));
+  buf.narrow(/*dim=*/1, qkv_cols, z_cols).copy_(z.reshape({M, z_cols}));
   return buf.view({bs, seqlen, flat_dim});
 }
 
@@ -244,14 +241,12 @@ torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_ba_from_split_activations(
                              ba_merge_buf_.scalar_type() != b.scalar_type() ||
                              ba_merge_buf_.device() != b.device();
   if (needs_realloc) {
-    const int64_t target_M = ba_merge_buf_.defined()
-                                 ? std::max(M, ba_merge_buf_.size(0))
-                                 : M;
+    const int64_t target_M =
+        ba_merge_buf_.defined() ? std::max(M, ba_merge_buf_.size(0)) : M;
     ba_merge_buf_ = torch::empty({target_M, flat_dim}, b.options());
   }
   auto buf = ba_merge_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M);
-  buf.narrow(/*dim=*/1, /*start=*/0, /*length=*/nv)
-      .copy_(b.reshape({M, nv}));
+  buf.narrow(/*dim=*/1, /*start=*/0, /*length=*/nv).copy_(b.reshape({M, nv}));
   buf.narrow(/*dim=*/1, nv, nv).copy_(a.reshape({M, nv}));
   return buf.view({bs, seqlen, flat_dim});
 }
@@ -296,14 +291,12 @@ void Qwen3_5GatedDeltaNetImpl::load_projection_state_dict(
     // projections via load_state_dict(prefixes). This concatenates the
     // weights (and FP8 block-scale grids, if present) along dim 0.
     if (!qkvz_proj_->is_weight_loaded()) {
-      qkvz_proj_->load_state_dict(
-          state_dict,
-          /*prefixes=*/{"in_proj_qkv.", "in_proj_z."});
+      qkvz_proj_->load_state_dict(state_dict,
+                                  /*prefixes=*/{"in_proj_qkv.", "in_proj_z."});
     }
     if (!ba_proj_->is_weight_loaded()) {
-      ba_proj_->load_state_dict(
-          state_dict,
-          /*prefixes=*/{"in_proj_b.", "in_proj_a."});
+      ba_proj_->load_state_dict(state_dict,
+                                /*prefixes=*/{"in_proj_b.", "in_proj_a."});
     }
     return;
   }

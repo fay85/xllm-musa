@@ -28,6 +28,8 @@ limitations under the License.
 #include <variant>
 
 #include "common/types.h"
+#include "framework/block/block.h"
+#include "platform/layer_synchronizer.h"
 #if defined(USE_NPU)
 #include "platform/npu/npu_layer_synchronizer.h"
 #endif
@@ -38,17 +40,14 @@ limitations under the License.
 #include "platform/dcu/dcu_layer_synchronizer.h"
 #endif
 
+#include "core/framework/model/mtp_topk_state.h"
 #include "core/framework/multimodal/mm_batch_data.h"
 #include "framework/batch/batch_forward_type.h"
-#include "framework/parallel_state/npu_cp_ep_padding.h"
-#include "framework/parallel_state/npu_cp_prepare.h"
+#include "framework/parallel_state/npu_cp_plan.h"
 #include "framework/parallel_state/npu_dp_ep_padding.h"
 #include "runtime/dit_forward_params.h"
 #include "util/hash_util.h"
 #include "util/tensor_helper.h"
-#if defined(USE_CUDA) || defined(USE_MUSA)
-#include "core/framework/config/execution_config.h"
-#endif
 
 namespace xllm {
 namespace npu {
@@ -359,42 +358,10 @@ struct AttentionHostInput {
   std::vector<int32_t> ring_cur_seqlen;
   std::vector<int32_t> ring_cache_seqlen;
   torch::Tensor block_tables;
-
-  // CPU mirrors of the paged-KV index tensors below. They are populated by the
-  // input builder at the same time as the device tensors (cheap: the source is
-  // a std::vector that already lives on host) and are kept alive across the
-  // input -> ModelInputParams::to(device) hop. Downstream attention metadata
-  // builders consume them via attention.host.paged_kv_* without any D2H sync.
-  // The Mate FFI batch_decode bridge consumes the host pointers directly (it
-  // requires kDLCPU for these three tensors), so this avoids 48 implicit
-  // .to(kCPU) per output token on Qwen3.5-27B (16 full-attn layers x 3 tensors)
-  // and unblocks the CUDA graph capture path which forbids host syncs entirely.
   torch::Tensor paged_kv_indptr;
   torch::Tensor paged_kv_indices;
   torch::Tensor paged_kv_last_page_len;
 };
-
-#if defined(USE_CUDA) || defined(USE_MUSA)
-namespace {
-inline bool is_cpu_int32_tensor(const torch::Tensor& tensor) {
-  return tensor.defined() && tensor.device().is_cpu() &&
-         tensor.scalar_type() == torch::kInt32;
-}
-
-inline bool should_skip_graph_decode_metadata_h2h(
-    const AttentionHostInput& host,
-    const BatchForwardType& batch_forward_type) {
-  if (!ExecutionConfig::get_instance().enable_graph() ||
-      !batch_forward_type.is_decode()) {
-    return false;
-  }
-  return !host.kv_seq_lens.empty() &&
-         is_cpu_int32_tensor(host.paged_kv_indptr) &&
-         is_cpu_int32_tensor(host.paged_kv_indices) &&
-         is_cpu_int32_tensor(host.paged_kv_last_page_len);
-}
-}  // namespace
-#endif
 
 struct AttentionDeviceInput {
   torch::Tensor q_seq_lens;
@@ -417,20 +384,14 @@ struct AttentionDeviceInput {
   torch::Tensor ring_cur_seqlen;
   torch::Tensor ring_cache_seqlen;
 
-  // Per-rank prefix slot index for KV-split prefix AllGather (see
-  // WorkerImpl::compute_in_prefix_slots). Must propagate in to(device) because
-  // nested worker paths skip recomputation when cp_partitioned is true.
+  // Per-rank prefix slot indices for KV-split prefix AllGather. NpuCpPlan
+  // supplies this graph input with the rest of the CP attention metadata.
   torch::Tensor in_prefix_slots;
 
-  AttentionDeviceInput to(const torch::Device& device,
-                          bool skip_graph_metadata_h2h = false) const {
+  AttentionDeviceInput to(const torch::Device& device) const {
     AttentionDeviceInput out;
     out.q_seq_lens = safe_to(q_seq_lens, device, true);
-    if (!skip_graph_metadata_h2h) {
-      out.kv_seq_lens = safe_to(kv_seq_lens, device, true);
-    } else {
-      out.kv_seq_lens = kv_seq_lens;
-    }
+    out.kv_seq_lens = safe_to(kv_seq_lens, device, true);
 #if !defined(USE_CUDA) && !defined(USE_MUSA)
     out.q_cu_seq_lens = safe_to(q_cu_seq_lens, device, true);
 #else
@@ -438,18 +399,9 @@ struct AttentionDeviceInput {
 #endif
     out.new_cache_slots = safe_to(new_cache_slots, device, true);
     out.block_tables = safe_to(block_tables, device, true);
-    if (!skip_graph_metadata_h2h) {
-      out.paged_kv_indptr = safe_to(paged_kv_indptr, device);
-      out.paged_kv_indices = safe_to(paged_kv_indices, device);
-      out.paged_kv_last_page_len = safe_to(paged_kv_last_page_len, device);
-    } else {
-      // Preserve the original tensors for graph-decode compatibility. The
-      // host fast path ignores them, while a non-fast fallback still requires
-      // defined sources for its persistent-buffer copies.
-      out.paged_kv_indptr = paged_kv_indptr;
-      out.paged_kv_indices = paged_kv_indices;
-      out.paged_kv_last_page_len = paged_kv_last_page_len;
-    }
+    out.paged_kv_indptr = safe_to(paged_kv_indptr, device);
+    out.paged_kv_indices = safe_to(paged_kv_indices, device);
+    out.paged_kv_last_page_len = safe_to(paged_kv_last_page_len, device);
     out.new_cache_slot_offsets = safe_to(new_cache_slot_offsets, device);
     out.kv_cache_start_offsets = safe_to(kv_cache_start_offsets, device);
     out.kv_cache_tokens_nums = safe_to(kv_cache_tokens_nums, device);
@@ -471,11 +423,10 @@ struct AttentionInput {
   uint64_t attention_buffer_capacity = 0;
   std::shared_ptr<int> attention_buffer_owner = std::make_shared<int>(0);
 
-  AttentionInput to(const torch::Device& target_device,
-                    bool skip_graph_metadata_h2h = false) const {
+  AttentionInput to(const torch::Device& target_device) const {
     AttentionInput out;
     out.host = host;
-    out.device = device.to(target_device, skip_graph_metadata_h2h);
+    out.device = device.to(target_device);
     out.attention_host_buffer = attention_host_buffer;
     out.attention_device_buffer = attention_device_buffer;
     out.attention_buffer_bytes = attention_buffer_bytes;
@@ -683,16 +634,19 @@ struct AttentionInput {
 };
 
 enum class TransferType : uint8_t {
-  G2H = 0,  // global memory(KVCache store) to host memory(DRAM)
-  H2D = 1,  // host memory(DRAM) to device memory(HBM)
-  D2G = 2,  // host memory(DRAM) to global memory(KVCache store)
-  G2D = 3   // global memory(KVCache store) to device memory(HBM)
+  G2H = 0,    // global memory(KVCache store) to host memory(DRAM)
+  H2D = 1,    // host memory(DRAM) to device memory(HBM)
+  D2G = 2,    // device memory(HBM) to global memory(KVCache store)
+  G2D = 3,    // global memory(KVCache store) to device memory(HBM)
+  D2H2G = 4,  // device memory(HBM) to host memory(DRAM) to global
+              // memory(KVCache store)
 };
 
 struct BlockTransferInfo {
   int32_t src_block_id = -1;
   int32_t dst_block_id = -1;
   uint8_t hash_key[XXH3_128BITS_HASH_VALUE_LEN];
+  BlockType block_type = BlockType::KV;
   TransferType transfer_type;
 
   BlockTransferInfo(int32_t src_block_id, int32_t dst_block_id) {
@@ -703,14 +657,19 @@ struct BlockTransferInfo {
   BlockTransferInfo(int32_t src_id,
                     int32_t dst_id,
                     const uint8_t* key,
-                    TransferType type)
-      : src_block_id(src_id), dst_block_id(dst_id), transfer_type(type) {
+                    TransferType type,
+                    BlockType btype = BlockType::KV)
+      : src_block_id(src_id),
+        dst_block_id(dst_id),
+        block_type(btype),
+        transfer_type(type) {
     memcpy(hash_key, key, XXH3_128BITS_HASH_VALUE_LEN);
   }
 
   BlockTransferInfo(const BlockTransferInfo& other)
       : src_block_id(other.src_block_id),
         dst_block_id(other.dst_block_id),
+        block_type(other.block_type),
         transfer_type(other.transfer_type) {
     memcpy(hash_key, other.hash_key, XXH3_128BITS_HASH_VALUE_LEN);
   }
@@ -718,6 +677,7 @@ struct BlockTransferInfo {
   BlockTransferInfo(BlockTransferInfo&& other)
       : src_block_id(other.src_block_id),
         dst_block_id(other.dst_block_id),
+        block_type(other.block_type),
         transfer_type(other.transfer_type) {
     memcpy(hash_key, other.hash_key, XXH3_128BITS_HASH_VALUE_LEN);
 
@@ -728,6 +688,7 @@ struct BlockTransferInfo {
   BlockTransferInfo& operator=(const BlockTransferInfo& other) {
     src_block_id = other.src_block_id;
     dst_block_id = other.dst_block_id;
+    block_type = other.block_type;
     transfer_type = other.transfer_type;
     memcpy(hash_key, other.hash_key, XXH3_128BITS_HASH_VALUE_LEN);
     return *this;
@@ -736,6 +697,7 @@ struct BlockTransferInfo {
   BlockTransferInfo& operator=(BlockTransferInfo&& other) {
     src_block_id = other.src_block_id;
     dst_block_id = other.dst_block_id;
+    block_type = other.block_type;
     transfer_type = other.transfer_type;
     memcpy(hash_key, other.hash_key, XXH3_128BITS_HASH_VALUE_LEN);
 
@@ -766,10 +728,8 @@ struct BatchInputMeta {
 struct ModelEmbeddingInput {
   // input embedding
   mutable torch::Tensor input_embedding;
-
-  // Precomputed token embedding for Qwen3.5 MTP CUDA-graph decode.  The MTP
-  // model keeps input_embedding for the target hidden state, so token and
-  // hidden inputs need separate persistent graph buffers.
+  // Qwen3.5 MTP keeps the target hidden input and current-token embedding in
+  // separate persistent graph buffers.
   torch::Tensor mtp_token_embedding;
 
   // embedding ids of each sequence
@@ -849,11 +809,14 @@ struct MultiModalInput {
 struct ParallelInput {
   // num tokens of all workers, mainly used for dp case
   std::vector<int32_t> dp_global_token_nums;
+  // Original DP token counts before empty ranks are padded to one fake token.
+  // Attention/FFN paths may need the padded counts, while lm_head output
+  // compaction must skip true empty DP ranks.
+  std::vector<int32_t> raw_dp_global_token_nums;
   std::vector<int32_t> dp_is_decode;
 
   DpEpPaddingData dp_ep_padding_data;
-  CpEpPaddingData cp_ep_padding_data;
-  CpPrefillInputs cp_prefill_inputs;
+  NpuCpPlan cp_plan;
 
 #if defined(USE_MLU)
   std::shared_ptr<MLULayerSynchronizerImpl> layer_synchronizer = nullptr;
@@ -861,15 +824,15 @@ struct ParallelInput {
   std::shared_ptr<DCULayerSynchronizerImpl> layer_synchronizer = nullptr;
 #elif defined(USE_NPU)
   std::shared_ptr<NPULayerSynchronizerImpl> layer_synchronizer = nullptr;
+#endif
   uint32_t layers_per_bacth_copy = std::numeric_limits<uint32_t>::max();
-  std::shared_ptr<NPULayerSynchronizerImpl> layer_wise_load_synchronizer =
-      nullptr;
+  std::shared_ptr<LayerSynchronizer> layer_wise_load_synchronizer = nullptr;
+#if defined(USE_NPU)
   std::vector<int64_t> query_start_loc;
   std::vector<int64_t> has_initial_state;
 #endif
+
 #if defined(USE_CUDA) || defined(USE_MUSA)
-  // Linear-attention (Qwen3.5 gated delta net) host metadata, mirrored from the
-  // NPU path so the torch_musa fallback kernels can consume them.
   std::vector<int64_t> query_start_loc;
   std::vector<int64_t> has_initial_state;
 #endif
@@ -877,45 +840,24 @@ struct ParallelInput {
   ParallelInput to(const torch::Device& device) const {
     ParallelInput out;
     out.dp_global_token_nums = dp_global_token_nums;
+    out.raw_dp_global_token_nums = raw_dp_global_token_nums;
     out.dp_is_decode = dp_is_decode;
     out.dp_ep_padding_data = dp_ep_padding_data;
-    out.cp_ep_padding_data
-        .attn_padding_idx(
-            safe_to(cp_ep_padding_data.attn_padding_idx(), device, true))
-        .attn_unpadding_idx(
-            safe_to(cp_ep_padding_data.attn_unpadding_idx(), device, true))
-        .ffn_padding_idx(
-            safe_to(cp_ep_padding_data.ffn_padding_idx(), device, true))
-        .ffn_unpadding_idx(
-            safe_to(cp_ep_padding_data.ffn_unpadding_idx(), device, true))
-        .lm_head_skip_padding_token_indices(
-            safe_to(cp_ep_padding_data.lm_head_skip_padding_token_indices(),
-                    device,
-                    true))
-        .gather_prenorm_idx(
-            safe_to(cp_ep_padding_data.gather_prenorm_idx(), device, true))
-        .padding_idx(safe_to(cp_ep_padding_data.padding_idx(), device, true))
-        .un_padding_idx(
-            safe_to(cp_ep_padding_data.un_padding_idx(), device, true))
-        .dynamic_ep_idx(
-            safe_to(cp_ep_padding_data.dynamic_ep_idx(), device, true))
-        .moe_idx(safe_to(cp_ep_padding_data.moe_idx(), device, true))
-        .expert_array(safe_to(cp_ep_padding_data.expert_array(), device, true));
-    out.cp_prefill_inputs = cp_prefill_inputs.to(device);
+    out.cp_plan = cp_plan.to(device);
 #if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
     out.layer_synchronizer = layer_synchronizer;
 #endif
-#if defined(USE_NPU)
     out.layers_per_bacth_copy = layers_per_bacth_copy;
     out.layer_wise_load_synchronizer = layer_wise_load_synchronizer;
-    out.query_start_loc = query_start_loc;
-    out.has_initial_state = has_initial_state;
-#endif
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_NPU)
     out.query_start_loc = query_start_loc;
     out.has_initial_state = has_initial_state;
 #endif
     return out;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+    out.query_start_loc = query_start_loc;
+    out.has_initial_state = has_initial_state;
+#endif
   }
 };
 
@@ -950,33 +892,22 @@ struct ExpertInput {
   }
 };
 
-// Per-layer mate GDN / conv intermediate states captured during MTP target
-// verify. Post-verify scatter commits `*_intermediate[seq, accepted_step]` into
-// the live linear cache (sglang `update_mamba_state_after_mtp_verify` pattern).
-//
-// This object is shared (shared_ptr) across every copy of ModelInputParams so
-// that (a) the on-device copy the worker builds via ModelInputParams::to() and
-// the original validate input observe the same recorded intermediates, and (b)
-// under CUDA graph the entries recorded during capture (which point at the
-// per-layer persistent grow-only buffers) remain valid across replays -- the
-// replayed kernels refresh the buffer *contents* while the entries themselves
-// (keyed by layer id, overwritten each eager forward) stay put.
 struct GdnMtpVerifyCache {
   struct LayerState {
-    // [batch, seq_len, num_v_heads, head_v_dim, head_k_dim], per-step SSM state
     torch::Tensor ssm_intermediate;
-    // [batch, seq_len, dim, conv_state_len], per-step conv window state
     torch::Tensor conv_intermediate;
   };
+
   bool enabled = false;
-  // Keyed by layer id and overwritten (not appended) on every forward so the
-  // set is stable across eager steps and graph replays.
   std::map<int32_t, LayerState> layer_states;
 };
 
 struct GraphInput {
   torch::Tensor attn_mask;
   torch::Tensor tiling_data;
+#if defined(USE_DCU)
+  bool use_dense_flash_attention = false;
+#endif
   bool use_expanded_decode_for_spec_verify_attention = false;
   torch::Tensor expanded_kv_seq_lens;
   torch::Tensor expanded_block_tables;
@@ -996,6 +927,9 @@ struct GraphInput {
     GraphInput out;
     out.attn_mask = safe_to(attn_mask, device, true);
     out.tiling_data = safe_to(tiling_data, device, true);
+#if defined(USE_DCU)
+    out.use_dense_flash_attention = use_dense_flash_attention;
+#endif
     out.use_expanded_decode_for_spec_verify_attention =
         use_expanded_decode_for_spec_verify_attention;
     out.expanded_kv_seq_lens = safe_to(expanded_kv_seq_lens, device, true);
@@ -1003,7 +937,8 @@ struct GraphInput {
     out.expanded_tiling_data = safe_to(expanded_tiling_data, device, true);
     out.expanded_kv_seq_lens_vec = expanded_kv_seq_lens_vec;
 #if defined(USE_CUDA) || defined(USE_MUSA)
-    out.expanded_paged_kv_indptr = safe_to(expanded_paged_kv_indptr, device, true);
+    out.expanded_paged_kv_indptr =
+        safe_to(expanded_paged_kv_indptr, device, true);
     out.expanded_paged_kv_indices =
         safe_to(expanded_paged_kv_indices, device, true);
     out.expanded_paged_kv_last_page_len =
@@ -1022,14 +957,7 @@ struct ModelInputParams {
   ModelInputParams to(const torch::Device& device) const {
     ModelInputParams params;
     params.meta = meta;
-#if defined(USE_CUDA) || defined(USE_MUSA)
-    const bool skip_graph_metadata_h2h =
-        should_skip_graph_decode_metadata_h2h(attention.host,
-                                              meta.batch_forward_type);
-    params.attention = attention.to(device, skip_graph_metadata_h2h);
-#else
     params.attention = attention.to(device);
-#endif
     params.embedding = embedding.to(device);
     params.block_copy = block_copy.to(device);
     params.multimodal = multimodal.to(device);
@@ -1041,15 +969,13 @@ struct ModelInputParams {
     params.is_spec_verify = is_spec_verify;
     params.num_accepted_tokens = safe_to(num_accepted_tokens, device, true);
     params.num_accepted_tokens_host = num_accepted_tokens_host;
-    params.dsa_topk_indices = safe_to(dsa_topk_indices, device, true);
+    params.mtp_topk_state =
+        mtp_topk_state == nullptr ? nullptr : mtp_topk_state->to(device);
     for (const auto& table : multi_block_tables) {
       params.multi_block_tables.push_back(
           safe_to(table, table.options().device(torch::kCPU), true));
     }
     params.mtp_shifted_token_ids = safe_to(mtp_shifted_token_ids, device, true);
-    // Share the same verify-cache object across device/graph copies so the
-    // states recorded inside the model forward are visible to the post-verify
-    // scatter regardless of which ModelInputParams copy the layer wrote into.
     params.gdn_mtp_verify_cache = gdn_mtp_verify_cache;
     if (!params.embedding.linear_state_indices.defined() &&
         !params.embedding.linear_state_ids.empty()) {
@@ -1127,7 +1053,6 @@ struct ModelInputParams {
   }
 
   bool synchronize_layer(uint32_t layer_idx) const {
-#if defined(USE_NPU)
     if (parallel.layer_wise_load_synchronizer != nullptr &&
         layer_idx % parallel.layers_per_bacth_copy == 0) {
       if (!parallel.layer_wise_load_synchronizer->synchronize_layer(
@@ -1135,9 +1060,6 @@ struct ModelInputParams {
         return false;
       }
     }
-#else
-    (void)layer_idx;
-#endif
     return true;
   }
 
@@ -1175,13 +1097,9 @@ struct ModelInputParams {
 
   bool is_spec_verify = false;
   torch::Tensor num_accepted_tokens;
-  torch::Tensor dsa_topk_indices;
+  // Backend-neutral state reused by the next MTP draft step.
+  MtpTopkStatePtr mtp_topk_state;
   std::vector<int64_t> num_accepted_tokens_host;
-
-  // Populated during mate-GDN MTP verify forward; consumed after rejection
-  // sampling to commit the accepted intermediate state into ssm_cache. Shared
-  // across ModelInputParams copies (device copy + graph capture/replay copies)
-  // so the recorded per-layer states are observed by the post-verify scatter.
   std::shared_ptr<GdnMtpVerifyCache> gdn_mtp_verify_cache;
 
   RecModelInputParams rec_params;

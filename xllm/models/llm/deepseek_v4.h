@@ -32,6 +32,7 @@ limitations under the License.
 #include <unordered_set>
 #include <utility>
 
+#include "core/common/flash_comm1_context.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/state_dict/utils.h"
@@ -404,7 +405,9 @@ class DeepseekV4ModelImpl
   explicit DeepseekV4ModelImpl(const ModelContext& context)
       : LlmModelImplBase<layer::DeepseekV4DecoderLayer>(
             "deepseek_v4",
-            context.get_model_args()) {
+            context.get_model_args()),
+        parallel_args_(context.get_parallel_args()),
+        flash_comm1_options_(context.get_flash_comm1_options()) {
     auto model_args = context.get_model_args();
     auto options = context.get_tensor_options();
     auto parallel_args = context.get_parallel_args();
@@ -742,6 +745,21 @@ class DeepseekV4ModelImpl
       }
     }
 
+    const int32_t fc1_num_tokens = static_cast<int32_t>(h.size(0));
+    FlashComm1Context fc1_ctx;
+    if (!acl_graph_forward && !is_empty_dp_rank) {
+      const bool is_prefill_side =
+          input_params.meta.batch_forward_type.no_decode();
+      fc1_ctx = build_flash_comm1_context(fc1_num_tokens,
+                                          is_prefill_side,
+                                          parallel_args_,
+                                          flash_comm1_options_);
+    }
+    FlashComm1ContextScope fc1_scope(&fc1_ctx);
+    if (is_sequence_sharded(fc1_ctx)) {
+      h = shard_sequence(h, fc1_ctx);
+    }
+
     std::optional<torch::Tensor> residual;
     for (size_t i = 0; i < layers_.size(); i++) {
       if (attn_metadata.dsa_metadata) {
@@ -812,9 +830,28 @@ class DeepseekV4ModelImpl
                      kv_caches[i],
                      modified_input_params,
                      tokens);
+#if defined(USE_NPU)
+      if (modified_input_params.parallel.layer_synchronizer != nullptr &&
+          !modified_input_params.parallel.layer_synchronizer->record_event(
+              static_cast<int64_t>(i), runtime_device.index())) {
+        return ModelOutput();
+      }
+#endif
+    }
+    if (is_sequence_sharded(fc1_ctx)) {
+      h = gather_sequence(h, fc1_ctx);
+    }
+    torch::Tensor pre_hc_head_hidden_states;
+    if (model_args_.num_speculative_tokens() > 0) {
+      pre_hc_head_hidden_states = h;
     }
     h = hc_head(h);
     auto [hidden_states, residual_out] = norm_(h, std::nullopt);
+    if (pre_hc_head_hidden_states.defined()) {
+      ModelOutput out(hidden_states, residual_out);
+      out.aux_hidden_states = pre_hc_head_hidden_states.flatten(1);
+      return out;
+    }
     return ModelOutput(hidden_states, residual_out);
   }
 
@@ -1529,6 +1566,9 @@ class DeepseekV4ModelImpl
   int64_t index_head_dim_ = 0;
   int64_t index_topk_ = 512;
   torch::Device device_{torch::kCPU};
+
+  ParallelArgs parallel_args_;
+  FlashComm1Options flash_comm1_options_;
 
   // DSA cache group info: built once at model init from compress_ratios
   // caches_info_[layer_id] = vector of DSACacheInfo for each cache in that

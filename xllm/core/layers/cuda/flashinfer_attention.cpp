@@ -27,41 +27,6 @@ namespace layer {
 
 namespace {
 
-bool use_expanded_spec_decode_attention(const AttentionMetadata& attn_metadata) {
-  return attn_metadata.use_expanded_decode_for_spec_verify_attention &&
-         attn_metadata.expanded_paged_kv_indptr.defined() &&
-         attn_metadata.expanded_paged_kv_indptr.numel() >= 2;
-}
-
-AttentionMetadata build_expanded_decode_metadata(
-    const AttentionMetadata& attn_metadata) {
-  AttentionMetadata decode_meta = attn_metadata;
-  const int64_t expanded_batch =
-      attn_metadata.expanded_paged_kv_indptr.size(0) - 1;
-  const torch::Device expanded_device =
-      attn_metadata.expanded_paged_kv_indptr.device();
-  const torch::TensorOptions expanded_int_options =
-      torch::TensorOptions().dtype(torch::kInt32).device(expanded_device);
-  decode_meta.paged_kv_indptr = attn_metadata.expanded_paged_kv_indptr;
-  decode_meta.paged_kv_indices = attn_metadata.expanded_paged_kv_indices;
-  decode_meta.paged_kv_last_page_len =
-      attn_metadata.expanded_paged_kv_last_page_len;
-  decode_meta.block_table = attn_metadata.expanded_block_table;
-  decode_meta.kv_seq_lens = attn_metadata.expanded_kv_seq_lens;
-  decode_meta.qo_indptr =
-      torch::arange(0, expanded_batch + 1, expanded_int_options);
-  decode_meta.max_query_len = 1;
-  decode_meta.paged_kv_indptr_host = torch::Tensor();
-  decode_meta.paged_kv_indices_host = torch::Tensor();
-  decode_meta.paged_kv_last_page_len_host = torch::Tensor();
-  return decode_meta;
-}
-
-}  // namespace
-
-
-namespace {
-
 // Eager causal + padding attention fallback when custom mask is used (e.g.
 // LongCat text encoder). FlashInfer's custom mask path gives wrong token-0
 // output; this path matches diffusers.
@@ -179,12 +144,6 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
 
   if (attn_metadata.is_prefill) {
     prefill_forward(attn_metadata, query, key, value, output, output_lse);
-  } else if (attn_metadata.is_chunked_prefill &&
-             (attn_metadata.use_expanded_decode_for_spec_verify_attention ||
-              use_expanded_spec_decode_attention(attn_metadata) ||
-              attn_metadata.is_spec_verify)) {
-    decoder_forward(
-        attn_metadata, query, key, output, output_lse, k_cache, v_cache);
   } else if (attn_metadata.is_chunked_prefill) {
     chunked_prefill_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
@@ -270,13 +229,6 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
     std::optional<at::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
-  if (attn_metadata.plan_info &&
-      (attn_metadata.plan_info->uri.find("batch_decode") != std::string::npos ||
-       attn_metadata.is_spec_verify)) {
-    decoder_forward(
-        attn_metadata, query, key, output, output_lse, k_cache, v_cache);
-    return;
-  }
   // Get block_size from k_cache if defined and has proper dimensions,
   // otherwise use a default value (for prefill without KV cache, e.g., LongCat)
   int64_t block_size = 1;
@@ -339,12 +291,6 @@ void FlashInferAttentionImpl::decoder_forward(
     std::optional<at::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
-  std::optional<AttentionMetadata> expanded_decode_meta;
-  const bool use_expanded = use_expanded_spec_decode_attention(attn_metadata);
-  const AttentionMetadata& decode_attn =
-      use_expanded ? *expanded_decode_meta.emplace(
-                         build_expanded_decode_metadata(attn_metadata))
-                   : attn_metadata;
   // Get block_size from k_cache if defined and has proper dimensions,
   // otherwise use a default value (for prefill without KV cache, e.g., LongCat)
   int64_t block_size = 1;
@@ -357,16 +303,16 @@ void FlashInferAttentionImpl::decoder_forward(
   // using "fa3" backend.
   std::string backend = "fa2";
 
-  if (decode_attn.enable_cuda_graph) {
-    CHECK(decode_attn.plan_info->plan_info.defined())
+  if (attn_metadata.enable_cuda_graph) {
+    CHECK(attn_metadata.plan_info->plan_info.defined())
         << "plan_info plan_info should not be null when enable_cuda_graph is "
            "true";
     VLOG(kGraphExecutorLogVerboseLevel)
         << "no need to update plan_info for CUDA graph";
   } else {
-    flashinfer::update_decode_plan_info(decode_attn.plan_info,
+    flashinfer::update_decode_plan_info(attn_metadata.plan_info,
                                         backend,
-                                        decode_attn,
+                                        attn_metadata,
                                         query.scalar_type(),
                                         key.scalar_type(),
                                         output.scalar_type(),
@@ -376,27 +322,27 @@ void FlashInferAttentionImpl::decoder_forward(
                                         num_kv_heads_,
                                         block_size,
                                         sliding_window_,
-                                        decode_attn.enable_cuda_graph,
+                                        attn_metadata.enable_cuda_graph,
                                         decode_use_tensor_core_);
   }
 
-  xllm::kernel::cuda::batch_decode(decode_attn.plan_info->uri,
-                                   decode_attn.plan_info->plan_info,
+  xllm::kernel::cuda::batch_decode(attn_metadata.plan_info->uri,
+                                   attn_metadata.plan_info->plan_info,
                                    float_workspace_buffer_,
                                    int_workspace_buffer_,
                                    page_locked_int_workspace_buffer_,
                                    query,
                                    k_cache,
                                    v_cache,
-                                   decode_attn.paged_kv_indptr,
-                                   decode_attn.paged_kv_indices,
-                                   decode_attn.paged_kv_last_page_len,
+                                   attn_metadata.paged_kv_indptr,
+                                   attn_metadata.paged_kv_indices,
+                                   attn_metadata.paged_kv_last_page_len,
                                    sliding_window_,
                                    scale_,
                                    output,
                                    output_lse,
                                    decode_use_tensor_core_,
-                                   decode_attn.qo_indptr);
+                                   attn_metadata.qo_indptr);
 }
 
 }  // namespace layer

@@ -15,9 +15,6 @@ limitations under the License.
 
 #pragma once
 
-#include <optional>
-#include <unordered_map>
-
 #include "framework/kv_cache/embedding_cache.h"
 #include "framework/kv_cache_transfer/kv_cache_transfer.h"
 #if defined(USE_NPU)
@@ -73,10 +70,13 @@ class MTPWorkerImpl : public SpeculativeWorkerImpl {
                                    ForwardInput& processed_inputs) override;
 
  protected:
+  // MTP composite: leaves own NpuCpPlan::prepare.
+  bool owns_npu_cp_plan_build() const override;
+
+ protected:
   std::optional<ForwardOutput> step_prefill(const ForwardInput& input) override;
   std::optional<ForwardOutput> step_decode(const ForwardInput& inputs) override;
   std::optional<ForwardOutput> step_empty(const ForwardInput& inputs) override;
-  void run_deferred_step_work() override;
 
   void fill_validate_input_from_draft_outputs(
       const std::vector<ForwardOutput>& draft_outputs,
@@ -94,10 +94,6 @@ class MTPWorkerImpl : public SpeculativeWorkerImpl {
   // Hook for algorithm-specific draft output post-processing during decode.
   // Default MTP behavior always compresses probs for cache storage.
   virtual void process_draft_sample_output(SampleOutput& sample_output);
-
-  ForwardInput prepare_draft_prefill_work(const ForwardInput& input,
-                                          ForwardOutput& target_output);
-  ForwardOutput run_draft_prefill(const ForwardInput& prefill_input);
 
   SampleOutput validate(const SamplingParameters& sampling_params,
                         const torch::Tensor& draft_token_ids,
@@ -133,10 +129,53 @@ class MTPWorkerImpl : public SpeculativeWorkerImpl {
   void prepare_draft_extend_inputs(
       const ForwardInput& base_input,
       const std::vector<EmbeddingCache::DecodeState>& last_states,
-      ForwardInput& extend_input);
+      ForwardInput& extend_input,
+      bool force_two_rows = false,
+      bool wait_for_compute_stream = true);
 
-  void write_target_context_to_cache(const ForwardInput& input,
-                                     const SampleOutput& validate_output);
+  struct PendingTargetContext {
+    std::vector<int32_t> embedding_ids;
+    std::vector<std::string> request_ids;
+    // Both tensors stay on device.  A steady-state overlap step consumes them
+    // by queueing gather/update ops behind rejection sampling on the same
+    // stream.  They are materialized on CPU only when the batch shape/order
+    // changes and the host cache fallback is required.
+    torch::Tensor accepted_tokens;
+    torch::Tensor accepted_tokens_host;
+    torch::Tensor accepted_embeddings;
+    torch::Tensor base_positions;
+    torch::Tensor base_kv_seq_lens;
+    StreamEventPtr ready_event;
+  };
+
+  struct PendingDraftContext {
+    std::vector<int32_t> embedding_ids;
+    std::vector<std::string> request_ids;
+    std::optional<ForwardOutput> output;
+    ForwardInput prepared_input;
+  };
+
+  void stage_target_context_write(const ForwardInput& input,
+                                  const SampleOutput& validate_output,
+                                  torch::Tensor base_positions,
+                                  torch::Tensor base_kv_seq_lens,
+                                  StreamEventPtr ready_event,
+                                  torch::Tensor accepted_tokens_host);
+  torch::Tensor acquire_accepted_tokens_host_buffer(
+      const torch::Tensor& accepted_tokens);
+  bool pending_target_context_matches(const ForwardInput& input) const;
+  bool device_target_context_ready_for_batch(const ForwardInput& input) const;
+  void flush_pending_target_context();
+  bool supports_combined_first_draft_execution() const;
+  bool can_use_combined_first_draft() const;
+  void prepare_next_first_draft_template(const ForwardInput& input,
+                                         ForwardInput& combined_input);
+  void enqueue_next_first_draft(const ForwardInput& input,
+                                const SampleOutput& validate_output,
+                                const torch::Tensor& base_positions,
+                                const torch::Tensor& base_kv_seq_lens,
+                                ForwardInput combined_input);
+  bool pending_draft_context_matches(const ForwardInput& input) const;
 
  protected:
   // Draft model worker
@@ -145,28 +184,25 @@ class MTPWorkerImpl : public SpeculativeWorkerImpl {
   // Embedding cache for speculative decoding
   std::shared_ptr<EmbeddingCache> embedding_cache_;
 
-  struct DeferredPrefillWork {
-    ForwardInput input;
-    ForwardOutput target_output;
-  };
-
-  // MUSA schedule overlap publishes the target token before preparing and
-  // submitting draft prefill. The one-threaded worker queue completes this
-  // work immediately after publication and before the next model step.
-  std::optional<DeferredPrefillWork> deferred_prefill_work_;
-
+  // Rejection sampling produces accepted state on the compute stream.  Keep
+  // that state device-resident so the next overlap task can be fully enqueued
+  // without waiting for target verification to finish.
+  PendingTargetContext pending_target_context_;
+  std::vector<int32_t> device_context_ready_embedding_ids_;
+  std::vector<std::string> device_context_ready_request_ids_;
+  // A single persistent pinned destination is sufficient for accepted-token
+  // D2H: the preceding pending target context is always flushed before the
+  // next validation can submit another copy. The pending context holds a view
+  // into this storage until the copy event is synchronized and CPU consumers
+  // have finished reading it.
+  torch::Tensor accepted_tokens_host_buffer_;
+  // Draft step 0 is submitted at the tail of the preceding target validation,
+  // before control returns to the scheduler.  The following scheduler turn
+  // consumes this output and only submits draft steps 1..N-1.
+  PendingDraftContext pending_draft_context_;
   // Whether validation directly uses selected-only draft_probs [B, S].
   // If false, selected-only cache values are restored to dense [B, S, V].
   bool enable_opt_validate_probs_ = false;
-
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  // A captured verify graph retains the addresses of every layer's deferred
-  // GDN state tensors. Keep one cache object per validation-token bucket so a
-  // later input preparation neither disconnects post-validate scatter from
-  // the captured tensors nor overwrites another bucket's tensor addresses.
-  std::unordered_map<int64_t, std::shared_ptr<GdnMtpVerifyCache>>
-      gdn_mtp_verify_caches_;
-#endif
 
 #if defined(USE_NPU) || defined(USE_MLU)
   std::shared_ptr<KVCacheTransfer> kv_cache_transfer_;

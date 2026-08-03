@@ -29,6 +29,7 @@ limitations under the License.
 
 #include "common/global_flags.h"
 #include "common/metrics.h"
+#include "core/common/constants.h"
 #include "core/framework/config/execution_config.h"
 #include "framework/model/causal_vlm.h"
 #include "util/utils.h"
@@ -126,6 +127,7 @@ enum class RunMode : int8_t {
   kGraph = 0,
   kPaddedDpGraph,
   kDraft,
+  kSpecVerify,
   kNonDecode,
   kDummy,
   kUnevenDp,
@@ -205,13 +207,6 @@ uint32_t get_graph_dp_tokens(uint32_t actual_tokens,
   return align_tokens(std::max(bucket_tokens, tp_size), tp_size);
 }
 
-int64_t get_seq_lens_capacity(const xllm::runtime::Options& options) {
-  const int64_t max_seqs = options.max_seqs_per_batch();
-  const int64_t seq_expand =
-      std::max<int64_t>(1, options.num_speculative_tokens() + 1);
-  return max_seqs * seq_expand + 1;
-}
-
 xllm::ModelInputParams make_graph_params(const xllm::ModelInputParams& params,
                                          uint32_t padding_num_tokens) {
   xllm::ModelInputParams graph_params = params;
@@ -227,6 +222,10 @@ RunMode get_run_mode(const xllm::runtime::Options& options,
                      const xllm::ModelInputParams& params) {
   if (options.is_draft_engine()) {
     return RunMode::kDraft;
+  }
+
+  if (params.is_spec_verify) {
+    return RunMode::kSpecVerify;
   }
 
   if (!params.meta.batch_forward_type.is_decode()) {
@@ -276,7 +275,9 @@ GraphPersistentParam::GraphPersistentParam(const ModelArgs& args,
     : num_decoding_tokens_(options.num_decoding_tokens()) {
   const int64_t max_tokens = options.max_tokens_per_batch();
   const int64_t graph_tokens_capacity = get_graph_token_capacity(options);
-  const int64_t max_seq_lens = get_seq_lens_capacity(options);
+  // Sequence lengths are cumulative offsets for graph token rows, including
+  // the terminal offset.
+  const int64_t max_seq_lens = graph_tokens_capacity + 1;
   const int64_t max_seq_len = args.max_position_embeddings();
   const uint32_t block_size = options.block_size();
   const int64_t max_num_blocks_per_req =
@@ -305,6 +306,10 @@ GraphPersistentParam::GraphPersistentParam(const ModelArgs& args,
   // bound covers both paths when speculative decode is enabled.
   q_seq_lens_ = torch::zeros({max_seq_lens}, int_tensor_options);
   kv_seq_lens_ = torch::zeros({max_seq_lens}, int_tensor_options);
+  // Padding decode rows can still execute stateful graph kernels. Point them
+  // at the reserved padding slot so they cannot update a live request state.
+  linear_state_indices_ =
+      torch::full({max_seq_lens}, kPaddingLinearStateId, int_tensor_options);
 }
 
 void GraphPersistentParam::init_params(const ModelInputParams& params,
@@ -326,6 +331,12 @@ void GraphPersistentParam::init_params(const ModelInputParams& params,
     }
     params_.embedding.input_embedding =
         input_embeds_.slice(0, 0, padding_num_tokens);
+  }
+
+  if (!params.embedding.linear_state_ids.empty()) {
+    params_.embedding.linear_state_ids = params.embedding.linear_state_ids;
+    params_.embedding.linear_state_indices =
+        linear_state_indices(padding_num_tokens);
   }
 }
 
@@ -413,6 +424,29 @@ void GraphPersistentParam::update_input_buffer(const torch::Tensor& tokens,
           .slice(0, params.embedding.input_embedding.size(0), padded_tokens)
           .zero_();
     }
+  }
+
+  if (!params.embedding.linear_state_ids.empty()) {
+    const int64_t actual_batch_size = params.embedding.linear_state_ids.size();
+    if (params.embedding.linear_state_indices.defined()) {
+      linear_state_indices_
+          .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_batch_size)
+          .copy_(params.embedding.linear_state_indices, /*non_blocking=*/true);
+    } else {
+      linear_state_indices_
+          .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_batch_size)
+          .copy_(torch::tensor(params.embedding.linear_state_ids,
+                               linear_state_indices_.options()),
+                 /*non_blocking=*/true);
+    }
+    if (padded_tokens > actual_batch_size) {
+      linear_state_indices_
+          .slice(/*dim=*/0, /*start=*/actual_batch_size, /*end=*/padded_tokens)
+          .fill_(kPaddingLinearStateId);
+    }
+    params_.embedding.linear_state_ids = params.embedding.linear_state_ids;
+    params_.embedding.linear_state_indices =
+        linear_state_indices(padded_tokens);
   }
 }
 
@@ -549,6 +583,8 @@ ModelOutput MluGraphExecutorImpl::run_eager(const torch::Tensor& tokens,
   RunMode run_mode = get_run_mode(options_, params);
   if (run_mode == RunMode::kDraft) {
     LOG_FIRST_N(INFO, 1) << "MLU graph fallback to eager for draft worker";
+  } else if (run_mode == RunMode::kSpecVerify) {
+    LOG_FIRST_N(INFO, 1) << "MLU graph fallback to eager for Spec Verify";
   } else if (run_mode == RunMode::kDummy) {
     LOG_FIRST_N(INFO, 1)
         << "MLU graph fallback to eager when decode inputs contain dummy run";
@@ -564,9 +600,12 @@ ModelOutput MluGraphExecutorImpl::run_eager(const torch::Tensor& tokens,
   }
   COUNTER_INC(num_model_execution_total_eager);
   ModelOutput result = model_->forward(tokens, positions, kv_caches, params);
-  return make_graph_output(result.hidden_states,
-                           result.aux_hidden_states,
-                           options_.enable_graph_aux_hidden_states());
+  ModelOutput output =
+      make_graph_output(result.hidden_states,
+                        result.aux_hidden_states,
+                        options_.enable_graph_aux_hidden_states());
+  output.mtp_topk_state = std::move(result.mtp_topk_state);
+  return output;
 }
 
 void MluGraphExecutorImpl::init_param_once() {

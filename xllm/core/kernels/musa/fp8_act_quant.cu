@@ -13,12 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-// clang-format off
+#include <c10/cuda/CUDAException.h>
+#include <c10/cuda/CUDAGuard.h>
 #include <musa_bf16.h>
 #include <musa_fp8.h>
-#include <c10/cuda/CUDAGuard.h>
-#include <c10/cuda/CUDAException.h>
-// clang-format on
 
 #include <cstdint>
 #include <limits>
@@ -261,8 +259,7 @@ __global__ void moe_preprocess_assign_bf16_kernel(
     auto* output_vec = reinterpret_cast<int4*>(output);
     for (int64_t vector_idx = thread_idx; vector_idx < vectors_per_row;
          vector_idx += static_cast<int64_t>(blockDim.x)) {
-      const int4 value =
-          input_vec[token_idx * vectors_per_row + vector_idx];
+      const int4 value = input_vec[token_idx * vectors_per_row + vector_idx];
       for (int32_t topk_idx = 0; topk_idx < topk; ++topk_idx) {
         const int32_t destination = destinations[topk_idx];
         if (destination >= 0) {
@@ -490,8 +487,8 @@ __global__ void moe_ragged_preprocess_assign_bf16_kernel(
        hidden_idx += static_cast<int64_t>(blockDim.x)) {
     const __mt_bfloat16 value = input[token_idx * hidden_size + hidden_idx];
     for (int32_t topk_idx = 0; topk_idx < topk; ++topk_idx) {
-      const int64_t row = token_block_start +
-                          static_cast<int64_t>(topk_idx) * kRaggedAlignment;
+      const int64_t row =
+          token_block_start + static_cast<int64_t>(topk_idx) * kRaggedAlignment;
       output[row * hidden_size + hidden_idx] = value;
     }
   }
@@ -600,8 +597,7 @@ __global__ void moe_ragged_swiglu_bf16_kernel(
   for (int64_t intermediate_idx = static_cast<int64_t>(threadIdx.x);
        intermediate_idx < intermediate_size;
        intermediate_idx += static_cast<int64_t>(blockDim.x)) {
-    const float gate =
-        __bfloat162float(input[gate_base + intermediate_idx]);
+    const float gate = __bfloat162float(input[gate_base + intermediate_idx]);
     const __mt_bfloat16 activated =
         __float2bfloat16_rn(gate / (1.0f + expf(-gate)));
     output[output_base + intermediate_idx] =
@@ -631,8 +627,7 @@ __global__ void moe_indexed_swiglu_bf16_kernel(
   for (int64_t intermediate_idx = static_cast<int64_t>(threadIdx.x);
        intermediate_idx < intermediate_size;
        intermediate_idx += static_cast<int64_t>(blockDim.x)) {
-    const float gate =
-        __bfloat162float(input[gate_base + intermediate_idx]);
+    const float gate = __bfloat162float(input[gate_base + intermediate_idx]);
     const __mt_bfloat16 activated =
         __float2bfloat16_rn(gate / (1.0f + expf(-gate)));
     output[output_base + intermediate_idx] =
@@ -845,8 +840,7 @@ std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
       0,
       stream>>>(
       reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
-      reinterpret_cast<__mt_fp8_e4m3*>(
-          out_q.data_ptr<c10::Float8_e4m3fn>()),
+      reinterpret_cast<__mt_fp8_e4m3*>(out_q.data_ptr<c10::Float8_e4m3fn>()),
       out_scale.data_ptr<float>(),
       k,
       k_groups,
@@ -968,8 +962,7 @@ fused_moe_preprocess_bf16(const torch::Tensor& input,
       torch::full({padded_rows}, -1, topk_ids.options());
   torch::Tensor original_to_padded =
       torch::empty({assignment_count}, topk_ids.options());
-  torch::Tensor expert_counts =
-      torch::zeros({num_experts}, topk_ids.options());
+  torch::Tensor expert_counts = torch::zeros({num_experts}, topk_ids.options());
   torch::Tensor group_m_counts =
       torch::zeros({num_experts}, topk_ids.options());
   if (num_tokens == 0) {
@@ -998,8 +991,10 @@ fused_moe_preprocess_bf16(const torch::Tensor& input,
       static_cast<int32_t>(num_experts),
       static_cast<int32_t>(alignment),
       static_cast<int32_t>(padded_rows));
-  moe_preprocess_assign_bf16_kernel<<<
-      static_cast<unsigned int>(num_tokens), 256, 0, stream>>>(
+  moe_preprocess_assign_bf16_kernel<<<static_cast<unsigned int>(num_tokens),
+                                      256,
+                                      0,
+                                      stream>>>(
       reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
       topk_ids.data_ptr<int32_t>(),
       expert_cursor.data_ptr<int32_t>(),
@@ -1101,10 +1096,12 @@ std::tuple<torch::Tensor, torch::Tensor> fused_moe_ragged_preprocess_bf16(
 
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  moe_ragged_preprocess_assign_bf16_kernel<<<
-      static_cast<unsigned int>(num_tokens), 256, 0, stream>>>(
-      reinterpret_cast<const __mt_bfloat16*>(
-          input.data_ptr<at::BFloat16>()),
+  moe_ragged_preprocess_assign_bf16_kernel<<<static_cast<unsigned int>(
+                                                 num_tokens),
+                                             256,
+                                             0,
+                                             stream>>>(
+      reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
       topk_ids.data_ptr<int32_t>(),
       reinterpret_cast<__mt_bfloat16*>(output.data_ptr<at::BFloat16>()),
       row_expert_ids.data_ptr<int32_t>(),
@@ -1160,10 +1157,11 @@ fused_moe_decode_preprocess_bf16(const torch::Tensor& input,
       static_cast<int32_t>(num_experts),
       static_cast<int32_t>(alignment),
       static_cast<int32_t>(padded_rows));
-  moe_decode_assign_bf16_kernel<<<
-      static_cast<unsigned int>(num_tokens), 256, 0, stream>>>(
-      reinterpret_cast<const __mt_bfloat16*>(
-          input.data_ptr<at::BFloat16>()),
+  moe_decode_assign_bf16_kernel<<<static_cast<unsigned int>(num_tokens),
+                                  256,
+                                  0,
+                                  stream>>>(
+      reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
       original_to_padded.data_ptr<int32_t>(),
       reinterpret_cast<__mt_bfloat16*>(output.data_ptr<at::BFloat16>()),
       num_tokens,
@@ -1174,7 +1172,7 @@ fused_moe_decode_preprocess_bf16(const torch::Tensor& input,
 }
 
 torch::Tensor fused_moe_ragged_swiglu_bf16(const torch::Tensor& input,
-                                            int64_t alignment) {
+                                           int64_t alignment) {
   CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
         input.is_contiguous())
       << "Ragged BF16 SwiGLU requires contiguous BF16 [M, 2N].";
@@ -1194,13 +1192,11 @@ torch::Tensor fused_moe_ragged_swiglu_bf16(const torch::Tensor& input,
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
   constexpr int32_t kSwiGluThreads = 256;
-  moe_ragged_swiglu_bf16_kernel<<<
-      static_cast<unsigned int>(assignment_count),
-      kSwiGluThreads,
-      0,
-      stream>>>(
-      reinterpret_cast<const __mt_bfloat16*>(
-          input.data_ptr<at::BFloat16>()),
+  moe_ragged_swiglu_bf16_kernel<<<static_cast<unsigned int>(assignment_count),
+                                  kSwiGluThreads,
+                                  0,
+                                  stream>>>(
+      reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
       reinterpret_cast<__mt_bfloat16*>(output.data_ptr<at::BFloat16>()),
       assignment_count,
       intermediate_size);
@@ -1208,21 +1204,20 @@ torch::Tensor fused_moe_ragged_swiglu_bf16(const torch::Tensor& input,
   return output;
 }
 
-torch::Tensor fused_moe_indexed_swiglu_bf16(
-    const torch::Tensor& input,
-    const torch::Tensor& valid_rows) {
+torch::Tensor fused_moe_indexed_swiglu_bf16(const torch::Tensor& input,
+                                            const torch::Tensor& valid_rows) {
   CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
         input.is_contiguous())
       << "Indexed BF16 SwiGLU requires contiguous BF16 [M, 2N].";
-  CHECK(valid_rows.scalar_type() == torch::kInt32 &&
-        valid_rows.dim() == 1 && valid_rows.is_contiguous())
+  CHECK(valid_rows.scalar_type() == torch::kInt32 && valid_rows.dim() == 1 &&
+        valid_rows.is_contiguous())
       << "Indexed BF16 SwiGLU requires contiguous int32 row indices.";
   CHECK_EQ(input.size(1) % 2, 0);
 
   const int64_t assignment_count = valid_rows.size(0);
   const int64_t intermediate_size = input.size(1) / 2;
-  torch::Tensor output = torch::empty(
-      {input.size(0), intermediate_size}, input.options());
+  torch::Tensor output =
+      torch::empty({input.size(0), intermediate_size}, input.options());
   if (assignment_count == 0) {
     return output;
   }
@@ -1238,10 +1233,11 @@ torch::Tensor fused_moe_indexed_swiglu_bf16(
     constexpr int32_t kFlatSwiGluThreads = 512;
     const int64_t blocks =
         (total_chunks + kFlatSwiGluThreads - 1) / kFlatSwiGluThreads;
-    moe_indexed_swiglu_bf16_vec8_kernel<<<
-        static_cast<unsigned int>(blocks), kFlatSwiGluThreads, 0, stream>>>(
-        reinterpret_cast<const __mt_bfloat16*>(
-            input.data_ptr<at::BFloat16>()),
+    moe_indexed_swiglu_bf16_vec8_kernel<<<static_cast<unsigned int>(blocks),
+                                          kFlatSwiGluThreads,
+                                          0,
+                                          stream>>>(
+        reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
         valid_rows.data_ptr<int32_t>(),
         reinterpret_cast<__mt_bfloat16*>(output.data_ptr<at::BFloat16>()),
         static_cast<int32_t>(assignment_count),
@@ -1253,13 +1249,11 @@ torch::Tensor fused_moe_indexed_swiglu_bf16(
   }
 
   constexpr int32_t kSwiGluThreads = 256;
-  moe_indexed_swiglu_bf16_kernel<<<
-      static_cast<unsigned int>(assignment_count),
-      kSwiGluThreads,
-      0,
-      stream>>>(
-      reinterpret_cast<const __mt_bfloat16*>(
-          input.data_ptr<at::BFloat16>()),
+  moe_indexed_swiglu_bf16_kernel<<<static_cast<unsigned int>(assignment_count),
+                                   kSwiGluThreads,
+                                   0,
+                                   stream>>>(
+      reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
       valid_rows.data_ptr<int32_t>(),
       reinterpret_cast<__mt_bfloat16*>(output.data_ptr<at::BFloat16>()),
       assignment_count,

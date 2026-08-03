@@ -85,8 +85,6 @@ VLMMaster::VLMMaster(const Options& options)
       .max_seqs_per_batch(options.max_seqs_per_batch())
       .max_tokens_per_chunk_for_prefill(
           options.max_tokens_per_chunk_for_prefill())
-      .enable_adaptive_prefill_oneshot(
-          options.enable_adaptive_prefill_oneshot())
       .dp_size(options_.dp_size())
       .enable_disagg_pd(options_.enable_disagg_pd())
       .enable_chunked_prefill(options_.enable_chunked_prefill())
@@ -421,6 +419,7 @@ std::shared_ptr<Request> VLMMaster::build_request(
                          options_.enable_schedule_overlap(),
                          callback,
                          nullptr);
+  req_state.include_stop_str_in_output = sp.include_stop_str_in_output;
   auto request = std::make_shared<Request>(sp.request_id,
                                            sp.x_request_id,
                                            sp.x_request_time,

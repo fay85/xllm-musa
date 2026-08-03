@@ -77,4 +77,4 @@ void update_llm_decode_metadata_from_host(
     const LlmDecodeMetadataHostUpdateParams& params,
     LlmDecodeMetadataUpdateStream stream);
 
-}
+}  // namespace xllm::kernel::cuda

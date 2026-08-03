@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/runtime/cuda_graph_executor_impl.h"
+#include "cuda_graph_executor_impl.h"
 
 #include <c10/core/Device.h>
 #include <c10/core/TensorOptions.h>

@@ -93,10 +93,6 @@ class ContinuousScheduler : public Scheduler {
     // the max tokens per chunk for request in prefill stage.
     PROPERTY(int32_t, max_tokens_per_chunk_for_prefill);
 
-    // Allow one-shot prefill for an isolated request that fits the batch
-    // budget.
-    PROPERTY(bool, enable_adaptive_prefill_oneshot) = false;
-
     // the number of speculative tokens per step
     PROPERTY(int32_t, num_speculative_tokens) = 0;
 
@@ -285,7 +281,6 @@ class ContinuousScheduler : public Scheduler {
  protected:
   void clear_mtp_bootstrap(Request* request);
 
-  // Rounds a per-step wall-clock latency to an amortized per-token latency,
   // i.e. round(tbt_ms / num_tokens). num_tokens must be > 0.
   static int64_t amortized_token_latency_ms(int64_t tbt_ms, size_t num_tokens);
 

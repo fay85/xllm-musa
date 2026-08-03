@@ -96,6 +96,7 @@ ModelContext ModelContext::with_parallel_args(
 #endif
   derived.model_id_ = model_id_;
   derived.optimization_config_ = optimization_config_;
+  derived.flash_comm1_options_ = flash_comm1_options_;
   return derived;
 }
 
@@ -107,14 +108,13 @@ void ModelContext::derive_optimization_config() {
   optimization_config_.enable_spec_token_broadcast = false;
 
   // determine whether to enable fused kernel based on backend
-  if (Platform::is_dcu()) {
+  if (Platform::is_npu()) {
+    // Unify speculative sampling results across TP ranks to guard against
+    // per-rank RNG divergence under enable_schedule_overlap.
+    optimization_config_.enable_spec_token_broadcast = true;
+  } else if (Platform::is_dcu()) {
     // DCU currently uses the unfused speculative sampling path.
     optimization_config_.enable_fused_spec_kernel = false;
-  } else if (Platform::is_musa()) {
-    // MUSA provides a target-only fused rejection kernel for the selected-only
-    // MTP probability layout used by Qwen3.5.
-    optimization_config_.enable_fused_spec_kernel =
-        util::get_bool_env("XLLM_MTP_FUSED_SAMPLER", true);
   } else if (Platform::is_mlu()) {
     // TODO: enable fused spec kernel for mlu backend
     // The current implementation of fused spec kernel is not stable.
@@ -126,7 +126,7 @@ void ModelContext::derive_optimization_config() {
     //  weights and bias loading.
     optimization_config_.enable_fused_indexer_qk = true;
     // Unify speculative sampling results across TP ranks to guard against
-    // per-rank RNG divergence under enable_schedule_overlap.
+    // per-rank RNG divergence.
     optimization_config_.enable_spec_token_broadcast = true;
   }
 }

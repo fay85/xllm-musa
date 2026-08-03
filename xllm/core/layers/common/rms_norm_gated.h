@@ -41,14 +41,7 @@ class RmsNormGatedImpl : public torch::nn::Module {
   DEFINE_WEIGHT(weight);
   int64_t norm_dim_;
   double eps_;
-
 #if defined(USE_CUDA) || defined(USE_MUSA)
-  // Persistent output buffer for the fused gated RMSNorm CUDA/MUSA kernel.
-  // Sized lazily on first call so that subsequent decode-graph captures find
-  // the buffer already allocated and large enough; replays reuse the same
-  // storage and the kernel writes into a slice view of it. The libtorch
-  // reference impl does not consult this field, so it stays a no-op on
-  // backends that don't use the fused kernel.
   mutable torch::Tensor out_buf_;
 #endif
 };

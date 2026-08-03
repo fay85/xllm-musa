@@ -448,11 +448,10 @@ fused_moe_decode_preprocess_bf16(const torch::Tensor& input,
                                  int64_t alignment);
 
 torch::Tensor fused_moe_ragged_swiglu_bf16(const torch::Tensor& input,
-                                            int64_t alignment);
+                                           int64_t alignment);
 
-torch::Tensor fused_moe_indexed_swiglu_bf16(
-    const torch::Tensor& input,
-    const torch::Tensor& valid_rows);
+torch::Tensor fused_moe_indexed_swiglu_bf16(const torch::Tensor& input,
+                                            const torch::Tensor& valid_rows);
 
 std::tuple<torch::Tensor, torch::Tensor> fused_moe_ragged_swiglu_quant_fp8(
     const torch::Tensor& input,
@@ -567,10 +566,10 @@ torch::Tensor contiguous_moe_gemm_bf16(const torch::Tensor& input,
 // Fixed-block BF16 Ragged GEMM. row_expert_ids has one entry per input row;
 // valid expert ids occur in aligned blocks and padding rows contain -1.
 torch::Tensor ragged_moe_gemm_bf16(const torch::Tensor& input,
-                                  const torch::Tensor& weights,
-                                  const torch::Tensor& row_expert_ids,
-                                  torch::ScalarType output_dtype,
-                                  int64_t alignment);
+                                   const torch::Tensor& weights,
+                                   const torch::Tensor& row_expert_ids,
+                                   torch::ScalarType output_dtype,
+                                   int64_t alignment);
 
 // Compact FP8 grouped GEMM. Input rows must be sorted by expert and
 // token_counts must contain the number of consecutive rows for each expert.

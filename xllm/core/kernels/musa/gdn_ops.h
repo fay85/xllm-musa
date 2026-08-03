@@ -110,71 +110,64 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
-torch::Tensor mate_gated_delta_rule_mtp(
-    MateGatedDeltaRuleMtpParams& params);
+torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params);
 
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
-void scatter_gdn_mtp_verify_states(
-    torch::Tensor& ssm_cache,
-    const torch::Tensor& ssm_intermediate,
-    torch::Tensor& conv_cache,
-    const torch::Tensor& conv_intermediate,
-    const torch::Tensor& logical_state_indices,
-    const torch::Tensor& accepted_tokens,
-    int64_t checkpoint_stride);
+void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
+                                   const torch::Tensor& ssm_intermediate,
+                                   torch::Tensor& conv_cache,
+                                   const torch::Tensor& conv_intermediate,
+                                   const torch::Tensor& logical_state_indices,
+                                   const torch::Tensor& accepted_tokens,
+                                   int64_t checkpoint_stride);
 
-void causal_conv1d_fwd(
-    const torch::Tensor &x,
-    const torch::Tensor &weight,
-    torch::Tensor &out,
-    const std::optional<torch::Tensor> &bias,
-    const std::optional<torch::Tensor> &conv_states,
-    const std::optional<torch::Tensor> &query_start_loc,
-    const std::optional<torch::Tensor> &cache_indices,
-    const std::optional<torch::Tensor> &has_initial_state,
-    bool silu_activation,
-    int64_t pad_slot_id);
+void causal_conv1d_fwd(const torch::Tensor& x,
+                       const torch::Tensor& weight,
+                       torch::Tensor& out,
+                       const std::optional<torch::Tensor>& bias,
+                       const std::optional<torch::Tensor>& conv_states,
+                       const std::optional<torch::Tensor>& query_start_loc,
+                       const std::optional<torch::Tensor>& cache_indices,
+                       const std::optional<torch::Tensor>& has_initial_state,
+                       bool silu_activation,
+                       int64_t pad_slot_id);
 
-void causal_conv1d_fwd_token_major(
-    const torch::Tensor& x,
-    const torch::Tensor& weight,
-    torch::Tensor& out,
-    const std::optional<torch::Tensor>& bias,
-    const torch::Tensor& conv_states,
-    const torch::Tensor& query_start_loc,
-    const torch::Tensor& cache_indices,
-    const torch::Tensor& has_initial_state,
-    bool silu_activation,
-    int64_t pad_slot_id);
+void causal_conv1d_fwd_token_major(const torch::Tensor& x,
+                                   const torch::Tensor& weight,
+                                   torch::Tensor& out,
+                                   const std::optional<torch::Tensor>& bias,
+                                   const torch::Tensor& conv_states,
+                                   const torch::Tensor& query_start_loc,
+                                   const torch::Tensor& cache_indices,
+                                   const torch::Tensor& has_initial_state,
+                                   bool silu_activation,
+                                   int64_t pad_slot_id);
 
-torch::Tensor causal_conv1d(
-    const torch::Tensor& x,
-    const torch::Tensor& weight,
-    const torch::Tensor& conv_state,
-    const std::optional<torch::Tensor>& bias_opt,
-    const torch::IntArrayRef query_start_loc_opt,
-    const torch::IntArrayRef cache_indices_opt,
-    const torch::IntArrayRef initial_state_mode_opt,
-    const torch::IntArrayRef num_accepted_tokens_opt,
-    int64_t activation_mode,
-    int64_t pad_slot_id,
-    int64_t run_mode);
+torch::Tensor causal_conv1d(const torch::Tensor& x,
+                            const torch::Tensor& weight,
+                            const torch::Tensor& conv_state,
+                            const std::optional<torch::Tensor>& bias_opt,
+                            const torch::IntArrayRef query_start_loc_opt,
+                            const torch::IntArrayRef cache_indices_opt,
+                            const torch::IntArrayRef initial_state_mode_opt,
+                            const torch::IntArrayRef num_accepted_tokens_opt,
+                            int64_t activation_mode,
+                            int64_t pad_slot_id,
+                            int64_t run_mode);
 
-torch::Tensor causal_conv1d_prefill(
-    const torch::Tensor& x,
-    const torch::Tensor& weight,
-    const torch::Tensor& conv_state,
-    const std::optional<torch::Tensor>& bias,
-    const torch::Tensor& query_start_loc,
-    const torch::Tensor& cache_indices,
-    const torch::Tensor& has_initial_state,
-    bool silu_activation);
+torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
+                                    const torch::Tensor& weight,
+                                    const torch::Tensor& conv_state,
+                                    const std::optional<torch::Tensor>& bias,
+                                    const torch::Tensor& query_start_loc,
+                                    const torch::Tensor& cache_indices,
+                                    const torch::Tensor& has_initial_state,
+                                    bool silu_activation);
 
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params);
-
 
 void causal_conv1d_decode_fused(const torch::Tensor& x,
                                 const torch::Tensor& weight,
@@ -203,6 +196,6 @@ void gated_rms_norm_fused(const torch::Tensor& x,
                           torch::Tensor output,
                           double eps);
 
-}
-}
-}
+}  // namespace cuda
+}  // namespace kernel
+}  // namespace xllm

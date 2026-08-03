@@ -261,9 +261,10 @@ void RecMultiRoundBatchInputBuilder::extract_tokens_and_positions(
   }
 
   // `linear_state_ids` is consumed per sequence, so preserve one entry per
-  // logical batch row even when this slice is not the last prefill chunk.
-  base_state.linear_state_ids.push_back(
-      sequence->get_linear_state_slot_id());
+  // logical batch row even when this slice is not the last prefill chunk. The
+  // slot is drawn from the dedicated LinearStateBlockManager and is -1 when
+  // linear state is disabled.
+  base_state.linear_state_ids.push_back(sequence->get_linear_state_slot_id());
 
   // Add extra token id
   if (n_tokens == seq_len) {
@@ -372,14 +373,8 @@ ForwardInput RecMultiRoundBatchInputBuilder::state_to_forward_input() {
   input_params.attention.device.new_cache_slots =
       torch::tensor(state.new_token_slot_ids, torch::kInt);
 
-  // for flashinfer
-  // Stash the CPU tensor into both attention.host (kept on host across
-  // ModelInputParams::to(device)) and attention.device (later moved to the
-  // target device). The host mirror lets AttentionMetadataBuilder hand CPU
-  // pointers to the Mate FFI batch_decode bridge without paying a per-layer
-  // D2H sync. See batch_input_builder.cpp for the matching change.
-  auto paged_kv_indptr_cpu =
-      torch::tensor(state.paged_kv_indptr, torch::kInt);
+  // Keep the original CPU paged-KV tensors alive for graph-safe Mate FFI.
+  auto paged_kv_indptr_cpu = torch::tensor(state.paged_kv_indptr, torch::kInt);
   auto paged_kv_indices_cpu =
       torch::tensor(state.paged_kv_indices, torch::kInt);
   auto paged_kv_last_page_len_cpu =
@@ -398,8 +393,8 @@ ForwardInput RecMultiRoundBatchInputBuilder::state_to_forward_input() {
   // Setup multimodal data
   input_params.multimodal.mm_data.batch(mm_data_vec_);
 
-  // Setup block tables (-1 padded; see batch_input_builder.cpp).
-  util::pad_2d_vector(state.block_tables_vec, /*pad_value=*/-1);
+  // Setup block tables
+  util::pad_2d_vector(state.block_tables_vec, /*pad_value=*/0);
   input_params.attention.device.block_tables =
       create_2d_tensor(state.block_tables_vec, torch::kInt);
   input_params.attention.host.block_tables =

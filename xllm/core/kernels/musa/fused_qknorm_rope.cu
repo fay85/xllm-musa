@@ -22,8 +22,8 @@ limitations under the License.
 #include <cmath>
 #include <type_traits>
 
-#include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/cuda/device_utils.cuh"
+#include "core/kernels/musa/musa_ops_api.h"
 
 using at::device_of;
 using ::xllm::kernel::cuda::xllm_ldg;
@@ -61,20 +61,19 @@ inline __device__ __host__ T div_up(T m, T n) {
 }
 
 template <typename scalar_t, int head_dim, bool interleave>
-__global__ void fused_qknorm_rope_kernel(
-    void* qkv_void,
-    int const num_heads_q,
-    int const num_heads_k,
-    int const total_heads_per_token,
-    int const k_head_offset,
-    float const eps,
-    float const weight_offset,
-    void const* q_weight_void,
-    void const* k_weight_void,
-    void const* cos_sin_cache_void,
-    int32_t const* position_ids,
-    int const num_tokens,
-    int const rotary_dim) {
+__global__ void fused_qknorm_rope_kernel(void* qkv_void,
+                                         int const num_heads_q,
+                                         int const num_heads_k,
+                                         int const total_heads_per_token,
+                                         int const k_head_offset,
+                                         float const eps,
+                                         float const weight_offset,
+                                         void const* q_weight_void,
+                                         void const* k_weight_void,
+                                         void const* cos_sin_cache_void,
+                                         int32_t const* position_ids,
+                                         int const num_tokens,
+                                         int const rotary_dim) {
   using T = scalar_t;
   T* qkv = reinterpret_cast<T*>(qkv_void);
   T const* q_weight = reinterpret_cast<T const*>(q_weight_void);
@@ -99,8 +98,7 @@ __global__ void fused_qknorm_rope_kernel(
   bool const is_q = local_head_idx < num_heads_q;
   int const head_idx = is_q ? local_head_idx : local_head_idx - num_heads_q;
 
-  static_assert(head_dim % (32 * 2) == 0,
-                "head_dim must be divisible by 64");
+  static_assert(head_dim % (32 * 2) == 0, "head_dim must be divisible by 64");
   constexpr int kNumElemsPerThread = head_dim / 32;
   float elements[kNumElemsPerThread];
   constexpr int kElemSizeBytes = kNumElemsPerThread * sizeof(scalar_t);
@@ -178,8 +176,7 @@ __global__ void fused_qknorm_rope_kernel(
       int pair_offset = (rotary_dim / 2) / kNumElemsPerThread;
 #pragma unroll
       for (int i = 0; i < kNumElemsPerThread; i++) {
-        elements2[i] =
-            __shfl_xor_sync(kFinalMask, elements[i], pair_offset);
+        elements2[i] = __shfl_xor_sync(kFinalMask, elements[i], pair_offset);
 
         if (lane_id < pair_offset) {
           elements2[i] = -elements2[i];
@@ -249,54 +246,54 @@ void launch_fused_qknorm_rope(void* qkv,
       DISPATCH_INTERLEAVE(interleave, INTERLEAVE, {
         fused_qknorm_rope_kernel<scalar_t, 64, INTERLEAVE>
             <<<gridDim, blockDim, 0, stream>>>(qkv,
-                                                num_heads_q,
-                                                num_heads_k,
-                                                total_heads_per_token,
-                                                k_head_offset,
-                                                eps,
-                                                weight_offset,
-                                                q_weight,
-                                                k_weight,
-                                                cos_sin_cache,
-                                                position_ids,
-                                                num_tokens,
-                                                rotary_dim);
+                                               num_heads_q,
+                                               num_heads_k,
+                                               total_heads_per_token,
+                                               k_head_offset,
+                                               eps,
+                                               weight_offset,
+                                               q_weight,
+                                               k_weight,
+                                               cos_sin_cache,
+                                               position_ids,
+                                               num_tokens,
+                                               rotary_dim);
       });
       break;
     case 128:
       DISPATCH_INTERLEAVE(interleave, INTERLEAVE, {
         fused_qknorm_rope_kernel<scalar_t, 128, INTERLEAVE>
             <<<gridDim, blockDim, 0, stream>>>(qkv,
-                                                num_heads_q,
-                                                num_heads_k,
-                                                total_heads_per_token,
-                                                k_head_offset,
-                                                eps,
-                                                weight_offset,
-                                                q_weight,
-                                                k_weight,
-                                                cos_sin_cache,
-                                                position_ids,
-                                                num_tokens,
-                                                rotary_dim);
+                                               num_heads_q,
+                                               num_heads_k,
+                                               total_heads_per_token,
+                                               k_head_offset,
+                                               eps,
+                                               weight_offset,
+                                               q_weight,
+                                               k_weight,
+                                               cos_sin_cache,
+                                               position_ids,
+                                               num_tokens,
+                                               rotary_dim);
       });
       break;
     case 256:
       DISPATCH_INTERLEAVE(interleave, INTERLEAVE, {
         fused_qknorm_rope_kernel<scalar_t, 256, INTERLEAVE>
             <<<gridDim, blockDim, 0, stream>>>(qkv,
-                                                num_heads_q,
-                                                num_heads_k,
-                                                total_heads_per_token,
-                                                k_head_offset,
-                                                eps,
-                                                weight_offset,
-                                                q_weight,
-                                                k_weight,
-                                                cos_sin_cache,
-                                                position_ids,
-                                                num_tokens,
-                                                rotary_dim);
+                                               num_heads_q,
+                                               num_heads_k,
+                                               total_heads_per_token,
+                                               k_head_offset,
+                                               eps,
+                                               weight_offset,
+                                               q_weight,
+                                               k_weight,
+                                               cos_sin_cache,
+                                               position_ids,
+                                               num_tokens,
+                                               rotary_dim);
       });
       break;
     default:
@@ -309,19 +306,18 @@ void launch_fused_qknorm_rope(void* qkv,
 
 namespace xllm::kernel::cuda {
 
-void fused_qk_norm_rope(
-    torch::Tensor& qkv,
-    int64_t num_heads_q,
-    int64_t num_heads_k,
-    int64_t num_heads_v,
-    int64_t head_dim,
-    double eps,
-    const torch::Tensor& q_weight,
-    const torch::Tensor& k_weight,
-    const torch::Tensor& cos_sin_cache,
-    bool interleaved,
-    const torch::Tensor& position_ids,
-     int64_t k_head_offset) {
+void fused_qk_norm_rope(torch::Tensor& qkv,
+                        int64_t num_heads_q,
+                        int64_t num_heads_k,
+                        int64_t num_heads_v,
+                        int64_t head_dim,
+                        double eps,
+                        const torch::Tensor& q_weight,
+                        const torch::Tensor& k_weight,
+                        const torch::Tensor& cos_sin_cache,
+                        bool interleaved,
+                        const torch::Tensor& position_ids,
+                        int64_t k_head_offset) {
   CHECK(qkv.is_contiguous()) << "qkv must be contiguous";
   CHECK(position_ids.is_contiguous()) << "position_ids must be contiguous";
   CHECK(position_ids.scalar_type() == torch::kInt32)
@@ -354,28 +350,40 @@ void fused_qk_norm_rope(
 
   if (qkv.scalar_type() == at::ScalarType::BFloat16) {
     launch_fused_qknorm_rope<__nv_bfloat16>(
-        qkv.data_ptr(), static_cast<int>(num_tokens),
-        static_cast<int>(num_heads_q), static_cast<int>(num_heads_k),
+        qkv.data_ptr(),
+        static_cast<int>(num_tokens),
+        static_cast<int>(num_heads_q),
+        static_cast<int>(num_heads_k),
         static_cast<int>(total_heads_per_token),
         static_cast<int>(k_head_offset > 0 ? k_head_offset : num_heads_q),
         static_cast<int>(head_dim),
-        static_cast<int>(cos_sin_cache.size(1)), static_cast<float>(eps),
+        static_cast<int>(cos_sin_cache.size(1)),
+        static_cast<float>(eps),
         weight_offset,
-        q_weight.data_ptr(), k_weight.data_ptr(),
-        cos_sin_cache.data_ptr(), interleaved,
-        reinterpret_cast<int32_t const*>(position_ids.data_ptr()), stream);
+        q_weight.data_ptr(),
+        k_weight.data_ptr(),
+        cos_sin_cache.data_ptr(),
+        interleaved,
+        reinterpret_cast<int32_t const*>(position_ids.data_ptr()),
+        stream);
   } else if (qkv.scalar_type() == at::ScalarType::Half) {
     launch_fused_qknorm_rope<__half>(
-        qkv.data_ptr(), static_cast<int>(num_tokens),
-        static_cast<int>(num_heads_q), static_cast<int>(num_heads_k),
+        qkv.data_ptr(),
+        static_cast<int>(num_tokens),
+        static_cast<int>(num_heads_q),
+        static_cast<int>(num_heads_k),
         static_cast<int>(total_heads_per_token),
         static_cast<int>(k_head_offset > 0 ? k_head_offset : num_heads_q),
         static_cast<int>(head_dim),
-        static_cast<int>(cos_sin_cache.size(1)), static_cast<float>(eps),
+        static_cast<int>(cos_sin_cache.size(1)),
+        static_cast<float>(eps),
         weight_offset,
-        q_weight.data_ptr(), k_weight.data_ptr(),
-        cos_sin_cache.data_ptr(), interleaved,
-        reinterpret_cast<int32_t const*>(position_ids.data_ptr()), stream);
+        q_weight.data_ptr(),
+        k_weight.data_ptr(),
+        cos_sin_cache.data_ptr(),
+        interleaved,
+        reinterpret_cast<int32_t const*>(position_ids.data_ptr()),
+        stream);
   } else {
     CHECK(false) << "Unsupported dtype for fused_qk_norm_rope: "
                  << qkv.scalar_type();

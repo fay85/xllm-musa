@@ -13,17 +13,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "kernels/musa/musa_ops_api.h"
-
 #include <glog/logging.h>
 #include <tvm/ffi/extra/stl.h>
+#include <unistd.h>
 
 #include <cstdlib>
 #include <string>
 #include <tuple>
 
-#include <unistd.h>
-
+#include "kernels/musa/musa_ops_api.h"
 #include "kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::kernel::cuda {
@@ -44,13 +42,14 @@ void check_masked_moe_inputs(const torch::Tensor& input,
   TORCH_CHECK(weights.dim() == 3,
               "Mate masked MoE weights must be [experts, N, K], got ",
               weights.sizes());
-  TORCH_CHECK(token_counts.dim() == 1 &&
-                  token_counts.size(0) == input.size(0),
+  TORCH_CHECK(token_counts.dim() == 1 && token_counts.size(0) == input.size(0),
               "Mate masked MoE token_counts must have one entry per expert.");
-  TORCH_CHECK(input.size(0) == weights.size(0) &&
-                  input.size(1) > 0 && input.size(2) == weights.size(2),
+  TORCH_CHECK(input.size(0) == weights.size(0) && input.size(1) > 0 &&
+                  input.size(2) == weights.size(2),
               "Mate masked MoE input/weight shapes are incompatible: input=",
-              input.sizes(), " weights=", weights.sizes());
+              input.sizes(),
+              " weights=",
+              weights.sizes());
   TORCH_CHECK(input.is_contiguous() && weights.is_contiguous() &&
                   token_counts.is_contiguous(),
               "Mate masked MoE tensors must be contiguous.");
@@ -70,9 +69,8 @@ torch::Tensor masked_moe_gemm_bf16(const torch::Tensor& input,
   check_masked_moe_inputs(input, weights, token_counts, expected_tokens);
   MusaTvmffiStreamGuard stream_guard(input.device());
 
-  auto output = torch::empty(
-      {input.size(0), input.size(1), weights.size(1)},
-      input.options().dtype(output_dtype));
+  auto output = torch::empty({input.size(0), input.size(1), weights.size(1)},
+                             input.options().dtype(output_dtype));
   get_function(kGemmOpsUri, "masked_moe_gemm_16bit")(
       to_ffi_tensor_view(input),
       to_ffi_tensor_view(weights),
@@ -111,9 +109,8 @@ torch::Tensor masked_moe_gemm_fp8(const torch::Tensor& input,
               "Mate FP8 MoE scales must be contiguous.");
 
   MusaTvmffiStreamGuard stream_guard(input.device());
-  auto output = torch::empty(
-      {input.size(0), input.size(1), weights.size(1)},
-      input.options().dtype(output_dtype));
+  auto output = torch::empty({input.size(0), input.size(1), weights.size(1)},
+                             input.options().dtype(output_dtype));
   get_function(kGemmOpsUri, "masked_moe_gemm_8bit")(
       std::make_tuple(to_ffi_borrowed_tensor(input),
                       to_ffi_borrowed_tensor(input_scale)),
@@ -152,8 +149,8 @@ torch::Tensor contiguous_moe_gemm_bf16(const torch::Tensor& input,
   CHECK_EQ(token_counts.scalar_type(), torch::kInt32);
 
   MusaTvmffiStreamGuard stream_guard(input.device());
-  torch::Tensor output = torch::empty(
-      {input.size(0), weights.size(1)}, input.options().dtype(output_dtype));
+  torch::Tensor output = torch::empty({input.size(0), weights.size(1)},
+                                      input.options().dtype(output_dtype));
   get_function(kGemmOpsUri, "m_grouped_contig_gemm_16bit")(
       to_ffi_tensor_view(input),
       to_ffi_tensor_view(weights),
@@ -188,8 +185,8 @@ torch::Tensor ragged_moe_gemm_bf16(const torch::Tensor& input,
   CHECK_EQ(input.size(0) % alignment, 0);
 
   MusaTvmffiStreamGuard stream_guard(input.device());
-  torch::Tensor output = torch::empty(
-      {input.size(0), weights.size(1)}, input.options().dtype(output_dtype));
+  torch::Tensor output = torch::empty({input.size(0), weights.size(1)},
+                                      input.options().dtype(output_dtype));
   get_function(kGemmOpsUri, "ragged_moe_gemm_16bit")(
       to_ffi_tensor_view(input),
       to_ffi_tensor_view(weights),
@@ -237,8 +234,8 @@ torch::Tensor contiguous_moe_gemm_fp8(const torch::Tensor& input,
   CHECK_EQ(weight_scale.size(2) * 128, weights.size(2));
 
   MusaTvmffiStreamGuard stream_guard(input.device());
-  torch::Tensor output = torch::empty(
-      {input.size(0), weights.size(1)}, input.options().dtype(output_dtype));
+  torch::Tensor output = torch::empty({input.size(0), weights.size(1)},
+                                      input.options().dtype(output_dtype));
   get_function(kGemmOpsUri, "m_grouped_contig_gemm_8bit")(
       std::make_tuple(to_ffi_borrowed_tensor(input),
                       to_ffi_borrowed_tensor(input_scale)),
@@ -291,8 +288,8 @@ torch::Tensor ragged_moe_gemm_fp8(const torch::Tensor& input,
   CHECK_EQ(input.size(0) % alignment, 0);
 
   MusaTvmffiStreamGuard stream_guard(input.device());
-  torch::Tensor output = torch::empty(
-      {input.size(0), weights.size(1)}, input.options().dtype(output_dtype));
+  torch::Tensor output = torch::empty({input.size(0), weights.size(1)},
+                                      input.options().dtype(output_dtype));
   get_function(kGemmOpsUri, "ragged_moe_gemm_8bit")(
       std::make_tuple(to_ffi_borrowed_tensor(input),
                       to_ffi_borrowed_tensor(input_scale)),
@@ -318,12 +315,11 @@ std::tuple<torch::Tensor, torch::Tensor> musa_moe_topk_softmax(
   CHECK_LE(topk, router_logits.size(1));
 
   MusaTvmffiStreamGuard stream_guard(router_logits.device());
-  auto topk_weights = torch::empty(
-      {router_logits.size(0), topk},
-      router_logits.options().dtype(torch::kFloat32));
-  auto topk_ids = torch::empty(
-      {router_logits.size(0), topk},
-      router_logits.options().dtype(torch::kInt32));
+  auto topk_weights =
+      torch::empty({router_logits.size(0), topk},
+                   router_logits.options().dtype(torch::kFloat32));
+  auto topk_ids = torch::empty({router_logits.size(0), topk},
+                               router_logits.options().dtype(torch::kInt32));
   auto unused_correction_bias = topk_weights.reshape({-1});
   get_function(kMusaTopkUri, "sgl_musa_topk_softmax")(
       to_ffi_tensor_view(topk_weights),
@@ -342,8 +338,8 @@ bool musa_moe_topk_softmax_available() {
     if (ops_path == nullptr || ops_path[0] == '\0') {
       return false;
     }
-    const std::string so_path = std::string(ops_path) + "/" + kMusaTopkUri +
-                                "/" + kMusaTopkUri + ".so";
+    const std::string so_path =
+        std::string(ops_path) + "/" + kMusaTopkUri + "/" + kMusaTopkUri + ".so";
     return ::access(so_path.c_str(), R_OK) == 0;
   }();
   return available;

@@ -26,6 +26,7 @@ limitations under the License.
 
 #if defined(USE_MUSA)
 #include <musa_runtime_api.h>
+
 #include "torch_musa/csrc/core/MUSAStream.h"
 #elif defined(USE_CUDA)
 #include <cuda_runtime_api.h>
@@ -56,9 +57,9 @@ class PrefillBreakdown final {
     kGdnOProj = 13,
     // Nested under kFullAttn (Phase G.5b).
     kFullQkv = 14,
-    kFullPrep = 15,  // slice + QK-norm + RoPE (+ optional gate slice)
-    kFullFa = 16,    // FlashInfer FA2/FA3 / AttentionImpl::forward
-    kFullOProj = 17, // output gate + o_proj
+    kFullPrep = 15,   // slice + QK-norm + RoPE (+ optional gate slice)
+    kFullFa = 16,     // FlashInfer FA2/FA3 / AttentionImpl::forward
+    kFullOProj = 17,  // output gate + o_proj
     // Nested inside the projection buckets above. These isolate the native
     // block-FP8 preparation, activation quantizer, and Mate GEMM.
     kFp8Prepare = 18,
@@ -149,108 +150,67 @@ class PrefillBreakdown final {
       accounted += sums[i];
     }
     const double other = wall_fwd_ms - accounted;
-    const double mlp_ms =
-        sums[static_cast<size_t>(Bucket::kMlpGateUp)] +
-        sums[static_cast<size_t>(Bucket::kMlpAct)] +
-        sums[static_cast<size_t>(Bucket::kMlpDown)];
-    const double gdn_non_mate_ms =
-        sums[static_cast<size_t>(Bucket::kGdnAttn)] -
-        sums[static_cast<size_t>(Bucket::kMate)];
+    const double mlp_ms = sums[static_cast<size_t>(Bucket::kMlpGateUp)] +
+                          sums[static_cast<size_t>(Bucket::kMlpAct)] +
+                          sums[static_cast<size_t>(Bucket::kMlpDown)];
+    const double gdn_non_mate_ms = sums[static_cast<size_t>(Bucket::kGdnAttn)] -
+                                   sums[static_cast<size_t>(Bucket::kMate)];
 
-    LOG(INFO) << "[PREFILL_BREAKDOWN] n_tokens=" << n_tokens
-              << " batch_bs=" << batch_bs << " wall_ms=" << wall_fwd_ms
-              << " accounted_ms=" << accounted << " other_ms=" << other
-              << " embed_ms=" << sums[static_cast<size_t>(Bucket::kEmbed)]
-              << " full_attn_ms=" << sums[static_cast<size_t>(Bucket::kFullAttn)]
-              << " gdn_attn_ms=" << sums[static_cast<size_t>(Bucket::kGdnAttn)]
-              << " mate_ms=" << sums[static_cast<size_t>(Bucket::kMate)]
-              << " gdn_non_mate_ms=" << gdn_non_mate_ms
-              << " gdn_proj_ms=" << sums[static_cast<size_t>(Bucket::kGdnProj)]
-              << " gdn_split_ms="
-              << sums[static_cast<size_t>(Bucket::kGdnSplit)]
-              << " gdn_conv_ms=" << sums[static_cast<size_t>(Bucket::kGdnConv)]
-              << " gdn_gate_ms=" << sums[static_cast<size_t>(Bucket::kGdnGate)]
-              << " gdn_layout_ms="
-              << sums[static_cast<size_t>(Bucket::kGdnLayout)]
-              << " gdn_o_proj_ms="
-              << sums[static_cast<size_t>(Bucket::kGdnOProj)]
-              << " gdn_state_prep_ms="
-              << sums[static_cast<size_t>(Bucket::kGdnStatePrep)]
-              << " gdn_state_write_ms="
-              << sums[static_cast<size_t>(Bucket::kGdnStateWrite)]
-              << " gdn_norm_ms="
-              << sums[static_cast<size_t>(Bucket::kGdnNorm)]
-              << " full_qkv_ms=" << sums[static_cast<size_t>(Bucket::kFullQkv)]
-              << " full_prep_ms="
-              << sums[static_cast<size_t>(Bucket::kFullPrep)]
-              << " full_fa_ms=" << sums[static_cast<size_t>(Bucket::kFullFa)]
-              << " full_o_proj_ms="
-              << sums[static_cast<size_t>(Bucket::kFullOProj)]
-              << " fp8_prepare_ms="
-              << sums[static_cast<size_t>(Bucket::kFp8Prepare)]
-              << " fp8_quant_ms="
-              << sums[static_cast<size_t>(Bucket::kFp8Quant)]
-              << " fp8_gemm_ms="
-              << sums[static_cast<size_t>(Bucket::kFp8Gemm)]
-              << " n_fp8_quant="
-              << counts[static_cast<size_t>(Bucket::kFp8Quant)]
-              << " n_fp8_gemm="
-              << counts[static_cast<size_t>(Bucket::kFp8Gemm)]
-              << " moe_route_ms="
-              << sums[static_cast<size_t>(Bucket::kMoeRoute)]
-              << " moe_preprocess_ms="
-              << sums[static_cast<size_t>(Bucket::kMoePreprocess)]
-              << " moe_gate_up_ms="
-              << sums[static_cast<size_t>(Bucket::kMoeGateUp)]
-              << " moe_act_ms="
-              << sums[static_cast<size_t>(Bucket::kMoeAct)]
-              << " moe_down_ms="
-              << sums[static_cast<size_t>(Bucket::kMoeDown)]
-              << " moe_combine_ms="
-              << sums[static_cast<size_t>(Bucket::kMoeCombine)]
-              << " moe_shared_ms="
-              << sums[static_cast<size_t>(Bucket::kMoeShared)]
-              << " mlp_ms=" << mlp_ms
-              << " mlp_gate_up_ms="
-              << sums[static_cast<size_t>(Bucket::kMlpGateUp)]
-              << " mlp_act_ms=" << sums[static_cast<size_t>(Bucket::kMlpAct)]
-              << " mlp_down_ms=" << sums[static_cast<size_t>(Bucket::kMlpDown)]
-              << " norm_ms=" << sums[static_cast<size_t>(Bucket::kNorm)]
-              << " n_full=" << counts[static_cast<size_t>(Bucket::kFullAttn)]
-              << " n_gdn=" << counts[static_cast<size_t>(Bucket::kGdnAttn)]
-              << " n_mate=" << counts[static_cast<size_t>(Bucket::kMate)];
+    LOG(INFO)
+        << "[PREFILL_BREAKDOWN] n_tokens=" << n_tokens
+        << " batch_bs=" << batch_bs << " wall_ms=" << wall_fwd_ms
+        << " accounted_ms=" << accounted << " other_ms=" << other
+        << " embed_ms=" << sums[static_cast<size_t>(Bucket::kEmbed)]
+        << " full_attn_ms=" << sums[static_cast<size_t>(Bucket::kFullAttn)]
+        << " gdn_attn_ms=" << sums[static_cast<size_t>(Bucket::kGdnAttn)]
+        << " mate_ms=" << sums[static_cast<size_t>(Bucket::kMate)]
+        << " gdn_non_mate_ms=" << gdn_non_mate_ms
+        << " gdn_proj_ms=" << sums[static_cast<size_t>(Bucket::kGdnProj)]
+        << " gdn_split_ms=" << sums[static_cast<size_t>(Bucket::kGdnSplit)]
+        << " gdn_conv_ms=" << sums[static_cast<size_t>(Bucket::kGdnConv)]
+        << " gdn_gate_ms=" << sums[static_cast<size_t>(Bucket::kGdnGate)]
+        << " gdn_layout_ms=" << sums[static_cast<size_t>(Bucket::kGdnLayout)]
+        << " gdn_o_proj_ms=" << sums[static_cast<size_t>(Bucket::kGdnOProj)]
+        << " gdn_state_prep_ms="
+        << sums[static_cast<size_t>(Bucket::kGdnStatePrep)]
+        << " gdn_state_write_ms="
+        << sums[static_cast<size_t>(Bucket::kGdnStateWrite)]
+        << " gdn_norm_ms=" << sums[static_cast<size_t>(Bucket::kGdnNorm)]
+        << " full_qkv_ms=" << sums[static_cast<size_t>(Bucket::kFullQkv)]
+        << " full_prep_ms=" << sums[static_cast<size_t>(Bucket::kFullPrep)]
+        << " full_fa_ms=" << sums[static_cast<size_t>(Bucket::kFullFa)]
+        << " full_o_proj_ms=" << sums[static_cast<size_t>(Bucket::kFullOProj)]
+        << " fp8_prepare_ms=" << sums[static_cast<size_t>(Bucket::kFp8Prepare)]
+        << " fp8_quant_ms=" << sums[static_cast<size_t>(Bucket::kFp8Quant)]
+        << " fp8_gemm_ms=" << sums[static_cast<size_t>(Bucket::kFp8Gemm)]
+        << " n_fp8_quant=" << counts[static_cast<size_t>(Bucket::kFp8Quant)]
+        << " n_fp8_gemm=" << counts[static_cast<size_t>(Bucket::kFp8Gemm)]
+        << " moe_route_ms=" << sums[static_cast<size_t>(Bucket::kMoeRoute)]
+        << " moe_preprocess_ms="
+        << sums[static_cast<size_t>(Bucket::kMoePreprocess)]
+        << " moe_gate_up_ms=" << sums[static_cast<size_t>(Bucket::kMoeGateUp)]
+        << " moe_act_ms=" << sums[static_cast<size_t>(Bucket::kMoeAct)]
+        << " moe_down_ms=" << sums[static_cast<size_t>(Bucket::kMoeDown)]
+        << " moe_combine_ms=" << sums[static_cast<size_t>(Bucket::kMoeCombine)]
+        << " moe_shared_ms=" << sums[static_cast<size_t>(Bucket::kMoeShared)]
+        << " mlp_ms=" << mlp_ms
+        << " mlp_gate_up_ms=" << sums[static_cast<size_t>(Bucket::kMlpGateUp)]
+        << " mlp_act_ms=" << sums[static_cast<size_t>(Bucket::kMlpAct)]
+        << " mlp_down_ms=" << sums[static_cast<size_t>(Bucket::kMlpDown)]
+        << " norm_ms=" << sums[static_cast<size_t>(Bucket::kNorm)]
+        << " n_full=" << counts[static_cast<size_t>(Bucket::kFullAttn)]
+        << " n_gdn=" << counts[static_cast<size_t>(Bucket::kGdnAttn)]
+        << " n_mate=" << counts[static_cast<size_t>(Bucket::kMate)];
 
-    static const char* kNames[] = {"embed",
-                                   "full_attn",
-                                   "gdn_attn",
-                                   "mate",
-                                   "mlp_gate_up",
-                                   "mlp_act",
-                                   "mlp_down",
-                                   "norm",
-                                   "gdn_proj",
-                                   "gdn_split",
-                                   "gdn_conv",
-                                   "gdn_gate",
-                                   "gdn_layout",
-                                   "gdn_o_proj",
-                                   "full_qkv",
-                                   "full_prep",
-                                   "full_fa",
-                                   "full_o_proj",
-                                   "fp8_prepare",
-                                   "fp8_quant",
-                                   "fp8_gemm",
-                                   "moe_route",
-                                   "moe_preprocess",
-                                   "moe_gate_up",
-                                   "moe_act",
-                                   "moe_down",
-                                   "moe_combine",
-                                   "moe_shared",
-                                   "gdn_state_prep",
-                                   "gdn_state_write",
-                                   "gdn_norm"};
+    static const char* kNames[] = {
+        "embed",          "full_attn",       "gdn_attn",       "mate",
+        "mlp_gate_up",    "mlp_act",         "mlp_down",       "norm",
+        "gdn_proj",       "gdn_split",       "gdn_conv",       "gdn_gate",
+        "gdn_layout",     "gdn_o_proj",      "full_qkv",       "full_prep",
+        "full_fa",        "full_o_proj",     "fp8_prepare",    "fp8_quant",
+        "fp8_gemm",       "moe_route",       "moe_preprocess", "moe_gate_up",
+        "moe_act",        "moe_down",        "moe_combine",    "moe_shared",
+        "gdn_state_prep", "gdn_state_write", "gdn_norm"};
     for (size_t i = 0; i < sums.size(); ++i) {
       if (counts[i] == 0) {
         continue;

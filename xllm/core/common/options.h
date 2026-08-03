@@ -39,11 +39,7 @@ class Options {
 
   PROPERTY(std::string, model_id);
 
-  PROPERTY(std::optional<std::string>, devices);
-
   PROPERTY(std::optional<std::string>, draft_model_path);
-
-  PROPERTY(std::optional<std::string>, draft_devices);
 
   // model backend
   PROPERTY(std::string, backend);
@@ -76,10 +72,7 @@ class Options {
   PROPERTY(int32_t, max_seqs_per_batch) = 256;
 
   // the max tokens per chunk for request in prefill stage.
-  PROPERTY(int32_t, max_tokens_per_chunk_for_prefill) = 8192;
-
-  // Allow one-shot prefill for an isolated request that fits the batch budget.
-  PROPERTY(bool, enable_adaptive_prefill_oneshot) = false;
+  PROPERTY(int32_t, max_tokens_per_chunk_for_prefill);
 
   // sps tokens
   PROPERTY(int32_t, num_speculative_tokens) = 0;
@@ -97,6 +90,8 @@ class Options {
   PROPERTY(int32_t, speculative_suffix_max_cached_requests) = -1;
 
   PROPERTY(bool, speculative_suffix_use_tree_spec) = false;
+
+  PROPERTY(bool, enable_mtp_draft_body_tp1) = false;
 
   // thread num to handle requests
   PROPERTY(size_t, num_request_handling_threads) = 4;
@@ -123,7 +118,14 @@ class Options {
 
   PROPERTY(bool, enable_chunked_prefill) = true;
 
-  PROPERTY(bool, enable_prefill_sp) = false;
+  // Flash Communication 1 (FC1) sequence-parallel optimization.
+  PROPERTY(bool, enable_flashcomm1) = false;
+
+  PROPERTY(int32_t, flashcomm1_min_prefill_tokens) = 8192;
+
+  PROPERTY(bool, enable_mmrs_fusion) = false;
+
+  PROPERTY(std::string, mmrs_comm_mode) = "aiv";
 
   PROPERTY(std::optional<std::string>, master_node_addr);
 
@@ -142,6 +144,8 @@ class Options {
   PROPERTY(int32_t, sp_size) = 1;
 
   PROPERTY(int32_t, cfg_size) = 1;
+
+  PROPERTY(int32_t, vae_size) = 1;
 
   PROPERTY(std::optional<std::string>, instance_name);
 
@@ -199,13 +203,13 @@ class Options {
   // true if enable forward interruption
   PROPERTY(bool, enable_forward_interruption) = false;
   // enable CUDA graph/ACL graph for performance optimization
-  PROPERTY(bool, enable_graph) = true;
+  PROPERTY(bool, enable_graph) = false;
   // enable graph-mode decode without padding
-  PROPERTY(bool, enable_graph_mode_decode_no_padding) = true;
+  PROPERTY(bool, enable_graph_mode_decode_no_padding) = false;
   // enable piecewise graph for prefill
-  PROPERTY(bool, enable_prefill_piecewise_graph) = true;
+  PROPERTY(bool, enable_prefill_piecewise_graph) = false;
   // maximum number of tokens for graph execution
-  PROPERTY(int32_t, max_tokens_for_graph_mode) = 8192;
+  PROPERTY(int32_t, max_tokens_for_graph_mode) = 2048;
   // all requests use single global ttft
   PROPERTY(int32_t, max_global_ttft_ms) = std::numeric_limits<int32_t>::max();
   // all requests use single global tpot

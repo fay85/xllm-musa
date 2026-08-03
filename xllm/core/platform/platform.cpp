@@ -1,4 +1,4 @@
-/* Copyright 2026 The xLLM Authors. All Rights Reserved.
+/* Copyright 2026 The xLLM Authors.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -21,12 +21,12 @@ limitations under the License.
 #include <torch_npu/csrc/core/npu/NPUCachingAllocator.h>
 #elif defined(USE_MLU)
 #include <framework/core/device.h>
-#elif defined(USE_MUSA)
-#include <c10/musa/MUSAGuard.h>
-
-#include "core/platform/cuda/cuda_utils.h"
 #elif defined(USE_CUDA) || defined(USE_ILU)
 #include <c10/cuda/CUDACachingAllocator.h>
+
+#include "core/platform/cuda/cuda_utils.h"
+#elif defined(USE_MUSA)
+#include <c10/musa/MUSAGuard.h>
 
 #include "core/platform/cuda/cuda_utils.h"
 #elif defined(USE_DCU)
@@ -51,12 +51,12 @@ std::string Platform::type_str() {
   return "npu";
 #elif defined(USE_MLU)
   return "mlu";
-#elif defined(USE_MUSA)
-  return "musa";
 #elif defined(USE_CUDA)
   return "cuda";
 #elif defined(USE_ILU)
   return "ilu";
+#elif defined(USE_MUSA)
+  return "musa";
 #elif defined(USE_DCU)
   return "dcu";
 #endif
@@ -65,10 +65,10 @@ std::string Platform::type_str() {
 torch::DeviceType Platform::type_torch() {
 #if defined(USE_NPU) || defined(USE_MLU)
   return torch::kPrivateUse1;
-#elif defined(USE_MUSA)
-  return torch::kMUSA;
 #elif defined(USE_CUDA) || defined(USE_ILU) || defined(USE_DCU)
   return torch::kCUDA;
+#elif defined(USE_MUSA)
+  return torch::kMUSA;
 #endif
 }
 
@@ -77,12 +77,26 @@ int32_t Platform::device_count() {
   return static_cast<int32_t>(c10_npu::device_count());
 #elif defined(USE_MLU)
   return static_cast<int32_t>(torch_mlu::device_count());
-#elif defined(USE_MUSA)
-  return static_cast<int32_t>(c10::musa::device_count());
 #elif defined(USE_CUDA) || defined(USE_ILU)
   return static_cast<int32_t>(c10::cuda::device_count());
+#elif defined(USE_MUSA)
+  return static_cast<int32_t>(c10::musa::device_count());
 #elif defined(USE_DCU)
   return static_cast<int32_t>(c10::hip::device_count());
+#endif
+}
+
+int32_t Platform::current_device() {
+#if defined(USE_NPU)
+  return static_cast<int32_t>(c10_npu::current_device());
+#elif defined(USE_MLU)
+  return static_cast<int32_t>(torch_mlu::current_device());
+#elif defined(USE_CUDA) || defined(USE_ILU)
+  return static_cast<int32_t>(c10::cuda::current_device());
+#elif defined(USE_MUSA)
+  return static_cast<int32_t>(c10::musa::current_device());
+#elif defined(USE_DCU)
+  return static_cast<int32_t>(c10::hip::current_device());
 #endif
 }
 

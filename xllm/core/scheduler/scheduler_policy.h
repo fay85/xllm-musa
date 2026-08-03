@@ -152,9 +152,6 @@ class SchedulerPolicy {
   size_t compute_prefill_tokens(Sequence* seq,
                                 size_t remaining_budget,
                                 const SchedulerState& state);
-  size_t effective_prefill_chunk_limit(const SchedulerState& state,
-                                       size_t batch_token_budget,
-                                       Sequence* sequence) const;
   bool allocate_for_prefill(Sequence* seq,
                             size_t token_budget,
                             size_t* actual_tokens,

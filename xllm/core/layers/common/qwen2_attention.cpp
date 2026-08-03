@@ -20,27 +20,7 @@ limitations under the License.
 #include <tuple>
 
 #if defined(USE_CUDA) || defined(USE_DCU)
-#if defined(USE_MUSA)
-namespace xllm::kernel::cuda {
-void fused_qk_norm_rope(torch::Tensor& qkv,
-                        int64_t num_heads_q,
-                        int64_t num_heads_k,
-                        int64_t num_heads_v,
-                        int64_t head_dim,
-                        double eps,
-                        const torch::Tensor& q_weight,
-                        const torch::Tensor& k_weight,
-                        const torch::Tensor& cos_sin_cache,
-                        bool interleaved,
-                        const torch::Tensor& position_ids);
-}
-#else
-#if defined(USE_MUSA)
-#include "kernels/musa/musa_ops_api.h"
-#else
 #include "kernels/cuda/cuda_ops_api.h"
-#endif
-#endif
 #endif
 namespace {
 inline bool is_qwen3_model(const std::string& model_type) {
