@@ -47,8 +47,6 @@ limitations under the License.
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
 #include "core/util/env_var.h"
-#include "core/util/layer_hidden_dumper.h"
-#include "core/util/prefill_breakdown.h"
 #include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
 
@@ -2294,8 +2292,6 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     }
   }
 
-  debug::LayerHiddenDumper::instance().flush(actual_num_tokens);
-
   // Return the actual num_tokens portion of ModelOutput
   // Note: aux_hidden_states handling is done in MusaGraphExecutorImpl::run()
   // since replay() doesn't have access to options
@@ -2921,10 +2917,8 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   // Prefill without piecewise graph: use eager mode
   if (is_prefill) {
     COUNTER_INC(num_model_execution_total_eager);
-    const bool time_fwd =
-        s_enable_prefill_fwd_timing() || PrefillBreakdown::enabled();
+    const bool time_fwd = s_enable_prefill_fwd_timing();
     if (time_fwd) {
-      PrefillBreakdown::begin();
       c10::cuda::getCurrentCUDAStream(device_.index()).synchronize();
       const auto t0 = std::chrono::steady_clock::now();
       auto result = model_->forward(tokens, positions, kv_caches, params);
@@ -2939,8 +2933,6 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                   << " mode=eager"
                   << " fwd_ms=" << ms;
       }
-      PrefillBreakdown::end_and_log(
-          static_cast<int64_t>(n_tokens), params.meta.num_sequences, ms);
       maybe_empty_prefill_cache();
       return result;
     }
