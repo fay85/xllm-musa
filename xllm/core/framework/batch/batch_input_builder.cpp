@@ -1328,7 +1328,7 @@ void BatchInputBuilder::process_swap_block_infos(ForwardInput& forward_input) {
               [](const BlockTransferInfo& a, const BlockTransferInfo& b) {
                 return a.src_block_id < b.src_block_id;
               });
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
     input_params.block_copy.swap_blocks.insert(
         input_params.block_copy.swap_blocks.end(),
         swap_blocks.begin(),

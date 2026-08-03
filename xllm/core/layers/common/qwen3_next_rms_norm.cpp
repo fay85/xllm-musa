@@ -42,6 +42,19 @@ Qwen3NextRMSNormImpl::forward(torch::Tensor& input,
     return std::make_tuple(norm_params.norm_out, std::nullopt);
   }
 
+#if (defined(USE_CUDA) || defined(USE_MUSA)) && !defined(USE_DCU)
+  // CUDA/MUSA dispatch folds the Gemma gamma offset inside the device kernel
+  // and avoids allocating `1.0 + weight_` during graph capture.
+  xllm::kernel::GemmaRMSNormParams gemma_params;
+  gemma_params.x = input;
+  gemma_params.gamma = weight_;
+  gemma_params.epsilon = eps_;
+  gemma_params.residual = residual.value();
+  xllm::kernel::gemma_rms_norm(gemma_params);
+  return std::make_tuple(gemma_params.norm_out, gemma_params.residual_out);
+#else
+  // Other backends keep their fused-layernorm implementation.
+  // NPU allocates outputs internally.
   // With residual: use the fused NPU AddRmsNorm path.
   xllm::kernel::FusedLayerNormParams fused_params;
   fused_params.input = input;
@@ -62,6 +75,7 @@ Qwen3NextRMSNormImpl::forward(torch::Tensor& input,
   fused_params.mode = "rmsnorm";
   xllm::kernel::fused_layernorm(fused_params);
   return std::make_tuple(fused_params.output, fused_params.residual_out);
+#endif
 }
 
 void Qwen3NextRMSNormImpl::load_state_dict(const StateDict& state_dict) {

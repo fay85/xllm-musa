@@ -23,6 +23,7 @@ limitations under the License.
 #include "npu/xllm_ops/xllm_ops_api.h"
 #include "triton_npu/torch_api/triton_ops_api.h"
 #elif defined(USE_MUSA)
+#include "musa/gdn_ops.h"
 #include "musa/musa_ops_api.h"
 #elif defined(USE_CUDA)
 #include "cuda/attention_runner.h"
@@ -669,7 +670,7 @@ std::vector<torch::Tensor> moe_gen_idx(MoeGenIdxParams& params) {
   return mlu::moe_gen_idx(params.expert_id, params.expert_num);
 #elif defined(USE_ILU)
   return ilu::moe_gen_idx(params.expert_id, params.expert_num);
-#elif defined(USE_DCU)
+#elif defined(USE_MUSA) || defined(USE_DCU)
   auto [src_dst, dst_src, expert_sizes] =
       cuda::moe_compute_index(params.expert_id, params.expert_num);
   return {src_dst, dst_src, expert_sizes};
@@ -719,7 +720,7 @@ torch::Tensor moe_combine_result(MoeCombineResultParams& params) {
   return output;
 #elif defined(USE_ILU)
   return ilu::moe_combine_result(params.input, params.reduce_weight);
-#elif defined(USE_DCU)
+#elif defined(USE_MUSA) || defined(USE_DCU)
   // N = params.reduce_weight.size(0), topk = params.reduce_weight.size(1)
   int64_t N = params.reduce_weight.size(0);
   int32_t topk = static_cast<int32_t>(params.reduce_weight.size(1));
@@ -898,7 +899,7 @@ torch::Tensor apply_top_k_top_p(TopKPParams& params) {
 torch::Tensor random_sample(RandomSampleParams& params) {
 #if defined(USE_MLU)
   return mlu::random_sample(params.logits);
-#elif defined(USE_CUDA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
   return cuda::random_sample(params.logits);
 #elif defined(USE_DCU)
   return dcu::random_sample(params.logits);
@@ -1058,6 +1059,8 @@ void fused_indexer_k(FusedIndexerKParams& params) {
 torch::Tensor l2_norm(torch::Tensor& x, double eps) {
 #if defined(USE_NPU)
   return npu::npu_l2norm_last_dim(x, eps);
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::l2_norm(x, eps);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -1262,6 +1265,8 @@ std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
   //                                  params.dt_bias,
   //                                  params.beta,
   //                                  params.threshold);
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::fused_gdn_gating(params);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -1310,6 +1315,8 @@ std::pair<torch::Tensor, torch::Tensor> fused_recurrent_gated_delta_rule(
       params.ssm_state_indices,
       params.num_accepted_tokens,
       params.use_qk_l2norm_in_kernel);
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::fused_recurrent_gated_delta_rule(params);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -1364,6 +1371,8 @@ torch::Tensor fused_sigmoid_gating_delta_rule_update(
       params.use_qk_l2norm_in_kernel,
       params.softplus_beta,
       params.softplus_threshold);
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::fused_sigmoid_gating_delta_rule_update(params);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -1632,6 +1641,8 @@ torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params) {
     y = y.view(x_work.sizes());
   }
   return y;
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::causal_conv1d_update(params);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -1716,6 +1727,8 @@ torch::Tensor gated_layer_norm(GatedLayerNormParams& params) {
                                params.z,
                                params.group_size,
                                params.norm_before_gate);
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::gated_layer_norm(params);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -1762,6 +1775,8 @@ std::pair<torch::Tensor, torch::Tensor> partial_rotary_embedding(
                                                  params.rotary_dim,
                                                  params.cos_sin_cache,
                                                  params.is_neox_style);
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::partial_rotary_embedding(params);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -1776,6 +1791,8 @@ fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params) {
                                                  params.num_heads_v,
                                                  params.head_qk,
                                                  params.head_v);
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::fused_qkvzba_split_reshape_cat(params);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -1815,6 +1832,19 @@ void gemma_rms_norm(GemmaRMSNormParams& params) {
                       params.residual_out);
 #elif defined(USE_DCU)
   dcu::gemma_rms_norm(params.x, params.gamma, params.epsilon, params.norm_out);
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  if (params.residual.defined()) {
+    cuda::fused_add_gemma_rms_norm(
+        params.x, params.residual, params.gamma, params.epsilon);
+    params.norm_out = params.x;
+    params.residual_out = params.residual;
+  } else {
+    if (!params.norm_out.defined()) {
+      params.norm_out = torch::empty_like(params.x);
+    }
+    cuda::gemma_rms_norm(
+        params.norm_out, params.x, params.gamma, params.epsilon);
+  }
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -2038,6 +2068,8 @@ std::pair<torch::Tensor, torch::Tensor> chunk_gated_delta_rule(
 
   return {out.to(input_dtype),
           params.output_final_state ? final_state : torch::Tensor()};
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::chunk_gated_delta_rule(params);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -2098,6 +2130,18 @@ torch::Tensor recurrent_gated_delta_rule(
                                              num_accepted_tokens,
                                              g,
                                              gk);
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::recurrent_gated_delta_rule(query,
+                                          key,
+                                          value,
+                                          state,
+                                          beta,
+                                          scale,
+                                          actual_seq_lengths,
+                                          ssm_state_indices,
+                                          num_accepted_tokens,
+                                          g,
+                                          gk);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -2126,6 +2170,18 @@ torch::Tensor causal_conv1d(const torch::Tensor& x,
                             activation_mode,
                             pad_slot_id,
                             run_mode);
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  return cuda::causal_conv1d(x,
+                             weight,
+                             conv_state,
+                             bias_opt,
+                             query_start_loc_opt,
+                             cache_indices_opt,
+                             initial_state_mode_opt,
+                             num_accepted_tokens_opt,
+                             activation_mode,
+                             pad_slot_id,
+                             run_mode);
 #else
   NOT_IMPLEMENTED();
 #endif
