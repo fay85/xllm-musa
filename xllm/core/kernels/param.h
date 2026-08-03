@@ -1628,6 +1628,7 @@ struct CausalConv1dUpdateParams {
   std::optional<torch::Tensor> initial_state_idx;
   std::optional<torch::Tensor> initial_state_mode;
   bool validate_data = false;
+  std::optional<torch::Tensor> output_buf = std::nullopt;
 };
 
 struct GatedLayerNormParams {
@@ -1639,6 +1640,7 @@ struct GatedLayerNormParams {
   int64_t group_size = -1;
   bool norm_before_gate = true;
   bool is_rms_norm = true;
+  std::optional<torch::Tensor> output_buf = std::nullopt;
 };
 
 struct PartialRotaryEmbeddingParams {
@@ -1658,6 +1660,15 @@ struct FusedQkvzbaSplitReshapeParams {
   int32_t num_heads_v;
   int32_t head_qk;
   int32_t head_v;
+  // When true, mixed_qkvz is [all_q | all_k | all_v | all_z] and mixed_ba is
+  // [all_b | all_a]. Otherwise the per-head-group interleaved layout from a
+  // single merged projection is assumed.
+  bool contiguous_input_layout = false;
+
+  torch::Tensor mixed_qkv_out_buf;
+  torch::Tensor z_out_buf;
+  torch::Tensor b_out_buf;
+  torch::Tensor a_out_buf;
 };
 
 struct GemmaRMSNormParams {
@@ -1708,6 +1719,82 @@ struct ChunkGatedDeltaRuleParams {
   bool head_first = false;
   // Whether to apply L2 norm to q and k inside the kernel. Default: false.
   bool use_qk_l2norm_in_kernel = false;
+};
+
+struct MateGatedDeltaRulePrefillParams {
+  torch::Tensor q;
+  torch::Tensor k;
+  torch::Tensor v;
+  torch::Tensor g;
+  torch::Tensor beta;
+  std::optional<float> scale = std::nullopt;
+  // Initial recurrent state in mate k-last layout [B, Hv, V, K], float32.
+  std::optional<torch::Tensor> initial_state = std::nullopt;
+  // Optional packed-varlen cumulative sequence lengths [num_seqs+1], int32.
+  // When set, q/k/v/g/beta must be the packed layout [1, total_tokens, ...]
+  // (or [B, max_T, ...] which is packed on the fly when B > 1).
+  // When unset, B == 1 is required and cu_seqlens=[0, T] is synthesized.
+  std::optional<torch::Tensor> cu_seqlens = std::nullopt;
+  // Optional KKT-only cumulative lengths. It has the same B+1 shape as
+  // cu_seqlens; for a bucketed packed graph its final endpoint may be the
+  // bucket capacity. The full recurrent kernel still consumes cu_seqlens.
+  std::optional<torch::Tensor> cu_seqlens_kkt = std::nullopt;
+  // Host-side copy of cu_seqlens. Prefer this for pack/unpack/cumsum so the
+  // multi-seq path does not D2H-sync the GPU stream once per helper call
+  // (and once per GDN layer). Built from q_seq_lens_vec when available.
+  std::optional<std::vector<int32_t>> cu_seqlens_host = std::nullopt;
+  // Optional graph-owned output buffers. Supplying them avoids per-layer
+  // allocations when the Mate varlen runner executes between graph segments.
+  std::optional<torch::Tensor> output = std::nullopt;
+  std::optional<torch::Tensor> final_state = std::nullopt;
+  std::optional<torch::Tensor> kkt_output = std::nullopt;
+  bool output_final_state = true;
+  bool use_qk_l2norm_in_kernel = true;
+  // The piecewise runner owns Q/K stable buffers that are overwritten by the
+  // preceding graph segment on every replay, so fused normalization may reuse
+  // those buffers in place instead of allocating normalized copies.
+  bool allow_inplace_qk_l2norm = false;
+};
+
+struct MateGatedDeltaRuleDecodeParams {
+  torch::Tensor mixed_qkv;
+  torch::Tensor state;
+  torch::Tensor A_log;
+  torch::Tensor a;
+  torch::Tensor dt_bias;
+  torch::Tensor b;
+  torch::Tensor state_indices;
+  int64_t num_k_heads = 0;
+  int64_t num_v_heads = 0;
+  int64_t head_k_dim = 0;
+  int64_t head_v_dim = 0;
+  double scale = 0.0;
+  bool use_qk_l2norm = true;
+  std::optional<torch::Tensor> decode_output = std::nullopt;
+  std::optional<torch::Tensor> q_buf = std::nullopt;
+  std::optional<torch::Tensor> k_buf = std::nullopt;
+  std::optional<torch::Tensor> v_buf = std::nullopt;
+};
+
+// Parameters for the fused mate GDN multi-token speculative-verify kernel.
+// The kernel computes qk L2-norm and softplus/sigmoid gating internally.
+struct MateGatedDeltaRuleMtpParams {
+  torch::Tensor q;
+  torch::Tensor k;
+  torch::Tensor v;
+  torch::Tensor A_log;
+  torch::Tensor a;
+  torch::Tensor dt_bias;
+  torch::Tensor b;
+  torch::Tensor state;
+  torch::Tensor state_indices;
+  torch::Tensor intermediate;
+  torch::Tensor output;
+  int64_t num_k_heads = 0;
+  int64_t num_v_heads = 0;
+  int64_t head_k_dim = 0;
+  int64_t head_v_dim = 0;
+  double scale = 0.0;
 };
 
 struct MegaChunkGdnParams {

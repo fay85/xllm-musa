@@ -337,21 +337,23 @@ void fused_layernorm(FusedLayerNormParams& params) {
                        params.store_output_after_norm,
                        params.dynamic_quant);
 #elif defined(USE_MUSA)
-  musa::fused_layernorm(params.input,
-                        params.output,
-                        params.residual,
-                        params.weight,
-                        params.beta,
-                        params.bias,
-                        params.quant_scale,
-                        params.residual_out,
-                        params.smooth_quant_scale,
-                        params.normed_out,
-                        params.mode,
-                        params.eps,
-                        params.store_output_before_norm,
-                        params.store_output_after_norm,
-                        params.dynamic_quant);
+  if (params.mode != "rmsnorm") {
+    NOT_IMPLEMENTED();
+  }
+  GemmaRMSNormParams gemma_params;
+  gemma_params.x = params.input;
+  gemma_params.gamma = params.weight;
+  gemma_params.epsilon = params.eps;
+  if (params.residual.has_value()) {
+    gemma_params.residual = params.residual.value();
+    gemma_rms_norm(gemma_params);
+    params.output = gemma_params.norm_out;
+    params.residual_out = gemma_params.residual_out;
+  } else {
+    gemma_params.norm_out = params.output;
+    gemma_rms_norm(gemma_params);
+    params.output = gemma_params.norm_out;
+  }
 #elif defined(USE_NPU)
   if (params.residual.has_value()) {
     if (params.add_gamma_offset) {
@@ -1833,11 +1835,12 @@ void gemma_rms_norm(GemmaRMSNormParams& params) {
 #elif defined(USE_DCU)
   dcu::gemma_rms_norm(params.x, params.gamma, params.epsilon, params.norm_out);
 #elif defined(USE_CUDA) || defined(USE_MUSA)
-  if (params.residual.defined()) {
+  if (params.residual.has_value() && params.residual->defined()) {
+    auto residual = params.residual.value();
     cuda::fused_add_gemma_rms_norm(
-        params.x, params.residual, params.gamma, params.epsilon);
+        params.x, residual, params.gamma, params.epsilon);
     params.norm_out = params.x;
-    params.residual_out = params.residual;
+    params.residual_out = residual;
   } else {
     if (!params.norm_out.defined()) {
       params.norm_out = torch::empty_like(params.x);
