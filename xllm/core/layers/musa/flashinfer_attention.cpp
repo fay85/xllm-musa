@@ -233,12 +233,12 @@ void FlashInferAttentionImpl::prefill_forward(
   }();
   const int64_t gqa_ratio = num_kv_heads_ > 0 ? num_heads_ / num_kv_heads_ : 0;
   const bool default_to_fa3 = query.scalar_type() == torch::kBFloat16 &&
-                              head_size_ == 256 && gqa_ratio == 8;
+                              head_size_ == 256 &&
+                              (gqa_ratio == 6 || gqa_ratio == 8);
   const bool use_fa3 = fa3_setting < 0 ? default_to_fa3 : fa3_setting == 1;
 
-  // GQA=8 defaults to FA3 because the MUSA FA2 prefill path does not safely
-  // reuse its workspace across requests. GQA=6 keeps the established FA2
-  // default unless XLLM_USE_FA3=1 explicitly opts in.
+  // Supported Qwen3.5 GQA=6/8 shapes default to FA3 because the MUSA FA2
+  // prefill path does not safely reuse its workspace across requests.
   if (use_fa3) {
     CHECK(!use_custom_mask)
         << "XLLM_USE_FA3=1 does not support custom attention masks";
@@ -593,7 +593,8 @@ void FlashInferAttentionImpl::decoder_forward(
     const int64_t gqa_ratio =
         num_kv_heads_ > 0 ? num_heads_ / num_kv_heads_ : 0;
     const bool default_to_fa3 = query.scalar_type() == torch::kBFloat16 &&
-                                head_size_ == 256 && gqa_ratio == 8;
+                                head_size_ == 256 &&
+                                (gqa_ratio == 6 || gqa_ratio == 8);
     const bool use_fa3 = fa3_setting < 0 ? default_to_fa3 : fa3_setting == 1;
     const bool fa3_shape_supported =
         query.scalar_type() == torch::kBFloat16 && head_size_ == 256 &&

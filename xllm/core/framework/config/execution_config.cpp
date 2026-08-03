@@ -20,7 +20,7 @@ limitations under the License.
 
 DEFINE_bool(
     enable_graph,
-    false,
+    xllm::execution_config_defaults::kEnableGraph,
     "Whether to enable graph execution for decode phase. When enabled, "
     "the engine uses graph mode (CUDA Graph for GPU, ACL Graph for NPU, "
     "MLU Graph, or DCU Graph) to optimize decode performance by reducing "
@@ -32,17 +32,17 @@ DEFINE_bool(enable_graph_double_buffer,
             "and graph instances for NPU schedule-overlap decode.");
 
 DEFINE_bool(enable_graph_mode_decode_no_padding,
-            false,
+            xllm::execution_config_defaults::kEnableGraphModeDecodeNoPadding,
             "Whether to enable graph execution for decode phase without "
             "padding. If true, graph will be captured with every actual num "
             "tokens, as stride is 1.");
 
 DEFINE_bool(enable_prefill_piecewise_graph,
-            false,
+            xllm::execution_config_defaults::kEnablePrefillPiecewiseGraph,
             "Whether to enable piecewise graph execution for prefill phase "
-            "when graph mode is enabled. When enabled, attention operations "
-            "use eager mode while other operations are captured in device "
-            "graphs.");
+            "when graph mode is enabled. Compatible operations are captured "
+            "in reusable device graphs; unsupported operations run eagerly "
+            "between graph segments.");
 
 DEFINE_bool(enable_packed_prefill,
             false,
@@ -50,15 +50,13 @@ DEFINE_bool(enable_packed_prefill,
             "the MUSA executor may process multiple prefill requests in one "
             "batch while preserving decode graph execution.");
 
-constexpr bool kEnableGraphVmmPoolDefault = true;
-
 DEFINE_bool(enable_graph_vmm_pool,
-            kEnableGraphVmmPoolDefault,
+            xllm::execution_config_defaults::kEnableGraphVmmPool,
             "Whether to enable VMM-backed graph memory pool for multi-shape "
             "graph memory reuse.");
 
 DEFINE_int32(max_tokens_for_graph_mode,
-             2048,
+             xllm::execution_config_defaults::kMaxTokensForGraphMode,
              "Maximum number of tokens for graph execution. "
              "If 0, no limit is applied.");
 

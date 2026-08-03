@@ -85,7 +85,7 @@ bool s_use_musa_fa3_decode(int64_t gqa_ratio) {
     }
     return std::string(env) == "1" ? int32_t{1} : int32_t{0};
   }();
-  return setting < 0 ? gqa_ratio == 8 : setting == 1;
+  return setting < 0 ? gqa_ratio == 6 || gqa_ratio == 8 : setting == 1;
 }
 
 // Phase D: wall+device time for packed/eager pure-prefill forwards.
