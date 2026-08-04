@@ -126,7 +126,8 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
         layer::AttentionMetadataBuilder::build(
             input_params,
             model_args_.enable_mla(),
-            build_attention_mask(input_params));
+            build_attention_mask(input_params),
+            /*device=*/device_);
 #endif
     const int32_t num_tokens = static_cast<int32_t>(tokens.size(0));
     const auto& batch_forward_type = input_params.meta.batch_forward_type;

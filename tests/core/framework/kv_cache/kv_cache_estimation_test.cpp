@@ -92,6 +92,19 @@ TEST(KVCacheEstimationTest, UserIndexerCacheDtypeDirectlyControlsQuantization) {
   EXPECT_TRUE(int8_capacity.enable_indexer_cache_quant());
 }
 
+TEST(KVCacheEstimationTest, IndexerScaleUsesLogicalCacheCapacity) {
+  ModelArgs model_args = make_standard_args();
+  model_args.model_type("deepseek_v32").index_n_heads(1).index_head_dim(16);
+  KVCacheEstimateOptions options = make_estimate_options();
+  options.indexer_cache_dtype = "int8";
+  options.cache_size_in_bytes = 10 * 1024 * 1024;
+
+  const KVCacheCapacity capacity =
+      estimate_kv_cache_capacity(model_args, options);
+
+  EXPECT_EQ(capacity.n_blocks(), 1107);
+}
+
 #if defined(USE_MLU)
 TEST(KVCacheEstimationTest, SharedDsaLayersDoNotConsumeIndexerCacheBudget) {
   ModelArgs model_args = make_standard_args();
@@ -110,38 +123,6 @@ TEST(KVCacheEstimationTest, SharedDsaLayersDoNotConsumeIndexerCacheBudget) {
   EXPECT_EQ(capacity.n_blocks(), 113);
 }
 
-TEST(KVCacheEstimationTest,
-     RdmaScalePaddingReducesCapacityToLargestAllocatableBlockCount) {
-  ModelArgs model_args = make_standard_args();
-  model_args.model_type("deepseek_v32").index_n_heads(1).index_head_dim(16);
-  KVCacheEstimateOptions options = make_estimate_options();
-  options.indexer_cache_dtype = "int8";
-  options.cache_size_in_bytes = 10 * 1024 * 1024;
-
-  options.enable_rdma_scale_padding = false;
-  const KVCacheCapacity logical_capacity =
-      estimate_kv_cache_capacity(model_args, options);
-  EXPECT_EQ(logical_capacity.n_blocks(), 1107);
-
-  options.enable_rdma_scale_padding = true;
-  const KVCacheCapacity rdma_capacity =
-      estimate_kv_cache_capacity(model_args, options);
-  EXPECT_EQ(rdma_capacity.n_blocks(), 227);
-}
-
-TEST(KVCacheEstimationTest, RdmaScalePaddingFailsWhenOneBlockExceedsBudget) {
-  GTEST_FLAG_SET(death_test_style, "threadsafe");
-  ModelArgs model_args = make_standard_args();
-  model_args.model_type("deepseek_v32").index_n_heads(1).index_head_dim(16);
-  KVCacheEstimateOptions options = make_estimate_options();
-  options.indexer_cache_dtype = "int8";
-  options.cache_size_in_bytes = 8 * 1024 * 1024;
-  options.enable_rdma_scale_padding = true;
-
-  EXPECT_DEATH(
-      { (void)estimate_kv_cache_capacity(model_args, options); },
-      "no memory for one KV cache block with RDMA-registerable indexer scales");
-}
 #endif
 
 namespace {

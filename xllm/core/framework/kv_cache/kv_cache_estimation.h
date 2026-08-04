@@ -43,7 +43,6 @@ struct KVCacheEstimateOptions {
   int64_t max_linear_state_cache_slots = 0;
   bool is_draft_engine = false;
   bool enable_prefix_cache = false;
-  bool enable_rdma_scale_padding = false;
   const ModelArgs* draft_model_args = nullptr;
   const KVCacheEstimateOptions* draft_options = nullptr;
 };
