@@ -28,7 +28,7 @@ limitations under the License.
 #elif defined(USE_MUSA)
 #include <c10/musa/MUSAGuard.h>
 
-#include "core/platform/cuda/cuda_utils.h"
+#include "core/platform/musa/musa_utils.h"
 #elif defined(USE_DCU)
 #include <c10/hip/HIPCachingAllocator.h>
 #endif
@@ -113,7 +113,7 @@ bool Platform::is_support_sm100f() { return support_sm100f_; }
 bool Platform::is_support_sm120a() { return support_sm120a_; }
 
 void Platform::init_capabilities(int32_t device_index) {
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   std::call_once(g_init_flag, [device_index]() {
     sm_count_ = cuda::get_device_sm_count(device_index);
     enable_pdl_ = cuda::support_pdl(device_index);
@@ -121,6 +121,10 @@ void Platform::init_capabilities(int32_t device_index) {
     support_sm100a_ = cuda::support_sm100a(device_index);
     support_sm100f_ = cuda::support_sm100f(device_index);
     support_sm120a_ = cuda::support_sm120a(device_index);
+  });
+#elif defined(USE_MUSA)
+  std::call_once(g_init_flag, [device_index]() {
+    sm_count_ = musa::get_device_multiprocessor_count(device_index);
   });
 #else
   (void)device_index;

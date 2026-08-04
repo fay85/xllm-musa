@@ -35,6 +35,7 @@ cc_library(
     $<$<BOOL:${USE_DCU}>:dcu/dcu_tensor_alloc.h>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>>:cuda/cuda_utils.h>
     $<$<BOOL:${USE_MUSA}>:musa/musa_csrc_guards.h>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_utils.h>
     $<$<BOOL:${USE_CUDA}>:cuda_profiler.h>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_DCU}>,$<BOOL:${USE_MUSA}>>:torch_profiler.h>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:numa_utils.h>
