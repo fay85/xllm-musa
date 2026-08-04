@@ -272,8 +272,6 @@ KVCacheCapacity VLMEngine::estimate_kv_cache_capacity() {
   estimate_options.is_draft_engine = options_.is_draft_engine();
   estimate_options.enable_prefix_cache =
       ::xllm::KVCacheConfig::get_instance().enable_prefix_cache();
-  estimate_options.enable_rdma_scale_padding =
-      options_.instance_role() != InstanceRole::DEFAULT;
 
   KVCacheCapacity kv_cache_cap =
       ::xllm::estimate_kv_cache_capacity(args_, estimate_options);

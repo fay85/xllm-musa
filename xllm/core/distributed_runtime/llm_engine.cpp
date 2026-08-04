@@ -469,8 +469,6 @@ KVCacheCapacity LLMEngine::estimate_kv_cache_capacity() {
   estimate_options.is_draft_engine = options_.is_draft_engine();
   estimate_options.enable_prefix_cache =
       ::xllm::KVCacheConfig::get_instance().enable_prefix_cache();
-  estimate_options.enable_rdma_scale_padding =
-      options_.instance_role() != InstanceRole::DEFAULT;
   if (options_.enable_mtp_draft_body_tp1() && options_.is_draft_engine()) {
     estimate_options.world_size = 1;
     estimate_options.n_local_kv_heads =
@@ -494,6 +492,8 @@ KVCacheCapacity LLMEngine::estimate_kv_cache_capacity() {
 }
 
 bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
+  const KVCacheConfig& kv_cache_config = KVCacheConfig::get_instance();
+
   LOG(INFO) << "kv cache capacity: "
             << readable_size(kv_cache_cap.cache_size_in_bytes())
             << ", blocks: " << kv_cache_cap.n_blocks()
@@ -518,6 +518,28 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
   const int32_t block_size = static_cast<int32_t>(kv_cache_cap.block_size());
   const bool enable_gdn_attention = has_linear_attention_layers(args_);
 
+  // Validate host offload before constructing block managers or asking workers
+  // to allocate potentially large pinned host tensors.
+  const KVCacheShape kv_cache_shape(kv_cache_cap, args_, dp_local_tp_size_);
+  HostCacheValidationOptions host_cache_validation_options{
+      .host_blocks_factor = options_.host_blocks_factor(),
+      .device_block_count = kv_cache_cap.n_blocks(),
+      .supports_host_kv_offload = Platform::supports_host_kv_offload(),
+      .enable_prefix_cache = options_.enable_prefix_cache(),
+      .has_key_cache_shape = kv_cache_shape.has_key_cache_shape(),
+      .has_grouped_cache_layout = kv_cache_shape.has_grouped_cache_layout(),
+      .has_conv_cache_shape = kv_cache_shape.has_conv_cache_shape(),
+      .has_ssm_cache_shape = kv_cache_shape.has_ssm_cache_shape(),
+      .kv_cache_dtype = options_.kv_cache_dtype(),
+      .indexer_cache_dtype = kv_cache_config.indexer_cache_dtype(),
+      .model_type = args_.model_type(),
+  };
+  const std::optional<std::string> host_cache_error =
+      validate_host_cache_options(host_cache_validation_options);
+  if (host_cache_error.has_value()) {
+    LOG(FATAL) << *host_cache_error;
+  }
+
   // DECODE-side skips LINEAR prefix cache by role (see
   // composite_block_manager.cpp::leaf_participates_in_prefix_cache), so the
   // chunked-prefill + chunk-stride guards below are only meaningful for
@@ -538,7 +560,6 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
   }
 
   // init kv cache for each worker
-  const KVCacheShape kv_cache_shape(kv_cache_cap, args_, dp_local_tp_size_);
   kv_cache_shape.print_shapes();
 
   // initialize block manager
@@ -551,13 +572,12 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
                                         : block_size)
       .host_num_blocks(kv_cache_cap.n_blocks() * options_.host_blocks_factor())
       .enable_linear_state(enable_gdn_attention)
-      .enable_prefix_cache(
-          ::xllm::KVCacheConfig::get_instance().enable_xtensor()
-              ? false
-              : options_.enable_prefix_cache())
+      .enable_prefix_cache(kv_cache_config.enable_xtensor()
+                               ? false
+                               : options_.enable_prefix_cache())
       .enable_disagg_pd(options_.enable_disagg_pd())
       .enable_kvcache_store(options_.enable_kvcache_store())
-      .enable_xtensor(::xllm::KVCacheConfig::get_instance().enable_xtensor())
+      .enable_xtensor(kv_cache_config.enable_xtensor())
       .num_layers(args_.n_layers())
       .slot_size(kv_cache_cap.slot_size())
       .model_id(options_.model_id())
@@ -616,16 +636,6 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
   }
 
   if (options_.host_blocks_factor() > 1.0) {
-    // Host prefix-cache offload routes device/host blocks through a single flat
-    // BlockType::KV host pool. DeepSeek-V4 has no KV block group (its device
-    // caches are SWA/C4/C128), so collect_offload_pairs would find no KV blocks
-    // and silently offload nothing while still allocating the pinned host
-    // cache. Fail loud until per-block-type host offload is implemented.
-    CHECK(!util::is_deepseek_v4_model_type(args_.model_type()))
-        << "host_blocks_factor > 1 (host prefix-cache offload) does not "
-           "support "
-           "DeepSeek-V4 yet: its SWA/C4/C128 block groups have no KV pool to "
-           "offload. Disable --host_blocks_factor for DeepSeek-V4 models.";
     options.enable_host_offload(true);
     kv_cache_manager_ =
         std::make_unique<HierarchyBlockManagerPool>(options, this, dp_size_);

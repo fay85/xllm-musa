@@ -110,8 +110,6 @@ KVCacheEstimateOptions make_kv_cache_estimate_options(
   estimate_options.is_draft_engine = options.is_draft_engine();
   estimate_options.enable_prefix_cache =
       ::xllm::KVCacheConfig::get_instance().enable_prefix_cache();
-  estimate_options.enable_rdma_scale_padding =
-      options.instance_role() != InstanceRole::DEFAULT;
   return estimate_options;
 }
 
