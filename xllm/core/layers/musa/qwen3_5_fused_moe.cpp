@@ -100,7 +100,7 @@ bool use_fused_moe_aot(int64_t num_tokens, bool is_decode) {
   if (!enabled || !is_decode) {
     return false;
   }
-  if (xllm::kernel::cuda::musa_fused_moe_aot_available(num_tokens)) {
+  if (xllm::kernel::musa::musa_fused_moe_aot_available(num_tokens)) {
     return true;
   }
   LOG_FIRST_N(WARNING, 1)
@@ -115,7 +115,7 @@ bool use_bf16_fused_moe_aot(int64_t num_tokens, bool is_decode) {
   if (!enabled || !is_decode) {
     return false;
   }
-  if (xllm::kernel::cuda::musa_fused_moe_bf16_aot_available(num_tokens)) {
+  if (xllm::kernel::musa::musa_fused_moe_bf16_aot_available(num_tokens)) {
     return true;
   }
   LOG_FIRST_N(WARNING, 1)
@@ -142,7 +142,7 @@ bool use_musa_moe_topk(int64_t num_tokens,
   if (!enabled || !shape_supported) {
     return false;
   }
-  if (xllm::kernel::cuda::musa_moe_topk_softmax_available()) {
+  if (xllm::kernel::musa::musa_moe_topk_softmax_available()) {
     return true;
   }
   LOG_FIRST_N(WARNING, 1)
@@ -251,14 +251,14 @@ Qwen3_5MusaFusedMoEImpl::Qwen3_5MusaFusedMoEImpl(
                            false);
 
     if (util::get_bool_env("XLLM_MUSA_FUSED_MOE_AOT", true) &&
-        xllm::kernel::cuda::musa_fused_moe_aot_available(
+        xllm::kernel::musa::musa_fused_moe_aot_available(
             /*num_tokens=*/1)) {
-      xllm::kernel::cuda::prepare_musa_fused_moe_aot(w13_.device());
+      xllm::kernel::musa::prepare_musa_fused_moe_aot(w13_.device());
     }
   } else if (util::get_bool_env("XLLM_MUSA_FUSED_MOE_BF16_AOT", true) &&
-             xllm::kernel::cuda::musa_fused_moe_bf16_aot_available(
+             xllm::kernel::musa::musa_fused_moe_bf16_aot_available(
                  /*num_tokens=*/1)) {
-    xllm::kernel::cuda::prepare_musa_fused_moe_bf16_aot(w13_.device());
+    xllm::kernel::musa::prepare_musa_fused_moe_bf16_aot(w13_.device());
   }
 }
 
@@ -379,7 +379,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     auto router_logits = gate_->forward(hidden_states);
     if (use_musa_moe_topk(num_tokens, router_logits, num_experts_, topk_)) {
       std::tie(topk_weights, topk_ids) =
-          xllm::kernel::cuda::musa_moe_topk_softmax(router_logits, topk_);
+          xllm::kernel::musa::musa_moe_topk_softmax(router_logits, topk_);
     } else {
       auto router_probs = torch::softmax(router_logits.to(torch::kFloat32), -1);
       auto topk_result = torch::topk(router_probs, topk_, -1, true, true);
@@ -393,12 +393,12 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
   auto flat_ids = topk_ids.reshape({assignment_count});
 
   if (!use_fp8_ && use_bf16_fused_moe_aot(num_tokens, is_decode)) {
-    return xllm::kernel::cuda::musa_fused_moe_aot_bf16(
+    return xllm::kernel::musa::musa_fused_moe_aot_bf16(
         hidden_states, w13_, w2_, topk_weights, topk_ids);
   }
 
   if (use_fp8_ && use_fused_moe_aot(num_tokens, is_decode)) {
-    return xllm::kernel::cuda::musa_fused_moe_aot_fp8(hidden_states,
+    return xllm::kernel::musa::musa_fused_moe_aot_fp8(hidden_states,
                                                       w13_,
                                                       w13_scale_inv_,
                                                       w2_,
@@ -409,32 +409,32 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
 
   if (use_fp8_ && use_contiguous_fp8_moe_ &&
       use_ragged_moe_decode(num_tokens, is_decode)) {
-    auto preprocess = xllm::kernel::cuda::fused_moe_ragged_preprocess_fp8(
+    auto preprocess = xllm::kernel::musa::fused_moe_ragged_preprocess_fp8(
         hidden_states.contiguous(),
         topk_ids,
         /*group_size=*/128,
         kRaggedDecodeAlignment);
     torch::Tensor gate_up =
-        xllm::kernel::cuda::ragged_moe_gemm_fp8(std::get<0>(preprocess),
+        xllm::kernel::musa::ragged_moe_gemm_fp8(std::get<0>(preprocess),
                                                 std::get<1>(preprocess),
                                                 w13_,
                                                 w13_scale_inv_,
                                                 std::get<2>(preprocess),
                                                 hidden_states.scalar_type(),
                                                 kRaggedDecodeAlignment);
-    auto activated = xllm::kernel::cuda::fused_moe_ragged_swiglu_quant_fp8(
+    auto activated = xllm::kernel::musa::fused_moe_ragged_swiglu_quant_fp8(
         gate_up,
         /*group_size=*/128,
         kRaggedDecodeAlignment);
     torch::Tensor down =
-        xllm::kernel::cuda::ragged_moe_gemm_fp8(std::get<0>(activated),
+        xllm::kernel::musa::ragged_moe_gemm_fp8(std::get<0>(activated),
                                                 std::get<1>(activated),
                                                 w2_,
                                                 w2_scale_inv_,
                                                 std::get<2>(preprocess),
                                                 hidden_states.scalar_type(),
                                                 kRaggedDecodeAlignment);
-    return xllm::kernel::cuda::fused_moe_ragged_combine(
+    return xllm::kernel::musa::fused_moe_ragged_combine(
         down, topk_weights, num_tokens, kRaggedDecodeAlignment);
   }
 
@@ -444,26 +444,26 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
       token_outputs.reserve(num_tokens);
       for (int64_t token_idx = 0; token_idx < num_tokens; ++token_idx) {
         auto token_preprocess =
-            xllm::kernel::cuda::fused_moe_ragged_preprocess_bf16(
+            xllm::kernel::musa::fused_moe_ragged_preprocess_bf16(
                 hidden_states.narrow(0, token_idx, 1).contiguous(),
                 topk_ids.narrow(0, token_idx, 1).contiguous(),
                 kRaggedDecodeAlignment);
-        torch::Tensor token_gate_up = xllm::kernel::cuda::ragged_moe_gemm_bf16(
+        torch::Tensor token_gate_up = xllm::kernel::musa::ragged_moe_gemm_bf16(
             std::get<0>(token_preprocess),
             w13_,
             std::get<1>(token_preprocess),
             hidden_states.scalar_type(),
             kRaggedDecodeAlignment);
         torch::Tensor token_activated =
-            xllm::kernel::cuda::fused_moe_ragged_swiglu_bf16(
+            xllm::kernel::musa::fused_moe_ragged_swiglu_bf16(
                 token_gate_up, kRaggedDecodeAlignment);
-        torch::Tensor token_down = xllm::kernel::cuda::ragged_moe_gemm_bf16(
+        torch::Tensor token_down = xllm::kernel::musa::ragged_moe_gemm_bf16(
             token_activated,
             w2_,
             std::get<1>(token_preprocess),
             hidden_states.scalar_type(),
             kRaggedDecodeAlignment);
-        token_outputs.emplace_back(xllm::kernel::cuda::fused_moe_ragged_combine(
+        token_outputs.emplace_back(xllm::kernel::musa::fused_moe_ragged_combine(
             token_down,
             topk_weights.narrow(0, token_idx, 1).contiguous(),
             /*num_tokens=*/1,
@@ -475,35 +475,35 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     auto preprocess =
         num_tokens == 1
             ? std::tuple_cat(
-                  xllm::kernel::cuda::fused_moe_ragged_preprocess_bf16(
+                  xllm::kernel::musa::fused_moe_ragged_preprocess_bf16(
                       hidden_states.contiguous(),
                       topk_ids,
                       kRaggedDecodeAlignment),
                   std::make_tuple(torch::Tensor()))
-            : xllm::kernel::cuda::fused_moe_decode_preprocess_bf16(
+            : xllm::kernel::musa::fused_moe_decode_preprocess_bf16(
                   hidden_states.contiguous(),
                   topk_ids,
                   num_experts_,
                   kRaggedDecodeAlignment);
     torch::Tensor gate_up =
-        xllm::kernel::cuda::ragged_moe_gemm_bf16(std::get<0>(preprocess),
+        xllm::kernel::musa::ragged_moe_gemm_bf16(std::get<0>(preprocess),
                                                  w13_,
                                                  std::get<1>(preprocess),
                                                  hidden_states.scalar_type(),
                                                  kRaggedDecodeAlignment);
     torch::Tensor activated =
-        num_tokens == 1 ? xllm::kernel::cuda::fused_moe_ragged_swiglu_bf16(
+        num_tokens == 1 ? xllm::kernel::musa::fused_moe_ragged_swiglu_bf16(
                               gate_up, kRaggedDecodeAlignment)
-                        : xllm::kernel::cuda::fused_moe_indexed_swiglu_bf16(
+                        : xllm::kernel::musa::fused_moe_indexed_swiglu_bf16(
                               gate_up, std::get<2>(preprocess));
     torch::Tensor down =
-        xllm::kernel::cuda::ragged_moe_gemm_bf16(activated,
+        xllm::kernel::musa::ragged_moe_gemm_bf16(activated,
                                                  w2_,
                                                  std::get<1>(preprocess),
                                                  hidden_states.scalar_type(),
                                                  kRaggedDecodeAlignment);
     if (num_tokens == 1) {
-      return xllm::kernel::cuda::fused_moe_ragged_combine(
+      return xllm::kernel::musa::fused_moe_ragged_combine(
           down, topk_weights, num_tokens, kRaggedDecodeAlignment);
     }
     auto valid_rows = std::get<2>(preprocess).to(torch::kLong);
@@ -515,13 +515,13 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
   }
 
   if (use_contiguous_bf16_moe_ && is_decode) {
-    auto preprocess = xllm::kernel::cuda::fused_moe_preprocess_bf16(
+    auto preprocess = xllm::kernel::musa::fused_moe_preprocess_bf16(
         hidden_states.contiguous(),
         topk_ids,
         num_experts_,
         kCompactBf16MAlignment);
     torch::Tensor gate_up =
-        xllm::kernel::cuda::ragged_moe_gemm_bf16(std::get<0>(preprocess),
+        xllm::kernel::musa::ragged_moe_gemm_bf16(std::get<0>(preprocess),
                                                  w13_,
                                                  std::get<1>(preprocess),
                                                  hidden_states.scalar_type(),
@@ -529,7 +529,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     torch::Tensor activated;
     activation_->forward(gate_up, activated);
     torch::Tensor down =
-        xllm::kernel::cuda::ragged_moe_gemm_bf16(activated,
+        xllm::kernel::musa::ragged_moe_gemm_bf16(activated,
                                                  w2_,
                                                  std::get<1>(preprocess),
                                                  hidden_states.scalar_type(),
@@ -549,7 +549,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
           const torch::Tensor& src_to_dst,
           const torch::Tensor& token_counts_i32,
           const torch::Tensor& original_indices) -> torch::Tensor {
-    auto gate_up = xllm::kernel::cuda::contiguous_moe_gemm_fp8(
+    auto gate_up = xllm::kernel::musa::contiguous_moe_gemm_fp8(
         sorted_hidden_fp8,
         sorted_hidden_scale,
         w13_,
@@ -561,7 +561,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     activation_->forward(gate_up, activated);
     auto [activated_fp8, activated_scale] =
         xllm::kernel::per_token_group_quant_fp8(activated, 128);
-    auto down = xllm::kernel::cuda::contiguous_moe_gemm_fp8(
+    auto down = xllm::kernel::musa::contiguous_moe_gemm_fp8(
         activated_fp8,
         activated_scale,
         w2_,
@@ -570,7 +570,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
         hidden_states.scalar_type());
 
     if (num_tokens >= kFusedCombineMinTokens) {
-      return xllm::kernel::cuda::moe_combine_result_indexed(
+      return xllm::kernel::musa::moe_combine_result_indexed(
           down,
           src_to_dst,
           topk_weights,
@@ -589,7 +589,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
   };
 
   if (use_contiguous_fp8_moe_ && use_fused_moe_preprocess(num_tokens)) {
-    auto preprocess = xllm::kernel::cuda::fused_moe_preprocess_fp8(
+    auto preprocess = xllm::kernel::musa::fused_moe_preprocess_fp8(
         hidden_states.contiguous(), topk_ids, num_experts_, 128);
     return run_contiguous_fp8(std::get<0>(preprocess),
                               std::get<1>(preprocess),
@@ -606,7 +606,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
         preprocess;
     {
-      preprocess = xllm::kernel::cuda::fused_moe_preprocess_bf16(
+      preprocess = xllm::kernel::musa::fused_moe_preprocess_bf16(
           hidden_states.contiguous(),
           topk_ids,
           num_experts_,
@@ -615,13 +615,13 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     torch::Tensor gate_up;
     {
       if (use_contiguous_bf16_prefill_gemm(num_tokens)) {
-        gate_up = xllm::kernel::cuda::contiguous_moe_gemm_bf16(
+        gate_up = xllm::kernel::musa::contiguous_moe_gemm_bf16(
             std::get<0>(preprocess),
             w13_,
             std::get<3>(preprocess),
             hidden_states.scalar_type());
       } else {
-        gate_up = xllm::kernel::cuda::ragged_moe_gemm_bf16(
+        gate_up = xllm::kernel::musa::ragged_moe_gemm_bf16(
             std::get<0>(preprocess),
             w13_,
             std::get<1>(preprocess),
@@ -632,19 +632,19 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
 
     torch::Tensor activated;
     {
-      activated = xllm::kernel::cuda::fused_moe_indexed_swiglu_bf16(
+      activated = xllm::kernel::musa::fused_moe_indexed_swiglu_bf16(
           gate_up, std::get<2>(preprocess));
     }
     torch::Tensor down;
     {
       if (use_contiguous_bf16_prefill_gemm(num_tokens)) {
-        down = xllm::kernel::cuda::contiguous_moe_gemm_bf16(
+        down = xllm::kernel::musa::contiguous_moe_gemm_bf16(
             activated,
             w2_,
             std::get<3>(preprocess),
             hidden_states.scalar_type());
       } else {
-        down = xllm::kernel::cuda::ragged_moe_gemm_bf16(
+        down = xllm::kernel::musa::ragged_moe_gemm_bf16(
             activated,
             w2_,
             std::get<1>(preprocess),
@@ -654,7 +654,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     }
     torch::Tensor combined;
     {
-      combined = xllm::kernel::cuda::moe_combine_result_indexed(
+      combined = xllm::kernel::musa::moe_combine_result_indexed(
           down,
           std::get<2>(preprocess),
           topk_weights,
@@ -717,7 +717,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     auto [expanded_fp8, expanded_scale] =
         xllm::kernel::per_token_group_quant_fp8(expanded, 128);
     gate_up =
-        xllm::kernel::cuda::masked_moe_gemm_fp8(expanded_fp8,
+        xllm::kernel::musa::masked_moe_gemm_fp8(expanded_fp8,
                                                 expanded_scale,
                                                 w13_,
                                                 w13_scale_inv_,
@@ -726,7 +726,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
                                                 expected_m);
   } else {
     gate_up =
-        xllm::kernel::cuda::masked_moe_gemm_bf16(expanded,
+        xllm::kernel::musa::masked_moe_gemm_bf16(expanded,
                                                  w13_,
                                                  token_counts_i32,
                                                  hidden_states.scalar_type(),
@@ -740,7 +740,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
   if (use_fp8_) {
     auto [activated_fp8, activated_scale] =
         xllm::kernel::per_token_group_quant_fp8(activated, 128);
-    down = xllm::kernel::cuda::masked_moe_gemm_fp8(activated_fp8,
+    down = xllm::kernel::musa::masked_moe_gemm_fp8(activated_fp8,
                                                    activated_scale,
                                                    w2_,
                                                    w2_scale_inv_,
@@ -748,7 +748,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
                                                    hidden_states.scalar_type(),
                                                    expected_m);
   } else {
-    down = xllm::kernel::cuda::masked_moe_gemm_bf16(activated,
+    down = xllm::kernel::musa::masked_moe_gemm_bf16(activated,
                                                     w2_,
                                                     token_counts_i32,
                                                     hidden_states.scalar_type(),
@@ -803,7 +803,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward(
   {
     shared = shared_experts_->forward(hidden_states);
     if (use_fused_shared_expert_gate(hidden_states.size(0))) {
-      xllm::kernel::cuda::fused_shared_expert_gate_inplace(
+      xllm::kernel::musa::fused_shared_expert_gate_inplace(
           shared, hidden_states, shared_expert_gate_->weight);
     } else {
       auto shared_gate =

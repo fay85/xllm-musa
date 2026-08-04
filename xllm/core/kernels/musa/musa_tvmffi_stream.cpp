@@ -137,6 +137,15 @@ MusaTvmffiStreamGuard::~MusaTvmffiStreamGuard() {
 
 }  // namespace xllm::kernel::cuda
 
+namespace xllm::kernel::musa {
+
+bool is_musa_stream_capturing() {
+  return c10::musa::currentStreamCaptureStatusMayInitCtx() !=
+         c10::musa::CaptureStatus::None;
+}
+
+}  // namespace xllm::kernel::musa
+
 #else
 
 namespace xllm::kernel::cuda {
@@ -152,6 +161,12 @@ MusaTvmffiStreamGuard::MusaTvmffiStreamGuard(const torch::Device& /*device*/) {}
 MusaTvmffiStreamGuard::~MusaTvmffiStreamGuard() {}
 
 }  // namespace xllm::kernel::cuda
+
+namespace xllm::kernel::musa {
+
+bool is_musa_stream_capturing() { return false; }
+
+}  // namespace xllm::kernel::musa
 
 #endif
 

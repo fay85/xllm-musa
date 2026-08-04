@@ -39,6 +39,12 @@ limitations under the License.
 
 namespace ffi = tvm::ffi;
 
+namespace xllm::kernel::musa {
+
+bool is_musa_stream_capturing();
+
+}  // namespace xllm::kernel::musa
+
 namespace xllm::kernel::cuda {
 
 inline bool is_torch_musa_device(const torch::Device& device) {
