@@ -17,10 +17,12 @@ limitations under the License.
 
 #include <torch/torch.h>
 
+#include <cstdint>
 #include <optional>
-#include <string>
 #include <tuple>
 #include <utility>
+
+#include "core/kernels/musa/ops_api.h"
 
 namespace xllm {
 namespace kernel {
@@ -31,24 +33,26 @@ struct FusedGdnGatingParams;
 struct FusedQkvzbaSplitReshapeParams;
 struct FusedRecurrentGatedDeltaRuleParams;
 struct GatedLayerNormParams;
-struct MateGatedDeltaRuleDecodeParams;
-struct MateGatedDeltaRulePrefillParams;
 struct PartialRotaryEmbeddingParams;
 struct FusedSigmoidGatingDeltaRuleUpdateParams;
 
-namespace cuda {
+namespace musa {
 
 torch::Tensor l2_norm(torch::Tensor& x, double eps);
 
+std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
+    const torch::Tensor& query,
+    const torch::Tensor& key,
+    double eps);
+
+// Normalizes Q/K in place. The fused H=128 kernel loads each row before any
+// stores, so input/output aliasing is safe.
+void l2_norm_pair_fused_inplace(torch::Tensor& query,
+                                torch::Tensor& key,
+                                double eps);
+
 std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
     FusedGdnGatingParams& params);
-
-std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,
-                                                   const torch::Tensor& b,
-                                                   const torch::Tensor& A_log,
-                                                   const torch::Tensor& dt_bias,
-                                                   double sp_beta,
-                                                   double threshold);
 
 std::pair<torch::Tensor, torch::Tensor> fused_recurrent_gated_delta_rule(
     FusedRecurrentGatedDeltaRuleParams& params);
@@ -79,14 +83,6 @@ torch::Tensor recurrent_gated_delta_rule(
     const std::optional<torch::Tensor>& g,
     const std::optional<torch::Tensor>& gk);
 
-std::string get_mate_gdn_prefill_uri(int64_t num_q_heads,
-                                     int64_t num_v_heads,
-                                     torch::ScalarType dtype);
-
-std::string get_mate_gdn_decode_uri(int64_t num_q_heads,
-                                    int64_t num_v_heads,
-                                    torch::ScalarType dtype);
-
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     MateGatedDeltaRulePrefillParams& params);
 
@@ -95,6 +91,28 @@ torch::Tensor mate_gated_delta_rule_decode(
 
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
+
+void causal_conv1d_fwd(const torch::Tensor& x,
+                       const torch::Tensor& weight,
+                       torch::Tensor& out,
+                       const std::optional<torch::Tensor>& bias,
+                       const std::optional<torch::Tensor>& conv_states,
+                       const std::optional<torch::Tensor>& query_start_loc,
+                       const std::optional<torch::Tensor>& cache_indices,
+                       const std::optional<torch::Tensor>& has_initial_state,
+                       bool silu_activation,
+                       int64_t pad_slot_id);
+
+void causal_conv1d_fwd_token_major(const torch::Tensor& x,
+                                   const torch::Tensor& weight,
+                                   torch::Tensor& out,
+                                   const std::optional<torch::Tensor>& bias,
+                                   const torch::Tensor& conv_states,
+                                   const torch::Tensor& query_start_loc,
+                                   const torch::Tensor& cache_indices,
+                                   const torch::Tensor& has_initial_state,
+                                   bool silu_activation,
+                                   int64_t pad_slot_id);
 
 torch::Tensor causal_conv1d(const torch::Tensor& x,
                             const torch::Tensor& weight,
@@ -108,24 +126,18 @@ torch::Tensor causal_conv1d(const torch::Tensor& x,
                             int64_t pad_slot_id,
                             int64_t run_mode);
 
+torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
+                                    const torch::Tensor& weight,
+                                    const torch::Tensor& conv_state,
+                                    const std::optional<torch::Tensor>& bias,
+                                    const torch::Tensor& query_start_loc,
+                                    const torch::Tensor& cache_indices,
+                                    const torch::Tensor& has_initial_state,
+                                    bool silu_activation);
+
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params);
 
-void causal_conv1d_decode_fused(const torch::Tensor& x,
-                                const torch::Tensor& weight,
-                                const std::optional<torch::Tensor>& bias,
-                                torch::Tensor conv_state,
-                                const torch::Tensor& cache_indices,
-                                torch::Tensor output_buf,
-                                int pad_slot_id,
-                                bool silu_activation);
-
-void gated_rms_norm_fused(const torch::Tensor& x,
-                          const torch::Tensor& weight,
-                          const torch::Tensor& z,
-                          torch::Tensor output,
-                          double eps);
-
-}  // namespace cuda
+}  // namespace musa
 }  // namespace kernel
 }  // namespace xllm
