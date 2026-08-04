@@ -42,4 +42,5 @@ cc_library(
     xllm_ops
     nnopbase
     opapi
+    platform_npu
 )
