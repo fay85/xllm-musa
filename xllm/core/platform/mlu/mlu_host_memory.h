@@ -16,17 +16,29 @@ limitations under the License.
 #pragma once
 
 #include <cstddef>
+#include <memory>
 
 namespace xllm::mlu {
 
-constexpr size_t kMinRdmaRegisterBytes = 2 * 1024 * 1024;
+// Owns a page-aligned MLU pinned-host allocation. The implementation records
+// the allocating context across moves and restores the releasing thread's
+// current context after freeing the allocation.
+class MLUHostMemoryRegion final {
+ public:
+  MLUHostMemoryRegion();
+  explicit MLUHostMemoryRegion(size_t bytes);
+  MLUHostMemoryRegion(const MLUHostMemoryRegion&) = delete;
+  MLUHostMemoryRegion& operator=(const MLUHostMemoryRegion&) = delete;
+  MLUHostMemoryRegion(MLUHostMemoryRegion&& other) noexcept;
+  MLUHostMemoryRegion& operator=(MLUHostMemoryRegion&& other) noexcept;
+  ~MLUHostMemoryRegion();
 
-struct RdmaMemoryPlan {
-  size_t logical_bytes = 0;
-  size_t block_bytes = 0;
-  size_t registered_bytes = 0;
+  void* data() const;
+  size_t size() const;
+
+ private:
+  class Impl;
+  std::unique_ptr<Impl> impl_;
 };
-
-RdmaMemoryPlan make_rdma_memory_plan(size_t logical_bytes, size_t block_count);
 
 }  // namespace xllm::mlu

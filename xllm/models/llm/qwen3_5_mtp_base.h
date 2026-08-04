@@ -116,7 +116,8 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
         layer::AttentionMetadataBuilder::build(
             input_params,
             model_args_.enable_mla(),
-            build_attention_mask(input_params));
+            build_attention_mask(input_params),
+            /*device=*/device_);
     prepare_mrope(positions, attn_metadata);
 
     torch::Tensor embedding = embed_tokens_(tokens);

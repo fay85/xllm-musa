@@ -1738,7 +1738,8 @@ class WanTransformer3DModelImpl : public torch::nn::Module {
                   bool rolling = false) {
     auto freqs_cos_fp32 = rope_->get_freqs_cos().clone();
     auto freqs_sin_fp32 = rope_->get_freqs_sin().clone();
-    // TODO: check the dtype solution. just use the options' dtype to control, instead of the to dtype.
+    // TODO: check the dtype solution. just use the options' dtype to control,
+    // instead of the to dtype.
     dit::to_bf16_preserve_quant(*this,
                                 rolling ? torch::kCPU : options_.device());
 

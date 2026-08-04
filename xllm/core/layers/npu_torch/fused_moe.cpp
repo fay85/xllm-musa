@@ -45,6 +45,25 @@ namespace layer {
 
 namespace {
 
+// Normalize dp_global_token_nums for MoE collectives. Under dp>1 an empty
+// dp_rank is padded with a single fake token by worker_impl (see the empty
+// shard padding path in WorkerImpl::execute_model) but dp_global_token_nums
+// still reports 0 for that rank. Passing this list into
+// parallel_state::gather (an allgather_base) would fail
+// CHECK_EQ(local_rows, token_num_list[rank]) on the padded rank. All ranks
+// apply the same 0->1 normalization so the token list stays consistent across
+// the DP group; the fake row is later dropped by the per-rank slice back.
+std::vector<int32_t> make_moe_dp_token_nums(
+    const std::vector<int32_t>& dp_global_token_nums) {
+  std::vector<int32_t> normalized = dp_global_token_nums;
+  for (int32_t& token_num : normalized) {
+    if (token_num == 0) {
+      token_num = 1;
+    }
+  }
+  return normalized;
+}
+
 // Generic local tensor helpers.
 torch::Tensor get_tensor_with_weight_suffix(const StateDict& state_dict,
                                             const std::string& tensor_name) {
@@ -1124,10 +1143,12 @@ torch::Tensor FusedMoEImpl::forward(const torch::Tensor& hidden_states,
                                     const ModelInputParams& input_params) {
   auto input = hidden_states;
   bool need_slice = false;
+  std::vector<int32_t> moe_dp_token_nums;
   if (should_gather_dp_inputs_for_moe()) {
-    input = parallel_state::gather(input,
-                                   parallel_args_.dp_local_process_group_,
-                                   input_params.parallel.dp_global_token_nums);
+    moe_dp_token_nums =
+        make_moe_dp_token_nums(input_params.parallel.dp_global_token_nums);
+    input = parallel_state::gather(
+        input, parallel_args_.dp_local_process_group_, moe_dp_token_nums);
     need_slice = true;
   }
 
@@ -1148,11 +1169,10 @@ torch::Tensor FusedMoEImpl::forward(const torch::Tensor& hidden_states,
   auto output = forward_expert(input, router_logits, shared_output);
 
   if (need_slice) {
-    const auto& dp_tokens = input_params.parallel.dp_global_token_nums;
     const int64_t dp_rank = parallel_args_.dp_local_process_group_->rank();
-    auto start =
-        std::accumulate(dp_tokens.begin(), dp_tokens.begin() + dp_rank, 0);
-    auto end = start + dp_tokens[dp_rank];
+    auto start = std::accumulate(
+        moe_dp_token_nums.begin(), moe_dp_token_nums.begin() + dp_rank, 0);
+    auto end = start + moe_dp_token_nums[dp_rank];
     output = output.slice(0, start, end);
   }
   return output;
