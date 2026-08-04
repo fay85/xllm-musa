@@ -49,8 +49,7 @@ std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
     double eps);
 
 // Normalizes Q/K in place. The fused H=128 kernel loads each row before any
-// stores, so input/output aliasing is safe and avoids two bucket-sized replay
-// allocations in the piecewise GDN runner.
+// stores, so input/output aliasing is safe.
 void l2_norm_pair_fused_inplace(torch::Tensor& query,
                                 torch::Tensor& key,
                                 double eps);

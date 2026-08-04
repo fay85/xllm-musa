@@ -24,23 +24,12 @@ limitations under the License.
 #include <optional>
 #include <string>
 #include <tuple>
-#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
-#if defined(__CUDACC__) || defined(_NVHPC_CUDA)
-#define HOST_DEVICE_INLINE __host__ __device__ __forceinline__
-#define DEVICE_INLINE __device__ __forceinline__
-#define HOST_INLINE __host__ __forceinline__
-#else
-#define HOST_DEVICE_INLINE inline
-#define DEVICE_INLINE inline
-#define HOST_INLINE inline
-#endif
-
 namespace ffi = tvm::ffi;
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 
 inline bool is_torch_musa_device(const torch::Device& device) {
   return device.is_privateuseone() || device.is_cuda();
@@ -105,23 +94,6 @@ class MusaTvmffiStreamGuard final {
   bool uses_event_handoff_ = false;
 };
 
-template <typename T>
-HOST_DEVICE_INLINE constexpr std::enable_if_t<std::is_integral_v<T>, T>
-ceil_div(T a, T b) {
-  return (a + b - 1) / b;
-}
-
-enum class ActivationType : int8_t {
-  GELU = 0,
-  RELU = 1,
-  SILU = 2,
-  SWIGLU = 3,
-  GEGLU = 4,
-  SWIGLU_BIAS = 5,
-  RELU2 = 6,
-  IDENTITY = 7,
-  INVALID_TYPE = 8
-};
 
 torch::Tensor get_cache_buffer(const int32_t seq_len,
                                const torch::Device& device);
@@ -215,4 +187,4 @@ void end_ffi_alloc_replay();
 FfiAllocMode get_ffi_alloc_mode();
 
 void bind_tvmffi_stream_to_current_torch_stream(const torch::Device& device);
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa

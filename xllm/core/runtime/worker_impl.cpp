@@ -61,10 +61,9 @@ limitations under the License.
 #include "platform/torch_profiler.h"
 #endif
 #if defined(USE_CUDA) || defined(USE_DCU) || defined(USE_MUSA)
+#include "kernels/cuda/cuda_ops_api.h"
 #if defined(USE_MUSA)
 #include "kernels/musa/musa_ops_api.h"
-#else
-#include "kernels/cuda/cuda_ops_api.h"
 #endif
 #endif
 #if defined(USE_CUDA)
@@ -1034,11 +1033,7 @@ bool WorkerImpl::can_use_cuda_block_copy_kernel(
 void WorkerImpl::execute_cuda_block_copy_kernel(
     const ModelInputParams& input_params) {
   CHECK(!kv_caches_.empty());
-#if defined(USE_MUSA)
-  xllm::kernel::musa::block_copy(
-#else
   xllm::kernel::cuda::block_copy(
-#endif
       cuda_block_copy_runtime_state_.k_cache_ptrs_device,
       cuda_block_copy_runtime_state_.v_cache_ptrs_device,
       input_params.block_copy.src_block_indices,

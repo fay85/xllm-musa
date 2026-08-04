@@ -26,8 +26,6 @@ namespace xllm::layer::musa {
 // copy semantics while isolating backend-specific fields from the common type.
 struct MusaAttentionMetadata {
   bool is_spec_verify = false;
-  torch::Tensor gdn_cu_seq_lens;
-  torch::Tensor gdn_kkt_cu_seq_lens;
   torch::Tensor expanded_paged_kv_indptr;
   torch::Tensor expanded_paged_kv_indices;
   torch::Tensor expanded_paged_kv_last_page_len;

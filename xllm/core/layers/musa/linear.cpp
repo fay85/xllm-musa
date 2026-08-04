@@ -19,7 +19,6 @@ limitations under the License.
 
 #include <algorithm>
 
-#include "layers/musa/graph_output_buffers.h"
 #include "util/env_var.h"
 
 namespace xllm::layer::musa {
@@ -56,12 +55,6 @@ void set_persistent_output_buf(xllm::kernel::musa::MatmulParams& params,
                                MatmulOutputBuffers& output_buffers,
                                const torch::Tensor& input,
                                const torch::Tensor& weight) {
-  PiecewiseGraphMatmulBufferPool* pool =
-      PiecewiseGraphMatmulBufferScope::current_buffer_pool();
-  if (pool != nullptr) {
-    params.output = pool->get(input, weight);
-    return;
-  }
   params.output = output_buffers.get(input, weight);
 }
 

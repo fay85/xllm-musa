@@ -24,7 +24,6 @@ limitations under the License.
 #include <vector>
 
 #include "core/common/macros.h"
-#include "core/kernels/musa/global_capture_instance.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/param.h"
 #include "core/util/env_var.h"
@@ -345,9 +344,7 @@ void l2norm_qk_last_dim(torch::Tensor& query,
   l2norm_last_dim(key);
 }
 
-// Grow-only scratch reused across GDN layers within a forward (eager only).
-// Under graph capture we always allocate fresh tensors to keep addresses
-// capture-safe for the recorded sizes.
+// Grow-only scratch reused across GDN layers within a forward.
 struct MateGdnPrefillScratch {
   torch::Tensor a;
   torch::Tensor output;
@@ -361,13 +358,6 @@ struct MateGdnPrefillScratch {
 MateGdnPrefillScratch& mate_gdn_prefill_scratch() {
   static thread_local MateGdnPrefillScratch scratch;
   return scratch;
-}
-
-bool mate_gdn_scratch_reuse_allowed() {
-  // Capture-time allocations must stay address-stable for the recorded graph;
-  // never reuse scratch while xLLM reports capture in progress.
-  return !xllm::runtime::musa::GlobalCaptureInstance::get_instance()
-              .is_capturing();
 }
 
 torch::Tensor ensure_scratch_tensor(torch::Tensor& buf,
@@ -1115,22 +1105,18 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       mate_kkt_module_available(get_mate_kkt_solve_uri(
           num_q_heads, num_v_heads, query.scalar_type()));
 
-  // Host→device torch::tensor(cu_host) is not capture-safe; also skip varlen
-  // while capturing even for packed shapes (packed prefill is eager).
   const bool use_c1_partial_fixed =
       mate_gdn_c1_partial_fixed_enabled() && input_batch == 1 &&
       input_seq_len >= kGdnChunkSize && input_seq_len % kGdnChunkSize != 0 &&
       (strided_padded_available || legacy_padded_available);
-  const bool capturing =
-      xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
   // Full-varlen Mate path handles a partial final chunk directly.
   // Keep XLLM_MATE_GDN_UNPADDED_C1=0 as a runtime rollback switch.
   const bool use_unpadded_c1_varlen =
-      !use_c1_partial_fixed && !capturing && mate_gdn_unpadded_c1_enabled() &&
+      !use_c1_partial_fixed && mate_gdn_unpadded_c1_enabled() &&
       input_batch == 1 && input_seq_len >= kGdnChunkSize &&
       input_seq_len % kGdnChunkSize != 0 && varlen_available;
   const bool use_full_varlen =
-      !use_c1_partial_fixed && varlen_available && !capturing &&
+      !use_c1_partial_fixed && varlen_available &&
       ((params.output.has_value() && params.output->defined()) ||
        (params.final_state.has_value() && params.final_state->defined()) ||
        (params.kkt_output.has_value() && params.kkt_output->defined()) ||
@@ -1252,13 +1238,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     }();
 
     torch::Tensor kkt_cu_seqlens;
-    const bool has_device_kkt =
-        params.cu_seqlens_kkt.has_value() && params.cu_seqlens_kkt->defined();
-    if (has_device_kkt && !need_unpack && pad_size == 0) {
-      kkt_cu_seqlens = params.cu_seqlens_kkt->to(torch::kInt32).contiguous();
-      CHECK_EQ(kkt_cu_seqlens.size(0), cu_seqlens.size(0));
-    } else if (mate_gdn_kkt_cu_alias_enabled() && !need_unpack &&
-               pad_size == 0) {
+    if (mate_gdn_kkt_cu_alias_enabled() && !need_unpack && pad_size == 0) {
       // With no pack/pad mutation, live cu_seqlens already ends at
       // num_tokens. KKT only reads the tensor, so alias it instead of doing a
       // redundant device clone and endpoint fill on every GDN layer.
@@ -1373,7 +1353,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       value = pad_time_dim_4d(value, pad_size);
     }
     const int64_t num_tokens = query.size(1);
-    const bool reuse = mate_gdn_scratch_reuse_allowed();
+    constexpr bool reuse = true;
     auto& scratch = mate_gdn_prefill_scratch();
 
     if (params.use_qk_l2norm_in_kernel) {

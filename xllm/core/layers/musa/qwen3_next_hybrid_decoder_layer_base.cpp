@@ -132,7 +132,7 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   } else {
     std::tie(x, residual) = input_norm_->forward(x, residual);
   }
-  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
+  xllm::kernel::musa::sync_musa_graph_preparation_stage(x.device());
 
   // Attention
   if (attention_) {
@@ -141,11 +141,11 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   } else {
     x = linear_attention_->forward(x, attn_metadata, kv_cache, input_params);
   }
-  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
+  xllm::kernel::musa::sync_musa_graph_preparation_stage(x.device());
 
   // Post-attention norm
   std::tie(x, residual) = post_norm_->forward(x, residual);
-  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
+  xllm::kernel::musa::sync_musa_graph_preparation_stage(x.device());
 
   // MLP forward
   if (moe_mlp_) {
@@ -153,7 +153,7 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   } else {
     x = mlp_(x);
   }
-  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
+  xllm::kernel::musa::sync_musa_graph_preparation_stage(x.device());
 
   return x;
 }

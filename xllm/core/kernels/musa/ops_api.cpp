@@ -20,16 +20,17 @@ limitations under the License.
 namespace xllm::kernel::musa {
 
 torch::Tensor matmul(MatmulParams& params) {
-  return cuda::matmul(params.a, params.b, params.bias, params.output);
+  return xllm::kernel::musa::matmul(
+      params.a, params.b, params.bias, params.output);
 }
 
 torch::Tensor fp8_block_matmul(Fp8BlockMatmulParams& params) {
-  return cuda::gemm_fp8_nt_groupwise(params.a,
-                                     params.b,
-                                     params.a_scale,
-                                     params.b_scale,
-                                     params.output_dtype,
-                                     params.output);
+  return xllm::kernel::musa::gemm_fp8_nt_groupwise(params.a,
+                                                   params.b,
+                                                   params.a_scale,
+                                                   params.b_scale,
+                                                   params.output_dtype,
+                                                   params.output);
 }
 
 }  // namespace xllm::kernel::musa

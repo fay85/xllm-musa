@@ -2,20 +2,6 @@ include(cc_library)
 
 cc_library(
   NAME
-    musa_graph_output_buffers
-  HDRS
-    graph_output_buffers.h
-  SRCS
-    graph_output_buffers.cpp
-  COPTS
-    ${_XLLM_MUSIFY_COPTS}
-  DEPS
-    glog::glog
-    torch
-)
-
-cc_library(
-  NAME
     musa_attention_metadata_builder
   HDRS
     attention_metadata.h
@@ -39,7 +25,6 @@ cc_library(
   COPTS
     ${_XLLM_MUSIFY_COPTS}
   DEPS
-    :musa_graph_output_buffers
     :musa_kernel_api
     :parallel_state
     :state_dict
@@ -90,7 +75,6 @@ set(_MUSA_LAYERS_SRCS
 set(_MUSA_LAYERS_DEPS
   :cuda_kernels
   :musa_kernel_api
-  :musa_graph_output_buffers
   :musa_linear
   :common_layers
   :parallel_state

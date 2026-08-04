@@ -29,6 +29,9 @@ namespace ffi = tvm::ffi;
 #include <string>
 
 #include "dsa_metadata.h"
+#if defined(USE_MUSA)
+#include "layers/musa/attention_metadata.h"
+#endif
 
 namespace xllm::layer {
 
@@ -170,6 +173,10 @@ struct AttentionMetadata {
   // DeepSeek V4 sparse attention metadata (optional).
   // Built by DSAMetadataBuilder and shared across all layers.
   std::shared_ptr<DSAMetadata> dsa_metadata;
+
+#if defined(USE_MUSA)
+  musa::MusaAttentionMetadata musa;
+#endif
 
 #if defined(USE_NPU)
   // for npu

@@ -45,15 +45,11 @@ limitations under the License.
 #include "core/framework/model/causal_lm.h"
 #include "core/framework/model/model_input_params.h"
 #include "core/kernels/musa/llm_decode_metadata_update.h"
-#include "core/kernels/musa/piecewise_graphs.h"
-#include "core/layers/musa/graph_output_buffers.h"
 #include "core/runtime/executor_impl.h"
 #include "core/runtime/executor_impl_factory.h"
 #include "core/runtime/options.h"
 
 namespace xllm::runtime::musa {
-
-using PiecewiseGraphs = ::xllm::runtime::cuda::PiecewiseGraphs;
 
 constexpr uint64_t kSpecVerifyGraphKeyMask = 1ull << 63;
 constexpr uint64_t kSpecVerifyQMaxSeqLenShift = 32;
@@ -87,8 +83,7 @@ class MusaGraphPersistentParam final {
                                          const torch::Tensor& positions,
                                          const ModelInputParams& params,
                                          uint32_t padded_num_tokens = 0,
-                                         bool return_capture_params = false,
-                                         bool update_prefill_plan = true);
+                                         bool return_capture_params = false);
 
   // Getter methods for persistent tensors
   torch::Tensor persistent_tokens(uint32_t actual_tokens) const {
@@ -315,9 +310,6 @@ class MusaGraphPersistentParam final {
   torch::Tensor persistent_decode_qo_indptr_;
   torch::Tensor persistent_kv_seq_lens_delta_;
 
-  // TODO maybe not used. or use q_cu_seq_lens instead.
-  torch::Tensor persistent_chunked_prefill_qo_indptr_;
-
   // Qwen3.5 MTP spec-verify expanded decode attention (per validate token).
   torch::Tensor persistent_expanded_block_tables_;
   torch::Tensor expanded_kv_seq_lens_;
@@ -329,16 +321,13 @@ class MusaGraphPersistentParam final {
 // CUDA graph executor using libtorch CUDAGraph for memory management
 class MusaGraph final {
  public:
-  // is_piecewise: if true, use piecewise graph capture for prefill
   // capture_stream: the stream to use for CUDA graph capture
   explicit MusaGraph(MusaGraphPersistentParam& persistent_param,
                      at::DeviceIndex device_index,
-                     at::cuda::CUDAStream capture_stream,
-                     bool is_piecewise = false)
+                     at::cuda::CUDAStream capture_stream)
       : persistent_param_(persistent_param),
         device_index_(device_index),
-        capture_stream_(capture_stream),
-        is_piecewise_(is_piecewise) {}
+        capture_stream_(capture_stream) {}
 
   // Capture computation graph for given bucket num_tokens
   bool capture(CausalLM* model,
@@ -393,14 +382,6 @@ class MusaGraph final {
   at::DeviceIndex device_index_;
   // CUDA-compatible stream for graph capture, owned by MusaGraphExecutorImpl.
   at::cuda::CUDAStream capture_stream_;
-
-  // Whether this graph uses piecewise capture
-  bool is_piecewise_ = false;
-
-  // Stable intermediate storage for this exact piecewise-prefill bucket.
-  // It must outlive graph holders because runners retain its tensor addresses.
-  std::shared_ptr<layer::musa::PiecewiseGraphMatmulBufferPool>
-      prefill_matmul_buffer_pool_;
 
   uint32_t padded_num_tokens_ = 0;
 
@@ -462,7 +443,6 @@ class MusaGraph final {
   // Declare graph holders last so they are destroyed before the tensors and
   // host buffers whose addresses were retained during capture.
   at::cuda::CUDAGraph graph_;
-  PiecewiseGraphs piecewise_graph_;
 };
 
 // Executor implementation using MUSA graph optimization
@@ -504,15 +484,6 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // Lazy-loaded CUDA graphs for MTP spec-verify validate (composite key)
   absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>> spec_verify_graphs_;
 
-  // Lazy-loaded CUDA graphs for prefill phase with piecewise capture
-  // (by bucket_num_tokens)
-  absl::flat_hash_map<uint32_t, std::unique_ptr<MusaGraph>> prefill_graphs_;
-
-  // Chunked-prefill piecewise graphs require an exact host-shape key because
-  // Qwen3.5 GDN control flow depends on per-sequence query lengths.
-  absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>>
-      chunked_prefill_graphs_;
-
   // Persistent parameters shared across all MusaGraph instances
   std::unique_ptr<MusaGraphPersistentParam> persistent_param_;
 
@@ -522,25 +493,13 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // executor is intentional. If concurrent calls are introduced in the future,
   // this assumption must be revisited.
   at::cuda::MempoolId_t graph_pool_;
-  // Whether to enable prefill piecewise graph
-  bool enable_prefill_piecewise_graph_;
-  int64_t max_tokens_for_graph_mode_ = 0;
-
-  // Fixed prefill pad ladder aligned with SGLang piecewise_cuda_graph_tokens.
-  // Pure-prefill graphs pad up to the next entry instead of ceil-to-16.
-  std::vector<uint32_t> prefill_graph_token_buckets_;
 
   // Get bucket num_tokens for given num_tokens.
-  // Prefill: nearest SGLang-style ladder size (>= num_tokens).
   // Decode: 1/2/4/8 then multiples of 16, or exact when no_padding is enabled.
-  uint32_t get_bucket_num_tokens(uint32_t num_tokens,
-                                 bool is_prefill = false) const;
+  uint32_t get_bucket_num_tokens(uint32_t num_tokens) const;
 
   uint64_t get_graph_key(uint32_t bucket_num_tokens,
                          const ModelInputParams& params) const;
-
-  uint64_t get_chunked_prefill_graph_key(uint32_t bucket_num_tokens,
-                                         const ModelInputParams& params) const;
 
   ModelOutput attach_aux_hidden_states_if_needed(
       const torch::Tensor& hidden_states,

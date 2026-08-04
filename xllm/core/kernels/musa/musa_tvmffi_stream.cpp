@@ -40,7 +40,7 @@ limitations under the License.
 #include "core/util/env_var.h"
 #include "core/util/utils.h"
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 namespace {
 
 thread_local bool s_force_ffi_preparation_sync = false;
@@ -368,7 +368,7 @@ MusaTvmffiStreamGuard::~MusaTvmffiStreamGuard() {
   }
 }
 
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa
 
 namespace {
 const std::unordered_map<torch::ScalarType, std::string_view>
@@ -661,8 +661,8 @@ bool ffi_alloc_dump_enabled() {
 }
 
 struct FfiAllocState {
-  ::xllm::kernel::cuda::FfiAllocMode mode =
-      ::xllm::kernel::cuda::FfiAllocMode::kPassthrough;
+  ::xllm::kernel::musa::FfiAllocMode mode =
+      ::xllm::kernel::musa::FfiAllocMode::kPassthrough;
   std::vector<torch::Tensor> record_buf;
   const std::vector<torch::Tensor>* replay_buf = nullptr;
   size_t replay_idx = 0;
@@ -719,7 +719,7 @@ int32_t torch_dlpack_managed_tensor_allocator(
 
     torch::Tensor tensor;
     switch (g_ffi_alloc_state.mode) {
-      case ::xllm::kernel::cuda::FfiAllocMode::kReplay: {
+      case ::xllm::kernel::musa::FfiAllocMode::kReplay: {
         CHECK(g_ffi_alloc_state.replay_buf != nullptr)
             << "[TVMFFI-ALLOC] kReplay with null recording";
         const size_t idx = g_ffi_alloc_state.replay_idx;
@@ -749,12 +749,12 @@ int32_t torch_dlpack_managed_tensor_allocator(
         ++g_ffi_alloc_state.replay_idx;
         break;
       }
-      case ::xllm::kernel::cuda::FfiAllocMode::kRecord: {
+      case ::xllm::kernel::musa::FfiAllocMode::kRecord: {
         tensor = torch::empty(shape, options);
         g_ffi_alloc_state.record_buf.push_back(tensor);
         break;
       }
-      case ::xllm::kernel::cuda::FfiAllocMode::kPassthrough:
+      case ::xllm::kernel::musa::FfiAllocMode::kPassthrough:
       default: {
         tensor = torch::empty(shape, options);
         break;
@@ -793,7 +793,7 @@ void ensure_tvm_ffi_tensor_allocator() {
 }
 }  // namespace
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 
 bool ensure_tilelang_musa_loader() {
   static const bool loaded = []() {
@@ -1126,4 +1126,4 @@ ffi::Function get_function(const std::string& uri,
   func_cache.emplace(key, func);
   return func;
 }
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa

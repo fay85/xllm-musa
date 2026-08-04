@@ -29,6 +29,9 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/model_config.h"
 #include "platform/stream.h"
+#if defined(USE_MUSA)
+#include <musa_runtime.h>
+#endif
 #if defined(USE_CUDA)
 #include <cuda_runtime_api.h>
 #endif
@@ -1384,6 +1387,23 @@ inline torch::Tensor materialize_tensor_from_current_cursor(
                      .device(torch::kCUDA);
 #endif
   auto tensor = torch::empty(meta.shape, options);
+#if defined(USE_MUSA)
+  musaError_t err;
+  if (stream != nullptr) {
+    err = musaMemcpyAsync(tensor.data_ptr(),
+                          device_buffer,
+                          meta.data_bytes,
+                          musaMemcpyDeviceToDevice,
+                          stream->get_stream()->stream());
+  } else {
+    err = musaMemcpy(tensor.data_ptr(),
+                     device_buffer,
+                     meta.data_bytes,
+                     musaMemcpyDeviceToDevice);
+  }
+  CHECK_EQ(err, musaSuccess)
+      << "MUSA device buffer copy failed: " << musaGetErrorString(err);
+#else
   cudaError_t err;
   if (stream != nullptr) {
     err = cudaMemcpyAsync(tensor.data_ptr(),
@@ -1399,6 +1419,7 @@ inline torch::Tensor materialize_tensor_from_current_cursor(
   }
   CHECK_EQ(err, cudaSuccess)
       << "CUDA device buffer copy failed: " << cudaGetErrorString(err);
+#endif
   return tensor;
 #elif defined(USE_MLU)
   if (session.owner_buffer.defined()) {
@@ -2373,10 +2394,18 @@ inline void deserialize_forward_input_payload(
                          input_params.attention.device.kv_seq_lens,
                          input_params.attention.host.kv_seq_lens,
                          stream);
-  read_tensor(context, input_params.attention.device.paged_kv_indptr, stream);
-  read_tensor(context, input_params.attention.device.paged_kv_indices, stream);
-  read_tensor(
-      context, input_params.attention.device.paged_kv_last_page_len, stream);
+  read_tensor_and_host(context,
+                       input_params.attention.device.paged_kv_indptr,
+                       input_params.attention.host.paged_kv_indptr,
+                       stream);
+  read_tensor_and_host(context,
+                       input_params.attention.device.paged_kv_indices,
+                       input_params.attention.host.paged_kv_indices,
+                       stream);
+  read_tensor_and_host(context,
+                       input_params.attention.device.paged_kv_last_page_len,
+                       input_params.attention.host.paged_kv_last_page_len,
+                       stream);
   read_tensor(
       context, input_params.attention.device.new_cache_slot_offsets, stream);
   read_tensor(
@@ -2701,6 +2730,20 @@ torch::Tensor choose_host_or_device_tensor(const torch::Tensor& host_tensor,
   }
   return device_tensor;
 }
+torch::Tensor choose_paged_kv_host_or_device_tensor(
+    const torch::Tensor& host_tensor,
+    const torch::Tensor& device_tensor) {
+  if (!host_tensor.defined() || !host_tensor.device().is_cpu() ||
+      host_tensor.scalar_type() != torch::kInt32) {
+    return device_tensor;
+  }
+  if (device_tensor.defined() &&
+      (device_tensor.scalar_type() != torch::kInt32 ||
+       device_tensor.sizes() != host_tensor.sizes())) {
+    return device_tensor;
+  }
+  return host_tensor;
+}
 
 void write_host_vector_or_tensor(RawInputSerializeContext& context,
                                  const std::vector<int32_t>& host_values,
@@ -2738,9 +2781,18 @@ inline void serialize_forward_input_sections(
   write_host_vector_or_tensor(context,
                               input_params.attention.host.kv_seq_lens,
                               input_params.attention.device.kv_seq_lens);
-  write_tensor(context, input_params.attention.device.paged_kv_indptr);
-  write_tensor(context, input_params.attention.device.paged_kv_indices);
-  write_tensor(context, input_params.attention.device.paged_kv_last_page_len);
+  write_tensor(context,
+               choose_paged_kv_host_or_device_tensor(
+                   input_params.attention.host.paged_kv_indptr,
+                   input_params.attention.device.paged_kv_indptr));
+  write_tensor(context,
+               choose_paged_kv_host_or_device_tensor(
+                   input_params.attention.host.paged_kv_indices,
+                   input_params.attention.device.paged_kv_indices));
+  write_tensor(context,
+               choose_paged_kv_host_or_device_tensor(
+                   input_params.attention.host.paged_kv_last_page_len,
+                   input_params.attention.device.paged_kv_last_page_len));
   write_tensor(context, input_params.attention.device.new_cache_slot_offsets);
   write_tensor(context, input_params.attention.device.kv_cache_start_offsets);
   write_tensor(context, input_params.embedding.input_embedding);

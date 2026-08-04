@@ -52,7 +52,6 @@ struct MateGatedDeltaRulePrefillParams {
   std::optional<float> scale = std::nullopt;
   std::optional<torch::Tensor> initial_state = std::nullopt;
   std::optional<torch::Tensor> cu_seqlens = std::nullopt;
-  std::optional<torch::Tensor> cu_seqlens_kkt = std::nullopt;
   std::optional<std::vector<int32_t>> cu_seqlens_host = std::nullopt;
   std::optional<torch::Tensor> output = std::nullopt;
   std::optional<torch::Tensor> final_state = std::nullopt;

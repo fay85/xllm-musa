@@ -31,7 +31,6 @@ cc_library(
     :platform
     :util
     :cuda_kernels
-    :musa_graph_output_buffers
     :kv_cache
     :model
     :layers

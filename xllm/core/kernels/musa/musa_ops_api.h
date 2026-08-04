@@ -29,14 +29,6 @@ limitations under the License.
 
 namespace xllm::kernel::musa {
 
-void block_copy(torch::Tensor key_cache_ptrs,
-                torch::Tensor value_cache_ptrs,
-                torch::Tensor src_block_indices,
-                torch::Tensor dst_block_indices,
-                torch::Tensor cum_sum,
-                int64_t numel_per_block,
-                torch::ScalarType cache_dtype);
-
 // Replaces negative dst entries with indexed values from src.
 void replace_token(torch::Tensor& dst,
                    torch::Tensor& src,
@@ -50,7 +42,7 @@ torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
 
 }  // namespace xllm::kernel::musa
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 
 void rotary_embedding(torch::Tensor& positions,
                       torch::Tensor& query,
@@ -68,6 +60,10 @@ void fused_shared_expert_gate_inplace(torch::Tensor& shared_output,
                                       const torch::Tensor& hidden_states,
                                       const torch::Tensor& gate_weight);
 
+}  // namespace xllm::kernel::musa
+
+namespace xllm::kernel::cuda {
+
 void reshape_paged_cache(torch::Tensor slot_ids,
                          torch::Tensor keys,
                          torch::Tensor values,
@@ -81,6 +77,10 @@ void block_copy(torch::Tensor key_cache_ptrs,
                 torch::Tensor cum_sum,
                 int64_t numel_per_block,
                 torch::ScalarType cache_dtype);
+
+}  // namespace xllm::kernel::cuda
+
+namespace xllm::kernel::musa {
 
 void batch_prefill(const std::string& uri,
                    ffi::Array<int64_t> plan_info,
@@ -97,22 +97,6 @@ void batch_prefill(const std::string& uri,
                    torch::Tensor output,
                    std::optional<torch::Tensor>& output_lse,
                    const std::optional<torch::Tensor>& mask = std::nullopt);
-
-void batch_prefill_with_optional_piecewise_capture(
-    const std::string& uri,
-    ffi::Array<int64_t> plan_info,
-    torch::Tensor float_workspace_buffer,
-    torch::Tensor int_workspace_buffer,
-    torch::Tensor page_locked_int_workspace_buffer,
-    torch::Tensor query,
-    torch::Tensor key,
-    torch::Tensor value,
-    torch::Tensor q_cu_seq_lens,
-    torch::Tensor kv_cu_seq_lens,
-    int64_t window_left,
-    double sm_scale,
-    torch::Tensor output,
-    std::optional<torch::Tensor>& output_lse);
 
 void batch_prefill_non_causal(
     const std::string& uri,
@@ -132,28 +116,6 @@ void batch_prefill_non_causal(
     const std::optional<torch::Tensor>& mask = std::nullopt);
 
 void batch_chunked_prefill(
-    const std::string& uri,
-    ffi::Array<int64_t> plan_info,
-    torch::Tensor float_workspace_buffer,
-    torch::Tensor int_workspace_buffer,
-    torch::Tensor page_locked_int_workspace_buffer,
-    torch::Tensor query,
-    torch::Tensor k_cache,
-    torch::Tensor v_cache,
-    torch::Tensor paged_kv_indptr,
-    torch::Tensor paged_kv_indices,
-    torch::Tensor paged_kv_last_page_len,
-    int64_t window_left,
-    double sm_scale,
-    torch::Tensor output,
-    std::optional<torch::Tensor>& output_lse,
-    std::optional<torch::Tensor> qo_indptr = std::nullopt,
-    bool causal = true,
-    const torch::Tensor& paged_kv_indptr_host = torch::Tensor(),
-    const torch::Tensor& paged_kv_indices_host = torch::Tensor(),
-    const torch::Tensor& paged_kv_last_page_len_host = torch::Tensor());
-
-void batch_chunked_prefill_with_optional_piecewise_capture(
     const std::string& uri,
     ffi::Array<int64_t> plan_info,
     torch::Tensor float_workspace_buffer,
@@ -254,20 +216,6 @@ void fa3_prefill_paged(const torch::Tensor& query,
                        torch::Tensor& output,
                        torch::Tensor& output_lse);
 
-void fa3_prefill_with_optional_piecewise_capture(
-    const torch::Tensor& query,
-    const torch::Tensor& key,
-    const torch::Tensor& value,
-    const torch::Tensor& cu_seqlens_q,
-    const torch::Tensor& cu_seqlens_k,
-    int64_t max_seqlen_q,
-    int64_t max_seqlen_k,
-    int64_t window_left,
-    int64_t window_right,
-    double sm_scale,
-    torch::Tensor& output,
-    torch::Tensor& output_lse);
-
 torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
                                             int32_t batch_size,
                                             int32_t num_heads_q,
@@ -281,6 +229,10 @@ torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
                                             const torch::Tensor& cu_seqlens_q,
                                             const torch::Tensor& seqused_k);
 
+}  // namespace xllm::kernel::musa
+
+namespace xllm::kernel::cuda {
+
 void rms_norm(torch::Tensor output,
               torch::Tensor input,
               torch::Tensor weight,
@@ -290,6 +242,10 @@ void fused_add_rms_norm(torch::Tensor& input,
                         torch::Tensor& residual,
                         torch::Tensor& weight,
                         double epsilon);
+
+}  // namespace xllm::kernel::cuda
+
+namespace xllm::kernel::musa {
 
 void gemma_rms_norm(torch::Tensor output,
                     torch::Tensor input,
@@ -337,44 +293,6 @@ void partial_rotary_embedding_inplace(torch::Tensor& positions,
                                       int64_t head_size,
                                       int64_t rotary_dim,
                                       bool is_neox);
-
-void cutlass_scaled_mm(torch::Tensor& c,
-                       torch::Tensor const& a,
-                       torch::Tensor const& b,
-                       torch::Tensor const& a_scales,
-                       torch::Tensor const& b_scales,
-                       std::optional<torch::Tensor> const& bias);
-
-void static_scaled_fp8_quant(torch::Tensor& out,
-                             torch::Tensor const& input,
-                             torch::Tensor const& scale);
-
-std::tuple<torch::Tensor, torch::Tensor> fp8_scaled_quantize(
-    const torch::Tensor& input,
-    const std::optional<torch::Tensor>& output = std::nullopt,
-    const std::optional<torch::Tensor>& scale = std::nullopt);
-
-void rms_norm_static_fp8_quant(torch::Tensor& out,
-                               torch::Tensor& input,
-                               torch::Tensor& weight,
-                               torch::Tensor& scale,
-                               double epsilon);
-
-void fused_add_rms_norm_static_fp8_quant(torch::Tensor& out,
-                                         torch::Tensor& input,
-                                         torch::Tensor& residual,
-                                         torch::Tensor& weight,
-                                         torch::Tensor& scale,
-                                         double epsilon);
-
-torch::Tensor fp8_scaled_matmul(
-    const torch::Tensor& a,
-    const torch::Tensor& b,
-    const torch::Tensor& a_scale,
-    const torch::Tensor& b_scale,
-    torch::ScalarType output_dtype,
-    const std::optional<torch::Tensor>& bias = std::nullopt,
-    const std::optional<torch::Tensor>& output = std::nullopt);
 
 torch::Tensor gemm_fp8_nt_groupwise(
     const torch::Tensor& a,
@@ -460,34 +378,9 @@ torch::Tensor musa_fused_moe_aot_bf16(const torch::Tensor& hidden_states,
                                       const torch::Tensor& topk_weights,
                                       const torch::Tensor& topk_ids);
 
-std::pair<torch::Tensor, torch::Tensor> compute_topk_for_beam_search(
-    torch::Tensor combined_probs,
-    uint32_t batch_size,
-    uint32_t beam_size,
-    uint32_t top_k,
-    torch::Device device);
+}  // namespace xllm::kernel::musa
 
-std::pair<torch::Tensor, torch::Tensor> compute_topk_general(
-    torch::Tensor input,
-    uint32_t batch_size,
-    uint32_t input_length,
-    uint32_t k,
-    torch::Device device);
-
-torch::Tensor air_log_softmax_last_dim(const torch::Tensor& input,
-                                       const torch::Tensor& temperatures);
-
-void fused_qk_norm_rope(torch::Tensor& qkv,
-                        int64_t num_heads_q,
-                        int64_t num_heads_k,
-                        int64_t num_heads_v,
-                        int64_t head_dim,
-                        double eps,
-                        const torch::Tensor& q_weight,
-                        const torch::Tensor& k_weight,
-                        const torch::Tensor& cos_sin_cache,
-                        bool interleaved,
-                        const torch::Tensor& position_ids);
+namespace xllm::kernel::cuda {
 
 std::tuple<torch::Tensor, torch::Tensor> moe_fused_topk(
     torch::Tensor& gating_output,
@@ -495,6 +388,10 @@ std::tuple<torch::Tensor, torch::Tensor> moe_fused_topk(
     bool renormalize,
     const std::optional<torch::Tensor>& correction_bias,
     const std::string& scoring_func);
+
+}  // namespace xllm::kernel::cuda
+
+namespace xllm::kernel::musa {
 
 torch::Tensor random_sample(const torch::Tensor& probs);
 
@@ -559,6 +456,10 @@ std::tuple<torch::Tensor, torch::Tensor> musa_moe_topk_softmax(
     int64_t topk);
 bool musa_moe_topk_softmax_available();
 
+}  // namespace xllm::kernel::musa
+
+namespace xllm::kernel::cuda {
+
 // Returns {src_dst, dst_src, expert_sizes}.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
     const torch::Tensor& expert_id,
@@ -571,5 +472,4 @@ torch::Tensor moe_combine_result(const torch::Tensor& gemm2,
 
 }  // namespace xllm::kernel::cuda
 
-#include "core/kernels/musa/attention_runner.h"
 #include "core/kernels/musa/gdn_ops.h"

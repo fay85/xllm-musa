@@ -17,9 +17,7 @@ limitations under the License.
 #pragma once
 #include <torch/torch.h>
 
-#ifndef XLLM_SKIP_OPENCV
 #include <opencv2/opencv.hpp>
-#endif
 #include <string>
 
 #include "mm_type.h"

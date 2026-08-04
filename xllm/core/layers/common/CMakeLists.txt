@@ -62,6 +62,7 @@ cc_library(
     :state_dict
     :model
     :kernels
+    $<$<BOOL:${USE_MUSA}>:musa_attention_metadata_builder>
     glog::glog
     gflags::gflags
     torch

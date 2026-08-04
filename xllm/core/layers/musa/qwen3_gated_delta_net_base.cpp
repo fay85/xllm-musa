@@ -22,14 +22,10 @@ limitations under the License.
 #include <tuple>
 #include <vector>
 
-#include "core/framework/config/execution_config.h"
-#include "kernels/musa/attention_runner.h"
 #include "kernels/musa/gdn_ops.h"
-#include "kernels/musa/global_capture_instance.h"
 #include "kernels/musa/ops_api.h"
 #include "kernels/ops_api.h"
 #include "layers/common/linear.h"
-#include "layers/musa/graph_output_buffers.h"
 #include "util/prefill_breakdown.h"
 
 namespace xllm {
@@ -779,36 +775,8 @@ torch::Tensor run_spec_verify_gated_delta_rule_mate(
   return output;
 }
 
-bool use_mate_gdn_prefill_graph_capture() {
-  // Mate KKT and prefill bind to the active MUSA stream and write to explicit
-  // output tensors, so both kernels are safe to include in piecewise graphs.
-  // Keep an opt-out for older MUSA stacks with broken external-kernel capture.
-  static const bool enabled = [] {
-    const char* value = std::getenv("XLLM_MATE_GDN_PREFILL_GRAPH");
-    return value == nullptr || value[0] != '0';
-  }();
-  return enabled;
-}
-
 // Match Mate's padded-waste gate (gdn_prefill.cpp).
 constexpr double kGdnPackedPaddedWasteThreshold = 0.05;
-
-bool gdn_packed_layout_env_enabled() {
-  static const int mode = [] {
-    const char* env = std::getenv("XLLM_GDN_PACKED_LAYOUT");
-    if (env == nullptr) {
-      return -1;  // default: follow enable_packed_prefill
-    }
-    return (env[0] == '0') ? 0 : 1;
-  }();
-  if (mode == 0) {
-    return false;
-  }
-  if (mode == 1) {
-    return true;
-  }
-  return ::xllm::ExecutionConfig::get_instance().enable_packed_prefill();
-}
 
 bool gdn_packed_layout_debug_enabled() {
   static const bool enabled = [] {
@@ -933,9 +901,6 @@ torch::Tensor unpad_rect_4d_to_packed(const torch::Tensor& padded,
 bool should_use_gdn_packed_prefill(const AttentionMetadata& attn_metadata,
                                    const ModelInputParams& input_params,
                                    const torch::Tensor& hidden_states) {
-  if (!gdn_packed_layout_env_enabled()) {
-    return false;
-  }
   if (!attn_metadata.is_prefill || attn_metadata.is_chunked_prefill) {
     return false;
   }
@@ -951,25 +916,16 @@ bool should_use_gdn_packed_prefill(const AttentionMetadata& attn_metadata,
   if (!use_mate_gdn_prefill_kernel()) {
     return false;
   }
-  const bool is_capturing =
-      xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
-  if (is_capturing &&
-      musa::PiecewiseGraphMatmulBufferScope::current_buffer_pool() == nullptr) {
-    return false;
-  }
   if (attn_metadata.musa.q_cu_seq_lens_host_vec.empty()) {
     return false;
   }
   const int64_t token_capacity = hidden_states.size(0);
   const int64_t actual_tokens =
       static_cast<int64_t>(attn_metadata.musa.q_cu_seq_lens_host_vec.back());
-  if (actual_tokens <= 0 || actual_tokens > token_capacity) {
+  if (actual_tokens <= 0 || actual_tokens != token_capacity) {
     return false;
   }
-  // Keep B=1 on the established logical-padding path. Its full-attention plan
-  // still uses bucket CU metadata, whereas the new packed runner contract uses
-  // live CU metadata. Multi-sequence packed batches are the target of this
-  // reusable-bucket path.
+  // Keep single-sequence prefill on the established path.
   if (attn_metadata.q_seq_lens_vec.size() == 1) {
     return false;
   }
@@ -1163,7 +1119,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
   const int64_t max_T = attn_metadata.max_query_len;
   const int64_t actual_tokens = static_cast<int64_t>(cu_host.back());
   CHECK_GE(num_seqs, 1);
-  CHECK_LE(actual_tokens, token_capacity);
+  CHECK_EQ(actual_tokens, token_capacity);
 
   torch::Tensor qkvz_flat;
   torch::Tensor ba_flat;
@@ -1257,28 +1213,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
         process_mixed_qkv(mixed_for_split);
   }
 
-  musa::PiecewiseGraphMatmulBufferPool* const piecewise_buffer_pool =
-      musa::PiecewiseGraphMatmulBufferScope::current_buffer_pool();
-  const bool is_piecewise_graph_capture =
-      xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
-  if (piecewise_buffer_pool != nullptr) {
-    // The preceding graph segment owns these copies. They are canonical,
-    // bucket-sized tensors, so the GDN runner can pass them directly on every
-    // replay without an actual-prefix narrow/contiguous allocation.
-    auto copy_to_pool = [](const torch::Tensor& source,
-                           torch::Tensor destination) {
-      destination.copy_(source, /*non_blocking=*/true);
-      return destination;
-    };
-    processed_q = copy_to_pool(
-        processed_q, piecewise_buffer_pool->get_gdn_query(processed_q));
-    processed_k = copy_to_pool(processed_k,
-                               piecewise_buffer_pool->get_gdn_key(processed_k));
-    processed_v = copy_to_pool(
-        processed_v, piecewise_buffer_pool->get_gdn_value(processed_v));
-    g = copy_to_pool(g, piecewise_buffer_pool->get_gdn_gate(g));
-    beta = copy_to_pool(beta, piecewise_buffer_pool->get_gdn_beta(beta));
-  }
   // Guaranteed [1, token_capacity, H, D].
 
   static const bool force_varlen = [] {
@@ -1286,9 +1220,8 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
     return env != nullptr && env[0] == '1';
   }();
   const double waste = gdn_padded_waste_ratio(cu_host, max_T);
-  const bool use_varlen_mate = piecewise_buffer_pool != nullptr ||
-                               force_varlen ||
-                               waste > kGdnPackedPaddedWasteThreshold;
+  const bool use_varlen_mate =
+      force_varlen || waste > kGdnPackedPaddedWasteThreshold;
 
   int32_t gdn_layer_id = 0;
   if (attn_metadata.plan_info != nullptr) {
@@ -1302,21 +1235,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
               << " layout=packed_layer path=" << (use_varlen_mate ? "A" : "B");
   }
 
-  torch::Tensor initial_state_tensor;
-  if (piecewise_buffer_pool != nullptr) {
-    // Pure prefill starts every recurrent row from zero. Keep one shared,
-    // graph-owned state input; it is read-only by Mate and can be reused by all
-    // sequential GDN runners in this bucket.
-    initial_state_tensor = piecewise_buffer_pool->get_gdn_initial_state(
-        ssm_cache.narrow(/*dim=*/0, /*start=*/0, /*length=*/num_seqs));
-    if (!is_piecewise_graph_capture) {
-      initial_state_tensor.zero_();
-    }
-  } else {
-    initial_state_tensor =
-        torch::index_select(ssm_cache, 0, linear_state_base_indices);
-    initial_state_tensor.fill_(0.0);
-  }
+  torch::Tensor initial_state_tensor =
+      torch::index_select(ssm_cache, 0, linear_state_base_indices);
+  initial_state_tensor.fill_(0.0);
 
   xllm::kernel::musa::MateGatedDeltaRulePrefillParams mate_params;
   mate_params.scale =
@@ -1324,64 +1245,20 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
   mate_params.initial_state = initial_state_tensor;
   mate_params.output_final_state = true;
   mate_params.use_qk_l2norm_in_kernel = true;
-  mate_params.allow_inplace_qk_l2norm = piecewise_buffer_pool != nullptr;
   mate_params.cu_seqlens_host = cu_host;
-  if (attn_metadata.musa.gdn_cu_seq_lens.defined()) {
-    mate_params.cu_seqlens = attn_metadata.musa.gdn_cu_seq_lens;
-  } else if (attn_metadata.q_cu_seq_lens.defined()) {
+  if (attn_metadata.q_cu_seq_lens.defined()) {
     mate_params.cu_seqlens = attn_metadata.q_cu_seq_lens.to(torch::kInt32);
-  }
-  if (attn_metadata.musa.gdn_kkt_cu_seq_lens.defined()) {
-    mate_params.cu_seqlens_kkt = attn_metadata.musa.gdn_kkt_cu_seq_lens;
   }
 
   torch::Tensor core_attn_out;
   torch::Tensor mate_final_state;
   if (use_varlen_mate) {
-    // Packed [1, bucket_T, ...] path. In graph mode the Mate call is split out
-    // as a runner; in eager warmup it uses the same stable buffers and live CU.
     mate_params.q = processed_q;
     mate_params.k = processed_k;
     mate_params.v = processed_v;
     mate_params.g = g;
     mate_params.beta = beta;
-    if (piecewise_buffer_pool != nullptr) {
-      auto output = piecewise_buffer_pool->get_gdn_output(processed_v);
-      auto final_state =
-          piecewise_buffer_pool->get_gdn_final_state(initial_state_tensor);
-      auto kkt_output = piecewise_buffer_pool->get_gdn_kkt(
-          processed_k, /*num_v_heads=*/local_nv);
-      if (!is_piecewise_graph_capture) {
-        output.zero_();
-      }
-      mate_params.output = output;
-      mate_params.final_state = final_state;
-      mate_params.kkt_output = kkt_output;
-      if (is_piecewise_graph_capture) {
-        xllm::kernel::musa::AttentionRunner runner;
-        runner.run_gdn_prefill_capture(
-            processed_q,
-            processed_k,
-            processed_v,
-            g,
-            beta,
-            initial_state_tensor,
-            *mate_params.cu_seqlens,
-            output,
-            final_state,
-            kkt_output,
-            static_cast<float>(mate_params.scale.value()));
-        xllm::runtime::musa::GlobalCaptureInstance::get_instance()
-            .register_attention_runner(std::move(runner));
-      } else {
-        PrefillBreakdown::Scope mate_scope(PrefillBreakdown::Bucket::kMate);
-        std::tie(std::ignore, std::ignore) =
-            xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
-      }
-      core_attn_out = output.squeeze(0);
-      mate_final_state = final_state;
-    } else {
-      // Eager packed path without a graph-owned pool.
+    {
       PrefillBreakdown::Scope mate_scope(PrefillBreakdown::Bucket::kMate);
       std::tie(core_attn_out, mate_final_state) =
           xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
@@ -1830,15 +1707,12 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   }
   torch::Tensor core_attn_out;
   torch::Tensor last_recurrent_state;
-  const bool is_piecewise_graph_capture =
-      xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
   const bool mate_prefill_shape_supported =
       attn_metadata.is_prefill ||
       (attn_metadata.is_chunked_prefill && batch_size == 1);
   const bool use_mate_gdn_prefill =
       kEnableMateGdnPrefill && use_mate_gdn_prefill_kernel() &&
-      mate_prefill_shape_supported && !use_spec_verify &&
-      (!is_piecewise_graph_capture || use_mate_gdn_prefill_graph_capture());
+      mate_prefill_shape_supported && !use_spec_verify;
   // Apply chunked or recurrent gated-delta attention and update caches.
   if (use_mate_gdn_prefill) {
     // Mate returns final state in k-last layout [B, Hv, V, K].
@@ -2312,8 +2186,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   auto z_reshaped = z.view({-1, z.size(-1)});
   auto core_attn_out_reshaped =
       core_attn_out.view({-1, core_attn_out.size(-1)});
-  const bool use_transient_norm_output =
-      is_any_prefill && !is_piecewise_graph_capture;
+  const bool use_transient_norm_output = is_any_prefill;
   torch::Tensor norm_out;
   {
     PrefillBreakdown::Scope norm_scope(PrefillBreakdown::Bucket::kGdnNorm);

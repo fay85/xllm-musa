@@ -326,7 +326,7 @@ void FlashInferAttentionImpl::prefill_forward(
         scheduler_metadata = attn_metadata.musa.fa3_scheduler_metadata;
       }
       if (!scheduler_metadata.defined()) {
-        scheduler_metadata = xllm::kernel::cuda::fa3_prefill_scheduler_metadata(
+        scheduler_metadata = xllm::kernel::musa::fa3_prefill_scheduler_metadata(
             query.device(),
             batch_size,
             static_cast<int32_t>(num_heads_),
@@ -364,7 +364,7 @@ void FlashInferAttentionImpl::prefill_forward(
             lse_buf_.narrow(0, 0, required).view({num_heads_, query.size(0)});
       }
 
-      xllm::kernel::cuda::fa3_prefill_paged(
+      xllm::kernel::musa::fa3_prefill_paged(
           query,
           k_cache,
           v_cache,
@@ -403,12 +403,17 @@ void FlashInferAttentionImpl::prefill_forward(
       lse_tensor = lse_buf_.narrow(0, 0, required).view({num_heads_, total_q});
     }
 
-    xllm::kernel::cuda::fa3_prefill_with_optional_piecewise_capture(
-        query,
-        key,
-        value,
-        attn_metadata.q_cu_seq_lens,
-        attn_metadata.kv_cu_seq_lens,
+    auto query_contiguous = query.contiguous();
+    auto key_contiguous = key.contiguous();
+    auto value_contiguous = value.contiguous();
+    auto q_cu_seq_lens = attn_metadata.q_cu_seq_lens.contiguous();
+    auto kv_cu_seq_lens = attn_metadata.kv_cu_seq_lens.contiguous();
+    xllm::kernel::musa::fa3_prefill(
+        query_contiguous,
+        key_contiguous,
+        value_contiguous,
+        q_cu_seq_lens,
+        kv_cu_seq_lens,
         /*max_seqlen_q=*/attn_metadata.max_query_len,
         /*max_seqlen_k=*/attn_metadata.max_seq_len,
         /*window_left=*/-1,
@@ -436,7 +441,7 @@ void FlashInferAttentionImpl::prefill_forward(
     return;
   }
 
-  std::string backend = xllm::kernel::cuda::determine_attention_backend(
+  std::string backend = xllm::kernel::musa::determine_attention_backend(
       /*pos_encoding_mode=*/0,
       /*use_fp16_qk_reduction=*/false,
       use_custom_mask);
@@ -461,21 +466,20 @@ void FlashInferAttentionImpl::prefill_forward(
                                          attn_metadata.enable_cuda_graph);
   }
 
-  xllm::kernel::cuda::batch_prefill_with_optional_piecewise_capture(
-      attn_metadata.plan_info->uri,
-      attn_metadata.plan_info->plan_info,
-      float_workspace_buffer_,
-      int_workspace_buffer_,
-      page_locked_int_workspace_buffer_,
-      query,
-      key,
-      value,
-      attn_metadata.q_cu_seq_lens,
-      attn_metadata.kv_cu_seq_lens,
-      sliding_window_,
-      scale_,
-      output,
-      output_lse);
+  xllm::kernel::musa::batch_prefill(attn_metadata.plan_info->uri,
+                                    attn_metadata.plan_info->plan_info,
+                                    float_workspace_buffer_,
+                                    int_workspace_buffer_,
+                                    page_locked_int_workspace_buffer_,
+                                    query,
+                                    key,
+                                    value,
+                                    attn_metadata.q_cu_seq_lens,
+                                    attn_metadata.kv_cu_seq_lens,
+                                    sliding_window_,
+                                    scale_,
+                                    output,
+                                    output_lse);
 }
 
 void FlashInferAttentionImpl::chunked_prefill_forward(
@@ -536,7 +540,7 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
     qo_indptr_arg = attn_metadata.qo_indptr;
   }
 
-  xllm::kernel::cuda::batch_chunked_prefill_with_optional_piecewise_capture(
+  xllm::kernel::musa::batch_chunked_prefill(
       attn_metadata.plan_info->uri,
       attn_metadata.plan_info->plan_info,
       float_workspace_buffer_,
@@ -650,7 +654,7 @@ void FlashInferAttentionImpl::decoder_forward(
               ? *decode_attn.qo_indptr
               : decode_attn.q_cu_seq_lens;
       if (!scheduler_metadata.defined()) {
-        scheduler_metadata = xllm::kernel::cuda::fa3_decode_scheduler_metadata(
+        scheduler_metadata = xllm::kernel::musa::fa3_decode_scheduler_metadata(
             query.device(),
             /*batch_size=*/static_cast<int32_t>(batch_size),
             /*num_heads_q=*/static_cast<int32_t>(num_heads_),
@@ -697,7 +701,7 @@ void FlashInferAttentionImpl::decoder_forward(
             lse_buf_.narrow(0, 0, required).view({num_heads_, total_q});
       }
 
-      xllm::kernel::cuda::fa3_decode(
+      xllm::kernel::musa::fa3_decode(
           query,
           k_cache,
           v_cache,
@@ -753,7 +757,7 @@ void FlashInferAttentionImpl::decoder_forward(
                                         decode_use_tensor_core_);
   }
 
-  xllm::kernel::cuda::batch_decode(
+  xllm::kernel::musa::batch_decode(
       decode_attn.plan_info->uri,
       decode_attn.plan_info->plan_info,
       float_workspace_buffer_,

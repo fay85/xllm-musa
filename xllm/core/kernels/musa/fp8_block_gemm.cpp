@@ -24,7 +24,7 @@ limitations under the License.
 
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 
 // Mate groupwise FP8 GEMM layout:
 //   a       [M, K]              float8_e4m3fn, contiguous
@@ -79,4 +79,4 @@ torch::Tensor gemm_fp8_nt_groupwise(
   return out;
 }
 
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa

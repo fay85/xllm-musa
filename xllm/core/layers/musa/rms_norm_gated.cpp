@@ -19,7 +19,6 @@ limitations under the License.
 
 #include "framework/state_dict/utils.h"
 #include "kernels/ops_api.h"
-#include "layers/musa/graph_output_buffers.h"
 
 namespace xllm::layer::musa {
 
@@ -46,13 +45,7 @@ torch::Tensor RmsNormGatedImpl::forward(torch::Tensor& input,
   params.is_rms_norm = true;
 
   constexpr int64_t kPersistentMaxRows = 128;
-  PiecewiseGraphMatmulBufferPool* pool =
-      PiecewiseGraphMatmulBufferScope::current_buffer_pool();
-  if (pool != nullptr) {
-    params.output_buf = pool->get_gated_rms_norm_output(input);
-  }
-  if (!params.output_buf.has_value() && input.dim() >= 1 && input.numel() > 0 &&
-      input.stride(-1) == 1) {
+  if (input.dim() >= 1 && input.numel() > 0 && input.stride(-1) == 1) {
     const int64_t last_dim = input.size(-1);
     const int64_t rows = input.numel() / last_dim;
     if (rows <= kPersistentMaxRows) {

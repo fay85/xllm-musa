@@ -1,0 +1,376 @@
+docs/src/content/docs/en/design/graph_mode_design.md:135:A simplified norm-kernel example is:
+tests/core/layers/mlu/deepseek_v2_decoder_layer_test.cpp:135:    return std::get<0>(decoder.post_norm_->forward(x));
+tests/core/layers/mlu/qwen3_next_rms_norm_test.cpp:51:  norm->weight().copy_(weight_cpu.to(mlu_options));
+tests/core/layers/mlu/qwen3_next_rms_norm_test.cpp:53:  auto [output, residual_out] = norm->forward(input, residual);
+xllm/core/layers/common/qwen2_attention.cpp:151:    auto q_weight = q_norm_->weight();
+xllm/core/layers/common/qwen2_attention.cpp:152:    auto k_weight = k_norm_->weight();
+xllm/core/layers/common/qwen2_attention.cpp:153:    auto eps = q_norm_->eps();
+xllm/core/layers/common/qwen2_attention.cpp:175:    q = std::get<0>(q_norm_->forward(q));
+xllm/core/layers/common/qwen2_attention.cpp:178:    k = std::get<0>(k_norm_->forward(k));
+xllm/core/layers/common/qwen2_attention.cpp:199:    q_norm_->load_state_dict(state_dict.get_dict_with_prefix("q_norm."));
+xllm/core/layers/common/qwen2_attention.cpp:200:    k_norm_->load_state_dict(state_dict.get_dict_with_prefix("k_norm."));
+xllm/core/layers/dcu/deepseek_v2_attention.cpp:441:    q_a_layernorm_->load_state_dict(
+xllm/core/layers/dcu/deepseek_v2_attention.cpp:446:  kv_a_layernorm_->load_state_dict(
+xllm/core/layers/dcu/deepseek_v2_decoder_layer_impl.cpp:83:  input_norm_->load_state_dict(
+xllm/core/layers/dcu/deepseek_v2_decoder_layer_impl.cpp:85:  post_norm_->load_state_dict(
+xllm/core/layers/dcu/deepseek_v2_decoder_layer_impl.cpp:104:    x = std::get<0>(input_norm_->forward(x));
+xllm/core/layers/dcu/deepseek_v2_decoder_layer_impl.cpp:106:    std::tie(x, residual) = input_norm_->forward(x, residual);
+xllm/core/layers/dcu/deepseek_v2_decoder_layer_impl.cpp:116:  std::tie(x, residual) = post_norm_->forward(x, residual);
+xllm/core/layers/dcu/qwen3_5_decoder_layer.cpp:171:    q_norm_->load_state_dict(
+xllm/core/layers/dcu/qwen3_5_decoder_layer.cpp:173:    k_norm_->load_state_dict(
+xllm/core/layers/dcu/qwen3_5_decoder_layer.cpp:179:  input_norm_->load_state_dict(
+xllm/core/layers/dcu/qwen3_5_decoder_layer.cpp:181:  post_norm_->load_state_dict(
+xllm/core/layers/dcu/qwen3_5_decoder_layer.cpp:200:    x = std::get<0>(input_norm_->forward(x));
+xllm/core/layers/dcu/qwen3_5_decoder_layer.cpp:206:    x = std::get<0>(input_norm_->forward(x));
+xllm/core/layers/dcu/qwen3_5_decoder_layer.cpp:245:    q = std::get<0>(q_norm_->forward(q_reshaped)).view({T, q_size_});
+xllm/core/layers/dcu/qwen3_5_decoder_layer.cpp:247:    k = std::get<0>(k_norm_->forward(k_reshaped)).view({T, kv_size_});
+xllm/core/layers/dcu/qwen3_5_decoder_layer.cpp:266:  std::tie(x, residual) = post_norm_->forward(x, residual);
+xllm/core/layers/dcu/qwen3_gated_delta_net_base.cpp:275:    norm_->load_state_dict(StateDict({{"weight", w}}));
+xllm/core/layers/dcu/qwen3_gated_delta_net_base.cpp:458:  auto norm_out = norm_->forward(core_attn_out_reshaped, z_reshaped);
+xllm/core/layers/dcu/qwen3_gated_delta_net_base.cpp:692:  auto norm_out = norm_->forward(co_2d, z_2d);
+xllm/core/layers/deepseek_v4_decoder_layer.cpp:95:    attn_norm_->load_state_dict(attn_norm_state);
+xllm/core/layers/deepseek_v4_decoder_layer.cpp:104:    ffn_norm_->load_state_dict(ffn_norm_state);
+xllm/core/layers/deepseek_v4_decoder_layer.cpp:152:  attn_input = std::get<0>(attn_norm_->forward(attn_input));
+xllm/core/layers/deepseek_v4_decoder_layer.cpp:181:  ffn_input = std::get<0>(ffn_norm_->forward(ffn_input));
+xllm/core/layers/minimax_m2_decoder_layer.cpp:98:    x = std::get<0>(input_norm_->forward(x));
+xllm/core/layers/minimax_m2_decoder_layer.cpp:100:    std::tie(x, residual) = input_norm_->forward(x, residual);
+xllm/core/layers/minimax_m2_decoder_layer.cpp:104:  std::tie(x, residual) = post_norm_->forward(x, residual);
+xllm/core/layers/minimax_m2_decoder_layer.cpp:111:  input_norm_->load_state_dict(
+xllm/core/layers/minimax_m2_decoder_layer.cpp:113:  post_norm_->load_state_dict(
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:101:  CHECK(q_norm->process_group() != nullptr &&
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:102:        q_norm->process_group() == k_norm->process_group())
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:109:      query.reshape({-1, q_norm->local_dim()}).to(torch::kFloat32);
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:111:      key.reshape({-1, k_norm->local_dim()}).to(torch::kFloat32);
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:116:  if (q_norm->process_group()->world_size() > 1) {
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:118:    qk_var = parallel_state::reduce(qk_var, q_norm->process_group());
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:125:      q_norm->process_group()->world_size() / q_norm->replica_factor();
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:127:      k_norm->process_group()->world_size() / k_norm->replica_factor();
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:132:      (q_2d * torch::rsqrt(q_var + q_norm->eps())).to(query.scalar_type());
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:134:      (k_2d * torch::rsqrt(k_var + k_norm->eps())).to(key.scalar_type());
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:135:  q_out = (q_out * q_norm->weight()).view(q_org_shape);
+xllm/core/layers/minimax_m2_tensor_parallel_rms_norm.cpp:136:  k_out = (k_out * k_norm->weight()).view(k_org_shape);
+xllm/core/layers/mlu/deepseek_v2_attention.cpp:271:    fused_mla_q_params.gamma = q_a_layernorm_->weight();
+xllm/core/layers/mlu/deepseek_v2_attention.cpp:302:  fused_mla_kv_params.gamma = kv_a_layernorm_->weight();
+xllm/core/layers/mlu/deepseek_v2_attention.cpp:556:    q_a_layernorm_->load_state_dict(
+xllm/core/layers/mlu/deepseek_v2_attention.cpp:561:  kv_a_layernorm_->load_state_dict(
+xllm/core/layers/mlu/deepseek_v2_decoder_layer_impl.cpp:131:  input_norm_->load_state_dict(
+xllm/core/layers/mlu/deepseek_v2_decoder_layer_impl.cpp:133:  post_norm_->load_state_dict(
+xllm/core/layers/mlu/deepseek_v2_decoder_layer_impl.cpp:154:  auto [ffn_in, skip_local] = post_norm_->forward(x, residual);
+xllm/core/layers/mlu/deepseek_v2_decoder_layer_impl.cpp:356:  x = std::get<0>(input_norm_->forward(x));
+xllm/core/layers/mlu/deepseek_v2_decoder_layer_impl.cpp:404:    x = std::get<0>(post_norm_->forward(x));
+xllm/core/layers/mlu/deepseek_v4/compressor.cpp:178:  auto output = std::get<0>(norm_->forward(kv));
+xllm/core/layers/mlu/deepseek_v4/compressor.cpp:237:      /*gamma=*/norm_->weight(),
+xllm/core/layers/mlu/deepseek_v4/compressor.cpp:304:  norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/core/layers/mlu/deepseek_v4/deepseek_v4_attention.cpp:299:  qr = std::get<0>(q_norm_->forward(q_down));
+xllm/core/layers/mlu/deepseek_v4/deepseek_v4_attention.cpp:323:  torch::Tensor kv = std::get<0>(kv_norm_->forward(kv_down));
+xllm/core/layers/mlu/deepseek_v4/deepseek_v4_attention.cpp:557:  q_norm_->load_state_dict(state_dict.get_dict_with_prefix("q_norm."));
+xllm/core/layers/mlu/deepseek_v4/deepseek_v4_attention.cpp:559:  kv_norm_->load_state_dict(state_dict.get_dict_with_prefix("kv_norm."));
+xllm/core/layers/mlu/deepseek_v4/deepseek_v4_decoder_layer.cpp:117:    attn_norm_->load_state_dict(attn_norm_state);
+xllm/core/layers/mlu/deepseek_v4/deepseek_v4_decoder_layer.cpp:123:    ffn_norm_->load_state_dict(ffn_norm_state);
+xllm/core/layers/mlu/deepseek_v4/deepseek_v4_decoder_layer.cpp:182:  attn_input = std::get<0>(attn_norm_->forward(attn_input));
+xllm/core/layers/mlu/deepseek_v4/deepseek_v4_decoder_layer.cpp:192:  ffn_input = std::get<0>(ffn_norm_->forward(ffn_input));
+xllm/core/layers/mlu/indexer.cpp:114:  k_norm_->set_layernorm_mode();
+xllm/core/layers/mlu/indexer.cpp:248:  k = std::get<0>(k_norm_->forward(k_fp32)).to(k_dtype);
+xllm/core/layers/mlu/indexer.cpp:328:  k_params.gamma = k_norm_->weight();
+xllm/core/layers/mlu/indexer.cpp:329:  k_params.beta = k_norm_->bias();
+xllm/core/layers/mlu/indexer.cpp:330:  k_params.eps = k_norm_->eps();
+xllm/core/layers/mlu/indexer.cpp:805:  k_norm_->load_state_dict(state_dict.get_dict_with_prefix("k_norm."));
+xllm/core/layers/mlu/qwen3_5/qwen3_5_attention.cpp:231:  auto q_normed = std::get<0>(q_norm_->forward(q_reshaped));
+xllm/core/layers/mlu/qwen3_5/qwen3_5_attention.cpp:233:  auto k_normed = std::get<0>(k_norm_->forward(k_reshaped));
+xllm/core/layers/mlu/qwen3_5/qwen3_5_attention.cpp:259:    q_norm_->load_state_dict(StateDict({{"weight", w}}));
+xllm/core/layers/mlu/qwen3_5/qwen3_5_attention.cpp:262:    k_norm_->load_state_dict(StateDict({{"weight", w}}));
+xllm/core/layers/mlu/qwen3_5/qwen3_5_decoder_layer.cpp:126:  input_norm_->load_state_dict(
+xllm/core/layers/mlu/qwen3_5/qwen3_5_decoder_layer.cpp:128:  post_norm_->load_state_dict(
+xllm/core/layers/mlu/qwen3_5/qwen3_5_decoder_layer.cpp:163:    auto output = std::get<0>(norm->forward(input));
+xllm/core/layers/mlu/qwen3_5/qwen3_5_decoder_layer.cpp:166:  return norm->forward(input, residual);
+xllm/core/layers/mlu/qwen3_5/qwen3_5_gated_delta_net.cpp:202:    norm_->load_state_dict(StateDict({{"weight", w}}));
+xllm/core/layers/mlu/qwen3_5/qwen3_5_gated_delta_net.cpp:452:  auto norm_out = norm_->forward(core_attn_out, z);
+xllm/core/layers/musa/qwen3_gated_delta_net_base.cpp:1041:    norm_->load_state_dict(StateDict({{"weight", w}}));
+xllm/core/layers/musa/qwen3_gated_delta_net_base.cpp:1247:    auto norm_out = norm_->forward(core_attn_out_reshaped,
+xllm/core/layers/musa/qwen3_gated_delta_net_base.cpp:2043:  auto norm_out = norm_->forward(
+xllm/core/layers/musa/qwen3_next_attention.cpp:196:      params.q_weight = q_norm_->weight();
+xllm/core/layers/musa/qwen3_next_attention.cpp:197:      params.k_weight = k_norm_->weight();
+xllm/core/layers/musa/qwen3_next_attention.cpp:259:                                             q_norm_->weight(),
+xllm/core/layers/musa/qwen3_next_attention.cpp:260:                                             k_norm_->weight(),
+xllm/core/layers/musa/qwen3_next_attention.cpp:273:      q = std::get<0>(q_norm_->forward(q_3d)).view({T, q_size_});
+xllm/core/layers/musa/qwen3_next_attention.cpp:275:      k = std::get<0>(k_norm_->forward(k_3d)).view({T, kv_size_});
+xllm/core/layers/musa/qwen3_next_attention.cpp:318:    q_norm_->load_state_dict(StateDict({{"weight", w}}));
+xllm/core/layers/musa/qwen3_next_attention.cpp:321:    k_norm_->load_state_dict(StateDict({{"weight", w}}));
+xllm/core/layers/musa/qwen3_next_attention.cpp:328:    if (q_norm_->is_weight_loaded() && !q_norm_weight_adjusted_) {
+xllm/core/layers/musa/qwen3_next_attention.cpp:329:      q_norm_->weight().add_(1.0);
+xllm/core/layers/musa/qwen3_next_attention.cpp:332:    if (k_norm_->is_weight_loaded() && !k_norm_weight_adjusted_) {
+xllm/core/layers/musa/qwen3_next_attention.cpp:333:      k_norm_->weight().add_(1.0);
+xllm/core/layers/musa/qwen3_next_hybrid_decoder_layer_base.cpp:99:  input_norm_->load_state_dict(
+xllm/core/layers/musa/qwen3_next_hybrid_decoder_layer_base.cpp:101:  post_norm_->load_state_dict(
+xllm/core/layers/musa/qwen3_next_hybrid_decoder_layer_base.cpp:131:    x = std::get<0>(input_norm_->forward(x));
+xllm/core/layers/musa/qwen3_next_hybrid_decoder_layer_base.cpp:133:    std::tie(x, residual) = input_norm_->forward(x, residual);
+xllm/core/layers/musa/qwen3_next_hybrid_decoder_layer_base.cpp:147:  std::tie(x, residual) = post_norm_->forward(x, residual);
+xllm/core/layers/npu_torch/deepseek_sparse_attention.cpp:357:    rms_quant_params.weight = q_layernorm->weight();
+xllm/core/layers/npu_torch/deepseek_sparse_attention.cpp:372:    outputs.qr = std::get<0>(q_layernorm->forward(q_down));
+xllm/core/layers/npu_torch/deepseek_sparse_attention.cpp:386:  outputs.kv = std::get<0>(kv_layernorm->forward(kv_down));
+xllm/core/layers/npu_torch/deepseek_sparse_attention.cpp:892:  q_layernorm_->load_state_dict(state_dict.get_dict_with_prefix("q_norm."));
+xllm/core/layers/npu_torch/deepseek_sparse_attention.cpp:895:  kv_layernorm_->load_state_dict(state_dict.get_dict_with_prefix("kv_norm."));
+xllm/core/layers/npu_torch/minimax_m2_decode_layer.cpp:62:    x = std::get<0>(input_norm_->forward(x));
+xllm/core/layers/npu_torch/minimax_m2_decode_layer.cpp:64:    std::tie(x, residual) = input_norm_->forward(x, residual);
+xllm/core/layers/npu_torch/minimax_m2_decode_layer.cpp:68:  std::tie(x, residual) = post_norm_->forward(x, residual);
+xllm/core/layers/npu_torch/minimax_m2_decode_layer.cpp:75:  input_norm_->load_state_dict(
+xllm/core/layers/npu_torch/minimax_m2_decode_layer.cpp:77:  post_norm_->load_state_dict(
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:94:  CHECK(q_norm->process_group() != nullptr &&
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:95:        q_norm->process_group() == k_norm->process_group())
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:102:      query.reshape({-1, q_norm->local_dim()}).to(torch::kFloat32);
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:103:  const auto k_2d = key.reshape({-1, k_norm->local_dim()}).to(torch::kFloat32);
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:108:  if (q_norm->process_group()->world_size() > 1) {
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:110:    qk_var = parallel_state::reduce(qk_var, q_norm->process_group());
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:117:      q_norm->process_group()->world_size() / q_norm->replica_factor();
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:119:      k_norm->process_group()->world_size() / k_norm->replica_factor();
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:124:      (q_2d * torch::rsqrt(q_var + q_norm->eps())).to(query.scalar_type());
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:126:      (k_2d * torch::rsqrt(k_var + k_norm->eps())).to(key.scalar_type());
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:127:  q_out = (q_out * q_norm->weight()).view(q_org_shape);
+xllm/core/layers/npu_torch/minimax_rms_norm.cpp:128:  k_out = (k_out * k_norm->weight()).view(k_org_shape);
+xllm/core/layers/npu_torch/qwen3_gated_delta_net_base.cpp:506:    norm_->load_state_dict(StateDict({{"weight", w}}));
+xllm/core/layers/npu_torch/qwen3_gated_delta_net_base.cpp:1017:  auto norm_out = norm_->forward(core_attn_out_reshaped, z_reshaped);
+xllm/core/layers/npu_torch/qwen3_next_attention.cpp:163:    params.q_weight = q_norm_->weight();
+xllm/core/layers/npu_torch/qwen3_next_attention.cpp:164:    params.k_weight = k_norm_->weight();
+xllm/core/layers/npu_torch/qwen3_next_attention.cpp:205:  q = std::get<0>(q_norm_->forward(q_3d)).view({T, q_size_});
+xllm/core/layers/npu_torch/qwen3_next_attention.cpp:207:  k = std::get<0>(k_norm_->forward(k_3d)).view({T, kv_size_});
+xllm/core/layers/npu_torch/qwen3_next_attention.cpp:269:    q_norm_->load_state_dict(StateDict({{"weight", w}}));
+xllm/core/layers/npu_torch/qwen3_next_attention.cpp:272:    k_norm_->load_state_dict(StateDict({{"weight", w}}));
+xllm/core/layers/npu_torch/qwen3_next_attention.cpp:279:    if (q_norm_->is_weight_loaded() && !q_norm_weight_adjusted_) {
+xllm/core/layers/npu_torch/qwen3_next_attention.cpp:280:      q_norm_->weight().add_(1.0);
+xllm/core/layers/npu_torch/qwen3_next_attention.cpp:283:    if (k_norm_->is_weight_loaded() && !k_norm_weight_adjusted_) {
+xllm/core/layers/npu_torch/qwen3_next_attention.cpp:284:      k_norm_->weight().add_(1.0);
+xllm/core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.cpp:93:  input_norm_->load_state_dict(
+xllm/core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.cpp:95:  post_norm_->load_state_dict(
+xllm/core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.cpp:123:    x = std::get<0>(input_norm_->forward(x));
+xllm/core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.cpp:134:    std::tie(x, residual) = input_norm_->forward(x, residual);
+xllm/core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.cpp:155:  std::tie(x, residual) = post_norm_->forward(x, residual);
+xllm/core/layers/qwen2_decoder_layer.cpp:58:  input_norm_->load_state_dict(
+xllm/core/layers/qwen2_decoder_layer.cpp:60:  post_norm_->load_state_dict(
+xllm/core/layers/qwen2_decoder_layer.cpp:77:                      ? std::get<0>(norm->forward_fp8(input, fp8_scale.value()))
+xllm/core/layers/qwen2_decoder_layer.cpp:78:                      : std::get<0>(norm->forward(input));
+xllm/core/layers/qwen2_decoder_layer.cpp:83:  return use_fp8_fusion ? norm->forward_fp8(input, fp8_scale.value(), residual)
+xllm/core/layers/qwen2_decoder_layer.cpp:84:                        : norm->forward(input, residual);
+xllm/core/layers/qwen3_moe_decoder_layer.cpp:121:  input_norm_->load_state_dict(
+xllm/core/layers/qwen3_moe_decoder_layer.cpp:123:  post_norm_->load_state_dict(
+xllm/core/layers/qwen3_moe_decoder_layer.cpp:142:    x = std::get<0>(input_norm_->forward(x));
+xllm/core/layers/qwen3_moe_decoder_layer.cpp:144:    std::tie(x, residual) = input_norm_->forward(x, residual);
+xllm/core/layers/qwen3_moe_decoder_layer.cpp:151:  std::tie(x, residual) = post_norm_->forward(x, residual);
+xllm/models/dit/autoencoders/autoencoder_kl.h:117:        group_norm_->forward(hidden_states.transpose(1, 2)).transpose(1, 2);
+xllm/models/dit/autoencoders/autoencoder_kl.h:163:                          group_norm_->weight,
+xllm/models/dit/autoencoders/autoencoder_kl.h:167:                          group_norm_->bias,
+xllm/models/dit/autoencoders/autoencoder_kl_qwenimage.h:727:    reshaped_x = norm_->forward(reshaped_x);
+xllm/models/dit/autoencoders/autoencoder_kl_qwenimage.h:792:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/dit/autoencoders/autoencoder_kl_qwenimage.h:805:    norm_->verify_loaded_weights("norm.");
+xllm/models/dit/autoencoders/autoencoder_kl_wan.h:738:    x = norm_->forward(x);
+xllm/models/dit/autoencoders/autoencoder_kl_wan.h:803:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/dit/autoencoders/autoencoder_kl_wan.h:816:    norm_->verify_loaded_weights("norm.");
+xllm/models/dit/encoders/clip_text_model.h:433:    final_layer_norm_->weight.set_data(final_layer_norm_->weight.to(options));
+xllm/models/dit/encoders/clip_text_model.h:434:    final_layer_norm_->bias.set_data(final_layer_norm_->bias.to(options));
+xllm/models/dit/encoders/clip_text_model.h:451:    auto last_hidden_state = final_layer_norm_->forward(encoder_output);
+xllm/models/dit/encoders/clip_text_model.h:462:                        final_layer_norm_->weight,
+xllm/models/dit/encoders/clip_text_model.h:466:                        final_layer_norm_->bias,
+xllm/models/dit/encoders/t5_encoder.h:220:    torch::Tensor forwarded_states = layer_norm_->forward(hidden_states);
+xllm/models/dit/encoders/t5_encoder.h:229:    layer_norm_->load_state_dict(
+xllm/models/dit/encoders/t5_encoder.h:235:    layer_norm_->verify_loaded_weights(prefix + "layer_norm.");
+xllm/models/dit/encoders/t5_encoder.h:513:    torch::Tensor normed_hidden_states = layer_norm_->forward(hidden_states);
+xllm/models/dit/encoders/t5_encoder.h:529:    layer_norm_->load_state_dict(
+xllm/models/dit/encoders/t5_encoder.h:535:    layer_norm_->verify_loaded_weights(prefix + "layer_norm.");
+xllm/models/dit/encoders/t5_encoder.h:666:    hidden_states = final_layer_norm_->forward(hidden_states);
+xllm/models/dit/encoders/t5_encoder.h:676:      final_layer_norm_->load_state_dict(
+xllm/models/dit/encoders/t5_encoder.h:691:    final_layer_norm_->verify_loaded_weights("encoder.final_layer_norm.");
+xllm/models/dit/encoders/umt5_encoder.h:66:    torch::Tensor normed = layer_norm_->forward(hidden_states);
+xllm/models/dit/encoders/umt5_encoder.h:77:    layer_norm_->load_state_dict(
+xllm/models/dit/encoders/umt5_encoder.h:83:    layer_norm_->verify_loaded_weights(prefix + "layer_norm.");
+xllm/models/dit/encoders/umt5_encoder.h:205:    hidden_states = final_layer_norm_->forward(hidden_states);
+xllm/models/dit/encoders/umt5_encoder.h:230:      final_layer_norm_->load_state_dict(
+xllm/models/dit/encoders/umt5_encoder.h:244:    final_layer_norm_->verify_loaded_weights("encoder.final_layer_norm.");
+xllm/models/dit/transformers/transformer_flux.h:827:    auto normalized_x = norm_->forward(x) * (1 + scale_msa.unsqueeze(1)) +
+xllm/models/dit/transformers/transformer_flux.h:880:    auto normalized_x = norm_->forward(x) * (1 + scale_msa.unsqueeze(1)) +
+xllm/models/dit/transformers/transformer_flux.h:937:    auto x_norm = norm_->forward(x);
+xllm/models/dit/transformers/transformer_flux.h:1073:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/dit/transformers/transformer_flux.h:1082:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/dit/transformers/transformer_flux2.h:1179:    auto norm_hidden_states = norm_->forward(hidden_states);
+xllm/models/dit/transformers/transformer_longcat_audiodit.h:779:    h = norm_->forward(h);
+xllm/models/dit/transformers/transformer_longcat_audiodit.h:859:    torch::Tensor h = norm_->forward(x.to(torch::kFloat32)).to(x.dtype());
+xllm/models/dit/transformers/transformer_longcat_audiodit.h:925:      q = q_norm_->forward(q);
+xllm/models/dit/transformers/transformer_longcat_audiodit.h:926:      k = k_norm_->forward(k);
+xllm/models/dit/transformers/transformer_longcat_audiodit.h:1021:      q = q_norm_->forward(q);
+xllm/models/dit/transformers/transformer_longcat_audiodit.h:1022:      k = k_norm_->forward(k);
+xllm/models/dit/transformers/transformer_longcat_image.h:110:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/dit/transformers/transformer_longcat_image.h:117:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/dit/transformers/transformer_qwen_image.h:262:    auto x_norm = norm_->forward(x);
+xllm/models/dit/transformers/transformer_qwen_image.h:905:    auto x_norm = norm_->forward(x);
+xllm/models/dit/transformers/transformer_qwen_image.h:2330:    new_encoder_hidden_states = txt_norm_->forward(new_encoder_hidden_states);
+xllm/models/dit/transformers/transformer_qwen_image.h:2446:    txt_norm_->verify_loaded_weights(prefix + "txt_norm.");
+xllm/models/dit/transformers/transformer_qwen_image.h:2463:      txt_norm_->load_state_dict(state_dict->get_dict_with_prefix("txt_norm."));
+xllm/models/dit/utils/dit_parallel_linear.h:612:      norm->weight().slice(0, tp_rank * local_dim, (tp_rank + 1) * local_dim);
+xllm/models/dit/utils/dit_parallel_linear.h:624:                torch::rsqrt(global_sum_sq * inv_full_dim + norm->eps()) *
+xllm/models/llm/deepseek_v2.h:146:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/deepseek_v4_mtp.h:173:    final_norm_->load_state_dict(
+xllm/models/llm/llm_model_base.h:143:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/mimo_mtp.h:94:    token_layernorm_->load_state_dict(
+xllm/models/llm/mimo_mtp.h:96:    hidden_layernorm_->load_state_dict(
+xllm/models/llm/mimo_mtp.h:105:    CHECK(token_layernorm_->weight().defined())
+xllm/models/llm/mimo_mtp.h:107:    CHECK(hidden_layernorm_->weight().defined())
+xllm/models/llm/mimo_mtp.h:206:    norm_->load_state_dict(mtp_dict.get_dict_with_prefix("final_layernorm."));
+xllm/models/llm/mimo_mtp.h:213:    CHECK(norm_->weight().defined())
+xllm/models/llm/mlu/deepseek_v4.h:140:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/mlu/deepseek_v4_mtp.h:167:    final_norm_->load_state_dict(
+xllm/models/llm/mtp_model_base.h:250:    enorm_->load_state_dict(state_dict.get_dict_with_prefix("enorm."));
+xllm/models/llm/mtp_model_base.h:251:    hnorm_->load_state_dict(state_dict.get_dict_with_prefix("hnorm."));
+xllm/models/llm/mtp_model_base.h:458:        norm_->load_state_dict(state_dict.get_dict_with_prefix(
+xllm/models/llm/npu/deepseek_v2.h:225:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/deepseek_v2.h:234:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/llm/npu/deepseek_v2.h:242:    norm_->merge_loaded_weights();
+xllm/models/llm/npu/deepseek_v2.h:250:    norm_->merge_and_move_pinned_host();
+xllm/models/llm/npu/deepseek_v2.h:258:    norm_->free_weights();
+xllm/models/llm/npu/deepseek_v2.h:266:    norm_->reload_weights();
+xllm/models/llm/npu/deepseek_v2.h:271:    norm_->reload_weights();
+xllm/models/llm/npu/deepseek_v2.h:279:    norm_->reload_weights_from_device();
+xllm/models/llm/npu/deepseek_v32.h:383:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/deepseek_v32.h:392:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/llm/npu/deepseek_v32.h:400:    norm_->merge_loaded_weights();
+xllm/models/llm/npu/deepseek_v32.h:408:    norm_->merge_and_move_pinned_host();
+xllm/models/llm/npu/deepseek_v32.h:416:    norm_->free_weights();
+xllm/models/llm/npu/deepseek_v32.h:424:    norm_->reload_weights();
+xllm/models/llm/npu/deepseek_v32.h:429:    norm_->reload_weights();
+xllm/models/llm/npu/deepseek_v32.h:437:    norm_->reload_weights_from_device();
+xllm/models/llm/npu/glm4_moe.h:259:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/glm4_moe.h:268:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/llm/npu/glm4_moe.h:276:    norm_->merge_loaded_weights();
+xllm/models/llm/npu/glm4_moe.h:284:    norm_->merge_and_move_pinned_host();
+xllm/models/llm/npu/glm4_moe.h:292:    norm_->free_weights();
+xllm/models/llm/npu/glm4_moe.h:300:    norm_->reload_weights();
+xllm/models/llm/npu/glm4_moe.h:305:    norm_->reload_weights();
+xllm/models/llm/npu/glm4_moe.h:313:    norm_->reload_weights_from_device();
+xllm/models/llm/npu/glm4_moe_lite.h:249:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/glm4_moe_lite.h:258:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/llm/npu/glm4_moe_lite.h:266:    norm_->merge_loaded_weights();
+xllm/models/llm/npu/glm4_moe_lite.h:274:    norm_->merge_and_move_pinned_host();
+xllm/models/llm/npu/glm4_moe_lite.h:282:    norm_->free_weights();
+xllm/models/llm/npu/glm4_moe_lite.h:290:    norm_->reload_weights();
+xllm/models/llm/npu/glm4_moe_lite.h:295:    norm_->reload_weights();
+xllm/models/llm/npu/glm4_moe_lite.h:303:    norm_->reload_weights_from_device();
+xllm/models/llm/npu/glm5_moe.h:198:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/glm5_moe.h:207:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/llm/npu/glm5_moe.h:215:    norm_->merge_loaded_weights();
+xllm/models/llm/npu/glm5_moe.h:223:    norm_->merge_and_move_pinned_host();
+xllm/models/llm/npu/glm5_moe.h:231:    norm_->free_weights();
+xllm/models/llm/npu/glm5_moe.h:239:    norm_->reload_weights();
+xllm/models/llm/npu/glm5_moe.h:244:    norm_->reload_weights();
+xllm/models/llm/npu/glm5_moe.h:252:    norm_->reload_weights_from_device();
+xllm/models/llm/npu/joyai_llm_flash.h:140:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/joyai_llm_flash.h:149:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/llm/npu/joyai_llm_flash.h:157:    norm_->merge_loaded_weights();
+xllm/models/llm/npu/joyai_llm_flash.h:165:    norm_->merge_and_move_pinned_host();
+xllm/models/llm/npu/joyai_llm_flash.h:173:    norm_->free_weights();
+xllm/models/llm/npu/joyai_llm_flash.h:181:    norm_->reload_weights();
+xllm/models/llm/npu/joyai_llm_flash.h:186:    norm_->reload_weights();
+xllm/models/llm/npu/joyai_llm_flash.h:193:    norm_->reload_weights_from_device();
+xllm/models/llm/npu/llama.h:205:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/llama.h:214:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/llm/npu/llama.h:223:    norm_->merge_loaded_weights();
+xllm/models/llm/npu/llama.h:231:    norm_->merge_and_move_pinned_host();
+xllm/models/llm/npu/llama.h:239:    norm_->free_weights();
+xllm/models/llm/npu/llama.h:247:    norm_->reload_weights();
+xllm/models/llm/npu/llama.h:252:    norm_->reload_weights();
+xllm/models/llm/npu/llama.h:260:    norm_->reload_weights_from_device();
+xllm/models/llm/npu/llm_model_base.h:279:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/llm_model_base.h:289:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/llm/npu/llm_model_base.h:298:    norm_->merge_loaded_weights();
+xllm/models/llm/npu/llm_model_base.h:306:    norm_->free_weights();
+xllm/models/llm/npu/llm_model_base.h:314:    norm_->reload_weights();
+xllm/models/llm/npu/llm_model_base.h:319:    norm_->reload_weights();
+xllm/models/llm/npu/llm_model_base.h:327:    norm_->reload_weights_from_device();
+xllm/models/llm/npu/llm_model_base.h:335:    norm_->merge_and_move_pinned_host();
+xllm/models/llm/npu/minimax_m2.h:277:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/mtp_model_base.h:251:    enorm_->load_state_dict(state_dict.get_dict_with_prefix("enorm."));
+xllm/models/llm/npu/mtp_model_base.h:252:    hnorm_->load_state_dict(state_dict.get_dict_with_prefix("hnorm."));
+xllm/models/llm/npu/mtp_model_base.h:253:    final_norm_->load_state_dict(
+xllm/models/llm/npu/mtp_model_base.h:266:    enorm_->verify_loaded_weights(prefix + "enorm.");
+xllm/models/llm/npu/mtp_model_base.h:267:    hnorm_->verify_loaded_weights(prefix + "hnorm.");
+xllm/models/llm/npu/mtp_model_base.h:268:    final_norm_->verify_loaded_weights(prefix + "shared_head.norm.");
+xllm/models/llm/npu/mtp_model_base.h:279:    enorm_->merge_loaded_weights();
+xllm/models/llm/npu/mtp_model_base.h:280:    hnorm_->merge_loaded_weights();
+xllm/models/llm/npu/mtp_model_base.h:281:    final_norm_->merge_loaded_weights();
+xllm/models/llm/npu/qwen3_dflash.h:73:    hidden_norm_->load_state_dict(
+xllm/models/llm/npu/qwen3_dflash.h:80:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/qwen3_dflash.h:85:    hidden_norm_->verify_loaded_weights(prefix + "hidden_norm.");
+xllm/models/llm/npu/qwen3_dflash.h:91:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/llm/npu/qwen3_dflash.h:96:    hidden_norm_->merge_loaded_weights();
+xllm/models/llm/npu/qwen3_dflash.h:101:    norm_->merge_loaded_weights();
+xllm/models/llm/npu/qwen3_eagle3.h:247:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/qwen3_eagle3.h:253:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/llm/npu/qwen3_eagle3.h:259:    norm_->merge_loaded_weights();
+xllm/models/llm/npu/qwen3_moe.h:383:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/npu/qwen3_moe.h:392:    norm_->verify_loaded_weights(prefix + "norm.");
+xllm/models/llm/npu/qwen3_moe.h:400:    norm_->merge_loaded_weights();
+xllm/models/llm/npu/qwen3_moe.h:408:    norm_->merge_and_move_pinned_host();
+xllm/models/llm/npu/qwen3_moe.h:416:    norm_->free_weights();
+xllm/models/llm/npu/qwen3_moe.h:424:    norm_->reload_weights();
+xllm/models/llm/npu/qwen3_moe.h:429:    norm_->reload_weights();
+xllm/models/llm/npu/qwen3_moe.h:437:    norm_->reload_weights_from_device();
+xllm/models/llm/qwen3_5_mtp_base.h:158:    auto [new_mtp_hidden, new_res] = norm_->forward(mtp_hidden, residual);
+xllm/models/llm/qwen3_5_mtp_base.h:201:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/qwen3_moe.h:230:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/llm/qwen3_next_hybrid_base.h:184:    auto [hidden_states, residual_out] = norm_->forward(h, residual);
+xllm/models/llm/qwen3_next_hybrid_base.h:200:    norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/rec/npu/onerec_npu_impl.h:349:    h = std::get<0>(norm_->forward(h, residual));
+xllm/models/rec/npu/onerec_npu_impl.h:373:    norm_->load_state_dict(
+xllm/models/vlm/npu/glm4v.h:311:    norm_->weight.set_data(norm_->weight.to(options_));
+xllm/models/vlm/npu/glm4v.h:312:    norm_->bias.set_data(norm_->bias.to(options_));
+xllm/models/vlm/npu/glm4v.h:350:      CHECK_EQ(norm_->weight.sizes(), norm_weight.sizes())
+xllm/models/vlm/npu/glm4v.h:352:      norm_->weight.data().copy_(norm_weight);
+xllm/models/vlm/npu/glm4v.h:357:      CHECK_EQ(norm_->bias.sizes(), norm_bias.sizes())
+xllm/models/vlm/npu/glm4v.h:359:      norm_->bias.data().copy_(norm_bias);
+xllm/models/vlm/npu/glm4v.h:578:      CHECK_EQ(post_conv_layernorm_->weight.sizes(), norm_weight.sizes())
+xllm/models/vlm/npu/glm4v.h:580:      post_conv_layernorm_->weight.data().copy_(norm_weight);
+xllm/models/vlm/npu/glm4v.h:591:      CHECK_EQ(post_layernorm_->weight.sizes(), post_norm_weight.sizes())
+xllm/models/vlm/npu/glm4v.h:593:      post_layernorm_->weight.data().copy_(post_norm_weight);
+xllm/models/vlm/npu/kimi_k25.h:99:                         layer_norm->weight,
+xllm/models/vlm/npu/kimi_k25.h:105:                         layer_norm->bias,
+xllm/models/vlm/npu/kimi_k25.h:438:    pre_norm_->weight.set_data(pre_norm_->weight.to(options));
+xllm/models/vlm/npu/kimi_k25.h:439:    pre_norm_->bias.set_data(pre_norm_->bias.to(options));
+xllm/models/vlm/npu/kimi_k25.h:552:    final_layernorm_->weight.set_data(final_layernorm_->weight.to(options));
+xllm/models/vlm/npu/kimi_k25.h:553:    final_layernorm_->bias.set_data(final_layernorm_->bias.to(options));
+xllm/models/vlm/npu/minicpmv.h:753:    post_layernorm_->weight.set_data(post_layernorm_->weight.to(options));
+xllm/models/vlm/npu/minicpmv.h:754:    post_layernorm_->bias.set_data(post_layernorm_->bias.to(options));
+xllm/models/vlm/npu/minicpmv.h:775:      CHECK_EQ(post_layernorm_->weight.sizes(), post_norm_weight.sizes())
+xllm/models/vlm/npu/minicpmv.h:777:      post_layernorm_->weight.data().copy_(post_norm_weight);
+xllm/models/vlm/npu/minicpmv.h:781:      CHECK_EQ(post_layernorm_->bias.sizes(), post_norm_bias.sizes())
+xllm/models/vlm/npu/minicpmv.h:783:      post_layernorm_->bias.data().copy_(post_norm_bias);
+xllm/models/vlm/npu/qwen2_vl.h:183:    norm_->weight.set_data(norm_->weight.to(options));
+xllm/models/vlm/npu/qwen2_vl.h:184:    norm_->bias.set_data(norm_->bias.to(options));
+xllm/models/vlm/npu/qwen2_vl.h:207:      CHECK_EQ(norm_->weight.sizes(), norm_weight.sizes())
+xllm/models/vlm/npu/qwen2_vl.h:209:      norm_->weight.data().copy_(norm_weight);
+xllm/models/vlm/npu/qwen2_vl.h:214:      CHECK_EQ(norm_->bias.sizes(), norm_bias.sizes())
+xllm/models/vlm/npu/qwen2_vl.h:216:      norm_->bias.data().copy_(norm_bias);
+xllm/models/vlm/npu/qwen3_vl.h:204:    norm_->weight.set_data(norm_->weight.to(options));
+xllm/models/vlm/npu/qwen3_vl.h:205:    norm_->bias.set_data(norm_->bias.to(options));
+xllm/models/vlm/npu/qwen3_vl.h:233:      CHECK_EQ(norm_->weight.sizes(), norm_weight.sizes())
+xllm/models/vlm/npu/qwen3_vl.h:235:      norm_->weight.data().copy_(norm_weight);
+xllm/models/vlm/npu/qwen3_vl.h:240:      CHECK_EQ(norm_->bias.sizes(), norm_bias.sizes())
+xllm/models/vlm/npu/qwen3_vl.h:242:      norm_->bias.data().copy_(norm_bias);
+xllm/models/vlm/oxygen_vlm.h:208:    norm_->weight.set_data(norm_->weight.to(options_));
+xllm/models/vlm/oxygen_vlm.h:209:    norm_->bias.set_data(norm_->bias.to(options_));
+xllm/models/vlm/oxygen_vlm.h:247:      CHECK_EQ(norm_->weight.sizes(), norm_weight.sizes())
+xllm/models/vlm/oxygen_vlm.h:249:      norm_->weight.data().copy_(norm_weight);
+xllm/models/vlm/oxygen_vlm.h:254:      CHECK_EQ(norm_->bias.sizes(), norm_bias.sizes())
+xllm/models/vlm/oxygen_vlm.h:256:      norm_->bias.data().copy_(norm_bias);
+xllm/models/vlm/oxygen_vlm.h:481:      CHECK_EQ(post_conv_layernorm_->weight().sizes(), norm_weight.sizes())
+xllm/models/vlm/oxygen_vlm.h:483:      post_conv_layernorm_->weight().data().copy_(norm_weight);
+xllm/models/vlm/oxygen_vlm.h:494:      CHECK_EQ(post_layernorm_->weight().sizes(), post_norm_weight.sizes())
+xllm/models/vlm/oxygen_vlm.h:496:      post_layernorm_->weight().data().copy_(post_norm_weight);
+xllm/models/vlm/qwen2_vl.h:139:    norm_->weight.set_data(norm_->weight.to(options));
+xllm/models/vlm/qwen2_vl.h:140:    norm_->bias.set_data(norm_->bias.to(options));
+xllm/models/vlm/qwen2_vl.h:163:      CHECK_EQ(norm_->weight.sizes(), norm_weight.sizes())
+xllm/models/vlm/qwen2_vl.h:165:      norm_->weight.data().copy_(norm_weight);
+xllm/models/vlm/qwen2_vl.h:170:      CHECK_EQ(norm_->bias.sizes(), norm_bias.sizes())
+xllm/models/vlm/qwen2_vl.h:172:      norm_->bias.data().copy_(norm_bias);
+xllm/models/vlm/qwen3_5.h:88:    rms_norm_->load_state_dict(state_dict.get_dict_with_prefix("norm."));
+xllm/models/vlm/qwen3_vl.h:160:    norm_->weight.set_data(norm_->weight.to(options));
+xllm/models/vlm/qwen3_vl.h:161:    norm_->bias.set_data(norm_->bias.to(options));
+xllm/models/vlm/qwen3_vl.h:189:      CHECK_EQ(norm_->weight.sizes(), norm_weight.sizes())
+xllm/models/vlm/qwen3_vl.h:191:      norm_->weight.data().copy_(norm_weight);
+xllm/models/vlm/qwen3_vl.h:196:      CHECK_EQ(norm_->bias.sizes(), norm_bias.sizes())
+xllm/models/vlm/qwen3_vl.h:198:      norm_->bias.data().copy_(norm_bias);
