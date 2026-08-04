@@ -21,7 +21,7 @@ limitations under the License.
 
 #include "core/kernels/musa/llm_decode_metadata_update.h"
 
-namespace xllm::kernel::cuda {
+namespace xllm::kernel::musa {
 namespace {
 
 constexpr int32_t kThreadsPerBlock = 256;
@@ -48,11 +48,19 @@ __global__ void llm_decode_metadata_update_kernel(
     }
     if (idx >= params.actual_num_tokens && idx < params.padded_num_tokens) {
       params.dst_tokens[idx] = 0;
-      params.dst_new_cache_slots[idx] = 0;
+      params.dst_positions[idx] = 0;
+      params.dst_new_cache_slots[idx] = -1;
     }
     if (idx < params.actual_batch_size + 1) {
       params.dst_kv_seq_lens[idx] = params.src_kv_seq_lens[idx];
       params.dst_paged_kv_indptr[idx] = params.src_paged_kv_indptr[idx];
+    }
+    if (idx >= params.actual_batch_size + 1 &&
+        idx < params.padded_num_tokens + 1) {
+      params.dst_kv_seq_lens[idx] =
+          params.src_kv_seq_lens[params.actual_batch_size];
+      params.dst_paged_kv_indptr[idx] =
+          params.src_paged_kv_indptr[params.actual_batch_size];
     }
     if (idx < params.actual_batch_size) {
       params.dst_kv_seq_lens_delta[idx] =
@@ -60,8 +68,39 @@ __global__ void llm_decode_metadata_update_kernel(
       params.dst_paged_kv_last_page_len[idx] =
           params.src_paged_kv_last_page_len[idx];
     }
+    if (idx >= params.actual_batch_size && idx < params.padded_num_tokens) {
+      params.dst_kv_seq_lens_delta[idx] = 0;
+      params.dst_paged_kv_last_page_len[idx] = 1;
+    }
     if (idx < dyn_indices_size) {
       params.dst_paged_kv_indices[idx] = params.src_paged_kv_indices[idx];
+    }
+  }
+}
+
+__global__ void llm_decode_metadata_pad_from_host_kernel(
+    LlmDecodeMetadataHostUpdateParams params,
+    int64_t max_work_size) {
+  const int64_t thread_idx =
+      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  const int64_t step = static_cast<int64_t>(blockDim.x) * gridDim.x;
+
+  for (int64_t idx = thread_idx; idx < max_work_size; idx += step) {
+    if (idx >= params.actual_num_tokens && idx < params.padded_num_tokens) {
+      params.dst_tokens[idx] = 0;
+      params.dst_positions[idx] = 0;
+      params.dst_new_cache_slots[idx] = -1;
+    }
+    if (idx >= params.actual_batch_size + 1 &&
+        idx < params.padded_num_tokens + 1) {
+      params.dst_kv_seq_lens[idx] =
+          params.dst_kv_seq_lens[params.actual_batch_size];
+      params.dst_paged_kv_indptr[idx] =
+          params.dst_paged_kv_indptr[params.actual_batch_size];
+    }
+    if (idx >= params.actual_batch_size && idx < params.padded_num_tokens) {
+      params.dst_kv_seq_lens_delta[idx] = 0;
+      params.dst_paged_kv_last_page_len[idx] = 1;
     }
   }
 }
@@ -110,22 +149,6 @@ void update_llm_decode_metadata_from_host(
                cudaMemcpyDeviceToDevice,
                stream);
 
-  if (padded_num_tokens > actual_num_tokens) {
-    const size_t pad_bytes =
-        static_cast<size_t>(padded_num_tokens - actual_num_tokens) *
-        sizeof(int32_t);
-    const cudaError_t zero_tokens = cudaMemsetAsync(
-        params.dst_tokens + actual_num_tokens, 0, pad_bytes, stream);
-    CHECK_EQ(zero_tokens, cudaSuccess)
-        << "llm_decode_metadata token padding memset failed: "
-        << cudaGetErrorString(zero_tokens);
-    const cudaError_t zero_slots = cudaMemsetAsync(
-        params.dst_new_cache_slots + actual_num_tokens, 0, pad_bytes, stream);
-    CHECK_EQ(zero_slots, cudaSuccess)
-        << "llm_decode_metadata slot padding memset failed: "
-        << cudaGetErrorString(zero_slots);
-  }
-
   if (actual_batch_size >= 0 && params.host_kv_seq_lens != nullptr) {
     const size_t kv_cu_bytes =
         static_cast<size_t>(actual_batch_size + 1) * sizeof(int32_t);
@@ -169,13 +192,28 @@ void update_llm_decode_metadata_from_host(
                  cudaMemcpyHostToDevice,
                  stream);
   }
+  if (padded_num_tokens > actual_num_tokens) {
+    const int64_t max_work_size = padded_num_tokens + 1;
+    const int64_t num_blocks = std::min<int64_t>(
+        (max_work_size + kThreadsPerBlock - 1) / kThreadsPerBlock,
+        kMaxBlocksPerLaunch);
+    llm_decode_metadata_pad_from_host_kernel<<<static_cast<uint32_t>(
+                                                   num_blocks),
+                                               kThreadsPerBlock,
+                                               /*shared_mem_bytes=*/0,
+                                               stream>>>(params, max_work_size);
+    const cudaError_t error = cudaGetLastError();
+    CHECK_EQ(error, cudaSuccess)
+        << "llm_decode_metadata host padding kernel launch failed: "
+        << cudaGetErrorString(error);
+  }
 }
 
 void update_llm_decode_metadata(const LlmDecodeMetadataUpdateParams& params,
                                 LlmDecodeMetadataUpdateStream stream) {
   int64_t max_work_size = params.actual_num_tokens;
-  if (params.padded_num_tokens > max_work_size) {
-    max_work_size = params.padded_num_tokens;
+  if (params.padded_num_tokens + 1 > max_work_size) {
+    max_work_size = params.padded_num_tokens + 1;
   }
   if (params.actual_batch_size + 1 > max_work_size) {
     max_work_size = params.actual_batch_size + 1;
@@ -202,4 +240,4 @@ void update_llm_decode_metadata(const LlmDecodeMetadataUpdateParams& params,
       << cudaGetErrorString(error);
 }
 
-}  // namespace xllm::kernel::cuda
+}  // namespace xllm::kernel::musa

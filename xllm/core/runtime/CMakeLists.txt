@@ -1,4 +1,9 @@
 include(cc_library)
+
+if(USE_MUSA)
+  add_subdirectory(musa)
+endif()
+
 include(cc_binary)
 
 cc_library(
@@ -19,6 +24,7 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:acl_graph_persistent_param.h>
     $<$<BOOL:${USE_MLU}>:mlu_graph_executor_impl.h>
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.h>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_graph_executor_impl.h>
     py_executor_impl.h
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.h>
     worker.h
@@ -100,6 +106,7 @@ cc_library(
     :util
     :worker_service
     :xllm_server
+    $<$<BOOL:${USE_MUSA}>:musa_graph_executor>
     $<$<BOOL:${USE_NPU}>:xllm_ops>
     $<$<BOOL:${USE_NPU}>:atb_customize>
     $<$<BOOL:${USE_NPU}>:platform_npu>
@@ -113,9 +120,3 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:torch_mlu>
     $<$<BOOL:${USE_DCU}>:hip::host>
 )
-
-if(USE_MUSA)
-  set_property(
-    SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/cuda_graph_executor_impl.cpp
-    APPEND PROPERTY COMPILE_OPTIONS ${_XLLM_MUSIFY_COPTS})
-endif()
