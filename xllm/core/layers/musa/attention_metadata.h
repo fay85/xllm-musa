@@ -25,10 +25,6 @@ namespace xllm::layer::musa {
 // implementations. Keeping it as a value member preserves AttentionMetadata
 // copy semantics while isolating backend-specific fields from the common type.
 struct MusaAttentionMetadata {
-  bool is_spec_verify = false;
-  torch::Tensor expanded_paged_kv_indptr;
-  torch::Tensor expanded_paged_kv_indices;
-  torch::Tensor expanded_paged_kv_last_page_len;
   torch::Tensor paged_kv_indptr_host;
   torch::Tensor paged_kv_indices_host;
   torch::Tensor paged_kv_last_page_len_host;

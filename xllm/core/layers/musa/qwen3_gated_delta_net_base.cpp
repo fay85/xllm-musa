@@ -371,12 +371,9 @@ torch::Tensor run_spec_verify_conv(
     torch::Tensor& conv_cache,
     const torch::Tensor& logical_state_indices,
     const std::vector<int64_t>& num_accepted_host,
-    const torch::Tensor& accepted_tokens,
     const torch::Tensor& q_cu_seq_lens,
     const torch::Tensor& conv_weight,
-    int32_t conv_kernel_size,
-    GdnMtpVerifyCache* verify_cache,
-    int32_t layer_id) {
+    int32_t conv_kernel_size) {
   const int64_t batch_size = mixed_qkv.size(0);
   const int64_t dim = mixed_qkv.size(1);
   const int64_t seq_len = mixed_qkv.size(2);
@@ -414,41 +411,6 @@ torch::Tensor run_spec_verify_conv(
   CHECK_EQ(weight.size(1), conv_kernel_size)
       << "spec conv weight width mismatch";
 
-  // The decomposed implementation below branches on accepted_count on the
-  // host.  That branch is captured once by a MUSA graph and is therefore
-  // stale on replay.  Keep the accepted count on device and let the fused
-  // kernel generate both the verify output and deferred state snapshots.
-  static const bool use_fused_musa_mtp_conv = [] {
-    const char* env = std::getenv("XLLM_MTP_CONV_FUSED");
-    return env == nullptr || env[0] != '0';
-  }();
-  if (use_fused_musa_mtp_conv && verify_cache != nullptr &&
-      verify_cache->enabled && accepted_tokens.defined()) {
-    auto state_indices =
-        expand_sequence_tensor_to_batch(
-            logical_state_indices, batch_size, "logical_state_indices")
-            .to(mixed_qkv.device(), torch::kInt32)
-            .contiguous();
-    auto accepted_tokens_device =
-        accepted_tokens.to(mixed_qkv.device()).contiguous();
-    auto x_contiguous = mixed_qkv.contiguous();
-    auto fused_output =
-        torch::empty(x_contiguous.sizes(), x_contiguous.options());
-    auto fused_intermediate = torch::empty(
-        {batch_size, seq_len, dim, expanded_state_len}, conv_cache.options());
-    xllm::kernel::musa::causal_conv1d_mtp_verify(x_contiguous,
-                                                 weight.contiguous(),
-                                                 conv_cache,
-                                                 state_indices,
-                                                 accepted_tokens_device,
-                                                 fused_output,
-                                                 fused_intermediate,
-                                                 /*silu_activation=*/true);
-    verify_cache->layer_states[layer_id].conv_intermediate =
-        std::move(fused_intermediate);
-    return fused_output;
-  }
-
   auto state_indices =
       expand_sequence_tensor_to_batch(
           logical_state_indices, batch_size, "logical_state_indices")
@@ -462,13 +424,6 @@ torch::Tensor run_spec_verify_conv(
   auto output_f32 = torch::empty_like(x_f32);
   auto next_states =
       torch::empty({batch_size, dim, expanded_state_len}, conv_cache.options());
-  torch::Tensor conv_intermediate;
-  const bool defer_conv_commit =
-      verify_cache != nullptr && verify_cache->enabled;
-  if (defer_conv_commit) {
-    conv_intermediate = torch::empty(
-        {batch_size, seq_len, dim, expanded_state_len}, conv_cache.options());
-  }
   const int64_t history_len = conv_kernel_size - 1;
   const int64_t old_prefix_len = expanded_state_len - seq_len;
 
@@ -496,60 +451,27 @@ torch::Tensor run_spec_verify_conv(
       output_f32.select(0, seq_idx).select(1, token_idx).copy_(token_out);
       history =
           window.narrow(/*dim=*/-1, /*start=*/1, history_len).contiguous();
-
-      if (defer_conv_commit) {
-        auto step_state =
-            torch::zeros({dim, expanded_state_len}, conv_cache.options());
-        if (old_prefix_len > 0) {
-          step_state.narrow(/*dim=*/-1, /*start=*/0, /*length=*/old_prefix_len)
-              .copy_(full_state
-                         .narrow(/*dim=*/-1,
-                                 /*start=*/accepted_offset + 1,
-                                 /*length=*/old_prefix_len)
-                         .to(conv_cache.scalar_type()));
-        }
-        const int64_t committed_len = token_idx + 1;
-        step_state
-            .narrow(/*dim=*/-1,
-                    /*start=*/old_prefix_len,
-                    /*length=*/committed_len)
-            .copy_(
-                mixed_qkv.select(0, seq_idx)
-                    .narrow(/*dim=*/-1, /*start=*/0, /*length=*/committed_len)
-                    .to(conv_cache.scalar_type()));
-        conv_intermediate.select(0, seq_idx)
-            .select(0, token_idx)
-            .copy_(step_state);
-      }
     }
 
-    if (!defer_conv_commit) {
-      auto next_state =
-          torch::zeros({dim, expanded_state_len}, conv_cache.options());
-      if (old_prefix_len > 0) {
-        next_state.narrow(/*dim=*/-1, /*start=*/0, /*length=*/old_prefix_len)
-            .copy_(full_state
-                       .narrow(/*dim=*/-1,
-                               /*start=*/accepted_offset + 1,
-                               /*length=*/old_prefix_len)
-                       .to(conv_cache.scalar_type()));
-      }
-      next_state
-          .narrow(/*dim=*/-1, /*start=*/old_prefix_len, /*length=*/seq_len)
-          .copy_(mixed_qkv.select(0, seq_idx).to(conv_cache.scalar_type()));
-      next_states.select(0, seq_idx).copy_(next_state);
+    auto next_state =
+        torch::zeros({dim, expanded_state_len}, conv_cache.options());
+    if (old_prefix_len > 0) {
+      next_state.narrow(/*dim=*/-1, /*start=*/0, /*length=*/old_prefix_len)
+          .copy_(full_state
+                     .narrow(/*dim=*/-1,
+                             /*start=*/accepted_offset + 1,
+                             /*length=*/old_prefix_len)
+                     .to(conv_cache.scalar_type()));
     }
+    next_state
+        .narrow(/*dim=*/-1, /*start=*/old_prefix_len, /*length=*/seq_len)
+        .copy_(mixed_qkv.select(0, seq_idx).to(conv_cache.scalar_type()));
+    next_states.select(0, seq_idx).copy_(next_state);
   }
 
-  if (defer_conv_commit) {
-    CHECK(verify_cache != nullptr);
-    verify_cache->layer_states[layer_id].conv_intermediate =
-        std::move(conv_intermediate);
-  } else {
-    qwen35_mtp_debug_sync("spec_conv_before_cache_write");
-    conv_cache.index_copy_(/*dim=*/0, state_indices, next_states);
-    qwen35_mtp_debug_sync("spec_conv_after_cache_write");
-  }
+  qwen35_mtp_debug_sync("spec_conv_before_cache_write");
+  conv_cache.index_copy_(/*dim=*/0, state_indices, next_states);
+  qwen35_mtp_debug_sync("spec_conv_after_cache_write");
   auto output = output_f32.to(mixed_qkv.scalar_type());
   qwen35_mtp_debug_sync("spec_conv_exit");
   return output;
@@ -686,92 +608,6 @@ torch::Tensor run_spec_verify_gated_delta_rule(
   }
 
   qwen35_mtp_debug_sync("spec_gdn_exit");
-  return output;
-}
-
-torch::Tensor run_spec_verify_gated_delta_rule_mate(
-    const torch::Tensor& query,
-    const torch::Tensor& key,
-    const torch::Tensor& value,
-    const torch::Tensor& a,
-    const torch::Tensor& b,
-    torch::Tensor& ssm_cache,
-    const torch::Tensor& checkpoint_indices,
-    const torch::Tensor& num_accepted_tokens,
-    const torch::Tensor& A_log,
-    const torch::Tensor& dt_bias,
-    int64_t num_k_heads,
-    int64_t num_v_heads,
-    int64_t head_k_dim,
-    int64_t head_v_dim,
-    double scale,
-    GdnMtpVerifyCache* verify_cache,
-    int32_t layer_id,
-    torch::Tensor* intermediate_buf,
-    torch::Tensor* output_buf) {
-  const auto device = value.device();
-  const int64_t B = value.size(0);
-  const int64_t T = value.size(1);
-
-  auto accepted = num_accepted_tokens.to(device, torch::kLong).clamp_min(1);
-  auto gather_idx = (accepted - 1).clamp(0, T - 1).unsqueeze(1);
-  auto init_slots =
-      checkpoint_indices.to(torch::kLong).gather(1, gather_idx).squeeze(1);
-
-  auto init_states =
-      ssm_cache.index_select(0, init_slots).to(torch::kFloat32).contiguous();
-  auto state_indices = torch::arange(
-      B, torch::TensorOptions().dtype(torch::kInt32).device(device));
-  const int64_t intermediate_numel =
-      B * T * num_v_heads * head_v_dim * head_k_dim;
-  torch::Tensor intermediate;
-  if (intermediate_buf != nullptr && intermediate_buf->defined() &&
-      intermediate_buf->numel() >= intermediate_numel) {
-    intermediate = intermediate_buf->narrow(0, 0, intermediate_numel)
-                       .view({B, T, num_v_heads, head_v_dim, head_k_dim});
-  } else {
-    intermediate = torch::empty(
-        {B, T, num_v_heads, head_v_dim, head_k_dim},
-        torch::TensorOptions().dtype(torch::kFloat32).device(device));
-  }
-  torch::Tensor output;
-  if (output_buf != nullptr && output_buf->defined() &&
-      output_buf->sizes() == value.sizes()) {
-    output = *output_buf;
-  } else {
-    output = torch::empty_like(value);
-  }
-
-  xllm::kernel::musa::MateGatedDeltaRuleMtpParams params;
-  params.q = query;
-  params.k = key;
-  params.v = value;
-  params.A_log = A_log;
-  params.a = a;
-  params.dt_bias = dt_bias;
-  params.b = b;
-  params.state = init_states;
-  params.state_indices = state_indices;
-  params.intermediate = intermediate;
-  params.output = output;
-  params.num_k_heads = num_k_heads;
-  params.num_v_heads = num_v_heads;
-  params.head_k_dim = head_k_dim;
-  params.head_v_dim = head_v_dim;
-  params.scale = scale;
-  xllm::kernel::musa::mate_gated_delta_rule_mtp(params);
-
-  // Disable state_update during verify; stash intermediate for
-  // post-rejection scatter instead of writing ssm_cache in-layer. Keyed by
-  // layer id (overwritten, not appended) so the recorded set is stable across
-  // eager steps and CUDA-graph replays; `intermediate` aliases the per-layer
-  // persistent buffer, so the replayed kernel refreshes its contents in place.
-  CHECK(verify_cache != nullptr)
-      << "gdn_mtp_verify_cache must be enabled for mate GDN MTP verify";
-  CHECK(verify_cache->enabled);
-  verify_cache->layer_states[layer_id].ssm_intermediate =
-      std::move(intermediate);
-
   return output;
 }
 
@@ -934,14 +770,6 @@ bool should_use_gdn_packed_prefill(const AttentionMetadata& attn_metadata,
 
 }  // namespace
 
-bool use_mate_gdn_mtp_kernel() {
-  static const bool enabled = [] {
-    const char* v = std::getenv("XLLM_MATE_GDN_MTP");
-    return (v == nullptr) || (v[0] != '0');
-  }();
-  return enabled;
-}
-
 bool use_mate_gdn_prefill_kernel() {
   static const bool enabled = [] {
     const char* v = std::getenv("XLLM_MATE_GDN_PREFILL");
@@ -950,72 +778,6 @@ bool use_mate_gdn_prefill_kernel() {
   return enabled;
 }
 
-void scatter_gdn_mtp_verify_ssm_states(const GdnMtpVerifyCache& cache,
-                                       const std::vector<KVCache>& kv_caches,
-                                       const ModelInputParams& input_params,
-                                       const torch::Tensor& accepted_tokens) {
-  if (!cache.enabled || cache.layer_states.empty()) {
-    return;
-  }
-
-  const torch::Device device =
-      cache.layer_states.begin()->second.ssm_intermediate.device();
-  torch::Tensor accepted_device =
-      accepted_tokens.to(device, torch::kLong).contiguous();
-  CHECK_EQ(accepted_device.dim(), 2)
-      << "accepted tokens must be [batch, width]";
-  const int64_t num_sequences = accepted_device.size(0);
-  torch::Tensor linear_state_indices =
-      input_params.embedding.linear_state_indices;
-  if (!linear_state_indices.defined()) {
-    CHECK(!input_params.embedding.linear_state_ids.empty())
-        << "linear_state_ids required for GDN MTP post-verify scatter";
-    linear_state_indices =
-        torch::tensor(input_params.embedding.linear_state_ids, torch::kInt32)
-            .to(device);
-  }
-  torch::Tensor logical_indices = expand_sequence_tensor_to_batch(
-      linear_state_indices, num_sequences, "linear_state_indices");
-  logical_indices = logical_indices.to(device, torch::kLong).contiguous();
-
-  for (const auto& [layer_id, state] : cache.layer_states) {
-    CHECK_GE(layer_id, 0);
-    CHECK_LT(static_cast<size_t>(layer_id), kv_caches.size())
-        << "GDN MTP verify layer_id out of range";
-    const KVCache& kv_cache = kv_caches[static_cast<size_t>(layer_id)];
-    torch::Tensor ssm_cache = kv_cache.get_ssm_cache();
-    torch::Tensor conv_cache = kv_cache.get_conv_cache();
-    const bool scatter_conv = state.conv_intermediate.defined() &&
-                              conv_cache.defined() && conv_cache.numel() > 0;
-    if (!ssm_cache.defined() || ssm_cache.numel() == 0) {
-      if (!scatter_conv) {
-        continue;
-      }
-    }
-    const int64_t checkpoint_stride =
-        get_checkpoint_stride(conv_cache, ssm_cache);
-    const torch::Tensor intermediate = state.ssm_intermediate;
-    const int64_t batch_size = intermediate.size(0);
-    const int64_t seq_len = intermediate.size(1);
-    CHECK_EQ(batch_size, num_sequences)
-        << "GDN MTP intermediate batch must match accepted-token batch";
-
-    const torch::Tensor conv_intermediate = state.conv_intermediate;
-    if (scatter_conv) {
-      CHECK_EQ(conv_intermediate.size(0), batch_size)
-          << "conv MTP intermediate batch must match accepted-token batch";
-      CHECK_EQ(conv_intermediate.size(1), seq_len)
-          << "conv MTP intermediate seq_len mismatch";
-    }
-    xllm::kernel::musa::scatter_gdn_mtp_verify_states(ssm_cache,
-                                                      intermediate,
-                                                      conv_cache,
-                                                      conv_intermediate,
-                                                      logical_indices,
-                                                      accepted_device,
-                                                      checkpoint_stride);
-  }
-}
 Qwen3GatedDeltaNetBaseImpl::Qwen3GatedDeltaNetBaseImpl(
     const ModelArgs& args,
     const QuantArgs& quant_args,
@@ -1447,16 +1209,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   torch::Tensor linear_state_base_indices =
       build_linear_state_base_indices(logical_state_indices, checkpoint_stride);
   const bool use_spec_verify = input_params.is_spec_verify;
-  GdnMtpVerifyCache* gdn_mtp_verify_cache = nullptr;
-  if (use_spec_verify && use_mate_gdn_mtp_kernel() && seq_len == 2 &&
-      input_params.gdn_mtp_verify_cache != nullptr &&
-      input_params.gdn_mtp_verify_cache->enabled) {
-    gdn_mtp_verify_cache = input_params.gdn_mtp_verify_cache.get();
-  }
-  int32_t gdn_layer_id = 0;
-  if (attn_metadata.plan_info != nullptr) {
-    gdn_layer_id = attn_metadata.plan_info->layer_id;
-  }
   const bool is_any_prefill =
       attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
   const bool decode_eligible = !attn_metadata.is_prefill && !use_spec_verify &&
@@ -1572,12 +1324,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                                      conv_cache,
                                      logical_state_indices,
                                      input_params.num_accepted_tokens_host,
-                                     input_params.num_accepted_tokens,
                                      attn_metadata.q_cu_seq_lens,
                                      conv_weight,
-                                     conv_kernel_size_,
-                                     gdn_mtp_verify_cache,
-                                     gdn_layer_id);
+                                     conv_kernel_size_);
     qwen35_mtp_debug_sync("forward_after_spec_conv");
   } else {
     // xllm_0526 (xllm_0623_build container) decode fast path: standard
@@ -1847,101 +1596,19 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                 << ", q_cu_seq_lens=" << attn_metadata.q_cu_seq_lens.sizes();
     }
     qwen35_mtp_debug_sync("forward_before_spec_gdn");
-    // The fused mate MTP kernel is JIT-specialized on the validate token count
-    // (deployed for seq_len == 2, i.e. one draft token). Fall back to the host
-    // loop for any other length until the corresponding kernel is deployed.
-    if (use_mate_gdn_mtp_kernel() && seq_len == 2) {
-      const bool mtp_cmp = qwen35_mtp_debug_enabled();
-      torch::Tensor ssm_clone;
-      if (mtp_cmp) {
-        ssm_clone = ssm_cache.clone();
-      }
-      GdnMtpVerifyCache* verify_cache = gdn_mtp_verify_cache;
-      int32_t layer_id = gdn_layer_id;
-      const int64_t mate_intermediate_numel = batch_size * seq_len *
-                                              (num_v_heads_ / tp_size_) *
-                                              head_v_dim_ * head_k_dim_;
-      if (!mate_gdn_mtp_intermediate_buf_.defined() ||
-          mate_gdn_mtp_intermediate_buf_.numel() < mate_intermediate_numel) {
-        mate_gdn_mtp_intermediate_buf_ =
-            torch::empty({std::max(mate_intermediate_numel,
-                                   mate_gdn_mtp_intermediate_buf_.defined()
-                                       ? mate_gdn_mtp_intermediate_buf_.numel()
-                                       : mate_intermediate_numel)},
-                         processed_v.options().dtype(torch::kFloat32));
-      }
-      if (!mate_gdn_mtp_output_buf_.defined() ||
-          mate_gdn_mtp_output_buf_.sizes() != processed_v.sizes()) {
-        // empty_like preserves a non-contiguous view layout.  Mate's MTP
-        // output ABI requires a contiguous buffer during graph capture.
-        mate_gdn_mtp_output_buf_ =
-            torch::empty(processed_v.sizes(), processed_v.options());
-      }
-      core_attn_out = run_spec_verify_gated_delta_rule_mate(
-          processed_q,
-          processed_k,
-          processed_v,
-          a,
-          b,
-          ssm_cache,
-          checkpoint_indices,
-          input_params.num_accepted_tokens,
-          A_log_,
-          dt_bias_,
-          num_k_heads_ / tp_size_,
-          num_v_heads_ / tp_size_,
-          head_k_dim_,
-          head_v_dim_,
-          scale,
-          verify_cache,
-          layer_id,
-          &mate_gdn_mtp_intermediate_buf_,
-          &mate_gdn_mtp_output_buf_);
-      if (mtp_cmp) {
-        auto out_host = run_spec_verify_gated_delta_rule(
-            processed_q,
-            processed_k,
-            processed_v,
-            g,
-            beta,
-            ssm_clone,
-            checkpoint_indices,
-            input_params.num_accepted_tokens_host,
-            attn_metadata.q_cu_seq_lens,
-            attn_metadata.q_seq_lens_vec,
-            fla_ssm_state_layout,
-            scale);
-        auto out_diff =
-            (core_attn_out.to(torch::kFloat32) - out_host.to(torch::kFloat32))
-                .abs()
-                .max()
-                .item<double>();
-        auto sd =
-            (ssm_cache.to(torch::kFloat32) - ssm_clone.to(torch::kFloat32))
-                .abs();
-        LOG(INFO) << "[MTP fused-vs-host] out_max|diff|=" << out_diff
-                  << " state_max|diff|=" << sd.max().item<double>()
-                  << " state_mean|diff|=" << sd.mean().item<double>()
-                  << " ssm_fused_absmax="
-                  << ssm_cache.abs().max().item<double>()
-                  << " ssm_host_absmax=" << ssm_clone.abs().max().item<double>()
-                  << " out_absmax=" << core_attn_out.abs().max().item<double>();
-      }
-    } else {
-      core_attn_out = run_spec_verify_gated_delta_rule(
-          processed_q,
-          processed_k,
-          processed_v,
-          g,
-          beta,
-          ssm_cache,
-          checkpoint_indices,
-          input_params.num_accepted_tokens_host,
-          attn_metadata.q_cu_seq_lens,
-          attn_metadata.q_seq_lens_vec,
-          fla_ssm_state_layout,
-          scale);
-    }
+    core_attn_out = run_spec_verify_gated_delta_rule(
+        processed_q,
+        processed_k,
+        processed_v,
+        g,
+        beta,
+        ssm_cache,
+        checkpoint_indices,
+        input_params.num_accepted_tokens_host,
+        attn_metadata.q_cu_seq_lens,
+        attn_metadata.q_seq_lens_vec,
+        fla_ssm_state_layout,
+        scale);
     qwen35_mtp_debug_sync("forward_after_spec_gdn");
   } else if (is_any_prefill) {
     CHECK_GE(attn_metadata.q_seq_lens_vec.size(),

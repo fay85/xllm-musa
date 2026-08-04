@@ -203,6 +203,7 @@ void prepare_input_params_for_linear_attention(ModelInputParams& input_params) {
   if (batch_size == 0 && input_params.attention.device.block_tables.defined()) {
     batch_size = input_params.attention.device.block_tables.size(0);
   }
+#if defined(USE_NPU)
   input_params.parallel.query_start_loc.resize(batch_size + 1, 0);
   for (int64_t i = 0; i < batch_size; ++i) {
     int64_t seq_len =
@@ -213,6 +214,7 @@ void prepare_input_params_for_linear_attention(ModelInputParams& input_params) {
     input_params.parallel.query_start_loc[i + 1] =
         input_params.parallel.query_start_loc[i] + seq_len;
   }
+#endif
 
   const std::vector<int32_t>& host_kv_cache_tokens_nums =
       input_params.attention.host.kv_cache_tokens_nums;

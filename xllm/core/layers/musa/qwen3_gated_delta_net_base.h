@@ -35,15 +35,7 @@ limitations under the License.
 namespace xllm {
 namespace layer {
 
-bool use_mate_gdn_mtp_kernel();
 bool use_mate_gdn_prefill_kernel();
-
-// After MTP rejection sampling, scatter per-layer intermediate SSM/conv states
-// into the live linear cache slots (post-verify commit).
-void scatter_gdn_mtp_verify_ssm_states(const GdnMtpVerifyCache& cache,
-                                       const std::vector<KVCache>& kv_caches,
-                                       const ModelInputParams& input_params,
-                                       const torch::Tensor& accepted_tokens);
 
 class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
  public:
@@ -149,9 +141,6 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
   mutable torch::Tensor mate_gdn_decode_k_buf_;
   mutable torch::Tensor mate_gdn_decode_v_buf_;
 
-  // Persistent buffers for mate GDN MTP spec-verify (seq_len == 2).
-  mutable torch::Tensor mate_gdn_mtp_intermediate_buf_;
-  mutable torch::Tensor mate_gdn_mtp_output_buf_;
 };
 
 }  // namespace layer

@@ -35,37 +35,6 @@ namespace layer {
 
 namespace {
 
-bool use_expanded_spec_decode_attention(
-    const AttentionMetadata& attn_metadata) {
-  return attn_metadata.use_expanded_decode_for_spec_verify_attention &&
-         attn_metadata.musa.expanded_paged_kv_indptr.defined() &&
-         attn_metadata.musa.expanded_paged_kv_indptr.numel() >= 2;
-}
-
-AttentionMetadata build_expanded_decode_metadata(
-    const AttentionMetadata& attn_metadata) {
-  AttentionMetadata decode_meta = attn_metadata;
-  const int64_t expanded_batch =
-      attn_metadata.musa.expanded_paged_kv_indptr.size(0) - 1;
-  const torch::Device expanded_device =
-      attn_metadata.musa.expanded_paged_kv_indptr.device();
-  const torch::TensorOptions expanded_int_options =
-      torch::TensorOptions().dtype(torch::kInt32).device(expanded_device);
-  decode_meta.paged_kv_indptr = attn_metadata.musa.expanded_paged_kv_indptr;
-  decode_meta.paged_kv_indices = attn_metadata.musa.expanded_paged_kv_indices;
-  decode_meta.paged_kv_last_page_len =
-      attn_metadata.musa.expanded_paged_kv_last_page_len;
-  decode_meta.block_table = attn_metadata.expanded_block_table;
-  decode_meta.kv_seq_lens = attn_metadata.expanded_kv_seq_lens;
-  decode_meta.qo_indptr =
-      torch::arange(0, expanded_batch + 1, expanded_int_options);
-  decode_meta.max_query_len = 1;
-  decode_meta.musa.paged_kv_indptr_host = torch::Tensor();
-  decode_meta.musa.paged_kv_indices_host = torch::Tensor();
-  decode_meta.musa.paged_kv_last_page_len_host = torch::Tensor();
-  return decode_meta;
-}
-
 // Eager causal + padding attention fallback when custom mask is used (e.g.
 // LongCat text encoder). FlashInfer's custom mask path gives wrong token-0
 // output; this path matches diffusers.
@@ -190,17 +159,9 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
     xllm::kernel::reshape_paged_cache(reshape_paged_cache_params);
   }
 
-  const bool spec_verify_expanded_decode =
-      attn_metadata.is_chunked_prefill &&
-      (attn_metadata.use_expanded_decode_for_spec_verify_attention ||
-       use_expanded_spec_decode_attention(attn_metadata) ||
-       attn_metadata.musa.is_spec_verify);
   if (attn_metadata.is_prefill) {
     prefill_forward(
         attn_metadata, query, key, value, output, output_lse, k_cache, v_cache);
-  } else if (spec_verify_expanded_decode) {
-    decoder_forward(
-        attn_metadata, query, key, output, output_lse, k_cache, v_cache);
   } else if (attn_metadata.is_chunked_prefill) {
     chunked_prefill_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
@@ -490,11 +451,11 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
     std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
-  // Graph capture plans expanded spec-verify as batch_decode (exports "run").
-  // batch_chunked_prefill looks up "paged_run" on the same URI and fatals.
+  // A decode plan exports "run", while chunked-prefill plans export
+  // "paged_run". Keep the interfaces matched when a caller supplies a decode
+  // plan here.
   if (attn_metadata.plan_info &&
-      (attn_metadata.plan_info->uri.find("batch_decode") != std::string::npos ||
-       attn_metadata.musa.is_spec_verify)) {
+      attn_metadata.plan_info->uri.find("batch_decode") != std::string::npos) {
     decoder_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
     return;
@@ -571,12 +532,7 @@ void FlashInferAttentionImpl::decoder_forward(
     std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
-  std::optional<AttentionMetadata> expanded_decode_meta;
-  if (use_expanded_spec_decode_attention(attn_metadata)) {
-    expanded_decode_meta = build_expanded_decode_metadata(attn_metadata);
-  }
-  const AttentionMetadata& decode_attn =
-      expanded_decode_meta.has_value() ? *expanded_decode_meta : attn_metadata;
+  const AttentionMetadata& decode_attn = attn_metadata;
   // FA3 decode fast path. Supported Qwen3.5 shapes use FA3 by default;
   // XLLM_USE_FA3_DECODE=0 provides an explicit rollback to FA2. The shared
   // XLLM_USE_FA3 switch remains an override when the decode-specific setting

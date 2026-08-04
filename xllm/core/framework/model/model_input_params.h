@@ -21,7 +21,6 @@ limitations under the License.
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
-#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -728,9 +727,6 @@ struct BatchInputMeta {
 struct ModelEmbeddingInput {
   // input embedding
   mutable torch::Tensor input_embedding;
-  // Qwen3.5 MTP keeps the target hidden input and current-token embedding in
-  // separate persistent graph buffers.
-  torch::Tensor mtp_token_embedding;
 
   // embedding ids of each sequence
   std::vector<int32_t> embedding_ids;
@@ -758,7 +754,6 @@ struct ModelEmbeddingInput {
   ModelEmbeddingInput to(const torch::Device& device) const {
     ModelEmbeddingInput out;
     out.input_embedding = safe_to(input_embedding, device);
-    out.mtp_token_embedding = safe_to(mtp_token_embedding, device, true);
     out.embedding_ids = embedding_ids;
     out.linear_state_ids = linear_state_ids;
     out.linear_state_indices = safe_to(linear_state_indices, device, true);
@@ -827,8 +822,10 @@ struct ParallelInput {
 #endif
   uint32_t layers_per_bacth_copy = std::numeric_limits<uint32_t>::max();
   std::shared_ptr<LayerSynchronizer> layer_wise_load_synchronizer = nullptr;
-#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_NPU)
   std::vector<int64_t> query_start_loc;
+#endif
+#if defined(USE_NPU) || defined(USE_MUSA)
   std::vector<int64_t> has_initial_state;
 #endif
 
@@ -844,8 +841,10 @@ struct ParallelInput {
 #endif
     out.layers_per_bacth_copy = layers_per_bacth_copy;
     out.layer_wise_load_synchronizer = layer_wise_load_synchronizer;
-#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_NPU)
     out.query_start_loc = query_start_loc;
+#endif
+#if defined(USE_NPU) || defined(USE_MUSA)
     out.has_initial_state = has_initial_state;
 #endif
     return out;
@@ -883,16 +882,6 @@ struct ExpertInput {
   }
 };
 
-struct GdnMtpVerifyCache {
-  struct LayerState {
-    torch::Tensor ssm_intermediate;
-    torch::Tensor conv_intermediate;
-  };
-
-  bool enabled = false;
-  std::map<int32_t, LayerState> layer_states;
-};
-
 struct GraphInput {
   torch::Tensor attn_mask;
   torch::Tensor tiling_data;
@@ -904,11 +893,6 @@ struct GraphInput {
   torch::Tensor expanded_block_tables;
   torch::Tensor expanded_tiling_data;
   std::vector<int32_t> expanded_kv_seq_lens_vec;
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  torch::Tensor expanded_paged_kv_indptr;
-  torch::Tensor expanded_paged_kv_indices;
-  torch::Tensor expanded_paged_kv_last_page_len;
-#endif
 #if defined(USE_NPU)
   std::shared_ptr<npu::AclGraphTaskUpdateContext> acl_graph_task_update_context;
 #endif
@@ -927,14 +911,6 @@ struct GraphInput {
     out.expanded_block_tables = safe_to(expanded_block_tables, device, true);
     out.expanded_tiling_data = safe_to(expanded_tiling_data, device, true);
     out.expanded_kv_seq_lens_vec = expanded_kv_seq_lens_vec;
-#if defined(USE_CUDA) || defined(USE_MUSA)
-    out.expanded_paged_kv_indptr =
-        safe_to(expanded_paged_kv_indptr, device, true);
-    out.expanded_paged_kv_indices =
-        safe_to(expanded_paged_kv_indices, device, true);
-    out.expanded_paged_kv_last_page_len =
-        safe_to(expanded_paged_kv_last_page_len, device, true);
-#endif
 #if defined(USE_NPU)
     out.acl_graph_task_update_context = acl_graph_task_update_context;
 #endif
@@ -967,7 +943,6 @@ struct ModelInputParams {
           safe_to(table, table.options().device(torch::kCPU), true));
     }
     params.mtp_shifted_token_ids = safe_to(mtp_shifted_token_ids, device, true);
-    params.gdn_mtp_verify_cache = gdn_mtp_verify_cache;
     if (!params.embedding.linear_state_indices.defined() &&
         !params.embedding.linear_state_ids.empty()) {
       params.embedding.linear_state_indices =
@@ -1091,7 +1066,6 @@ struct ModelInputParams {
   // Backend-neutral state reused by the next MTP draft step.
   MtpTopkStatePtr mtp_topk_state;
   std::vector<int64_t> num_accepted_tokens_host;
-  std::shared_ptr<GdnMtpVerifyCache> gdn_mtp_verify_cache;
 
   RecModelInputParams rec_params;
 

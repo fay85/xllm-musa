@@ -51,9 +51,6 @@ limitations under the License.
 
 namespace xllm::runtime::musa {
 
-constexpr uint64_t kSpecVerifyGraphKeyMask = 1ull << 63;
-constexpr uint64_t kSpecVerifyQMaxSeqLenShift = 32;
-
 #if TORCH_VERSION_MAJOR >= 2 && TORCH_VERSION_MINOR >= 10
 using TorchMemPool = at::cuda::MemPool;
 #else
@@ -157,13 +154,6 @@ class MusaGraphPersistentParam final {
     }
     return persistent_embedding_;
   }
-  torch::Tensor persistent_mtp_token_embedding(uint32_t actual_tokens) const {
-    if (actual_tokens > 0) {
-      return persistent_mtp_token_embedding_.slice(
-          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
-    }
-    return persistent_mtp_token_embedding_;
-  }
   torch::Tensor persistent_linear_state_indices(
       uint32_t actual_batch_size) const {
     if (actual_batch_size > 0) {
@@ -230,50 +220,7 @@ class MusaGraphPersistentParam final {
     }
     return persistent_kv_seq_lens_delta_;
   }
-  torch::Tensor persistent_expanded_block_tables(uint32_t actual_tokens) const {
-    if (actual_tokens > 0) {
-      return persistent_expanded_block_tables_.slice(
-          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
-    }
-    return persistent_expanded_block_tables_;
-  }
-  torch::Tensor expanded_kv_seq_lens(uint32_t actual_tokens) const {
-    if (actual_tokens > 0) {
-      return expanded_kv_seq_lens_.slice(
-          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
-    }
-    return expanded_kv_seq_lens_;
-  }
-  torch::Tensor persistent_expanded_paged_kv_indptr(
-      uint32_t actual_tokens) const {
-    if (actual_tokens > 0) {
-      return persistent_expanded_paged_kv_indptr_.slice(
-          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens + 1);
-    }
-    return persistent_expanded_paged_kv_indptr_;
-  }
-  torch::Tensor persistent_expanded_paged_kv_indices(
-      uint32_t actual_size) const {
-    if (actual_size > 0) {
-      return persistent_expanded_paged_kv_indices_.slice(
-          /*dim=*/0, /*start=*/0, /*end=*/actual_size);
-    }
-    return persistent_expanded_paged_kv_indices_;
-  }
-  torch::Tensor persistent_expanded_paged_kv_last_page_len(
-      uint32_t actual_tokens) const {
-    if (actual_tokens > 0) {
-      return persistent_expanded_paged_kv_last_page_len_.slice(
-          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
-    }
-    return persistent_expanded_paged_kv_last_page_len_;
-  }
-
  private:
-  std::vector<int32_t> update_expanded_spec_decode_attention(
-      const ModelInputParams& input_params,
-      uint32_t actual_num_tokens,
-      uint32_t padded_num_tokens);
   bool can_use_llm_decode_fast_path(const torch::Tensor& tokens,
                                     const torch::Tensor& positions,
                                     const ModelInputParams& params) const;
@@ -297,7 +244,6 @@ class MusaGraphPersistentParam final {
   torch::Tensor q_seq_lens_;
   torch::Tensor kv_seq_lens_;
   torch::Tensor persistent_embedding_;
-  torch::Tensor persistent_mtp_token_embedding_;
   torch::Tensor persistent_linear_state_indices_;
   torch::Tensor persistent_kv_cache_tokens_nums_;
   torch::Tensor persistent_num_accepted_tokens_;
@@ -310,12 +256,6 @@ class MusaGraphPersistentParam final {
   torch::Tensor persistent_decode_qo_indptr_;
   torch::Tensor persistent_kv_seq_lens_delta_;
 
-  // Qwen3.5 MTP spec-verify expanded decode attention (per validate token).
-  torch::Tensor persistent_expanded_block_tables_;
-  torch::Tensor expanded_kv_seq_lens_;
-  torch::Tensor persistent_expanded_paged_kv_indptr_;
-  torch::Tensor persistent_expanded_paged_kv_indices_;
-  torch::Tensor persistent_expanded_paged_kv_last_page_len_;
 };
 
 // CUDA graph executor using libtorch CUDAGraph for memory management
@@ -481,9 +421,6 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // Lazy-loaded CUDA graphs for decode phase (by bucket_num_tokens)
   absl::flat_hash_map<uint32_t, std::unique_ptr<MusaGraph>> graphs_;
 
-  // Lazy-loaded CUDA graphs for MTP spec-verify validate (composite key)
-  absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>> spec_verify_graphs_;
-
   // Persistent parameters shared across all MusaGraph instances
   std::unique_ptr<MusaGraphPersistentParam> persistent_param_;
 
@@ -497,9 +434,6 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // Get bucket num_tokens for given num_tokens.
   // Decode: 1/2/4/8 then multiples of 16, or exact when no_padding is enabled.
   uint32_t get_bucket_num_tokens(uint32_t num_tokens) const;
-
-  uint64_t get_graph_key(uint32_t bucket_num_tokens,
-                         const ModelInputParams& params) const;
 
   ModelOutput attach_aux_hidden_states_if_needed(
       const torch::Tensor& hidden_states,

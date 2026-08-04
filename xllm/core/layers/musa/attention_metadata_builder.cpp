@@ -77,26 +77,6 @@ void populate_attention_metadata(
     attn_metadata.attn_mask = attn_mask.value();
   }
 
-  attn_metadata.musa.is_spec_verify = params.is_spec_verify;
-  attn_metadata.use_expanded_decode_for_spec_verify_attention =
-      params.graph.use_expanded_decode_for_spec_verify_attention;
-  if (attn_metadata.use_expanded_decode_for_spec_verify_attention) {
-    attn_metadata.expanded_kv_seq_lens = params.graph.expanded_kv_seq_lens;
-    attn_metadata.expanded_block_table = params.graph.expanded_block_tables;
-    attn_metadata.expanded_paged_attention_tiling_data =
-        params.graph.expanded_tiling_data;
-    if (!params.graph.expanded_kv_seq_lens_vec.empty()) {
-      attn_metadata.expanded_kv_seq_lens_host =
-          torch::tensor(params.graph.expanded_kv_seq_lens_vec, torch::kInt);
-    }
-    attn_metadata.musa.expanded_paged_kv_indptr =
-        params.graph.expanded_paged_kv_indptr;
-    attn_metadata.musa.expanded_paged_kv_indices =
-        params.graph.expanded_paged_kv_indices;
-    attn_metadata.musa.expanded_paged_kv_last_page_len =
-        params.graph.expanded_paged_kv_last_page_len;
-  }
-
   if (params.attention.device.block_tables.defined()) {
     attn_metadata.block_table = params.attention.device.block_tables;
   }

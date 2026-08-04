@@ -102,14 +102,14 @@ class BatchInputBuilder {
     BatchForwardType batch_forward_type;
     uint32_t max_seq_len = 0;
     uint32_t q_max_seq_len = 0;
-    // Track each sequence's existing KV-cache token count for recurrent-state
-    // and chunked-prefill kernels.
+    // Tracking token counts in KV cache，only used for deepseek chunked prefill
+    // ops on npu device
     std::vector<int32_t> kv_cache_tokens_nums;
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
     std::vector<int32_t> seq_lens;
     std::vector<int32_t> q_seq_lens;
 #elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_ILU) || \
-    defined(USE_DCU) || defined(USE_MUSA)
+    defined(USE_DCU)
     std::vector<int32_t> seq_lens = {0};    // cu_seq_lens
     std::vector<int32_t> q_seq_lens = {0};  // q_cu_seq_len
 #endif
