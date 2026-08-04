@@ -15,10 +15,6 @@ limitations under the License.
 
 #pragma once
 
-// MUSA builds place torch_musa kernel sources under kernels/musa/ but expose
-// them in the xllm::kernel::cuda namespace so layers/runtime can share the
-// CUDA graph code path. Native MUSA symbols live in xllm::kernel::musa.
-
 #include <ATen/DynamicLibrary.h>
 #include <ATen/core/dispatch/Dispatcher.h>
 #include <glog/logging.h>
@@ -41,21 +37,21 @@ void block_copy(torch::Tensor key_cache_ptrs,
                 int64_t numel_per_block,
                 torch::ScalarType cache_dtype);
 
-// Fused token-replace for schedule-overlap decode path.
-// For each position i: if dst[i] < 0, set dst[i] = src[(-dst[i]) - 1].
-// Otherwise dst[i] is left unchanged.  Modifies dst in-place.
-// Declared in the musa namespace (not cuda) because the call site
-// (worker_impl.cpp) is compiled without the musamapping plugin, so
-// the cuda->musa token rewrite would not apply there.
+// Replaces negative dst entries with indexed values from src.
 void replace_token(torch::Tensor& dst,
                    torch::Tensor& src,
                    bool synchronize_stream = true);
+
+torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
+                                         const torch::Tensor& sorted_positions,
+                                         const torch::Tensor& reduce_weight,
+                                         int64_t num_tokens,
+                                         int32_t top_k);
 
 }  // namespace xllm::kernel::musa
 
 namespace xllm::kernel::cuda {
 
-// TODO: add head_size parameter
 void rotary_embedding(torch::Tensor& positions,
                       torch::Tensor& query,
                       std::optional<torch::Tensor> key,
@@ -214,9 +210,6 @@ void fa3_decode(const torch::Tensor& query,
                 torch::Tensor& output,
                 torch::Tensor& output_lse);
 
-// Dense ragged FA3 prefill (Mate mutlass flash_attn_varlen).
-// Specialized for bf16, head_dim=256, GQA ratios 6 and 8
-// (Qwen3.5-27B/35B TP=1).
 void fa3_prefill(const torch::Tensor& query,
                  const torch::Tensor& key,
                  const torch::Tensor& value,
@@ -230,10 +223,7 @@ void fa3_prefill(const torch::Tensor& query,
                  torch::Tensor& output,
                  torch::Tensor& output_lse);
 
-// Paged-KV FA3 prefill (Mate flash_attn_with_kvcache). Unlike the
-// dense-ragged variant above, this consumes the KV cache populated by
-// reshape_paged_cache and the rectangular page table. It is used when a
-// prefill extends an existing cached prefix.
+// Builds metadata for paged-KV FA3 prefill.
 torch::Tensor fa3_prefill_scheduler_metadata(
     const torch::Device& device,
     int32_t batch_size,
@@ -264,8 +254,6 @@ void fa3_prefill_paged(const torch::Tensor& query,
                        torch::Tensor& output,
                        torch::Tensor& output_lse);
 
-// Piecewise-graph-aware dense ragged FA3 prefill. During capture this splits
-// the graph and registers a replay runner; eager calls dispatch directly.
 void fa3_prefill_with_optional_piecewise_capture(
     const torch::Tensor& query,
     const torch::Tensor& key,
@@ -388,8 +376,6 @@ torch::Tensor fp8_scaled_matmul(
     const std::optional<torch::Tensor>& bias = std::nullopt,
     const std::optional<torch::Tensor>& output = std::nullopt);
 
-// Native DeepSeek block-wise FP8 GEMM (mate/muDNN groupwise, GROUP_BLOCK
-// (1,128,128)). See kernels/musa/fp8_block_gemm.cpp for the layout contract.
 torch::Tensor gemm_fp8_nt_groupwise(
     const torch::Tensor& a,
     const torch::Tensor& b,
@@ -398,38 +384,26 @@ torch::Tensor gemm_fp8_nt_groupwise(
     torch::ScalarType output_dtype,
     const std::optional<torch::Tensor>& output = std::nullopt);
 
-// Fused DeepSeek per-token-group FP8 activation quantization (bf16 -> e4m3,
-// group=128 along K). Returns {q [M,K] e4m3, scale [M, K/128] fp32}. See
-// kernels/musa/fp8_act_quant.cu.
+// Returns {quantized_input, per_group_scale}.
 std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size);
 
-// MUSA-specific Qwen3.5 MoE preprocess. Token-major contiguous preprocess
-// returns {fp8_rows, scales, src_to_dst,
-// expert_counts} while fusing expert placement, hidden-state replication, and
-// g128 FP8 quantization.
+// Returns {fp8_rows, scales, src_to_dst, expert_counts}.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 fused_moe_preprocess_fp8(const torch::Tensor& input,
                          const torch::Tensor& topk_ids,
                          int64_t num_experts,
                          int64_t group_size);
 
-// BF16 token-major contiguous MoE preprocess. Returns
-// {padded_hidden, row_expert_ids, original_to_padded, group_m_counts}; each
-// expert occupies an aligned block and padding rows in row_expert_ids are -1.
-// group_m_counts sums to the padded M and can be passed directly to Mate's
-// m-grouped contiguous GEMM. Fused preprocess avoids the per-layer
-// sort/index/cumsum sequence in the long-prefill path.
+// Returns {padded_hidden, row_expert_ids, original_to_padded, group_m_counts}.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 fused_moe_preprocess_bf16(const torch::Tensor& input,
                           const torch::Tensor& topk_ids,
                           int64_t num_experts,
                           int64_t alignment);
 
-// Decode-only fixed-block Ragged MoE helpers. Each routed assignment owns one
-// 128-row block and stores its valid row at the block start. This keeps graph
-// shapes static while allowing Mate's Ragged kernel to skip all padding rows.
+// Decode-only ragged MoE helpers use aligned 128-row blocks.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
 fused_moe_ragged_preprocess_fp8(const torch::Tensor& input,
                                 const torch::Tensor& topk_ids,
@@ -463,9 +437,7 @@ torch::Tensor fused_moe_ragged_combine(const torch::Tensor& down,
                                        int64_t num_tokens,
                                        int64_t alignment);
 
-// Token-major FP8 MoE decode path. The AOT MUBINs
-// are specialized for MP31 and decode batch sizes 1 through 8; helper artifacts
-// provide routing alignment, SwiGLU, and final top-k reduction.
+// AOT kernels support decode batch sizes 1 through 8.
 bool musa_fused_moe_aot_available(int64_t num_tokens);
 
 bool musa_fused_moe_bf16_aot_available(int64_t num_tokens);
@@ -526,10 +498,7 @@ std::tuple<torch::Tensor, torch::Tensor> moe_fused_topk(
 
 torch::Tensor random_sample(const torch::Tensor& probs);
 
-// Target-only speculative rejection sampling for the common MTP K=1 case.
-// draft_probs contains the selected draft-token probability with shape [B, 1]
-// and target_probs has shape [B, 1, V].  The returned tensor is [B, 2] with
-// rejected suffix positions masked to -1.
+// Returns [B, 2] with rejected suffix positions masked to -1.
 torch::Tensor rejection_sample_target_only_k1(
     const torch::Tensor& draft_token_ids,
     const torch::Tensor& draft_probs,
@@ -538,10 +507,6 @@ torch::Tensor rejection_sample_target_only_k1(
     const torch::Tensor& recovery_exponential,
     const torch::Tensor& bonus_token_ids);
 
-// Mate grouped MoE GEMM entry points.  The MUSA Qwen3.5 MoE path uses the
-// masked layout for both BF16 and block-wise FP8 expert weights.  Keeping the
-// wrapper in the MUSA API makes the layer independent of the Python Mate
-// package while still using the production Mate grouped-GEMM kernels.
 torch::Tensor masked_moe_gemm_bf16(const torch::Tensor& input,
                                    const torch::Tensor& weights,
                                    const torch::Tensor& token_counts,
@@ -571,10 +536,7 @@ torch::Tensor ragged_moe_gemm_bf16(const torch::Tensor& input,
                                    torch::ScalarType output_dtype,
                                    int64_t alignment);
 
-// Compact FP8 grouped GEMM. Input rows must be sorted by expert and
-// token_counts must contain the number of consecutive rows for each expert.
-// Unlike the masked layout, this path allocates and computes only valid routed
-// assignments.
+// Input rows must be sorted by expert and grouped by token_counts.
 torch::Tensor contiguous_moe_gemm_fp8(const torch::Tensor& input,
                                       const torch::Tensor& input_scale,
                                       const torch::Tensor& weights,
@@ -592,17 +554,12 @@ torch::Tensor ragged_moe_gemm_fp8(const torch::Tensor& input,
                                   torch::ScalarType output_dtype,
                                   int64_t alignment);
 
-// MUSA top-k kernel fuses softmax, top-k selection, and selected
-// weight renormalization. This is intended for small decode graph buckets;
-// large prefill continues to use the existing route.
 std::tuple<torch::Tensor, torch::Tensor> musa_moe_topk_softmax(
     const torch::Tensor& router_logits,
     int64_t topk);
 bool musa_moe_topk_softmax_available();
 
-// Graph-safe routed-index construction. Returns {src_dst, dst_src,
-// expert_sizes}, where src_dst maps each original assignment to its compact
-// expert-grouped row and dst_src is the inverse mapping.
+// Returns {src_dst, dst_src, expert_sizes}.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
     const torch::Tensor& expert_id,
     int64_t num_experts);
@@ -611,12 +568,6 @@ torch::Tensor moe_combine_result(const torch::Tensor& gemm2,
                                  const torch::Tensor& reduce_weight,
                                  int64_t N,
                                  int32_t topk);
-
-torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
-                                         const torch::Tensor& sorted_positions,
-                                         const torch::Tensor& reduce_weight,
-                                         int64_t N,
-                                         int32_t topk);
 
 }  // namespace xllm::kernel::cuda
 

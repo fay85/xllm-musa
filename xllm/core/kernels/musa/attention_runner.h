@@ -85,8 +85,6 @@ class AttentionRunner final {
       const torch::Tensor& paged_kv_last_page_len_host,
       uint32_t padded_num_tokens);
 
-  // Piecewise mode: capture a dense ragged FA3 prefill call. FA3 is replayed
-  // between graph segments, just like the FlashInfer attention runner.
   void run_fa3_prefill_capture(torch::Tensor query,
                                torch::Tensor key,
                                torch::Tensor value,
@@ -99,6 +97,8 @@ class AttentionRunner final {
                                torch::Tensor output_lse);
 
   void run_replay(const AttentionReplayParams& params);
+
+  bool requires_plan_info() const;
 
  private:
   enum class RunnerType { PREFILL, CHUNKED_PREFILL, FA3_PREFILL };

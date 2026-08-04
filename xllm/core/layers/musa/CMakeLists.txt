@@ -1,7 +1,60 @@
 include(cc_library)
 
+cc_library(
+  NAME
+    musa_graph_output_buffers
+  HDRS
+    graph_output_buffers.h
+  SRCS
+    graph_output_buffers.cpp
+  COPTS
+    ${_XLLM_MUSIFY_COPTS}
+  DEPS
+    glog::glog
+    torch
+)
+
+cc_library(
+  NAME
+    musa_attention_metadata_builder
+  HDRS
+    attention_metadata.h
+    attention_metadata_builder.h
+  SRCS
+    attention_metadata_builder.cpp
+  COPTS
+    ${_XLLM_MUSIFY_COPTS}
+  DEPS
+    torch
+)
+
+cc_library(
+  NAME
+    musa_linear
+  HDRS
+    linear.h
+  SRCS
+    linear.cpp
+    linear_impl.cpp
+  COPTS
+    ${_XLLM_MUSIFY_COPTS}
+  DEPS
+    :musa_graph_output_buffers
+    :musa_kernel_api
+    :parallel_state
+    :state_dict
+    :model
+    :platform
+    :kv_cache
+    :block
+    :kernels
+    glog::glog
+    torch
+)
+
 # MUSA layers - FlashInfer/Mate path
 set(_MUSA_LAYERS_HDRS
+  activation.h
   attention.h
   flashinfer_attention.h
   flashinfer_planinfo.h
@@ -14,8 +67,12 @@ set(_MUSA_LAYERS_HDRS
   qwen3_next_decoder_layer_impl.h
   qwen3_5_decoder_layer_impl.h
   qwen3_5_fused_moe.h
+  rms_norm_gated.h
+  dense_mlp.h
+  linear.h
 )
 set(_MUSA_LAYERS_SRCS
+  activation.cpp
   attention.cpp
   flashinfer_attention.cpp
   flashinfer_planinfo.cpp
@@ -27,9 +84,14 @@ set(_MUSA_LAYERS_SRCS
   qwen3_next_decoder_layer_impl.cpp
   qwen3_5_decoder_layer_impl.cpp
   qwen3_5_fused_moe.cpp
+  rms_norm_gated.cpp
+  dense_mlp.cpp
 )
 set(_MUSA_LAYERS_DEPS
   :cuda_kernels
+  :musa_kernel_api
+  :musa_graph_output_buffers
+  :musa_linear
   :common_layers
   :parallel_state
   :state_dict

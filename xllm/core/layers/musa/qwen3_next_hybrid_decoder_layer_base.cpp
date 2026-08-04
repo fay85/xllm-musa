@@ -19,6 +19,8 @@ limitations under the License.
 #include <optional>
 #include <tuple>
 
+#include "kernels/musa/musa_tvmffi_stream.h"
+
 namespace xllm {
 namespace layer {
 
@@ -74,15 +76,15 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
                                             options));
   } else {
     mlp_ = register_module("mlp",
-                           DenseMLP(model_args.hidden_size(),
-                                    model_args.intermediate_size(),
-                                    /*is_gated=*/true,
-                                    /*has_bias=*/false,
-                                    model_args.hidden_act(),
-                                    /*enable_result_reduction=*/true,
-                                    quant_args,
-                                    parallel_args.tp_group_,
-                                    options));
+                           MusaDenseMLP(model_args.hidden_size(),
+                                        model_args.intermediate_size(),
+                                        /*is_gated=*/true,
+                                        /*has_bias=*/false,
+                                        model_args.hidden_act(),
+                                        /*enable_result_reduction=*/true,
+                                        quant_args,
+                                        parallel_args.tp_group_,
+                                        options));
   }
 }
 
@@ -130,6 +132,7 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   } else {
     std::tie(x, residual) = input_norm_->forward(x, residual);
   }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
   // Attention
   if (attention_) {
@@ -138,9 +141,11 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   } else {
     x = linear_attention_->forward(x, attn_metadata, kv_cache, input_params);
   }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
   // Post-attention norm
   std::tie(x, residual) = post_norm_->forward(x, residual);
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
   // MLP forward
   if (moe_mlp_) {
@@ -148,6 +153,7 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   } else {
     x = mlp_(x);
   }
+  xllm::kernel::cuda::sync_musa_graph_preparation_stage(x.device());
 
   return x;
 }

@@ -27,15 +27,15 @@ namespace {
 constexpr int32_t kCombineBlockSize = 256;
 
 template <typename ScalarType>
-__global__ void XLLM_KERNEL_ATTR(kCombineBlockSize) moe_combine_indexed_kernel(
-    const ScalarType* __restrict__ gemm2_sorted,
-    const int32_t* __restrict__ sorted_positions,
-    const float* __restrict__ reduce_weight,
-    ScalarType* __restrict__ output,
-    int64_t num_tokens,
-    int32_t top_k,
-    int64_t gemm2_rows,
-    int64_t hidden_size) {
+__global__ void XLLM_KERNEL_ATTR(kCombineBlockSize)
+    moe_combine_indexed_kernel(const ScalarType* __restrict__ gemm2_sorted,
+                               const int32_t* __restrict__ sorted_positions,
+                               const float* __restrict__ reduce_weight,
+                               ScalarType* __restrict__ output,
+                               int64_t num_tokens,
+                               int32_t top_k,
+                               int64_t gemm2_rows,
+                               int64_t hidden_size) {
   const int64_t token_id = blockIdx.x;
   if (token_id >= num_tokens) {
     return;
@@ -99,8 +99,8 @@ __global__ void XLLM_KERNEL_ATTR(kCombineBlockSize)
       const float weight = reduce_weight[flat_idx];
       Bf16Pack8 input_pack;
       input_pack.vector = *reinterpret_cast<const int4*>(
-          gemm2_sorted +
-          static_cast<int64_t>(sorted_idx) * hidden_size + column);
+          gemm2_sorted + static_cast<int64_t>(sorted_idx) * hidden_size +
+          column);
 #pragma unroll
       for (int32_t value_idx = 0; value_idx < kValuesPerChunk; ++value_idx) {
         accumulators[value_idx] +=
@@ -157,16 +157,18 @@ torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
             hidden_size);
   } else if (gemm2_sorted.scalar_type() == torch::kBFloat16) {
     if (hidden_size % 8 == 0) {
-      moe_combine_indexed_bf16_vec8_kernel
-          <<<num_tokens, kCombineBlockSize, 0, stream>>>(
-              gemm2_sorted.data_ptr<c10::BFloat16>(),
-              sorted_positions.data_ptr<int32_t>(),
-              reduce_weight_fp32.data_ptr<float>(),
-              output.data_ptr<c10::BFloat16>(),
-              num_tokens,
-              top_k,
-              gemm2_sorted.size(0),
-              hidden_size);
+      moe_combine_indexed_bf16_vec8_kernel<<<num_tokens,
+                                             kCombineBlockSize,
+                                             0,
+                                             stream>>>(
+          gemm2_sorted.data_ptr<c10::BFloat16>(),
+          sorted_positions.data_ptr<int32_t>(),
+          reduce_weight_fp32.data_ptr<float>(),
+          output.data_ptr<c10::BFloat16>(),
+          num_tokens,
+          top_k,
+          gemm2_sorted.size(0),
+          hidden_size);
     } else {
       moe_combine_indexed_kernel<c10::BFloat16>
           <<<num_tokens, kCombineBlockSize, 0, stream>>>(

@@ -42,6 +42,7 @@ limitations under the License.
 #include "layers/cuda/flashinfer_workspace.h"
 #endif
 #include "models/model_registry.h"
+#include "util/env_var.h"
 #include "util/threadpool.h"
 #include "util/timer.h"
 
@@ -50,8 +51,15 @@ namespace xllm {
 namespace {
 
 void wait_input_ready_events(const ForwardInput& input, const Stream& stream) {
+#if defined(USE_MUSA)
+  (void)stream;
+  CHECK(input.metadata_ready_event == nullptr ||
+        input.metadata_ready_event->synchronize())
+      << "failed to synchronize ForwardInput metadata ready event";
+#else
   CHECK(stream.wait_event(input.metadata_ready_event))
       << "failed to wait ForwardInput metadata ready event";
+#endif
 }
 
 StreamEventPtr record_current_stream_event(const Device& device) {
@@ -70,6 +78,13 @@ LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
                              const runtime::Options& options)
     : WorkerImpl(parallel_args, device, options) {
   device_.set_device();
+#if defined(USE_MUSA)
+  static const bool use_pool_compute_stream =
+      util::get_bool_env("XLLM_MUSA_POOL_COMPUTE_STREAM", true);
+  if (use_pool_compute_stream) {
+    compute_stream_ = device_.get_stream_from_pool();
+  }
+#endif
 #if defined(USE_CUDA) || defined(USE_MUSA)
   const auto& model_config = ModelConfig::get_instance();
   if (!ModelConfig::is_python_model_impl(model_config.model_impl())) {
@@ -234,8 +249,17 @@ ForwardInput
 LLMWorkerImpl::update_input_by_last_step_output_for_schedule_overlap(
     ForwardInput& input) {
   c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+#if defined(USE_MUSA)
+  // TorchMUSA's cross-thread event block can return before the sampler output
+  // is host-visible. The next-token replacement must consume that output, so
+  // synchronize the recorded event at this unavoidable dependency boundary.
+  CHECK(last_step_output_.ready_event == nullptr ||
+        last_step_output_.ready_event->synchronize())
+      << "failed to synchronize last step output ready event";
+#else
   CHECK(compute_stream_->wait_event(last_step_output_.ready_event))
       << "failed to wait last step output ready event";
+#endif
   return update_input_by_last_step_output(input);
 }
 
@@ -301,7 +325,20 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
                                      /*non_blocking=*/false)
                                  .contiguous();
     }
+#if defined(USE_MUSA)
+    // A pure decode batch has one hidden-state row per selected token, in the
+    // same sequence order. Avoid the redundant identity IndexSelect: besides
+    // saving a kernel, TorchMUSA IndexSelect can illegally access memory when
+    // the decode graph batch changes shape (for example B5 -> B4).
+    if (input.input_params.meta.batch_forward_type.is_decode() &&
+        selected_token_idxes.numel() == model_output.hidden_states.size(0)) {
+      logits = model_->logits(model_output.hidden_states, torch::Tensor());
+    } else {
+      logits = model_->logits(model_output.hidden_states, selected_token_idxes);
+    }
+#else
     logits = model_->logits(model_output.hidden_states, selected_token_idxes);
+#endif
   }
 
   ForwardOutput output;

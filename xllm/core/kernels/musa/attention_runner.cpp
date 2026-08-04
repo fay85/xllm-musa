@@ -17,6 +17,32 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <cstdlib>
+#include <string>
+
+namespace {
+
+bool capture_fa3_in_piecewise_graph() {
+  static const bool enabled = [] {
+    const char* env = std::getenv("XLLM_PIECEWISE_CAPTURE_FA3");
+    return env == nullptr || std::string(env) != "0";
+  }();
+  return enabled;
+}
+
+int64_t capture_fa3_max_padding_tokens() {
+  static const int64_t max_padding = [] {
+    const char* env =
+        std::getenv("XLLM_PIECEWISE_CAPTURE_FA3_MAX_PADDING_TOKENS");
+    return env == nullptr
+               ? int64_t{32}
+               : static_cast<int64_t>(std::strtoll(env, nullptr, 10));
+  }();
+  return max_padding;
+}
+
+}  // namespace
+
 #include "core/common/global_flags.h"
 #include "core/framework/config/execution_config.h"
 #include "core/kernels/musa/global_capture_instance.h"
@@ -42,8 +68,6 @@ void AttentionRunner::run_capture(
     torch::Tensor output,
     std::optional<torch::Tensor>& output_lse,
     uint32_t padded_num_tokens) {
-  // plan_info is supplied per replay via AttentionReplayParams; not stored
-  // here.
   (void)plan_info;
 
   ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
@@ -130,9 +154,6 @@ void AttentionRunner::run_fa3_prefill_capture(torch::Tensor query,
                                               double sm_scale,
                                               torch::Tensor output,
                                               torch::Tensor output_lse) {
-  // FA3 is launched outside the graph during replay. End the current graph
-  // segment before storing its tensors, then resume capture for downstream
-  // layers; this is the same sequencing used by the FlashInfer runner.
   ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
       .temporarily_end_graph();
 
@@ -184,8 +205,6 @@ void AttentionRunner::run_replay(const AttentionReplayParams& params) {
     CHECK_GT(max_seqlen_q, 0);
     CHECK_GT(max_seqlen_k, 0);
 
-    // The model normally produces contiguous projection views. Preserve the
-    // existing eager FA3 behavior for the uncommon non-contiguous case.
     torch::Tensor query_contiguous = query_slice.contiguous();
     torch::Tensor key_contiguous = key_slice.contiguous();
     torch::Tensor value_contiguous = value_slice.contiguous();
@@ -206,7 +225,6 @@ void AttentionRunner::run_replay(const AttentionReplayParams& params) {
     return;
   }
 
-  // TODO: support output_lse for replay
   std::optional<torch::Tensor> output_lse = std::nullopt;
   if (runner_type_ == RunnerType::CHUNKED_PREFILL) {
     batch_chunked_prefill(uri_,
@@ -250,6 +268,11 @@ void AttentionRunner::run_replay(const AttentionReplayParams& params) {
                 scale_,
                 output_slice,
                 output_lse);
+}
+
+bool AttentionRunner::requires_plan_info() const {
+  return runner_type_ == RunnerType::PREFILL ||
+         runner_type_ == RunnerType::CHUNKED_PREFILL;
 }
 
 void batch_chunked_prefill_with_optional_piecewise_capture(
@@ -347,6 +370,33 @@ void fa3_prefill_with_optional_piecewise_capture(
           .enable_prefill_piecewise_graph() &&
       ::xllm::runtime::cuda::GlobalCaptureInstance::get_instance()
           .is_capturing()) {
+    const int64_t capture_padding = query.size(0) - max_seqlen_q;
+    const int64_t max_capture_padding = capture_fa3_max_padding_tokens();
+    const bool safe_c1_shape =
+        cu_seqlens_q.numel() == 2 && cu_seqlens_k.numel() == 2 &&
+        max_seqlen_q == max_seqlen_k && capture_padding >= 0 &&
+        (max_capture_padding < 0 || capture_padding <= max_capture_padding);
+    if (capture_fa3_in_piecewise_graph() && safe_c1_shape) {
+      torch::Tensor query_contiguous = query.contiguous();
+      torch::Tensor key_contiguous = key.contiguous();
+      torch::Tensor value_contiguous = value.contiguous();
+      torch::Tensor q_cu_seq_lens = cu_seqlens_q.contiguous();
+      torch::Tensor kv_cu_seq_lens = cu_seqlens_k.contiguous();
+      fa3_prefill(query_contiguous,
+                  key_contiguous,
+                  value_contiguous,
+                  q_cu_seq_lens,
+                  kv_cu_seq_lens,
+                  max_seqlen_q,
+                  max_seqlen_k,
+                  window_left,
+                  window_right,
+                  sm_scale,
+                  output,
+                  output_lse);
+      return;
+    }
+
     AttentionRunner runner;
     runner.run_fa3_prefill_capture(query,
                                    key,

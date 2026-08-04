@@ -79,3 +79,17 @@ cc_library(
     musa
     musart
 )
+
+cc_library(
+  NAME
+    musa_kernel_api
+  HDRS
+    ops_api.h
+  SRCS
+    ops_api.cpp
+  COPTS
+    ${_XLLM_MUSIFY_COPTS}
+  DEPS
+    :cuda_kernels
+    torch
+)

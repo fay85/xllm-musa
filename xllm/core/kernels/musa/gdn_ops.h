@@ -22,6 +22,8 @@ limitations under the License.
 #include <tuple>
 #include <utility>
 
+#include "core/kernels/musa/ops_api.h"
+
 namespace xllm {
 namespace kernel {
 
@@ -37,7 +39,7 @@ struct MateGatedDeltaRulePrefillParams;
 struct PartialRotaryEmbeddingParams;
 struct FusedSigmoidGatingDeltaRuleUpdateParams;
 
-namespace cuda {
+namespace musa {
 
 torch::Tensor l2_norm(torch::Tensor& x, double eps);
 
@@ -45,6 +47,13 @@ std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
     const torch::Tensor& query,
     const torch::Tensor& key,
     double eps);
+
+// Normalizes Q/K in place. The fused H=128 kernel loads each row before any
+// stores, so input/output aliasing is safe and avoids two bucket-sized replay
+// allocations in the piecewise GDN runner.
+void l2_norm_pair_fused_inplace(torch::Tensor& query,
+                                torch::Tensor& key,
+                                double eps);
 
 std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
     FusedGdnGatingParams& params);
@@ -189,6 +198,6 @@ void gated_rms_norm_fused(const torch::Tensor& x,
                           torch::Tensor output,
                           double eps);
 
-}  // namespace cuda
+}  // namespace musa
 }  // namespace kernel
 }  // namespace xllm

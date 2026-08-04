@@ -25,6 +25,13 @@ limitations under the License.
 #include <ATen/cuda/MemPool.h>
 #endif
 
+// MUSA host_defines.h defines __noinline__ as a macro. Folly uses that token
+// inside __attribute__((__noinline__)), so leaving it defined creates a nested
+// attribute during the MUSA device parse.
+#ifdef __noinline__
+#undef __noinline__
+#endif
+
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -39,13 +46,10 @@ limitations under the License.
 #include "core/framework/model/model_input_params.h"
 #include "core/kernels/musa/llm_decode_metadata_update.h"
 #include "core/kernels/musa/piecewise_graphs.h"
+#include "core/layers/musa/graph_output_buffers.h"
 #include "core/runtime/executor_impl.h"
 #include "core/runtime/executor_impl_factory.h"
 #include "core/runtime/options.h"
-
-namespace xllm::layer {
-class PiecewiseGraphMatmulBufferPool;
-}
 
 namespace xllm::runtime::musa {
 
@@ -128,29 +132,7 @@ class MusaGraphPersistentParam final {
     hidden_states_.slice(/*dim=*/0, /*start=*/0, /*end=*/result_tokens)
         .copy_(value, /*non_blocking=*/true);
   }
-  // Logits captured inside the graph (D1). [num_seqs, vocab_size].
-  torch::Tensor logits(uint32_t actual_tokens) const {
-    if (actual_tokens > 0) {
-      return logits_.slice(/*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
-    }
-    return logits_;
-  }
-  void set_logits(const torch::Tensor& value) {
-    const uint32_t result_tokens = value.size(0);
-    logits_.slice(/*dim=*/0, /*start=*/0, /*end=*/result_tokens)
-        .copy_(value, /*non_blocking=*/true);
-  }
-  bool has_logits_buffer() const { return logits_.defined(); }
   const torch::Device& device() const { return device_; }
-  void ensure_logits_buffer(int64_t vocab_size,
-                            torch::ScalarType dtype,
-                            const torch::Device& device) {
-    if (!logits_.defined()) {
-      logits_ =
-          torch::empty({options_.max_tokens_per_batch(), vocab_size},
-                       torch::TensorOptions().dtype(dtype).device(device));
-    }
-  }
   torch::Tensor q_seq_lens(uint32_t actual_batch_size) const {
     if (actual_batch_size > 0) {
       return q_seq_lens_.slice(
@@ -164,20 +146,6 @@ class MusaGraphPersistentParam final {
           /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
     }
     return kv_seq_lens_;
-  }
-  torch::Tensor gdn_cu_seq_lens(uint32_t actual_batch_size) const {
-    if (actual_batch_size > 0) {
-      return persistent_gdn_cu_seq_lens_.slice(
-          /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
-    }
-    return persistent_gdn_cu_seq_lens_;
-  }
-  torch::Tensor gdn_kkt_cu_seq_lens(uint32_t actual_batch_size) const {
-    if (actual_batch_size > 0) {
-      return persistent_gdn_kkt_cu_seq_lens_.slice(
-          /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
-    }
-    return persistent_gdn_kkt_cu_seq_lens_;
   }
   torch::Tensor persistent_kv_cache_tokens_nums(
       uint32_t actual_batch_size) const {
@@ -333,16 +301,12 @@ class MusaGraphPersistentParam final {
   torch::Tensor hidden_states_;
   torch::Tensor q_seq_lens_;
   torch::Tensor kv_seq_lens_;
-  torch::Tensor persistent_gdn_cu_seq_lens_;
-  torch::Tensor persistent_gdn_kkt_cu_seq_lens_;
   torch::Tensor persistent_embedding_;
   torch::Tensor persistent_mtp_token_embedding_;
   torch::Tensor persistent_linear_state_indices_;
   torch::Tensor persistent_kv_cache_tokens_nums_;
   torch::Tensor persistent_num_accepted_tokens_;
   torch::Tensor aux_hidden_states_;
-  // [max_tokens_per_batch, vocab_size] - persistent logits output for D1.
-  torch::Tensor logits_;
 
   // FlashInfer decode mode parameters
   torch::Tensor persistent_paged_kv_indptr_;
@@ -435,14 +399,10 @@ class MusaGraph final {
 
   // Stable intermediate storage for this exact piecewise-prefill bucket.
   // It must outlive graph holders because runners retain its tensor addresses.
-  std::shared_ptr<layer::PiecewiseGraphMatmulBufferPool>
+  std::shared_ptr<layer::musa::PiecewiseGraphMatmulBufferPool>
       prefill_matmul_buffer_pool_;
 
   uint32_t padded_num_tokens_ = 0;
-
-  // D1: when true, lm_head GEMM was captured inside the graph. On replay,
-  // persistent_param_.logits() holds the computed logits.
-  bool capture_logits_ = false;
 
   // FA3 scheduler metadata consumed by the captured full-attention kernels.
   // Its address is fixed at capture time; replay copies freshly generated
@@ -548,12 +508,6 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // (by bucket_num_tokens)
   absl::flat_hash_map<uint32_t, std::unique_ptr<MusaGraph>> prefill_graphs_;
 
-  // Packed pure-prefill graphs are reusable by token bucket and effective
-  // sequence count. Their live ragged lengths are replay metadata, not key
-  // material.
-  absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>>
-      packed_prefill_graphs_;
-
   // Chunked-prefill piecewise graphs require an exact host-shape key because
   // Qwen3.5 GDN control flow depends on per-sequence query lengths.
   absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>>
@@ -570,9 +524,6 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   at::cuda::MempoolId_t graph_pool_;
   // Whether to enable prefill piecewise graph
   bool enable_prefill_piecewise_graph_;
-  // Whether to route pure-prefill batches to eager (bypassing piecewise
-  // graph) so the scheduler can pack multiple prefills per batch.
-  bool enable_packed_prefill_;
   int64_t max_tokens_for_graph_mode_ = 0;
 
   // Fixed prefill pad ladder aligned with SGLang piecewise_cuda_graph_tokens.
@@ -587,9 +538,6 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
 
   uint64_t get_graph_key(uint32_t bucket_num_tokens,
                          const ModelInputParams& params) const;
-
-  uint64_t get_packed_prefill_graph_key(uint32_t bucket_num_tokens,
-                                        const ModelInputParams& params) const;
 
   uint64_t get_chunked_prefill_graph_key(uint32_t bucket_num_tokens,
                                          const ModelInputParams& params) const;

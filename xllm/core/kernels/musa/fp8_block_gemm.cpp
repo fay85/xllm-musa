@@ -17,6 +17,7 @@ limitations under the License.
 #include <tvm/ffi/extra/stl.h>
 #include <tvm/ffi/string.h>
 
+#include <cstdlib>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -25,12 +26,7 @@ limitations under the License.
 
 namespace xllm::kernel::cuda {
 
-// Native DeepSeek block-wise FP8 GEMM via the mate `gemm_ops` TVM-FFI module
-// (muDNN groupwise matmul, GROUP_BLOCK (1,128,128)). Avoids materializing a
-// BF16 weight: the FP8 weight is
-// read directly and 128x128 block scales are applied inside the kernel.
-//
-// Layout contract (matches mate.gemm.gemm_fp8_nt_groupwise):
+// Mate groupwise FP8 GEMM layout:
 //   a       [M, K]              float8_e4m3fn, contiguous
 //   b       [N, K] (NT)         float8_e4m3fn, contiguous
 //   a_scale [M, ceil(K/128)]    float32,       contiguous (K-major)
@@ -56,8 +52,6 @@ torch::Tensor gemm_fp8_nt_groupwise(
 
   MusaTvmffiStreamGuard stream_guard(a.device());
 
-  // The cached mate module lives at ${FLASHINFER_OPS_PATH}/gemm_ops/gemm_ops.so
-  // and exports the typed function "gemm_fp8_nt_groupwise".
   static const std::string kGemmOpsUri = "gemm_ops";
   get_function(kGemmOpsUri, "gemm_fp8_nt_groupwise")(
       to_ffi_tensor(a),
@@ -73,13 +67,14 @@ torch::Tensor gemm_fp8_nt_groupwise(
       to_ffi_tensor(out),
       /*backend=*/std::string("mudnn"));
 
-  // muDNN may complete the eager FP8 GEMM after the TVM-FFI call returns.
-  // Ensure PyTorch consumers cannot reuse or read `out` before that write is
-  // visible. Both helpers are capture-aware no-ops, so graph capture/replay
-  // remains asynchronous; the pool-stream sync covers the null-current-stream
-  // fallback selected by MusaTvmffiStreamGuard.
-  sync_current_musa_stream(a.device());
-  sync_musa_ffi_stream(a.device());
+  static const bool force_host_sync = []() {
+    const char* value = std::getenv("XLLM_FP8_FORCE_HOST_SYNC");
+    return value != nullptr && value[0] != '\0' && value[0] != '0';
+  }();
+  if (force_host_sync) {
+    sync_current_musa_stream(a.device());
+    sync_musa_ffi_stream(a.device());
+  }
 
   return out;
 }

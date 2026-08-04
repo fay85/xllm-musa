@@ -23,6 +23,7 @@ limitations under the License.
 #include <utility>
 
 #include "kernels/musa/musa_ops_api.h"
+#include "kernels/musa/ops_api.h"
 #include "kernels/ops_api.h"
 #include "util/env_var.h"
 
@@ -202,24 +203,24 @@ Qwen3_5MusaFusedMoEImpl::Qwen3_5MusaFusedMoEImpl(
 
   gate_ = register_module(
       "gate",
-      ReplicatedLinear(
+      musa::ReplicatedLinear(
           hidden_size_, num_experts_, /*bias=*/false, quant_args, options));
   shared_experts_ =
       register_module("shared_expert",
-                      DenseMLP(hidden_size_,
-                               model_args.shared_expert_intermediate_size(),
-                               /*is_gated=*/true,
-                               /*has_bias=*/false,
-                               model_args.hidden_act(),
-                               /*enable_result_reduction=*/true,
-                               quant_args,
-                               parallel_args.tp_group_,
-                               options));
+                      MusaDenseMLP(hidden_size_,
+                                   model_args.shared_expert_intermediate_size(),
+                                   /*is_gated=*/true,
+                                   /*has_bias=*/false,
+                                   model_args.hidden_act(),
+                                   /*enable_result_reduction=*/true,
+                                   quant_args,
+                                   parallel_args.tp_group_,
+                                   options));
   shared_expert_gate_ = register_module(
       "shared_expert_gate",
       torch::nn::Linear(torch::nn::LinearOptions(hidden_size_, 1).bias(false)));
   shared_expert_gate_->weight.set_data(shared_expert_gate_->weight.to(options));
-  activation_ = register_module("activation", Activation("silu", true));
+  activation_ = register_module("activation", musa::Activation("silu", true));
 
   const auto expert_options =
       use_fp8_ ? options_.dtype(torch::kFloat8_e4m3fn) : options_;
@@ -560,7 +561,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     torch::Tensor activated;
     activation_->forward(gate_up, activated);
     auto [activated_fp8, activated_scale] =
-        xllm::kernel::per_token_group_quant_fp8(activated, 128);
+        xllm::kernel::musa::per_token_group_quant_fp8(activated, 128);
     auto down = xllm::kernel::cuda::contiguous_moe_gemm_fp8(
         activated_fp8,
         activated_scale,
@@ -570,7 +571,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
         hidden_states.scalar_type());
 
     if (num_tokens >= kFusedCombineMinTokens) {
-      return xllm::kernel::cuda::moe_combine_result_indexed(
+      return xllm::kernel::musa::moe_combine_result_indexed(
           down,
           src_to_dst,
           topk_weights,
@@ -654,7 +655,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     }
     torch::Tensor combined;
     {
-      combined = xllm::kernel::cuda::moe_combine_result_indexed(
+      combined = xllm::kernel::musa::moe_combine_result_indexed(
           down,
           std::get<2>(preprocess),
           topk_weights,
@@ -678,7 +679,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     auto sorted_hidden =
         hidden_states.index_select(0, sorted_token_indices).contiguous();
     auto [sorted_hidden_fp8, sorted_hidden_scale] =
-        xllm::kernel::per_token_group_quant_fp8(sorted_hidden, 128);
+        xllm::kernel::musa::per_token_group_quant_fp8(sorted_hidden, 128);
     return run_contiguous_fp8(sorted_hidden_fp8,
                               sorted_hidden_scale,
                               std::get<0>(route_index),
@@ -715,7 +716,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
   torch::Tensor gate_up;
   if (use_fp8_) {
     auto [expanded_fp8, expanded_scale] =
-        xllm::kernel::per_token_group_quant_fp8(expanded, 128);
+        xllm::kernel::musa::per_token_group_quant_fp8(expanded, 128);
     gate_up =
         xllm::kernel::cuda::masked_moe_gemm_fp8(expanded_fp8,
                                                 expanded_scale,
@@ -739,7 +740,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
   torch::Tensor down;
   if (use_fp8_) {
     auto [activated_fp8, activated_scale] =
-        xllm::kernel::per_token_group_quant_fp8(activated, 128);
+        xllm::kernel::musa::per_token_group_quant_fp8(activated, 128);
     down = xllm::kernel::cuda::masked_moe_gemm_fp8(activated_fp8,
                                                    activated_scale,
                                                    w2_,
