@@ -1012,7 +1012,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       attn_metadata->qo_indptr = persistent_decode_qo_indptr(metadata_batch);
     }
   }
-  // Update plan_info if attn_metadata exists and enable_cuda_graph is true
+  // Update plan_info if attn_metadata exists and device-graph mode is on
   // This ensures plan_info is updated before MUSA graph capture/replay.
   {
     // Update plan_info
