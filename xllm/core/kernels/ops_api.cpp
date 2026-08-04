@@ -188,9 +188,7 @@ void apply_rotary(RotaryParams& params) {
     LOG(FATAL) << "apply_rotary: neither cos_sin nor cos/sin "
                   "provided; cannot infer cos_sin.";
   }
-#if defined(USE_MUSA)
-  musa::rotary_embedding(pos_ids, params.q, params.k, cos_sin, is_neox);
-#elif defined(USE_DCU)
+#if defined(USE_DCU)
   std::optional<torch::Tensor> key =
       params.k.defined() ? std::optional<torch::Tensor>(params.k)
                          : std::nullopt;
@@ -227,9 +225,7 @@ void active(ActivationParams& params) {
               params.expert_size);
 #elif defined(USE_NPU)
   params.output = npu::active(params.input, params.act_mode);
-#elif defined(USE_MUSA)
-  musa::act_and_mul(params.output, params.input, params.act_mode);
-#elif defined(USE_CUDA) || defined(USE_DCU)
+#elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   cuda::act_and_mul(params.output, params.input, params.act_mode);
 #elif defined(USE_ILU)
   ilu::act_and_mul(params.output, params.input, params.act_mode);
