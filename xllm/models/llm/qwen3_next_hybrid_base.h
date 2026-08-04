@@ -34,12 +34,12 @@ limitations under the License.
 #include "core/layers/common/lm_head.h"
 #include "core/layers/common/qwen3_next_rms_norm.h"
 #include "core/layers/common/word_embedding.h"
-#if defined(USE_CUDA) || defined(USE_MUSA)
-#include "core/layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
-#elif defined(USE_NPU)
+#if defined(USE_NPU)
 #include "core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.h"
 #elif defined(USE_MLU)
 #include "core/layers/mlu/qwen3_5/qwen3_5_hybrid_decoder_layer_base.h"
+#elif defined(USE_MUSA)
+#include "core/layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 #endif
 
 namespace xllm {
@@ -116,10 +116,10 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
             ? *(input_params.attn_metadata)
             : layer::AttentionMetadataBuilder::build(input_params,
                                                      model_args_.enable_mla());
-    attn_metadata.share_fa3_scheduler_metadata = true;
-    attn_metadata.fa3_scheduler_metadata =
+    attn_metadata.musa.share_fa3_scheduler_metadata = true;
+    attn_metadata.musa.fa3_scheduler_metadata =
         input_params.attn_metadata
-            ? input_params.attn_metadata->fa3_scheduler_metadata
+            ? input_params.attn_metadata->musa.fa3_scheduler_metadata
             : torch::Tensor();
 #else
     layer::AttentionMetadata attn_metadata =

@@ -23,6 +23,7 @@ limitations under the License.
 #include <cstring>
 #include <fstream>
 #include <optional>
+#include <source_location>
 #include <string>
 #include <unordered_map>
 #include <vector>
