@@ -13,14 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/runtime/musa/musa_graph_executor_impl.h"
+#include "core/runtime/musa_graph_executor_impl.h"
 
 #include <c10/core/Device.h>
+#include <c10/core/StreamGuard.h>
 #include <c10/core/TensorOptions.h>
-#include <c10/cuda/CUDACachingAllocator.h>
-#include <c10/cuda/CUDAGuard.h>
-#include <cuda_runtime_api.h>
 #include <glog/logging.h>
+#include <musa_runtime_api.h>
 #include <torch/torch.h>
 
 #include <algorithm>
@@ -37,8 +36,8 @@ limitations under the License.
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/linear.h"
 #include "core/layers/musa/flashinfer_planinfo.h"
-#include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
+#include "core/platform/musa/device_capture_lock.h"
 #include "core/util/env_var.h"
 #include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
@@ -116,9 +115,9 @@ struct GraphPoolMemoryUsage {
 
 GraphPoolMemoryUsage get_graph_pool_memory_usage(
     c10::DeviceIndex device_index,
-    const at::cuda::MempoolId_t& pool_id) {
+    const c10::musa::MempoolId_t& pool_id) {
   GraphPoolMemoryUsage usage;
-  const auto snapshot = c10::cuda::CUDACachingAllocator::snapshot();
+  const auto snapshot = c10::musa::MUSACachingAllocator::snapshot();
   for (const auto& segment : snapshot.segments) {
     if (segment.device != device_index ||
         segment.owner_private_pool_id != pool_id) {
@@ -134,12 +133,12 @@ GraphPoolMemoryUsage get_graph_pool_memory_usage(
 GraphPoolMemoryUsage get_private_pools_memory_usage(
     c10::DeviceIndex device_index) {
   GraphPoolMemoryUsage usage;
-  const auto snapshot = c10::cuda::CUDACachingAllocator::snapshot();
+  const auto snapshot = c10::musa::MUSACachingAllocator::snapshot();
   for (const auto& segment : snapshot.segments) {
     if (segment.device != device_index) {
       continue;
     }
-    if (segment.owner_private_pool_id == at::cuda::MempoolId_t{0, 0}) {
+    if (segment.owner_private_pool_id == c10::musa::MempoolId_t{0, 0}) {
       continue;
     }
     usage.reserved_bytes += segment.total_size;
@@ -151,13 +150,13 @@ GraphPoolMemoryUsage get_private_pools_memory_usage(
 
 size_t get_allocator_reserved_bytes(c10::DeviceIndex device_index) {
   const auto device_stats =
-      c10::cuda::CUDACachingAllocator::getDeviceStats(device_index);
+      c10::musa::MUSACachingAllocator::getDeviceStats(device_index);
   const size_t stat_index =
       static_cast<size_t>(c10::CachingAllocator::StatType::AGGREGATE);
   return static_cast<size_t>(device_stats.reserved_bytes[stat_index].current);
 }
 
-bool is_cuda_contiguous_int_tensor(const torch::Tensor& tensor) {
+bool is_musa_contiguous_int_tensor(const torch::Tensor& tensor) {
   if (!tensor.defined() || !tensor.is_contiguous()) {
     return false;
   }
@@ -165,42 +164,22 @@ bool is_cuda_contiguous_int_tensor(const torch::Tensor& tensor) {
   if (sc != torch::kInt32 && sc != torch::kInt64) {
     return false;
   }
-  // Accept CUDA tensors as well as torch_musa's MUSA tensors. On torch_musa
-  // 2.7/2.9 the MUSA backend uses device_type=PrivateUse1, so `is_cuda()`
-  // returns false and the legacy check would unconditionally fall back to
-  // the slow path.
-  const auto dt = tensor.device().type();
-  return dt == c10::DeviceType::CUDA || dt == c10::DeviceType::PrivateUse1;
+  return tensor.device().type() == at::musa::kMUSA;
 }
 
-bool is_cpu_int_tensor(const torch::Tensor& tensor) {
+bool is_cpu_int32_tensor(const torch::Tensor& tensor) {
   if (!tensor.defined() || !tensor.device().is_cpu() || tensor.numel() == 0 ||
       !tensor.is_contiguous()) {
     return false;
   }
-  const auto sc = tensor.scalar_type();
-  return sc == torch::kInt32 || sc == torch::kInt64;
-}
-
-const int32_t* host_int32_data_ptr(const torch::Tensor& tensor,
-                                   std::vector<int32_t>* cast_buf) {
-  if (!is_cpu_int_tensor(tensor)) {
-    return nullptr;
-  }
-  if (tensor.scalar_type() == torch::kInt32) {
-    return tensor.data_ptr<int32_t>();
-  }
-  CHECK(cast_buf != nullptr) << "host int64 tensor requires cast buffer";
-  const torch::Tensor i32 = tensor.to(torch::kInt32).contiguous();
-  cast_buf->assign(i32.data_ptr<int32_t>(),
-                   i32.data_ptr<int32_t>() + i32.numel());
-  return cast_buf->data();
+  return tensor.scalar_type() == torch::kInt32;
 }
 
 bool has_llm_decode_host_metadata(const AttentionHostInput& host) {
-  return !host.kv_seq_lens.empty() && is_cpu_int_tensor(host.paged_kv_indptr) &&
-         is_cpu_int_tensor(host.paged_kv_indices) &&
-         is_cpu_int_tensor(host.paged_kv_last_page_len);
+  return !host.kv_seq_lens.empty() &&
+         is_cpu_int32_tensor(host.paged_kv_indptr) &&
+         is_cpu_int32_tensor(host.paged_kv_indices) &&
+         is_cpu_int32_tensor(host.paged_kv_last_page_len);
 }
 
 struct IndexedTensorSnapshot {
@@ -330,7 +309,7 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
   torch::ScalarType dtype = util::parse_dtype(args.dtype(), device);
   if (args.dtype() == "float" || args.dtype() == "float32") {
     LOG(WARNING)
-        << "Cuda graph executor init hidden_states compatible with float32 "
+        << "MUSA graph executor init hidden_states compatible with float32 "
            "dtype: float32. This should not happen in production but for test.";
     dtype = torch::kFloat32;
   }
@@ -371,21 +350,21 @@ bool MusaGraphPersistentParam::can_use_llm_decode_fast_path(
     return false;
   }
   const bool device_token_metadata_ok =
-      is_cuda_contiguous_int_tensor(tokens) &&
-      is_cuda_contiguous_int_tensor(positions) &&
-      is_cuda_contiguous_int_tensor(params.attention.device.new_cache_slots);
+      is_musa_contiguous_int_tensor(tokens) &&
+      is_musa_contiguous_int_tensor(positions) &&
+      is_musa_contiguous_int_tensor(params.attention.device.new_cache_slots);
   if (!device_token_metadata_ok) {
     return false;
   }
   if (has_llm_decode_host_metadata(params.attention.host)) {
     return true;
   }
-  return is_cuda_contiguous_int_tensor(params.attention.device.kv_seq_lens) &&
-         is_cuda_contiguous_int_tensor(
+  return is_musa_contiguous_int_tensor(params.attention.device.kv_seq_lens) &&
+         is_musa_contiguous_int_tensor(
              params.attention.device.paged_kv_indptr) &&
-         is_cuda_contiguous_int_tensor(
+         is_musa_contiguous_int_tensor(
              params.attention.device.paged_kv_indices) &&
-         is_cuda_contiguous_int_tensor(
+         is_musa_contiguous_int_tensor(
              params.attention.device.paged_kv_last_page_len);
 }
 
@@ -412,21 +391,9 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
   const torch::Tensor kv_seq_lens_i32 =
       to_int32(params.attention.device.kv_seq_lens);
 
-  const cudaStream_t stream = c10::cuda::getCurrentCUDAStream(device_.index());
+  const musaStream_t stream = c10::musa::getCurrentMUSAStream(device_.index());
   if (has_llm_decode_host_metadata(params.attention.host)) {
     const auto& host = params.attention.host;
-    std::vector<int32_t> indptr_cast;
-    std::vector<int32_t> indices_cast;
-    std::vector<int32_t> last_page_cast;
-    const int32_t* host_indptr =
-        host_int32_data_ptr(host.paged_kv_indptr, &indptr_cast);
-    const int32_t* host_indices =
-        host_int32_data_ptr(host.paged_kv_indices, &indices_cast);
-    const int32_t* host_last_page =
-        host_int32_data_ptr(host.paged_kv_last_page_len, &last_page_cast);
-    CHECK(host_indptr != nullptr && host_indices != nullptr &&
-          host_last_page != nullptr)
-        << "host paged-KV mirrors must be int32/int64 CPU tensors";
     CHECK_GE(static_cast<int64_t>(host.kv_seq_lens.size()),
              actual_batch_size + 1)
         << "host kv_seq_lens too small for batch";
@@ -437,9 +404,10 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
         .src_positions = positions_i32.data_ptr<int32_t>(),
         .src_new_cache_slots = new_cache_slots_i32.data_ptr<int32_t>(),
         .host_kv_seq_lens = host.kv_seq_lens.data(),
-        .host_paged_kv_indptr = host_indptr,
-        .host_paged_kv_indices = host_indices,
-        .host_paged_kv_last_page_len = host_last_page,
+        .host_paged_kv_indptr = host.paged_kv_indptr.data_ptr<int32_t>(),
+        .host_paged_kv_indices = host.paged_kv_indices.data_ptr<int32_t>(),
+        .host_paged_kv_last_page_len =
+            host.paged_kv_last_page_len.data_ptr<int32_t>(),
         .dst_tokens = persistent_tokens_.data_ptr<int32_t>(),
         .dst_positions = persistent_positions_.data_ptr<int32_t>(),
         .dst_new_cache_slots = persistent_new_cache_slots_.data_ptr<int32_t>(),
@@ -1045,7 +1013,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     }
   }
   // Update plan_info if attn_metadata exists and enable_cuda_graph is true
-  // This ensures plan_info is updated before CUDA graph capture/replay
+  // This ensures plan_info is updated before MUSA graph capture/replay.
   {
     // Update plan_info
     // Note: plan_info is only updated at layer 0, so we set layer_id to 0
@@ -1184,7 +1152,7 @@ void MusaGraph::refresh_persistent_paged_kv_host_mirrors(
         !host_buf.defined() || host_buf.scalar_type() != src_dtype ||
         host_buf.numel() < numel || host_buf.numel() < min_alloc_numel;
     if (needs_alloc) {
-      // Pinned so cudaMemcpyAsync from device is a real async copy that can
+      // Pinned so musaMemcpyAsync from device is a real async copy that can
       // be captured into the graph (the Mate FFI submits H2D internally on
       // some shapes; pinning ensures the captured operation refreshes the
       // device buffer from our stable host pointer on every replay). Sized
@@ -1247,8 +1215,8 @@ bool MusaGraph::capture(CausalLM* model,
                         const ModelInputParams& params,
                         std::vector<KVCache>& kv_cache,
                         uint32_t bucket_num_tokens,
-                        const at::cuda::MempoolId_t& pool,
-                        TorchMemPool* pool_ptr) {
+                        const c10::musa::MempoolId_t& pool,
+                        MusaMemPool* pool_ptr) {
   padded_num_tokens_ = bucket_num_tokens;
   const uint32_t actual_num_tokens = tokens.size(0);
   CHECK_GE(padded_num_tokens_, actual_num_tokens)
@@ -1277,28 +1245,28 @@ bool MusaGraph::capture(CausalLM* model,
     paged_kv_last_page_len_host_max_numel_ = max_seqs;
   }
 
-  // Guard CUDA graph capture region with a device-level exclusive lock to
+  // Guard MUSA graph capture region with a device-level exclusive lock to
   // prevent conflicting GPU work from other streams (e.g., prepare streams) on
-  // the same device when using cudaStreamCaptureModeGlobal. Capture requires
+  // the same device when using musaStreamCaptureModeGlobal. Capture requires
   // exclusive access, so we use write lock.
   std::optional<std::unique_lock<std::shared_mutex>> capture_lock_guard;
   if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
     auto& capture_lock =
-        ::xllm::cuda::DeviceCaptureLock::get_instance().get_write_lock(
+        ::xllm::musa::DeviceCaptureLock::get_instance().get_write_lock(
             device_index_);
     capture_lock_guard.emplace(capture_lock);
   }
   // Use the returned ModelInputParams for graph capture
   // Always use capture stream for plan/update + capture + forward.
-  at::cuda::CUDAStream original_stream =
-      at::cuda::getCurrentCUDAStream(device_index_);
-  at::cuda::CUDAStream capture_stream = capture_stream_;
+  c10::musa::MUSAStream original_stream =
+      c10::musa::getCurrentMUSAStream(device_index_);
+  c10::musa::MUSAStream capture_stream = capture_stream_;
   if (original_stream != capture_stream) {
     original_stream.synchronize();
     capture_stream.synchronize();
   }
-  std::optional<at::cuda::CUDAStreamGuard> stream_guard;
-  stream_guard.emplace(capture_stream);
+  std::optional<c10::StreamGuard> stream_guard;
+  stream_guard.emplace(capture_stream.unwrap());
 
   // auto& tensor_options = model->options();
 
@@ -1307,7 +1275,7 @@ bool MusaGraph::capture(CausalLM* model,
   auto full_attention_cache =
       MusaGraphExecutorImpl::find_first_full_attention_cache(kv_cache);
   CHECK(full_attention_cache.has_value())
-      << "CUDA graph capture requires at least one full-attention KV cache";
+      << "MUSA graph capture requires at least one full-attention KV cache";
   const torch::Tensor& k_cache = full_attention_cache->first;
   const torch::Tensor& v_cache = full_attention_cache->second;
   auto graph_params_opt =
@@ -1347,7 +1315,7 @@ bool MusaGraph::capture(CausalLM* model,
   refresh_persistent_paged_kv_host_mirrors(
       graph_params_opt.value().attn_metadata, params.attention.host);
 
-  LOG(INFO) << "CUDA graph capture begin, bucket_num_tokens: "
+  LOG(INFO) << "MUSA graph capture begin, bucket_num_tokens: "
             << bucket_num_tokens
             << ", actual_num_tokens: " << actual_num_tokens;
 
@@ -1415,14 +1383,14 @@ bool MusaGraph::capture(CausalLM* model,
 #if TORCH_VERSION_MAJOR <= 2 && TORCH_VERSION_MINOR <= 7
     // Activate VMM mempool only for the actual capture to keep plan_info
     // allocations out of the shared physical memory pool.
-    std::optional<c10::cuda::MemPoolContext> mempool_ctx;
+    std::optional<c10::musa::MemPoolContext> mempool_ctx;
     if (pool_ptr != nullptr) {
       mempool_ctx.emplace(pool_ptr);
     }
 #endif
 
     // Begin graph capture (capture_mode defaults to
-    // cudaStreamCaptureModeGlobal)
+    // musaStreamCaptureModeGlobal)
     // graph_.capture_begin(pool);
     void* const capture_stream_handle =
         reinterpret_cast<void*>(capture_stream.stream());
@@ -1430,10 +1398,10 @@ bool MusaGraph::capture(CausalLM* model,
         ffi_capture_stream_guard;
     ffi_capture_stream_guard.emplace(persistent_param_.device(),
                                      capture_stream_handle);
-    graph_.capture_begin(pool, cudaStreamCaptureModeThreadLocal);
+    graph_.capture_begin(pool, musaStreamCaptureModeThreadLocal);
 
     xllm::kernel::musa::begin_ffi_alloc_replay(&recorded_ffi_allocs_);
-    // Execute forward pass - CUDA graph will capture this
+    // Execute forward pass; the MUSA graph captures this work.
     auto forward_result = model->forward(
         persistent_param_.persistent_tokens(padded_num_tokens_),
         persistent_param_.persistent_positions(padded_num_tokens_),
@@ -1471,7 +1439,7 @@ bool MusaGraph::capture(CausalLM* model,
 
   // Replay is unified in MusaGraphExecutorImpl::run() after capture success.
 
-  LOG(INFO) << "CUDA graph capture end, bucket_num_tokens: "
+  LOG(INFO) << "MUSA graph capture end, bucket_num_tokens: "
             << bucket_num_tokens;
   return true;
 }
@@ -1485,14 +1453,14 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
       << "num_tokens mismatch: expected <= " << padded_num_tokens_ << ", got "
       << actual_num_tokens;
 
-  // Guard CUDA graph replay with a device-level shared lock to allow multiple
+  // Guard MUSA graph replay with a device-level shared lock to allow multiple
   // replay operations to run concurrently while preventing conflicts with
   // capture operations. Replay can share the lock with other replay/prepare
   // operations.
   std::optional<std::shared_lock<std::shared_mutex>> replay_lock_guard;
   if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
     auto& replay_lock =
-        ::xllm::cuda::DeviceCaptureLock::get_instance().get_read_lock(
+        ::xllm::musa::DeviceCaptureLock::get_instance().get_read_lock(
             device_index_);
     replay_lock_guard.emplace(replay_lock);
   }
@@ -1501,7 +1469,7 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
   auto full_attention_cache =
       MusaGraphExecutorImpl::find_first_full_attention_cache(kv_cache);
   CHECK(full_attention_cache.has_value())
-      << "CUDA graph replay requires at least one full-attention KV cache";
+      << "MUSA graph replay requires at least one full-attention KV cache";
   const torch::Tensor& k_cache = full_attention_cache->first;
   const torch::Tensor& v_cache = full_attention_cache->second;
 
@@ -1565,7 +1533,8 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     }
 
     if (s_enable_graph_timing()) {
-      auto stream = c10::cuda::getCurrentCUDAStream(device_index_);
+      c10::musa::MUSAStream stream =
+          c10::musa::getCurrentMUSAStream(device_index_);
       stream.synchronize();
       const auto replay_start = std::chrono::steady_clock::now();
       graph_.replay();
@@ -1596,7 +1565,7 @@ MusaGraphExecutorImpl::MusaGraphExecutorImpl(CausalLM* model,
     : model_(model), args_(args), device_(device), options_(options) {
   // Keep one pool per executor instance so all captured graphs can reuse it,
   // while avoiding cross-instance stale-handle reuse.
-  graph_pool_ = at::cuda::graph_pool_handle();
+  graph_pool_ = at::musa::graph_pool_handle();
   // Create single persistent parameter object shared by all MusaGraph instances
   persistent_param_ =
       std::make_unique<MusaGraphPersistentParam>(args_, device_, options_);
@@ -1644,7 +1613,7 @@ MusaGraphExecutorImpl::get_or_create_vmm_pool_state(uint32_t physical_pool_id) {
   LOG(FATAL) << "Graph VMM pool is not enabled for MUSA builds";
 }
 
-TorchMemPool* MusaGraphExecutorImpl::get_or_create_vmm_mempool(
+MusaMemPool* MusaGraphExecutorImpl::get_or_create_vmm_mempool(
     uint32_t physical_pool_id,
     uint32_t shape_id) {
   (void)physical_pool_id;
@@ -1653,8 +1622,8 @@ TorchMemPool* MusaGraphExecutorImpl::get_or_create_vmm_mempool(
   return nullptr;
 }
 
-TorchMemPool* MusaGraphExecutorImpl::get_vmm_mempool(uint32_t physical_pool_id,
-                                                     uint32_t shape_id) {
+MusaMemPool* MusaGraphExecutorImpl::get_vmm_mempool(uint32_t physical_pool_id,
+                                                    uint32_t shape_id) {
   (void)physical_pool_id;
   (void)shape_id;
   return nullptr;
@@ -1676,7 +1645,7 @@ void MusaGraphExecutorImpl::log_graph_memory_after_capture() {}
 
 // Get graph memory pool id for capture. When VMM is enabled, uses per-shape
 // MemPool under (physical_pool_id, shape_id).
-at::cuda::MempoolId_t MusaGraphExecutorImpl::get_mem_pool(
+c10::musa::MempoolId_t MusaGraphExecutorImpl::get_mem_pool(
     uint32_t physical_pool_id,
     uint32_t shape_id) {
   if (!::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool()) {
@@ -1688,7 +1657,7 @@ at::cuda::MempoolId_t MusaGraphExecutorImpl::get_mem_pool(
     return graph_pool_;
   }
   // Per-shape VMM MemPool: look up pool for (physical_pool_id, shape_id).
-  TorchMemPool* pool = get_vmm_mempool(physical_pool_id, shape_id);
+  MusaMemPool* pool = get_vmm_mempool(physical_pool_id, shape_id);
   CHECK(pool != nullptr)
       << "VMM MemPool for shape_id=" << shape_id
       << ", physical_pool_id=" << physical_pool_id
@@ -1696,15 +1665,15 @@ at::cuda::MempoolId_t MusaGraphExecutorImpl::get_mem_pool(
   return pool->id();
 }
 
-// Static method to get CUDA capture stream for current thread
+// Static method to get the MUSA capture stream for the current thread.
 // Each thread gets its own high-priority capture stream
-c10::cuda::CUDAStream MusaGraphExecutorImpl::get_capture_stream(
+c10::musa::MUSAStream MusaGraphExecutorImpl::get_capture_stream(
     c10::DeviceIndex device_index) {
   // Use thread_local to ensure each thread has its own capture stream
-  // This is required because CUDA graphs must be captured on a non-default
+  // This is required because MUSA graphs must be captured on a non-default
   // stream. We use high-priority streams for better performance.
-  thread_local c10::cuda::CUDAStream thread_capture_stream =
-      c10::cuda::getStreamFromPool(/*isHighPriority=*/true, device_index);
+  thread_local c10::musa::MUSAStream thread_capture_stream =
+      c10::musa::getStreamFromPool(/*isHighPriority=*/true, device_index);
 
   // Thread-local counter to log initialization only once per thread
   thread_local bool initialized = false;
@@ -1795,10 +1764,10 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     COUNTER_INC(num_model_execution_total_eager);
     const bool time_fwd = s_enable_prefill_fwd_timing();
     if (time_fwd) {
-      c10::cuda::getCurrentCUDAStream(device_.index()).synchronize();
+      c10::musa::getCurrentMUSAStream(device_.index()).synchronize();
       const auto t0 = std::chrono::steady_clock::now();
       auto result = model_->forward(tokens, positions, kv_caches, params);
-      c10::cuda::getCurrentCUDAStream(device_.index()).synchronize();
+      c10::musa::getCurrentMUSAStream(device_.index()).synchronize();
       const auto t1 = std::chrono::steady_clock::now();
       const double ms =
           std::chrono::duration<double, std::milli>(t1 - t0).count();
@@ -1841,7 +1810,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
     // Early return if conditions are not suitable for graph operations
     if (!seq_len_supported) {
-      LOG(WARNING) << "Not suitable for CUDA graph operations, falling back to "
+      LOG(WARNING) << "Not suitable for MUSA graph operations, falling back to "
                       "eager mode.";
       COUNTER_INC(num_model_execution_total_eager);
       return model_->forward(tokens, positions, kv_caches, params);
@@ -1877,13 +1846,13 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     VLOG(kGraphExecutorLogVerboseLevel)
         << "MusaGraphExecutorImpl::run() in decode capture mode";
 
-    TorchMemPool* pool_ptr = nullptr;
+    MusaMemPool* pool_ptr = nullptr;
     if (::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool()) {
       reset_vmm_allocator_offset(kPhysicalPoolIdDecode);
       const uint32_t shape_id = bucket_num_tokens;
       pool_ptr = get_or_create_vmm_mempool(kPhysicalPoolIdDecode, shape_id);
     }
-    const at::cuda::MempoolId_t mem_pool =
+    const c10::musa::MempoolId_t mem_pool =
         get_mem_pool(kPhysicalPoolIdDecode, bucket_num_tokens);
 
     bool capture_success = graph->capture(model_,
@@ -1898,7 +1867,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                           pool_ptr);
 
     if (capture_success) {
-      LOG(INFO) << "Lazy capturing CUDA graph for bucket num_tokens: "
+      LOG(INFO) << "Lazy capturing MUSA graph for bucket num_tokens: "
                 << bucket_num_tokens << " (actual num_tokens: " << n_tokens
                 << ") done";
 
@@ -1923,14 +1892,14 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
     // Keep graph-mode behavior explicit instead of silently switching
     // execution semantics after a capture failure.
-    LOG(FATAL) << "Failed to capture CUDA graph for bucket num_tokens: "
+    LOG(FATAL) << "Failed to capture MUSA graph for bucket num_tokens: "
                << bucket_num_tokens << " (actual num_tokens: " << n_tokens
                << ")";
   }
 
   // Defensive fallback for unsupported forward types (should be unreachable for
   // normal prefill/decode paths).
-  LOG(ERROR) << "Failed to capture CUDA graph for bucket num_tokens: "
+  LOG(ERROR) << "Failed to capture MUSA graph for bucket num_tokens: "
              << bucket_num_tokens;
   COUNTER_INC(num_model_execution_total_eager);
   return model_->forward(tokens, positions, kv_caches, params);
