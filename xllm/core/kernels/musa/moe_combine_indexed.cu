@@ -13,8 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAException.h>
+#include <musa.h>
 
 #include <cstddef>
 #include <cstdint>
@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "core/kernels/cuda/device_utils.cuh"
 #include "core/kernels/musa/musa_ops_api.h"
+#include "torch_musa/csrc/core/MUSAStream.h"
 
 namespace xllm::kernel::musa {
 namespace {
@@ -166,7 +167,8 @@ torch::Tensor moe_combine_result_indexed(const torch::Tensor& gemm2_sorted,
 
   torch::Tensor reduce_weight_fp32 =
       reduce_weight.to(gemm2_sorted.device(), torch::kFloat32).contiguous();
-  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  const musaStream_t stream =
+      static_cast<musaStream_t>(c10::musa::getCurrentMUSAStream().stream());
 
   if (scalar_type == torch::kFloat16) {
     moe_combine_indexed_kernel<c10::Half>
