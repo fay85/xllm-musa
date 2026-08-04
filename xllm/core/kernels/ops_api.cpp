@@ -889,6 +889,8 @@ torch::Tensor apply_top_k_top_p(TopKPParams& params) {
 torch::Tensor random_sample(RandomSampleParams& params) {
 #if defined(USE_MLU)
   return mlu::random_sample(params.logits);
+#elif defined(USE_CUDA)
+  return cuda::random_sample(params.logits);
 #elif defined(USE_MUSA)
   return musa::random_sample(params.logits);
 #elif defined(USE_DCU)
