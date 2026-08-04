@@ -360,7 +360,6 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
   persistent_kv_seq_lens_delta_ = torch::zeros(
       {max_seqs_per_batch}, torch::dtype(torch::kInt).device(device));
   // aux_hidden_states will be lazily initialized when needed
-
 }
 
 bool MusaGraphPersistentParam::can_use_llm_decode_fast_path(
@@ -1638,9 +1637,7 @@ constexpr uint32_t kPhysicalPoolIdDecode = 1;
 
 struct MusaGraphExecutorImpl::VmmPoolState {};
 
-MusaGraphExecutorImpl::~MusaGraphExecutorImpl() {
-  graphs_.clear();
-}
+MusaGraphExecutorImpl::~MusaGraphExecutorImpl() { graphs_.clear(); }
 
 MusaGraphExecutorImpl::VmmPoolState&
 MusaGraphExecutorImpl::get_or_create_vmm_pool_state(uint32_t physical_pool_id) {

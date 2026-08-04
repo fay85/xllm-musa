@@ -94,7 +94,6 @@ class MusaTvmffiStreamGuard final {
   bool uses_event_handoff_ = false;
 };
 
-
 torch::Tensor get_cache_buffer(const int32_t seq_len,
                                const torch::Device& device);
 
