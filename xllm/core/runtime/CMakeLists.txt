@@ -102,8 +102,6 @@ cc_library(
     :util
     :worker_service
     :xllm_server
-    $<$<BOOL:${USE_MUSA}>:cuda_kernels>
-    $<$<BOOL:${USE_MUSA}>:layers>
     $<$<BOOL:${USE_NPU}>:xllm_ops>
     $<$<BOOL:${USE_NPU}>:atb_customize>
     $<$<BOOL:${USE_NPU}>:platform_npu>
