@@ -36,8 +36,8 @@ limitations under the License.
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/linear.h"
 #include "core/layers/musa/flashinfer_planinfo.h"
+#include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
-#include "core/platform/musa/device_capture_lock.h"
 #include "core/util/env_var.h"
 #include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
@@ -1252,7 +1252,7 @@ bool MusaGraph::capture(CausalLM* model,
   std::optional<std::unique_lock<std::shared_mutex>> capture_lock_guard;
   if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
     auto& capture_lock =
-        ::xllm::musa::DeviceCaptureLock::get_instance().get_write_lock(
+        ::xllm::cuda::DeviceCaptureLock::get_instance().get_write_lock(
             device_index_);
     capture_lock_guard.emplace(capture_lock);
   }
@@ -1460,7 +1460,7 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
   std::optional<std::shared_lock<std::shared_mutex>> replay_lock_guard;
   if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
     auto& replay_lock =
-        ::xllm::musa::DeviceCaptureLock::get_instance().get_read_lock(
+        ::xllm::cuda::DeviceCaptureLock::get_instance().get_read_lock(
             device_index_);
     replay_lock_guard.emplace(replay_lock);
   }

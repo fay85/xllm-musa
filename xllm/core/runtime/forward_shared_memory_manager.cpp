@@ -34,10 +34,8 @@ limitations under the License.
 #endif
 #if defined(USE_NPU)
 #include "platform/npu/device_capture_lock.h"
-#elif defined(USE_CUDA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
 #include "platform/cuda/device_capture_lock.h"
-#elif defined(USE_MUSA)
-#include "platform/musa/device_capture_lock.h"
 #endif
 #include "core/util/net.h"
 #include "core/util/tensor_helper.h"
@@ -2252,17 +2250,10 @@ inline void initialize_device_buffer_session(ReadContext& context,
     auto& capture_lock =
         ::xllm::npu::DeviceCaptureLock::get_instance().get_lock(device.index());
     session.capture_lock_guard.emplace(capture_lock);
-#elif defined(USE_CUDA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
     if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
       auto& replay_lock =
           ::xllm::cuda::DeviceCaptureLock::get_instance().get_read_lock(
-              device.index());
-      session.capture_lock_guard.emplace(replay_lock);
-    }
-#elif defined(USE_MUSA)
-    if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
-      auto& replay_lock =
-          ::xllm::musa::DeviceCaptureLock::get_instance().get_read_lock(
               device.index());
       session.capture_lock_guard.emplace(replay_lock);
     }
