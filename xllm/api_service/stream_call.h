@@ -43,8 +43,9 @@ class StreamCall : public Call {
              ::google::protobuf::Closure* done,
              Request* request,
              Response* response,
-             bool use_arena = false)
-      : Call(controller),
+             bool use_arena = false,
+             bool is_http_request = false)
+      : Call(controller, request_body_x_request_id(request), is_http_request),
         done_(done),
         request_(request),
         response_(response),
@@ -67,7 +68,7 @@ class StreamCall : public Call {
     }
 
     json_options_.bytes_to_base64 = false;
-    json_options_.jsonify_empty_array = true;
+    json_options_.jsonify_empty_array = false;
   }
 
   ~StreamCall() override {
@@ -177,13 +178,18 @@ class AnthropicCall : public StreamCall<proto::AnthropicMessagesRequest,
                 ::google::protobuf::Closure* done,
                 proto::AnthropicMessagesRequest* request,
                 proto::AnthropicMessagesResponse* response,
-                bool use_arena = false)
+                bool use_arena = false,
+                bool is_http_request = false)
       : StreamCall<proto::AnthropicMessagesRequest,
                    proto::AnthropicMessagesResponse>(controller,
                                                      done,
                                                      request,
                                                      response,
-                                                     use_arena) {}
+                                                     use_arena,
+                                                     is_http_request) {
+    // Anthropic responses require empty content arrays to remain visible.
+    this->json_options_.jsonify_empty_array = true;
+  }
 
   ~AnthropicCall() {}
 
