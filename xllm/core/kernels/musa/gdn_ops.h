@@ -38,6 +38,21 @@ struct FusedSigmoidGatingDeltaRuleUpdateParams;
 
 namespace musa {
 
+// MUSA-only extensions for graph-capture-safe persistent output buffers and
+// contiguous QKVZ/BA layout. Kept out of core/kernels/param.h so common
+// backend params stay unchanged.
+struct FusedQkvzbaSplitReshapeExtras {
+  // When true, mixed_qkvz is [all_q | all_k | all_v | all_z] and mixed_ba is
+  // [all_b | all_a]. Otherwise the per-head-group interleaved layout from a
+  // single merged projection is assumed.
+  bool contiguous_input_layout = false;
+
+  torch::Tensor mixed_qkv_out_buf;
+  torch::Tensor z_out_buf;
+  torch::Tensor b_out_buf;
+  torch::Tensor a_out_buf;
+};
+
 torch::Tensor l2_norm(torch::Tensor& x, double eps);
 
 std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
@@ -57,15 +72,21 @@ std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
 std::pair<torch::Tensor, torch::Tensor> fused_recurrent_gated_delta_rule(
     FusedRecurrentGatedDeltaRuleParams& params);
 
-torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params);
+torch::Tensor causal_conv1d_update(
+    CausalConv1dUpdateParams& params,
+    const std::optional<torch::Tensor>& output_buf = std::nullopt);
 
-torch::Tensor gated_layer_norm(GatedLayerNormParams& params);
+torch::Tensor gated_layer_norm(
+    GatedLayerNormParams& params,
+    const std::optional<torch::Tensor>& output_buf = std::nullopt);
 
 std::pair<torch::Tensor, torch::Tensor> partial_rotary_embedding(
     PartialRotaryEmbeddingParams& params);
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params);
+fused_qkvzba_split_reshape_cat(
+    FusedQkvzbaSplitReshapeParams& params,
+    const FusedQkvzbaSplitReshapeExtras& extras = {});
 
 std::pair<torch::Tensor, torch::Tensor> chunk_gated_delta_rule(
     ChunkGatedDeltaRuleParams& params);

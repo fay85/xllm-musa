@@ -17,8 +17,10 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdlib>
+#include <optional>
 #include <tuple>
 
+#include "kernels/musa/gdn_ops.h"
 #include "kernels/ops_api.h"
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
@@ -728,6 +730,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   fused_params.head_qk = static_cast<int32_t>(head_k_dim_);
   fused_params.head_v = static_cast<int32_t>(head_v_dim_);
 
+  xllm::kernel::musa::FusedQkvzbaSplitReshapeExtras fused_extras;
 #if defined(USE_CUDA) || defined(USE_MUSA)
   // Lazily size grow-only persistent output buffers so the kernel can
   // populate them via in-place `copy_` calls instead of allocating new
@@ -746,27 +749,28 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                           int64_t m,
                           int64_t d,
                           const torch::TensorOptions& options) {
-    const bool needs = !buf.defined() || buf.size(0) < M || buf.size(1) != D ||
+    const bool needs = !buf.defined() || buf.size(0) < m || buf.size(1) != d ||
                        buf.scalar_type() != options.dtype().toScalarType() ||
                        buf.device() != options.device();
     if (needs) {
-      const int64_t target_M = buf.defined() ? std::max(M, buf.size(0)) : M;
-      buf = torch::empty({target_M, D}, options);
+      const int64_t target_m = buf.defined() ? std::max(m, buf.size(0)) : m;
+      buf = torch::empty({target_m, d}, options);
     }
   };
-  grow_2d(mixed_qkv_out_buf_, expected_M, expected_qkv_dim, opts);
-  grow_2d(z_out_buf_, expected_M, expected_z_dim, opts);
-  grow_2d(b_out_buf_, expected_M, local_nv, opts_ba);
-  grow_2d(a_out_buf_, expected_M, local_nv, opts_ba);
-  fused_params.mixed_qkv_out_buf = mixed_qkv_out_buf_;
-  fused_params.z_out_buf = z_out_buf_;
-  fused_params.b_out_buf = b_out_buf_;
-  fused_params.a_out_buf = a_out_buf_;
+  grow_2d(mixed_qkv_out_buf_, expected_m, expected_qkv_dim, opts);
+  grow_2d(z_out_buf_, expected_m, expected_z_dim, opts);
+  grow_2d(b_out_buf_, expected_m, local_nv, opts_ba);
+  grow_2d(a_out_buf_, expected_m, local_nv, opts_ba);
+  fused_extras.mixed_qkv_out_buf = mixed_qkv_out_buf_;
+  fused_extras.z_out_buf = z_out_buf_;
+  fused_extras.b_out_buf = b_out_buf_;
+  fused_extras.a_out_buf = a_out_buf_;
 #endif
 
   torch::Tensor mixed_qkv, z, b, a;
   std::tie(mixed_qkv, z, b, a) =
-      xllm::kernel::fused_qkvzba_split_reshape_cat(fused_params);
+      xllm::kernel::musa::fused_qkvzba_split_reshape_cat(fused_params,
+                                                        fused_extras);
 
   mixed_qkv = mixed_qkv.view({batch_size, seq_len, mixed_qkv.size(-1)});
   z = z.view({batch_size, seq_len, num_v_heads_ / tp_size_, head_v_dim_});
@@ -904,6 +908,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     conv1d_params.initial_state_idx = std::optional<torch::Tensor>();
     conv1d_params.query_start_loc = attn_metadata.q_cu_seq_lens;
     conv1d_params.max_query_len = attn_metadata.max_query_len;
+    std::optional<torch::Tensor> conv1d_output_buf = std::nullopt;
 #if defined(USE_CUDA) || defined(USE_MUSA)
     // Provide a persistent, grow-only output buffer so the kernel takes its
     // graph-safe fused fast path (causal_conv1d_decode_fused) instead of the
@@ -916,22 +921,23 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       const int64_t d = x_in.size(1);
       const bool needs =
           !conv1d_decode_out_buf_.defined() ||
-          conv1d_decode_out_buf_.size(0) < M ||
-          conv1d_decode_out_buf_.size(1) != D ||
+          conv1d_decode_out_buf_.size(0) < m ||
+          conv1d_decode_out_buf_.size(1) != d ||
           conv1d_decode_out_buf_.scalar_type() != x_in.scalar_type() ||
           conv1d_decode_out_buf_.device() != x_in.device();
       if (needs) {
-        const int64_t target_M =
+        const int64_t target_m =
             conv1d_decode_out_buf_.defined()
-                ? std::max(M, conv1d_decode_out_buf_.size(0))
-                : M;
-        conv1d_decode_out_buf_ = torch::empty({target_M, D}, x_in.options());
+                ? std::max(m, conv1d_decode_out_buf_.size(0))
+                : m;
+        conv1d_decode_out_buf_ = torch::empty({target_m, d}, x_in.options());
       }
-      conv1d_params.output_buf =
-          conv1d_decode_out_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/M);
+      conv1d_output_buf =
+          conv1d_decode_out_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/m);
     }
 #endif
-    mixed_qkv = xllm::kernel::causal_conv1d_update(conv1d_params);
+    mixed_qkv = xllm::kernel::musa::causal_conv1d_update(conv1d_params,
+                                                         conv1d_output_buf);
     if (use_flat_mixed_qkv_decode) {
       // Keep flat [tokens, dim] for the packed mate / in-house fused decode
       // kernels; both consume the flat mixed_qkv directly via strided reads.

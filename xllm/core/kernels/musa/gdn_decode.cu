@@ -184,7 +184,9 @@ std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
   return {g_f32, beta_f32};
 }
 
-torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params) {
+torch::Tensor causal_conv1d_update(
+    CausalConv1dUpdateParams& params,
+    const std::optional<torch::Tensor>& output_buf) {
   auto x = params.x;
   auto weight = params.weight;
   if (weight.dim() == 3) {
@@ -214,7 +216,7 @@ torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params) {
   const int64_t batch = cache_indices_raw.size(0);
   const int64_t conv_num_tokens_pre = x.size(0);
 
-  if (params.output_buf.has_value() && params.output_buf->defined() &&
+  if (output_buf.has_value() && output_buf->defined() &&
       conv_num_tokens_pre == batch && state_len > 0 && width >= 2 &&
       width <= 5 && cache_indices_raw.scalar_type() == torch::kInt32 &&
       cache_indices_raw.is_contiguous()) {
@@ -223,10 +225,10 @@ torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params) {
                                params.bias,
                                params.conv_state,
                                cache_indices_raw,
-                               *params.output_buf,
+                               *output_buf,
                                static_cast<int>(params.pad_slot_id),
                                params.activation);
-    return *params.output_buf;
+    return *output_buf;
   }
 
   auto weight_f32 = weight.to(torch::kFloat32);
@@ -312,9 +314,11 @@ torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params) {
   return out.to(x.scalar_type());
 }
 
-torch::Tensor gated_layer_norm(GatedLayerNormParams& params) {
-  if (params.output_buf.has_value() && params.output_buf->defined() &&
-      params.is_rms_norm && params.norm_before_gate && params.z.has_value() &&
+torch::Tensor gated_layer_norm(
+    GatedLayerNormParams& params,
+    const std::optional<torch::Tensor>& output_buf) {
+  if (output_buf.has_value() && output_buf->defined() && params.is_rms_norm &&
+      params.norm_before_gate && params.z.has_value() &&
       params.z.value().defined() && !params.bias.defined()) {
     const int64_t last_dim = params.x.size(-1);
     const int64_t group_size_val =
@@ -326,15 +330,15 @@ torch::Tensor gated_layer_norm(GatedLayerNormParams& params) {
     if (group_size_val == last_dim && dtype_ok &&
         params.x.scalar_type() == z.scalar_type() &&
         params.x.scalar_type() == params.weight.scalar_type() &&
-        params.x.scalar_type() == params.output_buf->scalar_type() &&
+        params.x.scalar_type() == output_buf->scalar_type() &&
         params.x.is_contiguous() && z.is_contiguous() &&
-        params.output_buf->is_contiguous() && params.weight.is_contiguous() &&
+        output_buf->is_contiguous() && params.weight.is_contiguous() &&
         params.weight.dim() == 1) {
       auto x_2d = params.x.reshape({-1, last_dim});
       auto z_2d = z.reshape({-1, last_dim});
-      auto out_2d = params.output_buf->reshape({-1, last_dim});
+      auto out_2d = output_buf->reshape({-1, last_dim});
       gated_rms_norm_fused(x_2d, params.weight, z_2d, out_2d, params.eps);
-      return params.output_buf->reshape(params.x.sizes());
+      return output_buf->reshape(params.x.sizes());
     }
   }
   return gated_layer_norm_ref(params);
@@ -514,7 +518,8 @@ void gdn_fused_qkvzba_split_contiguous(const torch::Tensor& mixed_qkvz,
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 fused_qkvzba_split_reshape_cat_contiguous(
-    FusedQkvzbaSplitReshapeParams& params) {
+    FusedQkvzbaSplitReshapeParams& params,
+    const FusedQkvzbaSplitReshapeExtras& extras) {
   const int64_t nk = static_cast<int64_t>(params.num_heads_qk);
   const int64_t nv = static_cast<int64_t>(params.num_heads_v);
   const int64_t hk = static_cast<int64_t>(params.head_qk);
@@ -554,22 +559,22 @@ fused_qkvzba_split_reshape_cat_contiguous(
       << qkvz.scalar_type();
 
   const bool has_output_buffers =
-      params.mixed_qkv_out_buf.defined() || params.z_out_buf.defined() ||
-      params.b_out_buf.defined() || params.a_out_buf.defined();
+      extras.mixed_qkv_out_buf.defined() || extras.z_out_buf.defined() ||
+      extras.b_out_buf.defined() || extras.a_out_buf.defined();
   const bool use_output_buffers =
-      is_compatible_output_buffer(params.mixed_qkv_out_buf, qkvz, n, qkv_dim) &&
-      is_compatible_output_buffer(params.z_out_buf, qkvz, n, z_dim) &&
-      is_compatible_output_buffer(params.b_out_buf, qkvz, n, nv) &&
-      is_compatible_output_buffer(params.a_out_buf, qkvz, n, nv);
+      is_compatible_output_buffer(extras.mixed_qkv_out_buf, qkvz, n, qkv_dim) &&
+      is_compatible_output_buffer(extras.z_out_buf, qkvz, n, z_dim) &&
+      is_compatible_output_buffer(extras.b_out_buf, qkvz, n, nv) &&
+      is_compatible_output_buffer(extras.a_out_buf, qkvz, n, nv);
   CHECK(!has_output_buffers || use_output_buffers)
       << "fused_qkvzba_split_reshape_cat_contiguous: incompatible output "
          "buffers";
   if (use_output_buffers) {
     auto mixed_qkv_buf =
-        params.mixed_qkv_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto z_buf = params.z_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto b_buf = params.b_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto a_buf = params.a_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+        extras.mixed_qkv_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto z_buf = extras.z_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto b_buf = extras.b_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto a_buf = extras.a_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
 
     gdn_fused_qkvzba_split_contiguous(qkvz.contiguous(),
                                       ba.contiguous(),
@@ -594,9 +599,11 @@ fused_qkvzba_split_reshape_cat_contiguous(
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params) {
-  if (params.contiguous_input_layout) {
-    return fused_qkvzba_split_reshape_cat_contiguous(params);
+fused_qkvzba_split_reshape_cat(
+    FusedQkvzbaSplitReshapeParams& params,
+    const FusedQkvzbaSplitReshapeExtras& extras) {
+  if (extras.contiguous_input_layout) {
+    return fused_qkvzba_split_reshape_cat_contiguous(params, extras);
   }
   const int64_t nk = static_cast<int64_t>(params.num_heads_qk);
   const int64_t nv = static_cast<int64_t>(params.num_heads_v);
@@ -640,21 +647,21 @@ fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params) {
   const int64_t z_dim = nv * hv;
 
   const bool has_output_buffers =
-      params.mixed_qkv_out_buf.defined() || params.z_out_buf.defined() ||
-      params.b_out_buf.defined() || params.a_out_buf.defined();
+      extras.mixed_qkv_out_buf.defined() || extras.z_out_buf.defined() ||
+      extras.b_out_buf.defined() || extras.a_out_buf.defined();
   const bool use_output_buffers =
-      is_compatible_output_buffer(params.mixed_qkv_out_buf, qkvz, n, qkv_dim) &&
-      is_compatible_output_buffer(params.z_out_buf, qkvz, n, z_dim) &&
-      is_compatible_output_buffer(params.b_out_buf, qkvz, n, nv) &&
-      is_compatible_output_buffer(params.a_out_buf, qkvz, n, nv);
+      is_compatible_output_buffer(extras.mixed_qkv_out_buf, qkvz, n, qkv_dim) &&
+      is_compatible_output_buffer(extras.z_out_buf, qkvz, n, z_dim) &&
+      is_compatible_output_buffer(extras.b_out_buf, qkvz, n, nv) &&
+      is_compatible_output_buffer(extras.a_out_buf, qkvz, n, nv);
   CHECK(!has_output_buffers || use_output_buffers)
       << "fused_qkvzba_split_reshape_cat: incompatible output buffers";
   if (use_output_buffers) {
     auto mixed_qkv_buf =
-        params.mixed_qkv_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto z_buf = params.z_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto b_buf = params.b_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto a_buf = params.a_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+        extras.mixed_qkv_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto z_buf = extras.z_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto b_buf = extras.b_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto a_buf = extras.a_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
 
     mixed_qkv_buf.narrow(/*dim=*/1, /*start=*/0, /*length=*/nk * hk)
         .view({n, nk, hk})
