@@ -448,6 +448,8 @@ void FlashInferAttentionImpl::prefill_forward(
       lse_tensor = lse_buf_.narrow(0, 0, required).view({num_heads_, total_q});
     }
 
+    // Piecewise-capture wrappers were removed from the MUSA kernel library;
+    // graph capture for attention is owned by the MUSA graph executor path.
     xllm::kernel::musa::fa3_prefill(
         query,
         key,

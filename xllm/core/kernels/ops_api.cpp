@@ -1626,6 +1626,9 @@ torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params) {
   }
   return y;
 #elif defined(USE_MUSA)
+  // Default path has no capture-safe output buffer. MUSA GDN layers that need
+  // a persistent buffer must call musa::causal_conv1d_update(params, output_buf)
+  // directly instead of this shared wrapper.
   return musa::causal_conv1d_update(params);
 #else
   NOT_IMPLEMENTED();
@@ -1776,6 +1779,9 @@ fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params) {
                                                  params.head_qk,
                                                  params.head_v);
 #elif defined(USE_MUSA)
+  // Default path omits FusedQkvzbaSplitReshapeExtras. Graph-capture-safe MUSA
+  // GDN layers must call musa::fused_qkvzba_split_reshape_cat(params, extras)
+  // directly to supply persistent output buffers / contiguous layout flags.
   return musa::fused_qkvzba_split_reshape_cat(params);
 #else
   NOT_IMPLEMENTED();

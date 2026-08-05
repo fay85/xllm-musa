@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+// c10/cuda headers are remapped by mcc_wrapper on MUSA builds; keep the
+// shared CUDA exception macros while launching with an explicit musaStream_t.
 #include <c10/cuda/CUDAException.h>
 #include <musa.h>
 
