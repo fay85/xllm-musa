@@ -770,7 +770,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   torch::Tensor mixed_qkv, z, b, a;
   std::tie(mixed_qkv, z, b, a) =
       xllm::kernel::musa::fused_qkvzba_split_reshape_cat(fused_params,
-                                                        fused_extras);
+                                                         fused_extras);
 
   mixed_qkv = mixed_qkv.view({batch_size, seq_len, mixed_qkv.size(-1)});
   z = z.view({batch_size, seq_len, num_v_heads_ / tp_size_, head_v_dim_});
@@ -1230,7 +1230,8 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
           /*dim=*/0, /*start=*/0, /*length=*/b);
     }
     core_attn_out =
-        xllm::kernel::musa::fused_gated_delta_rule_decode(fused_params).unsqueeze(0);
+        xllm::kernel::musa::fused_gated_delta_rule_decode(fused_params)
+            .unsqueeze(0);
 #endif
   } else if (use_mate_gdn_decode) {
 #if defined(USE_CUDA) || defined(USE_MUSA)
@@ -1249,7 +1250,8 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     mate_params.scale = 1.0 / std::sqrt(static_cast<double>(head_k_dim_));
     mate_params.use_qk_l2norm = true;
     core_attn_out =
-        xllm::kernel::musa::mate_gated_delta_rule_decode(mate_params).unsqueeze(0);
+        xllm::kernel::musa::mate_gated_delta_rule_decode(mate_params)
+            .unsqueeze(0);
 #endif
   } else {
     double scale = 1.0 / std::sqrt(static_cast<float>(processed_q.size(-1)));
