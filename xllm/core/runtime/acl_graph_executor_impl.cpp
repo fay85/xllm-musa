@@ -801,6 +801,21 @@ ModelOutput AclGraphExecutorImpl::run(const torch::Tensor& tokens,
     COUNTER_INC(num_model_execution_total_eager);
     return forward_eager(model_, tokens, positions, kv_caches, params);
   }
+  // CP shards the query rows of a prefill batch and gathers them per layer, so
+  // token counts and collectives differ from the captured decode shape. Decode
+  // itself runs with CP inactive (both CP paths return early on decode), which
+  // is why graph mode and CP can coexist -- but spec-verify chunked prefill is
+  // a non-decode batch that reaches capture, so it must stay eager under CP.
+  if (in_spec_verify_phase && options_.cp_size() > 1) {
+    LOG_FIRST_N(WARNING, 1)
+        << "Falling back to eager mode for spec verify because context "
+           "parallel (cp_size="
+        << options_.cp_size()
+        << ") shards prefill rows, which the captured graph shape does not "
+           "describe.";
+    COUNTER_INC(num_model_execution_total_eager);
+    return model_->forward(tokens, positions, kv_caches, params);
+  }
 
   if (in_decoding_phase &&
       params_single.parallel.dp_global_token_nums.size() > 1) {

@@ -169,9 +169,16 @@ bool resolve_model_registration_name(const std::string& model_type,
 }
 
 bool is_npu_model_cp_capable(const std::string& resolved_name) {
+  // Registers model-side CP capability for master-side validation. Note this
+  // is not the same switch as the worker-side NpuCpPlan gate: deepseek_v4 and
+  // deepseek_v4_mtp own their CP split inside the model (TORCH backend) and
+  // deliberately keep model_supports_model_cp() false so the worker does not
+  // shard a second time.
   static const std::unordered_set<std::string> kCpCapableModels = {
       "deepseek_v32",
       "deepseek_v32_mtp",
+      "deepseek_v4",
+      "deepseek_v4_mtp",
       "glm_moe_dsa",
       "glm_moe_dsa_mtp",
   };
