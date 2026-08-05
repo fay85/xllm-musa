@@ -1870,6 +1870,10 @@ bool MusaGraph::capture(CausalLM* model,
     // been observed by the eager warmup.  A frozen pool turns any accidental
     // allocation during capture into an immediate, actionable failure.
     prefill_matmul_buffer_pool_->freeze();
+    // Warmup and capture share one BufferScope; warmup advances ring
+    // cursors to the end. Restart slots so capture binds the same
+    // buffer sequence that replay will use after reset_forward_slots().
+    prefill_matmul_buffer_pool_->reset_forward_slots();
 
     // MemPoolContext has been deprecated in torch >= 2.8
 #if TORCH_VERSION_MAJOR <= 2 && TORCH_VERSION_MINOR <= 7
@@ -2118,6 +2122,13 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
 
   if (is_piecewise_) {
     // Piecewise replay mode (for prefill)
+    // Match capture: MoE/linear buffer rings must restart each forward so
+    // same-shaped live values do not alias when runners touch the pool.
+    std::optional<layer::PiecewiseGraphMatmulBufferScope>
+        replay_buffer_pool_scope;
+    if (prefill_matmul_buffer_pool_) {
+      replay_buffer_pool_scope.emplace(prefill_matmul_buffer_pool_.get());
+    }
     const bool profile = s_enable_piecewise_profile();
     std::chrono::steady_clock::time_point update_start;
     if (profile) {

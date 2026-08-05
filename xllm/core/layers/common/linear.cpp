@@ -670,22 +670,59 @@ torch::Tensor dcu_w8a8_dynamic_linear_forward(
 #endif  // USE_DCU
 
 }  // namespace
+void PiecewiseGraphMatmulBufferPool::reset_rings(
+    std::vector<BufferRing>& rings) {
+  for (auto& ring : rings) {
+    ring.next = 0;
+  }
+}
+
+void PiecewiseGraphMatmulBufferPool::reset_forward_slots() {
+  reset_rings(output_bufs_);
+  reset_rings(gated_rms_norm_output_bufs_);
+  reset_rings(gdn_query_bufs_);
+  reset_rings(gdn_key_bufs_);
+  reset_rings(gdn_value_bufs_);
+  reset_rings(gdn_output_bufs_);
+  reset_rings(gdn_gate_bufs_);
+  reset_rings(gdn_beta_bufs_);
+  reset_rings(gdn_initial_state_bufs_);
+  reset_rings(gdn_final_state_bufs_);
+  reset_rings(gdn_kkt_bufs_);
+}
+
 torch::Tensor PiecewiseGraphMatmulBufferPool::get_tensor(
-    std::vector<torch::Tensor>& buffers,
+    std::vector<BufferRing>& rings,
     c10::IntArrayRef sizes,
     const torch::TensorOptions& options,
     const char* name) {
-  for (const torch::Tensor& buffer : buffers) {
-    if (buffer.sizes().equals(sizes) &&
-        buffer.scalar_type() == options.dtype().toScalarType() &&
-        buffer.device() == options.device()) {
+  for (BufferRing& ring : rings) {
+    if (ring.bufs.empty()) {
+      continue;
+    }
+    const torch::Tensor& probe = ring.bufs.front();
+    if (probe.sizes().equals(sizes) &&
+        probe.scalar_type() == options.dtype().toScalarType() &&
+        probe.device() == options.device()) {
+      if (ring.next < ring.bufs.size()) {
+        return ring.bufs[ring.next++];
+      }
+      CHECK(!frozen_) << "Piecewise graph " << name
+                      << " exhausted buffer ring during capture/replay; "
+                         "shape was under-provisioned in eager warmup";
+      torch::Tensor buffer = torch::empty(sizes, options);
+      ring.bufs.emplace_back(buffer);
+      ring.next = ring.bufs.size();
       return buffer;
     }
   }
   CHECK(!frozen_) << "Piecewise graph " << name
                   << " shape was not prepared during eager warmup";
+  BufferRing ring;
   torch::Tensor buffer = torch::empty(sizes, options);
-  buffers.emplace_back(buffer);
+  ring.bufs.emplace_back(buffer);
+  ring.next = 1;
+  rings.emplace_back(std::move(ring));
   return buffer;
 }
 
@@ -780,6 +817,7 @@ PiecewiseGraphMatmulBufferScope::PiecewiseGraphMatmulBufferScope(
     : previous_buffer_pool_(s_piecewise_graph_matmul_buffer_pool) {
   CHECK(buffer_pool != nullptr);
   s_piecewise_graph_matmul_buffer_pool = buffer_pool;
+  s_piecewise_graph_matmul_buffer_pool->reset_forward_slots();
 }
 
 PiecewiseGraphMatmulBufferScope::~PiecewiseGraphMatmulBufferScope() {

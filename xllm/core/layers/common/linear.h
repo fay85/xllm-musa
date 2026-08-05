@@ -44,24 +44,34 @@ class PiecewiseGraphMatmulBufferPool final {
   torch::Tensor get_gdn_final_state(const torch::Tensor& reference);
   torch::Tensor get_gdn_kkt(const torch::Tensor& key, int64_t num_v_heads);
   void freeze();
+  // Start of a capture/replay forward: reuse slot rings from index 0.
+  void reset_forward_slots();
 
  private:
-  torch::Tensor get_tensor(std::vector<torch::Tensor>& buffers,
+  // Each entry is a ring of same-shaped tensors. get_tensor() advances
+  // the cursor so concurrent live values of the same shape (MoE gate,
+  // shared-expert, residual projections, multi-layer GDN) do not alias.
+  struct BufferRing {
+    std::vector<torch::Tensor> bufs;
+    size_t next = 0;
+  };
+  torch::Tensor get_tensor(std::vector<BufferRing>& rings,
                            c10::IntArrayRef sizes,
                            const torch::TensorOptions& options,
                            const char* name);
+  void reset_rings(std::vector<BufferRing>& rings);
 
-  std::vector<torch::Tensor> output_bufs_;
-  std::vector<torch::Tensor> gated_rms_norm_output_bufs_;
-  std::vector<torch::Tensor> gdn_query_bufs_;
-  std::vector<torch::Tensor> gdn_key_bufs_;
-  std::vector<torch::Tensor> gdn_value_bufs_;
-  std::vector<torch::Tensor> gdn_output_bufs_;
-  std::vector<torch::Tensor> gdn_gate_bufs_;
-  std::vector<torch::Tensor> gdn_beta_bufs_;
-  std::vector<torch::Tensor> gdn_initial_state_bufs_;
-  std::vector<torch::Tensor> gdn_final_state_bufs_;
-  std::vector<torch::Tensor> gdn_kkt_bufs_;
+  std::vector<BufferRing> output_bufs_;
+  std::vector<BufferRing> gated_rms_norm_output_bufs_;
+  std::vector<BufferRing> gdn_query_bufs_;
+  std::vector<BufferRing> gdn_key_bufs_;
+  std::vector<BufferRing> gdn_value_bufs_;
+  std::vector<BufferRing> gdn_output_bufs_;
+  std::vector<BufferRing> gdn_gate_bufs_;
+  std::vector<BufferRing> gdn_beta_bufs_;
+  std::vector<BufferRing> gdn_initial_state_bufs_;
+  std::vector<BufferRing> gdn_final_state_bufs_;
+  std::vector<BufferRing> gdn_kkt_bufs_;
   bool frozen_ = false;
 };
 
