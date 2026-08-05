@@ -508,21 +508,20 @@ void FlashInferAttentionImpl::prefill_forward(
                                          attn_metadata.enable_cuda_graph);
   }
 
-  xllm::kernel::musa::batch_prefill(
-      attn_metadata.plan_info->uri,
-      attn_metadata.plan_info->plan_info,
-      float_workspace_buffer_,
-      int_workspace_buffer_,
-      page_locked_int_workspace_buffer_,
-      query,
-      key,
-      value,
-      attn_metadata.q_cu_seq_lens,
-      attn_metadata.kv_cu_seq_lens,
-      sliding_window_,
-      scale_,
-      output,
-      output_lse);
+  xllm::kernel::musa::batch_prefill(attn_metadata.plan_info->uri,
+                                    attn_metadata.plan_info->plan_info,
+                                    float_workspace_buffer_,
+                                    int_workspace_buffer_,
+                                    page_locked_int_workspace_buffer_,
+                                    query,
+                                    key,
+                                    value,
+                                    attn_metadata.q_cu_seq_lens,
+                                    attn_metadata.kv_cu_seq_lens,
+                                    sliding_window_,
+                                    scale_,
+                                    output,
+                                    output_lse);
 }
 
 void FlashInferAttentionImpl::chunked_prefill_forward(

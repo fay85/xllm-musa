@@ -1627,8 +1627,8 @@ torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params) {
   return y;
 #elif defined(USE_MUSA)
   // Default path has no capture-safe output buffer. MUSA GDN layers that need
-  // a persistent buffer must call musa::causal_conv1d_update(params, output_buf)
-  // directly instead of this shared wrapper.
+  // a persistent buffer must call musa::causal_conv1d_update(params,
+  // output_buf) directly instead of this shared wrapper.
   return musa::causal_conv1d_update(params);
 #else
   NOT_IMPLEMENTED();
@@ -2122,18 +2122,17 @@ torch::Tensor recurrent_gated_delta_rule(
                                              g,
                                              gk);
 #elif defined(USE_MUSA)
-  return musa::recurrent_gated_delta_rule(
-      query,
-      key,
-      value,
-      state,
-      beta,
-      scale,
-      actual_seq_lengths,
-      ssm_state_indices,
-      num_accepted_tokens,
-      g,
-      gk);
+  return musa::recurrent_gated_delta_rule(query,
+                                          key,
+                                          value,
+                                          state,
+                                          beta,
+                                          scale,
+                                          actual_seq_lengths,
+                                          ssm_state_indices,
+                                          num_accepted_tokens,
+                                          g,
+                                          gk);
 #else
   NOT_IMPLEMENTED();
 #endif
@@ -2163,18 +2162,17 @@ torch::Tensor causal_conv1d(const torch::Tensor& x,
                             pad_slot_id,
                             run_mode);
 #elif defined(USE_MUSA)
-  return musa::causal_conv1d(
-      x,
-      weight,
-      conv_state,
-      bias_opt,
-      query_start_loc_opt,
-      cache_indices_opt,
-      initial_state_mode_opt,
-      num_accepted_tokens_opt,
-      activation_mode,
-      pad_slot_id,
-      run_mode);
+  return musa::causal_conv1d(x,
+                             weight,
+                             conv_state,
+                             bias_opt,
+                             query_start_loc_opt,
+                             cache_indices_opt,
+                             initial_state_mode_opt,
+                             num_accepted_tokens_opt,
+                             activation_mode,
+                             pad_slot_id,
+                             run_mode);
 #else
   NOT_IMPLEMENTED();
 #endif

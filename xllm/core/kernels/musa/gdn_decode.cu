@@ -314,9 +314,8 @@ torch::Tensor causal_conv1d_update(
   return out.to(x.scalar_type());
 }
 
-torch::Tensor gated_layer_norm(
-    GatedLayerNormParams& params,
-    const std::optional<torch::Tensor>& output_buf) {
+torch::Tensor gated_layer_norm(GatedLayerNormParams& params,
+                               const std::optional<torch::Tensor>& output_buf) {
   if (output_buf.has_value() && output_buf->defined() && params.is_rms_norm &&
       params.norm_before_gate && params.z.has_value() &&
       params.z.value().defined() && !params.bias.defined()) {
@@ -599,9 +598,8 @@ fused_qkvzba_split_reshape_cat_contiguous(
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-fused_qkvzba_split_reshape_cat(
-    FusedQkvzbaSplitReshapeParams& params,
-    const FusedQkvzbaSplitReshapeExtras& extras) {
+fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params,
+                               const FusedQkvzbaSplitReshapeExtras& extras) {
   if (extras.contiguous_input_layout) {
     return fused_qkvzba_split_reshape_cat_contiguous(params, extras);
   }
