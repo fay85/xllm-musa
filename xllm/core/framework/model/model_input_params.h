@@ -362,6 +362,9 @@ struct AttentionHostInput {
   torch::Tensor paged_kv_indices;
   torch::Tensor paged_kv_last_page_len;
 #endif
+
+  const int32_t* graph_q_seq_lens_data = nullptr;
+  const int32_t* graph_kv_seq_lens_data = nullptr;
 };
 
 struct AttentionDeviceInput {
@@ -856,6 +859,9 @@ struct ParallelInput {
   // Attention/FFN paths may need the padded counts, while lm_head output
   // compaction must skip true empty DP ranks.
   std::vector<int32_t> raw_dp_global_token_nums;
+  // max kv seq len of all dp shards. Graph key generation uses this so empty
+  // DP decode ranks pick the same graph as ranks with real decode tokens.
+  std::vector<int32_t> dp_global_kv_max_seq_lens;
   std::vector<int32_t> dp_is_decode;
 
   DpEpPaddingData dp_ep_padding_data;
@@ -881,6 +887,7 @@ struct ParallelInput {
     ParallelInput out;
     out.dp_global_token_nums = dp_global_token_nums;
     out.raw_dp_global_token_nums = raw_dp_global_token_nums;
+    out.dp_global_kv_max_seq_lens = dp_global_kv_max_seq_lens;
     out.dp_is_decode = dp_is_decode;
     out.dp_ep_padding_data = dp_ep_padding_data;
     out.cp_plan = cp_plan.to(device);
