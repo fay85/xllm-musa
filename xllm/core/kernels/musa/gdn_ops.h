@@ -21,8 +21,7 @@ limitations under the License.
 #include <optional>
 #include <tuple>
 #include <utility>
-
-#include "core/kernels/musa/ops_api.h"
+#include <vector>
 
 namespace xllm {
 namespace kernel {
@@ -37,6 +36,42 @@ struct PartialRotaryEmbeddingParams;
 struct FusedSigmoidGatingDeltaRuleUpdateParams;
 
 namespace musa {
+
+// MUSA-owned GDN params. Kept out of core/kernels/param.h so common backend
+// headers stay unchanged; MUSA layers call these via kernel::musa::.
+struct MateGatedDeltaRulePrefillParams {
+  torch::Tensor q;
+  torch::Tensor k;
+  torch::Tensor v;
+  torch::Tensor g;
+  torch::Tensor beta;
+  std::optional<float> scale = std::nullopt;
+  std::optional<torch::Tensor> initial_state = std::nullopt;
+  std::optional<torch::Tensor> cu_seqlens = std::nullopt;
+  std::optional<std::vector<int32_t>> cu_seqlens_host = std::nullopt;
+  std::optional<torch::Tensor> output = std::nullopt;
+  std::optional<torch::Tensor> final_state = std::nullopt;
+  std::optional<torch::Tensor> kkt_output = std::nullopt;
+  bool use_qk_l2norm_in_kernel = true;
+  bool allow_inplace_qk_l2norm = false;
+};
+
+struct MateGatedDeltaRuleDecodeParams {
+  torch::Tensor mixed_qkv;
+  torch::Tensor state;
+  torch::Tensor A_log;
+  torch::Tensor a;
+  torch::Tensor dt_bias;
+  torch::Tensor b;
+  torch::Tensor state_indices;
+  int64_t num_k_heads = 0;
+  int64_t num_v_heads = 0;
+  int64_t head_k_dim = 0;
+  int64_t head_v_dim = 0;
+  double scale = 0.0;
+  bool use_qk_l2norm = true;
+  std::optional<torch::Tensor> decode_output = std::nullopt;
+};
 
 // MUSA-only extensions for graph-capture-safe persistent output buffers and
 // contiguous QKVZ/BA layout. Kept out of core/kernels/param.h so common

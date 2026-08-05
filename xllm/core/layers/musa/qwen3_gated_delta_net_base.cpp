@@ -1016,7 +1016,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   if (use_mate_gdn_prefill) {
 #if defined(USE_CUDA) || defined(USE_MUSA)
     // xllm_0526: pass full [B, T, H, D] tensors; mate returns VK state layout.
-    xllm::kernel::MateGatedDeltaRulePrefillParams mate_params;
+    xllm::kernel::musa::MateGatedDeltaRulePrefillParams mate_params;
     mate_params.q = processed_q;
     mate_params.k = processed_k;
     mate_params.v = processed_v;
@@ -1026,7 +1026,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
         1.0 / std::sqrt(static_cast<double>(processed_q.size(-1)));
     torch::Tensor mate_final_state;
     std::tie(core_attn_out, mate_final_state) =
-        xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+        xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
     ssm_cache.index_put_({linear_state_base_indices},
                          mate_final_state.to(ssm_cache.dtype()));
 #endif
@@ -1189,7 +1189,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     // mixed_qkv, gating, L2-norm, scale, recurrent step, and in-place fp32
     // state I/O (Qwen3.5 mamba_ssm_dtype). Reuses
     // MateGatedDeltaRuleDecodeParams.
-    xllm::kernel::MateGatedDeltaRuleDecodeParams fused_params;
+    xllm::kernel::musa::MateGatedDeltaRuleDecodeParams fused_params;
     fused_params.mixed_qkv = mixed_qkv;
     fused_params.state = ssm_cache;
     fused_params.A_log = A_log_;
@@ -1213,28 +1213,28 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       const int64_t v = head_v_dim_;
       const auto opts = mixed_qkv.options();
       const bool needs = !fused_gdn_decode_out_buf_.defined() ||
-                         fused_gdn_decode_out_buf_.size(0) < B ||
-                         fused_gdn_decode_out_buf_.size(1) != Hv ||
-                         fused_gdn_decode_out_buf_.size(2) != V ||
+                         fused_gdn_decode_out_buf_.size(0) < b ||
+                         fused_gdn_decode_out_buf_.size(1) != hv ||
+                         fused_gdn_decode_out_buf_.size(2) != v ||
                          fused_gdn_decode_out_buf_.scalar_type() !=
                              opts.dtype().toScalarType() ||
                          fused_gdn_decode_out_buf_.device() != opts.device();
       if (needs) {
-        const int64_t target_B =
+        const int64_t target_b =
             fused_gdn_decode_out_buf_.defined()
-                ? std::max(B, fused_gdn_decode_out_buf_.size(0))
-                : B;
-        fused_gdn_decode_out_buf_ = torch::empty({target_B, Hv, V}, opts);
+                ? std::max(b, fused_gdn_decode_out_buf_.size(0))
+                : b;
+        fused_gdn_decode_out_buf_ = torch::empty({target_b, hv, v}, opts);
       }
       fused_params.decode_output = fused_gdn_decode_out_buf_.narrow(
-          /*dim=*/0, /*start=*/0, /*length=*/B);
+          /*dim=*/0, /*start=*/0, /*length=*/b);
     }
     core_attn_out =
-        xllm::kernel::fused_gated_delta_rule_decode(fused_params).unsqueeze(0);
+        xllm::kernel::musa::fused_gated_delta_rule_decode(fused_params).unsqueeze(0);
 #endif
   } else if (use_mate_gdn_decode) {
 #if defined(USE_CUDA) || defined(USE_MUSA)
-    xllm::kernel::MateGatedDeltaRuleDecodeParams mate_params;
+    xllm::kernel::musa::MateGatedDeltaRuleDecodeParams mate_params;
     mate_params.mixed_qkv = mixed_qkv;
     mate_params.state = ssm_cache;
     mate_params.A_log = A_log_;
@@ -1249,7 +1249,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     mate_params.scale = 1.0 / std::sqrt(static_cast<double>(head_k_dim_));
     mate_params.use_qk_l2norm = true;
     core_attn_out =
-        xllm::kernel::mate_gated_delta_rule_decode(mate_params).unsqueeze(0);
+        xllm::kernel::musa::mate_gated_delta_rule_decode(mate_params).unsqueeze(0);
 #endif
   } else {
     double scale = 1.0 / std::sqrt(static_cast<float>(processed_q.size(-1)));

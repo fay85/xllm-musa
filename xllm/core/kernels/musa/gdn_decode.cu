@@ -896,11 +896,11 @@ torch::Tensor mate_gated_delta_rule_decode(
         params.state.size(2) == head_v_dim &&
         params.state.size(3) == head_k_dim)
       << "mate GDN decode state shape mismatch";
-  CHECK_EQ(params.a_log.numel(), num_v_heads);
+  CHECK_EQ(params.A_log.numel(), num_v_heads);
   CHECK_EQ(params.dt_bias.numel(), num_v_heads);
   CHECK_EQ(params.state_indices.numel(), batch_size);
   CHECK(params.state.device() == mixed_qkv.device() &&
-        params.a_log.device() == mixed_qkv.device() &&
+        params.A_log.device() == mixed_qkv.device() &&
         params.dt_bias.device() == mixed_qkv.device() &&
         params.a.device() == mixed_qkv.device() &&
         params.b.device() == mixed_qkv.device() &&
@@ -942,7 +942,7 @@ torch::Tensor mate_gated_delta_rule_decode(
                        ? params.state
                        : params.state.to(torch::kFloat32).contiguous();
   auto state_indices = params.state_indices.to(torch::kInt32).contiguous();
-  auto a_log_f32 = params.a_log.to(torch::kFloat32).contiguous();
+  auto a_log_f32 = params.A_log.to(torch::kFloat32).contiguous();
   auto dt_bias_f32 = params.dt_bias.to(torch::kFloat32).contiguous();
   auto output =
       params.decode_output.has_value() && params.decode_output.value().defined()
@@ -2497,11 +2497,11 @@ torch::Tensor fused_gated_delta_rule_decode(
   CHECK(params.state.scalar_type() == torch::kFloat32)
       << "fused GDN decode requires fp32 state cache (got "
       << params.state.scalar_type() << ")";
-  CHECK_EQ(params.a_log.numel(), num_v_heads);
+  CHECK_EQ(params.A_log.numel(), num_v_heads);
   CHECK_EQ(params.dt_bias.numel(), num_v_heads);
   CHECK_EQ(params.state_indices.numel(), batch_size);
   CHECK(params.state.device() == mixed_qkv.device() &&
-        params.a_log.device() == mixed_qkv.device() &&
+        params.A_log.device() == mixed_qkv.device() &&
         params.dt_bias.device() == mixed_qkv.device() &&
         params.a.device() == mixed_qkv.device() &&
         params.b.device() == mixed_qkv.device() &&
@@ -2528,7 +2528,7 @@ torch::Tensor fused_gated_delta_rule_decode(
         b.size(0) == batch_size && b.size(1) == num_v_heads)
       << "fused GDN decode a/b shape mismatch";
 
-  auto a_log_f32 = params.a_log.to(torch::kFloat32).contiguous();
+  auto a_log_f32 = params.A_log.to(torch::kFloat32).contiguous();
   auto dt_bias_f32 = params.dt_bias.to(torch::kFloat32).contiguous();
   auto state_indices_i32 = params.state_indices.to(torch::kInt32).contiguous();
 
