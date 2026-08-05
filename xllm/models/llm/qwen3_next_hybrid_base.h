@@ -38,6 +38,8 @@ limitations under the License.
 #include "core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.h"
 #elif defined(USE_MLU)
 #include "core/layers/mlu/qwen3_5/qwen3_5_hybrid_decoder_layer_base.h"
+#elif defined(USE_MUSA)
+#include "core/layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 #endif
 
 namespace xllm {
@@ -105,12 +107,30 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
       }
     }
 
+#if defined(USE_MUSA)
+    // MUSA FlashInfer applies causal masking internally. Graph replay must
+    // reuse the graph executor's stable metadata and plan objects rather than
+    // rebuilding metadata (and a dense custom mask) inside model forward.
+    layer::AttentionMetadata attn_metadata =
+        input_params.attn_metadata
+            ? *(input_params.attn_metadata)
+            : layer::AttentionMetadataBuilder::build(input_params,
+                                                     model_args_.enable_mla(),
+                                                     /*attn_mask=*/std::nullopt,
+                                                     /*device=*/device_);
+    attn_metadata.musa.share_fa3_scheduler_metadata = true;
+    attn_metadata.musa.fa3_scheduler_metadata =
+        input_params.attn_metadata
+            ? input_params.attn_metadata->musa.fa3_scheduler_metadata
+            : torch::Tensor();
+#else
     layer::AttentionMetadata attn_metadata =
         layer::AttentionMetadataBuilder::build(
             input_params,
             model_args_.enable_mla(),
             build_attention_mask(input_params),
             /*device=*/device_);
+#endif
     const int32_t num_tokens = static_cast<int32_t>(tokens.size(0));
     const auto& batch_forward_type = input_params.meta.batch_forward_type;
     const bool is_prefill_side = batch_forward_type.no_decode();
@@ -137,6 +157,17 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
 
     std::optional<torch::Tensor> residual = std::nullopt;
     for (size_t i = 0; i < layers_.size(); i++) {
+#if defined(USE_MUSA)
+      if (attn_metadata.plan_info != nullptr) {
+        attn_metadata.plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.shared_plan_info != nullptr) {
+        attn_metadata.shared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.unshared_plan_info != nullptr) {
+        attn_metadata.unshared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+#endif
       auto& layer = layers_[i];
       h = layer->forward(h,
                          residual,

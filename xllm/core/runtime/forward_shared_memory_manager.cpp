@@ -29,12 +29,15 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/model_config.h"
 #include "platform/stream.h"
+#if defined(USE_MUSA)
+#include <musa_runtime.h>
+#endif
 #if defined(USE_CUDA)
 #include <cuda_runtime_api.h>
 #endif
 #if defined(USE_NPU)
 #include "platform/npu/device_capture_lock.h"
-#elif defined(USE_CUDA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
 #include "platform/cuda/device_capture_lock.h"
 #endif
 #include "core/util/net.h"
@@ -1168,7 +1171,7 @@ struct DeviceBufferSession final {
   bool need_finalize_sync = false;
 #if defined(USE_NPU)
   std::optional<std::unique_lock<std::mutex>> capture_lock_guard;
-#elif defined(USE_CUDA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
   std::optional<std::shared_lock<std::shared_mutex>> capture_lock_guard;
 #endif
 };
@@ -1369,15 +1372,38 @@ inline torch::Tensor materialize_tensor_from_current_cursor(
   const char* device_buffer = session.device_cursor;
 #if defined(USE_NPU)
   return get_tensor_from_blob(meta.shape, meta.dtype, device_buffer);
-#elif defined(USE_CUDA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
   if (session.owner_buffer.defined() &&
       is_aligned_for_cuda_zero_copy(device_buffer)) {
     return get_tensor_from_blob(
         meta.shape, meta.dtype, device_buffer, session.owner_buffer);
   }
 
-  auto options = torch::TensorOptions().dtype(meta.dtype).device(torch::kCUDA);
+  auto options = torch::TensorOptions()
+                     .dtype(meta.dtype)
+#if defined(USE_MUSA)
+                     .device(torch::kPrivateUse1);
+#else
+                     .device(torch::kCUDA);
+#endif
   auto tensor = torch::empty(meta.shape, options);
+#if defined(USE_MUSA)
+  musaError_t err;
+  if (stream != nullptr) {
+    err = musaMemcpyAsync(tensor.data_ptr(),
+                          device_buffer,
+                          meta.data_bytes,
+                          musaMemcpyDeviceToDevice,
+                          stream->get_stream()->stream());
+  } else {
+    err = musaMemcpy(tensor.data_ptr(),
+                     device_buffer,
+                     meta.data_bytes,
+                     musaMemcpyDeviceToDevice);
+  }
+  CHECK_EQ(err, musaSuccess)
+      << "MUSA device buffer copy failed: " << musaGetErrorString(err);
+#else
   cudaError_t err;
   if (stream != nullptr) {
     err = cudaMemcpyAsync(tensor.data_ptr(),
@@ -1393,6 +1419,7 @@ inline torch::Tensor materialize_tensor_from_current_cursor(
   }
   CHECK_EQ(err, cudaSuccess)
       << "CUDA device buffer copy failed: " << cudaGetErrorString(err);
+#endif
   return tensor;
 #elif defined(USE_MLU)
   if (session.owner_buffer.defined()) {
@@ -2209,7 +2236,8 @@ inline void initialize_device_buffer_session(ReadContext& context,
     return;
   }
 
-#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA) || \
+    defined(USE_MLU)
   if (!materialize_device_buffer ||
       !::xllm::ExecutionConfig::get_instance().use_contiguous_input_buffer()) {
     return;
@@ -2217,6 +2245,10 @@ inline void initialize_device_buffer_session(ReadContext& context,
 
 #if defined(USE_CUDA)
   if (device.type() != torch::kCUDA) {
+    return;
+  }
+#elif defined(USE_MUSA)
+  if (device.type() != torch::kPrivateUse1) {
     return;
   }
 #elif defined(USE_MLU)
@@ -2250,7 +2282,7 @@ inline void initialize_device_buffer_session(ReadContext& context,
     auto& capture_lock =
         ::xllm::npu::DeviceCaptureLock::get_instance().get_lock(device.index());
     session.capture_lock_guard.emplace(capture_lock);
-#elif defined(USE_CUDA)
+#elif defined(USE_CUDA) || defined(USE_MUSA)
     if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
       auto& replay_lock =
           ::xllm::cuda::DeviceCaptureLock::get_instance().get_read_lock(
@@ -2286,7 +2318,8 @@ inline void initialize_device_buffer_session(ReadContext& context,
 
 inline void finalize_device_buffer_session(DeviceBufferSession& session,
                                            Stream* stream) {
-#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA) || \
+    defined(USE_MLU)
   if (session.need_finalize_sync && stream != nullptr) {
     stream->synchronize();
   }
@@ -2361,10 +2394,25 @@ inline void deserialize_forward_input_payload(
                          input_params.attention.device.kv_seq_lens,
                          input_params.attention.host.kv_seq_lens,
                          stream);
+#if defined(USE_MUSA)
+  read_tensor_and_host(context,
+                       input_params.attention.device.paged_kv_indptr,
+                       input_params.attention.host.paged_kv_indptr,
+                       stream);
+  read_tensor_and_host(context,
+                       input_params.attention.device.paged_kv_indices,
+                       input_params.attention.host.paged_kv_indices,
+                       stream);
+  read_tensor_and_host(context,
+                       input_params.attention.device.paged_kv_last_page_len,
+                       input_params.attention.host.paged_kv_last_page_len,
+                       stream);
+#else
   read_tensor(context, input_params.attention.device.paged_kv_indptr, stream);
   read_tensor(context, input_params.attention.device.paged_kv_indices, stream);
   read_tensor(
       context, input_params.attention.device.paged_kv_last_page_len, stream);
+#endif
   read_tensor(
       context, input_params.attention.device.new_cache_slot_offsets, stream);
   read_tensor(
@@ -2690,6 +2738,23 @@ torch::Tensor choose_host_or_device_tensor(const torch::Tensor& host_tensor,
   return device_tensor;
 }
 
+#if defined(USE_MUSA)
+torch::Tensor choose_paged_kv_host_or_device_tensor(
+    const torch::Tensor& host_tensor,
+    const torch::Tensor& device_tensor) {
+  if (!host_tensor.defined() || !host_tensor.device().is_cpu() ||
+      host_tensor.scalar_type() != torch::kInt32) {
+    return device_tensor;
+  }
+  if (device_tensor.defined() &&
+      (device_tensor.scalar_type() != torch::kInt32 ||
+       device_tensor.sizes() != host_tensor.sizes())) {
+    return device_tensor;
+  }
+  return host_tensor;
+}
+#endif
+
 void write_host_vector_or_tensor(RawInputSerializeContext& context,
                                  const std::vector<int32_t>& host_values,
                                  const torch::Tensor& tensor) {
@@ -2726,9 +2791,24 @@ inline void serialize_forward_input_sections(
   write_host_vector_or_tensor(context,
                               input_params.attention.host.kv_seq_lens,
                               input_params.attention.device.kv_seq_lens);
+#if defined(USE_MUSA)
+  write_tensor(context,
+               choose_paged_kv_host_or_device_tensor(
+                   input_params.attention.host.paged_kv_indptr,
+                   input_params.attention.device.paged_kv_indptr));
+  write_tensor(context,
+               choose_paged_kv_host_or_device_tensor(
+                   input_params.attention.host.paged_kv_indices,
+                   input_params.attention.device.paged_kv_indices));
+  write_tensor(context,
+               choose_paged_kv_host_or_device_tensor(
+                   input_params.attention.host.paged_kv_last_page_len,
+                   input_params.attention.device.paged_kv_last_page_len));
+#else
   write_tensor(context, input_params.attention.device.paged_kv_indptr);
   write_tensor(context, input_params.attention.device.paged_kv_indices);
   write_tensor(context, input_params.attention.device.paged_kv_last_page_len);
+#endif
   write_tensor(context, input_params.attention.device.new_cache_slot_offsets);
   write_tensor(context, input_params.attention.device.kv_cache_start_offsets);
   write_tensor(context, input_params.embedding.input_embedding);
@@ -3178,6 +3258,8 @@ void ForwardSharedMemoryManager::input_read(
       policy == InputDeviceMaterializationPolicy::MATERIALIZE_ON_READ;
 #elif defined(USE_CUDA)
   materialize_device_buffer = device.type() == torch::kCUDA;
+#elif defined(USE_MUSA)
+  materialize_device_buffer = device.type() == torch::kPrivateUse1;
 #elif defined(USE_MLU)
   materialize_device_buffer = device.type() == torch::kPrivateUse1;
 #endif

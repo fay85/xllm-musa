@@ -27,6 +27,9 @@ limitations under the License.
 #include "core/framework/config/rec_config.h"
 #include "framework/model/model_args.h"
 #include "framework/model/model_input_params.h"
+#if defined(USE_MUSA)
+#include "layers/musa/attention_metadata_builder.h"
+#endif
 
 namespace xllm::layer {
 
@@ -188,7 +191,7 @@ AttentionMetadata build_attention_metadata(
   // MLA-family MLU paths require per-sequence q/kv lengths during prefill.
   if (!attn_metadata.is_prefill || enable_mla) {
     attn_metadata.block_table = params.attention.device.block_tables;
-#if !defined(USE_NPU) && !defined(USE_CUDA)
+#if !defined(USE_NPU) && !defined(USE_CUDA) && !defined(USE_MUSA)
     attn_metadata.kv_seq_lens =
         torch::diff(params.attention.device.kv_seq_lens);  // kv seqlens
     attn_metadata.q_seq_lens =
@@ -218,6 +221,9 @@ AttentionMetadata build_attention_metadata(
       attn_metadata.q_cu_seq_lens = torch::cat({zero, q_cu_seq_lens}, 0);
     }
   }
+#endif
+#if defined(USE_MUSA)
+  musa::populate_attention_metadata(attn_metadata, params, attn_mask);
 #endif
 
   attn_metadata.is_dummy = (params.meta.q_max_seq_len == 0);
@@ -249,10 +255,13 @@ AttentionMetadata build_attention_metadata(
   // CUDA-oriented name for CUDA/MUSA attention plan handling.
   attn_metadata.enable_cuda_graph = params.enable_graph;
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   if (attn_metadata.is_causal && !attn_metadata.enable_cuda_graph) {
     attn_metadata.qo_indptr = attn_metadata.q_cu_seq_lens.to(torch::kCUDA);
   }
+#endif
+#if defined(USE_MUSA)
+  musa::finalize_attention_metadata(attn_metadata);
 #endif
 
 #if defined(USE_ILU)

@@ -357,6 +357,11 @@ struct AttentionHostInput {
   std::vector<int32_t> ring_cur_seqlen;
   std::vector<int32_t> ring_cache_seqlen;
   torch::Tensor block_tables;
+#if defined(USE_MUSA)
+  torch::Tensor paged_kv_indptr;
+  torch::Tensor paged_kv_indices;
+  torch::Tensor paged_kv_last_page_len;
+#endif
 };
 
 struct AttentionDeviceInput {
@@ -388,7 +393,7 @@ struct AttentionDeviceInput {
     AttentionDeviceInput out;
     out.q_seq_lens = safe_to(q_seq_lens, device, true);
     out.kv_seq_lens = safe_to(kv_seq_lens, device, true);
-#if !defined(USE_CUDA)
+#if !defined(USE_CUDA) && !defined(USE_MUSA)
     out.q_cu_seq_lens = safe_to(q_cu_seq_lens, device, true);
 #else
     out.q_cu_seq_lens = q_cu_seq_lens;
@@ -616,7 +621,7 @@ struct AttentionInput {
         continue;
       }
 #endif
-#if defined(USE_MLU)
+#if defined(USE_MLU) || defined(USE_MUSA)
       if (target_device.type() == torch::kPrivateUse1) {
         *entry.target = get_tensor_from_blob(
             entry.sizes, entry.dtype, ptr, attention_device_buffer);
@@ -867,6 +872,8 @@ struct ParallelInput {
   std::shared_ptr<LayerSynchronizer> layer_wise_load_synchronizer = nullptr;
 #if defined(USE_NPU)
   std::vector<int64_t> query_start_loc;
+#endif
+#if defined(USE_NPU) || defined(USE_MUSA)
   std::vector<int64_t> has_initial_state;
 #endif
 
@@ -884,6 +891,8 @@ struct ParallelInput {
     out.layer_wise_load_synchronizer = layer_wise_load_synchronizer;
 #if defined(USE_NPU)
     out.query_start_loc = query_start_loc;
+#endif
+#if defined(USE_NPU) || defined(USE_MUSA)
     out.has_initial_state = has_initial_state;
 #endif
     return out;
