@@ -573,29 +573,14 @@ void BatchInputBuilder::process_sequences_multithreaded() {
                                         state.unique_token_lens_vec.end());
     state_.max_seq_len = std::max(state_.max_seq_len, state.max_seq_len);
     state_.q_max_seq_len = std::max(state_.q_max_seq_len, state.q_max_seq_len);
-#if defined(USE_NPU) || defined(USE_MUSA)
-#if defined(USE_MUSA)
-    int32_t seq_len_offset = state_.seq_lens.back();
-    // skip the first element which is 0
-    for (size_t i = 1; i < state.seq_lens.size(); ++i) {
-      state_.seq_lens.emplace_back(state.seq_lens[i] + seq_len_offset);
-    }
-    int32_t q_seq_len_offset = state_.q_seq_lens.back();
-    for (size_t i = 1; i < state.q_seq_lens.size(); ++i) {
-      state_.q_seq_lens.emplace_back(state.q_seq_lens[i] + q_seq_len_offset);
-    }
-#else
+#if defined(USE_NPU)
     state_.seq_lens.insert(
         state_.seq_lens.end(), state.seq_lens.begin(), state.seq_lens.end());
     state_.q_seq_lens.insert(state_.q_seq_lens.end(),
                              state.q_seq_lens.begin(),
                              state.q_seq_lens.end());
-#endif
-    state_.kv_cache_tokens_nums.insert(state_.kv_cache_tokens_nums.end(),
-                                       state.kv_cache_tokens_nums.begin(),
-                                       state.kv_cache_tokens_nums.end());
-#elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_ILU) || \
-    defined(USE_DCU)
+#elif defined(USE_MUSA) || defined(USE_MLU) || defined(USE_CUDA) || \
+    defined(USE_ILU) || defined(USE_DCU)
     int32_t seq_len_offset = state_.seq_lens.back();
     // skip the first element which is 0
     for (size_t i = 1; i < state.seq_lens.size(); ++i) {
@@ -605,6 +590,12 @@ void BatchInputBuilder::process_sequences_multithreaded() {
     for (size_t i = 1; i < state.q_seq_lens.size(); ++i) {
       state_.q_seq_lens.emplace_back(state.q_seq_lens[i] + q_seq_len_offset);
     }
+#endif
+
+#if defined(USE_NPU) || defined(USE_MUSA)
+    state_.kv_cache_tokens_nums.insert(state_.kv_cache_tokens_nums.end(),
+                                       state.kv_cache_tokens_nums.begin(),
+                                       state.kv_cache_tokens_nums.end());
 #endif
     state_.new_token_slot_ids.insert(state_.new_token_slot_ids.end(),
                                      state.new_token_slot_ids.begin(),
