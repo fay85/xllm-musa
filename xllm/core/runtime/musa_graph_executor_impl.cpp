@@ -350,8 +350,7 @@ bool MusaGraphPersistentParam::can_use_llm_decode_fast_path(
     return false;
   }
   const bool device_token_metadata_ok =
-      is_contiguous_int_tensor(tokens) &&
-      is_contiguous_int_tensor(positions) &&
+      is_contiguous_int_tensor(tokens) && is_contiguous_int_tensor(positions) &&
       is_contiguous_int_tensor(params.attention.device.new_cache_slots);
   if (!device_token_metadata_ok) {
     return false;
@@ -360,10 +359,8 @@ bool MusaGraphPersistentParam::can_use_llm_decode_fast_path(
     return true;
   }
   return is_contiguous_int_tensor(params.attention.device.kv_seq_lens) &&
-         is_contiguous_int_tensor(
-             params.attention.device.paged_kv_indptr) &&
-         is_contiguous_int_tensor(
-             params.attention.device.paged_kv_indices) &&
+         is_contiguous_int_tensor(params.attention.device.paged_kv_indptr) &&
+         is_contiguous_int_tensor(params.attention.device.paged_kv_indices) &&
          is_contiguous_int_tensor(
              params.attention.device.paged_kv_last_page_len);
 }
@@ -1070,8 +1067,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   const bool is_qwen3_5 = args_.model_type() == "qwen3_5_text" ||
                           args_.model_type() == "qwen3_5_moe_text";
   const int64_t gqa_ratio = n_kv_heads > 0 ? n_heads / n_kv_heads : int64_t{0};
-  if (s_use_fa3_decode(gqa_ratio) && is_qwen3_5 &&
-      !attn_metadata->is_prefill && !attn_metadata->is_chunked_prefill &&
+  if (s_use_fa3_decode(gqa_ratio) && is_qwen3_5 && !attn_metadata->is_prefill &&
+      !attn_metadata->is_chunked_prefill &&
       attn_metadata->block_table.defined()) {
     const int64_t batch_size = attn_metadata->block_table.size(0);
     if (batch_size > 0 && (gqa_ratio == 6 || gqa_ratio == 8)) {
