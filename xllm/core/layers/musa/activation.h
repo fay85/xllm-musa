@@ -1,4 +1,4 @@
-/* Copyright 2025-2026 The xLLM Authors.
+/* Copyright 2026 The xLLM Authors. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -15,14 +15,25 @@ limitations under the License.
 
 #pragma once
 
-#if defined(USE_MLU)
-#include "layers/mlu/attention.h"
-#elif defined(USE_NPU)
-#include "layers/npu_torch/attention.h"
-#elif defined(USE_MUSA) || defined(USE_CUDA)
-#include "layers/cuda/attention.h"
-#elif defined(USE_ILU)
-#include "layers/ilu/attention.h"
-#elif defined(USE_DCU)
-#include "layers/dcu/attention.h"
-#endif
+#include <torch/torch.h>
+
+#include <string>
+
+namespace xllm::layer::musa {
+
+class ActivationImpl final : public torch::nn::Module {
+ public:
+  ActivationImpl(const std::string& act_mode,
+                 bool is_gated,
+                 double swiglu_limit = 0.0);
+
+  void forward(torch::Tensor& input, torch::Tensor& output);
+
+ private:
+  std::string act_mode_;
+  bool is_gated_;
+  double swiglu_limit_ = 0.0;
+};
+TORCH_MODULE(Activation);
+
+}  // namespace xllm::layer::musa

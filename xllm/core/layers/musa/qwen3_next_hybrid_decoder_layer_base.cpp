@@ -73,15 +73,15 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
                                                options));
   } else {
     mlp_ = register_module("mlp",
-                           DenseMLP(model_args.hidden_size(),
-                                    model_args.intermediate_size(),
-                                    /*is_gated=*/true,
-                                    /*has_bias=*/false,
-                                    model_args.hidden_act(),
-                                    /*enable_result_reduction=*/true,
-                                    quant_args,
-                                    parallel_args.tp_group_,
-                                    options));
+                           musa::DenseMLP(model_args.hidden_size(),
+                                          model_args.intermediate_size(),
+                                          /*is_gated=*/true,
+                                          /*has_bias=*/false,
+                                          model_args.hidden_act(),
+                                          /*enable_result_reduction=*/true,
+                                          quant_args,
+                                          parallel_args.tp_group_,
+                                          options));
   }
 }
 

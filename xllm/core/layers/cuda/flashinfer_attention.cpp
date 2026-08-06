@@ -116,7 +116,7 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
                                  torch::Tensor& value,
                                  torch::Tensor& output,
                                  KVCache& kv_cache) {
-  std::optional<at::Tensor> output_lse = std::nullopt;
+  std::optional<torch::Tensor> output_lse = std::nullopt;
   if (attn_metadata.max_seq_len == 0) {
     output = output.view({-1, num_heads_ * head_size_});
     return std::make_tuple(output, output_lse);
@@ -143,7 +143,8 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
   }
 
   if (attn_metadata.is_prefill) {
-    prefill_forward(attn_metadata, query, key, value, output, output_lse);
+    prefill_forward(
+        attn_metadata, query, key, value, output, output_lse, k_cache, v_cache);
   } else if (attn_metadata.is_chunked_prefill) {
     chunked_prefill_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
@@ -162,7 +163,9 @@ void FlashInferAttentionImpl::prefill_forward(
     torch::Tensor& key,
     torch::Tensor& value,
     torch::Tensor& output,
-    std::optional<at::Tensor>& output_lse) {
+    std::optional<torch::Tensor>& output_lse,
+    const torch::Tensor& /*k_cache*/,
+    const torch::Tensor& /*v_cache*/) {
   bool use_custom_mask = attn_metadata.attn_mask.defined();
 
   std::string backend = xllm::kernel::cuda::determine_attention_backend(
@@ -226,7 +229,7 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
     torch::Tensor& query,
     const torch::Tensor& key,
     torch::Tensor& output,
-    std::optional<at::Tensor>& output_lse,
+    std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
   // Get block_size from k_cache if defined and has proper dimensions,
@@ -288,7 +291,7 @@ void FlashInferAttentionImpl::decoder_forward(
     torch::Tensor& query,
     const torch::Tensor& key,
     torch::Tensor& output,
-    std::optional<at::Tensor>& output_lse,
+    std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
   // Get block_size from k_cache if defined and has proper dimensions,

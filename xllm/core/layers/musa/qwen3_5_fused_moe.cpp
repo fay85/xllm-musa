@@ -18,9 +18,8 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
-#include <optional>
+#include <cstdint>
 #include <tuple>
-#include <utility>
 
 #include "kernels/musa/musa_ops_api.h"
 #include "kernels/ops_api.h"
@@ -150,8 +149,32 @@ bool use_moe_topk(int64_t num_tokens,
   return false;
 }
 
-bool use_fused_shared_expert_gate(int64_t num_tokens) {
-  return num_tokens == 1;
+bool is_16byte_aligned(const torch::Tensor& tensor) {
+  return reinterpret_cast<std::uintptr_t>(tensor.data_ptr()) % 16 == 0;
+}
+
+bool use_fused_shared_expert_gate(const torch::Tensor& shared_output,
+                                  const torch::Tensor& hidden_states,
+                                  const torch::Tensor& gate_weight) {
+  if (!shared_output.defined() || !hidden_states.defined() ||
+      !gate_weight.defined()) {
+    return false;
+  }
+
+  const torch::ScalarType dtype = shared_output.scalar_type();
+  return shared_output.dim() == 2 && hidden_states.dim() == 2 &&
+         shared_output.sizes() == hidden_states.sizes() &&
+         gate_weight.dim() == 2 && gate_weight.size(0) == 1 &&
+         gate_weight.size(1) == hidden_states.size(1) &&
+         dtype == hidden_states.scalar_type() &&
+         dtype == gate_weight.scalar_type() &&
+         (dtype == torch::kFloat16 || dtype == torch::kBFloat16) &&
+         shared_output.device() == hidden_states.device() &&
+         shared_output.device() == gate_weight.device() &&
+         shared_output.is_contiguous() && hidden_states.is_contiguous() &&
+         gate_weight.is_contiguous() && hidden_states.size(1) % 8 == 0 &&
+         is_16byte_aligned(shared_output) && is_16byte_aligned(hidden_states) &&
+         is_16byte_aligned(gate_weight);
 }
 
 }  // namespace
@@ -201,24 +224,24 @@ Qwen3_5FusedMoEImpl::Qwen3_5FusedMoEImpl(const ModelArgs& model_args,
 
   gate_ = register_module(
       "gate",
-      ReplicatedLinear(
+      musa::ReplicatedLinear(
           hidden_size_, num_experts_, /*bias=*/false, quant_args, options));
-  shared_experts_ =
-      register_module("shared_expert",
-                      DenseMLP(hidden_size_,
-                               model_args.shared_expert_intermediate_size(),
-                               /*is_gated=*/true,
-                               /*has_bias=*/false,
-                               model_args.hidden_act(),
-                               /*enable_result_reduction=*/true,
-                               quant_args,
-                               parallel_args.tp_group_,
-                               options));
+  shared_experts_ = register_module(
+      "shared_expert",
+      musa::DenseMLP(hidden_size_,
+                     model_args.shared_expert_intermediate_size(),
+                     /*is_gated=*/true,
+                     /*has_bias=*/false,
+                     model_args.hidden_act(),
+                     /*enable_result_reduction=*/true,
+                     quant_args,
+                     parallel_args.tp_group_,
+                     options));
   shared_expert_gate_ = register_module(
       "shared_expert_gate",
       torch::nn::Linear(torch::nn::LinearOptions(hidden_size_, 1).bias(false)));
   shared_expert_gate_->weight.set_data(shared_expert_gate_->weight.to(options));
-  activation_ = register_module("activation", Activation("silu", true));
+  activation_ = register_module("activation", musa::Activation("silu", true));
 
   const auto expert_options =
       use_fp8_ ? options_.dtype(torch::kFloat8_e4m3fn) : options_;
@@ -558,7 +581,7 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
     torch::Tensor activated;
     activation_->forward(gate_up, activated);
     auto [activated_fp8, activated_scale] =
-        xllm::kernel::per_token_group_quant_fp8(activated, 128);
+        xllm::kernel::musa::per_token_group_quant_fp8(activated, 128);
     auto down = xllm::kernel::musa::contiguous_moe_gemm_fp8(
         activated_fp8,
         activated_scale,
@@ -676,7 +699,7 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
     auto sorted_hidden =
         hidden_states.index_select(0, sorted_token_indices).contiguous();
     auto [sorted_hidden_fp8, sorted_hidden_scale] =
-        xllm::kernel::per_token_group_quant_fp8(sorted_hidden, 128);
+        xllm::kernel::musa::per_token_group_quant_fp8(sorted_hidden, 128);
     return run_contiguous_fp8(sorted_hidden_fp8,
                               sorted_hidden_scale,
                               std::get<0>(route_index),
@@ -713,7 +736,7 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
   torch::Tensor gate_up;
   if (use_fp8_) {
     auto [expanded_fp8, expanded_scale] =
-        xllm::kernel::per_token_group_quant_fp8(expanded, 128);
+        xllm::kernel::musa::per_token_group_quant_fp8(expanded, 128);
     gate_up =
         xllm::kernel::musa::masked_moe_gemm_fp8(expanded_fp8,
                                                 expanded_scale,
@@ -737,7 +760,7 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
   torch::Tensor down;
   if (use_fp8_) {
     auto [activated_fp8, activated_scale] =
-        xllm::kernel::per_token_group_quant_fp8(activated, 128);
+        xllm::kernel::musa::per_token_group_quant_fp8(activated, 128);
     down = xllm::kernel::musa::masked_moe_gemm_fp8(activated_fp8,
                                                    activated_scale,
                                                    w2_,
@@ -800,7 +823,8 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward(
   torch::Tensor shared;
   {
     shared = shared_experts_->forward(hidden_states);
-    if (use_fused_shared_expert_gate(hidden_states.size(0))) {
+    if (use_fused_shared_expert_gate(
+            shared, hidden_states, shared_expert_gate_->weight)) {
       xllm::kernel::musa::fused_shared_expert_gate_inplace(
           shared, hidden_states, shared_expert_gate_->weight);
     } else {

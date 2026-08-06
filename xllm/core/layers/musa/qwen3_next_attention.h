@@ -26,9 +26,9 @@ limitations under the License.
 #include "framework/state_dict/state_dict.h"
 #include "kernels/ops_api.h"
 #include "layers/common/attention.h"
-#include "layers/common/linear.h"
 #include "layers/common/partial_rotary_embedding.h"
 #include "layers/common/qwen3_next_rms_norm.h"
+#include "layers/musa/linear.h"
 
 namespace xllm {
 namespace layer {
@@ -73,8 +73,8 @@ class Qwen3NextAttentionImpl final : public torch::nn::Module {
   std::vector<int64_t> mrope_section_;
   torch::Tensor mrope_gather_pattern_;
 
-  QKVParallelLinear qkv_proj_{nullptr};
-  RowParallelLinear o_proj_{nullptr};
+  musa::QKVParallelLinear qkv_proj_{nullptr};
+  musa::RowParallelLinear o_proj_{nullptr};
 
   Qwen3NextRMSNorm q_norm_{nullptr};
   Qwen3NextRMSNorm k_norm_{nullptr};

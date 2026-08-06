@@ -57,8 +57,8 @@ class Qwen3NextGatedDeltaNetImpl : public Qwen3GatedDeltaNetBaseImpl {
                              const torch::TensorOptions& options);
 
  private:
-  ColumnParallelLinear qkvz_proj_{nullptr};
-  ColumnParallelLinear ba_proj_{nullptr};
+  musa::ColumnParallelLinear qkvz_proj_{nullptr};
+  musa::ColumnParallelLinear ba_proj_{nullptr};
 };
 TORCH_MODULE(Qwen3NextGatedDeltaNet);
 
@@ -86,27 +86,14 @@ class Qwen3_5GatedDeltaNetImpl final : public Qwen3NextGatedDeltaNetImpl {
   torch::Tensor merge_ba_from_split_activations(const torch::Tensor& b,
                                                 const torch::Tensor& a) const;
 
-  ColumnParallelLinear in_proj_qkv_{nullptr};
-  ColumnParallelLinear in_proj_z_{nullptr};
-  ColumnParallelLinear in_proj_b_{nullptr};
-  ColumnParallelLinear in_proj_a_{nullptr};
+  musa::ColumnParallelLinear in_proj_qkv_{nullptr};
+  musa::ColumnParallelLinear in_proj_z_{nullptr};
+  musa::ColumnParallelLinear in_proj_b_{nullptr};
+  musa::ColumnParallelLinear in_proj_a_{nullptr};
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  // Persistent buffers that replace the two `torch::cat` calls in
-  // merge_qkvz_from_split_activations / merge_ba_from_split_activations.
-  // `torch::cat` allocates a fresh output via at::empty -> EmptyMUSA which
-  // is forbidden during MUSA graph capture; the equivalent of the cat is a
-  // sequence of strided `copy_` writes into pre-allocated rows, so we keep
-  // one persistent buffer per merge call and reuse it across replays.
-  //
-  // Sized lazily on the first (warmup) forward and grow-only thereafter,
-  // matching the contract used by ColumnParallelLinearImpl::output_buf_ and
-  // friends. Keep the existing four
-  // split projections (matching the on-disk checkpoint layout) and just
-  // make the final concat capture-safe.
+  // Persistent buffers for the split-projection merge path.
   mutable torch::Tensor qkvz_merge_buf_;
   mutable torch::Tensor ba_merge_buf_;
-#endif
 };
 TORCH_MODULE(Qwen3_5GatedDeltaNet);
 
