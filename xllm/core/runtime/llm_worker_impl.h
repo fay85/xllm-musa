@@ -49,7 +49,7 @@ class LLMWorkerImpl : public WorkerImpl {
   std::optional<ForwardOutput> step(const ForwardInput& input) override;
 
   std::optional<ForwardOutput> step_no_sync(const ForwardInput& input);
-  std::optional<ForwardOutput> execute_no_sync_on_stream(
+  virtual std::optional<ForwardOutput> execute_no_sync_on_stream(
       const ForwardInput& input,
       Stream& compute_stream,
       bool record_ready_event = true);

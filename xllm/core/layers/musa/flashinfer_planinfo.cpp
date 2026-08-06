@@ -25,7 +25,7 @@ limitations under the License.
 #include "kernels/musa/musa_tvmffi_stream.h"
 #include "layers/cuda/flashinfer_workspace.h"
 
-using namespace xllm::kernel::cuda;
+using namespace xllm::kernel::musa;
 
 namespace {
 

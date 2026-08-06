@@ -151,9 +151,9 @@ class KVCacheState {
   //   - Class B (continued chunk): allocate_for_sequence mounts the slot it
   //     just checkpointed at the previous step's save-rotation.
   // The batch builder consumes it to fill the cache op's restore_src_slot_id,
-  // then releases it -- a block-carried transport that replaces the former
-  // scheduler-side find() in resolve. Cleared by erase_blocks(LINEAR) and
-  // reset().
+  // then transfers used sources to the owning Batch. This block-carried
+  // transport replaces the former scheduler-side find() in resolve. Cleared by
+  // erase_blocks(LINEAR) and reset().
   void set_linear_restore_src_block(Block&& block) {
     linear_restore_src_block_ = std::move(block);
   }

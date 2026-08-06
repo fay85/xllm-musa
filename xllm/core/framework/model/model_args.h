@@ -159,6 +159,8 @@ struct ModelArgs {
   PROPERTY(std::string, index_topk_pattern);
   PROPERTY(int32_t, index_skip_topk_offset) = 0;
   PROPERTY(bool, index_share_for_mtp_iteration) = false;
+  PROPERTY(std::vector<std::string>, indexer_types) = {};
+  PROPERTY(std::vector<std::string>, mlp_layer_types) = {};
 
   // deepseek v4
   PROPERTY(int32_t, rope_head_dim) = 0;
@@ -573,6 +575,12 @@ struct ModelArgs {
   PROPERTY(bool, zero_cond_t) = false;
   PROPERTY(bool, use_additional_t_cond) = false;
   PROPERTY(bool, use_layer3d_rope) = false;
+
+  // JoyImage-Edit-Plus dit related args
+  PROPERTY(double, mlp_width_ratio) = 4.0;
+  PROPERTY(int64_t, text_dim) = 4096;
+  PROPERTY(std::vector<int64_t>, rope_dim_list) = { 16, 56, 56 };
+  PROPERTY(int64_t, rope_theta_dit) = 10000;
 };
 
 // Qwen hybrid models may describe full-attention layers explicitly via

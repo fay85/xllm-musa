@@ -116,8 +116,17 @@ void apply_rotary(RotaryParams& params) {
                     params.dynamic_ntk,
                     params.max_query_len);
 #elif defined(USE_NPU)
-  npu::apply_rotary(
-      params.q, params.k, params.cos_sin, params.position_ids.value());
+  if (!params.position_ids.has_value() && params.cos.defined() &&
+      params.sin.defined()) {
+    npu::apply_rotary(params.q, params.k, params.cos, params.sin, "BSND");
+  } else {
+    CHECK(params.position_ids.has_value())
+        << "NPU rotary embedding requires position_ids when precomputed "
+           "cos/sin "
+           "are unavailable";
+    npu::apply_rotary(
+        params.q, params.k, params.cos_sin, params.position_ids.value());
+  }
 #elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   bool is_neox = !params.interleaved;
   torch::Tensor pos_ids;
@@ -337,7 +346,19 @@ void fused_layernorm(FusedLayerNormParams& params) {
                        params.store_output_after_norm,
                        params.dynamic_quant);
 #elif defined(USE_NPU)
-  if (params.residual.has_value()) {
+  if (params.mode == "layernorm") {
+    CHECK(params.beta.has_value()) << "LayerNorm requires beta on NPU";
+    torch::Tensor norm_input = params.input;
+    if (params.residual.has_value()) {
+      norm_input = params.input + params.residual.value();
+      params.residual_out = norm_input;
+    }
+    params.output = torch::layer_norm(norm_input,
+                                      {params.input.size(-1)},
+                                      params.weight,
+                                      params.beta.value(),
+                                      params.eps);
+  } else if (params.residual.has_value()) {
     if (params.add_gamma_offset) {
       std::tie(params.output, std::ignore, params.residual_out) =
           npu::gamma_add_rms_norm(params.input,
@@ -354,7 +375,7 @@ void fused_layernorm(FusedLayerNormParams& params) {
     params.output =
         npu::rms_norm(params.input, params.weight, params.eps, params.mode);
   }
-  if (params.beta.has_value()) {
+  if (params.beta.has_value() && params.mode != "layernorm") {
     params.output += params.beta.value();
   }
 #elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
@@ -1200,6 +1221,45 @@ std::tuple<torch::Tensor, torch::Tensor> dispatch_gmm_combine_decode(
 bool has_dispatch_gmm_combine_decode() {
 #if defined(USE_NPU)
   return npu::has_dispatch_gmm_combine_decode();
+#else
+  return false;
+#endif
+}
+
+std::tuple<torch::Tensor, torch::Tensor> mega_moe(MegaMoeParams& params) {
+#if defined(USE_NPU)
+  return npu::apply_npu_mega_moe(params.context,
+                                 params.x,
+                                 params.topk_ids,
+                                 params.topk_weights,
+                                 params.weight1,
+                                 params.weight2,
+                                 params.moe_expert_num,
+                                 params.ep_world_size,
+                                 params.ccl_buffer_size,
+                                 params.weight_scales1,
+                                 params.weight_scales2,
+                                 params.bias1,
+                                 params.bias2,
+                                 params.x_active_mask,
+                                 params.max_recv_token_num,
+                                 params.dispatch_quant_mode,
+                                 params.combine_quant_mode,
+                                 params.comm_alg,
+                                 params.num_max_tokens_per_rank,
+                                 params.activation,
+                                 params.activation_clamp,
+                                 params.dispatch_quant_out_dtype,
+                                 params.topo_type,
+                                 params.rank_num_per_server);
+#else
+  NOT_IMPLEMENTED();
+#endif
+}
+
+bool has_mega_moe() {
+#if defined(USE_NPU)
+  return npu::has_mega_moe();
 #else
   return false;
 #endif

@@ -863,7 +863,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
         std::optional<torch::Tensor>(),  // bias (no bias for qwen3)
         torch::IntArrayRef(input_params.parallel.query_start_loc),
         torch::IntArrayRef(linear_state_indices_vec),
-        torch::IntArrayRef(input_params.parallel.has_initial_state),
+        torch::IntArrayRef(input_params.linear_state_validity_mask),
         num_accepted_tokens_opt,
         1,   // activation_mode (silu)
         -1,  // pad_slot_id
@@ -1133,12 +1133,12 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     // Shape: [batch_size, num_heads, head_k_dim, head_v_dim]
     torch::Tensor initial_state_tensor =
         torch::index_select(ssm_cache, 0, linear_state_base_indices);
-    CHECK_EQ(input_params.parallel.has_initial_state.size(),
+    CHECK_EQ(input_params.linear_state_validity_mask.size(),
              input_params.embedding.linear_state_ids.size())
-        << "has_initial_state must be sequence-scoped.";
-    for (size_t i = 0; i < input_params.parallel.has_initial_state.size();
+        << "linear state validity mask must be sequence-scoped.";
+    for (size_t i = 0; i < input_params.linear_state_validity_mask.size();
          ++i) {
-      if (input_params.parallel.has_initial_state[i] == 0) {
+      if (input_params.linear_state_validity_mask[i] == 0) {
         initial_state_tensor.select(0, static_cast<int64_t>(i)).fill_(0.0);
       }
     }

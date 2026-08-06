@@ -22,6 +22,7 @@ limitations under the License.
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <iterator>
 #include <thread>
 #include <utility>
 #include <vector>
@@ -448,6 +449,7 @@ void BatchInputBuilder::process_sequences_multithreaded() {
 #endif
     thread_state.embedding_ids.reserve(sequences_per_thread);
     thread_state.linear_state_ids.reserve(sequences_per_thread);
+    thread_state.linear_restore_src_blocks.reserve(sequences_per_thread);
     thread_state.request_ids.reserve(sequences_per_thread);
     thread_state.extra_token_ids.reserve(sequences_per_thread);
     thread_state.scheduled_mm_data_vec.reserve(sequences_per_thread);
@@ -499,11 +501,13 @@ void BatchInputBuilder::process_sequences_multithreaded() {
   size_t total_seqs = 0;
   size_t total_slots = 0;
   size_t total_paged_indices = 0;
+  size_t total_linear_restore_sources = 0;
   for (const auto& state : thread_builder_states) {
     total_tokens += state.flatten_tokens_vec.size();
     total_seqs += state.block_tables_vec.size();
     total_slots += state.new_token_slot_ids.size();
     total_paged_indices += state.paged_kv_indices.size();
+    total_linear_restore_sources += state.linear_restore_src_blocks.size();
   }
   state_.flatten_tokens_vec.reserve(total_tokens);
   if (!use_mrope_) {
@@ -520,6 +524,7 @@ void BatchInputBuilder::process_sequences_multithreaded() {
 #endif
   state_.embedding_ids.reserve(total_seqs);
   state_.linear_state_ids.reserve(total_seqs);
+  state_.linear_restore_src_blocks.reserve(total_linear_restore_sources);
   state_.request_ids.reserve(total_seqs);
   state_.extra_token_ids.reserve(total_seqs);
   state_.paged_kv_indices.reserve(total_paged_indices);
@@ -527,7 +532,7 @@ void BatchInputBuilder::process_sequences_multithreaded() {
   state_.paged_kv_last_page_len.reserve(total_seqs);
 
   // Merge results from all threads
-  for (const auto& state : thread_builder_states) {
+  for (auto& state : thread_builder_states) {
     state_.flatten_tokens_vec.insert(state_.flatten_tokens_vec.end(),
                                      state.flatten_tokens_vec.begin(),
                                      state.flatten_tokens_vec.end());
@@ -608,6 +613,10 @@ void BatchInputBuilder::process_sequences_multithreaded() {
     state_.linear_state_cache_ops.insert(state_.linear_state_cache_ops.end(),
                                          state.linear_state_cache_ops.begin(),
                                          state.linear_state_cache_ops.end());
+    state_.linear_restore_src_blocks.insert(
+        state_.linear_restore_src_blocks.end(),
+        std::make_move_iterator(state.linear_restore_src_blocks.begin()),
+        std::make_move_iterator(state.linear_restore_src_blocks.end()));
     state_.request_ids.insert(state_.request_ids.end(),
                               state.request_ids.begin(),
                               state.request_ids.end());
@@ -876,9 +885,9 @@ void BatchInputBuilder::append_linear_state_row(Sequence* sequence,
   // Restore source (block-carried): allocate_shared_for_sequence mounts the
   // deepest-hit checkpoint at admission (class A); allocate_for_sequence
   // mounts the slot it just checkpointed at the previous step's save-rotation
-  // (class B). Take it unconditionally so the pin never outlives the step
-  // that consumed the match; its id is used below only when a restore hash is
-  // actually emitted, otherwise the handle drops here and releases the pin.
+  // (class B). Take it unconditionally so unused matches are released in this
+  // build. A source used by a restore descriptor moves into builder state and
+  // then the owning Batch, which pins it until the worker result is consumed.
   std::optional<Block> mounted_restore_src =
       sequence->take_linear_restore_src_block();
   if (needs_restore_hash) {
@@ -888,6 +897,8 @@ void BatchInputBuilder::append_linear_state_row(Sequence* sequence,
       linear_state_cache_op.restore_requested = true;
       if (mounted_restore_src.has_value()) {
         linear_state_cache_op.restore_src_slot_id = mounted_restore_src->id();
+        state.linear_restore_src_blocks.emplace_back(
+            std::move(*mounted_restore_src));
       }
     }
   }

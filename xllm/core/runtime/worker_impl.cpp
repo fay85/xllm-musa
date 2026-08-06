@@ -42,11 +42,13 @@ limitations under the License.
 #include "common/device_monitor.h"
 #include "common/global_flags.h"
 #include "common/metrics.h"
+#include "core/common/constants.h"
 #include "core/common/flash_comm1_context.h"
 #include "core/framework/config/beam_search_config.h"
 #include "core/framework/config/disagg_pd_config.h"
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/execution_config.h"
+#include "core/framework/config/kernel_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/load_config.h"
 #include "core/framework/config/profile_config.h"
@@ -184,8 +186,16 @@ void ensure_forward_input_device_tensors(ForwardInput& input,
                                   device);
 }
 
+#if defined(USE_NPU) || defined(USE_MLU)
+struct LinearStateInputRows {
+  std::vector<int32_t> cached_tokens;
+  int64_t active_rows = 0;
+  bool empty_shard = false;
+};
+#endif
+
 #if defined(USE_NPU)
-void prepare_input_params_for_linear_attention(ModelInputParams& input_params) {
+LinearStateInputRows get_npu_linear_state_rows(ModelInputParams& input_params) {
   // Early-return on dummy/empty-shard inputs. Under dp>1, an empty shard is
   // padded with a fake token by worker_impl but its GDN-related tensors
   // (attention.device.kv_cache_tokens_nums etc.) are left undefined. Reading
@@ -194,7 +204,7 @@ void prepare_input_params_for_linear_attention(ModelInputParams& input_params) {
   // core/layers/common/attention_metadata_builder.cpp.
   if (input_params.meta.q_max_seq_len == 0 ||
       input_params.meta.num_sequences == 0) {
-    return;
+    return {{}, 0, /*empty_shard=*/true};
   }
   const std::vector<int32_t>& host_q_seq_lens =
       input_params.attention.host.q_seq_lens;
@@ -223,46 +233,77 @@ void prepare_input_params_for_linear_attention(ModelInputParams& input_params) {
 
   const std::vector<int32_t>& host_kv_cache_tokens_nums =
       input_params.attention.host.kv_cache_tokens_nums;
-  std::vector<int64_t> has_initial_state;
+  std::vector<int32_t> cached_tokens;
   if (!host_kv_cache_tokens_nums.empty()) {
-    has_initial_state.reserve(host_kv_cache_tokens_nums.size());
-    for (int32_t num_tokens : host_kv_cache_tokens_nums) {
-      has_initial_state.emplace_back(num_tokens > 0 ? 1 : 0);
-    }
+    cached_tokens = host_kv_cache_tokens_nums;
   } else {
     // Compatibility fallback for inputs that only carry the device view.
-    torch::Tensor has_initial_state_tensor =
+    torch::Tensor cached_tokens_tensor =
         input_params.attention.device.kv_cache_tokens_nums > 0;
-    torch::Tensor has_initial_state_cpu = has_initial_state_tensor.contiguous()
-                                              .view({-1})
-                                              .to(torch::kCPU)
-                                              .to(torch::kInt64);
-    has_initial_state.assign(has_initial_state_cpu.data_ptr<int64_t>(),
-                             has_initial_state_cpu.data_ptr<int64_t>() +
-                                 has_initial_state_cpu.numel());
+    torch::Tensor cached_tokens_cpu = cached_tokens_tensor.contiguous()
+                                          .view({-1})
+                                          .to(torch::kCPU)
+                                          .to(torch::kInt32);
+    cached_tokens.assign(
+        cached_tokens_cpu.data_ptr<int32_t>(),
+        cached_tokens_cpu.data_ptr<int32_t>() + cached_tokens_cpu.numel());
   }
-  const int64_t has_initial_state_size =
-      static_cast<int64_t>(has_initial_state.size());
-  CHECK_GT(has_initial_state_size, 0)
-      << "kv_cache_tokens_nums must not be empty for linear attention";
-  CHECK(batch_size == has_initial_state_size ||
-        batch_size % has_initial_state_size == 0)
-      << "kv_cache_tokens_nums size must match or evenly divide active batch "
-      << "size, kv_cache_tokens_nums_size=" << has_initial_state_size
-      << ", batch_size=" << batch_size;
-  if (batch_size == has_initial_state_size) {
-    input_params.parallel.has_initial_state = std::move(has_initial_state);
-    return;
+  return {std::move(cached_tokens), batch_size, /*empty_shard=*/false};
+}
+#endif
+
+#if defined(USE_MLU)
+LinearStateInputRows get_mlu_linear_state_rows(ModelInputParams& input_params) {
+  const std::vector<int32_t>& cached_tokens =
+      input_params.attention.host.kv_cache_tokens_nums;
+  const std::vector<int32_t>& host_q_seq_lens =
+      input_params.attention.host.q_seq_lens;
+  const int64_t sequence_rows = static_cast<int64_t>(cached_tokens.size());
+  const int64_t active_rows = static_cast<int64_t>(host_q_seq_lens.size()) - 1;
+  const int64_t cache_op_rows =
+      static_cast<int64_t>(input_params.linear_state_cache_ops.size());
+
+  // A data-parallel worker may receive an empty shard during graph warmup.
+  if (sequence_rows == 0 && active_rows == -1 && cache_op_rows == 0) {
+    input_params.embedding.linear_state_ids = {kPaddingLinearStateId};
+    return {{}, 0, /*empty_shard=*/true};
   }
 
-  const int64_t repeat_count = batch_size / has_initial_state_size;
-  input_params.parallel.has_initial_state.clear();
-  input_params.parallel.has_initial_state.reserve(batch_size);
-  for (int64_t i = 0; i < has_initial_state_size; ++i) {
-    for (int64_t repeat_idx = 0; repeat_idx < repeat_count; ++repeat_idx) {
-      input_params.parallel.has_initial_state.push_back(has_initial_state[i]);
-    }
+  CHECK_GT(sequence_rows, 0)
+      << "invalid MLU linear-state input row counts: sequence_rows="
+      << sequence_rows << ", active_rows=" << active_rows
+      << ", cache_op_rows=" << cache_op_rows;
+  CHECK_GT(active_rows, 0)
+      << "invalid MLU linear-state input row counts: sequence_rows="
+      << sequence_rows << ", active_rows=" << active_rows
+      << ", cache_op_rows=" << cache_op_rows;
+  CHECK_EQ(host_q_seq_lens.front(), 0)
+      << "MLU linear-state q_seq_lens must start with zero";
+  CHECK_EQ(active_rows % sequence_rows, 0)
+      << "invalid MLU linear-state input row counts: sequence_rows="
+      << sequence_rows << ", active_rows=" << active_rows
+      << ", cache_op_rows=" << cache_op_rows;
+  CHECK_EQ(cache_op_rows, active_rows)
+      << "invalid MLU linear-state input row counts: sequence_rows="
+      << sequence_rows << ", active_rows=" << active_rows
+      << ", cache_op_rows=" << cache_op_rows;
+  return {cached_tokens, active_rows, /*empty_shard=*/false};
+}
+#endif
+
+#if defined(USE_NPU) || defined(USE_MLU)
+void prepare_input_params_for_linear_attention(ModelInputParams& input_params) {
+#if defined(USE_NPU)
+  LinearStateInputRows rows = get_npu_linear_state_rows(input_params);
+#elif defined(USE_MLU)
+  LinearStateInputRows rows = get_mlu_linear_state_rows(input_params);
+#endif
+  if (rows.empty_shard) {
+    input_params.linear_state_validity_mask.clear();
+    return;
   }
+  input_params.linear_state_validity_mask =
+      build_linear_state_mask(rows.cached_tokens, rows.active_rows);
 }
 #endif
 
@@ -706,9 +747,15 @@ const CpPlanRuntimeConfig& WorkerImpl::npu_cp_plan_runtime_config() const {
     return npu_cp_runtime_config_;
   }
   CpPlanRuntimeConfig cfg;
-  cfg.enabled = parallel_args_.cp_size() > 1 &&
-                Platform::uses_model_cp_sharding() &&
-                owns_npu_cp_plan_build() && model_supports_model_cp();
+  // NpuCpPlan is the ATB-side CP substrate: it emits cp_ep_meta for ATB graph
+  // nodes and reads attn tp/cp widths out of MappingNPU's json, which only the
+  // ATB branch populates. TORCH models (deepseek_v4) own their CP split inside
+  // the model, so the worker must not shard a second time here -- and must not
+  // reach the mapping CHECK below with an empty mapping.
+  cfg.enabled =
+      parallel_args_.cp_size() > 1 && Platform::uses_model_cp_sharding() &&
+      ::xllm::KernelConfig::get_instance().npu_kernel_backend() == "ATB" &&
+      owns_npu_cp_plan_build() && model_supports_model_cp();
   cfg.has_prefix_slots =
       KVCacheConfig::get_instance().enable_prefix_cache() ||
       SchedulerConfig::get_instance().enable_chunked_prefill();
@@ -858,9 +905,11 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
             expert_load_data_;
       }
     }
+#endif
 
+#if defined(USE_NPU) || defined(USE_MLU)
     if (has_linear_attention_layers(context_.get_model_args())) {
-      prepare_input_params_for_linear_attention(processed_input.input_params);
+      prepare_input_params_for_linear_attention(input_params);
       // Under schedule_overlap chunked prefill the previous chunk's forward
       // runs on compute_stream_ from a worker thread that may not have
       // enqueued its kernels yet when this prepare runs on the main thread.
@@ -868,13 +917,14 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
       // thread, on compute_stream_) so stream ordering between chunk N-1
       // writes and chunk N restore is automatic.
       if (!enable_schedule_overlap()) {
-        restore_linear_state_slots(
-            kv_caches_,
-            processed_input.input_params.linear_state_cache_ops,
-            processed_input.input_params.parallel.has_initial_state);
+        restore_linear_state_slots(kv_caches_,
+                                   input_params.linear_state_cache_ops,
+                                   input_params.linear_state_validity_mask);
       }
     }
+#endif
 
+#if defined(USE_NPU)
     // CP prepare after global attention-meta consumers.
     processed_input.input_params.parallel.cp_plan.prepare(
         processed_input, npu_cp_plan_runtime_config());

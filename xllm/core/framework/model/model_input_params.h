@@ -357,6 +357,9 @@ struct AttentionHostInput {
   std::vector<int32_t> ring_cur_seqlen;
   std::vector<int32_t> ring_cache_seqlen;
   torch::Tensor block_tables;
+
+  const int32_t* graph_q_seq_lens_data = nullptr;
+  const int32_t* graph_kv_seq_lens_data = nullptr;
 };
 
 struct AttentionDeviceInput {
@@ -851,6 +854,9 @@ struct ParallelInput {
   // Attention/FFN paths may need the padded counts, while lm_head output
   // compaction must skip true empty DP ranks.
   std::vector<int32_t> raw_dp_global_token_nums;
+  // max kv seq len of all dp shards. Graph key generation uses this so empty
+  // DP decode ranks pick the same graph as ranks with real decode tokens.
+  std::vector<int32_t> dp_global_kv_max_seq_lens;
   std::vector<int32_t> dp_is_decode;
 
   DpEpPaddingData dp_ep_padding_data;
@@ -867,13 +873,13 @@ struct ParallelInput {
   std::shared_ptr<LayerSynchronizer> layer_wise_load_synchronizer = nullptr;
 #if defined(USE_NPU)
   std::vector<int64_t> query_start_loc;
-  std::vector<int64_t> has_initial_state;
 #endif
 
   ParallelInput to(const torch::Device& device) const {
     ParallelInput out;
     out.dp_global_token_nums = dp_global_token_nums;
     out.raw_dp_global_token_nums = raw_dp_global_token_nums;
+    out.dp_global_kv_max_seq_lens = dp_global_kv_max_seq_lens;
     out.dp_is_decode = dp_is_decode;
     out.dp_ep_padding_data = dp_ep_padding_data;
     out.cp_plan = cp_plan.to(device);
@@ -884,13 +890,13 @@ struct ParallelInput {
     out.layer_wise_load_synchronizer = layer_wise_load_synchronizer;
 #if defined(USE_NPU)
     out.query_start_loc = query_start_loc;
-    out.has_initial_state = has_initial_state;
 #endif
     return out;
   }
 };
 
 using LinearStatePrefixHash = PrefixHash;
+using LinearStateValidityMask = std::vector<int64_t>;
 
 struct LinearStateCacheOp {
   // Live slot the sequence advances its recurrent state in.
@@ -994,6 +1000,7 @@ struct ModelInputParams {
     params.graph = graph.to(device);
     params.dit_forward_input = dit_forward_input.to(device);
     params.linear_state_cache_ops = linear_state_cache_ops;
+    params.linear_state_validity_mask = linear_state_validity_mask;
     params.is_spec_verify = is_spec_verify;
     params.num_accepted_tokens = safe_to(num_accepted_tokens, device, true);
     params.num_accepted_tokens_host = num_accepted_tokens_host;
@@ -1121,8 +1128,13 @@ struct ModelInputParams {
 
   // Structured per-row linear-state cache operations.
   std::vector<LinearStateCacheOp> linear_state_cache_ops;
+  // Worker-produced per-row result declaring whether the recurrent state is
+  // valid for model-forward consumption after restore processing.
+  LinearStateValidityMask linear_state_validity_mask;
 
   bool is_spec_verify = false;
+  // Propagated to AttentionMetadata for caller-managed cacheless prefill.
+  bool prefill_without_cache = false;
   torch::Tensor num_accepted_tokens;
   // Backend-neutral state reused by the next MTP draft step.
   MtpTopkStatePtr mtp_topk_state;
