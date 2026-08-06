@@ -115,8 +115,7 @@ class TvmffiEventHandoff final {
 TvmffiEventHandoff& get_or_create_tvmffi_event_handoff(
     c10::DeviceIndex device_index,
     c10::DeviceType device_type) {
-  static thread_local std::array<std::optional<TvmffiEventHandoff>, 8>
-      slots;
+  static thread_local std::array<std::optional<TvmffiEventHandoff>, 8> slots;
   CHECK(device_index >= 0 &&
         device_index < static_cast<c10::DeviceIndex>(slots.size()))
       << "invalid MUSA device index: " << device_index;
@@ -162,9 +161,9 @@ bool current_stream_is_valid(c10::DeviceIndex device_index) {
 }
 
 bool enqueue_stream_dependency(const torch::Device& device,
-                                    const c10::musa::MUSAStream& producer,
-                                    const c10::musa::MUSAStream& consumer,
-                                    c10::Event& event) {
+                               const c10::musa::MUSAStream& producer,
+                               const c10::musa::MUSAStream& consumer,
+                               c10::Event& event) {
   try {
     c10::musa::MUSAGuard device_guard(device.index());
     event.record(producer.unwrap());
@@ -332,9 +331,9 @@ TvmffiStreamGuard::TvmffiStreamGuard(const torch::Device& device)
         device_.index(), current_stream.device_type());
     uses_event_handoff_ =
         enqueue_stream_dependency(device_,
-                                       current_stream,
-                                       ffi_stream,
-                                       event_handoff.current_to_ffi_event_);
+                                  current_stream,
+                                  ffi_stream,
+                                  event_handoff.current_to_ffi_event_);
     if (!uses_event_handoff_) {
       sync_current_stream(device_);
     }
@@ -352,14 +351,12 @@ TvmffiStreamGuard::~TvmffiStreamGuard() {
           c10::musa::getCurrentMUSAStream(device_.index());
       const c10::musa::MUSAStream ffi_stream =
           get_or_create_tvmffi_stream(device_.index());
-      TvmffiEventHandoff& event_handoff =
-          get_or_create_tvmffi_event_handoff(device_.index(),
-                                             current_stream.device_type());
-      if (!enqueue_stream_dependency(
-              device_,
-              ffi_stream,
-              current_stream,
-              event_handoff.ffi_to_current_event_)) {
+      TvmffiEventHandoff& event_handoff = get_or_create_tvmffi_event_handoff(
+          device_.index(), current_stream.device_type());
+      if (!enqueue_stream_dependency(device_,
+                                     ffi_stream,
+                                     current_stream,
+                                     event_handoff.ffi_to_current_event_)) {
         sync_ffi_stream(device_);
       }
     } else {

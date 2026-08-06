@@ -529,12 +529,12 @@ void prepare_fused_moe_bf16_aot(const torch::Device& device) {
 }
 
 torch::Tensor fused_moe_aot_fp8(const torch::Tensor& hidden_states,
-                                     const torch::Tensor& w13,
-                                     const torch::Tensor& w13_scale,
-                                     const torch::Tensor& w2,
-                                     const torch::Tensor& w2_scale,
-                                     const torch::Tensor& topk_weights,
-                                     const torch::Tensor& topk_ids) {
+                                const torch::Tensor& w13,
+                                const torch::Tensor& w13_scale,
+                                const torch::Tensor& w2,
+                                const torch::Tensor& w2_scale,
+                                const torch::Tensor& topk_weights,
+                                const torch::Tensor& topk_ids) {
   check_fp8_inputs(
       hidden_states, w13, w13_scale, w2, w2_scale, topk_weights, topk_ids);
   const KernelConfig* config =
@@ -579,10 +579,10 @@ torch::Tensor fused_moe_aot_fp8(const torch::Tensor& hidden_states,
 }
 
 torch::Tensor fused_moe_aot_bf16(const torch::Tensor& hidden_states,
-                                      const torch::Tensor& w13,
-                                      const torch::Tensor& w2,
-                                      const torch::Tensor& topk_weights,
-                                      const torch::Tensor& topk_ids) {
+                                 const torch::Tensor& w13,
+                                 const torch::Tensor& w2,
+                                 const torch::Tensor& topk_weights,
+                                 const torch::Tensor& topk_ids) {
   check_bf16_inputs(hidden_states, w13, w2, topk_weights, topk_ids);
   const KernelConfig* config =
       find_config(hidden_states.size(0), /*use_fp8=*/false);

@@ -322,18 +322,18 @@ void prepare_fused_moe_aot(const torch::Device& device);
 void prepare_fused_moe_bf16_aot(const torch::Device& device);
 
 torch::Tensor fused_moe_aot_fp8(const torch::Tensor& hidden_states,
-                                     const torch::Tensor& w13,
-                                     const torch::Tensor& w13_scale,
-                                     const torch::Tensor& w2,
-                                     const torch::Tensor& w2_scale,
-                                     const torch::Tensor& topk_weights,
-                                     const torch::Tensor& topk_ids);
+                                const torch::Tensor& w13,
+                                const torch::Tensor& w13_scale,
+                                const torch::Tensor& w2,
+                                const torch::Tensor& w2_scale,
+                                const torch::Tensor& topk_weights,
+                                const torch::Tensor& topk_ids);
 
 torch::Tensor fused_moe_aot_bf16(const torch::Tensor& hidden_states,
-                                      const torch::Tensor& w13,
-                                      const torch::Tensor& w2,
-                                      const torch::Tensor& topk_weights,
-                                      const torch::Tensor& topk_ids);
+                                 const torch::Tensor& w13,
+                                 const torch::Tensor& w2,
+                                 const torch::Tensor& topk_weights,
+                                 const torch::Tensor& topk_ids);
 
 torch::Tensor random_sample(const torch::Tensor& probs);
 

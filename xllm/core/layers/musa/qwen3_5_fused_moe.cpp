@@ -125,9 +125,9 @@ bool use_bf16_fused_moe_aot(int64_t num_tokens, bool is_decode) {
 }
 
 bool use_moe_topk(int64_t num_tokens,
-                       const torch::Tensor& router_logits,
-                       int64_t num_experts,
-                       int64_t topk) {
+                  const torch::Tensor& router_logits,
+                  int64_t num_experts,
+                  int64_t topk) {
   static const bool enabled =
       util::get_bool_env("XLLM_MUSA_FUSED_MOE_TOPK_SMALL", true);
   static const int64_t max_tokens =
@@ -156,12 +156,11 @@ bool use_fused_shared_expert_gate(int64_t num_tokens) {
 
 }  // namespace
 
-Qwen3_5FusedMoEImpl::Qwen3_5FusedMoEImpl(
-    const ModelArgs& model_args,
-    const FusedMoEArgs& moe_args,
-    const QuantArgs& quant_args,
-    const ParallelArgs& parallel_args,
-    const torch::TensorOptions& options)
+Qwen3_5FusedMoEImpl::Qwen3_5FusedMoEImpl(const ModelArgs& model_args,
+                                         const FusedMoEArgs& moe_args,
+                                         const QuantArgs& quant_args,
+                                         const ParallelArgs& parallel_args,
+                                         const torch::TensorOptions& options)
     : num_experts_(model_args.n_routed_experts()),
       topk_(model_args.num_experts_per_tok()),
       hidden_size_(model_args.hidden_size()),
@@ -262,8 +261,7 @@ Qwen3_5FusedMoEImpl::Qwen3_5FusedMoEImpl(
   }
 }
 
-void Qwen3_5FusedMoEImpl::load_routed_weights(
-    const StateDict& mlp_state_dict) {
+void Qwen3_5FusedMoEImpl::load_routed_weights(const StateDict& mlp_state_dict) {
   if (mlp_state_dict.size() == 0) {
     return;
   }
@@ -399,12 +397,12 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
 
   if (use_fp8_ && use_fused_moe_aot(num_tokens, is_decode)) {
     return xllm::kernel::musa::fused_moe_aot_fp8(hidden_states,
-                                                      w13_,
-                                                      w13_scale_inv_,
-                                                      w2_,
-                                                      w2_scale_inv_,
-                                                      topk_weights,
-                                                      topk_ids);
+                                                 w13_,
+                                                 w13_scale_inv_,
+                                                 w2_,
+                                                 w2_scale_inv_,
+                                                 topk_weights,
+                                                 topk_ids);
   }
 
   if (use_fp8_ && use_contiguous_fp8_moe_ &&

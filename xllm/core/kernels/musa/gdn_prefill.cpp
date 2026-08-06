@@ -1647,8 +1647,7 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
                                     const torch::Tensor& cache_indices,
                                     const torch::Tensor& has_initial_state,
                                     bool silu_activation) {
-  CHECK(query_start_loc.defined() &&
-        is_torch_device(query_start_loc.device()))
+  CHECK(query_start_loc.defined() && is_torch_device(query_start_loc.device()))
       << "causal_conv1d_prefill requires device query_start_loc";
   CHECK(cache_indices.defined() && is_torch_device(cache_indices.device()))
       << "causal_conv1d_prefill requires device cache_indices";

@@ -51,8 +51,8 @@ class TvmffiPreparationSyncGuard final {
   ~TvmffiPreparationSyncGuard();
 
   TvmffiPreparationSyncGuard(const TvmffiPreparationSyncGuard&) = delete;
-  TvmffiPreparationSyncGuard& operator=(
-      const TvmffiPreparationSyncGuard&) = delete;
+  TvmffiPreparationSyncGuard& operator=(const TvmffiPreparationSyncGuard&) =
+      delete;
 
  private:
   bool previous_ = false;
@@ -66,8 +66,8 @@ class TvmffiStreamOverrideGuard final {
   ~TvmffiStreamOverrideGuard();
 
   TvmffiStreamOverrideGuard(const TvmffiStreamOverrideGuard&) = delete;
-  TvmffiStreamOverrideGuard& operator=(
-      const TvmffiStreamOverrideGuard&) = delete;
+  TvmffiStreamOverrideGuard& operator=(const TvmffiStreamOverrideGuard&) =
+      delete;
 
  private:
   torch::Device device_;

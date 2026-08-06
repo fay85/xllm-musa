@@ -41,10 +41,10 @@ class Qwen3_5FusedMoEImpl : public torch::nn::Module {
  public:
   Qwen3_5FusedMoEImpl() = default;
   Qwen3_5FusedMoEImpl(const ModelArgs& model_args,
-                          const FusedMoEArgs& moe_args,
-                          const QuantArgs& quant_args,
-                          const ParallelArgs& parallel_args,
-                          const torch::TensorOptions& options);
+                      const FusedMoEArgs& moe_args,
+                      const QuantArgs& quant_args,
+                      const ParallelArgs& parallel_args,
+                      const torch::TensorOptions& options);
 
   torch::Tensor forward(const torch::Tensor& hidden_states,
                         const ModelInputParams& input_params);
