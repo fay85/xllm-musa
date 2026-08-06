@@ -48,7 +48,7 @@ torch::Tensor gemm_fp8_nt_groupwise(
     out = torch::empty({m, n}, a.options().dtype(output_dtype));
   }
 
-  MusaTvmffiStreamGuard stream_guard(a.device());
+  TvmffiStreamGuard stream_guard(a.device());
 
   static const std::string kGemmOpsUri = "gemm_ops";
   get_function(kGemmOpsUri, "gemm_fp8_nt_groupwise")(

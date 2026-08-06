@@ -67,7 +67,7 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
   if (use_qwen35_moe) {
     moe_mlp_ =
         register_module("mlp",
-                        Qwen3_5MusaFusedMoE(model_args,
+                        Qwen3_5FusedMoE(model_args,
                                             FusedMoEArgs{.is_gated = true},
                                             quant_args,
                                             parallel_args,

@@ -787,7 +787,7 @@ torch::Tensor kkt_solve(
                                                    use_varlen_kkt,
                                                    use_strided_abi);
     if (mate_kkt_module_available(uri)) {
-      if (ensure_tilelang_musa_loader()) {
+      if (ensure_tilelang_loader()) {
         if (is_varlen) {
           if (use_c1_partial_kkt) {
             return kkt_solve_mate_ffi(
@@ -1026,7 +1026,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   }
 
   // Register the TileLang loader before resolving FFI functions.
-  ensure_tilelang_musa_loader();
+  ensure_tilelang_loader();
 
   const std::string full_varlen_uri = get_mate_gdn_prefill_full_varlen_uri(
       num_q_heads, num_v_heads, query.scalar_type());
@@ -1217,7 +1217,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     torch::Tensor output;
     torch::Tensor final_state;
     {
-      MusaTvmffiStreamGuard stream_guard(query.device());
+      TvmffiStreamGuard stream_guard(query.device());
       a = kkt_solve(key,
                     beta,
                     kGdnChunkSize,
@@ -1350,8 +1350,8 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     torch::Tensor output;
     torch::Tensor final_state;
     {
-      MusaTvmffiStreamGuard stream_guard(query.device());
-      CHECK(ensure_tilelang_musa_loader())
+      TvmffiStreamGuard stream_guard(query.device());
+      CHECK(ensure_tilelang_loader())
           << "TileLang MUSA FFI loader required for Mate KKT reuse path";
       a = ensure_scratch_tensor(
           scratch.a,
@@ -1525,7 +1525,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   torch::Tensor output;
   torch::Tensor final_state;
   {
-    MusaTvmffiStreamGuard stream_guard(query.device());
+    TvmffiStreamGuard stream_guard(query.device());
     auto run = get_function(uri, "run");
     a = torch::empty({1, num_tokens, num_v_heads, kGdnChunkSize},
                      query.options());
@@ -1648,12 +1648,12 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
                                     const torch::Tensor& has_initial_state,
                                     bool silu_activation) {
   CHECK(query_start_loc.defined() &&
-        is_torch_musa_device(query_start_loc.device()))
+        is_torch_device(query_start_loc.device()))
       << "causal_conv1d_prefill requires device query_start_loc";
-  CHECK(cache_indices.defined() && is_torch_musa_device(cache_indices.device()))
+  CHECK(cache_indices.defined() && is_torch_device(cache_indices.device()))
       << "causal_conv1d_prefill requires device cache_indices";
   CHECK(has_initial_state.defined() &&
-        is_torch_musa_device(has_initial_state.device()))
+        is_torch_device(has_initial_state.device()))
       << "causal_conv1d_prefill requires device has_initial_state";
 
   static const bool use_token_major = [] {

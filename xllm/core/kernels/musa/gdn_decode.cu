@@ -974,7 +974,7 @@ torch::Tensor mate_gated_delta_rule_decode(
 
   {
     // Synchronize the FFI pool-stream fallback with the current torch stream.
-    MusaTvmffiStreamGuard stream_guard(query.device());
+    TvmffiStreamGuard stream_guard(query.device());
 
     if (use_direct_tvmffi) {
       // The native TVM-FFI ABI accepts scale as a runtime scalar.

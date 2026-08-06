@@ -313,15 +313,15 @@ torch::Tensor fused_moe_ragged_combine(const torch::Tensor& down,
                                        int64_t alignment);
 
 // AOT kernels support decode batch sizes 1 through 8.
-bool musa_fused_moe_aot_available(int64_t num_tokens);
+bool fused_moe_aot_available(int64_t num_tokens);
 
-bool musa_fused_moe_bf16_aot_available(int64_t num_tokens);
+bool fused_moe_bf16_aot_available(int64_t num_tokens);
 
-void prepare_musa_fused_moe_aot(const torch::Device& device);
+void prepare_fused_moe_aot(const torch::Device& device);
 
-void prepare_musa_fused_moe_bf16_aot(const torch::Device& device);
+void prepare_fused_moe_bf16_aot(const torch::Device& device);
 
-torch::Tensor musa_fused_moe_aot_fp8(const torch::Tensor& hidden_states,
+torch::Tensor fused_moe_aot_fp8(const torch::Tensor& hidden_states,
                                      const torch::Tensor& w13,
                                      const torch::Tensor& w13_scale,
                                      const torch::Tensor& w2,
@@ -329,7 +329,7 @@ torch::Tensor musa_fused_moe_aot_fp8(const torch::Tensor& hidden_states,
                                      const torch::Tensor& topk_weights,
                                      const torch::Tensor& topk_ids);
 
-torch::Tensor musa_fused_moe_aot_bf16(const torch::Tensor& hidden_states,
+torch::Tensor fused_moe_aot_bf16(const torch::Tensor& hidden_states,
                                       const torch::Tensor& w13,
                                       const torch::Tensor& w2,
                                       const torch::Tensor& topk_weights,
@@ -393,10 +393,10 @@ torch::Tensor ragged_moe_gemm_fp8(const torch::Tensor& input,
                                   torch::ScalarType output_dtype,
                                   int64_t alignment);
 
-std::tuple<torch::Tensor, torch::Tensor> musa_moe_topk_softmax(
+std::tuple<torch::Tensor, torch::Tensor> moe_topk_softmax(
     const torch::Tensor& router_logits,
     int64_t topk);
-bool musa_moe_topk_softmax_available();
+bool moe_topk_softmax_available();
 
 }  // namespace xllm::kernel::musa
 

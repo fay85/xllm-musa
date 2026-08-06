@@ -68,12 +68,12 @@ AttentionMetadata build_expanded_decode_metadata(
 
 bool qwen35_mtp_attention_debug_enabled() {
   static const bool enabled = std::getenv("XLLM_DEBUG_QWEN35_MTP") != nullptr;
-  return enabled && !xllm::kernel::musa::is_musa_stream_capturing();
+  return enabled && !xllm::kernel::musa::is_stream_capturing();
 }
 
 void qwen35_mtp_attention_debug_sync(const char* stage) {
   if (!qwen35_mtp_attention_debug_enabled() ||
-      xllm::kernel::musa::is_musa_stream_capturing()) {
+      xllm::kernel::musa::is_stream_capturing()) {
     return;
   }
   LOG(INFO) << "[Qwen3.5 MTP attention debug] sync begin: " << stage;
