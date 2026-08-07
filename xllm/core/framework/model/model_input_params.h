@@ -28,6 +28,7 @@ limitations under the License.
 
 #include "common/types.h"
 #include "framework/block/block.h"
+#include "framework/eplb/eplb_info.h"
 #include "platform/layer_synchronizer.h"
 #if defined(USE_NPU)
 #include "platform/npu/npu_layer_synchronizer.h"
@@ -1133,6 +1134,8 @@ struct ModelInputParams {
   LinearStateValidityMask linear_state_validity_mask;
 
   bool is_spec_verify = false;
+  // Propagated to AttentionMetadata for caller-managed cacheless prefill.
+  bool prefill_without_cache = false;
   torch::Tensor num_accepted_tokens;
   // Backend-neutral state reused by the next MTP draft step.
   MtpTopkStatePtr mtp_topk_state;
