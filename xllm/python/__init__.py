@@ -43,18 +43,18 @@ from __future__ import annotations
 
 import sys
 
-from xllm.python import platform
+from xllm.python.platform import current_platform
 
 # Bound before anything else in the package so that a module reached from here
 # already finds ``xllm.python.kernels`` in place.
-if platform.is_gpu():
+if current_platform.is_cuda():
     from xllm.python import kernels_cuda as kernels
-elif platform.is_npu():
+elif current_platform.is_npu():
     from xllm.python import kernels_npu as kernels
 else:
     raise ImportError(
-        f"no kernel package for platform '{platform.current_platform()}'; add "
-        f"xllm/python/kernels_{platform.current_platform()}/ exporting the same "
+        f"no kernel package for platform '{current_platform.device_type()}'; add "
+        f"xllm/python/kernels_{current_platform.device_type()}/ exporting the same "
         "names as its peers, and import it here"
     )
 

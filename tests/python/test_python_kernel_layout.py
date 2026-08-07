@@ -141,7 +141,7 @@ def test_platform_queries_stay_in_the_owning_layers() -> None:
             if not isinstance(node, ast.Call):
                 continue
             name = _qualified_name(node.func)
-            if not name.endswith(("platform.is_gpu", "platform.is_npu")):
+            if not name.endswith(("platform.is_cuda", "platform.is_npu")):
                 continue
             if relative != binding and not relative.is_relative_to(executor_root):
                 violations.append(f"{relative}:{node.lineno}: {name}")

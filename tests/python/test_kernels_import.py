@@ -72,7 +72,7 @@ _NPU_SCHEMAS = (
 )
 
 _PLATFORM_REQUIRED = pytest.mark.skipif(
-    not (platform.is_gpu() or platform.is_npu()),
+    not (platform.current_platform.is_cuda() or platform.current_platform.is_npu()),
     reason="no kernel package for this platform",
 )
 
@@ -132,15 +132,20 @@ def _run_isolated_python(
 
 
 def test_platform_queries_are_no_argument(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(platform, "current_platform", lambda: "npu")
-    assert platform.is_npu() and not platform.is_gpu()
-    monkeypatch.setattr(platform, "current_platform", lambda: "cuda")
-    assert platform.is_gpu() and not platform.is_npu()
+    current_platform = platform.current_platform
+    monkeypatch.setattr(
+        type(current_platform), "enum", classmethod(lambda cls: platform.PlatformEnum.NPU)
+    )
+    assert current_platform.is_npu() and not current_platform.is_cuda()
+    monkeypatch.setattr(
+        type(current_platform), "enum", classmethod(lambda cls: platform.PlatformEnum.CUDA)
+    )
+    assert current_platform.is_cuda() and not current_platform.is_npu()
 
 
 @_PLATFORM_REQUIRED
 def test_binding_import_contract() -> None:
-    schemas = _CUDA_SCHEMAS if platform.is_gpu() else _NPU_SCHEMAS
+    schemas = _CUDA_SCHEMAS if platform.current_platform.is_cuda() else _NPU_SCHEMAS
     _run_isolated_python(
         """
         import sys
@@ -149,12 +154,12 @@ def test_binding_import_contract() -> None:
         from xllm.python import kernels
         import xllm.python.kernels
         from xllm.python.kernels import rms_norm
-        from xllm.python import platform
+        from xllm.python.platform import current_platform
 
-        selected = f"xllm.python.kernels_{'cuda' if platform.is_gpu() else 'npu'}"
+        selected = f"xllm.python.kernels_{'cuda' if current_platform.is_cuda() else 'npu'}"
         peer = (
             "xllm.python.kernels_npu"
-            if platform.is_gpu()
+            if current_platform.is_cuda()
             else "xllm.python.kernels_cuda"
         )
         assert kernels is sys.modules[selected]

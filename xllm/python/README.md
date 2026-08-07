@@ -37,9 +37,9 @@ The peers share no code and never import each other. `xllm/python/__init__.py`
 binds the one matching the active platform:
 
 ```python
-if platform.is_gpu():
+if current_platform.is_cuda():
     from xllm.python import kernels_cuda as kernels
-elif platform.is_npu():
+elif current_platform.is_npu():
     from xllm.python import kernels_npu as kernels
 ```
 
@@ -143,7 +143,8 @@ up the change.
    implementation.
 3. Add `_custom_op.py` with the FakeTensor implementations of the platform's
    C++ operators.
-4. Teach `platform.current_platform()` to report `<device>` and add the matching
+4. Teach `Platform` in `xllm/python/platform.py` to report `<device>` (extend
+   `PlatformEnum` and the detection in `Platform.enum`) and add the matching
    branch to the import in `xllm/python/__init__.py`.
 5. `setup.py --device <device>` then ships it. Before that, a build for the
    device logs the packages that do exist and ships none of them.
