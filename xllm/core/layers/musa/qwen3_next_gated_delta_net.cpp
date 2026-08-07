@@ -52,24 +52,23 @@ void Qwen3NextGatedDeltaNetImpl::init_next_projections(
     const ParallelArgs& parallel_args,
     const torch::TensorOptions& options) {
   // QKVZ projection used by Qwen3-Next linear attention.
-  qkvz_proj_ =
-      register_module("in_proj_qkvz",
-                      musa::ColumnParallelLinear(args.hidden_size(),
-                                                 k_size_ * 2 + v_size_ * 2,
-                                                 /*bias=*/false,
-                                                 /*gather_output=*/false,
-                                                 quant_args,
-                                                 parallel_args.tp_group_,
-                                                 options));
+  qkvz_proj_ = register_module("in_proj_qkvz",
+                               ColumnParallelLinear(args.hidden_size(),
+                                                    k_size_ * 2 + v_size_ * 2,
+                                                    /*bias=*/false,
+                                                    /*gather_output=*/false,
+                                                    quant_args,
+                                                    parallel_args.tp_group_,
+                                                    options));
   // BA projection used to derive gating and beta terms.
   ba_proj_ = register_module("in_proj_ba",
-                             musa::ColumnParallelLinear(args.hidden_size(),
-                                                        num_v_heads_ * 2,
-                                                        /*bias=*/false,
-                                                        /*gather_output=*/false,
-                                                        quant_args,
-                                                        parallel_args.tp_group_,
-                                                        options));
+                             ColumnParallelLinear(args.hidden_size(),
+                                                  num_v_heads_ * 2,
+                                                  /*bias=*/false,
+                                                  /*gather_output=*/false,
+                                                  quant_args,
+                                                  parallel_args.tp_group_,
+                                                  options));
 }
 
 std::pair<torch::Tensor, torch::Tensor>
@@ -131,42 +130,38 @@ Qwen3_5GatedDeltaNetImpl::Qwen3_5GatedDeltaNetImpl(
                                  parallel_args,
                                  options,
                                  /*init_projections=*/false) {
-  in_proj_qkv_ =
-      register_module("in_proj_qkv",
-                      musa::ColumnParallelLinear(args.hidden_size(),
-                                                 k_size_ * 2 + v_size_,
-                                                 /*bias=*/false,
-                                                 /*gather_output=*/false,
-                                                 quant_args,
-                                                 parallel_args.tp_group_,
-                                                 options));
-  in_proj_z_ =
-      register_module("in_proj_z",
-                      musa::ColumnParallelLinear(args.hidden_size(),
-                                                 v_size_,
-                                                 /*bias=*/false,
-                                                 /*gather_output=*/false,
-                                                 quant_args,
-                                                 parallel_args.tp_group_,
-                                                 options));
-  in_proj_b_ =
-      register_module("in_proj_b",
-                      musa::ColumnParallelLinear(args.hidden_size(),
-                                                 num_v_heads_,
-                                                 /*bias=*/false,
-                                                 /*gather_output=*/false,
-                                                 quant_args,
-                                                 parallel_args.tp_group_,
-                                                 options));
-  in_proj_a_ =
-      register_module("in_proj_a",
-                      musa::ColumnParallelLinear(args.hidden_size(),
-                                                 num_v_heads_,
-                                                 /*bias=*/false,
-                                                 /*gather_output=*/false,
-                                                 quant_args,
-                                                 parallel_args.tp_group_,
-                                                 options));
+  in_proj_qkv_ = register_module("in_proj_qkv",
+                                 ColumnParallelLinear(args.hidden_size(),
+                                                      k_size_ * 2 + v_size_,
+                                                      /*bias=*/false,
+                                                      /*gather_output=*/false,
+                                                      quant_args,
+                                                      parallel_args.tp_group_,
+                                                      options));
+  in_proj_z_ = register_module("in_proj_z",
+                               ColumnParallelLinear(args.hidden_size(),
+                                                    v_size_,
+                                                    /*bias=*/false,
+                                                    /*gather_output=*/false,
+                                                    quant_args,
+                                                    parallel_args.tp_group_,
+                                                    options));
+  in_proj_b_ = register_module("in_proj_b",
+                               ColumnParallelLinear(args.hidden_size(),
+                                                    num_v_heads_,
+                                                    /*bias=*/false,
+                                                    /*gather_output=*/false,
+                                                    quant_args,
+                                                    parallel_args.tp_group_,
+                                                    options));
+  in_proj_a_ = register_module("in_proj_a",
+                               ColumnParallelLinear(args.hidden_size(),
+                                                    num_v_heads_,
+                                                    /*bias=*/false,
+                                                    /*gather_output=*/false,
+                                                    quant_args,
+                                                    parallel_args.tp_group_,
+                                                    options));
 }
 
 torch::Tensor Qwen3_5GatedDeltaNetImpl::merge_qkvz_from_split_activations(

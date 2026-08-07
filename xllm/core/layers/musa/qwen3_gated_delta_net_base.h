@@ -29,7 +29,7 @@ limitations under the License.
 #include "framework/state_dict/state_dict.h"
 #include "framework/state_dict/utils.h"
 #include "layers/common/attention.h"
-#include "layers/musa/linear.h"
+#include "layers/common/linear.h"
 #include "layers/musa/rms_norm_gated.h"
 
 namespace xllm {
@@ -87,8 +87,8 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
   int64_t rank_ = 0;
   int32_t conv_kernel_size_ = 0;
 
-  musa::ColumnParallelLinear conv1d_{nullptr};
-  musa::RowParallelLinear o_proj_{nullptr};
+  ColumnParallelLinear conv1d_{nullptr};
+  RowParallelLinear o_proj_{nullptr};
   musa::RmsNormGated norm_{nullptr};
 
   DEFINE_WEIGHT(dt_bias);

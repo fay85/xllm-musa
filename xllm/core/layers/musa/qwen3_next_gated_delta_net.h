@@ -20,6 +20,7 @@ limitations under the License.
 #include <string>
 #include <utility>
 
+#include "layers/common/linear.h"
 #include "layers/musa/qwen3_gated_delta_net_base.h"
 
 namespace xllm {
@@ -57,8 +58,8 @@ class Qwen3NextGatedDeltaNetImpl : public Qwen3GatedDeltaNetBaseImpl {
                              const torch::TensorOptions& options);
 
  private:
-  musa::ColumnParallelLinear qkvz_proj_{nullptr};
-  musa::ColumnParallelLinear ba_proj_{nullptr};
+  ColumnParallelLinear qkvz_proj_{nullptr};
+  ColumnParallelLinear ba_proj_{nullptr};
 };
 TORCH_MODULE(Qwen3NextGatedDeltaNet);
 
@@ -86,10 +87,10 @@ class Qwen3_5GatedDeltaNetImpl final : public Qwen3NextGatedDeltaNetImpl {
   torch::Tensor merge_ba_from_split_activations(const torch::Tensor& b,
                                                 const torch::Tensor& a) const;
 
-  musa::ColumnParallelLinear in_proj_qkv_{nullptr};
-  musa::ColumnParallelLinear in_proj_z_{nullptr};
-  musa::ColumnParallelLinear in_proj_b_{nullptr};
-  musa::ColumnParallelLinear in_proj_a_{nullptr};
+  ColumnParallelLinear in_proj_qkv_{nullptr};
+  ColumnParallelLinear in_proj_z_{nullptr};
+  ColumnParallelLinear in_proj_b_{nullptr};
+  ColumnParallelLinear in_proj_a_{nullptr};
 
   // Persistent buffers for the split-projection merge path.
   mutable torch::Tensor qkvz_merge_buf_;

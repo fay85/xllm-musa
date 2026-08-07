@@ -2,7 +2,6 @@ include(cc_library)
 
 # MUSA layers - FlashInfer/Mate path
 set(_MUSA_LAYERS_HDRS
-  activation.h
   attention.h
   attention_metadata.h
   attention_metadata_builder.h
@@ -18,11 +17,8 @@ set(_MUSA_LAYERS_HDRS
   qwen3_5_decoder_layer_impl.h
   qwen3_5_fused_moe.h
   rms_norm_gated.h
-  dense_mlp.h
-  linear.h
 )
 set(_MUSA_LAYERS_SRCS
-  activation.cpp
   attention.cpp
   attention_metadata_builder.cpp
   flashinfer_attention.cpp
@@ -36,8 +32,6 @@ set(_MUSA_LAYERS_SRCS
   qwen3_5_decoder_layer_impl.cpp
   qwen3_5_fused_moe.cpp
   rms_norm_gated.cpp
-  dense_mlp.cpp
-  linear.cpp
 )
 set(_MUSA_LAYERS_DEPS
   :cuda_kernels

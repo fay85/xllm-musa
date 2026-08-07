@@ -424,9 +424,8 @@ Qwen3GatedDeltaNetBaseImpl::Qwen3GatedDeltaNetBaseImpl(
   conv_kernel_size_ = args.linear_conv_kernel_dim();
 
   // Shared causal conv projection over mixed QKV states.
-  conv1d_ =
-      register_module("conv1d",
-                      musa::ColumnParallelLinear(args.linear_conv_kernel_dim(),
+  conv1d_ = register_module("conv1d",
+                            ColumnParallelLinear(args.linear_conv_kernel_dim(),
                                                  k_size_ * 2 + v_size_,
                                                  /*bias=*/false,
                                                  /*gather_output=*/false,
@@ -444,9 +443,8 @@ Qwen3GatedDeltaNetBaseImpl::Qwen3GatedDeltaNetBaseImpl(
                               /*requires_grad=*/false);
 
   // Output projection and gated RMSNorm shared by hybrid variants.
-  o_proj_ =
-      register_module("out_proj",
-                      musa::RowParallelLinear(v_size_,
+  o_proj_ = register_module("out_proj",
+                            RowParallelLinear(v_size_,
                                               args.hidden_size(),
                                               /*bias=*/false,
                                               /*input_is_parallelized=*/true,

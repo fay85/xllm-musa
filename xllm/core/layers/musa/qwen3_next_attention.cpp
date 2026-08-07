@@ -67,21 +67,20 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
   // 1. QKV linear
   qkv_proj_ = register_module(
       "qkv_proj",
-      musa::QKVParallelLinear(args.hidden_size(),
-                              attn_output_gate_ ? num_heads_ * 2 : num_heads_,
-                              num_kv_heads_,
-                              args.head_dim(),
-                              num_kv_head_replicas_,
-                              /*bias=*/args.attention_bias(),
-                              /*gather_output=*/false,
-                              parallel_args,
-                              options,
-                              quant_args));
+      QKVParallelLinear(args.hidden_size(),
+                        attn_output_gate_ ? num_heads_ * 2 : num_heads_,
+                        num_kv_heads_,
+                        args.head_dim(),
+                        num_kv_head_replicas_,
+                        /*bias=*/args.attention_bias(),
+                        /*gather_output=*/false,
+                        parallel_args,
+                        options,
+                        quant_args));
 
   // 2. O proj
-  o_proj_ =
-      register_module("o_proj",
-                      musa::RowParallelLinear(total_num_heads * head_dim_,
+  o_proj_ = register_module("o_proj",
+                            RowParallelLinear(total_num_heads * head_dim_,
                                               args.hidden_size(),
                                               /*bias=*/false,
                                               /*input_is_parallelized=*/true,
