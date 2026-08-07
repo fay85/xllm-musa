@@ -15,7 +15,7 @@ cc_library(
     rms_norm.h
     rotary_embedding.h
     rotary_embedding_util.h
-    $<$<NOT:$<OR:$<BOOL:${USE_ILU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_NPU}>,$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>,$<BOOL:${USE_DCU}>>>:fused_moe.h>
+    $<$<NOT:$<OR:$<BOOL:${USE_ILU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_NPU}>,$<BOOL:${USE_CUDA}>,$<BOOL:${USE_DCU}>>>:fused_moe.h>
     dense_mlp.h
     linear.h
     word_embedding_impl.h
@@ -41,7 +41,7 @@ cc_library(
     rms_norm.cpp
     rotary_embedding.cpp
     rotary_embedding_util.cpp
-    $<$<NOT:$<OR:$<BOOL:${USE_ILU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_NPU}>,$<BOOL:${USE_CUDA}>,$<BOOL:${USE_MUSA}>,$<BOOL:${USE_DCU}>>>:fused_moe.cpp>
+    $<$<NOT:$<OR:$<BOOL:${USE_ILU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_NPU}>,$<BOOL:${USE_CUDA}>,$<BOOL:${USE_DCU}>>>:fused_moe.cpp>
     dense_mlp.cpp
     linear.cpp
     word_embedding_impl.cpp
@@ -62,11 +62,11 @@ cc_library(
     :state_dict
     :model
     :kernels
-    $<$<BOOL:${USE_MUSA}>:musa_attention_metadata_builder>
     glog::glog
     gflags::gflags
     torch
     :platform
+    $<$<BOOL:${USE_NPU}>:npu_layers>
     $<$<BOOL:${USE_MLU}>:mlu_layers>
     $<$<AND:$<BOOL:${USE_CUDA}>,$<NOT:$<BOOL:${USE_MUSA}>>>:cuda_layers>
     $<$<BOOL:${USE_ILU}>:ilu_layers>
@@ -74,3 +74,8 @@ cc_library(
     $<$<BOOL:${USE_MUSA}>:musa_layers>
     $<$<BOOL:${USE_DCU}>:dcu_layers>
 )
+
+if(USE_NPU)
+  # Repeat the static-library cycle so NPU RoPE symbols are resolved.
+  set_property(TARGET common_layers PROPERTY LINK_INTERFACE_MULTIPLICITY 3)
+endif()

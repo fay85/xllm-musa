@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://github.com/jd-opensource/xllm/blob/main/LICENSE
+#     https://github.com/xLLM-AI/xllm/blob/main/LICENSE
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,11 @@ from typing import TYPE_CHECKING, Callable, Protocol
 import torch
 
 if TYPE_CHECKING:
-    from xllm.python.attention.backend import AttentionBackend
+    from xllm.python.attention.backend import (
+        AttentionBackend,
+        AttentionMetadata,
+        LayerCache,
+    )
 
 
 class LayerSynchronizer(Protocol):
@@ -54,6 +58,8 @@ class AclGraphCaptureContext:
 class ForwardContext:
     attention_backend: AttentionBackend
     device: torch.device
+    metadata: AttentionMetadata
+    layer_caches: list[LayerCache]
     acl_graph: AclGraphCaptureContext | None = None
     layer_synchronizer: LayerSynchronizer | None = None
 

@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://github.com/jd-opensource/xllm/blob/main/LICENSE
+#     https://github.com/xLLM-AI/xllm/blob/main/LICENSE
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -29,10 +29,11 @@ from typing import List, Optional, Tuple
 import torch
 import torch.nn as nn
 
-from xllm.python import ops
+from xllm.python import kernels
 from xllm.python.layers import (
     Attention,
     ColumnParallelLinear,
+    GatedMLP,
     HiddenParallelEmbedding,
     RMSNorm,
     RotaryEmbedding,
@@ -116,35 +117,6 @@ class Qwen3Config:
         return num_heads, num_kv_heads, replicas
 
 
-class Qwen3MLP(nn.Module):
-    def __init__(
-        self, cfg: Qwen3Config, dtype: torch.dtype, device: torch.device
-    ) -> None:
-        super().__init__()
-        tp = cfg.tp_size
-        assert cfg.intermediate_size % tp == 0
-        inter_per_rank = cfg.intermediate_size // tp
-        self.gate_up_proj = ColumnParallelLinear(
-            cfg.hidden_size,
-            2 * inter_per_rank,
-            tp,
-            dtype=dtype,
-            device=device,
-        )
-        self.down_proj = RowParallelLinear(
-            inter_per_rank,
-            cfg.hidden_size,
-            tp,
-            dtype=dtype,
-            device=device,
-        )
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        gate_up = self.gate_up_proj(x)
-        act = ops.silu_and_mul(gate_up)
-        return self.down_proj(act)
-
-
 class Qwen3Attention(nn.Module):
     def __init__(
         self, cfg: Qwen3Config, layer_id: int, dtype: torch.dtype, device: torch.device
@@ -200,7 +172,7 @@ class Qwen3Attention(nn.Module):
     ) -> torch.Tensor:
         qkv = self.qkv_proj(hidden)
 
-        q, k, v = ops.fused_qk_norm_rope(
+        q, k, v = kernels.fused_qk_norm_rope(
             qkv,
             num_heads_q=self.num_heads,
             num_heads_k=self.num_kv_heads,
@@ -236,7 +208,13 @@ class Qwen3DecoderLayer(nn.Module):
         self.post_attention_layernorm = RMSNorm(
             cfg.hidden_size, cfg.rms_norm_eps, dtype=dtype, device=device
         )
-        self.mlp = Qwen3MLP(cfg, dtype, device)
+        self.mlp = GatedMLP(
+            cfg.hidden_size,
+            cfg.intermediate_size,
+            cfg.tp_size,
+            dtype,
+            device,
+        )
 
     def forward(
         self,
@@ -417,10 +395,9 @@ class Qwen3ForCausalLM(PyModelBase):
             copy_in(p + "mlp.down_proj.weight",
                     shard(p + "mlp.down_proj.weight", dim=1))
 
-            if self.device.type in ("npu", "privateuseone"):
-                layer = self.model.layers[i]
-                layer.self_attn.o_proj.format_npu_weight_()
-                layer.mlp.down_proj.format_npu_weight_()
+            layer = self.model.layers[i]
+            layer.self_attn.o_proj.process_weights_after_loading()
+            layer.mlp.down_proj.process_weights_after_loading()
 
         norm_name = "model.norm.weight"
         if not find(norm_name):

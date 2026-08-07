@@ -300,12 +300,21 @@ Master::Master(const Options& options, EngineType type)
   const std::vector<torch::Device> devices = {visible_devices[device_idx]};
   // World size is the node count (one worker per process).
   const int32_t global_world_size = options_.nnodes();
-  std::string cp_model_type;
-  if (options_.cp_size() > 1 && Platform::uses_model_cp_sharding()) {
-    cp_model_type = util::get_model_type(model_path, options_.backend());
+  std::string model_type;
+  if ((options_.cp_size() > 1 && Platform::uses_model_cp_sharding()) ||
+      (ModelConfig::is_python_model_impl(
+           ModelConfig::get_instance().model_impl()) &&
+       options_.num_speculative_tokens() > 0)) {
+    model_type = util::get_model_type(model_path, options_.backend());
   }
+  const std::optional<std::string> speculative_error =
+      ModelConfig::validate_python_speculative_decode(
+          ModelConfig::get_instance().model_impl(),
+          model_type,
+          options_.num_speculative_tokens());
+  CHECK(!speculative_error.has_value()) << speculative_error.value();
   const std::optional<std::string> cp_error =
-      validate_model_cp(options_, type, cp_model_type, global_world_size);
+      validate_model_cp(options_, type, model_type, global_world_size);
   CHECK(!cp_error.has_value()) << cp_error.value();
   options_.enable_mla(util::should_enable_mla(model_path, options_.backend()));
   print_startup_banner(model_path, options_.backend(), options_.node_rank());
@@ -396,6 +405,8 @@ Master::Master(const Options& options, EngineType type)
         .enable_mmrs_fusion(options_.enable_mmrs_fusion())
         .mmrs_comm_mode(options_.mmrs_comm_mode())
         .cp_size(options_.cp_size())
+        .instance_role(options_.instance_role())
+        .enable_disagg_pd(options_.enable_disagg_pd())
         .npu_kernel_backend(options_.npu_kernel_backend())
         .enable_chunked_prefill(options_.enable_chunked_prefill())
         .enable_offline_inference(options_.enable_offline_inference())
@@ -619,6 +630,7 @@ Master::Master(const Options& options, EngineType type)
         .model_id(options.model_id())
         .devices(devices)
         .backend(options.backend())
+        .npu_kernel_backend(options_.npu_kernel_backend())
         .enable_prefix_cache(options_.enable_prefix_cache())
         .enable_chunked_prefill(options_.enable_chunked_prefill())
         .enable_offline_inference(options_.enable_offline_inference())
@@ -638,7 +650,8 @@ Master::Master(const Options& options, EngineType type)
         .tp_size(options_.tp_size())
         .sp_size(options_.sp_size())
         .cfg_size(options_.cfg_size())
-        .vae_size(options_.vae_size());
+        .vae_size(options_.vae_size())
+        .text_encoder_tp_size(options_.text_encoder_tp_size());
 
     auto dit_engine = std::make_unique<DiTEngine>(eng_options);
     engine_ = std::move(dit_engine);

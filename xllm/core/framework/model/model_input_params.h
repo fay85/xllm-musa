@@ -28,6 +28,7 @@ limitations under the License.
 
 #include "common/types.h"
 #include "framework/block/block.h"
+#include "framework/eplb/eplb_info.h"
 #include "platform/layer_synchronizer.h"
 #if defined(USE_NPU)
 #include "platform/npu/npu_layer_synchronizer.h"
@@ -357,11 +358,6 @@ struct AttentionHostInput {
   std::vector<int32_t> ring_cur_seqlen;
   std::vector<int32_t> ring_cache_seqlen;
   torch::Tensor block_tables;
-#if defined(USE_MUSA)
-  torch::Tensor paged_kv_indptr;
-  torch::Tensor paged_kv_indices;
-  torch::Tensor paged_kv_last_page_len;
-#endif
 
   const int32_t* graph_q_seq_lens_data = nullptr;
   const int32_t* graph_kv_seq_lens_data = nullptr;
@@ -876,11 +872,8 @@ struct ParallelInput {
 #endif
   uint32_t layers_per_bacth_copy = std::numeric_limits<uint32_t>::max();
   std::shared_ptr<LayerSynchronizer> layer_wise_load_synchronizer = nullptr;
-#if defined(USE_NPU)
-  std::vector<int64_t> query_start_loc;
-#endif
 #if defined(USE_NPU) || defined(USE_MUSA)
-  std::vector<int64_t> has_initial_state;
+  std::vector<int64_t> query_start_loc;
 #endif
 
   ParallelInput to(const torch::Device& device) const {
@@ -896,29 +889,29 @@ struct ParallelInput {
 #endif
     out.layers_per_bacth_copy = layers_per_bacth_copy;
     out.layer_wise_load_synchronizer = layer_wise_load_synchronizer;
-#if defined(USE_NPU)
-    out.query_start_loc = query_start_loc;
-#endif
 #if defined(USE_NPU) || defined(USE_MUSA)
-    out.has_initial_state = has_initial_state;
+    out.query_start_loc = query_start_loc;
 #endif
     return out;
   }
 };
 
 using LinearStatePrefixHash = PrefixHash;
+using LinearStateValidityMask = std::vector<int64_t>;
 
 struct LinearStateCacheOp {
   // Live slot the sequence advances its recurrent state in.
   int32_t linear_state_id = -1;
+  // A newly admitted sequence has no recurrent history. The physical slot may
+  // have been used by an earlier request, so the worker must clear it before
+  // the first forward instead of relying on allocator contents.
+  bool reset_requested = false;
   // Restore request flag and the checkpoint slot the scheduler resolved it to.
   // The worker copies `restore_src_slot_id` -> `linear_state_id`. This mirrors
-  // KV, which sends the worker only the resolved block-swap descriptor and
-  // never the prefix hash. Kept as a bool (not derived from
-  // `restore_src_slot_id >= 0`) so the "restore requested but the scheduler
-  // could not resolve a source -> force cold start" state survives the IPC
-  // boundary; the worker's copy-in relies on that bit
-  // (linear_state_restore.cpp).
+  // KV, which sends the worker only a fully resolved block-swap descriptor and
+  // never the prefix hash. A restore request without a valid source is an
+  // invariant violation because the full-attention KV prefix has already been
+  // reused and cannot be paired with a cold recurrent state.
   bool restore_requested = false;
   int32_t restore_src_slot_id = -1;
 };
@@ -1010,9 +1003,13 @@ struct ModelInputParams {
     params.graph = graph.to(device);
     params.dit_forward_input = dit_forward_input.to(device);
     params.linear_state_cache_ops = linear_state_cache_ops;
+    params.linear_state_validity_mask = linear_state_validity_mask;
     params.is_spec_verify = is_spec_verify;
     params.num_accepted_tokens = safe_to(num_accepted_tokens, device, true);
     params.num_accepted_tokens_host = num_accepted_tokens_host;
+#if defined(USE_MUSA)
+    params.attn_metadata = attn_metadata;
+#endif
     params.mtp_topk_state =
         mtp_topk_state == nullptr ? nullptr : mtp_topk_state->to(device);
     for (const auto& table : multi_block_tables) {
@@ -1137,8 +1134,13 @@ struct ModelInputParams {
 
   // Structured per-row linear-state cache operations.
   std::vector<LinearStateCacheOp> linear_state_cache_ops;
+  // Worker-produced per-row result declaring whether the recurrent state is
+  // valid for model-forward consumption after restore processing.
+  LinearStateValidityMask linear_state_validity_mask;
 
   bool is_spec_verify = false;
+  // Propagated to AttentionMetadata for caller-managed cacheless prefill.
+  bool prefill_without_cache = false;
   torch::Tensor num_accepted_tokens;
   // Backend-neutral state reused by the next MTP draft step.
   MtpTopkStatePtr mtp_topk_state;

@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://github.com/jd-opensource/xllm/blob/main/LICENSE
+#     https://github.com/xLLM-AI/xllm/blob/main/LICENSE
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -35,7 +35,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 
-from xllm.python import ops
+from xllm.python import kernels
 from xllm.python.attention.backend import AttentionBackend, AttentionMetadata
 from xllm.python.model_executor.forward_context import (
     AclGraphCaptureContext,
@@ -64,6 +64,8 @@ class _StaticAttentionMetadata:
     paged_kv_last_page_len_host: torch.Tensor | None = None
     block_table: torch.Tensor | None = None
     kv_seq_lens: torch.Tensor | None = None
+    linear_state_indices: torch.Tensor | None = None
+    has_initial_state: torch.Tensor | None = None
     is_prefill: bool = False
     is_chunked_prefill: bool = False
 
@@ -304,7 +306,7 @@ class DecodeAclGraphRunner(BaseRunner):
                 "decode ACL graph requires device cumulative KV lengths"
             )
         graph_positions = positions.to(torch.int32).contiguous()
-        ops.update_decode_graph_metadata(
+        kernels.update_decode_graph_metadata(
             input_ids,
             graph_positions,
             metadata.slot_mapping,
@@ -426,7 +428,12 @@ class DecodeAclGraphRunner(BaseRunner):
             ].fill_(int(cumulative_seq_lens[-1]))
 
     def _capture(self, entry: _DecodeGraphEntry) -> None:
-        context = ForwardContext(self.attention_backend, self.device)
+        context = ForwardContext(
+            self.attention_backend,
+            self.device,
+            entry.static_metadata,
+            self.layer_caches,
+        )
         with forward_context(context):
             for _ in range(_CAPTURE_WARMUP_STEPS):
                 self.model(entry.static_input_ids, entry.static_positions)
@@ -436,6 +443,8 @@ class DecodeAclGraphRunner(BaseRunner):
         context = ForwardContext(
             self.attention_backend,
             self.device,
+            entry.static_metadata,
+            self.layer_caches,
             acl_graph=capture_context,
         )
         with forward_context(context):

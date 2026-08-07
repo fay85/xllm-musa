@@ -19,6 +19,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -39,6 +40,7 @@ limitations under the License.
 #elif defined(USE_MLU)
 #include "core/layers/mlu/qwen3_5/qwen3_5_hybrid_decoder_layer_base.h"
 #elif defined(USE_MUSA)
+#include "core/layers/musa/attention_metadata_builder.h"
 #include "core/layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 #endif
 
@@ -108,21 +110,25 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
     }
 
 #if defined(USE_MUSA)
-    // MUSA FlashInfer applies causal masking internally. Graph replay must
-    // reuse the graph executor's stable metadata and plan objects rather than
-    // rebuilding metadata (and a dense custom mask) inside model forward.
-    layer::AttentionMetadata attn_metadata =
-        input_params.attn_metadata
-            ? *(input_params.attn_metadata)
-            : layer::AttentionMetadataBuilder::build(input_params,
-                                                     model_args_.enable_mla(),
-                                                     /*attn_mask=*/std::nullopt,
-                                                     /*device=*/device_);
-    attn_metadata.musa.share_fa3_scheduler_metadata = true;
-    attn_metadata.musa.fa3_scheduler_metadata =
-        input_params.attn_metadata
-            ? input_params.attn_metadata->musa.fa3_scheduler_metadata
-            : torch::Tensor();
+    std::optional<layer::musa::AttentionMetadata> owned_attn_metadata;
+    layer::musa::AttentionMetadata* attn_metadata_ptr = nullptr;
+    if (input_params.attn_metadata != nullptr) {
+      auto& existing =
+          layer::musa::get_attention_metadata(*input_params.attn_metadata);
+      if (existing.initialized) {
+        attn_metadata_ptr = &existing;
+      }
+    }
+    if (attn_metadata_ptr == nullptr) {
+      owned_attn_metadata.emplace(
+          layer::musa::build_attention_metadata(input_params,
+                                                model_args_.enable_mla(),
+                                                /*attn_mask=*/std::nullopt,
+                                                /*device=*/device_));
+      attn_metadata_ptr = &owned_attn_metadata.value();
+    }
+    auto& attn_metadata = *attn_metadata_ptr;
+    attn_metadata.share_fa3_scheduler_metadata = true;
 #else
     layer::AttentionMetadata attn_metadata =
         layer::AttentionMetadataBuilder::build(

@@ -66,6 +66,10 @@ struct ModelArgs {
   PROPERTY(int64_t, vocab_size) = -1;
   PROPERTY(int64_t, draft_vocab_size) = 0;
 
+  // DSpark: low-rank dim of the Markov head. 0 = disabled (plain DFlash /
+  // non-DSpark models).
+  PROPERTY(int64_t, markov_rank) = 0;
+
   PROPERTY(bool, use_qk_norm) = false;
   PROPERTY(float, rms_norm_eps) = 0.0f;
 
@@ -575,6 +579,12 @@ struct ModelArgs {
   PROPERTY(bool, zero_cond_t) = false;
   PROPERTY(bool, use_additional_t_cond) = false;
   PROPERTY(bool, use_layer3d_rope) = false;
+
+  // JoyImage-Edit-Plus dit related args
+  PROPERTY(double, mlp_width_ratio) = 4.0;
+  PROPERTY(int64_t, text_dim) = 4096;
+  PROPERTY(std::vector<int64_t>, rope_dim_list) = { 16, 56, 56 };
+  PROPERTY(int64_t, rope_theta_dit) = 10000;
 };
 
 // Qwen hybrid models may describe full-attention layers explicitly via

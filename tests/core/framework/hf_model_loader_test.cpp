@@ -108,6 +108,7 @@ TEST(HFModelLoaderTest, Qwen35DenseBackendAwareModelTypeSelection) {
   EXPECT_EQ(util::get_model_type(reader, fake_model_path, "llm"),
             "qwen3_5_text");
   EXPECT_EQ(util::get_model_type(reader, fake_model_path, "vlm"), "qwen3_5");
+  EXPECT_EQ(ModelRegistry::get_model_backend("qwen3_5_text"), "llm");
 }
 
 TEST(HFModelLoaderTest, Qwen35MoeBackendAwareModelTypeSelection) {
@@ -135,7 +136,15 @@ TEST(HFModelLoaderTest, Qwen35MoeBackendAwareModelTypeSelection) {
             "qwen3_5_moe_text");
   EXPECT_EQ(util::get_model_type(reader, fake_model_path, "vlm"),
             "qwen3_5_moe");
+  EXPECT_EQ(ModelRegistry::get_model_backend("qwen3_5_moe_text"), "llm");
 }
+
+#if defined(USE_MLU)
+TEST(HFModelLoaderTest, Qwen35MoeRootTypeHasCausalModelFactory) {
+  CausalLMFactory factory = ModelRegistry::get_causallm_factory("qwen3_5_moe");
+  EXPECT_TRUE(static_cast<bool>(factory));
+}
+#endif
 
 TEST(HFModelLoaderTest, LoadCompressedTensorsFp8StaticConfig) {
   JsonReader reader;

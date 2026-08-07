@@ -29,9 +29,6 @@ namespace ffi = tvm::ffi;
 #include <string>
 
 #include "dsa_metadata.h"
-#if defined(USE_MUSA)
-#include "layers/musa/attention_metadata.h"
-#endif
 
 namespace xllm::layer {
 
@@ -88,6 +85,8 @@ struct AttentionMetadata {
   std::string compute_dtype;
   bool is_prefill;
   bool is_chunked_prefill;
+  // Run prefill attention without writing key/value tensors to paged cache.
+  bool prefill_without_cache = false;
   bool is_dummy;
   // Whether to apply causal mask. Default: true.
   bool is_causal = true;
@@ -164,6 +163,8 @@ struct AttentionMetadata {
   torch::Tensor chunk_indices;
   torch::Tensor batch;
   torch::Tensor token_block_offset;
+  // Per-sequence recurrent-state validity for prefill/chunked-prefill only.
+  // Decode advances already-initialized states selected by linear state ids.
   torch::Tensor has_initial_states;
   int32_t tot = 0;
 
@@ -173,10 +174,6 @@ struct AttentionMetadata {
   // DeepSeek V4 sparse attention metadata (optional).
   // Built by DSAMetadataBuilder and shared across all layers.
   std::shared_ptr<DSAMetadata> dsa_metadata;
-
-#if defined(USE_MUSA)
-  musa::MusaAttentionMetadata musa;
-#endif
 
 #if defined(USE_NPU)
   // for npu
