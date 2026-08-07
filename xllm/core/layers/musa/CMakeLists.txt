@@ -3,10 +3,10 @@ include(cc_library)
 # MUSA layers - FlashInfer/Mate path
 set(_MUSA_LAYERS_HDRS
   activation.h
-  ../cuda/attention.h
+  attention.h
   attention_metadata.h
   attention_metadata_builder.h
-  ../cuda/flashinfer_attention.h
+  flashinfer_attention.h
   flashinfer_planinfo.h
   ../cuda/base_attention_impl.h
   ../cuda/flashinfer_workspace.h

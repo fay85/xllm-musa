@@ -18,6 +18,7 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <memory>
+#include <optional>
 #include <tuple>
 
 #include "framework/kv_cache/kv_cache.h"
@@ -28,7 +29,7 @@ namespace layer {
 
 class BaseAttentionImpl;
 
-class AttentionImpl : public torch::nn::Module {
+class AttentionImpl final : public torch::nn::Module {
  public:
   AttentionImpl() = default;
 
@@ -47,6 +48,7 @@ class AttentionImpl : public torch::nn::Module {
 
  private:
   std::shared_ptr<BaseAttentionImpl> attention_impl_;
+  torch::Tensor output_buf_;
 };
 TORCH_MODULE(Attention);
 

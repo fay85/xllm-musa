@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "layers/cuda/flashinfer_attention.h"
+#include "layers/musa/flashinfer_attention.h"
 
 #include <algorithm>
 #include <cstdlib>
