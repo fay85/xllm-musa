@@ -117,7 +117,7 @@ TEST(HierarchyKVCacheTransferTest,
   BlockTransferInfo load_info(/*src_block_id=*/0, kDestinationBlockId);
   load_info.block_type = BlockType::KV;
   load_info.transfer_type = TransferType::H2D;
-  EXPECT_EQ(transfer.transfer_kv_blocks(kBatchId, {load_info}), 0U);
+  EXPECT_EQ(transfer.transfer_kv_blocks(kBatchId, {load_info}), 1U);
 
   ModelInputParams params;
   params.meta.batch_id = kBatchId;

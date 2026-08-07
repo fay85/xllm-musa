@@ -1228,21 +1228,27 @@ TEST(MooncakeKVCacheTransferDefaultTest,
   transfer.register_kv_cache(caches, shape, torch::kBFloat16);
 
   ASSERT_EQ(engine_observer->registered_addrs.size(), 1U);
-  ASSERT_EQ(engine_observer->registered_addrs[0].size(), 8U);
+  ASSERT_EQ(engine_observer->registered_addrs[0].size(), 10U);
   const std::vector<void*> expected_addrs = {
       caches[0].get_k_cache().data_ptr(),
       caches[0].get_index_cache().data_ptr(),
       caches[0].get_indexer_cache_scale()->data_ptr(),
       caches[1].get_k_cache().data_ptr(),
+      caches[1].get_k_cache_scale()->data_ptr(),
       caches[2].get_k_cache().data_ptr(),
       caches[2].get_index_cache().data_ptr(),
       caches[2].get_indexer_cache_scale()->data_ptr(),
-      caches[3].get_k_cache().data_ptr()};
+      caches[3].get_k_cache().data_ptr(),
+      caches[3].get_k_cache_scale()->data_ptr()};
   EXPECT_EQ(engine_observer->registered_addrs[0], expected_addrs);
   EXPECT_EQ(engine_observer->registered_lens[0][2],
             caches[0].get_indexer_cache_scale()->nbytes());
   EXPECT_EQ(engine_observer->registered_block_bytes[0][2],
             caches[0].get_indexer_cache_scale()->nbytes() / 2);
+  EXPECT_EQ(engine_observer->registered_lens[0][4],
+            caches[1].get_k_cache_scale()->nbytes());
+  EXPECT_EQ(engine_observer->registered_block_bytes[0][4],
+            caches[1].get_k_cache_scale()->nbytes() / 2);
 
   KVTransferMapping mapping;
   mapping.group_id = cache_group_id(BlockType::KV);
@@ -1251,7 +1257,7 @@ TEST(MooncakeKVCacheTransferDefaultTest,
   EXPECT_TRUE(transfer.pull_kv_blocks(
       /*src_cluster_id=*/1, /*src_addr=*/"remote", {mapping}));
   ASSERT_EQ(engine_observer->move_calls.size(), 1U);
-  ASSERT_EQ(engine_observer->move_calls[0].mappings.size(), 8U);
+  ASSERT_EQ(engine_observer->move_calls[0].mappings.size(), 10U);
   for (size_t index = 0; index < engine_observer->move_calls[0].mappings.size();
        ++index) {
     EXPECT_EQ(engine_observer->move_calls[0].mappings[index].buf_id,
@@ -1287,15 +1293,16 @@ TEST(MooncakeKVCacheTransferDefaultTest,
   transfer.register_kv_cache_spec(draft_caches, shape, torch::kBFloat16);
 
   ASSERT_EQ(engine_observer->registered_addrs.size(), 2U);
-  EXPECT_EQ(engine_observer->registered_addrs[0].size(), 8U);
-  EXPECT_EQ(engine_observer->registered_addrs[1].size(), 4U);
+  EXPECT_EQ(engine_observer->registered_addrs[0].size(), 10U);
+  EXPECT_EQ(engine_observer->registered_addrs[1].size(), 5U);
   ASSERT_EQ(transfer.spec_layout_.layers.size(), 2U);
-  ASSERT_EQ(transfer.spec_layout_.layers[0].size(), 1U);
+  ASSERT_EQ(transfer.spec_layout_.layers[0].size(), 2U);
   ASSERT_EQ(transfer.spec_layout_.layers[1].size(), 3U);
-  EXPECT_EQ(transfer.spec_layout_.layers[0][0].buf_id, 8);
-  EXPECT_EQ(transfer.spec_layout_.layers[1][0].buf_id, 9);
-  EXPECT_EQ(transfer.spec_layout_.layers[1][1].buf_id, 10);
-  EXPECT_EQ(transfer.spec_layout_.layers[1][2].buf_id, 11);
+  EXPECT_EQ(transfer.spec_layout_.layers[0][0].buf_id, 10);
+  EXPECT_EQ(transfer.spec_layout_.layers[0][1].buf_id, 11);
+  EXPECT_EQ(transfer.spec_layout_.layers[1][0].buf_id, 12);
+  EXPECT_EQ(transfer.spec_layout_.layers[1][1].buf_id, 13);
+  EXPECT_EQ(transfer.spec_layout_.layers[1][2].buf_id, 14);
 }
 
 TEST(MooncakeKVCacheTransferDefaultTest, AddBufRejectsNonContiguousTensor) {
