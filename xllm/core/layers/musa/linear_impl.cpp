@@ -1633,6 +1633,42 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
   return forward_impl(input, reduce_mode);
 }
 
+bool RowParallelLinearImpl::supports_block_fp8_quantized_input() const {
+  return input_is_parallelized_ && is_block_fp8_quant(quant_args_) &&
+         weight_.defined() &&
+         weight_.scalar_type() == torch::kFloat8_e4m3fn &&
+         weight_scale_inv_.defined();
+}
+
+torch::Tensor RowParallelLinearImpl::forward_block_fp8_quantized(
+    torch::Tensor input,
+    torch::Tensor input_scale) {
+  CHECK(supports_block_fp8_quantized_input());
+  CHECK_EQ(input.dim(), 2);
+  CHECK_EQ(input.scalar_type(), torch::kFloat8_e4m3fn);
+  CHECK(input.is_contiguous());
+  CHECK_EQ(input_scale.scalar_type(), torch::kFloat32);
+  CHECK(input_scale.is_contiguous());
+  CHECK_EQ(input_scale.size(0), input.size(0));
+  CHECK_EQ(input_scale.size(1), input.size(1) / 128);
+
+  xllm::kernel::musa::Fp8BlockMatmulParams params;
+  params.a = input;
+  params.b = weight_;
+  params.a_scale = input_scale;
+  params.b_scale = weight_scale_inv_;
+  params.output_dtype = output_dtype_;
+  params.output = std::nullopt;
+  auto output = xllm::kernel::musa::fp8_block_matmul(params);
+  if (bias_.defined() && rank_ == 0) {
+    output = output + bias_.to(output.scalar_type());
+  }
+  if (enable_result_reduction_ && world_size_ > 1) {
+    output = xllm::parallel_state::reduce(output, process_group_);
+  }
+  return output;
+}
+
 torch::Tensor RowParallelLinearImpl::mmrs_weight_transposed() const {
   CHECK(weight_.defined()) << "weight is required for MMRS.";
   const bool valid = mmrs_weight_t_.defined() &&

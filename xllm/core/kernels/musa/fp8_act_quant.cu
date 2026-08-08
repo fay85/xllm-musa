@@ -22,6 +22,7 @@ limitations under the License.
 #include <limits>
 #include <tuple>
 
+#include "core/kernels/musa/global_capture_instance.h"
 #include "core/kernels/musa/musa_ops_api.h"
 
 namespace xllm::kernel::musa {
@@ -38,7 +39,13 @@ constexpr int32_t kThreadsPerGroup = 16;
 constexpr int32_t kElemsPerThread = kGroupSize / kThreadsPerGroup;  // 8
 constexpr int32_t kActThreadsPerGroup = 32;
 constexpr int32_t kActElemsPerThread = kGroupSize / kActThreadsPerGroup;  // 4
+constexpr int32_t kActGroupsPerBlock =
+    1024 / kThreadsPerGroup;
 constexpr int32_t kHardwareWarpThreads = 32;
+constexpr int32_t kDenseSwigluGroupsPerBlock = 16;
+// Larger tiles reduce graph replay scheduling overhead on MP31, while eager
+// launches perform best with the smaller tile.
+constexpr int32_t kDenseSwigluGraphGroupsPerBlock = 36;
 constexpr int32_t kMaxMoeExperts = 256;
 constexpr int32_t kMaxMoeTopk = 16;
 constexpr int32_t kRaggedAlignment = 128;
@@ -690,65 +697,73 @@ __global__ void moe_indexed_swiglu_bf16_vec8_kernel(
   *reinterpret_cast<int4*>(output + output_base) = result.vector;
 }
 
-__global__ void moe_ragged_swiglu_quant_kernel(
+__global__ void swiglu_quant_kernel(
     const __mt_bfloat16* __restrict__ input,
     __mt_fp8_e4m3* __restrict__ output_q,
     float* __restrict__ output_s,
-    int64_t assignment_count,
+    int64_t row_count,
     int64_t intermediate_size,
-    int32_t hidden_dim_num_groups) {
-  const int64_t assignment_idx = static_cast<int64_t>(blockIdx.x);
-  if (assignment_idx >= assignment_count) {
+    int32_t hidden_dim_num_groups,
+    int32_t groups_per_block,
+    int64_t row_stride) {
+  const int64_t row_idx = static_cast<int64_t>(blockIdx.y);
+  if (row_idx >= row_count) {
     return;
   }
 
   const int32_t thread_idx = static_cast<int32_t>(threadIdx.x);
-  const int32_t group_idx = thread_idx / kActThreadsPerGroup;
-  const int32_t lane = thread_idx % kActThreadsPerGroup;
+  const int32_t group_idx =
+      static_cast<int32_t>(blockIdx.x) * groups_per_block +
+      thread_idx / kThreadsPerGroup;
+  const int32_t lane = thread_idx % kThreadsPerGroup;
   if (group_idx >= hidden_dim_num_groups) {
     return;
   }
 
-  const int64_t row = assignment_idx * kRaggedAlignment;
-  const int64_t elem_offset = static_cast<int64_t>(lane) * kActElemsPerThread;
+  const int64_t row = row_idx * row_stride;
+  const int64_t elem_offset = static_cast<int64_t>(lane) * kElemsPerThread;
   const int64_t gate_base = row * intermediate_size * 2 +
                             static_cast<int64_t>(group_idx) * kGroupSize +
                             elem_offset;
   const int64_t up_base = gate_base + intermediate_size;
-  const uint64_t gate_u64 =
-      *reinterpret_cast<const uint64_t*>(input + gate_base);
-  const uint64_t up_u64 = *reinterpret_cast<const uint64_t*>(input + up_base);
-  const __mt_bfloat16* gate_values =
-      reinterpret_cast<const __mt_bfloat16*>(&gate_u64);
-  const __mt_bfloat16* up_values =
-      reinterpret_cast<const __mt_bfloat16*>(&up_u64);
+  Bf16Pack8 gate_values;
+  Bf16Pack8 up_values;
+  gate_values.vector = *reinterpret_cast<const int4*>(input + gate_base);
+  up_values.vector = *reinterpret_cast<const int4*>(input + up_base);
 
-  float values[kActElemsPerThread];
-  float local_absmax = kEps;
+  float values[kElemsPerThread];
+  float local_absmax = 0.0f;
 #pragma unroll
-  for (int32_t j = 0; j < kActElemsPerThread; ++j) {
-    const float gate = __bfloat162float(gate_values[j]);
-    const float half_gate = 0.5f * gate;
-    const __mt_bfloat16 activated =
-        __float2bfloat16_rn(half_gate * (1.0f + tanhf(half_gate)));
-    const __mt_bfloat16 product = activated * up_values[j];
+  for (int32_t j = 0; j < kElemsPerThread; ++j) {
+    const float gate = __bfloat162float(gate_values.values[j]);
+    const float up = __bfloat162float(up_values.values[j]);
+    const __mt_bfloat16 product =
+        __float2bfloat16_rn((gate / (1.0f + expf(-gate))) * up);
     const float value = __bfloat162float(product);
     values[j] = value;
     local_absmax = fmaxf(local_absmax, fabsf(value));
   }
-  local_absmax = group_reduce_max<kActThreadsPerGroup>(local_absmax, lane);
-  const float scale_inv = local_absmax / kFp8E4M3Max;
-  const float scale = kFp8E4M3Max / local_absmax;
-  const float4 scaled = make_float4(values[0] * scale,
-                                    values[1] * scale,
-                                    values[2] * scale,
-                                    values[3] * scale);
-  const uint32_t packed = static_cast<uint32_t>(
-      __musa_cvt_float4_to_fp8x4(scaled, __MT_SATFINITE, __MT_E4M3));
+  local_absmax = group_reduce_max<kThreadsPerGroup>(local_absmax, lane);
+  const float scale_inv = fmaxf(local_absmax / kFp8E4M3Max, kEps);
+  const float scale = 1.0f / scale_inv;
+  const float4 scaled_0 = make_float4(values[0] * scale,
+                                      values[1] * scale,
+                                      values[2] * scale,
+                                      values[3] * scale);
+  const float4 scaled_1 = make_float4(values[4] * scale,
+                                      values[5] * scale,
+                                      values[6] * scale,
+                                      values[7] * scale);
+  const uint32_t packed_0 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(scaled_0, __MT_SATFINITE, __MT_E4M3));
+  const uint32_t packed_1 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(scaled_1, __MT_SATFINITE, __MT_E4M3));
+  const uint64_t packed =
+      static_cast<uint64_t>(packed_0) | (static_cast<uint64_t>(packed_1) << 32);
   const int64_t output_base = row * intermediate_size +
                               static_cast<int64_t>(group_idx) * kGroupSize +
                               elem_offset;
-  *reinterpret_cast<uint32_t*>(output_q + output_base) = packed;
+  *reinterpret_cast<uint64_t*>(output_q + output_base) = packed;
   if (lane == 0) {
     output_s[row * hidden_dim_num_groups + group_idx] = scale_inv;
   }
@@ -798,6 +813,58 @@ int32_t choose_subwarps_per_block(int64_t hidden_dim_num_groups) {
 }
 
 }  // namespace
+
+std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size) {
+  CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
+        input.is_contiguous())
+      << "Dense SwiGLU quant requires contiguous BF16 [M, 2N].";
+  CHECK_EQ(group_size, kGroupSize);
+  CHECK_EQ(input.size(1) % (2 * kGroupSize), 0);
+
+  const int64_t num_rows = input.size(0);
+  const int64_t intermediate_size = input.size(1) / 2;
+  const int32_t hidden_dim_num_groups =
+      static_cast<int32_t>(intermediate_size / kGroupSize);
+  const bool is_capturing =
+      xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
+  const int32_t groups_per_tile =
+      is_capturing ? kDenseSwigluGraphGroupsPerBlock
+                   : kDenseSwigluGroupsPerBlock;
+  const int32_t groups_per_block =
+      std::min(hidden_dim_num_groups, groups_per_tile);
+  const int32_t group_tiles =
+      (hidden_dim_num_groups + groups_per_tile - 1) / groups_per_tile;
+
+  torch::Tensor output_q =
+      torch::empty({num_rows, intermediate_size},
+                   input.options().dtype(torch::kFloat8_e4m3fn));
+  torch::Tensor output_s = torch::empty({num_rows, hidden_dim_num_groups},
+                                        input.options().dtype(torch::kFloat32));
+  if (num_rows == 0) {
+    return std::make_tuple(output_q, output_s);
+  }
+
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  swiglu_quant_kernel<<<
+      dim3(static_cast<unsigned int>(group_tiles),
+           static_cast<unsigned int>(num_rows)),
+      static_cast<unsigned int>(groups_per_block * kThreadsPerGroup),
+      0,
+      stream>>>(
+      reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
+      reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
+      output_s.data_ptr<float>(),
+      num_rows,
+      intermediate_size,
+      hidden_dim_num_groups,
+      groups_per_tile,
+      /*row_stride=*/1);
+  C10_CUDA_CHECK(cudaGetLastError());
+  return std::make_tuple(output_q, output_s);
+}
 
 std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     const torch::Tensor& input,
@@ -1279,7 +1346,10 @@ std::tuple<torch::Tensor, torch::Tensor> fused_moe_ragged_swiglu_quant_fp8(
   const int64_t intermediate_size = input.size(1) / 2;
   const int32_t hidden_dim_num_groups =
       static_cast<int32_t>(intermediate_size / kGroupSize);
-  CHECK_LE(hidden_dim_num_groups * kActThreadsPerGroup, 1024);
+  const int32_t groups_per_block =
+      std::min(hidden_dim_num_groups, kActGroupsPerBlock);
+  const int32_t group_tiles =
+      (hidden_dim_num_groups + kActGroupsPerBlock - 1) / kActGroupsPerBlock;
 
   torch::Tensor output_q =
       torch::empty({padded_rows, intermediate_size},
@@ -1292,9 +1362,10 @@ std::tuple<torch::Tensor, torch::Tensor> fused_moe_ragged_swiglu_quant_fp8(
 
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  moe_ragged_swiglu_quant_kernel<<<
-      static_cast<unsigned int>(assignment_count),
-      static_cast<unsigned int>(hidden_dim_num_groups * kActThreadsPerGroup),
+  swiglu_quant_kernel<<<
+      dim3(static_cast<unsigned int>(group_tiles),
+           static_cast<unsigned int>(assignment_count)),
+      static_cast<unsigned int>(groups_per_block * kThreadsPerGroup),
       0,
       stream>>>(
       reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
@@ -1302,7 +1373,9 @@ std::tuple<torch::Tensor, torch::Tensor> fused_moe_ragged_swiglu_quant_fp8(
       output_s.data_ptr<float>(),
       assignment_count,
       intermediate_size,
-      hidden_dim_num_groups);
+      hidden_dim_num_groups,
+      kActGroupsPerBlock,
+      /*row_stride=*/kRaggedAlignment);
   C10_CUDA_CHECK(cudaGetLastError());
   return std::make_tuple(output_q, output_s);
 }

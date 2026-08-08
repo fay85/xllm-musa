@@ -20,6 +20,7 @@ limitations under the License.
 #include "common/flash_comm1_context.h"
 #include "kernels/ops_api.h"
 #include "platform/platform.h"
+#include "util/env_var.h"
 
 namespace xllm {
 namespace layer {
@@ -123,6 +124,18 @@ torch::Tensor MusaDenseMLPImpl::forward(const torch::Tensor& hidden_states) {
     output = torch::empty(
         {batch_size, intermediate_size_ / process_group_->world_size()},
         gate_up.options());
+  }
+
+  static const bool use_fused_swiglu_quant =
+      util::get_bool_env("XLLM_FUSED_DENSE_SWIGLU_FP8", true);
+  const bool use_fused_prefill =
+      use_fused_swiglu_quant && !use_fc1_sequence_parallel &&
+      hidden_act_ == "silu" && gate_up.dim() == 2 && gate_up.size(0) > 128 &&
+      down_proj_->supports_block_fp8_quantized_input();
+  if (use_fused_prefill) {
+    auto [quantized, scale] =
+        xllm::kernel::musa::fused_swiglu_quant_fp8(gate_up, 128);
+    return down_proj_->forward_block_fp8_quantized(quantized, scale);
   }
 
   act_->forward(gate_up, output);

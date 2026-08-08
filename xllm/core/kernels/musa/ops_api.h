@@ -109,6 +109,10 @@ std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size);
 
+std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size);
+
 void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate);
 
 }  // namespace xllm::kernel::musa

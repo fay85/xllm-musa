@@ -394,6 +394,12 @@ std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size);
 
+// Fuses dense BF16 SwiGLU with group-128 FP8 activation quantization.
+// Returns {q [M,N] e4m3, scale [M,N/128] fp32} for input [M,2N].
+std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size);
+
 // MUSA-specific Qwen3.5 MoE preprocess. Token-major contiguous preprocess
 // returns {fp8_rows, scales, src_to_dst,
 // expert_counts} while fusing expert placement, hidden-state replication, and

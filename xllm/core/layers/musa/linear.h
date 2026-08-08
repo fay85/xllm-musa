@@ -299,6 +299,11 @@ class RowParallelLinearImpl : public torch::nn::Module {
 
   torch::Tensor forward(torch::Tensor input, RowParallelReduceMode reduce_mode);
 
+  torch::Tensor forward_block_fp8_quantized(torch::Tensor input,
+                                            torch::Tensor input_scale);
+
+  bool supports_block_fp8_quantized_input() const;
+
   // load the weight from the checkpoint
   void load_state_dict(const StateDict& state_dict);
 
