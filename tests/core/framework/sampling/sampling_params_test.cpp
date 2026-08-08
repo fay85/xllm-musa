@@ -25,6 +25,8 @@ namespace xllm {
 TEST(SamplingParamsTest, NormalConcat) {
   // construct sampling_parameters_1
   RequestSamplingParam request_1, request_2;
+  request_1.top_k = 8;
+  request_2.top_k = 32;
   std::vector<int32_t> selected_token_idxes_1{11, 23};
   std::vector<int32_t> sample_idxes_1{0, 1};
   std::vector<std::vector<int64_t>> unique_token_ids_vec_1{
@@ -48,6 +50,8 @@ TEST(SamplingParamsTest, NormalConcat) {
 
   // construct sampling_parameters_2
   RequestSamplingParam request_3, request_4;
+  request_3.top_k = 64;
+  request_4.top_k = 16;
   std::vector<int32_t> selected_token_idxes_2{13, 28};
   std::vector<int32_t> sample_idxes_2{0, 1};
   std::vector<std::vector<int64_t>> unique_token_ids_vec_2{
@@ -101,6 +105,7 @@ TEST(SamplingParamsTest, NormalConcat) {
                            result_selected_token_idxes));
   EXPECT_TRUE(
       torch::equal(sampling_parameters_1.sample_idxes, result_sample_idxes));
+  EXPECT_EQ(sampling_parameters_1.max_top_k, 64);
 }
 
 TEST(SamplingParamsTest, AbnormalConcat) {

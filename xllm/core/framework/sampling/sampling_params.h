@@ -67,6 +67,7 @@ struct SamplingParameters {
     params.temperatures = safe_to(temperatures, options, true);
     params.top_p = safe_to(top_p, options, true);
     params.top_k = safe_to(top_k, device, true);
+    params.max_top_k = max_top_k;
 
     params.unique_token_ids = safe_to(unique_token_ids, device, true);
     params.unique_token_counts = safe_to(unique_token_counts, device, true);
@@ -141,6 +142,9 @@ struct SamplingParameters {
 
   bool all_random_sample = false;
   bool all_greedy_sample = true;
+
+  // maximum positive top-k among sampled requests.
+  int64_t max_top_k = 0;
 
   // whether to output logprobs for each generated token.
   bool logprobs = false;

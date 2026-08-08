@@ -137,6 +137,9 @@ void SamplingParameters::init(
 
   // construct do sample tensor
   std::vector<int32_t> do_sample;
+  int64_t max_top_k = 0;
+  bool all_random_sample = true;
+  bool all_greedy_sample = true;
   do_sample.reserve(sample_idxes.size());
   for (const auto idx : sample_idxes) {
     const auto* p = req_sampling_params[idx];
@@ -144,6 +147,9 @@ void SamplingParameters::init(
     const bool sample = p->do_sample || p->temperature != 0.0 ||
                         p->top_p != 1.0 || p->top_k > 0;
     do_sample.push_back(sample ? 1 : 0);
+    max_top_k = std::max(max_top_k, p->top_k);
+    all_random_sample = all_random_sample && sample;
+    all_greedy_sample = all_greedy_sample && !sample;
   }
   this->sample_idxes = torch::tensor(sample_idxes, int_tensor_options);
   this->do_sample = torch::tensor(do_sample, bool_tensor_options);
@@ -151,10 +157,9 @@ void SamplingParameters::init(
   this->max_top_logprobs = max_top_logprobs;
   this->is_embeddings = is_embeddings;
   this->num_return_sequences = num_return_sequences;
-  if (this->do_sample.defined()) {
-    this->all_random_sample = this->do_sample.all().item<bool>();
-    this->all_greedy_sample = !this->do_sample.any().item<bool>();
-  }
+  this->max_top_k = max_top_k;
+  this->all_random_sample = all_random_sample;
+  this->all_greedy_sample = all_greedy_sample;
 }
 
 void SamplingParameters::concat(const SamplingParameters& param) {
@@ -193,8 +198,11 @@ void SamplingParameters::concat(const SamplingParameters& param) {
   this->return_probs = this->return_probs || param.return_probs;
   this->is_embeddings = this->is_embeddings || param.is_embeddings;
   this->use_beam_search = this->use_beam_search || param.use_beam_search;
+  this->all_random_sample = this->all_random_sample && param.all_random_sample;
+  this->all_greedy_sample = this->all_greedy_sample && param.all_greedy_sample;
   this->max_top_logprobs =
       std::max(this->max_top_logprobs, param.max_top_logprobs);
+  this->max_top_k = std::max(this->max_top_k, param.max_top_k);
   this->num_return_sequences =
       std::max(this->num_return_sequences, param.num_return_sequences);
   return;

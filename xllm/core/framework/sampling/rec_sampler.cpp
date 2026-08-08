@@ -256,8 +256,11 @@ SampleOutput RecSampler::OneRecConstrainedSamplingStrategy::forward(
     sample_logits = sample_logits + filter_mask;
   }
 
-  apply_top_k_top_p(
-      sample_logits, sample_temperatures, sample_top_k, sample_top_p);
+  apply_top_k_top_p(sample_logits,
+                    sample_temperatures,
+                    sample_top_k,
+                    sample_top_p,
+                    params.max_top_k);
   if (use_sample_indices) {
     logits.index_copy_(/*dim=*/0, params.sample_idxes, sample_logits);
   }

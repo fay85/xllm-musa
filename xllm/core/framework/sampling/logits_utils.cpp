@@ -95,7 +95,8 @@ void apply_top_k_top_p_torch_impl(torch::Tensor& logits,
 void apply_top_k_top_p(torch::Tensor& logits,
                        const torch::Tensor& temperatures,
                        const torch::Tensor& top_k,
-                       const torch::Tensor& top_p) {
+                       const torch::Tensor& top_p,
+                       const int64_t max_top_k) {
   if (temperatures.defined()) {
     apply_temperatures(logits, temperatures);
   }
@@ -120,7 +121,7 @@ void apply_top_k_top_p(torch::Tensor& logits,
     const float ninf = -std::numeric_limits<float>::infinity();
     int64_t k;
     if (top_k.defined()) {
-      k = top_k.max().item<int64_t>();
+      k = max_top_k;
       if (k <= 0) {
         k = std::min<int64_t>(vocab, 1000);
       }
