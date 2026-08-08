@@ -141,7 +141,7 @@ void gelu_tanh_and_mul(torch::Tensor& out, torch::Tensor& input) {
   LAUNCH_ACTIVATION_GATE_KERNEL(gelu_tanh_kernel, true);
 }
 
-template <typename scalar_t>
+template <typename scalar_t, bool kBroadcastGate>
 __global__ void XLLM_KERNEL_ATTR(1024)
     mul_sigmoid_gate_strided_2d_kernel(scalar_t* __restrict__ out,
                                        const scalar_t* __restrict__ gate,
@@ -151,10 +151,16 @@ __global__ void XLLM_KERNEL_ATTR(1024)
   const int64_t row = blockIdx.x;
   scalar_t* out_row = out + row * out_row_stride;
   const scalar_t* gate_row = gate + row * gate_row_stride;
+  const float broadcast_gate =
+      kBroadcastGate ? static_cast<float>(xllm_ldg(gate_row)) : 0.0f;
   for (int64_t col = threadIdx.x; col < n; col += blockDim.x) {
-    const float g = static_cast<float>(xllm_ldg(&gate_row[col]));
+    const float g = kBroadcastGate
+                        ? broadcast_gate
+                        : static_cast<float>(xllm_ldg(&gate_row[col]));
     const float s = 1.0f / (1.0f + expf(-g));
-    out_row[col] = static_cast<scalar_t>(static_cast<float>(out_row[col]) * s);
+    const scalar_t rounded_gate = static_cast<scalar_t>(s);
+    out_row[col] = static_cast<scalar_t>(
+        static_cast<float>(out_row[col]) * static_cast<float>(rounded_gate));
   }
 }
 
@@ -168,6 +174,7 @@ void launch_mul_sigmoid_gate_inplace(torch::Tensor& out,
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
   const int64_t last_dim = out.size(-1);
+  const int64_t gate_last_dim = gate.size(-1);
   const int64_t M = n / last_dim;
   const int64_t out_row_stride = (out.dim() <= 1) ? last_dim : out.stride(-2);
   const int64_t gate_row_stride =
@@ -178,12 +185,21 @@ void launch_mul_sigmoid_gate_inplace(torch::Tensor& out,
   dim3 grid(static_cast<unsigned int>(M));
   dim3 block(static_cast<unsigned int>(threads));
   DISPATCH_FLOATING_TYPES(out.scalar_type(), "mul_sigmoid_gate_inplace", [&] {
-    mul_sigmoid_gate_strided_2d_kernel<scalar_t>
-        <<<grid, block, 0, stream>>>(out.data_ptr<scalar_t>(),
-                                     gate.data_ptr<scalar_t>(),
-                                     last_dim,
-                                     out_row_stride,
-                                     gate_row_stride);
+    if (gate_last_dim == 1) {
+      mul_sigmoid_gate_strided_2d_kernel<scalar_t, true>
+          <<<grid, block, 0, stream>>>(out.data_ptr<scalar_t>(),
+                                       gate.data_ptr<scalar_t>(),
+                                       last_dim,
+                                       out_row_stride,
+                                       gate_row_stride);
+    } else {
+      mul_sigmoid_gate_strided_2d_kernel<scalar_t, false>
+          <<<grid, block, 0, stream>>>(out.data_ptr<scalar_t>(),
+                                       gate.data_ptr<scalar_t>(),
+                                       last_dim,
+                                       out_row_stride,
+                                       gate_row_stride);
+    }
   });
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
@@ -298,17 +314,23 @@ namespace xllm::kernel::musa {
 
 void mul_sigmoid_gate_inplace(torch::Tensor& out, const torch::Tensor& gate) {
   CHECK(out.defined() && gate.defined()) << "out and gate must be defined";
-  CHECK(out.sizes() == gate.sizes()) << "out and gate must have same shape";
+  CHECK(out.dim() >= 1 && out.dim() == gate.dim())
+      << "out and gate must have the same positive rank";
+  for (int64_t dim = 0; dim + 1 < out.dim(); ++dim) {
+    CHECK(out.size(dim) == gate.size(dim))
+        << "out and gate leading dimensions must match";
+  }
+  CHECK(gate.size(-1) == out.size(-1) || gate.size(-1) == 1)
+      << "gate last dimension must match out or be one";
   CHECK(out.scalar_type() == gate.scalar_type()) << "dtype mismatch";
   CHECK(out.device() == gate.device()) << "device mismatch";
   CHECK(out.dim() >= 1) << "out must be at least 1D";
   CHECK(out.stride(-1) == 1 && gate.stride(-1) == 1)
       << "out and gate must have last-dim stride == 1";
   if (out.dim() > 2) {
-    const int64_t numel_per_row = out.size(-1);
-    CHECK(out.numel() % numel_per_row == 0)
+    CHECK(out.numel() % out.size(-1) == 0)
         << "out shape not collapsible to 2D";
-    CHECK(gate.numel() % numel_per_row == 0)
+    CHECK(gate.numel() % gate.size(-1) == 0)
         << "gate shape not collapsible to 2D";
   }
   launch_mul_sigmoid_gate_inplace(out, gate);

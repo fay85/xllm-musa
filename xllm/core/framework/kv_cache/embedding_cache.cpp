@@ -239,15 +239,25 @@ std::vector<EmbeddingCache::DecodeState> EmbeddingCache::read_decode_states(
 }
 
 std::vector<int32_t> EmbeddingCache::read_accepted_prefix_lengths(
-    const std::vector<int32_t>& ids) const {
+    const std::vector<int32_t>& ids,
+    const std::vector<std::string>& request_ids) const {
   CHECK(!ids.empty()) << "decode ids should not be empty";
+  CHECK(request_ids.empty() || request_ids.size() == ids.size())
+      << "embedding_id / request_id count mismatch";
   std::vector<int32_t> accepted_prefix_lengths;
   accepted_prefix_lengths.reserve(ids.size());
-  for (int32_t id : ids) {
-    const DecodeState& state = get_tail(id);
-    CHECK_GE(state.correction_token_id, 0)
-        << "decode entry missing correction token id";
-    accepted_prefix_lengths.emplace_back(state.correction_position_offset + 1);
+  for (int32_t i = 0; i < static_cast<int32_t>(ids.size()); ++i) {
+    const DecodeState& state = get_tail(ids[i]);
+    // A recycled embedding slot may still contain another request's target
+    // state. Do not let its correction offset leak into spec-verify metadata.
+    int32_t accepted_length = 1;
+    if (state.valid &&
+        (request_ids.empty() || state.request_id == request_ids[i])) {
+      CHECK_GE(state.correction_token_id, 0)
+          << "decode entry missing correction token id";
+      accepted_length = state.correction_position_offset + 1;
+    }
+    accepted_prefix_lengths.emplace_back(accepted_length);
   }
   return accepted_prefix_lengths;
 }

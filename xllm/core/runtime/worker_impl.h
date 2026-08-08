@@ -215,6 +215,10 @@ class WorkerImpl {
 
   int64_t get_active_activation_memory();
 
+  // Exposes the target KV cache to composite workers (for example, MTP's
+  // post-verify state commit) without making the cache storage public.
+  const std::vector<xllm::KVCache>& kv_caches() const { return kv_caches_; }
+
   Status get_status() const { return status_; }
 
   // model context, includes model args, parallel args and date type etc.

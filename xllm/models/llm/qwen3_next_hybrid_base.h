@@ -116,10 +116,10 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
             ? *(input_params.attn_metadata)
             : layer::AttentionMetadataBuilder::build(input_params,
                                                      model_args_.enable_mla());
-    attn_metadata.share_fa3_scheduler_metadata = true;
-    attn_metadata.fa3_scheduler_metadata =
+    attn_metadata.musa.share_fa3_scheduler_metadata = true;
+    attn_metadata.musa.fa3_scheduler_metadata =
         input_params.attn_metadata
-            ? input_params.attn_metadata->fa3_scheduler_metadata
+            ? input_params.attn_metadata->musa.fa3_scheduler_metadata
             : torch::Tensor();
 #else
     layer::AttentionMetadata attn_metadata =

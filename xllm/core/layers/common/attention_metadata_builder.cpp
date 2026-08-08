@@ -27,6 +27,9 @@ limitations under the License.
 #include "core/framework/config/rec_config.h"
 #include "framework/model/model_args.h"
 #include "framework/model/model_input_params.h"
+#if defined(USE_MUSA)
+#include "layers/musa/attention_metadata_builder.h"
+#endif
 
 namespace xllm::layer {
 
@@ -70,40 +73,6 @@ AttentionMetadata build_attention_metadata(
   }
   attn_metadata.kv_seq_lens_vec = params.attention.host.kv_seq_lens;
   attn_metadata.q_seq_lens_vec = params.attention.host.q_seq_lens;
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  // CUDA/MUSA inputs carry cumulative lengths; expose raw per-sequence lengths
-  // to hybrid GDN layers while caching the cumulative query endpoints once.
-  if (attn_metadata.q_seq_lens_vec.size() >= 2 &&
-      attn_metadata.q_seq_lens_vec.front() == 0) {
-    attn_metadata.q_cu_seq_lens_host_vec = attn_metadata.q_seq_lens_vec;
-    std::vector<int32_t> per_seq;
-    per_seq.reserve(attn_metadata.q_seq_lens_vec.size() - 1);
-    for (size_t i = 1; i < attn_metadata.q_seq_lens_vec.size(); ++i) {
-      per_seq.emplace_back(attn_metadata.q_seq_lens_vec[i] -
-                           attn_metadata.q_seq_lens_vec[i - 1]);
-    }
-    attn_metadata.q_seq_lens_vec = std::move(per_seq);
-  } else if (!attn_metadata.q_seq_lens_vec.empty()) {
-    attn_metadata.q_cu_seq_lens_host_vec.reserve(
-        attn_metadata.q_seq_lens_vec.size() + 1);
-    attn_metadata.q_cu_seq_lens_host_vec.emplace_back(0);
-    int32_t total = 0;
-    for (int32_t len : attn_metadata.q_seq_lens_vec) {
-      total += len;
-      attn_metadata.q_cu_seq_lens_host_vec.emplace_back(total);
-    }
-  }
-  if (attn_metadata.kv_seq_lens_vec.size() >= 2 &&
-      attn_metadata.kv_seq_lens_vec.front() == 0) {
-    std::vector<int32_t> per_seq;
-    per_seq.reserve(attn_metadata.kv_seq_lens_vec.size() - 1);
-    for (size_t i = 1; i < attn_metadata.kv_seq_lens_vec.size(); ++i) {
-      per_seq.emplace_back(attn_metadata.kv_seq_lens_vec[i] -
-                           attn_metadata.kv_seq_lens_vec[i - 1]);
-    }
-    attn_metadata.kv_seq_lens_vec = std::move(per_seq);
-  }
-#endif
   attn_metadata.slot_mapping = params.attention.device.new_cache_slots;
   attn_metadata.compute_dtype = compute_dtype;
 #if defined(USE_DCU)
@@ -120,34 +89,23 @@ AttentionMetadata build_attention_metadata(
   attn_metadata.plan_info = std::make_shared<PlanInfo>();
   attn_metadata.shared_plan_info = std::make_shared<PlanInfo>();
   attn_metadata.unshared_plan_info = std::make_shared<PlanInfo>();
-  attn_metadata.paged_kv_indptr_host = params.attention.host.paged_kv_indptr;
-  attn_metadata.paged_kv_indices_host = params.attention.host.paged_kv_indices;
-  attn_metadata.paged_kv_last_page_len_host =
-      params.attention.host.paged_kv_last_page_len;
 #endif
 
-#if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU) || \
-    defined(USE_NPU) || defined(USE_MLU)
-  // Use an explicit mask first. MUSA FlashInfer only accepts the 1D padding
-  // mask; dense graph-buffer masks must stay on the custom-mask path.
+#if defined(USE_CUDA) || defined(USE_DCU) || defined(USE_NPU) || \
+    defined(USE_MLU)
+  // Use explicit attn_mask if provided; otherwise fall back to
+  // graph_buffer.attn_mask (e.g. Qwen2_5_VL sets graph_buffer.attn_mask for
+  // LongCat text encoding)
   std::optional<torch::Tensor> mask_to_use = attn_mask;
-#if !defined(USE_MUSA)
   if (!mask_to_use.has_value() && params.graph.attn_mask.defined()) {
     mask_to_use = params.graph.attn_mask;
   }
-#endif
   if (mask_to_use.has_value()) {
-#if defined(USE_MUSA)
-    if (mask_to_use->dim() == 1) {
-      attn_metadata.attn_mask = mask_to_use.value();
-    }
-#else
     attn_metadata.attn_mask = mask_to_use.value();
-#endif
   }
 #endif
 
-#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_NPU)
   attn_metadata.is_spec_verify = params.is_spec_verify;
   attn_metadata.use_expanded_decode_for_spec_verify_attention =
       params.graph.use_expanded_decode_for_spec_verify_attention;
@@ -160,17 +118,7 @@ AttentionMetadata build_attention_metadata(
       attn_metadata.expanded_kv_seq_lens_host =
           torch::tensor(params.graph.expanded_kv_seq_lens_vec, torch::kInt);
     }
-#if defined(USE_CUDA) || defined(USE_MUSA)
-    attn_metadata.expanded_paged_kv_indptr =
-        params.graph.expanded_paged_kv_indptr;
-    attn_metadata.expanded_paged_kv_indices =
-        params.graph.expanded_paged_kv_indices;
-    attn_metadata.expanded_paged_kv_last_page_len =
-        params.graph.expanded_paged_kv_last_page_len;
-#endif
   }
-#endif
-#if defined(USE_NPU)
   // Determine if we should use ACL graph mode:
   // - --enable_graph=true
   // - Must be decode phase or spec-verify chunked prefill
@@ -250,22 +198,6 @@ AttentionMetadata build_attention_metadata(
         torch::diff(params.attention.device.q_seq_lens);  // q seqlens
 #endif
   }
-#if defined(USE_MUSA)
-  if (params.attention.device.block_tables.defined()) {
-    attn_metadata.block_table = params.attention.device.block_tables;
-  }
-#endif
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  if (params.attention.device.q_seq_lens.defined() &&
-      params.attention.device.q_seq_lens.numel() >= 2) {
-    attn_metadata.q_seq_lens = torch::diff(params.attention.device.q_seq_lens);
-  }
-  if (params.attention.device.kv_seq_lens.defined() &&
-      params.attention.device.kv_seq_lens.numel() >= 2) {
-    attn_metadata.kv_seq_lens =
-        torch::diff(params.attention.device.kv_seq_lens);
-  }
-#endif
 #if defined(USE_NPU)
   // NPU path uses per-sequence lengths (not cumulative), so no diff.
   // Ensure per-sequence lengths are available for NPU kernels in all phases.
@@ -289,6 +221,9 @@ AttentionMetadata build_attention_metadata(
       attn_metadata.q_cu_seq_lens = torch::cat({zero, q_cu_seq_lens}, 0);
     }
   }
+#endif
+#if defined(USE_MUSA)
+  musa::populate_attention_metadata(attn_metadata, params, attn_mask);
 #endif
 
   attn_metadata.is_dummy = (params.meta.q_max_seq_len == 0);
@@ -320,16 +255,13 @@ AttentionMetadata build_attention_metadata(
   // CUDA-oriented name for CUDA/MUSA attention plan handling.
   attn_metadata.enable_cuda_graph = params.enable_graph;
 
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  if (attn_metadata.is_causal && !attn_metadata.enable_cuda_graph &&
-      attn_metadata.q_cu_seq_lens.defined()) {
-#if defined(USE_MUSA)
-    attn_metadata.qo_indptr =
-        attn_metadata.q_cu_seq_lens.to(torch::kPrivateUse1);
-#else
+#if defined(USE_CUDA)
+  if (attn_metadata.is_causal && !attn_metadata.enable_cuda_graph) {
     attn_metadata.qo_indptr = attn_metadata.q_cu_seq_lens.to(torch::kCUDA);
-#endif
   }
+#endif
+#if defined(USE_MUSA)
+  musa::finalize_attention_metadata(attn_metadata);
 #endif
 
 #if defined(USE_ILU)

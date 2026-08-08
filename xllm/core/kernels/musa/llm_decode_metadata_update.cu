@@ -13,11 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <cuda_runtime.h>
 #include <glog/logging.h>
+#include <musa_runtime.h>
 
 #include <algorithm>
-#include <vector>
 
 #include "core/kernels/musa/llm_decode_metadata_update.h"
 
@@ -98,6 +97,10 @@ __global__ void llm_decode_metadata_pad_from_host_kernel(
       params.dst_paged_kv_indptr[idx] =
           params.dst_paged_kv_indptr[params.actual_batch_size];
     }
+    if (idx < params.actual_batch_size) {
+      params.dst_kv_seq_lens_delta[idx] =
+          params.dst_kv_seq_lens[idx + 1] - params.dst_kv_seq_lens[idx];
+    }
     if (idx >= params.actual_batch_size && idx < params.padded_num_tokens) {
       params.dst_kv_seq_lens_delta[idx] = 0;
       params.dst_paged_kv_last_page_len[idx] = 1;
@@ -110,14 +113,14 @@ __global__ void llm_decode_metadata_pad_from_host_kernel(
 void memcpy_async(void* dst,
                   const void* src,
                   size_t bytes,
-                  cudaMemcpyKind kind,
+                  musaMemcpyKind kind,
                   LlmDecodeMetadataUpdateStream stream) {
   if (bytes == 0 || dst == nullptr || src == nullptr) {
     return;
   }
-  const cudaError_t error = cudaMemcpyAsync(dst, src, bytes, kind, stream);
-  CHECK_EQ(error, cudaSuccess)
-      << "llm_decode_metadata memcpy failed: " << cudaGetErrorString(error);
+  const musaError_t error = musaMemcpyAsync(dst, src, bytes, kind, stream);
+  CHECK_EQ(error, musaSuccess)
+      << "llm_decode_metadata memcpy failed: " << musaGetErrorString(error);
 }
 
 void update_llm_decode_metadata_from_host(
@@ -136,17 +139,17 @@ void update_llm_decode_metadata_from_host(
   memcpy_async(params.dst_tokens,
                params.src_tokens,
                token_bytes,
-               cudaMemcpyDeviceToDevice,
+               musaMemcpyDeviceToDevice,
                stream);
   memcpy_async(params.dst_positions,
                params.src_positions,
                token_bytes,
-               cudaMemcpyDeviceToDevice,
+               musaMemcpyDeviceToDevice,
                stream);
   memcpy_async(params.dst_new_cache_slots,
                params.src_new_cache_slots,
                token_bytes,
-               cudaMemcpyDeviceToDevice,
+               musaMemcpyDeviceToDevice,
                stream);
 
   if (actual_batch_size >= 0 && params.host_kv_seq_lens != nullptr) {
@@ -155,45 +158,34 @@ void update_llm_decode_metadata_from_host(
     memcpy_async(params.dst_kv_seq_lens,
                  params.host_kv_seq_lens,
                  kv_cu_bytes,
-                 cudaMemcpyHostToDevice,
+                 musaMemcpyHostToDevice,
                  stream);
-    if (actual_batch_size > 0 && params.dst_kv_seq_lens_delta != nullptr) {
-      std::vector<int32_t> kv_delta(static_cast<size_t>(actual_batch_size));
-      for (int64_t i = 0; i < actual_batch_size; ++i) {
-        kv_delta[static_cast<size_t>(i)] =
-            params.host_kv_seq_lens[i + 1] - params.host_kv_seq_lens[i];
-      }
-      memcpy_async(params.dst_kv_seq_lens_delta,
-                   kv_delta.data(),
-                   static_cast<size_t>(actual_batch_size) * sizeof(int32_t),
-                   cudaMemcpyHostToDevice,
-                   stream);
-    }
   }
 
   if (params.host_paged_kv_indptr != nullptr && actual_batch_size >= 0) {
     memcpy_async(params.dst_paged_kv_indptr,
                  params.host_paged_kv_indptr,
                  static_cast<size_t>(actual_batch_size + 1) * sizeof(int32_t),
-                 cudaMemcpyHostToDevice,
+                 musaMemcpyHostToDevice,
                  stream);
   }
   if (params.host_paged_kv_indices != nullptr && actual_indices_size > 0) {
     memcpy_async(params.dst_paged_kv_indices,
                  params.host_paged_kv_indices,
                  static_cast<size_t>(actual_indices_size) * sizeof(int32_t),
-                 cudaMemcpyHostToDevice,
+                 musaMemcpyHostToDevice,
                  stream);
   }
   if (params.host_paged_kv_last_page_len != nullptr && actual_batch_size > 0) {
     memcpy_async(params.dst_paged_kv_last_page_len,
                  params.host_paged_kv_last_page_len,
                  static_cast<size_t>(actual_batch_size) * sizeof(int32_t),
-                 cudaMemcpyHostToDevice,
+                 musaMemcpyHostToDevice,
                  stream);
   }
-  if (padded_num_tokens > actual_num_tokens) {
-    const int64_t max_work_size = padded_num_tokens + 1;
+  if (actual_batch_size > 0 || padded_num_tokens > actual_num_tokens) {
+    const int64_t max_work_size =
+        std::max(padded_num_tokens + 1, actual_batch_size);
     const int64_t num_blocks = std::min<int64_t>(
         (max_work_size + kThreadsPerBlock - 1) / kThreadsPerBlock,
         kMaxBlocksPerLaunch);
@@ -202,10 +194,10 @@ void update_llm_decode_metadata_from_host(
                                                kThreadsPerBlock,
                                                /*shared_mem_bytes=*/0,
                                                stream>>>(params, max_work_size);
-    const cudaError_t error = cudaGetLastError();
-    CHECK_EQ(error, cudaSuccess)
+    const musaError_t error = musaGetLastError();
+    CHECK_EQ(error, musaSuccess)
         << "llm_decode_metadata host padding kernel launch failed: "
-        << cudaGetErrorString(error);
+        << musaGetErrorString(error);
   }
 }
 
@@ -234,10 +226,10 @@ void update_llm_decode_metadata(const LlmDecodeMetadataUpdateParams& params,
                                       kThreadsPerBlock,
                                       /*shared_mem_bytes=*/0,
                                       stream>>>(params, max_work_size);
-  const cudaError_t error = cudaGetLastError();
-  CHECK_EQ(error, cudaSuccess)
+  const musaError_t error = musaGetLastError();
+  CHECK_EQ(error, musaSuccess)
       << "llm_decode_metadata_update kernel launch failed: "
-      << cudaGetErrorString(error);
+      << musaGetErrorString(error);
 }
 
 }  // namespace xllm::kernel::musa

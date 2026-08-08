@@ -321,6 +321,11 @@ std::vector<Batch> ContinuousScheduler::schedule_request(
   return batch;
 }
 
+std::vector<Batch> ContinuousScheduler::try_schedule_request() {
+  apply_cancel_requests();
+  return prepare_batch();
+}
+
 void ContinuousScheduler::apply_cancel_requests() {
   std::vector<std::shared_ptr<Request>> requests =
       cancel_request_queue_->take_all();
@@ -384,14 +389,23 @@ void ContinuousScheduler::step(const absl::Duration& timeout) {
 
 void ContinuousScheduler::step_with_schedule_overlap(
     const absl::Duration& timeout) {
-  // get a new batch of requests
-  std::vector<Batch> batch = schedule_request(timeout);
-  bool cur_batch_all_empty =
-      std::all_of(batch.begin(), batch.end(), [](const Batch& one_batch) {
-        return one_batch.empty();
-      });
   bool last_batch_all_empty = std::all_of(
       last_batch_.begin(), last_batch_.end(), [](const Batch& one_batch) {
+        return one_batch.empty();
+      });
+
+  // When an overlapped step is still in flight, use a non-blocking scheduling
+  // probe. It still attempts prepare_batch once, but does not retry merely
+  // because an unschedulable request remains in a queue; otherwise
+  // update_last_step_result can be delayed indefinitely.
+  std::vector<Batch> batch;
+  if (last_batch_all_empty) {
+    batch = schedule_request(timeout);
+  } else {
+    batch = try_schedule_request();
+  }
+  bool cur_batch_all_empty =
+      std::all_of(batch.begin(), batch.end(), [](const Batch& one_batch) {
         return one_batch.empty();
       });
   if (cur_batch_all_empty && last_batch_all_empty) {

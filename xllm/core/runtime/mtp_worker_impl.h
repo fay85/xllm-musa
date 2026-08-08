@@ -15,6 +15,8 @@ limitations under the License.
 
 #pragma once
 
+#include <unordered_map>
+
 #include "framework/kv_cache/embedding_cache.h"
 #include "framework/kv_cache_transfer/kv_cache_transfer.h"
 #if defined(USE_NPU)
@@ -166,6 +168,8 @@ class MTPWorkerImpl : public SpeculativeWorkerImpl {
   bool pending_target_context_matches(const ForwardInput& input) const;
   bool device_target_context_ready_for_batch(const ForwardInput& input) const;
   void flush_pending_target_context();
+  bool supports_device_target_context_execution() const;
+  bool can_use_device_target_context() const;
   bool supports_combined_first_draft_execution() const;
   bool can_use_combined_first_draft() const;
   void prepare_next_first_draft_template(const ForwardInput& input,
@@ -203,6 +207,16 @@ class MTPWorkerImpl : public SpeculativeWorkerImpl {
   // Whether validation directly uses selected-only draft_probs [B, S].
   // If false, selected-only cache values are restored to dense [B, S, V].
   bool enable_opt_validate_probs_ = false;
+
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  // MUSA GDN MTP verify records per-layer intermediate states during target
+  // validation and commits the accepted prefix after rejection sampling. Keep
+  // one shared cache per spec-verify graph key so replays with the same graph
+  // shape observe the captured state addresses even when live token counts
+  // differ within a bucket.
+  std::unordered_map<uint64_t, std::shared_ptr<GdnMtpVerifyCache>>
+      gdn_mtp_verify_caches_;
+#endif
 
 #if defined(USE_NPU) || defined(USE_MLU)
   std::shared_ptr<KVCacheTransfer> kv_cache_transfer_;

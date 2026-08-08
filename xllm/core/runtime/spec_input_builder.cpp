@@ -604,4 +604,50 @@ std::pair<torch::Tensor, torch::Tensor> build_validate_tensors_from_block(
 
 }  // namespace draftProbs
 
+void build_expanded_decode_paged_kv(
+    const torch::Tensor& expanded_block_tables,
+    const std::vector<int32_t>& expanded_kv_seq_lens,
+    int32_t block_size,
+    std::vector<int32_t>& paged_kv_indptr,
+    std::vector<int32_t>& paged_kv_indices,
+    std::vector<int32_t>& paged_kv_last_page_len) {
+  CHECK_GT(block_size, 0) << "block_size must be positive";
+  CHECK(expanded_block_tables.defined())
+      << "expanded block tables must be defined";
+  CHECK_EQ(expanded_block_tables.dim(), 2)
+      << "expanded block tables must be 2D";
+  const int64_t num_rows = expanded_block_tables.size(0);
+  CHECK_EQ(expanded_kv_seq_lens.size(), static_cast<size_t>(num_rows))
+      << "expanded kv seq lens must match block table rows";
+
+  torch::Tensor block_tables_cpu = expanded_block_tables.to(torch::kCPU);
+  CHECK_EQ(block_tables_cpu.scalar_type(), torch::kInt)
+      << "expanded block tables must use int32";
+  auto block_accessor = block_tables_cpu.accessor<int32_t, 2>();
+
+  paged_kv_indptr = {0};
+  paged_kv_indices.clear();
+  paged_kv_last_page_len.clear();
+  paged_kv_indices.reserve(static_cast<size_t>(num_rows) * 4);
+  paged_kv_last_page_len.reserve(static_cast<size_t>(num_rows));
+
+  for (int64_t row = 0; row < num_rows; ++row) {
+    const int32_t kv_len = expanded_kv_seq_lens[static_cast<size_t>(row)];
+    CHECK_GE(kv_len, 1) << "expanded kv_len must be positive";
+    const int32_t num_blocks = (kv_len + block_size - 1) / block_size;
+    CHECK_LE(num_blocks, block_tables_cpu.size(1))
+        << "expanded block table row is too narrow for kv_len";
+    for (int32_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
+      const int32_t block_id = block_accessor[row][block_idx];
+      CHECK_GE(block_id, 0) << "invalid block id in expanded row " << row;
+      paged_kv_indices.push_back(block_id);
+    }
+    paged_kv_indptr.push_back(
+        static_cast<int32_t>(paged_kv_indices.size()));
+    const int32_t last_page_len =
+        (kv_len % block_size == 0) ? block_size : kv_len % block_size;
+    paged_kv_last_page_len.push_back(last_page_len);
+  }
+}
+
 }  // namespace xllm::specBuilder

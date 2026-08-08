@@ -419,7 +419,7 @@ bool cu_seqlens_all_full(c10::ArrayRef<int32_t> cu, int64_t max_len) {
 }
 
 std::vector<int32_t> materialize_cu_seqlens_host(
-    const MateGatedDeltaRulePrefillParams& params) {
+    const musa::MateGatedDeltaRulePrefillParams& params) {
   if (params.cu_seqlens_host.has_value() && !params.cu_seqlens_host->empty()) {
     return *params.cu_seqlens_host;
   }
@@ -1012,7 +1012,7 @@ double mate_gdn_padded_waste_ratio(c10::ArrayRef<int32_t> cu, int64_t max_len) {
 // Select warp varlen when packing is required or padding waste is high.
 // Presence of cu_seqlens alone is insufficient: the layer always passes it.
 bool mate_gdn_needs_varlen_packing(
-    const MateGatedDeltaRulePrefillParams& params,
+    const musa::MateGatedDeltaRulePrefillParams& params,
     int64_t input_batch,
     int64_t input_seq_len) {
   if (mate_gdn_force_varlen_kernel()) {
@@ -1045,7 +1045,7 @@ bool mate_gdn_needs_varlen_packing(
 }
 
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
-    MateGatedDeltaRulePrefillParams& params) {
+    musa::MateGatedDeltaRulePrefillParams& params) {
   torch::Tensor query = params.q;
   torch::Tensor key = params.k;
   torch::Tensor value = params.v;

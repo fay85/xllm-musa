@@ -15,14 +15,24 @@ limitations under the License.
 
 #pragma once
 
-#include <ATen/cuda/CUDAContext.h>
-#include <ATen/cuda/CUDAGraph.h>
 #include <absl/container/flat_hash_map.h>
-#include <c10/cuda/CUDACachingAllocator.h>
-#include <c10/cuda/CUDAStream.h>
 #include <torch/torch.h>
-#if TORCH_VERSION_MAJOR >= 2 && TORCH_VERSION_MINOR >= 10
-#include <ATen/cuda/MemPool.h>
+
+#include "torch_musa/csrc/core/MUSAStream.h"
+
+// torch_musa's native MUSAGraph header expects this stream alias.
+namespace at::musa {
+using c10::musa::MUSAStream;
+}  // namespace at::musa
+
+#include "torch_musa/csrc/aten/musa/MUSAGraph.h"
+#include "torch_musa/csrc/core/MUSACachingAllocator.h"
+
+// MUSA host_defines.h defines __noinline__ as a macro. Folly uses that token
+// inside __attribute__((__noinline__)), so leaving it defined creates a nested
+// attribute during the MUSA device parse.
+#ifdef __noinline__
+#undef __noinline__
 #endif
 
 #include <cstddef>
@@ -39,24 +49,17 @@ limitations under the License.
 #include "core/framework/model/model_input_params.h"
 #include "core/kernels/musa/llm_decode_metadata_update.h"
 #include "core/kernels/musa/piecewise_graphs.h"
+#include "core/layers/musa/graph_output_buffers.h"
 #include "core/runtime/executor_impl.h"
 #include "core/runtime/executor_impl_factory.h"
 #include "core/runtime/options.h"
-
-namespace xllm::layer {
-class PiecewiseGraphMatmulBufferPool;
-}
 
 namespace xllm::runtime::musa {
 
 constexpr uint64_t kSpecVerifyGraphKeyMask = 1ull << 63;
 constexpr uint64_t kSpecVerifyQMaxSeqLenShift = 32;
 
-#if TORCH_VERSION_MAJOR >= 2 && TORCH_VERSION_MINOR >= 10
-using TorchMemPool = at::cuda::MemPool;
-#else
-using TorchMemPool = c10::cuda::MemPool;
-#endif
+using MusaMemPool = c10::musa::MemPool;
 
 // Helper class to hold persistent parameters for MUSA graph execution
 // Multiple MusaGraph instances can share the same MusaGraphPersistentParam
@@ -360,14 +363,14 @@ class MusaGraphPersistentParam final {
   torch::Tensor persistent_expanded_paged_kv_last_page_len_;
 };
 
-// CUDA graph executor using libtorch CUDAGraph for memory management
+// MUSA graph executor using torch_musa MUSAGraph for memory management.
 class MusaGraph final {
  public:
   // is_piecewise: if true, use piecewise graph capture for prefill
-  // capture_stream: the stream to use for CUDA graph capture
+  // capture_stream: the stream to use for MUSA graph capture.
   explicit MusaGraph(MusaGraphPersistentParam& persistent_param,
                      at::DeviceIndex device_index,
-                     at::cuda::CUDAStream capture_stream,
+                     c10::musa::MUSAStream capture_stream,
                      bool is_piecewise = false)
       : persistent_param_(persistent_param),
         device_index_(device_index),
@@ -383,8 +386,8 @@ class MusaGraph final {
                const ModelInputParams& params,
                std::vector<KVCache>& kv_cache,
                uint32_t bucket_num_tokens,
-               const at::cuda::MempoolId_t& pool,
-               TorchMemPool* pool_ptr = nullptr);
+               const c10::musa::MempoolId_t& pool,
+               MusaMemPool* pool_ptr = nullptr);
 
   // Replay captured graph with new input data
   ModelOutput replay(const torch::Tensor& tokens,
@@ -418,22 +421,22 @@ class MusaGraph final {
   // path), copies CPU->pinned host directly and avoids per-step D2H sync.
   void refresh_persistent_paged_kv_host_mirrors(
       const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
-      const AttentionHostInput& host_src);
+      const ModelInputParams& params);
 
   // Reference to persistent parameters (shared across multiple MusaGraph
   // instances).
   MusaGraphPersistentParam& persistent_param_;
 
   at::DeviceIndex device_index_;
-  // CUDA-compatible stream for graph capture, owned by MusaGraphExecutorImpl.
-  at::cuda::CUDAStream capture_stream_;
+  // Native MUSA capture stream owned by MusaGraphExecutorImpl.
+  c10::musa::MUSAStream capture_stream_;
 
   // Whether this graph uses piecewise capture
   bool is_piecewise_ = false;
 
   // Stable intermediate storage for this exact piecewise-prefill bucket.
   // It must outlive graph holders because runners retain its tensor addresses.
-  std::shared_ptr<layer::PiecewiseGraphMatmulBufferPool>
+  std::shared_ptr<layer::musa::PiecewiseGraphMatmulBufferPool>
       prefill_matmul_buffer_pool_;
 
   uint32_t padded_num_tokens_ = 0;
@@ -499,7 +502,7 @@ class MusaGraph final {
 
   // Declare graph holders last so they are destroyed before the tensors and
   // host buffers whose addresses were retained during capture.
-  at::cuda::CUDAGraph graph_;
+  at::musa::MUSAGraph graph_;
   PiecewiseGraphs piecewise_graph_;
 };
 
@@ -536,13 +539,13 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   torch::Device device_;
   runtime::Options options_;
 
-  // Lazy-loaded CUDA graphs for decode phase (by bucket_num_tokens)
+  // Lazy-loaded MUSA graphs for decode phase (by bucket_num_tokens).
   absl::flat_hash_map<uint32_t, std::unique_ptr<MusaGraph>> graphs_;
 
-  // Lazy-loaded CUDA graphs for MTP spec-verify validate (composite key)
+  // Lazy-loaded MUSA graphs for MTP spec-verify validate (composite key).
   absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>> spec_verify_graphs_;
 
-  // Lazy-loaded CUDA graphs for prefill phase with piecewise capture
+  // Lazy-loaded MUSA graphs for prefill phase with piecewise capture.
   // (by bucket_num_tokens)
   absl::flat_hash_map<uint32_t, std::unique_ptr<MusaGraph>> prefill_graphs_;
 
@@ -560,12 +563,12 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // Persistent parameters shared across all MusaGraph instances
   std::unique_ptr<MusaGraphPersistentParam> persistent_param_;
 
-  // CUDA graph memory pool shared across all MusaGraph instances.
+  // MUSA graph memory pool shared across all MusaGraph instances.
   // This executor is expected to be called from a single worker thread (no
   // concurrent run() on the same executor instance), so sharing one pool per
   // executor is intentional. If concurrent calls are introduced in the future,
   // this assumption must be revisited.
-  at::cuda::MempoolId_t graph_pool_;
+  c10::musa::MempoolId_t graph_pool_;
   // Whether to enable prefill piecewise graph
   bool enable_prefill_piecewise_graph_;
   // Whether to route pure-prefill batches to eager (bypassing piecewise
@@ -600,12 +603,12 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
       const torch::Tensor& tokens,
       const ModelInputParams& params) const;
 
-  // Get CUDA graph memory pool id for capture. When VMM is enabled, uses
+  // Get MUSA graph memory pool id for capture. When VMM is enabled, uses
   // per-shape MemPool under (physical_pool_id, shape_id). Same physical_pool_id
   // => reuse across different shapes (e.g. prefill vs decode are different
   // pools).
-  at::cuda::MempoolId_t get_mem_pool(uint32_t physical_pool_id = 0,
-                                     uint32_t shape_id = 0);
+  c10::musa::MempoolId_t get_mem_pool(uint32_t physical_pool_id = 0,
+                                      uint32_t shape_id = 0);
 
   // Switch VMM allocator to a new virtual address space before capture for the
   // given physical pool. Enables physical memory reuse within that pool across
@@ -623,9 +626,9 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   };
 
   VmmPoolState& get_or_create_vmm_pool_state(uint32_t physical_pool_id);
-  TorchMemPool* get_or_create_vmm_mempool(uint32_t physical_pool_id,
-                                          uint32_t shape_id);
-  TorchMemPool* get_vmm_mempool(uint32_t physical_pool_id, uint32_t shape_id);
+  MusaMemPool* get_or_create_vmm_mempool(uint32_t physical_pool_id,
+                                         uint32_t shape_id);
+  MusaMemPool* get_vmm_mempool(uint32_t physical_pool_id, uint32_t shape_id);
   GraphMemoryUsageStats get_graph_memory_usage_stats();
   void log_graph_memory_after_capture();
 
@@ -642,7 +645,7 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // Get the MUSA-compatible capture stream for the current thread.
   // Each thread automatically gets its own high-priority capture stream
   // Returns the stream and device index
-  static c10::cuda::CUDAStream get_capture_stream(
+  static c10::musa::MUSAStream get_capture_stream(
       c10::DeviceIndex device_index);
 };
 

@@ -103,7 +103,7 @@ size_t count_prefill_sequences(const SchedulerState& state) {
   return count;
 }
 
-size_t effective_prefill_sequence_limit() {
+size_t effective_prefill_sequence_limit(const SchedulerState& state) {
   const size_t independent_limit = max_prefill_sequences();
   if (independent_limit > 0) {
     return independent_limit;
@@ -112,6 +112,15 @@ size_t effective_prefill_sequence_limit() {
     return max_packed_prefill_sequences();
   }
   if (graph_requires_homogeneous_batch()) {
+    return 1;
+  }
+  // MTP verification and GDN state commits are latency-sensitive and the
+  // current eager MUSA GDN prefill scales almost linearly with batch size.
+  // Keep the prefill side serial while retaining the decode batch budget.
+  // This avoids making every request in a concurrent wave wait for a B>1
+  // prefill that provides no useful amortization on this backend.
+  if (state.options.num_speculative_tokens() > 0 &&
+      state.has_linear_attention_layers) {
     return 1;
   }
   return 0;
@@ -242,7 +251,8 @@ void SchedulerPolicy::schedule_prefill_from_queue(
   while (!queue->empty() && budget.remaining_seq_budget > 0 &&
          budget.remaining_token_budget > 0 &&
          budget.latency_budget > budget.estimate_latency) {
-    const size_t prefill_sequence_limit = effective_prefill_sequence_limit();
+    const size_t prefill_sequence_limit =
+        effective_prefill_sequence_limit(state);
     if (prefill_sequence_limit > 0 &&
         count_prefill_sequences(state) >= prefill_sequence_limit) {
       break;

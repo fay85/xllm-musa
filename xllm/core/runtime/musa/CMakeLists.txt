@@ -21,16 +21,16 @@ cc_library(
     musa_graph_executor_impl.h
   SRCS
     musa_graph_executor_impl.cpp
-  COPTS
-    ${_XLLM_MUSIFY_COPTS}
   DEPS
     torch
+    torch_musa
     glog::glog
     absl::flat_hash_map
     :common
     :platform
     :util
     :cuda_kernels
+    :musa_graph_output_buffers
     :kv_cache
     :model
     :layers

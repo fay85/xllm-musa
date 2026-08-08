@@ -46,9 +46,22 @@ namespace xllm {
 namespace {
 
 bool should_use_ssm_engine(const Options& options) {
+  // A draft checkpoint by itself does not enable speculative decoding.  In
+  // particular, k=0 is the explicit MTP-off baseline used by launchers and
+  // benchmarks.  Do not route that configuration through SpeculativeEngine:
+  // its constructor (correctly) requires at least one speculative token, and
+  // routing k=0 there would turn a valid baseline into a fatal CHECK.
+  if (options.num_speculative_tokens() <= 0) {
+    if (!options.draft_model_path().value_or("").empty()) {
+      LOG(WARNING) << "Ignoring draft_model because "
+                   << "num_speculative_tokens="
+                   << options.num_speculative_tokens()
+                   << "; speculative decoding is disabled.";
+    }
+    return false;
+  }
   return !options.draft_model_path().value_or("").empty() ||
-         (options.speculative_algorithm() == "Suffix" &&
-          options.num_speculative_tokens() > 0);
+         options.speculative_algorithm() == "Suffix";
 }
 
 }  // namespace

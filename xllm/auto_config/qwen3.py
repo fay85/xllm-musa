@@ -18,9 +18,10 @@
 The launcher loads the base `qwen3.json` config, builds a `context` describing
 the current machine, and calls the module-level `tune(base_config, context)`.
 `tune` delegates to `Qwen3Tuner`, a `BaseTuner` subclass that implements the
-two mandatory hooks (`tune_common` and `tune_npu`) and returns an adjusted copy
-of the base config, which the launcher then writes next to the launch command
-and passes to the xllm binary via `--config_json_file`.
+two mandatory hooks (`tune_common` and `tune_npu`) plus the MUSA-specific
+kernel constraints, and returns an adjusted copy of the base config. The
+launcher writes it next to the launch command and passes it to the xllm binary
+via `--config_json_file`.
 
 Shared machinery (`BaseTuner`, `Platform`, `detect_hardware`,
 `check_device_count`) lives in `xllm.auto_config.utils`; this module only holds
@@ -38,9 +39,10 @@ from xllm.auto_config.utils import BaseTuner, CpuArchEnum, Platform
 class Qwen3Tuner(BaseTuner):
     """qwen3 auto-tuning policy.
 
-    Only the two mandatory hooks are implemented: `tune_common` (topology and
-    ARM adjustments) and `tune_npu`. Other platforms fall back to `BaseTuner`'s 
-    no-op defaults until qwen3 has validated tuning for them.
+    The mandatory `tune_common` and `tune_npu` hooks cover topology, ARM, and
+    NPU behavior. On MUSA, it also fixes the KV page size required by the
+    deployed FA3 kernels. Other platforms fall back to `BaseTuner`'s no-op
+    defaults until qwen3 has validated tuning for them.
     """
 
     MODEL_TYPE = "qwen3"
@@ -68,6 +70,14 @@ class Qwen3Tuner(BaseTuner):
     ) -> None:
         # TODO
         pass
+
+    def tune_musa(
+        self,
+        config: Dict[str, Any],
+        context: Dict[str, Any],
+    ) -> None:
+        """Use the KV page size compiled into the deployed FA3 kernels."""
+        config["block_size"] = 64
 
 
 def tune(base_config: Dict[str, Any], context: Dict[str, Any]) -> Dict[str, Any]:

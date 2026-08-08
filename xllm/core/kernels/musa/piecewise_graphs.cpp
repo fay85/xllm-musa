@@ -18,7 +18,7 @@ limitations under the License.
 
 namespace xllm::runtime::musa {
 
-void PiecewiseGraphs::add_graph(std::unique_ptr<at::cuda::CUDAGraph>&& graph) {
+void PiecewiseGraphs::add_graph(std::unique_ptr<at::musa::MUSAGraph>&& graph) {
   graphs_.emplace_back(std::move(graph));
   instructions_.emplace_back(InstructionType::kGraph);
 }

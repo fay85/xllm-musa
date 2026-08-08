@@ -43,6 +43,8 @@ set(_TORCH_MUSA_KERNEL_SRCS
   # Graph-safe expert histogram/prefix/placement used by Qwen3.5 routing.
   ../cuda/moe/moe_compute_index.cu
   ../cuda/moe/moe_combine.cu
+  # MUSA-only indexed combine for expert-major GEMM output.
+  moe_combine_indexed.cu
   # Fused per-token-group FP8 activation quant (MUSA-native intrinsics)
   fp8_act_quant.cu
   # Mate FFI + graph helpers
@@ -76,4 +78,18 @@ cc_library(
     :platform
     musa
     musart
+)
+
+cc_library(
+  NAME
+    musa_kernel_api
+  HDRS
+    ops_api.h
+  SRCS
+    ops_api.cpp
+  COPTS
+    ${_XLLM_MUSIFY_COPTS}
+  DEPS
+    :cuda_kernels
+    torch
 )

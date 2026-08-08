@@ -27,17 +27,17 @@ limitations under the License.
 #include <string>
 #include <tuple>
 
-#include "kernels/musa/musa_ops_api.h"
-#include "kernels/musa/musa_tvmffi_stream.h"
+#include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "torch_musa/csrc/core/MUSAGuard.h"
 #include "torch_musa/csrc/core/MUSAStream.h"
 
 namespace xllm::kernel::musa {
 namespace {
 
-constexpr const char* kAlignUri = "sglang_musa_moe_align_block_size";
-constexpr const char* kActivationUri = "sglang_musa_moe_act_and_mul";
-constexpr const char* kSumUri = "sglang_musa_moe_sum_reduce";
+constexpr const char* kAlignUri = "xllm_musa_moe_align_block_size";
+constexpr const char* kActivationUri = "xllm_musa_moe_act_and_mul";
+constexpr const char* kSumUri = "xllm_musa_moe_sum_reduce";
 constexpr const char* kKernelName = "fused_moe_kernel";
 constexpr int64_t kTopK = 8;
 constexpr int64_t kGroupSize = 128;
@@ -236,7 +236,7 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> align_topk_ids(
   auto cumsum_buffer = torch::empty({num_experts + 2}, int_options);
 
   MusaTvmffiStreamGuard stream_guard(topk_ids.device());
-  get_function(kAlignUri, "sgl_musa_moe_align_block_size")(
+  get_function(kAlignUri, "xllm_musa_moe_align_block_size")(
       to_ffi_tensor_view(topk_ids),
       num_experts + 1,
       block_size,
@@ -253,7 +253,7 @@ torch::Tensor activate_gate_up(const torch::Tensor& gate_up,
   auto output =
       torch::empty({gate_up.size(0), gate_up.size(1) / 2}, gate_up.options());
   MusaTvmffiStreamGuard stream_guard(gate_up.device());
-  get_function(kActivationUri, "sgl_musa_moe_act_and_mul")(
+  get_function(kActivationUri, "xllm_musa_moe_act_and_mul")(
       to_ffi_tensor_view(gate_up),
       to_ffi_tensor_view(output),
       to_ffi_tensor_view(topk_ids.reshape({-1})),
@@ -267,7 +267,7 @@ torch::Tensor reduce_assignments(const torch::Tensor& assignments) {
   auto output = torch::empty({assignments.size(0), assignments.size(2)},
                              assignments.options());
   MusaTvmffiStreamGuard stream_guard(assignments.device());
-  get_function(kSumUri, "sgl_musa_moe_sum_reduce")(
+  get_function(kSumUri, "xllm_musa_moe_sum_reduce")(
       to_ffi_tensor_view(assignments),
       to_ffi_tensor_view(output),
       /*routed_scaling_factor=*/1.0);
@@ -488,9 +488,9 @@ void prepare_musa_fused_moe_aot(const torch::Device& device) {
   }
 
   c10::musa::MUSAGuard device_guard(device_index);
-  get_function(kAlignUri, "sgl_musa_moe_align_block_size");
-  get_function(kActivationUri, "sgl_musa_moe_act_and_mul");
-  get_function(kSumUri, "sgl_musa_moe_sum_reduce");
+  get_function(kAlignUri, "xllm_musa_moe_align_block_size");
+  get_function(kActivationUri, "xllm_musa_moe_act_and_mul");
+  get_function(kSumUri, "xllm_musa_moe_sum_reduce");
   for (const KernelConfig& config : kKernelConfigs) {
     if (!musa_fused_moe_aot_available(config.batch_size)) {
       continue;
@@ -513,9 +513,9 @@ void prepare_musa_fused_moe_bf16_aot(const torch::Device& device) {
   }
 
   c10::musa::MUSAGuard device_guard(device_index);
-  get_function(kAlignUri, "sgl_musa_moe_align_block_size");
-  get_function(kActivationUri, "sgl_musa_moe_act_and_mul");
-  get_function(kSumUri, "sgl_musa_moe_sum_reduce");
+  get_function(kAlignUri, "xllm_musa_moe_align_block_size");
+  get_function(kActivationUri, "xllm_musa_moe_act_and_mul");
+  get_function(kSumUri, "xllm_musa_moe_sum_reduce");
   for (const KernelConfig& config : kBf16KernelConfigs) {
     if (!musa_fused_moe_bf16_aot_available(config.batch_size)) {
       continue;

@@ -78,13 +78,6 @@ LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
                              const runtime::Options& options)
     : WorkerImpl(parallel_args, device, options) {
   device_.set_device();
-#if defined(USE_MUSA)
-  static const bool use_pool_compute_stream =
-      util::get_bool_env("XLLM_MUSA_POOL_COMPUTE_STREAM", true);
-  if (use_pool_compute_stream) {
-    compute_stream_ = device_.get_stream_from_pool();
-  }
-#endif
 #if defined(USE_CUDA) || defined(USE_MUSA)
   const auto& model_config = ModelConfig::get_instance();
   if (!ModelConfig::is_python_model_impl(model_config.model_impl())) {
@@ -100,6 +93,17 @@ LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
 bool LLMWorkerImpl::init_model(ModelContext& context) {
   CHECK(model_ == nullptr) << "Model is already initialized.";
   const auto& model_config = ModelConfig::get_instance();
+#if defined(USE_MUSA)
+  static const bool use_pool_compute_stream =
+      util::get_bool_env("XLLM_MUSA_POOL_COMPUTE_STREAM", true);
+  const bool is_qwen3 = context.get_model_args().model_type() == "qwen3";
+  if (use_pool_compute_stream && !is_qwen3) {
+    compute_stream_ = device_.get_stream_from_pool();
+  } else if (use_pool_compute_stream) {
+    LOG(WARNING) << "MUSA pool compute streams are not validated for Qwen3 "
+                    "attention; using the default compute stream.";
+  }
+#endif
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
   // Ensure FlashinferWorkspace is initialized on the calling thread before
@@ -227,7 +231,7 @@ LLMWorkerImpl::step_async_no_sync(const ForwardInput& input) {
 
 std::optional<ForwardOutput> LLMWorkerImpl::step_for_schedule_overlap(
     const ForwardInput& input) {
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
   // Restore live recurrent-state slots from saved checkpoints here (worker
   // thread, on compute_stream_) instead of in prepare_work_before_execute on
   // prepare_stream_. The single-threaded worker pool guarantees the previous

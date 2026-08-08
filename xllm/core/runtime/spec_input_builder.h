@@ -146,6 +146,16 @@ torch::Tensor build_q_cu_seq_lens_tensor(const ModelInputParams& params,
                                          torch::Device device = torch::kCPU,
                                          bool include_leading_zero = false);
 
+// Builds FlashInfer paged-KV metadata for the expanded per-token rows used by
+// the MUSA Qwen3.5 MTP verify graph.
+void build_expanded_decode_paged_kv(
+    const torch::Tensor& expanded_block_tables,
+    const std::vector<int32_t>& expanded_kv_seq_lens,
+    int32_t block_size,
+    std::vector<int32_t>& paged_kv_indptr,
+    std::vector<int32_t>& paged_kv_indices,
+    std::vector<int32_t>& paged_kv_last_page_len);
+
 // Updates common decode-side ModelInputParams fields from built buffers.
 void update_input_params(ModelInputParams& input_params,
                          DecodeBuildBuffers& buf,

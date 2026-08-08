@@ -14,7 +14,14 @@ limitations under the License.
 ==============================================================================*/
 
 #pragma once
-#include <ATen/cuda/CUDAGraph.h>
+
+#include "torch_musa/csrc/core/MUSAStream.h"
+
+namespace at::musa {
+using c10::musa::MUSAStream;
+}  // namespace at::musa
+
+#include "torch_musa/csrc/aten/musa/MUSAGraph.h"
 
 #include <memory>
 #include <mutex>
@@ -32,7 +39,7 @@ namespace xllm::runtime::musa {
 class GlobalCaptureInstance final {
  public:
   static GlobalCaptureInstance& get_instance();
-  void begin_capture(const at::cuda::MempoolId_t& pool);
+  void begin_capture(const c10::musa::MempoolId_t& pool);
   std::unique_ptr<PiecewiseGraphs> end_capture();
   void temporarily_end_graph();
   void temporarily_begin_graph();
@@ -40,7 +47,7 @@ class GlobalCaptureInstance final {
       ::xllm::kernel::musa::AttentionRunner&& runner);
 
   bool is_capturing() const { return is_capturing_; }
-  at::cuda::CUDAGraph* get_current_graph() { return current_graph_.get(); }
+  at::musa::MUSAGraph* get_current_graph() { return current_graph_.get(); }
 
  private:
   GlobalCaptureInstance();
@@ -54,9 +61,9 @@ class GlobalCaptureInstance final {
   static std::mutex capture_mutex_;
 
   bool is_capturing_ = false;
-  std::unique_ptr<at::cuda::CUDAGraph> current_graph_;
+  std::unique_ptr<at::musa::MUSAGraph> current_graph_;
   std::unique_ptr<PiecewiseGraphs> current_piecewise_graph_;
-  at::cuda::MempoolId_t graph_pool_;
+  c10::musa::MempoolId_t graph_pool_;
   std::unique_lock<std::mutex> capture_lock_;
 };
 }  // namespace xllm::runtime::musa

@@ -780,7 +780,7 @@ bool mate_gdn_decode_module_available(const std::string& uri) {
 }  // namespace
 
 torch::Tensor mate_gated_delta_rule_decode(
-    MateGatedDeltaRuleDecodeParams& params) {
+    musa::MateGatedDeltaRuleDecodeParams& params) {
   auto mixed_qkv = params.mixed_qkv.contiguous();
   CHECK(mixed_qkv.dim() == 2) << "mate GDN decode expects mixed_qkv [B, D]";
   const int64_t batch_size = mixed_qkv.size(0);
@@ -916,19 +916,45 @@ torch::Tensor mate_gated_delta_rule_decode(
 
 std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
                                  int64_t num_v_heads,
-                                 torch::ScalarType dtype) {
+                                 torch::ScalarType dtype,
+                                 int64_t seq_len) {
+  CHECK_GT(seq_len, 0) << "MATE GDN MTP sequence length must be positive";
   std::ostringstream oss;
   oss << "mate_gdn_mtp_hq" << num_q_heads << "_hv" << num_v_heads << "_"
       << mate_gdn_dtype_suffix(dtype);
+  // The existing artifact is the K=1/T=2 module. Keep its URI stable and
+  // suffix modules specialized for larger validation widths.
+  if (seq_len != 2) {
+    oss << "_t" << seq_len;
+  }
   return oss.str();
 }
 
-torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params) {
+bool mate_gdn_mtp_module_available(int64_t num_q_heads,
+                                   int64_t num_v_heads,
+                                   torch::ScalarType dtype,
+                                   int64_t seq_len) {
+  const char* ops_path = std::getenv("FLASHINFER_OPS_PATH");
+  if (ops_path == nullptr || ops_path[0] == '\0') {
+    return false;
+  }
+  const std::string uri =
+      get_mate_gdn_mtp_uri(num_q_heads, num_v_heads, dtype, seq_len);
+  const std::string so_path =
+      std::string(ops_path) + "/" + uri + "/" + uri + ".so";
+  return ::access(so_path.c_str(), R_OK) == 0;
+}
+
+torch::Tensor mate_gated_delta_rule_mtp(
+    musa::MateGatedDeltaRuleMtpParams& params) {
   auto q = params.q.contiguous();
   auto k = params.k.contiguous();
   auto v = params.v.contiguous();
   CHECK(q.dim() == 4) << "mate GDN mtp expects q [B, T, Hqk, K]";
   CHECK(v.dim() == 4) << "mate GDN mtp expects v [B, T, Hv, V]";
+  CHECK_EQ(q.size(0), v.size(0)) << "mate GDN mtp batch mismatch";
+  CHECK_EQ(q.size(1), v.size(1)) << "mate GDN mtp sequence mismatch";
+  CHECK_GT(q.size(1), 0) << "mate GDN mtp sequence must be positive";
   const int64_t num_k_heads = params.num_k_heads;
   const int64_t num_v_heads = params.num_v_heads;
 
@@ -944,8 +970,8 @@ torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params) {
   auto intermediate = params.intermediate.contiguous();
   auto output = params.output;
 
-  const std::string uri =
-      get_mate_gdn_mtp_uri(num_k_heads, num_v_heads, q.scalar_type());
+  const std::string uri = get_mate_gdn_mtp_uri(
+      num_k_heads, num_v_heads, q.scalar_type(), q.size(1));
   auto direct_run = get_module(uri)->GetFunction("main");
   auto run =
       direct_run.defined() ? direct_run.value() : get_function(uri, "run");
@@ -2049,12 +2075,22 @@ __global__ void causal_conv1d_mtp_verify_kernel(
   if (batch_idx >= batch) {
     return;
   }
+  // Each channel is independent for the speculative causal convolution.  The
+  // old launch used one block per batch and made 256 threads walk all D
+  // channels serially; Qwen3.5's D=10240 therefore left almost the whole
+  // device idle.  Split the channel dimension across grid.y blocks so the
+  // B=1/T=2 verify path has useful occupancy.
+  const int32_t dim_block = static_cast<int32_t>(blockIdx.y);
   const int cache_idx = cache_indices[batch_idx];
   const int accepted =
       max(1, min(seq_len, static_cast<int>(accepted_tokens[batch_idx]))) - 1;
   const int old_prefix_len = state_len - seq_len;
 
-  for (int dim_idx = threadIdx.x; dim_idx < dim; dim_idx += blockDim.x) {
+  const int32_t dim_stride = static_cast<int32_t>(blockDim.x * gridDim.y);
+  for (int32_t dim_idx = dim_block * static_cast<int32_t>(blockDim.x) +
+                         static_cast<int32_t>(threadIdx.x);
+       dim_idx < dim;
+       dim_idx += dim_stride) {
     float history[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     if (cache_idx >= 0) {
       for (int history_idx = 0; history_idx < width - 1; ++history_idx) {
@@ -2085,7 +2121,12 @@ __global__ void causal_conv1d_mtp_verify_kernel(
                 weight[static_cast<int64_t>(dim_idx) * weight_dim_stride +
                        static_cast<int64_t>(width - 1) * weight_width_stride]);
         if (silu_activation) {
-          value = silu_f32(value);
+          // Keep speculative verification aligned with the decomposed
+          // torch::silu reference.  The generic decode helper intentionally
+          // uses __expf for throughput, but compounding that approximation
+          // with the Mate T>2 recurrent kernel can change greedy target
+          // tokens after a state checkpoint is replayed.
+          value = value / (1.0f + expf(-value));
         }
       }
       output[static_cast<int64_t>(batch_idx) * output_batch_stride +
@@ -2150,8 +2191,17 @@ void launch_causal_conv1d_mtp_verify(const torch::Tensor& x,
   const int width = static_cast<int>(weight.size(1));
   const int state_len = static_cast<int>(conv_state.size(2));
   constexpr int kThreads = 256;
+  static const bool use_dim_parallel = []() {
+    const char* value = std::getenv("XLLM_MTP_CONV_DIM_PARALLEL");
+    return value == nullptr || value[0] != '0';
+  }();
+  const int32_t dim_blocks =
+      use_dim_parallel ? (dim + kThreads - 1) / kThreads : 1;
   causal_conv1d_mtp_verify_kernel<scalar_t, accepted_t>
-      <<<batch, kThreads, 0, stream>>>(
+      <<<dim3(static_cast<uint32_t>(batch), static_cast<uint32_t>(dim_blocks)),
+         kThreads,
+         0,
+         stream>>>(
           reinterpret_cast<const scalar_t*>(x.data_ptr()),
           x.stride(0),
           x.stride(1),
@@ -2735,7 +2785,7 @@ void launch(const torch::Tensor& mixed_qkv,
 }  // namespace
 
 torch::Tensor fused_gated_delta_rule_decode(
-    MateGatedDeltaRuleDecodeParams& params) {
+    musa::MateGatedDeltaRuleDecodeParams& params) {
   auto mixed_qkv = params.mixed_qkv.contiguous();
   CHECK(mixed_qkv.dim() == 2)
       << "fused GDN decode expects mixed_qkv [B, D], got " << mixed_qkv.dim()

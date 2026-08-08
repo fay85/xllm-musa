@@ -32,8 +32,7 @@ class RmsNormGatedImpl : public torch::nn::Module {
                    const torch::TensorOptions& options);
 
   torch::Tensor forward(torch::Tensor& input,
-                        std::optional<torch::Tensor> gate = std::nullopt,
-                        bool use_transient_output = false);
+                        std::optional<torch::Tensor> gate = std::nullopt);
 
   void load_state_dict(const StateDict& state_dict);
 
@@ -41,9 +40,6 @@ class RmsNormGatedImpl : public torch::nn::Module {
   DEFINE_WEIGHT(weight);
   int64_t norm_dim_;
   double eps_;
-#if defined(USE_CUDA) || defined(USE_MUSA)
-  mutable torch::Tensor out_buf_;
-#endif
 };
 TORCH_MODULE(RmsNormGated);
 

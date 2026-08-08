@@ -896,6 +896,7 @@ struct GdnMtpVerifyCache {
   struct LayerState {
     torch::Tensor ssm_intermediate;
     torch::Tensor conv_intermediate;
+    bool ssm_state_transposed = false;
   };
 
   bool enabled = false;
@@ -917,6 +918,13 @@ struct GraphInput {
   torch::Tensor expanded_paged_kv_indptr;
   torch::Tensor expanded_paged_kv_indices;
   torch::Tensor expanded_paged_kv_last_page_len;
+  // CPU mirrors are consumed by the MUSA/CUDA paged-KV FFI path.  Keep these
+  // separate from the device graph inputs: graph capture owns the device
+  // tensors, while the FFI ABI requires host pointers and the logical (not
+  // capacity) lengths for the current expanded batch.
+  torch::Tensor expanded_paged_kv_indptr_host;
+  torch::Tensor expanded_paged_kv_indices_host;
+  torch::Tensor expanded_paged_kv_last_page_len_host;
 #endif
 #if defined(USE_NPU)
   std::shared_ptr<npu::AclGraphTaskUpdateContext> acl_graph_task_update_context;
@@ -943,6 +951,13 @@ struct GraphInput {
         safe_to(expanded_paged_kv_indices, device, true);
     out.expanded_paged_kv_last_page_len =
         safe_to(expanded_paged_kv_last_page_len, device, true);
+    // Host mirrors intentionally stay on CPU.  Copying them to `device`
+    // here would defeat the no-D2H graph replay contract and would also make
+    // the host pointer unstable across calls.
+    out.expanded_paged_kv_indptr_host = expanded_paged_kv_indptr_host;
+    out.expanded_paged_kv_indices_host = expanded_paged_kv_indices_host;
+    out.expanded_paged_kv_last_page_len_host =
+        expanded_paged_kv_last_page_len_host;
 #endif
 #if defined(USE_NPU)
     out.acl_graph_task_update_context = acl_graph_task_update_context;

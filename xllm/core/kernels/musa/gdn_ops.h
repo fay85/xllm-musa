@@ -22,6 +22,8 @@ limitations under the License.
 #include <tuple>
 #include <utility>
 
+#include "core/kernels/musa/ops_api.h"
+
 namespace xllm {
 namespace kernel {
 
@@ -31,9 +33,6 @@ struct FusedGdnGatingParams;
 struct FusedQkvzbaSplitReshapeParams;
 struct FusedRecurrentGatedDeltaRuleParams;
 struct GatedLayerNormParams;
-struct MateGatedDeltaRuleDecodeParams;
-struct MateGatedDeltaRuleMtpParams;
-struct MateGatedDeltaRulePrefillParams;
 struct PartialRotaryEmbeddingParams;
 struct FusedSigmoidGatingDeltaRuleUpdateParams;
 
@@ -102,7 +101,12 @@ std::string get_mate_gdn_decode_uri(int64_t num_q_heads,
 
 std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
                                  int64_t num_v_heads,
-                                 torch::ScalarType dtype);
+                                 torch::ScalarType dtype,
+                                 int64_t seq_len = 2);
+bool mate_gdn_mtp_module_available(int64_t num_q_heads,
+                                   int64_t num_v_heads,
+                                   torch::ScalarType dtype,
+                                   int64_t seq_len);
 
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     MateGatedDeltaRulePrefillParams& params);
@@ -121,7 +125,8 @@ void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
                                    const torch::Tensor& conv_intermediate,
                                    const torch::Tensor& logical_state_indices,
                                    const torch::Tensor& accepted_tokens,
-                                   int64_t checkpoint_stride);
+                                   int64_t checkpoint_stride,
+                                   bool ssm_state_transposed);
 
 void causal_conv1d_fwd(const torch::Tensor& x,
                        const torch::Tensor& weight,

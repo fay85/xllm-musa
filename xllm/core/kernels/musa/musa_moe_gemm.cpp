@@ -21,14 +21,14 @@ limitations under the License.
 #include <string>
 #include <tuple>
 
-#include "kernels/musa/musa_ops_api.h"
-#include "kernels/musa/musa_tvmffi_stream.h"
+#include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::kernel::musa {
 namespace {
 
 constexpr const char* kGemmOpsUri = "gemm_ops";
-constexpr const char* kMusaTopkUri = "sglang_musa_topk_gating";
+constexpr const char* kTopkUri = "xllm_musa_topk_gating";
 
 void check_masked_moe_inputs(const torch::Tensor& input,
                              const torch::Tensor& weights,
@@ -321,7 +321,7 @@ std::tuple<torch::Tensor, torch::Tensor> musa_moe_topk_softmax(
   auto topk_ids = torch::empty({router_logits.size(0), topk},
                                router_logits.options().dtype(torch::kInt32));
   auto unused_correction_bias = topk_weights.reshape({-1});
-  get_function(kMusaTopkUri, "sgl_musa_topk_softmax")(
+  get_function(kTopkUri, "xllm_musa_topk_softmax")(
       to_ffi_tensor_view(topk_weights),
       to_ffi_tensor_view(topk_ids),
       to_ffi_tensor_view(router_logits),
@@ -339,7 +339,7 @@ bool musa_moe_topk_softmax_available() {
       return false;
     }
     const std::string so_path =
-        std::string(ops_path) + "/" + kMusaTopkUri + "/" + kMusaTopkUri + ".so";
+        std::string(ops_path) + "/" + kTopkUri + "/" + kTopkUri + ".so";
     return ::access(so_path.c_str(), R_OK) == 0;
   }();
   return available;

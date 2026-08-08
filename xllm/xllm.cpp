@@ -25,9 +25,11 @@ namespace py = pybind11;
 #endif
 
 #include <csignal>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <random>
+#include <string>
 
 #include "api_service/api_service.h"
 #include "core/common/global_flags.h"
@@ -328,6 +330,40 @@ void validate_config(const std::string& model_type) {
   if (model_config.max_encoder_cache_size() < 0) {
     LOG(FATAL) << "max_encoder_cache_size must be >= 0.";
   }
+#if defined(USE_MUSA)
+  constexpr int32_t kMusaFa3BlockSize = 64;
+  const bool is_musa_fa3_model =
+      model_type == "qwen3" || model_type.starts_with("qwen3_5");
+  if (is_musa_fa3_model && kv_cache_config.block_size() != kMusaFa3BlockSize) {
+    LOG(WARNING) << "The current MUSA Qwen3 family attention path requires "
+                    "block_size=64; overriding block_size="
+                 << kv_cache_config.block_size() << ".";
+    kv_cache_config.block_size(kMusaFa3BlockSize);
+  }
+  const char* experimental_graph_env =
+      std::getenv("XLLM_QWEN3_ENABLE_GRAPH_EXPERIMENTAL");
+  const bool allow_experimental_qwen3_graph =
+      experimental_graph_env != nullptr &&
+      std::string(experimental_graph_env) == "1";
+  if (model_type == "qwen3" && execution_config.enable_graph() &&
+      !allow_experimental_qwen3_graph) {
+    LOG(WARNING) << "MUSA graph execution is not yet validated for Qwen3; "
+                    "disabling graph and piecewise graph execution. Set "
+                    "XLLM_QWEN3_ENABLE_GRAPH_EXPERIMENTAL=1 only for "
+                    "experimental validation.";
+    execution_config.enable_graph(false);
+    execution_config.enable_prefill_piecewise_graph(false);
+  } else if (model_type == "qwen3" && execution_config.enable_graph() &&
+             allow_experimental_qwen3_graph) {
+    LOG(WARNING) << "Experimental MUSA Qwen3 graph execution is enabled; "
+                    "correctness and performance are not yet validated.";
+  }
+  if (model_type == "qwen3" && !scheduler_config.enable_schedule_overlap()) {
+    LOG(WARNING) << "MUSA Qwen3 execution requires schedule overlap for "
+                    "correct stream ownership; enabling schedule overlap.";
+    scheduler_config.enable_schedule_overlap(true);
+  }
+#endif
 #if defined(USE_MLU)
   // Disable enable_schedule_overlap for VLM models on MLU backend
   if (scheduler_config.enable_schedule_overlap() &&

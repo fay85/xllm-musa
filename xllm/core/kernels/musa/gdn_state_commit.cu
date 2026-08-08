@@ -35,7 +35,10 @@ __global__ void scatter_selected_state_kernel(
     int64_t verify_sequence_length,
     int64_t values_per_state,
     int64_t checkpoint_stride,
-    bool add_step_to_destination) {
+    bool add_step_to_destination,
+    bool transpose_last_two_dims,
+    int64_t source_dim_outer,
+    int64_t source_dim_inner) {
   const int64_t sequence_index = static_cast<int64_t>(blockIdx.y);
   int64_t accepted_count = 0;
   const int64_t accepted_offset = sequence_index * accepted_token_width;
@@ -61,8 +64,21 @@ __global__ void scatter_selected_state_kernel(
   if (value_index >= values_per_state) {
     return;
   }
+  int64_t source_value_index = value_index;
+  if (transpose_last_two_dims) {
+    // The MATE intermediate is [H,V,K], whereas the FLA cache is [H,K,V].
+    // K and V are both 128 for Qwen3.5, so this cannot be inferred from
+    // shape and must be selected explicitly by the caller.
+    const int64_t head_stride = source_dim_outer * source_dim_inner;
+    const int64_t head = value_index / head_stride;
+    const int64_t tail = value_index % head_stride;
+    const int64_t key = tail / source_dim_outer;
+    const int64_t value = tail % source_dim_outer;
+    source_value_index =
+        head * head_stride + value * source_dim_inner + key;
+  }
   cache[destination_state * values_per_state + value_index] =
-      intermediate[source_state * values_per_state + value_index];
+      intermediate[source_state * values_per_state + source_value_index];
 }
 
 template <typename CopyType>
@@ -72,6 +88,7 @@ void launch_scatter_selected_state(torch::Tensor& cache,
                                    const torch::Tensor& accepted_tokens,
                                    int64_t checkpoint_stride,
                                    bool add_step_to_destination,
+                                   bool transpose_last_two_dims,
                                    cudaStream_t stream) {
   const int64_t batch_size = intermediate.size(0);
   const int64_t verify_sequence_length = intermediate.size(1);
@@ -89,7 +106,10 @@ void launch_scatter_selected_state(torch::Tensor& cache,
       verify_sequence_length,
       values_per_state,
       checkpoint_stride,
-      add_step_to_destination);
+      add_step_to_destination,
+      transpose_last_two_dims,
+      intermediate.size(-2),
+      intermediate.size(-1));
 }
 
 void scatter_selected_state(torch::Tensor& cache,
@@ -98,6 +118,7 @@ void scatter_selected_state(torch::Tensor& cache,
                             const torch::Tensor& accepted_tokens,
                             int64_t checkpoint_stride,
                             bool add_step_to_destination,
+                            bool transpose_last_two_dims,
                             cudaStream_t stream) {
   CHECK(cache.defined() && cache.numel() > 0);
   CHECK(intermediate.defined() && intermediate.numel() > 0);
@@ -114,6 +135,7 @@ void scatter_selected_state(torch::Tensor& cache,
                                          accepted_tokens,
                                          checkpoint_stride,
                                          add_step_to_destination,
+                                         transpose_last_two_dims,
                                          stream);
     return;
   }
@@ -125,6 +147,7 @@ void scatter_selected_state(torch::Tensor& cache,
                                             accepted_tokens,
                                             checkpoint_stride,
                                             add_step_to_destination,
+                                            transpose_last_two_dims,
                                             stream);
     return;
   }
@@ -139,7 +162,8 @@ void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
                                    const torch::Tensor& conv_intermediate,
                                    const torch::Tensor& logical_state_indices,
                                    const torch::Tensor& accepted_tokens,
-                                   int64_t checkpoint_stride) {
+                                   int64_t checkpoint_stride,
+                                   bool ssm_state_transposed) {
   CHECK(logical_state_indices.scalar_type() == torch::kInt64);
   CHECK(accepted_tokens.scalar_type() == torch::kInt64);
   CHECK(logical_state_indices.is_contiguous());
@@ -154,6 +178,7 @@ void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
                            accepted_tokens,
                            checkpoint_stride,
                            true,
+                           ssm_state_transposed,
                            stream);
   }
   if (conv_cache.defined() && conv_cache.numel() > 0 &&
@@ -163,6 +188,7 @@ void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
                            logical_state_indices,
                            accepted_tokens,
                            1,
+                           false,
                            false,
                            stream);
   }

@@ -14,7 +14,8 @@
 # limitations under the License.
 
 # Start the MUSA-only xLLM build with the validated graph/FA3 defaults.
-# Every performance switch remains overridable for correctness bisection.
+# Qwen3 graph capture additionally requires the explicit experimental opt-in;
+# every performance switch remains overridable for correctness bisection.
 
 set -euo pipefail
 
@@ -42,6 +43,9 @@ ENABLE_PREFILL_PIECEWISE_GRAPH="${ENABLE_PREFILL_PIECEWISE_GRAPH:-1}"
 ENABLE_PACKED_PREFILL="${ENABLE_PACKED_PREFILL:-0}"
 MAX_TOKENS_FOR_GRAPH_MODE="${MAX_TOKENS_FOR_GRAPH_MODE:-8192}"
 
+XLLM_USE_FA3_EXPLICIT="${XLLM_USE_FA3+x}"
+XLLM_USE_FA3_DECODE_EXPLICIT="${XLLM_USE_FA3_DECODE+x}"
+XLLM_MUSA_POOL_COMPUTE_STREAM_EXPLICIT="${XLLM_MUSA_POOL_COMPUTE_STREAM+x}"
 export XLLM_USE_FA3="${XLLM_USE_FA3:-1}"
 export XLLM_USE_FA3_DECODE="${XLLM_USE_FA3_DECODE:-${XLLM_USE_FA3}}"
 export XLLM_MUSA_POOL_COMPUTE_STREAM="${XLLM_MUSA_POOL_COMPUTE_STREAM:-1}"
@@ -71,6 +75,7 @@ Important overrides:
   XLLM_BIN, ENABLE_GRAPH, ENABLE_GRAPH_VMM_POOL,
   ENABLE_PREFILL_PIECEWISE_GRAPH, ENABLE_PACKED_PREFILL,
   XLLM_USE_FA3, XLLM_USE_FA3_DECODE, XLLM_MUSA_POOL_COMPUTE_STREAM,
+  XLLM_QWEN3_ENABLE_GRAPH_EXPERIMENTAL,
   XLLM_MAX_PACKED_PREFILL_SEQS, MAX_CONCURRENT_REQUESTS,
   MAX_SEQS_PER_BATCH, MAX_TOKENS_PER_BATCH
 EOF
@@ -268,15 +273,18 @@ num_kv_heads = int(text_config.get("num_key_value_heads", 0) or 0)
 head_dim = int(text_config.get("head_dim", 0) or 0)
 if head_dim == 0 and num_heads > 0:
     head_dim = hidden_size // num_heads
-gqa_ratio = num_heads // num_kv_heads if num_kv_heads > 0 else 0
+gqa_ratio = 0
+if num_kv_heads > 0 and num_heads % num_kv_heads == 0:
+    gqa_ratio = num_heads // num_kv_heads
 dtype = (
     text_config.get("torch_dtype")
     or text_config.get("dtype")
     or config.get("torch_dtype")
     or config.get("dtype")
-    or ""
+    or "unknown"
 )
-print(head_dim, gqa_ratio, str(dtype).lower())
+model_type = str(text_config.get("model_type") or config.get("model_type") or "unknown")
+print(head_dim, gqa_ratio, str(dtype).lower(), model_type)
 PY
 }
 
@@ -300,27 +308,72 @@ preflight() {
     exit 1
   fi
 
-  if [[ "$XLLM_USE_FA3" == 1 || "$XLLM_USE_FA3_DECODE" == 1 ]]; then
-    local head_dim gqa_ratio dtype metadata_uri metadata_so
-    local prefill_hash decode_hash
-    read -r head_dim gqa_ratio dtype < <(detect_attention_shape "$model_path")
-    if [[ "$head_dim" != 256 ||
-          ("$gqa_ratio" != 6 && "$gqa_ratio" != 8) ||
-          ("$dtype" != bfloat16 && "$dtype" != bf16 &&
-           "$dtype" != torch.bfloat16) ]]; then
-      echo "FA3 requires BF16 activations with head_dim=256 and GQA=6 or 8; " \
-        "model has dtype=${dtype}, head_dim=${head_dim}, GQA=${gqa_ratio}." >&2
-      echo "Set XLLM_USE_FA3=0 XLLM_USE_FA3_DECODE=0 to use FA2." >&2
+  local head_dim gqa_ratio dtype model_type
+  read -r head_dim gqa_ratio dtype model_type < <(detect_attention_shape "$model_path")
+  local fa3_shape_supported=1
+  if [[ "$dtype" != bfloat16 && "$dtype" != bf16 &&
+        "$dtype" != torch.bfloat16 ]]; then
+    fa3_shape_supported=0
+  elif [[ "$head_dim" == 128 &&
+          ("$gqa_ratio" == 2 || "$gqa_ratio" == 4) ]]; then
+    :
+  elif [[ "$head_dim" == 256 &&
+          ("$gqa_ratio" == 6 || "$gqa_ratio" == 8) ]]; then
+    :
+  else
+    fa3_shape_supported=0
+  fi
+
+  if [[ "$fa3_shape_supported" == 0 ]]; then
+    if [[ -z "$XLLM_USE_FA3_EXPLICIT" ]]; then
+      export XLLM_USE_FA3=0
+    fi
+    if [[ -z "$XLLM_USE_FA3_DECODE_EXPLICIT" ]]; then
+      export XLLM_USE_FA3_DECODE=0
+    fi
+    if [[ "$XLLM_USE_FA3" == 1 || "$XLLM_USE_FA3_DECODE" == 1 ]]; then
+      echo "FA3 is unavailable for dtype=${dtype}, head_dim=${head_dim}, " \
+        "GQA=${gqa_ratio}; set both FA3 switches to 0 or provide artifacts." \
+        >&2
       exit 1
     fi
-    if [[ "$gqa_ratio" == 6 ]]; then
+    echo "==> Attention shape dtype=${dtype}, head_dim=${head_dim}, " \
+      "GQA=${gqa_ratio}: using FA2."
+  fi
+
+  if [[ ("$XLLM_USE_FA3" == 1 || "$XLLM_USE_FA3_DECODE" == 1) &&
+        "$BLOCK_SIZE" != 64 ]]; then
+    echo "Deployed FA3 paged-KV artifacts require BLOCK_SIZE=64; got " \
+      "${BLOCK_SIZE}." >&2
+    exit 1
+  fi
+
+  if [[ "$model_type" == qwen3 &&
+        -z "$XLLM_MUSA_POOL_COMPUTE_STREAM_EXPLICIT" ]]; then
+    export XLLM_MUSA_POOL_COMPUTE_STREAM=0
+    echo "==> Qwen3 FA2/FA3 stream policy: using the default compute stream."
+  fi
+
+  if [[ "$XLLM_USE_FA3" == 1 || "$XLLM_USE_FA3_DECODE" == 1 ]]; then
+    local metadata_uri metadata_so
+    local prefill_hash decode_hash
+    if [[ "$head_dim" == 128 && "$gqa_ratio" == 2 ]]; then
+      prefill_hash="00d544f137545dec4a82da8d6d8f037e2412aab1ea8f5af43dd3904c28610f75"
+      decode_hash="f7d879530963f36128078114a5a41903c7af67f580eb5593609463668e114a3b"
+      metadata_uri="fmha_get_metadata_2x1_ragged_q_padded_k_causal_packgqa"
+    elif [[ "$head_dim" == 128 && "$gqa_ratio" == 4 ]]; then
+      prefill_hash="64232c3cdfc7d7a7f520f0af3b6d2b40bf08f5819563fbe5faf836b5b39aea1f"
+      decode_hash="781bb950b1a98e5fa1534b0733270d2b1143d14da549cc1b99eaa8f8c9976460"
+      metadata_uri="fmha_get_metadata_4x1_ragged_q_padded_k_causal_packgqa"
+    elif [[ "$gqa_ratio" == 6 ]]; then
       prefill_hash="7ee83f6c1e99c1e66180d62c666ae3683127d3e048aeda12e77ee4569f9912c9"
       decode_hash="9e4f4b2e6574a7a45a93fef39cf9b0485651e39052d9dfd88c2e1439137a9374"
+      metadata_uri="fmha_get_metadata_6x1_ragged_q_padded_k_causal_packgqa"
     else
       prefill_hash="f950a279e338c0aa62c4d285c73cbedc8da55a148c172855ea03b6c08978d029"
       decode_hash="94150355c74bdc57b0ec3f0a18926ec238aa401b7a6506ec460120ca8726277b"
+      metadata_uri="fmha_get_metadata_8x1_ragged_q_padded_k_causal_packgqa"
     fi
-    metadata_uri="fmha_get_metadata_${gqa_ratio}x1_ragged_q_padded_k_causal_packgqa"
     metadata_so="${FLASHINFER_OPS_PATH}/${metadata_uri}/${metadata_uri}.so"
     [[ -f "$metadata_so" ]] || {
       echo "Missing FA3 metadata op: ${metadata_so}" >&2
@@ -339,15 +392,15 @@ preflight() {
         echo "Missing FA3 decode op for GQA=${gqa_ratio}: ${decode_uri}" >&2
         exit 1
       }
-      local combine_size combine_uri
-      for combine_size in 16 32 64; do
-        combine_uri="fmha_fwd_combine_bf16_16x64x${combine_size}_ragged_q_metadata"
-        [[ -f "${FLASHINFER_OPS_PATH}/${combine_uri}/${combine_uri}.so" ]] || {
-          echo "Missing FA3 ragged-query combine op: ${combine_uri}" >&2
-          exit 1
-        }
-      done
     fi
+    local combine_size combine_uri
+    for combine_size in 16 32 64; do
+      combine_uri="fmha_fwd_combine_bf16_16x64x${combine_size}_ragged_q_metadata"
+      [[ -f "${FLASHINFER_OPS_PATH}/${combine_uri}/${combine_uri}.so" ]] || {
+        echo "Missing FA3 ragged-query combine op: ${combine_uri}" >&2
+        exit 1
+      }
+    done
   fi
 }
 

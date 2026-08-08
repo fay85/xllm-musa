@@ -131,6 +131,13 @@ class QWen3ModelImpl : public LlmModelImplBase<layer::Qwen3DecoderLayer> {
     }
 
     auto& attn_metadata = *(input_params_new.attn_metadata);
+#if defined(USE_MUSA)
+    // FA3 scheduler metadata is identical across decoder layers within one
+    // model forward. Clear any previous-step value, then let the first layer
+    // populate it for the remaining layers.
+    attn_metadata.musa.share_fa3_scheduler_metadata = true;
+    attn_metadata.musa.fa3_scheduler_metadata = torch::Tensor();
+#endif
     bool only_prefill =
         (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill);
     if (positions.dim() == 2 && only_prefill && !mrope_section_.empty()) {
@@ -147,13 +154,14 @@ class QWen3ModelImpl : public LlmModelImplBase<layer::Qwen3DecoderLayer> {
         attn_metadata.unshared_k_cache = llmrec_params->unshared_k_caches[i];
         attn_metadata.unshared_v_cache = llmrec_params->unshared_v_caches[i];
       }
-#if defined(USE_CUDA)
-      attn_metadata.plan_info->layer_id = i;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+      const int32_t layer_id = static_cast<int32_t>(i);
+      attn_metadata.plan_info->layer_id = layer_id;
       if (attn_metadata.shared_plan_info != nullptr) {
-        attn_metadata.shared_plan_info->layer_id = i;
+        attn_metadata.shared_plan_info->layer_id = layer_id;
       }
       if (attn_metadata.unshared_plan_info != nullptr) {
-        attn_metadata.unshared_plan_info->layer_id = i;
+        attn_metadata.unshared_plan_info->layer_id = layer_id;
       }
 #endif
       auto& layer = layers_[i];
@@ -254,6 +262,7 @@ REGISTER_CAUSAL_MODEL(qwen3, QWen3ForCausalLM);
 
 // register the model args
 REGISTER_MODEL_ARGS(qwen3, [&] {
+  constexpr int32_t kQwen3EndOfTextTokenId = 151643;
   LOAD_ARG_OR(model_type, "model_type", "qwen3");
   LOAD_ARG_OR(dtype, "torch_dtype", "");
   LOAD_ARG_OR(vocab_size, "vocab_size", 152064);
@@ -279,7 +288,9 @@ REGISTER_MODEL_ARGS(qwen3, [&] {
     return args->hidden_size() / args->n_heads();
   });
 
-  SET_ARG(stop_token_ids, std::unordered_set<int32_t>({args->eos_token_id()}));
+  SET_ARG(stop_token_ids,
+          std::unordered_set<int32_t>(
+              {args->eos_token_id(), kQwen3EndOfTextTokenId}));
 });
 
 }  // namespace xllm

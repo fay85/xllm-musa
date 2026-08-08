@@ -198,6 +198,7 @@ void fa3_decode(const torch::Tensor& query,
                 int64_t window_left,
                 int64_t window_right,
                 double sm_scale,
+                int64_t num_splits,
                 torch::Tensor& output,
                 torch::Tensor& output_lse);
 
@@ -278,7 +279,8 @@ torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
                                             int32_t window_size_left,
                                             int32_t window_size_right,
                                             const torch::Tensor& cu_seqlens_q,
-                                            const torch::Tensor& seqused_k);
+                                            const torch::Tensor& seqused_k,
+                                            int64_t num_splits);
 
 void rms_norm(torch::Tensor output,
               torch::Tensor input,
@@ -513,11 +515,11 @@ std::tuple<torch::Tensor, torch::Tensor> moe_fused_topk(
 
 torch::Tensor random_sample(const torch::Tensor& probs);
 
-// Target-only speculative rejection sampling for the common MTP K=1 case.
-// draft_probs contains the selected draft-token probability with shape [B, 1]
-// and target_probs has shape [B, 1, V].  The returned tensor is [B, 2] with
-// rejected suffix positions masked to -1.
-torch::Tensor rejection_sample_target_only_k1(
+// Target-only speculative rejection sampling for MTP with selected-only
+// draft probabilities. draft_token_ids and draft_probs have shape [B, K],
+// target_probs has shape [B, K, V], and the returned tensor is [B, K + 1]
+// with the rejected suffix (including the bonus token) masked to -1.
+torch::Tensor rejection_sample_target_only(
     const torch::Tensor& draft_token_ids,
     const torch::Tensor& draft_probs,
     const torch::Tensor& target_probs,

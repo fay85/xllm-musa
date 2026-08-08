@@ -112,14 +112,39 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
       positions = torch::tensor({0}).to(torch::kInt32).to(device_);
     }
 
+#if defined(USE_MUSA)
+    // MUSA graph capture supplies persistent, bucket-sized metadata through
+    // input_params.attn_metadata. Rebuilding it here would restore the live
+    // (un-padded) slot mapping and make the captured attention see a different
+    // token count than its graph buffers.
+    layer::AttentionMetadata attn_metadata =
+        input_params.attn_metadata
+            ? *(input_params.attn_metadata)
+            : layer::AttentionMetadataBuilder::build(
+                  input_params,
+                  model_args_.enable_mla(),
+                  build_attention_mask(input_params));
+    attn_metadata.musa.share_fa3_scheduler_metadata = true;
+    attn_metadata.musa.fa3_scheduler_metadata =
+        input_params.attn_metadata
+            ? input_params.attn_metadata->musa.fa3_scheduler_metadata
+            : torch::Tensor();
+#else
     layer::AttentionMetadata attn_metadata =
         layer::AttentionMetadataBuilder::build(
             input_params,
             model_args_.enable_mla(),
             build_attention_mask(input_params));
+#endif
     prepare_mrope(positions, attn_metadata);
 
-    torch::Tensor embedding = embed_tokens_(tokens);
+    // MUSA graph execution precomputes the token embedding outside capture
+    // and supplies it through the persistent MTP buffer. Keep the embedding
+    // lookup fallback for eager and non-MUSA paths.
+    torch::Tensor embedding = input_params.embedding.mtp_token_embedding;
+    if (!embedding.defined()) {
+      embedding = embed_tokens_(tokens);
+    }
     torch::Tensor hidden = input_params.embedding.input_embedding;
     if (hidden.defined() == false) {
       hidden = embedding;
@@ -140,6 +165,17 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
 
     std::optional<torch::Tensor> residual = std::nullopt;
     for (size_t i = 0; i < layers_.size(); ++i) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+      if (attn_metadata.plan_info != nullptr) {
+        attn_metadata.plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.shared_plan_info != nullptr) {
+        attn_metadata.shared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.unshared_plan_info != nullptr) {
+        attn_metadata.unshared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+#endif
       mtp_hidden = layers_[i]->forward(mtp_hidden,
                                        residual,
                                        positions,

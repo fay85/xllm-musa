@@ -56,8 +56,8 @@ class Qwen3NextGatedDeltaNetImpl : public Qwen3GatedDeltaNetBaseImpl {
                              const ParallelArgs& parallel_args,
                              const torch::TensorOptions& options);
 
-  ColumnParallelLinear qkvz_proj_{nullptr};
-  ColumnParallelLinear ba_proj_{nullptr};
+  musa::ColumnParallelLinear qkvz_proj_{nullptr};
+  musa::ColumnParallelLinear ba_proj_{nullptr};
 };
 TORCH_MODULE(Qwen3NextGatedDeltaNet);
 
@@ -88,10 +88,10 @@ class Qwen3_5GatedDeltaNetImpl final : public Qwen3NextGatedDeltaNetImpl {
   torch::Tensor merge_ba_from_split_activations(const torch::Tensor& b,
                                                 const torch::Tensor& a) const;
 
-  ColumnParallelLinear in_proj_qkv_{nullptr};
-  ColumnParallelLinear in_proj_z_{nullptr};
-  ColumnParallelLinear in_proj_b_{nullptr};
-  ColumnParallelLinear in_proj_a_{nullptr};
+  musa::ColumnParallelLinear in_proj_qkv_{nullptr};
+  musa::ColumnParallelLinear in_proj_z_{nullptr};
+  musa::ColumnParallelLinear in_proj_b_{nullptr};
+  musa::ColumnParallelLinear in_proj_a_{nullptr};
 
   // Persistent buffers that replace the two `torch::cat` calls in
   // merge_qkvz_from_split_activations / merge_ba_from_split_activations.

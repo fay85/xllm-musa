@@ -68,7 +68,9 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
       model_args.n_routed_experts() > 0 &&
       (layer_id + 1) % model_args.decoder_sparse_step() == 0;
   const bool use_qwen35_moe =
-      is_moe_layer && model_args.model_type() == "qwen3_5_moe_text";
+      is_moe_layer &&
+      (model_args.model_type() == "qwen3_5_moe_text" ||
+       model_args.model_type() == "qwen3_5_moe_mtp");
   if (use_qwen35_moe) {
     moe_mlp_ =
         register_module("mlp",
@@ -79,7 +81,7 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
                                             options));
   } else {
     mlp_ = register_module("mlp",
-                           DenseMLP(model_args.hidden_size(),
+                           MusaDenseMLP(model_args.hidden_size(),
                                     model_args.intermediate_size(),
                                     /*is_gated=*/true,
                                     /*has_bias=*/false,

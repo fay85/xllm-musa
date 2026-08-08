@@ -25,9 +25,11 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #include "kernels/musa/attention_runner.h"
 #include "kernels/musa/gdn_ops.h"
+#include "kernels/musa/ops_api.h"
 #include "kernels/musa/global_capture_instance.h"
 #include "kernels/ops_api.h"
 #include "layers/common/linear.h"
+#include "layers/musa/graph_output_buffers.h"
 #include "util/prefill_breakdown.h"
 
 namespace xllm {
@@ -706,6 +708,7 @@ torch::Tensor run_spec_verify_gated_delta_rule_mate(
     int64_t num_v_heads,
     int64_t head_k_dim,
     int64_t head_v_dim,
+    bool fla_ssm_state_layout,
     double scale,
     GdnMtpVerifyCache* verify_cache,
     int32_t layer_id,
@@ -744,7 +747,7 @@ torch::Tensor run_spec_verify_gated_delta_rule_mate(
     output = torch::empty_like(value);
   }
 
-  xllm::kernel::MateGatedDeltaRuleMtpParams params;
+  xllm::kernel::musa::MateGatedDeltaRuleMtpParams params;
   params.q = query;
   params.k = key;
   params.v = value;
@@ -761,7 +764,7 @@ torch::Tensor run_spec_verify_gated_delta_rule_mate(
   params.head_k_dim = head_k_dim;
   params.head_v_dim = head_v_dim;
   params.scale = scale;
-  xllm::kernel::mate_gated_delta_rule_mtp(params);
+  xllm::kernel::musa::mate_gated_delta_rule_mtp(params);
 
   // Disable state_update during verify; stash intermediate for
   // post-rejection scatter instead of writing ssm_cache in-layer. Keyed by
@@ -771,6 +774,11 @@ torch::Tensor run_spec_verify_gated_delta_rule_mate(
   CHECK(verify_cache != nullptr)
       << "gdn_mtp_verify_cache must be enabled for mate GDN MTP verify";
   CHECK(verify_cache->enabled);
+  // MATE emits and consumes recurrent states in [H,V,K] order.  The
+  // production MATE cache uses that same layout, regardless of the FLA
+  // compatibility flag used by the host reference path; do not transpose
+  // this intermediate during post-rejection scatter.
+  verify_cache->layer_states[layer_id].ssm_state_transposed = false;
   verify_cache->layer_states[layer_id].ssm_intermediate =
       std::move(intermediate);
 
@@ -952,15 +960,15 @@ bool should_use_gdn_packed_prefill(const AttentionMetadata& attn_metadata,
   const bool is_capturing =
       xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
   if (is_capturing &&
-      PiecewiseGraphMatmulBufferScope::current_buffer_pool() == nullptr) {
+      musa::PiecewiseGraphMatmulBufferScope::current_buffer_pool() == nullptr) {
     return false;
   }
-  if (attn_metadata.q_cu_seq_lens_host_vec.empty()) {
+  if (attn_metadata.musa.q_cu_seq_lens_host_vec.empty()) {
     return false;
   }
   const int64_t token_capacity = hidden_states.size(0);
   const int64_t actual_tokens =
-      static_cast<int64_t>(attn_metadata.q_cu_seq_lens_host_vec.back());
+      static_cast<int64_t>(attn_metadata.musa.q_cu_seq_lens_host_vec.back());
   if (actual_tokens <= 0 || actual_tokens > token_capacity) {
     return false;
   }
@@ -1055,7 +1063,8 @@ void scatter_gdn_mtp_verify_ssm_states(const GdnMtpVerifyCache& cache,
                                                       conv_intermediate,
                                                       logical_indices,
                                                       accepted_device,
-                                                      checkpoint_stride);
+                                                      checkpoint_stride,
+                                                      state.ssm_state_transposed);
   }
 }
 Qwen3GatedDeltaNetBaseImpl::Qwen3GatedDeltaNetBaseImpl(
@@ -1075,7 +1084,7 @@ Qwen3GatedDeltaNetBaseImpl::Qwen3GatedDeltaNetBaseImpl(
 
   // Shared causal conv projection over mixed QKV states.
   conv1d_ = register_module("conv1d",
-                            ColumnParallelLinear(args.linear_conv_kernel_dim(),
+                            musa::ColumnParallelLinear(args.linear_conv_kernel_dim(),
                                                  k_size_ * 2 + v_size_,
                                                  /*bias=*/false,
                                                  /*gather_output=*/false,
@@ -1094,7 +1103,7 @@ Qwen3GatedDeltaNetBaseImpl::Qwen3GatedDeltaNetBaseImpl(
 
   // Output projection and gated RMSNorm shared by hybrid variants.
   o_proj_ = register_module("out_proj",
-                            RowParallelLinear(v_size_,
+                            musa::RowParallelLinear(v_size_,
                                               args.hidden_size(),
                                               /*bias=*/false,
                                               /*input_is_parallelized=*/true,
@@ -1104,7 +1113,7 @@ Qwen3GatedDeltaNetBaseImpl::Qwen3GatedDeltaNetBaseImpl(
                                               options));
 
   norm_ = register_module(
-      "norm", RmsNormGated(head_v_dim_, args.rms_norm_eps(), options));
+      "norm", musa::RmsNormGated(head_v_dim_, args.rms_norm_eps(), options));
 }
 
 void Qwen3GatedDeltaNetBaseImpl::load_common_state_dict(
@@ -1154,7 +1163,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
     KVCache& kv_cache,
     const ModelInputParams& input_params) {
   const int64_t token_capacity = hidden_states.size(0);
-  const auto& cu_host = attn_metadata.q_cu_seq_lens_host_vec;
+  const auto& cu_host = attn_metadata.musa.q_cu_seq_lens_host_vec;
   const int64_t num_seqs = static_cast<int64_t>(cu_host.size()) - 1;
   const int64_t max_T = attn_metadata.max_query_len;
   const int64_t actual_tokens = static_cast<int64_t>(cu_host.back());
@@ -1253,8 +1262,8 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
         process_mixed_qkv(mixed_for_split);
   }
 
-  PiecewiseGraphMatmulBufferPool* const piecewise_buffer_pool =
-      PiecewiseGraphMatmulBufferScope::current_buffer_pool();
+  musa::PiecewiseGraphMatmulBufferPool* const piecewise_buffer_pool =
+      musa::PiecewiseGraphMatmulBufferScope::current_buffer_pool();
   const bool is_piecewise_graph_capture =
       xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
   if (piecewise_buffer_pool != nullptr) {
@@ -1314,7 +1323,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
     initial_state_tensor.fill_(0.0);
   }
 
-  xllm::kernel::MateGatedDeltaRulePrefillParams mate_params;
+  xllm::kernel::musa::MateGatedDeltaRulePrefillParams mate_params;
   mate_params.scale =
       1.0 / std::sqrt(static_cast<double>(processed_q.size(-1)));
   mate_params.initial_state = initial_state_tensor;
@@ -1322,13 +1331,13 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
   mate_params.use_qk_l2norm_in_kernel = true;
   mate_params.allow_inplace_qk_l2norm = piecewise_buffer_pool != nullptr;
   mate_params.cu_seqlens_host = cu_host;
-  if (attn_metadata.gdn_cu_seq_lens.defined()) {
-    mate_params.cu_seqlens = attn_metadata.gdn_cu_seq_lens;
+  if (attn_metadata.musa.gdn_cu_seq_lens.defined()) {
+    mate_params.cu_seqlens = attn_metadata.musa.gdn_cu_seq_lens;
   } else if (attn_metadata.q_cu_seq_lens.defined()) {
     mate_params.cu_seqlens = attn_metadata.q_cu_seq_lens.to(torch::kInt32);
   }
-  if (attn_metadata.gdn_kkt_cu_seq_lens.defined()) {
-    mate_params.cu_seqlens_kkt = attn_metadata.gdn_kkt_cu_seq_lens;
+  if (attn_metadata.musa.gdn_kkt_cu_seq_lens.defined()) {
+    mate_params.cu_seqlens_kkt = attn_metadata.musa.gdn_kkt_cu_seq_lens;
   }
 
   torch::Tensor core_attn_out;
@@ -1372,7 +1381,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
       } else {
         PrefillBreakdown::Scope mate_scope(PrefillBreakdown::Bucket::kMate);
         std::tie(std::ignore, std::ignore) =
-            xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+            xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
       }
       core_attn_out = output.squeeze(0);
       mate_final_state = final_state;
@@ -1380,7 +1389,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
       // Eager packed path without a graph-owned pool.
       PrefillBreakdown::Scope mate_scope(PrefillBreakdown::Bucket::kMate);
       std::tie(core_attn_out, mate_final_state) =
-          xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+          xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
       core_attn_out = core_attn_out.squeeze(0);
     }
   } else {
@@ -1413,7 +1422,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward_packed_prefill(
     {
       PrefillBreakdown::Scope mate_scope(PrefillBreakdown::Bucket::kMate);
       std::tie(core_attn_out, mate_final_state) =
-          xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+          xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
     }
     {
       PrefillBreakdown::Scope layout_scope(
@@ -1566,8 +1575,17 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   torch::Tensor linear_state_base_indices =
       build_linear_state_base_indices(logical_state_indices, checkpoint_stride);
   const bool use_spec_verify = input_params.is_spec_verify;
+  const bool mate_mtp_module_available =
+      use_mate_gdn_mtp_kernel() && seq_len >= 2 &&
+      xllm::kernel::musa::mate_gdn_mtp_module_available(num_k_heads_ / tp_size_,
+                                                        num_v_heads_ / tp_size_,
+                                                        mixed_qkv.scalar_type(),
+                                                        seq_len);
+  const bool bypass_gating_for_mate_mtp = use_spec_verify &&
+                                          mate_mtp_module_available &&
+                                          !qwen35_mtp_debug_enabled();
   GdnMtpVerifyCache* gdn_mtp_verify_cache = nullptr;
-  if (use_spec_verify && use_mate_gdn_mtp_kernel() && seq_len == 2 &&
+  if (use_spec_verify && mate_mtp_module_available &&
       input_params.gdn_mtp_verify_cache != nullptr &&
       input_params.gdn_mtp_verify_cache->enabled) {
     gdn_mtp_verify_cache = input_params.gdn_mtp_verify_cache.get();
@@ -1759,7 +1777,10 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   torch::Tensor g;
   torch::Tensor beta;
   // Compute gated delta net decay and beta terms.
-  if (use_spec_verify || checkpoint_stride > 1) {
+  const bool needs_explicit_gating =
+      (use_spec_verify && !mate_mtp_module_available) ||
+      (!use_spec_verify && checkpoint_stride > 1);
+  if (needs_explicit_gating) {
     qwen35_mtp_debug_sync("forward_before_gating");
     beta = torch::sigmoid(b);
     torch::Tensor A_log_exp = A_log_.exp();
@@ -1776,7 +1797,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                 << ", beta=" << beta.sizes();
     }
     qwen35_mtp_debug_sync("forward_after_gating");
-  } else if (is_any_prefill) {
+  } else if (is_any_prefill && !bypass_gating_for_mate_mtp) {
     PrefillBreakdown::Scope gate_scope(PrefillBreakdown::Bucket::kGdnGate);
     xllm::kernel::FusedGdnGatingParams gdn_params;
     gdn_params.A_log = A_log_;
@@ -1806,7 +1827,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
         }
       }
     }
-  } else if (!use_flat_mixed_qkv_decode) {
+  } else if (!bypass_gating_for_mate_mtp && !use_flat_mixed_qkv_decode) {
     xllm::kernel::FusedGdnGatingParams gdn_params;
     gdn_params.A_log = A_log_;
     gdn_params.a = a.view({-1, a.size(-1)});
@@ -1878,7 +1899,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       }
     }
 
-    xllm::kernel::MateGatedDeltaRulePrefillParams mate_params;
+    xllm::kernel::musa::MateGatedDeltaRulePrefillParams mate_params;
     mate_params.q = processed_q;
     mate_params.k = processed_k;
     mate_params.v = processed_v;
@@ -1897,8 +1918,8 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     // Varlen Mate needs cu_seqlens. Prefer host lengths filled once at
     // metadata build (q_cu_seq_lens_host_vec) so every GDN layer avoids
     // rebuilding the prefix sum from q_seq_lens_vec.
-    if (!attn_metadata.q_cu_seq_lens_host_vec.empty()) {
-      mate_params.cu_seqlens_host = attn_metadata.q_cu_seq_lens_host_vec;
+    if (!attn_metadata.musa.q_cu_seq_lens_host_vec.empty()) {
+      mate_params.cu_seqlens_host = attn_metadata.musa.q_cu_seq_lens_host_vec;
     } else if (!attn_metadata.q_seq_lens_vec.empty()) {
       std::vector<int32_t> cu_host(attn_metadata.q_seq_lens_vec.size() + 1);
       cu_host[0] = 0;
@@ -1914,7 +1935,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     {
       PrefillBreakdown::Scope mate_scope(PrefillBreakdown::Bucket::kMate);
       std::tie(core_attn_out, mate_final_state) =
-          xllm::kernel::mate_gated_delta_rule_prefill(mate_params);
+          xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
     }
 
     {
@@ -1969,10 +1990,10 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                 << ", q_cu_seq_lens=" << attn_metadata.q_cu_seq_lens.sizes();
     }
     qwen35_mtp_debug_sync("forward_before_spec_gdn");
-    // The fused mate MTP kernel is JIT-specialized on the validate token count
-    // (deployed for seq_len == 2, i.e. one draft token). Fall back to the host
-    // loop for any other length until the corresponding kernel is deployed.
-    if (use_mate_gdn_mtp_kernel() && seq_len == 2) {
+    // The fused Mate MTP kernel is specialized on the validate token count;
+    // T=K+1 for K speculative tokens. Fall back to the reference loop if the
+    // matching specialized artifact is not installed.
+    if (mate_mtp_module_available) {
       const bool mtp_cmp = qwen35_mtp_debug_enabled();
       torch::Tensor ssm_clone;
       if (mtp_cmp) {
@@ -2014,6 +2035,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
           num_v_heads_ / tp_size_,
           head_k_dim_,
           head_v_dim_,
+          fla_ssm_state_layout,
           scale,
           verify_cache,
           layer_id,
@@ -2038,15 +2060,59 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                 .abs()
                 .max()
                 .item<double>();
-        auto sd =
-            (ssm_cache.to(torch::kFloat32) - ssm_clone.to(torch::kFloat32))
-                .abs();
+        // MATE verify defers the production cache write. Compare the
+        // per-token intermediate states that post-verify scatter will select
+        // against the corresponding host checkpoints, rather than comparing
+        // the untouched live cache with the host clone.
+        const auto& mate_layer_state = verify_cache->layer_states.at(layer_id);
+        const torch::Tensor mate_state = mate_layer_state.ssm_intermediate;
+        CHECK(mate_state.defined() && mate_state.dim() == 5)
+            << "MATE GDN verify intermediate must be [B,T,H,V,K]";
+        const auto accepted_device =
+            input_params.num_accepted_tokens.to(device, torch::kLong)
+                .clamp(1, seq_len)
+                .contiguous();
+        const auto selected_step =
+            (accepted_device - 1).view({batch_size, 1, 1, 1, 1});
+        const std::vector<int64_t> mate_gather_shape = {
+            batch_size, 1, mate_state.size(2), mate_state.size(3),
+            mate_state.size(4)};
+        auto mate_all = mate_state.to(torch::kFloat32);
+        auto mate_selected = mate_state
+                                 .gather(1, selected_step.expand(mate_gather_shape))
+                                 .squeeze(1)
+                                 .to(torch::kFloat32);
+        const auto checkpoint_flat =
+            checkpoint_indices.to(device, torch::kLong).reshape({-1});
+        auto host_all =
+            ssm_clone.index_select(0, checkpoint_flat)
+                .view({batch_size,
+                       seq_len,
+                       ssm_clone.size(1),
+                       ssm_clone.size(2),
+                       ssm_clone.size(3)})
+                .to(torch::kFloat32);
+        const std::vector<int64_t> host_gather_shape = {
+            batch_size, 1, host_all.size(2), host_all.size(3),
+            host_all.size(4)};
+        auto host_selected =
+            host_all.gather(1, selected_step.expand(host_gather_shape))
+                .squeeze(1);
+        // The live cache and the MATE intermediate both use [H,V,K].  The
+        // host reference writes its checkpoints back through the same cache
+        // ABI, so compare raw tensors here; transposing only the MATE side
+        // would report a layout mismatch as a numerical error.
+        auto state_all_diff = (mate_all - host_all).abs();
+        auto state_selected_diff = (mate_selected - host_selected).abs();
         LOG(INFO) << "[MTP fused-vs-host] out_max|diff|=" << out_diff
-                  << " state_max|diff|=" << sd.max().item<double>()
-                  << " state_mean|diff|=" << sd.mean().item<double>()
-                  << " ssm_fused_absmax="
-                  << ssm_cache.abs().max().item<double>()
-                  << " ssm_host_absmax=" << ssm_clone.abs().max().item<double>()
+                  << " state_all_max|diff|="
+                  << state_all_diff.max().item<double>()
+                  << " state_selected_max|diff|="
+                  << state_selected_diff.max().item<double>()
+                  << " state_selected_mean|diff|="
+                  << state_selected_diff.mean().item<double>()
+                  << " mate_state_absmax=" << mate_all.abs().max().item<double>()
+                  << " host_state_absmax=" << host_all.abs().max().item<double>()
                   << " out_absmax=" << core_attn_out.abs().max().item<double>();
       }
     } else {
@@ -2160,7 +2226,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     // mixed_qkv, gating, L2-norm, scale, recurrent step, and in-place fp32
     // state I/O (Qwen3.5 mamba_ssm_dtype). Reuses
     // MateGatedDeltaRuleDecodeParams.
-    xllm::kernel::MateGatedDeltaRuleDecodeParams fused_params;
+    xllm::kernel::musa::MateGatedDeltaRuleDecodeParams fused_params;
     fused_params.mixed_qkv = mixed_qkv;
     fused_params.state = ssm_cache;
     fused_params.A_log = A_log_;
@@ -2201,9 +2267,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
           /*dim=*/0, /*start=*/0, /*length=*/B);
     }
     core_attn_out =
-        xllm::kernel::fused_gated_delta_rule_decode(fused_params).unsqueeze(0);
+        xllm::kernel::musa::fused_gated_delta_rule_decode(fused_params).unsqueeze(0);
   } else if (use_mate_gdn_decode) {
-    xllm::kernel::MateGatedDeltaRuleDecodeParams mate_params;
+    xllm::kernel::musa::MateGatedDeltaRuleDecodeParams mate_params;
     mate_params.mixed_qkv = mixed_qkv;
     mate_params.state = ssm_cache;
     mate_params.A_log = A_log_;
@@ -2256,7 +2322,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
           mate_gdn_decode_v_buf_.narrow(/*dim=*/0, /*start=*/0, /*length=*/B);
     }
     core_attn_out =
-        xllm::kernel::mate_gated_delta_rule_decode(mate_params).unsqueeze(0);
+        xllm::kernel::musa::mate_gated_delta_rule_decode(mate_params).unsqueeze(0);
   } else {
     double scale = 1.0 / std::sqrt(static_cast<float>(processed_q.size(-1)));
     if (fla_ssm_state_layout) {

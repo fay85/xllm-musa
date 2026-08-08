@@ -390,8 +390,8 @@ void update_decode_plan_info(std::shared_ptr<PlanInfo> plan_info,
     // .to(kCPU) inside the captured region would abort capture. Fall back to a
     // lazy D2H for callers that have not opted in (e.g. legacy input builders).
     torch::Tensor paged_kv_indptr_host =
-        attn_meta.paged_kv_indptr_host.defined()
-            ? attn_meta.paged_kv_indptr_host
+        attn_meta.musa.paged_kv_indptr_host.defined()
+            ? attn_meta.musa.paged_kv_indptr_host
             : attn_meta.paged_kv_indptr.to(torch::kCPU);
     const int64_t batch_size = attn_meta.paged_kv_last_page_len.size(0);
 

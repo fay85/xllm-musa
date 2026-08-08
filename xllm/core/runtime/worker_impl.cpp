@@ -887,6 +887,12 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
 #if defined(USE_MUSA)
     if (has_linear_attention_layers(context_.get_model_args())) {
       prepare_input_params_for_linear_attention(processed_input.input_params);
+      if (!enable_schedule_overlap()) {
+        restore_linear_state_slots(
+            kv_caches_,
+            processed_input.input_params.linear_state_cache_ops,
+            processed_input.input_params.parallel.has_initial_state);
+      }
     }
 #endif
   };
@@ -1498,6 +1504,28 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
         LOG(INFO) << "Overriding draft model_type from " << current_type
                   << " to " << it->second << " for speculative decoding";
         args.model_type(it->second);
+      } else if (current_type == "qwen3_5_text" ||
+                 current_type == "qwen3_5_moe_text") {
+        // The MTP draft worker intentionally runs with
+        // num_speculative_tokens=0.  Qwen3.5 checkpoints use the hybrid text
+        // model type for the target, but the draft body must be instantiated
+        // from the dedicated full-attention MTP variant.  This normalization
+        // exists on the NPU path as well; keep the MUSA/shared path aligned so
+        // the zero-token draft configuration does not construct a full
+        // Qwen3.5 hybrid body or fail later during verify.
+        const char* mtp_model_type = current_type == "qwen3_5_text"
+                                         ? "qwen3_5_mtp"
+                                         : "qwen3_5_moe_mtp";
+        LOG(INFO) << "Overriding draft model_type from " << current_type
+                  << " to " << mtp_model_type << " for speculative decoding";
+        args.model_type(mtp_model_type);
+        const int32_t mtp_layers = args.num_nextn_predict_layers();
+        CHECK_GT(mtp_layers, 0)
+            << "Qwen3.5 MTP draft requires num_nextn_predict_layers > 0";
+        args.n_layers(mtp_layers);
+        args.layer_types(
+            std::vector<std::string>(mtp_layers, "full_attention"));
+        args.full_attention_interval(1);
       }
     }
   }

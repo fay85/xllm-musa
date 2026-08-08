@@ -14,13 +14,20 @@ limitations under the License.
 ==============================================================================*/
 
 #pragma once
-#include <ATen/cuda/CUDAGraph.h>
 #include <glog/logging.h>
 
 #include <memory>
 #include <vector>
 
 #include "core/kernels/musa/attention_runner.h"
+#include "torch_musa/csrc/core/MUSAStream.h"
+
+// torch_musa's native MUSAGraph header expects this stream alias.
+namespace at::musa {
+using c10::musa::MUSAStream;
+}  // namespace at::musa
+
+#include "torch_musa/csrc/aten/musa/MUSAGraph.h"
 
 namespace xllm::runtime::musa {
 
@@ -33,7 +40,7 @@ class PiecewiseGraphs final {
   PiecewiseGraphs(PiecewiseGraphs&&) noexcept = default;
   PiecewiseGraphs& operator=(PiecewiseGraphs&&) noexcept = default;
 
-  void add_graph(std::unique_ptr<at::cuda::CUDAGraph>&& graph);
+  void add_graph(std::unique_ptr<at::musa::MUSAGraph>&& graph);
   void add_attention_runner(::xllm::kernel::musa::AttentionRunner&& runner);
   void replay(const ::xllm::kernel::musa::AttentionReplayParams& runner_params);
   size_t size() const { return instructions_.size(); }
@@ -43,7 +50,7 @@ class PiecewiseGraphs final {
   bool requires_plan_info() const { return requires_plan_info_; }
 
  private:
-  std::vector<std::unique_ptr<at::cuda::CUDAGraph>> graphs_;
+  std::vector<std::unique_ptr<at::musa::MUSAGraph>> graphs_;
   std::vector<std::unique_ptr<::xllm::kernel::musa::AttentionRunner>>
       attention_runners_;
   std::vector<InstructionType> instructions_;

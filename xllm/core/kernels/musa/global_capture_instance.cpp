@@ -16,6 +16,7 @@ limitations under the License.
 #include "core/kernels/musa/global_capture_instance.h"
 
 #include <glog/logging.h>
+#include <musa_runtime_api.h>
 
 #include "core/common/global_flags.h"
 #include "core/kernels/musa/attention_runner.h"
@@ -47,7 +48,8 @@ void GlobalCaptureInstance::cleanup_capture_state() {
   current_piecewise_graph_.reset();
 }
 
-void GlobalCaptureInstance::begin_capture(const at::cuda::MempoolId_t& pool) {
+void GlobalCaptureInstance::begin_capture(
+    const c10::musa::MempoolId_t& pool) {
   CHECK(!is_capturing_) << "Already capturing, call end_capture() first";
 
   capture_lock_ = std::unique_lock<std::mutex>(capture_mutex_);
@@ -57,8 +59,8 @@ void GlobalCaptureInstance::begin_capture(const at::cuda::MempoolId_t& pool) {
 
   current_piecewise_graph_ = std::make_unique<PiecewiseGraphs>();
 
-  current_graph_ = std::make_unique<at::cuda::CUDAGraph>();
-  current_graph_->capture_begin(pool, cudaStreamCaptureModeThreadLocal);
+  current_graph_ = std::make_unique<at::musa::MUSAGraph>();
+  current_graph_->capture_begin(pool, musaStreamCaptureModeThreadLocal);
 }
 
 std::unique_ptr<PiecewiseGraphs> GlobalCaptureInstance::end_capture() {
@@ -112,8 +114,8 @@ void GlobalCaptureInstance::temporarily_begin_graph_locked() {
       << "Current graph already exists, cannot begin new graph. "
       << "Did you call temporarily_begin_graph() twice?";
 
-  current_graph_ = std::make_unique<at::cuda::CUDAGraph>();
-  current_graph_->capture_begin(graph_pool_, cudaStreamCaptureModeThreadLocal);
+  current_graph_ = std::make_unique<at::musa::MUSAGraph>();
+  current_graph_->capture_begin(graph_pool_, musaStreamCaptureModeThreadLocal);
 
   VLOG(kGraphExecutorLogVerboseLevel)
       << "GlobalCaptureInstance::temporarily_begin_graph()";

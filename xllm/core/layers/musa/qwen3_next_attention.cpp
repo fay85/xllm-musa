@@ -21,6 +21,7 @@ limitations under the License.
 #include <vector>
 
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/ops_api.h"
 #include "core/util/env_var.h"
 #include "core/util/prefill_breakdown.h"
 
@@ -68,7 +69,7 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
   // 1. QKV linear
   qkv_proj_ = register_module(
       "qkv_proj",
-      QKVParallelLinear(args.hidden_size(),
+      musa::QKVParallelLinear(args.hidden_size(),
                         attn_output_gate_ ? num_heads_ * 2 : num_heads_,
                         num_kv_heads_,
                         args.head_dim(),
@@ -81,7 +82,7 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
 
   // 2. O proj
   o_proj_ = register_module("o_proj",
-                            RowParallelLinear(total_num_heads * head_dim_,
+                            musa::RowParallelLinear(total_num_heads * head_dim_,
                                               args.hidden_size(),
                                               /*bias=*/false,
                                               /*input_is_parallelized=*/true,

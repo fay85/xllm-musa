@@ -2407,6 +2407,22 @@ inline void deserialize_forward_input_payload(
                        input_params.attention.device.paged_kv_last_page_len,
                        input_params.attention.host.paged_kv_last_page_len,
                        stream);
+#if defined(USE_MUSA)
+  // The shared-memory arena can be reused by schedule overlap while Mate
+  // attention still reads paged-KV metadata on the host. Materialize stable
+  // worker-owned storage once, before eager or graph execution consumes it.
+  auto& host_attention = input_params.attention.host;
+  if (host_attention.paged_kv_indptr.defined()) {
+    host_attention.paged_kv_indptr = host_attention.paged_kv_indptr.clone();
+  }
+  if (host_attention.paged_kv_indices.defined()) {
+    host_attention.paged_kv_indices = host_attention.paged_kv_indices.clone();
+  }
+  if (host_attention.paged_kv_last_page_len.defined()) {
+    host_attention.paged_kv_last_page_len =
+        host_attention.paged_kv_last_page_len.clone();
+  }
+#endif
   read_tensor(
       context, input_params.attention.device.new_cache_slot_offsets, stream);
   read_tensor(
