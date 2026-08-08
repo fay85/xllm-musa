@@ -853,6 +853,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       attn_metadata->q_seq_lens_vec[0] =
           static_cast<int32_t>(padded_num_tokens);
       if (attn_metadata->kv_seq_lens_vec.size() == 1) {
+        attn_metadata->max_seq_len = padded_num_tokens;
         attn_metadata->kv_seq_lens_vec[0] =
             static_cast<int32_t>(padded_num_tokens);
       }
