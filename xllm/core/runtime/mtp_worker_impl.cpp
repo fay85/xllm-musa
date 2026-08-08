@@ -2129,6 +2129,8 @@ void MTPWorkerImpl::prepare_draft_extend_inputs(
   extend_input = base_input;
   extend_input.sampling_params.return_probs =
       !extend_input.sampling_params.all_greedy_sample;
+  extend_input.sampling_params.return_selected_probs =
+      !extend_input.sampling_params.all_greedy_sample;
   clear_ready_events(extend_input);
   extend_input.device_tensors_ready = false;
   auto& input_params = extend_input.input_params;
@@ -2366,6 +2368,8 @@ void MTPWorkerImpl::prepare_draft_inputs(const ForwardInput& input,
   c10::StreamGuard stream_guard = prepare_stream_->set_stream_guard();
   draft_input = input;
   draft_input.sampling_params.return_probs =
+      !draft_input.sampling_params.all_greedy_sample;
+  draft_input.sampling_params.return_selected_probs =
       !draft_input.sampling_params.all_greedy_sample;
   clear_ready_events(draft_input);
   draft_input.device_tensors_ready = false;

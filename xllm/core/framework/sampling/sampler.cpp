@@ -26,6 +26,9 @@ limitations under the License.
 #include "core/framework/config/model_config.h"
 #include "logits_utils.h"
 #include "sampling_params.h"
+#if defined(USE_MUSA)
+#include "kernels/musa/musa_ops_api.h"
+#endif
 
 namespace xllm {
 
@@ -87,7 +90,8 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
   // before sampling. The general path below remains necessary when callers
   // need filtered logits, probabilities, or log probabilities.
   if (params.all_random_sample && sample_top_k.defined() &&
-      params.max_top_k > 0 && !params.logprobs && !params.return_probs) {
+      params.max_top_k > 0 && !params.logprobs &&
+      (!params.return_probs || params.return_selected_probs)) {
     if (sample_temperatures.defined()) {
       apply_temperatures(sample_logits, sample_temperatures);
     }
@@ -122,6 +126,11 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
     auto candidate_indices = random_sample(candidate_probs).view({-1, 1});
     output.next_tokens =
         candidate_token_ids.gather(/*dim=*/-1, candidate_indices).view({-1});
+    if (params.return_probs) {
+      output.probs = candidate_probs.gather(/*dim=*/-1, candidate_indices)
+                         .view({-1})
+                         .to(logits.dtype());
+    }
     return output;
   }
 #endif
@@ -221,7 +230,9 @@ torch::Tensor Sampler::greedy_sample(const torch::Tensor& probs) {
 }
 
 torch::Tensor Sampler::random_sample(const torch::Tensor& probs) {
-#if defined(USE_MLU) || defined(USE_CUDA) || defined(USE_DCU)
+#if defined(USE_MUSA)
+  return xllm::kernel::musa::random_sample(probs);
+#elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_DCU)
   xllm::kernel::RandomSampleParams params;
   params.logits = probs;
   return xllm::kernel::random_sample(params);

@@ -153,6 +153,11 @@ struct SamplingParameters {
   // request itself does not ask for logprobs.
   bool return_probs = false;
 
+  // MTP draft sampling only needs the probability of the sampled token for
+  // rejection sampling. When set, Sampler::forward() may return that
+  // selected probability without materializing a dense [batch, vocab] tensor.
+  bool return_selected_probs = false;
+
   // wheteher to get the embeddings of the tokens. used by embeddings model.
   bool is_embeddings = false;
 
