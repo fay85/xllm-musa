@@ -30,6 +30,7 @@ MODEL_NAME="${MODEL_NAME:-Qwen3.5-27B-FP8}"
 MODEL_PATH="${MODEL_PATH:-}"
 PORT="${PORT:-8092}"
 MASTER_NODE_ADDR="${MASTER_NODE_ADDR:-127.0.0.1:9748}"
+XLLM_RANDOM_SEED="${XLLM_RANDOM_SEED:--1}"
 MUSA_VISIBLE_DEVICES="${MUSA_VISIBLE_DEVICES:-0}"
 LOG_DIR="${LOG_DIR:-${SCRIPT_DIR}/log}"
 BACKGROUND=0
@@ -75,6 +76,7 @@ Important overrides:
   XLLM_BIN, ENABLE_GRAPH, ENABLE_GRAPH_VMM_POOL,
   ENABLE_PREFILL_PIECEWISE_GRAPH, ENABLE_PACKED_PREFILL,
   XLLM_USE_FA3, XLLM_USE_FA3_DECODE, XLLM_MUSA_POOL_COMPUTE_STREAM,
+  XLLM_RANDOM_SEED,
   XLLM_QWEN3_ENABLE_GRAPH_EXPERIMENTAL,
   XLLM_MAX_PACKED_PREFILL_SEQS, MAX_CONCURRENT_REQUESTS,
   MAX_SEQS_PER_BATCH, MAX_TOKENS_PER_BATCH
@@ -414,6 +416,7 @@ run_xllm() {
     "--backend=llm"
     "--port=${PORT}"
     "--master_node_addr=${MASTER_NODE_ADDR}"
+    "--random_seed=${XLLM_RANDOM_SEED}"
     "--nnodes=1"
     "--node_rank=0"
     "--block_size=${BLOCK_SIZE}"
@@ -454,6 +457,7 @@ run_xllm() {
 
   echo "==> xLLM binary: ${xllm_bin}"
   echo "==> model: ${model_path} (${MODEL_NAME})"
+  echo "==> random seed: ${XLLM_RANDOM_SEED}"
   echo "==> device: logical musa:0, visible=${MUSA_VISIBLE_DEVICES}"
   echo "==> graph=${ENABLE_GRAPH}, piecewise=${ENABLE_PREFILL_PIECEWISE_GRAPH}, vmm=${ENABLE_GRAPH_VMM_POOL}, packed=${ENABLE_PACKED_PREFILL}"
   echo "==> FA3=${XLLM_USE_FA3}, FA3 decode=${XLLM_USE_FA3_DECODE}, pool stream=${XLLM_MUSA_POOL_COMPUTE_STREAM}, GDN=${XLLM_GDN_DECODE_BACKEND}"
