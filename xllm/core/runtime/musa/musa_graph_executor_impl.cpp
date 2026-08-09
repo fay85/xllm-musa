@@ -3239,7 +3239,20 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   if (in_spec_verify_phase) {
     static const bool force_spec_verify_eager =
         std::getenv("XLLM_SPEC_VERIFY_EAGER") != nullptr;
-    if (force_spec_verify_eager) {
+    // Qwen3.5 FP8 MoE AOT artifacts are fixed-batch kernels (B<=8).  The
+    // larger MTP verify buckets (C=4 produces 9/12 rows) must be executed
+    // eagerly: capturing the chunked routed-MoE path and replaying it across
+    // waves can leave the graph/state stream stalled.  Keep the <=8 path on
+    // graph so C=1 (three verify rows for K=2) retains its decode graph speed.
+    static const bool eager_large_spec_verify = util::get_bool_env(
+        "XLLM_SPEC_VERIFY_LARGE_BATCH_EAGER", true);
+    constexpr uint32_t kMaxQwen35SpecVerifyGraphTokens = 8;
+    const bool is_qwen35_model =
+        args_.model_type().find("qwen3_5") != std::string::npos;
+    const bool large_qwen35_spec_verify =
+        is_qwen35_model && n_tokens > kMaxQwen35SpecVerifyGraphTokens;
+    if (force_spec_verify_eager ||
+        (eager_large_spec_verify && large_qwen35_spec_verify)) {
       COUNTER_INC(num_model_execution_total_eager);
       return model_->forward(tokens, positions, kv_caches, params);
     }

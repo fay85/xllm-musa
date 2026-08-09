@@ -54,6 +54,8 @@ constexpr int64_t kMaxMusaMoeTopkTokens = 2048;
 constexpr int64_t kMaskedGemmMAlignment = 256;
 constexpr int64_t kCompactBf16MAlignment = 128;
 constexpr int64_t kRaggedDecodeAlignment = 128;
+// Fused FP8 AOT artifacts are validated for fixed token batches 1 through 8.
+constexpr int64_t kMaxFusedMoeAotDecodeTokens = 8;
 // Mate Ragged changes the FP8 GEMM accumulation layout. B=1 passes the model
 // correctness gate and captures the long-ISL decode win; B>1 remains on the
 // established contiguous path until a wider ragged decode path is ready.
@@ -109,6 +111,24 @@ bool use_fused_moe_aot(int64_t num_tokens, bool is_decode) {
       << "MUSA fused MoE AOT artifacts are unavailable for decode batch "
       << num_tokens << "; using the contiguous fallback.";
   return false;
+}
+
+bool use_chunked_fused_moe_aot(int64_t num_tokens, bool is_decode) {
+  static const bool enabled =
+      util::get_bool_env("XLLM_MUSA_FUSED_MOE_AOT", true);
+  if (!enabled || !is_decode ||
+      num_tokens <= kMaxFusedMoeAotDecodeTokens) {
+    return false;
+  }
+  for (int64_t start = 0; start < num_tokens;
+       start += kMaxFusedMoeAotDecodeTokens) {
+    const int64_t chunk_tokens =
+        std::min(kMaxFusedMoeAotDecodeTokens, num_tokens - start);
+    if (!xllm::kernel::musa::musa_fused_moe_aot_available(chunk_tokens)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool use_bf16_fused_moe_aot(int64_t num_tokens, bool is_decode) {
@@ -794,7 +814,9 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward(
                          input_params.is_spec_verify;
   const bool is_prefill = !is_decode;
   int64_t chunk_tokens = kMaxChunkTokens;
-  if (is_prefill && use_contiguous_bf16_moe_) {
+  if (use_fp8_ && use_chunked_fused_moe_aot(num_tokens, is_decode)) {
+    chunk_tokens = kMaxFusedMoeAotDecodeTokens;
+  } else if (is_prefill && use_contiguous_bf16_moe_) {
     chunk_tokens = kMaxCompactBf16PrefillTokens;
   } else if (is_prefill && use_contiguous_fp8_moe_) {
     chunk_tokens = kMaxCompactPrefillTokens;
