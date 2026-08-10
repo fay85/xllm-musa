@@ -219,26 +219,35 @@ LinearStateInputRows get_host_linear_state_rows(
   }
   const std::vector<int32_t>& host_q_seq_lens =
       input_params.attention.host.q_seq_lens;
+#if defined(USE_MUSA)
+  // MUSA carries cumulative query lengths. Graph bucket padding appends rows
+  // without changing meta.num_sequences, so the leading zero is the format
+  // discriminator; the logical sequence count is not.
+  const bool has_leading_zero =
+      !host_q_seq_lens.empty() && host_q_seq_lens.front() == 0;
+#else
   const bool has_leading_zero =
       !host_q_seq_lens.empty() && host_q_seq_lens.front() == 0 &&
       host_q_seq_lens.size() ==
           static_cast<size_t>(input_params.meta.num_sequences + 1);
-  int64_t batch_size = static_cast<int64_t>(
+#endif
+  int64_t query_row_count = static_cast<int64_t>(
       has_leading_zero ? host_q_seq_lens.size() - 1 : host_q_seq_lens.size());
-  if (batch_size == 0) {
-    batch_size = input_params.meta.num_sequences;
+  if (query_row_count == 0) {
+    query_row_count = input_params.meta.num_sequences;
   }
-  if (batch_size == 0 && input_params.attention.device.block_tables.defined()) {
-    batch_size = input_params.attention.device.block_tables.size(0);
+  if (query_row_count == 0 &&
+      input_params.attention.device.block_tables.defined()) {
+    query_row_count = input_params.attention.device.block_tables.size(0);
   }
-  if (batch_size == 0 &&
+  if (query_row_count == 0 &&
       input_params.embedding.linear_state_indices.defined()) {
-    batch_size = input_params.embedding.linear_state_indices.numel();
+    query_row_count = input_params.embedding.linear_state_indices.numel();
   }
 
 #if defined(USE_NPU) || defined(USE_MUSA)
-  input_params.parallel.query_start_loc.resize(batch_size + 1, 0);
-  for (int64_t i = 0; i < batch_size; ++i) {
+  input_params.parallel.query_start_loc.resize(query_row_count + 1, 0);
+  for (int64_t i = 0; i < query_row_count; ++i) {
     const int64_t seq_len =
         has_leading_zero
             ? static_cast<int64_t>(host_q_seq_lens[static_cast<size_t>(i + 1)] -
@@ -253,7 +262,19 @@ LinearStateInputRows get_host_linear_state_rows(
       input_params.attention.host.kv_cache_tokens_nums;
   CHECK(!cached_tokens.empty())
       << "linear-state input requires host kv cache token counts";
-  return {cached_tokens, batch_size, /*empty_shard=*/false};
+  int64_t active_rows = query_row_count;
+#if defined(USE_MUSA)
+  // Decode graph padding has query rows for the bucket but recurrent-state
+  // metadata only for real sequences. Spec-verify intentionally expands each
+  // logical row, so retain its repeated-row mask behavior.
+  const int64_t cached_row_count = static_cast<int64_t>(cached_tokens.size());
+  if (!input_params.is_spec_verify &&
+      input_params.meta.batch_forward_type.is_decode() &&
+      query_row_count > cached_row_count) {
+    active_rows = cached_row_count;
+  }
+#endif
+  return {cached_tokens, active_rows, /*empty_shard=*/false};
 }
 #endif
 

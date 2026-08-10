@@ -36,6 +36,7 @@ limitations under the License.
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/kv_cache/linear_state_restore.h"
 #include "framework/kv_cache_transfer/kv_transfer_completion.h"
+#include "framework/model/model_args.h"
 #include "framework/model/model_input_params.h"
 #include "framework/state_dict/state_dict.h"
 #if defined(USE_CUDA) || defined(USE_ILU) || defined(USE_MUSA)
@@ -64,22 +65,6 @@ StreamEventPtr record_current_stream_event(const Device& device) {
   return event;
 }
 
-#if defined(USE_MUSA)
-bool can_skip_identity_decode_index_select(const ForwardInput& input,
-                                           const torch::Tensor& selected,
-                                           int64_t hidden_state_rows) {
-  // Decode builders emit one selected row per sequence in packed order. Keep
-  // the sequence-count check with the row-count check so padded or multi-row
-  // speculative inputs continue through the indexed path.
-  const bool has_index_dtype = selected.scalar_type() == torch::kInt32 ||
-                               selected.scalar_type() == torch::kInt64;
-  return selected.dim() == 1 && selected.is_contiguous() && has_index_dtype &&
-         input.input_params.meta.batch_forward_type.is_decode() &&
-         selected.numel() == hidden_state_rows &&
-         selected.numel() == input.input_params.meta.num_sequences;
-}
-#endif
-
 }  // namespace
 
 LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
@@ -87,13 +72,6 @@ LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
                              const runtime::Options& options)
     : WorkerImpl(parallel_args, device, options) {
   device_.set_device();
-#if defined(USE_MUSA)
-  static const bool use_pool_compute_stream =
-      util::get_bool_env("XLLM_MUSA_POOL_COMPUTE_STREAM", true);
-  if (use_pool_compute_stream) {
-    compute_stream_ = device_.get_stream_from_pool();
-  }
-#endif
 #if defined(USE_CUDA) || defined(USE_MUSA)
   const auto& model_config = ModelConfig::get_instance();
   if (!ModelConfig::is_python_model_impl(model_config.model_impl())) {
@@ -109,6 +87,24 @@ LLMWorkerImpl::LLMWorkerImpl(const ParallelArgs& parallel_args,
 bool LLMWorkerImpl::init_model(ModelContext& context) {
   CHECK(model_ == nullptr) << "Model is already initialized.";
   const auto& model_config = ModelConfig::get_instance();
+#if defined(USE_MUSA)
+  static const bool use_pool_compute_stream = util::get_bool_env(
+      "XLLM_MUSA_POOL_COMPUTE_STREAM", /*default_value=*/true);
+  const bool is_qwen3 = context.get_model_args().model_type() == "qwen3";
+  if (use_pool_compute_stream && !is_qwen3) {
+    compute_stream_ = device_.get_stream_from_pool();
+  } else if (use_pool_compute_stream) {
+    LOG(WARNING) << "MUSA pool compute streams are not validated for Qwen3 "
+                    "attention; using the default compute stream.";
+  }
+
+  const auto& beam_search_config = BeamSearchConfig::get_instance();
+  CHECK(!has_linear_attention_layers(context.get_model_args()) ||
+        (!beam_search_config.enable_beam_search_kernel() &&
+         beam_search_config.beam_width() <= 1))
+      << "MUSA beam search is not supported for models with linear-attention "
+         "layers.";
+#endif
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
   // Ensure FlashinferWorkspace is initialized on the calling thread before
@@ -329,9 +325,6 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
   }
 
   torch::Tensor logits;
-#if defined(USE_MUSA)
-  bool skip_identity_decode_index_select = false;
-#endif
   if (sampling_params.selected_token_idxes.defined()) {
     torch::Tensor selected_token_idxes = sampling_params.selected_token_idxes;
     if (model_output.hidden_states.defined() &&
@@ -341,17 +334,7 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
                                      /*non_blocking=*/false)
                                  .contiguous();
     }
-#if defined(USE_MUSA)
-    skip_identity_decode_index_select = can_skip_identity_decode_index_select(
-        input, selected_token_idxes, model_output.hidden_states.size(0));
-    if (skip_identity_decode_index_select) {
-      logits = model_->logits(model_output.hidden_states, torch::Tensor());
-    } else {
-      logits = model_->logits(model_output.hidden_states, selected_token_idxes);
-    }
-#else
     logits = model_->logits(model_output.hidden_states, selected_token_idxes);
-#endif
   }
 
   ForwardOutput output;
@@ -416,18 +399,8 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
       // Target prefill: keep full embeddings (global-real under model-side CP).
       output.sample_output.embeddings = embeddings;
     } else if (sampling_params.selected_token_idxes.defined()) {
-#if defined(USE_MUSA)
-      if (skip_identity_decode_index_select &&
-          embeddings.size(0) == sampling_params.selected_token_idxes.numel()) {
-        output.sample_output.embeddings = embeddings;
-      } else {
-        output.sample_output.embeddings = embeddings.index_select(
-            /*dim=*/0, sampling_params.selected_token_idxes);
-      }
-#else
       output.sample_output.embeddings = embeddings.index_select(
           /*dim=*/0, sampling_params.selected_token_idxes);
-#endif
     }
   }
 
