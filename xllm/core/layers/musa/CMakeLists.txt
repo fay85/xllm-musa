@@ -3,8 +3,6 @@ include(cc_library)
 # MUSA layers - FlashInfer/Mate path
 set(_MUSA_LAYERS_HDRS
   attention.h
-  attention_metadata.h
-  attention_metadata_builder.h
   flashinfer_attention.h
   flashinfer_planinfo.h
   ../cuda/base_attention_impl.h
@@ -20,7 +18,6 @@ set(_MUSA_LAYERS_HDRS
 )
 set(_MUSA_LAYERS_SRCS
   attention.cpp
-  attention_metadata_builder.cpp
   flashinfer_attention.cpp
   flashinfer_planinfo.cpp
   ../cuda/flashinfer_workspace.cpp

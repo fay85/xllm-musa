@@ -26,7 +26,6 @@ limitations under the License.
 #include "kernels/ops_api.h"
 #include "layers/common/attention_metadata.h"
 #include "layers/cuda/flashinfer_workspace.h"
-#include "layers/musa/attention_metadata.h"
 #include "layers/musa/flashinfer_planinfo.h"
 
 namespace xllm {
@@ -191,7 +190,7 @@ void FlashInferAttentionImpl::prefill_forward(
     std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
-  const auto& musa_metadata = musa::get_attention_metadata(attn_metadata);
+  const MusaAttentionMetadata& musa_metadata = attn_metadata.musa;
   bool use_custom_mask = attn_metadata.attn_mask.defined();
 
   static const int32_t fa3_setting = [] {
@@ -471,7 +470,7 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
     return;
   }
-  const auto& musa_metadata = musa::get_attention_metadata(attn_metadata);
+  const MusaAttentionMetadata& musa_metadata = attn_metadata.musa;
   // Get block_size from k_cache if defined and has proper dimensions,
   // otherwise use a default value (for prefill without KV cache, e.g., LongCat)
   int64_t block_size = 1;
@@ -545,7 +544,7 @@ void FlashInferAttentionImpl::decoder_forward(
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
   const AttentionMetadata& decode_attn = attn_metadata;
-  const auto& musa_metadata = musa::get_attention_metadata(attn_metadata);
+  const MusaAttentionMetadata& musa_metadata = attn_metadata.musa;
   // Match the graph executor default while allowing an explicit FA3 override.
   {
     static const int32_t fa3_setting = [] {

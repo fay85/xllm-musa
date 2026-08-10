@@ -64,6 +64,19 @@ struct XAttentionTwoStageDecodeCache {
 };
 #endif
 
+#if defined(USE_MUSA)
+// Metadata used only by MUSA attention and graph replay. Keep these fields in
+// the common metadata object so every backend shares the same metadata type and
+// builder while backend-specific consumers remain clearly scoped.
+struct MusaAttentionMetadata {
+  torch::Tensor paged_kv_indptr_host;
+  torch::Tensor paged_kv_indices_host;
+  torch::Tensor paged_kv_last_page_len_host;
+  bool share_fa3_scheduler_metadata = false;
+  mutable torch::Tensor fa3_scheduler_metadata;
+};
+#endif
+
 // AttentionMetadata contains batch-level information shared across all
 // attention layers. It is built once at the beginning of model forward pass and
 // reused by all layers. This avoids redundant computation and memory allocation
@@ -174,6 +187,10 @@ struct AttentionMetadata {
   // DeepSeek V4 sparse attention metadata (optional).
   // Built by DSAMetadataBuilder and shared across all layers.
   std::shared_ptr<DSAMetadata> dsa_metadata;
+
+#if defined(USE_MUSA)
+  MusaAttentionMetadata musa;
+#endif
 
 #if defined(USE_NPU)
   // for npu

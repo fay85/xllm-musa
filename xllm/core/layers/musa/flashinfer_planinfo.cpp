@@ -24,7 +24,6 @@ limitations under the License.
 #include "core/util/utils.h"
 #include "kernels/musa/musa_tvmffi_stream.h"
 #include "layers/cuda/flashinfer_workspace.h"
-#include "layers/musa/attention_metadata.h"
 
 namespace xllm::layer::musa::flashinfer {
 
@@ -244,8 +243,7 @@ void update_chunked_prefill_plan_info(
     qo_indptr_host = get_cache_buffer(batch_size + 1, torch::kCPU);
   }
 
-  const auto& musa_metadata =
-      ::xllm::layer::musa::get_attention_metadata(attn_meta);
+  const MusaAttentionMetadata& musa_metadata = attn_meta.musa;
   torch::Tensor paged_kv_indptr_host =
       musa_metadata.paged_kv_indptr_host.defined()
           ? musa_metadata.paged_kv_indptr_host
@@ -369,8 +367,7 @@ void update_decode_plan_info(std::shared_ptr<PlanInfo> plan_info,
                              /*use_sliding_window=*/false,
                              /*use_logits_soft_cap=*/false);
 
-    const auto& musa_metadata =
-        ::xllm::layer::musa::get_attention_metadata(attn_meta);
+    const MusaAttentionMetadata& musa_metadata = attn_meta.musa;
     torch::Tensor paged_kv_indptr_host =
         musa_metadata.paged_kv_indptr_host.defined()
             ? musa_metadata.paged_kv_indptr_host
