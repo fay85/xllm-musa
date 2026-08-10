@@ -63,11 +63,10 @@ limitations under the License.
 #elif defined(USE_CUDA) || defined(USE_DCU) || defined(USE_MUSA)
 #include "platform/torch_profiler.h"
 #endif
-#if defined(USE_CUDA) || defined(USE_DCU) || defined(USE_MUSA)
-#include "kernels/cuda/cuda_ops_api.h"
 #if defined(USE_MUSA)
 #include "kernels/musa/musa_ops_api.h"
-#endif
+#elif defined(USE_CUDA) || defined(USE_DCU)
+#include "kernels/cuda/cuda_ops_api.h"
 #endif
 #if defined(USE_CUDA)
 #include "platform/cuda_profiler.h"
