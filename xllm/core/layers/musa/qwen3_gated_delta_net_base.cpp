@@ -507,6 +507,14 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     const AttentionMetadata& attn_metadata,
     KVCache& kv_cache,
     const ModelInputParams& input_params) {
+  // Early-return on dummy shards. Under dp>1, an empty shard is padded with a
+  // fake token by worker_impl but its GDN state tensors (linear_state_ids,
+  // has_initial_states etc.) may be empty/undefined. Entering
+  // get_linear_state_indices() would CHECK-fail or write fake index 0 into a
+  // real cache slot.
+  if (attn_metadata.is_dummy) {
+    return torch::zeros_like(hidden_states);
+  }
   // Save original hidden_states size for potential padding later
   const int64_t original_num_tokens = hidden_states.size(0);
   auto [qkvz_padded, ba_padded] =
@@ -600,19 +608,17 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
 
   if (!use_spec_verify && is_any_prefill) {
     torch::Tensor conv_input = reshape_qkvz_unpad(attn_metadata, mixed_qkv);
-    torch::Tensor has_initial_state;
-    const auto& kv_cache_tokens_nums =
-        input_params.attention.device.kv_cache_tokens_nums;
-    if (kv_cache_tokens_nums.defined()) {
-      has_initial_state = kv_cache_tokens_nums > 0;
-    } else if (attn_metadata.has_initial_states.defined()) {
-      has_initial_state = attn_metadata.has_initial_states;
-    } else {
-      has_initial_state = torch::zeros({batch_size},
-                                       torch::TensorOptions()
-                                           .dtype(torch::kBool)
-                                           .device(mixed_qkv.device()));
-    }
+    // Canonical recurrent-state validity from linear_state_validity_mask.
+    // Do not derive from kv_cache_tokens_nums: prefix-cached tokens do not
+    // imply a valid GDN recurrent state (see AttentionMetadataBuilder tests).
+    const torch::Tensor& has_initial_state = attn_metadata.has_initial_states;
+    CHECK(has_initial_state.defined())
+        << "has_initial_states must be populated for Qwen3.5 prefill";
+    CHECK_EQ(has_initial_state.dim(), 1);
+    CHECK_EQ(has_initial_state.numel(), batch_size);
+    CHECK_EQ(has_initial_state.scalar_type(), torch::kBool);
+    CHECK(has_initial_state.device() == mixed_qkv.device())
+        << "has_initial_states must be on the same device as mixed_qkv";
     mixed_qkv =
         xllm::kernel::musa::causal_conv1d_prefill(conv_input,
                                                   conv_weight,
