@@ -807,27 +807,27 @@ void FlashInferAttentionImpl::decoder_forward(
                                               decode_use_tensor_core_);
   }
 
-  xllm::kernel::musa::batch_decode(decode_attn.plan_info->uri,
-                                   decode_attn.plan_info->plan_info,
-                                   float_workspace_buffer_,
-                                   int_workspace_buffer_,
-                                   page_locked_int_workspace_buffer_,
-                                   query,
-                                   k_cache,
-                                   v_cache,
-                                   decode_attn.paged_kv_indptr,
-                                   decode_attn.paged_kv_indices,
-                                   decode_attn.paged_kv_last_page_len,
-                                   sliding_window_,
-                                   scale_,
-                                   output,
-                                   output_lse,
-                                   decode_use_tensor_core_,
-                                   decode_attn.qo_indptr,
-                                   decode_attn.fa3_metadata.paged_kv_indptr_host,
-                                   decode_attn.fa3_metadata.paged_kv_indices_host,
-                                   decode_attn.fa3_metadata
-                                       .paged_kv_last_page_len_host);
+  xllm::kernel::musa::batch_decode(
+      decode_attn.plan_info->uri,
+      decode_attn.plan_info->plan_info,
+      float_workspace_buffer_,
+      int_workspace_buffer_,
+      page_locked_int_workspace_buffer_,
+      query,
+      k_cache,
+      v_cache,
+      decode_attn.paged_kv_indptr,
+      decode_attn.paged_kv_indices,
+      decode_attn.paged_kv_last_page_len,
+      sliding_window_,
+      scale_,
+      output,
+      output_lse,
+      decode_use_tensor_core_,
+      decode_attn.qo_indptr,
+      decode_attn.fa3_metadata.paged_kv_indptr_host,
+      decode_attn.fa3_metadata.paged_kv_indices_host,
+      decode_attn.fa3_metadata.paged_kv_last_page_len_host);
 }
 
 }  // namespace layer
