@@ -24,6 +24,7 @@ cc_library(
     activation.h
     attention_metadata.h
     attention_metadata_builder.h
+    kv_shard_batch_metadata.h
     dsa_metadata.h
     dsa_metadata_builder.h
     dsa_topk_share_plan.h
@@ -50,6 +51,7 @@ cc_library(
     deep_ep.cpp
     activation.cpp
     attention_metadata_builder.cpp
+    kv_shard_batch_metadata.cpp
     dsa_metadata_builder.cpp
     dp_utils.cpp
     add_matmul.cpp
