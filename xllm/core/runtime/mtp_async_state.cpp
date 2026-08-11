@@ -47,6 +47,9 @@ TargetSpecVerifyMode classify_target_spec_verify_mode(
   if (is_qwen3_5_target_model_type(model_type)) {
     return TargetSpecVerifyMode::QWEN3_5_EXPANDED_VERIFY;
   }
+  if (model_type == "deepseek_v32") {
+    return TargetSpecVerifyMode::DEEPSEEK_V32_EXPANDED_VERIFY;
+  }
   if (model_type == "mimo") {
     return TargetSpecVerifyMode::CAUSAL_CHUNKED_PREFILL;
   }
