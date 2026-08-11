@@ -190,7 +190,7 @@ void FlashInferAttentionImpl::prefill_forward(
     std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
-  const MusaAttentionMetadata& musa_metadata = attn_metadata.musa;
+  const Fa3AttentionMetadata& fa3_metadata = attn_metadata.fa3;
   bool use_custom_mask = attn_metadata.attn_mask.defined();
 
   static const int32_t fa3_setting = [] {
@@ -286,13 +286,13 @@ void FlashInferAttentionImpl::prefill_forward(
       const int32_t batch_size =
           static_cast<int32_t>(attn_metadata.block_table.size(0));
       torch::Tensor scheduler_metadata;
-      if (musa_metadata.share_fa3_scheduler_metadata &&
-          musa_metadata.fa3_scheduler_metadata.defined()) {
-        CHECK_EQ(musa_metadata.fa3_scheduler_metadata.numel(),
+      if (fa3_metadata.share_fa3_scheduler_metadata &&
+          fa3_metadata.fa3_scheduler_metadata.defined()) {
+        CHECK_EQ(fa3_metadata.fa3_scheduler_metadata.numel(),
                  static_cast<int64_t>(batch_size) * 4)
             << "FA3 prefill scheduler metadata shape changed within one "
                "forward";
-        scheduler_metadata = musa_metadata.fa3_scheduler_metadata;
+        scheduler_metadata = fa3_metadata.fa3_scheduler_metadata;
       }
       if (!scheduler_metadata.defined()) {
         scheduler_metadata = xllm::kernel::musa::fa3_prefill_scheduler_metadata(
@@ -309,8 +309,8 @@ void FlashInferAttentionImpl::prefill_forward(
             cu_seqlens_q,
             cu_seqlens_k_new,
             seqused_k);
-        if (musa_metadata.share_fa3_scheduler_metadata) {
-          musa_metadata.fa3_scheduler_metadata = scheduler_metadata;
+        if (fa3_metadata.share_fa3_scheduler_metadata) {
+          fa3_metadata.fa3_scheduler_metadata = scheduler_metadata;
         }
       }
 
@@ -470,7 +470,7 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
     return;
   }
-  const MusaAttentionMetadata& musa_metadata = attn_metadata.musa;
+  const Fa3AttentionMetadata& fa3_metadata = attn_metadata.fa3;
   // Get block_size from k_cache if defined and has proper dimensions,
   // otherwise use a default value (for prefill without KV cache, e.g., LongCat)
   int64_t block_size = 1;
@@ -530,9 +530,9 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
       output_lse,
       qo_indptr_arg,
       /*causal=*/true,
-      musa_metadata.paged_kv_indptr_host,
-      musa_metadata.paged_kv_indices_host,
-      musa_metadata.paged_kv_last_page_len_host);
+      fa3_metadata.paged_kv_indptr_host,
+      fa3_metadata.paged_kv_indices_host,
+      fa3_metadata.paged_kv_last_page_len_host);
 }
 
 void FlashInferAttentionImpl::decoder_forward(
@@ -544,7 +544,7 @@ void FlashInferAttentionImpl::decoder_forward(
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
   const AttentionMetadata& decode_attn = attn_metadata;
-  const MusaAttentionMetadata& musa_metadata = attn_metadata.musa;
+  const Fa3AttentionMetadata& fa3_metadata = attn_metadata.fa3;
   // Match the graph executor default while allowing an explicit FA3 override.
   {
     static const int32_t fa3_setting = [] {
@@ -600,11 +600,11 @@ void FlashInferAttentionImpl::decoder_forward(
       // models retain per-layer generation so shared graph-capture metadata
       // cannot accidentally keep scheduler values from a previous step.
       torch::Tensor scheduler_metadata;
-      if (musa_metadata.share_fa3_scheduler_metadata &&
-          musa_metadata.fa3_scheduler_metadata.defined()) {
-        CHECK_EQ(musa_metadata.fa3_scheduler_metadata.numel(), batch_size * 4)
+      if (fa3_metadata.share_fa3_scheduler_metadata &&
+          fa3_metadata.fa3_scheduler_metadata.defined()) {
+        CHECK_EQ(fa3_metadata.fa3_scheduler_metadata.numel(), batch_size * 4)
             << "FA3 scheduler metadata shape changed within one forward";
-        scheduler_metadata = musa_metadata.fa3_scheduler_metadata;
+        scheduler_metadata = fa3_metadata.fa3_scheduler_metadata;
       }
       const torch::Tensor cu_seqlens_q =
           decode_attn.qo_indptr.has_value() && decode_attn.qo_indptr->defined()
@@ -624,8 +624,8 @@ void FlashInferAttentionImpl::decoder_forward(
             /*window_size_right=*/0,
             /*cu_seqlens_q=*/cu_seqlens_q,
             /*seqused_k=*/seqused_k);
-        if (musa_metadata.share_fa3_scheduler_metadata) {
-          musa_metadata.fa3_scheduler_metadata = scheduler_metadata;
+        if (fa3_metadata.share_fa3_scheduler_metadata) {
+          fa3_metadata.fa3_scheduler_metadata = scheduler_metadata;
         }
       }
 
@@ -727,9 +727,9 @@ void FlashInferAttentionImpl::decoder_forward(
                                    output_lse,
                                    decode_use_tensor_core_,
                                    decode_attn.qo_indptr,
-                                   musa_metadata.paged_kv_indptr_host,
-                                   musa_metadata.paged_kv_indices_host,
-                                   musa_metadata.paged_kv_last_page_len_host);
+                                   fa3_metadata.paged_kv_indptr_host,
+                                   fa3_metadata.paged_kv_indices_host,
+                                   fa3_metadata.paged_kv_last_page_len_host);
 }
 
 }  // namespace layer

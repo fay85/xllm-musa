@@ -584,7 +584,10 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const bool use_spec_verify = input_params.is_spec_verify;
   const bool is_any_prefill =
       attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
-  const bool decode_eligible = !attn_metadata.is_prefill && !use_spec_verify &&
+  // Exclude chunked-prefill: seq_len==1 chunked batches must not take the fused
+  // decode path (that skips process_mixed_qkv while still hitting prefill
+  // attn).
+  const bool decode_eligible = !is_any_prefill && !use_spec_verify &&
                                seq_len == 1 && checkpoint_stride == 1;
   // Production defaults: fused decode on, mate decode/prefill off.
   const bool use_fused_gdn_decode = kEnableFusedGdnDecode && decode_eligible;
@@ -597,8 +600,19 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
 
   if (!use_spec_verify && is_any_prefill) {
     torch::Tensor conv_input = reshape_qkvz_unpad(attn_metadata, mixed_qkv);
-    torch::Tensor has_initial_state =
-        input_params.attention.device.kv_cache_tokens_nums > 0;
+    torch::Tensor has_initial_state;
+    const auto& kv_cache_tokens_nums =
+        input_params.attention.device.kv_cache_tokens_nums;
+    if (kv_cache_tokens_nums.defined()) {
+      has_initial_state = kv_cache_tokens_nums > 0;
+    } else if (attn_metadata.has_initial_states.defined()) {
+      has_initial_state = attn_metadata.has_initial_states;
+    } else {
+      has_initial_state = torch::zeros({batch_size},
+                                       torch::TensorOptions()
+                                           .dtype(torch::kBool)
+                                           .device(mixed_qkv.device()));
+    }
     mixed_qkv =
         xllm::kernel::musa::causal_conv1d_prefill(conv_input,
                                                   conv_weight,

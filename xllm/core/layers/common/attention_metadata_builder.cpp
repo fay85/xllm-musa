@@ -94,7 +94,7 @@ void convert_cumulative_lengths(std::vector<int32_t>& lengths,
   lengths = std::move(per_sequence_lengths);
 }
 
-void populate_musa_attention_metadata(
+void populate_fa3_attention_metadata(
     AttentionMetadata& attn_metadata,
     const ModelInputParams& params,
     const std::optional<torch::Tensor>& attn_mask) {
@@ -108,7 +108,8 @@ void populate_musa_attention_metadata(
       params.attention.host.q_seq_lens.empty()
           ? params.meta.num_sequences
           : static_cast<int64_t>(q_lengths_are_cumulative
-                                     ? params.attention.host.q_seq_lens.size() - 1
+                                     ? params.attention.host.q_seq_lens.size() -
+                                           1
                                      : params.attention.host.q_seq_lens.size());
   const int64_t kv_sequence_count =
       params.attention.host.kv_seq_lens.empty()
@@ -151,10 +152,9 @@ void populate_musa_attention_metadata(
   attn_metadata.q_cu_seq_lens = to_int32_contiguous(q_cu_seq_lens);
 
   torch::Tensor kv_cu_seq_lens = attn_metadata.kv_cu_seq_lens;
-  bool kv_cu_is_cumulative =
-      kv_cu_seq_lens.defined() &&
-      (kv_device_lengths_are_cumulative ||
-       kv_cu_seq_lens.numel() == kv_sequence_count + 1);
+  bool kv_cu_is_cumulative = kv_cu_seq_lens.defined() &&
+                             (kv_device_lengths_are_cumulative ||
+                              kv_cu_seq_lens.numel() == kv_sequence_count + 1);
   if (!kv_cu_seq_lens.defined() &&
       params.attention.device.kv_seq_lens.defined()) {
     kv_cu_seq_lens = params.attention.device.kv_seq_lens;
@@ -172,18 +172,17 @@ void populate_musa_attention_metadata(
             .contiguous();
   }
 
-  if (!attn_metadata.musa.paged_kv_indptr_host.defined()) {
-    attn_metadata.musa.paged_kv_indptr_host =
+  if (!attn_metadata.fa3.paged_kv_indptr_host.defined()) {
+    attn_metadata.fa3.paged_kv_indptr_host =
         to_host_int32_contiguous(params.attention.device.paged_kv_indptr);
   }
-  if (!attn_metadata.musa.paged_kv_indices_host.defined()) {
-    attn_metadata.musa.paged_kv_indices_host =
+  if (!attn_metadata.fa3.paged_kv_indices_host.defined()) {
+    attn_metadata.fa3.paged_kv_indices_host =
         to_host_int32_contiguous(params.attention.device.paged_kv_indices);
   }
-  if (!attn_metadata.musa.paged_kv_last_page_len_host.defined()) {
-    attn_metadata.musa.paged_kv_last_page_len_host =
-        to_host_int32_contiguous(
-            params.attention.device.paged_kv_last_page_len);
+  if (!attn_metadata.fa3.paged_kv_last_page_len_host.defined()) {
+    attn_metadata.fa3.paged_kv_last_page_len_host = to_host_int32_contiguous(
+        params.attention.device.paged_kv_last_page_len);
   }
 
   if (attn_mask.has_value() && attn_mask->dim() == 1) {
@@ -280,7 +279,7 @@ AttentionMetadata build_attention_metadata(
   AttentionMetadata attn_metadata;
 #if defined(USE_MUSA)
   if (params.attn_metadata != nullptr) {
-    attn_metadata.musa = params.attn_metadata->musa;
+    attn_metadata.fa3 = params.attn_metadata->fa3;
   }
 #endif
   attn_metadata.q_cu_seq_lens = params.attention.device.q_seq_lens;
@@ -491,7 +490,7 @@ AttentionMetadata build_attention_metadata(
   attn_metadata.enable_cuda_graph = params.enable_graph;
 
 #if defined(USE_MUSA)
-  populate_musa_attention_metadata(attn_metadata, params, attn_mask);
+  populate_fa3_attention_metadata(attn_metadata, params, attn_mask);
 #endif
 
 #if defined(USE_CUDA)

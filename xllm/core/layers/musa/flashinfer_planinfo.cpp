@@ -243,10 +243,10 @@ void update_chunked_prefill_plan_info(
     qo_indptr_host = get_cache_buffer(batch_size + 1, torch::kCPU);
   }
 
-  const MusaAttentionMetadata& musa_metadata = attn_meta.musa;
+  const Fa3AttentionMetadata& fa3_metadata = attn_meta.fa3;
   torch::Tensor paged_kv_indptr_host =
-      musa_metadata.paged_kv_indptr_host.defined()
-          ? musa_metadata.paged_kv_indptr_host
+      fa3_metadata.paged_kv_indptr_host.defined()
+          ? fa3_metadata.paged_kv_indptr_host
           : attn_meta.paged_kv_indptr.to(torch::kCPU);
   torch::Tensor kv_len_arr_host = get_kv_len_arr_host(attn_meta);
 
@@ -367,10 +367,10 @@ void update_decode_plan_info(std::shared_ptr<PlanInfo> plan_info,
                              /*use_sliding_window=*/false,
                              /*use_logits_soft_cap=*/false);
 
-    const MusaAttentionMetadata& musa_metadata = attn_meta.musa;
+    const Fa3AttentionMetadata& fa3_metadata = attn_meta.fa3;
     torch::Tensor paged_kv_indptr_host =
-        musa_metadata.paged_kv_indptr_host.defined()
-            ? musa_metadata.paged_kv_indptr_host
+        fa3_metadata.paged_kv_indptr_host.defined()
+            ? fa3_metadata.paged_kv_indptr_host
             : attn_meta.paged_kv_indptr.to(torch::kCPU);
     const int64_t batch_size = attn_meta.paged_kv_last_page_len.size(0);
 

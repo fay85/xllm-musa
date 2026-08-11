@@ -65,10 +65,10 @@ struct XAttentionTwoStageDecodeCache {
 #endif
 
 #if defined(USE_MUSA)
-// Metadata used only by MUSA attention and graph replay. Keep these fields in
-// the common metadata object so every backend shares the same metadata type and
-// builder while backend-specific consumers remain clearly scoped.
-struct MusaAttentionMetadata {
+// FA3 / FlashInfer extras used by MUSA attention and graph replay:
+// CPU host mirrors for plan updates (avoid D2H during capture) and optional
+// shared FA3 scheduler metadata across layers.
+struct Fa3AttentionMetadata {
   torch::Tensor paged_kv_indptr_host;
   torch::Tensor paged_kv_indices_host;
   torch::Tensor paged_kv_last_page_len_host;
@@ -189,7 +189,7 @@ struct AttentionMetadata {
   std::shared_ptr<DSAMetadata> dsa_metadata;
 
 #if defined(USE_MUSA)
-  MusaAttentionMetadata musa;
+  Fa3AttentionMetadata fa3;
 #endif
 
 #if defined(USE_NPU)

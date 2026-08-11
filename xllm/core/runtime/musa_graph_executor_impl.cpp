@@ -583,17 +583,17 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     };
     if (s_enable_graph_timing()) {
       LOG(INFO) << "GRAPH_TIMING ensure_host_mirror: indptr_host_defined="
-                << attn_metadata->musa.paged_kv_indptr_host.defined()
+                << attn_metadata->fa3.paged_kv_indptr_host.defined()
                 << " indices_host_defined="
-                << attn_metadata->musa.paged_kv_indices_host.defined()
+                << attn_metadata->fa3.paged_kv_indices_host.defined()
                 << " last_page_len_host_defined="
-                << attn_metadata->musa.paged_kv_last_page_len_host.defined();
+                << attn_metadata->fa3.paged_kv_last_page_len_host.defined();
     }
-    ensure_host_mirror(attn_metadata->musa.paged_kv_indptr_host,
+    ensure_host_mirror(attn_metadata->fa3.paged_kv_indptr_host,
                        attn_metadata->paged_kv_indptr);
-    ensure_host_mirror(attn_metadata->musa.paged_kv_indices_host,
+    ensure_host_mirror(attn_metadata->fa3.paged_kv_indices_host,
                        attn_metadata->paged_kv_indices);
-    ensure_host_mirror(attn_metadata->musa.paged_kv_last_page_len_host,
+    ensure_host_mirror(attn_metadata->fa3.paged_kv_last_page_len_host,
                        attn_metadata->paged_kv_last_page_len);
   }
   auto build_capture_params_if_needed =
@@ -1032,7 +1032,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
                     (args_.max_position_embeddings() + block_size - 1) /
                     block_size)
               : 0;
-      layer::flashinfer::update_decode_plan_info(
+      layer::musa::flashinfer::update_decode_plan_info(
           attn_metadata->plan_info,
           /*backend=*/"fa2",  // flashinfer paged fa3 is slow, use fa2 instead
           *attn_metadata,
@@ -1079,8 +1079,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
               : attn_metadata->q_cu_seq_lens;
       CHECK(attn_metadata->kv_seq_lens.defined())
           << "FA3 graph decode requires per-sequence KV lengths";
-      attn_metadata->musa.share_fa3_scheduler_metadata = true;
-      attn_metadata->musa.fa3_scheduler_metadata =
+      attn_metadata->fa3.share_fa3_scheduler_metadata = true;
+      attn_metadata->fa3.fa3_scheduler_metadata =
           xllm::kernel::musa::fa3_decode_scheduler_metadata(
               device_,
               static_cast<int32_t>(batch_size),
@@ -1187,17 +1187,17 @@ void MusaGraph::refresh_persistent_paged_kv_host_mirrors(
   };
 
   refresh_one(paged_kv_indptr_host_buf_,
-              attn_metadata->musa.paged_kv_indptr_host,
+              attn_metadata->fa3.paged_kv_indptr_host,
               attn_metadata->paged_kv_indptr,
               host_src.paged_kv_indptr,
               paged_kv_indptr_host_max_numel_);
   refresh_one(paged_kv_indices_host_buf_,
-              attn_metadata->musa.paged_kv_indices_host,
+              attn_metadata->fa3.paged_kv_indices_host,
               attn_metadata->paged_kv_indices,
               host_src.paged_kv_indices,
               paged_kv_indices_host_max_numel_);
   refresh_one(paged_kv_last_page_len_host_buf_,
-              attn_metadata->musa.paged_kv_last_page_len_host,
+              attn_metadata->fa3.paged_kv_last_page_len_host,
               attn_metadata->paged_kv_last_page_len,
               host_src.paged_kv_last_page_len,
               paged_kv_last_page_len_host_max_numel_);
@@ -1290,7 +1290,7 @@ bool MusaGraph::capture(CausalLM* model,
          "return_capture_params=true";
 
   captured_fa3_scheduler_metadata_ =
-      graph_params_opt.value().attn_metadata->musa.fa3_scheduler_metadata;
+      graph_params_opt.value().attn_metadata->fa3.fa3_scheduler_metadata;
 
   // Graph preparation executes eager warmup and FFI-record forwards before
   // the real replay. Each forward mutates GDN convolution and recurrent state,
@@ -1496,7 +1496,7 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
         << "update() should return ModelInputParams for decode replay";
 
     const torch::Tensor& fresh_fa3_scheduler_metadata =
-        replay_params_opt.value().attn_metadata->musa.fa3_scheduler_metadata;
+        replay_params_opt.value().attn_metadata->fa3.fa3_scheduler_metadata;
     if (captured_fa3_scheduler_metadata_.defined()) {
       CHECK(fresh_fa3_scheduler_metadata.defined())
           << "FA3 scheduler metadata disappeared after graph capture";
