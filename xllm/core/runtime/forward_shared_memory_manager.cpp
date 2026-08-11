@@ -29,7 +29,7 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/model_config.h"
 #if defined(USE_MUSA)
-#include "layers/musa/attention_metadata_builder.h"
+#include "layers/common/attention_metadata.h"
 #endif
 #include "platform/stream.h"
 #if defined(USE_MUSA)
@@ -2404,8 +2404,12 @@ inline void deserialize_forward_input_payload(
                        input_params.attention.device.paged_kv_last_page_len,
                        paged_kv_last_page_len_host,
                        stream);
-  input_params.attn_metadata = layer::musa::create_attention_metadata_seed(
-      paged_kv_indptr_host, paged_kv_indices_host, paged_kv_last_page_len_host);
+  auto attn_metadata = std::make_shared<layer::AttentionMetadata>();
+  attn_metadata->fa3_metadata.paged_kv_indptr_host = paged_kv_indptr_host;
+  attn_metadata->fa3_metadata.paged_kv_indices_host = paged_kv_indices_host;
+  attn_metadata->fa3_metadata.paged_kv_last_page_len_host =
+      paged_kv_last_page_len_host;
+  input_params.attn_metadata = std::move(attn_metadata);
 #else
   read_tensor(context, input_params.attention.device.paged_kv_indptr, stream);
   read_tensor(context, input_params.attention.device.paged_kv_indices, stream);
@@ -2792,20 +2796,19 @@ inline void serialize_forward_input_sections(
                               input_params.attention.host.kv_seq_lens,
                               input_params.attention.device.kv_seq_lens);
 #if defined(USE_MUSA)
-  const layer::musa::AttentionMetadata* musa_metadata = nullptr;
+  const layer::Fa3AttentionMetadata* fa3_metadata = nullptr;
   if (input_params.attn_metadata != nullptr) {
-    musa_metadata =
-        &layer::musa::get_attention_metadata(*input_params.attn_metadata);
+    fa3_metadata = &input_params.attn_metadata->fa3_metadata;
   }
   const torch::Tensor paged_kv_indptr_host =
-      musa_metadata == nullptr ? torch::Tensor()
-                               : musa_metadata->paged_kv_indptr_host;
+      fa3_metadata == nullptr ? torch::Tensor()
+                              : fa3_metadata->paged_kv_indptr_host;
   const torch::Tensor paged_kv_indices_host =
-      musa_metadata == nullptr ? torch::Tensor()
-                               : musa_metadata->paged_kv_indices_host;
+      fa3_metadata == nullptr ? torch::Tensor()
+                              : fa3_metadata->paged_kv_indices_host;
   const torch::Tensor paged_kv_last_page_len_host =
-      musa_metadata == nullptr ? torch::Tensor()
-                               : musa_metadata->paged_kv_last_page_len_host;
+      fa3_metadata == nullptr ? torch::Tensor()
+                              : fa3_metadata->paged_kv_last_page_len_host;
   write_tensor(
       context,
       choose_paged_kv_host_or_device_tensor(

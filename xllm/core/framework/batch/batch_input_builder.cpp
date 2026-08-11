@@ -38,7 +38,7 @@ limitations under the License.
 #include "framework/request/sequence.h"
 #include "framework/sampling/sampling_params.h"
 #if defined(USE_MUSA)
-#include "layers/musa/attention_metadata_builder.h"
+#include "layers/common/attention_metadata.h"
 #endif
 #include "models/vlm/mposition/mposition.h"
 #include "runtime/params_utils.h"
@@ -1194,8 +1194,13 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
   input_params.attention.device.paged_kv_indices = paged_kv_indices_cpu;
   input_params.attention.device.paged_kv_last_page_len =
       paged_kv_last_page_len_cpu;
-  input_params.attn_metadata = layer::musa::create_attention_metadata_seed(
-      paged_kv_indptr_cpu, paged_kv_indices_cpu, paged_kv_last_page_len_cpu);
+  // Seed common AttentionMetadata FA3 host mirrors for graph/plan updates.
+  auto attn_metadata = std::make_shared<layer::AttentionMetadata>();
+  attn_metadata->fa3_metadata.paged_kv_indptr_host = paged_kv_indptr_cpu;
+  attn_metadata->fa3_metadata.paged_kv_indices_host = paged_kv_indices_cpu;
+  attn_metadata->fa3_metadata.paged_kv_last_page_len_host =
+      paged_kv_last_page_len_cpu;
+  input_params.attn_metadata = std::move(attn_metadata);
 #else
   // for flashinfer
   input_params.attention.device.paged_kv_indptr =
