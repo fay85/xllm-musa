@@ -108,7 +108,8 @@ void populate_musa_attention_metadata(
       params.attention.host.q_seq_lens.empty()
           ? params.meta.num_sequences
           : static_cast<int64_t>(q_lengths_are_cumulative
-                                     ? params.attention.host.q_seq_lens.size() - 1
+                                     ? params.attention.host.q_seq_lens.size() -
+                                           1
                                      : params.attention.host.q_seq_lens.size());
   const int64_t kv_sequence_count =
       params.attention.host.kv_seq_lens.empty()
@@ -151,10 +152,9 @@ void populate_musa_attention_metadata(
   attn_metadata.q_cu_seq_lens = to_int32_contiguous(q_cu_seq_lens);
 
   torch::Tensor kv_cu_seq_lens = attn_metadata.kv_cu_seq_lens;
-  bool kv_cu_is_cumulative =
-      kv_cu_seq_lens.defined() &&
-      (kv_device_lengths_are_cumulative ||
-       kv_cu_seq_lens.numel() == kv_sequence_count + 1);
+  bool kv_cu_is_cumulative = kv_cu_seq_lens.defined() &&
+                             (kv_device_lengths_are_cumulative ||
+                              kv_cu_seq_lens.numel() == kv_sequence_count + 1);
   if (!kv_cu_seq_lens.defined() &&
       params.attention.device.kv_seq_lens.defined()) {
     kv_cu_seq_lens = params.attention.device.kv_seq_lens;
@@ -181,9 +181,8 @@ void populate_musa_attention_metadata(
         to_host_int32_contiguous(params.attention.device.paged_kv_indices);
   }
   if (!attn_metadata.musa.paged_kv_last_page_len_host.defined()) {
-    attn_metadata.musa.paged_kv_last_page_len_host =
-        to_host_int32_contiguous(
-            params.attention.device.paged_kv_last_page_len);
+    attn_metadata.musa.paged_kv_last_page_len_host = to_host_int32_contiguous(
+        params.attention.device.paged_kv_last_page_len);
   }
 
   if (attn_mask.has_value() && attn_mask->dim() == 1) {

@@ -148,10 +148,10 @@ TEST(AttentionMetadataBuilderTest, BuildsMusaMetadataWithCommonBuilder) {
                            torch::tensor({0, 1, 2}, torch::kInt32)));
   EXPECT_TRUE(torch::equal(metadata.kv_cu_seq_lens,
                            torch::tensor({0, 3, 10}, torch::kInt32)));
-  EXPECT_TRUE(torch::equal(metadata.q_seq_lens,
-                           torch::tensor({1, 1}, torch::kInt32)));
-  EXPECT_TRUE(torch::equal(metadata.kv_seq_lens,
-                           torch::tensor({3, 7}, torch::kInt32)));
+  EXPECT_TRUE(
+      torch::equal(metadata.q_seq_lens, torch::tensor({1, 1}, torch::kInt32)));
+  EXPECT_TRUE(
+      torch::equal(metadata.kv_seq_lens, torch::tensor({3, 7}, torch::kInt32)));
   EXPECT_EQ(metadata.block_table.scalar_type(), torch::kInt32);
   EXPECT_EQ(metadata.musa.paged_kv_indptr_host.device(),
             torch::Device(torch::kCPU));
