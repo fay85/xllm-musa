@@ -243,7 +243,7 @@ void update_chunked_prefill_plan_info(
     qo_indptr_host = get_cache_buffer(batch_size + 1, torch::kCPU);
   }
 
-  const Fa3AttentionMetadata& fa3_metadata = attn_meta.fa3;
+  const Fa3AttentionMetadata& fa3_metadata = attn_meta.fa3_metadata;
   torch::Tensor paged_kv_indptr_host =
       fa3_metadata.paged_kv_indptr_host.defined()
           ? fa3_metadata.paged_kv_indptr_host
@@ -367,7 +367,7 @@ void update_decode_plan_info(std::shared_ptr<PlanInfo> plan_info,
                              /*use_sliding_window=*/false,
                              /*use_logits_soft_cap=*/false);
 
-    const Fa3AttentionMetadata& fa3_metadata = attn_meta.fa3;
+    const Fa3AttentionMetadata& fa3_metadata = attn_meta.fa3_metadata;
     torch::Tensor paged_kv_indptr_host =
         fa3_metadata.paged_kv_indptr_host.defined()
             ? fa3_metadata.paged_kv_indptr_host

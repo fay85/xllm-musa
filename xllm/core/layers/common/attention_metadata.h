@@ -192,7 +192,7 @@ struct AttentionMetadata {
   std::shared_ptr<DSAMetadata> dsa_metadata;
 
 #if defined(USE_MUSA)
-  Fa3AttentionMetadata fa3;
+  Fa3AttentionMetadata fa3_metadata;
 #endif
 
 #if defined(USE_NPU)

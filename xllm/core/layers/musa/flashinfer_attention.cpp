@@ -190,7 +190,7 @@ void FlashInferAttentionImpl::prefill_forward(
     std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
-  const Fa3AttentionMetadata& fa3_metadata = attn_metadata.fa3;
+  const Fa3AttentionMetadata& fa3_metadata = attn_metadata.fa3_metadata;
   bool use_custom_mask = attn_metadata.attn_mask.defined();
 
   static const int32_t fa3_setting = [] {
@@ -470,7 +470,7 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
     return;
   }
-  const Fa3AttentionMetadata& fa3_metadata = attn_metadata.fa3;
+  const Fa3AttentionMetadata& fa3_metadata = attn_metadata.fa3_metadata;
   // Get block_size from k_cache if defined and has proper dimensions,
   // otherwise use a default value (for prefill without KV cache, e.g., LongCat)
   int64_t block_size = 1;
@@ -544,7 +544,7 @@ void FlashInferAttentionImpl::decoder_forward(
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
   const AttentionMetadata& decode_attn = attn_metadata;
-  const Fa3AttentionMetadata& fa3_metadata = attn_metadata.fa3;
+  const Fa3AttentionMetadata& fa3_metadata = attn_metadata.fa3_metadata;
   // Match the graph executor default while allowing an explicit FA3 override.
   {
     static const int32_t fa3_setting = [] {

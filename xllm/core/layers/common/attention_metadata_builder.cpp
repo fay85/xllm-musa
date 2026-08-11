@@ -172,17 +172,18 @@ void populate_fa3_attention_metadata(
             .contiguous();
   }
 
-  if (!attn_metadata.fa3.paged_kv_indptr_host.defined()) {
-    attn_metadata.fa3.paged_kv_indptr_host =
+  if (!attn_metadata.fa3_metadata.paged_kv_indptr_host.defined()) {
+    attn_metadata.fa3_metadata.paged_kv_indptr_host =
         to_host_int32_contiguous(params.attention.device.paged_kv_indptr);
   }
-  if (!attn_metadata.fa3.paged_kv_indices_host.defined()) {
-    attn_metadata.fa3.paged_kv_indices_host =
+  if (!attn_metadata.fa3_metadata.paged_kv_indices_host.defined()) {
+    attn_metadata.fa3_metadata.paged_kv_indices_host =
         to_host_int32_contiguous(params.attention.device.paged_kv_indices);
   }
-  if (!attn_metadata.fa3.paged_kv_last_page_len_host.defined()) {
-    attn_metadata.fa3.paged_kv_last_page_len_host = to_host_int32_contiguous(
-        params.attention.device.paged_kv_last_page_len);
+  if (!attn_metadata.fa3_metadata.paged_kv_last_page_len_host.defined()) {
+    attn_metadata.fa3_metadata.paged_kv_last_page_len_host =
+        to_host_int32_contiguous(
+            params.attention.device.paged_kv_last_page_len);
   }
 
   if (attn_mask.has_value() && attn_mask->dim() == 1) {
@@ -279,7 +280,7 @@ AttentionMetadata build_attention_metadata(
   AttentionMetadata attn_metadata;
 #if defined(USE_MUSA)
   if (params.attn_metadata != nullptr) {
-    attn_metadata.fa3 = params.attn_metadata->fa3;
+    attn_metadata.fa3_metadata = params.attn_metadata->fa3_metadata;
   }
 #endif
   attn_metadata.q_cu_seq_lens = params.attention.device.q_seq_lens;
