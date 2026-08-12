@@ -6,6 +6,7 @@ cc_library(
     runtime
   HDRS
     options.h
+    decode_graph_bucket.h
     forward_params.h
     dit_forward_params.h
     params_utils.h
@@ -21,6 +22,7 @@ cc_library(
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.h>
     $<$<BOOL:${USE_MUSA}>:musa_graph_executor_impl.h>
     py_executor_impl.h
+    py_attention_metadata.h
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.h>
     worker.h
     worker_impl.h
@@ -45,6 +47,7 @@ cc_library(
     forward_shared_memory_manager.h
     worker_rendezvous.h
   SRCS
+    decode_graph_bucket.cpp
     executor.cpp
     executor_impl_factory.cpp
     base_executor_impl.cpp
@@ -56,6 +59,7 @@ cc_library(
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.cpp>
     $<$<BOOL:${USE_MUSA}>:musa_graph_executor_impl.cpp>
     py_executor_impl.cpp
+    py_attention_metadata.cpp
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.cpp>
     worker.cpp
     worker_impl.cpp
@@ -87,6 +91,7 @@ cc_library(
     :platform
     :model_context
     :request
+    :speculative
     :encoder_cache
     :state_dict
     :dit_cache

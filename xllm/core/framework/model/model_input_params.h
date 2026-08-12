@@ -855,6 +855,10 @@ struct ParallelInput {
   // Attention/FFN paths may need the padded counts, while lm_head output
   // compaction must skip true empty DP ranks.
   std::vector<int32_t> raw_dp_global_token_nums;
+  // Per-DP-shard generation derived from the local batch identity. Every shard
+  // receives the full vector so speculative prelaunch reuse decisions remain
+  // collective-order consistent when any shard changes its batch.
+  std::vector<uint64_t> dp_global_batch_generations;
   // max kv seq len of all dp shards. Graph key generation uses this so empty
   // DP decode ranks pick the same graph as ranks with real decode tokens.
   std::vector<int32_t> dp_global_kv_max_seq_lens;
@@ -880,6 +884,7 @@ struct ParallelInput {
     ParallelInput out;
     out.dp_global_token_nums = dp_global_token_nums;
     out.raw_dp_global_token_nums = raw_dp_global_token_nums;
+    out.dp_global_batch_generations = dp_global_batch_generations;
     out.dp_global_kv_max_seq_lens = dp_global_kv_max_seq_lens;
     out.dp_is_decode = dp_is_decode;
     out.dp_ep_padding_data = dp_ep_padding_data;
@@ -939,6 +944,9 @@ struct GraphInput {
   bool use_expanded_decode_for_spec_verify_attention = false;
   torch::Tensor expanded_kv_seq_lens;
   torch::Tensor expanded_block_tables;
+  torch::Tensor expanded_paged_kv_indptr;
+  torch::Tensor expanded_paged_kv_indices;
+  torch::Tensor expanded_paged_kv_last_page_len;
   torch::Tensor expanded_tiling_data;
   std::vector<int32_t> expanded_kv_seq_lens_vec;
 #if defined(USE_NPU)
@@ -969,6 +977,12 @@ struct GraphInput {
         use_expanded_decode_for_spec_verify_attention;
     out.expanded_kv_seq_lens = safe_to(expanded_kv_seq_lens, device, true);
     out.expanded_block_tables = safe_to(expanded_block_tables, device, true);
+    out.expanded_paged_kv_indptr =
+        safe_to(expanded_paged_kv_indptr, device, true);
+    out.expanded_paged_kv_indices =
+        safe_to(expanded_paged_kv_indices, device, true);
+    out.expanded_paged_kv_last_page_len =
+        safe_to(expanded_paged_kv_last_page_len, device, true);
     out.expanded_tiling_data = safe_to(expanded_tiling_data, device, true);
     out.expanded_kv_seq_lens_vec = expanded_kv_seq_lens_vec;
 #if defined(USE_NPU)

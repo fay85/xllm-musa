@@ -19,11 +19,13 @@ limitations under the License.
 
 #include <unordered_map>
 
+#include "core/framework/speculative/speculative_profile_registry.h"
 #include "framework/batch/batch.h"
 #include "framework/block/block_manager_pool.h"
 #include "framework/model/model_args.h"
 #include "framework/tokenizer/tokenizer.h"
 #include "framework/tokenizer/tokenizer_args.h"
+#include "runtime/decode_graph_bucket.h"
 #include "runtime/options.h"
 
 namespace xllm {
@@ -54,6 +56,16 @@ class Engine {
 
   // return the model args
   virtual const ModelArgs& model_args() const { return args_; }
+
+  virtual bool set_speculative_validate_time_predictor(
+      const SpeculativeProfileRegistry::ValidateTimePredictor&) {
+    return false;
+  }
+
+  virtual runtime::DecodeGraphExecutionShape decode_graph_execution_shape()
+      const {
+    return {};
+  }
 
   // return the tokenizer args
   virtual const TokenizerArgs& tokenizer_args() const {

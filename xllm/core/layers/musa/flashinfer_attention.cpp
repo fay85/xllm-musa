@@ -15,6 +15,9 @@ limitations under the License.
 
 #include "layers/musa/flashinfer_attention.h"
 
+#include <c10/cuda/CUDAException.h>
+#include <cuda_runtime.h>
+
 #include <algorithm>
 #include <cstdlib>
 #include <limits>
@@ -23,6 +26,7 @@ limitations under the License.
 
 #include "framework/kv_cache/kv_cache.h"
 #include "kernels/musa/musa_ops_api.h"
+#include "kernels/musa/musa_tvmffi_stream.h"
 #include "kernels/ops_api.h"
 #include "layers/common/attention_metadata.h"
 #include "layers/cuda/flashinfer_workspace.h"
@@ -41,6 +45,51 @@ bool is_fa3_shape_supported(int64_t head_size,
   }
   const int64_t gqa_ratio = num_heads / num_kv_heads;
   return head_size == 256 && (gqa_ratio == 6 || gqa_ratio == 8);
+}
+
+bool use_expanded_spec_decode_attention(
+    const AttentionMetadata& attn_metadata) {
+  const ExpandedDecodeMetadata& expanded = attn_metadata.expanded_decode;
+  return expanded.enabled && expanded.paged_kv_indptr.defined() &&
+         expanded.paged_kv_indptr.numel() >= 2;
+}
+
+AttentionMetadata build_expanded_decode_metadata(
+    const AttentionMetadata& attn_metadata) {
+  AttentionMetadata decode_meta = attn_metadata;
+  const ExpandedDecodeMetadata& expanded = attn_metadata.expanded_decode;
+  const int64_t expanded_batch = expanded.paged_kv_indptr.size(0) - 1;
+  const torch::Device expanded_device = expanded.paged_kv_indptr.device();
+  const torch::TensorOptions expanded_int_options =
+      torch::TensorOptions().dtype(torch::kInt32).device(expanded_device);
+  decode_meta.paged_kv_indptr = expanded.paged_kv_indptr;
+  decode_meta.paged_kv_indices = expanded.paged_kv_indices;
+  decode_meta.paged_kv_last_page_len = expanded.paged_kv_last_page_len;
+  decode_meta.block_table = expanded.block_table;
+  decode_meta.kv_seq_lens = expanded.kv_seq_lens;
+  decode_meta.qo_indptr =
+      torch::arange(0, expanded_batch + 1, expanded_int_options);
+  decode_meta.max_query_len = 1;
+  // Host mirrors live under fa3_metadata after the common metadata move.
+  decode_meta.fa3_metadata.paged_kv_indptr_host = torch::Tensor();
+  decode_meta.fa3_metadata.paged_kv_indices_host = torch::Tensor();
+  decode_meta.fa3_metadata.paged_kv_last_page_len_host = torch::Tensor();
+  return decode_meta;
+}
+
+bool qwen35_mtp_attention_debug_enabled() {
+  static const bool enabled = std::getenv("XLLM_DEBUG_QWEN35_MTP") != nullptr;
+  return enabled && !xllm::kernel::musa::is_stream_capturing();
+}
+
+void qwen35_mtp_attention_debug_sync(const char* stage) {
+  if (!qwen35_mtp_attention_debug_enabled() ||
+      xllm::kernel::musa::is_stream_capturing()) {
+    return;
+  }
+  LOG(INFO) << "[Qwen3.5 MTP attention debug] sync begin: " << stage;
+  C10_CUDA_CHECK(cudaDeviceSynchronize());
+  LOG(INFO) << "[Qwen3.5 MTP attention debug] sync end: " << stage;
 }
 
 // Eager causal + padding attention fallback when custom mask is used (e.g.
@@ -158,6 +207,33 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
         << ", v_cache=" << v_cache.sizes()
         << ", is_prefill=" << attn_metadata.is_prefill
         << ", is_chunked_prefill=" << attn_metadata.is_chunked_prefill;
+    if (qwen35_mtp_attention_debug_enabled()) {
+      LOG(INFO) << "[Qwen3.5 MTP attention debug] before reshape_paged_cache:"
+                << " query=" << query.sizes() << ", key=" << key.sizes()
+                << ", value=" << value.sizes()
+                << ", slot_mapping=" << attn_metadata.slot_mapping.sizes()
+                << ", k_cache=" << k_cache.sizes()
+                << ", v_cache=" << v_cache.sizes()
+                << ", q_cu_seq_lens=" << attn_metadata.q_cu_seq_lens.sizes()
+                << ", kv_cu_seq_lens=" << attn_metadata.kv_cu_seq_lens.sizes()
+                << ", paged_kv_indptr=" << attn_metadata.paged_kv_indptr.sizes()
+                << ", paged_kv_indices="
+                << attn_metadata.paged_kv_indices.sizes()
+                << ", paged_kv_last_page_len="
+                << attn_metadata.paged_kv_last_page_len.sizes()
+                << ", is_prefill=" << attn_metadata.is_prefill
+                << ", is_chunked_prefill=" << attn_metadata.is_chunked_prefill
+                << ", max_query_len=" << attn_metadata.max_query_len
+                << ", max_seq_len=" << attn_metadata.max_seq_len;
+      auto slot_cpu =
+          attn_metadata.slot_mapping.to(torch::kCPU).to(torch::kInt32);
+      if (slot_cpu.numel() > 0) {
+        LOG(INFO) << "[Qwen3.5 MTP attention debug] slot range: min="
+                  << slot_cpu.min().item<int32_t>()
+                  << ", max=" << slot_cpu.max().item<int32_t>();
+      }
+    }
+    qwen35_mtp_attention_debug_sync("attention_before_reshape_paged_cache");
     xllm::kernel::ReshapePagedCacheParams reshape_paged_cache_params;
     reshape_paged_cache_params.key = key;
     reshape_paged_cache_params.value = value;
@@ -165,11 +241,21 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
     reshape_paged_cache_params.v_cache = v_cache;
     reshape_paged_cache_params.slot_mapping = attn_metadata.slot_mapping;
     xllm::kernel::reshape_paged_cache(reshape_paged_cache_params);
+    qwen35_mtp_attention_debug_sync("attention_after_reshape_paged_cache");
   }
 
+  qwen35_mtp_attention_debug_sync("attention_before_core");
+  const bool spec_verify_expanded_decode =
+      attn_metadata.is_chunked_prefill &&
+      (attn_metadata.expanded_decode.enabled ||
+       use_expanded_spec_decode_attention(attn_metadata) ||
+       attn_metadata.is_spec_verify);
   if (attn_metadata.is_prefill) {
     prefill_forward(
         attn_metadata, query, key, value, output, output_lse, k_cache, v_cache);
+  } else if (spec_verify_expanded_decode) {
+    decoder_forward(
+        attn_metadata, query, key, output, output_lse, k_cache, v_cache);
   } else if (attn_metadata.is_chunked_prefill) {
     chunked_prefill_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
@@ -177,6 +263,8 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
     decoder_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
   }
+  qwen35_mtp_attention_debug_sync("attention_after_core");
+
   output = output.view({-1, num_heads_ * head_size_});
   return {output, output_lse};
 }
@@ -463,9 +551,11 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
     std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
-  // Decode plans export "run" while chunked-prefill plans export "paged_run".
+  // Graph capture plans expanded spec-verify as batch_decode (exports "run").
+  // batch_chunked_prefill looks up "paged_run" on the same URI and fatals.
   if (attn_metadata.plan_info &&
-      attn_metadata.plan_info->uri.find("batch_decode") != std::string::npos) {
+      (attn_metadata.plan_info->uri.find("batch_decode") != std::string::npos ||
+       attn_metadata.is_spec_verify)) {
     decoder_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
     return;
@@ -543,7 +633,14 @@ void FlashInferAttentionImpl::decoder_forward(
     std::optional<torch::Tensor>& output_lse,
     const torch::Tensor& k_cache,
     const torch::Tensor& v_cache) {
-  const AttentionMetadata& decode_attn = attn_metadata;
+  std::optional<AttentionMetadata> expanded_decode_meta;
+  if (use_expanded_spec_decode_attention(attn_metadata)) {
+    expanded_decode_meta = build_expanded_decode_metadata(attn_metadata);
+  }
+  const AttentionMetadata& decode_attn =
+      expanded_decode_meta.has_value() ? *expanded_decode_meta : attn_metadata;
+  // Keep FA3 scheduler sharing on the original metadata so layer-to-layer
+  // reuse still works when decode_attn is an expanded copy.
   const Fa3AttentionMetadata& fa3_metadata = attn_metadata.fa3_metadata;
   // Match the graph executor default while allowing an explicit FA3 override.
   {
@@ -710,26 +807,27 @@ void FlashInferAttentionImpl::decoder_forward(
                                               decode_use_tensor_core_);
   }
 
-  xllm::kernel::musa::batch_decode(decode_attn.plan_info->uri,
-                                   decode_attn.plan_info->plan_info,
-                                   float_workspace_buffer_,
-                                   int_workspace_buffer_,
-                                   page_locked_int_workspace_buffer_,
-                                   query,
-                                   k_cache,
-                                   v_cache,
-                                   decode_attn.paged_kv_indptr,
-                                   decode_attn.paged_kv_indices,
-                                   decode_attn.paged_kv_last_page_len,
-                                   sliding_window_,
-                                   scale_,
-                                   output,
-                                   output_lse,
-                                   decode_use_tensor_core_,
-                                   decode_attn.qo_indptr,
-                                   fa3_metadata.paged_kv_indptr_host,
-                                   fa3_metadata.paged_kv_indices_host,
-                                   fa3_metadata.paged_kv_last_page_len_host);
+  xllm::kernel::musa::batch_decode(
+      decode_attn.plan_info->uri,
+      decode_attn.plan_info->plan_info,
+      float_workspace_buffer_,
+      int_workspace_buffer_,
+      page_locked_int_workspace_buffer_,
+      query,
+      k_cache,
+      v_cache,
+      decode_attn.paged_kv_indptr,
+      decode_attn.paged_kv_indices,
+      decode_attn.paged_kv_last_page_len,
+      sliding_window_,
+      scale_,
+      output,
+      output_lse,
+      decode_use_tensor_core_,
+      decode_attn.qo_indptr,
+      decode_attn.fa3_metadata.paged_kv_indptr_host,
+      decode_attn.fa3_metadata.paged_kv_indices_host,
+      decode_attn.fa3_metadata.paged_kv_last_page_len_host);
 }
 
 }  // namespace layer

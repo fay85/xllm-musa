@@ -124,11 +124,7 @@ void clear_all_output_embeddings(ForwardOutput& output) {
 }
 
 void record_metadata_ready_event(Stream& stream, ForwardInput& input) {
-  StreamEventPtr event = stream.record_event();
-  if (event == nullptr) {
-    stream.synchronize();
-  }
-  input.metadata_ready_event = event;
+  input.metadata_ready_event = stream.record_event_or_sync();
 }
 
 void wait_metadata_ready_event(const ForwardInput& input, Stream& stream) {
@@ -371,13 +367,15 @@ bool DFlashWorkerImpl::init_model(const std::string& model_weights_path,
     CHECK_LT(mask_token_id_, draft_vocab_size)
         << "Block-diffusion mask_token_id (" << mask_token_id_
         << ") must be < draft vocab_size (" << draft_vocab_size << ").";
+    // Context hidden comes from the target.
+    const ModelArgs& target_args = impl_->context_.get_model_args();
     const int64_t num_target_layers =
-        static_cast<int64_t>(draft_args.layers_to_capture().size());
+        static_cast<int64_t>(target_args.layers_to_capture().size());
     CHECK_GT(num_target_layers, 0)
         << "Block-diffusion draft config requires target_layer_ids or "
            "dflash_config.target_layer_ids.";
     expected_context_hidden_size_ =
-        static_cast<int64_t>(draft_args.hidden_size()) * num_target_layers;
+        static_cast<int64_t>(target_args.hidden_size()) * num_target_layers;
   }
   return result;
 }
@@ -1160,12 +1158,11 @@ void DFlashWorkerImpl::write_target_context_to_cache(
   // enforce cross-stream ordering: the write_context_kv scatter could launch
   // before index_select finishes, producing corrupt KV cache. The prefill
   // caller runs its producer on compute_stream_, so no event is needed there.
-  StreamEventPtr context_hidden_ready_event = prepare_stream_->record_event();
+  StreamEventPtr context_hidden_ready_event =
+      prepare_stream_->record_event_or_sync();
   if (context_hidden_ready_event != nullptr) {
     CHECK(compute_stream_->wait_event(context_hidden_ready_event))
         << "failed to wait DFlash context hidden ready event";
-  } else {
-    prepare_stream_->synchronize();
   }
   write_context_kv(
       input, context_hidden, positions_device, new_cache_slots_device);
