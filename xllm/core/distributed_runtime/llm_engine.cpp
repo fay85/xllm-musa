@@ -98,6 +98,9 @@ LLMEngine::LLMEngine(const runtime::Options& options,
 
   dp_size_ = options_.dp_size();
   cp_size_ = options_.cp_size();
+  dp_batch_embedding_ids_.resize(dp_size_);
+  dp_batch_request_ids_.resize(dp_size_);
+  dp_batch_generations_.resize(dp_size_, 0);
   worker_clients_num_ = worker_clients_.size();
   dp_local_size_ = worker_clients_num_ / dp_size_;
   const bool use_model_sharding =
@@ -119,6 +122,16 @@ LLMEngine::LLMEngine(const runtime::Options& options,
       /*num_threads=*/16,
       /*cpu_binding=*/false,
       /*pool_name=*/"LLMEngine.forward_input");
+}
+
+runtime::DecodeGraphExecutionShape LLMEngine::decode_graph_execution_shape()
+    const {
+  runtime::DecodeGraphExecutionShape execution_shape;
+  execution_shape.num_decoding_tokens = options_.num_decoding_tokens();
+  execution_shape.num_speculative_tokens = options_.num_speculative_tokens();
+  execution_shape.enable_graph_mode_decode_no_padding =
+      options_.enable_graph_mode_decode_no_padding();
+  return execution_shape;
 }
 
 void LLMEngine::process_group_test() {
@@ -1189,7 +1202,12 @@ void LLMEngine::update_last_step_result(std::vector<Batch>& last_batch) {
   // cause the output on other workers is the same as that on driver.
   // Under data parallelism (DP), we need to get dp_size outputs.
   // The `stride` means the workers num we can skip.
-  uint32_t stride = dp_local_tp_size_;
+  // One retrievable result per DP group lives on its driver worker
+  // (dp_driver_: rank % (tp_size*cp_size) == 0), spaced dp_local_size_
+  // (= tp_size*cp_size) apart. dp_local_tp_size_ divides by cp_size, so
+  // under cp_size>1 it lands on cp_rank=1 non-driver workers whose
+  // get_last_step_result() blocks forever on cv_.wait(is_recorded_).
+  uint32_t stride = dp_local_size_;
   // If EPLB is enabled, we need to get results from all workers,
   // because the experts on each worker are different,
   // and the tokens load of all experts needs to be returned to engine.
@@ -1211,7 +1229,7 @@ void LLMEngine::update_last_step_result(std::vector<Batch>& last_batch) {
   }
 
   for (auto worker_rank = 0; worker_rank < worker_clients_num_;
-       worker_rank += dp_local_tp_size_) {
+       worker_rank += dp_local_size_) {
     auto result = last_step_results[worker_rank / stride].value();
     if (result.has_value()) {
       raw_forward_outputs.emplace_back(std::move(result.value()));
@@ -1357,6 +1375,15 @@ std::vector<ForwardInput> LLMEngine::prepare_inputs(std::vector<Batch>& batch) {
     dp_is_decode[dp_rank] =
         current_batch_forward_type.is_decode() &&
         batched_inputs[dp_rank].input_params.meta.q_max_seq_len == 1;
+
+    const ModelEmbeddingInput& embedding =
+        batched_inputs[dp_rank].input_params.embedding;
+    if (dp_batch_embedding_ids_[dp_rank] != embedding.embedding_ids ||
+        dp_batch_request_ids_[dp_rank] != embedding.request_ids) {
+      dp_batch_embedding_ids_[dp_rank] = embedding.embedding_ids;
+      dp_batch_request_ids_[dp_rank] = embedding.request_ids;
+      ++dp_batch_generations_[dp_rank];
+    }
   }
 
   // eplb related
@@ -1387,6 +1414,8 @@ std::vector<ForwardInput> LLMEngine::prepare_inputs(std::vector<Batch>& batch) {
         dp_global_token_nums;
     batched_inputs[dp_rank].input_params.parallel.raw_dp_global_token_nums =
         dp_global_token_nums;
+    batched_inputs[dp_rank].input_params.parallel.dp_global_batch_generations =
+        dp_batch_generations_;
     batched_inputs[dp_rank].input_params.parallel.dp_global_kv_max_seq_lens =
         dp_global_kv_max_seq_lens;
     batched_inputs[dp_rank].input_params.parallel.dp_is_decode = dp_is_decode;
