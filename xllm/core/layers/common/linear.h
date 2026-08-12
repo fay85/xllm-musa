@@ -184,8 +184,26 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   }
 
   // return the weight (for testing)
-  torch::Tensor weight() const { return weight_; }
-  bool is_weight_loaded() const { return weight_is_loaded_; }
+  torch::Tensor weight() const {
+    if (qweight_is_loaded_) {
+      return qweight_;
+    }
+    return weight_;
+  }
+  torch::Tensor per_channel_scale() const { return per_channel_scale_; }
+  std::optional<torch::Tensor> smooth() const {
+    if (smooth_is_loaded_) {
+      return smooth_;
+    }
+    return std::nullopt;
+  }
+  bool is_weight_loaded() const {
+    if (quant_args_.quant_method() == kQuantMethodSmoothquant) {
+      return qweight_is_loaded_ && per_channel_scale_is_loaded_ &&
+             smooth_is_loaded_;
+    }
+    return weight_is_loaded_;
+  }
 
   // Accessors for W8A8 dynamic quantization parameters.
   // Used by attention layers to reorder weight_scale/weight_offset
@@ -204,6 +222,9 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   // we allocate the transpose since linear performs XA^T.
   // A^T: [out_features_per_partition, in_features]
   DEFINE_FUSED_WEIGHT(weight);
+  DEFINE_FUSED_WEIGHT(qweight);
+  DEFINE_FUSED_WEIGHT(per_channel_scale);
+  DEFINE_WEIGHT(smooth);
   DEFINE_FUSED_WEIGHT(bias);
 
   // FP8 quantization parameters
