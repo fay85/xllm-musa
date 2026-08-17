@@ -168,21 +168,6 @@ bool is_contiguous_int_tensor(const torch::Tensor& tensor) {
   return tensor.device().type() == at::musa::kMUSA;
 }
 
-bool is_cpu_int32_tensor(const torch::Tensor& tensor) {
-  if (!tensor.defined() || !tensor.device().is_cpu() || tensor.numel() == 0 ||
-      !tensor.is_contiguous()) {
-    return false;
-  }
-  return tensor.scalar_type() == torch::kInt32;
-}
-
-bool has_llm_decode_host_metadata(const AttentionHostInput& host) {
-  return !host.kv_seq_lens.empty() &&
-         is_cpu_int32_tensor(host.paged_kv_indptr) &&
-         is_cpu_int32_tensor(host.paged_kv_indices) &&
-         is_cpu_int32_tensor(host.paged_kv_last_page_len);
-}
-
 struct IndexedTensorSnapshot {
   torch::Tensor target;
   torch::Tensor rows;
@@ -331,16 +316,10 @@ bool MusaGraphPersistentParam::can_use_llm_decode_fast_path(
       is_rec_multi_round_mode() || params.has_llmrec_params()) {
     return false;
   }
-  const bool device_token_metadata_ok =
-      is_contiguous_int_tensor(tokens) && is_contiguous_int_tensor(positions) &&
-      is_contiguous_int_tensor(params.attention.device.new_cache_slots);
-  if (!device_token_metadata_ok) {
-    return false;
-  }
-  if (has_llm_decode_host_metadata(params.attention.host)) {
-    return true;
-  }
-  return is_contiguous_int_tensor(params.attention.device.kv_seq_lens) &&
+  return is_contiguous_int_tensor(tokens) &&
+         is_contiguous_int_tensor(positions) &&
+         is_contiguous_int_tensor(params.attention.device.new_cache_slots) &&
+         is_contiguous_int_tensor(params.attention.device.kv_seq_lens) &&
          is_contiguous_int_tensor(params.attention.device.paged_kv_indptr) &&
          is_contiguous_int_tensor(params.attention.device.paged_kv_indices) &&
          is_contiguous_int_tensor(
@@ -371,43 +350,6 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
       to_int32(params.attention.device.kv_seq_lens);
 
   const musaStream_t stream = c10::musa::getCurrentMUSAStream(device_.index());
-  if (has_llm_decode_host_metadata(params.attention.host)) {
-    const auto& host = params.attention.host;
-    CHECK_GE(static_cast<int64_t>(host.kv_seq_lens.size()),
-             actual_batch_size + 1)
-        << "host kv_seq_lens too small for batch";
-    const int64_t actual_indices_size =
-        host.paged_kv_indices.defined() ? host.paged_kv_indices.numel() : 0;
-    xllm::kernel::musa::LlmDecodeMetadataHostUpdateParams host_update_params{
-        .src_tokens = tokens_i32.data_ptr<int32_t>(),
-        .src_positions = positions_i32.data_ptr<int32_t>(),
-        .src_new_cache_slots = new_cache_slots_i32.data_ptr<int32_t>(),
-        .host_kv_seq_lens = host.kv_seq_lens.data(),
-        .host_paged_kv_indptr = host.paged_kv_indptr.data_ptr<int32_t>(),
-        .host_paged_kv_indices = host.paged_kv_indices.data_ptr<int32_t>(),
-        .host_paged_kv_last_page_len =
-            host.paged_kv_last_page_len.data_ptr<int32_t>(),
-        .dst_tokens = persistent_tokens_.data_ptr<int32_t>(),
-        .dst_positions = persistent_positions_.data_ptr<int32_t>(),
-        .dst_new_cache_slots = persistent_new_cache_slots_.data_ptr<int32_t>(),
-        .dst_kv_seq_lens = kv_seq_lens_.data_ptr<int32_t>(),
-        .dst_kv_seq_lens_delta =
-            persistent_kv_seq_lens_delta_.data_ptr<int32_t>(),
-        .dst_paged_kv_indptr = persistent_paged_kv_indptr_.data_ptr<int32_t>(),
-        .dst_paged_kv_indices =
-            persistent_paged_kv_indices_.data_ptr<int32_t>(),
-        .dst_paged_kv_last_page_len =
-            persistent_paged_kv_last_page_len_.data_ptr<int32_t>(),
-        .actual_num_tokens = actual_num_tokens,
-        .padded_num_tokens = static_cast<int64_t>(padded_num_tokens),
-        .actual_batch_size = actual_batch_size,
-        .actual_indices_size = actual_indices_size,
-    };
-    xllm::kernel::musa::update_llm_decode_metadata_from_host(host_update_params,
-                                                             stream);
-    return;
-  }
-
   const torch::Tensor paged_kv_indptr_i32 =
       to_int32(params.attention.device.paged_kv_indptr);
   const torch::Tensor paged_kv_indices_i32 =
@@ -1085,8 +1027,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
 }
 
 void MusaGraph::refresh_persistent_paged_kv_host_mirrors(
-    const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
-    const AttentionHostInput& host_src) {
+    const std::shared_ptr<layer::AttentionMetadata>& attn_metadata) {
   // Only applies to the Mate FFI decode path. Prefill/chunked-prefill and MLA
   // attention do not pass host pointers through the FFI run() boundary, so
   // there is nothing to stabilize there.
@@ -1102,11 +1043,8 @@ void MusaGraph::refresh_persistent_paged_kv_host_mirrors(
   // underlying storage pointer must be STABLE across the lifetime of this
   // MusaGraph (captured FFI run() bakes it into the graph).
   //
-  // Prefer copying from attention.host CPU mirrors (batch_input_builder path):
-  // the values are already on host, so a CPU->pinned memcpy avoids the extra
-  // device round-trip and the musaStreamSync that blocking D2H would insert.
-  // Fall back to blocking D2H from persistent device tensors for callers that
-  // did not pre-stage host mirrors (profile / warmup paths).
+  // Copy from persistent device tensors so graph preparation follows the same
+  // metadata path as decode replay.
   //
   // CRITICAL: when allocating for the first time, size to max(numel,
   // min_alloc_numel). The captured graph cannot tolerate a later realloc:
@@ -1121,7 +1059,6 @@ void MusaGraph::refresh_persistent_paged_kv_host_mirrors(
   auto refresh_one = [](torch::Tensor& host_buf,
                         torch::Tensor& host_field,
                         const torch::Tensor& device_src,
-                        const torch::Tensor& cpu_src,
                         int64_t min_alloc_numel) {
     if (!device_src.defined()) {
       return;
@@ -1150,39 +1087,26 @@ void MusaGraph::refresh_persistent_paged_kv_host_mirrors(
     // copy and let host_field carry the original shape via a view-back.
     //
     // The Mate FFI batch_decode wrapper reads paged_kv_* host tensors on the
-    // CPU at submit time, so destination bytes must be valid before replay.
-    // CPU->pinned and blocking D2H both satisfy that; async D2H would not.
-    const bool use_cpu_src = cpu_src.defined() && cpu_src.device().is_cpu() &&
-                             cpu_src.numel() == numel;
-    if (use_cpu_src) {
-      torch::Tensor cpu_flat = cpu_src.contiguous().view({numel});
-      if (cpu_flat.scalar_type() != src_dtype) {
-        cpu_flat = cpu_flat.to(src_dtype);
-      }
-      dst.copy_(cpu_flat);
-    } else {
-      dst.copy_(device_src.contiguous().view({numel}), /*non_blocking=*/false);
-    }
+    // CPU at submit time, so the blocking D2H copy must finish before replay.
+    dst.copy_(device_src.contiguous().view({numel}), /*non_blocking=*/false);
     // Re-point host_field at the persistent storage; preserve the original
     // logical shape so downstream callers that interrogate sizes still see
     // the same view they did before this rewrite.
     host_field = dst.view(device_src.sizes());
   };
 
+  auto& fa3_metadata = attn_metadata->fa3_metadata;
   refresh_one(paged_kv_indptr_host_buf_,
-              attn_metadata->fa3_metadata.paged_kv_indptr_host,
+              fa3_metadata.paged_kv_indptr_host,
               attn_metadata->paged_kv_indptr,
-              host_src.paged_kv_indptr,
               paged_kv_indptr_host_max_numel_);
   refresh_one(paged_kv_indices_host_buf_,
-              attn_metadata->fa3_metadata.paged_kv_indices_host,
+              fa3_metadata.paged_kv_indices_host,
               attn_metadata->paged_kv_indices,
-              host_src.paged_kv_indices,
               paged_kv_indices_host_max_numel_);
   refresh_one(paged_kv_last_page_len_host_buf_,
-              attn_metadata->fa3_metadata.paged_kv_last_page_len_host,
+              fa3_metadata.paged_kv_last_page_len_host,
               attn_metadata->paged_kv_last_page_len,
-              host_src.paged_kv_last_page_len,
               paged_kv_last_page_len_host_max_numel_);
 }
 
@@ -1294,7 +1218,7 @@ bool MusaGraph::capture(CausalLM* model,
   }
 
   refresh_persistent_paged_kv_host_mirrors(
-      graph_params_opt.value().attn_metadata, params.attention.host);
+      graph_params_opt.value().attn_metadata);
 
   LOG(INFO) << "MUSA graph capture begin, bucket_num_tokens: "
             << bucket_num_tokens
@@ -1511,7 +1435,7 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     }();
     if (s_keep_host_mirror_refresh) {
       refresh_persistent_paged_kv_host_mirrors(
-          replay_params_opt.value().attn_metadata, params.attention.host);
+          replay_params_opt.value().attn_metadata);
     }
 
     if (s_enable_graph_timing()) {

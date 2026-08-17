@@ -308,11 +308,10 @@ class MusaGraph final {
   // On replay (graph_.replay() path), the captured graph already references
   // the persistent host buffer pointers from capture time; this method
   // refreshes their *contents* so the captured H2D copy sees fresh values.
-  // When attention.host paged-KV mirrors are populated (normal LLM-engine
-  // path), copies CPU->pinned host directly and avoids per-step D2H sync.
+  // The mirrors are refreshed from the same persistent device metadata used
+  // by decode replay.
   void refresh_persistent_paged_kv_host_mirrors(
-      const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
-      const AttentionHostInput& host_src);
+      const std::shared_ptr<layer::AttentionMetadata>& attn_metadata);
 
   // Reference to persistent parameters (shared across multiple MusaGraph
   // instances).
