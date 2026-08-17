@@ -15,6 +15,11 @@ set(_MUSA_LAYERS_HDRS
   qwen3_5_decoder_layer_impl.h
   qwen3_5_fused_moe.h
   rms_norm_gated.h
+  deepseek_v4/deepseek_v4_attention.h
+  deepseek_v4/deepseek_v4_decoder_layer.h
+  deepseek_v4/dsa_metadata_builder_musa.h
+  deepseek_v4/deepseek_v4_gate.h
+  deepseek_v4/deepseek_v4_moe.h
 )
 set(_MUSA_LAYERS_SRCS
   attention.cpp
@@ -29,6 +34,11 @@ set(_MUSA_LAYERS_SRCS
   qwen3_5_decoder_layer_impl.cpp
   qwen3_5_fused_moe.cpp
   rms_norm_gated.cpp
+  deepseek_v4/deepseek_v4_attention.cpp
+  deepseek_v4/deepseek_v4_decoder_layer.cpp
+  deepseek_v4/dsa_metadata_builder_musa.cpp
+  deepseek_v4/deepseek_v4_gate.cpp
+  deepseek_v4/deepseek_v4_moe.cpp
 )
 set(_MUSA_LAYERS_DEPS
   :cuda_kernels
