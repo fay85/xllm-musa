@@ -7,6 +7,10 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/../cuda/moe)
 
 set(_TORCH_MUSA_KERNEL_HDRS
   musa_ops_api.h
+  musa_kernel_utils.h
+  musa_fp8_quant_utils.cuh
+  deepseek_v4_dsa_rope.h
+  deepseek_v4_fp8_roundtrip.h
   musa_tvmffi_stream.h
   gdn_ops.h
   llm_decode_metadata_update.h
@@ -49,6 +53,24 @@ set(_TORCH_MUSA_KERNEL_SRCS
   # Mate FFI helpers
   musa_tvmffi_stream.cpp
   llm_decode_metadata_update.cu
+  deepseek_v4_sp_pad.cu
+  deepseek_v4_hc_head.cu
+  deepseek_v4_wo_a_m1.cu
+  deepseek_v4_compress_c4_prepare.cu
+  deepseek_v4_rope_hadamard.cu
+  deepseek_v4_q_rmsnorm_rope.cu
+  deepseek_v4_mega_moe_pre_dispatch.cu
+  deepseek_v4_masked_swiglu_quant.cu
+  deepseek_v4_fp8_moe_metadata.cu
+  deepseek_v4_gate_bf16_fp32.cpp
+  deepseek_v4_masked_fp8_moe_gemm.cpp
+  deepseek_v4_fp8_moe_gemv.cu
+  deepseek_v4_dsa_rope.cu
+  deepseek_v4_gate_gemv.cu
+  deepseek_v4_shared_expert_gate.cu
+  deepseek_v4_fp8_roundtrip.cu
+  deepseek_v4_dsa_cache_ops.cu
+  deepseek_v4_dsa_attention.cu
 )
 
 # Enable fast-math for fp8_act_quant.cu only, without changing
@@ -76,4 +98,3 @@ cc_library(
     musa
     musart
 )
-

@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <ATen/DynamicLibrary.h>
 #include <ATen/core/dispatch/Dispatcher.h>
-#include <glog/logging.h>
 #include <torch/torch.h>
 
 #include <cstdint>
@@ -264,6 +263,190 @@ torch::Tensor gemm_fp8_nt_groupwise(
 std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size);
+
+torch::Tensor deepseek_v4_sp_pad_local(const torch::Tensor& input,
+                                       int64_t padded_rows);
+
+void deepseek_v4_sp_pad_local_out(const torch::Tensor& input,
+                                  torch::Tensor& output);
+
+torch::Tensor deepseek_v4_hc_head(
+    const torch::Tensor& residual,
+    const torch::Tensor& weight,
+    const torch::Tensor& scale,
+    const torch::Tensor& base,
+    double norm_eps,
+    double hc_eps,
+    const std::optional<torch::Tensor>& output = std::nullopt,
+    const std::optional<torch::Tensor>& workspace = std::nullopt);
+
+torch::Tensor deepseek_v4_wo_a_m1(
+    const torch::Tensor& input,
+    const torch::Tensor& weight,
+    const torch::Tensor& head_scales,
+    const std::optional<torch::Tensor>& output = std::nullopt);
+
+torch::Tensor deepseek_v4_shared_expert_m1(
+    const torch::Tensor& input,
+    const torch::Tensor& gate_up_weight,
+    const torch::Tensor& down_weight,
+    double swiglu_limit,
+    const std::optional<torch::Tensor>& intermediate = std::nullopt,
+    const std::optional<torch::Tensor>& output = std::nullopt);
+
+bool deepseek_v4_compress_c4_update_and_prepare(torch::Tensor& kv_state,
+                                                torch::Tensor& score_state,
+                                                const torch::Tensor& kv_step,
+                                                const torch::Tensor& score_step,
+                                                const torch::Tensor& ape,
+                                                int64_t absolute_position,
+                                                torch::Tensor& pooled_kv,
+                                                torch::Tensor& pooled_score);
+
+bool deepseek_v4_compress_c4_weighted_sum(const torch::Tensor& pooled_kv,
+                                          const torch::Tensor& weights,
+                                          torch::Tensor& output);
+
+bool deepseek_v4_rope_hadamard_inplace(torch::Tensor& query,
+                                       const torch::Tensor& cos,
+                                       const torch::Tensor& sin);
+
+bool deepseek_v4_q_rmsnorm_rope_inplace(torch::Tensor& query,
+                                        const torch::Tensor& cos,
+                                        const torch::Tensor& sin,
+                                        double eps);
+
+bool deepseek_v4_weighted_rmsnorm_rope_inplace(torch::Tensor& input,
+                                               const torch::Tensor& weight,
+                                               const torch::Tensor& cos,
+                                               const torch::Tensor& sin,
+                                               double eps);
+
+bool deepseek_v4_partial_rope(const torch::Tensor& input,
+                              const torch::Tensor& cos,
+                              const torch::Tensor& sin,
+                              int64_t rope_start_dim,
+                              int64_t rope_head_dim,
+                              bool inverse,
+                              torch::Tensor& output);
+
+bool deepseek_v4_fp8_quantize_dequantize(torch::Tensor& tensor,
+                                         int64_t quant_dim,
+                                         int64_t block_size);
+
+bool deepseek_v4_int8_quantize_dequantize(const torch::Tensor& input,
+                                          torch::Tensor& output);
+
+torch::Tensor deepseek_v4_gate_gemv(
+    const torch::Tensor& input,
+    const torch::Tensor& weight,
+    const std::optional<torch::Tensor>& output = std::nullopt);
+
+torch::Tensor deepseek_v4_shared_expert_gate(const torch::Tensor& hidden_states,
+                                             const torch::Tensor& gate_weight,
+                                             const torch::Tensor& shared_output,
+                                             torch::Tensor routed_output);
+
+bool deepseek_v4_mega_moe_pre_dispatch(
+    const torch::Tensor& input,
+    const torch::Tensor& topk_ids,
+    const torch::Tensor& topk_weights,
+    const torch::Tensor& output,
+    const torch::Tensor& output_scale,
+    const torch::Tensor& output_topk_ids,
+    const torch::Tensor& output_topk_weights);
+
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v4_masked_swiglu_quantize(
+    const torch::Tensor& gate_up,
+    const torch::Tensor& masked_tokens,
+    double swiglu_limit);
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+deepseek_v4_fp8_moe_prepare(const torch::Tensor& input,
+                            const torch::Tensor& sorted_assignment,
+                            const torch::Tensor& expert_counts,
+                            int64_t topk,
+                            int64_t alignment_m,
+                            int64_t max_padded_assignments);
+
+std::tuple<torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor>
+deepseek_v4_fp8_moe_quant_prepare(const torch::Tensor& input,
+                                  const torch::Tensor& sorted_assignment,
+                                  const torch::Tensor& expert_counts,
+                                  int64_t topk,
+                                  int64_t alignment_m,
+                                  int64_t max_padded_assignments);
+
+std::tuple<torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor>
+deepseek_v4_fp8_moe_scatter_prepare(const torch::Tensor& input_fp8,
+                                    const torch::Tensor& input_scale,
+                                    const torch::Tensor& sorted_assignment,
+                                    const torch::Tensor& expert_counts,
+                                    int64_t topk,
+                                    int64_t alignment_m,
+                                    int64_t max_padded_assignments);
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+deepseek_v4_fp8_moe_masked_decode_prepare(const torch::Tensor& input,
+                                          const torch::Tensor& local_ids,
+                                          int64_t num_experts);
+
+// Low-token DeepSeek-V4 routed expert path. The caller owns all workspaces so
+// graph replay keeps their addresses stable.
+torch::Tensor deepseek_v4_fp8_moe_gemv_decode(
+    const torch::Tensor& input,
+    const torch::Tensor& local_ids,
+    const torch::Tensor& topk_weights,
+    const torch::Tensor& w13,
+    const torch::Tensor& w13_scale,
+    const torch::Tensor& w2,
+    const torch::Tensor& w2_scale,
+    const torch::Tensor& activated_workspace,
+    const torch::Tensor& routed_output_workspace,
+    const torch::Tensor& output_workspace,
+    double swiglu_limit);
+
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v4_fp8_moe_swiglu_quantize(
+    const torch::Tensor& gate_up,
+    const torch::Tensor& ragged_tokens_info,
+    double swiglu_limit);
+
+torch::Tensor deepseek_v4_gate_bf16_fp32(
+    const torch::Tensor& input,
+    const torch::Tensor& weight,
+    const std::optional<torch::Tensor>& output = std::nullopt,
+    const std::string& uri = "gemm_ops");
+
+torch::Tensor deepseek_v4_masked_fp8_moe_gemm(
+    const torch::Tensor& input,
+    const torch::Tensor& input_scale,
+    const torch::Tensor& weight,
+    const torch::Tensor& weight_scale,
+    const torch::Tensor& masked_tokens,
+    int64_t expected_tokens,
+    const std::optional<torch::Tensor>& output = std::nullopt,
+    const std::string& uri = "gemm_ops");
+
+bool deepseek_v4_masked_fp8_moe_available(const std::string& uri = "gemm_ops");
+
+torch::Tensor deepseek_v4_fp8_moe_restore(
+    const torch::Tensor& sorted_output,
+    const torch::Tensor& padded_assignment,
+    int64_t num_assignments);
+
+torch::Tensor deepseek_v4_fp8_moe_restore_combine(
+    const torch::Tensor& sorted_output,
+    const torch::Tensor& route_to_padded,
+    const torch::Tensor& topk_weights,
+    const torch::Tensor& output);
 
 // Returns {fp8_rows, scales, src_to_dst, expert_counts}.
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
