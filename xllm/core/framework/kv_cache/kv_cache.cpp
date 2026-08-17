@@ -38,6 +38,9 @@ limitations under the License.
 #include "framework/kv_cache/deepseek_v4_kv_cache_impl.h"
 #include "framework/kv_cache/indexed_kv_cache_impl.h"
 #include "framework/kv_cache/linear_attention_kv_cache_impl.h"
+#if defined(USE_MUSA)
+#include "framework/kv_cache/musa/deepseek_v4_kv_cache_impl.h"
+#endif
 #include "framework/kv_cache/quantized_kv_cache_impl.h"
 #include "framework/xtensor/xtensor_allocator.h"
 #include "platform/sleepable_allocator.h"
@@ -200,6 +203,15 @@ void allocate_sleepable_kv_caches(std::vector<KVCache>& kv_caches,
             << ", total_bytes=" << total_bytes << ", base=" << base;
 }
 
+std::unique_ptr<KVCacheImpl> create_platform_dsv4_kv_cache_impl(
+    const DeepSeekV4KVCacheTensors& tensors) {
+#if defined(USE_MUSA)
+  return create_musa_dsv4_kv_cache_impl(tensors);
+#else
+  return std::make_unique<DeepSeekV4KVCacheImpl>(tensors);
+#endif
+}
+
 }  // namespace
 
 KVCache::KVCache() : impl_(std::make_unique<KVCacheImpl>()) {}
@@ -217,7 +229,7 @@ KVCache::KVCache(const QuantizedKVCacheTensors& tensors)
     : impl_(std::make_unique<QuantizedKVCacheImpl>(tensors)) {}
 
 KVCache::KVCache(const DeepSeekV4KVCacheTensors& tensors)
-    : impl_(std::make_unique<DeepSeekV4KVCacheImpl>(tensors)) {}
+    : impl_(create_platform_dsv4_kv_cache_impl(tensors)) {}
 
 KVCache::KVCache(const KVCacheShape& kv_cache_shape,
                  const KVCacheCreateOptions& create_options,

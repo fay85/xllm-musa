@@ -163,9 +163,18 @@ struct HostPageAlignedRegion {
 
 struct DeepSeekV4KVCacheTensors {
   torch::Tensor key_cache;
+#if defined(USE_MUSA)
+  // Model1 caches are device-private representations. They travel through
+  // the common allocation carrier but are owned and interpreted only by the
+  // MUSA DeepSeek-V4 KV-cache implementation.
+  torch::Tensor mate_key_cache;
+#endif
   torch::Tensor index_cache;
   torch::Tensor indexer_cache_scale;
   torch::Tensor swa_cache;
+#if defined(USE_MUSA)
+  torch::Tensor mate_extra_k_cache;
+#endif
   torch::Tensor compress_kv_state;
   torch::Tensor compress_score_state;
   torch::Tensor compress_index_kv_state;

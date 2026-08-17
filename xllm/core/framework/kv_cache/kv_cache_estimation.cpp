@@ -23,6 +23,9 @@ limitations under the License.
 #include "core/platform/platform.h"
 #include "framework/block/block_utils.h"
 #include "framework/kv_cache/deepseek_v4_cache_policy.h"
+#if defined(USE_MUSA)
+#include "framework/kv_cache/musa/deepseek_v4_kv_cache_impl.h"
+#endif
 #include "framework/model/model_args.h"
 #include "util/pretty_print.h"
 #include "util/tensor_helper.h"
@@ -261,6 +264,12 @@ Dsv4KVCacheEstimateCost estimate_dsv4_kv_cache_cost(
   const int64_t float32_size = 4;
   const int64_t dtype_size =
       static_cast<int64_t>(torch::elementSize(options.dtype));
+#if defined(USE_MUSA)
+  const int64_t musa_model1_bytes_per_block =
+      musa_dsv4_model1_page_stride(block_size);
+#else
+  constexpr int64_t musa_model1_bytes_per_block = 0;
+#endif
 
   Dsv4KVCacheEstimateCost cache_cost;
   cache_cost.swa_count =
@@ -284,10 +293,12 @@ Dsv4KVCacheEstimateCost estimate_dsv4_kv_cache_cost(
       cache_cost.swa_count *
       (block_size * head_dim * dtype_size +
        block_size * (2 * head_dim * float32_size) * 2 +
-       block_size * (2 * index_head_dim * float32_size) * 2);
+       block_size * (2 * index_head_dim * float32_size) * 2 +
+       musa_model1_bytes_per_block);
   const int64_t swa_bytes_per_c128_layer =
-      cache_cost.swa_count * (block_size * head_dim * dtype_size +
-                              block_size * head_dim * float32_size * 2);
+      cache_cost.swa_count *
+      (block_size * head_dim * dtype_size +
+       block_size * head_dim * float32_size * 2 + musa_model1_bytes_per_block);
 
   cache_cost.constant_swa_bytes =
       n_c1_layers * swa_bytes_per_c1_layer +
@@ -300,9 +311,11 @@ Dsv4KVCacheEstimateCost estimate_dsv4_kv_cache_cost(
       cache_policy.has_indexer_cache_scale ? cache_policy.scale_dtype_size : 0;
   const int64_t bytes_per_c4_block =
       block_size *
-      (head_dim * dtype_size + index_head_dim * cache_policy.index_dtype_size +
-       scale_bytes);
-  const int64_t bytes_per_c128_block = block_size * head_dim * dtype_size;
+          (head_dim * dtype_size +
+           index_head_dim * cache_policy.index_dtype_size + scale_bytes) +
+      musa_model1_bytes_per_block;
+  const int64_t bytes_per_c128_block =
+      block_size * head_dim * dtype_size + musa_model1_bytes_per_block;
 
   if (cache_cost.n_c4_layers > 0 && cache_cost.n_c128_layers > 0) {
     cache_cost.token_unit_bytes =

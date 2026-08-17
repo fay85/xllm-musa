@@ -43,6 +43,7 @@ cc_library(
     kv_cache_utils.h
     linear_attention_kv_cache_impl.h
     quantized_kv_cache_impl.h
+    $<$<BOOL:${USE_MUSA}>:musa/deepseek_v4_kv_cache_impl.h>
   SRCS
     deepseek_v4_kv_cache_impl.cpp
     embedding_cache.cpp
@@ -55,6 +56,7 @@ cc_library(
     kv_cache_utils.cpp
     linear_attention_kv_cache_impl.cpp
     quantized_kv_cache_impl.cpp
+    $<$<BOOL:${USE_MUSA}>:musa/deepseek_v4_kv_cache_impl.cpp>
   DEPS
     :block_utils
     :common
