@@ -35,7 +35,7 @@ limitations under the License.
 #elif defined(USE_CUDA) || defined(USE_ILU)
 #include <c10/cuda/CUDAStream.h>
 #elif defined(USE_MUSA)
-#include <c10/musa/MUSAGuard.h>
+#include <torch_musa/csrc/core/MUSAGuard.h>
 #elif defined(USE_DCU)
 #include <c10/hip/HIPStream.h>
 #endif

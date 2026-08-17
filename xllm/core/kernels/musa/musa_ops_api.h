@@ -399,6 +399,17 @@ std::tuple<torch::Tensor, torch::Tensor> moe_topk_softmax(
     int64_t topk);
 bool moe_topk_softmax_available();
 
+// The MUSA build compiles the shared CUDA source through mcc_wrapper, which
+// maps its kernel namespace to xllm::kernel::musa. Keep the host declaration
+// in that namespace so eager MUSA callers resolve the same symbol.
+void block_copy(torch::Tensor key_cache_ptrs,
+                torch::Tensor value_cache_ptrs,
+                torch::Tensor src_block_indices,
+                torch::Tensor dst_block_indices,
+                torch::Tensor cum_sum,
+                int64_t numel_per_block,
+                torch::ScalarType cache_dtype);
+
 }  // namespace xllm::kernel::musa
 
 // Shared CUDA-source helpers compiled into the MUSA kernel library via
