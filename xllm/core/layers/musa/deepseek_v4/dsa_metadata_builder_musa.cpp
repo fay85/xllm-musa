@@ -97,6 +97,16 @@ std::vector<int32_t> resolve_query_lengths(const ModelInputParams& params,
   }
   return std::vector<int32_t>(static_cast<size_t>(batch_size), 1);
 }
+
+std::vector<int32_t> tensor_to_host_int32(const torch::Tensor& tensor) {
+  if (!tensor.defined() || tensor.numel() == 0) {
+    return {};
+  }
+  auto host = tensor.to(torch::kCPU, torch::kInt32).contiguous().view(-1);
+  const auto* data = host.data_ptr<int32_t>();
+  return std::vector<int32_t>(data, data + host.numel());
+}
+
 torch::Tensor pad_block_table(const torch::Tensor& block_table,
                               int32_t target_rows,
                               int32_t target_cols,
@@ -171,11 +181,35 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
     const std::vector<std::vector<DSACacheInfo>>& caches_info,
     const std::vector<DSAGroupInfo>& group_infos,
     DSAMetadata& dsa) {
-  const std::vector<int32_t> ctx_lens_vec = normalize_sequence_lengths(
+  std::vector<int32_t> ctx_lens_vec = normalize_sequence_lengths(
       params.attention.host.kv_seq_lens, params.meta.num_sequences);
+  if (ctx_lens_vec.empty()) {
+    // Some MUSA decode rebuilds carry the lengths only in device attention
+    // metadata. Keep the model-private DSA path independent of the public
+    // builder's host-vector convention by recovering those rows here.
+    ctx_lens_vec = tensor_to_host_int32(params.attention.device.kv_seq_lens);
+    ctx_lens_vec =
+        normalize_sequence_lengths(ctx_lens_vec, params.meta.num_sequences);
+  }
+  if (ctx_lens_vec.empty() && !params.multi_block_tables.empty() &&
+      params.multi_block_tables.front().defined() &&
+      params.multi_block_tables.front().dim() == 2) {
+    const int64_t rows = params.multi_block_tables.front().size(0);
+    const int32_t fallback_len =
+        std::max<int32_t>(params.meta.kv_max_seq_len, 1);
+    ctx_lens_vec.assign(static_cast<size_t>(rows), fallback_len);
+  }
   const int32_t batch_size = static_cast<int32_t>(ctx_lens_vec.size());
-  const std::vector<int32_t> q_lens_vec =
+  std::vector<int32_t> q_lens_vec =
       resolve_query_lengths(params, ctx_lens_vec, batch_size);
+  if (q_lens_vec.empty() && batch_size > 0) {
+    q_lens_vec = tensor_to_host_int32(params.attention.device.q_seq_lens);
+    q_lens_vec =
+        normalize_sequence_lengths(q_lens_vec, params.meta.num_sequences);
+  }
+  if (q_lens_vec.size() != static_cast<size_t>(batch_size)) {
+    q_lens_vec.assign(static_cast<size_t>(batch_size), 1);
+  }
 
   dsa.input_positions = positions;
   const bool is_acl_graph = params.enable_graph;
@@ -540,13 +574,26 @@ void DSAMetadataBuilderMusa::process_swa_group(
           ? std::max<int64_t>(block_table_capacity_cols, raw_bt.size(1))
           : raw_bt.size(1);
   const int64_t block_size_i64 = static_cast<int64_t>(block_size);
+  const bool compact_raw_rows = raw_bt.size(0) < batch_size;
+  auto raw_row_for_sequence = [&](int32_t seq) -> int32_t {
+    if (!compact_raw_rows) {
+      return seq;
+    }
+    int32_t raw_seq = 0;
+    for (int32_t s = 0; s < seq; ++s) {
+      if (ctx_lens[s] > 0) {
+        ++raw_seq;
+      }
+    }
+    return ctx_lens[seq] > 0 ? raw_seq : -1;
+  };
 
-  auto slot_for_position = [&](int32_t seq, int64_t pos) -> int32_t {
+  auto slot_for_position = [&](int32_t raw_seq, int64_t pos) -> int32_t {
     if (semantic_cols <= 0) {
       return -1;
     }
     const int64_t block_idx = (pos / block_size_i64) % semantic_cols;
-    const int32_t block_id = raw_bt_acc[seq][block_idx];
+    const int32_t block_id = raw_bt_acc[raw_seq][block_idx];
     if (block_id < 0) {
       return -1;
     }
@@ -560,13 +607,14 @@ void DSAMetadataBuilderMusa::process_swa_group(
     const int64_t ctx_len = static_cast<int64_t>(ctx_lens[seq]);
     const int64_t q_len =
         std::clamp<int64_t>(static_cast<int64_t>(q_lens[seq]), 0, ctx_len);
-    if (seq >= raw_bt.size(0)) {
+    const int32_t raw_seq = raw_row_for_sequence(seq);
+    if (raw_seq < 0 || raw_seq >= raw_bt.size(0)) {
       write_idx += q_len;
       continue;
     }
     const int64_t q_start = ctx_len - q_len;
     for (int64_t i = 0; i < q_len; ++i) {
-      out_slots_acc[write_idx++] = slot_for_position(seq, q_start + i);
+      out_slots_acc[write_idx++] = slot_for_position(raw_seq, q_start + i);
     }
   }
 
@@ -591,7 +639,8 @@ void DSAMetadataBuilderMusa::process_swa_group(
   auto old_acc = raw_bt.accessor<int32_t, 2>();
 
   for (int32_t s = 0; s < batch_size; ++s) {
-    if (s >= raw_bt.size(0)) {
+    const int32_t raw_seq = raw_row_for_sequence(s);
+    if (raw_seq < 0 || raw_seq >= raw_bt.size(0)) {
       continue;
     }
     const int32_t retained_cols = std::min(current_cols, dst_lens[s]);
@@ -600,7 +649,7 @@ void DSAMetadataBuilderMusa::process_swa_group(
       const int32_t logical_col = start_col + j;
       // Keep the read-side block table aligned with slot_for_position().
       const int32_t physical_col = logical_col % current_cols;
-      new_acc[s][logical_col] = old_acc[s][physical_col];
+      new_acc[s][logical_col] = old_acc[raw_seq][physical_col];
     }
   }
   out_bt = new_bt;

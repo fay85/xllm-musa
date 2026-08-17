@@ -19,10 +19,12 @@ limitations under the License.
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <string>
 #include <vector>
 
 #include "core/framework/parallel_state/parallel_state.h"
+#include "core/kernels/musa/musa_ops_api.h"
 
 namespace xllm {
 namespace layer {
@@ -60,6 +62,8 @@ bool all_tensors_defined(const std::vector<torch::Tensor>& tensors) {
     return tensor.defined();
   });
 }
+
+constexpr int64_t kFp8GemvWorkspaceTokens = 2;
 
 bool is_packed_fp4_weight(const torch::Tensor& tensor,
                           int64_t logical_out_features,
@@ -213,14 +217,6 @@ DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs& model_args,
   CHECK_EQ(intermediate_size_ % world_size, 0)
       << "DeepseekV4MoE intermediate size must be divisible by TP world size.";
   local_intermediate_size_ = intermediate_size_ / world_size;
-
-  if (quant_args.quant_method() != "" || !quant_args.quant_descs().empty()) {
-    LOG(WARNING)
-        << "DeepseekV4MoE MUSA fallback supports unquantized routed experts "
-           "and a functional packed-FP4 path for DeepSeek-V4-Flash. The FP4 "
-           "path unpacks selected experts on demand and is not a production "
-           "fused MoE kernel.";
-  }
 
   if (n_shared_experts_ > 0) {
     shared_experts_ =
@@ -636,12 +632,102 @@ torch::Tensor DeepseekV4MoEImpl::apply_expert(const torch::Tensor& input,
   return torch::matmul(activated, w2.transpose(0, 1));
 }
 
+torch::Tensor DeepseekV4MoEImpl::forward_grouped_fp8(
+    const torch::Tensor& input,
+    const torch::Tensor& topk_ids,
+    const torch::Tensor& topk_weights) const {
+  if (!fp8_experts_loaded()) {
+    return torch::Tensor();
+  }
+  auto local_ids = topk_ids.scalar_type() == torch::kInt32
+                       ? topk_ids.contiguous()
+                       : topk_ids.to(torch::kInt32).contiguous();
+  if (start_expert_id_ != 0 || num_experts_per_rank_ != num_total_experts_) {
+    const auto valid_ids = local_ids.ge(start_expert_id_)
+                               .logical_and(local_ids.lt(
+                                   start_expert_id_ + num_experts_per_rank_));
+    local_ids = torch::where(valid_ids,
+                             local_ids - start_expert_id_,
+                             torch::full_like(local_ids, -1));
+  }
+
+  const auto route_index = kernel::cuda::moe_compute_index(
+      local_ids.reshape({-1}), num_experts_per_rank_);
+  const auto dst_to_src = std::get<1>(route_index);
+  const auto expert_counts = std::get<2>(route_index);
+
+  constexpr int64_t kAlignmentM = 128;
+  const int64_t num_assignments = input.size(0) * topk_;
+  const int64_t ep_world_size =
+      ep_pg_ == nullptr ? 1 : std::max<int64_t>(ep_pg_->world_size(), 1);
+  // With EP, each rank only consumes its local expert routes.  Reserve a
+  // 2x overload budget for routing skew, then add the per-active-expert
+  // alignment slack.  EP1 keeps the exact all-route bound.
+  const int64_t route_capacity =
+      ep_world_size > 1
+          ? ((num_assignments + ep_world_size - 1) / ep_world_size) * 2
+          : num_assignments;
+  const int64_t max_active_experts =
+      std::min<int64_t>(num_experts_per_rank_, route_capacity);
+  const int64_t max_padded_assignments =
+      ((route_capacity + max_active_experts * (kAlignmentM - 1) + kAlignmentM -
+        1) /
+       kAlignmentM) *
+      kAlignmentM;
+
+  torch::Tensor sorted_input_fp8;
+  torch::Tensor sorted_input_scale;
+  torch::Tensor padded_assignment;
+  torch::Tensor padded_expert;
+  torch::Tensor route_to_padded;
+  std::tie(sorted_input_fp8,
+           sorted_input_scale,
+           padded_assignment,
+           padded_expert,
+           route_to_padded) =
+      kernel::musa::deepseek_v4_fp8_moe_quant_prepare(input,
+                                                      dst_to_src,
+                                                      expert_counts,
+                                                      topk_,
+                                                      kAlignmentM,
+                                                      max_padded_assignments);
+
+  auto gate_up = kernel::musa::ragged_moe_gemm_fp8(sorted_input_fp8,
+                                                   sorted_input_scale,
+                                                   w13_fp8_,
+                                                   w13_fp8_scale_,
+                                                   padded_expert,
+                                                   input.scalar_type(),
+                                                   kAlignmentM);
+  if (!gate_up.defined()) {
+    return torch::Tensor();
+  }
+
+  auto [activated_fp8, activated_scale] =
+      kernel::musa::deepseek_v4_fp8_moe_swiglu_quantize(
+          gate_up, padded_expert, swiglu_limit_);
+  if (!activated_fp8.defined() || !activated_scale.defined()) {
+    return torch::Tensor();
+  }
+  auto down = kernel::musa::ragged_moe_gemm_fp8(activated_fp8,
+                                                activated_scale,
+                                                w2_fp8_,
+                                                w2_fp8_scale_,
+                                                padded_expert,
+                                                input.scalar_type(),
+                                                kAlignmentM);
+  if (!down.defined()) {
+    return torch::Tensor();
+  }
+  return kernel::musa::deepseek_v4_fp8_moe_restore_combine(
+      down, route_to_padded, topk_weights.contiguous(), /*output=*/{});
+}
+
 torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     const torch::Tensor& hidden_states,
     const torch::Tensor& topk_weights,
     const torch::Tensor& topk_ids,
     const ModelInputParams& input_params) {
-  (void)input_params;
   CHECK((w13_is_loaded_ && w2_is_loaded_) || fp4_experts_loaded() ||
         fp8_experts_loaded())
       << "DeepseekV4MoE expert weights must be loaded before forward.";
@@ -649,43 +735,86 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
   auto input = hidden_states;
   auto input_2d = input.reshape({-1, input.size(-1)});
   auto weights_2d = topk_weights.reshape({-1, topk_}).to(input_2d.dtype());
-  auto ids_2d = topk_ids.reshape({-1, topk_}).to(torch::kLong);
+  auto ids_2d = topk_ids.reshape({-1, topk_});
   CHECK_EQ(weights_2d.size(0), input_2d.size(0))
       << "DeepseekV4MoE topk_weights token count mismatch.";
   CHECK_EQ(ids_2d.size(0), input_2d.size(0))
       << "DeepseekV4MoE topk_ids token count mismatch.";
+  torch::Tensor output;
+  const bool use_fp8_gemv = input_params.meta.batch_forward_type.is_decode() &&
+                            input_2d.size(0) > 0 &&
+                            input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
+                            fp8_experts_loaded();
+  if (!output.defined() && use_fp8_gemv) {
+    const int64_t num_tokens = input_2d.size(0);
+    const int64_t num_assignments = num_tokens * topk_;
+    auto local_ids = ids_2d.scalar_type() == torch::kInt32
+                         ? ids_2d.contiguous()
+                         : ids_2d.to(torch::kInt32).contiguous();
+    if (start_expert_id_ != 0 || num_experts_per_rank_ != num_total_experts_) {
+      const auto valid_ids = local_ids.ge(start_expert_id_)
+                                 .logical_and(local_ids.lt(
+                                     start_expert_id_ + num_experts_per_rank_));
+      local_ids = torch::where(valid_ids,
+                               local_ids - start_expert_id_,
+                               torch::full_like(local_ids, -1));
+    }
+    output = kernel::musa::deepseek_v4_fp8_moe_gemv_decode(
+        input_2d.contiguous(),
+        local_ids,
+        weights_2d.contiguous(),
+        w13_fp8_,
+        w13_fp8_scale_,
+        w2_fp8_,
+        w2_fp8_scale_,
+        fp8_gemv_activation_workspace_.narrow(
+            /*dim=*/0, /*start=*/0, /*length=*/num_assignments),
+        fp8_gemv_routed_output_workspace_.narrow(
+            /*dim=*/0, /*start=*/0, /*length=*/num_assignments),
+        fp8_gemv_output_workspace_.narrow(
+            /*dim=*/0, /*start=*/0, /*length=*/num_tokens),
+        swiglu_limit_);
+  }
 
-  torch::Tensor output = torch::zeros_like(input_2d);
-  auto ids_cpu = ids_2d.to(torch::kCPU).contiguous();
-  std::vector<std::vector<int64_t>> token_indices(num_experts_per_rank_);
-  std::vector<std::vector<int64_t>> topk_indices(num_experts_per_rank_);
-  for (int64_t token = 0; token < ids_cpu.size(0); ++token) {
-    for (int64_t k = 0; k < ids_cpu.size(1); ++k) {
-      const int64_t global_expert = ids_cpu.index({token, k}).item<int64_t>();
-      if (global_expert < start_expert_id_ ||
-          global_expert >= start_expert_id_ + num_experts_per_rank_) {
+  if (!output.defined() && !input_params.meta.batch_forward_type.is_decode() &&
+      fp8_experts_loaded()) {
+    output = forward_grouped_fp8(input_2d.contiguous(), ids_2d, weights_2d);
+  }
+
+  if (!output.defined()) {
+    output = torch::zeros_like(input_2d);
+    auto ids_cpu = ids_2d.to(torch::kLong).to(torch::kCPU).contiguous();
+    std::vector<std::vector<int64_t>> token_indices(num_experts_per_rank_);
+    std::vector<std::vector<int64_t>> topk_indices(num_experts_per_rank_);
+    for (int64_t token = 0; token < ids_cpu.size(0); ++token) {
+      for (int64_t k = 0; k < ids_cpu.size(1); ++k) {
+        const int64_t global_expert = ids_cpu.index({token, k}).item<int64_t>();
+        if (global_expert < start_expert_id_ ||
+            global_expert >= start_expert_id_ + num_experts_per_rank_) {
+          continue;
+        }
+        const int64_t local_expert = global_expert - start_expert_id_;
+        token_indices[local_expert].push_back(token);
+        topk_indices[local_expert].push_back(k);
+      }
+    }
+    for (int64_t local_expert = 0; local_expert < num_experts_per_rank_;
+         ++local_expert) {
+      if (token_indices[local_expert].empty()) {
         continue;
       }
-      const int64_t local_expert = global_expert - start_expert_id_;
-      token_indices[local_expert].push_back(token);
-      topk_indices[local_expert].push_back(k);
+      auto index_options =
+          torch::TensorOptions().dtype(torch::kLong).device(input_2d.device());
+      auto token_idx =
+          torch::tensor(token_indices[local_expert], index_options);
+      auto topk_idx = torch::tensor(topk_indices[local_expert], index_options);
+      auto expert_input = input_2d.index_select(/*dim=*/0, token_idx);
+      auto expert_output = apply_expert(expert_input, local_expert);
+      auto expert_weight = weights_2d.index({token_idx, topk_idx})
+                               .unsqueeze(-1)
+                               .to(output.dtype());
+      output.index_add_(/*dim=*/0, token_idx, expert_output * expert_weight);
     }
-  }
-  for (int64_t local_expert = 0; local_expert < num_experts_per_rank_;
-       ++local_expert) {
-    if (token_indices[local_expert].empty()) {
-      continue;
-    }
-    auto index_options =
-        torch::TensorOptions().dtype(torch::kLong).device(input_2d.device());
-    auto token_idx = torch::tensor(token_indices[local_expert], index_options);
-    auto topk_idx = torch::tensor(topk_indices[local_expert], index_options);
-    auto expert_input = input_2d.index_select(/*dim=*/0, token_idx);
-    auto expert_output = apply_expert(expert_input, local_expert);
-    auto expert_weight = weights_2d.index({token_idx, topk_idx})
-                             .unsqueeze(-1)
-                             .to(output.dtype());
-    output.index_add_(/*dim=*/0, token_idx, expert_output * expert_weight);
   }
 
   if (ep_pg_ != nullptr && ep_pg_->world_size() > 1) {
@@ -695,10 +824,40 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
   if (shared_experts_) {
     auto shared_output = shared_experts_(input);
     if (shared_expert_gate_ && shared_expert_gate_is_loaded_) {
-      auto gate = torch::sigmoid(shared_expert_gate_->forward(input));
-      shared_output = shared_output * gate;
+      auto shared_output_2d =
+          shared_output.reshape({-1, hidden_size_}).contiguous();
+      const auto gate_weight = shared_expert_gate_->weight;
+      const auto is_aligned = [](const torch::Tensor& tensor) {
+        return tensor.defined() &&
+               reinterpret_cast<std::uintptr_t>(tensor.data_ptr()) % 16 == 0;
+      };
+      const bool use_fused_shared_gate =
+          input_2d.is_contiguous() && shared_output_2d.is_contiguous() &&
+          output.is_contiguous() &&
+          (input_2d.scalar_type() == torch::kBFloat16 ||
+           input_2d.scalar_type() == torch::kFloat16) &&
+          gate_weight.scalar_type() == input_2d.scalar_type() &&
+          shared_output_2d.scalar_type() == input_2d.scalar_type() &&
+          output.scalar_type() == input_2d.scalar_type() &&
+          is_aligned(input_2d) && is_aligned(gate_weight) &&
+          is_aligned(shared_output_2d) && is_aligned(output);
+      if (use_fused_shared_gate) {
+        output = kernel::musa::deepseek_v4_shared_expert_gate(
+            input_2d, gate_weight, shared_output_2d, output);
+      } else {
+        auto gate = torch::sigmoid(shared_expert_gate_->forward(input));
+        shared_output = shared_output * gate;
+        output = output + shared_output.reshape_as(output);
+      }
+    } else {
+      output = output + shared_output.reshape_as(output);
     }
-    output = output + shared_output.reshape_as(output);
+  }
+
+  // Routed and shared experts are sharded across the TP group. Reduce their
+  // combined partial hidden-state sum once, after both branches are complete.
+  if (tp_pg_ != nullptr && tp_pg_->world_size() > 1) {
+    tp_pg_->allreduce(output);
   }
 
   return output.reshape(hidden_states.sizes());
@@ -828,6 +987,14 @@ void DeepseekV4MoEImpl::load_state_dict(const StateDict& state_dict) {
   }
 
   load_experts(state_dict.get_dict_with_prefix("experts."));
+  if (fp8_experts_loaded() && !fp8_gemv_activation_workspace_.defined()) {
+    fp8_gemv_activation_workspace_ = torch::empty(
+        {kFp8GemvWorkspaceTokens * topk_, local_intermediate_size_}, options_);
+    fp8_gemv_routed_output_workspace_ =
+        torch::empty({kFp8GemvWorkspaceTokens * topk_, hidden_size_}, options_);
+    fp8_gemv_output_workspace_ =
+        torch::empty({kFp8GemvWorkspaceTokens, hidden_size_}, options_);
+  }
 }
 
 }  // namespace layer

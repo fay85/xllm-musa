@@ -672,7 +672,8 @@ class DeepseekV4ModelImpl final
     // in xllm DP utilities. DeepSeek V4 not use DP today.
     std::replace(dp_token_nums.begin(), dp_token_nums.end(), 0, 1);
 
-    if (!modified_input_params.attn_metadata) {
+    if (!modified_input_params.attn_metadata ||
+        !modified_input_params.attn_metadata->dsa_metadata) {
       CHECK(!acl_graph_forward)
           << "DeepSeek V4 ACL graph requires prebuilt attention metadata";
       modified_input_params.attn_metadata =

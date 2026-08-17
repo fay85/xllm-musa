@@ -52,6 +52,9 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
   void load_experts(const StateDict& state_dict);
   torch::Tensor apply_expert(const torch::Tensor& input,
                              int64_t local_expert_id) const;
+  torch::Tensor forward_grouped_fp8(const torch::Tensor& input,
+                                    const torch::Tensor& topk_ids,
+                                    const torch::Tensor& topk_weights) const;
   void ensure_dense_expert_storage();
   void ensure_fp8_expert_storage();
   void ensure_packed_fp4_expert_storage();
@@ -111,6 +114,11 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
   torch::Tensor w2_fp8_scale_;
   bool w13_fp8_is_loaded_ = false;
   bool w2_fp8_is_loaded_ = false;
+  // Decode workspaces are allocated while loading weights so MUSA graph
+  // capture never observes an allocation or a changing storage address.
+  torch::Tensor fp8_gemv_activation_workspace_;
+  torch::Tensor fp8_gemv_routed_output_workspace_;
+  torch::Tensor fp8_gemv_output_workspace_;
   std::vector<torch::Tensor> w1_fp8_list_;
   std::vector<torch::Tensor> w3_fp8_list_;
   std::vector<torch::Tensor> w1_fp8_scale_list_;

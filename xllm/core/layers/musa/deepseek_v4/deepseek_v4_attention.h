@@ -78,6 +78,25 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
                              const torch::Tensor& block_table,
                              int64_t sequence_index,
                              int64_t kv_len) const;
+  torch::Tensor paged_dense_attention(
+      const torch::Tensor& q,
+      const torch::Tensor& cache,
+      const torch::Tensor& block_table,
+      int64_t sequence_index,
+      int64_t kv_len,
+      const torch::Tensor& compressed_kv,
+      const torch::Tensor& compressed_cache,
+      const torch::Tensor& compressed_block_table,
+      int64_t compressed_kv_len) const;
+  torch::Tensor mate_sparse_attention(
+      const torch::Tensor& q,
+      const torch::Tensor& packed_cache,
+      const torch::Tensor& logical_indices,
+      const torch::Tensor& compressed_block_table,
+      const torch::Tensor& extra_packed_cache,
+      const torch::Tensor& swa_block_table,
+      int64_t sequence_index,
+      int64_t kv_len) const;
   torch::Tensor dense_attention(const torch::Tensor& q,
                                 const torch::Tensor& kv,
                                 const torch::Tensor& compressed_kv,
@@ -94,6 +113,27 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
                                      const torch::Tensor& cos,
                                      const torch::Tensor& sin,
                                      size_t sequence_index);
+  torch::Tensor compress_indexer_prefill_sequence(
+      const torch::Tensor& hidden_states,
+      const torch::Tensor& cos,
+      const torch::Tensor& sin,
+      size_t sequence_index);
+  torch::Tensor compress_indexer_decode_step(const torch::Tensor& hidden_step,
+                                             int64_t start_pos,
+                                             const torch::Tensor& cos,
+                                             const torch::Tensor& sin,
+                                             size_t sequence_index);
+  torch::Tensor build_indexer_topk(const torch::Tensor& qr,
+                                   const torch::Tensor& hidden_states,
+                                   const torch::Tensor& cos,
+                                   const torch::Tensor& sin,
+                                   const torch::Tensor& index_kv,
+                                   const torch::Tensor& index_cache,
+                                   const torch::Tensor& index_scale_cache,
+                                   const torch::Tensor& index_block_table,
+                                   int64_t sequence_index,
+                                   int64_t index_len,
+                                   int64_t q_abs_start);
 
   int64_t num_heads_ = 0;
   int64_t hidden_dim_ = 0;
@@ -110,7 +150,11 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   int64_t n_local_groups_ = 0;
   int64_t tp_rank_ = 0;
   int64_t tp_size_ = 1;
+  int64_t index_n_heads_ = 0;
+  int64_t index_head_dim_ = 0;
+  int64_t index_topk_ = 0;
   double softmax_scale_ = 1.0;
+  double indexer_score_scale_ = 1.0;
   double eps_ = 1e-6;
   int32_t layer_id_ = 0;
 
@@ -124,16 +168,26 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   ReplicatedLinear compressor_wkv_{nullptr};
   ReplicatedLinear compressor_wgate_{nullptr};
   RMSNorm compressor_norm_{nullptr};
+  ReplicatedLinear indexer_wq_b_{nullptr};
+  ReplicatedLinear indexer_weights_proj_{nullptr};
+  ReplicatedLinear indexer_compressor_wkv_{nullptr};
+  ReplicatedLinear indexer_compressor_wgate_{nullptr};
+  RMSNorm indexer_compressor_norm_{nullptr};
 
   torch::Tensor q_rms_gamma_;
   torch::Tensor attn_sink_;
   torch::Tensor compressor_ape_;
-  std::vector<torch::Tensor> compressor_hidden_history_;
+  torch::Tensor indexer_compressor_ape_;
+  torch::Tensor indexer_hadamard_;
   std::vector<torch::Tensor> compressor_kv_history_;
   std::vector<torch::Tensor> compressor_kv_state_;
   std::vector<torch::Tensor> compressor_score_state_;
+  std::vector<torch::Tensor> indexer_kv_history_;
+  std::vector<torch::Tensor> indexer_kv_state_;
+  std::vector<torch::Tensor> indexer_score_state_;
   bool attn_sink_loaded_ = false;
   bool compressor_ape_loaded_ = false;
+  bool indexer_compressor_ape_loaded_ = false;
 };
 TORCH_MODULE(DeepseekV4Attention);
 
