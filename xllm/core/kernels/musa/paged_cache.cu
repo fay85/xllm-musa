@@ -200,11 +200,11 @@ void block_copy(torch::Tensor key_cache_ptrs,
     return;
   }
 
-  CHECK(key_cache_ptrs.is_cuda());
-  CHECK(value_cache_ptrs.is_cuda());
-  CHECK(src_block_indices.is_cuda());
-  CHECK(dst_block_indices.is_cuda());
-  CHECK(cum_sum.is_cuda());
+  CHECK(is_torch_musa_device(key_cache_ptrs.device()));
+  CHECK(is_torch_musa_device(value_cache_ptrs.device()));
+  CHECK(is_torch_musa_device(src_block_indices.device()));
+  CHECK(is_torch_musa_device(dst_block_indices.device()));
+  CHECK(is_torch_musa_device(cum_sum.device()));
   CHECK_EQ(key_cache_ptrs.scalar_type(), torch::kInt64);
   CHECK_EQ(value_cache_ptrs.scalar_type(), torch::kInt64);
   CHECK_EQ(src_block_indices.scalar_type(), torch::kInt32);

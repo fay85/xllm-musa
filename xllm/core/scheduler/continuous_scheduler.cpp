@@ -394,6 +394,26 @@ void ContinuousScheduler::step_with_schedule_overlap(
         return one_batch.empty();
       });
 
+  const bool has_inflight_beam_search =
+      !last_batch_all_empty &&
+      std::any_of(last_running_requests_.begin(),
+                  last_running_requests_.end(),
+                  [](const std::shared_ptr<Request>& request) {
+                    return request != nullptr && request->check_beam_search();
+                  });
+  if (has_inflight_beam_search) {
+    // Software beam search changes both the Sequence objects and their KV
+    // source blocks. Commit that state before building the next batch.
+    engine_->update_last_step_result(last_batch_);
+    process_batch_output(true);
+    last_batch_.clear();
+    last_batch_.resize(options_.dp_size());
+    last_running_requests_.clear();
+    last_running_sequences_.clear();
+    last_batch_all_empty = true;
+    is_first_step_ = true;
+  }
+
   // When an overlapped step is still in flight, use a non-blocking scheduling
   // probe. It still attempts prepare_batch once, but does not retry merely
   // because an unschedulable request remains in a queue; otherwise

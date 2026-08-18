@@ -51,6 +51,12 @@ constexpr size_t kDecoderBosTokenCount = 1;
 constexpr size_t kDecoderMaxTokenCount = kRecTotalSteps + kDecoderBosTokenCount;
 constexpr char kEmptyLogprobsFinishReason[] = "empty_logprobs";
 
+int64_t num_top_logprobs_to_store(const RequestSamplingParam& params) {
+  const int64_t beam_candidate_count =
+      params.beam_width > 1 ? 2 * static_cast<int64_t>(params.beam_width) : 0;
+  return std::max(params.top_logprobs, beam_candidate_count);
+}
+
 std::vector<int64_t> normalize_rec_item_ids(const std::vector<int64_t>& raw_ids,
                                             size_t sequence_index) {
   std::vector<int64_t> item_ids;
@@ -379,7 +385,9 @@ void Sequence::append_token(const Token& token) {
   // update logprobs if needed
   if (sequence_params_.sampling_param->logprobs) {
     logprob_state_->update_logprob(
-        cur_idx, token, sequence_params_.sampling_param->top_logprobs);
+        cur_idx,
+        token,
+        num_top_logprobs_to_store(*sequence_params_.sampling_param));
   }
 
   // invalidate the finish status once a new token is appended
@@ -431,7 +439,7 @@ void Sequence::update_last_step_token(const Token& token, size_t token_offset) {
     logprob_state_->update_logprob(
         cur_generated_token_idx_,
         token,
-        sequence_params_.sampling_param->top_logprobs);
+        num_top_logprobs_to_store(*sequence_params_.sampling_param));
   }
   ++cur_generated_token_idx_;
   finish_status_invalidated_ = true;
@@ -456,7 +464,9 @@ void Sequence::update_token(size_t index, const Token& token) {
   // update logprobs if needed
   if (sequence_params_.sampling_param->logprobs) {
     logprob_state_->update_logprob(
-        index, token, sequence_params_.sampling_param->top_logprobs);
+        index,
+        token,
+        num_top_logprobs_to_store(*sequence_params_.sampling_param));
   }
   // logprobs_[index] = token.logprob;
   finish_status_invalidated_ = true;
@@ -927,7 +937,8 @@ void Sequence::generate_output_tokens_logprobs(
       tokenizer,
       out_logprobs,
       sequence_params_.skip_special_tokens,
-      tokens_);
+      tokens_,
+      static_cast<size_t>(sequence_params_.sampling_param->top_logprobs));
 }
 
 Slice<int32_t> Sequence::get_generated_tokens() const {

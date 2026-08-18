@@ -61,7 +61,10 @@ void SamplingParameters::init(
     top_k.push_back(p->top_k);
     logprobs = logprobs || p->logprobs;
     is_embeddings = is_embeddings || p->is_embeddings;
-    max_top_logprobs = std::max(max_top_logprobs, p->top_logprobs);
+    const int64_t beam_candidate_count =
+        p->beam_width > 1 ? 2 * static_cast<int64_t>(p->beam_width) : 0;
+    max_top_logprobs = std::max(
+        max_top_logprobs, std::max(p->top_logprobs, beam_candidate_count));
     num_return_sequences =
         std::max(num_return_sequences, p->num_return_sequences);
     if (p->beam_width > 0) {

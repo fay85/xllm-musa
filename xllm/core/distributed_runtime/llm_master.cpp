@@ -399,18 +399,13 @@ std::shared_ptr<Request> LLMMaster::generate_request(
   sampling_param.top_logprobs = sp.top_logprobs;
   sampling_param.is_embeddings = sp.is_embeddings;
   sampling_param.beam_width = sp.beam_width;
+  sampling_param.num_return_sequences = sp.num_return_sequences;
   if (best_of > sp.n) {
     // enable logprobs for best_of to generate sequence logprob
     sampling_param.logprobs = true;
   }
   if (sampling_param.beam_width > 1) {
-    // beam search requires logprobs, and needs at least one top_logprob
-    // candidate for beam expansion.
     sampling_param.logprobs = true;
-    if (sampling_param.top_logprobs == 0) {
-      sampling_param.top_logprobs =
-          static_cast<int64_t>(sampling_param.beam_width);
-    }
   }
   // sampling_param.do_sample = sp.do_sample;
 

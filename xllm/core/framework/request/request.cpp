@@ -32,6 +32,18 @@ limitations under the License.
 
 namespace xllm {
 
+namespace {
+
+size_t count_generated_tokens(const Sequence& sequence) {
+  const auto tokens = sequence.tokens();
+  return static_cast<size_t>(
+      std::count_if(tokens.begin() + sequence.num_prompt_tokens(),
+                    tokens.end(),
+                    [](int32_t token_id) { return token_id >= 0; }));
+}
+
+}  // namespace
+
 Request::Request(const std::string& request_id,
                  const std::string& x_request_id,
                  const std::string& x_request_time,
@@ -82,10 +94,8 @@ void Request::log_statistic(double total_latency) {
   // log the request statistics
   int idx = 0;
   for (const auto& seq : sequences()) {
+    const size_t gen_tokens = count_generated_tokens(*seq);
     double ttft = seq->time_to_first_token_latency_seconds();
-    size_t gen_tokens = state_.enable_schedule_overlap
-                            ? seq->num_generated_tokens() - 1
-                            : seq->num_generated_tokens();
     double tpot = 0.0;
     double gen_speed = 0.0;
     if (gen_tokens > 1 && total_latency > ttft && ttft > 0) {
@@ -161,11 +171,7 @@ RequestOutput Request::generate_output(const Tokenizer& tokenizer,
   Usage usage;
   usage.num_prompt_tokens = state_.prompt_tokens.size();
   for (const auto& seq : sequences()) {
-    usage.num_generated_tokens += seq->num_generated_tokens();
-    // NOTE: Avoid counting the extra execution step in overlap scenario.
-    if (state_.enable_schedule_overlap) {
-      usage.num_generated_tokens--;
-    }
+    usage.num_generated_tokens += count_generated_tokens(*seq);
   }
   CHECK_LE(num_prefix_cache_tokens_,
            static_cast<size_t>(std::numeric_limits<int32_t>::max()));
