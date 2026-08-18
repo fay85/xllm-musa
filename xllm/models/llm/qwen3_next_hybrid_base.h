@@ -153,6 +153,10 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
     }
 
     std::optional<torch::Tensor> residual = std::nullopt;
+#if defined(USE_MUSA)
+    layer::GdnMtpVerifyForwardScope gdn_mtp_verify_forward_scope(
+        input_params.gdn_mtp_verify_cache.get());
+#endif
     for (size_t i = 0; i < layers_.size(); i++) {
 #if defined(USE_CUDA) || defined(USE_MUSA)
       if (attn_metadata.plan_info != nullptr) {

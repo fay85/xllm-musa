@@ -35,37 +35,10 @@ namespace layer {
 
 namespace {
 
-bool is_fa3_shape_supported(int64_t head_size,
-                            int64_t num_heads,
-                            int64_t num_kv_heads) {
-  if (num_kv_heads <= 0 || num_heads % num_kv_heads != 0) {
-    return false;
-  }
-  const int64_t gqa_ratio = num_heads / num_kv_heads;
-  return (head_size == 128 && (gqa_ratio == 2 || gqa_ratio == 4)) ||
-         (head_size == 256 && (gqa_ratio == 6 || gqa_ratio == 8));
-}
-
-int32_t fa3_prefill_setting() {
-  static const int32_t setting = [] {
-    const char* env = std::getenv("XLLM_USE_FA3");
-    if (env == nullptr) {
-      return int32_t{-1};
-    }
-    return std::string(env) == "1" ? int32_t{1} : int32_t{0};
-  }();
-  return setting;
-}
-
-bool should_use_fa3_prefill(const torch::Tensor& query,
-                            int64_t head_size,
-                            int64_t num_heads,
-                            int64_t num_kv_heads) {
-  const bool default_to_fa3 =
-      query.scalar_type() == torch::kBFloat16 &&
-      is_fa3_shape_supported(head_size, num_heads, num_kv_heads);
-  const int32_t setting = fa3_prefill_setting();
-  return setting < 0 ? default_to_fa3 : setting == 1;
+int64_t fa3_scheduler_metadata_numel(int32_t batch_size) {
+  const int64_t rounded_batch =
+      ((static_cast<int64_t>(batch_size) + 3) / 4) * 4;
+  return rounded_batch * 4;
 }
 
 bool use_expanded_spec_decode_attention(
@@ -244,7 +217,8 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
   const bool use_fa3_chunked_prefill =
       attn_metadata.is_chunked_prefill && !attn_metadata.enable_cuda_graph &&
       !attn_metadata.attn_mask.defined() && head_size_ == 128 &&
-      should_use_fa3_prefill(query, head_size_, num_heads_, num_kv_heads_);
+      musa::should_use_fa3_prefill(
+          query.scalar_type(), head_size_, num_heads_, num_kv_heads_);
   if (attn_metadata.is_prefill) {
     prefill_forward(
         attn_metadata, query, key, value, output, output_lse, k_cache, v_cache);
@@ -286,15 +260,15 @@ void FlashInferAttentionImpl::prefill_forward(
   bool use_custom_mask = attn_metadata.attn_mask.defined();
 
   const int64_t gqa_ratio = num_kv_heads_ > 0 ? num_heads_ / num_kv_heads_ : 0;
-  const bool use_fa3 =
-      should_use_fa3_prefill(query, head_size_, num_heads_, num_kv_heads_);
+  const bool use_fa3 = musa::should_use_fa3_prefill(
+      query.scalar_type(), head_size_, num_heads_, num_kv_heads_);
 
   // Supported BF16 shape-specialized kernels default to FA3 because the MUSA
   // FA2 prefill path does not safely reuse its workspace across requests.
   if (use_fa3) {
     CHECK(!use_custom_mask)
         << "XLLM_USE_FA3=1 does not support custom attention masks";
-    CHECK(is_fa3_shape_supported(head_size_, num_heads_, num_kv_heads_))
+    CHECK(musa::is_fa3_shape_supported(head_size_, num_heads_, num_kv_heads_))
         << "XLLM_USE_FA3=1 does not support head_dim=" << head_size_
         << " with GQA ratio " << gqa_ratio;
     CHECK_GT(num_kv_heads_, 0)
@@ -370,7 +344,7 @@ void FlashInferAttentionImpl::prefill_forward(
       if (attn_metadata.musa.share_fa3_scheduler_metadata &&
           attn_metadata.musa.fa3_scheduler_metadata.defined()) {
         CHECK_EQ(attn_metadata.musa.fa3_scheduler_metadata.numel(),
-                 static_cast<int64_t>(batch_size) * 4)
+                 fa3_scheduler_metadata_numel(batch_size))
             << "FA3 prefill scheduler metadata shape changed within one "
                "forward";
         scheduler_metadata = attn_metadata.musa.fa3_scheduler_metadata;
@@ -622,33 +596,22 @@ void FlashInferAttentionImpl::decoder_forward(
   }
   const AttentionMetadata& decode_attn =
       expanded_decode_meta.has_value() ? *expanded_decode_meta : attn_metadata;
-  // FA3 decode fast path. Supported Qwen3.5 shapes use FA3 by default;
+  int64_t block_size = 1;
+  if (k_cache.defined() && k_cache.dim() >= 2) {
+    block_size = k_cache.size(1);
+  }
+
+  // FA3 decode fast path. Supported BF16 shapes use FA3 by default;
   // XLLM_USE_FA3_DECODE=0 provides an explicit rollback to FA2. The shared
   // XLLM_USE_FA3 switch remains an override when the decode-specific setting
   // is absent. Requires the JIT-built fmha_fwd_<hash>.so under
   // FLASHINFER_OPS_PATH.
   {
-    static const int32_t fa3_setting = [] {
-      const char* decode_env = std::getenv("XLLM_USE_FA3_DECODE");
-      if (decode_env != nullptr) {
-        return std::string(decode_env) == "1" ? int32_t{1} : int32_t{0};
-      }
-      const char* env = std::getenv("XLLM_USE_FA3");
-      if (env == nullptr) {
-        return int32_t{-1};
-      }
-      return std::string(env) == "1" ? int32_t{1} : int32_t{0};
-    }();
-    const int64_t gqa_ratio =
-        num_kv_heads_ > 0 ? num_heads_ / num_kv_heads_ : 0;
-    const bool default_to_fa3 =
-        query.scalar_type() == torch::kBFloat16 &&
-        is_fa3_shape_supported(head_size_, num_heads_, num_kv_heads_);
-    const bool use_fa3 = fa3_setting < 0 ? default_to_fa3 : fa3_setting == 1;
-    const bool fa3_shape_supported =
-        query.scalar_type() == torch::kBFloat16 &&
-        is_fa3_shape_supported(head_size_, num_heads_, num_kv_heads_);
-    if (use_fa3 && fa3_shape_supported) {
+    if (musa::should_use_fa3_decode(query.scalar_type(),
+                                    head_size_,
+                                    num_heads_,
+                                    num_kv_heads_,
+                                    block_size)) {
       CHECK(decode_attn.block_table.defined())
           << "FA3 decode requires block_table (rectangular page_table)";
       const int64_t batch_size = decode_attn.block_table.size(0);
@@ -690,7 +653,7 @@ void FlashInferAttentionImpl::decoder_forward(
       if (attn_metadata.musa.share_fa3_scheduler_metadata &&
           attn_metadata.musa.fa3_scheduler_metadata.defined()) {
         CHECK_EQ(attn_metadata.musa.fa3_scheduler_metadata.numel(),
-                 batch_size * 4)
+                 fa3_scheduler_metadata_numel(batch_size))
             << "FA3 scheduler metadata shape changed within one forward";
         scheduler_metadata = attn_metadata.musa.fa3_scheduler_metadata;
       }
@@ -767,13 +730,6 @@ void FlashInferAttentionImpl::decoder_forward(
       }
       return;
     }
-  }
-
-  // Get block_size from k_cache if defined and has proper dimensions,
-  // otherwise use a default value (for prefill without KV cache, e.g., LongCat)
-  int64_t block_size = 1;
-  if (k_cache.defined() && k_cache.dim() >= 2) {
-    block_size = k_cache.size(1);
   }
 
   // NOTE: we only support "fa2" backend for BatchPrefillWithPagedKvcacheKernel

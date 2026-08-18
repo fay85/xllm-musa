@@ -33,10 +33,11 @@ namespace {
 
 constexpr int64_t kMatmulOutputBufMaxRows = 128;
 
-inline void maybe_set_persistent_output_buf(xllm::kernel::musa::MatmulParams& params,
-                                            MatmulOutputBuffers& output_buffers,
-                                            const torch::Tensor& input,
-                                            const torch::Tensor& weight) {
+inline void maybe_set_persistent_output_buf(
+    xllm::kernel::musa::MatmulParams& params,
+    MatmulOutputBuffers& output_buffers,
+    const torch::Tensor& input,
+    const torch::Tensor& weight) {
 #if defined(USE_MUSA)
   ::xllm::layer::musa::set_persistent_output_buf(
       params, output_buffers, input, weight);
@@ -1634,10 +1635,14 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
 }
 
 bool RowParallelLinearImpl::supports_block_fp8_quantized_input() const {
+  const auto& block_size = quant_args_.weight_block_size();
   return input_is_parallelized_ && is_block_fp8_quant(quant_args_) &&
-         weight_.defined() &&
+         block_size.size() == 2 && block_size[0] == 128 &&
+         block_size[1] == 128 && weight_.defined() &&
          weight_.scalar_type() == torch::kFloat8_e4m3fn &&
-         weight_scale_inv_.defined();
+         weight_scale_inv_.defined() &&
+         weight_scale_inv_.scalar_type() == torch::kFloat32 &&
+         weight_scale_inv_.is_contiguous();
 }
 
 torch::Tensor RowParallelLinearImpl::forward_block_fp8_quantized(
@@ -1658,7 +1663,8 @@ torch::Tensor RowParallelLinearImpl::forward_block_fp8_quantized(
   params.a_scale = input_scale;
   params.b_scale = weight_scale_inv_;
   params.output_dtype = output_dtype_;
-  params.output = std::nullopt;
+  params.output = output_buffers_.get(
+      input.size(0), weight_.size(0), input.options().dtype(output_dtype_));
   auto output = xllm::kernel::musa::fp8_block_matmul(params);
   if (bias_.defined() && rank_ == 0) {
     output = output + bias_.to(output.scalar_type());

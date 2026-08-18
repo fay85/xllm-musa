@@ -26,6 +26,7 @@ limitations under the License.
 #include "framework/kv_cache_transfer/mooncake_kv_cache_transfer.h"
 #endif
 #if defined(USE_MUSA)
+#include "core/runtime/musa/mtp_graph_buffers.h"
 #include "layers/musa/qwen3_gated_delta_net_base.h"
 #endif
 #include "core/framework/block/block_utils.h"
@@ -76,6 +77,54 @@ void broadcast_spec_tokens(torch::Tensor& tokens,
   tokens = tokens.contiguous();
   pg->broadcast(tokens, root_rank);
 }
+
+#if defined(USE_MUSA)
+// The combined first-draft path writes two rows per sequence.  A validation
+// at the end of a request can still look like a normal decode batch, while
+// the scheduler has allocated only the rows needed for that final step.  Do
+// not submit an asynchronous draft whose repair/current row can address a
+// block beyond the request's current table; the resulting MUSA error would be
+// reported later by the output stream synchronization.
+bool can_prelaunch_next_first_draft(const ForwardInput& input,
+                                    int32_t num_speculative_tokens,
+                                    int32_t block_size) {
+  const auto& block_tables = input.input_params.attention.host.block_tables;
+  const auto& positions = input.positions_host;
+  const int32_t num_sequences = input.input_params.meta.num_sequences;
+  if (!block_tables.defined() || !positions.defined() ||
+      block_tables.device() != torch::kCPU ||
+      positions.device() != torch::kCPU || !block_tables.is_contiguous() ||
+      !positions.is_contiguous() || block_tables.dim() != 2 ||
+      block_tables.scalar_type() != torch::kInt ||
+      positions.scalar_type() != torch::kInt || num_sequences <= 0 ||
+      num_speculative_tokens < 0 || block_size <= 0 ||
+      block_tables.size(0) < num_sequences ||
+      positions.numel() < num_sequences) {
+    return false;
+  }
+
+  const int32_t* position_ptr = positions.data_ptr<int32_t>();
+  const int32_t* block_table_ptr = block_tables.data_ptr<int32_t>();
+  const int64_t table_stride = block_tables.size(1);
+  const int64_t capacity = table_stride * block_size;
+  for (int32_t seq_id = 0; seq_id < num_sequences; ++seq_id) {
+    // The conservative upper bound covers the current row plus one repair
+    // row even when the validator accepts the complete draft.
+    const int64_t max_position =
+        static_cast<int64_t>(position_ptr[seq_id]) + num_speculative_tokens + 1;
+    if (max_position < 0 || max_position >= capacity) {
+      return false;
+    }
+    const int64_t block_idx = max_position / block_size;
+    if (block_idx >= table_stride ||
+        block_table_ptr[static_cast<int64_t>(seq_id) * table_stride +
+                        block_idx] < 0) {
+      return false;
+    }
+  }
+  return true;
+}
+#endif
 
 int64_t get_dp_local_tp_size(const ParallelArgs& parallel_args) {
   const int64_t dp_size = std::max<int64_t>(parallel_args.dp_size(), 1);
@@ -193,14 +242,14 @@ void finalize_output_on_stream(ForwardOutput& output,
   release_retained_inputs(output);
 }
 
-#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_NPU) || defined(USE_CUDA)
 void clear_expanded_spec_verify_graph_input(ModelInputParams& input_params) {
   input_params.graph.use_expanded_decode_for_spec_verify_attention = false;
   input_params.graph.expanded_kv_seq_lens = torch::Tensor();
   input_params.graph.expanded_block_tables = torch::Tensor();
   input_params.graph.expanded_tiling_data = torch::Tensor();
   input_params.graph.expanded_kv_seq_lens_vec.clear();
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   input_params.graph.expanded_paged_kv_indptr = torch::Tensor();
   input_params.graph.expanded_paged_kv_indices = torch::Tensor();
   input_params.graph.expanded_paged_kv_last_page_len = torch::Tensor();
@@ -255,7 +304,7 @@ void build_expanded_spec_verify_graph_input(ModelInputParams& input_params,
     CHECK_LT(static_cast<size_t>(seq_idx), lens.size());
     return lens[static_cast<size_t>(seq_idx)];
 #else
-    // CUDA/MUSA store q/kv sequence lengths in cumulative form.  A single
+    // CUDA stores q/kv sequence lengths in cumulative form.  A single
     // value is also accepted for the one-sequence metadata produced by the
     // MTP builder.
     if (lens.size() == 1) {
@@ -306,7 +355,7 @@ void build_expanded_spec_verify_graph_input(ModelInputParams& input_params,
   input_params.graph.expanded_block_tables =
       torch::stack(expanded_block_rows, 0);
   input_params.graph.expanded_kv_seq_lens_vec = std::move(expanded_kv_seq_lens);
-#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_CUDA)
   std::vector<int32_t> expanded_paged_kv_indptr;
   std::vector<int32_t> expanded_paged_kv_indices;
   std::vector<int32_t> expanded_paged_kv_last_page_len;
@@ -594,7 +643,12 @@ MTPWorkerImpl::MTPWorkerImpl(const ParallelArgs& parallel_args,
                              bool enable_opt_validate_probs)
     : SpeculativeWorkerImpl(parallel_args, device, options, target_options),
       enable_opt_validate_probs_(
-          use_selected_only_validate_probs(enable_opt_validate_probs)) {
+          use_selected_only_validate_probs(enable_opt_validate_probs))
+#if defined(USE_MUSA)
+      ,
+      mtp_graph_buffers_(device)
+#endif
+{
   draft_impl_ = std::make_unique<LLMWorkerImpl>(
       MTPDraftParallelArgs(parallel_args, options),
       device,
@@ -1090,12 +1144,13 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
   const int32_t num_speculative_tokens = options_.num_speculative_tokens();
   // Reuse draft-0 prelaunched for this same batch.
   const bool use_prelaunched_first_draft =
-      can_use_combined_first_draft() && pending_draft_context_matches(input);
+      can_use_combined_first_draft(input) &&
+      pending_draft_context_matches(input);
   const bool matching_device_target_context =
       pending_target_context_matches(input);
   // Consume this batch's pending target context directly on device.
   const bool use_device_target_context =
-      can_use_device_target_context() && matching_device_target_context &&
+      can_use_device_target_context(input) && matching_device_target_context &&
       device_target_context_ready_for_batch(input);
   if (pending_draft_context_.output.has_value() &&
       !use_prelaunched_first_draft) {
@@ -1252,7 +1307,7 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
         input,
         last_states,
         current_draft_input,
-        /*force_two_rows=*/can_use_combined_first_draft());
+        /*force_two_rows=*/can_use_combined_first_draft(input));
   }
   draft_outputs.reserve(num_speculative_tokens);
   const bool reuse_mtp_topk_state = layer::is_mtp_dsa_topk_reuse_enabled(
@@ -1377,6 +1432,26 @@ void MTPWorkerImpl::fill_validate_input_from_draft_outputs(
       validate_input.token_ids.view({num_sequences, num_val_tokens});
 
   validate_input.device_tensors_ready = false;
+#if defined(USE_MUSA)
+  if (num_speculative_tokens > 1) {
+    for (int32_t i = 0; i < num_speculative_tokens; ++i) {
+      const auto& draft_output = draft_outputs[i];
+      const torch::Tensor& next_tokens = draft_output.sample_output.next_tokens;
+      CHECK(next_tokens.defined())
+          << "draft next_tokens must be defined for validate token fill";
+      torch::Tensor draft_tokens = next_tokens.flatten();
+      CHECK_EQ(draft_tokens.numel(), num_sequences)
+          << "draft token count must match validate sequence count";
+      CHECK(draft_tokens.device() == validate_input.token_ids.device())
+          << "draft tokens and validate token_ids must be on the same device";
+      validate_token_rows.select(/*dim=*/1, /*index=*/i + 1)
+          .copy_(draft_tokens, /*non_blocking=*/true);
+    }
+    validate_input.device_tensors_ready = true;
+    record_metadata_ready_event(compute_stream, validate_input);
+    return;
+  }
+#endif
   for (int32_t i = 0; i < num_speculative_tokens; ++i) {
     const auto& draft_output = draft_outputs[i];
     const torch::Tensor& next_tokens = draft_output.sample_output.next_tokens;
@@ -1408,12 +1483,26 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_validate(
                                                      *compute_stream_,
                                                      target_prepared)
                                     .value();
+#if defined(USE_MUSA)
+  StreamEventPtr metadata_consumed_event = compute_stream_->record_event();
+  if (metadata_consumed_event == nullptr) {
+    const int32_t ret = compute_stream_->synchronize();
+    CHECK_EQ(ret, 0) << "failed to synchronize MUSA MTP metadata consumption";
+  }
+  mtp_graph_buffers_.mark_consumed(validate_input.input_params,
+                                   metadata_consumed_event);
+#endif
   COUNTER_ADD(speculative_execution_latency_seconds_target,
               timer.elapsed_seconds());
 
+  bool prelaunch_has_capacity = true;
+#if defined(USE_MUSA)
+  prelaunch_has_capacity = can_prelaunch_next_first_draft(
+      input, options_.num_speculative_tokens(), options_.block_size());
+#endif
   const bool prelaunch_next_first_draft =
-      can_use_combined_first_draft() &&
-      device_target_context_ready_for_batch(input);
+      can_use_combined_first_draft(input) &&
+      device_target_context_ready_for_batch(input) && prelaunch_has_capacity;
   ForwardInput next_first_draft_input;
   if (prelaunch_next_first_draft) {
     // This input is independent of the accepted token.  Prepare it on the
@@ -1556,7 +1645,7 @@ void MTPWorkerImpl::stage_target_context_write(
   pending_target_context_.base_positions = std::move(base_positions);
   pending_target_context_.base_kv_seq_lens = std::move(base_kv_seq_lens);
   pending_target_context_.ready_event = std::move(ready_event);
-  if (can_use_device_target_context()) {
+  if (can_use_device_target_context(input)) {
     device_context_ready_embedding_ids_ = pending_target_context_.embedding_ids;
     device_context_ready_request_ids_ = pending_target_context_.request_ids;
   }
@@ -1638,8 +1727,8 @@ bool MTPWorkerImpl::supports_device_target_context_execution() const {
     return false;
   }
 
-  static const bool musa_device_context_enabled = util::get_bool_env(
-      "XLLM_MUSA_MTP_DEVICE_CONTEXT", false);
+  static const bool musa_device_context_enabled =
+      util::get_bool_env("XLLM_MUSA_MTP_DEVICE_CONTEXT", false);
   if (!musa_device_context_enabled ||
       ::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel() ||
       parallel_args_.dp_size() > 1 || !device_.unwrap().is_privateuseone()) {
@@ -1654,9 +1743,10 @@ bool MTPWorkerImpl::supports_device_target_context_execution() const {
 #endif
 }
 
-bool MTPWorkerImpl::can_use_device_target_context() const {
+bool MTPWorkerImpl::can_use_device_target_context(
+    const ForwardInput& input) const {
   return enable_schedule_overlap() &&
-         (can_use_combined_first_draft() ||
+         (can_use_combined_first_draft(input) ||
           supports_device_target_context_execution());
 }
 
@@ -1668,8 +1758,9 @@ bool MTPWorkerImpl::supports_combined_first_draft_execution() const {
   }
 
 #if defined(USE_MUSA)
-  static const bool musa_overlap_enabled = util::get_bool_env(
-      "XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT", false);
+  // Keep this path opt-in until every expanded row has cumulative FA3 metadata.
+  static const bool musa_overlap_enabled =
+      util::get_bool_env("XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT", false);
   if (!musa_overlap_enabled) {
     return false;
   }
@@ -1702,7 +1793,15 @@ bool MTPWorkerImpl::supports_combined_first_draft_execution() const {
 #endif
 }
 
-bool MTPWorkerImpl::can_use_combined_first_draft() const {
+bool MTPWorkerImpl::can_use_combined_first_draft(
+    const ForwardInput& input) const {
+#if defined(USE_MUSA)
+  // A single-sequence batch has no independent draft work to overlap and is
+  // faster on the existing one-row path.
+  if (input.input_params.meta.num_sequences <= 1) {
+    return false;
+  }
+#endif
   return enable_schedule_overlap() && supports_combined_first_draft_execution();
 }
 
@@ -2056,6 +2155,7 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
     token_num *= num_val_tokens;
   }
 
+  std::vector<int32_t> accepted_prefix_lengths;
   if (use_chunked_prefill_spec_verify_path()) {
     input_params.embedding.input_embedding = torch::Tensor();
     input_params.is_spec_verify = true;
@@ -2068,15 +2168,19 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
       }
       input_params.attention.host.q_cu_seq_lens = std::move(q_cu_seq_lens_vec);
     }
-    std::vector<int32_t> accepted_prefix_lengths(num_sequences, 1);
+    accepted_prefix_lengths.assign(static_cast<size_t>(num_sequences), 1);
     if (embedding_cache_ != nullptr &&
         !input.input_params.embedding.embedding_ids.empty()) {
       accepted_prefix_lengths = embedding_cache_->read_accepted_prefix_lengths(
           input.input_params.embedding.embedding_ids,
           input.input_params.embedding.request_ids);
     }
+#if defined(USE_MUSA)
+    input_params.num_accepted_tokens = torch::Tensor();
+#else
     input_params.num_accepted_tokens =
         torch::tensor(accepted_prefix_lengths, token_options);
+#endif
     input_params.num_accepted_tokens_host.assign(
         accepted_prefix_lengths.begin(), accepted_prefix_lengths.end());
 #if defined(USE_MUSA)
@@ -2102,10 +2206,16 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
   }
 
   input_params.attention.rebuild_device_buffer(device_);
-#if defined(USE_NPU) || defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_MUSA)
+  if (use_chunked_prefill_spec_verify_path()) {
+    mtp_graph_buffers_.prepare(input_params,
+                               accepted_prefix_lengths,
+                               block_size,
+                               use_qwen3_5_spec_verify_path());
+  }
+#elif defined(USE_NPU) || defined(USE_CUDA)
   if (use_qwen3_5_spec_verify_path()) {
-    build_expanded_spec_verify_graph_input(
-        input_params, device_, block_size);
+    build_expanded_spec_verify_graph_input(input_params, device_, block_size);
   }
 #endif
   validate_input.device_tensors_ready = true;

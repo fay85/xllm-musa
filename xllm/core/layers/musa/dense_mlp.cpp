@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <cmath>
+
 #include "common/flash_comm1_context.h"
 #include "kernels/ops_api.h"
 #include "platform/platform.h"
@@ -118,24 +120,29 @@ torch::Tensor MusaDenseMLPImpl::forward(const torch::Tensor& hidden_states) {
     return down_proj_->forward(gate_up);
   }
 
+  static const bool use_fused_swiglu_quant =
+      util::get_bool_env("XLLM_FUSED_DENSE_SWIGLU_FP8", true);
+  const bool has_swiglu_limit = std::isfinite(swiglu_limit_) &&
+                                swiglu_limit_ > 0.0 &&
+                                swiglu_limit_ < 1000000.0;
+  const bool use_fused_path =
+      use_fused_swiglu_quant && is_gated_ && !use_fc1_sequence_parallel &&
+      hidden_act_ == "silu" && !has_swiglu_limit && gate_up.dim() == 2 &&
+      gate_up.size(0) > 0 && gate_up.scalar_type() == torch::kBFloat16 &&
+      gate_up.is_contiguous() &&
+      down_proj_->supports_block_fp8_quantized_input();
+  if (use_fused_path) {
+    auto [quantized, scale] =
+        xllm::kernel::musa::fused_swiglu_quant_fp8(gate_up, 128);
+    return down_proj_->forward_block_fp8_quantized(quantized, scale);
+  }
+
   torch::Tensor output;
   if (!Platform::is_npu()) {
     const int64_t batch_size = gate_up.sizes()[0];
     output = torch::empty(
         {batch_size, intermediate_size_ / process_group_->world_size()},
         gate_up.options());
-  }
-
-  static const bool use_fused_swiglu_quant =
-      util::get_bool_env("XLLM_FUSED_DENSE_SWIGLU_FP8", true);
-  const bool use_fused_prefill =
-      use_fused_swiglu_quant && !use_fc1_sequence_parallel &&
-      hidden_act_ == "silu" && gate_up.dim() == 2 && gate_up.size(0) > 128 &&
-      down_proj_->supports_block_fp8_quantized_input();
-  if (use_fused_prefill) {
-    auto [quantized, scale] =
-        xllm::kernel::musa::fused_swiglu_quant_fp8(gate_up, 128);
-    return down_proj_->forward_block_fp8_quantized(quantized, scale);
   }
 
   act_->forward(gate_up, output);

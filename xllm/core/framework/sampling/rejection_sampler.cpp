@@ -381,6 +381,17 @@ RejectionSampler::greedy_sample_from_token_ids(
     bool mask_out_rejected_tokens) {
   CHECK_EQ(target_token_ids.sizes(), draft_token_ids.sizes())
       << "target and draft token shapes must match";
+#if defined(USE_MUSA)
+  if (mask_out_rejected_tokens && draft_token_ids.device().is_privateuseone() &&
+      target_token_ids.device().is_privateuseone() &&
+      bonus_token_ids.device().is_privateuseone() &&
+      draft_token_ids.scalar_type() == torch::kLong &&
+      target_token_ids.scalar_type() == torch::kLong &&
+      bonus_token_ids.scalar_type() == torch::kLong) {
+    return kernel::musa::greedy_rejection_sample(
+        draft_token_ids, target_token_ids, bonus_token_ids);
+  }
+#endif
   // mask out the rejected tokens with -1
   // [batch_size, n_speculative_tokens + 1]
   torch::Tensor accepted_token_ids =

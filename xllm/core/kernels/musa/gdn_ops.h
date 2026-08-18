@@ -95,10 +95,6 @@ std::string get_mate_gdn_prefill_uri(int64_t num_q_heads,
                                      int64_t num_v_heads,
                                      torch::ScalarType dtype);
 
-std::string get_mate_gdn_decode_uri(int64_t num_q_heads,
-                                    int64_t num_v_heads,
-                                    torch::ScalarType dtype);
-
 std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
                                  int64_t num_v_heads,
                                  torch::ScalarType dtype,
@@ -107,6 +103,10 @@ bool mate_gdn_mtp_module_available(int64_t num_q_heads,
                                    int64_t num_v_heads,
                                    torch::ScalarType dtype,
                                    int64_t seq_len);
+bool mate_gdn_mtp_checkpoint_module_available(int64_t num_q_heads,
+                                              int64_t num_v_heads,
+                                              torch::ScalarType dtype,
+                                              int64_t seq_len);
 
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     MateGatedDeltaRulePrefillParams& params);
@@ -188,12 +188,15 @@ void causal_conv1d_decode_fused(const torch::Tensor& x,
 // device, so replay does not capture a host-side acceptance branch.
 void causal_conv1d_mtp_verify(const torch::Tensor& x,
                               const torch::Tensor& weight,
-                              const torch::Tensor& conv_state,
+                              torch::Tensor conv_state,
                               const torch::Tensor& cache_indices,
                               const torch::Tensor& num_accepted_tokens,
-                              torch::Tensor output_buf,
+                              torch::Tensor query_buf,
+                              torch::Tensor key_buf,
+                              torch::Tensor value_buf,
                               torch::Tensor intermediate_buf,
-                              bool silu_activation);
+                              bool silu_activation,
+                              bool write_superstate);
 
 void gated_rms_norm_fused(const torch::Tensor& x,
                           const torch::Tensor& weight,

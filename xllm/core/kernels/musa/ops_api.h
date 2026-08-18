@@ -92,6 +92,7 @@ struct MateGatedDeltaRuleMtpParams {
   torch::Tensor b;
   torch::Tensor state;
   torch::Tensor state_indices;
+  torch::Tensor checkpoint_state_indices;
   torch::Tensor intermediate;
   torch::Tensor output;
   int64_t num_k_heads = 0;

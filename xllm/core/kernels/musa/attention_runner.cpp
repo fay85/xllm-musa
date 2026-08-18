@@ -22,6 +22,25 @@ limitations under the License.
 
 namespace {
 
+constexpr int64_t kGdnChunkSize = 64;
+
+torch::Tensor canonical_time_prefix(const torch::Tensor& tensor,
+                                    int64_t num_tokens) {
+  CHECK_EQ(tensor.size(0), 1);
+  CHECK_LE(num_tokens, tensor.size(1));
+  if (tensor.dim() == 3) {
+    const int64_t dim = tensor.size(2);
+    return tensor.as_strided({1, num_tokens, dim}, {num_tokens * dim, dim, 1});
+  }
+  if (tensor.dim() == 4) {
+    const int64_t heads = tensor.size(2);
+    const int64_t dim = tensor.size(3);
+    return tensor.as_strided({1, num_tokens, heads, dim},
+                             {num_tokens * heads * dim, heads * dim, dim, 1});
+  }
+  LOG(FATAL) << "GDN prefix tensor must be 3D or 4D";
+}
+
 bool capture_fa3_in_piecewise_graph() {
   static const bool enabled = [] {
     const char* env = std::getenv("XLLM_PIECEWISE_CAPTURE_FA3");
@@ -220,8 +239,13 @@ void AttentionRunner::run_replay(const AttentionReplayParams& params) {
     torch::Tensor query_contiguous = query_slice.contiguous();
     torch::Tensor key_contiguous = key_slice.contiguous();
     torch::Tensor value_contiguous = value_slice.contiguous();
-    torch::Tensor q_cu_seq_lens = params.q_cu_seq_lens.contiguous();
-    torch::Tensor kv_cu_seq_lens = params.kv_cu_seq_lens.contiguous();
+    const torch::Tensor& live_cu_seq_lens = params.gdn_cu_seq_lens.defined()
+                                                ? params.gdn_cu_seq_lens
+                                                : params.q_cu_seq_lens;
+    torch::Tensor q_cu_seq_lens = live_cu_seq_lens.contiguous();
+    torch::Tensor kv_cu_seq_lens = params.gdn_cu_seq_lens.defined()
+                                       ? params.gdn_cu_seq_lens.contiguous()
+                                       : params.kv_cu_seq_lens.contiguous();
     fa3_prefill(query_contiguous,
                 key_contiguous,
                 value_contiguous,
@@ -288,6 +312,10 @@ bool AttentionRunner::requires_plan_info() const {
          runner_type_ == RunnerType::CHUNKED_PREFILL;
 }
 
+bool AttentionRunner::is_gdn_prefill() const {
+  return runner_type_ == RunnerType::GDN_PREFILL;
+}
+
 void AttentionRunner::run_gdn_prefill_capture(torch::Tensor query,
                                               torch::Tensor key,
                                               torch::Tensor value,
@@ -298,6 +326,8 @@ void AttentionRunner::run_gdn_prefill_capture(torch::Tensor query,
                                               torch::Tensor output,
                                               torch::Tensor final_state,
                                               torch::Tensor kkt_output,
+                                              torch::Tensor ssm_cache,
+                                              torch::Tensor state_indices,
                                               float scale) {
   auto& capture = ::xllm::runtime::musa::GlobalCaptureInstance::get_instance();
   capture.temporarily_end_graph();
@@ -311,6 +341,8 @@ void AttentionRunner::run_gdn_prefill_capture(torch::Tensor query,
   gdn_output_ = std::move(output);
   gdn_final_state_ = std::move(final_state);
   gdn_kkt_output_ = std::move(kkt_output);
+  gdn_ssm_cache_ = std::move(ssm_cache);
+  gdn_state_indices_ = std::move(state_indices);
   scale_ = scale;
   runner_type_ = RunnerType::GDN_PREFILL;
   capture.temporarily_begin_graph();
@@ -328,6 +360,8 @@ void AttentionRunner::run_gdn_prefill_replay(
   CHECK_EQ(live_cu.scalar_type(), torch::kInt32);
   CHECK(live_cu.is_contiguous());
   CHECK(kkt_cu.defined() && kkt_cu.is_contiguous());
+  CHECK_EQ(kkt_cu.scalar_type(), torch::kInt32);
+  CHECK_EQ(kkt_cu.size(0), live_cu.size(0));
   CHECK(!params.q_cu_seq_lens_host.empty())
       << "GDN runner requires host cu_seqlens";
   CHECK_EQ(params.q_cu_seq_lens_host.front(), 0);
@@ -344,6 +378,20 @@ void AttentionRunner::run_gdn_prefill_replay(
   CHECK_EQ(gdn_final_state_.size(0),
            static_cast<int64_t>(params.q_cu_seq_lens_host.size()) - 1);
 
+  CHECK_GT(params.gdn_kkt_num_tokens, 0);
+  const int64_t mate_num_tokens = params.gdn_kkt_num_tokens;
+  CHECK_GE(mate_num_tokens, params.actual_num_tokens);
+  CHECK_EQ(mate_num_tokens % kGdnChunkSize, 0);
+  CHECK_LE(mate_num_tokens, gdn_output_.size(1));
+  if (params.actual_num_tokens < mate_num_tokens) {
+    const int64_t tail_start = params.actual_num_tokens;
+    const int64_t tail_length = mate_num_tokens - tail_start;
+    query_.narrow(/*dim=*/1, tail_start, tail_length).zero_();
+    key_.narrow(/*dim=*/1, tail_start, tail_length).zero_();
+    value_.narrow(/*dim=*/1, tail_start, tail_length).zero_();
+    gdn_gate_.narrow(/*dim=*/1, tail_start, tail_length).zero_();
+    gdn_beta_.narrow(/*dim=*/1, tail_start, tail_length).zero_();
+  }
   if (params.actual_num_tokens < gdn_output_.size(1)) {
     gdn_output_
         .narrow(/*dim=*/1,
@@ -353,32 +401,34 @@ void AttentionRunner::run_gdn_prefill_replay(
   }
 
   MateGatedDeltaRulePrefillParams mate_params;
-  mate_params.q = query_;
-  mate_params.k = key_;
-  mate_params.v = value_;
-  mate_params.g = gdn_gate_;
-  mate_params.beta = gdn_beta_;
+  mate_params.q = canonical_time_prefix(query_, mate_num_tokens);
+  mate_params.k = canonical_time_prefix(key_, mate_num_tokens);
+  mate_params.v = canonical_time_prefix(value_, mate_num_tokens);
+  mate_params.g = canonical_time_prefix(gdn_gate_, mate_num_tokens);
+  mate_params.beta = canonical_time_prefix(gdn_beta_, mate_num_tokens);
   mate_params.scale = static_cast<float>(scale_);
   mate_params.initial_state = gdn_initial_state_;
   mate_params.cu_seqlens = live_cu;
   mate_params.cu_seqlens_kkt = kkt_cu;
   mate_params.cu_seqlens_host = params.q_cu_seq_lens_host;
-  mate_params.output = gdn_output_;
+  mate_params.output = canonical_time_prefix(gdn_output_, mate_num_tokens);
   mate_params.final_state = gdn_final_state_;
   mate_params.output_final_state = true;
   mate_params.use_qk_l2norm_in_kernel = true;
   mate_params.allow_inplace_qk_l2norm = true;
-  // KKT writes its own temporary `a` when no external buffer is supplied.
-  // The graph-owned output/final-state buffers are the critical stable outputs;
-  // kkt_output is populated by the layer when the pool supports it.
   if (gdn_kkt_output_.defined()) {
-    mate_params.kkt_output = gdn_kkt_output_;
+    mate_params.kkt_output =
+        canonical_time_prefix(gdn_kkt_output_, mate_num_tokens);
   }
   auto result = mate_gated_delta_rule_prefill(mate_params);
   CHECK(result.first.defined()) << "GDN runner output is undefined";
   CHECK(result.second.defined()) << "GDN runner final state is undefined";
   CHECK_EQ(result.first.data_ptr(), gdn_output_.data_ptr());
   CHECK_EQ(result.second.data_ptr(), gdn_final_state_.data_ptr());
+  if (gdn_ssm_cache_.defined() && gdn_state_indices_.defined()) {
+    gdn_ssm_cache_.index_put_({gdn_state_indices_},
+                              gdn_final_state_.to(gdn_ssm_cache_.dtype()));
+  }
 }
 
 void batch_chunked_prefill_with_optional_piecewise_capture(

@@ -77,4 +77,26 @@ void update_llm_decode_metadata_from_host(
     const LlmDecodeMetadataHostUpdateParams& params,
     LlmDecodeMetadataUpdateStream stream);
 
+struct ExpandedSpecDecodeMetadataUpdateParams {
+  const int32_t* src_kv_seq_lens;
+  const int32_t* src_block_tables;
+  const int32_t* src_paged_kv_indptr;
+  const int32_t* src_paged_kv_indices;
+  const int32_t* src_paged_kv_last_page_len;
+  int32_t* dst_kv_seq_lens;
+  int32_t* dst_block_tables;
+  int32_t* dst_paged_kv_indptr;
+  int32_t* dst_paged_kv_indices;
+  int32_t* dst_paged_kv_last_page_len;
+  int64_t actual_num_tokens;
+  int64_t padded_num_tokens;
+  int64_t src_block_table_width;
+  int64_t dst_block_table_width;
+  int64_t actual_indices_size;
+};
+
+void update_expanded_spec_decode_metadata(
+    const ExpandedSpecDecodeMetadataUpdateParams& params,
+    LlmDecodeMetadataUpdateStream stream);
+
 }  // namespace xllm::kernel::musa

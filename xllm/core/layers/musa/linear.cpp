@@ -33,21 +33,29 @@ std::optional<torch::Tensor> MatmulOutputBuffers::get(
   if (input.dim() != 2 || weight.dim() != 2 || input.size(0) <= 0) {
     return std::nullopt;
   }
-  const int64_t rows = input.size(0);
-  if (rows > kMatmulOutputBufMaxRows) {
+  return get(input.size(0), weight.size(0), input.options());
+}
+
+std::optional<torch::Tensor> MatmulOutputBuffers::get(
+    int64_t rows,
+    int64_t columns,
+    const torch::TensorOptions& options) {
+  if (rows <= 0 || rows > kMatmulOutputBufMaxRows || columns <= 0) {
     return std::nullopt;
   }
-  const int64_t columns = weight.size(0);
   const bool needs_realloc =
       !decode_output_buf_.defined() || decode_output_buf_.size(0) < rows ||
       decode_output_buf_.size(1) != columns ||
-      decode_output_buf_.scalar_type() != input.scalar_type() ||
-      decode_output_buf_.device() != input.device();
+      decode_output_buf_.scalar_type() != options.dtype().toScalarType() ||
+      decode_output_buf_.device() != options.device();
   if (needs_realloc) {
     const int64_t target_rows = decode_output_buf_.defined()
                                     ? std::max(rows, decode_output_buf_.size(0))
                                     : rows;
-    decode_output_buf_ = torch::empty({target_rows, columns}, input.options());
+    if (decode_output_buf_.defined()) {
+      retired_output_bufs_.push_back(decode_output_buf_);
+    }
+    decode_output_buf_ = torch::empty({target_rows, columns}, options);
   }
   return decode_output_buf_.narrow(0, 0, rows);
 }

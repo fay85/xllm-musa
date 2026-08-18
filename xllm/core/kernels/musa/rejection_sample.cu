@@ -13,6 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <cuda_runtime.h>
 
@@ -25,6 +26,8 @@ namespace xllm::kernel::musa {
 namespace {
 
 constexpr int32_t kBlockSize = 256;
+
+constexpr int32_t kGreedyBlockSize = 32;
 
 __device__ __forceinline__ float positive_probability(float value) {
   return (value > 0.0f && isfinite(value)) ? value : 0.0f;
@@ -144,6 +147,47 @@ __global__ void rejection_sample_target_only_kernel(
         rejected_seen ? -1 : bonus_token_ids[batch_index];
   }
 }
+
+__global__ void greedy_rejection_sample_kernel(
+    const int64_t* __restrict__ draft_token_ids,
+    const int64_t* __restrict__ target_token_ids,
+    const int64_t* __restrict__ bonus_token_ids,
+    int64_t batch_size,
+    int32_t num_speculative_tokens,
+    int64_t draft_stride_0,
+    int64_t draft_stride_1,
+    int64_t target_stride_0,
+    int64_t target_stride_1,
+    int64_t bonus_stride_0,
+    int64_t* __restrict__ accepted_token_ids,
+    int64_t* __restrict__ masked_token_ids) {
+  const int64_t batch_index =
+      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (batch_index >= batch_size) {
+    return;
+  }
+
+  const int64_t output_offset =
+      batch_index * static_cast<int64_t>(num_speculative_tokens + 1);
+  bool rejected = false;
+  for (int32_t index = 0; index < num_speculative_tokens; ++index) {
+    const int64_t target_token =
+        target_token_ids[batch_index * target_stride_0 +
+                         static_cast<int64_t>(index) * target_stride_1];
+    accepted_token_ids[output_offset + index] = target_token;
+    masked_token_ids[output_offset + index] = rejected ? -1 : target_token;
+    rejected =
+        rejected ||
+        target_token !=
+            draft_token_ids[batch_index * draft_stride_0 +
+                            static_cast<int64_t>(index) * draft_stride_1];
+  }
+
+  const int64_t bonus_token = bonus_token_ids[batch_index * bonus_stride_0];
+  accepted_token_ids[output_offset + num_speculative_tokens] = bonus_token;
+  masked_token_ids[output_offset + num_speculative_tokens] =
+      rejected ? -1 : bonus_token;
+}
 }  // namespace
 
 torch::Tensor rejection_sample_target_only(
@@ -194,6 +238,56 @@ torch::Tensor rejection_sample_target_only(
       static_cast<int32_t>(target_probability.size(2)),
       output.data_ptr<int64_t>());
   return output;
+}
+
+std::tuple<torch::Tensor, torch::Tensor> greedy_rejection_sample(
+    const torch::Tensor& draft_token_ids,
+    const torch::Tensor& target_token_ids,
+    const torch::Tensor& bonus_token_ids) {
+  CHECK_EQ(draft_token_ids.dim(), 2);
+  CHECK_GT(draft_token_ids.size(1), 0);
+  CHECK_EQ(target_token_ids.sizes(), draft_token_ids.sizes());
+  CHECK_EQ(bonus_token_ids.dim(), 2);
+  CHECK_EQ(bonus_token_ids.size(0), draft_token_ids.size(0));
+  CHECK_EQ(bonus_token_ids.size(1), 1);
+  CHECK(draft_token_ids.device() == target_token_ids.device());
+  CHECK(draft_token_ids.device() == bonus_token_ids.device());
+  CHECK_EQ(draft_token_ids.scalar_type(), torch::kLong);
+  CHECK_EQ(target_token_ids.scalar_type(), torch::kLong);
+  CHECK_EQ(bonus_token_ids.scalar_type(), torch::kLong);
+
+  const int64_t batch_size = draft_token_ids.size(0);
+  const int64_t num_speculative_tokens = draft_token_ids.size(1);
+  auto options = torch::TensorOptions()
+                     .dtype(torch::kLong)
+                     .device(draft_token_ids.device());
+  auto accepted_token_ids =
+      torch::empty({batch_size, num_speculative_tokens + 1}, options);
+  auto masked_token_ids =
+      torch::empty({batch_size, num_speculative_tokens + 1}, options);
+  if (batch_size == 0) {
+    return {accepted_token_ids, masked_token_ids};
+  }
+
+  const at::cuda::OptionalCUDAGuard device_guard(draft_token_ids.device());
+  cudaStream_t stream = c10::cuda::getCurrentCUDAStream().stream();
+  const int64_t grid_size =
+      (batch_size + kGreedyBlockSize - 1) / kGreedyBlockSize;
+  greedy_rejection_sample_kernel<<<grid_size, kGreedyBlockSize, 0, stream>>>(
+      draft_token_ids.data_ptr<int64_t>(),
+      target_token_ids.data_ptr<int64_t>(),
+      bonus_token_ids.data_ptr<int64_t>(),
+      batch_size,
+      static_cast<int32_t>(num_speculative_tokens),
+      draft_token_ids.stride(0),
+      draft_token_ids.stride(1),
+      target_token_ids.stride(0),
+      target_token_ids.stride(1),
+      bonus_token_ids.stride(0),
+      accepted_token_ids.data_ptr<int64_t>(),
+      masked_token_ids.data_ptr<int64_t>());
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+  return {accepted_token_ids, masked_token_ids};
 }
 
 }  // namespace xllm::kernel::musa

@@ -533,6 +533,11 @@ torch::Tensor rejection_sample_target_only(
     const torch::Tensor& recovery_exponential,
     const torch::Tensor& bonus_token_ids);
 
+std::tuple<torch::Tensor, torch::Tensor> greedy_rejection_sample(
+    const torch::Tensor& draft_token_ids,
+    const torch::Tensor& target_token_ids,
+    const torch::Tensor& bonus_token_ids);
+
 // Mate grouped MoE GEMM entry points.  The MUSA Qwen3.5 MoE path uses the
 // masked layout for both BF16 and block-wise FP8 expert weights.  Keeping the
 // wrapper in the MUSA API makes the layer independent of the Python Mate

@@ -54,6 +54,10 @@ using c10::musa::MUSAStream;
 #include "core/runtime/executor_impl_factory.h"
 #include "core/runtime/options.h"
 
+namespace xllm::layer {
+struct PlanInfo;
+}
+
 namespace xllm::runtime::musa {
 
 constexpr uint64_t kSpecVerifyGraphKeyMask = 1ull << 63;
@@ -78,14 +82,17 @@ class MusaGraphPersistentParam final {
   // return_capture_params is true, used for build new ModelInputParams for
   // capture. If return_capture_params is false, only updates persistent buffers
   // and returns std::nullopt.
-  std::optional<ModelInputParams> update(const torch::Tensor& tokens,
-                                         const torch::Tensor& k_cache,
-                                         const torch::Tensor& v_cache,
-                                         const torch::Tensor& positions,
-                                         const ModelInputParams& params,
-                                         uint32_t padded_num_tokens = 0,
-                                         bool return_capture_params = false,
-                                         bool update_prefill_plan = true);
+  std::optional<ModelInputParams> update(
+      const torch::Tensor& tokens,
+      const torch::Tensor& k_cache,
+      const torch::Tensor& v_cache,
+      const torch::Tensor& positions,
+      const ModelInputParams& params,
+      uint32_t padded_num_tokens = 0,
+      bool return_capture_params = false,
+      bool update_prefill_plan = true,
+      std::shared_ptr<layer::PlanInfo> graph_plan_info = nullptr,
+      std::optional<uint32_t> gdn_kkt_endpoint_override = std::nullopt);
 
   // Getter methods for persistent tensors
   torch::Tensor persistent_tokens(uint32_t actual_tokens) const {
@@ -143,12 +150,15 @@ class MusaGraphPersistentParam final {
   }
   bool has_logits_buffer() const { return logits_.defined(); }
   const torch::Device& device() const { return device_; }
-  void ensure_logits_buffer(int64_t vocab_size,
+  void ensure_logits_buffer(int64_t rows,
+                            int64_t vocab_size,
                             torch::ScalarType dtype,
                             const torch::Device& device) {
-    if (!logits_.defined()) {
+    if (!logits_.defined() || logits_.size(0) < rows ||
+        logits_.size(1) != vocab_size || logits_.scalar_type() != dtype ||
+        logits_.device() != device) {
       logits_ =
-          torch::empty({options_.max_tokens_per_batch(), vocab_size},
+          torch::empty({rows, vocab_size},
                        torch::TensorOptions().dtype(dtype).device(device));
     }
   }
@@ -314,7 +324,8 @@ class MusaGraphPersistentParam final {
       uint32_t padded_num_tokens);
   bool can_use_llm_decode_fast_path(const torch::Tensor& tokens,
                                     const torch::Tensor& positions,
-                                    const ModelInputParams& params) const;
+                                    const ModelInputParams& params,
+                                    int64_t actual_batch_size) const;
   void update_llm_decode_metadata_fast_path(const torch::Tensor& tokens,
                                             const torch::Tensor& positions,
                                             const ModelInputParams& params,
@@ -491,6 +502,9 @@ class MusaGraph final {
   torch::Tensor paged_kv_indptr_host_buf_;
   torch::Tensor paged_kv_indices_host_buf_;
   torch::Tensor paged_kv_last_page_len_host_buf_;
+
+  // The attention execution plan is fixed for this graph's capture shape.
+  std::shared_ptr<layer::PlanInfo> plan_info_;
 
   // Pre-computed max numel for each host buf (set in capture()).
   // 0 means "no pre-allocation hint", and refresh_one() falls back to its

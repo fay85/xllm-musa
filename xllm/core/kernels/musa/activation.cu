@@ -394,11 +394,22 @@ torch::Tensor matmul(torch::Tensor a,
                      torch::Tensor b,
                      std::optional<torch::Tensor> bias,
                      std::optional<torch::Tensor> output_buf) {
+  const bool has_bias = bias.has_value() && bias->defined();
+  const bool use_lm_head_gemv =
+      (!output_buf.has_value() || !output_buf->defined()) && a.dim() == 2 &&
+      b.dim() == 2 && a.size(0) == 1 && a.size(1) == 5120 &&
+      b.size(0) == 248320 && b.size(1) == 5120 &&
+      a.scalar_type() == torch::kBFloat16 &&
+      b.scalar_type() == torch::kBFloat16 && !has_bias &&
+      a.device() == b.device() && a.is_contiguous() && b.is_contiguous();
+  if (use_lm_head_gemv) {
+    return at::mv(b, a.view({a.size(1)})).view({1, b.size(0)});
+  }
+
   if (output_buf.has_value() && output_buf->defined() && a.dim() == 2 &&
       b.dim() == 2) {
     auto& out = *output_buf;
     const int64_t output_features = b.size(0);
-    const bool has_bias = bias.has_value() && bias->defined();
     const bool use_decode_gemv =
         a.size(0) == 1 && a.scalar_type() == torch::kBFloat16 &&
         b.scalar_type() == torch::kBFloat16 && a.size(1) == 2048 &&

@@ -26,6 +26,7 @@ void PiecewiseGraphs::add_graph(std::unique_ptr<at::musa::MUSAGraph>&& graph) {
 void PiecewiseGraphs::add_attention_runner(
     ::xllm::kernel::musa::AttentionRunner&& runner) {
   requires_plan_info_ = requires_plan_info_ || runner.requires_plan_info();
+  has_gdn_prefill_runner_ = has_gdn_prefill_runner_ || runner.is_gdn_prefill();
   attention_runners_.emplace_back(
       std::make_unique<::xllm::kernel::musa::AttentionRunner>(
           std::move(runner)));

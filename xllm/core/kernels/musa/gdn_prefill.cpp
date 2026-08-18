@@ -1239,22 +1239,23 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     }
 
     auto cu_seqlens = [&]() -> torch::Tensor {
-      // Prefer an already-on-device cu_seqlens when we did not mutate lengths
-      // (no pack/pad). Host→device torch::tensor is not CUDA-graph safe.
+      // Recurrent state must always use live sequence endpoints. Padding is
+      // appended only for the fixed-size KKT launch and must not extend the
+      // recurrent sequence boundary.
       const bool has_device_cu =
           params.cu_seqlens.has_value() && params.cu_seqlens->defined();
-      if (has_device_cu && !need_unpack && pad_size == 0) {
+      if (has_device_cu && !need_unpack) {
         return params.cu_seqlens->to(torch::kInt32).contiguous();
       }
       return torch::tensor(
-          cu_host,
+          cu_host_unpadded,
           torch::TensorOptions().dtype(torch::kInt32).device(query.device()));
     }();
 
     torch::Tensor kkt_cu_seqlens;
     const bool has_device_kkt =
         params.cu_seqlens_kkt.has_value() && params.cu_seqlens_kkt->defined();
-    if (has_device_kkt && !need_unpack && pad_size == 0) {
+    if (has_device_kkt && !need_unpack) {
       kkt_cu_seqlens = params.cu_seqlens_kkt->to(torch::kInt32).contiguous();
       CHECK_EQ(kkt_cu_seqlens.size(0), cu_seqlens.size(0));
     } else if (mate_gdn_kkt_cu_alias_enabled() && !need_unpack &&

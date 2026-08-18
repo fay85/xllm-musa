@@ -171,7 +171,8 @@ void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
 
   const at::cuda::OptionalCUDAGuard device_guard(accepted_tokens.device());
   cudaStream_t stream = c10::cuda::getCurrentCUDAStream().stream();
-  if (ssm_cache.defined() && ssm_cache.numel() > 0) {
+  if (ssm_cache.defined() && ssm_cache.numel() > 0 &&
+      ssm_intermediate.defined() && ssm_intermediate.numel() > 0) {
     scatter_selected_state(ssm_cache,
                            ssm_intermediate,
                            logical_state_indices,

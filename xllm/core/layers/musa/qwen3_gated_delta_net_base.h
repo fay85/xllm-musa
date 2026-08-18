@@ -20,6 +20,7 @@ limitations under the License.
 #include <string>
 #include <tuple>
 #include <utility>
+#include <vector>
 
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_args.h"
@@ -37,6 +38,18 @@ namespace layer {
 
 bool use_mate_gdn_mtp_kernel();
 bool use_mate_gdn_prefill_kernel();
+
+class GdnMtpVerifyForwardScope final {
+ public:
+  explicit GdnMtpVerifyForwardScope(const GdnMtpVerifyCache* cache);
+  ~GdnMtpVerifyForwardScope();
+
+  GdnMtpVerifyForwardScope(const GdnMtpVerifyForwardScope&) = delete;
+  GdnMtpVerifyForwardScope& operator=(const GdnMtpVerifyForwardScope&) = delete;
+
+ private:
+  bool active_ = false;
+};
 
 // After MTP rejection sampling, scatter per-layer intermediate SSM/conv states
 // into the live linear cache slots (post-verify commit).
@@ -150,6 +163,8 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
   mutable torch::Tensor mate_gdn_decode_v_buf_;
 
   // Persistent buffers for mate GDN MTP spec-verify (T=2/T=3).
+  mutable std::vector<torch::Tensor> mate_gdn_mtp_retired_bufs_;
+  mutable torch::Tensor mate_gdn_mtp_qkv_buf_;
   mutable torch::Tensor mate_gdn_mtp_intermediate_buf_;
   mutable torch::Tensor mate_gdn_mtp_output_buf_;
 };

@@ -903,8 +903,9 @@ bool should_use_tensor_core(torch::ScalarType kv_cache_dtype,
 bool support_pdl() { return Platform::is_enable_pdl(); }
 
 std::string path_to_uri_so_lib(const std::string& uri) {
-  return util::get_string_env("FLASHINFER_OPS_PATH") + "/" + uri + "/" + uri +
-         ".so";
+  const std::string ops_path = util::get_string_env("FLASHINFER_OPS_PATH");
+  CHECK(!ops_path.empty()) << "FLASHINFER_OPS_PATH is not set";
+  return ops_path + "/" + uri + "/" + uri + ".so";
 }
 
 std::string determine_attention_backend(int64_t pos_encoding_mode,

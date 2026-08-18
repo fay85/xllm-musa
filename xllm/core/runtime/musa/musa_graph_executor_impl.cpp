@@ -43,6 +43,7 @@ limitations under the License.
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/linear.h"
+#include "core/layers/musa/flashinfer_attention.h"
 #include "core/layers/musa/flashinfer_planinfo.h"
 #include "core/platform/device.h"
 #include "core/platform/musa/device_capture_lock.h"
@@ -69,24 +70,6 @@ bool s_enable_piecewise_profile() {
     return env != nullptr && std::string(env) == "1";
   }();
   return enabled;
-}
-
-bool s_use_musa_fa3_decode(int64_t gqa_ratio, int32_t head_dim) {
-  static const int32_t setting = [] {
-    const char* decode_env = std::getenv("XLLM_USE_FA3_DECODE");
-    if (decode_env != nullptr) {
-      return std::string(decode_env) == "1" ? int32_t{1} : int32_t{0};
-    }
-    const char* env = std::getenv("XLLM_USE_FA3");
-    if (env == nullptr) {
-      return int32_t{-1};
-    }
-    return std::string(env) == "1" ? int32_t{1} : int32_t{0};
-  }();
-  const bool default_to_fa3 =
-      (head_dim == 128 && (gqa_ratio == 2 || gqa_ratio == 4)) ||
-      (head_dim == 256 && (gqa_ratio == 6 || gqa_ratio == 8));
-  return default_to_fa3 && setting != 0;
 }
 
 constexpr int64_t kDefaultFa3GraphNumSplits = 4;
@@ -272,6 +255,101 @@ bool has_llm_decode_host_metadata(const AttentionHostInput& host) {
          is_cpu_int32_tensor(host.paged_kv_indptr) &&
          is_cpu_int32_tensor(host.paged_kv_indices) &&
          is_cpu_int32_tensor(host.paged_kv_last_page_len);
+}
+
+struct MusaLocalAttentionHeads {
+  int64_t num_heads;
+  int64_t num_kv_heads;
+};
+
+MusaLocalAttentionHeads get_musa_local_attention_heads(
+    const ModelArgs& args,
+    const runtime::Options& options) {
+  const int64_t tp_size = options.world_size() / std::max(options.dp_size(), 1);
+  const int64_t num_heads = args.n_heads() / std::max<int64_t>(tp_size, 1);
+  const int64_t total_kv_heads = args.n_kv_heads().value_or(args.n_heads());
+  const int64_t num_kv_heads =
+      total_kv_heads >= tp_size ? total_kv_heads / std::max<int64_t>(tp_size, 1)
+                                : 1;
+  return {.num_heads = num_heads, .num_kv_heads = num_kv_heads};
+}
+
+bool should_use_musa_fa3_prefill_for_graph(const ModelArgs& args,
+                                           const runtime::Options& options,
+                                           torch::ScalarType dtype) {
+  const MusaLocalAttentionHeads heads =
+      get_musa_local_attention_heads(args, options);
+  return layer::musa::should_use_fa3_prefill(
+      dtype, args.head_dim(), heads.num_heads, heads.num_kv_heads);
+}
+
+bool can_use_qwen35_fa3_decode_metadata_fast_path(
+    const ModelArgs& args,
+    const runtime::Options& options) {
+  const std::string& model_type = args.model_type();
+  const bool is_qwen3_5 =
+      model_type == "qwen3_5_text" || model_type == "qwen3_5_moe_text" ||
+      model_type == "qwen3_5_mtp" || model_type == "qwen3_5_moe_mtp";
+  if (!is_qwen3_5 || args.dtype() != "bfloat16") {
+    return false;
+  }
+
+  const MusaLocalAttentionHeads heads =
+      get_musa_local_attention_heads(args, options);
+  return layer::musa::should_use_fa3_decode(torch::kBFloat16,
+                                            args.head_dim(),
+                                            heads.num_heads,
+                                            heads.num_kv_heads,
+                                            options.block_size());
+}
+
+bool has_llm_decode_fa3_device_metadata(const AttentionDeviceInput& device,
+                                        const AttentionHostInput& host,
+                                        int64_t actual_batch_size) {
+  if (actual_batch_size < 0 ||
+      !is_musa_contiguous_int_tensor(device.kv_seq_lens) ||
+      !is_musa_contiguous_int_tensor(device.block_tables) ||
+      device.block_tables.dim() != 2 ||
+      device.block_tables.size(0) < actual_batch_size) {
+    return false;
+  }
+
+  const int64_t cumulative_size = actual_batch_size + 1;
+  return device.kv_seq_lens.numel() == cumulative_size &&
+         static_cast<int64_t>(host.kv_seq_lens.size()) == cumulative_size &&
+         !host.kv_seq_lens.empty() && host.kv_seq_lens.front() == 0;
+}
+
+bool has_llm_decode_device_metadata(const AttentionDeviceInput& device,
+                                    const AttentionHostInput& host,
+                                    int64_t actual_batch_size) {
+  if (actual_batch_size < 0 ||
+      !is_musa_contiguous_int_tensor(device.kv_seq_lens) ||
+      !is_musa_contiguous_int_tensor(device.paged_kv_indptr) ||
+      !is_musa_contiguous_int_tensor(device.paged_kv_indices) ||
+      !is_musa_contiguous_int_tensor(device.paged_kv_last_page_len)) {
+    return false;
+  }
+
+  const int64_t cumulative_size = actual_batch_size + 1;
+  if (device.kv_seq_lens.numel() != cumulative_size ||
+      device.paged_kv_indptr.numel() != cumulative_size ||
+      device.paged_kv_last_page_len.numel() != actual_batch_size) {
+    return false;
+  }
+
+  if (static_cast<int64_t>(host.kv_seq_lens.size()) != cumulative_size ||
+      host.kv_seq_lens.empty() || host.kv_seq_lens.front() != 0 ||
+      !has_llm_decode_host_metadata(host) ||
+      host.paged_kv_indptr.numel() != cumulative_size ||
+      host.paged_kv_last_page_len.numel() != actual_batch_size) {
+    return false;
+  }
+
+  const int32_t indices_size =
+      host.paged_kv_indptr.data_ptr<int32_t>()[actual_batch_size];
+  return indices_size >= 0 && indices_size <= host.paged_kv_indices.numel() &&
+         indices_size <= device.paged_kv_indices.numel();
 }
 
 struct IndexedTensorSnapshot {
@@ -490,7 +568,8 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
 bool MusaGraphPersistentParam::can_use_llm_decode_fast_path(
     const torch::Tensor& tokens,
     const torch::Tensor& positions,
-    const ModelInputParams& params) const {
+    const ModelInputParams& params,
+    int64_t actual_batch_size) const {
   if (!params.meta.batch_forward_type.is_decode() ||
       is_rec_multi_round_mode() || params.has_llmrec_params()) {
     return false;
@@ -502,16 +581,14 @@ bool MusaGraphPersistentParam::can_use_llm_decode_fast_path(
   if (!device_token_metadata_ok) {
     return false;
   }
-  if (has_llm_decode_host_metadata(params.attention.host)) {
-    return true;
-  }
-  return is_musa_contiguous_int_tensor(params.attention.device.kv_seq_lens) &&
-         is_musa_contiguous_int_tensor(
-             params.attention.device.paged_kv_indptr) &&
-         is_musa_contiguous_int_tensor(
-             params.attention.device.paged_kv_indices) &&
-         is_musa_contiguous_int_tensor(
-             params.attention.device.paged_kv_last_page_len);
+  return has_llm_decode_host_metadata(params.attention.host) ||
+         has_llm_decode_device_metadata(params.attention.device,
+                                        params.attention.host,
+                                        actual_batch_size) ||
+         (can_use_qwen35_fa3_decode_metadata_fast_path(args_, options_) &&
+          has_llm_decode_fa3_device_metadata(params.attention.device,
+                                             params.attention.host,
+                                             actual_batch_size));
 }
 
 void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
@@ -538,13 +615,31 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
       to_int32(params.attention.device.kv_seq_lens);
 
   const musaStream_t stream = c10::musa::getCurrentMUSAStream(device_.index());
-  if (has_llm_decode_host_metadata(params.attention.host)) {
+  const bool use_paged_device_attention_metadata =
+      has_llm_decode_device_metadata(
+          params.attention.device, params.attention.host, actual_batch_size);
+  const bool use_fa3_device_attention_metadata =
+      can_use_qwen35_fa3_decode_metadata_fast_path(args_, options_) &&
+      has_llm_decode_fa3_device_metadata(
+          params.attention.device, params.attention.host, actual_batch_size);
+  const bool use_device_attention_metadata =
+      use_paged_device_attention_metadata || use_fa3_device_attention_metadata;
+  if (!use_device_attention_metadata &&
+      has_llm_decode_host_metadata(params.attention.host)) {
     const auto& host = params.attention.host;
-    CHECK_GE(static_cast<int64_t>(host.kv_seq_lens.size()),
-             actual_batch_size + 1)
-        << "host kv_seq_lens too small for batch";
-    const int64_t actual_indices_size =
-        host.paged_kv_indices.defined() ? host.paged_kv_indices.numel() : 0;
+    const int64_t metadata_batch_size = host.paged_kv_indptr.numel() - 1;
+    CHECK_EQ(metadata_batch_size, actual_batch_size)
+        << "host decode metadata does not cover every live attention row";
+    const int64_t host_cumulative_size = metadata_batch_size + 1;
+    CHECK_EQ(static_cast<int64_t>(host.kv_seq_lens.size()),
+             host_cumulative_size)
+        << "host kv_seq_lens must use a complete cumulative layout";
+    CHECK_EQ(host.paged_kv_indptr.numel(), host_cumulative_size)
+        << "host paged-KV indptr must cover every live attention row";
+    CHECK_EQ(host.paged_kv_last_page_len.numel(), metadata_batch_size)
+        << "host paged-KV last-page lengths must cover every live row";
+    const int64_t actual_indices_size = host.paged_kv_indices.numel();
+
     xllm::kernel::musa::LlmDecodeMetadataHostUpdateParams host_update_params{
         .src_tokens = tokens_i32.data_ptr<int32_t>(),
         .src_positions = positions_i32.data_ptr<int32_t>(),
@@ -567,7 +662,7 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
             persistent_paged_kv_last_page_len_.data_ptr<int32_t>(),
         .actual_num_tokens = actual_num_tokens,
         .padded_num_tokens = static_cast<int64_t>(padded_num_tokens),
-        .actual_batch_size = actual_batch_size,
+        .actual_batch_size = metadata_batch_size,
         .actual_indices_size = actual_indices_size,
     };
     xllm::kernel::musa::update_llm_decode_metadata_from_host(host_update_params,
@@ -575,22 +670,34 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
     return;
   }
 
-  const torch::Tensor paged_kv_indptr_i32 =
-      to_int32(params.attention.device.paged_kv_indptr);
-  const torch::Tensor paged_kv_indices_i32 =
-      to_int32(params.attention.device.paged_kv_indices);
-  const torch::Tensor paged_kv_last_page_len_i32 =
-      to_int32(params.attention.device.paged_kv_last_page_len);
-  const int64_t actual_indices_size = paged_kv_indices_i32.size(0);
+  CHECK(use_device_attention_metadata)
+      << "LLM decode fast path requires complete device or host metadata";
+  torch::Tensor paged_kv_indptr_i32;
+  torch::Tensor paged_kv_indices_i32;
+  torch::Tensor paged_kv_last_page_len_i32;
+  int64_t actual_indices_size = 0;
+  if (use_paged_device_attention_metadata) {
+    paged_kv_indptr_i32 = to_int32(params.attention.device.paged_kv_indptr);
+    paged_kv_indices_i32 = to_int32(params.attention.device.paged_kv_indices);
+    paged_kv_last_page_len_i32 =
+        to_int32(params.attention.device.paged_kv_last_page_len);
+    actual_indices_size = paged_kv_indices_i32.size(0);
+  }
   xllm::kernel::musa::LlmDecodeMetadataUpdateParams update_params{
       .src_tokens = tokens_i32.data_ptr<int32_t>(),
       .src_positions = positions_i32.data_ptr<int32_t>(),
       .src_new_cache_slots = new_cache_slots_i32.data_ptr<int32_t>(),
       .src_kv_seq_lens = kv_seq_lens_i32.data_ptr<int32_t>(),
-      .src_paged_kv_indptr = paged_kv_indptr_i32.data_ptr<int32_t>(),
-      .src_paged_kv_indices = paged_kv_indices_i32.data_ptr<int32_t>(),
+      .src_paged_kv_indptr = use_paged_device_attention_metadata
+                                 ? paged_kv_indptr_i32.data_ptr<int32_t>()
+                                 : nullptr,
+      .src_paged_kv_indices = use_paged_device_attention_metadata
+                                  ? paged_kv_indices_i32.data_ptr<int32_t>()
+                                  : nullptr,
       .src_paged_kv_last_page_len =
-          paged_kv_last_page_len_i32.data_ptr<int32_t>(),
+          use_paged_device_attention_metadata
+              ? paged_kv_last_page_len_i32.data_ptr<int32_t>()
+              : nullptr,
       .dst_tokens = persistent_tokens_.data_ptr<int32_t>(),
       .dst_positions = persistent_positions_.data_ptr<int32_t>(),
       .dst_new_cache_slots = persistent_new_cache_slots_.data_ptr<int32_t>(),
@@ -606,7 +713,9 @@ void MusaGraphPersistentParam::update_llm_decode_metadata_fast_path(
       .actual_batch_size = actual_batch_size,
       .actual_indices_size = actual_indices_size,
       .max_indices_size_for_graph_capacity =
-          persistent_paged_kv_indices_.numel(),
+          use_paged_device_attention_metadata
+              ? persistent_paged_kv_indices_.numel()
+              : 0,
   };
   xllm::kernel::musa::update_llm_decode_metadata(update_params, stream);
 }
@@ -684,95 +793,153 @@ MusaGraphPersistentParam::update_expanded_spec_decode_attention(
       << "expanded spec decode attention expects chunked prefill";
   CHECK(input_params.graph.use_expanded_decode_for_spec_verify_attention)
       << "MTP worker must prepare expanded spec-verify graph input";
-  CHECK(input_params.graph.expanded_kv_seq_lens.defined())
-      << "expanded spec-verify kv seq lens must be defined";
-  CHECK(input_params.graph.expanded_block_tables.defined())
-      << "expanded spec-verify block tables must be defined";
+  CHECK_GT(actual_num_tokens, 0);
+  CHECK_GE(padded_num_tokens, actual_num_tokens);
   CHECK_EQ(input_params.graph.expanded_kv_seq_lens_vec.size(),
            static_cast<size_t>(actual_num_tokens))
       << "expanded kv seq lens size must match validate tokens";
-  CHECK_EQ(input_params.graph.expanded_block_tables.size(0),
-           static_cast<int64_t>(actual_num_tokens))
-      << "expanded block table rows must match validate tokens";
 
   std::vector<int32_t> expanded_kv_seq_lens_vec =
       input_params.graph.expanded_kv_seq_lens_vec;
-  expanded_kv_seq_lens_vec.reserve(padded_num_tokens);
-  if (padded_num_tokens > actual_num_tokens) {
-    const int64_t pad_count = padded_num_tokens - actual_num_tokens;
-    for (int64_t i = 0; i < pad_count; ++i) {
-      expanded_kv_seq_lens_vec.emplace_back(1);
+  expanded_kv_seq_lens_vec.resize(padded_num_tokens, 1);
+
+  const auto& src_kv_seq_lens = input_params.graph.expanded_kv_seq_lens;
+  const auto& src_block_tables = input_params.graph.expanded_block_tables;
+  const auto& src_paged_kv_indptr = input_params.graph.expanded_paged_kv_indptr;
+  const auto& src_paged_kv_indices =
+      input_params.graph.expanded_paged_kv_indices;
+  const auto& src_paged_kv_last_page_len =
+      input_params.graph.expanded_paged_kv_last_page_len;
+  CHECK(src_kv_seq_lens.defined())
+      << "expanded spec-verify device kv sequence lengths must be defined";
+  CHECK(src_block_tables.defined())
+      << "expanded spec-verify block tables must be defined";
+  CHECK(src_paged_kv_indptr.defined())
+      << "expanded spec-verify paged-KV indptr must be defined";
+  CHECK(src_paged_kv_indices.defined())
+      << "expanded spec-verify paged-KV indices must be defined";
+  CHECK(src_paged_kv_last_page_len.defined())
+      << "expanded spec-verify paged-KV last-page lengths must be defined";
+
+  CHECK_EQ(src_kv_seq_lens.dim(), 1);
+  CHECK_EQ(src_kv_seq_lens.numel(), static_cast<int64_t>(actual_num_tokens));
+  CHECK_EQ(src_block_tables.dim(), 2);
+  CHECK_EQ(src_block_tables.size(0), static_cast<int64_t>(actual_num_tokens));
+  CHECK_GT(src_block_tables.size(1), 0);
+  CHECK_EQ(src_paged_kv_indptr.dim(), 1);
+  CHECK_GT(src_paged_kv_indptr.numel(), 0);
+  CHECK_EQ(src_paged_kv_indices.dim(), 1);
+  CHECK_EQ(src_paged_kv_last_page_len.dim(), 1);
+  CHECK_GE(src_paged_kv_last_page_len.numel(),
+           static_cast<int64_t>(actual_num_tokens));
+
+  const int64_t padded_num_tokens_i64 = static_cast<int64_t>(padded_num_tokens);
+  const int64_t actual_indices_size = src_paged_kv_indices.numel();
+  CHECK_GE(expanded_kv_seq_lens_.numel(), padded_num_tokens_i64);
+  CHECK_EQ(persistent_expanded_block_tables_.dim(), 2);
+  CHECK_GE(persistent_expanded_block_tables_.size(0), padded_num_tokens_i64);
+  CHECK_GE(persistent_expanded_block_tables_.size(1), src_block_tables.size(1));
+  CHECK_GE(persistent_expanded_paged_kv_indptr_.numel(),
+           padded_num_tokens_i64 + 1);
+  CHECK_LE(actual_indices_size, persistent_expanded_paged_kv_indices_.numel());
+  CHECK_GE(persistent_expanded_paged_kv_last_page_len_.numel(),
+           padded_num_tokens_i64);
+
+  auto is_fast_tensor = [this](const torch::Tensor& tensor) {
+    return tensor.defined() && tensor.is_contiguous() &&
+           tensor.scalar_type() == torch::kInt32 && tensor.device() == device_;
+  };
+  const bool can_use_fused_path =
+      is_fast_tensor(src_kv_seq_lens) && is_fast_tensor(src_block_tables) &&
+      is_fast_tensor(src_paged_kv_indptr) &&
+      is_fast_tensor(src_paged_kv_indices) &&
+      is_fast_tensor(src_paged_kv_last_page_len) &&
+      src_paged_kv_indptr.numel() ==
+          static_cast<int64_t>(actual_num_tokens) + 1 &&
+      src_paged_kv_last_page_len.numel() ==
+          static_cast<int64_t>(actual_num_tokens);
+
+  if (can_use_fused_path) {
+    xllm::kernel::musa::ExpandedSpecDecodeMetadataUpdateParams update_params{
+        .src_kv_seq_lens = src_kv_seq_lens.data_ptr<int32_t>(),
+        .src_block_tables = src_block_tables.data_ptr<int32_t>(),
+        .src_paged_kv_indptr = src_paged_kv_indptr.data_ptr<int32_t>(),
+        .src_paged_kv_indices = src_paged_kv_indices.data_ptr<int32_t>(),
+        .src_paged_kv_last_page_len =
+            src_paged_kv_last_page_len.data_ptr<int32_t>(),
+        .dst_kv_seq_lens = expanded_kv_seq_lens_.data_ptr<int32_t>(),
+        .dst_block_tables =
+            persistent_expanded_block_tables_.data_ptr<int32_t>(),
+        .dst_paged_kv_indptr =
+            persistent_expanded_paged_kv_indptr_.data_ptr<int32_t>(),
+        .dst_paged_kv_indices =
+            persistent_expanded_paged_kv_indices_.data_ptr<int32_t>(),
+        .dst_paged_kv_last_page_len =
+            persistent_expanded_paged_kv_last_page_len_.data_ptr<int32_t>(),
+        .actual_num_tokens = static_cast<int64_t>(actual_num_tokens),
+        .padded_num_tokens = padded_num_tokens_i64,
+        .src_block_table_width = src_block_tables.size(1),
+        .dst_block_table_width = persistent_expanded_block_tables_.size(1),
+        .actual_indices_size = actual_indices_size,
+    };
+    const musaStream_t stream =
+        c10::musa::getCurrentMUSAStream(device_.index());
+    xllm::kernel::musa::update_expanded_spec_decode_metadata(update_params,
+                                                             stream);
+  } else {
+    expanded_kv_seq_lens_
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_num_tokens)
+        .copy_(src_kv_seq_lens, /*non_blocking=*/true);
+    if (padded_num_tokens > actual_num_tokens) {
+      expanded_kv_seq_lens_
+          .slice(/*dim=*/0,
+                 /*start=*/actual_num_tokens,
+                 /*end=*/padded_num_tokens)
+          .fill_(1);
     }
-  }
 
-  torch::Tensor expanded_kv_tensor =
-      torch::tensor(expanded_kv_seq_lens_vec, torch::kInt).to(device_);
-  expanded_kv_seq_lens_.slice(/*dim=*/0, /*start=*/0, /*end=*/padded_num_tokens)
-      .copy_(expanded_kv_tensor, /*non_blocking=*/true);
+    const int64_t block_table_len = src_block_tables.size(1);
+    persistent_expanded_block_tables_
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/padded_num_tokens)
+        .zero_();
+    persistent_expanded_block_tables_
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_num_tokens)
+        .slice(/*dim=*/1, /*start=*/0, /*end=*/block_table_len)
+        .copy_(src_block_tables, /*non_blocking=*/true);
 
-  const int64_t block_table_len =
-      input_params.graph.expanded_block_tables.size(1);
-  persistent_expanded_block_tables_
-      .slice(/*dim=*/0, /*start=*/0, /*end=*/padded_num_tokens)
-      .zero_();
-  persistent_expanded_block_tables_
-      .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_num_tokens)
-      .slice(/*dim=*/1, /*start=*/0, /*end=*/block_table_len)
-      .copy_(input_params.graph.expanded_block_tables, /*non_blocking=*/true);
+    const int64_t actual_indptr_size = src_paged_kv_indptr.numel();
+    CHECK_LE(actual_indptr_size, persistent_expanded_paged_kv_indptr_.numel())
+        << "expanded paged-KV indptr exceeds persistent capacity";
+    persistent_expanded_paged_kv_indptr_
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_indptr_size)
+        .copy_(src_paged_kv_indptr, /*non_blocking=*/true);
+    const int64_t padded_indptr_size =
+        static_cast<int64_t>(padded_num_tokens) + 1;
+    if (padded_indptr_size > actual_indptr_size) {
+      const int64_t tail_size = padded_indptr_size - actual_indptr_size;
+      torch::Tensor tail = persistent_expanded_paged_kv_indptr_.slice(
+          /*dim=*/0, /*start=*/actual_indptr_size, /*end=*/padded_indptr_size);
+      torch::Tensor last_value = persistent_expanded_paged_kv_indptr_.slice(
+          /*dim=*/0,
+          /*start=*/actual_indptr_size - 1,
+          /*end=*/actual_indptr_size);
+      tail.copy_(last_value.expand({tail_size}), /*non_blocking=*/true);
+    }
 
-  CHECK(input_params.graph.expanded_paged_kv_indptr.defined())
-      << "expanded spec-verify paged_kv_indptr must be defined";
-  CHECK(input_params.graph.expanded_paged_kv_indices.defined())
-      << "expanded spec-verify paged_kv_indices must be defined";
-  CHECK(input_params.graph.expanded_paged_kv_last_page_len.defined())
-      << "expanded spec-verify paged_kv_last_page_len must be defined";
+    persistent_expanded_paged_kv_indices_
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_indices_size)
+        .copy_(src_paged_kv_indices, /*non_blocking=*/true);
 
-  const int64_t actual_indptr_size =
-      input_params.graph.expanded_paged_kv_indptr.size(0);
-  CHECK_LE(actual_indptr_size,
-           persistent_expanded_paged_kv_indptr_.numel())
-      << "expanded paged-KV indptr exceeds persistent capacity";
-  persistent_expanded_paged_kv_indptr_
-      .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_indptr_size)
-      .copy_(input_params.graph.expanded_paged_kv_indptr,
-             /*non_blocking=*/true);
-  const int64_t padded_indptr_size =
-      static_cast<int64_t>(padded_num_tokens) + 1;
-  if (padded_indptr_size > actual_indptr_size) {
-    const int64_t tail_size = padded_indptr_size - actual_indptr_size;
-    torch::Tensor tail = persistent_expanded_paged_kv_indptr_.slice(
-        /*dim=*/0, /*start=*/actual_indptr_size, /*end=*/padded_indptr_size);
-    torch::Tensor last_value = persistent_expanded_paged_kv_indptr_.slice(
-        /*dim=*/0,
-        /*start=*/actual_indptr_size - 1,
-        /*end=*/actual_indptr_size);
-    tail.copy_(last_value.expand({tail_size}), /*non_blocking=*/true);
-  }
-
-  const int64_t actual_indices_size =
-      input_params.graph.expanded_paged_kv_indices.size(0);
-  CHECK_LE(actual_indices_size,
-           persistent_expanded_paged_kv_indices_.numel())
-      << "expanded paged-KV indices exceeds persistent capacity";
-  persistent_expanded_paged_kv_indices_
-      .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_indices_size)
-      .copy_(input_params.graph.expanded_paged_kv_indices,
-             /*non_blocking=*/true);
-
-  CHECK_LE(actual_num_tokens,
-           static_cast<uint32_t>(
-               persistent_expanded_paged_kv_last_page_len_.numel()))
-      << "expanded paged-KV last-page lengths exceed persistent capacity";
-  persistent_expanded_paged_kv_last_page_len_
-      .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_num_tokens)
-      .copy_(input_params.graph.expanded_paged_kv_last_page_len,
-             /*non_blocking=*/true);
-  if (padded_num_tokens > actual_num_tokens) {
     persistent_expanded_paged_kv_last_page_len_
-        .slice(/*dim=*/0,
-               /*start=*/actual_num_tokens,
-               /*end=*/static_cast<int64_t>(padded_num_tokens))
-        .fill_(1);
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_num_tokens)
+        .copy_(src_paged_kv_last_page_len, /*non_blocking=*/true);
+    if (padded_num_tokens > actual_num_tokens) {
+      persistent_expanded_paged_kv_last_page_len_
+          .slice(/*dim=*/0,
+                 /*start=*/actual_num_tokens,
+                 /*end=*/padded_num_tokens)
+          .fill_(1);
+    }
   }
 
   return expanded_kv_seq_lens_vec;
@@ -786,7 +953,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     const ModelInputParams& params,
     uint32_t padded_num_tokens,
     bool return_capture_params,
-    bool update_prefill_plan) {
+    bool update_prefill_plan,
+    std::shared_ptr<layer::PlanInfo> graph_plan_info,
+    std::optional<uint32_t> gdn_kkt_endpoint_override) {
   std::optional<ModelInputParams> params_for_capture;
   if (return_capture_params) {
     CHECK_GT(padded_num_tokens, 0)
@@ -799,6 +968,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       std::make_shared<layer::AttentionMetadata>(
           layer::AttentionMetadataBuilder::build(params, args_.enable_mla()));
   CHECK(attn_metadata) << "attn_metadata should not be null";
+  if (graph_plan_info != nullptr) {
+    attn_metadata->plan_info = std::move(graph_plan_info);
+  }
   attn_metadata->enable_cuda_graph = true;
 
   const uint32_t actual_num_tokens = tokens.size(0);
@@ -883,7 +1055,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   }
   const bool use_llm_decode_fast_path =
       !use_expanded_spec_decode_attention &&
-      can_use_llm_decode_fast_path(tokens, positions, params);
+      can_use_llm_decode_fast_path(
+          tokens, positions, params, actual_batch_size);
 
   // Cheap when the input builder already pre-staged (just a shared_ptr ref);
   // a single per-step D2H per index tensor in the fallback case (3 D2H total,
@@ -1156,7 +1329,18 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
         .copy_(params.attention.device.q_seq_lens.slice(
                    /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size + 1),
                /*non_blocking=*/true);
-    if (packed_piecewise_prefill_pad) {
+    if (gdn_kkt_endpoint_override.has_value()) {
+      const uint32_t endpoint = gdn_kkt_endpoint_override.value();
+      CHECK_GE(endpoint, actual_num_tokens);
+      CHECK_LE(endpoint, padded_num_tokens);
+      CHECK_LE(endpoint,
+               static_cast<uint32_t>(std::numeric_limits<int32_t>::max()));
+      persistent_gdn_kkt_cu_seq_lens_
+          .slice(/*dim=*/0,
+                 /*start=*/actual_batch_size,
+                 /*end=*/actual_batch_size + 1)
+          .fill_(static_cast<int32_t>(endpoint));
+    } else if (packed_piecewise_prefill_pad) {
       persistent_gdn_kkt_cu_seq_lens_
           .slice(/*dim=*/0,
                  /*start=*/actual_batch_size,
@@ -1564,8 +1748,10 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
             << "Skipping replay-time prefill plan update: piecewise graph "
                "contains no plan-dependent attention runner";
       }
-    } else if (use_expanded_spec_decode_attention ||
-               !attn_metadata->is_chunked_prefill) {
+    } else if ((use_expanded_spec_decode_attention ||
+                !attn_metadata->is_chunked_prefill) &&
+               !layer::musa::should_use_fa3_decode(
+                   dtype, head_dim, n_heads, n_kv_heads, block_size)) {
       // Spec-verify validate uses per-token batch_decode for full-attention
       // layers; regular decode uses the same decode plan path.
       const int32_t max_kv_blocks_per_seq_for_capture =
@@ -1590,7 +1776,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
           /*enable_cuda_graph=*/true,
           use_tensor_core,
           max_kv_blocks_per_seq_for_capture);
-    } else if (attn_metadata->is_chunked_prefill) {
+    } else if (attn_metadata->is_chunked_prefill &&
+               !use_expanded_spec_decode_attention) {
       // Worst-case KV blocks per sequence for graph capture: plan_info is
       // computed once (cached on PlanInfo) and reused for all replays. Make
       // sure the cached plan covers any future block count by computing it
@@ -1633,18 +1820,13 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   // Keep one fixed split topology per graph token bucket while refreshing the
   // live KV work metadata outside capture. MusaGraph::replay() copies it into
   // the tensor address retained by the captured attention calls.
-  const bool is_qwen3 = args_.model_type() == "qwen3";
-  const bool is_qwen3_5 = args_.model_type() == "qwen3_5_text" ||
-                          args_.model_type() == "qwen3_5_moe_text" ||
-                          args_.model_type() == "qwen3_5_mtp" ||
-                          args_.model_type() == "qwen3_5_moe_mtp";
-  const bool is_qwen3_family = is_qwen3 || is_qwen3_5;
   const int64_t gqa_ratio = n_kv_heads > 0 ? n_heads / n_kv_heads : int64_t{0};
   const bool expanded_fa3_decode = use_expanded_spec_decode_attention;
   const torch::Tensor scheduler_block_table =
       expanded_fa3_decode ? attn_metadata->expanded_block_table
                            : attn_metadata->block_table;
-  if (s_use_musa_fa3_decode(gqa_ratio, head_dim) && is_qwen3_family &&
+  if (layer::musa::should_use_fa3_decode(
+          dtype, head_dim, n_heads, n_kv_heads, block_size) &&
       (expanded_fa3_decode ||
        (!attn_metadata->is_prefill && !attn_metadata->is_chunked_prefill)) &&
       scheduler_block_table.defined()) {
@@ -1982,14 +2164,15 @@ bool MusaGraph::capture(CausalLM* model,
 
   // auto& tensor_options = model->options();
 
-  // Update persistent parameters with input data before capture (includes
-  // FlashInfer plan/update).
+  // Update persistent parameters with input data before capture.
   auto full_attention_cache =
       MusaGraphExecutorImpl::find_first_full_attention_cache(kv_cache);
   CHECK(full_attention_cache.has_value())
       << "MUSA graph capture requires at least one full-attention KV cache";
   const torch::Tensor& k_cache = full_attention_cache->first;
   const torch::Tensor& v_cache = full_attention_cache->second;
+  const bool update_prefill_plan = !should_use_musa_fa3_prefill_for_graph(
+      args, options, k_cache.scalar_type());
   auto graph_params_opt =
       persistent_param_.update(tokens,
                                k_cache,
@@ -1997,12 +2180,16 @@ bool MusaGraph::capture(CausalLM* model,
                                positions,
                                params,
                                padded_num_tokens_,
-                               /*return_capture_params=*/true);
+                               /*return_capture_params=*/true,
+                               /*update_prefill_plan=*/update_prefill_plan);
 
   // Use the returned ModelInputParams for graph capture
   CHECK(graph_params_opt.has_value())
       << "update() should return ModelInputParams when "
          "return_capture_params=true";
+  plan_info_ = graph_params_opt.value().attn_metadata->plan_info;
+  CHECK(plan_info_ != nullptr)
+      << "MUSA graph capture requires persistent attention plan info";
 
   captured_fa3_scheduler_metadata_ =
       graph_params_opt.value().attn_metadata->musa.fa3_scheduler_metadata;
@@ -2024,8 +2211,10 @@ bool MusaGraph::capture(CausalLM* model,
         kv_cache, linear_state_snapshot_indices);
   }
 
-  refresh_persistent_paged_kv_host_mirrors(
-      graph_params_opt.value().attn_metadata, graph_params_opt.value());
+  if (!captured_fa3_scheduler_metadata_.defined()) {
+    refresh_persistent_paged_kv_host_mirrors(
+        graph_params_opt.value().attn_metadata, graph_params_opt.value());
+  }
 
   LOG(INFO) << "MUSA graph capture begin, bucket_num_tokens: "
             << bucket_num_tokens << ", actual_num_tokens: " << actual_num_tokens
@@ -2135,8 +2324,10 @@ bool MusaGraph::capture(CausalLM* model,
     capture_logits_ = capture_logits_enabled && bucket_num_tokens == 1 &&
                       !options.enable_speculative_decode();
     if (capture_logits_) {
-      persistent_param_.ensure_logits_buffer(
-          args.vocab_size(), torch::kBFloat16, persistent_param_.device());
+      persistent_param_.ensure_logits_buffer(bucket_num_tokens,
+                                             args.vocab_size(),
+                                             torch::kBFloat16,
+                                             persistent_param_.device());
       LOG(INFO) << "D1: capturing lm_head into decode graph (bucket_num_tokens="
                 << bucket_num_tokens << ")";
     }
@@ -2323,6 +2514,18 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
       c10::musa::getCurrentMUSAStream(device_index_).synchronize();
       update_start = std::chrono::steady_clock::now();
     }
+    std::optional<uint32_t> gdn_kkt_num_tokens;
+    if (piecewise_graph_.has_gdn_prefill_runner()) {
+      constexpr uint64_t kGdnKktChunkSize = 64;
+      const uint64_t rounded_num_tokens =
+          (static_cast<uint64_t>(actual_num_tokens) + kGdnKktChunkSize - 1) /
+          kGdnKktChunkSize * kGdnKktChunkSize;
+      CHECK_GE(rounded_num_tokens, actual_num_tokens);
+      CHECK_LE(rounded_num_tokens, padded_num_tokens_);
+      CHECK_LE(rounded_num_tokens,
+               static_cast<uint64_t>(std::numeric_limits<int32_t>::max()));
+      gdn_kkt_num_tokens = static_cast<uint32_t>(rounded_num_tokens);
+    }
 
     // Need to get updated params with attn_metadata for attention replay
     auto updated_params_opt =
@@ -2334,7 +2537,9 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
                                  padded_num_tokens_,
                                  /*return_capture_params=*/true,
                                  /*update_prefill_plan=*/
-                                 piecewise_graph_.requires_plan_info());
+                                 piecewise_graph_.requires_plan_info(),
+                                 plan_info_,
+                                 gdn_kkt_num_tokens);
     double update_ms = 0.0;
     std::chrono::steady_clock::time_point replay_param_start;
     if (profile) {
@@ -2367,6 +2572,7 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     // Build AttentionReplayParams from updated attn_metadata
     ::xllm::kernel::musa::AttentionReplayParams replay_params;
     replay_params.actual_num_tokens = actual_num_tokens;
+    replay_params.gdn_kkt_num_tokens = gdn_kkt_num_tokens.value_or(0);
     if (updated_params.attn_metadata->plan_info) {
       replay_params.plan_info =
           updated_params.attn_metadata->plan_info->plan_info;
@@ -2434,7 +2640,9 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
                                  positions,
                                  params,
                                  padded_num_tokens_,
-                                 /*return_capture_params=*/true);
+                                 /*return_capture_params=*/true,
+                                 /*update_prefill_plan=*/true,
+                                 plan_info_);
     CHECK(replay_params_opt.has_value())
         << "update() should return ModelInputParams for decode replay";
 
@@ -2455,8 +2663,10 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     // pointers describe the current request. The normal path copies logical
     // CPU mirrors and performs no device-to-host transfer or stream sync;
     // legacy callers without mirrors retain the explicit blocking fallback.
-    refresh_persistent_paged_kv_host_mirrors(
-        replay_params_opt.value().attn_metadata, replay_params_opt.value());
+    if (!captured_fa3_scheduler_metadata_.defined()) {
+      refresh_persistent_paged_kv_host_mirrors(
+          replay_params_opt.value().attn_metadata, replay_params_opt.value());
+    }
 
     if (s_enable_graph_timing()) {
       auto stream = c10::musa::getCurrentMUSAStream(device_index_);
@@ -2800,22 +3010,31 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                       s_enable_packed_prefill_piecewise() &&
                                       effective_num_sequences > 1 &&
                                       !params.is_spec_verify;
-  const bool fixed_qwen35_mtp_draft_decode =
+  const bool qwen35_prefill =
+      is_prefill && args_.model_type().find("qwen3_5") != std::string::npos;
+  const bool qwen35_mtp_draft_decode =
       is_decode && (args_.model_type() == "qwen3_5_mtp" ||
                     args_.model_type() == "qwen3_5_moe_mtp");
   // Chunked/mixed GDN control flow is specialized to the exact packed query
   // shape. Unlike pure prefill and packed pure-prefill, it cannot safely
   // append padding tokens because those tokens would mutate recurrent state
   // and paged-KV state.
+  uint32_t bucket_lookup_tokens = n_tokens;
+  constexpr uint32_t kPackedPrefillCaptureHeadroom = 64;
+  const uint64_t packed_bucket_target =
+      static_cast<uint64_t>(n_tokens) + kPackedPrefillCaptureHeadroom;
+  if (qwen35_prefill && packed_multi_piecewise &&
+      packed_bucket_target <=
+          static_cast<uint64_t>(max_tokens_for_graph_mode_)) {
+    bucket_lookup_tokens = static_cast<uint32_t>(packed_bucket_target);
+  }
   uint32_t bucket_num_tokens =
       (is_chunked_prefill || is_mixed)
           ? n_tokens
-          : get_bucket_num_tokens(n_tokens, is_prefill);
+          : get_bucket_num_tokens(bucket_lookup_tokens, is_prefill);
   // The Mate varlen KKT kernel pads its token dimension to 64 internally. Keep
   // the graph-owned packed buffers at that same granularity so an externally
   // supplied KKT/output buffer never changes shape between warmup and replay.
-  const bool qwen35_prefill =
-      is_prefill && args_.model_type().find("qwen3_5") != std::string::npos;
   bool prefill_bucket_shape_supported = true;
   const bool qwen35_c1_partial_bucket = qwen35_prefill &&
                                         effective_num_sequences == 1 &&
@@ -2859,6 +3078,38 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                           << "; using eager for actual=" << n_tokens
                           << " bucket=" << bucket_num_tokens;
   }
+  if (packed_multi_piecewise && enable_prefill_piecewise_graph_ &&
+      prefill_bucket_shape_supported) {
+    bool has_graph_for_batch = false;
+    uint32_t reusable_bucket = std::numeric_limits<uint32_t>::max();
+    for (const auto& item : packed_prefill_graphs_) {
+      const uint32_t cached_batch_size =
+          static_cast<uint32_t>(item.first >> 32);
+      if (cached_batch_size != static_cast<uint32_t>(effective_num_sequences)) {
+        continue;
+      }
+      has_graph_for_batch = true;
+      const uint32_t cached_bucket = static_cast<uint32_t>(item.first);
+      if (cached_bucket >= n_tokens && cached_bucket < reusable_bucket) {
+        reusable_bucket = cached_bucket;
+      }
+    }
+    if (reusable_bucket != std::numeric_limits<uint32_t>::max()) {
+      if (reusable_bucket != bucket_num_tokens) {
+        VLOG(kGraphExecutorLogVerboseLevel)
+            << "Reusing packed prefill bucket " << reusable_bucket
+            << " for actual tokens=" << n_tokens
+            << " and B=" << effective_num_sequences;
+      }
+      bucket_num_tokens = reusable_bucket;
+    } else if (has_graph_for_batch) {
+      force_eager_prefill = true;
+      VLOG(kGraphExecutorLogVerboseLevel)
+          << "Packed prefill B=" << effective_num_sequences
+          << " exceeds its resident graph capacity; using eager for actual="
+          << n_tokens;
+    }
+  }
   // A packed graph currently contains B-shaped GDN state/scatter tensors.
   // Reusing a graph captured for another B would be incorrect, but capturing
   // another graph for every scheduler partition defeats the bucket win. If a
@@ -2889,11 +3140,18 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
           << " instead of recapturing a second graph";
     }
   }
-  if (fixed_qwen35_mtp_draft_decode) {
-    bucket_num_tokens =
+  if (qwen35_mtp_draft_decode) {
+    const uint32_t draft_capacity =
         static_cast<uint32_t>(options_.max_seqs_per_batch() * 2);
-    CHECK_LE(n_tokens, bucket_num_tokens)
+    CHECK_LE(n_tokens, draft_capacity)
         << "Qwen3.5 MTP draft rows exceed fixed graph capacity";
+    bucket_num_tokens = 1;
+    while (bucket_num_tokens < n_tokens && bucket_num_tokens < draft_capacity) {
+      bucket_num_tokens *= 2;
+    }
+    bucket_num_tokens = std::min(bucket_num_tokens, draft_capacity);
+    CHECK_GE(bucket_num_tokens, n_tokens)
+        << "Qwen3.5 MTP draft bucket is smaller than live rows";
   }
 
   // Prefill phase with piecewise graph. Single-sequence Qwen3.5 prefill uses
@@ -3239,13 +3497,13 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   if (in_spec_verify_phase) {
     static const bool force_spec_verify_eager =
         std::getenv("XLLM_SPEC_VERIFY_EAGER") != nullptr;
-    // Qwen3.5 FP8 MoE AOT artifacts are fixed-batch kernels (B<=8).  The
-    // larger MTP verify buckets (C=4 produces 9/12 rows) must be executed
-    // eagerly: capturing the chunked routed-MoE path and replaying it across
-    // waves can leave the graph/state stream stalled.  Keep the <=8 path on
-    // graph so C=1 (three verify rows for K=2) retains its decode graph speed.
-    static const bool eager_large_spec_verify = util::get_bool_env(
-        "XLLM_SPEC_VERIFY_LARGE_BATCH_EAGER", true);
+    // Qwen3.5 FP8 MoE AOT artifacts are fixed-batch kernels (B<=8).  Earlier
+    // graph captures were unstable for larger MTP verify buckets, but the
+    // current chunked routed-MoE path has been validated across C=4 waves.
+    // Keep large verify buckets on graph by default; set this env to 1 as a
+    // safety fallback for runtimes where graph replay is still unstable.
+    static const bool eager_large_spec_verify =
+        util::get_bool_env("XLLM_SPEC_VERIFY_LARGE_BATCH_EAGER", false);
     constexpr uint32_t kMaxQwen35SpecVerifyGraphTokens = 8;
     const bool is_qwen35_model =
         args_.model_type().find("qwen3_5") != std::string::npos;

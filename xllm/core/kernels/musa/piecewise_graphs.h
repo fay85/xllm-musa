@@ -48,6 +48,7 @@ class PiecewiseGraphs final {
   size_t num_graphs() const { return graphs_.size(); }
   size_t num_runners() const;
   bool requires_plan_info() const { return requires_plan_info_; }
+  bool has_gdn_prefill_runner() const { return has_gdn_prefill_runner_; }
 
  private:
   std::vector<std::unique_ptr<at::musa::MUSAGraph>> graphs_;
@@ -55,6 +56,7 @@ class PiecewiseGraphs final {
       attention_runners_;
   std::vector<InstructionType> instructions_;
   bool requires_plan_info_ = false;
+  bool has_gdn_prefill_runner_ = false;
 };
 
 }  // namespace xllm::runtime::musa

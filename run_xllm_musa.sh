@@ -14,10 +14,11 @@
 # limitations under the License.
 
 # Start the MUSA-only xLLM build with the validated graph/FA3 defaults.
-# Qwen3 graph capture additionally requires the explicit experimental opt-in;
-# every performance switch remains overridable for correctness bisection.
+# Qwen3 graph capture additionally requires the explicit experimental opt-in.
 
 set -euo pipefail
+
+ulimit -c 0 2>/dev/null || true
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 MODEL_ROOT="${MODEL_ROOT:-/workspace/model_weights}"
@@ -44,7 +45,6 @@ ENABLE_PREFILL_PIECEWISE_GRAPH="${ENABLE_PREFILL_PIECEWISE_GRAPH:-1}"
 ENABLE_PACKED_PREFILL="${ENABLE_PACKED_PREFILL:-0}"
 MAX_TOKENS_FOR_GRAPH_MODE="${MAX_TOKENS_FOR_GRAPH_MODE:-8192}"
 
-XLLM_USE_FA3_EXPLICIT="${XLLM_USE_FA3+x}"
 XLLM_USE_FA3_DECODE_EXPLICIT="${XLLM_USE_FA3_DECODE+x}"
 XLLM_MUSA_POOL_COMPUTE_STREAM_EXPLICIT="${XLLM_MUSA_POOL_COMPUTE_STREAM+x}"
 export XLLM_USE_FA3="${XLLM_USE_FA3:-1}"
@@ -75,7 +75,7 @@ Options:
 Important overrides:
   XLLM_BIN, ENABLE_GRAPH, ENABLE_GRAPH_VMM_POOL,
   ENABLE_PREFILL_PIECEWISE_GRAPH, ENABLE_PACKED_PREFILL,
-  XLLM_USE_FA3, XLLM_USE_FA3_DECODE, XLLM_MUSA_POOL_COMPUTE_STREAM,
+  XLLM_USE_FA3_DECODE, XLLM_MUSA_POOL_COMPUTE_STREAM,
   XLLM_RANDOM_SEED,
   XLLM_QWEN3_ENABLE_GRAPH_EXPERIMENTAL,
   XLLM_MAX_PACKED_PREFILL_SEQS, MAX_CONCURRENT_REQUESTS,
@@ -210,7 +210,40 @@ setup_runtime_env() {
   export MCCL_HOME="${MCCL_HOME:-/workspace/MCCL_2.3.0/mccl}"
   export MUSA_LAUNCH_BLOCKING="${MUSA_LAUNCH_BLOCKING:-0}"
   export XLLM_TILELANG_LIB="${XLLM_TILELANG_LIB:-/usr/local/lib/python3.10/dist-packages/tilelang/lib/libtilelang.so}"
-  export FLASHINFER_OPS_PATH="${FLASHINFER_OPS_PATH:-/workspace/mate_cached_ops}"
+  local mate_home="${MATE_HOME:-}"
+  local candidate
+  if [[ -z "${mate_home}" ]]; then
+    for candidate in /workspace/mate_0.2.5 /data/feihu/mate_0.2.5; do
+      if [[ -f "${candidate}/version.txt" ]]; then
+        mate_home="${candidate}"
+        break
+      fi
+    done
+  fi
+  [[ -n "${mate_home}" && -f "${mate_home}/version.txt" ]] || {
+    echo "Mate 0.2.5 source tree not found; set MATE_HOME." >&2
+    exit 1
+  }
+  local mate_version
+  mate_version="$(tr -d '[:space:]' < "${mate_home}/version.txt")"
+  [[ "${mate_version}" == "0.2.5" ]] || {
+    echo "Expected Mate 0.2.5, found ${mate_version} at ${mate_home}" >&2
+    exit 1
+  }
+  export MATE_HOME="${mate_home}"
+  export MATE_MUSA_ARCH_LIST="${MATE_MUSA_ARCH_LIST:-3.1}"
+  export PYTHONPATH="${MATE_HOME}${PYTHONPATH:+:${PYTHONPATH}}"
+  if [[ -z "${MATE_WORKSPACE_BASE:-}" ]]; then
+    if [[ -d /data/feihu/mate025_cache ]]; then
+      MATE_WORKSPACE_BASE=/data/feihu/mate025_cache
+    else
+      MATE_WORKSPACE_BASE="${MATE_HOME}"
+    fi
+  fi
+  export MATE_WORKSPACE_BASE
+
+  export MATE_MUBIN_DIR="${MATE_MUBIN_DIR:-${MATE_WORKSPACE_BASE}/mubin}"
+  export FLASHINFER_OPS_PATH="${MATE_WORKSPACE_BASE}/.cache/mate/0.2.5/mp31/cached_ops"
 
   local -a library_dirs=(
     "${MUDNN_HOME}/lib"
@@ -285,8 +318,16 @@ dtype = (
     or config.get("dtype")
     or "unknown"
 )
-model_type = str(text_config.get("model_type") or config.get("model_type") or "unknown")
-print(head_dim, gqa_ratio, str(dtype).lower(), model_type)
+model_type = str(
+    text_config.get("model_type") or config.get("model_type") or "unknown"
+)
+quantization_config = (
+    text_config.get("quantization_config")
+    or config.get("quantization_config")
+    or {}
+)
+quant_method = str(quantization_config.get("quant_method") or "none").lower()
+print(head_dim, gqa_ratio, str(dtype).lower(), model_type, quant_method)
 PY
 }
 
@@ -302,16 +343,70 @@ preflight() {
     exit 1
   }
   [[ -d "$FLASHINFER_OPS_PATH" ]] || {
-    echo "Mate ops directory does not exist: ${FLASHINFER_OPS_PATH}" >&2
+    echo "Mate 0.2.5 ops directory does not exist: ${FLASHINFER_OPS_PATH}" >&2
     exit 1
   }
   if ! find "$FLASHINFER_OPS_PATH" -name '*.so' -print -quit | grep -q .; then
-    echo "Mate ops directory contains no shared objects: ${FLASHINFER_OPS_PATH}" >&2
+    echo "Mate 0.2.5 ops directory contains no shared objects: ${FLASHINFER_OPS_PATH}" >&2
     exit 1
   fi
 
-  local head_dim gqa_ratio dtype model_type
-  read -r head_dim gqa_ratio dtype model_type < <(detect_attention_shape "$model_path")
+  local head_dim gqa_ratio dtype model_type quant_method
+  read -r head_dim gqa_ratio dtype model_type quant_method < <(
+    detect_attention_shape "$model_path"
+  )
+  case "$model_type" in
+    qwen3 | qwen3_5*)
+      if [[ "$BLOCK_SIZE" != 64 ]]; then
+        echo "==> MUSA Qwen3 attention uses effective BLOCK_SIZE=64; " \
+          "normalizing requested BLOCK_SIZE=${BLOCK_SIZE}."
+        BLOCK_SIZE=64
+      fi
+      ;;
+  esac
+
+  if [[ "$model_type" == qwen3_5_moe_text ]]; then
+    local gemm_artifact_id=fbd1a6df72047350033cb4c524dd8145b8f18698
+    local gemm_mubin_root="$MATE_MUBIN_DIR/gemm/$gemm_artifact_id"
+    [[ -f "$gemm_mubin_root/kernel_map.json" ]] || {
+      echo "Missing Mate 0.2.5 GEMM kernel map: $gemm_mubin_root/kernel_map.json" >&2
+      exit 1
+    }
+    local gemm_kernel_prefix
+    case "$quant_method" in
+      fp8)
+        gemm_kernel_prefix=e4m3e4m3bf16bf16ssgemm
+        ;;
+      none)
+        gemm_kernel_prefix=bf16bf16bf16bf16ssgemm
+        ;;
+      *)
+        echo "Unsupported Mate 0.2.5 MoE quantization: $quant_method" >&2
+        exit 1
+        ;;
+    esac
+    local -a moe_gemm_launchers
+    mapfile -t moe_gemm_launchers < <(
+      find "$FLASHINFER_OPS_PATH" -mindepth 2 -maxdepth 2 -type f \
+        -name "run_${gemm_kernel_prefix}_gm[134]_*.so" | sort
+    )
+    [[ ${#moe_gemm_launchers[@]} -eq 10 ]] || {
+      echo "Mate 0.2.5 MoE requires 10 ${gemm_kernel_prefix} launchers; " \
+        "found ${#moe_gemm_launchers[@]}." >&2
+      exit 1
+    }
+    local kernel launcher_path launcher_uri
+    for launcher_path in "${moe_gemm_launchers[@]}"; do
+      launcher_uri="${launcher_path%/*}"
+      launcher_uri="${launcher_uri##*/}"
+      kernel="${launcher_uri#run_}"
+      [[ -f "$gemm_mubin_root/mubin/$kernel.o" ]] || {
+        echo "Missing Mate 0.2.5 MoE GEMM object: $kernel.o" >&2
+        exit 1
+      }
+    done
+  fi
+
   local fa3_shape_supported=1
   if [[ "$dtype" != bfloat16 && "$dtype" != bf16 &&
         "$dtype" != torch.bfloat16 ]]; then
@@ -327,27 +422,24 @@ preflight() {
   fi
 
   if [[ "$fa3_shape_supported" == 0 ]]; then
-    if [[ -z "$XLLM_USE_FA3_EXPLICIT" ]]; then
-      export XLLM_USE_FA3=0
-    fi
-    if [[ -z "$XLLM_USE_FA3_DECODE_EXPLICIT" ]]; then
-      export XLLM_USE_FA3_DECODE=0
-    fi
-    if [[ "$XLLM_USE_FA3" == 1 || "$XLLM_USE_FA3_DECODE" == 1 ]]; then
-      echo "FA3 is unavailable for dtype=${dtype}, head_dim=${head_dim}, " \
-        "GQA=${gqa_ratio}; set both FA3 switches to 0 or provide artifacts." \
-        >&2
-      exit 1
-    fi
-    echo "==> Attention shape dtype=${dtype}, head_dim=${head_dim}, " \
-      "GQA=${gqa_ratio}: using FA2."
+    echo "Mate 0.2.5 FA3 artifacts are unavailable for dtype=${dtype}, " \
+      "head_dim=${head_dim}, GQA=${gqa_ratio}." >&2
+    exit 1
   fi
 
-  if [[ ("$XLLM_USE_FA3" == 1 || "$XLLM_USE_FA3_DECODE" == 1) &&
-        "$BLOCK_SIZE" != 64 ]]; then
-    echo "Deployed FA3 paged-KV artifacts require BLOCK_SIZE=64; got " \
-      "${BLOCK_SIZE}." >&2
+  if [[ "$XLLM_USE_FA3" != 1 ]]; then
+    echo "This Mate 0.2.5 deployment requires XLLM_USE_FA3=1." >&2
     exit 1
+  fi
+
+  if [[ "$XLLM_USE_FA3_DECODE" == 1 && "$BLOCK_SIZE" != 64 ]]; then
+    if [[ -n "$XLLM_USE_FA3_DECODE_EXPLICIT" ]]; then
+      echo "FA3 decode requires BLOCK_SIZE=64; got ${BLOCK_SIZE}." >&2
+      exit 1
+    fi
+    export XLLM_USE_FA3_DECODE=0
+    echo "==> FA3 decode disabled for BLOCK_SIZE=${BLOCK_SIZE}; " \
+      "prefill remains on FA3 and decode uses FA2."
   fi
 
   if [[ "$model_type" == qwen3 &&
@@ -357,49 +449,55 @@ preflight() {
   fi
 
   if [[ "$XLLM_USE_FA3" == 1 || "$XLLM_USE_FA3_DECODE" == 1 ]]; then
-    local metadata_uri metadata_so
-    local prefill_hash decode_hash
-    if [[ "$head_dim" == 128 && "$gqa_ratio" == 2 ]]; then
-      prefill_hash="00d544f137545dec4a82da8d6d8f037e2412aab1ea8f5af43dd3904c28610f75"
-      decode_hash="f7d879530963f36128078114a5a41903c7af67f580eb5593609463668e114a3b"
-      metadata_uri="fmha_get_metadata_2x1_ragged_q_padded_k_causal_packgqa"
-    elif [[ "$head_dim" == 128 && "$gqa_ratio" == 4 ]]; then
-      prefill_hash="64232c3cdfc7d7a7f520f0af3b6d2b40bf08f5819563fbe5faf836b5b39aea1f"
-      decode_hash="781bb950b1a98e5fa1534b0733270d2b1143d14da549cc1b99eaa8f8c9976460"
-      metadata_uri="fmha_get_metadata_4x1_ragged_q_padded_k_causal_packgqa"
-    elif [[ "$gqa_ratio" == 6 ]]; then
-      prefill_hash="7ee83f6c1e99c1e66180d62c666ae3683127d3e048aeda12e77ee4569f9912c9"
-      decode_hash="9e4f4b2e6574a7a45a93fef39cf9b0485651e39052d9dfd88c2e1439137a9374"
-      metadata_uri="fmha_get_metadata_6x1_ragged_q_padded_k_causal_packgqa"
-    else
-      prefill_hash="f950a279e338c0aa62c4d285c73cbedc8da55a148c172855ea03b6c08978d029"
-      decode_hash="94150355c74bdc57b0ec3f0a18926ec238aa401b7a6506ec460120ca8726277b"
-      metadata_uri="fmha_get_metadata_8x1_ragged_q_padded_k_causal_packgqa"
-    fi
-    metadata_so="${FLASHINFER_OPS_PATH}/${metadata_uri}/${metadata_uri}.so"
-    [[ -f "$metadata_so" ]] || {
-      echo "Missing FA3 metadata op: ${metadata_so}" >&2
+    [[ -d "$FLASHINFER_OPS_PATH" ]] || {
+      echo "Mate 0.2.5 FA3 ops directory does not exist: ${FLASHINFER_OPS_PATH}" >&2
       exit 1
     }
+    local prefill_hash decode_hash metadata_ratio
+    if [[ "$head_dim" == 128 && "$gqa_ratio" == 2 ]]; then
+      prefill_hash="782ec5133834c8e9cec31f987596832dccb087fca95a59dfa17b7f4125ac1108"
+      decode_hash="00c10b1f3506da04ed725b335bb7cf0bb3f3d52f636ebbe42666a64d56c62054"
+      metadata_ratio=2
+    elif [[ "$head_dim" == 128 && "$gqa_ratio" == 4 ]]; then
+      prefill_hash="b6883be7b4cfcc0200f994cdd9ec9844d8ec6175c27a5ea5488723c9a43164bf"
+      decode_hash="752d744e3cb4c86cb68d87b6765dad16ac8be82118ea254af186d3219d1cba13"
+      metadata_ratio=4
+    elif [[ "$head_dim" == 256 && "$gqa_ratio" == 6 ]]; then
+      prefill_hash="e140040cf5f04fdf94b0c9d28900659052de34f380b6ecea23afd16d3691d4ea"
+      decode_hash="fde7210c2a9ea763861b4f8358dc6a87e6a8eea0fb36bd5bb0477a9f356e69b8"
+      metadata_ratio=6
+    else
+      prefill_hash="236afb906e2625d51106085cc57d954f7e5b1440b41da68c782fc894801386ee"
+      decode_hash="fa49af2cdea283ee74e581849904e618b9eb550b9a6ab8ab04aa0693292b08f0"
+      metadata_ratio=8
+    fi
+    local metadata_warp metadata_uri
+    for metadata_warp in $(seq 1 17); do
+      metadata_uri="fmha_get_metadata_${metadata_ratio}x${metadata_warp}_bf16_ragged_q_padded_k_causal_packgqa"
+      [[ -f "$FLASHINFER_OPS_PATH/$metadata_uri/$metadata_uri.so" ]] || {
+        echo "Missing Mate 0.2.5 FA3 metadata op: $FLASHINFER_OPS_PATH/$metadata_uri" >&2
+        exit 1
+      }
+    done
     if [[ "$XLLM_USE_FA3" == 1 ]]; then
       local prefill_uri="fmha_fwd_${prefill_hash}"
-      [[ -f "${FLASHINFER_OPS_PATH}/${prefill_uri}/${prefill_uri}.so" ]] || {
-        echo "Missing FA3 prefill op for GQA=${gqa_ratio}: ${prefill_uri}" >&2
+      [[ -f "$FLASHINFER_OPS_PATH/$prefill_uri/$prefill_uri.so" ]] || {
+        echo "Missing Mate 0.2.5 FA3 prefill op for GQA=$gqa_ratio: $prefill_uri" >&2
         exit 1
       }
     fi
     if [[ "$XLLM_USE_FA3_DECODE" == 1 ]]; then
       local decode_uri="fmha_fwd_${decode_hash}"
-      [[ -f "${FLASHINFER_OPS_PATH}/${decode_uri}/${decode_uri}.so" ]] || {
-        echo "Missing FA3 decode op for GQA=${gqa_ratio}: ${decode_uri}" >&2
+      [[ -f "$FLASHINFER_OPS_PATH/$decode_uri/$decode_uri.so" ]] || {
+        echo "Missing Mate 0.2.5 FA3 decode op for GQA=$gqa_ratio: $decode_uri" >&2
         exit 1
       }
     fi
     local combine_size combine_uri
     for combine_size in 16 32 64; do
       combine_uri="fmha_fwd_combine_bf16_16x64x${combine_size}_ragged_q_metadata"
-      [[ -f "${FLASHINFER_OPS_PATH}/${combine_uri}/${combine_uri}.so" ]] || {
-        echo "Missing FA3 ragged-query combine op: ${combine_uri}" >&2
+      [[ -f "$FLASHINFER_OPS_PATH/$combine_uri/$combine_uri.so" ]] || {
+        echo "Missing Mate 0.2.5 FA3 combine op: $combine_uri" >&2
         exit 1
       }
     done

@@ -739,15 +739,6 @@ std::string mate_gdn_dtype_suffix(torch::ScalarType dtype) {
 
 }  // namespace
 
-std::string get_mate_gdn_decode_uri(int64_t num_q_heads,
-                                    int64_t num_v_heads,
-                                    torch::ScalarType dtype) {
-  std::ostringstream oss;
-  oss << "mate_gdn_decode_hq" << num_q_heads << "_hv" << num_v_heads << "_"
-      << mate_gdn_dtype_suffix(dtype);
-  return oss.str();
-}
-
 namespace {
 
 std::string get_mate_gdn_decode_tvmffi_uri(int64_t num_q_heads,
@@ -845,56 +836,26 @@ torch::Tensor mate_gated_delta_rule_decode(
           : torch::empty({batch_size, num_v_heads, head_v_dim},
                          value.options());
 
-  const std::string direct_uri = get_mate_gdn_decode_tvmffi_uri(
+  const std::string uri = get_mate_gdn_decode_tvmffi_uri(
       num_k_heads, num_v_heads, query.scalar_type(), batch_size);
-  const bool use_direct_tvmffi = mate_gdn_decode_module_available(direct_uri);
-  CHECK(use_direct_tvmffi || batch_size <= 2)
-      << "Mate GDN decode requires the batch-tuned TVM-FFI module "
-      << direct_uri << " for batch_size=" << batch_size
-      << "; refusing to reuse the B<=2 module because its TileLang grid "
-         "configuration is incorrect for this batch bucket";
-  const std::string uri =
-      use_direct_tvmffi ? direct_uri
-                        : get_mate_gdn_decode_uri(
-                              num_k_heads, num_v_heads, query.scalar_type());
-  auto run = get_function(uri, use_direct_tvmffi ? "main" : "run");
+  CHECK(mate_gdn_decode_module_available(uri))
+      << "Mate 0.2.5 GDN decode artifact is unavailable: " << uri;
+  auto run = get_function(uri, "main");
 
   {
-    // If the worker's current MUSA stream has no native handle, TVM FFI falls
-    // back to a pool stream. The guard synchronizes both boundaries so the FFI
-    // kernel sees preceding projection/conv results and subsequent PyTorch
-    // kernels see the updated output/state.
     MusaTvmffiStreamGuard stream_guard(query.device());
 
-    if (use_direct_tvmffi) {
-      // Current Mate exposes a native TVM-FFI entry and keeps scale as a
-      // runtime scalar. Calling it directly avoids the legacy Cython bridge
-      // ABI (init/call/get_last_error), which is not emitted by new TileLang.
-      run(to_ffi_tensor(query),
-          to_ffi_tensor(key),
-          to_ffi_tensor(value),
-          to_ffi_tensor(A_log_f32),
-          to_ffi_tensor(a),
-          to_ffi_tensor(dt_bias_f32),
-          to_ffi_tensor(b),
-          static_cast<float>(params.scale),
-          to_ffi_tensor(state_indices),
-          to_ffi_tensor(state_f32),
-          to_ffi_tensor(output));
-    } else {
-      // Legacy MateGdnDecodeRun internally reorders these arguments to match
-      // the Cython kernel ABI used by existing deployed artifacts.
-      run(to_ffi_tensor(query),
-          to_ffi_tensor(key),
-          to_ffi_tensor(value),
-          to_ffi_tensor(A_log_f32),
-          to_ffi_tensor(a),
-          to_ffi_tensor(dt_bias_f32),
-          to_ffi_tensor(b),
-          to_ffi_tensor(state_indices),
-          to_ffi_tensor(state_f32),
-          to_ffi_tensor(output));
-    }
+    run(to_ffi_tensor(query),
+        to_ffi_tensor(key),
+        to_ffi_tensor(value),
+        to_ffi_tensor(A_log_f32),
+        to_ffi_tensor(a),
+        to_ffi_tensor(dt_bias_f32),
+        to_ffi_tensor(b),
+        static_cast<float>(params.scale),
+        to_ffi_tensor(state_indices),
+        to_ffi_tensor(state_f32),
+        to_ffi_tensor(output));
   }
 
   // The mate kernel updates state_f32 in-place. When state_f32 IS
@@ -930,61 +891,162 @@ std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
   return oss.str();
 }
 
-bool mate_gdn_mtp_module_available(int64_t num_q_heads,
-                                   int64_t num_v_heads,
-                                   torch::ScalarType dtype,
-                                   int64_t seq_len) {
+namespace {
+
+bool mate_gdn_mtp_artifact_available(const std::string& uri) {
   const char* ops_path = std::getenv("FLASHINFER_OPS_PATH");
   if (ops_path == nullptr || ops_path[0] == '\0') {
     return false;
   }
-  const std::string uri =
-      get_mate_gdn_mtp_uri(num_q_heads, num_v_heads, dtype, seq_len);
   const std::string so_path =
       std::string(ops_path) + "/" + uri + "/" + uri + ".so";
   return ::access(so_path.c_str(), R_OK) == 0;
 }
 
+std::string get_mate_gdn_mtp_checkpoint_uri(int64_t num_q_heads,
+                                            int64_t num_v_heads,
+                                            torch::ScalarType dtype,
+                                            int64_t seq_len) {
+  CHECK_GT(seq_len, 0) << "MATE GDN MTP sequence length must be positive";
+  std::ostringstream oss;
+  oss << "mate_gdn_mtp_checkpoint_hq" << num_q_heads << "_hv" << num_v_heads
+      << "_" << mate_gdn_dtype_suffix(dtype) << "_t" << seq_len;
+  return oss.str();
+}
+
+}  // namespace
+
+bool mate_gdn_mtp_module_available(int64_t num_q_heads,
+                                   int64_t num_v_heads,
+                                   torch::ScalarType dtype,
+                                   int64_t seq_len) {
+  return mate_gdn_mtp_artifact_available(
+      get_mate_gdn_mtp_uri(num_q_heads, num_v_heads, dtype, seq_len));
+}
+
+bool mate_gdn_mtp_checkpoint_module_available(int64_t num_q_heads,
+                                              int64_t num_v_heads,
+                                              torch::ScalarType dtype,
+                                              int64_t seq_len) {
+  return mate_gdn_mtp_artifact_available(get_mate_gdn_mtp_checkpoint_uri(
+      num_q_heads, num_v_heads, dtype, seq_len));
+}
+
 torch::Tensor mate_gated_delta_rule_mtp(
     musa::MateGatedDeltaRuleMtpParams& params) {
-  auto q = params.q.contiguous();
-  auto k = params.k.contiguous();
-  auto v = params.v.contiguous();
+  const bool write_checkpoints = params.checkpoint_state_indices.defined();
+  auto q = write_checkpoints ? params.q : params.q.contiguous();
+  auto k = write_checkpoints ? params.k : params.k.contiguous();
+  auto v = write_checkpoints ? params.v : params.v.contiguous();
   CHECK(q.dim() == 4) << "mate GDN mtp expects q [B, T, Hqk, K]";
+  CHECK(k.sizes() == q.sizes()) << "mate GDN mtp q/k shape mismatch";
   CHECK(v.dim() == 4) << "mate GDN mtp expects v [B, T, Hv, V]";
   CHECK_EQ(q.size(0), v.size(0)) << "mate GDN mtp batch mismatch";
   CHECK_EQ(q.size(1), v.size(1)) << "mate GDN mtp sequence mismatch";
   CHECK_GT(q.size(1), 0) << "mate GDN mtp sequence must be positive";
+
   const int64_t num_k_heads = params.num_k_heads;
   const int64_t num_v_heads = params.num_v_heads;
-
-  // The compiled kernel bakes in bfloat16 q/k/v/a/b and float32 A_log/dt_bias/
-  // state/intermediate, so coerce to the exact dtypes the ABI expects.
   const auto io_dtype = q.scalar_type();
-  auto a = params.a.to(io_dtype).contiguous();
-  auto b = params.b.to(io_dtype).contiguous();
-  auto A_log = params.A_log.to(torch::kFloat32).contiguous();
-  auto dt_bias = params.dt_bias.to(torch::kFloat32).contiguous();
-  auto state_f32 = params.state.to(torch::kFloat32).contiguous();
-  auto state_indices = params.state_indices.to(torch::kInt32).contiguous();
-  auto intermediate = params.intermediate.contiguous();
+  auto a = write_checkpoints ? params.a : params.a.to(io_dtype).contiguous();
+  auto b = write_checkpoints ? params.b : params.b.to(io_dtype).contiguous();
+  auto A_log = write_checkpoints
+                   ? params.A_log
+                   : params.A_log.to(torch::kFloat32).contiguous();
+  auto dt_bias = write_checkpoints
+                     ? params.dt_bias
+                     : params.dt_bias.to(torch::kFloat32).contiguous();
+  auto state_f32 = write_checkpoints
+                       ? params.state
+                       : params.state.to(torch::kFloat32).contiguous();
+  auto state_indices =
+      write_checkpoints ? params.state_indices
+                        : params.state_indices.to(torch::kInt32).contiguous();
+  torch::Tensor checkpoint_state_indices;
+  torch::Tensor intermediate;
   auto output = params.output;
 
-  const std::string uri = get_mate_gdn_mtp_uri(
-      num_k_heads, num_v_heads, q.scalar_type(), q.size(1));
-  auto direct_run = get_module(uri)->GetFunction("main");
-  auto run =
-      direct_run.defined() ? direct_run.value() : get_function(uri, "run");
+  if (write_checkpoints) {
+    checkpoint_state_indices = params.checkpoint_state_indices;
+    CHECK(io_dtype == torch::kBFloat16);
+    CHECK(k.scalar_type() == io_dtype && v.scalar_type() == io_dtype &&
+          a.scalar_type() == io_dtype && b.scalar_type() == io_dtype &&
+          output.scalar_type() == io_dtype)
+        << "MATE GDN MTP checkpoint q/k/v/a/b/output must be bfloat16";
+    CHECK(A_log.scalar_type() == torch::kFloat32 &&
+          dt_bias.scalar_type() == torch::kFloat32 &&
+          state_f32.scalar_type() == torch::kFloat32)
+        << "MATE GDN MTP checkpoint state parameters must be float32";
+    CHECK(state_indices.scalar_type() == torch::kInt32 &&
+          checkpoint_state_indices.scalar_type() == torch::kInt32)
+        << "MATE GDN MTP checkpoint indices must be int32";
+    CHECK(A_log.is_contiguous() && dt_bias.is_contiguous() &&
+          state_f32.is_contiguous() && checkpoint_state_indices.is_contiguous())
+        << "MATE GDN MTP checkpoint dense inputs must be contiguous";
+    CHECK_EQ(q.size(2), num_k_heads);
+    CHECK_EQ(k.size(2), num_k_heads);
+    CHECK_EQ(v.size(2), num_v_heads);
+    CHECK_EQ(q.size(3), params.head_k_dim);
+    CHECK_EQ(k.size(3), params.head_k_dim);
+    CHECK_EQ(v.size(3), params.head_v_dim);
+    CHECK(a.dim() == 3 && b.dim() == 3);
+    CHECK_EQ(a.size(0), q.size(0));
+    CHECK_EQ(a.size(1), q.size(1));
+    CHECK_EQ(a.size(2), num_v_heads);
+    CHECK(b.sizes() == a.sizes());
+    CHECK_EQ(A_log.dim(), 1);
+    CHECK_EQ(A_log.size(0), num_v_heads);
+    CHECK_EQ(dt_bias.dim(), 1);
+    CHECK_EQ(dt_bias.size(0), num_v_heads);
+    CHECK_EQ(state_f32.dim(), 4);
+    CHECK_EQ(state_f32.size(1), num_v_heads);
+    CHECK_EQ(state_f32.size(2), params.head_v_dim);
+    CHECK_EQ(state_f32.size(3), params.head_k_dim);
+    CHECK_EQ(state_indices.dim(), 1);
+    CHECK_EQ(state_indices.size(0), q.size(0));
+    CHECK_EQ(checkpoint_state_indices.dim(), 2);
+    CHECK_EQ(checkpoint_state_indices.size(0), q.size(0));
+    CHECK_EQ(checkpoint_state_indices.size(1), q.size(1));
+    CHECK(output.sizes() == v.sizes());
+    CHECK(k.device() == q.device() && v.device() == q.device() &&
+          a.device() == q.device() && b.device() == q.device() &&
+          A_log.device() == q.device() && dt_bias.device() == q.device() &&
+          state_f32.device() == q.device() &&
+          state_indices.device() == q.device() &&
+          checkpoint_state_indices.device() == q.device() &&
+          output.device() == q.device())
+        << "MATE GDN MTP checkpoint inputs must share one device";
+  } else {
+    CHECK(params.intermediate.defined());
+    intermediate = params.intermediate.contiguous();
+  }
+
+  const std::string uri =
+      write_checkpoints
+          ? get_mate_gdn_mtp_checkpoint_uri(
+                num_k_heads, num_v_heads, q.scalar_type(), q.size(1))
+          : get_mate_gdn_mtp_uri(
+                num_k_heads, num_v_heads, q.scalar_type(), q.size(1));
+  auto main = get_module(uri)->GetFunction("main");
+  CHECK(main.defined()) << "Mate 0.2.5 GDN MTP artifact must expose main: "
+                        << uri;
+  auto run = main.value();
   {
-    // Worker compute streams do not always expose a native MUSA handle. In
-    // that case TVM FFI falls back to its pool stream, so both stream
-    // boundaries must be synchronized to keep the temporary inputs alive and
-    // make the output visible to the following target layers.
     MusaTvmffiStreamGuard stream_guard(q.device());
-    if (direct_run.defined()) {
-      // New TileLang modules expose their generated kernel through main and
-      // take the runtime scale before state. This avoids the legacy wrapper's
-      // init/call/get_last_error ABI, which current Mate no longer emits.
+    if (write_checkpoints) {
+      run(to_ffi_tensor(q),
+          to_ffi_tensor(k),
+          to_ffi_tensor(v),
+          to_ffi_tensor(A_log),
+          to_ffi_tensor(a),
+          to_ffi_tensor(dt_bias),
+          to_ffi_tensor(b),
+          static_cast<float>(params.scale),
+          to_ffi_tensor(state_f32),
+          to_ffi_tensor(state_indices),
+          to_ffi_tensor(checkpoint_state_indices),
+          to_ffi_tensor(output));
+    } else {
       run(to_ffi_tensor(q),
           to_ffi_tensor(k),
           to_ffi_tensor(v),
@@ -997,19 +1059,6 @@ torch::Tensor mate_gated_delta_rule_mtp(
           to_ffi_tensor(state_indices),
           to_ffi_tensor(intermediate),
           to_ffi_tensor(output));
-    } else {
-      run(to_ffi_tensor(q),
-          to_ffi_tensor(k),
-          to_ffi_tensor(v),
-          to_ffi_tensor(A_log),
-          to_ffi_tensor(a),
-          to_ffi_tensor(dt_bias),
-          to_ffi_tensor(b),
-          to_ffi_tensor(state_indices),
-          to_ffi_tensor(state_f32),
-          to_ffi_tensor(intermediate),
-          to_ffi_tensor(output),
-          static_cast<double>(params.scale));
     }
   }
 
@@ -1738,24 +1787,30 @@ namespace {
 template <typename scalar_t, typename accepted_t>
 void launch_causal_conv1d_mtp_verify(const torch::Tensor& x,
                                      const torch::Tensor& weight,
-                                     const torch::Tensor& conv_state,
+                                     torch::Tensor& conv_state,
                                      const torch::Tensor& cache_indices,
                                      const torch::Tensor& num_accepted_tokens,
-                                     torch::Tensor& output,
-                                     torch::Tensor& intermediate,
+                                     torch::Tensor& query,
+                                     torch::Tensor& key,
+                                     torch::Tensor& value,
+                                     const torch::Tensor& intermediate,
                                      bool silu_activation,
+                                     bool write_superstate,
                                      cudaStream_t stream);
 
 }  // namespace
 
 void causal_conv1d_mtp_verify(const torch::Tensor& x,
                               const torch::Tensor& weight,
-                              const torch::Tensor& conv_state,
+                              torch::Tensor conv_state,
                               const torch::Tensor& cache_indices,
                               const torch::Tensor& num_accepted_tokens,
-                              torch::Tensor output_buf,
+                              torch::Tensor query_buf,
+                              torch::Tensor key_buf,
+                              torch::Tensor value_buf,
                               torch::Tensor intermediate_buf,
-                              bool silu_activation) {
+                              bool silu_activation,
+                              bool write_superstate) {
   CHECK(x.dim() == 3) << "MTP conv x must be [batch, dim, seq_len]";
   CHECK(weight.dim() == 2) << "MTP conv weight must be [dim, width]";
   CHECK(conv_state.dim() == 3)
@@ -1768,9 +1823,8 @@ void causal_conv1d_mtp_verify(const torch::Tensor& x,
   CHECK(num_accepted_tokens.scalar_type() == torch::kInt32 ||
         num_accepted_tokens.scalar_type() == torch::kInt64)
       << "MTP conv accepted tokens must be int32 or int64";
-  CHECK(x.is_contiguous() && weight.is_contiguous() &&
-        conv_state.is_contiguous() && cache_indices.is_contiguous() &&
-        num_accepted_tokens.is_contiguous())
+  CHECK(weight.is_contiguous() && conv_state.is_contiguous() &&
+        cache_indices.is_contiguous() && num_accepted_tokens.is_contiguous())
       << "MTP conv inputs must be contiguous";
   CHECK(weight.scalar_type() == x.scalar_type() &&
         conv_state.scalar_type() == x.scalar_type())
@@ -1783,16 +1837,49 @@ void causal_conv1d_mtp_verify(const torch::Tensor& x,
       << "MTP conv state length mismatch";
   CHECK_EQ(cache_indices.size(0), x.size(0))
       << "MTP conv cache index batch mismatch";
-  CHECK(intermediate_buf.dim() == 4 && intermediate_buf.size(0) == x.size(0) &&
-        intermediate_buf.size(1) == x.size(2) &&
-        intermediate_buf.size(2) == x.size(1) &&
-        intermediate_buf.size(3) == conv_state.size(2))
-      << "MTP conv intermediate shape mismatch";
-  CHECK(output_buf.sizes() == x.sizes() && output_buf.is_contiguous())
-      << "MTP conv output shape/layout mismatch";
-  CHECK(intermediate_buf.is_contiguous() &&
-        intermediate_buf.scalar_type() == x.scalar_type())
-      << "MTP conv intermediate must be contiguous and match x dtype";
+  CHECK_EQ(num_accepted_tokens.size(0), x.size(0))
+      << "MTP conv accepted-token batch mismatch";
+  CHECK_EQ(query_buf.dim(), 4);
+  CHECK_EQ(key_buf.dim(), 4);
+  CHECK_EQ(value_buf.dim(), 4);
+  CHECK(query_buf.sizes() == key_buf.sizes())
+      << "MTP conv query/key shape mismatch";
+  CHECK_EQ(query_buf.size(0), x.size(0));
+  CHECK_EQ(key_buf.size(0), x.size(0));
+  CHECK_EQ(value_buf.size(0), x.size(0));
+  CHECK_EQ(query_buf.size(1), x.size(2));
+  CHECK_EQ(key_buf.size(1), x.size(2));
+  CHECK_EQ(value_buf.size(1), x.size(2));
+  const int64_t query_dim = query_buf.size(2) * query_buf.size(3);
+  const int64_t value_dim = value_buf.size(2) * value_buf.size(3);
+  CHECK_EQ(x.size(1), 2 * query_dim + value_dim);
+  CHECK_LE(query_dim, std::numeric_limits<int32_t>::max());
+  CHECK_LE(value_dim, std::numeric_limits<int32_t>::max());
+  CHECK(query_buf.is_contiguous() && key_buf.is_contiguous() &&
+        value_buf.is_contiguous())
+      << "MTP conv q/k/v outputs must be contiguous";
+  CHECK(query_buf.scalar_type() == x.scalar_type() &&
+        key_buf.scalar_type() == x.scalar_type() &&
+        value_buf.scalar_type() == x.scalar_type())
+      << "MTP conv q/k/v dtype mismatch";
+  CHECK(query_buf.device() == x.device() && key_buf.device() == x.device() &&
+        value_buf.device() == x.device())
+      << "MTP conv q/k/v device mismatch";
+  CHECK(write_superstate || intermediate_buf.defined())
+      << "MTP conv must write direct state or an intermediate checkpoint";
+  if (intermediate_buf.defined()) {
+    CHECK(intermediate_buf.dim() == 4 &&
+          intermediate_buf.size(0) == x.size(0) &&
+          intermediate_buf.size(1) == x.size(2) &&
+          intermediate_buf.size(2) == x.size(1) &&
+          intermediate_buf.size(3) == conv_state.size(2))
+        << "MTP conv intermediate shape mismatch";
+    CHECK(intermediate_buf.is_contiguous() &&
+          intermediate_buf.scalar_type() == x.scalar_type())
+        << "MTP conv intermediate must be contiguous and match x dtype";
+    CHECK(intermediate_buf.device() == x.device())
+        << "MTP conv intermediate device mismatch";
+  }
 
   const at::cuda::OptionalCUDAGuard guard(device_of(x));
   const auto stream = at::cuda::getCurrentCUDAStream();
@@ -1805,9 +1892,12 @@ void causal_conv1d_mtp_verify(const torch::Tensor& x,
             conv_state,
             cache_indices,
             num_accepted_tokens,
-            output_buf,
+            query_buf,
+            key_buf,
+            value_buf,
             intermediate_buf,
             silu_activation,
+            write_superstate,
             stream);
       } else {
         launch_causal_conv1d_mtp_verify<__nv_bfloat16, int64_t>(
@@ -1816,9 +1906,12 @@ void causal_conv1d_mtp_verify(const torch::Tensor& x,
             conv_state,
             cache_indices,
             num_accepted_tokens,
-            output_buf,
+            query_buf,
+            key_buf,
+            value_buf,
             intermediate_buf,
             silu_activation,
+            write_superstate,
             stream);
       }
       break;
@@ -1829,9 +1922,12 @@ void causal_conv1d_mtp_verify(const torch::Tensor& x,
                                                          conv_state,
                                                          cache_indices,
                                                          num_accepted_tokens,
-                                                         output_buf,
+                                                         query_buf,
+                                                         key_buf,
+                                                         value_buf,
                                                          intermediate_buf,
                                                          silu_activation,
+                                                         write_superstate,
                                                          stream);
       } else {
         launch_causal_conv1d_mtp_verify<__half, int64_t>(x,
@@ -1839,9 +1935,12 @@ void causal_conv1d_mtp_verify(const torch::Tensor& x,
                                                          conv_state,
                                                          cache_indices,
                                                          num_accepted_tokens,
-                                                         output_buf,
+                                                         query_buf,
+                                                         key_buf,
+                                                         value_buf,
                                                          intermediate_buf,
                                                          silu_activation,
+                                                         write_superstate,
                                                          stream);
       }
       break;
@@ -1852,9 +1951,12 @@ void causal_conv1d_mtp_verify(const torch::Tensor& x,
                                                         conv_state,
                                                         cache_indices,
                                                         num_accepted_tokens,
-                                                        output_buf,
+                                                        query_buf,
+                                                        key_buf,
+                                                        value_buf,
                                                         intermediate_buf,
                                                         silu_activation,
+                                                        write_superstate,
                                                         stream);
       } else {
         launch_causal_conv1d_mtp_verify<float, int64_t>(x,
@@ -1862,9 +1964,12 @@ void causal_conv1d_mtp_verify(const torch::Tensor& x,
                                                         conv_state,
                                                         cache_indices,
                                                         num_accepted_tokens,
-                                                        output_buf,
+                                                        query_buf,
+                                                        key_buf,
+                                                        value_buf,
                                                         intermediate_buf,
                                                         silu_activation,
+                                                        write_superstate,
                                                         stream);
       }
       break;
@@ -2050,16 +2155,17 @@ __global__ void causal_conv1d_mtp_verify_kernel(
     const scalar_t* __restrict__ weight,
     int64_t weight_dim_stride,
     int64_t weight_width_stride,
-    const scalar_t* __restrict__ conv_state,
+    scalar_t* conv_state,
     int64_t conv_state_batch_stride,
     int64_t conv_state_dim_stride,
     int64_t conv_state_time_stride,
     const int32_t* __restrict__ cache_indices,
     const accepted_t* __restrict__ accepted_tokens,
-    scalar_t* __restrict__ output,
-    int64_t output_batch_stride,
-    int64_t output_dim_stride,
-    int64_t output_time_stride,
+    scalar_t* __restrict__ query,
+    scalar_t* __restrict__ key,
+    scalar_t* __restrict__ value,
+    int32_t query_dim,
+    int32_t value_dim,
     scalar_t* __restrict__ intermediate,
     int64_t intermediate_batch_stride,
     int64_t intermediate_time_stride,
@@ -2070,7 +2176,8 @@ __global__ void causal_conv1d_mtp_verify_kernel(
     int seq_len,
     int width,
     int state_len,
-    bool silu_activation) {
+    bool silu_activation,
+    bool write_superstate) {
   const int batch_idx = blockIdx.x;
   if (batch_idx >= batch) {
     return;
@@ -2091,7 +2198,24 @@ __global__ void causal_conv1d_mtp_verify_kernel(
                          static_cast<int32_t>(threadIdx.x);
        dim_idx < dim;
        dim_idx += dim_stride) {
+    scalar_t* qkv_output = nullptr;
+    int32_t output_dim = 0;
+    int32_t output_channel = 0;
+    if (dim_idx < query_dim) {
+      qkv_output = query;
+      output_dim = query_dim;
+      output_channel = dim_idx;
+    } else if (dim_idx < 2 * query_dim) {
+      qkv_output = key;
+      output_dim = query_dim;
+      output_channel = dim_idx - query_dim;
+    } else {
+      qkv_output = value;
+      output_dim = value_dim;
+      output_channel = dim_idx - 2 * query_dim;
+    }
     float history[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float initial_history[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     if (cache_idx >= 0) {
       for (int history_idx = 0; history_idx < width - 1; ++history_idx) {
         history[history_idx] = to_f32(
@@ -2100,20 +2224,21 @@ __global__ void causal_conv1d_mtp_verify_kernel(
                        static_cast<int64_t>(dim_idx) * conv_state_dim_stride +
                        static_cast<int64_t>(accepted + history_idx) *
                            conv_state_time_stride]);
+        initial_history[history_idx] = history[history_idx];
       }
     }
 
     for (int time_idx = 0; time_idx < seq_len; ++time_idx) {
-      float value = 0.0f;
+      float conv_value = 0.0f;
       if (cache_idx >= 0) {
         for (int width_idx = 0; width_idx < width - 1; ++width_idx) {
-          value +=
+          conv_value +=
               history[width_idx] *
               to_f32(weight[static_cast<int64_t>(dim_idx) * weight_dim_stride +
                             static_cast<int64_t>(width_idx) *
                                 weight_width_stride]);
         }
-        value +=
+        conv_value +=
             to_f32(x[static_cast<int64_t>(batch_idx) * x_batch_stride +
                      static_cast<int64_t>(dim_idx) * x_dim_stride +
                      static_cast<int64_t>(time_idx) * x_time_stride]) *
@@ -2126,38 +2251,34 @@ __global__ void causal_conv1d_mtp_verify_kernel(
           // uses __expf for throughput, but compounding that approximation
           // with the Mate T>2 recurrent kernel can change greedy target
           // tokens after a state checkpoint is replayed.
-          value = value / (1.0f + expf(-value));
+          conv_value = conv_value / (1.0f + expf(-conv_value));
         }
       }
-      output[static_cast<int64_t>(batch_idx) * output_batch_stride +
-             static_cast<int64_t>(dim_idx) * output_dim_stride +
-             static_cast<int64_t>(time_idx) * output_time_stride] =
-          from_f32<scalar_t>(value);
+      const int64_t output_token =
+          static_cast<int64_t>(batch_idx) * seq_len + time_idx;
+      qkv_output[output_token * output_dim + output_channel] =
+          from_f32<scalar_t>(conv_value);
 
-      for (int state_idx = 0; state_idx < state_len; ++state_idx) {
-        float state_value = 0.0f;
-        if (cache_idx >= 0 && state_idx < old_prefix_len) {
-          state_value = to_f32(
-              conv_state[static_cast<int64_t>(cache_idx) *
-                             conv_state_batch_stride +
-                         static_cast<int64_t>(dim_idx) * conv_state_dim_stride +
-                         static_cast<int64_t>(accepted + 1 + state_idx) *
-                             conv_state_time_stride]);
-        } else if (cache_idx >= 0 &&
-                   state_idx < old_prefix_len + time_idx + 1) {
-          state_value =
-              to_f32(x[static_cast<int64_t>(batch_idx) * x_batch_stride +
-                       static_cast<int64_t>(dim_idx) * x_dim_stride +
-                       static_cast<int64_t>(state_idx - old_prefix_len) *
-                           x_time_stride]);
+      if (intermediate != nullptr) {
+        for (int32_t state_idx = 0; state_idx < state_len; ++state_idx) {
+          float state_value = 0.0f;
+          if (cache_idx >= 0 && state_idx < old_prefix_len) {
+            state_value = initial_history[state_idx + 1];
+          } else if (cache_idx >= 0 &&
+                     state_idx < old_prefix_len + time_idx + 1) {
+            state_value =
+                to_f32(x[static_cast<int64_t>(batch_idx) * x_batch_stride +
+                         static_cast<int64_t>(dim_idx) * x_dim_stride +
+                         static_cast<int64_t>(state_idx - old_prefix_len) *
+                             x_time_stride]);
+          }
+          intermediate
+              [static_cast<int64_t>(batch_idx) * intermediate_batch_stride +
+               static_cast<int64_t>(time_idx) * intermediate_time_stride +
+               static_cast<int64_t>(dim_idx) * intermediate_dim_stride +
+               static_cast<int64_t>(state_idx) * intermediate_state_stride] =
+                  from_f32<scalar_t>(state_value);
         }
-        intermediate[static_cast<int64_t>(batch_idx) *
-                         intermediate_batch_stride +
-                     static_cast<int64_t>(time_idx) * intermediate_time_stride +
-                     static_cast<int64_t>(dim_idx) * intermediate_dim_stride +
-                     static_cast<int64_t>(state_idx) *
-                         intermediate_state_stride] =
-            from_f32<scalar_t>(state_value);
       }
 
       for (int history_idx = 0; history_idx < width - 2; ++history_idx) {
@@ -2172,24 +2293,48 @@ __global__ void causal_conv1d_mtp_verify_kernel(
                 : 0.0f;
       }
     }
+
+    if (write_superstate && cache_idx >= 0) {
+      const int64_t state_offset =
+          static_cast<int64_t>(cache_idx) * conv_state_batch_stride +
+          static_cast<int64_t>(dim_idx) * conv_state_dim_stride;
+      for (int32_t state_idx = 0; state_idx < old_prefix_len; ++state_idx) {
+        conv_state[state_offset +
+                   static_cast<int64_t>(state_idx) * conv_state_time_stride] =
+            from_f32<scalar_t>(initial_history[state_idx + 1]);
+      }
+      for (int32_t time_idx = 0; time_idx < seq_len; ++time_idx) {
+        conv_state[state_offset +
+                   static_cast<int64_t>(old_prefix_len + time_idx) *
+                       conv_state_time_stride] =
+            x[static_cast<int64_t>(batch_idx) * x_batch_stride +
+              static_cast<int64_t>(dim_idx) * x_dim_stride +
+              static_cast<int64_t>(time_idx) * x_time_stride];
+      }
+    }
   }
 }
 
 template <typename scalar_t, typename accepted_t>
 void launch_causal_conv1d_mtp_verify(const torch::Tensor& x,
                                      const torch::Tensor& weight,
-                                     const torch::Tensor& conv_state,
+                                     torch::Tensor& conv_state,
                                      const torch::Tensor& cache_indices,
                                      const torch::Tensor& num_accepted_tokens,
-                                     torch::Tensor& output,
-                                     torch::Tensor& intermediate,
+                                     torch::Tensor& query,
+                                     torch::Tensor& key,
+                                     torch::Tensor& value,
+                                     const torch::Tensor& intermediate,
                                      bool silu_activation,
+                                     bool write_superstate,
                                      cudaStream_t stream) {
   const int batch = static_cast<int>(x.size(0));
   const int dim = static_cast<int>(x.size(1));
   const int seq_len = static_cast<int>(x.size(2));
   const int width = static_cast<int>(weight.size(1));
   const int state_len = static_cast<int>(conv_state.size(2));
+  const int32_t query_dim = static_cast<int32_t>(query.size(2) * query.size(3));
+  const int32_t value_dim = static_cast<int32_t>(value.size(2) * value.size(3));
   constexpr int kThreads = 256;
   static const bool use_dim_parallel = []() {
     const char* value = std::getenv("XLLM_MTP_CONV_DIM_PARALLEL");
@@ -2209,27 +2354,31 @@ void launch_causal_conv1d_mtp_verify(const torch::Tensor& x,
           reinterpret_cast<const scalar_t*>(weight.data_ptr()),
           weight.stride(0),
           weight.stride(1),
-          reinterpret_cast<const scalar_t*>(conv_state.data_ptr()),
+          reinterpret_cast<scalar_t*>(conv_state.data_ptr()),
           conv_state.stride(0),
           conv_state.stride(1),
           conv_state.stride(2),
           reinterpret_cast<const int32_t*>(cache_indices.data_ptr()),
           reinterpret_cast<const accepted_t*>(num_accepted_tokens.data_ptr()),
-          reinterpret_cast<scalar_t*>(output.data_ptr()),
-          output.stride(0),
-          output.stride(1),
-          output.stride(2),
-          reinterpret_cast<scalar_t*>(intermediate.data_ptr()),
-          intermediate.stride(0),
-          intermediate.stride(1),
-          intermediate.stride(2),
-          intermediate.stride(3),
+          reinterpret_cast<scalar_t*>(query.data_ptr()),
+          reinterpret_cast<scalar_t*>(key.data_ptr()),
+          reinterpret_cast<scalar_t*>(value.data_ptr()),
+          query_dim,
+          value_dim,
+          intermediate.defined()
+              ? reinterpret_cast<scalar_t*>(intermediate.data_ptr())
+              : nullptr,
+          intermediate.defined() ? intermediate.stride(0) : 0,
+          intermediate.defined() ? intermediate.stride(1) : 0,
+          intermediate.defined() ? intermediate.stride(2) : 0,
+          intermediate.defined() ? intermediate.stride(3) : 0,
           batch,
           dim,
           seq_len,
           width,
           state_len,
-          silu_activation);
+          silu_activation,
+          write_superstate);
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 

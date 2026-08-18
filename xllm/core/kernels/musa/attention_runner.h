@@ -43,6 +43,7 @@ struct AttentionReplayParams {
   std::vector<int32_t> q_cu_seq_lens_host;
   int64_t max_seqlen_q = 0;
   int64_t max_seqlen_k = 0;
+  uint32_t gdn_kkt_num_tokens = 0;
   uint32_t actual_num_tokens;
 };
 
@@ -114,6 +115,8 @@ class AttentionRunner final {
                                torch::Tensor output,
                                torch::Tensor final_state,
                                torch::Tensor kkt_output,
+                               torch::Tensor ssm_cache,
+                               torch::Tensor state_indices,
                                float scale);
 
   void run_replay(const AttentionReplayParams& params);
@@ -121,6 +124,7 @@ class AttentionRunner final {
   // FlashInfer PREFILL/CHUNKED_PREFILL runners consume plan_info on replay;
   // FA3 and GDN runners use live CU metadata instead.
   bool requires_plan_info() const;
+  bool is_gdn_prefill() const;
 
  private:
   void run_gdn_prefill_replay(const AttentionReplayParams& params);
@@ -146,6 +150,8 @@ class AttentionRunner final {
   torch::Tensor gdn_kkt_output_;
   torch::Tensor gdn_output_;
   torch::Tensor gdn_final_state_;
+  torch::Tensor gdn_ssm_cache_;
+  torch::Tensor gdn_state_indices_;
 
   std::string uri_;
   int64_t window_size_left_ = 0;

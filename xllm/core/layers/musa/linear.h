@@ -37,8 +37,12 @@ class MatmulOutputBuffers final {
  public:
   std::optional<torch::Tensor> get(const torch::Tensor& input,
                                    const torch::Tensor& weight);
+  std::optional<torch::Tensor> get(int64_t rows,
+                                   int64_t columns,
+                                   const torch::TensorOptions& options);
 
  private:
+  std::vector<torch::Tensor> retired_output_bufs_;
   torch::Tensor decode_output_buf_;
 };
 

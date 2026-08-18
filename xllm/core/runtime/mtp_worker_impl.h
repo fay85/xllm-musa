@@ -23,6 +23,9 @@ limitations under the License.
 #include "framework/kv_cache_transfer/spec_kv_cache_transfer.h"
 #endif
 #include "runtime/speculative_worker_impl.h"
+#if defined(USE_MUSA)
+#include "core/runtime/musa/mtp_graph_buffers.h"
+#endif
 
 namespace xllm {
 
@@ -169,9 +172,9 @@ class MTPWorkerImpl : public SpeculativeWorkerImpl {
   bool device_target_context_ready_for_batch(const ForwardInput& input) const;
   void flush_pending_target_context();
   bool supports_device_target_context_execution() const;
-  bool can_use_device_target_context() const;
+  bool can_use_device_target_context(const ForwardInput& input) const;
   bool supports_combined_first_draft_execution() const;
-  bool can_use_combined_first_draft() const;
+  bool can_use_combined_first_draft(const ForwardInput& input) const;
   void prepare_next_first_draft_template(const ForwardInput& input,
                                          ForwardInput& combined_input);
   void enqueue_next_first_draft(const ForwardInput& input,
@@ -207,6 +210,9 @@ class MTPWorkerImpl : public SpeculativeWorkerImpl {
   // Whether validation directly uses selected-only draft_probs [B, S].
   // If false, selected-only cache values are restored to dense [B, S, V].
   bool enable_opt_validate_probs_ = false;
+#if defined(USE_MUSA)
+  runtime::musa::MtpGraphBuffers mtp_graph_buffers_;
+#endif
 
 #if defined(USE_CUDA) || defined(USE_MUSA)
   // MUSA GDN MTP verify records per-layer intermediate states during target

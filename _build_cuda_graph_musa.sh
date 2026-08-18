@@ -31,11 +31,48 @@ export TorchMusa_DIR="${TORCH_MUSA_PYTHONPATH}/TorchMusa"
 unset TORCH_MUSA_ARCH_LIST || true
 export TORCH_CUDA_ARCH_LIST="9.0"
 
-export FLASHINFER_OPS_PATH=/workspace/mate_cached_ops
-export MATE_HOME="${MATE_HOME:-/workspace/mate_feihu}"
-# mate_feihu TVM-FFI deps (0526 uses mate_feihu build tree, NOT pip mate / mate_0.2.3)
-MATE_FFI_ROOT="${MATE_HOME}/build/flashinfer_ffi_hd256"
-export LD_LIBRARY_PATH="${MATE_FFI_ROOT}/mate_flashinfer_prefill_ffi:${MATE_FFI_ROOT}/mate_flashinfer_batch_attention_ffi:${MATE_FFI_ROOT}/mate_flashinfer_decode_ffi:${TVM_FFI_LIB_DIR}:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/opt/intel/oneapi/mkl/lib/intel64:/usr/lib:/usr/lib/x86_64-linux-gnu:/usr/local/openmpi/lib:${LD_LIBRARY_PATH:-}"
+resolve_mate_home() {
+  local candidate
+  if [[ -n "${MATE_HOME:-}" ]]; then
+    candidate="${MATE_HOME}"
+    [[ -f "${candidate}/version.txt" ]] && {
+      printf '%s\n' "${candidate}"
+      return
+    }
+    echo "MATE_HOME is not a Mate 0.2.5 source tree: ${candidate}" >&2
+    return 1
+  fi
+  for candidate in /workspace/mate_0.2.5 /data/feihu/mate_0.2.5; do
+    if [[ -f "${candidate}/version.txt" ]]; then
+      printf '%s\n' "${candidate}"
+      return
+    fi
+  done
+  echo "Mate 0.2.5 source tree not found; set MATE_HOME." >&2
+  return 1
+}
+
+MATE_HOME="$(resolve_mate_home)" || exit 1
+export MATE_HOME
+MATE_VERSION="$(tr -d '[:space:]' < "${MATE_HOME}/version.txt")"
+[[ "${MATE_VERSION}" == "0.2.5" ]] || {
+  echo "Expected Mate 0.2.5, found ${MATE_VERSION} at ${MATE_HOME}" >&2
+  exit 1
+}
+export MATE_MUSA_ARCH_LIST="${MATE_MUSA_ARCH_LIST:-3.1}"
+export PYTHONPATH="${MATE_HOME}${PYTHONPATH:+:${PYTHONPATH}}"
+if [[ -z "${MATE_WORKSPACE_BASE:-}" ]]; then
+  if [[ -d /data/feihu/mate025_cache ]]; then
+    MATE_WORKSPACE_BASE=/data/feihu/mate025_cache
+  else
+    MATE_WORKSPACE_BASE="${MATE_HOME}"
+  fi
+fi
+export MATE_WORKSPACE_BASE
+
+export MATE_MUBIN_DIR="${MATE_MUBIN_DIR:-${MATE_WORKSPACE_BASE}/mubin}"
+export FLASHINFER_OPS_PATH="${MATE_WORKSPACE_BASE}/.cache/mate/0.2.5/mp31/cached_ops"
+export LD_LIBRARY_PATH="${TVM_FFI_LIB_DIR}:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/opt/intel/oneapi/mkl/lib/intel64:/usr/lib:/usr/lib/x86_64-linux-gnu:/usr/local/openmpi/lib:${LD_LIBRARY_PATH:-}"
 
 CMAKE_MODULE_PATH_VALUE="${MUSAMAPPING_PATH}/cmake/Modules"
 if [[ -n "${XLLM_EXTRA_CMAKE_MODULE_PATH:-}" ]]; then

@@ -52,26 +52,32 @@ __global__ void llm_decode_metadata_update_kernel(
     }
     if (idx < params.actual_batch_size + 1) {
       params.dst_kv_seq_lens[idx] = params.src_kv_seq_lens[idx];
-      params.dst_paged_kv_indptr[idx] = params.src_paged_kv_indptr[idx];
+      if (params.src_paged_kv_indptr != nullptr) {
+        params.dst_paged_kv_indptr[idx] = params.src_paged_kv_indptr[idx];
+      }
     }
     if (idx >= params.actual_batch_size + 1 &&
         idx < params.padded_num_tokens + 1) {
       params.dst_kv_seq_lens[idx] =
           params.src_kv_seq_lens[params.actual_batch_size];
-      params.dst_paged_kv_indptr[idx] =
-          params.src_paged_kv_indptr[params.actual_batch_size];
+      if (params.src_paged_kv_indptr != nullptr) {
+        params.dst_paged_kv_indptr[idx] =
+            params.src_paged_kv_indptr[params.actual_batch_size];
+      }
     }
     if (idx < params.actual_batch_size) {
       params.dst_kv_seq_lens_delta[idx] =
           params.src_kv_seq_lens[idx + 1] - params.src_kv_seq_lens[idx];
-      params.dst_paged_kv_last_page_len[idx] =
-          params.src_paged_kv_last_page_len[idx];
+      if (params.src_paged_kv_last_page_len != nullptr) {
+        params.dst_paged_kv_last_page_len[idx] =
+            params.src_paged_kv_last_page_len[idx];
+      }
     }
     if (idx >= params.actual_batch_size && idx < params.padded_num_tokens) {
       params.dst_kv_seq_lens_delta[idx] = 0;
       params.dst_paged_kv_last_page_len[idx] = 1;
     }
-    if (idx < dyn_indices_size) {
+    if (idx < dyn_indices_size && params.src_paged_kv_indices != nullptr) {
       params.dst_paged_kv_indices[idx] = params.src_paged_kv_indices[idx];
     }
   }
@@ -104,6 +110,48 @@ __global__ void llm_decode_metadata_pad_from_host_kernel(
     if (idx >= params.actual_batch_size && idx < params.padded_num_tokens) {
       params.dst_kv_seq_lens_delta[idx] = 0;
       params.dst_paged_kv_last_page_len[idx] = 1;
+    }
+  }
+}
+
+__global__ void expanded_spec_decode_metadata_update_kernel(
+    ExpandedSpecDecodeMetadataUpdateParams params,
+    int64_t max_work_size) {
+  const int64_t thread_idx =
+      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  const int64_t step = static_cast<int64_t>(blockDim.x) * gridDim.x;
+  const int64_t block_table_size =
+      params.padded_num_tokens * params.dst_block_table_width;
+
+  for (int64_t idx = thread_idx; idx < max_work_size; idx += step) {
+    if (idx < params.padded_num_tokens) {
+      if (idx < params.actual_num_tokens) {
+        params.dst_kv_seq_lens[idx] = params.src_kv_seq_lens[idx];
+        params.dst_paged_kv_last_page_len[idx] =
+            params.src_paged_kv_last_page_len[idx];
+      } else {
+        params.dst_kv_seq_lens[idx] = 1;
+        params.dst_paged_kv_last_page_len[idx] = 1;
+      }
+    }
+    if (idx < params.padded_num_tokens + 1) {
+      const int64_t src_idx =
+          idx <= params.actual_num_tokens ? idx : params.actual_num_tokens;
+      params.dst_paged_kv_indptr[idx] = params.src_paged_kv_indptr[src_idx];
+    }
+    if (idx < params.actual_indices_size) {
+      params.dst_paged_kv_indices[idx] = params.src_paged_kv_indices[idx];
+    }
+    if (idx < block_table_size) {
+      const int64_t row = idx / params.dst_block_table_width;
+      const int64_t col = idx % params.dst_block_table_width;
+      if (row < params.actual_num_tokens &&
+          col < params.src_block_table_width) {
+        params.dst_block_tables[idx] =
+            params.src_block_tables[row * params.src_block_table_width + col];
+      } else {
+        params.dst_block_tables[idx] = 0;
+      }
     }
   }
 }
@@ -229,6 +277,32 @@ void update_llm_decode_metadata(const LlmDecodeMetadataUpdateParams& params,
   const musaError_t error = musaGetLastError();
   CHECK_EQ(error, musaSuccess)
       << "llm_decode_metadata_update kernel launch failed: "
+      << musaGetErrorString(error);
+}
+
+void update_expanded_spec_decode_metadata(
+    const ExpandedSpecDecodeMetadataUpdateParams& params,
+    LlmDecodeMetadataUpdateStream stream) {
+  int64_t max_work_size =
+      params.padded_num_tokens * params.dst_block_table_width;
+  max_work_size = std::max(max_work_size, params.padded_num_tokens + 1);
+  max_work_size = std::max(max_work_size, params.actual_indices_size);
+  if (max_work_size <= 0) {
+    return;
+  }
+
+  const int64_t num_blocks = std::min<int64_t>(
+      (max_work_size + kThreadsPerBlock - 1) / kThreadsPerBlock,
+      kMaxBlocksPerLaunch);
+  expanded_spec_decode_metadata_update_kernel<<<static_cast<uint32_t>(
+                                                    num_blocks),
+                                                kThreadsPerBlock,
+                                                /*shared_mem_bytes=*/0,
+                                                stream>>>(params,
+                                                          max_work_size);
+  const musaError_t error = musaGetLastError();
+  CHECK_EQ(error, musaSuccess)
+      << "expanded spec decode metadata update kernel launch failed: "
       << musaGetErrorString(error);
 }
 
