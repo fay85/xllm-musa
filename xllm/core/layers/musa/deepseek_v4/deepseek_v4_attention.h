@@ -84,6 +84,7 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
       const torch::Tensor& block_table,
       int64_t sequence_index,
       int64_t kv_len,
+      const torch::Tensor& kv_seq_lens,
       const torch::Tensor& compressed_kv,
       const torch::Tensor& compressed_cache,
       const torch::Tensor& compressed_block_table,
@@ -96,7 +97,10 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
       const torch::Tensor& extra_packed_cache,
       const torch::Tensor& swa_block_table,
       int64_t sequence_index,
-      int64_t kv_len) const;
+      int64_t kv_len,
+      const torch::Tensor& output = torch::Tensor(),
+      const torch::Tensor& physical_indices = torch::Tensor(),
+      const torch::Tensor& extra_physical_indices = torch::Tensor()) const;
   torch::Tensor dense_attention(const torch::Tensor& q,
                                 const torch::Tensor& kv,
                                 const torch::Tensor& compressed_kv,
@@ -107,7 +111,9 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   torch::Tensor compress_prefill_sequence(const torch::Tensor& hidden_states,
                                           const torch::Tensor& cos,
                                           const torch::Tensor& sin,
-                                          size_t sequence_index);
+                                          size_t sequence_index,
+                                          int64_t prefix_snapshot_tokens = 0,
+                                          int64_t cached_prefix_tokens = 0);
   torch::Tensor compress_decode_step(const torch::Tensor& hidden_step,
                                      int64_t start_pos,
                                      const torch::Tensor& cos,
@@ -117,23 +123,33 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
       const torch::Tensor& hidden_states,
       const torch::Tensor& cos,
       const torch::Tensor& sin,
-      size_t sequence_index);
+      size_t sequence_index,
+      int64_t prefix_snapshot_tokens = 0,
+      int64_t cached_prefix_tokens = 0);
   torch::Tensor compress_indexer_decode_step(const torch::Tensor& hidden_step,
                                              int64_t start_pos,
                                              const torch::Tensor& cos,
                                              const torch::Tensor& sin,
                                              size_t sequence_index);
-  torch::Tensor build_indexer_topk(const torch::Tensor& qr,
-                                   const torch::Tensor& hidden_states,
-                                   const torch::Tensor& cos,
-                                   const torch::Tensor& sin,
-                                   const torch::Tensor& index_kv,
-                                   const torch::Tensor& index_cache,
-                                   const torch::Tensor& index_scale_cache,
-                                   const torch::Tensor& index_block_table,
-                                   int64_t sequence_index,
-                                   int64_t index_len,
-                                   int64_t q_abs_start);
+  torch::Tensor build_indexer_topk(
+      const torch::Tensor& qr,
+      const torch::Tensor& hidden_states,
+      const torch::Tensor& cos,
+      const torch::Tensor& sin,
+      const torch::Tensor& index_kv,
+      const torch::Tensor& index_cache,
+      const torch::Tensor& index_scale_cache,
+      const torch::Tensor& index_block_table,
+      int64_t sequence_index,
+      int64_t index_len,
+      int64_t q_abs_start,
+      const torch::Tensor& output = torch::Tensor(),
+      const torch::Tensor& mate_compressed_block_table = torch::Tensor(),
+      const torch::Tensor& mate_swa_block_table = torch::Tensor(),
+      int64_t mate_kv_len = 0,
+      int64_t mate_block_size = 0,
+      torch::Tensor* mate_physical_indices = nullptr,
+      torch::Tensor* mate_extra_physical_indices = nullptr);
 
   int64_t num_heads_ = 0;
   int64_t hidden_dim_ = 0;
@@ -150,6 +166,7 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   int64_t n_local_groups_ = 0;
   int64_t tp_rank_ = 0;
   int64_t tp_size_ = 1;
+  int64_t decode_workspace_tokens_ = 1;
   int64_t index_n_heads_ = 0;
   int64_t index_head_dim_ = 0;
   int64_t index_topk_ = 0;
@@ -175,6 +192,53 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   RMSNorm indexer_compressor_norm_{nullptr};
 
   torch::Tensor q_rms_gamma_;
+  // wo_a is consumed outside the generic Linear forward. Materialize its FP8
+  // checkpoint weight once during loading instead of dequantizing every step.
+  torch::Tensor o_a_projection_weight_;
+  torch::Tensor decode_o_b_reduce_output_;
+  // Decode packs wq_a and wkv into one materialized BF16 projection.  The
+  // q branch then runs on a private stream while the main stream finishes KV
+  // normalization/cache writes.  Prefill keeps the original row shapes.
+  torch::Tensor decode_q_a_norm_output_;
+  torch::Tensor qkv_a_weight_;
+  torch::Tensor decode_qkv_a_output_;
+  torch::Tensor decode_q_down_;
+  torch::Tensor decode_kv_down_;
+  bool qkv_a_weight_loaded_ = false;
+  // Graph-owned decode outputs prevent consecutive q2 token launches from
+  // aliasing a backend workspace during capture/replay.
+  torch::Tensor decode_paged_attention_output_;
+  torch::Tensor decode_spec_attention_output_;
+  torch::Tensor decode_inverse_rope_output_;
+  torch::Tensor decode_wo_a_output_;
+  // Replay-time valid KV lengths are derived from persistent input positions.
+  torch::Tensor decode_kv_seq_lens_;
+  torch::Tensor decode_spec_indices_output_;
+  torch::Tensor decode_spec_mate_physical_indices_;
+  torch::Tensor decode_spec_mate_extra_physical_indices_;
+  // Single-token graph replay owns all compressor/indexer state and output
+  // buffers. Multi-token/MTP paths keep their existing per-request tensors.
+  torch::Tensor decode_compressor_kv_slots_;
+  torch::Tensor decode_compressor_score_slots_;
+  torch::Tensor decode_indexer_kv_slots_;
+  torch::Tensor decode_indexer_score_slots_;
+  torch::Tensor decode_compressor_kv_state_;
+  torch::Tensor decode_compressor_score_state_;
+  torch::Tensor decode_indexer_kv_state_;
+  torch::Tensor decode_indexer_score_state_;
+  torch::Tensor decode_compressor_kv_projection_;
+  torch::Tensor decode_compressor_score_projection_;
+  torch::Tensor decode_compressor_output_;
+  torch::Tensor decode_compressor_norm_output_;
+  torch::Tensor decode_compressor_rope_output_;
+  torch::Tensor decode_indexer_kv_projection_;
+  torch::Tensor decode_indexer_score_projection_;
+  torch::Tensor decode_indexer_output_;
+  torch::Tensor decode_indexer_norm_output_;
+  torch::Tensor decode_indexer_rope_output_;
+  torch::Tensor decode_indexer_head_weight_projection_;
+  torch::Tensor decode_indexer_head_weights_;
+  torch::Tensor decode_indexer_topk_output_;
   torch::Tensor attn_sink_;
   torch::Tensor compressor_ape_;
   torch::Tensor indexer_compressor_ape_;
@@ -182,9 +246,17 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   std::vector<torch::Tensor> compressor_kv_history_;
   std::vector<torch::Tensor> compressor_kv_state_;
   std::vector<torch::Tensor> compressor_score_state_;
+  // Prefix snapshots are captured in the private state cache by the MUSA
+  // metadata path. They are intentionally separate from the live suffix
+  // state, because the same layer may persist a newly advanced state while a
+  // later request still needs the immutable prefix boundary.
+  std::vector<torch::Tensor> prefix_compressor_kv_state_;
+  std::vector<torch::Tensor> prefix_compressor_score_state_;
   std::vector<torch::Tensor> indexer_kv_history_;
   std::vector<torch::Tensor> indexer_kv_state_;
   std::vector<torch::Tensor> indexer_score_state_;
+  std::vector<torch::Tensor> prefix_indexer_kv_state_;
+  std::vector<torch::Tensor> prefix_indexer_score_state_;
   bool attn_sink_loaded_ = false;
   bool compressor_ape_loaded_ = false;
   bool indexer_compressor_ape_loaded_ = false;

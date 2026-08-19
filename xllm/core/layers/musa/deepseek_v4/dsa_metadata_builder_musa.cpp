@@ -219,6 +219,21 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
   build_seq_lengths(
       params, metadata_device, batch_size, ctx_lens_vec, q_lens_vec, dsa);
   dsa.is_acl_graph = is_acl_graph;
+  // The eager MTP target carrier expands one logical request into q2 decode
+  // rows while retaining the original single request id.  Mark that private
+  // DSV4 shape as compact speculative verification too; otherwise attention
+  // interprets the two rows as two independent sequences.  Graph metadata
+  // already carries is_spec_verify/q_max_seq_len explicitly.
+  const bool eager_mtp_q2 =
+      !params.is_spec_verify && params.meta.num_sequences == 2 &&
+      params.embedding.embedding_ids.size() == 1 && q_lens_vec.size() == 2 &&
+      q_lens_vec[0] == 1 && q_lens_vec[1] == 1;
+  if ((params.is_spec_verify || eager_mtp_q2) &&
+      params.meta.q_max_seq_len > 1) {
+    dsa.num_speculative_tokens = params.meta.q_max_seq_len - 1;
+  } else if (eager_mtp_q2) {
+    dsa.num_speculative_tokens = 1;
+  }
 
   // Keep base RoPE tables in metadata. Per-forward cos/sin slices are
   // calculated in DeepseekV4ModelImpl::forward to align with MindIE timing.

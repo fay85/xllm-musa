@@ -84,6 +84,9 @@ limitations under the License.
 #include "framework/xtensor/xtensor_allocator.h"
 #include "models/model_registry.h"
 #include "runtime/forward_params.h"
+#if defined(USE_MUSA)
+#include "runtime/musa/musa_model_args.h"
+#endif
 #if defined(USE_NPU)
 #include "layers/npu/loader/rolling_weight_buffer.h"
 #endif
@@ -1616,7 +1619,11 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
     args.layers_to_capture({2, num_layers / 2, num_layers - 3});
   }
 #else
-  if (options_.enable_speculative_decode()) {
+  if (options_.enable_speculative_decode()
+#if defined(USE_MUSA)
+      || options_.is_draft_engine()
+#endif
+  ) {
     args.num_speculative_tokens(options_.num_speculative_tokens());
     // When running speculative decoding, the draft worker reuses the same
     // checkpoint as the target model. The draft worker needs to instantiate
@@ -1639,6 +1646,11 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
         LOG(INFO) << "Overriding draft model_type from " << current_type
                   << " to " << it->second << " for speculative decoding";
         args.model_type(it->second);
+#if defined(USE_MUSA)
+        if (it->second == "deepseek_v4_mtp") {
+          musa::configure_deepseek_v4_mtp_model_args(args);
+        }
+#endif
       }
     }
   }

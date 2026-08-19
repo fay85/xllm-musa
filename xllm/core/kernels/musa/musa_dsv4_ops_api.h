@@ -23,6 +23,25 @@ limitations under the License.
 
 namespace xllm::kernel::musa {
 
+bool deepseek_v4_partial_rope(const torch::Tensor& input,
+                              const torch::Tensor& cos,
+                              const torch::Tensor& sin,
+                              int64_t rope_start_dim,
+                              int64_t rope_head_dim,
+                              bool inverse,
+                              torch::Tensor& output);
+
+bool deepseek_v4_q_rmsnorm_rope_inplace(torch::Tensor& query,
+                                        const torch::Tensor& cos,
+                                        const torch::Tensor& sin,
+                                        double eps);
+
+bool deepseek_v4_weighted_rmsnorm_rope_inplace(torch::Tensor& input,
+                                               const torch::Tensor& weight,
+                                               const torch::Tensor& cos,
+                                               const torch::Tensor& sin,
+                                               double eps);
+
 torch::Tensor deepseek_v4_dense_attention_decode(
     const torch::Tensor& q,
     const torch::Tensor& kv,
@@ -209,6 +228,11 @@ torch::Tensor deepseek_v4_compress_decode(
     bool compute_boundary_output = true,
     const std::optional<torch::Tensor>& output = std::nullopt);
 
+torch::Tensor deepseek_v4_scale_to_fp32(
+    const torch::Tensor& input,
+    double scale,
+    const std::optional<torch::Tensor>& output = std::nullopt);
+
 torch::Tensor deepseek_v4_hc_pre_combine(
     const torch::Tensor& x_hc,
     const torch::Tensor& pre,
@@ -228,5 +252,21 @@ deepseek_v4_hc_pre_metadata(const torch::Tensor& mixes,
                             int64_t hc_mult,
                             int64_t sinkhorn_iters,
                             double eps);
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+deepseek_v4_hc_pre_decode(
+    const torch::Tensor& x,
+    const torch::Tensor& hc_fn,
+    const torch::Tensor& hc_scale,
+    const torch::Tensor& hc_base,
+    int64_t hc_mult,
+    int64_t sinkhorn_iters,
+    double norm_eps,
+    double hc_eps,
+    const std::optional<torch::Tensor>& output = std::nullopt,
+    const std::optional<torch::Tensor>& post = std::nullopt,
+    const std::optional<torch::Tensor>& comb = std::nullopt,
+    const std::optional<torch::Tensor>& norm_weight = std::nullopt,
+    bool* output_is_normalized = nullptr);
 
 }  // namespace xllm::kernel::musa

@@ -20,6 +20,8 @@ limitations under the License.
 #include <algorithm>
 #include <cctype>
 
+#include "core/kernels/musa/musa_ops_api.h"
+
 namespace xllm {
 namespace layer {
 namespace {
@@ -52,6 +54,8 @@ DeepseekV4GateImpl::DeepseekV4GateImpl(const ModelArgs& args,
   score_func_ = args.scoring_func().empty() ? std::string("softmax")
                                             : args.scoring_func();
   hash_layer_ = layer_id >= 0 && layer_id < n_hash_layers_;
+  decode_workspace_tokens_ =
+      std::max<int64_t>(16, args.num_speculative_tokens() + 1);
 
   CHECK_GT(hidden_size_, 0)
       << "DeepseekV4Gate requires hidden_size > 0, got " << hidden_size_;
@@ -96,6 +100,38 @@ std::tuple<torch::Tensor, torch::Tensor> DeepseekV4GateImpl::forward(
   CHECK_EQ(hidden_states.size(-1), hidden_size_)
       << "DeepseekV4Gate::forward hidden_states last dim mismatch, expected "
       << hidden_size_ << " got " << hidden_states.size(-1);
+
+  const int64_t num_tokens = hidden_states.numel() / hidden_size_;
+  if (score_func_to_norm_type(score_func_) == 2 && weight_bf16_.defined() &&
+      num_tokens > 0 && num_tokens <= decode_workspace_tokens_) {
+    auto input_2d = hidden_states.reshape({num_tokens, hidden_size_});
+    auto logits_output = decode_logits_output_.narrow(
+        /*dim=*/0, /*start=*/0, /*length=*/num_tokens);
+    auto logits = kernel::musa::deepseek_v4_gate_gemv(
+        input_2d, weight_bf16_, logits_output);
+    auto topk_weights_output = decode_topk_weights_output_.narrow(
+        /*dim=*/0, /*start=*/0, /*length=*/num_tokens);
+    auto topk_ids_output = decode_topk_ids_output_.narrow(
+        /*dim=*/0, /*start=*/0, /*length=*/num_tokens);
+    if (hash_layer_ && input_ids.has_value() && input_ids.value().defined() &&
+        tid2eid_.defined() && input_ids.value().numel() == num_tokens) {
+      return kernel::musa::deepseek_v4_gate_hash_topk(logits,
+                                                      input_ids.value(),
+                                                      tid2eid_,
+                                                      topk_,
+                                                      route_scale_,
+                                                      topk_weights_output,
+                                                      topk_ids_output);
+    }
+    if (!hash_layer_ && bias_.defined()) {
+      return kernel::musa::deepseek_v4_gate_topk(logits,
+                                                 bias_,
+                                                 topk_,
+                                                 route_scale_,
+                                                 topk_weights_output,
+                                                 topk_ids_output);
+    }
+  }
 
   auto gate_input = hidden_states;
   if (gate_input.scalar_type() != torch::kFloat32) {
@@ -154,8 +190,19 @@ void DeepseekV4GateImpl::load_state_dict(const StateDict& state_dict) {
       << state_dict.prefix();
   {
     torch::NoGradGuard no_grad;
-    weight_.copy_(gate_weight.to(weight_.device()).to(weight_.dtype()));
+    auto device_weight = gate_weight.to(weight_.device()).contiguous();
+    weight_.copy_(device_weight.to(weight_.dtype()));
+    if (gate_weight.scalar_type() == torch::kBFloat16) {
+      weight_bf16_ = device_weight.to(torch::kBFloat16).contiguous();
+    }
   }
+  const auto decode_options = weight_.options().dtype(torch::kFloat32);
+  decode_logits_output_ = torch::empty(
+      {decode_workspace_tokens_, n_routed_experts_}, decode_options);
+  decode_topk_weights_output_ =
+      torch::empty({decode_workspace_tokens_, topk_}, decode_options);
+  decode_topk_ids_output_ = torch::empty({decode_workspace_tokens_, topk_},
+                                         decode_options.dtype(torch::kInt32));
 
   if (hash_layer_) {
     auto tid2eid = state_dict.get_tensor("tid2eid");

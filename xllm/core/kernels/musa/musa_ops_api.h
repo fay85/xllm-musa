@@ -270,6 +270,22 @@ torch::Tensor deepseek_v4_sp_pad_local(const torch::Tensor& input,
 void deepseek_v4_sp_pad_local_out(const torch::Tensor& input,
                                   torch::Tensor& output);
 
+// Graph-safe lookup of the last valid paged-cache block and its state slots.
+torch::Tensor deepseek_v4_state_slots(const torch::Tensor& block_table,
+                                      int64_t sequence_index,
+                                      int64_t state_rows,
+                                      int64_t block_size,
+                                      const torch::Tensor& output);
+
+// Graph-safe paged-state restore into caller-owned workspaces.
+torch::Tensor deepseek_v4_state_gather(const torch::Tensor& cache,
+                                       const torch::Tensor& block_table,
+                                       int64_t sequence_index,
+                                       int64_t state_rows,
+                                       int64_t block_size,
+                                       const torch::Tensor& slots,
+                                       const torch::Tensor& output);
+
 torch::Tensor deepseek_v4_hc_head(
     const torch::Tensor& residual,
     const torch::Tensor& weight,
@@ -293,6 +309,13 @@ torch::Tensor deepseek_v4_shared_expert_m1(
     double swiglu_limit,
     const std::optional<torch::Tensor>& intermediate = std::nullopt,
     const std::optional<torch::Tensor>& output = std::nullopt);
+
+// Graph-safe clamp-SwiGLU for the DeepSeek-V4 shared-expert decode path.
+// The result is written into caller-owned storage so graph replay never needs
+// to allocate an activation tensor.
+torch::Tensor deepseek_v4_shared_swiglu(const torch::Tensor& input,
+                                        double swiglu_limit,
+                                        const torch::Tensor& output);
 
 bool deepseek_v4_compress_c4_update_and_prepare(torch::Tensor& kv_state,
                                                 torch::Tensor& score_state,
@@ -341,6 +364,23 @@ torch::Tensor deepseek_v4_gate_gemv(
     const torch::Tensor& input,
     const torch::Tensor& weight,
     const std::optional<torch::Tensor>& output = std::nullopt);
+
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v4_gate_topk(
+    const torch::Tensor& router_logits,
+    const torch::Tensor& correction_bias,
+    int64_t topk,
+    double route_scale,
+    const torch::Tensor& topk_weights_output,
+    const torch::Tensor& topk_ids_output);
+
+std::tuple<torch::Tensor, torch::Tensor> deepseek_v4_gate_hash_topk(
+    const torch::Tensor& router_logits,
+    const torch::Tensor& input_ids,
+    const torch::Tensor& tid2eid,
+    int64_t topk,
+    double route_scale,
+    const torch::Tensor& topk_weights_output,
+    const torch::Tensor& topk_ids_output);
 
 torch::Tensor deepseek_v4_shared_expert_gate(const torch::Tensor& hidden_states,
                                              const torch::Tensor& gate_weight,

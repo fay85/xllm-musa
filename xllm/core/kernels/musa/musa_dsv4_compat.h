@@ -72,6 +72,13 @@ struct DeepseekV4IndexerTopkParams {
   int64_t query_absolute_start = 0;
   int64_t compress_ratio = 4;
   std::optional<torch::Tensor> output = std::nullopt;
+  torch::Tensor mate_compressed_block_table;
+  torch::Tensor mate_swa_block_table;
+  int64_t mate_kv_len = 0;
+  int64_t mate_window_size = 0;
+  int64_t mate_block_size = 0;
+  std::optional<torch::Tensor> mate_physical_indices = std::nullopt;
+  std::optional<torch::Tensor> mate_extra_physical_indices = std::nullopt;
 };
 
 struct DeepseekV4LogicalToPhysicalTopkParams {
@@ -119,6 +126,7 @@ struct DeepseekV4PagedAttentionDecodeParams {
   torch::Tensor block_table;
   int64_t sequence_index = 0;
   int64_t kv_len = 0;
+  torch::Tensor kv_seq_lens;
   int64_t window_size = 0;
   torch::Tensor compressed_kv;
   torch::Tensor compressed_cache;
@@ -214,7 +222,14 @@ inline torch::Tensor deepseek_v4_indexer_topk(
                                         params.topk,
                                         params.query_absolute_start,
                                         params.compress_ratio,
-                                        params.output);
+                                        params.output,
+                                        params.mate_compressed_block_table,
+                                        params.mate_swa_block_table,
+                                        params.mate_kv_len,
+                                        params.mate_window_size,
+                                        params.mate_block_size,
+                                        params.mate_physical_indices,
+                                        params.mate_extra_physical_indices);
 }
 
 inline torch::Tensor deepseek_v4_logical_to_physical_topk(
@@ -264,16 +279,23 @@ inline torch::Tensor deepseek_v4_dense_attention_decode(
 
 inline torch::Tensor deepseek_v4_paged_attention_decode(
     DeepseekV4PagedAttentionDecodeParams& params) {
-  return musa::deepseek_v4_paged_attention_decode(params.q,
-                                                  params.cache,
-                                                  params.block_table,
-                                                  params.sequence_index,
-                                                  params.kv_len,
-                                                  params.window_size,
-                                                  params.compressed_kv,
-                                                  params.attn_sink,
-                                                  params.softmax_scale,
-                                                  params.output);
+  return musa::deepseek_v4_paged_attention_decode_with_paged_compressed_kv(
+      params.q,
+      params.cache,
+      params.block_table,
+      params.sequence_index,
+      params.kv_len,
+      params.kv_seq_lens,
+      params.window_size,
+      params.compressed_kv,
+      params.compressed_cache,
+      params.compressed_block_table,
+      params.compressed_sequence_index,
+      params.compressed_kv_len,
+      params.attn_sink,
+      params.softmax_scale,
+      std::nullopt,
+      params.output);
 }
 
 inline torch::Tensor deepseek_v4_mate_sparse_attention_decode(

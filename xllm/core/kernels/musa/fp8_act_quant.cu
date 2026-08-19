@@ -15,6 +15,7 @@ limitations under the License.
 
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
+#include <glog/logging.h>
 #include <musa_bf16.h>
 #include <musa_fp8.h>
 

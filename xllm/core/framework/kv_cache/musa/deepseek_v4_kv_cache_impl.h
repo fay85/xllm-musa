@@ -26,6 +26,12 @@ namespace xllm {
 
 inline constexpr int64_t kMusaDsv4Model1BytesPerToken = 584;
 inline constexpr int64_t kMusaDsv4Model1PageAlignment = 576;
+inline constexpr int64_t kMusaDsv4FlashMlaRopeHeadDim = 64;
+
+// FlashMLA consumes the 512-value latent row plus a second 64-value RoPE
+// view.  The MUSA scatter kernel materializes that view directly from the
+// model row, so this is a cache-layout contract rather than a model dimension.
+int64_t musa_dsv4_flashmla_cache_head_dim(int64_t model_head_dim);
 
 int64_t musa_dsv4_model1_page_stride(int64_t block_size);
 

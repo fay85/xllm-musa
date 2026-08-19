@@ -258,6 +258,11 @@ Dsv4KVCacheEstimateCost estimate_dsv4_kv_cache_cost(
       std::max(options.max_tokens_per_batch, static_cast<int64_t>(1)),
       block_size);
   const int64_t head_dim = model_args.head_dim();
+#if defined(USE_MUSA)
+  const int64_t cache_head_dim = musa_dsv4_flashmla_cache_head_dim(head_dim);
+#else
+  const int64_t cache_head_dim = head_dim;
+#endif
   const int64_t index_head_dim =
       std::max<int64_t>(model_args.index_head_dim(), 1);
   const std::vector<int32_t>& compress_ratios = model_args.compress_ratios();
@@ -288,16 +293,16 @@ Dsv4KVCacheEstimateCost estimate_dsv4_kv_cache_cost(
       model_args.n_layers() - cache_cost.n_c4_layers - cache_cost.n_c128_layers;
 
   const int64_t swa_bytes_per_c1_layer =
-      cache_cost.swa_count * block_size * head_dim * dtype_size;
+      cache_cost.swa_count * block_size * cache_head_dim * dtype_size;
   const int64_t swa_bytes_per_c4_layer =
       cache_cost.swa_count *
-      (block_size * head_dim * dtype_size +
+      (block_size * cache_head_dim * dtype_size +
        block_size * (2 * head_dim * float32_size) * 2 +
        block_size * (2 * index_head_dim * float32_size) * 2 +
        musa_model1_bytes_per_block);
   const int64_t swa_bytes_per_c128_layer =
       cache_cost.swa_count *
-      (block_size * head_dim * dtype_size +
+      (block_size * cache_head_dim * dtype_size +
        block_size * head_dim * float32_size * 2 + musa_model1_bytes_per_block);
 
   cache_cost.constant_swa_bytes =
@@ -311,11 +316,11 @@ Dsv4KVCacheEstimateCost estimate_dsv4_kv_cache_cost(
       cache_policy.has_indexer_cache_scale ? cache_policy.scale_dtype_size : 0;
   const int64_t bytes_per_c4_block =
       block_size *
-          (head_dim * dtype_size +
+          (cache_head_dim * dtype_size +
            index_head_dim * cache_policy.index_dtype_size + scale_bytes) +
       musa_model1_bytes_per_block;
   const int64_t bytes_per_c128_block =
-      block_size * head_dim * dtype_size + musa_model1_bytes_per_block;
+      block_size * cache_head_dim * dtype_size + musa_model1_bytes_per_block;
 
   if (cache_cost.n_c4_layers > 0 && cache_cost.n_c128_layers > 0) {
     cache_cost.token_unit_bytes =

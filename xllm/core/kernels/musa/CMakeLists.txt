@@ -54,6 +54,7 @@ set(_TORCH_MUSA_KERNEL_SRCS
   musa_tvmffi_stream.cpp
   llm_decode_metadata_update.cu
   deepseek_v4_sp_pad.cu
+  deepseek_v4_hc_pre.cu
   deepseek_v4_hc_head.cu
   deepseek_v4_wo_a_m1.cu
   deepseek_v4_compress_c4_prepare.cu
@@ -67,6 +68,7 @@ set(_TORCH_MUSA_KERNEL_SRCS
   deepseek_v4_fp8_moe_gemv.cu
   deepseek_v4_dsa_rope.cu
   deepseek_v4_gate_gemv.cu
+  deepseek_v4_gate_topk.cu
   deepseek_v4_shared_expert_gate.cu
   deepseek_v4_fp8_roundtrip.cu
   deepseek_v4_dsa_cache_ops.cu

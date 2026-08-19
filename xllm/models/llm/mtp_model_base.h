@@ -21,11 +21,15 @@ limitations under the License.
 #include <optional>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
 
 #include "core/framework/model/mtp_topk_state.h"
 #include "core/framework/model/mtp_utils.h"
 #include "core/framework/state_dict/utils.h"
+#if defined(USE_MUSA)
+#include "core/kernels/musa/musa_ops_api.h"
+#endif
 #include "core/util/utils.h"
 #include "llm_model_base.h"
 
@@ -58,19 +62,26 @@ class MtpDecoderLayerImplBase : public torch::nn::Module {
     enorm_ = register_module("enorm", layer::RMSNorm(context));
     hnorm_ = register_module("hnorm", layer::RMSNorm(context));
     if (projection_type_ == MtpProjectionType::ADD_EH_PROJ) {
+#if defined(USE_MUSA)
+      const QuantArgs projection_quant_args =
+          is_deepseek_v4_mtp_model(model_args_) ? context.get_quant_args()
+                                                : QuantArgs();
+#else
+      const QuantArgs projection_quant_args;
+#endif
       e_proj_ =
           register_module("e_proj",
                           layer::ReplicatedLinear(model_args_.hidden_size(),
                                                   model_args_.hidden_size(),
                                                   /*bias=*/false,
-                                                  /*QuantArgs=*/QuantArgs(),
+                                                  projection_quant_args,
                                                   options));
       h_proj_ =
           register_module("h_proj",
                           layer::ReplicatedLinear(model_args_.hidden_size(),
                                                   model_args_.hidden_size(),
                                                   /*bias=*/false,
-                                                  /*QuantArgs=*/QuantArgs(),
+                                                  projection_quant_args,
                                                   options));
     } else {
       // no quantization for eh_proj
@@ -166,8 +177,46 @@ class MtpDecoderLayerImplBase : public torch::nn::Module {
       const std::optional<torch::Tensor>& input_ids,
       DecoderForward&& decoder_forward,
       torch::Tensor* aux_hidden_states = nullptr) {
+    GraphWorkspace* graph_workspace = nullptr;
+#if defined(USE_MUSA)
+    if (is_deepseek_v4_mtp_model(model_args_) && input_params.enable_graph) {
+      const int64_t num_tokens = embed.size(0);
+      CHECK_GT(num_tokens, 0)
+          << "DeepSeek-V4 MTP graph requires a positive token bucket";
+      GraphWorkspace& workspace = graph_workspaces_[num_tokens];
+      if (!workspace.enorm_output.defined()) {
+        // Graph capture performs an uncaptured warmup first. Keep every
+        // normalization, projection, and HC-head output alive after warmup so
+        // capture and replay do not enter an allocator path.
+        const int64_t hidden_size = model_args_.hidden_size();
+        const int64_t hc_mult = model_args_.hc_mult();
+        workspace.enorm_output =
+            torch::empty({num_tokens, hidden_size}, embed.options());
+        workspace.target_lanes_input =
+            torch::empty({num_tokens, hc_mult * hidden_size}, embed.options());
+        workspace.hnorm_output =
+            torch::empty({num_tokens * hc_mult, hidden_size}, embed.options());
+        workspace.e_proj_output =
+            torch::empty({num_tokens, hidden_size}, embed.options());
+        workspace.h_proj_output =
+            torch::empty({num_tokens * hc_mult, hidden_size}, embed.options());
+        workspace.hc_head_output =
+            torch::empty({num_tokens, hidden_size}, embed.options());
+        workspace.hc_head_partial =
+            torch::empty({num_tokens, kHcHeadSplitK, kHcHeadPartialWidth},
+                         embed.options().dtype(torch::kFloat32));
+      }
+      graph_workspace = &workspace;
+    }
+#endif
+
     // Layer norm on token inputs
-    auto enorm_out = std::get<0>(enorm_(embed));
+    torch::Tensor enorm_out = std::get<0>(enorm_->forward(
+        embed,
+        std::nullopt,
+        graph_workspace == nullptr
+            ? std::nullopt
+            : std::optional<torch::Tensor>(graph_workspace->enorm_output)));
 
     torch::Tensor embedding_data = input_params.embedding.input_embedding;
     // for dummy data parallel run, we set a empty embedding
@@ -192,13 +241,37 @@ class MtpDecoderLayerImplBase : public torch::nn::Module {
       if (input_hidden == aux_hidden) {
         // Target feeds the draft the pre-hc_head 3D hidden flattened to
         // [N, hc_mult*hidden].
-        torch::Tensor prev = previous_hidden_states.reshape({-1, hidden});
-        prev = std::get<0>(hnorm_(prev));          // [N*hc_mult, hidden]
-        torch::Tensor e_out = e_proj_(enorm_out);  // [N, hidden]
-        torch::Tensor h_out = h_proj_(prev);       // [N*hc_mult, hidden]
-        hidden_states =
-            e_out.unsqueeze(1) + h_out.reshape({-1, hc_mult, hidden});
+        torch::Tensor target_lanes;
+        if (graph_workspace != nullptr) {
+          // The target lanes are sliced from a graph-packed tensor and have a
+          // wider row stride than their logical width. Copy them into stable
+          // contiguous storage before viewing as independent HC lanes.
+          graph_workspace->target_lanes_input.copy_(previous_hidden_states);
+          target_lanes = graph_workspace->target_lanes_input.view({-1, hidden});
+        } else {
+          target_lanes = previous_hidden_states.reshape({-1, hidden});
+        }
+        target_lanes = std::get<0>(hnorm_->forward(
+            target_lanes,
+            std::nullopt,
+            graph_workspace == nullptr
+                ? std::nullopt
+                : std::optional<torch::Tensor>(graph_workspace->hnorm_output)));
+        torch::Tensor h_out = h_proj_->forward(
+            target_lanes,
+            graph_workspace == nullptr
+                ? std::nullopt
+                : std::optional<torch::Tensor>(graph_workspace->h_proj_output));
+        h_out = h_out.view({-1, hc_mult, hidden});
+        torch::Tensor e_out = e_proj_->forward(
+            enorm_out,
+            graph_workspace == nullptr
+                ? std::nullopt
+                : std::optional<torch::Tensor>(graph_workspace->e_proj_output));
+        hidden_states = h_out.add_(e_out.unsqueeze(1));
       } else {
+        CHECK(graph_workspace == nullptr)
+            << "DeepSeek-V4 MTP graph requires flattened pre-HC target lanes";
         // Preserve compatibility with callers that provide the post-hc_head
         // 2D hidden [N, hidden].
         previous_hidden_states = std::get<0>(hnorm_(previous_hidden_states));
@@ -230,6 +303,37 @@ class MtpDecoderLayerImplBase : public torch::nn::Module {
       if (aux_hidden_states != nullptr) {
         *aux_hidden_states = hidden_states;
       }
+#if defined(USE_MUSA)
+      const bool can_use_fused_hc_head =
+          hidden_states.dim() == 3 && hidden_states.size(0) > 0 &&
+          hidden_states.size(0) <= 64 && hidden_states.size(1) == 4 &&
+          hidden_states.size(2) == 4096 && hidden_states.is_contiguous() &&
+          hc_head_fn_.scalar_type() == torch::kFloat32 &&
+          hc_head_fn_.is_contiguous() &&
+          hc_head_scale_.scalar_type() == torch::kFloat32 &&
+          hc_head_scale_.is_contiguous() &&
+          hc_head_base_.scalar_type() == torch::kFloat32 &&
+          hc_head_base_.is_contiguous();
+      if (graph_workspace != nullptr) {
+        CHECK(can_use_fused_hc_head)
+            << "DeepSeek-V4 MTP graph requires the fused MUSA HC head";
+      }
+      if (can_use_fused_hc_head) {
+        return kernel::musa::deepseek_v4_hc_head(
+            hidden_states,
+            hc_head_fn_,
+            hc_head_scale_,
+            hc_head_base_,
+            model_args_.rms_norm_eps(),
+            model_args_.hc_eps(),
+            graph_workspace == nullptr
+                ? std::nullopt
+                : std::optional<torch::Tensor>(graph_workspace->hc_head_output),
+            graph_workspace == nullptr ? std::nullopt
+                                       : std::optional<torch::Tensor>(
+                                             graph_workspace->hc_head_partial));
+      }
+#endif
       auto x_float = hidden_states.to(torch::kFloat32);
       auto x_flatten = x_float.flatten(-2, -1);
       auto rsqrt = torch::rsqrt(x_flatten.pow(2).mean(-1, true) +
@@ -264,6 +368,24 @@ class MtpDecoderLayerImplBase : public torch::nn::Module {
   }
 
   virtual void verify_loaded_weights() const {
+    enorm_->verify_loaded_weights("mtp.enorm.");
+    hnorm_->verify_loaded_weights("mtp.hnorm.");
+    if (projection_type_ == MtpProjectionType::ADD_EH_PROJ) {
+      CHECK(e_proj_->is_weight_loaded())
+          << "weight is not loaded for mtp.e_proj.weight";
+      CHECK(h_proj_->is_weight_loaded())
+          << "weight is not loaded for mtp.h_proj.weight";
+    } else {
+      CHECK(eh_proj_->is_weight_loaded())
+          << "weight is not loaded for mtp.eh_proj.weight";
+    }
+    if (is_deepseek_v4_mtp_model(model_args_)) {
+      CHECK(hc_head_fn_is_loaded_) << "weight is not loaded for mtp.hc_head_fn";
+      CHECK(hc_head_base_is_loaded_)
+          << "weight is not loaded for mtp.hc_head_base";
+      CHECK(hc_head_scale_is_loaded_)
+          << "weight is not loaded for mtp.hc_head_scale";
+    }
     // Not all decoder layer types provide verify_loaded_weights();
     // only call it when the method exists.
     if constexpr (requires { mtp_block_->verify_loaded_weights(); }) {
@@ -289,6 +411,19 @@ class MtpDecoderLayerImplBase : public torch::nn::Module {
   virtual void update_expert_weight(int32_t layer_id) { return; }
 
  private:
+  static constexpr int64_t kHcHeadSplitK = 32;
+  static constexpr int64_t kHcHeadPartialWidth = 5;
+
+  struct GraphWorkspace {
+    torch::Tensor enorm_output;
+    torch::Tensor target_lanes_input;
+    torch::Tensor hnorm_output;
+    torch::Tensor e_proj_output;
+    torch::Tensor h_proj_output;
+    torch::Tensor hc_head_output;
+    torch::Tensor hc_head_partial;
+  };
+
   layer::RMSNorm enorm_{nullptr};
   layer::RMSNorm hnorm_{nullptr};
   layer::ReplicatedLinear eh_proj_{nullptr};
@@ -302,6 +437,7 @@ class MtpDecoderLayerImplBase : public torch::nn::Module {
 
   MtpProjectionType projection_type_ = MtpProjectionType::CONCAT_EH_PROJ;
   ModelArgs model_args_;
+  std::unordered_map<int64_t, GraphWorkspace> graph_workspaces_;
 };
 
 template <typename DecoderLayerType>
@@ -421,9 +557,6 @@ class MtpModelImplBase : public torch::nn::Module {
     LayerForwardAdapter forward_adapter(
         input_params.mtp_topk_state, mtp_layers_.size(), device_);
     for (size_t i = 0; i < mtp_layers_.size(); i++) {
-      if (!modified_input_params.synchronize_layer(static_cast<uint32_t>(i))) {
-        return ModelOutput();
-      }
 #if defined(USE_CUDA) || defined(USE_MUSA)
       attn_metadata.plan_info->layer_id = i;
 #endif

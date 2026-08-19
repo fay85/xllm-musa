@@ -57,7 +57,9 @@ class DeepseekV4DecoderLayerImpl final : public torch::nn::Module {
       const torch::Tensor& x,
       const torch::Tensor& hc_fn,
       const torch::Tensor& hc_scale,
-      const torch::Tensor& hc_base);
+      const torch::Tensor& hc_base,
+      const torch::Tensor& norm_weight,
+      bool* output_is_normalized);
 
   torch::Tensor hc_post(const torch::Tensor& x,
                         const torch::Tensor& residual,
@@ -74,6 +76,11 @@ class DeepseekV4DecoderLayerImpl final : public torch::nn::Module {
   int64_t hc_sinkhorn_iters_ = 0;
   double hc_eps_ = 0.0;
   double norm_eps_ = 1e-6;
+  torch::Tensor hc_pre_output_workspace_;
+  torch::Tensor hc_pre_post_workspace_;
+  torch::Tensor hc_pre_comb_workspace_;
+  torch::Tensor hc_post_output_workspace_;
+  torch::Tensor rms_norm_output_workspace_;
 
   DEFINE_WEIGHT(hc_attn_fn);
   DEFINE_WEIGHT(hc_ffn_fn);

@@ -50,6 +50,7 @@ constexpr int32_t kIndexerRadixTopk = 512;
 constexpr int32_t kIndexerRadixThreads = 1024;
 constexpr int32_t kIndexerRadixBins = 256;
 constexpr int32_t kIndexerRadixSmemBytes = 32 * 1024;
+constexpr int32_t kIndexerMaxHeads = 128;
 constexpr int32_t kLogicalToPhysicalBlockSize = 256;
 constexpr int32_t kCompressPoolBlockSize = 256;
 constexpr int32_t kCompressPoolC128BlockSize = 256;
@@ -226,13 +227,14 @@ __global__ void __launch_bounds__(kCompressPoolC128BlockSize, 1)
 // thread owns one output dimension, which makes the state update, eight-way
 // softmax pooling, and four-row history rotation race-free without host-side
 // index_put/cat/softmax/mul/sum/copy launches.
+template <typename scalar_t>
 __global__ void __launch_bounds__(kCompressDecodeC4BlockSize, 1)
     dsv4_compress_decode_c4_kernel(float* __restrict__ kv_state,
                                    float* __restrict__ score_state,
-                                   const float* __restrict__ kv_step,
-                                   const float* __restrict__ score_step,
+                                   const scalar_t* __restrict__ kv_step,
+                                   const scalar_t* __restrict__ score_step,
                                    const float* __restrict__ ape,
-                                   float* __restrict__ output,
+                                   scalar_t* __restrict__ output,
                                    int64_t head_dim,
                                    int64_t ratio_position,
                                    bool at_boundary,
@@ -246,11 +248,14 @@ __global__ void __launch_bounds__(kCompressDecodeC4BlockSize, 1)
     const int64_t current_row = kRatio + ratio_position;
     const int64_t current_offset = current_row * width;
     const int64_t ape_offset = ratio_position * width;
-    kv_state[current_offset + dim] = kv_step[dim];
-    kv_state[current_offset + head_dim + dim] = kv_step[head_dim + dim];
-    score_state[current_offset + dim] = score_step[dim] + ape[ape_offset + dim];
+    kv_state[current_offset + dim] = musa_convert_to_float(kv_step[dim]);
+    kv_state[current_offset + head_dim + dim] =
+        musa_convert_to_float(kv_step[head_dim + dim]);
+    score_state[current_offset + dim] =
+        musa_convert_to_float(score_step[dim]) + ape[ape_offset + dim];
     score_state[current_offset + head_dim + dim] =
-        score_step[head_dim + dim] + ape[ape_offset + head_dim + dim];
+        musa_convert_to_float(score_step[head_dim + dim]) +
+        ape[ape_offset + head_dim + dim];
 
     // In state-only mode the caller still performs the exact Torch boundary
     // pool and ring rotation after this launch. Do not rotate the ring before
@@ -282,7 +287,7 @@ __global__ void __launch_bounds__(kCompressDecodeC4BlockSize, 1)
         denominator += weight;
         weighted_sum += weight * kv_state[offset];
       }
-      output[dim] = weighted_sum / denominator;
+      output[dim] = static_cast<scalar_t>(weighted_sum / denominator);
     }
 
     // Preserve the just-compressed four-token group as the history candidate
@@ -302,13 +307,14 @@ __global__ void __launch_bounds__(kCompressDecodeC4BlockSize, 1)
 // C128 is rare (one pool per 128 decode tokens) but the state write happens on
 // every token. Match SGLang's low-launch serial-per-dimension kernel here; the
 // more expensive 128-row loop only runs at a compression boundary.
+template <typename scalar_t>
 __global__ void __launch_bounds__(kCompressDecodeC128BlockSize, 1)
     dsv4_compress_decode_c128_kernel(float* __restrict__ kv_state,
                                      float* __restrict__ score_state,
-                                     const float* __restrict__ kv_step,
-                                     const float* __restrict__ score_step,
+                                     const scalar_t* __restrict__ kv_step,
+                                     const scalar_t* __restrict__ score_step,
                                      const float* __restrict__ ape,
-                                     float* __restrict__ output,
+                                     scalar_t* __restrict__ output,
                                      int64_t head_dim,
                                      int64_t ratio_position,
                                      bool at_boundary,
@@ -317,9 +323,9 @@ __global__ void __launch_bounds__(kCompressDecodeC128BlockSize, 1)
   for (int64_t dim = blockIdx.x * blockDim.x + threadIdx.x; dim < head_dim;
        dim += gridDim.x * blockDim.x) {
     const int64_t current_offset = ratio_position * head_dim + dim;
-    kv_state[current_offset] = kv_step[dim];
-    score_state[current_offset] =
-        score_step[dim] + ape[ratio_position * head_dim + dim];
+    kv_state[current_offset] = musa_convert_to_float(kv_step[dim]);
+    score_state[current_offset] = musa_convert_to_float(score_step[dim]) +
+                                  ape[ratio_position * head_dim + dim];
     if (!at_boundary || !emit_output) {
       continue;
     }
@@ -337,7 +343,7 @@ __global__ void __launch_bounds__(kCompressDecodeC128BlockSize, 1)
       denominator += weight;
       weighted_sum += weight * kv_state[offset];
     }
-    output[dim] = weighted_sum / denominator;
+    output[dim] = static_cast<scalar_t>(weighted_sum / denominator);
   }
 }
 
@@ -1175,12 +1181,13 @@ __global__ void __launch_bounds__(kIndexerRadixThreads, 1)
         int64_t mate_compressed_max_blocks,
         int64_t mate_swa_max_blocks,
         int64_t mate_sequence_index) {
-  // Score one key with one warp per indexer head. The launch uses exactly the
-  // number of warps needed by the model (subject to the radix minimum), rather
-  // than a fixed 1024-thread block.
-  __shared__ float head_scores[32];
+  // A 1024-thread MUSA block has 32 warps, while TP8/EP1 MODEL1 exposes 64
+  // indexer heads. Let each warp visit multiple heads and keep the full head
+  // reduction in bounds.
+  __shared__ float head_scores[kIndexerMaxHeads];
   const int32_t warp = threadIdx.x / kMusaWarpSize;
   const int32_t lane = threadIdx.x % kMusaWarpSize;
+  const int32_t warps_per_block = blockDim.x / kMusaWarpSize;
 
   for (int64_t key_index = blockIdx.x; key_index < valid_count;
        key_index += gridDim.x) {
@@ -1202,9 +1209,9 @@ __global__ void __launch_bounds__(kIndexerRadixThreads, 1)
 
     const float key_scale = static_cast<float>(scale_cache[slot]);
     const int8_t* key = cache + slot * head_dim;
-    if (warp < num_heads) {
+    for (int64_t head = warp; head < num_heads; head += warps_per_block) {
       float dot = 0.0f;
-      const scalar_t* query_head = query + warp * head_dim;
+      const scalar_t* query_head = query + head * head_dim;
       for (int64_t dim = lane; dim < head_dim; dim += kMusaWarpSize) {
         const scalar_t key_value =
             static_cast<scalar_t>(static_cast<float>(key[dim]) * key_scale);
@@ -1215,12 +1222,15 @@ __global__ void __launch_bounds__(kIndexerRadixThreads, 1)
         dot += __shfl_xor_sync(0xffffffffU, dot, offset);
       }
       if (lane == 0) {
-        head_scores[warp] = fmaxf(dot, 0.0f) * weights[warp];
+        head_scores[head] = fmaxf(dot, 0.0f) * weights[head];
       }
     }
     __syncthreads();
     if (warp == 0) {
-      float weighted_score = lane < num_heads ? head_scores[lane] : 0.0f;
+      float weighted_score = 0.0f;
+      for (int64_t head = lane; head < num_heads; head += kMusaWarpSize) {
+        weighted_score += head_scores[head];
+      }
       for (int32_t offset = kMusaWarpSize / 2; offset > 0; offset >>= 1) {
         weighted_score += __shfl_xor_sync(0xffffffffU, weighted_score, offset);
       }
@@ -1299,6 +1309,9 @@ bool dispatch_dsv4_indexer_paged_score_fused_radix(
     int64_t mate_window_size,
     int64_t mate_block_size,
     int64_t mate_sequence_index) {
+  if (query.size(1) > kIndexerMaxHeads) {
+    return false;
+  }
   musaDeviceProp properties{};
   const musaError_t properties_status =
       musaGetDeviceProperties(&properties, query.device().index());
@@ -1307,11 +1320,8 @@ bool dispatch_dsv4_indexer_paged_score_fused_radix(
     return false;
   }
 
-  // The score phase uses one warp per indexer head. DeepSeek-V4 normally has
-  // 8 or 16 heads, so a fixed 1024-thread block leaves half or three quarters
-  // of the block idle while it computes one key. The radix device routine only
-  // needs at least one thread per 8-bit histogram bin; use the smallest valid
-  // multiple of a warp and retain 1024 for larger head counts.
+  // The score phase assigns at least one warp per head when possible. For more
+  // than 32 heads, the kernel loops each warp over additional heads.
   const int32_t launch_threads = static_cast<int32_t>(std::min<int64_t>(
       kIndexerRadixThreads,
       std::max<int64_t>(kIndexerRadixBins, query.size(1) * kMusaWarpSize)));
@@ -2947,8 +2957,10 @@ torch::Tensor deepseek_v4_compress_decode(
         ape.is_contiguous());
   CHECK_EQ(kv_state.scalar_type(), torch::kFloat32);
   CHECK_EQ(score_state.scalar_type(), torch::kFloat32);
-  CHECK_EQ(kv_step.scalar_type(), torch::kFloat32);
-  CHECK_EQ(score_step.scalar_type(), torch::kFloat32);
+  CHECK(kv_step.scalar_type() == torch::kFloat32 ||
+        kv_step.scalar_type() == torch::kFloat16 ||
+        kv_step.scalar_type() == torch::kBFloat16);
+  CHECK_EQ(score_step.scalar_type(), kv_step.scalar_type());
   CHECK_EQ(ape.scalar_type(), torch::kFloat32);
   CHECK_EQ(kv_state.device(), score_state.device());
   CHECK_EQ(kv_state.device(), kv_step.device());
@@ -2957,16 +2969,16 @@ torch::Tensor deepseek_v4_compress_decode(
 
   const bool at_boundary = (absolute_position + 1) % compress_ratio == 0;
   torch::Tensor result;
-  float* output_ptr = nullptr;
+  void* output_ptr = nullptr;
   if (at_boundary && compute_boundary_output) {
     result = output.has_value()
                  ? output.value()
                  : torch::empty({1, head_dim}, kv_state.options());
     CHECK_EQ(result.sizes(), torch::IntArrayRef({1, head_dim}));
-    CHECK_EQ(result.scalar_type(), torch::kFloat32);
+    CHECK_EQ(result.scalar_type(), kv_step.scalar_type());
     CHECK_EQ(result.device(), kv_state.device());
     CHECK(result.is_contiguous());
-    output_ptr = result.data_ptr<float>();
+    output_ptr = result.data_ptr();
   }
 
   const int64_t ratio_position = absolute_position % compress_ratio;
@@ -2974,31 +2986,33 @@ torch::Tensor deepseek_v4_compress_decode(
                                        : kCompressDecodeC128BlockSize);
   const dim3 grid((head_dim + block.x - 1) / block.x);
   const musaStream_t stream = current_dsv4_cache_stream();
-  if (compress_ratio == 4) {
-    dsv4_compress_decode_c4_kernel<<<grid, block, 0, stream>>>(
-        kv_state.data_ptr<float>(),
-        score_state.data_ptr<float>(),
-        kv_step.data_ptr<float>(),
-        score_step.data_ptr<float>(),
-        ape.data_ptr<float>(),
-        output_ptr,
-        head_dim,
-        ratio_position,
-        at_boundary,
-        compute_boundary_output);
-  } else {
-    dsv4_compress_decode_c128_kernel<<<grid, block, 0, stream>>>(
-        kv_state.data_ptr<float>(),
-        score_state.data_ptr<float>(),
-        kv_step.data_ptr<float>(),
-        score_step.data_ptr<float>(),
-        ape.data_ptr<float>(),
-        output_ptr,
-        head_dim,
-        ratio_position,
-        at_boundary,
-        compute_boundary_output);
-  }
+  DISPATCH_FLOATING_TYPES(kv_step.scalar_type(), "dsv4_compress_decode", [&] {
+    if (compress_ratio == 4) {
+      dsv4_compress_decode_c4_kernel<scalar_t>
+          <<<grid, block, 0, stream>>>(kv_state.data_ptr<float>(),
+                                       score_state.data_ptr<float>(),
+                                       kv_step.data_ptr<scalar_t>(),
+                                       score_step.data_ptr<scalar_t>(),
+                                       ape.data_ptr<float>(),
+                                       static_cast<scalar_t*>(output_ptr),
+                                       head_dim,
+                                       ratio_position,
+                                       at_boundary,
+                                       compute_boundary_output);
+    } else {
+      dsv4_compress_decode_c128_kernel<scalar_t>
+          <<<grid, block, 0, stream>>>(kv_state.data_ptr<float>(),
+                                       score_state.data_ptr<float>(),
+                                       kv_step.data_ptr<scalar_t>(),
+                                       score_step.data_ptr<scalar_t>(),
+                                       ape.data_ptr<float>(),
+                                       static_cast<scalar_t*>(output_ptr),
+                                       head_dim,
+                                       ratio_position,
+                                       at_boundary,
+                                       compute_boundary_output);
+    }
+  });
   check_musa_kernel_launch("dsv4 kernel");
   return result;
 }
@@ -3117,6 +3131,51 @@ torch::Tensor deepseek_v4_hc_post(const torch::Tensor& x,
   });
   check_musa_kernel_launch("dsv4 kernel");
   return out;
+}
+
+namespace {
+
+template <typename scalar_t>
+__global__ void dsv4_scale_to_fp32_kernel(const scalar_t* input,
+                                          float* output,
+                                          int64_t elements,
+                                          float scale) {
+  for (int64_t index = blockIdx.x * blockDim.x + threadIdx.x; index < elements;
+       index += gridDim.x * blockDim.x) {
+    output[index] = musa_convert_to_float(input[index]) * scale;
+  }
+}
+
+}  // namespace
+
+torch::Tensor deepseek_v4_scale_to_fp32(
+    const torch::Tensor& input,
+    double scale,
+    const std::optional<torch::Tensor>& output) {
+  CHECK(input.defined() && !input.device().is_cpu() && input.is_contiguous());
+  CHECK(input.scalar_type() == torch::kFloat32 ||
+        input.scalar_type() == torch::kBFloat16 ||
+        input.scalar_type() == torch::kFloat16);
+  torch::Tensor result =
+      output.has_value()
+          ? output.value()
+          : torch::empty(input.sizes(), input.options().dtype(torch::kFloat32));
+  CHECK(result.defined() && result.sizes() == input.sizes() &&
+        result.scalar_type() == torch::kFloat32 &&
+        result.device() == input.device() && result.is_contiguous());
+  constexpr int64_t kThreads = 256;
+  const int64_t blocks = std::max<int64_t>(
+      1, std::min<int64_t>((input.numel() + kThreads - 1) / kThreads, 1024));
+  const auto stream = current_dsv4_cache_stream();
+  DISPATCH_FLOATING_TYPES(input.scalar_type(), "dsv4_scale_to_fp32", [&] {
+    dsv4_scale_to_fp32_kernel<scalar_t>
+        <<<blocks, kThreads, 0, stream>>>(input.data_ptr<scalar_t>(),
+                                          result.data_ptr<float>(),
+                                          input.numel(),
+                                          static_cast<float>(scale));
+  });
+  check_musa_kernel_launch("dsv4 scale-to-fp32 kernel");
+  return result;
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>

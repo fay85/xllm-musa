@@ -195,6 +195,32 @@ __global__ void deepseek_v4_shared_down_m1_kernel(
   }
 }
 
+__global__ void deepseek_v4_shared_swiglu_kernel(
+    const at::BFloat16* __restrict__ input,
+    at::BFloat16* __restrict__ output,
+    int64_t intermediate_size,
+    int64_t total_elements,
+    float swiglu_limit) {
+  const int64_t output_index =
+      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (output_index >= total_elements) {
+    return;
+  }
+
+  const int64_t row = output_index / intermediate_size;
+  const int64_t column = output_index - row * intermediate_size;
+  const int64_t input_row_offset = row * 2 * intermediate_size;
+  float gate = static_cast<float>(input[input_row_offset + column]);
+  float up =
+      static_cast<float>(input[input_row_offset + intermediate_size + column]);
+  if (swiglu_limit > 0.0f) {
+    gate = fminf(gate, swiglu_limit);
+    up = fminf(fmaxf(up, -swiglu_limit), swiglu_limit);
+  }
+  output[output_index] =
+      static_cast<at::BFloat16>(gate / (1.0f + expf(-gate)) * up);
+}
+
 bool matches_wo_a_m1_contract(const torch::Tensor& input,
                               const torch::Tensor& weight,
                               const torch::Tensor& head_scales) {
@@ -328,6 +354,40 @@ torch::Tensor deepseek_v4_shared_expert_m1(
       << "DeepSeek-V4 shared expert M=1 kernels failed: "
       << musaGetErrorString(status);
   return result;
+}
+
+torch::Tensor deepseek_v4_shared_swiglu(const torch::Tensor& input,
+                                        double swiglu_limit,
+                                        const torch::Tensor& output) {
+  const bool contract =
+      input.defined() && output.defined() && !input.device().is_cpu() &&
+      input.device() == output.device() &&
+      input.scalar_type() == torch::kBFloat16 &&
+      output.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
+      input.size(0) > 0 && input.size(1) > 0 && input.size(1) % 2 == 0 &&
+      output.dim() == 2 && output.size(0) == input.size(0) &&
+      output.size(1) * 2 == input.size(1) && input.is_contiguous() &&
+      output.is_contiguous();
+  if (!contract) {
+    return torch::Tensor();
+  }
+
+  const int64_t total_elements = output.numel();
+  constexpr int64_t kThreads = 256;
+  const XLLMOptionalDeviceGuard device_guard(at::device_of(input));
+  deepseek_v4_shared_swiglu_kernel<<<(total_elements + kThreads - 1) / kThreads,
+                                     kThreads,
+                                     0,
+                                     current_musa_stream(input.device())>>>(
+      input.data_ptr<at::BFloat16>(),
+      output.data_ptr<at::BFloat16>(),
+      output.size(1),
+      total_elements,
+      static_cast<float>(swiglu_limit));
+  const musaError_t status = musaGetLastError();
+  CHECK(status == musaSuccess) << "DeepSeek-V4 shared SwiGLU kernel failed: "
+                               << musaGetErrorString(status);
+  return output;
 }
 
 }  // namespace xllm::kernel::musa

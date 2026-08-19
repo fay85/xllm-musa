@@ -232,9 +232,28 @@ class DeepseekV4MtpModelImpl final : public torch::nn::Module {
           {0}, torch::TensorOptions().dtype(torch::kInt32).device(device_));
     }
 
-    torch::Tensor hidden_states = embed_tokens_(tokens);
     torch::Tensor previous_hidden_states =
         input_params.embedding.input_embedding;
+    torch::Tensor hidden_states;
+    const int64_t hidden_size = model_args_.hidden_size();
+    const int64_t target_context_size = hidden_size * model_args_.hc_mult();
+    // MUSA Graph decode receives a stable packed row containing the target's
+    // pre-HC context followed by the current token embedding.  The embedding
+    // lookup itself is performed outside capture by the graph executor; split
+    // the packed carrier here so capture/replay never reads the placeholder
+    // token id through embed_tokens_.
+    if (acl_graph_forward && previous_hidden_states.defined() &&
+        previous_hidden_states.dim() == 2 &&
+        previous_hidden_states.size(1) == target_context_size + hidden_size) {
+      hidden_states = previous_hidden_states.slice(
+          /*dim=*/1,
+          /*start=*/target_context_size,
+          /*end=*/target_context_size + hidden_size);
+      previous_hidden_states = previous_hidden_states.slice(
+          /*dim=*/1, /*start=*/0, /*end=*/target_context_size);
+    } else {
+      hidden_states = embed_tokens_(tokens);
+    }
     if (!previous_hidden_states.defined() && is_empty_dp_rank) {
       previous_hidden_states = hidden_states;
     }
@@ -264,10 +283,12 @@ class DeepseekV4MtpModelImpl final : public torch::nn::Module {
       positions = maybe_to_device(positions, runtime_device);
     }
 
-    auto mask = (positions == 0);
-    if (mask.any().item<bool>()) {
-      hidden_states.index_put_({mask},
-                               torch::zeros_like(hidden_states.index({mask})));
+    if (!acl_graph_forward) {
+      auto mask = (positions == 0);
+      if (mask.any().item<bool>()) {
+        hidden_states.index_put_(
+            {mask}, torch::zeros_like(hidden_states.index({mask})));
+      }
     }
 
     if (acl_graph_forward) {

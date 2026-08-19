@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <torch_musa/csrc/distributed/ProcessGroupMCCL.h>
 
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "process_group.h"
 
 namespace xllm {
@@ -48,7 +49,21 @@ class ProcessGroupImpl : public ProcessGroup {
     auto store = create_tcp_store(host, port, rank);
     pg_ = std::make_unique<c10d::ProcessGroupMCCL>(
         store, rank, rank_size, pg_options);
+    custom_all_reduce_ = std::make_unique<MusaCustomAllReduce>(
+        rank, rank_size, group_name, device, store);
   }
+
+  std::optional<torch::Tensor> allreduce_custom(
+      torch::Tensor& input,
+      const std::optional<torch::Tensor>& output = std::nullopt) {
+    if (custom_all_reduce_) {
+      return custom_all_reduce_->allreduce(input, output);
+    }
+    return std::nullopt;
+  }
+
+ private:
+  std::unique_ptr<MusaCustomAllReduce> custom_all_reduce_;
 };
 
 }  // namespace xllm

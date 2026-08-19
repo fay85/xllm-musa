@@ -23,8 +23,10 @@ limitations under the License.
 #include <string>
 #include <vector>
 
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/framework/parallel_state/parallel_state.h"
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/layers/musa/musa_fp8_linear.h"
 
 namespace xllm {
 namespace layer {
@@ -176,10 +178,156 @@ torch::Tensor unpack_fp4_weight(const torch::Tensor& packed,
 
 }  // namespace
 
+DeepseekV4SharedExpertImpl::DeepseekV4SharedExpertImpl(
+    int64_t hidden_size,
+    int64_t intermediate_size,
+    const std::string& hidden_act,
+    const QuantArgs& quant_args,
+    ProcessGroup* process_group,
+    const torch::TensorOptions& options,
+    double swiglu_limit)
+    : hidden_size_(hidden_size),
+      intermediate_size_(intermediate_size),
+      swiglu_limit_(swiglu_limit),
+      process_group_(process_group) {
+  CHECK(process_group_ != nullptr)
+      << "DeepseekV4SharedExpert requires a valid TP group.";
+  CHECK_EQ(intermediate_size_ % process_group_->world_size(), 0)
+      << "DeepseekV4SharedExpert intermediate size must be divisible by the "
+         "TP world size.";
+  local_intermediate_size_ = intermediate_size_ / process_group_->world_size();
+
+  gate_up_proj_ = register_module("gate_up_proj",
+                                  ColumnParallelLinear(hidden_size_,
+                                                       intermediate_size_ * 2,
+                                                       /*bias=*/false,
+                                                       /*gather_output=*/false,
+                                                       quant_args,
+                                                       process_group_,
+                                                       options));
+  act_ = register_module(
+      "act", Activation(hidden_act, /*is_gated=*/true, swiglu_limit_));
+  down_proj_ =
+      register_module("down_proj",
+                      RowParallelLinear(intermediate_size_,
+                                        hidden_size_,
+                                        /*bias=*/false,
+                                        /*input_is_parallelized=*/true,
+                                        /*enable_result_reduction=*/false,
+                                        quant_args,
+                                        process_group_,
+                                        options));
+
+  decode_gate_up_workspace_ = torch::empty(
+      {kFp8GemvWorkspaceTokens, local_intermediate_size_ * 2}, options);
+  decode_activation_workspace_ = torch::empty(
+      {kFp8GemvWorkspaceTokens, local_intermediate_size_}, options);
+  decode_output_workspace_ =
+      torch::empty({kFp8GemvWorkspaceTokens, hidden_size_}, options);
+}
+
+bool DeepseekV4SharedExpertImpl::fp8_decode_ready() const {
+  const auto gate_up_weight = gate_up_proj_->weight();
+  const auto gate_up_scale = gate_up_proj_->weight_scale();
+  const auto down_weight = down_proj_->weight();
+  return gate_up_weight.defined() && gate_up_scale.defined() &&
+         down_weight.defined() && down_weight_scale_.defined() &&
+         gate_up_weight.scalar_type() == torch::kFloat8_e4m3fn &&
+         gate_up_scale.scalar_type() == torch::kFloat32 &&
+         down_weight.scalar_type() == torch::kFloat8_e4m3fn &&
+         down_weight_scale_.scalar_type() == torch::kFloat32 &&
+         gate_up_weight.dim() == 2 &&
+         gate_up_weight.size(0) == local_intermediate_size_ * 2 &&
+         gate_up_weight.size(1) == hidden_size_ && gate_up_scale.dim() == 2 &&
+         gate_up_scale.size(0) == local_intermediate_size_ * 2 / 128 &&
+         gate_up_scale.size(1) == hidden_size_ / 128 &&
+         down_weight.dim() == 2 && down_weight.size(0) == hidden_size_ &&
+         down_weight.size(1) == local_intermediate_size_ &&
+         down_weight_scale_.dim() == 2 &&
+         down_weight_scale_.size(0) == hidden_size_ / 128 &&
+         down_weight_scale_.size(1) == local_intermediate_size_ / 128;
+}
+
+torch::Tensor DeepseekV4SharedExpertImpl::forward(
+    const torch::Tensor& hidden_states) {
+  auto input = hidden_states.reshape({-1, hidden_size_});
+  const int64_t num_tokens = input.size(0);
+  if (num_tokens > 0 && num_tokens <= kFp8GemvWorkspaceTokens &&
+      input.is_contiguous() && fp8_decode_ready()) {
+    auto gate_up = musa::fp8_linear_forward(
+        input,
+        gate_up_proj_->weight(),
+        gate_up_proj_->weight_scale(),
+        std::nullopt,
+        std::nullopt,
+        input.scalar_type(),
+        decode_gate_up_workspace_.narrow(
+            /*dim=*/0, /*start=*/0, /*length=*/num_tokens));
+    auto activated = kernel::musa::deepseek_v4_shared_swiglu(
+        gate_up,
+        swiglu_limit_,
+        decode_activation_workspace_.narrow(
+            /*dim=*/0, /*start=*/0, /*length=*/num_tokens));
+    CHECK(activated.defined())
+        << "DeepSeek-V4 MUSA shared-expert decode SwiGLU contract failed.";
+    auto output = musa::fp8_linear_forward(
+        activated,
+        down_proj_->weight(),
+        down_weight_scale_,
+        std::nullopt,
+        std::nullopt,
+        input.scalar_type(),
+        decode_output_workspace_.narrow(
+            /*dim=*/0, /*start=*/0, /*length=*/num_tokens));
+    LOG_FIRST_N(INFO, 1)
+        << "DeepSeek-V4 MUSA graph-safe shared-expert decode enabled.";
+    return output.reshape(hidden_states.sizes());
+  }
+
+  auto gate_up = gate_up_proj_->forward(input);
+  torch::Tensor activated =
+      torch::empty({num_tokens, local_intermediate_size_}, gate_up.options());
+  act_->forward(gate_up, activated);
+  return down_proj_->forward(activated).reshape(hidden_states.sizes());
+}
+
+void DeepseekV4SharedExpertImpl::load_down_scale(const StateDict& state_dict,
+                                                 const std::string& down_name) {
+  const int64_t rank = process_group_->rank();
+  const int64_t world_size = process_group_->world_size();
+  auto scale = state_dict.get_sharded_tensor(
+      down_name + "scale", /*dim=*/1, rank, world_size);
+  if (!scale.defined()) {
+    scale = state_dict.get_sharded_tensor(
+        down_name + "weight_scale", /*dim=*/1, rank, world_size);
+  }
+  if (scale.defined()) {
+    down_weight_scale_ = scale.to(torch::kFloat32)
+                             .to(down_proj_->weight().device())
+                             .contiguous();
+  }
+}
+
+void DeepseekV4SharedExpertImpl::load_state_dict(const StateDict& state_dict) {
+  load_state_dict(state_dict, {"gate_proj.", "up_proj."}, "down_proj.");
+}
+
+void DeepseekV4SharedExpertImpl::load_state_dict(
+    const StateDict& state_dict,
+    const std::vector<std::string>& gate_up_names,
+    const std::string& down_name) {
+  CHECK_EQ(gate_up_names.size(), 2)
+      << "DeepseekV4SharedExpert expects gate and up weight prefixes.";
+  gate_up_proj_->load_state_dict(state_dict, gate_up_names);
+  down_proj_->load_state_dict(state_dict.get_dict_with_prefix(down_name));
+  load_down_scale(state_dict, down_name);
+}
+
 DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs& model_args,
                                      const QuantArgs& quant_args,
                                      const ParallelArgs& parallel_args,
-                                     const torch::TensorOptions& options)
+                                     const torch::TensorOptions& options,
+                                     int32_t layer_id)
     : num_total_experts_(model_args.n_routed_experts()),
       topk_(model_args.n_activated_experts() > 0
                 ? model_args.n_activated_experts()
@@ -189,6 +337,8 @@ DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs& model_args,
                              ? model_args.moe_intermediate_size()
                              : model_args.intermediate_size()),
       n_shared_experts_(model_args.n_shared_experts()),
+      layer_id_(layer_id),
+      num_layers_(static_cast<int32_t>(model_args.n_layers())),
       swiglu_limit_(static_cast<double>(model_args.swiglu_limit())),
       hidden_act_(model_args.hidden_act()),
       options_(options),
@@ -217,21 +367,21 @@ DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs& model_args,
   CHECK_EQ(intermediate_size_ % world_size, 0)
       << "DeepseekV4MoE intermediate size must be divisible by TP world size.";
   local_intermediate_size_ = intermediate_size_ / world_size;
+  if (world_size > 1) {
+    tp_custom_allreduce_output_workspace_ =
+        torch::empty({kFp8GemvWorkspaceTokens, hidden_size_}, options_);
+  }
 
   if (n_shared_experts_ > 0) {
-    shared_experts_ =
-        register_module("shared_experts",
-                        DenseMLP(hidden_size_,
-                                 intermediate_size_ * n_shared_experts_,
-                                 /*is_gated=*/true,
-                                 /*has_bias=*/false,
-                                 hidden_act_,
-                                 /*enable_result_reduction=*/false,
-                                 quant_args,
-                                 tp_pg_,
-                                 options,
-                                 /*module_prefix=*/"",
-                                 swiglu_limit_));
+    shared_experts_ = register_module(
+        "shared_experts",
+        DeepseekV4SharedExpert(hidden_size_,
+                               intermediate_size_ * n_shared_experts_,
+                               hidden_act_,
+                               quant_args,
+                               tp_pg_,
+                               options,
+                               swiglu_limit_));
     shared_expert_gate_ = register_module(
         "shared_expert_gate",
         torch::nn::Linear(
@@ -734,17 +884,20 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
 
   auto input = hidden_states;
   auto input_2d = input.reshape({-1, input.size(-1)});
-  auto weights_2d = topk_weights.reshape({-1, topk_}).to(input_2d.dtype());
+  auto weights_2d = topk_weights.reshape({-1, topk_});
   auto ids_2d = topk_ids.reshape({-1, topk_});
+  const bool use_fp8_gemv = input_params.meta.batch_forward_type.is_decode() &&
+                            input_2d.size(0) > 0 &&
+                            input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
+                            fp8_experts_loaded();
+  if (!use_fp8_gemv && weights_2d.scalar_type() != input_2d.scalar_type()) {
+    weights_2d = weights_2d.to(input_2d.dtype());
+  }
   CHECK_EQ(weights_2d.size(0), input_2d.size(0))
       << "DeepseekV4MoE topk_weights token count mismatch.";
   CHECK_EQ(ids_2d.size(0), input_2d.size(0))
       << "DeepseekV4MoE topk_ids token count mismatch.";
   torch::Tensor output;
-  const bool use_fp8_gemv = input_params.meta.batch_forward_type.is_decode() &&
-                            input_2d.size(0) > 0 &&
-                            input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
-                            fp8_experts_loaded();
   if (!output.defined() && use_fp8_gemv) {
     const int64_t num_tokens = input_2d.size(0);
     const int64_t num_assignments = num_tokens * topk_;
@@ -846,18 +999,38 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
             input_2d, gate_weight, shared_output_2d, output);
       } else {
         auto gate = torch::sigmoid(shared_expert_gate_->forward(input));
-        shared_output = shared_output * gate;
-        output = output + shared_output.reshape_as(output);
+        shared_output.mul_(gate);
+        output.add_(shared_output.reshape_as(output));
       }
     } else {
-      output = output + shared_output.reshape_as(output);
+      output.add_(shared_output.reshape_as(output));
     }
   }
 
   // Routed and shared experts are sharded across the TP group. Reduce their
   // combined partial hidden-state sum once, after both branches are complete.
   if (tp_pg_ != nullptr && tp_pg_->world_size() > 1) {
-    tp_pg_->allreduce(output);
+    const bool use_custom_allreduce =
+        num_layers_ <= 4 || layer_id_ < num_layers_ - 4;
+    bool used_custom_allreduce = false;
+    if (use_custom_allreduce && output.dim() == 2 && output.size(0) > 0 &&
+        output.size(0) <= kFp8GemvWorkspaceTokens &&
+        output.size(1) == hidden_size_ &&
+        tp_custom_allreduce_output_workspace_.defined()) {
+      torch::Tensor output_workspace =
+          tp_custom_allreduce_output_workspace_.narrow(
+              /*dim=*/0, /*start=*/0, /*length=*/output.size(0));
+      if (std::optional<torch::Tensor> custom_output = musa_allreduce_custom(
+              tp_pg_, output, output_workspace.reshape_as(output))) {
+        output = *custom_output;
+        used_custom_allreduce = true;
+        LOG_FIRST_N(INFO, 1)
+            << "DeepSeek-V4 MUSA MoE out-of-place custom all-reduce enabled.";
+      }
+    }
+    if (!used_custom_allreduce) {
+      tp_pg_->allreduce(output);
+    }
   }
 
   return output.reshape(hidden_states.sizes());

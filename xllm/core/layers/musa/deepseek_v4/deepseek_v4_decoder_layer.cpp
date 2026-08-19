@@ -18,6 +18,7 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include "core/common/flash_comm1_context.h"
+#include "core/kernels/musa/musa_dsv4_ops_api.h"
 
 namespace xllm {
 namespace layer {
@@ -46,7 +47,7 @@ DeepseekV4DecoderLayerImpl::DeepseekV4DecoderLayerImpl(
   ffn_norm_ = register_module(
       "ffn_norm", RMSNorm(hidden_size, args.rms_norm_eps(), options));
   moe_mlp_ = register_module(
-      "ffn", DeepseekV4MoE(args, quant_args, parallel_args, options));
+      "ffn", DeepseekV4MoE(args, quant_args, parallel_args, options, layer_id));
   // Register as "gate" to match Python's mlp.gate module path.
   gate_ = register_module("gate", DeepseekV4Gate(context, layer_id));
 
@@ -71,6 +72,18 @@ DeepseekV4DecoderLayerImpl::DeepseekV4DecoderLayerImpl(
   hc_ffn_scale_ = register_parameter("hc_ffn_scale",
                                      torch::empty({3}, hc_options),
                                      /*requires_grad=*/false);
+
+  constexpr int64_t kHcDecodeWorkspaceTokens = 16;
+  hc_pre_output_workspace_ =
+      torch::empty({kHcDecodeWorkspaceTokens, hidden_size}, options);
+  hc_pre_post_workspace_ =
+      torch::empty({kHcDecodeWorkspaceTokens, hc_mult_}, hc_options);
+  hc_pre_comb_workspace_ =
+      torch::empty({kHcDecodeWorkspaceTokens, hc_mult_, hc_mult_}, hc_options);
+  hc_post_output_workspace_ =
+      torch::empty({kHcDecodeWorkspaceTokens, hc_mult_, hidden_size}, options);
+  rms_norm_output_workspace_ =
+      torch::empty({kHcDecodeWorkspaceTokens, hidden_size}, options);
 }
 
 void DeepseekV4DecoderLayerImpl::load_state_dict(const StateDict& state_dict) {
@@ -142,9 +155,24 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
   const FlashComm1Context* fc1_ctx = get_current_flash_comm1_context();
 
   auto residual_attn = x;
+  bool attn_hc_output_is_normalized = false;
   auto [attn_input, post_attn, comb_attn] =
-      hc_pre(x, hc_attn_fn_, hc_attn_scale_, hc_attn_base_);
-  attn_input = std::get<0>(attn_norm_->forward(attn_input));
+      hc_pre(x,
+             hc_attn_fn_,
+             hc_attn_scale_,
+             hc_attn_base_,
+             attn_norm_->weight(),
+             &attn_hc_output_is_normalized);
+  std::optional<torch::Tensor> rms_norm_output = std::nullopt;
+  if (input_params.enable_graph && attn_input.dim() == 2 &&
+      attn_input.size(0) <= rms_norm_output_workspace_.size(0)) {
+    rms_norm_output = rms_norm_output_workspace_.narrow(
+        /*dim=*/0, /*start=*/0, /*length=*/attn_input.size(0));
+  }
+  if (!attn_hc_output_is_normalized) {
+    attn_input = std::get<0>(
+        attn_norm_->forward(attn_input, std::nullopt, rms_norm_output));
+  }
 
   if (fc1_ctx && is_sequence_sharded(*fc1_ctx)) {
     attn_input = gather_sequence(attn_input, *fc1_ctx);
@@ -171,9 +199,24 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
   x = hc_post(attn_input, residual_attn, post_attn, comb_attn);
 
   auto residual_ffn = x;
-  auto [ffn_input, post_ffn, comb_ffn] =
-      hc_pre(x, hc_ffn_fn_, hc_ffn_scale_, hc_ffn_base_);
-  ffn_input = std::get<0>(ffn_norm_->forward(ffn_input));
+  bool ffn_hc_output_is_normalized = false;
+  auto [ffn_input, post_ffn, comb_ffn] = hc_pre(x,
+                                                hc_ffn_fn_,
+                                                hc_ffn_scale_,
+                                                hc_ffn_base_,
+                                                ffn_norm_->weight(),
+                                                &ffn_hc_output_is_normalized);
+  if (input_params.enable_graph && ffn_input.dim() == 2 &&
+      ffn_input.size(0) <= rms_norm_output_workspace_.size(0)) {
+    rms_norm_output = rms_norm_output_workspace_.narrow(
+        /*dim=*/0, /*start=*/0, /*length=*/ffn_input.size(0));
+  } else {
+    rms_norm_output = std::nullopt;
+  }
+  if (!ffn_hc_output_is_normalized) {
+    ffn_input = std::get<0>(
+        ffn_norm_->forward(ffn_input, std::nullopt, rms_norm_output));
+  }
 
   if (fc1_ctx && is_sequence_sharded(*fc1_ctx)) {
     ffn_input = gather_sequence(ffn_input, *fc1_ctx);
@@ -215,94 +258,65 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
 DeepseekV4DecoderLayerImpl::hc_pre(const torch::Tensor& x,
                                    const torch::Tensor& hc_fn,
                                    const torch::Tensor& hc_scale,
-                                   const torch::Tensor& hc_base) {
+                                   const torch::Tensor& hc_base,
+                                   const torch::Tensor& norm_weight,
+                                   bool* output_is_normalized) {
+  if (output_is_normalized != nullptr) {
+    *output_is_normalized = false;
+  }
   const int64_t dim = x.size(-1);
   torch::Tensor x_hc = x.reshape({-1, hc_mult_, dim}).contiguous();
+  if (x_hc.size(0) <= hc_pre_output_workspace_.size(0)) {
+    return kernel::musa::deepseek_v4_hc_pre_decode(x_hc,
+                                                   hc_fn.contiguous(),
+                                                   hc_scale.contiguous(),
+                                                   hc_base.contiguous(),
+                                                   hc_mult_,
+                                                   hc_sinkhorn_iters_,
+                                                   norm_eps_,
+                                                   hc_eps_,
+                                                   hc_pre_output_workspace_,
+                                                   hc_pre_post_workspace_,
+                                                   hc_pre_comb_workspace_,
+                                                   norm_weight,
+                                                   output_is_normalized);
+  }
   torch::Tensor x_flat =
       x_hc.reshape({x_hc.size(0), hc_mult_ * dim}).to(torch::kFloat32);
   torch::Tensor rsqrt = torch::rsqrt(
       x_flat.pow(2).mean(/*dim=*/-1, /*keepdim=*/true) + norm_eps_);
   torch::Tensor mixes = torch::matmul(x_flat, hc_fn.transpose(0, 1)) * rsqrt;
 
-  const int64_t first = hc_mult_;
-  const int64_t second = 2 * hc_mult_;
-  torch::Tensor scale = hc_scale.to(torch::kFloat32);
-  torch::Tensor base = hc_base.to(torch::kFloat32);
-  torch::Tensor pre_logits = mixes.slice(/*dim=*/1, /*start=*/0, /*end=*/first);
-  torch::Tensor post_logits =
-      mixes.slice(/*dim=*/1, /*start=*/first, /*end=*/second);
-  torch::Tensor comb_logits = mixes.slice(/*dim=*/1, /*start=*/second)
-                                  .reshape({-1, hc_mult_, hc_mult_});
-
-  torch::Tensor pre =
-      torch::sigmoid(pre_logits * scale[0] +
-                     base.slice(/*dim=*/0, /*start=*/0, /*end=*/first)) +
-      hc_eps_;
-  torch::Tensor post =
-      2 *
-      torch::sigmoid(post_logits * scale[1] +
-                     base.slice(/*dim=*/0, /*start=*/first, /*end=*/second));
-  torch::Tensor comb_base =
-      base.slice(/*dim=*/0, /*start=*/second).reshape({1, hc_mult_, hc_mult_});
-  torch::Tensor comb =
-      torch::softmax(comb_logits * scale[2] + comb_base, /*dim=*/-1) + hc_eps_;
-
-  comb = comb * (comb.sum(/*dim=*/-2, /*keepdim=*/true) + hc_eps_).reciprocal();
-  for (int64_t i = 1; i < hc_sinkhorn_iters_; ++i) {
-    comb =
-        comb * (comb.sum(/*dim=*/-1, /*keepdim=*/true) + hc_eps_).reciprocal();
-    comb =
-        comb * (comb.sum(/*dim=*/-2, /*keepdim=*/true) + hc_eps_).reciprocal();
-  }
-
-  torch::Tensor output =
-      (x_hc.to(torch::kFloat32) * pre.unsqueeze(-1)).sum(/*dim=*/1);
-  std::vector<int64_t> output_shape;
-  output_shape.reserve(static_cast<size_t>(x.dim() - 1));
-  for (int64_t i = 0; i < x.dim() - 2; ++i) {
-    output_shape.push_back(x.size(i));
-  }
-  output_shape.push_back(dim);
-
-  std::vector<int64_t> post_shape = output_shape;
-  post_shape.back() = hc_mult_;
-  std::vector<int64_t> comb_shape = post_shape;
-  comb_shape.push_back(hc_mult_);
-  return std::make_tuple(output.reshape(output_shape).to(x.dtype()),
-                         post.reshape(post_shape).to(torch::kFloat32),
-                         comb.reshape(comb_shape).to(torch::kFloat32));
+  auto [pre, post, comb] =
+      kernel::musa::deepseek_v4_hc_pre_metadata(mixes.contiguous(),
+                                                hc_scale.contiguous(),
+                                                hc_base.contiguous(),
+                                                hc_mult_,
+                                                hc_sinkhorn_iters_,
+                                                hc_eps_);
+  auto output =
+      kernel::musa::deepseek_v4_hc_pre_combine(x_hc, pre.contiguous());
+  return std::make_tuple(output, post, comb);
 }
 
 torch::Tensor DeepseekV4DecoderLayerImpl::hc_post(const torch::Tensor& x,
                                                   const torch::Tensor& residual,
                                                   const torch::Tensor& post,
                                                   const torch::Tensor& comb) {
-  const int64_t dim = residual.size(-1);
-  torch::Tensor x_flat = x.reshape({-1, dim}).to(torch::kFloat32);
-  torch::Tensor residual_flat =
-      residual.reshape({-1, hc_mult_, dim}).to(torch::kFloat32);
-  torch::Tensor post_flat = post.reshape({-1, hc_mult_}).to(torch::kFloat32);
-  torch::Tensor comb_flat =
-      comb.reshape({-1, hc_mult_, hc_mult_}).to(torch::kFloat32);
-
-  std::vector<torch::Tensor> mixed_rows;
-  mixed_rows.reserve(static_cast<size_t>(hc_mult_));
-  for (int64_t out_idx = 0; out_idx < hc_mult_; ++out_idx) {
-    torch::Tensor row = residual_flat.select(/*dim=*/1, /*index=*/0) *
-                        comb_flat.select(/*dim=*/1, /*index=*/out_idx)
-                            .select(/*dim=*/1, /*index=*/0)
-                            .unsqueeze(-1);
-    for (int64_t in_idx = 1; in_idx < hc_mult_; ++in_idx) {
-      row = row + residual_flat.select(/*dim=*/1, /*index=*/in_idx) *
-                      comb_flat.select(/*dim=*/1, /*index=*/out_idx)
-                          .select(/*dim=*/1, /*index=*/in_idx)
-                          .unsqueeze(-1);
-    }
-    mixed_rows.push_back(row);
+  std::optional<torch::Tensor> output = std::nullopt;
+  if (residual.dim() == 3 &&
+      residual.size(0) <= hc_post_output_workspace_.size(0) &&
+      residual.size(1) == hc_post_output_workspace_.size(1) &&
+      residual.size(2) == hc_post_output_workspace_.size(2)) {
+    output = hc_post_output_workspace_.narrow(
+        /*dim=*/0, /*start=*/0, /*length=*/residual.size(0));
   }
-  torch::Tensor mixed = torch::stack(mixed_rows, /*dim=*/1);
-  torch::Tensor output = mixed + post_flat.unsqueeze(-1) * x_flat.unsqueeze(1);
-  return output.reshape(residual.sizes()).to(residual.dtype());
+  return kernel::musa::deepseek_v4_hc_post(
+      x.reshape({-1, residual.size(-1)}).contiguous(),
+      residual.contiguous(),
+      post.contiguous(),
+      comb.contiguous(),
+      output);
 }
 
 }  // namespace layer

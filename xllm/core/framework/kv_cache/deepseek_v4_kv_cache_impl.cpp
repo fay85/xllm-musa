@@ -190,6 +190,11 @@ DeepSeekV4KVCacheImpl::DeepSeekV4KVCacheImpl(
       scale_host_block_count(pool_counts[2], factor);
   const int64_t block_size = create_options.block_size();
   const int64_t head_dim = create_options.head_dim();
+#if defined(USE_MUSA)
+  const int64_t cache_head_dim = musa_dsv4_flashmla_cache_head_dim(head_dim);
+#else
+  const int64_t cache_head_dim = head_dim;
+#endif
   const int64_t index_head_dim =
       std::max<int64_t>(create_options.index_head_dim(), 1);
   const int64_t n_heads = 1;
@@ -213,17 +218,19 @@ DeepSeekV4KVCacheImpl::DeepSeekV4KVCacheImpl(
   switch (type) {
     case BlockType::SWA:
       host_page_aligned_regions_.reserve(1);
-      create_host_tensor(host_group_shape(host_swa_count, n_heads, head_dim),
-                         create_options.dtype(),
-                         &swa_cache_,
-                         nullptr);
+      create_host_tensor(
+          host_group_shape(host_swa_count, n_heads, cache_head_dim),
+          create_options.dtype(),
+          &swa_cache_,
+          nullptr);
       break;
     case BlockType::C4:
       host_page_aligned_regions_.reserve(3);
-      create_host_tensor(host_group_shape(host_c4_count, n_heads, head_dim),
-                         create_options.dtype(),
-                         &key_cache_,
-                         nullptr);
+      create_host_tensor(
+          host_group_shape(host_c4_count, n_heads, cache_head_dim),
+          create_options.dtype(),
+          &key_cache_,
+          nullptr);
       create_host_tensor(
           host_group_shape(host_c4_count, index_n_heads, index_head_dim),
           cache_policy.index_dtype,
@@ -242,10 +249,11 @@ DeepSeekV4KVCacheImpl::DeepSeekV4KVCacheImpl(
       break;
     case BlockType::C128:
       host_page_aligned_regions_.reserve(1);
-      create_host_tensor(host_group_shape(host_c128_count, n_heads, head_dim),
-                         create_options.dtype(),
-                         &key_cache_,
-                         nullptr);
+      create_host_tensor(
+          host_group_shape(host_c128_count, n_heads, cache_head_dim),
+          create_options.dtype(),
+          &key_cache_,
+          nullptr);
       break;
     default:
       LOG(FATAL) << "Unsupported DeepSeek V4 host block type: "
@@ -417,6 +425,11 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
   const int64_t c128_count = pool_counts[2];
   const int64_t block_size = create_options.block_size();
   const int64_t head_dim = create_options.head_dim();
+#if defined(USE_MUSA)
+  const int64_t cache_head_dim = musa_dsv4_flashmla_cache_head_dim(head_dim);
+#else
+  const int64_t cache_head_dim = head_dim;
+#endif
   const int64_t index_head_dim =
       std::max<int64_t>(create_options.index_head_dim(), 1);
   const int64_t n_heads = 1;
@@ -457,13 +470,13 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
   if (compress_ratio == 1) {
     tensors.swa_cache = allocate_tensor(
         KVCacheTensorRole::WINDOW,
-        dsv4_block_shape(swa_count, block_size, n_heads, head_dim),
+        dsv4_block_shape(swa_count, block_size, n_heads, cache_head_dim),
         create_options.dtype());
   } else if (compress_ratio == 4) {
     tensors.compressed_block_type = BlockType::C4;
     tensors.key_cache = allocate_tensor(
         KVCacheTensorRole::KEY,
-        dsv4_block_shape(c4_count, block_size, n_heads, head_dim),
+        dsv4_block_shape(c4_count, block_size, n_heads, cache_head_dim),
         create_options.dtype());
 #if defined(USE_MUSA)
     tensors.mate_key_cache = create_musa_dsv4_model1_cache(
@@ -481,7 +494,7 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
     }
     tensors.swa_cache = allocate_tensor(
         KVCacheTensorRole::WINDOW,
-        dsv4_block_shape(swa_count, block_size, n_heads, head_dim),
+        dsv4_block_shape(swa_count, block_size, n_heads, cache_head_dim),
         create_options.dtype());
 #if defined(USE_MUSA)
     tensors.mate_extra_k_cache = create_musa_dsv4_model1_cache(
@@ -532,7 +545,7 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
     tensors.compressed_block_type = BlockType::C128;
     tensors.key_cache = allocate_tensor(
         KVCacheTensorRole::KEY,
-        dsv4_block_shape(c128_count, block_size, n_heads, head_dim),
+        dsv4_block_shape(c128_count, block_size, n_heads, cache_head_dim),
         create_options.dtype());
 #if defined(USE_MUSA)
     tensors.mate_key_cache = create_musa_dsv4_model1_cache(
@@ -540,7 +553,7 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
 #endif
     tensors.swa_cache = allocate_tensor(
         KVCacheTensorRole::WINDOW,
-        dsv4_block_shape(swa_count, block_size, n_heads, head_dim),
+        dsv4_block_shape(swa_count, block_size, n_heads, cache_head_dim),
         create_options.dtype());
 #if defined(USE_MUSA)
     tensors.mate_extra_k_cache = create_musa_dsv4_model1_cache(
@@ -570,7 +583,7 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
   } else {
     tensors.swa_cache = allocate_tensor(
         KVCacheTensorRole::WINDOW,
-        dsv4_block_shape(swa_count, block_size, n_heads, head_dim),
+        dsv4_block_shape(swa_count, block_size, n_heads, cache_head_dim),
         create_options.dtype());
   }
 

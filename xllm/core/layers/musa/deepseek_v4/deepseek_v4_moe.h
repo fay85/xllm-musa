@@ -27,10 +27,55 @@ limitations under the License.
 #include "core/framework/quant_args.h"
 #include "core/framework/state_dict/state_dict.h"
 #include "core/framework/state_dict/utils.h"
-#include "core/layers/common/dense_mlp.h"
+#include "core/layers/common/activation.h"
+#include "core/layers/common/linear.h"
 
 namespace xllm {
 namespace layer {
+
+// DeepSeek-V4 shared experts use a MUSA-only low-token FP8 path.  The
+// fallback remains the same parallel-linear implementation used by the
+// original shared expert, so non-MUSA and prefill behavior are unchanged.
+class DeepseekV4SharedExpertImpl final : public torch::nn::Module {
+ public:
+  DeepseekV4SharedExpertImpl() = default;
+  DeepseekV4SharedExpertImpl(int64_t hidden_size,
+                             int64_t intermediate_size,
+                             const std::string& hidden_act,
+                             const QuantArgs& quant_args,
+                             ProcessGroup* process_group,
+                             const torch::TensorOptions& options,
+                             double swiglu_limit);
+
+  torch::Tensor forward(const torch::Tensor& hidden_states);
+
+  void load_state_dict(const StateDict& state_dict);
+  void load_state_dict(const StateDict& state_dict,
+                       const std::vector<std::string>& gate_up_names,
+                       const std::string& down_name);
+
+ private:
+  bool fp8_decode_ready() const;
+  void load_down_scale(const StateDict& state_dict,
+                       const std::string& down_name);
+
+  int64_t hidden_size_ = 0;
+  int64_t intermediate_size_ = 0;
+  int64_t local_intermediate_size_ = 0;
+  double swiglu_limit_ = 0.0;
+  ProcessGroup* process_group_ = nullptr;
+
+  ColumnParallelLinear gate_up_proj_{nullptr};
+  RowParallelLinear down_proj_{nullptr};
+  Activation act_{nullptr};
+
+  torch::Tensor down_weight_scale_;
+  torch::Tensor decode_gate_up_workspace_;
+  torch::Tensor decode_activation_workspace_;
+  torch::Tensor decode_output_workspace_;
+};
+
+TORCH_MODULE(DeepseekV4SharedExpert);
 
 class DeepseekV4MoEImpl final : public torch::nn::Module {
  public:
@@ -38,7 +83,8 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
   DeepseekV4MoEImpl(const ModelArgs& model_args,
                     const QuantArgs& quant_args,
                     const ParallelArgs& parallel_args,
-                    const torch::TensorOptions& options);
+                    const torch::TensorOptions& options,
+                    int32_t layer_id);
 
   torch::Tensor forward_with_selected_experts(
       const torch::Tensor& hidden_states,
@@ -83,13 +129,15 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
   int64_t num_experts_per_rank_ = 0;
   int64_t start_expert_id_ = 0;
   int64_t n_shared_experts_ = 0;
+  int32_t layer_id_ = 0;
+  int32_t num_layers_ = 0;
   double swiglu_limit_ = 0.0;
   std::string hidden_act_ = "silu";
   torch::TensorOptions options_;
   ProcessGroup* tp_pg_ = nullptr;
   ProcessGroup* ep_pg_ = nullptr;
 
-  DenseMLP shared_experts_{nullptr};
+  DeepseekV4SharedExpert shared_experts_{nullptr};
   torch::nn::Linear shared_expert_gate_{nullptr};
   bool shared_expert_gate_is_loaded_ = false;
 
@@ -119,6 +167,7 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
   torch::Tensor fp8_gemv_activation_workspace_;
   torch::Tensor fp8_gemv_routed_output_workspace_;
   torch::Tensor fp8_gemv_output_workspace_;
+  torch::Tensor tp_custom_allreduce_output_workspace_;
   std::vector<torch::Tensor> w1_fp8_list_;
   std::vector<torch::Tensor> w3_fp8_list_;
   std::vector<torch::Tensor> w1_fp8_scale_list_;

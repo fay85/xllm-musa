@@ -176,6 +176,11 @@ class MusaDeepSeekV4KVCacheImpl final : public KVCacheImpl {
 
 }  // namespace
 
+int64_t musa_dsv4_flashmla_cache_head_dim(int64_t model_head_dim) {
+  CHECK_GT(model_head_dim, 0);
+  return model_head_dim + kMusaDsv4FlashMlaRopeHeadDim;
+}
+
 int64_t musa_dsv4_model1_page_stride(int64_t block_size) {
   CHECK_GT(block_size, 0);
   const int64_t page_bytes = block_size * kMusaDsv4Model1BytesPerToken;

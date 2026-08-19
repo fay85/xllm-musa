@@ -23,6 +23,7 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <shared_mutex>
 #include <vector>
@@ -30,6 +31,7 @@ limitations under the License.
 #include "core/common/metrics.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/rec_config.h"
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/common/attention_metadata.h"
@@ -47,12 +49,19 @@ namespace xllm::runtime::musa {
 
 namespace {
 
+std::atomic<uint32_t> s_completed_musa_graph_captures{0};
+
 bool s_enable_graph_timing() {
   static const bool val = [] {
     const char* env = std::getenv("XLLM_GRAPH_TIMING");
     return env != nullptr && std::string(env) == "1";
   }();
   return val;
+}
+
+const char* s_graph_dump_directory() {
+  const char* directory = std::getenv("XLLM_GRAPH_DUMP_DIR");
+  return directory != nullptr && directory[0] != '\0' ? directory : nullptr;
 }
 
 bool s_use_fa3_decode(int64_t gqa_ratio) {
@@ -214,6 +223,17 @@ void restore_linear_attention_state(
   }
 }
 
+bool should_capture_graph_aux_hidden_states(
+    const ModelArgs& args,
+    const runtime::Options& options) {
+  // The DeepSeek-V4 target graph exports pre-HC lanes to MTP, while its draft
+  // graph consumes those lanes and does not feed an auxiliary result back.
+  // Keep the generic option intact for other models/backends.
+  return options.enable_graph_aux_hidden_states() &&
+         !(options.is_draft_engine() &&
+           args.model_type() == "deepseek_v4_mtp");
+}
+
 }  // namespace
 
 // MusaGraphPersistentParam implementation
@@ -283,6 +303,19 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
   hidden_states_ = torch::zeros({max_tokens_per_batch, args.hidden_size()},
                                 torch::dtype(dtype).device(device));
 
+  if (should_capture_graph_aux_hidden_states(args_, options_) &&
+      args_.model_type() == "deepseek_v4" && args_.hc_mult() > 1) {
+    // DeepSeek-V4 MTP consumes the flattened pre-HC lanes.  Allocate the
+    // decode-only output before capture: lazily calling torch::zeros from
+    // set_aux_hidden_states() is not permitted by the MUSA graph runtime.
+    const int64_t max_aux_tokens =
+        std::max<int64_t>(1, max_seqs_per_batch) *
+        std::max<int64_t>(1, options_.num_speculative_tokens() + 1);
+    aux_hidden_states_ = torch::zeros(
+        {max_aux_tokens, args_.hidden_size() * args_.hc_mult()},
+        torch::dtype(dtype).device(device));
+  }
+
   // FlashInfer decode mode parameters
   // paged_kv_indptr: shape [max_seqs_per_batch + 1]
   persistent_paged_kv_indptr_ = torch::zeros(
@@ -305,7 +338,7 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
       0, max_seqs_per_batch + 1, torch::dtype(torch::kInt).device(device));
   persistent_kv_seq_lens_delta_ = torch::zeros(
       {max_seqs_per_batch}, torch::dtype(torch::kInt).device(device));
-  // aux_hidden_states will be lazily initialized when needed
+  // Other models retain the generic lazy path when graph aux output is unused.
 }
 
 bool MusaGraphPersistentParam::can_use_llm_decode_fast_path(
@@ -446,7 +479,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     const torch::Tensor& positions,
     const ModelInputParams& params,
     uint32_t padded_num_tokens,
-    bool return_capture_params) {
+    bool return_capture_params,
+    bool update_attention_plan) {
   std::optional<ModelInputParams> params_for_capture;
   if (return_capture_params) {
     CHECK_GT(padded_num_tokens, 0)
@@ -462,6 +496,45 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   attn_metadata->enable_cuda_graph = true;
 
   const uint32_t actual_num_tokens = tokens.size(0);
+  const int64_t linear_state_batch_size =
+      params.embedding.linear_state_indices.defined()
+          ? std::min<int64_t>(params.embedding.linear_state_indices.numel(),
+                              persistent_linear_state_indices_.numel())
+          : std::min<int64_t>(params.embedding.linear_state_ids.size(),
+                              persistent_linear_state_indices_.numel());
+  // The generic MTP input builder expands target verification into one row
+  // per validation token. DeepSeek-V4 owns recurrent/DSA state per request,
+  // so the target and draft graph carriers must retain one logical sequence
+  // with a compact query width (k + 1), rather than treating proposal rows as
+  // independent requests.
+  int64_t compact_decode_width =
+      std::max<int64_t>(options_.num_decoding_tokens(), 1);
+  const bool compact_dsv4_target_verify =
+      params.meta.batch_forward_type.is_decode() &&
+      args_.model_type() == "deepseek_v4" &&
+      options_.enable_speculative_decode() && !options_.is_draft_engine() &&
+      compact_decode_width > 1 && actual_num_tokens > 0 &&
+      actual_num_tokens % compact_decode_width == 0;
+  const bool compact_dsv4_draft_extend =
+      params.meta.batch_forward_type.is_decode() &&
+      args_.model_type() == "deepseek_v4_mtp" && options_.is_draft_engine() &&
+      linear_state_batch_size > 0 &&
+      actual_num_tokens > linear_state_batch_size &&
+      actual_num_tokens % linear_state_batch_size == 0;
+  if (compact_dsv4_draft_extend) {
+    compact_decode_width =
+        static_cast<int64_t>(actual_num_tokens) / linear_state_batch_size;
+  }
+  const bool compact_dsv4_mtp_decode =
+      compact_dsv4_target_verify || compact_dsv4_draft_extend;
+  if (s_enable_graph_timing()) {
+    LOG(INFO) << "GRAPH_TIMING compact_decode model_type="
+              << args_.model_type()
+              << " is_draft=" << options_.is_draft_engine()
+              << " actual_num_tokens=" << actual_num_tokens
+              << " compact_width=" << compact_decode_width
+              << " compact=" << compact_dsv4_mtp_decode;
+  }
   // Decode has exactly one query token per attention row.  Schedule-overlap
   // forward buffers can retain a bucket-capacity num_sequences value (for
   // example 8 for a live C=5 batch), while tokens and all logical outputs
@@ -474,18 +547,15 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
              !is_rec_multi_round_mode()) {
     actual_batch_size = static_cast<int64_t>(actual_num_tokens);
   }
+  if (compact_dsv4_mtp_decode) {
+    actual_batch_size =
+        static_cast<int64_t>(actual_num_tokens) / compact_decode_width;
+  }
   const int64_t accepted_batch_size =
       params.num_accepted_tokens.defined()
           ? std::min<int64_t>(params.num_accepted_tokens.numel(),
                               persistent_num_accepted_tokens_.numel())
           : 0;
-  const int64_t linear_state_batch_size =
-      params.embedding.linear_state_indices.defined()
-          ? std::min<int64_t>(params.embedding.linear_state_indices.numel(),
-                              persistent_linear_state_indices_.numel())
-          : std::min<int64_t>(params.embedding.linear_state_ids.size(),
-                              persistent_linear_state_indices_.numel());
-
   const bool use_llm_decode_fast_path =
       can_use_llm_decode_fast_path(tokens, positions, params);
 
@@ -556,13 +626,103 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       params_for_capture->num_accepted_tokens_host.assign(
           data, data + accepted_batch_size);
     }
+    params_for_capture->enable_graph = true;
+    const bool graph_decode =
+        !update_attention_plan || params.meta.batch_forward_type.is_decode();
+    const int32_t graph_num_sequences =
+        compact_dsv4_mtp_decode
+            ? static_cast<int32_t>(
+                  (padded_num_tokens + compact_decode_width - 1) /
+                  compact_decode_width)
+            : (graph_decode ? static_cast<int32_t>(padded_num_tokens)
+                            : params.meta.num_sequences);
+    params_for_capture->meta.num_sequences = graph_num_sequences;
+    params_for_capture->meta.actual_num_sequences =
+        compact_dsv4_mtp_decode
+            ? static_cast<int32_t>(actual_batch_size)
+            : (graph_decode ? static_cast<int32_t>(actual_num_tokens)
+                            : params.meta.num_sequences);
+    if (compact_dsv4_mtp_decode) {
+      const int32_t verify_width = static_cast<int32_t>(compact_decode_width);
+      const int32_t active_sequences = std::min<int32_t>(
+          static_cast<int32_t>(actual_batch_size), graph_num_sequences);
+
+      auto& host = params_for_capture->attention.host;
+      host.q_seq_lens.assign(static_cast<size_t>(graph_num_sequences + 1), 0);
+      host.q_cu_seq_lens.assign(static_cast<size_t>(graph_num_sequences), 0);
+      for (int32_t seq = 0; seq < graph_num_sequences; ++seq) {
+        const int32_t q_len = seq < active_sequences ? verify_width : 0;
+        host.q_seq_lens[static_cast<size_t>(seq + 1)] =
+            host.q_seq_lens[static_cast<size_t>(seq)] + q_len;
+        host.q_cu_seq_lens[static_cast<size_t>(seq)] =
+            host.q_seq_lens[static_cast<size_t>(seq + 1)];
+      }
+
+      const std::vector<int32_t> expanded_kv_lens =
+          params.attention.host.kv_seq_lens;
+      std::vector<int32_t> compact_kv_lens;
+      compact_kv_lens.reserve(static_cast<size_t>(graph_num_sequences + 1));
+      compact_kv_lens.emplace_back(0);
+      int32_t compact_kv_max = 0;
+      const bool expanded_kv_is_cumulative =
+          expanded_kv_lens.size() ==
+              static_cast<size_t>(actual_num_tokens + 1) &&
+          !expanded_kv_lens.empty() && expanded_kv_lens.front() == 0;
+      const bool expanded_kv_is_per_row =
+          expanded_kv_lens.size() == static_cast<size_t>(actual_num_tokens);
+      for (int32_t seq = 0; seq < graph_num_sequences; ++seq) {
+        int32_t kv_len = 0;
+        if (seq < active_sequences) {
+          const int64_t final_row =
+              (static_cast<int64_t>(seq) + 1) * compact_decode_width;
+          if (expanded_kv_is_cumulative) {
+            kv_len = expanded_kv_lens[static_cast<size_t>(final_row)] -
+                     expanded_kv_lens[static_cast<size_t>(final_row - 1)];
+          } else if (expanded_kv_is_per_row) {
+            kv_len = expanded_kv_lens[static_cast<size_t>(final_row - 1)];
+          } else {
+            kv_len = params.meta.kv_max_seq_len;
+          }
+          kv_len = std::max<int32_t>(kv_len, 1);
+          compact_kv_max = std::max(compact_kv_max, kv_len);
+        }
+        compact_kv_lens.emplace_back(compact_kv_lens.back() + kv_len);
+      }
+      host.kv_seq_lens = std::move(compact_kv_lens);
+      params_for_capture->meta.q_max_seq_len = verify_width;
+      params_for_capture->meta.kv_max_seq_len =
+          std::max(params.meta.kv_max_seq_len, compact_kv_max);
+      params_for_capture->is_spec_verify = true;
+
+      for (torch::Tensor& block_table :
+           params_for_capture->multi_block_tables) {
+        if (block_table.defined() && block_table.dim() == 2 &&
+            block_table.size(0) >= actual_num_tokens) {
+          block_table = block_table
+                            .slice(/*dim=*/0,
+                                   /*start=*/0,
+                                   /*end=*/actual_num_tokens,
+                                   /*step=*/compact_decode_width)
+                            .contiguous();
+        }
+      }
+    }
+    params_for_capture->attention.device.q_seq_lens =
+        q_seq_lens(static_cast<uint32_t>(graph_num_sequences + 1));
+    params_for_capture->attention.device.kv_seq_lens =
+        kv_seq_lens(static_cast<uint32_t>(graph_num_sequences + 1));
+    params_for_capture->attention.device.new_cache_slots =
+        persistent_new_cache_slots(padded_num_tokens);
+    params_for_capture->attention.device.block_tables =
+        persistent_block_tables(static_cast<uint32_t>(graph_num_sequences));
     params_for_capture->attn_metadata = attn_metadata;
-    params_for_capture->is_spec_verify = params.is_spec_verify;
+    params_for_capture->is_spec_verify =
+        compact_dsv4_mtp_decode || params.is_spec_verify;
     return params_for_capture;
   };
 
   // Copy data from input parameters to persistent graph tensors
-  if (use_llm_decode_fast_path) {
+  if (update_attention_plan && use_llm_decode_fast_path) {
     VLOG(kGraphExecutorLogVerboseLevel)
         << "use fast path for LLM decode metadata update";
     update_llm_decode_metadata_fast_path(tokens,
@@ -601,7 +761,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     }
   }
 
-  if (!is_rec_multi_round_mode() && !use_llm_decode_fast_path) {
+  if (!is_rec_multi_round_mode() && !use_llm_decode_fast_path &&
+      update_attention_plan) {
     // q_seq_lens is q_cu_seq_lens in GPU Model.
     // kv_seq_lens is kv_cu_seq_lens in GPU Model.
     VLOG(kGraphExecutorLogVerboseLevel)
@@ -676,6 +837,29 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
         padded_num_tokens > 0 ? padded_num_tokens : actual_num_tokens;
     attn_metadata->slot_mapping =
         persistent_new_cache_slots(slot_mapping_tokens);
+  } else if (!update_attention_plan) {
+    // DeepSeek-V4 rebuilds its per-cache slot mappings in the model-private
+    // DSA metadata hook. Keep only stable graph-facing carrier tensors here.
+    const uint32_t graph_num_sequences =
+        compact_dsv4_mtp_decode
+            ? static_cast<uint32_t>(
+                  (padded_num_tokens + compact_decode_width - 1) /
+                  compact_decode_width)
+            : (padded_num_tokens > 0 ? padded_num_tokens : actual_num_tokens);
+    const uint32_t graph_slot_tokens =
+        padded_num_tokens > 0 ? padded_num_tokens : actual_num_tokens;
+    persistent_new_cache_slots_
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/graph_slot_tokens)
+        .fill_(-1);
+    auto graph_q_seq_lens = q_seq_lens_.slice(
+        /*dim=*/0, /*start=*/0, /*end=*/graph_num_sequences + 1);
+    graph_q_seq_lens.copy_(persistent_decode_qo_indptr_.slice(
+        /*dim=*/0, /*start=*/0, /*end=*/graph_num_sequences + 1));
+    if (compact_dsv4_mtp_decode) {
+      graph_q_seq_lens.mul_(compact_decode_width);
+    }
+    kv_seq_lens_.slice(/*dim=*/0, /*start=*/0, /*end=*/graph_num_sequences + 1)
+        .zero_();
   }
 
   if (!is_rec_multi_round_mode() &&
@@ -703,54 +887,62 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
                /*non_blocking=*/true);
   }
 
-  // Copy block table data. In rec multi-round, block_tables may already be
-  // expanded to batch_size * beam_width rows while num_sequences still tracks
-  // the logical request count. Use the tensor's real row count here.
-  const int64_t actual_block_table_batch =
-      is_rec_multi_round_mode()
-          ? params.attention.device.block_tables.size(0)
-          : std::min<int64_t>(actual_batch_size,
-                              persistent_block_tables_.size(0));
-  CHECK_GE(params.attention.device.block_tables.size(0),
-           actual_block_table_batch)
-      << "block_tables has fewer rows than the logical graph batch";
-  const int64_t actual_block_table_len =
-      params.attention.device.block_tables.size(1);
-  const torch::Tensor source_block_tables =
-      params.attention.device.block_tables
-          .slice(/*dim=*/0,
-                 /*start=*/0,
-                 /*end=*/actual_block_table_batch)
-          .slice(/*dim=*/1,
-                 /*start=*/0,
-                 /*end=*/actual_block_table_len);
-  torch::Tensor slice_persistent_block_tables =
-      persistent_block_tables_
-          .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_block_table_batch)
-          .slice(/*dim=*/1, /*start=*/0, /*end=*/actual_block_table_len);
+  if (update_attention_plan) {
+    // Copy block table data. In rec multi-round, block_tables may already be
+    // expanded to batch_size * beam_width rows while num_sequences still tracks
+    // the logical request count. Use the tensor's real row count here.
+    const int64_t actual_block_table_batch =
+        is_rec_multi_round_mode()
+            ? params.attention.device.block_tables.size(0)
+            : std::min<int64_t>(actual_batch_size,
+                                persistent_block_tables_.size(0));
+    CHECK_GE(params.attention.device.block_tables.size(0),
+             actual_block_table_batch)
+        << "block_tables has fewer rows than the logical graph batch";
+    const int64_t actual_block_table_len =
+        params.attention.device.block_tables.size(1);
+    const torch::Tensor source_block_tables =
+        params.attention.device.block_tables
+            .slice(/*dim=*/0,
+                   /*start=*/0,
+                   /*end=*/actual_block_table_batch)
+            .slice(/*dim=*/1,
+                   /*start=*/0,
+                   /*end=*/actual_block_table_len);
+    torch::Tensor slice_persistent_block_tables =
+        persistent_block_tables_
+            .slice(/*dim=*/0, /*start=*/0, /*end=*/actual_block_table_batch)
+            .slice(/*dim=*/1, /*start=*/0, /*end=*/actual_block_table_len);
 
-  VLOG(kGraphExecutorLogVerboseLevel)
-      << "copy_ block_tables: src shape=" << source_block_tables.sizes()
-      << ", dst slice shape=" << slice_persistent_block_tables.sizes();
-  slice_persistent_block_tables.copy_(source_block_tables,
-                                      /*non_blocking=*/true);
-  const bool pad_decode_block_tables =
-      params.meta.batch_forward_type.is_decode() &&
-      padded_num_tokens > static_cast<uint32_t>(actual_block_table_batch);
-  if (pad_decode_block_tables) {
+    VLOG(kGraphExecutorLogVerboseLevel)
+        << "copy_ block_tables: src shape=" << source_block_tables.sizes()
+        << ", dst slice shape=" << slice_persistent_block_tables.sizes();
+    slice_persistent_block_tables.copy_(source_block_tables,
+                                        /*non_blocking=*/true);
+    const bool pad_decode_block_tables =
+        params.meta.batch_forward_type.is_decode() &&
+        padded_num_tokens > static_cast<uint32_t>(actual_block_table_batch);
+    if (pad_decode_block_tables) {
+      persistent_block_tables_
+          .slice(/*dim=*/0,
+                 /*start=*/actual_block_table_batch,
+                 /*end=*/padded_num_tokens)
+          .fill_(-1);
+    }
+    if (!attn_metadata->is_prefill || args_.enable_mla()) {
+      const uint32_t graph_block_table_batch =
+          pad_decode_block_tables
+              ? padded_num_tokens
+              : static_cast<uint32_t>(actual_block_table_batch);
+      attn_metadata->block_table =
+          persistent_block_tables(graph_block_table_batch);
+    }
+  } else {
+    const uint32_t graph_num_sequences =
+        padded_num_tokens > 0 ? padded_num_tokens : actual_num_tokens;
     persistent_block_tables_
-        .slice(/*dim=*/0,
-               /*start=*/actual_block_table_batch,
-               /*end=*/padded_num_tokens)
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/graph_num_sequences)
         .fill_(-1);
-  }
-  if (!attn_metadata->is_prefill || args_.enable_mla()) {
-    const uint32_t graph_block_table_batch =
-        pad_decode_block_tables
-            ? padded_num_tokens
-            : static_cast<uint32_t>(actual_block_table_batch);
-    attn_metadata->block_table =
-        persistent_block_tables(graph_block_table_batch);
   }
 
   // Update persistent embedding from input_embedding if available
@@ -761,21 +953,31 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     // Initialize persistent_embedding_ if needed and not already initialized
     if (persistent_embedding_.numel() == 0) {
       const int64_t max_tokens_per_batch = options_.max_tokens_per_batch();
-      const int64_t embedding_dim = embedding.size(1);
+      auto embedding_shape = embedding.sizes().vec();
+      CHECK(!embedding_shape.empty())
+          << "input_embedding must have a token dimension";
+      embedding_shape[0] = max_tokens_per_batch;
       torch::ScalarType dtype = util::parse_dtype(args_.dtype(), device_);
-      persistent_embedding_ =
-          torch::zeros({max_tokens_per_batch, embedding_dim},
-                       torch::dtype(dtype).device(device_));
+      persistent_embedding_ = torch::zeros(
+          embedding_shape, torch::dtype(dtype).device(device_));
     }
 
     // Copy embedding data to persistent buffer
     VLOG(kGraphExecutorLogVerboseLevel)
         << "copy_ embedding: src shape=" << embedding.sizes()
-        << ", dst slice shape=[" << embedding_tokens << ", "
-        << embedding.size(1) << "]";
+        << ", dst slice shape="
+        << persistent_embedding_
+               .slice(/*dim=*/0, /*start=*/0, /*end=*/embedding_tokens)
+               .sizes();
     persistent_embedding_
         .slice(/*dim=*/0, /*start=*/0, /*end=*/embedding_tokens)
         .copy_(embedding, /*non_blocking=*/true);
+  }
+
+  // DeepSeek-V4 owns composite DSA caches and supplies graph metadata through
+  // the model hook. It does not consume the generic FlashInfer plan below.
+  if (!update_attention_plan) {
+    return build_capture_params_if_needed();
   }
 
   const bool is_decode_with_llmrec =
@@ -1111,6 +1313,24 @@ void MusaGraph::refresh_persistent_paged_kv_host_mirrors(
 }
 
 // MusaGraph implementation
+void MusaGraph::prepare_model_graph_metadata(CausalLM* model,
+                                             const torch::Tensor& positions,
+                                             ModelInputParams& params) {
+  CHECK(model != nullptr) << "MUSA graph model must not be null";
+  if (!model->requires_graph_forward_metadata()) {
+    return;
+  }
+  if (!model_graph_metadata_state_) {
+    model_graph_metadata_state_ = model->create_graph_forward_metadata_state();
+    CHECK(model_graph_metadata_state_)
+        << "MUSA graph metadata state must be initialized during capture";
+  }
+  model->prepare_graph_forward_metadata(
+      model_graph_metadata_state_.get(), positions, params);
+  CHECK(params.attn_metadata)
+      << "MUSA graph metadata preparation did not populate attn_metadata";
+}
+
 bool MusaGraph::capture(CausalLM* model,
                         const ModelArgs& args,
                         const runtime::Options& options,
@@ -1121,6 +1341,7 @@ bool MusaGraph::capture(CausalLM* model,
                         uint32_t bucket_num_tokens,
                         const c10::musa::MempoolId_t& pool,
                         MusaMemPool* pool_ptr) {
+  model_ = model;
   padded_num_tokens_ = bucket_num_tokens;
   const uint32_t actual_num_tokens = tokens.size(0);
   CHECK_GE(padded_num_tokens_, actual_num_tokens)
@@ -1176,12 +1397,17 @@ bool MusaGraph::capture(CausalLM* model,
 
   // Update persistent parameters with input data before capture (includes
   // FlashInfer plan/update).
+  const bool needs_model_graph_metadata =
+      model->requires_graph_forward_metadata();
   auto full_attention_cache =
       MusaGraphExecutorImpl::find_first_full_attention_cache(kv_cache);
-  CHECK(full_attention_cache.has_value())
-      << "MUSA graph capture requires at least one full-attention KV cache";
-  const torch::Tensor& k_cache = full_attention_cache->first;
-  const torch::Tensor& v_cache = full_attention_cache->second;
+  CHECK(needs_model_graph_metadata || full_attention_cache.has_value())
+      << "MUSA graph capture requires at least one full-attention KV cache "
+         "unless the model supplies graph-forward metadata";
+  const torch::Tensor k_cache =
+      full_attention_cache ? full_attention_cache->first : torch::Tensor();
+  const torch::Tensor v_cache =
+      full_attention_cache ? full_attention_cache->second : torch::Tensor();
   auto graph_params_opt =
       persistent_param_.update(tokens,
                                k_cache,
@@ -1189,12 +1415,19 @@ bool MusaGraph::capture(CausalLM* model,
                                positions,
                                params,
                                padded_num_tokens_,
-                               /*return_capture_params=*/true);
+                               /*return_capture_params=*/true,
+                               /*update_attention_plan=*/
+                               !needs_model_graph_metadata);
 
   // Use the returned ModelInputParams for graph capture
   CHECK(graph_params_opt.has_value())
       << "update() should return ModelInputParams when "
          "return_capture_params=true";
+
+  prepare_model_graph_metadata(
+      model,
+      persistent_param_.persistent_positions(padded_num_tokens_),
+      graph_params_opt.value());
 
   captured_fa3_scheduler_metadata_ =
       graph_params_opt.value()
@@ -1216,7 +1449,6 @@ bool MusaGraph::capture(CausalLM* model,
     linear_state_snapshots = snapshot_linear_attention_state(
         kv_cache, linear_state_snapshot_indices);
   }
-
   refresh_persistent_paged_kv_host_mirrors(
       graph_params_opt.value().attn_metadata);
 
@@ -1303,6 +1535,9 @@ bool MusaGraph::capture(CausalLM* model,
         ffi_capture_stream_guard;
     ffi_capture_stream_guard.emplace(persistent_param_.device(),
                                      capture_stream_handle);
+    if (s_graph_dump_directory() != nullptr) {
+      graph_.enable_debug_mode();
+    }
     graph_.capture_begin(pool, musaStreamCaptureModeThreadLocal);
 
     xllm::kernel::musa::begin_ffi_alloc_replay(&recorded_ffi_allocs_);
@@ -1315,13 +1550,23 @@ bool MusaGraph::capture(CausalLM* model,
 
     // Store result in persistent buffer
     persistent_param_.set_hidden_states(forward_result.hidden_states);
-    if (options.enable_graph_aux_hidden_states() &&
+    if (should_capture_graph_aux_hidden_states(args, options) &&
         forward_result.aux_hidden_states.defined()) {
       persistent_param_.set_aux_hidden_states(forward_result.aux_hidden_states);
     }
 
     // End graph capture
     graph_.capture_end();
+    if (const char* dump_directory = s_graph_dump_directory()) {
+      const uint32_t capture_index =
+          s_completed_musa_graph_captures.load(std::memory_order_relaxed) + 1;
+      const std::string dump_path =
+          std::string(dump_directory) + "/target_device" +
+          std::to_string(device_index_) + "_capture" +
+          std::to_string(capture_index) + ".dot";
+      graph_.debug_dump(dump_path);
+      LOG(INFO) << "MUSA graph diagnostic dump: " << dump_path;
+    }
     ffi_capture_stream_guard.reset();
     xllm::kernel::musa::end_ffi_alloc_replay();
     if (snapshot_linear_state) {
@@ -1339,10 +1584,16 @@ bool MusaGraph::capture(CausalLM* model,
   // Synchronize to ensure graph capture is completed.
   capture_stream.synchronize();
 
+  // The external custom-allreduce backend records graph buffer addresses
+  // during capture. Exchange and register their IPC metadata before replay.
+  finalize_musa_custom_allreduce_graphs();
+
   // Explicitly restore stream after capture before replay logic.
   stream_guard.reset();
 
   // Replay is unified in MusaGraphExecutorImpl::run() after capture success.
+
+  s_completed_musa_graph_captures.fetch_add(1, std::memory_order_release);
 
   LOG(INFO) << "MUSA graph capture end, bucket_num_tokens: "
             << bucket_num_tokens;
@@ -1371,12 +1622,17 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
   }
 
   // Update persistent parameters with new input data
+  const bool needs_model_graph_metadata =
+      model_ != nullptr && model_->requires_graph_forward_metadata();
   auto full_attention_cache =
       MusaGraphExecutorImpl::find_first_full_attention_cache(kv_cache);
-  CHECK(full_attention_cache.has_value())
-      << "MUSA graph replay requires at least one full-attention KV cache";
-  const torch::Tensor& k_cache = full_attention_cache->first;
-  const torch::Tensor& v_cache = full_attention_cache->second;
+  CHECK(needs_model_graph_metadata || full_attention_cache.has_value())
+      << "MUSA graph replay requires at least one full-attention KV cache "
+         "unless the model supplies graph-forward metadata";
+  const torch::Tensor k_cache =
+      full_attention_cache ? full_attention_cache->first : torch::Tensor();
+  const torch::Tensor v_cache =
+      full_attention_cache ? full_attention_cache->second : torch::Tensor();
 
   {
     // Normal replay mode (for decode).
@@ -1399,9 +1655,16 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
                                  positions,
                                  params,
                                  padded_num_tokens_,
-                                 /*return_capture_params=*/true);
+                                 /*return_capture_params=*/true,
+                                 /*update_attention_plan=*/
+                                 !needs_model_graph_metadata);
     CHECK(replay_params_opt.has_value())
         << "update() should return ModelInputParams for decode replay";
+
+    prepare_model_graph_metadata(
+        model_,
+        persistent_param_.persistent_positions(padded_num_tokens_),
+        replay_params_opt.value());
 
     const torch::Tensor& fresh_fa3_scheduler_metadata =
         replay_params_opt.value()
@@ -1438,13 +1701,21 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
           replay_params_opt.value().attn_metadata);
     }
 
-    if (s_enable_graph_timing()) {
-      c10::musa::MUSAStream stream =
-          c10::musa::getCurrentMUSAStream(device_index_);
-      stream.synchronize();
+    // Timing is diagnostic-only. Do not synchronize the first q1 replay: the
+    // target q2 and draft q2 graphs have not been captured yet, and a device
+    // synchronization from that replay is illegal while another executor is
+    // entering capture. For the TP8/MTP validation shape all three captures
+    // complete before steady-state replay begins.
+    const bool time_graph_replay =
+        s_enable_graph_timing() &&
+        s_completed_musa_graph_captures.load(std::memory_order_acquire) >= 3;
+    if (time_graph_replay) {
+      CHECK_EQ(musaDeviceSynchronize(), musaSuccess)
+          << "failed to synchronize before MUSA graph timing";
       const auto replay_start = std::chrono::steady_clock::now();
       graph_.replay();
-      stream.synchronize();
+      CHECK_EQ(musaDeviceSynchronize(), musaSuccess)
+          << "failed to synchronize after MUSA graph timing";
       const auto replay_end = std::chrono::steady_clock::now();
       const auto replay_ms =
           std::chrono::duration<double, std::milli>(replay_end - replay_start)
@@ -1603,7 +1874,7 @@ ForwardInput MusaGraphExecutorImpl::prepare_inputs(Batch& batch) {
 ModelOutput MusaGraphExecutorImpl::attach_aux_hidden_states_if_needed(
     const torch::Tensor& hidden_states,
     uint32_t n_tokens) const {
-  if (options_.enable_graph_aux_hidden_states()) {
+  if (should_capture_graph_aux_hidden_states(args_, options_)) {
     auto aux_hidden_states = persistent_param_->aux_hidden_states(n_tokens);
     if (aux_hidden_states.defined() && aux_hidden_states.numel() > 0) {
       return ModelOutput(hidden_states, torch::Tensor(), aux_hidden_states);
@@ -1622,6 +1893,22 @@ ModelInputParams MusaGraphExecutorImpl::maybe_precompute_embedding_for_graph(
   auto embed_layer = model_->get_word_embedding();
   if (embed_layer.is_empty()) {
     return params;
+  }
+
+  if (args_.model_type() == "deepseek_v4_mtp") {
+    // The MTP graph already carries the target model's pre-HC context in
+    // input_embedding. Append the current token embedding outside capture;
+    // the MTP forward splits this stable packed tensor into target context and
+    // draft-token lanes.
+    CHECK(params.embedding.input_embedding.defined())
+        << "DeepSeek-V4 MTP Graph decode requires target context";
+    CHECK_EQ(params.embedding.input_embedding.dim(), 2)
+        << "DeepSeek-V4 MTP target context must be rank 2";
+    ModelInputParams new_params = params;
+    torch::Tensor token_embedding = embed_layer(tokens);
+    new_params.embedding.input_embedding = torch::cat(
+        {params.embedding.input_embedding, token_embedding}, /*dim=*/-1);
+    return new_params;
   }
 
   if (params.embedding.input_embedding.defined()) {
@@ -1646,7 +1933,15 @@ ModelInputParams MusaGraphExecutorImpl::maybe_precompute_embedding_for_graph(
   // around the in-graph `embed_tokens_(tokens)` call when the field is
   // defined (see xllm/models/llm/qwen3_next_hybrid_base.h).
   ModelInputParams new_params = params;
-  new_params.embedding.input_embedding = embed_layer(tokens);
+  torch::Tensor input_embedding = embed_layer(tokens);
+  if (args_.model_type() == "deepseek_v4" && input_embedding.dim() == 2) {
+    // TorchMUSA repeat() allocates its output and is illegal while a stream is
+    // capturing.  Materialize the HC lanes here; update() copies them into a
+    // stable persistent tensor referenced by both capture and replay.
+    input_embedding =
+        input_embedding.unsqueeze(1).repeat({1, args_.hc_mult(), 1});
+  }
+  new_params.embedding.input_embedding = std::move(input_embedding);
   return new_params;
 }
 

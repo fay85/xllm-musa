@@ -32,7 +32,8 @@ torch::Tensor fp8_linear_forward(
     const torch::Tensor& weight_scale,
     const std::optional<torch::Tensor>& input_scale,
     const std::optional<torch::Tensor>& bias,
-    at::ScalarType output_dtype);
+    at::ScalarType output_dtype,
+    const std::optional<torch::Tensor>& output = std::nullopt);
 
 bool load_fp8_weight_scale(const StateDict& state_dict,
                            int64_t dim,

@@ -79,7 +79,8 @@ class MusaGraphPersistentParam final {
                                          const torch::Tensor& positions,
                                          const ModelInputParams& params,
                                          uint32_t padded_num_tokens = 0,
-                                         bool return_capture_params = false);
+                                         bool return_capture_params = false,
+                                         bool update_attention_plan = true);
 
   // Getter methods for persistent tensors
   torch::Tensor persistent_tokens(uint32_t actual_tokens) const {
@@ -292,6 +293,10 @@ class MusaGraph final {
   }
 
  private:
+  void prepare_model_graph_metadata(CausalLM* model,
+                                    const torch::Tensor& positions,
+                                    ModelInputParams& params);
+
   // Print graph held tensors for debugging
   void print_graph_tensors() const;
 
@@ -316,12 +321,15 @@ class MusaGraph final {
   // Reference to persistent parameters (shared across multiple MusaGraph
   // instances).
   MusaGraphPersistentParam& persistent_param_;
+  CausalLM* model_{nullptr};
 
   at::DeviceIndex device_index_;
   // Native MUSA capture stream owned by MusaGraphExecutorImpl.
   c10::musa::MUSAStream capture_stream_;
 
   uint32_t padded_num_tokens_ = 0;
+
+  std::unique_ptr<ModelGraphMetadataState> model_graph_metadata_state_;
 
   // FA3 scheduler metadata consumed by the captured full-attention kernels.
   // Its address is fixed at capture time; replay copies freshly generated
