@@ -41,6 +41,7 @@ limitations under the License.
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
 #include "core/runtime/decode_graph_bucket.h"
+#include "core/runtime/musa/graph_memory_policy.h"
 #include "core/util/env_var.h"
 #include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
@@ -223,15 +224,13 @@ void restore_linear_attention_state(
   }
 }
 
-bool should_capture_graph_aux_hidden_states(
-    const ModelArgs& args,
-    const runtime::Options& options) {
+bool should_capture_graph_aux_hidden_states(const ModelArgs& args,
+                                            const runtime::Options& options) {
   // The DeepSeek-V4 target graph exports pre-HC lanes to MTP, while its draft
   // graph consumes those lanes and does not feed an auxiliary result back.
   // Keep the generic option intact for other models/backends.
   return options.enable_graph_aux_hidden_states() &&
-         !(options.is_draft_engine() &&
-           args.model_type() == "deepseek_v4_mtp");
+         !(options.is_draft_engine() && args.model_type() == "deepseek_v4_mtp");
 }
 
 }  // namespace
@@ -311,9 +310,9 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
     const int64_t max_aux_tokens =
         std::max<int64_t>(1, max_seqs_per_batch) *
         std::max<int64_t>(1, options_.num_speculative_tokens() + 1);
-    aux_hidden_states_ = torch::zeros(
-        {max_aux_tokens, args_.hidden_size() * args_.hc_mult()},
-        torch::dtype(dtype).device(device));
+    aux_hidden_states_ =
+        torch::zeros({max_aux_tokens, args_.hidden_size() * args_.hc_mult()},
+                     torch::dtype(dtype).device(device));
   }
 
   // FlashInfer decode mode parameters
@@ -528,8 +527,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   const bool compact_dsv4_mtp_decode =
       compact_dsv4_target_verify || compact_dsv4_draft_extend;
   if (s_enable_graph_timing()) {
-    LOG(INFO) << "GRAPH_TIMING compact_decode model_type="
-              << args_.model_type()
+    LOG(INFO) << "GRAPH_TIMING compact_decode model_type=" << args_.model_type()
               << " is_draft=" << options_.is_draft_engine()
               << " actual_num_tokens=" << actual_num_tokens
               << " compact_width=" << compact_decode_width
@@ -958,8 +956,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
           << "input_embedding must have a token dimension";
       embedding_shape[0] = max_tokens_per_batch;
       torch::ScalarType dtype = util::parse_dtype(args_.dtype(), device_);
-      persistent_embedding_ = torch::zeros(
-          embedding_shape, torch::dtype(dtype).device(device_));
+      persistent_embedding_ =
+          torch::zeros(embedding_shape, torch::dtype(dtype).device(device_));
     }
 
     // Copy embedding data to persistent buffer
@@ -1560,10 +1558,10 @@ bool MusaGraph::capture(CausalLM* model,
     if (const char* dump_directory = s_graph_dump_directory()) {
       const uint32_t capture_index =
           s_completed_musa_graph_captures.load(std::memory_order_relaxed) + 1;
-      const std::string dump_path =
-          std::string(dump_directory) + "/target_device" +
-          std::to_string(device_index_) + "_capture" +
-          std::to_string(capture_index) + ".dot";
+      const std::string dump_path = std::string(dump_directory) +
+                                    "/target_device" +
+                                    std::to_string(device_index_) + "_capture" +
+                                    std::to_string(capture_index) + ".dot";
       graph_.debug_dump(dump_path);
       LOG(INFO) << "MUSA graph diagnostic dump: " << dump_path;
     }
@@ -1825,7 +1823,7 @@ void MusaGraphExecutorImpl::log_graph_memory_after_capture() {}
 c10::musa::MempoolId_t MusaGraphExecutorImpl::get_mem_pool(
     uint32_t physical_pool_id,
     uint32_t shape_id) {
-  if (!::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool()) {
+  if (!supports_graph_vmm_pool()) {
     // Non-VMM mode intentionally uses one pool per executor instance.
     // Rationale: this executor is designed for single-threaded invocation, and
     // concurrent run() on the same executor instance is not allowed.
@@ -2048,7 +2046,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         << "MusaGraphExecutorImpl::run() in decode capture mode";
 
     MusaMemPool* pool_ptr = nullptr;
-    if (::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool()) {
+    if (supports_graph_vmm_pool()) {
       reset_vmm_allocator_offset(kPhysicalPoolIdDecode);
       const uint32_t shape_id = bucket_num_tokens;
       pool_ptr = get_or_create_vmm_mempool(kPhysicalPoolIdDecode, shape_id);

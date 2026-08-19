@@ -22,6 +22,7 @@ limitations under the License.
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/dsa_metadata.h"
 #include "core/util/tensor_helper.h"
+#include "framework/block/musa/deepseek_v4_prefix_transfer.h"
 
 namespace xllm::layer {
 
@@ -219,6 +220,22 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
   build_seq_lengths(
       params, metadata_device, batch_size, ctx_lens_vec, q_lens_vec, dsa);
   dsa.is_acl_graph = is_acl_graph;
+  std::vector<int32_t> prefix_snapshot_values;
+  for (const BlockTransferInfo& transfer : params.block_copy.swap_blocks) {
+    const musa::DeepseekV4PrefixTransfer decoded =
+        musa::decode_deepseek_v4_prefix_transfer(transfer);
+    if (decoded.kind != musa::DeepseekV4PrefixTransferKind::STATE_SNAPSHOT) {
+      continue;
+    }
+    prefix_snapshot_values.emplace_back(decoded.src_block_id);
+    prefix_snapshot_values.emplace_back(decoded.prefix_tokens);
+  }
+  if (!prefix_snapshot_values.empty()) {
+    dsa.cp_input_dict[musa::kDeepseekV4PrefixSnapshotMetadataKey] =
+        torch::tensor(prefix_snapshot_values,
+                      torch::TensorOptions().dtype(torch::kInt32))
+            .view({-1, 2});
+  }
   // The eager MTP target carrier expands one logical request into q2 decode
   // rows while retaining the original single request id.  Mark that private
   // DSV4 shape as compact speculative verification too; otherwise attention

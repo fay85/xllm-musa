@@ -877,7 +877,9 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     const torch::Tensor& hidden_states,
     const torch::Tensor& topk_weights,
     const torch::Tensor& topk_ids,
-    const ModelInputParams& input_params) {
+    const ModelInputParams& input_params,
+    bool skip_tp_allreduce,
+    const torch::Tensor& output_buffer) {
   CHECK((w13_is_loaded_ && w2_is_loaded_) || fp4_experts_loaded() ||
         fp8_experts_loaded())
       << "DeepseekV4MoE expert weights must be loaded before forward.";
@@ -1007,9 +1009,28 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     }
   }
 
+  if (output_buffer.defined()) {
+    CHECK(output_buffer.dim() == 2 && output_buffer.is_contiguous());
+    CHECK_GE(output_buffer.size(0), output.size(0));
+    CHECK_EQ(output_buffer.size(1), output.size(1));
+    auto valid_output = output_buffer.narrow(
+        /*dim=*/0, /*start=*/0, /*length=*/output.size(0));
+    if (valid_output.data_ptr() != output.data_ptr()) {
+      valid_output.copy_(output);
+      if (output_buffer.size(0) > output.size(0)) {
+        output_buffer
+            .narrow(/*dim=*/0,
+                    /*start=*/output.size(0),
+                    /*length=*/output_buffer.size(0) - output.size(0))
+            .zero_();
+      }
+      output = valid_output;
+    }
+  }
+
   // Routed and shared experts are sharded across the TP group. Reduce their
   // combined partial hidden-state sum once, after both branches are complete.
-  if (tp_pg_ != nullptr && tp_pg_->world_size() > 1) {
+  if (tp_pg_ != nullptr && tp_pg_->world_size() > 1 && !skip_tp_allreduce) {
     const bool use_custom_allreduce =
         num_layers_ <= 4 || layer_id_ < num_layers_ - 4;
     bool used_custom_allreduce = false;

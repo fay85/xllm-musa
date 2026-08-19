@@ -21,7 +21,9 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:mlu_graph_executor_impl.h>
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.h>
     $<$<BOOL:${USE_MUSA}>:musa_graph_executor_impl.h>
+    $<$<BOOL:${USE_MUSA}>:musa/graph_memory_policy.h>
     $<$<BOOL:${USE_MUSA}>:musa/musa_model_args.h>
+    $<$<BOOL:${USE_MUSA}>:musa/deepseek_v4_prefix_block_copy.h>
     py_executor_impl.h
     py_attention_metadata.h
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.h>
@@ -60,6 +62,7 @@ cc_library(
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.cpp>
     $<$<BOOL:${USE_MUSA}>:musa_graph_executor_impl.cpp>
     $<$<BOOL:${USE_MUSA}>:musa/musa_model_args.cpp>
+    $<$<BOOL:${USE_MUSA}>:musa/deepseek_v4_prefix_block_copy.cpp>
     py_executor_impl.cpp
     py_attention_metadata.cpp
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.cpp>

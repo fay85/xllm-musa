@@ -955,6 +955,19 @@ class DeepseekV4ModelImpl final
       h = shard_sequence(h, fc1_ctx);
     }
 
+    std::optional<layer::dsv4_musa_sp::DeepseekV4SPContext>
+        sequence_parallel_context = std::nullopt;
+    sequence_parallel_context = layer::dsv4_musa_sp::build_context(
+        tokens,
+        modified_input_params.meta.batch_forward_type.no_decode(),
+        parallel_args_.tp_group_);
+    if (sequence_parallel_context.has_value()) {
+      h = layer::dsv4_musa_sp::local_shard(h,
+                                           sequence_parallel_context.value());
+      tokens = layer::dsv4_musa_sp::local_shard(
+          tokens, sequence_parallel_context.value());
+    }
+
     std::optional<torch::Tensor> residual;
     for (size_t i = 0; i < layers_.size(); i++) {
       if (attn_metadata.dsa_metadata) {
@@ -1018,6 +1031,10 @@ class DeepseekV4ModelImpl final
         }
       }
 
+      layers_[i]->set_sequence_parallel_context(
+          sequence_parallel_context.has_value()
+              ? &sequence_parallel_context.value()
+              : nullptr);
       h = layers_[i](h,
                      residual,
                      positions,
@@ -1025,6 +1042,13 @@ class DeepseekV4ModelImpl final
                      kv_caches[i],
                      modified_input_params,
                      tokens);
+    }
+    if (sequence_parallel_context.has_value()) {
+      h = layer::dsv4_musa_sp::gather_global(h,
+                                             sequence_parallel_context.value());
+      for (layer::DeepseekV4DecoderLayer& layer : layers_) {
+        layer->set_sequence_parallel_context(nullptr);
+      }
     }
     if (is_sequence_sharded(fc1_ctx)) {
       h = gather_sequence(h, fc1_ctx);

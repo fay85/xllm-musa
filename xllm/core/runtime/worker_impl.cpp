@@ -85,6 +85,7 @@ limitations under the License.
 #include "models/model_registry.h"
 #include "runtime/forward_params.h"
 #if defined(USE_MUSA)
+#include "runtime/musa/deepseek_v4_prefix_block_copy.h"
 #include "runtime/musa/musa_model_args.h"
 #endif
 #if defined(USE_NPU)
@@ -1029,6 +1030,12 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
 }
 
 void WorkerImpl::apply_kv_block_swaps(const ModelInputParams& input_params) {
+#if defined(USE_MUSA)
+  if (musa::apply_deepseek_v4_prefix_block_copies(
+          input_params.block_copy.swap_blocks, &kv_caches_, device_)) {
+    return;
+  }
+#endif
 #if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   if (::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel() &&
       can_use_cuda_block_copy_kernel(input_params)) {

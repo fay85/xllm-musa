@@ -42,6 +42,15 @@ DeepseekV4DecoderLayerImpl::DeepseekV4DecoderLayerImpl(
   norm_eps_ = static_cast<double>(args.rms_norm_eps());
 
   attention_ = register_module("attn", DeepseekV4Attention(context, layer_id));
+  CHECK(parallel_args.single_rank_group_ != nullptr)
+      << "DeepSeek-V4 prefill sequence parallel requires a single-rank "
+         "process group for replicated attention";
+  ParallelArgs prefill_parallel_args = parallel_args;
+  prefill_parallel_args.tp_group_ = parallel_args.single_rank_group_;
+  prefill_attention_ = register_module(
+      "prefill_attn",
+      DeepseekV4Attention(
+          args, quant_args, prefill_parallel_args, options, layer_id));
   attn_norm_ = register_module(
       "attn_norm", RMSNorm(hidden_size, args.rms_norm_eps(), options));
   ffn_norm_ = register_module(
@@ -93,6 +102,7 @@ void DeepseekV4DecoderLayerImpl::load_state_dict(const StateDict& state_dict) {
   }
   if (attn_state.size() > 0) {
     attention_->load_state_dict(attn_state);
+    prefill_attention_->load_state_dict(attn_state);
   }
 
   auto attn_norm_state = state_dict.get_dict_with_prefix("attn_norm.");
@@ -186,16 +196,27 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
                    kv_cache.get_compress_score_state(),
                    kv_cache.get_compress_index_kv_state(),
                    kv_cache.get_compress_index_score_state()};
+  DeepseekV4Attention active_attention = attention_;
+  if (sequence_parallel_context_ != nullptr) {
+    prefill_attention_->set_sequence_parallel_context(
+        sequence_parallel_context_);
+    active_attention = prefill_attention_;
+  }
   auto [attn_output, attn_lse] =
-      attention_->forward(dsa,
-                          attn_input,
-                          kv_cache,
-                          kv_state,
-                          attn_metadata.is_prefill,
-                          attn_metadata.is_chunked_prefill,
-                          compress_metadata);
+      active_attention->forward(dsa,
+                                attn_input,
+                                kv_cache,
+                                kv_state,
+                                attn_metadata.is_prefill,
+                                attn_metadata.is_chunked_prefill,
+                                compress_metadata);
   (void)attn_lse;
   attn_input = attn_output;
+  if (sequence_parallel_context_ != nullptr &&
+      attn_input.size(0) == sequence_parallel_context_->local_valid_tokens) {
+    attn_input =
+        dsv4_musa_sp::pad_local(attn_input, *sequence_parallel_context_);
+  }
   x = hc_post(attn_input, residual_attn, post_attn, comb_attn);
 
   auto residual_ffn = x;
@@ -222,11 +243,25 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
     ffn_input = gather_sequence(ffn_input, *fc1_ctx);
   }
 
+  if (sequence_parallel_context_ != nullptr) {
+    const dsv4_musa_sp::DeepseekV4SPContext& sp = *sequence_parallel_context_;
+    CHECK_EQ(ffn_input.size(0), sp.local_tokens)
+        << "DeepSeek-V4 SP MoE input has unexpected local token rows";
+    ffn_input = dsv4_musa_sp::gather_global(ffn_input, sp);
+  }
   auto ffn_input_2d = ffn_input.reshape({-1, ffn_input.size(-1)});
   std::optional<torch::Tensor> gate_input_ids = std::nullopt;
   if (input_ids.has_value() && input_ids.value().defined()) {
     auto flat_input_ids =
         input_ids.value().reshape({-1}).to(ffn_input.device());
+    if (sequence_parallel_context_ != nullptr) {
+      const auto& global_input_ids =
+          sequence_parallel_context_->global_input_ids;
+      CHECK(global_input_ids.defined());
+      CHECK_EQ(global_input_ids.numel(),
+               sequence_parallel_context_->total_tokens);
+      flat_input_ids = global_input_ids.reshape({-1});
+    }
     const int64_t token_count = flat_input_ids.size(0);
     const int64_t hidden_rows = ffn_input_2d.size(0);
     if (token_count == hidden_rows) {
@@ -246,7 +281,10 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
   ffn_input = moe_mlp_->forward_with_selected_experts(
       ffn_input, topk_weights, topk_ids, input_params);
 
-  if (fc1_ctx && is_sequence_sharded(*fc1_ctx)) {
+  if (sequence_parallel_context_ != nullptr) {
+    const dsv4_musa_sp::DeepseekV4SPContext& sp = *sequence_parallel_context_;
+    ffn_input = dsv4_musa_sp::local_shard(ffn_input, sp);
+  } else if (fc1_ctx && is_sequence_sharded(*fc1_ctx)) {
     ffn_input = shard_sequence(ffn_input, *fc1_ctx);
   }
   x = hc_post(ffn_input, residual_ffn, post_ffn, comb_ffn);
@@ -278,6 +316,22 @@ DeepseekV4DecoderLayerImpl::hc_pre(const torch::Tensor& x,
                                                    hc_pre_output_workspace_,
                                                    hc_pre_post_workspace_,
                                                    hc_pre_comb_workspace_,
+                                                   norm_weight,
+                                                   output_is_normalized);
+  }
+  constexpr int64_t kMatePrefillValidatedMaxTokens = 320;
+  if (x_hc.size(0) <= kMatePrefillValidatedMaxTokens) {
+    return kernel::musa::deepseek_v4_hc_pre_decode(x_hc,
+                                                   hc_fn.contiguous(),
+                                                   hc_scale.contiguous(),
+                                                   hc_base.contiguous(),
+                                                   hc_mult_,
+                                                   hc_sinkhorn_iters_,
+                                                   norm_eps_,
+                                                   hc_eps_,
+                                                   std::nullopt,
+                                                   std::nullopt,
+                                                   std::nullopt,
                                                    norm_weight,
                                                    output_is_normalized);
   }

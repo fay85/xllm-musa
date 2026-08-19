@@ -1633,18 +1633,39 @@ torch::Tensor DeepseekV4AttentionImpl::compress_prefill_sequence(
     const torch::Tensor& sin,
     size_t sequence_index,
     int64_t prefix_snapshot_tokens,
-    int64_t cached_prefix_tokens) {
+    int64_t cached_prefix_tokens,
+    const torch::Tensor& projected_kv,
+    const torch::Tensor& projected_score) {
   if (!(compress_ratio_ == 4 || compress_ratio_ == 128) || !compressor_wkv_ ||
       !compressor_wgate_ || !compressor_norm_ || !compressor_ape_loaded_ ||
       !hidden_states.defined() || hidden_states.numel() == 0) {
     return torch::Tensor();
   }
-  auto kv_full =
-      compressor_wkv_->forward(hidden_states).to(torch::kFloat32).contiguous();
+  CHECK_EQ(projected_kv.defined(), projected_score.defined());
+  torch::Tensor kv_projection = projected_kv.defined()
+                                    ? projected_kv
+                                    : compressor_wkv_->forward(hidden_states);
+  torch::Tensor score_projection =
+      projected_score.defined() ? projected_score
+                                : compressor_wgate_->forward(hidden_states);
+  if (!projected_kv.defined() && sequence_parallel_context_ != nullptr &&
+      hidden_states.size(0) == sequence_parallel_context_->local_valid_tokens) {
+    CHECK_EQ(kv_projection.scalar_type(), score_projection.scalar_type());
+    const int64_t kv_width = kv_projection.size(1);
+    torch::Tensor packed_projection =
+        torch::cat({kv_projection.contiguous(), score_projection.contiguous()},
+                   /*dim=*/1);
+    packed_projection = dsv4_musa_sp::gather_global(
+        dsv4_musa_sp::pad_local(packed_projection, *sequence_parallel_context_),
+        *sequence_parallel_context_);
+    kv_projection = packed_projection.slice(
+        /*dim=*/1, /*start=*/0, /*end=*/kv_width);
+    score_projection = packed_projection.slice(
+        /*dim=*/1, /*start=*/kv_width, /*end=*/packed_projection.size(1));
+  }
+  torch::Tensor kv_full = kv_projection.to(torch::kFloat32).contiguous();
   maybe_sync_attention_stage(layer_id_, "compress_prefill_wkv", kv_full);
-  auto score_full = compressor_wgate_->forward(hidden_states)
-                        .to(torch::kFloat32)
-                        .contiguous();
+  torch::Tensor score_full = score_projection.to(torch::kFloat32).contiguous();
   maybe_sync_attention_stage(layer_id_, "compress_prefill_wgate", score_full);
   auto ape =
       compressor_ape_.to(score_full.device()).to(torch::kFloat32).contiguous();
@@ -1684,11 +1705,12 @@ torch::Tensor DeepseekV4AttentionImpl::compress_prefill_sequence(
       // second coefficient from block N. The prefix cache stores the former
       // in the recurrent state, so prepend it and discard the synthetic row.
       auto previous_kv =
-          restored_kv_state.slice(/*dim=*/0, /*start=*/0, /*end=*/compress_ratio_)
+          restored_kv_state
+              .slice(/*dim=*/0, /*start=*/0, /*end=*/compress_ratio_)
               .to(kv_full.scalar_type());
       auto previous_score =
-          restored_score_state
-              .slice(/*dim=*/0, /*start=*/0, /*end=*/compress_ratio_) -
+          restored_score_state.slice(
+              /*dim=*/0, /*start=*/0, /*end=*/compress_ratio_) -
           ape;
       kv_full = torch::cat({previous_kv, kv_full}, /*dim=*/0);
       score_full = torch::cat({previous_score, score_full}, /*dim=*/0);
@@ -1708,24 +1730,25 @@ torch::Tensor DeepseekV4AttentionImpl::compress_prefill_sequence(
   if (prefix_snapshot_tokens > 0 && prefix_snapshot_tokens <= seq_len &&
       prefix_snapshot_tokens % compress_ratio_ == 0) {
     auto snapshot_kv = torch::zeros({state_rows, state_dim}, state_options);
-    auto snapshot_score = torch::full(
-        {state_rows, state_dim}, -std::numeric_limits<float>::infinity(),
-        state_options);
+    auto snapshot_score = torch::full({state_rows, state_dim},
+                                      -std::numeric_limits<float>::infinity(),
+                                      state_options);
     if (compress_ratio_ == 4 && prefix_snapshot_tokens >= compress_ratio_) {
       snapshot_kv.slice(/*dim=*/0, /*start=*/0, /*end=*/compress_ratio_)
-          .copy_(kv_full.slice(/*dim=*/0,
-                               /*start=*/prefix_snapshot_tokens -
-                                   compress_ratio_,
-                               /*end=*/prefix_snapshot_tokens));
+          .copy_(
+              kv_full.slice(/*dim=*/0,
+                            /*start=*/prefix_snapshot_tokens - compress_ratio_,
+                            /*end=*/prefix_snapshot_tokens));
       snapshot_score.slice(/*dim=*/0, /*start=*/0, /*end=*/compress_ratio_)
-          .copy_(score_full.slice(/*dim=*/0,
-                                  /*start=*/prefix_snapshot_tokens -
-                                      compress_ratio_,
-                                  /*end=*/prefix_snapshot_tokens) +
+          .copy_(score_full.slice(
+                     /*dim=*/0,
+                     /*start=*/prefix_snapshot_tokens - compress_ratio_,
+                     /*end=*/prefix_snapshot_tokens) +
                  ape);
     }
     prefix_compressor_kv_state_[sequence_index] = snapshot_kv.contiguous();
-    prefix_compressor_score_state_[sequence_index] = snapshot_score.contiguous();
+    prefix_compressor_score_state_[sequence_index] =
+        snapshot_score.contiguous();
   }
   auto kv_state = torch::zeros({state_rows, state_dim}, state_options);
   auto score_state = torch::full({state_rows, state_dim},
@@ -1847,8 +1870,8 @@ torch::Tensor DeepseekV4AttentionImpl::compress_prefill_sequence(
   if (output_block_offset > 0) {
     CHECK_GE(compressed.size(0), output_block_offset);
     compressed = compressed.slice(/*dim=*/0,
-                                 /*start=*/output_block_offset,
-                                 /*end=*/compressed.size(0));
+                                  /*start=*/output_block_offset,
+                                  /*end=*/compressed.size(0));
   }
   return compressed;
 }
@@ -2032,7 +2055,9 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_prefill_sequence(
     const torch::Tensor& sin,
     size_t sequence_index,
     int64_t prefix_snapshot_tokens,
-    int64_t cached_prefix_tokens) {
+    int64_t cached_prefix_tokens,
+    const torch::Tensor& projected_kv,
+    const torch::Tensor& projected_score) {
   constexpr int64_t kCompressRatio = 4;
   constexpr int64_t kCompressorCoff = 2;
   if (compress_ratio_ != kCompressRatio || !indexer_compressor_wkv_ ||
@@ -2042,12 +2067,31 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_prefill_sequence(
     return torch::Tensor();
   }
 
-  auto kv_full = indexer_compressor_wkv_->forward(hidden_states)
-                     .to(torch::kFloat32)
-                     .contiguous();
-  auto score_full = indexer_compressor_wgate_->forward(hidden_states)
-                        .to(torch::kFloat32)
-                        .contiguous();
+  CHECK_EQ(projected_kv.defined(), projected_score.defined());
+  torch::Tensor kv_projection =
+      projected_kv.defined() ? projected_kv
+                             : indexer_compressor_wkv_->forward(hidden_states);
+  torch::Tensor score_projection =
+      projected_score.defined()
+          ? projected_score
+          : indexer_compressor_wgate_->forward(hidden_states);
+  if (!projected_kv.defined() && sequence_parallel_context_ != nullptr &&
+      hidden_states.size(0) == sequence_parallel_context_->local_valid_tokens) {
+    CHECK_EQ(kv_projection.scalar_type(), score_projection.scalar_type());
+    const int64_t kv_width = kv_projection.size(1);
+    torch::Tensor packed_projection =
+        torch::cat({kv_projection.contiguous(), score_projection.contiguous()},
+                   /*dim=*/1);
+    packed_projection = dsv4_musa_sp::gather_global(
+        dsv4_musa_sp::pad_local(packed_projection, *sequence_parallel_context_),
+        *sequence_parallel_context_);
+    kv_projection = packed_projection.slice(
+        /*dim=*/1, /*start=*/0, /*end=*/kv_width);
+    score_projection = packed_projection.slice(
+        /*dim=*/1, /*start=*/kv_width, /*end=*/packed_projection.size(1));
+  }
+  torch::Tensor kv_full = kv_projection.to(torch::kFloat32).contiguous();
+  torch::Tensor score_full = score_projection.to(torch::kFloat32).contiguous();
   auto ape = indexer_compressor_ape_.to(score_full.device())
                  .to(torch::kFloat32)
                  .contiguous();
@@ -2084,9 +2128,9 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_prefill_sequence(
     auto previous_kv =
         restored_kv_state.slice(/*dim=*/0, /*start=*/0, /*end=*/kCompressRatio)
             .to(kv_full.scalar_type());
-    auto previous_score =
-        restored_score_state.slice(/*dim=*/0, /*start=*/0, /*end=*/kCompressRatio) -
-        ape;
+    auto previous_score = restored_score_state.slice(
+                              /*dim=*/0, /*start=*/0, /*end=*/kCompressRatio) -
+                          ape;
     kv_full = torch::cat({previous_kv, kv_full}, /*dim=*/0);
     score_full = torch::cat({previous_score, score_full}, /*dim=*/0);
     output_block_offset = 1;
@@ -2102,9 +2146,9 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_prefill_sequence(
   if (prefix_snapshot_tokens > 0 && prefix_snapshot_tokens <= seq_len &&
       prefix_snapshot_tokens % kCompressRatio == 0) {
     auto snapshot_kv = torch::zeros({state_rows, state_dim}, state_options);
-    auto snapshot_score = torch::full(
-        {state_rows, state_dim}, -std::numeric_limits<float>::infinity(),
-        state_options);
+    auto snapshot_score = torch::full({state_rows, state_dim},
+                                      -std::numeric_limits<float>::infinity(),
+                                      state_options);
     snapshot_kv.slice(/*dim=*/0, /*start=*/0, /*end=*/kCompressRatio)
         .copy_(kv_full.slice(/*dim=*/0,
                              /*start=*/prefix_snapshot_tokens - kCompressRatio,
@@ -2211,8 +2255,8 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_prefill_sequence(
   if (output_block_offset > 0) {
     CHECK_GE(compressed.size(0), output_block_offset);
     compressed = compressed.slice(/*dim=*/0,
-                                 /*start=*/output_block_offset,
-                                 /*end=*/compressed.size(0));
+                                  /*start=*/output_block_offset,
+                                  /*end=*/compressed.size(0));
   }
   return apply_indexer_hadamard(compressed, indexer_hadamard_);
 }
@@ -2370,6 +2414,8 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_decode_step(
 torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
     const torch::Tensor& qr,
     const torch::Tensor& hidden_states,
+    const torch::Tensor& precomputed_head_weights,
+    const torch::Tensor& precomputed_query,
     const torch::Tensor& cos,
     const torch::Tensor& sin,
     const torch::Tensor& index_kv,
@@ -2386,7 +2432,9 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
     int64_t mate_block_size,
     torch::Tensor* mate_physical_indices,
     torch::Tensor* mate_extra_physical_indices) {
-  if (!dsv4_musa_indexer_enabled() || !indexer_wq_b_ ||
+  if (!dsv4_musa_indexer_enabled() ||
+      (!indexer_wq_b_ && !q_indexer_b_weight_loaded_ &&
+       !precomputed_query.defined()) ||
       !indexer_weights_proj_ || qr.numel() == 0 || index_len <= 0) {
     return torch::Tensor();
   }
@@ -2413,8 +2461,26 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
     CHECK_EQ(active_index_kv.size(-1), index_head_dim_);
   }
   const int64_t kv_tokens = index_len;
-  auto query = indexer_wq_b_->forward(qr).view(
-      {q_tokens, index_n_heads_, index_head_dim_});
+  torch::Tensor query;
+  if (precomputed_query.defined()) {
+    query = precomputed_query;
+  } else if (q_indexer_b_weight_loaded_) {
+    const int64_t main_q_width = n_local_heads_ * head_dim_;
+    kernel::MatmulParams params;
+    params.a = qr;
+    params.b = q_indexer_b_weight_.slice(
+        /*dim=*/0,
+        /*start=*/main_q_width,
+        /*end=*/main_q_width + index_n_heads_ * index_head_dim_);
+    params.bias = std::nullopt;
+    query = kernel::matmul(params).view(
+        {q_tokens, index_n_heads_, index_head_dim_});
+  } else {
+    query = indexer_wq_b_->forward(qr).view(
+        {q_tokens, index_n_heads_, index_head_dim_});
+  }
+  CHECK_EQ(query.sizes(),
+           torch::IntArrayRef({q_tokens, index_n_heads_, index_head_dim_}));
   bool fused_rope_hadamard = false;
   if (q_tokens == 1 && cos.defined() && sin.defined() &&
       cos.size(0) >= q_tokens && sin.size(0) >= q_tokens) {
@@ -2439,10 +2505,23 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
     query = dynamic_int8_roundtrip_last_dim(query);
   }
   torch::Tensor head_weights;
-  if (q_tokens == 1 && decode_indexer_head_weight_projection_.defined() &&
-      decode_indexer_head_weights_.defined() &&
-      hidden_states.scalar_type() ==
-          indexer_weights_proj_->weight().scalar_type()) {
+  if (precomputed_head_weights.defined()) {
+    CHECK_EQ(precomputed_head_weights.sizes(),
+             torch::IntArrayRef({q_tokens, index_n_heads_}));
+    if (q_tokens == 1 && decode_indexer_head_weights_.defined()) {
+      head_weights = kernel::musa::deepseek_v4_scale_to_fp32(
+          precomputed_head_weights,
+          indexer_score_scale_,
+          std::optional<torch::Tensor>(decode_indexer_head_weights_));
+    } else {
+      head_weights =
+          precomputed_head_weights.to(torch::kFloat32) * indexer_score_scale_;
+    }
+  } else if (q_tokens == 1 &&
+             decode_indexer_head_weight_projection_.defined() &&
+             decode_indexer_head_weights_.defined() &&
+             hidden_states.scalar_type() ==
+                 indexer_weights_proj_->weight().scalar_type()) {
     auto projection = kernel::musa::matmul(
         hidden_states,
         indexer_weights_proj_->weight(),
@@ -2571,33 +2650,51 @@ DeepseekV4AttentionImpl::forward(
             compress_metadata) {
   (void)compress_metadata;
 
+  const dsv4_musa_sp::DeepseekV4SPContext* sp_context =
+      (is_prefill || is_chunked_prefill) ? sequence_parallel_context_ : nullptr;
+  if (sp_context != nullptr) {
+    CHECK_EQ(hidden_states.size(0), sp_context->local_tokens)
+        << "DeepSeek-V4 replicated prefill attention expects padded local "
+           "hidden states";
+  }
+  torch::Tensor projection_hidden_states =
+      sp_context == nullptr
+          ? hidden_states
+          : hidden_states.narrow(/*dim=*/0,
+                                 /*start=*/0,
+                                 sp_context->local_valid_tokens);
+  torch::Tensor compression_hidden_states = projection_hidden_states;
+
   const int32_t profile_device_id = hidden_states.device().index();
-  auto* prefill_profile =
-      begin_prefill_profile(layer_id_, hidden_states, is_prefill);
+  auto* prefill_profile = begin_prefill_profile(
+      layer_id_, hidden_states, is_prefill || is_chunked_prefill);
 
   const bool use_packed_qkv_a =
-      qkv_a_weight_loaded_ && hidden_states.dim() == 2 &&
-      hidden_states.size(0) > 0 &&
-      hidden_states.size(0) <= decode_qkv_a_output_.size(0);
+      qkv_a_weight_loaded_ && projection_hidden_states.dim() == 2 &&
+      projection_hidden_states.size(0) > 0 &&
+      projection_hidden_states.size(0) <= decode_qkv_a_output_.size(0);
   auto packed_qkv_a_matmul = [&](const torch::Tensor& weight) {
     kernel::MatmulParams params;
-    params.a = hidden_states;
+    params.a = projection_hidden_states;
     params.b = weight;
     params.bias = std::nullopt;
     if (decode_qkv_a_output_.defined() &&
-        hidden_states.size(0) <= decode_qkv_a_output_.size(0) &&
+        projection_hidden_states.size(0) <= decode_qkv_a_output_.size(0) &&
         weight.size(0) == decode_qkv_a_output_.size(1)) {
       params.c = decode_qkv_a_output_.narrow(
-          /*dim=*/0, /*start=*/0, /*length=*/hidden_states.size(0));
+          /*dim=*/0,
+          /*start=*/0,
+          /*length=*/projection_hidden_states.size(0));
     }
     return kernel::matmul(params);
   };
 
   torch::Tensor q_down;
   torch::Tensor kv_down;
+  torch::Tensor packed_indexer_head_weights;
   if (use_packed_qkv_a) {
     auto qkv_down = packed_qkv_a_matmul(qkv_a_weight_);
-    if (hidden_states.size(0) == 1) {
+    if (projection_hidden_states.size(0) == 1) {
       q_down = qkv_down.slice(
           /*dim=*/1, /*start=*/0, /*end=*/q_lora_rank_);
       kv_down = qkv_down.slice(/*dim=*/1,
@@ -2607,16 +2704,26 @@ DeepseekV4AttentionImpl::forward(
           << "T=1 packed q/kv slices must remain contiguous.";
     } else {
       auto q_down_workspace = decode_q_down_.narrow(
-          /*dim=*/0, /*start=*/0, /*length=*/hidden_states.size(0));
+          /*dim=*/0,
+          /*start=*/0,
+          /*length=*/projection_hidden_states.size(0));
       q_down_workspace.copy_(qkv_down.slice(
           /*dim=*/1, /*start=*/0, /*end=*/q_lora_rank_));
       q_down = q_down_workspace;
       auto kv_down_workspace = decode_kv_down_.narrow(
-          /*dim=*/0, /*start=*/0, /*length=*/hidden_states.size(0));
+          /*dim=*/0,
+          /*start=*/0,
+          /*length=*/projection_hidden_states.size(0));
       kv_down_workspace.copy_(qkv_down.slice(/*dim=*/1,
                                              /*start=*/q_lora_rank_,
                                              /*end=*/q_lora_rank_ + head_dim_));
       kv_down = kv_down_workspace;
+    }
+    if (qkv_a_indexer_weight_loaded_) {
+      packed_indexer_head_weights = qkv_down.slice(
+          /*dim=*/1,
+          /*start=*/q_lora_rank_ + head_dim_,
+          /*end=*/q_lora_rank_ + head_dim_ + index_n_heads_);
     }
   } else if (qkv_a_weight_loaded_) {
     // Preserve the smaller projection shape for long prefill while sharing
@@ -2624,7 +2731,7 @@ DeepseekV4AttentionImpl::forward(
     q_down = packed_qkv_a_matmul(qkv_a_weight_.slice(
         /*dim=*/0, /*start=*/0, /*end=*/q_lora_rank_));
   } else {
-    q_down = q_a_proj_->forward(hidden_states);
+    q_down = q_a_proj_->forward(projection_hidden_states);
   }
   maybe_sync_attention_stage(layer_id_, "q_a_proj", q_down);
   if (dsv4_musa_trace_enabled()) {
@@ -2640,13 +2747,74 @@ DeepseekV4AttentionImpl::forward(
   auto qr =
       std::get<0>(q_layernorm_->forward(q_down, std::nullopt, q_a_norm_output));
   maybe_sync_attention_stage(layer_id_, "q_layernorm", qr);
+  const int64_t rope_token_count = sp_context == nullptr
+                                       ? projection_hidden_states.size(0)
+                                       : sp_context->total_tokens;
   const auto rope_tables =
-      select_rope_tables(attn_metadata, compress_ratio_, qr.size(0));
-  const auto& active_cos = rope_tables.first;
-  const auto& active_sin = rope_tables.second;
+      select_rope_tables(attn_metadata, compress_ratio_, rope_token_count);
+  const torch::Tensor& global_cos = rope_tables.first;
+  const torch::Tensor& global_sin = rope_tables.second;
+  torch::Tensor active_cos = global_cos;
+  torch::Tensor active_sin = global_sin;
+  if (sp_context != nullptr) {
+    CHECK_GE(global_cos.size(0),
+             sp_context->local_offset + sp_context->local_valid_tokens);
+    CHECK_GE(global_sin.size(0),
+             sp_context->local_offset + sp_context->local_valid_tokens);
+    active_cos = global_cos.slice(
+        /*dim=*/0,
+        /*start=*/sp_context->local_offset,
+        /*end=*/sp_context->local_offset + sp_context->local_valid_tokens);
+    active_sin = global_sin.slice(
+        /*dim=*/0,
+        /*start=*/sp_context->local_offset,
+        /*end=*/sp_context->local_offset + sp_context->local_valid_tokens);
+  }
   torch::Tensor q;
+  torch::Tensor packed_indexer_query;
   auto compute_q_branch = [&]() {
-    q = q_b_proj_->forward(qr).view({-1, n_local_heads_, head_dim_});
+    torch::Tensor q_projection;
+    const int64_t main_q_width = n_local_heads_ * head_dim_;
+    const bool use_packed_q_indexer =
+        q_indexer_b_weight_loaded_ && qr.size(0) > 0 &&
+        decode_q_indexer_b_output_.defined() &&
+        qr.size(0) <= decode_q_indexer_b_output_.size(0);
+    if (q_indexer_b_weight_loaded_) {
+      kernel::MatmulParams params;
+      params.a = qr;
+      params.b = use_packed_q_indexer
+                     ? q_indexer_b_weight_
+                     : q_indexer_b_weight_.slice(
+                           /*dim=*/0, /*start=*/0, /*end=*/main_q_width);
+      params.bias = std::nullopt;
+      if (use_packed_q_indexer) {
+        params.c = decode_q_indexer_b_output_.narrow(
+            /*dim=*/0, /*start=*/0, /*length=*/qr.size(0));
+      }
+      auto packed_q = kernel::matmul(params);
+      if (use_packed_q_indexer && qr.size(0) > 1) {
+        q_projection = decode_q_main_output_.narrow(
+            /*dim=*/0, /*start=*/0, /*length=*/qr.size(0));
+        q_projection.copy_(packed_q.slice(
+            /*dim=*/1, /*start=*/0, /*end=*/main_q_width));
+      } else if (use_packed_q_indexer) {
+        q_projection = packed_q.slice(
+            /*dim=*/1, /*start=*/0, /*end=*/main_q_width);
+      } else {
+        q_projection = packed_q;
+      }
+      if (use_packed_q_indexer) {
+        packed_indexer_query =
+            packed_q
+                .slice(/*dim=*/1,
+                       /*start=*/main_q_width,
+                       /*end=*/main_q_width + index_n_heads_ * index_head_dim_)
+                .view({qr.size(0), index_n_heads_, index_head_dim_});
+      }
+    } else {
+      q_projection = q_b_proj_->forward(qr);
+    }
+    q = q_projection.view({-1, n_local_heads_, head_dim_});
     maybe_sync_attention_stage(layer_id_, "q_b_proj", q);
     if (dsv4_musa_trace_enabled()) {
       LOG(INFO) << "[DSV4_MUSA_TRACE] attention layer=" << layer_id_
@@ -2667,9 +2835,10 @@ DeepseekV4AttentionImpl::forward(
     }
   };
 
-  const bool overlap_decode_q_kv =
-      dsv4_musa_decode_q_kv_overlap_enabled() && use_packed_qkv_a &&
-      !is_prefill && !is_chunked_prefill && hidden_states.size(0) == 1;
+  const bool overlap_decode_q_kv = dsv4_musa_decode_q_kv_overlap_enabled() &&
+                                   use_packed_qkv_a && !is_prefill &&
+                                   !is_chunked_prefill &&
+                                   projection_hidden_states.size(0) == 1;
   DecodeQKvOverlapState* q_overlap_state = nullptr;
   c10::musa::MUSAStream current_stream =
       c10::musa::getCurrentMUSAStream(hidden_states.device().index());
@@ -2701,7 +2870,7 @@ DeepseekV4AttentionImpl::forward(
           /*start=*/q_lora_rank_,
           /*end=*/q_lora_rank_ + head_dim_));
     } else {
-      kv_down = kv_proj_->forward(hidden_states);
+      kv_down = kv_proj_->forward(projection_hidden_states);
     }
   }
   maybe_sync_attention_stage(layer_id_, "kv_proj", kv_down);
@@ -2725,6 +2894,11 @@ DeepseekV4AttentionImpl::forward(
   }
   fp8_act_quant_roundtrip_inplace(kv, nope_head_dim_, /*block_size=*/64);
   maybe_sync_attention_stage(layer_id_, "kv_fp8_roundtrip", kv);
+  if (sp_context != nullptr) {
+    kv = dsv4_musa_sp::gather_global(dsv4_musa_sp::pad_local(kv, *sp_context),
+                                     *sp_context);
+    maybe_sync_attention_stage(layer_id_, "sp_kv_all_gather", kv);
+  }
 
   auto ori_kv = kv_cache.get_swa_cache();
   auto mate_swa_cache = dsv4_musa_block_tensor(
@@ -2781,6 +2955,16 @@ DeepseekV4AttentionImpl::forward(
     graph_decode_kv_seq_lens.add_(1);
   }
   auto query_ranges = build_query_ranges(attn_metadata, total_tokens);
+  if (sp_context != nullptr) {
+    // Scheduler metadata still describes the global prefill.  Attention on
+    // each TP rank only owns the valid (unpadded) rows of its local shard.
+    query_ranges = {{0, sp_context->local_valid_tokens}};
+  }
+  std::vector<std::pair<int64_t, int64_t>> compression_query_ranges =
+      query_ranges;
+  if (sp_context != nullptr) {
+    compression_query_ranges = {{0, sp_context->total_tokens}};
+  }
   const bool graph_has_one_sequence_kv =
       attn_metadata.is_acl_graph &&
       ((attn_metadata.actual_seq_lengths_kv.defined() &&
@@ -2827,8 +3011,9 @@ DeepseekV4AttentionImpl::forward(
       (compress_ratio_ == 4 || compress_ratio_ == 128) && compressor_wkv_ &&
       compressor_wgate_ && compressor_norm_ && compressor_ape_loaded_;
   const bool use_indexer_attention =
-      use_compressed_attention && compress_ratio_ == 4 && !is_chunked_prefill &&
-      dsv4_musa_indexer_enabled() && indexer_wq_b_ && indexer_weights_proj_ &&
+      use_compressed_attention && compress_ratio_ == 4 &&
+      dsv4_musa_indexer_enabled() &&
+      (indexer_wq_b_ || q_indexer_b_weight_loaded_) && indexer_weights_proj_ &&
       indexer_compressor_wkv_ && indexer_compressor_wgate_ &&
       indexer_compressor_norm_ && indexer_compressor_ape_loaded_;
   const bool apply_sparse_indexer_attention =
@@ -3145,6 +3330,42 @@ DeepseekV4AttentionImpl::forward(
       compress_ratio_ == 4 ? attn_metadata.c4_sin : attn_metadata.c128_sin;
   std::vector<torch::Tensor> prefill_compressed_by_seq(query_ranges.size());
   record_prefill_profile_boundary(prefill_profile, 1, profile_device_id);
+  torch::Tensor joint_main_kv_projection;
+  torch::Tensor joint_main_score_projection;
+  torch::Tensor joint_indexer_kv_projection;
+  torch::Tensor joint_indexer_score_projection;
+  const bool use_joint_sp_compressor_projection =
+      use_compressed_attention && use_indexer_attention &&
+      (is_prefill || is_chunked_prefill) && sp_context != nullptr &&
+      query_ranges.size() == 1 &&
+      sp_joint_compressor_projection_weight_.defined();
+  if (use_joint_sp_compressor_projection) {
+    const int64_t main_width = compressor_coff_ * head_dim_;
+    const int64_t indexer_width = 2 * index_head_dim_;
+    kernel::MatmulParams params;
+    params.a = compression_hidden_states;
+    params.b = sp_joint_compressor_projection_weight_;
+    params.bias = std::nullopt;
+    auto packed_local = kernel::matmul(params);
+    CHECK_EQ(packed_local.size(1), 2 * main_width + 2 * indexer_width);
+    auto packed_global = dsv4_musa_sp::gather_global(
+        dsv4_musa_sp::pad_local(packed_local, *sp_context), *sp_context);
+    joint_main_kv_projection = packed_global.slice(
+        /*dim=*/1, /*start=*/0, /*end=*/main_width);
+    joint_main_score_projection = packed_global.slice(
+        /*dim=*/1, /*start=*/main_width, /*end=*/2 * main_width);
+    joint_indexer_kv_projection = packed_global.slice(
+        /*dim=*/1,
+        /*start=*/2 * main_width,
+        /*end=*/2 * main_width + indexer_width);
+    joint_indexer_score_projection = packed_global.slice(
+        /*dim=*/1,
+        /*start=*/2 * main_width + indexer_width,
+        /*end=*/2 * main_width + 2 * indexer_width);
+    LOG_FIRST_N(INFO, 1)
+        << "DeepSeek-V4 MUSA SP main/indexer compressor projections share "
+           "one GEMM and one collective.";
+  }
   if (use_compressed_attention && (is_prefill || is_chunked_prefill)) {
     // A first, non-chunked prefill starts a new recurrent stream. A chunked
     // suffix must retain the state gathered from its mounted prefix block.
@@ -3172,10 +3393,29 @@ DeepseekV4AttentionImpl::forward(
     compressed_to_cache.reserve(query_ranges.size());
     std::vector<torch::Tensor> indexer_to_cache;
     indexer_to_cache.reserve(query_ranges.size());
+    const auto prefix_snapshot_it =
+        attn_metadata.cp_input_dict.find("__musa_dsv4_prefix_state_snapshot");
+    const torch::Tensor prefix_snapshot_metadata =
+        prefix_snapshot_it == attn_metadata.cp_input_dict.end()
+            ? torch::Tensor()
+            : prefix_snapshot_it->second;
+    const int32_t* prefix_snapshot_data =
+        prefix_snapshot_metadata.defined() &&
+                prefix_snapshot_metadata.device().is_cpu() &&
+                prefix_snapshot_metadata.scalar_type() == torch::kInt32 &&
+                prefix_snapshot_metadata.dim() == 2 &&
+                prefix_snapshot_metadata.size(1) == 2 &&
+                prefix_snapshot_metadata.is_contiguous()
+            ? prefix_snapshot_metadata.data_ptr<int32_t>()
+            : nullptr;
+    const size_t prefix_snapshot_rows =
+        prefix_snapshot_data == nullptr
+            ? 0
+            : static_cast<size_t>(prefix_snapshot_metadata.size(0));
     int64_t rope_offset = 0;
     for (size_t seq_idx = 0; seq_idx < query_ranges.size(); ++seq_idx) {
-      const int64_t q_start = query_ranges[seq_idx].first;
-      const int64_t q_end = query_ranges[seq_idx].second;
+      const int64_t q_start = compression_query_ranges[seq_idx].first;
+      const int64_t q_end = compression_query_ranges[seq_idx].second;
       const int64_t q_len = std::max<int64_t>(q_end - q_start, 0);
       const int64_t compressed_blocks = q_len / compress_ratio_;
       torch::Tensor cos_slice;
@@ -3197,8 +3437,17 @@ DeepseekV4AttentionImpl::forward(
       if (q_end <= q_start) {
         continue;
       }
-      auto hidden_seq =
-          hidden_states.slice(/*dim=*/0, /*start=*/q_start, /*end=*/q_end);
+      torch::Tensor hidden_seq =
+          sp_context == nullptr
+              ? compression_hidden_states.slice(
+                    /*dim=*/0, /*start=*/q_start, /*end=*/q_end)
+              : compression_hidden_states;
+      int32_t prefix_snapshot_state_id = -1;
+      int64_t prefix_snapshot_tokens = 0;
+      if (seq_idx < prefix_snapshot_rows) {
+        prefix_snapshot_state_id = prefix_snapshot_data[seq_idx * 2];
+        prefix_snapshot_tokens = prefix_snapshot_data[seq_idx * 2 + 1];
+      }
       const int64_t cached_prefix_tokens =
           is_chunked_prefill && seq_idx < kv_lens.size()
               ? std::max<int64_t>(kv_lens[seq_idx] - q_len, 0)
@@ -3207,8 +3456,10 @@ DeepseekV4AttentionImpl::forward(
                                                cos_slice,
                                                sin_slice,
                                                seq_idx,
-                                               /*prefix_snapshot_tokens=*/0,
-                                               cached_prefix_tokens);
+                                               prefix_snapshot_tokens,
+                                               cached_prefix_tokens,
+                                               joint_main_kv_projection,
+                                               joint_main_score_projection);
       if (cmp_seq.defined() && cmp_seq.numel() > 0) {
         maybe_sync_attention_stage(layer_id_, "prefill_compress_seq", cmp_seq);
         prefill_compressed_by_seq[seq_idx] = cmp_seq;
@@ -3221,13 +3472,15 @@ DeepseekV4AttentionImpl::forward(
             torch::empty({0, head_dim_}, hidden_states.options());
       }
       if (use_indexer_attention) {
-        auto index_seq = compress_indexer_prefill_sequence(
-            hidden_seq,
-            cos_slice,
-            sin_slice,
-            seq_idx,
-            /*prefix_snapshot_tokens=*/0,
-            cached_prefix_tokens);
+        auto index_seq =
+            compress_indexer_prefill_sequence(hidden_seq,
+                                              cos_slice,
+                                              sin_slice,
+                                              seq_idx,
+                                              prefix_snapshot_tokens,
+                                              cached_prefix_tokens,
+                                              joint_indexer_kv_projection,
+                                              joint_indexer_score_projection);
         if (use_paged_indexer_cache) {
           if (index_seq.defined() && index_seq.numel() > 0) {
             indexer_to_cache.push_back(index_seq);
@@ -3240,6 +3493,33 @@ DeepseekV4AttentionImpl::forward(
         }
         maybe_sync_attention_stage(
             layer_id_, "prefill_indexer_compress_seq", index_seq);
+      }
+      if (prefix_snapshot_state_id >= 0) {
+        auto store_snapshot = [prefix_snapshot_state_id](
+                                  const torch::Tensor& cache,
+                                  const std::vector<torch::Tensor>& states,
+                                  size_t sequence_index) {
+          if (!cache.defined() || sequence_index >= states.size() ||
+              !states[sequence_index].defined() ||
+              prefix_snapshot_state_id >= cache.size(0)) {
+            return;
+          }
+          const torch::Tensor& state = states[sequence_index];
+          CHECK_LE(state.size(0), cache.size(1));
+          cache.index({prefix_snapshot_state_id})
+              .slice(/*dim=*/0, /*start=*/0, /*end=*/state.size(0))
+              .copy_(state);
+        };
+        store_snapshot(
+            compressor_kv_cache, prefix_compressor_kv_state_, seq_idx);
+        store_snapshot(
+            compressor_score_cache, prefix_compressor_score_state_, seq_idx);
+        if (use_indexer_attention) {
+          store_snapshot(
+              indexer_kv_state_cache, prefix_indexer_kv_state_, seq_idx);
+          store_snapshot(
+              indexer_score_state_cache, prefix_indexer_score_state_, seq_idx);
+        }
       }
     }
     if (!compressed_to_cache.empty() && cmp_cache.defined() &&
@@ -3338,7 +3618,10 @@ DeepseekV4AttentionImpl::forward(
         mate_cmp_cache.defined() && mate_swa_cache.defined() &&
         cmp_block_table.defined() && swa_block_table.defined();
     if (use_current_prefill_kv) {
-      kv_seq = kv.slice(/*dim=*/0, /*start=*/q_start, /*end=*/q_end).squeeze(1);
+      kv_seq =
+          sp_context == nullptr
+              ? kv.slice(/*dim=*/0, /*start=*/q_start, /*end=*/q_end).squeeze(1)
+              : kv.squeeze(1);
     } else if (!use_paged_decode_attention && !defer_swa_gather_for_mate) {
       kv_seq = gather_cache(ori_kv,
                             swa_block_table,
@@ -3472,7 +3755,11 @@ DeepseekV4AttentionImpl::forward(
     const int64_t seq_q_len = q_end - q_start;
     const int64_t q_abs_start =
         use_current_prefill_kv
-            ? 0
+            ? (sp_context == nullptr ? 0 : sp_context->local_offset)
+        : is_chunked_prefill && sp_context != nullptr
+            ? std::max<int64_t>(kv_lens[seq_idx] - sp_context->total_tokens +
+                                    sp_context->local_offset,
+                                0)
             : std::max<int64_t>(kv_lens[seq_idx] - seq_q_len, 0);
     torch::Tensor index_kv;
     const int64_t index_len = kv_lens[seq_idx] / 4;
@@ -3500,6 +3787,15 @@ DeepseekV4AttentionImpl::forward(
       auto qr_seq = qr.slice(/*dim=*/0, /*start=*/q_start, /*end=*/q_end);
       auto hidden_seq =
           hidden_states.slice(/*dim=*/0, /*start=*/q_start, /*end=*/q_end);
+      auto index_head_weights =
+          packed_indexer_head_weights.defined()
+              ? packed_indexer_head_weights.slice(
+                    /*dim=*/0, /*start=*/q_start, /*end=*/q_end)
+              : torch::Tensor();
+      auto index_query = packed_indexer_query.defined()
+                             ? packed_indexer_query.slice(
+                                   /*dim=*/0, /*start=*/q_start, /*end=*/q_end)
+                             : torch::Tensor();
       auto index_cos =
           active_cos.defined()
               ? active_cos.slice(/*dim=*/0, /*start=*/q_start, /*end=*/q_end)
@@ -3537,6 +3833,14 @@ DeepseekV4AttentionImpl::forward(
               qr_seq.narrow(/*dim=*/0, /*start=*/token_idx, /*length=*/1),
               hidden_seq.narrow(
                   /*dim=*/0, /*start=*/token_idx, /*length=*/1),
+              index_head_weights.defined()
+                  ? index_head_weights.narrow(
+                        /*dim=*/0, /*start=*/token_idx, /*length=*/1)
+                  : torch::Tensor(),
+              index_query.defined()
+                  ? index_query.narrow(
+                        /*dim=*/0, /*start=*/token_idx, /*length=*/1)
+                  : torch::Tensor(),
               index_cos.defined()
                   ? index_cos.narrow(
                         /*dim=*/0, /*start=*/token_idx, /*length=*/1)
@@ -3574,6 +3878,8 @@ DeepseekV4AttentionImpl::forward(
       if (!cmp_indices.defined()) {
         cmp_indices = build_indexer_topk(qr_seq,
                                          hidden_seq,
+                                         index_head_weights,
+                                         index_query,
                                          index_cos,
                                          index_sin,
                                          index_kv,
@@ -3998,11 +4304,11 @@ DeepseekV4AttentionImpl::forward(
         wo_a_output = decode_wo_a_output_.narrow(
             /*dim=*/0, /*start=*/0, /*length=*/num_tokens);
       }
-      o_low_rank = kernel::musa::deepseek_v4_wo_a_m1(
-          o_group,
-          o_a_projection_weight_,
-          /*head_scales=*/torch::Tensor(),
-          wo_a_output);
+      o_low_rank =
+          kernel::musa::deepseek_v4_wo_a_m1(o_group,
+                                            o_a_projection_weight_,
+                                            /*head_scales=*/torch::Tensor(),
+                                            wo_a_output);
       used_wo_a_m1 = o_low_rank.defined();
     }
     if (!o_low_rank.defined() && decode_wo_a_output_.defined() &&
@@ -4126,6 +4432,34 @@ void DeepseekV4AttentionImpl::load_state_dict(const StateDict& state_dict) {
   kv_proj_->load_state_dict(state_dict.get_dict_with_prefix("wkv."));
   kv_layernorm_->load_state_dict(state_dict.get_dict_with_prefix("kv_norm."));
 
+  // Load C4 indexer projections before packing the shared decode GEMMs below.
+  // The original modules remain available as the large-prefill fallback.
+  if (indexer_wq_b_) {
+    auto indexer_state = state_dict.get_dict_with_prefix("indexer.");
+    indexer_wq_b_->load_state_dict(indexer_state.get_dict_with_prefix("wq_b."));
+    indexer_weights_proj_->load_state_dict(
+        indexer_state.get_dict_with_prefix("weights_proj."));
+    indexer_compressor_wkv_->load_state_dict(
+        indexer_state.get_dict_with_prefix("compressor.wkv."));
+    indexer_compressor_wgate_->load_state_dict(
+        indexer_state.get_dict_with_prefix("compressor.wgate."));
+    indexer_compressor_norm_->load_state_dict(
+        indexer_state.get_dict_with_prefix("compressor.norm."));
+    auto indexer_ape = indexer_state.get_tensor("compressor.ape");
+    if (indexer_ape.defined()) {
+      CHECK(indexer_ape.dim() == 2 && indexer_ape.size(0) == 4 &&
+            indexer_ape.size(1) == 2 * index_head_dim_)
+          << "DeepSeek-V4 MUSA indexer compressor.ape shape mismatch, expected "
+             "[4,"
+          << 2 * index_head_dim_ << "], got " << indexer_ape.sizes();
+      torch::NoGradGuard no_grad;
+      indexer_compressor_ape_.copy_(
+          indexer_ape.to(indexer_compressor_ape_.device())
+              .to(indexer_compressor_ape_.dtype()));
+      indexer_compressor_ape_loaded_ = true;
+    }
+  }
+
   // Materialize and pack the two replicated FP8 projections once. Decode
   // issues one wide GEMM, while prefill slices the same storage back to the
   // original projection shapes.
@@ -4160,12 +4494,25 @@ void DeepseekV4AttentionImpl::load_state_dict(const StateDict& state_dict) {
     if (q_a_materialized.defined() && kv_materialized.defined() &&
         q_a_materialized.scalar_type() == kv_materialized.scalar_type() &&
         q_a_materialized.device() == kv_materialized.device()) {
+      std::vector<torch::Tensor> packed_weights{q_a_materialized,
+                                                kv_materialized};
+      if (indexer_weights_proj_) {
+        const auto indexer_weight = indexer_weights_proj_->weight();
+        qkv_a_indexer_weight_loaded_ =
+            indexer_weight.defined() && indexer_weight.dim() == 2 &&
+            indexer_weight.size(0) == index_n_heads_ &&
+            indexer_weight.size(1) == hidden_dim_ &&
+            indexer_weight.scalar_type() == q_a_materialized.scalar_type() &&
+            indexer_weight.device() == q_a_materialized.device();
+        if (qkv_a_indexer_weight_loaded_) {
+          packed_weights.push_back(indexer_weight);
+        }
+      }
       torch::NoGradGuard no_grad;
-      qkv_a_weight_ = register_parameter(
-          "qkv_a_weight",
-          torch::cat({q_a_materialized, kv_materialized}, /*dim=*/0)
-              .contiguous(),
-          /*requires_grad=*/false);
+      qkv_a_weight_ =
+          register_parameter("qkv_a_weight",
+                             torch::cat(packed_weights, /*dim=*/0).contiguous(),
+                             /*requires_grad=*/false);
       qkv_a_weight_loaded_ = true;
       decode_qkv_a_output_ =
           torch::empty({decode_workspace_tokens_, qkv_a_weight_.size(0)},
@@ -4182,6 +4529,54 @@ void DeepseekV4AttentionImpl::load_state_dict(const StateDict& state_dict) {
         LOG(INFO) << "DeepSeek-V4 MUSA packed wq_a+wkv decode projection "
                      "enabled; prefill uses row slices.";
       }
+    }
+  }
+
+  if (indexer_wq_b_) {
+    const auto output_dtype = decode_q_a_norm_output_.scalar_type();
+    const auto main_q_b_weight = q_b_proj_->weight();
+    const auto indexer_q_b_weight = indexer_wq_b_->weight();
+    auto indexer_wq_b_state = state_dict.get_dict_with_prefix("indexer.wq_b.");
+    auto indexer_q_b_scale = indexer_wq_b_state.get_tensor("weight_scale");
+    if (!indexer_q_b_scale.defined()) {
+      indexer_q_b_scale = indexer_wq_b_state.get_tensor("scale");
+    }
+    auto main_q_b_materialized = dequantize_fp8_projection_weight(
+        main_q_b_weight, q_b_proj_->weight_scale(), output_dtype);
+    auto indexer_q_b_materialized = dequantize_fp8_projection_weight(
+        indexer_q_b_weight, indexer_q_b_scale, output_dtype);
+    const int64_t main_q_width = n_local_heads_ * head_dim_;
+    const int64_t indexer_q_width = index_n_heads_ * index_head_dim_;
+    const bool compatible_q_indexer_b_weights =
+        main_q_b_materialized.defined() && indexer_q_b_materialized.defined() &&
+        main_q_b_materialized.dim() == 2 &&
+        indexer_q_b_materialized.dim() == 2 &&
+        main_q_b_materialized.size(0) == main_q_width &&
+        indexer_q_b_materialized.size(0) == indexer_q_width &&
+        main_q_b_materialized.size(1) == q_lora_rank_ &&
+        indexer_q_b_materialized.size(1) == q_lora_rank_ &&
+        main_q_b_materialized.scalar_type() ==
+            indexer_q_b_materialized.scalar_type() &&
+        main_q_b_materialized.device() == indexer_q_b_materialized.device();
+    if (compatible_q_indexer_b_weights) {
+      torch::NoGradGuard no_grad;
+      q_indexer_b_weight_ = register_parameter(
+          "q_indexer_b_weight",
+          torch::cat({main_q_b_materialized, indexer_q_b_materialized},
+                     /*dim=*/0)
+              .contiguous(),
+          /*requires_grad=*/false);
+      q_indexer_b_weight_loaded_ = true;
+      decode_q_indexer_b_output_ =
+          torch::empty({decode_workspace_tokens_, q_indexer_b_weight_.size(0)},
+                       q_indexer_b_weight_.options());
+      decode_q_main_output_ =
+          torch::empty({decode_workspace_tokens_, main_q_width},
+                       q_indexer_b_weight_.options());
+      unregister_module("q_b_proj");
+      unregister_module("indexer_wq_b");
+      q_b_proj_ = nullptr;
+      indexer_wq_b_ = nullptr;
     }
   }
   o_a_proj_->load_state_dict(state_dict.get_dict_with_prefix("wo_a."));
@@ -4243,29 +4638,40 @@ void DeepseekV4AttentionImpl::load_state_dict(const StateDict& state_dict) {
     compressor_ape_loaded_ = true;
   }
 
-  if (indexer_wq_b_) {
-    auto indexer_state = state_dict.get_dict_with_prefix("indexer.");
-    indexer_wq_b_->load_state_dict(indexer_state.get_dict_with_prefix("wq_b."));
-    indexer_weights_proj_->load_state_dict(
-        indexer_state.get_dict_with_prefix("weights_proj."));
-    indexer_compressor_wkv_->load_state_dict(
-        indexer_state.get_dict_with_prefix("compressor.wkv."));
-    indexer_compressor_wgate_->load_state_dict(
-        indexer_state.get_dict_with_prefix("compressor.wgate."));
-    indexer_compressor_norm_->load_state_dict(
-        indexer_state.get_dict_with_prefix("compressor.norm."));
-    auto indexer_ape = indexer_state.get_tensor("compressor.ape");
-    if (indexer_ape.defined()) {
-      CHECK(indexer_ape.dim() == 2 && indexer_ape.size(0) == 4 &&
-            indexer_ape.size(1) == 2 * index_head_dim_)
-          << "DeepSeek-V4 MUSA indexer compressor.ape shape mismatch, expected "
-             "[4,"
-          << 2 * index_head_dim_ << "], got " << indexer_ape.sizes();
+  if (compressor_wkv_ && compressor_wgate_ && indexer_compressor_wkv_ &&
+      indexer_compressor_wgate_) {
+    const auto main_kv_weight = compressor_wkv_->weight();
+    const auto main_score_weight = compressor_wgate_->weight();
+    const auto indexer_kv_weight = indexer_compressor_wkv_->weight();
+    const auto indexer_score_weight = indexer_compressor_wgate_->weight();
+    const bool compatible =
+        compressor_wkv_->is_weight_loaded() &&
+        compressor_wgate_->is_weight_loaded() &&
+        indexer_compressor_wkv_->is_weight_loaded() &&
+        indexer_compressor_wgate_->is_weight_loaded() &&
+        main_kv_weight.dim() == 2 && main_score_weight.dim() == 2 &&
+        indexer_kv_weight.dim() == 2 && indexer_score_weight.dim() == 2 &&
+        main_kv_weight.size(1) == hidden_dim_ &&
+        main_score_weight.size(1) == hidden_dim_ &&
+        indexer_kv_weight.size(1) == hidden_dim_ &&
+        indexer_score_weight.size(1) == hidden_dim_ &&
+        main_kv_weight.scalar_type() == main_score_weight.scalar_type() &&
+        main_kv_weight.scalar_type() == indexer_kv_weight.scalar_type() &&
+        main_kv_weight.scalar_type() == indexer_score_weight.scalar_type() &&
+        main_kv_weight.device() == main_score_weight.device() &&
+        main_kv_weight.device() == indexer_kv_weight.device() &&
+        main_kv_weight.device() == indexer_score_weight.device();
+    if (compatible) {
       torch::NoGradGuard no_grad;
-      indexer_compressor_ape_.copy_(
-          indexer_ape.to(indexer_compressor_ape_.device())
-              .to(indexer_compressor_ape_.dtype()));
-      indexer_compressor_ape_loaded_ = true;
+      sp_joint_compressor_projection_weight_ =
+          register_parameter("sp_joint_compressor_projection_weight",
+                             torch::cat({main_kv_weight,
+                                         main_score_weight,
+                                         indexer_kv_weight,
+                                         indexer_score_weight},
+                                        /*dim=*/0)
+                                 .contiguous(),
+                             /*requires_grad=*/false);
     }
   }
 }

@@ -90,7 +90,9 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
       const torch::Tensor& hidden_states,
       const torch::Tensor& topk_weights,
       const torch::Tensor& topk_ids,
-      const ModelInputParams& input_params);
+      const ModelInputParams& input_params,
+      bool skip_tp_allreduce = false,
+      const torch::Tensor& output_buffer = {});
 
   void load_state_dict(const StateDict& state_dict);
 

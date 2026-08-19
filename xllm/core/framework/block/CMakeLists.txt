@@ -26,6 +26,8 @@ cc_library(
     hierarchy_block_manager_pool.h
     sliding_window_block_manager.h
     composite_block_manager.h
+    $<$<BOOL:${USE_MUSA}>:musa/deepseek_v4_prefix_cache_policy.h>
+    $<$<BOOL:${USE_MUSA}>:musa/deepseek_v4_prefix_transfer.h>
   SRCS
     block.cpp
     embedding_block_manager.cpp
@@ -36,6 +38,8 @@ cc_library(
     hierarchy_block_manager_pool.cpp
     sliding_window_block_manager.cpp
     composite_block_manager.cpp
+    $<$<BOOL:${USE_MUSA}>:musa/deepseek_v4_prefix_cache_policy.cpp>
+    $<$<BOOL:${USE_MUSA}>:musa/deepseek_v4_prefix_transfer.cpp>
   DEPS
     :block_utils
     $<$<BOOL:${USE_NPU}>:torch_npu>

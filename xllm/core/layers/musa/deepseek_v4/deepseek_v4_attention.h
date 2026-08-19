@@ -31,6 +31,7 @@ limitations under the License.
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/linear.h"
 #include "core/layers/common/rms_norm.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_sp_context.h"
 
 namespace xllm {
 namespace layer {
@@ -65,6 +66,11 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
 
   void load_state_dict(const StateDict& state_dict);
   int64_t non_registered_weight_bytes() const { return 0; }
+
+  void set_sequence_parallel_context(
+      const dsv4_musa_sp::DeepseekV4SPContext* context) {
+    sequence_parallel_context_ = context;
+  }
 
  private:
   std::vector<std::pair<int64_t, int64_t>> build_query_ranges(
@@ -108,12 +114,15 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
                                 bool causal,
                                 int64_t q_abs_start,
                                 bool use_full_kv) const;
-  torch::Tensor compress_prefill_sequence(const torch::Tensor& hidden_states,
-                                          const torch::Tensor& cos,
-                                          const torch::Tensor& sin,
-                                          size_t sequence_index,
-                                          int64_t prefix_snapshot_tokens = 0,
-                                          int64_t cached_prefix_tokens = 0);
+  torch::Tensor compress_prefill_sequence(
+      const torch::Tensor& hidden_states,
+      const torch::Tensor& cos,
+      const torch::Tensor& sin,
+      size_t sequence_index,
+      int64_t prefix_snapshot_tokens = 0,
+      int64_t cached_prefix_tokens = 0,
+      const torch::Tensor& projected_kv = {},
+      const torch::Tensor& projected_score = {});
   torch::Tensor compress_decode_step(const torch::Tensor& hidden_step,
                                      int64_t start_pos,
                                      const torch::Tensor& cos,
@@ -125,7 +134,9 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
       const torch::Tensor& sin,
       size_t sequence_index,
       int64_t prefix_snapshot_tokens = 0,
-      int64_t cached_prefix_tokens = 0);
+      int64_t cached_prefix_tokens = 0,
+      const torch::Tensor& projected_kv = {},
+      const torch::Tensor& projected_score = {});
   torch::Tensor compress_indexer_decode_step(const torch::Tensor& hidden_step,
                                              int64_t start_pos,
                                              const torch::Tensor& cos,
@@ -134,6 +145,8 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   torch::Tensor build_indexer_topk(
       const torch::Tensor& qr,
       const torch::Tensor& hidden_states,
+      const torch::Tensor& precomputed_head_weights,
+      const torch::Tensor& precomputed_query,
       const torch::Tensor& cos,
       const torch::Tensor& sin,
       const torch::Tensor& index_kv,
@@ -190,6 +203,9 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   ReplicatedLinear indexer_compressor_wkv_{nullptr};
   ReplicatedLinear indexer_compressor_wgate_{nullptr};
   RMSNorm indexer_compressor_norm_{nullptr};
+  // SP prefill projects the main and indexer compressor KV/score values with
+  // one private GEMM before issuing one packed sequence collective.
+  torch::Tensor sp_joint_compressor_projection_weight_;
 
   torch::Tensor q_rms_gamma_;
   // wo_a is consumed outside the generic Linear forward. Materialize its FP8
@@ -205,6 +221,14 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   torch::Tensor decode_q_down_;
   torch::Tensor decode_kv_down_;
   bool qkv_a_weight_loaded_ = false;
+  bool qkv_a_indexer_weight_loaded_ = false;
+  // C4 layers consume main and indexer Q-B projections from the same
+  // normalized low-rank query. Decode packs both weights into one GEMM while
+  // retaining row-sliced main-Q projection for larger prefill shapes.
+  torch::Tensor q_indexer_b_weight_;
+  torch::Tensor decode_q_indexer_b_output_;
+  torch::Tensor decode_q_main_output_;
+  bool q_indexer_b_weight_loaded_ = false;
   // Graph-owned decode outputs prevent consecutive q2 token launches from
   // aliasing a backend workspace during capture/replay.
   torch::Tensor decode_paged_attention_output_;
@@ -260,6 +284,7 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   bool attn_sink_loaded_ = false;
   bool compressor_ape_loaded_ = false;
   bool indexer_compressor_ape_loaded_ = false;
+  const dsv4_musa_sp::DeepseekV4SPContext* sequence_parallel_context_ = nullptr;
 };
 TORCH_MODULE(DeepseekV4Attention);
 

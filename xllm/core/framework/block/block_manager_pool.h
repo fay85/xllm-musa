@@ -74,7 +74,7 @@ class BlockManagerPool : public KVCacheManager {
 
   explicit BlockManagerPool(const Options& options, int32_t dp_size = 1);
 
-  ~BlockManagerPool() = default;
+  ~BlockManagerPool();
 
   bool allocate(Sequence* sequence) override;
   bool allocate(std::vector<Sequence*>& sequences) override;
