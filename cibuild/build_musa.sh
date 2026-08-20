@@ -18,6 +18,7 @@ set -Eeuo pipefail
 readonly IMAGE="${XLLM_MUSA_IMAGE:-registry.mthreads.com/presale/devtech/xllm:musa-cicd-20260820}"
 readonly WORKDIR="${GITHUB_WORKSPACE:-$(pwd)}"
 readonly CCACHE_CACHE="${XLLM_MUSA_CCACHE:-}"
+readonly VCPKG_CACHE="${XLLM_MUSA_VCPKG_CACHE:-/export/home/musa_vcpkg_cache}"
 
 error() {
   echo "Require one build command, e.g. python setup.py build --device musa" >&2
@@ -38,6 +39,11 @@ if [[ ! -d "${WORKDIR}" ]]; then
   exit 1
 fi
 
+if ! mkdir -p "${VCPKG_CACHE}/archives" "${VCPKG_CACHE}/downloads"; then
+  echo "ERROR: cannot create vcpkg cache directories: ${VCPKG_CACHE}" >&2
+  exit 1
+fi
+
 DOCKER_RUNTIMES="$(docker info --format '{{json .Runtimes}}')"
 readonly DOCKER_RUNTIMES
 if [[ "${DOCKER_RUNTIMES}" != *'"mthreads"'* ]]; then
@@ -45,7 +51,13 @@ if [[ "${DOCKER_RUNTIMES}" != *'"mthreads"'* ]]; then
   exit 1
 fi
 
-readonly COMMAND="$1"
+# Keep vcpkg source selection tied to CMake while reusing host downloads and
+# binary archives.
+readonly COMMAND="unset VCPKG_ROOT VCPKG_BINARY_SOURCES \
+  DEPENDENCES_ROOT FETCHCONTENT_SOURCE_DIR_VCPKG CMAKE_TOOLCHAIN_FILE
+export VCPKG_DEFAULT_BINARY_CACHE=/root/.cache/vcpkg/archives
+export VCPKG_DOWNLOADS=/root/.cache/vcpkg/downloads
+$1"
 readonly BUILD_JOBS="${MAX_JOBS:-16}"
 readonly MUSA_DEVICE_MASK="${MUSA_VISIBLE_DEVICES:-0}"
 container_name="${JOBNAME:-xllm-musa-cibuild}-${BASHPID}"
@@ -68,6 +80,7 @@ RUN_OPTS=(
   --env "XLLM_HOST_GID=$(id -g)"
   --env "XLLM_HOST_UID=$(id -u)"
   --volume "${WORKDIR}:${WORKDIR}"
+  --volume "${VCPKG_CACHE}:/root/.cache/vcpkg"
   --workdir "${WORKDIR}"
   --entrypoint /usr/local/bin/run-xllm-musa-ci
 )
@@ -87,11 +100,13 @@ cleanup() {
   local status=$?
   trap - EXIT INT TERM
   set +e
-  docker rm --force "${container_name}" >/dev/null 2>&1
   if [[ -n "${docker_pid}" ]]; then
+    docker stop --time 40 "${container_name}" >/dev/null 2>&1
+    kill -TERM "${docker_pid}" >/dev/null 2>&1
     wait "${docker_pid}" >/dev/null 2>&1
     docker_pid=""
   fi
+  docker rm --force "${container_name}" >/dev/null 2>&1
   exit "${status}"
 }
 trap cleanup EXIT

@@ -69,6 +69,11 @@ jobs:
           event="${{ github.event_name }}"
           if [[ "${event}" == "pull_request" ||
                 "${event}" == "pull_request_review" ]]; then
+            changed_files="$(
+              git diff --name-only \
+                "${{ github.event.pull_request.base.sha }}" \
+                "${{ github.event.pull_request.head.sha }}"
+            )"
             while IFS= read -r changed_file; do
               case "${changed_file}" in
                 .github/**|cibuild/**|setup.py|examples/generate.py)
@@ -76,11 +81,7 @@ jobs:
                   break
                   ;;
               esac
-            done < <(
-              git diff --name-only \
-                "${{ github.event.pull_request.base.sha }}" \
-                "${{ github.event.pull_request.head.sha }}"
-            )
+            done <<< "${changed_files}"
           fi
           echo "requires_approval=${requires_approval}" >> "${GITHUB_OUTPUT}"
 
@@ -142,6 +143,9 @@ jobs:
         run: git submodule foreach --recursive git clean -ffdx
 
       - name: Build Python package
+        if: ${{ success() }}
+        timeout-minutes: 120
         run: |
+          chmod +x ./cibuild/build_musa.sh
           bash ./cibuild/build_musa.sh \
             'python setup.py build --device musa'
