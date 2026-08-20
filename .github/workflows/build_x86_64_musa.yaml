@@ -1,0 +1,147 @@
+# Copyright 2026 The xLLM Authors. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+name: xLLM Build x86_64 MUSA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'docs/**'
+      - 'tools/**'
+      - '*.md'
+      - '*.txt'
+      - '*.yml'
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+    paths-ignore:
+      - 'docs/**'
+      - 'tools/**'
+      - '*.md'
+      - '*.txt'
+      - '*.yml'
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+
+env:
+  JOBNAME: xllm-x86_64-musa-cibuild-${{ github.run_id }}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+
+jobs:
+  # Review changes to executable CI inputs before using the privileged runner.
+  check-sensitive:
+    runs-on: [xllm-cpu-only-cicd]
+    outputs:
+      requires_approval: ${{ steps.check_sensitive.outputs.requires_approval }}
+      do_build: ${{ steps.decide.outputs.do_build }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Check if sensitive files were changed
+        id: check_sensitive
+        shell: bash
+        run: |
+          requires_approval=false
+          event="${{ github.event_name }}"
+          if [[ "${event}" == "pull_request" ||
+                "${event}" == "pull_request_review" ]]; then
+            while IFS= read -r changed_file; do
+              case "${changed_file}" in
+                .github/**|cibuild/**|setup.py|examples/generate.py)
+                  requires_approval=true
+                  break
+                  ;;
+              esac
+            done < <(
+              git diff --name-only \
+                "${{ github.event.pull_request.base.sha }}" \
+                "${{ github.event.pull_request.head.sha }}"
+            )
+          fi
+          echo "requires_approval=${requires_approval}" >> "${GITHUB_OUTPUT}"
+
+      - name: Decide whether to build
+        id: decide
+        shell: bash
+        run: |
+          event="${{ github.event_name }}"
+          if [[ "${event}" == "workflow_dispatch" || "${event}" == "push" ]]; then
+            echo "do_build=true" >> "${GITHUB_OUTPUT}"
+          elif [[ "${event}" == "pull_request" ]]; then
+            if [[ "${{ steps.check_sensitive.outputs.requires_approval }}" == "true" ]]; then
+              echo "do_build=false" >> "${GITHUB_OUTPUT}"
+            else
+              echo "do_build=true" >> "${GITHUB_OUTPUT}"
+            fi
+          elif [[ "${event}" == "pull_request_review" ]]; then
+            association="${{ github.event.review.author_association }}"
+            if [[ "${{ steps.check_sensitive.outputs.requires_approval }}" == "true" &&
+                  "${{ github.event.review.state }}" == "approved" &&
+                  "${{ github.event.review.commit_id }}" ==
+                    "${{ github.event.pull_request.head.sha }}" &&
+                  ("${association}" == "OWNER" ||
+                   "${association}" == "MEMBER" ||
+                   "${association}" == "COLLABORATOR") ]]; then
+              echo "do_build=true" >> "${GITHUB_OUTPUT}"
+            else
+              echo "do_build=false" >> "${GITHUB_OUTPUT}"
+            fi
+          else
+            echo "do_build=false" >> "${GITHUB_OUTPUT}"
+          fi
+
+  build:
+    needs: check-sensitive
+    if: >
+      (github.event_name == 'workflow_dispatch' || github.event_name == 'push') ||
+      needs.check-sensitive.outputs.do_build == 'true'
+    runs-on: [self-hosted, xllm-musa-x86-cicd]
+    timeout-minutes: 120
+    steps:
+      - name: Prepare submodule checkout
+        run: |
+          if [ -d .git/modules ]; then
+            find .git/modules -type f -name '*.lock' -print -delete || true
+          fi
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+        timeout-minutes: 10
+        with:
+          clean: true
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
+          submodules: recursive
+
+      - name: Clean submodules
+        run: git submodule foreach --recursive git clean -ffdx
+
+      - name: Build Python package
+        run: |
+          bash ./cibuild/build_musa.sh \
+            'python setup.py build --device musa'
