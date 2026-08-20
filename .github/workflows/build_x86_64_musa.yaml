@@ -100,10 +100,12 @@ jobs:
             fi
           elif [[ "${event}" == "pull_request_review" ]]; then
             association="${{ github.event.review.author_association }}"
+            review_state="${{ github.event.review.state }}"
+            review_commit="${{ github.event.review.commit_id }}"
+            head_sha="${{ github.event.pull_request.head.sha }}"
             if [[ "${{ steps.check_sensitive.outputs.requires_approval }}" == "true" &&
-                  "${{ github.event.review.state }}" == "approved" &&
-                  "${{ github.event.review.commit_id }}" ==
-                    "${{ github.event.pull_request.head.sha }}" &&
+                  "${review_state}" == "approved" &&
+                  "${review_commit}" == "${head_sha}" &&
                   ("${association}" == "OWNER" ||
                    "${association}" == "MEMBER" ||
                    "${association}" == "COLLABORATOR") ]]; then
