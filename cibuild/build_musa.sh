@@ -21,6 +21,7 @@ docker run \
   --network=host \
   --env "GITHUB_WORKSPACE=${PWD}" \
   --env MAX_JOBS=16 \
+  --env "CMAKE_ARGS=-DCMAKE_CUDA_COMPILER=/usr/local/musa/tools/musamapping/mcc_wrapper -DCMAKE_MODULE_PATH=/usr/local/musa/tools/musamapping/cmake/Modules" \
   --env "XLLM_HOST_GID=$(id -g)" \
   --env "XLLM_HOST_UID=$(id -u)" \
   --volume "${PWD}:${PWD}" \
