@@ -13,7 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+set -e
+
 IMAGE="registry.mthreads.com/presale/devtech/xllm:musa-cicd-20260820"
+COMMAND="unset VCPKG_ROOT VCPKG_BINARY_SOURCES DEPENDENCES_ROOT FETCHCONTENT_SOURCE_DIR_VCPKG CMAKE_TOOLCHAIN_FILE
+export VCPKG_DEFAULT_BINARY_CACHE=/root/.cache/vcpkg/archives
+export VCPKG_DOWNLOADS=/root/.cache/vcpkg/downloads
+$*"
 
 docker run \
   --rm \
@@ -28,4 +34,4 @@ docker run \
   --volume /export/home/musa_vcpkg_cache:/root/.cache/vcpkg \
   --workdir "${PWD}" \
   --entrypoint /usr/local/bin/run-xllm-musa-ci \
-  "${IMAGE}" run "$*"
+  "${IMAGE}" run "${COMMAND}"

@@ -108,6 +108,9 @@ jobs:
     runs-on: [xllm-musa-x86-cicd]
     timeout-minutes: 120
     steps:
+      - name: Prepare vcpkg cache
+        run: mkdir -p /export/home/musa_vcpkg_cache/archives /export/home/musa_vcpkg_cache/downloads
+
       - name: Prepare submodule checkout
         run: |
           if [ -d .git/modules ]; then
