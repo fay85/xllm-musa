@@ -20,7 +20,6 @@ WORKDIR="$(pwd)"
 VCPKG_CACHE="${XLLM_MUSA_VCPKG_CACHE:-/export/home/musa_vcpkg_cache}"
 
 CMD="$*"
-[[ -z "${CMD}" ]] && echo "Require build command" && exit 1
 
 mkdir -p "${VCPKG_CACHE}"
 
