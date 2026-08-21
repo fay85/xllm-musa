@@ -19,13 +19,8 @@ IMAGE="${XLLM_MUSA_IMAGE:-registry.mthreads.com/presale/devtech/xllm:musa-cicd-2
 WORKDIR="$(pwd)"
 VCPKG_CACHE="${XLLM_MUSA_VCPKG_CACHE:-/export/home/musa_vcpkg_cache}"
 
-error() {
-  echo "Require one build command, e.g. python setup.py build --device musa" >&2
-  exit 1
-}
-
 CMD="$*"
-[[ -z "${CMD}" ]] && error
+[[ -z "${CMD}" ]] && echo "Require build command" && exit 1
 
 mkdir -p "${VCPKG_CACHE}"
 
