@@ -26,7 +26,6 @@ on:
       - '*.yml'
   pull_request:
     branches: [main]
-    types: [opened, synchronize, reopened]
     paths-ignore:
       - 'docs/**'
       - 'tools/**'
@@ -39,22 +38,18 @@ on:
 permissions:
   contents: read
 
-env:
-  JOBNAME: xllm-x86_64-musa-cibuild-${{ github.run_id }}
-
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
 
 jobs:
-  # Review changes to executable CI inputs before using the privileged runner.
   check-sensitive:
     runs-on: [xllm-cpu-only-cicd]
     outputs:
-      requires_approval: ${{ steps.check_sensitive.outputs.requires_approval }}
       do_build: ${{ steps.decide.outputs.do_build }}
     steps:
       - name: Checkout code
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review'
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -63,66 +58,54 @@ jobs:
 
       - name: Check if sensitive files were changed
         id: check_sensitive
-        shell: bash
+        if: github.event_name == 'pull_request' || github.event_name == 'pull_request_review'
         run: |
           requires_approval=false
-          event="${{ github.event_name }}"
-          if [[ "${event}" == "pull_request" ||
-                "${event}" == "pull_request_review" ]]; then
-            changed_files="$(
-              git diff --name-only \
-                "${{ github.event.pull_request.base.sha }}" \
-                "${{ github.event.pull_request.head.sha }}"
-            )"
-            while IFS= read -r changed_file; do
-              case "${changed_file}" in
-                .github/**|cibuild/**|setup.py|examples/generate.py)
-                  requires_approval=true
-                  break
-                  ;;
-              esac
-            done <<< "${changed_files}"
-          fi
+          while IFS= read -r changed_file; do
+            case "${changed_file}" in
+              .github/**|cibuild/**|setup.py|examples/generate.py)
+                requires_approval=true
+                break
+                ;;
+            esac
+          done < <(
+            git diff --name-only \
+              "${{ github.event.pull_request.base.sha }}" \
+              "${{ github.event.pull_request.head.sha }}"
+          )
           echo "requires_approval=${requires_approval}" >> "${GITHUB_OUTPUT}"
 
       - name: Decide whether to build
         id: decide
-        shell: bash
         run: |
           event="${{ github.event_name }}"
+          requires_approval="${{ steps.check_sensitive.outputs.requires_approval }}"
+          do_build=false
           if [[ "${event}" == "workflow_dispatch" || "${event}" == "push" ]]; then
-            echo "do_build=true" >> "${GITHUB_OUTPUT}"
-          elif [[ "${event}" == "pull_request" ]]; then
-            if [[ "${{ steps.check_sensitive.outputs.requires_approval }}" == "true" ]]; then
-              echo "do_build=false" >> "${GITHUB_OUTPUT}"
-            else
-              echo "do_build=true" >> "${GITHUB_OUTPUT}"
-            fi
+            do_build=true
+          elif [[ "${event}" == "pull_request" &&
+                  "${requires_approval}" != "true" ]]; then
+            do_build=true
           elif [[ "${event}" == "pull_request_review" ]]; then
             association="${{ github.event.review.author_association }}"
             review_state="${{ github.event.review.state }}"
             review_commit="${{ github.event.review.commit_id }}"
             head_sha="${{ github.event.pull_request.head.sha }}"
-            if [[ "${{ steps.check_sensitive.outputs.requires_approval }}" == "true" &&
+            if [[ "${requires_approval}" == "true" &&
                   "${review_state}" == "approved" &&
                   "${review_commit}" == "${head_sha}" &&
                   ("${association}" == "OWNER" ||
                    "${association}" == "MEMBER" ||
                    "${association}" == "COLLABORATOR") ]]; then
-              echo "do_build=true" >> "${GITHUB_OUTPUT}"
-            else
-              echo "do_build=false" >> "${GITHUB_OUTPUT}"
+              do_build=true
             fi
-          else
-            echo "do_build=false" >> "${GITHUB_OUTPUT}"
           fi
+          echo "do_build=${do_build}" >> "${GITHUB_OUTPUT}"
 
   build:
     needs: check-sensitive
-    if: >
-      (github.event_name == 'workflow_dispatch' || github.event_name == 'push') ||
-      needs.check-sensitive.outputs.do_build == 'true'
-    runs-on: [self-hosted, xllm-musa-x86-cicd]
+    if: needs.check-sensitive.outputs.do_build == 'true'
+    runs-on: [xllm-musa-x86-cicd]
     timeout-minutes: 120
     steps:
       - name: Prepare submodule checkout
@@ -135,19 +118,11 @@ jobs:
         uses: actions/checkout@v4
         timeout-minutes: 10
         with:
-          clean: true
-          fetch-depth: 1
           persist-credentials: false
-          ref: ${{ github.event.pull_request.merge_commit_sha || github.sha }}
           submodules: recursive
 
       - name: Clean submodules
         run: git submodule foreach --recursive git clean -ffdx
 
       - name: Build Python package
-        if: ${{ success() }}
-        timeout-minutes: 120
-        run: |
-          chmod +x ./cibuild/build_musa.sh
-          bash ./cibuild/build_musa.sh \
-            'python setup.py build --device musa'
+        run: bash ./cibuild/build_musa.sh 'python setup.py build --device musa'
