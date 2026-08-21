@@ -47,7 +47,6 @@ RUN_OPTS=(
   --runtime=mthreads
   --ipc=host
   --network=host
-  --shm-size=128g
   --ulimit memlock=-1
   --env "GITHUB_WORKSPACE=${WORKDIR}"
   --env "MAX_JOBS=${BUILD_JOBS}"
