@@ -13,39 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-set -e
+IMAGE="registry.mthreads.com/presale/devtech/xllm:musa-cicd-20260820"
 
-IMAGE="${XLLM_MUSA_IMAGE:-registry.mthreads.com/presale/devtech/xllm:musa-cicd-20260820}"
-WORKDIR="$(pwd)"
-VCPKG_CACHE="${XLLM_MUSA_VCPKG_CACHE:-/export/home/musa_vcpkg_cache}"
-
-mkdir -p "${VCPKG_CACHE}"
-
-COMMAND="set -euo pipefail; \
-unset VCPKG_ROOT VCPKG_BINARY_SOURCES \
-  DEPENDENCES_ROOT FETCHCONTENT_SOURCE_DIR_VCPKG CMAKE_TOOLCHAIN_FILE
-export VCPKG_DEFAULT_BINARY_CACHE=/root/.cache/vcpkg/archives
-export VCPKG_DOWNLOADS=/root/.cache/vcpkg/downloads
-$*"
-BUILD_JOBS="${MAX_JOBS:-16}"
-MUSA_DEVICE_MASK="${MUSA_VISIBLE_DEVICES:-0}"
-
-RUN_OPTS=(
-  --rm
-  --privileged
-  --runtime=mthreads
-  --ipc=host
-  --network=host
-  --ulimit memlock=-1
-  --env "GITHUB_WORKSPACE=${WORKDIR}"
-  --env "MAX_JOBS=${BUILD_JOBS}"
-  --env "MUSA_VISIBLE_DEVICES=${MUSA_DEVICE_MASK}"
-  --env "XLLM_HOST_GID=$(id -g)"
-  --env "XLLM_HOST_UID=$(id -u)"
-  --volume "${WORKDIR}:${WORKDIR}"
-  --volume "${VCPKG_CACHE}:/root/.cache/vcpkg"
-  --workdir "${WORKDIR}"
-  --entrypoint /usr/local/bin/run-xllm-musa-ci
-)
-
-docker run "${RUN_OPTS[@]}" "${IMAGE}" run "${COMMAND}"
+docker run \
+  --rm \
+  --runtime=mthreads \
+  --network=host \
+  --env "GITHUB_WORKSPACE=${PWD}" \
+  --env MAX_JOBS=16 \
+  --env "XLLM_HOST_GID=$(id -g)" \
+  --env "XLLM_HOST_UID=$(id -u)" \
+  --volume "${PWD}:${PWD}" \
+  --volume /export/home/musa_vcpkg_cache:/root/.cache/vcpkg \
+  --workdir "${PWD}" \
+  --entrypoint /usr/local/bin/run-xllm-musa-ci \
+  "${IMAGE}" run "$*"
