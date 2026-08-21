@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "models/llm/py_causal_lm.h"
 
+#include <Python.h>
 #include <glog/logging.h>
 #include <pybind11/stl.h>
 #include <torch/extension.h>
@@ -26,12 +27,28 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #include "core/framework/model/model_output.h"
 #include "core/framework/model_loader.h"
+#include "core/framework/parallel_state/process_group.h"
 #include "core/framework/state_dict/state_dict.h"
 #include "models/py_model_helper.h"
 
 namespace py = pybind11;
 
 namespace xllm {
+namespace {
+
+void clear_python_object(py::object& object) {
+  if (!object) {
+    return;
+  }
+  if (!Py_IsInitialized()) {
+    (void)object.release();
+    return;
+  }
+  py::gil_scoped_acquire gil;
+  object = py::object();
+}
+
+}  // namespace
 
 PyCausalLM::PyCausalLM(const ModelContext& context)
     : model_args_(context.get_model_args()),
@@ -49,7 +66,8 @@ PyCausalLM::PyCausalLM(const ModelContext& context)
   if (tp_size_ > 1) {
     CHECK(!parallel_args.python_tp_rendezvous_host_.empty());
     CHECK_GT(parallel_args.python_tp_rendezvous_port_, 0);
-    py::module_::import("xllm.python.ops")
+    py::module_::import("xllm.python")
+        .attr("kernels")
         .attr("init_tp_group")(parallel_args.python_tp_rendezvous_host_,
                                parallel_args.python_tp_rendezvous_port_,
                                tp_rank_,
@@ -68,9 +86,8 @@ PyCausalLM::PyCausalLM(const ModelContext& context)
 }
 
 PyCausalLM::~PyCausalLM() {
-  py::gil_scoped_acquire gil;
-  py_model_ = py::object();
-  config_dict_ = py::object();
+  clear_python_object(py_model_);
+  clear_python_object(config_dict_);
 }
 
 py::dict PyCausalLM::build_config_dict(
@@ -83,8 +100,29 @@ py::dict PyCausalLM::build_config_dict(
   d["device"] = c10::str(device_);
   d["tp_size"] = tp_size_;
   d["tp_rank"] = tp_rank_;
+  d["dp_size"] = parallel_args.dp_size();
+  ProcessGroup* dp_group = parallel_args.dp_local_process_group_;
+  d["dp_rank"] = (dp_group != nullptr) ? dp_group->rank() : 0;
+  d["ep_size"] = parallel_args.ep_size();
+  int32_t moe_tp_size = 1;
+  int32_t moe_tp_rank = 0;
+  if (parallel_args.moe_tp_group_ != nullptr) {
+    moe_tp_size = parallel_args.moe_tp_group_->world_size();
+    moe_tp_rank = parallel_args.moe_tp_group_->rank();
+  }
+  d["moe_tp_size"] = moe_tp_size;
+  d["moe_tp_rank"] = moe_tp_rank;
+  int32_t ep_rank = 0;
+  if (parallel_args.moe_ep_group_ != nullptr) {
+    ep_rank = parallel_args.moe_ep_group_->rank();
+  }
+  d["ep_rank"] = ep_rank;
+  d["cp_rank"] = parallel_args.cp_rank();
+  d["enable_graph"] = ExecutionConfig::get_instance().enable_graph();
   d["python_graph_backend"] =
       ExecutionConfig::get_instance().python_graph_backend();
+  d["max_tokens_for_graph_mode"] =
+      ExecutionConfig::get_instance().max_tokens_for_graph_mode();
   return d;
 }
 

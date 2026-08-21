@@ -678,9 +678,10 @@ bool MTPWorkerImpl::init_model(const std::string& model_weights_path,
   if (draft_impl_ != nullptr &&
       draft_impl_->get_status() == WorkerImpl::Status::LOADED) {
     const bool draft_owns_shared_weights =
-        options_.enable_mtp_draft_body_tp1() &&
         is_qwen3_5_draft_model_type(
-            draft_impl_->context_.get_model_args().model_type());
+            draft_impl_->context_.get_model_args().model_type()) &&
+        (options_.enable_mtp_draft_body_tp1() ||
+         draft_impl_->context_.get_model_impl() == "python");
     // Qwen3.5 draft checkpoints contain complete embedding and LMHead weights.
     // Other MTP drafts retain their existing target-weight sharing contract;
     // only their transformer body is replicated with TP1 parallel arguments.

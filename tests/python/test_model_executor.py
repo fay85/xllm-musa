@@ -42,6 +42,7 @@ from xllm.python.model_executor.executor import (  # noqa: E402
     ModelExecutor,
     _create_attention_backend,
     _is_npu_device,
+    _use_decode_graph,
 )
 
 
@@ -127,6 +128,35 @@ class _FakeModelNoAttention(nn.Module):
 # ---------------------------------------------------------------------------
 # Tests: _is_npu_device
 # ---------------------------------------------------------------------------
+
+
+class TestUseDecodeGraph:
+    def test_spec_verify_uses_decode_graph_even_when_chunked(self) -> None:
+        @dataclass
+        class _Meta:
+            is_prefill: bool = False
+            is_chunked_prefill: bool = True
+            is_spec_verify: bool = True
+
+        assert _use_decode_graph(_Meta()) is True
+
+    def test_chunked_prefill_skips_decode_graph(self) -> None:
+        @dataclass
+        class _Meta:
+            is_prefill: bool = False
+            is_chunked_prefill: bool = True
+            is_spec_verify: bool = False
+
+        assert _use_decode_graph(_Meta()) is False
+
+    def test_plain_decode_uses_decode_graph(self) -> None:
+        @dataclass
+        class _Meta:
+            is_prefill: bool = False
+            is_chunked_prefill: bool = False
+            is_spec_verify: bool = False
+
+        assert _use_decode_graph(_Meta()) is True
 
 
 class TestIsNpuDevice:

@@ -64,7 +64,7 @@ def fused_qk_norm_rope(
     if device_type == "cuda":
         qkv = torch.ops.xllm_ops.fused_qk_norm_rope(
             qkv, num_heads_q, num_heads_k, num_heads_v, head_dim, eps,
-            q_weight, k_weight, cos_sin_cache, interleaved, position_ids,
+            q_weight, k_weight, cos_sin_cache, interleaved, position_ids, 0,
         )
         return qkv[:, :q_size], qkv[:, q_size:q_size + kv_size], qkv[:, q_size + kv_size:]
     if device_type in ("npu", "privateuseone"):
@@ -109,5 +109,19 @@ def _fused_qk_norm_rope_npu(
 
 
 @torch.library.register_fake("xllm_ops::fused_qk_norm_rope")
-def _(qkv, num_heads_q, num_heads_k, num_heads_v, head_dim, eps, q_weight, k_weight, cos_sin_cache, interleaved, position_ids):
+def _(
+    qkv,
+    num_heads_q,
+    num_heads_k,
+    num_heads_v,
+    head_dim,
+    eps,
+    q_weight,
+    k_weight,
+    cos_sin_cache,
+    interleaved,
+    position_ids,
+    k_head_offset=0,
+):
+    del k_head_offset
     return qkv

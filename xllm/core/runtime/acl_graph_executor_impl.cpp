@@ -573,50 +573,35 @@ ModelOutput AclGraphExecutorImpl::run(const torch::Tensor& tokens,
       std::make_unique<AclGraph>(active_persistent_param, device_.index());
   VLOG(kGraphExecutorLogVerboseLevel)
       << "AclGraphExecutorImpl::run() in capture mode";
-  bool capture_success = false;
-  try {
-    capture_success = graph->capture(model_,
-                                     options_,
-                                     tokens_tensor,
-                                     positions_tensor,
-                                     params_single,
-                                     kv_caches,
-                                     bucket_num_tokens);
-  } catch (const std::exception& e) {
-    LOG(ERROR) << "ACL graph capture threw exception for bucket num_tokens="
-               << bucket_num_tokens << ": " << e.what()
-               << ". Falling back to eager mode.";
-    COUNTER_INC(num_model_execution_total_eager);
-    return model_->forward(tokens, positions, kv_caches, params);
-  }
+  const bool capture_success = graph->capture(model_,
+                                              options_,
+                                              tokens_tensor,
+                                              positions_tensor,
+                                              params_single,
+                                              kv_caches,
+                                              bucket_num_tokens);
+  CHECK(capture_success)
+      << "Failed to capture ACL graph for bucket num_tokens: "
+      << bucket_num_tokens;
+  LOG(INFO) << "Lazy capturing ACL graph for bucket num_tokens: "
+            << bucket_num_tokens << " (actual num_tokens: " << n_tokens
+            << ") done";
 
-  if (capture_success) {
-    LOG(INFO) << "Lazy capturing ACL graph for bucket num_tokens: "
-              << bucket_num_tokens << " (actual num_tokens: " << n_tokens
-              << ") done";
+  // Save the graph for future reuse
+  active_slot.graphs[graph_key] = std::move(graph);
 
-    // Save the graph for future reuse
-    active_slot.graphs[graph_key] = std::move(graph);
-
-    // Return the output from capture (no need to replay since capture
-    // already executed)
-    torch::Tensor hidden_states =
-        active_slot.graphs[graph_key]->get_hidden_states(n_tokens);
-    if (options_.enable_graph_aux_hidden_states()) {
-      torch::Tensor aux_hidden_states =
-          active_persistent_param.aux_hidden_states(n_tokens);
-      if (aux_hidden_states.defined() && aux_hidden_states.numel() > 0) {
-        return ModelOutput(hidden_states, torch::Tensor(), aux_hidden_states);
-      }
+  // Return the output from capture (no need to replay since capture
+  // already executed)
+  torch::Tensor hidden_states =
+      active_slot.graphs[graph_key]->get_hidden_states(n_tokens);
+  if (options_.enable_graph_aux_hidden_states()) {
+    torch::Tensor aux_hidden_states =
+        active_persistent_param.aux_hidden_states(n_tokens);
+    if (aux_hidden_states.defined() && aux_hidden_states.numel() > 0) {
+      return ModelOutput(hidden_states, torch::Tensor(), aux_hidden_states);
     }
-    return ModelOutput(hidden_states);
   }
-
-  // Fallback to eager mode if capture fails
-  LOG(ERROR) << "Failed to capture ACL graph for bucket num_tokens: "
-             << bucket_num_tokens;
-  COUNTER_INC(num_model_execution_total_eager);
-  return model_->forward(tokens, positions, kv_caches, params);
+  return ModelOutput(hidden_states);
 }
 
 void AclGraphExecutorImpl::prepare_graph_input(const torch::Tensor& tokens,

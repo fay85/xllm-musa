@@ -345,8 +345,10 @@ void validate_config(const std::string& model_type) {
   const bool allow_experimental_qwen3_graph =
       experimental_graph_env != nullptr &&
       std::string(experimental_graph_env) == "1";
+  const bool python_model_impl =
+      ModelConfig::is_python_model_impl(model_config.model_impl());
   if (model_type == "qwen3" && execution_config.enable_graph() &&
-      !allow_experimental_qwen3_graph) {
+      !allow_experimental_qwen3_graph && !python_model_impl) {
     LOG(WARNING) << "MUSA graph execution is not yet validated for Qwen3; "
                     "disabling graph and piecewise graph execution. Set "
                     "XLLM_QWEN3_ENABLE_GRAPH_EXPERIMENTAL=1 only for "
@@ -354,7 +356,7 @@ void validate_config(const std::string& model_type) {
     execution_config.enable_graph(false);
     execution_config.enable_prefill_piecewise_graph(false);
   } else if (model_type == "qwen3" && execution_config.enable_graph() &&
-             allow_experimental_qwen3_graph) {
+             (allow_experimental_qwen3_graph || python_model_impl)) {
     LOG(WARNING) << "Experimental MUSA Qwen3 graph execution is enabled; "
                     "correctness and performance are not yet validated.";
   }

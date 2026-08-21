@@ -29,7 +29,8 @@ from typing import List, Optional, Tuple
 import torch
 import torch.nn as nn
 
-from xllm.python import ops
+from xllm.python import kernels
+from xllm.python.platform import current_platform
 from xllm.python.layers import (
     Attention,
     ColumnParallelLinear,
@@ -38,7 +39,7 @@ from xllm.python.layers import (
     RotaryEmbedding,
     RowParallelLinear,
 )
-from xllm.python.model_executor.forward_context import get_forward_context
+from xllm.python.model_executor.forward_context import record_layer_event
 from xllm.python.models.base import PyModelBase
 
 
@@ -59,6 +60,8 @@ class Qwen3Config:
     attention_bias: bool = False
     tp_size: int = 1
     tp_rank: int = 0
+    dp_size: int = 1
+    dp_rank: int = 0
 
     @classmethod
     def from_dict(cls, d: dict) -> "Qwen3Config":
@@ -88,6 +91,8 @@ class Qwen3Config:
             attention_bias=bool(pick("attention_bias", default=False)),
             tp_size=int(pick("tp_size", default=1)),
             tp_rank=int(pick("tp_rank", default=0)),
+            dp_size=int(pick("dp_size", default=1)),
+            dp_rank=int(pick("dp_rank", default=0)),
         )
 
     def head_split(self) -> Tuple[int, int, int]:
@@ -134,10 +139,29 @@ class Qwen3MLP(nn.Module):
             dtype=dtype,
             device=device,
         )
+        self._intermediate_per_rank = inter_per_rank
+        self._silu_output: torch.Tensor | None = None
+
+    def reserve_graph_workspace(self, max_tokens: int) -> None:
+        if max_tokens <= 0:
+            raise RuntimeError("Qwen3MLP graph reserve requires max_tokens > 0")
+        need_output = (
+            self._silu_output is None or self._silu_output.size(0) < max_tokens
+        )
+        if need_output:
+            self._silu_output = torch.empty(
+                (max_tokens, self._intermediate_per_rank),
+                dtype=self.gate_up_proj.weight.dtype,
+                device=self.gate_up_proj.weight.device,
+            )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         gate_up = self.gate_up_proj(x)
-        act = ops.silu_and_mul(gate_up)
+        silu_output = self._silu_output
+        if silu_output is not None and x.size(0) <= silu_output.size(0):
+            act = kernels.silu_and_mul(gate_up, silu_output[: x.size(0)])
+        else:
+            act = kernels.silu_and_mul(gate_up)
         return self.down_proj(act)
 
 
@@ -196,7 +220,7 @@ class Qwen3Attention(nn.Module):
     ) -> torch.Tensor:
         qkv = self.qkv_proj(hidden)
 
-        q, k, v = ops.fused_qk_norm_rope(
+        q, k, v = kernels.fused_qk_norm_rope(
             qkv,
             num_heads_q=self.num_heads,
             num_heads_k=self.num_kv_heads,
@@ -285,26 +309,41 @@ class Qwen3Model(nn.Module):
             cfg.hidden_size, cfg.rms_norm_eps, dtype=dtype, device=device
         )
 
+    def reserve_graph_workspaces(self, max_tokens: int) -> None:
+        if max_tokens <= 0:
+            raise RuntimeError("Qwen3 graph reserve requires max_tokens > 0")
+        reservable = [
+            module
+            for module in self.modules()
+            if hasattr(module, "reserve_graph_workspace")
+        ]
+        for module in reservable:
+            module.reserve_graph_workspace(max_tokens)
+
     def forward(
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
     ) -> torch.Tensor:
         hidden = self.embed_tokens(input_ids)
-        # The fused QK-norm+RoPE kernel requires int64 position ids, but C++
-        # passes them as int32. Cast once here instead of once per layer. In the
-        # captured decode graph this single cast is recorded inside the graph
-        # (its output lives in the graph memory pool), so replay re-casts the
-        # updated static_positions correctly.
-        positions = positions.to(torch.int64).contiguous()
+        # MUSA fused_qk_norm_rope accepts int32 positions. Keep the graph
+        # address set static by avoiding a per-step int64 cast on replay.
+        if current_platform.is_musa():
+            if positions.dtype != torch.int32:
+                positions = positions.to(torch.int32)
+            if not positions.is_contiguous():
+                positions = positions.contiguous()
+        else:
+            positions = positions.to(torch.int64).contiguous()
         cos, sin = None, None
-        if get_forward_context().device.type in ("npu", "privateuseone"):
+        if current_platform.is_npu():
             cos, sin = self.rotary(positions)
         residual: Optional[torch.Tensor] = None
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             hidden, residual = layer(
                 hidden, residual, positions, self.rotary.cos_sin_cache, cos, sin
             )
+            record_layer_event(i)
         hidden, _ = self.norm(hidden, residual)
         return hidden
 
@@ -321,6 +360,11 @@ class Qwen3ForCausalLM(PyModelBase):
         self.device = device
 
         tp = self.cfg.tp_size
+        dp = self.cfg.dp_size
+        if tp * dp != int(config.get("world_size", tp * dp)):
+            raise ValueError("world_size must equal tp_size * dp_size")
+        if not 0 <= self.cfg.dp_rank < dp:
+            raise ValueError("dp_rank must be in [0, dp_size)")
         assert self.cfg.vocab_size % tp == 0
         self.model = Qwen3Model(self.cfg, dtype, device)
         self.lm_head = ColumnParallelLinear(
@@ -331,6 +375,10 @@ class Qwen3ForCausalLM(PyModelBase):
             dtype=dtype,
             device=device,
         )
+
+    def reserve_graph_workspaces(self, max_tokens: int) -> None:
+        self.model.reserve_graph_workspaces(max_tokens)
+        self.lm_head.reserve_graph_workspace(max_tokens)
 
     # -- weight loading ---------------------------------------------------
     def load_weights(
@@ -425,3 +473,4 @@ class Qwen3ForCausalLM(PyModelBase):
         else:
             lm_name = "lm_head.weight"
         copy_in("lm_head.weight", shard(lm_name, dim=0))
+        self.lm_head.prefer_nn_gemm_layout()

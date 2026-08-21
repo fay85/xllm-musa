@@ -22,13 +22,18 @@ touch the kernel backends directly. The dependency direction is
 
 from xllm.python.layers.attention import Attention
 from xllm.python.layers.embedding import HiddenParallelEmbedding
-from xllm.python.layers.layernorm import RMSNorm
+from xllm.python.layers.gated_delta_net import Qwen3_5GatedDeltaNet
+from xllm.python.layers.gated_mlp import GatedMLP
+from xllm.python.layers.layernorm import GemmaRMSNorm, RMSNorm
 from xllm.python.layers.linear import ColumnParallelLinear, RowParallelLinear
 from xllm.python.layers.rotary_embedding import RotaryEmbedding
 
 __all__ = [
     "Attention",
     "RMSNorm",
+    "GemmaRMSNorm",
+    "GatedMLP",
+    "Qwen3_5GatedDeltaNet",
     "RotaryEmbedding",
     "ColumnParallelLinear",
     "RowParallelLinear",
