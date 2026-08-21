@@ -19,8 +19,6 @@ IMAGE="${XLLM_MUSA_IMAGE:-registry.mthreads.com/presale/devtech/xllm:musa-cicd-2
 WORKDIR="$(pwd)"
 VCPKG_CACHE="${XLLM_MUSA_VCPKG_CACHE:-/export/home/musa_vcpkg_cache}"
 
-CMD="$*"
-
 mkdir -p "${VCPKG_CACHE}"
 
 COMMAND="set -euo pipefail; \
@@ -28,7 +26,7 @@ unset VCPKG_ROOT VCPKG_BINARY_SOURCES \
   DEPENDENCES_ROOT FETCHCONTENT_SOURCE_DIR_VCPKG CMAKE_TOOLCHAIN_FILE
 export VCPKG_DEFAULT_BINARY_CACHE=/root/.cache/vcpkg/archives
 export VCPKG_DOWNLOADS=/root/.cache/vcpkg/downloads
-${CMD}"
+$*"
 BUILD_JOBS="${MAX_JOBS:-16}"
 MUSA_DEVICE_MASK="${MUSA_VISIBLE_DEVICES:-0}"
 
