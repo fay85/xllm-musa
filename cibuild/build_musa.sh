@@ -23,9 +23,6 @@ CMD="$*"
 
 mkdir -p "${VCPKG_CACHE}"
 
-[[ ! -x $(command -v docker) ]] && \
-  echo "ERROR: 'docker' command is missing." && exit 1
-
 COMMAND="set -euo pipefail; \
 unset VCPKG_ROOT VCPKG_BINARY_SOURCES \
   DEPENDENCES_ROOT FETCHCONTENT_SOURCE_DIR_VCPKG CMAKE_TOOLCHAIN_FILE
