@@ -80,6 +80,16 @@ bool use_contiguous_bf16_prefill_gemm(int64_t num_tokens) {
   return enabled && num_tokens >= kContiguousBf16PrefillMinTokens;
 }
 
+bool use_contiguous_fp8_moe_prefill() {
+  // The contiguous FP8 MoE prefill path changes greedy HumanEval results for
+  // Qwen3.5-35B-A3B-FP8 relative to the masked path and SGLang. Keep decode
+  // eligibility independent, and require an explicit opt-in for prefill until
+  // the contiguous prefill kernel reaches the same correctness gate.
+  static const bool enabled = util::get_bool_env(
+      "XLLM_MUSA_CONTIGUOUS_FP8_MOE_PREFILL", false);
+  return enabled;
+}
+
 bool use_ragged_moe_decode(int64_t num_tokens, bool is_decode) {
   static const bool enabled =
       util::get_bool_env("XLLM_MUSA_RAGGED_MOE_DECODE", false);
@@ -397,6 +407,9 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     const torch::Tensor& hidden_states,
     bool is_decode) {
   const int64_t num_tokens = hidden_states.size(0);
+  const bool use_contiguous_fp8_moe =
+      use_contiguous_fp8_moe_ &&
+      (is_decode || use_contiguous_fp8_moe_prefill());
   torch::Tensor topk_weights;
   torch::Tensor topk_ids;
   {
@@ -431,7 +444,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
                                                       topk_ids);
   }
 
-  if (use_fp8_ && use_contiguous_fp8_moe_ &&
+  if (use_fp8_ && use_contiguous_fp8_moe &&
       use_ragged_moe_decode(num_tokens, is_decode)) {
     auto preprocess = xllm::kernel::musa::fused_moe_ragged_preprocess_fp8(
         hidden_states.contiguous(),
@@ -613,7 +626,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
         .to(hidden_states.scalar_type());
   };
 
-  if (use_contiguous_fp8_moe_ && use_fused_moe_preprocess(num_tokens)) {
+  if (use_contiguous_fp8_moe && use_fused_moe_preprocess(num_tokens)) {
     auto preprocess = xllm::kernel::musa::fused_moe_preprocess_fp8(
         hidden_states.contiguous(), topk_ids, num_experts_, 128);
     return run_contiguous_fp8(std::get<0>(preprocess),
@@ -695,7 +708,7 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
   auto token_counts_i32 = std::get<2>(route_index);
   auto original_indices = dst_src_i32.to(torch::kLong);
 
-  if (use_contiguous_fp8_moe_) {
+  if (use_contiguous_fp8_moe) {
     // The contiguous Mate kernel consumes only valid assignment rows, grouped
     // by expert. Gather in BF16 before quantization; Float8 index_copy is not
     // supported by torch_musa and byte-view scatter is not correctness-safe.
@@ -818,7 +831,8 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward(
     chunk_tokens = kMaxFusedMoeAotDecodeTokens;
   } else if (is_prefill && use_contiguous_bf16_moe_) {
     chunk_tokens = kMaxCompactBf16PrefillTokens;
-  } else if (is_prefill && use_contiguous_fp8_moe_) {
+  } else if (is_prefill && use_contiguous_fp8_moe_ &&
+             use_contiguous_fp8_moe_prefill()) {
     chunk_tokens = kMaxCompactPrefillTokens;
   }
   std::vector<torch::Tensor> routed_chunks;

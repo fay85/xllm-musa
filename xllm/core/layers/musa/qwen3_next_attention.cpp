@@ -226,14 +226,21 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     }
   }
 
-  // Fallback path: weight-reordered layout [Q | G | K | V]
+  // Fallback path: checkpoint layout [Q/G interleaved per head | K | V].
   torch::Tensor q, k, v;
   torch::Tensor gate;
   {
     PrefillBreakdown::Scope prep_scope(PrefillBreakdown::Bucket::kFullPrep);
+    const int64_t T = qkv.size(0);
     if (attn_output_gate_) {
-      q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
-      gate = qkv.slice(/*dim=*/-1, /*start=*/q_size_, /*end=*/q_size_ * 2);
+      auto qg = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_ * 2)
+                    .view({T, num_heads_, 2, head_dim_});
+      q = qg.select(/*dim=*/2, /*index=*/0)
+              .reshape({T, q_size_})
+              .contiguous();
+      gate = qg.select(/*dim=*/2, /*index=*/1)
+                 .reshape({T, q_size_})
+                 .contiguous();
       k = qkv.slice(/*dim=*/-1,
                     /*start=*/q_size_ * 2,
                     /*end=*/q_size_ * 2 + kv_size_);
@@ -248,11 +255,11 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
                     /*end=*/q_size_ + 2 * kv_size_);
     }
 
-    const int64_t T = q.size(0);
-
     // Fused QK-norm + RoPE: collapse 3 kernel launches into 1 for decode
-    // (1D positions). Writes norm+rope results back into qkv in-place.
-    if (fused_qk_norm_rope_enabled() && positions.dim() == 1 &&
+    // (1D positions). It expects grouped Q/K rows, so keep it off for the
+    // Qwen3.5 interleaved Q/G checkpoint layout handled above.
+    if (fused_qk_norm_rope_enabled() && !attn_output_gate_ &&
+        positions.dim() == 1 &&
         positions.scalar_type() == torch::kInt32 &&
         (head_dim_ == 64 || head_dim_ == 128 || head_dim_ == 256)) {
       auto cos_sin_cache = rotary_emb_->get_cos_sin_cache();
@@ -304,23 +311,6 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
 
 void Qwen3NextAttentionImpl::load_state_dict(const StateDict& state_dict) {
   qkv_proj_->load_state_dict(state_dict, {"q_proj.", "k_proj.", "v_proj."});
-
-  if (attn_output_gate_ && qkv_proj_->is_weight_loaded() &&
-      !qkv_weight_reordered_) {
-    // Rearrange q_proj rows from per-head interleaved [q0,g0,q1,g1,...]
-    // to grouped [q0,q1,...,g0,g1,...] so forward output is [Q|G|K|V].
-    auto w = qkv_proj_->weight();
-    auto qg_rows = w.slice(0, 0, q_size_ * 2);
-    const int64_t hidden = w.size(1);
-    auto qg_3d = qg_rows.view({num_heads_, 2 * head_dim_, hidden});
-    auto q_part = qg_3d.slice(1, 0, head_dim_);
-    auto g_part = qg_3d.slice(1, head_dim_, 2 * head_dim_);
-    auto reordered = torch::cat(
-        {q_part.reshape({q_size_, hidden}), g_part.reshape({q_size_, hidden})},
-        0);
-    qg_rows.copy_(reordered);
-    qkv_weight_reordered_ = true;
-  }
 
   o_proj_->load_state_dict(state_dict.get_dict_with_prefix("o_proj."));
   if (auto w = state_dict.get_tensor("q_norm.weight"); w.defined()) {
