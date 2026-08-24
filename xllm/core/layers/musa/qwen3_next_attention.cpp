@@ -192,7 +192,7 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     torch::Tensor k_flat;
     torch::Tensor v_flat;
     torch::Tensor gate;
-    const int64_t T = qkv.size(0);
+    const int64_t num_tokens = qkv.size(0);
     {
       PrefillBreakdown::Scope prep_scope(PrefillBreakdown::Bucket::kFullPrep);
       xllm::kernel::SplitQkvRmsnormMropeParams params;
@@ -207,9 +207,9 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
       params.head_size = head_dim_;
 
       auto [q, k, v, g] = xllm::kernel::split_qkv_rmsnorm_mrope(params);
-      q_flat = q.view({T, q_size_});
-      k_flat = k.view({T, kv_size_});
-      v_flat = v.view({T, kv_size_});
+      q_flat = q.view({num_tokens, q_size_});
+      k_flat = k.view({num_tokens, kv_size_});
+      v_flat = v.view({num_tokens, kv_size_});
       gate = g;
     }
 
@@ -221,7 +221,7 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     }
     {
       PrefillBreakdown::Scope o_scope(PrefillBreakdown::Bucket::kFullOProj);
-      out = out * torch::sigmoid(gate.view({T, q_size_}));
+      out = out * torch::sigmoid(gate.view({num_tokens, q_size_}));
       return o_proj_->forward(out);
     }
   }
@@ -231,15 +231,15 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
   torch::Tensor gate;
   {
     PrefillBreakdown::Scope prep_scope(PrefillBreakdown::Bucket::kFullPrep);
-    const int64_t T = qkv.size(0);
+    const int64_t num_tokens = qkv.size(0);
     if (attn_output_gate_) {
       auto qg = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_ * 2)
-                    .view({T, num_heads_, 2, head_dim_});
+                    .view({num_tokens, num_heads_, 2, head_dim_});
       q = qg.select(/*dim=*/2, /*index=*/0)
-              .reshape({T, q_size_})
+              .reshape({num_tokens, q_size_})
               .contiguous();
       gate = qg.select(/*dim=*/2, /*index=*/1)
-                 .reshape({T, q_size_})
+                 .reshape({num_tokens, q_size_})
                  .contiguous();
       k = qkv.slice(/*dim=*/-1,
                     /*start=*/q_size_ * 2,
@@ -283,10 +283,10 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
           /*end=*/
           attn_output_gate_ ? q_size_ * 2 + kv_size_ : q_size_ + kv_size_);
     } else {
-      auto q_3d = q.view({T, num_heads_, head_dim_});
-      q = std::get<0>(q_norm_->forward(q_3d)).view({T, q_size_});
-      auto k_3d = k.view({T, num_kv_heads_, head_dim_});
-      k = std::get<0>(k_norm_->forward(k_3d)).view({T, kv_size_});
+      auto q_3d = q.view({num_tokens, num_heads_, head_dim_});
+      q = std::get<0>(q_norm_->forward(q_3d)).view({num_tokens, q_size_});
+      auto k_3d = k.view({num_tokens, num_kv_heads_, head_dim_});
+      k = std::get<0>(k_norm_->forward(k_3d)).view({num_tokens, kv_size_});
 
       rotary_emb_->forward(positions, q, k);
     }
