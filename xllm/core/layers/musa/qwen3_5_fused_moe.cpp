@@ -85,18 +85,20 @@ bool use_contiguous_fp8_moe_prefill() {
   // Low-occupancy prefills use the aligned Ragged path below. Contiguous FP8
   // remains the high-throughput path once each expert receives enough rows.
   static const bool enabled =
-      util::get_bool_env("XLLM_MUSA_CONTIGUOUS_FP8_MOE_PREFILL", true);
+      util::get_bool_env("XLLM_MUSA_CONTIGUOUS_FP8_MOE_PREFILL",
+                         /*defaultValue=*/true);
   return enabled;
 }
 
 bool use_aligned_ragged_fp8_moe_prefill(int64_t num_tokens) {
   static const bool enabled =
-      util::get_bool_env("XLLM_MUSA_ALIGNED_RAGGED_FP8_MOE_PREFILL", true);
+      util::get_bool_env("XLLM_MUSA_ALIGNED_RAGGED_FP8_MOE_PREFILL",
+                         /*defaultValue=*/true);
   static const int64_t max_tokens = std::clamp(
       util::get_int_env("XLLM_MUSA_ALIGNED_RAGGED_FP8_MOE_PREFILL_MAX_TOKENS",
-                        kMaxAlignedRaggedFp8PrefillTokens),
-      int64_t{1},
-      kMaxCompactPrefillTokens);
+                        /*defaultValue=*/kMaxAlignedRaggedFp8PrefillTokens),
+      /*lo=*/int64_t{1},
+      /*hi=*/kMaxCompactPrefillTokens);
   return enabled && num_tokens <= max_tokens;
 }
 
@@ -643,31 +645,31 @@ torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
             hidden_states.contiguous(),
             topk_ids,
             num_experts_,
-            kCompactBf16MAlignment);
+            /*alignment=*/kCompactBf16MAlignment);
     auto [hidden_fp8, hidden_scale] =
         xllm::kernel::musa::per_token_group_quant_fp8(std::get<0>(preprocess),
                                                       /*group_size=*/128);
-    torch::Tensor gate_up =
-        xllm::kernel::musa::ragged_moe_gemm_fp8(hidden_fp8,
-                                                hidden_scale,
-                                                w13_,
-                                                w13_scale_inv_,
-                                                std::get<1>(preprocess),
-                                                hidden_states.scalar_type(),
-                                                kCompactBf16MAlignment);
+    torch::Tensor gate_up = xllm::kernel::musa::ragged_moe_gemm_fp8(
+        hidden_fp8,
+        hidden_scale,
+        w13_,
+        w13_scale_inv_,
+        std::get<1>(preprocess),
+        hidden_states.scalar_type(),
+        /*alignment=*/kCompactBf16MAlignment);
     torch::Tensor activated;
     activation_->forward(gate_up, activated);
     auto [activated_fp8, activated_scale] =
         xllm::kernel::musa::per_token_group_quant_fp8(activated,
                                                       /*group_size=*/128);
-    torch::Tensor down =
-        xllm::kernel::musa::ragged_moe_gemm_fp8(activated_fp8,
-                                                activated_scale,
-                                                w2_,
-                                                w2_scale_inv_,
-                                                std::get<1>(preprocess),
-                                                hidden_states.scalar_type(),
-                                                kCompactBf16MAlignment);
+    torch::Tensor down = xllm::kernel::musa::ragged_moe_gemm_fp8(
+        activated_fp8,
+        activated_scale,
+        w2_,
+        w2_scale_inv_,
+        std::get<1>(preprocess),
+        hidden_states.scalar_type(),
+        /*alignment=*/kCompactBf16MAlignment);
     return xllm::kernel::musa::moe_combine_result_indexed(
         down,
         std::get<2>(preprocess),
