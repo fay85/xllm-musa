@@ -19,6 +19,8 @@ typedef struct {
 
 TokenizerHandle tokenizers_new_from_path(const char* path);
 
+TokenizerHandle tokenizers_clone(TokenizerHandle handle);
+
 void tokenizers_encode(TokenizerHandle handle,
                        const char* data,
                        size_t len,

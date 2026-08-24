@@ -8,7 +8,7 @@ use std::io;
 use tokenizers::tokenizer::Tokenizer;
 
 pub struct TokenizerWrapper {
-    tokenizer: Tokenizer,
+    tokenizer: std::sync::Arc<Tokenizer>,
     decode_str: String,
     id_to_token_result: String,
 }
@@ -49,7 +49,7 @@ impl TokenizerWrapper {
         tokenizer.with_padding(None);
         tokenizer.with_truncation(None).unwrap();
         TokenizerWrapper {
-            tokenizer,
+            tokenizer: std::sync::Arc::new(tokenizer),
             decode_str: String::new(),
             id_to_token_result: String::new(),
         }
@@ -96,6 +96,17 @@ extern "C" fn tokenizers_new_from_path(path: *const c_char) -> *mut TokenizerWra
         Err(_) => {
             panic!("Failed to read tokenizer file.");
         }
+    }
+}
+
+#[no_mangle]
+extern "C" fn tokenizers_clone(handle: *mut TokenizerWrapper) -> *mut TokenizerWrapper {
+    unsafe {
+        Box::into_raw(Box::new(TokenizerWrapper {
+            tokenizer: std::sync::Arc::clone(&(*handle).tokenizer),
+            decode_str: String::new(),
+            id_to_token_result: String::new(),
+        }))
     }
 }
 

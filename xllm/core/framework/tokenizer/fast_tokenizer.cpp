@@ -27,8 +27,15 @@ FastTokenizer::FastTokenizer(const TokenizerArgs& tokenizer_args)
       << "Failed to load tokenizer from file: " << tokenizer_args.vocab_file();
 }
 
+FastTokenizer::FastTokenizer(const TokenizerArgs& tokenizer_args,
+                             TokenizerHandle handle)
+    : tokenizer_args_(tokenizer_args), handle_(handle) {
+  CHECK(handle_ != nullptr) << "Failed to clone fast tokenizer.";
+}
+
 std::unique_ptr<Tokenizer> FastTokenizer::clone() const {
-  return std::make_unique<FastTokenizer>(tokenizer_args_);
+  return std::unique_ptr<Tokenizer>(
+      new FastTokenizer(tokenizer_args_, tokenizers_clone(handle_)));
 }
 
 FastTokenizer::~FastTokenizer() { tokenizers_free(handle_); }
