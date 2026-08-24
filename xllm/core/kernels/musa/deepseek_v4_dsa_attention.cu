@@ -18,6 +18,7 @@ limitations under the License.
 #include <glog/logging.h>
 #include <musa_runtime_api.h>
 #include <torch_musa/csrc/core/MUSAStream.h>
+#include <tvm/ffi/extra/c_env_api.h>
 
 #include <algorithm>
 #include <array>
@@ -77,6 +78,27 @@ void wait_musa_ffi_stream_for_current(const torch::Device&) {}
 void wait_current_musa_stream_for_ffi(const torch::Device&) {
   CHECK(dsv4_tvmffi_stream_guard.has_value());
   dsv4_tvmffi_stream_guard.reset();
+}
+
+// The local sparse-prefill AOT is validated on the Torch compatibility
+// stream used by its metadata and KV producers.  Preserve a null handle here:
+// on MUSA it denotes the valid default stream, while the generic graph-aware
+// helper intentionally replaces it with a pooled stream and therefore needs
+// per-call event handoffs.  This binding is private to local prefill; decode
+// paths retain their existing stream policy.
+void bind_dsv4_local_prefill_tvmffi_current_stream(
+    const torch::Device& device) {
+  void* const stream =
+      reinterpret_cast<void*>(current_dsv4_cache_stream());
+  constexpr int32_t kDlCuda = 2;
+  constexpr int32_t kDlExtDev = 12;
+  for (const int32_t device_type : {kDlCuda, kDlExtDev}) {
+    void* original_stream = nullptr;
+    const int rc = TVMFFIEnvSetStream(
+        device_type, device.index(), stream, &original_stream);
+    CHECK_EQ(rc, 0) << "failed to bind local prefill FFI stream, dev_type="
+                    << device_type << ", device=" << device.index();
+  }
 }
 
 bool dsv4_paged_decode_sync_enabled() { return false; }
@@ -2407,7 +2429,7 @@ torch::Tensor try_dsv4_mate_model1_local_sparse_prefill(
           compress_ratio);
       check_musa_kernel_launch("dsv4 kernel");
 
-      bind_musa_tvmffi_current_stream(q.device());
+      bind_dsv4_local_prefill_tvmffi_current_stream(q.device());
       split_function.value()(to_ffi_tensor(q),
                              to_ffi_tensor(workspace.main_kv),
                              to_ffi_tensor(workspace.indices),
@@ -2473,7 +2495,7 @@ torch::Tensor try_dsv4_mate_model1_local_sparse_prefill(
         compress_ratio);
     check_musa_kernel_launch("dsv4 kernel");
 
-    bind_musa_tvmffi_current_stream(q.device());
+    bind_dsv4_local_prefill_tvmffi_current_stream(q.device());
     function.value()(to_ffi_tensor(q),
                      to_ffi_tensor(workspace.combined_kv),
                      to_ffi_tensor(workspace.indices),

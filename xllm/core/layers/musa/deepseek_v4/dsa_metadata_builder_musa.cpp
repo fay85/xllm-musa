@@ -28,6 +28,9 @@ namespace xllm::layer {
 
 namespace {
 
+constexpr char kDsv4StateBlockIndicesMetadataKey[] =
+    "__musa_dsv4_state_block_indices";
+
 torch::Device infer_metadata_device(const ModelInputParams& params,
                                     const torch::Tensor& positions) {
   if (positions.defined()) {
@@ -341,6 +344,35 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
                     graph_block_table_capacity_cols,
                     proc_bt[m],
                     proc_slots[m]);
+    }
+
+    // Compressor and indexer recurrent states share the active SWA block.
+    // Resolve that block once per request and carry it through DSV4-private
+    // metadata; the attention layers otherwise repeat a device reduction over
+    // the same block-table row four times per compressed layer.
+    for (int32_t m = 0; m < manager_num; ++m) {
+      if (group_infos[m].type != DSACacheType::SLIDING_WINDOW ||
+          !proc_bt[m].defined() || proc_bt[m].dim() != 2) {
+        continue;
+      }
+      auto state_block_indices = torch::full(
+          {proc_bt[m].size(0)}, -1, torch::TensorOptions().dtype(torch::kInt64));
+      const auto block_table =
+          proc_bt[m].to(torch::kCPU, torch::kInt32).contiguous();
+      const auto block_table_access = block_table.accessor<int32_t, 2>();
+      auto state_block_access = state_block_indices.accessor<int64_t, 1>();
+      for (int64_t row = 0; row < block_table.size(0); ++row) {
+        for (int64_t column = block_table.size(1); column > 0; --column) {
+          const int32_t block_id = block_table_access[row][column - 1];
+          if (block_id >= 0) {
+            state_block_access[row] = block_id;
+            break;
+          }
+        }
+      }
+      dsa.cp_input_dict[kDsv4StateBlockIndicesMetadataKey] = safe_to(
+          state_block_indices, infer_metadata_device(params, positions), true);
+      break;
     }
 
     // Keep expanded metadata on host. DeepSeek V4 packs these small tensors

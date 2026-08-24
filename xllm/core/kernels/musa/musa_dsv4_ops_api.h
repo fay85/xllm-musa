@@ -228,6 +228,19 @@ torch::Tensor deepseek_v4_compress_decode(
     bool compute_boundary_output = true,
     const std::optional<torch::Tensor>& output = std::nullopt);
 
+// Advance a C4 compressor through a contiguous sequence in one launch while
+// preserving the exact per-token state rotation and boundary output order of
+// deepseek_v4_compress_decode.
+torch::Tensor deepseek_v4_compress_decode_sequence_c4(
+    torch::Tensor kv_state,
+    torch::Tensor score_state,
+    const torch::Tensor& kv_steps,
+    const torch::Tensor& score_steps,
+    const torch::Tensor& ape,
+    int64_t head_dim,
+    int64_t absolute_start_position,
+    const std::optional<torch::Tensor>& output = std::nullopt);
+
 torch::Tensor deepseek_v4_scale_to_fp32(
     const torch::Tensor& input,
     double scale,

@@ -127,7 +127,9 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
                                      int64_t start_pos,
                                      const torch::Tensor& cos,
                                      const torch::Tensor& sin,
-                                     size_t sequence_index);
+                                     size_t sequence_index,
+                                     const torch::Tensor& projected_kv = {},
+                                     const torch::Tensor& projected_score = {});
   torch::Tensor compress_indexer_prefill_sequence(
       const torch::Tensor& hidden_states,
       const torch::Tensor& cos,
@@ -141,7 +143,9 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
                                              int64_t start_pos,
                                              const torch::Tensor& cos,
                                              const torch::Tensor& sin,
-                                             size_t sequence_index);
+                                             size_t sequence_index,
+                                             const torch::Tensor& projected_kv = {},
+                                             const torch::Tensor& projected_score = {});
   torch::Tensor build_indexer_topk(
       const torch::Tensor& qr,
       const torch::Tensor& hidden_states,

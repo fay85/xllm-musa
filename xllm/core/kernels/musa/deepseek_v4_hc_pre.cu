@@ -40,6 +40,8 @@ constexpr int64_t kMixHc = 24;
 constexpr int64_t kMateHcPrenormSplits = 32;
 constexpr int32_t kHcFinishHiddenTile = 512;
 constexpr char kMateHcPrenormUri[] = "mhc_prenorm_ops";
+constexpr char kMateHcVerifyPrenormUri[] =
+    "mate_jit_tf32_hc_prenorm_64x32x32_3stages";
 constexpr char kMateHcBigFuseUri[] = "mhc_pre_big_fuse_ops";
 
 template <typename scalar_t>
@@ -139,29 +141,38 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
                             double hc_eps,
                             const std::optional<torch::Tensor>& norm_weight,
                             bool* output_is_normalized) {
-  if (x.scalar_type() != torch::kBFloat16 ||
-      (x.size(0) != 1 && x.size(0) != 2)) {
+  // The Mate prefill pair is model-level validated through the largest local
+  // TP8/SP8 shard produced by the fixed 2.5K gate (313 rows).  Keep larger or
+  // otherwise unsupported shapes on the local correctness-first kernel.
+  constexpr int64_t kMatePrefillValidatedMaxTokens = 320;
+  const int64_t tokens = x.size(0);
+  if (x.scalar_type() != torch::kBFloat16 || tokens < 1 ||
+      tokens > kMatePrefillValidatedMaxTokens || sinkhorn_iters != 20) {
     return false;
   }
-  auto prenorm =
-      get_mate_hc_function(kMateHcPrenormUri, "tf32_hc_prenorm_gemm");
+  const bool is_prefill = tokens > 1;
+  const char* prenorm_uri =
+      is_prefill ? kMateHcVerifyPrenormUri : kMateHcPrenormUri;
+  auto prenorm = get_mate_hc_function(prenorm_uri, "tf32_hc_prenorm_gemm");
   if (!prenorm.defined()) {
     return false;
   }
+  auto big_fuse = is_prefill
+                      ? get_mate_hc_function(kMateHcBigFuseUri,
+                                             "mhc_pre_big_fuse_kernel")
+                      : ffi::Optional<ffi::Function>();
+  if (is_prefill && !big_fuse.defined()) {
+    return false;
+  }
   try {
-    auto& workspace = mate_hc_workspace(x, x.size(0));
+    auto& workspace = mate_hc_workspace(x, tokens);
     TvmffiStreamGuard stream_guard(x.device());
-    prenorm.value()(to_ffi_tensor(x.reshape({x.size(0), kHcMult * x.size(2)})),
+    prenorm.value()(to_ffi_tensor(x.reshape({tokens, kHcMult * x.size(2)})),
                     to_ffi_tensor(hc_fn),
                     to_ffi_tensor(workspace.gemm_partials),
                     to_ffi_tensor(workspace.sqr_sum_partials),
                     kMateHcPrenormSplits);
-    if (x.size(0) == 2) {
-      auto big_fuse =
-          get_mate_hc_function(kMateHcBigFuseUri, "mhc_pre_big_fuse_kernel");
-      if (!big_fuse.defined()) {
-        return false;
-      }
+    if (is_prefill) {
       big_fuse.value()(to_ffi_tensor(workspace.gemm_partials),
                        to_ffi_tensor(workspace.sqr_sum_partials),
                        to_ffi_tensor(hc_scale),
@@ -174,7 +185,8 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
         *output_is_normalized = false;
       }
       LOG_FIRST_N(INFO, 1)
-          << "DeepSeek-V4 MUSA Mate T=2 HC prenorm and big-fuse enabled.";
+          << "DeepSeek-V4 MUSA Mate prefill HC prenorm and big-fuse enabled; "
+          << "validated tokens <= " << kMatePrefillValidatedMaxTokens << ".";
       return true;
     }
     const XLLMOptionalDeviceGuard device_guard(at::device_of(x));

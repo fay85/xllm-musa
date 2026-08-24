@@ -61,6 +61,7 @@ constexpr int32_t kCompressPoolC128DimsPerBlock =
     kCompressPoolC128Warps * kCompressPoolC128DimsPerWarp;
 constexpr int32_t kCompressDecodeC4BlockSize = 256;
 constexpr int32_t kCompressDecodeC128BlockSize = 256;
+constexpr int32_t kCompressDecodeSequenceC4BlockSize = 256;
 constexpr int64_t kModel1HeadDim = 512;
 constexpr int64_t kModel1NopeDim = 448;
 constexpr int64_t kModel1RopeDim = 64;
@@ -300,6 +301,91 @@ __global__ void __launch_bounds__(kCompressDecodeC4BlockSize, 1)
       kv_state[dst + head_dim + dim] = kv_state[src + head_dim + dim];
       score_state[dst + dim] = score_state[src + dim];
       score_state[dst + head_dim + dim] = score_state[src + head_dim + dim];
+    }
+  }
+}
+
+// Sequence form of the C4 state machine above. Each thread still owns one
+// output dimension, but walks every suffix token before returning. This keeps
+// the same update/pool/rotate order while replacing O(tokens) host launches
+// with one launch for a prefix-cache suffix.
+template <typename scalar_t>
+__global__ void __launch_bounds__(kCompressDecodeSequenceC4BlockSize, 1)
+    dsv4_compress_decode_sequence_c4_kernel(
+        float* __restrict__ kv_state,
+        float* __restrict__ score_state,
+        const scalar_t* __restrict__ kv_steps,
+        int64_t kv_step_stride,
+        const scalar_t* __restrict__ score_steps,
+        int64_t score_step_stride,
+        const float* __restrict__ ape,
+        scalar_t* __restrict__ output,
+        int64_t token_count,
+        int64_t head_dim,
+        int64_t absolute_start_position) {
+  constexpr int64_t kRatio = 4;
+  constexpr int64_t kCoeff = 2;
+  constexpr int64_t kStateRows = kRatio * kCoeff;
+  const int64_t width = kCoeff * head_dim;
+  for (int64_t dim = blockIdx.x * blockDim.x + threadIdx.x; dim < head_dim;
+       dim += gridDim.x * blockDim.x) {
+    int64_t output_row = 0;
+    for (int64_t token = 0; token < token_count; ++token) {
+      const int64_t absolute_position = absolute_start_position + token;
+      const int64_t ratio_position = absolute_position % kRatio;
+      const int64_t current_row = kRatio + ratio_position;
+      const int64_t current_offset = current_row * width;
+      const int64_t ape_offset = ratio_position * width;
+      const scalar_t* kv_step = kv_steps + token * kv_step_stride;
+      const scalar_t* score_step = score_steps + token * score_step_stride;
+      kv_state[current_offset + dim] = musa_convert_to_float(kv_step[dim]);
+      kv_state[current_offset + head_dim + dim] =
+          musa_convert_to_float(kv_step[head_dim + dim]);
+      score_state[current_offset + dim] =
+          musa_convert_to_float(score_step[dim]) + ape[ape_offset + dim];
+      score_state[current_offset + head_dim + dim] =
+          musa_convert_to_float(score_step[head_dim + dim]) +
+          ape[ape_offset + head_dim + dim];
+
+      if ((absolute_position + 1) % kRatio != 0) {
+        continue;
+      }
+
+      float max_score = -INFINITY;
+      for (int64_t row = 0; row < kRatio; ++row) {
+        max_score = fmaxf(max_score, score_state[row * width + dim]);
+      }
+      for (int64_t row = kRatio; row < kStateRows; ++row) {
+        max_score =
+            fmaxf(max_score, score_state[row * width + head_dim + dim]);
+      }
+
+      float denominator = 0.0f;
+      float weighted_sum = 0.0f;
+      for (int64_t row = 0; row < kRatio; ++row) {
+        const float weight = expf(score_state[row * width + dim] - max_score);
+        denominator += weight;
+        weighted_sum += weight * kv_state[row * width + dim];
+      }
+      for (int64_t row = kRatio; row < kStateRows; ++row) {
+        const int64_t offset = row * width + head_dim + dim;
+        const float weight = expf(score_state[offset] - max_score);
+        denominator += weight;
+        weighted_sum += weight * kv_state[offset];
+      }
+      output[output_row * head_dim + dim] =
+          static_cast<scalar_t>(weighted_sum / denominator);
+      ++output_row;
+
+      for (int64_t row = 0; row < kRatio; ++row) {
+        const int64_t dst = row * width;
+        const int64_t src = (kRatio + row) * width;
+        kv_state[dst + dim] = kv_state[src + dim];
+        kv_state[dst + head_dim + dim] = kv_state[src + head_dim + dim];
+        score_state[dst + dim] = score_state[src + dim];
+        score_state[dst + head_dim + dim] =
+            score_state[src + head_dim + dim];
+      }
     }
   }
 }
@@ -3014,6 +3100,88 @@ torch::Tensor deepseek_v4_compress_decode(
     }
   });
   check_musa_kernel_launch("dsv4 kernel");
+  return result;
+}
+
+torch::Tensor deepseek_v4_compress_decode_sequence_c4(
+    torch::Tensor kv_state,
+    torch::Tensor score_state,
+    const torch::Tensor& kv_steps,
+    const torch::Tensor& score_steps,
+    const torch::Tensor& ape,
+    int64_t head_dim,
+    int64_t absolute_start_position,
+    const std::optional<torch::Tensor>& output) {
+  CHECK(kv_state.defined() && score_state.defined() && kv_steps.defined() &&
+        score_steps.defined() && ape.defined());
+  CHECK_GT(head_dim, 0);
+  CHECK_GE(absolute_start_position, 0);
+  constexpr int64_t kCompressRatio = 4;
+  constexpr int64_t kCompressorCoeff = 2;
+  constexpr int64_t kStateRows = kCompressRatio * kCompressorCoeff;
+  const int64_t width = kCompressorCoeff * head_dim;
+  CHECK_EQ(kv_state.sizes(), torch::IntArrayRef({kStateRows, width}));
+  CHECK_EQ(score_state.sizes(), kv_state.sizes());
+  CHECK_EQ(kv_steps.dim(), 2);
+  CHECK_EQ(score_steps.sizes(), kv_steps.sizes());
+  CHECK_EQ(kv_steps.size(1), width);
+  CHECK_EQ(ape.sizes(), torch::IntArrayRef({kCompressRatio, width}));
+  CHECK(kv_state.is_contiguous() && score_state.is_contiguous() &&
+        ape.is_contiguous());
+  CHECK_EQ(kv_steps.stride(1), 1);
+  CHECK_EQ(score_steps.stride(1), 1);
+  CHECK_EQ(kv_state.scalar_type(), torch::kFloat32);
+  CHECK_EQ(score_state.scalar_type(), torch::kFloat32);
+  CHECK(kv_steps.scalar_type() == torch::kFloat32 ||
+        kv_steps.scalar_type() == torch::kFloat16 ||
+        kv_steps.scalar_type() == torch::kBFloat16);
+  CHECK_EQ(score_steps.scalar_type(), kv_steps.scalar_type());
+  CHECK_EQ(ape.scalar_type(), torch::kFloat32);
+  CHECK_EQ(kv_state.device(), score_state.device());
+  CHECK_EQ(kv_state.device(), kv_steps.device());
+  CHECK_EQ(kv_state.device(), score_steps.device());
+  CHECK_EQ(kv_state.device(), ape.device());
+
+  const int64_t token_count = kv_steps.size(0);
+  const int64_t first_boundary =
+      (kCompressRatio - ((absolute_start_position + 1) % kCompressRatio)) %
+      kCompressRatio;
+  const int64_t boundary_count =
+      first_boundary < token_count
+          ? 1 + (token_count - 1 - first_boundary) / kCompressRatio
+          : 0;
+  auto result = output.has_value()
+                    ? output.value()
+                    : torch::empty({boundary_count, head_dim},
+                                   kv_steps.options());
+  CHECK_EQ(result.sizes(), torch::IntArrayRef({boundary_count, head_dim}));
+  CHECK_EQ(result.scalar_type(), kv_steps.scalar_type());
+  CHECK_EQ(result.device(), kv_steps.device());
+  CHECK(result.is_contiguous());
+  if (token_count == 0) {
+    return result;
+  }
+
+  const dim3 block(kCompressDecodeSequenceC4BlockSize);
+  const dim3 grid((head_dim + block.x - 1) / block.x);
+  const musaStream_t stream = current_dsv4_cache_stream();
+  DISPATCH_FLOATING_TYPES(
+      kv_steps.scalar_type(), "dsv4_compress_decode_sequence_c4", [&] {
+        dsv4_compress_decode_sequence_c4_kernel<scalar_t>
+            <<<grid, block, 0, stream>>>(
+                kv_state.data_ptr<float>(),
+                score_state.data_ptr<float>(),
+                kv_steps.data_ptr<scalar_t>(),
+                kv_steps.stride(0),
+                score_steps.data_ptr<scalar_t>(),
+                score_steps.stride(0),
+                ape.data_ptr<float>(),
+                result.data_ptr<scalar_t>(),
+                token_count,
+                head_dim,
+                absolute_start_position);
+      });
+  check_musa_kernel_launch("dsv4 compress decode sequence c4 kernel");
   return result;
 }
 
