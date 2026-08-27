@@ -35,43 +35,71 @@ resolve_mate_home() {
   local candidate
   if [[ -n "${MATE_HOME:-}" ]]; then
     candidate="${MATE_HOME}"
-    [[ -f "${candidate}/version.txt" ]] && {
+    [[ -f "${candidate}/version.txt" ]] &&
+      [[ "$(tr -d '[:space:]' < "${candidate}/version.txt")" == "0.2.6" ]] && {
       printf '%s\n' "${candidate}"
       return
     }
-    echo "MATE_HOME is not a Mate 0.2.5 source tree: ${candidate}" >&2
-    return 1
   fi
-  for candidate in /workspace/mate_0.2.5 /data/feihu/mate_0.2.5; do
+  for candidate in /workspace/mate_0.2.6 /data/feihu/mate_0.2.6; do
     if [[ -f "${candidate}/version.txt" ]]; then
       printf '%s\n' "${candidate}"
       return
     fi
   done
-  echo "Mate 0.2.5 source tree not found; set MATE_HOME." >&2
+  echo "Mate 0.2.6 source tree not found; set MATE_HOME." >&2
   return 1
 }
 
 MATE_HOME="$(resolve_mate_home)" || exit 1
 export MATE_HOME
 MATE_VERSION="$(tr -d '[:space:]' < "${MATE_HOME}/version.txt")"
-[[ "${MATE_VERSION}" == "0.2.5" ]] || {
-  echo "Expected Mate 0.2.5, found ${MATE_VERSION} at ${MATE_HOME}" >&2
+[[ "${MATE_VERSION}" == "0.2.6" ]] || {
+  echo "Expected Mate 0.2.6, found ${MATE_VERSION} at ${MATE_HOME}" >&2
   exit 1
 }
 export MATE_MUSA_ARCH_LIST="${MATE_MUSA_ARCH_LIST:-3.1}"
-export PYTHONPATH="${MATE_HOME}${PYTHONPATH:+:${PYTHONPATH}}"
-if [[ -z "${MATE_WORKSPACE_BASE:-}" ]]; then
-  if [[ -d /data/feihu/mate025_cache ]]; then
-    MATE_WORKSPACE_BASE=/data/feihu/mate025_cache
+# MATE 0.2.6 is installed from its official wheel so the packaged Mutlass
+# headers match the release. Drop stale source-tree overrides from the image.
+filtered_pythonpath=""
+IFS=: read -ra pythonpath_entries <<< "${PYTHONPATH:-}"
+for pythonpath_entry in "${pythonpath_entries[@]}"; do
+  case "${pythonpath_entry}" in
+    /workspace/mate_0.2.* | /data/feihu/mate_0.2.*) continue ;;
+  esac
+  filtered_pythonpath="${filtered_pythonpath:+${filtered_pythonpath}:}${pythonpath_entry}"
+done
+export PYTHONPATH="${filtered_pythonpath}"
+python3 - <<'PY'
+from importlib.metadata import version
+
+expected = {
+    "mate": "0.2.6",
+    "apache-tvm-ffi": "0.1.11.post1+musa.1",
+    "tilelang-musa": "0.1.12+musa.2",
+}
+for package, expected_version in expected.items():
+    installed_version = version(package)
+    if installed_version != expected_version:
+        raise RuntimeError(
+            f"{package}: expected {expected_version}, got {installed_version}"
+        )
+PY
+if [[ -z "${MATE_WORKSPACE_BASE:-}" ||
+      "${MATE_WORKSPACE_BASE}" == */mate025_cache ]]; then
+  if [[ -d /data/feihu/mate026_cache ]]; then
+    MATE_WORKSPACE_BASE=/data/feihu/mate026_cache
   else
     MATE_WORKSPACE_BASE="${MATE_HOME}"
   fi
 fi
 export MATE_WORKSPACE_BASE
 
-export MATE_MUBIN_DIR="${MATE_MUBIN_DIR:-${MATE_WORKSPACE_BASE}/mubin}"
-export FLASHINFER_OPS_PATH="${MATE_WORKSPACE_BASE}/.cache/mate/0.2.5/mp31/cached_ops"
+if [[ -z "${MATE_MUBIN_DIR:-}" || "${MATE_MUBIN_DIR}" == *mate025* ]]; then
+  MATE_MUBIN_DIR="${MATE_WORKSPACE_BASE}/mubin"
+fi
+export MATE_MUBIN_DIR
+export FLASHINFER_OPS_PATH="${MATE_WORKSPACE_BASE}/.cache/mate/0.2.6/mp31/cached_ops"
 export LD_LIBRARY_PATH="${TVM_FFI_LIB_DIR}:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/opt/intel/oneapi/mkl/lib/intel64:/usr/lib:/usr/lib/x86_64-linux-gnu:/usr/local/openmpi/lib:${LD_LIBRARY_PATH:-}"
 
 CMAKE_MODULE_PATH_VALUE="${MUSAMAPPING_PATH}/cmake/Modules"
