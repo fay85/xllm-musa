@@ -282,6 +282,21 @@ torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
                                             const torch::Tensor& seqused_k,
                                             int64_t num_splits);
 
+void fa3_decode_scheduler_metadata(const torch::Device& device,
+                                   int32_t batch_size,
+                                   int32_t num_heads_q,
+                                   int32_t num_heads_kv,
+                                   int32_t head_dim_qk,
+                                   int32_t head_dim_vo,
+                                   int32_t max_seqlen_q,
+                                   int32_t max_seqlen_k,
+                                   int32_t window_size_left,
+                                   int32_t window_size_right,
+                                   const torch::Tensor& cu_seqlens_q,
+                                   const torch::Tensor& seqused_k,
+                                   int64_t num_splits,
+                                   torch::Tensor& metadata);
+
 void rms_norm(torch::Tensor output,
               torch::Tensor input,
               torch::Tensor weight,
@@ -394,11 +409,21 @@ std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size);
 
+void per_token_group_quant_fp8_out(const torch::Tensor& input,
+                                   int64_t group_size,
+                                   torch::Tensor& output_q,
+                                   torch::Tensor& output_s);
+
 // Fuses dense BF16 SwiGLU with group-128 FP8 activation quantization.
 // Returns {q [M,N] e4m3, scale [M,N/128] fp32} for input [M,2N].
 std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size);
+
+void fused_swiglu_quant_fp8_out(const torch::Tensor& input,
+                                int64_t group_size,
+                                torch::Tensor& output_q,
+                                torch::Tensor& output_s);
 
 // MUSA-specific Qwen3.5 MoE preprocess. Token-major contiguous preprocess
 // returns {fp8_rows, scales, src_to_dst,
@@ -520,6 +545,13 @@ std::tuple<torch::Tensor, torch::Tensor> moe_fused_topk(
     const std::string& scoring_func);
 
 torch::Tensor random_sample(const torch::Tensor& probs);
+
+// Last-dim FP32 TopK used by software-beam top-logprobs. Workspace is a
+// process-lifetime musaMalloc buffer so the caching allocator cannot recycle
+// it under an in-flight kernel. Corrupt int64 indices abort instead of
+// becoming embedding token ids.
+std::tuple<torch::Tensor, torch::Tensor> topk(const torch::Tensor& input,
+                                              int64_t k);
 
 // Target-only speculative rejection sampling for MTP with selected-only
 // draft probabilities. draft_token_ids and draft_probs have shape [B, K],

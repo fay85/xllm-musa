@@ -8,6 +8,7 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/../cuda/moe)
 set(_TORCH_MUSA_KERNEL_HDRS
   attention_runner.h
   musa_ops_api.h
+  musa_ops_library.h
   musa_tvmffi_stream.h
   gdn_ops.h
   global_capture_instance.h
@@ -31,6 +32,7 @@ set(_TORCH_MUSA_KERNEL_SRCS
   rope.cu
   paged_cache.cu
   random_sample.cpp
+  musa_topk.cpp
   rejection_sample.cu
   replace_token.cu
   fused_qknorm_rope.cu
@@ -52,6 +54,7 @@ set(_TORCH_MUSA_KERNEL_SRCS
   global_capture_instance.cpp
   piecewise_graphs.cpp
   llm_decode_metadata_update.cu
+  musa_ops_library.cpp
 )
 
 # Enable fast-math for fp8_act_quant.cu only, without changing
@@ -79,6 +82,12 @@ cc_library(
     musa
     musart
 )
+
+# _build_cuda_graph_musa.sh points libmudnn.so at libmudnncxx.so (C++ API).
+# Software-beam TopK uses the C API in the versioned C library.
+if(EXISTS "/usr/local/musa/lib/libmudnn.so.3")
+  target_link_libraries(cuda_kernels PUBLIC /usr/local/musa/lib/libmudnn.so.3)
+endif()
 
 cc_library(
   NAME

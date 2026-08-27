@@ -21,6 +21,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <limits>
+#include <tuple>
 
 #include "common/global_flags.h"
 #include "core/framework/config/model_config.h"
@@ -215,8 +216,13 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
     output.logprobs = selected_logprobs.view({-1});
 
     if (params.max_top_logprobs > 0) {
+#if defined(USE_MUSA)
+      auto [values, indices] =
+          xllm::kernel::musa::topk(logprobs, params.max_top_logprobs);
+#else
       auto [values, indices] =
           logprobs.topk(params.max_top_logprobs, /*dim=*/-1);
+#endif
       output.top_logprobs = values;
       output.top_tokens = indices;
     }

@@ -1278,19 +1278,14 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
         .copy_(params.attention.device.new_cache_slots, /*non_blocking=*/true);
     if (padded_num_tokens > actual_num_tokens) {
       if (piecewise_prefill_pad) {
-        // Fill padding cache slots with last actual token's slot so the
-        // KV cache write for padding tokens overwrites the last actual
-        // token's slot with the same value (no corruption).
+        // Pad queries sit at later positions, so their K/V is not identical
+        // to the last real token. Writing them into that slot corrupts every
+        // later layer. Skip the write, same as decode/packed padding.
         persistent_new_cache_slots_
             .slice(/*dim=*/0,
                    /*start=*/actual_num_tokens,
                    /*end=*/padded_num_tokens)
-            .copy_(persistent_new_cache_slots_
-                       .slice(/*dim=*/0,
-                              /*start=*/actual_num_tokens - 1,
-                              /*end=*/actual_num_tokens)
-                       .expand({static_cast<int64_t>(padded_num_tokens -
-                                                     actual_num_tokens)}));
+            .fill_(-1);
       } else {
         persistent_new_cache_slots_
             .slice(/*dim=*/0,
@@ -1532,6 +1527,24 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       /*pos_encoding_mode=*/0,
       /*use_fp16_qk_reduction=*/false,
       /*use_custom_mask=*/false);
+  // Keep planner dispatch independent of the environment switches.  A
+  // supported FA3 shape must never build an FA2 plan merely because a caller
+  // disabled FA3; the attention layer will fail closed on that configuration.
+  const bool fa3_prefill_shape_supported =
+      dtype == torch::ScalarType::BFloat16 &&
+      layer::musa::is_fa3_shape_supported(head_dim, n_heads, n_kv_heads);
+  const bool fa3_decode_shape_supported =
+      fa3_prefill_shape_supported &&
+      layer::musa::is_fa3_decode_page_size_supported(block_size);
+  CHECK(fa3_prefill_shape_supported || !layer::musa::is_fa3_prefill_requested())
+      << "MUSA FA3-only graph has no prefill specialization for head_dim="
+      << head_dim
+      << ", GQA ratio=" << (n_kv_heads > 0 ? n_heads / n_kv_heads : 0);
+  CHECK(fa3_decode_shape_supported || !layer::musa::is_fa3_decode_requested())
+      << "MUSA FA3-only graph has no decode specialization for head_dim="
+      << head_dim
+      << ", GQA ratio=" << (n_kv_heads > 0 ? n_heads / n_kv_heads : 0)
+      << ", block_size=" << block_size;
 
   bool use_tensor_core =
       xllm::kernel::musa::should_use_tensor_core(dtype, n_heads, n_kv_heads);
@@ -1730,7 +1743,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
         << ", enable_cuda_graph=" << attn_metadata->enable_cuda_graph;
 
     if (attn_metadata->is_prefill) {
-      if (update_prefill_plan) {
+      if (update_prefill_plan && !fa3_prefill_shape_supported) {
         layer::flashinfer::update_prefill_plan_info(
             attn_metadata->plan_info,
             backend,
@@ -1743,6 +1756,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
             static_cast<int32_t>(n_heads),     // num_qo_heads
             static_cast<int32_t>(n_kv_heads),  // num_kv_heads
             /*enable_cuda_graph=*/true);
+      } else if (fa3_prefill_shape_supported) {
+        VLOG(kGraphExecutorLogVerboseLevel)
+            << "Skipping FA2 prefill plan for MUSA FA3-only shape";
       } else {
         VLOG(kGraphExecutorLogVerboseLevel)
             << "Skipping replay-time prefill plan update: piecewise graph "
@@ -1750,8 +1766,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       }
     } else if ((use_expanded_spec_decode_attention ||
                 !attn_metadata->is_chunked_prefill) &&
-               !layer::musa::should_use_fa3_decode(
-                   dtype, head_dim, n_heads, n_kv_heads, block_size)) {
+               !fa3_decode_shape_supported) {
       // Spec-verify validate uses per-token batch_decode for full-attention
       // layers; regular decode uses the same decode plan path.
       const int32_t max_kv_blocks_per_seq_for_capture =
@@ -1762,7 +1777,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
               : 0;
       layer::flashinfer::update_decode_plan_info(
           attn_metadata->plan_info,
-          /*backend=*/"fa2",  // flashinfer paged fa3 is slow, use fa2 instead
+          backend,
           *attn_metadata,
           dtype,                             // query_dtype
           dtype,                             // key_dtype
@@ -1778,6 +1793,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
           max_kv_blocks_per_seq_for_capture);
     } else if (attn_metadata->is_chunked_prefill &&
                !use_expanded_spec_decode_attention) {
+      CHECK(!fa3_prefill_shape_supported)
+          << "MUSA FA3-only attention does not support the legacy FA2 "
+             "chunked-prefill graph; disable chunked prefill or use eager FA3";
       // Worst-case KV blocks per sequence for graph capture: plan_info is
       // computed once (cached on PlanInfo) and reused for all replays. Make
       // sure the cached plan covers any future block count by computing it
@@ -1791,7 +1809,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
               : 0;
       layer::flashinfer::update_chunked_prefill_plan_info(
           attn_metadata->plan_info,
-          /*backend=*/"fa2",  // flashinfer paged fa3 is slow, use fa2 instead
+          backend,
           *attn_metadata,
           dtype,                             // query_dtype
           dtype,                             // key_dtype
@@ -1824,7 +1842,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   const bool expanded_fa3_decode = use_expanded_spec_decode_attention;
   const torch::Tensor scheduler_block_table =
       expanded_fa3_decode ? attn_metadata->expanded_block_table
-                           : attn_metadata->block_table;
+                          : attn_metadata->block_table;
   if (layer::musa::should_use_fa3_decode(
           dtype, head_dim, n_heads, n_kv_heads, block_size) &&
       (expanded_fa3_decode ||
@@ -2231,12 +2249,35 @@ bool MusaGraph::capture(CausalLM* model,
 
     // Warm up once without capture because MUSA BLAS handles and runtime
     // resources cannot be created during graph capture.
+    const bool breakdown_warmup = PrefillBreakdown::enabled();
+    if (breakdown_warmup) {
+      PrefillBreakdown::begin();
+      capture_stream.synchronize();
+    }
+    const auto warmup_t0 = std::chrono::steady_clock::now();
     {
       xllm::kernel::musa::MusaTvmffiPreparationSyncGuard ffi_sync_guard;
       model->forward(persistent_param_.persistent_tokens(padded_num_tokens_),
                      persistent_param_.persistent_positions(padded_num_tokens_),
                      kv_cache,
                      graph_params_opt.value());
+    }
+    if (breakdown_warmup) {
+      capture_stream.synchronize();
+      const auto warmup_t1 = std::chrono::steady_clock::now();
+      const double warmup_ms =
+          std::chrono::duration<double, std::milli>(warmup_t1 - warmup_t0)
+              .count();
+      LOG(INFO)
+          << "[PREFILL_FWD] n_tokens=" << actual_num_tokens
+          << " batch_bs=1 packed_prefill="
+          << ::xllm::ExecutionConfig::get_instance().enable_packed_prefill()
+          << " mode=piecewise_warmup"
+          << " padded_tokens=" << padded_num_tokens_ << " fwd_ms=" << warmup_ms;
+      PrefillBreakdown::end_and_log(static_cast<int64_t>(actual_num_tokens),
+                                    /*batch_bs=*/1,
+                                    warmup_ms,
+                                    /*mode=*/"piecewise_warmup");
     }
     // MUSA TVM-FFI/AOT operators may finish initialization work on their
     // thread-local pool stream even when the model forward runs on the capture
@@ -2246,6 +2287,37 @@ bool MusaGraph::capture(CausalLM* model,
     if (snapshot_linear_state) {
       restore_linear_attention_state(linear_state_snapshots);
       capture_stream.synchronize();
+    }
+    // Second eager pass: BLAS/FFI handles already exist, so omit the
+    // preparation-sync guard. Event buckets are then comparable to Python
+    // eager_graph_mode (warmup buckets include host FFI waits).
+    if (breakdown_warmup) {
+      PrefillBreakdown::begin();
+      capture_stream.synchronize();
+      const auto eager_t0 = std::chrono::steady_clock::now();
+      model->forward(persistent_param_.persistent_tokens(padded_num_tokens_),
+                     persistent_param_.persistent_positions(padded_num_tokens_),
+                     kv_cache,
+                     graph_params_opt.value());
+      capture_stream.synchronize();
+      const auto eager_t1 = std::chrono::steady_clock::now();
+      const double eager_ms =
+          std::chrono::duration<double, std::milli>(eager_t1 - eager_t0)
+              .count();
+      LOG(INFO)
+          << "[PREFILL_FWD] n_tokens=" << actual_num_tokens
+          << " batch_bs=1 packed_prefill="
+          << ::xllm::ExecutionConfig::get_instance().enable_packed_prefill()
+          << " mode=piecewise_eager_clean"
+          << " padded_tokens=" << padded_num_tokens_ << " fwd_ms=" << eager_ms;
+      PrefillBreakdown::end_and_log(static_cast<int64_t>(actual_num_tokens),
+                                    /*batch_bs=*/1,
+                                    eager_ms,
+                                    /*mode=*/"piecewise_eager_clean");
+      if (snapshot_linear_state) {
+        restore_linear_attention_state(linear_state_snapshots);
+        capture_stream.synchronize();
+      }
     }
     // All tensor shapes used by the graph-owned linear/GDN buffers must have
     // been observed by the eager warmup.  A frozen pool turns any accidental
@@ -3377,8 +3449,10 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                   << " mode=eager"
                   << " fwd_ms=" << ms;
       }
-      PrefillBreakdown::end_and_log(
-          static_cast<int64_t>(n_tokens), params.meta.num_sequences, ms);
+      PrefillBreakdown::end_and_log(static_cast<int64_t>(n_tokens),
+                                    params.meta.num_sequences,
+                                    ms,
+                                    /*mode=*/"eager");
       maybe_empty_prefill_cache();
       return result;
     }
@@ -3497,20 +3571,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   if (in_spec_verify_phase) {
     static const bool force_spec_verify_eager =
         std::getenv("XLLM_SPEC_VERIFY_EAGER") != nullptr;
-    // Qwen3.5 FP8 MoE AOT artifacts are fixed-batch kernels (B<=8).  Earlier
-    // graph captures were unstable for larger MTP verify buckets, but the
-    // current chunked routed-MoE path has been validated across C=4 waves.
-    // Keep large verify buckets on graph by default; set this env to 1 as a
-    // safety fallback for runtimes where graph replay is still unstable.
-    static const bool eager_large_spec_verify =
-        util::get_bool_env("XLLM_SPEC_VERIFY_LARGE_BATCH_EAGER", false);
-    constexpr uint32_t kMaxQwen35SpecVerifyGraphTokens = 8;
-    const bool is_qwen35_model =
-        args_.model_type().find("qwen3_5") != std::string::npos;
-    const bool large_qwen35_spec_verify =
-        is_qwen35_model && n_tokens > kMaxQwen35SpecVerifyGraphTokens;
-    if (force_spec_verify_eager ||
-        (eager_large_spec_verify && large_qwen35_spec_verify)) {
+    if (force_spec_verify_eager) {
       COUNTER_INC(num_model_execution_total_eager);
       return model_->forward(tokens, positions, kv_caches, params);
     }
