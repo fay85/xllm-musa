@@ -3,6 +3,103 @@
 > 本文是当前 handoff 的权威入口，取代 `0827_STATUS.md` 中已经过时的“CPU fallback 当前状态”描述。
 > `0827_STATUS.md` 保留完整诊断历史；本文聚焦已经落地的修复、验证结果、本地 Git 快照和仍未关闭的问题。
 
+## 2026-08-28 review follow-up（当前权威状态）
+
+本节记录对本文件进行独立 review 后完成的修复和重新验证。若本节与后续旧记录中的源码、二进制或 Git 状态冲突，以本节为准。
+
+### A. 健康源码快照
+
+```text
+worktree: /data/feihu/xllm-qwen3-beam-local
+branch:   bugfix/qwen3-beam-topk-local
+code fix: 9039d98a  fix: make musa software beam snapshot reproducible
+```
+
+原 `/data/feihu/xllm-git-master-python` 工作树的 index 仍然损坏，仅保留历史运行产物，不再作为可重建源码入口。
+
+review 发现的不可重建问题已经关闭：
+
+- 补齐 `musa_ops_library.{h,cpp}` 及 linker anchor；
+- 补齐 FA3 requested helpers、Mate 0.2.6 metadata hashes、32-warp metadata 与 caller-owned output API；
+- 补齐 FA3 graph metadata update、GDN out-buffer overload 和 Python graph varlen scope；
+- `PrefillBreakdown::end_and_log` 的声明与 call site 已一致；
+- MUSA 启动时会拒绝 CUDA-only beam kernel，明确切换到 software beam。
+
+### B. TopK 修复
+
+`xllm::kernel::musa::topk` 当前实现：
+
+- handle 与 raw buffers 按 host thread 和 MUSA device 分离；
+- 显式验证 MUSA tensor/device，并使用 `MUSAGuard`；
+- buffer 扩容发生在 device synchronization 之后，旧 allocation 会被释放，不再累计泄漏；
+- 普通 API `top_logprobs` 恢复使用原生 Torch TopK；只有 software beam 使用该 wrapper；
+- 继续保留越界 D2H 检查和 fail-fast，错误 index 不会传播为 embedding token id。
+
+新增的 `tests/core/kernels/musa/musa_topk_test.cpp` 直接调用 xLLM wrapper，不再用 `torch.topk` 代替。测试在同一进程先使用 32 rows，再扩容到目标 rows，覆盖实际 buffer growth 路径。
+
+### C. 构建与静态门禁
+
+```text
+container: xllm-musa2.9.1-sdk5.1-dev
+build log: /data/feihu/xllm-qwen3-beam-local/build_logs/build_cuda_graph_musa_20260828_125245.log
+binary:    /data/feihu/xllm-qwen3-beam-local/build/lib.linux-x86_64-cpython-310/xllm/xllm
+SHA256:    7a9510aee8443de577d7f155549f8510f973ee199101a34f1540a5b81f8667e9
+```
+
+完整 `xllm` target 已在容器内使用 `mcc_wrapper` 链接成功；二进制中存在 `xllm::ensure_xllm_ops_registered()`。构建脚本还修正了：
+
+- Git worktree `.git` 文件兼容；
+- reference build path 重复拼接 `build/`；
+- 可选 `XLLM_BUILD_TESTING=1`；
+- `mcc_wrapper` 错误返回 0 时的日志 fail-closed 检查；
+- 生成的 linker wrapper 移到 ignored build tree。
+
+最终门禁：clang-format、changed-range clang-format、Black、`bash -n`、`git diff --check`、递归 submodule gitlink 检查全部通过。
+
+### D. wrapper 与 server 验证
+
+直接 wrapper test：
+
+```text
+beam=128: PASS，3 iterations，32 -> 128 rows growth
+beam=512: PASS，3 iterations，32 -> 512 rows growth
+logs:
+  /data/feihu/validation_qwen06_beam_fix_20260828/topk_wrapper_beam128.log
+  /data/feihu/validation_qwen06_beam_fix_20260828/topk_wrapper_beam512.log
+```
+
+Qwen3-0.6B、FA3 prefill/decode、graph-on、piecewise-on、beam=128：
+
+| Concurrency | Requests | Success | Unstable prompts | QPS | Mean | P99 |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1 | 1000 | 1000/1000 | 0 | 9.2287 | 107.59 ms | 158.09 ms |
+| 4 | 2000 | 2000/2000 | 0 | 11.7691 | 339.24 ms | 505.43 ms |
+
+产物：
+
+```text
+/data/feihu/validation_qwen06_beam_fix_20260828/beam_c1_1000.json
+/data/feihu/validation_qwen06_beam_fix_20260828/beam_c4_final_2000.json
+```
+
+一次中间 C=4/2000 运行在首次 ISL=64 graph capture 时出现单次签名 outlier；同一 server 后续 320/320 为 0 unstable，随后全新 server 的 cold 320/320 和最终 cold 2000/2000 均为 0 unstable，因此该单次现象未复现，不作为最终准入结果。
+
+同一设备、相同参数、相同 workload 的旧/新二进制短 A/B：
+
+```text
+C=1: old 9.3522 QPS, new 9.3258 QPS, delta -0.28%
+C=4: old 11.8871 QPS, new 11.8335 QPS, delta -0.45%
+```
+
+因此没有证据表明本轮修复带来性能 regression；本节绝对 QPS 与旧历史值的差异来自设备当时的全局显存占用，不能跨时段直接比较。本轮设备已有约 80.6% 全局占用，验证使用 `max_memory_utilization=0.90` 才能得到正的 KV cache capacity。
+
+server 日志未出现 `MUSA_TOPK_INDEX_CORRUPTION`、FA2 fallback、FATAL 或新 `.mudmp`。
+
+### E. 仍未关闭
+
+- `beam_width=512` 只通过了 direct wrapper test；完整 xLLM 集成稳定性仍按本文第 5 节保持“未准入”。
+- TopK 的同步与 D2H 越界检查仍有性能成本；它们当前是 correctness guard，后续只能逐项 A/B 移除并重复稳定性门槛。
+
 ## 0. 当前结论
 
 Qwen3-0.6B software-beam 的 graph-on 故障已经通过两层修复解决：
