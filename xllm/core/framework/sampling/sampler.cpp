@@ -216,11 +216,18 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
     output.logprobs = selected_logprobs.view({-1});
 
     if (params.max_top_logprobs > 0) {
+      torch::Tensor values;
+      torch::Tensor indices;
 #if defined(USE_MUSA)
-      auto [values, indices] =
-          xllm::kernel::musa::topk(logprobs, params.max_top_logprobs);
+      if (params.use_beam_search) {
+        std::tie(values, indices) =
+            xllm::kernel::musa::topk(logprobs, params.max_top_logprobs);
+      } else {
+        std::tie(values, indices) =
+            logprobs.topk(params.max_top_logprobs, /*dim=*/-1);
+      }
 #else
-      auto [values, indices] =
+      std::tie(values, indices) =
           logprobs.topk(params.max_top_logprobs, /*dim=*/-1);
 #endif
       output.top_logprobs = values;

@@ -108,6 +108,9 @@ if [[ -n "${XLLM_EXTRA_CMAKE_MODULE_PATH:-}" ]]; then
 fi
 
 export CMAKE_ARGS="-DCMAKE_CUDA_COMPILER=${MUSAMAPPING_PATH}/mcc_wrapper -DCMAKE_MODULE_PATH=${CMAKE_MODULE_PATH_VALUE} -DCUDAToolkit_ROOT=${MUSA_HOME} -DCUDA_HOME=${MUSA_HOME} -DUSE_CXX11_ABI=ON -D_GLIBCXX_USE_CXX11_ABI=1 -DGENERATE_SO=OFF -DVCPKG_MANIFEST_INSTALL=OFF -DUSE_MUSA:BOOL=ON -DUSE_CUDA:BOOL=OFF -DCMAKE_CUDA_ARCHITECTURES=90 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_EXPERIMENTAL_RUST=3cc9b32c-47d3-4056-8953-d74e69fc0d6c"
+if [[ "${XLLM_BUILD_TESTING:-0}" == "1" ]]; then
+  CMAKE_ARGS+=" -DBUILD_TESTING=ON"
+fi
 
 export GIT_CONFIG_COUNT=1
 export GIT_CONFIG_KEY_0=safe.directory
@@ -141,18 +144,19 @@ export LIBRARY_PATH="${SCRIPT_DIR}/${BD}/xllm/core/layers/musa:${LIBRARY_PATH:-}
 
 # Guard all ninja/cmake --build calls: one writer + .ninja_log backup/restore.
 NINJA_GUARD_DIR="${SCRIPT_DIR}/scripts/ninja_guard"
-# mcc g++ link driver: wrapper adds MKL + --allow-shlib-undefined (see scripts/musa_link_wrapper/g++).
-mkdir -p "${SCRIPT_DIR}/scripts/musa_link_wrapper"
-if [ ! -x "${SCRIPT_DIR}/scripts/musa_link_wrapper/g++" ]; then
-  cat > "${SCRIPT_DIR}/scripts/musa_link_wrapper/g++" <<'GXXWRAP'
+# mcc g++ link driver: keep the generated wrapper under the ignored build tree.
+MUSA_LINK_WRAPPER_DIR="${SCRIPT_DIR}/${BD}/musa_link_wrapper"
+mkdir -p "${MUSA_LINK_WRAPPER_DIR}"
+if [ ! -x "${MUSA_LINK_WRAPPER_DIR}/g++" ]; then
+  cat > "${MUSA_LINK_WRAPPER_DIR}/g++" <<'GXXWRAP'
 #!/bin/bash
 # mcc_wrapper final link: libtorch_cpu pulls MKL DSOs; resolve at runtime via LD_PRELOAD.
 set -euo pipefail
 exec /usr/bin/g++ "$@" -Wl,--allow-shlib-undefined
 GXXWRAP
-  chmod +x "${SCRIPT_DIR}/scripts/musa_link_wrapper/g++"
+  chmod +x "${MUSA_LINK_WRAPPER_DIR}/g++"
 fi
-export PATH="${SCRIPT_DIR}/scripts/musa_link_wrapper:${PATH}"
+export PATH="${MUSA_LINK_WRAPPER_DIR}:${PATH}"
 export PATH="${NINJA_GUARD_DIR}:${PATH}"
 
 ln -sf libmudnncxx.so /usr/local/musa/lib/libmudnn.so 2>/dev/null || true
@@ -204,10 +208,10 @@ fi
 BUILD_DIR=build/cmake.linux-x86_64-cpython-310
 REF="${XLLM_MUSA_REF}"
 # Only seed vcpkg when missing. Never rm+cp on every run (that + cache wipe => vcpkg reinstall loop).
-if [ ! -d "${BUILD_DIR}/vcpkg_installed" ] && [ -d "${REF}/build/${BUILD_DIR}/vcpkg_installed" ]; then
+if [ ! -d "${BUILD_DIR}/vcpkg_installed" ] && [ -d "${REF}/${BUILD_DIR}/vcpkg_installed" ]; then
   echo "==> First-time init: copy vcpkg_installed from xllm-musa reference (${REF})"
   mkdir -p "${BUILD_DIR}"
-  cp -a "${REF}/build/${BUILD_DIR}/vcpkg_installed" "${BUILD_DIR}/"
+  cp -a "${REF}/${BUILD_DIR}/vcpkg_installed" "${BUILD_DIR}/"
 fi
 
 # FULL_RESET=1 only: wipes cmake cache and forces vcpkg reinstall (avoid in normal use).
@@ -219,7 +223,7 @@ if [ "${FULL_RESET:-0}" = "1" ]; then
 fi
 
 BD="${BUILD_DIR}"
-REFBD="${REF}/build/${BUILD_DIR}"
+REFBD="${REF}/${BUILD_DIR}"
 # Recover a good cache if missing or poisoned (MANIFEST_INSTALL=ON causes reinstall loop).
 if [ ! -f "${BD}/CMakeCache.txt" ] || grep -q "^VCPKG_MANIFEST_INSTALL:BOOL=ON" "${BD}/CMakeCache.txt" 2>/dev/null; then
   if [ -f "${REFBD}/CMakeCache.txt" ]; then
@@ -229,10 +233,22 @@ if [ ! -f "${BD}/CMakeCache.txt" ] || grep -q "^VCPKG_MANIFEST_INSTALL:BOOL=ON" 
   fi
 fi
 
-mkdir -p .git/hooks && touch .git/hooks/pre-commit
+GIT_DIR="$(git rev-parse --absolute-git-dir)"
+mkdir -p "${GIT_DIR}/hooks"
+touch "${GIT_DIR}/hooks/pre-commit"
 mkdir -p build_logs
 LOG=build_logs/build_cuda_graph_musa_$(date +%Y%m%d_%H%M%S).log
 echo "==> Logging to ${LOG}"
+
+check_build_log() {
+  local log_file="$1"
+  if grep -Eq 'FAILED:|:[[:space:]]+(fatal )?error:|collect2: error:|ninja: build stopped' \
+      "${log_file}"; then
+    echo "Build log contains a compiler or linker failure: ${log_file}" >&2
+    return 1
+  fi
+}
+
 # NINJA_TARGET: default xllm; set to specific .o targets for incremental rebuilds.
 NINJA_TARGET="${NINJA_TARGET:-xllm}"
 NINJA_SAFE="${SCRIPT_DIR}/scripts/ninja_safe.sh"
@@ -254,7 +270,9 @@ if [ -f "${BD}/build.ninja" ] && [ "${FORCE_CMAKE:-0}" != "1" ]; then
   fi
   NINJA_ARGS+=("${NINJA_TARGET}")
   "${NINJA_SAFE}" "${BD}" "${NINJA_ARGS[@]}" 2>&1 | tee "${LOG}"
+  check_build_log "${LOG}"
 else
   echo "==> Configure + build via setup.py"
-  exec python3 setup.py build --device musa 2>&1 | tee "${LOG}"
+  python3 setup.py build --device musa 2>&1 | tee "${LOG}"
+  check_build_log "${LOG}"
 fi

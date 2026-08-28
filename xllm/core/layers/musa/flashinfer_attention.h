@@ -42,6 +42,25 @@ inline bool is_fa3_shape_supported(int64_t head_size,
          (head_size == 256 && (gqa_ratio == 6 || gqa_ratio == 8));
 }
 
+inline bool is_fa3_prefill_requested() {
+  static const bool requested = [] {
+    const char* env = std::getenv("XLLM_USE_FA3");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return requested;
+}
+
+inline bool is_fa3_decode_requested() {
+  static const bool requested = [] {
+    const char* env = std::getenv("XLLM_USE_FA3_DECODE");
+    if (env == nullptr) {
+      env = std::getenv("XLLM_USE_FA3");
+    }
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return requested;
+}
+
 inline bool should_use_fa3_prefill(torch::ScalarType query_dtype,
                                    int64_t head_size,
                                    int64_t num_heads,

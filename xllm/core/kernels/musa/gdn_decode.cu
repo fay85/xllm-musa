@@ -26,6 +26,7 @@ limitations under the License.
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
+#include <optional>
 #include <sstream>
 #include <vector>
 
@@ -1477,12 +1478,15 @@ void l2_norm_pair_fused_inplace(torch::Tensor& query,
   l2_norm_pair_fused_out(query, key, query, key, eps);
 }
 
-std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,
-                                                   const torch::Tensor& b,
-                                                   const torch::Tensor& A_log,
-                                                   const torch::Tensor& dt_bias,
-                                                   double sp_beta,
-                                                   double threshold) {
+std::pair<torch::Tensor, torch::Tensor> gdn_gating(
+    const torch::Tensor& a,
+    const torch::Tensor& b,
+    const torch::Tensor& A_log,
+    const torch::Tensor& dt_bias,
+    double sp_beta,
+    double threshold,
+    const std::optional<torch::Tensor>& g_out,
+    const std::optional<torch::Tensor>& beta_out) {
   const int64_t H = a.size(-1);
   const int64_t n_elem = a.numel();
   auto a_c = a.contiguous();
@@ -1495,8 +1499,27 @@ std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,
   }();
   const auto output_options =
       gating_fp32 ? a_c.options().dtype(torch::kFloat32) : a_c.options();
-  auto g = torch::empty(a_c.sizes(), output_options);
-  auto beta = torch::empty(a_c.sizes(), output_options);
+  torch::Tensor g;
+  torch::Tensor beta;
+  if (g_out.has_value() && g_out->defined()) {
+    CHECK_EQ(g_out->sizes(), a_c.sizes())
+        << "gdn_gating g_out must match input shape";
+    CHECK_EQ(g_out->scalar_type(), output_options.dtype().toScalarType());
+    CHECK(g_out->is_contiguous()) << "gdn_gating g_out must be contiguous";
+    g = *g_out;
+  } else {
+    g = torch::empty(a_c.sizes(), output_options);
+  }
+  if (beta_out.has_value() && beta_out->defined()) {
+    CHECK_EQ(beta_out->sizes(), a_c.sizes())
+        << "gdn_gating beta_out must match input shape";
+    CHECK_EQ(beta_out->scalar_type(), output_options.dtype().toScalarType());
+    CHECK(beta_out->is_contiguous())
+        << "gdn_gating beta_out must be contiguous";
+    beta = *beta_out;
+  } else {
+    beta = torch::empty(a_c.sizes(), output_options);
+  }
 
   const at::cuda::OptionalCUDAGuard guard(device_of(a));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();

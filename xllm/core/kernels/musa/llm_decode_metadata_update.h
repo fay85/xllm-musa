@@ -99,4 +99,20 @@ void update_expanded_spec_decode_metadata(
     const ExpandedSpecDecodeMetadataUpdateParams& params,
     LlmDecodeMetadataUpdateStream stream);
 
+// One-launch FA3 graph replay update: copy live per-sequence KV lengths and
+// the rectangular page table, then pad unused rows/cols with 0 / -1.
+struct Fa3GraphMetadataUpdateParams {
+  const int32_t* src_kv_seq_lens;
+  const int32_t* src_block_tables;
+  int32_t* dst_kv_seq_lens;
+  int32_t* dst_block_tables;
+  int64_t actual_batch_size;
+  int64_t padded_batch_size;
+  int64_t src_block_table_width;
+  int64_t dst_block_table_width;
+};
+
+void update_fa3_graph_metadata(const Fa3GraphMetadataUpdateParams& params,
+                               LlmDecodeMetadataUpdateStream stream);
+
 }  // namespace xllm::kernel::musa

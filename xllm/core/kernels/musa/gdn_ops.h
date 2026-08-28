@@ -55,12 +55,15 @@ void l2_norm_pair_fused_inplace(torch::Tensor& query,
 std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
     FusedGdnGatingParams& params);
 
-std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,
-                                                   const torch::Tensor& b,
-                                                   const torch::Tensor& A_log,
-                                                   const torch::Tensor& dt_bias,
-                                                   double sp_beta,
-                                                   double threshold);
+std::pair<torch::Tensor, torch::Tensor> gdn_gating(
+    const torch::Tensor& a,
+    const torch::Tensor& b,
+    const torch::Tensor& A_log,
+    const torch::Tensor& dt_bias,
+    double sp_beta,
+    double threshold,
+    const std::optional<torch::Tensor>& g_out = std::nullopt,
+    const std::optional<torch::Tensor>& beta_out = std::nullopt);
 
 std::pair<torch::Tensor, torch::Tensor> fused_recurrent_gated_delta_rule(
     FusedRecurrentGatedDeltaRuleParams& params);
@@ -110,6 +113,22 @@ bool mate_gdn_mtp_checkpoint_module_available(int64_t num_q_heads,
 
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     MateGatedDeltaRulePrefillParams& params);
+
+// Python MusaGraph wraps the whole model(), including Mate. C++ piecewise
+// keeps Mate off the captured graph. This scope opts the Python op into a
+// C=1 varlen path that reuses scratch and never D2Hs, so warmup+capture can
+// record the same kernels C++ replays. Native C++ callers leave it unset.
+class MateGdnPythonGraphVarlenScope final {
+ public:
+  explicit MateGdnPythonGraphVarlenScope(bool enabled);
+  ~MateGdnPythonGraphVarlenScope();
+  MateGdnPythonGraphVarlenScope(const MateGdnPythonGraphVarlenScope&) = delete;
+  MateGdnPythonGraphVarlenScope& operator=(
+      const MateGdnPythonGraphVarlenScope&) = delete;
+
+ private:
+  bool previous_;
+};
 
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);

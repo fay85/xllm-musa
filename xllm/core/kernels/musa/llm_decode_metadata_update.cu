@@ -156,6 +156,37 @@ __global__ void expanded_spec_decode_metadata_update_kernel(
   }
 }
 
+__global__ void fa3_graph_metadata_update_kernel(
+    Fa3GraphMetadataUpdateParams params,
+    int64_t max_work_size) {
+  const int64_t thread_idx =
+      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  const int64_t step = static_cast<int64_t>(blockDim.x) * gridDim.x;
+  const int64_t block_table_size =
+      params.padded_batch_size * params.dst_block_table_width;
+
+  for (int64_t idx = thread_idx; idx < max_work_size; idx += step) {
+    if (idx < params.padded_batch_size) {
+      if (idx < params.actual_batch_size) {
+        params.dst_kv_seq_lens[idx] = params.src_kv_seq_lens[idx];
+      } else {
+        params.dst_kv_seq_lens[idx] = 0;
+      }
+    }
+    if (idx < block_table_size) {
+      const int64_t row = idx / params.dst_block_table_width;
+      const int64_t col = idx % params.dst_block_table_width;
+      if (row < params.actual_batch_size &&
+          col < params.src_block_table_width) {
+        params.dst_block_tables[idx] =
+            params.src_block_tables[row * params.src_block_table_width + col];
+      } else {
+        params.dst_block_tables[idx] = -1;
+      }
+    }
+  }
+}
+
 }  // namespace
 
 void memcpy_async(void* dst,
@@ -303,6 +334,30 @@ void update_expanded_spec_decode_metadata(
   const musaError_t error = musaGetLastError();
   CHECK_EQ(error, musaSuccess)
       << "expanded spec decode metadata update kernel launch failed: "
+      << musaGetErrorString(error);
+}
+
+void update_fa3_graph_metadata(const Fa3GraphMetadataUpdateParams& params,
+                               LlmDecodeMetadataUpdateStream stream) {
+  int64_t max_work_size =
+      params.padded_batch_size * params.dst_block_table_width;
+  if (params.padded_batch_size > max_work_size) {
+    max_work_size = params.padded_batch_size;
+  }
+  if (max_work_size <= 0) {
+    return;
+  }
+
+  const int64_t num_blocks = std::min<int64_t>(
+      (max_work_size + kThreadsPerBlock - 1) / kThreadsPerBlock,
+      kMaxBlocksPerLaunch);
+  fa3_graph_metadata_update_kernel<<<static_cast<uint32_t>(num_blocks),
+                                     kThreadsPerBlock,
+                                     /*shared_mem_bytes=*/0,
+                                     stream>>>(params, max_work_size);
+  const musaError_t error = musaGetLastError();
+  CHECK_EQ(error, musaSuccess)
+      << "FA3 graph metadata update kernel launch failed: "
       << musaGetErrorString(error);
 }
 

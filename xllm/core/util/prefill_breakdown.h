@@ -99,16 +99,19 @@ class PrefillBreakdown final {
 
   static void end_and_log(int64_t n_tokens,
                           int32_t batch_bs,
-                          double wall_fwd_ms) {
+                          double wall_fwd_ms,
+                          const char* mode = nullptr) {
     if (!enabled()) {
       return;
     }
+    const char* mode_label =
+        (mode != nullptr && mode[0] != '\0') ? mode : "unspecified";
     std::lock_guard<std::mutex> lock(mutex());
     auto& recs = records();
     if (recs.empty()) {
-      LOG(INFO) << "[PREFILL_BREAKDOWN] n_tokens=" << n_tokens
-                << " batch_bs=" << batch_bs << " wall_ms=" << wall_fwd_ms
-                << " (no samples)";
+      LOG(INFO) << "[PREFILL_BREAKDOWN] mode=" << mode_label
+                << " n_tokens=" << n_tokens << " batch_bs=" << batch_bs
+                << " wall_ms=" << wall_fwd_ms << " (no samples)";
       return;
     }
 
@@ -157,7 +160,7 @@ class PrefillBreakdown final {
                                    sums[static_cast<size_t>(Bucket::kMate)];
 
     LOG(INFO)
-        << "[PREFILL_BREAKDOWN] n_tokens=" << n_tokens
+        << "[PREFILL_BREAKDOWN] mode=" << mode_label << " n_tokens=" << n_tokens
         << " batch_bs=" << batch_bs << " wall_ms=" << wall_fwd_ms
         << " accounted_ms=" << accounted << " other_ms=" << other
         << " embed_ms=" << sums[static_cast<size_t>(Bucket::kEmbed)]

@@ -363,6 +363,10 @@ MateGdnPrefillScratch& mate_gdn_prefill_scratch() {
   return scratch;
 }
 
+thread_local bool t_python_graph_varlen = false;
+
+bool mate_gdn_python_graph_varlen_requested() { return t_python_graph_varlen; }
+
 bool mate_gdn_scratch_reuse_allowed() {
   // Capture-time allocations must stay address-stable for the recorded graph;
   // never reuse scratch while xLLM reports capture in progress.
@@ -400,9 +404,11 @@ torch::Tensor as_fp32_contig(const torch::Tensor& src,
   if (!allow_reuse) {
     return src.to(torch::kFloat32).contiguous();
   }
-  auto out = ensure_scratch_tensor(
+  torch::Tensor out = ensure_scratch_tensor(
       scratch_buf, src.sizes(), src.options().dtype(torch::kFloat32), true);
-  out.copy_(src.to(torch::kFloat32));
+  // copy_ converts dtype in place. Do not insert src.to(kFloat32); that
+  // allocates a temporary and aborts torch.musa.graph() capture.
+  out.copy_(src);
   return out;
 }
 
@@ -743,7 +749,11 @@ torch::Tensor kkt_solve_mate_ffi(
                                                  use_strided_abi);
 
   torch::Tensor key_input = use_strided_abi ? key : key.contiguous();
-  auto beta_contig = beta.to(torch::kFloat32).contiguous();
+  torch::Tensor beta_contig = beta;
+  if (beta_contig.scalar_type() != torch::kFloat32 ||
+      !beta_contig.is_contiguous()) {
+    beta_contig = beta.to(torch::kFloat32).contiguous();
+  }
   torch::Tensor a;
   if (output.has_value() && output->defined()) {
     a = *output;
@@ -793,8 +803,15 @@ torch::Tensor kkt_solve_mate_ffi_varlen(
                                                  use_strided_abi);
 
   torch::Tensor key_input = use_strided_abi ? key : key.contiguous();
-  auto beta_contig = beta.to(torch::kFloat32).contiguous();
-  auto cu_contig = cu_seqlens.to(torch::kInt32).contiguous();
+  torch::Tensor beta_contig = beta;
+  if (beta_contig.scalar_type() != torch::kFloat32 ||
+      !beta_contig.is_contiguous()) {
+    beta_contig = beta.to(torch::kFloat32).contiguous();
+  }
+  torch::Tensor cu_contig = cu_seqlens;
+  if (cu_contig.scalar_type() != torch::kInt32 || !cu_contig.is_contiguous()) {
+    cu_contig = cu_seqlens.to(torch::kInt32).contiguous();
+  }
   torch::Tensor a;
   if (output.has_value() && output->defined()) {
     a = *output;
@@ -877,6 +894,15 @@ torch::Tensor kkt_solve(
   return kkt_solve_torch(key, beta, chunk_size);
 }
 }  // namespace
+
+MateGdnPythonGraphVarlenScope::MateGdnPythonGraphVarlenScope(bool enabled)
+    : previous_(t_python_graph_varlen) {
+  t_python_graph_varlen = enabled;
+}
+
+MateGdnPythonGraphVarlenScope::~MateGdnPythonGraphVarlenScope() {
+  t_python_graph_varlen = previous_;
+}
 
 std::string get_mate_gdn_prefill_simple_uri(int64_t num_q_heads,
                                             int64_t num_v_heads,
@@ -1117,25 +1143,46 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
 
   // Host→device torch::tensor(cu_host) is not capture-safe; also skip varlen
   // while capturing even for packed shapes (packed prefill is eager).
+  // Python MusaGraph is the exception: the whole model() is captured, so the
+  // Python op opts into a C=1 scratch-reuse varlen path (see
+  // MateGdnPythonGraphVarlenScope). Native C++ piecewise still keeps Mate
+  // off the graph via GlobalCaptureInstance / AttentionRunner.
+  const bool has_device_cu_c1 =
+      params.cu_seqlens.has_value() && params.cu_seqlens->defined() &&
+      params.cu_seqlens->numel() == 2 && params.cu_seqlens->is_contiguous() &&
+      params.cu_seqlens->scalar_type() == torch::kInt32;
+  const bool python_graph_varlen =
+      mate_gdn_python_graph_varlen_requested() && varlen_available &&
+      input_batch == 1 && has_device_cu_c1 && input_seq_len >= kGdnChunkSize;
   const bool use_c1_partial_fixed =
-      mate_gdn_c1_partial_fixed_enabled() && input_batch == 1 &&
-      input_seq_len >= kGdnChunkSize && input_seq_len % kGdnChunkSize != 0 &&
+      !python_graph_varlen && mate_gdn_c1_partial_fixed_enabled() &&
+      input_batch == 1 && input_seq_len >= kGdnChunkSize &&
+      input_seq_len % kGdnChunkSize != 0 &&
       (strided_padded_available || legacy_padded_available);
   const bool capturing =
-      xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
+      xllm::runtime::musa::GlobalCaptureInstance::get_instance()
+          .is_capturing() ||
+      is_musa_stream_capturing();
   // Full-varlen Mate path handles a partial final chunk directly.
   // Keep XLLM_MATE_GDN_UNPADDED_C1=0 as a runtime rollback switch.
   const bool use_unpadded_c1_varlen =
-      !use_c1_partial_fixed && !capturing && mate_gdn_unpadded_c1_enabled() &&
-      input_batch == 1 && input_seq_len >= kGdnChunkSize &&
-      input_seq_len % kGdnChunkSize != 0 && varlen_available;
+      !use_c1_partial_fixed && (!capturing || python_graph_varlen) &&
+      mate_gdn_unpadded_c1_enabled() && input_batch == 1 &&
+      input_seq_len >= kGdnChunkSize && input_seq_len % kGdnChunkSize != 0 &&
+      varlen_available;
   const bool use_full_varlen =
-      !use_c1_partial_fixed && varlen_available && !capturing &&
-      ((params.output.has_value() && params.output->defined()) ||
+      !use_c1_partial_fixed && varlen_available &&
+      (!capturing || python_graph_varlen) &&
+      (python_graph_varlen ||
+       (params.output.has_value() && params.output->defined()) ||
        (params.final_state.has_value() && params.final_state->defined()) ||
        (params.kkt_output.has_value() && params.kkt_output->defined()) ||
        mate_gdn_needs_varlen_packing(params, input_batch, input_seq_len) ||
        use_unpadded_c1_varlen);
+  if (python_graph_varlen) {
+    LOG_FIRST_N(INFO, 1) << "[MateGdnPythonGraphVarlen] C=1 varlen Mate T="
+                         << input_seq_len << " capturing=" << capturing;
+  }
   const bool use_full_padded =
       !use_full_varlen && (strided_padded_available || legacy_padded_available);
   const bool use_strided_abi = (use_full_varlen && strided_varlen_available) ||
@@ -1159,6 +1206,8 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
   // real cu_seqlens, varlen KKT, no host g-cumsum, k-last state.
   // ------------------------------------------------------------------
   if (use_full_varlen) {
+    const bool reuse = python_graph_varlen && mate_gdn_scratch_reuse_allowed();
+    MateGdnPrefillScratch& scratch = mate_gdn_prefill_scratch();
     std::vector<int32_t> cu_host;
     std::vector<int32_t> cu_host_unpadded;
     int64_t num_seqs = 1;
@@ -1170,7 +1219,13 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     const bool has_device_cu =
         params.cu_seqlens.has_value() && params.cu_seqlens->defined();
 
-    if (has_host_cu || has_device_cu) {
+    if (python_graph_varlen) {
+      // Device CU is already [0, T] for C=1. A host materialize D2Hs and
+      // aborts torch.musa.graph() capture.
+      CHECK(has_device_cu);
+      num_seqs = 1;
+      need_unpack = false;
+    } else if (has_host_cu || has_device_cu) {
       cu_host = materialize_cu_seqlens_host(params);
       CHECK_GE(cu_host.size(), 2u);
       num_seqs = static_cast<int64_t>(cu_host.size()) - 1;
@@ -1206,7 +1261,8 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
 
     const int64_t packed_seq_len = query.size(1);
     const bool skip_chunk_padding =
-        use_unpadded_c1_varlen && num_seqs == 1 && !need_unpack;
+        (use_unpadded_c1_varlen || python_graph_varlen) && num_seqs == 1 &&
+        !need_unpack;
     const int64_t pad_size =
         skip_chunk_padding ? 0 : chunk_pad_size(packed_seq_len, kGdnChunkSize);
     if (pad_size > 0) {
@@ -1227,8 +1283,15 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       value = value.contiguous();
     }
 
-    auto beta = params.beta.to(torch::kFloat32).contiguous();
-    auto g_log = params.g.to(torch::kFloat32).contiguous();
+    torch::Tensor beta;
+    torch::Tensor g_log;
+    if (python_graph_varlen) {
+      beta = as_fp32_contig(params.beta, scratch.beta_f32, reuse);
+      g_log = as_fp32_contig(params.g, scratch.g_f32, reuse);
+    } else {
+      beta = params.beta.to(torch::kFloat32).contiguous();
+      g_log = params.g.to(torch::kFloat32).contiguous();
+    }
     if (need_unpack) {
       beta = pack_time_dim_3d(beta, cu_host_unpadded);
       g_log = pack_time_dim_3d(g_log, cu_host_unpadded);
@@ -1238,24 +1301,36 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
       g_log = pad_time_dim_3d(g_log, pad_size, 0.0);
     }
 
-    auto cu_seqlens = [&]() -> torch::Tensor {
+    torch::Tensor cu_seqlens;
+    if (python_graph_varlen) {
+      cu_seqlens = *params.cu_seqlens;
+    } else {
       // Recurrent state must always use live sequence endpoints. Padding is
       // appended only for the fixed-size KKT launch and must not extend the
       // recurrent sequence boundary.
-      const bool has_device_cu =
+      const bool device_cu_ready =
           params.cu_seqlens.has_value() && params.cu_seqlens->defined();
-      if (has_device_cu && !need_unpack) {
-        return params.cu_seqlens->to(torch::kInt32).contiguous();
+      if (device_cu_ready && !need_unpack) {
+        cu_seqlens = params.cu_seqlens->to(torch::kInt32).contiguous();
+      } else {
+        cu_seqlens = torch::tensor(
+            cu_host_unpadded,
+            torch::TensorOptions().dtype(torch::kInt32).device(query.device()));
       }
-      return torch::tensor(
-          cu_host_unpadded,
-          torch::TensorOptions().dtype(torch::kInt32).device(query.device()));
-    }();
+    }
 
     torch::Tensor kkt_cu_seqlens;
     const bool has_device_kkt =
         params.cu_seqlens_kkt.has_value() && params.cu_seqlens_kkt->defined();
-    if (has_device_kkt && !need_unpack) {
+    if (python_graph_varlen) {
+      // Default post_conv no longer grows q/k/v, so live CU already ends
+      // at T. Avoid 48 per-layer zero_/fill_ nodes in the captured graph.
+      if (has_device_kkt && !need_unpack) {
+        kkt_cu_seqlens = params.cu_seqlens_kkt->to(torch::kInt32).contiguous();
+      } else {
+        kkt_cu_seqlens = *params.cu_seqlens;
+      }
+    } else if (has_device_kkt && !need_unpack) {
       kkt_cu_seqlens = params.cu_seqlens_kkt->to(torch::kInt32).contiguous();
       CHECK_EQ(kkt_cu_seqlens.size(0), cu_seqlens.size(0));
     } else if (mate_gdn_kkt_cu_alias_enabled() && !need_unpack &&
@@ -1279,18 +1354,47 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     torch::Tensor final_state;
     {
       MusaTvmffiStreamGuard stream_guard(query.device());
+      std::optional<torch::Tensor> kkt_output = params.kkt_output;
+      if (python_graph_varlen &&
+          !(kkt_output.has_value() && kkt_output->defined())) {
+        kkt_output =
+            ensure_scratch_tensor(scratch.a,
+                                  {1, num_tokens, num_v_heads, kGdnChunkSize},
+                                  key.options(),
+                                  reuse);
+      }
       a = kkt_solve(key,
                     beta,
                     kGdnChunkSize,
                     cu_seqlens,
                     kkt_cu_seqlens,
-                    params.kkt_output,
+                    kkt_output,
                     use_strided_abi);
       if (params.initial_state.has_value() && params.initial_state->defined()) {
-        h0 = params.initial_state->scalar_type() == torch::kFloat32 &&
-                     params.initial_state->is_contiguous()
-                 ? *params.initial_state
-                 : params.initial_state->to(torch::kFloat32).contiguous();
+        if (params.initial_state->scalar_type() == torch::kFloat32 &&
+            params.initial_state->is_contiguous()) {
+          h0 = *params.initial_state;
+        } else if (python_graph_varlen) {
+          h0 = ensure_scratch_tensor(
+              scratch.h0,
+              {num_seqs, num_v_heads, head_v_dim, head_k_dim},
+              torch::TensorOptions()
+                  .dtype(torch::kFloat32)
+                  .device(query.device()),
+              reuse);
+          h0.copy_(*params.initial_state);
+        } else {
+          h0 = params.initial_state->to(torch::kFloat32).contiguous();
+        }
+      } else if (python_graph_varlen) {
+        h0 = ensure_scratch_tensor(
+            scratch.h0,
+            {num_seqs, num_v_heads, head_v_dim, head_k_dim},
+            torch::TensorOptions()
+                .dtype(torch::kFloat32)
+                .device(query.device()),
+            reuse);
+        h0.zero_();
       } else {
         h0 = torch::zeros({num_seqs, num_v_heads, head_v_dim, head_k_dim},
                           torch::TensorOptions()
@@ -1309,6 +1413,11 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
         CHECK_EQ(output.size(2), num_v_heads);
         CHECK_EQ(output.size(3), head_v_dim);
         CHECK(output.is_contiguous()) << "Mate GDN output must be contiguous";
+      } else if (python_graph_varlen) {
+        output = ensure_scratch_tensor(scratch.output,
+                                       {1, num_tokens, num_v_heads, head_v_dim},
+                                       value.options(),
+                                       reuse);
       } else {
         output = torch::empty({1, num_tokens, num_v_heads, head_v_dim},
                               value.options());
@@ -1323,6 +1432,14 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
         CHECK(final_state.is_contiguous() &&
               final_state.scalar_type() == torch::kFloat32)
             << "Mate GDN final_state must be contiguous FP32";
+      } else if (python_graph_varlen) {
+        final_state = ensure_scratch_tensor(
+            scratch.final_state,
+            {num_seqs, num_v_heads, head_v_dim, head_k_dim},
+            torch::TensorOptions()
+                .dtype(torch::kFloat32)
+                .device(query.device()),
+            reuse);
       } else {
         final_state =
             torch::empty({num_seqs, num_v_heads, head_v_dim, head_k_dim},

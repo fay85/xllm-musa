@@ -2,6 +2,10 @@ if(USE_CUDA)
   add_subdirectory(cuda)
 endif()
 
+if(USE_MUSA)
+  add_subdirectory(musa)
+endif()
+
 if(USE_NPU)
   add_subdirectory(npu)
 endif()

@@ -334,6 +334,11 @@ void validate_config(const std::string& model_type) {
   constexpr int32_t kMusaFa3BlockSize = 64;
   const bool is_musa_fa3_model =
       model_type == "qwen3" || model_type.starts_with("qwen3_5");
+  if (BeamSearchConfig::get_instance().enable_beam_search_kernel()) {
+    LOG(WARNING) << "MUSA beam search kernel is not implemented; using "
+                    "software beam search instead.";
+    BeamSearchConfig::get_instance().enable_beam_search_kernel(false);
+  }
   if (is_musa_fa3_model && kv_cache_config.block_size() != kMusaFa3BlockSize) {
     LOG(WARNING) << "The current MUSA Qwen3 family attention path requires "
                     "block_size=64; overriding block_size="

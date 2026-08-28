@@ -21,6 +21,7 @@ limitations under the License.
 #include <cstdint>
 #include <limits>
 #include <tuple>
+#include <vector>
 
 #include "core/kernels/musa/global_capture_instance.h"
 #include "core/kernels/musa/musa_ops_api.h"
@@ -814,46 +815,60 @@ int32_t choose_subwarps_per_block(int64_t hidden_dim_num_groups) {
 
 }  // namespace
 
-std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
-    const torch::Tensor& input,
-    int64_t group_size) {
+void fused_swiglu_quant_fp8_out(const torch::Tensor& input,
+                                int64_t group_size,
+                                torch::Tensor& output_q,
+                                torch::Tensor& output_s) {
   CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
         input.is_contiguous())
       << "Dense SwiGLU quant requires contiguous BF16 [M, 2N].";
   CHECK_EQ(group_size, kGroupSize);
   CHECK_EQ(input.size(1) % (2 * kGroupSize), 0);
+  CHECK(output_q.defined() && output_s.defined())
+      << "fused_swiglu_quant_fp8_out requires caller-owned outputs";
 
   const int64_t num_rows = input.size(0);
   const int64_t intermediate_size = input.size(1) / 2;
   const int32_t hidden_dim_num_groups =
       static_cast<int32_t>(intermediate_size / kGroupSize);
+  CHECK_EQ(output_q.dim(), 2);
+  CHECK_EQ(output_q.size(0), num_rows);
+  CHECK_EQ(output_q.size(1), intermediate_size);
+  CHECK_EQ(output_q.scalar_type(), torch::kFloat8_e4m3fn);
+  CHECK(output_q.is_contiguous());
+  CHECK_EQ(output_q.device(), input.device());
+  CHECK_EQ(output_s.dim(), 2);
+  CHECK_EQ(output_s.size(0), num_rows);
+  CHECK_EQ(output_s.size(1), hidden_dim_num_groups);
+  CHECK_EQ(output_s.scalar_type(), torch::kFloat32);
+  CHECK(output_s.is_contiguous());
+  CHECK_EQ(output_s.device(), input.device());
+  if (num_rows == 0) {
+    return;
+  }
+
+  // Python torch.musa.graph does not set GlobalCaptureInstance. Use the
+  // larger graph tile whenever the current MUSA stream is capturing so
+  // replay matches the C++ piecewise launch config.
   const bool is_capturing =
-      xllm::runtime::musa::GlobalCaptureInstance::get_instance().is_capturing();
-  const int32_t groups_per_tile =
-      is_capturing ? kDenseSwigluGraphGroupsPerBlock
-                   : kDenseSwigluGroupsPerBlock;
+      xllm::runtime::musa::GlobalCaptureInstance::get_instance()
+          .is_capturing() ||
+      is_musa_stream_capturing();
+  const int32_t groups_per_tile = is_capturing ? kDenseSwigluGraphGroupsPerBlock
+                                               : kDenseSwigluGroupsPerBlock;
   const int32_t groups_per_block =
       std::min(hidden_dim_num_groups, groups_per_tile);
   const int32_t group_tiles =
       (hidden_dim_num_groups + groups_per_tile - 1) / groups_per_tile;
 
-  torch::Tensor output_q =
-      torch::empty({num_rows, intermediate_size},
-                   input.options().dtype(torch::kFloat8_e4m3fn));
-  torch::Tensor output_s = torch::empty({num_rows, hidden_dim_num_groups},
-                                        input.options().dtype(torch::kFloat32));
-  if (num_rows == 0) {
-    return std::make_tuple(output_q, output_s);
-  }
-
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  swiglu_quant_kernel<<<
-      dim3(static_cast<unsigned int>(group_tiles),
-           static_cast<unsigned int>(num_rows)),
-      static_cast<unsigned int>(groups_per_block * kThreadsPerGroup),
-      0,
-      stream>>>(
+  swiglu_quant_kernel<<<dim3(static_cast<unsigned int>(group_tiles),
+                             static_cast<unsigned int>(num_rows)),
+                        static_cast<unsigned int>(groups_per_block *
+                                                  kThreadsPerGroup),
+                        0,
+                        stream>>>(
       reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
       reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
       output_s.data_ptr<float>(),
@@ -863,35 +878,54 @@ std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
       groups_per_tile,
       /*row_stride=*/1);
   C10_CUDA_CHECK(cudaGetLastError());
+}
+
+std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size) {
+  CHECK(input.dim() == 2) << "Dense SwiGLU quant requires [M, 2N].";
+  const int64_t num_rows = input.size(0);
+  const int64_t intermediate_size = input.size(1) / 2;
+  torch::Tensor output_q =
+      torch::empty({num_rows, intermediate_size},
+                   input.options().dtype(torch::kFloat8_e4m3fn));
+  torch::Tensor output_s =
+      torch::empty({num_rows, intermediate_size / kGroupSize},
+                   input.options().dtype(torch::kFloat32));
+  fused_swiglu_quant_fp8_out(input, group_size, output_q, output_s);
   return std::make_tuple(output_q, output_s);
 }
 
-std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
-    const torch::Tensor& input,
-    int64_t group_size) {
-  TORCH_CHECK(input.scalar_type() == torch::kBFloat16,
-              "per_token_group_quant_fp8 (MUSA g128) supports bf16 input only");
-  TORCH_CHECK(group_size == kGroupSize,
-              "per_token_group_quant_fp8 (MUSA g128) requires group_size=128");
-  TORCH_CHECK(input.stride(-1) == 1,
-              "per_token_group_quant_fp8: input last dim must be contiguous");
+void per_token_group_quant_fp8_out(const torch::Tensor& input,
+                                   int64_t group_size,
+                                   torch::Tensor& output_q,
+                                   torch::Tensor& output_s) {
+  CHECK(input.scalar_type() == torch::kBFloat16)
+      << "per_token_group_quant_fp8 supports bf16 input only";
+  CHECK_EQ(group_size, kGroupSize)
+      << "per_token_group_quant_fp8 requires group_size=128";
+  CHECK_EQ(input.stride(-1), 1)
+      << "per_token_group_quant_fp8: input last dim must be contiguous";
+  CHECK(output_q.defined() && output_s.defined())
+      << "per_token_group_quant_fp8_out requires caller-owned outputs";
 
   const int64_t k = input.size(-1);
-  TORCH_CHECK(k > 0, "per_token_group_quant_fp8: K must be positive");
-  TORCH_CHECK(k % kGroupSize == 0,
-              "per_token_group_quant_fp8: K must be divisible by 128");
+  CHECK_GT(k, 0);
+  CHECK_EQ(k % kGroupSize, 0)
+      << "per_token_group_quant_fp8: K must be divisible by 128";
   const int64_t k_groups = k / kGroupSize;
   const int64_t m = input.numel() / k;
-
-  auto out_q =
-      torch::empty(input.sizes(), input.options().dtype(torch::kFloat8_e4m3fn));
-  auto scale_sizes = input.sizes().vec();
-  scale_sizes.back() = k_groups;
-  auto out_scale =
-      torch::empty(scale_sizes, input.options().dtype(torch::kFloat32));
-
+  CHECK_EQ(output_q.numel(), input.numel());
+  CHECK_EQ(output_q.scalar_type(), torch::kFloat8_e4m3fn);
+  CHECK(output_q.is_contiguous());
+  CHECK_EQ(output_q.device(), input.device());
+  CHECK_EQ(output_s.size(-1), k_groups);
+  CHECK_EQ(output_s.numel(), m * k_groups);
+  CHECK_EQ(output_s.scalar_type(), torch::kFloat32);
+  CHECK(output_s.is_contiguous());
+  CHECK_EQ(output_s.device(), input.device());
   if (m == 0 || k_groups == 0) {
-    return std::make_tuple(out_q, out_scale);
+    return;
   }
 
   const int32_t subwarps_per_block = choose_subwarps_per_block(k_groups);
@@ -907,14 +941,37 @@ std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
       0,
       stream>>>(
       reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
-      reinterpret_cast<__mt_fp8_e4m3*>(out_q.data_ptr<c10::Float8_e4m3fn>()),
-      out_scale.data_ptr<float>(),
+      reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
+      output_s.data_ptr<float>(),
       k,
       k_groups,
       m);
   C10_CUDA_CHECK(cudaGetLastError());
+}
 
-  return std::make_tuple(out_q, out_scale);
+std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size) {
+  CHECK(input.scalar_type() == torch::kBFloat16)
+      << "per_token_group_quant_fp8 (MUSA g128) supports bf16 input only";
+  CHECK_EQ(group_size, kGroupSize)
+      << "per_token_group_quant_fp8 (MUSA g128) requires group_size=128";
+  CHECK_EQ(input.stride(-1), 1)
+      << "per_token_group_quant_fp8: input last dim must be contiguous";
+
+  const int64_t k = input.size(-1);
+  CHECK_GT(k, 0);
+  CHECK_EQ(k % kGroupSize, 0)
+      << "per_token_group_quant_fp8: K must be divisible by 128";
+  const int64_t k_groups = k / kGroupSize;
+  torch::Tensor output_q =
+      torch::empty(input.sizes(), input.options().dtype(torch::kFloat8_e4m3fn));
+  std::vector<int64_t> scale_sizes = input.sizes().vec();
+  scale_sizes.back() = k_groups;
+  torch::Tensor output_s =
+      torch::empty(scale_sizes, input.options().dtype(torch::kFloat32));
+  per_token_group_quant_fp8_out(input, group_size, output_q, output_s);
+  return std::make_tuple(output_q, output_s);
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>

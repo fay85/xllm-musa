@@ -13,8 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/kernels/musa/musa_ops_api.h"
-
 #include <glog/logging.h>
 #include <mudnn.h>
 #include <musa_runtime_api.h>
@@ -22,8 +20,13 @@ limitations under the License.
 
 #include <cstdint>
 #include <cstring>
+#include <limits>
+#include <memory>
 #include <tuple>
+#include <vector>
 
+#include "core/kernels/musa/musa_ops_api.h"
+#include "torch_musa/csrc/core/MUSAGuard.h"
 #include "torch_musa/csrc/core/MUSAStream.h"
 
 namespace xllm::kernel::musa {
@@ -39,18 +42,15 @@ void check_musa(musaError_t status, const char* what) {
       << what << " status=" << static_cast<int32_t>(status);
 }
 
-mudnnHandle_t handle_on_current_stream() {
-  thread_local mudnnHandle_t handle = nullptr;
-  if (handle == nullptr) {
-    check_mudnn(mudnnCreate(&handle), "mudnnCreate");
-  }
-  const musaStream_t stream = c10::musa::getCurrentMUSAStream().stream();
-  check_mudnn(mudnnSetStream(handle, stream), "mudnnSetStream");
-  return handle;
-}
-
 class DeviceBuffer final {
  public:
+  DeviceBuffer() = default;
+
+  ~DeviceBuffer() { release(); }
+
+  DeviceBuffer(const DeviceBuffer&) = delete;
+  DeviceBuffer& operator=(const DeviceBuffer&) = delete;
+
   void* get(size_t bytes) {
     if (bytes == 0) {
       return nullptr;
@@ -58,13 +58,19 @@ class DeviceBuffer final {
     if (bytes <= capacity_) {
       return ptr_;
     }
-    void* grown = nullptr;
-    check_musa(musaMalloc(&grown, bytes), "musaMalloc TopK buffer");
-    // Keep the previous buffer. Freeing it can race an in-flight kernel or a
-    // captured graph that still names the old address.
-    ptr_ = grown;
+    release();
+    check_musa(musaMalloc(&ptr_, bytes), "musaMalloc TopK buffer");
     capacity_ = bytes;
     return ptr_;
+  }
+
+  void release() {
+    if (ptr_ == nullptr) {
+      return;
+    }
+    check_musa(musaFree(ptr_), "musaFree TopK buffer");
+    ptr_ = nullptr;
+    capacity_ = 0;
   }
 
  private:
@@ -72,24 +78,73 @@ class DeviceBuffer final {
   size_t capacity_ = 0;
 };
 
-DeviceBuffer& input_buffer() {
-  thread_local DeviceBuffer buffer;
-  return buffer;
-}
+class TopKDeviceResources final {
+ public:
+  explicit TopKDeviceResources(int32_t device_index)
+      : device_index_(device_index) {
+    c10::musa::MUSAGuard device_guard(device_index_);
+    check_mudnn(mudnnCreate(&handle_), "mudnnCreate");
+  }
 
-DeviceBuffer& values_buffer() {
-  thread_local DeviceBuffer buffer;
-  return buffer;
-}
+  ~TopKDeviceResources() {
+    c10::musa::MUSAGuard device_guard(device_index_);
+    input_buffer_.release();
+    values_buffer_.release();
+    indices_buffer_.release();
+    workspace_buffer_.release();
+    if (handle_ != nullptr) {
+      check_mudnn(mudnnDestroy(handle_), "mudnnDestroy");
+      handle_ = nullptr;
+    }
+  }
 
-DeviceBuffer& indices_buffer() {
-  thread_local DeviceBuffer buffer;
-  return buffer;
-}
+  TopKDeviceResources(const TopKDeviceResources&) = delete;
+  TopKDeviceResources& operator=(const TopKDeviceResources&) = delete;
 
-DeviceBuffer& workspace_buffer() {
-  thread_local DeviceBuffer buffer;
-  return buffer;
+  mudnnHandle_t handle_on_current_stream() {
+    const musaStream_t stream =
+        c10::musa::getCurrentMUSAStream(device_index_).stream();
+    check_mudnn(mudnnSetStream(handle_, stream), "mudnnSetStream");
+    return handle_;
+  }
+
+  DeviceBuffer& input_buffer() { return input_buffer_; }
+
+  DeviceBuffer& values_buffer() { return values_buffer_; }
+
+  DeviceBuffer& indices_buffer() { return indices_buffer_; }
+
+  DeviceBuffer& workspace_buffer() { return workspace_buffer_; }
+
+ private:
+  int32_t device_index_;
+  mudnnHandle_t handle_ = nullptr;
+  DeviceBuffer input_buffer_;
+  DeviceBuffer values_buffer_;
+  DeviceBuffer indices_buffer_;
+  DeviceBuffer workspace_buffer_;
+};
+
+TopKDeviceResources& resources_for_device(int32_t device_index) {
+  int device_count = 0;
+  check_musa(musaGetDeviceCount(&device_count), "musaGetDeviceCount");
+  CHECK_GE(device_index, 0) << "MUSA device index must be non-negative";
+  CHECK_LT(device_index, device_count)
+      << "MUSA device index " << device_index << " exceeds device count "
+      << device_count;
+
+  static thread_local std::vector<std::unique_ptr<TopKDeviceResources>>
+      resources_by_device;
+  if (resources_by_device.size() < static_cast<size_t>(device_count)) {
+    resources_by_device.resize(static_cast<size_t>(device_count));
+  }
+
+  std::unique_ptr<TopKDeviceResources>& resources =
+      resources_by_device[static_cast<size_t>(device_index)];
+  if (resources == nullptr) {
+    resources = std::make_unique<TopKDeviceResources>(device_index);
+  }
+  return *resources;
 }
 
 void check_topk_indices(const torch::Tensor& input,
@@ -115,13 +170,11 @@ void check_topk_indices(const torch::Tensor& input,
     const float topk_value =
         values.flatten()[flat_index].to(torch::kCPU).item<float>();
     LOG(FATAL) << "MUSA_TOPK_INDEX_CORRUPTION"
-               << " flat_index=" << flat_index
-               << " row=" << (flat_index / k)
+               << " flat_index=" << flat_index << " row=" << (flat_index / k)
                << " column=" << (flat_index % k)
                << " token_index=" << token_index
                << " low32_as_float=" << low32_as_float
-               << " topk_value=" << topk_value
-               << " vocab_size=" << vocab_size;
+               << " topk_value=" << topk_value << " vocab_size=" << vocab_size;
   }
 }
 
@@ -130,6 +183,16 @@ void check_topk_indices(const torch::Tensor& input,
 std::tuple<torch::Tensor, torch::Tensor> topk(const torch::Tensor& input,
                                               int64_t k) {
   CHECK(input.defined()) << "TopK input must be defined";
+  CHECK(input.device().type() == torch::kMUSA)
+      << "software-beam TopK expects a MUSA tensor, got " << input.device();
+  const int32_t device_index = static_cast<int32_t>(input.device().index());
+  CHECK_GE(device_index, 0) << "software-beam TopK requires a device index";
+  c10::musa::MUSAGuard device_guard(device_index);
+
+  int current_device = -1;
+  check_musa(musaGetDevice(&current_device), "musaGetDevice");
+  CHECK_EQ(current_device, device_index)
+      << "software-beam TopK input/current device mismatch";
   CHECK_EQ(input.dim(), 2) << "software-beam TopK expects 2-D [rows, vocab]";
   CHECK(input.scalar_type() == torch::kFloat32)
       << "software-beam TopK expects FP32 logprobs, got "
@@ -140,6 +203,12 @@ std::tuple<torch::Tensor, torch::Tensor> topk(const torch::Tensor& input,
   const torch::Tensor contiguous_input = input.contiguous();
   const int64_t rows = contiguous_input.size(0);
   const int64_t cols = contiguous_input.size(1);
+  CHECK_LE(rows, std::numeric_limits<int32_t>::max())
+      << "software-beam TopK row count exceeds muDNN int32 dimensions";
+  CHECK_LE(cols, std::numeric_limits<int32_t>::max())
+      << "software-beam TopK vocabulary exceeds muDNN int32 dimensions";
+  CHECK_LE(k, std::numeric_limits<int32_t>::max())
+      << "software-beam TopK k exceeds muDNN int32 dimensions";
   const size_t input_bytes =
       static_cast<size_t>(rows) * static_cast<size_t>(cols) * sizeof(float);
   const size_t values_bytes =
@@ -147,13 +216,14 @@ std::tuple<torch::Tensor, torch::Tensor> topk(const torch::Tensor& input,
   const size_t indices_bytes =
       static_cast<size_t>(rows) * static_cast<size_t>(k) * sizeof(int64_t);
 
-  // Graph capture/replay and the caching allocator share device addresses.
-  // Wait for every stream, then run TopK in process-lifetime musaMalloc
-  // buffers so replay cannot write into values/indices.
+  // Wait for every stream before reusing or growing the per-device raw
+  // buffers. This makes freeing a previous allocation safe while keeping the
+  // buffers outside the graph-aware caching allocator.
   check_musa(musaDeviceSynchronize(), "synchronize before TopK");
-  void* input_ptr = input_buffer().get(input_bytes);
-  void* values_ptr = values_buffer().get(values_bytes);
-  void* indices_ptr = indices_buffer().get(indices_bytes);
+  TopKDeviceResources& resources = resources_for_device(device_index);
+  void* input_ptr = resources.input_buffer().get(input_bytes);
+  void* values_ptr = resources.values_buffer().get(values_bytes);
+  void* indices_ptr = resources.indices_buffer().get(indices_bytes);
   check_musa(musaMemcpy(input_ptr,
                         contiguous_input.data_ptr(),
                         input_bytes,
@@ -167,7 +237,7 @@ std::tuple<torch::Tensor, torch::Tensor> topk(const torch::Tensor& input,
                                   static_cast<int32_t>(k)};
   const int32_t output_strides[2] = {static_cast<int32_t>(k), 1};
 
-  mudnnHandle_t handle = handle_on_current_stream();
+  mudnnHandle_t handle = resources.handle_on_current_stream();
   mudnnTensorDescriptor_t input_desc = nullptr;
   mudnnTensorDescriptor_t values_desc = nullptr;
   mudnnTensorDescriptor_t indices_desc = nullptr;
@@ -210,7 +280,7 @@ std::tuple<torch::Tensor, torch::Tensor> topk(const torch::Tensor& input,
                                         indices_desc,
                                         &workspace_bytes),
               "mudnnGetTopKWorkspaceSize");
-  void* workspace = workspace_buffer().get(workspace_bytes);
+  void* workspace = resources.workspace_buffer().get(workspace_bytes);
   const mudnnStatus_t run_status = mudnnTopK(handle,
                                              topk_desc,
                                              input_desc,
@@ -228,14 +298,14 @@ std::tuple<torch::Tensor, torch::Tensor> topk(const torch::Tensor& input,
   mudnnDestroyTensorDescriptor(values_desc);
   mudnnDestroyTensorDescriptor(input_desc);
 
-  torch::Tensor values = torch::empty(
-      {rows, k},
-      contiguous_input.options().memory_format(torch::MemoryFormat::Contiguous));
-  torch::Tensor indices = torch::empty(
-      {rows, k},
-      contiguous_input.options()
-          .dtype(torch::kLong)
-          .memory_format(torch::MemoryFormat::Contiguous));
+  torch::Tensor values = torch::empty({rows, k},
+                                      contiguous_input.options().memory_format(
+                                          torch::MemoryFormat::Contiguous));
+  torch::Tensor indices =
+      torch::empty({rows, k},
+                   contiguous_input.options()
+                       .dtype(torch::kLong)
+                       .memory_format(torch::MemoryFormat::Contiguous));
   check_musa(musaMemcpy(values.data_ptr(),
                         values_ptr,
                         values_bytes,

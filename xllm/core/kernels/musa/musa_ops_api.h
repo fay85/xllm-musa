@@ -546,10 +546,10 @@ std::tuple<torch::Tensor, torch::Tensor> moe_fused_topk(
 
 torch::Tensor random_sample(const torch::Tensor& probs);
 
-// Last-dim FP32 TopK used by software-beam top-logprobs. Workspace is a
-// process-lifetime musaMalloc buffer so the caching allocator cannot recycle
-// it under an in-flight kernel. Corrupt int64 indices abort instead of
-// becoming embedding token ids.
+// Last-dim FP32 TopK used by software-beam top-logprobs. Per-thread,
+// per-device musaMalloc buffers stay outside the caching allocator and are
+// resized only after device synchronization. Corrupt int64 indices abort
+// instead of becoming embedding token ids.
 std::tuple<torch::Tensor, torch::Tensor> topk(const torch::Tensor& input,
                                               int64_t k);
 

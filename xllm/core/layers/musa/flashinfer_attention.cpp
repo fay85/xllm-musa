@@ -183,6 +183,19 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
   value = value.view({-1, num_kv_heads_, head_size_});
   output = output.view({-1, num_heads_, head_size_});
 
+  const bool spec_verify_expanded_decode =
+      attn_metadata.is_chunked_prefill &&
+      (attn_metadata.use_expanded_decode_for_spec_verify_attention ||
+       use_expanded_spec_decode_attention(attn_metadata) ||
+       attn_metadata.musa.is_spec_verify);
+  if (attn_metadata.is_chunked_prefill && attn_metadata.enable_cuda_graph &&
+      !spec_verify_expanded_decode &&
+      musa::is_fa3_shape_supported(head_size_, num_heads_, num_kv_heads_)) {
+    CHECK(false)
+        << "MUSA FA3-only attention does not support legacy FA2 "
+           "chunked-prefill graph; disable chunked prefill or use eager FA3";
+  }
+
   torch::Tensor k_cache = kv_cache.get_k_cache();
   torch::Tensor v_cache = kv_cache.get_v_cache();
 
@@ -207,16 +220,11 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
     xllm::kernel::reshape_paged_cache(reshape_paged_cache_params);
   }
 
-  const bool spec_verify_expanded_decode =
-      attn_metadata.is_chunked_prefill &&
-      (attn_metadata.use_expanded_decode_for_spec_verify_attention ||
-       use_expanded_spec_decode_attention(attn_metadata) ||
-       attn_metadata.musa.is_spec_verify);
   // Prefix-cache hits are represented as chunked prefill. Route supported
   // shapes to paged FA3 instead of the legacy FA2 chunked-prefill backend.
   const bool use_fa3_chunked_prefill =
       attn_metadata.is_chunked_prefill && !attn_metadata.enable_cuda_graph &&
-      !attn_metadata.attn_mask.defined() && head_size_ == 128 &&
+      !attn_metadata.attn_mask.defined() &&
       musa::should_use_fa3_prefill(
           query.scalar_type(), head_size_, num_heads_, num_kv_heads_);
   if (attn_metadata.is_prefill) {
@@ -262,6 +270,12 @@ void FlashInferAttentionImpl::prefill_forward(
   const int64_t gqa_ratio = num_kv_heads_ > 0 ? num_heads_ / num_kv_heads_ : 0;
   const bool use_fa3 = musa::should_use_fa3_prefill(
       query.scalar_type(), head_size_, num_heads_, num_kv_heads_);
+
+  if (musa::is_fa3_shape_supported(head_size_, num_heads_, num_kv_heads_)) {
+    CHECK(use_fa3)
+        << "MUSA FA3-only attention refuses to route supported prefill "
+           "shapes to FA2; set XLLM_USE_FA3=1";
+  }
 
   // Supported BF16 shape-specialized kernels default to FA3 because the MUSA
   // FA2 prefill path does not safely reuse its workspace across requests.
@@ -525,9 +539,28 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
     block_size = k_cache.size(1);
   }
 
-  // NOTE: we only support "fa2" backend for BatchPrefillWithPagedKvcacheKernel
-  // for flashinfer v0.6.2, because it would cause performance degradation if
-  // using "fa3" backend.
+  const bool fa3_shape_supported =
+      musa::is_fa3_shape_supported(head_size_, num_heads_, num_kv_heads_);
+  if (fa3_shape_supported) {
+    CHECK(musa::should_use_fa3_prefill(
+        query.scalar_type(), head_size_, num_heads_, num_kv_heads_))
+        << "MUSA FA3-only attention refuses to route supported chunked "
+           "prefill shapes to FA2; set XLLM_USE_FA3=1";
+    CHECK(!attn_metadata.attn_mask.defined())
+        << "MUSA FA3-only attention does not support custom masks for "
+           "chunked prefill";
+    CHECK(!attn_metadata.enable_cuda_graph)
+        << "MUSA FA3-only attention does not support the legacy FA2 "
+           "chunked-prefill graph; disable chunked prefill or use eager FA3";
+  } else if (musa::is_fa3_prefill_requested()) {
+    CHECK(false) << "MUSA FA3-only attention has no FA3 chunked-prefill "
+                    "specialization for head_dim="
+                 << head_size_ << ", GQA ratio="
+                 << (num_kv_heads_ > 0 ? num_heads_ / num_kv_heads_ : 0);
+  }
+
+  // Unsupported shapes retain the legacy paged backend. Supported Qwen3-family
+  // shapes are rejected above instead of silently falling back from FA3.
   std::string backend = "fa2";
 
   if (attn_metadata.enable_cuda_graph) {
@@ -602,11 +635,26 @@ void FlashInferAttentionImpl::decoder_forward(
   }
 
   // FA3 decode fast path. Supported BF16 shapes use FA3 by default;
-  // XLLM_USE_FA3_DECODE=0 provides an explicit rollback to FA2. The shared
-  // XLLM_USE_FA3 switch remains an override when the decode-specific setting
-  // is absent. Requires the JIT-built fmha_fwd_<hash>.so under
-  // FLASHINFER_OPS_PATH.
+  // Supported Qwen3-family shapes are FA3-only. Unsupported shapes retain
+  // the legacy backend for models that do not have a Mate FA3 specialization.
   {
+    const bool fa3_shape_supported =
+        musa::is_fa3_shape_supported(head_size_, num_heads_, num_kv_heads_);
+    if (!fa3_shape_supported && musa::is_fa3_decode_requested()) {
+      CHECK(false) << "MUSA FA3-only attention has no FA3 decode "
+                      "specialization for head_dim="
+                   << head_size_ << ", GQA ratio="
+                   << (num_kv_heads_ > 0 ? num_heads_ / num_kv_heads_ : 0);
+    }
+    if (fa3_shape_supported) {
+      CHECK(musa::should_use_fa3_decode(query.scalar_type(),
+                                        head_size_,
+                                        num_heads_,
+                                        num_kv_heads_,
+                                        block_size))
+          << "MUSA FA3-only attention refuses to route supported decode "
+             "shapes to FA2; set XLLM_USE_FA3_DECODE=1";
+    }
     if (musa::should_use_fa3_decode(query.scalar_type(),
                                     head_size_,
                                     num_heads_,
@@ -732,9 +780,8 @@ void FlashInferAttentionImpl::decoder_forward(
     }
   }
 
-  // NOTE: we only support "fa2" backend for BatchPrefillWithPagedKvcacheKernel
-  // for flashinfer v0.6.2, because it would cause performance degradation if
-  // using "fa3" backend.
+  // Unsupported shapes retain the legacy paged backend. Supported Qwen3-family
+  // shapes return through the FA3 path above or fail closed before reaching it.
   std::string backend = "fa2";
 
   if (decode_attn.enable_cuda_graph) {
