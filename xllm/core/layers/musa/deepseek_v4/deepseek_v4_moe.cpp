@@ -15,17 +15,21 @@ limitations under the License.
 
 #include "core/layers/musa/deepseek_v4/deepseek_v4_moe.h"
 
+#include <cuda_runtime_api.h>
 #include <glog/logging.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/framework/parallel_state/parallel_state.h"
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/musa/musa_fp8_linear.h"
 
 namespace xllm {
@@ -66,6 +70,33 @@ bool all_tensors_defined(const std::vector<torch::Tensor>& tensors) {
 }
 
 constexpr int64_t kFp8GemvWorkspaceTokens = 2;
+constexpr int64_t kPrefillCustomAllreduceWorkspaceTokens = 1024;
+
+struct SharedExpertOverlapState {
+  explicit SharedExpertOverlapState(int32_t device_id)
+      : stream(
+            c10::musa::getStreamFromPool(/*isHighPriority=*/false, device_id)) {
+    CHECK_EQ(musaEventCreateWithFlags(&input_ready, musaEventDisableTiming),
+             musaSuccess);
+    CHECK_EQ(musaEventCreateWithFlags(&shared_ready, musaEventDisableTiming),
+             musaSuccess);
+  }
+
+  c10::musa::MUSAStream stream;
+  musaEvent_t input_ready = nullptr;
+  musaEvent_t shared_ready = nullptr;
+};
+
+SharedExpertOverlapState* get_shared_expert_overlap_state(int32_t device_id) {
+  using States =
+      std::unordered_map<int32_t, std::unique_ptr<SharedExpertOverlapState>>;
+  thread_local States* states = new States();
+  auto& state = (*states)[device_id];
+  if (!state) {
+    state = std::make_unique<SharedExpertOverlapState>(device_id);
+  }
+  return state.get();
+}
 
 bool is_packed_fp4_weight(const torch::Tensor& tensor,
                           int64_t logical_out_features,
@@ -368,8 +399,8 @@ DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs& model_args,
       << "DeepseekV4MoE intermediate size must be divisible by TP world size.";
   local_intermediate_size_ = intermediate_size_ / world_size;
   if (world_size > 1) {
-    tp_custom_allreduce_output_workspace_ =
-        torch::empty({kFp8GemvWorkspaceTokens, hidden_size_}, options_);
+    tp_custom_allreduce_output_workspace_ = torch::empty(
+        {kPrefillCustomAllreduceWorkspaceTokens, hidden_size_}, options_);
   }
 
   if (n_shared_experts_ > 0) {
@@ -888,6 +919,36 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
   auto input_2d = input.reshape({-1, input.size(-1)});
   auto weights_2d = topk_weights.reshape({-1, topk_});
   auto ids_2d = topk_ids.reshape({-1, topk_});
+  const bool is_prefill = !input_params.meta.batch_forward_type.is_decode();
+  const bool use_shared_expert_overlap = is_prefill && shared_experts_ &&
+                                         input_2d.device().is_privateuseone() &&
+                                         !kernel::musa::is_stream_capturing();
+  torch::Tensor shared_output;
+  SharedExpertOverlapState* shared_overlap_state = nullptr;
+  if (use_shared_expert_overlap) {
+    shared_overlap_state = get_shared_expert_overlap_state(
+        static_cast<int32_t>(input_2d.device().index()));
+    const c10::musa::MUSAStream current_stream =
+        c10::musa::getCurrentMUSAStream(input_2d.device().index());
+    CHECK_EQ(musaEventRecord(shared_overlap_state->input_ready,
+                             current_stream.stream()),
+             musaSuccess);
+    CHECK_EQ(musaStreamWaitEvent(shared_overlap_state->stream.stream(),
+                                 shared_overlap_state->input_ready,
+                                 /*flags=*/0),
+             musaSuccess);
+    {
+      c10::StreamGuard stream_guard(shared_overlap_state->stream.unwrap());
+      shared_output = shared_experts_(input);
+      if (shared_expert_gate_ && shared_expert_gate_is_loaded_) {
+        auto gate = torch::sigmoid(shared_expert_gate_->forward(input));
+        shared_output.mul_(gate);
+      }
+    }
+    CHECK_EQ(musaEventRecord(shared_overlap_state->shared_ready,
+                             shared_overlap_state->stream.stream()),
+             musaSuccess);
+  }
   const bool use_fp8_gemv = input_params.meta.batch_forward_type.is_decode() &&
                             input_2d.size(0) > 0 &&
                             input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
@@ -976,7 +1037,7 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     ep_pg_->allreduce(output);
   }
 
-  if (shared_experts_) {
+  if (shared_experts_ && !shared_output.defined()) {
     auto shared_output = shared_experts_(input);
     if (shared_expert_gate_ && shared_expert_gate_is_loaded_) {
       auto shared_output_2d =
@@ -1009,6 +1070,16 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     }
   }
 
+  if (shared_overlap_state != nullptr) {
+    const c10::musa::MUSAStream current_stream =
+        c10::musa::getCurrentMUSAStream(input_2d.device().index());
+    CHECK_EQ(musaStreamWaitEvent(current_stream.stream(),
+                                 shared_overlap_state->shared_ready,
+                                 /*flags=*/0),
+             musaSuccess);
+    output.add_(shared_output.reshape_as(output));
+  }
+
   if (output_buffer.defined()) {
     CHECK(output_buffer.dim() == 2 && output_buffer.is_contiguous());
     CHECK_GE(output_buffer.size(0), output.size(0));
@@ -1032,10 +1103,11 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
   // combined partial hidden-state sum once, after both branches are complete.
   if (tp_pg_ != nullptr && tp_pg_->world_size() > 1 && !skip_tp_allreduce) {
     const bool use_custom_allreduce =
-        num_layers_ <= 4 || layer_id_ < num_layers_ - 4;
+        is_prefill || num_layers_ <= 4 || layer_id_ < num_layers_ - 4;
     bool used_custom_allreduce = false;
     if (use_custom_allreduce && output.dim() == 2 && output.size(0) > 0 &&
-        output.size(0) <= kFp8GemvWorkspaceTokens &&
+        output.size(0) <= (is_prefill ? kPrefillCustomAllreduceWorkspaceTokens
+                                      : kFp8GemvWorkspaceTokens) &&
         output.size(1) == hidden_size_ &&
         tp_custom_allreduce_output_workspace_.defined()) {
       torch::Tensor output_workspace =

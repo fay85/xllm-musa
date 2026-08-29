@@ -88,8 +88,7 @@ void wait_current_musa_stream_for_ffi(const torch::Device&) {
 // paths retain their existing stream policy.
 void bind_dsv4_local_prefill_tvmffi_current_stream(
     const torch::Device& device) {
-  void* const stream =
-      reinterpret_cast<void*>(current_dsv4_cache_stream());
+  void* const stream = reinterpret_cast<void*>(current_dsv4_cache_stream());
   constexpr int32_t kDlCuda = 2;
   constexpr int32_t kDlExtDev = 12;
   for (const int32_t device_type : {kDlCuda, kDlExtDev}) {
@@ -105,7 +104,7 @@ bool dsv4_paged_decode_sync_enabled() { return false; }
 
 bool dsv4_paged_decode_warp_fused_enabled() { return true; }
 
-bool dsv4_paged_decode_precompute_probs_enabled() { return false; }
+bool dsv4_paged_decode_precompute_probs_enabled() { return true; }
 
 bool dsv4_mate_flashmla_enabled() { return true; }
 

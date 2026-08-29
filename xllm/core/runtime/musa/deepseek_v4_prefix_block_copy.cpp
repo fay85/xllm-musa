@@ -28,8 +28,7 @@ namespace {
 
 void copy_tensor_block(const torch::Tensor& tensor,
                        int32_t src_block_id,
-                       int32_t dst_block_id,
-                       const torch::Device& device) {
+                       int32_t dst_block_id) {
   if (!tensor.defined() || tensor.numel() == 0) {
     return;
   }
@@ -37,51 +36,48 @@ void copy_tensor_block(const torch::Tensor& tensor,
   CHECK_GE(dst_block_id, 0);
   CHECK_LT(src_block_id, tensor.size(0));
   CHECK_LT(dst_block_id, tensor.size(0));
-  const torch::TensorOptions index_options =
-      torch::TensorOptions().dtype(torch::kLong).device(device);
-  const torch::Tensor src = torch::tensor({src_block_id}, index_options);
-  const torch::Tensor dst = torch::tensor({dst_block_id}, index_options);
-  const torch::Tensor selected = torch::index_select(tensor, /*dim=*/0, src);
-  tensor.index_copy_(/*dim=*/0, dst, selected);
-}
-
-void copy_recurrent_state(KVCache* kv_cache,
-                          int32_t src_block_id,
-                          int32_t dst_block_id,
-                          const torch::Device& device) {
-  CHECK(kv_cache != nullptr);
-  const BlockTypeTensorMap swa_tensors =
-      kv_cache->get_block_type_tensors(BlockType::SWA);
-  for (const auto& [role, tensor] : swa_tensors) {
-    (void)role;
-    copy_tensor_block(tensor, src_block_id, dst_block_id, device);
+  if (src_block_id == dst_block_id) {
+    return;
   }
-  copy_tensor_block(
-      kv_cache->get_compress_kv_state(), src_block_id, dst_block_id, device);
-  copy_tensor_block(
-      kv_cache->get_compress_score_state(), src_block_id, dst_block_id, device);
-  copy_tensor_block(kv_cache->get_compress_index_kv_state(),
-                    src_block_id,
-                    dst_block_id,
-                    device);
-  copy_tensor_block(kv_cache->get_compress_index_score_state(),
-                    src_block_id,
-                    dst_block_id,
-                    device);
+
+  // Block ids are host scalars. Selecting the two first-dimension views
+  // avoids constructing device index tensors for every cache tensor.
+  torch::Tensor destination = tensor.select(/*dim=*/0, dst_block_id);
+  const torch::Tensor source = tensor.select(/*dim=*/0, src_block_id);
+  destination.copy_(source);
 }
 
 void copy_compressed_block(KVCache* kv_cache,
                            BlockType block_type,
                            int32_t src_block_id,
-                           int32_t dst_block_id,
-                           const torch::Device& device) {
+                           int32_t dst_block_id) {
   CHECK(kv_cache != nullptr);
   const BlockTypeTensorMap tensors =
       kv_cache->get_block_type_tensors(block_type);
   for (const auto& [role, tensor] : tensors) {
     (void)role;
-    copy_tensor_block(tensor, src_block_id, dst_block_id, device);
+    copy_tensor_block(tensor, src_block_id, dst_block_id);
   }
+}
+
+void copy_recurrent_state(KVCache* kv_cache,
+                          int32_t src_block_id,
+                          int32_t dst_block_id) {
+  CHECK(kv_cache != nullptr);
+  const BlockTypeTensorMap swa_tensors =
+      kv_cache->get_block_type_tensors(BlockType::SWA);
+  for (const auto& [role, tensor] : swa_tensors) {
+    (void)role;
+    copy_tensor_block(tensor, src_block_id, dst_block_id);
+  }
+  copy_tensor_block(
+      kv_cache->get_compress_kv_state(), src_block_id, dst_block_id);
+  copy_tensor_block(
+      kv_cache->get_compress_score_state(), src_block_id, dst_block_id);
+  copy_tensor_block(
+      kv_cache->get_compress_index_kv_state(), src_block_id, dst_block_id);
+  copy_tensor_block(
+      kv_cache->get_compress_index_score_state(), src_block_id, dst_block_id);
 }
 
 }  // namespace
@@ -112,17 +108,18 @@ bool apply_deepseek_v4_prefix_block_copies(
       continue;
     }
     if (decoded.kind == DeepseekV4PrefixTransferKind::BLOCK_COPY) {
-      for (KVCache& kv_cache : *kv_caches) {
-        if (decoded.block_type == BlockType::SWA) {
+      if (decoded.block_type == BlockType::SWA) {
+        for (KVCache& kv_cache : *kv_caches) {
           copy_recurrent_state(
-              &kv_cache, decoded.src_block_id, decoded.dst_block_id, device);
-        } else {
-          copy_compressed_block(&kv_cache,
-                                decoded.block_type,
-                                decoded.src_block_id,
-                                decoded.dst_block_id,
-                                device);
+              &kv_cache, decoded.src_block_id, decoded.dst_block_id);
         }
+        continue;
+      }
+      for (KVCache& kv_cache : *kv_caches) {
+        copy_compressed_block(&kv_cache,
+                              decoded.block_type,
+                              decoded.src_block_id,
+                              decoded.dst_block_id);
       }
       continue;
     }

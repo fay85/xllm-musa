@@ -30,6 +30,8 @@ namespace {
 
 constexpr char kDsv4StateBlockIndicesMetadataKey[] =
     "__musa_dsv4_state_block_indices";
+constexpr char kDsv4HostSequenceLengthsMetadataKey[] =
+    "__musa_dsv4_host_sequence_lengths";
 
 torch::Device infer_metadata_device(const ModelInputParams& params,
                                     const torch::Tensor& positions) {
@@ -215,6 +217,24 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
     q_lens_vec.assign(static_cast<size_t>(batch_size), 1);
   }
 
+  // Attention consumes these host values in every DSA layer. Keep one
+  // MUSA-private CPU sidecar so the layer loop does not copy the equivalent
+  // device tensors back to the host twice per layer. The public metadata ABI
+  // and the graph-owned device tensors remain unchanged.
+  if (batch_size > 0 && !params.enable_graph) {
+    std::vector<int32_t> host_sequence_lengths;
+    host_sequence_lengths.reserve(static_cast<size_t>(2 * batch_size));
+    host_sequence_lengths.insert(
+        host_sequence_lengths.end(), q_lens_vec.begin(), q_lens_vec.end());
+    host_sequence_lengths.insert(
+        host_sequence_lengths.end(), ctx_lens_vec.begin(), ctx_lens_vec.end());
+    dsa.cp_input_dict[kDsv4HostSequenceLengthsMetadataKey] =
+        torch::tensor(
+            host_sequence_lengths,
+            torch::TensorOptions().dtype(torch::kInt32).device(torch::kCPU))
+            .view({2, batch_size});
+  }
+
   dsa.input_positions = positions;
   const bool is_acl_graph = params.enable_graph;
   const torch::Device metadata_device(torch::kCPU);
@@ -355,8 +375,10 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
           !proc_bt[m].defined() || proc_bt[m].dim() != 2) {
         continue;
       }
-      auto state_block_indices = torch::full(
-          {proc_bt[m].size(0)}, -1, torch::TensorOptions().dtype(torch::kInt64));
+      auto state_block_indices =
+          torch::full({proc_bt[m].size(0)},
+                      -1,
+                      torch::TensorOptions().dtype(torch::kInt64));
       const auto block_table =
           proc_bt[m].to(torch::kCPU, torch::kInt32).contiguous();
       const auto block_table_access = block_table.accessor<int32_t, 2>();
