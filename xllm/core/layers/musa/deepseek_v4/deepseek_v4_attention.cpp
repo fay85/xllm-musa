@@ -3154,7 +3154,9 @@ DeepseekV4AttentionImpl::forward(
     scatter_by_slot(ori_kv, swa_slot_mapping, kv);
     maybe_sync_attention_stage(layer_id_, "swa_scatter_by_slot", kv);
   }
-  if (mate_swa_cache.defined()) {
+  const bool skip_mate_swa_graph_decode_pack =
+      !is_prefill && attn_metadata.is_acl_graph;
+  if (mate_swa_cache.defined() && !skip_mate_swa_graph_decode_pack) {
     pack_mate_model1_cache(mate_swa_cache, swa_slot_mapping, kv);
     maybe_sync_attention_stage(layer_id_, "mate_swa_pack", kv);
   }
