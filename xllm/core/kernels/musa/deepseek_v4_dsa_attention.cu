@@ -197,7 +197,7 @@ bool dsv4_mate_flashmla_graph_page_aligned_zero_copy_enabled() { return false; }
 
 bool dsv4_mate_flashmla_graph_native_leftpad_enabled() { return false; }
 
-bool dsv4_mate_flashmla_fuse_compact_query_enabled() { return false; }
+bool dsv4_mate_flashmla_fuse_compact_query_enabled() { return true; }
 
 int64_t dsv4_mate_flashmla_max_kv_len() { return 4096; }
 

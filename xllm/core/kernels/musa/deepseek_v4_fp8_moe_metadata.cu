@@ -39,7 +39,7 @@ constexpr float kFp8Max = 448.0f;
 
 constexpr bool metadata_single_cta_enabled() { return false; }
 
-constexpr bool metadata_expert_parallel_enabled() { return false; }
+constexpr bool metadata_expert_parallel_enabled() { return true; }
 
 constexpr int32_t quant_groups_per_cta() { return 1; }
 
@@ -254,7 +254,7 @@ void launch_build_padded_metadata(const int32_t* sorted_assignment,
                                   musaStream_t stream) {
   if (metadata_expert_parallel_enabled() && num_experts > 0) {
     build_padded_metadata_expert_parallel_kernel<<<num_experts,
-                                                   kMetadataBlock,
+                                                   6 * kWarpSize,
                                                    0,
                                                    stream>>>(sorted_assignment,
                                                              expert_counts,
