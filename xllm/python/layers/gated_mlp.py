@@ -24,7 +24,6 @@ import torch.nn as nn
 from xllm.python import kernels
 from xllm.python.layers.linear import ColumnParallelLinear, RowParallelLinear
 from xllm.python.model_executor.forward_context import acquire_graph_activation
-from xllm.python.model_executor.prefill_breakdown import scope as breakdown_scope
 
 _FUSED_SWIGLU_GROUP_SIZE = 128
 
@@ -78,9 +77,7 @@ class GatedMLP(nn.Module):
             if fp8_weight is not None
             else self.down_proj.weight.size(1)
         )
-        need_silu = (
-            self._silu_output is None or self._silu_output.size(0) < max_tokens
-        )
+        need_silu = self._silu_output is None or self._silu_output.size(0) < max_tokens
         if need_silu:
             self._silu_output = torch.empty(
                 (max_tokens, hidden),
@@ -93,16 +90,12 @@ class GatedMLP(nn.Module):
             # Keep gate_up as one C++ op (quant + GEMM). Splitting them
             # across Python added per-layer host bubbles and made eager
             # mlp_gate_up slower than the fused block_fp8_linear path.
-            with breakdown_scope("mlp_gate_up"):
-                gate_up = self.gate_up_proj(hidden_states)
-            with breakdown_scope("mlp_act"):
-                quantized, scale = kernels.fused_swiglu_quant_fp8(
-                    gate_up, _FUSED_SWIGLU_GROUP_SIZE
-                )
-            with breakdown_scope("mlp_down"):
-                return self.down_proj.forward_quantized(quantized, scale)
-        with breakdown_scope("mlp_gate_up"):
             gate_up = self.gate_up_proj(hidden_states)
+            quantized, scale = kernels.fused_swiglu_quant_fp8(
+                gate_up, _FUSED_SWIGLU_GROUP_SIZE
+            )
+            return self.down_proj.forward_quantized(quantized, scale)
+        gate_up = self.gate_up_proj(hidden_states)
         hidden = int(gate_up.size(-1) // 2)
         silu_output = acquire_graph_activation(
             (int(gate_up.size(0)), hidden),
@@ -115,10 +108,8 @@ class GatedMLP(nn.Module):
             and gate_up.size(0) <= self._silu_output.size(0)
         ):
             silu_output = self._silu_output[: gate_up.size(0)]
-        with breakdown_scope("mlp_act"):
-            activated = kernels.silu_and_mul(gate_up, silu_output)
-        with breakdown_scope("mlp_down"):
-            return self.down_proj(activated)
+        activated = kernels.silu_and_mul(gate_up, silu_output)
+        return self.down_proj(activated)
 
     def _can_fused_fp8_mlp(self, hidden_states: torch.Tensor) -> bool:
         if not _fused_dense_swiglu_fp8_enabled():

@@ -125,5 +125,47 @@ TEST(MusaTopkTest, ConfiguredBeamMatchesCpuCandidateSet) {
   }
 }
 
+TEST(MusaTopkTest, EqualScoresPreferSmallerTokenId) {
+  if (!is_musa_available()) {
+    GTEST_SKIP() << "MUSA device is unavailable";
+  }
+
+  const musaError_t set_device_status = musaSetDevice(/*device=*/0);
+  ASSERT_EQ(set_device_status, musaSuccess)
+      << "musaSetDevice failed with status="
+      << static_cast<int32_t>(set_device_status);
+
+  const int64_t rows = 2;
+  const int64_t vocab_size = 16;
+  const int64_t k = 4;
+  torch::Tensor source_cpu = torch::zeros(
+      {rows, vocab_size},
+      torch::TensorOptions().dtype(torch::kFloat32).device(torch::kCPU));
+  source_cpu[0][5] = 1.0f;
+  source_cpu[0][9] = 1.0f;
+  source_cpu[0][2] = 1.0f;
+  source_cpu[0][14] = 1.0f;
+  source_cpu[1][3] = 2.0f;
+  source_cpu[1][11] = 2.0f;
+  source_cpu[1][7] = 2.0f;
+  source_cpu[1][1] = 2.0f;
+  const torch::Tensor source =
+      source_cpu.to(torch::Device(/*type=*/torch::kPrivateUse1, /*index=*/0));
+
+  const std::tuple<torch::Tensor, torch::Tensor> result =
+      xllm::kernel::musa::topk(source, k);
+  const torch::Tensor indices = std::get<1>(result).to(torch::kCPU);
+  ASSERT_EQ(indices.size(0), rows);
+  ASSERT_EQ(indices.size(1), k);
+  EXPECT_EQ(indices[0][0].item<int64_t>(), 2);
+  EXPECT_EQ(indices[0][1].item<int64_t>(), 5);
+  EXPECT_EQ(indices[0][2].item<int64_t>(), 9);
+  EXPECT_EQ(indices[0][3].item<int64_t>(), 14);
+  EXPECT_EQ(indices[1][0].item<int64_t>(), 1);
+  EXPECT_EQ(indices[1][1].item<int64_t>(), 3);
+  EXPECT_EQ(indices[1][2].item<int64_t>(), 7);
+  EXPECT_EQ(indices[1][3].item<int64_t>(), 11);
+}
+
 }  // namespace
 }  // namespace xllm::kernel::musa

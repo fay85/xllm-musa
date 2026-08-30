@@ -328,7 +328,8 @@ void fused_qk_norm_rope(torch::Tensor& qkv,
                         const torch::Tensor& cos_sin_cache,
                         bool interleaved,
                         const torch::Tensor& position_ids,
-                        int64_t k_head_offset = 0);
+                        int64_t k_head_offset = 0,
+                        int64_t q_head_stride = 1);
 
 torch::Tensor matmul(torch::Tensor a,
                      torch::Tensor b,
@@ -535,7 +536,9 @@ void fused_qk_norm_rope(torch::Tensor& qkv,
                         const torch::Tensor& k_weight,
                         const torch::Tensor& cos_sin_cache,
                         bool interleaved,
-                        const torch::Tensor& position_ids);
+                        const torch::Tensor& position_ids,
+                        int64_t k_head_offset,
+                        int64_t q_head_stride);
 
 std::tuple<torch::Tensor, torch::Tensor> moe_fused_topk(
     torch::Tensor& gating_output,

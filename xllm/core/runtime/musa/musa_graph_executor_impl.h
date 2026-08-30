@@ -412,9 +412,6 @@ class MusaGraph final {
   }
 
  private:
-  // Print graph held tensors for debugging
-  void print_graph_tensors() const;
-
   // Refresh the persistent host mirrors used by the Mate FFI batch_decode
   // run() call. Lazily allocates pinned CPU buffers sized to worst case (set
   // by MusaGraphPersistentParam at executor construction), then copies the
@@ -476,9 +473,7 @@ class MusaGraph final {
   // struct). If we let `.to(kCPU)` create a fresh per-call tensor, then on
   // every replay the captured graph holds a dangling pointer to the
   // previous-step host buffer (already freed). On torch_musa 2.7.1 this
-  // surfaces as a GPU page fault inside the captured Mate decode kernel
-  // ("ExceptionType: IllegalAddress ... Reading from 0x... Fault (Page
-  // Directory)"; see the .mudmp under repro logs).
+  // surfaces as a GPU page fault inside the captured Mate decode kernel.
 
   // Grow-only across captures so smaller-bucket graphs keep referencing
   // the same storage even when a larger bucket later expands the buffer.
@@ -631,30 +626,13 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
 
   struct VmmPoolState;
 
-  struct GraphMemoryUsageStats {
-    size_t executor_total_bytes = 0;
-    size_t persistent_param_bytes = 0;
-    size_t allocated_pool_bytes = 0;
-    size_t active_pool_bytes = 0;
-    size_t pool_high_water_mark_bytes = 0;
-  };
-
   VmmPoolState& get_or_create_vmm_pool_state(uint32_t physical_pool_id);
   MusaMemPool* get_or_create_vmm_mempool(uint32_t physical_pool_id,
                                          uint32_t shape_id);
   MusaMemPool* get_vmm_mempool(uint32_t physical_pool_id, uint32_t shape_id);
-  GraphMemoryUsageStats get_graph_memory_usage_stats();
-  void log_graph_memory_after_capture();
 
   std::mutex vmm_mutex_;
   std::unordered_map<uint32_t, std::unique_ptr<VmmPoolState>> vmm_pools_;
-
-  size_t baseline_private_pool_reserved_bytes_ = 0;
-  size_t baseline_private_pool_allocated_bytes_ = 0;
-  size_t baseline_private_pool_active_bytes_ = 0;
-  size_t baseline_allocator_reserved_bytes_ = 0;
-
-  size_t last_logged_executor_total_bytes_ = 0;
 
   // Get the MUSA-compatible capture stream for the current thread.
   // Each thread automatically gets its own high-priority capture stream

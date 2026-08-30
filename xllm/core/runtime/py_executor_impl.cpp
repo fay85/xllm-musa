@@ -31,8 +31,6 @@ limitations under the License.
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/runtime/py_attention_metadata.h"
 #include "models/llm/py_causal_lm.h"
-#include "util/env_var.h"
-#include "util/timer.h"
 
 #if defined(USE_NPU)
 #include <torch_npu/csrc/core/npu/NPUStream.h>
@@ -44,12 +42,6 @@ namespace py = pybind11;
 
 namespace xllm {
 namespace {
-
-bool python_prefill_profile_enabled() {
-  static const bool enabled =
-      util::get_bool_env("XLLM_PYTHON_PREFILL_PROFILE", /*defaultValue=*/false);
-  return enabled;
-}
 
 py::object optional_tensor(const torch::Tensor& tensor) {
   return tensor.defined() ? py::cast(tensor) : py::none();
@@ -120,10 +112,6 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
                                 const ModelInputParams& params) {
   torch::NoGradGuard no_grad;
   COUNTER_INC(num_model_execution_total_eager);
-  const bool profile_prefill = python_prefill_profile_enabled() &&
-                               params.meta.batch_forward_type.is_prefill();
-  Timer total_timer;
-  Timer stage_timer;
 
   // Build or reuse attention metadata.
   std::shared_ptr<layer::AttentionMetadata> attn_metadata =
@@ -133,11 +121,7 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
         layer::AttentionMetadataBuilder::build(
             params, enable_mla_, std::nullopt, device_));
   }
-  const double metadata_ms = stage_timer.elapsed_milliseconds();
-
-  stage_timer.reset();
   py::gil_scoped_acquire gil;
-  const double gil_ms = stage_timer.elapsed_milliseconds();
 
   // Lazy bind KV caches on first call.
   int64_t num_layers = static_cast<int64_t>(kv_caches.size());
@@ -166,10 +150,8 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
         << "KV cache layer count changed after initial bind";
   }
 
-  stage_timer.reset();
   py::object py_metadata =
       py::cast(PyAttentionMetadataView(attn_metadata, params));
-  const double cast_ms = stage_timer.elapsed_milliseconds();
 
   py::object input_embedding = params.embedding.input_embedding.defined()
                                    ? py::cast(params.embedding.input_embedding)
@@ -233,12 +215,9 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
 
   // Execute: one C++ -> Python call per step. MUSA 27B still reads embeddings
   // from metadata; the extra args stay None unless a VLM/NPU caller sets them.
-  stage_timer.reset();
   py::object execute_obj = py_executor_.attr("execute")(
       tokens, positions_arg, py_metadata, input_embedding, py_sync);
-  const double execute_ms = stage_timer.elapsed_milliseconds();
 
-  stage_timer.reset();
   ModelOutput output;
   if (py::isinstance<py::tuple>(execute_obj)) {
     const py::tuple packed = execute_obj.cast<py::tuple>();
@@ -250,13 +229,6 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
     }
   } else {
     output = ModelOutput(execute_obj.cast<torch::Tensor>());
-  }
-  if (profile_prefill) {
-    LOG(INFO) << "py_executor profile tokens=" << tokens.numel()
-              << " metadata_ms=" << metadata_ms << " gil_ms=" << gil_ms
-              << " cast_ms=" << cast_ms << " execute_ms=" << execute_ms
-              << " unpack_ms=" << stage_timer.elapsed_milliseconds()
-              << " total_ms=" << total_timer.elapsed_milliseconds();
   }
   return output;
 }

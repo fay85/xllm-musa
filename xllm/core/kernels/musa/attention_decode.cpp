@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include <glog/logging.h>
+#include <unistd.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -68,6 +69,41 @@ constexpr const char* kFa3PrefillFwdUriHashGqa4 =
 constexpr const char* kFa3PrefillFwdUriHashGqa8 =
     "37a746d759d71d0f133087f9f93a14e80f5f67839d7ebec9f6b1769609eec4d8";
 
+// Mate 0.2.5 remains supported for reproducible performance comparisons and
+// deployments that have not regenerated the 0.2.6 dense-prefill artifacts.
+constexpr const char* kFa3PrefillFwdUriHashGqa6V025 =
+    "e140040cf5f04fdf94b0c9d28900659052de34f380b6ecea23afd16d3691d4ea";
+constexpr const char* kFa3PrefillFwdUriHashGqa2V025 =
+    "782ec5133834c8e9cec31f987596832dccb087fca95a59dfa17b7f4125ac1108";
+constexpr const char* kFa3PrefillFwdUriHashGqa4V025 =
+    "b6883be7b4cfcc0200f994cdd9ec9844d8ec6175c27a5ea5488723c9a43164bf";
+constexpr const char* kFa3PrefillFwdUriHashGqa8V025 =
+    "236afb906e2625d51106085cc57d954f7e5b1440b41da68c782fc894801386ee";
+
+bool fa3_module_available(const std::string& uri) {
+  const char* ops_path = std::getenv("FLASHINFER_OPS_PATH");
+  if (ops_path == nullptr || ops_path[0] == '\0') {
+    return false;
+  }
+  const std::string so_path =
+      std::string(ops_path) + "/" + uri + "/" + uri + ".so";
+  return access(so_path.c_str(), R_OK) == 0;
+}
+
+std::string resolve_fa3_prefill_uri(const char* current_hash,
+                                    const char* v025_hash) {
+  const std::string current_uri = std::string("fmha_fwd_") + current_hash;
+  if (fa3_module_available(current_uri)) {
+    return current_uri;
+  }
+
+  const std::string v025_uri = std::string("fmha_fwd_") + v025_hash;
+  if (fa3_module_available(v025_uri)) {
+    return v025_uri;
+  }
+  return current_uri;
+}
+
 int32_t fa3_metadata_num_warps(int32_t batch_size) {
   CHECK_GT(batch_size, 0);
   return std::min<int32_t>(
@@ -109,15 +145,24 @@ std::string fa3_prefill_fwd_uri(int64_t gqa_ratio) {
   CHECK(gqa_ratio == 2 || gqa_ratio == 4 || gqa_ratio == 6 || gqa_ratio == 8)
       << "MUSA FA3 prefill supports GQA ratios 2, 4, 6, and 8, got "
       << gqa_ratio;
-  const char* hash = kFa3PrefillFwdUriHashGqa8;
   if (gqa_ratio == 2) {
-    hash = kFa3PrefillFwdUriHashGqa2;
-  } else if (gqa_ratio == 4) {
-    hash = kFa3PrefillFwdUriHashGqa4;
-  } else if (gqa_ratio == 6) {
-    hash = kFa3PrefillFwdUriHashGqa6;
+    static const std::string uri = resolve_fa3_prefill_uri(
+        kFa3PrefillFwdUriHashGqa2, kFa3PrefillFwdUriHashGqa2V025);
+    return uri;
   }
-  return std::string("fmha_fwd_") + hash;
+  if (gqa_ratio == 4) {
+    static const std::string uri = resolve_fa3_prefill_uri(
+        kFa3PrefillFwdUriHashGqa4, kFa3PrefillFwdUriHashGqa4V025);
+    return uri;
+  }
+  if (gqa_ratio == 6) {
+    static const std::string uri = resolve_fa3_prefill_uri(
+        kFa3PrefillFwdUriHashGqa6, kFa3PrefillFwdUriHashGqa6V025);
+    return uri;
+  }
+  static const std::string uri = resolve_fa3_prefill_uri(
+      kFa3PrefillFwdUriHashGqa8, kFa3PrefillFwdUriHashGqa8V025);
+  return uri;
 }
 
 bool is_fa3_shape_supported(int64_t head_dim_qk,
@@ -178,14 +223,6 @@ void combine_fa3_split_k(const ffi::Any& fwd_result,
       num_splits <= 16
           ? kFa3FwdCombine16Uri
           : (num_splits <= 32 ? kFa3FwdCombine32Uri : kFa3FwdCombine64Uri);
-  static const bool log_splits = [] {
-    const char* value = std::getenv("XLLM_FA3_LOG_SPLITS");
-    return value != nullptr && std::string(value) == "1";
-  }();
-  if (log_splits) {
-    LOG(INFO) << "FA3 decode selected num_splits=" << num_splits
-              << ", max_seqlen_q=" << max_seqlen_q;
-  }
 
   get_function(combine_uri, combine_uri)(to_ffi_tensor(cu_seqlens_q),
                                          none_tensor(),

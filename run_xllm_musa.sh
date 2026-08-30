@@ -265,7 +265,8 @@ for package, expected_version in expected.items():
         )
 PY
   if [[ -z "${MATE_WORKSPACE_BASE:-}" ||
-        "${MATE_WORKSPACE_BASE}" == */mate025_cache ]]; then
+        "${MATE_WORKSPACE_BASE}" == *mate025* ||
+        "${MATE_WORKSPACE_BASE}" == *"/0.2.5"* ]]; then
     if [[ -d /data/feihu/mate026_cache ]]; then
       MATE_WORKSPACE_BASE=/data/feihu/mate026_cache
     else
@@ -279,6 +280,10 @@ PY
   fi
   export MATE_MUBIN_DIR
   export FLASHINFER_OPS_PATH="${MATE_WORKSPACE_BASE}/.cache/mate/0.2.6/mp31/cached_ops"
+  if [[ "${FLASHINFER_OPS_PATH}" == *"/0.2.5/"* ]]; then
+    echo "Mate 0.2.6 binary must not use a 0.2.5 FLASHINFER_OPS_PATH: ${FLASHINFER_OPS_PATH}" >&2
+    exit 1
+  fi
 
   local -a library_dirs=(
     "${MUDNN_HOME}/lib"
@@ -372,6 +377,55 @@ if dtype_name in {"unknown", "none", ""} and (
     dtype_name = "bfloat16"
 print(head_dim, gqa_ratio, dtype_name, model_type, quant_method)
 PY
+}
+
+detect_gdn_shape() {
+  local model_path="$1"
+  python3 - "${model_path}/config.json" <<'PY'
+import json
+import sys
+
+with open(sys.argv[1], encoding="utf-8") as config_file:
+    config = json.load(config_file)
+text_config = config.get("text_config", config)
+num_k_heads = int(
+    text_config.get("linear_num_key_heads", 0)
+    or config.get("linear_num_key_heads", 0)
+    or 0
+)
+num_v_heads = int(
+    text_config.get("linear_num_value_heads", 0)
+    or config.get("linear_num_value_heads", 0)
+    or 0
+)
+print(num_k_heads, num_v_heads)
+PY
+}
+
+require_real_mate026_so() {
+  local uri="$1"
+  local so_path="$FLASHINFER_OPS_PATH/$uri/$uri.so"
+  if [[ ! -e "$so_path" ]]; then
+    echo "Missing Mate 0.2.6 op: ${so_path}" >&2
+    exit 1
+  fi
+  local real_path
+  real_path="$(readlink -f "$so_path")"
+  if [[ "$real_path" == *"/0.2.5/"* ]]; then
+    echo "Mate 0.2.6 binary refuses a 0.2.5 artifact for ${uri}: ${real_path}" >&2
+    exit 1
+  fi
+}
+
+require_mate026_export() {
+  local uri="$1"
+  local export_name="$2"
+  require_real_mate026_so "$uri"
+  local so_path="$FLASHINFER_OPS_PATH/$uri/$uri.so"
+  if ! nm -D --defined-only "$so_path" | grep -q "__tvm_ffi_${export_name}"; then
+    echo "Mate 0.2.6 ${uri} does not export ${export_name}: ${so_path}" >&2
+    exit 1
+  fi
 }
 
 preflight() {
@@ -556,6 +610,45 @@ preflight() {
       }
     done
   fi
+
+  local gdn_k_heads gdn_v_heads
+  read -r gdn_k_heads gdn_v_heads < <(detect_gdn_shape "$model_path")
+  if [[ "${quant_method}" == fp8 ]]; then
+    require_mate026_export "gemm_ops" "gemm_fp8_nt_groupwise"
+  fi
+
+  if [[ "${gdn_k_heads}" -gt 0 && "${gdn_v_heads}" -gt 0 &&
+        "${XLLM_GDN_DECODE_BACKEND}" == mate ]]; then
+    require_real_mate026_so \
+      "mate_gdn_decode_tvmffi_hq${gdn_k_heads}_hv${gdn_v_heads}_bf16"
+  fi
+
+  if [[ "${NUM_SPECULATIVE_TOKENS:-0}" -gt 0 &&
+        "${gdn_k_heads}" -gt 0 && "${gdn_v_heads}" -gt 0 &&
+        "${XLLM_MATE_GDN_MTP:-1}" != 0 ]]; then
+    local mtp_seq_len mtp_uri checkpoint_uri
+    mtp_seq_len=$((NUM_SPECULATIVE_TOKENS + 1))
+    mtp_uri="mate_gdn_mtp_hq${gdn_k_heads}_hv${gdn_v_heads}_bf16"
+    if [[ "${mtp_seq_len}" -ne 2 ]]; then
+      mtp_uri="${mtp_uri}_t${mtp_seq_len}"
+    fi
+    checkpoint_uri="mate_gdn_mtp_checkpoint_hq${gdn_k_heads}_hv${gdn_v_heads}_bf16_t${mtp_seq_len}"
+    require_real_mate026_so "$mtp_uri"
+    require_real_mate026_so "$checkpoint_uri"
+  fi
+
+  # Default is on: C++ uses Mate GDN prefill unless XLLM_MATE_GDN_PREFILL=0.
+  if [[ "${gdn_k_heads}" -gt 0 && "${gdn_v_heads}" -gt 0 &&
+        "${XLLM_MATE_GDN_PREFILL:-1}" != 0 ]]; then
+    require_real_mate026_so \
+      "mate_gdn_prefill_full_strided_hq${gdn_k_heads}_hv${gdn_v_heads}_bf16"
+    require_real_mate026_so \
+      "mate_kkt_solve_strided_hq${gdn_k_heads}_hv${gdn_v_heads}_bf16"
+    require_real_mate026_so \
+      "mate_gdn_prefill_full_varlen_strided_hq${gdn_k_heads}_hv${gdn_v_heads}_bf16"
+    require_real_mate026_so \
+      "mate_kkt_solve_varlen_strided_hq${gdn_k_heads}_hv${gdn_v_heads}_bf16"
+  fi
 }
 
 run_xllm() {
@@ -613,6 +706,8 @@ run_xllm() {
   echo "==> device: logical musa:0, visible=${MUSA_VISIBLE_DEVICES}"
   echo "==> graph=${ENABLE_GRAPH}, piecewise=${ENABLE_PREFILL_PIECEWISE_GRAPH}, vmm=${ENABLE_GRAPH_VMM_POOL}, packed=${ENABLE_PACKED_PREFILL}"
   echo "==> FA3=${XLLM_USE_FA3}, FA3 decode=${XLLM_USE_FA3_DECODE}, pool stream=${XLLM_MUSA_POOL_COMPUTE_STREAM}, GDN=${XLLM_GDN_DECODE_BACKEND}"
+  echo "==> Mate ${MATE_HOME} workspace=${MATE_WORKSPACE_BASE}"
+  echo "==> FLASHINFER_OPS_PATH=${FLASHINFER_OPS_PATH}"
   echo "==> max concurrency=${MAX_CONCURRENT_REQUESTS}, max seqs=${MAX_SEQS_PER_BATCH}, memory utilization=${MAX_MEMORY_UTILIZATION}"
 
   if [[ "$BACKGROUND" == 1 ]]; then

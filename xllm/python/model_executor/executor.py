@@ -14,9 +14,6 @@
 
 from __future__ import annotations
 
-import os
-import time
-
 import torch
 import torch.nn as nn
 
@@ -195,12 +192,8 @@ class ModelExecutor:
                 PrefillMusaGraphRunner,
             )
 
-            max_decode_tokens = _decode_graph_max_tokens(
-                max_seqs_per_batch, config
-            )
-            logger.info(
-                f"Python MUSA decode graph max tokens: {max_decode_tokens}"
-            )
+            max_decode_tokens = _decode_graph_max_tokens(max_seqs_per_batch, config)
+            logger.info(f"Python MUSA decode graph max tokens: {max_decode_tokens}")
             self.decode_graph_runner = DecodeMusaGraphRunner(
                 execution_model,
                 self.attention_backend,
@@ -214,17 +207,13 @@ class ModelExecutor:
             # explicit Python override; otherwise keep the C++ flag but cap
             # it at a C=1-safe size that still covers the 384-token bucket.
             if "max_tokens_for_python_prefill_graph" in config:
-                prefill_max_tokens = int(
-                    config["max_tokens_for_python_prefill_graph"]
-                )
+                prefill_max_tokens = int(config["max_tokens_for_python_prefill_graph"])
             else:
                 prefill_max_tokens = min(
                     int(config.get("max_tokens_for_graph_mode") or 2048),
                     512,
                 )
-            logger.info(
-                f"Python MUSA prefill graph max tokens: {prefill_max_tokens}"
-            )
+            logger.info(f"Python MUSA prefill graph max tokens: {prefill_max_tokens}")
             self.prefill_graph_runner = PrefillMusaGraphRunner(
                 execution_model,
                 self.attention_backend,
@@ -266,9 +255,7 @@ class ModelExecutor:
                     decode_batch_size_limit,
                 )
             max_graph_tokens = graph_sequence_capacity * decode_tokens
-            logger.info(
-                f"Python ACL decode graph max tokens: {max_graph_tokens}"
-            )
+            logger.info(f"Python ACL decode graph max tokens: {max_graph_tokens}")
             self.decode_graph_runner = DecodeAclGraphRunner(
                 execution_model,
                 self.attention_backend,
@@ -306,9 +293,7 @@ class ModelExecutor:
         ]
         required_layers = max(attention_ids) + 1
         if len(layer_caches) < required_layers:
-            raise ValueError(
-                "cache layer count does not match the model layer layout"
-            )
+            raise ValueError("cache layer count does not match the model layer layout")
         if self._kv_bound:
             return
         self.attention_backend.bind_kv_caches(layer_caches)
@@ -320,9 +305,7 @@ class ModelExecutor:
         self._refresh_gdn_ssm_workspaces(layer_caches)
         self._kv_bound = True
 
-    def _refresh_gdn_ssm_workspaces(
-        self, layer_caches: list[LayerCache]
-    ) -> None:
+    def _refresh_gdn_ssm_workspaces(self, layer_caches: list[LayerCache]) -> None:
         for module in self.model.modules():
             refresh = getattr(module, "refresh_graph_ssm_workspace", None)
             if refresh is None:
@@ -345,8 +328,6 @@ class ModelExecutor:
         if not self._kv_bound:
             raise RuntimeError("KV caches are not bound")
 
-        profile = os.environ.get("XLLM_PYTHON_PREFILL_PROFILE", "") == "1"
-        decode_start = time.perf_counter() if profile else 0.0
         graph_runner = self.decode_graph_runner
         if graph_runner is not None and _use_decode_graph(metadata):
             graph_runner.warmup(input_ids.device, input_ids.dtype)
@@ -356,22 +337,11 @@ class ModelExecutor:
                 if last_logits is not None:
                     return hidden, last_logits
                 return hidden
-        decode_ms = (time.perf_counter() - decode_start) * 1000.0 if profile else 0.0
-        prefill_can_start = time.perf_counter() if profile else 0.0
         prefill_runner = self.prefill_graph_runner
         if prefill_runner is not None and prefill_runner.can_execute(
             input_ids, metadata
         ):
-            can_ms = (
-                (time.perf_counter() - prefill_can_start) * 1000.0 if profile else 0.0
-            )
             hidden = prefill_runner.execute(input_ids, positions, metadata)
-            if profile and metadata.is_prefill:
-                logger.info(
-                    f"python execute dispatch decode_ms={decode_ms:.2f} "
-                    f"prefill_can_ms={can_ms:.2f} "
-                    f"tokens={int(input_ids.shape[0])}"
-                )
             last_logits = getattr(prefill_runner, "last_logits", None)
             if last_logits is not None:
                 return hidden, last_logits

@@ -23,7 +23,6 @@ limitations under the License.
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/ops_api.h"
 #include "core/util/env_var.h"
-#include "core/util/prefill_breakdown.h"
 
 namespace xllm {
 namespace layer {
@@ -70,19 +69,20 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
   qkv_proj_ = register_module(
       "qkv_proj",
       musa::QKVParallelLinear(args.hidden_size(),
-                        attn_output_gate_ ? num_heads_ * 2 : num_heads_,
-                        num_kv_heads_,
-                        args.head_dim(),
-                        num_kv_head_replicas_,
-                        /*bias=*/args.attention_bias(),
-                        /*gather_output=*/false,
-                        parallel_args,
-                        options,
-                        quant_args));
+                              attn_output_gate_ ? num_heads_ * 2 : num_heads_,
+                              num_kv_heads_,
+                              args.head_dim(),
+                              num_kv_head_replicas_,
+                              /*bias=*/args.attention_bias(),
+                              /*gather_output=*/false,
+                              parallel_args,
+                              options,
+                              quant_args));
 
   // 2. O proj
-  o_proj_ = register_module("o_proj",
-                            musa::RowParallelLinear(total_num_heads * head_dim_,
+  o_proj_ =
+      register_module("o_proj",
+                      musa::RowParallelLinear(total_num_heads * head_dim_,
                                               args.hidden_size(),
                                               /*bias=*/false,
                                               /*input_is_parallelized=*/true,
@@ -182,62 +182,53 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     const AttentionMetadata& attn_metadata,
     KVCache& kv_cache,
     const torch::Tensor& mrope_cos_sin) {
-  torch::Tensor qkv;
-  {
-    PrefillBreakdown::Scope qkv_scope(PrefillBreakdown::Bucket::kFullQkv);
-    qkv = qkv_proj_->forward(hidden_states);
-  }
+  torch::Tensor qkv = qkv_proj_->forward(hidden_states);
   if (use_fused_qkv_) {
     torch::Tensor q_flat;
     torch::Tensor k_flat;
     torch::Tensor v_flat;
     torch::Tensor gate;
     const int64_t num_tokens = qkv.size(0);
-    {
-      PrefillBreakdown::Scope prep_scope(PrefillBreakdown::Bucket::kFullPrep);
-      xllm::kernel::SplitQkvRmsnormMropeParams params;
-      params.qkvg = qkv;
-      params.q_weight = q_norm_->weight();
-      params.k_weight = k_norm_->weight();
-      params.cos_sin = mrope_cos_sin;
-      params.gather_pattern = mrope_gather_pattern_;
-      params.eps = rms_norm_eps_;
-      params.num_q_heads = num_heads_;
-      params.num_kv_heads = num_kv_heads_;
-      params.head_size = head_dim_;
+    xllm::kernel::SplitQkvRmsnormMropeParams params;
+    params.qkvg = qkv;
+    params.q_weight = q_norm_->weight();
+    params.k_weight = k_norm_->weight();
+    params.cos_sin = mrope_cos_sin;
+    params.gather_pattern = mrope_gather_pattern_;
+    params.eps = rms_norm_eps_;
+    params.num_q_heads = num_heads_;
+    params.num_kv_heads = num_kv_heads_;
+    params.head_size = head_dim_;
 
-      auto [q, k, v, g] = xllm::kernel::split_qkv_rmsnorm_mrope(params);
-      q_flat = q.view({num_tokens, q_size_});
-      k_flat = k.view({num_tokens, kv_size_});
-      v_flat = v.view({num_tokens, kv_size_});
-      gate = g;
-    }
+    auto [q, k, v, g] = xllm::kernel::split_qkv_rmsnorm_mrope(params);
+    q_flat = q.view({num_tokens, q_size_});
+    k_flat = k.view({num_tokens, kv_size_});
+    v_flat = v.view({num_tokens, kv_size_});
+    gate = g;
 
-    torch::Tensor out;
-    {
-      PrefillBreakdown::Scope fa_scope(PrefillBreakdown::Bucket::kFullFa);
-      out = std::get<0>(
-          attn_->forward(attn_metadata, q_flat, k_flat, v_flat, kv_cache));
-    }
-    {
-      PrefillBreakdown::Scope o_scope(PrefillBreakdown::Bucket::kFullOProj);
-      out = out * torch::sigmoid(gate.view({num_tokens, q_size_}));
-      return o_proj_->forward(out);
-    }
+    torch::Tensor out = std::get<0>(
+        attn_->forward(attn_metadata, q_flat, k_flat, v_flat, kv_cache));
+    out = out * torch::sigmoid(gate.view({num_tokens, q_size_}));
+    return o_proj_->forward(out);
   }
 
   // Fallback path: checkpoint layout [Q/G interleaved per head | K | V].
   torch::Tensor q, k, v;
   torch::Tensor gate;
+  const bool use_fused_qk_norm_rope =
+      fused_qk_norm_rope_enabled() && positions.dim() == 1 &&
+      positions.scalar_type() == torch::kInt32 &&
+      (head_dim_ == 64 || head_dim_ == 128 || head_dim_ == 256);
   {
-    PrefillBreakdown::Scope prep_scope(PrefillBreakdown::Bucket::kFullPrep);
     const int64_t num_tokens = qkv.size(0);
     if (attn_output_gate_) {
       auto qg = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_ * 2)
                     .view({num_tokens, num_heads_, 2, head_dim_});
-      q = qg.select(/*dim=*/2, /*index=*/0)
-              .reshape({num_tokens, q_size_})
-              .contiguous();
+      if (!use_fused_qk_norm_rope) {
+        q = qg.select(/*dim=*/2, /*index=*/0)
+                .reshape({num_tokens, q_size_})
+                .contiguous();
+      }
       gate = qg.select(/*dim=*/2, /*index=*/1)
                  .reshape({num_tokens, q_size_})
                  .contiguous();
@@ -256,12 +247,9 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     }
 
     // Fused QK-norm + RoPE: collapse 3 kernel launches into 1 for decode
-    // (1D positions). It expects grouped Q/K rows, so keep it off for the
-    // Qwen3.5 interleaved Q/G checkpoint layout handled above.
-    if (fused_qk_norm_rope_enabled() && !attn_output_gate_ &&
-        positions.dim() == 1 &&
-        positions.scalar_type() == torch::kInt32 &&
-        (head_dim_ == 64 || head_dim_ == 128 || head_dim_ == 256)) {
+    // (1D positions). q_head_stride=2 selects the checkpoint's per-head
+    // interleaved Q/G layout without reordering FP8 weight scales.
+    if (use_fused_qk_norm_rope) {
       auto cos_sin_cache = rotary_emb_->get_cos_sin_cache();
       int64_t k_head_offset = attn_output_gate_ ? num_heads_ * 2 : num_heads_;
       xllm::kernel::musa::fused_qk_norm_rope(qkv,
@@ -275,8 +263,18 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
                                              cos_sin_cache,
                                              /*interleaved=*/false,
                                              positions,
-                                             k_head_offset);
-      q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
+                                             k_head_offset,
+                                             /*q_head_stride=*/
+                                             attn_output_gate_ ? 2 : 1);
+      if (attn_output_gate_) {
+        q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_ * 2)
+                .view({num_tokens, num_heads_, 2, head_dim_})
+                .select(/*dim=*/2, /*index=*/0)
+                .reshape({num_tokens, q_size_})
+                .contiguous();
+      } else {
+        q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
+      }
       k = qkv.slice(
           /*dim=*/-1,
           /*start=*/attn_output_gate_ ? q_size_ * 2 : q_size_,
@@ -293,20 +291,14 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
   }
   xllm::kernel::musa::sync_musa_graph_preparation_stage(q.device());
 
-  torch::Tensor out;
-  {
-    PrefillBreakdown::Scope fa_scope(PrefillBreakdown::Bucket::kFullFa);
-    out = std::get<0>(attn_->forward(attn_metadata, q, k, v, kv_cache));
+  torch::Tensor out =
+      std::get<0>(attn_->forward(attn_metadata, q, k, v, kv_cache));
+  if (attn_output_gate_) {
+    // Capture-safe fused gating: compute sigmoid(gate) and multiply `out`
+    // in one launch without a temporary allocation or mutating `gate`.
+    xllm::kernel::musa::mul_sigmoid_gate_inplace(out, gate);
   }
-  {
-    PrefillBreakdown::Scope o_scope(PrefillBreakdown::Bucket::kFullOProj);
-    if (attn_output_gate_) {
-      // Capture-safe fused gating: compute sigmoid(gate) and multiply `out`
-      // in one launch without a temporary allocation or mutating `gate`.
-      xllm::kernel::musa::mul_sigmoid_gate_inplace(out, gate);
-    }
-    return o_proj_->forward(out);
-  }
+  return o_proj_->forward(out);
 }
 
 void Qwen3NextAttentionImpl::load_state_dict(const StateDict& state_dict) {

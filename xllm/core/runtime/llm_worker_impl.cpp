@@ -50,21 +50,7 @@ namespace xllm {
 
 namespace {
 
-bool python_prefill_profile_enabled() {
-  static const bool enabled =
-      util::get_bool_env("XLLM_PYTHON_PREFILL_PROFILE", /*defaultValue=*/false);
-  return enabled;
-}
-
-const char* sync_policy_name(LLMWorkerImpl::ForwardSyncPolicy policy) {
-  if (policy == LLMWorkerImpl::ForwardSyncPolicy::NO_SYNC) {
-    return "no_sync";
-  }
-  return "legacy";
-}
-
 void wait_input_ready_events(const ForwardInput& input, const Stream& stream) {
-  Timer wait_timer;
 #if defined(USE_MUSA)
   (void)stream;
   CHECK(input.metadata_ready_event == nullptr ||
@@ -74,11 +60,6 @@ void wait_input_ready_events(const ForwardInput& input, const Stream& stream) {
   CHECK(stream.wait_event(input.metadata_ready_event))
       << "failed to wait ForwardInput metadata ready event";
 #endif
-  if (python_prefill_profile_enabled() &&
-      input.input_params.meta.batch_forward_type.is_prefill()) {
-    LOG(INFO) << "worker profile wait_input_ms="
-              << wait_timer.elapsed_milliseconds();
-  }
 }
 
 StreamEventPtr record_current_stream_event(const Device& device) {
@@ -272,7 +253,6 @@ ForwardInput
 LLMWorkerImpl::update_input_by_last_step_output_for_schedule_overlap(
     ForwardInput& input) {
   c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
-  Timer ready_timer;
 #if defined(USE_MUSA)
   // TorchMUSA's cross-thread event block can return before the sampler output
   // is host-visible. The next-token replacement must consume that output, so
@@ -284,11 +264,6 @@ LLMWorkerImpl::update_input_by_last_step_output_for_schedule_overlap(
   CHECK(compute_stream_->wait_event(last_step_output_.ready_event))
       << "failed to wait last step output ready event";
 #endif
-  if (python_prefill_profile_enabled()) {
-    LOG(INFO) << "worker profile overlap_ready_sync_ms="
-              << ready_timer.elapsed_milliseconds() << " cur_is_prefill="
-              << input.input_params.meta.batch_forward_type.is_prefill();
-  }
   return update_input_by_last_step_output(input);
 }
 
@@ -299,26 +274,6 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
   MULTI_MODEL_STEP_LOCK(::xllm::KVCacheConfig::get_instance().enable_xtensor());
 
   Timer timer;
-  Timer stage_timer;
-  const bool profile_prefill =
-      python_prefill_profile_enabled() &&
-      input.input_params.meta.batch_forward_type.is_prefill();
-  double forward_ms = 0.0;
-  double logits_ms = 0.0;
-  double sample_ms = 0.0;
-  double sync_ms = 0.0;
-  bool has_logits = false;
-  auto log_profile = [&]() {
-    if (!profile_prefill) {
-      return;
-    }
-    LOG(INFO) << "worker profile tokens=" << input.token_ids.numel()
-              << " has_logits=" << has_logits
-              << " sync_policy=" << sync_policy_name(sync_policy)
-              << " forward_ms=" << forward_ms << " logits_ms=" << logits_ms
-              << " sample_ms=" << sample_ms << " sync_ms=" << sync_ms
-              << " total_ms=" << timer.elapsed_milliseconds();
-  };
   auto& sampling_params = input.sampling_params;
 
   KVTransferCompletion kv_transfers;
@@ -357,18 +312,13 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
   }
 
   // call model executor forward to get hidden states
-  stage_timer.reset();
   auto model_output = model_executor_->forward(
       input.token_ids, input.positions, kv_caches_, input.input_params);
-  forward_ms = stage_timer.elapsed_milliseconds();
-  has_logits = model_output.logits.defined();
   if (!model_output.hidden_states.defined()) {
     wait_kv_push();
-    log_profile();
     return std::nullopt;
   }
 
-  stage_timer.reset();
   torch::Tensor logits;
   if (model_output.logits.defined()) {
     logits = model_output.logits;
@@ -396,8 +346,6 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     logits = model_->logits(model_output.hidden_states, selected_token_idxes);
 #endif
   }
-  logits_ms = stage_timer.elapsed_milliseconds();
-
   ForwardOutput output;
   output.mtp_topk_state = std::move(model_output.mtp_topk_state);
   if (::xllm::EPLBConfig::get_instance().enable_eplb()) {
@@ -413,15 +361,11 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     MULTI_MODEL_STEP_UNLOCK();
     if (sync_policy == ForwardSyncPolicy::NO_SYNC) {
       wait_kv_push();
-      log_profile();
       return std::nullopt;
     }
-    stage_timer.reset();
     int ret = device_.synchronize_default_stream();
     CHECK_EQ(ret, 0) << "synchronize_default_stream failed";
-    sync_ms = stage_timer.elapsed_milliseconds();
     wait_kv_push();
-    log_profile();
     if (::xllm::EPLBConfig::get_instance().enable_eplb()) {
       return output;
     }
@@ -429,7 +373,6 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
   }
 
   // driver prepare model output
-  stage_timer.reset();
   if (sampling_params.selected_token_idxes.defined()) {
     output.logits = logits;
     output.do_sample = sampling_params.do_sample;
@@ -472,8 +415,6 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
           /*dim=*/0, sampling_params.selected_token_idxes);
     }
   }
-  sample_ms = stage_timer.elapsed_milliseconds();
-
   MULTI_MODEL_STEP_UNLOCK();
   bool should_sync_default_stream = true;
 #if defined(USE_NPU)
@@ -486,15 +427,12 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
     if (enable_schedule_overlap() && record_ready_event) {
       output.ready_event = record_current_stream_event(device_);
     }
-    log_profile();
     return output;
   }
-  stage_timer.reset();
   if (should_sync_default_stream) {
     int ret = device_.synchronize_default_stream();
     CHECK_EQ(ret, 0) << "synchronize_default_stream failed";
   }
-  sync_ms = stage_timer.elapsed_milliseconds();
 
   wait_kv_push();
 
@@ -504,7 +442,6 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
         device_.index());
   }
 
-  log_profile();
   return output;
 }
 

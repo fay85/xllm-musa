@@ -20,7 +20,6 @@ limitations under the License.
 #include <tuple>
 
 #include "kernels/musa/musa_tvmffi_stream.h"
-#include "util/prefill_breakdown.h"
 
 namespace xllm {
 namespace layer {
@@ -68,9 +67,8 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
       model_args.n_routed_experts() > 0 &&
       (layer_id + 1) % model_args.decoder_sparse_step() == 0;
   const bool use_qwen35_moe =
-      is_moe_layer &&
-      (model_args.model_type() == "qwen3_5_moe_text" ||
-       model_args.model_type() == "qwen3_5_moe_mtp");
+      is_moe_layer && (model_args.model_type() == "qwen3_5_moe_text" ||
+                       model_args.model_type() == "qwen3_5_moe_mtp");
   if (use_qwen35_moe) {
     moe_mlp_ =
         register_module("mlp",
@@ -82,14 +80,14 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
   } else {
     mlp_ = register_module("mlp",
                            MusaDenseMLP(model_args.hidden_size(),
-                                    model_args.intermediate_size(),
-                                    /*is_gated=*/true,
-                                    /*has_bias=*/false,
-                                    model_args.hidden_act(),
-                                    /*enable_result_reduction=*/true,
-                                    quant_args,
-                                    parallel_args.tp_group_,
-                                    options));
+                                        model_args.intermediate_size(),
+                                        /*is_gated=*/true,
+                                        /*has_bias=*/false,
+                                        model_args.hidden_act(),
+                                        /*enable_result_reduction=*/true,
+                                        quant_args,
+                                        parallel_args.tp_group_,
+                                        options));
   }
 }
 
@@ -131,38 +129,29 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
     const ModelInputParams& input_params,
     const torch::Tensor& mrope_cos_sin) {
   // Pre-attention norm
-  {
-    PrefillBreakdown::Scope norm_scope(PrefillBreakdown::Bucket::kNorm);
-    if (!residual.has_value()) {
-      residual = x;
-      x = std::get<0>(input_norm_->forward(x));
-    } else {
-      std::tie(x, residual) = input_norm_->forward(x, residual);
-    }
+  if (!residual.has_value()) {
+    residual = x;
+    x = std::get<0>(input_norm_->forward(x));
+  } else {
+    std::tie(x, residual) = input_norm_->forward(x, residual);
   }
   xllm::kernel::musa::sync_musa_graph_preparation_stage(x.device());
 
   // Attention
   if (attention_) {
-    PrefillBreakdown::Scope attn_scope(PrefillBreakdown::Bucket::kFullAttn);
     x = attention_->forward(
         positions, x, attn_metadata, kv_cache, mrope_cos_sin);
   } else {
-    PrefillBreakdown::Scope attn_scope(PrefillBreakdown::Bucket::kGdnAttn);
     x = linear_attention_->forward(x, attn_metadata, kv_cache, input_params);
   }
   xllm::kernel::musa::sync_musa_graph_preparation_stage(x.device());
 
   // Post-attention norm
-  {
-    PrefillBreakdown::Scope norm_scope(PrefillBreakdown::Bucket::kNorm);
-    std::tie(x, residual) = post_norm_->forward(x, residual);
-  }
+  std::tie(x, residual) = post_norm_->forward(x, residual);
   xllm::kernel::musa::sync_musa_graph_preparation_stage(x.device());
 
   // MLP forward (sub-buckets live inside DenseMLPImpl::forward).
   if (moe_mlp_) {
-    PrefillBreakdown::Scope mlp_scope(PrefillBreakdown::Bucket::kMlpGateUp);
     x = moe_mlp_->forward(x, input_params);
   } else {
     x = mlp_(x);

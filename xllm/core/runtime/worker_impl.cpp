@@ -955,6 +955,14 @@ void WorkerImpl::apply_kv_block_swaps(const ModelInputParams& input_params) {
   for (size_t layer_id = 0; layer_id < kv_caches_.size(); ++layer_id) {
     kv_caches_[layer_id].swap_blocks(src_tensor, dst_tensor);
   }
+  if (!src_indices.empty()) {
+    // Beam copy-on-write must be visible before the next graph replay. The
+    // torch index_copy sits on the current stream; a captured decode graph
+    // may replay on another stream and otherwise read a stale last page.
+    const int sync_ret = device_.synchronize_default_stream();
+    CHECK_EQ(sync_ret, 0)
+        << "synchronize after beam KV copy-on-write failed";
+  }
 #endif
 }
 

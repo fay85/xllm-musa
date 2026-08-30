@@ -14,3 +14,18 @@ cc_test(
     GTest::gtest_main
     glog::glog
 )
+
+cc_test(
+  NAME
+    fused_qknorm_rope_musa_test
+  SRCS
+    fused_qknorm_rope_test.cpp
+  DEPS
+    :cuda_kernels
+    torch
+    torch_musa
+    musa
+    musart
+    GTest::gtest_main
+    glog::glog
+)

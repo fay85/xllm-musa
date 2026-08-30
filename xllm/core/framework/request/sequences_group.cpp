@@ -277,6 +277,9 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
     BeamCandidate candidate;
     candidate.source_index = seq_index;
     candidate.logprob_sum = seq->get_acc_logprob();
+    if (seq->num_tokens() > 0) {
+      candidate.last_token_id = seq->tokens()[seq->num_tokens() - 1];
+    }
     topk_optimizer.insert(std::move(candidate));
   };
 
@@ -313,7 +316,8 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
     const size_t source_index = i;
     for (size_t idx = 0; idx < candidate_topk; ++idx) {
       const float new_logprob = base_logprob + top_logprobs[idx];
-      if (!topk_optimizer.worthInserting(new_logprob)) {
+      if (new_logprob < topk_optimizer.getMinLogprob() &&
+          !topk_optimizer.worthInserting(new_logprob)) {
         break;
       }
 
@@ -328,6 +332,11 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
   }
 
   std::vector<BeamCandidate> candidates = topk_optimizer.getTopKSorted();
+  std::stable_sort(candidates.begin(),
+                   candidates.end(),
+                   [](const BeamCandidate& lhs, const BeamCandidate& rhs) {
+                     return lhs < rhs;
+                   });
   for (auto& seq : sequences_) {
     seq->clear_updated_since_last_beam_search();
   }

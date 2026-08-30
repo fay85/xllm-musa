@@ -17,7 +17,6 @@ limitations under the License.
 #include <unistd.h>
 
 #include <algorithm>
-#include <atomic>
 #include <cstdlib>
 #include <optional>
 #include <sstream>
@@ -311,33 +310,10 @@ void l2norm_qk_last_dim(torch::Tensor& query,
                               query.dim() == 4 && query.stride(-1) == 1 &&
                               key.stride(-1) == 1 && query.size(-1) == 128;
   if (use_fused_pair && pair_supported) {
-    static const bool validate_fused_pair = [] {
-      const char* env = std::getenv("XLLM_VALIDATE_FUSED_GDN_QK_L2NORM");
-      return env != nullptr && std::string(env) == "1";
-    }();
-    static std::atomic<bool> validation_pending{true};
-    torch::Tensor reference_query;
-    torch::Tensor reference_key;
-    if (validate_fused_pair && validation_pending.exchange(false)) {
-      reference_query = query.clone();
-      reference_key = key.clone();
-      l2norm_last_dim(reference_query);
-      l2norm_last_dim(reference_key);
-    }
-
     if (allow_inplace) {
       l2_norm_pair_fused_inplace(query, key, /*eps=*/1e-6);
     } else {
       std::tie(query, key) = l2_norm_pair_fused(query, key, /*eps=*/1e-6);
-    }
-
-    if (reference_query.defined()) {
-      const double query_max_diff =
-          (query - reference_query).abs().max().item<double>();
-      const double key_max_diff =
-          (key - reference_key).abs().max().item<double>();
-      LOG(INFO) << "[GDN_QK_L2NORM_VALIDATE] query_max_diff=" << query_max_diff
-                << " key_max_diff=" << key_max_diff;
     }
     return;
   }
@@ -569,22 +545,6 @@ torch::Tensor unpack_time_dim_4d(const torch::Tensor& packed,
                        /*dim=*/0, /*start=*/start, /*length=*/len));
   }
   return out;
-}
-
-bool mate_gdn_debug_enabled() {
-  static const bool enabled = [] {
-    const char* env = std::getenv("XLLM_MATE_GDN_DEBUG");
-    return env != nullptr && env[0] == '1';
-  }();
-  return enabled;
-}
-
-bool mate_gdn_validation_enabled() {
-  static const bool enabled = [] {
-    const char* env = std::getenv("XLLM_MATE_GDN_VALIDATE");
-    return env != nullptr && env[0] == '1';
-  }();
-  return enabled;
 }
 
 bool mate_kkt_enabled() {
@@ -1448,11 +1408,6 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
                              .device(query.device()));
       }
 
-      if (mate_gdn_debug_enabled()) {
-        LOG(INFO) << "[MateGdnPrefillFullVarlen] q=" << query.sizes()
-                  << " a=" << a.sizes() << " uri=" << uri
-                  << " num_seqs=" << num_seqs << " pad_size=" << pad_size;
-      }
       auto run = get_function(uri, use_strided_abi ? "main" : "run");
       run(to_ffi_tensor(query),
           to_ffi_tensor(key),
@@ -1598,11 +1553,6 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
           torch::TensorOptions().dtype(torch::kFloat32).device(query.device()),
           reuse);
 
-      if (mate_gdn_debug_enabled()) {
-        LOG(INFO) << "[MateGdnPrefillFull] q=" << query.sizes()
-                  << " a=" << a.sizes() << " uri=" << uri
-                  << " pad_size=" << pad_size << " reuse=" << reuse;
-      }
       auto run = get_function(uri, use_strided_abi ? "main" : "run");
       run(to_ffi_tensor(query),
           to_ffi_tensor(key),
@@ -1721,12 +1671,6 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     g_log = pad_time_dim_3d(g_log, pad_size, 0.0);
   }
   g_log = chunk_local_cumsum_log_space(g_log, num_seqs, cu_host);
-
-  if (mate_gdn_debug_enabled()) {
-    LOG(INFO) << "[MateGdnPrefillSimple] q=" << query.sizes() << " uri=" << uri
-              << " pad_size=" << pad_size << " num_tokens=" << num_tokens
-              << " num_seqs=" << num_seqs;
-  }
 
   torch::Tensor a;
   torch::Tensor h0;

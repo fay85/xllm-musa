@@ -16,20 +16,17 @@ from __future__ import annotations
 
 import bisect
 import os
-import time
 from dataclasses import dataclass
 
 import torch
 import torch.nn as nn
 
 from xllm.python.attention.backend import AttentionBackend, AttentionMetadata
-from xllm.python.model_executor import prefill_breakdown
 from xllm.python.model_executor.forward_context import (
     ForwardContext,
     forward_context,
 )
 from xllm.python.model_executor.graph_workspace import GraphActivationPool
-from xllm.python.model_executor.prefill_breakdown import scope as breakdown_scope
 from xllm.python.model_executor.runners.base import BaseRunner
 from xllm.python.model_executor.runners.decode_musa_graph import (
     _ensure_static_input_embedding,
@@ -43,18 +40,10 @@ _CAPTURE_WARMUP_STEPS = 2
 _PREFILL_CHUNK = 64
 
 
-def _prefill_profile_enabled() -> bool:
-    return os.environ.get("XLLM_PYTHON_PREFILL_PROFILE", "") == "1"
-
-
 def _prefill_piecewise_enabled() -> bool:
     # C++ C1/384 currently captures one graph and zero GDN runners.
     # Splitting Mate out of Python MusaGraph is opt-in only.
     return os.environ.get("XLLM_PYTHON_PREFILL_PIECEWISE", "") == "1"
-
-
-def _cpu_ms(start: float) -> float:
-    return (time.perf_counter() - start) * 1000.0
 
 
 _PREFILL_SHOULDERS = (2080, 2112, 4352, 6400, 8448, 10496, 12544, 14592)
@@ -94,9 +83,7 @@ def _align_qwen35_bucket(bucket: int, max_tokens: int) -> int | None:
         return bucket if bucket <= max_tokens else None
     if bucket % _PREFILL_CHUNK == 0:
         return bucket if bucket <= max_tokens else None
-    aligned = (
-        (bucket + _PREFILL_CHUNK - 1) // _PREFILL_CHUNK
-    ) * _PREFILL_CHUNK
+    aligned = ((bucket + _PREFILL_CHUNK - 1) // _PREFILL_CHUNK) * _PREFILL_CHUNK
     if aligned <= max_tokens:
         return aligned
     return None
@@ -142,9 +129,7 @@ def _gdn_kkt_tokens(num_tokens: int) -> int:
     """64-align live tokens for Mate KKT, matching C++ piecewise."""
     if num_tokens < _PREFILL_CHUNK:
         return num_tokens
-    return (
-        (num_tokens + _PREFILL_CHUNK - 1) // _PREFILL_CHUNK
-    ) * _PREFILL_CHUNK
+    return ((num_tokens + _PREFILL_CHUNK - 1) // _PREFILL_CHUNK) * _PREFILL_CHUNK
 
 
 def _host_prefill_has_gdn_prefix(
@@ -238,8 +223,7 @@ class PrefillMusaGraphRunner(BaseRunner):
         from xllm.python.layers.gated_delta_net import Qwen3_5GatedDeltaNet
 
         self._has_linear_attention = any(
-            isinstance(module, Qwen3_5GatedDeltaNet)
-            for module in self.model.modules()
+            isinstance(module, Qwen3_5GatedDeltaNet) for module in self.model.modules()
         )
         self._linear_conv_kernel = 0
         self._linear_conv_dim = 0
@@ -249,60 +233,6 @@ class PrefillMusaGraphRunner(BaseRunner):
                 self._linear_conv_dim = int(module.conv_dim)
                 break
         self._stream: torch.musa.Stream | None = None
-        self._replay_start_event: torch.musa.Event | None = None
-        self._replay_end_event: torch.musa.Event | None = None
-        self._clone_start_event: torch.musa.Event | None = None
-        self._clone_end_event: torch.musa.Event | None = None
-        self._pending_gpu_log = False
-        self._warned_no_event_query = False
-        self._breakdown_left: int | None = None
-
-    def _ensure_profile_events(self) -> None:
-        if self._replay_start_event is not None:
-            return
-        self._replay_start_event = torch.musa.Event(enable_timing=True)
-        self._replay_end_event = torch.musa.Event(enable_timing=True)
-        self._clone_start_event = torch.musa.Event(enable_timing=True)
-        self._clone_end_event = torch.musa.Event(enable_timing=True)
-        if not hasattr(self._replay_end_event, "query"):
-            if not self._warned_no_event_query:
-                logger.warning(
-                    "MUSA Event.query is unavailable; skip GPU event times"
-                )
-                self._warned_no_event_query = True
-
-    def _profile_events_ready(self) -> bool:
-        if (
-            self._replay_start_event is None
-            or self._replay_end_event is None
-            or self._clone_start_event is None
-            or self._clone_end_event is None
-        ):
-            return False
-        if not hasattr(self._replay_end_event, "query"):
-            return False
-        return bool(
-            self._replay_start_event.query()
-            and self._replay_end_event.query()
-            and self._clone_start_event.query()
-            and self._clone_end_event.query()
-        )
-
-    def _log_ready_gpu_times(self, tag: str) -> None:
-        if not self._pending_gpu_log or not self._profile_events_ready():
-            return
-        replay_gpu_ms = float(
-            self._replay_start_event.elapsed_time(self._replay_end_event)
-        )
-        clone_gpu_ms = float(
-            self._clone_start_event.elapsed_time(self._clone_end_event)
-        )
-        logger.info(
-            f"prefill graph profile gpu_{tag} "
-            f"replay_gpu_ms={replay_gpu_ms:.2f} "
-            f"clone_gpu_ms={clone_gpu_ms:.2f}"
-        )
-        self._pending_gpu_log = False
 
     def _linear_prefill_cache_supported(self) -> bool:
         """Allow GDN prefill graph for fused or MTP ``history+K`` conv."""
@@ -323,9 +253,7 @@ class PrefillMusaGraphRunner(BaseRunner):
                 return False
         return found_conv
 
-    def can_execute(
-        self, input_ids: torch.Tensor, metadata: AttentionMetadata
-    ) -> bool:
+    def can_execute(self, input_ids: torch.Tensor, metadata: AttentionMetadata) -> bool:
         if not metadata.is_prefill or metadata.is_chunked_prefill:
             return False
         if not _input_embedding_matches_tokens(metadata, input_ids.shape[0]):
@@ -374,25 +302,9 @@ class PrefillMusaGraphRunner(BaseRunner):
         if self._stream is None:
             self._stream = torch.musa.Stream(device=input_ids.device)
 
-        profile = _prefill_profile_enabled()
-        if profile:
-            self._ensure_profile_events()
-            self._log_ready_gpu_times("prev")
-        execute_start = time.perf_counter() if profile else 0.0
-        fill_ms = 0.0
-        wait_enter_ms = 0.0
-        wait_exit_ms = 0.0
-
-        fill_start = time.perf_counter() if profile else 0.0
         self._fill_entry(entry, input_ids, positions, metadata)
         self.attention_backend.prepare(entry.static_metadata, graph_mode=True)
-        if profile:
-            fill_ms = _cpu_ms(fill_start)
-
-        wait_enter_start = time.perf_counter() if profile else 0.0
         self._stream.wait_stream(torch.musa.current_stream())
-        if profile:
-            wait_enter_ms = _cpu_ms(wait_enter_start)
         with torch.musa.stream(self._stream):
             with forward_context(
                 ForwardContext(
@@ -406,16 +318,7 @@ class PrefillMusaGraphRunner(BaseRunner):
             ):
                 if first_capture:
                     self._capture(entry)
-                if profile:
-                    assert self._replay_start_event is not None
-                    assert self._replay_end_event is not None
-                    assert self._clone_start_event is not None
-                    assert self._clone_end_event is not None
-                    self._replay_start_event.record()
                 self._replay_entry(entry, actual_tokens)
-                if profile:
-                    self._replay_end_event.record()
-                    self._clone_start_event.record()
                 if entry.static_logits is not None:
                     self.last_logits = entry.static_logits.clone()
                 else:
@@ -423,26 +326,7 @@ class PrefillMusaGraphRunner(BaseRunner):
                 # MTP draft prefill cats token embeds with target hidden.
                 # Last-row-only hidden makes that cat 382 vs 1 and crashes.
                 output = entry.static_output[:actual_tokens].clone()
-                if profile:
-                    self._clone_end_event.record()
-                    self._pending_gpu_log = True
-                if not first_capture:
-                    self._maybe_eager_breakdown(entry, actual_tokens)
-
-        wait_exit_start = time.perf_counter() if profile else 0.0
         torch.musa.current_stream().wait_stream(self._stream)
-        if profile:
-            wait_exit_ms = _cpu_ms(wait_exit_start)
-            logger.info(
-                f"prefill graph profile tokens={actual_tokens} "
-                f"fill_ms={fill_ms:.2f} wait_enter_ms={wait_enter_ms:.2f} "
-                f"wait_exit_ms={wait_exit_ms:.2f} "
-                f"execute_ms={_cpu_ms(execute_start):.2f}"
-            )
-            # Do not call elapsed_time here: it can host-sync and inflate TTFT.
-            # GPU times are logged when events are query-ready (usually the
-            # next prefill, after the natural first-token sync).
-            self._log_ready_gpu_times("curr")
         return output
 
     def _allocate_entry(
@@ -459,15 +343,11 @@ class PrefillMusaGraphRunner(BaseRunner):
         entry.piecewise_handle = None
         entry.static_output = None
         entry.static_logits = None
-        entry.static_kkt_cu_seq_lens = torch.zeros(
-            2, dtype=torch.int32, device=device
-        )
+        entry.static_kkt_cu_seq_lens = torch.zeros(2, dtype=torch.int32, device=device)
         entry.static_input_ids = torch.zeros(
             bucket, dtype=input_ids.dtype, device=device
         )
-        entry.static_positions = torch.zeros(
-            bucket, dtype=torch.int32, device=device
-        )
+        entry.static_positions = torch.zeros(bucket, dtype=torch.int32, device=device)
         entry.static_input_embedding = None
         cu_seqlens = torch.tensor([0, bucket], dtype=torch.int32, device=device)
         entry.static_metadata = _StaticPrefillMetadata(
@@ -489,12 +369,8 @@ class PrefillMusaGraphRunner(BaseRunner):
             q_cu_seq_lens=cu_seqlens,
             gdn_cu_seq_lens=torch.zeros(2, dtype=torch.int32, device=device),
             kv_cu_seq_lens=cu_seqlens,
-            linear_state_indices=torch.ones(
-                1, dtype=torch.int32, device=device
-            ),
-            has_initial_state=torch.zeros(
-                1, dtype=torch.bool, device=device
-            ),
+            linear_state_indices=torch.ones(1, dtype=torch.int32, device=device),
+            has_initial_state=torch.zeros(1, dtype=torch.bool, device=device),
             max_seq_len=bucket,
             max_query_len=bucket,
             is_prefill=True,
@@ -543,9 +419,7 @@ class PrefillMusaGraphRunner(BaseRunner):
         live_has_state = getattr(metadata, "has_initial_state", None)
         if live_indices is None or live_has_state is None:
             if self._has_linear_attention:
-                raise RuntimeError(
-                    "Qwen3.5 MUSA graph requires linear state metadata"
-                )
+                raise RuntimeError("Qwen3.5 MUSA graph requires linear state metadata")
             static_metadata.linear_state_indices.zero_()
             static_metadata.has_initial_state.zero_()
             return
@@ -616,9 +490,7 @@ class PrefillMusaGraphRunner(BaseRunner):
             f"logits={'on' if entry.static_logits is not None else 'off'}"
         )
 
-    def _replay_entry(
-        self, entry: _PrefillGraphEntry, actual_tokens: int
-    ) -> None:
+    def _replay_entry(self, entry: _PrefillGraphEntry, actual_tokens: int) -> None:
         if entry.piecewise_handle is not None:
             self._replay_piecewise(entry, actual_tokens)
             return
@@ -626,9 +498,7 @@ class PrefillMusaGraphRunner(BaseRunner):
             raise RuntimeError("prefill graph was not captured")
         entry.graph.replay()
 
-    def _replay_piecewise(
-        self, entry: _PrefillGraphEntry, actual_tokens: int
-    ) -> None:
+    def _replay_piecewise(self, entry: _PrefillGraphEntry, actual_tokens: int) -> None:
         from xllm.python import kernels
 
         gdn_cu = entry.static_metadata.gdn_cu_seq_lens
@@ -651,32 +521,8 @@ class PrefillMusaGraphRunner(BaseRunner):
         if self.lm_head is None:
             return hidden, None
         # Exact-length graphs keep the last row as the live token.
-        with breakdown_scope("lm_head"):
-            logits = self.lm_head(hidden[-1:])
+        logits = self.lm_head(hidden[-1:])
         return hidden, logits
-
-    def _maybe_eager_breakdown(
-        self, entry: _PrefillGraphEntry, actual_tokens: int
-    ) -> None:
-        """Eager graph_mode forward with GPU events. Not part of replay TTFT."""
-        if not prefill_breakdown.enabled():
-            return
-        if self._breakdown_left is None:
-            self._breakdown_left = prefill_breakdown.max_samples()
-        if self._breakdown_left <= 0:
-            return
-        snapshot = self._snapshot_linear_state(entry)
-        prefill_breakdown.begin()
-        self._stream.synchronize()
-        wall_start = time.perf_counter()
-        self._run_captured_model(entry)
-        self._stream.synchronize()
-        wall_ms = (time.perf_counter() - wall_start) * 1000.0
-        prefill_breakdown.end_and_log(
-            actual_tokens, wall_ms, mode="eager_graph_mode"
-        )
-        self._restore_linear_state(snapshot)
-        self._breakdown_left -= 1
 
     def _snapshot_linear_state(
         self, entry: _PrefillGraphEntry
@@ -700,9 +546,7 @@ class PrefillMusaGraphRunner(BaseRunner):
                     raise RuntimeError("SSM cache layout does not match conv cache")
                 stride = cache.ssm.size(0) // cache.conv.size(0)
                 offsets = torch.arange(stride, device=indices.device)
-                expanded = (
-                    indices[:, None] * stride + offsets[None, :]
-                ).reshape(-1)
+                expanded = (indices[:, None] * stride + offsets[None, :]).reshape(-1)
                 snapshots.append(
                     (cache.ssm, cache.ssm.index_select(0, expanded), expanded)
                 )

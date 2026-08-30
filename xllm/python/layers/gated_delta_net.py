@@ -27,7 +27,6 @@ from xllm.python.model_executor.forward_context import (
     acquire_graph_activation,
     get_forward_context,
 )
-from xllm.python.model_executor.prefill_breakdown import scope as breakdown_scope
 
 
 class GatedDeltaNetConfig(Protocol):
@@ -261,9 +260,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         )
 
     @staticmethod
-    def _expand_sequence_tensor(
-        tensor: torch.Tensor, batch_size: int
-    ) -> torch.Tensor:
+    def _expand_sequence_tensor(tensor: torch.Tensor, batch_size: int) -> torch.Tensor:
         tensor = tensor.reshape(-1)
         if tensor.numel() == batch_size:
             return tensor.contiguous()
@@ -290,12 +287,12 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         history_len = self.conv_kernel_size - 1
         if expanded_state_len != history_len + seq_len - 1:
             raise ValueError("unexpected Qwen3.5 MTP convolution cache width")
-        logical_indices = self._expand_sequence_tensor(
-            state_indices, batch_size
-        ).to(device=mixed_qkv.device, dtype=torch.int32)
-        accepted = self._expand_sequence_tensor(
-            accepted_tokens, batch_size
-        ).to(device=mixed_qkv.device, dtype=torch.int32)
+        logical_indices = self._expand_sequence_tensor(state_indices, batch_size).to(
+            device=mixed_qkv.device, dtype=torch.int32
+        )
+        accepted = self._expand_sequence_tensor(accepted_tokens, batch_size).to(
+            device=mixed_qkv.device, dtype=torch.int32
+        )
         return kernels.causal_conv1d_mtp_verify(
             mixed_qkv.contiguous(),
             self.conv1d_weight,
@@ -320,12 +317,12 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         seq_len: int,
     ) -> torch.Tensor:
         """Run fused MTP recurrence and save every candidate checkpoint."""
-        logical_indices = self._expand_sequence_tensor(
-            state_indices, batch_size
-        ).to(device=mixed_qkv.device, dtype=torch.int32)
-        accepted = self._expand_sequence_tensor(
-            accepted_tokens, batch_size
-        ).to(device=mixed_qkv.device, dtype=torch.int32)
+        logical_indices = self._expand_sequence_tensor(state_indices, batch_size).to(
+            device=mixed_qkv.device, dtype=torch.int32
+        )
+        accepted = self._expand_sequence_tensor(accepted_tokens, batch_size).to(
+            device=mixed_qkv.device, dtype=torch.int32
+        )
         checkpoint_stride = ssm_state.size(0) // conv_state.size(0)
         if checkpoint_stride != seq_len:
             raise ValueError("MTP checkpoint stride must match verify width")
@@ -357,63 +354,55 @@ class Qwen3_5GatedDeltaNet(nn.Module):
     ) -> torch.Tensor:
         cache_indices = self._acquire_cache_indices(state_indices)
         batch_size = int(state_indices.numel())
-        with breakdown_scope("gdn_state_prep"):
-            initial_state = self._acquire_gdn_initial_state(
-                ssm_state, batch_size
-            )
-            # Graph capture records the zero-init branch used by C++ piecewise
-            # prefill. Prefix restore stays on eager model() so index_select
-            # and device .any() are not captured.
-            if get_forward_context().graph_mode:
-                initial_state.zero_()
-            else:
-                use_initial_state = (state_indices > 0) & has_initial_state
-                if bool(use_initial_state.any()):
-                    selected = ssm_state.index_select(0, cache_indices)
-                    initial_state.copy_(selected.to(dtype=torch.float32))
-                    initial_state.mul_(
-                        use_initial_state.to(
-                            device=initial_state.device
-                        ).view(batch_size, 1, 1, 1)
+        initial_state = self._acquire_gdn_initial_state(ssm_state, batch_size)
+        # Graph capture records the zero-init branch used by C++ piecewise
+        # prefill. Prefix restore stays on eager model() so index_select
+        # and device .any() are not captured.
+        if get_forward_context().graph_mode:
+            initial_state.zero_()
+        else:
+            use_initial_state = (state_indices > 0) & has_initial_state
+            if bool(use_initial_state.any()):
+                selected = ssm_state.index_select(0, cache_indices)
+                initial_state.copy_(selected.to(dtype=torch.float32))
+                initial_state.mul_(
+                    use_initial_state.to(device=initial_state.device).view(
+                        batch_size, 1, 1, 1
                     )
-                else:
-                    initial_state.zero_()
-        with breakdown_scope("gdn_gate"):
-            q, k, v, g, beta = kernels.fused_gdn_prefill_post_conv(
-                mixed_qkv,
-                a,
-                b,
-                self.A_log,
-                self.dt_bias,
-                self.num_k_heads,
-                self.key_head_dim,
-                self.value_head_dim,
-            )
-        with breakdown_scope("mate"):
-            output, final_state = kernels.chunk_gated_delta_rule(
-                q,
-                k,
-                v,
-                g,
-                beta,
-                initial_state,
-                cu_seqlens,
-                self.gdn_prefill_backend,
-            )
+                )
+            else:
+                initial_state.zero_()
+        q, k, v, g, beta = kernels.fused_gdn_prefill_post_conv(
+            mixed_qkv,
+            a,
+            b,
+            self.A_log,
+            self.dt_bias,
+            self.num_k_heads,
+            self.key_head_dim,
+            self.value_head_dim,
+        )
+        output, final_state = kernels.chunk_gated_delta_rule(
+            q,
+            k,
+            v,
+            g,
+            beta,
+            initial_state,
+            cu_seqlens,
+            self.gdn_prefill_backend,
+        )
         live_tokens = mixed_qkv.size(0)
         if output.size(0) > live_tokens:
             # KKT alignment may extend q/k/v; recurrent Mate still stops at
             # the live cu_seqlens endpoint. Slice is a packed prefix view.
             output = output[:live_tokens]
-        with breakdown_scope("gdn_state_write"):
-            # Match C++ index_put_. Slot-0 backup/restore was extra D2D
-            # traffic captured into the Python graph (2 copies x 48 layers).
-            write_state = self._acquire_ssm_write_state(
-                ssm_state, final_state, batch_size
-            )
-            if write_state.data_ptr() != final_state.data_ptr():
-                write_state.copy_(final_state)
-            ssm_state.index_put_((cache_indices,), write_state)
+        # Match C++ index_put_. Slot-0 backup/restore was extra D2D
+        # traffic captured into the Python graph (2 copies x 48 layers).
+        write_state = self._acquire_ssm_write_state(ssm_state, final_state, batch_size)
+        if write_state.data_ptr() != final_state.data_ptr():
+            write_state.copy_(final_state)
+        ssm_state.index_put_((cache_indices,), write_state)
         return output
 
     def _acquire_gdn_initial_state(
@@ -437,9 +426,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
             device=ssm_state.device,
         )
 
-    def _acquire_cache_indices(
-        self, state_indices: torch.Tensor
-    ) -> torch.Tensor:
+    def _acquire_cache_indices(self, state_indices: torch.Tensor) -> torch.Tensor:
         batch_size = int(state_indices.numel())
         reserved = self._gdn_cache_indices
         if reserved is not None and batch_size <= reserved.numel():
@@ -447,9 +434,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
             view.copy_(state_indices)
             return view
         if get_forward_context().graph_mode:
-            raise RuntimeError(
-                "GDN cache-index buffer was not reserved before capture"
-            )
+            raise RuntimeError("GDN cache-index buffer was not reserved before capture")
         return state_indices.to(dtype=torch.long)
 
     def _acquire_ssm_write_state(
@@ -469,9 +454,7 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         ):
             return reserved[:batch_size]
         if get_forward_context().graph_mode:
-            raise RuntimeError(
-                "GDN SSM write buffer was not reserved before capture"
-            )
+            raise RuntimeError("GDN SSM write buffer was not reserved before capture")
         return final_state.to(dtype=ssm_state.dtype)
 
     def _pack_gdn_z(self, z_flat: torch.Tensor) -> torch.Tensor:
@@ -481,25 +464,17 @@ class Qwen3_5GatedDeltaNet(nn.Module):
             and z_flat.dim() == 2
             and int(z_flat.size(-1)) == self.value_dim
         ):
-            return z_flat.view(
-                tokens, self.num_v_heads, self.value_head_dim
-            )
+            return z_flat.view(tokens, self.num_v_heads, self.value_head_dim)
         packed = acquire_graph_activation(
             (tokens, self.num_v_heads, self.value_head_dim),
             z_flat.dtype,
             z_flat.device,
         )
-        if (
-            packed is None
-            and self._gdn_z is not None
-            and tokens <= self._gdn_z.size(0)
-        ):
+        if packed is None and self._gdn_z is not None and tokens <= self._gdn_z.size(0):
             packed = self._gdn_z[:tokens]
         if packed is None:
             if get_forward_context().graph_mode:
-                raise RuntimeError(
-                    "GDN z buffer was not reserved before capture"
-                )
+                raise RuntimeError("GDN z buffer was not reserved before capture")
             return z_flat.contiguous().view(
                 tokens, self.num_v_heads, self.value_head_dim
             )
@@ -542,13 +517,8 @@ class Qwen3_5GatedDeltaNet(nn.Module):
         state_indices = metadata.linear_state_indices
         if state_indices is None:
             raise RuntimeError("linear_state_indices are required by Qwen3.5")
-        if (
-            state_indices.device != hidden.device
-            or state_indices.dtype != torch.int32
-        ):
-            state_indices = state_indices.to(
-                device=hidden.device, dtype=torch.int32
-            )
+        if state_indices.device != hidden.device or state_indices.dtype != torch.int32:
+            state_indices = state_indices.to(device=hidden.device, dtype=torch.int32)
         has_initial_state = metadata.has_initial_state
         cu_seqlens = getattr(metadata, "gdn_cu_seq_lens", None)
         if cu_seqlens is None:
@@ -561,26 +531,21 @@ class Qwen3_5GatedDeltaNet(nn.Module):
             )
 
         conv_state, ssm_state = self._cache()
-        with breakdown_scope("gdn_proj"):
-            if self.in_proj_qkvz is not None:
-                qkvz = self.in_proj_qkvz(hidden)
-                mixed_qkv, z_flat = qkvz.split(
-                    [self.conv_dim, self.value_dim], dim=-1
-                )
-                z = self._pack_gdn_z(z_flat)
-            else:
-                mixed_qkv = self.in_proj_qkv(hidden)
-                z = self._pack_gdn_z(self.in_proj_z(hidden))
-            if self.in_proj_ba is not None:
-                ba = self.in_proj_ba(hidden)
-                b, a = ba.split(
-                    [self.num_v_heads, self.num_v_heads], dim=-1
-                )
-            else:
-                if self.in_proj_b is None or self.in_proj_a is None:
-                    raise RuntimeError("GDN TP>1 projections were not created")
-                b = self.in_proj_b(hidden)
-                a = self.in_proj_a(hidden)
+        if self.in_proj_qkvz is not None:
+            qkvz = self.in_proj_qkvz(hidden)
+            mixed_qkv, z_flat = qkvz.split([self.conv_dim, self.value_dim], dim=-1)
+            z = self._pack_gdn_z(z_flat)
+        else:
+            mixed_qkv = self.in_proj_qkv(hidden)
+            z = self._pack_gdn_z(self.in_proj_z(hidden))
+        if self.in_proj_ba is not None:
+            ba = self.in_proj_ba(hidden)
+            b, a = ba.split([self.num_v_heads, self.num_v_heads], dim=-1)
+        else:
+            if self.in_proj_b is None or self.in_proj_a is None:
+                raise RuntimeError("GDN TP>1 projections were not created")
+            b = self.in_proj_b(hidden)
+            a = self.in_proj_a(hidden)
         is_prefill = metadata.is_prefill or metadata.is_chunked_prefill
         is_spec_verify = bool(getattr(metadata, "is_spec_verify", False))
         if is_spec_verify:
@@ -613,14 +578,13 @@ class Qwen3_5GatedDeltaNet(nn.Module):
                 )
             if has_initial_state.shape != state_indices.shape:
                 raise ValueError("has_initial_state must match linear_state_indices")
-            with breakdown_scope("gdn_conv"):
-                mixed_qkv = self._conv_prefill(
-                    mixed_qkv,
-                    conv_state,
-                    state_indices,
-                    has_initial_state,
-                    cu_seqlens,
-                )
+            mixed_qkv = self._conv_prefill(
+                mixed_qkv,
+                conv_state,
+                state_indices,
+                has_initial_state,
+                cu_seqlens,
+            )
         else:
             mixed_qkv = self._conv_decode(mixed_qkv, conv_state, state_indices)
 
@@ -663,13 +627,11 @@ class Qwen3_5GatedDeltaNet(nn.Module):
             and output.size(0) <= self._rms_norm_gated_out.size(0)
         ):
             gated_output = self._rms_norm_gated_out[: output.size(0)]
-        with breakdown_scope("gdn_norm"):
-            output = kernels.rms_norm_gated(
-                output,
-                z,
-                self.norm_weight,
-                self.norm_eps,
-                gated_output,
-            )
-        with breakdown_scope("gdn_o_proj"):
-            return self.out_proj(output.reshape(-1, self.value_dim))
+        output = kernels.rms_norm_gated(
+            output,
+            z,
+            self.norm_weight,
+            self.norm_eps,
+            gated_output,
+        )
+        return self.out_proj(output.reshape(-1, self.value_dim))

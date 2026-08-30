@@ -18,6 +18,7 @@ limitations under the License.
 #include <musa_runtime_api.h>
 #include <torch/torch.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -58,24 +59,34 @@ class DeviceBuffer final {
     if (bytes <= capacity_) {
       return ptr_;
     }
-    release();
+    // Grow-only: a captured graph may still name the previous block. Retire
+    // it and free every retired block only when the process tears the
+    // per-device resources down.
+    if (ptr_ != nullptr) {
+      retired_.emplace_back(ptr_);
+    }
+    ptr_ = nullptr;
     check_musa(musaMalloc(&ptr_, bytes), "musaMalloc TopK buffer");
     capacity_ = bytes;
     return ptr_;
   }
 
   void release() {
-    if (ptr_ == nullptr) {
-      return;
+    if (ptr_ != nullptr) {
+      retired_.emplace_back(ptr_);
+      ptr_ = nullptr;
+      capacity_ = 0;
     }
-    check_musa(musaFree(ptr_), "musaFree TopK buffer");
-    ptr_ = nullptr;
-    capacity_ = 0;
+    for (void* block : retired_) {
+      check_musa(musaFree(block), "musaFree TopK buffer");
+    }
+    retired_.clear();
   }
 
  private:
   void* ptr_ = nullptr;
   size_t capacity_ = 0;
+  std::vector<void*> retired_;
 };
 
 class TopKDeviceResources final {
@@ -176,6 +187,52 @@ void check_topk_indices(const torch::Tensor& input,
                << " low32_as_float=" << low32_as_float
                << " topk_value=" << topk_value << " vocab_size=" << vocab_size;
   }
+}
+
+void stabilize_tied_topk(torch::Tensor& values, torch::Tensor& indices) {
+  const torch::Tensor host_values = values.to(torch::kCPU).contiguous();
+  const torch::Tensor host_indices = indices.to(torch::kCPU).contiguous();
+  const int64_t rows = host_values.size(0);
+  const int64_t k = host_values.size(1);
+  float* values_data = host_values.data_ptr<float>();
+  int64_t* indices_data = host_indices.data_ptr<int64_t>();
+  std::vector<int64_t> order;
+  std::vector<float> values_tmp;
+  std::vector<int64_t> indices_tmp;
+  order.reserve(static_cast<size_t>(k));
+  values_tmp.reserve(static_cast<size_t>(k));
+  indices_tmp.reserve(static_cast<size_t>(k));
+  for (int64_t row = 0; row < rows; ++row) {
+    float* row_values = values_data + row * k;
+    int64_t* row_indices = indices_data + row * k;
+    order.resize(static_cast<size_t>(k));
+    for (int64_t i = 0; i < k; ++i) {
+      order[static_cast<size_t>(i)] = i;
+    }
+    std::stable_sort(order.begin(),
+                     order.end(),
+                     [row_values, row_indices](int64_t lhs, int64_t rhs) {
+                       if (row_values[lhs] != row_values[rhs]) {
+                         return row_values[lhs] > row_values[rhs];
+                       }
+                       return row_indices[lhs] < row_indices[rhs];
+                     });
+    values_tmp.resize(static_cast<size_t>(k));
+    indices_tmp.resize(static_cast<size_t>(k));
+    for (int64_t i = 0; i < k; ++i) {
+      const int64_t src = order[static_cast<size_t>(i)];
+      values_tmp[static_cast<size_t>(i)] = row_values[src];
+      indices_tmp[static_cast<size_t>(i)] = row_indices[src];
+    }
+    std::memcpy(row_values,
+                values_tmp.data(),
+                static_cast<size_t>(k) * sizeof(float));
+    std::memcpy(row_indices,
+                indices_tmp.data(),
+                static_cast<size_t>(k) * sizeof(int64_t));
+  }
+  values.copy_(host_values);
+  indices.copy_(host_indices);
 }
 
 }  // namespace
@@ -319,6 +376,7 @@ std::tuple<torch::Tensor, torch::Tensor> topk(const torch::Tensor& input,
   check_musa(musaDeviceSynchronize(), "synchronize TopK outputs");
 
   check_topk_indices(contiguous_input, values, indices);
+  stabilize_tied_topk(values, indices);
   return {values, indices};
 }
 

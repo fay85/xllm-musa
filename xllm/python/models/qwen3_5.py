@@ -31,7 +31,6 @@ from xllm.python.layers import (
 )
 from xllm.python.layers.gated_delta_net import Qwen3_5GatedDeltaNet
 from xllm.python.layers.gated_mlp import GatedMLP
-from xllm.python.model_executor.prefill_breakdown import scope as breakdown_scope
 from xllm.python.models.base import PyModelBase
 from xllm.python.platform import current_platform
 
@@ -165,9 +164,7 @@ class Qwen3_5Config:
             if self.tp_size * self.dp_size != self.world_size:
                 raise ValueError("world_size must equal tp_size * dp_size")
             if self.ep_size not in (1, self.world_size):
-                raise ValueError(
-                    "Qwen3.5 Python supports only ep_size=1 or world_size"
-                )
+                raise ValueError("Qwen3.5 Python supports only ep_size=1 or world_size")
             if self.moe_tp_size * self.ep_size != self.world_size:
                 raise ValueError("world_size must equal moe_tp_size * ep_size")
             if not 0 <= self.dp_rank < self.dp_size:
@@ -443,8 +440,7 @@ class Qwen3_5Attention(nn.Module):
         self.o_proj.reserve_graph_workspace(max_tokens)
 
     def forward(self, positions: torch.Tensor, hidden: torch.Tensor) -> torch.Tensor:
-        with breakdown_scope("full_qkv"):
-            qkv = self.qkv_proj(hidden)
+        qkv = self.qkv_proj(hidden)
         q_weight = self.q_norm.weight
         k_weight = self.k_norm.weight
         if q_weight.dtype != qkv.dtype or k_weight.dtype != qkv.dtype:
@@ -453,30 +449,27 @@ class Qwen3_5Attention(nn.Module):
                 f"(q={q_weight.dtype}, k={k_weight.dtype}, qkv={qkv.dtype})"
             )
         k_head_offset = 2 * self.num_heads if self.attn_output_gate else 0
-        with breakdown_scope("full_prep"):
-            q, k, v = kernels.fused_qk_norm_rope(
-                qkv,
-                num_heads_q=self.num_heads,
-                num_heads_k=self.num_kv_heads,
-                num_heads_v=self.num_kv_heads,
-                head_dim=self.head_dim,
-                eps=self.q_norm.eps,
-                q_weight=q_weight,
-                k_weight=k_weight,
-                cos_sin_cache=self.rotary.cos_sin_cache,
-                position_ids=positions,
-                k_head_offset=k_head_offset,
-            )
-        with breakdown_scope("full_fa"):
-            output = self.attn(q, k, v)
-        with breakdown_scope("full_o_proj"):
-            if self.attn_output_gate:
-                gate = qkv[:, self.q_size : 2 * self.q_size]
-                if current_platform.is_musa():
-                    kernels.mul_sigmoid_gate_inplace(output, gate)
-                else:
-                    output = output * torch.sigmoid(gate)
-            return self.o_proj(output)
+        q, k, v = kernels.fused_qk_norm_rope(
+            qkv,
+            num_heads_q=self.num_heads,
+            num_heads_k=self.num_kv_heads,
+            num_heads_v=self.num_kv_heads,
+            head_dim=self.head_dim,
+            eps=self.q_norm.eps,
+            q_weight=q_weight,
+            k_weight=k_weight,
+            cos_sin_cache=self.rotary.cos_sin_cache,
+            position_ids=positions,
+            k_head_offset=k_head_offset,
+        )
+        output = self.attn(q, k, v)
+        if self.attn_output_gate:
+            gate = qkv[:, self.q_size : 2 * self.q_size]
+            if current_platform.is_musa():
+                kernels.mul_sigmoid_gate_inplace(output, gate)
+            else:
+                output = output * torch.sigmoid(gate)
+        return self.o_proj(output)
 
 
 class Qwen3_5DecoderLayer(nn.Module):
@@ -528,25 +521,23 @@ class Qwen3_5DecoderLayer(nn.Module):
         residual: torch.Tensor | None,
         positions: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        with breakdown_scope("norm"):
-            if residual is None:
-                residual = hidden
-                hidden = self.input_layernorm(hidden)
-            else:
-                hidden, residual = self.input_layernorm(hidden, residual)
-        if self.layer_type == "full_attention":
-            with breakdown_scope("full_attn"):
-                hidden = self.self_attn(positions, hidden)
+        if residual is None:
+            residual = hidden
+            hidden = self.input_layernorm(hidden)
         else:
-            with breakdown_scope("gdn_attn"):
-                hidden = self.linear_attn(hidden)
-        with breakdown_scope("norm"):
-            hidden, residual = self.post_attention_layernorm(hidden, residual)
+            hidden, residual = self.input_layernorm(hidden, residual)
+        if self.layer_type == "full_attention":
+            hidden = self.self_attn(positions, hidden)
+        else:
+            hidden = self.linear_attn(hidden)
+        hidden, residual = self.post_attention_layernorm(hidden, residual)
         return self.mlp(hidden), residual
 
 
 class Qwen3_5Model(nn.Module):
-    def __init__(self, cfg: Qwen3_5Config, dtype: torch.dtype, device: torch.device) -> None:
+    def __init__(
+        self, cfg: Qwen3_5Config, dtype: torch.dtype, device: torch.device
+    ) -> None:
         super().__init__()
         if cfg.hidden_size % cfg.tp_size:
             raise ValueError("hidden_size must be divisible by tp_size")
@@ -582,18 +573,16 @@ class Qwen3_5Model(nn.Module):
         self.norm.reserve_graph_workspace(max_tokens)
 
     def forward(self, input_ids: torch.Tensor, positions: torch.Tensor) -> torch.Tensor:
-        with breakdown_scope("embed"):
-            hidden = self.embed_tokens(input_ids)
-            if current_platform.is_musa():
-                if positions.dtype != torch.int32:
-                    positions = positions.to(torch.int32)
-                if not positions.is_contiguous():
-                    positions = positions.contiguous()
+        hidden = self.embed_tokens(input_ids)
+        if current_platform.is_musa():
+            if positions.dtype != torch.int32:
+                positions = positions.to(torch.int32)
+            if not positions.is_contiguous():
+                positions = positions.contiguous()
         residual: torch.Tensor | None = None
         for layer in self.layers:
             hidden, residual = layer(hidden, residual, positions)
-        with breakdown_scope("norm"):
-            hidden, _ = self.norm(hidden, residual)
+        hidden, _ = self.norm(hidden, residual)
         return hidden
 
 
@@ -779,9 +768,7 @@ class Qwen3_5ForCausalLM(PyModelBase):
                             torch.cat((fused_scale, z_scale)),
                         )
                     else:
-                        layer.linear_attn.in_proj_qkv.load_fp8(
-                            fused_qkv, fused_scale
-                        )
+                        layer.linear_attn.in_proj_qkv.load_fp8(fused_qkv, fused_scale)
                         load_linear(
                             layer.linear_attn.in_proj_z,
                             linear + "in_proj_z.weight",
@@ -850,9 +837,7 @@ class Qwen3_5ForCausalLM(PyModelBase):
                     f"model.layers.{layer_id}.linear_attn.norm_weight",
                     tensor(linear + "norm.weight"),
                 )
-                load_linear(
-                    layer.linear_attn.out_proj, linear + "out_proj.weight", 1
-                )
+                load_linear(layer.linear_attn.out_proj, linear + "out_proj.weight", 1)
 
             if cfg.is_moe_layer(layer_id):
                 moe = source + "mlp."

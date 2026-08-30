@@ -13,11 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include <glog/logging.h>
 #include <tvm/ffi/extra/stl.h>
 #include <tvm/ffi/string.h>
 
-#include <cstdlib>
 #include <optional>
 #include <string>
 #include <tuple>
@@ -73,19 +71,6 @@ torch::Tensor gemm_fp8_nt_groupwise(
                       static_cast<int64_t>(128)),
       to_ffi_tensor(out),
       /*backend=*/std::string("mudnn"));
-
-  // The stream guard binds eager FFI work to the current compute stream, or
-  // establishes event handoffs for its pool-stream fallback. Preserve that
-  // asynchronous ordering by default; the legacy host barriers remain
-  // available only for debugging and numerical bisection.
-  static const bool force_host_sync = []() {
-    const char* value = std::getenv("XLLM_FP8_FORCE_HOST_SYNC");
-    return value != nullptr && value[0] != '\0' && value[0] != '0';
-  }();
-  if (force_host_sync) {
-    sync_current_musa_stream(a.device());
-    sync_musa_ffi_stream(a.device());
-  }
 
   return out;
 }

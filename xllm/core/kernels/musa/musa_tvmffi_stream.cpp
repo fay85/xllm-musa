@@ -22,10 +22,8 @@ limitations under the License.
 #include <dlpack/dlpack.h>
 #include <glog/logging.h>
 #include <tvm/ffi/extra/c_env_api.h>
-#include <unistd.h>
 
 #include <array>
-#include <atomic>
 #include <cstdlib>
 #include <exception>
 #include <mutex>
@@ -51,39 +49,6 @@ void*& get_forced_tvmffi_stream(c10::DeviceIndex device_index) {
         device_index < static_cast<c10::DeviceIndex>(streams.size()))
       << "invalid MUSA device index: " << device_index;
   return streams[static_cast<size_t>(device_index)];
-}
-
-constexpr int32_t kMaxTvmffiStreamDebugRecords = 4096;
-std::atomic<int32_t> s_tvmffi_stream_debug_record_count{0};
-
-bool tvmffi_stream_debug_enabled() {
-  static const bool enabled = []() {
-    const char* env = std::getenv("XLLM_TVMFFI_STREAM_DEBUG");
-    return env != nullptr && env[0] != '0' && env[0] != '\0';
-  }();
-  return enabled && access("/tmp/xllm_tvmffi_stream_debug_enabled", F_OK) == 0;
-}
-
-void log_tvmffi_stream_debug(const char* phase,
-                             c10::DeviceIndex device_index,
-                             bool capturing,
-                             void* stream,
-                             void* original_stream,
-                             int32_t device_type,
-                             int rc) {
-  if (!tvmffi_stream_debug_enabled()) {
-    return;
-  }
-  const int32_t record_index = s_tvmffi_stream_debug_record_count.fetch_add(
-      1, std::memory_order_relaxed);
-  if (record_index >= kMaxTvmffiStreamDebugRecords) {
-    return;
-  }
-  LOG(INFO) << "[tvmffi.stream.debug] n=" << record_index << " phase=" << phase
-            << " dev=" << static_cast<int32_t>(device_index)
-            << " capturing=" << capturing << " stream=" << stream
-            << " original=" << original_stream << " dev_type=" << device_type
-            << " rc=" << rc;
 }
 
 bool is_current_stream_capturing();
@@ -135,13 +100,6 @@ void set_tvmffi_stream_handle(c10::DeviceIndex device_index, void* stream) {
     void* original_stream = nullptr;
     const int rc =
         TVMFFIEnvSetStream(device_type, device_index, stream, &original_stream);
-    log_tvmffi_stream_debug(/*phase=*/"set",
-                            device_index,
-                            is_current_stream_capturing(),
-                            stream,
-                            original_stream,
-                            device_type,
-                            rc);
     if (rc != 0) {
       LOG(WARNING) << "[tvmffi.stream] failed to set stream, rc=" << rc
                    << " dev_type=" << device_type << " dev=" << device_index;
@@ -194,25 +152,11 @@ void bind_musa_tvmffi_stream(const torch::Device& device) {
       c10::musa::getCurrentMUSAStream(device.index());
   void* const stream = reinterpret_cast<void*>(musa_stream.stream());
   if (stream != nullptr) {
-    log_tvmffi_stream_debug(/*phase=*/"bind-current",
-                            device.index(),
-                            is_current_stream_capturing(),
-                            stream,
-                            nullptr,
-                            /*device_type=*/-1,
-                            /*rc=*/0);
     set_tvmffi_stream_handle(device.index(), stream);
     return;
   }
   void* const forced_stream = get_forced_tvmffi_stream(device.index());
   if (forced_stream != nullptr) {
-    log_tvmffi_stream_debug(/*phase=*/"bind-forced",
-                            device.index(),
-                            is_current_stream_capturing(),
-                            forced_stream,
-                            nullptr,
-                            /*device_type=*/-1,
-                            /*rc=*/0);
     set_tvmffi_stream_handle(device.index(), forced_stream);
     return;
   }
@@ -222,13 +166,6 @@ void bind_musa_tvmffi_stream(const torch::Device& device) {
     LOG(ERROR) << "[tvmffi.stream] MUSA stream handle is null on " << device;
     return;
   }
-  log_tvmffi_stream_debug(/*phase=*/"bind-pool",
-                          device.index(),
-                          is_current_stream_capturing(),
-                          pool_stream,
-                          nullptr,
-                          /*device_type=*/-1,
-                          /*rc=*/0);
   set_tvmffi_stream_handle(device.index(), pool_stream);
 }
 
@@ -635,31 +572,6 @@ T* to_dlpack_impl(const torch::Tensor& src) {
   return &(atDLMTensor->tensor);
 }
 
-const char* dlpack_device_to_string(DLDeviceType t) {
-  switch (t) {
-    case DLDeviceType::kDLCPU:
-      return "cpu";
-    case DLDeviceType::kDLCUDA:
-      return "cuda";
-    case DLDeviceType::kDLCUDAHost:
-      return "cuda_host";
-    case DLDeviceType::kDLROCM:
-      return "rocm";
-    case DLDeviceType::kDLExtDev:
-      return "extdev";
-    default:
-      return "other";
-  }
-}
-
-bool ffi_alloc_dump_enabled() {
-  static const bool v = ([]() {
-    const char* env = std::getenv("XLLM_DUMP_FFI_ALLOC");
-    return env != nullptr && env[0] != '0' && env[0] != '\0';
-  })();
-  return v;
-}
-
 struct FfiAllocState {
   ::xllm::kernel::musa::FfiAllocMode mode =
       ::xllm::kernel::musa::FfiAllocMode::kPassthrough;
@@ -687,35 +599,6 @@ int32_t torch_dlpack_managed_tensor_allocator(
         torch::TensorOptions()
             .dtype(at::toScalarType(prototype->dtype))
             .device(dl_device_to_torch_device_for_dlpack_v1(prototype->device));
-
-    const bool dump_alloc = ffi_alloc_dump_enabled();
-    thread_local int64_t call_idx = 0;
-    const int64_t this_call = dump_alloc ? call_idx++ : -1;
-    if (dump_alloc) {
-      const int64_t dtype_bits = static_cast<int64_t>(prototype->dtype.bits) *
-                                 static_cast<int64_t>(prototype->dtype.lanes);
-      int64_t numel = 1;
-      for (int i = 0; i < prototype->ndim; ++i) {
-        numel *= prototype->shape[i];
-      }
-      const int64_t bytes = (numel * dtype_bits + 7) / 8;
-
-      std::ostringstream shape_oss;
-      shape_oss << "[";
-      for (int i = 0; i < prototype->ndim; ++i) {
-        if (i) shape_oss << ",";
-        shape_oss << prototype->shape[i];
-      }
-      shape_oss << "]";
-
-      LOG(INFO) << "[TVMFFI-ALLOC #" << this_call
-                << "] shape=" << shape_oss.str()
-                << " dtype=" << at::toString(at::toScalarType(prototype->dtype))
-                << " device="
-                << dlpack_device_to_string(prototype->device.device_type) << ":"
-                << static_cast<int>(prototype->device.device_id)
-                << " bytes=" << bytes;
-    }
 
     torch::Tensor tensor;
     switch (g_ffi_alloc_state.mode) {
@@ -759,13 +642,6 @@ int32_t torch_dlpack_managed_tensor_allocator(
         tensor = torch::empty(shape, options);
         break;
       }
-    }
-    if (dump_alloc) {
-      const uintptr_t address = reinterpret_cast<uintptr_t>(tensor.data_ptr());
-      LOG(INFO) << "[TVMFFI-ALLOC-PTR #" << this_call
-                << "] mode=" << static_cast<int>(g_ffi_alloc_state.mode)
-                << " data=" << tensor.data_ptr() << " mod4k=" << address % 4096
-                << " mod16k=" << address % 16384;
     }
     *out = to_dlpack_impl<DLManagedTensorVersioned>(tensor);
     return 0;
