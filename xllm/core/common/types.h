@@ -210,8 +210,11 @@ struct RecItemInfo {
 // Weight segment info for P2P transfer (supports non-contiguous allocation)
 // Forward declaration needed by InstanceInfo
 struct WeightSegment {
-  uint64_t offset;  // Offset from GlobalXTensor base address
-  uint64_t size;    // Segment size in bytes
+  uint64_t offset = 0;  // Offset from GlobalXTensor base address
+  uint64_t size = 0;    // Segment size in bytes
+
+  WeightSegment() = default;
+  WeightSegment(uint64_t off, uint64_t sz) : offset(off), size(sz) {}
 };
 
 struct InstanceInfo {

@@ -87,6 +87,7 @@ struct Reader {
   }
 };
 
+#ifndef XLLM_SKIP_OPENCV
 // Downstream multimodal preprocess expects a 3-channel RGB image. For BGRA
 // input, blend alpha onto a white background instead of dropping alpha
 // directly, so transparent regions keep visually stable colors.
@@ -130,6 +131,7 @@ void convert_decoded_image_to_rgb(const cv::Mat& image, cv::Mat& rgb_image) {
     LOG(FATAL) << "unsupported channel count: " << channels;
   }
 }
+#endif  // XLLM_SKIP_OPENCV
 
 }  // namespace
 
@@ -548,6 +550,7 @@ class MemoryAudioReader : public MemoryMediaReader {
   std::vector<float> pcm_;
 };
 
+#ifndef XLLM_SKIP_OPENCV
 bool OpenCVImageDecoder::decode(const std::string& raw_data, torch::Tensor& t) {
   cv::Mat buffer(1, raw_data.size(), CV_8UC1, (void*)raw_data.data());
   if (raw_data.empty()) {
@@ -609,6 +612,18 @@ bool OpenCVImageEncoder::valid(const torch::Tensor& t) {
 
   return true;
 }
+
+#else   // XLLM_SKIP_OPENCV
+bool OpenCVImageDecoder::decode(const std::string&, torch::Tensor&) {
+  LOG(ERROR) << "OpenCV disabled at build time (XLLM_SKIP_OPENCV)";
+  return false;
+}
+bool OpenCVImageEncoder::encode(const torch::Tensor&, std::string&) {
+  LOG(ERROR) << "OpenCV disabled at build time (XLLM_SKIP_OPENCV)";
+  return false;
+}
+bool OpenCVImageEncoder::valid(const torch::Tensor&) { return false; }
+#endif  // XLLM_SKIP_OPENCV
 
 bool FFmpegVideoDecoder::decode(const std::string& raw_data,
                                 torch::Tensor& t,

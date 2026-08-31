@@ -4,22 +4,23 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
+    10|distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/runtime/py_executor_impl.h"
+#include "py_executor_impl.h"
 
 #include <Python.h>
 #include <glog/logging.h>
 #include <pybind11/embed.h>
 #include <torch/extension.h>
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -120,7 +121,6 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
         layer::AttentionMetadataBuilder::build(
             params, enable_mla_, std::nullopt, device_));
   }
-
   py::gil_scoped_acquire gil;
 
   // Lazy bind KV caches on first call.
@@ -152,28 +152,15 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
 
   py::object py_metadata =
       py::cast(PyAttentionMetadataView(attn_metadata, params));
+
   py::object input_embedding = params.embedding.input_embedding.defined()
                                    ? py::cast(params.embedding.input_embedding)
                                    : py::none();
 
   // --- VLM: vision encode + embedding merge on image/video prefill steps ---
-  // On steps carrying multimodal input, ``params.multimodal.mm_data`` holds the
-  // batched ``pixel_values`` + ``image_grid_thw`` (still images) and/or
-  // ``pixel_values_videos`` + ``video_grid_thw`` (video) — same accessors the
-  // C++ Qwen3-VL base uses in qwen3_vl_base.h. Drive the Python model's
-  // ``encode`` -> ``get_input_embeddings`` pipeline: the latter scatters each
-  // modality's embeddings at its placeholder-token positions and sets
-  // ``model._inputs_embeds`` / ``deepstack_input_embeds`` for the runner-driven
-  // ``Qwen3VLModel.forward``. Decode steps carry no mm_data, so the attributes
-  // stay clear and the aclgraph embed path is used.
-  //
-  // NOTE: this scatters the FULL image/video embedding into the current
-  // forward's tokens, so it assumes every multimodal token is in this batch
-  // (i.e. enable_chunked_prefill=False). Chunked prefill — where a chunk
-  // boundary can land inside an item's token span — needs item-level scatter
-  // (reuse EncoderEmbeddingGatherVisitor + the NPU backend's paged mixed-batch
-  // attention, both tracked for a follow-up PR).
-  auto& mm_data = params.multimodal.mm_data;
+  // Decode steps carry no mm_data, so the attributes stay clear. This assumes
+  // every multimodal token is in this batch (enable_chunked_prefill=False).
+  const auto& mm_data = params.multimodal.mm_data;
   if (mm_data.valid()) {
     torch::Tensor pixel_values;
     if (const auto& res = mm_data.get<torch::Tensor>("pixel_values")) {
@@ -194,7 +181,6 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
 
     if (pixel_values.defined() || pixel_values_videos.defined()) {
       py::object top_model = py_causal_lm_->python_model();
-      // encode() moves the tensors onto device internally.
       py::object image_embeds = py::none();
       if (pixel_values.defined() && image_grid_thw.defined()) {
         image_embeds = top_model.attr("encode")(pixel_values, image_grid_thw);
@@ -204,20 +190,14 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
         video_embeds =
             top_model.attr("encode")(pixel_values_videos, video_grid_thw);
       }
-      // Sets top_model.model._inputs_embeds + deepstack_input_embeds.
       top_model.attr("get_input_embeddings")(
           tokens, image_embeds, video_embeds);
     }
   }
 
   // --- mRoPE: collapse [3, N] decode positions to 1-D ---
-  // Only PURE decode collapses to 1-D: decode rows are identical
-  // (batch_input_builder get_mrope_positions), and mRoPE(p,p,p) == standard
-  // RoPE at p, so a single row feeds the captured aclgraph's 1-D
-  // static_positions unchanged. Chunked/mixed prefill (is_prefill=false but
-  // is_chunked_prefill=true) still needs the full [3, N] for the Python mRoPE
-  // path, so it is excluded here. The 2-D shape itself is the mRoPE signal:
-  // non-mRoPE models never receive 2-D positions, so no config flag is needed.
+  // Chunked/mixed prefill still needs the full [3, N]. Non-mRoPE models never
+  // receive 2-D positions.
   torch::Tensor positions_arg = positions;
   if (positions.dim() == 2 && !attn_metadata->is_prefill &&
       !attn_metadata->is_chunked_prefill) {
@@ -233,14 +213,24 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
   }
 #endif
 
-  // Execute: one C++ -> Python call per step. input_embedding stays None for
-  // the Qwen3-VL python path (embeddings are merged via the attribute set by
-  // get_input_embeddings above), so the runner takes the 2-arg model() branch
-  // and Qwen3VLModel.forward reads _inputs_embeds. positions_arg carries the
-  // mRoPE [3,N]->1-D decode collapse.
-  py::object hidden_obj = py_executor_.attr("execute")(
+  // Execute: one C++ -> Python call per step. MUSA 27B still reads embeddings
+  // from metadata; the extra args stay None unless a VLM/NPU caller sets them.
+  py::object execute_obj = py_executor_.attr("execute")(
       tokens, positions_arg, py_metadata, input_embedding, py_sync);
-  return ModelOutput(hidden_obj.cast<torch::Tensor>());
+
+  ModelOutput output;
+  if (py::isinstance<py::tuple>(execute_obj)) {
+    const py::tuple packed = execute_obj.cast<py::tuple>();
+    CHECK_GE(packed.size(), 1)
+        << "Python execute tuple must contain hidden states";
+    output = ModelOutput(packed[0].cast<torch::Tensor>());
+    if (packed.size() > 1 && !packed[1].is_none()) {
+      output.logits = packed[1].cast<torch::Tensor>();
+    }
+  } else {
+    output = ModelOutput(execute_obj.cast<torch::Tensor>());
+  }
+  return output;
 }
 
 }  // namespace xllm

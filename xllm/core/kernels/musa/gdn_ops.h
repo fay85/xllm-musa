@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,11 +17,12 @@ limitations under the License.
 
 #include <torch/torch.h>
 
-#include <cstdint>
 #include <optional>
+#include <string>
 #include <tuple>
 #include <utility>
-#include <vector>
+
+#include "core/kernels/musa/ops_api.h"
 
 namespace xllm {
 namespace kernel {
@@ -37,57 +38,6 @@ struct FusedSigmoidGatingDeltaRuleUpdateParams;
 
 namespace musa {
 
-// MUSA-owned GDN params. Kept out of core/kernels/param.h so common backend
-// headers stay unchanged; MUSA layers call these via kernel::musa::.
-struct MateGatedDeltaRulePrefillParams {
-  torch::Tensor q;
-  torch::Tensor k;
-  torch::Tensor v;
-  torch::Tensor g;
-  torch::Tensor beta;
-  std::optional<float> scale = std::nullopt;
-  std::optional<torch::Tensor> initial_state = std::nullopt;
-  std::optional<torch::Tensor> cu_seqlens = std::nullopt;
-  std::optional<std::vector<int32_t>> cu_seqlens_host = std::nullopt;
-  std::optional<torch::Tensor> output = std::nullopt;
-  std::optional<torch::Tensor> final_state = std::nullopt;
-  std::optional<torch::Tensor> kkt_output = std::nullopt;
-  bool use_qk_l2norm_in_kernel = true;
-  bool allow_inplace_qk_l2norm = false;
-};
-
-struct MateGatedDeltaRuleDecodeParams {
-  torch::Tensor mixed_qkv;
-  torch::Tensor state;
-  torch::Tensor A_log;
-  torch::Tensor a;
-  torch::Tensor dt_bias;
-  torch::Tensor b;
-  torch::Tensor state_indices;
-  int64_t num_k_heads = 0;
-  int64_t num_v_heads = 0;
-  int64_t head_k_dim = 0;
-  int64_t head_v_dim = 0;
-  double scale = 0.0;
-  bool use_qk_l2norm = true;
-  std::optional<torch::Tensor> decode_output = std::nullopt;
-};
-
-// MUSA-only extensions for graph-capture-safe persistent output buffers and
-// contiguous QKVZ/BA layout. Kept out of core/kernels/param.h so common
-// backend params stay unchanged.
-struct FusedQkvzbaSplitReshapeExtras {
-  // When true, mixed_qkvz is [all_q | all_k | all_v | all_z] and mixed_ba is
-  // [all_b | all_a]. Otherwise the per-head-group interleaved layout from a
-  // single merged projection is assumed.
-  bool contiguous_input_layout = false;
-
-  torch::Tensor mixed_qkv_out_buf;
-  torch::Tensor z_out_buf;
-  torch::Tensor b_out_buf;
-  torch::Tensor a_out_buf;
-};
-
 torch::Tensor l2_norm(torch::Tensor& x, double eps);
 
 std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
@@ -96,7 +46,8 @@ std::pair<torch::Tensor, torch::Tensor> l2_norm_pair_fused(
     double eps);
 
 // Normalizes Q/K in place. The fused H=128 kernel loads each row before any
-// stores, so input/output aliasing is safe.
+// stores, so input/output aliasing is safe and avoids two bucket-sized replay
+// allocations in the piecewise GDN runner.
 void l2_norm_pair_fused_inplace(torch::Tensor& query,
                                 torch::Tensor& key,
                                 double eps);
@@ -104,24 +55,28 @@ void l2_norm_pair_fused_inplace(torch::Tensor& query,
 std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
     FusedGdnGatingParams& params);
 
+std::pair<torch::Tensor, torch::Tensor> gdn_gating(
+    const torch::Tensor& a,
+    const torch::Tensor& b,
+    const torch::Tensor& A_log,
+    const torch::Tensor& dt_bias,
+    double sp_beta,
+    double threshold,
+    const std::optional<torch::Tensor>& g_out = std::nullopt,
+    const std::optional<torch::Tensor>& beta_out = std::nullopt);
+
 std::pair<torch::Tensor, torch::Tensor> fused_recurrent_gated_delta_rule(
     FusedRecurrentGatedDeltaRuleParams& params);
 
-torch::Tensor causal_conv1d_update(
-    CausalConv1dUpdateParams& params,
-    const std::optional<torch::Tensor>& output_buf = std::nullopt);
+torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params);
 
-torch::Tensor gated_layer_norm(
-    GatedLayerNormParams& params,
-    const std::optional<torch::Tensor>& output_buf = std::nullopt);
+torch::Tensor gated_layer_norm(GatedLayerNormParams& params);
 
 std::pair<torch::Tensor, torch::Tensor> partial_rotary_embedding(
     PartialRotaryEmbeddingParams& params);
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-fused_qkvzba_split_reshape_cat(
-    FusedQkvzbaSplitReshapeParams& params,
-    const FusedQkvzbaSplitReshapeExtras& extras = {});
+fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params);
 
 std::pair<torch::Tensor, torch::Tensor> chunk_gated_delta_rule(
     ChunkGatedDeltaRuleParams& params);
@@ -139,14 +94,58 @@ torch::Tensor recurrent_gated_delta_rule(
     const std::optional<torch::Tensor>& g,
     const std::optional<torch::Tensor>& gk);
 
+std::string get_mate_gdn_prefill_uri(int64_t num_q_heads,
+                                     int64_t num_v_heads,
+                                     torch::ScalarType dtype);
+
+std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
+                                 int64_t num_v_heads,
+                                 torch::ScalarType dtype,
+                                 int64_t seq_len = 2);
+bool mate_gdn_mtp_module_available(int64_t num_q_heads,
+                                   int64_t num_v_heads,
+                                   torch::ScalarType dtype,
+                                   int64_t seq_len);
+bool mate_gdn_mtp_checkpoint_module_available(int64_t num_q_heads,
+                                              int64_t num_v_heads,
+                                              torch::ScalarType dtype,
+                                              int64_t seq_len);
+
 std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
     MateGatedDeltaRulePrefillParams& params);
+
+// Python MusaGraph wraps the whole model(), including Mate. C++ piecewise
+// keeps Mate off the captured graph. This scope opts the Python op into a
+// C=1 varlen path that reuses scratch and never D2Hs, so warmup+capture can
+// record the same kernels C++ replays. Native C++ callers leave it unset.
+class MateGdnPythonGraphVarlenScope final {
+ public:
+  explicit MateGdnPythonGraphVarlenScope(bool enabled);
+  ~MateGdnPythonGraphVarlenScope();
+  MateGdnPythonGraphVarlenScope(const MateGdnPythonGraphVarlenScope&) = delete;
+  MateGdnPythonGraphVarlenScope& operator=(
+      const MateGdnPythonGraphVarlenScope&) = delete;
+
+ private:
+  bool previous_;
+};
 
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
+torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params);
+
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
+
+void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
+                                   const torch::Tensor& ssm_intermediate,
+                                   torch::Tensor& conv_cache,
+                                   const torch::Tensor& conv_intermediate,
+                                   const torch::Tensor& logical_state_indices,
+                                   const torch::Tensor& accepted_tokens,
+                                   int64_t checkpoint_stride,
+                                   bool ssm_state_transposed);
 
 void causal_conv1d_fwd(const torch::Tensor& x,
                        const torch::Tensor& weight,
@@ -193,6 +192,36 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
 
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params);
+
+void causal_conv1d_decode_fused(const torch::Tensor& x,
+                                const torch::Tensor& weight,
+                                const std::optional<torch::Tensor>& bias,
+                                torch::Tensor conv_state,
+                                const torch::Tensor& cache_indices,
+                                torch::Tensor output_buf,
+                                int pad_slot_id,
+                                bool silu_activation);
+
+// Graph-safe Qwen3.5 MTP verify convolution.  Unlike the generic
+// causal-conv path, this kernel reads the per-sequence accepted-token count on
+// device, so replay does not capture a host-side acceptance branch.
+void causal_conv1d_mtp_verify(const torch::Tensor& x,
+                              const torch::Tensor& weight,
+                              torch::Tensor conv_state,
+                              const torch::Tensor& cache_indices,
+                              const torch::Tensor& num_accepted_tokens,
+                              torch::Tensor query_buf,
+                              torch::Tensor key_buf,
+                              torch::Tensor value_buf,
+                              torch::Tensor intermediate_buf,
+                              bool silu_activation,
+                              bool write_superstate);
+
+void gated_rms_norm_fused(const torch::Tensor& x,
+                          const torch::Tensor& weight,
+                          const torch::Tensor& z,
+                          torch::Tensor output,
+                          double eps);
 
 }  // namespace musa
 }  // namespace kernel

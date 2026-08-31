@@ -20,7 +20,7 @@ limitations under the License.
 
 DEFINE_bool(
     enable_graph,
-    false,
+    xllm::execution_config_defaults::kEnableGraph,
     "Whether to enable graph execution for decode phase. When enabled, "
     "the engine uses graph mode (CUDA Graph for GPU, ACL Graph for NPU, "
     "MLU Graph, or DCU Graph) to optimize decode performance by reducing "
@@ -37,27 +37,31 @@ DEFINE_bool(enable_graph_double_buffer,
             "and graph instances for NPU schedule-overlap decode.");
 
 DEFINE_bool(enable_graph_mode_decode_no_padding,
-            false,
+            xllm::execution_config_defaults::kEnableGraphModeDecodeNoPadding,
             "Whether to enable graph execution for decode phase without "
             "padding. If true, graph will be captured with every actual num "
             "tokens, as stride is 1.");
 
 DEFINE_bool(enable_prefill_piecewise_graph,
-            false,
+            xllm::execution_config_defaults::kEnablePrefillPiecewiseGraph,
             "Whether to enable piecewise graph execution for prefill phase "
-            "when graph mode is enabled. When enabled, attention operations "
-            "use eager mode while other operations are captured in device "
-            "graphs.");
+            "when graph mode is enabled. Compatible operations are captured "
+            "in reusable device graphs; unsupported operations run eagerly "
+            "between graph segments.");
 
-constexpr bool kEnableGraphVmmPoolDefault = true;
+DEFINE_bool(enable_packed_prefill,
+            false,
+            "Whether to enable packed pure-prefill execution. When enabled, "
+            "the MUSA executor may process multiple prefill requests in one "
+            "batch while preserving decode graph execution.");
 
 DEFINE_bool(enable_graph_vmm_pool,
-            kEnableGraphVmmPoolDefault,
+            xllm::execution_config_defaults::kEnableGraphVmmPool,
             "Whether to enable VMM-backed graph memory pool for multi-shape "
             "graph memory reuse.");
 
 DEFINE_int32(max_tokens_for_graph_mode,
-             2048,
+             xllm::execution_config_defaults::kMaxTokensForGraphMode,
              "Maximum number of tokens for graph execution. "
              "If 0, no limit is applied.");
 
@@ -90,8 +94,9 @@ DEFINE_string(
     python_graph_backend,
     "off",
     "Graph backend for the Python model executor. "
-    "Defaults to aclgraph on NPU when --enable_graph is enabled. "
+    "Defaults to aclgraph on NPU and musagraph on MUSA when --enable_graph is enabled. "
     "Values: off (eager), cudagraphs (CUDA decode graph with eager prefill), "
+    "musagraph (MUSA decode graph with eager prefill), "
     "aclgraph (NPU decode graph with eager prefill), "
     "or any torch.compile backend name.");
 
@@ -103,6 +108,7 @@ void ExecutionConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_graph_double_buffer);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_graph_mode_decode_no_padding);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_prefill_piecewise_graph);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_packed_prefill);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_graph_vmm_pool);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(max_tokens_for_graph_mode);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(acl_graph_decode_batch_size_limit);
@@ -120,6 +126,7 @@ void ExecutionConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph_double_buffer);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph_mode_decode_no_padding);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_prefill_piecewise_graph);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_packed_prefill);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph_vmm_pool);
   XLLM_CONFIG_ASSIGN_FROM_JSON(max_tokens_for_graph_mode);
   XLLM_CONFIG_ASSIGN_FROM_JSON(acl_graph_decode_batch_size_limit);
@@ -144,6 +151,8 @@ void ExecutionConfig::append_config_json(
       config_json, default_config, enable_graph_mode_decode_no_padding);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_prefill_piecewise_graph);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_packed_prefill);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_graph_vmm_pool);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(

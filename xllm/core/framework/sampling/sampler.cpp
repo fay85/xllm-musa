@@ -19,11 +19,18 @@ limitations under the License.
 #include <glog/logging.h>
 #include <torch/torch.h>
 
+#include <algorithm>
+#include <limits>
+#include <tuple>
+
 #include "common/global_flags.h"
 #include "core/framework/config/model_config.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "logits_utils.h"
 #include "sampling_params.h"
+#if defined(USE_MUSA)
+#include "kernels/musa/musa_ops_api.h"
+#endif
 
 namespace xllm {
 
@@ -89,6 +96,56 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
     sample_logits = sample_logits + effective_filter_mask;
   }
 
+#if defined(USE_MUSA)
+  // Avoid expanding a small top-k candidate set back to the full vocabulary
+  // before sampling. The general path below remains necessary when callers
+  // need filtered logits, probabilities, or log probabilities.
+  if (params.all_random_sample && sample_top_k.defined() &&
+      params.max_top_k > 0 && !params.logprobs &&
+      (!params.return_probs || params.return_selected_probs)) {
+    if (sample_temperatures.defined()) {
+      apply_temperatures(sample_logits, sample_temperatures);
+    }
+
+    const int64_t vocab_size = sample_logits.size(-1);
+    const int64_t candidate_count =
+        std::clamp(params.max_top_k, static_cast<int64_t>(1), vocab_size);
+    auto [candidate_logits, candidate_token_ids] =
+        sample_logits.topk(candidate_count,
+                           /*dim=*/-1,
+                           /*largest=*/true,
+                           /*sorted=*/true);
+
+    const float negative_infinity = -std::numeric_limits<float>::infinity();
+    auto top_k_values =
+        sample_top_k.clamp(1, vocab_size).unsqueeze(-1).to(torch::kLong);
+    auto top_k_mask = torch::arange(candidate_count, candidate_logits.device())
+                          .expand_as(candidate_logits) >= top_k_values;
+    candidate_logits.masked_fill_(top_k_mask, negative_infinity);
+
+    if (sample_top_p.defined()) {
+      auto candidate_probs =
+          candidate_logits.softmax(/*dim=*/-1).to(torch::kFloat32);
+      auto top_p_mask =
+          candidate_probs.cumsum(/*dim=*/-1) > sample_top_p.unsqueeze(-1);
+      top_p_mask.index_put_({torch::indexing::Ellipsis, 0}, false);
+      candidate_logits.masked_fill_(top_p_mask, negative_infinity);
+    }
+
+    auto candidate_probs =
+        torch::softmax(candidate_logits, /*dim=*/-1, /*dtype=*/torch::kFloat32);
+    auto candidate_indices = random_sample(candidate_probs).view({-1, 1});
+    output.next_tokens =
+        candidate_token_ids.gather(/*dim=*/-1, candidate_indices).view({-1});
+    if (params.return_probs) {
+      output.probs = candidate_probs.gather(/*dim=*/-1, candidate_indices)
+                         .view({-1})
+                         .to(logits.dtype());
+    }
+    return output;
+  }
+#endif
+
   if (params.all_greedy_sample && !params.logprobs && !params.return_probs &&
       !use_sample_indices && !filter_mask.defined()) {
     output.next_tokens = greedy_sample(sample_logits).to(torch::kLong);
@@ -112,8 +169,11 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
   }
 
   // apply temperatures, top-k and top-p
-  apply_top_k_top_p(
-      sample_logits, sample_temperatures, sample_top_k, sample_top_p);
+  apply_top_k_top_p(sample_logits,
+                    sample_temperatures,
+                    sample_top_k,
+                    sample_top_p,
+                    params.max_top_k);
   if (use_sample_indices) {
     logits.index_copy_(/*dim=*/0, params.sample_idxes, sample_logits);
   }
@@ -139,7 +199,9 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
     samples = torch::where(params.do_sample, random, greedy);
   }
   auto sample_indices = samples.to(torch::kLong);
-  output.probs = probs.to(logits.dtype());
+  if (params.return_probs) {
+    output.probs = probs.to(logits.dtype());
+  }
   output.next_tokens = sample_indices;
 
   if (params.logprobs) {
@@ -164,8 +226,20 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
     output.logprobs = selected_logprobs.view({-1});
 
     if (params.max_top_logprobs > 0) {
-      auto [values, indices] =
+      torch::Tensor values;
+      torch::Tensor indices;
+#if defined(USE_MUSA)
+      if (params.use_beam_search) {
+        std::tie(values, indices) =
+            xllm::kernel::musa::topk(logprobs, params.max_top_logprobs);
+      } else {
+        std::tie(values, indices) =
+            logprobs.topk(params.max_top_logprobs, /*dim=*/-1);
+      }
+#else
+      std::tie(values, indices) =
           logprobs.topk(params.max_top_logprobs, /*dim=*/-1);
+#endif
       output.top_logprobs = values;
       output.top_tokens = indices;
     }
@@ -179,7 +253,9 @@ torch::Tensor Sampler::greedy_sample(const torch::Tensor& probs) {
 }
 
 torch::Tensor Sampler::random_sample(const torch::Tensor& probs) {
-#if defined(USE_MLU) || defined(USE_CUDA) || defined(USE_DCU)
+#if defined(USE_MUSA)
+  return xllm::kernel::musa::random_sample(probs);
+#elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_DCU)
   xllm::kernel::RandomSampleParams params;
   params.logits = probs;
   return xllm::kernel::random_sample(params);

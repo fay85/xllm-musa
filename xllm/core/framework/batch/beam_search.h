@@ -40,8 +40,17 @@ struct BeamCandidate {
 
   BeamCandidate() = default;
 
+  // priority_queue is a max-heap, so "less" means better: the worst candidate
+  // sits at top() and is evicted first. Score ties must be a total order or
+  // equal-score beams can swap API choice indices across identical requests.
   bool operator<(const BeamCandidate& other) const {
-    return logprob_sum > other.logprob_sum;
+    if (logprob_sum != other.logprob_sum) {
+      return logprob_sum > other.logprob_sum;
+    }
+    if (last_token_id != other.last_token_id) {
+      return last_token_id < other.last_token_id;
+    }
+    return source_index < other.source_index;
   }
 };
 
@@ -63,7 +72,7 @@ class SimpleTopKOptimizer {
   void insert(const CandidateType& candidate) {
     if (min_heap_.size() < k_) {
       min_heap_.push(candidate);
-    } else if (candidate.logprob_sum > min_heap_.top().logprob_sum) {
+    } else if (candidate < min_heap_.top()) {
       min_heap_.pop();
       min_heap_.push(candidate);
     }
@@ -72,7 +81,7 @@ class SimpleTopKOptimizer {
   void insert(CandidateType&& candidate) {
     if (min_heap_.size() < k_) {
       min_heap_.push(std::move(candidate));
-    } else if (candidate.logprob_sum > min_heap_.top().logprob_sum) {
+    } else if (candidate < min_heap_.top()) {
       min_heap_.pop();
       min_heap_.push(std::move(candidate));
     }

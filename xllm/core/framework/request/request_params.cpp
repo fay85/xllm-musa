@@ -54,15 +54,6 @@ std::string generate_anthropic_chat_request_id() {
          short_uuid.random();
 }
 
-void apply_beam_search_logprobs_default(
-    RequestParams& params,
-    bool probability_params_explicitly_set) {
-  if (params.beam_width > 1 && !probability_params_explicitly_set) {
-    params.logprobs = true;
-    params.top_logprobs = static_cast<int64_t>(params.beam_width);
-  }
-}
-
 nlohmann::json proto_struct_to_json(const google::protobuf::Struct& pb_struct);
 
 // Handle tool_choice conversion from Anthropic format to internal format
@@ -240,8 +231,6 @@ RequestParams::RequestParams(const proto::CompletionRequest& request,
   if (request.has_num_return_sequences()) {
     num_return_sequences = request.num_return_sequences();
   }
-  apply_beam_search_logprobs_default(
-      *this, /*probability_params_explicitly_set=*/request.has_logprobs());
   if (request.has_add_special_tokens()) {
     add_special_tokens = request.add_special_tokens();
   } else {
@@ -454,11 +443,6 @@ void init_from_chat_request(RequestParams& params, const ChatRequest& request) {
   if (request.has_num_return_sequences()) {
     params.num_return_sequences = request.num_return_sequences();
   }
-  apply_beam_search_logprobs_default(
-      params,
-      /*probability_params_explicitly_set=*/
-      request.has_logprobs() || request.has_top_logprobs());
-
   if (request.has_add_special_tokens()) {
     params.add_special_tokens = request.add_special_tokens();
   } else {

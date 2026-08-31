@@ -6,30 +6,33 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/../cuda)
 include_directories(${CMAKE_CURRENT_LIST_DIR}/../cuda/moe)
 
 set(_TORCH_MUSA_KERNEL_HDRS
+  attention_runner.h
   musa_ops_api.h
+  musa_ops_library.h
   musa_tvmffi_stream.h
   gdn_ops.h
+  global_capture_instance.h
   llm_decode_metadata_update.h
+  piecewise_graphs.h
   ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk.cuh
   ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk_sigmoid_kernels.cuh
   ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk_softmax_kernels.cuh
 )
 
 set(_TORCH_MUSA_KERNEL_SRCS
+  attention_runner.cpp
   attention_decode.cpp
   attention_prefill.cpp
   gdn_decode.cu
+  gdn_state_commit.cu
   gdn_prefill.cpp
   causal_conv1d.cu
   gemma_norm.cu
   activation.cu
   rope.cu
-  gdn_state_commit.cu
-  ../cuda/block_copy.cu
-  ../cuda/norm.cu
-  ../cuda/reshape_paged_cache.cu
-  ../cuda/moe/moe_fused_topk.cu
+  paged_cache.cu
   random_sample.cpp
+  musa_topk.cpp
   rejection_sample.cu
   replace_token.cu
   fused_qknorm_rope.cu
@@ -46,9 +49,12 @@ set(_TORCH_MUSA_KERNEL_SRCS
   moe_combine_indexed.cu
   # Fused per-token-group FP8 activation quant (MUSA-native intrinsics)
   fp8_act_quant.cu
-  # Mate FFI helpers
+  # Mate FFI + graph helpers
   musa_tvmffi_stream.cpp
+  global_capture_instance.cpp
+  piecewise_graphs.cpp
   llm_decode_metadata_update.cu
+  musa_ops_library.cpp
 )
 
 # Enable fast-math for fp8_act_quant.cu only, without changing
@@ -77,3 +83,22 @@ cc_library(
     musart
 )
 
+# _build_cuda_graph_musa.sh points libmudnn.so at libmudnncxx.so (C++ API).
+# Software-beam TopK uses the C API in the versioned C library.
+if(EXISTS "/usr/local/musa/lib/libmudnn.so.3")
+  target_link_libraries(cuda_kernels PUBLIC /usr/local/musa/lib/libmudnn.so.3)
+endif()
+
+cc_library(
+  NAME
+    musa_kernel_api
+  HDRS
+    ops_api.h
+  SRCS
+    ops_api.cpp
+  COPTS
+    ${_XLLM_MUSIFY_COPTS}
+  DEPS
+    :cuda_kernels
+    torch
+)

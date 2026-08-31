@@ -4,15 +4,21 @@ add_subdirectory(sentencepiece)
 add_subdirectory(minja)
 add_subdirectory(brpc)
 add_subdirectory(smhasher/src)
+# mcc_wrapper: suppress sign-conversion noise in cpprestsdk.
+if(USE_MUSA)
+  set(_XLLM_CXX_FLAGS_BEFORE_CPPREST "${CMAKE_CXX_FLAGS}")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-sign-conversion -Wno-error=sign-conversion -w")
+endif()
 add_subdirectory(cpprestsdk)
-if(USE_MUSA AND TARGET cpprest)
-  # mcc_wrapper diagnoses signed conversions in cpprestsdk headers more
-  # aggressively than the host compiler. Keep the suppression local to the
-  # third-party target instead of muting warnings for the whole build.
-  target_compile_options(cpprest PRIVATE
-    -Wno-sign-conversion
-    -Wno-error=sign-conversion
-  )
+if(USE_MUSA)
+  set(CMAKE_CXX_FLAGS "${_XLLM_CXX_FLAGS_BEFORE_CPPREST}")
+  if(TARGET cpprest)
+    target_compile_options(cpprest PRIVATE
+      -Wno-sign-conversion
+      -Wno-error=sign-conversion
+      -w
+    )
+  endif()
 endif()
 set(CPPREST_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/cpprestsdk/Release/include)
 set(CPPREST_LIB ${CMAKE_BINARY_DIR}/third_party/cpprestsdk/Release/Binaries/libcpprest.a)
@@ -34,6 +40,14 @@ if(USE_NPU)
   add_subdirectory(torch_npu_ops)
 endif()
 add_subdirectory(Mooncake)
+
+if(USE_MUSA AND TARGET mooncake_store)
+  # mcc uses Clang's thread-safety analyzer, which cannot infer Mooncake's
+  # custom lock-guard annotations and reports false positives in store code.
+  target_compile_options(mooncake_store PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Wno-thread-safety>
+  )
+endif()
 
 target_include_directories(mooncake_store PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/Mooncake/mooncake-transfer-engine/include

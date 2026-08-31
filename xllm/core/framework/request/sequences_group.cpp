@@ -239,8 +239,7 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
           : sequence_params_.sampling_param->beam_width;
   const size_t requested_result_size =
       static_cast<size_t>(requested_num_return_sequences);
-  const size_t topk =
-      std::max<size_t>(1, sequence_params_.sampling_param->top_logprobs);
+  const size_t topk = beam_width * 2;
 
   std::vector<BeamSourceInfo> source_infos;
   source_infos.reserve(sequences_.size());
@@ -290,6 +289,9 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
     BeamCandidate candidate;
     candidate.source_index = seq_index;
     candidate.logprob_sum = seq->get_acc_logprob();
+    if (seq->num_tokens() > 0) {
+      candidate.last_token_id = seq->tokens()[seq->num_tokens() - 1];
+    }
     topk_optimizer.insert(std::move(candidate));
   };
 
@@ -326,7 +328,8 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
     const size_t source_index = i;
     for (size_t idx = 0; idx < candidate_topk; ++idx) {
       const float new_logprob = base_logprob + top_logprobs[idx];
-      if (!topk_optimizer.worthInserting(new_logprob)) {
+      if (new_logprob < topk_optimizer.getMinLogprob() &&
+          !topk_optimizer.worthInserting(new_logprob)) {
         break;
       }
 
@@ -341,6 +344,11 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
   }
 
   std::vector<BeamCandidate> candidates = topk_optimizer.getTopKSorted();
+  std::stable_sort(candidates.begin(),
+                   candidates.end(),
+                   [](const BeamCandidate& lhs, const BeamCandidate& rhs) {
+                     return lhs < rhs;
+                   });
   for (auto& seq : sequences_) {
     seq->clear_updated_since_last_beam_search();
   }
@@ -399,6 +407,7 @@ void SequencesGroup::process_beam_search(bool force_requested_result_size) {
     }
     auto& next_seq = sequences_[i];
     CHECK(next_seq != nullptr);
+    next_seq->set_index(i);
 
     CHECK_EQ(next_seq->num_prompt_tokens(), source_info.suffix_start_idx);
     CHECK_EQ(next_seq->num_tokens() - source_info.suffix_start_idx,

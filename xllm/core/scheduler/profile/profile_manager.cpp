@@ -1228,6 +1228,14 @@ void ProfileManager::warmup_for_graph() {
 }
 
 void ProfileManager::warmup_prefill_for_graph() {
+  if (!::xllm::ExecutionConfig::get_instance()
+           .enable_prefill_piecewise_graph()) {
+    LOG(INFO) << "Skipping prefill graph warmup: "
+              << "enable_prefill_piecewise_graph=false "
+              << "(prefill runs eager).";
+    return;
+  }
+
   auto& model_args = engine_->model_args();
   int32_t max_context_len = model_args.max_position_embeddings();
 

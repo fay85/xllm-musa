@@ -275,6 +275,16 @@ std::vector<int64_t> SpeculativeEngine::get_active_activation_memory() const {
   return engine_->get_active_activation_memory();
 }
 
+bool SpeculativeEngine::start_profile() {
+  CHECK(engine_ != nullptr) << "target engine is not initialized";
+  return engine_->start_profile();
+}
+
+bool SpeculativeEngine::stop_profile() {
+  CHECK(engine_ != nullptr) << "target engine is not initialized";
+  return engine_->stop_profile();
+}
+
 bool SpeculativeEngine::pull_kv_blocks(
     const int32_t src_dp_size,
     const int32_t src_dp_rank,

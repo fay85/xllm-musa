@@ -21,6 +21,7 @@ limitations under the License.
 #include <algorithm>
 #include <cstdint>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -361,6 +362,9 @@ struct AttentionHostInput {
 
   const int32_t* graph_q_seq_lens_data = nullptr;
   const int32_t* graph_kv_seq_lens_data = nullptr;
+  torch::Tensor paged_kv_indptr;
+  torch::Tensor paged_kv_indices;
+  torch::Tensor paged_kv_last_page_len;
 };
 
 struct AttentionDeviceInput {
@@ -775,6 +779,9 @@ struct BatchInputMeta {
 struct ModelEmbeddingInput {
   // input embedding
   mutable torch::Tensor input_embedding;
+  // Qwen3.5 MTP keeps the target hidden input and current-token embedding in
+  // separate persistent graph buffers.
+  torch::Tensor mtp_token_embedding;
 
   // embedding ids of each sequence
   std::vector<int32_t> embedding_ids;
@@ -802,6 +809,7 @@ struct ModelEmbeddingInput {
   ModelEmbeddingInput to(const torch::Device& device) const {
     ModelEmbeddingInput out;
     out.input_embedding = safe_to(input_embedding, device);
+    out.mtp_token_embedding = safe_to(mtp_token_embedding, device, true);
     out.embedding_ids = embedding_ids;
     out.linear_state_ids = linear_state_ids;
     out.linear_state_indices = safe_to(linear_state_indices, device, true);
@@ -881,6 +889,11 @@ struct ParallelInput {
   std::vector<int64_t> query_start_loc;
 #endif
 
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  std::vector<int64_t> query_start_loc;
+  std::vector<int64_t> has_initial_state;
+#endif
+
   ParallelInput to(const torch::Device& device) const {
     ParallelInput out;
     out.dp_global_token_nums = dp_global_token_nums;
@@ -899,6 +912,10 @@ struct ParallelInput {
     out.query_start_loc = query_start_loc;
 #endif
     return out;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+    out.query_start_loc = query_start_loc;
+    out.has_initial_state = has_initial_state;
+#endif
   }
 };
 
@@ -939,6 +956,17 @@ struct ExpertInput {
   }
 };
 
+struct GdnMtpVerifyCache {
+  struct LayerState {
+    torch::Tensor ssm_intermediate;
+    torch::Tensor conv_intermediate;
+    bool ssm_state_transposed = false;
+  };
+
+  bool enabled = false;
+  std::map<int32_t, LayerState> layer_states;
+};
+
 struct GraphInput {
   torch::Tensor attn_mask;
   torch::Tensor tiling_data;
@@ -953,6 +981,18 @@ struct GraphInput {
   torch::Tensor expanded_paged_kv_last_page_len;
   torch::Tensor expanded_tiling_data;
   std::vector<int32_t> expanded_kv_seq_lens_vec;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  torch::Tensor expanded_paged_kv_indptr;
+  torch::Tensor expanded_paged_kv_indices;
+  torch::Tensor expanded_paged_kv_last_page_len;
+  // CPU mirrors are consumed by the MUSA/CUDA paged-KV FFI path.  Keep these
+  // separate from the device graph inputs: graph capture owns the device
+  // tensors, while the FFI ABI requires host pointers and the logical (not
+  // capacity) lengths for the current expanded batch.
+  torch::Tensor expanded_paged_kv_indptr_host;
+  torch::Tensor expanded_paged_kv_indices_host;
+  torch::Tensor expanded_paged_kv_last_page_len_host;
+#endif
 #if defined(USE_NPU)
   std::shared_ptr<npu::AclGraphTaskUpdateContext> acl_graph_task_update_context;
 #endif
@@ -989,6 +1029,21 @@ struct GraphInput {
         safe_to(expanded_paged_kv_last_page_len, device, true);
     out.expanded_tiling_data = safe_to(expanded_tiling_data, device, true);
     out.expanded_kv_seq_lens_vec = expanded_kv_seq_lens_vec;
+#if defined(USE_CUDA) || defined(USE_MUSA)
+    out.expanded_paged_kv_indptr =
+        safe_to(expanded_paged_kv_indptr, device, true);
+    out.expanded_paged_kv_indices =
+        safe_to(expanded_paged_kv_indices, device, true);
+    out.expanded_paged_kv_last_page_len =
+        safe_to(expanded_paged_kv_last_page_len, device, true);
+    // Host mirrors intentionally stay on CPU.  Copying them to `device`
+    // here would defeat the no-D2H graph replay contract and would also make
+    // the host pointer unstable across calls.
+    out.expanded_paged_kv_indptr_host = expanded_paged_kv_indptr_host;
+    out.expanded_paged_kv_indices_host = expanded_paged_kv_indices_host;
+    out.expanded_paged_kv_last_page_len_host =
+        expanded_paged_kv_last_page_len_host;
+#endif
 #if defined(USE_NPU)
     out.acl_graph_task_update_context = acl_graph_task_update_context;
 #endif
@@ -1035,6 +1090,7 @@ struct ModelInputParams {
           safe_to(table, table.options().device(torch::kCPU), true));
     }
     params.mtp_shifted_token_ids = safe_to(mtp_shifted_token_ids, device, true);
+    params.gdn_mtp_verify_cache = gdn_mtp_verify_cache;
     if (!params.embedding.linear_state_indices.defined() &&
         !params.embedding.linear_state_ids.empty()) {
       params.embedding.linear_state_indices =
@@ -1163,6 +1219,7 @@ struct ModelInputParams {
   // Backend-neutral state reused by the next MTP draft step.
   MtpTopkStatePtr mtp_topk_state;
   std::vector<int64_t> num_accepted_tokens_host;
+  std::shared_ptr<GdnMtpVerifyCache> gdn_mtp_verify_cache;
 
   RecModelInputParams rec_params;
 

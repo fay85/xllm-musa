@@ -27,10 +27,10 @@ limitations under the License.
 #include "framework/quant_args.h"
 #include "framework/state_dict/state_dict.h"
 #include "framework/state_dict/utils.h"
-#include "layers/common/activation.h"
-#include "layers/common/dense_mlp.h"
 #include "layers/common/fused_moe_base.h"
-#include "layers/common/linear.h"
+#include "layers/musa/activation.h"
+#include "layers/musa/dense_mlp.h"
+#include "layers/musa/linear.h"
 
 namespace xllm {
 namespace layer {
@@ -73,10 +73,10 @@ class Qwen3_5FusedMoEImpl final : public torch::nn::Module {
   torch::TensorOptions options_;
   ProcessGroup* tp_pg_ = nullptr;
 
-  ReplicatedLinear gate_{nullptr};
-  DenseMLP shared_experts_{nullptr};
+  musa::ReplicatedLinear gate_{nullptr};
+  MusaDenseMLP shared_experts_{nullptr};
   torch::nn::Linear shared_expert_gate_{nullptr};
-  Activation activation_{nullptr};
+  musa::Activation activation_{nullptr};
 
   DEFINE_WEIGHT(w13);
   DEFINE_FUSED_WEIGHT(w2);

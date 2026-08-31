@@ -484,6 +484,8 @@ class Sequence final {
 
   double estimated_latency() const { return estimated_latency_; }
 
+  void set_index(size_t index) { index_ = index; }
+
   // set sequence id
   void set_seq_id(int32_t seq_id) { seq_id_ = seq_id; }
 

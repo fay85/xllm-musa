@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+#     https://github.com/jd-opensource/xllm/blob/main/LICENSE
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,6 +20,7 @@ import torch.nn as nn
 from xllm.python.attention.backend import (
     AttentionBackend,
     AttentionMetadata,
+    LayerCache,
     LayerCacheInput,
     normalize_layer_caches,
 )
@@ -27,12 +28,47 @@ from xllm.python.layers.attention import Attention
 from xllm.python.model_executor.forward_context import LayerSynchronizer
 from xllm.python.model_executor.runners.eager import EagerRunner
 from xllm.python.platform import current_platform
+from scripts.logger import logger
+
+
+def _is_npu_device(device: torch.device) -> bool:
+    return device.type in ("npu", "privateuseone") and not current_platform.is_musa()
+
+
+def _is_musa_device(device: torch.device) -> bool:
+    return current_platform.is_musa() or device.type == "musa"
+
+
+def _use_decode_graph(metadata: AttentionMetadata) -> bool:
+    """True for decode and MTP target verify.
+
+    Qwen3.5 verify is marked ``CHUNKED_PREFILL`` in C++ so FlashInfer
+    sees causal token order. That flag must not send verify to the
+    prefill graph or skip MusaGraph capture.
+    """
+    if bool(getattr(metadata, "is_spec_verify", False)):
+        return True
+    return not bool(metadata.is_prefill or metadata.is_chunked_prefill)
+
+
+def _decode_graph_max_tokens(max_seqs_per_batch: int, config: dict) -> int:
+    """Token width for decode/verify graphs.
+
+    ``max_seqs_per_batch`` is sequence concurrency. MTP verify forwards
+    ``num_speculative_tokens + 1`` tokens for every live sequence, so graph
+    capacity must cover their product rather than either dimension alone.
+    """
+    speculative_tokens = int(config.get("num_speculative_tokens") or 0)
+    verify_width = int(max_seqs_per_batch) * max(speculative_tokens + 1, 1)
+    return max(int(max_seqs_per_batch), verify_width, 8)
 
 
 def _resolve_graph_backend(config: dict) -> str:
     graph_backend = str(config.get("python_graph_backend", "off")).lower()
     graph_disabled = graph_backend in ("", "off", "none", "0")
     if graph_disabled and config.get("enable_graph", False):
+        if current_platform.is_musa():
+            return "musagraph"
         if current_platform.is_npu():
             return "aclgraph"
     return graph_backend
@@ -43,7 +79,7 @@ def _create_attention_backend(
     device: torch.device,
     dtype: torch.dtype,
 ) -> AttentionBackend:
-    if current_platform.is_npu():
+    if _is_npu_device(device):
         from xllm.python.attention.npu_paged_attention import (
             NpuPagedAttentionBackend,
         )
@@ -57,7 +93,21 @@ def _create_attention_backend(
             device=device,
             dtype=dtype,
         )
-    if current_platform.is_cuda():
+    if _is_musa_device(device):
+        from xllm.python.attention.musa_paged_attention import (
+            MusaPagedAttentionBackend,
+        )
+
+        return MusaPagedAttentionBackend(
+            num_heads=first_attention.num_heads,
+            num_kv_heads=first_attention.num_kv_heads,
+            head_dim=first_attention.head_dim,
+            scale=first_attention.scale,
+            sliding_window=first_attention.sliding_window,
+            device=device,
+            dtype=dtype,
+        )
+    if device.type == "cuda":
         from xllm.python.attention.flashinfer import FlashInferBackend
 
         return FlashInferBackend(
@@ -69,7 +119,9 @@ def _create_attention_backend(
             device=device,
             dtype=dtype,
         )
-    raise NotImplementedError(f"No attention backend available for device type '{device.type}'")
+    raise NotImplementedError(
+        f"No attention backend available for device type '{device.type}'"
+    )
 
 
 class ModelExecutor:
@@ -84,7 +136,9 @@ class ModelExecutor:
         self.model = model
         self._kv_bound = False
 
-        attention_layers = [module for module in model.modules() if isinstance(module, Attention)]
+        attention_layers = [
+            module for module in model.modules() if isinstance(module, Attention)
+        ]
         if not attention_layers:
             raise ValueError("Python model does not contain an Attention layer")
 
@@ -92,35 +146,30 @@ class ModelExecutor:
         expected_config = self._attention_config(first_attention)
         for layer in attention_layers[1:]:
             if self._attention_config(layer) != expected_config:
-                raise ValueError("Attention backend requires identical attention configuration across all layers")
+                raise ValueError(
+                    "Attention backend requires identical attention configuration "
+                    "across all layers"
+                )
 
         first_parameter = next(model.parameters())
         device = first_parameter.device
         self._num_attention_layers = len(attention_layers)
-        self.attention_backend = _create_attention_backend(first_attention, device, first_parameter.dtype)
+        self.attention_backend = _create_attention_backend(
+            first_attention, device, first_parameter.dtype
+        )
 
         execution_model = model.model
         self.eager_runner = EagerRunner(execution_model, self.attention_backend, device)
-        # Context-Parallel: shard prefill sequences across the CP group. Decode
-        # stays on the non-CP path (CP is prefill-only, eager-only in v1).
         self.eager_runner.cp_size = int(config.get("cp_size", 1))
         self.eager_runner.cp_rank = int(config.get("cp_rank", 0))
         self.decode_graph_runner = None
+        self.prefill_graph_runner = None
         self.inductor_runner = None
 
         graph_backend = _resolve_graph_backend(config)
+        logger.info(f"Python decode graph backend: {graph_backend}")
         dp_size = int(config.get("dp_size", 1))
         dp_rank = int(config.get("dp_rank", 0))
-        self.dp_size = dp_size
-        if dp_size > 1 and graph_backend not in (
-            "",
-            "off",
-            "none",
-            "0",
-            "cudagraphs",
-            "aclgraph",
-        ):
-            raise NotImplementedError("Python data parallel graph execution supports cudagraphs and aclgraph only")
         if graph_backend in ("", "off", "none", "0"):
             pass
         elif graph_backend == "cudagraphs":
@@ -133,51 +182,97 @@ class ModelExecutor:
                 self.attention_backend,
                 device,
                 max_seqs_per_batch,
-                int(config["max_position_embeddings"]),
-                dp_size,
-                dp_rank,
+                int(config.get("max_position_embeddings") or 40960),
             )
+        elif graph_backend == "musagraph":
+            from xllm.python.model_executor.runners.decode_musa_graph import (
+                DecodeMusaGraphRunner,
+            )
+            from xllm.python.model_executor.runners.prefill_musa_graph import (
+                PrefillMusaGraphRunner,
+            )
+
+            max_decode_tokens = _decode_graph_max_tokens(max_seqs_per_batch, config)
+            logger.info(f"Python MUSA decode graph max tokens: {max_decode_tokens}")
+            self.decode_graph_runner = DecodeMusaGraphRunner(
+                execution_model,
+                self.attention_backend,
+                device,
+                max_decode_tokens,
+                int(config.get("max_position_embeddings") or 40960),
+                lm_head=getattr(model, "lm_head", None),
+            )
+            # C++ can capture an 8k piecewise ladder. Python reserves a
+            # per-layer GEMM workspace, so 27B OOM at that cap. Honor an
+            # explicit Python override; otherwise keep the C++ flag but cap
+            # it at a C=1-safe size that still covers the 384-token bucket.
+            if "max_tokens_for_python_prefill_graph" in config:
+                prefill_max_tokens = int(config["max_tokens_for_python_prefill_graph"])
+            else:
+                prefill_max_tokens = min(
+                    int(config.get("max_tokens_for_graph_mode") or 2048),
+                    512,
+                )
+            logger.info(f"Python MUSA prefill graph max tokens: {prefill_max_tokens}")
+            self.prefill_graph_runner = PrefillMusaGraphRunner(
+                execution_model,
+                self.attention_backend,
+                device,
+                prefill_max_tokens,
+                lm_head=getattr(model, "lm_head", None),
+            )
+            # Prefill GEMM/activations use GraphActivationPool. Reserve only
+            # decode-width persistent buffers so 27B does not keep a 512-token
+            # per-layer workspace that evicts weights.
+            workspace_tokens = max_decode_tokens
+            reserve_model = getattr(model, "reserve_graph_workspaces", None)
+            if reserve_model is None:
+                reserve_model = getattr(
+                    execution_model, "reserve_graph_workspaces", None
+                )
+            if reserve_model is not None:
+                reserve_model(workspace_tokens)
+            reserve_prefill = getattr(
+                self.attention_backend, "reserve_prefill_buffers", None
+            )
+            if reserve_prefill is not None:
+                reserve_prefill(self.prefill_graph_runner.max_tokens)
         elif graph_backend == "aclgraph":
             from xllm.python.model_executor.runners.decode_acl_graph import (
                 DecodeAclGraphRunner,
             )
 
-            num_decoding_tokens = max(1, int(num_decoding_tokens))
+            decode_tokens = max(1, int(num_decoding_tokens))
             decode_batch_size_limit = (
-                None if acl_graph_decode_batch_size_limit is None else max(1, int(acl_graph_decode_batch_size_limit))
+                None
+                if acl_graph_decode_batch_size_limit is None
+                else max(1, int(acl_graph_decode_batch_size_limit))
             )
-            graph_sequence_capacity = max_seqs_per_batch
+            graph_sequence_capacity = int(max_seqs_per_batch)
             if decode_batch_size_limit is not None:
                 graph_sequence_capacity = min(
                     graph_sequence_capacity,
                     decode_batch_size_limit,
                 )
-            max_graph_tokens = graph_sequence_capacity * num_decoding_tokens
+            max_graph_tokens = graph_sequence_capacity * decode_tokens
+            logger.info(f"Python ACL decode graph max tokens: {max_graph_tokens}")
             self.decode_graph_runner = DecodeAclGraphRunner(
                 execution_model,
                 self.attention_backend,
                 device,
                 max_graph_tokens,
-                int(config["max_position_embeddings"]),
+                int(config.get("max_position_embeddings") or 40960),
                 dp_size,
                 dp_rank,
                 decode_batch_size_limit,
-                num_decoding_tokens,
+                decode_tokens,
             )
         else:
-            if self.eager_runner.cp_size > 1:
-                # CP is prefill-only and lives on eager_runner; a compile
-                # backend serves prefill through InductorRunner, which carries
-                # no cp_context, so CP would silently no-op. Reject rather than
-                # run without the requested sharding.
-                raise NotImplementedError(
-                    "Context-Parallel (cp_size > 1) is not supported with the "
-                    f"'{graph_backend}' graph backend; CP is eager-only. Use "
-                    "graph_backend=off/aclgraph, or set cp_size=1."
-                )
             from xllm.python.model_executor.runners.inductor import InductorRunner
 
-            self.inductor_runner = InductorRunner(execution_model, self.attention_backend, device, graph_backend)
+            self.inductor_runner = InductorRunner(
+                execution_model, self.attention_backend, device, graph_backend
+            )
 
     @staticmethod
     def _attention_config(layer: Attention) -> tuple[int, int, int, float, int]:
@@ -191,7 +286,12 @@ class ModelExecutor:
 
     def bind_kv_caches(self, kv_caches: list[LayerCacheInput]) -> None:
         layer_caches = normalize_layer_caches(kv_caches)
-        required_layers = max(layer.layer_id for layer in self.model.modules() if isinstance(layer, Attention)) + 1
+        attention_ids = [
+            module.layer_id
+            for module in self.model.modules()
+            if isinstance(module, Attention)
+        ]
+        required_layers = max(attention_ids) + 1
         if len(layer_caches) < required_layers:
             raise ValueError("cache layer count does not match the model layer layout")
         if self._kv_bound:
@@ -200,11 +300,23 @@ class ModelExecutor:
         self.eager_runner.bind_layer_caches(layer_caches)
         if self.decode_graph_runner is not None:
             self.decode_graph_runner.bind_layer_caches(layer_caches)
-        if self.inductor_runner is not None:
-            self.inductor_runner.bind_layer_caches(layer_caches)
+        if self.prefill_graph_runner is not None:
+            self.prefill_graph_runner.bind_layer_caches(layer_caches)
+        self._refresh_gdn_ssm_workspaces(layer_caches)
         self._kv_bound = True
 
-    @torch.inference_mode()
+    def _refresh_gdn_ssm_workspaces(self, layer_caches: list[LayerCache]) -> None:
+        for module in self.model.modules():
+            refresh = getattr(module, "refresh_graph_ssm_workspace", None)
+            if refresh is None:
+                continue
+            layer_id = getattr(module, "layer_id", None)
+            if layer_id is None or int(layer_id) >= len(layer_caches):
+                continue
+            ssm = layer_caches[int(layer_id)].ssm
+            if ssm is not None:
+                refresh(ssm)
+
     def execute(
         self,
         input_ids: torch.Tensor,
@@ -212,19 +324,28 @@ class ModelExecutor:
         metadata: AttentionMetadata,
         input_embedding: torch.Tensor | None = None,
         layer_synchronizer: LayerSynchronizer | None = None,
-    ) -> torch.Tensor:
+    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
         if not self._kv_bound:
             raise RuntimeError("KV caches are not bound")
 
         graph_runner = self.decode_graph_runner
-        if graph_runner is not None and graph_runner.can_execute(input_ids, metadata, input_embedding):
-            graph_runner.warmup(
-                input_ids,
-                positions,
-                metadata,
-                input_embedding,
-            )
-            return graph_runner.execute(input_ids, positions, metadata, input_embedding)
+        if graph_runner is not None and _use_decode_graph(metadata):
+            graph_runner.warmup(input_ids.device, input_ids.dtype)
+            if graph_runner.can_execute(input_ids, metadata):
+                hidden = graph_runner.execute(input_ids, positions, metadata)
+                last_logits = getattr(graph_runner, "last_logits", None)
+                if last_logits is not None:
+                    return hidden, last_logits
+                return hidden
+        prefill_runner = self.prefill_graph_runner
+        if prefill_runner is not None and prefill_runner.can_execute(
+            input_ids, metadata
+        ):
+            hidden = prefill_runner.execute(input_ids, positions, metadata)
+            last_logits = getattr(prefill_runner, "last_logits", None)
+            if last_logits is not None:
+                return hidden, last_logits
+            return hidden
         if self.inductor_runner is not None:
             return self.inductor_runner.execute(
                 input_ids,

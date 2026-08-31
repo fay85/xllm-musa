@@ -86,6 +86,16 @@ def _torch_device_type() -> PlatformEnum | None:
     except ImportError:
         return None
 
+    # Detect MUSA before CUDA. A CUDA-compat torch.cuda.is_available() on this
+    # machine must not hide a native torch_musa runtime. If the MUSA wheel is
+    # importable, this process is a MUSA build; do not fall through to CUDA.
+    try:
+        __import__("torch_musa")
+    except ImportError:
+        pass
+    else:
+        return PlatformEnum.MUSA
+
     try:
         if torch.cuda.is_available():
             try:
@@ -105,7 +115,6 @@ def _torch_device_type() -> PlatformEnum | None:
         pass
 
     for module_name, attr, enum_value in (
-        ("torch_musa", "musa", PlatformEnum.MUSA),
         ("torch_mlu", "mlu", PlatformEnum.MLU),
         ("torch_npu", "npu", PlatformEnum.NPU),
     ):

@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+#     https://github.com/jd-opensource/xllm/blob/main/LICENSE
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,9 @@ import pytest
 from xllm.python import registry
 
 
-def test_unsupported_model_fails_before_import(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_unsupported_model_fails_before_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     import_model = Mock()
     monkeypatch.setattr(registry.current_platform, "device_type", lambda: "npu")
     monkeypatch.setattr(registry, "import_module", import_model)
@@ -28,3 +30,27 @@ def test_unsupported_model_fails_before_import(monkeypatch: pytest.MonkeyPatch) 
         registry.get_model_class("qwen3_5")
 
     import_model.assert_not_called()
+
+
+def test_npu_only_model_fails_on_musa_before_import(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import_model = Mock()
+    monkeypatch.setattr(registry.current_platform, "device_type", lambda: "musa")
+    monkeypatch.setattr(registry, "import_module", import_model)
+
+    with pytest.raises(NotImplementedError, match="deepseek_v32.*musa"):
+        registry.get_model_class("deepseek_v32")
+
+    import_model.assert_not_called()
+
+
+def test_qwen3_5_is_imported_on_musa(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake_cls = type("Qwen3_5ForCausalLM", (), {})
+    fake_module = Mock()
+    fake_module.Qwen3_5ForCausalLM = fake_cls
+    monkeypatch.setattr(registry.current_platform, "device_type", lambda: "musa")
+    monkeypatch.setattr(registry, "import_module", Mock(return_value=fake_module))
+
+    assert registry.get_model_class("qwen3_5") is fake_cls
+    registry.import_module.assert_called_once_with("xllm.python.models.qwen3_5")

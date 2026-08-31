@@ -282,7 +282,9 @@ class FlashInferBackend(AttentionBackend):
         k_3d = _pack_head_axes(k.view(-1, layer.num_kv_heads, layer.head_dim))
         v_3d = _pack_head_axes(v.view(-1, layer.num_kv_heads, layer.head_dim))
 
-        kernels.reshape_paged_cache(metadata.slot_mapping, k_3d, v_3d, k_cache, v_cache)
+        kernels.reshape_paged_cache(
+            metadata.slot_mapping, k_3d, v_3d, k_cache, v_cache
+        )
 
         if metadata.is_prefill:
             output = self._prefill_ragged_wrapper.run(q_3d, k_3d, v_3d)

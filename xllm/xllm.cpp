@@ -25,9 +25,11 @@ namespace py = pybind11;
 #endif
 
 #include <csignal>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <random>
+#include <string>
 
 #include "api_service/api_service.h"
 #include "core/common/global_flags.h"
@@ -68,6 +70,18 @@ namespace py = pybind11;
 #include "parser/reasoning_parser.h"
 #include "server/xllm_server_registry.h"
 using namespace xllm;
+
+// Deprecated launch-script compatibility flags. Device selection now follows
+// the visible-device environment, and adaptive one-shot prefill is no longer
+// configured by the current scheduler. Keeping false/zero invocations
+// accepted lets older deployment scripts launch the current binary safely.
+DEFINE_int32(device_id,
+             0,
+             "Deprecated compatibility flag; device selection uses the "
+             "visible-device environment.");
+DEFINE_bool(enable_adaptive_prefill_oneshot,
+            false,
+            "Deprecated compatibility flag; must remain disabled.");
 
 static std::atomic<uint32_t> signal_received{0};
 
@@ -345,6 +359,47 @@ void validate_config(const std::string& model_type) {
   if (model_config.max_processor_cache_items() < 0) {
     LOG(FATAL) << "max_processor_cache_items must be >= 0.";
   }
+#if defined(USE_MUSA)
+  constexpr int32_t kMusaFa3BlockSize = 64;
+  const bool is_musa_fa3_model =
+      model_type == "qwen3" || model_type.starts_with("qwen3_5");
+  if (BeamSearchConfig::get_instance().enable_beam_search_kernel()) {
+    LOG(WARNING) << "MUSA beam search kernel is not implemented; using "
+                    "software beam search instead.";
+    BeamSearchConfig::get_instance().enable_beam_search_kernel(false);
+  }
+  if (is_musa_fa3_model && kv_cache_config.block_size() != kMusaFa3BlockSize) {
+    LOG(WARNING) << "The current MUSA Qwen3 family attention path requires "
+                    "block_size=64; overriding block_size="
+                 << kv_cache_config.block_size() << ".";
+    kv_cache_config.block_size(kMusaFa3BlockSize);
+  }
+  const char* experimental_graph_env =
+      std::getenv("XLLM_QWEN3_ENABLE_GRAPH_EXPERIMENTAL");
+  const bool allow_experimental_qwen3_graph =
+      experimental_graph_env != nullptr &&
+      std::string(experimental_graph_env) == "1";
+  const bool python_model_impl =
+      ModelConfig::is_python_model_impl(model_config.model_impl());
+  if (model_type == "qwen3" && execution_config.enable_graph() &&
+      !allow_experimental_qwen3_graph && !python_model_impl) {
+    LOG(WARNING) << "MUSA graph execution is not yet validated for Qwen3; "
+                    "disabling graph and piecewise graph execution. Set "
+                    "XLLM_QWEN3_ENABLE_GRAPH_EXPERIMENTAL=1 only for "
+                    "experimental validation.";
+    execution_config.enable_graph(false);
+    execution_config.enable_prefill_piecewise_graph(false);
+  } else if (model_type == "qwen3" && execution_config.enable_graph() &&
+             (allow_experimental_qwen3_graph || python_model_impl)) {
+    LOG(WARNING) << "Experimental MUSA Qwen3 graph execution is enabled; "
+                    "correctness and performance are not yet validated.";
+  }
+  if (model_type == "qwen3" && !scheduler_config.enable_schedule_overlap()) {
+    LOG(WARNING) << "MUSA Qwen3 execution requires schedule overlap for "
+                    "correct stream ownership; enabling schedule overlap.";
+    scheduler_config.enable_schedule_overlap(true);
+  }
+#endif
 #if defined(USE_MLU)
   // Disable enable_schedule_overlap for VLM models on MLU backend
   if (scheduler_config.enable_schedule_overlap() &&

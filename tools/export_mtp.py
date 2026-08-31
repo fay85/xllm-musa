@@ -287,9 +287,14 @@ def update_and_save_config(config: ConfigView, output_dir: str, model_type: str,
         "num_nextn_predict_layers": mtp_layer_count,
         "architectures": [mtp_architecture],
         "model_type": mtp_model_type,
-        "quantization_config": "",
         "first_k_dense_replace": 0,
     }
+
+    # Qwen3.5 exports native MTP tensors without dequantizing them. Preserve
+    # the source quantization metadata so FP8 draft weights and scales are
+    # loaded by the matching quantized layers.
+    if model_type not in QWEN3_5_EXPORT_MODEL_TYPES:
+        updates["quantization_config"] = ""
 
     if model_type == "deepseek_v4":
         updates["num_hash_layers"] = 0

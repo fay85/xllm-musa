@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/framework/speculative/spec_input_builder.h"
+#include "spec_input_builder.h"
 
 #include <glog/logging.h>
 
@@ -179,51 +179,6 @@ int32_t calc_slot_id(int32_t position,
   return block_id * block_size + block_offset;
 }
 
-int32_t calc_ring_slot_id(int32_t position,
-                          const Slice<int32_t>& block_table_slice,
-                          int32_t block_size) {
-  CHECK_GT(block_size, 0) << "invalid block_size=" << block_size;
-  CHECK_GE(position, 0) << "invalid position=" << position;
-  CHECK(!block_table_slice.empty()) << "circular block table must not be empty";
-  const int32_t block_idx =
-      (position / block_size) % static_cast<int32_t>(block_table_slice.size());
-  const int32_t block_id = block_table_slice[block_idx];
-  CHECK_GE(block_id, 0) << "invalid circular block_id=" << block_id;
-  const int32_t block_offset = position % block_size;
-  return block_id * block_size + block_offset;
-}
-
-std::vector<int32_t> build_grouped_prefill_swa_slots(const ForwardInput& input,
-                                                     int32_t block_size) {
-  DecodeRowContext ctx = make_decode_row_context(input);
-  CHECK(ctx.model_managed_multiblock)
-      << "grouped prefill SWA slots require multi_block_tables";
-  CHECK(!ctx.multi_block_tables.empty())
-      << "grouped prefill SWA slots require manager 0";
-  CHECK_EQ(ctx.multi_block_tables.front().size(),
-           static_cast<size_t>(ctx.num_sequences))
-      << "grouped prefill SWA manager row count mismatch";
-
-  std::vector<int32_t> slots;
-  slots.reserve(ctx.positions.size());
-  for (int32_t seq_id = 0; seq_id < ctx.num_sequences; ++seq_id) {
-    const int32_t kv_len = calc_kv_len(ctx.kv_seq_lens, seq_id, /*offset=*/0);
-    const int32_t q_len = input.input_params.get_q_seq_len(seq_id);
-    CHECK_GE(q_len, 0) << "grouped prefill q length must be non-negative";
-    CHECK_GE(kv_len, q_len) << "grouped prefill kv length must cover the query";
-    const int32_t query_start = kv_len - q_len;
-    const Slice<int32_t>& swa_block_table =
-        ctx.multi_block_tables.front()[static_cast<size_t>(seq_id)];
-    for (int32_t query_idx = 0; query_idx < q_len; ++query_idx) {
-      slots.emplace_back(calc_ring_slot_id(
-          query_start + query_idx, swa_block_table, block_size));
-    }
-  }
-  CHECK_EQ(slots.size(), ctx.positions.size())
-      << "grouped prefill SWA slot/position count mismatch";
-  return slots;
-}
-
 int32_t calc_kv_len(const Slice<int32_t>& kv_seq_lens_slice,
                     int32_t seq_id,
                     int32_t offset) {
@@ -330,14 +285,7 @@ void append_decode_row(const DecodeRowContext& ctx,
   }
   buf.out_positions.emplace_back(new_position);
   if (ctx.model_managed_multiblock) {
-    CHECK(!ctx.multi_block_tables.empty())
-        << "model-managed multiblock input requires an SWA manager";
-    CHECK_LT(static_cast<size_t>(row.seq_id),
-             ctx.multi_block_tables.front().size());
-    buf.out_new_cache_slots.emplace_back(calc_ring_slot_id(
-        new_position,
-        ctx.multi_block_tables.front()[static_cast<size_t>(row.seq_id)],
-        block_size));
+    buf.out_new_cache_slots.emplace_back(0);
     if (row.append_block_table) {
       if (buf.out_multi_block_tables.size() < ctx.multi_block_tables.size()) {
         buf.out_multi_block_tables.resize(ctx.multi_block_tables.size());
@@ -372,10 +320,8 @@ void append_decode_row(const DecodeRowContext& ctx,
   }
 
   if (row.append_kv_len) {
-    const int32_t kv_len_offset =
-        row.kv_len_offset.value_or(row.position_offset);
-    const int32_t kv_len =
-        calc_kv_len(ctx.kv_seq_lens, row.seq_id, kv_len_offset);
+    int32_t kv_len =
+        calc_kv_len(ctx.kv_seq_lens, row.seq_id, row.position_offset);
     update_kv_seq_lens_and_max(
         buf.out_kv_seq_lens, kv_len, buf.meta.kv_max_seq_len);
   }
@@ -445,6 +391,27 @@ void append_decode_row_from_last_step(const DecodeRowContext& ctx,
   append_decode_row(ctx, row, block_size, buf);
 }
 
+torch::Tensor build_q_cu_seq_lens_tensor(const ModelInputParams& params,
+                                         torch::Device device,
+                                         bool include_leading_zero) {
+  CHECK_EQ(params.attention.host.q_seq_lens.empty(),
+           params.attention.host.q_cu_seq_lens.empty())
+      << "q_seq_lens and q_cu_seq_lens must be provided together";
+  if (!include_leading_zero) {
+    return torch::tensor(params.attention.host.q_cu_seq_lens,
+                         torch::dtype(torch::kInt).device(device));
+  }
+  std::vector<int32_t> q_cu_seq_lens_vec;
+  q_cu_seq_lens_vec.reserve(params.meta.num_sequences + 1);
+  q_cu_seq_lens_vec.emplace_back(0);
+  for (int32_t i = 0; i < params.meta.num_sequences; ++i) {
+    q_cu_seq_lens_vec.emplace_back(q_cu_seq_lens_vec.back() +
+                                   params.get_q_seq_len(i));
+  }
+  return torch::tensor(q_cu_seq_lens_vec,
+                       torch::dtype(torch::kInt).device(device));
+}
+
 void update_input_params(ModelInputParams& input_params,
                          DecodeBuildBuffers& buf,
                          int32_t q_max_seq_len,
@@ -507,20 +474,180 @@ void set_token_position_tensors(ForwardInput& input,
   input.device_tensors_ready = true;
 }
 
-DraftProposal build_validate_proposal(
-    const std::vector<torch::Tensor>& draft_token_ids_steps,
-    const std::vector<torch::Tensor>& draft_probs_steps,
-    bool draft_probs_required) {
-  CHECK(!draft_token_ids_steps.empty()) << "draft steps must not be empty";
+namespace draftProbs {
 
-  auto draft_token_ids =
-      torch::stack(draft_token_ids_steps, /*dim=*/1).to(torch::kLong);
-  if (!draft_probs_required) {
-    return DraftProposal(std::move(draft_token_ids));
+namespace {
+
+torch::Tensor extract_selected_probs(const torch::Tensor& draft_probs,
+                                     const torch::Tensor& draft_token_ids) {
+  CHECK(draft_probs.defined()) << "draft_probs must be defined";
+  CHECK(draft_token_ids.defined()) << "draft_token_ids must be defined";
+
+  if (draft_probs.dim() == 1) {
+    return draft_probs;
   }
 
-  return DraftProposal(std::move(draft_token_ids),
-                       torch::stack(draft_probs_steps, /*dim=*/1));
+  if (draft_probs.dim() == 2) {
+    CHECK_EQ(draft_probs.size(0), draft_token_ids.numel())
+        << "draft_probs batch size mismatch";
+    if (draft_probs.size(1) == 1) {
+      return draft_probs.squeeze(-1);
+    }
+    auto ids = draft_token_ids.view({-1, 1}).to(torch::kLong);
+    return draft_probs.gather(/*dim=*/-1, ids).squeeze(-1);
+  }
+
+  CHECK(false) << "draft_probs must be [batch], [batch,1] or [batch,vocab]";
+  return torch::Tensor();
+}
+
+// Scatter selected-only probs into a dense last-vocab-dim tensor. `ids` and
+// `selected_probs` share shape [..., width]; the result is [..., width, vocab],
+// with each selected id's prob placed at its vocab slot and zeros elsewhere.
+torch::Tensor scatter_selected_to_dense(const torch::Tensor& ids,
+                                        const torch::Tensor& selected_probs,
+                                        int32_t vocab_size) {
+  CHECK_GT(vocab_size, 0) << "vocab_size must be > 0 for dense draft probs";
+  std::vector<int64_t> dense_shape(ids.sizes().begin(), ids.sizes().end());
+  dense_shape.emplace_back(vocab_size);
+  torch::Tensor dense_probs =
+      torch::zeros(dense_shape, selected_probs.options());
+  dense_probs.scatter_(
+      /*dim=*/-1, ids.unsqueeze(-1), selected_probs.unsqueeze(-1));
+  return dense_probs;
+}
+
+}  // namespace
+
+torch::Tensor compress_for_cache(const torch::Tensor& draft_probs,
+                                 const torch::Tensor& draft_token_ids) {
+  return extract_selected_probs(draft_probs, draft_token_ids);
+}
+
+std::pair<torch::Tensor, torch::Tensor> build_validate_tensors(
+    const std::vector<torch::Tensor>& draft_token_ids_steps,
+    const std::vector<torch::Tensor>& draft_probs_steps,
+    int32_t batch_size,
+    int32_t vocab_size,
+    bool enable_opt_validate_probs,
+    bool draft_probs_required) {
+  CHECK_GT(batch_size, 0) << "batch_size must be > 0";
+  CHECK_GT(vocab_size, 0) << "vocab_size must be > 0";
+  CHECK_EQ(draft_token_ids_steps.size(), draft_probs_steps.size())
+      << "draft steps mismatch";
+  CHECK(!draft_token_ids_steps.empty()) << "draft steps must not be empty";
+
+  std::vector<torch::Tensor> token_ids_vec;
+  std::vector<torch::Tensor> probs_vec;
+  token_ids_vec.reserve(draft_token_ids_steps.size());
+  probs_vec.reserve(draft_probs_steps.size());
+
+  for (size_t i = 0; i < draft_token_ids_steps.size(); ++i) {
+    auto draft_token_ids =
+        draft_token_ids_steps[i].view({batch_size, 1}).to(torch::kLong);
+    token_ids_vec.emplace_back(draft_token_ids);
+    if (!draft_probs_required) {
+      continue;
+    }
+
+    torch::Tensor selected_probs =
+        extract_selected_probs(draft_probs_steps[i], draft_token_ids)
+            .view({batch_size, 1});
+    if (enable_opt_validate_probs) {
+      probs_vec.emplace_back(selected_probs);
+    } else {
+      probs_vec.emplace_back(scatter_selected_to_dense(
+          draft_token_ids, selected_probs, vocab_size));
+    }
+  }
+
+  auto draft_token_ids = torch::cat(token_ids_vec, /*dim=*/1);
+  if (!draft_probs_required) {
+    return {draft_token_ids, torch::Tensor()};
+  }
+  auto draft_probs = torch::cat(probs_vec, /*dim=*/1);
+  return {draft_token_ids, draft_probs};
+}
+
+std::pair<torch::Tensor, torch::Tensor> build_validate_tensors_from_block(
+    const torch::Tensor& token_ids_block,
+    const torch::Tensor& probs_block,
+    int32_t vocab_size,
+    bool enable_opt_validate_probs) {
+  CHECK(token_ids_block.defined()) << "token_ids_block must be defined";
+  CHECK(probs_block.defined()) << "probs_block must be defined";
+  CHECK_EQ(token_ids_block.dim(), 2)
+      << "token_ids_block must be [batch, n_speculative_tokens], got "
+      << token_ids_block.sizes();
+  CHECK_EQ(probs_block.dim(), 2)
+      << "probs_block must be selected-only [batch, n_speculative_tokens], got "
+      << probs_block.sizes();
+  CHECK_EQ(probs_block.size(0), token_ids_block.size(0))
+      << "probs/token block batch mismatch";
+  CHECK_EQ(probs_block.size(1), token_ids_block.size(1))
+      << "probs/token block width mismatch";
+
+  auto draft_token_ids = token_ids_block.to(torch::kLong);
+  if (enable_opt_validate_probs) {
+    // The draft block is already stacked as [batch, n_speculative_tokens]; pass
+    // the selected-only probs straight to the rejection sampler.
+    return {draft_token_ids, probs_block};
+  }
+
+  // Default path: scatter the selected probs into a dense
+  // [batch, n_speculative_tokens, vocab_size] tensor, matching MTP's
+  // build_validate_tensors output so the shared rejection sampler (and its
+  // fused kernel) always receives dense draft_probs.
+  return {draft_token_ids,
+          scatter_selected_to_dense(draft_token_ids, probs_block, vocab_size)};
+}
+
+}  // namespace draftProbs
+
+void build_expanded_decode_paged_kv(
+    const torch::Tensor& expanded_block_tables,
+    const std::vector<int32_t>& expanded_kv_seq_lens,
+    int32_t block_size,
+    std::vector<int32_t>& paged_kv_indptr,
+    std::vector<int32_t>& paged_kv_indices,
+    std::vector<int32_t>& paged_kv_last_page_len) {
+  CHECK_GT(block_size, 0) << "block_size must be positive";
+  CHECK(expanded_block_tables.defined())
+      << "expanded block tables must be defined";
+  CHECK_EQ(expanded_block_tables.dim(), 2)
+      << "expanded block tables must be 2D";
+  const int64_t num_rows = expanded_block_tables.size(0);
+  CHECK_EQ(expanded_kv_seq_lens.size(), static_cast<size_t>(num_rows))
+      << "expanded kv seq lens must match block table rows";
+
+  torch::Tensor block_tables_cpu = expanded_block_tables.to(torch::kCPU);
+  CHECK_EQ(block_tables_cpu.scalar_type(), torch::kInt)
+      << "expanded block tables must use int32";
+  auto block_accessor = block_tables_cpu.accessor<int32_t, 2>();
+
+  paged_kv_indptr = {0};
+  paged_kv_indices.clear();
+  paged_kv_last_page_len.clear();
+  paged_kv_indices.reserve(static_cast<size_t>(num_rows) * 4);
+  paged_kv_last_page_len.reserve(static_cast<size_t>(num_rows));
+
+  for (int64_t row = 0; row < num_rows; ++row) {
+    const int32_t kv_len = expanded_kv_seq_lens[static_cast<size_t>(row)];
+    CHECK_GE(kv_len, 1) << "expanded kv_len must be positive";
+    const int32_t num_blocks = (kv_len + block_size - 1) / block_size;
+    CHECK_LE(num_blocks, block_tables_cpu.size(1))
+        << "expanded block table row is too narrow for kv_len";
+    for (int32_t block_idx = 0; block_idx < num_blocks; ++block_idx) {
+      const int32_t block_id = block_accessor[row][block_idx];
+      CHECK_GE(block_id, 0) << "invalid block id in expanded row " << row;
+      paged_kv_indices.push_back(block_id);
+    }
+    paged_kv_indptr.push_back(
+        static_cast<int32_t>(paged_kv_indices.size()));
+    const int32_t last_page_len =
+        (kv_len % block_size == 0) ? block_size : kv_len % block_size;
+    paged_kv_last_page_len.push_back(last_page_len);
+  }
 }
 
 }  // namespace xllm::specBuilder

@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -42,7 +42,9 @@ Qwen3NextRMSNormImpl::forward(torch::Tensor& input,
     return std::make_tuple(norm_params.norm_out, std::nullopt);
   }
 
-#if defined(USE_MUSA)
+#if (defined(USE_CUDA) || defined(USE_MUSA)) && !defined(USE_DCU)
+  // CUDA/MUSA dispatch folds the Gemma gamma offset inside the device kernel
+  // and avoids allocating `1.0 + weight_` during graph capture.
   xllm::kernel::GemmaRMSNormParams gemma_params;
   gemma_params.x = input;
   gemma_params.gamma = weight_;
@@ -51,6 +53,8 @@ Qwen3NextRMSNormImpl::forward(torch::Tensor& input,
   xllm::kernel::gemma_rms_norm(gemma_params);
   return std::make_tuple(gemma_params.norm_out, gemma_params.residual_out);
 #else
+  // Other backends keep their fused-layernorm implementation.
+  // NPU allocates outputs internally.
   // With residual: use the fused NPU AddRmsNorm path.
   xllm::kernel::FusedLayerNormParams fused_params;
   fused_params.input = input;

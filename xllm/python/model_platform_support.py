@@ -15,10 +15,11 @@
 """Python model support declared by implementation and platform."""
 
 MODEL_PLATFORM_SUPPORT: dict[str, dict[str, bool]] = {
-    "qwen3": {"cuda": True, "npu": True},
-    "qwen3_5": {"cuda": True, "npu": False},
-    "qwen3_vl": {"cuda": False, "npu": True},
-    "deepseek_v32": {"cuda": False, "npu": True},
-    "glm5_2": {"cuda": False, "npu": True},
-    "deepseek_v32_mtp": {"cuda": False, "npu": True},
+    "qwen3": {"cuda": True, "npu": True, "musa": True},
+    "qwen3_5": {"cuda": True, "npu": False, "musa": True},
+    "qwen3_5_mtp": {"cuda": True, "npu": False, "musa": True},
+    "qwen3_vl": {"cuda": False, "npu": True, "musa": False},
+    "deepseek_v32": {"cuda": False, "npu": True, "musa": False},
+    "glm5_2": {"cuda": False, "npu": True, "musa": False},
+    "deepseek_v32_mtp": {"cuda": False, "npu": True, "musa": False},
 }

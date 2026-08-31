@@ -7,7 +7,7 @@ You may obtain a copy of the License at
     https://github.com/xLLM-AI/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
+    10|distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
@@ -62,6 +62,8 @@ void register_attention_metadata_views(py::module_& module) {
       .def_property_readonly("qo_indptr", &PyAttentionMetadataView::qo_indptr)
       .def_property_readonly("q_cu_seq_lens",
                              &PyAttentionMetadataView::q_cu_seq_lens)
+      .def_property_readonly("gdn_cu_seq_lens",
+                             &PyAttentionMetadataView::gdn_cu_seq_lens)
       .def_property_readonly("kv_cu_seq_lens",
                              &PyAttentionMetadataView::kv_cu_seq_lens)
       .def_property_readonly("kv_seq_lens_host",
@@ -74,20 +76,56 @@ void register_attention_metadata_views(py::module_& module) {
                              &PyAttentionMetadataView::block_table)
       .def_property_readonly("kv_seq_lens",
                              &PyAttentionMetadataView::kv_seq_lens)
+      .def_property_readonly("q_seq_lens", &PyAttentionMetadataView::q_seq_lens)
+      .def_property_readonly("max_seq_len",
+                             &PyAttentionMetadataView::max_seq_len)
+      .def_property_readonly("max_query_len",
+                             &PyAttentionMetadataView::max_query_len)
+      .def_property_readonly("paged_kv_indptr_host",
+                             &PyAttentionMetadataView::paged_kv_indptr_host)
+      .def_property_readonly("paged_kv_indices_host",
+                             &PyAttentionMetadataView::paged_kv_indices_host)
+      .def_property_readonly(
+          "paged_kv_last_page_len_host",
+          &PyAttentionMetadataView::paged_kv_last_page_len_host)
+      .def_property_readonly("is_prefill", &PyAttentionMetadataView::is_prefill)
+      .def_property_readonly("is_chunked_prefill",
+                             &PyAttentionMetadataView::is_chunked_prefill)
       .def_property_readonly("linear_state_indices",
                              &PyAttentionMetadataView::linear_state_indices)
       .def_property_readonly("has_initial_state",
                              &PyAttentionMetadataView::has_initial_state)
+      .def_property_readonly("input_embedding",
+                             &PyAttentionMetadataView::input_embedding)
+      .def_property_readonly("num_accepted_tokens",
+                             &PyAttentionMetadataView::num_accepted_tokens)
       .def_property_readonly("dp_token_counts",
                              &PyAttentionMetadataView::dp_token_counts)
       .def_property_readonly("dp_is_decode",
                              &PyAttentionMetadataView::dp_is_decode)
-      .def_property_readonly("q_seq_lens", &PyAttentionMetadataView::q_seq_lens)
       .def_property_readonly("expanded_decode_metadata",
                              &PyAttentionMetadataView::expanded_decode_metadata)
-      .def_property_readonly("is_prefill", &PyAttentionMetadataView::is_prefill)
-      .def_property_readonly("is_chunked_prefill",
-                             &PyAttentionMetadataView::is_chunked_prefill);
+      .def_property_readonly("is_spec_verify",
+                             &PyAttentionMetadataView::is_spec_verify)
+      .def_property_readonly(
+          "use_expanded_decode_for_spec_verify_attention",
+          &PyAttentionMetadataView::
+              use_expanded_decode_for_spec_verify_attention)
+      .def_property_readonly("expanded_kv_seq_lens",
+                             &PyAttentionMetadataView::expanded_kv_seq_lens)
+      .def_property_readonly("expanded_block_table",
+                             &PyAttentionMetadataView::expanded_block_table)
+      .def_property_readonly("expanded_kv_seq_lens_host",
+                             &PyAttentionMetadataView::expanded_kv_seq_lens_host)
+      .def_property_readonly(
+          "expanded_paged_kv_indptr",
+          &PyAttentionMetadataView::expanded_paged_kv_indptr)
+      .def_property_readonly(
+          "expanded_paged_kv_indices",
+          &PyAttentionMetadataView::expanded_paged_kv_indices)
+      .def_property_readonly(
+          "expanded_paged_kv_last_page_len",
+          &PyAttentionMetadataView::expanded_paged_kv_last_page_len);
 }
 
 PyExpandedDecodeMetadataView::PyExpandedDecodeMetadataView(
@@ -95,57 +133,66 @@ PyExpandedDecodeMetadataView::PyExpandedDecodeMetadataView(
     : metadata_(std::move(metadata)) {}
 
 bool PyExpandedDecodeMetadataView::enabled() const {
-  return metadata().enabled;
+  return metadata_->use_expanded_decode_for_spec_verify_attention;
 }
 
 py::object PyExpandedDecodeMetadataView::kv_seq_lens() const {
-  return metadata().kv_seq_lens.defined() ? py::cast(metadata().kv_seq_lens)
-                                          : py::none();
+  return metadata_->expanded_kv_seq_lens.defined()
+             ? py::cast(metadata_->expanded_kv_seq_lens)
+             : py::none();
 }
 
 py::object PyExpandedDecodeMetadataView::block_table() const {
-  return metadata().block_table.defined() ? py::cast(metadata().block_table)
-                                          : py::none();
+  return metadata_->expanded_block_table.defined()
+             ? py::cast(metadata_->expanded_block_table)
+             : py::none();
 }
 
 py::object PyExpandedDecodeMetadataView::paged_kv_indptr() const {
-  return metadata().paged_kv_indptr.defined()
-             ? py::cast(metadata().paged_kv_indptr)
+#if defined(USE_MUSA)
+  return metadata_->musa.expanded_paged_kv_indptr.defined()
+             ? py::cast(metadata_->musa.expanded_paged_kv_indptr)
              : py::none();
+#else
+  return py::none();
+#endif
 }
 
 py::object PyExpandedDecodeMetadataView::paged_kv_indices() const {
-  return metadata().paged_kv_indices.defined()
-             ? py::cast(metadata().paged_kv_indices)
+#if defined(USE_MUSA)
+  return metadata_->musa.expanded_paged_kv_indices.defined()
+             ? py::cast(metadata_->musa.expanded_paged_kv_indices)
              : py::none();
+#else
+  return py::none();
+#endif
 }
 
 py::object PyExpandedDecodeMetadataView::paged_kv_last_page_len() const {
-  return metadata().paged_kv_last_page_len.defined()
-             ? py::cast(metadata().paged_kv_last_page_len)
+#if defined(USE_MUSA)
+  return metadata_->musa.expanded_paged_kv_last_page_len.defined()
+             ? py::cast(metadata_->musa.expanded_paged_kv_last_page_len)
              : py::none();
+#else
+  return py::none();
+#endif
 }
 
 py::object PyExpandedDecodeMetadataView::paged_attention_tiling_data() const {
-  return metadata().paged_attention_tiling_data.defined()
-             ? py::cast(metadata().paged_attention_tiling_data)
+  return metadata_->expanded_paged_attention_tiling_data.defined()
+             ? py::cast(metadata_->expanded_paged_attention_tiling_data)
              : py::none();
 }
 
 py::object PyExpandedDecodeMetadataView::kv_seq_lens_host() const {
-  return metadata().kv_seq_lens_host.defined()
-             ? py::cast(metadata().kv_seq_lens_host)
+  return metadata_->expanded_kv_seq_lens_host.defined()
+             ? py::cast(metadata_->expanded_kv_seq_lens_host)
              : py::none();
 }
 
 const std::vector<int32_t>&
 PyExpandedDecodeMetadataView::kv_seq_lens_host_values() const {
-  return metadata().kv_seq_lens_host_vec;
-}
-
-const layer::ExpandedDecodeMetadata& PyExpandedDecodeMetadataView::metadata()
-    const {
-  return metadata_->expanded_decode;
+  return empty_kv_seq_lens_host_values_;
 }
 
 PyAttentionMetadataView::PyAttentionMetadataView(
@@ -161,6 +208,10 @@ PyAttentionMetadataView::PyAttentionMetadataView(
     const ModelInputParams& params)
     : PyAttentionMetadataView(std::move(metadata)) {
   linear_state_indices_ = params.embedding.linear_state_indices;
+  input_embedding_ = params.embedding.input_embedding;
+  has_initial_state_ = make_has_initial_state(metadata_, params);
+  num_accepted_tokens_ = params.num_accepted_tokens;
+  is_spec_verify_ = params.is_spec_verify;
   dp_token_counts_ = params.parallel.raw_dp_global_token_nums.empty()
                          ? params.parallel.dp_global_token_nums
                          : params.parallel.raw_dp_global_token_nums;
@@ -194,6 +245,14 @@ py::object PyAttentionMetadataView::q_cu_seq_lens() const {
   return optional_tensor(metadata_->q_cu_seq_lens);
 }
 
+py::object PyAttentionMetadataView::gdn_cu_seq_lens() const {
+#if defined(USE_MUSA)
+  return optional_tensor(metadata_->musa.gdn_cu_seq_lens);
+#else
+  return py::none();
+#endif
+}
+
 py::object PyAttentionMetadataView::kv_cu_seq_lens() const {
   return optional_tensor(metadata_->kv_cu_seq_lens);
 }
@@ -207,6 +266,10 @@ const std::vector<int32_t>& PyAttentionMetadataView::kv_seq_lens_host_values()
   return metadata_->kv_seq_lens_vec;
 }
 
+py::object PyAttentionMetadataView::q_seq_lens_host() const {
+  return optional_tensor(q_seq_lens_host_);
+}
+
 py::object PyAttentionMetadataView::block_table() const {
   return optional_tensor(metadata_->block_table);
 }
@@ -215,12 +278,64 @@ py::object PyAttentionMetadataView::kv_seq_lens() const {
   return optional_tensor(metadata_->kv_seq_lens);
 }
 
+py::object PyAttentionMetadataView::q_seq_lens() const {
+  return optional_tensor(metadata_->q_seq_lens);
+}
+
+int64_t PyAttentionMetadataView::max_seq_len() const {
+  return metadata_->max_seq_len;
+}
+
+int64_t PyAttentionMetadataView::max_query_len() const {
+  return metadata_->max_query_len;
+}
+
+py::object PyAttentionMetadataView::paged_kv_indptr_host() const {
+#if defined(USE_MUSA)
+  return optional_tensor(metadata_->musa.paged_kv_indptr_host);
+#else
+  return py::none();
+#endif
+}
+
+py::object PyAttentionMetadataView::paged_kv_indices_host() const {
+#if defined(USE_MUSA)
+  return optional_tensor(metadata_->musa.paged_kv_indices_host);
+#else
+  return py::none();
+#endif
+}
+
+py::object PyAttentionMetadataView::paged_kv_last_page_len_host() const {
+#if defined(USE_MUSA)
+  return optional_tensor(metadata_->musa.paged_kv_last_page_len_host);
+#else
+  return py::none();
+#endif
+}
+
+bool PyAttentionMetadataView::is_prefill() const {
+  return metadata_->is_prefill;
+}
+
+bool PyAttentionMetadataView::is_chunked_prefill() const {
+  return metadata_->is_chunked_prefill;
+}
+
 py::object PyAttentionMetadataView::linear_state_indices() const {
   return optional_tensor(linear_state_indices_);
 }
 
 py::object PyAttentionMetadataView::has_initial_state() const {
-  return optional_tensor(metadata_->has_initial_states);
+  return optional_tensor(has_initial_state_);
+}
+
+py::object PyAttentionMetadataView::input_embedding() const {
+  return optional_tensor(input_embedding_);
+}
+
+py::object PyAttentionMetadataView::num_accepted_tokens() const {
+  return optional_tensor(num_accepted_tokens_);
 }
 
 const std::vector<int32_t>& PyAttentionMetadataView::dp_token_counts() const {
@@ -231,25 +346,52 @@ const std::vector<int32_t>& PyAttentionMetadataView::dp_is_decode() const {
   return dp_is_decode_;
 }
 
-py::object PyAttentionMetadataView::q_seq_lens() const {
-  return optional_tensor(metadata_->q_seq_lens);
-}
-
-py::object PyAttentionMetadataView::q_seq_lens_host() const {
-  return optional_tensor(q_seq_lens_host_);
-}
-
 PyExpandedDecodeMetadataView PyAttentionMetadataView::expanded_decode_metadata()
     const {
   return PyExpandedDecodeMetadataView(metadata_);
 }
 
-bool PyAttentionMetadataView::is_prefill() const {
-  return metadata_->is_prefill;
+bool PyAttentionMetadataView::is_spec_verify() const { return is_spec_verify_; }
+
+bool PyAttentionMetadataView::use_expanded_decode_for_spec_verify_attention()
+    const {
+  return metadata_->use_expanded_decode_for_spec_verify_attention;
 }
 
-bool PyAttentionMetadataView::is_chunked_prefill() const {
-  return metadata_->is_chunked_prefill;
+py::object PyAttentionMetadataView::expanded_kv_seq_lens() const {
+  return optional_tensor(metadata_->expanded_kv_seq_lens);
+}
+
+py::object PyAttentionMetadataView::expanded_block_table() const {
+  return optional_tensor(metadata_->expanded_block_table);
+}
+
+py::object PyAttentionMetadataView::expanded_kv_seq_lens_host() const {
+  return optional_tensor(metadata_->expanded_kv_seq_lens_host);
+}
+
+py::object PyAttentionMetadataView::expanded_paged_kv_indptr() const {
+#if defined(USE_MUSA)
+  return optional_tensor(metadata_->musa.expanded_paged_kv_indptr);
+#else
+  return py::none();
+#endif
+}
+
+py::object PyAttentionMetadataView::expanded_paged_kv_indices() const {
+#if defined(USE_MUSA)
+  return optional_tensor(metadata_->musa.expanded_paged_kv_indices);
+#else
+  return py::none();
+#endif
+}
+
+py::object PyAttentionMetadataView::expanded_paged_kv_last_page_len() const {
+#if defined(USE_MUSA)
+  return optional_tensor(metadata_->musa.expanded_paged_kv_last_page_len);
+#else
+  return py::none();
+#endif
 }
 
 torch::Tensor PyAttentionMetadataView::make_host_int32_view(
@@ -265,6 +407,32 @@ torch::Tensor PyAttentionMetadataView::make_host_int32_view(
       {static_cast<int64_t>(host_vec.size())},
       [owner = std::move(owner)](void*) mutable { owner.reset(); },
       torch::TensorOptions().dtype(torch::kInt32).device(torch::kCPU));
+}
+
+torch::Tensor PyAttentionMetadataView::make_has_initial_state(
+    const std::shared_ptr<layer::AttentionMetadata>& metadata,
+    const ModelInputParams& params) {
+  if (metadata->has_initial_states.defined()) {
+    return metadata->has_initial_states;
+  }
+  if (params.attention.device.kv_cache_tokens_nums.defined() &&
+      params.attention.device.kv_cache_tokens_nums.numel() > 0) {
+    return (params.attention.device.kv_cache_tokens_nums > 0).to(torch::kBool);
+  }
+  const std::vector<int64_t>& host_flags = params.parallel.has_initial_state;
+  if (host_flags.empty()) {
+    return torch::Tensor();
+  }
+  torch::Tensor cpu = torch::empty({static_cast<int64_t>(host_flags.size())},
+                                   torch::dtype(torch::kBool));
+  bool* data = cpu.data_ptr<bool>();
+  for (size_t i = 0; i < host_flags.size(); ++i) {
+    data[i] = host_flags[i] != 0;
+  }
+  if (!metadata->slot_mapping.defined()) {
+    return cpu;
+  }
+  return cpu.to(metadata->slot_mapping.device());
 }
 
 py::object PyAttentionMetadataView::optional_tensor(

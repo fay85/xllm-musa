@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,11 +18,10 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <cstdint>
-#include <optional>
+#include <utility>
 #include <vector>
 
 #include "core/framework/model/mtp_topk_state.h"
-#include "core/framework/sampling/draft_proposal.h"
 #include "util/slice.h"
 
 namespace xllm {
@@ -80,9 +79,6 @@ struct RowSpec {
   int32_t position_offset = 0;
   bool append_token = true;
   bool append_kv_len = true;
-  // When set, decouples the visible KV extent from this row's position. This
-  // lets block-parallel draft rows share the full block KV length.
-  std::optional<int32_t> kv_len_offset;
   bool append_q_len_one = false;
   bool append_block_table = false;
 };
@@ -125,15 +121,6 @@ int32_t calc_slot_id(int32_t position,
                      const Slice<int32_t>& block_table_slice,
                      int32_t block_size);
 
-// Circular (ring) variant of calc_slot_id for DSV4 SWA block tables.
-int32_t calc_ring_slot_id(int32_t position,
-                          const Slice<int32_t>& block_table_slice,
-                          int32_t block_size);
-
-// Manager 0 in a grouped-cache input is the DSV4 SWA manager.
-std::vector<int32_t> build_grouped_prefill_swa_slots(const ForwardInput& input,
-                                                     int32_t block_size);
-
 // Computes sequence kv length with platform-specific seq-lens layout handling.
 int32_t calc_kv_len(const Slice<int32_t>& kv_seq_lens_slice,
                     int32_t seq_id,
@@ -151,6 +138,23 @@ void append_q_seq_len(std::vector<int32_t>& q_seq_lens,
 void update_kv_seq_lens_and_max(std::vector<int32_t>& kv_seq_lens_vec,
                                 int32_t kv_len,
                                 int32_t& kv_max_seq_len);
+
+// Builds q_cu_seq_lens tensor from upstream-provided host values.
+// When include_leading_zero is true, returns query_start_loc-style
+// [0, cumsum...].
+torch::Tensor build_q_cu_seq_lens_tensor(const ModelInputParams& params,
+                                         torch::Device device = torch::kCPU,
+                                         bool include_leading_zero = false);
+
+// Builds FlashInfer paged-KV metadata for the expanded per-token rows used by
+// the MUSA Qwen3.5 MTP verify graph.
+void build_expanded_decode_paged_kv(
+    const torch::Tensor& expanded_block_tables,
+    const std::vector<int32_t>& expanded_kv_seq_lens,
+    int32_t block_size,
+    std::vector<int32_t>& paged_kv_indptr,
+    std::vector<int32_t>& paged_kv_indices,
+    std::vector<int32_t>& paged_kv_last_page_len);
 
 // Updates common decode-side ModelInputParams fields from built buffers.
 void update_input_params(ModelInputParams& input_params,
@@ -179,10 +183,49 @@ MtpTopkStatePtr select_mtp_topk_state_for_next_step(
     const MtpTopkStatePtr& state,
     const SamplingParameters& sampling_params);
 
-DraftProposal build_validate_proposal(
+namespace draftProbs {
+
+// Compress draft probs to selected-only format [batch_size] for cache storage.
+// Input draft_probs may be dense [batch_size, vocab_size] or selected-only
+// [batch_size] / [batch_size, 1].
+torch::Tensor compress_for_cache(const torch::Tensor& draft_probs,
+                                 const torch::Tensor& draft_token_ids);
+
+// Build validate inputs from per-step draft token ids/probs.
+// Returns:
+//   - draft_token_ids: [batch_size, n_speculative_tokens]
+//   - draft_probs:
+//       * selected-only [batch_size, n_speculative_tokens], if
+//         enable_opt_validate_probs=true
+//       * recovered-dense [batch_size, n_speculative_tokens, vocab_size], if
+//         enable_opt_validate_probs=false
+//       * undefined, if draft_probs_required=false
+std::pair<torch::Tensor, torch::Tensor> build_validate_tensors(
     const std::vector<torch::Tensor>& draft_token_ids_steps,
     const std::vector<torch::Tensor>& draft_probs_steps,
-    bool draft_probs_required);
+    int32_t batch_size,
+    int32_t vocab_size,
+    bool enable_opt_validate_probs,
+    bool draft_probs_required = true);
+
+// Build validate inputs from an already-stacked draft block. Block-diffusion
+// drafters (DFlash) emit the whole block in one forward, so there are no
+// per-step tensors to assemble — this avoids the per-step select/view/cat
+// round trip of build_validate_tensors.
+//   token_ids_block / probs_block: [batch_size, n_speculative_tokens]
+// Returns draft_token_ids [batch, n_spec] (int64). When
+// enable_opt_validate_probs is true the selected-only probs_block is returned
+// as-is [batch, n_spec]; otherwise the selected probs are scattered into a
+// dense [batch, n_spec, vocab_size] tensor matching MTP's
+// build_validate_tensors output, which the default path and the fused
+// rejection kernel require.
+std::pair<torch::Tensor, torch::Tensor> build_validate_tensors_from_block(
+    const torch::Tensor& token_ids_block,
+    const torch::Tensor& probs_block,
+    int32_t vocab_size,
+    bool enable_opt_validate_probs);
+
+}  // namespace draftProbs
 
 }  // namespace specBuilder
 

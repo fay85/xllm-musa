@@ -19,10 +19,13 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
+#include <string>
 
 #include "async_response_processor.h"
 #include "common/metrics.h"
+#include "core/framework/config/execution_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/kv_cache_store_config.h"
 #include "core/framework/config/parallel_config.h"
@@ -57,6 +60,70 @@ inline size_t maybe_align_cp_chunk_tokens(size_t num_tokens,
     return num_tokens;
   }
   return (num_tokens / kv_term) * kv_term;
+}
+
+bool graph_requires_homogeneous_batch() {
+  const ExecutionConfig& execution_config = ExecutionConfig::get_instance();
+  return execution_config.enable_graph() &&
+         execution_config.enable_prefill_piecewise_graph();
+}
+
+bool packed_prefill_enabled() {
+  return ExecutionConfig::get_instance().enable_packed_prefill();
+}
+
+size_t read_positive_sequence_limit(const char* name) {
+  const char* value = std::getenv(name);
+  if (value == nullptr || value[0] == '\0') {
+    return 0;
+  }
+  const int64_t parsed = std::strtoll(value, nullptr, 10);
+  return parsed > 0 ? static_cast<size_t>(parsed) : 0;
+}
+
+size_t max_prefill_sequences() {
+  static const size_t limit =
+      read_positive_sequence_limit("XLLM_MAX_PREFILL_SEQS");
+  return limit;
+}
+
+size_t max_packed_prefill_sequences() {
+  static const size_t limit =
+      read_positive_sequence_limit("XLLM_MAX_PACKED_PREFILL_SEQS");
+  return limit;
+}
+
+size_t count_prefill_sequences(const SchedulerState& state) {
+  size_t count = 0;
+  for (const Sequence* sequence : state.running_sequences) {
+    if (sequence != nullptr && sequence->stage() != SequenceStage::DECODE) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+size_t effective_prefill_sequence_limit(const SchedulerState& state) {
+  const size_t independent_limit = max_prefill_sequences();
+  if (independent_limit > 0) {
+    return independent_limit;
+  }
+  if (packed_prefill_enabled()) {
+    return max_packed_prefill_sequences();
+  }
+  if (graph_requires_homogeneous_batch()) {
+    return 1;
+  }
+  // MTP verification and GDN state commits are latency-sensitive and the
+  // current eager MUSA GDN prefill scales almost linearly with batch size.
+  // Keep the prefill side serial while retaining the decode batch budget.
+  // This avoids making every request in a concurrent wave wait for a B>1
+  // prefill that provides no useful amortization on this backend.
+  if (state.options.num_speculative_tokens() > 0 &&
+      state.has_linear_attention_layers) {
+    return 1;
+  }
+  return 0;
 }
 
 // Estimate extra blocks needed for a decode step with speculative tokens.
@@ -184,6 +251,13 @@ void SchedulerPolicy::schedule_prefill_from_queue(
   while (!queue->empty() && budget.remaining_seq_budget > 0 &&
          budget.remaining_token_budget > 0 &&
          budget.latency_budget > budget.estimate_latency) {
+    const size_t prefill_sequence_limit =
+        effective_prefill_sequence_limit(state);
+    if (prefill_sequence_limit > 0 &&
+        count_prefill_sequences(state) >= prefill_sequence_limit) {
+      break;
+    }
+
     // Memory-utilization short-circuit.
     if (!options_.enable_disagg_pd() &&
         state.kv_cache_manager->kv_cache_utilization() >=
@@ -207,6 +281,23 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       CHECK(num_sequences == 1 || num_sequences == request->best_of())
           << "Waiting request should have either 1 or best_of("
           << request->best_of() << ") sequences, got " << num_sequences;
+    }
+
+    // Full-footprint admission (fresh requests only): check that the system
+    // has enough capacity for this request's full KV plus all already-reserved
+    // blocks. In-flight chunked requests are always allowed to continue.
+    if (batch_mode_.enable_chunked_prefill &&
+        request->sequences()[0]->kv_state().kv_cache_tokens_num() == 0) {
+      const size_t block_size =
+          static_cast<size_t>(state.kv_cache_manager->block_size());
+      const size_t total_blocks =
+          static_cast<size_t>(state.kv_cache_manager->num_blocks());
+      const size_t full_footprint =
+          (request->sequences()[0]->num_tokens() + block_size - 1) / block_size;
+      if (reserved_full_footprint + full_footprint > total_blocks) {
+        blocks_exhausted = true;
+        break;
+      }
     }
 
     // Full-footprint admission (fresh requests only): check that the system

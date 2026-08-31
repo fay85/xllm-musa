@@ -1,0 +1,31 @@
+include(cc_test)
+
+cc_test(
+  NAME
+    musa_topk_test
+  SRCS
+    musa_topk_test.cpp
+  DEPS
+    :cuda_kernels
+    torch
+    torch_musa
+    musa
+    musart
+    GTest::gtest_main
+    glog::glog
+)
+
+cc_test(
+  NAME
+    fused_qknorm_rope_musa_test
+  SRCS
+    fused_qknorm_rope_test.cpp
+  DEPS
+    :cuda_kernels
+    torch
+    torch_musa
+    musa
+    musart
+    GTest::gtest_main
+    glog::glog
+)

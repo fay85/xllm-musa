@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,10 +18,13 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
-#include <cstdint>
+#include <optional>
 #include <tuple>
+#include <utility>
 
 #include "kernels/musa/musa_ops_api.h"
+#include "kernels/musa/ops_api.h"
+#include "kernels/ops_api.h"
 #include "util/env_var.h"
 
 namespace xllm {
@@ -37,49 +40,29 @@ torch::Tensor get_tensor_with_weight_suffix(const StateDict& state_dict,
   return tensor;
 }
 
-void check_fp8_weight_dtype(const torch::Tensor& weight,
-                            const std::string& name) {
-  if (!weight.defined()) {
-    return;
-  }
-  CHECK_EQ(weight.scalar_type(), torch::kFloat8_e4m3fn)
-      << "Qwen3.5 MUSA MoE supports only float8_e4m3fn weights; " << name
-      << " has dtype " << weight.scalar_type();
-}
-
-void check_expert_fp8_weight_dtypes(const StateDict& state_dict,
-                                    int64_t start_expert_id,
-                                    int64_t num_experts) {
-  for (int64_t index = 0; index < num_experts; ++index) {
-    const std::string prefix = std::to_string(start_expert_id + index) + ".";
-    check_fp8_weight_dtype(state_dict.get_tensor(prefix + "gate_proj.weight"),
-                           prefix + "gate_proj.weight");
-    check_fp8_weight_dtype(state_dict.get_tensor(prefix + "up_proj.weight"),
-                           prefix + "up_proj.weight");
-    check_fp8_weight_dtype(state_dict.get_tensor(prefix + "down_proj.weight"),
-                           prefix + "down_proj.weight");
-  }
-}
-
 constexpr int64_t kMaxChunkTokens = 1024;
 // Compact FP8 prefill path for large batches. Compact routing does not
 // allocate the [experts, max_m, hidden]
 // masked-GEMM buffer, so this size is safe for the 20k-token target while
 // avoiding one route/quantize/GEMM/synchronize sequence per 1k tokens.
 constexpr int64_t kMaxCompactPrefillTokens = 16384;
+constexpr int64_t kMaxAlignedRaggedFp8PrefillTokens = 512;
 // The BF16 compact path has no activation-quantization buffers and can process
 // the complete long-context prefill in one routed batch and avoids
 // repeating routing per layer.
 constexpr int64_t kMaxCompactBf16PrefillTokens = 65536;
-constexpr int64_t kMaxMoeTopkTokens = 2048;
+constexpr int64_t kMaxMusaMoeTopkTokens = 2048;
 constexpr int64_t kMaskedGemmMAlignment = 256;
 constexpr int64_t kCompactBf16MAlignment = 128;
 constexpr int64_t kRaggedDecodeAlignment = 128;
+// Fused FP8 AOT artifacts are validated for fixed token batches 1 through 8.
+constexpr int64_t kMaxFusedMoeAotDecodeTokens = 8;
 // Mate Ragged changes the FP8 GEMM accumulation layout. B=1 passes the model
 // correctness gate and captures the long-ISL decode win; B>1 remains on the
 // established contiguous path until a wider ragged decode path is ready.
 constexpr int64_t kMaxRaggedDecodeTokens = 1;
 constexpr int64_t kMaxRaggedBf16DecodeTokens = 32;
+constexpr int64_t kMaxFusedSharedExpertGateTokens = 8;
 // Separate large-token MoE reduction from the small-token path.
 // The fused combine kernel amortizes launch cost on prefill-sized batches;
 // eager Torch reduction is faster for decode-sized batches.
@@ -96,6 +79,27 @@ bool use_contiguous_bf16_prefill_gemm(int64_t num_tokens) {
   static const bool enabled =
       util::get_bool_env("XLLM_MUSA_CONTIGUOUS_BF16_PREFILL_GEMM", false);
   return enabled && num_tokens >= kContiguousBf16PrefillMinTokens;
+}
+
+bool use_contiguous_fp8_moe_prefill() {
+  // Low-occupancy prefills use the aligned Ragged path below. Contiguous FP8
+  // remains the high-throughput path once each expert receives enough rows.
+  static const bool enabled =
+      util::get_bool_env("XLLM_MUSA_CONTIGUOUS_FP8_MOE_PREFILL",
+                         /*defaultValue=*/true);
+  return enabled;
+}
+
+bool use_aligned_ragged_fp8_moe_prefill(int64_t num_tokens) {
+  static const bool enabled =
+      util::get_bool_env("XLLM_MUSA_ALIGNED_RAGGED_FP8_MOE_PREFILL",
+                         /*defaultValue=*/true);
+  static const int64_t max_tokens = std::clamp(
+      util::get_int_env("XLLM_MUSA_ALIGNED_RAGGED_FP8_MOE_PREFILL_MAX_TOKENS",
+                        /*defaultValue=*/kMaxAlignedRaggedFp8PrefillTokens),
+      /*lo=*/int64_t{1},
+      /*hi=*/kMaxCompactPrefillTokens);
+  return enabled && num_tokens <= max_tokens;
 }
 
 bool use_ragged_moe_decode(int64_t num_tokens, bool is_decode) {
@@ -122,7 +126,7 @@ bool use_fused_moe_aot(int64_t num_tokens, bool is_decode) {
   if (!enabled || !is_decode) {
     return false;
   }
-  if (xllm::kernel::musa::fused_moe_aot_available(num_tokens)) {
+  if (xllm::kernel::musa::musa_fused_moe_aot_available(num_tokens)) {
     return true;
   }
   LOG_FIRST_N(WARNING, 1)
@@ -131,13 +135,31 @@ bool use_fused_moe_aot(int64_t num_tokens, bool is_decode) {
   return false;
 }
 
+bool use_chunked_fused_moe_aot(int64_t num_tokens, bool is_decode) {
+  static const bool enabled =
+      util::get_bool_env("XLLM_MUSA_FUSED_MOE_AOT", true);
+  if (!enabled || !is_decode ||
+      num_tokens <= kMaxFusedMoeAotDecodeTokens) {
+    return false;
+  }
+  for (int64_t start = 0; start < num_tokens;
+       start += kMaxFusedMoeAotDecodeTokens) {
+    const int64_t chunk_tokens =
+        std::min(kMaxFusedMoeAotDecodeTokens, num_tokens - start);
+    if (!xllm::kernel::musa::musa_fused_moe_aot_available(chunk_tokens)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool use_bf16_fused_moe_aot(int64_t num_tokens, bool is_decode) {
   static const bool enabled =
       util::get_bool_env("XLLM_MUSA_FUSED_MOE_BF16_AOT", true);
   if (!enabled || !is_decode) {
     return false;
   }
-  if (xllm::kernel::musa::fused_moe_bf16_aot_available(num_tokens)) {
+  if (xllm::kernel::musa::musa_fused_moe_bf16_aot_available(num_tokens)) {
     return true;
   }
   LOG_FIRST_N(WARNING, 1)
@@ -146,17 +168,17 @@ bool use_bf16_fused_moe_aot(int64_t num_tokens, bool is_decode) {
   return false;
 }
 
-bool use_moe_topk(int64_t num_tokens,
-                  const torch::Tensor& router_logits,
-                  int64_t num_experts,
-                  int64_t topk) {
+bool use_musa_moe_topk(int64_t num_tokens,
+                       const torch::Tensor& router_logits,
+                       int64_t num_experts,
+                       int64_t topk) {
   static const bool enabled =
       util::get_bool_env("XLLM_MUSA_FUSED_MOE_TOPK_SMALL", true);
   static const int64_t max_tokens =
       std::clamp(util::get_int_env("XLLM_MUSA_FUSED_MOE_TOPK_MAX_TOKENS",
-                                   kMaxMoeTopkTokens),
+                                   kMaxMusaMoeTopkTokens),
                  int64_t{1},
-                 kMaxMoeTopkTokens);
+                 kMaxMusaMoeTopkTokens);
   const bool shape_supported =
       num_tokens <= max_tokens && num_experts == 256 && topk == 8 &&
       router_logits.scalar_type() == torch::kBFloat16 &&
@@ -164,7 +186,7 @@ bool use_moe_topk(int64_t num_tokens,
   if (!enabled || !shape_supported) {
     return false;
   }
-  if (xllm::kernel::musa::moe_topk_softmax_available()) {
+  if (xllm::kernel::musa::musa_moe_topk_softmax_available()) {
     return true;
   }
   LOG_FIRST_N(WARNING, 1)
@@ -172,41 +194,20 @@ bool use_moe_topk(int64_t num_tokens,
   return false;
 }
 
-bool is_16byte_aligned(const torch::Tensor& tensor) {
-  return reinterpret_cast<std::uintptr_t>(tensor.data_ptr()) % 16 == 0;
-}
-
-bool use_fused_shared_expert_gate(const torch::Tensor& shared_output,
-                                  const torch::Tensor& hidden_states,
-                                  const torch::Tensor& gate_weight) {
-  if (!shared_output.defined() || !hidden_states.defined() ||
-      !gate_weight.defined()) {
-    return false;
-  }
-
-  const torch::ScalarType dtype = shared_output.scalar_type();
-  return shared_output.dim() == 2 && hidden_states.dim() == 2 &&
-         shared_output.sizes() == hidden_states.sizes() &&
-         gate_weight.dim() == 2 && gate_weight.size(0) == 1 &&
-         gate_weight.size(1) == hidden_states.size(1) &&
-         dtype == hidden_states.scalar_type() &&
-         dtype == gate_weight.scalar_type() &&
-         (dtype == torch::kFloat16 || dtype == torch::kBFloat16) &&
-         shared_output.device() == hidden_states.device() &&
-         shared_output.device() == gate_weight.device() &&
-         shared_output.is_contiguous() && hidden_states.is_contiguous() &&
-         gate_weight.is_contiguous() && hidden_states.size(1) % 8 == 0 &&
-         is_16byte_aligned(shared_output) && is_16byte_aligned(hidden_states) &&
-         is_16byte_aligned(gate_weight);
+bool use_fused_shared_expert_gate(int64_t num_tokens, bool is_decode) {
+  static const bool enabled =
+      util::get_bool_env("XLLM_MUSA_FUSED_SHARED_EXPERT_GATE", true);
+  return enabled && is_decode && num_tokens <= kMaxFusedSharedExpertGateTokens;
 }
 
 }  // namespace
 
-Qwen3_5FusedMoEImpl::Qwen3_5FusedMoEImpl(const ModelArgs& model_args,
-                                         const FusedMoEArgs& moe_args,
-                                         const QuantArgs& quant_args,
-                                         const ParallelArgs& parallel_args,
-                                         const torch::TensorOptions& options)
+Qwen3_5MusaFusedMoEImpl::Qwen3_5MusaFusedMoEImpl(
+    const ModelArgs& model_args,
+    const FusedMoEArgs& moe_args,
+    const QuantArgs& quant_args,
+    const ParallelArgs& parallel_args,
+    const torch::TensorOptions& options)
     : num_experts_(model_args.n_routed_experts()),
       topk_(model_args.num_experts_per_tok()),
       hidden_size_(model_args.hidden_size()),
@@ -247,24 +248,24 @@ Qwen3_5FusedMoEImpl::Qwen3_5FusedMoEImpl(const ModelArgs& model_args,
 
   gate_ = register_module(
       "gate",
-      ReplicatedLinear(
+      musa::ReplicatedLinear(
           hidden_size_, num_experts_, /*bias=*/false, quant_args, options));
   shared_experts_ =
       register_module("shared_expert",
-                      DenseMLP(hidden_size_,
-                               model_args.shared_expert_intermediate_size(),
-                               /*is_gated=*/true,
-                               /*has_bias=*/false,
-                               model_args.hidden_act(),
-                               /*enable_result_reduction=*/true,
-                               quant_args,
-                               parallel_args.tp_group_,
-                               options));
+                      MusaDenseMLP(hidden_size_,
+                                   model_args.shared_expert_intermediate_size(),
+                                   /*is_gated=*/true,
+                                   /*has_bias=*/false,
+                                   model_args.hidden_act(),
+                                   /*enable_result_reduction=*/true,
+                                   quant_args,
+                                   parallel_args.tp_group_,
+                                   options));
   shared_expert_gate_ = register_module(
       "shared_expert_gate",
       torch::nn::Linear(torch::nn::LinearOptions(hidden_size_, 1).bias(false)));
   shared_expert_gate_->weight.set_data(shared_expert_gate_->weight.to(options));
-  activation_ = register_module("activation", Activation("silu", true));
+  activation_ = register_module("activation", musa::Activation("silu", true));
 
   const auto expert_options =
       use_fp8_ ? options_.dtype(torch::kFloat8_e4m3fn) : options_;
@@ -296,18 +297,19 @@ Qwen3_5FusedMoEImpl::Qwen3_5FusedMoEImpl(const ModelArgs& model_args,
                            false);
 
     if (util::get_bool_env("XLLM_MUSA_FUSED_MOE_AOT", true) &&
-        xllm::kernel::musa::fused_moe_aot_available(
+        xllm::kernel::musa::musa_fused_moe_aot_available(
             /*num_tokens=*/1)) {
-      xllm::kernel::musa::prepare_fused_moe_aot(w13_.device());
+      xllm::kernel::musa::prepare_musa_fused_moe_aot(w13_.device());
     }
   } else if (util::get_bool_env("XLLM_MUSA_FUSED_MOE_BF16_AOT", true) &&
-             xllm::kernel::musa::fused_moe_bf16_aot_available(
+             xllm::kernel::musa::musa_fused_moe_bf16_aot_available(
                  /*num_tokens=*/1)) {
-    xllm::kernel::musa::prepare_fused_moe_bf16_aot(w13_.device());
+    xllm::kernel::musa::prepare_musa_fused_moe_bf16_aot(w13_.device());
   }
 }
 
-void Qwen3_5FusedMoEImpl::load_routed_weights(const StateDict& mlp_state_dict) {
+void Qwen3_5MusaFusedMoEImpl::load_routed_weights(
+    const StateDict& mlp_state_dict) {
   if (mlp_state_dict.size() == 0) {
     return;
   }
@@ -319,8 +321,6 @@ void Qwen3_5FusedMoEImpl::load_routed_weights(const StateDict& mlp_state_dict) {
   const int64_t start_expert_id = start_expert_id_;
   const int64_t num_experts_per_rank = num_experts_per_rank_;
   if (use_fp8_) {
-    check_expert_fp8_weight_dtypes(
-        state_dict, start_expert_id, num_experts_per_rank);
     // FP8 Qwen3.5 checkpoints store one gate/up/down tensor per expert.  The
     // Mate layout is [gate, up] (SwiGLU convention).
     const std::vector<std::string> prefixes = {"gate_proj.", "up_proj."};
@@ -340,7 +340,6 @@ void Qwen3_5FusedMoEImpl::load_routed_weights(const StateDict& mlp_state_dict) {
         packed_scale = state_dict.get_tensor("gate_up_proj_scale_inv");
       }
       if (packed.defined() && packed_scale.defined()) {
-        check_fp8_weight_dtype(packed, "gate_up_proj.weight");
         CHECK_EQ(packed.sizes(), w13_.sizes());
         CHECK_EQ(packed_scale.sizes(), w13_scale_inv_.sizes());
         w13_.copy_(packed);
@@ -356,7 +355,6 @@ void Qwen3_5FusedMoEImpl::load_routed_weights(const StateDict& mlp_state_dict) {
         packed_scale = state_dict.get_tensor("down_proj_scale_inv");
       }
       if (packed.defined() && packed_scale.defined()) {
-        check_fp8_weight_dtype(packed, "down_proj.weight");
         CHECK_EQ(packed.sizes(), w2_.sizes());
         CHECK_EQ(packed_scale.sizes(), w2_scale_inv_.sizes());
         w2_.copy_(packed);
@@ -398,7 +396,7 @@ void Qwen3_5FusedMoEImpl::load_routed_weights(const StateDict& mlp_state_dict) {
   }
 }
 
-void Qwen3_5FusedMoEImpl::load_state_dict(const StateDict& state_dict) {
+void Qwen3_5MusaFusedMoEImpl::load_state_dict(const StateDict& state_dict) {
   if (state_dict.size() == 0) {
     return;
   }
@@ -417,17 +415,20 @@ void Qwen3_5FusedMoEImpl::load_state_dict(const StateDict& state_dict) {
   load_routed_weights(state_dict);
 }
 
-torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
+torch::Tensor Qwen3_5MusaFusedMoEImpl::forward_chunk(
     const torch::Tensor& hidden_states,
     bool is_decode) {
   const int64_t num_tokens = hidden_states.size(0);
+  const bool use_contiguous_fp8_moe =
+      use_contiguous_fp8_moe_ &&
+      (is_decode || use_contiguous_fp8_moe_prefill());
   torch::Tensor topk_weights;
   torch::Tensor topk_ids;
   {
     auto router_logits = gate_->forward(hidden_states);
-    if (use_moe_topk(num_tokens, router_logits, num_experts_, topk_)) {
+    if (use_musa_moe_topk(num_tokens, router_logits, num_experts_, topk_)) {
       std::tie(topk_weights, topk_ids) =
-          xllm::kernel::musa::moe_topk_softmax(router_logits, topk_);
+          xllm::kernel::musa::musa_moe_topk_softmax(router_logits, topk_);
     } else {
       auto router_probs = torch::softmax(router_logits.to(torch::kFloat32), -1);
       auto topk_result = torch::topk(router_probs, topk_, -1, true, true);
@@ -441,21 +442,21 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
   auto flat_ids = topk_ids.reshape({assignment_count});
 
   if (!use_fp8_ && use_bf16_fused_moe_aot(num_tokens, is_decode)) {
-    return xllm::kernel::musa::fused_moe_aot_bf16(
+    return xllm::kernel::musa::musa_fused_moe_aot_bf16(
         hidden_states, w13_, w2_, topk_weights, topk_ids);
   }
 
   if (use_fp8_ && use_fused_moe_aot(num_tokens, is_decode)) {
-    return xllm::kernel::musa::fused_moe_aot_fp8(hidden_states,
-                                                 w13_,
-                                                 w13_scale_inv_,
-                                                 w2_,
-                                                 w2_scale_inv_,
-                                                 topk_weights,
-                                                 topk_ids);
+    return xllm::kernel::musa::musa_fused_moe_aot_fp8(hidden_states,
+                                                      w13_,
+                                                      w13_scale_inv_,
+                                                      w2_,
+                                                      w2_scale_inv_,
+                                                      topk_weights,
+                                                      topk_ids);
   }
 
-  if (use_fp8_ && use_contiguous_fp8_moe_ &&
+  if (use_fp8_ && use_contiguous_fp8_moe &&
       use_ragged_moe_decode(num_tokens, is_decode)) {
     auto preprocess = xllm::kernel::musa::fused_moe_ragged_preprocess_fp8(
         hidden_states.contiguous(),
@@ -637,7 +638,47 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
         .to(hidden_states.scalar_type());
   };
 
-  if (use_contiguous_fp8_moe_ && use_fused_moe_preprocess(num_tokens)) {
+  if (use_fp8_ && !is_decode &&
+      use_aligned_ragged_fp8_moe_prefill(num_tokens)) {
+    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+        preprocess = xllm::kernel::musa::fused_moe_preprocess_bf16(
+            hidden_states.contiguous(),
+            topk_ids,
+            num_experts_,
+            /*alignment=*/kCompactBf16MAlignment);
+    auto [hidden_fp8, hidden_scale] =
+        xllm::kernel::musa::per_token_group_quant_fp8(std::get<0>(preprocess),
+                                                      /*group_size=*/128);
+    torch::Tensor gate_up = xllm::kernel::musa::ragged_moe_gemm_fp8(
+        hidden_fp8,
+        hidden_scale,
+        w13_,
+        w13_scale_inv_,
+        std::get<1>(preprocess),
+        hidden_states.scalar_type(),
+        /*alignment=*/kCompactBf16MAlignment);
+    torch::Tensor activated;
+    activation_->forward(gate_up, activated);
+    auto [activated_fp8, activated_scale] =
+        xllm::kernel::musa::per_token_group_quant_fp8(activated,
+                                                      /*group_size=*/128);
+    torch::Tensor down = xllm::kernel::musa::ragged_moe_gemm_fp8(
+        activated_fp8,
+        activated_scale,
+        w2_,
+        w2_scale_inv_,
+        std::get<1>(preprocess),
+        hidden_states.scalar_type(),
+        /*alignment=*/kCompactBf16MAlignment);
+    return xllm::kernel::musa::moe_combine_result_indexed(
+        down,
+        std::get<2>(preprocess),
+        topk_weights,
+        num_tokens,
+        static_cast<int32_t>(topk_));
+  }
+
+  if (use_contiguous_fp8_moe && use_fused_moe_preprocess(num_tokens)) {
     auto preprocess = xllm::kernel::musa::fused_moe_preprocess_fp8(
         hidden_states.contiguous(), topk_ids, num_experts_, 128);
     return run_contiguous_fp8(std::get<0>(preprocess),
@@ -714,12 +755,12 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
   }
 
   auto route_index =
-      xllm::kernel::cuda::moe_compute_index(flat_ids, num_experts_);
+      xllm::kernel::musa::moe_compute_index(flat_ids, num_experts_);
   auto dst_src_i32 = std::get<1>(route_index);
   auto token_counts_i32 = std::get<2>(route_index);
   auto original_indices = dst_src_i32.to(torch::kLong);
 
-  if (use_contiguous_fp8_moe_) {
+  if (use_contiguous_fp8_moe) {
     // The contiguous Mate kernel consumes only valid assignment rows, grouped
     // by expert. Gather in BF16 before quantization; Float8 index_copy is not
     // supported by torch_musa and byte-view scatter is not correctness-safe.
@@ -817,7 +858,7 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
   return masked_output;
 }
 
-torch::Tensor Qwen3_5FusedMoEImpl::forward(
+torch::Tensor Qwen3_5MusaFusedMoEImpl::forward(
     const torch::Tensor& hidden_states,
     const ModelInputParams& input_params) {
   CHECK(hidden_states.dim() == 2)
@@ -831,13 +872,22 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward(
 
   const int64_t num_tokens = hidden_states.size(0);
   // MIXED contains both prefill and decode rows. It must use the general
-  // compact route rather than a decode-only fixed-block specialization.
-  const bool is_decode = input_params.meta.batch_forward_type.is_decode();
+  // compact route rather than a decode-only fixed-block specialization. MTP
+  // verification is token-wise for MoE and uses a small fixed token batch, so
+  // it can use the same fused AOT kernels as decode.
+  const bool is_decode = input_params.meta.batch_forward_type.is_decode() ||
+                         input_params.is_spec_verify;
   const bool is_prefill = !is_decode;
   int64_t chunk_tokens = kMaxChunkTokens;
-  if (is_prefill && use_contiguous_bf16_moe_) {
+  if (use_fp8_ && use_chunked_fused_moe_aot(num_tokens, is_decode)) {
+    chunk_tokens = kMaxFusedMoeAotDecodeTokens;
+  } else if (is_prefill && use_contiguous_bf16_moe_) {
     chunk_tokens = kMaxCompactBf16PrefillTokens;
-  } else if (is_prefill && use_contiguous_fp8_moe_) {
+  } else if (is_prefill && use_fp8_ &&
+             use_aligned_ragged_fp8_moe_prefill(num_tokens)) {
+    chunk_tokens = kMaxCompactPrefillTokens;
+  } else if (is_prefill && use_contiguous_fp8_moe_ &&
+             use_contiguous_fp8_moe_prefill()) {
     chunk_tokens = kMaxCompactPrefillTokens;
   }
   std::vector<torch::Tensor> routed_chunks;
@@ -854,10 +904,9 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward(
   torch::Tensor shared;
   {
     shared = shared_experts_->forward(hidden_states);
-    if (use_fused_shared_expert_gate(
-            shared, hidden_states, shared_expert_gate_->weight)) {
-      xllm::kernel::musa::fused_shared_expert_gate_inplace(
-          shared, hidden_states, shared_expert_gate_->weight);
+    if (use_fused_shared_expert_gate(hidden_states.size(0), is_decode)) {
+      auto shared_gate = shared_expert_gate_->forward(hidden_states);
+      xllm::kernel::musa::mul_sigmoid_gate_inplace(shared, shared_gate);
     } else {
       auto shared_gate =
           torch::sigmoid(shared_expert_gate_->forward(hidden_states));
@@ -867,7 +916,7 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward(
   return routed + shared;
 }
 
-void Qwen3_5FusedMoEImpl::verify_loaded_weights() const {
+void Qwen3_5MusaFusedMoEImpl::verify_loaded_weights() const {
   CHECK(w13_is_loaded_ && w2_is_loaded_)
       << "Qwen3.5 MUSA MoE expert weights are missing.";
   if (use_fp8_) {

@@ -16,6 +16,7 @@ limitations under the License.
 #pragma once
 #include <torch/torch.h>
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -43,6 +44,7 @@ void apply_temperatures(torch::Tensor& logits,
 void apply_top_k_top_p(torch::Tensor& logits,
                        const torch::Tensor& temperatures,
                        const torch::Tensor& top_k,
-                       const torch::Tensor& top_p);
+                       const torch::Tensor& top_p,
+                       int64_t max_top_k);
 
 }  // namespace xllm

@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,9 +26,8 @@ limitations under the License.
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
+#include <optional>
 #include <sstream>
-#include <type_traits>
-#include <unordered_map>
 #include <vector>
 
 #include "core/common/macros.h"
@@ -49,31 +48,9 @@ torch::Tensor as_long_indices(const torch::Tensor& indices) {
   return indices.to(torch::kLong).contiguous();
 }
 
-std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,
-                                                   const torch::Tensor& b,
-                                                   const torch::Tensor& a_log,
-                                                   const torch::Tensor& dt_bias,
-                                                   double softplus_beta,
-                                                   double softplus_threshold);
-
-std::string get_mate_gdn_decode_uri(int64_t num_q_heads,
-                                    int64_t num_v_heads,
-                                    torch::ScalarType dtype);
-
-void causal_conv1d_decode_fused(const torch::Tensor& x,
-                                const torch::Tensor& weight,
-                                const std::optional<torch::Tensor>& bias,
-                                torch::Tensor conv_state,
-                                const torch::Tensor& cache_indices,
-                                torch::Tensor output_buf,
-                                int32_t pad_slot_id,
-                                bool silu_activation);
-
-void gated_rms_norm_fused(const torch::Tensor& x,
-                          const torch::Tensor& weight,
-                          const torch::Tensor& z,
-                          torch::Tensor output,
-                          double eps);
+inline torch::Tensor l2norm_last(const torch::Tensor& x, double eps) {
+  return x / (x.pow(2).sum(-1, /*keepdim=*/true) + eps).sqrt();
+}
 
 torch::Tensor gated_layer_norm_ref(GatedLayerNormParams& params) {
   const auto x_shape_og = params.x.sizes();
@@ -151,19 +128,11 @@ std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
   const auto& a = params.a;
   const auto& b = params.b;
   const auto& dt_bias = params.dt_bias;
-  CHECK_GT(a.dim(), 0);
-  CHECK(a.sizes() == b.sizes())
-      << "fused_gdn_gating requires matching a/b shapes";
-  CHECK_EQ(A_log.numel(), a.size(-1));
-  CHECK_EQ(dt_bias.numel(), a.size(-1));
-  CHECK(a.device() == b.device() && a.device() == A_log.device() &&
-        a.device() == dt_bias.device())
-      << "fused_gdn_gating inputs must be on the same device";
-  const torch::ScalarType input_dtype = a.scalar_type();
+  const auto orig_dtype = a.scalar_type();
 
   if (!a.is_cpu() &&
-      (input_dtype == torch::kFloat32 || input_dtype == torch::kBFloat16) &&
-      b.scalar_type() == input_dtype) {
+      (orig_dtype == torch::kFloat32 || orig_dtype == torch::kBFloat16) &&
+      b.scalar_type() == orig_dtype) {
     return gdn_gating(a, b, A_log, dt_bias, params.beta, params.threshold);
   }
 
@@ -181,12 +150,10 @@ std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
   auto g_f32 = -torch::exp(A_log_f32).unsqueeze(0) * sp;
   auto beta_f32 = torch::sigmoid(b_f32);
 
-  return {g_f32, beta_f32};
+  return {g_f32.to(orig_dtype), beta_f32.to(orig_dtype)};
 }
 
-torch::Tensor causal_conv1d_update(
-    CausalConv1dUpdateParams& params,
-    const std::optional<torch::Tensor>& output_buf) {
+torch::Tensor causal_conv1d_update(CausalConv1dUpdateParams& params) {
   auto x = params.x;
   auto weight = params.weight;
   if (weight.dim() == 3) {
@@ -216,7 +183,7 @@ torch::Tensor causal_conv1d_update(
   const int64_t batch = cache_indices_raw.size(0);
   const int64_t conv_num_tokens_pre = x.size(0);
 
-  if (output_buf.has_value() && output_buf->defined() &&
+  if (params.output_buf.has_value() && params.output_buf->defined() &&
       conv_num_tokens_pre == batch && state_len > 0 && width >= 2 &&
       width <= 5 && cache_indices_raw.scalar_type() == torch::kInt32 &&
       cache_indices_raw.is_contiguous()) {
@@ -225,10 +192,10 @@ torch::Tensor causal_conv1d_update(
                                params.bias,
                                params.conv_state,
                                cache_indices_raw,
-                               *output_buf,
+                               *params.output_buf,
                                static_cast<int>(params.pad_slot_id),
                                params.activation);
-    return *output_buf;
+    return *params.output_buf;
   }
 
   auto weight_f32 = weight.to(torch::kFloat32);
@@ -314,10 +281,9 @@ torch::Tensor causal_conv1d_update(
   return out.to(x.scalar_type());
 }
 
-torch::Tensor gated_layer_norm(GatedLayerNormParams& params,
-                               const std::optional<torch::Tensor>& output_buf) {
-  if (output_buf.has_value() && output_buf->defined() && params.is_rms_norm &&
-      params.norm_before_gate && params.z.has_value() &&
+torch::Tensor gated_layer_norm(GatedLayerNormParams& params) {
+  if (params.output_buf.has_value() && params.output_buf->defined() &&
+      params.is_rms_norm && params.norm_before_gate && params.z.has_value() &&
       params.z.value().defined() && !params.bias.defined()) {
     const int64_t last_dim = params.x.size(-1);
     const int64_t group_size_val =
@@ -329,15 +295,15 @@ torch::Tensor gated_layer_norm(GatedLayerNormParams& params,
     if (group_size_val == last_dim && dtype_ok &&
         params.x.scalar_type() == z.scalar_type() &&
         params.x.scalar_type() == params.weight.scalar_type() &&
-        params.x.scalar_type() == output_buf->scalar_type() &&
+        params.x.scalar_type() == params.output_buf->scalar_type() &&
         params.x.is_contiguous() && z.is_contiguous() &&
-        output_buf->is_contiguous() && params.weight.is_contiguous() &&
+        params.output_buf->is_contiguous() && params.weight.is_contiguous() &&
         params.weight.dim() == 1) {
       auto x_2d = params.x.reshape({-1, last_dim});
       auto z_2d = z.reshape({-1, last_dim});
-      auto out_2d = output_buf->reshape({-1, last_dim});
+      auto out_2d = params.output_buf->reshape({-1, last_dim});
       gated_rms_norm_fused(x_2d, params.weight, z_2d, out_2d, params.eps);
-      return output_buf->reshape(params.x.sizes());
+      return params.output_buf->reshape(params.x.sizes());
     }
   }
   return gated_layer_norm_ref(params);
@@ -425,9 +391,6 @@ void launch_gdn_fused_qkvzba_split_contiguous(const torch::Tensor& mixed_qkvz,
                                               int64_t head_qk,
                                               int64_t head_v) {
   const int64_t m = mixed_qkvz.size(0);
-  if (m == 0) {
-    return;
-  }
   const int32_t nk = static_cast<int32_t>(num_heads_qk);
   const int32_t nv = static_cast<int32_t>(num_heads_v);
   const int32_t hk = static_cast<int32_t>(head_qk);
@@ -438,7 +401,7 @@ void launch_gdn_fused_qkvzba_split_contiguous(const torch::Tensor& mixed_qkvz,
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
   const dim3 grid(static_cast<unsigned int>(m), static_cast<unsigned int>(nk));
-  const int32_t threads = std::min(128, std::max(hk, vpk * hv));
+  const int threads = std::min(128, std::max(hk, vpk * hv));
 
   switch (mixed_qkvz.scalar_type()) {
     case torch::kBFloat16:
@@ -480,17 +443,6 @@ void launch_gdn_fused_qkvzba_split_contiguous(const torch::Tensor& mixed_qkvz,
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-bool is_compatible_output_buffer(const torch::Tensor& buffer,
-                                 const torch::Tensor& input,
-                                 int64_t rows,
-                                 int64_t columns) {
-  return buffer.defined() && buffer.dim() == 2 &&
-         buffer.device() == input.device() &&
-         buffer.scalar_type() == input.scalar_type() &&
-         buffer.is_contiguous() && buffer.size(0) >= rows &&
-         buffer.size(1) == columns;
-}
-
 }  // namespace
 
 void gdn_fused_qkvzba_split_contiguous(const torch::Tensor& mixed_qkvz,
@@ -517,21 +469,17 @@ void gdn_fused_qkvzba_split_contiguous(const torch::Tensor& mixed_qkvz,
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
 fused_qkvzba_split_reshape_cat_contiguous(
-    FusedQkvzbaSplitReshapeParams& params,
-    const FusedQkvzbaSplitReshapeExtras& extras) {
+    FusedQkvzbaSplitReshapeParams& params) {
   const int64_t nk = static_cast<int64_t>(params.num_heads_qk);
   const int64_t nv = static_cast<int64_t>(params.num_heads_v);
   const int64_t hk = static_cast<int64_t>(params.head_qk);
   const int64_t hv = static_cast<int64_t>(params.head_v);
-  CHECK(nk > 0 && nv > 0 && hk > 0 && hv > 0 && nv % nk == 0)
+  CHECK(nk > 0 && nv > 0 && nv % nk == 0)
       << "fused_qkvzba_split_reshape_cat_contiguous: invalid head counts nk="
-      << nk << " nv=" << nv << " hk=" << hk << " hv=" << hv;
+      << nk << " nv=" << nv;
 
   const auto& qkvz = params.mixed_qkvz;
-  CHECK_EQ(qkvz.dim(), 2)
-      << "fused_qkvzba_split_reshape_cat_contiguous: mixed_qkvz must be 2D";
   const int64_t n = qkvz.size(0);
-  CHECK_LE(n, static_cast<int64_t>(std::numeric_limits<uint32_t>::max()));
   const int64_t qkv_dim = 2 * nk * hk + nv * hv;
   const int64_t z_dim = nv * hv;
   CHECK(qkvz.size(-1) == qkv_dim + z_dim)
@@ -540,40 +488,23 @@ fused_qkvzba_split_reshape_cat_contiguous(
       << qkvz.size(-1) << " expected " << (qkv_dim + z_dim);
 
   const auto& ba = params.mixed_ba;
-  CHECK_EQ(ba.dim(), 2)
-      << "fused_qkvzba_split_reshape_cat_contiguous: mixed_ba must be 2D";
-  CHECK_EQ(ba.size(0), n)
-      << "fused_qkvzba_split_reshape_cat_contiguous: row count mismatch";
   CHECK(ba.size(-1) == 2 * nv)
       << "fused_qkvzba_split_reshape_cat_contiguous: mixed_ba last dim "
          "mismatch, got "
       << ba.size(-1) << " expected " << (2 * nv);
-  CHECK_EQ(ba.scalar_type(), qkvz.scalar_type())
-      << "fused_qkvzba_split_reshape_cat_contiguous: input dtype mismatch";
-  CHECK(ba.device() == qkvz.device())
-      << "fused_qkvzba_split_reshape_cat_contiguous: input device mismatch";
-  CHECK(qkvz.scalar_type() == torch::kBFloat16 ||
-        qkvz.scalar_type() == torch::kFloat16)
-      << "fused_qkvzba_split_reshape_cat_contiguous: unsupported dtype "
-      << qkvz.scalar_type();
 
-  const bool has_output_buffers =
-      extras.mixed_qkv_out_buf.defined() || extras.z_out_buf.defined() ||
-      extras.b_out_buf.defined() || extras.a_out_buf.defined();
-  const bool use_output_buffers =
-      is_compatible_output_buffer(extras.mixed_qkv_out_buf, qkvz, n, qkv_dim) &&
-      is_compatible_output_buffer(extras.z_out_buf, qkvz, n, z_dim) &&
-      is_compatible_output_buffer(extras.b_out_buf, qkvz, n, nv) &&
-      is_compatible_output_buffer(extras.a_out_buf, qkvz, n, nv);
-  CHECK(!has_output_buffers || use_output_buffers)
-      << "fused_qkvzba_split_reshape_cat_contiguous: incompatible output "
-         "buffers";
-  if (use_output_buffers) {
+  if (params.mixed_qkv_out_buf.defined() && params.z_out_buf.defined() &&
+      params.b_out_buf.defined() && params.a_out_buf.defined() &&
+      params.mixed_qkv_out_buf.size(0) >= n &&
+      params.mixed_qkv_out_buf.size(1) == qkv_dim &&
+      params.z_out_buf.size(0) >= n && params.z_out_buf.size(1) == z_dim &&
+      params.b_out_buf.size(0) >= n && params.b_out_buf.size(1) == nv &&
+      params.a_out_buf.size(0) >= n && params.a_out_buf.size(1) == nv) {
     auto mixed_qkv_buf =
-        extras.mixed_qkv_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto z_buf = extras.z_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto b_buf = extras.b_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto a_buf = extras.a_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+        params.mixed_qkv_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto z_buf = params.z_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto b_buf = params.b_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto a_buf = params.a_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
 
     gdn_fused_qkvzba_split_contiguous(qkvz.contiguous(),
                                       ba.contiguous(),
@@ -598,25 +529,22 @@ fused_qkvzba_split_reshape_cat_contiguous(
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
-fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params,
-                               const FusedQkvzbaSplitReshapeExtras& extras) {
-  if (extras.contiguous_input_layout) {
-    return fused_qkvzba_split_reshape_cat_contiguous(params, extras);
+fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params) {
+  if (params.contiguous_input_layout) {
+    return fused_qkvzba_split_reshape_cat_contiguous(params);
   }
   const int64_t nk = static_cast<int64_t>(params.num_heads_qk);
   const int64_t nv = static_cast<int64_t>(params.num_heads_v);
   const int64_t hk = static_cast<int64_t>(params.head_qk);
   const int64_t hv = static_cast<int64_t>(params.head_v);
-  CHECK(nk > 0 && nv > 0 && hk > 0 && hv > 0 && nv % nk == 0)
+  CHECK(nk > 0 && nv > 0 && nv % nk == 0)
       << "fused_qkvzba_split_reshape_cat: invalid head counts nk=" << nk
-      << " nv=" << nv << " hk=" << hk << " hv=" << hv;
+      << " nv=" << nv;
   const int64_t vpk = nv / nk;
   const int64_t per_group = 2 * hk + 2 * vpk * hv;
 
   const auto& qkvz = params.mixed_qkvz;
-  CHECK_EQ(qkvz.dim(), 2)
-      << "fused_qkvzba_split_reshape_cat: mixed_qkvz must be 2D";
-  const int64_t n = qkvz.size(0);
+  const int64_t n = qkvz.numel() / qkvz.size(-1);
   CHECK(qkvz.size(-1) == nk * per_group)
       << "fused_qkvzba_split_reshape_cat: mixed_qkvz last dim mismatch, got "
       << qkvz.size(-1) << " expected " << nk * per_group;
@@ -628,15 +556,9 @@ fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params,
   auto z = qkvz_g.slice(-1, 2 * hk + vpk * hv, per_group);
 
   const auto& ba = params.mixed_ba;
-  CHECK_EQ(ba.dim(), 2)
-      << "fused_qkvzba_split_reshape_cat: mixed_ba must be 2D";
-  CHECK_EQ(ba.size(0), n)
-      << "fused_qkvzba_split_reshape_cat: row count mismatch";
   CHECK(ba.size(-1) == 2 * nv)
       << "fused_qkvzba_split_reshape_cat: mixed_ba last dim mismatch, got "
       << ba.size(-1) << " expected " << 2 * nv;
-  CHECK(ba.scalar_type() == qkvz.scalar_type() && ba.device() == qkvz.device())
-      << "fused_qkvzba_split_reshape_cat: input dtype/device mismatch";
   auto ba_g = ba.reshape({n, nk, 2 * vpk});
   auto b_slice = ba_g.slice(-1, 0, vpk);
   auto a_slice = ba_g.slice(-1, vpk, 2 * vpk);
@@ -644,22 +566,18 @@ fused_qkvzba_split_reshape_cat(FusedQkvzbaSplitReshapeParams& params,
   const int64_t qkv_dim = 2 * nk * hk + nv * hv;
   const int64_t z_dim = nv * hv;
 
-  const bool has_output_buffers =
-      extras.mixed_qkv_out_buf.defined() || extras.z_out_buf.defined() ||
-      extras.b_out_buf.defined() || extras.a_out_buf.defined();
-  const bool use_output_buffers =
-      is_compatible_output_buffer(extras.mixed_qkv_out_buf, qkvz, n, qkv_dim) &&
-      is_compatible_output_buffer(extras.z_out_buf, qkvz, n, z_dim) &&
-      is_compatible_output_buffer(extras.b_out_buf, qkvz, n, nv) &&
-      is_compatible_output_buffer(extras.a_out_buf, qkvz, n, nv);
-  CHECK(!has_output_buffers || use_output_buffers)
-      << "fused_qkvzba_split_reshape_cat: incompatible output buffers";
-  if (use_output_buffers) {
+  if (params.mixed_qkv_out_buf.defined() && params.z_out_buf.defined() &&
+      params.b_out_buf.defined() && params.a_out_buf.defined() &&
+      params.mixed_qkv_out_buf.size(0) >= n &&
+      params.mixed_qkv_out_buf.size(1) == qkv_dim &&
+      params.z_out_buf.size(0) >= n && params.z_out_buf.size(1) == z_dim &&
+      params.b_out_buf.size(0) >= n && params.b_out_buf.size(1) == nv &&
+      params.a_out_buf.size(0) >= n && params.a_out_buf.size(1) == nv) {
     auto mixed_qkv_buf =
-        extras.mixed_qkv_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto z_buf = extras.z_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto b_buf = extras.b_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
-    auto a_buf = extras.a_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+        params.mixed_qkv_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto z_buf = params.z_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto b_buf = params.b_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
+    auto a_buf = params.a_out_buf.narrow(/*dim=*/0, /*start=*/0, /*length=*/n);
 
     mixed_qkv_buf.narrow(/*dim=*/1, /*start=*/0, /*length=*/nk * hk)
         .view({n, nk, hk})
@@ -820,14 +738,9 @@ std::string mate_gdn_dtype_suffix(torch::ScalarType dtype) {
   LOG(FATAL) << "mate GDN decode expects bfloat16 or float16 q/k/v";
 }
 
-std::string get_mate_gdn_decode_uri(int64_t num_q_heads,
-                                    int64_t num_v_heads,
-                                    torch::ScalarType dtype) {
-  std::ostringstream oss;
-  oss << "mate_gdn_decode_hq" << num_q_heads << "_hv" << num_v_heads << "_"
-      << mate_gdn_dtype_suffix(dtype);
-  return oss.str();
-}
+}  // namespace
+
+namespace {
 
 std::string get_mate_gdn_decode_tvmffi_uri(int64_t num_q_heads,
                                            int64_t num_v_heads,
@@ -853,24 +766,13 @@ bool mate_gdn_decode_module_available(const std::string& uri) {
   }
   const std::string so_path =
       std::string(ops_path) + "/" + uri + "/" + uri + ".so";
-  static thread_local std::unordered_map<std::string, bool> availability;
-  const auto cached = availability.find(so_path);
-  if (cached != availability.end()) {
-    return cached->second;
-  }
-  const bool available = ::access(so_path.c_str(), R_OK) == 0;
-  availability.emplace(so_path, available);
-  return available;
+  return ::access(so_path.c_str(), R_OK) == 0;
 }
 
 }  // namespace
 
 torch::Tensor mate_gated_delta_rule_decode(
     musa::MateGatedDeltaRuleDecodeParams& params) {
-  CHECK(params.use_qk_l2norm)
-      << "mate GDN decode requires internal Q/K normalization";
-  CHECK(std::isfinite(params.scale) && params.scale > 0.0)
-      << "mate GDN decode requires a positive finite scale";
   auto mixed_qkv = params.mixed_qkv.contiguous();
   CHECK(mixed_qkv.dim() == 2) << "mate GDN decode expects mixed_qkv [B, D]";
   const int64_t batch_size = mixed_qkv.size(0);
@@ -878,34 +780,16 @@ torch::Tensor mate_gated_delta_rule_decode(
   const int64_t num_v_heads = params.num_v_heads;
   const int64_t head_k_dim = params.head_k_dim;
   const int64_t head_v_dim = params.head_v_dim;
-  CHECK_GT(num_k_heads, 0);
-  CHECK_GT(num_v_heads, 0);
-  CHECK_GT(head_k_dim, 0);
-  CHECK_GT(head_v_dim, 0);
-  CHECK_EQ(num_v_heads % num_k_heads, 0);
   const int64_t qk_cols = num_k_heads * head_k_dim;
   const int64_t v_cols = num_v_heads * head_v_dim;
   CHECK(mixed_qkv.size(1) == 2 * qk_cols + v_cols)
       << "mate GDN decode mixed_qkv dim mismatch";
-  CHECK(mixed_qkv.scalar_type() == torch::kBFloat16 ||
-        mixed_qkv.scalar_type() == torch::kFloat16)
-      << "mate GDN decode unsupported dtype " << mixed_qkv.scalar_type();
-  CHECK(params.state.dim() == 4 && params.state.size(1) == num_v_heads &&
-        params.state.size(2) == head_v_dim &&
-        params.state.size(3) == head_k_dim)
-      << "mate GDN decode state shape mismatch";
-  CHECK_EQ(params.A_log.numel(), num_v_heads);
-  CHECK_EQ(params.dt_bias.numel(), num_v_heads);
-  CHECK_EQ(params.state_indices.numel(), batch_size);
-  CHECK(params.state.device() == mixed_qkv.device() &&
-        params.A_log.device() == mixed_qkv.device() &&
-        params.dt_bias.device() == mixed_qkv.device() &&
-        params.a.device() == mixed_qkv.device() &&
-        params.b.device() == mixed_qkv.device() &&
-        params.state_indices.device() == mixed_qkv.device())
-      << "mate GDN decode inputs must be on the same device";
 
-  // The FFI kernel accepts last-dimension-contiguous strided Q/K/V views.
+  // Pass strided views directly to the FFI kernel — no copy needed.
+  // The TileLang kernel uses T.StridedTensor with explicit stride parameters,
+  // and the FFI bridge has been relaxed to accept last-dim-contiguous tensors.
+  // Strided layout: stride_b = 2*qk_cols+v_cols (full mixed_qkv row),
+  //                  stride_h = head_dim, stride_d = 1.
   auto query = mixed_qkv.slice(/*dim=*/1, /*start=*/0, /*end=*/qk_cols)
                    .reshape({batch_size, num_k_heads, head_k_dim});
   auto key = mixed_qkv.slice(/*dim=*/1, /*start=*/qk_cols, /*end=*/2 * qk_cols)
@@ -915,8 +799,16 @@ torch::Tensor mate_gated_delta_rule_decode(
           .slice(/*dim=*/1, /*start=*/2 * qk_cols, /*end=*/2 * qk_cols + v_cols)
           .reshape({batch_size, num_v_heads, head_v_dim});
 
-  // MATE decode normalizes Q/K internally and requires FP32 state parameters.
-  const torch::ScalarType io_dtype = query.scalar_type();
+  // The compiled MATE decode kernel applies QK L2-norm internally
+  // (build_gdn_decode_op.py passes use_qk_l2norm=True to the TileLang
+  // kernel factory, which fuses the norm via warp-shuffle reduction).
+  // No external normalization is needed — doing so would be a redundant
+  // double-norm that wastes GPU cycles.
+
+  // The compiled MATE kernel bakes in bfloat16 q/k/v/a/b and float32
+  // A_log/dt_bias/state (same ABI as the MTP kernel — see line 876-877).
+  // Coerce a/b to the q/k/v dtype to satisfy the ABI.
+  const auto io_dtype = query.scalar_type();
   auto a = (params.a.scalar_type() == io_dtype && params.a.is_contiguous())
                ? params.a
                : params.a.to(io_dtype).contiguous();
@@ -931,80 +823,47 @@ torch::Tensor mate_gated_delta_rule_decode(
   }
   CHECK(a.dim() == 2 && b.dim() == 2)
       << "mate GDN decode expects a/b shaped [B, Hv]";
-  CHECK(a.size(0) == batch_size && a.size(1) == num_v_heads &&
-        b.size(0) == batch_size && b.size(1) == num_v_heads)
-      << "mate GDN decode a/b shape mismatch";
 
   auto state_f32 = (params.state.scalar_type() == torch::kFloat32 &&
                     params.state.is_contiguous())
                        ? params.state
                        : params.state.to(torch::kFloat32).contiguous();
   auto state_indices = params.state_indices.to(torch::kInt32).contiguous();
-  auto a_log_f32 = params.A_log.to(torch::kFloat32).contiguous();
+  auto A_log_f32 = params.A_log.to(torch::kFloat32).contiguous();
   auto dt_bias_f32 = params.dt_bias.to(torch::kFloat32).contiguous();
   auto output =
       params.decode_output.has_value() && params.decode_output.value().defined()
           ? params.decode_output.value()
           : torch::empty({batch_size, num_v_heads, head_v_dim},
                          value.options());
-  CHECK(output.dim() == 3 && output.size(0) == batch_size &&
-        output.size(1) == num_v_heads && output.size(2) == head_v_dim)
-      << "mate GDN decode output shape mismatch";
-  CHECK(output.scalar_type() == value.scalar_type() &&
-        output.device() == value.device() && output.is_contiguous())
-      << "mate GDN decode output must match value dtype/device and be "
-         "contiguous";
-  if (batch_size == 0) {
-    return output;
-  }
 
-  const std::string direct_uri = get_mate_gdn_decode_tvmffi_uri(
+  const std::string uri = get_mate_gdn_decode_tvmffi_uri(
       num_k_heads, num_v_heads, query.scalar_type(), batch_size);
-  const bool use_direct_tvmffi = mate_gdn_decode_module_available(direct_uri);
-  CHECK(use_direct_tvmffi || batch_size <= 2)
-      << "Mate GDN decode requires the batch-tuned TVM-FFI module "
-      << direct_uri << " for batch_size=" << batch_size
-      << "; refusing to reuse the B<=2 module because its TileLang grid "
-         "configuration is incorrect for this batch bucket";
-  const std::string uri =
-      use_direct_tvmffi ? direct_uri
-                        : get_mate_gdn_decode_uri(
-                              num_k_heads, num_v_heads, query.scalar_type());
-  auto run = get_function(uri, use_direct_tvmffi ? "main" : "run");
+  CHECK(mate_gdn_decode_module_available(uri))
+      << "Mate 0.2.5 GDN decode artifact is unavailable: " << uri;
+  auto run = get_function(uri, "main");
 
   {
-    // Synchronize the FFI pool-stream fallback with the current torch stream.
-    TvmffiStreamGuard stream_guard(query.device());
+    MusaTvmffiStreamGuard stream_guard(query.device());
 
-    if (use_direct_tvmffi) {
-      // The native TVM-FFI ABI accepts scale as a runtime scalar.
-      run(to_ffi_tensor(query),
-          to_ffi_tensor(key),
-          to_ffi_tensor(value),
-          to_ffi_tensor(a_log_f32),
-          to_ffi_tensor(a),
-          to_ffi_tensor(dt_bias_f32),
-          to_ffi_tensor(b),
-          static_cast<float>(params.scale),
-          to_ffi_tensor(state_indices),
-          to_ffi_tensor(state_f32),
-          to_ffi_tensor(output));
-    } else {
-      // The wrapper ABI uses a different argument order.
-      run(to_ffi_tensor(query),
-          to_ffi_tensor(key),
-          to_ffi_tensor(value),
-          to_ffi_tensor(a_log_f32),
-          to_ffi_tensor(a),
-          to_ffi_tensor(dt_bias_f32),
-          to_ffi_tensor(b),
-          to_ffi_tensor(state_indices),
-          to_ffi_tensor(state_f32),
-          to_ffi_tensor(output));
-    }
+    run(to_ffi_tensor(query),
+        to_ffi_tensor(key),
+        to_ffi_tensor(value),
+        to_ffi_tensor(A_log_f32),
+        to_ffi_tensor(a),
+        to_ffi_tensor(dt_bias_f32),
+        to_ffi_tensor(b),
+        static_cast<float>(params.scale),
+        to_ffi_tensor(state_indices),
+        to_ffi_tensor(state_f32),
+        to_ffi_tensor(output));
   }
 
-  // Avoid allocating a state copy when the FP32 state is updated in place.
+  // The mate kernel updates state_f32 in-place. When state_f32 IS
+  // params.state (already fp32 contiguous — the production case), the
+  // index_select + index_copy_ below is a redundant self-writeback. Skip
+  // it to avoid two extra allocations (index_select result + int64 index
+  // cast) that abort MUSA graph capture.
   if (state_f32.data_ptr() != params.state.data_ptr()) {
     auto updated_state =
         state_f32.index_select(/*dim=*/0, state_indices.to(torch::kLong));
@@ -1012,6 +871,196 @@ torch::Tensor mate_gated_delta_rule_decode(
         /*dim=*/0,
         state_indices.to(torch::kLong),
         updated_state.to(params.state.scalar_type()));
+  }
+
+  return output;
+}
+
+std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
+                                 int64_t num_v_heads,
+                                 torch::ScalarType dtype,
+                                 int64_t seq_len) {
+  CHECK_GT(seq_len, 0) << "MATE GDN MTP sequence length must be positive";
+  std::ostringstream oss;
+  oss << "mate_gdn_mtp_hq" << num_q_heads << "_hv" << num_v_heads << "_"
+      << mate_gdn_dtype_suffix(dtype);
+  // The existing artifact is the K=1/T=2 module. Keep its URI stable and
+  // suffix modules specialized for larger validation widths.
+  if (seq_len != 2) {
+    oss << "_t" << seq_len;
+  }
+  return oss.str();
+}
+
+namespace {
+
+bool mate_gdn_mtp_artifact_available(const std::string& uri) {
+  const char* ops_path = std::getenv("FLASHINFER_OPS_PATH");
+  if (ops_path == nullptr || ops_path[0] == '\0') {
+    return false;
+  }
+  const std::string so_path =
+      std::string(ops_path) + "/" + uri + "/" + uri + ".so";
+  return ::access(so_path.c_str(), R_OK) == 0;
+}
+
+std::string get_mate_gdn_mtp_checkpoint_uri(int64_t num_q_heads,
+                                            int64_t num_v_heads,
+                                            torch::ScalarType dtype,
+                                            int64_t seq_len) {
+  CHECK_GT(seq_len, 0) << "MATE GDN MTP sequence length must be positive";
+  std::ostringstream oss;
+  oss << "mate_gdn_mtp_checkpoint_hq" << num_q_heads << "_hv" << num_v_heads
+      << "_" << mate_gdn_dtype_suffix(dtype) << "_t" << seq_len;
+  return oss.str();
+}
+
+}  // namespace
+
+bool mate_gdn_mtp_module_available(int64_t num_q_heads,
+                                   int64_t num_v_heads,
+                                   torch::ScalarType dtype,
+                                   int64_t seq_len) {
+  return mate_gdn_mtp_artifact_available(
+      get_mate_gdn_mtp_uri(num_q_heads, num_v_heads, dtype, seq_len));
+}
+
+bool mate_gdn_mtp_checkpoint_module_available(int64_t num_q_heads,
+                                              int64_t num_v_heads,
+                                              torch::ScalarType dtype,
+                                              int64_t seq_len) {
+  return mate_gdn_mtp_artifact_available(get_mate_gdn_mtp_checkpoint_uri(
+      num_q_heads, num_v_heads, dtype, seq_len));
+}
+
+torch::Tensor mate_gated_delta_rule_mtp(
+    musa::MateGatedDeltaRuleMtpParams& params) {
+  const bool write_checkpoints = params.checkpoint_state_indices.defined();
+  auto q = write_checkpoints ? params.q : params.q.contiguous();
+  auto k = write_checkpoints ? params.k : params.k.contiguous();
+  auto v = write_checkpoints ? params.v : params.v.contiguous();
+  CHECK(q.dim() == 4) << "mate GDN mtp expects q [B, T, Hqk, K]";
+  CHECK(k.sizes() == q.sizes()) << "mate GDN mtp q/k shape mismatch";
+  CHECK(v.dim() == 4) << "mate GDN mtp expects v [B, T, Hv, V]";
+  CHECK_EQ(q.size(0), v.size(0)) << "mate GDN mtp batch mismatch";
+  CHECK_EQ(q.size(1), v.size(1)) << "mate GDN mtp sequence mismatch";
+  CHECK_GT(q.size(1), 0) << "mate GDN mtp sequence must be positive";
+
+  const int64_t num_k_heads = params.num_k_heads;
+  const int64_t num_v_heads = params.num_v_heads;
+  const auto io_dtype = q.scalar_type();
+  auto a = write_checkpoints ? params.a : params.a.to(io_dtype).contiguous();
+  auto b = write_checkpoints ? params.b : params.b.to(io_dtype).contiguous();
+  auto A_log = write_checkpoints
+                   ? params.A_log
+                   : params.A_log.to(torch::kFloat32).contiguous();
+  auto dt_bias = write_checkpoints
+                     ? params.dt_bias
+                     : params.dt_bias.to(torch::kFloat32).contiguous();
+  auto state_f32 = write_checkpoints
+                       ? params.state
+                       : params.state.to(torch::kFloat32).contiguous();
+  auto state_indices =
+      write_checkpoints ? params.state_indices
+                        : params.state_indices.to(torch::kInt32).contiguous();
+  torch::Tensor checkpoint_state_indices;
+  torch::Tensor intermediate;
+  auto output = params.output;
+
+  if (write_checkpoints) {
+    checkpoint_state_indices = params.checkpoint_state_indices;
+    CHECK(io_dtype == torch::kBFloat16);
+    CHECK(k.scalar_type() == io_dtype && v.scalar_type() == io_dtype &&
+          a.scalar_type() == io_dtype && b.scalar_type() == io_dtype &&
+          output.scalar_type() == io_dtype)
+        << "MATE GDN MTP checkpoint q/k/v/a/b/output must be bfloat16";
+    CHECK(A_log.scalar_type() == torch::kFloat32 &&
+          dt_bias.scalar_type() == torch::kFloat32 &&
+          state_f32.scalar_type() == torch::kFloat32)
+        << "MATE GDN MTP checkpoint state parameters must be float32";
+    CHECK(state_indices.scalar_type() == torch::kInt32 &&
+          checkpoint_state_indices.scalar_type() == torch::kInt32)
+        << "MATE GDN MTP checkpoint indices must be int32";
+    CHECK(A_log.is_contiguous() && dt_bias.is_contiguous() &&
+          state_f32.is_contiguous() && checkpoint_state_indices.is_contiguous())
+        << "MATE GDN MTP checkpoint dense inputs must be contiguous";
+    CHECK_EQ(q.size(2), num_k_heads);
+    CHECK_EQ(k.size(2), num_k_heads);
+    CHECK_EQ(v.size(2), num_v_heads);
+    CHECK_EQ(q.size(3), params.head_k_dim);
+    CHECK_EQ(k.size(3), params.head_k_dim);
+    CHECK_EQ(v.size(3), params.head_v_dim);
+    CHECK(a.dim() == 3 && b.dim() == 3);
+    CHECK_EQ(a.size(0), q.size(0));
+    CHECK_EQ(a.size(1), q.size(1));
+    CHECK_EQ(a.size(2), num_v_heads);
+    CHECK(b.sizes() == a.sizes());
+    CHECK_EQ(A_log.dim(), 1);
+    CHECK_EQ(A_log.size(0), num_v_heads);
+    CHECK_EQ(dt_bias.dim(), 1);
+    CHECK_EQ(dt_bias.size(0), num_v_heads);
+    CHECK_EQ(state_f32.dim(), 4);
+    CHECK_EQ(state_f32.size(1), num_v_heads);
+    CHECK_EQ(state_f32.size(2), params.head_v_dim);
+    CHECK_EQ(state_f32.size(3), params.head_k_dim);
+    CHECK_EQ(state_indices.dim(), 1);
+    CHECK_EQ(state_indices.size(0), q.size(0));
+    CHECK_EQ(checkpoint_state_indices.dim(), 2);
+    CHECK_EQ(checkpoint_state_indices.size(0), q.size(0));
+    CHECK_EQ(checkpoint_state_indices.size(1), q.size(1));
+    CHECK(output.sizes() == v.sizes());
+    CHECK(k.device() == q.device() && v.device() == q.device() &&
+          a.device() == q.device() && b.device() == q.device() &&
+          A_log.device() == q.device() && dt_bias.device() == q.device() &&
+          state_f32.device() == q.device() &&
+          state_indices.device() == q.device() &&
+          checkpoint_state_indices.device() == q.device() &&
+          output.device() == q.device())
+        << "MATE GDN MTP checkpoint inputs must share one device";
+  } else {
+    CHECK(params.intermediate.defined());
+    intermediate = params.intermediate.contiguous();
+  }
+
+  const std::string uri =
+      write_checkpoints
+          ? get_mate_gdn_mtp_checkpoint_uri(
+                num_k_heads, num_v_heads, q.scalar_type(), q.size(1))
+          : get_mate_gdn_mtp_uri(
+                num_k_heads, num_v_heads, q.scalar_type(), q.size(1));
+  auto main = get_module(uri)->GetFunction("main");
+  CHECK(main.defined()) << "Mate 0.2.5 GDN MTP artifact must expose main: "
+                        << uri;
+  auto run = main.value();
+  {
+    MusaTvmffiStreamGuard stream_guard(q.device());
+    if (write_checkpoints) {
+      run(to_ffi_tensor(q),
+          to_ffi_tensor(k),
+          to_ffi_tensor(v),
+          to_ffi_tensor(A_log),
+          to_ffi_tensor(a),
+          to_ffi_tensor(dt_bias),
+          to_ffi_tensor(b),
+          static_cast<float>(params.scale),
+          to_ffi_tensor(state_f32),
+          to_ffi_tensor(state_indices),
+          to_ffi_tensor(checkpoint_state_indices),
+          to_ffi_tensor(output));
+    } else {
+      run(to_ffi_tensor(q),
+          to_ffi_tensor(k),
+          to_ffi_tensor(v),
+          to_ffi_tensor(A_log),
+          to_ffi_tensor(a),
+          to_ffi_tensor(dt_bias),
+          to_ffi_tensor(b),
+          static_cast<float>(params.scale),
+          to_ffi_tensor(state_f32),
+          to_ffi_tensor(state_indices),
+          to_ffi_tensor(intermediate),
+          to_ffi_tensor(output));
+    }
   }
 
   return output;
@@ -1187,7 +1236,7 @@ __global__ void __launch_bounds__(256, 1)
                                   const T* key,
                                   T* query_out,
                                   T* key_out,
-                                  int32_t rows,
+                                  int rows,
                                   int64_t num_tokens,
                                   int64_t num_heads,
                                   int64_t query_stride_b,
@@ -1203,15 +1252,14 @@ __global__ void __launch_bounds__(256, 1)
                                   int64_t key_out_stride_t,
                                   int64_t key_out_stride_h,
                                   float eps) {
-  constexpr int32_t kColumns = 128;
-  constexpr int32_t kLanesPerRow = 32;
-  constexpr int32_t kValuesPerLane = kColumns / kLanesPerRow;
-  constexpr int32_t kRowsPerBlock = 8;
+  constexpr int kColumns = 128;
+  constexpr int kLanesPerRow = 32;
+  constexpr int kValuesPerLane = kColumns / kLanesPerRow;
+  constexpr int kRowsPerBlock = 8;
 
-  const int32_t lane = static_cast<int32_t>(threadIdx.x) % kLanesPerRow;
-  const int32_t row_in_block = static_cast<int32_t>(threadIdx.x) / kLanesPerRow;
-  const int32_t row =
-      static_cast<int32_t>(blockIdx.x) * kRowsPerBlock + row_in_block;
+  const int lane = threadIdx.x % kLanesPerRow;
+  const int row_in_block = threadIdx.x / kLanesPerRow;
+  const int row = blockIdx.x * kRowsPerBlock + row_in_block;
   if (row >= rows) {
     return;
   }
@@ -1228,13 +1276,13 @@ __global__ void __launch_bounds__(256, 1)
   const int64_t key_row_offset = batch_idx * key_stride_b +
                                  token_idx * key_stride_t +
                                  head_idx * key_stride_h;
-  const int32_t column_base = lane * kValuesPerLane;
+  const int column_base = lane * kValuesPerLane;
   float query_values[kValuesPerLane];
   float key_values[kValuesPerLane];
   float query_sum = 0.0f;
   float key_sum = 0.0f;
 #pragma unroll
-  for (int32_t index = 0; index < kValuesPerLane; ++index) {
+  for (int index = 0; index < kValuesPerLane; ++index) {
     const int64_t column = static_cast<int64_t>(column_base + index);
     query_values[index] = to_f32<T>(query[query_row_offset + column]);
     key_values[index] = to_f32<T>(key[key_row_offset + column]);
@@ -1243,7 +1291,7 @@ __global__ void __launch_bounds__(256, 1)
   }
 
 #pragma unroll
-  for (int32_t offset = kLanesPerRow / 2; offset > 0; offset >>= 1) {
+  for (int offset = kLanesPerRow / 2; offset > 0; offset >>= 1) {
     query_sum += __shfl_xor_sync(0xffffffffu, query_sum, offset, kLanesPerRow);
     key_sum += __shfl_xor_sync(0xffffffffu, key_sum, offset, kLanesPerRow);
   }
@@ -1257,7 +1305,7 @@ __global__ void __launch_bounds__(256, 1)
                                      token_idx * key_out_stride_t +
                                      head_idx * key_out_stride_h;
 #pragma unroll
-  for (int32_t index = 0; index < kValuesPerLane; ++index) {
+  for (int index = 0; index < kValuesPerLane; ++index) {
     const int64_t column = static_cast<int64_t>(column_base + index);
     query_out[query_out_row_offset + column] =
         from_f32<T>(query_values[index] * query_inv_norm);
@@ -1271,12 +1319,12 @@ void launch_l2_norm_pair_h128(const torch::Tensor& query,
                               const torch::Tensor& key,
                               torch::Tensor& query_out,
                               torch::Tensor& key_out,
-                              int32_t rows,
+                              int rows,
                               double eps,
                               cudaStream_t stream) {
-  constexpr int32_t kRowsPerBlock = 8;
-  constexpr int32_t kThreads = 256;
-  const int32_t blocks = (rows + kRowsPerBlock - 1) / kRowsPerBlock;
+  constexpr int kRowsPerBlock = 8;
+  constexpr int kThreads = 256;
+  const int blocks = (rows + kRowsPerBlock - 1) / kRowsPerBlock;
   l2_norm_pair_h128_rows_kernel<T><<<blocks, kThreads, 0, stream>>>(
       reinterpret_cast<const T*>(query.data_ptr()),
       reinterpret_cast<const T*>(key.data_ptr()),
@@ -1309,7 +1357,7 @@ __global__ void gdn_gating_kernel(const input_t* __restrict__ a,
                                   output_t* __restrict__ g_out,
                                   output_t* __restrict__ beta_out,
                                   int64_t n_elem,
-                                  int32_t num_heads,
+                                  int H,
                                   float sp_beta,
                                   float threshold) {
   const int64_t idx =
@@ -1317,12 +1365,12 @@ __global__ void gdn_gating_kernel(const input_t* __restrict__ a,
   if (idx >= n_elem) {
     return;
   }
-  const int32_t head_idx = static_cast<int32_t>(idx % num_heads);
+  const int h = static_cast<int>(idx % H);
 
-  const float pre = static_cast<float>(a[idx]) + dt_bias[head_idx];
+  const float pre = static_cast<float>(a[idx]) + dt_bias[h];
   const float bx = sp_beta * pre;
   const float sp = (bx > threshold) ? pre : (log1pf(expf(bx)) / sp_beta);
-  const float g = -expf(A_log[head_idx]) * sp;
+  const float g = -expf(A_log[h]) * sp;
   const float beta = 1.f / (1.f + expf(-static_cast<float>(b[idx])));
 
   g_out[idx] = static_cast<output_t>(g);
@@ -1337,24 +1385,23 @@ void launch(const torch::Tensor& a,
             torch::Tensor& g,
             torch::Tensor& beta,
             int64_t n_elem,
-            int32_t num_heads,
+            int H,
             float sp_beta,
             float threshold,
             cudaStream_t stream) {
-  constexpr int32_t kThreads = 256;
-  const int32_t blocks =
-      static_cast<int32_t>((n_elem + kThreads - 1) / kThreads);
+  const int threads = 256;
+  const int blocks = static_cast<int>((n_elem + threads - 1) / threads);
   gdn_gating_kernel<input_t, output_t>
-      <<<blocks, kThreads, 0, stream>>>(a.data_ptr<input_t>(),
-                                        b.data_ptr<input_t>(),
-                                        A_log_f32.data_ptr<float>(),
-                                        dt_bias_f32.data_ptr<float>(),
-                                        g.data_ptr<output_t>(),
-                                        beta.data_ptr<output_t>(),
-                                        n_elem,
-                                        num_heads,
-                                        sp_beta,
-                                        threshold);
+      <<<blocks, threads, 0, stream>>>(a.data_ptr<input_t>(),
+                                       b.data_ptr<input_t>(),
+                                       A_log_f32.data_ptr<float>(),
+                                       dt_bias_f32.data_ptr<float>(),
+                                       g.data_ptr<output_t>(),
+                                       beta.data_ptr<output_t>(),
+                                       n_elem,
+                                       H,
+                                       sp_beta,
+                                       threshold);
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
@@ -1371,12 +1418,6 @@ void l2_norm_pair_fused_out(const torch::Tensor& query,
       << "l2_norm_pair_fused requires matching Q/K shapes";
   CHECK(query.scalar_type() == key.scalar_type())
       << "l2_norm_pair_fused requires matching Q/K dtypes";
-  CHECK(query.device() == key.device())
-      << "l2_norm_pair_fused requires matching Q/K devices";
-  CHECK(query.scalar_type() == torch::kBFloat16 ||
-        query.scalar_type() == torch::kFloat16 ||
-        query.scalar_type() == torch::kFloat32)
-      << "l2_norm_pair_fused: unsupported dtype " << query.scalar_type();
   CHECK_EQ(query.dim(), 4) << "l2_norm_pair_fused requires 4D Q/K tensors";
   CHECK_EQ(query.stride(-1), 1)
       << "l2_norm_pair_fused requires contiguous Q last dimension";
@@ -1389,20 +1430,14 @@ void l2_norm_pair_fused_out(const torch::Tensor& query,
   CHECK(query_out.scalar_type() == query.scalar_type() &&
         key_out.scalar_type() == key.scalar_type())
       << "l2_norm_pair_fused output dtypes must match inputs";
-  CHECK(query_out.device() == query.device() &&
-        key_out.device() == key.device())
-      << "l2_norm_pair_fused output devices must match inputs";
   CHECK_EQ(query_out.stride(-1), 1)
       << "l2_norm_pair_fused requires contiguous Q output last dimension";
   CHECK_EQ(key_out.stride(-1), 1)
       << "l2_norm_pair_fused requires contiguous K output last dimension";
 
   const int64_t rows_i64 = query.numel() / query.size(-1);
-  CHECK_LE(rows_i64, std::numeric_limits<int32_t>::max());
-  const int32_t rows = static_cast<int32_t>(rows_i64);
-  if (rows == 0) {
-    return;
-  }
+  CHECK_LE(rows_i64, std::numeric_limits<int>::max());
+  const int rows = static_cast<int>(rows_i64);
   const at::cuda::OptionalCUDAGuard device_guard(device_of(query));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
 
@@ -1443,25 +1478,47 @@ void l2_norm_pair_fused_inplace(torch::Tensor& query,
   l2_norm_pair_fused_out(query, key, query, key, eps);
 }
 
-namespace {
-
-std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,
-                                                   const torch::Tensor& b,
-                                                   const torch::Tensor& a_log,
-                                                   const torch::Tensor& dt_bias,
-                                                   double softplus_beta,
-                                                   double softplus_threshold) {
-  const int64_t num_heads = a.size(-1);
+std::pair<torch::Tensor, torch::Tensor> gdn_gating(
+    const torch::Tensor& a,
+    const torch::Tensor& b,
+    const torch::Tensor& A_log,
+    const torch::Tensor& dt_bias,
+    double sp_beta,
+    double threshold,
+    const std::optional<torch::Tensor>& g_out,
+    const std::optional<torch::Tensor>& beta_out) {
+  const int64_t H = a.size(-1);
   const int64_t n_elem = a.numel();
   auto a_c = a.contiguous();
   auto b_c = b.contiguous();
-  auto a_log_f32 = a_log.to(torch::kFloat32).contiguous();
+  auto A_log_f32 = A_log.to(torch::kFloat32).contiguous();
   auto dt_bias_f32 = dt_bias.to(torch::kFloat32).contiguous();
-  const auto output_options = a_c.options().dtype(torch::kFloat32);
-  auto g = torch::empty(a_c.sizes(), output_options);
-  auto beta = torch::empty(a_c.sizes(), output_options);
-  if (n_elem == 0) {
-    return {g, beta};
+  static const bool gating_fp32 = [] {
+    const char* value = std::getenv("XLLM_GDN_DISABLE_GATING_FP32");
+    return value == nullptr || std::string(value) != "1";
+  }();
+  const auto output_options =
+      gating_fp32 ? a_c.options().dtype(torch::kFloat32) : a_c.options();
+  torch::Tensor g;
+  torch::Tensor beta;
+  if (g_out.has_value() && g_out->defined()) {
+    CHECK_EQ(g_out->sizes(), a_c.sizes())
+        << "gdn_gating g_out must match input shape";
+    CHECK_EQ(g_out->scalar_type(), output_options.dtype().toScalarType());
+    CHECK(g_out->is_contiguous()) << "gdn_gating g_out must be contiguous";
+    g = *g_out;
+  } else {
+    g = torch::empty(a_c.sizes(), output_options);
+  }
+  if (beta_out.has_value() && beta_out->defined()) {
+    CHECK_EQ(beta_out->sizes(), a_c.sizes())
+        << "gdn_gating beta_out must match input shape";
+    CHECK_EQ(beta_out->scalar_type(), output_options.dtype().toScalarType());
+    CHECK(beta_out->is_contiguous())
+        << "gdn_gating beta_out must be contiguous";
+    beta = *beta_out;
+  } else {
+    beta = torch::empty(a_c.sizes(), output_options);
   }
 
   const at::cuda::OptionalCUDAGuard guard(device_of(a));
@@ -1470,33 +1527,49 @@ std::pair<torch::Tensor, torch::Tensor> gdn_gating(const torch::Tensor& a,
   if (a_c.scalar_type() == torch::kFloat32) {
     launch<float, float>(a_c,
                          b_c,
-                         a_log_f32,
+                         A_log_f32,
                          dt_bias_f32,
                          g,
                          beta,
                          n_elem,
-                         static_cast<int32_t>(num_heads),
-                         static_cast<float>(softplus_beta),
-                         static_cast<float>(softplus_threshold),
+                         static_cast<int>(H),
+                         static_cast<float>(sp_beta),
+                         static_cast<float>(threshold),
                          stream);
   } else if (a_c.scalar_type() == torch::kBFloat16) {
-    launch<at::BFloat16, float>(a_c,
-                                b_c,
-                                a_log_f32,
-                                dt_bias_f32,
-                                g,
-                                beta,
-                                n_elem,
-                                static_cast<int32_t>(num_heads),
-                                static_cast<float>(softplus_beta),
-                                static_cast<float>(softplus_threshold),
-                                stream);
+    if (gating_fp32) {
+      launch<at::BFloat16, float>(a_c,
+                                  b_c,
+                                  A_log_f32,
+                                  dt_bias_f32,
+                                  g,
+                                  beta,
+                                  n_elem,
+                                  static_cast<int>(H),
+                                  static_cast<float>(sp_beta),
+                                  static_cast<float>(threshold),
+                                  stream);
+    } else {
+      launch<at::BFloat16, at::BFloat16>(a_c,
+                                         b_c,
+                                         A_log_f32,
+                                         dt_bias_f32,
+                                         g,
+                                         beta,
+                                         n_elem,
+                                         static_cast<int>(H),
+                                         static_cast<float>(sp_beta),
+                                         static_cast<float>(threshold),
+                                         stream);
+    }
   } else {
     LOG(FATAL) << "gdn_gating: unsupported dtype " << a_c.scalar_type();
   }
   C10_CUDA_KERNEL_LAUNCH_CHECK();
   return {g, beta};
 }
+
+namespace {
 
 template <typename T, int BLOCK_THREADS>
 __global__ void __launch_bounds__(BLOCK_THREADS, 1)
@@ -1559,18 +1632,19 @@ __global__ void __launch_bounds__(256, 1)
                                     int64_t x_stride_row,
                                     int64_t z_stride_row,
                                     int64_t y_stride_row,
-                                    int32_t rows,
+                                    int rows,
                                     float eps) {
-  // Process eight H=128 rows per block.
-  constexpr int32_t kLanesPerRow = 32;
-  constexpr int32_t kValuesPerLane = 4;
-  constexpr int32_t kRowsPerBlock = 8;
+  // Long prefill flattens [tokens, heads, 128] into many short rows. Packing
+  // eight rows into one block avoids the one-block-per-row launch used by the
+  // general kernel and keeps each row's reduction inside one 32-lane warp.
+  constexpr int kLanesPerRow = 32;
+  constexpr int kValuesPerLane = 4;
+  constexpr int kRowsPerBlock = 8;
   static_assert(kLanesPerRow * kValuesPerLane == 128);
 
-  const int32_t lane = static_cast<int32_t>(threadIdx.x) % kLanesPerRow;
-  const int32_t row_in_block = static_cast<int32_t>(threadIdx.x) / kLanesPerRow;
-  const int32_t row =
-      static_cast<int32_t>(blockIdx.x) * kRowsPerBlock + row_in_block;
+  const int lane = threadIdx.x % kLanesPerRow;
+  const int row_in_block = threadIdx.x / kLanesPerRow;
+  const int row = blockIdx.x * kRowsPerBlock + row_in_block;
   if (row >= rows) {
     return;
   }
@@ -1579,25 +1653,25 @@ __global__ void __launch_bounds__(256, 1)
   const T* __restrict__ z_row = z + static_cast<int64_t>(row) * z_stride_row;
   T* __restrict__ y_row = y + static_cast<int64_t>(row) * y_stride_row;
 
-  const int32_t column_base = lane * kValuesPerLane;
+  const int column_base = lane * kValuesPerLane;
   float x_values[kValuesPerLane];
   float local_sum = 0.0f;
 #pragma unroll
-  for (int32_t index = 0; index < kValuesPerLane; ++index) {
-    const int32_t column = column_base + index;
+  for (int index = 0; index < kValuesPerLane; ++index) {
+    const int column = column_base + index;
     x_values[index] = to_f32<T>(x_row[column]);
     local_sum += x_values[index] * x_values[index];
   }
 
 #pragma unroll
-  for (int32_t offset = kLanesPerRow / 2; offset > 0; offset >>= 1) {
+  for (int offset = kLanesPerRow / 2; offset > 0; offset >>= 1) {
     local_sum += __shfl_xor_sync(0xffffffffu, local_sum, offset, kLanesPerRow);
   }
   const float inv_rms = rsqrtf(local_sum * (1.0f / 128.0f) + eps);
 
 #pragma unroll
-  for (int32_t index = 0; index < kValuesPerLane; ++index) {
-    const int32_t column = column_base + index;
+  for (int index = 0; index < kValuesPerLane; ++index) {
+    const int column = column_base + index;
     const float z_value = to_f32<T>(z_row[column]);
     const float gated = z_value * fast_sigmoid_f32(z_value);
     y_row[column] =
@@ -1638,9 +1712,9 @@ void launch_gated_rms_norm(const torch::Tensor& x,
                            cudaStream_t stream) {
   const int rows = static_cast<int>(x.size(0));
   if (N == 128 && rows > 128) {
-    constexpr int32_t kRowsPerBlock = 8;
-    constexpr int32_t kThreads = 256;
-    const int32_t blocks = (rows + kRowsPerBlock - 1) / kRowsPerBlock;
+    constexpr int kRowsPerBlock = 8;
+    constexpr int kThreads = 256;
+    const int blocks = (rows + kRowsPerBlock - 1) / kRowsPerBlock;
     gated_rms_norm_h128_rows_kernel<T><<<blocks, kThreads, 0, stream>>>(
         reinterpret_cast<const T*>(x.data_ptr()),
         reinterpret_cast<const T*>(weight.data_ptr()),
@@ -1682,6 +1756,8 @@ void launch_gated_rms_norm(const torch::Tensor& x,
 
 #undef GATED_RMSNORM_DISPATCH_BLOCK
 
+}  // namespace
+
 void gated_rms_norm_fused(const torch::Tensor& x,
                           const torch::Tensor& weight,
                           const torch::Tensor& z,
@@ -1707,9 +1783,6 @@ void gated_rms_norm_fused(const torch::Tensor& x,
 
   const int N = static_cast<int>(x.size(1));
   CHECK(N > 0) << "gated_rms_norm_fused: hidden_size must be > 0 (got ", N, ")";
-  if (x.size(0) == 0) {
-    return;
-  }
 
   const at::cuda::OptionalCUDAGuard device_guard(device_of(x));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
@@ -1731,6 +1804,204 @@ void gated_rms_norm_fused(const torch::Tensor& x,
   }
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
+
+namespace {
+
+template <typename scalar_t, typename accepted_t>
+void launch_causal_conv1d_mtp_verify(const torch::Tensor& x,
+                                     const torch::Tensor& weight,
+                                     torch::Tensor& conv_state,
+                                     const torch::Tensor& cache_indices,
+                                     const torch::Tensor& num_accepted_tokens,
+                                     torch::Tensor& query,
+                                     torch::Tensor& key,
+                                     torch::Tensor& value,
+                                     const torch::Tensor& intermediate,
+                                     bool silu_activation,
+                                     bool write_superstate,
+                                     cudaStream_t stream);
+
+}  // namespace
+
+void causal_conv1d_mtp_verify(const torch::Tensor& x,
+                              const torch::Tensor& weight,
+                              torch::Tensor conv_state,
+                              const torch::Tensor& cache_indices,
+                              const torch::Tensor& num_accepted_tokens,
+                              torch::Tensor query_buf,
+                              torch::Tensor key_buf,
+                              torch::Tensor value_buf,
+                              torch::Tensor intermediate_buf,
+                              bool silu_activation,
+                              bool write_superstate) {
+  CHECK(x.dim() == 3) << "MTP conv x must be [batch, dim, seq_len]";
+  CHECK(weight.dim() == 2) << "MTP conv weight must be [dim, width]";
+  CHECK(conv_state.dim() == 3)
+      << "MTP conv state must be [cache, dim, state_len]";
+  CHECK(cache_indices.dim() == 1 &&
+        cache_indices.scalar_type() == torch::kInt32)
+      << "MTP conv cache indices must be contiguous int32 [batch]";
+  CHECK(num_accepted_tokens.dim() == 1)
+      << "MTP conv accepted tokens must be [batch]";
+  CHECK(num_accepted_tokens.scalar_type() == torch::kInt32 ||
+        num_accepted_tokens.scalar_type() == torch::kInt64)
+      << "MTP conv accepted tokens must be int32 or int64";
+  CHECK(weight.is_contiguous() && conv_state.is_contiguous() &&
+        cache_indices.is_contiguous() && num_accepted_tokens.is_contiguous())
+      << "MTP conv inputs must be contiguous";
+  CHECK(weight.scalar_type() == x.scalar_type() &&
+        conv_state.scalar_type() == x.scalar_type())
+      << "MTP conv inputs must have the same dtype";
+  CHECK(x.size(1) == weight.size(0) && conv_state.size(1) == x.size(1))
+      << "MTP conv dimension mismatch";
+  CHECK_GE(weight.size(1), 2) << "MTP conv width must be at least 2";
+  CHECK_LE(weight.size(1), 5) << "MTP conv width must be at most 5";
+  CHECK_EQ(conv_state.size(2), weight.size(1) - 1 + x.size(2) - 1)
+      << "MTP conv state length mismatch";
+  CHECK_EQ(cache_indices.size(0), x.size(0))
+      << "MTP conv cache index batch mismatch";
+  CHECK_EQ(num_accepted_tokens.size(0), x.size(0))
+      << "MTP conv accepted-token batch mismatch";
+  CHECK_EQ(query_buf.dim(), 4);
+  CHECK_EQ(key_buf.dim(), 4);
+  CHECK_EQ(value_buf.dim(), 4);
+  CHECK(query_buf.sizes() == key_buf.sizes())
+      << "MTP conv query/key shape mismatch";
+  CHECK_EQ(query_buf.size(0), x.size(0));
+  CHECK_EQ(key_buf.size(0), x.size(0));
+  CHECK_EQ(value_buf.size(0), x.size(0));
+  CHECK_EQ(query_buf.size(1), x.size(2));
+  CHECK_EQ(key_buf.size(1), x.size(2));
+  CHECK_EQ(value_buf.size(1), x.size(2));
+  const int64_t query_dim = query_buf.size(2) * query_buf.size(3);
+  const int64_t value_dim = value_buf.size(2) * value_buf.size(3);
+  CHECK_EQ(x.size(1), 2 * query_dim + value_dim);
+  CHECK_LE(query_dim, std::numeric_limits<int32_t>::max());
+  CHECK_LE(value_dim, std::numeric_limits<int32_t>::max());
+  CHECK(query_buf.is_contiguous() && key_buf.is_contiguous() &&
+        value_buf.is_contiguous())
+      << "MTP conv q/k/v outputs must be contiguous";
+  CHECK(query_buf.scalar_type() == x.scalar_type() &&
+        key_buf.scalar_type() == x.scalar_type() &&
+        value_buf.scalar_type() == x.scalar_type())
+      << "MTP conv q/k/v dtype mismatch";
+  CHECK(query_buf.device() == x.device() && key_buf.device() == x.device() &&
+        value_buf.device() == x.device())
+      << "MTP conv q/k/v device mismatch";
+  CHECK(write_superstate || intermediate_buf.defined())
+      << "MTP conv must write direct state or an intermediate checkpoint";
+  if (intermediate_buf.defined()) {
+    CHECK(intermediate_buf.dim() == 4 &&
+          intermediate_buf.size(0) == x.size(0) &&
+          intermediate_buf.size(1) == x.size(2) &&
+          intermediate_buf.size(2) == x.size(1) &&
+          intermediate_buf.size(3) == conv_state.size(2))
+        << "MTP conv intermediate shape mismatch";
+    CHECK(intermediate_buf.is_contiguous() &&
+          intermediate_buf.scalar_type() == x.scalar_type())
+        << "MTP conv intermediate must be contiguous and match x dtype";
+    CHECK(intermediate_buf.device() == x.device())
+        << "MTP conv intermediate device mismatch";
+  }
+
+  const at::cuda::OptionalCUDAGuard guard(device_of(x));
+  const auto stream = at::cuda::getCurrentCUDAStream();
+  switch (x.scalar_type()) {
+    case torch::kBFloat16:
+      if (num_accepted_tokens.scalar_type() == torch::kInt32) {
+        launch_causal_conv1d_mtp_verify<__nv_bfloat16, int32_t>(
+            x,
+            weight,
+            conv_state,
+            cache_indices,
+            num_accepted_tokens,
+            query_buf,
+            key_buf,
+            value_buf,
+            intermediate_buf,
+            silu_activation,
+            write_superstate,
+            stream);
+      } else {
+        launch_causal_conv1d_mtp_verify<__nv_bfloat16, int64_t>(
+            x,
+            weight,
+            conv_state,
+            cache_indices,
+            num_accepted_tokens,
+            query_buf,
+            key_buf,
+            value_buf,
+            intermediate_buf,
+            silu_activation,
+            write_superstate,
+            stream);
+      }
+      break;
+    case torch::kHalf:
+      if (num_accepted_tokens.scalar_type() == torch::kInt32) {
+        launch_causal_conv1d_mtp_verify<__half, int32_t>(x,
+                                                         weight,
+                                                         conv_state,
+                                                         cache_indices,
+                                                         num_accepted_tokens,
+                                                         query_buf,
+                                                         key_buf,
+                                                         value_buf,
+                                                         intermediate_buf,
+                                                         silu_activation,
+                                                         write_superstate,
+                                                         stream);
+      } else {
+        launch_causal_conv1d_mtp_verify<__half, int64_t>(x,
+                                                         weight,
+                                                         conv_state,
+                                                         cache_indices,
+                                                         num_accepted_tokens,
+                                                         query_buf,
+                                                         key_buf,
+                                                         value_buf,
+                                                         intermediate_buf,
+                                                         silu_activation,
+                                                         write_superstate,
+                                                         stream);
+      }
+      break;
+    case torch::kFloat32:
+      if (num_accepted_tokens.scalar_type() == torch::kInt32) {
+        launch_causal_conv1d_mtp_verify<float, int32_t>(x,
+                                                        weight,
+                                                        conv_state,
+                                                        cache_indices,
+                                                        num_accepted_tokens,
+                                                        query_buf,
+                                                        key_buf,
+                                                        value_buf,
+                                                        intermediate_buf,
+                                                        silu_activation,
+                                                        write_superstate,
+                                                        stream);
+      } else {
+        launch_causal_conv1d_mtp_verify<float, int64_t>(x,
+                                                        weight,
+                                                        conv_state,
+                                                        cache_indices,
+                                                        num_accepted_tokens,
+                                                        query_buf,
+                                                        key_buf,
+                                                        value_buf,
+                                                        intermediate_buf,
+                                                        silu_activation,
+                                                        write_superstate,
+                                                        stream);
+      }
+      break;
+    default:
+      LOG(FATAL) << "MTP conv unsupported dtype: " << x.scalar_type();
+  }
+}
+
+namespace {
 
 template <typename T>
 __global__ void __launch_bounds__(256, 1)
@@ -1894,6 +2165,248 @@ void launch_conv1d_decode(const torch::Tensor& x,
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
+}  // namespace
+
+namespace {
+
+template <typename scalar_t, typename accepted_t>
+__global__ void causal_conv1d_mtp_verify_kernel(
+    const scalar_t* __restrict__ x,
+    int64_t x_batch_stride,
+    int64_t x_dim_stride,
+    int64_t x_time_stride,
+    const scalar_t* __restrict__ weight,
+    int64_t weight_dim_stride,
+    int64_t weight_width_stride,
+    scalar_t* conv_state,
+    int64_t conv_state_batch_stride,
+    int64_t conv_state_dim_stride,
+    int64_t conv_state_time_stride,
+    const int32_t* __restrict__ cache_indices,
+    const accepted_t* __restrict__ accepted_tokens,
+    scalar_t* __restrict__ query,
+    scalar_t* __restrict__ key,
+    scalar_t* __restrict__ value,
+    int32_t query_dim,
+    int32_t value_dim,
+    scalar_t* __restrict__ intermediate,
+    int64_t intermediate_batch_stride,
+    int64_t intermediate_time_stride,
+    int64_t intermediate_dim_stride,
+    int64_t intermediate_state_stride,
+    int batch,
+    int dim,
+    int seq_len,
+    int width,
+    int state_len,
+    bool silu_activation,
+    bool write_superstate) {
+  const int batch_idx = blockIdx.x;
+  if (batch_idx >= batch) {
+    return;
+  }
+  // Each channel is independent for the speculative causal convolution.  The
+  // old launch used one block per batch and made 256 threads walk all D
+  // channels serially; Qwen3.5's D=10240 therefore left almost the whole
+  // device idle.  Split the channel dimension across grid.y blocks so the
+  // B=1/T=2 verify path has useful occupancy.
+  const int32_t dim_block = static_cast<int32_t>(blockIdx.y);
+  const int cache_idx = cache_indices[batch_idx];
+  const int accepted =
+      max(1, min(seq_len, static_cast<int>(accepted_tokens[batch_idx]))) - 1;
+  const int old_prefix_len = state_len - seq_len;
+
+  const int32_t dim_stride = static_cast<int32_t>(blockDim.x * gridDim.y);
+  for (int32_t dim_idx = dim_block * static_cast<int32_t>(blockDim.x) +
+                         static_cast<int32_t>(threadIdx.x);
+       dim_idx < dim;
+       dim_idx += dim_stride) {
+    scalar_t* qkv_output = nullptr;
+    int32_t output_dim = 0;
+    int32_t output_channel = 0;
+    if (dim_idx < query_dim) {
+      qkv_output = query;
+      output_dim = query_dim;
+      output_channel = dim_idx;
+    } else if (dim_idx < 2 * query_dim) {
+      qkv_output = key;
+      output_dim = query_dim;
+      output_channel = dim_idx - query_dim;
+    } else {
+      qkv_output = value;
+      output_dim = value_dim;
+      output_channel = dim_idx - 2 * query_dim;
+    }
+    float history[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float initial_history[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    if (cache_idx >= 0) {
+      for (int history_idx = 0; history_idx < width - 1; ++history_idx) {
+        history[history_idx] = to_f32(
+            conv_state[static_cast<int64_t>(cache_idx) *
+                           conv_state_batch_stride +
+                       static_cast<int64_t>(dim_idx) * conv_state_dim_stride +
+                       static_cast<int64_t>(accepted + history_idx) *
+                           conv_state_time_stride]);
+        initial_history[history_idx] = history[history_idx];
+      }
+    }
+
+    for (int time_idx = 0; time_idx < seq_len; ++time_idx) {
+      float conv_value = 0.0f;
+      if (cache_idx >= 0) {
+        for (int width_idx = 0; width_idx < width - 1; ++width_idx) {
+          conv_value +=
+              history[width_idx] *
+              to_f32(weight[static_cast<int64_t>(dim_idx) * weight_dim_stride +
+                            static_cast<int64_t>(width_idx) *
+                                weight_width_stride]);
+        }
+        conv_value +=
+            to_f32(x[static_cast<int64_t>(batch_idx) * x_batch_stride +
+                     static_cast<int64_t>(dim_idx) * x_dim_stride +
+                     static_cast<int64_t>(time_idx) * x_time_stride]) *
+            to_f32(
+                weight[static_cast<int64_t>(dim_idx) * weight_dim_stride +
+                       static_cast<int64_t>(width - 1) * weight_width_stride]);
+        if (silu_activation) {
+          // Keep speculative verification aligned with the decomposed
+          // torch::silu reference.  The generic decode helper intentionally
+          // uses __expf for throughput, but compounding that approximation
+          // with the Mate T>2 recurrent kernel can change greedy target
+          // tokens after a state checkpoint is replayed.
+          conv_value = conv_value / (1.0f + expf(-conv_value));
+        }
+      }
+      const int64_t output_token =
+          static_cast<int64_t>(batch_idx) * seq_len + time_idx;
+      qkv_output[output_token * output_dim + output_channel] =
+          from_f32<scalar_t>(conv_value);
+
+      if (intermediate != nullptr) {
+        for (int32_t state_idx = 0; state_idx < state_len; ++state_idx) {
+          float state_value = 0.0f;
+          if (cache_idx >= 0 && state_idx < old_prefix_len) {
+            state_value = initial_history[state_idx + 1];
+          } else if (cache_idx >= 0 &&
+                     state_idx < old_prefix_len + time_idx + 1) {
+            state_value =
+                to_f32(x[static_cast<int64_t>(batch_idx) * x_batch_stride +
+                         static_cast<int64_t>(dim_idx) * x_dim_stride +
+                         static_cast<int64_t>(state_idx - old_prefix_len) *
+                             x_time_stride]);
+          }
+          intermediate
+              [static_cast<int64_t>(batch_idx) * intermediate_batch_stride +
+               static_cast<int64_t>(time_idx) * intermediate_time_stride +
+               static_cast<int64_t>(dim_idx) * intermediate_dim_stride +
+               static_cast<int64_t>(state_idx) * intermediate_state_stride] =
+                  from_f32<scalar_t>(state_value);
+        }
+      }
+
+      for (int history_idx = 0; history_idx < width - 2; ++history_idx) {
+        history[history_idx] = history[history_idx + 1];
+      }
+      if (width >= 2) {
+        history[width - 2] =
+            cache_idx >= 0
+                ? to_f32(x[static_cast<int64_t>(batch_idx) * x_batch_stride +
+                           static_cast<int64_t>(dim_idx) * x_dim_stride +
+                           static_cast<int64_t>(time_idx) * x_time_stride])
+                : 0.0f;
+      }
+    }
+
+    if (write_superstate && cache_idx >= 0) {
+      const int64_t state_offset =
+          static_cast<int64_t>(cache_idx) * conv_state_batch_stride +
+          static_cast<int64_t>(dim_idx) * conv_state_dim_stride;
+      for (int32_t state_idx = 0; state_idx < old_prefix_len; ++state_idx) {
+        conv_state[state_offset +
+                   static_cast<int64_t>(state_idx) * conv_state_time_stride] =
+            from_f32<scalar_t>(initial_history[state_idx + 1]);
+      }
+      for (int32_t time_idx = 0; time_idx < seq_len; ++time_idx) {
+        conv_state[state_offset +
+                   static_cast<int64_t>(old_prefix_len + time_idx) *
+                       conv_state_time_stride] =
+            x[static_cast<int64_t>(batch_idx) * x_batch_stride +
+              static_cast<int64_t>(dim_idx) * x_dim_stride +
+              static_cast<int64_t>(time_idx) * x_time_stride];
+      }
+    }
+  }
+}
+
+template <typename scalar_t, typename accepted_t>
+void launch_causal_conv1d_mtp_verify(const torch::Tensor& x,
+                                     const torch::Tensor& weight,
+                                     torch::Tensor& conv_state,
+                                     const torch::Tensor& cache_indices,
+                                     const torch::Tensor& num_accepted_tokens,
+                                     torch::Tensor& query,
+                                     torch::Tensor& key,
+                                     torch::Tensor& value,
+                                     const torch::Tensor& intermediate,
+                                     bool silu_activation,
+                                     bool write_superstate,
+                                     cudaStream_t stream) {
+  const int batch = static_cast<int>(x.size(0));
+  const int dim = static_cast<int>(x.size(1));
+  const int seq_len = static_cast<int>(x.size(2));
+  const int width = static_cast<int>(weight.size(1));
+  const int state_len = static_cast<int>(conv_state.size(2));
+  const int32_t query_dim = static_cast<int32_t>(query.size(2) * query.size(3));
+  const int32_t value_dim = static_cast<int32_t>(value.size(2) * value.size(3));
+  constexpr int kThreads = 256;
+  static const bool use_dim_parallel = []() {
+    const char* value = std::getenv("XLLM_MTP_CONV_DIM_PARALLEL");
+    return value == nullptr || value[0] != '0';
+  }();
+  const int32_t dim_blocks =
+      use_dim_parallel ? (dim + kThreads - 1) / kThreads : 1;
+  causal_conv1d_mtp_verify_kernel<scalar_t, accepted_t>
+      <<<dim3(static_cast<uint32_t>(batch), static_cast<uint32_t>(dim_blocks)),
+         kThreads,
+         0,
+         stream>>>(
+          reinterpret_cast<const scalar_t*>(x.data_ptr()),
+          x.stride(0),
+          x.stride(1),
+          x.stride(2),
+          reinterpret_cast<const scalar_t*>(weight.data_ptr()),
+          weight.stride(0),
+          weight.stride(1),
+          reinterpret_cast<scalar_t*>(conv_state.data_ptr()),
+          conv_state.stride(0),
+          conv_state.stride(1),
+          conv_state.stride(2),
+          reinterpret_cast<const int32_t*>(cache_indices.data_ptr()),
+          reinterpret_cast<const accepted_t*>(num_accepted_tokens.data_ptr()),
+          reinterpret_cast<scalar_t*>(query.data_ptr()),
+          reinterpret_cast<scalar_t*>(key.data_ptr()),
+          reinterpret_cast<scalar_t*>(value.data_ptr()),
+          query_dim,
+          value_dim,
+          intermediate.defined()
+              ? reinterpret_cast<scalar_t*>(intermediate.data_ptr())
+              : nullptr,
+          intermediate.defined() ? intermediate.stride(0) : 0,
+          intermediate.defined() ? intermediate.stride(1) : 0,
+          intermediate.defined() ? intermediate.stride(2) : 0,
+          intermediate.defined() ? intermediate.stride(3) : 0,
+          batch,
+          dim,
+          seq_len,
+          width,
+          state_len,
+          silu_activation,
+          write_superstate);
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+}  // namespace
+
 void causal_conv1d_decode_fused(const torch::Tensor& x,
                                 const torch::Tensor& weight,
                                 const std::optional<torch::Tensor>& bias,
@@ -1953,9 +2466,6 @@ void causal_conv1d_decode_fused(const torch::Tensor& x,
     CHECK(bias_ptr->numel() == dim)
         << "causal_conv1d_decode_fused: bias must have shape [dim]";
   }
-  if (batch == 0 || dim == 0) {
-    return;
-  }
 
   switch (x.scalar_type()) {
     case torch::kBFloat16:
@@ -2009,6 +2519,8 @@ void causal_conv1d_decode_fused(const torch::Tensor& x,
   }
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
+
+namespace {
 
 int next_power_of_two(int n) {
   CHECK(n > 0);
@@ -2183,11 +2695,11 @@ __global__ void fused_gdn_decode_kernel(
   }
 }
 
-constexpr int32_t kFusedGdnH128Threads = 128;
-constexpr int32_t kFusedGdnH128LanesPerWarp = 32;
-constexpr int32_t kFusedGdnH128ValuesPerLane = 4;
-constexpr int32_t kFusedGdnH128RowsPerBlock = 16;
-constexpr int32_t kFusedGdnH128BlocksPerState = 8;
+constexpr int kFusedGdnH128Threads = 128;
+constexpr int kFusedGdnH128LanesPerWarp = 32;
+constexpr int kFusedGdnH128ValuesPerLane = 4;
+constexpr int kFusedGdnH128RowsPerBlock = 16;
+constexpr int kFusedGdnH128BlocksPerState = 8;
 static_assert(kFusedGdnH128LanesPerWarp * kFusedGdnH128ValuesPerLane == 128);
 static_assert(kFusedGdnH128RowsPerBlock * kFusedGdnH128BlocksPerState == 128);
 
@@ -2197,7 +2709,7 @@ __global__ void __launch_bounds__(kFusedGdnH128Threads, 1)
         const scalar_t* __restrict__ mixed_qkv,
         int64_t mixed_qkv_row_stride,
         float* __restrict__ state,
-        const float* __restrict__ a_log_f32,
+        const float* __restrict__ A_log_f32,
         const scalar_t* __restrict__ a,
         const float* __restrict__ dt_bias_f32,
         const scalar_t* __restrict__ b,
@@ -2210,22 +2722,20 @@ __global__ void __launch_bounds__(kFusedGdnH128Threads, 1)
         float softplus_beta,
         float softplus_threshold) {
   constexpr uint32_t kFullWarpMask = 0xffffffffu;
-  constexpr int32_t kHeadDim = 128;
+  constexpr int kHeadDim = 128;
 
-  const int32_t batch = static_cast<int32_t>(blockIdx.x);
-  const int32_t hv = static_cast<int32_t>(blockIdx.y);
-  const int32_t v_block = static_cast<int32_t>(blockIdx.z);
-  const int32_t lane =
-      static_cast<int32_t>(threadIdx.x) % kFusedGdnH128LanesPerWarp;
-  const int32_t warp =
-      static_cast<int32_t>(threadIdx.x) / kFusedGdnH128LanesPerWarp;
-  const int32_t v_block_start = v_block * kFusedGdnH128RowsPerBlock;
+  const int batch = blockIdx.x;
+  const int hv = blockIdx.y;
+  const int v_block = blockIdx.z;
+  const int lane = threadIdx.x % kFusedGdnH128LanesPerWarp;
+  const int warp = threadIdx.x / kFusedGdnH128LanesPerWarp;
+  const int v_block_start = v_block * kFusedGdnH128RowsPerBlock;
 
   const int64_t slot = static_cast<int64_t>(state_indices[batch]);
   if (slot < 0) {
-    for (int32_t v_offset = warp; v_offset < kFusedGdnH128RowsPerBlock;
+    for (int v_offset = warp; v_offset < kFusedGdnH128RowsPerBlock;
          v_offset += kFusedGdnH128Threads / kFusedGdnH128LanesPerWarp) {
-      const int32_t v = v_block_start + v_offset;
+      const int v = v_block_start + v_offset;
       if (lane == 0) {
         const int64_t out_offset =
             (static_cast<int64_t>(batch) * num_v_heads + hv) * kHeadDim + v;
@@ -2235,9 +2745,8 @@ __global__ void __launch_bounds__(kFusedGdnH128Threads, 1)
     return;
   }
 
-  const int32_t head_group_size =
-      static_cast<int32_t>(num_v_heads / num_k_heads);
-  const int32_t hk = hv / head_group_size;
+  const int head_group_size = static_cast<int>(num_v_heads / num_k_heads);
+  const int hk = hv / head_group_size;
   const scalar_t* qkv_row =
       mixed_qkv + static_cast<int64_t>(batch) * mixed_qkv_row_stride;
   const int64_t query_base = static_cast<int64_t>(hk) * kHeadDim;
@@ -2249,16 +2758,15 @@ __global__ void __launch_bounds__(kFusedGdnH128Threads, 1)
   float query_sum = 0.0f;
   float key_sum = 0.0f;
 #pragma unroll
-  for (int32_t index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
-    const int32_t k = lane + index * kFusedGdnH128LanesPerWarp;
+  for (int index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
+    const int k = lane + index * kFusedGdnH128LanesPerWarp;
     query_values[index] = static_cast<float>(qkv_row[query_base + k]);
     key_values[index] = static_cast<float>(qkv_row[key_base + k]);
     query_sum += query_values[index] * query_values[index];
     key_sum += key_values[index] * key_values[index];
   }
 #pragma unroll
-  for (int32_t offset = kFusedGdnH128LanesPerWarp / 2; offset > 0;
-       offset >>= 1) {
+  for (int offset = kFusedGdnH128LanesPerWarp / 2; offset > 0; offset >>= 1) {
     query_sum += __shfl_xor_sync(
         kFullWarpMask, query_sum, offset, kFusedGdnH128LanesPerWarp);
     key_sum += __shfl_xor_sync(
@@ -2267,7 +2775,7 @@ __global__ void __launch_bounds__(kFusedGdnH128Threads, 1)
   const float query_norm = rsqrtf(query_sum + 1e-6f) * scale;
   const float key_norm = rsqrtf(key_sum + 1e-6f);
 #pragma unroll
-  for (int32_t index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
+  for (int index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
     query_values[index] *= query_norm;
     key_values[index] *= key_norm;
   }
@@ -2283,30 +2791,29 @@ __global__ void __launch_bounds__(kFusedGdnH128Threads, 1)
     const float softplus = scaled_pre > softplus_threshold
                                ? pre
                                : log1pf(expf(scaled_pre)) / softplus_beta;
-    alpha = expf(-expf(a_log_f32[hv]) * softplus);
+    alpha = expf(-expf(A_log_f32[hv]) * softplus);
     beta = 1.0f / (1.0f + expf(-b_value));
   }
   alpha = __shfl_sync(kFullWarpMask, alpha, 0, kFusedGdnH128LanesPerWarp);
   beta = __shfl_sync(kFullWarpMask, beta, 0, kFusedGdnH128LanesPerWarp);
 
-  constexpr int32_t kWarpsPerBlock =
+  constexpr int kWarpsPerBlock =
       kFusedGdnH128Threads / kFusedGdnH128LanesPerWarp;
-  for (int32_t v_offset = warp; v_offset < kFusedGdnH128RowsPerBlock;
+  for (int v_offset = warp; v_offset < kFusedGdnH128RowsPerBlock;
        v_offset += kWarpsPerBlock) {
-    const int32_t v = v_block_start + v_offset;
+    const int v = v_block_start + v_offset;
     const int64_t state_row =
         ((slot * num_v_heads + hv) * kHeadDim + v) * kHeadDim;
     float state_values[kFusedGdnH128ValuesPerLane];
     float state_key_sum = 0.0f;
 #pragma unroll
-    for (int32_t index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
-      const int32_t k = lane + index * kFusedGdnH128LanesPerWarp;
+    for (int index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
+      const int k = lane + index * kFusedGdnH128LanesPerWarp;
       state_values[index] = alpha * state[state_row + k];
       state_key_sum += state_values[index] * key_values[index];
     }
 #pragma unroll
-    for (int32_t offset = kFusedGdnH128LanesPerWarp / 2; offset > 0;
-         offset >>= 1) {
+    for (int offset = kFusedGdnH128LanesPerWarp / 2; offset > 0; offset >>= 1) {
       state_key_sum += __shfl_xor_sync(
           kFullWarpMask, state_key_sum, offset, kFusedGdnH128LanesPerWarp);
     }
@@ -2317,15 +2824,14 @@ __global__ void __launch_bounds__(kFusedGdnH128Threads, 1)
     const float delta = (value - state_key_sum) * beta;
     float state_query_sum = 0.0f;
 #pragma unroll
-    for (int32_t index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
-      const int32_t k = lane + index * kFusedGdnH128LanesPerWarp;
+    for (int index = 0; index < kFusedGdnH128ValuesPerLane; ++index) {
+      const int k = lane + index * kFusedGdnH128LanesPerWarp;
       state_values[index] += key_values[index] * delta;
       state_query_sum += state_values[index] * query_values[index];
       state[state_row + k] = state_values[index];
     }
 #pragma unroll
-    for (int32_t offset = kFusedGdnH128LanesPerWarp / 2; offset > 0;
-         offset >>= 1) {
+    for (int offset = kFusedGdnH128LanesPerWarp / 2; offset > 0; offset >>= 1) {
       state_query_sum += __shfl_xor_sync(
           kFullWarpMask, state_query_sum, offset, kFusedGdnH128LanesPerWarp);
     }
@@ -2340,7 +2846,7 @@ __global__ void __launch_bounds__(kFusedGdnH128Threads, 1)
 template <typename scalar_t>
 void launch_fused_gdn_h128_tiled(const torch::Tensor& mixed_qkv,
                                  torch::Tensor& state,
-                                 const torch::Tensor& a_log_f32,
+                                 const torch::Tensor& A_log_f32,
                                  const torch::Tensor& a,
                                  const torch::Tensor& dt_bias_f32,
                                  const torch::Tensor& b,
@@ -2362,7 +2868,7 @@ void launch_fused_gdn_h128_tiled(const torch::Tensor& mixed_qkv,
           mixed_qkv.data_ptr<scalar_t>(),
           mixed_qkv.stride(0),
           state.data_ptr<float>(),
-          a_log_f32.data_ptr<float>(),
+          A_log_f32.data_ptr<float>(),
           a.data_ptr<scalar_t>(),
           dt_bias_f32.data_ptr<float>(),
           b.data_ptr<scalar_t>(),
@@ -2452,10 +2958,6 @@ void launch(const torch::Tensor& mixed_qkv,
 
 torch::Tensor fused_gated_delta_rule_decode(
     musa::MateGatedDeltaRuleDecodeParams& params) {
-  CHECK(params.use_qk_l2norm)
-      << "fused GDN decode requires internal Q/K normalization";
-  CHECK(std::isfinite(params.scale) && params.scale > 0.0)
-      << "fused GDN decode requires a positive finite scale";
   auto mixed_qkv = params.mixed_qkv.contiguous();
   CHECK(mixed_qkv.dim() == 2)
       << "fused GDN decode expects mixed_qkv [B, D], got " << mixed_qkv.dim()
@@ -2466,8 +2968,6 @@ torch::Tensor fused_gated_delta_rule_decode(
   const int64_t num_v_heads = params.num_v_heads;
   const int64_t head_k_dim = params.head_k_dim;
   const int64_t head_v_dim = params.head_v_dim;
-  CHECK_GT(num_k_heads, 0);
-  CHECK_GT(num_v_heads, 0);
   const int64_t qk_cols = num_k_heads * head_k_dim;
   const int64_t v_cols = num_v_heads * head_v_dim;
 
@@ -2495,16 +2995,6 @@ torch::Tensor fused_gated_delta_rule_decode(
   CHECK(params.state.scalar_type() == torch::kFloat32)
       << "fused GDN decode requires fp32 state cache (got "
       << params.state.scalar_type() << ")";
-  CHECK_EQ(params.A_log.numel(), num_v_heads);
-  CHECK_EQ(params.dt_bias.numel(), num_v_heads);
-  CHECK_EQ(params.state_indices.numel(), batch_size);
-  CHECK(params.state.device() == mixed_qkv.device() &&
-        params.A_log.device() == mixed_qkv.device() &&
-        params.dt_bias.device() == mixed_qkv.device() &&
-        params.a.device() == mixed_qkv.device() &&
-        params.b.device() == mixed_qkv.device() &&
-        params.state_indices.device() == mixed_qkv.device())
-      << "fused GDN decode inputs must be on the same device";
 
   auto a = params.a;
   if (a.dim() == 1) {
@@ -2516,17 +3006,10 @@ torch::Tensor fused_gated_delta_rule_decode(
   }
   CHECK(a.dim() == 2 && b.dim() == 2)
       << "fused GDN decode expects a/b shaped [B, Hv]";
-  a = (a.scalar_type() == mixed_qkv.scalar_type() && a.is_contiguous())
-          ? a
-          : a.to(mixed_qkv.scalar_type()).contiguous();
-  b = (b.scalar_type() == mixed_qkv.scalar_type() && b.is_contiguous())
-          ? b
-          : b.to(mixed_qkv.scalar_type()).contiguous();
-  CHECK(a.size(0) == batch_size && a.size(1) == num_v_heads &&
-        b.size(0) == batch_size && b.size(1) == num_v_heads)
-      << "fused GDN decode a/b shape mismatch";
+  a = a.contiguous();
+  b = b.contiguous();
 
-  auto a_log_f32 = params.A_log.to(torch::kFloat32).contiguous();
+  auto A_log_f32 = params.A_log.to(torch::kFloat32).contiguous();
   auto dt_bias_f32 = params.dt_bias.to(torch::kFloat32).contiguous();
   auto state_indices_i32 = params.state_indices.to(torch::kInt32).contiguous();
 
@@ -2534,19 +3017,11 @@ torch::Tensor fused_gated_delta_rule_decode(
   if (params.decode_output.has_value() &&
       params.decode_output.value().defined()) {
     output = params.decode_output.value();
-    CHECK(output.dim() == 3 && output.size(0) == batch_size &&
-          output.size(1) == num_v_heads && output.size(2) == head_v_dim)
-        << "fused GDN decode output shape mismatch";
-    CHECK(output.scalar_type() == mixed_qkv.scalar_type() &&
-          output.device() == mixed_qkv.device() && output.is_contiguous())
-        << "fused GDN decode output must match input dtype/device and be "
-           "contiguous";
+    CHECK(output.is_contiguous())
+        << "fused GDN decode requires contiguous decode_output";
   } else {
     output = torch::empty({batch_size, num_v_heads, head_v_dim},
                           mixed_qkv.options());
-  }
-  if (batch_size == 0) {
-    return output;
   }
 
   const float scale = static_cast<float>(params.scale);
@@ -2559,7 +3034,7 @@ torch::Tensor fused_gated_delta_rule_decode(
   if (mixed_qkv.scalar_type() == torch::kBFloat16) {
     launch<at::BFloat16>(mixed_qkv,
                          params.state,
-                         a_log_f32,
+                         A_log_f32,
                          a,
                          dt_bias_f32,
                          b,
@@ -2579,7 +3054,7 @@ torch::Tensor fused_gated_delta_rule_decode(
   } else if (mixed_qkv.scalar_type() == torch::kFloat16) {
     launch<at::Half>(mixed_qkv,
                      params.state,
-                     a_log_f32,
+                     A_log_f32,
                      a,
                      dt_bias_f32,
                      b,

@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ limitations under the License.
 
 #include <algorithm>
 #include <memory>
-#include <optional>
 #include <string>
 #include <vector>
 
@@ -35,12 +34,12 @@ limitations under the License.
 #include "core/layers/common/lm_head.h"
 #include "core/layers/common/qwen3_next_rms_norm.h"
 #include "core/layers/common/word_embedding.h"
-#if defined(USE_NPU)
+#if defined(USE_CUDA) || defined(USE_MUSA)
+#include "core/layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
+#elif defined(USE_NPU)
 #include "core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.h"
 #elif defined(USE_MLU)
 #include "core/layers/mlu/qwen3_5/qwen3_5_hybrid_decoder_layer_base.h"
-#elif defined(USE_MUSA)
-#include "core/layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
 #endif
 
 namespace xllm {
@@ -108,29 +107,26 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
       }
     }
 
-    layer::AttentionMetadataBuildOptions metadata_build_options;
-#if defined(USE_NPU)
-    // Native NPU GDN consumes the canonical host mask directly. Avoid
-    // materializing the unused device bool tensor inside ACL graph capture.
-    metadata_build_options.materialize_linear_state_validity =
-        !input_params.enable_graph;
-#endif
 #if defined(USE_MUSA)
+    // MUSA FlashInfer applies causal masking internally. Graph replay must
+    // reuse the graph executor's stable metadata and plan objects rather than
+    // rebuilding metadata (and a dense custom mask) inside model forward.
     layer::AttentionMetadata attn_metadata =
-        layer::AttentionMetadataBuilder::build(input_params,
-                                               model_args_.enable_mla(),
-                                               /*attn_mask=*/std::nullopt,
-                                               /*device=*/device_,
-                                               metadata_build_options);
-    attn_metadata.fa3_metadata.share_fa3_scheduler_metadata = true;
+        input_params.attn_metadata
+            ? *(input_params.attn_metadata)
+            : layer::AttentionMetadataBuilder::build(input_params,
+                                                     model_args_.enable_mla());
+    attn_metadata.musa.share_fa3_scheduler_metadata = true;
+    attn_metadata.musa.fa3_scheduler_metadata =
+        input_params.attn_metadata
+            ? input_params.attn_metadata->musa.fa3_scheduler_metadata
+            : torch::Tensor();
 #else
     layer::AttentionMetadata attn_metadata =
         layer::AttentionMetadataBuilder::build(
             input_params,
             model_args_.enable_mla(),
-            build_attention_mask(input_params),
-            /*device=*/device_,
-            metadata_build_options);
+            build_attention_mask(input_params));
 #endif
     const int32_t num_tokens = static_cast<int32_t>(tokens.size(0));
     const auto& batch_forward_type = input_params.meta.batch_forward_type;
@@ -157,8 +153,12 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
     }
 
     std::optional<torch::Tensor> residual = std::nullopt;
-    for (size_t i = 0; i < layers_.size(); i++) {
 #if defined(USE_MUSA)
+    layer::GdnMtpVerifyForwardScope gdn_mtp_verify_forward_scope(
+        input_params.gdn_mtp_verify_cache.get());
+#endif
+    for (size_t i = 0; i < layers_.size(); i++) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
       if (attn_metadata.plan_info != nullptr) {
         attn_metadata.plan_info->layer_id = static_cast<int32_t>(i);
       }

@@ -47,6 +47,8 @@ class FastTokenizer : public Tokenizer {
   std::unique_ptr<Tokenizer> clone() const override;
 
  private:
+  FastTokenizer(const TokenizerArgs& tokenizer_args, TokenizerHandle handle);
+
   TokenizerArgs tokenizer_args_;
   bool byte_level_decoder_ = false;
   TokenizerHandle handle_ = nullptr;

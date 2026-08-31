@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,35 +24,47 @@ limitations under the License.
 #include <optional>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
+
+#if defined(__CUDACC__) || defined(_NVHPC_CUDA)
+#define HOST_DEVICE_INLINE __host__ __device__ __forceinline__
+#define DEVICE_INLINE __device__ __forceinline__
+#define HOST_INLINE __host__ __forceinline__
+#else
+#define HOST_DEVICE_INLINE inline
+#define DEVICE_INLINE inline
+#define HOST_INLINE inline
+#endif
 
 namespace ffi = tvm::ffi;
 
 namespace xllm::kernel::musa {
 
-inline bool is_torch_device(const torch::Device& device) {
+inline bool is_torch_musa_device(const torch::Device& device) {
   return device.is_privateuseone() || device.is_cuda();
 }
 
-void bind_tvmffi_stream(const torch::Device& device);
+void bind_musa_tvmffi_stream(const torch::Device& device);
 
-bool is_stream_capturing();
+bool is_musa_stream_capturing();
 
-void sync_current_stream(const torch::Device& device);
+void sync_current_musa_stream(const torch::Device& device);
 
-void sync_ffi_stream(const torch::Device& device);
+void sync_musa_ffi_stream(const torch::Device& device);
 
-void sync_graph_preparation_stage(const torch::Device& device);
+void sync_musa_graph_preparation_stage(const torch::Device& device);
 
-class TvmffiPreparationSyncGuard final {
+class MusaTvmffiPreparationSyncGuard final {
  public:
-  TvmffiPreparationSyncGuard();
-  ~TvmffiPreparationSyncGuard();
+  MusaTvmffiPreparationSyncGuard();
+  ~MusaTvmffiPreparationSyncGuard();
 
-  TvmffiPreparationSyncGuard(const TvmffiPreparationSyncGuard&) = delete;
-  TvmffiPreparationSyncGuard& operator=(const TvmffiPreparationSyncGuard&) =
+  MusaTvmffiPreparationSyncGuard(const MusaTvmffiPreparationSyncGuard&) =
       delete;
+  MusaTvmffiPreparationSyncGuard& operator=(
+      const MusaTvmffiPreparationSyncGuard&) = delete;
 
  private:
   bool previous_ = false;
@@ -60,14 +72,14 @@ class TvmffiPreparationSyncGuard final {
 
 // During graph capture, replaces only an invalid current MUSA stream with the
 // capture stream. Individual FFI operators still rebind their stream handle.
-class TvmffiStreamOverrideGuard final {
+class MusaTvmffiStreamOverrideGuard final {
  public:
-  TvmffiStreamOverrideGuard(const torch::Device& device, void* stream);
-  ~TvmffiStreamOverrideGuard();
+  MusaTvmffiStreamOverrideGuard(const torch::Device& device, void* stream);
+  ~MusaTvmffiStreamOverrideGuard();
 
-  TvmffiStreamOverrideGuard(const TvmffiStreamOverrideGuard&) = delete;
-  TvmffiStreamOverrideGuard& operator=(const TvmffiStreamOverrideGuard&) =
-      delete;
+  MusaTvmffiStreamOverrideGuard(const MusaTvmffiStreamOverrideGuard&) = delete;
+  MusaTvmffiStreamOverrideGuard& operator=(
+      const MusaTvmffiStreamOverrideGuard&) = delete;
 
  private:
   torch::Device device_;
@@ -75,13 +87,13 @@ class TvmffiStreamOverrideGuard final {
   void* previous_forced_stream_ = nullptr;
 };
 
-class TvmffiStreamGuard final {
+class MusaTvmffiStreamGuard final {
  public:
-  explicit TvmffiStreamGuard(const torch::Device& device);
-  ~TvmffiStreamGuard();
+  explicit MusaTvmffiStreamGuard(const torch::Device& device);
+  ~MusaTvmffiStreamGuard();
 
-  TvmffiStreamGuard(const TvmffiStreamGuard&) = delete;
-  TvmffiStreamGuard& operator=(const TvmffiStreamGuard&) = delete;
+  MusaTvmffiStreamGuard(const MusaTvmffiStreamGuard&) = delete;
+  MusaTvmffiStreamGuard& operator=(const MusaTvmffiStreamGuard&) = delete;
 
  private:
   torch::Device device_;
@@ -91,6 +103,24 @@ class TvmffiStreamGuard final {
   // FFI stream to the compute stream before subsequent PyTorch operations.
   bool needs_sync_ = false;
   bool uses_event_handoff_ = false;
+};
+
+template <typename T>
+HOST_DEVICE_INLINE constexpr std::enable_if_t<std::is_integral_v<T>, T>
+ceil_div(T a, T b) {
+  return (a + b - 1) / b;
+}
+
+enum class ActivationType : int8_t {
+  GELU = 0,
+  RELU = 1,
+  SILU = 2,
+  SWIGLU = 3,
+  GEGLU = 4,
+  SWIGLU_BIAS = 5,
+  RELU2 = 6,
+  IDENTITY = 7,
+  INVALID_TYPE = 8
 };
 
 torch::Tensor get_cache_buffer(const int32_t seq_len,
@@ -170,7 +200,7 @@ ffi::Function get_function(const std::string& uri,
 
 // Registers TileLang's embedded MUSA-module loader with TVM FFI. Returns false
 // when libtilelang is unavailable so callers can use a non-TileLang fallback.
-bool ensure_tilelang_loader();
+bool ensure_tilelang_musa_loader();
 
 enum class FfiAllocMode { kPassthrough, kRecord, kReplay };
 

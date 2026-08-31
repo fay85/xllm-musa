@@ -405,6 +405,9 @@ class ContinuousScheduler : public Scheduler {
 
   std::vector<Batch> schedule_request(const absl::Duration& timeout);
 
+  // Perform one scheduling attempt without waiting for queued work.
+  std::vector<Batch> try_schedule_request();
+
   virtual void update_token_latency_metrics(std::vector<Sequence*>& sequences);
 
   // process the batch output

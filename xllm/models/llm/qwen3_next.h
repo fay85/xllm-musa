@@ -19,9 +19,9 @@ limitations under the License.
 #include <unordered_set>
 #include <vector>
 
-#if defined(USE_MUSA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
 #include "core/layers/musa/qwen3_next_decoder_layer_impl.h"
-#else
+#elif defined(USE_NPU)
 #include "core/layers/npu_torch/qwen3_next_decoder_layer_impl.h"
 #endif
 #include "models/model_registry.h"

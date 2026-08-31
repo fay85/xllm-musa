@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+#     https://github.com/jd-opensource/xllm/blob/main/LICENSE
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -46,7 +46,9 @@ def register_model(
     return deco
 
 
-def _register_model_path(module_name: str, class_name: str, *names: str) -> None:
+def _register_model_path(
+    module_name: str, class_name: str, *names: str
+) -> None:
     path = (module_name, class_name)
     for name in names:
         _REGISTRY[name] = path
@@ -54,14 +56,20 @@ def _register_model_path(module_name: str, class_name: str, *names: str) -> None
 
 def get_model_class(name: str) -> type[nn.Module]:
     if name not in _REGISTRY:
-        raise KeyError(f"model '{name}' not registered; available: {sorted(_REGISTRY)}")
+        raise KeyError(
+            f"model '{name}' not registered; available: {sorted(_REGISTRY)}"
+        )
 
     module_name, class_name = _REGISTRY[name]
     implementation = module_name.rsplit(".", 1)[-1]
     platform = current_platform.device_type()
     support = MODEL_PLATFORM_SUPPORT.get(implementation, {})
     if not support.get(platform, False):
-        supported_platforms = sorted(name for name, enabled in support.items() if enabled)
+        supported_platforms = sorted(
+            platform_name
+            for platform_name, enabled in support.items()
+            if enabled
+        )
         raise NotImplementedError(
             f"Python model '{name}' (implementation '{implementation}') is not "
             f"supported on platform '{platform}'; supported platforms: "
@@ -92,6 +100,13 @@ def _register_builtin_models() -> None:
         "qwen3_5_moe_text",
     )
     _register_model_path(
+        "xllm.python.models.qwen3_5_mtp",
+        "Qwen3_5MtpForCausalLM",
+        "Qwen3_5MtpForCausalLM",
+        "qwen3_5_mtp",
+        "qwen3_5_moe_mtp",
+    )
+    _register_model_path(
         "xllm.python.models.qwen3_vl",
         "Qwen3VLForConditionalGeneration",
         "qwen3_vl",
@@ -106,7 +121,6 @@ def _register_builtin_models() -> None:
         "Glm52ForCausalLM",
         "glm_moe_dsa",
     )
-
     _register_model_path(
         "xllm.python.models.deepseek_v32_mtp",
         "DeepseekV32MtpForCausalLM",

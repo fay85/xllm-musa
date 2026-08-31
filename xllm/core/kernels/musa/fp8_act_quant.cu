@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,7 +21,9 @@ limitations under the License.
 #include <cstdint>
 #include <limits>
 #include <tuple>
+#include <vector>
 
+#include "core/kernels/musa/global_capture_instance.h"
 #include "core/kernels/musa/musa_ops_api.h"
 
 namespace xllm::kernel::musa {
@@ -38,7 +40,13 @@ constexpr int32_t kThreadsPerGroup = 16;
 constexpr int32_t kElemsPerThread = kGroupSize / kThreadsPerGroup;  // 8
 constexpr int32_t kActThreadsPerGroup = 32;
 constexpr int32_t kActElemsPerThread = kGroupSize / kActThreadsPerGroup;  // 4
+constexpr int32_t kActGroupsPerBlock =
+    1024 / kThreadsPerGroup;
 constexpr int32_t kHardwareWarpThreads = 32;
+constexpr int32_t kDenseSwigluGroupsPerBlock = 16;
+// Larger tiles reduce graph replay scheduling overhead on MP31, while eager
+// launches perform best with the smaller tile.
+constexpr int32_t kDenseSwigluGraphGroupsPerBlock = 36;
 constexpr int32_t kMaxMoeExperts = 256;
 constexpr int32_t kMaxMoeTopk = 16;
 constexpr int32_t kRaggedAlignment = 128;
@@ -50,19 +58,16 @@ template <int32_t ThreadsPerGroup>
 __device__ __forceinline__ float group_reduce_max(float value, int32_t lane) {
   static_assert(ThreadsPerGroup <= kHardwareWarpThreads,
                 "FP8 quantization subwarp must fit in one hardware warp");
-  constexpr uint32_t kSubwarpMaskBits = ThreadsPerGroup == kHardwareWarpThreads
-                                            ? 0xffffffffu
-                                            : (1u << ThreadsPerGroup) - 1u;
+  constexpr unsigned int kSubwarpMaskBits =
+      ThreadsPerGroup == kHardwareWarpThreads ? 0xffffffffu
+                                              : (1u << ThreadsPerGroup) - 1u;
   // threadIdx.x is a block-wide index. Restrict it to the physical warp lane
   // before constructing the mask; using threadIdx.x directly would shift by
   // 32 for the second warp and is undefined for a 32-bit mask.
   const int32_t warp_lane =
       static_cast<int32_t>(threadIdx.x) & (kHardwareWarpThreads - 1);
-  const uint32_t mask = kSubwarpMaskBits << (warp_lane - lane);
+  const unsigned int mask = kSubwarpMaskBits << (warp_lane - lane);
 
-  if constexpr (ThreadsPerGroup >= 32) {
-    value = fmaxf(value, __shfl_xor_sync(mask, value, 16));
-  }
   if constexpr (ThreadsPerGroup >= 16) {
     value = fmaxf(value, __shfl_xor_sync(mask, value, 8));
   }
@@ -256,9 +261,7 @@ __global__ void moe_preprocess_assign_bf16_kernel(
   __syncthreads();
 
   constexpr int32_t kBf16PerVector = sizeof(int4) / sizeof(__mt_bfloat16);
-  if (hidden_size % kBf16PerVector == 0 &&
-      reinterpret_cast<uintptr_t>(input) % alignof(int4) == 0 &&
-      reinterpret_cast<uintptr_t>(output) % alignof(int4) == 0) {
+  if (hidden_size % kBf16PerVector == 0) {
     const int64_t vectors_per_row = hidden_size / kBf16PerVector;
     const auto* input_vec = reinterpret_cast<const int4*>(input);
     auto* output_vec = reinterpret_cast<int4*>(output);
@@ -695,65 +698,73 @@ __global__ void moe_indexed_swiglu_bf16_vec8_kernel(
   *reinterpret_cast<int4*>(output + output_base) = result.vector;
 }
 
-__global__ void moe_ragged_swiglu_quant_kernel(
+__global__ void swiglu_quant_kernel(
     const __mt_bfloat16* __restrict__ input,
     __mt_fp8_e4m3* __restrict__ output_q,
     float* __restrict__ output_s,
-    int64_t assignment_count,
+    int64_t row_count,
     int64_t intermediate_size,
-    int32_t hidden_dim_num_groups) {
-  const int64_t assignment_idx = static_cast<int64_t>(blockIdx.x);
-  if (assignment_idx >= assignment_count) {
+    int32_t hidden_dim_num_groups,
+    int32_t groups_per_block,
+    int64_t row_stride) {
+  const int64_t row_idx = static_cast<int64_t>(blockIdx.y);
+  if (row_idx >= row_count) {
     return;
   }
 
   const int32_t thread_idx = static_cast<int32_t>(threadIdx.x);
-  const int32_t group_idx = thread_idx / kActThreadsPerGroup;
-  const int32_t lane = thread_idx % kActThreadsPerGroup;
+  const int32_t group_idx =
+      static_cast<int32_t>(blockIdx.x) * groups_per_block +
+      thread_idx / kThreadsPerGroup;
+  const int32_t lane = thread_idx % kThreadsPerGroup;
   if (group_idx >= hidden_dim_num_groups) {
     return;
   }
 
-  const int64_t row = assignment_idx * kRaggedAlignment;
-  const int64_t elem_offset = static_cast<int64_t>(lane) * kActElemsPerThread;
+  const int64_t row = row_idx * row_stride;
+  const int64_t elem_offset = static_cast<int64_t>(lane) * kElemsPerThread;
   const int64_t gate_base = row * intermediate_size * 2 +
                             static_cast<int64_t>(group_idx) * kGroupSize +
                             elem_offset;
   const int64_t up_base = gate_base + intermediate_size;
-  const uint64_t gate_u64 =
-      *reinterpret_cast<const uint64_t*>(input + gate_base);
-  const uint64_t up_u64 = *reinterpret_cast<const uint64_t*>(input + up_base);
-  const __mt_bfloat16* gate_values =
-      reinterpret_cast<const __mt_bfloat16*>(&gate_u64);
-  const __mt_bfloat16* up_values =
-      reinterpret_cast<const __mt_bfloat16*>(&up_u64);
+  Bf16Pack8 gate_values;
+  Bf16Pack8 up_values;
+  gate_values.vector = *reinterpret_cast<const int4*>(input + gate_base);
+  up_values.vector = *reinterpret_cast<const int4*>(input + up_base);
 
-  float values[kActElemsPerThread];
-  float local_absmax = kEps;
+  float values[kElemsPerThread];
+  float local_absmax = 0.0f;
 #pragma unroll
-  for (int32_t j = 0; j < kActElemsPerThread; ++j) {
-    const float gate = __bfloat162float(gate_values[j]);
-    const float half_gate = 0.5f * gate;
-    const __mt_bfloat16 activated =
-        __float2bfloat16_rn(half_gate * (1.0f + tanhf(half_gate)));
-    const __mt_bfloat16 product = activated * up_values[j];
+  for (int32_t j = 0; j < kElemsPerThread; ++j) {
+    const float gate = __bfloat162float(gate_values.values[j]);
+    const float up = __bfloat162float(up_values.values[j]);
+    const __mt_bfloat16 product =
+        __float2bfloat16_rn((gate / (1.0f + expf(-gate))) * up);
     const float value = __bfloat162float(product);
     values[j] = value;
     local_absmax = fmaxf(local_absmax, fabsf(value));
   }
-  local_absmax = group_reduce_max<kActThreadsPerGroup>(local_absmax, lane);
-  const float scale_inv = local_absmax / kFp8E4M3Max;
-  const float scale = kFp8E4M3Max / local_absmax;
-  const float4 scaled = make_float4(values[0] * scale,
-                                    values[1] * scale,
-                                    values[2] * scale,
-                                    values[3] * scale);
-  const uint32_t packed = static_cast<uint32_t>(
-      __musa_cvt_float4_to_fp8x4(scaled, __MT_SATFINITE, __MT_E4M3));
+  local_absmax = group_reduce_max<kThreadsPerGroup>(local_absmax, lane);
+  const float scale_inv = fmaxf(local_absmax / kFp8E4M3Max, kEps);
+  const float scale = 1.0f / scale_inv;
+  const float4 scaled_0 = make_float4(values[0] * scale,
+                                      values[1] * scale,
+                                      values[2] * scale,
+                                      values[3] * scale);
+  const float4 scaled_1 = make_float4(values[4] * scale,
+                                      values[5] * scale,
+                                      values[6] * scale,
+                                      values[7] * scale);
+  const uint32_t packed_0 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(scaled_0, __MT_SATFINITE, __MT_E4M3));
+  const uint32_t packed_1 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(scaled_1, __MT_SATFINITE, __MT_E4M3));
+  const uint64_t packed =
+      static_cast<uint64_t>(packed_0) | (static_cast<uint64_t>(packed_1) << 32);
   const int64_t output_base = row * intermediate_size +
                               static_cast<int64_t>(group_idx) * kGroupSize +
                               elem_offset;
-  *reinterpret_cast<uint32_t*>(output_q + output_base) = packed;
+  *reinterpret_cast<uint64_t*>(output_q + output_base) = packed;
   if (lane == 0) {
     output_s[row * hidden_dim_num_groups + group_idx] = scale_inv;
   }
@@ -804,33 +815,117 @@ int32_t choose_subwarps_per_block(int64_t hidden_dim_num_groups) {
 
 }  // namespace
 
-std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
+void fused_swiglu_quant_fp8_out(const torch::Tensor& input,
+                                int64_t group_size,
+                                torch::Tensor& output_q,
+                                torch::Tensor& output_s) {
+  CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
+        input.is_contiguous())
+      << "Dense SwiGLU quant requires contiguous BF16 [M, 2N].";
+  CHECK_EQ(group_size, kGroupSize);
+  CHECK_EQ(input.size(1) % (2 * kGroupSize), 0);
+  CHECK(output_q.defined() && output_s.defined())
+      << "fused_swiglu_quant_fp8_out requires caller-owned outputs";
+
+  const int64_t num_rows = input.size(0);
+  const int64_t intermediate_size = input.size(1) / 2;
+  const int32_t hidden_dim_num_groups =
+      static_cast<int32_t>(intermediate_size / kGroupSize);
+  CHECK_EQ(output_q.dim(), 2);
+  CHECK_EQ(output_q.size(0), num_rows);
+  CHECK_EQ(output_q.size(1), intermediate_size);
+  CHECK_EQ(output_q.scalar_type(), torch::kFloat8_e4m3fn);
+  CHECK(output_q.is_contiguous());
+  CHECK_EQ(output_q.device(), input.device());
+  CHECK_EQ(output_s.dim(), 2);
+  CHECK_EQ(output_s.size(0), num_rows);
+  CHECK_EQ(output_s.size(1), hidden_dim_num_groups);
+  CHECK_EQ(output_s.scalar_type(), torch::kFloat32);
+  CHECK(output_s.is_contiguous());
+  CHECK_EQ(output_s.device(), input.device());
+  if (num_rows == 0) {
+    return;
+  }
+
+  // Python torch.musa.graph does not set GlobalCaptureInstance. Use the
+  // larger graph tile whenever the current MUSA stream is capturing so
+  // replay matches the C++ piecewise launch config.
+  const bool is_capturing =
+      xllm::runtime::musa::GlobalCaptureInstance::get_instance()
+          .is_capturing() ||
+      is_musa_stream_capturing();
+  const int32_t groups_per_tile = is_capturing ? kDenseSwigluGraphGroupsPerBlock
+                                               : kDenseSwigluGroupsPerBlock;
+  const int32_t groups_per_block =
+      std::min(hidden_dim_num_groups, groups_per_tile);
+  const int32_t group_tiles =
+      (hidden_dim_num_groups + groups_per_tile - 1) / groups_per_tile;
+
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  swiglu_quant_kernel<<<dim3(static_cast<unsigned int>(group_tiles),
+                             static_cast<unsigned int>(num_rows)),
+                        static_cast<unsigned int>(groups_per_block *
+                                                  kThreadsPerGroup),
+                        0,
+                        stream>>>(
+      reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
+      reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
+      output_s.data_ptr<float>(),
+      num_rows,
+      intermediate_size,
+      hidden_dim_num_groups,
+      groups_per_tile,
+      /*row_stride=*/1);
+  C10_CUDA_CHECK(cudaGetLastError());
+}
+
+std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
     const torch::Tensor& input,
     int64_t group_size) {
-  CHECK_EQ(input.scalar_type(), torch::kBFloat16)
-      << "per_token_group_quant_fp8 supports BF16 input only.";
-  CHECK_EQ(group_size, kGroupSize);
-  CHECK_GT(input.dim(), 0);
-  CHECK(input.is_contiguous())
-      << "per_token_group_quant_fp8 requires contiguous input.";
-  CHECK(reinterpret_cast<uintptr_t>(input.data_ptr()) % alignof(int4) == 0)
-      << "per_token_group_quant_fp8 requires 16-byte-aligned input.";
+  CHECK(input.dim() == 2) << "Dense SwiGLU quant requires [M, 2N].";
+  const int64_t num_rows = input.size(0);
+  const int64_t intermediate_size = input.size(1) / 2;
+  torch::Tensor output_q =
+      torch::empty({num_rows, intermediate_size},
+                   input.options().dtype(torch::kFloat8_e4m3fn));
+  torch::Tensor output_s =
+      torch::empty({num_rows, intermediate_size / kGroupSize},
+                   input.options().dtype(torch::kFloat32));
+  fused_swiglu_quant_fp8_out(input, group_size, output_q, output_s);
+  return std::make_tuple(output_q, output_s);
+}
+
+void per_token_group_quant_fp8_out(const torch::Tensor& input,
+                                   int64_t group_size,
+                                   torch::Tensor& output_q,
+                                   torch::Tensor& output_s) {
+  CHECK(input.scalar_type() == torch::kBFloat16)
+      << "per_token_group_quant_fp8 supports bf16 input only";
+  CHECK_EQ(group_size, kGroupSize)
+      << "per_token_group_quant_fp8 requires group_size=128";
+  CHECK_EQ(input.stride(-1), 1)
+      << "per_token_group_quant_fp8: input last dim must be contiguous";
+  CHECK(output_q.defined() && output_s.defined())
+      << "per_token_group_quant_fp8_out requires caller-owned outputs";
 
   const int64_t k = input.size(-1);
   CHECK_GT(k, 0);
-  CHECK_EQ(k % kGroupSize, 0);
+  CHECK_EQ(k % kGroupSize, 0)
+      << "per_token_group_quant_fp8: K must be divisible by 128";
   const int64_t k_groups = k / kGroupSize;
   const int64_t m = input.numel() / k;
-
-  auto out_q =
-      torch::empty(input.sizes(), input.options().dtype(torch::kFloat8_e4m3fn));
-  auto scale_sizes = input.sizes().vec();
-  scale_sizes.back() = k_groups;
-  auto out_scale =
-      torch::empty(scale_sizes, input.options().dtype(torch::kFloat32));
-
+  CHECK_EQ(output_q.numel(), input.numel());
+  CHECK_EQ(output_q.scalar_type(), torch::kFloat8_e4m3fn);
+  CHECK(output_q.is_contiguous());
+  CHECK_EQ(output_q.device(), input.device());
+  CHECK_EQ(output_s.size(-1), k_groups);
+  CHECK_EQ(output_s.numel(), m * k_groups);
+  CHECK_EQ(output_s.scalar_type(), torch::kFloat32);
+  CHECK(output_s.is_contiguous());
+  CHECK_EQ(output_s.device(), input.device());
   if (m == 0 || k_groups == 0) {
-    return std::make_tuple(out_q, out_scale);
+    return;
   }
 
   const int32_t subwarps_per_block = choose_subwarps_per_block(k_groups);
@@ -846,14 +941,37 @@ std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
       0,
       stream>>>(
       reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
-      reinterpret_cast<__mt_fp8_e4m3*>(out_q.data_ptr<c10::Float8_e4m3fn>()),
-      out_scale.data_ptr<float>(),
+      reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
+      output_s.data_ptr<float>(),
       k,
       k_groups,
       m);
   C10_CUDA_CHECK(cudaGetLastError());
+}
 
-  return std::make_tuple(out_q, out_scale);
+std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size) {
+  CHECK(input.scalar_type() == torch::kBFloat16)
+      << "per_token_group_quant_fp8 (MUSA g128) supports bf16 input only";
+  CHECK_EQ(group_size, kGroupSize)
+      << "per_token_group_quant_fp8 (MUSA g128) requires group_size=128";
+  CHECK_EQ(input.stride(-1), 1)
+      << "per_token_group_quant_fp8: input last dim must be contiguous";
+
+  const int64_t k = input.size(-1);
+  CHECK_GT(k, 0);
+  CHECK_EQ(k % kGroupSize, 0)
+      << "per_token_group_quant_fp8: K must be divisible by 128";
+  const int64_t k_groups = k / kGroupSize;
+  torch::Tensor output_q =
+      torch::empty(input.sizes(), input.options().dtype(torch::kFloat8_e4m3fn));
+  std::vector<int64_t> scale_sizes = input.sizes().vec();
+  scale_sizes.back() = k_groups;
+  torch::Tensor output_s =
+      torch::empty(scale_sizes, input.options().dtype(torch::kFloat32));
+  per_token_group_quant_fp8_out(input, group_size, output_q, output_s);
+  return std::make_tuple(output_q, output_s);
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
@@ -861,20 +979,20 @@ fused_moe_preprocess_fp8(const torch::Tensor& input,
                          const torch::Tensor& topk_ids,
                          int64_t num_experts,
                          int64_t group_size) {
-  CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
-        input.is_contiguous())
-      << "fused_moe_preprocess_fp8 requires contiguous BF16 [M, K].";
-  CHECK(topk_ids.scalar_type() == torch::kInt32 && topk_ids.dim() == 2 &&
-        topk_ids.is_contiguous())
-      << "fused_moe_preprocess_fp8 requires contiguous int32 top-k ids.";
-  CHECK_EQ(input.device(), topk_ids.device());
-  CHECK_EQ(topk_ids.size(0), input.size(0));
-  CHECK_EQ(group_size, kGroupSize);
-  CHECK_EQ(input.size(1) % kGroupSize, 0);
-  CHECK_GT(num_experts, 0);
-  CHECK_LE(num_experts, kMaxMoeExperts);
-  CHECK_GT(topk_ids.size(1), 0);
-  CHECK_LE(topk_ids.size(1), kMaxMoeTopk);
+  TORCH_CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
+                  input.is_contiguous(),
+              "fused_moe_preprocess_fp8 requires contiguous BF16 [M, K]");
+  TORCH_CHECK(topk_ids.scalar_type() == torch::kInt32 && topk_ids.dim() == 2 &&
+                  topk_ids.is_contiguous(),
+              "fused_moe_preprocess_fp8 requires contiguous int32 topk ids");
+  TORCH_CHECK(topk_ids.size(0) == input.size(0),
+              "fused_moe_preprocess_fp8 token count mismatch");
+  TORCH_CHECK(group_size == kGroupSize && input.size(1) % kGroupSize == 0,
+              "fused_moe_preprocess_fp8 requires group_size=128");
+  TORCH_CHECK(num_experts > 0 && num_experts <= kMaxMoeExperts,
+              "fused_moe_preprocess_fp8 supports at most 256 experts");
+  TORCH_CHECK(topk_ids.size(1) > 0 && topk_ids.size(1) <= kMaxMoeTopk,
+              "fused_moe_preprocess_fp8 supports topk <= 16");
 
   const int64_t num_tokens = input.size(0);
   const int64_t hidden_size = input.size(1);
@@ -882,10 +1000,8 @@ fused_moe_preprocess_fp8(const torch::Tensor& input,
       static_cast<int32_t>(hidden_size / kGroupSize);
   const int32_t topk = static_cast<int32_t>(topk_ids.size(1));
   const int64_t assignment_count = num_tokens * topk;
-  CHECK_GT(hidden_dim_num_groups, 0);
-  CHECK_LE(hidden_dim_num_groups * kActThreadsPerGroup, 1024);
-  CHECK(reinterpret_cast<uintptr_t>(input.data_ptr()) % alignof(uint64_t) == 0)
-      << "fused_moe_preprocess_fp8 requires 8-byte-aligned input.";
+  TORCH_CHECK(hidden_dim_num_groups * kActThreadsPerGroup <= 1024,
+              "fused_moe_preprocess_fp8 hidden size exceeds block limit");
 
   auto output_q = torch::empty({assignment_count, hidden_size},
                                input.options().dtype(torch::kFloat8_e4m3fn));
@@ -940,20 +1056,20 @@ fused_moe_preprocess_bf16(const torch::Tensor& input,
                           const torch::Tensor& topk_ids,
                           int64_t num_experts,
                           int64_t alignment) {
-  CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
-        input.is_contiguous())
-      << "fused_moe_preprocess_bf16 requires contiguous BF16 [M, K].";
-  CHECK(topk_ids.scalar_type() == torch::kInt32 && topk_ids.dim() == 2 &&
-        topk_ids.is_contiguous())
-      << "fused_moe_preprocess_bf16 requires contiguous int32 top-k ids.";
-  CHECK_EQ(input.device(), topk_ids.device());
-  CHECK_EQ(topk_ids.size(0), input.size(0));
-  CHECK_GT(num_experts, 0);
-  CHECK_LE(num_experts, kMaxMoeExperts);
-  CHECK_GT(topk_ids.size(1), 0);
-  CHECK_LE(topk_ids.size(1), kMaxMoeTopk);
-  CHECK(alignment == 128 || alignment == 256)
-      << "fused_moe_preprocess_bf16 alignment must be 128 or 256.";
+  TORCH_CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
+                  input.is_contiguous(),
+              "fused_moe_preprocess_bf16 requires contiguous BF16 [M, K]");
+  TORCH_CHECK(topk_ids.scalar_type() == torch::kInt32 && topk_ids.dim() == 2 &&
+                  topk_ids.is_contiguous(),
+              "fused_moe_preprocess_bf16 requires contiguous int32 topk ids");
+  TORCH_CHECK(topk_ids.size(0) == input.size(0),
+              "fused_moe_preprocess_bf16 token count mismatch");
+  TORCH_CHECK(num_experts > 0 && num_experts <= kMaxMoeExperts,
+              "fused_moe_preprocess_bf16 supports at most 256 experts");
+  TORCH_CHECK(topk_ids.size(1) > 0 && topk_ids.size(1) <= kMaxMoeTopk,
+              "fused_moe_preprocess_bf16 supports topk <= 16");
+  TORCH_CHECK(alignment == 128 || alignment == 256,
+              "fused_moe_preprocess_bf16 alignment must be 128 or 256");
 
   const int64_t num_tokens = input.size(0);
   const int64_t hidden_size = input.size(1);
@@ -1029,7 +1145,6 @@ fused_moe_ragged_preprocess_fp8(const torch::Tensor& input,
   CHECK(topk_ids.scalar_type() == torch::kInt32 && topk_ids.dim() == 2 &&
         topk_ids.is_contiguous())
       << "Ragged MoE preprocess requires contiguous int32 top-k ids.";
-  CHECK_EQ(input.device(), topk_ids.device());
   CHECK_EQ(topk_ids.size(0), input.size(0));
   CHECK_EQ(group_size, kGroupSize);
   CHECK_EQ(alignment, kRaggedAlignment);
@@ -1044,10 +1159,7 @@ fused_moe_ragged_preprocess_fp8(const torch::Tensor& input,
   const int32_t topk = static_cast<int32_t>(topk_ids.size(1));
   const int64_t assignment_count = num_tokens * topk;
   const int64_t padded_rows = assignment_count * alignment;
-  CHECK_GT(hidden_dim_num_groups, 0);
   CHECK_LE(hidden_dim_num_groups * kActThreadsPerGroup, 1024);
-  CHECK(reinterpret_cast<uintptr_t>(input.data_ptr()) % alignof(uint64_t) == 0)
-      << "Ragged MoE preprocess requires 8-byte-aligned input.";
 
   torch::Tensor output_q = torch::empty(
       {padded_rows, hidden_size}, input.options().dtype(torch::kFloat8_e4m3fn));
@@ -1089,7 +1201,6 @@ std::tuple<torch::Tensor, torch::Tensor> fused_moe_ragged_preprocess_bf16(
   CHECK(topk_ids.scalar_type() == torch::kInt32 && topk_ids.dim() == 2 &&
         topk_ids.is_contiguous())
       << "Ragged BF16 MoE preprocess requires contiguous int32 top-k ids.";
-  CHECK_EQ(input.device(), topk_ids.device());
   CHECK_EQ(topk_ids.size(0), input.size(0));
   CHECK_EQ(alignment, kRaggedAlignment);
   CHECK_GT(topk_ids.size(1), 0);
@@ -1136,7 +1247,6 @@ fused_moe_decode_preprocess_bf16(const torch::Tensor& input,
   CHECK(topk_ids.scalar_type() == torch::kInt32 && topk_ids.dim() == 2 &&
         topk_ids.is_contiguous())
       << "Decode BF16 MoE preprocess requires contiguous int32 top-k ids.";
-  CHECK_EQ(input.device(), topk_ids.device());
   CHECK_EQ(topk_ids.size(0), input.size(0));
   CHECK_GT(num_experts, 0);
   CHECK_LE(num_experts, kMaxMoeExperts);
@@ -1226,12 +1336,10 @@ torch::Tensor fused_moe_indexed_swiglu_bf16(const torch::Tensor& input,
   CHECK(valid_rows.scalar_type() == torch::kInt32 && valid_rows.dim() == 1 &&
         valid_rows.is_contiguous())
       << "Indexed BF16 SwiGLU requires contiguous int32 row indices.";
-  CHECK_EQ(input.device(), valid_rows.device());
   CHECK_EQ(input.size(1) % 2, 0);
 
   const int64_t assignment_count = valid_rows.size(0);
   const int64_t intermediate_size = input.size(1) / 2;
-  CHECK_GT(intermediate_size, 0);
   torch::Tensor output =
       torch::empty({input.size(0), intermediate_size}, input.options());
   if (assignment_count == 0) {
@@ -1244,8 +1352,6 @@ torch::Tensor fused_moe_indexed_swiglu_bf16(const torch::Tensor& input,
   const int64_t chunks_per_row = intermediate_size / kValuesPerChunk;
   const int64_t total_chunks = assignment_count * chunks_per_row;
   if (intermediate_size % kValuesPerChunk == 0 &&
-      reinterpret_cast<uintptr_t>(input.data_ptr()) % alignof(int4) == 0 &&
-      reinterpret_cast<uintptr_t>(output.data_ptr()) % alignof(int4) == 0 &&
       total_chunks <= std::numeric_limits<int32_t>::max() &&
       assignment_count <= std::numeric_limits<int32_t>::max()) {
     constexpr int32_t kFlatSwiGluThreads = 512;
@@ -1297,10 +1403,10 @@ std::tuple<torch::Tensor, torch::Tensor> fused_moe_ragged_swiglu_quant_fp8(
   const int64_t intermediate_size = input.size(1) / 2;
   const int32_t hidden_dim_num_groups =
       static_cast<int32_t>(intermediate_size / kGroupSize);
-  CHECK_GT(hidden_dim_num_groups, 0);
-  CHECK_LE(hidden_dim_num_groups * kActThreadsPerGroup, 1024);
-  CHECK(reinterpret_cast<uintptr_t>(input.data_ptr()) % alignof(uint64_t) == 0)
-      << "Ragged SwiGLU quant requires 8-byte-aligned input.";
+  const int32_t groups_per_block =
+      std::min(hidden_dim_num_groups, kActGroupsPerBlock);
+  const int32_t group_tiles =
+      (hidden_dim_num_groups + kActGroupsPerBlock - 1) / kActGroupsPerBlock;
 
   torch::Tensor output_q =
       torch::empty({padded_rows, intermediate_size},
@@ -1313,9 +1419,10 @@ std::tuple<torch::Tensor, torch::Tensor> fused_moe_ragged_swiglu_quant_fp8(
 
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  moe_ragged_swiglu_quant_kernel<<<
-      static_cast<unsigned int>(assignment_count),
-      static_cast<unsigned int>(hidden_dim_num_groups * kActThreadsPerGroup),
+  swiglu_quant_kernel<<<
+      dim3(static_cast<unsigned int>(group_tiles),
+           static_cast<unsigned int>(assignment_count)),
+      static_cast<unsigned int>(groups_per_block * kThreadsPerGroup),
       0,
       stream>>>(
       reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
@@ -1323,7 +1430,9 @@ std::tuple<torch::Tensor, torch::Tensor> fused_moe_ragged_swiglu_quant_fp8(
       output_s.data_ptr<float>(),
       assignment_count,
       intermediate_size,
-      hidden_dim_num_groups);
+      hidden_dim_num_groups,
+      kActGroupsPerBlock,
+      /*row_stride=*/kRaggedAlignment);
   C10_CUDA_CHECK(cudaGetLastError());
   return std::make_tuple(output_q, output_s);
 }
@@ -1338,12 +1447,9 @@ torch::Tensor fused_moe_ragged_combine(const torch::Tensor& down,
   CHECK(topk_weights.scalar_type() == torch::kFloat32 &&
         topk_weights.dim() == 2 && topk_weights.is_contiguous())
       << "Ragged MoE combine requires contiguous FP32 top-k weights.";
-  CHECK_EQ(down.device(), topk_weights.device());
-  CHECK_GE(num_tokens, 0);
   CHECK_EQ(topk_weights.size(0), num_tokens);
   CHECK_EQ(alignment, kRaggedAlignment);
   const int64_t topk = topk_weights.size(1);
-  CHECK_GT(topk, 0);
   CHECK_EQ(down.size(0), num_tokens * topk * alignment);
   CHECK_LE(topk, kMaxMoeTopk);
 

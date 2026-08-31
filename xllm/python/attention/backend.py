@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+#     https://github.com/jd-opensource/xllm/blob/main/LICENSE
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,13 +31,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True, slots=True)
 class LayerCache:
-    """Every cache a layer may own, named rather than positional.
-
-    A layer holds a subset: full attention uses ``key``/``value``, the MLA
-    sparse indexer adds ``index``, and a linear-attention layer uses
-    ``conv``/``ssm`` instead of K/V. An absent slot is ``None`` rather than an
-    empty tensor, so a layer that reads the wrong slot fails loudly.
-    """
+    """Named per-layer caches. Full attention uses key/value; GDN uses conv/ssm."""
 
     key: torch.Tensor | None
     value: torch.Tensor | None
@@ -47,22 +41,26 @@ class LayerCache:
     index_scale: torch.Tensor | None = None
 
 
-#: Field order of the tuple form, which is what the C++ executor hands over.
 _LAYER_CACHE_SLOTS = ("key", "value", "index", "conv", "ssm", "index_scale")
-
 LayerCacheInput = LayerCache | tuple[torch.Tensor | None, ...]
+KVCache = tuple[torch.Tensor, torch.Tensor]
 
 
 def normalize_layer_caches(caches: Sequence[LayerCacheInput]) -> list[LayerCache]:
-    """Accept the tuple form and return named caches with empty slots dropped."""
     normalized: list[LayerCache] = []
     for cache in caches:
         if isinstance(cache, LayerCache):
             normalized.append(cache)
             continue
         if not 2 <= len(cache) <= len(_LAYER_CACHE_SLOTS):
-            raise ValueError(f"layer cache must hold between K/V and {'/'.join(_LAYER_CACHE_SLOTS)} tensors")
-        slots = [None if tensor is None or not tensor.numel() else tensor for tensor in cache]
+            raise ValueError(
+                "layer cache must hold between K/V and "
+                f"{'/'.join(_LAYER_CACHE_SLOTS)} tensors"
+            )
+        slots = [
+            None if tensor is None or not tensor.numel() else tensor
+            for tensor in cache
+        ]
         slots.extend([None] * (len(_LAYER_CACHE_SLOTS) - len(slots)))
         normalized.append(LayerCache(*slots))
     return normalized
@@ -75,6 +73,7 @@ class AttentionMetadata(Protocol):
     paged_kv_last_page_len: torch.Tensor
     qo_indptr: torch.Tensor | None
     q_cu_seq_lens: torch.Tensor | None
+    gdn_cu_seq_lens: torch.Tensor | None
     kv_cu_seq_lens: torch.Tensor | None
     kv_seq_lens_host: torch.Tensor | None
     kv_seq_lens_host_values: list[int] | None
@@ -83,25 +82,31 @@ class AttentionMetadata(Protocol):
     paged_kv_last_page_len_host: torch.Tensor | None
     block_table: torch.Tensor | None
     kv_seq_lens: torch.Tensor | None
-    linear_state_indices: torch.Tensor | None
-    has_initial_state: torch.Tensor | None
-    dp_token_counts: Sequence[int]
-    dp_is_decode: Sequence[int]
     q_seq_lens: torch.Tensor | None
-    expanded_decode_metadata: ExpandedDecodeMetadataLike
+    max_seq_len: int
+    max_query_len: int
     is_prefill: bool
     is_chunked_prefill: bool
+    linear_state_indices: torch.Tensor | None
+    has_initial_state: torch.Tensor | None
+    input_embedding: torch.Tensor | None
+    num_accepted_tokens: torch.Tensor | None
+    dp_token_counts: Sequence[int]
+    dp_is_decode: Sequence[int]
+    expanded_decode_metadata: ExpandedDecodeMetadataLike | None
+    is_spec_verify: bool
+    use_expanded_decode_for_spec_verify_attention: bool
+    expanded_kv_seq_lens: torch.Tensor | None
+    expanded_block_table: torch.Tensor | None
+    expanded_kv_seq_lens_host: torch.Tensor | None
+    expanded_paged_kv_indptr: torch.Tensor | None
+    expanded_paged_kv_indices: torch.Tensor | None
+    expanded_paged_kv_last_page_len: torch.Tensor | None
 
 
 @dataclass(frozen=True)
 class MlaIndexContext:
-    """Public contract handed to an optional LightningIndexer.
-
-    Replaces direct model access to ``backend._metadata`` / ``backend._kv_caches``
-    for MLA layers. The backend owns the paged index cache (``LayerCache.index``)
-    and prepares the paging / sequence-length metadata once per step; the indexer
-    receives this view and produces ``topk``.
-    """
+    """Public contract handed to an optional LightningIndexer."""
 
     index_cache: torch.Tensor
     slot_mapping: torch.Tensor
@@ -142,7 +147,7 @@ class AttentionBackend(ABC):
         q: torch.Tensor,
         k: torch.Tensor,
         v: torch.Tensor,
-        layer: Attention,
+        layer: "Attention",
     ) -> torch.Tensor:
         pass
 
@@ -162,33 +167,22 @@ class AttentionBackend(ABC):
         q_pe: torch.Tensor,
         k_latent: torch.Tensor | None,
         k_pe: torch.Tensor | None,
-        layer: Attention,
+        layer: "Attention",
         topk: torch.Tensor | None = None,
         cache_is_preprocessed: bool = False,
     ) -> torch.Tensor:
-        """Absorbed-MLA attention over paged latent (nope) + rope caches.
-
-        Returns ``[T, H, kv_lora]``; caller bmm's ``W_UV``. When ``topk`` is
-        provided, dispatches to the sparse SFA path driven by an optional
-        LightningIndexer; otherwise a dense MLA path is requested. Backends
-        that do not implement MLA raise.
-        """
+        del q_latent, q_pe, k_latent, k_pe, layer, topk, cache_is_preprocessed
         raise NotImplementedError(f"{type(self).__name__} does not support MLA")
 
     def mla_preprocess_context(
         self,
-        layer: Attention,
+        layer: "Attention",
     ) -> MlaPreprocessContext | None:
-        """Return decode cache tensors for a fused preprocessing region."""
         del layer
         return None
 
-    def mla_index_context(self, layer: Attention) -> MlaIndexContext:
-        """Public hook for an optional LightningIndexer.
-
-        Hands out the paged index cache view (``LayerCache.index``) plus the
-        paging / sequence-length metadata the indexer needs, so the model never
-        touches ``backend._metadata`` / ``backend._kv_caches`` directly.
-        Backends that do not support the sparse MLA indexer raise.
-        """
-        raise NotImplementedError(f"{type(self).__name__} does not support MLA indexer")
+    def mla_index_context(self, layer: "Attention") -> MlaIndexContext:
+        del layer
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support MLA indexer"
+        )

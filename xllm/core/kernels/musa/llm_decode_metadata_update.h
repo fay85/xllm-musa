@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -76,5 +76,43 @@ struct LlmDecodeMetadataHostUpdateParams {
 void update_llm_decode_metadata_from_host(
     const LlmDecodeMetadataHostUpdateParams& params,
     LlmDecodeMetadataUpdateStream stream);
+
+struct ExpandedSpecDecodeMetadataUpdateParams {
+  const int32_t* src_kv_seq_lens;
+  const int32_t* src_block_tables;
+  const int32_t* src_paged_kv_indptr;
+  const int32_t* src_paged_kv_indices;
+  const int32_t* src_paged_kv_last_page_len;
+  int32_t* dst_kv_seq_lens;
+  int32_t* dst_block_tables;
+  int32_t* dst_paged_kv_indptr;
+  int32_t* dst_paged_kv_indices;
+  int32_t* dst_paged_kv_last_page_len;
+  int64_t actual_num_tokens;
+  int64_t padded_num_tokens;
+  int64_t src_block_table_width;
+  int64_t dst_block_table_width;
+  int64_t actual_indices_size;
+};
+
+void update_expanded_spec_decode_metadata(
+    const ExpandedSpecDecodeMetadataUpdateParams& params,
+    LlmDecodeMetadataUpdateStream stream);
+
+// One-launch FA3 graph replay update: copy live per-sequence KV lengths and
+// the rectangular page table, then pad unused rows/cols with 0 / -1.
+struct Fa3GraphMetadataUpdateParams {
+  const int32_t* src_kv_seq_lens;
+  const int32_t* src_block_tables;
+  int32_t* dst_kv_seq_lens;
+  int32_t* dst_block_tables;
+  int64_t actual_batch_size;
+  int64_t padded_batch_size;
+  int64_t src_block_table_width;
+  int64_t dst_block_table_width;
+};
+
+void update_fa3_graph_metadata(const Fa3GraphMetadataUpdateParams& params,
+                               LlmDecodeMetadataUpdateStream stream);
 
 }  // namespace xllm::kernel::musa

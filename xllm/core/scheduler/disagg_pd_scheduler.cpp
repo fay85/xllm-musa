@@ -314,6 +314,11 @@ void DisaggPDScheduler::step(const absl::Duration& timeout) {
 
 bool DisaggPDScheduler::enqueue_ready_request(
     std::shared_ptr<Request> request) {
+  CHECK(request != nullptr);
+  CHECK(!request->sequences().empty());
+
+  kv_cache_manager_->prefetch_from_storage(request);
+
   if (request->offline()) {
     prefill_request_queue_offline_.enqueue(std::move(request));
     return true;

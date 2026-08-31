@@ -28,8 +28,12 @@ limitations under the License.
 #include "core/framework/config/rec_config.h"
 #include "logits_utils.h"
 #include "sampler.h"
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) || defined(USE_MUSA)
+#if defined(USE_MUSA)
+#include "kernels/musa/musa_ops_api.h"
+#else
 #include "kernels/cuda/cuda_ops_api.h"
+#endif
 #endif
 
 namespace xllm {
@@ -60,7 +64,7 @@ static inline torch::Tensor log_softmax_last_dim(
     const torch::Tensor& input,
     const torch::Tensor& temperatures) {
   const bool has_temps = temperatures.defined();
-#if defined(USE_CUDA)
+#if defined(USE_CUDA) && !defined(USE_MUSA)
   if (input.is_cuda() && use_air_log_softmax_env()) {
     return kernel::cuda::air_log_softmax_last_dim(input, temperatures);
   }
@@ -253,8 +257,11 @@ SampleOutput RecSampler::OneRecConstrainedSamplingStrategy::forward(
     sample_logits = sample_logits + filter_mask;
   }
 
-  apply_top_k_top_p(
-      sample_logits, sample_temperatures, sample_top_k, sample_top_p);
+  apply_top_k_top_p(sample_logits,
+                    sample_temperatures,
+                    sample_top_k,
+                    sample_top_p,
+                    params.max_top_k);
   if (use_sample_indices) {
     logits.index_copy_(/*dim=*/0, params.sample_idxes, sample_logits);
   }

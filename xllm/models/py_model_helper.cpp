@@ -107,6 +107,9 @@ void ensure_python_interpreter() {
         py::module_::import("xllm.python._npu_bootstrap");
       }
 #endif
+#if defined(USE_MUSA)
+      py::module_::import("xllm.python._musa_bootstrap");
+#endif
       try {
         py::module_ python_package = py::module_::import("xllm.python");
         python_package.attr("initialize_runtime")();

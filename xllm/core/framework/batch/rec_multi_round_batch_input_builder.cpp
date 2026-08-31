@@ -144,8 +144,8 @@ void RecMultiRoundBatchInputBuilder::process_single_sequence(
 #if defined(USE_NPU)
   base_state.seq_lens.push_back(seq_len);
   base_state.q_seq_lens.push_back(q_seq_len);
-#elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_ILU) || \
-    defined(USE_DCU)
+#elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_MUSA) || \
+    defined(USE_ILU) || defined(USE_DCU)
   base_state.seq_lens.push_back(base_state.seq_lens.back() + seq_len);
   base_state.q_seq_lens.push_back(base_state.q_seq_lens.back() + q_seq_len);
 #endif
@@ -373,13 +373,22 @@ ForwardInput RecMultiRoundBatchInputBuilder::state_to_forward_input() {
   input_params.attention.device.new_cache_slots =
       torch::tensor(state.new_token_slot_ids, torch::kInt);
 
-  // for flashinfer
-  input_params.attention.device.paged_kv_indptr =
-      torch::tensor(state.paged_kv_indptr, torch::kInt);
-  input_params.attention.device.paged_kv_indices =
+  // Keep the original CPU paged-KV tensors alive for graph-safe Mate FFI.
+  auto paged_kv_indptr_cpu = torch::tensor(state.paged_kv_indptr, torch::kInt);
+  auto paged_kv_indices_cpu =
       torch::tensor(state.paged_kv_indices, torch::kInt);
-  input_params.attention.device.paged_kv_last_page_len =
+  auto paged_kv_last_page_len_cpu =
       torch::tensor(state.paged_kv_last_page_len, torch::kInt);
+  input_params.attention.host.paged_kv_indptr = paged_kv_indptr_cpu;
+  input_params.attention.host.paged_kv_indices = paged_kv_indices_cpu;
+  input_params.attention.host.paged_kv_last_page_len =
+      paged_kv_last_page_len_cpu;
+  input_params.attention.device.paged_kv_indptr =
+      std::move(paged_kv_indptr_cpu);
+  input_params.attention.device.paged_kv_indices =
+      std::move(paged_kv_indices_cpu);
+  input_params.attention.device.paged_kv_last_page_len =
+      std::move(paged_kv_last_page_len_cpu);
 
   // Setup multimodal data
   input_params.multimodal.mm_data.batch(mm_data_vec_);

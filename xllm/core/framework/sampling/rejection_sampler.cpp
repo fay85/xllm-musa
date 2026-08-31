@@ -25,6 +25,9 @@ limitations under the License.
 
 #include "kernels/ops_api.h"
 #include "sampler.h"
+#if defined(USE_MUSA)
+#include "kernels/musa/musa_ops_api.h"
+#endif
 
 namespace xllm {
 
@@ -269,6 +272,26 @@ std::tuple<torch::Tensor, torch::Tensor> RejectionSampler::random_sample_fused(
     const torch::Tensor& uniform_rand,
     const torch::Tensor& bonus_token_ids,
     bool mask_out_rejected_tokens) {
+#if defined(USE_MUSA)
+  // Qwen3.5 MTP uses selected-only draft probabilities on MUSA.  The
+  // target-only kernel supports K >= 1 and handles zero/NaN residual mass
+  // without calling native multinomial, whose MUSA implementation aborts
+  // when the row sum is zero.
+  if (draft_probs.dim() == 2 && draft_token_ids.dim() == 2 &&
+      draft_token_ids.size(1) > 0) {
+    auto recovery_exponential =
+        torch::empty_like(target_probs, torch::kFloat32).exponential_();
+    auto fused_output = kernel::musa::rejection_sample_target_only(
+        draft_token_ids,
+        draft_probs,
+        target_probs,
+        uniform_rand,
+        recovery_exponential,
+        bonus_token_ids);
+    return {fused_output, fused_output};
+  }
+#endif
+
   CHECK_EQ(draft_probs.dim(), 3)
       << "Fused rejection sampler requires dense draft_probs [batch, n_spec, "
          "vocab].";
@@ -361,6 +384,17 @@ RejectionSampler::greedy_sample_from_token_ids(
     bool mask_out_rejected_tokens) {
   CHECK_EQ(target_token_ids.sizes(), draft_token_ids.sizes())
       << "target and draft token shapes must match";
+#if defined(USE_MUSA)
+  if (mask_out_rejected_tokens && draft_token_ids.device().is_privateuseone() &&
+      target_token_ids.device().is_privateuseone() &&
+      bonus_token_ids.device().is_privateuseone() &&
+      draft_token_ids.scalar_type() == torch::kLong &&
+      target_token_ids.scalar_type() == torch::kLong &&
+      bonus_token_ids.scalar_type() == torch::kLong) {
+    return kernel::musa::greedy_rejection_sample(
+        draft_token_ids, target_token_ids, bonus_token_ids);
+  }
+#endif
   // [batch_size, n_speculative_tokens + 1]
   torch::Tensor accepted_token_ids =
       torch::cat({target_token_ids, bonus_token_ids}, /*dim=*/-1);

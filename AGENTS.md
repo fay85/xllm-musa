@@ -33,6 +33,16 @@
 
 ## Code Style Guide
 
+### Mandatory Style Gate
+
+* The upstream canonical rule is [xLLM custom-code-style.md](https://github.com/xLLM-AI/xllm/blob/main/.agents/skills/code-review/references/custom-code-style.md). Before the first code action, read the target checkout's complete local copy and verify it against upstream; when they differ, the upstream rule takes precedence and the discrepancy must not be ignored.
+* Compliance with [.agents/skills/code-review/references/custom-code-style.md](.agents/skills/code-review/references/custom-code-style.md) is a **blocking requirement** for every task that writes, edits, generates, refactors, or reviews files under `xllm/`.
+* Before the first code action, the primary agent **MUST read the entire style file from the current target checkout and the current upstream canonical version**. Cached knowledge, memory, summaries, or a copy from another checkout do not satisfy this requirement.
+* If either style source is missing, unreadable, or only partially read, stop before modifying `xllm/` and report the blocker.
+* Any delegated agent that writes or reviews `xllm/` code must be explicitly instructed to follow both style sources. Delegation does not transfer or waive this obligation.
+* Before handoff, re-check the task diff against every applicable rule in the style file. Do not claim completion while a known violation remains.
+* These project rules override conflicting generic style guidance. They may not be relaxed unless the user explicitly changes this project rule.
+
 * Before editing, creating, refactoring, or reviewing any file under `xllm/`, you **MUST** read [custom-code-style.md](.agents/skills/code-review/references/custom-code-style.md).
 * The file above is a **required instruction file**, not an optional reference. Do not skip reading it.
 * Apply the rules in [custom-code-style.md](.agents/skills/code-review/references/custom-code-style.md) to **both code generation and code review**.

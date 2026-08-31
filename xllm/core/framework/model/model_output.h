@@ -26,6 +26,8 @@ namespace xllm {
 struct ModelOutput {
   // [num_tokens, hidden_size]
   torch::Tensor hidden_states;
+  // Optional logits produced inside a graph-captured lm_head.
+  torch::Tensor logits;
   // [num_tokens, hidden_size]
   torch::Tensor residual;
   // [num_tokens, ...]

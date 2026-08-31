@@ -251,7 +251,6 @@ torch::Tensor build_split_qkv_rmsnorm_mrope_gather_pattern(
     const std::vector<int64_t>& mrope_section,
     bool is_interleaved,
     const torch::Device& device);
-
 std::pair<torch::Tensor, torch::Tensor> chunk_gated_delta_rule(
     ChunkGatedDeltaRuleParams& params);
 

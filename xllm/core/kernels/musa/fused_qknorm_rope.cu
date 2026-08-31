@@ -26,7 +26,7 @@ limitations under the License.
 #include "core/kernels/musa/musa_ops_api.h"
 
 using at::device_of;
-using ::xllm::kernel::cuda::xllm_ldg;
+using ::xllm::kernel::musa::xllm_ldg;
 
 namespace {
 
@@ -65,6 +65,7 @@ __global__ void fused_qknorm_rope_kernel(void* qkv_void,
                                          int const num_heads_q,
                                          int const num_heads_k,
                                          int const total_heads_per_token,
+                                         int const q_head_stride,
                                          int const k_head_offset,
                                          float const eps,
                                          float const weight_offset,
@@ -109,8 +110,8 @@ __global__ void fused_qknorm_rope_kernel(void* qkv_void,
 
   int offset_warp;
   if (is_q) {
-    offset_warp =
-        token_idx * total_heads_per_token * head_dim + head_idx * head_dim;
+    offset_warp = token_idx * total_heads_per_token * head_dim +
+                  head_idx * q_head_stride * head_dim;
   } else {
     offset_warp = token_idx * total_heads_per_token * head_dim +
                   k_head_offset * head_dim + head_idx * head_dim;
@@ -220,6 +221,7 @@ void launch_fused_qknorm_rope(void* qkv,
                               int const num_heads_q,
                               int const num_heads_k,
                               int const total_heads_per_token,
+                              int const q_head_stride,
                               int const k_head_offset,
                               int const head_dim,
                               int const rotary_dim,
@@ -249,6 +251,7 @@ void launch_fused_qknorm_rope(void* qkv,
                                                num_heads_q,
                                                num_heads_k,
                                                total_heads_per_token,
+                                               q_head_stride,
                                                k_head_offset,
                                                eps,
                                                weight_offset,
@@ -267,6 +270,7 @@ void launch_fused_qknorm_rope(void* qkv,
                                                num_heads_q,
                                                num_heads_k,
                                                total_heads_per_token,
+                                               q_head_stride,
                                                k_head_offset,
                                                eps,
                                                weight_offset,
@@ -285,6 +289,7 @@ void launch_fused_qknorm_rope(void* qkv,
                                                num_heads_q,
                                                num_heads_k,
                                                total_heads_per_token,
+                                               q_head_stride,
                                                k_head_offset,
                                                eps,
                                                weight_offset,
@@ -317,7 +322,8 @@ void fused_qk_norm_rope(torch::Tensor& qkv,
                         const torch::Tensor& cos_sin_cache,
                         bool interleaved,
                         const torch::Tensor& position_ids,
-                        int64_t k_head_offset) {
+                        int64_t k_head_offset,
+                        int64_t q_head_stride) {
   CHECK(qkv.is_contiguous()) << "qkv must be contiguous";
   CHECK(position_ids.is_contiguous()) << "position_ids must be contiguous";
   CHECK(position_ids.scalar_type() == torch::kInt32)
@@ -337,14 +343,21 @@ void fused_qk_norm_rope(torch::Tensor& qkv,
   int64_t total_heads_per_token =
       k_head_offset > 0 ? k_head_offset + num_heads_k + num_heads_v
                         : num_heads_q + num_heads_k + num_heads_v;
+  CHECK(q_head_stride == 1 || q_head_stride == 2)
+      << "q_head_stride must be 1 or 2";
+  if (q_head_stride == 2) {
+    CHECK_EQ(k_head_offset, 2 * num_heads_q)
+        << "interleaved Q/G requires k_head_offset=2*num_heads_q";
+  }
 
   CHECK(qkv.size(1) == total_heads_per_token * head_dim)
       << "QKV tensor size mismatch";
 
   const at::cuda::OptionalCUDAGuard device_guard(device_of(qkv));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  // Qwen3.5's [Q|G|K|V] layout passes a nonzero K-head offset and uses
-  // Gemma RMSNorm semantics, whose effective scale is (1 + weight).
+  // Qwen3.5 passes K offset 2*Q and uses Gemma RMSNorm semantics, whose
+  // effective scale is (1 + weight). q_head_stride selects grouped Q/G (1)
+  // or per-head interleaved Q/G (2).
   // Standard Qwen2 attention passes offset zero and keeps regular RMSNorm.
   const float weight_offset = k_head_offset > 0 ? 1.0f : 0.0f;
 
@@ -355,6 +368,7 @@ void fused_qk_norm_rope(torch::Tensor& qkv,
         static_cast<int>(num_heads_q),
         static_cast<int>(num_heads_k),
         static_cast<int>(total_heads_per_token),
+        static_cast<int>(q_head_stride),
         static_cast<int>(k_head_offset > 0 ? k_head_offset : num_heads_q),
         static_cast<int>(head_dim),
         static_cast<int>(cos_sin_cache.size(1)),
@@ -373,6 +387,7 @@ void fused_qk_norm_rope(torch::Tensor& qkv,
         static_cast<int>(num_heads_q),
         static_cast<int>(num_heads_k),
         static_cast<int>(total_heads_per_token),
+        static_cast<int>(q_head_stride),
         static_cast<int>(k_head_offset > 0 ? k_head_offset : num_heads_q),
         static_cast<int>(head_dim),
         static_cast<int>(cos_sin_cache.size(1)),

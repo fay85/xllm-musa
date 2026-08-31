@@ -18,6 +18,8 @@ limitations under the License.
 
 #include <absl/strings/match.h>
 
+#include <algorithm>
+
 namespace xllm {
 
 LogprobState::LogprobState(int64_t num_prompt_tokens, size_t capacity)
@@ -97,7 +99,8 @@ void LogprobState::generate_output_tokens_logprobs(
     const Tokenizer& tokenizer,
     std::optional<std::vector<LogProb>>& out_logprobs,
     bool skip_special_tokens,
-    const std::vector<int32_t>& tokens) {
+    const std::vector<int32_t>& tokens,
+    size_t max_top_logprobs) {
   if (start_idx < num_prompt_tokens_) {
     start_idx = num_prompt_tokens_;
   }
@@ -130,7 +133,7 @@ void LogprobState::generate_output_tokens_logprobs(
     tmp_logprob.logprob = logprobs_[i].value();
 
     // add top logprobs
-    if (top_tokens_[i].empty()) {
+    if (top_tokens_[i].empty() || max_top_logprobs == 0) {
       out_logprobs->emplace_back(std::move(tmp_logprob));
       continue;
     }
@@ -139,7 +142,9 @@ void LogprobState::generate_output_tokens_logprobs(
     const auto& top_logprobs = top_logprobs_[i];
     DCHECK_EQ(top_tokens.size(), top_logprobs.size());
     std::vector<LogProbData> logprobs;
-    for (size_t j = 0; j < top_tokens.size(); ++j) {
+    const size_t output_top_count =
+        std::min(top_tokens.size(), max_top_logprobs);
+    for (size_t j = 0; j < output_top_count; ++j) {
       LogProbData logprob;
       const int32_t top_token_id = static_cast<int32_t>(top_tokens[j]);
       const float top_logprob = top_logprobs[j];

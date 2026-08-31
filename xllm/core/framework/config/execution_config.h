@@ -26,6 +26,24 @@ namespace xllm {
 
 class JsonReader;
 
+namespace execution_config_defaults {
+
+#if defined(USE_MUSA)
+inline constexpr bool kEnableGraph = true;
+inline constexpr bool kEnableGraphModeDecodeNoPadding = true;
+inline constexpr bool kEnablePrefillPiecewiseGraph = true;
+inline constexpr bool kEnableGraphVmmPool = false;
+inline constexpr int32_t kMaxTokensForGraphMode = 8192;
+#else
+inline constexpr bool kEnableGraph = false;
+inline constexpr bool kEnableGraphModeDecodeNoPadding = false;
+inline constexpr bool kEnablePrefillPiecewiseGraph = false;
+inline constexpr bool kEnableGraphVmmPool = true;
+inline constexpr int32_t kMaxTokensForGraphMode = 2048;
+#endif
+
+}  // namespace execution_config_defaults
+
 class ExecutionConfig final {
  public:
   ExecutionConfig() = default;
@@ -46,6 +64,7 @@ class ExecutionConfig final {
          "enable_graph_double_buffer",
          "enable_graph_mode_decode_no_padding",
          "enable_prefill_piecewise_graph",
+         "enable_packed_prefill",
          "enable_graph_vmm_pool",
          "max_tokens_for_graph_mode",
          "acl_graph_decode_batch_size_limit",
@@ -58,19 +77,24 @@ class ExecutionConfig final {
     return kOptionCategory;
   }
 
-  PROPERTY(bool, enable_graph) = false;
+  PROPERTY(bool, enable_graph) = execution_config_defaults::kEnableGraph;
 
   PROPERTY(bool, disable_graph_warmup) = false;
 
   PROPERTY(bool, enable_graph_double_buffer) = true;
 
-  PROPERTY(bool, enable_graph_mode_decode_no_padding) = false;
+  PROPERTY(bool, enable_graph_mode_decode_no_padding) =
+      execution_config_defaults::kEnableGraphModeDecodeNoPadding;
 
-  PROPERTY(bool, enable_prefill_piecewise_graph) = false;
+  PROPERTY(bool, enable_prefill_piecewise_graph) =
+      execution_config_defaults::kEnablePrefillPiecewiseGraph;
+  PROPERTY(bool, enable_packed_prefill) = false;
 
-  PROPERTY(bool, enable_graph_vmm_pool) = true;
+  PROPERTY(bool, enable_graph_vmm_pool) =
+      execution_config_defaults::kEnableGraphVmmPool;
 
-  PROPERTY(int32_t, max_tokens_for_graph_mode) = 2048;
+  PROPERTY(int32_t, max_tokens_for_graph_mode) =
+      execution_config_defaults::kMaxTokensForGraphMode;
 
   PROPERTY(int32_t, acl_graph_decode_batch_size_limit) = 16;
 

@@ -19,6 +19,8 @@ limitations under the License.
 #include <optional>
 #include <tuple>
 
+#include "kernels/musa/musa_tvmffi_stream.h"
+
 namespace xllm {
 namespace layer {
 
@@ -54,8 +56,10 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
       Qwen3NextRMSNorm(
           model_args.hidden_size(), model_args.rms_norm_eps(), options));
 
-  // Initialize the feed-forward block. Qwen3.5 uses a routed block; select the
-  // MUSA MoE path only for qwen3_5_moe_text (generic Qwen3-Next MoE differs).
+  // Initialize the feed-forward block.  Qwen3.5 uses a routed block in every
+  // decoder layer; the MUSA implementation is deliberately selected only for
+  // the Qwen3.5 MoE model type because the generic Qwen3-Next MoE contract is
+  // different (and is not silently treated as a dense MLP).
   auto mlp_only_layers = model_args.mlp_only_layers();
   const bool is_moe_layer =
       std::count(mlp_only_layers.begin(), mlp_only_layers.end(), layer_id) ==
@@ -63,7 +67,8 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
       model_args.n_routed_experts() > 0 &&
       (layer_id + 1) % model_args.decoder_sparse_step() == 0;
   const bool use_qwen35_moe =
-      is_moe_layer && model_args.model_type() == "qwen3_5_moe_text";
+      is_moe_layer && (model_args.model_type() == "qwen3_5_moe_text" ||
+                       model_args.model_type() == "qwen3_5_moe_mtp");
   if (use_qwen35_moe) {
     moe_mlp_ = register_module("mlp",
                                Qwen3_5FusedMoE(model_args,
@@ -73,15 +78,15 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
                                                options));
   } else {
     mlp_ = register_module("mlp",
-                           DenseMLP(model_args.hidden_size(),
-                                    model_args.intermediate_size(),
-                                    /*is_gated=*/true,
-                                    /*has_bias=*/false,
-                                    model_args.hidden_act(),
-                                    /*enable_result_reduction=*/true,
-                                    quant_args,
-                                    parallel_args.tp_group_,
-                                    options));
+                           MusaDenseMLP(model_args.hidden_size(),
+                                        model_args.intermediate_size(),
+                                        /*is_gated=*/true,
+                                        /*has_bias=*/false,
+                                        model_args.hidden_act(),
+                                        /*enable_result_reduction=*/true,
+                                        quant_args,
+                                        parallel_args.tp_group_,
+                                        options));
   }
 }
 
@@ -129,6 +134,7 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   } else {
     std::tie(x, residual) = input_norm_->forward(x, residual);
   }
+  xllm::kernel::musa::sync_musa_graph_preparation_stage(x.device());
 
   // Attention
   if (attention_) {
@@ -137,16 +143,19 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   } else {
     x = linear_attention_->forward(x, attn_metadata, kv_cache, input_params);
   }
+  xllm::kernel::musa::sync_musa_graph_preparation_stage(x.device());
 
   // Post-attention norm
   std::tie(x, residual) = post_norm_->forward(x, residual);
+  xllm::kernel::musa::sync_musa_graph_preparation_stage(x.device());
 
-  // MLP forward
+  // MLP forward (sub-buckets live inside DenseMLPImpl::forward).
   if (moe_mlp_) {
     x = moe_mlp_->forward(x, input_params);
   } else {
     x = mlp_(x);
   }
+  xllm::kernel::musa::sync_musa_graph_preparation_stage(x.device());
 
   return x;
 }

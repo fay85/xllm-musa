@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,10 +17,11 @@ limitations under the License.
 
 #include <glog/logging.h>
 
-#include <cmath>
 #include <tuple>
+#include <vector>
 
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/ops_api.h"
 #include "core/util/env_var.h"
 
 namespace xllm {
@@ -67,20 +68,21 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
   // 1. QKV linear
   qkv_proj_ = register_module(
       "qkv_proj",
-      QKVParallelLinear(args.hidden_size(),
-                        attn_output_gate_ ? num_heads_ * 2 : num_heads_,
-                        num_kv_heads_,
-                        args.head_dim(),
-                        num_kv_head_replicas_,
-                        /*bias=*/args.attention_bias(),
-                        /*gather_output=*/false,
-                        parallel_args,
-                        options,
-                        quant_args));
+      musa::QKVParallelLinear(args.hidden_size(),
+                              attn_output_gate_ ? num_heads_ * 2 : num_heads_,
+                              num_kv_heads_,
+                              args.head_dim(),
+                              num_kv_head_replicas_,
+                              /*bias=*/args.attention_bias(),
+                              /*gather_output=*/false,
+                              parallel_args,
+                              options,
+                              quant_args));
 
   // 2. O proj
-  o_proj_ = register_module("o_proj",
-                            RowParallelLinear(total_num_heads * head_dim_,
+  o_proj_ =
+      register_module("o_proj",
+                      musa::RowParallelLinear(total_num_heads * head_dim_,
                                               args.hidden_size(),
                                               /*bias=*/false,
                                               /*input_is_parallelized=*/true,
@@ -139,8 +141,26 @@ Qwen3NextAttentionImpl::Qwen3NextAttentionImpl(
 
 torch::Tensor Qwen3NextAttentionImpl::build_mrope_cos_sin(
     const torch::Tensor& positions) const {
-  // The MUSA build does not provide the fused mRoPE specialization. Returning
-  // an undefined tensor keeps the caller on the standalone rotary path.
+  // The fused split_qkv_rmsnorm_mrope kernel is currently NPU-only via
+  // TileLang -- `has_split_qkv_rmsnorm_mrope_specialization()` returns false
+  // in the MUSA build (see ops_api.cpp), so `use_fused_qkv_` is always false
+  // on this platform and the precomputed mrope_cos_sin tensor
+  // produced here is never consulted by forward() -- it falls through to the
+  // standalone `rotary_emb_->forward(positions, q, k)` path instead.
+  //
+  // Returning an undefined tensor short-circuits the per-step host gather
+  // (`cos_sin_cache.permute().contiguous().index_select(...)`) which would
+  // otherwise issue at::musa::IndexSelect -> EmptyMUSA inside a captured
+  // MUSA stream and abort with
+  //   "operation not permitted when stream is capturing".
+  //
+  // The caller loop in Qwen3HybridModelImplBase::forward keeps an undefined
+  // mrope_cos_sin and propagates it through every layer's forward, where
+  // each Qwen3NextAttentionImpl::forward only reads `mrope_cos_sin` from
+  // inside `if (use_fused_qkv_) { ... }`; the value is therefore never
+  // dereferenced. When the MUSA tilelang specialization lands we should
+  // revisit this and route through persistent buffers + a custom gather
+  // kernel that does not call EmptyMUSA.
   if (!use_fused_qkv_) {
     return {};
   }
@@ -168,44 +188,50 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     torch::Tensor k_flat;
     torch::Tensor v_flat;
     torch::Tensor gate;
-    const int64_t T = qkv.size(0);
-    {
-      xllm::kernel::SplitQkvRmsnormMropeParams params;
-      params.qkvg = qkv;
-      params.q_weight = q_norm_->weight();
-      params.k_weight = k_norm_->weight();
-      params.cos_sin = mrope_cos_sin;
-      params.gather_pattern = mrope_gather_pattern_;
-      params.eps = rms_norm_eps_;
-      params.num_q_heads = num_heads_;
-      params.num_kv_heads = num_kv_heads_;
-      params.head_size = head_dim_;
+    const int64_t num_tokens = qkv.size(0);
+    xllm::kernel::SplitQkvRmsnormMropeParams params;
+    params.qkvg = qkv;
+    params.q_weight = q_norm_->weight();
+    params.k_weight = k_norm_->weight();
+    params.cos_sin = mrope_cos_sin;
+    params.gather_pattern = mrope_gather_pattern_;
+    params.eps = rms_norm_eps_;
+    params.num_q_heads = num_heads_;
+    params.num_kv_heads = num_kv_heads_;
+    params.head_size = head_dim_;
 
-      auto [q, k, v, g] = xllm::kernel::split_qkv_rmsnorm_mrope(params);
-      q_flat = q.view({T, q_size_});
-      k_flat = k.view({T, kv_size_});
-      v_flat = v.view({T, kv_size_});
-      gate = g;
-    }
+    auto [q, k, v, g] = xllm::kernel::split_qkv_rmsnorm_mrope(params);
+    q_flat = q.view({num_tokens, q_size_});
+    k_flat = k.view({num_tokens, kv_size_});
+    v_flat = v.view({num_tokens, kv_size_});
+    gate = g;
 
-    torch::Tensor out;
-    {
-      out = std::get<0>(
-          attn_->forward(attn_metadata, q_flat, k_flat, v_flat, kv_cache));
-    }
-    {
-      out = out * torch::sigmoid(gate.view({T, q_size_}));
-      return o_proj_->forward(out);
-    }
+    torch::Tensor out = std::get<0>(
+        attn_->forward(attn_metadata, q_flat, k_flat, v_flat, kv_cache));
+    out = out * torch::sigmoid(gate.view({num_tokens, q_size_}));
+    return o_proj_->forward(out);
   }
 
-  // Fallback path: weight-reordered layout [Q | G | K | V]
+  // Fallback path: checkpoint layout [Q/G interleaved per head | K | V].
   torch::Tensor q, k, v;
   torch::Tensor gate;
+  const bool use_fused_qk_norm_rope =
+      fused_qk_norm_rope_enabled() && positions.dim() == 1 &&
+      positions.scalar_type() == torch::kInt32 &&
+      (head_dim_ == 64 || head_dim_ == 128 || head_dim_ == 256);
   {
+    const int64_t num_tokens = qkv.size(0);
     if (attn_output_gate_) {
-      q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
-      gate = qkv.slice(/*dim=*/-1, /*start=*/q_size_, /*end=*/q_size_ * 2);
+      auto qg = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_ * 2)
+                    .view({num_tokens, num_heads_, 2, head_dim_});
+      if (!use_fused_qk_norm_rope) {
+        q = qg.select(/*dim=*/2, /*index=*/0)
+                .reshape({num_tokens, q_size_})
+                .contiguous();
+      }
+      gate = qg.select(/*dim=*/2, /*index=*/1)
+                 .reshape({num_tokens, q_size_})
+                 .contiguous();
       k = qkv.slice(/*dim=*/-1,
                     /*start=*/q_size_ * 2,
                     /*end=*/q_size_ * 2 + kv_size_);
@@ -220,13 +246,10 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
                     /*end=*/q_size_ + 2 * kv_size_);
     }
 
-    const int64_t T = q.size(0);
-
     // Fused QK-norm + RoPE: collapse 3 kernel launches into 1 for decode
-    // (1D positions). Writes norm+rope results back into qkv in-place.
-    if (fused_qk_norm_rope_enabled() && positions.dim() == 1 &&
-        positions.scalar_type() == torch::kInt32 &&
-        (head_dim_ == 64 || head_dim_ == 128 || head_dim_ == 256)) {
+    // (1D positions). q_head_stride=2 selects the checkpoint's per-head
+    // interleaved Q/G layout without reordering FP8 weight scales.
+    if (use_fused_qk_norm_rope) {
       auto cos_sin_cache = rotary_emb_->get_cos_sin_cache();
       int64_t k_head_offset = attn_output_gate_ ? num_heads_ * 2 : num_heads_;
       xllm::kernel::musa::fused_qk_norm_rope(qkv,
@@ -240,22 +263,34 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
                                              cos_sin_cache,
                                              /*interleaved=*/false,
                                              positions,
-                                             k_head_offset);
-      q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
+                                             k_head_offset,
+                                             /*q_head_stride=*/
+                                             attn_output_gate_ ? 2 : 1);
+      if (attn_output_gate_) {
+        q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_ * 2)
+                .view({num_tokens, num_heads_, 2, head_dim_})
+                .select(/*dim=*/2, /*index=*/0)
+                .reshape({num_tokens, q_size_})
+                .contiguous();
+      } else {
+        q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
+      }
       k = qkv.slice(
           /*dim=*/-1,
           /*start=*/attn_output_gate_ ? q_size_ * 2 : q_size_,
           /*end=*/
           attn_output_gate_ ? q_size_ * 2 + kv_size_ : q_size_ + kv_size_);
     } else {
-      auto q_3d = q.view({T, num_heads_, head_dim_});
-      q = std::get<0>(q_norm_->forward(q_3d)).view({T, q_size_});
-      auto k_3d = k.view({T, num_kv_heads_, head_dim_});
-      k = std::get<0>(k_norm_->forward(k_3d)).view({T, kv_size_});
+      auto q_3d = q.view({num_tokens, num_heads_, head_dim_});
+      q = std::get<0>(q_norm_->forward(q_3d)).view({num_tokens, q_size_});
+      auto k_3d = k.view({num_tokens, num_kv_heads_, head_dim_});
+      k = std::get<0>(k_norm_->forward(k_3d)).view({num_tokens, kv_size_});
 
       rotary_emb_->forward(positions, q, k);
     }
   }
+  xllm::kernel::musa::sync_musa_graph_preparation_stage(q.device());
+
   torch::Tensor out =
       std::get<0>(attn_->forward(attn_metadata, q, k, v, kv_cache));
   if (attn_output_gate_) {
@@ -268,23 +303,6 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
 
 void Qwen3NextAttentionImpl::load_state_dict(const StateDict& state_dict) {
   qkv_proj_->load_state_dict(state_dict, {"q_proj.", "k_proj.", "v_proj."});
-
-  if (attn_output_gate_ && qkv_proj_->is_weight_loaded() &&
-      !qkv_weight_reordered_) {
-    // Rearrange q_proj rows from per-head interleaved [q0,g0,q1,g1,...]
-    // to grouped [q0,q1,...,g0,g1,...] so forward output is [Q|G|K|V].
-    auto w = qkv_proj_->weight();
-    auto qg_rows = w.slice(0, 0, q_size_ * 2);
-    const int64_t hidden = w.size(1);
-    auto qg_3d = qg_rows.view({num_heads_, 2 * head_dim_, hidden});
-    auto q_part = qg_3d.slice(1, 0, head_dim_);
-    auto g_part = qg_3d.slice(1, head_dim_, 2 * head_dim_);
-    auto reordered = torch::cat(
-        {q_part.reshape({q_size_, hidden}), g_part.reshape({q_size_, hidden})},
-        0);
-    qg_rows.copy_(reordered);
-    qkv_weight_reordered_ = true;
-  }
 
   o_proj_->load_state_dict(state_dict.get_dict_with_prefix("o_proj."));
   if (auto w = state_dict.get_tensor("q_norm.weight"); w.defined()) {

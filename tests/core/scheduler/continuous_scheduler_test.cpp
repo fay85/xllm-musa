@@ -114,6 +114,22 @@ class FakeEngine : public Engine {
   ModelArgs model_args_;
 };
 
+class CountingFakeEngine final : public FakeEngine {
+ public:
+  using FakeEngine::FakeEngine;
+
+  void update_last_step_result(std::vector<Batch>& /*batch*/) override {
+    ++update_last_step_result_calls_;
+  }
+
+  int32_t update_last_step_result_calls() const {
+    return update_last_step_result_calls_;
+  }
+
+ private:
+  int32_t update_last_step_result_calls_ = 0;
+};
+
 class TestContinuousScheduler final : public ContinuousScheduler {
  public:
   TestContinuousScheduler(Engine* engine, const Options& options)
@@ -133,6 +149,34 @@ class TestContinuousScheduler final : public ContinuousScheduler {
   size_t scheduler_queue_size() { return request_queue_.size(); }
 
   void wait_for_responses() { response_processor_->wait_completion(); }
+};
+
+class OverlapProbeScheduler final : public ContinuousScheduler {
+ public:
+  OverlapProbeScheduler(Engine* engine,
+                        const Options& options,
+                        Sequence* sequence)
+      : ContinuousScheduler(engine, options), sequence_(sequence) {}
+
+  int32_t prepare_batch_calls() const { return prepare_batch_calls_; }
+
+ protected:
+  std::vector<Batch> prepare_batch() override {
+    ++prepare_batch_calls_;
+    if (prepare_batch_calls_ == 1) {
+      return {Batch(sequence_)};
+    }
+    return {Batch()};
+  }
+
+  bool if_queue_not_empty() override {
+    return prepare_batch_calls_ < kMaxQueueRetries;
+  }
+
+ private:
+  static constexpr int32_t kMaxQueueRetries = 32;
+  Sequence* sequence_ = nullptr;
+  int32_t prepare_batch_calls_ = 0;
 };
 
 template <typename T>
@@ -717,6 +761,26 @@ TEST(ContinuousSchedulerTest, PDDecodeBestOfOneSkipsExpansionAndShares) {
   // teardown (BlockManagerImpl checks all blocks are on the free list).
   block_manager_pool->deallocate_without_cache(seq0);
   (void)engine.release();
+}
+
+TEST(ContinuousSchedulerTest,
+     ScheduleOverlapNonBlockingProbeDrainsQueuedEmptyBatch) {
+  ContinuousScheduler::Options opt =
+      create_scheduler_options(1024, 16, 0, 1024, 1);
+  opt.enable_schedule_overlap() = true;
+
+  auto engine = std::make_unique<CountingFakeEngine>(32, 4);
+  auto request = generate_request_with_prompt_tokens({1, 2, 3, 4}, 4, 30000);
+  auto scheduler = std::make_unique<OverlapProbeScheduler>(
+      engine.get(), opt, request->sequences()[0].get());
+
+  scheduler->step(absl::ZeroDuration());
+  ASSERT_EQ(scheduler->prepare_batch_calls(), 1);
+
+  scheduler->step(absl::ZeroDuration());
+
+  EXPECT_EQ(scheduler->prepare_batch_calls(), 2);
+  EXPECT_EQ(engine->update_last_step_result_calls(), 1);
 }
 
 TEST(ContinuousSchedulerTest, RejectedStreamCancelsAtSchedulingBoundary) {

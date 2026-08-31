@@ -26,7 +26,7 @@ limitations under the License.
 #include "framework/state_dict/state_dict.h"
 #include "kernels/ops_api.h"
 #include "layers/common/attention.h"
-#include "layers/common/linear.h"
+#include "layers/musa/linear.h"
 #include "layers/common/partial_rotary_embedding.h"
 #include "layers/common/qwen3_next_rms_norm.h"
 
@@ -67,14 +67,13 @@ class Qwen3NextAttentionImpl final : public torch::nn::Module {
   float rms_norm_eps_;
   bool use_fused_qkv_;
   bool is_interleaved_;
-  bool qkv_weight_reordered_ = false;
   bool q_norm_weight_adjusted_ = false;
   bool k_norm_weight_adjusted_ = false;
   std::vector<int64_t> mrope_section_;
   torch::Tensor mrope_gather_pattern_;
 
-  QKVParallelLinear qkv_proj_{nullptr};
-  RowParallelLinear o_proj_{nullptr};
+  musa::QKVParallelLinear qkv_proj_{nullptr};
+  musa::RowParallelLinear o_proj_{nullptr};
 
   Qwen3NextRMSNorm q_norm_{nullptr};
   Qwen3NextRMSNorm k_norm_{nullptr};

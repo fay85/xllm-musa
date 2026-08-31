@@ -129,6 +129,12 @@ void ModelContext::derive_optimization_config() {
   } else if (Platform::is_dcu()) {
     // DCU currently uses the unfused speculative sampling path.
     optimization_config_.enable_fused_spec_kernel = false;
+  } else if (Platform::is_musa()) {
+    // MUSA has a target-only K=1 rejection kernel for Qwen3.5's selected-only
+    // draft probability layout. Keep it enabled by default; the environment
+    // switch is retained for controlled correctness/performance A/B tests.
+    optimization_config_.enable_fused_spec_kernel =
+        util::get_bool_env("XLLM_MTP_FUSED_SAMPLER", true);
   } else if (Platform::is_mlu()) {
     // TODO: enable fused spec kernel for mlu backend
     // The current implementation of fused spec kernel is not stable.

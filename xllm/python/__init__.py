@@ -4,7 +4,7 @@
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
 #
-#     https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+#     https://github.com/jd-opensource/xllm/blob/main/LICENSE
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,10 +18,6 @@ Importing this package is intentionally runtime-neutral. The embedded C++
 bootstrap calls :func:`initialize_runtime` after registering native operators
 and before importing a Python model module. That call selects the platform
 kernel package and publishes it as :mod:`xllm.python.kernels`.
-
-Keeping ordinary package import free of platform and native-operator side
-effects lets build tools import leaf DSL modules such as
-``xllm.python.kernels_npu.tilelang`` before the xLLM binary exists.
 """
 
 from __future__ import annotations
@@ -43,7 +39,9 @@ def initialize_runtime() -> None:
 
     from xllm.python.platform import current_platform
 
-    if current_platform.is_cuda():
+    if current_platform.is_musa():
+        backend_name = "xllm.python.kernels_musa"
+    elif current_platform.is_cuda():
         backend_name = "xllm.python.kernels_cuda"
     elif current_platform.is_npu():
         backend_name = "xllm.python.kernels_npu"
@@ -77,7 +75,7 @@ def __getattr__(name: str) -> Any:
         value = getattr(registry, name)
         globals()[name] = value
         return value
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+    raise AttributeError(f"module {__name__!r} has no attribute {name}")
 
 
 __all__ = ["get_model_class", "initialize_runtime", "kernels", "register_model"]

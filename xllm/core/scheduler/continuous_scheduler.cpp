@@ -110,6 +110,14 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
       ::xllm::KVCacheConfig::get_instance().enable_prefix_cache();
   has_linear_attention_layers_ =
       ::xllm::has_linear_attention_layers(engine_->model_args());
+#if defined(USE_MUSA)
+  // MUSA hybrid GDN does not support a single model forward containing both
+  // prefill and decode rows. Keep those stages in homogeneous batches; this
+  // also matches the piecewise-graph execution contract.
+  if (has_linear_attention_layers_) {
+    batch_mode_.enable_mix_batch = false;
+  }
+#endif
   enable_in_batch_prefix_cache_ =
       ::xllm::KVCacheConfig::get_instance().enable_in_batch_prefix_cache();
 
@@ -398,6 +406,11 @@ std::vector<Batch> ContinuousScheduler::schedule_request(
   return batch;
 }
 
+std::vector<Batch> ContinuousScheduler::try_schedule_request() {
+  apply_cancel_requests();
+  return prepare_batch();
+}
+
 void ContinuousScheduler::apply_cancel_requests() {
   std::vector<std::shared_ptr<Request>> requests =
       cancel_request_queue_->take_all();
@@ -461,14 +474,43 @@ void ContinuousScheduler::step(const absl::Duration& timeout) {
 
 void ContinuousScheduler::step_with_schedule_overlap(
     const absl::Duration& timeout) {
-  // get a new batch of requests
-  std::vector<Batch> batch = schedule_request(timeout);
-  bool cur_batch_all_empty =
-      std::all_of(batch.begin(), batch.end(), [](const Batch& one_batch) {
-        return one_batch.empty();
-      });
   bool last_batch_all_empty = std::all_of(
       last_batch_.begin(), last_batch_.end(), [](const Batch& one_batch) {
+        return one_batch.empty();
+      });
+
+  const bool has_inflight_beam_search =
+      !last_batch_all_empty &&
+      std::any_of(last_running_requests_.begin(),
+                  last_running_requests_.end(),
+                  [](const std::shared_ptr<Request>& request) {
+                    return request != nullptr && request->check_beam_search();
+                  });
+  if (has_inflight_beam_search) {
+    // Software beam search changes both the Sequence objects and their KV
+    // source blocks. Commit that state before building the next batch.
+    engine_->update_last_step_result(last_batch_);
+    process_batch_output(true);
+    last_batch_.clear();
+    last_batch_.resize(options_.dp_size());
+    last_running_requests_.clear();
+    last_running_sequences_.clear();
+    last_batch_all_empty = true;
+    is_first_step_ = true;
+  }
+
+  // When an overlapped step is still in flight, use a non-blocking scheduling
+  // probe. It still attempts prepare_batch once, but does not retry merely
+  // because an unschedulable request remains in a queue; otherwise
+  // update_last_step_result can be delayed indefinitely.
+  std::vector<Batch> batch;
+  if (last_batch_all_empty) {
+    batch = schedule_request(timeout);
+  } else {
+    batch = try_schedule_request();
+  }
+  bool cur_batch_all_empty =
+      std::all_of(batch.begin(), batch.end(), [](const Batch& one_batch) {
         return one_batch.empty();
       });
   if (cur_batch_all_empty && last_batch_all_empty) {

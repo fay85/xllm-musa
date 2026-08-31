@@ -49,9 +49,22 @@ namespace xllm {
 namespace {
 
 bool should_use_ssm_engine(const Options& options) {
+  // A draft checkpoint by itself does not enable speculative decoding.  In
+  // particular, k=0 is the explicit MTP-off baseline used by launchers and
+  // benchmarks.  Do not route that configuration through SpeculativeEngine:
+  // its constructor (correctly) requires at least one speculative token, and
+  // routing k=0 there would turn a valid baseline into a fatal CHECK.
+  if (options.num_speculative_tokens() <= 0) {
+    if (!options.draft_model_path().value_or("").empty()) {
+      LOG(WARNING) << "Ignoring draft_model because "
+                   << "num_speculative_tokens="
+                   << options.num_speculative_tokens()
+                   << "; speculative decoding is disabled.";
+    }
+    return false;
+  }
   return !options.draft_model_path().value_or("").empty() ||
-         (options.speculative_algorithm() == "Suffix" &&
-          options.num_speculative_tokens() > 0);
+         options.speculative_algorithm() == "Suffix";
 }
 
 bool get_enable_thinking(const nlohmann::json& chat_template_kwargs) {
@@ -447,18 +460,13 @@ std::shared_ptr<Request> LLMMaster::generate_request(
       sp.response_format == ResponseFormatType::JSON_OBJECT;
   const bool json_object = sampling_param.json_object;
   sampling_param.beam_width = sp.beam_width;
+  sampling_param.num_return_sequences = sp.num_return_sequences;
   if (best_of > sp.n) {
     // enable logprobs for best_of to generate sequence logprob
     sampling_param.logprobs = true;
   }
   if (sampling_param.beam_width > 1) {
-    // beam search requires logprobs, and needs at least one top_logprob
-    // candidate for beam expansion.
     sampling_param.logprobs = true;
-    if (sampling_param.top_logprobs == 0) {
-      sampling_param.top_logprobs =
-          static_cast<int64_t>(sampling_param.beam_width);
-    }
   }
   // sampling_param.do_sample = sp.do_sample;
 

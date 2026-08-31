@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,7 +24,7 @@ limitations under the License.
 #include "framework/model/model_input_params.h"
 #include "framework/model_context.h"
 #include "framework/state_dict/state_dict.h"
-#include "layers/common/dense_mlp.h"
+#include "layers/musa/dense_mlp.h"
 #include "layers/common/qwen3_next_rms_norm.h"
 #include "layers/musa/qwen3_5_fused_moe.h"
 #include "layers/musa/qwen3_gated_delta_net_base.h"
@@ -79,8 +79,8 @@ class Qwen3HybridDecoderLayerImplBase : public Qwen3HybridDecoderLayerModule {
   Qwen3NextAttention attention_{nullptr};
   std::shared_ptr<Qwen3GatedDeltaNetBaseImpl> linear_attention_;
 
-  DenseMLP mlp_{nullptr};
-  Qwen3_5FusedMoE moe_mlp_{nullptr};
+  MusaDenseMLP mlp_{nullptr};
+  Qwen3_5MusaFusedMoE moe_mlp_{nullptr};
 
   Qwen3NextRMSNorm input_norm_{nullptr};
   Qwen3NextRMSNorm post_norm_{nullptr};
