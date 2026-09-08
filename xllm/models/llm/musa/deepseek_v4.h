@@ -957,10 +957,16 @@ class DeepseekV4ModelImpl final
 
     std::optional<layer::dsv4_musa_sp::DeepseekV4SPContext>
         sequence_parallel_context = std::nullopt;
-    sequence_parallel_context = layer::dsv4_musa_sp::build_context(
-        tokens,
-        modified_input_params.meta.batch_forward_type.no_decode(),
-        parallel_args_.tp_group_);
+    // Target-only has no speculative lane to carry SP-local prefill state
+    // into the first decode step. Keep it on the regular TP prefill path;
+    // the MTP target retains the existing SP metadata contract.
+    const bool target_only_model = model_args_.num_speculative_tokens() == 0;
+    if (!target_only_model) {
+      sequence_parallel_context = layer::dsv4_musa_sp::build_context(
+          tokens,
+          modified_input_params.meta.batch_forward_type.no_decode(),
+          parallel_args_.tp_group_);
+    }
     if (sequence_parallel_context.has_value()) {
       h = layer::dsv4_musa_sp::local_shard(h,
                                            sequence_parallel_context.value());
