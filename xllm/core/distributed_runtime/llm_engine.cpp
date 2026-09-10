@@ -610,13 +610,20 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
   // Logical block_size *= kv_split_size.
   const int32_t kv_split_size_eff =
       ::xllm::ParallelConfig::get_instance().kv_split_size_effective();
+  // DSpark takes request block mappings from the target and rebuilds draft
+  // context KV from target hidden states. Its SWA-only allocation manager
+  // must not independently enable the target's SWA+C4+C128 prefix policy.
+  const bool draft_uses_target_prefix_manager =
+      options_.is_draft_engine() &&
+      util::is_deepseek_v4_dspark_model_type(args_.model_type());
   BlockManagerPool::Options options;
   options.num_blocks(kv_cache_cap.n_blocks())
       .block_size(kv_split_size_eff > 1 ? block_size * kv_split_size_eff
                                         : block_size)
       .host_num_blocks(kv_cache_cap.n_blocks() * options_.host_blocks_factor())
       .enable_linear_state(enable_gdn_attention)
-      .enable_prefix_cache(kv_cache_config.enable_xtensor()
+      .enable_prefix_cache(kv_cache_config.enable_xtensor() ||
+                                   draft_uses_target_prefix_manager
                                ? false
                                : options_.enable_prefix_cache())
       .enable_disagg_pd(options_.enable_disagg_pd())

@@ -306,3 +306,14 @@ at that sample. Holders are stopped only for this task's model experiments.
   no-SP route remain unchanged. Decode Graph geometry/algorithms are unchanged.
   Build is recorded in `build_sp_capture.log`; precision and hot latency
   still need validation for this candidate.
+- `dspark_sp_prefix_06`: SP candidate source `1d586c44`, binary SHA256
+  `4b4d22d8a013be62c54dac3fa11df560bf9707e629ce359ad1e60d71724f97af`,
+  Prefix Cache enabled. Startup stopped before requests because the draft
+  engine constructed a prefix-enabled SWA-only CompositeBlockManager:
+  `SWA prefix cache is on but neither C4 nor C128 is present`.
+  Keep that public manager's validation intact. The DSpark draft allocation
+  manager takes its request mappings from the target and must not independently
+  use the target's compressed-prefix policy. Disable prefix participation only
+  for the DSpark draft manager; leave target Prefix Cache enabled. Build:
+  `build_prefix_manager.log`. No SP precision or latency result was produced
+  by this failed startup; host cleanup and resumed holders are retained.
