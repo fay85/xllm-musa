@@ -42,6 +42,10 @@ worker, not a donor compute binary.
 general model-quality parity beyond the counting protocol. Target-only eager
 remains unvalidated after an observed failure; adaptive, multi-batch, PD, CP,
 other models/devices and arbitrary prefix-hit ratios are not acceptance-tested.
+The target-only eager limitation above describes the measured `a9cd485c`
+revision. The subsequent eager fix and fresh-service regression are recorded
+in [the follow-up ledger](DEEPSEEK_V4_MUSA_DSPARK_FOLLOWUP.md); they do not
+replace the historical binary or performance windows in this document.
 The existing compact-Graph compressor behavior is retained from the perf
 baseline; broader task/long-context equivalence requires separate validation.
 Commands and dependencies: [reproduction guide](DEEPSEEK_V4_MUSA_DSPARK_REPRO.md).

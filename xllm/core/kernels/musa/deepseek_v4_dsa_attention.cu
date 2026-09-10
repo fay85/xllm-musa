@@ -65,7 +65,7 @@ void check_musa_runtime(musaError_t status) {
 thread_local std::optional<TvmffiStreamGuard> dsv4_tvmffi_stream_guard;
 
 void bind_musa_tvmffi_current_stream(const torch::Device& device) {
-  bind_tvmffi_stream(device);
+  bind_tvmffi_stream_to_current_torch_stream(device);
 }
 
 void bind_musa_tvmffi_stream(const torch::Device& device) {

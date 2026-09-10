@@ -278,13 +278,15 @@ torch::Tensor deepseek_v4_state_slots(const torch::Tensor& block_table,
                                       const torch::Tensor& output);
 
 // Graph-safe paged-state restore into caller-owned workspaces.
-torch::Tensor deepseek_v4_state_gather(const torch::Tensor& cache,
-                                       const torch::Tensor& block_table,
-                                       int64_t sequence_index,
-                                       int64_t state_rows,
-                                       int64_t block_size,
-                                       const torch::Tensor& slots,
-                                       const torch::Tensor& output);
+torch::Tensor deepseek_v4_state_gather(
+    const torch::Tensor& cache,
+    const torch::Tensor& block_table,
+    int64_t sequence_index,
+    int64_t state_rows,
+    int64_t block_size,
+    const torch::Tensor& slots,
+    const torch::Tensor& output,
+    const torch::Tensor& input_positions = {});
 
 torch::Tensor deepseek_v4_hc_head(
     const torch::Tensor& residual,

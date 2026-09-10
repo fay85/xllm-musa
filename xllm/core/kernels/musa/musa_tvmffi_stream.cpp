@@ -875,10 +875,16 @@ void end_ffi_alloc_replay() {
 FfiAllocMode get_ffi_alloc_mode() { return g_ffi_alloc_state.mode; }
 
 void bind_tvmffi_stream_to_current_torch_stream(const torch::Device& device) {
-  if (is_torch_device(device)) {
-    bind_tvmffi_stream(device);
+  if (!is_torch_device(device)) {
     return;
   }
+  // A null native handle is the valid Torch default stream. Callers of this
+  // direct binding do not install the event handoffs in TvmffiStreamGuard;
+  // redirecting them to a pooled stream races their producers and consumers.
+  c10::musa::MUSAGuard device_guard(device.index());
+  void* const stream = reinterpret_cast<void*>(
+      c10::musa::getCurrentMUSAStream(device.index()).stream());
+  set_tvmffi_stream_handle(device.index(), stream);
 }
 
 bool should_use_tensor_core(torch::ScalarType kv_cache_dtype,

@@ -3477,7 +3477,8 @@ DeepseekV4AttentionImpl::forward(
             compressor_state_rows,
             state_block_size,
             decode_compressor_kv_slots_,
-            decode_compressor_kv_state_);
+            decode_compressor_kv_state_,
+            attn_metadata.input_positions);
         compressor_score_state_[seq_idx] =
             kernel::musa::deepseek_v4_state_gather(
                 compressor_score_cache,
@@ -3486,7 +3487,8 @@ DeepseekV4AttentionImpl::forward(
                 compressor_state_rows,
                 state_block_size,
                 decode_compressor_score_slots_,
-                decode_compressor_score_state_);
+                decode_compressor_score_state_,
+                attn_metadata.input_positions);
         compressor_kv_state_slots_by_seq[seq_idx] =
             decode_compressor_kv_slots_.narrow(
                 /*dim=*/0, /*start=*/0, compressor_state_rows);
@@ -3566,7 +3568,8 @@ DeepseekV4AttentionImpl::forward(
             indexer_state_rows,
             state_block_size,
             decode_indexer_kv_slots_,
-            decode_indexer_kv_state_);
+            decode_indexer_kv_state_,
+            attn_metadata.input_positions);
         indexer_score_state_[seq_idx] = kernel::musa::deepseek_v4_state_gather(
             indexer_score_state_cache,
             indexer_score_state_block_table,
@@ -3574,7 +3577,8 @@ DeepseekV4AttentionImpl::forward(
             indexer_state_rows,
             state_block_size,
             decode_indexer_score_slots_,
-            decode_indexer_score_state_);
+            decode_indexer_score_state_,
+            attn_metadata.input_positions);
         indexer_kv_state_slots_by_seq[seq_idx] =
             decode_indexer_kv_slots_.narrow(
                 /*dim=*/0, /*start=*/0, indexer_state_rows);

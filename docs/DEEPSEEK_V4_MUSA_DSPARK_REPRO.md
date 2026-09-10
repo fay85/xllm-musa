@@ -222,7 +222,7 @@ bash "$DSPARK_SCRIPTS/run_suite.sh" "$DSPARK_RUN" 8 13 \
 - 已验证范围仅为以上 checkpoint、TP8/EP1、batch 1、静态 DSpark N=5、2.5K/1.5K、0.65 前缀。
 - 不等于 batch8/16、PD、CP、多机、adaptive 或任意前缀命中比例已验证。
 - 其他模型和非 MUSA 设备未做运行回归，不以本次结果代替它们的验收。
-- 0731 target-only **eager** 曾出现精度异常；target-only Graph 已通过 `750/750`。本成果不宣称 eager 问题已修复。
+- 本文历史测试版本的 0731 target-only **eager** 曾出现精度异常，target-only Graph 已通过 `750/750`。2026-09-11 的后续 eager 修复及独立复验见 [后续目标与验证记录](DEEPSEEK_V4_MUSA_DSPARK_FOLLOWUP.md)，不混入本文旧二进制的性能结果。
 - draft block 仍为 eager；不宣称全 draft/context/Markov 路径已捕获为 Graph。
 - 精度验收是严格计数协议，不等于 GSM8K 或任意任务全面精度对齐；沿用原性能分支的 compact Graph compressor 行为，其他长上下文任务需另行验证。
 - 构建、每次失败原因、旧二进制、完整样本与最终结果均保留在验证记录及 NFS 实验目录。未推送远端、未 reset GPU。
@@ -234,7 +234,7 @@ bash "$DSPARK_SCRIPTS/run_suite.sh" "$DSPARK_RUN" 8 13 \
 上述两轮 TTFT/TPOT 和严格计数门槛已经完成，不需要把历史记录中的“待验证”阶段误当作当前状态。继续推进时应单独定义新验收项：
 
 1. **更广泛的精度验证。** 当前 `freeze_compact_graph_compressor` 路径保留 prefill 建立的压缩前缀，SWA 继续更新。需验证/完善 C4/C128 状态演进、拒绝草稿 token 后的状态恢复，以及短 suffix 的高前缀命中场景；计数 PASS 不能证明这些情形正确。
-2. **target-only eager 精度修复。** 这是已记录的独立失败路径，不能写成已修复。
+2. **target-only eager 精度修复。** 初版中的独立失败路径已在 2026-09-11 后续修复，并通过连续和独立服务的严格计数回归，详见[后续记录](DEEPSEEK_V4_MUSA_DSPARK_FOLLOWUP.md)。本文保留初版结果，不将新旧二进制指标混用。
 3. **draft 全链路 Graph。** draft block、上下文注入和 Markov 采样尚非全链路 Graph。仅将更多操作捕获成 Graph，不能替代前两项精度工作。
 
 这些是后续工作清单，不是本轮新增实验结果；已有两个完整热窗和对应二进制保持不变。

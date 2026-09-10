@@ -54,6 +54,8 @@ __global__ void deepseek_v4_state_slots_kernel(const index_t* block_table,
 template <typename index_t>
 __global__ void deepseek_v4_state_gather_kernel(const uint4* cache,
                                                 const index_t* block_table,
+                                                const void* input_positions,
+                                                bool positions_are_int64,
                                                 int64_t blocks,
                                                 int64_t state_rows,
                                                 int64_t block_size,
@@ -61,12 +63,25 @@ __global__ void deepseek_v4_state_gather_kernel(const uint4* cache,
                                                 int64_t* slots,
                                                 uint4* output) {
   __shared__ int64_t last_block;
+  __shared__ int64_t source_block;
   if (threadIdx.x == 0) {
     last_block = -1;
     for (int64_t column = 0; column < blocks; ++column) {
       const int64_t block = static_cast<int64_t>(block_table[column]);
       if (block >= 0) {
         last_block = block;
+      }
+    }
+    source_block = last_block;
+    if (input_positions != nullptr) {
+      const int64_t position =
+          positions_are_int64 ? static_cast<const int64_t*>(input_positions)[0]
+                              : static_cast<const int32_t*>(input_positions)[0];
+      if (position > 0) {
+        const int64_t previous_column = (position - 1) / block_size;
+        if (previous_column < blocks && block_table[previous_column] >= 0) {
+          source_block = block_table[previous_column];
+        }
       }
     }
   }
@@ -79,7 +94,10 @@ __global__ void deepseek_v4_state_gather_kernel(const uint4* cache,
     return;
   }
 
-  const int64_t source_offset = last_block * block_size * vectors_per_row;
+  // A newly allocated SWA page has no recurrent state yet. Read the previous
+  // token's page, but publish slots for the current page so the updated state
+  // follows the sequence across the page boundary.
+  const int64_t source_offset = source_block * block_size * vectors_per_row;
   const int64_t vector_count = state_rows * vectors_per_row;
   for (int64_t index = threadIdx.x; index < vector_count; index += blockDim.x) {
     output[index] = cache[source_offset + index];
@@ -188,7 +206,8 @@ torch::Tensor deepseek_v4_state_gather(const torch::Tensor& cache,
                                        int64_t state_rows,
                                        int64_t block_size,
                                        const torch::Tensor& slots,
-                                       const torch::Tensor& output) {
+                                       const torch::Tensor& output,
+                                       const torch::Tensor& input_positions) {
   CHECK(cache.defined() && cache.dim() == 3 && cache.is_contiguous());
   CHECK(block_table.defined() && block_table.dim() == 2 &&
         block_table.stride(1) == 1);
@@ -205,6 +224,13 @@ torch::Tensor deepseek_v4_state_gather(const torch::Tensor& cache,
   CHECK(block_table.device() == cache.device());
   CHECK(block_table.scalar_type() == torch::kInt32 ||
         block_table.scalar_type() == torch::kInt64);
+  if (input_positions.defined()) {
+    CHECK(input_positions.device() == cache.device() &&
+          input_positions.dim() == 1 && input_positions.numel() == 1 &&
+          input_positions.is_contiguous());
+    CHECK(input_positions.scalar_type() == torch::kInt32 ||
+          input_positions.scalar_type() == torch::kInt64);
+  }
 
   constexpr int64_t kVectorBytes = sizeof(uint4);
   const int64_t row_bytes = cache.size(2) * cache.element_size();
@@ -223,6 +249,9 @@ torch::Tensor deepseek_v4_state_gather(const torch::Tensor& cache,
     deepseek_v4_state_gather_kernel<int32_t><<<1, kThreads, 0, stream>>>(
         reinterpret_cast<const uint4*>(cache.data_ptr()),
         reinterpret_cast<const int32_t*>(block_row),
+        input_positions.defined() ? input_positions.data_ptr() : nullptr,
+        input_positions.defined() &&
+            input_positions.scalar_type() == torch::kInt64,
         block_table.size(1),
         state_rows,
         block_size,
@@ -233,6 +262,9 @@ torch::Tensor deepseek_v4_state_gather(const torch::Tensor& cache,
     deepseek_v4_state_gather_kernel<int64_t><<<1, kThreads, 0, stream>>>(
         reinterpret_cast<const uint4*>(cache.data_ptr()),
         reinterpret_cast<const int64_t*>(block_row),
+        input_positions.defined() ? input_positions.data_ptr() : nullptr,
+        input_positions.defined() &&
+            input_positions.scalar_type() == torch::kInt64,
         block_table.size(1),
         state_rows,
         block_size,

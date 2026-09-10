@@ -157,38 +157,42 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
   if (!prenorm.defined()) {
     return false;
   }
-  auto big_fuse = is_prefill
-                      ? get_mate_hc_function(kMateHcBigFuseUri,
-                                             "mhc_pre_big_fuse_kernel")
-                      : ffi::Optional<ffi::Function>();
+  auto big_fuse = is_prefill ? get_mate_hc_function(kMateHcBigFuseUri,
+                                                    "mhc_pre_big_fuse_kernel")
+                             : ffi::Optional<ffi::Function>();
   if (is_prefill && !big_fuse.defined()) {
     return false;
   }
   try {
     auto& workspace = mate_hc_workspace(x, tokens);
-    TvmffiStreamGuard stream_guard(x.device());
-    prenorm.value()(to_ffi_tensor(x.reshape({tokens, kHcMult * x.size(2)})),
-                    to_ffi_tensor(hc_fn),
-                    to_ffi_tensor(workspace.gemm_partials),
-                    to_ffi_tensor(workspace.sqr_sum_partials),
-                    kMateHcPrenormSplits);
-    if (is_prefill) {
-      big_fuse.value()(to_ffi_tensor(workspace.gemm_partials),
-                       to_ffi_tensor(workspace.sqr_sum_partials),
-                       to_ffi_tensor(hc_scale),
-                       to_ffi_tensor(hc_base),
-                       to_ffi_tensor(x),
-                       to_ffi_tensor(post),
-                       to_ffi_tensor(comb),
-                       to_ffi_tensor(output));
-      if (output_is_normalized != nullptr) {
-        *output_is_normalized = false;
+    {
+      TvmffiStreamGuard stream_guard(x.device());
+      prenorm.value()(to_ffi_tensor(x.reshape({tokens, kHcMult * x.size(2)})),
+                      to_ffi_tensor(hc_fn),
+                      to_ffi_tensor(workspace.gemm_partials),
+                      to_ffi_tensor(workspace.sqr_sum_partials),
+                      kMateHcPrenormSplits);
+      if (is_prefill) {
+        big_fuse.value()(to_ffi_tensor(workspace.gemm_partials),
+                         to_ffi_tensor(workspace.sqr_sum_partials),
+                         to_ffi_tensor(hc_scale),
+                         to_ffi_tensor(hc_base),
+                         to_ffi_tensor(x),
+                         to_ffi_tensor(post),
+                         to_ffi_tensor(comb),
+                         to_ffi_tensor(output));
+        if (output_is_normalized != nullptr) {
+          *output_is_normalized = false;
+        }
+        LOG_FIRST_N(INFO, 1)
+            << "DeepSeek-V4 MUSA Mate prefill HC prenorm and big-fuse enabled; "
+            << "validated tokens <= " << kMatePrefillValidatedMaxTokens << ".";
+        return true;
       }
-      LOG_FIRST_N(INFO, 1)
-          << "DeepSeek-V4 MUSA Mate prefill HC prenorm and big-fuse enabled; "
-          << "validated tokens <= " << kMatePrefillValidatedMaxTokens << ".";
-      return true;
     }
+    // Complete the FFI->Torch handoff before the native finish kernel reads
+    // prenorm partials. Keeping the guard alive through that launch enqueues
+    // the wait too late when eager execution starts on the default stream.
     const XLLMOptionalDeviceGuard device_guard(at::device_of(x));
     const musaStream_t stream = current_musa_stream(x.device());
     const bool fuse_norm = norm_weight.has_value();
