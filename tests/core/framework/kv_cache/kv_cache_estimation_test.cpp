@@ -72,6 +72,21 @@ TEST(KVCacheEstimationTest, IgnoresLinearStateSlotsWithoutLinearAttention) {
   EXPECT_EQ(capacity.linear_cache_size_in_bytes(), 0);
 }
 
+TEST(KVCacheEstimationTest, PreservesMtpDraftLayerCount) {
+  ModelArgs model_args = make_standard_args();
+  model_args.num_nextn_predict_layers(1);
+  KVCacheEstimateOptions options = make_estimate_options();
+  options.is_draft_engine = true;
+
+  const KVCacheCapacity capacity =
+      estimate_kv_cache_capacity(model_args, options);
+#if defined(USE_NPU)
+  EXPECT_EQ(capacity.n_layers(), model_args.n_layers());
+#else
+  EXPECT_EQ(capacity.n_layers(), 1);
+#endif
+}
+
 TEST(KVCacheEstimationTest, UserIndexerCacheDtypeDirectlyControlsQuantization) {
   ModelArgs model_args = make_standard_args();
   model_args.model_type("unsupported_model")
@@ -332,6 +347,7 @@ TEST(KVCacheEstimationTest, EstimatesDeepSeekV4DSparkSwaPool) {
   ModelArgs model_args;
   model_args.model_type("deepseek_v4_dspark")
       .n_layers(3)
+      .num_nextn_predict_layers(1)
       .head_dim(16)
       .index_head_dim(8)
       .window_size(257)
@@ -343,11 +359,13 @@ TEST(KVCacheEstimationTest, EstimatesDeepSeekV4DSparkSwaPool) {
   options.cache_size_in_bytes = 2818048;
   options.block_size = 128;
   options.max_seqs_per_batch = 4;
+  options.is_draft_engine = true;
 
   const KVCacheCapacity capacity =
       estimate_kv_cache_capacity(model_args, options);
 
   EXPECT_EQ(capacity.swa_count(), 19);
+  EXPECT_EQ(capacity.n_layers(), 3);
   EXPECT_EQ(capacity.c4_count(), 0);
   EXPECT_EQ(capacity.c128_count(), 0);
   EXPECT_EQ(capacity.n_blocks(), 1);

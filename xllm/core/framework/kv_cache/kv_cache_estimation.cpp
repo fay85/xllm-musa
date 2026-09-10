@@ -547,7 +547,8 @@ KVCacheCapacity estimate_kv_cache_capacity(
                                      num_speculative_tokens);
   kv_cache_cap.linear_ssm_checkpoint_stride(num_speculative_tokens + 1);
 #if !defined(USE_NPU)
-  if (options.is_draft_engine) {
+  if (options.is_draft_engine &&
+      !util::is_deepseek_v4_dspark_model_type(model_args.model_type())) {
     kv_cache_cap.n_layers(model_args.num_nextn_predict_layers());
   }
 #endif

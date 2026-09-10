@@ -217,6 +217,18 @@ bool LLMEngine::init_model(MasterStatus master_status) {
   args_ = model_loader->model_args();
   quant_args_ = model_loader->quant_args();
 
+  // The shared checkpoint also carries legacy MTP metadata. A DSpark draft
+  // owns all trained draft stages, not num_nextn_predict_layers caches.
+  if (options_.is_draft_engine() &&
+      options_.speculative_algorithm() == "DSpark" &&
+      util::is_deepseek_v4_model_type(args_.model_type())) {
+    CHECK_GT(args_.dspark_num_layers(), 0);
+    args_.model_type(std::string(util::kDeepseekV4DSparkModelType));
+    args_.n_layers(args_.dspark_num_layers());
+    args_.compress_ratios(std::vector<int32_t>(
+        static_cast<size_t>(args_.n_layers()), /*value=*/1));
+  }
+
   // A draft engine is fed token ids and detokenized by the target, so it
   // shares the target vocabulary and loads no tokenizer of its own.
   if (!options_.is_draft_engine()) {

@@ -118,9 +118,13 @@ Artifacts are retained under:
   static-width metrics implementation and call sites. This does not import
   adaptive acceptance statistics or change worker execution.
   Incremental rebuild is retained as `build_full2.log`.
-- Full xllm link and model execution are NOT yet verified. Mooncake is still
-  referenced by this branch's link graph; skipping/removing it is not claimed.
-  vcpkg is reused and model weights are not downloaded.
+- Full xllm build/link passed: `build_full2.log` reached 128/128 and exit 0.
+  Source at launch: `6eff81e2`; binary SHA256:
+  `a893098bfddb8639b265292cccfb5c4c004ad693f45f5e9e0e870e545480e3d4`.
+  Bare ldd cannot find TVM-FFI; ldd with the launcher's complete runtime
+  library path has no missing libraries (`binary_runtime_ldd.txt`).
+  Mooncake is still referenced by this branch's link graph; skipping/removing
+  it is not claimed. vcpkg is reused and weights are not downloaded.
 
 Reconfigure using the retained environment recipe:
 
@@ -140,17 +144,79 @@ These are metadata unit tests, not model precision tests.
 
 Edited C++ files were formatted with clang-format 20.1.6.
 
-Next: finish linking; validate 0731 target-only and DSpark eager counting;
+Next: validate 0731 target-only and DSpark eager counting;
 compare proposal acceptance and context-KV results; validate DSpark Full
 Graph and prefix-state behavior; then run complete hot latency windows.
 There is currently no accepted TTFT/TPOT or 1..750 result for this port.
 
-Prepared runtime tools (not executed until the full binary links):
+Runtime tools:
 `launch_eager.sh` selects the 0731 checkpoint, DSpark with five proposals,
 TP8/EP1 and no Graph/prefix/overlap for initial correctness isolation.
 `benchmark_0731.py` uses the retained counting protocol with the 0731
 tokenizer rather than silently using the preview tokenizer.
 `host_during_build.txt` retains the host GPU occupancy snapshot.
 `holder_resume_2038/host.txt` confirms the restarted holder reserves about
-61.7 GiB as reported in MiB per card, with all eight devices at 100% compute
+61694 MiB per card, with all eight devices at 100% compute
 at that sample. Holders are stopped only for this task's model experiments.
+
+## Runtime ledger
+
+- `target_eager_01`: 0731 target-only, TP8/EP1, no Graph/overlap/prefix,
+  max batch tokens 10240, block 128, original custom-AR/AOT environment.
+  Host snapshots show only this task's holders before release and zero
+  allocated GPU memory after release. Stop only the validated holder PGID.
+  A first `setsid ... &` shell detached without starting any ranks; retry
+  with `setsid -f` is the working persistent launch method. Keep both logs.
+  All eight workers loaded successfully; health became ready at 20:48:40.
+  The two 64/64 counting requests both failed strict 1..32 (only the first
+  number 1 appeared, followed by whitespace/punctuation). Input/output usage
+  is exactly 64/64, no prefix hit. Retain `short_01.json` and `short_02.json`.
+  Client TTFT/TPOT: 8133.739/40.061 ms (cold), 588.722/39.786 ms (warm).
+  Neither failed-accuracy sample is a valid performance baseline.
+- `target_eager_01/teacher_prefill.json`: six independent raw-completion
+  prefills, each generating one token, returned the expected next token for
+  prefixes empty, `1`, `1 `, `1 2`, `1 2 `, `1 2 3 `: respectively
+  `1`, space, `2`, space, `3`, `4`. This narrows investigation toward the
+  continuous decode path; it does not prove every loaded weight or all
+  prefill shapes correct. This failure predates enabling DSpark.
+- Stop only this launcher's PID using its worker cleanup trap. `host_after.txt`
+  records zero MiB and no remaining GPU processes, without reset.
+- `target_graph_01`: same binary/checkpoint/topology and no prefix/overlap;
+  change only Graph to true (VMM and decode-no-padding remain enabled).
+  Source diff at launch is documentation only. The 64/64 request passed
+  strict 1..32, client TTFT/TPOT 8114.772/22.479 ms including cold prefill.
+  Log explicitly confirms q1 MUSA Graph capture and replay.
+  The 2500/1500 request passed strict 750/750 with exact server token usage;
+  client TTFT/TPOT 1524.965/22.392 ms; cached tokens 0. Server-side TTFT is
+  separately 1052.0 ms (do not substitute it for client TTFT).
+  These are target-only functional checks, not DSpark or hot-prefix performance
+  acceptance. The eager decode failure remains open and is not fixed merely
+  because Full Graph passes. Cleanup left zero MiB/no processes on the host.
+- `dspark_graph_01`: same binary/checkpoint, TP8/EP1, five proposals,
+  Graph enabled, no prefix/overlap. This is an initial mixed-route diagnostic:
+  target verification is intended to capture six rows, draft still uses the
+  eager grouped non-causal block route. Do not call it a fully captured DSpark
+  pipeline. Both target and three-stage draft weights loaded, including the
+  Markov head and explicit target-vocabulary fallback for this checkpoint.
+  Health became ready at 20:56:36. First 64/64 request failed before emitting
+  content: `kv_caches.size() == layers_.size() (1 vs. 3)` in draft context
+  injection, on all ranks. No Graph verify or accuracy result was produced.
+  Root cause: legacy non-NPU MTP layer selection reused
+  `num_nextn_predict_layers=1` for the three-layer DSpark draft.
+  `host_after.txt` confirms cleanup to zero MiB/no processes.
+- Cache-layer repair: preserve the configured DSpark layer count in Worker
+  allocation and capacity estimation, and normalize the draft engine's model
+  descriptor to DSpark with three SWA stages. This is algorithm/checkpoint
+  metadata, not a new MUSA runtime flag. Preserve MTP's legacy count rule.
+  Add tests for DSpark with a stale nextn=1 and for MTP compatibility.
+  `build_cache_layers.log` linked successfully; new binary SHA256:
+  `47d0a8daaeb55e3943784ac4497ad80f89df68bde21ea95952cfc36ed3af7b83`.
+  Standalone test-harness setup initially missed generated protobuf/xxHash
+  includes, then exposed the lack of a CPU PlatformStream configuration.
+  The final harness uses the actual built MUSA estimator object and arithmetic
+  layout helpers, running only layer-count contracts without GPU allocation.
+  Its first link omitted Python, a dependency of the built estimator object;
+  the retained script now includes it. These setup failures are not model
+  test results. All `build_cache_contract_test*.log` files are retained.
+  The two targeted tests now PASS (2/2), retained in
+  `cache_contract_test.xml` and `build_cache_contract_test5.log`.

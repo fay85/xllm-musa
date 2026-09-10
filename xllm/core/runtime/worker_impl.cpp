@@ -2109,7 +2109,8 @@ void WorkerImpl::prepare_mla_prefixcache_inputs(
 int64_t WorkerImpl::get_num_layers() const {
   int64_t num_layers = context_.get_model_args().n_layers();
 #if !defined(USE_NPU)
-  if (is_spec_draft_) {
+  if (is_spec_draft_ && !util::is_deepseek_v4_dspark_model_type(
+                            context_.get_model_args().model_type())) {
     // for MTP draft models, the number of layers is the number of nextn
     // predict layers
     int64_t num_nextn_predict_layers =
