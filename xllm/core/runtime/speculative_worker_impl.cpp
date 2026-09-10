@@ -378,7 +378,11 @@ void SpeculativeWorkerImpl::update_sampling_params(
 void SpeculativeWorkerImpl::prepare_validate_inputs(
     const ForwardInput& input,
     ForwardInput& validate_input) {
-  validate_input = input.to(device_, dtype_);
+  // This builder consumes the already materialized host fields. Re-decoding
+  // the original wire payload would append its manager tables a second time.
+  validate_input = input;
+  validate_input.input_host_buffer_has_layout = false;
+  validate_input = validate_input.to(device_, dtype_);
   validate_input.device_tensors_ready = false;
   auto& input_params = validate_input.input_params;
   torch::TensorOptions token_options = validate_input.token_ids.options();

@@ -247,3 +247,30 @@ at that sample. Holders are stopped only for this task's model experiments.
   Repair is in MUSA private `dsa_metadata_builder_musa.cpp`; incremental build
   is `build_draft_metadata.log`. This run produced no accuracy/performance
   result; all rank/client logs and host cleanup snapshots are retained.
+- `dspark_graph_04`: source `5d5c6b27`, binary SHA256
+  `b30154076ac69f8540d39963c99614e164b087f6924b3931381bf37628db21b9`.
+  The draft forward completed and target Graph preparation began, but failed
+  with manager count 6 versus 3. One content chunk `1` reached the client,
+  with no server usage/finish event; the client's fallback TPOT=0 is INVALID,
+  not a latency measurement or successful request.
+  Root cause: speculative preparation called ForwardInput::to on already
+  materialized fields while the original serialized-layout flag remained set.
+  Re-deserializing into a copy appended the original three manager tables.
+  Invalidate that stale layout before preparing target validation; likewise
+  invalidate it whenever the shared speculative helper rebuilds token/position
+  tensors. Retain the original buffer owner so other host views stay alive.
+  This is a device-independent input-lifecycle repair, not a MUSA algorithm
+  added to the shared serializer. Add a serialized-layout invalidation test;
+  retain build/test evidence under `build_input_layout.log` and
+  `build_input_contract_test.log`.
+  The model build/link passed, binary SHA256
+  `93e902d9892c5862f156db80cc7a300491b19f2c2d6c86d24542ffab0289336d`.
+  The focused `spec_input_layout_test.cpp` is included in the normal
+  spec_input_builder_test CMake target. Its standalone run passed 1/1, checking
+  stale-layout invalidation, backing-buffer lifetime and replacement host
+  tokens/positions (`input_contract_test_runtime.log`, XML of the same name
+  without `_runtime`). Broader standalone test linking initially required
+  unrelated multimodal/protobuf dependencies; the focused regression remains
+  a normal source test, not a mocked implementation. The retained runner uses
+  matching generated TorchMUSA API headers and preloads torch_python followed
+  by musa_python. Keep all failed harness logs as environment setup evidence.

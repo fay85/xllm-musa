@@ -518,6 +518,9 @@ void set_token_position_tensors(ForwardInput& input,
                                 const std::vector<int32_t>& positions,
                                 const torch::TensorOptions& token_options,
                                 const torch::TensorOptions& position_options) {
+  // Keep the backing buffer alive, but its serialized layout no longer
+  // describes these newly built speculative tokens and positions.
+  input.input_host_buffer_has_layout = false;
   input.device_tensors_ready = false;
   input.token_ids_host = make_cpu_int_tensor(token_ids);
   input.positions_host = make_cpu_int_tensor(positions);
