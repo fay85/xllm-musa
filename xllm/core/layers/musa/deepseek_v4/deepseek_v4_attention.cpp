@@ -1052,8 +1052,22 @@ void DeepseekV4AttentionImpl::write_context_kv(
     const torch::Tensor& cache_slots,
     KVCache& kv_cache) {
   CHECK_GT(dspark_block_size_, 0);
+  CHECK(hidden_states.defined() && hidden_states.dim() == 2);
   CHECK_EQ(hidden_states.size(0), cache_slots.numel());
-  torch::Tensor kv = kv_proj_->forward(hidden_states);
+  torch::Tensor kv;
+  if (qkv_a_weight_loaded_) {
+    // Loading packs wq_a/wkv and releases the original linear modules.
+    // Context injection uses the same materialized wkv rows as prefill.
+    kernel::MatmulParams params;
+    params.a = hidden_states;
+    params.b = qkv_a_weight_.slice(
+        /*dim=*/0, /*start=*/q_lora_rank_, /*end=*/q_lora_rank_ + head_dim_);
+    params.bias = std::nullopt;
+    kv = kernel::matmul(params);
+  } else {
+    CHECK(kv_proj_) << "DSpark context KV projection is not initialized.";
+    kv = kv_proj_->forward(hidden_states);
+  }
   kv = std::get<0>(kv_layernorm_->forward(kv)).view({-1, 1, head_dim_});
   kv = apply_interleaved_partial_rope(
       kv, nope_head_dim_, rope_head_dim_, cos, sin);

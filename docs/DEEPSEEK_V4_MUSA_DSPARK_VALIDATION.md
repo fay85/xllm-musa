@@ -147,7 +147,8 @@ Edited C++ files were formatted with clang-format 20.1.6.
 Next: validate 0731 target-only and DSpark eager counting;
 compare proposal acceptance and context-KV results; validate DSpark Full
 Graph and prefix-state behavior; then run complete hot latency windows.
-There is currently no accepted TTFT/TPOT or 1..750 result for this port.
+There is currently no accepted DSpark TTFT/TPOT or 1..750 result. The
+target-only 0731 Full Graph functional result is recorded separately below.
 
 Runtime tools:
 `launch_eager.sh` selects the 0731 checkpoint, DSpark with five proposals,
@@ -220,3 +221,17 @@ at that sample. Holders are stopped only for this task's model experiments.
   test results. All `build_cache_contract_test*.log` files are retained.
   The two targeted tests now PASS (2/2), retained in
   `cache_contract_test.xml` and `build_cache_contract_test5.log`.
+- `dspark_graph_02`: source `9d4c71d8`, binary `47d0a8da...`, same diagnostic
+  configuration. Both engine and worker now report three draft SWA caches
+  (`layer_crs: [1,1,1]`), confirming the layer-count repair at runtime.
+  First 64/64 request failed before content with `Accessing empty ModuleHolder`.
+  Address resolution locates `DeepseekV4AttentionImpl::write_context_kv`.
+  The pre-existing packed projection loader unregisters and clears `kv_proj_`
+  after packing wq_a/wkv; context injection still dereferenced it. The fix
+  selects the KV rows from the materialized packed weight and calls the same
+  matmul API as existing prefill; unpacked weights keep the original linear.
+  This repair is confined to the MUSA private attention file.
+  `build_context_projection.log` retains the incremental build. No tokens,
+  acceptance rate or model-accuracy pass can be reported for this failed run.
+  Host cleanup again reached zero MiB/no GPU processes; holders were restored
+  for compilation (`holder_compile_projection_fix/host.txt`).
