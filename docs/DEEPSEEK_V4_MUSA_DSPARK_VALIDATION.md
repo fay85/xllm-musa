@@ -79,7 +79,7 @@ the loader retains the explicit dedicated-first, target-fallback policy.
 The static greedy path is the initial validation scope; adaptive/confidence
 sampling is not yet validated.
 
-## Changes being integrated
+## Implemented changes
 
 1. Restore the speculative cache-budget/count helpers omitted by the first
    cherry-pick conflict resolution.
@@ -96,12 +96,12 @@ sampling is not yet validated.
 7. Size the target Graph auxiliary buffer by the three captured layers
    (12288 columns), not by the four pre-HC lanes used by MTP (16384 columns).
 
-The current draft attention implementation is an eager reference route.
-Initial DSpark aux capture avoided prefill SP/FC1 sharding. The next candidate
-restores SP and gathers captured layer outputs in global token order; FC1
-remains disabled for auxiliary capture. This is not a performance completion
-claim: Full Graph, SP-compatible capture, compressed-state evolution,
-prefix restoration and the latency gate still require runtime validation.
+The validated configuration uses eager draft block attention and six-token
+target Graph verification. Prefill SP is enabled: captured auxiliary states
+are gathered in global token order with padding removed. FC1 remains disabled
+for auxiliary capture. Runs 07/08 validate this configuration's counting and
+hot-prefix latency gates; they do not establish full draft Graph coverage or
+general compressed-state/prefix-restoration correctness outside those cases.
 
 ## Build and environment ledger (2026-09-10)
 
@@ -131,13 +131,15 @@ Artifacts are retained under:
 - Python interpreter, MKL, ASIO and xxHash paths are explicit in
   `configure.sh`. The final build directory is `build/dspark-musa-local`.
 - First full component build stopped on cpprestsdk -Werror=conversion in Boost
-  headers. An external compiler launcher scopes warning relaxation to the
-  third-party compilation and adds the local TorchMUSA/msgpack include roots.
+  headers. An external compiler launcher adds warning relaxation when its
+  arguments contain a cpprestsdk path, plus the local TorchMUSA/msgpack include
+  roots. Include paths can also trigger it for product translation units;
+  it is not restricted solely to third-party source compilation.
 - First targeted compile exposed a JsonReader template default and an NPU-only
   KernelConfig accessor on MUSA. Both were corrected.
 - All five targeted objects (model registry, worker_impl, dflash_worker_impl,
   speculative_worker_impl, MUSA attention) subsequently compiled successfully.
-  The later compact target-verify edit is also included in the ongoing full build.
+  The later compact target-verify edit was also included in the full build.
   Full-build entries 807 and 829 confirm the Graph executor and compact-verify
   objects were rebuilt successfully after those edits.
 - The first full build stopped at entry 993/1030: the initial cherry-pick
@@ -181,8 +183,10 @@ DSpark 2500/1500 strict 1..750 and two independent complete hot-prefix windows
 now pass. Historical intermediate results and failures are retained below.
 
 Runtime tools:
-`launch_eager.sh` selects the 0731 checkpoint, DSpark with five proposals,
-TP8/EP1 and no Graph/prefix/overlap for initial correctness isolation.
+`launch_eager.sh` selects the 0731 checkpoint, DSpark with five proposals and
+TP8/EP1. Its diagnostic defaults disable Graph/prefix/overlap; the validated
+launch explicitly enables target Graph and Prefix Cache, as shown in the
+reproduction guide, and keeps overlap disabled.
 `benchmark_0731.py` uses the retained counting protocol with the 0731
 tokenizer rather than silently using the preview tokenizer.
 `host_during_build.txt` retains the host GPU occupancy snapshot.
@@ -329,12 +333,13 @@ at that sample. Holders are stopped only for this task's model experiments.
   The full requests meet TPOT but NOT TTFT. They are not hot-prefix gate runs.
   Preserve the working executable as `bin/xllm_dspark_functional_93e902d9`.
   Host teardown is clean; holders restored before compilation.
-- Next candidate: capture SP-local HC-averaged layer states, gather/unpad them
+- SP candidate, subsequently validated in runs 07/08: capture SP-local
+  HC-averaged layer states, gather/unpad them
   before copying to the draft context buffer, and enable existing Prefix Cache
   in the external launcher. Target-only's TP-prefill guard and DSpark draft's
   no-SP route remain unchanged. Decode Graph geometry/algorithms are unchanged.
-  Build is recorded in `build_sp_capture.log`; precision and hot latency
-  still need validation for this candidate.
+  Build is recorded in `build_sp_capture.log`; subsequent precision and hot
+  latency results are recorded below.
 - `dspark_sp_prefix_06`: SP candidate source `1d586c44`, binary SHA256
   `4b4d22d8a013be62c54dac3fa11df560bf9707e629ce359ad1e60d71724f97af`,
   Prefix Cache enabled. Startup stopped before requests because the draft
