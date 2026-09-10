@@ -294,6 +294,15 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
   if (!params.multi_block_tables.empty() && !caches_info.empty()) {
     std::vector<torch::Tensor> active_multi_block_tables =
         params.multi_block_tables;
+    if (group_infos.size() == 1 &&
+        group_infos.front().type == DSACacheType::SLIDING_WINDOW &&
+        active_multi_block_tables.size() > 1) {
+      // A SWA-only draft inherits the target's composite manager tables.
+      // DeepSeek-V4 registers SWA first, followed by C4/C128; only the first
+      // table addresses this model's caches. Never mutate the target carrier.
+      CHECK_LE(active_multi_block_tables.size(), 3);
+      active_multi_block_tables.resize(1);
+    }
     int32_t manager_num =
         static_cast<int32_t>(active_multi_block_tables.size());
     if (manager_num == 1 && batch_size == 1 &&

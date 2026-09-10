@@ -235,3 +235,15 @@ at that sample. Holders are stopped only for this task's model experiments.
   acceptance rate or model-accuracy pass can be reported for this failed run.
   Host cleanup again reached zero MiB/no GPU processes; holders were restored
   for compilation (`holder_compile_projection_fix/host.txt`).
+- `dspark_graph_03`: source `f7d0177f`, binary SHA256
+  `5d88dc124ade8fb7613a1bb8553ca7160ebec3197058b69e0034fc35192cf5ff`.
+  Context injection advanced successfully to the first draft decode.
+  Draft metadata construction then failed with
+  `manager_num(3) exceeds group_infos size(1)`: it inherited the target's
+  three composite block tables although all draft layers are SWA-only.
+  Preserve the target carrier and filter only the builder's local table copy
+  for SWA-only models. The existing V4 registration order is SWA, then C4/C128;
+  multi-group target construction keeps its existing checks and mapping.
+  Repair is in MUSA private `dsa_metadata_builder_musa.cpp`; incremental build
+  is `build_draft_metadata.log`. This run produced no accuracy/performance
+  result; all rank/client logs and host cleanup snapshots are retained.
