@@ -158,17 +158,55 @@ std::vector<int32_t> read_capture_layer_ids(
       << "Failed to parse block-diffusion draft config: " << config_path;
   std::vector<int32_t> capture_layer_ids;
   for (int32_t layer_id : reader.value_or<std::vector<int32_t>>(
-           std::vector<std::string>{"target_layer_ids",
+           std::vector<std::string>{"dspark_target_layer_ids",
+                                    "target_layer_ids",
                                     "dflash_config.target_layer_ids"},
            std::vector<int32_t>{})) {
     capture_layer_ids.emplace_back(layer_id + 1);
   }
   CHECK(!capture_layer_ids.empty())
-      << "Block-diffusion draft config requires target_layer_ids or "
-         "dflash_config.target_layer_ids: "
+      << "Block-diffusion draft config requires dspark_target_layer_ids, "
+         "target_layer_ids, or dflash_config.target_layer_ids: "
       << config_path;
   return capture_layer_ids;
 }
+
+#if defined(USE_NPU)
+int32_t read_block_size(const std::string& model_weights_path) {
+  JsonReader reader;
+  const std::string config_path = model_weights_path + "/config.json";
+  CHECK(reader.parse(config_path))
+      << "Failed to parse DSpark draft config: " << config_path;
+  return reader.value_or<int32_t>("dspark_block_size", 0);
+}
+
+void configure_deepseek_v4_dspark_args(ModelArgs& args,
+                                       const runtime::Options& options) {
+  CHECK_GT(args.dspark_num_layers(), 0)
+      << "DeepSeek-V4 DSpark requires at least one draft layer.";
+  args.n_layers(args.dspark_num_layers());
+  args.n_hash_layers(0);
+
+  // Default to the checkpoint's block_size; --num_speculative_tokens overrides.
+  const int32_t ckpt_block_size = read_block_size(options.model_path());
+  const int32_t user_num_spec = options.num_speculative_tokens();
+  if (user_num_spec > 0 && user_num_spec != ckpt_block_size) {
+    LOG(WARNING) << "--num_speculative_tokens=" << user_num_spec
+                 << " overrides DSpark checkpoint dspark_block_size="
+                 << ckpt_block_size << ".";
+  }
+  args.dspark_block_size(user_num_spec > 0 ? user_num_spec : ckpt_block_size);
+
+  // DSpark stages are all standard SWA layers. Their stage ids are not target
+  // model layer ids, so target compress_ratios[0..N) must not be reused.
+  args.compress_ratios(
+      std::vector<int32_t>(static_cast<size_t>(args.dspark_num_layers()),
+                           /*value=*/1));
+
+  args.dspark_use_native_sas(
+      KernelConfig::get_instance().enable_dspark_native_sas());
+}
+#endif
 
 void move_tensor_to_device_if_needed(torch::Tensor& tensor,
                                      const torch::Device& device) {
@@ -1572,23 +1610,34 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
     }
   }
 
-#if defined(USE_NPU)
   const std::string& speculative_algorithm = options_.speculative_algorithm();
+  const bool is_block_diffusion =
+      speculative_algorithm == "DFlash" || speculative_algorithm == "DSpark";
+
+#if defined(USE_NPU)
   if (options_.enable_speculative_decode() &&
       SpeculativeConfig::is_mtp_algorithm(speculative_algorithm) &&
       util::is_deepseek_v4_model_type(args.model_type())) {
     args.num_speculative_tokens(options_.num_speculative_tokens());
   }
-  if (options_.speculative_algorithm() == "DFlash" ||
-      options_.speculative_algorithm() == "DSpark") {
-    const bool is_dspark = options_.speculative_algorithm() == "DSpark";
-    const char* draft_model_type =
-        is_dspark ? "DSparkDraftModel" : "DFlashDraftModel";
+  if (is_block_diffusion) {
     if (options_.is_draft_engine()) {
+      args.layers_to_capture({});
+      const bool is_dspark = speculative_algorithm == "DSpark";
+      const bool is_deepseek_v4_dspark =
+          is_dspark && util::is_deepseek_v4_model_type(args.model_type());
+      std::string draft_model_type =
+          is_dspark ? "DSparkDraftModel" : "DFlashDraftModel";
+      if (is_deepseek_v4_dspark) {
+        draft_model_type = std::string(util::kDeepseekV4DSparkModelType);
+      }
       LOG(INFO) << "Overriding draft model_type from " << args.model_type()
                 << " to " << draft_model_type
                 << " for block-diffusion speculative decoding";
       args.model_type(draft_model_type);
+      if (is_deepseek_v4_dspark) {
+        configure_deepseek_v4_dspark_args(args, options_);
+      }
     } else {
       CHECK(options_.draft_model_path().has_value())
           << "block-diffusion speculative decoding requires --draft_model.";
@@ -1632,11 +1681,22 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
 #endif
   ) {
     args.num_speculative_tokens(options_.num_speculative_tokens());
+    if (is_block_diffusion) {
+      if (options_.is_draft_engine()) {
+        LOG(FATAL) << speculative_algorithm
+                   << " block-diffusion draft is not supported on "
+                   << Platform::type_str() << ".";
+      }
+      CHECK(options_.draft_model_path().has_value())
+          << "block-diffusion speculative decoding requires --draft_model.";
+      args.layers_to_capture(
+          read_capture_layer_ids(options_.draft_model_path().value()));
+    }
     // When running speculative decoding, the draft worker reuses the same
     // checkpoint as the target model. The draft worker needs to instantiate
     // the MTP variant, so override the model_type here without mutating the
     // original config.
-    if (options_.num_speculative_tokens() == 0 &&
+    if (!is_block_diffusion && options_.num_speculative_tokens() == 0 &&
         args.num_nextn_predict_layers() != 0) {
       static const std::unordered_map<std::string, std::string>
           kModelTypeToMtpType = {
