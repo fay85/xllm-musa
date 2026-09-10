@@ -68,8 +68,9 @@ sampling is not yet validated.
    (12288 columns), not by the four pre-HC lanes used by MTP (16384 columns).
 
 The current draft attention implementation is an eager reference route.
-DSpark aux capture currently avoids prefill SP/FC1 sharding until equivalent
-gather semantics are validated. Neither decision is a performance completion
+Initial DSpark aux capture avoided prefill SP/FC1 sharding. The next candidate
+restores SP and gathers captured layer outputs in global token order; FC1
+remains disabled for auxiliary capture. This is not a performance completion
 claim: Full Graph, SP-compatible capture, compressed-state evolution,
 prefix restoration and the latency gate still require runtime validation.
 
@@ -147,8 +148,8 @@ Edited C++ files were formatted with clang-format 20.1.6.
 Next: validate 0731 target-only and DSpark eager counting;
 compare proposal acceptance and context-KV results; validate DSpark Full
 Graph and prefix-state behavior; then run complete hot latency windows.
-There is currently no accepted DSpark TTFT/TPOT or 1..750 result. The
-target-only 0731 Full Graph functional result is recorded separately below.
+DSpark 2500/1500 strict 1..750 now passes, but no hot-prefix latency window
+has passed the complete performance gate. Functional results are below.
 
 Runtime tools:
 `launch_eager.sh` selects the 0731 checkpoint, DSpark with five proposals,
@@ -274,3 +275,34 @@ at that sample. Holders are stopped only for this task's model experiments.
   a normal source test, not a mocked implementation. The retained runner uses
   matching generated TorchMUSA API headers and preloads torch_python followed
   by musa_python. Keep all failed harness logs as environment setup evidence.
+- `dspark_graph_05`: source `d7bcc845`, binary `93e902d9...`. Both repairs
+  passed runtime validation: target verification captured/replayed six-token
+  Graphs, and the complete three-stage draft/context/Markov/verify loop ran.
+  Configuration: TP8/EP1/DP1/CP1, DSpark five proposals, target Graph + draft
+  eager block, no prefix/overlap, batch 1, block 128, batch token limit 10240,
+  memory utilization 0.8, four response threads. All server usages exact.
+
+  | Request | Client TTFT ms | Client TPOT ms | Strict result | Cached tokens |
+  | --- | ---: | ---: | --- | ---: |
+  | short_01, 64/64 | 8109.204 | 12.994 | 32/32 PASS | 0 |
+  | short_02, 64/64 | 561.333 | 5.570 | 32/32 PASS | 0 |
+  | full_01, 2500/1500 | 1422.460 | 8.181 | 750/750 PASS | 0 |
+  | full_02, 2500/1500 | 1230.839 | 8.107 | 750/750 PASS | 0 |
+  | short_03, 64/64 | 131.662 | 8.792 | 32/32 PASS | 0 |
+
+  Each full request had draft/accepted counter deltas 1250/1250. Only the
+  existing fixed-width draft/accepted counters are used: the newly declared
+  step/committed gauges are not wired by this compatibility worker and stay 0.
+  The first four requests were handled by different request threads; the
+  fifth returned to the first thread and removed the roughly 427-ms client
+  versus server TTFT gap. This is evidence of settling behavior, not permission
+  to mix short requests or remove slow samples from a formal hot window.
+  The full requests meet TPOT but NOT TTFT. They are not hot-prefix gate runs.
+  Preserve the working executable as `bin/xllm_dspark_functional_93e902d9`.
+  Host teardown is clean; holders restored before compilation.
+- Next candidate: capture SP-local HC-averaged layer states, gather/unpad them
+  before copying to the draft context buffer, and enable existing Prefix Cache
+  in the external launcher. Target-only's TP-prefill guard and DSpark draft's
+  no-SP route remain unchanged. Decode Graph geometry/algorithms are unchanged.
+  Build is recorded in `build_sp_capture.log`; precision and hot latency
+  still need validation for this candidate.

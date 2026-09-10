@@ -982,8 +982,7 @@ class DeepseekV4ModelImpl
     // into the first decode step. Keep it on the regular TP prefill path;
     // the MTP target retains the existing SP metadata contract.
     const bool target_only_model = model_args_.num_speculative_tokens() == 0;
-    if (!target_only_model && !aux_capture_.enabled() &&
-        model_args_.dspark_block_size() == 0) {
+    if (!target_only_model && model_args_.dspark_block_size() == 0) {
       sequence_parallel_context = layer::dsv4_musa_sp::build_context(
           tokens,
           modified_input_params.meta.batch_forward_type.no_decode(),
@@ -1072,8 +1071,15 @@ class DeepseekV4ModelImpl
                      tokens);
       const int32_t output_layer = static_cast<int32_t>(i) + 1;
       if (aux_capture_.should_capture(output_layer)) {
+        torch::Tensor auxiliary_hidden = h.mean(/*dim=*/1);
+        if (sequence_parallel_context.has_value()) {
+          // Draft context injection consumes global token order on every TP
+          // rank; discard SP padding before saving a captured layer output.
+          auxiliary_hidden = layer::dsv4_musa_sp::gather_global(
+              auxiliary_hidden, sequence_parallel_context.value());
+        }
         aux_capture_.capture_layer(
-            output_layer, h.mean(/*dim=*/1), std::nullopt);
+            output_layer, auxiliary_hidden, std::nullopt);
       }
     }
     if (sequence_parallel_context.has_value()) {
