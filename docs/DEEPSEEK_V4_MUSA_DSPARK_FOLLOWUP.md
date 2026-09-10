@@ -71,7 +71,7 @@ Target-only 配置：TP8/EP1/DP1/CP1、B1、Graph=false、无 draft、无 prefix
 | 实验 | 结果 |
 | --- | --- |
 | `target_eager_baseline_01` | 原二进制两条 64/64 均失败，只输出数字 1 |
-| `target_eager_direct_stream_02` | 只修正直接流 helper，仍失败 |
+| `target_eager_direct_stream_02` | 只修正直接流 helper，仍失败；候选随后回退 |
 | `target_eager_dsa_stream_03` | 增加 H8 包装修正，仍失败 |
 | `target_eager_hc_handoff_04` | 64/64 严格 1..32、128/128 严格 1..64、64/256 严格 1..128 通过；2500 长输入仍失败 |
 | 同上，2500/1500 | 只输出 1..32 后继续生成不可见 token，完整精度失败 |
@@ -114,14 +114,14 @@ DSpark 的热态性能基线直接比较。
 
 ### 定向测试
 
-五个测试均通过，无跳过：
+四个保留测试均通过，无跳过：
 
-- 默认流在池化流绑定之后仍被正确绑定。
-- 跟随非默认流切换。
-- capture 中保持同一流。
 - 延迟 FFI prenorm producer 后，HC output/post/comb 与非默认流参考一致。
-- C4/C128 状态行数、int32/int64 table 和 position 下，位置 128 从旧页读向
+- C4/C128 状态行数、int32/int64 table 和 position 下，位置 128 从旧页向
   新页写，位置 129 从新页读取；复用同一 metadata tensor。
+
+直接流绑定的三个单测曾通过，但该候选导致 target Graph 长请求退化，已在
+`b8dc72ba` 中回退；因此不把它们作为当前产品修复的一部分。
 
 测试 XML：`state_gather_test.xml`；构建脚本：`build_stream_test.sh`。
 测试已接入正常 `cc_test` 清单；本轮实际执行使用同一产品实现与已编译 native
