@@ -110,6 +110,14 @@ Artifacts are retained under:
   The later compact target-verify edit is also included in the ongoing full build.
   Full-build entries 807 and 829 confirm the Graph executor and compact-verify
   objects were rebuilt successfully after those edits.
+- The first full build stopped at entry 993/1030: the initial cherry-pick
+  added a one-argument WorkerService member declaration but retained the
+  existing two-argument anonymous-namespace metrics function in the cpp file.
+  The unimplemented member shadowed that function. Remove the stale member
+  declaration and its unused position-label member; retain the original
+  static-width metrics implementation and call sites. This does not import
+  adaptive acceptance statistics or change worker execution.
+  Incremental rebuild is retained as `build_full2.log`.
 - Full xllm link and model execution are NOT yet verified. Mooncake is still
   referenced by this branch's link graph; skipping/removing it is not claimed.
   vcpkg is reused and model weights are not downloaded.
@@ -143,3 +151,6 @@ TP8/EP1 and no Graph/prefix/overlap for initial correctness isolation.
 `benchmark_0731.py` uses the retained counting protocol with the 0731
 tokenizer rather than silently using the preview tokenizer.
 `host_during_build.txt` retains the host GPU occupancy snapshot.
+`holder_resume_2038/host.txt` confirms the restarted holder reserves about
+61.7 GiB as reported in MiB per card, with all eight devices at 100% compute
+at that sample. Holders are stopped only for this task's model experiments.
