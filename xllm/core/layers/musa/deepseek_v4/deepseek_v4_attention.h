@@ -65,6 +65,11 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
               compress_metadata);
 
   void load_state_dict(const StateDict& state_dict);
+  void write_context_kv(const torch::Tensor& hidden_states,
+                        const torch::Tensor& cos,
+                        const torch::Tensor& sin,
+                        const torch::Tensor& cache_slots,
+                        KVCache& kv_cache);
   int64_t non_registered_weight_bytes() const { return 0; }
 
   void set_sequence_parallel_context(
@@ -139,13 +144,14 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
       int64_t cached_prefix_tokens = 0,
       const torch::Tensor& projected_kv = {},
       const torch::Tensor& projected_score = {});
-  torch::Tensor compress_indexer_decode_step(const torch::Tensor& hidden_step,
-                                             int64_t start_pos,
-                                             const torch::Tensor& cos,
-                                             const torch::Tensor& sin,
-                                             size_t sequence_index,
-                                             const torch::Tensor& projected_kv = {},
-                                             const torch::Tensor& projected_score = {});
+  torch::Tensor compress_indexer_decode_step(
+      const torch::Tensor& hidden_step,
+      int64_t start_pos,
+      const torch::Tensor& cos,
+      const torch::Tensor& sin,
+      size_t sequence_index,
+      const torch::Tensor& projected_kv = {},
+      const torch::Tensor& projected_score = {});
   torch::Tensor build_indexer_topk(
       const torch::Tensor& qr,
       const torch::Tensor& hidden_states,
@@ -177,6 +183,7 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   int64_t rope_head_dim_ = 0;
   int64_t nope_head_dim_ = 0;
   int64_t window_size_ = 0;
+  int64_t dspark_block_size_ = 0;
   int64_t compress_ratio_ = 1;
   int64_t compressor_coff_ = 1;
   int64_t n_local_heads_ = 0;

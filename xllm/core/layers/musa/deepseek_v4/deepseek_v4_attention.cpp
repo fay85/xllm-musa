@@ -823,6 +823,7 @@ DeepseekV4AttentionImpl::DeepseekV4AttentionImpl(
       o_groups_(args.o_groups()),
       rope_head_dim_(args.rope_head_dim()),
       window_size_(args.window_size()),
+      dspark_block_size_(args.dspark_block_size()),
       softmax_scale_(std::pow(static_cast<double>(args.head_dim()), -0.5)),
       eps_(args.rms_norm_eps()),
       layer_id_(std::max<int32_t>(layer_id, 0)) {
@@ -1042,6 +1043,27 @@ DeepseekV4AttentionImpl::DeepseekV4AttentionImpl(
                                              torch::TensorOptions()
                                                  .dtype(options.dtype())
                                                  .device(options.device())));
+}
+
+void DeepseekV4AttentionImpl::write_context_kv(
+    const torch::Tensor& hidden_states,
+    const torch::Tensor& cos,
+    const torch::Tensor& sin,
+    const torch::Tensor& cache_slots,
+    KVCache& kv_cache) {
+  CHECK_GT(dspark_block_size_, 0);
+  CHECK_EQ(hidden_states.size(0), cache_slots.numel());
+  torch::Tensor kv = kv_proj_->forward(hidden_states);
+  kv = std::get<0>(kv_layernorm_->forward(kv)).view({-1, 1, head_dim_});
+  kv = apply_interleaved_partial_rope(
+      kv, nope_head_dim_, rope_head_dim_, cos, sin);
+  fp8_act_quant_roundtrip_inplace(kv, nope_head_dim_, /*block_size=*/64);
+  torch::Tensor swa_cache = kv_cache.get_swa_cache();
+  CHECK(swa_cache.defined());
+  scatter_by_slot(swa_cache, cache_slots, kv);
+  torch::Tensor packed_swa_cache = dsv4_musa_block_tensor(
+      kv_cache, BlockType::SWA, KVCacheTensorRole::VALUE);
+  pack_mate_model1_cache(packed_swa_cache, cache_slots, kv);
 }
 
 std::vector<std::pair<int64_t, int64_t>>
@@ -3885,8 +3907,8 @@ DeepseekV4AttentionImpl::forward(
     torch::Tensor kv_seq;
     const bool use_current_prefill_kv = is_prefill && !is_chunked_prefill;
     const bool use_paged_decode_attention =
-        !use_current_prefill_kv && !use_indexer_attention &&
-        dsv4_musa_paged_dense_decode_enabled() &&
+        dspark_block_size_ == 0 && !use_current_prefill_kv &&
+        !use_indexer_attention && dsv4_musa_paged_dense_decode_enabled() &&
         dsv4_musa_fused_dense_decode_enabled();
     // Mate consumes the packed compressed/SWA caches directly. Avoid
     // materializing the complete dense SWA history unless a fallback path
@@ -4403,6 +4425,16 @@ DeepseekV4AttentionImpl::forward(
       maybe_sync_attention_stage(layer_id_, "indexer_topk", cmp_indices);
     }
     torch::Tensor seq_output;
+    if (dspark_block_size_ > 0) {
+      // All rows in a DSpark block see the same trailing context plus the
+      // entire diffusion block, without a causal mask within that block.
+      CHECK_EQ(compress_ratio_, 1);
+      CHECK(kv_seq.defined());
+      const int64_t visible_rows = window_size_ + q_seq.size(0);
+      const int64_t start = std::max<int64_t>(kv_seq.size(0) - visible_rows, 0);
+      seq_output = selected_kv_attention_reference(
+          q_seq, kv_seq.slice(/*dim=*/0, start), attn_sink_, softmax_scale_);
+    }
     if (use_indexer_attention && !use_current_prefill_kv &&
         dsv4_musa_mate_fused_dsa_trace_enabled()) {
       const int64_t index_history_rows =

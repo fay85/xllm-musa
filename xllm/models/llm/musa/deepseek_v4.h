@@ -35,6 +35,8 @@ limitations under the License.
 #include "core/common/flash_comm1_context.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/kv_cache_config.h"
+#include "core/framework/config/scheduler_config.h"
+#include "core/framework/model/aux_hidden_capture.h"
 #include "core/framework/state_dict/utils.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/ops_api.h"
@@ -580,7 +582,7 @@ inline void deepseek_v4_build_cache_specs(
   }
 }
 
-class DeepseekV4ModelImpl final
+class DeepseekV4ModelImpl
     : public LlmModelImplBase<layer::DeepseekV4DecoderLayer> {
  public:
   explicit DeepseekV4ModelImpl(const ModelContext& context)
@@ -588,7 +590,10 @@ class DeepseekV4ModelImpl final
             "deepseek_v4",
             context.get_model_args()),
         parallel_args_(context.get_parallel_args()),
-        flash_comm1_options_(context.get_flash_comm1_options()) {
+        flash_comm1_options_(context.get_flash_comm1_options()),
+        aux_capture_(context.get_model_args(),
+                     context.get_tensor_options(),
+                     SchedulerConfig::get_instance().max_tokens_per_batch()) {
     auto model_args = context.get_model_args();
     auto options = context.get_tensor_options();
     auto parallel_args = context.get_parallel_args();
@@ -781,6 +786,22 @@ class DeepseekV4ModelImpl final
 
   bool requires_graph_forward_metadata() { return true; }
 
+ protected:
+  void load_hc_head_state_dict(const StateDict& state_dict) {
+    LOAD_WEIGHT(hc_head_fn);
+    LOAD_WEIGHT(hc_head_base);
+    LOAD_WEIGHT(hc_head_scale);
+  }
+
+  layer::DeepseekV4RotaryEmbedding::CosSinPair build_default_rope(
+      const torch::Tensor& positions) const {
+    CHECK(dsa_rotary_embedding_ != nullptr);
+    auto groups = dsa_rotary_embedding_->build(positions);
+    CHECK(groups.count("default") != 0);
+    return groups.at("default");
+  }
+
+ public:
   std::unique_ptr<ModelGraphMetadataState>
   create_graph_forward_metadata_state() {
     return std::make_unique<DeepseekV4GraphMetadataState>();
@@ -942,7 +963,7 @@ class DeepseekV4ModelImpl final
 
     const int32_t fc1_num_tokens = static_cast<int32_t>(h.size(0));
     FlashComm1Context fc1_ctx;
-    if (!acl_graph_forward && !is_empty_dp_rank) {
+    if (!acl_graph_forward && !is_empty_dp_rank && !aux_capture_.enabled()) {
       const bool is_prefill_side =
           input_params.meta.batch_forward_type.no_decode();
       fc1_ctx = build_flash_comm1_context(fc1_num_tokens,
@@ -961,7 +982,8 @@ class DeepseekV4ModelImpl final
     // into the first decode step. Keep it on the regular TP prefill path;
     // the MTP target retains the existing SP metadata contract.
     const bool target_only_model = model_args_.num_speculative_tokens() == 0;
-    if (!target_only_model) {
+    if (!target_only_model && !aux_capture_.enabled() &&
+        model_args_.dspark_block_size() == 0) {
       sequence_parallel_context = layer::dsv4_musa_sp::build_context(
           tokens,
           modified_input_params.meta.batch_forward_type.no_decode(),
@@ -1048,6 +1070,11 @@ class DeepseekV4ModelImpl final
                      kv_caches[i],
                      modified_input_params,
                      tokens);
+      const int32_t output_layer = static_cast<int32_t>(i) + 1;
+      if (aux_capture_.should_capture(output_layer)) {
+        aux_capture_.capture_layer(
+            output_layer, h.mean(/*dim=*/1), std::nullopt);
+      }
     }
     if (sequence_parallel_context.has_value()) {
       h = layer::dsv4_musa_sp::gather_global(h,
@@ -1060,7 +1087,8 @@ class DeepseekV4ModelImpl final
       h = gather_sequence(h, fc1_ctx);
     }
     torch::Tensor pre_hc_head_hidden_states;
-    if (model_args_.num_speculative_tokens() > 0) {
+    if (!aux_capture_.enabled() && model_args_.dspark_block_size() == 0 &&
+        model_args_.num_speculative_tokens() > 0) {
       pre_hc_head_hidden_states = h;
     }
     h = hc_head(h);
@@ -1072,6 +1100,9 @@ class DeepseekV4ModelImpl final
     }
     auto [hidden_states, residual_out] =
         norm_(h, std::nullopt, final_norm_output);
+    if (aux_capture_.enabled()) {
+      return aux_capture_.finalize(hidden_states, residual_out);
+    }
     if (pre_hc_head_hidden_states.defined()) {
       ModelOutput out(hidden_states, residual_out);
       out.aux_hidden_states = pre_hc_head_hidden_states.flatten(1);
@@ -1888,6 +1919,7 @@ class DeepseekV4ModelImpl final
 
   ParallelArgs parallel_args_;
   FlashComm1Options flash_comm1_options_;
+  AuxHiddenCapture aux_capture_;
 
   // DSA cache group info: built once at model init from compress_ratios
   // caches_info_[layer_id] = vector of DSACacheInfo for each cache in that
@@ -2039,6 +2071,11 @@ inline void load_deepseek_v4_model_args(const JsonReader& json,
 
   // HC / DSA helpers
   LOAD_ARG_OR(hc_mult, "hc_mult", 4);
+  LOAD_ARG_OR(markov_rank, "dspark_markov_rank", 0);
+  args->dspark_num_layers() = static_cast<int32_t>(
+      json.value_or<std::vector<int32_t>>("dspark_target_layer_ids",
+                                          std::vector<int32_t>{})
+          .size());
   LOAD_ARG_OR(hc_sinkhorn_iters, "hc_sinkhorn_iters", 20);
   LOAD_ARG_OR(hc_eps, "hc_eps", 1e-6f);
   LOAD_ARG_OR(factor, "rope_scaling.factor", 16.0f);

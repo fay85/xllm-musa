@@ -44,6 +44,15 @@ class DeepseekV4DecoderLayerImpl final : public torch::nn::Module {
   void load_state_dict(const StateDict& state_dict);
   void verify_loaded_weights() const;
 
+  void write_context_kv(const torch::Tensor& hidden_states,
+                        const torch::Tensor& cos,
+                        const torch::Tensor& sin,
+                        const torch::Tensor& cache_slots,
+                        KVCache& kv_cache) {
+    attention_->write_context_kv(
+        hidden_states, cos, sin, cache_slots, kv_cache);
+  }
+
   void set_sequence_parallel_context(
       const dsv4_musa_sp::DeepseekV4SPContext* context) {
     sequence_parallel_context_ = context;

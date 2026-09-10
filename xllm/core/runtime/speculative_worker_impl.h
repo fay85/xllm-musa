@@ -28,6 +28,18 @@ namespace xllm {
 // plan for the current global DP batch.
 bool should_run_speculative_decode(const ModelInputParams& params);
 
+void scale_speculative_parallel_token_counts(ModelInputParams& params,
+                                             int32_t multiplier);
+
+struct SpeculativeOutputStats {
+  std::vector<int64_t> accepted_per_position;
+  int64_t committed_tokens = 0;
+};
+
+SpeculativeOutputStats calculate_speculative_output_stats(
+    const torch::Tensor& tokens,
+    int64_t num_speculative_tokens);
+
 // Base class for all speculative decoding workers.
 // Provides common logic: target model management, step dispatch, and
 // sampling parameter updates. Subclasses implement algorithm-specific
@@ -137,6 +149,11 @@ class SpeculativeWorkerImpl : public WorkerImpl {
                                ForwardInput& validate_inputs);
 
  protected:
+  std::tuple<int64_t, int64_t> estimate_kv_cache_capacity_with_draft(
+      LLMWorkerImpl& draft_impl,
+      const runtime::Options& target_options,
+      const runtime::Options& draft_options);
+
   // Target model worker
   std::unique_ptr<LLMWorkerImpl> impl_;
 

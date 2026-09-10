@@ -304,14 +304,19 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
 
   if (should_capture_graph_aux_hidden_states(args_, options_) &&
       args_.model_type() == "deepseek_v4" && args_.hc_mult() > 1) {
-    // DeepSeek-V4 MTP consumes the flattened pre-HC lanes.  Allocate the
+    // MTP consumes pre-HC lanes; DSpark consumes selected layer outputs.
+    // Allocate the matching auxiliary width before capture. Allocate the
     // decode-only output before capture: lazily calling torch::zeros from
     // set_aux_hidden_states() is not permitted by the MUSA graph runtime.
     const int64_t max_aux_tokens =
         std::max<int64_t>(1, max_seqs_per_batch) *
         std::max<int64_t>(1, options_.num_speculative_tokens() + 1);
+    const int64_t auxiliary_width =
+        args_.layers_to_capture().empty()
+            ? args_.hc_mult()
+            : static_cast<int64_t>(args_.layers_to_capture().size());
     aux_hidden_states_ =
-        torch::zeros({max_aux_tokens, args_.hidden_size() * args_.hc_mult()},
+        torch::zeros({max_aux_tokens, args_.hidden_size() * auxiliary_width},
                      torch::dtype(dtype).device(device));
   }
 

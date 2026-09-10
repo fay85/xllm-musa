@@ -69,7 +69,7 @@ bool all_tensors_defined(const std::vector<torch::Tensor>& tensors) {
   });
 }
 
-constexpr int64_t kFp8GemvWorkspaceTokens = 2;
+constexpr int64_t kFp8GemvWorkspaceTokens = 16;
 constexpr int64_t kPrefillCustomAllreduceWorkspaceTokens = 1024;
 
 struct SharedExpertOverlapState {

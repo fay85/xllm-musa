@@ -19,7 +19,10 @@ limitations under the License.
 
 #include "common/global_flags.h"
 #include "common/metrics.h"
+#include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/speculative_config.h"
+#include "core/framework/kv_cache/kv_cache_estimation.h"
+#include "core/framework/model/mtp_utils.h"
 #include "spec_input_builder.h"
 #include "util/slice.h"
 #include "util/timer.h"
@@ -37,6 +40,52 @@ namespace {
 
 Slice<int32_t> tensor_slice(const torch::Tensor& tensor) {
   return {tensor.data_ptr<int32_t>(), static_cast<size_t>(tensor.numel())};
+}
+
+int64_t get_dp_local_tp_size(const ParallelArgs& parallel_args) {
+  const int64_t dp_size = std::max<int64_t>(parallel_args.dp_size(), 1);
+  const int64_t cp_size = std::max<int64_t>(parallel_args.cp_size(), 1);
+  return std::max<int64_t>(parallel_args.world_size() / dp_size / cp_size, 1);
+}
+
+KVCacheEstimateOptions make_kv_cache_estimate_options(
+    const ModelArgs& model_args,
+    const runtime::Options& options,
+    const ParallelArgs& parallel_args,
+    torch::ScalarType dtype,
+    int64_t cache_size_in_bytes) {
+  const int64_t dp_local_tp_size = get_dp_local_tp_size(parallel_args);
+  const int64_t n_heads = model_args.n_heads();
+  const int64_t n_kv_heads = model_args.n_kv_heads().value_or(n_heads);
+
+  KVCacheEstimateOptions estimate_options;
+  estimate_options.dtype = dtype;
+  estimate_options.kv_cache_dtype = options.kv_cache_dtype();
+  estimate_options.indexer_cache_dtype =
+      KVCacheConfig::get_instance().indexer_cache_dtype();
+  estimate_options.cache_size_in_bytes = cache_size_in_bytes;
+  estimate_options.block_size = options.block_size();
+  estimate_options.world_size = dp_local_tp_size;
+  estimate_options.n_local_kv_heads =
+      std::max<int64_t>(n_kv_heads / dp_local_tp_size, 1);
+  if (has_linear_attention_layers(model_args)) {
+    estimate_options.n_local_linear_k_heads = std::max<int64_t>(
+        model_args.linear_num_key_heads() / dp_local_tp_size, 1);
+    estimate_options.n_local_linear_v_heads = std::max<int64_t>(
+        model_args.linear_num_value_heads() / dp_local_tp_size, 1);
+  }
+  estimate_options.max_seqs_per_batch =
+      static_cast<int64_t>(options.max_seqs_per_batch());
+  estimate_options.num_speculative_tokens =
+      static_cast<int64_t>(options.num_speculative_tokens());
+  estimate_options.max_tokens_per_batch =
+      static_cast<int64_t>(options.max_tokens_per_batch());
+  estimate_options.max_linear_state_cache_slots =
+      options.max_linear_state_cache_slots();
+  estimate_options.is_draft_engine = options.is_draft_engine();
+  estimate_options.enable_prefix_cache =
+      KVCacheConfig::get_instance().enable_prefix_cache();
+  return estimate_options;
 }
 
 }  // namespace
@@ -58,6 +107,43 @@ bool should_run_speculative_decode(const ModelInputParams& params) {
   return std::all_of(dp_is_decode.begin(),
                      dp_is_decode.end(),
                      [](int32_t is_decode) { return is_decode == 1; });
+}
+
+void scale_speculative_parallel_token_counts(ModelInputParams& params,
+                                             int32_t multiplier) {
+  for (int32_t& token_num : params.parallel.dp_global_token_nums) {
+    token_num *= multiplier;
+  }
+  for (int32_t& token_num : params.parallel.raw_dp_global_token_nums) {
+    token_num *= multiplier;
+  }
+}
+
+SpeculativeOutputStats calculate_speculative_output_stats(
+    const torch::Tensor& tokens,
+    int64_t num_speculative_tokens) {
+  torch::Tensor int_tokens = tokens.to(torch::kInt64).contiguous();
+  const int64_t* data = int_tokens.const_data_ptr<int64_t>();
+  const int64_t batch_size = int_tokens.size(0);
+  const int64_t token_width = int_tokens.size(1);
+  CHECK_LE(token_width, num_speculative_tokens + 1)
+      << "next_tokens width exceeds num_speculative_tokens + 1.";
+  SpeculativeOutputStats stats;
+  stats.accepted_per_position.resize(
+      static_cast<size_t>(num_speculative_tokens));
+  for (int64_t row = 0; row < batch_size; ++row) {
+    const int64_t* row_ptr = data + row * token_width;
+    for (int64_t column = 0; column < token_width; ++column) {
+      if (row_ptr[column] < 0) {
+        continue;
+      }
+      ++stats.committed_tokens;
+      if (column > 0) {
+        ++stats.accepted_per_position[static_cast<size_t>(column - 1)];
+      }
+    }
+  }
+  return stats;
 }
 
 SpeculativeWorkerImpl::SpeculativeWorkerImpl(
@@ -86,6 +172,46 @@ bool SpeculativeWorkerImpl::init_model(const std::string& model_weights_path,
   enable_fused_kernel_ =
       impl_->get_optimization_config().enable_fused_spec_kernel;
   return result;
+}
+
+std::tuple<int64_t, int64_t>
+SpeculativeWorkerImpl::estimate_kv_cache_capacity_with_draft(
+    LLMWorkerImpl& draft_impl,
+    const runtime::Options& target_options,
+    const runtime::Options& draft_options) {
+  const std::tuple<int64_t, int64_t> target_memory =
+      impl_->estimate_kv_cache_capacity();
+  const std::tuple<int64_t, int64_t> draft_memory =
+      draft_impl.estimate_kv_cache_capacity();
+  const int64_t cache_size_in_bytes =
+      std::min(std::get<0>(target_memory), std::get<0>(draft_memory));
+  const int64_t total_memory =
+      std::min(std::get<1>(target_memory), std::get<1>(draft_memory));
+
+  const ModelArgs& target_model_args = impl_->context_.get_model_args();
+  if (!util::is_deepseek_v4_model_type(target_model_args.model_type())) {
+    return {cache_size_in_bytes, total_memory};
+  }
+
+  const ModelArgs& draft_model_args = draft_impl.context_.get_model_args();
+  KVCacheEstimateOptions target_estimate_options =
+      make_kv_cache_estimate_options(target_model_args,
+                                     target_options,
+                                     parallel_args_,
+                                     dtype_,
+                                     cache_size_in_bytes);
+  const KVCacheEstimateOptions draft_estimate_options =
+      make_kv_cache_estimate_options(draft_model_args,
+                                     draft_options,
+                                     parallel_args_,
+                                     dtype_,
+                                     cache_size_in_bytes);
+  target_estimate_options.draft_model_args = &draft_model_args;
+  target_estimate_options.draft_options = &draft_estimate_options;
+
+  const KVCacheCapacity capacity = ::xllm::estimate_kv_cache_capacity(
+      target_model_args, target_estimate_options);
+  return {capacity.cache_size_in_bytes(), total_memory};
 }
 
 bool SpeculativeWorkerImpl::allocate_kv_cache(
@@ -263,6 +389,15 @@ void SpeculativeWorkerImpl::prepare_validate_inputs(
   const int32_t num_val_tokens = num_speculative_tokens + 1;
   const int32_t total_num_val_tokens = num_sequences * num_val_tokens;
   const int32_t block_size = options_.block_size();
+  const bool use_atb_spec_kernel =
+      ::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel();
+  bool use_compact_dsv4 = false;
+#if defined(USE_MUSA)
+  use_compact_dsv4 =
+      options_.speculative_algorithm() == "DSpark" &&
+      impl_->context_.get_model_args().model_type() == "deepseek_v4";
+#endif
+  const bool use_compact_verify = use_atb_spec_kernel || use_compact_dsv4;
   specBuilder::DecodeRowContext row_ctx =
       specBuilder::make_decode_row_context(input);
 
@@ -273,7 +408,7 @@ void SpeculativeWorkerImpl::prepare_validate_inputs(
   buf.out_token_ids.reserve(total_num_val_tokens);
   buf.out_positions.reserve(total_num_val_tokens);
   buf.out_new_cache_slots.reserve(total_num_val_tokens);
-  if (!::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel()) {
+  if (!use_compact_verify) {
     buf.out_kv_seq_lens.reserve(total_num_val_tokens);
     buf.out_q_seq_lens.reserve(total_num_val_tokens);
     buf.out_q_cu_seq_lens.reserve(total_num_val_tokens);
@@ -302,16 +437,13 @@ void SpeculativeWorkerImpl::prepare_validate_inputs(
         row.token_id = -val_idx;
       }
       row.position_offset = val_idx;
-      row.append_kv_len =
-          !::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel();
-      row.append_q_len_one =
-          !::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel();
-      row.append_block_table =
-          !::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel();
+      row.append_kv_len = !use_compact_verify;
+      row.append_q_len_one = !use_compact_verify;
+      row.append_block_table = !use_compact_verify;
       specBuilder::append_decode_row(row_ctx, row, block_size, buf);
     }
 
-    if (::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel()) {
+    if (use_compact_verify) {
       const int32_t kv_len_after_validation = kv_len + num_speculative_tokens;
       specBuilder::update_kv_seq_lens_and_max(
           atb_kv_seq_lens_vec, kv_len_after_validation, atb_kv_max_seq_len);
@@ -331,15 +463,21 @@ void SpeculativeWorkerImpl::prepare_validate_inputs(
                                           token_options,
                                           position_options);
   // update the input_params
-  if (!::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel()) {
+  if (!use_compact_verify) {
     input_params.meta.num_sequences = total_num_val_tokens;
     input_params.meta.q_max_seq_len = 1;
     input_params.meta.batch_forward_type = BatchForwardType::DECODE;
   } else {
     input_params.meta.q_max_seq_len = num_val_tokens;
-    input_params.meta.batch_forward_type = BatchForwardType::CHUNKED_PREFILL;
+    input_params.meta.batch_forward_type =
+        use_compact_dsv4 ? BatchForwardType::DECODE
+                         : BatchForwardType::CHUNKED_PREFILL;
+    if (use_compact_dsv4) {
+      input_params.is_spec_verify = true;
+      input_params.attn_metadata.reset();
+    }
   }
-  if (::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel()) {
+  if (use_compact_verify) {
     specBuilder::update_input_params(input_params,
                                      buf,
                                      num_val_tokens,
@@ -363,13 +501,7 @@ void SpeculativeWorkerImpl::prepare_validate_inputs(
   update_sampling_params(
       validate_input.sampling_params, num_val_tokens, total_num_val_tokens);
 
-  // update dp_global_token_nums for dp/ep parallel
-  for (auto& it : input_params.parallel.dp_global_token_nums) {
-    it *= num_val_tokens;
-  }
-  for (auto& it : input_params.parallel.raw_dp_global_token_nums) {
-    it *= num_val_tokens;
-  }
+  scale_speculative_parallel_token_counts(input_params, num_val_tokens);
   validate_input.device_tensors_ready = true;
 }
 

@@ -171,7 +171,7 @@ std::vector<int32_t> read_capture_layer_ids(
   return capture_layer_ids;
 }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
 int32_t read_block_size(const std::string& model_weights_path) {
   JsonReader reader;
   const std::string config_path = model_weights_path + "/config.json";
@@ -203,8 +203,12 @@ void configure_deepseek_v4_dspark_args(ModelArgs& args,
       std::vector<int32_t>(static_cast<size_t>(args.dspark_num_layers()),
                            /*value=*/1));
 
+#if defined(USE_NPU)
   args.dspark_use_native_sas(
       KernelConfig::get_instance().enable_dspark_native_sas());
+#else
+  args.dspark_use_native_sas(false);
+#endif
 }
 #endif
 
@@ -1683,14 +1687,22 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
     args.num_speculative_tokens(options_.num_speculative_tokens());
     if (is_block_diffusion) {
       if (options_.is_draft_engine()) {
+#if defined(USE_MUSA)
+        CHECK_EQ(speculative_algorithm, "DSpark");
+        CHECK_EQ(args.model_type(), "deepseek_v4");
+        args.model_type("deepseek_v4_dspark");
+        configure_deepseek_v4_dspark_args(args, options_);
+#else
         LOG(FATAL) << speculative_algorithm
                    << " block-diffusion draft is not supported on "
                    << Platform::type_str() << ".";
+#endif
+      } else {
+        CHECK(options_.draft_model_path().has_value())
+            << "block-diffusion speculative decoding requires --draft_model.";
+        args.layers_to_capture(
+            read_capture_layer_ids(options_.draft_model_path().value()));
       }
-      CHECK(options_.draft_model_path().has_value())
-          << "block-diffusion speculative decoding requires --draft_model.";
-      args.layers_to_capture(
-          read_capture_layer_ids(options_.draft_model_path().value()));
     }
     // When running speculative decoding, the draft worker reuses the same
     // checkpoint as the target model. The draft worker needs to instantiate
