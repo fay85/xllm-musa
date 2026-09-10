@@ -1,21 +1,50 @@
-# DeepSeek-V4-0731 MUSA DSpark port: work in progress
+# DeepSeek-V4-0731 MUSA DSpark: validated hot-prefix configuration
 
 ## Scope and acceptance
 
 - Independent worktree: `xllm0814/xllm-dsv4-musa-dspark`.
 - Branch: `dsv4/feat/musa-dspark-20260910`, based on perf checkout
   `0dacf20781d43a8f2c05fea47be4d76b87ebc434`. The original perf checkout,
-  including its uncommitted MoE workspace and tensor-helper changes, is untouched.
+  including its uncommitted MoE workspace and tensor-helper source changes,
+  has not been edited in this continuation. See the original-index warning below.
 - Model: `/data/nfs_shared/models/DeepSeek-V4-Flash-0731-FP8-mt`.
   Config SHA256: `9a387b757dc12751447ec0f450a30929b3bfab17f2ee4b9a9a3372300c373fa4`.
 - Required comparison: 8 cards TP8/EP1, 2500 input / 1500 output tokens,
-  batch 1, prefix cache 0.65 with measured 1536-token hits, Full Graph,
+  batch 1, prefix cache 0.65 with measured 1536-token hits, target Graph,
   hot TTFT <250 ms and TPOT <14 ms. Retain the original documented
   <=13.758500 ms TPOT non-regression gate as well.
 - Retain complete six-request hot windows, all warmups/failures and strict
   1..750 checks. The old model's Run539/Run540 numbers are reference only;
   they are not evidence for the 0731 model or this branch.
 - No GPU reset or remote push. Use host mthreads-gmi for occupancy.
+
+## Final measured result
+
+Code revision `a9cd485c`, binary SHA256
+`78f4a5acff37b5353510bdf1b4d3a20aa8cb455c6b2e683f584b10d322eceee5`.
+Both independent services used the exact same binary/configuration:
+TP8/EP1/DP1/CP1, batch 1, static DSpark N=5, target six-token Graph plus
+draft eager block, prefill SP, Prefix Cache 0.65, overlap OFF, 2500/1500.
+
+| Independent service | Complete hot window | Mean client TTFT ms | Mean client TPOT ms | Strict full-text accuracy | Cache |
+| --- | --- | ---: | ---: | --- | --- |
+| dspark_sp_prefix_07 | variants 2–7 | 217.370500 | 8.212000 | 6/6, each 750/750 | 1536 on all six |
+| dspark_sp_prefix_08_fresh | variants 2–7 | 215.821167 | 8.188667 | 6/6, each 750/750 | 1536 on all six |
+
+Both windows PASS TTFT <250 ms, TPOT <14 ms and <=13.758500 ms.
+Every formal request, including cold/setup variants 0/1, passed exact token
+accounting and strict full-text counting. No samples were dropped.
+The preview model's MTP reference numbers are comparison targets, not the
+source of these results. This is the copied source's freshly compiled DSpark
+worker, not a donor compute binary.
+
+**Scope:** these results do not claim the draft is fully Graph-captured, or
+general model-quality parity beyond the counting protocol. Target-only eager
+remains unvalidated after an observed failure; adaptive, multi-batch, PD, CP,
+other models/devices and arbitrary prefix-hit ratios are not acceptance-tested.
+The existing compact-Graph compressor behavior is retained from the perf
+baseline; broader task/long-context equivalence requires separate validation.
+Commands and dependencies: [reproduction guide](DEEPSEEK_V4_MUSA_DSPARK_REPRO.md).
 
 ## References and implementation contract
 
@@ -145,11 +174,11 @@ These are metadata unit tests, not model precision tests.
 
 Edited C++ files were formatted with clang-format 20.1.6.
 
-Next: validate 0731 target-only and DSpark eager counting;
-compare proposal acceptance and context-KV results; validate DSpark Full
-Graph and prefix-state behavior; then run complete hot latency windows.
-DSpark 2500/1500 strict 1..750 now passes, but no hot-prefix latency window
-has passed the complete performance gate. Functional results are below.
+Follow-up work outside the measured acceptance configuration includes repairing
+target-only eager, capturing the complete draft pipeline and evaluating general
+model quality, larger batches and additional prefix-state scenarios.
+DSpark 2500/1500 strict 1..750 and two independent complete hot-prefix windows
+now pass. Historical intermediate results and failures are retained below.
 
 Runtime tools:
 `launch_eager.sh` selects the 0731 checkpoint, DSpark with five proposals,
@@ -317,3 +346,49 @@ at that sample. Holders are stopped only for this task's model experiments.
   for the DSpark draft manager; leave target Prefix Cache enabled. Build:
   `build_prefix_manager.log`. No SP precision or latency result was produced
   by this failed startup; host cleanup and resumed holders are retained.
+- `dspark_sp_prefix_07`: source `a9cd485c`, binary `78f4a5ac...`.
+  Two 64/64 warmups passed strict full-text 1..32. Complete formal variants
+  0–7 all passed strict full-text 1..750 and usage=2500/1500. Cold/setup
+  TTFTs 925.316 and 649.802 ms are retained, not part of the hot window.
+  Hot TTFTs: 219.413, 219.962, 219.193, 212.830, 216.902, 215.923 ms.
+  Hot TPOTs: 8.311, 8.285, 8.169, 8.152, 8.156, 8.199 ms.
+  Every hot request reported 1536 cached tokens. `window_2_7.summary.json`
+  is PASS. After shutdown, host inspection confirmed zero GPU memory and
+  no processes before the independent service was started.
+- `dspark_sp_prefix_08_fresh`: identical source/binary/configuration, fresh
+  processes and reloaded target/draft weights. Two short warmups and all eight
+  formal requests passed. Cold/setup TTFTs 924.949 and 681.381 ms are retained.
+  Hot TTFTs: 219.031, 217.122, 211.151, 214.940, 217.633, 215.050 ms.
+  Hot TPOTs: 8.223, 8.185, 8.228, 8.166, 8.140, 8.190 ms.
+  Every hot request reported 1536 cached tokens. `window_2_7.summary.json`
+  is PASS. Host snapshots were collected before/during/after both windows.
+- The formal benchmark is a retained copy of the original timing protocol;
+  only checkpoint selection and post-timing full-text output/checking were
+  added. `strict_text_passed` requires the whitespace-separated output to
+  exactly equal canonical strings 1 through 750; usage fallback is rejected.
+- `loaded_shared_libraries.txt` in the fresh run records actual mappings,
+  including DSA Model1/local-prefill, MLA and TF32 HC prenorm AOT modules beyond
+  the launcher's minimal preflight list. Fingerprints are retained in
+  `dependency_sha256.txt` and `model_metadata_sha256.txt`.
+- Final audit: `final_gate.json` verifies all 16 formal requests and all 12
+  hot-window requests; the two summary files both report PASS. All 79 loaded
+  shared-library paths have matching SHA256 inventory entries. Script syntax
+  checks and git whitespace checks passed. Final documentation changes do not
+  alter the measured source revision or executable.
+- Final teardown: the fresh service exited cleanly and the host reported zero
+  MiB/no GPU processes. Eight 60-GiB holders were then restarted. Snapshot
+  `holder_final/host.txt` confirms about 61694 MiB per card (card 0 also has
+  the holders' small auxiliary contexts), with all eight at 100% compute at
+  that sample. Container holder PGID is 43610, worker PIDs 43612–43619; host
+  PIDs differ. Re-verify identity/occupancy before stopping any holder later.
+  No GPU reset or remote push occurred.
+
+## Original checkout index warning
+
+The original `xllm-dsv4-musa-perf` source worktree still differs from its HEAD
+only in the MoE workspace and tensor-helper files. A final read-only check
+also found a separately staged DSpark-related index that does not match those
+working files. Its Git directory/index is distinct from this worktree's.
+This continuation did not clear/reset that index or commit from the original
+checkout. Review `git diff --cached` there before any future original-branch
+commit; do not mistake that staging state for this clean DSpark branch.
