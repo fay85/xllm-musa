@@ -368,6 +368,18 @@ bool CompositeBlockManager::allocate_sequence(Sequence* seq,
   }
   KVCacheState& kv_state = seq->kv_state();
 
+  // SWA is a bounded ring while C4/C128 retain the full logical history.
+  // Release completed pages that have already slid out before asking the SWA
+  // leaf for the next chunk.  Waiting until after the allocation makes a
+  // chunked prefill deadlock once the ring is full: the new chunk cannot be
+  // allocated, so the post-commit release is never reached.  Publishing the
+  // completed prefix first preserves prefix-cache ownership; the operation is
+  // idempotent with the post-commit release below.
+  if (combination_ == LeafCombination::SWA_COMPRESSED) {
+    cache_full_blocks_for_sequence(seq);
+    release_out_of_window_for_sequence(seq);
+  }
+
   // Fan out growth. Each leaf returns its newly allocated blocks (or nullopt
   // on failure). Stage keyed by BlockType; commit only after every leaf
   // succeeds so a failure rolls back cleanly.

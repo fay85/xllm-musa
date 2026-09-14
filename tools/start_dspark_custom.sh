@@ -17,6 +17,9 @@ kv_cache_dtype=${XLLM2_EXTERNAL_TP8_KV_CACHE_DTYPE:-auto}
 ep_size=${XLLM2_EXTERNAL_TP8_EP_SIZE:-1}
 dp_size=${XLLM2_EXTERNAL_TP8_DP_SIZE:-1}
 host_blocks_factor=${XLLM2_EXTERNAL_TP8_HOST_BLOCKS_FACTOR:-0}
+num_speculative_tokens=${XLLM2_EXTERNAL_TP8_NUM_SPECULATIVE_TOKENS:-5}
+disable_draft=${XLLM2_EXTERNAL_TP8_DISABLE_DRAFT:-false}
+enable_chunked=${XLLM2_EXTERNAL_TP8_CHUNKED_PREFILL:-true}
 mkdir -p "$run_dir"
 [[ ! -e "$run_dir/launch_manifest.txt" ]] || { echo "run directory already used" >&2; exit 2; }
 preload="$custom_ar:/data/nfs_shared/xllm2_artifacts/libasio_gcc.so:/usr/local/lib/python3.10/dist-packages/torch_musa/lib/libmusa_python.so"
@@ -38,6 +41,9 @@ library_path="/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib
   echo "max_memory_utilization=$max_memory"
   echo "kv_cache_dtype=$kv_cache_dtype"
   echo "host_blocks_factor=$host_blocks_factor"
+  echo "num_speculative_tokens=$num_speculative_tokens"
+  echo "disable_draft=$disable_draft"
+  echo "enable_chunked_prefill=$enable_chunked"
   echo "block_size=128"
   echo "enable_chunked_prefill=true"
   echo "ops_path=$ops_path"
@@ -46,6 +52,11 @@ library_path="/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib
 } > "$run_dir/launch_manifest.txt"
 
 pids=()
+draft_args=(--draft_model="$model_path")
+if [[ "$disable_draft" == true ]]; then
+  num_speculative_tokens=0
+  draft_args=()
+fi
 cleanup() {
   trap - INT TERM EXIT
   for pid in "${pids[@]}"; do kill -INT "$pid" 2>/dev/null || true; done
@@ -70,10 +81,12 @@ launch_rank() {
     --enable_prefix_cache=true --enable_in_batch_prefix_cache=false \
     --max_tokens_per_batch="$max_tokens" --max_seqs_per_batch=1 \
     --max_concurrent_requests=1 --num_response_handling_threads=4 \
-    --enable_chunked_prefill=true --enable_shm=false \
-    --enable_schedule_overlap=false --num_speculative_tokens=5 \
+    --enable_chunked_prefill="$enable_chunked" \
+    --max_tokens_per_chunk_for_prefill="$max_tokens" --enable_shm=false \
+    --enable_schedule_overlap=false --num_speculative_tokens="$num_speculative_tokens" \
     --speculative_algorithm=DSpark --enable_mtp_draft_body_tp1=false \
-    --draft_model="$model_path" --enable_graph=true \
+    "${draft_args[@]}" \
+    --enable_graph=true \
     --enable_graph_vmm_pool=true --enable_graph_mode_decode_no_padding=true \
     --max_tokens_for_graph_mode=2048 --enable_online_profile=false \
     --profile_backend=torch --profile_dir="$run_dir/profile" \
