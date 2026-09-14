@@ -19,6 +19,7 @@ def main() -> None:
     p.add_argument("--output-tokens", type=int, required=True)
     p.add_argument("--count-to", type=int, required=True)
     p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--show-special-tokens", action="store_true")
     a = p.parse_args()
     tok = AutoTokenizer.from_pretrained(a.model_path, trust_remote_code=True,
                                         local_files_only=True)
@@ -49,6 +50,7 @@ def main() -> None:
                "reasoning_effort": "none",
                "temperature": 0, "max_tokens": a.output_tokens,
                "ignore_eos": True, "stream": True,
+               "skip_special_tokens": not a.show_special_tokens,
                "stream_options": {"include_usage": True}}
     req = urllib.request.Request(a.url, data=json.dumps(payload).encode(),
                                  headers={"Content-Type": "application/json"},
