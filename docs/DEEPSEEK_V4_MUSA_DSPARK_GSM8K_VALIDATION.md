@@ -1,0 +1,71 @@
+# DeepSeek-V4-Flash MUSA DSpark GSM8K 精度记录
+
+日期：2026-09-14。实验分支：goal-dspark-30k-20260914，二进制为当前分支
+build/dspark-musa-local/xllm/xllm（SHA256：
+396a855499468a9add72321f1b862b5a73231ef0ceb37b098801593363f14269）。
+模型：/data/nfs_shared/models/DeepSeek-V4-Flash-0731-FP8-mt。
+
+## 数据集与评分
+
+使用 GSM8K 官方测试集 grade_school_math/data/test.jsonl，下载地址为：
+https://raw.githubusercontent.com/openai/grade-school-math/master/grade_school_math/data/test.jsonl。
+下载文件 SHA256=3730d312f6e3440559ace48831e51066acaca737f6eab99bccb9e4b3c39d14，
+共 1319 题；Parquet 转换副本和全部结果只保存在本目录下的 logs/。
+
+本次固定随机种子 20260914 抽取 100 题，不是人工挑题；样本题号、题目、参考答案、
+模型全文和预测值均在 logs/gsm8k_eval_20260914_1925/sample100/results.jsonl。
+参考答案取官方答案中 #### 后的数值；预测答案取模型输出的最后一个 ####、boxed
+或数值，并做逗号、整数、小数、分数规范化。该规则适用于 GSM8K 数值准确率，
+不等同于严格文本匹配。
+
+## 运行配置
+
+- MTT S5000 8 卡，TP8/EP1/DP1/CP1，global batch=1，串行请求。
+- DSpark N=5，Graph/VMM/decode-no-padding 开启，Prefix Cache 开启，schedule overlap 关闭。
+- max_memory_utilization=0.8，max_tokens_per_batch=10240，MUSA Torch 2.9.1，
+  使用已存在 AOT/custom-AR 依赖；没有修改共享依赖或 GPU 驱动。
+- evaluator：prompt-style=reasoning、thinking-mode=chat、reasoning-effort=high、
+  temperature=0、top-p=1、max_tokens=2048。
+
+## 结果
+
+| 数据量 | 正确 | 错误 | 请求错误 | 准确率 |
+| ---: | ---: | ---: | ---: | ---: |
+| 100 | 71 | 29 | 0 | **71.0%** |
+
+总请求耗时 666.576 秒。服务端 100 个请求均正常返回，没有 OOM、进程退出或 HTTP
+请求错误。逐请求服务日志在 logs/gsm8k_eval_20260914_1925/service/rank*.log；
+可见短题 TTFT 约 120 ms，但部分请求生成到 2048 token 才停止，说明答案格式遵循
+并不稳定。
+
+## 错误定位初步结论
+
+错误不是单一的“数值精度误差”表现：
+
+1. 部分是正常的算术/读题错误，例如 index=125 预测 0、参考 10，index=128 预测
+   130、参考 880，index=705 预测 10、参考 120。
+2. 多个输出混入与当前题目无关的历史问答、模板或重复 token，例如 index=244、255、
+   570、589、716、724、911、959；index=567 反复输出 2.2，index=1096 出现大量
+   [end]。这类现象更像请求间 KV/Graph/DSpark 状态或输出约束问题，而不是单纯
+   FP8/MXFP4 算子舍入；本轮没有做关闭 Graph、关闭 draft、Eager 或 MATE 对照，
+   因而不能把它归因到某个算子。
+3. 0 个请求异常且显存稳定，说明本轮主要是模型输出正确性未闭环，不是服务可用性或
+   显存问题。71% 也不能代表官方 GSM8K test 全量准确率；要宣称全量结果必须跑完
+   剩余 1219 题，并固定相同 prompt/scoring 口径。
+
+## 可复现命令
+
+服务启动和 GPU 占用方式见 DSpark 8192/1024 记录。服务 ready 后，在当前项目目录
+执行（使用新的输出目录）：
+
+    python3 -B /data/nfs_shared/jiaming.wang/test/fhxllm/xllm-musa-worker25/logs/goal_gsm8k100_20260811/deepseek_v4_gsm8k_eval.py \
+      --dataset=logs/gsm8k_eval_20260914_1925/gsm8k_test.parquet \
+      --url=http://127.0.0.1:18920/v1/chat/completions \
+      --model=DeepSeek-V4-Flash-FP8 \
+      --output-dir=logs/gsm8k_eval_new/sample100 \
+      --samples=100 --seed=20260914 --max-tokens=2048 --timeout=600 \
+      --temperature=0 --top-p=1 --thinking-mode=chat --reasoning-effort=high \
+      --prompt-style=reasoning
+
+本次测试结束后已停止 xLLM 服务，并恢复 0--7 卡占卡程序（PID=24062，每卡 70 GiB）；
+未执行 GPU reset。
