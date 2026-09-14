@@ -22,7 +22,9 @@ MUSA AOT objects、custom all-reduce 和 Torch/MUSA 2.9.1，不重新编译共�
 | 前缀缓存 | 每个变体 cached_tokens=1536 |
 
 汇总证据：`logs/repro_dspark_20260914_baseline_run/window_2_7.summary.json`。
-注意该二进制 SHA256 为
+基线首次启动时 manifest 记录的目标工作树仍是迁入修复前的 `046fb526`；二进制
+来自同名只读工作树的 `ad17d7f8`，随后已将 `cafa1663`、`b8dc72ba`、`ad17d7f8`
+三个提交迁入本分支，因此源代码与该二进制对齐。注意该二进制 SHA256 为
 `99bde8b9ece700a5bc452c090663fc74bf7b71e06136a7214cf475f65a16023b`，与本分支
 迁入的 stream/state 修复提交一致；后续若重新构建必须重新记录 SHA。
 
