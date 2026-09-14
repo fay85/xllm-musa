@@ -79,6 +79,11 @@ EP8 将每卡显存占用降至约 72 GiB，但旧启动配置仍没有显式 ch
 `content`（生成的是不可见 token），严格计数未通过。因此这是“功能可调度但精度
 未闭环”，不能作为最终达标结果。
 
+使用与正式基线相同的上下文型 prompt（非纯 `x` 填充）复测，结果一致：server
+完成 `generated_tokens=1024`，TTFT 约 `14.24 s`、TPOT 约 `386.8 ms`，原始 SSE
+逐 token 返回 `<｜end▁of▁sentence｜>`，不是客户端解析丢失。显式设置
+`reasoning_effort=none` 也未改变该结果。
+
 chunk=128 对照也能完成请求，但 TTFT 约 `45.5 s`、TPOT 约 `878.9 ms`，同样
 没有可见 content；说明长 chunked prefill 仍存在 compressor/indexer/SWA 状态或
 长上下文 logits 问题，尚未达到高性能/正确性目标。
