@@ -149,3 +149,22 @@ TP8/EP1、DSpark N=5、Graph、Prefix、chunk=10240、显存利用率 0.8、
 连续完成并正确输出；它仍不等价于 GSM8K 或任意自然语言长上下文全量正确性，也
 不意味着 TTFT 达到 250 ms。旧的未预热 EOS 异常及 GSM8K 71% 结果仍需后续
 Graph/draft 关闭对照，不能从本次两次通过直接归因于某个算子已完全修好。
+
+## 当前二进制高性能原口径复测
+
+日志目录：logs/repro_current_highperf_20260915/。本次使用当前分支二进制
+（SHA256：396a855499468a9add72321f1b862b5a73231ef0ceb37b098801593363f14269）
+和项目高性能启动器原参数：TP8/EP1/DP1/CP1、DSpark N=5、Graph、Prefix
+Cache 0.65、max_tokens_per_batch=10240、显存利用率 0.8。两次 64/64 预热后
+执行 2500/1500、count-to=750 的 variant 0--7。
+
+variant 0/1 的 TTFT 分别为 936.643/651.232 ms，不计入热态窗口。
+variant 2--7 均严格 1..750 PASS、cached_tokens=1536：
+
+| 热态样本数 | TTFT_AVG | TPOT_AVG | 严格精度 | 验收 |
+| ---: | ---: | ---: | --- | --- |
+| 6（variant 2--7） | 217.212 ms | 8.159 ms | 6/6 PASS | PASS |
+
+当前分支满足 TTFT<250 ms、TPOT<14 ms。summary 文件为
+logs/repro_current_highperf_20260915/window_2_7.summary.json。这是
+B1/global batch=1 的 2500/1500 热态结果，不能外推为多 batch 或 30K TTFT。
