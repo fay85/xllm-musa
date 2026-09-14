@@ -22,6 +22,7 @@ disable_draft=${XLLM2_EXTERNAL_TP8_DISABLE_DRAFT:-false}
 enable_chunked=${XLLM2_EXTERNAL_TP8_CHUNKED_PREFILL:-true}
 speculative_algorithm=${XLLM2_EXTERNAL_TP8_SPECULATIVE_ALGORITHM:-DSpark}
 enable_graph=${XLLM2_EXTERNAL_TP8_GRAPH:-true}
+prefill_threshold=${XLLM2_EXTERNAL_TP8_PREFILL_THRESHOLD:-0.95}
 mkdir -p "$run_dir"
 [[ ! -e "$run_dir/launch_manifest.txt" ]] || { echo "run directory already used" >&2; exit 2; }
 preload="$custom_ar:/data/nfs_shared/xllm2_artifacts/libasio_gcc.so:/usr/local/lib/python3.10/dist-packages/torch_musa/lib/libmusa_python.so"
@@ -48,6 +49,7 @@ library_path="/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib
   echo "enable_chunked_prefill=$enable_chunked"
   echo "speculative_algorithm=$speculative_algorithm"
   echo "enable_graph=$enable_graph"
+  echo "prefill_scheduling_memory_usage_threshold=$prefill_threshold"
   echo "block_size=128"
   echo "enable_chunked_prefill=true"
   echo "ops_path=$ops_path"
@@ -87,6 +89,7 @@ launch_rank() {
     --max_concurrent_requests=1 --num_response_handling_threads=4 \
     --enable_chunked_prefill="$enable_chunked" \
     --max_tokens_per_chunk_for_prefill="$max_tokens" --enable_shm=false \
+    --prefill_scheduling_memory_usage_threshold="$prefill_threshold" \
     --enable_schedule_overlap=false --num_speculative_tokens="$num_speculative_tokens" \
     --speculative_algorithm="$speculative_algorithm" --enable_mtp_draft_body_tp1=false \
     "${draft_args[@]}" \

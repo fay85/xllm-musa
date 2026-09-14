@@ -3687,9 +3687,24 @@ DeepseekV4AttentionImpl::forward(
            "one GEMM and one collective.";
   }
   if (use_compressed_attention && (is_prefill || is_chunked_prefill)) {
-    // A first, non-chunked prefill starts a new recurrent stream. A chunked
-    // suffix must retain the state gathered from its mounted prefix block.
-    if (is_prefill && !is_chunked_prefill) {
+    // A new request can enter through chunked prefill (DSpark requires the
+    // chunked flag). Detect its first chunk from the global compression span:
+    // its KV length equals the number of tokens being compressed; later chunks
+    // include the already-computed prefix and therefore have a larger length.
+    bool starts_new_chunked_prefill = false;
+    if (is_chunked_prefill && !kv_lens.empty() &&
+        compression_query_ranges.size() == kv_lens.size()) {
+      starts_new_chunked_prefill = true;
+      for (size_t seq_idx = 0; seq_idx < kv_lens.size(); ++seq_idx) {
+        const auto& range = compression_query_ranges[seq_idx];
+        const int64_t compression_tokens = range.second - range.first;
+        if (compression_tokens <= 0 || kv_lens[seq_idx] != compression_tokens) {
+          starts_new_chunked_prefill = false;
+          break;
+        }
+      }
+    }
+    if ((is_prefill && !is_chunked_prefill) || starts_new_chunked_prefill) {
       compressor_kv_history_.clear();
       compressor_kv_state_.clear();
       compressor_score_state_.clear();
