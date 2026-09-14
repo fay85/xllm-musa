@@ -33,6 +33,11 @@ MUSA AOT objects、custom all-reduce 和 Torch/MUSA 2.9.1，不重新编译共�
 
 ## 30K/1024 尝试
 
+本轮新增修复：`CompositeBlockManager::allocate_sequence` 在 SWA ring
+增长前先发布已完成前缀并释放已经滑出窗口的物理页，避免 chunked prefill
+在第二个 chunk 因“先申请、后释放”而死锁。启动器同时显式传递
+`max_tokens_per_chunk_for_prefill`；`max_tokens_per_batch` 不能代替该参数。
+
 ### EP1，32768 batch token，显存 0.8
 
 目录：`logs/repro_dspark_20260914_30k_mem80_run/`。
@@ -51,8 +56,9 @@ DSV4 c4_count must be > 0 when compress_ratio=4 layers exist
 
 目录：`logs/repro_dspark_20260914_30k_chunk4096/`。
 
-服务可启动，但 cache shape 为 `c4_count=3744,c128_count=117`，可调度容量约
-15K token；30K 请求被 scheduler 正确拒绝：
+服务可启动，但旧二进制 cache shape 为 `c4_count=3744,c128_count=117`；由于
+启动器没有传 `max_tokens_per_chunk_for_prefill`，实际仍按整段 prompt 申请，30K
+请求被 scheduler 拒绝。
 
 ```text
 Request prompt is too long, no enough memory to schedule a single sequence
@@ -62,9 +68,26 @@ Request prompt is too long, no enough memory to schedule a single sequence
 
 目录：`logs/repro_dspark_20260914_30k_ep8/`。
 
-EP8 将每卡显存占用降至约 72 GiB，但 cache shape 仍为
-`c4_count=3808,c128_count=119`（约 15K token）；30K/1024 同样被 scheduler
-拒绝。该路径的拒绝不是请求精度失败，客户端只收到无 content token 的错误响应。
+EP8 将每卡显存占用降至约 72 GiB，但旧启动配置仍没有显式 chunk 参数，30K
+同样被 scheduler 拒绝。
+
+### SWA 修复后二进制，chunk=1024，显存 0.9
+
+目录：`logs/repro_dspark_30k_swa_fix_chunk1024/`。服务能够接受并完成
+`prompt_tokens=30000, generated_tokens=1024`，证明 SWA 物理页增长死锁已解除；
+但 server 端 TTFT 约 `14.5 s`、TPOT 约 `388.7 ms`，客户端没有收到可见
+`content`（生成的是不可见 token），严格计数未通过。因此这是“功能可调度但精度
+未闭环”，不能作为最终达标结果。
+
+chunk=128 对照也能完成请求，但 TTFT 约 `45.5 s`、TPOT 约 `878.9 ms`，同样
+没有可见 content；说明长 chunked prefill 仍存在 compressor/indexer/SWA 状态或
+长上下文 logits 问题，尚未达到高性能/正确性目标。
+
+### 显式 full-prefill 尝试
+
+`max_tokens_per_batch=32768`、显存 0.9 可启动（`swa_count=260,
+c4_count=1440,c128_count=45`），但 30K 请求首次 prefill workspace 额外申请
+6.71 GiB 时 OOM，不能用 full-prefill 绕过 chunk 状态问题。
 
 ### 已验证的不可行尝试
 
@@ -78,10 +101,10 @@ EP8 将每卡显存占用降至约 72 GiB，但 cache shape 仍为
 
 ## 结论与后续
 
-当前 80-GiB S5000、DSpark TP8/EP1（或 EP8）在此模型和现有 MUSA cache 实现下，
-30K 单序列不能仅通过 chunk 或显存比例配置跑通：可用 cache 约 15--21K token，
-而完整 30K 需要更多压缩 KV/state 空间。框架已经在调度前给出明确拒绝，不存在
-隐性错误输出。
+当前 80-GiB S5000、DSpark TP8/EP1 已经可以在修复后完成 30K 的 cache 分配和
+生成循环，但长 chunked prefill 的严格精度与性能仍未闭环；full-prefill 受 workspace
+峰值显存限制。当前不能宣称 30K/1024 达标，需继续修复 chunked compressor/indexer/
+SWA 状态演进或降低 prefill workspace 峰值。
 
 若必须支持 30K，需要后续架构级工作（例如降低 DSV4 model1/state 每 token
 占用、实现 MUSA 可用的 KV host/offload 或采用更大显存/不同并行切分），并为
