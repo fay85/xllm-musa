@@ -46,6 +46,7 @@ def main() -> None:
         raise RuntimeError(f"cannot build exact prompt: {actual} != {a.prompt_tokens}")
     payload = {"model": a.model, "messages": [{"role": "user", "content": content}],
                "chat_template_kwargs": {"enable_thinking": False},
+               "reasoning_effort": "none",
                "temperature": 0, "max_tokens": a.output_tokens,
                "ignore_eos": True, "stream": True,
                "stream_options": {"include_usage": True}}
