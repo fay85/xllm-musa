@@ -2920,8 +2920,10 @@ DeepseekV4AttentionImpl::forward(
   // Otherwise a later decode could reuse tensors left by a previous request
   // after its prompt stayed below the full-KV threshold. This is a defensive
   // request-isolation reset, not a complete GSM8K accuracy fix. Prefix
-  // snapshots are request-scoped and rebuilt by compress_prefill_sequence
-  // when needed, so they remain intact.
+  // snapshots are also cleared: a short full-KV request can legitimately
+  // bypass compress_prefill_sequence, so retaining a snapshot by sequence
+  // slot would let a later cached-prefix request restore another request's
+  // state.
   if (is_prefill && !is_chunked_prefill) {
     compressor_kv_history_.clear();
     compressor_kv_state_.clear();
@@ -2929,6 +2931,10 @@ DeepseekV4AttentionImpl::forward(
     indexer_kv_history_.clear();
     indexer_kv_state_.clear();
     indexer_score_state_.clear();
+    prefix_compressor_kv_state_.clear();
+    prefix_compressor_score_state_.clear();
+    prefix_indexer_kv_state_.clear();
+    prefix_indexer_score_state_.clear();
   }
 
   const dsv4_musa_sp::DeepseekV4SPContext* sp_context =

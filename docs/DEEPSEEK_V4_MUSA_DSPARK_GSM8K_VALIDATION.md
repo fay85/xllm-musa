@@ -175,3 +175,16 @@ manifest 确认实际权重为 `DeepSeek-V4-Flash-0731-FP8-mt`。
 active；后续需要对同一请求做 Graph/Eager logits 对照，并检查短上下文 SWA
 slot/block-table 与 graph persistent metadata，而不是继续把提示词收益当作
 运行时正确性修复。实验结束恢复 0--7 卡占卡，未执行 GPU reset。
+
+## 2026-09-15 后续状态隔离候选
+
+在前述修复基础上，普通 prefill 现在也清理 prefix compressor/indexer snapshot
+向量，防止 full-KV 短请求绕过压缩路径时遗留按 sequence slot 保存的快照污染下一次
+带 prefix 的请求。候选二进制为
+`build/gsm8k_candidates/state_reset_prefix_20260915/xllm`，SHA256=
+`ef1e20f3815b4524e3bb81b9c63687674489481287eb20e15cd193be7faede01`。
+
+该候选已完成编译检查，但本轮启动复测时 MUSA allocator 报告每卡仅约 249 MiB
+可用，服务未进入可测试状态；没有把这次 OOM 当作精度结果，也没有覆盖生产二进制。
+待 GPU allocator 状态恢复后，必须重新跑固定 100 题并与前一候选按相同 manifest
+对比。
