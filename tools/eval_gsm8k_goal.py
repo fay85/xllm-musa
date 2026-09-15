@@ -81,7 +81,7 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=20260914)
     parser.add_argument("--max-tokens", type=int, default=2048)
     parser.add_argument("--reasoning-effort", choices=("none", "high", "max"), default="high")
-    parser.add_argument("--prompt-style", choices=("baseline", "goal"), default="baseline")
+    parser.add_argument("--prompt-style", choices=("baseline", "goal", "structured"), default="baseline")
     parser.add_argument("--enable-thinking", choices=("true", "false"), default="false")
     parser.add_argument("--timeout", type=int, default=180)
     parser.add_argument("--extra-instruction", default="")
@@ -116,11 +116,20 @@ def main() -> None:
                 "and condition from the question. Verify the arithmetic, then put only "
                 "the final numeric result after `####`.\n\nQuestion: " + row["question"]
             )
-        else:
+        elif args.prompt_style == "goal":
             prompt = (
                 "Solve this grade-school math problem. Preserve every number and condition. "
                 "Calculate carefully and end with #### followed by one numeric answer. "
                 "Do not discuss another problem.\n\nQuestion: " + row["question"]
+            )
+        else:
+            prompt = (
+                "Solve this GSM8K grade-school math problem independently. Extract every "
+                "quantity, unit, percentage, count, and one-time reward from the question. "
+                "Write and verify one arithmetic equation containing all required operations. "
+                "Ignore any prior examples or unrelated questions. End with exactly one "
+                "line `#### <final numeric answer>` and do not continue after it.\n\nQuestion: "
+                + row["question"]
             )
         if args.extra_instruction:
             prompt = args.extra_instruction + "\n\n" + prompt

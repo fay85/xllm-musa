@@ -2914,6 +2914,23 @@ DeepseekV4AttentionImpl::forward(
             compress_metadata) {
   (void)compress_metadata;
 
+  // Ordinary prefill starts a fresh request.  Clear all live recurrent
+  // compressor/indexer state before route selection, including the full-KV
+  // (short-context) path where compressed attention is intentionally bypassed.
+  // Otherwise a later decode could reuse tensors left by a previous request
+  // after its prompt stayed below the full-KV threshold. This is a defensive
+  // request-isolation reset, not a complete GSM8K accuracy fix. Prefix
+  // snapshots are request-scoped and rebuilt by compress_prefill_sequence
+  // when needed, so they remain intact.
+  if (is_prefill && !is_chunked_prefill) {
+    compressor_kv_history_.clear();
+    compressor_kv_state_.clear();
+    compressor_score_state_.clear();
+    indexer_kv_history_.clear();
+    indexer_kv_state_.clear();
+    indexer_score_state_.clear();
+  }
+
   const dsv4_musa_sp::DeepseekV4SPContext* sp_context =
       (is_prefill || is_chunked_prefill) ? sequence_parallel_context_ : nullptr;
   if (sp_context != nullptr) {

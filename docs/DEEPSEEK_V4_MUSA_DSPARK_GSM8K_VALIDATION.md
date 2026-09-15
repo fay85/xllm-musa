@@ -134,3 +134,44 @@ health-check 断连，不能作为正确性基线。
 连接失败计入模型准确率。下一步应在 no-draft/no-prefix 隔离路径上实现受控的失败题
 复核或修复短上下文多阶段算术/输出污染，然后重新跑完整 100 题；不要把 few-shot
 test-derived 演示（会导致复制演示答案）当成标准 GSM8K 结果。
+
+## 2026-09-15 晚间：短上下文状态隔离候选
+
+候选二进制：`build/gsm8k_candidates/state_reset_20260915/xllm`，
+SHA256=`be9c2b465794555a3dd30a678f8e5933a0c7fc3571a18bb63882cf5178c29e4c`。
+生产二进制 `build/gsm8k_baseline_396a/xllm` 未覆盖。
+
+新增防御性修复：普通 prefill 在进入 full-KV/compressed 路由选择前清理本层
+compressor/indexer 的 live history/state，避免短 prompt 绕过 compressed 分支后
+保留上一请求的 live state。此修复只做请求隔离，不声称已经解决全部精度问题。
+
+同一固定 100 题的前 20 题，使用正确的 0731 权重重新验证：
+
+| 配置 | 提示词 | 结果 | 请求错误 |
+| --- | --- | ---: | ---: |
+| Graph=true, draft=false, Prefix Cache=false | baseline, high, max_tokens=2048 | 17/20=85% | 0 |
+| Graph=true, DSpark N=5, Prefix Cache=true | baseline, high, max_tokens=2048 | 14/20=70% | 0 |
+| Graph=true, draft=false, Prefix Cache=false | structured, high, max_tokens=1024 | 16/20=80% | 0 |
+| 同上，固定第 21--40 题 | structured, high, max_tokens=1024 | 15/20=75% | 0 |
+
+structured 提示词的前 40 题合计 31/40=77.5%，没有提升到 90%。将失败样本输出
+上限改为 512 也没有修复：10 个诊断样本为 2/10；这不是完整回归准确率。
+无 draft/no-prefix 路径的稳态 TPOT 约 22.2--22.5 ms，仍慢于历史高性能 DSpark
+路径，不作为最终性能配置。
+
+重要边界：最初一轮候选实验误用了旧路径 `DeepSeek-V4-Flash-FP8`，其 3 题结果
+仅保存在 `failed3.json`，不计入 0731 的准确率。之后所有 `0731_*` 结果均由
+manifest 确认实际权重为 `DeepSeek-V4-Flash-0731-FP8-mt`。
+
+当前仍能看到两类错误：
+
+- 真实读题/算术错误：index=201 把 $5000 奖励改写成 $1000，或漏算加薪；
+  index=235 把题目的 20 人改成 21 人。
+- 答案后续漂移：index=128 先正确计算 880，之后改写为另一道水果题；index=244
+  把最终 27 改成 25，随后继续生成无关问题。仅清理 live state 和调整提示词
+  不能消除，尚不能归因于某个 FP8/MXFP4/MATE 算子。
+
+证据全部位于 `logs/gsm8k_state_reset_20260915/`。目标 90% 尚未达到，goal 保持
+active；后续需要对同一请求做 Graph/Eager logits 对照，并检查短上下文 SWA
+slot/block-table 与 graph persistent metadata，而不是继续把提示词收益当作
+运行时正确性修复。实验结束恢复 0--7 卡占卡，未执行 GPU reset。
