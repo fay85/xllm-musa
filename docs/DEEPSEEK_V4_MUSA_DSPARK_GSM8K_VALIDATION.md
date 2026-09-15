@@ -86,3 +86,28 @@ trace 元数据确认普通 GSM8K prefill 为 `is_prefill=1`、`is_chunked_prefi
 上一轮 71% 的错误需要拆成两类处理：一部分模型正文已经出现正确答案，后续又生成无关内容（应改 stop/EOS 或请求状态）；另一部分是真实算术/读题错误。部分 GSM8K 官方题目还存在题面与标签不一致（例如 index=952 题面是 8AM 到 11PM，官方答案按 8AM 到 11AM 的 3 小时计算），不能把这类样本归咎于算子精度。当前尚未有足够证据安全修改 Attention/KV 默认路径；本轮没有保留实验性阈值修改。
 
 证据目录：`logs/gsm8k_eval_20260914_1925/sample100/`、`logs/gsm8k_short_answer_20260915/`、`logs/gsm8k_threshold0_20260915/`、`logs/gsm8k_graph_eager_20260915/`。
+
+## GSM8K goal 复测（2026-09-15）
+
+新分支 `fix/gsm8k-short-context-20260915` 增加了可复现实验工具，并将 Graph、
+draft、Prefix Cache 和 chunk 大小全部写入 manifest。当前最好的可用隔离配置是：
+
+```text
+TP8/EP1/DP1/CP1, Graph=true, DSpark draft=false,
+enable_prefix_cache=false, reasoning_effort=none, temperature=0
+```
+
+固定随机 100 题中的前 20 题结果为 `17/20=85%`；前三个 20 题批次合计
+`47/60=78.3%`。这组结果没有请求错误，且 server prompt token 保持约 70--160，
+没有 Prefix Cache 开启时出现的 1200+ token 旧模板膨胀。错误主要是真实读题/算术错误，
+例如把 5 次/周、4 周和 2 次/周、3 周读错，或把多阶段金额题漏算加薪。
+
+对比：默认 Graph+DSpark+Prefix Cache 的固定 100 题为 71/100；只输出数字为
+24/100；算式输出为 67/100。关闭 Graph/draft 的 target-only 路径会发生 collective
+health-check 断连，不能作为正确性基线。
+
+当前仍未达到用户要求的 90%，因此本 goal 不能标记完成。测试工具会拒绝覆盖已有
+输出、记录 dataset SHA、每题原始 response，并在 HTTP/worker 错误时停止而不是把
+连接失败计入模型准确率。下一步应在 no-draft/no-prefix 隔离路径上实现受控的失败题
+复核或修复短上下文多阶段算术/输出污染，然后重新跑完整 100 题；不要把 few-shot
+test-derived 演示（会导致复制演示答案）当成标准 GSM8K 结果。
