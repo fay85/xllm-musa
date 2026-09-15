@@ -774,6 +774,17 @@ torch::Tensor try_dsv4_mate_flashmla_decode(
     return torch::Tensor();
   }
   const bool dynamic_graph_window = dynamic_kv_seq_lens.defined();
+  // Dynamic Graph FlashMLA uses a different accumulation/layout path from
+  // eager scalar-length decode. Keep an opt-out for bit/accuracy isolation;
+  // the default remains enabled for the performance path.
+  if (dynamic_graph_window) {
+    const char* disable_dynamic_mate =
+        std::getenv("XLLM_DSV4_DISABLE_DYNAMIC_MATE");
+    if (disable_dynamic_mate != nullptr &&
+        std::string(disable_dynamic_mate) == "1") {
+      return torch::Tensor();
+    }
+  }
   const int64_t min_kv_len = dsv4_mate_flashmla_min_kv_len();
   const int64_t max_kv_len = dsv4_mate_flashmla_max_kv_len();
   if (max_kv_len <= 0 ||

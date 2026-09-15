@@ -220,3 +220,16 @@ SHA256=`612432d0c82a283a8b9813d388807d8a2258e3e240c1c29a215e46b8d54ff5f8`。
 Eager 不是足以达到 90% 的单独修复。前 7 题曾达到 7/7，但扩大样本后出现
 index=125、184、235、244、255 等错误。该结果仅作为 Graph/Eager 对照证据，不是
 完整 100 题结论。
+
+## 2026-09-16 动态 MATE FlashMLA 对照
+
+对 Graph 路径加入实验开关 `XLLM_DSV4_DISABLE_DYNAMIC_MATE=1`，仅禁用带动态
+`kv_seq_lens` 的 MATE FlashMLA，默认仍启用。候选二进制为
+`build/gsm8k_candidates/disable_dynamic_mate_20260915/xllm`，SHA256=
+`04d9bcf6e9d99beafb779279598d87f1755d62b0d7e1875d566308c7131ea26`。
+
+正确的 0731 权重、Graph=true、draft=false、Prefix Cache=false、固定前 20 题、
+max_tokens=1024 下，动态 MATE 禁用结果为 **16/20=80%**，默认 Graph 为 17/20。
+错误集合也发生变化（128、201、235、244 等），因此动态 MATE 是数值差异来源，
+但不是唯一精度根因，不能把它设为默认关闭。完整逐题结果在
+`logs/gsm8k_token_compare_20260915/dynamic_mate_off2/`。
