@@ -1465,7 +1465,13 @@ bool MusaGraph::capture(CausalLM* model,
     // and active via stream_guard) so the warmup runs on the exact stream
     // about to be captured -- syncing a different stream would leave the
     // capture stream with stale pending work.
-    for (int warmup_iter = 0; warmup_iter < 2; ++warmup_iter) {
+    const char* skip_graph_warmup_env =
+        std::getenv("XLLM_MUSA_GRAPH_SKIP_WARMUP");
+    const bool skip_graph_warmup =
+        skip_graph_warmup_env != nullptr &&
+        std::string(skip_graph_warmup_env) == "1";
+    for (int warmup_iter = 0; warmup_iter < (skip_graph_warmup ? 0 : 2);
+         ++warmup_iter) {
       capture_stream.synchronize();
       {
         xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
@@ -1494,26 +1500,29 @@ bool MusaGraph::capture(CausalLM* model,
     // hook (torch::empty), which MUSA rejects under stream capture. We capture
     // the exact sequence of tensors here and replay them during capture_begin.
     recorded_ffi_allocs_.clear();
-    xllm::kernel::musa::begin_ffi_alloc_record();
-    {
-      xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
-      model->forward(persistent_param_.persistent_tokens(padded_num_tokens_),
-                     persistent_param_.persistent_positions(padded_num_tokens_),
-                     kv_cache,
-                     graph_params_opt.value());
-    }
-    xllm::kernel::musa::sync_ffi_stream(persistent_param_.device());
-    if (snapshot_linear_state) {
-      // The FFI recording pass is eager as well; leave the live cache at the
-      // pre-capture state before beginning graph capture.
+    if (!skip_graph_warmup) {
+      xllm::kernel::musa::begin_ffi_alloc_record();
+      {
+        xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
+        model->forward(
+            persistent_param_.persistent_tokens(padded_num_tokens_),
+            persistent_param_.persistent_positions(padded_num_tokens_),
+            kv_cache,
+            graph_params_opt.value());
+      }
+      xllm::kernel::musa::sync_ffi_stream(persistent_param_.device());
+      if (snapshot_linear_state) {
+        // The FFI recording pass is eager as well; leave the live cache at the
+        // pre-capture state before beginning graph capture.
+        capture_stream.synchronize();
+      }
+      if (snapshot_linear_state) {
+        restore_linear_attention_state(linear_state_snapshots,
+                                       linear_state_snapshot_indices);
+      }
+      recorded_ffi_allocs_ = xllm::kernel::musa::end_ffi_alloc_record();
       capture_stream.synchronize();
     }
-    if (snapshot_linear_state) {
-      restore_linear_attention_state(linear_state_snapshots,
-                                     linear_state_snapshot_indices);
-    }
-    recorded_ffi_allocs_ = xllm::kernel::musa::end_ffi_alloc_record();
-    capture_stream.synchronize();
     LOG(INFO) << "Recorded " << recorded_ffi_allocs_.size()
               << " Mate FFI scratch tensors for decode graph capture, "
                  "bucket_num_tokens="

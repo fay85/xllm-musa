@@ -276,6 +276,16 @@ overlap。候选二进制为
 max_tokens=1024 下，关闭 overlap 结果仍为 **17/20=85%**，与默认 Graph 相同。
 因此 Q/KV overlap 不是主要精度根因，默认 overlap 保持开启。
 
+## 2026-09-16 Graph capture warmup 对照
+
+新增 `XLLM_MUSA_GRAPH_SKIP_WARMUP=1`，跳过两次 warmup 和一次 FFI recording
+forward，验证 capture 前状态写入是否是根因。候选二进制为
+`build/gsm8k_candidates/skip_warmup_20260916/xllm`，SHA256=
+`50e252b0a6947d1771d20b8a8d56996dc3add50631c077ea1755e6c2e34876cb`。
+
+该配置固定前 8 题仅 6/8，且第 7 题起出现显著延迟；默认 warmup/recording 不能
+直接删除，仍需针对 DSV4 cache 状态做精确快照恢复。
+
 ## 2026-09-16 fused dense decode 对照
 
 加入 `XLLM_DSV4_DISABLE_FUSED_DENSE_DECODE=1`，让 Graph decode 跳过 fused paged
