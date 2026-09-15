@@ -286,6 +286,13 @@ forward，验证 capture 前状态写入是否是根因。候选二进制为
 该配置固定前 8 题仅 6/8，且第 7 题起出现显著延迟；默认 warmup/recording 不能
 直接删除，仍需针对 DSV4 cache 状态做精确快照恢复。
 
+## 2026-09-16 DSpark draft 组合对照
+
+尝试开启 DSpark draft、关闭 Prefix Cache 后，首次 GSM8K 请求即导致 8 个 rank
+在模型初始化/执行阶段 MUSA OOM，未形成任何准确率结果。该配置不应作为当前
+GSM8K 精度基线；实验目录为 `logs/gsm8k_draft_noprefix_20260916/`，生产二进制
+未覆盖。
+
 ## 2026-09-16 Graph VMM pool 对照
 
 启动器新增 `XLLM2_EXTERNAL_TP8_GRAPH_VMM_POOL`，并以 `false` 关闭 Graph VMM
