@@ -234,6 +234,13 @@ max_tokens=1024 下，动态 MATE 禁用结果为 **16/20=80%**，默认 Graph �
 但不是唯一精度根因，不能把它设为默认关闭。完整逐题结果在
 `logs/gsm8k_token_compare_20260915/dynamic_mate_off2/`。
 
+## 2026-09-16 host mirror 刷新对照
+
+开启 `XLLM_KEEP_HOST_MIRROR_REFRESH=1`，并同时开启 Graph 输入/输出同步后，
+固定前 20 题仍为 **17/20=85%**，与默认 Graph 相同。由此排除当前默认跳过的
+paged-KV host mirror 刷新是主要精度根因；问题继续收敛到 Graph 内部某层状态或
+算子数值差异。结果位于 `logs/gsm8k_token_compare_20260915/hostmirror_refresh/`。
+
 ## 2026-09-16 Graph replay 完成屏障对照
 
 新增 `XLLM_MUSA_GRAPH_SYNC_OUTPUTS=1` 诊断开关，在 Graph replay 返回前等待
