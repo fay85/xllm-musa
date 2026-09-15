@@ -233,3 +233,15 @@ max_tokens=1024 下，动态 MATE 禁用结果为 **16/20=80%**，默认 Graph �
 错误集合也发生变化（128、201、235、244 等），因此动态 MATE 是数值差异来源，
 但不是唯一精度根因，不能把它设为默认关闭。完整逐题结果在
 `logs/gsm8k_token_compare_20260915/dynamic_mate_off2/`。
+
+## 2026-09-16 Graph replay 完成屏障对照
+
+新增 `XLLM_MUSA_GRAPH_SYNC_OUTPUTS=1` 诊断开关，在 Graph replay 返回前等待
+`capture_stream` 完成，以排除上一请求仍写共享 KV/output buffer 的竞态。候选二进制
+`build/gsm8k_candidates/graph_sync_both_20260916/xllm`，SHA256=
+`e95a9743152b459f2b585d6f6a2c4584551243b9dc50934f754acef60366e4f8`。
+
+与输入同步同时开启时，固定前 20 题仍为 **17/20=85%**，与默认 Graph 完全相同；
+因此简单的 replay 前后 stream race 不是主要精度根因。Graph/Eager 首个 token 对照
+仍显示约第 15 个 token 开始分歧，后续应继续比较 persistent embedding、Q/KV
+projection 和每层 attention 输出。该屏障保持诊断开关，未设为默认，避免性能回退。

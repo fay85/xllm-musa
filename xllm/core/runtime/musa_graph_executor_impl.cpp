@@ -1704,6 +1704,19 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
           replay_params_opt.value().attn_metadata);
     }
 
+    // Optional diagnostic barrier for persistent input copies. The update path
+    // runs on the caller stream while the captured graph is launched on
+    // capture_stream_; a barrier here distinguishes a stale-input race from
+    // kernel arithmetic differences. Keep it opt-in because the synchronous
+    // version is intentionally not the performance default.
+    static const bool s_sync_graph_inputs = [] {
+      const char* env = std::getenv("XLLM_MUSA_GRAPH_SYNC_INPUTS");
+      return env && std::string(env) == "1";
+    }();
+    if (s_sync_graph_inputs) {
+      c10::musa::getCurrentMUSAStream(device_index_).synchronize();
+    }
+
     // Timing is diagnostic-only. Do not synchronize the first q1 replay: the
     // target q2 and draft q2 graphs have not been captured yet, and a device
     // synchronization from that replay is illegal while another executor is
@@ -1728,6 +1741,19 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
                 << " replay_ms=" << replay_ms;
     } else {
       graph_.replay();
+    }
+
+    // Optional completion barrier for cross-request isolation diagnostics.
+    // The graph runs on capture_stream_, while the next scheduler request may
+    // arrive on another worker stream. Waiting here verifies whether a prior
+    // replay is still mutating shared KV/output storage when the next request
+    // starts. Keep opt-in until the performance cost is measured.
+    static const bool s_sync_graph_outputs = [] {
+      const char* env = std::getenv("XLLM_MUSA_GRAPH_SYNC_OUTPUTS");
+      return env && std::string(env) == "1";
+    }();
+    if (s_sync_graph_outputs) {
+      capture_stream_.synchronize();
     }
   }
 
