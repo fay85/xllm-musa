@@ -2006,6 +2006,21 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   }
   const uint32_t bucket_num_tokens = get_bucket_num_tokens(n_tokens);
 
+  // Honor the public graph token limit on MUSA as the CUDA executor does.
+  // Previously every decode shape entered capture/replay regardless of
+  // max_tokens_for_graph_mode, making an explicit eager accuracy comparison
+  // impossible and allowing unsupported buckets to retain stale graph state.
+  const int32_t max_graph_tokens = options_.max_tokens_for_graph_mode();
+  if (max_graph_tokens == 0 ||
+      (max_graph_tokens > 0 &&
+       static_cast<int64_t>(bucket_num_tokens) > max_graph_tokens)) {
+    LOG(INFO) << "MUSA graph bucket " << bucket_num_tokens
+              << " exceeds max_tokens_for_graph_mode (" << max_graph_tokens
+              << "), falling back to eager mode";
+    COUNTER_INC(num_model_execution_total_eager);
+    return model_->forward(tokens, positions, kv_caches, params);
+  }
+
   // Decode phase with full graph
   if (is_decode) {
     // Check if conditions are suitable for graph execution (replay or capture)

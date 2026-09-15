@@ -200,3 +200,17 @@ SHA256=`612432d0c82a283a8b9813d388807d8a2258e3e240c1c29a215e46b8d54ff5f8`。
 阈值 4096 结果仍为 **17/20=85%**，请求错误为 0；201、206、244 仍失败。说明
 把短序列更多地固定到 dense-KV 不能消除主要精度问题，因此没有将 4096 设为默认值。
 实验结果位于 `logs/gsm8k_state_reset_20260915/fullkv4096/`，生产二进制未覆盖。
+
+## 2026-09-15 MUSA Graph/Eager 对照
+
+补充修复了 MUSA Graph executor 对 `max_tokens_for_graph_mode` 不生效的问题，并在
+`tools/start_dspark_custom.sh` 增加 `XLLM2_EXTERNAL_TP8_MAX_GRAPH_TOKENS` 覆盖项。
+默认值仍为 2048；设置为 `0` 时显式走 Eager，便于精度对照。候选二进制为
+`build/gsm8k_candidates/graphlimit_20260915/xllm`，SHA256=
+`9f4cf97c295246d6a02712c3ecf588f9a1d2a28cb7924fe8d5e7881ca7f8fd7a`。
+
+同一 0731 权重、无 draft、无 Prefix Cache、固定前 20 题的 Eager 运行中，前 8
+题完成 **8/8**；随后在长生成题上单题耗时显著增加，完整 20 题尚未结束。之前同
+口径 Graph 运行前 20 题为 17/20，且 201/206/244 错误；因此 Graph 路径确实是
+精度风险来源之一，但 Eager 尚未形成完整 100 题结果，不能据此宣称达到 90%。
+本次长 Eager 任务已停止，生产性能路径未改变。
