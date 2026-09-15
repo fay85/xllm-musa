@@ -179,7 +179,10 @@ DecodeQKvOverlapState* get_decode_q_kv_overlap_state(int32_t device_id) {
   return state.get();
 }
 
-bool dsv4_musa_trace_enabled() { return false; }
+bool dsv4_musa_trace_enabled() {
+  const char* env = std::getenv("XLLM_DSV4_MUSA_TRACE");
+  return env != nullptr && std::string(env) == "1";
+}
 bool dsv4_musa_cache_trace_enabled() { return false; }
 bool dsv4_musa_mate_fused_dsa_trace_enabled() { return false; }
 bool dsv4_musa_mate_fused_dsa_verify_enabled() { return false; }
