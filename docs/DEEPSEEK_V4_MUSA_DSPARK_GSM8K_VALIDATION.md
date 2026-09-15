@@ -69,3 +69,20 @@ https://raw.githubusercontent.com/openai/grade-school-math/master/grade_school_m
 
 本次测试结束后已停止 xLLM 服务，并恢复 0--7 卡占卡程序（PID=24062，每卡 70 GiB）；
 未执行 GPU reset。
+
+## 2026-09-15 诊断对照
+
+关键源码改动已经先提交，工作树保持干净；当前生产二进制重新编译后 SHA256 为 `396a855499468a9add72321f1b862b5a73231ef0ceb37b098801593363f14269`。针对上一轮 29 个失败题做了以下隔离：
+
+- `short-answer`、max_tokens=128：24/100（同一 100 题），去掉推理反而恶化。
+- `expression`、max_tokens=256：67/100，不能消除错误。
+- `thinking_mode=thinking`、max_tokens=4096：前 8 题均未修复，并出现平方和/弹珠等无关历史内容。
+- `Graph=false`、Prefix Cache=false、draft 保留：代表性 3 题 0/3，输出长时间重复或答非所问。
+- target-only（Graph=false、draft=false、Prefix Cache=false）：worker collective health check 不连通，未形成可用精度对照。
+- 临时 `full_kv_threshold=0`：29 题几乎只输出 `Let’s` 后停止，证明不能直接强制所有短 prompt 走当前压缩 prefill。该改动已回退，未进入生产二进制。
+
+trace 元数据确认普通 GSM8K prefill 为 `is_prefill=1`、`is_chunked_prefill=0`，例如 q/kv=`20/154`、`15/119`、`14/112`，所以“首个 prefill 没被识别”不是当前证据支持的原因。
+
+上一轮 71% 的错误需要拆成两类处理：一部分模型正文已经出现正确答案，后续又生成无关内容（应改 stop/EOS 或请求状态）；另一部分是真实算术/读题错误。部分 GSM8K 官方题目还存在题面与标签不一致（例如 index=952 题面是 8AM 到 11PM，官方答案按 8AM 到 11AM 的 3 小时计算），不能把这类样本归咎于算子精度。当前尚未有足够证据安全修改 Attention/KV 默认路径；本轮没有保留实验性阈值修改。
+
+证据目录：`logs/gsm8k_eval_20260914_1925/sample100/`、`logs/gsm8k_short_answer_20260915/`、`logs/gsm8k_threshold0_20260915/`、`logs/gsm8k_graph_eager_20260915/`。
