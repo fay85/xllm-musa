@@ -255,6 +255,11 @@ metadata 缺失时才使用 batch 最大值。候选二进制为
 该修改针对 DSpark/MTP compact verify；本轮未重新开启 draft（之前 draft 组合会
 OOM），因此尚无它对固定 100 题的 E2E 准确率证据，默认非 compact 路径行为不变。
 
+随后使用低显存 DSpark 配置（`max_tokens_per_batch=512`、显存利用率 0.70）实际
+开启 draft 验证：前 10 题在 `max_tokens=512` 下为 **8/10**；针对失败题提高到
+`max_tokens=2048` 后为 **4/10**。causal guard 已能进入运行路径，但没有改善
+普通 GSM8K 的读题/算术错误，且完整 100 题仍未闭环。
+
 ## 2026-09-16 host mirror 刷新对照
 
 开启 `XLLM_KEEP_HOST_MIRROR_REFRESH=1`，并同时开启 Graph 输入/输出同步后，
