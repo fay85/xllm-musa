@@ -216,7 +216,10 @@ bool dsv4_musa_indexer_query_int8_enabled() { return false; }
 bool dsv4_musa_multi_sequence_indexer_prefill_enabled() { return true; }
 bool dsv4_musa_fused_indexer_topk_enabled() { return true; }
 bool dsv4_musa_mate_fused_dsa_multi_sequence_enabled() { return false; }
-bool dsv4_musa_fused_dense_decode_enabled() { return true; }
+bool dsv4_musa_fused_dense_decode_enabled() {
+  const char* env = std::getenv("XLLM_DSV4_DISABLE_FUSED_DENSE_DECODE");
+  return !(env != nullptr && std::string(env) == "1");
+}
 bool dsv4_musa_fused_cache_gather_enabled() { return true; }
 bool dsv4_musa_fused_cache_scatter_enabled() { return false; }
 bool dsv4_musa_fused_partial_rope_enabled() { return true; }

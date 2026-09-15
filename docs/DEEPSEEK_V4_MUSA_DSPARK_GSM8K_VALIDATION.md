@@ -275,3 +275,14 @@ overlap。候选二进制为
 正确的 0731 权重、Graph=true、无 draft、无 Prefix Cache、固定前 20 题、
 max_tokens=1024 下，关闭 overlap 结果仍为 **17/20=85%**，与默认 Graph 相同。
 因此 Q/KV overlap 不是主要精度根因，默认 overlap 保持开启。
+
+## 2026-09-16 fused dense decode 对照
+
+加入 `XLLM_DSV4_DISABLE_FUSED_DENSE_DECODE=1`，让 Graph decode 跳过 fused paged
+dense kernel，尝试走参考 dense attention。候选二进制为
+`build/gsm8k_candidates/disable_fused_dense_20260916/xllm`，SHA256=
+`eb952ba385e39930f7e264c48f8b43dba5e44484d01379de64da3854577a02a1`。
+
+该配置只完成固定序列前 6 题，单题耗时已明显超过默认 Graph 路径，未形成可用的
+准确率结果；因此没有证据支持将 fused dense decode 关闭。实验目录为
+`logs/gsm8k_token_compare_20260916/fused_dense_off/`，默认路径未改变。
