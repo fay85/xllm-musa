@@ -149,7 +149,10 @@ torch::Tensor dequantize_fp8_projection_weight(const torch::Tensor& weight,
       .contiguous();
 }
 
-bool dsv4_musa_decode_q_kv_overlap_enabled() { return true; }
+bool dsv4_musa_decode_q_kv_overlap_enabled() {
+  const char* env = std::getenv("XLLM_DSV4_DISABLE_QKV_OVERLAP");
+  return !(env != nullptr && std::string(env) == "1");
+}
 
 struct DecodeQKvOverlapState {
   explicit DecodeQKvOverlapState(int32_t device_id)

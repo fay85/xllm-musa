@@ -264,3 +264,14 @@ projection 和每层 attention 输出。该屏障保持诊断开关，未设为�
 max_tokens=1024 下，关闭 custom AR 结果为 **16/20=80%**，低于默认 Graph 的
 17/20=85%。因此 custom AR 不是唯一或主要精度根因，默认通信路径保持不变。
 结果位于 `logs/gsm8k_token_compare_20260915/custom_ar_off/`。
+
+## 2026-09-16 Q/KV overlap 对照
+
+加入 `XLLM_DSV4_DISABLE_QKV_OVERLAP=1`，关闭 Attention decode Q/KV 跨 stream
+overlap。候选二进制为
+`build/gsm8k_candidates/disable_qkv_overlap_20260916/xllm`，SHA256=
+`d5b36675ba9533faa80fe795a50e8f47ea5a5c8e85cc45d63e74eb3e1f3148b9`。
+
+正确的 0731 权重、Graph=true、无 draft、无 Prefix Cache、固定前 20 题、
+max_tokens=1024 下，关闭 overlap 结果仍为 **17/20=85%**，与默认 Graph 相同。
+因此 Q/KV overlap 不是主要精度根因，默认 overlap 保持开启。
