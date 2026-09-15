@@ -286,6 +286,14 @@ forward，验证 capture 前状态写入是否是根因。候选二进制为
 该配置固定前 8 题仅 6/8，且第 7 题起出现显著延迟；默认 warmup/recording 不能
 直接删除，仍需针对 DSV4 cache 状态做精确快照恢复。
 
+## 2026-09-16 Graph VMM pool 对照
+
+启动器新增 `XLLM2_EXTERNAL_TP8_GRAPH_VMM_POOL`，并以 `false` 关闭 Graph VMM
+pool 做对照。正确的 0731 权重、Graph=true、无 draft、无 Prefix Cache、固定前
+20 题、max_tokens=1024 下仍为 **17/20=85%**，与默认 Graph 相同；因此 VMM
+allocator 复用不是当前主因。结果位于
+`logs/gsm8k_compare_20260916/vmm_off/`，默认值保持 `true`。
+
 ## 2026-09-16 fused dense decode 对照
 
 加入 `XLLM_DSV4_DISABLE_FUSED_DENSE_DECODE=1`，让 Graph decode 跳过 fused paged

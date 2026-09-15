@@ -27,6 +27,7 @@ enable_in_batch_prefix_cache=${XLLM2_EXTERNAL_TP8_IN_BATCH_PREFIX_CACHE:-false}
 prefill_threshold=${XLLM2_EXTERNAL_TP8_PREFILL_THRESHOLD:-0.95}
 prefill_chunk=${XLLM2_EXTERNAL_TP8_PREFILL_CHUNK:-$max_tokens}
 max_graph_tokens=${XLLM2_EXTERNAL_TP8_MAX_GRAPH_TOKENS:-2048}
+graph_vmm_pool=${XLLM2_EXTERNAL_TP8_GRAPH_VMM_POOL:-true}
 draft_args=(--draft_model="$model_path")
 if [[ "$disable_draft" == true ]]; then
   num_speculative_tokens=0
@@ -53,6 +54,7 @@ library_path="/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib
   echo "max_memory_utilization=$max_memory"
   echo "max_tokens_per_chunk_for_prefill=$prefill_chunk"
   echo "max_tokens_for_graph_mode=$max_graph_tokens"
+  echo "graph_vmm_pool=$graph_vmm_pool"
   echo "kv_cache_dtype=$kv_cache_dtype"
   echo "host_blocks_factor=$host_blocks_factor"
   echo "num_speculative_tokens=$num_speculative_tokens"
@@ -100,7 +102,7 @@ launch_rank() {
     --speculative_algorithm="$speculative_algorithm" --enable_mtp_draft_body_tp1=false \
     "${draft_args[@]}" \
     --enable_graph="$enable_graph" \
-    --enable_graph_vmm_pool=true --enable_graph_mode_decode_no_padding=true \
+    --enable_graph_vmm_pool="$graph_vmm_pool" --enable_graph_mode_decode_no_padding=true \
     --max_tokens_for_graph_mode="$max_graph_tokens" --enable_online_profile=false \
     --profile_backend=torch --profile_dir="$run_dir/profile" \
     > "$run_dir/rank${rank}.log" 2>&1 &
