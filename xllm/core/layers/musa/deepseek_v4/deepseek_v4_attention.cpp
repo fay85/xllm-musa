@@ -225,7 +225,19 @@ int64_t dsv4_musa_paged_dense_decode_max_total_len() { return 4096; }
 int64_t dsv4_musa_attention_reduce_delay_us() { return 0; }
 int64_t dsv4_musa_attention_sync_delay_us() { return 0; }
 int64_t dsv4_musa_output_proj_chunk_tokens() { return 4096; }
-int64_t dsv4_musa_prefill_full_kv_threshold() { return 2048; }
+int64_t dsv4_musa_prefill_full_kv_threshold() {
+  // Keep the validated default while allowing isolated accuracy experiments
+  // to extend dense-KV coverage without rebuilding the whole worker.
+  const char* value = std::getenv("XLLM_DSV4_FULL_KV_THRESHOLD");
+  if (value != nullptr && *value != '\0') {
+    char* end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    if (end != value && *end == '\0' && parsed >= 0) {
+      return static_cast<int64_t>(parsed);
+    }
+  }
+  return 2048;
+}
 int64_t dsv4_musa_prefill_attention_chunk_size() { return 32; }
 
 template <typename... Args>

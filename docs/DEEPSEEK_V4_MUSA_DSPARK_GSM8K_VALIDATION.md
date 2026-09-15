@@ -188,3 +188,15 @@ slot/block-table 与 graph persistent metadata，而不是继续把提示词收�
 可用，服务未进入可测试状态；没有把这次 OOM 当作精度结果，也没有覆盖生产二进制。
 待 GPU allocator 状态恢复后，必须重新跑固定 100 题并与前一候选按相同 manifest
 对比。
+
+## 2026-09-15 dense-KV 阈值对照
+
+为验证 DSA 压缩 decode 是否是短题精度主因，新增环境变量
+`XLLM_DSV4_FULL_KV_THRESHOLD`；默认仍为 `2048`，只用于隔离实验，不改变默认性能
+路径。候选 `build/gsm8k_candidates/fullkv4096_20260915/xllm` 使用阈值 `4096`，
+SHA256=`612432d0c82a283a8b9813d388807d8a2258e3e240c1c29a215e46b8d54ff5f8`。
+
+在正确的 0731 权重、Graph=true、draft=false、Prefix Cache=false、前 20 题下，
+阈值 4096 结果仍为 **17/20=85%**，请求错误为 0；201、206、244 仍失败。说明
+把短序列更多地固定到 dense-KV 不能消除主要精度问题，因此没有将 4096 设为默认值。
+实验结果位于 `logs/gsm8k_state_reset_20260915/fullkv4096/`，生产二进制未覆盖。
