@@ -245,6 +245,16 @@ metadata 缺失时才使用 batch 最大值。候选二进制为
 但不是唯一精度根因，不能把它设为默认关闭。完整逐题结果在
 `logs/gsm8k_token_compare_20260915/dynamic_mate_off2/`。
 
+## 2026-09-16 compact speculative verify causal guard
+
+恢复 compact verify 中按 token 使用有效 KV 长度的 causal fallback：MATE 对同一
+验证块不提供行间 causal mask，后续 proposal 不能影响较早 target token。候选二进制
+`build/gsm8k_candidates/compact_verify_causal_20260916/xllm`，SHA256=
+`afbd3e77dc776bf595ec1cbd38d8cad1fcaf2fbe921296952e81d2468fd82069`。
+
+该修改针对 DSpark/MTP compact verify；本轮未重新开启 draft（之前 draft 组合会
+OOM），因此尚无它对固定 100 题的 E2E 准确率证据，默认非 compact 路径行为不变。
+
 ## 2026-09-16 host mirror 刷新对照
 
 开启 `XLLM_KEEP_HOST_MIRROR_REFRESH=1`，并同时开启 Graph 输入/输出同步后，

@@ -4570,6 +4570,11 @@ DeepseekV4AttentionImpl::forward(
     const bool allow_mate_sparse_attention =
         query_ranges.size() <= 1 ||
         dsv4_musa_mate_fused_dsa_multi_sequence_enabled();
+    // MATE has no causal mask between rows of a compact speculative verify
+    // block. Recompute each row independently with its effective KV length;
+    // otherwise a later proposal can affect an earlier target token.
+    const bool compact_verify_needs_causal_fallback =
+        compact_spec_verify && q_seq.size(0) > 1;
     if (use_indexer_attention && !use_current_prefill_kv &&
         allow_mate_sparse_attention && cmp_indices.defined() &&
         mate_cmp_cache.defined() && mate_swa_cache.defined() &&
@@ -4584,17 +4589,34 @@ DeepseekV4AttentionImpl::forward(
           cmp_extra_physical_indices.defined()) {
         auto compact_output = decode_spec_attention_output_.narrow(
             /*dim=*/0, /*start=*/0, /*length=*/q_seq.size(0));
-        seq_output = mate_sparse_attention(q_seq,
-                                           mate_cmp_cache,
-                                           cmp_indices,
-                                           cmp_block_table,
-                                           mate_swa_cache,
-                                           swa_block_table,
-                                           static_cast<int64_t>(seq_idx),
-                                           kv_lens[seq_idx],
-                                           compact_output,
-                                           cmp_physical_indices,
-                                           cmp_extra_physical_indices);
+        bool all_tokens_completed = true;
+        for (int64_t token_idx = 0; token_idx < q_seq.size(0); ++token_idx) {
+          const int64_t token_kv_len = std::max<int64_t>(
+              kv_lens[seq_idx] - (q_seq.size(0) - 1 - token_idx), 1);
+          auto token_output = mate_sparse_attention(
+              q_seq.narrow(/*dim=*/0, /*start=*/token_idx, /*length=*/1),
+              mate_cmp_cache,
+              cmp_indices.narrow(
+                  /*dim=*/0, /*start=*/token_idx, /*length=*/1),
+              cmp_block_table,
+              mate_swa_cache,
+              swa_block_table,
+              static_cast<int64_t>(seq_idx),
+              token_kv_len,
+              compact_output.narrow(
+                  /*dim=*/0, /*start=*/token_idx, /*length=*/1),
+              cmp_physical_indices.narrow(
+                  /*dim=*/0, /*start=*/token_idx, /*length=*/1),
+              cmp_extra_physical_indices.narrow(
+                  /*dim=*/0, /*start=*/token_idx, /*length=*/1));
+          if (!token_output.defined()) {
+            all_tokens_completed = false;
+            break;
+          }
+        }
+        if (all_tokens_completed) {
+          seq_output = compact_output;
+        }
       } else {
         seq_output = mate_sparse_attention(q_seq,
                                            mate_cmp_cache,
@@ -4830,8 +4852,9 @@ DeepseekV4AttentionImpl::forward(
       // rows are already present in the gathered KV cache, so retain causal
       // absolute-position masking and allow the validated local-prefill AOT
       // instead of falling through to the decode-style composite path.
-      const bool causal_full_query =
-          use_current_prefill_kv || is_chunked_prefill;
+      const bool causal_full_query = use_current_prefill_kv ||
+                                     is_chunked_prefill ||
+                                     compact_verify_needs_causal_fallback;
       seq_output = dense_attention(q_seq,
                                    kv_seq,
                                    cmp_seq,
