@@ -87,6 +87,29 @@ trace 元数据确认普通 GSM8K prefill 为 `is_prefill=1`、`is_chunked_prefi
 
 证据目录：`logs/gsm8k_eval_20260914_1925/sample100/`、`logs/gsm8k_short_answer_20260915/`、`logs/gsm8k_threshold0_20260915/`、`logs/gsm8k_graph_eager_20260915/`。
 
+## 2026-09-15 GSM8K goal 进展
+
+独立分支 `fix/gsm8k-short-context-20260915` 增加了固定索引、dataset SHA、逐题
+JSONL 落盘的评测工具，以及可独立控制 Graph、Prefix Cache、draft 和 chunk 的启动器。
+可复现工具均已提交，生产二进制 `396a8554` 未被覆盖。
+
+最好的稳定隔离结果是 Graph=true、DSpark draft=false、Prefix Cache=false、
+reasoning_effort=none、temperature=0：
+
+| 批次 | 正确率 | 请求错误 |
+| --- | ---: | ---: |
+| 固定前 20 题 | 17/20 = 85% | 0 |
+| 固定前 60 题（3 批） | 47/60 = 78.3% | 0 |
+
+high 思考模式在同一前 20 题也是 17/20；显式 `enable_thinking=false` 没有改变结果。
+Prefix Cache 开启时观测到后续请求 prompt token 膨胀到 1200+ 并混入旧模板，关闭后
+该现象消失，但仍有真实读题/算术错误。标准 train 8-shot 会显著增加 prompt 长度，
+前 20 题结果更差，不能作为修复。
+
+截至本记录，目标 90% 尚未达到，不能标记 goal 完成；仍需修复短上下文多阶段算术/
+请求输出污染，或实现经过严格验证的失败题复核策略。GPU 测试服务停止后应恢复
+0--7 卡占卡；生产性能二进制未被替换。
+
 ## GSM8K goal 复测（2026-09-15）
 
 新分支 `fix/gsm8k-short-context-20260915` 增加了可复现实验工具，并将 Graph、
