@@ -22,6 +22,8 @@ disable_draft=${XLLM2_EXTERNAL_TP8_DISABLE_DRAFT:-false}
 enable_chunked=${XLLM2_EXTERNAL_TP8_CHUNKED_PREFILL:-true}
 speculative_algorithm=${XLLM2_EXTERNAL_TP8_SPECULATIVE_ALGORITHM:-DSpark}
 enable_graph=${XLLM2_EXTERNAL_TP8_GRAPH:-true}
+enable_prefix_cache=${XLLM2_EXTERNAL_TP8_PREFIX_CACHE:-true}
+enable_in_batch_prefix_cache=${XLLM2_EXTERNAL_TP8_IN_BATCH_PREFIX_CACHE:-false}
 prefill_threshold=${XLLM2_EXTERNAL_TP8_PREFILL_THRESHOLD:-0.95}
 mkdir -p "$run_dir"
 [[ ! -e "$run_dir/launch_manifest.txt" ]] || { echo "run directory already used" >&2; exit 2; }
@@ -35,9 +37,9 @@ library_path="/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib
   echo "master_addr=$master"
   echo "http_port=$port"
   echo "topology=TP8/EP${ep_size}/DP${dp_size}/CP1"
-  echo "graph=true"
+  echo "graph=$enable_graph"
   echo "schedule_overlap=false"
-  echo "prefix_cache=true"
+  echo "prefix_cache=$enable_prefix_cache"
   echo "num_speculative_tokens=5"
   echo "speculative_algorithm=DSpark"
   echo "max_tokens_per_batch=$max_tokens"
@@ -84,7 +86,8 @@ launch_rank() {
     --block_size=128 --max_memory_utilization="$max_memory" \
     --kv_cache_dtype="$kv_cache_dtype" \
     --host_blocks_factor="$host_blocks_factor" \
-    --enable_prefix_cache=true --enable_in_batch_prefix_cache=false \
+    --enable_prefix_cache="$enable_prefix_cache" \
+    --enable_in_batch_prefix_cache="$enable_in_batch_prefix_cache" \
     --max_tokens_per_batch="$max_tokens" --max_seqs_per_batch=1 \
     --max_concurrent_requests=1 --num_response_handling_threads=4 \
     --enable_chunked_prefill="$enable_chunked" \
