@@ -171,6 +171,12 @@ std::optional<torch::Tensor> musa_allreduce_custom(
     ProcessGroup* process_group,
     torch::Tensor& input,
     const std::optional<torch::Tensor>& output) {
+  const char* disable_dsv4_custom_ar =
+      std::getenv("XLLM_DSV4_DISABLE_CUSTOM_AR");
+  if (disable_dsv4_custom_ar != nullptr &&
+      std::string(disable_dsv4_custom_ar) == "1") {
+    return std::nullopt;
+  }
   ProcessGroupImpl* musa_process_group =
       dynamic_cast<ProcessGroupImpl*>(process_group);
   if (musa_process_group == nullptr) {

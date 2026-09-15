@@ -252,3 +252,15 @@ paged-KV host mirror 刷新是主要精度根因；问题继续收敛到 Graph �
 因此简单的 replay 前后 stream race 不是主要精度根因。Graph/Eager 首个 token 对照
 仍显示约第 15 个 token 开始分歧，后续应继续比较 persistent embedding、Q/KV
 projection 和每层 attention 输出。该屏障保持诊断开关，未设为默认，避免性能回退。
+
+## 2026-09-16 自定义 all-reduce 对照
+
+加入 `XLLM_DSV4_DISABLE_CUSTOM_AR=1`，让 Attention/MoE 跳过自定义 all-reduce，
+回退到普通 process-group collective。候选二进制为
+`build/gsm8k_candidates/disable_custom_ar_20260916/xllm`，SHA256=
+`a5b63c11a6c390128cfd21937e7dfbffc7705380183fa07f1b4b6174aee313ca`。
+
+正确的 0731 权重、Graph=true、无 draft、无 Prefix Cache、固定前 20 题、
+max_tokens=1024 下，关闭 custom AR 结果为 **16/20=80%**，低于默认 Graph 的
+17/20=85%。因此 custom AR 不是唯一或主要精度根因，默认通信路径保持不变。
+结果位于 `logs/gsm8k_token_compare_20260915/custom_ar_off/`。
