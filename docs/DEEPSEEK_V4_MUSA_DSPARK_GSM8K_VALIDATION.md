@@ -230,6 +230,17 @@ index=125、184、235、244、255 等错误。该结果仅作为 Graph/Eager 对
 
 正确的 0731 权重、Graph=true、draft=false、Prefix Cache=false、固定前 20 题、
 max_tokens=1024 下，动态 MATE 禁用结果为 **16/20=80%**，默认 Graph 为 17/20。
+
+## 2026-09-16 Graph per-sequence KV length
+
+修复 `build_kv_lens()` 在 Graph 下直接把所有 sequence 折叠为 `max_seq_len` 的
+问题：优先读取 DSA builder 保留的 CPU `actual_seq_lengths_kv/seq_lens`，只有
+metadata 缺失时才使用 batch 最大值。候选二进制为
+`build/gsm8k_candidates/perseq_graph_kv_20260916/xllm`，SHA256=
+`3408870b45d801c233ffd2b7cf67cd1c602a546e7652637e32470eb374ce4eb6`。
+
+单请求固定前 20 题仍为 **17/20=85%**，该改动主要针对多 sequence/row identity
+切换；多 batch 仍需单独回归验证。
 错误集合也发生变化（128、201、235、244 等），因此动态 MATE 是数值差异来源，
 但不是唯一精度根因，不能把它设为默认关闭。完整逐题结果在
 `logs/gsm8k_token_compare_20260915/dynamic_mate_off2/`。

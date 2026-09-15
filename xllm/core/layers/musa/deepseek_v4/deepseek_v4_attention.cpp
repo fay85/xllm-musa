@@ -1187,12 +1187,52 @@ DeepseekV4AttentionImpl::build_query_ranges(const DSAMetadata& attn_metadata,
 
 std::vector<int64_t> DeepseekV4AttentionImpl::build_kv_lens(
     const DSAMetadata& attn_metadata,
-    size_t num_sequences,
-    const std::vector<std::pair<int64_t, int64_t>>& query_ranges) const {
+  size_t num_sequences,
+  const std::vector<std::pair<int64_t, int64_t>>& query_ranges) const {
   if (attn_metadata.is_acl_graph) {
-    // Graph decode cannot perform device-to-host scalar copies during capture.
-    // max_seq_len is populated from host scheduler metadata before capture or
-    // replay and is stable for the graph's logical batch.
+    // Graph decode cannot perform device-to-host scalar copies during capture,
+    // but the DSA builder intentionally keeps these sequence lengths on CPU.
+    // Preserve per-sequence values instead of collapsing every row to the
+    // batch maximum; the latter makes row reuse and multi-sequence replay read
+    // another request's effective KV range.
+    if (const torch::Tensor* host_lengths =
+            dsv4_musa_host_sequence_lengths(attn_metadata)) {
+      const int64_t available_sequences = host_lengths->size(1);
+      const int32_t* host_data = host_lengths->data_ptr<int32_t>();
+      const int32_t* host_kv_lens = host_data + available_sequences;
+      const int64_t copy_count = std::min<int64_t>(
+          static_cast<int64_t>(num_sequences), available_sequences);
+      std::vector<int64_t> graph_kv_lens;
+      graph_kv_lens.reserve(static_cast<size_t>(copy_count));
+      for (int64_t i = 0; i < copy_count; ++i) {
+        graph_kv_lens.push_back(std::max<int64_t>(host_kv_lens[i], 0));
+      }
+      if (!graph_kv_lens.empty()) {
+        return graph_kv_lens;
+      }
+    }
+    const auto cpu_lengths = [](const torch::Tensor& tensor) {
+      return tensor.defined() && tensor.device().is_cpu() &&
+             tensor.scalar_type() == torch::kInt32 && tensor.dim() == 1
+                 ? tensor_to_i64_vector(tensor)
+                 : std::vector<int64_t>();
+    };
+    auto graph_kv_lens = cpu_lengths(attn_metadata.actual_seq_lengths_kv);
+    if (graph_kv_lens.empty()) {
+      graph_kv_lens = cpu_lengths(attn_metadata.seq_lens);
+    }
+    if (graph_kv_lens.size() > num_sequences) {
+      graph_kv_lens.resize(num_sequences);
+    }
+    if (!graph_kv_lens.empty()) {
+      while (graph_kv_lens.size() < num_sequences) {
+        const size_t idx = graph_kv_lens.size();
+        graph_kv_lens.push_back(query_ranges[idx].second -
+                                query_ranges[idx].first);
+      }
+      return graph_kv_lens;
+    }
+    // Last-resort fallback for metadata built without CPU lengths.
     const int64_t graph_kv_len =
         std::max<int64_t>(attn_metadata.max_seq_len, 1);
     return std::vector<int64_t>(num_sequences, graph_kv_len);
