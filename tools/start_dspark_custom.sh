@@ -25,6 +25,12 @@ enable_graph=${XLLM2_EXTERNAL_TP8_GRAPH:-true}
 enable_prefix_cache=${XLLM2_EXTERNAL_TP8_PREFIX_CACHE:-true}
 enable_in_batch_prefix_cache=${XLLM2_EXTERNAL_TP8_IN_BATCH_PREFIX_CACHE:-false}
 prefill_threshold=${XLLM2_EXTERNAL_TP8_PREFILL_THRESHOLD:-0.95}
+prefill_chunk=${XLLM2_EXTERNAL_TP8_PREFILL_CHUNK:-$max_tokens}
+draft_args=(--draft_model="$model_path")
+if [[ "$disable_draft" == true ]]; then
+  num_speculative_tokens=0
+  draft_args=()
+fi
 mkdir -p "$run_dir"
 [[ ! -e "$run_dir/launch_manifest.txt" ]] || { echo "run directory already used" >&2; exit 2; }
 preload="$custom_ar:/data/nfs_shared/xllm2_artifacts/libasio_gcc.so:/usr/local/lib/python3.10/dist-packages/torch_musa/lib/libmusa_python.so"
@@ -32,6 +38,8 @@ library_path="/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib
 {
   date --iso-8601=seconds
   echo "xllm_bin=$xllm_bin"
+  git rev-parse HEAD
+  git diff --stat
   sha256sum "$xllm_bin"
   echo "model_path=$model_path"
   echo "master_addr=$master"
@@ -40,10 +48,9 @@ library_path="/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib
   echo "graph=$enable_graph"
   echo "schedule_overlap=false"
   echo "prefix_cache=$enable_prefix_cache"
-  echo "num_speculative_tokens=5"
-  echo "speculative_algorithm=DSpark"
   echo "max_tokens_per_batch=$max_tokens"
   echo "max_memory_utilization=$max_memory"
+  echo "max_tokens_per_chunk_for_prefill=$prefill_chunk"
   echo "kv_cache_dtype=$kv_cache_dtype"
   echo "host_blocks_factor=$host_blocks_factor"
   echo "num_speculative_tokens=$num_speculative_tokens"
@@ -53,18 +60,12 @@ library_path="/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib
   echo "enable_graph=$enable_graph"
   echo "prefill_scheduling_memory_usage_threshold=$prefill_threshold"
   echo "block_size=128"
-  echo "enable_chunked_prefill=true"
   echo "ops_path=$ops_path"
   echo "custom_ar_so=$custom_ar"
   sha256sum "$custom_ar"
 } > "$run_dir/launch_manifest.txt"
 
 pids=()
-draft_args=(--draft_model="$model_path")
-if [[ "$disable_draft" == true ]]; then
-  num_speculative_tokens=0
-  draft_args=()
-fi
 cleanup() {
   trap - INT TERM EXIT
   for pid in "${pids[@]}"; do kill -INT "$pid" 2>/dev/null || true; done
@@ -91,7 +92,7 @@ launch_rank() {
     --max_tokens_per_batch="$max_tokens" --max_seqs_per_batch=1 \
     --max_concurrent_requests=1 --num_response_handling_threads=4 \
     --enable_chunked_prefill="$enable_chunked" \
-    --max_tokens_per_chunk_for_prefill="$max_tokens" --enable_shm=false \
+    --max_tokens_per_chunk_for_prefill="$prefill_chunk" --enable_shm=false \
     --prefill_scheduling_memory_usage_threshold="$prefill_threshold" \
     --enable_schedule_overlap=false --num_speculative_tokens="$num_speculative_tokens" \
     --speculative_algorithm="$speculative_algorithm" --enable_mtp_draft_body_tp1=false \
