@@ -37,6 +37,11 @@ mkdir -p "$run_dir"
 [[ ! -e "$run_dir/launch_manifest.txt" ]] || { echo "run directory already used" >&2; exit 2; }
 preload="$custom_ar:/data/nfs_shared/xllm2_artifacts/libasio_gcc.so:/usr/local/lib/python3.10/dist-packages/torch_musa/lib/libmusa_python.so"
 library_path="/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/usr/local/mudnn/lib:/workspace/MCCL_2.3.0/mccl/lib:/usr/local/openmpi/lib:/usr/local/lib/python3.10/dist-packages/tilelang/lib:${LD_LIBRARY_PATH:-}"
+# AOT modules are loaded via dlopen, not linked into the executable. Record
+# their content as well as the binary hash so shared-cache updates cannot be
+# mistaken for source-only accuracy/performance changes.
+find "$ops_path" -maxdepth 2 -type f \( -name '*.so' -o -name 'manifest.json' \) \
+  -print0 | sort -z | xargs -0 -r sha256sum > "$run_dir/ops_artifacts.sha256"
 {
   date --iso-8601=seconds
   echo "xllm_bin=$xllm_bin"
@@ -65,6 +70,8 @@ library_path="/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib
   echo "prefill_scheduling_memory_usage_threshold=$prefill_threshold"
   echo "block_size=128"
   echo "ops_path=$ops_path"
+  echo "ops_artifact_hashes=$run_dir/ops_artifacts.sha256"
+  sha256sum "$run_dir/ops_artifacts.sha256"
   echo "custom_ar_so=$custom_ar"
   sha256sum "$custom_ar"
 } > "$run_dir/launch_manifest.txt"

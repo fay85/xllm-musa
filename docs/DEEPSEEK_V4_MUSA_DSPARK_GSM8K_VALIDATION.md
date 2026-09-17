@@ -337,3 +337,28 @@ dense kernel，尝试走参考 dense attention。候选二进制为
 该配置只完成固定序列前 6 题，单题耗时已明显超过默认 Graph 路径，未形成可用的
 准确率结果；因此没有证据支持将 fused dense decode 关闭。实验目录为
 `logs/gsm8k_token_compare_20260916/fused_dense_off/`，默认路径未改变。
+
+## 2026-09-17 MATE/MUTLASS 归因边界与 AOT 记录
+
+当前 DSV4 MUSA Attention 会经 TVM-FFI 使用 MATE 的 `mla_ops` 和
+`dsa_model1_*` 模块。MUTLASS 是 MATE 部分编译路径的底层依赖，不是另一个独立的
+xLLM backend；现有 `mla_ops.so` 导出符号中包含 `mutlass::bfloat16_t` 和
+MATE `flash_mla` combine kernel。
+
+已有 `XLLM_DSV4_DISABLE_DYNAMIC_MATE=1` 对照只禁用动态 Graph FlashMLA，
+并未禁用所有 MODEL1 DSA、Prefill、HC 或 GEMM 路径。固定前 20 题为 16/20，
+默认 Graph 为 17/20；这说明切换路径会改变输出，但不能仅凭不同失败集合证明
+MATE/MUTLASS kernel 本身有 bug，更不能据此认定它是当前 GSM8K 失败的唯一主因。
+仍需同一份输入/metadata 下逐层比较 attention 输出和最终 logits。
+
+另一个复现风险是启动器默认复用共享 `cached_ops`，未在旧 manifest 中记录模块
+hash。MODEL1 h8 的 manifest 标注 MATE commit `015b3643`、dirty=true、源码位于
+`test/workspace_fp8/mate`，不是最新 `tools/mate`；且当前 `mla_ops.so` 的 mtime
+为 2026-09-16 10:33，晚于 02:15 结束的上一轮 GSM8K 实验，因此旧结果不能直接
+代表当前共享 AOT 内容。当前模块 hash：
+
+- `mla_ops/mla_ops.so`：`dd4b4f3b272789e64d291be36362130674ff92f203bc7b319e0728fe35aecd21`
+- `dsa_model1_h8_topk512_extra128_bs128.so`：`e4784b05ce4afa04e6980023e35cce6e536a4413d18088d25fd607cd4fea2863`
+
+启动器现增加 `ops_artifacts.sha256`，记录所有实际可加载 `.so` 和 AOT manifest
+的内容 hash；默认算子/Graph/性能配置不变，未修改共享 MATE/MUTLASS 文件。
