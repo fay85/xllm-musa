@@ -188,7 +188,10 @@ bool dsv4_musa_trace_enabled() {
 }
 bool dsv4_musa_cache_trace_enabled() { return false; }
 bool dsv4_musa_mate_fused_dsa_trace_enabled() { return false; }
-bool dsv4_musa_mate_fused_dsa_verify_enabled() { return false; }
+bool dsv4_musa_mate_fused_dsa_verify_enabled() {
+  const char* env = std::getenv("XLLM_DSV4_MATE_VERIFY");
+  return env != nullptr && std::string(env) == "1";
+}
 bool dsv4_musa_mate_prefill_trace_enabled() { return false; }
 bool dsv4_musa_sync_trace_enabled() { return false; }
 
@@ -3376,12 +3379,18 @@ DeepseekV4AttentionImpl::forward(
   std::vector<torch::Tensor> outputs;
   outputs.reserve(query_ranges.size());
 
+  // Compression/cache construction is independent from the attention route.
+  // A short normal prefill may use dense full-KV attention, but it must still
+  // populate C4/C128 and indexer caches for the first decode step that crosses
+  // the SWA window. Previously force_full_kv_attention disabled construction
+  // altogether, leaving empty C4 pages that MATE consumed at q_len=1.
   const bool use_compressed_attention =
-      dsv4_musa_compress_fallback_enabled() && !force_full_kv_attention &&
+      dsv4_musa_compress_fallback_enabled() &&
       (compress_ratio_ == 4 || compress_ratio_ == 128) && compressor_wkv_ &&
       compressor_wgate_ && compressor_norm_ && compressor_ape_loaded_;
   const bool use_indexer_attention =
       use_compressed_attention && compress_ratio_ == 4 &&
+      (is_prefill || is_chunked_prefill || !force_full_kv_attention) &&
       dsv4_musa_indexer_enabled() &&
       (indexer_wq_b_ || q_indexer_b_weight_loaded_) && indexer_weights_proj_ &&
       indexer_compressor_wkv_ && indexer_compressor_wgate_ &&
@@ -3426,6 +3435,16 @@ DeepseekV4AttentionImpl::forward(
           ? layer_cache_tensor(
                 attn_metadata.block_tables, layer_id_, cmp_cache_idx)
           : torch::Tensor();
+  if (dsv4_musa_trace_enabled() && use_compressed_attention) {
+    LOG(INFO) << "[DSV4_MUSA_TRACE] layer=" << layer_id_
+              << " cmp_cache_idx=" << cmp_cache_idx
+              << " cmp_cache_shape=" << tensor_sizes_string(cmp_cache)
+              << " mate_cmp_shape=" << tensor_sizes_string(mate_cmp_cache)
+              << " cmp_slot_shape=" << tensor_sizes_string(cmp_slot_mapping)
+              << " cmp_slot_prefix=" << tensor_i64_prefix(cmp_slot_mapping)
+              << " cmp_bt_shape=" << tensor_sizes_string(cmp_block_table)
+              << " cmp_bt_prefix=" << tensor_i64_prefix(cmp_block_table);
+  }
   auto index_cache =
       use_indexer_attention ? kv_cache.get_index_cache() : torch::Tensor();
   auto index_scale_cache = use_indexer_attention
@@ -4079,7 +4098,11 @@ DeepseekV4AttentionImpl::forward(
     std::vector<torch::Tensor> current_compressed_rows;
     if (use_compressed_attention) {
       if (use_current_prefill_kv) {
-        cmp_seq = prefill_compressed_by_seq[seq_idx];
+        // Full-KV normal prefill still builds the compressed cache above, but
+        // must not merge the compressed rows into the dense attention result.
+        if (!force_full_kv_attention) {
+          cmp_seq = prefill_compressed_by_seq[seq_idx];
+        }
       } else {
         if (retain_compressed_history &&
             seq_idx >= compressor_kv_history_.size()) {
@@ -4717,7 +4740,11 @@ DeepseekV4AttentionImpl::forward(
                     << " cmp_mean_abs=" << cmp_diff.mean().item<float>()
                     << " extra_rows=" << packed_extra.size(0)
                     << " extra_max_abs=" << extra_diff.max().item<float>()
-                    << " extra_mean_abs=" << extra_diff.mean().item<float>();
+                    << " extra_mean_abs=" << extra_diff.mean().item<float>()
+                    << " packed_cmp_stats="
+                    << tensor_stat_string(packed_cmp)
+                    << " reference_cmp_stats="
+                    << tensor_stat_string(reference_cmp_selected);
         }
         auto selected_reference_kv =
             torch::cat({reference_cmp_selected, reference_extra}, /*dim=*/0);

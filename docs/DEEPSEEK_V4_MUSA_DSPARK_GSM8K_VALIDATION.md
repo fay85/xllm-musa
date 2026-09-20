@@ -460,3 +460,27 @@ MATE sparse 数值/缓存状态路径与 Graph 状态切换，而不是 GSM8K �
 达到同样准确率，仍需在 Graph capture/replay 中修复 persistent metadata、请求
 切换和 MATE q_len=1 kernel 的数值/状态问题；当前不能宣称 DSpark Graph 全量
 GSM8K 已达到 90% 或 96.06%。
+
+### 2026-09-20 full-KV prefill cache population 修复
+
+进一步定位发现，`force_full_kv_attention` 原来同时关闭了两件不应耦合的事情：
+短 prefill 的 dense full-KV attention，以及 C4/C128/indexer cache 构建。这样
+`kv_len <= 128` 的题目在 prefill 阶段没有写 MODEL1 C4/SWA packed cache，随后
+q_len=1 MATE decode 读取未初始化压缩页；验证日志中出现 `cmp_slot_mapping=[0]`
+以及 `1e34` 量级 cache 值。
+
+本轮修改为：full-KV prefill 仍只走 dense attention，但照常构建压缩/indexer
+cache；decode 时再使用这些 cache。默认 Graph+draft 性能路由没有关闭，生产
+二进制没有覆盖。
+
+候选二进制：
+`build/gsm8k_candidates/fix_prefill_cache_graph_draft_20260920/xllm`。
+固定随机 100 题、TP8/EP1、Graph=true、DSpark N=5、Prefix Cache=false、
+max_tokens=2048 的结果从此前 **73/100** 提升到 **79/100**，无请求错误；结果目录：
+`logs/gsm8k_fix_prefill_cache_graph_draft_100_20260920/sample100/`。
+
+典型修复证据：同一题 index=128 的 C4 `cmp_slot_mapping` 从空映射变为 29 个
+有效 slot；此前输出 130/2080 等漂移，修复后大部分长题恢复。剩余 21 题中仍有
+短输出截断、模型读题/算术错误和少量官方题面标签矛盾，不能把 79% 写成最终
+90% 验收结果。关闭 draft 的 target-only 对照没有达到更高闭环，说明剩余问题
+还涉及 DSpark accepted-token/Graph replay 状态，而不仅是 target MATE cache。
