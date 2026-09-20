@@ -90,10 +90,30 @@ KVCacheCapacity estimate_kv_cache_capacity(
     const ModelArgs& model_args,
     const KVCacheEstimateOptions& options);
 
+// Per-block full-attention KV cost of a speculative target+draft pair.
+struct SpeculativeFullAttentionBlockCost {
+  int64_t target_full_attention_block_size_in_bytes = 0;
+  int64_t draft_full_attention_block_size_in_bytes = 0;
+};
+
+// Shared draft-slot sizing for SpeculativeEngine::calculate_kv_cache and
+// estimate_speculative_kv_cache_blocks. `draft_body_uses_tp1` marks an MTP
+// draft body running TP1; `draft_manages_own_kv_shape` mirrors
+// SpeculativeConfig::draft_manages_own_kv_shape. Both draft flavors are
+// sized by the draft's own slot geometry; only workers that reuse the
+// target KVCacheShape require the draft slot to fit within the target's.
+SpeculativeFullAttentionBlockCost
+estimate_speculative_full_attention_block_cost(
+    const KVCacheCapacity& target_kv_cache_cap,
+    const KVCacheCapacity& draft_kv_cache_cap,
+    bool draft_body_uses_tp1,
+    bool draft_manages_own_kv_shape);
+
 int64_t estimate_speculative_kv_cache_blocks(
     const KVCacheCapacity& target_kv_cache_cap,
     const KVCacheCapacity& draft_kv_cache_cap,
     bool share_device,
-    bool draft_body_uses_tp1 = false);
+    bool draft_body_uses_tp1 = false,
+    bool draft_manages_own_kv_shape = false);
 
 }  // namespace xllm

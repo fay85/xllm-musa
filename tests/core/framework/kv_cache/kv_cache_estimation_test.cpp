@@ -762,4 +762,41 @@ TEST(KVCacheEstimationTest, SpeculativeDecodeUsesDraftShapeForTp1Body) {
             476);
 }
 
+TEST(KVCacheEstimationTest, SpeculativeDecodeUsesDraftShapeForDFlash2) {
+  // A DFlash2 draft whose per-slot KV is wider than the target's (a hybrid
+  // target with narrow full-attention layers) must skip the draft-slot<=
+  // target-slot guard and be sized by the draft's own geometry, matching
+  // DFlash2WorkerImpl::draft_kv_cache_shape allocations.
+  KVCacheCapacity target_capacity;
+  target_capacity.cache_size_in_bytes(100000)
+      .block_size(10)
+      .slot_size(2)
+      .scale_slot_size(1)
+      .index_slot_size(3)
+      .num_full_attention_layers(2)
+      .num_indexer_layers(1);
+  KVCacheCapacity draft_capacity;
+  draft_capacity.cache_size_in_bytes(100000)
+      .block_size(10)
+      .slot_size(4)
+      .scale_slot_size(1)
+      .index_slot_size(2)
+      .num_indexer_layers(1)
+      .n_layers(2);
+
+  const int64_t dflash2_blocks =
+      estimate_speculative_kv_cache_blocks(target_capacity,
+                                           draft_capacity,
+                                           /*share_device=*/true,
+                                           /*draft_body_uses_tp1=*/false,
+                                           /*draft_manages_own_kv_shape=*/true);
+  const int64_t tp1_blocks =
+      estimate_speculative_kv_cache_blocks(target_capacity,
+                                           draft_capacity,
+                                           /*share_device=*/true,
+                                           /*draft_body_uses_tp1=*/true);
+  EXPECT_EQ(dflash2_blocks, tp1_blocks);
+  EXPECT_EQ(dflash2_blocks, 476);
+}
+
 }  // namespace xllm

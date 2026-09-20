@@ -49,6 +49,17 @@ class SpeculativeConfig final {
            is_dflash2_algorithm(algorithm) || algorithm == "DSpark";
   }
 
+  // Whether the speculative worker builds the draft paged cache from the
+  // draft ModelArgs instead of reusing the target KVCacheShape (see
+  // DFlash2WorkerImpl::draft_kv_cache_shape). Master-side capacity
+  // estimation must size such drafts by their own per-slot geometry; every
+  // other worker allocates draft KV tensors with the target KVCacheShape, so
+  // its draft slot must not exceed the target slot. Keep this mapping in
+  // sync with the algorithm-to-worker dispatch in runtime/worker.cpp.
+  static bool draft_manages_own_kv_shape(std::string_view algorithm) {
+    return is_dflash2_algorithm(algorithm);
+  }
+
   static bool is_dflash2_algorithm(std::string_view algorithm) {
     return iequals(algorithm, kDFlash2Algorithm);
   }

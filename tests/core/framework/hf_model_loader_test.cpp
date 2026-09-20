@@ -277,6 +277,53 @@ TEST(HFModelLoaderTest, DeepseekV4DSparkModelArgsFrom0731Config) {
 }
 #endif
 
+TEST(HFModelLoaderTest, Qwen3DFlash2DraftModelArgsFromOrnithConfig) {
+  auto loader = ModelRegistry::get_model_args_loader("qwen3");
+  ASSERT_NE(loader, nullptr);
+
+  // Field subset of jzinno/Ornith-1.5-35B-A3B-DFlash2's draft config.json:
+  // a 6-layer draft whose fc fuses 8 captured target hidden states.
+  JsonReader reader;
+  ASSERT_TRUE(reader.parse_text(R"json(
+    {
+      "architectures": ["DFlash2DraftModel"],
+      "dflash_config": {
+        "block_size": 16,
+        "conv_group_size": 16,
+        "conv_kernel_size": 2,
+        "mask_token_id": 248077,
+        "selector_rank": 256,
+        "selector_top_k": 16,
+        "target_layer_ids": [1, 6, 11, 16, 22, 27, 32, 37]
+      },
+      "dtype": "bfloat16",
+      "hidden_size": 2048,
+      "model_type": "qwen3",
+      "num_attention_heads": 32,
+      "num_hidden_layers": 6,
+      "num_key_value_heads": 8,
+      "sliding_window": 4096,
+      "vocab_size": 248320
+    }
+  )json"));
+
+  ModelArgs args;
+  ASSERT_TRUE(loader(reader, &args));
+  EXPECT_EQ(args.model_type(), "qwen3");
+  EXPECT_EQ(args.n_layers(), 6);
+  EXPECT_EQ(args.hidden_size(), 2048);
+  EXPECT_EQ(args.dflash2_block_size(), 16);
+  ASSERT_EQ(args.dflash2_target_layer_ids().size(), 8U);
+  EXPECT_EQ(args.dflash2_target_layer_ids().front(), 1);
+  EXPECT_EQ(args.dflash2_target_layer_ids().back(), 37);
+  // Mirrors DFlash2Qwen3ModelImpl's fc in_features: hidden_size *
+  // len(target_layer_ids), not hidden_size * n_layers (6 draft layers vs 8
+  // fused target layers on this checkpoint).
+  EXPECT_EQ(args.hidden_size() *
+                static_cast<int64_t>(args.dflash2_target_layer_ids().size()),
+            16384);
+}
+
 TEST(HFModelLoaderTest, Qwen35MtpModelArgsFromDenseConfig) {
   auto loader = ModelRegistry::get_model_args_loader("qwen3_5_mtp");
   ASSERT_NE(loader, nullptr);

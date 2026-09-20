@@ -303,6 +303,9 @@ REGISTER_MODEL_ARGS(qwen3, [&] {
   LOAD_ARG_OR(dflash2_conv_kernel_size, "dflash_config.conv_kernel_size", 0);
   LOAD_ARG_OR(dflash2_selector_rank, "dflash_config.selector_rank", 0);
   LOAD_ARG_OR(dflash2_selector_top_k, "dflash_config.selector_top_k", 0);
+  LOAD_ARG_OR(dflash2_target_layer_ids,
+              "dflash_config.target_layer_ids",
+              std::vector<int32_t>());
 
   LOAD_ARG_OR_FUNC(head_dim, "head_dim", [&] {
     return args->hidden_size() / args->n_heads();

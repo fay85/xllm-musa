@@ -96,6 +96,10 @@ struct ModelArgs {
   PROPERTY(int32_t, dflash2_conv_kernel_size) = 0;
   PROPERTY(int32_t, dflash2_selector_rank) = 0;
   PROPERTY(int32_t, dflash2_selector_top_k) = 0;
+  // Target layers whose hidden states the DFlash2 fc fuses (draft config key
+  // dflash_config.target_layer_ids). Its length, not the draft's own
+  // num_hidden_layers, sizes the fused fc input width.
+  PROPERTY(std::vector<int32_t>, dflash2_target_layer_ids) = {};
 
   PROPERTY(bool, use_qk_norm) = false;
   PROPERTY(float, rms_norm_eps) = 0.0f;
