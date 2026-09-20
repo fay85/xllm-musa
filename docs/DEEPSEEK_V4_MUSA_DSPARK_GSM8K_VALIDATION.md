@@ -428,3 +428,35 @@ MUSA 0--7, temperature=0, 4-shot structured prompt, single solver
 结果提升到此前非 DSpark 的 96.06%；主要瓶颈仍是 DSpark 输出/状态稳定性和真实
 读题推理错误。当前没有足够证据支持跑 1319 题并声称 96.06%，因此本轮不作全量
 准确率结论。
+
+### 2026-09-20 q_len=1 MATE/Graph 定位与 A/B
+
+针对上面的生成漂移，做了相同固定 20 题的 target-only 对照。旧生产候选在
+Graph+draft 下为 **13/20**，关闭 Graph、保留 target-only 后为 **15/20**；因此
+Graph/persistent 状态会放大问题，但不是唯一原因。已构建独立候选二进制，没有
+覆盖 `build/dspark-musa-local/xllm/xllm`。
+
+源码审计显示 DSV4 target 的 q_len=1 路径会先走 MATE sparse decode；通过临时
+环境开关 `XLLM_DSV4_DISABLE_MATE_SPARSE_DECODE=1`，保留压缩历史但强制走 dense
+composite fallback。该开关默认关闭，不改变高性能默认路径；同时保留
+`XLLM_DSV4_DISABLE_PAGED_DENSE_DECODE=1` 作为 paged kernel A/B 开关，并限制
+full-KV fallback 只在完整历史不超过 SWA window 时生效，避免把长上下文错误裁成
+SWA 尾部。
+
+结果：
+
+| 配置 | 候选 | 固定前 20 题 | 说明 |
+| --- | --- | ---: | --- |
+| TP8/EP1、Graph=false、target-only、MATE sparse disabled | `build/gsm8k_candidates/disable_mate_sparse_decode_20260920/xllm` | **20/20 (100%)** | `logs/gsm8k_disable_mate_sparse_decode_eager_20260920b/baseline20/` |
+| TP8/EP1、Graph=true、target-only、MATE sparse disabled | 同候选 | 首题可正确，但后续请求明显变慢并未完成 4 题闭环 | dense fallback 不是 Graph 默认修复 |
+| TP8/EP1、Graph=false、target-only、仅禁用 paged/fused dense | `disable_paged_dense_20260920` | 首题长生成未闭环 | 不能归因于单一 paged kernel |
+
+Eager 20 题的平均服务侧 TPOT 约 63--64 ms，明显低于生产 MATE/Graph 性能，
+所以该开关目前是精度诊断/安全回退路径，不应直接写进默认高性能配置。它同时
+证明此前“只需 reference-free 算术修复”不成立：问题确实集中在 q_len=1
+MATE sparse 数值/缓存状态路径与 Graph 状态切换，而不是 GSM8K 解析器本身。
+
+本轮已停止所有测试服务并恢复 0--7 卡占卡程序；未执行 GPU reset。Graph 下要
+达到同样准确率，仍需在 Graph capture/replay 中修复 persistent metadata、请求
+切换和 MATE q_len=1 kernel 的数值/状态问题；当前不能宣称 DSpark Graph 全量
+GSM8K 已达到 90% 或 96.06%。

@@ -216,6 +216,13 @@ bool dsv4_musa_indexer_query_int8_enabled() { return false; }
 bool dsv4_musa_multi_sequence_indexer_prefill_enabled() { return true; }
 bool dsv4_musa_fused_indexer_topk_enabled() { return true; }
 bool dsv4_musa_mate_fused_dsa_multi_sequence_enabled() { return false; }
+bool dsv4_musa_mate_sparse_decode_enabled() {
+  // Diagnostic escape hatch for the q_len=1 DSV4 path. Keeping this enabled
+  // preserves the performance route; disabling it falls through to the
+  // reference composite attention while retaining compressed-history rows.
+  const char* env = std::getenv("XLLM_DSV4_DISABLE_MATE_SPARSE_DECODE");
+  return !(env != nullptr && std::string(env) == "1");
+}
 bool dsv4_musa_fused_dense_decode_enabled() {
   const char* env = std::getenv("XLLM_DSV4_DISABLE_FUSED_DENSE_DECODE");
   return !(env != nullptr && std::string(env) == "1");
@@ -224,7 +231,14 @@ bool dsv4_musa_fused_cache_gather_enabled() { return true; }
 bool dsv4_musa_fused_cache_scatter_enabled() { return false; }
 bool dsv4_musa_fused_partial_rope_enabled() { return true; }
 int64_t dsv4_musa_fused_partial_rope_max_tokens() { return 4; }
-bool dsv4_musa_paged_dense_decode_enabled() { return true; }
+bool dsv4_musa_paged_dense_decode_enabled() {
+  // Keep the fused paged path as the default performance route, but allow a
+  // controlled dense-fallback A/B for accuracy debugging. This is useful for
+  // separating a q_len=1/paged-kernel issue from target-state or sampler
+  // contamination without rebuilding the worker again.
+  const char* env = std::getenv("XLLM_DSV4_DISABLE_PAGED_DENSE_DECODE");
+  return !(env != nullptr && std::string(env) == "1");
+}
 bool dsv4_musa_paged_compressed_decode_enabled() { return true; }
 bool dsv4_musa_split_ob_proj_enabled() { return true; }
 bool dsv4_musa_output_proj_prefill_sync_enabled() { return false; }
@@ -3335,8 +3349,14 @@ DeepseekV4AttentionImpl::forward(
   const int64_t max_kv_len =
       kv_lens.empty() ? total_tokens
                       : *std::max_element(kv_lens.begin(), kv_lens.end());
+  // Full-KV fallback is safe only while the complete history fits in the
+  // model's SWA window. For a decode request longer than that window,
+  // disabling C4/indexer attention would silently discard the older context
+  // and leave only the trailing SWA rows. Keep compressed history active in
+  // that case; it is the intended DSV4 representation for q_len=1 decode.
   const bool force_full_kv_attention =
-      full_kv_threshold > 0 && max_kv_len <= full_kv_threshold;
+      full_kv_threshold > 0 && max_kv_len <= full_kv_threshold &&
+      (window_size_ <= 0 || max_kv_len <= window_size_);
   if (trace_layer0) {
     std::vector<int64_t> q_range_flat;
     q_range_flat.reserve(query_ranges.size() * 2);
@@ -4575,7 +4595,8 @@ DeepseekV4AttentionImpl::forward(
     // otherwise a later proposal can affect an earlier target token.
     const bool compact_verify_needs_causal_fallback =
         compact_spec_verify && q_seq.size(0) > 1;
-    if (use_indexer_attention && !use_current_prefill_kv &&
+    if (dsv4_musa_mate_sparse_decode_enabled() && use_indexer_attention &&
+        !use_current_prefill_kv &&
         allow_mate_sparse_attention && cmp_indices.defined() &&
         mate_cmp_cache.defined() && mate_swa_cache.defined() &&
         cmp_block_table.defined() && swa_block_table.defined()) {
