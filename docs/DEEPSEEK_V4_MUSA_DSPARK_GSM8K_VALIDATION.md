@@ -362,3 +362,51 @@ hash。MODEL1 h8 的 manifest 标注 MATE commit `015b3643`、dirty=true、源�
 
 启动器现增加 `ops_artifacts.sha256`，记录所有实际可加载 `.so` 和 AOT manifest
 的内容 hash；默认算子/Graph/性能配置不变，未修改共享 MATE/MUTLASS 文件。
+
+## 2026-09-20 DSpark reference-free 修复迁移试验
+
+本轮把此前非 DSpark 版本的 reference-free 算术/语义审计流程迁移到当前 checkout，
+新增以下工具：
+
+- `tools/dspark_gsm8k_consensus_eval.py`：结构化 primary solver；
+- `tools/dspark_gsm8k_arithmetic_audit.py`、`tools/dspark_gsm8k_arithmetic_repair_eval.py`：
+  只依据模型显式等式做 Fraction 精确审计/修复；
+- `tools/dspark_gsm8k_semantic_risk.py`、`tools/dspark_gsm8k_semantic_repair_eval.py`：
+  只路由预定义语义约定；
+- `tools/dspark_gsm8k_merge_reference_free_results.py`：合并时强制
+  `selection_uses_reference=false`。
+
+训练示例和全部输出均位于当前目录；测试集为当前 checkout 的
+`logs/gsm8k_eval_20260914_1925/gsm8k_test.parquet`，SHA256 为
+`011a2dff6b06becf5a41d1947cfaf8e6d95a093be8e7d37cf9b31d4a6ed0b0d7`。
+
+### DSpark smoke 结果
+
+服务目录：`logs/gsm8k_dspark_reference_free_20260920c/`。配置为：
+
+```text
+DeepSeek-V4-Flash-0731-FP8-mt
+TP8/EP1/DP1/CP1, Graph=true, DSpark N=5, Prefix Cache=false
+max_memory_utilization=0.80, max_tokens_per_batch=2048
+MUSA 0--7, temperature=0, 4-shot structured prompt, single solver
+```
+
+固定前 20 题的结果：
+
+| 阶段 | 结果 | 说明 |
+| --- | ---: | --- |
+| DSpark primary | **0/20** | 20 题均无合法 `####` marker |
+| arithmetic audit | 0 flagged | 没有可安全审计的合格候选 |
+| arithmetic repair | 0 selected | 没有合法 primary 候选 |
+| semantic repair | 0 selected | 无可路由的合格候选 |
+| merged reference-free | **0/20** | `selection_uses_reference=false` |
+
+原始响应可在 `primary20/results.jsonl` 查看。响应包含跨题无关文本、重复片段、
+`0.5`/`42` 等漂移内容；例如第一题没有输出严格最终答案，后续短收尾也继续
+重复。这说明当前 DSpark 首先存在请求间状态/输出污染或 draft/Graph 路径问题，
+不是 reference-free 算术修复能弥补的普通算术错误。
+
+因此本轮没有达到此前非 DSpark 的 `1267/1319 = 96.0576%`，也没有继续消耗显存
+跑 1319 题：在固定 20 题已经得到 0/20 且无可修复候选的情况下，全量结果没有
+有效意义。该结果不是 DSpark 全量准确率声明；它是迁移流程的失败闭环证据。
+服务已停止并恢复 0--7 卡占卡（每卡约 70 GiB），未执行 GPU reset。
