@@ -189,6 +189,12 @@ def audit_content(content):
                 claimed = parse_number(match.group(1))
             except (ValueError, ZeroDivisionError):
                 continue
+            # A percentage RHS is dimensionless fraction notation.  Without
+            # this conversion, a correct ``12 / 20 = 60%`` is compared as
+            # ``3/5 == 60`` and can be sent to an unsafe repair path.
+            rhs_after_number = segments[position + 1][match.end() :]
+            if re.match(r"\s*%", rhs_after_number):
+                claimed /= 100
             error = abs(float(computed - claimed))
             is_correct = computed == claimed or error <= max(
                 1e-9, abs(float(computed)) * 1e-3

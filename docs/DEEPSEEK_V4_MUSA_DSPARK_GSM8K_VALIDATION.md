@@ -410,3 +410,21 @@ MUSA 0--7, temperature=0, 4-shot structured prompt, single solver
 跑 1319 题：在固定 20 题已经得到 0/20 且无可修复候选的情况下，全量结果没有
 有效意义。该结果不是 DSpark 全量准确率声明；它是迁移流程的失败闭环证据。
 服务已停止并恢复 0--7 卡占卡（每卡约 70 GiB），未执行 GPU reset。
+
+### DSpark 短 baseline 对照
+
+为排除 4-shot structured prompt 本身的影响，随后使用同一 DSpark 服务配置和
+`tools/eval_gsm8k_goal.py` 的短 baseline prompt 测试固定前 20 题。结果为
+**13/20 = 65%**，失败索引为 `7, 8, 12, 13, 15, 16, 17`，无 transport error。
+原始结果在 `logs/gsm8k_dspark_reference_free_20260920d/baseline20.json`。
+
+把这组输出送入迁移的 reference-free 审计后，审计出 2 条明确算术矛盾；没有
+安全候选修复，合并结果仍为 **13/20 = 65%**。初版审计器曾把正确的
+`12/20 = 60%` 当成 `3/5 != 60`，导致错误地把正确答案改成 `3/5`；已在
+`tools/dspark_gsm8k_arithmetic_audit.py` 修正百分号 RHS 归一化，v2 合并结果
+位于 `logs/gsm8k_dspark_reference_free_20260920d/merged_baseline20_v2/`。
+
+该对照说明：在 DSpark 当前 Graph+draft 配置下，reference-free 修复并不能把
+结果提升到此前非 DSpark 的 96.06%；主要瓶颈仍是 DSpark 输出/状态稳定性和真实
+读题推理错误。当前没有足够证据支持跑 1319 题并声称 96.06%，因此本轮不作全量
+准确率结论。
