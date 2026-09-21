@@ -41,3 +41,14 @@ q2 eager 对照的剩余失败为 `130,201,333,570,952,1038`，内容检查显�
 - **已定位**：默认错误集中在 target q2 Graph 的跨请求 persistent DSA/accepted-token 路径；q2 eager 对照可以恢复 128/206/244，证明不是 GSM8K evaluator 或普通 MATE 单算子错误。
 - **尚未达成**：默认 Graph+draft 尚未完成固定 100 题 >=95%，不能把 q2 eager 的 94% 宣称为最终通过。
 - 下一步应在不改变默认 Graph 性能的前提下，对同一请求的 target q2 Graph/eager 逐 layer 对比 `q/kv/slot/block/state`，重点是 q2 第一行的 accepted-context 与 C4/SWA state；然后再做无 reference 的 arithmetic/semantic audit，处理剩余 6 个语义 case。
+
+## 2026-09-22 accepted-state 回写实验
+
+尝试在 q2 前保存 compressor/indexer state，并在 draft 被拒绝后的下一次 q1
+恢复；该候选在固定 20 题得到 **17/20**，但首题从基线 540 变为 60，且
+128/255 也出现新错误。说明当前 snapshot 的 slot 生命周期尚未正确闭环，
+代码未合入 `cde77311`，只保留为失败实验候选，不影响默认二进制。
+
+候选构建目录：`build/gsm8k_candidates/dsv4_state_restore_diag5_20260922/`。
+该实验同时确认：简单地在下一步 scatter 旧 state，不能替代 target q2 对
+rejected proposal 的正确回滚。
