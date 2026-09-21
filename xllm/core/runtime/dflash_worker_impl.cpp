@@ -18,8 +18,10 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -620,6 +622,11 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
   }
 
   if (input.sampling_params.selected_token_idxes.defined()) {
+    // Embedding ids are recycled across requests when the scheduler does not
+    // attach request ids. Clear the old tail before publishing this prefill so
+    // a new request cannot inherit the previous request's draft/target
+    // embedding or accepted-position offset.
+    embedding_cache_->clear(input.input_params.embedding.embedding_ids);
     embedding_cache_->write_prefill_target_context(
         input.input_params.embedding.embedding_ids,
         input.input_params.embedding.request_ids,
@@ -894,6 +901,27 @@ SampleOutput DFlashWorkerImpl::validate(
                                          target_output.logprobs,
                                          target_output.max_top_logprobs,
                                          enable_fused_kernel_);
+
+  const char* target_only_env =
+      std::getenv("XLLM_DSV4_FORCE_TARGET_TOKEN_ONLY");
+  if (target_only_env != nullptr && std::string(target_only_env) == "1") {
+    // Keep the DSpark draft/target forward for a controlled accuracy A/B, but
+    // commit only the target's first row. This rejects the proposed token
+    // without reading any GSM8K reference answer and isolates accepted-token
+    // state from semantic drift in the draft proposal.
+    auto target_tokens = target_output.sample_output.next_tokens.view(
+        {batch_size, num_val_tokens});
+    auto target_only_tokens = torch::full_like(target_tokens, -1);
+    target_only_tokens.select(/*dim=*/1, /*index=*/0)
+        .copy_(target_tokens.select(/*dim=*/1, /*index=*/0));
+    SampleOutput target_only_output;
+    target_only_output.next_tokens = target_only_tokens;
+    const torch::Tensor& target_embeddings = target_output.sample_output.embeddings;
+    target_only_output.embeddings =
+        target_embeddings.view({batch_size, num_val_tokens,
+                                target_embeddings.size(-1)});
+    return target_only_output;
+  }
 
   SampleOutput sample_output =
       rejection_sampler->forward(draft_token_ids.to(bonus_token_ids),

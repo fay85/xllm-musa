@@ -64,6 +64,22 @@ const torch::Tensor* dsv4_musa_host_sequence_lengths(
   return &lengths;
 }
 
+bool dsv4_musa_starts_new_request(const DSAMetadata& attn_metadata) {
+  const torch::Tensor* lengths =
+      dsv4_musa_host_sequence_lengths(attn_metadata);
+  if (lengths == nullptr) {
+    return false;
+  }
+  const int32_t* q_lengths = lengths->data_ptr<int32_t>();
+  const int32_t* kv_lengths = q_lengths + lengths->size(1);
+  for (int64_t index = 0; index < lengths->size(1); ++index) {
+    if (q_lengths[index] != kv_lengths[index]) {
+      return false;
+    }
+  }
+  return lengths->size(1) > 0;
+}
+
 QuantArgs dsv4_musa_quant_args(const QuantArgs& quant_args) {
   QuantArgs result = quant_args;
   // DeepSeek-V4 stores block scales under `scale`; keep its projections on
@@ -3002,7 +3018,9 @@ DeepseekV4AttentionImpl::forward(
   // bypass compress_prefill_sequence, so retaining a snapshot by sequence
   // slot would let a later cached-prefix request restore another request's
   // state.
-  if (is_prefill && !is_chunked_prefill) {
+  const bool starts_new_request =
+      !is_chunked_prefill || dsv4_musa_starts_new_request(attn_metadata);
+  if (is_prefill && starts_new_request) {
     compressor_kv_history_.clear();
     compressor_kv_state_.clear();
     compressor_score_state_.clear();
@@ -3395,8 +3413,16 @@ DeepseekV4AttentionImpl::forward(
       (indexer_wq_b_ || q_indexer_b_weight_loaded_) && indexer_weights_proj_ &&
       indexer_compressor_wkv_ && indexer_compressor_wgate_ &&
       indexer_compressor_norm_ && indexer_compressor_ape_loaded_;
-  const bool apply_sparse_indexer_attention =
+  const bool disable_graph_compact_indexer = [] {
+    const char* env = std::getenv("XLLM_DSV4_DISABLE_GRAPH_COMPACT_INDEXER");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  const bool effective_use_indexer_attention =
       use_indexer_attention &&
+      !(disable_graph_compact_indexer && attn_metadata.is_acl_graph &&
+        compact_spec_verify && total_tokens > 1);
+  const bool apply_sparse_indexer_attention =
+      effective_use_indexer_attention &&
       (!is_prefill || query_ranges.size() <= 1 ||
        dsv4_musa_multi_sequence_indexer_prefill_enabled());
   if (compress_ratio_ == 4 && dsv4_musa_mate_fused_dsa_trace_enabled()) {
@@ -3410,7 +3436,7 @@ DeepseekV4AttentionImpl::forward(
               << " compressor_ape_loaded=" << compressor_ape_loaded_
               << " indexer_ape_loaded=" << indexer_compressor_ape_loaded_
               << " use_compressed=" << use_compressed_attention
-              << " use_indexer=" << use_indexer_attention;
+              << " use_indexer=" << effective_use_indexer_attention;
   }
   const int64_t cmp_cache_idx =
       use_compressed_attention
@@ -3445,23 +3471,24 @@ DeepseekV4AttentionImpl::forward(
               << " cmp_bt_shape=" << tensor_sizes_string(cmp_block_table)
               << " cmp_bt_prefix=" << tensor_i64_prefix(cmp_block_table);
   }
-  auto index_cache =
-      use_indexer_attention ? kv_cache.get_index_cache() : torch::Tensor();
-  auto index_scale_cache = use_indexer_attention
+  auto index_cache = effective_use_indexer_attention
+                         ? kv_cache.get_index_cache()
+                         : torch::Tensor();
+  auto index_scale_cache = effective_use_indexer_attention
                                ? dsv4_musa_indexer_scale_cache(kv_cache)
                                : torch::Tensor();
   const int64_t index_cache_idx =
-      use_indexer_attention
+      effective_use_indexer_attention
           ? find_token_cache_index(
                 attn_metadata, layer_id_, compress_ratio_, /*ordinal=*/1)
           : -1;
   auto index_slot_mapping =
-      use_indexer_attention
+      effective_use_indexer_attention
           ? layer_cache_tensor(
                 attn_metadata.slot_mappings, layer_id_, index_cache_idx)
           : torch::Tensor();
   auto index_block_table =
-      use_indexer_attention
+      effective_use_indexer_attention
           ? layer_cache_tensor(
                 attn_metadata.block_tables, layer_id_, index_cache_idx)
           : torch::Tensor();
@@ -3529,20 +3556,21 @@ DeepseekV4AttentionImpl::forward(
   const int64_t indexer_state_rows = 2 * 4;
   const int64_t indexer_state_dim = 2 * index_head_dim_;
   const int64_t indexer_state_cache_idx =
-      use_indexer_attention
+      effective_use_indexer_attention
           ? find_swa_cache_index(attn_metadata, layer_id_, /*ordinal=*/3)
           : -1;
   const int64_t indexer_score_state_cache_idx =
-      use_indexer_attention
+      effective_use_indexer_attention
           ? find_swa_cache_index(attn_metadata, layer_id_, /*ordinal=*/4)
           : -1;
   auto indexer_state_block_table =
-      use_indexer_attention
+      effective_use_indexer_attention
           ? layer_cache_tensor(
                 attn_metadata.block_tables, layer_id_, indexer_state_cache_idx)
           : torch::Tensor();
   auto indexer_score_state_block_table =
-      use_indexer_attention ? layer_cache_tensor(attn_metadata.block_tables,
+      effective_use_indexer_attention
+          ? layer_cache_tensor(attn_metadata.block_tables,
                                                  layer_id_,
                                                  indexer_score_state_cache_idx)
                             : torch::Tensor();
@@ -3553,7 +3581,7 @@ DeepseekV4AttentionImpl::forward(
     indexer_score_state_block_table = indexer_state_block_table;
   }
   const bool use_persistent_indexer_state =
-      use_indexer_attention &&
+      effective_use_indexer_attention &&
       dsv4_musa_persistent_indexer_state_enabled() &&
       indexer_kv_state_cache.defined() && indexer_score_state_cache.defined() &&
       indexer_kv_state_cache.dim() == 3 &&
@@ -3577,8 +3605,9 @@ DeepseekV4AttentionImpl::forward(
       (total_tokens == 1 ||
        (compact_spec_verify && attn_metadata.is_acl_graph &&
         total_tokens <= decode_workspace_tokens_));
-  torch::Tensor compact_decode_state_position;
-  if (use_compact_decode_workspace && attn_metadata.input_positions.defined()) {
+  torch::Tensor compact_decode_state_position = attn_metadata.input_positions;
+  if (compact_spec_verify && attn_metadata.is_acl_graph &&
+      total_tokens > 1 && attn_metadata.input_positions.defined()) {
     compact_decode_state_position = attn_metadata.input_positions.narrow(
         /*dim=*/0, /*start=*/0, /*length=*/1);
   }
@@ -3779,7 +3808,7 @@ DeepseekV4AttentionImpl::forward(
   torch::Tensor joint_indexer_kv_projection;
   torch::Tensor joint_indexer_score_projection;
   const bool use_joint_sp_compressor_projection =
-      use_compressed_attention && use_indexer_attention &&
+      use_compressed_attention && effective_use_indexer_attention &&
       (is_prefill || is_chunked_prefill) && sp_context != nullptr &&
       query_ranges.size() == 1 &&
       sp_joint_compressor_projection_weight_.defined();
@@ -3841,7 +3870,7 @@ DeepseekV4AttentionImpl::forward(
     }
     compressor_kv_state_.resize(query_ranges.size());
     compressor_score_state_.resize(query_ranges.size());
-    if (use_indexer_attention) {
+    if (effective_use_indexer_attention) {
       if (!use_paged_indexer_cache) {
         indexer_kv_history_.resize(query_ranges.size());
       }
@@ -3931,7 +3960,7 @@ DeepseekV4AttentionImpl::forward(
         compressor_kv_history_[seq_idx] =
             torch::empty({0, head_dim_}, hidden_states.options());
       }
-      if (use_indexer_attention) {
+      if (effective_use_indexer_attention) {
         torch::Tensor index_seq =
             compress_indexer_prefill_sequence(hidden_seq,
                                               cos_slice,
@@ -3974,7 +4003,7 @@ DeepseekV4AttentionImpl::forward(
             compressor_kv_cache, prefix_compressor_kv_state_, seq_idx);
         store_snapshot(
             compressor_score_cache, prefix_compressor_score_state_, seq_idx);
-        if (use_indexer_attention) {
+          if (effective_use_indexer_attention) {
           store_snapshot(
               indexer_kv_state_cache, prefix_indexer_kv_state_, seq_idx);
           store_snapshot(
@@ -4090,13 +4119,13 @@ DeepseekV4AttentionImpl::forward(
     const bool use_current_prefill_kv = is_prefill && !is_chunked_prefill;
     const bool use_paged_decode_attention =
         dspark_block_size_ == 0 && !use_current_prefill_kv &&
-        !use_indexer_attention && dsv4_musa_paged_dense_decode_enabled() &&
+        !effective_use_indexer_attention && dsv4_musa_paged_dense_decode_enabled() &&
         dsv4_musa_fused_dense_decode_enabled();
     // Mate consumes the packed compressed/SWA caches directly. Avoid
     // materializing the complete dense SWA history unless a fallback path
     // actually needs it.
     const bool defer_swa_gather_for_mate =
-        !use_current_prefill_kv && use_indexer_attention &&
+        !use_current_prefill_kv && effective_use_indexer_attention &&
         (query_ranges.size() <= 1 ||
          dsv4_musa_mate_fused_dsa_multi_sequence_enabled()) &&
         mate_cmp_cache.defined() && mate_swa_cache.defined() &&
@@ -4134,11 +4163,11 @@ DeepseekV4AttentionImpl::forward(
             seq_idx >= compressor_kv_history_.size()) {
           compressor_kv_history_.resize(seq_idx + 1);
         }
-        if (use_indexer_attention && !use_paged_indexer_cache &&
+        if (effective_use_indexer_attention && !use_paged_indexer_cache &&
             seq_idx >= indexer_kv_history_.size()) {
           indexer_kv_history_.resize(seq_idx + 1);
         }
-        if (use_indexer_attention && seq_idx >= indexer_kv_state_.size()) {
+        if (effective_use_indexer_attention && seq_idx >= indexer_kv_state_.size()) {
           indexer_kv_state_.resize(seq_idx + 1);
           indexer_score_state_.resize(seq_idx + 1);
         }
@@ -4235,7 +4264,7 @@ DeepseekV4AttentionImpl::forward(
           const int64_t indexer_state_dim =
               kIndexerCompressorCoeff * index_head_dim_;
           const bool fuse_chunked_indexer_state_only =
-              reuse_joint_chunked_projections && use_indexer_attention &&
+              reuse_joint_chunked_projections && effective_use_indexer_attention &&
               compress_ratio_ == kIndexerCompressRatio &&
               indexer_compressor_ape_.defined() &&
               indexer_compressor_ape_.scalar_type() == torch::kFloat32 &&
@@ -4318,7 +4347,7 @@ DeepseekV4AttentionImpl::forward(
                                                       main_kv_projection,
                                                       main_score_projection);
             torch::Tensor new_indexer_cmp;
-            if (use_indexer_attention) {
+            if (effective_use_indexer_attention) {
               if (fuse_chunked_indexer_state_only) {
                 if ((abs_pos + 1) % kIndexerCompressRatio == 0) {
                   CHECK_LT(fused_indexer_output_row,
@@ -4457,7 +4486,7 @@ DeepseekV4AttentionImpl::forward(
           if (retain_compressed_history) {
             cmp_seq = compressor_kv_history_[seq_idx];
           }
-          if (!cmp_seq.defined() && !use_indexer_attention) {
+          if (!cmp_seq.defined() && !effective_use_indexer_attention) {
             cmp_seq = gather_cache(cmp_cache,
                                    cmp_block_table,
                                    static_cast<int64_t>(seq_idx),
@@ -4621,7 +4650,7 @@ DeepseekV4AttentionImpl::forward(
       seq_output = selected_kv_attention_reference(
           q_seq, kv_seq.slice(/*dim=*/0, start), attn_sink_, softmax_scale_);
     }
-    if (use_indexer_attention && !use_current_prefill_kv &&
+    if (effective_use_indexer_attention && !use_current_prefill_kv &&
         dsv4_musa_mate_fused_dsa_trace_enabled()) {
       const int64_t index_history_rows =
           index_kv.defined() ? index_kv.size(0) : -1;
@@ -4644,7 +4673,7 @@ DeepseekV4AttentionImpl::forward(
     // otherwise a later proposal can affect an earlier target token.
     const bool compact_verify_needs_causal_fallback =
         compact_spec_verify && q_seq.size(0) > 1;
-    if (dsv4_musa_mate_sparse_decode_enabled() && use_indexer_attention &&
+    if (dsv4_musa_mate_sparse_decode_enabled() && effective_use_indexer_attention &&
         !(attn_metadata.is_acl_graph && q_seq.size(0) > 1) &&
         !use_current_prefill_kv &&
         allow_mate_sparse_attention && cmp_indices.defined() &&

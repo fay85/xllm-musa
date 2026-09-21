@@ -2058,6 +2058,26 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
   // Decode phase with full graph
   if (is_decode) {
+    // Diagnostic control for DeepSeek-V4 DSpark compact verification.  The
+    // target q2 Graph path owns a different persistent DSA state carrier than
+    // draft q1; keeping this switch opt-in lets us compare the exact same
+    // request with eager target verification without changing the default
+    // performance path.
+    const char* force_eager_compact_env =
+        std::getenv("XLLM_DSV4_FORCE_EAGER_COMPACT_VERIFY");
+    const bool force_eager_compact_verify =
+        force_eager_compact_env != nullptr &&
+        std::string(force_eager_compact_env) == "1" &&
+        args_.model_type() == "deepseek_v4" && n_tokens > 1 &&
+        params.is_spec_verify;
+    if (force_eager_compact_verify) {
+      ModelInputParams eager_params = params;
+      eager_params.enable_graph = false;
+      eager_params.attn_metadata.reset();
+      COUNTER_INC(num_model_execution_total_eager);
+      return model_->forward(tokens, positions, kv_caches, eager_params);
+    }
+
     // Check if conditions are suitable for graph execution (replay or capture)
     const auto max_seq_len = args_.max_position_embeddings();
     const bool seq_len_supported = params.meta.kv_max_seq_len <= max_seq_len;
