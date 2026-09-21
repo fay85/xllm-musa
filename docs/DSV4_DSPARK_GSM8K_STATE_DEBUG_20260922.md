@@ -61,3 +61,14 @@ sparse 路径。该修改修复了 q2 eager 对照中的部分语义漂移（130
 Graph/state 修复，默认高性能路径仍需继续定位。
 
 短答案 prompt 对照更差（6 题仅 1/6），说明问题不能通过缩短输出提示解决。
+
+## 2026-09-22 SWA block-table 追踪
+
+对固定前序请求开启临时 `XLLM_DSV4_LOG_COMPACT_META=1` 后，target q2 Graph
+在跨过 SWA block 边界时观察到 SWA manager 从 `[1,2]` 变为 `[-1,2,3]`，而
+C4/C128 manager 仍为 `[1]`。这确认 128/206/244 的首次分叉位于 rolling SWA
+block-table / compressed attention 读取交界，而不是 q2 shape 本身；简单把
+Graph q2 改成 eager 或关闭 indexer 不能稳定修复。
+
+临时 full-dense SWA A/B 能让 index=128 正确，但会使 122/125 错误，因为跳过
+压缩 cache 构建会破坏后续长 decode state；该 A/B 未合入默认代码。
