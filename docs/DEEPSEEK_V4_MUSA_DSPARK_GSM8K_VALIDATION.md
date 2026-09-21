@@ -506,3 +506,19 @@ index=128 的 pack cache 在无同步时曾出现 `inf/nan`，加入 device even
 record/wait 后恢复为 finite cache（`cmp_max_abs=0.125`，题目输出恢复为 880）。
 事件桥位于 `deepseek_v4_dsa_cache_ops.cu` / `deepseek_v4_dsa_attention.cu`，
 不做 host-wide synchronize，默认高性能路径仍可使用。
+
+### 2026-09-21 Eager target-only、禁用 MATE sparse 的固定 100 题
+
+在同一 event-order 候选上完成固定随机 100 题：Graph=false、draft=false、
+Prefix Cache=false、`XLLM_DSV4_DISABLE_MATE_SPARSE_DECODE=1`、TP8/EP1、
+`max_tokens_per_batch=2048`、显存利用率 0.80。由于该 Eager fallback 较慢，
+测试分三段续跑；三段共 100 个不重复索引、无请求错误，结果为：
+
+| 配置 | 完成 | 正确 | 准确率 | 失败索引 |
+| --- | ---: | ---: | ---: | --- |
+| Eager + target-only + MATE sparse disabled | 100/100 | 95 | **95%** | 235、273、333、952、1038 |
+
+结果摘要：
+`logs/gsm8k_eager_targetonly_mateoff_100_20260921/baseline100/merged_summary.json`。
+该结果是诊断 fallback，不代表高性能 MATE/Graph 默认路径；服务已停止并恢复
+0--7 卡占卡程序。
