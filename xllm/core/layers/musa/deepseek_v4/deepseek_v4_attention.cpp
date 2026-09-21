@@ -3987,8 +3987,12 @@ DeepseekV4AttentionImpl::forward(
       auto cmp_all = compressed_to_cache.size() == 1
                          ? compressed_to_cache.front()
                          : torch::cat(compressed_to_cache, /*dim=*/0);
-      auto valid_slots = cmp_slot_mapping.reshape({-1}).slice(
-          /*dim=*/0, /*start=*/0, /*end=*/cmp_all.size(0));
+      auto valid_slots = attn_metadata.is_acl_graph
+                             ? cmp_slot_mapping.reshape({-1}).slice(
+                                   /*dim=*/0,
+                                   /*start=*/0,
+                                   /*end=*/cmp_all.size(0))
+                             : cmp_slot_mapping;
       scatter_by_slot(cmp_cache, valid_slots, cmp_all);
       maybe_sync_attention_stage(
           layer_id_, "prefill_cmp_scatter_by_slot", cmp_all);
@@ -4001,8 +4005,12 @@ DeepseekV4AttentionImpl::forward(
       auto index_all = indexer_to_cache.size() == 1
                            ? indexer_to_cache.front()
                            : torch::cat(indexer_to_cache, /*dim=*/0);
-      auto valid_index_slots = index_slot_mapping.reshape({-1}).slice(
-          /*dim=*/0, /*start=*/0, /*end=*/index_all.size(0));
+      auto valid_index_slots = attn_metadata.is_acl_graph
+                                   ? index_slot_mapping.reshape({-1}).slice(
+                                         /*dim=*/0,
+                                         /*start=*/0,
+                                         /*end=*/index_all.size(0))
+                                   : index_slot_mapping;
       quant_scatter_indexer_cache(
           index_cache, index_scale_cache, valid_index_slots, index_all);
       maybe_sync_attention_stage(
@@ -4029,11 +4037,14 @@ DeepseekV4AttentionImpl::forward(
                                  /*end=*/cmp_all.size(0));
     auto flat_slots = cmp_slot_mapping.reshape({-1});
     CHECK_GE(flat_slots.numel(), cmp_all.size(0));
-    auto pending_slots = flat_slots
-                             .slice(/*dim=*/0,
-                                    /*start=*/decode_compressed_rows_scattered,
-                                    /*end=*/cmp_all.size(0))
-                             .contiguous();
+    auto pending_slots = attn_metadata.is_acl_graph
+                             ? flat_slots
+                                   .slice(
+                                       /*dim=*/0,
+                                       /*start=*/decode_compressed_rows_scattered,
+                                       /*end=*/cmp_all.size(0))
+                                   .contiguous()
+                             : cmp_slot_mapping;
     scatter_by_slot(cmp_cache, pending_slots, pending);
     maybe_sync_attention_stage(
         layer_id_, "decode_cmp_scatter_by_slot", pending);
@@ -4052,12 +4063,14 @@ DeepseekV4AttentionImpl::forward(
           /*end=*/index_all.size(0));
       auto flat_index_slots = index_slot_mapping.reshape({-1});
       CHECK_GE(flat_index_slots.numel(), index_all.size(0));
-      auto pending_index_slots =
-          flat_index_slots
-              .slice(/*dim=*/0,
-                     /*start=*/decode_compressed_rows_scattered,
-                     /*end=*/index_all.size(0))
-              .contiguous();
+      auto pending_index_slots = attn_metadata.is_acl_graph
+                                     ? flat_index_slots
+                                           .slice(
+                                               /*dim=*/0,
+                                               /*start=*/decode_compressed_rows_scattered,
+                                               /*end=*/index_all.size(0))
+                                           .contiguous()
+                                     : index_slot_mapping;
       quant_scatter_indexer_cache(
           index_cache, index_scale_cache, pending_index_slots, pending_index);
       maybe_sync_attention_stage(
@@ -4961,11 +4974,6 @@ DeepseekV4AttentionImpl::forward(
       }
     }
     if (active_slots.empty()) {
-      return;
-    }
-    if (active_slots.size() == 1) {
-      scatter_by_slot(cache, active_slots.front(), active_states.front());
-      maybe_sync_attention_stage(layer_id_, stage, active_states.front());
       return;
     }
     auto all_slots = torch::cat(active_slots, /*dim=*/0);
