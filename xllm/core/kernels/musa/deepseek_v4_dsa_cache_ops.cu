@@ -82,6 +82,9 @@ musaStream_t current_dsv4_cache_stream() {
   return c10::cuda::getCurrentCUDAStream();
 }
 
+thread_local musaEvent_t dsv4_model1_pack_event = nullptr;
+thread_local bool dsv4_model1_pack_event_recorded = false;
+
 void check_musa_runtime(musaError_t status) {
   CHECK(status == musaSuccess)
       << "DeepSeek-V4 MUSA runtime call failed: " << musaGetErrorString(status);
@@ -2419,7 +2422,22 @@ void deepseek_v4_pack_fp8_cache(torch::Tensor cache,
                                                  block_size,
                                                  page_stride_bytes);
   }
+  if (dsv4_model1_pack_event == nullptr) {
+    check_musa_runtime(
+        musaEventCreateWithFlags(&dsv4_model1_pack_event, musaEventDisableTiming));
+  }
+  check_musa_runtime(musaEventRecord(dsv4_model1_pack_event,
+                                     current_dsv4_cache_stream()));
+  dsv4_model1_pack_event_recorded = true;
 #endif
+}
+
+void deepseek_v4_wait_model1_pack_event() {
+  if (!dsv4_model1_pack_event_recorded) {
+    return;
+  }
+  check_musa_runtime(musaStreamWaitEvent(
+      c10::musa::getCurrentMUSAStream().stream(), dsv4_model1_pack_event, 0));
 }
 
 void deepseek_v4_indexer_cache_quant_scatter(torch::Tensor cache,

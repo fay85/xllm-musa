@@ -153,6 +153,11 @@ void deepseek_v4_pack_fp8_cache(torch::Tensor cache,
                                 torch::Tensor slot_ids,
                                 torch::Tensor values);
 
+// MODEL1 cache packing uses the compatibility CUDA stream while the MATE FFI
+// consumer uses the native MUSA stream.  Bridge the producer/consumer streams
+// with a device event instead of a host-wide synchronize.
+void deepseek_v4_wait_model1_pack_event();
+
 void deepseek_v4_indexer_cache_quant_scatter(torch::Tensor cache,
                                              torch::Tensor scale_cache,
                                              torch::Tensor slot_ids,

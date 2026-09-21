@@ -484,3 +484,25 @@ max_tokens=2048 的结果从此前 **73/100** 提升到 **79/100**，无请求�
 短输出截断、模型读题/算术错误和少量官方题面标签矛盾，不能把 79% 写成最终
 90% 验收结果。关闭 draft 的 target-only 对照没有达到更高闭环，说明剩余问题
 还涉及 DSpark accepted-token/Graph replay 状态，而不仅是 target MATE cache。
+
+### 2026-09-21 Eager+draft 对照及 MODEL1 pack stream ordering
+
+为回答 Eager+draft 与 Eager target-only 的差异，使用同一 event-order 候选：
+`build/gsm8k_candidates/event_order_final_20260921/xllm`，配置为 TP8/EP1、
+Graph=false、DSpark draft=true、`num_speculative_tokens=1`、Prefix Cache=false、
+`max_tokens_per_batch=2048`、固定随机 20 题。
+
+普通 baseline prompt 结果为 **17/20 = 85%**，失败 index 为 `3, 125, 333`，
+请求错误为 0；结果目录为
+`logs/gsm8k_event_order_eager_draft_n1_20260921/baseline20/`。
+同一服务切换到 compact structured solver 后为 **19/20 = 95%**，仅 index=1086
+出现数值偏差；结果目录为
+`logs/gsm8k_event_order_eager_draft_n1_20260921/structured20/`。
+structured 结果属于评测提示/输出策略对照，不能等同于普通 baseline 的原始模型
+准确率。
+
+本轮还确认 C4 MODEL1 cache 的异常来自 producer/consumer stream 顺序：Eager
+index=128 的 pack cache 在无同步时曾出现 `inf/nan`，加入 device event
+record/wait 后恢复为 finite cache（`cmp_max_abs=0.125`，题目输出恢复为 880）。
+事件桥位于 `deepseek_v4_dsa_cache_ops.cu` / `deepseek_v4_dsa_attention.cu`，
+不做 host-wide synchronize，默认高性能路径仍可使用。

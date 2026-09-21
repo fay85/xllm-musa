@@ -1857,6 +1857,10 @@ torch::Tensor try_dsv4_mate_model1_sparse_decode(
   }
 
   try {
+    // Cache packing is issued on the compatibility CUDA stream, while the
+    // MATE FFI path consumes the native MUSA stream.  Queue an event wait so
+    // the packed C4/SWA bytes are visible without a host synchronize.
+    deepseek_v4_wait_model1_pack_event();
     auto main_bytes = dsv4_model1_cache_bytes(packed_cache);
     auto extra_bytes = dsv4_model1_cache_bytes(extra_packed_cache);
     auto q4d = q.unsqueeze(1);
