@@ -3351,13 +3351,12 @@ DeepseekV4AttentionImpl::forward(
     compression_query_ranges = {{0, sp_context->total_tokens}};
   }
   const bool graph_has_one_sequence_kv =
-      attn_metadata.is_acl_graph &&
-      ((attn_metadata.actual_seq_lengths_kv.defined() &&
-        attn_metadata.actual_seq_lengths_kv.numel() == 1) ||
-       (attn_metadata.seq_lens.defined() &&
-        attn_metadata.seq_lens.numel() == 1));
+      (attn_metadata.actual_seq_lengths_kv.defined() &&
+       attn_metadata.actual_seq_lengths_kv.numel() == 1) ||
+      (attn_metadata.seq_lens.defined() &&
+       attn_metadata.seq_lens.numel() == 1);
   const bool compact_spec_verify =
-      attn_metadata.is_acl_graph && query_ranges.size() == 1 &&
+      query_ranges.size() == 1 &&
       query_ranges.front().first == 0 &&
       query_ranges.front().second == total_tokens && total_tokens > 1 &&
       graph_has_one_sequence_kv &&
@@ -4672,9 +4671,9 @@ DeepseekV4AttentionImpl::forward(
     // block. Recompute each row independently with its effective KV length;
     // otherwise a later proposal can affect an earlier target token.
     const bool compact_verify_needs_causal_fallback =
-        compact_spec_verify && q_seq.size(0) > 1;
+        !is_prefill && q_seq.size(0) > 1 && query_ranges.size() == 1;
     if (dsv4_musa_mate_sparse_decode_enabled() && effective_use_indexer_attention &&
-        !(attn_metadata.is_acl_graph && q_seq.size(0) > 1) &&
+        !compact_verify_needs_causal_fallback &&
         !use_current_prefill_kv &&
         allow_mate_sparse_attention && cmp_indices.defined() &&
         mate_cmp_cache.defined() && mate_swa_cache.defined() &&

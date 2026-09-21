@@ -52,3 +52,12 @@ q2 eager 对照的剩余失败为 `130,201,333,570,952,1038`，内容检查显�
 候选构建目录：`build/gsm8k_candidates/dsv4_state_restore_diag5_20260922/`。
 该实验同时确认：简单地在下一步 scatter 旧 state，不能替代 target q2 对
 rejected proposal 的正确回滚。
+
+## 2026-09-22 eager q2 causal A/B
+
+将单序列 q_len>1 的 target verify 强制视为 causal fallback，禁止多行 MATE
+sparse 路径。该修改修复了 q2 eager 对照中的部分语义漂移（130、201），但
+固定 20 仍为 **16/20**，失败仍集中在 `128,206,235,244`；因此它不是完整的
+Graph/state 修复，默认高性能路径仍需继续定位。
+
+短答案 prompt 对照更差（6 题仅 1/6），说明问题不能通过缩短输出提示解决。
