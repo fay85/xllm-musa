@@ -1678,6 +1678,28 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
         persistent_param_.persistent_positions(padded_num_tokens_),
         replay_params_opt.value());
 
+    // persistent_param_.update() and model-private DSA metadata preparation
+    // run on the caller stream, while the captured graph replays on the
+    // dedicated capture stream.  A host-side synchronize of the caller is
+    // insufficient: the capture stream may start before the metadata copies
+    // become visible.  Add an explicit producer->capture event for the
+    // DeepSeek diagnostic first; this is opt-in until its accuracy/perf impact
+    // is measured.
+    static const bool s_sync_dsv4_graph_metadata = [] {
+      const char* env = std::getenv("XLLM_DSV4_GRAPH_METADATA_EVENT");
+      return env != nullptr && std::string(env) == "1";
+    }();
+    if (s_sync_dsv4_graph_metadata) {
+      c10::musa::MUSAStream producer_stream =
+          c10::musa::getCurrentMUSAStream(device_index_);
+      c10::Event metadata_ready(producer_stream.device_type());
+      metadata_ready.record(producer_stream);
+      metadata_ready.block(capture_stream_);
+      LOG_FIRST_N(INFO, 1)
+          << "[DSV4_GRAPH_ROUTE] metadata producer event waits on capture "
+             "stream";
+    }
+
     const torch::Tensor& fresh_fa3_scheduler_metadata =
         replay_params_opt.value()
             .attn_metadata->fa3_metadata.fa3_scheduler_metadata;
@@ -2058,19 +2080,40 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
   // Decode phase with full graph
   if (is_decode) {
-    // Diagnostic control for DeepSeek-V4 DSpark compact verification.  The
-    // target q2 Graph path owns a different persistent DSA state carrier than
-    // draft q1; keeping this switch opt-in lets us compare the exact same
-    // request with eager target verification without changing the default
-    // performance path.
+    // DeepSeek-V4 DSpark compact verification currently has a persistent
+    // q2-Graph state divergence: with the same accepted token/slot sequence,
+    // Graph and eager target verification can produce different token logits.
+    // Use eager q2 as the correctness default; Graph q2 remains an explicit
+    // opt-in for performance experiments until its persistent state carrier
+    // is made numerically equivalent.
     const char* force_eager_compact_env =
         std::getenv("XLLM_DSV4_FORCE_EAGER_COMPACT_VERIFY");
+    const char* enable_graph_compact_env =
+        std::getenv("XLLM_DSV4_ENABLE_GRAPH_COMPACT_VERIFY");
+    const bool graph_compact_opt_in =
+        enable_graph_compact_env != nullptr &&
+        std::string(enable_graph_compact_env) == "1";
     const bool force_eager_compact_verify =
         force_eager_compact_env != nullptr &&
         std::string(force_eager_compact_env) == "1" &&
         args_.model_type() == "deepseek_v4" && n_tokens > 1 &&
         params.is_spec_verify;
-    if (force_eager_compact_verify) {
+    // Before the SWA window rolls, compact Graph q2 is still equivalent in
+    // the fixed-prefix comparison.  Keep that fast path; switch to the
+    // validated eager q2 path only once the request crosses the rolling
+    // window, where stale persistent DSA state has been observed.
+    const int32_t dsv4_window_size = args_.window_size();
+    const bool compact_verify_crosses_swa_window =
+        dsv4_window_size > 0 &&
+        params.meta.kv_max_seq_len > dsv4_window_size;
+    const bool default_eager_compact_verify =
+        !graph_compact_opt_in && args_.model_type() == "deepseek_v4" &&
+        n_tokens > 1 && params.is_spec_verify &&
+        compact_verify_crosses_swa_window;
+    if (force_eager_compact_verify || default_eager_compact_verify) {
+      LOG(INFO) << "[DSV4_GRAPH_ROUTE] target compact verify forced eager; "
+                   "tokens="
+                << n_tokens;
       ModelInputParams eager_params = params;
       eager_params.enable_graph = false;
       eager_params.attn_metadata.reset();

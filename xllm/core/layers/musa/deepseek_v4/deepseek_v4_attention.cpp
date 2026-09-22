@@ -20,6 +20,7 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <array>
 #include <barrier>
 #include <chrono>
 #include <cmath>
@@ -78,6 +79,18 @@ bool dsv4_musa_starts_new_request(const DSAMetadata& attn_metadata) {
     }
   }
   return lengths->size(1) > 0;
+}
+
+bool dsv4_musa_clear_state_cache_on_request_enabled() {
+  const char* value =
+      std::getenv("XLLM_DSV4_CLEAR_STATE_CACHE_ON_REQUEST");
+  return value != nullptr && std::string(value) == "1";
+}
+
+bool dsv4_musa_clear_decode_workspaces_on_request_enabled() {
+  const char* value =
+      std::getenv("XLLM_DSV4_CLEAR_DECODE_WORKSPACES_ON_REQUEST");
+  return value != nullptr && std::string(value) == "1";
 }
 
 QuantArgs dsv4_musa_quant_args(const QuantArgs& quant_args) {
@@ -3031,6 +3044,69 @@ DeepseekV4AttentionImpl::forward(
     prefix_compressor_score_state_.clear();
     prefix_indexer_kv_state_.clear();
     prefix_indexer_score_state_.clear();
+    if (dsv4_musa_clear_state_cache_on_request_enabled()) {
+      for (const auto& cache : {std::get<1>(kv_state),
+                                std::get<2>(kv_state),
+                                std::get<3>(kv_state),
+                                std::get<4>(kv_state)}) {
+        if (cache.defined() && cache.numel() > 0) {
+          cache.zero_();
+        }
+      }
+      LOG(INFO) << "[DSV4_STATE_RESET] cleared persistent compressor/indexer "
+                   "state caches for new request, layer="
+                << layer_id_;
+    }
+    if (dsv4_musa_clear_decode_workspaces_on_request_enabled()) {
+      const std::array<torch::Tensor*, 22> workspaces = {
+          &decode_spec_attention_output_,
+          &decode_kv_seq_lens_,
+          &decode_spec_indices_output_,
+          &decode_spec_mate_physical_indices_,
+          &decode_spec_mate_extra_physical_indices_,
+          &decode_compressor_kv_slots_,
+          &decode_compressor_score_slots_,
+          &decode_indexer_kv_slots_,
+          &decode_indexer_score_slots_,
+          &decode_compressor_kv_state_,
+          &decode_compressor_score_state_,
+          &decode_indexer_kv_state_,
+          &decode_indexer_score_state_,
+          &decode_compressor_kv_projection_,
+          &decode_compressor_score_projection_,
+          &decode_compressor_output_,
+          &decode_compressor_norm_output_,
+          &decode_compressor_rope_output_,
+          &decode_indexer_kv_projection_,
+          &decode_indexer_score_projection_,
+          &decode_indexer_output_,
+          &decode_indexer_norm_output_};
+      for (torch::Tensor* workspace : workspaces) {
+        if (workspace != nullptr && workspace->defined() &&
+            workspace->numel() > 0) {
+          workspace->zero_();
+        }
+      }
+      if (decode_indexer_rope_output_.defined() &&
+          decode_indexer_rope_output_.numel() > 0) {
+        decode_indexer_rope_output_.zero_();
+      }
+      if (decode_indexer_head_weight_projection_.defined() &&
+          decode_indexer_head_weight_projection_.numel() > 0) {
+        decode_indexer_head_weight_projection_.zero_();
+      }
+      if (decode_indexer_head_weights_.defined() &&
+          decode_indexer_head_weights_.numel() > 0) {
+        decode_indexer_head_weights_.zero_();
+      }
+      if (decode_indexer_topk_output_.defined() &&
+          decode_indexer_topk_output_.numel() > 0) {
+        decode_indexer_topk_output_.zero_();
+      }
+      LOG(INFO) << "[DSV4_STATE_RESET] cleared decode workspaces for new "
+                   "request, layer="
+                << layer_id_;
+    }
   }
 
   const dsv4_musa_sp::DeepseekV4SPContext* sp_context =

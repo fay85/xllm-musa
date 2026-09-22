@@ -112,3 +112,42 @@ env MUSA_VISIBLE_DEVICES=0 \
 目前没有证据表明 `mate_sparse_attention` 本身是 GSM8K 错误的首因。该单测不
 覆盖 Graph persistent buffer、accepted-token 回写、跨请求 state 生命周期，所
 以不能替代固定 100 题 Graph+draft 回归。
+
+## 后续定位准备：accepted-state 日志（未运行验证）
+
+新增默认关闭的 `XLLM_DSV4_LOG_ACCEPTED_STATE=1`，记录 decode 的输入 token、
+位置、KV 长度、embedding state offset，以及 accepted token 对应的 context
+写回位置和物理 slot。独立候选
+`build/gsm8k_candidates/accepted_state_trace_20260922/xllm` 已编译链接成功，
+SHA256 为 `ec9d9e59e58bfac7b15dc5146822f09c22bf1ed17bb51525ed72571dbbd6be93`。
+本候选继承了未验证的 SWA 实验；尚未启动，不作为新准确率或修复证据。
+候选中一处 layer0 indexer 日志在构建后从工作树移除（layer0 为 ratio=1，
+不会经过该分支），精确源码以候选目录 `source.diff` 和快照为准。
+
+下一步需固定 token 前缀，分别在相同 prefill/cache 状态下比较 Eager target
+与 Graph target 的 q2 第0行，保存 Graph replay 后的设备诊断 buffer（不能在
+capture 内做 D2H/item 日志）。在首个 logits 分叉 step 内，再逐层比较 hidden、
+Q/KV、SWA/C4/indexer state 和 Attention 输出。accepted 数量本来可能因草稿
+不同而变化，应按绝对 token 位置对齐，不能按外层迭代序号直接断言状态错误。
+现有三个 MATE 输入 case 通过并未证明 Graph replay 数值、完整索引范围、真实
+失败激活都正确；`[-1,2,3]` 本身也可以是正常逻辑页淘汰表示，并非根因证明。
+
+## 2026-09-22 真正 Eager q2 结果与临时默认策略
+
+为避免把旧候选误称为 Eager，`musa_graph_executor_impl.cpp` 增加了命中日志
+`[DSV4_GRAPH_ROUTE] target compact verify forced eager`。使用包含该 runtime
+对象的独立候选 `build/gsm8k_candidates/route_accurate_ab_20260922/xllm`，
+固定 100 题真正走 Eager q2 的结果为 **95/100（95%）**，失败为
+`235,255,333,952,1038`。这五题是当前 draft/语义路径问题，原先 Graph q2
+跨请求污染的 `128,206,244` 不再出现。
+
+随后确认清空 compressor/indexer state cache、清空 decode workspace、关闭
+compact indexer，以及给 Graph metadata 增加 producer→capture event，均未让
+默认 Graph q2 的 index=128 从 305 恢复到 880。因此没有把这些诊断项直接合入
+默认性能路径。
+
+当前修改把 Eager q2 作为准确率保护路径，但只在 `kv_max_seq_len` 超过模型
+SWA window 时触发；短上下文仍允许 Graph q2，Graph q2 可通过
+`XLLM_DSV4_ENABLE_GRAPH_COMPACT_VERIFY=1` 显式 opt-in。该策略尚需重新构建并
+跑完整固定 100 题，当前 95/100 证据来自显式 Eager 控制候选，不能直接宣称
+策略版本已闭环。

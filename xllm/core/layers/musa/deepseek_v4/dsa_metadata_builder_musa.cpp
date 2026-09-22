@@ -16,6 +16,9 @@ limitations under the License.
 #include "core/layers/musa/deepseek_v4/dsa_metadata_builder_musa.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <glog/logging.h>
+#include <string>
 
 #include "core/framework/model/model_input_params.h"
 #include "core/layers/common/attention_metadata.h"
@@ -27,6 +30,32 @@ limitations under the License.
 namespace xllm::layer {
 
 namespace {
+
+bool dsv4_log_graph_metadata_enabled() {
+  const char* value = std::getenv("XLLM_DSV4_LOG_GRAPH_METADATA");
+  return value != nullptr && std::string(value) == "1";
+}
+
+std::string dsv4_metadata_prefix(const torch::Tensor& tensor,
+                                 int64_t limit = 16) {
+  if (!tensor.defined() || tensor.numel() == 0) {
+    return "[]";
+  }
+  auto host = tensor.to(torch::kCPU).to(torch::kInt64).contiguous().view(-1);
+  std::string result = "[";
+  const int64_t count = std::min<int64_t>(host.numel(), limit);
+  for (int64_t index = 0; index < count; ++index) {
+    if (index != 0) {
+      result += ",";
+    }
+    result += std::to_string(host[index].item<int64_t>());
+  }
+  if (host.numel() > count) {
+    result += ",...";
+  }
+  result += "]";
+  return result;
+}
 
 constexpr char kDsv4StateBlockIndicesMetadataKey[] =
     "__musa_dsv4_state_block_indices";
@@ -373,6 +402,23 @@ void DSAMetadataBuilderMusa::build_dsa_fields(
                     graph_block_table_capacity_cols,
                     proc_bt[m],
                     proc_slots[m]);
+    }
+
+    if (dsv4_log_graph_metadata_enabled()) {
+      const auto cpu_options =
+          torch::TensorOptions().dtype(torch::kInt32).device(torch::kCPU);
+      LOG(INFO) << "[DSV4_GRAPH_META] graph=" << is_acl_graph
+                << " batch=" << batch_size << " managers=" << manager_num
+                << " q_lens="
+                << dsv4_metadata_prefix(torch::tensor(q_lens_vec, cpu_options))
+                << " ctx_lens=" << dsv4_metadata_prefix(
+                       torch::tensor(ctx_lens_vec, cpu_options));
+      for (int32_t m = 0; m < manager_num; ++m) {
+        LOG(INFO) << "[DSV4_GRAPH_META] manager=" << m
+                  << " type=" << static_cast<int32_t>(group_infos[m].type)
+                  << " bt=" << dsv4_metadata_prefix(proc_bt[m])
+                  << " slots=" << dsv4_metadata_prefix(proc_slots[m]);
+      }
     }
 
     // Compressor and indexer recurrent states share the active SWA block.

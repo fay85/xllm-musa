@@ -48,6 +48,37 @@ limitations under the License.
 namespace xllm {
 namespace {
 
+bool dsv4_log_accepted_state_enabled() {
+  const char* value = std::getenv("XLLM_DSV4_LOG_ACCEPTED_STATE");
+  return value != nullptr && std::string(value) == "1";
+}
+
+template <typename T>
+std::string dsv4_host_vector_string(const std::vector<T>& values) {
+  std::string result = "[";
+  for (size_t index = 0; index < values.size(); ++index) {
+    if (index != 0) {
+      result += ",";
+    }
+    result += std::to_string(values[index]);
+  }
+  result += "]";
+  return result;
+}
+
+std::string dsv4_cpu_tensor_vector_string(const torch::Tensor& tensor) {
+  if (!tensor.defined() || tensor.numel() == 0) {
+    return "[]";
+  }
+  auto cpu = tensor.to(torch::kCPU).to(torch::kLong).contiguous().view({-1});
+  std::vector<int64_t> values;
+  values.reserve(static_cast<size_t>(cpu.numel()));
+  for (int64_t index = 0; index < cpu.numel(); ++index) {
+    values.push_back(cpu[index].item<int64_t>());
+  }
+  return dsv4_host_vector_string(values);
+}
+
 // Per-rank sampling RNG can diverge across the tensor-parallel group.
 // Broadcasting the sampled draft/accepted tokens to the group's rank 0 keeps
 // every rank's cached draft probs and accepted prefixes identical. No-op for a
@@ -1019,6 +1050,18 @@ void DFlashWorkerImpl::update_decode_step_input(
                                                   : input_token_id);
     positions_vec.emplace_back(current_position);
     specBuilder::append_seq_len_by_layout(kv_seq_lens_vec, current_kv_len);
+
+    if (dsv4_log_accepted_state_enabled()) {
+      LOG(INFO) << "[DSV4_ACCEPTED_STATE] phase=prepare seq=" << seq_id
+                << " input_token=" << input_token_id
+                << " rewritten_token="
+                << (rewrite_fake_token ? state.token_id : input_token_id)
+                << " state_valid=" << state.valid
+                << " state_position_offset=" << state.position_offset
+                << " input_position=" << input_positions[seq_id]
+                << " current_position=" << current_position
+                << " current_kv_len=" << current_kv_len;
+    }
   }
 
   input.token_ids_host = specBuilder::make_cpu_int_tensor(token_ids_vec);
@@ -1212,6 +1255,21 @@ void DFlashWorkerImpl::write_target_context_to_cache(
   specBuilder::DecodeBuildBuffers buf;
   std::vector<int64_t> accepted_idxes = build_accepted_context_rows(
       input, accepted_tokens, options_.block_size(), buf);
+  if (dsv4_log_accepted_state_enabled()) {
+    LOG(INFO) << "[DSV4_ACCEPTED_STATE] phase=commit accepted_tokens="
+              << dsv4_cpu_tensor_vector_string(accepted_tokens)
+              << " input_positions="
+              << dsv4_cpu_tensor_vector_string(input.positions_host)
+              << " input_kv_lens="
+              << dsv4_host_vector_string(
+                     input.input_params.attention.host.kv_seq_lens)
+              << " accepted_rows="
+              << dsv4_host_vector_string(accepted_idxes)
+              << " cache_positions="
+              << dsv4_host_vector_string(buf.out_positions)
+              << " cache_slots="
+              << dsv4_host_vector_string(buf.out_new_cache_slots);
+  }
   torch::TensorOptions host_index_options = torch::TensorOptions()
                                                 .dtype(torch::kLong)
                                                 .device(torch::kCPU)
