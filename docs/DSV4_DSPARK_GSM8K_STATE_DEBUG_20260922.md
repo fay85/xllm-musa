@@ -189,7 +189,7 @@ Graph 配置，分别测试 4 个 1024/512 请求，严格数到 256：
 
 | Graph 路径 | TTFT_AVG | TPOT_AVG | Input TGS | Output TGS | Total TGS | 严格正确 |
 |---|---:|---:|---:|---:|---:|---:|
-| DSpark N=5（target q6） | 460.139 ms | 49.707 ms | 39.597 tok/s | 19.799 tok/s | 59.396 tok/s | 4/4 |
+| DSpark N=5（target q6） | 460.138 ms | 49.707 ms | 39.597 tok/s | 19.799 tok/s | 59.396 tok/s | 4/4 |
 | DSpark N=1（target q2） | 449.374 ms | 98.971 ms | 20.069 tok/s | 10.035 tok/s | 30.104 tok/s | 4/4 |
 
 N=1 的每个请求均生成 `512/512`，cached tokens 为 variant 0 的 0 和后续
@@ -197,3 +197,29 @@ variant 的 640；但 q2 Graph 的 TPOT 约 99 ms，仍明显慢于历史高性�
 所以短序列也不能证明 Graph q2 已恢复高性能。日志分别为
 `logs/repro_graph_q2_short1024_20260922_retry1/` 和
 `logs/repro_graph_q2_short1024_n1_20260922/`。
+
+上表统计全部 variant 0--3，包含首条缓存未命中和首次缓存命中请求，不能称为
+纯热态均值。单列最后两条 variant 2--3 作为短热态观察窗口（不是历史六请求
+窗口的等量复现）：
+
+| Graph 路径 | 热态 TTFT_AVG | 热态 TPOT_AVG | Output TGS | Total TGS | 热态样本 |
+|---|---:|---:|---:|---:|---:|
+| N=5，target q6 | 189.391 ms | 49.805 ms | 19.969 tok/s | 59.906 tok/s | 2/2 |
+| N=1，target q2 | 189.402 ms | 99.092 ms | 10.074 tok/s | 30.221 tok/s | 2/2 |
+
+TGS 均为整套 TP8 服务总 token 数除以所列请求 E2E 耗时之和，未除以卡数，
+不包含独立客户端进程之间构建 prompt 的间隔；输入包含缓存命中的 token。
+实际缓存命中 640/1024=62.5%，0.65 为配置的前缀比例。TPOT 使用客户端
+首个至最后一个非空 content 的间隔除以 usage completion_tokens-1。
+两个热态窗口的总 E2E 分别为 51.280097 s 和 101.650776 s。
+
+N=1 rank0 日志实际记录 `bucket_num_tokens: 2, actual_num_tokens: 2` 的 Graph
+capture 完成，没有命中 `target compact verify forced eager` 路由日志；N=5
+记录的是 bucket 6，故不再将前一轮 N=5 长序列超时称为 q2 专属问题。
+本轮复用原独立二进制，SHA256 为
+`4c24d92f154843526fdde51ac709ff798f46ba39a5f422f90add511765aea5d4`，未修改
+推理代码或重编共享库。短计数全部通过不证明 GSM8K Graph+draft 精度已经恢复。
+
+N=5 目录的 `window_0_3.summary.json` 是旧汇总器因只支持六请求 2500/1500
+窗口而产生的参数校验失败，不是模型结果失败；该文件保留，不覆盖。上述短序列
+统计从四份 `formal_variant_*.json` 及逐条 accuracy gate 重新计算。
