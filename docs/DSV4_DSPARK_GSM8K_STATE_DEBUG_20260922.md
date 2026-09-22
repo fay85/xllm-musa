@@ -155,10 +155,12 @@ compact indexer，以及给 Graph metadata 增加 producer→capture event，均
 准确率门槛，但 Eager q2 会降低长序列 decode 性能；后续仍需在 Graph q2 修复
 后重新恢复 Graph 并复测性能。
 
-## 2026-09-22 Graph q2 热态性能复测
+## 2026-09-22 Graph+DSpark 长短序列性能复测
 
 按历史高性能口径启动当前候选，并显式设置
-`XLLM_DSV4_ENABLE_GRAPH_COMPACT_VERIFY=1`，确保 target q2 不回退到默认 Eager：
+`XLLM_DSV4_ENABLE_GRAPH_COMPACT_VERIFY=1`，确保 target compact verify 不回退到
+默认 Eager。历史高性能口径使用 DSpark `N=5`，因此对应 target q6，并不等于
+真正的 q2。
 
 - 模型：`DeepSeek-V4-Flash-0731-FP8-mt`；MUSA TP8/EP1/DP1/CP1；B1；
   DSpark `N=5`；Graph/VMM/decode-no-padding 开启；Prefix Cache 开启，
@@ -168,7 +170,7 @@ compact indexer，以及给 Graph metadata 增加 producer→capture event，均
 - 二进制：`build/gsm8k_candidates/dspark_accuracy_default_eager_verified_20260922/xllm`。
 - 日志：`logs/repro_graph_q2_current_20260922_retry1/`。
 
-两次 warmup 均严格通过，但 Graph q2 长序列没有形成有效性能窗口：
+两次 warmup 均严格通过，但 N=5 长序列没有形成有效性能窗口：
 
 | 请求 | TTFT | TPOT | 结果 |
 |---|---:|---:|---|
@@ -177,6 +179,21 @@ compact indexer，以及给 Graph metadata 增加 producer→capture event，均
 | variant 0，2500/1500 | 487 ms（服务端记录） | 690.1 ms（仅生成631 token） | 客户端 180 s 超时 |
 
 variant 0 服务端在约 435 秒后仍只生成 `631/1500`，因此不能计算合格的
-TTFT/TPOT/TGS；variant 2--7 未执行。结论是：当前 Graph q2 在该长序列口径下
-不是简单的性能回退，而是出现严重 decode 卡滞/极低吞吐，当前默认 Eager q2
-准确率保护路径仍不能切回 Graph q2。
+TTFT/TPOT/TGS；variant 2--7 未执行。该结果只能说明当前 Graph+DSpark 长序列
+存在严重 decode 卡滞，不能单独归因于 q2。
+
+### 1024/512 短序列对照
+
+为区分 DSpark N=5 与真正 q2，使用相同 TP8/EP1、B1、Prefix Cache 0.65、
+Graph 配置，分别测试 4 个 1024/512 请求，严格数到 256：
+
+| Graph 路径 | TTFT_AVG | TPOT_AVG | Input TGS | Output TGS | Total TGS | 严格正确 |
+|---|---:|---:|---:|---:|---:|---:|
+| DSpark N=5（target q6） | 460.139 ms | 49.707 ms | 39.597 tok/s | 19.799 tok/s | 59.396 tok/s | 4/4 |
+| DSpark N=1（target q2） | 449.374 ms | 98.971 ms | 20.069 tok/s | 10.035 tok/s | 30.104 tok/s | 4/4 |
+
+N=1 的每个请求均生成 `512/512`，cached tokens 为 variant 0 的 0 和后续
+variant 的 640；但 q2 Graph 的 TPOT 约 99 ms，仍明显慢于历史高性能路径，
+所以短序列也不能证明 Graph q2 已恢复高性能。日志分别为
+`logs/repro_graph_q2_short1024_20260922_retry1/` 和
+`logs/repro_graph_q2_short1024_n1_20260922/`。
