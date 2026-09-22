@@ -2080,12 +2080,10 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
 
   // Decode phase with full graph
   if (is_decode) {
-    // DeepSeek-V4 DSpark compact verification currently has a persistent
-    // q2-Graph state divergence: with the same accepted token/slot sequence,
-    // Graph and eager target verification can produce different token logits.
-    // Use eager q2 as the correctness default; Graph q2 remains an explicit
-    // opt-in for performance experiments until its persistent state carrier
-    // is made numerically equivalent.
+    // Diagnostic control for DeepSeek-V4 DSpark compact verification. The
+    // target q2 Graph path owns a different persistent DSA state carrier than
+    // draft q1; keep eager target verification opt-in until that carrier is
+    // made numerically equivalent.
     const char* force_eager_compact_env =
         std::getenv("XLLM_DSV4_FORCE_EAGER_COMPACT_VERIFY");
     const char* enable_graph_compact_env =
@@ -2098,19 +2096,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         std::string(force_eager_compact_env) == "1" &&
         args_.model_type() == "deepseek_v4" && n_tokens > 1 &&
         params.is_spec_verify;
-    // Before the SWA window rolls, compact Graph q2 is still equivalent in
-    // the fixed-prefix comparison.  Keep that fast path; switch to the
-    // validated eager q2 path only once the request crosses the rolling
-    // window, where stale persistent DSA state has been observed.
-    const int32_t dsv4_window_size = args_.window_size();
-    const bool compact_verify_crosses_swa_window =
-        dsv4_window_size > 0 &&
-        params.meta.kv_max_seq_len > dsv4_window_size;
-    const bool default_eager_compact_verify =
-        !graph_compact_opt_in && args_.model_type() == "deepseek_v4" &&
-        n_tokens > 1 && params.is_spec_verify &&
-        compact_verify_crosses_swa_window;
-    if (force_eager_compact_verify || default_eager_compact_verify) {
+    if (force_eager_compact_verify) {
       LOG(INFO) << "[DSV4_GRAPH_ROUTE] target compact verify forced eager; "
                    "tokens="
                 << n_tokens;

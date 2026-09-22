@@ -146,8 +146,8 @@ compact indexer，以及给 Graph metadata 增加 producer→capture event，均
 默认 Graph q2 的 index=128 从 305 恢复到 880。因此没有把这些诊断项直接合入
 默认性能路径。
 
-当前修改把 Eager q2 作为准确率保护路径，但只在 `kv_max_seq_len` 超过模型
-SWA window 时触发；短上下文仍允许 Graph q2，Graph q2 可通过
-`XLLM_DSV4_ENABLE_GRAPH_COMPACT_VERIFY=1` 显式 opt-in。该策略尚需重新构建并
-跑完整固定 100 题，当前 95/100 证据来自显式 Eager 控制候选，不能直接宣称
-策略版本已闭环。
+当前工作树暂不把 Eager q2 默认切换提交为生产修复；Graph q2 仍是默认路径，
+Eager q2 只能通过 `XLLM_DSV4_FORCE_EAGER_COMPACT_VERIFY=1` 做控制对照，
+Graph q2 可通过 `XLLM_DSV4_ENABLE_GRAPH_COMPACT_VERIFY=1` 显式控制。显式
+Eager 控制候选的固定 100 题结果是 95/100，但默认策略候选尚未完成同口径
+固定 100 题复验，目标仍未闭环。
