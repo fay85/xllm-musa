@@ -146,8 +146,11 @@ compact indexer，以及给 Graph metadata 增加 producer→capture event，均
 默认 Graph q2 的 index=128 从 305 恢复到 880。因此没有把这些诊断项直接合入
 默认性能路径。
 
-当前工作树暂不把 Eager q2 默认切换提交为生产修复；Graph q2 仍是默认路径，
-Eager q2 只能通过 `XLLM_DSV4_FORCE_EAGER_COMPACT_VERIFY=1` 做控制对照，
-Graph q2 可通过 `XLLM_DSV4_ENABLE_GRAPH_COMPACT_VERIFY=1` 显式控制。显式
-Eager 控制候选的固定 100 题结果是 95/100，但默认策略候选尚未完成同口径
-固定 100 题复验，目标仍未闭环。
+最终候选已将 Eager q2 设为默认准确率保护路径；Graph q2 只有通过
+`XLLM_DSV4_ENABLE_GRAPH_COMPACT_VERIFY=1` 才显式 opt-in，仍保留用于性能实验。
+使用当前工作树改动构建的独立候选
+`build/gsm8k_candidates/dspark_accuracy_default_eager_verified_20260922/xllm`
+实际命中 `[DSV4_GRAPH_ROUTE] target compact verify forced eager`，固定 100 题
+结果为 **95/100（95%）**，失败 `235,255,333,952,1038`。该结果完成了当前
+准确率门槛，但 Eager q2 会降低长序列 decode 性能；后续仍需在 Graph q2 修复
+后重新恢复 Graph 并复测性能。

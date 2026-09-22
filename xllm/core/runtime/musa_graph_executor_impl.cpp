@@ -2096,7 +2096,10 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         std::string(force_eager_compact_env) == "1" &&
         args_.model_type() == "deepseek_v4" && n_tokens > 1 &&
         params.is_spec_verify;
-    if (force_eager_compact_verify) {
+    const bool default_eager_compact_verify =
+        !graph_compact_opt_in && args_.model_type() == "deepseek_v4" &&
+        n_tokens > 1 && params.is_spec_verify;
+    if (force_eager_compact_verify || default_eager_compact_verify) {
       LOG(INFO) << "[DSV4_GRAPH_ROUTE] target compact verify forced eager; "
                    "tokens="
                 << n_tokens;
