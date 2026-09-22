@@ -32,3 +32,19 @@ cc_test(
     GTest::gtest_main
     glog::glog
 )
+
+cc_test(
+  NAME
+    deepseek_v4_mate_sparse_attention_test
+  SRCS
+    deepseek_v4_mate_sparse_attention_test.cpp
+  DEPS
+    :cuda_kernels
+    tvm_ffi
+    musa_python
+    torch_python
+    Python::Python
+    torch
+    GTest::gtest_main
+    glog::glog
+)

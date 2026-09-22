@@ -72,3 +72,43 @@ Graph q2 改成 eager 或关闭 indexer 不能稳定修复。
 
 临时 full-dense SWA A/B 能让 index=128 正确，但会使 122/125 错误，因为跳过
 压缩 cache 构建会破坏后续长 decode state；该 A/B 未合入默认代码。
+
+## 2026-09-22 MATE `mate_sparse_attention` 独立单测
+
+为区分 MATE kernel 数值问题和上层 Graph/state 输入问题，新增
+`tests/core/kernels/musa/deepseek_v4_mate_sparse_attention_test.cpp`，并用独立
+构建脚本 `tools/build_mate_sparse_unit.py` 复用当前 `libcuda_kernels.a`，不改动
+主 xLLM 构建产物。测试使用真实 MODEL1 FP8 page layout（每页 stride 按 576
+字节对齐），先调用 `deepseek_v4_pack_fp8_cache`，再将 packed cache 解码成
+同一份 K/V 做普通 BF16 dense reference。
+
+覆盖三类输入：
+
+1. q1 scalar：8 heads、top-k 8、SWA extra 128；
+2. q2 两行：两行使用不同 main/extra 物理索引，验证 batched row 独立性；
+3. q2 rolling SWA 边界：`compressed block table=[1,2]`、`SWA table=[-1,2,3]`、
+   `kv_len=258/window=128`，通过 `deepseek_v4_prepare_mate_dsa_indices` 验证
+   第 439/440 类边界的物理映射。
+
+运行命令：
+
+```bash
+env MUSA_VISIBLE_DEVICES=0 \
+  FLASHINFER_OPS_PATH=/data/nfs_shared/jiaming.wang/test/workspace_fp8_28/cached_ops \
+  LD_LIBRARY_PATH=/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/usr/local/mudnn/lib \
+  build/mate_sparse_unit_20260922_d/mate_sparse_test --gtest_color=no
+```
+
+结果：**2/2 passed**。
+
+| case | max abs | mean abs |
+|---|---:|---:|
+| q1 scalar | 0.0078125 | 0.000601768 |
+| q2 batched rows | 0.0078125 | 0.000497341 |
+| q2 `[-1,2,3]` SWA boundary | 0.0078125 | 0.000286102 |
+
+因此，在真实 page stride、packed FP8 cache、q1/q2、rolling SWA table 这几个
+受控条件下，MATE sparse kernel 与同一 packed cache 的 dense reference 对齐；
+目前没有证据表明 `mate_sparse_attention` 本身是 GSM8K 错误的首因。该单测不
+覆盖 Graph persistent buffer、accepted-token 回写、跨请求 state 生命周期，所
+以不能替代固定 100 题 Graph+draft 回归。
