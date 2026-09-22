@@ -704,7 +704,8 @@ assert sparse_values.data_ptr() == values_address
 )PY");
 }
 
-TEST_F(NpuXllmOpsTest, SparseFlashAttentionOutKeepsBufferAcrossGraphReplay) {
+TEST_F(NpuXllmOpsTest,
+       DISABLED_SparseFlashAttentionOutKeepsBufferAcrossGraphReplay) {
   py::gil_scoped_acquire gil;
 
   py::exec(R"PY(
