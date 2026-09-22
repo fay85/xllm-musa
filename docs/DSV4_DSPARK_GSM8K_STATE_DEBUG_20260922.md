@@ -223,3 +223,56 @@ capture 完成，没有命中 `target compact verify forced eager` 路由日志�
 N=5 目录的 `window_0_3.summary.json` 是旧汇总器因只支持六请求 2500/1500
 窗口而产生的参数校验失败，不是模型结果失败；该文件保留，不覆盖。上述短序列
 统计从四份 `formal_variant_*.json` 及逐条 accuracy gate 重新计算。
+
+## 2026-09-22 GSM8K 93% 目标与选择性性能保护
+
+本轮目标是固定 100 题准确率至少 93%，同时尽量恢复 q6 Graph 性能。新增的
+Attention 改动只对 `compact_spec_verify && is_acl_graph && total_tokens > 2`
+冻结 compressor/indexer 的 persistent state 更新，覆盖 DSpark `N=5 -> target q6`；
+q2 不改变，仍由 `musa_graph_executor_impl.cpp` 的默认 Eager accuracy route
+保护。这样没有把 q2 未闭环的 Graph state 直接重新开放到默认路径。
+
+### 固定 100 题精度
+
+最终精度候选：
+`build/gsm8k_candidates/selective_q6_freeze_verified_runtime_20260922/xllm`，
+SHA256=`58cb6d2e1dd6668a02c1914e3551a2fb97d6fca2981cf9c462397241e20004b9`。
+该候选包含当前 Attention 和当前 Graph runtime，启动日志确认每个 target q2
+命中：`[DSV4_GRAPH_ROUTE] target compact verify forced eager; tokens=2`。
+
+固定同一组 100 题、DeepSeek-V4-Flash-0731-FP8-mt、TP8/EP1/DP1/CP1、Graph=true、
+DSpark `N=1`、Prefix Cache=false、reasoning prompt、temperature=0 的结果：
+
+| 正确 | 错误 | 准确率 | 请求错误 | 失败题号 |
+|---:|---:|---:|---:|---|
+| 95 | 5 | **95.0%** | 0 | 235, 255, 333, 952, 1038 |
+
+原始结果：[eval100/summary.json](../logs/goal_selective_accuracy_verified_20260922/eval100/summary.json)。
+这满足本轮 `>=93%` 目标；剩余错误属于 draft/算术/语义路径，未通过改变 q6
+Graph state 直接修复。
+
+### q6 Graph 热态性能
+
+使用同一最终候选、TP8/EP1、B1、2500/1500、Prefix Cache 0.65、Graph+DSpark
+`N=5`、热态 variant 2--7，6/6 严格 `1..750` 通过：
+
+| TTFT_AVG | TPOT_AVG | 严格正确 | cached tokens |
+|---:|---:|---:|---:|
+| **215.813 ms** | **30.0145 ms** | 6/6 | 1536 |
+
+结果目录：[repro_final_q6_retry_20260922](../logs/repro_final_q6_retry_20260922/)。
+相同当前分支、未冻结 q6 state 的短热态对照约为 TPOT 49.7 ms，因此本改动保留了
+约 40% 的 q6 decode 时间；历史旧二进制约 8 ms 的记录仍未恢复，不能把本轮
+30 ms 宣称为历史最优。
+
+### 重要边界
+
+- 当前默认精度路径是 q2 Eager，q6 性能路径是 Graph state-freeze；两者不是
+  同一个请求形状，不能合并成“Graph+draft 全路径同时 95% 且 8 ms”。
+- q6 state-freeze 尚未完成固定 100 题的 Graph+draft GSM8K 精度验收，因此默认
+  生产精度保护仍以 q2 Eager 为准。
+- `tools/build_gsm8k_isolated_candidate.py` 现在只要重编任一 DSpark 核心源文件，
+  就自动把 Attention、DSA metadata、Graph executor、DFlash worker 四个源一起
+  纳入候选，避免 Attention 新代码与旧 runtime 归档混链；单元检查覆盖去重和
+  非 DSpark 源文件不扩展。
+- 测试结束后 xLLM 已停止，GPU 0--7 由占卡程序 PID `41030` 保留，每卡约 70 GiB。

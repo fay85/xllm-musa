@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# Copyright 2026 The xLLM Authors. All Rights Reserved.
+# Licensed under the Apache License, Version 2.0 (the "License");
+# https://www.apache.org/licenses/LICENSE-2.0
+# Distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND.
 """Reuse dependencies, rebuild named TUs into private archives, record provenance."""
 import argparse
 import hashlib
@@ -8,6 +12,22 @@ from pathlib import Path
 import shlex
 import shutil
 import subprocess
+
+
+DSPARK_CURRENT_SOURCES = (
+    "xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp",
+    "xllm/core/layers/musa/deepseek_v4/dsa_metadata_builder_musa.cpp",
+    "xllm/core/runtime/musa_graph_executor_impl.cpp",
+    "xllm/core/runtime/dflash_worker_impl.cpp",
+)
+
+
+def _complete_dspark_sources(sources: list[str]) -> list[str]:
+    """Do not silently combine current Attention with stale DSpark runtime."""
+    requested = list(dict.fromkeys(sources))
+    if any(source in DSPARK_CURRENT_SOURCES for source in requested):
+        return list(dict.fromkeys([*requested, *DSPARK_CURRENT_SOURCES]))
+    return requested
 
 
 def sha(path):
@@ -28,6 +48,7 @@ def main():
     parser.add_argument("output_dir")
     parser.add_argument("sources", nargs="+")
     args = parser.parse_args()
+    sources = _complete_dspark_sources(args.sources)
     dest = (root / args.output_dir).resolve()
     if not dest.is_relative_to(root / "build") or dest.exists():
         parser.error("output must be a NEW directory under this checkout's build/")
@@ -41,10 +62,14 @@ def main():
                     "-I/usr/local/lib/python3.10/dist-packages/tvm_ffi/include",
                     "-I/data/nfs_shared/jiaming.wang/xllmmerge/xllm/build/musa-standalone-db33797/musa-msgpack-manual/include"]
     manifest = {"head": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip(),
+                "requested_sources": args.sources,
+                "required_dspark_sources": list(DSPARK_CURRENT_SOURCES)
+                if any(source in DSPARK_CURRENT_SOURCES for source in sources)
+                else [],
                 "sources": [], "archives": {}}
     (dest / "source.diff").write_bytes(subprocess.check_output(["git", "diff", "HEAD"], cwd=root))
     archives = {}
-    for source_name in args.sources:
+    for source_name in sources:
         source = (root / source_name).resolve()
         assert source.is_relative_to(root), source
         entry = next(item for item in commands if Path(item["file"]).resolve() == source)

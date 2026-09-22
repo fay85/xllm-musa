@@ -3616,8 +3616,13 @@ DeepseekV4AttentionImpl::forward(
   }
   const int64_t compressor_state_rows = compressor_coff_ * compress_ratio_;
   const int64_t compressor_state_dim = compressor_coff_ * head_dim_;
+  // Preserve the established q6 Graph performance path. The q2 Graph path
+  // remains stateful for diagnostics, while the default accuracy route keeps
+  // q2 target verification eager until its persistent state is equivalent.
+  const bool freeze_compact_graph_compressor =
+      compact_spec_verify && attn_metadata.is_acl_graph && total_tokens > 2;
   const bool use_persistent_compressor_state =
-      use_compressed_attention &&
+      use_compressed_attention && !freeze_compact_graph_compressor &&
       dsv4_musa_persistent_compressor_state_enabled() &&
       compressor_kv_cache.defined() && compressor_score_cache.defined() &&
       compressor_kv_cache.dim() == 3 && compressor_score_cache.dim() == 3 &&
@@ -3656,7 +3661,7 @@ DeepseekV4AttentionImpl::forward(
     indexer_score_state_block_table = indexer_state_block_table;
   }
   const bool use_persistent_indexer_state =
-      effective_use_indexer_attention &&
+      effective_use_indexer_attention && !freeze_compact_graph_compressor &&
       dsv4_musa_persistent_indexer_state_enabled() &&
       indexer_kv_state_cache.defined() && indexer_score_state_cache.defined() &&
       indexer_kv_state_cache.dim() == 3 &&
