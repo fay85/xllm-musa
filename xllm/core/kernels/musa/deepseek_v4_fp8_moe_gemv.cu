@@ -23,6 +23,8 @@ limitations under the License.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <string>
 
 #include "core/kernels/musa/musa_kernel_utils.h"
 #include "core/kernels/musa/musa_ops_api.h"
@@ -221,7 +223,7 @@ __global__ void fp8_moe_route_combine_kernel(
   }
 }
 
-template <typename scalar_t, typename weight_t>
+template <typename scalar_t, typename weight_t, int32_t kW13BlockN, int32_t kW2BlockN>
 void launch_fp8_moe_gemv(const torch::Tensor& input,
                          const torch::Tensor& local_ids,
                          const torch::Tensor& topk_weights,
@@ -234,9 +236,7 @@ void launch_fp8_moe_gemv(const torch::Tensor& input,
                          const torch::Tensor& routed_output,
                          const torch::Tensor& output,
                          musaStream_t stream) {
-  constexpr int32_t kW13BlockN = 4;
   constexpr int32_t kW13BlockK = 32;
-  constexpr int32_t kW2BlockN = 32;
   constexpr int32_t kW2BlockK = 4;
   const int64_t tokens = input.size(0);
   const int64_t topk = local_ids.size(1);
@@ -290,6 +290,44 @@ void launch_fp8_moe_gemv(const torch::Tensor& input,
           tokens,
           topk,
           hidden);
+}
+
+template <typename Scalar, typename Weight>
+void dispatch_fp8_moe_tiles(
+    const torch::Tensor& input, const torch::Tensor& local_ids,
+    const torch::Tensor& topk_weights, const torch::Tensor& w13,
+    const torch::Tensor& w13_scale, const torch::Tensor& w2,
+    const torch::Tensor& w2_scale, float limit, const torch::Tensor& activated,
+    const torch::Tensor& routed_output, const torch::Tensor& output,
+    musaStream_t stream) {
+  const char* w13_env = std::getenv("XLLM_DSV4_MOE_W13_TILE_N");
+  const char* w2_env = std::getenv("XLLM_DSV4_MOE_W2_TILE_N");
+  const std::string w13_tile = w13_env == nullptr ? "4" : w13_env;
+  const std::string w2_tile = w2_env == nullptr ? "32" : w2_env;
+  CHECK(w13_tile == "4" || w13_tile == "8" || w13_tile == "16");
+  CHECK(w2_tile == "32" || w2_tile == "64" || w2_tile == "128");
+  auto launch = [&](auto w13_tag, auto w2_tag) {
+    launch_fp8_moe_gemv<Scalar, Weight, decltype(w13_tag)::value,
+                       decltype(w2_tag)::value>(
+        input, local_ids, topk_weights, w13, w13_scale, w2, w2_scale, limit,
+        activated, routed_output, output, stream);
+  };
+  auto dispatch_w2 = [&](auto w13_tag) {
+    if (w2_tile == "64") {
+      launch(w13_tag, std::integral_constant<int32_t, 64>{});
+    } else if (w2_tile == "128") {
+      launch(w13_tag, std::integral_constant<int32_t, 128>{});
+    } else {
+      launch(w13_tag, std::integral_constant<int32_t, 32>{});
+    }
+  };
+  if (w13_tile == "8") {
+    dispatch_w2(std::integral_constant<int32_t, 8>{});
+  } else if (w13_tile == "16") {
+    dispatch_w2(std::integral_constant<int32_t, 16>{});
+  } else {
+    dispatch_w2(std::integral_constant<int32_t, 4>{});
+  }
 }
 
 }  // namespace
@@ -375,7 +413,7 @@ torch::Tensor deepseek_v4_fp8_moe_gemv_decode(
       "deepseek_v4_fp8_moe_gemv_decode_input",
       [&] {
         if (topk_weights.scalar_type() == torch::kFloat32) {
-          launch_fp8_moe_gemv<scalar_t, float>(input,
+          dispatch_fp8_moe_tiles<scalar_t, float>(input,
                                                local_ids,
                                                topk_weights,
                                                w13,
@@ -388,7 +426,7 @@ torch::Tensor deepseek_v4_fp8_moe_gemv_decode(
                                                output_workspace,
                                                stream);
         } else if (topk_weights.scalar_type() == torch::kFloat16) {
-          launch_fp8_moe_gemv<scalar_t, c10::Half>(input,
+          dispatch_fp8_moe_tiles<scalar_t, c10::Half>(input,
                                                    local_ids,
                                                    topk_weights,
                                                    w13,
@@ -401,7 +439,7 @@ torch::Tensor deepseek_v4_fp8_moe_gemv_decode(
                                                    output_workspace,
                                                    stream);
         } else {
-          launch_fp8_moe_gemv<scalar_t, c10::BFloat16>(input,
+          dispatch_fp8_moe_tiles<scalar_t, c10::BFloat16>(input,
                                                        local_ids,
                                                        topk_weights,
                                                        w13,

@@ -78,6 +78,22 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   }
 
  private:
+  // Current accuracy-protected implementation.  A separately linked legacy
+  // implementation may override only the Graph target-q6 route; keeping the
+  // entry point split makes that performance A/B explicit and reversible.
+  std::tuple<torch::Tensor, std::optional<torch::Tensor>>
+  forward_current_impl(
+      const DSAMetadata& attn_metadata,
+      torch::Tensor& hidden_states,
+      KVCache& kv_cache,
+      KVState& kv_state,
+      bool is_prefill,
+      bool is_chunked_prefill,
+      const std::tuple<torch::Tensor,
+                       torch::Tensor,
+                       torch::Tensor,
+                       torch::Tensor>& compress_metadata);
+
   std::vector<std::pair<int64_t, int64_t>> build_query_ranges(
       const DSAMetadata& attn_metadata,
       int64_t total_tokens) const;
@@ -112,6 +128,22 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
       const torch::Tensor& output = torch::Tensor(),
       const torch::Tensor& physical_indices = torch::Tensor(),
       const torch::Tensor& extra_physical_indices = torch::Tensor()) const;
+  // Compact q6 verification uses one MATE launch with per-row causal lengths
+  // instead of a host loop over q rows. The MATE ABI accepts vectorized
+  // top-k/extra lengths and masks each row independently.
+  torch::Tensor mate_sparse_attention_batched(
+      const torch::Tensor& q,
+      const torch::Tensor& packed_cache,
+      const torch::Tensor& logical_indices,
+      const torch::Tensor& compressed_block_table,
+      const torch::Tensor& extra_packed_cache,
+      const torch::Tensor& swa_block_table,
+      int64_t sequence_index,
+      int64_t scalar_kv_len,
+      const torch::Tensor& kv_seq_lens,
+      const torch::Tensor& output = torch::Tensor(),
+      const torch::Tensor& physical_indices = torch::Tensor(),
+      const torch::Tensor& extra_physical_indices = torch::Tensor());
   torch::Tensor dense_attention(const torch::Tensor& q,
                                 const torch::Tensor& kv,
                                 const torch::Tensor& compressed_kv,
@@ -172,7 +204,8 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
       int64_t mate_kv_len = 0,
       int64_t mate_block_size = 0,
       torch::Tensor* mate_physical_indices = nullptr,
-      torch::Tensor* mate_extra_physical_indices = nullptr);
+      torch::Tensor* mate_extra_physical_indices = nullptr,
+      const torch::Tensor& dynamic_kv_len = torch::Tensor());
 
   int64_t num_heads_ = 0;
   int64_t hidden_dim_ = 0;

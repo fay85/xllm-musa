@@ -78,6 +78,17 @@ SpeculativeEngine::decode_graph_execution_shape() const {
   return engine_->decode_graph_execution_shape();
 }
 
+bool SpeculativeEngine::start_profile() {
+  // The target engine owns the speculative worker clients. Those workers run
+  // both target and draft forwards on their compute threads; forwarding once
+  // avoids double-starting the process-global profiler through draft_engine_.
+  return engine_->start_profile();
+}
+
+bool SpeculativeEngine::stop_profile() {
+  return engine_->stop_profile();
+}
+
 bool SpeculativeEngine::init(MasterStatus master_status) {
   if (!init_model()) {
     return false;

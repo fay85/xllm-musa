@@ -32,12 +32,14 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/rec_config.h"
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
+#include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/linear.h"
 #include "core/layers/musa/flashinfer_planinfo.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_graph_policy.h"
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
 #include "core/runtime/decode_graph_bucket.h"
@@ -95,6 +97,112 @@ bool s_enable_prefill_empty_cache() {
     return env != nullptr && std::string(env) == "1";
   }();
   return val;
+}
+
+bool s_enable_dsv4_dynamic_graph_state() {
+  static const bool val = [] {
+    const char* env = std::getenv("XLLM_DSV4_DYNAMIC_GRAPH_STATE");
+    return env != nullptr && std::string(env) == "1";
+  }();
+  return val;
+}
+
+bool s_enable_dsv4_graph_persistent_reset() {
+  static const bool val = [] {
+    const char* env = std::getenv("XLLM_DSV4_CLEAR_GRAPH_PERSISTENT_ON_REQUEST");
+    if (env != nullptr) {
+      return std::string(env) == "1";
+    }
+    // Persistent graph metadata carries accepted-token and block-table state;
+    // retaining it across a recycled request can change the next request's
+    // q6 target logits. Clearing the small metadata carriers at prefill has no
+    // decode cost and is the safe DeepSeek default.
+    return true;
+  }();
+  return val;
+}
+
+bool s_enable_dsv4_graph_short_fullkv_eager() {
+  const char* env = std::getenv("XLLM_DSV4_GRAPH_SHORT_FULLKV_EAGER");
+  // Short compact verification uses the dense full-KV attention contract. The
+  // Graph paged-dense fallback has different cache/position semantics for
+  // these rows; preserve q2 Eager correctness while keeping long q6 Graph.
+  return env == nullptr || std::string(env) == "1";
+}
+
+uint32_t dsv4_graph_shape_key(uint32_t bucket_num_tokens,
+                              uint32_t actual_num_tokens,
+                              const ModelArgs& args,
+                              const runtime::Options& options,
+                              const ModelInputParams& params) {
+  if (!s_enable_dsv4_dynamic_graph_state() ||
+      args.model_type() != "deepseek_v4" || !params.is_spec_verify ||
+      actual_num_tokens <= 2 || options.num_decoding_tokens() <= 1) {
+    return bucket_num_tokens;
+  }
+  const auto& kv_lens = params.attention.host.kv_seq_lens;
+  if (kv_lens.size() < 2 || kv_lens.front() != 0) {
+    return bucket_num_tokens;
+  }
+  const int64_t query_width = options.num_decoding_tokens();
+  const int64_t start_position =
+      static_cast<int64_t>(kv_lens[1]) - query_width;
+  if (start_position < 0) {
+    return bucket_num_tokens;
+  }
+  constexpr int64_t kCompressRatio = 4;
+  const int64_t first_boundary =
+      (kCompressRatio - ((start_position + 1) % kCompressRatio)) %
+      kCompressRatio;
+  const int64_t boundary_count =
+      first_boundary < query_width
+          ? 1 + (query_width - 1 - first_boundary) / kCompressRatio
+          : 0;
+  // The fused indexer TopK path now uses the replay-time device KV length,
+  // but its score workspace is captured at a bounded capacity. Partition
+  // Graphs when that capacity grows so a long request does not exceed the
+  // first short-prefix capture's fixed score buffer.
+  const int64_t indexer_rows = std::max<int64_t>(kv_lens[1] / 4, 1);
+  const int64_t indexer_capacity_bucket = (indexer_rows + 511) / 512;
+  const char* dynamic_indexer_env =
+      std::getenv("XLLM_DSV4_GRAPH_DYNAMIC_INDEXER");
+  const bool dynamic_indexer = dynamic_indexer_env != nullptr &&
+                               std::string(dynamic_indexer_env) == "1";
+  // Keep graph storage keyed by both query bucket and the fixed C4 output
+  // capacity. The captured graph cannot change tensor shapes on replay, while
+  // the absolute position itself is supplied through persistent device input.
+  CHECK_GE(boundary_count, 0);
+  CHECK_LT(boundary_count, 4);
+  const uint32_t c4_outputs = static_cast<uint32_t>(boundary_count);
+  const int64_t c128_count = layer::dsv4_compression_boundaries(
+      start_position, query_width, /*ratio=*/128);
+  CHECK_GE(c128_count, 0);
+  CHECK_LT(c128_count, 4);
+  const bool full_kv = layer::dsv4_uses_full_kv(
+      kv_lens[1], layer::dsv4_full_kv_threshold(), args.window_size());
+  // Separate namespace from ordinary decode buckets. Never silently clamp a
+  // capacity: that would permit replay beyond the captured score workspace.
+  CHECK(!dynamic_indexer || (bucket_num_tokens < 4096 &&
+                             indexer_capacity_bucket < 1024));
+  const uint32_t key = layer::dsv4_compact_graph_key(
+      bucket_num_tokens,
+      dynamic_indexer ? static_cast<uint32_t>(indexer_capacity_bucket) : 0,
+      c4_outputs, static_cast<uint32_t>(c128_count), full_kv);
+  const char* trace_env = std::getenv("XLLM_DSV4_GRAPH_KEY_TRACE");
+  if (trace_env != nullptr && std::string(trace_env) == "1") {
+    const int32_t kv0 = kv_lens.empty() ? -1 : kv_lens.front();
+    const int32_t kv1 = kv_lens.size() < 2 ? -1 : kv_lens[1];
+    LOG(INFO) << "[DSV4_GRAPH_KEY] bucket=" << bucket_num_tokens
+              << " actual_tokens=" << actual_num_tokens
+              << " query_width=" << query_width << " kv0=" << kv0
+              << " kv1=" << kv1 << " start=" << start_position
+              << " first_boundary=" << first_boundary
+              << " boundary_count=" << boundary_count << " key=" << key
+              << " c128_outputs=" << c128_count << " full_kv=" << full_kv
+              << " num_sequences=" << params.meta.num_sequences
+              << " actual_sequences=" << params.meta.actual_num_sequences;
+  }
+  return key;
 }
 
 void maybe_empty_prefill_cache() {
@@ -559,6 +667,31 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
           ? std::min<int64_t>(params.num_accepted_tokens.numel(),
                               persistent_num_accepted_tokens_.numel())
           : 0;
+  const bool dsv4_request_start =
+      args_.model_type() == "deepseek_v4" &&
+      (attn_metadata->is_prefill || attn_metadata->is_chunked_prefill) &&
+      s_enable_dsv4_graph_persistent_reset();
+  if (dsv4_request_start) {
+    // These carriers are not necessarily present in a prefill input (for
+    // example num_accepted_tokens is decode-only), so a recycled Graph can
+    // otherwise retain the previous request's accepted-prefix/state rows.
+    // Reset only persistent metadata; model KV/cache tensors are populated by
+    // the normal prefill path and are intentionally left untouched.
+    persistent_new_cache_slots_.fill_(-1);
+    persistent_linear_state_indices_.fill_(-1);
+    persistent_kv_cache_tokens_nums_.zero_();
+    persistent_num_accepted_tokens_.fill_(1);
+    q_seq_lens_.zero_();
+    kv_seq_lens_.zero_();
+    persistent_block_tables_.fill_(-1);
+    persistent_paged_kv_indptr_.zero_();
+    persistent_paged_kv_indices_.fill_(-1);
+    persistent_paged_kv_last_page_len_.zero_();
+    persistent_kv_seq_lens_delta_.zero_();
+    LOG_FIRST_N(INFO, 1)
+        << "DeepSeek-V4 MUSA graph persistent metadata reset at request "
+           "boundary.";
+  }
   const bool use_llm_decode_fast_path =
       can_use_llm_decode_fast_path(tokens, positions, params);
 
@@ -671,6 +804,15 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
           expanded_kv_lens.size() ==
               static_cast<size_t>(actual_num_tokens + 1) &&
           !expanded_kv_lens.empty() && expanded_kv_lens.front() == 0;
+      // Non-block-parallel DSpark supplies one cumulative KV entry per
+      // sequence ([0, seq0, seq0+seq1, ...]), while the compact Graph
+      // verifier consumes one logical row per sequence. Recognize that
+      // layout before falling back to kv_max_seq_len; otherwise every active
+      // row in a multi-sequence replay inherits the batch maximum.
+      const bool expanded_kv_is_sequence_cumulative =
+          expanded_kv_lens.size() ==
+              static_cast<size_t>(graph_num_sequences + 1) &&
+          !expanded_kv_lens.empty() && expanded_kv_lens.front() == 0;
       const bool expanded_kv_is_per_row =
           expanded_kv_lens.size() == static_cast<size_t>(actual_num_tokens);
       for (int32_t seq = 0; seq < graph_num_sequences; ++seq) {
@@ -678,7 +820,10 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
         if (seq < active_sequences) {
           const int64_t final_row =
               (static_cast<int64_t>(seq) + 1) * compact_decode_width;
-          if (expanded_kv_is_cumulative) {
+          if (expanded_kv_is_sequence_cumulative) {
+            kv_len = expanded_kv_lens[static_cast<size_t>(seq + 1)] -
+                     expanded_kv_lens[static_cast<size_t>(seq)];
+          } else if (expanded_kv_is_cumulative) {
             kv_len = expanded_kv_lens[static_cast<size_t>(final_row)] -
                      expanded_kv_lens[static_cast<size_t>(final_row - 1)];
           } else if (expanded_kv_is_per_row) {
@@ -1470,6 +1615,10 @@ bool MusaGraph::capture(CausalLM* model,
     const bool skip_graph_warmup =
         skip_graph_warmup_env != nullptr &&
         std::string(skip_graph_warmup_env) == "1";
+    // Warmup and FFI recording run eagerly before capture and must not advance
+    // DSV4 compressor/indexer state. The real captured forward below is the
+    // first preparation pass allowed to mutate that state.
+    xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(true);
     for (int warmup_iter = 0; warmup_iter < (skip_graph_warmup ? 0 : 2);
          ++warmup_iter) {
       capture_stream.synchronize();
@@ -1550,6 +1699,7 @@ bool MusaGraph::capture(CausalLM* model,
     if (s_graph_dump_directory() != nullptr) {
       graph_.enable_debug_mode();
     }
+    xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(false);
     graph_.capture_begin(pool, musaStreamCaptureModeThreadLocal);
 
     xllm::kernel::musa::begin_ffi_alloc_replay(&recorded_ffi_allocs_);
@@ -1569,6 +1719,7 @@ bool MusaGraph::capture(CausalLM* model,
 
     // End graph capture
     graph_.capture_end();
+    xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(false);
     if (const char* dump_directory = s_graph_dump_directory()) {
       const uint32_t capture_index =
           s_completed_musa_graph_captures.load(std::memory_order_relaxed) + 1;
@@ -1753,9 +1904,11 @@ ModelOutput MusaGraph::replay(const torch::Tensor& tokens,
     // synchronization from that replay is illegal while another executor is
     // entering capture. For the TP8/MTP validation shape all three captures
     // complete before steady-state replay begins.
+    const char* timing_all_env = std::getenv("XLLM_GRAPH_TIMING_ALL");
     const bool time_graph_replay =
         s_enable_graph_timing() &&
-        s_completed_musa_graph_captures.load(std::memory_order_acquire) >= 3;
+        ((timing_all_env != nullptr && std::string(timing_all_env) == "1") ||
+         s_completed_musa_graph_captures.load(std::memory_order_acquire) >= 3);
     if (time_graph_replay) {
       CHECK_EQ(musaDeviceSynchronize(), musaSuccess)
           << "failed to synchronize before MUSA graph timing";
@@ -2013,6 +2166,22 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
   const bool is_prefill = params.meta.batch_forward_type.is_prefill();
   const bool is_decode = params.meta.batch_forward_type.is_decode();
 
+  // Diagnostic correctness mode: a captured DeepSeek graph owns model-private
+  // graph metadata/state carriers. Re-capturing at each new prefill isolates
+  // whether cross-request graph reuse, rather than the attention kernel, is
+  // responsible for request-order-dependent logits. It is opt-in because
+  // capture cost is intentionally excluded from the production fast path.
+  if (is_prefill && args_.model_type() == "deepseek_v4") {
+    const char* recapture_env =
+        std::getenv("XLLM_DSV4_RECAPTURE_GRAPH_ON_PREFILL");
+    if (recapture_env != nullptr && std::string(recapture_env) == "1" &&
+        !graphs_.empty()) {
+      graphs_.clear();
+      LOG(INFO) << "[DSV4_GRAPH_ROUTE] recaptured Graph cache at prefill "
+                   "request boundary.";
+    }
+  }
+
   // Get actual num_tokens from tokens shape
   const uint32_t n_tokens = tokens.size(/*dim=*/0);
   const int64_t effective_num_sequences = params.meta.actual_num_sequences > 0
@@ -2099,10 +2268,26 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     const bool default_eager_compact_verify =
         !graph_compact_opt_in && args_.model_type() == "deepseek_v4" &&
         n_tokens > 1 && params.is_spec_verify;
-    if (force_eager_compact_verify || default_eager_compact_verify) {
+    int64_t graph_kv_len_hint = params.meta.kv_max_seq_len;
+    if (graph_kv_len_hint <= 0 && !params.attention.host.kv_seq_lens.empty()) {
+      const auto& host_kv = params.attention.host.kv_seq_lens;
+      graph_kv_len_hint = *std::max_element(host_kv.begin(), host_kv.end());
+      if (host_kv.size() > 1 && host_kv.front() == 0) {
+        graph_kv_len_hint = host_kv.back();
+      }
+    }
+    const bool short_fullkv_eager =
+        graph_compact_opt_in && s_enable_dsv4_graph_short_fullkv_eager() &&
+        args_.model_type() == "deepseek_v4" && n_tokens > 1 &&
+        params.is_spec_verify && graph_kv_len_hint > 0 &&
+        graph_kv_len_hint <= 2048;
+    if (force_eager_compact_verify || default_eager_compact_verify ||
+        short_fullkv_eager) {
       LOG(INFO) << "[DSV4_GRAPH_ROUTE] target compact verify forced eager; "
-                   "tokens="
-                << n_tokens;
+                   "tokens=" << n_tokens
+                << " reason=" << (short_fullkv_eager ? "short_fullkv" :
+                                    (force_eager_compact_verify ? "forced" :
+                                                                    "default"));
       ModelInputParams eager_params = params;
       eager_params.enable_graph = false;
       eager_params.attn_metadata.reset();
@@ -2130,9 +2315,11 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     // maybe_precompute_embedding_for_graph() for the full rationale.
     const ModelInputParams graph_params =
         maybe_precompute_embedding_for_graph(tokens, params);
+    const uint32_t graph_shape_key = dsv4_graph_shape_key(
+        bucket_num_tokens, n_tokens, args_, options_, graph_params);
 
     // Check if captured graph exists for this bucket num_tokens
-    auto it = graphs_.find(bucket_num_tokens);
+    auto it = graphs_.find(graph_shape_key);
     if (it != graphs_.end()) {
       // Replay the existing graph
       VLOG(kGraphExecutorLogVerboseLevel)
@@ -2155,11 +2342,11 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     MusaMemPool* pool_ptr = nullptr;
     if (supports_graph_vmm_pool()) {
       reset_vmm_allocator_offset(kPhysicalPoolIdDecode);
-      const uint32_t shape_id = bucket_num_tokens;
+      const uint32_t shape_id = graph_shape_key;
       pool_ptr = get_or_create_vmm_mempool(kPhysicalPoolIdDecode, shape_id);
     }
     const c10::musa::MempoolId_t mem_pool =
-        get_mem_pool(kPhysicalPoolIdDecode, bucket_num_tokens);
+        get_mem_pool(kPhysicalPoolIdDecode, graph_shape_key);
 
     bool capture_success = graph->capture(model_,
                                           args_,
@@ -2180,7 +2367,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       log_graph_memory_after_capture();
 
       // Save the graph for future reuse
-      graphs_[bucket_num_tokens] = std::move(graph);
+      graphs_[graph_shape_key] = std::move(graph);
 
       // Run replay after capture so first request uses same execution path as
       // subsequent requests. Recompute the embedding so the persistent buffer
@@ -2189,7 +2376,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
       // unlikely case the post-capture request happens to match exactly).
       const ModelInputParams replay_params =
           maybe_precompute_embedding_for_graph(tokens, params);
-      auto result = graphs_[bucket_num_tokens]->replay(
+      auto result = graphs_[graph_shape_key]->replay(
           tokens, positions, kv_caches, replay_params);
       auto output =
           attach_aux_hidden_states_if_needed(result.hidden_states, n_tokens);

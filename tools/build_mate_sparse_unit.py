@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Build only the MATE sparse unit, reusing the local kernel archive read-only."""
+import argparse
 import hashlib
 import json
 import os
@@ -10,7 +11,11 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILD = ROOT / 'build/dspark-musa-local'
-DEST = (ROOT / sys.argv[1]).resolve()
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('output_dir')
+parser.add_argument('--kernel-archive', type=Path)
+args = parser.parse_args()
+DEST = (ROOT / args.output_dir).resolve()
 assert DEST.is_relative_to(ROOT / 'build') and not DEST.exists(), DEST
 DEST.mkdir(parents=True)
 (DEST / 'tmp').mkdir()
@@ -26,7 +31,9 @@ vcpkg = Path('/data/nfs_shared/jiaming.wang/xllmmerge/xllm/build/musa-standalone
 torchlib = Path('/usr/local/lib/python3.10/dist-packages/torch/lib')
 musalib = Path('/usr/local/lib/python3.10/dist-packages/torch_musa/lib')
 ffi = Path('/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib')
-kernel = BUILD / 'xllm/core/kernels/musa/libcuda_kernels.a'
+kernel = (args.kernel_archive.resolve() if args.kernel_archive else
+          BUILD / 'xllm/core/kernels/musa/libcuda_kernels.a')
+assert kernel.is_file(), kernel
 commands.append(['g++', str(obj), '-o', str(DEST / 'mate_sparse_test'),
     '-Wl,--start-group', str(kernel),
     str(BUILD / 'xllm/core/platform/libplatform.a'),

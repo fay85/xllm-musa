@@ -19,6 +19,8 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
+#include <string>
 #include <unordered_map>
 
 #include "core/kernels/musa/musa_ops_api.h"
@@ -132,9 +134,15 @@ torch::Tensor fp8_linear_forward(
                           weight.scalar_type() == torch::kFloat8_e5m2;
   const int64_t workspace_rows =
       output.has_value() ? kHcLaneExpandedWorkspaceRows : kDecodeWorkspaceRows;
+  const char* disable_bf16_cache_env =
+      std::getenv("XLLM_DSV4_DISABLE_FP8_BF16_CACHE");
+  const bool disable_bf16_cache =
+      disable_bf16_cache_env != nullptr &&
+      std::string(disable_bf16_cache_env) == "1";
   if (fp8_weight && input_2d.size(0) > 0 &&
       input_2d.size(0) <= workspace_rows &&
-      (output_dtype == torch::kBFloat16 || output_dtype == torch::kFloat16)) {
+      (output_dtype == torch::kBFloat16 || output_dtype == torch::kFloat16) &&
+      !disable_bf16_cache) {
     auto& workspace = get_fp8_linear_workspace(weight);
     if (!workspace.dequantized_weight.defined() ||
         workspace.dequantized_weight.sizes() != weight.sizes() ||

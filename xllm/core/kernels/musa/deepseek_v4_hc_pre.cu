@@ -42,6 +42,8 @@ constexpr int32_t kHcFinishHiddenTile = 512;
 constexpr char kMateHcPrenormUri[] = "mhc_prenorm_ops";
 constexpr char kMateHcVerifyPrenormUri[] =
     "mate_jit_tf32_hc_prenorm_64x32x32_3stages";
+constexpr char kMateHcSmallPrenormUri[] =
+    "mate_jit_tf32_hc_prenorm_32x32x32_3stages";
 constexpr char kMateHcBigFuseUri[] = "mhc_pre_big_fuse_ops";
 
 template <typename scalar_t>
@@ -151,16 +153,26 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
     return false;
   }
   const bool is_prefill = tokens > 1;
-  const char* prenorm_uri =
-      is_prefill ? kMateHcVerifyPrenormUri : kMateHcPrenormUri;
+  const char* batched_finish_env = std::getenv("XLLM_DSV4_HC_PRE_BATCHED_FINISH");
+  const bool use_batched_finish = is_prefill && tokens <= 8 &&
+      norm_weight.has_value() && batched_finish_env != nullptr &&
+      std::string(batched_finish_env) == "1";
+  const char* small_tile_env = std::getenv("XLLM_DSV4_HC_PRE_SMALL_TILE");
+  const bool use_small_tile = is_prefill && tokens <= 8 &&
+      small_tile_env != nullptr && std::string(small_tile_env) == "1";
+  const char* prenorm_uri = use_small_tile ? kMateHcSmallPrenormUri
+      : is_prefill ? kMateHcVerifyPrenormUri : kMateHcPrenormUri;
   auto prenorm = get_mate_hc_function(prenorm_uri, "tf32_hc_prenorm_gemm");
   if (!prenorm.defined()) {
     return false;
   }
+  if (use_small_tile) {
+    LOG_FIRST_N(INFO, 1) << "[DSV4_HC_SMALL_TILE] using " << prenorm_uri;
+  }
   auto big_fuse = is_prefill ? get_mate_hc_function(kMateHcBigFuseUri,
                                                     "mhc_pre_big_fuse_kernel")
                              : ffi::Optional<ffi::Function>();
-  if (is_prefill && !big_fuse.defined()) {
+  if (is_prefill && !use_batched_finish && !big_fuse.defined()) {
     return false;
   }
   try {
@@ -172,7 +184,7 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
                       to_ffi_tensor(workspace.gemm_partials),
                       to_ffi_tensor(workspace.sqr_sum_partials),
                       kMateHcPrenormSplits);
-      if (is_prefill) {
+      if (is_prefill && !use_batched_finish) {
         big_fuse.value()(to_ffi_tensor(workspace.gemm_partials),
                          to_ffi_tensor(workspace.sqr_sum_partials),
                          to_ffi_tensor(hc_scale),
@@ -206,7 +218,8 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
             const int64_t finish_tiles =
                 (x.size(2) + kHcFinishHiddenTile - 1) / kHcFinishHiddenTile;
             dsv4_hc_pre_finish_split_kernel<scalar_t>
-                <<<dim3(1, static_cast<unsigned int>(finish_tiles)),
+                <<<dim3(static_cast<unsigned int>(tokens),
+                        static_cast<unsigned int>(finish_tiles)),
                    kThreads,
                    0,
                    stream>>>(x.data_ptr<scalar_t>(),
@@ -225,7 +238,8 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
                              static_cast<float>(norm_eps),
                              static_cast<float>(hc_eps));
           } else {
-            dsv4_hc_pre_finish_kernel<scalar_t><<<1, kThreads, 0, stream>>>(
+            dsv4_hc_pre_finish_kernel<scalar_t><<<static_cast<unsigned int>(tokens),
+                                                kThreads, 0, stream>>>(
                 x.data_ptr<scalar_t>(),
                 workspace.gemm_partials.data_ptr<float>(),
                 workspace.sqr_sum_partials.data_ptr<float>(),
@@ -770,7 +784,11 @@ deepseek_v4_hc_pre_decode(const torch::Tensor& x,
   // Match worker2's decode fast path: Mate split-K prenorm plus its fused HC
   // finish writes directly into the persistent decode workspaces. If the
   // cached modules are unavailable, retain the local MUSA implementation.
-  if (try_mate_hc_pre_decode(x,
+  const char* disable_mate_hc_env =
+      std::getenv("XLLM_DSV4_DISABLE_MATE_HC_PRE");
+  const bool disable_mate_hc =
+      disable_mate_hc_env != nullptr && std::string(disable_mate_hc_env) == "1";
+  if (!disable_mate_hc && try_mate_hc_pre_decode(x,
                              hc_fn,
                              hc_scale,
                              hc_base,

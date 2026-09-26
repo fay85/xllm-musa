@@ -36,6 +36,10 @@ class SpeculativeEngine : public Engine {
 
   bool init(MasterStatus master_status) override;
 
+  bool start_profile() override;
+
+  bool stop_profile() override;
+
   // step the engine forward
   ForwardOutput step(std::vector<Batch>& batch) override;
 

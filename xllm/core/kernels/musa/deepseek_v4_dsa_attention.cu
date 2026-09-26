@@ -28,6 +28,7 @@ limitations under the License.
 #include <mutex>
 #include <string>
 #include <tuple>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -1260,8 +1261,19 @@ struct Dsv4MateModel1Workspace {
   torch::Tensor lse;
   int64_t cached_topk_length = -1;
   int64_t cached_extra_topk_length = -1;
+  int64_t cached_metadata_key = std::numeric_limits<int64_t>::min();
   bool metadata_valid = false;
+  unsigned long long metadata_capture_id = 0;
+  bool metadata_was_captured = false;
 };
+
+// All Attention layers on one worker thread observe the same q6 causal
+// length pattern for a decode step. The packed cache pointers differ by
+// layer, but MODEL1 scheduling metadata does not; share its build across the
+// layer loop without changing the external MATE ABI.
+thread_local int64_t dsv4_mate_model1_metadata_key =
+    std::numeric_limits<int64_t>::min();
+thread_local int64_t dsv4_mate_model1_metadata_group = 0;
 
 struct Dsv4MatePrefillWorkspace {
   int64_t seq_len = 0;
@@ -1743,13 +1755,18 @@ Dsv4MatePrefillWorkspace& dsv4_mate_prefill_workspace(
   return workspace;
 }
 
-Dsv4MateModel1Workspace& dsv4_model1_workspace(const torch::Tensor& q) {
+Dsv4MateModel1Workspace& dsv4_model1_workspace(const torch::Tensor& q,
+                                             int64_t metadata_group) {
   constexpr int64_t kTopk = 512;
   constexpr int64_t kExtraTopk = 128;
   constexpr int64_t kHeadDim = 512;
-  thread_local Dsv4MateModel1Workspace workspace;
+  thread_local std::unordered_map<std::string, Dsv4MateModel1Workspace> workspaces;
   const int64_t batch = q.size(0);
   const int64_t heads = q.size(1);
+  const std::string key = std::to_string(q.device().index()) + ":" +
+                          std::to_string(batch) + ":" + std::to_string(heads) +
+                          ":" + std::to_string(metadata_group);
+  auto& workspace = workspaces[key];
   if (workspace.batch != batch || workspace.heads != heads ||
       workspace.device != q.device().index() || !workspace.metadata.defined()) {
     musaDeviceProp properties{};
@@ -1779,6 +1796,7 @@ Dsv4MateModel1Workspace& dsv4_model1_workspace(const torch::Tensor& q) {
     workspace.lse = torch::empty({batch, heads, 1}, f32_options);
     workspace.cached_topk_length = -1;
     workspace.cached_extra_topk_length = -1;
+    workspace.cached_metadata_key = std::numeric_limits<int64_t>::min();
     workspace.metadata_valid = false;
   }
   return workspace;
@@ -1868,7 +1886,8 @@ torch::Tensor try_dsv4_mate_model1_sparse_decode(
     auto flat_extra_indices = extra_physical_indices.reshape({batch, -1});
     CHECK_GE(flat_indices.size(1), topk_length);
     CHECK_GE(flat_extra_indices.size(1), extra_topk_length);
-    auto& workspace = dsv4_model1_workspace(q);
+    const int64_t metadata_group = has_batched_lengths ? dsv4_mate_model1_metadata_group : 0;
+    auto& workspace = dsv4_model1_workspace(q, metadata_group);
     torch::Tensor indices_4d;
     if (flat_indices.size(1) == kTopk) {
       indices_4d = flat_indices.view({batch, 1, 1, kTopk});
@@ -1897,11 +1916,28 @@ torch::Tensor try_dsv4_mate_model1_sparse_decode(
     // boundary. Compact MTP has one dynamic prefix per row, so use the
     // device-provided vectors and refresh once for the whole q batch. This
     // preserves the Mate batch ABI while removing the old per-row host loop.
-    const bool refresh_metadata =
-        has_batched_lengths || !workspace.metadata_valid ||
-        workspace.cached_topk_length != effective_topk_length ||
-        workspace.cached_extra_topk_length != effective_extra_topk_length;
-    if (has_batched_lengths) {
+    musaStreamCaptureStatus capture_status = musaStreamCaptureStatusNone;
+    unsigned long long capture_id = 0;
+    if (metadata_group != 0) {
+      check_musa_runtime(musaStreamGetCaptureInfo(
+          current_dsv4_cache_stream(), &capture_status, &capture_id));
+    }
+    const bool capturing = capture_status == musaStreamCaptureStatusActive;
+    const bool new_capture = metadata_group != 0 &&
+        (workspace.metadata_was_captured != capturing ||
+         (capturing && workspace.metadata_capture_id != capture_id));
+    const bool refresh_metadata = new_capture ||
+        (has_batched_lengths
+             ? (!workspace.metadata_valid ||
+                dsv4_mate_model1_metadata_key ==
+                    std::numeric_limits<int64_t>::min() ||
+                workspace.cached_metadata_key !=
+                    dsv4_mate_model1_metadata_key)
+             : (!workspace.metadata_valid ||
+                workspace.cached_topk_length != effective_topk_length ||
+                workspace.cached_extra_topk_length !=
+                    effective_extra_topk_length));
+    if (has_batched_lengths && (metadata_group == 0 || refresh_metadata)) {
       auto topk_lengths = batched_topk_lengths.value();
       auto extra_topk_lengths = batched_extra_topk_lengths.value();
       if (topk_lengths.scalar_type() != torch::kInt32) {
@@ -1947,8 +1983,13 @@ torch::Tensor try_dsv4_mate_model1_sparse_decode(
       return torch::Tensor();
     }
     if (refresh_metadata) {
+      workspace.metadata_capture_id = capture_id;
+      workspace.metadata_was_captured = capturing;
       workspace.cached_topk_length = effective_topk_length;
       workspace.cached_extra_topk_length = effective_extra_topk_length;
+      if (has_batched_lengths) {
+        workspace.cached_metadata_key = dsv4_mate_model1_metadata_key;
+      }
       workspace.metadata_valid = true;
     }
     function.value()(to_ffi_tensor(q4d),
@@ -2734,7 +2775,8 @@ __device__ __forceinline__ float dsv4_block_sum(float value,
   return scratch[0];
 }
 
-template <typename scalar_t, typename index_t>
+template <typename scalar_t, typename index_t, int32_t kContextSplits = 1,
+          int32_t kContextUnroll = 1>
 __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
     dsv4_paged_decode_warp_fused_kernel(
         const scalar_t* __restrict__ q,
@@ -2764,8 +2806,11 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
         int64_t compressed_row_width,
         float softmax_scale,
         bool has_attn_sink,
-        bool precompute_probs) {
+        bool precompute_probs,
+        bool batched_verify,
+        int64_t dynamic_compress_ratio) {
   const int64_t head = blockIdx.x;
+  const int64_t query = blockIdx.y;
   const int64_t total_len =
       kv_window_len + paged_compressed_kv_len + dense_compressed_kv_len;
   if (head >= num_heads || total_len <= 0) {
@@ -2775,12 +2820,22 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
   extern __shared__ float shared[];
   float* scores = shared;
   float* reduce = shared + total_len;
+  // Resolve each paged row once, then reuse its address for all head
+  // dimensions. Repeating 64-bit block/page division in the context loop
+  // costs far more than the value multiply/add. Keep pointer storage aligned
+  // even for an odd scalar-decode history length.
+  const int64_t pointer_offset =
+      ((total_len + kDecodeAttentionBlockSize + 1) / 2) * 2;
+  const scalar_t** row_addresses =
+      reinterpret_cast<const scalar_t**>(shared + pointer_offset);
 
   int64_t runtime_kv_start = kv_start;
   int64_t runtime_kv_window_len = kv_window_len;
+  int64_t runtime_compressed_len = paged_compressed_kv_len;
   if (dynamic_kv_seq_lens != nullptr) {
     const int64_t raw_runtime_kv_len =
-        static_cast<int64_t>(dynamic_kv_seq_lens[sequence_index]);
+        static_cast<int64_t>(dynamic_kv_seq_lens[
+            batched_verify ? query : sequence_index]);
     const int64_t runtime_kv_len =
         raw_runtime_kv_len > 0 ? raw_runtime_kv_len : 0;
     const int64_t cache_capacity = max_blocks_per_seq * block_size;
@@ -2790,12 +2845,16 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
                                 ? effective_runtime_kv_len
                                 : kv_window_len;
     runtime_kv_start = effective_runtime_kv_len - runtime_kv_window_len;
+    if (dynamic_compress_ratio > 0) {
+      runtime_compressed_len = min(paged_compressed_kv_len,
+                                   runtime_kv_len / dynamic_compress_ratio);
+    }
   }
 
   constexpr int kWarpsPerBlock = kDecodeAttentionBlockSize / kMusaWarpSize;
   const int warp_id = threadIdx.x / kMusaWarpSize;
   const int lane = threadIdx.x % kMusaWarpSize;
-  const scalar_t* q_row = q + head * head_dim;
+  const scalar_t* q_row = q + (query * num_heads + head) * head_dim;
 
   for (int64_t token = warp_id; token < total_len; token += kWarpsPerBlock) {
     bool row_valid = true;
@@ -2814,14 +2873,16 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
       row = row_valid ? cache + flat * row_width : cache;
     } else if (token < kv_window_len + paged_compressed_kv_len) {
       const int64_t compressed_token = token - kv_window_len;
+      row_valid = compressed_token < runtime_compressed_len;
       const int64_t flat =
-          dsv4_paged_flat_row_from_table(compressed_block_table,
+          row_valid ? dsv4_paged_flat_row_from_table(compressed_block_table,
                                          compressed_sequence_index,
                                          compressed_token,
                                          compressed_block_size,
                                          compressed_num_blocks,
-                                         compressed_max_blocks_per_seq);
-      row_valid = flat >= 0;
+                                         compressed_max_blocks_per_seq)
+                    : int64_t{-1};
+      row_valid = row_valid && flat >= 0;
       row = row_valid ? compressed_cache + flat * compressed_row_width
                       : compressed_cache;
     } else {
@@ -2839,6 +2900,7 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
     }
     if (lane == 0) {
       scores[token] = row_valid ? sum * softmax_scale : -INFINITY;
+      row_addresses[token] = row_valid ? row : nullptr;
     }
   }
   __syncthreads();
@@ -2873,41 +2935,22 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
     __syncthreads();
   }
 
-  scalar_t* out_head = output + head * head_dim;
-  for (int64_t dim = threadIdx.x; dim < head_dim; dim += blockDim.x) {
+  scalar_t* out_head = output + (query * num_heads + head) * head_dim;
+  // Duplicate the identical score/softmax work, but partition output columns
+  // across CTAs. Every output retains the original token accumulation order.
+  // The default specialization folds back to the original unsplit loop.
+  const int64_t context_tile = (head_dim + kContextSplits - 1) / kContextSplits;
+  const int64_t context_begin = kContextSplits == 1
+      ? int64_t{0} : static_cast<int64_t>(blockIdx.z) * context_tile;
+  const int64_t context_end = kContextSplits == 1
+      ? head_dim : min(context_begin + context_tile, head_dim);
+  for (int64_t dim = context_begin + threadIdx.x; dim < context_end;
+       dim += blockDim.x) {
     float acc = 0.0f;
+#pragma unroll(kContextUnroll)
     for (int64_t token = 0; token < total_len; ++token) {
-      bool row_valid = true;
-      const scalar_t* row = nullptr;
-      if (token < kv_window_len) {
-        row_valid = token < runtime_kv_window_len;
-        const int64_t flat =
-            row_valid ? dsv4_paged_flat_row_from_table(block_table,
-                                                       sequence_index,
-                                                       runtime_kv_start + token,
-                                                       block_size,
-                                                       num_blocks,
-                                                       max_blocks_per_seq)
-                      : int64_t{-1};
-        row_valid = row_valid && flat >= 0;
-        row = row_valid ? cache + flat * row_width : cache;
-      } else if (token < kv_window_len + paged_compressed_kv_len) {
-        const int64_t compressed_token = token - kv_window_len;
-        const int64_t flat =
-            dsv4_paged_flat_row_from_table(compressed_block_table,
-                                           compressed_sequence_index,
-                                           compressed_token,
-                                           compressed_block_size,
-                                           compressed_num_blocks,
-                                           compressed_max_blocks_per_seq);
-        row_valid = flat >= 0;
-        row = row_valid ? compressed_cache + flat * compressed_row_width
-                        : compressed_cache;
-      } else {
-        row = dense_compressed_kv +
-              (token - kv_window_len - paged_compressed_kv_len) * head_dim;
-      }
-      if (!row_valid) {
+      const scalar_t* row = row_addresses[token];
+      if (row == nullptr) {
         continue;
       }
       const float prob = precompute_probs
@@ -3432,8 +3475,9 @@ deepseek_v4_paged_attention_decode_with_paged_compressed_kv_impl(
     const dim3 fused_grid(num_heads);
     const dim3 fused_block(kDecodeAttentionBlockSize);
     const size_t shared_bytes =
-        static_cast<size_t>(total_len + kDecodeAttentionBlockSize) *
-        sizeof(float);
+        static_cast<size_t>((total_len + kDecodeAttentionBlockSize + 1) / 2) *
+            2 * sizeof(float) +
+        static_cast<size_t>(total_len) * sizeof(void*);
     const auto stream = current_dsv4_cache_stream();
 
     if (block_table.scalar_type() == torch::kInt32) {
@@ -3471,7 +3515,9 @@ deepseek_v4_paged_attention_decode_with_paged_compressed_kv_impl(
                     compressed_row_width,
                     static_cast<float>(softmax_scale),
                     has_sink,
-                    dsv4_paged_decode_precompute_probs_enabled());
+                    dsv4_paged_decode_precompute_probs_enabled(),
+                    /*batched_verify=*/false,
+                    /*dynamic_compress_ratio=*/0);
           });
     } else {
       DISPATCH_FLOATING_TYPES(
@@ -3508,7 +3554,9 @@ deepseek_v4_paged_attention_decode_with_paged_compressed_kv_impl(
                     compressed_row_width,
                     static_cast<float>(softmax_scale),
                     has_sink,
-                    dsv4_paged_decode_precompute_probs_enabled());
+                    dsv4_paged_decode_precompute_probs_enabled(),
+                    /*batched_verify=*/false,
+                    /*dynamic_compress_ratio=*/0);
           });
     }
     check_musa_kernel_launch("dsv4 kernel");
@@ -3640,6 +3688,222 @@ deepseek_v4_paged_attention_decode_with_paged_compressed_kv_impl(
   return out;
 }
 
+torch::Tensor deepseek_v4_paged_attention_sas(
+    const torch::Tensor& q,
+    const torch::Tensor& cache,
+    const torch::Tensor& block_table,
+    int64_t sequence_index,
+    int64_t kv_len,
+    int64_t window_size,
+    const torch::Tensor& attn_sink,
+    double softmax_scale,
+    const torch::Tensor& output) {
+#if defined(USE_DCU)
+  return torch::Tensor();
+#else
+  CHECK_EQ(q.dim(), 3);
+  CHECK_EQ(q.size(2), 512);
+  CHECK_GT(q.size(0), 0);
+  CHECK_GT(q.size(1), 0);
+  CHECK_EQ(cache.scalar_type(), q.scalar_type());
+  CHECK_GE(cache.dim(), 3);
+  CHECK_GE(cache.size(-1), q.size(2));
+  CHECK_EQ(cache.numel(), cache.size(0) * cache.size(1) * cache.size(-1));
+  CHECK_EQ(block_table.dim(), 2);
+  CHECK_GE(sequence_index, 0);
+  CHECK_LT(sequence_index, block_table.size(0));
+  CHECK(block_table.scalar_type() == torch::kInt32 || block_table.scalar_type() == torch::kInt64);
+  CHECK_EQ(output.sizes(), q.sizes());
+  CHECK_EQ(output.scalar_type(), q.scalar_type());
+  CHECK(!q.is_alias_of(output));
+  CHECK_GT(kv_len, 0);
+  CHECK_LE(kv_len, block_table.size(1) * cache.size(1));
+  CHECK_GT(window_size, 0);
+  CHECK_LE(window_size, 512);
+  CHECK_EQ(attn_sink.scalar_type(), torch::kFloat32);
+  CHECK_EQ(attn_sink.numel(), q.size(1));
+  for (const torch::Tensor& tensor : {q, cache, block_table, attn_sink, output}) {
+    CHECK(tensor.is_contiguous());
+    CHECK_EQ(tensor.device(), q.device());
+  }
+  const int64_t visible = std::min(kv_len, window_size);
+  const size_t shared_bytes =
+      ((visible + kDecodeAttentionBlockSize + 1) / 2) * 2 * sizeof(float) +
+      visible * sizeof(void*);
+  const musaStream_t stream = current_dsv4_cache_stream();
+  DISPATCH_FLOATING_TYPES(q.scalar_type(), "dsv4_paged_sas", [&] {
+    auto launch = [&](auto index_tag) {
+      using Index = decltype(index_tag);
+      dsv4_paged_decode_warp_fused_kernel<scalar_t, Index, 2>
+          <<<dim3(q.size(1), q.size(0), 2), kDecodeAttentionBlockSize, shared_bytes, stream>>>(
+              q.data_ptr<scalar_t>(), cache.data_ptr<scalar_t>(),
+              block_table.data_ptr<Index>(), nullptr, nullptr, nullptr, nullptr,
+              attn_sink.data_ptr<float>(), output.data_ptr<scalar_t>(),
+              sequence_index, kv_len - visible, visible,
+              cache.size(1), cache.size(0), block_table.size(1),
+              /*compressed_sequence_index=*/0, /*paged_compressed_kv_len=*/0,
+              /*compressed_block_size=*/0, /*compressed_num_blocks=*/0,
+              /*compressed_max_blocks_per_seq=*/0, q.size(1), q.size(2),
+              /*dense_compressed_kv_len=*/0, cache.size(-1), /*compressed_row_width=*/0,
+              static_cast<float>(softmax_scale), /*has_attn_sink=*/true,
+              /*precompute_probs=*/true, /*batched_verify=*/true,
+              /*dynamic_compress_ratio=*/0);
+    };
+    if (block_table.scalar_type() == torch::kInt32) {
+      launch(int32_t{0});
+    } else {
+      launch(int64_t{0});
+    }
+  });
+  check_musa_kernel_launch("dsv4 paged noncausal SAS");
+  return output;
+#endif
+}
+
+torch::Tensor deepseek_v4_paged_attention_verify_compressed(
+    const torch::Tensor& q,
+    const torch::Tensor& cache,
+    const torch::Tensor& block_table,
+    const torch::Tensor& kv_seq_lens,
+    const torch::Tensor& compressed_cache,
+    const torch::Tensor& compressed_block_table,
+    int64_t compressed_capacity,
+    int64_t compression_ratio,
+    const torch::Tensor& attn_sink,
+    double softmax_scale,
+    const torch::Tensor& output) {
+#if defined(USE_DCU)
+  return torch::Tensor();
+#else
+  CHECK_EQ(q.dim(), 3);
+  CHECK_GT(q.size(0), 0);
+  CHECK_GT(q.size(1), 0);
+  CHECK_GT(q.size(2), 0);
+  CHECK_EQ(kv_seq_lens.dim(), 1);
+  CHECK_EQ(kv_seq_lens.size(0), q.size(0));
+  CHECK_EQ(kv_seq_lens.scalar_type(), torch::kInt32);
+  CHECK_EQ(output.sizes(), q.sizes());
+  CHECK_EQ(output.scalar_type(), q.scalar_type());
+  CHECK_EQ(block_table.dim(), 2);
+  CHECK_EQ(compressed_block_table.dim(), 2);
+  CHECK_EQ(block_table.size(0), 1);
+  CHECK_EQ(compressed_block_table.size(0), 1);
+  CHECK(block_table.scalar_type() == torch::kInt32 ||
+        block_table.scalar_type() == torch::kInt64);
+  CHECK_EQ(compressed_block_table.scalar_type(), block_table.scalar_type());
+  CHECK_GE(compressed_capacity, 0);
+  CHECK_LE(compressed_capacity, 384);
+  CHECK(compression_ratio == 4 || compression_ratio == 128);
+  for (const torch::Tensor& tensor : {q, cache, block_table, kv_seq_lens,
+                                    compressed_cache, compressed_block_table,
+                                    attn_sink, output}) {
+    CHECK(tensor.is_contiguous());
+    CHECK_EQ(tensor.device(), q.device());
+  }
+  for (const torch::Tensor& values : {cache, compressed_cache}) {
+    CHECK_GE(values.dim(), 3);
+    CHECK_EQ(values.scalar_type(), q.scalar_type());
+    CHECK_GE(values.size(-1), q.size(2));
+    CHECK_GT(values.size(0), 0);
+    CHECK_GT(values.size(1), 0);
+    CHECK_EQ(values.numel(), values.size(0) * values.size(1) * values.size(-1));
+  }
+  CHECK_LE(compressed_capacity,
+           compressed_block_table.size(1) * compressed_cache.size(1));
+  CHECK_EQ(attn_sink.scalar_type(), torch::kFloat32);
+  CHECK_EQ(attn_sink.numel(), q.size(1));
+  constexpr int64_t kWindow = 128;
+  int32_t context_splits = 1;
+  const char* splits_env = std::getenv("XLLM_DSV4_C128_CONTEXT_SPLITS");
+  if (splits_env != nullptr) {
+    const std::string requested(splits_env);
+    CHECK(requested == "1" || requested == "2" || requested == "4" || requested == "8")
+        << "C128 context splits must be 1, 2, 4 or 8";
+    context_splits = static_cast<int32_t>(requested[0] - '0');
+  }
+  // Multiple CTAs must not overwrite Q while another split still reads it.
+  if (q.is_alias_of(output)) {
+    context_splits = 1;
+  }
+  const dim3 block(kDecodeAttentionBlockSize);
+  const size_t shared_bytes =
+      ((kWindow + compressed_capacity + kDecodeAttentionBlockSize + 1) / 2) *
+          2 * sizeof(float) +
+      (kWindow + compressed_capacity) * sizeof(void*);
+  const musaStream_t stream = current_dsv4_cache_stream();
+  DISPATCH_FLOATING_TYPES(q.scalar_type(), "dsv4_paged_verify_c128", [&] {
+    auto launch = [&](auto index_tag, auto split_tag, auto unroll_tag) {
+      using Index = decltype(index_tag);
+      constexpr int32_t kSplits = decltype(split_tag)::value;
+      constexpr int32_t kUnroll = decltype(unroll_tag)::value;
+      const dim3 grid(q.size(1), q.size(0), kSplits);
+      dsv4_paged_decode_warp_fused_kernel<scalar_t, Index, kSplits, kUnroll>
+          <<<grid, block, shared_bytes, stream>>>(
+              q.data_ptr<scalar_t>(), cache.data_ptr<scalar_t>(),
+              block_table.data_ptr<Index>(), kv_seq_lens.data_ptr<int32_t>(),
+              nullptr, compressed_cache.data_ptr<scalar_t>(),
+              compressed_block_table.data_ptr<Index>(),
+              attn_sink.data_ptr<float>(), output.data_ptr<scalar_t>(),
+              /*sequence_index=*/0, /*kv_start=*/0, kWindow,
+              cache.size(1), cache.size(0), block_table.size(1),
+              /*compressed_sequence_index=*/0, compressed_capacity,
+              compressed_cache.size(1), compressed_cache.size(0),
+              compressed_block_table.size(1), q.size(1), q.size(2),
+              /*dense_compressed_kv_len=*/0, cache.size(-1),
+              compressed_cache.size(-1), static_cast<float>(softmax_scale),
+              /*has_attn_sink=*/true, /*precompute_probs=*/true,
+              /*batched_verify=*/true, compression_ratio);
+    };
+    auto dispatch_splits = [&](auto index_tag, auto unroll_tag) {
+      switch (context_splits) {
+        case 2: launch(index_tag, std::integral_constant<int32_t, 2>{}, unroll_tag); break;
+        case 4: launch(index_tag, std::integral_constant<int32_t, 4>{}, unroll_tag); break;
+        case 8: launch(index_tag, std::integral_constant<int32_t, 8>{}, unroll_tag); break;
+        default: launch(index_tag, std::integral_constant<int32_t, 1>{}, unroll_tag); break;
+      }
+    };
+    const char* unroll_env = std::getenv("XLLM_DSV4_C128_CONTEXT_UNROLL");
+    const std::string unroll = unroll_env == nullptr ? "1" : unroll_env;
+    CHECK(unroll == "1" || unroll == "2" || unroll == "4" || unroll == "8");
+    auto dispatch_unroll = [&](auto index_tag) {
+      if (unroll == "2") {
+        dispatch_splits(index_tag, std::integral_constant<int32_t, 2>{});
+      } else if (unroll == "4") {
+        dispatch_splits(index_tag, std::integral_constant<int32_t, 4>{});
+      } else if (unroll == "8") {
+        dispatch_splits(index_tag, std::integral_constant<int32_t, 8>{});
+      } else {
+        dispatch_splits(index_tag, std::integral_constant<int32_t, 1>{});
+      }
+    };
+    if (block_table.scalar_type() == torch::kInt32) {
+      dispatch_unroll(int32_t{0});
+    } else {
+      dispatch_unroll(int64_t{0});
+    }
+  });
+  check_musa_kernel_launch("dsv4 paged verify compressed");
+  return output;
+#endif
+}
+
+torch::Tensor deepseek_v4_paged_attention_verify_c128(
+    const torch::Tensor& q,
+    const torch::Tensor& cache,
+    const torch::Tensor& block_table,
+    const torch::Tensor& kv_seq_lens,
+    const torch::Tensor& compressed_cache,
+    const torch::Tensor& compressed_block_table,
+    int64_t compressed_capacity,
+    const torch::Tensor& attn_sink,
+    double softmax_scale,
+    const torch::Tensor& output) {
+  return deepseek_v4_paged_attention_verify_compressed(
+      q, cache, block_table, kv_seq_lens, compressed_cache,
+      compressed_block_table, compressed_capacity, /*compression_ratio=*/128,
+      attn_sink, softmax_scale, output);
+}
+
 torch::Tensor deepseek_v4_paged_attention_decode_with_paged_compressed_kv(
     const torch::Tensor& q,
     const torch::Tensor& cache,
@@ -3752,6 +4016,13 @@ torch::Tensor deepseek_v4_mate_sparse_attention_decode_batched(
                                             output,
                                             topk_lengths,
                                             extra_topk_lengths);
+}
+
+void deepseek_v4_mate_sparse_attention_set_metadata_key(int64_t metadata_key) {
+  dsv4_mate_model1_metadata_key = metadata_key;
+}
+void deepseek_v4_mate_sparse_attention_set_metadata_group(int64_t metadata_group) {
+  dsv4_mate_model1_metadata_group = metadata_group;
 }
 
 torch::Tensor deepseek_v4_mate_sparse_attention_prefill(

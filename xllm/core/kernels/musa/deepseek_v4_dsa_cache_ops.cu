@@ -22,6 +22,10 @@ limitations under the License.
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
+#include <string>
+#include <type_traits>
+#include <unordered_map>
 
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/kernels/musa/musa_kernel_utils.h"
@@ -34,6 +38,59 @@ limitations under the License.
 #endif
 
 namespace xllm::kernel::musa {
+
+namespace {
+__global__ void dsv4_greedy_verify_tokens_kernel(
+    const int64_t* draft, const int64_t* target, int64_t* output, int32_t width) {
+  const int32_t lane = threadIdx.x;
+  const int64_t row = blockIdx.x;
+  const bool mismatch = lane < width &&
+      draft[row * width + lane] != target[row * (width + 1) + lane];
+  const uint32_t mismatches = __ballot_sync(0xffffffffu, mismatch);
+  const int32_t first_rejected = mismatches == 0 ? width : __ffs(mismatches) - 1;
+  if (lane <= width) {
+    const int64_t index = row * (width + 1) + lane;
+    output[index] = lane <= first_rejected ? target[index] : int64_t{-1};
+  }
+}
+}  // namespace
+
+torch::Tensor deepseek_v4_greedy_verify_tokens(
+    const torch::Tensor& draft_tokens,
+    const torch::Tensor& target_tokens,
+    const torch::Tensor& output) {
+  CHECK_EQ(draft_tokens.dim(), 2);
+  CHECK_EQ(target_tokens.dim(), 2);
+  CHECK_EQ(target_tokens.size(0), draft_tokens.size(0));
+  CHECK_EQ(target_tokens.size(1), draft_tokens.size(1) + 1);
+  CHECK_EQ(output.sizes(), target_tokens.sizes());
+  CHECK_GT(draft_tokens.size(0), 0);
+  CHECK_GT(draft_tokens.size(1), 0);
+  CHECK_LT(draft_tokens.size(1), 32);
+  for (const torch::Tensor& tensor : {draft_tokens, target_tokens, output}) {
+    CHECK_EQ(tensor.scalar_type(), torch::kInt64);
+    CHECK(tensor.is_contiguous());
+    CHECK_EQ(tensor.device(), target_tokens.device());
+  }
+  const XLLMOptionalDeviceGuard guard(target_tokens.device());
+  dsv4_greedy_verify_tokens_kernel<<<draft_tokens.size(0), 32, 0,
+      current_musa_stream(target_tokens.device())>>>(
+      draft_tokens.data_ptr<int64_t>(), target_tokens.data_ptr<int64_t>(),
+      output.data_ptr<int64_t>(), static_cast<int32_t>(draft_tokens.size(1)));
+  check_musa_kernel_launch("dsv4 greedy accepted prefix");
+  return output;
+}
+
+thread_local bool dsv4_graph_capture_warmup = false;
+
+void deepseek_v4_set_graph_capture_warmup(bool enabled) {
+  dsv4_graph_capture_warmup = enabled;
+}
+
+bool deepseek_v4_graph_capture_warmup() {
+  return dsv4_graph_capture_warmup;
+}
+
 namespace {
 
 constexpr int32_t kGatherCacheBlockSize = 256;
@@ -72,6 +129,14 @@ constexpr int64_t kModel1ScaleBytes = 8;
 constexpr int64_t kModel1BytesPerToken = 584;
 
 musaStream_t current_dsv4_cache_stream() {
+  // Graph capture is entered through torch_musa's MUSA stream guard. The
+  // CUDA-compatible accessor can still return its mapped caller stream while
+  // that guard is active, which makes cache kernels escape capture. Prefer the
+  // native MUSA stream during capture; retain the CUDA-mapped stream for eager
+  // execution because that is the established service ordering.
+  if (is_stream_capturing()) {
+    return c10::musa::getCurrentMUSAStream().stream();
+  }
   // The MUSA build is compiled through musamapping, so CUDA stream APIs map
   // to the caller's active MUSA stream.  Keep cache kernels on the same stream
   // API as the surrounding attention, RoPE, HC and MoE kernels.  Mixing the
@@ -389,6 +454,82 @@ __global__ void __launch_bounds__(kCompressDecodeSequenceC4BlockSize, 1)
         score_state[dst + head_dim + dim] =
             score_state[src + head_dim + dim];
       }
+    }
+  }
+}
+
+// Unlike the suffix-prefill helper above, Graph decode must not capture the
+// absolute position or boundary count as host scalar arguments. Keep output
+// capacity fixed and determine the state row and valid outputs on device.
+template <typename scalar_t, typename position_t, int32_t Ratio>
+__global__ void __launch_bounds__(kCompressDecodeSequenceC4BlockSize, 1)
+    dsv4_compress_decode_sequence_graph_kernel(
+        float* __restrict__ kv_state,
+        float* __restrict__ score_state,
+        const scalar_t* __restrict__ kv_steps,
+        int64_t kv_stride,
+        const scalar_t* __restrict__ score_steps,
+        int64_t score_stride,
+        const float* __restrict__ ape,
+        const position_t* __restrict__ start_position,
+        scalar_t* __restrict__ output,
+        int64_t token_count,
+        int64_t head_dim,
+        int64_t output_capacity) {
+  constexpr int32_t kCoeff = Ratio == 4 ? 2 : 1;
+  constexpr int32_t kRows = Ratio * kCoeff;
+  const int64_t width = kCoeff * head_dim;
+  const int64_t start = static_cast<int64_t>(start_position[0]);
+  for (int64_t dim = blockIdx.x * blockDim.x + threadIdx.x; dim < head_dim;
+       dim += gridDim.x * blockDim.x) {
+    int64_t output_row = 0;
+    for (int64_t token = 0; token < token_count && start >= 0; ++token) {
+      const int64_t position = (start + token) % Ratio;
+      const int64_t row = (kCoeff - 1) * Ratio + position;
+      for (int32_t coeff = 0; coeff < kCoeff; ++coeff) {
+        const int64_t col = coeff * head_dim + dim;
+        kv_state[row * width + col] =
+            musa_convert_to_float(kv_steps[token * kv_stride + col]);
+        score_state[row * width + col] =
+            musa_convert_to_float(score_steps[token * score_stride + col]) +
+            ape[position * width + col];
+      }
+      if (position != Ratio - 1) {
+        continue;
+      }
+      float max_score = -INFINITY;
+      for (int32_t candidate = 0; candidate < kRows; ++candidate) {
+        const int64_t col = (candidate / Ratio) * head_dim + dim;
+        max_score = fmaxf(max_score, score_state[candidate * width + col]);
+      }
+      float denominator = 0.0f;
+      float weighted_sum = 0.0f;
+      for (int32_t candidate = 0; candidate < kRows; ++candidate) {
+        const int64_t col = (candidate / Ratio) * head_dim + dim;
+        const int64_t offset = candidate * width + col;
+        const float weight = expf(score_state[offset] - max_score);
+        denominator += weight;
+        weighted_sum += weight * kv_state[offset];
+      }
+      if (output_row < output_capacity) {
+        output[output_row * head_dim + dim] =
+            static_cast<scalar_t>(weighted_sum / denominator);
+      }
+      ++output_row;
+      if constexpr (Ratio == 4) {
+        for (int32_t history_row = 0; history_row < Ratio; ++history_row) {
+          for (int32_t coeff = 0; coeff < kCoeff; ++coeff) {
+            const int64_t col = coeff * head_dim + dim;
+            const int64_t dst = history_row * width + col;
+            const int64_t src = (Ratio + history_row) * width + col;
+            kv_state[dst] = kv_state[src];
+            score_state[dst] = score_state[src];
+          }
+        }
+      }
+    }
+    for (; output_row < output_capacity; ++output_row) {
+      output[output_row * head_dim + dim] = static_cast<scalar_t>(0.0f);
     }
   }
 }
@@ -1240,7 +1381,8 @@ dsv4_map_logical_to_physical(int64_t logical,
 template <typename scalar_t,
           typename block_index_t,
           typename mate_compressed_index_t,
-          typename mate_swa_index_t>
+          typename mate_swa_index_t,
+          int32_t kStage = 0>
 __global__ void __launch_bounds__(kIndexerRadixThreads, 1)
     dsv4_indexer_paged_score_fused_radix_kernel(
         const scalar_t* __restrict__ query,
@@ -1253,6 +1395,7 @@ __global__ void __launch_bounds__(kIndexerRadixThreads, 1)
         int32_t* __restrict__ completion_counter,
         int64_t sequence_index,
         int64_t valid_count,
+        const int32_t* __restrict__ dynamic_kv_len,
         int64_t num_heads,
         int64_t head_dim,
         int64_t block_size,
@@ -1270,6 +1413,23 @@ __global__ void __launch_bounds__(kIndexerRadixThreads, 1)
         int64_t mate_compressed_max_blocks,
         int64_t mate_swa_max_blocks,
         int64_t mate_sequence_index) {
+  // Each grid-y plane owns one causal query and an independent completion
+  // counter. Keep scoring/reduction order inside a query identical to q1.
+  const int64_t query_row = blockIdx.y;
+  query += query_row * num_heads * head_dim;
+  weights += query_row * num_heads;
+  scores += query_row * valid_count;
+  indices += query_row * kIndexerRadixTopk;
+  completion_counter += query_row;
+  if (dynamic_kv_len != nullptr) {
+    dynamic_kv_len += query_row;
+  }
+  if (mate_physical_indices != nullptr) {
+    mate_physical_indices += query_row * mate_main_count;
+  }
+  if (mate_extra_physical_indices != nullptr) {
+    mate_extra_physical_indices += query_row * mate_extra_count;
+  }
   // A 1024-thread MUSA block has 32 warps, while TP8/EP1 MODEL1 exposes 64
   // indexer heads. Let each warp visit multiple heads and keep the full head
   // reduction in bounds.
@@ -1277,8 +1437,20 @@ __global__ void __launch_bounds__(kIndexerRadixThreads, 1)
   const int32_t warp = threadIdx.x / kMusaWarpSize;
   const int32_t lane = threadIdx.x % kMusaWarpSize;
   const int32_t warps_per_block = blockDim.x / kMusaWarpSize;
+  const int64_t runtime_valid_count =
+      dynamic_kv_len == nullptr
+          ? valid_count
+          : min(valid_count,
+                max(static_cast<int64_t>(dynamic_kv_len[0]) / 4,
+                    int64_t{0}));
+  const int64_t runtime_mate_kv_len =
+      dynamic_kv_len == nullptr
+          ? mate_kv_len
+          : max(static_cast<int64_t>(dynamic_kv_len[0]), int64_t{0});
 
-  for (int64_t key_index = blockIdx.x; key_index < valid_count;
+  if constexpr (kStage != 2) {
+  for (int64_t key_index = blockIdx.x;
+       runtime_valid_count > kIndexerRadixTopk && key_index < runtime_valid_count;
        key_index += gridDim.x) {
     const int64_t logical_block = key_index / block_size;
     const int64_t block_offset = key_index % block_size;
@@ -1329,20 +1501,38 @@ __global__ void __launch_bounds__(kIndexerRadixThreads, 1)
     }
     __syncthreads();
   }
+  }
+  if constexpr (kStage == 1) {
+    // A separate launch performs TopK, so score CTAs do not reserve radix
+    // candidate storage and do not need a completion counter or grid fence.
+    return;
+  }
 
   // Publish this block's score writes before announcing completion. The last
   // block performs radix TopK in-place, avoiding a cooperative grid barrier
   // and a second kernel launch.
   __shared__ int32_t is_last_block;
   if (threadIdx.x == 0) {
-    __threadfence();
-    is_last_block =
-        atomicAdd(completion_counter, 1) == static_cast<int32_t>(gridDim.x - 1);
+    if constexpr (kStage == 2) {
+      is_last_block = 1;
+    } else {
+      __threadfence();
+      is_last_block =
+          atomicAdd(completion_counter, 1) == static_cast<int32_t>(gridDim.x - 1);
+    }
   }
   __syncthreads();
   if (is_last_block != 0) {
-    dsv4_indexer_radix_topk_device(
-        scores, indices, static_cast<int32_t>(valid_count));
+    if (runtime_valid_count <= kIndexerRadixTopk) {
+      // Preserve the exact eager all-valid shortcut, including padding. This
+      // branch is evaluated on device on EVERY replay, not at capture time.
+      for (int64_t i = threadIdx.x; i < kIndexerRadixTopk; i += blockDim.x) {
+        indices[i] = i < runtime_valid_count ? static_cast<int32_t>(i) : -1;
+      }
+    } else {
+      dsv4_indexer_radix_topk_device(
+          scores, indices, static_cast<int32_t>(runtime_valid_count));
+    }
     if (mate_physical_indices != nullptr &&
         mate_extra_physical_indices != nullptr) {
       // Keep logical-to-physical mapping in the score/TopK launch for the
@@ -1361,9 +1551,11 @@ __global__ void __launch_bounds__(kIndexerRadixThreads, 1)
       for (int64_t index = threadIdx.x; index < mate_extra_count;
            index += blockDim.x) {
         const int64_t row_extra_len =
-            min(min(int64_t{128}, mate_window_size), mate_kv_len);
+            min(min(int64_t{128}, mate_window_size), runtime_mate_kv_len);
         const int64_t logical =
-            index < row_extra_len ? mate_kv_len - row_extra_len + index : -1;
+            index < row_extra_len
+                ? runtime_mate_kv_len - row_extra_len + index
+                : -1;
         mate_extra_physical_indices[index] =
             dsv4_map_logical_to_physical<mate_swa_index_t>(logical,
                                                            mate_swa_block_table,
@@ -1390,6 +1582,7 @@ bool dispatch_dsv4_indexer_paged_score_fused_radix(
     torch::Tensor& completion_counter,
     int64_t sequence_index,
     int64_t valid_count,
+    const torch::Tensor& dynamic_kv_len,
     const torch::Tensor& mate_compressed_block_table,
     const torch::Tensor& mate_swa_block_table,
     const torch::Tensor& mate_physical_indices,
@@ -1411,9 +1604,16 @@ bool dispatch_dsv4_indexer_paged_score_fused_radix(
 
   // The score phase assigns at least one warp per head when possible. For more
   // than 32 heads, the kernel loops each warp over additional heads.
-  const int32_t launch_threads = static_cast<int32_t>(std::min<int64_t>(
+  int32_t launch_threads = static_cast<int32_t>(std::min<int64_t>(
       kIndexerRadixThreads,
       std::max<int64_t>(kIndexerRadixBins, query.size(1) * kMusaWarpSize)));
+  const char* threads_env = std::getenv("XLLM_DSV4_INDEXER_THREADS");
+  if (threads_env != nullptr) {
+    const std::string requested(threads_env);
+    CHECK(requested == "512" || requested == "1024")
+        << "Indexer threads must be 512 or 1024 (radix uses 257 histogram entries)";
+    launch_threads = requested == "512" ? 512 : 1024;
+  }
   int32_t blocks_per_sm = 0;
   const musaError_t occupancy_status =
       musaOccupancyMaxActiveBlocksPerMultiprocessor(
@@ -1463,13 +1663,19 @@ bool dispatch_dsv4_indexer_paged_score_fused_radix(
   int64_t block_size = cache.size(1);
   int64_t num_blocks = cache.size(0);
   int64_t max_blocks_per_sequence = block_table.size(1);
+  const int32_t* dynamic_kv_len_ptr =
+      dynamic_kv_len.defined() ? dynamic_kv_len.data_ptr<int32_t>() : nullptr;
+  auto launch_stage = [&](auto stage_tag, int64_t blocks, int32_t threads,
+                          int32_t shared_bytes) {
+  constexpr int32_t kStage = decltype(stage_tag)::value;
   dsv4_indexer_paged_score_fused_radix_kernel<scalar_t,
                                               block_index_t,
                                               mate_compressed_index_t,
-                                              mate_swa_index_t>
-      <<<dim3(static_cast<unsigned int>(grid_blocks)),
-         dim3(static_cast<unsigned int>(launch_threads)),
-         kIndexerRadixSmemBytes,
+                                              mate_swa_index_t, kStage>
+      <<<dim3(static_cast<unsigned int>(blocks),
+              static_cast<unsigned int>(query.size(0))),
+         dim3(static_cast<unsigned int>(threads)),
+         shared_bytes,
          current_dsv4_cache_stream()>>>(
           query_ptr,
           weights_ptr,
@@ -1481,6 +1687,7 @@ bool dispatch_dsv4_indexer_paged_score_fused_radix(
           completion_counter_ptr,
           sequence_index,
           valid_count,
+          dynamic_kv_len_ptr,
           num_heads,
           head_dim,
           block_size,
@@ -1490,8 +1697,9 @@ bool dispatch_dsv4_indexer_paged_score_fused_radix(
           mate_swa_block_table_ptr,
           mate_physical_indices_ptr,
           mate_extra_physical_indices_ptr,
-          mate_mapping_enabled ? mate_physical_indices.numel() : int64_t{0},
-          mate_mapping_enabled ? mate_extra_physical_indices.numel()
+          mate_mapping_enabled ? mate_physical_indices.numel() / query.size(0)
+                               : int64_t{0},
+          mate_mapping_enabled ? mate_extra_physical_indices.numel() / query.size(0)
                                : int64_t{0},
           mate_kv_len,
           mate_window_size,
@@ -1500,6 +1708,25 @@ bool dispatch_dsv4_indexer_paged_score_fused_radix(
                                : int64_t{0},
           mate_mapping_enabled ? mate_swa_block_table.size(1) : int64_t{0},
           mate_sequence_index);
+  };
+  const char* split_env = std::getenv("XLLM_DSV4_INDEXER_SPLIT_SCORE_TOPK");
+  if (split_env != nullptr && std::string(split_env) == "1") {
+    int32_t score_threads = 256;
+    const char* score_threads_env = std::getenv("XLLM_DSV4_INDEXER_SCORE_THREADS");
+    if (score_threads_env != nullptr) {
+      const std::string requested(score_threads_env);
+      CHECK(requested == "64" || requested == "128" || requested == "256" ||
+            requested == "512") << "Unsupported Indexer scoring CTA size";
+      score_threads = std::stoi(requested);
+    }
+    launch_stage(std::integral_constant<int32_t, 1>{}, valid_count,
+                 score_threads, /*shared_bytes=*/0);
+    launch_stage(std::integral_constant<int32_t, 2>{}, /*blocks=*/1,
+                 kIndexerRadixThreads, kIndexerRadixSmemBytes);
+  } else {
+    launch_stage(std::integral_constant<int32_t, 0>{}, grid_blocks,
+                 launch_threads, kIndexerRadixSmemBytes);
+  }
   const musaError_t launch_status = musaGetLastError();
   if (launch_status != musaSuccess) {
     musaGetLastError();
@@ -1520,6 +1747,7 @@ bool dispatch_dsv4_indexer_paged_score_fused_radix_mate_types(
     torch::Tensor& completion_counter,
     int64_t sequence_index,
     int64_t valid_count,
+    const torch::Tensor& dynamic_kv_len,
     const torch::Tensor& mate_compressed_block_table,
     const torch::Tensor& mate_swa_block_table,
     const torch::Tensor& mate_physical_indices,
@@ -1543,6 +1771,7 @@ bool dispatch_dsv4_indexer_paged_score_fused_radix_mate_types(
         completion_counter,
         sequence_index,
         valid_count,
+        dynamic_kv_len,
         mate_compressed_block_table,
         mate_swa_block_table,
         mate_physical_indices,
@@ -1567,6 +1796,7 @@ bool dispatch_dsv4_indexer_paged_score_fused_radix_mate_types(
       completion_counter,                                             \
       sequence_index,                                                 \
       valid_count,                                                    \
+      dynamic_kv_len,                                                 \
       mate_compressed_block_table,                                    \
       mate_swa_block_table,                                           \
       mate_physical_indices,                                          \
@@ -1728,19 +1958,30 @@ Dsv4IndexerSingleTopkWorkspace& dsv4_indexer_single_topk_workspace(
     int64_t topk,
     int64_t score_count = 0,
     int64_t air_workspace_bytes = 0) {
-  thread_local Dsv4IndexerSingleTopkWorkspace workspace;
+  thread_local Dsv4IndexerSingleTopkWorkspace scalar_workspace;
+  // Batched Graphs retain these addresses. Do not let scalar calls or another
+  // capacity bucket resize/free their score or completion-counter buffers.
+  thread_local std::unordered_map<std::string, Dsv4IndexerSingleTopkWorkspace>
+      batched_workspaces;
+  const std::string batch_key = std::to_string(query.device().index()) + ":" +
+                                std::to_string(query.size(0)) + ":" +
+                                std::to_string(score_count);
+  auto& workspace = query.size(0) == 1 ? scalar_workspace
+                                     : batched_workspaces[batch_key];
   const bool device_changed = workspace.device != query.device().index();
   if (workspace.topk < topk || device_changed) {
     workspace.topk = topk;
     workspace.device = query.device().index();
     workspace.values =
         torch::empty({topk}, query.options().dtype(torch::kFloat32));
-    workspace.lock = torch::empty({1}, query.options().dtype(torch::kInt32));
+    workspace.lock =
+        torch::empty({query.size(0)}, query.options().dtype(torch::kInt32));
   }
   if (workspace.score_capacity < score_count || device_changed) {
     workspace.score_capacity = score_count;
     workspace.scores =
-        torch::empty({score_count}, query.options().dtype(torch::kFloat32));
+        torch::empty({query.size(0) * score_count},
+                     query.options().dtype(torch::kFloat32));
   }
   if (workspace.air_workspace_capacity < air_workspace_bytes ||
       device_changed) {
@@ -1915,6 +2156,41 @@ __global__ void __launch_bounds__(kLogicalToPhysicalBlockSize, 1)
   }
 }
 
+template <typename index_t>
+__global__ void dsv4_c128_mate_indices_kernel(
+    const int32_t* lengths, const index_t* compressed_table,
+    const index_t* swa_table, int32_t* logical, int32_t* physical,
+    int32_t* extra, int64_t block_size, int64_t compressed_columns,
+    int64_t swa_columns, int64_t main_capacity) {
+  const int64_t row = blockIdx.x;
+  const int64_t length = max(static_cast<int64_t>(lengths[row]), int64_t{0});
+  const int64_t compressed_rows = min(length / 128, main_capacity);
+  const int64_t extra_rows = min(length, int64_t{128});
+  for (int64_t column = threadIdx.x; column < main_capacity; column += blockDim.x) {
+    const int64_t logical_row = column < compressed_rows ? column : -1;
+    logical[row * main_capacity + column] = static_cast<int32_t>(logical_row);
+    physical[row * main_capacity + column] = dsv4_map_logical_to_physical(
+        logical_row, compressed_table, /*sequence_index=*/0,
+        compressed_columns, block_size);
+  }
+  for (int64_t column = threadIdx.x; column < 128; column += blockDim.x) {
+    const int64_t logical_row = column < extra_rows ? length - extra_rows + column : -1;
+    extra[row * 128 + column] = dsv4_map_logical_to_physical(
+        logical_row, swa_table, /*sequence_index=*/0, swa_columns, block_size);
+  }
+}
+
+__global__ void dsv4_mate_causal_lengths_kernel(
+    const int32_t* lengths, int32_t* main, int32_t* extra,
+    int64_t rows, int64_t ratio, int64_t topk, int64_t window) {
+  const int64_t row = blockIdx.x * blockDim.x + threadIdx.x;
+  if (row < rows) {
+    const int64_t length = max(static_cast<int64_t>(lengths[row]), int64_t{0});
+    main[row] = static_cast<int32_t>(min(length / ratio, topk));
+    extra[row] = static_cast<int32_t>(min(length, window));
+  }
+}
+
 template <typename scalar_t, typename index_t>
 __global__ void __launch_bounds__(kGatherCacheBlockSize, 1)
     dsv4_gather_cache_kernel(const scalar_t* __restrict__ cache,
@@ -2045,11 +2321,14 @@ __global__ void __launch_bounds__(kHcPreCombineBlockSize, 1)
 
   const int64_t token = stream / hc_mult;
   const int64_t output_stream = stream % hc_mult;
-  const int64_t comb_base = (token * hc_mult + output_stream) * hc_mult;
+  // HC pre emits comb[token, input_stream, output_stream]. The residual
+  // contraction is over the INPUT axis; using its row here applies the
+  // transpose of the model's mixer once the HC lanes are no longer equal.
+  const int64_t comb_base = token * hc_mult * hc_mult + output_stream;
   const int64_t residual_base = token * hc_mult * hidden_size + hidden;
   float value = 0.0f;
   for (int64_t input_stream = 0; input_stream < hc_mult; ++input_stream) {
-    value += comb[comb_base + input_stream] *
+    value += comb[comb_base + input_stream * hc_mult] *
              static_cast<float>(
                  residual[residual_base + input_stream * hidden_size]);
   }
@@ -2106,7 +2385,7 @@ __global__ void __launch_bounds__(kHcPost2DBlockSize, 1)
       float value = 0.0f;
 #pragma unroll
       for (int64_t input_stream = 0; input_stream < 4; ++input_stream) {
-        value += shared_comb[output_stream * 4 + input_stream] *
+        value += shared_comb[input_stream * 4 + output_stream] *
                  residual_values[input_stream];
       }
       value += x_value * shared_post[output_stream];
@@ -2422,6 +2701,15 @@ void deepseek_v4_pack_fp8_cache(torch::Tensor cache,
                                                  block_size,
                                                  page_stride_bytes);
   }
+  // The pack kernel is capture-safe, but its legacy cross-stream completion
+  // event is not: recording it while the MUSA Graph owns the capture stream
+  // creates a dependency on the uncaptured producer stream. Graph replay is
+  // already ordered by the captured kernel sequence, so keep this handoff only
+  // for eager execution.
+  if (is_stream_capturing()) {
+    dsv4_model1_pack_event_recorded = false;
+    return;
+  }
   if (dsv4_model1_pack_event == nullptr) {
     check_musa_runtime(
         musaEventCreateWithFlags(&dsv4_model1_pack_event, musaEventDisableTiming));
@@ -2433,7 +2721,10 @@ void deepseek_v4_pack_fp8_cache(torch::Tensor cache,
 }
 
 void deepseek_v4_wait_model1_pack_event() {
-  if (!dsv4_model1_pack_event_recorded) {
+  if (!dsv4_model1_pack_event_recorded || is_stream_capturing()) {
+    // A stale eager event cannot be waited on from a Graph capture stream:
+    // MUSA rejects that as a dependency on uncaptured work. During capture
+    // pack and its consumers are already ordered in the same graph stream.
     return;
   }
   check_musa_runtime(musaStreamWaitEvent(
@@ -2544,7 +2835,7 @@ torch::Tensor deepseek_v4_indexer_cache_gather(
   return out;
 }
 
-torch::Tensor deepseek_v4_indexer_topk(
+static torch::Tensor deepseek_v4_indexer_topk_impl(
     const torch::Tensor& query,
     const torch::Tensor& weights,
     const torch::Tensor& cache,
@@ -2562,13 +2853,16 @@ torch::Tensor deepseek_v4_indexer_topk(
     int64_t mate_window_size,
     int64_t mate_block_size,
     const std::optional<torch::Tensor>& mate_physical_indices,
-    const std::optional<torch::Tensor>& mate_extra_physical_indices) {
+    const std::optional<torch::Tensor>& mate_extra_physical_indices,
+    const torch::Tensor& dynamic_kv_len) {
   CHECK(query.defined() && weights.defined() && cache.defined() &&
         scale_cache.defined() && block_table.defined());
   CHECK_EQ(query.dim(), 3);
-  CHECK_EQ(query.size(0), 1)
-      << "Fused DeepSeek-V4 indexer currently supports decode q_tokens=1.";
-  CHECK_EQ(weights.sizes(), torch::IntArrayRef({1, query.size(1)}));
+  const int64_t query_rows = query.size(0);
+  CHECK_GT(query_rows, 0);
+  CHECK(query_rows == 1 || dynamic_kv_len.defined())
+      << "Batched indexer requires one device causal KV length per query.";
+  CHECK_EQ(weights.sizes(), torch::IntArrayRef({query_rows, query.size(1)}));
   CHECK_EQ(weights.scalar_type(), torch::kFloat32);
   CHECK_EQ(cache.scalar_type(), torch::kInt8);
   CHECK_EQ(scale_cache.scalar_type(), torch::kFloat16);
@@ -2582,6 +2876,15 @@ torch::Tensor deepseek_v4_indexer_topk(
   CHECK_GT(kv_len, 0);
   CHECK_GT(topk, 0);
   CHECK_GT(compress_ratio, 0);
+  if (dynamic_kv_len.defined()) {
+    CHECK_EQ(dynamic_kv_len.numel(), query_rows);
+    CHECK_EQ(dynamic_kv_len.scalar_type(), torch::kInt32);
+    CHECK_EQ(dynamic_kv_len.device(), query.device());
+    CHECK(dynamic_kv_len.is_contiguous());
+    CHECK_EQ(compress_ratio, 4);
+    CHECK_EQ(topk, kIndexerRadixTopk);
+    CHECK_GE(kv_len, kIndexerRadixTopk);
+  }
   CHECK(query.is_contiguous() && weights.is_contiguous() &&
         cache.is_contiguous() && scale_cache.is_contiguous() &&
         block_table.is_contiguous());
@@ -2611,20 +2914,22 @@ torch::Tensor deepseek_v4_indexer_topk(
     mate_extra_output = mate_extra_physical_indices.value();
     CHECK_EQ(mate_main_output.scalar_type(), torch::kInt32);
     CHECK_EQ(mate_extra_output.scalar_type(), torch::kInt32);
-    CHECK_EQ(mate_main_output.sizes(), torch::IntArrayRef({1, topk}));
-    CHECK_EQ(mate_extra_output.sizes(), torch::IntArrayRef({1, 128}));
+    CHECK_EQ(mate_main_output.sizes(), torch::IntArrayRef({query_rows, topk}));
+    CHECK_EQ(mate_extra_output.sizes(), torch::IntArrayRef({query_rows, 128}));
     CHECK(mate_main_output.is_contiguous());
     CHECK(mate_extra_output.is_contiguous());
   }
 
-  const int64_t valid_count = std::clamp<int64_t>(
-      (query_absolute_start + 1) / compress_ratio, 0, kv_len);
+  const int64_t valid_count = dynamic_kv_len.defined()
+      ? kv_len
+      : std::clamp<int64_t>(
+            (query_absolute_start + 1) / compress_ratio, 0, kv_len);
   const int64_t selected_count = std::min<int64_t>(topk, valid_count);
   torch::Tensor indices =
       output.has_value()
           ? output.value()
-          : torch::empty({1, topk}, cache.options().dtype(torch::kInt32));
-  CHECK_EQ(indices.sizes(), torch::IntArrayRef({1, topk}));
+          : torch::empty({query_rows, topk}, cache.options().dtype(torch::kInt32));
+  CHECK_EQ(indices.sizes(), torch::IntArrayRef({query_rows, topk}));
   CHECK_EQ(indices.scalar_type(), torch::kInt32);
   CHECK(indices.is_contiguous());
   check_musa_runtime(musaMemsetAsync(indices.data_ptr<int32_t>(),
@@ -2653,7 +2958,7 @@ torch::Tensor deepseek_v4_indexer_topk(
   if (dsv4_musa_indexer_radix_topk_enabled()) {
     // SGLang skips scoring when every causal key is selected. The sparse
     // attention result depends on the selected set, not score order.
-    if (selected_count == valid_count) {
+    if (selected_count == valid_count && !dynamic_kv_len.defined()) {
       dsv4_indexer_all_valid_kernel<<<1,
                                       kIndexerCacheBlockSize,
                                       0,
@@ -2664,15 +2969,15 @@ torch::Tensor deepseek_v4_indexer_topk(
       return indices;
     }
     if (topk == kIndexerRadixTopk && selected_count == kIndexerRadixTopk &&
-        valid_count > kIndexerRadixTopk) {
+        (valid_count > kIndexerRadixTopk || dynamic_kv_len.defined())) {
       auto& workspace = dsv4_indexer_single_topk_workspace(
           query, selected_count, valid_count);
-      auto scores =
-          workspace.scores.narrow(0, 0, valid_count).view({1, valid_count});
+      auto scores = workspace.scores.narrow(0, 0, query_rows * valid_count)
+                        .view({query_rows, valid_count});
       if (dsv4_musa_indexer_fused_score_radix_enabled()) {
         check_musa_runtime(musaMemsetAsync(workspace.lock.data_ptr<int32_t>(),
                                            0,
-                                           sizeof(int32_t),
+                                           query_rows * sizeof(int32_t),
                                            current_dsv4_cache_stream()));
         bool fused_launched = false;
         DISPATCH_FLOATING_TYPES(
@@ -2691,6 +2996,7 @@ torch::Tensor deepseek_v4_indexer_topk(
                                  workspace.lock,
                                  sequence_index,
                                  valid_count,
+                                 dynamic_kv_len,
                                  mate_compressed_block_table,
                                  mate_swa_block_table,
                                  mate_main_output,
@@ -2713,6 +3019,7 @@ torch::Tensor deepseek_v4_indexer_topk(
                                  workspace.lock,
                                  sequence_index,
                                  valid_count,
+                                 dynamic_kv_len,
                                  mate_compressed_block_table,
                                  mate_swa_block_table,
                                  mate_main_output,
@@ -2729,6 +3036,8 @@ torch::Tensor deepseek_v4_indexer_topk(
           return indices;
         }
       }
+      CHECK(!dynamic_kv_len.defined())
+          << "Dynamic Graph indexer requires the fused device-length kernel";
       DISPATCH_FLOATING_TYPES(
           query.scalar_type(), "dsv4_indexer_paged_score_radix_topk", [&] {
             dispatch_dsv4_indexer_paged_score<scalar_t>(query,
@@ -2800,6 +3109,116 @@ torch::Tensor deepseek_v4_indexer_topk(
       .copy_(std::get<1>(topk_result).to(torch::kInt32));
   prepare_mate_mapping(/*mapping_already_fused=*/false);
   return indices;
+}
+
+torch::Tensor deepseek_v4_indexer_topk(
+    const torch::Tensor& query, const torch::Tensor& weights,
+    const torch::Tensor& cache, const torch::Tensor& scale_cache,
+    const torch::Tensor& block_table, int64_t sequence_index, int64_t kv_len,
+    int64_t topk, int64_t query_absolute_start, int64_t compress_ratio,
+    const std::optional<torch::Tensor>& output,
+    const torch::Tensor& mate_compressed_block_table,
+    const torch::Tensor& mate_swa_block_table, int64_t mate_kv_len,
+    int64_t mate_window_size, int64_t mate_block_size,
+    const std::optional<torch::Tensor>& mate_physical_indices,
+    const std::optional<torch::Tensor>& mate_extra_physical_indices) {
+  return deepseek_v4_indexer_topk_impl(
+      query, weights, cache, scale_cache, block_table, sequence_index, kv_len,
+      topk, query_absolute_start, compress_ratio, output,
+      mate_compressed_block_table, mate_swa_block_table, mate_kv_len,
+      mate_window_size, mate_block_size, mate_physical_indices,
+      mate_extra_physical_indices, torch::Tensor());
+}
+
+torch::Tensor deepseek_v4_indexer_topk_graph(
+    const torch::Tensor& query, const torch::Tensor& weights,
+    const torch::Tensor& cache, const torch::Tensor& scale_cache,
+    const torch::Tensor& block_table, int64_t sequence_index, int64_t kv_capacity,
+    int64_t topk, const torch::Tensor& output,
+    const torch::Tensor& mate_compressed_block_table,
+    const torch::Tensor& mate_swa_block_table, int64_t mate_window_size,
+    int64_t mate_block_size, const torch::Tensor& mate_physical_indices,
+    const torch::Tensor& mate_extra_physical_indices,
+    const torch::Tensor& dynamic_kv_len) {
+  CHECK(dynamic_kv_len.defined());
+  CHECK(output.defined() && mate_physical_indices.defined() &&
+        mate_extra_physical_indices.defined());
+  return deepseek_v4_indexer_topk_impl(
+      query, weights, cache, scale_cache, block_table, sequence_index, kv_capacity,
+      topk, /*query_absolute_start=*/0, /*compress_ratio=*/4, output,
+      mate_compressed_block_table, mate_swa_block_table, /*mate_kv_len=*/0,
+      mate_window_size, mate_block_size, mate_physical_indices,
+      mate_extra_physical_indices, dynamic_kv_len);
+}
+
+void deepseek_v4_mate_causal_lengths(const torch::Tensor& kv_seq_lens,
+                                     int64_t compress_ratio,
+                                     int64_t topk,
+                                     int64_t window,
+                                     torch::Tensor topk_lengths,
+                                     torch::Tensor extra_lengths) {
+  CHECK_EQ(kv_seq_lens.dim(), 1);
+  CHECK_GT(compress_ratio, 0);
+  CHECK_GE(topk, 0);
+  CHECK_GE(window, 0);
+  for (const auto& tensor : {kv_seq_lens, topk_lengths, extra_lengths}) {
+    CHECK(tensor.is_contiguous());
+    CHECK_EQ(tensor.scalar_type(), torch::kInt32);
+    CHECK_EQ(tensor.device(), kv_seq_lens.device());
+    CHECK_EQ(tensor.sizes(), kv_seq_lens.sizes());
+  }
+  CHECK_GT(kv_seq_lens.numel(), 0);
+  dsv4_mate_causal_lengths_kernel
+      <<<(kv_seq_lens.numel() + 127) / 128, 128, 0, current_dsv4_cache_stream()>>>(
+          kv_seq_lens.data_ptr<int32_t>(), topk_lengths.data_ptr<int32_t>(),
+          extra_lengths.data_ptr<int32_t>(), kv_seq_lens.numel(), compress_ratio, topk, window);
+  check_musa_kernel_launch("dsv4 MODEL1 causal lengths");
+}
+
+void deepseek_v4_prepare_c128_mate_indices(
+    const torch::Tensor& kv_seq_lens,
+    const torch::Tensor& compressed_block_table,
+    const torch::Tensor& swa_block_table,
+    int64_t block_size,
+    torch::Tensor logical_indices,
+    torch::Tensor physical_indices,
+    torch::Tensor extra_physical_indices) {
+  CHECK_EQ(kv_seq_lens.dim(), 1);
+  CHECK_EQ(kv_seq_lens.scalar_type(), torch::kInt32);
+  CHECK_GT(block_size, 0);
+  CHECK_EQ(compressed_block_table.dim(), 2);
+  CHECK_EQ(swa_block_table.dim(), 2);
+  CHECK_EQ(compressed_block_table.size(0), 1);
+  CHECK_EQ(swa_block_table.size(0), 1);
+  CHECK_EQ(compressed_block_table.scalar_type(), swa_block_table.scalar_type());
+  CHECK(compressed_block_table.scalar_type() == torch::kInt32 ||
+        compressed_block_table.scalar_type() == torch::kInt64);
+  CHECK_EQ(logical_indices.sizes(), torch::IntArrayRef({kv_seq_lens.size(0), 512}));
+  CHECK_EQ(physical_indices.sizes(), logical_indices.sizes());
+  CHECK_EQ(extra_physical_indices.sizes(), torch::IntArrayRef({kv_seq_lens.size(0), 128}));
+  for (const auto& tensor : {logical_indices, physical_indices, extra_physical_indices}) {
+    CHECK_EQ(tensor.scalar_type(), torch::kInt32);
+  }
+  for (const auto& tensor : {kv_seq_lens, compressed_block_table, swa_block_table,
+                             logical_indices, physical_indices, extra_physical_indices}) {
+    CHECK(tensor.is_contiguous());
+    CHECK_EQ(tensor.device(), kv_seq_lens.device());
+  }
+  auto launch = [&](auto tag) {
+    using Index = decltype(tag);
+    dsv4_c128_mate_indices_kernel<Index>
+        <<<kv_seq_lens.size(0), 256, 0, current_dsv4_cache_stream()>>>(
+            kv_seq_lens.data_ptr<int32_t>(), compressed_block_table.data_ptr<Index>(),
+            swa_block_table.data_ptr<Index>(), logical_indices.data_ptr<int32_t>(),
+            physical_indices.data_ptr<int32_t>(), extra_physical_indices.data_ptr<int32_t>(),
+            block_size, compressed_block_table.size(1), swa_block_table.size(1), 512);
+  };
+  if (compressed_block_table.scalar_type() == torch::kInt32) {
+    launch(int32_t{0});
+  } else {
+    launch(int64_t{0});
+  }
+  check_musa_kernel_launch("dsv4 C128 causal MODEL1 indices");
 }
 
 torch::Tensor deepseek_v4_logical_to_physical_topk(
@@ -3201,6 +3620,86 @@ torch::Tensor deepseek_v4_compress_decode_sequence_c4(
       });
   check_musa_kernel_launch("dsv4 compress decode sequence c4 kernel");
   return result;
+}
+
+torch::Tensor deepseek_v4_compress_decode_sequence_graph(
+    torch::Tensor kv_state,
+    torch::Tensor score_state,
+    const torch::Tensor& kv_steps,
+    const torch::Tensor& score_steps,
+    const torch::Tensor& ape,
+    int64_t compress_ratio,
+    int64_t head_dim,
+    const torch::Tensor& start_position,
+    const torch::Tensor& output) {
+  CHECK(compress_ratio == 4 || compress_ratio == 128);
+  CHECK_GT(head_dim, 0);
+  const int64_t coeff = compress_ratio == 4 ? 2 : 1;
+  const int64_t width = coeff * head_dim;
+  CHECK_EQ(kv_steps.dim(), 2);
+  CHECK_EQ(kv_steps.size(1), width);
+  CHECK_EQ(score_steps.sizes(), kv_steps.sizes());
+  CHECK_EQ(kv_steps.stride(1), 1);
+  CHECK_EQ(score_steps.stride(1), 1);
+  CHECK_EQ(score_steps.scalar_type(), kv_steps.scalar_type());
+  CHECK(kv_steps.scalar_type() == torch::kFloat32 ||
+        kv_steps.scalar_type() == torch::kFloat16 ||
+        kv_steps.scalar_type() == torch::kBFloat16);
+  CHECK_EQ(kv_state.sizes(), torch::IntArrayRef({compress_ratio * coeff, width}));
+  CHECK_EQ(score_state.sizes(), kv_state.sizes());
+  CHECK_EQ(ape.sizes(), torch::IntArrayRef({compress_ratio, width}));
+  CHECK_EQ(kv_state.scalar_type(), torch::kFloat32);
+  CHECK_EQ(score_state.scalar_type(), torch::kFloat32);
+  CHECK_EQ(ape.scalar_type(), torch::kFloat32);
+  CHECK_EQ(start_position.numel(), 1);
+  CHECK(start_position.scalar_type() == torch::kInt32 ||
+        start_position.scalar_type() == torch::kInt64);
+  CHECK(!start_position.device().is_cpu());
+  const int64_t token_count = kv_steps.size(0);
+  const int64_t output_capacity = output.size(0);
+  CHECK_EQ(output.sizes(), torch::IntArrayRef({output_capacity, head_dim}));
+  CHECK_EQ(output.scalar_type(), kv_steps.scalar_type());
+  for (const torch::Tensor& tensor :
+       {kv_state, score_state, ape, start_position, output}) {
+    CHECK(tensor.is_contiguous());
+    CHECK_EQ(tensor.device(), kv_steps.device());
+  }
+  CHECK_EQ(score_steps.device(), kv_steps.device());
+  if (token_count == 0) {
+    return output;
+  }
+  const dim3 block(kCompressDecodeSequenceC4BlockSize);
+  const dim3 grid((head_dim + block.x - 1) / block.x);
+  const musaStream_t stream = current_dsv4_cache_stream();
+  DISPATCH_FLOATING_TYPES(
+      kv_steps.scalar_type(), "dsv4_compress_decode_sequence_graph", [&] {
+        auto launch = [&](auto position_tag, auto ratio_tag) {
+          using Position = decltype(position_tag);
+          constexpr int32_t kRatio = decltype(ratio_tag)::value;
+          dsv4_compress_decode_sequence_graph_kernel<scalar_t, Position, kRatio>
+              <<<grid, block, 0, stream>>>(
+                  kv_state.data_ptr<float>(), score_state.data_ptr<float>(),
+                  kv_steps.data_ptr<scalar_t>(), kv_steps.stride(0),
+                  score_steps.data_ptr<scalar_t>(), score_steps.stride(0),
+                  ape.data_ptr<float>(), start_position.data_ptr<Position>(),
+                  output.data_ptr<scalar_t>(), token_count, head_dim,
+                  output_capacity);
+        };
+        auto dispatch_ratio = [&](auto position_tag) {
+          if (compress_ratio == 4) {
+            launch(position_tag, std::integral_constant<int32_t, 4>{});
+          } else {
+            launch(position_tag, std::integral_constant<int32_t, 128>{});
+          }
+        };
+        if (start_position.scalar_type() == torch::kInt32) {
+          dispatch_ratio(int32_t{0});
+        } else {
+          dispatch_ratio(int64_t{0});
+        }
+      });
+  check_musa_kernel_launch("dsv4 compress decode sequence graph kernel");
+  return output;
 }
 
 torch::Tensor deepseek_v4_hc_pre_combine(

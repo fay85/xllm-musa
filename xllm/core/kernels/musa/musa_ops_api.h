@@ -278,6 +278,16 @@ torch::Tensor deepseek_v4_state_slots(const torch::Tensor& block_table,
                                       const torch::Tensor& output);
 
 // Graph-safe paged-state restore into caller-owned workspaces.
+// Group independent cache roles without changing their per-role mapping.
+void deepseek_v4_state_gather_many(
+    const std::vector<torch::Tensor>& caches,
+    const std::vector<torch::Tensor>& block_tables,
+    const std::vector<int64_t>& state_rows,
+    const std::vector<torch::Tensor>& slots,
+    const std::vector<torch::Tensor>& outputs,
+    int64_t sequence_index,
+    const torch::Tensor& input_positions = {});
+
 torch::Tensor deepseek_v4_state_gather(
     const torch::Tensor& cache,
     const torch::Tensor& block_table,

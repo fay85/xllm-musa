@@ -28,6 +28,34 @@ prefill_threshold=${XLLM2_EXTERNAL_TP8_PREFILL_THRESHOLD:-0.95}
 prefill_chunk=${XLLM2_EXTERNAL_TP8_PREFILL_CHUNK:-$max_tokens}
 max_graph_tokens=${XLLM2_EXTERNAL_TP8_MAX_GRAPH_TOKENS:-2048}
 graph_vmm_pool=${XLLM2_EXTERNAL_TP8_GRAPH_VMM_POOL:-true}
+enable_online_profile=${XLLM2_EXTERNAL_TP8_ONLINE_PROFILE:-false}
+# Check resources before starting any rank: master+1 is the TP TCPStore port.
+# Never stop an existing process here; the experiment owner must release it.
+[[ -x "$xllm_bin" ]] || { echo "Missing executable: $xllm_bin" >&2; exit 2; }
+python3 - "$port" "$master" <<'PY'
+import socket, sys
+http_port = int(sys.argv[1])
+master_host, master_port = sys.argv[2].rsplit(':', 1)
+ports = [http_port, int(master_port), int(master_port) + 1]
+if len(set(ports)) != len(ports):
+    raise SystemExit('HTTP/master/TCPStore ports must be distinct')
+held = []
+try:
+    for port in ports:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        held.append(sock)
+        sock.bind((master_host, port))
+except OSError as exc:
+    raise SystemExit(f'Port preflight failed at {master_host}:{port}: {exc}')
+finally:
+    for sock in held:
+        sock.close()
+PY
+# Consume ps output fully under pipefail (rg -q can terminate ps with SIGPIPE).
+if ps -eo args= | rg '^python[0-9.]* .*musa_gpu_reservation\.py( |$)|^bash (tools/|.*/tools/)reserve_idle_musa\.sh( |$)' >/dev/null; then
+  echo "GPU reservation is still running; release it before launching ranks." >&2
+  exit 2
+fi
 draft_args=(--draft_model="$model_path")
 if [[ "$disable_draft" == true ]]; then
   num_speculative_tokens=0
@@ -60,6 +88,7 @@ find "$ops_path" -maxdepth 2 -type f \( -name '*.so' -o -name 'manifest.json' \)
   echo "max_tokens_per_chunk_for_prefill=$prefill_chunk"
   echo "max_tokens_for_graph_mode=$max_graph_tokens"
   echo "graph_vmm_pool=$graph_vmm_pool"
+  echo "enable_online_profile=$enable_online_profile"
   echo "kv_cache_dtype=$kv_cache_dtype"
   echo "host_blocks_factor=$host_blocks_factor"
   echo "num_speculative_tokens=$num_speculative_tokens"
@@ -74,6 +103,12 @@ find "$ops_path" -maxdepth 2 -type f \( -name '*.so' -o -name 'manifest.json' \)
   sha256sum "$run_dir/ops_artifacts.sha256"
   echo "custom_ar_so=$custom_ar"
   sha256sum "$custom_ar"
+  echo "routing_environment_begin"
+  echo "OMP_NUM_THREADS=${OMP_NUM_THREADS:-unset}"
+  echo "MKL_NUM_THREADS=${MKL_NUM_THREADS:-unset}"
+  # Only allowlisted execution flags; never dump unrelated credentials.
+  env | LC_ALL=C sort | rg '^(XLLM_DSV4_|XLLM_GRAPH_|XLLM_MUSA_GRAPH_|XLLM_KEEP_HOST_MIRROR_REFRESH=)' || true
+  echo "routing_environment_end"
 } > "$run_dir/launch_manifest.txt"
 
 pids=()
@@ -110,7 +145,7 @@ launch_rank() {
     "${draft_args[@]}" \
     --enable_graph="$enable_graph" \
     --enable_graph_vmm_pool="$graph_vmm_pool" --enable_graph_mode_decode_no_padding=true \
-    --max_tokens_for_graph_mode="$max_graph_tokens" --enable_online_profile=false \
+    --max_tokens_for_graph_mode="$max_graph_tokens" --enable_online_profile="$enable_online_profile" \
     --profile_backend=torch --profile_dir="$run_dir/profile" \
     > "$run_dir/rank${rank}.log" 2>&1 &
   pids+=("$!")

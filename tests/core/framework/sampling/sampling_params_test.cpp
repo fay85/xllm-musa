@@ -115,4 +115,43 @@ TEST(SamplingParamsTest, AbnormalConcat) {
   EXPECT_FALSE(sampling_parameters_1.sample_idxes.defined());
 }
 
+TEST(SamplingParamsTest, TemperatureZeroKeepsGreedyWithTopP) {
+  RequestSamplingParam request;
+  request.temperature = 0.0F;
+  request.top_p = 0.95F;
+  request.top_k = 50;
+  request.do_sample = false;
+  SamplingParameters parameters;
+  parameters.init({&request}, {0}, {0}, {{}}, {{}}, {0});
+  ASSERT_TRUE(parameters.do_sample.defined());
+  EXPECT_FALSE(parameters.do_sample.item<bool>());
+  EXPECT_TRUE(parameters.all_greedy_sample);
+  EXPECT_FALSE(parameters.all_random_sample);
+}
+
+TEST(SamplingParamsTest, ExplicitSamplingOverridesTemperatureZero) {
+  RequestSamplingParam request;
+  request.temperature = 0.0F;
+  request.top_p = 0.95F;
+  request.do_sample = true;
+  SamplingParameters parameters;
+  parameters.init({&request}, {0}, {0}, {{}}, {{}}, {0});
+  ASSERT_TRUE(parameters.do_sample.defined());
+  EXPECT_TRUE(parameters.do_sample.item<bool>());
+  EXPECT_FALSE(parameters.all_greedy_sample);
+  EXPECT_TRUE(parameters.all_random_sample);
+}
+
+TEST(SamplingParamsTest, MixedTemperatureClassification) {
+  RequestSamplingParam greedy, random;
+  greedy.top_p = 0.95F;
+  random.temperature = 0.7F;
+  random.top_p = 0.95F;
+  SamplingParameters parameters;
+  parameters.init({&random, &greedy}, {3, 5}, {1, 0}, {{}, {}}, {{}, {}}, {0, 0});
+  EXPECT_TRUE(torch::equal(parameters.do_sample, torch::tensor({false, true})));
+  EXPECT_FALSE(parameters.all_greedy_sample);
+  EXPECT_FALSE(parameters.all_random_sample);
+}
+
 }  // namespace xllm

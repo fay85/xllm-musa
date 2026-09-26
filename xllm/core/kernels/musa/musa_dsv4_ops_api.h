@@ -92,6 +92,50 @@ torch::Tensor deepseek_v4_mate_sparse_attention_decode(
     double softmax_scale,
     const std::optional<torch::Tensor>& output = std::nullopt);
 
+// B1 compact verify: every query row reads its replay-time causal KV length.
+// Compressed rows must already be published to the paged cache. Capacity is
+// only a workspace bound, never the number of logically visible C128 rows.
+torch::Tensor deepseek_v4_paged_attention_verify_compressed(
+    const torch::Tensor& q,
+    const torch::Tensor& cache,
+    const torch::Tensor& block_table,
+    const torch::Tensor& kv_seq_lens,
+    const torch::Tensor& compressed_cache,
+    const torch::Tensor& compressed_block_table,
+    int64_t compressed_capacity,
+    int64_t compression_ratio,
+    const torch::Tensor& attn_sink,
+    double softmax_scale,
+    const torch::Tensor& output);
+
+torch::Tensor deepseek_v4_paged_attention_sas(
+    const torch::Tensor& q,
+    const torch::Tensor& cache,
+    const torch::Tensor& block_table,
+    int64_t sequence_index,
+    int64_t kv_len,
+    int64_t window_size,
+    const torch::Tensor& attn_sink,
+    double softmax_scale,
+    const torch::Tensor& output);
+
+torch::Tensor deepseek_v4_greedy_verify_tokens(
+    const torch::Tensor& draft_tokens,
+    const torch::Tensor& target_tokens,
+    const torch::Tensor& output);
+
+torch::Tensor deepseek_v4_paged_attention_verify_c128(
+    const torch::Tensor& q,
+    const torch::Tensor& cache,
+    const torch::Tensor& block_table,
+    const torch::Tensor& kv_seq_lens,
+    const torch::Tensor& compressed_cache,
+    const torch::Tensor& compressed_block_table,
+    int64_t compressed_capacity,
+    const torch::Tensor& attn_sink,
+    double softmax_scale,
+    const torch::Tensor& output);
+
 torch::Tensor deepseek_v4_mate_sparse_attention_decode_batched(
     const torch::Tensor& q,
     const torch::Tensor& packed_cache,
@@ -103,6 +147,23 @@ torch::Tensor deepseek_v4_mate_sparse_attention_decode_batched(
     const torch::Tensor& attn_sink,
     double softmax_scale,
     const std::optional<torch::Tensor>& output = std::nullopt);
+
+// Set the per-step key used to share batched MATE scheduling metadata across
+// DSV4 Attention layers. The key is thread-local to the serving worker.
+void deepseek_v4_mate_sparse_attention_set_metadata_key(int64_t metadata_key);
+void deepseek_v4_mate_sparse_attention_set_metadata_group(int64_t metadata_group);
+void deepseek_v4_mate_causal_lengths(const torch::Tensor& kv_seq_lens,
+                                     int64_t compress_ratio,
+                                     int64_t topk,
+                                     int64_t window,
+                                     torch::Tensor topk_lengths,
+                                     torch::Tensor extra_lengths);
+
+// Graph capture performs eager warmup/FFI-recording forwards before the real
+// capture. DSV4 compressor/indexer state must not advance during those
+// preparation forwards; the flag is thread-local to the graph worker.
+void deepseek_v4_set_graph_capture_warmup(bool enabled);
+bool deepseek_v4_graph_capture_warmup();
 
 torch::Tensor deepseek_v4_mate_sparse_attention_prefill(
     const torch::Tensor& q,
@@ -193,6 +254,38 @@ torch::Tensor deepseek_v4_indexer_topk(
     const std::optional<torch::Tensor>& mate_extra_physical_indices =
         std::nullopt);
 
+// Graph variant: kv_capacity is storage capacity, not the live C4 history.
+// dynamic_kv_len is an int32 device vector containing each query row's
+// uncompressed KV length. Query rows share one logical sequence/block table;
+// scoring and completion counters are independent. The eager ABI is unchanged.
+torch::Tensor deepseek_v4_indexer_topk_graph(
+    const torch::Tensor& query,
+    const torch::Tensor& weights,
+    const torch::Tensor& cache,
+    const torch::Tensor& scale_cache,
+    const torch::Tensor& block_table,
+    int64_t sequence_index,
+    int64_t kv_capacity,
+    int64_t topk,
+    const torch::Tensor& output,
+    const torch::Tensor& mate_compressed_block_table,
+    const torch::Tensor& mate_swa_block_table,
+    int64_t mate_window_size,
+    int64_t mate_block_size,
+    const torch::Tensor& mate_physical_indices,
+    const torch::Tensor& mate_extra_physical_indices,
+    const torch::Tensor& dynamic_kv_len);
+
+// All causal C128 rows plus each query's SWA tail, for MODEL1 batch decode.
+void deepseek_v4_prepare_c128_mate_indices(
+    const torch::Tensor& kv_seq_lens,
+    const torch::Tensor& compressed_block_table,
+    const torch::Tensor& swa_block_table,
+    int64_t block_size,
+    torch::Tensor logical_indices,
+    torch::Tensor physical_indices,
+    torch::Tensor extra_physical_indices);
+
 torch::Tensor deepseek_v4_logical_to_physical_topk(
     const torch::Tensor& logical_indices,
     const torch::Tensor& block_table,
@@ -245,6 +338,21 @@ torch::Tensor deepseek_v4_compress_decode_sequence_c4(
     int64_t head_dim,
     int64_t absolute_start_position,
     const std::optional<torch::Tensor>& output = std::nullopt);
+
+// Graph-safe C4/C128 sequence compression. The first absolute position is
+// read on device at replay time. Output has ceil(tokens / ratio) rows: valid
+// boundaries are packed first and unused rows are zeroed. Cache publication
+// must use the matching dynamic slot mapping (unused slots are -1).
+torch::Tensor deepseek_v4_compress_decode_sequence_graph(
+    torch::Tensor kv_state,
+    torch::Tensor score_state,
+    const torch::Tensor& kv_steps,
+    const torch::Tensor& score_steps,
+    const torch::Tensor& ape,
+    int64_t compress_ratio,
+    int64_t head_dim,
+    const torch::Tensor& start_position,
+    const torch::Tensor& output);
 
 torch::Tensor deepseek_v4_scale_to_fp32(
     const torch::Tensor& input,

@@ -32,6 +32,16 @@ limitations under the License.
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/musa/musa_fp8_linear.h"
 
+// The shared CUDA source is remapped into kernel::musa by musamapping, while
+// musa_ops_api.h retains the historical CUDA namespace declaration. Keep the
+// MUSA declaration local to this implementation so the grouped FP8 path can
+// link against the actual MUSA archive symbol.
+namespace xllm::kernel::musa {
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
+    const torch::Tensor& expert_id,
+    int64_t num_experts);
+}  // namespace xllm::kernel::musa
+
 namespace xllm {
 namespace layer {
 namespace {
@@ -832,7 +842,9 @@ torch::Tensor DeepseekV4MoEImpl::forward_grouped_fp8(
                              torch::full_like(local_ids, -1));
   }
 
-  const auto route_index = kernel::cuda::moe_compute_index(
+  // This is the MUSA build of the shared index kernel. The source file is
+  // shared with CUDA but musamapping places its symbol in kernel::musa.
+  const auto route_index = kernel::musa::moe_compute_index(
       local_ids.reshape({-1}), num_experts_per_rank_);
   const auto dst_to_src = std::get<1>(route_index);
   const auto expert_counts = std::get<2>(route_index);
@@ -949,10 +961,15 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
                              shared_overlap_state->stream.stream()),
              musaSuccess);
   }
-  const bool use_fp8_gemv = input_params.meta.batch_forward_type.is_decode() &&
-                            input_2d.size(0) > 0 &&
-                            input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
-                            fp8_experts_loaded();
+  const char* disable_fp8_gemv_env =
+      std::getenv("XLLM_DSV4_DISABLE_MOE_FP8_GEMV");
+  const bool disable_fp8_gemv =
+      disable_fp8_gemv_env != nullptr &&
+      std::string(disable_fp8_gemv_env) == "1";
+  const bool use_fp8_gemv =
+      !disable_fp8_gemv && input_params.meta.batch_forward_type.is_decode() &&
+      input_2d.size(0) > 0 && input_2d.size(0) <= kFp8GemvWorkspaceTokens &&
+      fp8_experts_loaded();
   if (!use_fp8_gemv && weights_2d.scalar_type() != input_2d.scalar_type()) {
     weights_2d = weights_2d.to(input_2d.dtype());
   }

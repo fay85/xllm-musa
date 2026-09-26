@@ -102,7 +102,13 @@ std::tuple<torch::Tensor, torch::Tensor> DeepseekV4GateImpl::forward(
       << hidden_size_ << " got " << hidden_states.size(-1);
 
   const int64_t num_tokens = hidden_states.numel() / hidden_size_;
-  if (score_func_to_norm_type(score_func_) == 2 && weight_bf16_.defined() &&
+  const char* disable_gate_gemv_env =
+      std::getenv("XLLM_DSV4_DISABLE_GATE_GEMV");
+  const bool disable_gate_gemv =
+      disable_gate_gemv_env != nullptr &&
+      std::string(disable_gate_gemv_env) == "1";
+  if (!disable_gate_gemv && score_func_to_norm_type(score_func_) == 2 &&
+      weight_bf16_.defined() &&
       num_tokens > 0 && num_tokens <= decode_workspace_tokens_) {
     auto input_2d = hidden_states.reshape({num_tokens, hidden_size_});
     auto logits_output = decode_logits_output_.narrow(

@@ -20,8 +20,11 @@ limitations under the License.
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -33,6 +36,9 @@ limitations under the License.
 #include "framework/model/model_args.h"
 #include "framework/parallel_state/process_group.h"
 #include "framework/sampling/rejection_sampler.h"
+#if defined(USE_MUSA)
+#include "core/kernels/musa/musa_dsv4_ops_api.h"
+#endif
 #if defined(USE_NPU) || defined(USE_MLU)
 #include "framework/kv_cache_transfer/mooncake_kv_cache_transfer.h"
 #endif
@@ -48,9 +54,122 @@ limitations under the License.
 namespace xllm {
 namespace {
 
+bool dsv4_fast_greedy_verify_enabled() {
+#if defined(USE_MUSA)
+  const char* value = std::getenv("XLLM_DSV4_FAST_GREEDY_VERIFY");
+  return value != nullptr && std::string(value) == "1";
+#else
+  return false;
+#endif
+}
+
 bool dsv4_log_accepted_state_enabled() {
   const char* value = std::getenv("XLLM_DSV4_LOG_ACCEPTED_STATE");
   return value != nullptr && std::string(value) == "1";
+}
+
+bool dsv4_log_verify_tokens_enabled() {
+  const char* value = std::getenv("XLLM_DSV4_LOG_VERIFY_TOKENS");
+  return value != nullptr && std::string(value) == "1";
+}
+
+std::mutex& dsv4_first_verify_mutex() {
+  static std::mutex mutex;
+  return mutex;
+}
+
+std::unordered_map<const DFlashWorkerImpl*, bool>&
+dsv4_first_verify_flags() {
+  static std::unordered_map<const DFlashWorkerImpl*, bool> flags;
+  return flags;
+}
+
+std::unordered_map<const DFlashWorkerImpl*, int32_t>&
+dsv4_target_only_remaining() {
+  static std::unordered_map<const DFlashWorkerImpl*, int32_t> counts;
+  return counts;
+}
+
+int32_t dsv4_target_only_verify_count() {
+  const char* value = std::getenv("XLLM_DSV4_TARGET_ONLY_VERIFY_COUNT");
+  if (value == nullptr || *value == '\0') {
+    return 0;
+  }
+  char* end = nullptr;
+  const long parsed = std::strtol(value, &end, 10);
+  return end != value && *end == '\0' && parsed > 0
+             ? static_cast<int32_t>(std::min<long>(parsed, 32))
+             : 0;
+}
+
+std::unordered_map<const DFlashWorkerImpl*, std::unordered_set<std::string>>&
+dsv4_initialized_requests() {
+  static std::unordered_map<const DFlashWorkerImpl*,
+                            std::unordered_set<std::string>> requests;
+  return requests;
+}
+
+void dsv4_mark_first_verify(const DFlashWorkerImpl* worker,
+                            const ForwardInput& input) {
+  std::lock_guard<std::mutex> lock(dsv4_first_verify_mutex());
+  const char* first_verify_env =
+      std::getenv("XLLM_DSV4_FIRST_TARGET_ONLY");
+  const bool first_only = first_verify_env != nullptr &&
+                          std::string(first_verify_env) == "1";
+  const int32_t target_only_count = dsv4_target_only_verify_count();
+  dsv4_first_verify_flags()[worker] = false;
+  if (!first_only && target_only_count <= 0) {
+    dsv4_target_only_remaining()[worker] = 0;
+    return;
+  }
+  bool first = false;
+  auto& requests = dsv4_initialized_requests()[worker];
+  for (size_t index = 0;
+       index < input.input_params.embedding.embedding_ids.size(); ++index) {
+    std::string key;
+    if (index < input.input_params.embedding.request_ids.size() &&
+        !input.input_params.embedding.request_ids[index].empty()) {
+      key = input.input_params.embedding.request_ids[index];
+    } else {
+      key = "embedding:" + std::to_string(
+                                input.input_params.embedding.embedding_ids[index]);
+    }
+    const bool inserted = requests.insert(std::move(key)).second;
+    first = inserted || first;
+    if (inserted && target_only_count > 0) {
+      dsv4_target_only_remaining()[worker] = target_only_count;
+    }
+  }
+  dsv4_first_verify_flags()[worker] = first_only && first;
+}
+
+void dsv4_reset_initialized_requests(const DFlashWorkerImpl* worker,
+                                     const ForwardInput& input) {
+  std::lock_guard<std::mutex> lock(dsv4_first_verify_mutex());
+  auto& requests = dsv4_initialized_requests()[worker];
+  for (size_t index = 0;
+       index < input.input_params.embedding.embedding_ids.size(); ++index) {
+    if (index < input.input_params.embedding.request_ids.size() &&
+        !input.input_params.embedding.request_ids[index].empty()) {
+      requests.erase(input.input_params.embedding.request_ids[index]);
+    } else {
+      requests.erase("embedding:" + std::to_string(
+                                     input.input_params.embedding.embedding_ids[index]));
+    }
+  }
+}
+
+bool dsv4_consume_first_verify(const DFlashWorkerImpl* worker) {
+  std::lock_guard<std::mutex> lock(dsv4_first_verify_mutex());
+  auto& flags = dsv4_first_verify_flags();
+  const bool first = flags[worker];
+  flags[worker] = false;
+  auto& remaining = dsv4_target_only_remaining();
+  if (remaining[worker] > 0) {
+    --remaining[worker];
+    return true;
+  }
+  return first;
 }
 
 template <typename T>
@@ -610,6 +729,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_empty(
 std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
     const ForwardInput& input) {
   Timer timer;
+  dsv4_reset_initialized_requests(this, input);
   ForwardInput processed_target_input;
   ForwardOutput output = run_llm_no_sync_impl(*impl_,
                                               input,
@@ -652,12 +772,13 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
                 timer.elapsed_seconds());
   }
 
+  // Embedding ids are recycled across requests when the scheduler does not
+  // attach request ids. Clear the old tail at every new prefill, including
+  // paths without selected_token_idxes (for example prefix-cache/chunked
+  // bootstrap requests), so Graph verify cannot inherit a previous request's
+  // accepted embedding or position offset.
+  embedding_cache_->clear(input.input_params.embedding.embedding_ids);
   if (input.sampling_params.selected_token_idxes.defined()) {
-    // Embedding ids are recycled across requests when the scheduler does not
-    // attach request ids. Clear the old tail before publishing this prefill so
-    // a new request cannot inherit the previous request's draft/target
-    // embedding or accepted-position offset.
-    embedding_cache_->clear(input.input_params.embedding.embedding_ids);
     embedding_cache_->write_prefill_target_context(
         input.input_params.embedding.embedding_ids,
         input.input_params.embedding.request_ids,
@@ -743,6 +864,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_decode(
   CHECK_EQ(last_states.size(),
            input.input_params.embedding.embedding_ids.size())
       << "DFlash decode target state count mismatch";
+  dsv4_mark_first_verify(this, input);
 
   update_decode_step_input(input, last_states);
   DraftBlock draft_block = run_decode_draft(input, validate_input);
@@ -881,6 +1003,11 @@ SampleOutput DFlashWorkerImpl::validate(
     const SamplingParameters& sampling_params,
     const DraftBlock& draft_block,
     const ForwardOutput& target_output) {
+  if (dsv4_fast_greedy_verify_enabled() && sampling_params.all_greedy_sample) {
+    // Greedy rejection never reads proposal probabilities. Do not materialize
+    // a dense [batch, draft, vocab] carrier for values that cannot be consumed.
+    return validate(sampling_params, draft_block.token_ids, torch::Tensor(), target_output);
+  }
   // Draft already emits the whole block [batch, num_speculative_tokens]; feed
   // it straight to the verifier without the per-step select/view/cat round
   // trip. The shared rejection sampler uses MTP's dense contract, so
@@ -925,6 +1052,18 @@ SampleOutput DFlashWorkerImpl::validate(
   torch::Tensor target_logits =
       target_output.logits.view({batch_size, num_val_tokens, vocab_size});
 
+  if (dsv4_log_verify_tokens_enabled()) {
+    const torch::Tensor target_argmax =
+        target_logits.argmax(/*dim=*/-1).to(torch::kCPU).to(torch::kLong);
+    LOG(INFO) << "[DSV4_VERIFY_TOKENS] draft="
+              << dsv4_cpu_tensor_vector_string(draft_token_ids)
+              << " target_argmax="
+              << dsv4_cpu_tensor_vector_string(target_argmax)
+              << " target_sampled="
+              << dsv4_cpu_tensor_vector_string(
+                     target_output.sample_output.next_tokens);
+  }
+
   auto rejection_sampler =
       std::make_unique<RejectionSampler>(sampling_params.do_sample,
                                          sampling_params.all_random_sample,
@@ -935,7 +1074,9 @@ SampleOutput DFlashWorkerImpl::validate(
 
   const char* target_only_env =
       std::getenv("XLLM_DSV4_FORCE_TARGET_TOKEN_ONLY");
-  if (target_only_env != nullptr && std::string(target_only_env) == "1") {
+  const bool first_verify = dsv4_consume_first_verify(this);
+  if ((target_only_env != nullptr && std::string(target_only_env) == "1") ||
+      first_verify) {
     // Keep the DSpark draft/target forward for a controlled accuracy A/B, but
     // commit only the target's first row. This rejects the proposed token
     // without reading any GSM8K reference answer and isolates accepted-token
@@ -954,12 +1095,35 @@ SampleOutput DFlashWorkerImpl::validate(
     return target_only_output;
   }
 
-  SampleOutput sample_output =
-      rejection_sampler->forward(draft_token_ids.to(bonus_token_ids),
-                                 draft_probs.to(target_logits.device()),
+  SampleOutput sample_output;
+#if defined(USE_MUSA)
+  const bool reuse_greedy_ids = dsv4_fast_greedy_verify_enabled() &&
+      sampling_params.all_greedy_sample && !target_output.logprobs &&
+      !sampling_params.frequency_penalties.defined() &&
+      !sampling_params.presence_penalties.defined() &&
+      !sampling_params.repetition_penalties.defined() && num_val_tokens <= 32;
+  if (reuse_greedy_ids) {
+    const auto target_tokens = target_output.sample_output.next_tokens.view(
+        {batch_size, num_val_tokens});
+    auto accepted = torch::empty_like(target_tokens);
+    sample_output.next_tokens = kernel::musa::deepseek_v4_greedy_verify_tokens(
+        draft_token_ids.to(target_tokens).contiguous(), target_tokens.contiguous(), accepted);
+    LOG_FIRST_N(INFO, 1) << "[DSV4_FAST_GREEDY_VERIFY] reuse sampled ids and fuse prefix mask";
+  } else
+#endif
+  {
+    sample_output = rejection_sampler->forward(draft_token_ids.to(bonus_token_ids),
+                                 draft_probs.defined() ? draft_probs.to(target_logits.device())
+                                                       : torch::Tensor(),
                                  target_logits,
                                  bonus_token_ids,
                                  /*mask_out_rejected_tokens=*/true);
+  }
+
+  if (dsv4_log_verify_tokens_enabled()) {
+    LOG(INFO) << "[DSV4_VERIFY_TOKENS] accepted="
+              << dsv4_cpu_tensor_vector_string(sample_output.next_tokens);
+  }
 
   const torch::Tensor& embeddings = target_output.sample_output.embeddings;
   sample_output.embeddings =
