@@ -18,10 +18,13 @@ limitations under the License.
 // Keeping route ids and expert padding in int32 avoids PrivateUse1 integer
 // promotion and removes host synchronization from the prefill data path.
 
+#include <glog/logging.h>
 #include <torch/torch.h>
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
 
@@ -41,6 +44,11 @@ constexpr bool metadata_single_cta_enabled() { return false; }
 
 constexpr bool metadata_expert_parallel_enabled() { return true; }
 
+bool metadata_parallel_prefix_enabled() {
+  const char* value = std::getenv("XLLM_DSV4_MOE_PARALLEL_PREFIX");
+  return value != nullptr && std::string(value) == "1";
+}
+
 constexpr int32_t quant_groups_per_cta() { return 1; }
 
 constexpr bool warp_quant_scatter_enabled() { return true; }
@@ -48,6 +56,16 @@ constexpr bool warp_quant_scatter_enabled() { return true; }
 constexpr int32_t warp_quant_scatter_warps_per_cta() { return 16; }
 
 constexpr bool warp_swiglu_quant_enabled() { return false; }
+
+bool long_warp_swiglu_quant_enabled(const torch::Tensor& gate_up) {
+  // Restrict this opt-in experiment to the measured long TP8 BF16 shape.
+  // The original dispatch remains unchanged for short rows and other widths.
+  const char* value = std::getenv("XLLM_DSV4_LONG_MOE_WARP_SWIGLU");
+  return value != nullptr && std::string(value) == "1" &&
+         gate_up.scalar_type() == torch::kBFloat16 &&
+         gate_up.size(1) == 512 && gate_up.size(0) >= 4096 * 6 &&
+         gate_up.size(0) <= 16384 * 6;
+}
 
 constexpr bool restore_combine_2d_enabled() { return true; }
 
@@ -243,6 +261,88 @@ __global__ void build_padded_metadata_expert_parallel_kernel(
   }
 }
 
+// The DSV4/EP1 family has256 experts. Each CTA computes the exact integer
+// prefix in parallel, and every CTA participates in clearing the disjoint
+// tail. No global barrier or floating-point operation is introduced.
+__global__ void build_padded_metadata_parallel_prefix_kernel(
+    const int32_t* __restrict__ sorted_assignment,
+    const int32_t* __restrict__ expert_counts,
+    int32_t* __restrict__ padded_assignment,
+    int32_t* __restrict__ m_indices,
+    int32_t* __restrict__ route_to_padded,
+    int64_t padded_m,
+    int32_t alignment_m) {
+  constexpr int32_t kExperts = 256;
+  constexpr int32_t kWarps = kExperts / kWarpSize;
+  const int32_t expert = static_cast<int32_t>(blockIdx.x);
+  const int32_t tid = static_cast<int32_t>(threadIdx.x);
+  const int32_t lane = tid % kWarpSize;
+  const int32_t warp = tid / kWarpSize;
+  const int32_t count_i = expert_counts[tid];
+  const int32_t padded_i = (count_i + alignment_m - 1) & ~(alignment_m - 1);
+  int32_t source = tid < expert ? count_i : 0;
+  int32_t prefix = tid < expert ? padded_i : 0;
+  int32_t total = padded_i;
+#pragma unroll
+  for (int32_t offset = kWarpSize / 2; offset > 0; offset >>= 1) {
+    source += __shfl_down_sync(0xffffffffU, source, offset);
+    prefix += __shfl_down_sync(0xffffffffU, prefix, offset);
+    total += __shfl_down_sync(0xffffffffU, total, offset);
+  }
+  __shared__ int32_t partial_source[kWarps];
+  __shared__ int32_t partial_prefix[kWarps];
+  __shared__ int32_t partial_total[kWarps];
+  __shared__ int32_t source_offset;
+  __shared__ int32_t padded_offset;
+  __shared__ int32_t total_padded;
+  __shared__ int32_t count;
+  __shared__ int32_t padded_count;
+  if (lane == 0) {
+    partial_source[warp] = source;
+    partial_prefix[warp] = prefix;
+    partial_total[warp] = total;
+  }
+  __syncthreads();
+  if (tid == 0) {
+    int32_t source_sum = 0;
+    int32_t prefix_sum = 0;
+    int32_t total_sum = 0;
+#pragma unroll
+    for (int32_t index = 0; index < kWarps; ++index) {
+      source_sum += partial_source[index];
+      prefix_sum += partial_prefix[index];
+      total_sum += partial_total[index];
+    }
+    source_offset = source_sum;
+    padded_offset = prefix_sum;
+    total_padded = total_sum;
+    count = expert_counts[expert];
+    padded_count = (count + alignment_m - 1) & ~(alignment_m - 1);
+  }
+  __syncthreads();
+  for (int32_t index = tid; index < padded_count; index += kExperts) {
+    const int64_t row = static_cast<int64_t>(padded_offset) + index;
+    if (row >= padded_m) {
+      break;
+    }
+    const int32_t route = index < count ? sorted_assignment[source_offset + index] : -1;
+    padded_assignment[row] = route;
+    m_indices[row] = index < count ? expert : -1;
+    if (route_to_padded != nullptr && route >= 0) {
+      route_to_padded[route] = static_cast<int32_t>(row);
+    }
+  }
+  // All writes here are >=total_padded, and all expert intervals end before
+  // that boundary. Therefore tail clearing cannot race an expert's publish.
+  for (int64_t row = static_cast<int64_t>(total_padded) +
+                     static_cast<int64_t>(expert) * kExperts + tid;
+       row < padded_m;
+       row += static_cast<int64_t>(kExperts) * kExperts) {
+    padded_assignment[row] = -1;
+    m_indices[row] = -1;
+  }
+}
+
 void launch_build_padded_metadata(const int32_t* sorted_assignment,
                                   const int32_t* expert_counts,
                                   int32_t* padded_assignment,
@@ -252,6 +352,15 @@ void launch_build_padded_metadata(const int32_t* sorted_assignment,
                                   int32_t num_experts,
                                   int32_t alignment_m,
                                   musaStream_t stream) {
+  if (metadata_parallel_prefix_enabled() && num_experts == 256) {
+    build_padded_metadata_parallel_prefix_kernel<<<256, 256, 0, stream>>>(
+        sorted_assignment, expert_counts, padded_assignment, m_indices,
+        route_to_padded, padded_m, alignment_m);
+    LOG_FIRST_N(INFO, 1) << "[DSV4_MOE_PARALLEL_PREFIX] experts=256 padded_m="
+                        << padded_m << " alignment=" << alignment_m
+                        << " integer_only=1 distributed_tail=1";
+    return;
+  }
   if (metadata_expert_parallel_enabled() && num_experts > 0) {
     build_padded_metadata_expert_parallel_kernel<<<num_experts,
                                                    6 * kWarpSize,
@@ -1114,12 +1223,77 @@ __global__ void restore_combine_2d_kernel(
   }
 }
 
+template <typename Scalar, typename Weight>
+__global__ void restore_combine_vector8_kernel(
+    const Scalar* __restrict__ sorted_output,
+    const int32_t* __restrict__ route_to_padded,
+    const Weight* __restrict__ topk_weights,
+    Scalar* __restrict__ output) {
+  static_assert(sizeof(Scalar) == 2);
+  constexpr int32_t kHidden = 4096;
+  constexpr int32_t kTopk = 6;
+  constexpr int32_t kValues = 8;
+  const int64_t token = blockIdx.x;
+  const int32_t column = blockIdx.y * kMetadataBlock * kValues +
+                         threadIdx.x * kValues;
+  __shared__ int32_t route_rows[kTopk];
+  __shared__ float route_weights[kTopk];
+  if (threadIdx.x < kTopk) {
+    const int64_t route = token * kTopk + threadIdx.x;
+    route_rows[threadIdx.x] = route_to_padded[route];
+    route_weights[threadIdx.x] = static_cast<float>(topk_weights[route]);
+  }
+  __syncthreads();
+  float accumulators[kValues] = {};
+#pragma unroll
+  for (int32_t slot = 0; slot < kTopk; ++slot) {
+    const int32_t row = route_rows[slot];
+    if (row < 0) {
+      continue;
+    }
+    alignas(16) Scalar values[kValues];
+    *reinterpret_cast<uint4*>(values) = *reinterpret_cast<const uint4*>(
+        sorted_output + static_cast<int64_t>(row) * kHidden + column);
+    const float weight = route_weights[slot];
+#pragma unroll
+    for (int32_t value = 0; value < kValues; ++value) {
+      accumulators[value] += weight * static_cast<float>(values[value]);
+    }
+  }
+  alignas(16) Scalar result[kValues];
+#pragma unroll
+  for (int32_t value = 0; value < kValues; ++value) {
+    result[value] = static_cast<Scalar>(accumulators[value]);
+  }
+  *reinterpret_cast<uint4*>(output + token * kHidden + column) =
+      *reinterpret_cast<const uint4*>(result);
+}
+
 template <typename scalar_t, typename weight_t>
 void launch_restore_combine(const torch::Tensor& sorted_output,
                             const torch::Tensor& route_to_padded,
                             const torch::Tensor& topk_weights,
                             torch::Tensor& output,
                             musaStream_t stream) {
+  if constexpr (sizeof(scalar_t) == 2) {
+    const char* enabled = std::getenv("XLLM_DSV4_LONG_MOE_VECTOR_RESTORE");
+    if (enabled != nullptr && std::string(enabled) == "1" &&
+        topk_weights.size(0) >= 4096 && topk_weights.size(0) <= 16384 &&
+        topk_weights.size(1) == 6 && sorted_output.size(1) == 4096 &&
+        sorted_output.scalar_type() == torch::kBFloat16 &&
+        topk_weights.scalar_type() == torch::kBFloat16 &&
+        reinterpret_cast<uintptr_t>(sorted_output.data_ptr()) % 16 == 0 &&
+        reinterpret_cast<uintptr_t>(output.data_ptr()) % 16 == 0) {
+      restore_combine_vector8_kernel<scalar_t, weight_t>
+          <<<dim3(topk_weights.size(0), 2), kMetadataBlock, 0, stream>>>(
+              sorted_output.data_ptr<scalar_t>(),
+              route_to_padded.data_ptr<int32_t>(),
+              topk_weights.data_ptr<weight_t>(), output.data_ptr<scalar_t>());
+      LOG_FIRST_N(INFO, 1) << "[DSV4_LONG_MOE_VECTOR_RESTORE] rows=" << topk_weights.size(0)
+                          << " hidden=4096 topk=6 bf16_router=1";
+      return;
+    }
+  }
   constexpr int32_t kMaxTopK = 16;
   if (restore_combine_2d_enabled() &&
       topk_weights.size(0) >= restore_combine_2d_min_tokens() &&
@@ -1178,8 +1352,13 @@ deepseek_v4_fp8_moe_prepare(const torch::Tensor& input,
   CHECK(input.device() == sorted_assignment.device());
   CHECK(input.device() == expert_counts.device());
   CHECK(topk > 0);
-  CHECK(alignment_m == 128 || alignment_m == 256);
+  // Alignment1 keeps sorted valid routes contiguous for count-based GEMM.
+  // Invalid routes still have inverse=-1 and never enter restore/combine.
+  CHECK(alignment_m == 1 || alignment_m == 128 || alignment_m == 256);
   CHECK(max_padded_assignments > 0);
+  if (alignment_m == 1) {
+    CHECK_GE(max_padded_assignments, input.size(0) * topk);
+  }
 
   const auto int_options = input.options().dtype(torch::kInt32);
   auto padded_assignment = torch::empty({max_padded_assignments}, int_options);
@@ -1243,10 +1422,13 @@ deepseek_v4_fp8_moe_quant_prepare(const torch::Tensor& input,
   CHECK(input.device() == expert_counts.device());
   CHECK(input.size(1) > 0 && input.size(1) % kQuantBlock == 0);
   CHECK(topk > 0);
-  CHECK(alignment_m == 128 || alignment_m == 256);
+  CHECK(alignment_m == 1 || alignment_m == 128 || alignment_m == 256);
   CHECK(max_padded_assignments > 0);
 
   const int64_t num_assignments = input.size(0) * topk;
+  if (alignment_m == 1) {
+    CHECK_GE(max_padded_assignments, num_assignments);
+  }
   auto& workspace = get_quant_prepare_workspace(
       input, max_padded_assignments, num_assignments);
   auto input_fp8 = workspace.input_fp8.narrow(0, 0, max_padded_assignments);
@@ -1555,7 +1737,8 @@ std::tuple<torch::Tensor, torch::Tensor> deepseek_v4_fp8_moe_swiglu_quantize(
       gate_up.scalar_type(),
       "deepseek_v4_fp8_moe_swiglu_quantize",
       [&] {
-        if (warp_swiglu_quant_enabled()) {
+        if (warp_swiglu_quant_enabled() ||
+            long_warp_swiglu_quant_enabled(gate_up)) {
           constexpr int32_t kWarpsPerCta = 8;
           const int64_t total_groups = rows * scale_cols;
           const int64_t warp_grid =

@@ -19,8 +19,13 @@ limitations under the License.
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
+#include <string>
 
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_gate_policy.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_prefill_gate_policy.h"
 
 namespace xllm {
 namespace layer {
@@ -94,7 +99,8 @@ DeepseekV4GateImpl::DeepseekV4GateImpl(const ModelArgs& args,
 
 std::tuple<torch::Tensor, torch::Tensor> DeepseekV4GateImpl::forward(
     const torch::Tensor& hidden_states,
-    const std::optional<torch::Tensor>& input_ids) {
+    const std::optional<torch::Tensor>& input_ids,
+    bool batch_verify) {
   CHECK(hidden_states.defined())
       << "DeepseekV4Gate::forward hidden_states is undefined";
   CHECK_EQ(hidden_states.size(-1), hidden_size_)
@@ -107,14 +113,23 @@ std::tuple<torch::Tensor, torch::Tensor> DeepseekV4GateImpl::forward(
   const bool disable_gate_gemv =
       disable_gate_gemv_env != nullptr &&
       std::string(disable_gate_gemv_env) == "1";
+  const bool batch_mate = batch_verify && num_tokens > decode_workspace_tokens_ &&
+                          decode_logits_output_.defined() &&
+                          num_tokens <= decode_logits_output_.size(0);
   if (!disable_gate_gemv && score_func_to_norm_type(score_func_) == 2 &&
       weight_bf16_.defined() &&
-      num_tokens > 0 && num_tokens <= decode_workspace_tokens_) {
+      num_tokens > 0 && (num_tokens <= decode_workspace_tokens_ || batch_mate)) {
     auto input_2d = hidden_states.reshape({num_tokens, hidden_size_});
     auto logits_output = decode_logits_output_.narrow(
         /*dim=*/0, /*start=*/0, /*length=*/num_tokens);
-    auto logits = kernel::musa::deepseek_v4_gate_gemv(
-        input_2d, weight_bf16_, logits_output);
+    auto logits = batch_mate
+        ? kernel::musa::deepseek_v4_gate_bf16_fp32(input_2d, weight_bf16_, logits_output)
+        : kernel::musa::deepseek_v4_gate_gemv(input_2d, weight_bf16_, logits_output);
+    CHECK(logits.defined()) << "Selected Gate projection is unavailable";
+    if (batch_mate) {
+      LOG_FIRST_N(INFO, 1) << "[DSV4_BATCH_GATE_MATE] rows=" << num_tokens
+                         << " output_fp32=1 target_verify_only=1";
+    }
     auto topk_weights_output = decode_topk_weights_output_.narrow(
         /*dim=*/0, /*start=*/0, /*length=*/num_tokens);
     auto topk_ids_output = decode_topk_ids_output_.narrow(
@@ -137,6 +152,32 @@ std::tuple<torch::Tensor, torch::Tensor> DeepseekV4GateImpl::forward(
                                                  topk_weights_output,
                                                  topk_ids_output);
     }
+    CHECK(!batch_mate) << "Batched target Gate requires valid hash IDs or correction bias";
+  }
+
+  if (!disable_gate_gemv && dsv4_prefill_gate_enabled() &&
+      dsv4_prefill_gate_shape(
+          num_tokens, hidden_size_, n_routed_experts_,
+          score_func_to_norm_type(score_func_), batch_verify,
+          weight_bf16_.defined() && hidden_states.scalar_type() == torch::kBFloat16)) {
+    // The checkpoint weight is already BF16. Only the projection backend
+    // changes; retain FP32 logits and the original native expert selection.
+    // Keep this separate from the small persistent Decode workspaces.
+    torch::Tensor logits;
+    {
+      // In the preserved runtime a null/default Torch stream is bound to
+      // the FFI pool stream. Order both producers and native consumers; the
+      // guard must end before select_experts_native enqueues its operations.
+      kernel::musa::TvmffiStreamGuard stream_guard(hidden_states.device());
+      logits = kernel::musa::deepseek_v4_gate_bf16_fp32(
+          hidden_states.reshape({num_tokens, hidden_size_}),
+          weight_bf16_, /*output=*/std::nullopt);
+    }
+    CHECK(logits.defined()) << "Required Prefill Gate projection unavailable";
+    CHECK_EQ(logits.scalar_type(), torch::kFloat32);
+    LOG_FIRST_N(INFO, 1) << "[DSV4_PREFILL_GATE_BF16_FP32] rows=" << num_tokens
+                        << " original_bf16_weights=1 native_selection=1";
+    return select_experts_native(logits, input_ids);
   }
 
   auto gate_input = hidden_states;
@@ -203,11 +244,14 @@ void DeepseekV4GateImpl::load_state_dict(const StateDict& state_dict) {
     }
   }
   const auto decode_options = weight_.options().dtype(torch::kFloat32);
+  const char* batch_mate_env = std::getenv("XLLM_DSV4_BATCH_GATE_MATE_VERIFY");
+  const bool batch_mate = batch_mate_env != nullptr && std::string(batch_mate_env) == "1";
+  const int64_t capacity = dsv4_gate_workspace_capacity(decode_workspace_tokens_, batch_mate);
   decode_logits_output_ = torch::empty(
-      {decode_workspace_tokens_, n_routed_experts_}, decode_options);
+      {capacity, n_routed_experts_}, decode_options);
   decode_topk_weights_output_ =
-      torch::empty({decode_workspace_tokens_, topk_}, decode_options);
-  decode_topk_ids_output_ = torch::empty({decode_workspace_tokens_, topk_},
+      torch::empty({capacity, topk_}, decode_options);
+  decode_topk_ids_output_ = torch::empty({capacity, topk_},
                                          decode_options.dtype(torch::kInt32));
 
   if (hash_layer_) {

@@ -16,9 +16,11 @@ limitations under the License.
 #include "framework/block/musa/deepseek_v4_prefix_cache_policy.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <map>
 #include <memory>
 #include <mutex>
+#include <string>
 #include <unordered_map>
 #include <utility>
 
@@ -107,18 +109,24 @@ bool snapshot_prefix_blocks(const CompositeBlockManager& composite,
       return false;
     }
 
-    std::vector<Block> prefix_blocks;
-    prefix_blocks.reserve(blocks_needed);
-    for (size_t block_index = 0; block_index < blocks_needed; ++block_index) {
-      prefix_blocks.emplace_back(held[block_index]);
-    }
-
     size_t first_required = 0;
     if (block_type == BlockType::SWA) {
       const size_t window =
           std::max<size_t>(entry.leaf->options().sliding_window_size(), 1);
       if (prefix_tokens > window) {
         first_required = (prefix_tokens - window) / leaf_block_size;
+      }
+    }
+    std::vector<Block> prefix_blocks;
+    prefix_blocks.reserve(blocks_needed);
+    for (size_t block_index = 0; block_index < blocks_needed; ++block_index) {
+      if (block_index < first_required) {
+        // Preserve absolute logical columns without pinning slid-out SWA
+        // pages. Only the tail window and separate recurrent snapshot are
+        // needed on restore; C4/C128 still retain the complete prefix.
+        prefix_blocks.emplace_back();
+      } else {
+        prefix_blocks.emplace_back(held[block_index]);
       }
     }
     for (size_t block_index = first_required;
@@ -196,13 +204,35 @@ bool restore_prefix_blocks(CompositeBlockManager* composite,
   return true;
 }
 
-bool evict_oldest_ready_entry(PrefixCache* cache) {
+bool has_pending_reader(const PrefixCacheEntry& entry,
+                         const PrefixPoolState& pool,
+                         const std::vector<BlockTransferInfo>& transfers) {
+  for (const auto& [sequence, pending] : pool.pending_sequences) {
+    if (pending.restore_src_block_id == entry.state_block.id()) return true;
+  }
+  for (const auto& transfer : transfers) {
+    const auto decoded = decode_deepseek_v4_prefix_transfer(transfer);
+    if (decoded.kind != DeepseekV4PrefixTransferKind::BLOCK_COPY) continue;
+    if (decoded.block_type == BlockType::SWA &&
+        decoded.src_block_id == entry.state_block.id()) return true;
+    const auto blocks = entry.blocks.find(decoded.block_type);
+    if (blocks == entry.blocks.end()) continue;
+    for (const auto& block : blocks->second) {
+      if (block.is_valid() && block.id() == decoded.src_block_id) return true;
+    }
+  }
+  return false;
+}
+
+bool evict_oldest_ready_entry(PrefixCache* cache,
+                              const PrefixPoolState& pool,
+                              const std::vector<BlockTransferInfo>& transfers) {
   if (cache == nullptr) {
     return false;
   }
   auto oldest = cache->end();
   for (auto it = cache->begin(); it != cache->end(); ++it) {
-    if (!it->second.ready) {
+    if (!it->second.ready || has_pending_reader(it->second, pool, transfers)) {
       continue;
     }
     if (oldest == cache->end() ||
@@ -306,13 +336,12 @@ void prepare_deepseek_v4_prefix_snapshot(
   if (owner == nullptr || sequence == nullptr || composite == nullptr ||
       transfers == nullptr || base_block_size == 0 ||
       !owner->options().enable_prefix_cache() ||
-      !has_deepseek_v4_cache_shape(*composite) ||
-      sequence->kv_state().kv_cache_tokens_num() != 0) {
+      !has_deepseek_v4_cache_shape(*composite)) {
     return;
   }
 
   const size_t prompt_tokens = sequence->num_prompt_tokens();
-  if (prompt_tokens == 0 || max_computed_tokens < prompt_tokens) {
+  if (prompt_tokens == 0) {
     return;
   }
   const size_t unaligned_prefix =
@@ -321,7 +350,12 @@ void prepare_deepseek_v4_prefix_snapshot(
           kPrefixRateDenominator;
   const size_t prefix_tokens =
       (unaligned_prefix / base_block_size) * base_block_size;
-  if (prefix_tokens == 0 || prefix_tokens >= prompt_tokens) {
+  const size_t computed_before = sequence->kv_state().kv_cache_tokens_num();
+  const char* chunk_env = std::getenv("XLLM_DSV4_CHUNK_PREFIX_SNAPSHOT");
+  const bool allow_chunked = chunk_env != nullptr && std::string(chunk_env) == "1";
+  if (!deepseek_v4_prefix_snapshot_in_chunk(prompt_tokens, prefix_tokens,
+                                             computed_before, max_computed_tokens,
+                                             allow_chunked)) {
     return;
   }
 
@@ -351,7 +385,7 @@ void prepare_deepseek_v4_prefix_snapshot(
     return;
   }
   while (cache.size() >= kMaxPrefixEntries &&
-         evict_oldest_ready_entry(&cache)) {
+         evict_oldest_ready_entry(&cache, *pool_state, *transfers)) {
   }
   if (cache.size() >= kMaxPrefixEntries) {
     return;
@@ -359,7 +393,8 @@ void prepare_deepseek_v4_prefix_snapshot(
 
   std::vector<Block> state_blocks =
       composite->allocate_blocks(BlockType::SWA, /*num_blocks=*/1);
-  while (state_blocks.empty() && evict_oldest_ready_entry(&cache)) {
+  while (state_blocks.empty() &&
+         evict_oldest_ready_entry(&cache, *pool_state, *transfers)) {
     state_blocks = composite->allocate_blocks(BlockType::SWA, /*num_blocks=*/1);
   }
   if (state_blocks.size() != 1) {
@@ -385,6 +420,11 @@ void prepare_deepseek_v4_prefix_snapshot(
   CHECK(encode_deepseek_v4_prefix_state_snapshot(
       state_block_id, static_cast<int32_t>(prefix_tokens), &snapshot_transfer));
   transfers->emplace_back(std::move(snapshot_transfer));
+  if (allow_chunked) {
+    LOG_FIRST_N(INFO, 8) << "[DSV4_CHUNK_PREFIX_SNAPSHOT] before=" << computed_before
+                       << " end=" << max_computed_tokens << " prefix=" << prefix_tokens
+                       << " prompt=" << prompt_tokens;
+  }
 }
 
 void activate_deepseek_v4_prefix_snapshot(const BlockManagerPool* owner,
@@ -496,6 +536,18 @@ void reset_deepseek_v4_prefix_cache(const BlockManagerPool* owner) {
   }
   pool_state->pending_sequences.clear();
   pool_state->access_counter = 0;
+}
+
+bool evict_one_deepseek_v4_prefix_snapshot(
+    const BlockManagerPool* owner, int32_t dp_rank,
+    const std::vector<BlockTransferInfo>& queued_transfers) {
+  if (!owner || !owner->options().enable_prefix_cache()) return false;
+  std::lock_guard<std::mutex> lock(prefix_pool_states_mutex);
+  auto* pool = find_pool_state(owner);
+  if (!pool || dp_rank < 0 || static_cast<size_t>(dp_rank) >= pool->caches.size()) {
+    return false;
+  }
+  return evict_oldest_ready_entry(&pool->caches[dp_rank], *pool, queued_transfers);
 }
 
 }  // namespace xllm::musa

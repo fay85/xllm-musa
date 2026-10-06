@@ -21,6 +21,7 @@ limitations under the License.
 #include "framework/block/musa/deepseek_v4_prefix_transfer.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_input_params.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 
 namespace xllm::musa {
 
@@ -87,6 +88,13 @@ bool apply_deepseek_v4_prefix_block_copies(
     std::vector<KVCache>* kv_caches,
     const torch::Device& device) {
   if (kv_caches == nullptr || transfers.empty()) {
+    return false;
+  }
+  // Prefix block transfers are host-side cache lifecycle work. They allocate
+  // device index tensors for swap operations and must never run inside an
+  // in-flight MUSA Graph capture. The scheduler will retry/retain the
+  // transfer on the non-capture preparation stream.
+  if (kernel::musa::is_stream_capturing()) {
     return false;
   }
   bool has_private_transfer = false;

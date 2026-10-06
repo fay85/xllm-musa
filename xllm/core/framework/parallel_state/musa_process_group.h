@@ -62,6 +62,11 @@ class ProcessGroupImpl : public ProcessGroup {
     return std::nullopt;
   }
 
+  void long_prefill_host_barrier() {
+    CHECK(custom_all_reduce_ != nullptr);
+    custom_all_reduce_->long_prefill_host_barrier();
+  }
+
  private:
   std::unique_ptr<MusaCustomAllReduce> custom_all_reduce_;
 };

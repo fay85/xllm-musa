@@ -1417,9 +1417,8 @@ class DeepseekV4ModelImpl
         return;
       }
       auto group_positions = positions;
-      if (group_positions.scalar_type() != torch::kInt64) {
-        group_positions = group_positions.to(torch::kInt64);
-      }
+      // MUSA embedding accepts int32 indices. Avoid a device dtype copy while
+      // an ACL Graph is capturing multi-sequence speculative verification.
       positions_map[group] = group_positions;
     };
 
@@ -1454,9 +1453,6 @@ class DeepseekV4ModelImpl
 
     if (dsa.input_positions.defined() && dsa.input_positions.numel() > 0) {
       auto input_positions = dsa.input_positions;
-      if (input_positions.scalar_type() != torch::kInt64) {
-        input_positions = input_positions.to(torch::kInt64);
-      }
       // C4/C128 layers still apply main q/kv RoPE at input-token length; only
       // the RoPE group changes to use the compressed theta.
       auto input_group_cos_sin = dsa_rotary_embedding_->build(

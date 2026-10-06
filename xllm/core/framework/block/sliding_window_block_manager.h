@@ -15,7 +15,7 @@ limitations under the License.
 
 #pragma once
 
-#include "block_manager_impl.h"
+#include "core/framework/block/block_manager_impl.h"
 
 namespace xllm {
 
@@ -30,6 +30,11 @@ class SlidingWindowBlockManager : public BlockManagerImpl {
  public:
   explicit SlidingWindowBlockManager(const Options& options);
   ~SlidingWindowBlockManager() override = default;
+
+  std::optional<std::vector<Block>> allocate_for_sequence(
+      Sequence* seq, size_t num_tokens) override;
+  std::optional<std::vector<Block>> allocate_for_sequence(
+      Sequence* seq, KVCacheState& kv_state, size_t num_tokens) override;
 
   // Deallocate leading blocks that have slid out of the window; leaves
   // invalid placeholders in their slots. Called by the composite after a

@@ -28,6 +28,7 @@ limitations under the License.
 #include <vector>
 
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
+#include "core/kernels/musa/deepseek_v4_hc_policy.h"
 #include "core/kernels/musa/musa_kernel_utils.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
@@ -143,13 +144,12 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
                             double hc_eps,
                             const std::optional<torch::Tensor>& norm_weight,
                             bool* output_is_normalized) {
-  // The Mate prefill pair is model-level validated through the largest local
-  // TP8/SP8 shard produced by the fixed 2.5K gate (313 rows).  Keep larger or
-  // otherwise unsupported shapes on the local correctness-first kernel.
-  constexpr int64_t kMatePrefillValidatedMaxTokens = 320;
+  // Large rows are opt-in; the original <=320 model-validated route remains
+  // the default until the candidate also completes model-level acceptance.
+  const int64_t max_prefill_tokens = deepseek_v4_hc_prefill_row_limit(x.size(2));
   const int64_t tokens = x.size(0);
   if (x.scalar_type() != torch::kBFloat16 || tokens < 1 ||
-      tokens > kMatePrefillValidatedMaxTokens || sinkhorn_iters != 20) {
+      tokens > max_prefill_tokens || sinkhorn_iters != 20) {
     return false;
   }
   const bool is_prefill = tokens > 1;
@@ -198,7 +198,7 @@ bool try_mate_hc_pre_decode(const torch::Tensor& x,
         }
         LOG_FIRST_N(INFO, 1)
             << "DeepSeek-V4 MUSA Mate prefill HC prenorm and big-fuse enabled; "
-            << "validated tokens <= " << kMatePrefillValidatedMaxTokens << ".";
+            << "configured tokens <= " << max_prefill_tokens << ".";
         return true;
       }
     }

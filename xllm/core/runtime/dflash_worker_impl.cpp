@@ -39,7 +39,7 @@ limitations under the License.
 #if defined(USE_MUSA)
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #endif
-#if defined(USE_NPU) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
 #include "framework/kv_cache_transfer/mooncake_kv_cache_transfer.h"
 #endif
 #if defined(USE_NPU)
@@ -607,7 +607,7 @@ bool DFlashWorkerImpl::allocate_kv_cache(const KVCacheShape& kv_cache_shape) {
   return target_allocated && draft_allocated;
 }
 
-#if defined(USE_NPU) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
 bool DFlashWorkerImpl::allocate_kv_cache_with_transfer(
     const KVCacheShape& kv_cache_shape) {
   const int64_t num_blocks = kv_cache_shape.key_cache_shape()[0];
@@ -630,10 +630,10 @@ bool DFlashWorkerImpl::allocate_kv_cache_with_transfer(
           device_,
           context_.get_model_args().model_type());
     }
-#elif defined(USE_MLU)
+#elif defined(USE_MLU) || defined(USE_MUSA)
     CHECK_EQ(::xllm::DisaggPDConfig::get_instance().kv_cache_transfer_type(),
              "Mooncake")
-        << "MLU DFlash only supports Mooncake KV transfer.";
+        << "MLU/MUSA DFlash only supports Mooncake KV transfer.";
     kv_cache_transfer_ = std::make_shared<MooncakeKVCacheTransferDefault>(
         device_.index(),
         options_.transfer_listen_port(),
@@ -728,6 +728,12 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_empty(
 
 std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
     const ForwardInput& input) {
+#if defined(USE_MUSA)
+  // Target/context work uses compute_stream_, but bootstrap index_select and
+  // EmbeddingCache tail clones previously escaped onto the caller's default
+  // stream. Keep all prefill output consumers in one ordered stream.
+  c10::StreamGuard prefill_stream_guard = compute_stream_->set_stream_guard();
+#endif
   Timer timer;
   dsv4_reset_initialized_requests(this, input);
   ForwardInput processed_target_input;
@@ -739,6 +745,52 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
                              .value();
   COUNTER_ADD(speculative_execution_latency_seconds_target,
               timer.elapsed_seconds());
+
+#if defined(USE_MUSA)
+  const bool trace_prefill_final = driver_ &&
+      std::getenv("XLLM_DSV4_TRACE_PREFILL_FINAL_ROWS") != nullptr;
+  torch::Tensor sampled_before_context;
+  torch::Tensor selected_before_context;
+  if (trace_prefill_final) {
+    // Snapshot on the compute stream, but defer host reads until the normal
+    // prefill completion point below. An early D2H read changed the timing
+    // of this bug; this probe does not insert an early synchronization.
+    if (output.sample_output.next_tokens.defined()) {
+      sampled_before_context = output.sample_output.next_tokens.clone();
+    }
+    if (processed_target_input.sampling_params.selected_token_idxes.defined()) {
+      selected_before_context =
+          processed_target_input.sampling_params.selected_token_idxes.clone();
+    }
+  }
+  if (driver_ && std::getenv("XLLM_DSV4_TRACE_PREFILL_ROWS") != nullptr) {
+    const auto values = [](const torch::Tensor& tensor) {
+      std::string text = "[";
+      if (tensor.defined()) {
+        auto host = tensor.to(torch::kCPU, torch::kInt64).contiguous().view(-1);
+        for (int64_t i = 0; i < std::min<int64_t>(host.numel(), 32); ++i) {
+          if (i) text += ",";
+          text += std::to_string(host.data_ptr<int64_t>()[i]);
+        }
+      }
+      return text + "]";
+    };
+    const auto& params = processed_target_input.input_params;
+    auto selected = processed_target_input.sampling_params.selected_token_idxes;
+    auto selected_cpu = selected.defined()
+        ? selected.to(torch::kCPU, torch::kInt64).contiguous() : torch::Tensor();
+    auto selected_input = selected_cpu.defined() && processed_target_input.token_ids_host.defined()
+        ? processed_target_input.token_ids_host.index_select(0, selected_cpu)
+        : torch::Tensor();
+    LOG(INFO) << "[DSV4_PREFILL_ROWS] sequences=" << params.meta.num_sequences
+              << " q=" << values(torch::tensor(params.attention.host.q_seq_lens))
+              << " kv=" << values(torch::tensor(params.attention.host.kv_seq_lens))
+              << " embedding_ids=" << values(torch::tensor(params.embedding.embedding_ids))
+              << " selected=" << values(selected_cpu)
+              << " selected_input=" << values(selected_input)
+              << " next=" << values(output.sample_output.next_tokens);
+  }
+#endif
 
   const torch::Tensor& embeddings = output.sample_output.embeddings;
   if (embeddings.defined()) {
@@ -805,6 +857,30 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
     clear_all_output_embeddings(output);
   }
 
+#if defined(USE_MUSA)
+  // write_context_kv synchronizes before the bootstrap/tail operations above.
+  // Those later operations are also part of the prefill completion contract:
+  // the next prepare stream and the RPC host-copy must not see partial tails.
+  if (enable_schedule_overlap()) {
+    output.ready_event = compute_stream_->record_event_or_sync();
+  } else {
+    CHECK_EQ(compute_stream_->synchronize(), 0)
+        << "failed to finalize DSpark prefill outputs";
+    output.retained_inputs.clear();
+  }
+  if (trace_prefill_final) {
+    const auto& params = processed_target_input.input_params;
+    LOG(INFO) << "[DSV4_PREFILL_FINAL_ROWS] sequences=" << params.meta.num_sequences
+              << " q=" << dsv4_host_vector_string(params.attention.host.q_seq_lens)
+              << " kv=" << dsv4_host_vector_string(params.attention.host.kv_seq_lens)
+              << " embedding_ids=" << dsv4_host_vector_string(params.embedding.embedding_ids)
+              << " selected_before=" << dsv4_cpu_tensor_vector_string(selected_before_context)
+              << " selected_after=" << dsv4_cpu_tensor_vector_string(
+                     processed_target_input.sampling_params.selected_token_idxes)
+              << " next_before_context=" << dsv4_cpu_tensor_vector_string(sampled_before_context)
+              << " next_after_context=" << dsv4_cpu_tensor_vector_string(output.sample_output.next_tokens);
+  }
+#endif
   if (!enable_schedule_overlap() && !driver_ && !dp_driver_) {
     return std::nullopt;
   }

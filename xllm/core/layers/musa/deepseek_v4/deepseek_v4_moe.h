@@ -32,38 +32,40 @@ limitations under the License.
 
 namespace xllm {
 namespace layer {
+namespace dsv4_musa_sp {
+struct DeepseekV4SPContext;
+}
 
 // DeepSeek-V4 shared experts use a MUSA-only low-token FP8 path.  The
 // fallback remains the same parallel-linear implementation used by the
 // original shared expert, so non-MUSA and prefill behavior are unchanged.
 class DeepseekV4SharedExpertImpl final : public torch::nn::Module {
- public:
+public:
   DeepseekV4SharedExpertImpl() = default;
-  DeepseekV4SharedExpertImpl(int64_t hidden_size,
-                             int64_t intermediate_size,
-                             const std::string& hidden_act,
-                             const QuantArgs& quant_args,
-                             ProcessGroup* process_group,
-                             const torch::TensorOptions& options,
+  DeepseekV4SharedExpertImpl(int64_t hidden_size, int64_t intermediate_size,
+                             const std::string &hidden_act,
+                             const QuantArgs &quant_args,
+                             ProcessGroup *process_group,
+                             const torch::TensorOptions &options,
                              double swiglu_limit);
 
-  torch::Tensor forward(const torch::Tensor& hidden_states);
+  torch::Tensor forward(const torch::Tensor &hidden_states);
 
-  void load_state_dict(const StateDict& state_dict);
-  void load_state_dict(const StateDict& state_dict,
-                       const std::vector<std::string>& gate_up_names,
-                       const std::string& down_name);
+  void load_state_dict(const StateDict &state_dict);
+  void load_state_dict(const StateDict &state_dict,
+                       const std::vector<std::string> &gate_up_names,
+                       const std::string &down_name);
 
- private:
+private:
   bool fp8_decode_ready() const;
-  void load_down_scale(const StateDict& state_dict,
-                       const std::string& down_name);
+  void load_down_scale(const StateDict &state_dict,
+                       const std::string &down_name);
 
   int64_t hidden_size_ = 0;
   int64_t intermediate_size_ = 0;
   int64_t local_intermediate_size_ = 0;
   double swiglu_limit_ = 0.0;
-  ProcessGroup* process_group_ = nullptr;
+  ProcessGroup *process_group_ = nullptr;
 
   ColumnParallelLinear gate_up_proj_{nullptr};
   RowParallelLinear down_proj_{nullptr};
@@ -78,43 +80,44 @@ class DeepseekV4SharedExpertImpl final : public torch::nn::Module {
 TORCH_MODULE(DeepseekV4SharedExpert);
 
 class DeepseekV4MoEImpl final : public torch::nn::Module {
- public:
+public:
   DeepseekV4MoEImpl() = default;
-  DeepseekV4MoEImpl(const ModelArgs& model_args,
-                    const QuantArgs& quant_args,
-                    const ParallelArgs& parallel_args,
-                    const torch::TensorOptions& options,
-                    int32_t layer_id);
+  DeepseekV4MoEImpl(const ModelArgs &model_args, const QuantArgs &quant_args,
+                    const ParallelArgs &parallel_args,
+                    const torch::TensorOptions &options, int32_t layer_id);
 
   torch::Tensor forward_with_selected_experts(
-      const torch::Tensor& hidden_states,
-      const torch::Tensor& topk_weights,
-      const torch::Tensor& topk_ids,
-      const ModelInputParams& input_params,
-      bool skip_tp_allreduce = false,
-      const torch::Tensor& output_buffer = {});
+      const torch::Tensor &hidden_states, const torch::Tensor &topk_weights,
+      const torch::Tensor &topk_ids, const ModelInputParams &input_params,
+      bool skip_tp_allreduce = false, const torch::Tensor &output_buffer = {});
 
-  void load_state_dict(const StateDict& state_dict);
+  // Preserve the existing six-argument ABI for all non-SP callers.
+  torch::Tensor forward_with_selected_experts(
+      const torch::Tensor &hidden_states, const torch::Tensor &topk_weights,
+      const torch::Tensor &topk_ids, const ModelInputParams &input_params,
+      bool skip_tp_allreduce, const torch::Tensor &output_buffer,
+      const dsv4_musa_sp::DeepseekV4SPContext *reduce_scatter_context);
 
- private:
-  void load_experts(const StateDict& state_dict);
-  torch::Tensor apply_expert(const torch::Tensor& input,
+  void load_state_dict(const StateDict &state_dict);
+
+private:
+  void load_experts(const StateDict &state_dict);
+  torch::Tensor apply_expert(const torch::Tensor &input,
                              int64_t local_expert_id) const;
-  torch::Tensor forward_grouped_fp8(const torch::Tensor& input,
-                                    const torch::Tensor& topk_ids,
-                                    const torch::Tensor& topk_weights) const;
+  torch::Tensor forward_grouped_fp8(const torch::Tensor &input,
+                                    const torch::Tensor &topk_ids,
+                                    const torch::Tensor &topk_weights,
+                                    bool compact_rows = false) const;
   void ensure_dense_expert_storage();
   void ensure_fp8_expert_storage();
   void ensure_packed_fp4_expert_storage();
-  bool try_load_packed_fp4_experts(const StateDict& state_dict,
-                                   const std::vector<std::string>& w13_prefixes,
-                                   const std::string& w2_prefix,
-                                   int64_t rank,
+  bool try_load_packed_fp4_experts(const StateDict &state_dict,
+                                   const std::vector<std::string> &w13_prefixes,
+                                   const std::string &w2_prefix, int64_t rank,
                                    int64_t world_size);
-  bool try_load_fp8_experts(const StateDict& state_dict,
-                            const std::vector<std::string>& w13_prefixes,
-                            const std::string& w2_prefix,
-                            int64_t rank,
+  bool try_load_fp8_experts(const StateDict &state_dict,
+                            const std::vector<std::string> &w13_prefixes,
+                            const std::string &w2_prefix, int64_t rank,
                             int64_t world_size);
   bool fp4_experts_loaded() const {
     return w13_packed_is_loaded_ && w2_packed_is_loaded_;
@@ -133,11 +136,12 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
   int64_t n_shared_experts_ = 0;
   int32_t layer_id_ = 0;
   int32_t num_layers_ = 0;
+  int64_t grouped_fp8_decode_min_tokens_ = 0;
   double swiglu_limit_ = 0.0;
   std::string hidden_act_ = "silu";
   torch::TensorOptions options_;
-  ProcessGroup* tp_pg_ = nullptr;
-  ProcessGroup* ep_pg_ = nullptr;
+  ProcessGroup *tp_pg_ = nullptr;
+  ProcessGroup *ep_pg_ = nullptr;
 
   DeepseekV4SharedExpert shared_experts_{nullptr};
   torch::nn::Linear shared_expert_gate_{nullptr};
@@ -185,5 +189,5 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
 
 TORCH_MODULE(DeepseekV4MoE);
 
-}  // namespace layer
-}  // namespace xllm
+} // namespace layer
+} // namespace xllm

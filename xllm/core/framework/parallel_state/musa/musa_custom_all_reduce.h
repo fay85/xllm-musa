@@ -47,6 +47,7 @@ class MusaCustomAllReduce {
       const std::optional<torch::Tensor>& output = std::nullopt);
 
   void finalize_graph_buffers();
+  void long_prefill_host_barrier();
   friend void finalize_musa_custom_allreduce_graphs();
 
  private:
@@ -84,5 +85,6 @@ std::optional<torch::Tensor> musa_allreduce_custom(
     const std::optional<torch::Tensor>& output = std::nullopt);
 
 void finalize_musa_custom_allreduce_graphs();
+void musa_long_prefill_host_barrier(ProcessGroup* process_group);
 
 }  // namespace xllm

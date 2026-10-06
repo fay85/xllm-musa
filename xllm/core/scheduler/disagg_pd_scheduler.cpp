@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "scheduler/disagg_pd_scheduler.h"
+#include "core/scheduler/disagg_pd_scheduler.h"
 
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
@@ -31,7 +31,6 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
 #include "disagg_pd.pb.h"
-#include "disagg_pd_scheduler.h"
 #include "distributed_runtime/engine.h"
 #include "framework/batch/batch_factory.h"
 #include "framework/block/block_manager_pool.h"
@@ -654,6 +653,18 @@ void DisaggPDScheduler::prefill_send_first_generation() {
       if (!options_.disable_log_stats()) {
         request->log_statistic(request->elapsed_seconds());
       }
+#if defined(USE_MUSA)
+      if (options_.kv_cache_transfer_mode() == "PULL") {
+        auto* pool = dynamic_cast<BlockManagerPool*>(kv_cache_manager_);
+        if (pool != nullptr) {
+          const size_t released = pool->reclaim_completed_pd_prefill_swa(
+              request->sequences()[0].get());
+          LOG(INFO) << "[DSV4_PD_PREFILL_RECLAIM] request_id="
+                    << request->request_id() << ", released_swa=" << released
+                    << ", free_swa=" << pool->swa_free_blocks();
+        }
+      }
+#endif
       requests.emplace_back(request);
       if (!request->state().stream) {
         non_stream_requests.emplace_back(request);
@@ -810,6 +821,12 @@ void DisaggPDScheduler::prefill_send_first_generation() {
       // TODO: Async call later
       proto::Status resp;
       brpc::Controller cntl;
+      // The first-token response was queued by ContinuousScheduler::step.
+      // Drain its response/RPC tasks before Decode may generate more tokens;
+      // waiting only after FirstGeneration allows Decode's SSE to overtake it.
+      response_processor_->wait_completion();
+      LOG_FIRST_N(INFO, 1)
+          << "[PD_FIRST_TOKEN_ORDER] responses_drained_before_decode_handoff";
       Timer rpc_timer;
       stub->FirstGeneration(&cntl, &gens, &resp, nullptr);
       const double rpc_seconds = rpc_timer.elapsed_seconds();
@@ -824,6 +841,14 @@ void DisaggPDScheduler::prefill_send_first_generation() {
                    << request->state().decode_address
                    << ", error text : " << cntl.ErrorText()
                    << ", response status: " << resp.ok();
+        // Finish the original response stream on a failed handoff. The helper
+        // drains that error response, erases the channel and releases KV once.
+        fail_request(request,
+                     {StatusCode::UNKNOWN,
+                      "PD decode handoff failed: " +
+                          (cntl.Failed() ? cntl.ErrorText()
+                                         : "Decode rejected KV handoff")});
+        continue;
       }
 
       {
@@ -1024,13 +1049,24 @@ bool DisaggPDScheduler::decode_recv_first_generation(
             mapping.remote_ids.size() < blocks.size()) {
           local_begin = blocks.size() - mapping.remote_ids.size();
         }
+        // Slid-out SWA pages keep logical UINT64_MAX placeholders. Filter
+        // both sides together so valid local pages never pair with sentinels.
+        std::vector<uint64_t> filtered_remote_ids;
+        filtered_remote_ids.reserve(mapping.remote_ids.size());
         mapping.local_ids.reserve(blocks.size() - local_begin);
         for (size_t index = local_begin; index < blocks.size(); ++index) {
           const Block& block = blocks[index];
-          if (block.is_valid()) {
+          const size_t remote_index = index - local_begin;
+          const bool remote_valid =
+              remote_index < mapping.remote_ids.size() &&
+              mapping.remote_ids[remote_index] !=
+                  std::numeric_limits<uint64_t>::max();
+          if (block.is_valid() && remote_valid) {
             mapping.local_ids.emplace_back(static_cast<uint64_t>(block.id()));
+            filtered_remote_ids.emplace_back(mapping.remote_ids[remote_index]);
           }
         }
+        mapping.remote_ids = std::move(filtered_remote_ids);
       }
       if (mapping.local_ids.size() != mapping.remote_ids.size()) {
         LOG(ERROR) << "PULL KV mapping size mismatch, request_id=" << req_id

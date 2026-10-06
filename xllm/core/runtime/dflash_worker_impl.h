@@ -84,7 +84,7 @@ class DFlashWorkerImpl : public SpeculativeWorkerImpl {
 
   bool allocate_kv_cache(const KVCacheShape& kv_cache_shape) override;
 
-#if defined(USE_NPU) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
   bool allocate_kv_cache_with_transfer(
       const KVCacheShape& kv_cache_shape) override;
 #endif
@@ -176,7 +176,7 @@ class DFlashWorkerImpl : public SpeculativeWorkerImpl {
  protected:
   std::unique_ptr<LLMWorkerImpl> draft_impl_;
   std::shared_ptr<EmbeddingCache> embedding_cache_;
-#if defined(USE_NPU) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
   std::shared_ptr<KVCacheTransfer> kv_cache_transfer_;
 #endif
   int32_t mask_token_id_ = -1;

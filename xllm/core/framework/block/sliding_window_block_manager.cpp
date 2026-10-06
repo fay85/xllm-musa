@@ -13,9 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "sliding_window_block_manager.h"
+#include "core/framework/block/sliding_window_block_manager.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "framework/prefix_cache/prefix_cache.h"
 
@@ -32,6 +33,54 @@ SlidingWindowBlockManager::SlidingWindowBlockManager(const Options& options)
         << "SWA prefix cache does not yet support VLM (MM hasher). "
            "Disable prefix cache for VLM DSV4 or wait for VLM support.";
   }
+}
+
+std::optional<std::vector<Block>>
+SlidingWindowBlockManager::allocate_for_sequence(Sequence* seq,
+                                                size_t num_tokens) {
+  if (seq == nullptr) {
+    return std::nullopt;
+  }
+  return allocate_for_sequence(seq, seq->kv_state(), num_tokens);
+}
+
+std::optional<std::vector<Block>>
+SlidingWindowBlockManager::allocate_for_sequence(Sequence* seq,
+                                                KVCacheState& kv_state,
+                                                size_t num_tokens) {
+  if (!options_.enable_disagg_pd() || !options_.instance_is_decode()) {
+    return BlockManagerImpl::allocate_for_sequence(seq, kv_state, num_tokens);
+  }
+  if (seq == nullptr || block_size_ == 0) {
+    return std::nullopt;
+  }
+  const size_t logical_blocks =
+      num_tokens / block_size_ + (num_tokens % block_size_ != 0);
+  const size_t held_blocks = kv_state.num_blocks(block_type());
+  if (logical_blocks <= held_blocks) {
+    return std::vector<Block>{};
+  }
+  const size_t retained_tokens =
+      std::max<size_t>(options_.sliding_window_size(), 1) +
+      static_cast<size_t>(options_.num_speculative_tokens());
+  const size_t first_live = num_tokens > retained_tokens
+                                ? (num_tokens - retained_tokens + 1) / block_size_
+                                : 0;
+  const size_t first_new_live = std::max(held_blocks, first_live);
+  const size_t physical_count = logical_blocks - first_new_live;
+  auto physical = allocate(physical_count);
+  if (physical.size() != physical_count) {
+    deallocate(physical);
+    return std::nullopt;
+  }
+  // Preserve absolute logical columns for v128 metadata. Earlier history is
+  // represented by invalid placeholders, not extra physical SWA pages. Other
+  // leaves still allocate the complete C4/C128 history independently.
+  std::vector<Block> appended(logical_blocks - held_blocks);
+  for (size_t index = first_new_live; index < logical_blocks; ++index) {
+    appended[index - held_blocks] = std::move(physical[index - first_new_live]);
+  }
+  return appended;
 }
 
 void SlidingWindowBlockManager::release_out_of_window(Sequence* seq) {

@@ -13,12 +13,21 @@ from pathlib import Path
 import statistics
 import sys
 import time
+from urllib.parse import urlsplit
 
 import aiohttp
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.logger import logger
+
+
+def _validate_chat_url(url: str) -> str:
+    parsed = urlsplit(url)
+    if (parsed.scheme not in {"http", "https"} or not parsed.netloc or
+            parsed.path != "/v1/chat/completions" or parsed.query or parsed.fragment):
+        raise ValueError("--url must be the full /v1/chat/completions endpoint")
+    return url
 
 
 async def _request(client: aiohttp.ClientSession, url: str, case: dict) -> dict:
@@ -31,8 +40,13 @@ async def _request(client: aiohttp.ClientSession, url: str, case: dict) -> dict:
     finish = None
     try:
         async with client.post(url, json=case["request_payload"]) as response:
+            row["http_status"] = response.status
+            row["response_content_type"] = response.headers.get("Content-Type", "")
             if response.status != 200:
                 raise RuntimeError(f"HTTP {response.status}: {(await response.text())[:2048]}")
+            if response.content_type != "text/event-stream":
+                preview = (await response.content.read(2048)).decode(errors="replace")
+                raise RuntimeError(f"expected SSE response, got {response.content_type}: {preview}")
             async for raw in response.content:
                 line = raw.decode().strip()
                 if not line.startswith("data:") or line[5:].strip() == "[DONE]":
@@ -151,7 +165,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
-    parser.add_argument("--url", default="http://127.0.0.1:19467/v1/chat/completions")
+    parser.add_argument("--url", type=_validate_chat_url,
+                        default="http://127.0.0.1:19467/v1/chat/completions",
+                        help="Full chat-completions endpoint, including /v1/chat/completions.")
     parser.add_argument("--concurrency", type=int, default=16)
     parser.add_argument("--timeout", type=int, default=600)
     parser.add_argument("--stop-errors", type=int, default=3)

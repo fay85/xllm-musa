@@ -124,6 +124,7 @@ class CompositeBlockManager : public BlockManager {
 
   // RL sleep/wakeup: fan out to every leaf (non-prefix leaves are a no-op).
   void reset_prefix_cache() override;
+  void reset_swa_prefix_cache();
 
   // Stats reported from the single capacity leaf (see capacity_leaf()).
   size_t num_blocks_in_prefix_cache() const override;

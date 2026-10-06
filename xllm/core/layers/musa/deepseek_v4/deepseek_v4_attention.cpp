@@ -42,6 +42,15 @@ limitations under the License.
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/ops_api.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_graph_policy.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_graph_sequence.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_paged_cache_view.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_prefill_continuation.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_indexer_reference.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_rope_assembly.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_rope_main_assembly.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_indexer_gemm.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_sequence_output.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_pending_cache_rows.h"
 
 namespace xllm {
 namespace layer {
@@ -49,8 +58,77 @@ namespace {
 
 constexpr char kDsv4StateBlockIndicesMetadataKey[] =
     "__musa_dsv4_state_block_indices";
+constexpr char kDsv4PrefillResetBlocksMetadataKey[] =
+    "__musa_dsv4_prefill_reset_blocks";
+constexpr char kDsv4PrefillStateReadIndicesMetadataKey[] =
+    "__musa_dsv4_prefill_state_read_indices";
 constexpr char kDsv4HostSequenceLengthsMetadataKey[] =
     "__musa_dsv4_host_sequence_lengths";
+constexpr char kDsv4BatchedQkvProjectionMetadataKey[] =
+    "__musa_dsv4_batched_qkv_projection";
+constexpr char kDsv4BatchedQrMetadataKey[] = "__musa_dsv4_batched_qr";
+constexpr char kDsv4BatchedQbMetadataKey[] = "__musa_dsv4_batched_qb";
+constexpr char kDsv4BatchedHeadWeightsMetadataKey[] =
+    "__musa_dsv4_batched_head_weights";
+constexpr char kDsv4BatchedCompressorMetadataKey[] =
+    "__musa_dsv4_batched_compressor";
+constexpr char kDsv4GraphSequenceIndexMetadataKey[] =
+    "__musa_dsv4_graph_sequence_index";
+
+thread_local bool dsv4_sequence_view_active = false;
+thread_local bool dsv4_defer_output_projection = false;
+thread_local bool dsv4_defer_o_a_projection = false;
+
+std::optional<size_t> dsv4_graph_sequence_index(
+    const DSAMetadata& attn_metadata) {
+  const auto it = attn_metadata.cp_input_dict.find(
+      kDsv4GraphSequenceIndexMetadataKey);
+  if (it == attn_metadata.cp_input_dict.end()) {
+    return std::nullopt;
+  }
+  const torch::Tensor& index = it->second;
+  if (!index.defined() || !index.device().is_cpu() || index.numel() != 1 ||
+      !index.is_contiguous()) {
+    return std::nullopt;
+  }
+  int64_t value = -1;
+  if (index.scalar_type() == torch::kInt32) {
+    value = static_cast<int64_t>(index.data_ptr<int32_t>()[0]);
+  } else if (index.scalar_type() == torch::kInt64) {
+    value = index.data_ptr<int64_t>()[0];
+  } else {
+    return std::nullopt;
+  }
+  if (value < 0) {
+    return std::nullopt;
+  }
+  return static_cast<size_t>(value);
+}
+
+class SequenceViewScope final {
+ public:
+  explicit SequenceViewScope(bool defer_output_projection,
+                             bool defer_o_a_projection)
+      : previous_view_(dsv4_sequence_view_active),
+        previous_defer_(dsv4_defer_output_projection),
+        previous_o_a_(dsv4_defer_o_a_projection) {
+    dsv4_sequence_view_active = true;
+    dsv4_defer_output_projection = defer_output_projection;
+    dsv4_defer_o_a_projection = defer_o_a_projection;
+  }
+  ~SequenceViewScope() {
+    dsv4_sequence_view_active = previous_view_;
+    dsv4_defer_output_projection = previous_defer_;
+    dsv4_defer_o_a_projection = previous_o_a_;
+  }
+  SequenceViewScope(const SequenceViewScope&) = delete;
+  SequenceViewScope& operator=(const SequenceViewScope&) = delete;
+
+ private:
+  const bool previous_view_;
+  const bool previous_defer_;
+  const bool previous_o_a_;
+};
 
 bool packed_fp8_activations_enabled() {
   const char* value = std::getenv("XLLM_DSV4_FP8_PACKED_ACTIVATIONS");
@@ -209,6 +287,8 @@ std::vector<int64_t> tensor_to_i64_vector(const torch::Tensor& tensor) {
   if (!tensor.defined() || tensor.numel() == 0) {
     return values;
   }
+  CHECK(tensor.device().is_cpu() || !kernel::musa::is_stream_capturing())
+      << "Graph execution requires host lengths or persistent device metadata";
   auto cpu = tensor.to(torch::kCPU).to(torch::kLong).contiguous().view({-1});
   values.reserve(static_cast<size_t>(cpu.numel()));
   for (int64_t i = 0; i < cpu.numel(); ++i) {
@@ -350,7 +430,28 @@ bool dsv4_musa_batched_graph_indexer_enabled() {
   const char* value = std::getenv("XLLM_DSV4_GRAPH_BATCHED_INDEXER");
   return value != nullptr && std::string(value) == "1";
 }
-bool dsv4_musa_mate_fused_dsa_multi_sequence_enabled() { return false; }
+bool dsv4_musa_mate_fused_dsa_multi_sequence_enabled() {
+  const char* projection_value =
+      std::getenv("XLLM_DSV4_BATCH_ATTENTION_PROJECTIONS");
+  const char* mate_value =
+      std::getenv("XLLM_DSV4_BATCH_MATE_ACROSS_SEQUENCES");
+  return (projection_value != nullptr && std::string(projection_value) == "1") ||
+         (mate_value != nullptr && std::string(mate_value) == "1");
+}
+
+size_t dsv4_musa_mate_max_sequences_per_launch() {
+  const char* value =
+      std::getenv("XLLM_DSV4_MATE_MAX_SEQUENCES_PER_LAUNCH");
+  if (value == nullptr || *value == '\0') {
+    return 1;
+  }
+  char* end = nullptr;
+  const long parsed = std::strtol(value, &end, 10);
+  if (end == value || *end != '\0' || parsed < 1 || parsed > 16) {
+    return 1;
+  }
+  return static_cast<size_t>(parsed);
+}
 bool dsv4_musa_mate_sparse_decode_enabled() {
   // Diagnostic escape hatch for the q_len=1 DSV4 path. Keeping this enabled
   // preserves the performance route; disabling it falls through to the
@@ -421,6 +522,10 @@ std::string i64_prefix_to_string(const std::vector<int64_t>& values,
 }
 
 std::string tensor_i64_prefix(const torch::Tensor& tensor, size_t limit = 16) {
+  if (kernel::musa::is_stream_capturing() &&
+      tensor.defined() && !tensor.device().is_cpu()) {
+    return "[capture-suppressed]";
+  }
   return i64_prefix_to_string(tensor_to_i64_vector(tensor), limit);
 }
 
@@ -430,6 +535,11 @@ std::string tensor_stat_string(const torch::Tensor& tensor) {
   }
   if (tensor.numel() == 0) {
     return "empty";
+  }
+  // Statistics require reductions and scalar host reads.  They are diagnostic
+  // only and must not execute while a MUSA graph is being captured.
+  if (kernel::musa::is_stream_capturing()) {
+    return "capture-suppressed";
   }
   auto fp32 = tensor.to(torch::kFloat32);
   const bool finite = torch::isfinite(fp32).all().item<bool>();
@@ -474,7 +584,9 @@ torch::Tensor apply_interleaved_partial_rope(
     const torch::Tensor& cos,
     const torch::Tensor& sin,
     bool inverse = false,
-    torch::Tensor output_workspace = torch::Tensor()) {
+    torch::Tensor output_workspace = torch::Tensor(),
+    bool allow_prefill_assembly = false,
+    bool allow_main_assembly = false) {
   if (!input.defined() || !cos.defined() || !sin.defined() ||
       rope_head_dim <= 0 || rope_start_dim < 0 ||
       input.size(-1) < rope_start_dim + rope_head_dim) {
@@ -541,6 +653,37 @@ torch::Tensor apply_interleaved_partial_rope(
 
   auto rot_even = even * cos_even - odd * sin_even;
   auto rot_odd = odd * cos_even + even * sin_even;
+  const char* assembly_setting =
+      std::getenv("XLLM_DSV4_PREFILL_INDEXER_ROPE_COPY");
+  if (allow_prefill_assembly && assembly_setting != nullptr &&
+      std::string(assembly_setting) == "1" &&
+      !kernel::musa::is_stream_capturing() &&
+      dsv4_prefill_rope_assembly_eligible(input, rope_start_dim, rope_head_dim)) {
+    LOG_FIRST_N(INFO, 2) << "[DSV4_PREFILL_INDEXER_ROPE_COPY] rows="
+                        << input.size(0) << " copy_only=1";
+    return dsv4_assemble_prefill_rope(input, rot_even, rot_odd);
+  }
+  const char* main_assembly_setting =
+      std::getenv("XLLM_DSV4_PREFILL_MAIN_ROPE_COPY");
+  if (allow_main_assembly && main_assembly_setting != nullptr &&
+      std::string(main_assembly_setting) == "1") {
+    LOG_FIRST_N(INFO, 2) << "[DSV4_MAIN_ROPE_ASSEMBLY_INPUT] shape="
+                        << input.sizes() << " dtype=" << input.scalar_type()
+                        << " contiguous=" << input.is_contiguous()
+                        << " rope_start=" << rope_start_dim
+                        << " rope_width=" << rope_head_dim;
+  }
+  if (allow_main_assembly && main_assembly_setting != nullptr &&
+      std::string(main_assembly_setting) == "1" &&
+      !kernel::musa::is_stream_capturing() &&
+      dsv4_prefill_main_rope_assembly_eligible(input, rope_start_dim,
+                                               rope_head_dim)) {
+    LOG_FIRST_N(INFO, 2) << "[DSV4_PREFILL_MAIN_ROPE_COPY] rows="
+                        << input.size(0) << " heads=" << input.size(1)
+                        << " inverse=" << inverse
+                        << " copy_only=1";
+    return dsv4_assemble_prefill_main_rope(input, rot_even, rot_odd);
+  }
   auto rotated = torch::stack({rot_even, rot_odd}, /*dim=*/-1).flatten(-2);
   return torch::cat({before, rotated, after}, /*dim=*/-1).contiguous();
 }
@@ -998,6 +1141,17 @@ DeepseekV4AttentionImpl::DeepseekV4AttentionImpl(
   tp_size_ = std::max<int64_t>(tp_size, 1);
   decode_workspace_tokens_ =
       std::max<int64_t>(16, args.num_speculative_tokens() + 1);
+  const char* multi_sequence_workspace_env =
+      std::getenv("XLLM_DSV4_MULTI_SEQUENCE_WORKSPACE_TOKENS");
+  if (multi_sequence_workspace_env != nullptr) {
+    const int64_t requested_workspace =
+        std::strtoll(multi_sequence_workspace_env, nullptr, 10);
+    CHECK(requested_workspace == 64 || requested_workspace == 128 ||
+          requested_workspace == 256)
+        << "XLLM_DSV4_MULTI_SEQUENCE_WORKSPACE_TOKENS must be 64, 128 or 256";
+    decode_workspace_tokens_ =
+        std::max<int64_t>(decode_workspace_tokens_, requested_workspace);
+  }
   CHECK_EQ(num_heads_ % tp_size_, 0)
       << "DeepSeek-V4 MUSA attention requires num_heads divisible by TP size.";
   CHECK_EQ(o_groups_ % tp_size_, 0)
@@ -1231,6 +1385,13 @@ void DeepseekV4AttentionImpl::write_context_kv(
   CHECK_GT(dspark_block_size_, 0);
   CHECK(hidden_states.defined() && hidden_states.dim() == 2);
   CHECK_EQ(hidden_states.size(0), cache_slots.numel());
+  if (dsv4_musa_trace_enabled()) {
+    LOG_FIRST_N(INFO, 1)
+        << "[DSV4_CONTEXT_KV] hidden=" << tensor_sizes_string(hidden_states)
+        << " slots=" << tensor_sizes_string(cache_slots)
+        << " slots_device=" << cache_slots.device()
+        << " layer_device=" << hidden_states.device();
+  }
   torch::Tensor kv;
   if (qkv_a_weight_loaded_) {
     // Loading packs wq_a/wkv and releases the original linear modules.
@@ -1284,6 +1445,23 @@ DeepseekV4AttentionImpl::build_query_ranges(const DSAMetadata& attn_metadata,
   if (compact_spec_verify) {
     ranges.emplace_back(0, total_tokens);
     return ranges;
+  }
+  // Physical multi-sequence Graph verify is laid out as one contiguous
+  // q-width segment per request.  Do not fall through to one range per token:
+  // the cache/block tables still have one row per request, not one row per
+  // draft/target token.  The old fallback produced seq_idx=16 for B16/q7.
+  if (attn_metadata.is_acl_graph && attn_metadata.num_speculative_tokens > 0) {
+    const int64_t query_width =
+        static_cast<int64_t>(attn_metadata.num_speculative_tokens) + 1;
+    if (query_width > 1 && total_tokens % query_width == 0) {
+      const int64_t sequence_count = total_tokens / query_width;
+      ranges.reserve(static_cast<size_t>(sequence_count));
+      for (int64_t sequence = 0; sequence < sequence_count; ++sequence) {
+        const int64_t start = sequence * query_width;
+        ranges.emplace_back(start, start + query_width);
+      }
+      return ranges;
+    }
   }
   // Graph decode metadata is deliberately kept on device. Reading the
   // cumulative lengths back to host here would issue tensor.to(kCPU) while
@@ -1784,14 +1962,26 @@ torch::Tensor DeepseekV4AttentionImpl::mate_sparse_attention_batched(
   }
 
   const int64_t q_tokens = q.size(0);
+  const char* partitioned_c128_env = std::getenv("XLLM_DSV4_PARTITIONED_C128_MATE");
+  const bool partitioned_c128 = compress_ratio_ == 128 && q_tokens > 7 &&
+      q_tokens % 7 == 0 && partitioned_c128_env != nullptr &&
+      std::string(partitioned_c128_env) == "1";
   const char* share_metadata_env =
       std::getenv("XLLM_DSV4_MATE_SHARE_METADATA");
   const char* grouped_metadata_env = std::getenv("XLLM_DSV4_MATE_GROUPED_METADATA");
-  const bool grouped_metadata = grouped_metadata_env != nullptr &&
-                                std::string(grouped_metadata_env) == "1";
+  const char* batch_grouped_metadata_env =
+      std::getenv("XLLM_DSV4_BATCH_MATE_GROUPED_METADATA");
+  const bool batch_grouped_metadata =
+      batch_grouped_metadata_env != nullptr &&
+      std::string(batch_grouped_metadata_env) == "1" &&
+      dsv4_musa_mate_fused_dsa_multi_sequence_enabled();
+  const bool grouped_metadata =
+      grouped_metadata_env != nullptr && std::string(grouped_metadata_env) == "1" &&
+      (!dsv4_sequence_view_active || batch_grouped_metadata);
   const bool share_metadata =
-      grouped_metadata ||
-      (share_metadata_env != nullptr && std::string(share_metadata_env) == "1");
+      (!dsv4_sequence_view_active || batch_grouped_metadata) &&
+      (grouped_metadata ||
+       (share_metadata_env != nullptr && std::string(share_metadata_env) == "1"));
   const int64_t metadata_key =
       share_metadata ? ((scalar_kv_len << 12) ^ q_tokens)
                      : std::numeric_limits<int64_t>::min();
@@ -1811,8 +2001,16 @@ torch::Tensor DeepseekV4AttentionImpl::mate_sparse_attention_batched(
       kv_seq_lens, compress_ratio_, index_topk_,
       std::min<int64_t>(window_size_, int64_t{128}), topk_lengths, extra_topk_lengths);
 
-  auto mate_output =
-      ::xllm::kernel::musa::deepseek_v4_mate_sparse_attention_decode_batched(
+  const auto sink = attn_sink_.defined()
+      ? attn_sink_.to(q.device()).to(torch::kFloat32).contiguous() : torch::Tensor();
+  const auto destination = output.defined() ? std::optional<torch::Tensor>(output)
+                                           : std::nullopt;
+  auto mate_output = partitioned_c128
+      ? kernel::musa::deepseek_v4_mate_sparse_attention_decode_partitioned(
+          q, packed_cache, physical_indices, topk_lengths, extra_packed_cache,
+          extra_physical_indices, extra_topk_lengths, sink, softmax_scale_,
+          /*query_width=*/7, destination)
+      : kernel::musa::deepseek_v4_mate_sparse_attention_decode_batched(
           q,
           packed_cache,
           physical_indices,
@@ -1820,12 +2018,9 @@ torch::Tensor DeepseekV4AttentionImpl::mate_sparse_attention_batched(
           extra_packed_cache,
           extra_physical_indices,
           extra_topk_lengths,
-          attn_sink_.defined()
-              ? attn_sink_.to(q.device()).to(torch::kFloat32).contiguous()
-              : torch::Tensor(),
+          sink,
           softmax_scale_,
-          output.defined() ? std::optional<torch::Tensor>(output)
-                           : std::nullopt);
+          destination);
   return mate_output.defined() ? mate_output.contiguous() : torch::Tensor();
 }
 
@@ -1840,6 +2035,26 @@ torch::Tensor DeepseekV4AttentionImpl::dense_attention(
   if (!kv.defined() || kv.numel() == 0) {
     return torch::zeros_like(q);
   }
+  const char* native_prefill_env =
+      std::getenv("XLLM_DSV4_MULTI_PREFILL_LOCAL_MATE");
+  const bool native_compressed_prefill =
+      native_prefill_env != nullptr && std::string(native_prefill_env) == "1" &&
+      sequence_parallel_context_ == nullptr && causal && use_full_kv &&
+      (compress_ratio_ == 4 || compress_ratio_ == 128) &&
+      compressed_kv.defined() && compressed_kv.numel() > 0 &&
+      q.dim() == 3 && q.size(0) >= 128 &&
+      !kernel::musa::is_stream_capturing();
+  if (native_compressed_prefill && q.size(0) > 1024) {
+    std::vector<torch::Tensor> chunks;
+    for (int64_t start = 0; start < q.size(0); start += 1024) {
+      const int64_t count = std::min<int64_t>(1024, q.size(0) - start);
+      auto indices = compressed_indices.defined()
+          ? compressed_indices.narrow(0, start, count) : torch::Tensor();
+      chunks.push_back(dense_attention(q.narrow(0, start, count), kv,
+          compressed_kv, indices, true, q_abs_start + start, true));
+    }
+    return torch::cat(chunks, 0);
+  }
   if (dsv4_musa_mate_prefill_trace_enabled() && causal && use_full_kv) {
     LOG(INFO) << "[DSV4_MATE_PREFILL_ROUTE] layer=" << layer_id_
               << " q=" << tensor_sizes_string(q)
@@ -1852,11 +2067,12 @@ torch::Tensor DeepseekV4AttentionImpl::dense_attention(
   // narrower query/sink and crop the output back. Unsupported shapes or a
   // missing external artifact return an undefined tensor and retain the
   // established composite fallback below.
-  if (sequence_parallel_context_ != nullptr && causal && use_full_kv &&
+  if ((sequence_parallel_context_ != nullptr || native_compressed_prefill) &&
+      causal && use_full_kv &&
       q.dim() == 3 && q.size(1) > 0 && q.size(1) <= 64 && q.size(2) == 512 &&
       kv.dim() == 2 && kv.size(1) == 512 && q_abs_start >= 0 &&
       q_abs_start + q.size(0) <= kv.size(0) &&
-      (q.size(0) != kv.size(0) || q_abs_start != 0) &&
+      (native_compressed_prefill || q.size(0) != kv.size(0) || q_abs_start != 0) &&
       (compress_ratio_ == 1 || compress_ratio_ == 4 ||
        compress_ratio_ == 128)) {
     constexpr int64_t kMateLocalHeads = 64;
@@ -1899,8 +2115,16 @@ torch::Tensor DeepseekV4AttentionImpl::dense_attention(
             q_abs_start,
             local_compress_ratio,
             softmax_scale_,
-            std::nullopt);
+            native_compressed_prefill
+                ? std::optional<torch::Tensor>(torch::empty_like(q_padded))
+                : std::nullopt);
     if (local_sparse_prefill.defined()) {
+      if (native_compressed_prefill) {
+        LOG_FIRST_N(INFO, 2) << "[DSV4_NATIVE_COMPRESSED_PREFILL] layer="
+                            << layer_id_ << " q_tokens=" << q.size(0)
+                            << " q_abs_start=" << q_abs_start
+                            << " ratio=" << compress_ratio_;
+      }
       dump_local_prefill_attention(layer_id_,
                                    q_padded,
                                    kv,
@@ -2250,33 +2474,22 @@ torch::Tensor DeepseekV4AttentionImpl::compress_prefill_sequence(
   torch::Tensor effective_cos = cos;
   torch::Tensor effective_sin = sin;
   if (cached_prefix_tokens > 0) {
-    CHECK_EQ(cached_prefix_tokens % compress_ratio_, 0)
-        << "DeepSeek-V4 cached prefix must end on a compression boundary";
-    CHECK_LT(sequence_index, compressor_kv_state_.size());
-    CHECK_LT(sequence_index, compressor_score_state_.size());
-    const auto& restored_kv_state = compressor_kv_state_[sequence_index];
-    const auto& restored_score_state = compressor_score_state_[sequence_index];
-    CHECK(restored_kv_state.defined() && restored_score_state.defined())
-        << "DeepSeek-V4 cached prefix compressor state was not restored";
-    CHECK_EQ(restored_kv_state.size(0), state_rows);
-    CHECK_EQ(restored_kv_state.size(1), state_dim);
-    CHECK_EQ(restored_score_state.size(0), state_rows);
-    CHECK_EQ(restored_score_state.size(1), state_dim);
-    if (compress_ratio_ == 4) {
-      // C4 row N consumes the first coefficient from row block N-1 and the
-      // second coefficient from block N. The prefix cache stores the former
-      // in the recurrent state, so prepend it and discard the synthetic row.
-      auto previous_kv =
-          restored_kv_state
-              .slice(/*dim=*/0, /*start=*/0, /*end=*/compress_ratio_)
-              .to(kv_full.scalar_type());
-      auto previous_score =
-          restored_score_state.slice(
-              /*dim=*/0, /*start=*/0, /*end=*/compress_ratio_) -
-          ape;
-      kv_full = torch::cat({previous_kv, kv_full}, /*dim=*/0);
-      score_full = torch::cat({previous_score, score_full}, /*dim=*/0);
-      output_block_offset = 1;
+    auto continuation = dsv4_prefill_continuation(
+        kv_full, score_full, ape, compressor_kv_state_[sequence_index],
+        compressor_score_state_[sequence_index], cached_prefix_tokens,
+        compress_ratio_);
+    kv_full = continuation.kv;
+    score_full = continuation.score;
+    output_block_offset = continuation.output_block_offset;
+    if (prefix_snapshot_tokens > 0) {
+      prefix_snapshot_tokens += continuation.prepended_rows - cached_prefix_tokens;
+    }
+    if (cached_prefix_tokens % compress_ratio_ != 0) {
+      LOG_FIRST_N(INFO, 8) << "[DSV4_PREFILL_CONTINUATION] ratio=" << compress_ratio_
+          << " cached=" << cached_prefix_tokens
+          << " restored_partial=" << cached_prefix_tokens % compress_ratio_;
+    }
+    if (output_block_offset) {
       if (cos.defined() && sin.defined() && cos.size(0) > 0 &&
           sin.size(0) > 0) {
         effective_cos = torch::cat(
@@ -2492,9 +2705,8 @@ torch::Tensor DeepseekV4AttentionImpl::compress_decode_step(
   auto& score_state = compressor_score_state_[sequence_index];
   const bool use_workspace_decode =
       (use_preprojected ||
-       (hidden_step.scalar_type() == compressor_wkv_->weight().scalar_type() &&
-        hidden_step.scalar_type() ==
-            compressor_wgate_->weight().scalar_type())) &&
+       (decode_compressor_kv_projection_.defined() &&
+        decode_compressor_score_projection_.defined())) &&
       decode_compressor_kv_projection_.defined() &&
       decode_compressor_score_projection_.defined() &&
       decode_compressor_output_.defined() &&
@@ -2722,27 +2934,15 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_prefill_sequence(
   torch::Tensor effective_cos = cos;
   torch::Tensor effective_sin = sin;
   if (cached_prefix_tokens > 0) {
-    CHECK_EQ(cached_prefix_tokens % kCompressRatio, 0)
-        << "DeepSeek-V4 cached prefix must end on an indexer boundary";
-    CHECK_LT(sequence_index, indexer_kv_state_.size());
-    CHECK_LT(sequence_index, indexer_score_state_.size());
-    const auto& restored_kv_state = indexer_kv_state_[sequence_index];
-    const auto& restored_score_state = indexer_score_state_[sequence_index];
-    CHECK(restored_kv_state.defined() && restored_score_state.defined())
-        << "DeepSeek-V4 cached prefix indexer state was not restored";
-    CHECK_EQ(restored_kv_state.size(0), state_rows);
-    CHECK_EQ(restored_kv_state.size(1), state_dim);
-    CHECK_EQ(restored_score_state.size(0), state_rows);
-    CHECK_EQ(restored_score_state.size(1), state_dim);
-    auto previous_kv =
-        restored_kv_state.slice(/*dim=*/0, /*start=*/0, /*end=*/kCompressRatio)
-            .to(kv_full.scalar_type());
-    auto previous_score = restored_score_state.slice(
-                              /*dim=*/0, /*start=*/0, /*end=*/kCompressRatio) -
-                          ape;
-    kv_full = torch::cat({previous_kv, kv_full}, /*dim=*/0);
-    score_full = torch::cat({previous_score, score_full}, /*dim=*/0);
-    output_block_offset = 1;
+    auto continuation = dsv4_prefill_continuation(
+        kv_full, score_full, ape, indexer_kv_state_[sequence_index],
+        indexer_score_state_[sequence_index], cached_prefix_tokens, kCompressRatio);
+    kv_full = continuation.kv;
+    score_full = continuation.score;
+    output_block_offset = continuation.output_block_offset;
+    if (prefix_snapshot_tokens > 0) {
+      prefix_snapshot_tokens += continuation.prepended_rows - cached_prefix_tokens;
+    }
     if (cos.defined() && sin.defined() && cos.size(0) > 0 && sin.size(0) > 0) {
       effective_cos = torch::cat(
           {cos.slice(/*dim=*/0, /*start=*/0, /*end=*/1), cos}, /*dim=*/0);
@@ -2926,10 +3126,8 @@ torch::Tensor DeepseekV4AttentionImpl::compress_indexer_decode_step(
   auto& score_state = indexer_score_state_[sequence_index];
   const bool use_workspace_decode =
       (use_preprojected ||
-       (hidden_step.scalar_type() ==
-            indexer_compressor_wkv_->weight().scalar_type() &&
-        hidden_step.scalar_type() ==
-            indexer_compressor_wgate_->weight().scalar_type())) &&
+       (decode_indexer_kv_projection_.defined() &&
+        decode_indexer_score_projection_.defined())) &&
       decode_indexer_kv_projection_.defined() &&
       decode_indexer_score_projection_.defined() &&
       decode_indexer_output_.defined() &&
@@ -3072,7 +3270,9 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
     int64_t mate_block_size,
     torch::Tensor* mate_physical_indices,
     torch::Tensor* mate_extra_physical_indices,
-    const torch::Tensor& dynamic_kv_len) {
+    const torch::Tensor& dynamic_kv_len,
+    int64_t batched_query_rows_per_sequence,
+    int64_t batched_sequence_count) {
   if (!dsv4_musa_indexer_enabled() ||
       (!indexer_wq_b_ && !q_indexer_b_weight_loaded_ &&
        !precomputed_query.defined()) ||
@@ -3089,6 +3289,15 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
                               index_cache.defined() &&
                               index_scale_cache.defined() &&
                               index_block_table.defined();
+  if (dsv4_musa_trace_enabled() && !use_fused_topk) {
+    LOG_FIRST_N(WARNING, 1)
+        << "[DSV4_INDEXER_FALLBACK] q_tokens=" << q_tokens
+        << " index_cache=" << index_cache.defined()
+        << " scale_cache=" << index_scale_cache.defined()
+        << " block_table=" << index_block_table.defined()
+        << " dynamic_kv=" << dynamic_kv_len.defined()
+        << " fused=" << dsv4_musa_fused_indexer_topk_enabled();
+  }
   torch::Tensor active_index_kv = index_kv;
   if (!use_fused_topk) {
     if (!active_index_kv.defined() || active_index_kv.numel() == 0) {
@@ -3152,7 +3361,10 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
         index_head_dim_ - rope_head_dim_,
         rope_head_dim_,
         cos.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens),
-        sin.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens));
+        sin.slice(/*dim=*/0, /*start=*/0, /*end=*/q_tokens),
+        /*inverse=*/false,
+        /*output_workspace=*/torch::Tensor(),
+        /*allow_prefill_assembly=*/q_tokens > decode_workspace_tokens_);
   }
   if (!fused_rope_hadamard) {
     query = apply_indexer_hadamard(query, indexer_hadamard_);
@@ -3198,8 +3410,20 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
     params.weights = head_weights.contiguous();
     params.cache = index_cache;
     params.scale_cache = index_scale_cache;
-    params.block_table =
-        index_block_table.to(index_cache.device()).contiguous();
+    // Graph capture must not perform a dtype/device conversion. The graph
+    // metadata builder already stages this table on the cache device; retain
+    // the alias when it is there and only migrate in eager execution.
+    if (index_block_table.device() != index_cache.device()) {
+      if (kernel::musa::is_stream_capturing()) {
+        LOG_FIRST_N(ERROR, 1)
+            << "DSV4 indexer block table is on a different device during "
+               "Graph capture; refusing a dynamic copy";
+        return torch::Tensor();
+      }
+      params.block_table = index_block_table.to(index_cache.device()).contiguous();
+    } else {
+      params.block_table = index_block_table.contiguous();
+    }
     params.sequence_index = sequence_index;
     params.kv_len = index_len;
     params.topk = index_topk_;
@@ -3239,15 +3463,68 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
       *mate_physical_indices = physical_output;
       *mate_extra_physical_indices = extra_physical_output;
     }
-    auto selected = dynamic_kv_len.defined()
-        ? kernel::musa::deepseek_v4_indexer_topk_graph(
-              params.query, params.weights, params.cache, params.scale_cache,
-              params.block_table, sequence_index, index_len, index_topk_,
-              params.output.value(), params.mate_compressed_block_table,
-              params.mate_swa_block_table, window_size_, mate_block_size,
-              params.mate_physical_indices.value(),
-              params.mate_extra_physical_indices.value(), dynamic_kv_len)
-        : ::xllm::kernel::deepseek_v4_indexer_topk(params);
+    torch::Tensor selected;
+    const char* single_gemm_env = std::getenv("XLLM_DSV4_SINGLE_INDEXER_GEMM");
+    const bool single_gemm = single_gemm_env != nullptr &&
+        std::string(single_gemm_env) == "1" && batched_sequence_count <= 1 &&
+        dynamic_kv_len.defined() && dynamic_kv_len.numel() == q_tokens &&
+        prepare_mate_indices && params.query.scalar_type() == torch::kBFloat16 &&
+        dsv4_single_indexer_gemm_shape(q_tokens, params.query.size(1),
+                                      params.query.size(2), index_len, index_topk_);
+    if (single_gemm) {
+      // The helper expects request-local tables. Preserve the real owner
+      // instead of implicitly using row zero of a shared block table.
+      CHECK_GE(sequence_index, 0);
+      CHECK_LT(sequence_index, params.block_table.size(0));
+      CHECK_LT(sequence_index, params.mate_compressed_block_table.size(0));
+      CHECK_LT(sequence_index, params.mate_swa_block_table.size(0));
+      selected = dsv4_batched_indexer_gemm(
+          params.query, params.weights, params.cache, params.scale_cache,
+          params.block_table.narrow(0, sequence_index, 1), q_tokens, index_len,
+          index_topk_, params.output.value(),
+          params.mate_compressed_block_table.narrow(0, sequence_index, 1),
+          params.mate_swa_block_table.narrow(0, sequence_index, 1), window_size_,
+          mate_block_size, params.mate_physical_indices.value(),
+          params.mate_extra_physical_indices.value(), dynamic_kv_len);
+      LOG_FIRST_N(INFO, 1) << "[DSV4_SINGLE_INDEXER_GEMM] rows=" << q_tokens
+                          << " capacity=" << index_len
+                          << " sequence_index=" << sequence_index;
+    } else if (dynamic_kv_len.defined() && batched_sequence_count > 1) {
+      CHECK_EQ(batched_query_rows_per_sequence * batched_sequence_count,
+               q_tokens);
+      const char* gemm_env = std::getenv("XLLM_DSV4_BATCH_INDEXER_GEMM");
+      const bool use_gemm = gemm_env != nullptr && std::string(gemm_env) == "1";
+      if (use_gemm) {
+        selected = dsv4_batched_indexer_gemm(
+            params.query, params.weights, params.cache, params.scale_cache,
+            params.block_table, batched_query_rows_per_sequence, index_len,
+            index_topk_, params.output.value(), params.mate_compressed_block_table,
+            params.mate_swa_block_table, window_size_, mate_block_size,
+            params.mate_physical_indices.value(),
+            params.mate_extra_physical_indices.value(), dynamic_kv_len);
+        LOG_FIRST_N(INFO, 1) << "[DSV4_BATCH_INDEXER_GEMM] sequences="
+                            << batched_sequence_count << " rows=" << q_tokens
+                            << " capacity=" << index_len;
+      } else {
+        selected = kernel::musa::deepseek_v4_indexer_topk_graph_batched(
+          params.query, params.weights, params.cache, params.scale_cache,
+          params.block_table, batched_query_rows_per_sequence, index_len,
+          index_topk_, params.output.value(), params.mate_compressed_block_table,
+          params.mate_swa_block_table, window_size_, mate_block_size,
+          params.mate_physical_indices.value(),
+          params.mate_extra_physical_indices.value(), dynamic_kv_len);
+      }
+    } else if (dynamic_kv_len.defined()) {
+      selected = kernel::musa::deepseek_v4_indexer_topk_graph(
+          params.query, params.weights, params.cache, params.scale_cache,
+          params.block_table, sequence_index, index_len, index_topk_,
+          params.output.value(), params.mate_compressed_block_table,
+          params.mate_swa_block_table, window_size_, mate_block_size,
+          params.mate_physical_indices.value(),
+          params.mate_extra_physical_indices.value(), dynamic_kv_len);
+    } else {
+      selected = ::xllm::kernel::deepseek_v4_indexer_topk(params);
+    }
     if (dsv4_musa_mate_fused_dsa_trace_enabled()) {
       LOG(INFO) << "[DSV4_MUSA_FUSED_INDEXER] layer=" << layer_id_
                 << " q_tokens=" << q_tokens << " kv_tokens=" << kv_tokens
@@ -3255,21 +3532,58 @@ torch::Tensor DeepseekV4AttentionImpl::build_indexer_topk(
     }
     return selected;
   }
+  constexpr int64_t max_reference_score_bytes = 64 * 1024 * 1024;
+  if (q_tokens > decode_workspace_tokens_ &&
+      q_tokens * index_n_heads_ * kv_tokens * int64_t{sizeof(float)} >
+          max_reference_score_bytes) {
+    LOG_FIRST_N(INFO, 2) << "[DSV4_TILED_PREFILL_INDEXER] query=" << q_tokens
+        << " heads=" << index_n_heads_ << " keys=" << kv_tokens
+        << " scratch_limit_bytes=" << max_reference_score_bytes;
+    const char* prefill_gemm_env =
+        std::getenv("XLLM_DSV4_PREFILL_INDEXER_BF16_FP32");
+    const bool prefill_bf16_fp32 = prefill_gemm_env != nullptr &&
+        std::string(prefill_gemm_env) == "1" &&
+        query.scalar_type() == torch::kBFloat16 &&
+        active_index_kv.scalar_type() == torch::kBFloat16 &&
+        dsv4_prefill_indexer_bf16_fp32_shape(
+            q_tokens, index_n_heads_, kv_tokens, index_head_dim_);
+    if (prefill_bf16_fp32) {
+      LOG_FIRST_N(INFO, 2) << "[DSV4_PREFILL_INDEXER_BF16_FP32] query=" << q_tokens
+                           << " heads=" << index_n_heads_ << " keys=" << kv_tokens
+                           << " checked_bmm_out=1 fp32_scores=1";
+    }
+    const char* mask_once_env =
+        std::getenv("XLLM_DSV4_PREFILL_INDEXER_MASK_ONCE");
+    const bool prepare_masks_once = prefill_bf16_fp32 && q_tokens <= 2048 &&
+        mask_once_env != nullptr && std::string(mask_once_env) == "1" &&
+        q_abs_start >= 0 && !kernel::musa::is_stream_capturing();
+    if (prepare_masks_once) {
+      LOG_FIRST_N(INFO, 2) << "[DSV4_PREFILL_INDEXER_MASK_ONCE] q=" << q_tokens
+          << " keys=" << kv_tokens << " mask_bytes="
+          << q_tokens * (kv_tokens + std::min(index_topk_, kv_tokens))
+          << " per_call=1 unchanged_score_topk=1";
+    }
+    return dsv4_tiled_indexer_topk(query, active_index_kv, head_weights,
+                                   q_abs_start, index_topk_,
+                                   max_reference_score_bytes, prefill_bf16_fp32,
+                                   prepare_masks_once);
+  }
   auto scores =
       torch::matmul(query.to(torch::kFloat32),
                     active_index_kv.to(torch::kFloat32).transpose(0, 1));
   scores = torch::relu(scores);
   scores = (scores * head_weights.unsqueeze(-1)).sum(/*dim=*/1);
 
-  std::vector<int64_t> valid_counts;
-  valid_counts.reserve(static_cast<size_t>(q_tokens));
-  for (int64_t token = 0; token < q_tokens; ++token) {
-    valid_counts.push_back(
-        std::clamp<int64_t>((q_abs_start + token + 1) / 4, 0, kv_tokens));
-  }
-  auto valid = torch::tensor(
-      valid_counts,
-      torch::TensorOptions().dtype(torch::kLong).device(scores.device()));
+  // Keep the validity vector on-device. Constructing a host vector and
+  // torch::tensor(..., device) here performs a host-to-device copy during
+  // Graph capture and aborts on MUSA for multi-sequence q7.
+  auto valid = torch::arange(
+                   q_tokens,
+                   torch::TensorOptions().dtype(torch::kLong).device(
+                       scores.device()))
+                   .add(q_abs_start + 1)
+                   .div(4, /*rounding_mode=*/"floor")
+                   .clamp(0, kv_tokens);
   auto key_positions = torch::arange(
       kv_tokens,
       torch::TensorOptions().dtype(torch::kLong).device(scores.device()));
@@ -3352,7 +3666,7 @@ DeepseekV4AttentionImpl::forward(
                      torch::Tensor,
                      torch::Tensor>& compress_metadata) {
   const bool graph_target_q6 =
-      attn_metadata.is_acl_graph && !is_prefill &&
+      attn_metadata.is_acl_graph && !is_prefill && !is_chunked_prefill &&
       hidden_states.defined() && hidden_states.dim() > 0 &&
       hidden_states.size(0) > 2;
   const char* legacy_graph_env =
@@ -3364,6 +3678,290 @@ DeepseekV4AttentionImpl::forward(
   if (graph_target_q6 && enable_legacy_graph_q6 && legacy_fn != nullptr) {
     return legacy_fn(this, attn_metadata, hidden_states, kv_cache, kv_state,
                      is_prefill, is_chunked_prefill, compress_metadata);
+  }
+  const int64_t width = attn_metadata.num_speculative_tokens + 1;
+  if (dsv4_graph_sequence_views_enabled() && graph_target_q6 &&
+      dspark_block_size_ == 0 && width > 1 &&
+      hidden_states.size(0) > width) {
+    CHECK_EQ(hidden_states.size(0) % width, 0);
+    const int64_t sequences = hidden_states.size(0) / width;
+    const auto* host_lengths = dsv4_musa_host_sequence_lengths(attn_metadata);
+    CHECK(host_lengths != nullptr);
+    CHECK_EQ(host_lengths->size(1), sequences);
+    const auto* host_q = host_lengths->data_ptr<int32_t>();
+    const auto* host_kv = host_q + sequences;
+    const char* batch_output_env =
+        std::getenv("XLLM_DSV4_BATCH_OUTPUT_PROJECTION");
+    const bool batch_output_projection =
+        batch_output_env != nullptr && std::string(batch_output_env) == "1";
+    const char* batch_qkv_env = std::getenv("XLLM_DSV4_BATCH_QKV_PROJECTION");
+    const bool batch_qkv_projection =
+        batch_qkv_env != nullptr && std::string(batch_qkv_env) == "1" &&
+        qkv_a_weight_loaded_ && hidden_states.dim() == 2 &&
+        decode_qkv_a_output_.defined() &&
+        hidden_states.size(0) <= decode_qkv_a_output_.size(0);
+    const char* batch_attention_env =
+        std::getenv("XLLM_DSV4_BATCH_ATTENTION_PROJECTIONS");
+    // The direct multi-sequence path is useful even when the optional packed
+    // qkv scratch is unavailable (for example, a candidate that reuses an
+    // older model-loader archive).  forward_current_impl already owns the
+    // regular flattened q/kv projections; requiring batch_qkv_projection here
+    // silently fell back to one sequence view and prevented cross-request
+    // MATE fusion.  Keep the packed projection as an optimization, not as a
+    // prerequisite for the multi-sequence state/attention path.
+    const bool batch_attention_projections =
+        batch_output_projection && batch_attention_env != nullptr &&
+        std::string(batch_attention_env) == "1";
+    if (batch_attention_projections) {
+      // Keep one forward_current_impl invocation for the physical batch. It
+      // still iterates request ranges for cache/state identity, but q/kv,
+      // indexer metadata, MATE dispatch and output projection can share the
+      // batched token carrier. The old per-sequence view remains the default
+      // and is used whenever this opt-in path is not explicitly requested.
+      SequenceViewScope sequence_view_scope(/*defer_output_projection=*/false,
+                                            /*defer_o_a_projection=*/false);
+      DSAMetadata batched_metadata = attn_metadata;
+      // The direct multi-sequence path still processes each request range
+      // independently for C4/C128 boundary/state semantics. Carry the same
+      // private graph-view marker used by the proven per-sequence path so
+      // compressed strides and persistent state rows are not interpreted as a
+      // single flattened 112-token request.
+      batched_metadata.cp_input_dict[kDsv4GraphSequenceView] = torch::Tensor();
+      // Precompute the row-independent projections before entering the direct
+      // multi-sequence implementation. The old early return skipped this
+      // block entirely, so the path fused MATE but still repeated QKV/QB and
+      // compressor projections inside every layer/request view.
+      if (batch_qkv_projection) {
+        kernel::MatmulParams params;
+        params.a = packed_projection_input(hidden_states);
+        params.b = qkv_a_weight_;
+        params.bias = std::nullopt;
+        params.c = torch::empty(
+            {hidden_states.size(0), qkv_a_weight_.size(0)},
+            hidden_states.options());
+        auto batched_qkv = kernel::matmul(params);
+        batched_metadata.cp_input_dict[kDsv4BatchedQkvProjectionMetadataKey] =
+            batched_qkv;
+        auto q_down = batched_qkv.narrow(1, 0, q_lora_rank_).contiguous();
+        auto qr = std::get<0>(q_layernorm_->forward(q_down));
+        batched_metadata.cp_input_dict[kDsv4BatchedQrMetadataKey] = qr;
+        torch::Tensor qb;
+        if (q_indexer_b_weight_loaded_) {
+          kernel::MatmulParams qb_params;
+          qb_params.a = packed_projection_input(qr);
+          qb_params.b = q_indexer_b_weight_;
+          qb_params.bias = std::nullopt;
+          qb = kernel::matmul(qb_params);
+        } else {
+          qb = q_b_proj_->forward(qr);
+        }
+        batched_metadata.cp_input_dict[kDsv4BatchedQbMetadataKey] = qb;
+        if (qkv_a_indexer_weight_loaded_ &&
+            packed_fp8_activations_enabled()) {
+          batched_metadata.cp_input_dict[kDsv4BatchedHeadWeightsMetadataKey] =
+              indexer_weights_proj_->forward(hidden_states);
+        }
+        const char* joint_env =
+            std::getenv("XLLM_DSV4_GRAPH_JOINT_COMPRESSOR_PROJECTION");
+        if (compress_ratio_ == 4 && joint_env != nullptr &&
+            std::string(joint_env) == "1" &&
+            sp_joint_compressor_projection_weight_.defined()) {
+          kernel::MatmulParams compressor_params;
+          compressor_params.a = hidden_states;
+          compressor_params.b = sp_joint_compressor_projection_weight_;
+          compressor_params.bias = std::nullopt;
+          batched_metadata.cp_input_dict[kDsv4BatchedCompressorMetadataKey] =
+              kernel::matmul(compressor_params);
+        } else if (compress_ratio_ == 128 && compressor_wkv_ &&
+                   compressor_wgate_) {
+          auto kv_steps = kernel::musa::matmul(
+              hidden_states, compressor_wkv_->weight(), std::nullopt,
+              std::nullopt);
+          auto score_steps = kernel::musa::matmul(
+              hidden_states, compressor_wgate_->weight(), std::nullopt,
+              std::nullopt);
+          batched_metadata.cp_input_dict[kDsv4BatchedCompressorMetadataKey] =
+              torch::cat({kv_steps, score_steps}, 1);
+        }
+      }
+      return forward_current_impl(batched_metadata, hidden_states, kv_cache,
+                                  kv_state, is_prefill, is_chunked_prefill,
+                                  compress_metadata);
+    }
+    SequenceViewScope sequence_view_scope(batch_output_projection,
+                                         batch_attention_projections);
+    torch::Tensor batched_qkv;
+    if (batch_qkv_projection) {
+      kernel::MatmulParams params;
+      params.a = packed_projection_input(hidden_states);
+      params.b = qkv_a_weight_;
+      params.bias = std::nullopt;
+      // Do not use the layer's B1 scratch: every row view must remain valid
+      // while subsequent sequences reuse all their ordinary decode buffers.
+      params.c = torch::empty(
+          {hidden_states.size(0), qkv_a_weight_.size(0)}, hidden_states.options());
+      batched_qkv = kernel::matmul(params);
+    }
+    // These operations are row-independent. Keep their outputs separate from
+    // B1 scratch because every request-local state path reuses that scratch.
+    // All state gather/update/scatter and causal masks still run per request.
+    std::vector<std::pair<const char*, torch::Tensor>> batched_projections;
+    batched_projections.reserve(4);
+    if (batch_attention_projections) {
+      auto q_down = batched_qkv.narrow(1, 0, q_lora_rank_).contiguous();
+      auto qr = std::get<0>(q_layernorm_->forward(q_down));
+      batched_projections.emplace_back(kDsv4BatchedQrMetadataKey, qr);
+      torch::Tensor qb;
+      if (q_indexer_b_weight_loaded_) {
+        kernel::MatmulParams params;
+        params.a = packed_projection_input(qr);
+        params.b = q_indexer_b_weight_;
+        params.bias = std::nullopt;
+        qb = kernel::matmul(params);
+      } else {
+        qb = q_b_proj_->forward(qr);
+      }
+      batched_projections.emplace_back(kDsv4BatchedQbMetadataKey, qb);
+      if (qkv_a_indexer_weight_loaded_ && packed_fp8_activations_enabled()) {
+        batched_projections.emplace_back(kDsv4BatchedHeadWeightsMetadataKey,
+                                        indexer_weights_proj_->forward(hidden_states));
+      }
+      const char* joint_env =
+          std::getenv("XLLM_DSV4_GRAPH_JOINT_COMPRESSOR_PROJECTION");
+      if (compress_ratio_ == 4 && joint_env != nullptr &&
+          std::string(joint_env) == "1" &&
+          sp_joint_compressor_projection_weight_.defined()) {
+        kernel::MatmulParams params;
+        params.a = hidden_states;
+        params.b = sp_joint_compressor_projection_weight_;
+        params.bias = std::nullopt;
+        batched_projections.emplace_back(kDsv4BatchedCompressorMetadataKey,
+                                        kernel::matmul(params));
+      } else if (compress_ratio_ == 128 && compressor_wkv_ && compressor_wgate_) {
+        auto kv_steps = kernel::musa::matmul(
+            hidden_states, compressor_wkv_->weight(), std::nullopt, std::nullopt);
+        auto score_steps = kernel::musa::matmul(
+            hidden_states, compressor_wgate_->weight(), std::nullopt, std::nullopt);
+        batched_projections.emplace_back(kDsv4BatchedCompressorMetadataKey,
+                                        torch::cat({kv_steps, score_steps}, 1));
+      }
+    }
+    std::vector<torch::Tensor> sequence_outputs;
+    sequence_outputs.reserve(sequences);
+    for (int64_t seq = 0; seq < sequences; ++seq) {
+      CHECK_EQ(host_q[seq], width) << "No padded or ragged row may become a request";
+      DSAMetadata row = attn_metadata;
+      row.cp_input_dict[kDsv4HostSequenceLengthsMetadataKey] =
+          host_lengths->narrow(1, seq, 1).contiguous();
+      // The row-local block table is intentionally narrowed to row zero, but
+      // recurrent compressor/indexer state is owned by the original request
+      // slot. Carry that identity separately so a sequence-view replay does
+      // not load sequence zero's state for every physical request.
+      row.cp_input_dict[kDsv4GraphSequenceIndexMetadataKey] =
+          torch::tensor({static_cast<int32_t>(seq)},
+                        torch::TensorOptions().dtype(torch::kInt32).device(
+                            torch::kCPU));
+      row.cp_input_dict[kDsv4GraphSequenceView] = torch::Tensor();
+      if (batched_qkv.defined()) {
+        row.cp_input_dict[kDsv4BatchedQkvProjectionMetadataKey] =
+            batched_qkv.narrow(/*dim=*/0, /*start=*/seq * width, /*length=*/width);
+      }
+      for (const auto& [key, projection] : batched_projections) {
+        row.cp_input_dict[key] = projection.narrow(0, seq * width, width);
+      }
+      row.max_query_len = width;
+      row.max_seq_len = host_kv[seq];
+      const auto slice = [](torch::Tensor& tensor, int64_t start, int64_t count) {
+        if (tensor.defined()) {
+          CHECK_GT(tensor.dim(), 0);
+          CHECK_GE(tensor.size(0), start + count);
+          tensor = tensor.narrow(0, start, count);
+        }
+      };
+      for (auto* tensor : {&row.seq_lens, &row.seq_lens_q,
+                           &row.actual_seq_lengths_kv, &row.start_pos}) {
+        slice(*tensor, seq, 1);
+      }
+      // Compact verify uses the single-sequence KV carrier above. The
+      // cumulative query tensor is retained only as a request-local view.
+      slice(row.actual_seq_lengths_query, seq, 2);
+      for (auto* tensor : {&row.cos, &row.sin, &row.kv_cos, &row.kv_sin,
+                           &row.c4_input_cos, &row.c4_input_sin,
+                           &row.c128_input_cos, &row.c128_input_sin,
+                           &row.input_positions}) {
+        slice(*tensor, seq * width, width);
+      }
+      const int64_t c4_stride = dsv4_graph_compressed_stride(width, 4);
+      const int64_t c128_stride = dsv4_graph_compressed_stride(width, 128);
+      for (auto* tensor : {&row.c4_cos, &row.c4_sin, &row.c4_pad_positions}) {
+        slice(*tensor, seq * c4_stride, c4_stride);
+      }
+      for (auto* tensor : {&row.c128_cos, &row.c128_sin, &row.c128_pad_positions}) {
+        slice(*tensor, seq * c128_stride, c128_stride);
+      }
+      CHECK(row.caches_info != nullptr);
+      for (size_t ci = 0; ci < row.block_tables[layer_id_].size(); ++ci) {
+        slice(row.block_tables[layer_id_][ci], seq, 1);
+        const auto& info = (*row.caches_info)[layer_id_][ci];
+        const int64_t stride = info.type == DSACacheType::TOKEN
+            ? dsv4_graph_compressed_stride(width, info.ratio) : width;
+        slice(row.slot_mappings[layer_id_][ci], seq * stride, stride);
+      }
+      auto hidden_row = hidden_states.narrow(0, seq * width, width);
+      auto result = forward_current_impl(row, hidden_row, kv_cache, kv_state,
+                                         false, false, compress_metadata);
+      // Each invocation reuses the layer's B1 scratch/output buffers. Snapshot
+      // the result on-device before the next sequence can overwrite it.
+      sequence_outputs.push_back(std::get<0>(result).clone());
+    }
+    LOG_FIRST_N(INFO, 1)
+        << "[DSV4_GRAPH_SEQUENCE_VIEWS] physical_sequences=" << sequences
+        << " query_width=" << width;
+    if (batch_qkv_projection) {
+      LOG_FIRST_N(INFO, 1)
+          << "[DSV4_BATCH_QKV_PROJECTION] sequences=" << sequences
+          << " tokens=" << hidden_states.size(0);
+    }
+    auto output = torch::cat(sequence_outputs, /*dim=*/0);
+    if (batch_attention_projections) {
+      auto grouped = output.view({output.size(0), n_local_groups_, -1});
+      if (n_local_groups_ == 1) {
+        output = torch::mm(grouped.select(1, 0),
+                           o_a_projection_weight_.select(0, 0).transpose(0, 1));
+      } else {
+        output = torch::einsum("tgd,grd->tgr", {grouped, o_a_projection_weight_})
+                     .reshape({output.size(0), -1});
+      }
+      LOG_FIRST_N(INFO, 1) << "[DSV4_BATCH_ATTENTION_PROJECTIONS] sequences="
+                           << sequences << " tokens=" << hidden_states.size(0);
+    }
+    if (batch_output_projection) {
+      // Each sequence keeps its own state/cache/attention mapping and copied
+      // low-rank result. wo_b is row-independent: execute it once, then perform
+      // one TP collective for all live rows instead of one per sequence.
+      CHECK_EQ(output.dim(), 2);
+      CHECK_EQ(output.size(0), hidden_states.size(0));
+      output = o_b_proj_->forward(output);
+      ProcessGroup* process_group = o_b_proj_->process_group();
+      if (process_group != nullptr && process_group->world_size() > 1) {
+        std::optional<torch::Tensor> output_workspace;
+        if (decode_o_b_reduce_output_.defined() &&
+            output.size(0) <= decode_o_b_reduce_output_.size(0)) {
+          output_workspace = decode_o_b_reduce_output_.narrow(
+              /*dim=*/0, /*start=*/0, /*length=*/output.size(0));
+        }
+        if (auto reduced = musa_allreduce_custom(
+                process_group, output, output_workspace)) {
+          output = *reduced;
+        } else {
+          process_group->allreduce(output);
+        }
+      }
+      LOG_FIRST_N(INFO, 1)
+          << "[DSV4_BATCH_OUTPUT_PROJECTION] sequences=" << sequences
+          << " tokens=" << output.size(0);
+    }
+    return {output, std::nullopt};
   }
   return forward_current_impl(attn_metadata, hidden_states, kv_cache, kv_state,
                               is_prefill, is_chunked_prefill,
@@ -3407,16 +4005,31 @@ DeepseekV4AttentionImpl::forward_current_impl(
     prefix_indexer_kv_state_.clear();
     prefix_indexer_score_state_.clear();
     if (dsv4_musa_clear_state_cache_on_request_enabled()) {
+      const auto state_ids_it =
+          attn_metadata.cp_input_dict.find(kDsv4PrefillResetBlocksMetadataKey);
+      torch::Tensor active_state_blocks;
       for (const auto& cache : {std::get<1>(kv_state),
                                 std::get<2>(kv_state),
                                 std::get<3>(kv_state),
                                 std::get<4>(kv_state)}) {
         if (cache.defined() && cache.numel() > 0) {
-          cache.zero_();
+          if (!active_state_blocks.defined()) {
+            CHECK(state_ids_it != attn_metadata.cp_input_dict.end())
+                << "Eager new-request prefill needs request-owned state block IDs";
+            // Filtering is done once on the existing host metadata. MUSA
+            // masked_select performs a blocking D2H size query and can wait
+            // behind an outstanding collective from a faster rank.
+            active_state_blocks = state_ids_it->second;
+            CHECK_EQ(active_state_blocks.device(), cache.device());
+            CHECK_EQ(active_state_blocks.scalar_type(), torch::kInt64);
+          }
+          if (active_state_blocks.numel() > 0) {
+            dsv4_clear_prefill_state_rows(cache, active_state_blocks);
+          }
         }
       }
-      LOG(INFO) << "[DSV4_STATE_RESET] cleared persistent compressor/indexer "
-                   "state caches for new request, layer="
+      LOG(INFO) << "[DSV4_STATE_RESET] cleared request-owned compressor/indexer "
+                   "state rows for new request, layer="
                 << layer_id_;
     }
     if (dsv4_musa_clear_decode_workspaces_on_request_enabled()) {
@@ -3528,9 +4141,28 @@ DeepseekV4AttentionImpl::forward_current_impl(
 
   torch::Tensor q_down;
   torch::Tensor kv_down;
+  torch::Tensor deferred_kv_norm_output;
+  const char* projection_norm_copy_env = dsv4_projection_norm_copy_shape(
+      projection_hidden_states.size(0), is_prefill, is_chunked_prefill)
+      ? std::getenv("XLLM_DSV4_FUSED_PROJECTION_NORM_COPY") : nullptr;
+  const bool fuse_projection_norm_copy = projection_norm_copy_env != nullptr &&
+      projection_norm_copy_env[0] == '1' && projection_norm_copy_env[1] == '\0';
   torch::Tensor packed_indexer_head_weights;
   if (use_packed_qkv_a) {
-    auto qkv_down = packed_qkv_a_matmul(qkv_a_weight_);
+    const auto batched_projection =
+        attn_metadata.cp_input_dict.find(kDsv4BatchedQkvProjectionMetadataKey);
+    torch::Tensor qkv_down;
+    if (batched_projection != attn_metadata.cp_input_dict.end()) {
+      CHECK(dsv4_sequence_view_active && attn_metadata.is_acl_graph &&
+            !is_prefill && !is_chunked_prefill);
+      qkv_down = batched_projection->second;
+      CHECK(qkv_down.defined() && qkv_down.dim() == 2 &&
+            qkv_down.is_contiguous());
+      CHECK_EQ(qkv_down.size(0), projection_hidden_states.size(0));
+      CHECK_EQ(qkv_down.size(1), qkv_a_weight_.size(0));
+    } else {
+      qkv_down = packed_qkv_a_matmul(qkv_a_weight_);
+    }
     if (projection_hidden_states.size(0) == 1) {
       q_down = qkv_down.slice(
           /*dim=*/1, /*start=*/0, /*end=*/q_lora_rank_);
@@ -3551,10 +4183,15 @@ DeepseekV4AttentionImpl::forward_current_impl(
           /*dim=*/0,
           /*start=*/0,
           /*length=*/projection_hidden_states.size(0));
-      kv_down_workspace.copy_(qkv_down.slice(/*dim=*/1,
-                                             /*start=*/q_lora_rank_,
-                                             /*end=*/q_lora_rank_ + head_dim_));
-      kv_down = kv_down_workspace;
+      auto kv_view = qkv_down.slice(/*dim=*/1, /*start=*/q_lora_rank_,
+                                    /*end=*/q_lora_rank_ + head_dim_);
+      if (fuse_projection_norm_copy) {
+        kv_down = kv_view;
+        deferred_kv_norm_output = kv_down_workspace;
+      } else {
+        kv_down_workspace.copy_(kv_view);
+        kv_down = kv_down_workspace;
+      }
     }
     if (qkv_a_indexer_weight_loaded_) {
       packed_indexer_head_weights = qkv_down.slice(
@@ -3563,8 +4200,11 @@ DeepseekV4AttentionImpl::forward_current_impl(
           /*end=*/q_lora_rank_ + head_dim_ + index_n_heads_);
       if (packed_fp8_activations_enabled()) {
         // The packed head-weight projection is BF16, not an FP8 linear.
-        packed_indexer_head_weights =
-            indexer_weights_proj_->forward(projection_hidden_states);
+        const auto batch_weights = attn_metadata.cp_input_dict.find(
+            kDsv4BatchedHeadWeightsMetadataKey);
+        packed_indexer_head_weights = batch_weights != attn_metadata.cp_input_dict.end()
+            ? batch_weights->second
+            : indexer_weights_proj_->forward(projection_hidden_states);
       }
     }
   } else if (qkv_a_weight_loaded_) {
@@ -3586,8 +4226,10 @@ DeepseekV4AttentionImpl::forward_current_impl(
     q_a_norm_output = decode_q_a_norm_output_.narrow(
         /*dim=*/0, /*start=*/0, /*length=*/q_down.size(0));
   }
-  auto qr =
-      std::get<0>(q_layernorm_->forward(q_down, std::nullopt, q_a_norm_output));
+  const auto batch_qr = attn_metadata.cp_input_dict.find(kDsv4BatchedQrMetadataKey);
+  auto qr = batch_qr != attn_metadata.cp_input_dict.end()
+      ? batch_qr->second
+      : std::get<0>(q_layernorm_->forward(q_down, std::nullopt, q_a_norm_output));
   maybe_sync_attention_stage(layer_id_, "q_layernorm", qr);
   const int64_t rope_token_count = sp_context == nullptr
                                        ? projection_hidden_states.size(0)
@@ -3623,6 +4265,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
   torch::Tensor packed_indexer_query;
   auto compute_q_branch = [&]() {
     torch::Tensor q_projection;
+    torch::Tensor deferred_q_norm_output;
     const int64_t main_q_width = n_local_heads_ * head_dim_;
     const bool use_packed_q_indexer =
         q_indexer_b_weight_loaded_ && qr.size(0) > 0 &&
@@ -3640,12 +4283,20 @@ DeepseekV4AttentionImpl::forward_current_impl(
         params.c = decode_q_indexer_b_output_.narrow(
             /*dim=*/0, /*start=*/0, /*length=*/qr.size(0));
       }
-      auto packed_q = kernel::matmul(params);
+      const auto batch_qb = attn_metadata.cp_input_dict.find(kDsv4BatchedQbMetadataKey);
+      auto packed_q = batch_qb != attn_metadata.cp_input_dict.end()
+          ? batch_qb->second : kernel::matmul(params);
       if (use_packed_q_indexer && qr.size(0) > 1) {
-        q_projection = decode_q_main_output_.narrow(
+        auto q_workspace = decode_q_main_output_.narrow(
             /*dim=*/0, /*start=*/0, /*length=*/qr.size(0));
-        q_projection.copy_(packed_q.slice(
-            /*dim=*/1, /*start=*/0, /*end=*/main_q_width));
+        auto q_view = packed_q.slice(/*dim=*/1, /*start=*/0, /*end=*/main_q_width);
+        if (fuse_projection_norm_copy) {
+          q_projection = q_view;
+          deferred_q_norm_output = q_workspace;
+        } else {
+          q_workspace.copy_(q_view);
+          q_projection = q_workspace;
+        }
       } else if (use_packed_q_indexer) {
         q_projection = packed_q.slice(
             /*dim=*/1, /*start=*/0, /*end=*/main_q_width);
@@ -3661,7 +4312,9 @@ DeepseekV4AttentionImpl::forward_current_impl(
                 .view({qr.size(0), index_n_heads_, index_head_dim_});
       }
     } else {
-      q_projection = q_b_proj_->forward(qr);
+      const auto batch_qb = attn_metadata.cp_input_dict.find(kDsv4BatchedQbMetadataKey);
+      q_projection = batch_qb != attn_metadata.cp_input_dict.end()
+          ? batch_qb->second : q_b_proj_->forward(qr);
     }
     q = q_projection.view({-1, n_local_heads_, head_dim_});
     maybe_sync_attention_stage(layer_id_, "q_b_proj", q);
@@ -3669,10 +4322,24 @@ DeepseekV4AttentionImpl::forward_current_impl(
       LOG(INFO) << "[DSV4_MUSA_TRACE] attention layer=" << layer_id_
                 << " after_q_b shape=" << q.sizes();
     }
-    const bool fused_q_norm_rope =
-        head_dim_ == 512 && nope_head_dim_ == 448 && rope_head_dim_ == 64 &&
-        kernel::musa::deepseek_v4_q_rmsnorm_rope_inplace(
-            q, active_cos, active_sin, eps_);
+    bool fused_q_norm_rope = false;
+    if (deferred_q_norm_output.defined()) {
+      auto q_output = deferred_q_norm_output.view({-1, n_local_heads_, head_dim_});
+      fused_q_norm_rope = head_dim_ == 512 && nope_head_dim_ == 448 && rope_head_dim_ == 64 &&
+          kernel::musa::deepseek_v4_q_rmsnorm_rope_out(q, active_cos, active_sin, eps_, q_output);
+      if (fused_q_norm_rope) {
+        LOG_FIRST_N(INFO, 2) << "[DSV4_FUSED_Q_COPY_NORM_ROPE] rows=" << q.size(0)
+                             << " source_row_stride=" << q.stride(0);
+      } else {
+        deferred_q_norm_output.copy_(q_projection);
+      }
+      q = q_output;
+    }
+    if (!fused_q_norm_rope) {
+      fused_q_norm_rope =
+          head_dim_ == 512 && nope_head_dim_ == 448 && rope_head_dim_ == 64 &&
+          kernel::musa::deepseek_v4_q_rmsnorm_rope_inplace(q, active_cos, active_sin, eps_);
+    }
     if (fused_q_norm_rope) {
       maybe_sync_attention_stage(layer_id_, "q_rms_norm_rope", q);
     } else {
@@ -3728,10 +4395,27 @@ DeepseekV4AttentionImpl::forward_current_impl(
               << " after_kv_proj shape=" << kv_down.sizes();
   }
   auto kv = kv_down.view({-1, 1, head_dim_});
-  const bool fused_kv_norm_rope =
-      head_dim_ == 512 && nope_head_dim_ == 448 && rope_head_dim_ == 64 &&
-      kernel::musa::deepseek_v4_weighted_rmsnorm_rope_inplace(
-          kv, kv_layernorm_->weight(), active_cos, active_sin, eps_);
+  bool fused_kv_norm_rope = false;
+  if (deferred_kv_norm_output.defined()) {
+    auto kv_output = deferred_kv_norm_output.view({-1, 1, head_dim_});
+    fused_kv_norm_rope = head_dim_ == 512 && nope_head_dim_ == 448 && rope_head_dim_ == 64 &&
+        kernel::musa::deepseek_v4_weighted_rmsnorm_rope_out(
+            kv, kv_layernorm_->weight(), active_cos, active_sin, eps_, kv_output);
+    if (fused_kv_norm_rope) {
+      LOG_FIRST_N(INFO, 2) << "[DSV4_FUSED_KV_COPY_NORM_ROPE] rows=" << kv.size(0)
+                           << " source_row_stride=" << kv.stride(0);
+    } else {
+      deferred_kv_norm_output.copy_(kv_down);
+    }
+    kv_down = deferred_kv_norm_output;
+    kv = kv_output;
+  }
+  if (!fused_kv_norm_rope) {
+    fused_kv_norm_rope =
+        head_dim_ == 512 && nope_head_dim_ == 448 && rope_head_dim_ == 64 &&
+        kernel::musa::deepseek_v4_weighted_rmsnorm_rope_inplace(
+            kv, kv_layernorm_->weight(), active_cos, active_sin, eps_);
+  }
   if (fused_kv_norm_rope) {
     maybe_sync_attention_stage(layer_id_, "kv_rms_norm_rope", kv);
   } else {
@@ -3836,7 +4520,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
        attn_metadata.actual_seq_lengths_kv.numel() == 1) ||
       (attn_metadata.seq_lens.defined() &&
        attn_metadata.seq_lens.numel() == 1);
-  const bool compact_spec_verify =
+  const bool compact_spec_verify_single =
       query_ranges.size() == 1 &&
       query_ranges.front().first == 0 &&
       query_ranges.front().second == total_tokens && total_tokens > 1 &&
@@ -3844,8 +4528,59 @@ DeepseekV4AttentionImpl::forward_current_impl(
       ((attn_metadata.num_speculative_tokens > 0 &&
         total_tokens == attn_metadata.num_speculative_tokens + 1) ||
        attn_metadata.max_query_len == total_tokens || total_tokens == 2);
+  const bool compact_spec_verify_multi =
+      attn_metadata.is_acl_graph && query_ranges.size() > 1 &&
+      attn_metadata.num_speculative_tokens > 0 &&
+      total_tokens % (attn_metadata.num_speculative_tokens + 1) == 0 &&
+      std::all_of(query_ranges.begin(), query_ranges.end(),
+                  [&](const std::pair<int64_t, int64_t>& range) {
+                    return range.second - range.first ==
+                           attn_metadata.num_speculative_tokens + 1;
+                  });
+  const std::optional<size_t> graph_state_sequence_index =
+      dsv4_graph_sequence_index(attn_metadata);
+  const auto state_sequence_index_for = [&](size_t local_sequence) {
+    return graph_state_sequence_index.value_or(local_sequence);
+  };
+  const size_t state_sequence_count =
+      graph_state_sequence_index.has_value()
+          ? *graph_state_sequence_index + 1
+          : query_ranges.size();
+  const bool compact_spec_verify = compact_spec_verify_single ||
+                                   compact_spec_verify_multi;
   auto kv_lens =
       build_kv_lens(attn_metadata, query_ranges.size(), query_ranges);
+  const char* dynamic_short_keys = std::getenv("XLLM_DSV4_DYNAMIC_SHORT_GRAPH_KEYS");
+  if (compact_spec_verify_multi && dynamic_short_keys != nullptr &&
+      std::string(dynamic_short_keys) == "1") {
+    CHECK(graph_decode_kv_seq_lens.defined())
+        << "Dynamic short Graph key requires live positions, not a captured host KV fill";
+  }
+  // Direct multi-sequence Graph capture may not carry the optional
+  // input_positions view. Batched MATE still needs one causal KV length per
+  // proposal row, not one maximum length for the whole request. Materialize
+  // the rows into persistent storage from the already validated per-sequence
+  // KV lengths; scalar fill is capture-safe and introduces no allocation. The
+  // MATE physical-index rows still carry the causal -1 tail masking.
+  if (!graph_decode_kv_seq_lens.defined() && !is_prefill &&
+      !is_chunked_prefill && attn_metadata.is_acl_graph &&
+      query_ranges.size() > 1 && decode_kv_seq_lens_.defined() &&
+      decode_kv_seq_lens_.size(0) >= total_tokens &&
+      kv_lens.size() >= query_ranges.size()) {
+    for (size_t seq_idx = 0; seq_idx < query_ranges.size(); ++seq_idx) {
+      const int64_t q_start = query_ranges[seq_idx].first;
+      const int64_t q_end = query_ranges[seq_idx].second;
+      const int64_t q_len = q_end - q_start;
+      if (q_len <= 0) {
+        continue;
+      }
+      auto rows = decode_kv_seq_lens_.narrow(0, q_start, q_len);
+      rows.fill_(static_cast<int32_t>(std::max<int64_t>(
+          kv_lens[seq_idx], 1)));
+    }
+    graph_decode_kv_seq_lens =
+        decode_kv_seq_lens_.narrow(0, 0, total_tokens);
+  }
   const int64_t full_kv_threshold = dsv4_musa_prefill_full_kv_threshold();
   const int64_t max_kv_len =
       kv_lens.empty() ? total_tokens
@@ -3875,7 +4610,25 @@ DeepseekV4AttentionImpl::forward_current_impl(
   }
   std::vector<torch::Tensor> outputs;
   outputs.reserve(query_ranges.size());
-
+  struct PendingBatchedMate {
+    torch::Tensor q;
+    torch::Tensor logical_indices;
+    torch::Tensor physical_indices;
+    torch::Tensor extra_physical_indices;
+    int64_t kv_len = 0;
+    int64_t q_start = 0;
+  };
+  const bool batch_mate_across_sequences =
+      dsv4_sequence_view_active && query_ranges.size() > 1 &&
+      dsv4_musa_mate_fused_dsa_multi_sequence_enabled() && [] {
+        const char* value = std::getenv(
+            "XLLM_DSV4_DISABLE_BATCH_MATE_ACROSS_SEQUENCES");
+        return value == nullptr || std::string(value) != "1";
+      }();
+  std::vector<PendingBatchedMate> pending_batched_mate;
+  if (batch_mate_across_sequences) {
+    pending_batched_mate.reserve(query_ranges.size());
+  }
   // Compression/cache construction is independent from the attention route.
   // A short normal prefill may use dense full-KV attention, but it must still
   // populate C4/C128 and indexer caches for the first decode step that crosses
@@ -3993,6 +4746,20 @@ DeepseekV4AttentionImpl::forward_current_impl(
               state_block_indices_it != attn_metadata.cp_input_dict.end()
           ? state_block_indices_it->second
           : torch::Tensor();
+  const auto read_indices_it =
+      attn_metadata.cp_input_dict.find(kDsv4PrefillStateReadIndicesMetadataKey);
+  const auto prefill_read_slots = [&](const torch::Tensor& write_slots,
+                                      size_t seq, const torch::Tensor& cache,
+                                      int64_t rows, int64_t block_size) {
+    if (!is_chunked_prefill || read_indices_it == attn_metadata.cp_input_dict.end()) {
+      return write_slots;
+    }
+    // Do not reuse the write-slot workspace: its original addresses are
+    // retained for scattering the resulting state into this chunk's page.
+    return compressor_state_slots_from_indices(
+        read_indices_it->second, seq, cache.size(0), rows, block_size,
+        cache.device(), torch::Tensor());
+  };
   const int64_t compressor_state_cache_idx =
       use_compressed_attention
           ? find_swa_cache_index(attn_metadata, layer_id_, /*ordinal=*/1)
@@ -4104,6 +4871,8 @@ DeepseekV4AttentionImpl::forward_current_impl(
   std::vector<torch::Tensor> indexer_kv_state_slots_by_seq(query_ranges.size());
   std::vector<torch::Tensor> indexer_score_state_slots_by_seq(
       query_ranges.size());
+  std::vector<uint8_t> compact_indexer_state_gathered(
+      query_ranges.size(), 0);
   const bool use_compact_decode_workspace =
       !is_prefill && query_ranges.size() == 1 &&
       (total_tokens == 1 ||
@@ -4118,6 +4887,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
   const char* grouped_state_env = std::getenv("XLLM_DSV4_GROUPED_STATE_GATHER");
   const bool grouped_state_gather =
       grouped_state_env != nullptr && std::string(grouped_state_env) == "1" &&
+      !graph_state_sequence_index.has_value() &&
       use_compact_decode_workspace && use_persistent_compressor_state &&
       decode_compressor_kv_state_.defined() &&
       decode_compressor_score_state_.defined() &&
@@ -4143,20 +4913,129 @@ DeepseekV4AttentionImpl::forward_current_impl(
         caches, tables, rows, slots, outputs, 0, compact_decode_state_position);
     LOG_FIRST_N(INFO, 1) << "[DSV4_GROUPED_STATE_GATHER] roles=" << caches.size();
   }
+  const char* batched_state_env = std::getenv("XLLM_DSV4_BATCH_STATE_GATHER");
+  const bool batched_state_gather =
+      compact_spec_verify_multi && dsv4_sequence_view_active &&
+      !is_prefill && !is_chunked_prefill && use_persistent_compressor_state &&
+      batched_state_env != nullptr && std::string(batched_state_env) == "1";
+  std::vector<torch::Tensor> batched_decode_states;
+  if (batched_state_gather) {
+    const int64_t sequences = static_cast<int64_t>(query_ranges.size());
+    const int64_t query_width = attn_metadata.num_speculative_tokens + 1;
+    CHECK_EQ(query_width, 7);
+    CHECK_LE(sequences, 16);
+    CHECK(!graph_state_sequence_index.has_value());
+    compressor_kv_state_.resize(state_sequence_count);
+    compressor_score_state_.resize(state_sequence_count);
+    std::vector<torch::Tensor> caches{compressor_kv_cache, compressor_score_cache};
+    std::vector<torch::Tensor> tables{compressor_state_block_table,
+                                     compressor_score_state_block_table};
+    std::vector<int64_t> rows{compressor_state_rows, compressor_state_rows};
+    if (use_persistent_indexer_state) {
+      indexer_kv_state_.resize(state_sequence_count);
+      indexer_score_state_.resize(state_sequence_count);
+      caches.insert(caches.end(), {indexer_kv_state_cache, indexer_score_state_cache});
+      tables.insert(tables.end(), {indexer_state_block_table,
+                                   indexer_score_state_block_table});
+      rows.insert(rows.end(), {indexer_state_rows, indexer_state_rows});
+    }
+    std::vector<torch::Tensor> slots;
+    slots.reserve(caches.size());
+    batched_decode_states.reserve(caches.size());
+    for (size_t role = 0; role < caches.size(); ++role) {
+      slots.emplace_back(torch::empty({sequences, rows[role]},
+                                      caches[role].options().dtype(torch::kInt64)));
+      batched_decode_states.emplace_back(torch::empty(
+          {sequences, rows[role], caches[role].size(2)}, caches[role].options()));
+    }
+    kernel::musa::deepseek_v4_state_gather_batched(
+        caches, tables, rows, slots, batched_decode_states, sequences, query_width,
+        attn_metadata.input_positions);
+    for (size_t seq = 0; seq < query_ranges.size(); ++seq) {
+      compressor_kv_state_[seq] = batched_decode_states[0].select(0, seq);
+      compressor_score_state_[seq] = batched_decode_states[1].select(0, seq);
+      compressor_kv_state_slots_by_seq[seq] = slots[0].select(0, seq);
+      compressor_score_state_slots_by_seq[seq] = slots[1].select(0, seq);
+      if (use_persistent_indexer_state) {
+        indexer_kv_state_[seq] = batched_decode_states[2].select(0, seq);
+        indexer_score_state_[seq] = batched_decode_states[3].select(0, seq);
+        indexer_kv_state_slots_by_seq[seq] = slots[2].select(0, seq);
+        indexer_score_state_slots_by_seq[seq] = slots[3].select(0, seq);
+        compact_indexer_state_gathered[seq] = 1;
+      }
+    }
+    LOG_FIRST_N(INFO, 1) << "[DSV4_BATCH_STATE_GATHER] sequences=" << sequences
+                       << " roles=" << caches.size() << " query_width=" << query_width;
+  }
   if (use_persistent_compressor_state) {
-    compressor_kv_state_.resize(query_ranges.size());
-    compressor_score_state_.resize(query_ranges.size());
+    compressor_kv_state_.resize(state_sequence_count);
+    compressor_score_state_.resize(state_sequence_count);
     auto kv_state_2d = compressor_kv_cache.view({-1, compressor_state_dim});
     auto score_state_2d =
         compressor_score_cache.view({-1, compressor_state_dim});
     const int64_t state_block_size = compressor_kv_cache.size(1);
     for (size_t seq_idx = 0; seq_idx < query_ranges.size(); ++seq_idx) {
+      if (batched_state_gather) {
+        continue;
+      }
+      const size_t state_seq_idx = state_sequence_index_for(seq_idx);
+      if (compact_spec_verify_multi) {
+        // A verify segment may straddle an SWA block boundary. Read the state
+        // belonging to this request's first input position, not the last
+        // valid block in the capacity-padded table (which can be a proposal).
+        auto position = attn_metadata.input_positions.narrow(
+            0, query_ranges[seq_idx].first, 1);
+        auto kv_slots = torch::empty_like(decode_compressor_kv_slots_);
+        auto score_slots = torch::empty_like(decode_compressor_score_slots_);
+        auto kv_output = torch::empty_like(decode_compressor_kv_state_);
+        auto score_output = torch::empty_like(decode_compressor_score_state_);
+        if (use_persistent_indexer_state) {
+          auto indexer_kv_slots = torch::empty_like(decode_indexer_kv_slots_);
+          auto indexer_score_slots =
+              torch::empty_like(decode_indexer_score_slots_);
+          auto indexer_kv_output =
+              torch::empty_like(decode_indexer_kv_state_);
+          auto indexer_score_output =
+              torch::empty_like(decode_indexer_score_state_);
+          kernel::musa::deepseek_v4_state_gather_many(
+              {compressor_kv_cache, compressor_score_cache,
+               indexer_kv_state_cache, indexer_score_state_cache},
+              {compressor_state_block_table,
+               compressor_score_state_block_table, indexer_state_block_table,
+               indexer_score_state_block_table},
+              {compressor_state_rows, compressor_state_rows, indexer_state_rows,
+               indexer_state_rows},
+              {kv_slots, score_slots, indexer_kv_slots, indexer_score_slots},
+              {kv_output, score_output, indexer_kv_output, indexer_score_output},
+              static_cast<int64_t>(seq_idx), position);
+          indexer_kv_state_[state_seq_idx] = indexer_kv_output;
+          indexer_score_state_[state_seq_idx] = indexer_score_output;
+          indexer_kv_state_slots_by_seq[seq_idx] =
+              indexer_kv_slots.narrow(0, 0, indexer_state_rows);
+          indexer_score_state_slots_by_seq[seq_idx] =
+              indexer_score_slots.narrow(0, 0, indexer_state_rows);
+          compact_indexer_state_gathered[seq_idx] = 1;
+        } else {
+          kernel::musa::deepseek_v4_state_gather_many(
+              {compressor_kv_cache, compressor_score_cache},
+              {compressor_state_block_table,
+               compressor_score_state_block_table},
+              {compressor_state_rows, compressor_state_rows},
+              {kv_slots, score_slots}, {kv_output, score_output},
+              static_cast<int64_t>(seq_idx), position);
+        }
+        compressor_kv_state_[state_seq_idx] = kv_output;
+        compressor_score_state_[state_seq_idx] = score_output;
+        compressor_kv_state_slots_by_seq[seq_idx] = kv_slots.narrow(0, 0, compressor_state_rows);
+        compressor_score_state_slots_by_seq[seq_idx] = score_slots.narrow(0, 0, compressor_state_rows);
+        continue;
+      }
       const bool use_decode_workspace =
           use_compact_decode_workspace &&
           decode_compressor_kv_state_.defined() &&
           decode_compressor_score_state_.defined();
       if (use_decode_workspace) {
-        compressor_kv_state_[seq_idx] = grouped_state_gather
+        compressor_kv_state_[state_seq_idx] = grouped_state_gather
             ? decode_compressor_kv_state_.narrow(0, 0, compressor_state_rows)
             : kernel::musa::deepseek_v4_state_gather(
             compressor_kv_cache,
@@ -4167,7 +5046,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
             decode_compressor_kv_slots_,
             decode_compressor_kv_state_,
             compact_decode_state_position);
-        compressor_score_state_[seq_idx] = grouped_state_gather
+        compressor_score_state_[state_seq_idx] = grouped_state_gather
             ? decode_compressor_score_state_.narrow(0, 0, compressor_state_rows)
             : kernel::musa::deepseek_v4_state_gather(
                 compressor_score_cache,
@@ -4188,7 +5067,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
       }
       auto kv_slots = compressor_state_slots_from_indices(
           state_block_indices,
-          static_cast<int64_t>(seq_idx),
+          static_cast<int64_t>(state_seq_idx),
           compressor_kv_cache.size(0),
           compressor_state_rows,
           state_block_size,
@@ -4204,7 +5083,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
       }
       auto score_slots = compressor_state_slots_from_indices(
           state_block_indices,
-          static_cast<int64_t>(seq_idx),
+          static_cast<int64_t>(state_seq_idx),
           compressor_score_cache.size(0),
           compressor_state_rows,
           state_block_size,
@@ -4222,34 +5101,61 @@ DeepseekV4AttentionImpl::forward_current_impl(
       compressor_score_state_slots_by_seq[seq_idx] = score_slots;
       if ((!is_prefill || is_chunked_prefill) && kv_slots.defined() &&
           score_slots.defined()) {
-        compressor_kv_state_[seq_idx] = kv_state_2d.index_select(0, kv_slots);
-        compressor_score_state_[seq_idx] =
-            score_state_2d.index_select(0, score_slots);
+        compressor_kv_state_[state_seq_idx] = kv_state_2d.index_select(0,
+            prefill_read_slots(kv_slots, seq_idx, compressor_kv_cache,
+                               compressor_state_rows, state_block_size));
+        compressor_score_state_[state_seq_idx] =
+            score_state_2d.index_select(0,
+                prefill_read_slots(score_slots, seq_idx, compressor_score_cache,
+                                   compressor_state_rows, state_block_size));
         if (trace_layer0) {
           LOG(INFO) << "[DSV4_MUSA_STATE] phase=load kind=compressor seq="
                     << seq_idx << " kv_slots=" << tensor_i64_prefix(kv_slots)
                     << " score_slots=" << tensor_i64_prefix(score_slots)
                     << " kv="
-                    << tensor_stat_string(compressor_kv_state_[seq_idx])
+                    << tensor_stat_string(compressor_kv_state_[state_seq_idx])
                     << " score="
-                    << tensor_stat_string(compressor_score_state_[seq_idx]);
+                    << tensor_stat_string(compressor_score_state_[state_seq_idx]);
         }
       }
     }
   }
   if (use_persistent_indexer_state) {
-    indexer_kv_state_.resize(query_ranges.size());
-    indexer_score_state_.resize(query_ranges.size());
+    indexer_kv_state_.resize(state_sequence_count);
+    indexer_score_state_.resize(state_sequence_count);
     auto kv_state_2d = indexer_kv_state_cache.view({-1, indexer_state_dim});
     auto score_state_2d =
         indexer_score_state_cache.view({-1, indexer_state_dim});
     const int64_t state_block_size = indexer_kv_state_cache.size(1);
     for (size_t seq_idx = 0; seq_idx < query_ranges.size(); ++seq_idx) {
+      const size_t state_seq_idx = state_sequence_index_for(seq_idx);
+      if (compact_spec_verify_multi) {
+        if (compact_indexer_state_gathered[seq_idx] != 0) {
+          continue;
+        }
+        auto position = attn_metadata.input_positions.narrow(
+            0, query_ranges[seq_idx].first, 1);
+        auto kv_slots = torch::empty_like(decode_indexer_kv_slots_);
+        auto score_slots = torch::empty_like(decode_indexer_score_slots_);
+        auto kv_output = torch::empty_like(decode_indexer_kv_state_);
+        auto score_output = torch::empty_like(decode_indexer_score_state_);
+        kernel::musa::deepseek_v4_state_gather_many(
+            {indexer_kv_state_cache, indexer_score_state_cache},
+            {indexer_state_block_table, indexer_score_state_block_table},
+            {indexer_state_rows, indexer_state_rows},
+            {kv_slots, score_slots}, {kv_output, score_output},
+            static_cast<int64_t>(seq_idx), position);
+        indexer_kv_state_[state_seq_idx] = kv_output;
+        indexer_score_state_[state_seq_idx] = score_output;
+        indexer_kv_state_slots_by_seq[seq_idx] = kv_slots.narrow(0, 0, indexer_state_rows);
+        indexer_score_state_slots_by_seq[seq_idx] = score_slots.narrow(0, 0, indexer_state_rows);
+        continue;
+      }
       const bool use_decode_workspace = use_compact_decode_workspace &&
                                         decode_indexer_kv_state_.defined() &&
                                         decode_indexer_score_state_.defined();
       if (use_decode_workspace) {
-        indexer_kv_state_[seq_idx] = grouped_state_gather
+        indexer_kv_state_[state_seq_idx] = grouped_state_gather
             ? decode_indexer_kv_state_.narrow(0, 0, indexer_state_rows)
             : kernel::musa::deepseek_v4_state_gather(
             indexer_kv_state_cache,
@@ -4260,7 +5166,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
             decode_indexer_kv_slots_,
             decode_indexer_kv_state_,
             compact_decode_state_position);
-        indexer_score_state_[seq_idx] = grouped_state_gather
+        indexer_score_state_[state_seq_idx] = grouped_state_gather
             ? decode_indexer_score_state_.narrow(0, 0, indexer_state_rows)
             : kernel::musa::deepseek_v4_state_gather(
             indexer_score_state_cache,
@@ -4281,7 +5187,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
       }
       auto kv_slots = compressor_state_slots_from_indices(
           state_block_indices,
-          static_cast<int64_t>(seq_idx),
+          static_cast<int64_t>(state_seq_idx),
           indexer_kv_state_cache.size(0),
           indexer_state_rows,
           state_block_size,
@@ -4297,7 +5203,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
       }
       auto score_slots = compressor_state_slots_from_indices(
           state_block_indices,
-          static_cast<int64_t>(seq_idx),
+          static_cast<int64_t>(state_seq_idx),
           indexer_score_state_cache.size(0),
           indexer_state_rows,
           state_block_size,
@@ -4316,16 +5222,20 @@ DeepseekV4AttentionImpl::forward_current_impl(
       indexer_score_state_slots_by_seq[seq_idx] = score_slots;
       if ((!is_prefill || is_chunked_prefill) && kv_slots.defined() &&
           score_slots.defined()) {
-        indexer_kv_state_[seq_idx] = kv_state_2d.index_select(0, kv_slots);
-        indexer_score_state_[seq_idx] =
-            score_state_2d.index_select(0, score_slots);
+        indexer_kv_state_[state_seq_idx] = kv_state_2d.index_select(0,
+            prefill_read_slots(kv_slots, seq_idx, indexer_kv_state_cache,
+                               indexer_state_rows, state_block_size));
+        indexer_score_state_[state_seq_idx] =
+            score_state_2d.index_select(0,
+                prefill_read_slots(score_slots, seq_idx, indexer_score_state_cache,
+                                   indexer_state_rows, state_block_size));
         if (trace_layer0) {
           LOG(INFO) << "[DSV4_MUSA_STATE] phase=load kind=indexer seq="
                     << seq_idx << " kv_slots=" << tensor_i64_prefix(kv_slots)
                     << " score_slots=" << tensor_i64_prefix(score_slots)
-                    << " kv=" << tensor_stat_string(indexer_kv_state_[seq_idx])
+                    << " kv=" << tensor_stat_string(indexer_kv_state_[state_seq_idx])
                     << " score="
-                    << tensor_stat_string(indexer_score_state_[seq_idx]);
+                    << tensor_stat_string(indexer_score_state_[state_seq_idx]);
         }
       }
     }
@@ -4412,16 +5322,16 @@ DeepseekV4AttentionImpl::forward_current_impl(
       indexer_score_state_.clear();
     }
     if (retain_compressed_history) {
-      compressor_kv_history_.resize(query_ranges.size());
+      compressor_kv_history_.resize(state_sequence_count);
     }
-    compressor_kv_state_.resize(query_ranges.size());
-    compressor_score_state_.resize(query_ranges.size());
+    compressor_kv_state_.resize(state_sequence_count);
+    compressor_score_state_.resize(state_sequence_count);
     if (effective_use_indexer_attention) {
       if (!use_paged_indexer_cache) {
-        indexer_kv_history_.resize(query_ranges.size());
+        indexer_kv_history_.resize(state_sequence_count);
       }
-      indexer_kv_state_.resize(query_ranges.size());
-      indexer_score_state_.resize(query_ranges.size());
+      indexer_kv_state_.resize(state_sequence_count);
+      indexer_score_state_.resize(state_sequence_count);
     }
     std::vector<torch::Tensor> compressed_to_cache;
     compressed_to_cache.reserve(query_ranges.size());
@@ -4451,7 +5361,12 @@ DeepseekV4AttentionImpl::forward_current_impl(
       const int64_t q_start = compression_query_ranges[seq_idx].first;
       const int64_t q_end = compression_query_ranges[seq_idx].second;
       const int64_t q_len = std::max<int64_t>(q_end - q_start, 0);
-      const int64_t compressed_blocks = q_len / compress_ratio_;
+      const int64_t cached_prefix_tokens =
+          is_chunked_prefill && seq_idx < kv_lens.size()
+              ? std::max<int64_t>(kv_lens[seq_idx] - q_len, 0)
+              : 0;
+      const int64_t compressed_blocks = dsv4_prefill_compressed_rows(
+          cached_prefix_tokens, q_len, compress_ratio_);
       torch::Tensor cos_slice;
       torch::Tensor sin_slice;
       if (compressed_blocks > 0 && compressed_cos.defined() &&
@@ -4482,10 +5397,6 @@ DeepseekV4AttentionImpl::forward_current_impl(
         prefix_snapshot_state_id = prefix_snapshot_data[seq_idx * 2];
         prefix_snapshot_tokens = prefix_snapshot_data[seq_idx * 2 + 1];
       }
-      const int64_t cached_prefix_tokens =
-          is_chunked_prefill && seq_idx < kv_lens.size()
-              ? std::max<int64_t>(kv_lens[seq_idx] - q_len, 0)
-              : 0;
       torch::Tensor cmp_seq =
           compress_prefill_sequence(hidden_seq,
                                     cos_slice,
@@ -4593,31 +5504,73 @@ DeepseekV4AttentionImpl::forward_current_impl(
     }
   }
   record_prefill_profile_boundary(prefill_profile, 2, profile_device_id);
+  const char* partitioned_c128_env = std::getenv("XLLM_DSV4_PARTITIONED_C128_MATE");
+  const bool partitioned_c128_requests =
+      partitioned_c128_env != nullptr && std::string(partitioned_c128_env) == "1" &&
+      batch_mate_across_sequences && compact_spec_verify_multi &&
+      attn_metadata.is_acl_graph && !is_prefill && !is_chunked_prefill &&
+      dspark_block_size_ == 0 && attn_metadata.num_speculative_tokens == 6 &&
+      compress_ratio_ == 128 && window_size_ == 128 && index_topk_ == 512 &&
+      n_local_heads_ == 8 && dsv4_musa_c128_mate_enabled() &&
+      mate_cmp_cache.defined() && mate_swa_cache.defined() &&
+      cmp_cache.defined() && cmp_block_table.defined() &&
+      graph_decode_kv_seq_lens.defined() && decode_spec_indices_output_.defined() &&
+      decode_spec_mate_physical_indices_.defined() &&
+      decode_spec_mate_extra_physical_indices_.defined() &&
+      [] {
+        const char* value = std::getenv("XLLM_DSV4_DYNAMIC_GRAPH_STATE");
+        return value != nullptr && std::string(value) == "1";
+      }() &&
+      // Bound the entire Graph capacity bucket,not just the capture's live
+      // length. At most floor((4*16384+3)/128)=512 compressed keys are valid.
+      dsv4_graph_indexer_capacity(max_kv_len / 4, /*multi_sequence=*/true) <= 16384;
+  const bool batch_mate_metadata = batch_mate_across_sequences && [] {
+    const char* value = std::getenv("XLLM_DSV4_BATCH_MATE_METADATA");
+    return value != nullptr && std::string(value) == "1";
+  }();
+  const bool batch_c128_indices = batch_mate_metadata && partitioned_c128_requests;
   std::vector<torch::Tensor> decode_compressed_to_cache;
   std::vector<torch::Tensor> decode_indexer_to_cache;
   int64_t decode_compressed_rows_scattered = 0;
+  int64_t decode_compressed_tensors_scattered = 0;
+  int64_t decode_indexer_tensors_scattered = 0;
+  bool batch_compression = false;
   auto flush_decode_compressed_cache = [&]() {
     if (decode_compressed_to_cache.empty() || !cmp_cache.defined() ||
         !cmp_slot_mapping.defined()) {
       return;
     }
-    auto cmp_all = decode_compressed_to_cache.size() == 1
-                       ? decode_compressed_to_cache.front()
-                       : torch::cat(decode_compressed_to_cache, /*dim=*/0);
-    if (decode_compressed_rows_scattered >= cmp_all.size(0)) {
-      return;
+    torch::Tensor pending;
+    int64_t row_end = 0;
+    if (batch_compression) {
+      auto rows = dsv4_pending_cache_rows(decode_compressed_to_cache,
+                                           decode_compressed_tensors_scattered,
+                                           decode_compressed_rows_scattered);
+      if (!rows.values.defined()) {
+        return;
+      }
+      pending = rows.values;
+      row_end = rows.row_end;
+    } else {
+      auto cmp_all = decode_compressed_to_cache.size() == 1
+                         ? decode_compressed_to_cache.front()
+                         : torch::cat(decode_compressed_to_cache, /*dim=*/0);
+      if (decode_compressed_rows_scattered >= cmp_all.size(0)) {
+        return;
+      }
+      row_end = cmp_all.size(0);
+      pending = cmp_all.slice(/*dim=*/0,
+                               /*start=*/decode_compressed_rows_scattered,
+                               /*end=*/row_end);
     }
-    auto pending = cmp_all.slice(/*dim=*/0,
-                                 /*start=*/decode_compressed_rows_scattered,
-                                 /*end=*/cmp_all.size(0));
     auto flat_slots = cmp_slot_mapping.reshape({-1});
-    CHECK_GE(flat_slots.numel(), cmp_all.size(0));
+    CHECK_GE(flat_slots.numel(), row_end);
     auto pending_slots = attn_metadata.is_acl_graph
                              ? flat_slots
                                    .slice(
                                        /*dim=*/0,
                                        /*start=*/decode_compressed_rows_scattered,
-                                       /*end=*/cmp_all.size(0))
+                                       /*end=*/row_end)
                                    .contiguous()
                              : cmp_slot_mapping;
     scatter_by_slot(cmp_cache, pending_slots, pending);
@@ -4628,22 +5581,32 @@ DeepseekV4AttentionImpl::forward_current_impl(
       maybe_sync_attention_stage(layer_id_, "decode_mate_cmp_pack", pending);
     }
     if (use_paged_indexer_cache && !decode_indexer_to_cache.empty()) {
-      auto index_all = decode_indexer_to_cache.size() == 1
-                           ? decode_indexer_to_cache.front()
-                           : torch::cat(decode_indexer_to_cache, /*dim=*/0);
-      CHECK_EQ(index_all.size(0), cmp_all.size(0));
-      auto pending_index = index_all.slice(
-          /*dim=*/0,
-          /*start=*/decode_compressed_rows_scattered,
-          /*end=*/index_all.size(0));
+      torch::Tensor pending_index;
+      if (batch_compression) {
+        auto rows = dsv4_pending_cache_rows(decode_indexer_to_cache,
+                                             decode_indexer_tensors_scattered,
+                                             decode_compressed_rows_scattered);
+        CHECK(rows.values.defined());
+        CHECK_EQ(rows.row_end, row_end);
+        pending_index = rows.values;
+      } else {
+        auto index_all = decode_indexer_to_cache.size() == 1
+                             ? decode_indexer_to_cache.front()
+                             : torch::cat(decode_indexer_to_cache, /*dim=*/0);
+        CHECK_EQ(index_all.size(0), row_end);
+        pending_index = index_all.slice(
+            /*dim=*/0,
+            /*start=*/decode_compressed_rows_scattered,
+            /*end=*/row_end);
+      }
       auto flat_index_slots = index_slot_mapping.reshape({-1});
-      CHECK_GE(flat_index_slots.numel(), index_all.size(0));
+      CHECK_GE(flat_index_slots.numel(), row_end);
       auto pending_index_slots = attn_metadata.is_acl_graph
                                      ? flat_index_slots
                                            .slice(
                                                /*dim=*/0,
                                                /*start=*/decode_compressed_rows_scattered,
-                                               /*end=*/index_all.size(0))
+                                               /*end=*/row_end)
                                            .contiguous()
                                      : index_slot_mapping;
       quant_scatter_indexer_cache(
@@ -4651,7 +5614,15 @@ DeepseekV4AttentionImpl::forward_current_impl(
       maybe_sync_attention_stage(
           layer_id_, "decode_indexer_cache_scatter", pending_index);
     }
-    decode_compressed_rows_scattered = cmp_all.size(0);
+    decode_compressed_rows_scattered = row_end;
+    decode_compressed_tensors_scattered =
+        static_cast<int64_t>(decode_compressed_to_cache.size());
+    decode_indexer_tensors_scattered =
+        static_cast<int64_t>(decode_indexer_to_cache.size());
+    if (batch_compression) {
+      LOG_FIRST_N(INFO, 1) << "[DSV4_INCREMENTAL_CACHE_FLUSH] layer=" << layer_id_
+                          << " rows=" << pending.size(0) << " end=" << row_end;
+    }
   };
   int64_t decode_compressed_rope_offset = 0;
   const char* graph_q6_first_state_only_env =
@@ -4661,13 +5632,352 @@ DeepseekV4AttentionImpl::forward_current_impl(
       std::string(graph_q6_first_state_only_env) == "1" &&
       compact_spec_verify && attn_metadata.is_acl_graph && total_tokens > 2 &&
       use_persistent_compressor_state;
+  // Optional B16 fast path: q7 Indexer rows from all fixed-width sequence
+  // views share one fused score/radix launch.  The kernel still selects the
+  // block-table row and dynamic KV length from the sequence owning each row;
+  // this only removes the per-sequence launch/queue boundary.
+  bool batched_indexer_across_sequences = false;
+  int64_t batched_indexer_query_rows = 0;
+  int64_t batched_indexer_sequence_count = 0;
+  torch::Tensor batched_indexer_indices;
+  torch::Tensor batched_indexer_physical_indices;
+  torch::Tensor batched_indexer_extra_physical_indices;
+  const char* batched_indexer_env =
+      std::getenv("XLLM_DSV4_BATCH_INDEXER_ACROSS_SEQUENCES");
+  if (batched_indexer_env != nullptr &&
+      std::string(batched_indexer_env) == "1" && compact_spec_verify_multi &&
+      attn_metadata.is_acl_graph && dsv4_sequence_view_active &&
+      batch_mate_across_sequences && mate_cmp_cache.defined() &&
+      mate_swa_cache.defined() &&
+      apply_sparse_indexer_attention && use_paged_indexer_cache &&
+      dsv4_musa_batched_graph_indexer_enabled() && query_ranges.size() > 1 &&
+      query_ranges.front().second > query_ranges.front().first) {
+    const int64_t candidate_rows =
+        query_ranges.front().second - query_ranges.front().first;
+    bool fixed_width = candidate_rows > 2;
+    for (const auto& range : query_ranges) {
+      fixed_width = fixed_width &&
+                    range.second - range.first == candidate_rows;
+    }
+    if (fixed_width && candidate_rows * static_cast<int64_t>(query_ranges.size()) ==
+                           total_tokens &&
+        graph_decode_kv_seq_lens.defined() &&
+        graph_decode_kv_seq_lens.size(0) >= total_tokens &&
+        decode_spec_indices_output_.defined() &&
+        decode_spec_indices_output_.size(0) >= total_tokens &&
+        decode_spec_mate_physical_indices_.defined() &&
+        decode_spec_mate_physical_indices_.size(0) >= total_tokens &&
+        decode_spec_mate_extra_physical_indices_.defined() &&
+        decode_spec_mate_extra_physical_indices_.size(0) >= total_tokens) {
+      int64_t max_index_len = 0;
+      for (const int64_t kv_len : kv_lens) {
+        max_index_len = std::max(max_index_len, kv_len / 4);
+      }
+      const int64_t index_capacity =
+          dsv4_graph_indexer_capacity(max_index_len,
+                                      /*multi_sequence=*/true);
+      const char* exact_capacity_env =
+          std::getenv("XLLM_DSV4_INDEXER_EXACT_RUNTIME_CAPACITY");
+      const bool exact_runtime_capacity =
+          exact_capacity_env != nullptr &&
+          std::string(exact_capacity_env) == "1";
+      const int64_t cache_capacity =
+          index_block_table.size(1) * index_cache.size(1);
+      CHECK(!exact_runtime_capacity)
+          << "Exact capture-time capacity truncates growing KV history on "
+             "Graph replay; use the graph-key capacity bucket";
+      const int64_t fused_capacity = std::min(index_capacity, cache_capacity);
+      if (fused_capacity >= index_topk_) {
+        batched_indexer_query_rows = candidate_rows;
+        batched_indexer_sequence_count = query_ranges.size();
+        batched_indexer_indices = decode_spec_indices_output_.narrow(
+            /*dim=*/0, /*start=*/0, /*length=*/total_tokens);
+        batched_indexer_physical_indices =
+            decode_spec_mate_physical_indices_.narrow(
+                /*dim=*/0, /*start=*/0, /*length=*/total_tokens);
+        batched_indexer_extra_physical_indices =
+            decode_spec_mate_extra_physical_indices_.narrow(
+                /*dim=*/0, /*start=*/0, /*length=*/total_tokens);
+        batched_indexer_across_sequences = true;
+      }
+    }
+  }
+  // Define the launch here, but enqueue it only after every sequence has
+  // produced and published this step's C4/Indexer rows. An earlier flush is
+  // a no-op because both pending-cache vectors are still empty at this point.
+  const char* global_short_family =
+      std::getenv("XLLM_DSV4_GLOBAL_SHORT_GRAPH_FAMILY");
+  if (compact_spec_verify_multi && max_kv_len <= 2048 &&
+      global_short_family != nullptr && std::string(global_short_family) == "1" &&
+      compress_ratio_ == 4 && !force_full_kv_attention) {
+    CHECK(batched_indexer_across_sequences)
+        << "Global short Graph family must use the merged live-length Indexer";
+  }
+  auto launch_batched_indexer = [&]() {
+    if (!batched_indexer_across_sequences) {
+      return;
+    }
+    const int64_t candidate_rows = batched_indexer_query_rows;
+    const int64_t fused_capacity = std::min(
+        dsv4_graph_indexer_capacity(max_kv_len / 4, /*multi_sequence=*/true),
+        index_block_table.size(1) * index_cache.size(1));
+    // Bound each launch to the previously tested eight q7 sequences.
+    // Larger flattened captures hung in v86; their root cause is not
+    // established by the successful chunked workaround alone.
+        constexpr int64_t kMaxBatchedIndexerSequences = 8;
+        for (int64_t sequence_start = 0;
+             sequence_start < batched_indexer_sequence_count;
+             sequence_start += kMaxBatchedIndexerSequences) {
+          const int64_t sequence_count = std::min<int64_t>(
+              kMaxBatchedIndexerSequences,
+              batched_indexer_sequence_count - sequence_start);
+          const int64_t row_start =
+              query_ranges[sequence_start].first;
+          const int64_t row_count = candidate_rows * sequence_count;
+          auto chunk_indices = batched_indexer_indices.narrow(
+              /*dim=*/0, row_start, row_count);
+          auto chunk_physical = batched_indexer_physical_indices.narrow(
+              /*dim=*/0, row_start, row_count);
+          auto chunk_extra =
+              batched_indexer_extra_physical_indices.narrow(
+                  /*dim=*/0, row_start, row_count);
+          auto selected = build_indexer_topk(
+              qr.narrow(/*dim=*/0, row_start, row_count),
+              hidden_states.narrow(/*dim=*/0, row_start, row_count),
+              packed_indexer_head_weights.defined()
+                  ? packed_indexer_head_weights.narrow(
+                        /*dim=*/0, row_start, row_count)
+                  : torch::Tensor(),
+              packed_indexer_query.defined()
+                  ? packed_indexer_query.narrow(/*dim=*/0, row_start, row_count)
+                  : torch::Tensor(),
+              active_cos.narrow(/*dim=*/0, row_start, row_count),
+              active_sin.narrow(/*dim=*/0, row_start, row_count),
+              torch::Tensor(), index_cache, index_scale_cache,
+              index_block_table.narrow(/*dim=*/0, sequence_start,
+                                       sequence_count),
+              /*sequence_index=*/0, fused_capacity, /*q_abs_start=*/0,
+              chunk_indices,
+              cmp_block_table.narrow(/*dim=*/0, sequence_start,
+                                     sequence_count),
+              swa_block_table.narrow(/*dim=*/0, sequence_start,
+                                     sequence_count),
+              max_kv_len, mate_cmp_cache.size(1), &chunk_physical,
+              &chunk_extra,
+              graph_decode_kv_seq_lens.narrow(/*dim=*/0, row_start, row_count),
+              batched_indexer_query_rows, sequence_count);
+          CHECK(selected.defined())
+              << "Cross-sequence Graph indexer chunk did not execute";
+        }
+        LOG_FIRST_N(INFO, 1)
+            << "[DSV4_BATCH_INDEXER_ACROSS_SEQUENCES] sequences="
+            << batched_indexer_sequence_count
+            << " query_rows=" << batched_indexer_query_rows
+            << " capacity=" << fused_capacity
+            << " after_cache_publish=1";
+  };
+  torch::Tensor batched_main_compressed;
+  torch::Tensor batched_indexer_compressed;
+  bool batch_indexer_hadamard = false;
+  int64_t batched_compressed_stride = 0;
+  const char* batch_compression_env =
+      std::getenv("XLLM_DSV4_BATCH_COMPRESSION");
+  const char* dynamic_state_env = std::getenv("XLLM_DSV4_DYNAMIC_GRAPH_STATE");
+  const auto batch_projection =
+      attn_metadata.cp_input_dict.find(kDsv4BatchedCompressorMetadataKey);
+  batch_compression =
+      batch_compression_env != nullptr &&
+      std::string(batch_compression_env) == "1" &&
+      dynamic_state_env != nullptr && std::string(dynamic_state_env) == "1" &&
+      batched_state_gather && attn_metadata.is_acl_graph &&
+      !freeze_compact_graph_compressor && !graph_q6_first_state_only &&
+      use_compressed_attention &&
+      (compress_ratio_ == 4 || compress_ratio_ == 128) &&
+      (!effective_use_indexer_attention || use_persistent_indexer_state) &&
+      batch_projection != attn_metadata.cp_input_dict.end();
+  if (batch_compression) {
+    // The state gather already owns contiguous [request, state-row, width]
+    // tensors. Reuse them directly: no stack/copy and no collapsed identity.
+    const int64_t sequences = static_cast<int64_t>(query_ranges.size());
+    const int64_t query_width = attn_metadata.num_speculative_tokens + 1;
+    CHECK_EQ(query_width, 7);
+    CHECK_GT(sequences, 1);
+    CHECK_LE(sequences, 16);
+    CHECK_EQ(total_tokens, sequences * query_width);
+    for (int64_t seq = 0; seq < sequences; ++seq) {
+      CHECK_EQ(query_ranges[seq].first, seq * query_width);
+      CHECK_EQ(query_ranges[seq].second, (seq + 1) * query_width);
+    }
+    batched_compressed_stride =
+        dsv4_graph_compressed_stride(query_width, compress_ratio_);
+    const int64_t output_rows = sequences * batched_compressed_stride;
+    const int64_t main_width = compressor_coff_ * head_dim_;
+    const int64_t index_width = 2 * index_head_dim_;
+    const auto& projections = batch_projection->second;
+    CHECK_EQ(projections.size(0), total_tokens);
+    CHECK_EQ(projections.size(1),
+             2 * main_width +
+                 (effective_use_indexer_attention ? 2 * index_width : 0));
+    CHECK_GE(decode_compressor_output_.size(0), output_rows);
+    CHECK_GE(decode_compressor_norm_output_.size(0), output_rows);
+    CHECK_GE(decode_compressor_rope_output_.size(0), output_rows);
+    CHECK(compressed_cos.defined() && compressed_sin.defined());
+    CHECK_GE(compressed_cos.size(0), output_rows);
+    CHECK_GE(compressed_sin.size(0), output_rows);
+    const auto batch_cos = compressed_cos.narrow(0, 0, output_rows);
+    const auto batch_sin = compressed_sin.narrow(0, 0, output_rows);
+    CHECK_GE(attn_metadata.input_positions.numel(), total_tokens);
+    const auto batch_positions = attn_metadata.input_positions.narrow(0, 0, total_tokens);
+    batched_main_compressed =
+        kernel::musa::deepseek_v4_compress_decode_batch_graph(
+            batched_decode_states[0],
+            batched_decode_states[1],
+            projections.narrow(1, 0, main_width),
+            projections.narrow(1, main_width, main_width),
+            compressor_ape_,
+            compress_ratio_,
+            head_dim_,
+            query_width,
+            batch_positions,
+            decode_compressor_output_.narrow(0, 0, output_rows));
+    batched_main_compressed = std::get<0>(compressor_norm_->forward(
+        batched_main_compressed,
+        std::nullopt,
+        std::optional<torch::Tensor>(
+            decode_compressor_norm_output_.narrow(0, 0, output_rows))));
+    // The scalar helper deliberately caps fused RoPE at four tokens. Call
+    // the same row-independent kernel directly for the tested batch shape,
+    // without changing the global cap or falling back to allocating ATen.
+    auto main_rope_output =
+        decode_compressor_rope_output_.narrow(0, 0, output_rows);
+    CHECK(kernel::musa::deepseek_v4_partial_rope(batched_main_compressed,
+                                                 batch_cos,
+                                                 batch_sin,
+                                                 nope_head_dim_,
+                                                 rope_head_dim_,
+                                                 /*inverse=*/false,
+                                                 main_rope_output));
+    batched_main_compressed = main_rope_output;
+    fp8_act_quant_roundtrip_inplace(batched_main_compressed,
+                                    nope_head_dim_,
+                                    /*block_size=*/64);
+    if (effective_use_indexer_attention) {
+      CHECK_EQ(compress_ratio_, 4);
+      CHECK_EQ(batched_decode_states.size(), 4);
+      CHECK_GE(decode_indexer_output_.size(0), output_rows);
+      CHECK_GE(decode_indexer_norm_output_.size(0), output_rows);
+      CHECK_GE(decode_indexer_rope_output_.size(0), output_rows);
+      batched_indexer_compressed =
+          kernel::musa::deepseek_v4_compress_decode_batch_graph(
+              batched_decode_states[2],
+              batched_decode_states[3],
+              projections.narrow(1, 2 * main_width, index_width),
+              projections.narrow(1, 2 * main_width + index_width, index_width),
+              indexer_compressor_ape_,
+              compress_ratio_,
+              index_head_dim_,
+              query_width,
+              batch_positions,
+              decode_indexer_output_.narrow(0, 0, output_rows));
+      batched_indexer_compressed =
+          std::get<0>(indexer_compressor_norm_->forward(
+              batched_indexer_compressed,
+              std::nullopt,
+              std::optional<torch::Tensor>(
+                  decode_indexer_norm_output_.narrow(0, 0, output_rows))));
+      auto indexer_rope_output =
+          decode_indexer_rope_output_.narrow(0, 0, output_rows);
+      CHECK(kernel::musa::deepseek_v4_partial_rope(
+          batched_indexer_compressed,
+          batch_cos,
+          batch_sin,
+          index_head_dim_ - rope_head_dim_,
+          rope_head_dim_,
+          /*inverse=*/false,
+          indexer_rope_output));
+      batched_indexer_compressed = indexer_rope_output;
+      const char* hadamard_env = std::getenv("XLLM_DSV4_BATCH_INDEXER_HADAMARD");
+      batch_indexer_hadamard = hadamard_env != nullptr &&
+          std::string(hadamard_env) == "1" && batched_compressed_stride == 2 &&
+          index_head_dim_ == 128 &&
+          batched_indexer_compressed.scalar_type() == torch::kBFloat16;
+      if (batch_indexer_hadamard) {
+        // The q7/C4 transform is row-independent. Validate the merged BF16
+        // result against each original two-row GEMM before enabling this path.
+        batched_indexer_compressed =
+            apply_indexer_hadamard(batched_indexer_compressed, indexer_hadamard_);
+        LOG_FIRST_N(INFO, 1) << "[DSV4_BATCH_INDEXER_HADAMARD] sequences=" << sequences
+                            << " rows=" << output_rows << " dim=" << index_head_dim_;
+      }
+    }
+    LOG_FIRST_N(INFO, 2) << "[DSV4_BATCH_COMPRESSION] sequences=" << sequences
+                         << " query_width=" << query_width
+                         << " ratio=" << compress_ratio_
+                         << " output_rows=" << output_rows
+                         << " layer=" << layer_id_;
+  }
+  torch::Tensor batched_sas_output;
+  const auto sas_lengths_it = attn_metadata.cp_input_dict.find(kDsv4BatchedSasKvLengths);
+  if (dspark_block_size_ > 0 && query_ranges.size() > 1 &&
+      query_ranges.size() <= 16 && !(is_prefill && !is_chunked_prefill) &&
+      !attn_metadata.is_acl_graph && decode_spec_attention_output_.defined() &&
+      ori_kv.defined() && swa_block_table.defined() &&
+      sas_lengths_it != attn_metadata.cp_input_dict.end() && [] {
+        const char* batched = std::getenv("XLLM_DSV4_BATCH_PAGED_SAS");
+        const char* scalar = std::getenv("XLLM_DSV4_FUSED_PAGED_SAS");
+        return batched != nullptr && std::string(batched) == "1" &&
+               scalar != nullptr && std::string(scalar) == "1";
+      }()) {
+    const int64_t sequences = static_cast<int64_t>(query_ranges.size());
+    const int64_t query_width = query_ranges.front().second - query_ranges.front().first;
+    const torch::Tensor& live_lengths = sas_lengths_it->second;
+    bool fixed_ranges = query_width >= 5 && query_width <= 7 &&
+        query_width <= decode_workspace_tokens_ &&
+        sequences * query_width == q.size(0) && kv_lens.size() == query_ranges.size();
+    for (int64_t sequence = 0; sequence < sequences; ++sequence) {
+      fixed_ranges = fixed_ranges &&
+          query_ranges[sequence].first == sequence * query_width &&
+          query_ranges[sequence].second == (sequence + 1) * query_width;
+    }
+    if (fixed_ranges && live_lengths.dim() == 1 &&
+        live_lengths.numel() == sequences && live_lengths.device() == q.device() &&
+        live_lengths.scalar_type() == torch::kInt32 && live_lengths.is_contiguous() &&
+        swa_block_table.dim() == 2 && swa_block_table.size(0) >= sequences &&
+        window_size_ + query_width <= 256) {
+      CHECK_EQ(compress_ratio_, 1);
+      CHECK_LE(max_kv_len, swa_block_table.size(1) * ori_kv.size(1));
+      // The metadata builder creates this device tensor and the scalar path's
+      // host sidecar from the same ctx_lens vector. Reuse it without new per-
+      // layer H2D copies. All cache rows were published before this loop.
+      auto sas_query = q.is_contiguous() ? q : q.contiguous();
+      batched_sas_output = torch::empty(q.sizes(), q.options());
+      kernel::musa::deepseek_v4_paged_attention_sas_batched(
+          sas_query, ori_kv, swa_block_table.narrow(0, 0, sequences), live_lengths,
+          query_width, window_size_ + query_width,
+          attn_sink_.to(q.device()).to(torch::kFloat32).contiguous(),
+          softmax_scale_, batched_sas_output);
+      LOG_FIRST_N(INFO, 3) << "[DSV4_BATCH_PAGED_SAS] layer=" << layer_id_
+                           << " sequences=" << sequences
+                           << " query_width=" << query_width
+                           << " draft_noncausal=1 device_lengths_reused=1";
+      if (sequences == 16) {
+        LOG_FIRST_N(INFO, 1) << "[DSV4_BATCH_PAGED_SAS_B16] query_width="
+                             << query_width << " actual_rows=" << q.size(0)
+                             << " device_length_rows=" << live_lengths.numel();
+      }
+    }
+  }
   for (size_t seq_idx = 0; seq_idx < query_ranges.size(); ++seq_idx) {
     const int64_t q_start = query_ranges[seq_idx].first;
     const int64_t q_end = query_ranges[seq_idx].second;
     if (q_end <= q_start) {
       continue;
     }
+    const size_t state_seq_idx = state_sequence_index_for(seq_idx);
     auto q_seq = q.slice(/*dim=*/0, /*start=*/q_start, /*end=*/q_end);
+    const auto sequence_state_position = compact_spec_verify_multi
+        ? attn_metadata.input_positions.narrow(0, q_start, 1)
+        : compact_decode_state_position;
     torch::Tensor kv_seq;
     const bool use_current_prefill_kv = is_prefill && !is_chunked_prefill;
     const bool use_fused_paged_sas = dspark_block_size_ > 0 &&
@@ -4722,16 +6032,17 @@ DeepseekV4AttentionImpl::forward_current_impl(
         }
       } else {
         if (retain_compressed_history &&
-            seq_idx >= compressor_kv_history_.size()) {
-          compressor_kv_history_.resize(seq_idx + 1);
+            state_seq_idx >= compressor_kv_history_.size()) {
+          compressor_kv_history_.resize(state_seq_idx + 1);
         }
         if (effective_use_indexer_attention && !use_paged_indexer_cache &&
-            seq_idx >= indexer_kv_history_.size()) {
-          indexer_kv_history_.resize(seq_idx + 1);
+            state_seq_idx >= indexer_kv_history_.size()) {
+          indexer_kv_history_.resize(state_seq_idx + 1);
         }
-        if (effective_use_indexer_attention && seq_idx >= indexer_kv_state_.size()) {
-          indexer_kv_state_.resize(seq_idx + 1);
-          indexer_score_state_.resize(seq_idx + 1);
+        if (effective_use_indexer_attention &&
+            state_seq_idx >= indexer_kv_state_.size()) {
+          indexer_kv_state_.resize(state_seq_idx + 1);
+          indexer_score_state_.resize(state_seq_idx + 1);
         }
         auto hidden_seq =
             hidden_states.slice(/*dim=*/0, /*start=*/q_start, /*end=*/q_end);
@@ -4768,14 +6079,14 @@ DeepseekV4AttentionImpl::forward_current_impl(
               compressor_coff_ == 2 && compressor_ape_.defined() &&
               compressor_ape_.scalar_type() == torch::kFloat32 &&
               compressor_ape_.is_contiguous() &&
-              seq_idx < compressor_kv_state_.size() &&
-              seq_idx < compressor_score_state_.size() &&
-              compressor_kv_state_[seq_idx].defined() &&
-              compressor_score_state_[seq_idx].defined() &&
-              compressor_kv_state_[seq_idx].sizes() ==
+              state_seq_idx < compressor_kv_state_.size() &&
+              state_seq_idx < compressor_score_state_.size() &&
+              compressor_kv_state_[state_seq_idx].defined() &&
+              compressor_score_state_[state_seq_idx].defined() &&
+              compressor_kv_state_[state_seq_idx].sizes() ==
                   torch::IntArrayRef({main_state_rows, main_state_dim}) &&
-              compressor_score_state_[seq_idx].sizes() ==
-                  compressor_kv_state_[seq_idx].sizes() &&
+              compressor_score_state_[state_seq_idx].sizes() ==
+                  compressor_kv_state_[state_seq_idx].sizes() &&
               joint_main_kv_projection.stride(1) == 1 &&
               joint_main_score_projection.stride(1) == 1;
           if (fuse_chunked_main_state_sequence) {
@@ -4789,8 +6100,8 @@ DeepseekV4AttentionImpl::forward_current_impl(
                 /*end=*/projection_start + seq_q_len);
             fused_chunked_main_compressed =
                 kernel::musa::deepseek_v4_compress_decode_sequence_c4(
-                    compressor_kv_state_[seq_idx],
-                    compressor_score_state_[seq_idx],
+                    compressor_kv_state_[state_seq_idx],
+                    compressor_score_state_[state_seq_idx],
                     main_kv_sequence,
                     main_score_sequence,
                     compressor_ape_,
@@ -4837,14 +6148,14 @@ DeepseekV4AttentionImpl::forward_current_impl(
               indexer_compressor_ape_.is_contiguous() &&
               decode_indexer_norm_output_.defined() &&
               decode_indexer_rope_output_.defined() &&
-              seq_idx < indexer_kv_state_.size() &&
-              seq_idx < indexer_score_state_.size() &&
-              indexer_kv_state_[seq_idx].defined() &&
-              indexer_score_state_[seq_idx].defined() &&
-              indexer_kv_state_[seq_idx].sizes() ==
+              state_seq_idx < indexer_kv_state_.size() &&
+              state_seq_idx < indexer_score_state_.size() &&
+              indexer_kv_state_[state_seq_idx].defined() &&
+              indexer_score_state_[state_seq_idx].defined() &&
+              indexer_kv_state_[state_seq_idx].sizes() ==
                   torch::IntArrayRef({indexer_state_rows, indexer_state_dim}) &&
-              indexer_score_state_[seq_idx].sizes() ==
-                  indexer_kv_state_[seq_idx].sizes() &&
+              indexer_score_state_[state_seq_idx].sizes() ==
+                  indexer_kv_state_[state_seq_idx].sizes() &&
               joint_indexer_kv_projection.stride(1) == 1 &&
               joint_indexer_score_projection.stride(1) == 1;
           torch::Tensor fused_chunked_indexer_raw;
@@ -4859,10 +6170,10 @@ DeepseekV4AttentionImpl::forward_current_impl(
               (compress_ratio_ == 4 ||
                (compress_ratio_ == 128 && use_dynamic_graph_state)) &&
               use_persistent_compressor_state &&
-              seq_idx < compressor_kv_state_.size() &&
-              seq_idx < compressor_score_state_.size() &&
-              compressor_kv_state_[seq_idx].defined() &&
-              compressor_score_state_[seq_idx].defined() &&
+              state_seq_idx < compressor_kv_state_.size() &&
+              state_seq_idx < compressor_score_state_.size() &&
+              compressor_kv_state_[state_seq_idx].defined() &&
+              compressor_score_state_[state_seq_idx].defined() &&
               compressor_ape_.defined() &&
               compressor_ape_.scalar_type() == torch::kFloat32 &&
               compressor_ape_.is_contiguous() &&
@@ -4870,16 +6181,31 @@ DeepseekV4AttentionImpl::forward_current_impl(
               decode_compressor_score_projection_.size(0) >= seq_q_len &&
               (!effective_use_indexer_attention ||
                (use_persistent_indexer_state &&
-                seq_idx < indexer_kv_state_.size() &&
-                seq_idx < indexer_score_state_.size() &&
-                indexer_kv_state_[seq_idx].defined() &&
-                indexer_score_state_[seq_idx].defined() &&
+                state_seq_idx < indexer_kv_state_.size() &&
+                state_seq_idx < indexer_score_state_.size() &&
+                indexer_kv_state_[state_seq_idx].defined() &&
+                indexer_score_state_[state_seq_idx].defined() &&
                 indexer_compressor_ape_.defined() &&
                 indexer_compressor_ape_.scalar_type() == torch::kFloat32 &&
                 indexer_compressor_ape_.is_contiguous() &&
                 decode_indexer_kv_projection_.size(0) >= seq_q_len &&
                 decode_indexer_score_projection_.size(0) >= seq_q_len));
-          if (use_batched_decode_state) {
+          if (batch_compression) {
+            CHECK(use_batched_decode_state);
+            CHECK_EQ(decode_compressed_rope_offset,
+                     static_cast<int64_t>(seq_idx) * batched_compressed_stride);
+            fused_decode_main_compressed = batched_main_compressed.narrow(
+                0, decode_compressed_rope_offset, batched_compressed_stride);
+            if (effective_use_indexer_attention) {
+              auto indexer_rows = batched_indexer_compressed.narrow(
+                  0, decode_compressed_rope_offset, batched_compressed_stride);
+              fused_decode_indexer_compressed = batch_indexer_hadamard
+                  ? indexer_rows
+                  : apply_indexer_hadamard(indexer_rows, indexer_hadamard_);
+            }
+            decode_compressed_rope_offset += batched_compressed_stride;
+            sequence_decode_state = true;
+          } else if (use_batched_decode_state) {
             // In the q6 Graph fast-state A/B we only need to commit the
             // first target row.  The previous implementation applied this
             // policy only to the scalar fallback below, while the batched
@@ -4898,7 +6224,15 @@ DeepseekV4AttentionImpl::forward_current_impl(
                 (effective_use_indexer_attention ? 2 * index_projection_width : 0);
             const char* joint_decode_env =
                 std::getenv("XLLM_DSV4_GRAPH_JOINT_COMPRESSOR_PROJECTION");
-            if (compress_ratio_ == 4 && joint_decode_env != nullptr &&
+            const auto batch_compressor = attn_metadata.cp_input_dict.find(
+                kDsv4BatchedCompressorMetadataKey);
+            if (batch_compressor != attn_metadata.cp_input_dict.end()) {
+              CHECK_EQ(batch_compressor->second.size(1), packed_projection_width);
+              packed_decode_projections =
+                  batch_compressor->second.narrow(
+                      /*dim=*/0, /*start=*/q_start,
+                      /*length=*/state_sequence_tokens);
+            } else if (compress_ratio_ == 4 && joint_decode_env != nullptr &&
                 std::string(joint_decode_env) == "1" &&
                 sp_joint_compressor_projection_weight_.defined() &&
                 sp_joint_compressor_projection_weight_.size(0) == packed_projection_width &&
@@ -4926,7 +6260,9 @@ DeepseekV4AttentionImpl::forward_current_impl(
                 (compress_ratio_ - ((decode_start_pos + 1) % compress_ratio_)) %
                 compress_ratio_;
             const int64_t sequence_boundary_count =
-                first_boundary < state_sequence_tokens
+                attn_metadata.cp_input_dict.count(kDsv4GraphSequenceView) != 0
+                    ? dsv4_graph_compressed_stride(state_sequence_tokens, compress_ratio_)
+                : first_boundary < state_sequence_tokens
                     ? 1 + (state_sequence_tokens - 1 - first_boundary) /
                           compress_ratio_
                     : 0;
@@ -4955,22 +6291,22 @@ DeepseekV4AttentionImpl::forward_current_impl(
             if (use_dynamic_graph_state) {
               fused_decode_main_compressed =
                   kernel::musa::deepseek_v4_compress_decode_sequence_graph(
-                      compressor_kv_state_[seq_idx],
-                      compressor_score_state_[seq_idx],
+                      compressor_kv_state_[state_seq_idx],
+                      compressor_score_state_[state_seq_idx],
                       main_kv_steps,
                       main_score_steps,
                       compressor_ape_,
                       compress_ratio_,
                       head_dim_,
-                      compact_decode_state_position,
+                      sequence_state_position,
                       decode_compressor_output_.narrow(
                           /*dim=*/0, /*start=*/0,
                           /*length=*/sequence_boundary_count));
             } else {
               fused_decode_main_compressed =
                   kernel::musa::deepseek_v4_compress_decode_sequence_c4(
-                      compressor_kv_state_[seq_idx],
-                      compressor_score_state_[seq_idx],
+                      compressor_kv_state_[state_seq_idx],
+                      compressor_score_state_[state_seq_idx],
                       main_kv_steps,
                       main_score_steps,
                       compressor_ape_,
@@ -5044,22 +6380,22 @@ DeepseekV4AttentionImpl::forward_current_impl(
               if (use_dynamic_graph_state) {
                 fused_decode_indexer_compressed =
                     kernel::musa::deepseek_v4_compress_decode_sequence_graph(
-                        indexer_kv_state_[seq_idx],
-                        indexer_score_state_[seq_idx],
+                        indexer_kv_state_[state_seq_idx],
+                        indexer_score_state_[state_seq_idx],
                         indexer_kv_steps,
                         indexer_score_steps,
                         indexer_compressor_ape_,
                         compress_ratio_,
                         index_head_dim_,
-                        compact_decode_state_position,
+                        sequence_state_position,
                         decode_indexer_output_.narrow(
                             /*dim=*/0, /*start=*/0,
                             /*length=*/sequence_boundary_count));
               } else {
                 fused_decode_indexer_compressed =
                     kernel::musa::deepseek_v4_compress_decode_sequence_c4(
-                        indexer_kv_state_[seq_idx],
-                        indexer_score_state_[seq_idx],
+                        indexer_kv_state_[state_seq_idx],
+                        indexer_score_state_[state_seq_idx],
                         indexer_kv_steps,
                         indexer_score_steps,
                         indexer_compressor_ape_,
@@ -5120,8 +6456,8 @@ DeepseekV4AttentionImpl::forward_current_impl(
           if (fuse_chunked_indexer_state_only) {
             fused_chunked_indexer_raw =
                 kernel::musa::deepseek_v4_compress_decode_sequence_c4(
-                    indexer_kv_state_[seq_idx],
-                    indexer_score_state_[seq_idx],
+                    indexer_kv_state_[state_seq_idx],
+                    indexer_score_state_[state_seq_idx],
                     joint_indexer_kv_projection.slice(
                         /*dim=*/0,
                         /*start=*/projection_start,
@@ -5183,7 +6519,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
                                                       abs_pos,
                                                       cos_row,
                                                       sin_row,
-                                                      seq_idx,
+                                                      state_seq_idx,
                                                       main_kv_projection,
                                                       main_score_projection);
             torch::Tensor new_indexer_cmp;
@@ -5247,39 +6583,42 @@ DeepseekV4AttentionImpl::forward_current_impl(
                                                  abs_pos,
                                                  cos_row,
                                                  sin_row,
-                                                 seq_idx,
+                                                 state_seq_idx,
                                                  indexer_kv_projection,
                                                  indexer_score_projection);
               }
             }
             if (new_cmp.defined() && new_cmp.numel() > 0) {
               if (retain_compressed_history) {
-                if (compressor_kv_history_[seq_idx].defined() &&
-                    compressor_kv_history_[seq_idx].numel() > 0) {
-                  compressor_kv_history_[seq_idx] =
-                      torch::cat({compressor_kv_history_[seq_idx], new_cmp},
+                if (compressor_kv_history_[state_seq_idx].defined() &&
+                    compressor_kv_history_[state_seq_idx].numel() > 0) {
+                  compressor_kv_history_[state_seq_idx] =
+                      torch::cat({compressor_kv_history_[state_seq_idx], new_cmp},
                                  /*dim=*/0)
                           .contiguous();
                 } else {
-                  compressor_kv_history_[seq_idx] = new_cmp.contiguous();
+                  compressor_kv_history_[state_seq_idx] = new_cmp.contiguous();
                 }
               }
               current_compressed_rows.push_back(new_cmp);
-              decode_compressed_to_cache.push_back(new_cmp);
+              decode_compressed_to_cache.push_back(
+                  batched_indexer_across_sequences ? new_cmp.clone() : new_cmp);
             }
             if (new_indexer_cmp.defined() && new_indexer_cmp.numel() > 0) {
               if (use_paged_indexer_cache) {
-                decode_indexer_to_cache.push_back(new_indexer_cmp);
+                decode_indexer_to_cache.push_back(
+                    batched_indexer_across_sequences
+                        ? new_indexer_cmp.clone() : new_indexer_cmp);
               } else {
-                if (indexer_kv_history_[seq_idx].defined() &&
-                    indexer_kv_history_[seq_idx].numel() > 0) {
-                  indexer_kv_history_[seq_idx] =
+                if (indexer_kv_history_[state_seq_idx].defined() &&
+                    indexer_kv_history_[state_seq_idx].numel() > 0) {
+                  indexer_kv_history_[state_seq_idx] =
                       torch::cat(
-                          {indexer_kv_history_[seq_idx], new_indexer_cmp},
+                          {indexer_kv_history_[state_seq_idx], new_indexer_cmp},
                           /*dim=*/0)
                           .contiguous();
                 } else {
-                  indexer_kv_history_[seq_idx] = new_indexer_cmp.contiguous();
+                  indexer_kv_history_[state_seq_idx] = new_indexer_cmp.contiguous();
                 }
               }
             }
@@ -5292,26 +6631,32 @@ DeepseekV4AttentionImpl::forward_current_impl(
           if (sequence_decode_state && fused_decode_main_compressed.defined() &&
               fused_decode_main_compressed.numel() > 0) {
             current_compressed_rows.push_back(fused_decode_main_compressed);
-            decode_compressed_to_cache.push_back(fused_decode_main_compressed);
+            decode_compressed_to_cache.push_back(
+                batched_indexer_across_sequences && !batch_compression
+                    ? fused_decode_main_compressed.clone()
+                    : fused_decode_main_compressed);
           }
           if (sequence_decode_state &&
               fused_decode_indexer_compressed.defined() &&
               fused_decode_indexer_compressed.numel() > 0 &&
               use_paged_indexer_cache) {
-            decode_indexer_to_cache.push_back(fused_decode_indexer_compressed);
+            decode_indexer_to_cache.push_back(
+                batched_indexer_across_sequences && !batch_compression
+                    ? fused_decode_indexer_compressed.clone()
+                    : fused_decode_indexer_compressed);
           }
           if (fused_chunked_main_compressed.defined() &&
               fused_chunked_main_compressed.numel() > 0) {
             if (retain_compressed_history) {
-              if (compressor_kv_history_[seq_idx].defined() &&
-                  compressor_kv_history_[seq_idx].numel() > 0) {
-                compressor_kv_history_[seq_idx] =
-                    torch::cat({compressor_kv_history_[seq_idx],
+              if (compressor_kv_history_[state_seq_idx].defined() &&
+                  compressor_kv_history_[state_seq_idx].numel() > 0) {
+                compressor_kv_history_[state_seq_idx] =
+                    torch::cat({compressor_kv_history_[state_seq_idx],
                                 fused_chunked_main_compressed},
                                /*dim=*/0)
                         .contiguous();
               } else {
-                compressor_kv_history_[seq_idx] =
+                compressor_kv_history_[state_seq_idx] =
                     fused_chunked_main_compressed.contiguous();
               }
             }
@@ -5336,7 +6681,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
           }
         } else {
           if (retain_compressed_history) {
-            cmp_seq = compressor_kv_history_[seq_idx];
+            cmp_seq = compressor_kv_history_[state_seq_idx];
           }
           if (!cmp_seq.defined() && !effective_use_indexer_attention) {
             cmp_seq = gather_cache(cmp_cache,
@@ -5367,7 +6712,11 @@ DeepseekV4AttentionImpl::forward_current_impl(
         (seq_q_len == 1 || compact_spec_verify);
     if (use_paged_indexer_cache && index_len > 0) {
       // A decode step on a C4 boundary produces a row consumed immediately.
-      flush_decode_compressed_cache();
+      // The merged path publishes all sequences once after this loop. Its
+      // Indexer and MATE consumers are both deferred until that publication.
+      if (!batched_indexer_across_sequences) {
+        flush_decode_compressed_cache();
+      }
       if (!use_fused_indexer_topk) {
         index_kv = gather_indexer_cache(index_cache,
                                         index_scale_cache,
@@ -5377,8 +6726,8 @@ DeepseekV4AttentionImpl::forward_current_impl(
                                         hidden_states.scalar_type());
         maybe_sync_attention_stage(layer_id_, "indexer_cache_gather", index_kv);
       }
-    } else if (seq_idx < indexer_kv_history_.size()) {
-      index_kv = indexer_kv_history_[seq_idx];
+      } else if (state_seq_idx < indexer_kv_history_.size()) {
+        index_kv = indexer_kv_history_[state_seq_idx];
     }
     if (apply_sparse_indexer_attention && index_len > 0 &&
         (use_fused_indexer_topk ||
@@ -5403,7 +6752,15 @@ DeepseekV4AttentionImpl::forward_current_impl(
           active_sin.defined()
               ? active_sin.slice(/*dim=*/0, /*start=*/q_start, /*end=*/q_end)
               : torch::Tensor();
-      if (compact_spec_verify && seq_q_len > 1 && use_paged_indexer_cache &&
+      if (batched_indexer_across_sequences) {
+        cmp_indices = batched_indexer_indices.narrow(
+            /*dim=*/0, /*start=*/q_start, /*length=*/seq_q_len);
+        cmp_physical_indices = batched_indexer_physical_indices.narrow(
+            /*dim=*/0, /*start=*/q_start, /*length=*/seq_q_len);
+        cmp_extra_physical_indices =
+            batched_indexer_extra_physical_indices.narrow(
+                /*dim=*/0, /*start=*/q_start, /*length=*/seq_q_len);
+      } else if (compact_spec_verify && seq_q_len > 1 && use_paged_indexer_cache &&
           decode_spec_indices_output_.defined() &&
           decode_spec_indices_output_.size(0) >= seq_q_len &&
           decode_spec_mate_physical_indices_.defined() &&
@@ -5427,7 +6784,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
             index_block_table.defined() && index_cache.defined()
                 ? index_block_table.size(1) * index_cache.size(1) : index_len;
         const int64_t rounded_index_capacity =
-            ((index_len + int64_t{511}) / int64_t{512}) * int64_t{512};
+            dsv4_graph_indexer_capacity(index_len, dsv4_sequence_view_active);
         int64_t completed_tokens = 0;
         if (graph_dynamic_indexer && seq_q_len > 2 &&
             dsv4_musa_batched_graph_indexer_enabled()) {
@@ -5535,7 +6892,10 @@ DeepseekV4AttentionImpl::forward_current_impl(
       // entire diffusion block, without a causal mask within that block.
       CHECK_EQ(compress_ratio_, 1);
       const int64_t visible_rows = window_size_ + q_seq.size(0);
-      if (use_fused_paged_sas) {
+      if (batched_sas_output.defined()) {
+        CHECK(use_fused_paged_sas);
+        seq_output = batched_sas_output.narrow(0, q_start, q_end - q_start);
+      } else if (use_fused_paged_sas) {
         // Every diffusion-block row sees the SAME context+block, not a
         // per-row causal prefix. Avoid gathering the entire logical history
         // and building FP32 score/probability/intermediate tensors in eager.
@@ -5543,7 +6903,8 @@ DeepseekV4AttentionImpl::forward_current_impl(
             q_seq.contiguous(), ori_kv, swa_block_table,
             static_cast<int64_t>(seq_idx), kv_lens[seq_idx], visible_rows,
             attn_sink_.to(q.device()).to(torch::kFloat32).contiguous(),
-            softmax_scale_, decode_spec_attention_output_.narrow(0, 0, q_seq.size(0)));
+            softmax_scale_, dsv4_sequence_output_buffer(
+                q_seq, decode_spec_attention_output_, query_ranges.size()));
       } else {
         CHECK(kv_seq.defined());
         const int64_t start = std::max<int64_t>(kv_seq.size(0) - visible_rows, 0);
@@ -5579,6 +6940,29 @@ DeepseekV4AttentionImpl::forward_current_impl(
     const bool use_graph_batched_mate_verify =
         enable_graph_batched_mate_verify && attn_metadata.is_acl_graph &&
         compact_spec_verify && q_seq.size(0) > 2;
+    if (batch_mate_across_sequences && compact_spec_verify &&
+        q_seq.size(0) > 1 && cmp_indices.defined() &&
+        cmp_physical_indices.defined() && cmp_extra_physical_indices.defined() &&
+        mate_cmp_cache.defined() && mate_swa_cache.defined()) {
+      // Defer the fused MATE launch until every request has published its
+      // causal physical rows. The per-request compressor/indexer/state work
+      // above remains isolated; only the row-independent FlashMLA launch is
+      // merged. Per-sequence Indexer scratch needs a snapshot; merged Indexer
+      // rows are disjoint views written after this loop, so retain their
+      // addresses instead of copying the as-yet-uninitialized output.
+      pending_batched_mate.push_back(PendingBatchedMate{
+          q_seq,
+          batched_indexer_across_sequences
+              ? cmp_indices : cmp_indices.contiguous().clone(),
+          batched_indexer_across_sequences
+              ? cmp_physical_indices : cmp_physical_indices.contiguous().clone(),
+          batched_indexer_across_sequences
+              ? cmp_extra_physical_indices
+              : cmp_extra_physical_indices.contiguous().clone(),
+          kv_lens[seq_idx],
+          q_start});
+      continue;
+    }
     if (dsv4_musa_mate_sparse_decode_enabled() && effective_use_indexer_attention &&
         (!compact_verify_needs_causal_fallback ||
          use_graph_batched_mate_verify) &&
@@ -5588,7 +6972,9 @@ DeepseekV4AttentionImpl::forward_current_impl(
         cmp_block_table.defined() && swa_block_table.defined()) {
       // TopK may select the compressed row produced at this decode step.
       // Commit pending rows before the packed cache is consumed by Mate.
-      flush_decode_compressed_cache();
+      if (!batched_indexer_across_sequences) {
+        flush_decode_compressed_cache();
+      }
       if (compact_spec_verify && q_seq.size(0) > 1 &&
           !use_graph_batched_mate_verify &&
           decode_spec_attention_output_.defined() &&
@@ -5792,11 +7178,23 @@ DeepseekV4AttentionImpl::forward_current_impl(
     }
     if (use_paged_decode_attention &&
         (!seq_output.defined() || verify_mate_dsa)) {
+      const bool direct_multi_sequence =
+          dsv4_sequence_view_active && query_ranges.size() > 1 &&
+          dsv4_musa_mate_fused_dsa_multi_sequence_enabled();
+      const torch::Tensor paged_swa_table =
+          direct_multi_sequence
+              ? swa_block_table.narrow(/*dim=*/0,
+                                       /*start=*/static_cast<int64_t>(seq_idx),
+                                       /*length=*/1)
+              : swa_block_table;
+      const int64_t paged_sequence_index = direct_multi_sequence ? 0 :
+                                                                  static_cast<int64_t>(seq_idx);
       torch::Tensor paged_output;
       const bool dynamic_compressed_verify =
           attn_metadata.is_acl_graph && compact_spec_verify &&
           q_seq.size(0) > 2 && window_size_ == 128 &&
-          query_ranges.size() == 1 && graph_decode_kv_seq_lens.defined() &&
+          (query_ranges.size() == 1 || direct_multi_sequence) &&
+          graph_decode_kv_seq_lens.defined() &&
           cmp_cache.defined() && cmp_block_table.defined() &&
           decode_spec_attention_output_.defined() && [] {
             const char* env = std::getenv("XLLM_DSV4_DYNAMIC_GRAPH_STATE");
@@ -5804,6 +7202,10 @@ DeepseekV4AttentionImpl::forward_current_impl(
           }();
       const bool dynamic_c128_verify =
           dynamic_compressed_verify && compress_ratio_ == 128;
+      const torch::Tensor paged_compressed_table =
+          dsv4_paged_compressed_table_view(
+              cmp_block_table, paged_cmp_block_table, dynamic_compressed_verify,
+              direct_multi_sequence, static_cast<int64_t>(seq_idx));
       const bool dynamic_short_c4_verify =
           dynamic_compressed_verify && compress_ratio_ == 4 &&
           force_full_kv_attention && [] {
@@ -5814,21 +7216,36 @@ DeepseekV4AttentionImpl::forward_current_impl(
         // Publishing the whole proposal is safe only when each target row
         // masks compressed history by its own runtime KV length. A dense
         // tail shared by all q6 rows leaks the later compression boundary.
-        flush_decode_compressed_cache();
+        if (!partitioned_c128_requests) {
+          flush_decode_compressed_cache();
+        }
         if (dynamic_c128_verify && dsv4_musa_c128_mate_enabled() &&
             kv_lens[seq_idx] / 128 <= 512 &&
             mate_cmp_cache.defined() && mate_swa_cache.defined() &&
             decode_spec_indices_output_.defined() && index_topk_ == 512) {
-          auto logical = decode_spec_indices_output_.narrow(0, 0, q_seq.size(0));
-          auto physical = decode_spec_mate_physical_indices_.narrow(0, 0, q_seq.size(0));
-          auto extra = decode_spec_mate_extra_physical_indices_.narrow(0, 0, q_seq.size(0));
+          const int64_t row_start = partitioned_c128_requests ? q_start : 0;
+          auto logical = decode_spec_indices_output_.narrow(0, row_start, q_seq.size(0));
+          auto physical = decode_spec_mate_physical_indices_.narrow(0, row_start, q_seq.size(0));
+          auto extra = decode_spec_mate_extra_physical_indices_.narrow(0, row_start, q_seq.size(0));
           auto lengths = graph_decode_kv_seq_lens.narrow(0, q_start, q_seq.size(0));
-          kernel::musa::deepseek_v4_prepare_c128_mate_indices(
-              lengths, cmp_block_table, swa_block_table, mate_cmp_cache.size(1),
-              logical, physical, extra);
+          if (!batch_c128_indices) {
+            kernel::musa::deepseek_v4_prepare_c128_mate_indices(
+                lengths, paged_compressed_table, paged_swa_table, mate_cmp_cache.size(1),
+                logical, physical, extra);
+          }
+          if (partitioned_c128_requests) {
+            CHECK_EQ(q_seq.size(0), 7);
+            // Views are disjoint for every request. Cache publication occurs
+            // once after the loop,before the merged MATE reader is enqueued.
+            pending_batched_mate.emplace_back(PendingBatchedMate{
+                q_seq, logical, physical, extra, kv_lens[seq_idx], q_start});
+            LOG_FIRST_N(INFO, 1) << "[DSV4_PARTITIONED_C128_MATE] sequences="
+                                << query_ranges.size() << " query_width=7";
+            continue;
+          }
           paged_output = mate_sparse_attention_batched(
-              q_seq, mate_cmp_cache, logical, cmp_block_table, mate_swa_cache,
-              swa_block_table, static_cast<int64_t>(seq_idx), kv_lens[seq_idx],
+              q_seq, mate_cmp_cache, logical, paged_compressed_table, mate_swa_cache,
+              paged_swa_table, paged_sequence_index, kv_lens[seq_idx],
               lengths, decode_spec_attention_output_.narrow(0, 0, q_seq.size(0)),
               physical, extra);
           CHECK(paged_output.defined()) << "C128 MODEL1 path unavailable";
@@ -5847,10 +7264,10 @@ DeepseekV4AttentionImpl::forward_current_impl(
               cmp_block_table.size(1) * cmp_cache.size(1));
           paged_output =
               kernel::musa::deepseek_v4_paged_attention_verify_compressed(
-                  q_seq, ori_kv, swa_block_table,
+                  q_seq, ori_kv, paged_swa_table,
                   graph_decode_kv_seq_lens.narrow(
                       /*dim=*/0, q_start, /*length=*/q_seq.size(0)),
-                  cmp_cache, cmp_block_table, compressed_capacity,
+                  cmp_cache, paged_compressed_table, compressed_capacity,
                   compress_ratio_,
                   attn_sink_.to(q.device()).to(torch::kFloat32).contiguous(),
                   softmax_scale_, decode_spec_attention_output_.narrow(
@@ -5882,8 +7299,8 @@ DeepseekV4AttentionImpl::forward_current_impl(
           auto token_output = paged_dense_attention(
               q_seq.narrow(/*dim=*/0, /*start=*/token_idx, /*length=*/1),
               ori_kv,
-              swa_block_table,
-              static_cast<int64_t>(seq_idx),
+              paged_swa_table,
+              paged_sequence_index,
               token_kv_len,
               graph_decode_kv_seq_lens.defined()
                   ? graph_decode_kv_seq_lens.narrow(
@@ -5893,7 +7310,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
                   : torch::Tensor(),
               cmp_seq,
               paged_cmp_cache,
-              paged_cmp_block_table,
+              paged_compressed_table,
               token_paged_compressed_len);
           if (!token_output.defined()) {
             all_tokens_completed = false;
@@ -5909,8 +7326,8 @@ DeepseekV4AttentionImpl::forward_current_impl(
         paged_output = paged_dense_attention(
             q_seq,
             ori_kv,
-            swa_block_table,
-            static_cast<int64_t>(seq_idx),
+            paged_swa_table,
+            paged_sequence_index,
             kv_lens[seq_idx],
             graph_decode_kv_seq_lens.defined()
                 ? graph_decode_kv_seq_lens.narrow(
@@ -5918,7 +7335,7 @@ DeepseekV4AttentionImpl::forward_current_impl(
                 : torch::Tensor(),
             cmp_seq,
             paged_cmp_cache,
-            paged_cmp_block_table,
+            paged_compressed_table,
             paged_cmp_len);
       }
       maybe_sync_attention_stage(
@@ -5981,9 +7398,16 @@ DeepseekV4AttentionImpl::forward_current_impl(
                 << " kv_seq_stats=" << tensor_stat_string(kv_seq)
                 << " out_stats=" << tensor_stat_string(seq_output);
     }
-    outputs.push_back(seq_output);
+    outputs.emplace_back(batched_sas_output.defined()
+                             ? seq_output
+                             : dsv4_retain_sequence_output(seq_output, query_ranges.size()));
   }
   flush_decode_compressed_cache();
+  launch_batched_indexer();
+  const bool batch_state_publish_views = batched_state_gather && batch_compression && [] {
+    const char* value = std::getenv("XLLM_DSV4_BATCH_STATE_PUBLISH_VIEWS");
+    return value != nullptr && std::string(value) == "1";
+  }();
   auto persist_sequence_state = [&](torch::Tensor cache,
                                     const std::vector<torch::Tensor>& slots,
                                     const std::vector<torch::Tensor>& states,
@@ -5996,23 +7420,37 @@ DeepseekV4AttentionImpl::forward_current_impl(
     active_slots.reserve(query_ranges.size());
     active_states.reserve(query_ranges.size());
     for (size_t seq_idx = 0; seq_idx < query_ranges.size(); ++seq_idx) {
+      const size_t state_seq_idx = state_sequence_index_for(seq_idx);
       if (seq_idx < slots.size() && slots[seq_idx].defined() &&
-          seq_idx < states.size() && states[seq_idx].defined()) {
+          state_seq_idx < states.size() && states[state_seq_idx].defined()) {
         if (trace_layer0) {
           LOG(INFO) << "[DSV4_MUSA_STATE] phase=persist kind=" << stage
                     << " seq=" << seq_idx
                     << " slots=" << tensor_i64_prefix(slots[seq_idx])
-                    << " state=" << tensor_stat_string(states[seq_idx]);
+                    << " state_seq=" << state_seq_idx
+                    << " state=" << tensor_stat_string(states[state_seq_idx]);
         }
         active_slots.push_back(slots[seq_idx]);
-        active_states.push_back(states[seq_idx]);
+        active_states.push_back(states[state_seq_idx]);
       }
     }
     if (active_slots.empty()) {
       return;
     }
-    auto all_slots = torch::cat(active_slots, /*dim=*/0);
-    auto all_states = torch::cat(active_states, /*dim=*/0);
+    // Batched gather owns these buffers independently of the persistent cache;
+    // compression updates them in place. Adjacent slices need no new storage.
+    // Reordered or independent scratch rows retain cat/copy semantics.
+    auto all_slots = batch_state_publish_views
+                         ? dsv4_adjacent_row_view_or_cat(active_slots)
+                         : torch::cat(active_slots, /*dim=*/0);
+    auto all_states = batch_state_publish_views
+                          ? dsv4_adjacent_row_view_or_cat(active_states)
+                          : torch::cat(active_states, /*dim=*/0);
+    if (batch_state_publish_views && query_ranges.size() == 16) {
+      LOG_FIRST_N(INFO, 1) << "[DSV4_BATCH_STATE_PUBLISH_B16] stage=" << stage
+                          << " slots_view=" << all_slots.is_alias_of(active_slots.front())
+                          << " states_view=" << all_states.is_alias_of(active_states.front());
+    }
     scatter_by_slot(cache, all_slots, all_states);
     maybe_sync_attention_stage(layer_id_, stage, all_states);
   };
@@ -6036,13 +7474,107 @@ DeepseekV4AttentionImpl::forward_current_impl(
                            indexer_score_state_,
                            "indexer_score_state_scatter");
   }
+  if (!pending_batched_mate.empty()) {
+    // Diagnostic baseline: keep one request per MATE launch. If this restores
+    // row identity, the remaining error is in batched MATE/Graph metadata
+    // rather than compressor/indexer state publication.
+    const size_t max_mate_sequences_per_launch =
+        dsv4_musa_mate_max_sequences_per_launch();
+    if (partitioned_c128_requests) {
+      CHECK_EQ(pending_batched_mate.size(), query_ranges.size());
+      CHECK_GE(max_mate_sequences_per_launch, pending_batched_mate.size())
+          << "Partitioned C128 metadata sharing requires the whole physical batch";
+      if (batch_c128_indices) {
+        const int64_t sequences = static_cast<int64_t>(query_ranges.size());
+        const int64_t rows = sequences * 7;
+        CHECK_EQ(q.size(0), rows);
+        for (int64_t seq = 0; seq < sequences; ++seq) {
+          CHECK_EQ(pending_batched_mate[seq].q_start, seq * 7);
+          CHECK_EQ(pending_batched_mate[seq].q.size(0), 7);
+        }
+        kernel::musa::deepseek_v4_prepare_c128_mate_indices_batched(
+            graph_decode_kv_seq_lens.narrow(0, 0, rows),
+            cmp_block_table.narrow(0, 0, sequences),
+            swa_block_table.narrow(0, 0, sequences), mate_cmp_cache.size(1), 7,
+            decode_spec_indices_output_.narrow(0, 0, rows),
+            decode_spec_mate_physical_indices_.narrow(0, 0, rows),
+            decode_spec_mate_extra_physical_indices_.narrow(0, 0, rows));
+        LOG_FIRST_N(INFO, 1) << "[DSV4_BATCH_C128_INDICES] sequences=" << sequences
+                            << " query_width=7 partition_order_unchanged=1";
+      }
+    }
+    for (size_t group_start = 0; group_start < pending_batched_mate.size();
+         group_start += max_mate_sequences_per_launch) {
+      const size_t group_end = std::min(
+          group_start + max_mate_sequences_per_launch,
+          pending_batched_mate.size());
+      std::vector<torch::Tensor> pending_q;
+      std::vector<torch::Tensor> pending_logical;
+      std::vector<torch::Tensor> pending_physical;
+      std::vector<torch::Tensor> pending_extra;
+      std::vector<torch::Tensor> pending_lengths;
+      pending_q.reserve(group_end - group_start);
+      pending_logical.reserve(group_end - group_start);
+      pending_physical.reserve(group_end - group_start);
+      pending_extra.reserve(group_end - group_start);
+      pending_lengths.reserve(group_end - group_start);
+      int64_t max_pending_kv_len = 0;
+      for (size_t pending_index = group_start; pending_index < group_end;
+           ++pending_index) {
+        const auto& pending = pending_batched_mate[pending_index];
+        pending_q.push_back(pending.q);
+        pending_logical.push_back(pending.logical_indices);
+        pending_physical.push_back(pending.physical_indices);
+        pending_extra.push_back(pending.extra_physical_indices);
+        max_pending_kv_len = std::max(max_pending_kv_len, pending.kv_len);
+        CHECK(graph_decode_kv_seq_lens.defined());
+        pending_lengths.push_back(graph_decode_kv_seq_lens.narrow(
+            /*dim=*/0, /*start=*/pending.q_start,
+            /*length=*/pending.q.size(0)));
+      }
+      auto merge_rows = [&](const std::vector<torch::Tensor>& rows) {
+        return batch_mate_metadata ? dsv4_adjacent_row_view_or_cat(rows)
+                                   : torch::cat(rows, 0);
+      };
+      auto batched_q = merge_rows(pending_q);
+      auto batched_logical = merge_rows(pending_logical);
+      auto batched_physical = merge_rows(pending_physical);
+      auto batched_extra = merge_rows(pending_extra);
+      auto batched_lengths = merge_rows(pending_lengths).contiguous();
+      auto batched_output = decode_spec_attention_output_.narrow(
+          /*dim=*/0, /*start=*/0, /*length=*/batched_q.size(0));
+      auto batched_mate_output = mate_sparse_attention_batched(
+          batched_q, mate_cmp_cache, batched_logical, cmp_block_table,
+          mate_swa_cache, swa_block_table, /*sequence_index=*/0,
+          max_pending_kv_len, batched_lengths, batched_output,
+          batched_physical, batched_extra);
+      CHECK(batched_mate_output.defined())
+          << "Batched MATE launch failed after per-sequence state publication";
+      // MATE writes every group into the same persistent decode scratch. A
+      // view would be overwritten by the next group and reorder/contaminate
+      // requests at the final cat; snapshot each group before continuing.
+      const bool only_launch = batch_mate_metadata && group_start == 0 &&
+          group_end == pending_batched_mate.size() && outputs.empty();
+      outputs.push_back(only_launch ? batched_mate_output : batched_mate_output.clone());
+    }
+    LOG_FIRST_N(INFO, 1)
+        << "[DSV4_BATCH_MATE_ACROSS_SEQUENCES] sequences="
+        << pending_batched_mate.size() << " group_size="
+        << max_mate_sequences_per_launch;
+  }
   if (dsv4_musa_trace_enabled()) {
     LOG(INFO) << "[DSV4_MUSA_TRACE] attention layer=" << layer_id_
               << " dense_done seqs=" << query_ranges.size();
   }
 
   torch::Tensor attn_output;
-  if (outputs.empty()) {
+  if (batched_sas_output.defined()) {
+    CHECK_EQ(outputs.size(), query_ranges.size());
+    CHECK(pending_batched_mate.empty());
+    // The full-batch output has private storage: no reused scalar scratch,
+    // per-sequence clone, or concatenation is required.
+    attn_output = batched_sas_output;
+  } else if (outputs.empty()) {
     if (decode_spec_attention_output_.defined() &&
         decode_spec_attention_output_.size(0) >= q.size(0) &&
         decode_spec_attention_output_.size(1) == q.size(1) &&
@@ -6082,9 +7614,19 @@ DeepseekV4AttentionImpl::forward_current_impl(
                                           active_cos,
                                           active_sin,
                                           /*inverse=*/true,
-                                          inverse_rope_workspace);
+                                          inverse_rope_workspace,
+                                          /*allow_prefill_assembly=*/false,
+                                          /*allow_main_assembly=*/is_prefill ||
+                                              is_chunked_prefill);
   maybe_sync_attention_stage(layer_id_, "output_inverse_rope", o);
   const int64_t num_tokens = o.size(0);
+  if (dsv4_defer_o_a_projection) {
+    CHECK(dsv4_defer_output_projection && dsv4_sequence_view_active &&
+          attn_metadata.is_acl_graph && !is_prefill && !is_chunked_prefill);
+    // State persistence above has completed. The caller snapshots this
+    // inverse-RoPE output before the next sequence reuses the same buffer.
+    return {o.reshape({num_tokens, -1}), std::nullopt};
+  }
   auto o_group = o.view({num_tokens, n_local_groups_, -1});
   CHECK(o_a_projection_weight_.defined())
       << "DeepSeek-V4 MUSA wo_a weight was not materialized during loading.";
@@ -6135,7 +7677,20 @@ DeepseekV4AttentionImpl::forward_current_impl(
   }
   maybe_sync_attention_stage(layer_id_, "output_o_a_einsum", o_low_rank);
   record_prefill_profile_boundary(prefill_profile, 4, profile_device_id);
-  auto reduce_o_b_output = [this](torch::Tensor local_output) {
+  if (dsv4_defer_output_projection) {
+    CHECK(dsv4_sequence_view_active && attn_metadata.is_acl_graph &&
+          !is_prefill && !is_chunked_prefill);
+    // The outer view loop must clone this scratch-backed result before the
+    // next sequence uses it. No collective is issued on the per-row path.
+    return {o_low_rank.reshape({num_tokens, -1}), std::nullopt};
+  }
+  const char* prefill_fence_env =
+      std::getenv("XLLM_DSV4_MULTI_PREFILL_COLLECTIVE_FENCE");
+  const bool fence_prefill_collective =
+      prefill_fence_env != nullptr && std::string(prefill_fence_env) == "1" &&
+      (is_prefill || is_chunked_prefill) && sp_context == nullptr &&
+      num_tokens >= 128 && !kernel::musa::is_stream_capturing();
+  auto reduce_o_b_output = [this, fence_prefill_collective](torch::Tensor local_output) {
     ProcessGroup* process_group = o_b_proj_->process_group();
     if (process_group == nullptr || process_group->world_size() <= 1) {
       return local_output;
@@ -6158,7 +7713,13 @@ DeepseekV4AttentionImpl::forward_current_impl(
       return *custom_output;
     }
 
+    if (fence_prefill_collective) {
+      c10::musa::getCurrentMUSAStream(local_output.device().index()).synchronize();
+    }
     process_group->allreduce(local_output);
+    if (fence_prefill_collective) {
+      c10::musa::getCurrentMUSAStream(local_output.device().index()).synchronize();
+    }
     return local_output;
   };
   if (dsv4_musa_trace_enabled()) {

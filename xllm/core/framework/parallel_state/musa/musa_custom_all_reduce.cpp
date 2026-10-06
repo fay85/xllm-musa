@@ -18,22 +18,29 @@ limitations under the License.
 #include <ATen/core/dispatch/Dispatcher.h>
 #include <c10/core/DeviceGuard.h>
 #include <glog/logging.h>
+#include <musa_runtime_api.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstring>
 #include <limits>
 #include <mutex>
 #include <stdexcept>
 #include <unordered_set>
+#include <unordered_map>
 
 #include "core/framework/parallel_state/musa_process_group.h"
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce_policy.h"
+#include "torch_musa/csrc/core/MUSAStream.h"
 
 namespace xllm {
 
 namespace {
 
 std::mutex g_custom_allreduce_instances_mutex;
+std::mutex g_custom_allreduce_algorithm_mutex;
 std::unordered_set<MusaCustomAllReduce*> g_custom_allreduce_instances;
+std::unordered_map<MusaCustomAllReduce*, uint64_t> g_long_prefill_generations;
 
 int64_t op_meta_size() {
   static auto op = c10::Dispatcher::singleton()
@@ -217,6 +224,7 @@ MusaCustomAllReduce::~MusaCustomAllReduce() {
   {
     std::lock_guard<std::mutex> lock(g_custom_allreduce_instances_mutex);
     g_custom_allreduce_instances.erase(this);
+    g_long_prefill_generations.erase(this);
   }
   const c10::DeviceGuard device_guard(device_);
   if (custom_ar_handle_ != 0) {
@@ -232,6 +240,40 @@ MusaCustomAllReduce::~MusaCustomAllReduce() {
       buffer_ptrs_[rank_] != 0) {
     op_free_shared_buffer(buffer_ptrs_[rank_]);
   }
+}
+
+void MusaCustomAllReduce::long_prefill_host_barrier() {
+  CHECK(store_ != nullptr);
+  CHECK_GE(rank_, 0);
+  CHECK_LT(rank_, world_size_);
+  uint64_t generation = 0;
+  {
+    std::lock_guard<std::mutex> lock(g_custom_allreduce_instances_mutex);
+    generation = ++g_long_prefill_generations[this];
+  }
+  const std::string base = "xllm_long_prefill/" + group_name_ + "/";
+  const std::string prefix = base + std::to_string(generation) + "/";
+  std::vector<std::string> keys;
+  keys.reserve(world_size_);
+  for (int32_t rank = 0; rank < world_size_; ++rank) {
+    keys.emplace_back(prefix + std::to_string(rank));
+  }
+  store_->set(keys[rank_], std::vector<uint8_t>{1});
+  store_->wait(keys, std::chrono::seconds(120));
+  // Arrival in generation N proves every peer has finished waiting for N-1.
+  // Keep only the current round; do not leak millions of keys in long runs.
+  if (rank_ == 0 && generation > 1) {
+    const std::string previous = base + std::to_string(generation - 1) + "/";
+    for (int32_t rank = 0; rank < world_size_; ++rank) {
+      store_->deleteKey(previous + std::to_string(rank));
+    }
+  }
+}
+
+void musa_long_prefill_host_barrier(ProcessGroup* process_group) {
+  auto* musa_group = dynamic_cast<ProcessGroupImpl*>(process_group);
+  CHECK(musa_group != nullptr) << "Long-prefill rendezvous requires a MUSA group";
+  musa_group->long_prefill_host_barrier();
 }
 
 void MusaCustomAllReduce::init() {
@@ -347,8 +389,34 @@ std::optional<torch::Tensor> MusaCustomAllReduce::allreduce(
       !is_16_byte_aligned(output) || output.is_alias_of(input)) {
     return std::nullopt;
   }
-  op_all_reduce(
-      custom_ar_handle_, input, output, buffer_ptrs_[rank_], max_size_bytes_);
+  const char* graph_two_shot = std::getenv("XLLM_DSV4_GRAPH_TP_BF16_TWO_SHOT");
+  const bool enable_graph_two_shot = group_name_ == "tp_group" &&
+      graph_two_shot != nullptr && std::string(graph_two_shot) == "1";
+  auto reduce = [&]() {
+    op_all_reduce(custom_ar_handle_, input, output, buffer_ptrs_[rank_], max_size_bytes_);
+  };
+  if (!enable_graph_two_shot) {
+    reduce();
+    return output;
+  }
+  // Serialize selection + launch + restore, including small/eager TP calls,
+  // so another host thread cannot observe the temporary capture algorithm.
+  std::lock_guard<std::mutex> algorithm_lock(g_custom_allreduce_algorithm_mutex);
+  bool capture_two_shot = false;
+  if (input.dim() == 2 && musa_graph_tp_bf16_two_shot_shape(
+          group_name_, world_size_, input.scalar_type() == torch::kBFloat16,
+          input.size(0), input.size(1))) {
+    musaStreamCaptureStatus capture_status = musaStreamCaptureStatusNone;
+    CHECK_EQ(musaStreamIsCapturing(c10::musa::getCurrentMUSAStream(device_.index()),
+                                   &capture_status), musaSuccess);
+    capture_two_shot = capture_status == musaStreamCaptureStatusActive;
+  }
+  musa_with_tp_two_shot(capture_two_shot,
+      [&](int64_t algorithm) { op_set_algorithm(custom_ar_handle_, algorithm); }, reduce);
+  if (capture_two_shot && input.size(0) == 112) {
+    LOG_FIRST_N(INFO, 1) << "[DSV4_GRAPH_TP_TWO_SHOT_B16] rows=112 width=4096 bf16=1 "
+                           "capture_algorithm=2 restored_host_algorithm=1";
+  }
   return output;
 }
 

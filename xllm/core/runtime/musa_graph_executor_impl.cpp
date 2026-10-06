@@ -25,6 +25,7 @@ limitations under the License.
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <map>
 #include <shared_mutex>
 #include <vector>
 
@@ -40,6 +41,7 @@ limitations under the License.
 #include "core/layers/common/linear.h"
 #include "core/layers/musa/flashinfer_planinfo.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_graph_policy.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_graph_sequence.h"
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
 #include "core/runtime/decode_graph_bucket.h"
@@ -134,7 +136,8 @@ uint32_t dsv4_graph_shape_key(uint32_t bucket_num_tokens,
                               uint32_t actual_num_tokens,
                               const ModelArgs& args,
                               const runtime::Options& options,
-                              const ModelInputParams& params) {
+                              const ModelInputParams& params,
+                              bool emit_trace = true) {
   if (!s_enable_dsv4_dynamic_graph_state() ||
       args.model_type() != "deepseek_v4" || !params.is_spec_verify ||
       actual_num_tokens <= 2 || options.num_decoding_tokens() <= 1) {
@@ -145,6 +148,154 @@ uint32_t dsv4_graph_shape_key(uint32_t bucket_num_tokens,
     return bucket_num_tokens;
   }
   const int64_t query_width = options.num_decoding_tokens();
+  const char* stable_sequences_env =
+      std::getenv("XLLM_DSV4_STABLE_MULTI_GRAPH_SEQUENCES");
+  const bool stable_sequences =
+      stable_sequences_env != nullptr &&
+      std::string(stable_sequences_env) == "1" &&
+      layer::dsv4_reusable_graph_capacity(kv_lens, query_width) > 0;
+  if (layer::dsv4_graph_sequence_views_enabled() &&
+      actual_num_tokens > query_width && !stable_sequences) {
+    CHECK_EQ(actual_num_tokens % query_width, 0);
+    const int64_t sequences = actual_num_tokens / query_width;
+    CHECK_EQ(kv_lens.size(), sequences + 1)
+        << "Multi-sequence Graph key requires per-request cumulative KV lengths";
+    const auto enabled = [](const char* name) {
+      const char* value = std::getenv(name);
+      return value != nullptr && std::string(value) == "1";
+    };
+    const bool dynamic_short = enabled("XLLM_DSV4_DYNAMIC_SHORT_GRAPH_KEYS");
+    const bool global_short_family =
+        enabled("XLLM_DSV4_GLOBAL_SHORT_GRAPH_FAMILY");
+    CHECK(!global_short_family || dynamic_short)
+        << "Global short Graph family requires validated dynamic short keys";
+    if (dynamic_short) {
+      CHECK(query_width == 7 && args.window_size() == 128)
+          << "Dynamic short Graph keys require N6/q7 and a128-token SWA window";
+      for (const char* name : {"XLLM_DSV4_DYNAMIC_GRAPH_STATE",
+                               "XLLM_DSV4_GRAPH_CAUSAL_SHORT_C4",
+                               "XLLM_DSV4_C128_MATE_VERIFY",
+                               "XLLM_DSV4_ENABLE_GRAPH_BATCHED_MATE_VERIFY",
+                               "XLLM_DSV4_MATE_GROUPED_METADATA",
+                               "XLLM_DSV4_BATCH_MATE_GROUPED_METADATA",
+                               "XLLM_DSV4_BATCH_OUTPUT_PROJECTION",
+                               "XLLM_DSV4_BATCH_ATTENTION_PROJECTIONS",
+                               "XLLM_DSV4_BATCH_INDEXER_ACROSS_SEQUENCES",
+                               "XLLM_DSV4_BATCH_INDEXER_GEMM",
+                               "XLLM_DSV4_DISABLE_GRAPH_Q6_FREEZE"}) {
+        CHECK(enabled(name)) << "Dynamic short Graph key requires " << name;
+      }
+      for (const char* name : {"XLLM_DSV4_DISABLE_PAGED_DENSE_DECODE",
+                               "XLLM_DSV4_DISABLE_FUSED_DENSE_DECODE",
+                               "XLLM_DSV4_DISABLE_MATE_SPARSE_DECODE",
+                               "XLLM_DSV4_MATE_BATCHED_STATIC_LENGTHS",
+                               "XLLM_DSV4_DISABLE_GRAPH_COMPACT_INDEXER"}) {
+        CHECK(!enabled(name)) << "Dynamic short Graph key is incompatible with " << name;
+      }
+      if (emit_trace) {
+        LOG_FIRST_N(INFO, 1)
+            << "[DSV4_SHORT_GRAPH_KEYS] exact_short_kv_in_key=0 live_causal_lengths=1";
+      }
+    }
+    const int64_t short_batch_max = global_short_family
+        ? layer::dsv4_graph_short_batch_max_kv(kv_lens, query_width) : 0;
+    if (short_batch_max > 0 && emit_trace) {
+      LOG_FIRST_N(INFO, 1)
+          << "[DSV4_GLOBAL_SHORT_GRAPH_FAMILY] max_kv_capacity=2048 "
+             "per_row_validity=live batch_wide_attention_branch=1";
+    }
+    // Exact structural signatures, not a lossy packed/hash key. Fixed
+    // per-request compressor capacities make C4/C128 emission phases dynamic.
+    // The guarded direct short route uses a batch-wide attention branch.
+    // Other families retain per-row branches and indexer capacities.
+    std::vector<int64_t> shape{bucket_num_tokens, query_width, sequences,
+                              args.window_size(), layer::dsv4_full_kv_threshold(),
+                              short_batch_max > 0};
+    for (int64_t seq = 0; seq < sequences; ++seq) {
+      const int64_t len = kv_lens[seq + 1] - kv_lens[seq];
+      CHECK_GE(len, query_width);
+      const bool full = layer::dsv4_uses_full_kv(
+          short_batch_max > 0 ? short_batch_max : len,
+          layer::dsv4_full_kv_threshold(), args.window_size());
+      shape.push_back(full);
+      shape.push_back(layer::dsv4_graph_indexer_capacity(
+                          len / 4, /*multi_sequence=*/true) / 512);
+      shape.push_back(layer::dsv4_graph_baked_kv_length(len, full, dynamic_short));
+    }
+    static thread_local std::map<std::vector<int64_t>, uint32_t> signatures;
+    auto [entry, inserted] = signatures.try_emplace(shape, 0);
+    if (inserted) {
+      CHECK_LT(signatures.size(), uint32_t{1} << 30);
+      entry->second = (uint32_t{1} << 30) | signatures.size();
+      if (emit_trace) {
+        LOG(INFO) << "[DSV4_MULTI_GRAPH_KEY] key=" << entry->second
+                  << " sequences=" << sequences
+                  << " query_width=" << query_width;
+      }
+    }
+    const char* trace = std::getenv("XLLM_DSV4_GRAPH_KEY_TRACE");
+    if (emit_trace && trace != nullptr && std::string(trace) == "1") {
+      LOG(INFO) << "[DSV4_MULTI_GRAPH_ROUTE] key=" << entry->second
+                << " actual_tokens=" << actual_num_tokens
+                << " bucket_tokens=" << bucket_num_tokens
+                << " sequences=" << sequences << " query_width=" << query_width;
+    }
+    return entry->second;
+  }
+  if (stable_sequences && layer::dsv4_graph_sequence_views_enabled() &&
+      actual_num_tokens > query_width &&
+      actual_num_tokens % query_width == 0) {
+    const int64_t active_sequences = actual_num_tokens / query_width;
+    const int64_t bucket_sequences = bucket_num_tokens / query_width;
+    if (bucket_sequences >= active_sequences &&
+        bucket_sequences <= options.max_seqs_per_batch()) {
+      int64_t max_kv_len = 0;
+      for (size_t index = 1; index < kv_lens.size(); ++index) {
+        max_kv_len = std::max<int64_t>(max_kv_len,
+                                       kv_lens[index] - kv_lens[index - 1]);
+      }
+      const bool full = layer::dsv4_uses_full_kv(
+          max_kv_len, layer::dsv4_full_kv_threshold(), args.window_size());
+      std::vector<int64_t> shape{
+          bucket_num_tokens,
+          query_width,
+          bucket_sequences,
+          args.window_size(),
+          layer::dsv4_full_kv_threshold(),
+          layer::dsv4_graph_indexer_capacity(max_kv_len / 4,
+                                             /*multi_sequence=*/true) /
+              512,
+          full || max_kv_len / 128 > 512 ? max_kv_len : 0};
+      static thread_local std::map<std::vector<int64_t>, uint32_t>
+          stable_signatures;
+      auto [entry, inserted] = stable_signatures.try_emplace(shape, 0);
+      if (inserted) {
+        CHECK_LT(stable_signatures.size(), uint32_t{1} << 30);
+        entry->second = (uint32_t{1} << 29) | stable_signatures.size();
+        if (emit_trace) {
+          LOG(INFO) << "[DSV4_STABLE_MULTI_GRAPH_KEY] key=" << entry->second
+                    << " active_sequences=" << active_sequences
+                    << " graph_sequences=" << bucket_sequences;
+        }
+      }
+      const char* trace = std::getenv("XLLM_DSV4_GRAPH_KEY_TRACE");
+      if (emit_trace && trace != nullptr && std::string(trace) == "1") {
+        LOG(INFO) << "[DSV4_STABLE_MULTI_GRAPH_ROUTE] key=" << entry->second
+                  << " actual_tokens=" << actual_num_tokens
+                  << " bucket_tokens=" << bucket_num_tokens
+                  << " active_sequences=" << active_sequences
+                  << " graph_sequences=" << bucket_sequences;
+        // Report real active sequences for the throughput auditor. Padded
+        // graph rows must never count as a physically active B16 request set.
+        LOG(INFO) << "[DSV4_MULTI_GRAPH_ROUTE] key=" << entry->second
+                  << " actual_tokens=" << actual_num_tokens
+                  << " bucket_tokens=" << bucket_num_tokens
+                  << " sequences=" << active_sequences
+                  << " query_width=" << query_width;
+      }
+      return entry->second;
+    }
+  }
   const int64_t start_position =
       static_cast<int64_t>(kv_lens[1]) - query_width;
   if (start_position < 0) {
@@ -727,6 +878,11 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     ensure_host_mirror(attn_metadata->fa3_metadata.paged_kv_last_page_len_host,
                        attn_metadata->paged_kv_last_page_len);
   }
+  const char* stable_multi_graph_env =
+      std::getenv("XLLM_DSV4_STABLE_MULTI_GRAPH_SEQUENCES");
+  const bool stable_multi_graph_sequences =
+      stable_multi_graph_env != nullptr &&
+      std::string(stable_multi_graph_env) == "1";
   auto build_capture_params_if_needed =
       [&]() -> std::optional<ModelInputParams> {
     if (!return_capture_params) {
@@ -786,8 +942,11 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       auto& host = params_for_capture->attention.host;
       host.q_seq_lens.assign(static_cast<size_t>(graph_num_sequences + 1), 0);
       host.q_cu_seq_lens.assign(static_cast<size_t>(graph_num_sequences), 0);
+      const auto graph_q_lengths = layer::dsv4_graph_query_lengths(
+          active_sequences, graph_num_sequences, verify_width,
+          stable_multi_graph_sequences);
       for (int32_t seq = 0; seq < graph_num_sequences; ++seq) {
-        const int32_t q_len = seq < active_sequences ? verify_width : 0;
+        const int32_t q_len = graph_q_lengths[seq];
         host.q_seq_lens[static_cast<size_t>(seq + 1)] =
             host.q_seq_lens[static_cast<size_t>(seq)] + q_len;
         host.q_cu_seq_lens[static_cast<size_t>(seq)] =
@@ -796,45 +955,13 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
 
       const std::vector<int32_t> expanded_kv_lens =
           params.attention.host.kv_seq_lens;
-      std::vector<int32_t> compact_kv_lens;
-      compact_kv_lens.reserve(static_cast<size_t>(graph_num_sequences + 1));
-      compact_kv_lens.emplace_back(0);
+      auto compact_kv_lens = layer::dsv4_compact_graph_kv_lengths(
+          expanded_kv_lens, active_sequences, graph_num_sequences,
+          verify_width, actual_num_tokens, params.meta.kv_max_seq_len);
       int32_t compact_kv_max = 0;
-      const bool expanded_kv_is_cumulative =
-          expanded_kv_lens.size() ==
-              static_cast<size_t>(actual_num_tokens + 1) &&
-          !expanded_kv_lens.empty() && expanded_kv_lens.front() == 0;
-      // Non-block-parallel DSpark supplies one cumulative KV entry per
-      // sequence ([0, seq0, seq0+seq1, ...]), while the compact Graph
-      // verifier consumes one logical row per sequence. Recognize that
-      // layout before falling back to kv_max_seq_len; otherwise every active
-      // row in a multi-sequence replay inherits the batch maximum.
-      const bool expanded_kv_is_sequence_cumulative =
-          expanded_kv_lens.size() ==
-              static_cast<size_t>(graph_num_sequences + 1) &&
-          !expanded_kv_lens.empty() && expanded_kv_lens.front() == 0;
-      const bool expanded_kv_is_per_row =
-          expanded_kv_lens.size() == static_cast<size_t>(actual_num_tokens);
       for (int32_t seq = 0; seq < graph_num_sequences; ++seq) {
-        int32_t kv_len = 0;
-        if (seq < active_sequences) {
-          const int64_t final_row =
-              (static_cast<int64_t>(seq) + 1) * compact_decode_width;
-          if (expanded_kv_is_sequence_cumulative) {
-            kv_len = expanded_kv_lens[static_cast<size_t>(seq + 1)] -
-                     expanded_kv_lens[static_cast<size_t>(seq)];
-          } else if (expanded_kv_is_cumulative) {
-            kv_len = expanded_kv_lens[static_cast<size_t>(final_row)] -
-                     expanded_kv_lens[static_cast<size_t>(final_row - 1)];
-          } else if (expanded_kv_is_per_row) {
-            kv_len = expanded_kv_lens[static_cast<size_t>(final_row - 1)];
-          } else {
-            kv_len = params.meta.kv_max_seq_len;
-          }
-          kv_len = std::max<int32_t>(kv_len, 1);
-          compact_kv_max = std::max(compact_kv_max, kv_len);
-        }
-        compact_kv_lens.emplace_back(compact_kv_lens.back() + kv_len);
+        compact_kv_max = std::max<int32_t>(compact_kv_max,
+            compact_kv_lens[seq + 1] - compact_kv_lens[seq]);
       }
       host.kv_seq_lens = std::move(compact_kv_lens);
       params_for_capture->meta.q_max_seq_len = verify_width;
@@ -853,6 +980,16 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
                                    /*step=*/compact_decode_width)
                             .contiguous();
         }
+        if (stable_multi_graph_sequences && block_table.defined() &&
+            block_table.dim() == 2 &&
+            block_table.size(0) < graph_num_sequences) {
+          const int64_t missing_rows =
+              graph_num_sequences - block_table.size(0);
+          auto padding = torch::full(
+              {missing_rows, block_table.size(1)}, -1, block_table.options());
+          block_table = torch::cat({block_table, padding}, /*dim=*/0)
+                            .contiguous();
+        }
       }
     }
     params_for_capture->attention.device.q_seq_lens =
@@ -863,6 +1000,32 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
         persistent_new_cache_slots(padded_num_tokens);
     params_for_capture->attention.device.block_tables =
         persistent_block_tables(static_cast<uint32_t>(graph_num_sequences));
+    const char* compact_tables_env =
+        std::getenv("XLLM_DSV4_COMPACT_GRAPH_BLOCK_TABLES");
+    if (compact_dsv4_target_verify && actual_batch_size > 1 &&
+        layer::dsv4_graph_sequence_views_enabled() &&
+        compact_tables_env != nullptr && std::string(compact_tables_env) == "1") {
+      const auto& padded_kv = params_for_capture->attention.host.kv_seq_lens;
+      CHECK_GE(padded_kv.size(), static_cast<size_t>(actual_batch_size + 1));
+      const std::vector<int32_t> live_kv(
+          padded_kv.begin(), padded_kv.begin() + actual_batch_size + 1);
+      const int64_t columns = layer::dsv4_graph_block_table_columns(
+          live_kv, compact_decode_width, options_.block_size());
+      if (columns > 0) {
+        auto& carrier = params_for_capture->attention.device.block_tables;
+        CHECK_LE(columns, carrier.size(1));
+        for (const auto& table : params_for_capture->multi_block_tables) {
+          CHECK(table.defined() && table.dim() == 2);
+          CHECK_LE(table.size(1), columns)
+              << "Raw DSV4 table exceeds its graph-key capacity; cannot trim";
+        }
+        carrier = carrier.narrow(/*dim=*/1, /*start=*/0, columns);
+        LOG_FIRST_N(INFO, 1)
+            << "[DSV4_COMPACT_GRAPH_BLOCK_TABLES] sequences="
+            << graph_num_sequences << " columns=" << columns
+            << " live_kv_max=" << params_for_capture->meta.kv_max_seq_len;
+      }
+    }
     params_for_capture->attn_metadata = attn_metadata;
     params_for_capture->is_spec_verify =
         compact_dsv4_mtp_decode || params.is_spec_verify;
@@ -1492,6 +1655,7 @@ bool MusaGraph::capture(CausalLM* model,
   model_ = model;
   padded_num_tokens_ = bucket_num_tokens;
   const uint32_t actual_num_tokens = tokens.size(0);
+  captured_actual_tokens_ = actual_num_tokens;
   CHECK_GE(padded_num_tokens_, actual_num_tokens)
       << "bucket_num_tokens >= actual_num_tokens";
 
@@ -2080,8 +2244,17 @@ c10::musa::MUSAStream MusaGraphExecutorImpl::get_capture_stream(
 
 ForwardInput MusaGraphExecutorImpl::prepare_inputs(Batch& batch) {
   // Prepare inputs for workers
+  uint32_t min_decoding_batch_size = 0;
+  const char* min_batch_env = std::getenv("XLLM_DSV4_MIN_DECODE_BATCH");
+  if (min_batch_env != nullptr && *min_batch_env != '\0') {
+    const long parsed = std::strtol(min_batch_env, nullptr, 10);
+    if (parsed > 0 && parsed <= std::numeric_limits<uint32_t>::max()) {
+      min_decoding_batch_size = static_cast<uint32_t>(parsed);
+    }
+  }
   return batch.prepare_forward_input(
-      options_.num_decoding_tokens(), 0, args_, options_.cp_size());
+      options_.num_decoding_tokens(), min_decoding_batch_size, args_,
+      options_.cp_size());
 }
 
 ModelOutput MusaGraphExecutorImpl::attach_aux_hidden_states_if_needed(
@@ -2230,7 +2403,24 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     COUNTER_INC(num_model_execution_total_eager);
     return model_->forward(tokens, positions, kv_caches, params);
   }
-  const uint32_t bucket_num_tokens = get_bucket_num_tokens(n_tokens);
+  uint32_t bucket_num_tokens = get_bucket_num_tokens(n_tokens);
+  const char* stable_multi_graph_env =
+      std::getenv("XLLM_DSV4_STABLE_MULTI_GRAPH_SEQUENCES");
+  const bool stable_multi_graph_sequences =
+      stable_multi_graph_env != nullptr &&
+      std::string(stable_multi_graph_env) == "1";
+  const bool reuse_existing_graph = stable_multi_graph_sequences && is_decode &&
+      args_.model_type() == "deepseek_v4" && params.is_spec_verify &&
+      options_.num_decoding_tokens() > 1 &&
+      options_.max_seqs_per_batch() > 1 &&
+      layer::dsv4_graph_sequence_views_enabled() &&
+      layer::dsv4_reusable_graph_capacity(params.attention.host.kv_seq_lens,
+                                          options_.num_decoding_tokens()) > 0;
+  if (reuse_existing_graph) {
+    // First capture only fully populated real rows. Larger shapes are eligible
+    // for reuse only after they have been captured by an actual larger batch.
+    bucket_num_tokens = n_tokens;
+  }
 
   // Honor the public graph token limit on MUSA as the CUDA executor does.
   // Previously every decode shape entered capture/replay regardless of
@@ -2281,13 +2471,22 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         args_.model_type() == "deepseek_v4" && n_tokens > 1 &&
         params.is_spec_verify && graph_kv_len_hint > 0 &&
         graph_kv_len_hint <= 2048;
+    const char* multi_sequence_eager_env =
+        std::getenv("XLLM_DSV4_MULTI_SEQUENCE_FORCE_EAGER");
+    const bool multi_sequence_eager =
+        multi_sequence_eager_env != nullptr &&
+        std::string(multi_sequence_eager_env) == "1" &&
+        args_.model_type() == "deepseek_v4" && n_tokens > 1 &&
+        params.is_spec_verify && params.meta.num_sequences > 1;
     if (force_eager_compact_verify || default_eager_compact_verify ||
+        multi_sequence_eager ||
         short_fullkv_eager) {
       LOG(INFO) << "[DSV4_GRAPH_ROUTE] target compact verify forced eager; "
                    "tokens=" << n_tokens
                 << " reason=" << (short_fullkv_eager ? "short_fullkv" :
+                                    (multi_sequence_eager ? "multi_sequence" :
                                     (force_eager_compact_verify ? "forced" :
-                                                                    "default"));
+                                                                    "default")));
       ModelInputParams eager_params = params;
       eager_params.enable_graph = false;
       eager_params.attn_metadata.reset();
@@ -2315,12 +2514,33 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     // maybe_precompute_embedding_for_graph() for the full rationale.
     const ModelInputParams graph_params =
         maybe_precompute_embedding_for_graph(tokens, params);
+    if (reuse_existing_graph) {
+      const uint32_t width = static_cast<uint32_t>(options_.num_decoding_tokens());
+      CHECK_EQ(n_tokens % width, 0);
+      const uint32_t maximum_sequences = std::min<uint32_t>(
+          static_cast<uint32_t>(options_.max_seqs_per_batch()),
+          max_graph_tokens > 0 ? static_cast<uint32_t>(max_graph_tokens) / width
+                               : static_cast<uint32_t>(options_.max_seqs_per_batch()));
+      const uint32_t sequences = layer::dsv4_select_existing_graph_sequences(
+          n_tokens / width, maximum_sequences,
+          [&](uint32_t candidate_sequences) {
+            const uint32_t candidate_tokens = candidate_sequences * width;
+            const uint32_t key = dsv4_graph_shape_key(
+                candidate_tokens, n_tokens, args_, options_, graph_params,
+                /*emit_trace=*/false);
+            const auto candidate = graphs_.find(key);
+            return candidate != graphs_.end() &&
+                   candidate->second->captured_without_padding();
+          });
+      bucket_num_tokens = sequences * width;
+    }
     const uint32_t graph_shape_key = dsv4_graph_shape_key(
         bucket_num_tokens, n_tokens, args_, options_, graph_params);
 
     // Check if captured graph exists for this bucket num_tokens
     auto it = graphs_.find(graph_shape_key);
     if (it != graphs_.end()) {
+      CHECK(!reuse_existing_graph || it->second->captured_without_padding());
       // Replay the existing graph
       VLOG(kGraphExecutorLogVerboseLevel)
           << "MusaGraphExecutorImpl::run() in decode replay mode";

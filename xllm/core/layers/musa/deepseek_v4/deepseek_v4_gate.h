@@ -38,7 +38,8 @@ class DeepseekV4GateImpl final : public torch::nn::Module {
 
   std::tuple<torch::Tensor, torch::Tensor> forward(
       const torch::Tensor& hidden_states,
-      const std::optional<torch::Tensor>& input_ids = std::nullopt);
+      const std::optional<torch::Tensor>& input_ids = std::nullopt,
+      bool batch_verify = false);
 
   void load_state_dict(const StateDict& state_dict);
 

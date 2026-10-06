@@ -292,6 +292,10 @@ class MusaGraph final {
     return persistent_param_.hidden_states(actual_num_tokens);
   }
 
+  bool captured_without_padding() const {
+    return captured_actual_tokens_ == padded_num_tokens_;
+  }
+
  private:
   void prepare_model_graph_metadata(CausalLM* model,
                                     const torch::Tensor& positions,
@@ -328,6 +332,7 @@ class MusaGraph final {
   c10::musa::MUSAStream capture_stream_;
 
   uint32_t padded_num_tokens_ = 0;
+  uint32_t captured_actual_tokens_ = 0;
 
   std::unique_ptr<ModelGraphMetadataState> model_graph_metadata_state_;
 

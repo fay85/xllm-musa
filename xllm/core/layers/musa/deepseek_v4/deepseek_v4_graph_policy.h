@@ -15,8 +15,10 @@ limitations under the License.
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <vector>
 
 namespace xllm::layer {
 
@@ -39,6 +41,41 @@ inline bool dsv4_uses_full_kv(int64_t kv_len,
                               int64_t window_size) {
   return threshold > 0 && kv_len <= threshold &&
          (window_size <= 0 || kv_len <= window_size);
+}
+
+// Direct q7 short-context Graph kernels receive live per-query KV lengths.
+// Keep the full/sparse bit and allocation buckets in the caller's key, but
+// omit exact length only for the explicitly validated <=128-token family.
+// Legacy scalar compressed fallback and extreme C128 lengths remain exact.
+inline int64_t dsv4_graph_baked_kv_length(int64_t kv_len,
+                                        bool full_kv,
+                                        bool dynamic_short) {
+  const bool live_short = dynamic_short && kv_len >= 0 && kv_len <= 128;
+  return ((full_kv && !live_short) || kv_len / 128 > 512) ? kv_len : 0;
+}
+
+// Direct multi-sequence Attention selects full-KV versus sparse attention
+// from the batch maximum, not each row's length. This opt-in family is bounded
+// to the first C4 allocation bucket. Validity still comes from live device
+// positions; callers must keep the batch-wide full/sparse bit in the key.
+// Return zero for B1, dummy rows, other query widths or unvalidated lengths.
+inline int64_t dsv4_graph_short_batch_max_kv(
+    const std::vector<int32_t>& cumulative_kv,
+    int64_t query_width) {
+  if (query_width != 7 || cumulative_kv.size() < 3 ||
+      cumulative_kv.front() != 0) {
+    return 0;
+  }
+  int64_t maximum = 0;
+  for (std::size_t row = 1; row < cumulative_kv.size(); ++row) {
+    const int64_t length = static_cast<int64_t>(cumulative_kv[row]) -
+                           cumulative_kv[row - 1];
+    if (length < query_width || length > 2048) {
+      return 0;
+    }
+    maximum = length > maximum ? length : maximum;
+  }
+  return maximum;
 }
 
 inline int64_t dsv4_compression_boundaries(int64_t start,

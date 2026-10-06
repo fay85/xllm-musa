@@ -18,6 +18,9 @@ limitations under the License.
 #include <folly/futures/Future.h>
 
 #include "common/types.h"
+#if defined(USE_MUSA)
+#include "platform/layer_synchronizer.h"
+#endif
 #include "framework/kv_cache/kv_cache.h"
 #if defined(USE_NPU)
 #include "platform/npu/npu_layer_synchronizer.h"
@@ -38,6 +41,8 @@ namespace xllm {
 using KVPushSynchronizerImpl = NPULayerSynchronizerImpl;
 #elif defined(USE_MLU)
 using KVPushSynchronizerImpl = MLULayerSynchronizerImpl;
+#elif defined(USE_MUSA)
+using KVPushSynchronizerImpl = LayerSynchronizer;
 #elif defined(USE_DCU)
 using KVPushSynchronizerImpl = DCULayerSynchronizerImpl;
 #endif
@@ -121,7 +126,7 @@ class KVCacheTransfer {
     return false;
   }
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || defined(USE_MUSA)
   virtual folly::SemiFuture<bool> push_kv_blocks_async(
       const std::vector<TransferKVInfo>& transfer_kv_infos,
       const ParallelArgs& parallel_args,
@@ -134,7 +139,7 @@ class KVCacheTransfer {
       const std::vector<TransferKVInfo>& transfer_kv_infos,
       const ParallelArgs& parallel_args);
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || defined(USE_MUSA)
   virtual bool push_kv_blocks(
       std::unordered_map<std::string, KVCacheInfo>& merged_kv_infos,
       std::shared_ptr<KVPushSynchronizerImpl>& layer_synchronizer,

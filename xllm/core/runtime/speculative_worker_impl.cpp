@@ -219,7 +219,7 @@ bool SpeculativeWorkerImpl::allocate_kv_cache(
   return impl_->allocate_kv_cache(kv_cache_shape);
 }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
 bool SpeculativeWorkerImpl::allocate_kv_cache_with_transfer(
     const KVCacheShape& kv_cache_shape) {
   return impl_->allocate_kv_cache_with_transfer(kv_cache_shape);

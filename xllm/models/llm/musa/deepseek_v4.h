@@ -45,6 +45,7 @@ limitations under the License.
 #include "core/layers/common/rms_norm.h"
 #include "core/layers/common/word_embedding.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_decoder_layer.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_graph_sequence.h"
 #include "core/layers/musa/deepseek_v4/dsa_metadata_builder_musa.h"
 #include "core/util/tensor_helper.h"
 #include "models/llm/llm_model_base.h"
@@ -123,6 +124,9 @@ struct DeepseekV4GraphPackedTensorSlot {
   std::vector<int64_t> sizes;
   torch::ScalarType dtype = torch::kUInt8;
   size_t nbytes = 0;
+  // Only cache metadata has an explicit group identity. Other semantic
+  // fields remain independent even if their temporary CPU storages alias.
+  int64_t cache_group_key = -1;
 };
 
 struct DeepseekV4GraphPackedTensorSpec {
@@ -131,6 +135,7 @@ struct DeepseekV4GraphPackedTensorSpec {
   torch::ScalarType dtype = torch::kUInt8;
   size_t offset = 0;
   size_t nbytes = 0;
+  int64_t cache_group_key = -1;
 };
 
 inline void deepseek_v4_add_packed_tensor(
@@ -212,7 +217,8 @@ inline void deepseek_v4_collect_cpu_metadata_tensors(
 inline void deepseek_v4_add_graph_packed_tensor_slot(
     torch::Tensor& tensor,
     const torch::Device& runtime_device,
-    std::vector<DeepseekV4GraphPackedTensorSlot>& slots) {
+    std::vector<DeepseekV4GraphPackedTensorSlot>& slots,
+    int64_t cache_group_key = -1) {
   if (!tensor.defined() || tensor.device() == runtime_device) {
     return;
   }
@@ -228,13 +234,15 @@ inline void deepseek_v4_add_graph_packed_tensor_slot(
   slot.dtype = slot.cpu_tensor.scalar_type();
   slot.nbytes = static_cast<size_t>(slot.cpu_tensor.numel() *
                                     slot.cpu_tensor.element_size());
+  slot.cache_group_key = cache_group_key;
   slots.push_back(std::move(slot));
 }
 
 inline void deepseek_v4_collect_graph_cpu_metadata_slots(
     layer::DSAMetadata& dsa,
     const torch::Device& runtime_device,
-    std::vector<DeepseekV4GraphPackedTensorSlot>& slots) {
+    std::vector<DeepseekV4GraphPackedTensorSlot>& slots,
+    bool share_cache_groups = false) {
   deepseek_v4_add_graph_packed_tensor_slot(dsa.seq_lens, runtime_device, slots);
   deepseek_v4_add_graph_packed_tensor_slot(
       dsa.seq_lens_q, runtime_device, slots);
@@ -255,19 +263,47 @@ inline void deepseek_v4_collect_graph_cpu_metadata_slots(
   deepseek_v4_add_graph_packed_tensor_slot(
       dsa.c128_pad_positions, runtime_device, slots);
 
-  for (auto& layer_block_tables : dsa.block_tables) {
-    for (auto& block_table : layer_block_tables) {
+  auto cache_key = [&](size_t layer, size_t cache, bool is_slot_mapping) {
+    if (!share_cache_groups) {
+      return int64_t{-1};
+    }
+    CHECK(dsa.caches_info != nullptr);
+    CHECK_LT(layer, dsa.caches_info->size());
+    CHECK_LT(cache, (*dsa.caches_info)[layer].size());
+    const int64_t group = (*dsa.caches_info)[layer][cache].group_id;
+    CHECK_GE(group, 0);
+    return group * 2 + static_cast<int64_t>(is_slot_mapping);
+  };
+  for (size_t layer = 0; layer < dsa.block_tables.size(); ++layer) {
+    for (size_t cache = 0; cache < dsa.block_tables[layer].size(); ++cache) {
       deepseek_v4_add_graph_packed_tensor_slot(
-          block_table, runtime_device, slots);
+          dsa.block_tables[layer][cache], runtime_device, slots,
+          cache_key(layer, cache, /*is_slot_mapping=*/false));
     }
   }
-  for (auto& layer_slot_mappings : dsa.slot_mappings) {
-    for (auto& slot_mapping : layer_slot_mappings) {
+  for (size_t layer = 0; layer < dsa.slot_mappings.size(); ++layer) {
+    for (size_t cache = 0; cache < dsa.slot_mappings[layer].size(); ++cache) {
       deepseek_v4_add_graph_packed_tensor_slot(
-          slot_mapping, runtime_device, slots);
+          dsa.slot_mappings[layer][cache], runtime_device, slots,
+          cache_key(layer, cache, /*is_slot_mapping=*/true));
     }
   }
   deepseek_v4_add_graph_packed_tensor_slot(dsa.hadamard, runtime_device, slots);
+}
+
+inline void deepseek_v4_check_graph_cache_group_alias(
+    const DeepseekV4GraphPackedTensorSlot& slot,
+    const DeepseekV4GraphPackedTensorSlot& representative) {
+  CHECK_GE(slot.cache_group_key, 0);
+  CHECK_EQ(slot.cache_group_key, representative.cache_group_key);
+  CHECK_EQ(slot.dtype, representative.dtype);
+  CHECK(slot.sizes == representative.sizes);
+  CHECK_EQ(slot.nbytes, representative.nbytes);
+  // DSAMetadataBuilderMusa expands proc_bt[gid]/proc_slots[gid] by reference.
+  // Check that invariant within THIS metadata build, never against a previous
+  // build's addresses. Fail closed if a producer stops sharing group values.
+  CHECK_EQ(slot.cpu_tensor.data_ptr(), representative.cpu_tensor.data_ptr())
+      << "DSV4 cache group metadata lost its shared source";
 }
 
 inline size_t deepseek_v4_register_graph_packed_schema(
@@ -278,10 +314,20 @@ inline size_t deepseek_v4_register_graph_packed_schema(
   schema.clear();
   slot_to_spec.clear();
   slot_to_spec.reserve(slots.size());
+  std::unordered_map<int64_t, size_t> cache_groups;
+  cache_groups.reserve(slots.size());
 
   size_t total_bytes = 0;
   for (size_t slot_idx = 0; slot_idx < slots.size(); ++slot_idx) {
     const auto& slot = slots[slot_idx];
+    const auto found = cache_groups.find(slot.cache_group_key);
+    if (slot.cache_group_key >= 0 && found != cache_groups.end()) {
+      const auto& representative =
+          slots[schema[found->second].representative_slot];
+      deepseek_v4_check_graph_cache_group_alias(slot, representative);
+      slot_to_spec.emplace_back(found->second);
+      continue;
+    }
     total_bytes = deepseek_v4_align_up(total_bytes, kAlignment);
     DeepseekV4GraphPackedTensorSpec registered;
     registered.representative_slot = slot_idx;
@@ -289,8 +335,13 @@ inline size_t deepseek_v4_register_graph_packed_schema(
     registered.dtype = slot.dtype;
     registered.offset = total_bytes;
     registered.nbytes = slot.nbytes;
+    registered.cache_group_key = slot.cache_group_key;
+    const size_t spec_idx = schema.size();
     schema.push_back(std::move(registered));
-    slot_to_spec.push_back(slot_idx);
+    slot_to_spec.emplace_back(spec_idx);
+    if (slot.cache_group_key >= 0) {
+      cache_groups.emplace(slot.cache_group_key, spec_idx);
+    }
     total_bytes += slot.nbytes;
   }
   return total_bytes;
@@ -308,6 +359,8 @@ inline void deepseek_v4_validate_graph_packed_schema(
         << "DeepSeek V4 graph metadata schema index is invalid";
     const auto& slot = slots[slot_idx];
     const auto& registered = schema[spec_idx];
+    CHECK_EQ(slot.cache_group_key, registered.cache_group_key)
+        << "DeepSeek V4 graph cache group identity changed";
     CHECK_EQ(slot.dtype, registered.dtype)
         << "DeepSeek V4 graph metadata dtype changed at semantic slot "
         << slot_idx;
@@ -317,6 +370,11 @@ inline void deepseek_v4_validate_graph_packed_schema(
     CHECK_EQ(slot.nbytes, registered.nbytes)
         << "DeepSeek V4 graph metadata byte size changed at semantic slot "
         << slot_idx;
+    if (registered.representative_slot != slot_idx) {
+      CHECK_LT(registered.representative_slot, slots.size());
+      deepseek_v4_check_graph_cache_group_alias(
+          slot, slots[registered.representative_slot]);
+    }
   }
 }
 
@@ -982,7 +1040,13 @@ class DeepseekV4ModelImpl
     // into the first decode step. Keep it on the regular TP prefill path;
     // the MTP target retains the existing SP metadata contract.
     const bool target_only_model = model_args_.num_speculative_tokens() == 0;
-    if (!target_only_model && model_args_.dspark_block_size() == 0) {
+    // This SP implementation replaces query_ranges by one rank-local range
+    // and compresses the globally concatenated tokens as one sequence. It
+    // cannot preserve request boundaries in a packed multi-sequence prefill.
+    // Keep B1's fast SP path and use ordinary TP for a real multi-request
+    // prefill until SP has a per-request interval/offset plan.
+    if (!target_only_model && model_args_.dspark_block_size() == 0 &&
+        modified_input_params.meta.num_sequences == 1) {
       sequence_parallel_context = layer::dsv4_musa_sp::build_context(
           tokens,
           modified_input_params.meta.batch_forward_type.no_decode(),
@@ -1207,13 +1271,25 @@ class DeepseekV4ModelImpl
     }
 
     std::vector<DeepseekV4GraphPackedTensorSlot> slots;
-    deepseek_v4_collect_graph_cpu_metadata_slots(dsa, runtime_device, slots);
+    const char* share_groups_env =
+        std::getenv("XLLM_DSV4_GRAPH_METADATA_SHARE_CACHE_GROUPS");
+    const bool share_cache_groups =
+        share_groups_env != nullptr && std::string(share_groups_env) == "1" &&
+        dsa.seq_lens_q.defined() && dsa.seq_lens_q.numel() > 1;
+    deepseek_v4_collect_graph_cpu_metadata_slots(
+        dsa, runtime_device, slots, share_cache_groups);
     size_t total_bytes = 0;
     if (persistent.packed_metadata_schema.empty()) {
       total_bytes = deepseek_v4_register_graph_packed_schema(
           slots,
           persistent.packed_metadata_schema,
           persistent.packed_metadata_slot_to_spec);
+      if (share_cache_groups) {
+        LOG_FIRST_N(INFO, 8) << "[DSV4_GRAPH_METADATA_CACHE_GROUPS] slots="
+                            << slots.size() << " groups="
+                            << persistent.packed_metadata_schema.size()
+                            << " bytes=" << total_bytes;
+      }
     } else {
       deepseek_v4_validate_graph_packed_schema(
           slots,
@@ -1341,7 +1417,16 @@ class DeepseekV4ModelImpl
     // Graph forward tensors are padded to the decode bucket. Build metadata
     // for the same padded row count so compressor/attention inputs agree.
     trim_lens_vec(params.attention.host.kv_seq_lens);
-    trim_lens_vec(params.attention.host.q_seq_lens);
+    const bool fixed_query_storage =
+        params.enable_graph && params.is_spec_verify &&
+        layer::dsv4_graph_sequence_views_enabled() &&
+        layer::dsv4_fixed_graph_query_layout(
+            params.attention.host.q_seq_lens,
+            padded_metadata_rows,
+            params.meta.q_max_seq_len);
+    if (!fixed_query_storage) {
+      trim_lens_vec(params.attention.host.q_seq_lens);
+    }
     params.meta.num_sequences = static_cast<int32_t>(padded_metadata_rows);
     params.meta.actual_num_sequences =
         static_cast<int32_t>(actual_metadata_rows);
@@ -1555,9 +1640,10 @@ class DeepseekV4ModelImpl
         return;
       }
       auto group_positions = positions;
-      if (group_positions.scalar_type() != torch::kInt64) {
-        group_positions = group_positions.to(torch::kInt64);
-      }
+      // Embedding accepts both int32 and int64 indices on MUSA. Do not cast
+      // a device tensor here: this helper runs while an ACL Graph is being
+      // captured for multi-sequence verify, where a dtype-changing `.to()`
+      // is an illegal stream-capture operation.
       positions_map[group] = group_positions;
     };
 
@@ -1592,9 +1678,6 @@ class DeepseekV4ModelImpl
 
     if (dsa.input_positions.defined() && dsa.input_positions.numel() > 0) {
       auto input_positions = dsa.input_positions;
-      if (input_positions.scalar_type() != torch::kInt64) {
-        input_positions = input_positions.to(torch::kInt64);
-      }
       // C4/C128 layers still apply main q/kv RoPE at input-token length; only
       // the RoPE group changes to use the compressed theta.
       auto input_group_cos_sin = dsa_rotary_embedding_->build(

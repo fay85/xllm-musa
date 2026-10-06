@@ -13,9 +13,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "composite_block_manager.h"
+#include "core/framework/block/composite_block_manager.h"
 
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include <optional>
 #include <utility>
@@ -27,7 +28,7 @@ limitations under the License.
 #include "embedding_block_manager.h"
 #include "framework/xtensor/xtensor_block_manager_impl.h"
 #include "linear_state_block_manager.h"
-#include "sliding_window_block_manager.h"
+#include "core/framework/block/sliding_window_block_manager.h"
 
 namespace xllm {
 
@@ -235,7 +236,12 @@ CompositeBlockManager::LeafMap build_composite_leaves(
       // Slack fits the peak "old blocks not yet released + new tail".
       const uint32_t swa_total_blocks =
           swa_blocks_per_seq * max_seqs + burst_blocks + max_seqs + 2;
-      const bool swa_prefix_cache = prefix_cache_on && swa_participates;
+      const char* barrier_disable_swa_cache =
+          std::getenv("XLLM_DSV4_BARRIER_DISABLE_SWA_PREFIX_CACHE");
+      const bool swa_prefix_cache =
+          prefix_cache_on && swa_participates &&
+          !(barrier_disable_swa_cache != nullptr &&
+            std::string(barrier_disable_swa_cache) == "1");
       opts.num_blocks(swa_total_blocks)
           .swa_blocks_per_seq(swa_blocks_per_seq)
           .sliding_window_size(sliding_window_size)
@@ -368,6 +374,22 @@ bool CompositeBlockManager::allocate_sequence(Sequence* seq,
   }
   KVCacheState& kv_state = seq->kv_state();
 
+  // A single growth step cannot consume more physical SWA pages than the
+  // entire pool (block zero is reserved). Reject it before trimming anything,
+  // preserving the grow-or-fail contract for an impossible chunk.
+  const auto swa_it = leaves_.find(BlockType::SWA);
+  if (swa_it != leaves_.end()) {
+    const auto& swa = *swa_it->second.leaf;
+    const size_t needed = (num_tokens + swa.block_size() - 1) / swa.block_size();
+    const size_t held = kv_state.num_blocks(BlockType::SWA);
+    const bool imported_decode_tail = swa.options().enable_disagg_pd() &&
+                                      swa.options().instance_is_decode();
+    if (!imported_decode_tail && needed > held &&
+        needed - held > swa.num_total_blocks()) {
+      return false;
+    }
+  }
+
   // SWA is a bounded ring while C4/C128 retain the full logical history.
   // Release completed pages that have already slid out before asking the SWA
   // leaf for the next chunk.  Waiting until after the allocation makes a
@@ -375,7 +397,10 @@ bool CompositeBlockManager::allocate_sequence(Sequence* seq,
   // allocated, so the post-commit release is never reached.  Publishing the
   // completed prefix first preserves prefix-cache ownership; the operation is
   // idempotent with the post-commit release below.
-  if (combination_ == LeafCombination::SWA_COMPRESSED) {
+  // SWA lifetime depends on the physical layout, not whether any prefix
+  // leaf supports matching. With prefix disabled combination_ is UNSUPPORTED,
+  // but the rolling SWA pool still needs this pre-growth reclamation.
+  if (leaves_.find(BlockType::SWA) != leaves_.end()) {
     cache_full_blocks_for_sequence(seq);
     release_out_of_window_for_sequence(seq);
   }
@@ -396,6 +421,15 @@ bool CompositeBlockManager::allocate_sequence(Sequence* seq,
     std::optional<std::vector<Block>> blocks =
         entry.leaf->allocate_for_sequence(seq, num_tokens);
     if (!blocks.has_value()) {
+      const char* barrier_env = std::getenv("XLLM_DSV4_DECODE_BATCH_BARRIER");
+      if (barrier_env != nullptr) {
+        LOG(INFO) << "[DSV4_DECODE_BATCH_BARRIER] leaf_allocate_failed type="
+                  << static_cast<int32_t>(type)
+                  << " requested_tokens=" << num_tokens
+                  << " held_blocks=" << seq->kv_state().num_blocks(type)
+                  << " leaf_total=" << entry.leaf->num_total_blocks()
+                  << " leaf_free=" << entry.leaf->num_free_blocks();
+      }
       release_staged();
       return false;
     }
@@ -424,6 +458,17 @@ bool CompositeBlockManager::allocate_sequence(Sequence* seq,
         staged_it == staged.end() ? 0 : staged_it->second.size();
     const size_t total = seq->kv_state().num_blocks(type) + staged_for_type;
     if (total < needed) {
+      const char* barrier_env = std::getenv("XLLM_DSV4_DECODE_BATCH_BARRIER");
+      if (barrier_env != nullptr) {
+        LOG(INFO) << "[DSV4_DECODE_BATCH_BARRIER] leaf_coverage_failed type="
+                  << static_cast<int32_t>(type)
+                  << " requested_tokens=" << num_tokens
+                  << " needed_blocks=" << needed << " held_blocks="
+                  << seq->kv_state().num_blocks(type) << " staged_blocks="
+                  << staged_for_type << " leaf_total="
+                  << entry.leaf->num_total_blocks() << " leaf_free="
+                  << entry.leaf->num_free_blocks();
+      }
       release_staged();
       return false;
     }
@@ -913,6 +958,13 @@ void CompositeBlockManager::cache(const std::vector<Block>& /*blocks*/) {
 void CompositeBlockManager::reset_prefix_cache() {
   for (auto& [type, entry] : leaves_) {
     entry.leaf->reset_prefix_cache();
+  }
+}
+
+void CompositeBlockManager::reset_swa_prefix_cache() {
+  const auto it = leaves_.find(BlockType::SWA);
+  if (it != leaves_.end() && it->second.leaf) {
+    it->second.leaf->reset_prefix_cache();
   }
 }
 

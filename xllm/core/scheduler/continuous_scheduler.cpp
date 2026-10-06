@@ -24,11 +24,13 @@ limitations under the License.
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <iomanip>
 #include <iterator>
 #include <limits>
 #include <memory>
 #include <sstream>
+#include <string>
 #include <vector>
 
 #include "common/metrics.h"
@@ -44,6 +46,7 @@ limitations under the License.
 #include "framework/request/sequence.h"
 #include "scheduler/request_priority_queue.h"
 #include "scheduler/scheduler_policy.h"
+#include "core/scheduler/single_request_overlap_policy.h"
 #include "util/timer.h"
 #include "util/utils.h"
 
@@ -461,6 +464,49 @@ void ContinuousScheduler::step(const absl::Duration& timeout) {
 
 void ContinuousScheduler::step_with_schedule_overlap(
     const absl::Duration& timeout) {
+#if defined(USE_MUSA)
+  const char* drain_env = std::getenv("XLLM_DSV4_DRAIN_SINGLE_OVERLAP");
+  if (drain_env != nullptr && std::string(drain_env) == "1" &&
+      options_.num_speculative_tokens() == 6 && !options_.enable_disagg_pd() &&
+      last_running_requests_.size() == 1 &&
+      last_running_sequences_.size() == 1) {
+    const bool last_in_flight =
+        !is_first_step_ &&
+        std::any_of(last_batch_.begin(),
+                    last_batch_.end(),
+                    [](const Batch& one_batch) { return !one_batch.empty(); });
+    const bool same_request =
+        running_requests_.size() == 1 && running_sequences_.size() == 1 &&
+        running_requests_.front() == last_running_requests_.front() &&
+        running_sequences_.front() == last_running_sequences_.front();
+    const SingleRequestOverlapState state{
+        .enabled = true,
+        .in_flight = last_in_flight,
+        .dp_size = options_.dp_size(),
+        .last_requests = static_cast<int64_t>(last_running_requests_.size()),
+        .last_sequences = static_cast<int64_t>(last_running_sequences_.size()),
+        .same_running_request = same_request,
+        .queued_work = if_queue_not_empty(),
+        .frontend_queue_empty = request_queue_.size() == 0,
+        .pending_admissions = static_cast<int64_t>(num_pending_requests()),
+        .pending_prefetch =
+            static_cast<int64_t>(num_prefetch_pending_requests())};
+    if (should_drain_single_request_overlap(state)) {
+      // Keep the worker/engine overlap protocol enabled. Commit its existing
+      // result and replace fake tokens before preparing the next batch;never
+      // clear/free the in-flight sequence state before collecting that result.
+      engine_->update_last_step_result(last_batch_);
+      process_batch_output(true);
+      last_batch_.clear();
+      last_batch_.resize(options_.dp_size());
+      last_running_requests_.clear();
+      last_running_sequences_.clear();
+      is_first_step_ = true;
+      LOG_FIRST_N(INFO, 8)
+          << "[DSV4_SINGLE_OVERLAP_DRAIN] result_before_schedule=1";
+    }
+  }
+#endif
   // get a new batch of requests
   std::vector<Batch> batch = schedule_request(timeout);
   bool cur_batch_all_empty =

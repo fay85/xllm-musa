@@ -42,6 +42,20 @@ bool deepseek_v4_weighted_rmsnorm_rope_inplace(torch::Tensor& input,
                                                const torch::Tensor& sin,
                                                double eps);
 
+// Read packed, row-strided projections into distinct contiguous storage.
+// Preserve the corresponding inplace kernel's reduction and BF16 rounding.
+bool deepseek_v4_q_rmsnorm_rope_out(const torch::Tensor& query,
+                                    const torch::Tensor& cos,
+                                    const torch::Tensor& sin,
+                                    double eps,
+                                    const torch::Tensor& output);
+bool deepseek_v4_weighted_rmsnorm_rope_out(const torch::Tensor& input,
+                                           const torch::Tensor& weight,
+                                           const torch::Tensor& cos,
+                                           const torch::Tensor& sin,
+                                           double eps,
+                                           const torch::Tensor& output);
+
 torch::Tensor deepseek_v4_dense_attention_decode(
     const torch::Tensor& q,
     const torch::Tensor& kv,
@@ -124,6 +138,20 @@ torch::Tensor deepseek_v4_greedy_verify_tokens(
     const torch::Tensor& target_tokens,
     const torch::Tensor& output);
 
+// Sequence-major uniform queries. Each sequence has one live KV length and
+// all of its queries see the same noncausal context+block window. Zero-live
+// rows yield zero output. Existing scalar and causal APIs are unchanged.
+torch::Tensor deepseek_v4_paged_attention_sas_batched(
+    const torch::Tensor& q,
+    const torch::Tensor& cache,
+    const torch::Tensor& block_table,
+    const torch::Tensor& kv_seq_lens,
+    int64_t query_rows_per_sequence,
+    int64_t window_size,
+    const torch::Tensor& attn_sink,
+    double softmax_scale,
+    const torch::Tensor& output);
+
 torch::Tensor deepseek_v4_paged_attention_verify_c128(
     const torch::Tensor& q,
     const torch::Tensor& cache,
@@ -147,6 +175,28 @@ torch::Tensor deepseek_v4_mate_sparse_attention_decode_batched(
     const torch::Tensor& attn_sink,
     double softmax_scale,
     const std::optional<torch::Tensor>& output = std::nullopt);
+
+// Preserve the scalar request's KV reduction partitions while merging MATE
+// execution. q/physical/length rows are flattened sequence-major fixed-width.
+torch::Tensor deepseek_v4_mate_sparse_attention_decode_partitioned(
+    const torch::Tensor& q,
+    const torch::Tensor& packed_cache,
+    const torch::Tensor& physical_indices,
+    const torch::Tensor& topk_lengths,
+    const torch::Tensor& extra_packed_cache,
+    const torch::Tensor& extra_physical_indices,
+    const torch::Tensor& extra_topk_lengths,
+    const torch::Tensor& attn_sink,
+    double softmax_scale,
+    int64_t query_width,
+    const std::optional<torch::Tensor>& output = std::nullopt);
+
+// Each local planner overwrites its metadata slice before every invocation;
+// this in-place rebasing must not be applied twice without that rewrite.
+void deepseek_v4_rebase_mate_partitions(torch::Tensor metadata,
+                                       const torch::Tensor& local_splits,
+                                       torch::Tensor cumulative_splits,
+                                       int64_t query_width);
 
 // Set the per-step key used to share batched MATE scheduling metadata across
 // DSV4 Attention layers. The key is thread-local to the serving worker.
@@ -276,12 +326,45 @@ torch::Tensor deepseek_v4_indexer_topk_graph(
     const torch::Tensor& mate_extra_physical_indices,
     const torch::Tensor& dynamic_kv_len);
 
+// Graph variant for fixed-width multi-sequence verify.  Query rows are laid
+// out as [sequence0 rows, sequence1 rows, ...].  Each sequence keeps its own
+// block-table row and dynamic KV lengths; only the score/top-k launch is
+// merged so this is not a semantic cross-sequence attention operation.
+torch::Tensor deepseek_v4_indexer_topk_graph_batched(
+    const torch::Tensor& query,
+    const torch::Tensor& weights,
+    const torch::Tensor& cache,
+    const torch::Tensor& scale_cache,
+    const torch::Tensor& block_table,
+    int64_t query_rows_per_sequence,
+    int64_t kv_capacity,
+    int64_t topk,
+    const torch::Tensor& output,
+    const torch::Tensor& mate_compressed_block_table,
+    const torch::Tensor& mate_swa_block_table,
+    int64_t mate_window_size,
+    int64_t mate_block_size,
+    const torch::Tensor& mate_physical_indices,
+    const torch::Tensor& mate_extra_physical_indices,
+    const torch::Tensor& dynamic_kv_len);
+
 // All causal C128 rows plus each query's SWA tail, for MODEL1 batch decode.
 void deepseek_v4_prepare_c128_mate_indices(
     const torch::Tensor& kv_seq_lens,
     const torch::Tensor& compressed_block_table,
     const torch::Tensor& swa_block_table,
     int64_t block_size,
+    torch::Tensor logical_indices,
+    torch::Tensor physical_indices,
+    torch::Tensor extra_physical_indices);
+
+// Uniform q7 requests, with a distinct block-table row for every request.
+void deepseek_v4_prepare_c128_mate_indices_batched(
+    const torch::Tensor& kv_seq_lens,
+    const torch::Tensor& compressed_block_table,
+    const torch::Tensor& swa_block_table,
+    int64_t block_size,
+    int64_t query_width,
     torch::Tensor logical_indices,
     torch::Tensor physical_indices,
     torch::Tensor extra_physical_indices);
@@ -352,6 +435,21 @@ torch::Tensor deepseek_v4_compress_decode_sequence_graph(
     int64_t compress_ratio,
     int64_t head_dim,
     const torch::Tensor& start_position,
+    const torch::Tensor& output);
+
+// Request-isolated Graph recurrence on contiguous [B,state_rows,state_width]
+// states. Projection rows may be strided views of a packed projection. Query
+// positions stay [B*query_width], and output is [B*ceil(query_width/ratio),H].
+torch::Tensor deepseek_v4_compress_decode_batch_graph(
+    torch::Tensor kv_state,
+    torch::Tensor score_state,
+    const torch::Tensor& kv_steps,
+    const torch::Tensor& score_steps,
+    const torch::Tensor& ape,
+    int64_t compress_ratio,
+    int64_t head_dim,
+    int64_t query_width,
+    const torch::Tensor& positions,
     const torch::Tensor& output);
 
 torch::Tensor deepseek_v4_scale_to_fp32(

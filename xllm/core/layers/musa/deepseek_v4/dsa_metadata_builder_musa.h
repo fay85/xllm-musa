@@ -55,6 +55,9 @@ class DSAMetadataBuilderMusa final {
       const torch::Tensor& dsa_c128_cos_sin = torch::Tensor());
 
  private:
+  // CPU tests exercise DSA layout without the common builder's MUSA-only
+  // causal-attention carrier allocation.
+  friend struct Dsv4MetadataTestAccess;
   // Build DSA-specific fields into dsa_metadata.
   static void build_dsa_fields(
       const ModelInputParams& params,

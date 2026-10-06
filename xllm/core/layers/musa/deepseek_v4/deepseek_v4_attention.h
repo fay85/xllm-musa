@@ -205,7 +205,9 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
       int64_t mate_block_size = 0,
       torch::Tensor* mate_physical_indices = nullptr,
       torch::Tensor* mate_extra_physical_indices = nullptr,
-      const torch::Tensor& dynamic_kv_len = torch::Tensor());
+      const torch::Tensor& dynamic_kv_len = torch::Tensor(),
+      int64_t batched_query_rows_per_sequence = 0,
+      int64_t batched_sequence_count = 1);
 
   int64_t num_heads_ = 0;
   int64_t hidden_dim_ = 0;

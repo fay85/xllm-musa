@@ -32,6 +32,7 @@ cc_library(
     block.cpp
     embedding_block_manager.cpp
     block_manager_pool.cpp
+    $<$<BOOL:${USE_MUSA}>:block_manager_pool_pd.cpp>
     linear_state_block_manager.cpp
     concurrent_block_manager_impl.cpp
     block_manager_impl.cpp

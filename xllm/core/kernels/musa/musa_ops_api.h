@@ -288,6 +288,19 @@ void deepseek_v4_state_gather_many(
     int64_t sequence_index,
     const torch::Tensor& input_positions = {});
 
+// Restore multiple independent request rows and cache roles in one launch.
+// Slots are [sequence, rows], outputs [sequence, rows, width]. Positions keep
+// the original packed query layout; each request starts at sequence * width.
+void deepseek_v4_state_gather_batched(
+    const std::vector<torch::Tensor>& caches,
+    const std::vector<torch::Tensor>& block_tables,
+    const std::vector<int64_t>& state_rows,
+    const std::vector<torch::Tensor>& slots,
+    const std::vector<torch::Tensor>& outputs,
+    int64_t sequence_count,
+    int64_t query_width,
+    const torch::Tensor& input_positions);
+
 torch::Tensor deepseek_v4_state_gather(
     const torch::Tensor& cache,
     const torch::Tensor& block_table,
@@ -361,6 +374,18 @@ bool deepseek_v4_weighted_rmsnorm_rope_inplace(torch::Tensor& input,
                                                const torch::Tensor& cos,
                                                const torch::Tensor& sin,
                                                double eps);
+
+bool deepseek_v4_q_rmsnorm_rope_out(const torch::Tensor& query,
+                                    const torch::Tensor& cos,
+                                    const torch::Tensor& sin,
+                                    double eps,
+                                    const torch::Tensor& output);
+bool deepseek_v4_weighted_rmsnorm_rope_out(const torch::Tensor& input,
+                                           const torch::Tensor& weight,
+                                           const torch::Tensor& cos,
+                                           const torch::Tensor& sin,
+                                           double eps,
+                                           const torch::Tensor& output);
 
 bool deepseek_v4_partial_rope(const torch::Tensor& input,
                               const torch::Tensor& cos,

@@ -233,7 +233,14 @@ bool BlockManagerPool::allocate(Sequence* sequence, size_t num_tokens) {
   // sequence (e.g. a fork/clone of a beam parent) may still be missing its
   // per-sequence EMBEDDING / LINEAR block. The composite skips no-op leaves
   // internally.
-  if (!composite->allocate_sequence(sequence, num_tokens)) {
+  bool allocated = composite->allocate_sequence(sequence, num_tokens);
+#if defined(USE_MUSA)
+  while (!allocated && musa::evict_one_deepseek_v4_prefix_snapshot(
+                           this, dp_rank, swap_block_transfer_infos_[dp_rank])) {
+    allocated = composite->allocate_sequence(sequence, num_tokens);
+  }
+#endif
+  if (!allocated) {
     if (started_empty) {
       composite->deallocate_for_sequence(sequence);
       sequence->reset();
@@ -276,6 +283,57 @@ std::vector<Block> BlockManagerPool::allocate(size_t num_tokens,
   return composite->allocate_blocks(BlockType::KV, num_blocks_needed);
 }
 
+size_t BlockManagerPool::reclaim_completed_prefill_swa(Sequence* sequence) {
+  if (sequence == nullptr || options_.sliding_window_size() == 0 ||
+      options_.enable_disagg_pd() || options_.enable_host_offload() ||
+      options_.enable_kvcache_store() || sequence->check_beam_search()) {
+    return 0;
+  }
+  const int32_t rank = sequence->dp_rank();
+  if (rank < 0 || static_cast<size_t>(rank) >= block_managers_.size()) {
+    return 0;
+  }
+  auto* composite =
+      static_cast<CompositeBlockManager*>(block_managers_[rank].get());
+  const auto& leaves = composite->leaf_entries();
+  if (!leaves.contains(BlockType::SWA) || !leaves.contains(BlockType::C4) ||
+      !leaves.contains(BlockType::C128)) {
+    return 0;
+  }
+  const auto count_valid = [&]() -> size_t {
+    const auto blocks = sequence->kv_state().blocks(BlockType::SWA);
+    return static_cast<size_t>(std::count_if(
+        blocks.begin(), blocks.end(),
+        [](const Block& block) { return block.is_valid(); }));
+  };
+  const size_t before = count_valid();
+  // Same ordering as allocate_sequence(): publish completed prefix pages
+  // before releasing slid-out live references. Preserve logical indices,
+  // the tail state page, and all compressed-history leaves.
+  composite->cache_full_blocks_for_sequence(sequence);
+  composite->release_out_of_window_for_sequence(sequence);
+  return before - count_valid();
+}
+
+size_t BlockManagerPool::swa_free_blocks() const {
+  if (block_managers_.empty()) {
+    return 0;
+  }
+  const auto* composite =
+      static_cast<const CompositeBlockManager*>(block_managers_.front().get());
+  const auto it = composite->leaf_entries().find(BlockType::SWA);
+  return it == composite->leaf_entries().end() || !it->second.leaf
+             ? 0
+             : it->second.leaf->num_free_blocks();
+}
+
+void BlockManagerPool::reset_swa_prefix_cache() {
+  for (auto& manager : block_managers_) {
+    auto* composite = static_cast<CompositeBlockManager*>(manager.get());
+    composite->reset_swa_prefix_cache();
+  }
+}
+
 bool BlockManagerPool::try_allocate(Sequence* sequence) {
   int32_t dp_rank = get_dp_rank(sequence);
 
@@ -299,7 +357,14 @@ bool BlockManagerPool::try_allocate(Sequence* sequence) {
 #else
   composite->allocate_shared_for_sequence(sequence);
 #endif
-  if (!composite->allocate_sequence(sequence, sequence->num_tokens())) {
+  bool allocated = composite->allocate_sequence(sequence, sequence->num_tokens());
+#if defined(USE_MUSA)
+  while (!allocated && musa::evict_one_deepseek_v4_prefix_snapshot(
+                           this, dp_rank, swap_block_transfer_infos_[dp_rank])) {
+    allocated = composite->allocate_sequence(sequence, sequence->num_tokens());
+  }
+#endif
+  if (!allocated) {
     composite->deallocate_for_sequence(sequence);
     sequence->reset();
 #if defined(USE_MUSA)
@@ -375,6 +440,23 @@ void BlockManagerPool::allocate_shared(Sequence* sequence) {
   int32_t dp_rank = get_dp_rank(sequence);
   auto* composite =
       static_cast<CompositeBlockManager*>(block_managers_[dp_rank].get());
+#if defined(USE_MUSA)
+  // The scheduler reads the restored token count to compute the absolute
+  // prefill endpoint. Restoring only in allocate() moves that endpoint after
+  // its capacity was chosen (e.g. 10032 becomes 5760 + 10032 on a long hit).
+  // A sequence that already owns blocks must not rewind to a saved prefix.
+  if (!sequence->has_any_blocks() &&
+      musa::try_restore_deepseek_v4_prefix(
+          this,
+          sequence,
+          dp_rank,
+          composite,
+          static_cast<uint32_t>(options_.block_size()),
+          options_.hasher_type(),
+          &swap_block_transfer_infos_[dp_rank])) {
+    return;
+  }
+#endif
   if (composite->leaf_combination() ==
           CompositeBlockManager::LeafCombination::SWA_COMPRESSED &&
       sequence->kv_state().prefix_cache_matched()) {

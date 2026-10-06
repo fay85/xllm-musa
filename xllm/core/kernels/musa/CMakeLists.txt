@@ -11,6 +11,7 @@ set(_TORCH_MUSA_KERNEL_HDRS
   musa_fp8_quant_utils.cuh
   deepseek_v4_dsa_rope.h
   deepseek_v4_fp8_roundtrip.h
+  deepseek_v4_indexer_metadata.h
   musa_tvmffi_stream.h
   gdn_ops.h
   llm_decode_metadata_update.h
@@ -72,6 +73,9 @@ set(_TORCH_MUSA_KERNEL_SRCS
   deepseek_v4_shared_expert_gate.cu
   deepseek_v4_fp8_roundtrip.cu
   deepseek_v4_dsa_cache_ops.cu
+  deepseek_v4_indexer_metadata.cu
+  deepseek_v4_compress_batch.cu
+  deepseek_v4_mate_partition_metadata.cu
   deepseek_v4_dsa_attention.cu
 )
 
