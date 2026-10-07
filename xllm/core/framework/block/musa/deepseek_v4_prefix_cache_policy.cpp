@@ -260,6 +260,15 @@ void initialize_deepseek_v4_prefix_cache(const BlockManagerPool* owner,
   CHECK_GT(dp_size, 0);
   std::lock_guard<std::mutex> lock(prefix_pool_states_mutex);
   prefix_pool_states.erase(owner);
+  // These snapshots are written by the prefill forward at an exact prompt
+  // boundary. PD Decode only imports the final prompt state through PULL;
+  // it never executes that producer. Publishing its pending snapshot after
+  // generation would mark unwritten state as ready, and a repeated prompt
+  // could overwrite freshly imported state with that invalid snapshot.
+  // Leave ordinary composite C4/C128 prefix participation unchanged.
+  if (owner->options().instance_is_decode()) {
+    return;
+  }
   prefix_pool_states.emplace(owner, std::make_unique<PrefixPoolState>(dp_size));
 }
 

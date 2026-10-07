@@ -14,12 +14,12 @@ limitations under the License.
 ==============================================================================*/
 
 #include <glog/logging.h>
+#include <tvm/ffi/container/tuple.h>
 #include <tvm/ffi/extra/stl.h>
 
 #include <exception>
 #include <fstream>
 #include <string>
-#include <tuple>
 
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
@@ -128,10 +128,13 @@ torch::Tensor deepseek_v4_masked_fp8_moe_gemm(
   try {
     bind_tvmffi_stream_to_current_torch_stream(input.device());
     tvm::ffi::Function run = get_function(uri, "masked_moe_gemm_8bit");
-    run(std::make_tuple(to_ffi_tensor(input), to_ffi_tensor(input_scale)),
-        std::make_tuple(to_ffi_tensor(weight), to_ffi_tensor(weight_scale)),
+    run(ffi::Tuple<ffi::Tensor, ffi::Tensor>(
+            to_ffi_tensor(input), to_ffi_tensor(input_scale)),
+        ffi::Tuple<ffi::Tensor, ffi::Tensor>(
+            to_ffi_tensor(weight), to_ffi_tensor(weight_scale)),
         to_ffi_tensor(masked_tokens),
-        std::make_tuple(int64_t{1}, int64_t{128}, int64_t{128}),
+        ffi::Tuple<int64_t, int64_t, int64_t>(
+            int64_t{1}, int64_t{128}, int64_t{128}),
         to_ffi_tensor(out),
         expected_tokens,
         to_ffi_optional_tensor(std::nullopt));

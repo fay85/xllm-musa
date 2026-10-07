@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include <glog/logging.h>
+#include <tvm/ffi/container/tuple.h>
 #include <tvm/ffi/extra/stl.h>
 #include <unistd.h>
 
@@ -111,15 +112,16 @@ torch::Tensor masked_moe_gemm_fp8(const torch::Tensor& input,
   TvmffiStreamGuard stream_guard(input.device());
   auto output = torch::empty({input.size(0), input.size(1), weights.size(1)},
                              input.options().dtype(output_dtype));
+  // Own the boxed argument containers until the FFI call returns. Implicit
+  // std::tuple -> AnyView conversion allocates containers without an owner.
   get_function(kGemmOpsUri, "masked_moe_gemm_8bit")(
-      std::make_tuple(to_ffi_borrowed_tensor(input),
-                      to_ffi_borrowed_tensor(input_scale)),
-      std::make_tuple(to_ffi_borrowed_tensor(weights),
-                      to_ffi_borrowed_tensor(weight_scale)),
+      ffi::Tuple<ffi::Tensor, ffi::Tensor>(
+          to_ffi_borrowed_tensor(input), to_ffi_borrowed_tensor(input_scale)),
+      ffi::Tuple<ffi::Tensor, ffi::Tensor>(
+          to_ffi_borrowed_tensor(weights), to_ffi_borrowed_tensor(weight_scale)),
       to_ffi_tensor_view(token_counts),
-      std::make_tuple(static_cast<int64_t>(1),
-                      static_cast<int64_t>(128),
-                      static_cast<int64_t>(128)),
+      ffi::Tuple<int64_t, int64_t, int64_t>(
+          int64_t{1}, int64_t{128}, int64_t{128}),
       to_ffi_tensor_view(output),
       expected_tokens,
       to_ffi_optional_tensor(std::nullopt));
@@ -237,14 +239,13 @@ torch::Tensor contiguous_moe_gemm_fp8(const torch::Tensor& input,
   torch::Tensor output = torch::empty({input.size(0), weights.size(1)},
                                       input.options().dtype(output_dtype));
   get_function(kGemmOpsUri, "m_grouped_contig_gemm_8bit")(
-      std::make_tuple(to_ffi_borrowed_tensor(input),
-                      to_ffi_borrowed_tensor(input_scale)),
-      std::make_tuple(to_ffi_borrowed_tensor(weights),
-                      to_ffi_borrowed_tensor(weight_scale)),
+      ffi::Tuple<ffi::Tensor, ffi::Tensor>(
+          to_ffi_borrowed_tensor(input), to_ffi_borrowed_tensor(input_scale)),
+      ffi::Tuple<ffi::Tensor, ffi::Tensor>(
+          to_ffi_borrowed_tensor(weights), to_ffi_borrowed_tensor(weight_scale)),
       to_ffi_tensor_view(token_counts),
-      std::make_tuple(static_cast<int64_t>(1),
-                      static_cast<int64_t>(128),
-                      static_cast<int64_t>(128)),
+      ffi::Tuple<int64_t, int64_t, int64_t>(
+          int64_t{1}, int64_t{128}, int64_t{128}),
       to_ffi_tensor_view(output),
       std::string("K"),
       std::string("K"),
@@ -291,14 +292,13 @@ torch::Tensor ragged_moe_gemm_fp8(const torch::Tensor& input,
   torch::Tensor output = torch::empty({input.size(0), weights.size(1)},
                                       input.options().dtype(output_dtype));
   get_function(kGemmOpsUri, "ragged_moe_gemm_8bit")(
-      std::make_tuple(to_ffi_borrowed_tensor(input),
-                      to_ffi_borrowed_tensor(input_scale)),
-      std::make_tuple(to_ffi_borrowed_tensor(weights),
-                      to_ffi_borrowed_tensor(weight_scale)),
+      ffi::Tuple<ffi::Tensor, ffi::Tensor>(
+          to_ffi_borrowed_tensor(input), to_ffi_borrowed_tensor(input_scale)),
+      ffi::Tuple<ffi::Tensor, ffi::Tensor>(
+          to_ffi_borrowed_tensor(weights), to_ffi_borrowed_tensor(weight_scale)),
       to_ffi_tensor_view(row_expert_ids),
-      std::make_tuple(static_cast<int64_t>(1),
-                      static_cast<int64_t>(128),
-                      static_cast<int64_t>(128)),
+      ffi::Tuple<int64_t, int64_t, int64_t>(
+          int64_t{1}, int64_t{128}, int64_t{128}),
       to_ffi_tensor_view(output),
       alignment);
   return output;
