@@ -20,6 +20,7 @@ limitations under the License.
 
 #include <algorithm>
 
+#include "common/metrics.h"
 #include "continuous_scheduler.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/scheduler_config.h"
@@ -192,6 +193,33 @@ TEST(FixedStepsSchedulerTest, PrepareBatchEmptyWhenNoRequests) {
   std::vector<Batch> batches = base->prepare_batch_test();
   EXPECT_FALSE(batches.empty());
   EXPECT_TRUE(batches[0].empty());
+}
+
+TEST(FixedStepsSchedulerTest, ReportsBlockCountsInsteadOfRankCount) {
+  ScopedConfigValue<bool> prefix_cache(
+      KVCacheConfig::get_instance().enable_prefix_cache(), false);
+  auto engine = std::make_unique<FakeEngine>(32, 32);
+  auto opt = CreateOptions();
+  FixedStepsScheduler scheduler(engine.get(), opt);
+  ContinuousScheduler* base = &scheduler;
+  base->prepare_batch_test();
+
+  const std::vector<size_t> free_blocks =
+      engine->block_manager_pool()->num_free_blocks();
+  const std::vector<size_t> used_blocks =
+      engine->block_manager_pool()->num_used_blocks();
+  const std::vector<size_t> prefix_blocks =
+      engine->block_manager_pool()->num_blocks_in_prefix_cache();
+  ASSERT_EQ(free_blocks.size(), 1u);
+  ASSERT_EQ(used_blocks.size(), 1u);
+  ASSERT_EQ(prefix_blocks.size(), 1u);
+  EXPECT_GT(free_blocks[0], 1u);
+  EXPECT_DOUBLE_EQ(GAUGE_num_free_blocks.get_value(),
+                   static_cast<double>(free_blocks[0]));
+  EXPECT_DOUBLE_EQ(GAUGE_num_used_blocks.get_value(),
+                   static_cast<double>(used_blocks[0]));
+  EXPECT_DOUBLE_EQ(GAUGE_num_blocks_in_prefix_cache.get_value(),
+                   static_cast<double>(prefix_blocks[0]));
 }
 
 TEST(FixedStepsSchedulerTest, PrepareBatchOneRecSchedulesRequest) {
