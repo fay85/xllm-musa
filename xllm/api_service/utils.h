@@ -29,6 +29,7 @@ limitations under the License.
 #include "chat.pb.h"
 #include "common.pb.h"
 #include "core/common/types.h"
+#include "core/framework/chat_template/thinking_mode_resolver.h"
 #include "core/framework/request/usage.h"
 #include "function_call/function_call.h"
 
@@ -53,6 +54,13 @@ inline void set_proto_usage(proto::Usage* proto_usage,
       proto_usage->mutable_completion_tokens_details();
   completion_tokens_details->set_reasoning_tokens(0);
   completion_tokens_details->set_audio_tokens(0);
+}
+
+inline bool get_enable_thinking_from_request(
+    const nlohmann::json& chat_template_kwargs,
+    const std::string& reasoning_parser_format) {
+  return thinking_mode::is_enabled(chat_template_kwargs,
+                                   reasoning_parser_format);
 }
 
 inline bool check_for_unstreamed_tool_args(

@@ -54,6 +54,7 @@ cc_library(
     shm_channel.cpp
   DEPS
     :api_service
+    :chat_template_base
     :runtime
     :util
     glog::glog

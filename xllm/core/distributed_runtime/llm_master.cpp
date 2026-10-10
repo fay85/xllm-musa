@@ -29,6 +29,7 @@ limitations under the License.
 
 #include "api_service/call.h"
 #include "common/metrics.h"
+#include "core/framework/chat_template/thinking_mode_resolver.h"
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/service_config.h"
 #include "core/framework/sampling/json_object_grammar.h"
@@ -52,23 +53,6 @@ bool should_use_ssm_engine(const Options& options) {
   return !options.draft_model_path().value_or("").empty() ||
          (options.speculative_algorithm() == "Suffix" &&
           options.num_speculative_tokens() > 0);
-}
-
-bool get_enable_thinking(const nlohmann::json& chat_template_kwargs) {
-  const bool default_value =
-      !ModelConfig::get_instance().reasoning_parser().empty();
-  if (!chat_template_kwargs.contains("enable_thinking") &&
-      !chat_template_kwargs.contains("thinking")) {
-    return default_value;
-  }
-  bool enabled = false;
-  for (const char* key : {"enable_thinking", "thinking"}) {
-    const auto it = chat_template_kwargs.find(key);
-    if (it != chat_template_kwargs.end() && it->is_boolean()) {
-      enabled = enabled || it->get<bool>();
-    }
-  }
-  return enabled;
 }
 
 }  // namespace
@@ -571,7 +555,9 @@ std::shared_ptr<Request> LLMMaster::generate_request(
       reasoning_enabled =
           generation_mode == ChatTemplateGenerationMode::REASONING;
     } else {
-      reasoning_enabled = get_enable_thinking(sp.chat_template_kwargs);
+      reasoning_enabled = thinking_mode::is_enabled(
+          sp.chat_template_kwargs,
+          ModelConfig::get_instance().reasoning_parser());
     }
     req_state.json_object_grammar =
         get_json_object_grammar(reasoning_enabled, &grammar_error);

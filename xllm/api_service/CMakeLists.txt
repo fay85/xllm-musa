@@ -58,6 +58,7 @@ cc_library(
   DEPS
     :master
     :chat_template
+    :chat_template_base
     :util
     glog::glog
     proto::xllm_proto
