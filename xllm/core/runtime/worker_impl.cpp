@@ -102,6 +102,20 @@ limitations under the License.
 
 #define USE_ASYNC true
 
+#if defined(USE_MUSA)
+// block_copy.cu is compiled through musamapping, which emits the symbol in
+// xllm::kernel::musa; declare it here for the host-side caller.
+namespace xllm::kernel::musa {
+void block_copy(torch::Tensor key_cache_ptrs,
+                torch::Tensor value_cache_ptrs,
+                torch::Tensor src_block_indices,
+                torch::Tensor dst_block_indices,
+                torch::Tensor cum_sum,
+                int64_t numel_per_block,
+                torch::ScalarType cache_dtype);
+}  // namespace xllm::kernel::musa
+#endif
+
 namespace xllm {
 
 constexpr uint64_t MBUF_SIZE = 128 * 1024 * 1024;
@@ -1566,7 +1580,12 @@ bool WorkerImpl::can_use_cuda_block_copy_kernel(
 void WorkerImpl::execute_cuda_block_copy_kernel(
     const ModelInputParams& input_params) {
   CHECK(!kv_caches_.empty());
+#if defined(USE_MUSA)
+  // musamapping renames xllm::kernel::cuda -> xllm::kernel::musa in .cu TUs.
+  xllm::kernel::musa::block_copy(
+#else
   xllm::kernel::cuda::block_copy(
+#endif
       cuda_block_copy_runtime_state_.k_cache_ptrs_device,
       cuda_block_copy_runtime_state_.v_cache_ptrs_device,
       input_params.block_copy.src_block_indices,

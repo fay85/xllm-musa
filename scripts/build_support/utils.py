@@ -401,6 +401,9 @@ def _run_dependencies_script_or_exit(script_path: str) -> None:
 
 
 def _validate_submodules_or_exit(repo_root: str) -> None:
+    import os
+    if os.environ.get("XLLM_SKIP_SUBMODULE_CHECK") == "1":
+        return
     issues = _collect_submodule_init_issues(repo_root)
 
     if issues:

@@ -358,6 +358,11 @@ struct AttentionHostInput {
   std::vector<int32_t> ring_cur_seqlen;
   std::vector<int32_t> ring_cache_seqlen;
   torch::Tensor block_tables;
+  // MUSA graph path still stages these on the host side (see
+  // musa_graph_executor_impl.cpp). Keep them here for that backend.
+  torch::Tensor paged_kv_indptr;
+  torch::Tensor paged_kv_indices;
+  torch::Tensor paged_kv_last_page_len;
 
   const int32_t* graph_q_seq_lens_data = nullptr;
   const int32_t* graph_kv_seq_lens_data = nullptr;

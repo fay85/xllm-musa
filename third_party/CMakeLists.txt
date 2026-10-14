@@ -12,6 +12,9 @@ if(USE_MUSA AND TARGET cpprest)
   target_compile_options(cpprest PRIVATE
     -Wno-sign-conversion
     -Wno-error=sign-conversion
+    # mcc (clang-14) also flags asio-handler expressions as unused values.
+    -Wno-unused-value
+    -Wno-error=unused-value
   )
 endif()
 set(CPPREST_INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/cpprestsdk/Release/include)
@@ -34,6 +37,14 @@ if(USE_NPU)
   add_subdirectory(torch_npu_ops)
 endif()
 add_subdirectory(Mooncake)
+
+if(USE_MUSA AND TARGET mooncake_store)
+  # mcc uses Clang's thread-safety analyzer, which cannot infer Mooncake's
+  # custom lock-guard annotations and reports false positives in store code.
+  target_compile_options(mooncake_store PRIVATE
+    $<$<COMPILE_LANGUAGE:CXX>:-Wno-thread-safety>
+  )
+endif()
 
 target_include_directories(mooncake_store PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/Mooncake/mooncake-transfer-engine/include

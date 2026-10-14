@@ -33,7 +33,7 @@ limitations under the License.
 #include <c10/cuda/CUDAStream.h>
 #include <cuda.h>
 #elif defined(USE_MUSA)
-#include <c10/musa/MUSAGuard.h>
+#include "torch_musa/csrc/core/MUSAGuard.h"
 #include <musa.h>
 #elif defined(USE_DCU)
 #include <c10/hip/HIPCachingAllocator.h>

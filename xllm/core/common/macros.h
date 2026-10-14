@@ -71,7 +71,8 @@ namespace xllm {
 // without it the struct keeps the `void` owner and registers nothing.
 #define REFLECT_PROPERTIES(OwnerType) using xllm_property_owner_t = OwnerType
 
-#define SAFE_CONCAT(a, b) (a##b)
+#define SAFE_CONCAT_INNER(a, b) a##b
+#define SAFE_CONCAT(a, b) SAFE_CONCAT_INNER(a, b)
 
 #ifndef UNUSED_PARAMETER
 #define UNUSED_PARAMETER(x) ((void)(x))

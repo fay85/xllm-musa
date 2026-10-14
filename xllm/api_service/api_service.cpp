@@ -1274,7 +1274,7 @@ bool APIService::do_wakeup(const proto::MasterInfos& request,
         std::vector<WeightSegment> segments;
         segments.reserve(seg_list.segments_size());
         for (const auto& proto_seg : seg_list.segments()) {
-          segments.emplace_back(proto_seg.offset(), proto_seg.size());
+          segments.emplace_back(WeightSegment{proto_seg.offset(), proto_seg.size()});
         }
         wakeup_options.src_weight_segments.push_back(std::move(segments));
       }
