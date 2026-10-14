@@ -344,7 +344,8 @@ void fa3_decode(const torch::Tensor& query,
                                to_ffi_tensor(output_lse),
                                /*cp_world_size=*/static_cast<int64_t>(1),
                                /*cp_rank=*/static_cast<int64_t>(0),
-                               none_tensor());
+                               none_tensor(),
+                             /*skip_kernel_launch=*/false);
 
     // Metadata-enabled FA3 writes split-K partials. Keep the returned tensors
     // alive through combine; graph capture's FFI allocation replay owns their
@@ -402,7 +403,8 @@ void fa3_decode(const torch::Tensor& query,
                              to_ffi_tensor(output_lse),
                              /*cp_world_size=*/static_cast<int64_t>(1),
                              /*cp_rank=*/static_cast<int64_t>(0),
-                             none_tensor());
+                             none_tensor(),
+                             /*skip_kernel_launch=*/false);
 
   // The older GQA=6 forward ABI exposes scheduler metadata as tensor views,
   // but its split-K result contract matches GQA=8.
@@ -511,7 +513,8 @@ void fa3_prefill(const torch::Tensor& query,
                          to_ffi_tensor(output_lse),
                          /*cp_world_size=*/static_cast<int64_t>(1),
                          /*cp_rank=*/static_cast<int64_t>(0),
-                         none_tensor());
+                         none_tensor(),
+                         /*skip_kernel_launch=*/false);
 }
 
 torch::Tensor fa3_prefill_scheduler_metadata(
@@ -712,7 +715,8 @@ void fa3_prefill_paged(const torch::Tensor& query,
       to_ffi_tensor(output_lse),
       /*cp_world_size=*/static_cast<int64_t>(1),
       /*cp_rank=*/static_cast<int64_t>(0),
-      none_tensor());
+      none_tensor(),
+      /*skip_kernel_launch=*/false);
   combine_fa3_split_k(fwd_result,
                       cu_seqlens_q,
                       max_seqlen_q,

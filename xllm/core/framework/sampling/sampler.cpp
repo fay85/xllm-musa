@@ -19,11 +19,17 @@ limitations under the License.
 #include <glog/logging.h>
 #include <torch/torch.h>
 
+#include <algorithm>
+#include <limits>
+
 #include "common/global_flags.h"
 #include "core/framework/config/model_config.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "logits_utils.h"
 #include "sampling_params.h"
+#if defined(USE_MUSA)
+#include "kernels/musa/musa_ops_api.h"
+#endif
 
 namespace xllm {
 
@@ -88,6 +94,54 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
         << ", sample_logits.size(1)=" << sample_logits.size(1);
     sample_logits = sample_logits + effective_filter_mask;
   }
+
+#if defined(USE_MUSA)
+  // Avoid expanding a small top-k candidate set back to the full vocabulary
+  // before sampling. Native multinomial on near-zero rows aborts on MUSA.
+  if (params.all_random_sample && sample_top_k.defined() && !params.logprobs) {
+    if (sample_temperatures.defined()) {
+      apply_temperatures(sample_logits, sample_temperatures);
+    }
+
+    const int64_t vocab_size = sample_logits.size(-1);
+    const int64_t max_top_k = sample_top_k.max().item<int64_t>();
+    const int64_t candidate_count =
+        std::clamp(max_top_k, static_cast<int64_t>(1), vocab_size);
+    auto [candidate_logits, candidate_token_ids] =
+        sample_logits.topk(candidate_count,
+                           /*dim=*/-1,
+                           /*largest=*/true,
+                           /*sorted=*/true);
+
+    const float negative_infinity = -std::numeric_limits<float>::infinity();
+    auto top_k_values =
+        sample_top_k.clamp(1, vocab_size).unsqueeze(-1).to(torch::kLong);
+    auto top_k_mask = torch::arange(candidate_count, candidate_logits.device())
+                          .expand_as(candidate_logits) >= top_k_values;
+    candidate_logits.masked_fill_(top_k_mask, negative_infinity);
+
+    if (sample_top_p.defined()) {
+      auto candidate_probs =
+          candidate_logits.softmax(/*dim=*/-1).to(torch::kFloat32);
+      auto top_p_mask =
+          candidate_probs.cumsum(/*dim=*/-1) > sample_top_p.unsqueeze(-1);
+      top_p_mask.index_put_({torch::indexing::Ellipsis, 0}, false);
+      candidate_logits.masked_fill_(top_p_mask, negative_infinity);
+    }
+
+    auto candidate_probs =
+        torch::softmax(candidate_logits, /*dim=*/-1, /*dtype=*/torch::kFloat32);
+    auto candidate_indices = random_sample(candidate_probs).view({-1, 1});
+    output.next_tokens =
+        candidate_token_ids.gather(/*dim=*/-1, candidate_indices).view({-1});
+    if (params.return_probs) {
+      output.probs = candidate_probs.gather(/*dim=*/-1, candidate_indices)
+                         .view({-1})
+                         .to(logits.dtype());
+    }
+    return output;
+  }
+#endif
 
   if (params.all_greedy_sample && !params.logprobs && !params.return_probs &&
       !use_sample_indices && !filter_mask.defined()) {
