@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include <glog/logging.h>
+#include <unistd.h>
 
 #include <cstdint>
 #include <cstdlib>
@@ -28,21 +29,22 @@ namespace xllm::kernel::musa {
 
 namespace {
 
+// Mate 0.2.7-compatible FA3 URIs (ported from local build2). The upstream
+// v0.11.0 hashes are not present in the Mate 0.2.7 cached_ops tree used here.
 constexpr const char* kFa3MetadataUriGqa6 =
-    "fmha_get_metadata_6x1_ragged_q_padded_k_causal_packgqa";
+    "fmha_get_metadata_6x1_bf16_ragged_q_padded_k_causal_packgqa";
 constexpr const char* kFa3MetadataUriGqa8 =
-    "fmha_get_metadata_8x1_ragged_q_padded_k_causal_packgqa";
+    "fmha_get_metadata_8x1_bf16_ragged_q_padded_k_causal_packgqa";
 
 constexpr int32_t kFa3TileM = 32;
 constexpr int32_t kFa3TileN = 64;
 constexpr int32_t kFa3Gqa6MultiBatchDynamicSplitMinKvLength = 8192;
 
-// Paged-KV FA3 (decode / with_kvcache). head_dim=256, GQA=6/8,
-// packgqa+metadata.
+// Paged-KV FA3 (decode / with_kvcache). head_dim=256, GQA=6/8.
 constexpr const char* kFa3FwdUriHashGqa6 =
-    "9e4f4b2e6574a7a45a93fef39cf9b0485651e39052d9dfd88c2e1439137a9374";
+    "055332826071b0537d08ac0f855780d9dc53099d976fc6cd544d944b7940db24";
 constexpr const char* kFa3FwdUriHashGqa8 =
-    "94150355c74bdc57b0ec3f0a18926ec238aa401b7a6506ec460120ca8726277b";
+    "96c89a71db14cd369d03c0e1cbb43a2815da277c2f592061425e2b436354127a";
 constexpr const char* kFa3FwdCombine16Uri =
     "fmha_fwd_combine_bf16_16x64x16_ragged_q_metadata";
 constexpr const char* kFa3FwdCombine32Uri =
@@ -50,16 +52,39 @@ constexpr const char* kFa3FwdCombine32Uri =
 constexpr const char* kFa3FwdCombine64Uri =
     "fmha_fwd_combine_bf16_16x64x64_ragged_q_metadata";
 
-// Dense ragged FA3 prefill (Mate flash_attn_varlen). bf16, head_dim=256,
-// GQA ratio=6, causal, no packgqa/metadata. Built into FLASHINFER_OPS_PATH.
+// Dense ragged FA3 prefill hashes present in Mate 0.2.7 cached_ops.
 constexpr const char* kFa3PrefillFwdUriHashGqa6 =
-    "7ee83f6c1e99c1e66180d62c666ae3683127d3e048aeda12e77ee4569f9912c9";
-// Qwen3.5-35B-A3B uses GQA=8. This artifact is the M=192, pack_gqa=false
-// configuration selected by Mate for ordinary dense prefill. The older
-// 556a1a artifact is the decode/pack-GQA M=32 configuration and is roughly
-// 3-4x slower for a 20k-token ragged prefill.
+    "639113a0bd9f58a20ca13cdc5b37f65cfe8d2b6cba2296105219fd8299cad5bd";
 constexpr const char* kFa3PrefillFwdUriHashGqa8 =
-    "f950a279e338c0aa62c4d285c73cbedc8da55a148c172855ea03b6c08978d029";
+    "3c319be5ad6952b77e51c55060c55e2dc3da6090a8fc6a8734dbd8baf0f6ed53";
+// Mate 0.2.5 fallbacks (same as build2) if the 0.2.7 artifact is absent.
+constexpr const char* kFa3PrefillFwdUriHashGqa6V025 =
+    "e140040cf5f04fdf94b0c9d28900659052de34f380b6ecea23afd16d3691d4ea";
+constexpr const char* kFa3PrefillFwdUriHashGqa8V025 =
+    "236afb906e2625d51106085cc57d954f7e5b1440b41da68c782fc894801386ee";
+
+bool fa3_module_available(const std::string& uri) {
+  const char* ops_path = std::getenv("FLASHINFER_OPS_PATH");
+  if (ops_path == nullptr || ops_path[0] == '\0') {
+    return false;
+  }
+  const std::string so_path =
+      std::string(ops_path) + "/" + uri + "/" + uri + ".so";
+  return access(so_path.c_str(), R_OK) == 0;
+}
+
+std::string resolve_fa3_prefill_uri(const char* current_hash,
+                                    const char* v025_hash) {
+  const std::string current_uri = std::string("fmha_fwd_") + current_hash;
+  if (fa3_module_available(current_uri)) {
+    return current_uri;
+  }
+  const std::string v025_uri = std::string("fmha_fwd_") + v025_hash;
+  if (fa3_module_available(v025_uri)) {
+    return v025_uri;
+  }
+  return current_uri;
+}
 
 const char* fa3_metadata_uri(int64_t gqa_ratio) {
   CHECK(gqa_ratio == 6 || gqa_ratio == 8)
@@ -77,9 +102,14 @@ std::string fa3_fwd_uri(int64_t gqa_ratio) {
 std::string fa3_prefill_fwd_uri(int64_t gqa_ratio) {
   CHECK(gqa_ratio == 6 || gqa_ratio == 8)
       << "MUSA FA3 prefill supports GQA ratios 6 and 8, got " << gqa_ratio;
-  const char* hash =
-      gqa_ratio == 6 ? kFa3PrefillFwdUriHashGqa6 : kFa3PrefillFwdUriHashGqa8;
-  return std::string("fmha_fwd_") + hash;
+  if (gqa_ratio == 6) {
+    static const std::string uri = resolve_fa3_prefill_uri(
+        kFa3PrefillFwdUriHashGqa6, kFa3PrefillFwdUriHashGqa6V025);
+    return uri;
+  }
+  static const std::string uri = resolve_fa3_prefill_uri(
+      kFa3PrefillFwdUriHashGqa8, kFa3PrefillFwdUriHashGqa8V025);
+  return uri;
 }
 
 bool enable_fa3_gqa6_dynamic_split() {
