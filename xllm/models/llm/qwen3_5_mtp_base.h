@@ -119,6 +119,36 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
     metadata_build_options.materialize_linear_state_validity =
         !input_params.enable_graph;
 #endif
+#if defined(USE_MUSA)
+    // MUSA graph capture supplies persistent, bucket-sized metadata through
+    // input_params.attn_metadata. Rebuilding it here would restore the live
+    // (un-padded) slot mapping and make the captured attention see a different
+    // token count than its graph buffers.
+    // MUSA metadata keeps only 1-D masks; a dense [S,S] mask from
+    // build_attention_mask() is discarded and costs O(S^2) memory
+    // (1.88 GiB at 31k). Mirror the hybrid main model: no mask.
+    layer::AttentionMetadata attn_metadata =
+        input_params.attn_metadata
+            ? *(input_params.attn_metadata)
+            : (input_params.graph.attn_mask.defined()
+                   ? layer::AttentionMetadataBuilder::build(
+                         input_params,
+                         model_args_.enable_mla(),
+                         input_params.graph.attn_mask,
+                         /*device=*/device_,
+                         metadata_build_options)
+                   : layer::AttentionMetadataBuilder::build(
+                         input_params,
+                         model_args_.enable_mla(),
+                         /*attn_mask=*/std::nullopt,
+                         /*device=*/device_,
+                         metadata_build_options));
+    attn_metadata.fa3_metadata.share_fa3_scheduler_metadata = true;
+    attn_metadata.fa3_metadata.fa3_scheduler_metadata =
+        input_params.attn_metadata
+            ? input_params.attn_metadata->fa3_metadata.fa3_scheduler_metadata
+            : torch::Tensor();
+#else
     layer::AttentionMetadata attn_metadata =
         layer::AttentionMetadataBuilder::build(
             input_params,
@@ -126,6 +156,7 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
             build_attention_mask(input_params),
             /*device=*/device_,
             metadata_build_options);
+#endif
     prepare_mrope(positions, attn_metadata);
 
     torch::Tensor embedding = embed_tokens_(tokens);

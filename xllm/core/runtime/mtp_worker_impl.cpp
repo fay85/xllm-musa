@@ -1657,6 +1657,20 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
           << "MTP bootstrap row index exceeds request ids";
       CHECK_LT(static_cast<int64_t>(row_idx), input.token_ids_host.numel())
           << "MTP bootstrap row index exceeds token ids";
+      // Schedule-overlap fix: a sequence's bootstrap embedding is consumed
+      // only when its host token is real. Under overlap the first decode
+      // step carries a fake token, so the bootstrap is deferred to a later
+      // batch transition, by which time this worker already holds a valid
+      // target context (with accepted-length / position correction) for the
+      // request. Re-bootstrapping then resets correction_position_offset to
+      // 0, so the next verify restores GDN checkpoint 0 instead of the
+      // actually accepted one and corrupts the linear (SSM/conv) state.
+      if (embedding_cache_
+              ->read_decode_states({embedding.embedding_ids[row_idx]},
+                                   {embedding.request_ids[row_idx]})[0]
+              .valid) {
+        continue;
+      }
       embedding_cache_->write_mtp_bootstrap_context(
           embedding.embedding_ids[row_idx],
           embedding.request_ids[row_idx],
