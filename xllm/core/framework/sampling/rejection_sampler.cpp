@@ -20,6 +20,8 @@ limitations under the License.
 #include <ATen/ops/stack.h>
 #include <glog/logging.h>
 #include <torch/torch.h>
+#include <atomic>
+#include <sstream>
 
 #include "kernels/ops_api.h"
 #if defined(USE_MUSA)
@@ -380,6 +382,38 @@ RejectionSampler::greedy_sample_from_token_ids(
     bool mask_out_rejected_tokens) {
   CHECK_EQ(target_token_ids.sizes(), draft_token_ids.sizes())
       << "target and draft token shapes must match";
+  // MTP_ACCEPT_DEBUG: one-shot dump of draft vs target for greedy reject RCA.
+  {
+    static std::atomic<int> dbg_left{4};
+    const int remaining = dbg_left.fetch_sub(1);
+    if (remaining > 0) {
+      auto draft_cpu = draft_token_ids.to(torch::kCPU).contiguous();
+      auto target_cpu = target_token_ids.to(torch::kCPU).contiguous();
+      auto bonus_cpu = bonus_token_ids.to(torch::kCPU).contiguous();
+      const int64_t* d = draft_cpu.const_data_ptr<int64_t>();
+      const int64_t* tg = target_cpu.const_data_ptr<int64_t>();
+      const int64_t* b = bonus_cpu.const_data_ptr<int64_t>();
+      const int64_t bs = draft_cpu.size(0);
+      const int64_t k = draft_cpu.size(1);
+      std::ostringstream oss;
+      oss << "MTP_ACCEPT_DEBUG greedy draft vs target bs=" << bs << " k=" << k
+          << " shapes draft=" << draft_token_ids.sizes()
+          << " target=" << target_token_ids.sizes()
+          << " bonus=" << bonus_token_ids.sizes();
+      for (int64_t i = 0; i < bs && i < 2; ++i) {
+        oss << " | row" << i << " draft=[";
+        for (int64_t j = 0; j < k; ++j) {
+          oss << d[i * k + j] << (j + 1 < k ? "," : "");
+        }
+        oss << "] target=[";
+        for (int64_t j = 0; j < k; ++j) {
+          oss << tg[i * k + j] << (j + 1 < k ? "," : "");
+        }
+        oss << "] bonus=" << b[i] << " match0=" << (d[i * k] == tg[i * k]);
+      }
+      LOG(WARNING) << oss.str();
+    }
+  }
 #if defined(USE_MUSA)
   if (mask_out_rejected_tokens && draft_token_ids.device().is_privateuseone() &&
       target_token_ids.device().is_privateuseone() &&

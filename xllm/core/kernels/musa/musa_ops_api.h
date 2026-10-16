@@ -192,6 +192,59 @@ void fa3_prefill_paged(const torch::Tensor& query,
                        torch::Tensor& output,
                        torch::Tensor& output_lse);
 
+// Piecewise-graph-aware FA3 prefill wrappers (capture splits + registers runner).
+void fa3_prefill_paged_with_optional_piecewise_capture(
+    const torch::Tensor& query,
+    const torch::Tensor& k_cache,
+    const torch::Tensor& v_cache,
+    const torch::Tensor& cu_seqlens_q,
+    const torch::Tensor& cu_seqlens_k_new,
+    const torch::Tensor& seqused_k,
+    const torch::Tensor& page_table,
+    const torch::Tensor& scheduler_metadata,
+    int64_t max_seqlen_q,
+    int64_t window_left,
+    int64_t window_right,
+    double sm_scale,
+    torch::Tensor& output,
+    torch::Tensor& output_lse);
+
+void fa3_prefill_with_optional_piecewise_capture(
+    const torch::Tensor& query,
+    const torch::Tensor& key,
+    const torch::Tensor& value,
+    const torch::Tensor& cu_seqlens_q,
+    const torch::Tensor& cu_seqlens_k,
+    int64_t max_seqlen_q,
+    int64_t max_seqlen_k,
+    int64_t window_left,
+    int64_t window_right,
+    double sm_scale,
+    torch::Tensor& output,
+    torch::Tensor& output_lse);
+
+void batch_chunked_prefill_with_optional_piecewise_capture(
+    const std::string& uri,
+    ffi::Array<int64_t> plan_info,
+    torch::Tensor float_workspace_buffer,
+    torch::Tensor int_workspace_buffer,
+    torch::Tensor page_locked_int_workspace_buffer,
+    torch::Tensor query,
+    torch::Tensor k_cache,
+    torch::Tensor v_cache,
+    torch::Tensor paged_kv_indptr,
+    torch::Tensor paged_kv_indices,
+    torch::Tensor paged_kv_last_page_len,
+    int64_t window_left,
+    double sm_scale,
+    torch::Tensor output,
+    std::optional<torch::Tensor>& output_lse,
+    std::optional<torch::Tensor> qo_indptr,
+    bool causal,
+    const torch::Tensor& paged_kv_indptr_host,
+    const torch::Tensor& paged_kv_indices_host,
+    const torch::Tensor& paged_kv_last_page_len_host);
+
 torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
                                             int32_t batch_size,
                                             int32_t num_heads_q,

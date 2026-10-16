@@ -19,9 +19,14 @@ limitations under the License.
 #include <cmath>
 #include <optional>
 #include <tuple>
+#include <cstdlib>
+#include <string>
 #include <vector>
 
 #include "kernels/musa/gdn_ops.h"
+#include "kernels/musa/attention_runner.h"
+#include "kernels/musa/global_capture_instance.h"
+#include "layers/musa/graph_output_buffers.h"
 #include "kernels/ops_api.h"
 
 namespace xllm {
@@ -30,7 +35,13 @@ namespace layer {
 namespace {
 constexpr bool kEnableFusedGdnDecode = true;
 constexpr bool kEnableMateGdnDecode = false;
-constexpr bool kEnableMateGdnPrefill = false;
+bool mate_gdn_prefill_env_enabled() {
+  static const bool enabled = [] {
+    const char* v = std::getenv("XLLM_MATE_GDN_PREFILL");
+    return v != nullptr && std::string(v) == "1";
+  }();
+  return enabled;
+}
 constexpr int64_t kDefaultMaxGraphBatchSize = 256;
 
 torch::Tensor l2norm(const torch::Tensor& x, int64_t dim, double eps = 1e-6) {
@@ -608,6 +619,15 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
 
   if (!use_spec_verify && is_any_prefill) {
     torch::Tensor conv_input = reshape_qkvz_unpad(attn_metadata, mixed_qkv);
+    // Under piecewise capture use the persistent live GDN CU (real ragged
+    // endpoints, refreshed in place before every replay) instead of the
+    // attention CU whose endpoint is padded to the bucket.
+    const torch::Tensor& conv_cu_seq_lens =
+        (xllm::runtime::musa::GlobalCaptureInstance::get_instance()
+             .is_capturing() &&
+         attn_metadata.fa3_metadata.gdn_cu_seq_lens.defined())
+            ? attn_metadata.fa3_metadata.gdn_cu_seq_lens
+            : attn_metadata.q_cu_seq_lens;
     // Canonical recurrent-state validity from linear_state_validity_mask.
     // Do not derive from kv_cache_tokens_nums: prefix-cached tokens do not
     // imply a valid GDN recurrent state (see AttentionMetadataBuilder tests).
@@ -624,7 +644,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                                                   conv_weight,
                                                   conv_cache,
                                                   std::nullopt,
-                                                  attn_metadata.q_cu_seq_lens,
+                                                  conv_cu_seq_lens,
                                                   logical_state_indices,
                                                   has_initial_state,
                                                   /*silu_activation=*/true);
@@ -731,7 +751,13 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   torch::Tensor core_attn_out;
   torch::Tensor last_recurrent_state;
   const bool use_mate_gdn_prefill =
-      kEnableMateGdnPrefill && attn_metadata.is_prefill && !use_spec_verify;
+      (mate_gdn_prefill_env_enabled() ||
+       // Piecewise capture: the non-mate chunk GDN path bakes capture-time
+       // cu_seqlens/chunk counts into the graph and corrupts recurrent state
+       // on replay with a different token count. Always use the replay runner.
+       xllm::runtime::musa::GlobalCaptureInstance::get_instance()
+           .is_capturing()) &&
+      attn_metadata.is_prefill && !use_spec_verify;
   // Apply chunked or recurrent gated-delta attention and update caches.
   if (use_mate_gdn_prefill) {
     xllm::kernel::musa::MateGatedDeltaRulePrefillParams mate_params;
@@ -743,10 +769,79 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     mate_params.scale =
         1.0 / std::sqrt(static_cast<double>(processed_q.size(-1)));
     torch::Tensor mate_final_state;
-    std::tie(core_attn_out, mate_final_state) =
-        xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
-    ssm_cache.index_put_({linear_state_base_indices},
-                         mate_final_state.to(ssm_cache.dtype()));
+    const bool is_piecewise_graph_capture =
+        xllm::runtime::musa::GlobalCaptureInstance::get_instance()
+            .is_capturing();
+    auto* piecewise_buffer_pool =
+        layer::musa::PiecewiseGraphMatmulBufferScope::current_buffer_pool();
+    if (is_piecewise_graph_capture) {
+      CHECK(piecewise_buffer_pool != nullptr)
+          << "Piecewise GDN capture requires an active matmul buffer pool";
+      // Host/device syncs (e.g. Tensor::to(CPU)) are forbidden under capture.
+      // Register a replay runner; kernels run at replay, not during capture.
+      torch::Tensor initial_state_tensor =
+          torch::zeros({linear_state_base_indices.numel(),
+                        ssm_cache.size(1),
+                        ssm_cache.size(2),
+                        ssm_cache.size(3)},
+                       ssm_cache.options());
+      auto output = piecewise_buffer_pool->get_gdn_output(processed_v);
+      auto final_state =
+          piecewise_buffer_pool->get_gdn_final_state(initial_state_tensor);
+      auto kkt_output = piecewise_buffer_pool->get_gdn_kkt(
+          processed_k, /*num_v_heads=*/processed_v.size(-2));
+      torch::Tensor cu_seqlens = attn_metadata.q_cu_seq_lens;
+      xllm::kernel::musa::AttentionRunner runner;
+      runner.run_gdn_prefill_capture(
+          processed_q,
+          processed_k,
+          processed_v,
+          g,
+          beta,
+          initial_state_tensor,
+          cu_seqlens,
+          output,
+          final_state,
+          kkt_output,
+          ssm_cache,
+          linear_state_base_indices,
+          mate_params.scale.value_or(0.0f));
+      xllm::runtime::musa::GlobalCaptureInstance::get_instance()
+          .register_attention_runner(std::move(runner));
+      core_attn_out = output;
+      mate_final_state = final_state;
+    } else {
+      if (piecewise_buffer_pool != nullptr) {
+        // Eager warmup for piecewise capture: provision the GDN runner
+        // buffers with the exact shapes capture will request (pool is frozen
+        // before capture).
+        torch::Tensor warm_state =
+            torch::empty({linear_state_base_indices.numel(),
+                          ssm_cache.size(1),
+                          ssm_cache.size(2),
+                          ssm_cache.size(3)},
+                         ssm_cache.options());
+        // Capture keeps the full bucket token dim (see reshape_qkvz_unpad),
+        // so provision with the padded length rather than the warmup
+        // request's real length.
+        auto pad_time = [&](const torch::Tensor& t) {
+          if (t.size(0) != 1 || t.size(1) >= original_num_tokens) {
+            return t;
+          }
+          std::vector<int64_t> sz(t.sizes().begin(), t.sizes().end());
+          sz[1] = original_num_tokens;
+          return torch::empty(sz, t.options());
+        };
+        (void)piecewise_buffer_pool->get_gdn_output(pad_time(processed_v));
+        (void)piecewise_buffer_pool->get_gdn_final_state(warm_state);
+        (void)piecewise_buffer_pool->get_gdn_kkt(
+            pad_time(processed_k), /*num_v_heads=*/processed_v.size(-2));
+      }
+      std::tie(core_attn_out, mate_final_state) =
+          xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
+      ssm_cache.index_put_({linear_state_base_indices},
+                           mate_final_state.to(ssm_cache.dtype()));
+    }
   } else if (!use_spec_verify && attn_metadata.is_prefill &&
              !attn_metadata.is_chunked_prefill) {
     xllm::kernel::ChunkGatedDeltaRuleParams chunk_gated_delta_params;
@@ -1041,6 +1136,19 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_unpad(
   if (!has_padded_queries) {
     return padded_qkvz;
   }
+  if (xllm::runtime::musa::GlobalCaptureInstance::get_instance()
+          .is_capturing()) {
+    const int64_t cap_bs =
+        !attn_metadata.q_seq_lens_vec.empty()
+            ? static_cast<int64_t>(attn_metadata.q_seq_lens_vec.size())
+            : attn_metadata.q_seq_lens.size(0);
+    if (cap_bs == 1) {
+      // Piecewise capture: keep the full bucket-sized token dim so captured
+      // GDN shapes do not depend on the capture request's length. The real
+      // endpoint is carried by the live gdn_cu_seq_lens buffer at replay.
+      return padded_qkvz.reshape({-1, padded_qkvz.size(-1)});
+    }
+  }
   std::vector<torch::Tensor> valid_batches;
   const bool has_host_lens = !attn_metadata.q_seq_lens_vec.empty();
   int64_t bs = has_host_lens
@@ -1054,8 +1162,14 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_unpad(
   // host once. Calling .item() per batch on a device tensor issues a separate
   // synchronous device->host copy each iteration, stalling schedule/execute
   // overlap; a single bulk copy avoids the per-iteration syncs.
-  const torch::Tensor host_seq_lens =
-      has_host_lens ? torch::Tensor() : ori_seq_lens.to(torch::kCPU);
+  torch::Tensor host_seq_lens;
+  if (!has_host_lens) {
+    CHECK(!xllm::runtime::musa::GlobalCaptureInstance::get_instance()
+               .is_capturing())
+        << "GDN reshape under graph capture requires q_seq_lens_vec host "
+           "mirrors (Tensor::to(CPU) is capture-unsafe)";
+    host_seq_lens = ori_seq_lens.to(torch::kCPU);
+  }
   for (int64_t b = 0; b < bs; ++b) {
     int64_t ori_len = has_host_lens ? attn_metadata.q_seq_lens_vec[b]
                                     : host_seq_lens[b].item<int64_t>();
@@ -1100,7 +1214,10 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_with_pad(
   const auto& start_loc = attn_metadata.q_seq_lens;
   const bool need_padding =
       attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
-  if (!need_padding) {
+  if (!need_padding || (bs == 1 &&
+                        xllm::runtime::musa::GlobalCaptureInstance::
+                            get_instance()
+                                .is_capturing())) {
     return qkvz.view({bs, -1, qkvz.size(-1)});
   }
   std::vector<torch::Tensor> batches;
@@ -1108,8 +1225,14 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_with_pad(
   int64_t idx = 0;
   // See reshape_qkvz_unpad: stage device lengths to host once when host
   // lengths are absent to avoid a per-batch .item() device->host sync.
-  const torch::Tensor host_seq_lens =
-      has_host_lens ? torch::Tensor() : start_loc.to(torch::kCPU);
+  torch::Tensor host_seq_lens;
+  if (!has_host_lens) {
+    CHECK(!xllm::runtime::musa::GlobalCaptureInstance::get_instance()
+               .is_capturing())
+        << "GDN reshape_pad under graph capture requires q_seq_lens_vec host "
+           "mirrors (Tensor::to(CPU) is capture-unsafe)";
+    host_seq_lens = start_loc.to(torch::kCPU);
+  }
   for (int64_t b = 0; b < bs; ++b) {
     int64_t cur_len = has_host_lens ? attn_metadata.q_seq_lens_vec[b]
                                     : host_seq_lens[b].item<int64_t>();

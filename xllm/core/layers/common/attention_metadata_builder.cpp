@@ -14,6 +14,9 @@ limitations under the License.
 ==============================================================================*/
 
 #include "layers/common/attention_metadata_builder.h"
+#if defined(USE_MUSA)
+#include "kernels/musa/global_capture_instance.h"
+#endif
 
 #include <glog/logging.h>
 
@@ -52,8 +55,29 @@ torch::Tensor to_host_int32_contiguous(const torch::Tensor& tensor) {
   if (!tensor.defined()) {
     return {};
   }
-  torch::Tensor result =
-      tensor.device().is_cpu() ? tensor : tensor.to(torch::kCPU);
+  if (tensor.device().is_cpu()) {
+    torch::Tensor result = tensor;
+    if (result.scalar_type() != torch::kInt32) {
+      result = result.to(torch::kInt32);
+    }
+    return result.contiguous();
+  }
+  // D2H is illegal while a MUSA stream is capturing. Pause piecewise capture
+  // around the copy (same pattern as AttentionRunner capture splits).
+  torch::Tensor result;
+#if defined(USE_MUSA)
+  auto& capture = ::xllm::runtime::musa::GlobalCaptureInstance::get_instance();
+  const bool capturing = capture.is_capturing();
+  if (capturing) {
+    capture.temporarily_end_graph();
+  }
+#endif
+  result = tensor.to(torch::kCPU);
+#if defined(USE_MUSA)
+  if (capturing) {
+    capture.temporarily_begin_graph();
+  }
+#endif
   if (result.scalar_type() != torch::kInt32) {
     result = result.to(torch::kInt32);
   }
@@ -269,10 +293,34 @@ void materialize_linear_state_validity(
     options = torch::TensorOptions().device(device.value());
   }
   options = options.dtype(torch::kBool);
-  attn_metadata.has_initial_states =
+  // Never torch::tensor(host_vec, device_options): TensorDataContainer H2D is
+  // illegal under MUSA stream capture (piecewise / decode graph). Build on CPU
+  // then copy, pausing capture around the H2D when needed.
+  torch::Tensor cpu_mask =
       attn_metadata.is_dummy && mask_rows == 0
-          ? torch::zeros({1}, options)
-          : torch::tensor(params.linear_state_validity_mask, options);
+          ? torch::zeros({1}, torch::TensorOptions().dtype(torch::kBool))
+          : torch::tensor(params.linear_state_validity_mask,
+                          torch::TensorOptions().dtype(torch::kBool));
+  if (cpu_mask.device() == options.device()) {
+    attn_metadata.has_initial_states = cpu_mask;
+  } else {
+#if defined(USE_MUSA)
+    auto& capture = ::xllm::runtime::musa::GlobalCaptureInstance::get_instance();
+    const bool capturing = capture.is_capturing();
+    if (capturing) {
+      capture.temporarily_end_graph();
+    }
+#endif
+    attn_metadata.has_initial_states =
+        cpu_mask.to(options.device(),
+                    /*non_blocking=*/false,
+                    /*copy=*/false);
+#if defined(USE_MUSA)
+    if (capturing) {
+      capture.temporarily_begin_graph();
+    }
+#endif
+  }
 }
 
 AttentionMetadata build_attention_metadata(

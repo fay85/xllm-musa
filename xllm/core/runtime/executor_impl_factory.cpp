@@ -28,6 +28,9 @@ limitations under the License.
 #elif defined(USE_DCU)
 #include "runtime/dcu_graph_executor_impl.h"
 #endif
+#if defined(USE_MUSA)
+#include "runtime/musa/musa_graph_executor_impl.h"
+#endif
 
 namespace xllm {
 

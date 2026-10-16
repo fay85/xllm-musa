@@ -1,5 +1,19 @@
 include(cc_library)
 
+cc_library(
+  NAME
+    musa_graph_output_buffers
+  HDRS
+    graph_output_buffers.h
+  SRCS
+    graph_output_buffers.cpp
+  COPTS
+    ${_XLLM_MUSIFY_COPTS}
+  DEPS
+    glog::glog
+    torch
+)
+
 # MUSA layers - FlashInfer/Mate path
 set(_MUSA_LAYERS_HDRS
   attention.h
@@ -32,6 +46,7 @@ set(_MUSA_LAYERS_SRCS
 )
 set(_MUSA_LAYERS_DEPS
   :cuda_kernels
+  :musa_graph_output_buffers
   :common_layers
   :model
   :kernels

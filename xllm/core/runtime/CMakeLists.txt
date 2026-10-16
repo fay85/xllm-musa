@@ -1,4 +1,9 @@
 include(cc_library)
+
+if(USE_MUSA)
+  add_subdirectory(musa)
+endif()
+
 include(cc_binary)
 
 cc_library(
@@ -20,7 +25,7 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:acl_graph_persistent_param.h>
     $<$<BOOL:${USE_MLU}>:mlu_graph_executor_impl.h>
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.h>
-    $<$<BOOL:${USE_MUSA}>:musa_graph_executor_impl.h>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_graph_executor_impl.h>
     py_executor_impl.h
     py_attention_metadata.h
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.h>
@@ -55,7 +60,6 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:acl_graph_persistent_param.cpp>
     $<$<BOOL:${USE_MLU}>:mlu_graph_executor_impl.cpp>
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.cpp>
-    $<$<BOOL:${USE_MUSA}>:musa_graph_executor_impl.cpp>
     py_executor_impl.cpp
     py_attention_metadata.cpp
     $<$<BOOL:${USE_DCU}>:dcu_graph_executor_impl.cpp>
@@ -117,5 +121,6 @@ cc_library(
     proto::xllm_proto
     $<$<BOOL:${USE_MLU}>:torch_mlu>
     $<$<BOOL:${USE_MUSA}>:torch_musa>
+    $<$<BOOL:${USE_MUSA}>:musa_graph_executor>
     $<$<BOOL:${USE_DCU}>:hip::host>
 )

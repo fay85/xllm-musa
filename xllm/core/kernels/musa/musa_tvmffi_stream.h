@@ -185,4 +185,12 @@ void end_ffi_alloc_replay();
 FfiAllocMode get_ffi_alloc_mode();
 
 void bind_tvmffi_stream_to_current_torch_stream(const torch::Device& device);
+
+// Hist MUSA graph executor name.
+using MusaTvmffiPreparationSyncGuard = TvmffiPreparationSyncGuard;
+
+
+using MusaTvmffiStreamOverrideGuard = TvmffiStreamOverrideGuard;
+inline void sync_musa_ffi_stream(const torch::Device& device) { sync_ffi_stream(device); }
+
 }  // namespace xllm::kernel::musa

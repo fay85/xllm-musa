@@ -48,11 +48,20 @@ using c10::musa::MUSAStream;
 #include "core/framework/model/causal_lm.h"
 #include "core/framework/model/model_input_params.h"
 #include "core/kernels/musa/llm_decode_metadata_update.h"
+#include "core/kernels/musa/piecewise_graphs.h"
+#include "core/layers/musa/graph_output_buffers.h"
 #include "core/runtime/executor_impl.h"
 #include "core/runtime/executor_impl_factory.h"
 #include "core/runtime/options.h"
 
+namespace xllm::layer {
+struct PlanInfo;
+}
+
 namespace xllm::runtime::musa {
+
+constexpr uint64_t kSpecVerifyGraphKeyMask = 1ull << 63;
+constexpr uint64_t kSpecVerifyQMaxSeqLenShift = 32;
 
 using MusaMemPool = c10::musa::MemPool;
 
@@ -73,13 +82,17 @@ class MusaGraphPersistentParam final {
   // return_capture_params is true, used for build new ModelInputParams for
   // capture. If return_capture_params is false, only updates persistent buffers
   // and returns std::nullopt.
-  std::optional<ModelInputParams> update(const torch::Tensor& tokens,
-                                         const torch::Tensor& k_cache,
-                                         const torch::Tensor& v_cache,
-                                         const torch::Tensor& positions,
-                                         const ModelInputParams& params,
-                                         uint32_t padded_num_tokens = 0,
-                                         bool return_capture_params = false);
+  std::optional<ModelInputParams> update(
+      const torch::Tensor& tokens,
+      const torch::Tensor& k_cache,
+      const torch::Tensor& v_cache,
+      const torch::Tensor& positions,
+      const ModelInputParams& params,
+      uint32_t padded_num_tokens = 0,
+      bool return_capture_params = false,
+      bool update_prefill_plan = true,
+      std::shared_ptr<layer::PlanInfo> graph_plan_info = nullptr,
+      std::optional<uint32_t> gdn_kkt_endpoint_override = std::nullopt);
 
   // Getter methods for persistent tensors
   torch::Tensor persistent_tokens(uint32_t actual_tokens) const {
@@ -92,7 +105,7 @@ class MusaGraphPersistentParam final {
   torch::Tensor persistent_positions(uint32_t actual_tokens) const {
     if (actual_tokens > 0) {
       return persistent_positions_.slice(
-          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+          persistent_positions_.dim() - 1, /*start=*/0, /*end=*/actual_tokens);
     }
     return persistent_positions_;
   }
@@ -123,7 +136,32 @@ class MusaGraphPersistentParam final {
     hidden_states_.slice(/*dim=*/0, /*start=*/0, /*end=*/result_tokens)
         .copy_(value, /*non_blocking=*/true);
   }
+  // Logits captured inside the graph (D1). [num_seqs, vocab_size].
+  torch::Tensor logits(uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return logits_.slice(/*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+    }
+    return logits_;
+  }
+  void set_logits(const torch::Tensor& value) {
+    const uint32_t result_tokens = value.size(0);
+    logits_.slice(/*dim=*/0, /*start=*/0, /*end=*/result_tokens)
+        .copy_(value, /*non_blocking=*/true);
+  }
+  bool has_logits_buffer() const { return logits_.defined(); }
   const torch::Device& device() const { return device_; }
+  void ensure_logits_buffer(int64_t rows,
+                            int64_t vocab_size,
+                            torch::ScalarType dtype,
+                            const torch::Device& device) {
+    if (!logits_.defined() || logits_.size(0) < rows ||
+        logits_.size(1) != vocab_size || logits_.scalar_type() != dtype ||
+        logits_.device() != device) {
+      logits_ =
+          torch::empty({rows, vocab_size},
+                       torch::TensorOptions().dtype(dtype).device(device));
+    }
+  }
   torch::Tensor q_seq_lens(uint32_t actual_batch_size) const {
     if (actual_batch_size > 0) {
       return q_seq_lens_.slice(
@@ -137,6 +175,20 @@ class MusaGraphPersistentParam final {
           /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
     }
     return kv_seq_lens_;
+  }
+  torch::Tensor gdn_cu_seq_lens(uint32_t actual_batch_size) const {
+    if (actual_batch_size > 0) {
+      return persistent_gdn_cu_seq_lens_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
+    }
+    return persistent_gdn_cu_seq_lens_;
+  }
+  torch::Tensor gdn_kkt_cu_seq_lens(uint32_t actual_batch_size) const {
+    if (actual_batch_size > 0) {
+      return persistent_gdn_kkt_cu_seq_lens_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
+    }
+    return persistent_gdn_kkt_cu_seq_lens_;
   }
   torch::Tensor persistent_kv_cache_tokens_nums(
       uint32_t actual_batch_size) const {
@@ -152,6 +204,13 @@ class MusaGraphPersistentParam final {
           /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
     }
     return persistent_embedding_;
+  }
+  torch::Tensor persistent_mtp_token_embedding(uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return persistent_mtp_token_embedding_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+    }
+    return persistent_mtp_token_embedding_;
   }
   torch::Tensor persistent_linear_state_indices(
       uint32_t actual_batch_size) const {
@@ -219,11 +278,54 @@ class MusaGraphPersistentParam final {
     }
     return persistent_kv_seq_lens_delta_;
   }
+  torch::Tensor persistent_expanded_block_tables(uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return persistent_expanded_block_tables_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+    }
+    return persistent_expanded_block_tables_;
+  }
+  torch::Tensor expanded_kv_seq_lens(uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return expanded_kv_seq_lens_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+    }
+    return expanded_kv_seq_lens_;
+  }
+  torch::Tensor persistent_expanded_paged_kv_indptr(
+      uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return persistent_expanded_paged_kv_indptr_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens + 1);
+    }
+    return persistent_expanded_paged_kv_indptr_;
+  }
+  torch::Tensor persistent_expanded_paged_kv_indices(
+      uint32_t actual_size) const {
+    if (actual_size > 0) {
+      return persistent_expanded_paged_kv_indices_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_size);
+    }
+    return persistent_expanded_paged_kv_indices_;
+  }
+  torch::Tensor persistent_expanded_paged_kv_last_page_len(
+      uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return persistent_expanded_paged_kv_last_page_len_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+    }
+    return persistent_expanded_paged_kv_last_page_len_;
+  }
 
  private:
+  std::vector<int32_t> update_expanded_spec_decode_attention(
+      const ModelInputParams& input_params,
+      uint32_t actual_num_tokens,
+      uint32_t padded_num_tokens);
   bool can_use_llm_decode_fast_path(const torch::Tensor& tokens,
                                     const torch::Tensor& positions,
-                                    const ModelInputParams& params) const;
+                                    const ModelInputParams& params,
+                                    int64_t actual_batch_size) const;
   void update_llm_decode_metadata_fast_path(const torch::Tensor& tokens,
                                             const torch::Tensor& positions,
                                             const ModelInputParams& params,
@@ -243,11 +345,16 @@ class MusaGraphPersistentParam final {
   torch::Tensor hidden_states_;
   torch::Tensor q_seq_lens_;
   torch::Tensor kv_seq_lens_;
+  torch::Tensor persistent_gdn_cu_seq_lens_;
+  torch::Tensor persistent_gdn_kkt_cu_seq_lens_;
   torch::Tensor persistent_embedding_;
+  torch::Tensor persistent_mtp_token_embedding_;
   torch::Tensor persistent_linear_state_indices_;
   torch::Tensor persistent_kv_cache_tokens_nums_;
   torch::Tensor persistent_num_accepted_tokens_;
   torch::Tensor aux_hidden_states_;
+  // [max_tokens_per_batch, vocab_size] - persistent logits output for D1.
+  torch::Tensor logits_;
 
   // FlashInfer decode mode parameters
   torch::Tensor persistent_paged_kv_indptr_;
@@ -255,18 +362,31 @@ class MusaGraphPersistentParam final {
   torch::Tensor persistent_paged_kv_last_page_len_;
   torch::Tensor persistent_decode_qo_indptr_;
   torch::Tensor persistent_kv_seq_lens_delta_;
+
+  // TODO maybe not used. or use q_cu_seq_lens instead.
+  torch::Tensor persistent_chunked_prefill_qo_indptr_;
+
+  // Qwen3.5 MTP spec-verify expanded decode attention (per validate token).
+  torch::Tensor persistent_expanded_block_tables_;
+  torch::Tensor expanded_kv_seq_lens_;
+  torch::Tensor persistent_expanded_paged_kv_indptr_;
+  torch::Tensor persistent_expanded_paged_kv_indices_;
+  torch::Tensor persistent_expanded_paged_kv_last_page_len_;
 };
 
 // MUSA graph executor using torch_musa MUSAGraph for memory management.
 class MusaGraph final {
  public:
+  // is_piecewise: if true, use piecewise graph capture for prefill
   // capture_stream: the stream to use for MUSA graph capture.
   explicit MusaGraph(MusaGraphPersistentParam& persistent_param,
                      at::DeviceIndex device_index,
-                     c10::musa::MUSAStream capture_stream)
+                     c10::musa::MUSAStream capture_stream,
+                     bool is_piecewise = false)
       : persistent_param_(persistent_param),
         device_index_(device_index),
-        capture_stream_(capture_stream) {}
+        capture_stream_(capture_stream),
+        is_piecewise_(is_piecewise) {}
 
   // Capture computation graph for given bucket num_tokens
   bool capture(CausalLM* model,
@@ -292,9 +412,6 @@ class MusaGraph final {
   }
 
  private:
-  // Print graph held tensors for debugging
-  void print_graph_tensors() const;
-
   // Refresh the persistent host mirrors used by the Mate FFI batch_decode
   // run() call. Lazily allocates pinned CPU buffers sized to worst case (set
   // by MusaGraphPersistentParam at executor construction), then copies the
@@ -312,7 +429,7 @@ class MusaGraph final {
   // path), copies CPU->pinned host directly and avoids per-step D2H sync.
   void refresh_persistent_paged_kv_host_mirrors(
       const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
-      const AttentionHostInput& host_src);
+      const ModelInputParams& params);
 
   // Reference to persistent parameters (shared across multiple MusaGraph
   // instances).
@@ -322,7 +439,19 @@ class MusaGraph final {
   // Native MUSA capture stream owned by MusaGraphExecutorImpl.
   c10::musa::MUSAStream capture_stream_;
 
+  // Whether this graph uses piecewise capture
+  bool is_piecewise_ = false;
+
+  // Stable intermediate storage for this exact piecewise-prefill bucket.
+  // It must outlive graph holders because runners retain its tensor addresses.
+  std::shared_ptr<layer::musa::PiecewiseGraphMatmulBufferPool>
+      prefill_matmul_buffer_pool_;
+
   uint32_t padded_num_tokens_ = 0;
+
+  // D1: when true, lm_head GEMM was captured inside the graph. On replay,
+  // persistent_param_.logits() holds the computed logits.
+  bool capture_logits_ = false;
 
   // FA3 scheduler metadata consumed by the captured full-attention kernels.
   // Its address is fixed at capture time; replay copies freshly generated
@@ -344,9 +473,7 @@ class MusaGraph final {
   // struct). If we let `.to(kCPU)` create a fresh per-call tensor, then on
   // every replay the captured graph holds a dangling pointer to the
   // previous-step host buffer (already freed). On torch_musa 2.7.1 this
-  // surfaces as a GPU page fault inside the captured Mate decode kernel
-  // ("ExceptionType: IllegalAddress ... Reading from 0x... Fault (Page
-  // Directory)"; see the .mudmp under repro logs).
+  // surfaces as a GPU page fault inside the captured Mate decode kernel.
 
   // Grow-only across captures so smaller-bucket graphs keep referencing
   // the same storage even when a larger bucket later expands the buffer.
@@ -371,6 +498,9 @@ class MusaGraph final {
   torch::Tensor paged_kv_indices_host_buf_;
   torch::Tensor paged_kv_last_page_len_host_buf_;
 
+  // The attention execution plan is fixed for this graph's capture shape.
+  std::shared_ptr<layer::PlanInfo> plan_info_;
+
   // Pre-computed max numel for each host buf (set in capture()).
   // 0 means "no pre-allocation hint", and refresh_one() falls back to its
   // legacy "alloc to current device numel" behavior. Non-zero means the
@@ -382,6 +512,7 @@ class MusaGraph final {
   // Declare graph holders last so they are destroyed before the tensors and
   // host buffers whose addresses were retained during capture.
   at::musa::MUSAGraph graph_;
+  PiecewiseGraphs piecewise_graph_;
 };
 
 // Executor implementation using MUSA graph optimization
@@ -420,6 +551,24 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // Lazy-loaded MUSA graphs for decode phase (by bucket_num_tokens).
   absl::flat_hash_map<uint32_t, std::unique_ptr<MusaGraph>> graphs_;
 
+  // Lazy-loaded MUSA graphs for MTP spec-verify validate (composite key).
+  absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>> spec_verify_graphs_;
+
+  // Lazy-loaded MUSA graphs for prefill phase with piecewise capture.
+  // (by bucket_num_tokens)
+  absl::flat_hash_map<uint32_t, std::unique_ptr<MusaGraph>> prefill_graphs_;
+
+  // Packed pure-prefill graphs are reusable by token bucket and effective
+  // sequence count. Their live ragged lengths are replay metadata, not key
+  // material.
+  absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>>
+      packed_prefill_graphs_;
+
+  // Chunked-prefill piecewise graphs require an exact host-shape key because
+  // Qwen3.5 GDN control flow depends on per-sequence query lengths.
+  absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>>
+      chunked_prefill_graphs_;
+
   // Persistent parameters shared across all MusaGraph instances
   std::unique_ptr<MusaGraphPersistentParam> persistent_param_;
 
@@ -429,10 +578,31 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // executor is intentional. If concurrent calls are introduced in the future,
   // this assumption must be revisited.
   c10::musa::MempoolId_t graph_pool_;
+  // Whether to enable prefill piecewise graph
+  bool enable_prefill_piecewise_graph_;
+  // Whether to route pure-prefill batches to eager (bypassing piecewise
+  // graph) so the scheduler can pack multiple prefills per batch.
+  bool enable_packed_prefill_;
+  int64_t max_tokens_for_graph_mode_ = 0;
+
+  // Fixed prefill pad ladder aligned with SGLang piecewise_cuda_graph_tokens.
+  // Pure-prefill graphs pad up to the next entry instead of ceil-to-16.
+  std::vector<uint32_t> prefill_graph_token_buckets_;
 
   // Get bucket num_tokens for given num_tokens.
+  // Prefill: nearest SGLang-style ladder size (>= num_tokens).
   // Decode: 1/2/4/8 then multiples of 16, or exact when no_padding is enabled.
-  uint32_t get_bucket_num_tokens(uint32_t num_tokens) const;
+  uint32_t get_bucket_num_tokens(uint32_t num_tokens,
+                                 bool is_prefill = false) const;
+
+  uint64_t get_graph_key(uint32_t bucket_num_tokens,
+                         const ModelInputParams& params) const;
+
+  uint64_t get_packed_prefill_graph_key(uint32_t bucket_num_tokens,
+                                        const ModelInputParams& params) const;
+
+  uint64_t get_chunked_prefill_graph_key(uint32_t bucket_num_tokens,
+                                         const ModelInputParams& params) const;
 
   ModelOutput attach_aux_hidden_states_if_needed(
       const torch::Tensor& hidden_states,
@@ -456,30 +626,13 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
 
   struct VmmPoolState;
 
-  struct GraphMemoryUsageStats {
-    size_t executor_total_bytes = 0;
-    size_t persistent_param_bytes = 0;
-    size_t allocated_pool_bytes = 0;
-    size_t active_pool_bytes = 0;
-    size_t pool_high_water_mark_bytes = 0;
-  };
-
   VmmPoolState& get_or_create_vmm_pool_state(uint32_t physical_pool_id);
   MusaMemPool* get_or_create_vmm_mempool(uint32_t physical_pool_id,
                                          uint32_t shape_id);
   MusaMemPool* get_vmm_mempool(uint32_t physical_pool_id, uint32_t shape_id);
-  GraphMemoryUsageStats get_graph_memory_usage_stats();
-  void log_graph_memory_after_capture();
 
   std::mutex vmm_mutex_;
   std::unordered_map<uint32_t, std::unique_ptr<VmmPoolState>> vmm_pools_;
-
-  size_t baseline_private_pool_reserved_bytes_ = 0;
-  size_t baseline_private_pool_allocated_bytes_ = 0;
-  size_t baseline_private_pool_active_bytes_ = 0;
-  size_t baseline_allocator_reserved_bytes_ = 0;
-
-  size_t last_logged_executor_total_bytes_ = 0;
 
   // Get the MUSA-compatible capture stream for the current thread.
   // Each thread automatically gets its own high-priority capture stream

@@ -183,6 +183,20 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
       if (!input_params.synchronize_layer(static_cast<uint32_t>(i))) {
         return ModelOutput();
       }
+#if defined(USE_CUDA) || defined(USE_MUSA)
+      // Restored from hist MTP: FA3/MUSA plan_info is layer-scoped. Without
+      // updating layer_id, draft attention can bind the wrong KV/workspace and
+      // produce NaN logits (accept=0). Keep merge synchronize_layer above.
+      if (attn_metadata.plan_info != nullptr) {
+        attn_metadata.plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.shared_plan_info != nullptr) {
+        attn_metadata.shared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.unshared_plan_info != nullptr) {
+        attn_metadata.unshared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+#endif
       mtp_hidden = layers_[i]->forward(mtp_hidden,
                                        residual,
                                        positions,

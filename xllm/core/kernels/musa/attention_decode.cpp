@@ -199,48 +199,15 @@ torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
 
   TvmffiStreamGuard stream_guard(device);
 
-  const int64_t b = batch_size;
-  auto num_splits_dynamic = metadata.slice(/*dim=*/0, /*start=*/0, /*end=*/b);
-  auto batch_table = metadata.slice(/*dim=*/0, /*start=*/b, /*end=*/2 * b);
-  auto num_m_blocks = metadata.slice(/*dim=*/0, /*start=*/2 * b, /*end=*/3 * b);
-  auto num_nheads_in_l2 =
-      metadata.slice(/*dim=*/0, /*start=*/3 * b, /*end=*/4 * b);
-
   const int64_t gqa_ratio = num_heads_q / num_heads_kv;
   const std::string uri = fa3_metadata_uri(gqa_ratio);
 
-  // The GQA=8 kernel comes from the current Mate cache. Its
-  // output contract is one contiguous [4 * batch] metadata tensor. The older
-  // GQA=6 artifact below predates that ABI and accepts four output views.
-  if (gqa_ratio == 8) {
-    get_function(uri, uri)(
-        static_cast<int64_t>(batch_size),
-        static_cast<int64_t>(num_heads_q),
-        static_cast<int64_t>(num_heads_kv),
-        static_cast<int64_t>(head_dim_qk),
-        static_cast<int64_t>(head_dim_vo),
-        static_cast<int64_t>(max_seqlen_q),
-        static_cast<int64_t>(max_seqlen_k),
-        /*max_seqlen_k_new=*/static_cast<int64_t>(0),
-        to_ffi_tensor(cu_seqlens_q),
-        none_tensor(),
-        none_tensor(),
-        to_ffi_tensor(seqused_k),
-        none_tensor(),
-        static_cast<int64_t>(window_size_left),
-        static_cast<int64_t>(window_size_right),
-        none_tensor(),
-        to_ffi_tensor(metadata),
-        // FA3 decode policy: let Mate choose the split count
-        // from the current KV length. A fixed single split leaves long-context
-        // decode severely under-parallelized.
-        /*num_splits=*/static_cast<int64_t>(0),
-        static_cast<int64_t>(kFa3TileM),
-        static_cast<int64_t>(kFa3TileN),
-        /*mp_margin=*/static_cast<int64_t>(0));
-    return metadata;
-  }
-
+  // Mate 0.2.7 cached fmha_get_metadata_* (GQA=6 and GQA=8) use the
+  // contiguous [4*batch] metadata ABI (21 args). The old four-output GQA=6
+  // call path (24 args) mismatches the shared cache and aborts at runtime.
+  const int64_t metadata_num_splits =
+      gqa_ratio == 6 ? fa3_gqa6_num_splits(batch_size, max_seqlen_k)
+                     : static_cast<int64_t>(0);
   get_function(uri, uri)(
       static_cast<int64_t>(batch_size),
       static_cast<int64_t>(num_heads_q),
@@ -251,25 +218,18 @@ torch::Tensor fa3_decode_scheduler_metadata(const torch::Device& device,
       static_cast<int64_t>(max_seqlen_k),
       /*max_seqlen_k_new=*/static_cast<int64_t>(0),
       to_ffi_tensor(cu_seqlens_q),
-      ffi::Optional<ffi::Tensor>(),
-      ffi::Optional<ffi::Tensor>(),
+      none_tensor(),
+      none_tensor(),
       to_ffi_tensor(seqused_k),
-      ffi::Optional<ffi::Tensor>(),
+      none_tensor(),
       static_cast<int64_t>(window_size_left),
       static_cast<int64_t>(window_size_right),
-      ffi::Optional<ffi::Tensor>(),
-      to_ffi_tensor(num_splits_dynamic),
-      to_ffi_tensor(batch_table),
-      to_ffi_tensor(num_m_blocks),
-      to_ffi_tensor(num_nheads_in_l2),
-      // This older four-output metadata ABI supports the same Mate split
-      // heuristic as the current contiguous ABI. Keep a runtime rollback for
-      // A/B validation and deployments with different cached artifacts.
-      /*num_splits=*/fa3_gqa6_num_splits(batch_size, max_seqlen_k),
+      none_tensor(),
+      to_ffi_tensor(metadata),
+      /*num_splits=*/metadata_num_splits,
       static_cast<int64_t>(kFa3TileM),
       static_cast<int64_t>(kFa3TileN),
       /*mp_margin=*/static_cast<int64_t>(0));
-
   return metadata;
 }
 
@@ -306,64 +266,7 @@ void fa3_decode(const torch::Tensor& query,
 
   // Match the current Mate ABI used by the GQA=8 artifact: one
   // scheduler_metadata tensor followed by the optional learnable sink.
-  if (gqa_ratio == 8) {
-    auto fwd_result =
-        get_function(uri, uri)(to_ffi_tensor(query),
-                               to_ffi_tensor(k_cache),
-                               to_ffi_tensor(v_cache),
-                               none_tensor(),
-                               none_tensor(),
-                               none_tensor(),
-                               to_ffi_tensor(cu_seqlens_q),
-                               none_tensor(),
-                               none_tensor(),
-                               none_tensor(),
-                               to_ffi_tensor(seqused_k),
-                               ffi::Optional<int64_t>(max_seqlen_q),
-                               none_int(),
-                               to_ffi_tensor(page_table),
-                               none_tensor(),
-                               none_tensor(),
-                               none_tensor(),
-                               none_tensor(),
-                               none_tensor(),
-                               none_tensor(),
-                               none_tensor(),
-                               none_tensor(),
-                               sm_scale,
-                               /*is_causal=*/true,
-                               window_left,
-                               window_right,
-                               /*attention_chunk=*/static_cast<int64_t>(0),
-                               /*softcap=*/0.0,
-                               /*mp_margin=*/static_cast<int64_t>(0),
-                               /*num_splits=*/static_cast<int64_t>(0),
-                               to_ffi_tensor(scheduler_metadata),
-                               none_tensor(),
-                               to_ffi_tensor(output),
-                               to_ffi_tensor(output_lse),
-                               /*cp_world_size=*/static_cast<int64_t>(1),
-                               /*cp_rank=*/static_cast<int64_t>(0),
-                               none_tensor(),
-                             /*skip_kernel_launch=*/false);
-
-    // Metadata-enabled FA3 writes split-K partials. Keep the returned tensors
-    // alive through combine; graph capture's FFI allocation replay owns their
-    // backing storage across subsequent graph replays.
-    combine_fa3_split_k(fwd_result,
-                        cu_seqlens_q,
-                        max_seqlen_q,
-                        scheduler_metadata,
-                        output,
-                        output_lse);
-    return;
-  }
-
-  const int64_t b = batch_size;
-  auto num_splits_dynamic = scheduler_metadata.slice(0, 0, b);
-  auto batch_table = scheduler_metadata.slice(0, b, 2 * b);
-  auto num_m_blocks = scheduler_metadata.slice(0, 2 * b, 3 * b);
-
+  // Contiguous scheduler_metadata ABI for GQA=6 and GQA=8 (Mate 0.2.7).
   auto fwd_result =
       get_function(uri, uri)(to_ffi_tensor(query),
                              to_ffi_tensor(k_cache),
@@ -395,9 +298,7 @@ void fa3_decode(const torch::Tensor& query,
                              /*softcap=*/0.0,
                              /*mp_margin=*/static_cast<int64_t>(0),
                              /*num_splits=*/static_cast<int64_t>(0),
-                             to_ffi_tensor(num_splits_dynamic),
-                             to_ffi_tensor(batch_table),
-                             to_ffi_tensor(num_m_blocks),
+                             to_ffi_tensor(scheduler_metadata),
                              none_tensor(),
                              to_ffi_tensor(output),
                              to_ffi_tensor(output_lse),
@@ -406,8 +307,6 @@ void fa3_decode(const torch::Tensor& query,
                              none_tensor(),
                              /*skip_kernel_launch=*/false);
 
-  // The older GQA=6 forward ABI exposes scheduler metadata as tensor views,
-  // but its split-K result contract matches GQA=8.
   combine_fa3_split_k(fwd_result,
                       cu_seqlens_q,
                       max_seqlen_q,
@@ -554,39 +453,7 @@ torch::Tensor fa3_prefill_scheduler_metadata(
 
   TvmffiStreamGuard stream_guard(device);
   const std::string uri = fa3_metadata_uri(gqa_ratio);
-  const int64_t b = batch_size;
-  if (gqa_ratio == 8) {
-    // The current GQA=8 Mate artifact returns one contiguous [4*B] tensor.
-    get_function(uri, uri)(static_cast<int64_t>(batch_size),
-                           static_cast<int64_t>(num_heads_q),
-                           static_cast<int64_t>(num_heads_kv),
-                           static_cast<int64_t>(head_dim_qk),
-                           static_cast<int64_t>(head_dim_vo),
-                           static_cast<int64_t>(max_seqlen_q),
-                           static_cast<int64_t>(max_seqlen_k),
-                           /*max_seqlen_k_new=*/static_cast<int64_t>(0),
-                           to_ffi_tensor(cu_seqlens_q),
-                           none_tensor(),
-                           to_ffi_tensor(cu_seqlens_k_new),
-                           to_ffi_tensor(seqused_k),
-                           none_tensor(),
-                           static_cast<int64_t>(window_size_left),
-                           static_cast<int64_t>(window_size_right),
-                           none_tensor(),
-                           to_ffi_tensor(metadata),
-                           /*num_splits=*/static_cast<int64_t>(1),
-                           static_cast<int64_t>(kFa3TileM),
-                           static_cast<int64_t>(kFa3TileN),
-                           /*mp_margin=*/static_cast<int64_t>(0));
-    return metadata;
-  }
-
-  // Keep compatibility with the older GQA=6 artifact, whose output ABI is
-  // four separate views rather than one packed tensor.
-  auto num_splits_dynamic = metadata.slice(0, 0, b);
-  auto batch_table = metadata.slice(0, b, 2 * b);
-  auto num_m_blocks = metadata.slice(0, 2 * b, 3 * b);
-  auto num_nheads_in_l2 = metadata.slice(0, 3 * b, 4 * b);
+  // Contiguous [4*B] metadata ABI for both GQA=6 and GQA=8 (Mate 0.2.7 cache).
   get_function(uri, uri)(static_cast<int64_t>(batch_size),
                          static_cast<int64_t>(num_heads_q),
                          static_cast<int64_t>(num_heads_kv),
@@ -603,10 +470,7 @@ torch::Tensor fa3_prefill_scheduler_metadata(
                          static_cast<int64_t>(window_size_left),
                          static_cast<int64_t>(window_size_right),
                          none_tensor(),
-                         to_ffi_tensor(num_splits_dynamic),
-                         to_ffi_tensor(batch_table),
-                         to_ffi_tensor(num_m_blocks),
-                         to_ffi_tensor(num_nheads_in_l2),
+                         to_ffi_tensor(metadata),
                          /*num_splits=*/static_cast<int64_t>(1),
                          static_cast<int64_t>(kFa3TileM),
                          static_cast<int64_t>(kFa3TileN),

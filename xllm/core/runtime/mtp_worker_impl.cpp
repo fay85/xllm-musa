@@ -16,6 +16,8 @@ limitations under the License.
 #include "mtp_worker_impl.h"
 
 #include <glog/logging.h>
+#include <atomic>
+#include <sstream>
 #if defined(USE_NPU)
 #include <acl/acl.h>
 #include <torch_npu/csrc/core/npu/NPUStream.h>
@@ -1458,6 +1460,48 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_prefill(
   {
     c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
     process_draft_sample_output(draft_output.sample_output);
+    // MTP_PREFILL_DEBUG: detect NaN at draft prefill (poisons KV for decode).
+    {
+      static std::atomic<int> prefill_dbg_left{4};
+      const int remaining = prefill_dbg_left.fetch_sub(1);
+      if (remaining > 0) {
+        std::ostringstream oss;
+        oss << "MTP_PREFILL_DEBUG";
+        if (draft_output.logits.defined()) {
+          auto logits = draft_output.logits.detach();
+          auto absmax = logits.abs().max().to(torch::kCPU);
+          auto am = logits.argmax(/*dim=*/-1).to(torch::kCPU).contiguous();
+          oss << " logits_shape=" << logits.sizes()
+              << " absmax=" << absmax.item<double>() << " argmax=";
+          for (int64_t i = 0; i < am.numel() && i < 4; ++i) {
+            oss << am[i].item<int64_t>() << (i + 1 < am.numel() && i + 1 < 4 ? "," : "");
+          }
+        } else {
+          oss << " logits=<undefined>";
+        }
+        if (draft_output.sample_output.embeddings.defined()) {
+          auto emb = draft_output.sample_output.embeddings.detach()
+                         .to(torch::kFloat32);
+          oss << " out_emb_norm=" << emb.norm().to(torch::kCPU).item<double>();
+        }
+        if (prefill_input.input_params.embedding.input_embedding.defined()) {
+          auto in_emb = prefill_input.input_params.embedding.input_embedding
+                            .detach()
+                            .to(torch::kFloat32);
+          oss << " in_emb_norm="
+              << in_emb.norm().to(torch::kCPU).item<double>()
+              << " in_emb_shape=" << in_emb.sizes();
+        }
+        if (prefill_input.token_ids.defined()) {
+          auto tid = prefill_input.token_ids.to(torch::kCPU).contiguous();
+          oss << " n_tokens=" << tid.numel() << " head_tokens=";
+          for (int64_t i = 0; i < tid.numel() && i < 4; ++i) {
+            oss << tid[i].item<int64_t>() << (i + 1 < tid.numel() && i + 1 < 4 ? "," : "");
+          }
+        }
+        LOG(WARNING) << oss.str();
+      }
+    }
   }
   COUNTER_ADD(speculative_execution_latency_seconds_draft,
               timer.elapsed_seconds());
@@ -1513,6 +1557,9 @@ void MTPWorkerImpl::prepare_prefill_inputs(const ForwardInput& input,
   // target's recurrent slot metadata makes MTP prefill enter a stateful path
   // it has neither a validity mask nor a recurrent cache for.
   input_params.clear_linear_attention_state();
+#if defined(USE_MUSA)
+  input_params.attn_metadata.reset();
+#endif
   auto& extra_token_ids = input_params.embedding.extra_token_ids;
 
   const torch::Tensor& token_ids = input.token_ids_host;
@@ -1657,19 +1704,28 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
           << "MTP bootstrap row index exceeds request ids";
       CHECK_LT(static_cast<int64_t>(row_idx), input.token_ids_host.numel())
           << "MTP bootstrap row index exceeds token ids";
-      // Schedule-overlap fix: a sequence's bootstrap embedding is consumed
-      // only when its host token is real. Under overlap the first decode
-      // step carries a fake token, so the bootstrap is deferred to a later
-      // batch transition, by which time this worker already holds a valid
-      // target context (with accepted-length / position correction) for the
-      // request. Re-bootstrapping then resets correction_position_offset to
-      // 0, so the next verify restores GDN checkpoint 0 instead of the
-      // actually accepted one and corrupts the linear (SSM/conv) state.
-      if (embedding_cache_
-              ->read_decode_states({embedding.embedding_ids[row_idx]},
-                                   {embedding.request_ids[row_idx]})[0]
-              .valid) {
+      // Schedule-overlap / GDN-safe bootstrap:
+      // - Defer while the host token is still the overlap fake (-1); writing
+      //   that would trip write_mtp_bootstrap_context's token_id>=0 check.
+      // - Skip only once validate has already advanced the decode context
+      //   (prev_token_id or position_offset>0 or all_draft_accepted). Prefill
+      //   write_prefill_target_context sets valid=true with position_offset=0
+      //   and prev_token_id=-1; treating bare `.valid` as "skip" dropped the
+      //   initial MTP bootstrap and left draft on a stale/empty path (accept=0).
+      if (token_ids[row_idx] < 0) {
         continue;
+      }
+      {
+        const EmbeddingCache::DecodeState bootstrap_state =
+            embedding_cache_->read_decode_states(
+                {embedding.embedding_ids[row_idx]},
+                {embedding.request_ids[row_idx]})[0];
+        if (bootstrap_state.valid &&
+            (bootstrap_state.prev_token_id >= 0 ||
+             bootstrap_state.position_offset > 0 ||
+             bootstrap_state.all_draft_accepted)) {
+          continue;
+        }
       }
       embedding_cache_->write_mtp_bootstrap_context(
           embedding.embedding_ids[row_idx],
@@ -1954,6 +2010,68 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
         broadcast_and_process_draft_sample(
             draft_outputs.back().sample_output,
             draft_sampling_params.all_greedy_sample);
+      }
+      // Snapshot draft token ids before later target/draft graph replays.
+      // MUSA graph capture may reuse output storage; without a private copy,
+      // validate() can observe zeros and drive accept rate to 0.
+      SampleOutput& draft_sample = draft_outputs.back().sample_output;
+      if (draft_sample.next_tokens.defined()) {
+        draft_sample.next_tokens = draft_sample.next_tokens.clone();
+      }
+      // MTP_ACCEPT_DEBUG: dump draft sample + logits + embedding health.
+      {
+        static std::atomic<int> draft_dbg_left{6};
+        const int remaining = draft_dbg_left.fetch_sub(1);
+        if (remaining > 0) {
+          std::ostringstream oss;
+          oss << "MTP_DRAFT_DEBUG step=" << draft_idx
+              << " pending_consumed=" << pending_output_consumed;
+          if (draft_sample.next_tokens.defined()) {
+            auto tok = draft_sample.next_tokens.to(torch::kCPU).contiguous();
+            oss << " next_tokens=";
+            for (int64_t i = 0; i < tok.numel() && i < 4; ++i) {
+              oss << tok[i].item<int64_t>() << (i + 1 < tok.numel() ? "," : "");
+            }
+            oss << " shape=" << draft_sample.next_tokens.sizes()
+                << " dtype=" << draft_sample.next_tokens.scalar_type();
+          } else {
+            oss << " next_tokens=<undefined>";
+          }
+          const ForwardOutput& dout = draft_outputs.back();
+          if (dout.logits.defined()) {
+            auto logits_cpu = dout.logits.detach();
+            auto am = logits_cpu.argmax(/*dim=*/-1).to(torch::kCPU).contiguous();
+            auto absmax = logits_cpu.abs().max().to(torch::kCPU);
+            oss << " logits_shape=" << dout.logits.sizes()
+                << " argmax=";
+            for (int64_t i = 0; i < am.numel() && i < 4; ++i) {
+              oss << am[i].item<int64_t>() << (i + 1 < am.numel() ? "," : "");
+            }
+            oss << " absmax=" << absmax.item<double>();
+          } else {
+            oss << " logits=<undefined>";
+          }
+          const torch::Tensor& emb =
+              draft_prepared[draft_idx].input_params.embedding.input_embedding;
+          if (emb.defined()) {
+            auto nrm = emb.detach().to(torch::kFloat32).norm().to(torch::kCPU);
+            oss << " emb_shape=" << emb.sizes()
+                << " emb_norm=" << nrm.item<double>();
+          } else {
+            oss << " emb=<undefined>";
+          }
+          if (draft_prepared[draft_idx].token_ids.defined()) {
+            auto tid = draft_prepared[draft_idx]
+                           .token_ids.to(torch::kCPU)
+                           .contiguous();
+            oss << " in_tokens=";
+            for (int64_t i = 0; i < tid.numel() && i < 4; ++i) {
+              oss << tid[i].item<int64_t>()
+                  << (i + 1 < tid.numel() && i + 1 < 4 ? "," : "");
+            }
+          }
+          LOG(WARNING) << oss.str();
+        }
       }
     }
     bool halt_json_draft = false;
@@ -3155,6 +3273,10 @@ void MTPWorkerImpl::submit_pending_first_draft(
         pending_draft_context_.drafts.back();
     broadcast_and_process_draft_sample(draft.output.sample_output,
                                        all_greedy_sample);
+    if (draft.output.sample_output.next_tokens.defined()) {
+      draft.output.sample_output.next_tokens =
+          draft.output.sample_output.next_tokens.clone();
+    }
   }
   finalize_pending_draft_submission();
 }
@@ -3239,6 +3361,9 @@ void MTPWorkerImpl::submit_pending_followup_drafts(
         pending_draft_context_.drafts.back().output.sample_output;
     broadcast_and_process_draft_sample(
         sample_output, next_input.sampling_params.all_greedy_sample);
+    if (sample_output.next_tokens.defined()) {
+      sample_output.next_tokens = sample_output.next_tokens.clone();
+    }
   }
   finalize_pending_draft_submission();
 }
@@ -4142,6 +4267,13 @@ void MTPWorkerImpl::prepare_draft_extend_inputs(
   input_params.embedding.linear_state_indices = torch::Tensor();
   input_params.linear_state_cache_ops.clear();
   input_params.linear_state_validity_mask.clear();
+#if defined(USE_MUSA)
+  // Target MUSA graph may stash hybrid/GDN AttentionMetadata on the shared
+  // ForwardInput. Qwen3.5 MTP draft is pure full-attention and will reuse that
+  // pointer if set (see qwen3_5_mtp_base.h), producing NaN logits. Mirror
+  // DFlash's attn_metadata.reset() so draft rebuilds its own metadata.
+  input_params.attn_metadata.reset();
+#endif
   const int32_t num_sequences = input_params.meta.num_sequences;
 
   const bool dp_enabled = parallel_args_.dp_size() > 1;
@@ -4393,6 +4525,15 @@ void MTPWorkerImpl::prepare_draft_inputs(const ForwardInput& input,
   draft_input.device_tensors_ready = false;
 
   auto& input_params = draft_input.input_params;
+  // Pure full-attention MTP draft reuses the hybrid target's ForwardInput.
+  // Without this cleanup, target GDN/linear slot metadata makes draft rows
+  // look recurrent and enter a stateful path with no draft cache (logits NaN
+  // -> draft tokens 0 -> accept=0). Mirror prepare_prefill_inputs /
+  // prepare_draft_extend_inputs / DFlash2.
+  input_params.clear_linear_attention_state();
+#if defined(USE_MUSA)
+  input_params.attn_metadata.reset();
+#endif
   input_params.embedding.input_embedding = torch::Tensor();
   const int32_t num_sequences = input_params.meta.num_sequences;
   const int32_t block_size = options_.block_size();

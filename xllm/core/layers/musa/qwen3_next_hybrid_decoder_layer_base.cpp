@@ -55,7 +55,7 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
           model_args.hidden_size(), model_args.rms_norm_eps(), options));
 
   // Initialize the feed-forward block. Qwen3.5 uses a routed block; select the
-  // MUSA MoE path only for qwen3_5_moe_text (generic Qwen3-Next MoE differs).
+  // MUSA MoE path for qwen3_5_moe / qwen3_5_moe_text / qwen3_5_moe_mtp (generic Qwen3-Next MoE differs). MTP draft rewrites model_type to qwen3_5_moe_mtp; omitting it built DenseMLP against MoE weights and produced NaN logits (accept=0).
   auto mlp_only_layers = model_args.mlp_only_layers();
   const bool is_moe_layer =
       std::count(mlp_only_layers.begin(), mlp_only_layers.end(), layer_id) ==
@@ -63,7 +63,9 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
       model_args.n_routed_experts() > 0 &&
       (layer_id + 1) % model_args.decoder_sparse_step() == 0;
   const bool use_qwen35_moe =
-      is_moe_layer && model_args.model_type() == "qwen3_5_moe_text";
+      is_moe_layer && (model_args.model_type() == "qwen3_5_moe" ||
+                       model_args.model_type() == "qwen3_5_moe_text" ||
+                       model_args.model_type() == "qwen3_5_moe_mtp");
   if (use_qwen35_moe) {
     moe_mlp_ = register_module("mlp",
                                Qwen3_5FusedMoE(model_args,

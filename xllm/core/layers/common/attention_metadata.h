@@ -92,7 +92,12 @@ struct Fa3AttentionMetadata {
   torch::Tensor paged_kv_indices_host;
   torch::Tensor paged_kv_last_page_len_host;
   bool share_fa3_scheduler_metadata = false;
+  int64_t fa3_num_splits = 0;
   mutable torch::Tensor fa3_scheduler_metadata;
+  // Piecewise / hybrid-GDN fields (hist MusaAttentionMetadata).
+  torch::Tensor gdn_cu_seq_lens;
+  torch::Tensor gdn_kkt_cu_seq_lens;
+  std::vector<int32_t> q_cu_seq_lens_host_vec;
 };
 #endif
 

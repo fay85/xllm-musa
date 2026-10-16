@@ -10,6 +10,9 @@ set(_TORCH_MUSA_KERNEL_HDRS
   musa_tvmffi_stream.h
   gdn_ops.h
   llm_decode_metadata_update.h
+  attention_runner.h
+  global_capture_instance.h
+  piecewise_graphs.h
   ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk.cuh
   ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk_sigmoid_kernels.cuh
   ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk_softmax_kernels.cuh
@@ -48,6 +51,10 @@ set(_TORCH_MUSA_KERNEL_SRCS
   fp8_act_quant.cu
   # Mate FFI helpers
   musa_tvmffi_stream.cpp
+  # Piecewise / graph capture (ported from hist xllm-git-master)
+  attention_runner.cpp
+  global_capture_instance.cpp
+  piecewise_graphs.cpp
   llm_decode_metadata_update.cu
 )
 

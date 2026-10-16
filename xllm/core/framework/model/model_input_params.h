@@ -799,6 +799,9 @@ struct ModelEmbeddingInput {
   // Precomputed shifted token ids for MTP prefill, aligned with tokens.
   torch::Tensor mtp_shifted_token_ids;
 
+  // Optional MTP token embedding override used by MUSA graph capture/replay.
+  torch::Tensor mtp_token_embedding;
+
   // Pending PD handoff bootstrap rows for the first MTP decode step.
   std::vector<int32_t> mtp_bootstrap_row_idxes;
   torch::Tensor mtp_bootstrap_embeddings;
@@ -812,6 +815,7 @@ struct ModelEmbeddingInput {
     out.request_ids = request_ids;
     out.extra_token_ids = extra_token_ids;
     out.mtp_shifted_token_ids = safe_to(mtp_shifted_token_ids, device, true);
+    out.mtp_token_embedding = safe_to(mtp_token_embedding, device, true);
     out.mtp_bootstrap_row_idxes = mtp_bootstrap_row_idxes;
     out.mtp_bootstrap_embeddings =
         safe_to(mtp_bootstrap_embeddings, device, true);
@@ -875,6 +879,9 @@ struct ParallelInput {
   std::vector<int32_t> dp_global_json_object_active;
   std::vector<int32_t> dp_is_decode;
 
+  // Per-sequence recurrent-state validity (hist MUSA graph key).
+  std::vector<int64_t> has_initial_state;
+
   DpEpPaddingData dp_ep_padding_data;
   NpuCpPlan cp_plan;
 
@@ -899,6 +906,7 @@ struct ParallelInput {
     out.dp_global_kv_max_seq_lens = dp_global_kv_max_seq_lens;
     out.dp_global_json_object_active = dp_global_json_object_active;
     out.dp_is_decode = dp_is_decode;
+    out.has_initial_state = has_initial_state;
     out.dp_ep_padding_data = dp_ep_padding_data;
     out.cp_plan = cp_plan.to(device);
 #if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
@@ -959,6 +967,9 @@ struct GraphInput {
   torch::Tensor expanded_paged_kv_indptr;
   torch::Tensor expanded_paged_kv_indices;
   torch::Tensor expanded_paged_kv_last_page_len;
+  torch::Tensor expanded_paged_kv_indptr_host;
+  torch::Tensor expanded_paged_kv_indices_host;
+  torch::Tensor expanded_paged_kv_last_page_len_host;
   torch::Tensor expanded_tiling_data;
   std::vector<int32_t> expanded_kv_seq_lens_vec;
 #if defined(USE_NPU)
@@ -995,6 +1006,10 @@ struct GraphInput {
         safe_to(expanded_paged_kv_indices, device, true);
     out.expanded_paged_kv_last_page_len =
         safe_to(expanded_paged_kv_last_page_len, device, true);
+    out.expanded_paged_kv_indptr_host = expanded_paged_kv_indptr_host;
+    out.expanded_paged_kv_indices_host = expanded_paged_kv_indices_host;
+    out.expanded_paged_kv_last_page_len_host =
+        expanded_paged_kv_last_page_len_host;
     out.expanded_tiling_data = safe_to(expanded_tiling_data, device, true);
     out.expanded_kv_seq_lens_vec = expanded_kv_seq_lens_vec;
 #if defined(USE_NPU)

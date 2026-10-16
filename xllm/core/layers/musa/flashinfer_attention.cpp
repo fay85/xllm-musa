@@ -23,6 +23,8 @@ limitations under the License.
 
 #include "framework/kv_cache/kv_cache.h"
 #include "kernels/musa/musa_ops_api.h"
+#include "kernels/musa/attention_runner.h"
+#include "kernels/musa/global_capture_instance.h"
 #include "kernels/ops_api.h"
 #include "layers/common/attention_metadata.h"
 #include "layers/cuda/flashinfer_workspace.h"
@@ -188,13 +190,26 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
         << ", v_cache=" << v_cache.sizes()
         << ", is_prefill=" << attn_metadata.is_prefill
         << ", is_chunked_prefill=" << attn_metadata.is_chunked_prefill;
-    xllm::kernel::ReshapePagedCacheParams reshape_paged_cache_params;
-    reshape_paged_cache_params.key = key;
-    reshape_paged_cache_params.value = value;
-    reshape_paged_cache_params.k_cache = k_cache;
-    reshape_paged_cache_params.v_cache = v_cache;
-    reshape_paged_cache_params.slot_mapping = attn_metadata.slot_mapping;
-    xllm::kernel::reshape_paged_cache(reshape_paged_cache_params);
+    if (xllm::kernel::musa::piecewise_graph_is_capturing()) {
+      // CRITICAL: reshape_paged_cache must not become a MUSA graph kernelNode.
+      // Capture freezes slot_mapping / grid to capture-time actual tokens;
+      // replaying a different request in the same bucket writes past the KV
+      // cache (MMU fault in reshape_paged_cache_kernel<BFloat16>). Split the
+      // graph and register a runner that rebinds live slot_mapping on replay.
+      xllm::kernel::musa::AttentionRunner runner;
+      runner.run_reshape_paged_cache_capture(
+          key, value, k_cache, v_cache, attn_metadata.slot_mapping);
+      ::xllm::runtime::musa::GlobalCaptureInstance::get_instance()
+          .register_attention_runner(std::move(runner));
+    } else {
+      xllm::kernel::ReshapePagedCacheParams reshape_paged_cache_params;
+      reshape_paged_cache_params.key = key;
+      reshape_paged_cache_params.value = value;
+      reshape_paged_cache_params.k_cache = k_cache;
+      reshape_paged_cache_params.v_cache = v_cache;
+      reshape_paged_cache_params.slot_mapping = attn_metadata.slot_mapping;
+      xllm::kernel::reshape_paged_cache(reshape_paged_cache_params);
+    }
   }
 
   const bool spec_verify_expanded_decode =
@@ -209,8 +224,38 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
     decoder_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
   } else if (attn_metadata.is_chunked_prefill) {
-    chunked_prefill_forward(
-        attn_metadata, query, key, output, output_lse, k_cache, v_cache);
+    // Mate 0.2.7 cache has FA3 fmha_fwd kernels, not the old FA2
+    // batch_prefill_with_kv_cache URI. Route supported chunked-prefill
+    // shapes through prefill_forward (paged FA3), matching build2 /
+    // xllm-git-master. Without this, prompts > chunk size fatal on the
+    // missing .so (seen at 31k / chunk 2048).
+    static const int32_t fa3_chunked_setting = [] {
+      const char* env = std::getenv("XLLM_USE_FA3");
+      if (env == nullptr) {
+        return int32_t{-1};
+      }
+      return std::string(env) == "1" ? int32_t{1} : int32_t{0};
+    }();
+    const bool fa3_chunked_shape_ok =
+        query.scalar_type() == torch::kBFloat16 &&
+        is_fa3_shape_supported(head_size_, num_heads_, num_kv_heads_) &&
+        !attn_metadata.attn_mask.defined();
+    const bool use_fa3_chunked_prefill =
+        fa3_chunked_shape_ok &&
+        (fa3_chunked_setting < 0 ? true : fa3_chunked_setting == 1);
+    if (use_fa3_chunked_prefill) {
+      prefill_forward(attn_metadata,
+                      query,
+                      key,
+                      value,
+                      output,
+                      output_lse,
+                      k_cache,
+                      v_cache);
+    } else {
+      chunked_prefill_forward(
+          attn_metadata, query, key, output, output_lse, k_cache, v_cache);
+    }
   } else {
     decoder_forward(
         attn_metadata, query, key, output, output_lse, k_cache, v_cache);
@@ -333,7 +378,8 @@ void FlashInferAttentionImpl::prefill_forward(
                "forward";
         scheduler_metadata = fa3_metadata.fa3_scheduler_metadata;
       }
-      if (!scheduler_metadata.defined()) {
+      if (!scheduler_metadata.defined() &&
+          !xllm::kernel::musa::piecewise_graph_is_capturing()) {
         scheduler_metadata = xllm::kernel::musa::fa3_prefill_scheduler_metadata(
             query.device(),
             batch_size,
@@ -357,7 +403,15 @@ void FlashInferAttentionImpl::prefill_forward(
       if (output_lse.has_value() && output_lse->defined()) {
         lse_tensor = *output_lse;
       } else {
-        const int64_t required = num_heads_ * query.size(0);
+        // During piecewise capture, cover the graph bucket (slot_mapping is
+        // padded to bucket_num_tokens) so FA3_PAGED runners survive in-bucket
+        // replay with more tokens than the capture request.
+        const int64_t lse_tokens =
+            (xllm::kernel::musa::piecewise_graph_is_capturing() &&
+             attn_metadata.slot_mapping.defined())
+                ? std::max(query.size(0), attn_metadata.slot_mapping.size(0))
+                : query.size(0);
+        const int64_t required = num_heads_ * lse_tokens;
         const auto lse_options = torch::TensorOptions()
                                      .dtype(torch::kFloat32)
                                      .device(query.device());
@@ -370,11 +424,11 @@ void FlashInferAttentionImpl::prefill_forward(
           prefill_lse_buf_ = torch::empty({required}, lse_options);
         }
         lse_tensor = prefill_lse_buf_.narrow(0, 0, required)
-                         .view({num_heads_, query.size(0)});
+                         .view({num_heads_, lse_tokens});
       }
 
       torch::Tensor query_contiguous = query.contiguous();
-      xllm::kernel::musa::fa3_prefill_paged(
+      xllm::kernel::musa::fa3_prefill_paged_with_optional_piecewise_capture(
           query_contiguous,
           k_cache,
           v_cache,
@@ -396,11 +450,19 @@ void FlashInferAttentionImpl::prefill_forward(
     }
 
     const int64_t total_q = query.size(0);
+    // During piecewise capture, LSE must cover the bucket pad (slot_mapping
+    // length), not just live tokens — replay may use more tokens in-bucket.
+    const int64_t lse_tokens =
+        (xllm::kernel::musa::piecewise_graph_is_capturing() &&
+         attn_metadata.slot_mapping.defined())
+            ? std::max(total_q, attn_metadata.slot_mapping.size(0))
+            : total_q;
     torch::Tensor lse_tensor;
     if (output_lse.has_value() && output_lse->defined()) {
       lse_tensor = *output_lse;
     } else {
-      const int64_t required = num_heads_ * total_q;
+      const int64_t required = num_heads_ * lse_tokens;
+
       const auto lse_options =
           torch::TensorOptions().dtype(torch::kFloat32).device(query.device());
       const bool need_realloc =
@@ -412,7 +474,7 @@ void FlashInferAttentionImpl::prefill_forward(
         prefill_lse_buf_ = torch::empty({required}, lse_options);
       }
       lse_tensor =
-          prefill_lse_buf_.narrow(0, 0, required).view({num_heads_, total_q});
+          prefill_lse_buf_.narrow(0, 0, required).view({num_heads_, lse_tokens});
     }
 
     torch::Tensor query_contiguous = query.contiguous();
@@ -420,7 +482,7 @@ void FlashInferAttentionImpl::prefill_forward(
     torch::Tensor value_contiguous = value.contiguous();
     torch::Tensor q_cu_seq_lens = attn_metadata.q_cu_seq_lens.contiguous();
     torch::Tensor kv_cu_seq_lens = attn_metadata.kv_cu_seq_lens.contiguous();
-    xllm::kernel::musa::fa3_prefill(
+    xllm::kernel::musa::fa3_prefill_with_optional_piecewise_capture(
         query_contiguous,
         key_contiguous,
         value_contiguous,
@@ -553,7 +615,7 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
     qo_indptr_arg = attn_metadata.qo_indptr;
   }
 
-  xllm::kernel::musa::batch_chunked_prefill(
+  xllm::kernel::musa::batch_chunked_prefill_with_optional_piecewise_capture(
       attn_metadata.plan_info->uri,
       attn_metadata.plan_info->plan_info,
       float_workspace_buffer_,
