@@ -371,11 +371,14 @@ CompositeBlockManager::LeafMap build_composite_leaves(
   if (c4 != leaves.end() && c128 != leaves.end() &&
       c4->second.participates_in_admission &&
       c128->second.participates_in_admission) {
-    CHECK_EQ(static_cast<int64_t>(c4->second.leaf->num_total_blocks()) *
+    // The estimator aligns allocated pools, including each leaf's padding
+    // block. Removing one block from unequal logical block sizes does not
+    // preserve that equality. Admission uses the minimum usable capacity.
+    CHECK_EQ(static_cast<int64_t>(c4->second.leaf->options().num_blocks()) *
                  c4->second.leaf->block_size(),
-             static_cast<int64_t>(c128->second.leaf->num_total_blocks()) *
+             static_cast<int64_t>(c128->second.leaf->options().num_blocks()) *
                  c128->second.leaf->block_size())
-        << "DSV4 C4 and C128 admission capacity must stay aligned";
+        << "DSV4 C4 and C128 allocated pool capacity must stay aligned";
   }
   return leaves;
 }

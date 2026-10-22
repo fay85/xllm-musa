@@ -58,6 +58,13 @@ class DeepseekV4PDPrefixPolicyTest : public ::testing::Test {
   StoppingChecker stopping_checker_;
 };
 
+TEST_F(DeepseekV4PDPrefixPolicyTest, CompressedAdmissionExcludesNullBlocks) {
+  BlockManagerPool pool(options(/*decode=*/true));
+  // C4 and C128 reserve one physical page each. Admission is bounded by
+  // min((1024 - 1) * 4, (32 - 1) * 128) base blocks.
+  EXPECT_EQ(pool.num_free_blocks(), (std::vector<size_t>{3968}));
+}
+
 TEST_F(DeepseekV4PDPrefixPolicyTest, DecodeDoesNotPublishUnwrittenSnapshot) {
   BlockManagerPool pool(options(/*decode=*/true));
   auto first = make_sequence();
