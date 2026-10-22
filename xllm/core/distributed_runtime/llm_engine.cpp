@@ -936,23 +936,44 @@ bool LLMEngine::pull_kv_blocks(const int32_t src_dp_size,
                                const std::vector<std::string>& src_addrs,
                                const int32_t dst_dp_rank,
                                const std::vector<KVTransferMapping>& mappings) {
-  int32_t src_world_size = src_cluster_ids.size();
-  int32_t src_tp_size = src_world_size / src_dp_size;
-  int32_t dst_world_size = options_.nnodes();
-  int32_t dst_tp_size = dst_world_size / dp_size_;
+  if (src_cluster_ids.empty() ||
+      src_cluster_ids.size() >
+          static_cast<size_t>(std::numeric_limits<int32_t>::max()) ||
+      src_addrs.size() != src_cluster_ids.size() || src_dp_size <= 0 ||
+      src_dp_rank < 0 || src_dp_rank >= src_dp_size || dp_size_ <= 0 ||
+      dst_dp_rank < 0 || dst_dp_rank >= dp_size_) {
+    LOG(ERROR) << "Invalid topology for KV cache pull.";
+    return false;
+  }
+  const int32_t src_world_size = static_cast<int32_t>(src_cluster_ids.size());
+  const int32_t dst_world_size = options_.nnodes();
+  if (src_world_size % src_dp_size != 0 || dst_world_size <= 0 ||
+      dst_world_size % dp_size_ != 0 ||
+      static_cast<size_t>(dst_world_size) > worker_clients_.size()) {
+    LOG(ERROR) << "Invalid worker counts for KV cache pull.";
+    return false;
+  }
+  const int32_t src_tp_size = src_world_size / src_dp_size;
+  const int32_t dst_tp_size = dst_world_size / dp_size_;
 
   std::vector<bool> results;
-  results.reserve(dst_tp_size);
+  results.reserve(static_cast<size_t>(dst_tp_size) * src_tp_size);
   // Pull the KV cache for all workers in the current DP rank.
   for (size_t tp_rank = 0; tp_rank < dst_tp_size; ++tp_rank) {
     int32_t dst_worker_rank = dst_dp_rank * dst_tp_size + tp_rank;
-    // Determine the ranks of the remote workers connected to the current
-    // worker.
-    // Heterogeneous TP (src_tp > dst_tp): this worker owns the heads of
-    // every source TP rank congruent to it modulo dst_tp, so it must read
-    // each of them; the per-peer incoming ReshardPlan selects the regions.
+#if defined(USE_MUSA)
+    // Linking negotiated every source worker. Submit the request to the
+    // entire source DP group so the negotiated plans choose shard owners;
+    // known PLAN_ONLY peers complete without moving bytes.
+    std::vector<int32_t> src_tp_ranks;
+    src_tp_ranks.reserve(src_tp_size);
+    for (int32_t source_rank = 0; source_rank < src_tp_size; ++source_rank) {
+      src_tp_ranks.emplace_back(source_rank);
+    }
+#else
     const std::vector<int32_t> src_tp_ranks = get_src_tp_ranks(
         static_cast<int32_t>(tp_rank), src_tp_size, dst_tp_size);
+#endif
     CHECK(!src_tp_ranks.empty())
         << "no source TP rank for dst tp_rank " << tp_rank;
     if (src_tp_ranks.size() == 1) {

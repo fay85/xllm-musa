@@ -78,6 +78,9 @@ class MooncakeTransferEngineCore {
   bool has_outgoing_plan(const std::string& remote_addr,
                          CacheNamespace cache_namespace) const;
   bool has_reshard_plan(const std::string& remote_addr) const;
+  bool is_cache_peer_current(const WorkerCacheLayoutManifest& local_manifest,
+                             const WorkerCacheLayoutManifest& peer_manifest,
+                             CachePeerMode mode) const;
   Status bind_outgoing_regions(const std::string& remote_addr,
                                const std::vector<KVTransferMapping>& mappings,
                                CacheNamespace cache_namespace,
@@ -247,12 +250,17 @@ class MooncakeTransferEngine {
                                CachePeerMode mode);
   virtual bool set_local_peer(const WorkerCacheLayoutManifest& manifest,
                               CachePeerMode mode);
+  virtual bool is_cache_peer_current(
+      const WorkerCacheLayoutManifest& local_manifest,
+      const WorkerCacheLayoutManifest& peer_manifest,
+      CachePeerMode mode) const;
 
  private:
   // Preserve the exact identity used by idempotent ABSENT requests.
   struct LocalCachePeer {
     WorkerCacheLayoutManifest local_manifest;
     WorkerCacheLayoutManifest remote_manifest;
+    CachePeerMode mode = CachePeerMode::ABSENT;
     std::shared_ptr<const ReshardPlanTemplate> incoming_plan;
   };
 

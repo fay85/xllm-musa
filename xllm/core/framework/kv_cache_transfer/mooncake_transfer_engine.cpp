@@ -606,6 +606,22 @@ bool MooncakeTransferEngineCore::has_reshard_plan(
   return cache_peer_links_.find(remote_addr) != cache_peer_links_.end();
 }
 
+bool MooncakeTransferEngineCore::is_cache_peer_current(
+    const WorkerCacheLayoutManifest& local_manifest,
+    const WorkerCacheLayoutManifest& peer_manifest,
+    CachePeerMode mode) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto peer = cache_peer_links_.find(peer_manifest.addr);
+  return local_cache_layout_.has_value() &&
+         local_cache_layout_->incarnation_id == local_manifest.incarnation_id &&
+         local_cache_layout_->layout_generation ==
+             local_manifest.layout_generation &&
+         peer != cache_peer_links_.end() && peer->second.mode == mode &&
+         peer->second.destination_incarnation == peer_manifest.incarnation_id &&
+         peer->second.destination_layout_generation ==
+             peer_manifest.layout_generation;
+}
+
 Status MooncakeTransferEngineCore::bind_outgoing_regions(
     const std::string& remote_addr,
     const std::vector<KVTransferMapping>& mappings,
@@ -814,6 +830,13 @@ bool MooncakeTransferEngine::set_local_peer(
   return true;
 }
 
+bool MooncakeTransferEngine::is_cache_peer_current(
+    const WorkerCacheLayoutManifest& local_manifest,
+    const WorkerCacheLayoutManifest& peer_manifest,
+    CachePeerMode mode) const {
+  return core_.is_cache_peer_current(local_manifest, peer_manifest, mode);
+}
+
 bool MooncakeTransferEngine::open_session(const uint64_t cluster_id,
                                           const std::string& remote_addr) {
   if (!core_.open_session(cluster_id, remote_addr)) {
@@ -896,8 +919,14 @@ bool MooncakeTransferEngine::link_sessions(
 
   ReshardPlanner planner;
   std::vector<size_t> selected_indices;
+#if defined(USE_MUSA)
+  std::vector<ReshardPlanTemplate> selected_plans;
+  const Status selection = planner.build_incoming_plans(
+      remote_manifests, *local_manifest, &selected_indices, &selected_plans);
+#else
   const Status selection = planner.select_sources(
       remote_manifests, *local_manifest, &selected_indices);
+#endif
   if (!selection.ok()) {
     LOG(ERROR) << "Remote cache layouts cannot cover local destination: "
                << selection.message();
@@ -910,18 +939,8 @@ bool MooncakeTransferEngine::link_sessions(
   std::vector<std::shared_ptr<const ReshardPlanTemplate>> incoming_plans(
       remote_manifests.size());
   for (size_t index : selected_indices) {
-    auto plan = std::make_shared<ReshardPlanTemplate>();
-    const Status plan_status =
-        planner.build_outgoing_plan(remote_manifests[index],
-                                    *local_manifest,
-                                    plan.get(),
-                                    /*include_replicas=*/true);
-    if (!plan_status.ok()) {
-      LOG(ERROR) << "Failed to plan incoming KV transfer: "
-                 << plan_status.message();
-      return false;
-    }
-    incoming_plans[index] = std::move(plan);
+    incoming_plans[index] =
+        std::make_shared<ReshardPlanTemplate>(std::move(selected_plans[index]));
   }
 #endif
   bool linked = true;
@@ -962,6 +981,9 @@ bool MooncakeTransferEngine::link_sessions(
     LocalCachePeer cache_peer;
     cache_peer.local_manifest = *local_manifest;
     cache_peer.remote_manifest = remote_manifests[index];
+    cache_peer.mode = selected_set.find(index) != selected_set.end()
+                          ? CachePeerMode::ACTIVE
+                          : CachePeerMode::PLAN_ONLY;
 #if defined(USE_MUSA)
     cache_peer.incoming_plan = std::move(incoming_plans[index]);
 #endif
@@ -1002,14 +1024,29 @@ Status MooncakeTransferEngine::bind_incoming_regions(
     CacheNamespace cache_namespace,
     int64_t layer_id,
     std::vector<ByteRegion>* regions) {
+  if (regions == nullptr) {
+    return Status(StatusCode::INVALID_ARGUMENT,
+                  "incoming KV region output must not be null");
+  }
   std::shared_ptr<const ReshardPlanTemplate> plan;
   {
     std::lock_guard<std::mutex> lock(session_mutex_);
     const auto peer = cache_peers_.find(remote_addr);
-    if (peer == cache_peers_.end() || !peer->second.incoming_plan ||
-        !core_.has_reshard_plan(remote_addr)) {
+    if (peer == cache_peers_.end() ||
+        !is_cache_peer_current(peer->second.local_manifest,
+                               peer->second.remote_manifest,
+                               peer->second.mode)) {
       return Status(StatusCode::UNAVAILABLE,
-                    "incoming KV peer has no negotiated transfer plan");
+                    "incoming KV peer is not currently negotiated");
+    }
+    if (peer->second.mode == CachePeerMode::PLAN_ONLY) {
+      regions->clear();
+      return Status();
+    }
+    if (peer->second.mode != CachePeerMode::ACTIVE ||
+        !peer->second.incoming_plan) {
+      return Status(StatusCode::UNAVAILABLE,
+                    "active incoming KV peer has no transfer plan");
     }
     plan = peer->second.incoming_plan;
   }

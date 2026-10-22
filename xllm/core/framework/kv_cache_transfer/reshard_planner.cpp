@@ -1073,16 +1073,17 @@ Status bind_regions(
   return Status();
 }
 
-}  // namespace
+struct SourceSelection {
+  std::vector<size_t> indices;
+  SpanWriters homogeneous_writers = SpanWriters::declared();
+  bool collapse_partitions = false;
+};
 
-Status ReshardPlanner::select_sources(
+Status select_source_writers(
     const std::vector<WorkerCacheLayoutManifest>& sources,
     const WorkerCacheLayoutManifest& destination,
-    std::vector<size_t>* selected_indices) const {
-  if (selected_indices == nullptr) {
-    return invalid("selected source index output must not be null");
-  }
-  selected_indices->clear();
+    SourceSelection* selection) {
+  selection->indices.clear();
   const Status destination_status = validate_worker_cache_layout(destination);
   if (!destination_status.ok()) {
     return invalid("invalid destination layout: " +
@@ -1154,7 +1155,28 @@ Status ReshardPlanner::select_sources(
   if (!coverage.ok()) {
     return coverage;
   }
-  selected_indices->swap(writers);
+  selection->indices.swap(writers);
+  selection->homogeneous_writers = std::move(homogeneous_writers);
+  selection->collapse_partitions = collapse_partitions;
+  return Status();
+}
+
+}  // namespace
+
+Status ReshardPlanner::select_sources(
+    const std::vector<WorkerCacheLayoutManifest>& sources,
+    const WorkerCacheLayoutManifest& destination,
+    std::vector<size_t>* selected_indices) const {
+  if (selected_indices == nullptr) {
+    return invalid("selected source index output must not be null");
+  }
+  selected_indices->clear();
+  SourceSelection selection;
+  const Status status = select_source_writers(sources, destination, &selection);
+  if (!status.ok()) {
+    return status;
+  }
+  *selected_indices = std::move(selection.indices);
   return Status();
 }
 
@@ -1221,14 +1243,11 @@ Status select_replicated_index_source_page(
   return Status();
 }
 
-}  // namespace
-
-Status ReshardPlanner::build_outgoing_plan(
-    const WorkerCacheLayoutManifest& source,
-    const WorkerCacheLayoutManifest& destination,
-    ReshardPlanTemplate* plan,
-    bool include_replicas,
-    int32_t source_cp_index_write_mode) const {
+Status build_outgoing_plan_impl(const WorkerCacheLayoutManifest& source,
+                                const WorkerCacheLayoutManifest& destination,
+                                ReshardPlanTemplate* plan,
+                                const SpanWriters& writers,
+                                int32_t source_cp_index_write_mode) {
   if (plan == nullptr) {
     return invalid("reshard plan output must not be null");
   }
@@ -1248,14 +1267,7 @@ Status ReshardPlanner::build_outgoing_plan(
 
   std::vector<AtomicLogicalRegion> source_regions;
   std::vector<AtomicLogicalRegion> destination_regions;
-  // The data plane is built for a peer the link already selected, so with
-  // `include_replicas` the source owns everything it holds -- including replica
-  // copies of a replicated tensor. Filtering by the declared owner would
-  // silently drop those bytes for every non-owning KV-split partition.
-  expand_manifest(source,
-                  include_replicas ? SpanWriters::everything()
-                                   : source_writers(source.coordinates),
-                  &source_regions);
+  expand_manifest(source, writers, &source_regions);
   expand_manifest(destination, SpanWriters::everything(), &destination_regions);
   const RegionGroups source_groups = group_regions(source_regions);
   const RegionGroups destination_groups = group_regions(destination_regions);
@@ -1324,6 +1336,58 @@ Status ReshardPlanner::build_outgoing_plan(
   compact_planned_regions(&candidates, &plan->regions);
   return select_replicated_index_source_page(
       source, source_cp_index_write_mode, plan);
+}
+
+}  // namespace
+
+Status ReshardPlanner::build_outgoing_plan(
+    const WorkerCacheLayoutManifest& source,
+    const WorkerCacheLayoutManifest& destination,
+    ReshardPlanTemplate* plan,
+    bool include_replicas,
+    int32_t source_cp_index_write_mode) const {
+  return build_outgoing_plan_impl(source,
+                                  destination,
+                                  plan,
+                                  include_replicas
+                                      ? SpanWriters::everything()
+                                      : source_writers(source.coordinates),
+                                  source_cp_index_write_mode);
+}
+
+Status ReshardPlanner::build_incoming_plans(
+    const std::vector<WorkerCacheLayoutManifest>& sources,
+    const WorkerCacheLayoutManifest& destination,
+    std::vector<size_t>* selected_indices,
+    std::vector<ReshardPlanTemplate>* plans) const {
+  if (selected_indices == nullptr || plans == nullptr) {
+    return invalid("incoming plan outputs must not be null");
+  }
+  selected_indices->clear();
+  plans->clear();
+  SourceSelection selection;
+  const Status selection_status =
+      select_source_writers(sources, destination, &selection);
+  if (!selection_status.ok()) {
+    return selection_status;
+  }
+  std::vector<ReshardPlanTemplate> incoming_plans(sources.size());
+  for (size_t index : selection.indices) {
+    const WorkerCacheLayoutManifest& source = sources[index];
+    const Status plan_status = build_outgoing_plan_impl(
+        source,
+        destination,
+        &incoming_plans[index],
+        selection.collapse_partitions ? source_writers(source.coordinates)
+                                      : selection.homogeneous_writers,
+        kCpIndexWriteModeReplicated);
+    if (!plan_status.ok()) {
+      return plan_status;
+    }
+  }
+  *selected_indices = std::move(selection.indices);
+  *plans = std::move(incoming_plans);
+  return Status();
 }
 
 Status RequestRegionBinder::bind(const ReshardPlanTemplate& plan,

@@ -99,6 +99,14 @@ class ReshardPlanner final {
                         const WorkerCacheLayoutManifest& destination,
                         std::vector<size_t>* selected_indices) const;
 
+  // Incoming plans use the same per-span writers as source selection. Plans
+  // are indexed like sources; unselected sources have no regions.
+  Status build_incoming_plans(
+      const std::vector<WorkerCacheLayoutManifest>& sources,
+      const WorkerCacheLayoutManifest& destination,
+      std::vector<size_t>* selected_indices,
+      std::vector<ReshardPlanTemplate>* plans) const;
+
   Status validate_destination_coverage(
       const std::vector<WorkerCacheLayoutManifest>& sources,
       const WorkerCacheLayoutManifest& destination) const;
