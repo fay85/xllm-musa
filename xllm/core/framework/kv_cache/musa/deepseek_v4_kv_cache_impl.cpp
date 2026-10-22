@@ -15,11 +15,60 @@ limitations under the License.
 
 #include "framework/kv_cache/musa/deepseek_v4_kv_cache_impl.h"
 
+#include <limits>
 #include <utility>
 #include <vector>
 
 namespace xllm {
 namespace {
+
+KVCacheTensor describe_model1_transfer_tensor(const torch::Tensor& tensor,
+                                              BlockType block_type) {
+  CHECK_EQ(tensor.scalar_type(), torch::kUInt8);
+  CHECK_EQ(tensor.dim(), 4);
+  CHECK_GT(tensor.size(0), 0);
+  CHECK_GT(tensor.size(1), 0);
+  CHECK_EQ(tensor.size(2), 1);
+  CHECK_EQ(tensor.size(3), kMusaDsv4Model1BytesPerToken);
+  CHECK_LE(
+      tensor.size(1),
+      (std::numeric_limits<int64_t>::max() - kMusaDsv4Model1PageAlignment + 1) /
+          kMusaDsv4Model1BytesPerToken);
+  const int64_t page_stride = musa_dsv4_model1_page_stride(tensor.size(1));
+  CHECK_EQ(tensor.stride(0), page_stride);
+  CHECK_EQ(tensor.stride(1), kMusaDsv4Model1BytesPerToken);
+  CHECK_EQ(tensor.stride(2), kMusaDsv4Model1BytesPerToken);
+  CHECK_EQ(tensor.stride(3), 1);
+  CHECK_GE(tensor.storage_offset(), 0);
+  const uint64_t storage_offset =
+      static_cast<uint64_t>(tensor.storage_offset());
+  const uint64_t storage_bytes = tensor.storage().nbytes();
+  CHECK_LE(storage_offset, storage_bytes);
+  CHECK_LE(
+      static_cast<uint64_t>(tensor.size(0)),
+      (storage_bytes - storage_offset) / static_cast<uint64_t>(page_stride))
+      << "Model1 transfer view must include the final page padding";
+
+  // The kernel view omits alignment bytes at the end of each page. Transfer
+  // the complete physical page without copying or changing that kernel view.
+  // Model1 stores the shared MLA latent row on every TP rank, so a page is
+  // one replicated resource rather than a head-sharded VALUE tensor.
+  KVCacheTensor cache_tensor{
+      KVCacheTensorRole::VALUE,
+      tensor.as_strided({tensor.size(0), page_stride}, {page_stride, 1}),
+      cache_group_id(block_type)};
+  LogicalSpan span;
+  span.logical_tensor = cache_tensor.role.to_string();
+  span.bytes_per_region = static_cast<uint64_t>(page_stride);
+  span.owner_tp_rank = 0;
+  LogicalShardDescriptor descriptor;
+  descriptor.kind = LogicalShardKind::REPLICATED;
+  descriptor.resource_scope = CacheResourceScope::BLOCK;
+  descriptor.spans.reserve(1);
+  descriptor.spans.emplace_back(std::move(span));
+  cache_tensor.shard_descriptor = std::move(descriptor);
+  return cache_tensor;
+}
 
 torch::Tensor swap_tensor_blocks(const torch::Tensor& tensor,
                                  const torch::Tensor& src,
@@ -81,12 +130,18 @@ class MusaDeepSeekV4KVCacheImpl final : public KVCacheImpl {
             KVCacheTensor{role, tensor, cache_group_id(block_type)});
       }
     };
+    auto add_model1_tensor = [&tensors](const torch::Tensor& tensor,
+                                        BlockType block_type) {
+      if (tensor.defined() && tensor.numel() > 0) {
+        tensors.emplace_back(
+            describe_model1_transfer_tensor(tensor, block_type));
+      }
+    };
 
     add_tensor(KVCacheTensorRole::WINDOW, swa_cache_, BlockType::SWA);
-    add_tensor(KVCacheTensorRole::VALUE, mate_extra_k_cache_, BlockType::SWA);
+    add_model1_tensor(mate_extra_k_cache_, BlockType::SWA);
     add_tensor(KVCacheTensorRole::KEY, key_cache_, compressed_block_type_);
-    add_tensor(
-        KVCacheTensorRole::VALUE, mate_key_cache_, compressed_block_type_);
+    add_model1_tensor(mate_key_cache_, compressed_block_type_);
     add_tensor(KVCacheTensorRole::INDEX, index_cache_, compressed_block_type_);
     add_tensor(KVCacheTensorRole::INDEX_SCALE,
                indexer_cache_scale_,

@@ -509,6 +509,12 @@ void record_group_block_capacities(const std::vector<KVCache>& kv_caches,
   const int64_t token_axis = tensor_layout->head_major_layout ? 2 : 1;
   for (const KVCache& cache : kv_caches) {
     for (const KVCacheTensor& cache_tensor : cache.get_cache_tensors()) {
+      // A producer-supplied descriptor can expose an opaque physical page
+      // without a token axis, such as the padded MUSA Model1 byte view. Its
+      // shape must not redefine the token span of ordinary K/V in the pool.
+      if (cache_tensor.shard_descriptor.has_value()) {
+        continue;
+      }
       // Only the K/V roles define their pool's token-axis span: compressed
       // KPool gives INDEX and INDEX_SCALE a narrower span than the K/V
       // tensors sharing their group, and their geometry is already covered
