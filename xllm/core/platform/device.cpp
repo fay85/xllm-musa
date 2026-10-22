@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "device.h"
+#include "core/platform/device.h"
 
 #include "core/framework/config/model_config.h"
 #include "core/platform/platform.h"
@@ -47,7 +47,9 @@ namespace xllm {
 
 Device::Device(const torch::Device& device) : device_(device) {
 #if defined(USE_CUDA) || defined(USE_MUSA)
-  Platform::init_capabilities(device.index());
+  if (device.type() == Platform::type_torch()) {
+    Platform::init_capabilities(device.index());
+  }
 #endif
 }
 
