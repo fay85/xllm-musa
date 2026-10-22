@@ -690,12 +690,12 @@ void XTensorAllocator::record_weight_fallback_allocation(
       if (sorted_pages[i] == sorted_pages[i - 1] + 1) {
         seg_size += page_size;
       } else {
-        tensors.weight_segments.emplace_back(seg_offset, seg_size);
+        tensors.weight_segments.emplace_back(WeightSegment{seg_offset, seg_size});
         seg_offset = static_cast<uint64_t>(sorted_pages[i]) * page_size;
         seg_size = page_size;
       }
     }
-    tensors.weight_segments.emplace_back(seg_offset, seg_size);
+    tensors.weight_segments.emplace_back(WeightSegment{seg_offset, seg_size});
   }
 
   LOG(INFO) << "XTensorAllocator: recorded XTensor allocation for model "

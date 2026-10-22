@@ -57,7 +57,7 @@ std::pair<int32_t, int32_t> compute_emb_range(int32_t start_pos,
 
 std::vector<int32_t> normalize_to_per_seq_lens(
     const std::vector<int32_t>& seq_lens) {
-#if defined(USE_NPU) || defined(USE_MUSA)
+#if defined(USE_NPU)
   return seq_lens;
 #else
   // Other backends pass cumulative sequence lengths.
@@ -303,6 +303,11 @@ EncoderEmbeddingGatherVisitor::EncoderEmbeddingGatherVisitor(
       total_scheduled_tokens_(std::accumulate(per_seq_scheduled_lens_.begin(),
                                               per_seq_scheduled_lens_.end(),
                                               0)) {
+  LOG(INFO) << "MM_TRACE raw_context=" << seq_lens.size()
+            << " raw_scheduled=" << scheduled_seq_lens.size()
+            << " context=" << per_seq_context_lens_.size()
+            << " scheduled=" << per_seq_scheduled_lens_.size()
+            << " total_scheduled=" << total_scheduled_tokens_;
   CHECK_EQ(per_seq_context_lens_.size(), per_seq_scheduled_lens_.size())
       << "sequence length counts do not match";
   for (size_t seq_index = 0; seq_index < per_seq_context_lens_.size();

@@ -4,7 +4,7 @@ Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
 
-    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
 
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
@@ -14,10 +14,14 @@ limitations under the License.
 ==============================================================================*/
 
 #include <glog/logging.h>
+#include <musa_runtime.h>
 #include <tvm/ffi/extra/stl.h>
 #include <unistd.h>
 
+#include <algorithm>
+#include <array>
 #include <cstdlib>
+#include <optional>
 #include <string>
 #include <tuple>
 
@@ -27,36 +31,338 @@ limitations under the License.
 namespace xllm::kernel::musa {
 namespace {
 
-constexpr const char* kGemmOpsUri = "gemm_ops";
 constexpr const char* kTopkUri = "xllm_musa_topk_gating";
+constexpr const char* kMateGemmArtifactId =
+    "fbd1a6df72047350033cb4c524dd8145b8f18698";
+
+int64_t get_musa_mp_count(int32_t device_id) {
+  thread_local int32_t cached_device_id = -1;
+  thread_local int64_t cached_mp_count = 0;
+  if (cached_device_id == device_id && cached_mp_count > 0) {
+    return cached_mp_count;
+  }
+
+  musaDeviceProp properties;
+  const musaError_t error = musaGetDeviceProperties(&properties, device_id);
+  CHECK_EQ(error, musaSuccess)
+      << "Failed to get MUSA properties for device " << device_id << ": "
+      << musaGetErrorString(error);
+  cached_device_id = device_id;
+  cached_mp_count = properties.multiProcessorCount;
+  return cached_mp_count;
+}
+
+struct MateMubinGemmLauncher {
+  const char* kernel_name;
+  int64_t tile_m;
+  int64_t tile_n;
+  double base_score;
+  bool tme_cache_hint_b;
+};
+
+constexpr std::array<MateMubinGemmLauncher, 3> kContiguousFp8MubinLaunchers = {{
+    {"e4m3e4m3bf16bf16ssgemm_gm1_nt_tce_512_"
+     "256x256B128_epilogue_group_block_128_persis_stage2_stable",
+     256,
+     256,
+     1.0,
+     false},
+    {"e4m3e4m3bf16bf16ssgemm_gm1_nt_tce_256_"
+     "128x256B128_epilogue_group_block_128_persis_stage4_stable",
+     128,
+     256,
+     0.8,
+     false},
+    {"e4m3e4m3bf16bf16ssgemm_gm1_nt_tce_256_"
+     "256x128B128_epilogue_group_block_128_persis_stage4_stable",
+     256,
+     128,
+     0.8,
+     false},
+}};
+constexpr std::array<MateMubinGemmLauncher, 3> kContiguousBf16MubinLaunchers = {
+    {
+        {"bf16bf16bf16bf16ssgemm_gm1_nt_tce_512_"
+         "256x256B128_epilogue_persis_stage2_stable",
+         256,
+         256,
+         1.0,
+         false},
+        {"bf16bf16bf16bf16ssgemm_gm1_nt_tce_256_"
+         "128x256B128_epilogue_persis_stage4_stable",
+         128,
+         256,
+         0.8,
+         false},
+        {"bf16bf16bf16bf16ssgemm_gm1_nt_tce_256_"
+         "256x128B128_epilogue_persis_stage4_stable",
+         256,
+         128,
+         0.8,
+         false},
+    }};
+
+constexpr std::array<MateMubinGemmLauncher, 4> kRaggedFp8MubinLaunchers = {{
+    {"e4m3e4m3bf16bf16ssgemm_gm3_nt_tce_256_"
+     "128x256B128_epilogue_group_block_128_persis_stage4_stable",
+     128,
+     256,
+     0.0,
+     false},
+    {"e4m3e4m3bf16bf16ssgemm_gm3_nt_tce_256_"
+     "128x256B128_epilogue_group_block_128_persis_stage4_btmenc_stable",
+     128,
+     256,
+     0.0,
+     true},
+    {"e4m3e4m3bf16bf16ssgemm_gm3_nt_tce_512_"
+     "256x256B128_epilogue_group_block_128_persis_stage2_stable",
+     256,
+     256,
+     0.0,
+     false},
+    {"e4m3e4m3bf16bf16ssgemm_gm3_nt_tce_512_"
+     "256x256B128_epilogue_group_block_128_persis_stage2_btmenc_stable",
+     256,
+     256,
+     0.0,
+     true},
+}};
+
+constexpr std::array<MateMubinGemmLauncher, 4> kRaggedBf16MubinLaunchers = {{
+    {"bf16bf16bf16bf16ssgemm_gm3_nt_tce_256_"
+     "128x256B128_epilogue_persis_stage4_stable",
+     128,
+     256,
+     0.0,
+     false},
+    {"bf16bf16bf16bf16ssgemm_gm3_nt_tce_256_"
+     "128x256B128_epilogue_persis_stage4_btmenc_stable",
+     128,
+     256,
+     0.0,
+     true},
+    {"bf16bf16bf16bf16ssgemm_gm3_nt_tce_512_"
+     "256x256B128_epilogue_persis_stage2_stable",
+     256,
+     256,
+     0.0,
+     false},
+    {"bf16bf16bf16bf16ssgemm_gm3_nt_tce_512_"
+     "256x256B128_epilogue_persis_stage2_btmenc_stable",
+     256,
+     256,
+     0.0,
+     true},
+}};
+
+constexpr std::array<MateMubinGemmLauncher, 3> kMaskedFp8MubinLaunchers = {{
+    {"e4m3e4m3bf16bf16ssgemm_gm4_nt_tce_256_"
+     "128x256B128_epilogue_group_block_128_persis_stage4_btmenc_stable",
+     128,
+     256,
+     0.0,
+     true},
+    {"e4m3e4m3bf16bf16ssgemm_gm4_nt_tce_512_"
+     "256x256B128_epilogue_group_block_128_persis_stage2_btmenc_stable",
+     256,
+     256,
+     0.0,
+     true},
+    {"e4m3e4m3bf16bf16ssgemm_gm4_nt_tce_512_"
+     "256x256B128_epilogue_group_block_128_persis_stage2_stable",
+     256,
+     256,
+     0.0,
+     false},
+}};
+
+constexpr std::array<MateMubinGemmLauncher, 3> kMaskedBf16MubinLaunchers = {{
+    {"bf16bf16bf16bf16ssgemm_gm4_nt_tce_256_"
+     "128x256B128_epilogue_persis_stage4_btmenc_stable",
+     128,
+     256,
+     0.0,
+     true},
+    {"bf16bf16bf16bf16ssgemm_gm4_nt_tce_512_"
+     "256x256B128_epilogue_persis_stage2_btmenc_stable",
+     256,
+     256,
+     0.0,
+     true},
+    {"bf16bf16bf16bf16ssgemm_gm4_nt_tce_512_"
+     "256x256B128_epilogue_persis_stage2_stable",
+     256,
+     256,
+     0.0,
+     false},
+}};
+
+int64_t ceil_div(int64_t dividend, int64_t divisor) {
+  CHECK_GE(dividend, 0);
+  CHECK_GT(divisor, 0);
+  return (dividend + divisor - 1) / divisor;
+}
+
+double estimate_contiguous_mubin_score(const MateMubinGemmLauncher& launcher,
+                                       int64_t m,
+                                       int64_t n,
+                                       int64_t num_experts,
+                                       int64_t total_mp_count) {
+  const int64_t average_group_m = m / num_experts;
+  const int64_t upper_average_group_m =
+      static_cast<int64_t>(static_cast<double>(average_group_m) * 1.04);
+  const int64_t lower_average_group_m =
+      static_cast<int64_t>(static_cast<double>(average_group_m) * 0.96);
+  const int64_t deviate_group_count = num_experts / 3;
+  const int64_t lower_group_tiles =
+      ceil_div(lower_average_group_m, launcher.tile_m);
+  const int64_t upper_group_tiles =
+      ceil_div(upper_average_group_m, launcher.tile_m);
+  const int64_t group_tiles =
+      lower_group_tiles * deviate_group_count +
+      upper_group_tiles * (num_experts - deviate_group_count);
+  const int64_t n_tiles = ceil_div(n, launcher.tile_n);
+  const int64_t total_tiles = std::max<int64_t>(group_tiles * n_tiles, 1);
+  const int64_t waves =
+      std::max<int64_t>(ceil_div(total_tiles, total_mp_count), 1);
+  return launcher.base_score * static_cast<double>(m) * static_cast<double>(n) /
+         (static_cast<double>(launcher.tile_m) *
+          static_cast<double>(launcher.tile_n) * static_cast<double>(waves) *
+          static_cast<double>(total_mp_count));
+}
+
+template <size_t Size>
+size_t select_contiguous_mubin_launcher(
+    const std::array<MateMubinGemmLauncher, Size>& launchers,
+    int64_t m,
+    int64_t n,
+    int64_t num_experts,
+    int64_t total_mp_count) {
+  CHECK_GT(m, 0);
+  CHECK_GT(n, 0);
+  CHECK_GT(num_experts, 0);
+  CHECK_GT(total_mp_count, 0);
+  auto best = std::max_element(
+      launchers.begin(),
+      launchers.end(),
+      [=](const MateMubinGemmLauncher& lhs, const MateMubinGemmLauncher& rhs) {
+        return estimate_contiguous_mubin_score(
+                   lhs, m, n, num_experts, total_mp_count) <
+               estimate_contiguous_mubin_score(
+                   rhs, m, n, num_experts, total_mp_count);
+      });
+  CHECK(best != launchers.end());
+  return static_cast<size_t>(std::distance(launchers.begin(), best));
+}
+
+template <size_t Size>
+size_t select_ragged_mubin_launcher(
+    const std::array<MateMubinGemmLauncher, Size>& launchers,
+    int64_t m,
+    int64_t num_experts,
+    int64_t alignment) {
+  CHECK_GT(num_experts, 0);
+  CHECK(alignment == 128 || alignment == 256);
+  const bool use_tme_cache_hint = m <= 192 * num_experts;
+  auto selected =
+      std::find_if(launchers.begin(),
+                   launchers.end(),
+                   [=](const MateMubinGemmLauncher& launcher) {
+                     return launcher.tile_m == alignment &&
+                            launcher.tme_cache_hint_b == use_tme_cache_hint;
+                   });
+  CHECK(selected != launchers.end());
+  return static_cast<size_t>(std::distance(launchers.begin(), selected));
+}
+
+template <size_t Size>
+size_t select_masked_mubin_launcher(
+    const std::array<MateMubinGemmLauncher, Size>& launchers,
+    int64_t expected_tokens) {
+  CHECK_GE(expected_tokens, 0);
+  const int64_t selected_m = expected_tokens <= 128 ? 128 : 256;
+  const bool use_tme_cache_hint = selected_m == 128 || expected_tokens <= 256;
+  auto selected =
+      std::find_if(launchers.begin(),
+                   launchers.end(),
+                   [=](const MateMubinGemmLauncher& launcher) {
+                     return launcher.tile_m == selected_m &&
+                            launcher.tme_cache_hint_b == use_tme_cache_hint;
+                   });
+  CHECK(selected != launchers.end());
+  return static_cast<size_t>(std::distance(launchers.begin(), selected));
+}
+
+template <size_t Size>
+std::array<std::string, Size> resolve_mubin_paths(
+    const std::array<MateMubinGemmLauncher, Size>& launchers) {
+  const char* mubin_root_env = std::getenv("MATE_MUBIN_DIR");
+  CHECK(mubin_root_env != nullptr && mubin_root_env[0] != '\0')
+      << "MATE_MUBIN_DIR must point to the Mate 0.2.7 MUBIN root.";
+  const std::string gemm_root = std::string(mubin_root_env) + "/gemm/" +
+                                kMateGemmArtifactId + "/mubin/";
+
+  std::array<std::string, Size> paths;
+  for (size_t index = 0; index < launchers.size(); ++index) {
+    paths[index] = gemm_root + launchers[index].kernel_name + ".o";
+    CHECK_EQ(::access(paths[index].c_str(), R_OK), 0)
+        << "Mate 0.2.7 GEMM MUBIN object is unavailable: " << paths[index];
+  }
+  return paths;
+}
+
+void launch_mubin_gemm(const MateMubinGemmLauncher& launcher,
+                       const std::string& object_path,
+                       const torch::Tensor& input,
+                       const torch::Tensor& weights,
+                       const torch::Tensor& output,
+                       const std::optional<torch::Tensor>& input_scale,
+                       const std::optional<torch::Tensor>& weight_scale,
+                       const torch::Tensor& token_info,
+                       int64_t target_mp_count) {
+  const std::string launcher_uri = "run_" + std::string(launcher.kernel_name);
+  get_function(launcher_uri, launcher_uri)(
+      object_path,
+      to_ffi_tensor_view(input),
+      to_ffi_tensor_view(weights),
+      to_ffi_tensor_view(output),
+      to_ffi_optional_tensor(input_scale),
+      to_ffi_optional_tensor(weight_scale),
+      /*scale_b1=*/to_ffi_optional_tensor(std::nullopt),
+      to_ffi_optional_tensor(std::optional<torch::Tensor>(token_info)),
+      /*signal=*/to_ffi_optional_tensor(std::nullopt),
+      /*output_scale=*/to_ffi_optional_tensor(std::nullopt),
+      target_mp_count);
+}
 
 void check_masked_moe_inputs(const torch::Tensor& input,
                              const torch::Tensor& weights,
                              const torch::Tensor& token_counts,
                              int64_t expected_tokens) {
-  TORCH_CHECK(input.defined() && weights.defined() && token_counts.defined(),
-              "Mate masked MoE GEMM received an undefined tensor.");
-  TORCH_CHECK(input.dim() == 3,
-              "Mate masked MoE input must be [experts, tokens, K], got ",
-              input.sizes());
-  TORCH_CHECK(weights.dim() == 3,
-              "Mate masked MoE weights must be [experts, N, K], got ",
-              weights.sizes());
-  TORCH_CHECK(token_counts.dim() == 1 && token_counts.size(0) == input.size(0),
-              "Mate masked MoE token_counts must have one entry per expert.");
-  TORCH_CHECK(input.size(0) == weights.size(0) && input.size(1) > 0 &&
-                  input.size(2) == weights.size(2),
-              "Mate masked MoE input/weight shapes are incompatible: input=",
-              input.sizes(),
-              " weights=",
-              weights.sizes());
-  TORCH_CHECK(input.is_contiguous() && weights.is_contiguous() &&
-                  token_counts.is_contiguous(),
-              "Mate masked MoE tensors must be contiguous.");
-  TORCH_CHECK(token_counts.scalar_type() == torch::kInt32,
-              "Mate masked MoE token_counts must be int32.");
-  TORCH_CHECK(expected_tokens >= 0,
-              "Mate masked MoE expected_tokens must be non-negative.");
+  CHECK(input.defined() && weights.defined() && token_counts.defined())
+      << "Mate masked MoE GEMM received an undefined tensor.";
+  CHECK_EQ(input.dim(), 3)
+      << "Mate masked MoE input must be [experts, tokens, K], got "
+      << input.sizes();
+  CHECK_EQ(weights.dim(), 3)
+      << "Mate masked MoE weights must be [experts, N, K], got "
+      << weights.sizes();
+  CHECK_EQ(token_counts.dim(), 1);
+  CHECK_EQ(token_counts.size(0), input.size(0))
+      << "Mate masked MoE token_counts must have one entry per expert.";
+  CHECK_EQ(input.size(0), weights.size(0));
+  CHECK_GT(input.size(1), 0);
+  CHECK_EQ(input.size(2), weights.size(2))
+      << "Mate masked MoE input/weight shapes are incompatible: input="
+      << input.sizes() << " weights=" << weights.sizes();
+  CHECK(input.is_contiguous() && weights.is_contiguous() &&
+        token_counts.is_contiguous())
+      << "Mate masked MoE tensors must be contiguous.";
+  CHECK_EQ(token_counts.scalar_type(), torch::kInt32)
+      << "Mate masked MoE token_counts must be int32.";
+  CHECK_GE(expected_tokens, 0)
+      << "Mate masked MoE expected_tokens must be non-negative.";
 }
 
 }  // namespace
@@ -67,17 +373,31 @@ torch::Tensor masked_moe_gemm_bf16(const torch::Tensor& input,
                                    torch::ScalarType output_dtype,
                                    int64_t expected_tokens) {
   check_masked_moe_inputs(input, weights, token_counts, expected_tokens);
+  CHECK_EQ(input.scalar_type(), torch::kBFloat16);
+  CHECK_EQ(weights.scalar_type(), torch::kBFloat16);
+  CHECK_EQ(output_dtype, torch::kBFloat16);
   TvmffiStreamGuard stream_guard(input.device());
 
-  auto output = torch::empty({input.size(0), input.size(1), weights.size(1)},
-                             input.options().dtype(output_dtype));
-  get_function(kGemmOpsUri, "masked_moe_gemm_16bit")(
-      to_ffi_tensor_view(input),
-      to_ffi_tensor_view(weights),
-      to_ffi_tensor_view(token_counts),
-      to_ffi_tensor_view(output),
-      expected_tokens,
-      to_ffi_optional_tensor(std::nullopt));
+  torch::Tensor output =
+      torch::empty({input.size(0), input.size(1), weights.size(1)},
+                   input.options().dtype(output_dtype));
+  const int64_t total_mp_count =
+      get_musa_mp_count(static_cast<int32_t>(input.get_device()));
+  const size_t launcher_index =
+      select_masked_mubin_launcher(kMaskedBf16MubinLaunchers, expected_tokens);
+  const MateMubinGemmLauncher& launcher =
+      kMaskedBf16MubinLaunchers[launcher_index];
+  static const auto object_paths =
+      resolve_mubin_paths(kMaskedBf16MubinLaunchers);
+  launch_mubin_gemm(launcher,
+                    object_paths[launcher_index],
+                    input,
+                    weights,
+                    output,
+                    std::nullopt,
+                    std::nullopt,
+                    token_counts,
+                    total_mp_count);
   return output;
 }
 
@@ -108,21 +428,28 @@ torch::Tensor masked_moe_gemm_fp8(const torch::Tensor& input,
   TORCH_CHECK(input_scale.is_contiguous() && weight_scale.is_contiguous(),
               "Mate FP8 MoE scales must be contiguous.");
 
+  CHECK_EQ(output_dtype, torch::kBFloat16);
   TvmffiStreamGuard stream_guard(input.device());
-  auto output = torch::empty({input.size(0), input.size(1), weights.size(1)},
-                             input.options().dtype(output_dtype));
-  get_function(kGemmOpsUri, "masked_moe_gemm_8bit")(
-      std::make_tuple(to_ffi_borrowed_tensor(input),
-                      to_ffi_borrowed_tensor(input_scale)),
-      std::make_tuple(to_ffi_borrowed_tensor(weights),
-                      to_ffi_borrowed_tensor(weight_scale)),
-      to_ffi_tensor_view(token_counts),
-      std::make_tuple(static_cast<int64_t>(1),
-                      static_cast<int64_t>(128),
-                      static_cast<int64_t>(128)),
-      to_ffi_tensor_view(output),
-      expected_tokens,
-      to_ffi_optional_tensor(std::nullopt));
+  torch::Tensor output =
+      torch::empty({input.size(0), input.size(1), weights.size(1)},
+                   input.options().dtype(output_dtype));
+  const int64_t total_mp_count =
+      get_musa_mp_count(static_cast<int32_t>(input.get_device()));
+  const size_t launcher_index =
+      select_masked_mubin_launcher(kMaskedFp8MubinLaunchers, expected_tokens);
+  const MateMubinGemmLauncher& launcher =
+      kMaskedFp8MubinLaunchers[launcher_index];
+  static const auto object_paths =
+      resolve_mubin_paths(kMaskedFp8MubinLaunchers);
+  launch_mubin_gemm(launcher,
+                    object_paths[launcher_index],
+                    input,
+                    weights,
+                    output,
+                    std::optional<torch::Tensor>(input_scale),
+                    std::optional<torch::Tensor>(weight_scale),
+                    token_counts,
+                    total_mp_count);
   return output;
 }
 
@@ -148,17 +475,39 @@ torch::Tensor contiguous_moe_gemm_bf16(const torch::Tensor& input,
   CHECK_EQ(weights.scalar_type(), torch::kBFloat16);
   CHECK_EQ(token_counts.scalar_type(), torch::kInt32);
 
+  CHECK_EQ(output_dtype, torch::kBFloat16);
   TvmffiStreamGuard stream_guard(input.device());
   torch::Tensor output = torch::empty({input.size(0), weights.size(1)},
                                       input.options().dtype(output_dtype));
-  get_function(kGemmOpsUri, "m_grouped_contig_gemm_16bit")(
-      to_ffi_tensor_view(input),
-      to_ffi_tensor_view(weights),
-      to_ffi_tensor_view(token_counts),
-      to_ffi_tensor_view(output),
-      std::string("K"),
-      std::string("K"),
-      ffi::Optional<int64_t>());
+  if (input.size(0) == 0 || weights.size(1) == 0) {
+    return output;
+  }
+  if (input.size(1) == 0) {
+    output.zero_();
+    return output;
+  }
+
+  const int64_t total_mp_count =
+      get_musa_mp_count(static_cast<int32_t>(input.get_device()));
+  const size_t launcher_index =
+      select_contiguous_mubin_launcher(kContiguousBf16MubinLaunchers,
+                                       input.size(0),
+                                       weights.size(1),
+                                       weights.size(0),
+                                       total_mp_count);
+  const MateMubinGemmLauncher& launcher =
+      kContiguousBf16MubinLaunchers[launcher_index];
+  static const auto object_paths =
+      resolve_mubin_paths(kContiguousBf16MubinLaunchers);
+  launch_mubin_gemm(launcher,
+                    object_paths[launcher_index],
+                    input,
+                    weights,
+                    output,
+                    std::nullopt,
+                    std::nullopt,
+                    token_counts,
+                    total_mp_count);
   return output;
 }
 
@@ -184,17 +533,35 @@ torch::Tensor ragged_moe_gemm_bf16(const torch::Tensor& input,
       << "Mate Ragged BF16 MoE alignment must be 128 or 256.";
   CHECK_EQ(input.size(0) % alignment, 0);
 
+  CHECK_EQ(output_dtype, torch::kBFloat16);
   TvmffiStreamGuard stream_guard(input.device());
   torch::Tensor output = torch::empty({input.size(0), weights.size(1)},
                                       input.options().dtype(output_dtype));
-  get_function(kGemmOpsUri, "ragged_moe_gemm_16bit")(
-      to_ffi_tensor_view(input),
-      to_ffi_tensor_view(weights),
-      to_ffi_tensor_view(row_expert_ids),
-      to_ffi_tensor_view(output),
-      /*use_psum_layout=*/false,
-      ffi::Optional<int64_t>(),
-      alignment);
+  if (input.size(0) == 0 || weights.size(1) == 0) {
+    return output;
+  }
+  if (input.size(1) == 0) {
+    output.zero_();
+    return output;
+  }
+
+  const int64_t total_mp_count =
+      get_musa_mp_count(static_cast<int32_t>(input.get_device()));
+  const size_t launcher_index = select_ragged_mubin_launcher(
+      kRaggedBf16MubinLaunchers, input.size(0), weights.size(0), alignment);
+  const MateMubinGemmLauncher& launcher =
+      kRaggedBf16MubinLaunchers[launcher_index];
+  static const auto object_paths =
+      resolve_mubin_paths(kRaggedBf16MubinLaunchers);
+  launch_mubin_gemm(launcher,
+                    object_paths[launcher_index],
+                    input,
+                    weights,
+                    output,
+                    std::nullopt,
+                    std::nullopt,
+                    row_expert_ids,
+                    total_mp_count);
   return output;
 }
 
@@ -222,6 +589,7 @@ torch::Tensor contiguous_moe_gemm_fp8(const torch::Tensor& input,
       << "Mate contiguous FP8 MoE tensors must be contiguous.";
   CHECK_EQ(input.scalar_type(), torch::kFloat8_e4m3fn);
   CHECK_EQ(weights.scalar_type(), torch::kFloat8_e4m3fn);
+  CHECK_EQ(output_dtype, torch::kBFloat16);
   CHECK_EQ(input_scale.scalar_type(), torch::kFloat32);
   CHECK_EQ(weight_scale.scalar_type(), torch::kFloat32);
   CHECK_EQ(token_counts.scalar_type(), torch::kInt32);
@@ -236,19 +604,35 @@ torch::Tensor contiguous_moe_gemm_fp8(const torch::Tensor& input,
   TvmffiStreamGuard stream_guard(input.device());
   torch::Tensor output = torch::empty({input.size(0), weights.size(1)},
                                       input.options().dtype(output_dtype));
-  get_function(kGemmOpsUri, "m_grouped_contig_gemm_8bit")(
-      std::make_tuple(to_ffi_borrowed_tensor(input),
-                      to_ffi_borrowed_tensor(input_scale)),
-      std::make_tuple(to_ffi_borrowed_tensor(weights),
-                      to_ffi_borrowed_tensor(weight_scale)),
-      to_ffi_tensor_view(token_counts),
-      std::make_tuple(static_cast<int64_t>(1),
-                      static_cast<int64_t>(128),
-                      static_cast<int64_t>(128)),
-      to_ffi_tensor_view(output),
-      std::string("K"),
-      std::string("K"),
-      to_ffi_optional_tensor(std::nullopt));
+  if (input.size(0) == 0 || weights.size(1) == 0) {
+    return output;
+  }
+  if (input.size(1) == 0) {
+    output.zero_();
+    return output;
+  }
+
+  const int64_t total_mp_count =
+      get_musa_mp_count(static_cast<int32_t>(input.get_device()));
+  const size_t launcher_index =
+      select_contiguous_mubin_launcher(kContiguousFp8MubinLaunchers,
+                                       input.size(0),
+                                       weights.size(1),
+                                       weights.size(0),
+                                       total_mp_count);
+  const MateMubinGemmLauncher& launcher =
+      kContiguousFp8MubinLaunchers[launcher_index];
+  static const auto object_paths =
+      resolve_mubin_paths(kContiguousFp8MubinLaunchers);
+  launch_mubin_gemm(launcher,
+                    object_paths[launcher_index],
+                    input,
+                    weights,
+                    output,
+                    std::optional<torch::Tensor>(input_scale),
+                    std::optional<torch::Tensor>(weight_scale),
+                    token_counts,
+                    total_mp_count);
   return output;
 }
 
@@ -287,20 +671,35 @@ torch::Tensor ragged_moe_gemm_fp8(const torch::Tensor& input,
       << "Mate Ragged FP8 MoE alignment must be 128 or 256.";
   CHECK_EQ(input.size(0) % alignment, 0);
 
+  CHECK_EQ(output_dtype, torch::kBFloat16);
   TvmffiStreamGuard stream_guard(input.device());
   torch::Tensor output = torch::empty({input.size(0), weights.size(1)},
                                       input.options().dtype(output_dtype));
-  get_function(kGemmOpsUri, "ragged_moe_gemm_8bit")(
-      std::make_tuple(to_ffi_borrowed_tensor(input),
-                      to_ffi_borrowed_tensor(input_scale)),
-      std::make_tuple(to_ffi_borrowed_tensor(weights),
-                      to_ffi_borrowed_tensor(weight_scale)),
-      to_ffi_tensor_view(row_expert_ids),
-      std::make_tuple(static_cast<int64_t>(1),
-                      static_cast<int64_t>(128),
-                      static_cast<int64_t>(128)),
-      to_ffi_tensor_view(output),
-      alignment);
+  if (input.size(0) == 0 || weights.size(1) == 0) {
+    return output;
+  }
+  if (input.size(1) == 0) {
+    output.zero_();
+    return output;
+  }
+
+  const int64_t total_mp_count =
+      get_musa_mp_count(static_cast<int32_t>(input.get_device()));
+  const size_t launcher_index = select_ragged_mubin_launcher(
+      kRaggedFp8MubinLaunchers, input.size(0), weights.size(0), alignment);
+  const MateMubinGemmLauncher& launcher =
+      kRaggedFp8MubinLaunchers[launcher_index];
+  static const auto object_paths =
+      resolve_mubin_paths(kRaggedFp8MubinLaunchers);
+  launch_mubin_gemm(launcher,
+                    object_paths[launcher_index],
+                    input,
+                    weights,
+                    output,
+                    std::optional<torch::Tensor>(input_scale),
+                    std::optional<torch::Tensor>(weight_scale),
+                    row_expert_ids,
+                    total_mp_count);
   return output;
 }
 

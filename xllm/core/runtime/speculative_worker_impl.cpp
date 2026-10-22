@@ -364,16 +364,11 @@ void SpeculativeWorkerImpl::update_sampling_params(
     const int32_t num_val_tokens,
     const int32_t total_num_val_tokens,
     const bool repeat_unique_history) {
-  std::vector<int32_t> selected_token_idxes_vec;
-  selected_token_idxes_vec.reserve(total_num_val_tokens);
-  for (int32_t i = 0; i < total_num_val_tokens; i++) {
-    selected_token_idxes_vec.emplace_back(i);
-  }
-  torch::Tensor selected_token_idxes = torch::tensor(selected_token_idxes_vec);
-
   // sample_idxes equals to selected_token_idxes since only process decode batch
-  sampling_params.selected_token_idxes = selected_token_idxes.to(device_);
-  sampling_params.sample_idxes = selected_token_idxes.to(device_);
+  sampling_params.selected_token_idxes = torch::arange(
+      total_num_val_tokens,
+      torch::TensorOptions().dtype(torch::kInt).device(device_));
+  sampling_params.sample_idxes = sampling_params.selected_token_idxes;
 
   TENSOR_REPEAT(sampling_params.frequency_penalties, num_val_tokens);
   TENSOR_REPEAT(sampling_params.presence_penalties, num_val_tokens);
@@ -395,15 +390,9 @@ void SpeculativeWorkerImpl::update_sampling_params(
     SamplingParameters& sampling_params,
     const std::vector<int32_t>& per_seq_val_tokens,
     const int32_t total_num_val_tokens) {
-  std::vector<int32_t> selected_token_idxes_vec;
-  selected_token_idxes_vec.reserve(total_num_val_tokens);
-  for (int32_t i = 0; i < total_num_val_tokens; i++) {
-    selected_token_idxes_vec.emplace_back(i);
-  }
-  torch::Tensor selected_token_idxes = torch::tensor(selected_token_idxes_vec);
-  sampling_params.selected_token_idxes = selected_token_idxes.to(device_);
-  // Alias sample_idxes to the already-uploaded device tensor rather than
-  // paying a second identical H2D copy.
+  sampling_params.selected_token_idxes = torch::arange(
+      total_num_val_tokens,
+      torch::TensorOptions().dtype(torch::kInt).device(device_));
   sampling_params.sample_idxes = sampling_params.selected_token_idxes;
 
   torch::Tensor repeats_tensor =

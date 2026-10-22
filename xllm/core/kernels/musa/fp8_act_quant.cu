@@ -18,6 +18,7 @@ limitations under the License.
 #include <musa_bf16.h>
 #include <musa_fp8.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <limits>
 #include <tuple>
@@ -39,6 +40,10 @@ constexpr int32_t kElemsPerThread = kGroupSize / kThreadsPerGroup;  // 8
 constexpr int32_t kActThreadsPerGroup = 32;
 constexpr int32_t kActElemsPerThread = kGroupSize / kActThreadsPerGroup;  // 4
 constexpr int32_t kHardwareWarpThreads = 32;
+constexpr int32_t kDenseSwigluGroupsPerBlock = 16;
+// Larger tiles reduce graph replay scheduling overhead on MP31, while eager
+// launches perform best with the smaller tile.
+constexpr int32_t kDenseSwigluGraphGroupsPerBlock = 36;
 constexpr int32_t kMaxMoeExperts = 256;
 constexpr int32_t kMaxMoeTopk = 16;
 constexpr int32_t kRaggedAlignment = 128;
@@ -759,6 +764,339 @@ __global__ void moe_ragged_swiglu_quant_kernel(
   }
 }
 
+
+__global__ void swiglu_quant_kernel(
+    const __mt_bfloat16* __restrict__ input,
+    __mt_fp8_e4m3* __restrict__ output_q,
+    float* __restrict__ output_s,
+    int64_t row_count,
+    int64_t intermediate_size,
+    int32_t hidden_dim_num_groups,
+    int32_t groups_per_block,
+    int64_t row_stride) {
+  const int64_t row_idx = static_cast<int64_t>(blockIdx.y);
+  if (row_idx >= row_count) {
+    return;
+  }
+
+  const int32_t thread_idx = static_cast<int32_t>(threadIdx.x);
+  const int32_t group_idx =
+      static_cast<int32_t>(blockIdx.x) * groups_per_block +
+      thread_idx / kThreadsPerGroup;
+  const int32_t lane = thread_idx % kThreadsPerGroup;
+  if (group_idx >= hidden_dim_num_groups) {
+    return;
+  }
+
+  const int64_t row = row_idx * row_stride;
+  const int64_t elem_offset = static_cast<int64_t>(lane) * kElemsPerThread;
+  const int64_t gate_base = row * intermediate_size * 2 +
+                            static_cast<int64_t>(group_idx) * kGroupSize +
+                            elem_offset;
+  const int64_t up_base = gate_base + intermediate_size;
+  Bf16Pack8 gate_values;
+  Bf16Pack8 up_values;
+  gate_values.vector = *reinterpret_cast<const int4*>(input + gate_base);
+  up_values.vector = *reinterpret_cast<const int4*>(input + up_base);
+
+  float values[kElemsPerThread];
+  float local_absmax = 0.0f;
+#pragma unroll
+  for (int32_t j = 0; j < kElemsPerThread; ++j) {
+    const float gate = __bfloat162float(gate_values.values[j]);
+    const float up = __bfloat162float(up_values.values[j]);
+    const __mt_bfloat16 product =
+        __float2bfloat16_rn((gate / (1.0f + expf(-gate))) * up);
+    const float value = __bfloat162float(product);
+    values[j] = value;
+    local_absmax = fmaxf(local_absmax, fabsf(value));
+  }
+  local_absmax = group_reduce_max<kThreadsPerGroup>(local_absmax, lane);
+  const float scale_inv = fmaxf(local_absmax / kFp8E4M3Max, kEps);
+  const float scale = 1.0f / scale_inv;
+  const float4 scaled_0 = make_float4(values[0] * scale,
+                                      values[1] * scale,
+                                      values[2] * scale,
+                                      values[3] * scale);
+  const float4 scaled_1 = make_float4(values[4] * scale,
+                                      values[5] * scale,
+                                      values[6] * scale,
+                                      values[7] * scale);
+  const uint32_t packed_0 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(scaled_0, __MT_SATFINITE, __MT_E4M3));
+  const uint32_t packed_1 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(scaled_1, __MT_SATFINITE, __MT_E4M3));
+  const uint64_t packed =
+      static_cast<uint64_t>(packed_0) | (static_cast<uint64_t>(packed_1) << 32);
+  const int64_t output_base = row * intermediate_size +
+                              static_cast<int64_t>(group_idx) * kGroupSize +
+                              elem_offset;
+  *reinterpret_cast<uint64_t*>(output_q + output_base) = packed;
+  if (lane == 0) {
+    output_s[row * hidden_dim_num_groups + group_idx] = scale_inv;
+  }
+}
+
+constexpr int32_t kGatedNormDim = 128;
+constexpr int32_t kGatedNormValuesPerLane =
+    kGatedNormDim / kHardwareWarpThreads;  // 4
+constexpr int32_t kGatedNormRowsPerBlock = 8;
+
+union Bf16Pack4 {
+  uint2 vector;
+  __mt_bfloat16 values[kGatedNormValuesPerLane];
+};
+
+// One warp normalizes one H=128 row: rmsnorm(x) * w * silu(z), rounded to
+// BF16 like the unfused gated RMSNorm. Each row is exactly one group-128
+// quantization group of the following FP8 projection. Input row r gates with
+// head r % gate_heads of token r / gate_heads.
+__global__ void __launch_bounds__(kGatedNormRowsPerBlock * kHardwareWarpThreads)
+    gated_rms_norm_quant_kernel(const __mt_bfloat16* __restrict__ input,
+                                const __mt_bfloat16* __restrict__ gate,
+                                const __mt_bfloat16* __restrict__ weight,
+                                __mt_fp8_e4m3* __restrict__ output_q,
+                                float* __restrict__ output_s,
+                                int64_t input_row_stride,
+                                int64_t gate_token_stride,
+                                int64_t gate_head_stride,
+                                int32_t gate_heads,
+                                int32_t rows,
+                                float eps) {
+  constexpr float kLog2e = 1.4426950408889634f;
+  const int32_t lane =
+      static_cast<int32_t>(threadIdx.x) % kHardwareWarpThreads;
+  const int32_t row =
+      static_cast<int32_t>(blockIdx.x) * kGatedNormRowsPerBlock +
+      static_cast<int32_t>(threadIdx.x) / kHardwareWarpThreads;
+  if (row >= rows) {
+    return;
+  }
+
+  const int32_t column = lane * kGatedNormValuesPerLane;
+  Bf16Pack4 x_pack;
+  Bf16Pack4 z_pack;
+  Bf16Pack4 w_pack;
+  x_pack.vector = *reinterpret_cast<const uint2*>(
+      input + static_cast<int64_t>(row) * input_row_stride + column);
+  z_pack.vector = *reinterpret_cast<const uint2*>(
+      gate + static_cast<int64_t>(row / gate_heads) * gate_token_stride +
+      static_cast<int64_t>(row % gate_heads) * gate_head_stride + column);
+  w_pack.vector = *reinterpret_cast<const uint2*>(weight + column);
+
+  float x_values[kGatedNormValuesPerLane];
+  float sum = 0.0f;
+#pragma unroll
+  for (int32_t i = 0; i < kGatedNormValuesPerLane; ++i) {
+    x_values[i] = __bfloat162float(x_pack.values[i]);
+    sum += x_values[i] * x_values[i];
+  }
+#pragma unroll
+  for (int32_t offset = kHardwareWarpThreads / 2; offset > 0; offset >>= 1) {
+    sum += __shfl_xor_sync(0xffffffffu, sum, offset, kHardwareWarpThreads);
+  }
+  const float inv_rms =
+      rsqrtf(sum * (1.0f / static_cast<float>(kGatedNormDim)) + eps);
+
+  float values[kGatedNormValuesPerLane];
+  float local_absmax = 0.0f;
+#pragma unroll
+  for (int32_t i = 0; i < kGatedNormValuesPerLane; ++i) {
+    const float z = __bfloat162float(z_pack.values[i]);
+    const float gated = z * (1.0f / (1.0f + exp2f(-z * kLog2e)));
+    const __mt_bfloat16 normed = __float2bfloat16_rn(
+        x_values[i] * inv_rms * __bfloat162float(w_pack.values[i]) * gated);
+    values[i] = __bfloat162float(normed);
+    local_absmax = fmaxf(local_absmax, fabsf(values[i]));
+  }
+  local_absmax = group_reduce_max<kHardwareWarpThreads>(local_absmax, lane);
+  const float scale_inv = fmaxf(local_absmax / kFp8E4M3Max, kEps);
+  const float scale = 1.0f / scale_inv;
+  const float4 scaled = make_float4(values[0] * scale,
+                                    values[1] * scale,
+                                    values[2] * scale,
+                                    values[3] * scale);
+  *reinterpret_cast<uint32_t*>(output_q +
+                               static_cast<int64_t>(row) * kGatedNormDim +
+                               column) =
+      static_cast<uint32_t>(
+          __musa_cvt_float4_to_fp8x4(scaled, __MT_SATFINITE, __MT_E4M3));
+  if (lane == 0) {
+    output_s[row] = scale_inv;
+  }
+}
+
+// out * sigmoid(gate), rounded to BF16 like mul_sigmoid_gate_inplace, then
+// quantized per group of 128 columns. One warp handles one group.
+__global__ void __launch_bounds__(kGatedNormRowsPerBlock * kHardwareWarpThreads)
+    mul_sigmoid_gate_quant_kernel(const __mt_bfloat16* __restrict__ input,
+                                  const __mt_bfloat16* __restrict__ gate,
+                                  __mt_fp8_e4m3* __restrict__ output_q,
+                                  float* __restrict__ output_s,
+                                  int64_t input_row_stride,
+                                  int64_t gate_row_stride,
+                                  int32_t groups_per_row,
+                                  int32_t total_groups) {
+  const int32_t lane =
+      static_cast<int32_t>(threadIdx.x) % kHardwareWarpThreads;
+  const int32_t group =
+      static_cast<int32_t>(blockIdx.x) * kGatedNormRowsPerBlock +
+      static_cast<int32_t>(threadIdx.x) / kHardwareWarpThreads;
+  if (group >= total_groups) {
+    return;
+  }
+  const int64_t row = group / groups_per_row;
+  const int32_t group_in_row = group - static_cast<int32_t>(row) * groups_per_row;
+  const int32_t column =
+      group_in_row * kGroupSize + lane * kGatedNormValuesPerLane;
+
+  Bf16Pack4 input_pack;
+  Bf16Pack4 gate_pack;
+  input_pack.vector = *reinterpret_cast<const uint2*>(
+      input + row * input_row_stride + column);
+  gate_pack.vector =
+      *reinterpret_cast<const uint2*>(gate + row * gate_row_stride + column);
+
+  float values[kGatedNormValuesPerLane];
+  float local_absmax = 0.0f;
+#pragma unroll
+  for (int32_t i = 0; i < kGatedNormValuesPerLane; ++i) {
+    const float g = __bfloat162float(gate_pack.values[i]);
+    const float s = 1.0f / (1.0f + expf(-g));
+    values[i] = __bfloat162float(
+        __float2bfloat16_rn(__bfloat162float(input_pack.values[i]) * s));
+    local_absmax = fmaxf(local_absmax, fabsf(values[i]));
+  }
+  local_absmax = group_reduce_max<kHardwareWarpThreads>(local_absmax, lane);
+  const float scale_inv = fmaxf(local_absmax / kFp8E4M3Max, kEps);
+  const float scale = 1.0f / scale_inv;
+  const float4 scaled = make_float4(values[0] * scale,
+                                    values[1] * scale,
+                                    values[2] * scale,
+                                    values[3] * scale);
+  *reinterpret_cast<uint32_t*>(
+      output_q + row * static_cast<int64_t>(groups_per_row) * kGroupSize +
+      column) =
+      static_cast<uint32_t>(
+          __musa_cvt_float4_to_fp8x4(scaled, __MT_SATFINITE, __MT_E4M3));
+  if (lane == 0) {
+    output_s[group] = scale_inv;
+  }
+}
+
+constexpr int32_t kNormQuantMaxThreads = 1024;
+
+__device__ __forceinline__ float norm_fast_rsqrt(float value) {
+#if defined(__MUSA_ARCH__) && (__MUSA_ARCH__ == 310)
+  const float half_value = 0.5f * value;
+  float y = __frsqrt_rn(value);
+  y = y * (1.5f - half_value * y * y);
+  return y;
+#else
+  return rsqrtf(value);
+#endif
+}
+
+// Same arithmetic as fused_add_rmsnorm_vec8_kernel<GEMMA=true>:
+// residual <- bf16(x + r) and normed <- bf16((x + r) * rsqrt(mean + eps) *
+// (w + 1)), then normed is quantized like per_token_group_quant_fp8. Each
+// thread owns 8 columns, so 16 threads form one group-128 quantization group.
+__global__ void __launch_bounds__(kNormQuantMaxThreads)
+    fused_add_gemma_rmsnorm_quant_kernel(__mt_bfloat16* __restrict__ input,
+                                         __mt_bfloat16* __restrict__ residual,
+                                         const __mt_bfloat16* __restrict__ weight,
+                                         __mt_fp8_e4m3* __restrict__ output_q,
+                                         float* __restrict__ output_s,
+                                         int64_t hidden,
+                                         int32_t hidden_groups,
+                                         float inv_hidden,
+                                         float eps,
+                                         bool write_normed) {
+  __shared__ float warp_sums[kNormQuantMaxThreads / kHardwareWarpThreads];
+  const int32_t tid = static_cast<int32_t>(threadIdx.x);
+  const int32_t lane = tid % kHardwareWarpThreads;
+  const int32_t warp = tid / kHardwareWarpThreads;
+  const int32_t num_warps =
+      static_cast<int32_t>(blockDim.x) / kHardwareWarpThreads;
+  const int64_t base =
+      static_cast<int64_t>(blockIdx.x) * hidden + tid * kElemsPerThread;
+
+  Bf16Pack8 x_pack;
+  Bf16Pack8 r_pack;
+  Bf16Pack8 w_pack;
+  x_pack.vector = *reinterpret_cast<const int4*>(input + base);
+  r_pack.vector = *reinterpret_cast<const int4*>(residual + base);
+  w_pack.vector = *reinterpret_cast<const int4*>(weight + tid * kElemsPerThread);
+  float values[kElemsPerThread];
+  Bf16Pack8 sum_pack;
+  float sum = 0.0f;
+#pragma unroll
+  for (int32_t i = 0; i < kElemsPerThread; ++i) {
+    values[i] = __bfloat162float(x_pack.values[i]) +
+                __bfloat162float(r_pack.values[i]);
+    sum += values[i] * values[i];
+    sum_pack.values[i] = __float2bfloat16_rn(values[i]);
+  }
+  *reinterpret_cast<int4*>(residual + base) = sum_pack.vector;
+
+#pragma unroll
+  for (int32_t offset = kHardwareWarpThreads / 2; offset > 0; offset >>= 1) {
+    sum += __shfl_down_sync(0xffffffff, sum, offset, kHardwareWarpThreads);
+  }
+  if (lane == 0) {
+    warp_sums[warp] = sum;
+  }
+  __syncthreads();
+  if (warp == 0) {
+    sum = lane < num_warps ? warp_sums[lane] : 0.0f;
+#pragma unroll
+    for (int32_t offset = kHardwareWarpThreads / 2; offset > 0; offset >>= 1) {
+      sum += __shfl_down_sync(0xffffffff, sum, offset, kHardwareWarpThreads);
+    }
+    if (lane == 0) {
+      warp_sums[0] = sum;
+    }
+  }
+  __syncthreads();
+  const float scale = norm_fast_rsqrt(warp_sums[0] * inv_hidden + eps);
+
+  Bf16Pack8 normed_pack;
+  float local_absmax = 0.0f;
+#pragma unroll
+  for (int32_t i = 0; i < kElemsPerThread; ++i) {
+    normed_pack.values[i] = __float2bfloat16_rn(
+        values[i] * scale * (__bfloat162float(w_pack.values[i]) + 1.0f));
+    values[i] = __bfloat162float(normed_pack.values[i]);
+    local_absmax = fmaxf(local_absmax, fabsf(values[i]));
+  }
+  if (write_normed) {
+    *reinterpret_cast<int4*>(input + base) = normed_pack.vector;
+  }
+
+  const int32_t group_lane = tid % kThreadsPerGroup;
+  local_absmax = group_reduce_max<kThreadsPerGroup>(local_absmax, group_lane);
+  const float scale_inv = fmaxf(local_absmax / kFp8E4M3Max, kEps);
+  const float quant_scale = 1.0f / scale_inv;
+  const float4 scaled_0 = make_float4(values[0] * quant_scale,
+                                      values[1] * quant_scale,
+                                      values[2] * quant_scale,
+                                      values[3] * quant_scale);
+  const float4 scaled_1 = make_float4(values[4] * quant_scale,
+                                      values[5] * quant_scale,
+                                      values[6] * quant_scale,
+                                      values[7] * quant_scale);
+  const uint32_t packed_0 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(scaled_0, __MT_SATFINITE, __MT_E4M3));
+  const uint32_t packed_1 = static_cast<uint32_t>(
+      __musa_cvt_float4_to_fp8x4(scaled_1, __MT_SATFINITE, __MT_E4M3));
+  *reinterpret_cast<uint64_t*>(output_q + base) =
+      static_cast<uint64_t>(packed_0) | (static_cast<uint64_t>(packed_1) << 32);
+  if (group_lane == 0) {
+    output_s[static_cast<int64_t>(blockIdx.x) * hidden_groups +
+             tid / kThreadsPerGroup] = scale_inv;
+  }
+}
+
 __global__ void moe_ragged_combine_bf16_kernel(
     const __mt_bfloat16* __restrict__ down,
     const float* __restrict__ topk_weights,
@@ -803,6 +1141,227 @@ int32_t choose_subwarps_per_block(int64_t hidden_dim_num_groups) {
 }
 
 }  // namespace
+
+std::tuple<torch::Tensor, torch::Tensor> fused_swiglu_quant_fp8(
+    const torch::Tensor& input,
+    int64_t group_size) {
+  CHECK(input.scalar_type() == torch::kBFloat16 && input.dim() == 2 &&
+        input.is_contiguous())
+      << "Dense SwiGLU quant requires contiguous BF16 [M, 2N].";
+  CHECK_EQ(group_size, kGroupSize);
+  CHECK_EQ(input.size(1) % (2 * kGroupSize), 0);
+
+  const int64_t num_rows = input.size(0);
+  const int64_t intermediate_size = input.size(1) / 2;
+  const int32_t hidden_dim_num_groups =
+      static_cast<int32_t>(intermediate_size / kGroupSize);
+  // Prefer graph tile: MTP verify is captured; eager remains correct.
+  const int32_t groups_per_tile = kDenseSwigluGraphGroupsPerBlock;
+  const int32_t groups_per_block =
+      std::min(hidden_dim_num_groups, groups_per_tile);
+  const int32_t group_tiles =
+      (hidden_dim_num_groups + groups_per_tile - 1) / groups_per_tile;
+
+  torch::Tensor output_q =
+      torch::empty({num_rows, intermediate_size},
+                   input.options().dtype(torch::kFloat8_e4m3fn));
+  torch::Tensor output_s = torch::empty({num_rows, hidden_dim_num_groups},
+                                        input.options().dtype(torch::kFloat32));
+  if (num_rows == 0) {
+    return std::make_tuple(output_q, output_s);
+  }
+
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  swiglu_quant_kernel<<<
+      dim3(static_cast<unsigned int>(group_tiles),
+           static_cast<unsigned int>(num_rows)),
+      static_cast<unsigned int>(groups_per_block * kThreadsPerGroup),
+      0,
+      stream>>>(
+      reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
+      reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
+      output_s.data_ptr<float>(),
+      num_rows,
+      intermediate_size,
+      hidden_dim_num_groups,
+      groups_per_tile,
+      /*row_stride=*/1);
+  C10_CUDA_CHECK(cudaGetLastError());
+  return std::make_tuple(output_q, output_s);
+}
+
+std::tuple<torch::Tensor, torch::Tensor> fused_gated_rms_norm_quant_fp8(
+    const torch::Tensor& input,
+    const torch::Tensor& gate,
+    const torch::Tensor& weight,
+    double eps) {
+  CHECK(input.dim() == 2 && (gate.dim() == 2 || gate.dim() == 3) &&
+        weight.dim() == 1)
+      << "Gated RMSNorm quant requires 2-D input, 2-D or 3-D gate and 1-D "
+         "weight.";
+  const torch::Tensor gate_3d = gate.dim() == 2 ? gate.unsqueeze(1) : gate;
+  CHECK_EQ(input.size(1), kGatedNormDim);
+  CHECK_EQ(gate_3d.size(2), kGatedNormDim);
+  CHECK_EQ(gate_3d.size(0) * gate_3d.size(1), input.size(0));
+  CHECK_EQ(weight.size(0), kGatedNormDim);
+  CHECK(input.scalar_type() == torch::kBFloat16 &&
+        gate.scalar_type() == torch::kBFloat16 &&
+        weight.scalar_type() == torch::kBFloat16)
+      << "Gated RMSNorm quant supports BF16 only.";
+  CHECK(input.stride(1) == 1 && gate_3d.stride(2) == 1 &&
+        weight.is_contiguous())
+      << "Gated RMSNorm quant requires contiguous rows.";
+  CHECK(input.stride(0) % kGatedNormValuesPerLane == 0 &&
+        gate_3d.stride(0) % kGatedNormValuesPerLane == 0 &&
+        gate_3d.stride(1) % kGatedNormValuesPerLane == 0 &&
+        reinterpret_cast<uintptr_t>(input.data_ptr()) % alignof(uint2) == 0 &&
+        reinterpret_cast<uintptr_t>(gate.data_ptr()) % alignof(uint2) == 0 &&
+        reinterpret_cast<uintptr_t>(weight.data_ptr()) % alignof(uint2) == 0)
+      << "Gated RMSNorm quant requires 8-byte-aligned rows.";
+
+  const int64_t rows = input.size(0);
+  torch::Tensor output_q = torch::empty(
+      {rows, kGatedNormDim}, input.options().dtype(torch::kFloat8_e4m3fn));
+  torch::Tensor output_s =
+      torch::empty({rows, 1}, input.options().dtype(torch::kFloat32));
+  if (rows == 0) {
+    return std::make_tuple(output_q, output_s);
+  }
+
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  const int64_t blocks =
+      (rows + kGatedNormRowsPerBlock - 1) / kGatedNormRowsPerBlock;
+  gated_rms_norm_quant_kernel<<<static_cast<unsigned int>(blocks),
+                                kGatedNormRowsPerBlock * kHardwareWarpThreads,
+                                0,
+                                stream>>>(
+      reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
+      reinterpret_cast<const __mt_bfloat16*>(gate.data_ptr<at::BFloat16>()),
+      reinterpret_cast<const __mt_bfloat16*>(weight.data_ptr<at::BFloat16>()),
+      reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
+      output_s.data_ptr<float>(),
+      input.stride(0),
+      gate_3d.stride(0),
+      gate_3d.stride(1),
+      static_cast<int32_t>(gate_3d.size(1)),
+      static_cast<int32_t>(rows),
+      static_cast<float>(eps));
+  C10_CUDA_CHECK(cudaGetLastError());
+  return std::make_tuple(output_q, output_s);
+}
+
+bool fused_add_gemma_rms_norm_quant_supported(const torch::Tensor& input,
+                                               const torch::Tensor& residual,
+                                               const torch::Tensor& weight) {
+  return input.dim() == 2 && residual.sizes() == input.sizes() &&
+         weight.dim() == 1 && weight.size(0) == input.size(1) &&
+         input.scalar_type() == torch::kBFloat16 &&
+         residual.scalar_type() == torch::kBFloat16 &&
+         weight.scalar_type() == torch::kBFloat16 && input.is_contiguous() &&
+         residual.is_contiguous() && weight.is_contiguous() &&
+         input.size(1) % kGroupSize == 0 &&
+         input.size(1) / kElemsPerThread <= kNormQuantMaxThreads &&
+         reinterpret_cast<uintptr_t>(input.data_ptr()) % alignof(int4) == 0 &&
+         reinterpret_cast<uintptr_t>(residual.data_ptr()) % alignof(int4) ==
+             0 &&
+         reinterpret_cast<uintptr_t>(weight.data_ptr()) % alignof(int4) == 0;
+}
+
+std::tuple<torch::Tensor, torch::Tensor> fused_add_gemma_rms_norm_quant_fp8(
+    torch::Tensor& input,
+    torch::Tensor& residual,
+    const torch::Tensor& weight,
+    double eps,
+    bool write_normed) {
+  CHECK(fused_add_gemma_rms_norm_quant_supported(input, residual, weight))
+      << "unsupported add-RMSNorm quant: input=" << input.sizes()
+      << ", residual=" << residual.sizes() << ", weight=" << weight.sizes();
+  const int64_t rows = input.size(0);
+  const int64_t hidden = input.size(1);
+  const int32_t hidden_groups = static_cast<int32_t>(hidden / kGroupSize);
+  torch::Tensor output_q = torch::empty(
+      {rows, hidden}, input.options().dtype(torch::kFloat8_e4m3fn));
+  torch::Tensor output_s = torch::empty(
+      {rows, hidden_groups}, input.options().dtype(torch::kFloat32));
+  if (rows == 0) {
+    return std::make_tuple(output_q, output_s);
+  }
+
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  fused_add_gemma_rmsnorm_quant_kernel<<<
+      static_cast<unsigned int>(rows),
+      static_cast<unsigned int>(hidden / kElemsPerThread),
+      0,
+      stream>>>(
+      reinterpret_cast<__mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
+      reinterpret_cast<__mt_bfloat16*>(residual.data_ptr<at::BFloat16>()),
+      reinterpret_cast<const __mt_bfloat16*>(weight.data_ptr<at::BFloat16>()),
+      reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
+      output_s.data_ptr<float>(),
+      hidden,
+      hidden_groups,
+      1.0f / static_cast<float>(hidden),
+      static_cast<float>(eps),
+      write_normed);
+  C10_CUDA_CHECK(cudaGetLastError());
+  return std::make_tuple(output_q, output_s);
+}
+
+bool mul_sigmoid_gate_quant_supported(const torch::Tensor& input,
+                                      const torch::Tensor& gate) {
+  return input.dim() == 2 && gate.dim() == 2 &&
+         gate.sizes() == input.sizes() &&
+         input.scalar_type() == torch::kBFloat16 &&
+         gate.scalar_type() == torch::kBFloat16 &&
+         input.size(1) % kGroupSize == 0 && input.stride(1) == 1 &&
+         gate.stride(1) == 1 &&
+         input.stride(0) % kGatedNormValuesPerLane == 0 &&
+         gate.stride(0) % kGatedNormValuesPerLane == 0 &&
+         reinterpret_cast<uintptr_t>(input.data_ptr()) % alignof(uint2) == 0 &&
+         reinterpret_cast<uintptr_t>(gate.data_ptr()) % alignof(uint2) == 0;
+}
+
+std::tuple<torch::Tensor, torch::Tensor> fused_mul_sigmoid_gate_quant_fp8(
+    const torch::Tensor& input,
+    const torch::Tensor& gate) {
+  CHECK(mul_sigmoid_gate_quant_supported(input, gate))
+      << "unsupported sigmoid-gate quant: input=" << input.sizes()
+      << ", gate=" << gate.sizes();
+  const int64_t rows = input.size(0);
+  const int64_t columns = input.size(1);
+  const int32_t groups_per_row = static_cast<int32_t>(columns / kGroupSize);
+  torch::Tensor output_q = torch::empty(
+      {rows, columns}, input.options().dtype(torch::kFloat8_e4m3fn));
+  torch::Tensor output_s = torch::empty(
+      {rows, groups_per_row}, input.options().dtype(torch::kFloat32));
+  const int64_t total_groups = rows * groups_per_row;
+  if (total_groups == 0) {
+    return std::make_tuple(output_q, output_s);
+  }
+  CHECK_LE(total_groups, std::numeric_limits<int32_t>::max());
+
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  const int64_t blocks =
+      (total_groups + kGatedNormRowsPerBlock - 1) / kGatedNormRowsPerBlock;
+  mul_sigmoid_gate_quant_kernel<<<static_cast<unsigned int>(blocks),
+                                  kGatedNormRowsPerBlock * kHardwareWarpThreads,
+                                  0,
+                                  stream>>>(
+      reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
+      reinterpret_cast<const __mt_bfloat16*>(gate.data_ptr<at::BFloat16>()),
+      reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
+      output_s.data_ptr<float>(),
+      input.stride(0),
+      gate.stride(0),
+      groups_per_row,
+      static_cast<int32_t>(total_groups));
+  C10_CUDA_CHECK(cudaGetLastError());
+  return std::make_tuple(output_q, output_s);
+}
 
 std::tuple<torch::Tensor, torch::Tensor> per_token_group_quant_fp8(
     const torch::Tensor& input,

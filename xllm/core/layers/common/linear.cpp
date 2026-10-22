@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "linear.h"
 #if defined(USE_MUSA)
+#include "kernels/musa/musa_ops_api.h"
 #include "layers/musa/linear_block_fp8.h"
 #endif
 
@@ -23,6 +24,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <cctype>
+#include <limits>
 
 #include "core/layers/common/quant_utils.h"
 #include "framework/parallel_state/parallel_args.h"
@@ -692,7 +694,23 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
 #endif
   } else {
 #if defined(USE_MUSA)
-    output = musa::matmul_forward(input, weight_, bias, matmul_output_buffer_);
+    // Unquantized layers can carry a block-FP8 weight from
+    // load_block_fp8_from(); BF16 weights still take the plain matmul.
+    output = musa::block_fp8_or_bf16_forward(
+        input, weight_, weight_scale_inv_, bias, matmul_output_buffer_);
+    if (output_column_ids_.defined()) {
+      CHECK_EQ(output.dim(), 2) << "row-subset linear expects a 2-D output";
+      torch::Tensor full_output =
+          torch::full({output.size(0), full_out_features_},
+                      -std::numeric_limits<float>::infinity(),
+                      output.options());
+      full_output.index_copy_(/*dim=*/1, output_column_ids_, output);
+      output = full_output;
+    }
+    if (exact_weight_.defined()) {
+      xllm::kernel::musa::rescore_top_logits(
+          input.contiguous(), exact_weight_, output, exact_top_k_);
+    }
 #else
     xllm::kernel::MatmulParams matmul_params;
     matmul_params.a = input;
@@ -707,6 +725,87 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
   }
   return output;
 }
+
+#if defined(USE_MUSA)
+void ColumnParallelLinearImpl::load_block_fp8_from(
+    const torch::Tensor& source_weight) {
+  CHECK(quant_args_.quant_method().empty())
+      << "load_block_fp8_from expects an unquantized linear layer, got "
+      << quant_args_.quant_method();
+  CHECK_EQ(source_weight.sizes(), weight_.sizes())
+      << "block-fp8 source weight shape mismatch";
+  auto [quantized_weight, weight_scale_inv] =
+      musa::quantize_weight_to_block_fp8(source_weight.to(device_));
+  weight_.set_data(quantized_weight);
+  weight_is_loaded_ = true;
+  weight_scale_inv_ = register_parameter("weight_scale_inv",
+                                         weight_scale_inv,
+                                         /*requires_grad=*/false);
+  weight_scale_inv_is_loaded_ = true;
+}
+
+void ColumnParallelLinearImpl::load_block_fp8_with_exact_top_k_from(
+    const torch::Tensor& source_weight,
+    int64_t exact_top_k) {
+  CHECK(!bias_.defined()) << "exact top-k re-scoring does not support bias";
+  exact_weight_ = source_weight.to(device_).contiguous();
+  exact_top_k_ = exact_top_k;
+  load_block_fp8_from(exact_weight_);
+}
+
+void ColumnParallelLinearImpl::load_block_fp8_rows_from(
+    const torch::Tensor& source_weight,
+    const torch::Tensor& row_ids) {
+  CHECK(quant_args_.quant_method().empty())
+      << "load_block_fp8_rows_from expects an unquantized linear layer, got "
+      << quant_args_.quant_method();
+  CHECK(!bias_.defined()) << "row-subset linear does not support bias";
+  // TP>1 is allowed when gather_output_ is set: each rank expands into its
+  // local vocab shard then gathers to the full vocabulary (MTP draft head).
+  CHECK(world_size_ == 1 || gather_output_)
+      << "row-subset linear under TP>1 requires gather_output";
+  CHECK_EQ(source_weight.sizes(), weight_.sizes())
+      << "block-fp8 source weight shape mismatch";
+  CHECK_EQ(row_ids.dim(), 1) << "row ids must be 1-D";
+  const torch::Tensor device_row_ids = row_ids.to(device_, torch::kLong);
+  auto [quantized_weight, weight_scale_inv] =
+      musa::quantize_weight_to_block_fp8(
+          source_weight.to(device_).index_select(/*dim=*/0, device_row_ids));
+  full_out_features_ = source_weight.size(0);
+  output_column_ids_ = device_row_ids;
+  weight_.set_data(quantized_weight);
+  weight_is_loaded_ = true;
+  weight_scale_inv_ = register_parameter("weight_scale_inv",
+                                         weight_scale_inv,
+                                         /*requires_grad=*/false);
+  weight_scale_inv_is_loaded_ = true;
+}
+
+bool ColumnParallelLinearImpl::supports_block_fp8_quantized_input() const {
+  // Every rank of a column-parallel layer consumes the full input.
+  return !output_column_ids_.defined() &&
+         musa::supports_block_fp8_quantized_input(
+             /*input_is_parallelized=*/true,
+             quant_args_,
+             weight_,
+             weight_scale_inv_);
+}
+
+torch::Tensor ColumnParallelLinearImpl::forward_block_fp8_quantized(
+    torch::Tensor input,
+    torch::Tensor input_scale) {
+  CHECK(supports_block_fp8_quantized_input());
+  auto bias =
+      bias_.defined() ? std::optional<torch::Tensor>(bias_) : std::nullopt;
+  torch::Tensor output = musa::block_fp8_quantized_forward(
+      input, input_scale, weight_, weight_scale_inv_, bias,
+      matmul_output_buffer_);
+  if (world_size_ > 1 && gather_output_) {
+    output = xllm::parallel_state::gather(output, process_group_);
+  }
+  return output;
+}
+#endif
 
 torch::Tensor ColumnParallelLinearImpl::forward_quantized(
     const W8A8DynamicInput& input) {
@@ -1063,10 +1162,19 @@ void ColumnParallelLinearImpl::load_state_dict(
                                               weight_scale_inv_is_loaded_,
                                               block_fp8_resolved_unquantized_);
     if (!block_fp8_resolved_unquantized_) {
-      LOAD_WEIGHT(weight_scale_inv);
-      if (weight_scale_inv_is_loaded_) {
-        CHECK_EQ(world_size, 1)
-            << "block-fp8 merged-variable-shard scale loading requires TP=1";
+      if (world_size == 1) {
+        LOAD_WEIGHT(weight_scale_inv);
+      } else {
+        weight::load_merged_weight_v2(
+            state_dict,
+            "weight_scale_inv",
+            /*dim=*/0,
+            static_cast<int32_t>(rank),
+            static_cast<int32_t>(world_size),
+            shard_tensor_count,
+            musa::block_fp8_scale_shard_sizes(shard_sizes),
+            weight_scale_inv_,
+            weight_scale_inv_is_loaded_);
       }
     }
     LOAD_MERGED_WEIGHT_V2(weight, 0);
@@ -1286,6 +1394,32 @@ torch::Tensor QKVParallelLinearImpl::forward(torch::Tensor input) {
   }
   return output;
 }
+
+#if defined(USE_MUSA)
+bool QKVParallelLinearImpl::supports_block_fp8_quantized_input() const {
+  // Every rank of a column-parallel layer consumes the full input.
+  return musa::supports_block_fp8_quantized_input(
+      /*input_is_parallelized=*/true,
+      quant_args_,
+      weight_,
+      weight_scale_inv_);
+}
+
+torch::Tensor QKVParallelLinearImpl::forward_block_fp8_quantized(
+    torch::Tensor input,
+    torch::Tensor input_scale) {
+  CHECK(supports_block_fp8_quantized_input());
+  auto bias =
+      bias_.defined() ? std::optional<torch::Tensor>(bias_) : std::nullopt;
+  torch::Tensor output = musa::block_fp8_quantized_forward(
+      input, input_scale, weight_, weight_scale_inv_, bias,
+      matmul_output_buffer_);
+  if (world_size_ > 1 && gather_output_) {
+    output = xllm::parallel_state::gather(output, parallel_args_.tp_group_);
+  }
+  return output;
+}
+#endif
 
 void QKVParallelLinearImpl::load_state_dict(
     const StateDict& state_dict,
@@ -1634,6 +1768,30 @@ torch::Tensor RowParallelLinearImpl::forward(torch::Tensor input) {
                                : RowParallelReduceMode::NONE;
   return forward_impl(input, reduce_mode);
 }
+
+
+#if defined(USE_MUSA)
+bool RowParallelLinearImpl::supports_block_fp8_quantized_input() const {
+  return musa::supports_block_fp8_quantized_input(
+      input_is_parallelized_, quant_args_, weight_, weight_scale_inv_);
+}
+
+torch::Tensor RowParallelLinearImpl::forward_block_fp8_quantized(
+    torch::Tensor input,
+    torch::Tensor input_scale) {
+  CHECK(supports_block_fp8_quantized_input());
+  auto bias = bias_.defined() && rank_ == 0
+                  ? std::optional<torch::Tensor>(bias_)
+                  : std::nullopt;
+  torch::Tensor output = musa::block_fp8_quantized_forward(
+      input, input_scale, weight_, weight_scale_inv_, bias,
+      matmul_output_buffer_);
+  if (enable_result_reduction_ && world_size_ > 1) {
+    output = xllm::parallel_state::reduce(output, process_group_);
+  }
+  return output;
+}
+#endif
 
 torch::Tensor RowParallelLinearImpl::mmrs_weight_transposed() const {
   CHECK(weight_.defined()) << "weight is required for MMRS.";

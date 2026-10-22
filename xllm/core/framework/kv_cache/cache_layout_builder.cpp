@@ -329,6 +329,39 @@ bool append_conv_component(const CacheTensorLayoutContext& context,
   }
   const bool replicated = replica_count > 1;
 
+#if defined(USE_MUSA)
+  const uint64_t element_bytes = tensor.element_size();
+  const uint64_t head_dim = static_cast<uint64_t>(context.linear_key_head_dim);
+  const uint64_t state_count = static_cast<uint64_t>(tensor.size(2));
+  const uint64_t feature_stride = tensor_stride_bytes(tensor, 1);
+  const uint64_t state_stride = tensor_stride_bytes(tensor, 2);
+  // Use a canonical state-major logical layout while preserving MUSA's
+  // feature-major physical strides. This also maps compact prefill state into
+  // the committed prefix of a larger speculative decode window.
+  for (int64_t local_head = 0; local_head < local_head_count; ++local_head) {
+    const int64_t global_head = first_global_head + local_head;
+    for (uint64_t state = 0; state < state_count; ++state) {
+      LogicalSpan span;
+      span.logical_tensor = logical_tensor;
+      span.logical_offset_bytes =
+          (state * static_cast<uint64_t>(global_head_count) +
+           static_cast<uint64_t>(global_head)) *
+          head_dim * element_bytes;
+      span.physical_offset_bytes =
+          component_offset_bytes +
+          static_cast<uint64_t>(local_head) * head_dim * feature_stride +
+          state * state_stride;
+      span.bytes_per_region = element_bytes;
+      span.repeat_count = head_dim;
+      span.logical_stride_bytes = element_bytes;
+      span.physical_stride_bytes = feature_stride;
+      span.owner_tp_rank =
+          replicated ? static_cast<int32_t>(global_head * replica_count)
+                     : context.tp_rank;
+      descriptor->spans.emplace_back(std::move(span));
+    }
+  }
+#else
   const uint64_t bytes_per_head =
       static_cast<uint64_t>(context.linear_key_head_dim) *
       tensor.element_size();
@@ -354,6 +387,7 @@ bool append_conv_component(const CacheTensorLayoutContext& context,
                              : context.tp_rank;
     descriptor->spans.emplace_back(std::move(span));
   }
+#endif
   return true;
 }
 
@@ -363,8 +397,13 @@ bool describe_conv(const CacheTensorLayoutContext& context,
   const torch::Tensor& tensor = cache_tensor->tensor;
   if (!tensor.is_contiguous() || tensor.dim() != 3 ||
       context.linear_key_head_dim <= 0) {
+#if defined(USE_MUSA)
+    return fail("CONV cache tensor must use [slot, packed_heads, state]",
+                error);
+#else
     return fail("CONV cache tensor must use [slot, state, packed_heads]",
                 error);
+#endif
   }
 
   const int64_t local_key_heads =
@@ -377,7 +416,14 @@ bool describe_conv(const CacheTensorLayoutContext& context,
           : 1;
   const int64_t expected_features =
       context.linear_key_head_dim * (local_key_heads * 2 + local_value_heads);
-  if (tensor.size(2) != expected_features) {
+#if defined(USE_MUSA)
+  constexpr int64_t kFeatureAxis = 1;
+  constexpr int64_t kStateAxis = 2;
+#else
+  constexpr int64_t kFeatureAxis = 2;
+  constexpr int64_t kStateAxis = 1;
+#endif
+  if (tensor.size(kFeatureAxis) != expected_features) {
     return fail("CONV packed feature size differs from producer metadata",
                 error);
   }
@@ -385,11 +431,11 @@ bool describe_conv(const CacheTensorLayoutContext& context,
   LogicalShardDescriptor descriptor;
   descriptor.kind = LogicalShardKind::COMPOSITE;
   descriptor.resource_scope = CacheResourceScope::SEQUENCE;
-  descriptor.spans.reserve(
-      static_cast<size_t>(local_key_heads * 2 + local_value_heads));
+  descriptor.spans.reserve(static_cast<size_t>(
+      (local_key_heads * 2 + local_value_heads) * tensor.size(kStateAxis)));
   const uint64_t bytes_per_head =
       static_cast<uint64_t>(context.linear_key_head_dim) *
-      tensor.element_size();
+      tensor_stride_bytes(tensor, kFeatureAxis);
   if (!append_conv_component(context,
                              tensor,
                              "conv_key_a",

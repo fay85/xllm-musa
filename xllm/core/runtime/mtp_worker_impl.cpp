@@ -27,11 +27,14 @@ limitations under the License.
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <memory>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 #include "common/metrics.h"
+#include "util/env_var.h"
 #if defined(USE_NPU) || defined(USE_MLU)
 #include "framework/kv_cache_transfer/mooncake_kv_cache_transfer.h"
 #endif
@@ -48,6 +51,8 @@ limitations under the License.
 #include "models/model_registry.h"
 #if defined(USE_NPU)
 #include "core/kernels/npu/tilelang/tilelang_ops_api.h"
+#endif
+#if defined(USE_NPU) || defined(USE_MUSA)
 #include "core/layers/common/expanded_decode_metadata_builder.h"
 #endif
 #include "core/framework/speculative/adaptive_pruning_helpers.h"
@@ -59,6 +64,11 @@ limitations under the License.
 #include "core/framework/speculative/spec_verify.h"
 #include "core/framework/speculative/speculative_profile_registry.h"
 #include "core/layers/common/dsa_topk_share_plan.h"
+#if defined(USE_MUSA)
+#include "core/kernels/musa/musa_ops_api.h"
+#include "core/layers/common/lm_head.h"
+#include "core/layers/musa/qwen3_gated_delta_net_base.h"
+#endif
 #include "core/platform/platform.h"
 #include "runtime/llm_worker_impl.h"
 #include "runtime/speculative_worker_impl.h"
@@ -78,6 +88,97 @@ using speculative_worker::clear_all_output_embeddings;
 using speculative_worker::clear_selected_embeddings;
 using speculative_worker::record_metadata_ready_event;
 using speculative_worker::wait_metadata_ready_event;
+
+#if defined(USE_MUSA)
+constexpr int64_t kBlockFp8Rows = 128;
+// The exact argmax is recovered whenever block-FP8 error keeps it among this
+// many best approximate logits.
+constexpr int64_t kTargetLmHeadExactTopK = 8;
+
+// Reads one token id per line. Ids must be unique and inside the global
+// vocabulary. When the target LM head is column-parallel (TP>1), only ids in
+// [rank_start, rank_end) are kept and converted to local row indices so each
+// rank loads a subset of its own weight shard. The kept count is truncated
+// down to a multiple of 128 (block-FP8 tile). After local forward the head
+// expands to the local shard width and gathers to the full vocabulary.
+torch::Tensor load_draft_vocab_ids(const std::string& path,
+                                   int64_t global_vocab_size,
+                                   int64_t rank_start,
+                                   int64_t rank_end) {
+  CHECK_GE(rank_start, 0);
+  CHECK_GT(rank_end, rank_start);
+  CHECK_LE(rank_end, global_vocab_size);
+  std::ifstream file(path);
+  CHECK(file.is_open()) << "failed to open MTP draft vocab file " << path;
+  std::vector<int64_t> ids;
+  ids.reserve(static_cast<size_t>(rank_end - rank_start));
+  int64_t id = 0;
+  int64_t global_count = 0;
+  while (file >> id) {
+    CHECK(id >= 0 && id < global_vocab_size)
+        << "MTP draft vocab id " << id << " is outside [0, " << global_vocab_size
+        << ") in " << path;
+    ++global_count;
+    if (id >= rank_start && id < rank_end) {
+      ids.emplace_back(id - rank_start);
+    }
+  }
+  CHECK(file.eof()) << "malformed MTP draft vocab file " << path;
+  std::sort(ids.begin(), ids.end());
+  CHECK(std::adjacent_find(ids.begin(), ids.end()) == ids.end())
+      << "duplicate token id in MTP draft vocab file " << path;
+  const int64_t kept_tiles =
+      static_cast<int64_t>(ids.size()) / kBlockFp8Rows;
+  CHECK(kept_tiles > 0)
+      << "MTP draft vocab has no ids in local shard [" << rank_start << ", "
+      << rank_end << ") after reading " << global_count << " global ids from "
+      << path;
+  const int64_t kept = kept_tiles * kBlockFp8Rows;
+  if (kept < static_cast<int64_t>(ids.size())) {
+    LOG(WARNING) << "MTP draft vocab: truncating local shard rows from "
+                 << ids.size() << " to " << kept
+                 << " (multiple of " << kBlockFp8Rows << ") for rank_start="
+                 << rank_start;
+    ids.resize(static_cast<size_t>(kept));
+  }
+  LOG(INFO) << "MTP draft vocab shard: global_ids=" << global_count
+            << " local_rows=" << ids.size() << " shard=[" << rank_start << ","
+            << rank_end << ")";
+  return torch::tensor(ids, torch::kLong);
+}
+
+layer::LmHead make_block_fp8_draft_lm_head(const layer::LmHead& target_head,
+                                           const ModelContext& draft_context,
+                                           const std::string& vocab_path) {
+  layer::LmHead draft_head(draft_context);
+  if (vocab_path.empty()) {
+    draft_head->load_block_fp8_from(target_head->weight());
+  } else {
+    const ParallelArgs& parallel = draft_context.get_parallel_args();
+    const int64_t local_rows = target_head->weight().size(0);
+    // Match LmHead's process-group selection (lm_head_group_ else tp_group_).
+    ProcessGroup* process_group = parallel.lm_head_group_ != nullptr
+                                      ? parallel.lm_head_group_
+                                      : parallel.tp_group_;
+    CHECK(process_group != nullptr)
+        << "MTP draft vocab sharding requires a process group";
+    const int64_t world_size =
+        static_cast<int64_t>(process_group->world_size());
+    const int64_t rank = static_cast<int64_t>(process_group->rank());
+    CHECK_GT(local_rows, 0);
+    CHECK_GT(world_size, 0);
+    const int64_t global_vocab_size = local_rows * world_size;
+    const int64_t rank_start = rank * local_rows;
+    const int64_t rank_end = rank_start + local_rows;
+    CHECK_EQ(rank_end - rank_start, local_rows);
+    draft_head->load_block_fp8_rows_from(
+        target_head->weight(),
+        load_draft_vocab_ids(
+            vocab_path, global_vocab_size, rank_start, rank_end));
+  }
+  return draft_head;
+}
+#endif
 
 void clear_draft_state(ModelInputParams& params) {
   params.clear_linear_attention_state();
@@ -168,7 +269,7 @@ void finalize_output_on_stream(ForwardOutput& output,
   output.retained_inputs.clear();
 }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
 void clear_expanded_spec_verify_graph_input(ModelInputParams& input_params) {
   input_params.graph.use_expanded_decode_for_spec_verify_attention = false;
   input_params.graph.expanded_kv_seq_lens = torch::Tensor();
@@ -188,10 +289,32 @@ bool build_expanded_spec_verify_graph_host_input(
     return false;
   }
 
-  const std::vector<int32_t>& q_seq_lens =
+  const std::vector<int32_t>& host_q_seq_lens =
       input_params.attention.host.q_seq_lens;
-  const std::vector<int32_t>& kv_seq_lens =
+  const std::vector<int32_t>& host_kv_seq_lens =
       input_params.attention.host.kv_seq_lens;
+  if (host_q_seq_lens.empty() || host_kv_seq_lens.empty()) {
+    return false;
+  }
+  // NPU stores per-sequence lengths; MUSA/MLU store cumulative lengths with a
+  // leading 0 (see append_seq_len_by_layout). ExpandedDecodeMetadataBuilder
+  // always expects per-sequence positive lengths.
+  std::vector<int32_t> q_seq_lens;
+  std::vector<int32_t> kv_seq_lens;
+  const bool cumulative = host_q_seq_lens.size() > 1 &&
+                          host_q_seq_lens.front() == 0 &&
+                          host_kv_seq_lens.size() == host_q_seq_lens.size();
+  if (cumulative) {
+    q_seq_lens.reserve(host_q_seq_lens.size() - 1);
+    kv_seq_lens.reserve(host_kv_seq_lens.size() - 1);
+    for (size_t i = 1; i < host_q_seq_lens.size(); ++i) {
+      q_seq_lens.emplace_back(host_q_seq_lens[i] - host_q_seq_lens[i - 1]);
+      kv_seq_lens.emplace_back(host_kv_seq_lens[i] - host_kv_seq_lens[i - 1]);
+    }
+  } else {
+    q_seq_lens = host_q_seq_lens;
+    kv_seq_lens = host_kv_seq_lens;
+  }
   if (q_seq_lens.empty() || kv_seq_lens.empty()) {
     return false;
   }
@@ -215,7 +338,16 @@ void bind_expanded_spec_verify_graph_input(ModelInputParams& input_params,
   if (!input_params.graph.use_expanded_decode_for_spec_verify_attention) {
     return;
   }
-  const auto& q_seq_lens = input_params.attention.host.q_seq_lens;
+  const auto& host_q_seq_lens = input_params.attention.host.q_seq_lens;
+  std::vector<int32_t> q_seq_lens;
+  if (host_q_seq_lens.size() > 1 && host_q_seq_lens.front() == 0) {
+    q_seq_lens.reserve(host_q_seq_lens.size() - 1);
+    for (size_t i = 1; i < host_q_seq_lens.size(); ++i) {
+      q_seq_lens.emplace_back(host_q_seq_lens[i] - host_q_seq_lens[i - 1]);
+    }
+  } else {
+    q_seq_lens = host_q_seq_lens;
+  }
   if (!kv_lens_already_bound) {
     torch::Tensor expanded_kv_seq_lens_host =
         torch::tensor(input_params.graph.expanded_kv_seq_lens_vec,
@@ -431,7 +563,7 @@ void set_positions_tensor(ForwardInput& input,
   input.device_tensors_ready = false;
   input.positions_host = positions_host;
   input.positions =
-      safe_to(input.positions_host, device_options, /*non_blocking=*/true);
+      specBuilder::host_to_device_async(input.positions_host, device_options);
   input.device_tensors_ready = true;
 }
 
@@ -758,6 +890,189 @@ class NpuJsonDraftTokenHandoff final {
 }  // namespace detail
 #endif
 
+namespace {
+#if defined(USE_MUSA)
+void rebuild_paged_metadata_with_tensor_ops(AttentionDeviceInput& dev,
+                                            int64_t rows,
+                                            int64_t block_size) {
+  const auto i32 = dev.kv_seq_lens.options().dtype(torch::kInt32);
+  const torch::Tensor lens = dev.kv_seq_lens.to(torch::kInt32);
+  const torch::Tensor zero = torch::zeros({1}, i32);
+  const torch::Tensor pages = (lens + (block_size - 1)).div(
+      block_size, /*rounding_mode=*/"floor");
+  const torch::Tensor last = lens - (pages - 1) * block_size;
+  const torch::Tensor indptr =
+      torch::cat({zero, pages.cumsum(0).to(torch::kInt32)});
+  const torch::Tensor cu_lens =
+      torch::cat({zero, lens.cumsum(0).to(torch::kInt32)});
+  const int64_t total = dev.paged_kv_indices.numel();
+  const torch::Tensor j = torch::arange(total, i32);
+  torch::Tensor row = torch::searchsorted(indptr.slice(0, 1), j,
+                                          /*out_int32=*/true, /*right=*/true)
+                          .clamp_max(rows - 1);
+  torch::Tensor local = (j - indptr.index_select(0, row))
+                            .clamp(0, dev.block_tables.size(1) - 1);
+  const torch::Tensor bt = dev.block_tables.slice(0, 0, rows);
+  const torch::Tensor indices =
+      bt.index({row.to(torch::kLong), local.to(torch::kLong)})
+          .to(torch::kInt32)
+          .contiguous();
+  dev.kv_seq_lens = cu_lens.contiguous();
+  dev.paged_kv_indptr = indptr.contiguous();
+  dev.paged_kv_last_page_len = last.contiguous();
+  dev.paged_kv_indices = indices;
+}
+
+// MUSA attention consumes cumulative kv_seq_lens plus paged-KV metadata.
+// prepare_next_draft_from_accepted_state() writes exact per-row kv lengths on
+// device, but the host paged metadata is the conservative "+K" template. The
+// graph fast path previously copied the host template, so rows whose drafts
+// were rejected attended one stale KV slot. Rebuild exact device metadata.
+void rebuild_musa_device_draft_paged_metadata(ForwardInput& draft_input,
+                                              int64_t block_size) {
+  auto& dev = draft_input.input_params.attention.device;
+  const int64_t rows = draft_input.positions.numel();
+  if (rows <= 0 || block_size <= 0 || !dev.kv_seq_lens.defined() ||
+      dev.kv_seq_lens.numel() != rows || !dev.block_tables.defined() ||
+      dev.block_tables.dim() != 2 || dev.block_tables.size(0) < rows ||
+      !dev.paged_kv_indices.defined() || dev.paged_kv_indices.numel() <= 0) {
+    LOG_FIRST_N(WARNING, 3)
+        << "MUSA device draft metadata rebuild skipped: rows=" << rows
+        << " kv=" << dev.kv_seq_lens.numel() << " bt="
+        << (dev.block_tables.defined() ? dev.block_tables.size(0) : -1);
+    return;
+  }
+  if (!kernel::musa::draft_paged_kv_metadata_supported(
+          dev.kv_seq_lens, dev.block_tables, rows)) {
+    rebuild_paged_metadata_with_tensor_ops(dev, rows, block_size);
+    return;
+  }
+  kernel::musa::DraftPagedKvMetadata metadata =
+      kernel::musa::draft_paged_kv_metadata(dev.kv_seq_lens,
+                                            dev.block_tables,
+                                            rows,
+                                            dev.paged_kv_indices.numel(),
+                                            block_size);
+  dev.kv_seq_lens = std::move(metadata.kv_cu_seq_lens);
+  dev.paged_kv_indptr = std::move(metadata.paged_kv_indptr);
+  dev.paged_kv_last_page_len = std::move(metadata.paged_kv_last_page_len);
+  dev.paged_kv_indices = std::move(metadata.paged_kv_indices);
+}
+
+// Fused form of mtp_async::prepare_next_draft_from_accepted_state() on the
+// non-chunked decode layout; false leaves draft_input for the tensor-op path.
+bool apply_musa_next_draft_inputs(ForwardInput& draft_input,
+                                  const ForwardInput& block_table_source,
+                                  const torch::Tensor& accepted_tokens,
+                                  const torch::Tensor& accepted_embeddings,
+                                  const torch::Tensor& embedding_placeholder,
+                                  const torch::Tensor& base_positions,
+                                  const torch::Tensor& base_kv_seq_lens,
+                                  int32_t block_size) {
+  AttentionDeviceInput& dev = draft_input.input_params.attention.device;
+  const torch::Tensor& block_tables =
+      block_table_source.input_params.attention.device.block_tables;
+  if (!block_table_source.input_params.multi_block_tables.empty() ||
+      !draft_input.token_ids.defined() || !draft_input.positions.defined() ||
+      !dev.kv_seq_lens.defined()) {
+    return false;
+  }
+  kernel::musa::MtpNextDraftDtypes dtypes;
+  dtypes.token_ids = draft_input.token_ids.scalar_type();
+  dtypes.positions = draft_input.positions.scalar_type();
+  dtypes.kv_seq_lens = dev.kv_seq_lens.scalar_type();
+  if (!kernel::musa::mtp_next_draft_inputs_supported(accepted_tokens,
+                                                     accepted_embeddings,
+                                                     embedding_placeholder,
+                                                     base_positions,
+                                                     base_kv_seq_lens,
+                                                     block_tables,
+                                                     dtypes)) {
+    return false;
+  }
+  kernel::musa::MtpNextDraftInputs inputs =
+      kernel::musa::mtp_next_draft_inputs(accepted_tokens,
+                                          accepted_embeddings,
+                                          embedding_placeholder,
+                                          base_positions,
+                                          base_kv_seq_lens,
+                                          block_tables,
+                                          block_size,
+                                          dtypes);
+  draft_input.token_ids = std::move(inputs.token_ids);
+  draft_input.input_params.embedding.input_embedding =
+      std::move(inputs.embeddings);
+  draft_input.positions = std::move(inputs.positions);
+  dev.kv_seq_lens = std::move(inputs.kv_seq_lens);
+  dev.new_cache_slots = std::move(inputs.cache_slots);
+  return true;
+}
+#endif
+
+// Greedy verification: the target tokens up to and including the first draft
+// mismatch, then -1. bonus_token_ids is the last column of target_token_ids.
+torch::Tensor greedy_accepted_target_tokens(
+    const torch::Tensor& draft_token_ids,
+    const torch::Tensor& target_token_ids,
+    const torch::Tensor& bonus_token_ids) {
+#if defined(USE_MUSA)
+  if (kernel::musa::greedy_accepted_tokens_supported(draft_token_ids,
+                                                     target_token_ids)) {
+    return kernel::musa::greedy_accepted_tokens(draft_token_ids,
+                                                target_token_ids);
+  }
+#endif
+  const torch::Tensor target_draft_token_ids = target_token_ids.slice(
+      /*dim=*/1, /*start=*/0, /*end=*/target_token_ids.size(1) - 1);
+  return std::get<1>(RejectionSampler::greedy_sample_from_token_ids(
+      draft_token_ids.to(target_draft_token_ids),
+      target_draft_token_ids,
+      bonus_token_ids,
+      /*mask_out_rejected_tokens=*/true));
+}
+
+// Builds the [repair, current] first-draft rows of every sequence from the
+// accepted target tokens.
+void prepare_first_draft_from_accepted_state(
+    ForwardInput& draft_input,
+    const ForwardInput& block_table_source,
+    const torch::Tensor& accepted_tokens,
+    const torch::Tensor& accepted_embeddings,
+    const torch::Tensor& embedding_placeholder,
+    const torch::Tensor& base_positions,
+    const torch::Tensor& base_kv_seq_lens,
+    bool rebuild_expanded_decode_metadata,
+    int32_t block_size) {
+#if defined(USE_MUSA)
+  if (apply_musa_next_draft_inputs(draft_input,
+                                   block_table_source,
+                                   accepted_tokens,
+                                   accepted_embeddings,
+                                   embedding_placeholder,
+                                   base_positions,
+                                   base_kv_seq_lens,
+                                   block_size)) {
+    rebuild_musa_device_draft_paged_metadata(draft_input, block_size);
+    return;
+  }
+#endif
+  mtp_async::prepare_next_draft_from_accepted_state(
+      draft_input,
+      block_table_source,
+      accepted_tokens,
+      accepted_embeddings,
+      embedding_placeholder,
+      base_positions,
+      base_kv_seq_lens,
+      /*use_chunked_prefill=*/false,
+      rebuild_expanded_decode_metadata,
+      block_size);
+#if defined(USE_MUSA)
+  rebuild_musa_device_draft_paged_metadata(draft_input, block_size);
+#endif
+}
+}  // namespace
+
 MTPWorkerImpl::MTPWorkerImpl(const ParallelArgs& parallel_args,
                              const torch::Device& device,
                              const runtime::Options& options,
@@ -887,6 +1202,22 @@ bool MTPWorkerImpl::init_model(const std::string& model_weights_path,
 #else
         if (share_lm_head) {
           auto head = impl_->get_lm_head();
+#if defined(USE_MUSA)
+          const SpeculativeConfig& speculative_config =
+              ::xllm::SpeculativeConfig::get_instance();
+          const std::string& draft_vocab_path =
+              speculative_config.mtp_draft_vocab_path();
+          if (speculative_config.enable_mtp_draft_fp8_lm_head() ||
+              !draft_vocab_path.empty()) {
+            head = make_block_fp8_draft_lm_head(
+                head, draft_impl_->context_, draft_vocab_path);
+            LOG(INFO) << "MTP draft proposes with a block-FP8 LM head"
+                      << (draft_vocab_path.empty()
+                              ? std::string()
+                              : " over the token ids in " + draft_vocab_path)
+                      << "; target verification keeps the original LM head.";
+          }
+#endif
           draft_impl_->set_lm_head(head);
         }
         auto word_embedding = impl_->get_word_embedding();
@@ -894,6 +1225,19 @@ bool MTPWorkerImpl::init_model(const std::string& model_weights_path,
 #endif
       }
     }
+#if defined(USE_MUSA)
+    // Runs after the draft LM head has copied the unquantized target weight.
+    if (::xllm::SpeculativeConfig::get_instance()
+            .enable_mtp_target_fp8_lm_head()) {
+      layer::LmHead target_head(impl_->context_);
+      target_head->load_block_fp8_with_exact_top_k_from(
+          impl_->get_lm_head()->weight(), kTargetLmHeadExactTopK);
+      impl_->set_lm_head(target_head);
+      LOG(INFO) << "MTP target verifies with a block-FP8 LM head whose "
+                << kTargetLmHeadExactTopK
+                << " best logits per token are recomputed exactly.";
+    }
+#endif
   }
 #if defined(USE_NPU)
   if (result && supports_expanded_spec_verify()) {
@@ -1002,6 +1346,16 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_worker_no_sync(
 bool MTPWorkerImpl::supports_expanded_spec_verify() const {
   return target_spec_verify_mode_ ==
          mtp_async::TargetSpecVerifyMode::EXPANDED_VERIFY;
+}
+
+bool MTPWorkerImpl::builds_expanded_spec_verify_attention() const {
+#if defined(USE_MUSA)
+  if (::xllm::SpeculativeConfig::get_instance()
+          .enable_mtp_packed_verify_attention()) {
+    return false;
+  }
+#endif
+  return supports_expanded_spec_verify();
 }
 
 bool MTPWorkerImpl::supports_explicit_spec_verify_replay_update() const {
@@ -1487,6 +1841,12 @@ void MTPWorkerImpl::prepare_prefill_inputs(const ForwardInput& input,
   if (!draft_impl_->has_request_state_cache()) {
     input_params.clear_linear_attention_state();
   }
+#if defined(USE_MUSA)
+  // The target and draft workers build different attention metadata.  Do not
+  // carry the target's paged/plan metadata into the draft prefill, especially
+  // when a batch contains multiple requests.
+  input_params.attn_metadata.reset();
+#endif
   auto& extra_token_ids = input_params.embedding.extra_token_ids;
 
   const torch::Tensor& token_ids = input.token_ids_host;
@@ -1545,8 +1905,10 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
   const bool matching_device_target_context =
       pending_target_context_matches(input);
   // Consume this batch's pending target context directly on device.
+  // MUSA can enable device-context without combined first-draft overlap via
+  // XLLM_MUSA_MTP_DEVICE_CONTEXT (see can_use_device_target_context).
   const bool use_device_target_context =
-      combined_first_draft_available && matching_device_target_context &&
+      can_use_device_target_context(input) && matching_device_target_context &&
       device_target_context_ready_for_batch(input);
   // Keep the device-side accepted state alive across a first-transition Host
   // cache flush. The prelaunched draft can be valid before the batch is marked
@@ -1670,7 +2032,7 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
     wait_metadata_ready_event(current_draft_input, *compute_stream_);
     clear_ready_events(current_draft_input);
 
-    mtp_async::prepare_next_draft_from_accepted_state(
+    prepare_first_draft_from_accepted_state(
         current_draft_input,
         input,
         accepted_tokens,
@@ -1678,7 +2040,6 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_decode(
         embedding_cache_->embedding_placeholder(),
         target_base_positions,
         target_base_kv_seq_lens,
-        /*use_chunked_prefill=*/false,
         /*rebuild_expanded_decode_metadata=*/true,
         logical_block_size());
   } else {
@@ -2477,14 +2838,51 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_validate(
       broadcast_spec_tokens(val_output.next_tokens, parallel_args_);
     }
 
+#if defined(USE_MUSA)
+    if (validate_input.input_params.gdn_mtp_verify_cache != nullptr &&
+        validate_input.input_params.gdn_mtp_verify_cache->enabled) {
+      layer::scatter_gdn_mtp_verify_ssm_states(
+          *validate_input.input_params.gdn_mtp_verify_cache,
+          impl_->kv_caches(),
+          validate_input.input_params,
+          val_output.next_tokens);
+      validate_input.input_params.gdn_mtp_verify_cache->enabled = false;
+    }
+#endif
+
     base_positions = validate_positions.view({batch_size, num_val_tokens})
                          .select(/*dim=*/1, /*index=*/0)
                          .contiguous();
+#if defined(USE_MUSA)
+    // MUSA stores device kv_seq_lens in the cumulative layout with a leading
+    // zero (kv_cu_seq_lens). extract_target_base_kv_seq_lens() expects
+    // per-row lengths, so slicing the cumulative tensor yielded base=0 and the
+    // device-target-context draft got kv lens {0,1}/{-1,0} and wrong repair
+    // cache slots. Convert to per-row lengths first.
+    {
+      const torch::Tensor cu = validate_kv_seq_lens.flatten();
+      const int64_t expanded_rows = batch_size * num_val_tokens;
+      if (cu.numel() == expanded_rows + 1) {
+        base_kv_seq_lens = mtp_async::extract_target_base_kv_seq_lens(
+            cu.slice(0, 1) - cu.slice(0, 0, -1), batch_size, num_val_tokens,
+            /*use_chunked_prefill=*/false);
+      } else if (cu.numel() == batch_size + 1) {
+        base_kv_seq_lens = mtp_async::extract_target_base_kv_seq_lens(
+            cu.slice(0, 1) - cu.slice(0, 0, -1), batch_size, num_val_tokens,
+            /*use_chunked_prefill=*/true);
+      } else {
+        base_kv_seq_lens = mtp_async::extract_target_base_kv_seq_lens(
+            validate_kv_seq_lens, batch_size, num_val_tokens,
+            use_chunked_prefill_spec_verify_path());
+      }
+    }
+#else
     base_kv_seq_lens = mtp_async::extract_target_base_kv_seq_lens(
         validate_kv_seq_lens,
         batch_size,
         num_val_tokens,
         use_chunked_prefill_spec_verify_path());
+#endif
 
     accepted_tokens_host.copy_(val_output.next_tokens,
                                /*non_blocking=*/true);
@@ -2638,6 +3036,10 @@ void MTPWorkerImpl::stage_target_context_write(
   }
   pending_target_context_.failed_rows = std::move(failed_rows);
   pending_target_context_.ready_event = std::move(ready_event);
+  if (can_use_device_target_context(input)) {
+    device_context_ready_embedding_ids_ = pending_target_context_.embedding_ids;
+    device_context_ready_request_ids_ = pending_target_context_.request_ids;
+  }
 }
 
 torch::Tensor MTPWorkerImpl::acquire_accepted_tokens_host_buffer(
@@ -2831,15 +3233,71 @@ bool MTPWorkerImpl::npu_combined_draft_ready() const {
 #endif
 }
 
-bool MTPWorkerImpl::supports_combined_first_draft_execution() const {
-#if defined(USE_NPU)
-  if (!npu_combined_draft_ready()) {
+bool MTPWorkerImpl::supports_device_target_context_execution() const {
+#if defined(USE_MUSA)
+  if (draft_impl_ == nullptr ||
+      draft_impl_->get_status() == WorkerImpl::Status::UNINITIALIZED) {
     return false;
   }
-  const std::string& npu_backend =
-      ::xllm::KernelConfig::get_instance().npu_kernel_backend();
-  return mtp_async::supports_combined_draft_configuration(
-      combined_draft_execution_path_, npu_backend, parallel_args_.dp_size());
+
+  static const bool musa_device_context_enabled =
+      ::xllm::util::get_bool_env("XLLM_MUSA_MTP_DEVICE_CONTEXT", false);
+  if (!musa_device_context_enabled ||
+      ::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel() ||
+      parallel_args_.dp_size() > 1 || !device_.unwrap().is_privateuseone()) {
+    return false;
+  }
+
+  return mtp_async::classify_combined_draft_execution_path(
+             draft_impl_->context_.get_model_args().model_type()) ==
+         mtp_async::CombinedDraftExecutionPath::QWEN3_5_PAGED_ATTENTION;
+#else
+  return false;
+#endif
+}
+
+bool MTPWorkerImpl::can_use_device_target_context(
+    const ForwardInput& input) const {
+  return enable_schedule_overlap() &&
+         (can_use_combined_first_draft(input) ||
+          supports_device_target_context_execution());
+}
+
+bool MTPWorkerImpl::supports_combined_first_draft_execution() const {
+#if defined(USE_NPU) || defined(USE_MUSA)
+  if (draft_impl_ == nullptr ||
+      draft_impl_->get_status() == WorkerImpl::Status::UNINITIALIZED) {
+    return false;
+  }
+
+#if defined(USE_MUSA)
+  // Opt-in: multi-seq overlap of first draft with host/scheduler work.
+  static const bool musa_overlap_enabled =
+      ::xllm::util::get_bool_env("XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT", false);
+  if (!musa_overlap_enabled) {
+    return false;
+  }
+#endif
+
+  if (::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel() ||
+      parallel_args_.dp_size() > 1) {
+    return false;
+  }
+
+  const ModelArgs& draft_args = draft_impl_->context_.get_model_args();
+  const bool supported_model =
+      mtp_async::classify_combined_draft_execution_path(
+          draft_args.model_type()) ==
+      mtp_async::CombinedDraftExecutionPath::QWEN3_5_PAGED_ATTENTION;
+  if (!supported_model || !device_.unwrap().is_privateuseone()) {
+    return false;
+  }
+
+#if defined(USE_NPU)
+  return ::xllm::KernelConfig::get_instance().npu_kernel_backend() == "TORCH";
+#else
+  return true;
+#endif
 #else
   return false;
 #endif
@@ -2873,9 +3331,15 @@ bool MTPWorkerImpl::can_use_combined_first_draft(
   if (!enable_schedule_overlap()) {
     return false;
   }
-  // DSV32 needs positive topk for expanded verify. Zero topk rejects both
-  // prelaunch and continuous drafting; its native combined path is unsupported,
-  // so it stays on regular in-loop drafting, not generic verify correction.
+#if defined(USE_MUSA)
+  // C=1 has no independent draft work to overlap; keep the one-row path
+  // unless the next first draft should be prelaunched behind verification.
+  static const bool allow_single_sequence = ::xllm::util::get_bool_env(
+      "XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT_C1", false);
+  if (input.input_params.meta.num_sequences <= 1 && !allow_single_sequence) {
+    return false;
+  }
+#endif
   return supports_python_dsv32_continuous_drafts(input) ||
          supports_combined_first_draft_execution();
 }
@@ -2954,7 +3418,7 @@ void MTPWorkerImpl::enqueue_next_first_draft(
   // layer projects both rows, writes both KV rows, and only then launches
   // PagedAttention. Same-stream ordering therefore makes repair KV visible to
   // the current row without a host wait or a separate repair forward.
-  mtp_async::prepare_next_draft_from_accepted_state(
+  prepare_first_draft_from_accepted_state(
       combined_input,
       input,
       validate_output.next_tokens,
@@ -2962,7 +3426,6 @@ void MTPWorkerImpl::enqueue_next_first_draft(
       embedding_cache_->embedding_placeholder(),
       base_positions,
       base_kv_seq_lens,
-      /*use_chunked_prefill=*/false,
       /*rebuild_expanded_decode_metadata=*/false,
       logical_block_size());
 
@@ -3499,9 +3962,22 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
     // (checkpoint index = nat - 1) and stays equal to the accepted count.
     input_params.num_accepted_tokens_host.assign(
         accepted_prefix_lengths.begin(), accepted_prefix_lengths.end());
+#if defined(USE_MUSA)
+    if (use_chunked_prefill_spec_verify_path() &&
+        layer::use_mate_gdn_mtp_kernel()) {
+      if (input_params.gdn_mtp_verify_cache == nullptr) {
+        input_params.gdn_mtp_verify_cache =
+            std::make_shared<GdnMtpVerifyCache>();
+      }
+      input_params.gdn_mtp_verify_cache->enabled = true;
+      input_params.gdn_mtp_verify_cache->layer_states.clear();
+    }
+#endif
     if (!use_explicit_spec_verify_replay_update) {
       input_params.num_accepted_tokens =
-          torch::tensor(accepted_prefix_lengths, token_options);
+          safe_to(specBuilder::make_cpu_int_tensor(accepted_prefix_lengths),
+                  token_options,
+                  /*non_blocking=*/true);
     }
   }
 
@@ -3645,7 +4121,18 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
     }
   }
 #else
+  // MUSA: same non-explicit expanded path as NPU (no tilelang replay update).
+  if (supports_expanded_spec_verify()) {
+    ensure_spec_verify_control_block_table(
+        input_params,
+        num_sequences,
+        active_spec_verify_block_table_width(input_params));
+  }
   input_params.attention.rebuild_device_buffer(device_);
+  if (builds_expanded_spec_verify_attention()) {
+    build_expanded_spec_verify_graph_input(
+        input_params, device_, logical_block_size(), defer_expanded_paging);
+  }
 #endif
   validate_input.device_tensors_ready = true;
   // This metadata is independent of the in-flight final draft. Keep it on the
@@ -3869,12 +4356,14 @@ void MTPWorkerImpl::prepare_validate_inputs(
     // num_accepted_tokens selects the previous step's conv/SSM checkpoint
     // (checkpoint index = nat - 1) and stays equal to the accepted count.
     input_params.num_accepted_tokens =
-        torch::tensor(accepted_prefix_lengths, token_options);
+        safe_to(specBuilder::make_cpu_int_tensor(accepted_prefix_lengths),
+                token_options,
+                /*non_blocking=*/true);
     input_params.num_accepted_tokens_host.assign(
         accepted_prefix_lengths.begin(), accepted_prefix_lengths.end());
   }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
   if (supports_expanded_spec_verify()) {
     ensure_spec_verify_control_block_table(
         input_params,
@@ -3883,8 +4372,8 @@ void MTPWorkerImpl::prepare_validate_inputs(
   }
 #endif
   input_params.attention.rebuild_device_buffer(device_);
-#if defined(USE_NPU)
-  if (supports_expanded_spec_verify()) {
+#if defined(USE_NPU) || defined(USE_MUSA)
+  if (builds_expanded_spec_verify_attention()) {
     build_expanded_spec_verify_graph_input(
         input_params, device_, logical_block_size());
   }
@@ -4473,17 +4962,8 @@ SampleOutput MTPWorkerImpl::validate(
       sampling_params.all_greedy_sample && !target_output.logprobs) {
     torch::Tensor target_token_ids =
         target_next_tokens.view({batch_size, num_val_tokens});
-    torch::Tensor target_draft_token_ids = target_token_ids.slice(
-        /*dim=*/1, /*start=*/0, /*end=*/num_val_tokens - 1);
-    auto [accepted_token_ids, masked_accepted_token_ids] =
-        RejectionSampler::greedy_sample_from_token_ids(
-            draft_proposal.token_ids().to(target_draft_token_ids),
-            target_draft_token_ids,
-            bonus_token_ids,
-            /*mask_out_rejected_tokens=*/true);
-    (void)accepted_token_ids;
-
-    sample_output.next_tokens = masked_accepted_token_ids;
+    sample_output.next_tokens = greedy_accepted_target_tokens(
+        draft_proposal.token_ids(), target_token_ids, bonus_token_ids);
     sample_output.embeddings = target_embeddings;
   } else {
     if (target_filter_bitmask.defined()) {

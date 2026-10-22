@@ -138,6 +138,24 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
       positions = torch::tensor({0}).to(torch::kInt32).to(device_);
     }
 
+#if defined(USE_MUSA)
+    // MUSA graph capture supplies persistent, bucket-sized metadata. Reusing
+    // it here keeps draft attention and MTP verification on the same slot and
+    // FA3 scheduler addresses as the captured target graph.
+    layer::AttentionMetadata attn_metadata =
+        input_params.attn_metadata
+            ? *(input_params.attn_metadata)
+            : layer::AttentionMetadataBuilder::build(
+                  input_params,
+                  model_args_.enable_mla(),
+                  build_attention_mask(input_params),
+                  /*device=*/device_);
+    attn_metadata.fa3_metadata.share_fa3_scheduler_metadata = true;
+    if (input_params.attn_metadata != nullptr) {
+      attn_metadata.fa3_metadata.fa3_scheduler_metadata =
+          input_params.attn_metadata->fa3_metadata.fa3_scheduler_metadata;
+    }
+#else
     layer::AttentionMetadataBuildOptions metadata_build_options;
 #if defined(USE_NPU)
     // Native NPU GDN consumes the canonical host mask directly. Avoid
@@ -152,9 +170,13 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
             build_attention_mask(input_params),
             /*device=*/device_,
             metadata_build_options);
+#endif
     prepare_mrope(positions, attn_metadata);
 
-    torch::Tensor embedding = embed_tokens_(tokens);
+    torch::Tensor embedding = input_params.embedding.mtp_token_embedding;
+    if (!embedding.defined()) {
+      embedding = embed_tokens_(tokens);
+    }
     torch::Tensor hidden = input_params.embedding.input_embedding;
     if (hidden.defined() == false) {
       hidden = embedding;
@@ -174,10 +196,18 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
     }
 
     std::optional<torch::Tensor> residual = std::nullopt;
-    if (!input_params.synchronize_draft_layer()) {
-      return ModelOutput();
-    }
     for (size_t i = 0; i < layers_.size(); ++i) {
+#if defined(USE_CUDA) || defined(USE_MUSA)
+      if (attn_metadata.plan_info != nullptr) {
+        attn_metadata.plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.shared_plan_info != nullptr) {
+        attn_metadata.shared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+      if (attn_metadata.unshared_plan_info != nullptr) {
+        attn_metadata.unshared_plan_info->layer_id = static_cast<int32_t>(i);
+      }
+#endif
       mtp_hidden = layers_[i]->forward(mtp_hidden,
                                        residual,
                                        positions,
@@ -192,9 +222,6 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
         return ModelOutput();
       }
 #endif
-      if (!input_params.record_layer(static_cast<uint32_t>(i), device_)) {
-        return ModelOutput();
-      }
     }
     auto [new_mtp_hidden, new_res] = norm_->forward(mtp_hidden, residual);
     mtp_hidden = new_mtp_hidden;

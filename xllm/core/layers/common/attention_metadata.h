@@ -159,6 +159,8 @@ struct AttentionMetadata {
   bool is_mixed = false;
   // Run prefill attention without writing key/value tensors to paged cache.
   bool prefill_without_cache = false;
+  // The layer already wrote this call's key/value rows to the paged cache.
+  bool kv_cache_written = false;
   bool is_dummy;
   // Whether to apply causal mask. Default: true.
   bool is_causal = true;

@@ -235,7 +235,18 @@ void active(ActivationParams& params) {
 #elif defined(USE_NPU)
   params.output = npu::active(params.input, params.act_mode);
 #elif defined(USE_MUSA)
-  musa::active(params.output, params.input, params.act_mode, params.is_gated);
+  if (params.is_gated) {
+    musa::active(params.output, params.input, params.act_mode, true);
+  } else if (params.act_mode == "silu") {
+    params.output = torch::silu(params.input);
+  } else if (params.act_mode == "gelu") {
+    params.output = torch::gelu(params.input);
+  } else if (params.act_mode == "gelu_tanh" ||
+             params.act_mode == "gelu_pytorch_tanh") {
+    params.output = torch::gelu(params.input, /*approximate=*/"tanh");
+  } else {
+    LOG(FATAL) << "Unsupported ungated MUSA activation: " << params.act_mode;
+  }
 #elif defined(USE_CUDA) || defined(USE_DCU)
   cuda::act_and_mul(params.output, params.input, params.act_mode);
 #elif defined(USE_ILU)
@@ -381,6 +392,19 @@ void fused_layernorm(FusedLayerNormParams& params) {
     params.output += params.beta.value();
   }
 #elif defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
+#if defined(USE_MUSA)
+  // The shared CUDA norm kernels implement RMSNorm only.
+  if (params.mode == "layernorm") {
+    CHECK(!params.residual.has_value())
+        << "MUSA LayerNorm does not support fused residual addition";
+    params.output.copy_(torch::layer_norm(params.input,
+                                          {params.input.size(-1)},
+                                          params.weight,
+                                          params.beta.value_or(torch::Tensor()),
+                                          params.eps));
+    return;
+  }
+#endif
   if (params.residual.has_value()) {
     cuda::fused_add_rms_norm(
         params.input, params.residual.value(), params.weight, params.eps);

@@ -145,6 +145,10 @@ class SpeculativeConfig final {
          "speculative_suffix_use_tree_spec",
          "draft_sampling_mode",
          "enable_mtp_draft_body_tp1",
+         "enable_mtp_draft_fp8_lm_head",
+         "mtp_draft_vocab_path",
+         "enable_mtp_target_fp8_lm_head",
+         "enable_mtp_packed_verify_attention",
          "enable_atb_spec_kernel",
          "enable_adaptive_speculative_decode",
          "adaptive_speculative_min_gain"}};
@@ -172,6 +176,22 @@ class SpeculativeConfig final {
   PROPERTY(std::string, draft_sampling_mode) = "greedy";
 
   PROPERTY(bool, enable_mtp_draft_body_tp1) = false;
+
+  // MUSA only: the MTP draft proposes tokens with a 128x128 block-FP8 copy of
+  // the target LM head; target verification keeps the original LM head.
+  PROPERTY(bool, enable_mtp_draft_fp8_lm_head) = false;
+
+  // MUSA only: file with one token id per line. The MTP draft LM head scores
+  // only these tokens; target verification keeps the full LM head.
+  PROPERTY(std::string, mtp_draft_vocab_path);
+
+  // MUSA only: the MTP target LM head runs on a 128x128 block-FP8 copy of its
+  // weight and recomputes the best logits of every token exactly.
+  PROPERTY(bool, enable_mtp_target_fp8_lm_head) = false;
+
+  // MUSA only: MTP verification attends over all verify tokens of a sequence
+  // in one causal FA3 call instead of one expanded decode row per token.
+  PROPERTY(bool, enable_mtp_packed_verify_attention) = false;
 
   PROPERTY(bool, enable_atb_spec_kernel) = false;
 

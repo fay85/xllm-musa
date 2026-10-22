@@ -25,6 +25,7 @@ limitations under the License.
 
 #include "core/common/macros.h"
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/kernels/param.h"
 #include "core/util/env_var.h"
 
@@ -345,6 +346,11 @@ MateGdnPrefillScratch& mate_gdn_prefill_scratch() {
 torch::Tensor ensure_scratch_tensor(torch::Tensor& buf,
                                     torch::IntArrayRef sizes,
                                     const torch::TensorOptions& opts) {
+  // A captured graph keeps the address it recorded, so capture never borrows
+  // a buffer that a later eager call may reallocate.
+  if (is_stream_capturing()) {
+    return torch::empty(sizes, opts);
+  }
   // TileLang buffers must retain exact contiguous strides.
   const bool exact_reuse = buf.defined() && buf.sizes().equals(sizes) &&
                            buf.is_contiguous() &&

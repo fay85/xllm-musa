@@ -126,6 +126,14 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
     LOG(WARNING) << "Disabling UnifiedPolicy for models with LINEAR state.";
     batch_mode_.enable_mix_batch = false;
   }
+#if defined(USE_MUSA)
+  // A MUSA forward that mixes prefill and decode rows cannot replay a graph
+  // and runs GDN per sequence, which costs about a second per batch. Keep
+  // prefill and decode in separate batches.
+  if (has_linear_attention_layers(engine_->model_args())) {
+    batch_mode_.enable_mix_batch = false;
+  }
+#endif
 
   kv_cache_manager_ = engine_->block_manager_pool();
   CHECK(kv_cache_manager_ != nullptr);
@@ -452,6 +460,7 @@ std::vector<Batch> ContinuousScheduler::schedule_request(
   std::vector<Batch> batch;
   while (true) {
     apply_cancel_requests();
+    wait_for_inflight_requests_when_idle();
     batch = prepare_batch();
     bool all_empty =
         std::all_of(batch.begin(), batch.end(), [](const Batch& one_batch) {
@@ -484,6 +493,28 @@ std::vector<Batch> ContinuousScheduler::schedule_request(
   }
   // return an empty batch
   return batch;
+}
+
+void ContinuousScheduler::wait_for_inflight_requests_when_idle() {
+  const int32_t wait_ms =
+      ::xllm::SchedulerConfig::get_instance().prefill_batch_wait_ms();
+  if (wait_ms <= 0 || request_queue_.isEmpty() || if_queue_not_empty()) {
+    return;
+  }
+  const bool has_pending_batch =
+      std::any_of(last_batch_.begin(),
+                  last_batch_.end(),
+                  [](const Batch& pending) { return !pending.empty(); });
+  if (has_pending_batch) {
+    return;
+  }
+  // pending_requests_ counts requests accepted by the master that have not
+  // been pushed to request_queue_ yet.
+  constexpr absl::Duration kPollInterval = absl::Microseconds(200);
+  const absl::Time deadline = absl::Now() + absl::Milliseconds(wait_ms);
+  while (num_pending_requests() > 0 && absl::Now() < deadline) {
+    absl::SleepFor(kPollInterval);
+  }
 }
 
 void ContinuousScheduler::apply_cancel_requests() {

@@ -8,8 +8,8 @@ option(USE_CUDA "Enable CUDA support" OFF)
 option(USE_MUSA "Enable MUSA support" OFF)
 option(USE_DCU "Enable DCU support" OFF)
 option(USE_MACA "Enable MACA support" OFF)
-set(USE_ETCD ON CACHE BOOL "Build Mooncake etcd support" FORCE)
-set(STORE_USE_ETCD ON CACHE BOOL "Build Mooncake Store etcd support" FORCE)
+option(USE_ETCD "Build Mooncake etcd support" ON)
+option(STORE_USE_ETCD "Build Mooncake Store etcd support" ON)
 add_compile_definitions(YLT_ENABLE_IBV)
 add_definitions(-DYLT_ENABLE_IBV)
 set(YLT_ENABLE_IBV ON)
@@ -874,26 +874,28 @@ endif()
 # Configure third_party first so xllm can link against real CMake targets.
 
 add_subdirectory(third_party)
-if(NOT TARGET build_etcd_wrapper OR NOT TARGET mooncake_store)
-  message(FATAL_ERROR
-    "Mooncake Store requires its etcd wrapper targets")
-endif()
+if(USE_ETCD OR STORE_USE_ETCD)
+  if(NOT TARGET build_etcd_wrapper OR NOT TARGET mooncake_store)
+    message(FATAL_ERROR
+      "Mooncake Store requires its etcd wrapper targets")
+  endif()
 
-if(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
-  set(MOONCAKE_ETCD_RUNTIME_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
-else()
-  set(MOONCAKE_ETCD_RUNTIME_DIR "${CMAKE_BINARY_DIR}")
+  if(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+    set(MOONCAKE_ETCD_RUNTIME_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+  else()
+    set(MOONCAKE_ETCD_RUNTIME_DIR "${CMAKE_BINARY_DIR}")
+  endif()
+  set(MOONCAKE_ETCD_WRAPPER
+      "${CMAKE_BINARY_DIR}/third_party/Mooncake/mooncake-common/etcd/libetcd_wrapper.so")
+  add_custom_target(stage_mooncake_etcd_runtime ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${MOONCAKE_ETCD_RUNTIME_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${MOONCAKE_ETCD_WRAPPER}"
+            "${MOONCAKE_ETCD_RUNTIME_DIR}/libetcd_wrapper.so"
+    DEPENDS build_etcd_wrapper
+    COMMENT "Staging Mooncake etcd runtime")
+  add_dependencies(mooncake_store stage_mooncake_etcd_runtime)
 endif()
-set(MOONCAKE_ETCD_WRAPPER
-    "${CMAKE_BINARY_DIR}/third_party/Mooncake/mooncake-common/etcd/libetcd_wrapper.so")
-add_custom_target(stage_mooncake_etcd_runtime ALL
-  COMMAND ${CMAKE_COMMAND} -E make_directory "${MOONCAKE_ETCD_RUNTIME_DIR}"
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          "${MOONCAKE_ETCD_WRAPPER}"
-          "${MOONCAKE_ETCD_RUNTIME_DIR}/libetcd_wrapper.so"
-  DEPENDS build_etcd_wrapper
-  COMMENT "Staging Mooncake etcd runtime")
-add_dependencies(mooncake_store stage_mooncake_etcd_runtime)
 if(TARGET brpc-static AND NOT TARGET brpc)
   add_library(brpc ALIAS brpc-static)
 endif()

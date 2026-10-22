@@ -413,6 +413,10 @@ class ContinuousScheduler : public Scheduler {
 
   std::vector<Batch> schedule_request(const absl::Duration& timeout);
 
+  // On an idle engine, give requests that are still being tokenized a short
+  // window to reach request_queue_ so that their prefills share one batch.
+  void wait_for_inflight_requests_when_idle();
+
   virtual void update_token_latency_metrics(std::vector<Sequence*>& sequences);
 
   // process the batch output

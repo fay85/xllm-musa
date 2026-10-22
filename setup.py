@@ -343,7 +343,11 @@ def _stage_mooncake_runtime_binaries(cmake_dir: str, extdir: str) -> None:
     must carry its soname for deployment on images without liburing installed.
     The binaries' ``$ORIGIN`` rpath resolves these copies beside them.
     """
-    uring_library = _get_cmake_library(cmake_dir, "URING_LIB")
+    try:
+        uring_library = _get_cmake_library(cmake_dir, "URING_LIB")
+    except RuntimeError:
+        logger.info("Mooncake liburing is unavailable; skipping optional runtime staging")
+        return
     resolved_uring_library = os.path.realpath(uring_library)
     if not os.path.basename(resolved_uring_library).startswith("liburing.so.2"):
         raise RuntimeError(
@@ -469,6 +473,11 @@ class ExtBuild(build_ext):
         # which can cause deadlocks and hang the build process.
         archive_jobs: int = min(8, max(1, max_jobs_int // 4))
 
+        # Some deployment images do not ship the Go toolchain used only by
+        # Mooncake's optional etcd wrapper. Keep the upstream default, while
+        # allowing those images to disable the unused dependency explicitly.
+        etcd_enabled = os.getenv("XLLM_USE_ETCD", "ON")
+
         if self.device is None:
             raise ValueError("Please set --device to npu, mlu, cuda, dcu, ilu or musa.")
         if self.arch is None:
@@ -486,8 +495,8 @@ class ExtBuild(build_ext):
             "-DBUILD_SHARED_LIBS=OFF",
             f"-DDEVICE_TYPE=USE_{self.device.upper()}",
             f"-DDEVICE_ARCH={self.arch.upper()}",
-            "-DUSE_ETCD=ON",
-            "-DSTORE_USE_ETCD=ON",
+            f"-DUSE_ETCD={etcd_enabled}",
+            f"-DSTORE_USE_ETCD={etcd_enabled}",
             f"-DXLLM_ATB_LAYERS_SOURCE_DIR={os.path.join(self.base_dir, 'third_party', 'xllm_atb_layers')}",
             f"-DCMAKE_JOB_POOLS=archive={archive_jobs}",
         ]
@@ -627,7 +636,15 @@ class ExtBuild(build_ext):
         base_build_args = build_args
         # Build every native executable shipped in the wheel so stale Mooncake
         # binaries cannot be reused from a previous build directory.
-        build_targets = [ext.name, "mooncake_master", "mooncake_client", "stage_mooncake_etcd_runtime"]
+        build_targets = [ext.name, "mooncake_master", "mooncake_client"]
+        etcd_enabled = env.get("XLLM_USE_ETCD", "ON").strip().upper() in {
+            "1",
+            "ON",
+            "TRUE",
+            "YES",
+        }
+        if etcd_enabled:
+            build_targets.append("stage_mooncake_etcd_runtime")
         build_args += ["--target", *build_targets]
         subprocess.check_call([cmake_cmd, "--build", ".", "--verbose"] + build_args, cwd=cmake_dir, env=env)
 
@@ -637,10 +654,11 @@ class ExtBuild(build_ext):
             os.path.join(extdir, product),
             server_output_dir,
         )
-        etcd_wrapper = os.path.join(extdir, "libetcd_wrapper.so")
-        if not os.path.isfile(etcd_wrapper):
-            raise RuntimeError(f"Mooncake etcd runtime library was not staged: {etcd_wrapper}")
-        shutil.copy(etcd_wrapper, server_output_dir)
+        if etcd_enabled:
+            etcd_wrapper = os.path.join(extdir, "libetcd_wrapper.so")
+            if not os.path.isfile(etcd_wrapper):
+                raise RuntimeError(f"Mooncake etcd runtime library was not staged: {etcd_wrapper}")
+            shutil.copy(etcd_wrapper, server_output_dir)
 
         # Stage the Python model-executor package into the wheel as the
         # ``xllm.python`` subpackage (xllm/python/...). The installed ``xllm``

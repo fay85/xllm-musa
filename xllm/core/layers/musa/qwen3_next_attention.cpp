@@ -20,6 +20,7 @@ limitations under the License.
 #include <cmath>
 #include <tuple>
 
+#include "core/kernels/musa/mrope.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/util/env_var.h"
 
@@ -156,13 +157,21 @@ torch::Tensor Qwen3NextAttentionImpl::build_mrope_cos_sin(
   return gathered.view({positions.size(1), -1});
 }
 
+bool Qwen3NextAttentionImpl::supports_fp8_input() const {
+  return qkv_proj_->supports_block_fp8_quantized_input();
+}
+
 torch::Tensor Qwen3NextAttentionImpl::forward(
     const torch::Tensor& positions,
-    const torch::Tensor& hidden_states,
+    const NormalizedHiddenStates& hidden_states,
     const AttentionMetadata& attn_metadata,
     KVCache& kv_cache,
     const torch::Tensor& mrope_cos_sin) {
-  torch::Tensor qkv = qkv_proj_->forward(hidden_states);
+  torch::Tensor qkv =
+      hidden_states.has_fp8() && supports_fp8_input()
+          ? qkv_proj_->forward_block_fp8_quantized(hidden_states.fp8_values,
+                                                   hidden_states.fp8_scales)
+          : qkv_proj_->forward(hidden_states.values);
   if (use_fused_qkv_) {
     torch::Tensor q_flat;
     torch::Tensor k_flat;
@@ -202,6 +211,7 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
   // Fallback path: weight-reordered layout [Q | G | K | V]
   torch::Tensor q, k, v;
   torch::Tensor gate;
+  bool kv_cache_written = false;
   {
     if (attn_output_gate_) {
       q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
@@ -229,18 +239,47 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
         (head_dim_ == 64 || head_dim_ == 128 || head_dim_ == 256)) {
       auto cos_sin_cache = rotary_emb_->get_cos_sin_cache();
       int64_t k_head_offset = attn_output_gate_ ? num_heads_ * 2 : num_heads_;
-      xllm::kernel::musa::fused_qk_norm_rope(qkv,
-                                             num_heads_,
-                                             num_kv_heads_,
-                                             num_kv_heads_,
-                                             head_dim_,
-                                             rms_norm_eps_,
-                                             q_norm_->weight(),
-                                             k_norm_->weight(),
-                                             cos_sin_cache,
-                                             /*interleaved=*/false,
-                                             positions,
-                                             k_head_offset);
+      torch::Tensor k_cache = kv_cache.get_k_cache();
+      torch::Tensor v_cache = kv_cache.get_v_cache();
+      kv_cache_written =
+          !attn_metadata.prefill_without_cache &&
+          xllm::kernel::musa::fused_qk_norm_rope_cache_supported(
+              qkv,
+              k_cache,
+              v_cache,
+              attn_metadata.slot_mapping,
+              num_kv_heads_,
+              head_dim_);
+      if (kv_cache_written) {
+        xllm::kernel::musa::fused_qk_norm_rope_with_cache(
+            qkv,
+            num_heads_,
+            num_kv_heads_,
+            head_dim_,
+            rms_norm_eps_,
+            q_norm_->weight(),
+            k_norm_->weight(),
+            cos_sin_cache,
+            /*interleaved=*/false,
+            positions,
+            k_head_offset,
+            k_cache,
+            v_cache,
+            attn_metadata.slot_mapping);
+      } else {
+        xllm::kernel::musa::fused_qk_norm_rope(qkv,
+                                               num_heads_,
+                                               num_kv_heads_,
+                                               num_kv_heads_,
+                                               head_dim_,
+                                               rms_norm_eps_,
+                                               q_norm_->weight(),
+                                               k_norm_->weight(),
+                                               cos_sin_cache,
+                                               /*interleaved=*/false,
+                                               positions,
+                                               k_head_offset);
+      }
       q = qkv.slice(/*dim=*/-1, /*start=*/0, /*end=*/q_size_);
       k = qkv.slice(
           /*dim=*/-1,
@@ -253,12 +292,40 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
       auto k_3d = k.view({T, num_kv_heads_, head_dim_});
       k = std::get<0>(k_norm_->forward(k_3d)).view({T, kv_size_});
 
-      rotary_emb_->forward(positions, q, k);
+      // Qwen3.8 VLM/text configurations use three-axis mRoPE positions
+      // ([temporal, height, width]). The ordinary partial RoPE kernel expects
+      // one position per token, so route the [3, T] layout through the MUSA
+      // mRoPE kernel and keep the one-dimensional text path unchanged.
+      if (positions.dim() == 2 && positions.size(0) == 3) {
+        xllm::kernel::musa::partial_mrope_embedding(
+            positions,
+            q,
+            k,
+            rotary_emb_->get_cos_sin_cache(),
+            head_dim_,
+            rotary_dim_,
+            mrope_section_,
+            is_interleaved_);
+      } else {
+        rotary_emb_->forward(positions, q, k);
+      }
     }
   }
-  torch::Tensor out =
-      std::get<0>(attn_->forward(attn_metadata, q, k, v, kv_cache));
+  torch::Tensor out;
+  if (kv_cache_written) {
+    AttentionMetadata cached_metadata = attn_metadata;
+    cached_metadata.kv_cache_written = true;
+    out = std::get<0>(attn_->forward(cached_metadata, q, k, v, kv_cache));
+  } else {
+    out = std::get<0>(attn_->forward(attn_metadata, q, k, v, kv_cache));
+  }
   if (attn_output_gate_) {
+    if (o_proj_->supports_block_fp8_quantized_input() &&
+        xllm::kernel::musa::mul_sigmoid_gate_quant_supported(out, gate)) {
+      auto [quantized, scales] =
+          xllm::kernel::musa::fused_mul_sigmoid_gate_quant_fp8(out, gate);
+      return o_proj_->forward_block_fp8_quantized(quantized, scales);
+    }
     // Capture-safe fused gating: compute sigmoid(gate) and multiply `out`
     // in one launch without a temporary allocation or mutating `gate`.
     xllm::kernel::musa::mul_sigmoid_gate_inplace(out, gate);
@@ -283,6 +350,25 @@ void Qwen3NextAttentionImpl::load_state_dict(const StateDict& state_dict) {
         {q_part.reshape({q_size_, hidden}), g_part.reshape({q_size_, hidden})},
         0);
     qg_rows.copy_(reordered);
+    // Block-FP8: the weight rows were permuted from per-head [q,g]
+    // interleave to [Q|G]; permute the [128-row] scale blocks identically,
+    // otherwise Q and G rows are dequantized with each other's scales.
+    torch::Tensor scale_inv = qkv_proj_->weight_scale_inv();
+    if (scale_inv.defined() && scale_inv.numel() > 0 &&
+        qkv_proj_->is_weight_scale_inv_loaded()) {
+      constexpr int64_t kBlock = 128;
+      CHECK_EQ(head_dim_ % kBlock, 0)
+          << "Q/G scale reorder requires head_dim % 128 == 0";
+      const int64_t blocks_per_head = head_dim_ / kBlock;
+      const int64_t qg_blocks = q_size_ * 2 / kBlock;
+      auto s_rows = scale_inv.slice(0, 0, qg_blocks);
+      auto s_3d = s_rows.view({num_heads_, 2 * blocks_per_head, scale_inv.size(1)});
+      auto sq = s_3d.slice(1, 0, blocks_per_head)
+                    .reshape({num_heads_ * blocks_per_head, scale_inv.size(1)});
+      auto sg = s_3d.slice(1, blocks_per_head, 2 * blocks_per_head)
+                    .reshape({num_heads_ * blocks_per_head, scale_inv.size(1)});
+      s_rows.copy_(torch::cat({sq, sg}, 0));
+    }
     qkv_weight_reordered_ = true;
   }
 

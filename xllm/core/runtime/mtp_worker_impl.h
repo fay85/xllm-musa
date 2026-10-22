@@ -156,6 +156,8 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
                               ForwardInput& prefill_inputs);
   void prepare_draft_sampling(SamplingParameters& sampling_params) const;
   bool supports_expanded_spec_verify() const;
+  // Whether verify attention gets one expanded decode row per verify token.
+  bool builds_expanded_spec_verify_attention() const;
   bool supports_explicit_spec_verify_replay_update() const;
   bool should_use_explicit_spec_verify_replay_update(
       const ForwardInput& input) const;
@@ -280,6 +282,8 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
   bool device_target_context_ready_for_batch(const ForwardInput& input) const;
   void flush_pending_target_context();
   bool npu_combined_draft_ready() const;
+  bool supports_device_target_context_execution() const;
+  bool can_use_device_target_context(const ForwardInput& input) const;
   bool supports_combined_first_draft_execution() const;
   bool supports_python_dsv32_continuous_drafts(const ForwardInput& input) const;
   bool can_use_combined_first_draft(const ForwardInput& input) const;

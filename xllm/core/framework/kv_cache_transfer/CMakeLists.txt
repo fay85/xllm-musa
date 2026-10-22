@@ -91,8 +91,8 @@ cc_library(
     prefetch_result.h
     prefetch_tail_probe.h
     hierarchy_kv_cache_transfer.h
-    $<$<OR:$<BOOL:${USE_NPU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:mooncake_transfer_engine.h>
-    $<$<OR:$<BOOL:${USE_NPU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:mooncake_kv_cache_transfer.h>
+    $<$<OR:$<BOOL:${USE_NPU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>,$<BOOL:${USE_MUSA}>>:mooncake_transfer_engine.h>
+    $<$<OR:$<BOOL:${USE_NPU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>,$<BOOL:${USE_MUSA}>>:mooncake_kv_cache_transfer.h>
     $<$<BOOL:${USE_NPU}>:mooncake_weight_transfer.h>
   SRCS
     kv_cache_transfer.cpp
@@ -106,8 +106,8 @@ cc_library(
     host_transfer/compact_load_executor.cpp
     host_transfer/compact_offload_executor.cpp
     hierarchy_kv_cache_transfer.cpp
-    $<$<OR:$<BOOL:${USE_NPU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:mooncake_transfer_engine.cpp>
-    $<$<OR:$<BOOL:${USE_NPU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>>:mooncake_kv_cache_transfer.cpp>
+    $<$<OR:$<BOOL:${USE_NPU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>,$<BOOL:${USE_MUSA}>>:mooncake_transfer_engine.cpp>
+    $<$<OR:$<BOOL:${USE_NPU}>,$<BOOL:${USE_MLU}>,$<BOOL:${USE_DCU}>,$<BOOL:${USE_MUSA}>>:mooncake_kv_cache_transfer.cpp>
     $<$<BOOL:${USE_NPU}>:mooncake_weight_transfer.cpp>
   DEPS
     :cache_layout

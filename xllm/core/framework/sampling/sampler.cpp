@@ -25,6 +25,9 @@ limitations under the License.
 #include "core/framework/config/model_config.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "logits_utils.h"
+#if defined(USE_MUSA)
+#include "core/kernels/musa/musa_ops_api.h"
+#endif
 #include "sampling_params.h"
 
 namespace xllm {
@@ -199,11 +202,18 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
 }
 
 torch::Tensor Sampler::greedy_sample(const torch::Tensor& probs) {
+#if defined(USE_MUSA)
+  if (xllm::kernel::musa::row_argmax_supported(probs)) {
+    return xllm::kernel::musa::row_argmax(probs);
+  }
+#endif
   return probs.argmax(/*dim=*/-1);
 }
 
 torch::Tensor Sampler::random_sample(const torch::Tensor& probs) {
-#if defined(USE_MLU) || defined(USE_CUDA) || defined(USE_DCU)
+#if defined(USE_MUSA)
+  return xllm::kernel::musa::random_sample(probs);
+#elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_DCU)
   xllm::kernel::RandomSampleParams params;
   params.logits = probs;
   return xllm::kernel::random_sample(params);

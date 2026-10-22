@@ -67,6 +67,7 @@ constexpr int64_t kMaxChunkTokens = 1024;
 // masked-GEMM buffer, so this size is safe for the 20k-token target while
 // avoiding one route/quantize/GEMM/synchronize sequence per 1k tokens.
 constexpr int64_t kMaxCompactPrefillTokens = 16384;
+constexpr int64_t kMaxAlignedRaggedFp8PrefillTokens = 512;
 // The BF16 compact path has no activation-quantization buffers and can process
 // the complete long-context prefill in one routed batch and avoids
 // repeating routing per layer.
@@ -75,6 +76,8 @@ constexpr int64_t kMaxMoeTopkTokens = 2048;
 constexpr int64_t kMaskedGemmMAlignment = 256;
 constexpr int64_t kCompactBf16MAlignment = 128;
 constexpr int64_t kRaggedDecodeAlignment = 128;
+// Fused FP8 AOT artifacts are validated for fixed token batches 1 through 8.
+constexpr int64_t kMaxFusedMoeAotDecodeTokens = 8;
 // Mate Ragged changes the FP8 GEMM accumulation layout. B=1 passes the model
 // correctness gate and captures the long-ISL decode win; B>1 remains on the
 // established contiguous path until a wider ragged decode path is ready.
@@ -96,6 +99,24 @@ bool use_contiguous_bf16_prefill_gemm(int64_t num_tokens) {
   static const bool enabled =
       util::get_bool_env("XLLM_MUSA_CONTIGUOUS_BF16_PREFILL_GEMM", false);
   return enabled && num_tokens >= kContiguousBf16PrefillMinTokens;
+}
+
+bool use_contiguous_fp8_moe_prefill() {
+  // Low-occupancy prefills use the aligned Ragged path below. Contiguous FP8
+  // remains the high-throughput path once each expert receives enough rows.
+  static const bool enabled =
+      util::get_bool_env("XLLM_MUSA_CONTIGUOUS_FP8_MOE_PREFILL", true);
+  return enabled;
+}
+
+bool use_aligned_ragged_fp8_moe_prefill(int64_t num_tokens) {
+  static const bool enabled =
+      util::get_bool_env("XLLM_MUSA_ALIGNED_RAGGED_FP8_MOE_PREFILL", true);
+  static const int64_t max_tokens = std::clamp(
+      util::get_int_env("XLLM_MUSA_ALIGNED_RAGGED_FP8_MOE_PREFILL_MAX_TOKENS",
+                        kMaxAlignedRaggedFp8PrefillTokens),
+      int64_t{1}, kMaxCompactPrefillTokens);
+  return enabled && num_tokens <= max_tokens;
 }
 
 bool use_ragged_moe_decode(int64_t num_tokens, bool is_decode) {
@@ -129,6 +150,23 @@ bool use_fused_moe_aot(int64_t num_tokens, bool is_decode) {
       << "MUSA fused MoE AOT artifacts are unavailable for decode batch "
       << num_tokens << "; using the contiguous fallback.";
   return false;
+}
+
+bool use_chunked_fused_moe_aot(int64_t num_tokens, bool is_decode) {
+  static const bool enabled =
+      util::get_bool_env("XLLM_MUSA_FUSED_MOE_AOT", true);
+  if (!enabled || !is_decode || num_tokens <= kMaxFusedMoeAotDecodeTokens) {
+    return false;
+  }
+  for (int64_t start = 0; start < num_tokens;
+       start += kMaxFusedMoeAotDecodeTokens) {
+    const int64_t chunk_tokens =
+        std::min(kMaxFusedMoeAotDecodeTokens, num_tokens - start);
+    if (!xllm::kernel::musa::fused_moe_aot_available(chunk_tokens)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 bool use_bf16_fused_moe_aot(int64_t num_tokens, bool is_decode) {
@@ -637,6 +675,33 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward_chunk(
         .to(hidden_states.scalar_type());
   };
 
+  // The aligned Ragged FP8 route avoids the large contiguous expert buffer
+  // for short prefills, where most expert rows would otherwise be padding.
+  if (use_fp8_ && !is_decode &&
+      use_aligned_ragged_fp8_moe_prefill(num_tokens)) {
+    auto preprocess = xllm::kernel::musa::fused_moe_preprocess_bf16(
+        hidden_states.contiguous(), topk_ids, num_experts_,
+        kCompactBf16MAlignment);
+    auto [hidden_fp8, hidden_scale] =
+        xllm::kernel::musa::per_token_group_quant_fp8(
+            std::get<0>(preprocess), /*group_size=*/128);
+    auto gate_up = xllm::kernel::musa::ragged_moe_gemm_fp8(
+        hidden_fp8, hidden_scale, w13_, w13_scale_inv_, std::get<1>(preprocess),
+        hidden_states.scalar_type(), kCompactBf16MAlignment);
+    torch::Tensor activated;
+    activation_->forward(gate_up, activated);
+    auto [activated_fp8, activated_scale] =
+        xllm::kernel::musa::per_token_group_quant_fp8(activated,
+                                                      /*group_size=*/128);
+    auto down = xllm::kernel::musa::ragged_moe_gemm_fp8(
+        activated_fp8, activated_scale, w2_, w2_scale_inv_,
+        std::get<1>(preprocess), hidden_states.scalar_type(),
+        kCompactBf16MAlignment);
+    return xllm::kernel::musa::moe_combine_result_indexed(
+        down, std::get<2>(preprocess), topk_weights, num_tokens,
+        static_cast<int32_t>(topk_));
+  }
+
   if (use_contiguous_fp8_moe_ && use_fused_moe_preprocess(num_tokens)) {
     auto preprocess = xllm::kernel::musa::fused_moe_preprocess_fp8(
         hidden_states.contiguous(), topk_ids, num_experts_, 128);
@@ -832,12 +897,22 @@ torch::Tensor Qwen3_5FusedMoEImpl::forward(
   const int64_t num_tokens = hidden_states.size(0);
   // MIXED contains both prefill and decode rows. It must use the general
   // compact route rather than a decode-only fixed-block specialization.
-  const bool is_decode = input_params.meta.batch_forward_type.is_decode();
+  // MTP verification is a fixed small token batch even though the outer
+  // scheduler labels it as a prefill-like forward.  Route those rows through
+  // the same fixed-batch AOT MoE kernels as ordinary decode.
+  const bool is_decode = input_params.meta.batch_forward_type.is_decode() ||
+                         input_params.is_spec_verify;
   const bool is_prefill = !is_decode;
   int64_t chunk_tokens = kMaxChunkTokens;
-  if (is_prefill && use_contiguous_bf16_moe_) {
+  if (use_fp8_ && use_chunked_fused_moe_aot(num_tokens, is_decode)) {
+    chunk_tokens = kMaxFusedMoeAotDecodeTokens;
+  } else if (is_prefill && use_contiguous_bf16_moe_) {
     chunk_tokens = kMaxCompactBf16PrefillTokens;
-  } else if (is_prefill && use_contiguous_fp8_moe_) {
+  } else if (is_prefill && use_fp8_ &&
+             use_aligned_ragged_fp8_moe_prefill(num_tokens)) {
+    chunk_tokens = kMaxCompactPrefillTokens;
+  } else if (is_prefill && use_contiguous_fp8_moe_ &&
+             use_contiguous_fp8_moe_prefill()) {
     chunk_tokens = kMaxCompactPrefillTokens;
   }
   std::vector<torch::Tensor> routed_chunks;

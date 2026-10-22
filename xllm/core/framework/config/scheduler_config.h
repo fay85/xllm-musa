@@ -48,6 +48,8 @@ class SchedulerConfig final {
          "enable_chunked_prefill",
          "max_tokens_per_chunk_for_prefill",
          "chunked_match_frequency",
+         "prefill_batch_wait_ms",
+         "decode_priority_max_wait_ms",
          "use_zero_evict",
          "max_decode_token_per_sequence",
          "priority_strategy",
@@ -73,6 +75,15 @@ class SchedulerConfig final {
   PROPERTY(int32_t, max_tokens_per_chunk_for_prefill) = -1;
 
   PROPERTY(int32_t, chunked_match_frequency) = 2;
+
+  // Upper bound on how long an idle engine waits for requests that are still
+  // being tokenized, so that a burst of arrivals is prefilled in one batch.
+  PROPERTY(int32_t, prefill_batch_wait_ms) = 0;
+
+  // In exclusive prefill/decode batching, keep new prefills out while decode
+  // requests are running until one of them has waited this long. 0 keeps the
+  // prefill-first behavior.
+  PROPERTY(int32_t, decode_priority_max_wait_ms) = 0;
 
   PROPERTY(bool, use_zero_evict) = false;
 

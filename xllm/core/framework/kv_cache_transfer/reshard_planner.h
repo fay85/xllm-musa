@@ -133,6 +133,14 @@ class RequestRegionBinder final {
               int64_t layer_id,
               std::vector<ByteRegion>* regions) const;
 
+  // The plan describes remote source -> local destination. Request mappings
+  // and returned byte regions use the receiver's local/remote orientation.
+  Status bind_pull(const ReshardPlanTemplate& plan,
+                   const std::vector<KVTransferMapping>& mappings,
+                   CacheNamespace cache_namespace,
+                   int64_t layer_id,
+                   std::vector<ByteRegion>* regions) const;
+
   Status bind_explicit(const ReshardPlanTemplate& plan,
                        const std::vector<ExplicitResourceMapping>& mappings,
                        CacheNamespace cache_namespace,

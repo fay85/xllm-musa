@@ -24,6 +24,7 @@ limitations under the License.
 
 #include "async_response_processor.h"
 #include "common/metrics.h"
+#include "core/framework/config/execution_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/kv_cache_store_config.h"
 #include "core/framework/config/parallel_config.h"
@@ -99,6 +100,26 @@ void restore_skipped_requests(
     queue->push(*it);
   }
 }
+
+#if defined(USE_MUSA)
+// MUSA piecewise prefill graphs cover one sequence of a model with linear
+// attention: multi-sequence GDN prefill rows keep their exact host layout and
+// run eager. One prefill sequence per batch lets every chunk replay a graph;
+// decode batching is unaffected.
+bool limit_prefill_to_one_sequence(const SchedulerState& state) {
+  const ExecutionConfig& execution_config = ExecutionConfig::get_instance();
+  return execution_config.enable_graph() &&
+         execution_config.enable_prefill_piecewise_graph() &&
+         has_linear_attention_layers(state.model_args);
+}
+
+bool has_prefill_sequence(const std::vector<Sequence*>& sequences) {
+  return std::any_of(
+      sequences.begin(), sequences.end(), [](const Sequence* sequence) {
+        return sequence != nullptr && sequence->is_prefill_stage();
+      });
+}
+#endif
 
 }  // namespace
 
@@ -261,6 +282,12 @@ void SchedulerPolicy::schedule_prefill_from_queue(
   while (!queue->empty() && budget.remaining_seq_budget > 0 &&
          budget.remaining_token_budget > 0 &&
          budget.latency_budget > budget.estimate_latency) {
+#if defined(USE_MUSA)
+    if (limit_prefill_to_one_sequence(state) &&
+        has_prefill_sequence(state.running_sequences)) {
+      break;
+    }
+#endif
     // Memory-utilization short-circuit.
     if (!options_.enable_disagg_pd() &&
         state.kv_cache_manager->kv_cache_utilization() >=

@@ -18,6 +18,7 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <iterator>
 #include <limits>
 #include <numeric>
 #include <sstream>
@@ -33,6 +34,7 @@ limitations under the License.
 #include "framework/xtensor/xtensor_allocator.h"
 #include "util/net.h"
 #include "util/utils.h"
+#include "util/timer.h"
 #include "util/uuid.h"
 
 namespace xllm {
@@ -222,6 +224,8 @@ void MooncakeKVCacheTransferBase::configure_cache_layout(
   context.backend = "mlu";
 #elif defined(USE_DCU)
   context.backend = "dcu";
+#elif defined(USE_MUSA)
+  context.backend = "musa";
 #else
   context.backend = "cpu";
 #endif
@@ -684,6 +688,79 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
     const uint64_t src_cluster_id,
     const std::string& src_addr,
     const std::vector<KVTransferMapping>& mappings) {
+#if defined(USE_MUSA)
+  // Keep ReshardPlan bind_incoming_regions, but submit one (or few) Mooncake
+  // READ batches across all layers. Per-layer submit+wait was ~15ms * 64
+  // layers ~= 950ms on same-host RDMA.
+  CHECK(main_layout_.registered) << "Main KV cache is not registered.";
+  std::vector<ByteRegion> all_regions;
+  size_t bind_layers = 0;
+  Timer bind_timer;
+  for (CacheNamespace cache_namespace :
+       {CacheNamespace::MAIN, CacheNamespace::SPEC_DRAFT}) {
+    const BufLayout& layout =
+        cache_namespace == CacheNamespace::MAIN ? main_layout_ : spec_layout_;
+    if (!layout.registered) {
+      continue;
+    }
+    for (int64_t layer_id = 0; layer_id < layout.num_layers; ++layer_id) {
+      std::vector<ByteRegion> layer_regions;
+      const Status status = mooncake_te_->bind_incoming_regions(
+          src_addr, mappings, cache_namespace, layer_id, &layer_regions);
+      if (!status.ok()) {
+        LOG(ERROR) << "Bind incoming KV regions failed, layer=" << layer_id
+                   << ": " << status.message();
+        return false;
+      }
+      all_regions.insert(all_regions.end(),
+                         std::make_move_iterator(layer_regions.begin()),
+                         std::make_move_iterator(layer_regions.end()));
+      ++bind_layers;
+    }
+  }
+  const double bind_ms = bind_timer.elapsed_seconds() * 1000.0;
+  Timer move_timer;
+  // Heterogeneous TP yields per-token head-shard regions (~1 KiB each); read
+  // their remote-contiguous runs through a staging buffer instead.
+  uint64_t region_bytes = 0;
+  for (const ByteRegion& region : all_regions) {
+    region_bytes += region.length;
+  }
+  const bool staged =
+      all_regions.size() >= 4096 &&
+      region_bytes / std::max<uint64_t>(all_regions.size(), 1) < 16384;
+  const size_t remote_runs = 0;
+  double staged_read_ms = 0.0;
+  double staged_scatter_ms = 0.0;
+  const bool moved =
+      all_regions.empty() ||
+      (staged ? mooncake_te_->move_memory_regions_staged(
+                    src_addr, all_regions, &staged_read_ms, &staged_scatter_ms)
+              : mooncake_te_->move_memory_regions(
+                    src_addr,
+                    all_regions,
+                    MooncakeTransferEngine::MoveOpcode::READ));
+  if (!moved) {
+    LOG(ERROR) << "Pull KV byte regions failed, layers=" << bind_layers
+               << ", regions=" << all_regions.size() << ", staged=" << staged;
+    return false;
+  }
+  const double move_ms = move_timer.elapsed_seconds() * 1000.0;
+  if (staged) {
+    (void)remote_runs;
+    LOG(INFO) << "[Mooncake][PDTransfer] staged pull, regions="
+              << all_regions.size() << ", read_ms=" << staged_read_ms
+              << ", scatter_ms=" << staged_scatter_ms;
+  }
+  LOG(INFO) << "[Mooncake][PDTransfer] direction=pull, cluster_id="
+            << src_cluster_id << ", remote=" << src_addr
+            << ", mapping_groups=" << mappings.size()
+            << ", layers=" << bind_layers
+            << ", regions=" << all_regions.size()
+            << ", bind_ms=" << bind_ms << ", move_ms=" << move_ms
+            << ", success=true";
+  return true;
+#else
   std::vector<int64_t> layer_ids;
   std::vector<MooncakeTransferEngine::BufferTransferMapping> buffer_mappings;
   if (!append_buffer_mappings(
@@ -706,6 +783,7 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
           << ", mapping_groups=" << mappings.size()
           << ", buffers=" << buffer_mappings.size() << ", success=true";
   return true;
+#endif
 }
 
 void MooncakeKVCacheTransferBase::merge_kv_blocks(
@@ -736,6 +814,7 @@ void MooncakeKVCacheTransferBase::merge_kv_blocks(
   }
 }
 
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
 std::vector<KVTransferTaskResult>
 MooncakeKVCacheTransferDefault::push_kv_blocks(
     std::unordered_map<std::string, KVCacheInfo>& merged_kv_infos,
@@ -1228,5 +1307,7 @@ MooncakeKVCacheTransferXTensor::push_kv_blocks_impl(
           << ", failed_tasks=" << results.size();
   return results;
 }
+
+#endif
 
 }  // namespace xllm

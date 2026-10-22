@@ -64,6 +64,36 @@ DEFINE_bool(enable_mtp_draft_body_tp1,
             "Whether to run the MTP draft body with tensor-parallel size 1 "
             "while keeping the draft LMHead on the target TP group.");
 
+DEFINE_bool(enable_mtp_draft_fp8_lm_head,
+            false,
+            "MUSA only. Let the MTP draft propose tokens with a 128x128 "
+            "block-FP8 copy of the target LMHead. Target verification keeps "
+            "the original LMHead; only the draft proposals and their "
+            "acceptance rate change.");
+
+DEFINE_string(mtp_draft_vocab_path,
+              "",
+              "MUSA only. File listing one token id per line. The MTP draft "
+              "LMHead scores only these tokens with a 128x128 block-FP8 copy "
+              "of their target LMHead rows and gives every other token a -inf "
+              "logit. Target verification keeps the full LMHead; only the "
+              "draft proposals and their acceptance rate change.");
+
+DEFINE_bool(enable_mtp_target_fp8_lm_head,
+            false,
+            "MUSA only. Run the MTP target LMHead on a 128x128 block-FP8 "
+            "copy of its weight, halving the bytes read per verify, and "
+            "recompute the best logits of every token with the original "
+            "weight. Greedy outputs match the original LMHead except near "
+            "exact ties; other logits are approximate.");
+
+DEFINE_bool(enable_mtp_packed_verify_attention,
+            false,
+            "MUSA only. MTP target verification runs one causal FA3 decode "
+            "call per sequence over all of its verify tokens instead of "
+            "expanding every verify token into its own decode row, so each "
+            "KV page is read once per sequence.");
+
 DEFINE_bool(enable_atb_spec_kernel,
             false,
             "Whether to use ATB speculative kernel.");
@@ -92,6 +122,10 @@ void SpeculativeConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(speculative_suffix_use_tree_spec);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(draft_sampling_mode);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_mtp_draft_body_tp1);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_mtp_draft_fp8_lm_head);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(mtp_draft_vocab_path);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_mtp_target_fp8_lm_head);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_mtp_packed_verify_attention);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_atb_spec_kernel);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_adaptive_speculative_decode);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(adaptive_speculative_min_gain);
@@ -109,6 +143,10 @@ void SpeculativeConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(speculative_suffix_use_tree_spec);
   XLLM_CONFIG_ASSIGN_FROM_JSON(draft_sampling_mode);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_mtp_draft_body_tp1);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_mtp_draft_fp8_lm_head);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(mtp_draft_vocab_path);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_mtp_target_fp8_lm_head);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_mtp_packed_verify_attention);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_atb_spec_kernel);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_adaptive_speculative_decode);
   XLLM_CONFIG_ASSIGN_FROM_JSON(adaptive_speculative_min_gain);
@@ -139,6 +177,14 @@ void SpeculativeConfig::append_config_json(
       config_json, default_config, draft_sampling_mode);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_mtp_draft_body_tp1);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_mtp_draft_fp8_lm_head);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, mtp_draft_vocab_path);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_mtp_target_fp8_lm_head);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_mtp_packed_verify_attention);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_atb_spec_kernel);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(

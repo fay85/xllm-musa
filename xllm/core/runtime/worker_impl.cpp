@@ -371,6 +371,12 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
                        const torch::Device& device,
                        const runtime::Options& options)
     : options_(options), device_(device), parallel_args_(parallel_args) {
+#if defined(USE_MUSA)
+  CHECK(!options_.enable_disagg_pd() ||
+        options_.kv_cache_transfer_mode() == "PULL")
+      << "MUSA PD requires kv_cache_transfer_mode=PULL; per-layer PUSH "
+         "synchronization is not implemented.";
+#endif
   if (options_.enable_speculative_decode() &&
       options_.num_decoding_tokens() == 1) {
     is_spec_draft_ = true;
@@ -601,14 +607,17 @@ bool WorkerImpl::allocate_kv_cache_with_transfer(
   return true;
 }
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
 bool WorkerImpl::allocate_kv_cache_with_transfer(
     std::shared_ptr<KVCacheTransfer> kv_cache_transfer,
     const KVCacheShape& kv_cache_shape) {
   CHECK(model_ != nullptr) << "Model is not initialized.";
   CHECK(kv_caches_.empty()) << "KV caches are already initialized.";
 
-  kv_cache_transfer_ = kv_cache_transfer;
+  CHECK(kv_cache_transfer != nullptr)
+      << "KV cache transfer backend must be initialized.";
+  kv_cache_transfer_ = std::move(kv_cache_transfer);
 
   if (!allocate_kv_cache_storage(kv_cache_shape,
                                  /*use_huge_page_allocator=*/true,
@@ -641,7 +650,8 @@ void WorkerImpl::get_cache_info(uint64_t& cluster_id,
                                 uint16_t& port) {
   cluster_id = 0;
   addr.clear();
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
   if (kv_cache_transfer_) {
     kv_cache_transfer_->get_cache_info(cluster_id, addr);
   }
@@ -1586,7 +1596,11 @@ bool WorkerImpl::can_use_cuda_block_copy_kernel(
 void WorkerImpl::execute_cuda_block_copy_kernel(
     const ModelInputParams& input_params) {
   CHECK(!kv_caches_.empty());
+#if defined(USE_MUSA)
+  xllm::kernel::musa::block_copy(
+#else
   xllm::kernel::cuda::block_copy(
+#endif
       cuda_block_copy_runtime_state_.k_cache_ptrs_device,
       cuda_block_copy_runtime_state_.v_cache_ptrs_device,
       input_params.block_copy.src_block_indices,
@@ -2343,7 +2357,10 @@ folly::SemiFuture<bool> WorkerImpl::pull_kv_blocks_async(
     uint64_t src_cluster_id,
     const std::string& src_addr,
     const std::vector<KVTransferMapping>& mappings) {
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
+  CHECK(kv_cache_transfer_ != nullptr)
+      << "KV cache transfer backend must be initialized before PULL.";
   return kv_cache_transfer_->pull_kv_blocks_async(
       src_cluster_id, src_addr, mappings);
 #else

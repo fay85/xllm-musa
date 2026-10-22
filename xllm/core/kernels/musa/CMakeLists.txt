@@ -7,9 +7,14 @@ include_directories(${CMAKE_CURRENT_LIST_DIR}/../cuda/moe)
 
 set(_TORCH_MUSA_KERNEL_HDRS
   musa_ops_api.h
+  skinny_gemm.cuh
+  mrope.h
   musa_tvmffi_stream.h
   gdn_ops.h
   llm_decode_metadata_update.h
+  attention_runner.h
+  global_capture_instance.h
+  piecewise_graphs.h
   ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk.cuh
   ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk_sigmoid_kernels.cuh
   ${CMAKE_CURRENT_LIST_DIR}/../cuda/moe/moe_topk_softmax_kernels.cuh
@@ -24,6 +29,7 @@ set(_TORCH_MUSA_KERNEL_SRCS
   gemma_norm.cu
   activation.cu
   rope.cu
+  mrope.cu
   gdn_state_commit.cu
   ../cuda/block_copy.cu
   ../cuda/norm.cu
@@ -46,9 +52,23 @@ set(_TORCH_MUSA_KERNEL_SRCS
   moe_combine_indexed.cu
   # Fused per-token-group FP8 activation quant (MUSA-native intrinsics)
   fp8_act_quant.cu
+  # BF16 GEMM for small-row, small-column projections
+  skinny_gemm.cu
+  # Block-scaled FP8 GEMM for at most 8 rows on MP31
+  fp8_skinny_gemm.cu
+  # Exact re-scoring of the best logits of an approximate LM head
+  logits_rescore.cu
+  # MTP greedy acceptance, next-draft inputs and draft paged-KV metadata
+  mtp_draft_metadata.cu
+  # Multi-block argmax over large logit rows
+  row_argmax.cu
   # Mate FFI helpers
   musa_tvmffi_stream.cpp
   llm_decode_metadata_update.cu
+  # Piecewise prefill graph capture and replay runners
+  attention_runner.cpp
+  global_capture_instance.cpp
+  piecewise_graphs.cpp
 )
 
 # Enable fast-math for fp8_act_quant.cu only, without changing

@@ -15,6 +15,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include "llm_engine.h"
+#include "framework/kv_cache_transfer/push_route.h"
 
 #include <absl/strings/str_format.h>
 #include <absl/time/clock.h>
@@ -928,12 +929,35 @@ bool LLMEngine::pull_kv_blocks(const int32_t src_dp_size,
     int32_t dst_worker_rank = dst_dp_rank * dst_tp_size + tp_rank;
     // Determine the ranks of the remote workers connected to the current
     // worker.
-    int32_t src_dp_worker_rank = dst_worker_rank % src_tp_size;
-    int32_t src_worker_rank = src_dp_rank * src_tp_size + src_dp_worker_rank;
-    results.push_back(worker_clients_[dst_worker_rank]->pull_kv_blocks(
-        src_cluster_ids[src_worker_rank],
-        src_addrs[src_worker_rank],
-        mappings));
+    // Heterogeneous TP (src_tp > dst_tp): this worker owns the heads of
+    // every source TP rank congruent to it modulo dst_tp, so it must read
+    // each of them; the per-peer incoming ReshardPlan selects the regions.
+    const std::vector<int32_t> src_tp_ranks = get_src_tp_ranks(
+        static_cast<int32_t>(tp_rank), src_tp_size, dst_tp_size);
+    CHECK(!src_tp_ranks.empty())
+        << "no source TP rank for dst tp_rank " << tp_rank;
+    if (src_tp_ranks.size() == 1) {
+      const int32_t src_worker_rank = src_dp_rank * src_tp_size + src_tp_ranks[0];
+      results.push_back(worker_clients_[dst_worker_rank]->pull_kv_blocks(
+          src_cluster_ids[src_worker_rank], src_addrs[src_worker_rank],
+          mappings));
+      continue;
+    }
+    // Overlap the per-source bind/read of every covering Prefill shard.
+    std::vector<folly::SemiFuture<bool>> futures;
+    futures.reserve(src_tp_ranks.size());
+    for (const int32_t src_dp_worker_rank : src_tp_ranks) {
+      const int32_t src_worker_rank =
+          src_dp_rank * src_tp_size + src_dp_worker_rank;
+      futures.emplace_back(
+          worker_clients_[dst_worker_rank]->pull_kv_blocks_async(
+              src_cluster_ids[src_worker_rank],
+              src_addrs[src_worker_rank],
+              mappings));
+    }
+    for (auto& future : futures) {
+      results.push_back(std::move(future).get());
+    }
   }
 
   for (bool result : results) {

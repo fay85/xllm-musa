@@ -13,8 +13,6 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "scheduler/disagg_pd_scheduler.h"
-
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
 #include <brpc/server.h>
@@ -36,7 +34,6 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
 #include "disagg_pd.pb.h"
-#include "disagg_pd_scheduler.h"
 #include "distributed_runtime/engine.h"
 #include "framework/batch/batch_factory.h"
 #include "framework/block/block_manager_pool.h"
@@ -48,6 +45,7 @@ limitations under the License.
 #include "framework/xtensor/page_allocator.h"
 #include "runtime/xservice_client.h"
 #include "scheduler/continuous_scheduler.h"
+#include "scheduler/disagg_pd_scheduler.h"
 #include "util/env_var.h"
 #include "util/timer.h"
 #include "util/utils.h"
@@ -224,21 +222,24 @@ DisaggPDScheduler::DisaggPDScheduler(Engine* engine, const Options& options)
 }
 
 DisaggPDScheduler::~DisaggPDScheduler() {
-  // Clean up common threads (shared by both OOC and non-OOC modes)
+  // Stop accepting RPCs while the service and scheduler dependencies are alive.
+  // The RPC thread waits in Server::Join(), so Stop must precede its join.
+  auto rpc_server = ServerRegistry::get_instance().get_server(server_name_);
+  if (rpc_server != nullptr) {
+    rpc_server->stop();
+  }
   if (rpc_server_thread_ && rpc_server_thread_->joinable()) {
     rpc_server_thread_->join();
   }
 
-  // Clean up dispatch thread (created in base class for non-OOC mode,
-  // or in subclass for OOC mode)
+  // Both dispatch queues use a null request as their termination signal.
+  prefill_request_queue_.enqueue(nullptr);
+  prefill_request_queue_offline_.enqueue(nullptr);
   if (dispatch_thread_ && dispatch_thread_->joinable()) {
     dispatch_thread_->join();
   }
 
-  auto rpc_server = ServerRegistry::get_instance().get_server(server_name_);
   if (rpc_server != nullptr) {
-    rpc_server->stop();
-
     ServerRegistry::get_instance().unregister_server(server_name_);
   }
 }

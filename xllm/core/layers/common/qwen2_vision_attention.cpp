@@ -153,8 +153,8 @@ void compute_qwen2_vision_attention_torch(
     v_i = v_i.permute({1, 0, 2});
 
     // Scaled dot-product attention per head.
+    auto k_t = k_i.transpose(1, 2);  // [H, D, len]
     auto q_scaled = q_i * scale;
-    auto k_t = k_i.transpose(1, 2);              // [H, D, len]
     auto scores = torch::matmul(q_scaled, k_t);  // [H, len, len]
     auto attn = torch::softmax(scores, /*dim=*/-1);
     auto out_i = torch::matmul(attn, v_i);  // [H, len, D]

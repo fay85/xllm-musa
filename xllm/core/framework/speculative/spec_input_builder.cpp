@@ -729,11 +729,45 @@ void update_execution_batch_metadata(
 }
 
 torch::Tensor make_cpu_int_tensor(const std::vector<int32_t>& values) {
+#if defined(USE_MUSA)
+  // torch::tensor() ignores pinned_memory, and a pageable H2D copy on MUSA
+  // waits for the stream to drain even when it is non_blocking.
+  torch::Tensor tensor =
+      torch::empty({static_cast<int64_t>(values.size())},
+                   torch::TensorOptions()
+                       .dtype(torch::kInt)
+                       .device(torch::kCPU)
+                       .pinned_memory(true));
+  std::copy(values.begin(), values.end(), tensor.data_ptr<int32_t>());
+  return tensor;
+#else
   return torch::tensor(values,
                        torch::TensorOptions()
                            .dtype(torch::kInt)
                            .device(torch::kCPU)
                            .pinned_memory(true));
+#endif
+}
+
+torch::Tensor host_to_device_async(const torch::Tensor& host_tensor,
+                                   const torch::TensorOptions& device_options) {
+#if defined(USE_MUSA)
+  // A dtype-converting H2D copy stages the converted values in pageable
+  // memory, which makes the copy wait for the stream to drain.
+  if (host_tensor.defined() && host_tensor.device().is_cpu() &&
+      device_options.has_dtype() &&
+      host_tensor.scalar_type() != device_options.dtype().toScalarType()) {
+    torch::Tensor staged =
+        torch::empty(host_tensor.sizes(),
+                     torch::TensorOptions()
+                         .dtype(device_options.dtype())
+                         .device(torch::kCPU)
+                         .pinned_memory(true));
+    staged.copy_(host_tensor);
+    return staged.to(device_options, /*non_blocking=*/true);
+  }
+#endif
+  return safe_to(host_tensor, device_options, /*non_blocking=*/true);
 }
 
 void set_token_position_tensors(ForwardInput& input,
@@ -744,10 +778,9 @@ void set_token_position_tensors(ForwardInput& input,
   input.device_tensors_ready = false;
   input.token_ids_host = make_cpu_int_tensor(token_ids);
   input.positions_host = make_cpu_int_tensor(positions);
-  input.token_ids =
-      safe_to(input.token_ids_host, token_options, /*non_blocking=*/true);
+  input.token_ids = host_to_device_async(input.token_ids_host, token_options);
   input.positions =
-      safe_to(input.positions_host, position_options, /*non_blocking=*/true);
+      host_to_device_async(input.positions_host, position_options);
   input.device_tensors_ready = true;
 }
 

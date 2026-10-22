@@ -32,6 +32,9 @@ limitations under the License.
 #include "core/framework/model_context.h"
 #include "core/framework/model_loader.h"
 #include "core/framework/parallel_state/parallel_args.h"
+#if defined(USE_MUSA)
+#include "core/layers/musa/qwen3_gated_delta_net_base.h"
+#endif
 #include "core/layers/common/attention_mask.h"
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/lm_head.h"
@@ -182,6 +185,10 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
     }
 
     std::optional<torch::Tensor> residual = std::nullopt;
+#if defined(USE_MUSA)
+    layer::GdnMtpVerifyForwardScope gdn_mtp_verify_forward_scope(
+        input_params.gdn_mtp_verify_cache.get());
+#endif
     for (size_t i = 0; i < layers_.size(); i++) {
 #if defined(USE_MUSA)
       if (attn_metadata.plan_info != nullptr) {
@@ -258,11 +265,12 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
 
  protected:
   torch::Tensor build_attention_mask(const ModelInputParams& input_params) {
-#if defined(USE_NPU) || defined(USE_MLU)
-    // NPU and MLU hybrid attention do not consume attn_metadata.attn_mask:
-    // their full-attention kernels handle causality internally, and linear
-    // attention needs no mask. Avoid quadratic allocations for long contexts,
-    // including MTP decode graph capture. Preserve an explicit graph buffer.
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
+    // NPU, MLU and MUSA hybrid attention do not consume
+    // attn_metadata.attn_mask: their full-attention kernels handle causality
+    // internally, and linear attention needs no mask. Avoid quadratic
+    // allocations for long contexts, including MTP decode graph capture.
+    // Preserve an explicit graph buffer.
     if (input_params.graph.attn_mask.defined()) {
       return input_params.graph.attn_mask;
     }

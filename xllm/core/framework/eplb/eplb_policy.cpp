@@ -416,8 +416,10 @@ std::vector<int64_t> GreedyEplbPolicy::plan_layer(
 std::vector<int64_t> GreedyEplbPolicy::compute_balanced_pack_host(
     const std::vector<int64_t>& expert_loads_host) {
   const int32_t redundant_experts_num = options_.redundant_experts_num;
-  auto [updated_weights, redundancy_map] = update_origin_weights_host(
+  auto updated_weights_and_redundancy = update_origin_weights_host(
       expert_loads_host, device_num_ * redundant_experts_num);
+  auto updated_weights = std::move(updated_weights_and_redundancy.first);
+  auto redundancy_map = std::move(updated_weights_and_redundancy.second);
 
   const int64_t num_experts = static_cast<int64_t>(expert_loads_host.size());
   const int64_t total_slots =

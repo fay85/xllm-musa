@@ -18,6 +18,9 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include "xllm/core/kernels/ops_api.h"
+#if defined(USE_MUSA)
+#include "kernels/musa/musa_ops_api.h"
+#endif
 
 namespace xllm {
 namespace layer {
@@ -73,6 +76,23 @@ Qwen3NextRMSNormImpl::forward(torch::Tensor& input,
   return std::make_tuple(fused_params.output, fused_params.residual_out);
 #endif
 }
+
+#if defined(USE_MUSA)
+bool Qwen3NextRMSNormImpl::supports_quant_fp8(
+    const torch::Tensor& input,
+    const torch::Tensor& residual) const {
+  return xllm::kernel::musa::fused_add_gemma_rms_norm_quant_supported(
+      input, residual, weight_);
+}
+
+std::tuple<torch::Tensor, torch::Tensor>
+Qwen3NextRMSNormImpl::forward_quant_fp8(torch::Tensor& input,
+                                        torch::Tensor& residual,
+                                        bool keep_normed_input) {
+  return xllm::kernel::musa::fused_add_gemma_rms_norm_quant_fp8(
+      input, residual, weight_, eps_, keep_normed_input);
+}
+#endif
 
 void Qwen3NextRMSNormImpl::load_state_dict(const StateDict& state_dict) {
   LOAD_WEIGHT(weight);

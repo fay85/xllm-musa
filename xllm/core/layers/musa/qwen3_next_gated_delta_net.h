@@ -36,6 +36,7 @@ class Qwen3NextGatedDeltaNetImpl : public Qwen3GatedDeltaNetBaseImpl {
 
   void load_state_dict(const StateDict& state_dict) override;
   void verify_loaded_weights(const std::string& prefix) const override;
+  bool supports_fp8_input() const override;
 
  protected:
   Qwen3NextGatedDeltaNetImpl(const ModelArgs& args,
@@ -45,9 +46,12 @@ class Qwen3NextGatedDeltaNetImpl : public Qwen3GatedDeltaNetBaseImpl {
                              bool init_projections);
 
   std::pair<torch::Tensor, torch::Tensor> project_decode_inputs(
-      const torch::Tensor& hidden_states) override;
+      const NormalizedHiddenStates& hidden_states) override;
   std::pair<torch::Tensor, torch::Tensor> project_flat_inputs(
-      const torch::Tensor& hidden_states) override;
+      const NormalizedHiddenStates& hidden_states) override;
+  torch::Tensor fusable_ba_weight() const override;
+  torch::Tensor project_qkvz(
+      const NormalizedHiddenStates& hidden_states) override;
 
   virtual void load_projection_state_dict(const StateDict& state_dict);
   virtual void verify_projection_weights(const std::string& prefix) const;
@@ -57,7 +61,6 @@ class Qwen3NextGatedDeltaNetImpl : public Qwen3GatedDeltaNetBaseImpl {
                              const ParallelArgs& parallel_args,
                              const torch::TensorOptions& options);
 
- private:
   ColumnParallelLinear qkvz_proj_{nullptr};
   ColumnParallelLinear ba_proj_{nullptr};
 };
@@ -71,17 +74,25 @@ class Qwen3_5GatedDeltaNetImpl final : public Qwen3NextGatedDeltaNetImpl {
                            const ParallelArgs& parallel_args,
                            const torch::TensorOptions& options);
 
+  bool supports_fp8_input() const override;
+
  protected:
   std::pair<torch::Tensor, torch::Tensor> project_decode_inputs(
-      const torch::Tensor& hidden_states) override;
+      const NormalizedHiddenStates& hidden_states) override;
   std::pair<torch::Tensor, torch::Tensor> project_flat_inputs(
-      const torch::Tensor& hidden_states) override;
+      const NormalizedHiddenStates& hidden_states) override;
   bool use_fla_ssm_state_layout() const override { return true; }
+  bool uses_contiguous_qkvzba_layout() const override {
+    return use_merged_projections();
+  }
+  torch::Tensor fusable_ba_weight() const override;
 
   void load_projection_state_dict(const StateDict& state_dict) override;
   void verify_projection_weights(const std::string& prefix) const override;
 
  private:
+  bool use_merged_projections() const { return static_cast<bool>(qkvz_proj_); }
+
   torch::Tensor merge_qkvz_from_split_activations(const torch::Tensor& qkv,
                                                   const torch::Tensor& z) const;
   torch::Tensor merge_ba_from_split_activations(const torch::Tensor& b,
@@ -92,7 +103,7 @@ class Qwen3_5GatedDeltaNetImpl final : public Qwen3NextGatedDeltaNetImpl {
   ColumnParallelLinear in_proj_b_{nullptr};
   ColumnParallelLinear in_proj_a_{nullptr};
 
-  // Persistent buffers for the split-projection merge path.
+  // Persistent buffers for the TP>1 split-projection merge path.
   mutable torch::Tensor qkvz_merge_buf_;
   mutable torch::Tensor ba_merge_buf_;
 };

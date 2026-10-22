@@ -261,6 +261,28 @@ bool enable_hybrid_spec_verify(const ModelArgs& model_args,
           model_args.model_type() == "glm5_next_text");
 }
 
+// PD conv-state layout: a PREFILL instance never runs spec verify, but its
+// conv rows are pulled by an MTP DECODE whose rows are expanded to
+// (kernel - 1 + K). Using the same row length on PREFILL keeps the per-channel
+// stride identical on both sides so the KV reshard plan emits one contiguous
+// region per conv resource instead of one 6-byte region per channel. PREFILL
+// kernels still only read/write the committed slots [0, kernel - 1); the tail
+// is spec-verify scratch on DECODE. SSM checkpoints are not expanded.
+int64_t conv_layout_spec_tokens(const ModelArgs& model_args,
+                                const KVCacheEstimateOptions& options) {
+  if (enable_hybrid_spec_verify(model_args, options)) {
+    return effective_num_speculative_tokens(options);
+  }
+  if (options.instance_role == InstanceRole::PREFILL &&
+      !options.is_draft_engine && options.num_speculative_tokens > 0 &&
+      (is_qwen3_5_target_model_type(model_args.model_type()) ||
+       model_args.model_type() == "glm5_next" ||
+       model_args.model_type() == "glm5_next_text")) {
+    return options.num_speculative_tokens;
+  }
+  return 0;
+}
+
 int64_t linear_slot_size(const ModelArgs& model_args,
                          const KVCacheEstimateOptions& options,
                          int64_t dtype_size) {
@@ -279,8 +301,9 @@ int64_t linear_slot_size(const ModelArgs& model_args,
 
   const int64_t linear_ssm_slot_size =
       ssm_dtype_size * options.n_local_linear_v_heads * head_k_dim * head_v_dim;
-  const int64_t linear_conv_state_len =
-      model_args.linear_conv_kernel_dim() - 1 + num_speculative_tokens;
+  const int64_t linear_conv_state_len = model_args.linear_conv_kernel_dim() -
+                                        1 +
+                                        conv_layout_spec_tokens(model_args, options);
   const int64_t linear_conv_slot_size =
       dtype_size *
       (head_k_dim * options.n_local_linear_k_heads * 2 +
@@ -1008,8 +1031,9 @@ KVCacheCapacity estimate_kv_cache_capacity(
       enable_hybrid_spec_verify(model_args, options)
           ? effective_num_speculative_tokens(options)
           : 0;
-  kv_cache_cap.linear_conv_state_len(model_args.linear_conv_kernel_dim() - 1 +
-                                     num_speculative_tokens);
+  kv_cache_cap.linear_conv_state_len(
+      model_args.linear_conv_kernel_dim() - 1 +
+      conv_layout_spec_tokens(model_args, options));
   kv_cache_cap.linear_ssm_checkpoint_stride(num_speculative_tokens + 1);
   if (options.is_draft_engine && model_args.num_nextn_predict_layers() > 0) {
     kv_cache_cap.n_layers(model_args.num_nextn_predict_layers());

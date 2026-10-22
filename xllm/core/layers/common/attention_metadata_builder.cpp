@@ -351,6 +351,13 @@ AttentionMetadata build_attention_metadata(
   attn_metadata.plan_info = std::make_shared<PlanInfo>();
   attn_metadata.shared_plan_info = std::make_shared<PlanInfo>();
   attn_metadata.unshared_plan_info = std::make_shared<PlanInfo>();
+#if defined(USE_MUSA)
+  // MUSA prefill is eager and bypasses the graph persistent update that
+  // normally assigns the layer-0 owner of the shared plan.
+  attn_metadata.plan_info->layer_id = 0;
+  attn_metadata.shared_plan_info->layer_id = 0;
+  attn_metadata.unshared_plan_info->layer_id = 0;
+#endif
 #endif
 
 #if defined(USE_CUDA) || defined(USE_DCU) || defined(USE_NPU) || \

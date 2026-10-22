@@ -212,7 +212,11 @@ TEST(CacheLayoutBuilderTest, DescribesCompositeConvState) {
   context.linear_value_head_count = 2;
   context.linear_key_head_dim = 3;
   KVCacheTensor tensor{KVCacheTensorRole::CONV,
+#if defined(USE_MUSA)
+                       torch::zeros({2, 15, 5}),
+#else
                        torch::zeros({2, 5, 15}),
+#endif
                        cache_group_id(BlockType::LINEAR),
                        /*sequence_scoped=*/true};
   std::string error;
@@ -222,12 +226,45 @@ TEST(CacheLayoutBuilderTest, DescribesCompositeConvState) {
   const LogicalShardDescriptor& descriptor = *tensor.shard_descriptor;
   EXPECT_EQ(descriptor.kind, LogicalShardKind::COMPOSITE);
   EXPECT_EQ(descriptor.resource_scope, CacheResourceScope::SEQUENCE);
+#if defined(USE_MUSA)
+  ASSERT_EQ(descriptor.spans.size(), 25U);
+  EXPECT_EQ(descriptor.spans[0].logical_tensor, "conv_key_a");
+  EXPECT_EQ(descriptor.spans[10].logical_tensor, "conv_key_b");
+  EXPECT_EQ(descriptor.spans[20].logical_tensor, "conv_value");
+  EXPECT_EQ(descriptor.spans[0].repeat_count, 3U);
+  EXPECT_EQ(descriptor.spans[0].logical_offset_bytes, 24U);
+  EXPECT_EQ(descriptor.spans[0].physical_stride_bytes, 20U);
+  EXPECT_EQ(descriptor.spans[5].physical_offset_bytes, 60U);
+#else
   ASSERT_EQ(descriptor.spans.size(), 5U);
   EXPECT_EQ(descriptor.spans[0].logical_tensor, "conv_key_a");
   EXPECT_EQ(descriptor.spans[2].logical_tensor, "conv_key_b");
   EXPECT_EQ(descriptor.spans[4].logical_tensor, "conv_value");
   EXPECT_EQ(descriptor.spans[0].repeat_count, 5U);
+#endif
 }
+
+#if defined(USE_MUSA)
+TEST(CacheLayoutBuilderTest, RejectsInvalidMusaConvStorage) {
+  CacheTensorLayoutContext context;
+  context.linear_key_head_count = 2;
+  context.linear_value_head_count = 2;
+  context.linear_key_head_dim = 2;
+  const std::vector<torch::Tensor> invalid_tensors = {
+      torch::zeros({4, 3, 12}),
+      torch::zeros({4, 11, 3}),
+      torch::zeros({4, 3, 12}).transpose(1, 2)};
+  for (const torch::Tensor& value : invalid_tensors) {
+    KVCacheTensor tensor{KVCacheTensorRole::CONV,
+                         value,
+                         cache_group_id(BlockType::LINEAR),
+                         /*sequence_scoped=*/true};
+    std::string error;
+    EXPECT_FALSE(describe_cache_tensor(context, &tensor, &error));
+    EXPECT_FALSE(error.empty());
+  }
+}
+#endif
 
 TEST(CacheLayoutBuilderTest, HybridMlaKeepsKPoolTailSequenceScopedReplica) {
   CacheTensorLayoutContext context;

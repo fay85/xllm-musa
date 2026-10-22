@@ -424,6 +424,10 @@ torch::Tensor matmul(torch::Tensor a,
       at::mv_out(out_flat, b, input_flat);
       return out;
     }
+    if (!has_bias && skinny_bf16_gemm_supported(a, b, out)) {
+      skinny_bf16_gemm(a, b, out);
+      return out;
+    }
     auto bt = b.t();
     if (bias.has_value() && bias->defined()) {
       torch::addmm_out(out, *bias, a, bt);

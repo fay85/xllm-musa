@@ -64,6 +64,9 @@ class SpeculativeEngineBase : public Engine {
   // return the active activation memory
   std::vector<int64_t> get_active_activation_memory() const override;
 
+  bool start_profile() override;
+  bool stop_profile() override;
+
   // P/D
   bool pull_kv_blocks(const int32_t src_dp_size,
                       const int32_t src_dp_rank,

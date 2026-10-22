@@ -73,6 +73,28 @@ struct MateGatedDeltaRuleDecodeParams {
   std::optional<torch::Tensor> decode_output = std::nullopt;
 };
 
+// Fixed-width MTP verify input. The checkpoint variant writes each token's
+// recurrent state directly into the expanded SSM cache rows.
+struct MateGatedDeltaRuleMtpParams {
+  torch::Tensor q;
+  torch::Tensor k;
+  torch::Tensor v;
+  torch::Tensor A_log;
+  torch::Tensor a;
+  torch::Tensor dt_bias;
+  torch::Tensor b;
+  torch::Tensor state;
+  torch::Tensor state_indices;
+  torch::Tensor checkpoint_state_indices;
+  torch::Tensor intermediate;
+  torch::Tensor output;
+  int64_t num_k_heads = 0;
+  int64_t num_v_heads = 0;
+  int64_t head_k_dim = 0;
+  int64_t head_v_dim = 0;
+  double scale = 0.0;
+};
+
 // MUSA-only extensions for graph-capture-safe persistent output buffers and
 // contiguous QKVZ/BA layout. Kept out of core/kernels/param.h so common
 // backend params stay unchanged.
@@ -145,6 +167,22 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
+torch::Tensor mate_gated_delta_rule_mtp(
+    MateGatedDeltaRuleMtpParams& params);
+
+std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
+                                 int64_t num_v_heads,
+                                 torch::ScalarType dtype,
+                                 int64_t seq_len = 2);
+bool mate_gdn_mtp_module_available(int64_t num_q_heads,
+                                   int64_t num_v_heads,
+                                   torch::ScalarType dtype,
+                                   int64_t seq_len);
+bool mate_gdn_mtp_checkpoint_module_available(int64_t num_q_heads,
+                                              int64_t num_v_heads,
+                                              torch::ScalarType dtype,
+                                              int64_t seq_len);
+
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
@@ -193,6 +231,56 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
 
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params);
+
+
+// Graph-safe Qwen3.5 MTP spec-verify causal conv: reads accepted counts on
+// device. x/output [B, dim, seq]; cache_indices int64 [B];
+// intermediate [B, seq, dim, state_len] (per-step conv state snapshot) or
+// undefined when write_superstate commits directly into conv_state.
+void causal_conv1d_mtp_verify(const torch::Tensor& x,
+                              const torch::Tensor& weight,
+                              torch::Tensor conv_state,
+                              const torch::Tensor& cache_indices,
+                              const torch::Tensor& num_accepted_tokens,
+                              torch::Tensor output,
+                              torch::Tensor intermediate,
+                              bool silu_activation,
+                              bool write_superstate);
+
+// causal_conv1d_mtp_verify() with SiLU and write_superstate for a single
+// sequence that also computes proj_output[seq, cols] = proj_input[seq, K] *
+// proj_weight[cols, K]^T (all BF16) in the same launch, with the same
+// arithmetic as skinny_bf16_gemm(). The support check takes the conv input
+// shape so callers can decide before projecting.
+bool causal_conv1d_mtp_verify_with_projection_supported(
+    int64_t batch,
+    int64_t seq_len,
+    int64_t conv_width,
+    torch::ScalarType dtype,
+    const torch::Tensor& proj_input,
+    const torch::Tensor& proj_weight);
+
+void causal_conv1d_mtp_verify_with_projection(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    torch::Tensor conv_state,
+    const torch::Tensor& cache_indices,
+    const torch::Tensor& num_accepted_tokens,
+    torch::Tensor output,
+    const torch::Tensor& proj_input,
+    const torch::Tensor& proj_weight,
+    torch::Tensor proj_output);
+
+// Copies the accepted step of deferred spec-verify states into the linear
+// caches. Undefined intermediates are skipped; rows whose logical state id is
+// negative are padding and stay untouched.
+void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
+                                   const torch::Tensor& ssm_intermediate,
+                                   torch::Tensor& conv_cache,
+                                   const torch::Tensor& conv_intermediate,
+                                   const torch::Tensor& logical_state_indices,
+                                   const torch::Tensor& accepted_tokens,
+                                   int64_t checkpoint_stride);
 
 }  // namespace musa
 }  // namespace kernel

@@ -41,6 +41,9 @@ AsyncResponseProcessor::AsyncResponseProcessor(
     : response_threadpool_(
           /*num_threads=*/::xllm::ServiceConfig::get_instance()
               .num_response_handling_threads(),
+          // Detokenizing clones a per-thread tokenizer on first use, about
+          // half a second for a large tokenizer.json; do it at startup.
+          /*init_func=*/[tokenizer]() { (void)tokenizer->vocab_size(); },
           /*cpu_binding=*/false,
           /*pool_name=*/"AsyncResponseProcessor.response"),
       rpc_threadpool_(/*num_threads=*/1,

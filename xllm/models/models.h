@@ -118,6 +118,7 @@ limitations under the License.
 #include "llm/qwen3_5.h"      // IWYU pragma: keep
 #include "llm/qwen3_5_mtp.h"  // IWYU pragma: keep
 #include "llm/qwen3_next.h"   // IWYU pragma: keep
+#include "vlm/qwen3_5.h"      // IWYU pragma: keep
 #elif defined(USE_CUDA)
 #include "dit/pipelines/pipeline_cola_dlm.h"            // IWYU pragma: keep
 #include "dit/pipelines/pipeline_longcat_audiodit.h"    // IWYU pragma: keep
