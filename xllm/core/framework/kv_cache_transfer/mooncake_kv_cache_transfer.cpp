@@ -198,6 +198,15 @@ void MooncakeKVCacheTransferBase::configure_cache_layout(
   context.coordinates.cp_size = parallel_args.cp_size();
   context.coordinates.kv_split_rank = parallel_args.kv_split_rank();
   context.coordinates.kv_split_size = parallel_args.kv_split_size_effective();
+#if defined(USE_MUSA)
+  // MUSA prefill context parallelism leaves the full KV cache and recurrent
+  // state on the last CP rank, which alone serves transfer as a CP1 worker.
+  if (context.coordinates.cp_size > 1 &&
+      context.coordinates.kv_split_size == 1) {
+    context.coordinates.cp_rank = 0;
+    context.coordinates.cp_size = 1;
+  }
+#endif
 
   CacheTensorLayoutContext& tensor_layout = context.tensor_layout;
   tensor_layout.tp_rank = context.coordinates.tp_rank;

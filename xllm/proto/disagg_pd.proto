@@ -267,6 +267,9 @@ message DisaggGenerationsRequest {
   repeated KVTransferGroup source_groups = 20;
   // Cumulative end-to-end latency measured by the source at handoff.
   optional double upstream_elapsed_seconds = 21;
+  // M-RoPE offset between decode positions and token indices; non-zero only
+  // when the prompt carries multimodal tokens.
+  int32 mrope_position_delta = 22;
 }
 
 message DisaggGenerationsRequests {

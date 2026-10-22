@@ -19,6 +19,7 @@ limitations under the License.
 
 #include <cstdint>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "core/framework/multimodal/mm_data.h"
@@ -35,6 +36,10 @@ class PromptProcessor {
   virtual bool process(std::string& prompt, const MMData& mm_data) = 0;
   virtual bool find_mm_spans(const std::vector<int32_t>& token_ids,
                              MMData& mm_data) = 0;
+
+  // Special token after which the expanded prompt tokenizes independently of
+  // what precedes it; empty disables segment reuse.
+  virtual std::string_view segment_delimiter() const { return {}; }
 };
 
 }  // namespace xllm

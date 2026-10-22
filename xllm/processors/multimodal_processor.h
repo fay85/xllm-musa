@@ -18,10 +18,14 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
+#include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -61,13 +65,30 @@ class MultimodalProcessorBase {
   bool tokenize(const std::string& prompt,
                 std::vector<int32_t>& token_ids) const;
 
+  // Encodes segments closed by segment_delimiter separately so segments shared
+  // across requests (e.g. a repeated prefix with images) are encoded once.
+  bool tokenize(const std::string& prompt,
+                std::string_view segment_delimiter,
+                std::vector<int32_t>& token_ids) const;
+
   void assign_mm_hash_keys(const MMInput& mm_input, MMData& mm_data) const;
 
   void pad_to_max_length(std::vector<int32_t>& token_ids) const;
 
  private:
+  bool tokenize_segments(const std::string& prompt,
+                         std::string_view segment_delimiter,
+                         std::vector<int32_t>& token_ids) const;
+
+  bool append_cached_segment(std::string segment,
+                             std::vector<int32_t>& token_ids) const;
+
   std::shared_ptr<Tokenizer> tokenizer_;
   TokenizerArgs tokenizer_args_;
+  mutable std::mutex segment_cache_mutex_;
+  mutable std::unordered_map<std::string, std::vector<int32_t>> segment_cache_;
+  mutable std::atomic<bool> segment_reuse_enabled_{true};
+  mutable std::atomic<bool> segment_reuse_verified_{false};
 };
 
 std::unique_ptr<MultimodalProcessorBase> create_multimodal_processor(
@@ -99,7 +120,7 @@ class MultimodalProcessor final : public MultimodalProcessorBase {
     if (!prompt_processor_->process(prompt, mm_data)) {
       return false;
     }
-    if (!tokenize(prompt, token_ids)) {
+    if (!tokenize(prompt, prompt_processor_->segment_delimiter(), token_ids)) {
       return false;
     }
     if (!prompt_processor_->find_mm_spans(token_ids, mm_data)) {

@@ -896,6 +896,8 @@ void DisaggPDScheduler::prefill_send_first_generation() {
       } else {
         gen->set_num_cached_tokens(static_cast<int32_t>(num_cached_tokens));
       }
+      gen->set_mrope_position_delta(
+          request->sequences()[0]->get_mrope_position_delta());
       if (request->sequences()[0]->first_token().has_value()) {
         auto token = gen->mutable_tokens()->Add();
         token->set_token_id(
@@ -1151,7 +1153,8 @@ bool DisaggPDScheduler::decode_recv_first_generation(
     int32_t src_dp_size,
     int32_t src_dp_rank,
     torch::Tensor mtp_bootstrap_embedding,
-    int32_t num_cached_tokens) {
+    int32_t num_cached_tokens,
+    int32_t mrope_position_delta) {
   Timer receive_timer;
   // push to request_queue_, and will be executed by engine.
   std::shared_ptr<Request> request = nullptr;
@@ -1185,6 +1188,7 @@ bool DisaggPDScheduler::decode_recv_first_generation(
   }
   request->record_num_prefix_cache_tokens(
       static_cast<size_t>(num_cached_tokens));
+  sequence->set_mrope_position_delta(mrope_position_delta);
   const bool need_mtp_bootstrap = options_.num_speculative_tokens() > 0;
   if (need_mtp_bootstrap) {
     const int32_t slot_id = sequence->get_embedding_block_id();

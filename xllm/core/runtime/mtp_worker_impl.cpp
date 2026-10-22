@@ -533,6 +533,7 @@ runtime::Options mtp_target_options(const runtime::Options& options) {
 runtime::Options mtp_draft_options(const runtime::Options& options) {
   runtime::Options draft_options = options;
   draft_options.enable_schedule_overlap(false)
+      .mrope_positions(options.mrope_positions() || options.backend() == "vlm")
       .backend("llm")
       .is_draft_engine(true)
       .num_decoding_tokens(1)
@@ -4629,6 +4630,10 @@ void MTPWorkerImpl::prepare_draft_extend_inputs(
     input_params.meta.num_sequences =
         static_cast<int32_t>(buf.out_positions.size());
     input_params.meta.batch_forward_type = BatchForwardType::DECODE;
+    // Each draft row is its own decode sequence here, so the base batch's
+    // per-sequence KV-cache token counts no longer line up with the rows.
+    input_params.attention.host.kv_cache_tokens_nums.clear();
+    input_params.attention.device.kv_cache_tokens_nums = torch::Tensor();
     specBuilder::update_input_params(input_params,
                                      buf,
                                      1,

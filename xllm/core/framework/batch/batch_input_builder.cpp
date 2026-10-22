@@ -1165,6 +1165,12 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
   if (!use_mrope_) {
     forward_input.positions =
         torch::tensor(state_.flatten_positions_vec, torch::kInt);
+  } else if (state_.batch_forward_type.is_decode()) {
+    // Every M-RoPE axis of a decode token holds the same position, so decode
+    // batches carry the [seq] positions of text and share its decode path.
+    forward_input.positions = torch::cat(state_.mrope_positions_vec, /*dim=*/1)
+                                  .select(/*dim=*/0, /*index=*/0)
+                                  .contiguous();
   } else {
     forward_input.positions = torch::cat(state_.mrope_positions_vec, 1);
   }

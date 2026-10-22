@@ -139,11 +139,19 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
     }
 
 #if defined(USE_MUSA)
-    // MUSA graph capture supplies persistent, bucket-sized metadata. Reusing
-    // it here keeps draft attention and MTP verification on the same slot and
-    // FA3 scheduler addresses as the captured target graph.
+    // MUSA decode graph capture supplies persistent, bucket-sized metadata.
+    // Reusing it here keeps draft attention and MTP verification on the same
+    // slot and FA3 scheduler addresses as the captured target graph. A prefill
+    // graph supplies metadata of the live inputs for its eager runners, which
+    // a captured forward must not bake in, so prefill and chunked prefill
+    // build their own from the persistent inputs.
+    const BatchForwardType& forward_type =
+        input_params.meta.batch_forward_type;
+    const bool reuse_graph_metadata = input_params.attn_metadata != nullptr &&
+                                      !forward_type.is_prefill() &&
+                                      !forward_type.is_chunked_prefill();
     layer::AttentionMetadata attn_metadata =
-        input_params.attn_metadata
+        reuse_graph_metadata
             ? *(input_params.attn_metadata)
             : layer::AttentionMetadataBuilder::build(
                   input_params,
@@ -151,7 +159,7 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
                   build_attention_mask(input_params),
                   /*device=*/device_);
     attn_metadata.fa3_metadata.share_fa3_scheduler_metadata = true;
-    if (input_params.attn_metadata != nullptr) {
+    if (reuse_graph_metadata) {
       attn_metadata.fa3_metadata.fa3_scheduler_metadata =
           input_params.attn_metadata->fa3_metadata.fa3_scheduler_metadata;
     }

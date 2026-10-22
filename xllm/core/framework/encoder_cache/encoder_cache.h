@@ -34,7 +34,12 @@ class EncoderCache {
 
   std::optional<torch::Tensor> lookup(const XXH3Key& key);
   void insert(const XXH3Key& key, torch::Tensor embedding);
+  void erase(const XXH3Key& key);
   void clear();
+
+  // An engine-managed cache keeps every inserted output until the engine
+  // erases it; the engine tracks the capacity instead.
+  void set_engine_managed() { engine_managed_ = true; }
 
  private:
   using LruList = std::list<XXH3Key>;
@@ -54,6 +59,7 @@ class EncoderCache {
 
   int64_t max_size_ = 0;
   int64_t current_size_ = 0;
+  bool engine_managed_ = false;
   LruList lru_keys_;
   EntryMap entries_;
 };

@@ -49,6 +49,28 @@ class ProcessGroupImpl : public ProcessGroup {
     pg_ = std::make_unique<c10d::ProcessGroupMCCL>(
         store, rank, rank_size, pg_options);
   }
+
+  // The caller already resolved this rank's position inside group_ranks.
+  ProcessGroupImpl(int32_t global_rank,
+                   int32_t local_rank,
+                   const std::vector<int32_t>& /*group_ranks*/,
+                   int32_t world_size,
+                   int32_t rank_size,
+                   int32_t port,
+                   const std::string& host,
+                   const std::string& group_name,
+                   const torch::Device& device)
+      : ProcessGroup(global_rank, world_size, device) {
+    c10::intrusive_ptr<c10d::ProcessGroupMCCL::Options> pg_options =
+        c10d::ProcessGroupMCCL::Options::create();
+#if TORCH_VERSION_MAJOR > 2 || \
+    (TORCH_VERSION_MAJOR == 2 && TORCH_VERSION_MINOR >= 7)
+    pg_options->group_name = group_name;
+#endif
+    auto store = create_tcp_store(host, port, local_rank);
+    pg_ = std::make_unique<c10d::ProcessGroupMCCL>(
+        store, local_rank, rank_size, pg_options);
+  }
 };
 
 }  // namespace xllm

@@ -200,8 +200,9 @@ std::unique_ptr<xllm::ProcessGroup> create_process_group(
     const std::string& group_name,
     const torch::Device& device);
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
-// for DiT models
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
+// for DiT models and context-parallel groups
 std::unique_ptr<xllm::ProcessGroup> create_process_group(
     int32_t global_rank,
     int32_t local_rank,
