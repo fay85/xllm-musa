@@ -256,6 +256,14 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
         {num_heads_, query.size(0)}, query.options().dtype(torch::kFloat32));
     prefill_forward(
         attn_metadata, query, key, value, output, dense_lse, k_cache, v_cache);
+  } else if (attn_metadata.pcp_context != nullptr &&
+             attn_metadata.is_chunked_prefill) {
+    // Context-parallel continuation rows launch from device lengths, so they
+    // stay inside a captured graph and own their LSE tensor like dense FA3.
+    std::optional<torch::Tensor> chunk_lse = torch::empty(
+        {num_heads_, query.size(0)}, query.options().dtype(torch::kFloat32));
+    chunked_prefill_forward(
+        attn_metadata, query, key, output, chunk_lse, k_cache, v_cache);
   } else if (attn_metadata.is_prefill ||
              (attn_metadata.is_chunked_prefill &&
               !spec_verify_expanded_decode)) {

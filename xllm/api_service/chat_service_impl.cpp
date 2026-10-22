@@ -27,6 +27,7 @@ limitations under the License.
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <unordered_set>
 
 #include "api_service/request_admission.h"
@@ -39,6 +40,7 @@ limitations under the License.
 #include "core/distributed_runtime/vlm_master.h"
 #include "core/framework/request/rec_type.h"
 #include "core/framework/request/request_params.h"
+#include "core/runtime/xservice_client.h"
 #include "core/util/utils.h"
 #include "core/util/uuid.h"
 #include "mm_service_utils.h"
@@ -830,6 +832,42 @@ void ChatServiceImpl::process_async_impl(std::shared_ptr<ChatCall> call) {
       });
 }
 
+namespace {
+
+// xllm-service forwards chat content as plain text, so images reach the
+// prefill instance as <img>URL</img> markers inside the message text.
+constexpr std::string_view kInlineImageBegin = "<img>";
+constexpr std::string_view kInlineImageEnd = "</img>";
+
+MMContentVec parse_inline_images(const std::string& content) {
+  MMContentVec contents;
+  size_t pos = 0;
+  while (pos < content.size()) {
+    const size_t begin = content.find(kInlineImageBegin, pos);
+    if (begin == std::string::npos) {
+      break;
+    }
+    const size_t url_begin = begin + kInlineImageBegin.size();
+    const size_t end = content.find(kInlineImageEnd, url_begin);
+    if (end == std::string::npos) {
+      break;
+    }
+    if (begin > pos) {
+      contents.emplace_back("text", content.substr(pos, begin - pos));
+    }
+    ImageURL image_url;
+    image_url.url = content.substr(url_begin, end - url_begin);
+    contents.emplace_back("image_url", image_url);
+    pos = end + kInlineImageEnd.size();
+  }
+  if (pos < content.size()) {
+    contents.emplace_back("text", content.substr(pos));
+  }
+  return contents;
+}
+
+}  // namespace
+
 MMChatServiceImpl::MMChatServiceImpl(VLMMaster* master,
                                      const std::vector<std::string>& models)
     : APIServiceImpl(models),
@@ -940,6 +978,46 @@ void MMChatServiceImpl::process_async_impl(std::shared_ptr<MMChatCall> call) {
                                           is_force_reasoning,
                                           json_tools);
       });
+}
+
+void MMChatServiceImpl::process_async_rpc_impl(
+    const proto::ChatRequest* request) {
+  const std::string& service_request_id = request->service_request_id();
+  const std::string& target_xservice_addr = request->source_xservice_addr();
+  auto callback = [](const RequestOutput& req_output) -> bool {
+    req_output.log_request_status();
+    const std::vector<bool> status =
+        XServiceClient::get_instance()->generations({req_output});
+    return !status.empty() && status[0];
+  };
+
+  const auto& rpc_request = *request;
+  const Status admission_status = api_service_internal::admit_rpc_request(
+      rpc_request.model(), models_, master_->get_rate_limiter());
+  if (unlikely(!admission_status.ok())) {
+    CALLBACK_WITH_ERROR(admission_status.code(),
+                        admission_status.message(),
+                        service_request_id,
+                        target_xservice_addr);
+    return;
+  }
+
+  RequestParams request_params(rpc_request, "", "");
+  // The service's token ids omit the image placeholder expansion, so the
+  // request factory re-tokenizes the prompt.
+  if (rpc_request.has_routing()) {
+    request_params.decode_address = rpc_request.routing().decode_name();
+  }
+  std::vector<Message> messages;
+  messages.reserve(rpc_request.messages_size());
+  for (const auto& message : rpc_request.messages()) {
+    messages.emplace_back(message.role(),
+                          parse_inline_images(message.content()));
+  }
+  master_->handle_request(std::move(messages),
+                          std::move(request_params),
+                          /*payload=*/"",
+                          callback);
 }
 
 }  // namespace xllm

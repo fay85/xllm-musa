@@ -22,6 +22,7 @@ limitations under the License.
 
 #include "core/kernels/musa/mrope.h"
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/layers/musa/pcp_context.h"
 #include "core/util/env_var.h"
 
 namespace xllm {
@@ -167,6 +168,13 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     const AttentionMetadata& attn_metadata,
     KVCache& kv_cache,
     const torch::Tensor& mrope_cos_sin) {
+  if (attn_metadata.pcp_context != nullptr) {
+    // Posting before the projection overlaps the transfer with it.
+    musa_pcp::expect_prefix_kv(num_kv_heads_,
+                               head_dim_,
+                               kv_cache.get_k_cache().options(),
+                               *attn_metadata.pcp_context);
+  }
   torch::Tensor qkv =
       hidden_states.has_fp8() && supports_fp8_input()
           ? qkv_proj_->forward_block_fp8_quantized(hidden_states.fp8_values,
@@ -198,7 +206,18 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
     }
 
     torch::Tensor out;
-    {
+    if (attn_metadata.pcp_context != nullptr) {
+      musa_pcp::exchange_kv(k_flat,
+                            v_flat,
+                            num_kv_heads_,
+                            head_dim_,
+                            kv_cache,
+                            *attn_metadata.pcp_context);
+      AttentionMetadata cached_metadata = attn_metadata;
+      cached_metadata.kv_cache_written = true;
+      out = std::get<0>(
+          attn_->forward(cached_metadata, q_flat, k_flat, v_flat, kv_cache));
+    } else {
       out = std::get<0>(
           attn_->forward(attn_metadata, q_flat, k_flat, v_flat, kv_cache));
     }
@@ -242,6 +261,7 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
       torch::Tensor k_cache = kv_cache.get_k_cache();
       torch::Tensor v_cache = kv_cache.get_v_cache();
       kv_cache_written =
+          attn_metadata.pcp_context == nullptr &&
           !attn_metadata.prefill_without_cache &&
           xllm::kernel::musa::fused_qk_norm_rope_cache_supported(
               qkv,
@@ -310,6 +330,15 @@ torch::Tensor Qwen3NextAttentionImpl::forward(
         rotary_emb_->forward(positions, q, k);
       }
     }
+  }
+  if (attn_metadata.pcp_context != nullptr) {
+    musa_pcp::exchange_kv(k,
+                          v,
+                          num_kv_heads_,
+                          head_dim_,
+                          kv_cache,
+                          *attn_metadata.pcp_context);
+    kv_cache_written = true;
   }
   torch::Tensor out;
   if (kv_cache_written) {

@@ -635,9 +635,16 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
   // Create persistent tensors with max_tokens_per_batch as first dimension
   persistent_tokens_ = torch::zeros({max_tokens_per_batch},
                                     torch::dtype(torch::kInt).device(device));
-  // Qwen VL M-RoPE positions are [3, seq]. Text positions stay [seq].
-  if (options_.backend() == "vlm" &&
-      !args_.rope_scaling_mrope_section().empty()) {
+  // Qwen VL M-RoPE positions are [3, seq] only in captured prefill graphs.
+  // Decode batches carry the [seq] positions of text, which the fused decode
+  // metadata update requires.
+  const auto& execution_config = ::xllm::ExecutionConfig::get_instance();
+  const bool mrope_prefill_graphs =
+      execution_config.enable_prefill_piecewise_graph() &&
+      (options_.mrope_positions() ||
+       (options_.backend() == "vlm" &&
+        !args_.rope_scaling_mrope_section().empty()));
+  if (mrope_prefill_graphs) {
     persistent_positions_ = torch::zeros(
         {3, max_tokens_per_batch}, torch::dtype(torch::kInt).device(device));
   } else {
@@ -871,6 +878,28 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
     }
   }
 
+  // The Qwen3.5 MTP draft prefill reads its token embedding from outside the
+  // captured region, as in the decode update.
+  const torch::Tensor& mtp_token_embedding =
+      params.embedding.mtp_token_embedding;
+  if (mtp_token_embedding.defined()) {
+    if (!persistent_mtp_token_embedding_.defined() ||
+        persistent_mtp_token_embedding_.numel() == 0) {
+      persistent_mtp_token_embedding_ = torch::zeros(
+          {options_.max_tokens_per_batch(), mtp_token_embedding.size(1)},
+          mtp_token_embedding.options().device(device_));
+    }
+    const int64_t mtp_rows = mtp_token_embedding.size(0);
+    persistent_mtp_token_embedding_
+        .slice(/*dim=*/0, /*start=*/0, /*end=*/mtp_rows)
+        .copy_(mtp_token_embedding, /*non_blocking=*/true);
+    if (static_cast<int64_t>(padded_num_tokens) > mtp_rows) {
+      persistent_mtp_token_embedding_
+          .slice(/*dim=*/0, /*start=*/mtp_rows, /*end=*/padded_num_tokens)
+          .zero_();
+    }
+  }
+
   if (!return_capture_params) {
     return std::nullopt;
   }
@@ -904,7 +933,12 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
   capture_device.kv_seq_lens = kv_seq_lens(static_cast<uint32_t>(cu_len));
   capture_device.new_cache_slots =
       persistent_new_cache_slots(padded_num_tokens);
-  capture_device.block_tables = block_tables;
+  // Captured paged attention replays every later history length, so it reads
+  // the full-width table; launches only visit the blocks of the live keys.
+  if (block_tables.defined()) {
+    capture_device.block_tables = persistent_block_tables_.slice(
+        /*dim=*/0, /*start=*/0, /*end=*/actual_batch_size);
+  }
   if (device_input.kv_cache_tokens_nums.defined()) {
     capture_device.kv_cache_tokens_nums = persistent_kv_cache_tokens_nums(
         static_cast<uint32_t>(actual_batch_size));
@@ -928,6 +962,10 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
   if (embedding.defined()) {
     params_for_capture.embedding.input_embedding =
         persistent_embedding(padded_num_tokens);
+  }
+  if (mtp_token_embedding.defined()) {
+    params_for_capture.embedding.mtp_token_embedding =
+        persistent_mtp_token_embedding(padded_num_tokens);
   }
   return params_for_capture;
 }
@@ -1893,8 +1931,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       !::xllm::RecConfig::get_instance().enable_xattention_one_stage() &&
       is_decode_with_llmrec;
   const int32_t head_dim = args_.head_dim();
-  const int64_t tp_size =
-      options_.world_size() / std::max(options_.dp_size(), 1);
+  const int64_t tp_size = options_.world_size() /
+                          (std::max(options_.dp_size(), 1) *
+                           std::max(options_.cp_size(), 1));
   const int64_t n_heads = args_.n_heads() / std::max(tp_size, int64_t{1});
   const int64_t total_kv_heads = args_.n_kv_heads().value_or(args_.n_heads());
   const int64_t n_kv_heads =
@@ -3605,11 +3644,8 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   if (!forward_type.is_prefill() && !forward_type.is_chunked_prefill()) {
     return false;
   }
-  // Spec verify has its own graph. The Qwen3.5 MTP draft prefill consumes
-  // target hidden states and token embeddings prepared outside its forward.
-  if (params.is_spec_verify || params.has_llmrec_params() ||
-      args_.model_type() == "qwen3_5_mtp" ||
-      args_.model_type() == "qwen3_5_moe_mtp") {
+  // Spec verify has its own graph.
+  if (params.is_spec_verify || params.has_llmrec_params()) {
     return false;
   }
   // Multi-sequence GDN chunked prefill runs its recurrence inside the forward

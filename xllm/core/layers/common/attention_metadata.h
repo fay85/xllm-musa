@@ -114,6 +114,10 @@ struct XAttentionTwoStageDecodeCache {
 #endif
 
 #if defined(USE_MUSA)
+namespace musa_pcp {
+struct Context;
+}  // namespace musa_pcp
+
 // FA3 / FlashInfer extras used by MUSA attention and graph replay:
 // CPU host mirrors for plan updates (avoid D2H during capture) and optional
 // shared FA3 scheduler metadata across layers.
@@ -254,6 +258,8 @@ struct AttentionMetadata {
 
 #if defined(USE_MUSA)
   Fa3AttentionMetadata fa3_metadata;
+  // Set only on the per-rank metadata of a context-parallel prefill.
+  musa_pcp::Context* pcp_context = nullptr;
 #endif
 
 #if defined(USE_NPU)

@@ -370,7 +370,8 @@ void DisaggPDServiceImpl::decode_recv_first_generation(
         gen.dp_size(),
         gen.dp_rank(),
         mtp_bootstrap_embedding,
-        gen.num_cached_tokens());
+        gen.num_cached_tokens(),
+        gen.mrope_position_delta());
     if (!success) {
       response->set_ok(false);
       return;

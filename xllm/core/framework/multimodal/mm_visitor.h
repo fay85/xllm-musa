@@ -18,11 +18,14 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <list>
 #include <optional>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
+#include "core/util/hash_util.h"
 #include "mm_batch_data.h"
 #include "mm_data.h"
 #include "mm_input.h"
@@ -189,22 +192,97 @@ class ProcessorCacheInsertVisitor final : public MMDataItem::IVisitor {
   ProcessorCache& cache_;
 };
 
+// Item entries through which the engine instructs the encoder caches of its
+// workers. Only the key names carry meaning, and workers remove them before
+// encoding. Every planned item carries exactly one of the store, reuse and
+// skip entries; an evict entry names, in hex, an output to drop.
+inline constexpr char kEncoderCacheCommandPrefix[] = "encoder_cache|";
+inline constexpr char kEncoderCacheStoreKey[] = "encoder_cache|store";
+inline constexpr char kEncoderCacheReuseKey[] = "encoder_cache|reuse";
+inline constexpr char kEncoderCacheSkipKey[] = "encoder_cache|skip";
+inline constexpr char kEncoderCacheEvictPrefix[] = "encoder_cache|evict|";
+
+// Engine-side record of the encoder outputs its workers cache. Workers store
+// the output of every item it marks for storing and drop outputs only when it
+// evicts them, so the record is exact and an item whose output is cached
+// reaches the workers without its encoder inputs.
+class EncoderCacheDirectory final {
+ public:
+  EncoderCacheDirectory(int64_t max_bytes, int64_t bytes_per_token);
+
+  // Plans one step: items whose output the workers hold reuse it, the others
+  // are stored, evicting the least recently used outputs the step does not
+  // reference.
+  void plan(MMBatchData& batch);
+
+ private:
+  using KeySet =
+      std::unordered_set<XXH3Key, FixedStringKeyHash, FixedStringKeyEqual>;
+  using LruList = std::list<XXH3Key>;
+
+  struct Entry final {
+    int64_t size = 0;
+    LruList::iterator lru_it;
+  };
+
+  using EntryMap = std::
+      unordered_map<XXH3Key, Entry, FixedStringKeyHash, FixedStringKeyEqual>;
+
+  // Records `key` unless it cannot fit beside the outputs of this step, and
+  // appends the outputs it evicts to `evicted`.
+  bool admit(const XXH3Key& key,
+             int64_t size,
+             const KeySet& referenced,
+             std::vector<XXH3Key>& evicted);
+
+  int64_t max_bytes_ = 0;
+  int64_t bytes_per_token_ = 0;
+  int64_t current_bytes_ = 0;
+  LruList lru_keys_;
+  EntryMap entries_;
+};
+
+// Applies the instructions of an engine-managed encoder cache and removes
+// them from the items.
+class EncoderCacheCommandVisitor final : public MMDataItem::IVisitor {
+ public:
+  explicit EncoderCacheCommandVisitor(EncoderCache* cache);
+  bool visit(MMDataItem& item) override;
+
+  // Whether the engine relies on the cache holding the output of `key`.
+  bool reuses(const XXH3Key& key) const;
+  // Whether the output of `key` must stay out of the cache.
+  bool skips(const XXH3Key& key) const;
+
+ private:
+  using KeySet =
+      std::unordered_set<XXH3Key, FixedStringKeyHash, FixedStringKeyEqual>;
+
+  EncoderCache* cache_;
+  KeySet reused_keys_;
+  KeySet skipped_keys_;
+};
+
 class EncoderCacheLookupVisitor : public MMDataItem::IVisitor {
  public:
-  explicit EncoderCacheLookupVisitor(EncoderCache* cache);
+  EncoderCacheLookupVisitor(EncoderCache* cache,
+                            const EncoderCacheCommandVisitor& commands);
   bool visit(MMDataItem& item) override;
 
  private:
   EncoderCache* cache_;
+  const EncoderCacheCommandVisitor& commands_;
 };
 
 class EncoderCacheInsertVisitor : public MMDataItem::IVisitor {
  public:
-  explicit EncoderCacheInsertVisitor(EncoderCache* cache);
+  EncoderCacheInsertVisitor(EncoderCache* cache,
+                            const EncoderCacheCommandVisitor& commands);
   bool visit(MMDataItem& item) override;
 
  private:
   EncoderCache* cache_;
+  const EncoderCacheCommandVisitor& commands_;
 };
 
 // Restores missing CTC tensors or caches newly computed outputs on each item.

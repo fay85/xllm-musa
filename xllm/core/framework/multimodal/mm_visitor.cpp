@@ -15,11 +15,17 @@ limitations under the License.
 
 #include "mm_visitor.h"
 
+#include <absl/strings/escaping.h>
 #include <absl/strings/match.h>
+#include <absl/strings/string_view.h>
 #include <glog/logging.h>
 
+#include <algorithm>
+#include <array>
+#include <iterator>
 #include <numeric>
 #include <optional>
+#include <string>
 #include <utility>
 
 #include "common/metrics.h"
@@ -462,31 +468,196 @@ bool ProcessorCacheInsertVisitor::visit(MMDataItem& item) {
   return true;
 }
 
-EncoderCacheLookupVisitor::EncoderCacheLookupVisitor(EncoderCache* cache)
+namespace {
+
+// Encoder inputs an item no longer needs once its output is cached.
+constexpr std::array<const char*, 2> kEncoderInputKeys = {
+    "pixel_values", "pixel_values_videos"};
+
+class ItemCollector final : public MMDataItem::IVisitor {
+ public:
+  bool visit(MMDataItem& item) override {
+    if (item.valid()) {
+      items_.emplace_back(&item);
+    }
+    return true;
+  }
+
+  const std::vector<MMDataItem*>& items() const { return items_; }
+
+ private:
+  std::vector<MMDataItem*> items_;
+};
+
+bool is_set(const XXH3Key& key) {
+  return std::any_of(std::begin(key.data),
+                     std::end(key.data),
+                     [](uint8_t byte) { return byte != 0; });
+}
+
+void add_command(MMDataItem& item, const std::string& command) {
+  item.mutable_data()[command] = torch::zeros({1}, torch::kUInt8);
+}
+
+}  // namespace
+
+EncoderCacheDirectory::EncoderCacheDirectory(int64_t max_bytes,
+                                             int64_t bytes_per_token)
+    : max_bytes_(max_bytes), bytes_per_token_(bytes_per_token) {
+  CHECK_GT(max_bytes, 0);
+  CHECK_GT(bytes_per_token, 0);
+}
+
+void EncoderCacheDirectory::plan(MMBatchData& batch) {
+  ItemCollector collector;
+  CHECK(batch.foreach (collector));
+  if (collector.items().empty()) {
+    return;
+  }
+  KeySet referenced;
+  for (const MMDataItem* item : collector.items()) {
+    referenced.insert(item->state().schedule_data().key);
+  }
+
+  // Workers look every item up before storing any output of the step, so an
+  // output first stored in this step cannot serve another item of the step.
+  KeySet stored;
+  std::vector<XXH3Key> evicted;
+  for (MMDataItem* item : collector.items()) {
+    const XXH3Key& key = item->state().schedule_data().key;
+    const int64_t size =
+        static_cast<int64_t>(item->state().mm_token_num()) * bytes_per_token_;
+    if (item->is_embedded() || !is_set(key) || size <= 0) {
+      add_command(*item, kEncoderCacheSkipKey);
+      continue;
+    }
+    EntryMap::iterator it = entries_.find(key);
+    if (it != entries_.end() && stored.count(key) == 0) {
+      lru_keys_.splice(lru_keys_.end(), lru_keys_, it->second.lru_it);
+      for (const char* input_key : kEncoderInputKeys) {
+        item->mutable_data().erase(input_key);
+      }
+      add_command(*item, kEncoderCacheReuseKey);
+      continue;
+    }
+    if (it != entries_.end() || admit(key, size, referenced, evicted)) {
+      stored.insert(key);
+      add_command(*item, kEncoderCacheStoreKey);
+      continue;
+    }
+    add_command(*item, kEncoderCacheSkipKey);
+  }
+
+  MMDataItem& first_item = *collector.items().front();
+  for (const XXH3Key& key : evicted) {
+    add_command(first_item,
+                kEncoderCacheEvictPrefix +
+                    absl::BytesToHexString(absl::string_view(
+                        reinterpret_cast<const char*>(key.data),
+                        sizeof(key.data))));
+  }
+}
+
+bool EncoderCacheDirectory::admit(const XXH3Key& key,
+                                  int64_t size,
+                                  const KeySet& referenced,
+                                  std::vector<XXH3Key>& evicted) {
+  if (size > max_bytes_) {
+    return false;
+  }
+  LruList::iterator candidate = lru_keys_.begin();
+  while (current_bytes_ + size > max_bytes_ && candidate != lru_keys_.end()) {
+    if (referenced.count(*candidate) != 0) {
+      ++candidate;
+      continue;
+    }
+    EntryMap::iterator victim = entries_.find(*candidate);
+    CHECK(victim != entries_.end());
+    current_bytes_ -= victim->second.size;
+    evicted.emplace_back(*candidate);
+    entries_.erase(victim);
+    candidate = lru_keys_.erase(candidate);
+  }
+  if (current_bytes_ + size > max_bytes_) {
+    return false;
+  }
+  lru_keys_.push_back(key);
+  entries_.emplace(key, Entry{size, std::prev(lru_keys_.end())});
+  current_bytes_ += size;
+  return true;
+}
+
+EncoderCacheCommandVisitor::EncoderCacheCommandVisitor(EncoderCache* cache)
     : cache_(cache) {}
+
+bool EncoderCacheCommandVisitor::visit(MMDataItem& item) {
+  const XXH3Key& key = item.state().schedule_data().key;
+  MMDict& data = item.mutable_data();
+  for (MMDict::iterator it = data.begin(); it != data.end();) {
+    const std::string& name = it->first;
+    if (!absl::StartsWith(name, kEncoderCacheCommandPrefix)) {
+      ++it;
+      continue;
+    }
+    cache_->set_engine_managed();
+    if (absl::StartsWith(name, kEncoderCacheEvictPrefix)) {
+      const std::string evicted = absl::HexStringToBytes(
+          absl::string_view(name).substr(sizeof(kEncoderCacheEvictPrefix) - 1));
+      CHECK_EQ(evicted.size(), sizeof(XXH3Key::data))
+          << "malformed encoder cache eviction: " << name;
+      cache_->erase(XXH3Key(reinterpret_cast<const uint8_t*>(evicted.data())));
+    } else if (name == kEncoderCacheReuseKey) {
+      reused_keys_.insert(key);
+    } else if (name == kEncoderCacheSkipKey) {
+      skipped_keys_.insert(key);
+    }
+    it = data.erase(it);
+  }
+  return true;
+}
+
+bool EncoderCacheCommandVisitor::reuses(const XXH3Key& key) const {
+  return reused_keys_.count(key) != 0;
+}
+
+bool EncoderCacheCommandVisitor::skips(const XXH3Key& key) const {
+  return skipped_keys_.count(key) != 0;
+}
+
+EncoderCacheLookupVisitor::EncoderCacheLookupVisitor(
+    EncoderCache* cache,
+    const EncoderCacheCommandVisitor& commands)
+    : cache_(cache), commands_(commands) {}
 
 bool EncoderCacheLookupVisitor::visit(MMDataItem& item) {
   if (item.is_embedded()) {
     return true;
   }
-  std::optional<torch::Tensor> cached =
-      cache_->lookup(item.state().schedule_data().key);
+  const XXH3Key& key = item.state().schedule_data().key;
+  std::optional<torch::Tensor> cached = cache_->lookup(key);
   HISTOGRAM_OBSERVE(encoder_cache_hit_rate, cached.has_value() ? 100 : 0);
   if (!cached.has_value()) {
+    CHECK(!commands_.reuses(key))
+        << "encoder cache lost an output the engine reuses without inputs";
     return true;
   }
   item.add(get_embedding_key(item.type()), cached.value());
   return true;
 }
 
-EncoderCacheInsertVisitor::EncoderCacheInsertVisitor(EncoderCache* cache)
-    : cache_(cache) {}
+EncoderCacheInsertVisitor::EncoderCacheInsertVisitor(
+    EncoderCache* cache,
+    const EncoderCacheCommandVisitor& commands)
+    : cache_(cache), commands_(commands) {}
 
 bool EncoderCacheInsertVisitor::visit(MMDataItem& item) {
   if (!item.is_embedded()) {
     return true;
   }
   const XXH3Key& key = item.state().schedule_data().key;
+  if (commands_.skips(key)) {
+    return true;
+  }
   std::optional<torch::Tensor> embedding =
       item.get<torch::Tensor>(get_embedding_key(item.type()));
   if (!embedding.has_value()) {

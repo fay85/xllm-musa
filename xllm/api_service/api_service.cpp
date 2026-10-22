@@ -560,6 +560,10 @@ void APIService::ChatCompletions(::google::protobuf::RpcController* controller,
   auto ctrl = reinterpret_cast<brpc::Controller*>(controller);
   // Maybe need double check later
 
+  if (mm_chat_service_impl_) {
+    mm_chat_service_impl_->process_async_rpc_impl(request);
+    return;
+  }
   chat_service_impl_->process_async_rpc_impl(request);
 }
 

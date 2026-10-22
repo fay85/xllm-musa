@@ -53,6 +53,14 @@ constexpr const char* kFa3FwdUriHashGqa7 =
     "83616583ddc213f94251d2993281b3fa1a5ccd5939c55dff11e6d9ad979306cb";
 constexpr const char* kFa3FwdUriHashGqa8 =
     "96c89a71db14cd369d03c0e1cbb43a2815da277c2f592061425e2b436354127a";
+// Paged-KV FA3 chunked prefill for head-256 GQA6: Mate 0.2.7 tile 192x64
+// without GQA packing. Metadata and forward must agree on tile and packing,
+// and only the single-warp metadata module is deployed.
+constexpr int32_t kFa3PagedPrefillTileM = 192;
+constexpr const char* kFa3PagedPrefillFwdUriGqa6 =
+    "fmha_fwd_a26e1456a24cd0303a54b37fc29ccfb61f0d85bea6f2bf0578e95edf4c541e8a";
+constexpr const char* kFa3PagedPrefillMetadataUriGqa6 =
+    "fmha_get_metadata_6x1_bf16_ragged_q_padded_k_causal";
 constexpr const char* kFa3FwdCombine16Uri =
     "fmha_fwd_combine_bf16_16x64x16_ragged_q_metadata";
 constexpr const char* kFa3FwdCombine32Uri =
@@ -111,6 +119,14 @@ int32_t fa3_metadata_num_warps(int32_t batch_size) {
   return std::min<int32_t>(
       (batch_size + kFa3MetadataRowsPerWarp - 1) / kFa3MetadataRowsPerWarp,
       kFa3MaxMetadataWarps);
+}
+
+bool use_fa3_paged_prefill_kernel(int64_t gqa_ratio, int32_t batch_size) {
+  static const bool available =
+      fa3_module_available(kFa3PagedPrefillFwdUriGqa6) &&
+      fa3_module_available(kFa3PagedPrefillMetadataUriGqa6);
+  return available && gqa_ratio == 6 &&
+         fa3_metadata_num_warps(batch_size) == 1;
 }
 
 int64_t fa3_metadata_numel(int32_t batch_size) {
@@ -660,7 +676,13 @@ torch::Tensor fa3_prefill_scheduler_metadata(
       torch::empty({fa3_metadata_numel(batch_size)}, options);
 
   TvmffiStreamGuard stream_guard(device);
-  const std::string uri = fa3_metadata_uri(gqa_ratio, batch_size);
+  const bool paged_prefill_kernel =
+      use_fa3_paged_prefill_kernel(gqa_ratio, batch_size);
+  const std::string uri = paged_prefill_kernel
+                              ? std::string(kFa3PagedPrefillMetadataUriGqa6)
+                              : fa3_metadata_uri(gqa_ratio, batch_size);
+  const int32_t tile_m =
+      paged_prefill_kernel ? kFa3PagedPrefillTileM : kFa3TileM;
   get_function(uri, uri)(static_cast<int64_t>(batch_size),
                          static_cast<int64_t>(num_heads_q),
                          static_cast<int64_t>(num_heads_kv),
@@ -679,7 +701,7 @@ torch::Tensor fa3_prefill_scheduler_metadata(
                          none_tensor(),
                          to_ffi_tensor(metadata),
                          /*num_splits=*/kFa3PagedPrefillNumSplits,
-                         static_cast<int64_t>(kFa3TileM),
+                         static_cast<int64_t>(tile_m),
                          static_cast<int64_t>(kFa3TileN),
                          /*mp_margin=*/static_cast<int64_t>(0));
   return metadata;
@@ -743,11 +765,13 @@ void fa3_prefill_paged(const torch::Tensor& query,
       << "fa3_prefill_paged: requires GQA ratio 2, 4, 6, 7, or 8, got "
       << gqa_ratio;
   CHECK_EQ(page_table.size(0), seqused_k.numel());
-  CHECK_EQ(scheduler_metadata.numel(),
-           fa3_metadata_numel(static_cast<int32_t>(seqused_k.numel())));
+  const int32_t batch_size = static_cast<int32_t>(seqused_k.numel());
+  CHECK_EQ(scheduler_metadata.numel(), fa3_metadata_numel(batch_size));
   CHECK_GT(max_seqlen_q, 0);
 
-  const std::string uri = fa3_fwd_uri(gqa_ratio);
+  const std::string uri = use_fa3_paged_prefill_kernel(gqa_ratio, batch_size)
+                              ? std::string(kFa3PagedPrefillFwdUriGqa6)
+                              : fa3_fwd_uri(gqa_ratio);
   TvmffiStreamGuard stream_guard(query.device());
 
   auto fwd_result =

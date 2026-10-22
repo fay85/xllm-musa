@@ -202,6 +202,16 @@ std::shared_ptr<Request> VLMRequestFactory::build_request(
     stream = false;
   }
 
+  // Disaggregated PD responds through the batched callback.
+  OutputsFunc outputs_callback =
+      [callback](const std::vector<RequestOutput>& outputs) {
+        std::vector<bool> statuses;
+        statuses.reserve(outputs.size());
+        for (const RequestOutput& output : outputs) {
+          statuses.push_back(callback(output));
+        }
+        return statuses;
+      };
   RequestState req_state(std::move(prompt),
                          std::move(prompt_tokens),
                          std::move(mm_data),
@@ -216,7 +226,8 @@ std::shared_ptr<Request> VLMRequestFactory::build_request(
                          sp.skip_special_tokens,
                          options_->enable_schedule_overlap(),
                          callback,
-                         nullptr);
+                         outputs_callback,
+                         sp.decode_address);
   req_state.include_stop_str_in_output = sp.include_stop_str_in_output;
 
   rate_limit_guard.dismiss();

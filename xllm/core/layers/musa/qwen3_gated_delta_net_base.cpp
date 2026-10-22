@@ -25,6 +25,7 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 
+#include "core/layers/musa/pcp_context.h"
 #include "kernels/musa/attention_runner.h"
 #include "kernels/musa/gdn_ops.h"
 #include "kernels/ops_api.h"
@@ -858,6 +859,14 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   if (attn_metadata.is_dummy) {
     return torch::zeros_like(hidden_states.values);
   }
+  musa_pcp::Context* pcp_context = attn_metadata.pcp_context;
+  if (pcp_context != nullptr) {
+    // Posting before the projections overlaps the transfers with them.
+    musa_pcp::expect_prefix_cache_row(kv_cache.get_conv_cache(),
+                                      *pcp_context);
+    musa_pcp::expect_prefix_cache_row(kv_cache.get_ssm_cache(),
+                                      *pcp_context);
+  }
   // Save original hidden_states size for potential padding later
   const int64_t original_num_tokens = hidden_states.values.size(0);
   const bool use_spec_verify = input_params.is_spec_verify;
@@ -973,6 +982,10 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     CHECK_EQ(has_initial_state.scalar_type(), torch::kBool);
     CHECK(has_initial_state.device() == mixed_qkv.device())
         << "has_initial_states must be on the same device as mixed_qkv";
+    if (pcp_context != nullptr) {
+      musa_pcp::receive_prefix_cache_row(
+          conv_cache, logical_state_indices, *pcp_context);
+    }
     mixed_qkv =
         xllm::kernel::musa::causal_conv1d_prefill(conv_input,
                                                   conv_weight,
@@ -982,6 +995,10 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                                                   logical_state_indices,
                                                   has_initial_state,
                                                   /*silu_activation=*/true);
+    if (pcp_context != nullptr) {
+      musa_pcp::send_prefix_cache_row(
+          conv_cache, logical_state_indices, *pcp_context);
+    }
 
     mixed_qkv = reshape_qkvz_with_pad(attn_metadata, mixed_qkv);
     mixed_qkv = mixed_qkv.transpose(1, 2);
@@ -1135,6 +1152,9 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   const bool use_mate_gdn_prefill =
       kEnableMateGdnPrefill && !use_spec_verify &&
       (attn_metadata.is_prefill || use_mate_gdn_chunked_prefill);
+  CHECK(pcp_context == nullptr || (use_mate_gdn_prefill && batch_size == 1))
+      << "context-parallel prefill requires the single-sequence Mate GDN "
+         "prefill";
   // Apply chunked or recurrent gated-delta attention and update caches.
   if (use_mate_gdn_prefill && batch_size == 1) {
     // A single sequence launches Mate from device-resident cu_seqlens, so the
@@ -1154,17 +1174,31 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
       CHECK(attn_metadata.has_initial_states.defined())
           << "has_initial_states must be populated for Qwen3.5 chunked "
              "prefill";
-      torch::Tensor initial_state =
-          torch::index_select(ssm_cache, 0, linear_state_base_indices);
-      initial_state.mul_(attn_metadata.has_initial_states.view({-1, 1, 1, 1})
-                             .to(initial_state.scalar_type()));
+      torch::Tensor initial_state;
+      if (pcp_context != nullptr &&
+          musa_pcp::receives_prefix_state(*pcp_context)) {
+        initial_state = musa_pcp::take_prefix_rows(*pcp_context);
+      } else {
+        initial_state =
+            torch::index_select(ssm_cache, 0, linear_state_base_indices);
+        initial_state.mul_(
+            attn_metadata.has_initial_states.view({-1, 1, 1, 1})
+                .to(initial_state.scalar_type()));
+      }
       mate_params.initial_state = initial_state;
     }
     torch::Tensor mate_final_state;
     std::tie(core_attn_out, mate_final_state) =
         xllm::kernel::musa::mate_gated_delta_rule_prefill(mate_params);
-    ssm_cache.index_put_({linear_state_base_indices},
-                         mate_final_state.to(ssm_cache.dtype()));
+    const torch::Tensor final_state = mate_final_state.to(ssm_cache.dtype());
+    ssm_cache.index_put_({linear_state_base_indices}, final_state);
+    if (pcp_context != nullptr) {
+      musa_pcp::send_prefix_rows(final_state, *pcp_context);
+      musa_pcp::defer_final_state(
+          conv_cache, logical_state_indices, *pcp_context);
+      musa_pcp::defer_final_state(
+          ssm_cache, linear_state_base_indices, *pcp_context);
+    }
   } else if (use_mate_gdn_prefill) {
     // Multi-sequence prefill packs rows from host lengths, so the recurrence
     // runs between captured segments.

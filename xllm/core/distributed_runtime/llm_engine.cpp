@@ -318,6 +318,20 @@ bool LLMEngine::init_model(MasterStatus master_status) {
             << ", dtype: " << dtype_
             << ", kv_cache_dtype: " << options_.kv_cache_dtype();
 
+  if (options_.backend() == "vlm" && options_.max_encoder_cache_size() > 0) {
+    // A cached output holds one embedding row per multimodal token, plus one
+    // per deepstack layer.
+    const int64_t bytes_per_token =
+        args_.hidden_size() *
+        static_cast<int64_t>(1 + args_.mm_deepstack_visual_indexes().size()) *
+        static_cast<int64_t>(torch::elementSize(dtype_));
+    encoder_cache_directories_.reserve(dp_size_);
+    for (uint32_t dp_rank = 0; dp_rank < dp_size_; ++dp_rank) {
+      encoder_cache_directories_.emplace_back(
+          options_.max_encoder_cache_size() * 1024 * 1024, bytes_per_token);
+    }
+  }
+
   if (tokenizer_ != nullptr) {
     const int64_t tokenizer_vocab_size = tokenizer_->vocab_size();
     int64_t model_vocab_size = args_.vocab_size();
@@ -691,9 +705,14 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
   const bool draft_uses_target_prefix_manager =
       options_.is_draft_engine() &&
       util::is_deepseek_v4_dspark_model_type(args_.model_type());
+  // VLM requests must hash image content so different images never share
+  // cached blocks.
+  const BlockHasherType base_hasher_type = options_.backend() == "vlm"
+                                               ? BlockHasherType::MM
+                                               : BlockHasherType::TEXT;
   BlockManagerPool::Options options;
   options.num_blocks(kv_cache_cap.n_blocks())
-      .hasher_type(mtp_hasher_type(BlockHasherType::TEXT,
+      .hasher_type(mtp_hasher_type(base_hasher_type,
                                    options_.num_speculative_tokens(),
                                    options_.speculative_algorithm()))
       .block_size(kv_split_size_eff > 1 ? block_size * kv_split_size_eff
@@ -1066,10 +1085,22 @@ void LLMEngine::prefetch_from_storage(
 void LLMEngine::get_cache_info(std::vector<uint64_t>& cluster_ids,
                                std::vector<std::string>& addrs,
                                std::vector<uint16_t>& ports) {
-  cluster_ids.reserve(worker_clients_num_);
-  addrs.reserve(worker_clients_num_);
-  ports.reserve(worker_clients_num_);
-  for (size_t worker_rank = 0; worker_rank < worker_clients_num_;
+  // MUSA prefill context parallelism leaves the full KV cache and the final
+  // recurrent state on the last CP rank, so that replica alone serves KV
+  // transfer and peers see a TP-only layout.
+  const bool kv_complete_on_last_cp_rank =
+      Platform::is_musa() && cp_size_ > 1 &&
+      ::xllm::ParallelConfig::get_instance().kv_split_size_effective() == 1;
+  const size_t first_published_worker =
+      kv_complete_on_last_cp_rank
+          ? worker_clients_num_ - worker_clients_num_ / cp_size_
+          : 0;
+  const size_t published_workers = worker_clients_num_ - first_published_worker;
+  cluster_ids.reserve(published_workers);
+  addrs.reserve(published_workers);
+  ports.reserve(published_workers);
+  for (size_t worker_rank = first_published_worker;
+       worker_rank < worker_clients_num_;
        ++worker_rank) {
     uint64_t cluster_id = 0;
     std::string addr;
@@ -1533,6 +1564,10 @@ std::vector<ForwardInput> LLMEngine::prepare_inputs(std::vector<Batch>& batch) {
     // below already sees the rotated live slot -- no apply step is needed here.
     batched_inputs.emplace_back(std::move(batch[dp_rank].prepare_forward_input(
         args_, threadpool_.get(), cp_size_)));
+    if (!encoder_cache_directories_.empty()) {
+      encoder_cache_directories_[dp_rank].plan(
+          batched_inputs[dp_rank].input_params.multimodal.mm_data);
+    }
     const BatchForwardType& current_batch_forward_type =
         batched_inputs[dp_rank].input_params.meta.batch_forward_type;
     dp_global_token_nums[dp_rank] =

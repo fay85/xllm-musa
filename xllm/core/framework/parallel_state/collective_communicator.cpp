@@ -528,7 +528,8 @@ void CollectiveCommunicator::create_process_groups(
     }
     const int32_t cp_group_index =
         cp_topology->dp_rank() * tp_size + cp_topology->tp_rank();
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
     cp_group_ = create_process_group(
         global_rank,
         cp_local_rank,

@@ -33,6 +33,7 @@ limitations under the License.
 #include "core/framework/model_loader.h"
 #include "core/framework/parallel_state/parallel_args.h"
 #if defined(USE_MUSA)
+#include "core/layers/musa/pcp_context.h"
 #include "core/layers/musa/qwen3_gated_delta_net_base.h"
 #endif
 #include "core/layers/common/attention_mask.h"
@@ -145,6 +146,15 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
                                                /*device=*/device_,
                                                metadata_build_options);
     attn_metadata.fa3_metadata.share_fa3_scheduler_metadata = true;
+    // Auxiliary capture records every row on every rank, so it keeps the
+    // replicated layout.
+    std::optional<layer::musa_pcp::Context> pcp_context;
+    if (parallel_args_.cp_size() > 1 && !aux_capture_.enabled()) {
+      layer::musa_pcp::build_context(attn_metadata,
+                                     parallel_args_,
+                                     static_cast<int32_t>(tokens.size(0)),
+                                     &pcp_context);
+    }
 #else
     layer::AttentionMetadata attn_metadata =
         layer::AttentionMetadataBuilder::build(
@@ -177,6 +187,15 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
     if (is_sequence_sharded(fc1_ctx)) {
       h = shard_sequence(h, fc1_ctx);
     }
+    const layer::AttentionMetadata* layer_metadata = &attn_metadata;
+#if defined(USE_MUSA)
+    if (pcp_context.has_value()) {
+      h = layer::musa_pcp::shard_rows(h, *pcp_context, /*dim=*/0);
+      positions = layer::musa_pcp::shard_rows(
+          positions, *pcp_context, /*dim=*/positions.dim() - 1);
+      layer_metadata = &pcp_context->local_metadata;
+    }
+#endif
 
     torch::Tensor mrope_cos_sin;
     for (const auto& layer : layers_) {
@@ -210,7 +229,7 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
       h = layer->forward(h,
                          residual,
                          positions,
-                         attn_metadata,
+                         *layer_metadata,
                          kv_caches[i],
                          input_params,
                          mrope_cos_sin);
@@ -227,6 +246,11 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
     if (is_sequence_sharded(fc1_ctx)) {
       h = gather_sequence(h, fc1_ctx);
     }
+#if defined(USE_MUSA)
+    if (pcp_context.has_value()) {
+      h = layer::musa_pcp::finish(h, *pcp_context);
+    }
+#endif
     return aux_capture_.finalize(h);
   }
 
