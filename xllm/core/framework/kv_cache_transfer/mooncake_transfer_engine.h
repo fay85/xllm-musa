@@ -176,16 +176,6 @@ class MooncakeTransferEngine {
                                    const std::vector<ByteRegion>& regions,
                                    MoveOpcode move_opcode);
 
-  // Heterogeneous-TP PULL produces many small, destination-strided regions
-  // whose source bytes are contiguous (one source block holds its whole head
-  // shard). Read the remote-contiguous runs into a registered device staging
-  // buffer with few large requests, then scatter on device.
-  bool move_memory_regions_staged(const std::string& remote_addr,
-                                  const std::vector<ByteRegion>& regions,
-                                  double* read_ms,
-                                  double* scatter_ms);
-  static size_t count_remote_runs(const std::vector<ByteRegion>& regions);
-
   bool link_sessions(const std::vector<uint64_t>& cluster_ids,
                      const std::vector<std::string>& remote_addrs);
 
@@ -259,9 +249,6 @@ class MooncakeTransferEngine {
   uint16_t listen_port_;
   std::vector<uint64_t> buf_bytes_;
   Device device_;
-  std::mutex staging_mutex_;
-  torch::Tensor staging_;
-  uint64_t staging_buf_id_ = 0;
   MooncakeTransferEngineCore& core_;
   std::mutex session_mutex_;
   std::unordered_map<std::string, int32_t> session_ref_counts_;

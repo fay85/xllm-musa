@@ -244,16 +244,9 @@ class KVCacheTransfer {
       int32_t src_kv_split_size);
 
   // working thread
-#if defined(USE_MUSA)
-  // Heterogeneous-TP PULL reads several Prefill shards concurrently.
-  ThreadPool threadpool_{/*num_threads=*/2,
-                         /*cpu_binding=*/false,
-                         /*pool_name=*/"KVCacheTransfer.async"};
-#else
   ThreadPool threadpool_{/*num_threads=*/1,
                          /*cpu_binding=*/false,
                          /*pool_name=*/"KVCacheTransfer.async"};
-#endif
 };
 
 class KVCacheTransferFactory {

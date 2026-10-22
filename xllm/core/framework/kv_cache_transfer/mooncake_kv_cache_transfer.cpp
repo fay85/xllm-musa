@@ -720,38 +720,14 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
   }
   const double bind_ms = bind_timer.elapsed_seconds() * 1000.0;
   Timer move_timer;
-  // Heterogeneous TP yields per-token head-shard regions (~1 KiB each); read
-  // their remote-contiguous runs through a staging buffer instead.
-  uint64_t region_bytes = 0;
-  for (const ByteRegion& region : all_regions) {
-    region_bytes += region.length;
-  }
-  const bool staged =
-      all_regions.size() >= 4096 &&
-      region_bytes / std::max<uint64_t>(all_regions.size(), 1) < 16384;
-  const size_t remote_runs = 0;
-  double staged_read_ms = 0.0;
-  double staged_scatter_ms = 0.0;
-  const bool moved =
-      all_regions.empty() ||
-      (staged ? mooncake_te_->move_memory_regions_staged(
-                    src_addr, all_regions, &staged_read_ms, &staged_scatter_ms)
-              : mooncake_te_->move_memory_regions(
-                    src_addr,
-                    all_regions,
-                    MooncakeTransferEngine::MoveOpcode::READ));
-  if (!moved) {
+  if (!all_regions.empty() &&
+      !mooncake_te_->move_memory_regions(
+          src_addr, all_regions, MooncakeTransferEngine::MoveOpcode::READ)) {
     LOG(ERROR) << "Pull KV byte regions failed, layers=" << bind_layers
-               << ", regions=" << all_regions.size() << ", staged=" << staged;
+               << ", regions=" << all_regions.size();
     return false;
   }
   const double move_ms = move_timer.elapsed_seconds() * 1000.0;
-  if (staged) {
-    (void)remote_runs;
-    LOG(INFO) << "[Mooncake][PDTransfer] staged pull, regions="
-              << all_regions.size() << ", read_ms=" << staged_read_ms
-              << ", scatter_ms=" << staged_scatter_ms;
-  }
   LOG(INFO) << "[Mooncake][PDTransfer] direction=pull, cluster_id="
             << src_cluster_id << ", remote=" << src_addr
             << ", mapping_groups=" << mappings.size()
