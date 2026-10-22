@@ -95,55 +95,28 @@ constexpr int64_t kBlockFp8Rows = 128;
 // many best approximate logits.
 constexpr int64_t kTargetLmHeadExactTopK = 8;
 
-// Reads one token id per line. Ids must be unique and inside the global
-// vocabulary. When the target LM head is column-parallel (TP>1), only ids in
-// [rank_start, rank_end) are kept and converted to local row indices so each
-// rank loads a subset of its own weight shard. The kept count is truncated
-// down to a multiple of 128 (block-FP8 tile). After local forward the head
-// expands to the local shard width and gathers to the full vocabulary.
+// Reads one token id per line. Ids must be unique and inside the vocabulary,
+// and their count must fill whole 128-row block-FP8 tiles.
 torch::Tensor load_draft_vocab_ids(const std::string& path,
-                                   int64_t global_vocab_size,
-                                   int64_t rank_start,
-                                   int64_t rank_end) {
-  CHECK_GE(rank_start, 0);
-  CHECK_GT(rank_end, rank_start);
-  CHECK_LE(rank_end, global_vocab_size);
+                                   int64_t vocab_size) {
   std::ifstream file(path);
   CHECK(file.is_open()) << "failed to open MTP draft vocab file " << path;
   std::vector<int64_t> ids;
-  ids.reserve(static_cast<size_t>(rank_end - rank_start));
+  ids.reserve(static_cast<size_t>(vocab_size));
   int64_t id = 0;
-  int64_t global_count = 0;
   while (file >> id) {
-    CHECK(id >= 0 && id < global_vocab_size)
-        << "MTP draft vocab id " << id << " is outside [0, " << global_vocab_size
+    CHECK(id >= 0 && id < vocab_size)
+        << "MTP draft vocab id " << id << " is outside [0, " << vocab_size
         << ") in " << path;
-    ++global_count;
-    if (id >= rank_start && id < rank_end) {
-      ids.emplace_back(id - rank_start);
-    }
+    ids.emplace_back(id);
   }
   CHECK(file.eof()) << "malformed MTP draft vocab file " << path;
   std::sort(ids.begin(), ids.end());
   CHECK(std::adjacent_find(ids.begin(), ids.end()) == ids.end())
       << "duplicate token id in MTP draft vocab file " << path;
-  const int64_t kept_tiles =
-      static_cast<int64_t>(ids.size()) / kBlockFp8Rows;
-  CHECK(kept_tiles > 0)
-      << "MTP draft vocab has no ids in local shard [" << rank_start << ", "
-      << rank_end << ") after reading " << global_count << " global ids from "
-      << path;
-  const int64_t kept = kept_tiles * kBlockFp8Rows;
-  if (kept < static_cast<int64_t>(ids.size())) {
-    LOG(WARNING) << "MTP draft vocab: truncating local shard rows from "
-                 << ids.size() << " to " << kept
-                 << " (multiple of " << kBlockFp8Rows << ") for rank_start="
-                 << rank_start;
-    ids.resize(static_cast<size_t>(kept));
-  }
-  LOG(INFO) << "MTP draft vocab shard: global_ids=" << global_count
-            << " local_rows=" << ids.size() << " shard=[" << rank_start << ","
-            << rank_end << ")";
+  CHECK(!ids.empty() && static_cast<int64_t>(ids.size()) % kBlockFp8Rows == 0)
+      << "MTP draft vocab size must be a positive multiple of "
+      << kBlockFp8Rows << ", got " << ids.size();
   return torch::tensor(ids, torch::kLong);
 }
 
@@ -154,27 +127,9 @@ layer::LmHead make_block_fp8_draft_lm_head(const layer::LmHead& target_head,
   if (vocab_path.empty()) {
     draft_head->load_block_fp8_from(target_head->weight());
   } else {
-    const ParallelArgs& parallel = draft_context.get_parallel_args();
-    const int64_t local_rows = target_head->weight().size(0);
-    // Match LmHead's process-group selection (lm_head_group_ else tp_group_).
-    ProcessGroup* process_group = parallel.lm_head_group_ != nullptr
-                                      ? parallel.lm_head_group_
-                                      : parallel.tp_group_;
-    CHECK(process_group != nullptr)
-        << "MTP draft vocab sharding requires a process group";
-    const int64_t world_size =
-        static_cast<int64_t>(process_group->world_size());
-    const int64_t rank = static_cast<int64_t>(process_group->rank());
-    CHECK_GT(local_rows, 0);
-    CHECK_GT(world_size, 0);
-    const int64_t global_vocab_size = local_rows * world_size;
-    const int64_t rank_start = rank * local_rows;
-    const int64_t rank_end = rank_start + local_rows;
-    CHECK_EQ(rank_end - rank_start, local_rows);
     draft_head->load_block_fp8_rows_from(
         target_head->weight(),
-        load_draft_vocab_ids(
-            vocab_path, global_vocab_size, rank_start, rank_end));
+        load_draft_vocab_ids(vocab_path, target_head->weight().size(0)));
   }
   return draft_head;
 }

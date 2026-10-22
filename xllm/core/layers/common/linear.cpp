@@ -760,10 +760,7 @@ void ColumnParallelLinearImpl::load_block_fp8_rows_from(
       << "load_block_fp8_rows_from expects an unquantized linear layer, got "
       << quant_args_.quant_method();
   CHECK(!bias_.defined()) << "row-subset linear does not support bias";
-  // TP>1 is allowed when gather_output_ is set: each rank expands into its
-  // local vocab shard then gathers to the full vocabulary (MTP draft head).
-  CHECK(world_size_ == 1 || gather_output_)
-      << "row-subset linear under TP>1 requires gather_output";
+  CHECK_EQ(world_size_, 1) << "row-subset linear requires world size 1";
   CHECK_EQ(source_weight.sizes(), weight_.sizes())
       << "block-fp8 source weight shape mismatch";
   CHECK_EQ(row_ids.dim(), 1) << "row ids must be 1-D";
