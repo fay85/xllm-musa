@@ -681,34 +681,44 @@ TEST(CacheLayoutBuilderTest, MusaGroupedModel1TransfersWholeFinalPage) {
           .fill_(85);
       source_kernel[block_count - 1].fill_(31);
       destination->tensor.fill_(239);
-      WorkerCacheLayoutManifest source_manifest =
-          make_musa_page_manifest(*source, "source", /*tp_rank=*/0);
+      // Instance coverage validates the complete TP topology even when only
+      // rank 0 owns the replicated page's outgoing bytes.
+      std::vector<WorkerCacheLayoutManifest> source_manifests;
+      source_manifests.reserve(8);
+      for (int32_t tp_rank = 0; tp_rank < 8; ++tp_rank) {
+        source_manifests.emplace_back(make_musa_page_manifest(
+            *source, "source-" + std::to_string(tp_rank), tp_rank));
+      }
+      const WorkerCacheLayoutManifest& source_manifest =
+          source_manifests.front();
       WorkerCacheLayoutManifest destination_manifest =
           make_musa_page_manifest(*destination, "destination", /*tp_rank=*/7);
-      ASSERT_TRUE(validate_worker_cache_layout(source_manifest).ok());
-      ASSERT_TRUE(validate_worker_cache_layout(destination_manifest).ok());
+      const Status source_status =
+          validate_worker_cache_layout(source_manifest);
+      ASSERT_TRUE(source_status.ok()) << source_status.message();
+      const Status destination_status =
+          validate_worker_cache_layout(destination_manifest);
+      ASSERT_TRUE(destination_status.ok()) << destination_status.message();
       ReshardPlanner planner;
-      ASSERT_TRUE(planner
-                      .validate_destination_coverage({source_manifest},
-                                                     destination_manifest)
-                      .ok());
+      const Status coverage_status = planner.validate_destination_coverage(
+          source_manifests, destination_manifest);
+      ASSERT_TRUE(coverage_status.ok()) << coverage_status.message();
       ReshardPlanTemplate plan;
-      ASSERT_TRUE(
-          planner
-              .build_outgoing_plan(source_manifest, destination_manifest, &plan)
-              .ok());
+      const Status plan_status = planner.build_outgoing_plan(
+          source_manifest, destination_manifest, &plan);
+      ASSERT_TRUE(plan_status.ok()) << plan_status.message();
       KVTransferMapping mapping;
       mapping.group_id = cache_group_id(type);
       mapping.local_ids = {static_cast<uint64_t>(block_count - 1)};
       mapping.remote_ids = {static_cast<uint64_t>(block_count - 1)};
       std::vector<ByteRegion> regions;
-      ASSERT_TRUE(RequestRegionBinder()
-                      .bind_pull(plan,
-                                 {mapping},
-                                 CacheNamespace::MAIN,
-                                 /*layer_id=*/0,
-                                 &regions)
-                      .ok());
+      const Status bind_status =
+          RequestRegionBinder().bind_pull(plan,
+                                          {mapping},
+                                          CacheNamespace::MAIN,
+                                          /*layer_id=*/0,
+                                          &regions);
+      ASSERT_TRUE(bind_status.ok()) << bind_status.message();
       ASSERT_EQ(regions.size(), 1U);
       const ByteRegion& region = regions.front();
       EXPECT_EQ(region.length, kPageBytes);
