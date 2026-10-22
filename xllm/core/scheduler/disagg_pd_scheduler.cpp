@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "scheduler/disagg_pd_scheduler.h"
+
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
 #include <brpc/server.h>
@@ -45,7 +47,6 @@ limitations under the License.
 #include "framework/xtensor/page_allocator.h"
 #include "runtime/xservice_client.h"
 #include "scheduler/continuous_scheduler.h"
-#include "scheduler/disagg_pd_scheduler.h"
 #include "util/env_var.h"
 #include "util/timer.h"
 #include "util/utils.h"
@@ -832,6 +833,18 @@ void DisaggPDScheduler::prefill_send_first_generation() {
       if (!options_.disable_log_stats()) {
         request->log_statistic(request->elapsed_seconds());
       }
+#if defined(USE_MUSA)
+      if (options_.kv_cache_transfer_mode() == "PULL") {
+        auto* pool = dynamic_cast<BlockManagerPool*>(kv_cache_manager_);
+        if (pool != nullptr) {
+          const size_t released = pool->reclaim_completed_pd_prefill_swa(
+              request->sequences()[0].get());
+          LOG(INFO) << "[DSV4_PD_PREFILL_RECLAIM] request_id="
+                    << request->request_id() << ", released_swa=" << released
+                    << ", free_swa=" << pool->swa_free_blocks();
+        }
+      }
+#endif
       requests.emplace_back(request);
       if (!request->state().stream) {
         non_stream_requests.emplace_back(request);
@@ -1000,6 +1013,12 @@ void DisaggPDScheduler::prefill_send_first_generation() {
       // TODO: Async call later
       proto::Status resp;
       brpc::Controller cntl;
+      // The first-token response was queued by ContinuousScheduler::step.
+      // Drain its response/RPC tasks before Decode may generate more tokens;
+      // waiting only after FirstGeneration allows Decode's SSE to overtake it.
+      response_processor_->wait_completion();
+      LOG_FIRST_N(INFO, 1)
+          << "[PD_FIRST_TOKEN_ORDER] responses_drained_before_decode_handoff";
       Timer rpc_timer;
       gen->set_upstream_elapsed_seconds(request->end_to_end_latency_seconds());
       stub->FirstGeneration(&cntl, &gens, &resp, nullptr);
@@ -1277,13 +1296,23 @@ bool DisaggPDScheduler::decode_recv_first_generation(
             mapping.remote_ids.size() < blocks.size()) {
           local_begin = blocks.size() - mapping.remote_ids.size();
         }
+        // Slid-out SWA pages keep logical UINT64_MAX placeholders. Filter
+        // both sides together so valid local pages never pair with sentinels.
+        std::vector<uint64_t> filtered_remote_ids;
+        filtered_remote_ids.reserve(mapping.remote_ids.size());
         mapping.local_ids.reserve(blocks.size() - local_begin);
         for (size_t index = local_begin; index < blocks.size(); ++index) {
           const Block& block = blocks[index];
-          if (block.is_valid()) {
+          const size_t remote_index = index - local_begin;
+          const bool remote_valid = remote_index < mapping.remote_ids.size() &&
+                                    mapping.remote_ids[remote_index] !=
+                                        std::numeric_limits<uint64_t>::max();
+          if (block.is_valid() && remote_valid) {
             mapping.local_ids.emplace_back(static_cast<uint64_t>(block.id()));
+            filtered_remote_ids.emplace_back(mapping.remote_ids[remote_index]);
           }
         }
+        mapping.remote_ids = std::move(filtered_remote_ids);
       }
       if (mapping.local_ids.size() != mapping.remote_ids.size()) {
         LOG(ERROR) << "PULL KV mapping size mismatch, request_id=" << req_id

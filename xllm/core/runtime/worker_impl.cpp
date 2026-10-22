@@ -97,6 +97,10 @@ limitations under the License.
 #include "layers/common/kv_shard_batch_metadata.h"
 #include "models/model_registry.h"
 #include "runtime/forward_params.h"
+#if defined(USE_MUSA)
+#include "runtime/musa/deepseek_v4_prefix_block_copy.h"
+#include "runtime/musa/musa_model_args.h"
+#endif
 #if defined(USE_NPU)
 #include "layers/npu/loader/rolling_weight_buffer.h"
 #endif
@@ -1467,6 +1471,12 @@ std::shared_ptr<const JsonObjectGrammar> WorkerImpl::ensure_json_object_grammar(
 }
 
 void WorkerImpl::apply_kv_block_swaps(const ModelInputParams& input_params) {
+#if defined(USE_MUSA)
+  if (musa::apply_deepseek_v4_prefix_block_copies(
+          input_params.block_copy.swap_blocks, &kv_caches_, device_)) {
+    return;
+  }
+#endif
 #if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   if (::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel() &&
       can_use_cuda_block_copy_kernel(input_params)) {
@@ -2126,7 +2136,11 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
     args.layers_to_capture(std::move(capture_layer_ids));
   }
 #else
-  if (options_.enable_speculative_decode()) {
+  if (options_.enable_speculative_decode()
+#if defined(USE_MUSA)
+      || options_.is_draft_engine()
+#endif
+  ) {
     args.num_speculative_tokens(options_.num_speculative_tokens());
     if (is_block_diffusion) {
       configure_block_diffusion_model(args, options_);
@@ -2156,6 +2170,11 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
         LOG(INFO) << "Overriding draft model_type from " << current_type
                   << " to " << it->second << " for speculative decoding";
         args.model_type(it->second);
+#if defined(USE_MUSA)
+        if (it->second == "deepseek_v4_mtp") {
+          musa::configure_deepseek_v4_mtp_model_args(args);
+        }
+#endif
       }
     }
   }
@@ -2656,7 +2675,8 @@ void WorkerImpl::prepare_mla_prefixcache_inputs(
 int64_t WorkerImpl::get_num_layers() const {
   int64_t num_layers = context_.get_model_args().n_layers();
 #if !defined(USE_NPU)
-  if (is_spec_draft_) {
+  if (is_spec_draft_ && !util::is_deepseek_v4_dspark_model_type(
+                            context_.get_model_args().model_type())) {
     // for MTP draft models, the number of layers is the number of nextn
     // predict layers
     int64_t num_nextn_predict_layers =

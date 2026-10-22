@@ -35,6 +35,9 @@ limitations under the License.
 #include "framework/kv_cache/deepseek_v4_cache_geometry.h"
 #include "framework/kv_cache/deepseek_v4_cache_policy.h"
 #include "framework/kv_cache/kv_cache_shape.h"
+#if defined(USE_MUSA)
+#include "framework/kv_cache/musa/deepseek_v4_kv_cache_impl.h"
+#endif
 #include "framework/kv_cache/kv_cache_utils.h"
 #include "platform/platform.h"
 #include "util/utils.h"
@@ -186,12 +189,19 @@ DeepSeekV4KVCacheImpl::DeepSeekV4KVCacheImpl(
   const double factor = create_options.host_blocks_factor();
   const int64_t block_size = create_options.block_size();
   const int64_t head_dim = create_options.head_dim();
+#if defined(USE_MUSA)
+  const int64_t cache_head_dim = musa_dsv4_flashmla_cache_head_dim(head_dim);
+#else
+  const int64_t cache_head_dim = head_dim;
+#endif
   const int64_t index_head_dim =
       std::max<int64_t>(create_options.index_head_dim(), 1);
   const Dsv4CacheGeometry& geometry =
       KVCacheConfig::get_instance().dsv4_cache_geometry();
-  const int64_t c4_physical_dim = geometry.c4_physical_dim();
-  const int64_t c128_physical_dim = geometry.c128_physical_dim();
+  const int64_t c4_physical_dim =
+      geometry.compressed_physical_dim(4, block_size);
+  const int64_t c128_physical_dim =
+      geometry.compressed_physical_dim(128, block_size);
   const int64_t n_heads = 1;
   const int64_t index_n_heads = 1;
   const DeepSeekV4CachePolicy cache_policy =
@@ -230,7 +240,7 @@ DeepSeekV4KVCacheImpl::DeepSeekV4KVCacheImpl(
               : scale_host_block_count(swa_source_count, factor);
       host_page_aligned_regions_.reserve(1);
       create_host_tensor(
-          host_group_shape(host_swa_count, block_size, n_heads, head_dim),
+          host_group_shape(host_swa_count, block_size, n_heads, cache_head_dim),
           create_options.dtype(),
           &swa_cache_,
           nullptr);
@@ -241,7 +251,8 @@ DeepSeekV4KVCacheImpl::DeepSeekV4KVCacheImpl(
           scale_host_block_count(pool_counts[1], factor);
       host_page_aligned_regions_.reserve(3);
       create_host_tensor(
-          host_group_shape(host_c4_count, c4_physical_dim, n_heads, head_dim),
+          host_group_shape(
+              host_c4_count, c4_physical_dim, n_heads, cache_head_dim),
           create_options.dtype(),
           &key_cache_,
           nullptr);
@@ -269,7 +280,7 @@ DeepSeekV4KVCacheImpl::DeepSeekV4KVCacheImpl(
       host_page_aligned_regions_.reserve(1);
       create_host_tensor(
           host_group_shape(
-              host_c128_count, c128_physical_dim, n_heads, head_dim),
+              host_c128_count, c128_physical_dim, n_heads, cache_head_dim),
           create_options.dtype(),
           &key_cache_,
           nullptr);
@@ -465,6 +476,11 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
   const int64_t c128_count = pool_counts[2];
   const int64_t block_size = create_options.block_size();
   const int64_t head_dim = create_options.head_dim();
+#if defined(USE_MUSA)
+  const int64_t cache_head_dim = musa_dsv4_flashmla_cache_head_dim(head_dim);
+#else
+  const int64_t cache_head_dim = head_dim;
+#endif
   const int64_t index_head_dim =
       std::max<int64_t>(create_options.index_head_dim(), 1);
   const int64_t n_heads = 1;
@@ -567,18 +583,23 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
   if (compress_ratio == 1) {
     tensors.swa_cache = allocate_tensor(
         KVCacheTensorRole::WINDOW,
-        dsv4_block_shape(swa_count, block_size, n_heads, head_dim),
+        dsv4_block_shape(swa_count, block_size, n_heads, cache_head_dim),
         create_options.dtype());
   } else if (compress_ratio == 4) {
     const int64_t compressed_physical_dim =
         KVCacheConfig::get_instance()
             .dsv4_cache_geometry()
-            .compressed_physical_dim(compress_ratio);
+            .compressed_physical_dim(compress_ratio, block_size);
     tensors.compressed_block_type = BlockType::C4;
     tensors.key_cache = allocate_tensor(
         KVCacheTensorRole::KEY,
-        dsv4_block_shape(c4_count, compressed_physical_dim, n_heads, head_dim),
+        dsv4_block_shape(
+            c4_count, compressed_physical_dim, n_heads, cache_head_dim),
         create_options.dtype());
+#if defined(USE_MUSA)
+    tensors.mate_key_cache = create_musa_dsv4_model1_cache(
+        c4_count, block_size, create_options.device());
+#endif
     tensors.index_cache = allocate_tensor(
         KVCacheTensorRole::INDEX,
         dsv4_block_shape(
@@ -592,8 +613,12 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
     }
     tensors.swa_cache = allocate_tensor(
         KVCacheTensorRole::WINDOW,
-        dsv4_block_shape(swa_count, block_size, n_heads, head_dim),
+        dsv4_block_shape(swa_count, block_size, n_heads, cache_head_dim),
         create_options.dtype());
+#if defined(USE_MUSA)
+    tensors.mate_extra_k_cache = create_musa_dsv4_model1_cache(
+        swa_count, block_size, create_options.device());
+#endif
 #if defined(USE_MLU)
     // coff_dim = 2 * head_dim for ratio==4; merged dim = 2 * coff_dim. The
     // owning compress_state backs the narrow-view getters and is passed
@@ -639,17 +664,25 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
     const int64_t compressed_physical_dim =
         KVCacheConfig::get_instance()
             .dsv4_cache_geometry()
-            .compressed_physical_dim(compress_ratio);
+            .compressed_physical_dim(compress_ratio, block_size);
     tensors.compressed_block_type = BlockType::C128;
     tensors.key_cache = allocate_tensor(
         KVCacheTensorRole::KEY,
         dsv4_block_shape(
-            c128_count, compressed_physical_dim, n_heads, head_dim),
+            c128_count, compressed_physical_dim, n_heads, cache_head_dim),
         create_options.dtype());
+#if defined(USE_MUSA)
+    tensors.mate_key_cache = create_musa_dsv4_model1_cache(
+        c128_count, block_size, create_options.device());
+#endif
     tensors.swa_cache = allocate_tensor(
         KVCacheTensorRole::WINDOW,
-        dsv4_block_shape(swa_count, block_size, n_heads, head_dim),
+        dsv4_block_shape(swa_count, block_size, n_heads, cache_head_dim),
         create_options.dtype());
+#if defined(USE_MUSA)
+    tensors.mate_extra_k_cache = create_musa_dsv4_model1_cache(
+        swa_count, block_size, create_options.device());
+#endif
 #if defined(USE_MLU)
     // coff_dim = head_dim for ratio==128; merged dim = 2 * coff_dim.
     const int64_t cmp_coff_dim = head_dim;
@@ -674,7 +707,7 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
   } else {
     tensors.swa_cache = allocate_tensor(
         KVCacheTensorRole::WINDOW,
-        dsv4_block_shape(swa_count, block_size, n_heads, head_dim),
+        dsv4_block_shape(swa_count, block_size, n_heads, cache_head_dim),
         create_options.dtype());
   }
 
@@ -707,10 +740,18 @@ std::string dsv4_shape_summary(const DeepSeekV4KVCacheTensors& tensors,
     summary << "swa_cache=" << tensor_shape_string(tensors.swa_cache);
   } else if (compress_ratio == 4) {
     summary << "key_cache=" << tensor_shape_string(tensors.key_cache)
+#if defined(USE_MUSA)
+            << ", mate_key_cache="
+            << tensor_shape_string(tensors.mate_key_cache)
+#endif
             << ", index_cache=" << tensor_shape_string(tensors.index_cache)
             << ", indexer_cache_scale="
             << tensor_shape_string(tensors.indexer_cache_scale)
             << ", swa_cache=" << tensor_shape_string(tensors.swa_cache)
+#if defined(USE_MUSA)
+            << ", mate_extra_k_cache="
+            << tensor_shape_string(tensors.mate_extra_k_cache)
+#endif
             << ", compress_kv_state="
             << tensor_shape_string(tensors.compress_kv_state)
             << ", compress_score_state="
@@ -721,7 +762,15 @@ std::string dsv4_shape_summary(const DeepSeekV4KVCacheTensors& tensors,
             << tensor_shape_string(tensors.compress_index_score_state);
   } else if (compress_ratio == 128) {
     summary << "key_cache=" << tensor_shape_string(tensors.key_cache)
+#if defined(USE_MUSA)
+            << ", mate_key_cache="
+            << tensor_shape_string(tensors.mate_key_cache)
+#endif
             << ", swa_cache=" << tensor_shape_string(tensors.swa_cache)
+#if defined(USE_MUSA)
+            << ", mate_extra_k_cache="
+            << tensor_shape_string(tensors.mate_extra_k_cache)
+#endif
             << ", compress_kv_state="
             << tensor_shape_string(tensors.compress_kv_state)
             << ", compress_score_state="

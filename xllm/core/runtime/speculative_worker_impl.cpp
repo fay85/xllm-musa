@@ -265,7 +265,7 @@ bool SpeculativeWorkerImpl::allocate_kv_cache(
   return impl_->allocate_kv_cache(kv_cache_shape);
 }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
 bool SpeculativeWorkerImpl::allocate_kv_cache_with_transfer(
     const KVCacheShape& kv_cache_shape) {
   return impl_->allocate_kv_cache_with_transfer(kv_cache_shape);
@@ -365,9 +365,9 @@ void SpeculativeWorkerImpl::update_sampling_params(
     const int32_t total_num_val_tokens,
     const bool repeat_unique_history) {
   // sample_idxes equals to selected_token_idxes since only process decode batch
-  sampling_params.selected_token_idxes = torch::arange(
-      total_num_val_tokens,
-      torch::TensorOptions().dtype(torch::kInt).device(device_));
+  sampling_params.selected_token_idxes =
+      torch::arange(total_num_val_tokens,
+                    torch::TensorOptions().dtype(torch::kInt).device(device_));
   sampling_params.sample_idxes = sampling_params.selected_token_idxes;
 
   TENSOR_REPEAT(sampling_params.frequency_penalties, num_val_tokens);
@@ -390,9 +390,9 @@ void SpeculativeWorkerImpl::update_sampling_params(
     SamplingParameters& sampling_params,
     const std::vector<int32_t>& per_seq_val_tokens,
     const int32_t total_num_val_tokens) {
-  sampling_params.selected_token_idxes = torch::arange(
-      total_num_val_tokens,
-      torch::TensorOptions().dtype(torch::kInt).device(device_));
+  sampling_params.selected_token_idxes =
+      torch::arange(total_num_val_tokens,
+                    torch::TensorOptions().dtype(torch::kInt).device(device_));
   sampling_params.sample_idxes = sampling_params.selected_token_idxes;
 
   torch::Tensor repeats_tensor =
@@ -422,7 +422,12 @@ void SpeculativeWorkerImpl::prepare_validate_inputs(
     const ForwardInput& input,
     ForwardInput& validate_input,
     const bool repeat_unique_history) {
-  validate_input = input.to(device_, dtype_);
+  // This builder consumes the already materialized host fields. Re-decoding
+  // the original wire payload would append its manager tables a second time.
+  validate_input = input;
+  validate_input.input_host_buffer_has_layout = false;
+  validate_input = validate_input.to(device_, dtype_);
+
   validate_input.device_tensors_ready = false;
   auto& input_params = validate_input.input_params;
   torch::TensorOptions token_options = validate_input.token_ids.options();
@@ -438,9 +443,15 @@ void SpeculativeWorkerImpl::prepare_validate_inputs(
   // with an N+1-token query so recurrent state is checkpointed and committed
   // by the model's spec-verify kernel instead of being expanded into N+1
   // independent decode rows.
+  bool use_compact_dsv4 = false;
+#if defined(USE_MUSA)
+  use_compact_dsv4 =
+      options_.speculative_algorithm() == "DSpark" &&
+      impl_->context_.get_model_args().model_type() == "deepseek_v4";
+#endif
   const bool use_chunked_spec_verify =
       ::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel() ||
-      input.input_params.is_spec_verify;
+      input.input_params.is_spec_verify || use_compact_dsv4;
   specBuilder::DecodeRowContext row_ctx =
       specBuilder::make_decode_row_context(input);
 
@@ -506,7 +517,13 @@ void SpeculativeWorkerImpl::prepare_validate_inputs(
     input_params.meta.batch_forward_type = BatchForwardType::DECODE;
   } else {
     input_params.meta.q_max_seq_len = num_val_tokens;
-    input_params.meta.batch_forward_type = BatchForwardType::CHUNKED_PREFILL;
+    input_params.meta.batch_forward_type =
+        use_compact_dsv4 ? BatchForwardType::DECODE
+                         : BatchForwardType::CHUNKED_PREFILL;
+    if (use_compact_dsv4) {
+      input_params.is_spec_verify = true;
+      input_params.attn_metadata.reset();
+    }
   }
   if (use_chunked_spec_verify) {
     specBuilder::update_input_params(input_params,
@@ -552,7 +569,9 @@ void SpeculativeWorkerImpl::prepare_validate_inputs(
     const ForwardInput& input,
     ForwardInput& validate_input,
     const std::vector<int32_t>& per_seq_val_tokens) {
-  validate_input = input.to(device_, dtype_);
+  validate_input = input;
+  validate_input.input_host_buffer_has_layout = false;
+  validate_input = validate_input.to(device_, dtype_);
   validate_input.device_tensors_ready = false;
   auto& input_params = validate_input.input_params;
   torch::TensorOptions token_options = validate_input.token_ids.options();

@@ -102,7 +102,8 @@ class MooncakeKVCacheTransferDefault final
                       const std::string& src_addr,
                       const std::vector<KVTransferMapping>& mappings) override;
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
   std::vector<KVTransferTaskResult> push_kv_blocks(
       std::unordered_map<std::string, KVCacheInfo>& merged_kv_infos,
       std::shared_ptr<KVPushSynchronizerImpl>& layer_synchronizer,
@@ -158,7 +159,8 @@ class MooncakeKVCacheTransferDefault final
   BufLayout spec_layout_;
 };
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
 class MooncakeKVCacheTransferXTensor final
     : public MooncakeKVCacheTransferBase {
  public:

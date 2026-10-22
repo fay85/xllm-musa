@@ -16,6 +16,7 @@ limitations under the License.
 #include <ATen/ops/swish_glu.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
+#include <glog/logging.h>
 #include <torch/cuda.h>
 
 #include <cstdint>

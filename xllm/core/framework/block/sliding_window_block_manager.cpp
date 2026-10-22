@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "sliding_window_block_manager.h"
+#include "core/framework/block/sliding_window_block_manager.h"
 
 #include <algorithm>
 #include <iterator>
@@ -114,7 +114,12 @@ SlidingWindowBlockManager::allocate_for_sequence(Sequence* seq,
   CHECK_GT(block_size, 0u);
   const size_t logical_blocks = (num_tokens + block_size - 1) / block_size;
   const size_t sliding_window_tokens =
+#if defined(USE_MUSA)
+      std::max<size_t>(options_.sliding_window_size(), 1) +
+      static_cast<size_t>(options_.num_speculative_tokens());
+#else
       std::max<size_t>(options_.sliding_window_size(), 1);
+#endif
   const size_t window_start =
       num_tokens - std::min(num_tokens, sliding_window_tokens);
   const size_t inactive_blocks = window_start / block_size;
@@ -143,9 +148,10 @@ bool SlidingWindowBlockManager::allocate_for_prefetch(Sequence* seq,
   size_t checkpoint_window_blocks = 1;
   for (uint32_t compress_ratio : options_.compress_ratios()) {
     if (compress_ratio == kDsv4C128CompressRatio) {
-      const int64_t compressed_unit_tokens = KVCacheConfig::get_instance()
-                                                 .dsv4_cache_geometry()
-                                                 .compressed_block_token_size();
+      const int64_t compressed_unit_tokens =
+          KVCacheConfig::get_instance()
+              .dsv4_cache_geometry()
+              .logical_block_token_size(compress_ratio, block_size);
       CHECK_GT(compressed_unit_tokens, 0);
       CHECK_EQ(compressed_unit_tokens % block_size, 0);
       checkpoint_span_blocks =

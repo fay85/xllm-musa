@@ -673,6 +673,31 @@ int run() {
   exit_without_python_teardown(0);
 }
 
+#if defined(USE_MUSA)
+// torch_musa registers its PrivateUse1 backend hooks lazily. A pure C++ xLLM
+// process does not import the Python module that normally triggers this path,
+// so initialize the backend before the first MUSA tensor allocation.
+namespace at {
+struct MUSAHooksInterface;
+namespace detail {
+const MUSAHooksInterface& getMUSAHooks();
+}  // namespace detail
+}  // namespace at
+
+namespace {
+
+void initialize_musa_backend() {
+  if (!c10::is_privateuse1_backend_registered()) {
+    c10::register_privateuse1_backend("musa");
+  }
+  (void)at::detail::getMUSAHooks();
+  LOG(INFO) << "Registered torch_musa PrivateUse1 backend name="
+            << c10::get_privateuse1_backend() << " and hooks";
+}
+
+}  // namespace
+#endif
+
 int main(int argc, char** argv) {
   // Check for --help flag before parsing other flags
   for (int i = 1; i < argc; ++i) {
@@ -687,6 +712,9 @@ int main(int argc, char** argv) {
   FLAGS_minloglevel = 0;
   google::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging("xllm");
+#if defined(USE_MUSA)
+  initialize_musa_backend();
+#endif
   initialize_configs();
 
   const ServiceConfig& service_config = ServiceConfig::get_instance();

@@ -30,6 +30,9 @@ limitations under the License.
 #include "framework/kv_cache/deepseek_v4_cache_geometry.h"
 #include "framework/kv_cache/deepseek_v4_cache_policy.h"
 #include "framework/kv_cache/kv_cache_shape.h"
+#if defined(USE_MUSA)
+#include "framework/kv_cache/musa/deepseek_v4_kv_cache_impl.h"
+#endif
 #include "framework/model/model_args.h"
 #include "util/pretty_print.h"
 #include "util/tensor_helper.h"
@@ -301,9 +304,9 @@ int64_t linear_slot_size(const ModelArgs& model_args,
 
   const int64_t linear_ssm_slot_size =
       ssm_dtype_size * options.n_local_linear_v_heads * head_k_dim * head_v_dim;
-  const int64_t linear_conv_state_len = model_args.linear_conv_kernel_dim() -
-                                        1 +
-                                        conv_layout_spec_tokens(model_args, options);
+  const int64_t linear_conv_state_len =
+      model_args.linear_conv_kernel_dim() - 1 +
+      conv_layout_spec_tokens(model_args, options);
   const int64_t linear_conv_slot_size =
       dtype_size *
       (head_k_dim * options.n_local_linear_k_heads * 2 +
@@ -479,10 +482,20 @@ void set_dsv4_compressed_counts(const Dsv4KVCacheEstimateCost& cache_cost,
     return;
   }
   if (cache_cost.n_c4_layers > 0) {
+#if defined(USE_MUSA)
+    kv_cache_cap->c4_count(token_unit_count *
+                           cache_cost.manager_blocks_per_unit / 4);
+#else
     kv_cache_cap->c4_count(token_unit_count);
+#endif
   }
   if (cache_cost.n_c128_layers > 0) {
+#if defined(USE_MUSA)
+    kv_cache_cap->c128_count(token_unit_count *
+                             cache_cost.manager_blocks_per_unit / 128);
+#else
     kv_cache_cap->c128_count(token_unit_count);
+#endif
   }
 }
 
@@ -491,6 +504,11 @@ Dsv4KVCacheEstimateCost estimate_dsv4_kv_cache_cost(
     const KVCacheEstimateOptions& options) {
   const int64_t block_size = options.block_size;
   const int64_t head_dim = model_args.head_dim();
+#if defined(USE_MUSA)
+  const int64_t cache_head_dim = musa_dsv4_flashmla_cache_head_dim(head_dim);
+#else
+  const int64_t cache_head_dim = head_dim;
+#endif
   const int64_t index_head_dim =
       std::max<int64_t>(model_args.index_head_dim(), 1);
   const std::vector<int32_t>& compress_ratios = model_args.compress_ratios();
@@ -499,10 +517,16 @@ Dsv4KVCacheEstimateCost estimate_dsv4_kv_cache_cost(
       static_cast<int64_t>(torch::elementSize(options.dtype));
   const Dsv4CacheGeometry& geometry =
       KVCacheConfig::get_instance().dsv4_cache_geometry();
-  const int64_t compressed_block_token_size =
-      geometry.compressed_block_token_size();
-  const int64_t c4_physical_dim = geometry.c4_physical_dim();
-  const int64_t c128_physical_dim = geometry.c128_physical_dim();
+  const int64_t c4_physical_dim =
+      geometry.compressed_physical_dim(4, block_size);
+  const int64_t c128_physical_dim =
+      geometry.compressed_physical_dim(128, block_size);
+#if defined(USE_MUSA)
+  const int64_t musa_model1_bytes_per_block =
+      musa_dsv4_model1_page_stride(block_size);
+#else
+  constexpr int64_t musa_model1_bytes_per_block = 0;
+#endif
 
   Dsv4KVCacheEstimateCost cache_cost;
   cache_cost.swa_count = dsv4_swa_block_count(model_args, options);
@@ -520,14 +544,16 @@ Dsv4KVCacheEstimateCost estimate_dsv4_kv_cache_cost(
   const int64_t n_c1_layers =
       model_args.n_layers() - cache_cost.n_c4_layers - cache_cost.n_c128_layers;
 
-  const int64_t swa_bytes_per_c1_block = block_size * head_dim * dtype_size;
+  const int64_t swa_bytes_per_c1_block =
+      block_size * cache_head_dim * dtype_size;
   const int64_t swa_bytes_per_c4_block =
-      block_size * head_dim * dtype_size +
+      block_size * cache_head_dim * dtype_size +
       block_size * (2 * head_dim * float32_size) * 2 +
-      block_size * (2 * index_head_dim * float32_size) * 2;
+      block_size * (2 * index_head_dim * float32_size) * 2 +
+      musa_model1_bytes_per_block;
   const int64_t swa_bytes_per_c128_block =
-      block_size * head_dim * dtype_size +
-      block_size * head_dim * float32_size * 2;
+      block_size * cache_head_dim * dtype_size +
+      block_size * head_dim * float32_size * 2 + musa_model1_bytes_per_block;
 
   cache_cost.swa_bytes_per_block =
       n_c1_layers * swa_bytes_per_c1_block +
@@ -542,25 +568,30 @@ Dsv4KVCacheEstimateCost estimate_dsv4_kv_cache_cost(
       cache_policy.has_indexer_cache_scale ? cache_policy.scale_dtype_size : 0;
   const int64_t bytes_per_c4_block =
       c4_physical_dim *
-      (head_dim * dtype_size + index_head_dim * cache_policy.index_dtype_size +
-       scale_bytes);
+          (cache_head_dim * dtype_size +
+           index_head_dim * cache_policy.index_dtype_size + scale_bytes) +
+      musa_model1_bytes_per_block;
   const int64_t bytes_per_c128_block =
-      c128_physical_dim * head_dim * dtype_size;
-  const int64_t manager_blocks_per_compressed_block =
-      compressed_block_token_size / block_size;
+      c128_physical_dim * cache_head_dim * dtype_size +
+      musa_model1_bytes_per_block;
+  const int64_t c4_manager_blocks =
+      geometry.logical_block_token_size(4, block_size) / block_size;
+  const int64_t c128_manager_blocks =
+      geometry.logical_block_token_size(128, block_size) / block_size;
 
   if (cache_cost.n_c4_layers > 0 && cache_cost.n_c128_layers > 0) {
     cache_cost.token_unit_bytes =
-        cache_cost.n_c4_layers * bytes_per_c4_block +
+        cache_cost.n_c4_layers * (c128_manager_blocks / c4_manager_blocks) *
+            bytes_per_c4_block +
         cache_cost.n_c128_layers * bytes_per_c128_block;
-    cache_cost.manager_blocks_per_unit = manager_blocks_per_compressed_block;
+    cache_cost.manager_blocks_per_unit = c128_manager_blocks;
   } else if (cache_cost.n_c4_layers > 0) {
     cache_cost.token_unit_bytes = cache_cost.n_c4_layers * bytes_per_c4_block;
-    cache_cost.manager_blocks_per_unit = manager_blocks_per_compressed_block;
+    cache_cost.manager_blocks_per_unit = c4_manager_blocks;
   } else if (cache_cost.n_c128_layers > 0) {
     cache_cost.token_unit_bytes =
         cache_cost.n_c128_layers * bytes_per_c128_block;
-    cache_cost.manager_blocks_per_unit = manager_blocks_per_compressed_block;
+    cache_cost.manager_blocks_per_unit = c128_manager_blocks;
   }
   return cache_cost;
 }
@@ -760,12 +791,18 @@ void init_dsv4_counts(const ModelArgs& model_args,
   if (cache_cost.n_c4_layers > 0) {
     manager_base_blocks =
         std::max(manager_base_blocks,
-                 kv_cache_cap->c4_count() * cache_cost.manager_blocks_per_unit);
+                 kv_cache_cap->c4_count() *
+                     Dsv4CacheGeometry{}.logical_block_token_size(
+                         4, options.block_size) /
+                     options.block_size);
   }
   if (cache_cost.n_c128_layers > 0) {
-    manager_base_blocks = std::max(
-        manager_base_blocks,
-        kv_cache_cap->c128_count() * cache_cost.manager_blocks_per_unit);
+    manager_base_blocks =
+        std::max(manager_base_blocks,
+                 kv_cache_cap->c128_count() *
+                     Dsv4CacheGeometry{}.logical_block_token_size(
+                         128, options.block_size) /
+                     options.block_size);
   }
   // V4.1 TOKEN groups: a c2 block spans 2 engine blocks (bs*2 tokens), a c1
   // block spans 1 (bs tokens). n_blocks is in engine-block units, matching
@@ -1035,7 +1072,8 @@ KVCacheCapacity estimate_kv_cache_capacity(
       model_args.linear_conv_kernel_dim() - 1 +
       conv_layout_spec_tokens(model_args, options));
   kv_cache_cap.linear_ssm_checkpoint_stride(num_speculative_tokens + 1);
-  if (options.is_draft_engine && model_args.num_nextn_predict_layers() > 0) {
+  if (options.is_draft_engine && model_args.num_nextn_predict_layers() > 0 &&
+      !util::is_deepseek_v4_dspark_model_type(model_args.model_type())) {
     kv_cache_cap.n_layers(model_args.num_nextn_predict_layers());
   }
 

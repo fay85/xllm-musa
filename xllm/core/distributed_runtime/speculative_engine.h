@@ -38,6 +38,10 @@ class SpeculativeEngineBase : public Engine {
 
   bool init(MasterStatus master_status) override;
 
+  bool start_profile() override;
+
+  bool stop_profile() override;
+
   // step the engine forward
   ForwardOutput step(std::vector<Batch>& batch) override;
 
@@ -63,9 +67,6 @@ class SpeculativeEngineBase : public Engine {
 
   // return the active activation memory
   std::vector<int64_t> get_active_activation_memory() const override;
-
-  bool start_profile() override;
-  bool stop_profile() override;
 
   // P/D
   bool pull_kv_blocks(const int32_t src_dp_size,

@@ -300,8 +300,8 @@ std::array<std::string, Size> resolve_mubin_paths(
   const char* mubin_root_env = std::getenv("MATE_MUBIN_DIR");
   CHECK(mubin_root_env != nullptr && mubin_root_env[0] != '\0')
       << "MATE_MUBIN_DIR must point to the Mate 0.2.7 MUBIN root.";
-  const std::string gemm_root = std::string(mubin_root_env) + "/gemm/" +
-                                kMateGemmArtifactId + "/mubin/";
+  const std::string gemm_root =
+      std::string(mubin_root_env) + "/gemm/" + kMateGemmArtifactId + "/mubin/";
 
   std::array<std::string, Size> paths;
   for (size_t index = 0; index < launchers.size(); ++index) {

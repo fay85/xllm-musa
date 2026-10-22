@@ -356,8 +356,8 @@ class RowParallelLinearImpl : public torch::nn::Module {
 
 #if defined(USE_MUSA)
   // Prefused dense SwiGLU+FP8 path: quantized activation + scale.
-  torch::Tensor forward_block_fp8_quantized(
-      torch::Tensor input, torch::Tensor input_scale);
+  torch::Tensor forward_block_fp8_quantized(torch::Tensor input,
+                                            torch::Tensor input_scale);
   bool supports_block_fp8_quantized_input() const;
 #endif
 
@@ -466,7 +466,10 @@ class ReplicatedLinearImpl : public torch::nn::Module {
       const torch::TensorOptions& options,
       const LinearExtraArgs& linear_extra_args = LinearExtraArgs());
 
-  torch::Tensor forward(torch::Tensor input);
+  // Fixed-address output is supported by MUSA FP8 and plain matmul paths.
+  torch::Tensor forward(
+      torch::Tensor input,
+      const std::optional<torch::Tensor>& output = std::nullopt);
 
   // load the weight from the checkpoint
   void load_state_dict(const StateDict& state_dict);

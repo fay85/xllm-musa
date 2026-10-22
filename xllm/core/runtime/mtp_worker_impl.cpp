@@ -116,8 +116,8 @@ torch::Tensor load_draft_vocab_ids(const std::string& path,
   int64_t global_count = 0;
   while (file >> id) {
     CHECK(id >= 0 && id < global_vocab_size)
-        << "MTP draft vocab id " << id << " is outside [0, " << global_vocab_size
-        << ") in " << path;
+        << "MTP draft vocab id " << id << " is outside [0, "
+        << global_vocab_size << ") in " << path;
     ++global_count;
     if (id >= rank_start && id < rank_end) {
       ids.emplace_back(id - rank_start);
@@ -127,18 +127,15 @@ torch::Tensor load_draft_vocab_ids(const std::string& path,
   std::sort(ids.begin(), ids.end());
   CHECK(std::adjacent_find(ids.begin(), ids.end()) == ids.end())
       << "duplicate token id in MTP draft vocab file " << path;
-  const int64_t kept_tiles =
-      static_cast<int64_t>(ids.size()) / kBlockFp8Rows;
-  CHECK(kept_tiles > 0)
-      << "MTP draft vocab has no ids in local shard [" << rank_start << ", "
-      << rank_end << ") after reading " << global_count << " global ids from "
-      << path;
+  const int64_t kept_tiles = static_cast<int64_t>(ids.size()) / kBlockFp8Rows;
+  CHECK(kept_tiles > 0) << "MTP draft vocab has no ids in local shard ["
+                        << rank_start << ", " << rank_end << ") after reading "
+                        << global_count << " global ids from " << path;
   const int64_t kept = kept_tiles * kBlockFp8Rows;
   if (kept < static_cast<int64_t>(ids.size())) {
     LOG(WARNING) << "MTP draft vocab: truncating local shard rows from "
-                 << ids.size() << " to " << kept
-                 << " (multiple of " << kBlockFp8Rows << ") for rank_start="
-                 << rank_start;
+                 << ids.size() << " to " << kept << " (multiple of "
+                 << kBlockFp8Rows << ") for rank_start=" << rank_start;
     ids.resize(static_cast<size_t>(kept));
   }
   LOG(INFO) << "MTP draft vocab shard: global_ids=" << global_count
@@ -898,8 +895,8 @@ void rebuild_paged_metadata_with_tensor_ops(AttentionDeviceInput& dev,
   const auto i32 = dev.kv_seq_lens.options().dtype(torch::kInt32);
   const torch::Tensor lens = dev.kv_seq_lens.to(torch::kInt32);
   const torch::Tensor zero = torch::zeros({1}, i32);
-  const torch::Tensor pages = (lens + (block_size - 1)).div(
-      block_size, /*rounding_mode=*/"floor");
+  const torch::Tensor pages =
+      (lens + (block_size - 1)).div(block_size, /*rounding_mode=*/"floor");
   const torch::Tensor last = lens - (pages - 1) * block_size;
   const torch::Tensor indptr =
       torch::cat({zero, pages.cumsum(0).to(torch::kInt32)});
@@ -907,11 +904,13 @@ void rebuild_paged_metadata_with_tensor_ops(AttentionDeviceInput& dev,
       torch::cat({zero, lens.cumsum(0).to(torch::kInt32)});
   const int64_t total = dev.paged_kv_indices.numel();
   const torch::Tensor j = torch::arange(total, i32);
-  torch::Tensor row = torch::searchsorted(indptr.slice(0, 1), j,
-                                          /*out_int32=*/true, /*right=*/true)
+  torch::Tensor row = torch::searchsorted(indptr.slice(0, 1),
+                                          j,
+                                          /*out_int32=*/true,
+                                          /*right=*/true)
                           .clamp_max(rows - 1);
-  torch::Tensor local = (j - indptr.index_select(0, row))
-                            .clamp(0, dev.block_tables.size(1) - 1);
+  torch::Tensor local =
+      (j - indptr.index_select(0, row)).clamp(0, dev.block_tables.size(1) - 1);
   const torch::Tensor bt = dev.block_tables.slice(0, 0, rows);
   const torch::Tensor indices =
       bt.index({row.to(torch::kLong), local.to(torch::kLong)})
@@ -2864,15 +2863,21 @@ std::optional<ForwardOutput> MTPWorkerImpl::run_validate(
       const int64_t expanded_rows = batch_size * num_val_tokens;
       if (cu.numel() == expanded_rows + 1) {
         base_kv_seq_lens = mtp_async::extract_target_base_kv_seq_lens(
-            cu.slice(0, 1) - cu.slice(0, 0, -1), batch_size, num_val_tokens,
+            cu.slice(0, 1) - cu.slice(0, 0, -1),
+            batch_size,
+            num_val_tokens,
             /*use_chunked_prefill=*/false);
       } else if (cu.numel() == batch_size + 1) {
         base_kv_seq_lens = mtp_async::extract_target_base_kv_seq_lens(
-            cu.slice(0, 1) - cu.slice(0, 0, -1), batch_size, num_val_tokens,
+            cu.slice(0, 1) - cu.slice(0, 0, -1),
+            batch_size,
+            num_val_tokens,
             /*use_chunked_prefill=*/true);
       } else {
         base_kv_seq_lens = mtp_async::extract_target_base_kv_seq_lens(
-            validate_kv_seq_lens, batch_size, num_val_tokens,
+            validate_kv_seq_lens,
+            batch_size,
+            num_val_tokens,
             use_chunked_prefill_spec_verify_path());
       }
     }

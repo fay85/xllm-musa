@@ -387,7 +387,6 @@ bool SpeculativeEngineBase<TargetEngine>::unlink_cluster(
       cluster_ids, addrs, ports, src_dp_size, src_kv_split_size);
 };
 
-
 template <typename TargetEngine>
 bool SpeculativeEngineBase<TargetEngine>::start_profile() {
   CHECK(engine_ != nullptr) << "target engine is not initialized";

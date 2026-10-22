@@ -15,10 +15,10 @@ limitations under the License.
 
 #pragma once
 
-#include <map>
-
 #include <absl/container/flat_hash_map.h>
 #include <torch/torch.h>
+
+#include <map>
 
 #include "torch_musa/csrc/core/MUSAStream.h"
 
@@ -27,10 +27,9 @@ namespace at::musa {
 using c10::musa::MUSAStream;
 }  // namespace at::musa
 
+#include "core/kernels/musa/piecewise_graphs.h"
 #include "torch_musa/csrc/aten/musa/MUSAGraph.h"
 #include "torch_musa/csrc/core/MUSACachingAllocator.h"
-
-#include "core/kernels/musa/piecewise_graphs.h"
 
 // MUSA host_defines.h defines __noinline__ as a macro. Folly uses that token
 // inside __attribute__((__noinline__)), so leaving it defined creates a nested
@@ -83,7 +82,8 @@ class MusaGraphPersistentParam final {
                                          const torch::Tensor& positions,
                                          const ModelInputParams& params,
                                          uint32_t padded_num_tokens = 0,
-                                         bool return_capture_params = false);
+                                         bool return_capture_params = false,
+                                         bool update_attention_plan = true);
 
   // Prefill counterpart of update() for piecewise graphs. Capture params point
   // every device input that the model reads inside its forward at persistent
@@ -351,7 +351,15 @@ class MusaGraph final {
     return persistent_param_.hidden_states(actual_num_tokens);
   }
 
+  bool captured_without_padding() const {
+    return captured_actual_tokens_ == padded_num_tokens_;
+  }
+
  private:
+  void prepare_model_graph_metadata(CausalLM* model,
+                                    const torch::Tensor& positions,
+                                    ModelInputParams& params);
+
   // Print graph held tensors for debugging
   void print_graph_tensors() const;
 
@@ -368,8 +376,8 @@ class MusaGraph final {
   // On replay (graph_.replay() path), the captured graph already references
   // the persistent host buffer pointers from capture time; this method
   // refreshes their *contents* so the captured H2D copy sees fresh values.
-  // When attention.host paged-KV mirrors are populated (normal LLM-engine
-  // path), copies CPU->pinned host directly and avoids per-step D2H sync.
+  // Prefer host metadata when available to avoid blocking device-to-host
+  // copies.
   void refresh_persistent_paged_kv_host_mirrors(
       const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
       const AttentionHostInput& host_src);
@@ -377,6 +385,7 @@ class MusaGraph final {
   // Reference to persistent parameters (shared across multiple MusaGraph
   // instances).
   MusaGraphPersistentParam& persistent_param_;
+  CausalLM* model_{nullptr};
 
   at::DeviceIndex device_index_;
   // Native MUSA capture stream owned by MusaGraphExecutorImpl.
@@ -386,6 +395,9 @@ class MusaGraph final {
   bool is_piecewise_ = false;
 
   uint32_t padded_num_tokens_ = 0;
+  uint32_t captured_actual_tokens_ = 0;
+
+  std::unique_ptr<ModelGraphMetadataState> model_graph_metadata_state_;
 
   // FA3 scheduler metadata consumed by the captured full-attention kernels.
   // Its address is fixed at capture time; replay copies freshly generated

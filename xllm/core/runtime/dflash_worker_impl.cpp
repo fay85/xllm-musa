@@ -19,10 +19,14 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <iterator>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -38,7 +42,10 @@ limitations under the License.
 #include "core/layers/common/kv_shard_batch_metadata.h"
 #include "framework/model/model_args.h"
 #include "framework/sampling/sampling_params.h"
-#if defined(USE_NPU) || defined(USE_MLU)
+#if defined(USE_MUSA)
+#include "core/kernels/musa/musa_dsv4_ops_api.h"
+#endif
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
 #include "framework/kv_cache_transfer/mooncake_kv_cache_transfer.h"
 #endif
 #if defined(USE_NPU)
@@ -64,6 +71,151 @@ using speculative_worker::clear_all_output_embeddings;
 using speculative_worker::clear_selected_embeddings;
 using speculative_worker::record_metadata_ready_event;
 using speculative_worker::wait_metadata_ready_event;
+bool dsv4_fast_greedy_verify_enabled() {
+#if defined(USE_MUSA)
+  const char* value = std::getenv("XLLM_DSV4_FAST_GREEDY_VERIFY");
+  return value != nullptr && std::string(value) == "1";
+#else
+  return false;
+#endif
+}
+
+bool dsv4_log_accepted_state_enabled() {
+  const char* value = std::getenv("XLLM_DSV4_LOG_ACCEPTED_STATE");
+  return value != nullptr && std::string(value) == "1";
+}
+
+bool dsv4_log_verify_tokens_enabled() {
+  const char* value = std::getenv("XLLM_DSV4_LOG_VERIFY_TOKENS");
+  return value != nullptr && std::string(value) == "1";
+}
+
+std::mutex& dsv4_first_verify_mutex() {
+  static std::mutex mutex;
+  return mutex;
+}
+
+std::unordered_map<const DFlashWorkerImpl*, bool>& dsv4_first_verify_flags() {
+  static std::unordered_map<const DFlashWorkerImpl*, bool> flags;
+  return flags;
+}
+
+std::unordered_map<const DFlashWorkerImpl*, int32_t>&
+dsv4_target_only_remaining() {
+  static std::unordered_map<const DFlashWorkerImpl*, int32_t> counts;
+  return counts;
+}
+
+int32_t dsv4_target_only_verify_count() {
+  const char* value = std::getenv("XLLM_DSV4_TARGET_ONLY_VERIFY_COUNT");
+  if (value == nullptr || *value == '\0') {
+    return 0;
+  }
+  char* end = nullptr;
+  const long parsed = std::strtol(value, &end, 10);
+  return end != value && *end == '\0' && parsed > 0
+             ? static_cast<int32_t>(std::min<long>(parsed, 32))
+             : 0;
+}
+
+std::unordered_map<const DFlashWorkerImpl*, std::unordered_set<std::string>>&
+dsv4_initialized_requests() {
+  static std::unordered_map<const DFlashWorkerImpl*,
+                            std::unordered_set<std::string>>
+      requests;
+  return requests;
+}
+
+void dsv4_mark_first_verify(const DFlashWorkerImpl* worker,
+                            const ForwardInput& input) {
+  std::lock_guard<std::mutex> lock(dsv4_first_verify_mutex());
+  const char* first_verify_env = std::getenv("XLLM_DSV4_FIRST_TARGET_ONLY");
+  const bool first_only =
+      first_verify_env != nullptr && std::string(first_verify_env) == "1";
+  const int32_t target_only_count = dsv4_target_only_verify_count();
+  dsv4_first_verify_flags()[worker] = false;
+  if (!first_only && target_only_count <= 0) {
+    dsv4_target_only_remaining()[worker] = 0;
+    return;
+  }
+  bool first = false;
+  auto& requests = dsv4_initialized_requests()[worker];
+  for (size_t index = 0;
+       index < input.input_params.embedding.embedding_ids.size();
+       ++index) {
+    std::string key;
+    if (index < input.input_params.embedding.request_ids.size() &&
+        !input.input_params.embedding.request_ids[index].empty()) {
+      key = input.input_params.embedding.request_ids[index];
+    } else {
+      key = "embedding:" +
+            std::to_string(input.input_params.embedding.embedding_ids[index]);
+    }
+    const bool inserted = requests.insert(std::move(key)).second;
+    first = inserted || first;
+    if (inserted && target_only_count > 0) {
+      dsv4_target_only_remaining()[worker] = target_only_count;
+    }
+  }
+  dsv4_first_verify_flags()[worker] = first_only && first;
+}
+
+void dsv4_reset_initialized_requests(const DFlashWorkerImpl* worker,
+                                     const ForwardInput& input) {
+  std::lock_guard<std::mutex> lock(dsv4_first_verify_mutex());
+  auto& requests = dsv4_initialized_requests()[worker];
+  for (size_t index = 0;
+       index < input.input_params.embedding.embedding_ids.size();
+       ++index) {
+    if (index < input.input_params.embedding.request_ids.size() &&
+        !input.input_params.embedding.request_ids[index].empty()) {
+      requests.erase(input.input_params.embedding.request_ids[index]);
+    } else {
+      requests.erase(
+          "embedding:" +
+          std::to_string(input.input_params.embedding.embedding_ids[index]));
+    }
+  }
+}
+
+bool dsv4_consume_first_verify(const DFlashWorkerImpl* worker) {
+  std::lock_guard<std::mutex> lock(dsv4_first_verify_mutex());
+  auto& flags = dsv4_first_verify_flags();
+  const bool first = flags[worker];
+  flags[worker] = false;
+  auto& remaining = dsv4_target_only_remaining();
+  if (remaining[worker] > 0) {
+    --remaining[worker];
+    return true;
+  }
+  return first;
+}
+
+template <typename T>
+std::string dsv4_host_vector_string(const std::vector<T>& values) {
+  std::string result = "[";
+  for (size_t index = 0; index < values.size(); ++index) {
+    if (index != 0) {
+      result += ",";
+    }
+    result += std::to_string(values[index]);
+  }
+  result += "]";
+  return result;
+}
+
+std::string dsv4_cpu_tensor_vector_string(const torch::Tensor& tensor) {
+  if (!tensor.defined() || tensor.numel() == 0) {
+    return "[]";
+  }
+  auto cpu = tensor.to(torch::kCPU).to(torch::kLong).contiguous().view({-1});
+  std::vector<int64_t> values;
+  values.reserve(static_cast<size_t>(cpu.numel()));
+  for (int64_t index = 0; index < cpu.numel(); ++index) {
+    values.push_back(cpu[index].item<int64_t>());
+  }
+  return dsv4_host_vector_string(values);
+}
 
 runtime::Options target_options(const runtime::Options& options) {
   runtime::Options opts = options;
@@ -423,6 +575,8 @@ bool DFlashWorkerImpl::init_model(const std::string& model_weights_path,
     const bool uses_own_head_and_embedding =
         util::is_deepseek_v4_dspark_model_type(draft_args.model_type());
     if (uses_own_head_and_embedding) {
+      CHECK_EQ(parallel_args_.cp_size(), 1)
+          << "DeepSeek-V4 DSpark does not support context parallelism yet.";
       LOG(INFO) << "Configured DeepSeek-V4 DSpark draft block size: "
                 << draft_args.dspark_block_size();
       LOG(INFO) << "Configured DeepSeek-V4 DSpark SAS mode: "
@@ -612,7 +766,14 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_empty(
 std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
     const ForwardInput& input) {
   discard_draft_prelaunch();
+#if defined(USE_MUSA)
+  // Target/context work uses compute_stream_, but bootstrap index_select and
+  // EmbeddingCache tail clones previously escaped onto the caller's default
+  // stream. Keep all prefill output consumers in one ordered stream.
+  c10::StreamGuard prefill_stream_guard = compute_stream_->set_stream_guard();
+#endif
   Timer timer;
+  dsv4_reset_initialized_requests(this, input);
   ForwardInput processed_target_input;
   ForwardOutput output =
       speculative_worker::run_worker_no_sync(*impl_,
@@ -623,6 +784,60 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
           .value();
   COUNTER_ADD(speculative_execution_latency_seconds_target,
               timer.elapsed_seconds());
+
+#if defined(USE_MUSA)
+  const bool trace_prefill_final =
+      driver_ && std::getenv("XLLM_DSV4_TRACE_PREFILL_FINAL_ROWS") != nullptr;
+  torch::Tensor sampled_before_context;
+  torch::Tensor selected_before_context;
+  if (trace_prefill_final) {
+    // Snapshot on the compute stream, but defer host reads until the normal
+    // prefill completion point below. An early D2H read changed the timing
+    // of this bug; this probe does not insert an early synchronization.
+    if (output.sample_output.next_tokens.defined()) {
+      sampled_before_context = output.sample_output.next_tokens.clone();
+    }
+    if (processed_target_input.sampling_params.selected_token_idxes.defined()) {
+      selected_before_context =
+          processed_target_input.sampling_params.selected_token_idxes.clone();
+    }
+  }
+  if (driver_ && std::getenv("XLLM_DSV4_TRACE_PREFILL_ROWS") != nullptr) {
+    const auto values = [](const torch::Tensor& tensor) {
+      std::string text = "[";
+      if (tensor.defined()) {
+        auto host = tensor.to(torch::kCPU, torch::kInt64).contiguous().view(-1);
+        for (int64_t i = 0; i < std::min<int64_t>(host.numel(), 32); ++i) {
+          if (i) text += ",";
+          text += std::to_string(host.data_ptr<int64_t>()[i]);
+        }
+      }
+      return text + "]";
+    };
+    const auto& params = processed_target_input.input_params;
+    auto selected = processed_target_input.sampling_params.selected_token_idxes;
+    auto selected_cpu =
+        selected.defined()
+            ? selected.to(torch::kCPU, torch::kInt64).contiguous()
+            : torch::Tensor();
+    auto selected_input =
+        selected_cpu.defined() &&
+                processed_target_input.token_ids_host.defined()
+            ? processed_target_input.token_ids_host.index_select(0,
+                                                                 selected_cpu)
+            : torch::Tensor();
+    LOG(INFO) << "[DSV4_PREFILL_ROWS] sequences=" << params.meta.num_sequences
+              << " q="
+              << values(torch::tensor(params.attention.host.q_seq_lens))
+              << " kv="
+              << values(torch::tensor(params.attention.host.kv_seq_lens))
+              << " embedding_ids="
+              << values(torch::tensor(params.embedding.embedding_ids))
+              << " selected=" << values(selected_cpu)
+              << " selected_input=" << values(selected_input)
+              << " next=" << values(output.sample_output.next_tokens);
+  }
+#endif
 
   const torch::Tensor& embeddings = output.sample_output.embeddings;
   if (embeddings.defined()) {
@@ -661,6 +876,12 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
                 timer.elapsed_seconds());
   }
 
+  // Embedding ids are recycled across requests when the scheduler does not
+  // attach request ids. Clear the old tail at every new prefill, including
+  // paths without selected_token_idxes (for example prefix-cache/chunked
+  // bootstrap requests), so Graph verify cannot inherit a previous request's
+  // accepted embedding or position offset.
+  embedding_cache_->clear(input.input_params.embedding.embedding_ids);
   if (input.sampling_params.selected_token_idxes.defined()) {
     embedding_cache_->write_prefill_target_context(
         input.input_params.embedding.embedding_ids,
@@ -688,6 +909,36 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
     clear_all_output_embeddings(output);
   }
 
+#if defined(USE_MUSA)
+  // write_context_kv synchronizes before the bootstrap/tail operations above.
+  // Those later operations are also part of the prefill completion contract:
+  // the next prepare stream and the RPC host-copy must not see partial tails.
+  if (enable_schedule_overlap()) {
+    output.ready_event = compute_stream_->record_event_or_sync();
+  } else {
+    CHECK_EQ(compute_stream_->synchronize(), 0)
+        << "failed to finalize DSpark prefill outputs";
+    output.retained_inputs.clear();
+  }
+  if (trace_prefill_final) {
+    const auto& params = processed_target_input.input_params;
+    LOG(INFO)
+        << "[DSV4_PREFILL_FINAL_ROWS] sequences=" << params.meta.num_sequences
+        << " q=" << dsv4_host_vector_string(params.attention.host.q_seq_lens)
+        << " kv=" << dsv4_host_vector_string(params.attention.host.kv_seq_lens)
+        << " embedding_ids="
+        << dsv4_host_vector_string(params.embedding.embedding_ids)
+        << " selected_before="
+        << dsv4_cpu_tensor_vector_string(selected_before_context)
+        << " selected_after="
+        << dsv4_cpu_tensor_vector_string(
+               processed_target_input.sampling_params.selected_token_idxes)
+        << " next_before_context="
+        << dsv4_cpu_tensor_vector_string(sampled_before_context)
+        << " next_after_context="
+        << dsv4_cpu_tensor_vector_string(output.sample_output.next_tokens);
+  }
+#endif
   if (!enable_schedule_overlap() && !driver_ && !dp_driver_) {
     if (output.failed_request_ids.empty()) {
       return std::nullopt;
@@ -750,6 +1001,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_decode(
   CHECK_EQ(last_states.size(),
            input.input_params.embedding.embedding_ids.size())
       << "DFlash decode target state count mismatch";
+  dsv4_mark_first_verify(this, input);
 
   update_decode_step_input(input, last_states);
   DraftBlock draft_block = run_decode_draft(input, validate_input);
@@ -1192,15 +1444,65 @@ SampleOutput DFlashWorkerImpl::validate(
 
   torch::Tensor target_logits = target_output.logits.view(
       {batch_size, num_val_tokens, target_output.logits.size(/*dim=*/-1)});
-  return spec_verify::run_rejection_sampling(
-      {.do_sample = sampling_params.do_sample,
-       .all_random_sample = sampling_params.all_random_sample,
-       .all_greedy_sample = sampling_params.all_greedy_sample},
-      draft_proposal,
-      target_logits,
-      target_output,
-      bonus_token_ids,
-      enable_fused_kernel_);
+  const torch::Tensor& draft_token_ids = draft_proposal.token_ids();
+  if (dsv4_log_verify_tokens_enabled()) {
+    LOG(INFO) << "[DSV4_VERIFY_TOKENS] draft="
+              << dsv4_cpu_tensor_vector_string(draft_token_ids)
+              << " target_argmax="
+              << dsv4_cpu_tensor_vector_string(target_logits.argmax(/*dim=*/-1))
+              << " target_sampled="
+              << dsv4_cpu_tensor_vector_string(target_next_tokens_2d);
+  }
+
+  const char* target_only_env =
+      std::getenv("XLLM_DSV4_FORCE_TARGET_TOKEN_ONLY");
+  const bool first_verify = dsv4_consume_first_verify(this);
+  SampleOutput sample_output;
+  if ((target_only_env != nullptr && std::string(target_only_env) == "1") ||
+      first_verify) {
+    sample_output.next_tokens = torch::full_like(target_next_tokens_2d, -1);
+    sample_output.next_tokens.select(/*dim=*/1, /*index=*/0)
+        .copy_(target_next_tokens_2d.select(/*dim=*/1, /*index=*/0));
+  } else {
+#if defined(USE_MUSA)
+    const bool reuse_greedy_ids =
+        dsv4_fast_greedy_verify_enabled() &&
+        sampling_params.all_greedy_sample && !target_output.logprobs &&
+        per_seq_val_tokens.empty() &&
+        !sampling_params.frequency_penalties.defined() &&
+        !sampling_params.presence_penalties.defined() &&
+        !sampling_params.repetition_penalties.defined() && num_val_tokens <= 32;
+    if (reuse_greedy_ids) {
+      torch::Tensor accepted = torch::empty_like(target_next_tokens_2d);
+      sample_output.next_tokens =
+          kernel::musa::deepseek_v4_greedy_verify_tokens(
+              draft_token_ids.to(target_next_tokens_2d).contiguous(),
+              target_next_tokens_2d.contiguous(),
+              accepted);
+      LOG_FIRST_N(INFO, 1)
+          << "[DSV4_FAST_GREEDY_VERIFY] reuse sampled ids and fuse prefix mask";
+    } else
+#endif
+    {
+      sample_output = spec_verify::run_rejection_sampling(
+          {.do_sample = sampling_params.do_sample,
+           .all_random_sample = sampling_params.all_random_sample,
+           .all_greedy_sample = sampling_params.all_greedy_sample},
+          draft_proposal,
+          target_logits,
+          target_output,
+          bonus_token_ids,
+          enable_fused_kernel_);
+    }
+  }
+  if (dsv4_log_verify_tokens_enabled()) {
+    LOG(INFO) << "[DSV4_VERIFY_TOKENS] accepted="
+              << dsv4_cpu_tensor_vector_string(sample_output.next_tokens);
+  }
+  const torch::Tensor& embeddings = target_output.sample_output.embeddings;
+  sample_output.embeddings =
+      embeddings.view({batch_size, num_val_tokens, embeddings.size(-1)});
+  return sample_output;
 }
 
 void DFlashWorkerImpl::process_draft_sample_output(
@@ -1273,6 +1575,17 @@ void DFlashWorkerImpl::update_decode_step_input(
                                                   : input_token_id);
     positions_vec.emplace_back(current_position);
     specBuilder::append_seq_len_by_layout(kv_seq_lens_vec, current_kv_len);
+
+    if (dsv4_log_accepted_state_enabled()) {
+      LOG(INFO) << "[DSV4_ACCEPTED_STATE] phase=prepare seq=" << seq_id
+                << " input_token=" << input_token_id << " rewritten_token="
+                << (rewrite_fake_token ? state.token_id : input_token_id)
+                << " state_valid=" << state.valid
+                << " state_position_offset=" << state.position_offset
+                << " input_position=" << input_positions[seq_id]
+                << " current_position=" << current_position
+                << " current_kv_len=" << current_kv_len;
+    }
   }
 
   input.token_ids_host = specBuilder::make_cpu_int_tensor(token_ids_vec);
@@ -1546,6 +1859,19 @@ std::vector<std::string> DFlashWorkerImpl::write_target_context_to_cache(
       expanded_draft_input.has_value() ? *expanded_draft_input : input;
   std::vector<int64_t> accepted_idxes = build_accepted_context_rows(
       draft_input, accepted_tokens, options_.block_size(), buf);
+  if (dsv4_log_accepted_state_enabled()) {
+    LOG(INFO) << "[DSV4_ACCEPTED_STATE] phase=commit accepted_tokens="
+              << dsv4_cpu_tensor_vector_string(accepted_tokens)
+              << " input_positions="
+              << dsv4_cpu_tensor_vector_string(input.positions_host)
+              << " input_kv_lens="
+              << dsv4_host_vector_string(
+                     input.input_params.attention.host.kv_seq_lens)
+              << " accepted_rows=" << dsv4_host_vector_string(accepted_idxes)
+              << " cache_positions="
+              << dsv4_host_vector_string(buf.out_positions) << " cache_slots="
+              << dsv4_host_vector_string(buf.out_new_cache_slots);
+  }
   torch::TensorOptions host_index_options = torch::TensorOptions()
                                                 .dtype(torch::kLong)
                                                 .device(torch::kCPU)

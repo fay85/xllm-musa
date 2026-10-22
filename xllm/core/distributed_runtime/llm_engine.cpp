@@ -15,7 +15,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "llm_engine.h"
-#include "framework/kv_cache_transfer/push_route.h"
 
 #include <absl/strings/str_format.h>
 #include <absl/time/clock.h>
@@ -53,6 +52,7 @@ limitations under the License.
 #include "framework/kv_cache/kv_cache_estimation.h"
 #include "framework/kv_cache/kv_cache_shape.h"
 #include "framework/kv_cache/kv_cache_utils.h"
+#include "framework/kv_cache_transfer/push_route.h"
 #include "framework/model/model_args.h"
 #include "framework/model/mtp_utils.h"
 #include "framework/model_loader.h"
@@ -272,6 +272,18 @@ bool LLMEngine::init_model(MasterStatus master_status) {
       SpeculativeConfig::is_mtp_algorithm(options_.speculative_algorithm()) &&
       is_glm5_next_target_model(args_)) {
     args_.num_speculative_tokens(options_.num_speculative_tokens());
+  }
+
+  // The shared checkpoint also carries legacy MTP metadata. A DSpark draft
+  // owns all trained draft stages, not num_nextn_predict_layers caches.
+  if (options_.is_draft_engine() &&
+      options_.speculative_algorithm() == "DSpark" &&
+      util::is_deepseek_v4_model_type(args_.model_type())) {
+    CHECK_GT(args_.dspark_num_layers(), 0);
+    args_.model_type(std::string(util::kDeepseekV4DSparkModelType));
+    args_.n_layers(args_.dspark_num_layers());
+    args_.compress_ratios(std::vector<int32_t>(
+        static_cast<size_t>(args_.n_layers()), /*value=*/1));
   }
 
   // A draft engine is fed token ids and detokenized by the target, so it
@@ -673,6 +685,12 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
   kv_cache_shape.print_shapes();
 
   // initialize block manager
+  // DSpark takes request block mappings from the target and rebuilds draft
+  // context KV from target hidden states. Its SWA-only allocation manager
+  // must not independently enable the target's SWA+C4+C128 prefix policy.
+  const bool draft_uses_target_prefix_manager =
+      options_.is_draft_engine() &&
+      util::is_deepseek_v4_dspark_model_type(args_.model_type());
   BlockManagerPool::Options options;
   options.num_blocks(kv_cache_cap.n_blocks())
       .hasher_type(mtp_hasher_type(BlockHasherType::TEXT,
@@ -682,7 +700,8 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
                                         : block_size)
       .host_num_blocks(kv_cache_cap.n_blocks() * options_.host_blocks_factor())
       .enable_linear_state(enable_state_cache)
-      .enable_prefix_cache(options_.enable_prefix_cache())
+      .enable_prefix_cache(!draft_uses_target_prefix_manager &&
+                           options_.enable_prefix_cache())
       .enable_disagg_pd(options_.enable_disagg_pd())
       .enable_kvcache_store(options_.enable_kvcache_store())
       .prefetch_batch_size(options_.prefetch_batch_size())
@@ -937,9 +956,11 @@ bool LLMEngine::pull_kv_blocks(const int32_t src_dp_size,
     CHECK(!src_tp_ranks.empty())
         << "no source TP rank for dst tp_rank " << tp_rank;
     if (src_tp_ranks.size() == 1) {
-      const int32_t src_worker_rank = src_dp_rank * src_tp_size + src_tp_ranks[0];
+      const int32_t src_worker_rank =
+          src_dp_rank * src_tp_size + src_tp_ranks[0];
       results.push_back(worker_clients_[dst_worker_rank]->pull_kv_blocks(
-          src_cluster_ids[src_worker_rank], src_addrs[src_worker_rank],
+          src_cluster_ids[src_worker_rank],
+          src_addrs[src_worker_rank],
           mappings));
       continue;
     }

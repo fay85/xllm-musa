@@ -55,7 +55,7 @@ void apply_dflash2_runtime_block_size(ModelArgs& args,
             << ", candidate tokens: " << runtime_block_size - 1;
 }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
 int32_t read_block_size(const std::string& model_weights_path) {
   JsonReader reader;
   const std::string config_path = model_weights_path + "/config.json";
@@ -87,8 +87,12 @@ void configure_deepseek_v4_dspark_args(ModelArgs& args,
       std::vector<int32_t>(static_cast<size_t>(args.dspark_num_layers()),
                            /*value=*/1));
 
+#if defined(USE_NPU)
   args.dspark_use_native_sas(
       KernelConfig::get_instance().enable_dspark_native_sas());
+#else
+  args.dspark_use_native_sas(false);
+#endif
   args.enable_confidence_head(options.enable_adaptive_speculative_decode());
   args.confidence_head_with_markov(true);
 }
@@ -101,6 +105,9 @@ bool supports_block_diffusion_draft(std::string_view algorithm) {
   }
   if (Platform::is_mlu()) {
     return SpeculativeConfig::is_dflash2_algorithm(algorithm);
+  }
+  if (Platform::is_musa()) {
+    return algorithm == "DSpark";
   }
   return false;
 }
@@ -181,6 +188,8 @@ void configure_block_diffusion_model(ModelArgs& args,
   const bool is_dspark = algorithm == "DSpark";
   const bool is_deepseek_v4_dspark =
       is_dspark && util::is_deepseek_v4_model_type(args.model_type());
+  CHECK(!Platform::is_musa() || is_deepseek_v4_dspark)
+      << "MUSA block-diffusion draft requires DeepSeek-V4 DSpark.";
   std::string draft_model_type = std::string(kDFlashDraftModelType);
   if (is_dspark) {
     draft_model_type = std::string(kDSparkDraftModelType);
@@ -198,7 +207,7 @@ void configure_block_diffusion_model(ModelArgs& args,
   args.layers_to_capture({});
   args.model_type(draft_model_type);
   args.requires_eager_execution(!is_deepseek_v4_dspark);
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
   if (is_deepseek_v4_dspark) {
     configure_deepseek_v4_dspark_args(args, options);
   }

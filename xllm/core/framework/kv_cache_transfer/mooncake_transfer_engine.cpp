@@ -18,15 +18,23 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
-#include "util/timer.h"
-#include <map>
-#include <tuple>
 #include <cstdlib>
 #include <limits>
+#include <map>
 #include <numeric>
+#include <tuple>
 #include <unordered_set>
 
 #include "absl/strings/str_join.h"
+#include "util/timer.h"
+#if defined(USE_MUSA)
+#include <chrono>
+#include <thread>
+
+#include "core/framework/kv_cache_transfer/mooncake_open_session_retry.h"
+#include "core/framework/kv_cache_transfer/mooncake_segment_reopen.h"
+#endif
+
 #include "common/metrics.h"
 #include "framework/kv_cache_transfer/kv_cache_transfer.h"
 #include "util/net.h"
@@ -231,6 +239,17 @@ bool MooncakeTransferEngineCore::open_session(const uint64_t cluster_id,
     return true;
   }
 
+#if defined(USE_MUSA)
+  // Reaching this branch means no application session remains for this peer.
+  // Mooncake closeSegment() does not evict its descriptor or connected QPs;
+  // reopening a recycled endpoint must refresh both before any peer refcount
+  // increment or publication in handles_. Fail closed if refresh fails.
+  if (!detail::prepare_mooncake_segment_reopen(
+          *engine_, remote_addr, /*invalidate_endpoints=*/true)) {
+    return false;
+  }
+#endif
+
   if (cluster_id != 0) {
     proto::MooncakeTransferEngineService_Stub* stub =
         get_or_create_stub_locked(cluster_id);
@@ -241,6 +260,46 @@ bool MooncakeTransferEngineCore::open_session(const uint64_t cluster_id,
 
     proto::SessionInfo request;
     request.set_addr(addr_);
+#if defined(USE_MUSA)
+    int32_t attempts = 0;
+    std::string error_text;
+    const auto result = detail::run_session_open_rpc(
+        [&](int64_t timeout_ms) -> detail::SessionOpenRpcResult {
+          ++attempts;
+          proto::Status response;
+          brpc::Controller cntl;
+          cntl.set_timeout_ms(timeout_ms);
+          // Only retry an unsent EHOSTDOWN explicitly. Automatic retries could
+          // mix in an ambiguous timeout/reset after a peer-side open succeeded.
+          cntl.set_max_retry(0);
+          stub->OpenSession(&cntl, &request, &response, nullptr);
+          error_text =
+              cntl.Failed() ? cntl.ErrorText() : response.ShortDebugString();
+          return {cntl.Failed(), cntl.ErrorCode(), response.ok()};
+        },
+        [&](int32_t delay_ms) {
+          LOG(WARNING) << "[MUSA_OPEN_SESSION_RETRY] cluster_id=" << cluster_id
+                       << ", remote_addr=" << remote_addr
+                       << ", attempt=" << attempts << ", delay_ms=" << delay_ms
+                       << ", error=" << error_text;
+          std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        },
+        []() -> int64_t {
+          return std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now().time_since_epoch())
+              .count();
+        });
+    if (result.transport_failed || !result.peer_ok) {
+      LOG(ERROR) << "OpenSession failed, attempts=" << attempts
+                 << ", error_code=" << result.error_code
+                 << ", peer_ok=" << result.peer_ok << ", error=" << error_text;
+      return false;
+    }
+    if (attempts > 1) {
+      LOG(INFO) << "[MUSA_OPEN_SESSION_RECOVERED] cluster_id=" << cluster_id
+                << ", remote_addr=" << remote_addr << ", attempts=" << attempts;
+    }
+#else
     proto::Status response;
     brpc::Controller cntl;
     stub->OpenSession(&cntl, &request, &response, nullptr);
@@ -249,6 +308,7 @@ bool MooncakeTransferEngineCore::open_session(const uint64_t cluster_id,
                  << ", peer_ok=" << response.ok();
       return false;
     }
+#endif
 
     LOG(INFO) << "OpenSession RPC to " << remote_addr
               << ", local_addr=" << addr_;
@@ -1281,11 +1341,8 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
     torch::Tensor staging = torch::empty(
         {kStagingBytes},
         torch::TensorOptions().dtype(torch::kUInt8).device(torch_device));
-    const int32_t ret = engine->registerLocalMemory(staging.data_ptr(),
-                                                    kStagingBytes,
-                                                    kWildcardLocation,
-                                                    true,
-                                                    true);
+    const int32_t ret = engine->registerLocalMemory(
+        staging.data_ptr(), kStagingBytes, kWildcardLocation, true, true);
     if (ret != 0) {
       LOG(ERROR) << "registerLocalMemory for PULL staging failed, ret=" << ret;
       return false;
@@ -1334,8 +1391,8 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
         continue;
       }
     }
-    runs.push_back(Run{cur.remote_buffer_id, cur.remote_offset, cur.length, i,
-                       i + 1});
+    runs.push_back(
+        Run{cur.remote_buffer_id, cur.remote_offset, cur.length, i, i + 1});
   }
 
   const auto uint8_options =
@@ -1406,8 +1463,8 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
       bool aligned = static_cast<int64_t>(buffer.length) % length == 0 &&
                      kStagingBytes % length == 0;
       for (size_t i = 0; aligned && i < offsets.first.size(); ++i) {
-        aligned = offsets.first[i] % length == 0 &&
-                  offsets.second[i] % length == 0;
+        aligned =
+            offsets.first[i] % length == 0 && offsets.second[i] % length == 0;
       }
       if (!aligned) {
         unaligned_offsets.emplace_back(&offsets);
@@ -1432,10 +1489,10 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
     }
     for (const auto& [local_buffer_id, length, base, n] : aligned_groups) {
       const auto& buffer = local_desc->buffers[local_buffer_id];
-      torch::Tensor dst =
-          torch::from_blob(reinterpret_cast<void*>(buffer.addr),
-                           {static_cast<int64_t>(buffer.length) / length, length},
-                           uint8_options);
+      torch::Tensor dst = torch::from_blob(
+          reinterpret_cast<void*>(buffer.addr),
+          {static_cast<int64_t>(buffer.length) / length, length},
+          uint8_options);
       torch::Tensor src_index = device_rows.narrow(
           0, static_cast<int64_t>(base), static_cast<int64_t>(n));
       torch::Tensor dst_index = device_rows.narrow(

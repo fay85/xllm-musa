@@ -299,6 +299,7 @@ DECLARE_COUNTER(speculative_num_accepted_tokens_constrained_total);
 DECLARE_COUNTER(speculative_num_accepted_tokens_plain_total);
 DECLARE_COUNTER(speculative_num_draft_tokens_constrained_total);
 DECLARE_COUNTER(speculative_num_draft_tokens_plain_total);
+DECLARE_GAUGE(speculative_mean_tokens_per_decode_step);
 
 // latency of proto conversion in seconds
 DECLARE_COUNTER(proto_latency_seconds_proto2i);

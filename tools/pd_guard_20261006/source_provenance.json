@@ -1,0 +1,222 @@
+{
+    "decode_overlay":  [
+                           "core/framework/block/block_manager_pool.cpp",
+                           "core/framework/block/block_manager_pool.h",
+                           "core/scheduler/disagg_pd_scheduler.cpp",
+                           "core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp",
+                           "core/layers/musa/deepseek_v4/deepseek_v4_gate.cpp",
+                           "core/layers/musa/deepseek_v4/deepseek_v4_moe.cpp",
+                           "core/layers/musa/deepseek_v4/deepseek_v4_moe.h",
+                           "core/layers/musa/deepseek_v4/deepseek_v4_moe_policy.h",
+                           "core/layers/musa/deepseek_v4/deepseek_v4_decoder_layer.cpp",
+                           "core/layers/musa/deepseek_v4/deepseek_v4_indexer_reference.h",
+                           "core/kernels/musa/deepseek_v4_dsa_attention.cu",
+                           "core/kernels/musa/deepseek_v4_fp8_moe_metadata.cu"
+                       ],
+    "overrides":  [
+                      {
+                          "path":  "xllm/core/runtime/dflash_worker_impl.cpp",
+                          "sha256":  "560de26ede4c471c6e244a3f521d8385c2ec19a9c73789498547e3decbfd0a0b",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/dflash_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/dit_worker_impl.cpp",
+                          "sha256":  "462b39a7749e58d38e244f4216624019f4752331035f83d346b33e94b88f8a8f",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/dit_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/dspark_worker_impl.cpp",
+                          "sha256":  "602ca00facc05a3ecc1272dc37d2518218c0c544da800518241d3edae78491c0",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/dspark_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/eagle3_worker_impl.cpp",
+                          "sha256":  "7b981603267f726ee07579804f3ff9f8d0dec4fdfeda05e52542094fc65d0561",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/eagle3_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/embed_vlm_worker_impl.cpp",
+                          "sha256":  "1d3d178de12fc78db3504f1efe9f61b4d32d11e5bb8dc3911a5850cb9cf37a7b",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/embed_vlm_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/embed_worker_impl.cpp",
+                          "sha256":  "ffe241eb5100bed79e692b4b289ed654962977ca8e0a48209422c0bc80704d6e",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/embed_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/llm_worker_impl.cpp",
+                          "sha256":  "b185d10884f7da430576a2b2d0df075d5304728070acbc5d34e579ba7f627467",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/llm_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/mm_embed_vlm_worker_impl.cpp",
+                          "sha256":  "6694dde4c75f7cd11620d7574899041e7bf6839f799f24038874527b141834a5",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/mm_embed_vlm_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/mtp_worker_impl.cpp",
+                          "sha256":  "4405aa377884cbc9d933347a22bf86d1fdea51a92282c239ccf15793c89d0999",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/mtp_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/rec_worker_impl.cpp",
+                          "sha256":  "15ef6fbccf63d24f9c96e7522a52638c1edc0cc07e2cbac1af79a3711b167f53",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/rec_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/speculative_worker_impl.cpp",
+                          "sha256":  "7655a9d5d112cf6037c41c7c220e32fa5e05bc78a6933f85e1540b0974bf1df4",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/speculative_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/suffix_worker_impl.cpp",
+                          "sha256":  "50f944634e19ca0f4fd7a76f6337e9ccfae6bb01d477ebee03e60b0d73f56f22",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/suffix_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/vlm_worker_impl.cpp",
+                          "sha256":  "c4837ced1d055986cf6da1312bc448d35e0f1cb5e8484ad4dd03ab9b329b3ce2",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/vlm_worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/worker.cpp",
+                          "sha256":  "a412eaeadd25291678fc0fb916e535ab893c6fb19a9f7a6bb9c477ce0e225fb1",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/worker.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/worker_impl.cpp",
+                          "sha256":  "f80bee945a48a54b2f9f5f755b3f2ad3a2780b621b5275afdaae7d5e376e380a",
+                          "frozen_input":  "pd_v128_guard_bridge_20261005_r2/worker_impl.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/runtime/worker_rendezvous.cpp",
+                          "sha256":  "53ca23d2a19cfbba432348f6cc37621305339481762f1724b6465636bff87c47",
+                          "frozen_input":  "pd_v128_rendezvous_20261005/worker_rendezvous.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/framework/block/composite_block_manager.cpp",
+                          "sha256":  "8e9a3d0391df84ca9ac8d33dcfe101e966857e3913794feb9c9ac431ac738858",
+                          "frozen_input":  "pd_v128_swa_tail_20261005/composite_block_manager.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/framework/block/sliding_window_block_manager.cpp",
+                          "sha256":  "80cc8bba456c2e9756eecb7fc91aaf1f2fd3baab3610cdd1d67c90449f03227b",
+                          "frozen_input":  "pd_v128_swa_tail_20261005/sliding_window_block_manager.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/framework/block/sliding_window_block_manager.h",
+                          "sha256":  "a899f1c0e18a5dbf3f6e545f8064b9775cddffa828c08cf4790131adfdccfb79",
+                          "frozen_input":  "pd_v128_swa_tail_20261005/sliding_window_block_manager.h"
+                      },
+                      {
+                          "path":  "xllm/core/scheduler/disagg_pd_scheduler.cpp",
+                          "sha256":  "983303c4d0c0cd1ce3684e2fc406f4288706268d4a5a05e85da9e305b933fd29",
+                          "frozen_input":  "pd_v128_handoff_20261005_r5/disagg_pd_scheduler.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/framework/kv_cache_transfer/mooncake_transfer_engine.cpp",
+                          "sha256":  "22bdd0e5c258c3a113f76e2449798d7277edc9e266331b2cfd4fae5572a7123b",
+                          "frozen_input":  "pd_session_reopen_fix_20261006/mooncake_transfer_engine.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/framework/kv_cache_transfer/mooncake_segment_reopen.h",
+                          "sha256":  "d4a530863f982b0eb90952d28bce5716a5f11ee2f94f829c56f1f4c381a9c1f6",
+                          "frozen_input":  "pd_session_reopen_fix_20261006/mooncake_segment_reopen.h"
+                      },
+                      {
+                          "path":  "xllm/core/framework/kv_cache_transfer/mooncake_open_session_retry.h",
+                          "sha256":  "cab99e90380ca5abe0babdc5513f8c3f10167fc4028099fc599f8ba466afb050",
+                          "frozen_input":  "pd_session_reopen_fix_20261006/mooncake_open_session_retry.h"
+                      },
+                      {
+                          "path":  "xllm/core/framework/block/block_manager_pool_pd.cpp",
+                          "sha256":  "d003bd9eeeabf9bc334b89d5fc919092d146535cbb0898ebf4c37ec65aad5a5e",
+                          "frozen_input":  "pd_v128_prefill_reclaim_20261005_r2/block_manager_pool_pd.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/framework/block/block_manager_pool.h",
+                          "sha256":  "cb1434458ceda65b384604d0daa8fedd37a7aff05c75fc308db7cd166a45d7d4",
+                          "frozen_input":  "pd_v128_prefill_reclaim_20261005_r2/block_manager_pool.h"
+                      },
+                      {
+                          "path":  "xllm/core/scheduler/disagg_pd_scheduler.cpp",
+                          "sha256":  "f341ef93b703b1980f71cf627e43da3b3925f5f437bb305df2f58f0c3a2735c9",
+                          "frozen_input":  "pd_handoff_error_20261006_r2/prefill_reopen_disagg_pd_scheduler.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp",
+                          "sha256":  "284e044c648734b009c2c5b6f5fdf0ca43849f433792c228fb579e72c4398e78",
+                          "frozen_input":  "pd_indexer_mask_once_model_20261006/mask_once_deepseek_v4_attention.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_gate.cpp",
+                          "sha256":  "83938406c745d7576a4f673a4379642cb0c1c401478f9928ee80f259fafd37df",
+                          "frozen_input":  "pd_prefill_gate_handoff_20261006/deepseek_v4_gate.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe.cpp",
+                          "sha256":  "8c82225fb1c47bde76fe13d98620df287c1c9bc047fa6cabfec748a195b7c1c8",
+                          "frozen_input":  "pd_prefill_reduce_scatter_20261006/deepseek_v4_moe.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_decoder_layer.cpp",
+                          "sha256":  "f6058de1ffaad9d8934f87edebea0af287dd9c11a93925d6ebc70bfd2bc14fc6",
+                          "frozen_input":  "pd_prefill_reduce_scatter_20261006/deepseek_v4_decoder_layer.cpp"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_hc_tiled_prefill.h",
+                          "sha256":  "3c97a7c80b92f3bc822a0288991a08dbc03ef1071b4ba3aaca745824999d3ff7",
+                          "frozen_input":  "pd_prefill_reduce_scatter_20261006/header/core/layers/musa/deepseek_v4/deepseek_v4_hc_tiled_prefill.h"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe.h",
+                          "sha256":  "df4627dc6b476f43cf078003eb647177d94d69ca712a277c5b588d162510804a",
+                          "frozen_input":  "pd_prefill_reduce_scatter_20261006/header/core/layers/musa/deepseek_v4/deepseek_v4_moe.h"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe_policy.h",
+                          "sha256":  "2c7582b7cf4f46d5a9122249b7f7a5dc92eaa58230d0583bf416ae21d19bcbd8",
+                          "frozen_input":  "pd_prefill_reduce_scatter_20261006/header/core/layers/musa/deepseek_v4/deepseek_v4_moe_policy.h"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_pd_reduce_scatter_policy.h",
+                          "sha256":  "6d9f97c565318a4f2523066302c0f59932749c623eed732388f5a1a00c15b833",
+                          "frozen_input":  "pd_prefill_reduce_scatter_20261006/header/core/layers/musa/deepseek_v4/deepseek_v4_pd_reduce_scatter_policy.h"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_prefill_gate_policy.h",
+                          "sha256":  "98ee6b379aa02601be06523f818cafab8d5964bf325d8b39bbedc09614c62757",
+                          "frozen_input":  "pd_prefill_gate_handoff_20261006/deepseek_v4_prefill_gate_policy.h"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_indexer_reference.h",
+                          "sha256":  "7e7e82d1f359f47bb04afa580535eacebb5c8b2f72621c1361de502a34579ac4",
+                          "frozen_input":  "pd_indexer_mask_once_model_20261006/header/core/layers/musa/deepseek_v4/deepseek_v4_indexer_reference.h"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_rope_assembly.h",
+                          "sha256":  "ba35de61197db648df5c059d654cd44ddb3c1c976c48dd1f8aae6d2cc913d51d",
+                          "frozen_input":  "pd_indexer_mask_once_model_20261006/header/core/layers/musa/deepseek_v4/deepseek_v4_rope_assembly.h"
+                      },
+                      {
+                          "path":  "xllm/core/layers/musa/deepseek_v4/deepseek_v4_rope_main_assembly.h",
+                          "sha256":  "0ef86a065f071a132eb370e41ff19e36b29489ab341074144058ede4313ccdc6",
+                          "frozen_input":  "pd_indexer_mask_once_model_20261006/header/core/layers/musa/deepseek_v4/deepseek_v4_rope_main_assembly.h"
+                      },
+                      {
+                          "path":  "xllm/core/kernels/musa/deepseek_v4_dsa_attention.cu",
+                          "sha256":  "c094e13938b6531ff0e653f8cf62f8be8a185304588fc6c93a03e1a18ea24e8c",
+                          "frozen_input":  "pd_prefill_prepare_once_20261005/deepseek_v4_dsa_attention.cu"
+                      },
+                      {
+                          "path":  "xllm/core/kernels/musa/deepseek_v4_fp8_moe_metadata.cu",
+                          "sha256":  "38fff7b9066d0a4fe4cbf1b87f762cf503fb30a5e960aab5dfa9a9f741feb695",
+                          "frozen_input":  "pd_moe_warp_swiglu_20261006/deepseek_v4_fp8_moe_metadata.cu"
+                      }
+                  ],
+    "original_prefill_binary":  "caf3db8f775224045f9b8143f1b8a3491fb4637229fd5ab18194e00b60506b43",
+    "base_tree":  "pd_v128_guard_bridge_20261005_r2/header",
+    "base_commit":  "b5cc2b94679db6770b7ed8b6e96d1cb922eaa042",
+    "original_decode_binary":  "5ea86017debbd94ba751a8ce38c74c1e2e9d39487b4ef3fcf662a24cedbaac93"
+}

@@ -395,7 +395,8 @@ std::vector<std::string> KVCacheTransfer::rotate_dst_rank(
   return rotated_keys;
 }
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
 folly::SemiFuture<std::vector<KVTransferTaskResult>>
 KVCacheTransfer::push_kv_blocks_async(
     const std::vector<TransferKVInfo>& transfer_kv_infos,

@@ -13,12 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <tvm/ffi/container/tuple.h>
 #include <tvm/ffi/extra/stl.h>
 #include <tvm/ffi/string.h>
 
 #include <optional>
 #include <string>
-#include <tuple>
 
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 
@@ -59,9 +59,8 @@ torch::Tensor gemm_fp8_nt_groupwise(
       /*scale_major_mode=*/std::string("K"),
       /*mma_sm=*/static_cast<int64_t>(1),
       /*scale_granularity_mnk=*/
-      std::make_tuple(static_cast<int64_t>(1),
-                      static_cast<int64_t>(128),
-                      static_cast<int64_t>(128)),
+      ffi::Tuple<int64_t, int64_t, int64_t>(
+          int64_t{1}, int64_t{128}, int64_t{128}),
       to_ffi_tensor(out),
       /*backend=*/std::string("mudnn"));
 

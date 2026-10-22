@@ -1,0 +1,44 @@
+{
+  "role": "decode",
+  "incremental_not_clean_build": true,
+  "relink_only": false,
+  "rebuilt": [
+    {
+      "source": "/tmp/pd_release_compile_source_20261006_r2/xllm/core/runtime/worker_rendezvous.cpp",
+      "source_sha256": "53ca23d2a19cfbba432348f6cc37621305339481762f1724b6465636bff87c47",
+      "member": "worker_rendezvous.cpp.o",
+      "archive": "libruntime.a",
+      "object_sha256": "3267b5c74b1865dd45ad356d76ad0d333b8d621bd574dd7635520e147015fbce"
+    },
+    {
+      "source": "/tmp/pd_release_compile_source_20261006_r2/xllm/core/framework/kv_cache_transfer/mooncake_transfer_engine.cpp",
+      "source_sha256": "22bdd0e5c258c3a113f76e2449798d7277edc9e266331b2cfd4fae5572a7123b",
+      "member": "mooncake_transfer_engine.cpp.o",
+      "archive": "libkv_cache_transfer.a",
+      "object_sha256": "49caba7288340e7795648eea45beee09085578f6ee830aa1b817f3d20e4020f6"
+    },
+    {
+      "source": "/tmp/pd_release_compile_source_20261006_r2/xllm/core/framework/block/composite_block_manager.cpp",
+      "source_sha256": "8e9a3d0391df84ca9ac8d33dcfe101e966857e3913794feb9c9ac431ac738858",
+      "member": "composite_block_manager.cpp.o",
+      "archive": "libblock.a",
+      "object_sha256": "2de3686c4ba5844f6a82da4d6336fe64eb1560721beb76b061a99f32fdade23d"
+    },
+    {
+      "source": "/tmp/pd_release_compile_source_20261006_r2/xllm/core/framework/block/sliding_window_block_manager.cpp",
+      "source_sha256": "80cc8bba456c2e9756eecb7fc91aaf1f2fd3baab3610cdd1d67c90449f03227b",
+      "member": "sliding_window_block_manager.cpp.o",
+      "archive": "libblock.a",
+      "object_sha256": "b55315390c08215745533765d02b8ffd1341e20b9832de3aa420d57e5ae8a20c"
+    },
+    {
+      "source": "/tmp/pd_release_compile_source_20261006_r2/tools/pd_guard_20261006/decode_overlay/xllm/core/scheduler/disagg_pd_scheduler.cpp",
+      "source_sha256": "983303c4d0c0cd1ce3684e2fc406f4288706268d4a5a05e85da9e305b933fd29",
+      "member": "disagg_pd_scheduler.cpp.o",
+      "archive": "libscheduler.a",
+      "object_sha256": "794ef684a41bb5c3ca251591a3633eb5bc0d0b54bb479deeb22e8b7692833454"
+    }
+  ],
+  "recipes_sha256": "7f7bc243b904896c92f3e4fa6e30918d198ed804bb48b226ea6524ebe7b69d0d",
+  "binary_sha256": "37b6eafca02373003a473eb8808ae84f5dbb2a2382ac85d99314be35605d9fa9"
+}

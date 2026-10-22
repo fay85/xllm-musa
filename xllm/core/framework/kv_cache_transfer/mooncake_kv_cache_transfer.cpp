@@ -33,8 +33,8 @@ limitations under the License.
 #include "framework/xtensor/global_xtensor.h"
 #include "framework/xtensor/xtensor_allocator.h"
 #include "util/net.h"
-#include "util/utils.h"
 #include "util/timer.h"
+#include "util/utils.h"
 #include "util/uuid.h"
 
 namespace xllm {
@@ -237,9 +237,13 @@ void MooncakeKVCacheTransferBase::configure_cache_layout(
     const Dsv4CacheGeometry& geometry =
         KVCacheConfig::get_instance().dsv4_cache_geometry();
     fingerprint << "|dsv4_compressed_geometry:"
-                << geometry.compressed_block_token_size() << ":"
-                << geometry.c4_physical_dim() << ":"
-                << geometry.c128_physical_dim();
+                << geometry.logical_block_token_size(4, block_token_capacity)
+                << ":"
+                << geometry.compressed_physical_dim(4, block_token_capacity)
+                << ":"
+                << geometry.logical_block_token_size(128, block_token_capacity)
+                << ":"
+                << geometry.compressed_physical_dim(128, block_token_capacity);
   }
   if (!is_spec_draft && uses_npu_compressed_kpool_tail(model_args)) {
     fingerprint << "|compressed_kpool_tail:" << model_args.index_head_dim()
@@ -755,8 +759,7 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
   LOG(INFO) << "[Mooncake][PDTransfer] direction=pull, cluster_id="
             << src_cluster_id << ", remote=" << src_addr
             << ", mapping_groups=" << mappings.size()
-            << ", layers=" << bind_layers
-            << ", regions=" << all_regions.size()
+            << ", layers=" << bind_layers << ", regions=" << all_regions.size()
             << ", bind_ms=" << bind_ms << ", move_ms=" << move_ms
             << ", success=true";
   return true;
@@ -814,7 +817,8 @@ void MooncakeKVCacheTransferBase::merge_kv_blocks(
   }
 }
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
 std::vector<KVTransferTaskResult>
 MooncakeKVCacheTransferDefault::push_kv_blocks(
     std::unordered_map<std::string, KVCacheInfo>& merged_kv_infos,

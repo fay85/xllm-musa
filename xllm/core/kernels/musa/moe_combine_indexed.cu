@@ -16,6 +16,7 @@ limitations under the License.
 // c10/cuda headers are remapped by mcc_wrapper on MUSA builds; keep the
 // shared CUDA exception macros while launching with an explicit musaStream_t.
 #include <c10/cuda/CUDAException.h>
+#include <glog/logging.h>
 #include <musa.h>
 
 #include <cstddef>

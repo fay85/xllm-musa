@@ -153,8 +153,10 @@ void check_quantization_supported(
   CHECK_NE(quant_args.quant_method(), kQuantMethodSmoothquant)
       << "MUSA linear does not support SmoothQuant.";
   if (quant_args.quant_method() == kQuantMethodFp8) {
-    CHECK(is_block_fp8_quant(quant_args))
-        << "MUSA linear supports only FP8 weight_block_size=[128, 128].";
+    CHECK(quant_args.weight_block_size().empty() ||
+          is_block_fp8_quant(quant_args))
+        << "MUSA linear supports FP8 with an empty weight_block_size or "
+           "weight_block_size=[128, 128].";
   }
   if (!resolved_weight_quant_method.has_value()) {
     return;

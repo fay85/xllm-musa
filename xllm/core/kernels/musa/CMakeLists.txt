@@ -9,6 +9,11 @@ set(_TORCH_MUSA_KERNEL_HDRS
   musa_ops_api.h
   skinny_gemm.cuh
   mrope.h
+  musa_kernel_utils.h
+  musa_fp8_quant_utils.cuh
+  deepseek_v4_dsa_rope.h
+  deepseek_v4_fp8_roundtrip.h
+  deepseek_v4_indexer_metadata.h
   musa_tvmffi_stream.h
   gdn_ops.h
   llm_decode_metadata_update.h
@@ -69,7 +74,52 @@ set(_TORCH_MUSA_KERNEL_SRCS
   attention_runner.cpp
   global_capture_instance.cpp
   piecewise_graphs.cpp
+  deepseek_v4_sp_pad.cu
+  deepseek_v4_hc_pre.cu
+  deepseek_v4_hc_head.cu
+  deepseek_v4_wo_a_m1.cu
+  deepseek_v4_compress_c4_prepare.cu
+  deepseek_v4_rope_hadamard.cu
+  deepseek_v4_q_rmsnorm_rope.cu
+  deepseek_v4_mega_moe_pre_dispatch.cu
+  deepseek_v4_masked_swiglu_quant.cu
+  deepseek_v4_fp8_moe_metadata.cu
+  deepseek_v4_gate_bf16_fp32.cpp
+  deepseek_v4_masked_fp8_moe_gemm.cpp
+  deepseek_v4_fp8_moe_gemv.cu
+  deepseek_v4_dsa_rope.cu
+  deepseek_v4_gate_gemv.cu
+  deepseek_v4_gate_topk.cu
+  deepseek_v4_shared_expert_gate.cu
+  deepseek_v4_fp8_roundtrip.cu
+  deepseek_v4_dsa_cache_ops.cu
+  deepseek_v4_indexer_metadata.cu
+  deepseek_v4_compress_batch.cu
+  deepseek_v4_mate_partition_metadata.cu
+  deepseek_v4_dsa_attention.cu
 )
+
+set(_DSV4_ROLE_KERNEL_SOURCES
+  deepseek_v4_dsa_attention.cu
+  deepseek_v4_fp8_moe_metadata.cu
+)
+set(_DSV4_ROLE_KERNEL_MANIFEST "role=${XLLM_DSV4_PD_ROLE}\n")
+foreach(_DSV4_SOURCE IN LISTS _DSV4_ROLE_KERNEL_SOURCES)
+  if(XLLM_DSV4_PD_ROLE STREQUAL "decode")
+    list(REMOVE_ITEM _TORCH_MUSA_KERNEL_SRCS "${_DSV4_SOURCE}")
+    set(_DSV4_ROLE_SOURCE
+        "${CMAKE_SOURCE_DIR}/tools/pd_guard_20261006/decode_overlay/xllm/core/kernels/musa/${_DSV4_SOURCE}")
+    list(APPEND _TORCH_MUSA_KERNEL_SRCS "${_DSV4_ROLE_SOURCE}")
+  else()
+    set(_DSV4_ROLE_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/${_DSV4_SOURCE}")
+  endif()
+  file(SHA256 "${_DSV4_ROLE_SOURCE}" _DSV4_SOURCE_SHA256)
+  string(APPEND _DSV4_ROLE_KERNEL_MANIFEST
+         "source=${_DSV4_ROLE_SOURCE} sha256=${_DSV4_SOURCE_SHA256}\n")
+endforeach()
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/dsv4_pd_kernel_selection.txt"
+     "${_DSV4_ROLE_KERNEL_MANIFEST}")
+
 
 # Enable fast-math for fp8_act_quant.cu only, without changing
 # floating-point flags for the other kernels in this library.
@@ -96,4 +146,3 @@ cc_library(
     musa
     musart
 )
-

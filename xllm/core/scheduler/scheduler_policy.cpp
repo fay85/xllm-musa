@@ -20,6 +20,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <limits>
 
 #include "async_response_processor.h"
@@ -31,6 +32,7 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "framework/batch/batch_factory.h"
+#include "framework/block/block_manager_pool.h"
 #include "framework/model/model_args.h"
 #include "framework/request/priority_comparator.h"
 #include "util/timer.h"
@@ -278,6 +280,16 @@ void SchedulerPolicy::schedule_prefill_from_queue(
   bool budget_exhausted = false;
   bool blocks_exhausted = false;
   std::vector<std::shared_ptr<Request>> skipped;
+  const char* single_prefill_env =
+      std::getenv("XLLM_DSV4_SINGLE_SEQUENCE_PREFILL");
+  const bool single_sequence_prefill = !batch_mode_.enable_mix_batch &&
+                                       single_prefill_env != nullptr &&
+                                       std::string(single_prefill_env) == "1";
+  if (single_sequence_prefill) {
+    LOG_FIRST_N(INFO, 1)
+        << "[DSV4_SINGLE_SEQUENCE_PREFILL] one prefill sequence per step; "
+           "decode sequence budget and KV admission checks remain unchanged";
+  }
 
   while (!queue->empty() && budget.remaining_seq_budget > 0 &&
          budget.remaining_token_budget > 0 &&
@@ -288,6 +300,12 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       break;
     }
 #endif
+    // Keep the validated single-sequence SP prefill route while diagnosing
+    // packed-prefill collectives. Do not serialize decode or reject pending
+    // requests; they remain in this queue for subsequent prefill steps.
+    if (single_sequence_prefill && !state.running_sequences.empty()) {
+      break;
+    }
     // Memory-utilization short-circuit.
     if (!options_.enable_disagg_pd() &&
         state.kv_cache_manager->kv_cache_utilization() >=
@@ -322,8 +340,26 @@ void SchedulerPolicy::schedule_prefill_from_queue(
           static_cast<size_t>(state.kv_cache_manager->block_size());
       const size_t total_blocks =
           static_cast<size_t>(state.kv_cache_manager->num_blocks());
+      size_t admission_tokens = request->sequences()[0]->num_tokens();
+      uint32_t sliding_window_size = 0;
+      if (const auto* pool =
+              dynamic_cast<const BlockManagerPool*>(state.kv_cache_manager);
+          pool != nullptr) {
+        sliding_window_size = pool->options().sliding_window_size();
+      }
+      if (sliding_window_size > 0) {
+        // Composite SWA is a bounded ring; C4/C128 leaves independently
+        // enforce their full-history growth in allocate_sequence(). Using the
+        // entire prompt here incorrectly reserves 64 SWA blocks for an
+        // 8192-token request whose SWA tail is only one or two blocks.
+        admission_tokens = std::min<size_t>(
+            admission_tokens,
+            static_cast<size_t>(sliding_window_size) +
+                static_cast<size_t>(state.min_speculative_tokens_required) +
+                block_size - 1);
+      }
       const size_t full_footprint =
-          (request->sequences()[0]->num_tokens() + block_size - 1) / block_size;
+          (admission_tokens + block_size - 1) / block_size;
       // Predict and pre-assign the target DP rank so that the subsequent
       // allocation reuses the same rank. This keeps the admission check
       // consistent with the allocation path (same available-blocks metric
@@ -413,6 +449,19 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       // No external deallocate needed here.
       if (!allocate_for_prefill(
               prefill_sequence.get(), num_tokens, &actual_tokens, state)) {
+        const char* barrier_diagnostic =
+            std::getenv("XLLM_DSV4_DECODE_BATCH_BARRIER");
+        if (barrier_diagnostic != nullptr) {
+          LOG(INFO) << "[DSV4_DECODE_BATCH_BARRIER] prefill_allocate_failed "
+                    << "request=" << request->request_id()
+                    << " prompt_tokens=" << prefill_sequence->num_tokens()
+                    << " cached_tokens="
+                    << prefill_sequence->kv_cache_tokens_num()
+                    << " requested_tokens=" << num_tokens << " free_blocks="
+                    << state.kv_cache_manager->num_free_blocks().front()
+                    << " used_blocks="
+                    << state.kv_cache_manager->num_used_blocks().front();
+        }
         can_schedule = false;
         blocks_exhausted = true;
         break;
@@ -627,6 +676,115 @@ void SchedulerPolicy::schedule_decode_from_queue(RequestPriorityQueue* queue,
                                                  ScheduleBudget& budget) {
   if (queue == nullptr || queue->empty()) {
     return;
+  }
+
+  // DeepSeek-V4 Graph+DSpark needs the first target verify graph to be
+  // captured with the intended physical cohort. Starting decode as soon as
+  // the first long prefill finishes creates a sequence-count ladder (2, 3,
+  // ... 16), repeatedly captures Graphs, and may leave later rows in a
+  // different persistent state epoch. This is an opt-in admission barrier:
+  // normal scheduling and B1 remain unchanged, while a controlled B16 run can
+  // let the prefill queue fill the requested cohort before decode starts.
+  const char* barrier_env = std::getenv("XLLM_DSV4_DECODE_BATCH_BARRIER");
+  char* barrier_limit_end = nullptr;
+  const long barrier_limit =
+      barrier_env == nullptr ? 0
+                             : std::strtol(barrier_env, &barrier_limit_end, 10);
+  const bool valid_barrier =
+      barrier_env != nullptr && barrier_limit > 1 &&
+      barrier_limit <= std::numeric_limits<int32_t>::max() &&
+      (barrier_limit_end == nullptr || *barrier_limit_end == '\0');
+  if (valid_barrier && state.running_sequences.empty() &&
+      queue->size() < static_cast<size_t>(barrier_limit) &&
+      !state.prefill_queue.empty()) {
+    bool allow_decode_fallback = false;
+    if (auto* pool = dynamic_cast<BlockManagerPool*>(state.kv_cache_manager);
+        pool != nullptr) {
+      size_t reclaimed_total = 0;
+      auto reclaim_request = [&](const std::shared_ptr<Request>& request) {
+        if (request == nullptr || request->sequences().empty()) {
+          return;
+        }
+        reclaimed_total += pool->reclaim_completed_prefill_swa(
+            request->sequences().front().get());
+      };
+      if (queue->supports_sort()) {
+        for (auto it = queue->begin(); it != queue->end(); ++it) {
+          reclaim_request(*it);
+        }
+      } else {
+        reclaim_request(queue->top());
+      }
+      if (reclaimed_total > 0) {
+        LOG_FIRST_N(INFO, 1)
+            << "[DSV4_DECODE_BATCH_BARRIER] reclaimed_swa_blocks="
+            << reclaimed_total;
+      }
+      auto queued = queue->top();
+      if (queued != nullptr && !queued->sequences().empty()) {
+        if (!state.prefill_queue.empty() &&
+            !state.prefill_queue.top()->sequences().empty()) {
+          const size_t block_size =
+              static_cast<size_t>(state.kv_cache_manager->block_size());
+          Sequence* prefill_sequence =
+              state.prefill_queue.top()->sequences().front().get();
+          const size_t prompt_end = prefill_sequence->num_tokens();
+          const size_t computed_tokens =
+              prefill_sequence->kv_state().kv_cache_tokens_num();
+          const size_t remaining_tokens =
+              prompt_end > computed_tokens ? prompt_end - computed_tokens : 0;
+          const size_t chunk_limit = std::max<size_t>(
+              options_.max_tokens_per_chunk_for_prefill(), block_size);
+          const size_t next_chunk_tokens =
+              std::min(remaining_tokens, chunk_limit);
+          const size_t required =
+              (next_chunk_tokens + block_size - 1) / block_size;
+          const char* evict_swa_env =
+              std::getenv("XLLM_DSV4_BARRIER_EVICT_SWA_CACHE");
+          if (evict_swa_env != nullptr && std::string(evict_swa_env) == "1" &&
+              pool->swa_free_blocks() < required) {
+            pool->reset_swa_prefix_cache();
+            if (queue->supports_sort()) {
+              for (auto it = queue->begin(); it != queue->end(); ++it) {
+                pool->reclaim_completed_prefill_swa(
+                    (*it)->sequences().front().get());
+              }
+            } else {
+              pool->reclaim_completed_prefill_swa(
+                  queue->top()->sequences().front().get());
+            }
+          }
+          allow_decode_fallback = pool->swa_free_blocks() < required;
+          if (allow_decode_fallback) {
+            LOG_FIRST_N(INFO, 1)
+                << "[DSV4_DECODE_BATCH_BARRIER] SWA remains full; "
+                   "allowing decode progress before cohort barrier, free="
+                << pool->swa_free_blocks() << " required=" << required;
+          }
+        }
+      }
+    }
+    if (!allow_decode_fallback) {
+      // The first long prefill can consume the entire token budget. Returning
+      // with a zero budget would produce an empty scheduler batch and prevent
+      // the next waiting prefill from ever reaching decode_queue. Re-open this
+      // scheduling turn so the cohort can continue to fill.
+      budget.remaining_token_budget = options_.max_tokens_per_batch();
+      budget.latency_budget = std::numeric_limits<int32_t>::max();
+      budget.estimate_latency = 0.0;
+      LOG_FIRST_N(INFO, 1) << "[DSV4_DECODE_BATCH_BARRIER] waiting for "
+                           << barrier_limit
+                           << " decode requests; currently queued="
+                           << queue->size()
+                           << " prefill_queue=" << state.prefill_queue.size()
+                           << " chunk_queue=" << state.chunk_queue.size()
+                           << " token_budget=" << budget.remaining_token_budget
+                           << " seq_budget=" << budget.remaining_seq_budget
+                           << " latency=" << budget.latency_budget;
+      return;
+    }
+    LOG_FIRST_N(INFO, 1)
+        << "[DSV4_DECODE_BATCH_BARRIER] bypassing barrier for decode progress";
   }
 
   while (!queue->empty() &&

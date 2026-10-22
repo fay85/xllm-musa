@@ -732,12 +732,11 @@ torch::Tensor make_cpu_int_tensor(const std::vector<int32_t>& values) {
 #if defined(USE_MUSA)
   // torch::tensor() ignores pinned_memory, and a pageable H2D copy on MUSA
   // waits for the stream to drain even when it is non_blocking.
-  torch::Tensor tensor =
-      torch::empty({static_cast<int64_t>(values.size())},
-                   torch::TensorOptions()
-                       .dtype(torch::kInt)
-                       .device(torch::kCPU)
-                       .pinned_memory(true));
+  torch::Tensor tensor = torch::empty({static_cast<int64_t>(values.size())},
+                                      torch::TensorOptions()
+                                          .dtype(torch::kInt)
+                                          .device(torch::kCPU)
+                                          .pinned_memory(true));
   std::copy(values.begin(), values.end(), tensor.data_ptr<int32_t>());
   return tensor;
 #else
@@ -757,12 +756,11 @@ torch::Tensor host_to_device_async(const torch::Tensor& host_tensor,
   if (host_tensor.defined() && host_tensor.device().is_cpu() &&
       device_options.has_dtype() &&
       host_tensor.scalar_type() != device_options.dtype().toScalarType()) {
-    torch::Tensor staged =
-        torch::empty(host_tensor.sizes(),
-                     torch::TensorOptions()
-                         .dtype(device_options.dtype())
-                         .device(torch::kCPU)
-                         .pinned_memory(true));
+    torch::Tensor staged = torch::empty(host_tensor.sizes(),
+                                        torch::TensorOptions()
+                                            .dtype(device_options.dtype())
+                                            .device(torch::kCPU)
+                                            .pinned_memory(true));
     staged.copy_(host_tensor);
     return staged.to(device_options, /*non_blocking=*/true);
   }
@@ -775,6 +773,9 @@ void set_token_position_tensors(ForwardInput& input,
                                 const std::vector<int32_t>& positions,
                                 const torch::TensorOptions& token_options,
                                 const torch::TensorOptions& position_options) {
+  // Keep the backing buffer alive, but its serialized layout no longer
+  // describes these newly built speculative tokens and positions.
+  input.input_host_buffer_has_layout = false;
   input.device_tensors_ready = false;
   input.token_ids_host = make_cpu_int_tensor(token_ids);
   input.positions_host = make_cpu_int_tensor(positions);

@@ -460,6 +460,14 @@ torch::Tensor matmul(MatmulParams& params) {
 #elif defined(USE_NPU)
   return npu::matmul(params.a, params.b, params.bias);
 #elif defined(USE_MUSA)
+  // MUSA decode linear layers provide a persistent output workspace.  Keep
+  // the existing public gateway thin, but honor that workspace for the
+  // common 2-D no-bias graph contract so functional matmul does not allocate
+  // on every replay.
+  if (params.c.has_value() && !params.bias.has_value() && params.a.dim() == 2 &&
+      params.b.dim() == 2 && params.alpha == 1.0 && params.beta == 0.0) {
+    return musa::matmul(params.a, params.b, params.bias, params.c);
+  }
   return musa::matmul(params.a, params.b, params.bias);
 #elif defined(USE_CUDA)
   return cuda::matmul(params.a, params.b, params.bias);

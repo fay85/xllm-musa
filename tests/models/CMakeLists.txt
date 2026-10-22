@@ -2,6 +2,12 @@ include(cc_test)
 
 add_subdirectory(dit)
 
+cc_test(
+  NAME dspark_metadata_contract_test
+  SRCS dspark_metadata_contract_test.cpp
+  DEPS torch GTest::gtest_main glog::glog
+)
+
 if(USE_NPU)
   cc_test(
     NAME
