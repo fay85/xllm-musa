@@ -53,10 +53,15 @@ Measured with `run_sweep.sh 5 6 12` in the benchmark image on dev92 on
 
 ## Container image
 
-The image `xllm-musa:qwen38-vl-pd-20261023` is the development container the
-results were measured in, based on
-`registry.mthreads.com/presale/devtech/xllm:musa-mt-main-20261022-pcp`. It
-contains:
+The image `registry.mthreads.com/presale/devtech/xllm:musa-qwen38-vl-pd-20261023`
+is the development container the results were measured in.
+
+- **Format:** a single layer, about 43 GB.
+- **Origin:** based on
+  `registry.mthreads.com/presale/devtech/xllm:musa-mt-main-20261022-pcp`.
+- **Local name on dev92:** `xllm-musa:qwen38-vl-pd-20261023`.
+
+It contains:
 
 | Path | Content |
 |---|---|
@@ -67,12 +72,16 @@ contains:
 | `/workspace/xllm_vl_bench_ref` | the reference articles and photos behind the published numbers |
 
 The model is not in the image. Start the container with the GPUs and the
-model directory, then point `VL_MODEL` at the checkpoint:
+model directory. The image's default command (`bash -lc "sleep infinity"`)
+keeps the container running. Open a shell in it and point `VL_MODEL` at the
+checkpoint:
 
 ```bash
-docker run -it --privileged --network=host --shm-size=64g --ulimit memlock=-1 \
-  -v /path/to/models:/models \
-  xllm-musa:qwen38-vl-pd-20261023 /bin/bash
+docker pull registry.mthreads.com/presale/devtech/xllm:musa-qwen38-vl-pd-20261023
+docker run -d --name xllm-vl-bench --privileged --network=host --shm-size=64g \
+  --ulimit memlock=-1 -v /path/to/models:/models \
+  registry.mthreads.com/presale/devtech/xllm:musa-qwen38-vl-pd-20261023
+docker exec -it xllm-vl-bench bash
 export VL_MODEL=/models/Qwen3.8-27B-FP8
 ```
 
