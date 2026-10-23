@@ -19,11 +19,15 @@ limitations under the License.
 
 #include <algorithm>
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "core/layers/common/linear.h"
+#if defined(USE_MUSA)
+#include "core/layers/musa/pcp_context.h"
+#endif
 #include "core/layers/qwen3_5_decoder_layer.h"
 #include "models/llm/qwen3_next_hybrid_base.h"
 #include "models/model_registry.h"
@@ -190,6 +194,25 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
       hidden = embedding;
     }
 
+    const layer::AttentionMetadata* layer_metadata = &attn_metadata;
+#if defined(USE_MUSA)
+    std::optional<layer::musa_pcp::Context> pcp_context;
+    if (parallel_args_.cp_size() > 1) {
+      layer::musa_pcp::build_context(attn_metadata,
+                                     parallel_args_,
+                                     static_cast<int32_t>(tokens.size(0)),
+                                     &pcp_context);
+    }
+    if (pcp_context.has_value()) {
+      embedding =
+          layer::musa_pcp::shard_rows(embedding, *pcp_context, /*dim=*/0);
+      hidden = layer::musa_pcp::shard_rows(hidden, *pcp_context, /*dim=*/0);
+      positions = layer::musa_pcp::shard_rows(
+          positions, *pcp_context, /*dim=*/positions.dim() - 1);
+      layer_metadata = &pcp_context->local_metadata;
+    }
+#endif
+
     embedding = std::get<0>(pre_fc_norm_embedding_->forward(embedding));
     hidden = std::get<0>(pre_fc_norm_hidden_->forward(hidden));
     torch::Tensor mtp_hidden = fc_(torch::cat({embedding, hidden}, -1));
@@ -219,7 +242,7 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
       mtp_hidden = layers_[i]->forward(mtp_hidden,
                                        residual,
                                        positions,
-                                       attn_metadata,
+                                       *layer_metadata,
                                        kv_caches[i],
                                        input_params,
                                        mrope_cos_sin);
@@ -233,6 +256,11 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
     }
     auto [new_mtp_hidden, new_res] = norm_->forward(mtp_hidden, residual);
     mtp_hidden = new_mtp_hidden;
+#if defined(USE_MUSA)
+    if (pcp_context.has_value()) {
+      mtp_hidden = layer::musa_pcp::finish(mtp_hidden, *pcp_context);
+    }
+#endif
     return ModelOutput(mtp_hidden);
   }
 
