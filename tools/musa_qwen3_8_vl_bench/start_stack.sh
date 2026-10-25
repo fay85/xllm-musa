@@ -214,9 +214,9 @@ for ((k = 0; k < i; k++)); do
 done
 
 for _ in $(seq 180); do
-  curl -s -o /dev/null -m 2 "$MASTER_URL/v1/models" && break
+  curl -fsS -o /dev/null -m 2 "$MASTER_URL/readyz" && break
   sleep 1
 done
-curl -s -o /dev/null -m 2 "$MASTER_URL/v1/models" || die "master is not answering on $MASTER_URL"
+curl -fsS -o /dev/null -m 2 "$MASTER_URL/readyz" || die "master is not ready to accept traffic on $MASTER_URL/readyz"
 echo "logs: $RUN"
 echo READY

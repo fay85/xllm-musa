@@ -28,3 +28,5 @@ bash stop_stack.sh
 
 此固定配置默认关闭Graph VMM，保持历史大缓存/RR的开关口径。镜像中的新Engine包含VMM生命周期修复，
 可显式设置 `VL_ENABLE_GRAPH_VMM_POOL=true`；该路径已有原生GPU回归，尚不等同于完整VL性能资格。
+
+启动门控使用Service `/readyz`，不把 `/v1/models` 的200当作可接收流量。停止时先Engine，再前端/Coordinator，etcd最后停止。
