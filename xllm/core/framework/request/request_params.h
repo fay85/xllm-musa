@@ -100,6 +100,7 @@ struct RequestParams {
   // request id
   std::string request_id;
   std::string service_request_id = "";
+  std::optional<uint64_t> v2_attempt_seq;
   std::string source_xservice_addr = "";
   std::string x_request_id;
   std::string x_request_time;

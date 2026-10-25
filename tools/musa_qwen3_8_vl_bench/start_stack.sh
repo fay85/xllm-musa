@@ -4,7 +4,11 @@
 # pid list go to $RUNS_DIR/<timestamp>; $RUNS_DIR/current points at the
 # latest run. Prints READY on success.
 set -u
-source "$(dirname "$0")/env.sh"
+source "$(dirname "$0")/env.sh" || exit $?
+
+if [[ -n $MCCL_MIN_NCHANNELS_PIN ]]; then
+  export MCCL_MIN_NCHANNELS=$MCCL_MIN_NCHANNELS_PIN
+fi
 
 die() {
   echo "ERROR: $*" >&2
@@ -24,7 +28,7 @@ done
 # (master node), 62500+i (PD), 62600+20i+10r (transfer) and Mooncake RPC
 # 33000+100i+20r..+16; decode j uses 62700+j, 62800+10j, 62900+j, 63000+10j
 # and Mooncake RPC 34000+100j..+16.
-ports=("$ETCD_CLIENT_PORT" "$ETCD_PEER_PORT" "$MASTER_HTTP_PORT" "$MASTER_RPC_PORT")
+ports=("$ETCD_CLIENT_PORT" "$ETCD_PEER_PORT" "$MASTER_HTTP_PORT" "$MASTER_RPC_PORT" 64890 64891)
 i=0
 for gpus in $PREFILL_GPUS; do
   [[ $gpus =~ ^[0-9]+,[0-9]+$ ]] || die "prefill group '$gpus' must be two GPUs, e.g. 0,1"
@@ -59,9 +63,21 @@ ln -sfn "$RUN" "$RUNS_DIR/current"
 ln -sf "$RUST_TOKENIZERS_LIB" "$RUN/master_lib/librust_tokenizers.so"
 {
   echo "xllm_bin=$XLLM_BIN md5=$(md5sum < "$XLLM_BIN" | cut -c1-32)"
+  echo "master_bin=$MASTER_BIN md5=$(md5sum < "$MASTER_BIN" | cut -c1-32)"
   echo "xllm_commit=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
   echo "model=$MODEL conc=$CONC mtp_k=$MTP_K prefill_gpus=$PREFILL_GPUS decode_gpus=$DECODE_GPUS"
+  echo "batch_credit_max_grant_units=$BATCH_CREDIT_MAX_GRANT_UNITS batch_credit_max_grant_units_per_router_tenant=$BATCH_CREDIT_MAX_GRANT_UNITS_PER_ROUTER_TENANT"
+  echo "profile=$PROFILE enable_graph_vmm_pool=$ENABLE_GRAPH_VMM_POOL"
+  echo "service_vmodule=$SERVICE_VMODULE"
+  echo "max_memory_utilization=$MAX_MEMORY_UTILIZATION prefill_batch_wait_ms=$PREFILL_BATCH_WAIT_MS prefill_chunk_tokens=$PREFILL_CHUNK_TOKENS enable_in_batch_prefix_cache=$ENABLE_IN_BATCH_PREFIX_CACHE"
+  echo "mccl_min_nchannels=${MCCL_MIN_NCHANNELS:-unset} imccl_min_nchannels=${IMCCL_MIN_NCHANNELS:-unset}"
+  echo "batch_credit_safety_permyriad=$BATCH_CREDIT_SAFETY_PERMYRIAD"
 } > "$RUN/stack_info.txt"
+
+service_logging=()
+if [[ -n $SERVICE_VMODULE ]]; then
+  service_logging+=(--vmodule="$SERVICE_VMODULE")
+fi
 
 setsid "$ETCD_BIN" --name=vl-bench --data-dir="$RUN/etcd_data" \
   --listen-client-urls="http://127.0.0.1:$ETCD_CLIENT_PORT" \
@@ -81,22 +97,45 @@ LD_LIBRARY_PATH=$RUN/master_lib:/usr/lib:/usr/lib/x86_64-linux-gnu setsid "$MAST
   --http_server_port="$MASTER_HTTP_PORT" --rpc_server_port="$MASTER_RPC_PORT" \
   --tokenizer_path="$MASTER_TOKENIZER" --block_size=64 \
   --http_server_num_threads=4 --rpc_server_num_threads=4 --num_threads=4 --logtostderr=true \
+  "${service_logging[@]}" \
+  --batch_credit_max_grant_units="$BATCH_CREDIT_MAX_GRANT_UNITS" \
+  --batch_credit_safety_permyriad="$BATCH_CREDIT_SAFETY_PERMYRIAD" \
+  --batch_credit_max_grant_units_per_router_tenant="$BATCH_CREDIT_MAX_GRANT_UNITS_PER_ROUTER_TENANT" \
+  --internal_api_token=lab-local-token --service_deployment_role=ROUTER \
+  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy=RR \
+  --kv_route_mode=DISABLED \
   > "$RUN/master.log" 2>&1 < /dev/null &
 echo "master $!" >> "$RUN/pids.txt"
-sleep 5
+sleep 2
+# Engines block until this key exists. The router does not publish it.
+LD_LIBRARY_PATH=$RUN/master_lib:/usr/lib:/usr/lib/x86_64-linux-gnu setsid "$MASTER_BIN" \
+  --server_host="$HOST" --etcd_addr="127.0.0.1:$ETCD_CLIENT_PORT" \
+  --http_server_port=64890 --rpc_server_port=64891 \
+  --tokenizer_path="$MASTER_TOKENIZER" --block_size=64 \
+  --num_threads=2 --logtostderr=true \
+  "${service_logging[@]}" \
+  --batch_credit_max_grant_units="$BATCH_CREDIT_MAX_GRANT_UNITS" \
+  --batch_credit_safety_permyriad="$BATCH_CREDIT_SAFETY_PERMYRIAD" \
+  --batch_credit_max_grant_units_per_router_tenant="$BATCH_CREDIT_MAX_GRANT_UNITS_PER_ROUTER_TENANT" \
+  --internal_api_token=lab-local-token --service_deployment_role=COORDINATOR \
+  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy=RR \
+  --kv_route_mode=DISABLED \
+  > "$RUN/coordinator.log" 2>&1 < /dev/null &
+echo "coordinator $!" >> "$RUN/pids.txt"
+sleep 3
 
 common=(
   --model="$MODEL" --model_id="$MODEL_ID" --host="$HOST" --backend=vlm --random_seed=-1
-  --block_size=64 --max_memory_utilization=0.80
+  --block_size=64 --max_memory_utilization="$MAX_MEMORY_UTILIZATION"
   --max_concurrent_requests="$CONC" --max_seqs_per_batch="$CONC"
   --enable_prefix_cache=true --max_encoder_cache_size=256 --enable_chunked_prefill=true
   --enable_schedule_overlap=true --enable_graph=true --enable_graph_mode_decode_no_padding=true
-  --enable_graph_vmm_pool=false
+  --enable_graph_vmm_pool="$ENABLE_GRAPH_VMM_POOL"
   --draft_model="$MODEL" --speculative_algorithm=MTP --num_speculative_tokens="$MTP_K"
   --mtp_draft_vocab_path="$KIT_DIR/draft_vocab_65536.txt"
   --enable_mtp_draft_fp8_lm_head=true --enable_mtp_target_fp8_lm_head=true
   --enable_mtp_packed_verify_attention=true --enable_musa_fp8_skinny_gemm=true
-  --enable_disagg_pd=true --kv_cache_transfer_mode=PULL --kv_split_size=1
+  --enable_disagg_pd=true --enable_native_service_adapter=true --kv_cache_transfer_mode=PULL --kv_split_size=1
   --etcd_addr="127.0.0.1:$ETCD_CLIENT_PORT" --vmodule=disagg_pd_scheduler=1 --usercode_in_pthread=true
 )
 decode_flags=(
@@ -104,11 +143,13 @@ decode_flags=(
   --max_tokens_per_batch=32768 --max_tokens_per_chunk_for_prefill=2048
   --max_tokens_for_graph_mode=4096 --enable_prefill_piecewise_graph=false
 )
-# The prefix cache restores GDN state only at chunk boundaries, so a request
-# reuses a multiple of the 8192-token chunk: 32768 of its 40960 tokens.
+# The prefix cache restores GDN state at chunk boundaries. The default8192
+# reuses32768 of40960 tokens; changed chunks require per-request revalidation.
 prefill_flags=(
   --instance_role=PREFILL --nnodes=2 --cp_size=2
-  --max_tokens_per_batch=8192 --max_tokens_per_chunk_for_prefill=8192
+  --max_tokens_per_batch=8192 --max_tokens_per_chunk_for_prefill="$PREFILL_CHUNK_TOKENS"
+  --prefill_batch_wait_ms="$PREFILL_BATCH_WAIT_MS"
+  --enable_in_batch_prefix_cache="$ENABLE_IN_BATCH_PREFIX_CACHE"
   --max_tokens_for_graph_mode=8192 --enable_prefill_piecewise_graph=true
 )
 
@@ -173,9 +214,9 @@ for ((k = 0; k < i; k++)); do
 done
 
 for _ in $(seq 180); do
-  curl -s -o /dev/null -m 2 "$MASTER_URL/v1/models" && break
+  curl -fsS -o /dev/null -m 2 "$MASTER_URL/readyz" && break
   sleep 1
 done
-curl -s -o /dev/null -m 2 "$MASTER_URL/v1/models" || die "master is not answering on $MASTER_URL"
+curl -fsS -o /dev/null -m 2 "$MASTER_URL/readyz" || die "master is not ready to accept traffic on $MASTER_URL/readyz"
 echo "logs: $RUN"
 echo READY

@@ -1,3 +1,19 @@
+# Current deployment default: large cache + RR
+
+The default is now the named `large_kv_rr` profile (memory0.90, caps8192,
+MTP K2, RR-cursor-patched Service). See [profiles/README.md](profiles/README.md)
+for the exact settings, rollback, four-round protocol and historical-result boundaries.
+Run `bash profile_info.sh` before launch. The remainder of this document is the
+historical benchmark reference; its old "defaults" and short warmup protocol do
+not describe the current frozen release.
+
+The 2026-10-25 throughput profile is `VL_PROFILE=throughput_k3_vmm`
+(memory0.90, RR, K3, VMM enabled,16 requests per instance). See
+[MUSA_RELEASE_20261025.md](../../MUSA_RELEASE_20261025.md) for the C5/C6/C12
+measurements, companion Service, source provenance and rejected OOM settings.
+
+---
+
 # Qwen3.8-27B-FP8 VL PD benchmark on MUSA
 
 Scripts that build xllm and reproduce the disaggregated prefill/decode (PD)
@@ -53,15 +69,10 @@ Measured with `run_sweep.sh 5 6 12` in the benchmark image on dev92 on
 
 ## Container image
 
-The image `registry.mthreads.com/presale/devtech/xllm:musa-qwen38-vl-pd-20261023`
-is the development container the results were measured in.
-
-- **Format:** a single layer, about 43 GB.
-- **Origin:** based on
-  `registry.mthreads.com/presale/devtech/xllm:musa-mt-main-20261022-pcp`.
-- **Local name on dev92:** `xllm-musa:qwen38-vl-pd-20261023`.
-
-It contains:
+The image `xllm-musa:qwen38-vl-pd-20261023` is the development container the
+results were measured in, based on
+`registry.mthreads.com/presale/devtech/xllm:musa-mt-main-20261022-pcp`. It
+contains:
 
 | Path | Content |
 |---|---|
@@ -72,16 +83,12 @@ It contains:
 | `/workspace/xllm_vl_bench_ref` | the reference articles and photos behind the published numbers |
 
 The model is not in the image. Start the container with the GPUs and the
-model directory. The image's default command (`bash -lc "sleep infinity"`)
-keeps the container running. Open a shell in it and point `VL_MODEL` at the
-checkpoint:
+model directory, then point `VL_MODEL` at the checkpoint:
 
 ```bash
-docker pull registry.mthreads.com/presale/devtech/xllm:musa-qwen38-vl-pd-20261023
-docker run -d --name xllm-vl-bench --privileged --network=host --shm-size=64g \
-  --ulimit memlock=-1 -v /path/to/models:/models \
-  registry.mthreads.com/presale/devtech/xllm:musa-qwen38-vl-pd-20261023
-docker exec -it xllm-vl-bench bash
+docker run -it --privileged --network=host --shm-size=64g --ulimit memlock=-1 \
+  -v /path/to/models:/models \
+  xllm-musa:qwen38-vl-pd-20261023 /bin/bash
 export VL_MODEL=/models/Qwen3.8-27B-FP8
 ```
 

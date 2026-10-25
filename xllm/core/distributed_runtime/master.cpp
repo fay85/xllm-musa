@@ -431,12 +431,15 @@ std::optional<std::string> validate_model_cp(const Options& options,
   }
 
   if (Platform::is_musa()) {
+    // VLM+disagg_pd also runs under LLMEngine (see Master ctor), so CP is OK
+    // without speculative decoding when MTP is off.
     const bool llm_engine_target =
         engine_type == EngineType::LLM || engine_type == EngineType::SSM ||
-        (engine_type == EngineType::VLMSSM && options.enable_disagg_pd());
+        ((engine_type == EngineType::VLMSSM || engine_type == EngineType::VLM) &&
+         options.enable_disagg_pd());
     if (!llm_engine_target) {
-      return "MUSA CP supports only LLM-engine generation: text, or VLM with "
-             "speculative decoding under disaggregated PD";
+      return "MUSA CP supports only LLM-engine generation: text, or VLM under "
+             "disaggregated PD (with or without speculative decoding)";
     }
     if (options.task_type() != "generate") {
       return "MUSA CP supports only the generate task";
@@ -786,6 +789,9 @@ Master::Master(const Options& options, EngineType type)
         .cp_size(options_.cp_size())
         .instance_role(options_.instance_role())
         .enable_disagg_pd(options_.enable_disagg_pd())
+        .kv_cache_transfer_mode(options_.kv_cache_transfer_mode())
+        .transfer_listen_port(options_.transfer_listen_port())
+        .enable_service_routing(options_.enable_service_routing())
         .npu_kernel_backend(options_.npu_kernel_backend())
         .enable_chunked_prefill(options_.enable_chunked_prefill())
         .enable_offline_inference(options_.enable_offline_inference())
@@ -812,8 +818,14 @@ Master::Master(const Options& options, EngineType type)
         .max_tokens_per_chunk_for_prefill(
             options_.max_tokens_per_chunk_for_prefill());
 
-    auto engine = std::make_unique<VLMEngine>(eng_options);
-    engine_ = std::move(engine);
+    // VLMEngine has no KV transfer (get_cache_info/link_cluster unimplemented).
+    // Disaggregated VLM serving runs VLM workers under LLMEngine, matching
+    // the VLMSSM+disagg_pd speculative path.
+    if (options_.enable_disagg_pd()) {
+      engine_ = std::make_unique<LLMEngine>(eng_options);
+    } else {
+      engine_ = std::make_unique<VLMEngine>(eng_options);
+    }
   } else if (type == EngineType::SSM || type == EngineType::VLMSSM) {
     if (type == EngineType::VLMSSM) {
       CHECK(!options_.enable_pd_ooc())
