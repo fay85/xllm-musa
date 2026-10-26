@@ -277,7 +277,12 @@ void musa_long_prefill_host_barrier(ProcessGroup* process_group) {
   musa_group->long_prefill_host_barrier();
 }
 
+void register_musa_custom_all_reduce_kernel();
+
 void MusaCustomAllReduce::init() {
+  // Reference the kernel translation unit so its torch op registration is
+  // linked into this binary.
+  register_musa_custom_all_reduce_kernel();
   const c10::DeviceGuard device_guard(device_);
   CHECK(store_ != nullptr) << "Custom all-reduce requires a c10d store.";
 
