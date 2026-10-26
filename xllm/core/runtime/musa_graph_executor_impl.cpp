@@ -49,6 +49,7 @@ limitations under the License.
 #include "core/platform/musa_vmm_capture_pool.h"
 #include "core/runtime/decode_graph_bucket.h"
 #include "core/runtime/musa/graph_memory_policy.h"
+#include "core/runtime/musa/prefill_graph_policy.h"
 #include "core/util/env_var.h"
 #include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
@@ -2511,6 +2512,12 @@ bool MusaGraph::capture(CausalLM* model,
   LOG(INFO) << "MUSA graph capture begin, bucket_num_tokens: "
             << bucket_num_tokens
             << ", actual_num_tokens: " << actual_num_tokens;
+  size_t physical_free_before_warmup = 0;
+  size_t physical_total = 0;
+  if (is_piecewise_) {
+    CHECK_EQ(musaMemGetInfo(&physical_free_before_warmup, &physical_total),
+             musaSuccess);
+  }
 
   {
     // Normal capture mode for decode.
@@ -2555,6 +2562,16 @@ bool MusaGraph::capture(CausalLM* model,
       }
     }
     capture_stream.synchronize();
+
+    if (is_piecewise_) {
+      size_t physical_free_after_warmup = 0;
+      CHECK_EQ(musaMemGetInfo(&physical_free_after_warmup, &physical_total),
+               musaSuccess);
+      LOG(INFO) << "MUSA Prefill preparation: bucket_num_tokens="
+                << bucket_num_tokens << " physical_free_before_warmup="
+                << physical_free_before_warmup
+                << " physical_free_after_warmup=" << physical_free_after_warmup;
+    }
 
     // Record Mate FFI internal scratch allocations on one extra eager forward.
     // The Mate decode .so allocates via TVM-FFI's DLPackManagedTensorAllocator
@@ -3322,7 +3339,12 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     LOG(INFO) << "Lazy capturing MUSA piecewise prefill graph num_tokens="
               << graph_num_tokens << " (actual num_tokens: " << n_tokens
               << ") num_sequences=" << effective_num_sequences << " chunked="
-              << params.meta.batch_forward_type.is_chunked_prefill() << " done";
+              << params.meta.batch_forward_type.is_chunked_prefill()
+              << " retained_prefill_keys=" << prefill_graphs_.size() + 1
+              << " max_prefill_keys="
+              << ::xllm::ExecutionConfig::get_instance()
+                     .musa_prefill_graph_max_entries()
+              << " done";
     log_graph_memory_after_capture();
     auto& stored = prefill_graphs_[graph_key];
     stored = std::move(graph);
@@ -3684,9 +3706,28 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
       !params.embedding.linear_state_ids.empty()) {
     return false;
   }
-  return static_cast<int64_t>(num_tokens) <= max_tokens_for_graph_mode_ &&
-         static_cast<int64_t>(get_prefill_graph_num_tokens(
-             num_tokens, params)) <= options_.max_tokens_per_batch();
+  const int64_t bucket_num_tokens =
+      get_prefill_graph_num_tokens(num_tokens, params);
+  if (bucket_num_tokens <= 0 ||
+      bucket_num_tokens > max_tokens_for_graph_mode_ ||
+      bucket_num_tokens > options_.max_tokens_per_batch()) {
+    return false;
+  }
+  const bool cache_hit = prefill_graphs_.find(get_prefill_graph_key(
+                             num_tokens, params)) != prefill_graphs_.end();
+  const bool admitted =
+      can_admit_prefill_graph(prefill_graphs_.size(),
+                              execution_config.musa_prefill_graph_max_entries(),
+                              cache_hit);
+  if (!admitted) {
+    LOG_FIRST_N(WARNING, 8)
+        << "MUSA Prefill graph cache at limit: entries="
+        << prefill_graphs_.size()
+        << " limit=" << execution_config.musa_prefill_graph_max_entries()
+        << " bucket_num_tokens=" << bucket_num_tokens
+        << "; execute unseen shape eager without allocating another graph/VA";
+  }
+  return admitted;
 }
 
 uint32_t MusaGraphExecutorImpl::get_prefill_graph_num_tokens(
@@ -3698,8 +3739,13 @@ uint32_t MusaGraphExecutorImpl::get_prefill_graph_num_tokens(
   if (num_sequences > 1 && !params.embedding.linear_state_ids.empty()) {
     return num_tokens;
   }
-  return static_cast<uint32_t>(::xllm::runtime::get_decode_graph_token_bucket(
-      num_tokens, /*enable_no_padding=*/false));
+  const int64_t bucket_num_tokens =
+      prefill_graph_token_bucket(num_tokens,
+                                 ::xllm::ExecutionConfig::get_instance()
+                                     .musa_prefill_graph_token_stride());
+  return bucket_num_tokens <= options_.max_tokens_per_batch()
+             ? static_cast<uint32_t>(bucket_num_tokens)
+             : 0;
 }
 
 std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(

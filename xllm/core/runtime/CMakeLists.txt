@@ -27,6 +27,7 @@ cc_library(
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.h>
     $<$<BOOL:${USE_MUSA}>:musa_graph_executor_impl.h>
     $<$<BOOL:${USE_MUSA}>:musa/graph_memory_policy.h>
+    $<$<BOOL:${USE_MUSA}>:musa/prefill_graph_policy.h>
     $<$<BOOL:${USE_MUSA}>:musa/musa_model_args.h>
     $<$<BOOL:${USE_MUSA}>:musa/deepseek_v4_prefix_block_copy.h>
     py_executor_impl.h
