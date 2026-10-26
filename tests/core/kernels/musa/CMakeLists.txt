@@ -72,3 +72,11 @@ cc_test(
   DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
        GTest::gtest_main glog::glog
 )
+
+# Packed compressor layouts and request-local Graph projection equivalence.
+cc_test(
+  NAME deepseek_v4_joint_projection_test
+  SRCS deepseek_v4_joint_projection_test.cpp
+  DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
+       GTest::gtest_main glog::glog
+)

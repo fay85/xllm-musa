@@ -41,6 +41,7 @@ limitations under the License.
 #include "core/kernels/musa/musa_dsv4_compat.h"
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/ops_api.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_compressor_projection.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_graph_policy.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_graph_sequence.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_indexer_gemm.h"
@@ -3910,12 +3911,13 @@ DeepseekV4AttentionImpl::forward(
         if (compress_ratio_ == 4 && joint_env != nullptr &&
             std::string(joint_env) == "1" &&
             sp_joint_compressor_projection_weight_.defined()) {
-          kernel::MatmulParams compressor_params;
-          compressor_params.a = hidden_states;
-          compressor_params.b = sp_joint_compressor_projection_weight_;
-          compressor_params.bias = std::nullopt;
           batched_metadata.cp_input_dict[kDsv4BatchedCompressorMetadataKey] =
-              kernel::matmul(compressor_params);
+              dsv4_pack_compressor_projections(
+                  hidden_states,
+                  sp_joint_compressor_projection_weight_,
+                  width,
+                  compressor_coff_ * head_dim_,
+                  2 * index_head_dim_);
         } else if (compress_ratio_ == 128 && compressor_wkv_ &&
                    compressor_wgate_) {
           auto kv_steps = kernel::musa::matmul(hidden_states,
@@ -3982,12 +3984,14 @@ DeepseekV4AttentionImpl::forward(
       if (compress_ratio_ == 4 && joint_env != nullptr &&
           std::string(joint_env) == "1" &&
           sp_joint_compressor_projection_weight_.defined()) {
-        kernel::MatmulParams params;
-        params.a = hidden_states;
-        params.b = sp_joint_compressor_projection_weight_;
-        params.bias = std::nullopt;
-        batched_projections.emplace_back(kDsv4BatchedCompressorMetadataKey,
-                                         kernel::matmul(params));
+        batched_projections.emplace_back(
+            kDsv4BatchedCompressorMetadataKey,
+            dsv4_pack_compressor_projections(
+                hidden_states,
+                sp_joint_compressor_projection_weight_,
+                width,
+                compressor_coff_ * head_dim_,
+                2 * index_head_dim_));
       } else if (compress_ratio_ == 128 && compressor_wkv_ &&
                  compressor_wgate_) {
         auto kv_steps = kernel::musa::matmul(hidden_states,
@@ -6158,11 +6162,12 @@ DeepseekV4AttentionImpl::forward_current_impl(
     const int64_t output_rows = sequences * batched_compressed_stride;
     const int64_t main_width = compressor_coff_ * head_dim_;
     const int64_t index_width = 2 * index_head_dim_;
-    const auto& projections = batch_projection->second;
+    auto projections =
+        dsv4_compressor_projection_view(batch_projection->second,
+                                        main_width,
+                                        compress_ratio_ == 4 ? index_width : 0,
+                                        effective_use_indexer_attention);
     CHECK_EQ(projections.size(0), total_tokens);
-    CHECK_EQ(projections.size(1),
-             2 * main_width +
-                 (effective_use_indexer_attention ? 2 * index_width : 0));
     CHECK_GE(decode_compressor_output_.size(0), output_rows);
     CHECK_GE(decode_compressor_norm_output_.size(0), output_rows);
     CHECK_GE(decode_compressor_rope_output_.size(0), output_rows);
@@ -6594,12 +6599,16 @@ DeepseekV4AttentionImpl::forward_current_impl(
             const auto batch_compressor = attn_metadata.cp_input_dict.find(
                 kDsv4BatchedCompressorMetadataKey);
             if (batch_compressor != attn_metadata.cp_input_dict.end()) {
-              CHECK_EQ(batch_compressor->second.size(1),
-                       packed_projection_width);
-              packed_decode_projections = batch_compressor->second.narrow(
-                  /*dim=*/0,
-                  /*start=*/q_start,
-                  /*length=*/state_sequence_tokens);
+              packed_decode_projections =
+                  dsv4_compressor_projection_view(
+                      batch_compressor->second,
+                      main_projection_width,
+                      compress_ratio_ == 4 ? index_projection_width : 0,
+                      effective_use_indexer_attention)
+                      .narrow(
+                          /*dim=*/0,
+                          /*start=*/q_start,
+                          /*length=*/state_sequence_tokens);
             } else if (compress_ratio_ == 4 && joint_decode_env != nullptr &&
                        std::string(joint_decode_env) == "1" &&
                        sp_joint_compressor_projection_weight_.defined() &&
@@ -6615,14 +6624,15 @@ DeepseekV4AttentionImpl::forward_current_impl(
                       .narrow(
                           0, 0, state_sequence_tokens * packed_projection_width)
                       .view({state_sequence_tokens, packed_projection_width});
-              kernel::MatmulParams params;
-              params.a = hidden_seq.narrow(0, 0, state_sequence_tokens);
-              params.b = sp_joint_compressor_projection_weight_;
-              params.c = packed_decode_projections;
-              params.bias = std::nullopt;
-              packed_decode_projections = kernel::matmul(params);
+              packed_decode_projections = dsv4_pack_compressor_projections(
+                  hidden_seq.narrow(0, 0, state_sequence_tokens),
+                  sp_joint_compressor_projection_weight_,
+                  state_sequence_tokens,
+                  main_projection_width,
+                  index_projection_width,
+                  packed_decode_projections);
               LOG_FIRST_N(INFO, 1)
-                  << "[DSV4_JOINT_DECODE_PROJECTION] ratio=" << compress_ratio_
+                  << "[DSV4_PACKED_DECODE_PROJECTION] ratio=" << compress_ratio_
                   << " columns=" << packed_projection_width;
             }
             const int64_t sequence_rope_offset = decode_compressed_rope_offset;
