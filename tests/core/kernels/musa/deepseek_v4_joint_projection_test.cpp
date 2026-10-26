@@ -273,18 +273,21 @@ TEST_F(DeepseekV4JointProjectionGraphTest,
       input.copy_(torch::randn_like(input));
       packed_weight.copy_(torch::randn_like(packed_weight));
       EXPECT_EQ(musaDeviceSynchronize(), musaSuccess);
-      std::vector<torch::Tensor> expected_columns;
-      expected_columns.reserve(4);
-      int64_t offset = 0;
-      for (const int64_t width : {1024, 1024, 256, 256}) {
-        expected_columns.emplace_back(
-            ::xllm::kernel::musa::matmul(input,
-                                         packed_weight.narrow(0, offset, width),
-                                         std::nullopt,
-                                         std::nullopt));
-        offset += width;
+      for (int64_t sequence = 0; sequence < sequences; ++sequence) {
+        std::vector<torch::Tensor> expected_columns;
+        expected_columns.reserve(4);
+        int64_t offset = 0;
+        for (const int64_t width : {1024, 1024, 256, 256}) {
+          expected_columns.emplace_back(::xllm::kernel::musa::matmul(
+              input.narrow(0, sequence * 7, 7),
+              packed_weight.narrow(0, offset, width),
+              std::nullopt,
+              std::nullopt));
+          offset += width;
+        }
+        expected.narrow(0, sequence * 7, 7)
+            .copy_(torch::cat(expected_columns, /*dim=*/1));
       }
-      expected.copy_(torch::cat(expected_columns, /*dim=*/1));
       EXPECT_EQ(musaDeviceSynchronize(), musaSuccess);
       EXPECT_EQ(musaDeviceSynchronize(), musaSuccess);
       graph.replay();

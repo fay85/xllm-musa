@@ -39,30 +39,38 @@ inline torch::Tensor dsv4_pack_compressor_projections(
   CHECK_EQ(input.size(0) % query_width, 0);
   const int64_t sequences = input.size(0) / query_width;
   CHECK_GT(sequences, 0);
-  auto main_kv = main_kv_projection(input);
-  auto main_score = main_score_projection(input);
-  auto index_kv = index_kv_projection(input);
-  auto index_score = index_score_projection(input);
-  CHECK_EQ(main_kv.dim(), 2);
-  CHECK_EQ(main_score.dim(), 2);
-  CHECK_EQ(index_kv.dim(), 2);
-  CHECK_EQ(index_score.dim(), 2);
-  CHECK_EQ(main_kv.size(0), input.size(0));
-  CHECK_EQ(main_score.size(0), input.size(0));
-  CHECK_EQ(index_kv.size(0), input.size(0));
-  CHECK_EQ(index_score.size(0), input.size(0));
-  CHECK_EQ(main_kv.size(1), main_width);
-  CHECK_EQ(main_score.size(1), main_width);
-  CHECK_EQ(index_kv.size(1), index_width);
-  CHECK_EQ(index_score.size(1), index_width);
-  CHECK_EQ(main_kv.scalar_type(), main_score.scalar_type());
-  CHECK_EQ(main_kv.scalar_type(), index_kv.scalar_type());
-  CHECK_EQ(main_kv.scalar_type(), index_score.scalar_type());
-  torch::Tensor packed = torch::cat({main_kv.contiguous(),
-                                     main_score.contiguous(),
-                                     index_kv.contiguous(),
-                                     index_score.contiguous()},
-                                    /*dim=*/1);
+  std::vector<torch::Tensor> packed_sequences;
+  packed_sequences.reserve(sequences);
+  for (int64_t sequence = 0; sequence < sequences; ++sequence) {
+    auto local_input = input.narrow(0, sequence * query_width, query_width);
+    auto main_kv = main_kv_projection(local_input);
+    auto main_score = main_score_projection(local_input);
+    auto index_kv = index_kv_projection(local_input);
+    auto index_score = index_score_projection(local_input);
+    CHECK_EQ(main_kv.dim(), 2);
+    CHECK_EQ(main_score.dim(), 2);
+    CHECK_EQ(index_kv.dim(), 2);
+    CHECK_EQ(index_score.dim(), 2);
+    CHECK_EQ(main_kv.size(0), query_width);
+    CHECK_EQ(main_score.size(0), query_width);
+    CHECK_EQ(index_kv.size(0), query_width);
+    CHECK_EQ(index_score.size(0), query_width);
+    CHECK_EQ(main_kv.size(1), main_width);
+    CHECK_EQ(main_score.size(1), main_width);
+    CHECK_EQ(index_kv.size(1), index_width);
+    CHECK_EQ(index_score.size(1), index_width);
+    CHECK_EQ(main_kv.scalar_type(), main_score.scalar_type());
+    CHECK_EQ(main_kv.scalar_type(), index_kv.scalar_type());
+    CHECK_EQ(main_kv.scalar_type(), index_score.scalar_type());
+    packed_sequences.emplace_back(torch::cat({main_kv.contiguous(),
+                                              main_score.contiguous(),
+                                              index_kv.contiguous(),
+                                              index_score.contiguous()},
+                                             /*dim=*/1));
+  }
+  torch::Tensor packed = sequences == 1
+                             ? packed_sequences.front()
+                             : torch::cat(packed_sequences, /*dim=*/0);
   if (!output.has_value()) {
     return packed;
   }
