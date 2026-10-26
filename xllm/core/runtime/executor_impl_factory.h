@@ -53,18 +53,21 @@ class ExecutorImplFactory {
   std::unordered_map<std::string, Creator> creators_;
 };
 
-#define REGISTER_EXECUTOR(backend, class_type)                                 \
-  namespace {                                                                  \
-  bool class_type##_registered = []() -> bool {                                \
-    return ExecutorImplFactory::get_instance().register_creator(               \
-        backend,                                                               \
-        [](CausalLM* model,                                                    \
-           const ModelArgs& args,                                              \
-           const torch::Device& device,                                        \
-           const runtime::Options& options) -> std::unique_ptr<ExecutorImpl> { \
-          return std::make_unique<class_type>(model, args, device, options);   \
-        });                                                                    \
-  }();                                                                         \
+// Class-specific function pointers avoid anonymous-lambda numbering across
+// host and MUSA mapping translation units.
+#define REGISTER_EXECUTOR(backend, class_type)                         \
+  namespace {                                                          \
+  std::unique_ptr<ExecutorImpl> create_##class_type(                   \
+      CausalLM* model,                                                 \
+      const ModelArgs& args,                                           \
+      const torch::Device& device,                                     \
+      const runtime::Options& options) {                               \
+    return std::make_unique<class_type>(model, args, device, options); \
+  }                                                                    \
+  const bool class_type##_registered =                                 \
+      ExecutorImplFactory::get_instance().register_creator(            \
+          backend,                                                     \
+          create_##class_type);                                        \
   }
 
 }  // namespace xllm

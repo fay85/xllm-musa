@@ -20,6 +20,7 @@ limitations under the License.
 #include "common/global_flags.h"
 #include "common/metrics.h"
 #include "core/framework/config/execution_config.h"
+#include "core/runtime/base_executor_impl.h"
 #include "platform/device.h"
 #include "platform/platform.h"
 
@@ -29,12 +30,27 @@ VlmExecutorImpl::VlmExecutorImpl(CausalLM* model,
                                  const ModelArgs& args,
                                  const torch::Device& device,
                                  const runtime::Options& options)
-    : model_(dynamic_cast<CausalVLM*>(model)),
+    : model_base_(model),
+      model_(dynamic_cast<CausalVLM*>(model)),
       args_(args),
       device_(device),
       options_(options),
       encoder_executor_(options.max_encoder_cache_size() * 1024 * 1024) {
-  if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
+  if (model_ == nullptr) {
+    LOG(WARNING) << "VlmExecutorImpl received a non-VLM model; falling back "
+                    "to the LLM executor. backend="
+                 << options_.backend();
+    CHECK(model_base_ != nullptr) << "Executor requires a model.";
+    // Do not consult the same registry again on the eager fallback path.
+    // A broken registration could otherwise recursively create this executor.
+    if (options_.enable_graph()) {
+      llm_executor_ = ExecutorImplFactory::get_instance().create_executor_impl(
+          model_base_, args, device, options, Platform::type_str());
+    } else {
+      llm_executor_ = std::make_unique<BaseExecutorImpl>(
+          model_base_, args, device, options);
+    }
+  } else if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
     llm_executor_ = ExecutorImplFactory::get_instance().create_executor_impl(
         model, args, device, options, Platform::type_str());
   }
@@ -60,6 +76,12 @@ ModelOutput VlmExecutorImpl::run(const torch::Tensor& tokens,
                                  std::vector<KVCache>& kv_caches,
                                  const ModelInputParams& params) {
   torch::NoGradGuard no_grad;
+  if (model_ == nullptr) {
+    CHECK(llm_executor_ != nullptr)
+        << "Text-only model did not initialize the LLM executor.";
+    return llm_executor_->run(tokens, positions, kv_caches, params);
+  }
+
   auto& mm_data = params.multimodal.mm_data;
 
   // Pure decode carries no multimodal data. Its mRoPE positions degenerate to

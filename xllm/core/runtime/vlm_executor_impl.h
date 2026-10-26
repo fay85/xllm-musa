@@ -59,6 +59,9 @@ class VlmExecutorImpl : public ExecutorImpl {
   virtual MMDict encode(const ModelInputParams& params);
 
   // not own
+  // Keep the original pointer so a text-only model routed to this executor
+  // can safely fall back to the ordinary LLM path.
+  CausalLM* model_base_;
   CausalVLM* model_;
   ModelArgs args_;
   torch::Device device_;

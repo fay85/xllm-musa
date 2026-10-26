@@ -1,6 +1,13 @@
 include(cc_test)
 
 cc_test(
+  NAME executor_model_type_test
+  CPU_ONLY
+  SRCS executor_model_type_test.cpp
+  DEPS :runtime :batch :kv_cache :platform GTest::gtest_main
+)
+
+cc_test(
   NAME
     musa_prefill_graph_policy_test
   CPU_ONLY
