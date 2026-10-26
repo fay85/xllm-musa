@@ -56,3 +56,19 @@ cc_test(
     GTest::gtest_main
     glog::glog
 )
+
+# Indexer scoring is isolated from model loading and uses one MUSA device.
+cc_test(
+  NAME deepseek_v4_indexer_metadata_test
+  SRCS deepseek_v4_indexer_metadata_test.cpp
+  DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
+       GTest::gtest_main glog::glog
+)
+
+# Cached Prefill Gate projection and routing numerical checks on MUSA.
+cc_test(
+  NAME deepseek_v4_prefill_gate_test
+  SRCS deepseek_v4_prefill_gate_test.cpp
+  DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
+       GTest::gtest_main glog::glog
+)

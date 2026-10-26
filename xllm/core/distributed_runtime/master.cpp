@@ -441,14 +441,19 @@ std::optional<std::string> validate_model_cp(const Options& options,
     if (options.task_type() != "generate") {
       return "MUSA CP supports only the generate task";
     }
-    if (!is_qwen3_5_target_model_type(model_type)) {
-      return "MUSA CP supports only Qwen3.5 text targets, got model_type=" +
+    const bool deepseek_text_target = model_type == "deepseek_v4";
+    if (!is_qwen3_5_target_model_type(model_type) && !deepseek_text_target) {
+      return "MUSA CP supports only Qwen3.5 or DeepSeek-V4 text targets, got "
+             "model_type=" +
              model_type;
     }
     if (options.cp_size() != 2 || options.dp_size() != 1 ||
-        global_world_size != options.cp_size()) {
-      return "MUSA CP requires cp_size == 2, dp_size == 1 and world_size == "
-             "cp_size (no tensor parallelism)";
+        (deepseek_text_target ? (global_world_size % options.cp_size() != 0 ||
+                                 global_world_size / options.cp_size() < 1)
+                              : global_world_size != options.cp_size())) {
+      return "MUSA CP requires cp_size == 2, dp_size == 1; Qwen3.5 runs "
+             "world_size == cp_size (no tensor parallelism), DeepSeek-V4 "
+             "splits the world into CP groups over tensor-parallel ranks";
     }
     if (ParallelConfig::get_instance().kv_split_size_effective() != 1) {
       return "MUSA CP keeps the full KV cache on every CP rank; set "

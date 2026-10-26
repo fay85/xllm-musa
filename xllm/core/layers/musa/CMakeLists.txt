@@ -43,6 +43,7 @@ set(_MUSA_LAYERS_SRCS
   musa_fp8_linear.cpp
   deepseek_v4/deepseek_v4_attention.cpp
   deepseek_v4/deepseek_v4_decoder_layer.cpp
+  deepseek_v4/deepseek_v4_pcp_context.cpp
   deepseek_v4/dsa_metadata_builder_musa.cpp
   deepseek_v4/deepseek_v4_gate.cpp
   deepseek_v4/deepseek_v4_moe.cpp

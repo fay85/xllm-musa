@@ -58,6 +58,17 @@ class DeepseekV4DecoderLayerImpl final : public torch::nn::Module {
     sequence_parallel_context_ = context;
   }
 
+  void set_pcp_context(dsv4_musa_pcp::Context* context) {
+    pcp_context_ = context;
+    if (context != nullptr) {
+      attention_->set_pcp_context(context);
+      prefill_attention_->set_pcp_context(context);
+    } else {
+      attention_->set_pcp_context(nullptr);
+      prefill_attention_->set_pcp_context(nullptr);
+    }
+  }
+
   torch::Tensor forward(
       torch::Tensor& x,
       std::optional<torch::Tensor>& residual,
@@ -93,6 +104,7 @@ class DeepseekV4DecoderLayerImpl final : public torch::nn::Module {
   double hc_eps_ = 0.0;
   double norm_eps_ = 1e-6;
   const dsv4_musa_sp::DeepseekV4SPContext* sequence_parallel_context_ = nullptr;
+  dsv4_musa_pcp::Context* pcp_context_ = nullptr;
   torch::Tensor hc_pre_output_workspace_;
   torch::Tensor hc_pre_post_workspace_;
   torch::Tensor hc_pre_comb_workspace_;

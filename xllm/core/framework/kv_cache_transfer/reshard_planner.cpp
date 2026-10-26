@@ -13,20 +13,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "framework/kv_cache_transfer/reshard_planner.h"
+
 #include <algorithm>
+#include <cstdlib>
 #include <limits>
 #include <map>
 #include <numeric>
 #include <optional>
 #include <set>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include "framework/kv_cache/kv_cache_tensor_role.h"
-#include "framework/kv_cache_transfer/reshard_planner.h"
 
 namespace xllm {
 
@@ -764,7 +767,8 @@ void fold_contiguous_templates(std::vector<StridedRegionTemplate>* templates) {
       key.bytes_per_region = prev.bytes_per_region;
       if (prev.repeat_count == 1 && t.repeat_count == 1 &&
           same_template_key(prev, key) &&
-          !add_overflows(prev.local_offset_in_resource, prev.bytes_per_region) &&
+          !add_overflows(prev.local_offset_in_resource,
+                         prev.bytes_per_region) &&
           !add_overflows(prev.remote_offset_in_resource,
                          prev.bytes_per_region) &&
           prev.local_offset_in_resource + prev.bytes_per_region ==
@@ -1101,8 +1105,16 @@ Status select_source_writers(
   std::vector<AtomicLogicalRegion> destination_regions;
   expand_manifest(destination, SpanWriters::everything(), &destination_regions);
   const RegionGroups destination_groups = group_regions(destination_regions);
-  const bool collapse_partitions = !same_partition_sizes(
-      sources.front().coordinates, destination.coordinates);
+  const char* pcp_setting = std::getenv("XLLM_DSV4_PCP");
+  const bool pcp_enabled =
+      pcp_setting != nullptr && std::string_view(pcp_setting) == "1";
+  // Each PCP head group publishes a complete prompt over its TP4 head range.
+  // Decode TP8 needs the partition planner to select overlapping head spans.
+  const bool collapse_partitions =
+      !same_partition_sizes(sources.front().coordinates,
+                            destination.coordinates) ||
+      (pcp_enabled &&
+       sources.front().coordinates.tp_size != destination.coordinates.tp_size);
   // Writers for the homogeneous branch; unused when partitions collapse, where
   // the per-partition pair rules already carry the ownership.
   SpanWriters homogeneous_writers = SpanWriters::declared();
