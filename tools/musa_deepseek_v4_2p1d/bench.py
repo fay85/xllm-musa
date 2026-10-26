@@ -2,7 +2,7 @@
 # Copyright 2026 The xLLM Authors. All Rights Reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # https://www.apache.org/licenses/LICENSE-2.0
-"""Prepare and execute a fixed 80-percent prefix-sharing (40K input) concurrency sweep."""
+"""Prepare and execute an 80-percent prefix-sharing (20K or 40K) sweep."""
 
 from __future__ import annotations
 
@@ -90,11 +90,12 @@ def _ids_hash(ids: list[int]) -> str:
     return hashlib.sha256(json.dumps(ids, separators=(",", ":")).encode()).hexdigest()
 
 
-def _stage_plan() -> list[dict[str, Any]]:
+def _stage_plan(max_concurrency: int = 5) -> list[dict[str, Any]]:
     stages = [{"name": "primer", "phase": "primer", "concurrency": 1, "count": 2},
               {"name": "warm_probe", "phase": "probe", "concurrency": 1, "count": 2}]
     for round_index in range(1, ROUNDS + 1):
-        order = range(5, 0, -1) if round_index == 2 else range(1, 6)
+        order = (range(max_concurrency, 0, -1) if round_index == 2
+                 else range(1, max_concurrency + 1))
         stages.extend({"name": f"b{concurrency}_r{round_index}", "phase": "formal",
                        "round": round_index, "concurrency": concurrency,
                        "count": REQUESTS_PER_ROUND} for concurrency in order)
@@ -107,9 +108,10 @@ def _prefix_ids(tokenizer: Any, text: str) -> list[int]:
 
 
 def _make_shared_prefix(tokenizer: Any, run_nonce: str,
-                        filler: list[int]) -> tuple[str, list[int]]:
+                        filler: list[int],
+                        shared_tokens: int = SHARED_CHAT_TOKENS) -> tuple[str, list[int]]:
     header = run_nonce + "\nShared background notes (ignore for the answer):\n"
-    estimate = SHARED_CHAT_TOKENS - len(_prefix_ids(tokenizer, header + "\n\n"))
+    estimate = shared_tokens - len(_prefix_ids(tokenizer, header + "\n\n"))
     offsets = [0] + [offset for distance in range(1, 49) for offset in (-distance, distance)]
     for offset in offsets:
         length = estimate + offset
@@ -117,9 +119,9 @@ def _make_shared_prefix(tokenizer: Any, run_nonce: str,
         for padding in range(5):
             candidate = text + " x" * padding + "\n\n"
             ids = _prefix_ids(tokenizer, candidate)
-            if len(ids) == SHARED_CHAT_TOKENS:
+            if len(ids) == shared_tokens:
                 return candidate, ids
-    raise ValueError("Cannot construct exactly 32000 shared chat-prefix tokens")
+    raise ValueError(f"Cannot construct exactly {shared_tokens} shared chat-prefix tokens")
 
 
 def _lcp(left: list[int], right: list[int]) -> int:
@@ -135,24 +137,26 @@ def _make_case(tokenizer: Any, args: argparse.Namespace, stage: dict[str, Any],
     instruction = ("\n\nIgnore the background text. Output only consecutive integers "
                    "from 1 through 1000 separated by one ASCII space. "
                    "Do not add explanations or punctuation.")
-    estimate = INPUT_TOKENS - len(_chat_ids(tokenizer, header + instruction, args.template))
+    shared_tokens = args.input_tokens * 4 // 5
+    cached_tokens = shared_tokens // BLOCK_TOKENS * BLOCK_TOKENS
+    estimate = args.input_tokens - len(_chat_ids(tokenizer, header + instruction, args.template))
     offsets = [0] + [offset for distance in range(1, 33) for offset in (-distance, distance)]
     for offset in offsets:
         content = header + tokenizer.decode(filler[:estimate + offset])
         trial = content + instruction
         trial_ids = _chat_ids(tokenizer, trial, args.template)
-        gap = INPUT_TOKENS - len(trial_ids)
+        gap = args.input_tokens - len(trial_ids)
         for padding in ([0] if gap == 0 else [gap, gap - 1, gap + 1]):
             if padding < 0 or padding > 32:
                 continue
             prompt = content + " x" * padding + instruction
             ids = trial_ids if padding == 0 else _chat_ids(tokenizer, prompt, args.template)
-            if len(ids) != INPUT_TOKENS:
+            if len(ids) != args.input_tokens:
                 continue
-            prefix_length = INPUT_TOKENS if primer_ids is None else _lcp(primer_ids, ids)
+            prefix_length = args.input_tokens if primer_ids is None else _lcp(primer_ids, ids)
             if primer_ids is not None and not (
-                    abs(prefix_length - SHARED_CHAT_TOKENS) <= 8
-                    and prefix_length // BLOCK_TOKENS * BLOCK_TOKENS == EXPECTED_CACHED_TOKENS):
+                    abs(prefix_length - shared_tokens) <= 8
+                    and prefix_length // BLOCK_TOKENS * BLOCK_TOKENS == cached_tokens):
                 raise ValueError(f"Unexpected shared token boundary {prefix_length}: {request_id}")
             if prompt[len(shared):len(shared) + len(marker)] != marker or prompt.count(marker) != 1:
                 raise ValueError("The unique suffix marker must occur once immediately after the shared prefix")
@@ -161,13 +165,13 @@ def _make_case(tokenizer: Any, args: argparse.Namespace, stage: dict[str, Any],
                     "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(),
                     "shared_prefix_sha256": hashlib.sha256(shared.encode()).hexdigest(),
                     "unique_suffix_marker": marker, "primer_lcp_tokens": prefix_length,
-                    "expected_cached_tokens": 0 if stage["phase"] == "primer" else EXPECTED_CACHED_TOKENS,
+                    "expected_cached_tokens": 0 if stage["phase"] == "primer" else cached_tokens,
                     "payload": {"model": args.model,
                                 "messages": [{"role": "user", "content": prompt}],
                                 "chat_template_kwargs": {"thinking": False}, "temperature": 0,
                                 "max_tokens": OUTPUT_TOKENS, "ignore_eos": True,
                                 "stream": True, "stream_options": {"include_usage": True}}}, ids
-    raise ValueError(f"Cannot fit exactly 40000 tokens: {request_id}")
+    raise ValueError(f"Cannot fit exactly {args.input_tokens} tokens: {request_id}")
 
 
 def _output_contract(tokenizer: Any) -> dict[str, Any]:
@@ -202,14 +206,17 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
     run_id = uuid.uuid4().hex
     run_nonce = hashlib.sha256(run_id.encode()).hexdigest()
     unit_length = len(tokenizer.encode(CONTEXT))
-    filler = tokenizer.encode(CONTEXT * ((INPUT_TOKENS + 512) // unit_length + 20))
-    shared, shared_ids = _make_shared_prefix(tokenizer, run_nonce, filler)
-    stages = _stage_plan()
+    filler = tokenizer.encode(CONTEXT * ((args.input_tokens + 512) // unit_length + 20))
+    shared_tokens = args.input_tokens * 4 // 5
+    cached_tokens = shared_tokens // BLOCK_TOKENS * BLOCK_TOKENS
+    shared, shared_ids = _make_shared_prefix(tokenizer, run_nonce, filler, shared_tokens)
+    stages = _stage_plan(args.max_concurrency)
+    formal_requests = args.max_concurrency * ROUNDS * REQUESTS_PER_ROUND
     primer_ids = None
     ids_seen: set[str] = set()
     marker_seen: set[str] = set()
     hashes_seen: set[str] = set()
-    lcp_min, lcp_max = INPUT_TOKENS, 0
+    lcp_min, lcp_max = args.input_tokens, 0
     count = 0
     with (args.output_dir / "payloads.jsonl").open("x", encoding="utf-8", newline="\n") as stream:
         for stage in stages:
@@ -230,12 +237,12 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
                 stream.write(json.dumps(case, ensure_ascii=False, separators=(",", ":")) + "\n")
                 count += 1
             logger.info("Prepared %s: %d exact-length prompts", stage["name"], stage["count"])
-    if count != 324:
+    if count != formal_requests + 4:
         raise ValueError("Unexpected total prepared request count")
     prefix = {"run_nonce": run_nonce, "requested_ratio": 0.8,
-              "target_chat_tokens": SHARED_CHAT_TOKENS, "block_tokens": BLOCK_TOKENS,
-              "expected_cached_tokens": EXPECTED_CACHED_TOKENS,
-              "expected_cached_fraction": EXPECTED_CACHED_TOKENS / INPUT_TOKENS,
+              "target_chat_tokens": shared_tokens, "block_tokens": BLOCK_TOKENS,
+              "expected_cached_tokens": cached_tokens,
+              "expected_cached_fraction": cached_tokens / args.input_tokens,
               "snapshot_rule": "floor(floor(prompt_tokens * 80 / 100) / 128) * 128",
               "shared_prompt_text": shared,
               "shared_prefix_sha256": hashlib.sha256(shared.encode()).hexdigest(),
@@ -252,12 +259,12 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
                 "tokenizer_sha256": {name: _digest(args.tokenizer / name)
                                      for name in ("tokenizer.json", "tokenizer_config.json", "config.json")},
                 "payloads_file": "payloads.jsonl", "payloads_sha256": _digest(args.output_dir / "payloads.jsonl"),
-                "requests_including_warmup": count, "formal_requests": 320,
+                "requests_including_warmup": count, "formal_requests": formal_requests,
                 "prefix": prefix, "output_contract": output, "stages": stages,
                 "protocol": {"template": "deepseek-v4-cpp", "thinking": False,
                              "ignore_eos": True, "retries": 0, "warmup_excluded": True,
                              "primer_excluded": True, "warm_probe_excluded": True,
-                             "concurrency_order": [list(range(1, 6)), list(range(5, 0, -1))],
+                             "concurrency_order": [args.batches, list(reversed(args.batches))],
                              "cache_policy": "primer=0; probe/formal=exact fixed 80-percent snapshot boundary",
                              "ttft": "first content minus HTTP request start",
                              "tpot": "(last content - first content) / (actual completion_tokens - 1)",
@@ -265,10 +272,10 @@ def _prepare(args: argparse.Namespace) -> dict[str, Any]:
                              "uncached_input_throughput": "(prompt usage - cached usage) / complete stage wall"}}
     _write_json(args.output_dir / "manifest.json", manifest)
     result = {"prepared": True, "inference_executed": False, "requests": count,
-              "formal_requests": 320, "output_dir": str(args.output_dir),
+              "formal_requests": formal_requests, "output_dir": str(args.output_dir),
               "manifest_sha256": _digest(args.output_dir / "manifest.json"),
               "payloads_sha256": manifest["payloads_sha256"],
-              "shared_chat_tokens": len(shared_ids), "expected_cached_tokens": EXPECTED_CACHED_TOKENS,
+              "shared_chat_tokens": len(shared_ids), "expected_cached_tokens": cached_tokens,
               "nonprimer_lcp_min": lcp_min, "nonprimer_lcp_max": lcp_max}
     _write_json(args.output_dir / "prepare_result.json", result)
     return result
@@ -456,15 +463,16 @@ def _execute_prepared(cli: argparse.Namespace) -> dict[str, Any]:
     directory = cli.output_dir
     manifest = json.loads((directory / "manifest.json").read_text(encoding="utf-8"))
     prepared = json.loads((directory / "prepare_result.json").read_text(encoding="utf-8"))
+    args = argparse.Namespace(**manifest["arguments"])
     if (manifest["schema_version"] != 1 or manifest["script_sha256"] != _digest(Path(__file__))
-            or manifest["stages"] != _stage_plan()
+            or manifest["stages"] != _stage_plan(args.max_concurrency)
             or prepared["manifest_sha256"] != _digest(directory / "manifest.json")
             or manifest["payloads_sha256"] != _digest(directory / "payloads.jsonl")
             or prepared["payloads_sha256"] != manifest["payloads_sha256"]):
         raise ValueError("Prepared script, manifest, stage plan, or payload bytes changed")
-    args = argparse.Namespace(**manifest["arguments"])
-    if (args.input_tokens != INPUT_TOKENS or args.output_tokens != OUTPUT_TOKENS
-            or args.batches != list(range(1, 6)) or args.rounds != ROUNDS
+    if (args.input_tokens not in (20000, 40000) or args.output_tokens != OUTPUT_TOKENS
+            or not 1 <= args.max_concurrency <= 16
+            or args.batches != list(range(1, args.max_concurrency + 1)) or args.rounds != ROUNDS
             or args.requests_per_round != REQUESTS_PER_ROUND
             or args.template != "deepseek-v4-cpp" or Path(args.output_dir) != directory):
         raise ValueError("Prepared benchmark dimensions or directory changed")
@@ -526,10 +534,13 @@ def main() -> int:
     parser.add_argument("--model")
     parser.add_argument("--tokenizer", type=Path)
     parser.add_argument("--timeout", type=float, default=600)
+    parser.add_argument("--input-tokens", type=int, choices=(20000, 40000))
+    parser.add_argument("--max-concurrency", type=int, choices=range(1, 17))
     args = parser.parse_args()
     args.output_dir = args.output_dir.resolve()
     if args.execute_prepared:
-        if args.base_url or args.model or args.tokenizer:
+        if (args.base_url or args.model or args.tokenizer
+                or args.input_tokens is not None or args.max_concurrency is not None):
             parser.error("execute-prepared uses only the frozen URL/model/tokenizer; omit overrides")
         result = _execute_prepared(args)
     else:
@@ -546,8 +557,11 @@ def main() -> int:
         if json.loads((args.tokenizer / "config.json").read_text()).get("model_type") != "deepseek_v4":
             raise ValueError("Expected DeepSeek V4 tokenizer and chat template")
         args.url = origin.removesuffix("/v1") + "/v1/chat/completions"
-        args.template, args.input_tokens, args.output_tokens = "deepseek-v4-cpp", INPUT_TOKENS, OUTPUT_TOKENS
-        args.batches, args.rounds, args.requests_per_round = list(range(1, 6)), ROUNDS, REQUESTS_PER_ROUND
+        args.input_tokens = args.input_tokens or INPUT_TOKENS
+        args.max_concurrency = args.max_concurrency or 5
+        args.template, args.output_tokens = "deepseek-v4-cpp", OUTPUT_TOKENS
+        args.batches = list(range(1, args.max_concurrency + 1))
+        args.rounds, args.requests_per_round = ROUNDS, REQUESTS_PER_ROUND
         result = _prepare(args)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0 if result.get("prepared") or result.get("passed") else 2
