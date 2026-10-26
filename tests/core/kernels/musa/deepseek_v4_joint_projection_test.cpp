@@ -226,38 +226,76 @@ TEST_F(DeepseekV4JointProjectionGraphTest,
     }
     torch::Tensor packed_weight = torch::cat(weights, 0);
     torch::Tensor expected = torch::empty({rows, 2560}, input.options());
+    auto pack_projection = [&]() {
+      return layer::dsv4_pack_compressor_projections(
+          input,
+          /*query_width=*/7,
+          /*main_width=*/1024,
+          /*index_width=*/256,
+          [&](const torch::Tensor& value) {
+            return ::xllm::kernel::musa::matmul(
+                value,
+                packed_weight.narrow(/*dim=*/0, /*start=*/0, /*length=*/1024),
+                std::nullopt,
+                std::nullopt);
+          },
+          [&](const torch::Tensor& value) {
+            return ::xllm::kernel::musa::matmul(
+                value,
+                packed_weight.narrow(
+                    /*dim=*/0, /*start=*/1024, /*length=*/1024),
+                std::nullopt,
+                std::nullopt);
+          },
+          [&](const torch::Tensor& value) {
+            return ::xllm::kernel::musa::matmul(
+                value,
+                packed_weight.narrow(/*dim=*/0, /*start=*/2048, /*length=*/256),
+                std::nullopt,
+                std::nullopt);
+          },
+          [&](const torch::Tensor& value) {
+            return ::xllm::kernel::musa::matmul(
+                value,
+                packed_weight.narrow(/*dim=*/0, /*start=*/2304, /*length=*/256),
+                std::nullopt,
+                std::nullopt);
+          });
+    };
     EXPECT_EQ(musaDeviceSynchronize(), musaSuccess);
-    layer::dsv4_pack_compressor_projections(input, packed_weight, 7, 1024, 256);
+    pack_projection();
     EXPECT_EQ(musaDeviceSynchronize(), musaSuccess);
     at::musa::MUSAGraph graph;
     graph.capture_begin();
-    torch::Tensor actual = layer::dsv4_pack_compressor_projections(
-        input, packed_weight, 7, 1024, 256);
+    torch::Tensor actual = pack_projection();
     graph.capture_end();
     for (int32_t iteration = 0; iteration < 3; ++iteration) {
       input.copy_(torch::randn_like(input));
       packed_weight.copy_(torch::randn_like(packed_weight));
       EXPECT_EQ(musaDeviceSynchronize(), musaSuccess);
-      for (int64_t sequence = 0; sequence < sequences; ++sequence) {
-        int64_t offset = 0;
-        for (const int64_t width : {1024, 1024, 256, 256}) {
-          torch::Tensor output = torch::empty({7, width}, input.options());
-          ::xllm::kernel::musa::matmul(input.narrow(0, sequence * 7, 7),
-                                       packed_weight.narrow(0, offset, width),
-                                       std::nullopt,
-                                       output);
-          EXPECT_EQ(musaDeviceSynchronize(), musaSuccess);
-          expected.narrow(0, sequence * 7, 7)
-              .narrow(1, offset, width)
-              .copy_(output);
-          offset += width;
-        }
+      std::vector<torch::Tensor> expected_columns;
+      expected_columns.reserve(4);
+      int64_t offset = 0;
+      for (const int64_t width : {1024, 1024, 256, 256}) {
+        expected_columns.emplace_back(
+            ::xllm::kernel::musa::matmul(input,
+                                         packed_weight.narrow(0, offset, width),
+                                         std::nullopt,
+                                         std::nullopt));
+        offset += width;
       }
+      expected.copy_(torch::cat(expected_columns, /*dim=*/1));
+      EXPECT_EQ(musaDeviceSynchronize(), musaSuccess);
       EXPECT_EQ(musaDeviceSynchronize(), musaSuccess);
       graph.replay();
       EXPECT_EQ(musaDeviceSynchronize(), musaSuccess);
+      const torch::Tensor diff = (actual.cpu().to(torch::kFloat32) -
+                                  expected.cpu().to(torch::kFloat32))
+                                     .abs();
       EXPECT_TRUE(torch::equal(actual.cpu(), expected.cpu()))
-          << "sequences=" << sequences << " iteration=" << iteration;
+          << "sequences=" << sequences << " iteration=" << iteration
+          << " max_diff=" << diff.max().item<float>()
+          << " changed=" << (diff != 0).sum().item<int64_t>();
     }
   }
 }

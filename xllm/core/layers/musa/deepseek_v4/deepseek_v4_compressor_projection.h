@@ -6,7 +6,6 @@ Licensed under the Apache License, Version 2.0.
 #include <glog/logging.h>
 #include <torch/torch.h>
 
-#include <array>
 #include <cstdint>
 #include <optional>
 #include <vector>
@@ -19,46 +18,51 @@ namespace xllm::layer {
 // independent compressor path. A single wider GEMM can choose a different
 // reduction kernel (including bypassing the <=8-row Indexer GEMM) and change
 // BF16 rounding. Packing these results still enables batched compression.
+template <typename MainKvProjection,
+          typename MainScoreProjection,
+          typename IndexKvProjection,
+          typename IndexScoreProjection>
 inline torch::Tensor dsv4_pack_compressor_projections(
     const torch::Tensor& input,
-    const torch::Tensor& packed_weight,
     int64_t query_width,
     int64_t main_width,
     int64_t index_width,
+    MainKvProjection&& main_kv_projection,
+    MainScoreProjection&& main_score_projection,
+    IndexKvProjection&& index_kv_projection,
+    IndexScoreProjection&& index_score_projection,
     const std::optional<torch::Tensor>& output = std::nullopt) {
   CHECK_EQ(input.dim(), 2);
-  CHECK_EQ(packed_weight.dim(), 2);
   CHECK_GT(query_width, 0);
   CHECK_GT(main_width, 0);
   CHECK_GT(index_width, 0);
   CHECK_EQ(input.size(0) % query_width, 0);
-  CHECK_EQ(input.size(1), packed_weight.size(1));
-  CHECK_EQ(packed_weight.size(0), 2 * main_width + 2 * index_width);
   const int64_t sequences = input.size(0) / query_width;
   CHECK_GT(sequences, 0);
-  const std::array<int64_t, 4> widths{
-      main_width, main_width, index_width, index_width};
-  std::vector<torch::Tensor> packed_sequences;
-  packed_sequences.reserve(sequences);
-  for (int64_t sequence = 0; sequence < sequences; ++sequence) {
-    auto local_input = input.narrow(0, sequence * query_width, query_width);
-    std::vector<torch::Tensor> projections;
-    projections.reserve(widths.size());
-    int64_t offset = 0;
-    for (const int64_t width : widths) {
-      auto buffer = torch::empty({query_width, width}, input.options());
-      projections.emplace_back(
-          kernel::musa::matmul(local_input,
-                               packed_weight.narrow(0, offset, width),
-                               /*bias=*/std::nullopt,
-                               buffer));
-      offset += width;
-    }
-    packed_sequences.emplace_back(torch::cat(projections, /*dim=*/1));
-  }
-  torch::Tensor packed = sequences == 1
-                             ? packed_sequences.front()
-                             : torch::cat(packed_sequences, /*dim=*/0);
+  auto main_kv = main_kv_projection(input);
+  auto main_score = main_score_projection(input);
+  auto index_kv = index_kv_projection(input);
+  auto index_score = index_score_projection(input);
+  CHECK_EQ(main_kv.dim(), 2);
+  CHECK_EQ(main_score.dim(), 2);
+  CHECK_EQ(index_kv.dim(), 2);
+  CHECK_EQ(index_score.dim(), 2);
+  CHECK_EQ(main_kv.size(0), input.size(0));
+  CHECK_EQ(main_score.size(0), input.size(0));
+  CHECK_EQ(index_kv.size(0), input.size(0));
+  CHECK_EQ(index_score.size(0), input.size(0));
+  CHECK_EQ(main_kv.size(1), main_width);
+  CHECK_EQ(main_score.size(1), main_width);
+  CHECK_EQ(index_kv.size(1), index_width);
+  CHECK_EQ(index_score.size(1), index_width);
+  CHECK_EQ(main_kv.scalar_type(), main_score.scalar_type());
+  CHECK_EQ(main_kv.scalar_type(), index_kv.scalar_type());
+  CHECK_EQ(main_kv.scalar_type(), index_score.scalar_type());
+  torch::Tensor packed = torch::cat({main_kv.contiguous(),
+                                     main_score.contiguous(),
+                                     index_kv.contiguous(),
+                                     index_score.contiguous()},
+                                    /*dim=*/1);
   if (!output.has_value()) {
     return packed;
   }
