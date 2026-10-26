@@ -527,7 +527,7 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   bool use_prefill_piecewise_graph(uint32_t num_tokens,
                                    const ModelInputParams& params) const;
 
-  // Prefill graphs use the decode token buckets with padding. Multi-sequence
+  // Prefill graphs use their own coarse token buckets. Multi-sequence
   // GDN batches keep their exact token count, because their runners read the
   // padded per-sequence layout recorded from host lengths.
   uint32_t get_prefill_graph_num_tokens(uint32_t num_tokens,
