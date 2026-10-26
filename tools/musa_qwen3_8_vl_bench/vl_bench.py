@@ -176,7 +176,12 @@ def stream_chat(url: str, model: str, content: str, osl: int, request_id: str, t
     first = last = None
     pieces = []
     completion_tokens = None
-    with urllib.request.urlopen(request, timeout=timeout) as response:
+    try:
+        response_cm = urllib.request.urlopen(request, timeout=timeout)
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")[:800]
+        raise RuntimeError(f"HTTP {exc.code}: {detail}") from exc
+    with response_cm as response:
         for raw in response:
             line = raw.decode("utf-8", "replace").strip()
             if not line.startswith("data:") or line[5:].strip() == "[DONE]":

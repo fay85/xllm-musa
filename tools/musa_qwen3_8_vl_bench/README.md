@@ -1,3 +1,19 @@
+# Current deployment default: large cache + RR
+
+The default is now the named `large_kv_rr` profile (memory0.90, caps8192,
+MTP K2, RR-cursor-patched Service). See [profiles/README.md](profiles/README.md)
+for the exact settings, rollback, four-round protocol and historical-result boundaries.
+Run `bash profile_info.sh` before launch. The remainder of this document is the
+historical benchmark reference; its old "defaults" and short warmup protocol do
+not describe the current frozen release.
+
+The 2026-10-25 throughput profile is `VL_PROFILE=throughput_k3_vmm`
+(memory0.90, RR, K3, VMM enabled,16 requests per instance). See
+[MUSA_RELEASE_20261025.md](../../MUSA_RELEASE_20261025.md) for the C5/C6/C12
+measurements, companion Service, source provenance and rejected OOM settings.
+
+---
+
 # Qwen3.8-27B-FP8 VL PD benchmark on MUSA
 
 Scripts that build xllm and reproduce the disaggregated prefill/decode (PD)
