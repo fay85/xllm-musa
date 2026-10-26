@@ -1,0 +1,37 @@
+[
+  {
+    "file": "01_us_capitol.jpg",
+    "commons_file": "United_States_Capitol_-_west_front.jpg",
+    "license": "Public domain",
+    "author": "Architect of the Capitol",
+    "crop": ["center", "center"]
+  },
+  {
+    "file": "02_supreme_court.jpg",
+    "commons_file": "US_Supreme_Court.JPG",
+    "license": "CC BY-SA 3.0",
+    "author": "Kjetil Ree",
+    "crop": ["center", "top"]
+  },
+  {
+    "file": "03_kremlin.jpg",
+    "commons_file": "View_to_Moscow_river_from_Bolshoy_Moskvoretsky_Bridge.jpg",
+    "license": "CC BY 3.0",
+    "author": "Anton Zelenov",
+    "crop": ["right", "center"]
+  },
+  {
+    "file": "04_oil_tanker.jpg",
+    "commons_file": "Solomon_Sea_(oil_tanker),_in_the_Solent,_England.jpg",
+    "license": "CC BY-SA 4.0",
+    "author": "ITookSomePhotos",
+    "crop": ["center", "center"]
+  },
+  {
+    "file": "05_budget_airline.jpg",
+    "commons_file": "Boeing_737_8AS_-_EI-DLV_from_Ryanair_after_landing_at_LFBT_airport.jpg",
+    "license": "CC BY-SA 4.0",
+    "author": "Hugo LUC",
+    "crop": ["center", "center"]
+  }
+]

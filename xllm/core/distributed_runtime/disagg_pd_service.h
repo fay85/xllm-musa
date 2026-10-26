@@ -60,6 +60,26 @@ class DisaggPDService : public proto::DisaggPDService {
                       proto::Status* response,
                       ::google::protobuf::Closure* done) override;
 
+  void EnsureLink(::google::protobuf::RpcController* controller,
+                  const proto::EnsureLinkRequest* request,
+                  proto::EnsureLinkResult* response,
+                  ::google::protobuf::Closure* done) override;
+
+  void DrainLink(::google::protobuf::RpcController* controller,
+                 const proto::DrainLinkRequest* request,
+                 proto::EnsureLinkResult* response,
+                 ::google::protobuf::Closure* done) override;
+
+  void QueryRequest(::google::protobuf::RpcController* controller,
+                    const proto::AttemptControlRequest* request,
+                    proto::AttemptControlResponse* response,
+                    ::google::protobuf::Closure* done) override;
+
+  void CancelRequest(::google::protobuf::RpcController* controller,
+                     const proto::AttemptControlRequest* request,
+                     proto::AttemptControlResponse* response,
+                     ::google::protobuf::Closure* done) override;
+
   void ReleaseReservation(::google::protobuf::RpcController* controller,
                           const proto::ReleaseReservationRequest* request,
                           proto::ReleaseReservationResponse* response,

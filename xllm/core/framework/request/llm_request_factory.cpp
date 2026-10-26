@@ -370,13 +370,17 @@ std::shared_ptr<Request> LLMRequestFactory::create(
 
   rate_limit_guard.dismiss();
   // add one sequence, rest will be added by scheduler
-  return std::make_shared<Request>(sp.request_id,
-                                   sp.x_request_id,
-                                   sp.x_request_time,
-                                   std::move(req_state),
-                                   sp.service_request_id,
-                                   sp.source_xservice_addr,
-                                   rate_limiter_);
+  auto request = std::make_shared<Request>(sp.request_id,
+                                           sp.x_request_id,
+                                           sp.x_request_time,
+                                           std::move(req_state),
+                                           sp.service_request_id,
+                                           sp.source_xservice_addr,
+                                           rate_limiter_);
+  if (sp.v2_attempt_seq.has_value()) {
+    request->set_v2_attempt_seq(*sp.v2_attempt_seq);
+  }
+  return request;
 }
 
 std::shared_ptr<Request> LLMRequestFactory::create(

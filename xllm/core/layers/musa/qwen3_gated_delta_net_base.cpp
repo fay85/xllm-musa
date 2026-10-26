@@ -894,10 +894,13 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
           : ba_padded.view({batch_size * seq_len, ba_padded.size(-1)});
   const int64_t local_nk = num_k_heads_ / tp_size_;
   const int64_t local_nv = num_v_heads_ / tp_size_;
+  const bool is_any_prefill =
+      attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
   torch::Tensor mixed_qkv, z, b, a;
-  if (use_spec_verify && uses_contiguous_qkvzba_layout()) {
+  if ((use_spec_verify || is_any_prefill) && uses_contiguous_qkvzba_layout()) {
     // Each token row already holds [q | k | v | z] and [b | a], and every
-    // spec-verify consumer accepts strided rows, so no split copy is needed.
+    // spec-verify and prefill consumer accepts strided rows, so no split copy
+    // is needed.
     const int64_t qkv_dim =
         2 * local_nk * head_k_dim_ + local_nv * head_v_dim_;
     mixed_qkv = qkvz_flat.narrow(/*dim=*/-1, /*start=*/0, /*length=*/qkv_dim);
@@ -942,8 +945,6 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   }
   const int32_t gdn_layer_id =
       attn_metadata.plan_info != nullptr ? attn_metadata.plan_info->layer_id : 0;
-  const bool is_any_prefill =
-      attn_metadata.is_prefill || attn_metadata.is_chunked_prefill;
   // Exclude chunked-prefill: seq_len==1 chunked batches must not take the fused
   // decode path (that skips process_mixed_qkv while still hitting prefill
   // attn).
@@ -1643,7 +1644,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_unpad(
     valid_batches.emplace_back(valid_batch);
   }
   if (valid_batches.size() == 1) {
-    return valid_batches[0].contiguous();
+    return valid_batches[0];
   }
   return torch::cat(valid_batches, 0).contiguous();
 }

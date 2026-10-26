@@ -188,8 +188,8 @@ endfunction()
 # Set default build type
 if(NOT CMAKE_BUILD_TYPE)
   message(STATUS "Build type not set - defaulting to Release")
-  set(CMAKE_BUILD_TYPE "Release" 
-      CACHE STRING "Choose the type of build from: Debug Release RelWithDebInfo MinSizeRel Coverage." 
+  set(CMAKE_BUILD_TYPE "Release"
+      CACHE STRING "Choose the type of build from: Debug Release RelWithDebInfo MinSizeRel Coverage."
       FORCE
   )
 endif()
@@ -353,7 +353,7 @@ if(DEVICE_ARCH STREQUAL "ARM")
        add_compile_options(-march=armv8.2-a+dotprod+crypto)
        message(STATUS "ARM: using -march=armv8.2-a+dotprod+crypto for optimal ISA")
    else()
-        add_compile_options(-march=native) 
+        add_compile_options(-march=native)
         message(STATUS "ARM: using -march=native (cross-compile fallback)")
    endif()
 endif()
@@ -672,7 +672,7 @@ if(USE_MUSA)
     message(FATAL_ERROR
             "TVM FFI headers or libraries missing under ${_TVM_FFI_ROOT}")
   endif()
-  
+
 
   include_directories(
       ${MUSA_INCLUDE_DIRS}

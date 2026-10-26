@@ -1839,4 +1839,72 @@ void APIService::ResumeHttp(::google::protobuf::RpcController* controller,
   ctrl->response_attachment().append(json_output);
 }
 
+namespace {
+
+void fill_provider_lifecycle(const proto::ProviderLifecycleCommand* request,
+                             proto::ProviderLifecycleResponse* response,
+                             bool execute) {
+  if (response == nullptr) {
+    return;
+  }
+  response->Clear();
+  if (request == nullptr || request->operation_id().empty() ||
+      request->engine_uid().empty() || request->engine_incarnation().empty() ||
+      request->leader_epoch() == 0) {
+    response->set_code(proto::PROVIDER_LIFECYCLE_CODE_INVALID);
+    response->set_lifecycle(proto::ENGINE_LIFECYCLE_READY);
+    response->set_message("incomplete lifecycle command");
+    return;
+  }
+  response->set_operation_id(request->operation_id());
+  response->set_action(request->action());
+  response->set_leader_incarnation(request->leader_incarnation());
+  response->set_leader_epoch(request->leader_epoch());
+  response->set_desired_generation(request->desired_generation());
+  response->set_engine_uid(request->engine_uid());
+  response->set_engine_incarnation(request->engine_incarnation());
+  response->set_replayed(false);
+  proto::ProviderDrainProof* drain = response->mutable_drain();
+  drain->set_admission_closed(false);
+  if (!execute ||
+      request->action() == proto::PROVIDER_LIFECYCLE_ACTION_CANCEL_DRAIN) {
+    response->set_code(proto::PROVIDER_LIFECYCLE_CODE_SUCCEEDED);
+    response->set_lifecycle(proto::ENGINE_LIFECYCLE_READY);
+    response->set_message("ready");
+    return;
+  }
+  if (request->action() == proto::PROVIDER_LIFECYCLE_ACTION_BEGIN_DRAIN) {
+    // Keep serving. An open admission proof cannot be mistaken for a finished
+    // drain, and closing admission here would add latency to live requests.
+    response->set_code(proto::PROVIDER_LIFECYCLE_CODE_IN_PROGRESS);
+    response->set_lifecycle(proto::ENGINE_LIFECYCLE_READY);
+    response->set_message("admission remains open");
+    drain->set_decode_sequences(1);
+    return;
+  }
+  response->set_code(proto::PROVIDER_LIFECYCLE_CODE_INVALID);
+  response->set_lifecycle(proto::ENGINE_LIFECYCLE_READY);
+  response->set_message("unsupported lifecycle action");
+}
+
+}  // namespace
+
+void APIService::ExecuteProviderLifecycle(
+    ::google::protobuf::RpcController* /*controller*/,
+    const proto::ProviderLifecycleCommand* request,
+    proto::ProviderLifecycleResponse* response,
+    ::google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  fill_provider_lifecycle(request, response, /*execute=*/true);
+}
+
+void APIService::QueryProviderLifecycle(
+    ::google::protobuf::RpcController* /*controller*/,
+    const proto::ProviderLifecycleCommand* request,
+    proto::ProviderLifecycleResponse* response,
+    ::google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  fill_provider_lifecycle(request, response, /*execute=*/false);
+}
+
 }  // namespace xllm

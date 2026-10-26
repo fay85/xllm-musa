@@ -1,6 +1,14 @@
 # Copyright 2026 The xLLM Authors. All Rights Reserved.
 include(cc_test)
 
+# Registration and C++ dispatcher signatures can be checked without a device.
+cc_test(
+  NAME musa_custom_all_reduce_signature_test
+  SRCS musa_custom_all_reduce_signature_test.cpp
+  DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
+       GTest::gtest_main glog::glog
+)
+
 # CPU tensors exercise ownership without running a MUSA kernel or model.
 cc_test(
   NAME musa_tvmffi_lifetime_test

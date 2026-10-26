@@ -2,6 +2,16 @@ include(cc_test)
 
 cc_test(
   NAME
+    musa_prefill_graph_policy_test
+  CPU_ONLY
+  SRCS
+    musa_prefill_graph_policy_test.cpp
+  DEPS
+    GTest::gtest_main
+)
+
+cc_test(
+  NAME
     encoder_executor_test
   CPU_ONLY
   SRCS

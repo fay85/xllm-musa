@@ -17,6 +17,12 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <cstdint>
+#include <limits>
+#include <string>
+#include <utility>
+#include <vector>
+
 #include "common/global_flags.h"
 #include "common/types.h"
 #include "core/framework/config/kv_cache_config.h"
@@ -28,6 +34,57 @@ limitations under the License.
 
 namespace xllm {
 
+namespace {
+
+constexpr uint32_t kEnsureLinkContractVersion = 2;
+
+void set_ensure_link_rejection(proto::EnsureLinkDisposition disposition,
+                               const std::string& reason,
+                               proto::EnsureLinkResult* response) {
+  response->set_disposition(disposition);
+  response->set_link_generation(0);
+  response->set_replayed(false);
+  response->set_reason(reason);
+}
+
+std::string ensured_link_key(const proto::ProviderEngineKey& prefill) {
+  return prefill.engine_uid() + "\n" + prefill.incarnation_id();
+}
+
+bool local_decode_matches(const proto::ProviderDescriptor& local,
+                          const proto::EnsureLinkSpec& spec) {
+  return spec.decode().engine_uid() == local.identity().engine_uid() &&
+         spec.decode().incarnation_id() == local.identity().incarnation_id() &&
+         spec.decode().provider_id() == local.identity().provider_id();
+}
+
+bool supported_transfer_mode(proto::TransferMode mode) {
+  return mode == proto::TRANSFER_MODE_PULL ||
+         mode == proto::TRANSFER_MODE_LAYERWISE_PUSH;
+}
+
+void fill_absent_attempt(const proto::AttemptControlRequest* request,
+                         proto::AttemptControlResponse* response) {
+  if (response == nullptr) {
+    return;
+  }
+  response->Clear();
+  if (request == nullptr || !request->has_key() ||
+      request->key().request_uid().empty() ||
+      request->key().incarnation_id().empty()) {
+    response->set_ok(false);
+    response->set_reason(proto::ADMISSION_REASON_INVALID_REQUEST);
+    return;
+  }
+  response->set_ok(true);
+  response->set_reason(proto::ADMISSION_REASON_ATTEMPT_NOT_FOUND);
+  proto::AttemptStatus* status = response->mutable_status();
+  *status->mutable_key() = request->key();
+  status->set_state(proto::ATTEMPT_LIFECYCLE_STATE_ABSENT);
+  status->set_reason(proto::ADMISSION_REASON_ATTEMPT_NOT_FOUND);
+}
+
+}  // namespace
 DisaggPDServiceImpl::DisaggPDServiceImpl(DisaggPDScheduler* scheduler,
                                          Engine* engine)
     : scheduler_(scheduler), engine_(engine) {
@@ -172,6 +229,9 @@ std::shared_ptr<Request> DisaggPDServiceImpl::generate_request(
                                                std::move(req_state),
                                                req.service_req_id(),
                                                req.source_xservice_addr());
+  if (req.has_service_attempt_seq()) {
+    new_request->set_v2_attempt_seq(req.service_attempt_seq());
+  }
 
   // add one sequence, rest will be added by scheduler
   return new_request;
@@ -437,6 +497,199 @@ void DisaggPDServiceImpl::unlink_instance(
   }
 
   response->set_ok(true);
+}
+
+void DisaggPDServiceImpl::ensure_link(const proto::EnsureLinkRequest* request,
+                                      proto::EnsureLinkResult* response) {
+  if (response == nullptr) {
+    return;
+  }
+  response->Clear();
+  if (request == nullptr || !request->has_spec() ||
+      !request->has_prefill_cluster()) {
+    set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_INVALID,
+                              "missing-ensure-link-request",
+                              response);
+    return;
+  }
+  const proto::EnsureLinkSpec& spec = request->spec();
+  const proto::InstanceClusterInfo& cluster = request->prefill_cluster();
+  if (spec.contract_version() != kEnsureLinkContractVersion ||
+      !supported_transfer_mode(spec.transfer_mode()) ||
+      spec.prefill().engine_uid().empty() ||
+      spec.prefill().incarnation_id().empty() ||
+      spec.decode().engine_uid().empty() ||
+      spec.decode().incarnation_id().empty() ||
+      cluster.instance_name() != spec.prefill().engine_uid() ||
+      cluster.incarnation_id() != spec.prefill().incarnation_id() ||
+      cluster.cluster_ids_size() == 0 ||
+      cluster.cluster_ids_size() != cluster.addrs_size() ||
+      cluster.cluster_ids_size() != cluster.ports_size() ||
+      cluster.dp_size() <= 0 || cluster.kv_split_size() <= 0 ||
+      cluster.cluster_ids_size() % cluster.dp_size() != 0 ||
+      (cluster.cluster_ids_size() / cluster.dp_size()) %
+              cluster.kv_split_size() !=
+          0) {
+    set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_INVALID,
+                              "prefill-cluster-contract-mismatch",
+                              response);
+    return;
+  }
+
+  std::vector<uint16_t> ports;
+  ports.reserve(static_cast<size_t>(cluster.ports_size()));
+  for (uint32_t port : cluster.ports()) {
+    if (port == 0 || port > std::numeric_limits<uint16_t>::max()) {
+      set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_INVALID,
+                                "prefill-cluster-port-invalid",
+                                response);
+      return;
+    }
+    ports.emplace_back(static_cast<uint16_t>(port));
+  }
+  for (const std::string& address : cluster.addrs()) {
+    if (address.empty()) {
+      set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_INVALID,
+                                "prefill-cluster-address-empty",
+                                response);
+      return;
+    }
+  }
+
+  if (xservice_client_ == nullptr) {
+    set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_INVALID,
+                              "local-provider-descriptor-unavailable",
+                              response);
+    return;
+  }
+  const std::optional<proto::ProviderDescriptor> local =
+      xservice_client_->get_provider_descriptor();
+  if (!local.has_value()) {
+    set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_INVALID,
+                              "local-provider-descriptor-unavailable",
+                              response);
+    return;
+  }
+  if (!local_decode_matches(*local, spec)) {
+    set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_FENCED,
+                              "decode-identity-mismatch",
+                              response);
+    return;
+  }
+
+  const std::string key = ensured_link_key(spec.prefill());
+  {
+    std::lock_guard<std::mutex> lock(ensured_links_mutex_);
+    const auto existing = ensured_links_.find(key);
+    if (existing != ensured_links_.end()) {
+      response->set_disposition(proto::ENSURE_LINK_DISPOSITION_READY);
+      response->set_link_generation(existing->second);
+      response->set_replayed(true);
+      response->set_reason("ready");
+      return;
+    }
+  }
+
+  // Record the prefill peer. On MUSA the Mooncake session is established by
+  // the existing PULL path, so a repeated handshake is not required.
+  std::vector<uint64_t> cluster_ids(cluster.cluster_ids().begin(),
+                                    cluster.cluster_ids().end());
+  std::vector<std::string> addrs(cluster.addrs().begin(), cluster.addrs().end());
+  const bool linked = scheduler_->link_instance(cluster.instance_name(),
+                                                cluster_ids,
+                                                addrs,
+                                                ports,
+                                                cluster.dp_size(),
+                                                cluster.kv_split_size());
+  if (!linked) {
+    set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_FAILED,
+                              "physical-link-failed",
+                              response);
+    return;
+  }
+
+  uint64_t generation = 0;
+  bool replayed = false;
+  {
+    std::lock_guard<std::mutex> lock(ensured_links_mutex_);
+    const auto existing = ensured_links_.find(key);
+    if (existing != ensured_links_.end()) {
+      generation = existing->second;
+      replayed = true;
+    } else {
+      generation = ++next_link_generation_;
+      if (generation == 0) {
+        generation = ++next_link_generation_;
+      }
+      ensured_links_.emplace(key, generation);
+    }
+  }
+  response->set_disposition(proto::ENSURE_LINK_DISPOSITION_READY);
+  response->set_link_generation(generation);
+  response->set_replayed(replayed);
+  response->set_reason("ready");
+  if (!replayed) {
+    LOG(INFO) << "ensure_link ready prefill=" << spec.prefill().engine_uid()
+              << " decode=" << spec.decode().engine_uid()
+              << " link_generation=" << generation;
+  }
+}
+
+void DisaggPDServiceImpl::drain_link(const proto::DrainLinkRequest* request,
+                                     proto::EnsureLinkResult* response) {
+  if (response == nullptr) {
+    return;
+  }
+  response->Clear();
+  if (request == nullptr || !request->has_spec()) {
+    set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_INVALID,
+                              "missing-drain-link-request",
+                              response);
+    return;
+  }
+  const proto::EnsureLinkSpec& spec = request->spec();
+  if (xservice_client_ == nullptr) {
+    set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_INVALID,
+                              "local-provider-descriptor-unavailable",
+                              response);
+    return;
+  }
+  const std::optional<proto::ProviderDescriptor> local =
+      xservice_client_->get_provider_descriptor();
+  if (!local.has_value() || !local_decode_matches(*local, spec)) {
+    set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_FENCED,
+                              "decode-identity-mismatch",
+                              response);
+    return;
+  }
+
+  // Drop the service-facing edge only. unlink_instance also clears in-flight
+  // decode requests, which would stall tokens already on this PULL path.
+  uint64_t generation = 1;
+  {
+    std::lock_guard<std::mutex> lock(ensured_links_mutex_);
+    const auto existing = ensured_links_.find(ensured_link_key(spec.prefill()));
+    if (existing != ensured_links_.end()) {
+      generation = existing->second;
+      ensured_links_.erase(existing);
+    }
+  }
+  response->set_disposition(proto::ENSURE_LINK_DISPOSITION_READY);
+  response->set_link_generation(generation);
+  response->set_replayed(false);
+  response->set_reason("drained");
+}
+
+void DisaggPDServiceImpl::query_request(
+    const proto::AttemptControlRequest* request,
+    proto::AttemptControlResponse* response) {
+  fill_absent_attempt(request, response);
+}
+
+void DisaggPDServiceImpl::cancel_request(
+    const proto::AttemptControlRequest* request,
+    proto::AttemptControlResponse* response) {
+  fill_absent_attempt(request, response);
 }
 
 }  // namespace xllm

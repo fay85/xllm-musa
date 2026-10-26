@@ -1001,8 +1001,12 @@ __device__ __forceinline__ float norm_fast_rsqrt(float value) {
 // Same arithmetic as fused_add_rmsnorm_vec8_kernel<GEMMA=true>:
 // residual <- bf16(x + r) and normed <- bf16((x + r) * rsqrt(mean + eps) *
 // (w + 1)), then normed is quantized like per_token_group_quant_fp8. Each
-// thread owns 8 columns, so 16 threads form one group-128 quantization group.
-__global__ void __launch_bounds__(kNormQuantMaxThreads)
+// thread owns VectorsPerThread vectors of 8 columns, one block width apart,
+// so 16 threads form one group-128 quantization group in every vector. Fewer
+// threads per row keep more rows resident, which the row reduction's barrier
+// would otherwise leave stalled.
+template <int32_t VectorsPerThread>
+__global__ void __launch_bounds__(kNormQuantMaxThreads / VectorsPerThread)
     fused_add_gemma_rmsnorm_quant_kernel(__mt_bfloat16* __restrict__ input,
                                          __mt_bfloat16* __restrict__ residual,
                                          const __mt_bfloat16* __restrict__ weight,
@@ -1019,84 +1023,147 @@ __global__ void __launch_bounds__(kNormQuantMaxThreads)
   const int32_t warp = tid / kHardwareWarpThreads;
   const int32_t num_warps =
       static_cast<int32_t>(blockDim.x) / kHardwareWarpThreads;
-  const int64_t base =
-      static_cast<int64_t>(blockIdx.x) * hidden + tid * kElemsPerThread;
+  const int32_t vector_stride =
+      static_cast<int32_t>(blockDim.x) * kElemsPerThread;
+  const int64_t row_base = static_cast<int64_t>(blockIdx.x) * hidden;
 
-  Bf16Pack8 x_pack;
-  Bf16Pack8 r_pack;
-  Bf16Pack8 w_pack;
-  x_pack.vector = *reinterpret_cast<const int4*>(input + base);
-  r_pack.vector = *reinterpret_cast<const int4*>(residual + base);
-  w_pack.vector = *reinterpret_cast<const int4*>(weight + tid * kElemsPerThread);
-  float values[kElemsPerThread];
-  Bf16Pack8 sum_pack;
+  Bf16Pack8 x_pack[VectorsPerThread];
+  Bf16Pack8 r_pack[VectorsPerThread];
+  Bf16Pack8 w_pack[VectorsPerThread];
+#pragma unroll
+  for (int32_t v = 0; v < VectorsPerThread; ++v) {
+    const int32_t column = tid * kElemsPerThread + v * vector_stride;
+    x_pack[v].vector =
+        *reinterpret_cast<const int4*>(input + row_base + column);
+    r_pack[v].vector =
+        *reinterpret_cast<const int4*>(residual + row_base + column);
+    w_pack[v].vector = *reinterpret_cast<const int4*>(weight + column);
+  }
+  float values[VectorsPerThread][kElemsPerThread];
   float sum = 0.0f;
 #pragma unroll
-  for (int32_t i = 0; i < kElemsPerThread; ++i) {
-    values[i] = __bfloat162float(x_pack.values[i]) +
-                __bfloat162float(r_pack.values[i]);
-    sum += values[i] * values[i];
-    sum_pack.values[i] = __float2bfloat16_rn(values[i]);
+  for (int32_t v = 0; v < VectorsPerThread; ++v) {
+    Bf16Pack8 sum_pack;
+#pragma unroll
+    for (int32_t i = 0; i < kElemsPerThread; ++i) {
+      values[v][i] = __bfloat162float(x_pack[v].values[i]) +
+                     __bfloat162float(r_pack[v].values[i]);
+      sum += values[v][i] * values[v][i];
+      sum_pack.values[i] = __float2bfloat16_rn(values[v][i]);
+    }
+    *reinterpret_cast<int4*>(residual + row_base + tid * kElemsPerThread +
+                             v * vector_stride) = sum_pack.vector;
   }
-  *reinterpret_cast<int4*>(residual + base) = sum_pack.vector;
 
 #pragma unroll
   for (int32_t offset = kHardwareWarpThreads / 2; offset > 0; offset >>= 1) {
-    sum += __shfl_down_sync(0xffffffff, sum, offset, kHardwareWarpThreads);
+    sum += __shfl_xor_sync(0xffffffff, sum, offset, kHardwareWarpThreads);
   }
   if (lane == 0) {
     warp_sums[warp] = sum;
   }
   __syncthreads();
-  if (warp == 0) {
-    sum = lane < num_warps ? warp_sums[lane] : 0.0f;
-#pragma unroll
-    for (int32_t offset = kHardwareWarpThreads / 2; offset > 0; offset >>= 1) {
-      sum += __shfl_down_sync(0xffffffff, sum, offset, kHardwareWarpThreads);
-    }
-    if (lane == 0) {
-      warp_sums[0] = sum;
-    }
+  float row_sum = 0.0f;
+  for (int32_t w = 0; w < num_warps; ++w) {
+    row_sum += warp_sums[w];
   }
-  __syncthreads();
-  const float scale = norm_fast_rsqrt(warp_sums[0] * inv_hidden + eps);
-
-  Bf16Pack8 normed_pack;
-  float local_absmax = 0.0f;
-#pragma unroll
-  for (int32_t i = 0; i < kElemsPerThread; ++i) {
-    normed_pack.values[i] = __float2bfloat16_rn(
-        values[i] * scale * (__bfloat162float(w_pack.values[i]) + 1.0f));
-    values[i] = __bfloat162float(normed_pack.values[i]);
-    local_absmax = fmaxf(local_absmax, fabsf(values[i]));
-  }
-  if (write_normed) {
-    *reinterpret_cast<int4*>(input + base) = normed_pack.vector;
-  }
+  const float scale = norm_fast_rsqrt(row_sum * inv_hidden + eps);
 
   const int32_t group_lane = tid % kThreadsPerGroup;
-  local_absmax = group_reduce_max<kThreadsPerGroup>(local_absmax, group_lane);
-  const float scale_inv = fmaxf(local_absmax / kFp8E4M3Max, kEps);
-  const float quant_scale = 1.0f / scale_inv;
-  const float4 scaled_0 = make_float4(values[0] * quant_scale,
-                                      values[1] * quant_scale,
-                                      values[2] * quant_scale,
-                                      values[3] * quant_scale);
-  const float4 scaled_1 = make_float4(values[4] * quant_scale,
-                                      values[5] * quant_scale,
-                                      values[6] * quant_scale,
-                                      values[7] * quant_scale);
-  const uint32_t packed_0 = static_cast<uint32_t>(
-      __musa_cvt_float4_to_fp8x4(scaled_0, __MT_SATFINITE, __MT_E4M3));
-  const uint32_t packed_1 = static_cast<uint32_t>(
-      __musa_cvt_float4_to_fp8x4(scaled_1, __MT_SATFINITE, __MT_E4M3));
-  *reinterpret_cast<uint64_t*>(output_q + base) =
-      static_cast<uint64_t>(packed_0) | (static_cast<uint64_t>(packed_1) << 32);
-  if (group_lane == 0) {
-    output_s[static_cast<int64_t>(blockIdx.x) * hidden_groups +
-             tid / kThreadsPerGroup] = scale_inv;
+#pragma unroll
+  for (int32_t v = 0; v < VectorsPerThread; ++v) {
+    const int32_t column = tid * kElemsPerThread + v * vector_stride;
+    Bf16Pack8 normed_pack;
+    float local_absmax = 0.0f;
+#pragma unroll
+    for (int32_t i = 0; i < kElemsPerThread; ++i) {
+      normed_pack.values[i] = __float2bfloat16_rn(
+          values[v][i] * scale *
+          (__bfloat162float(w_pack[v].values[i]) + 1.0f));
+      values[v][i] = __bfloat162float(normed_pack.values[i]);
+      local_absmax = fmaxf(local_absmax, fabsf(values[v][i]));
+    }
+    if (write_normed) {
+      *reinterpret_cast<int4*>(input + row_base + column) =
+          normed_pack.vector;
+    }
+
+    local_absmax =
+        group_reduce_max<kThreadsPerGroup>(local_absmax, group_lane);
+    const float scale_inv = fmaxf(local_absmax / kFp8E4M3Max, kEps);
+    const float quant_scale = 1.0f / scale_inv;
+    const float4 scaled_0 = make_float4(values[v][0] * quant_scale,
+                                        values[v][1] * quant_scale,
+                                        values[v][2] * quant_scale,
+                                        values[v][3] * quant_scale);
+    const float4 scaled_1 = make_float4(values[v][4] * quant_scale,
+                                        values[v][5] * quant_scale,
+                                        values[v][6] * quant_scale,
+                                        values[v][7] * quant_scale);
+    const uint32_t packed_0 = static_cast<uint32_t>(
+        __musa_cvt_float4_to_fp8x4(scaled_0, __MT_SATFINITE, __MT_E4M3));
+    const uint32_t packed_1 = static_cast<uint32_t>(
+        __musa_cvt_float4_to_fp8x4(scaled_1, __MT_SATFINITE, __MT_E4M3));
+    *reinterpret_cast<uint64_t*>(output_q + row_base + column) =
+        static_cast<uint64_t>(packed_0) |
+        (static_cast<uint64_t>(packed_1) << 32);
+    if (group_lane == 0) {
+      output_s[static_cast<int64_t>(blockIdx.x) * hidden_groups +
+               column / kGroupSize] = scale_inv;
+    }
   }
 }
+
+// Largest vectors-per-thread count that keeps whole warps per row; every row
+// has a multiple of 32 vectors (see fused_add_gemma_rms_norm_quant_supported).
+int32_t norm_quant_vectors_per_thread(int64_t hidden) {
+  const int64_t row_vectors = hidden / kElemsPerThread;
+  for (const int32_t vectors : {5, 4, 2}) {
+    if (row_vectors % (static_cast<int64_t>(vectors) * kHardwareWarpThreads) ==
+        0) {
+      return vectors;
+    }
+  }
+  return 1;
+}
+
+template <int32_t VectorsPerThread>
+void launch_fused_add_gemma_rmsnorm_quant(torch::Tensor& input,
+                                          torch::Tensor& residual,
+                                          const torch::Tensor& weight,
+                                          torch::Tensor& output_q,
+                                          torch::Tensor& output_s,
+                                          double eps,
+                                          bool write_normed,
+                                          cudaStream_t stream) {
+  const int64_t rows = input.size(0);
+  const int64_t hidden = input.size(1);
+  fused_add_gemma_rmsnorm_quant_kernel<VectorsPerThread><<<
+      static_cast<unsigned int>(rows),
+      static_cast<unsigned int>(hidden /
+                                (kElemsPerThread * VectorsPerThread)),
+      0,
+      stream>>>(
+      reinterpret_cast<__mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
+      reinterpret_cast<__mt_bfloat16*>(residual.data_ptr<at::BFloat16>()),
+      reinterpret_cast<const __mt_bfloat16*>(weight.data_ptr<at::BFloat16>()),
+      reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
+      output_s.data_ptr<float>(),
+      hidden,
+      static_cast<int32_t>(hidden / kGroupSize),
+      1.0f / static_cast<float>(hidden),
+      static_cast<float>(eps),
+      write_normed);
+}
+
+using NormQuantLaunch = void (*)(torch::Tensor&,
+                                 torch::Tensor&,
+                                 const torch::Tensor&,
+                                 torch::Tensor&,
+                                 torch::Tensor&,
+                                 double,
+                                 bool,
+                                 cudaStream_t);
 
 __global__ void moe_ragged_combine_bf16_kernel(
     const __mt_bfloat16* __restrict__ down,
@@ -1264,6 +1331,7 @@ bool fused_add_gemma_rms_norm_quant_supported(const torch::Tensor& input,
          residual.is_contiguous() && weight.is_contiguous() &&
          input.size(1) % kGroupSize == 0 &&
          input.size(1) / kElemsPerThread <= kNormQuantMaxThreads &&
+         (input.size(1) / kElemsPerThread) % kHardwareWarpThreads == 0 &&
          reinterpret_cast<uintptr_t>(input.data_ptr()) % alignof(int4) == 0 &&
          reinterpret_cast<uintptr_t>(residual.data_ptr()) % alignof(int4) ==
              0 &&
@@ -1292,21 +1360,22 @@ std::tuple<torch::Tensor, torch::Tensor> fused_add_gemma_rms_norm_quant_fp8(
 
   const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
   const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
-  fused_add_gemma_rmsnorm_quant_kernel<<<
-      static_cast<unsigned int>(rows),
-      static_cast<unsigned int>(hidden / kElemsPerThread),
-      0,
-      stream>>>(
-      reinterpret_cast<__mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
-      reinterpret_cast<__mt_bfloat16*>(residual.data_ptr<at::BFloat16>()),
-      reinterpret_cast<const __mt_bfloat16*>(weight.data_ptr<at::BFloat16>()),
-      reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
-      output_s.data_ptr<float>(),
-      hidden,
-      hidden_groups,
-      1.0f / static_cast<float>(hidden),
-      static_cast<float>(eps),
-      write_normed);
+  NormQuantLaunch launch = launch_fused_add_gemma_rmsnorm_quant<1>;
+  switch (norm_quant_vectors_per_thread(hidden)) {
+    case 5:
+      launch = launch_fused_add_gemma_rmsnorm_quant<5>;
+      break;
+    case 4:
+      launch = launch_fused_add_gemma_rmsnorm_quant<4>;
+      break;
+    case 2:
+      launch = launch_fused_add_gemma_rmsnorm_quant<2>;
+      break;
+    default:
+      break;
+  }
+  launch(
+      input, residual, weight, output_q, output_s, eps, write_normed, stream);
   C10_CUDA_CHECK(cudaGetLastError());
   return std::make_tuple(output_q, output_s);
 }

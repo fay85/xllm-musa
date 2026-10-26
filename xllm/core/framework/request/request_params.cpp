@@ -489,6 +489,9 @@ RequestParams::RequestParams(const proto::ChatRequest& request,
   }
 
   init_from_chat_request(*this, request);
+  if (request.has_correlation() && request.correlation().has_attempt_seq()) {
+    v2_attempt_seq = request.correlation().attempt_seq();
+  }
 }
 
 RequestParams::RequestParams(const proto::MMChatRequest& request,
