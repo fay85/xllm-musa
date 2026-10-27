@@ -147,6 +147,14 @@ void set_multi_gauge_value(bvar::MultiDimension<bvar::Status<double>>& metric,
   bvar::MultiDimension<bvar::Adder<double>> MULTI_COUNTER_##name(#name, \
                                                                  {(label)});
 
+#define DEFINE_MULTI_COUNTER_2_LABELS(name, label1, label2, desc) \
+  bvar::MultiDimension<bvar::Adder<double>> MULTI_COUNTER_##name( \
+      #name, {(label1), (label2)});
+
+#define DEFINE_MULTI_COUNTER_3_LABELS(name, label1, label2, label3, desc) \
+  bvar::MultiDimension<bvar::Adder<double>> MULTI_COUNTER_##name(         \
+      #name, {(label1), (label2), (label3)});
+
 #define MULTI_COUNTER_ADD(name, key, value)      \
   do {                                           \
     bvar::Adder<double>* counter_##name =        \
@@ -154,6 +162,24 @@ void set_multi_gauge_value(bvar::MultiDimension<bvar::Status<double>>& metric,
     if (counter_##name) {                        \
       *counter_##name << (value);                \
     }                                            \
+  } while (false)
+
+#define MULTI_COUNTER_ADD_2_LABELS(name, key1, key2, value) \
+  do {                                                      \
+    bvar::Adder<double>* counter_##name =                   \
+        MULTI_COUNTER_##name.get_stats({(key1), (key2)});   \
+    if (counter_##name) {                                   \
+      *counter_##name << (value);                           \
+    }                                                       \
+  } while (false)
+
+#define MULTI_COUNTER_ADD_3_LABELS(name, key1, key2, key3, value) \
+  do {                                                            \
+    bvar::Adder<double>* counter_##name =                         \
+        MULTI_COUNTER_##name.get_stats({(key1), (key2), (key3)}); \
+    if (counter_##name) {                                         \
+      *counter_##name << (value);                                 \
+    }                                                             \
   } while (false)
 
 // read a labeled counter's current value (0.0 when the label has no stats yet);
@@ -225,9 +251,18 @@ DECLARE_COUNTER(request_handling_latency_seconds_completion);
 DECLARE_COUNTER(tokenization_latency_seconds);
 DECLARE_COUNTER(chat_template_latency_seconds);
 
-// latency of multimodal preprocessing in milliseconds
-DECLARE_HISTOGRAM(mm_input_loading_latency_milliseconds);
-DECLARE_HISTOGRAM(mm_preprocess_latency_milliseconds);
+// latency of multimodal input stages in milliseconds
+DECLARE_HISTOGRAM(mm_transfer_latency_milliseconds);
+DECLARE_HISTOGRAM(mm_processor_latency_milliseconds);
+
+DECLARE_MULTI_COUNTER(mm_input_stage_failures_total);
+DECLARE_MULTI_COUNTER(mm_input_items_total);
+DECLARE_MULTI_COUNTER(mm_cache_lookups_total);
+
+DECLARE_HISTOGRAM(dit_input_parse_latency_milliseconds);
+DECLARE_HISTOGRAM(dit_output_build_latency_milliseconds);
+DECLARE_MULTI_HISTOGRAM(dit_input_stage_host_latency_microseconds);
+DECLARE_MULTI_COUNTER(dit_input_stage_failures_total);
 
 // encoder cache hit rate in percent
 DECLARE_HISTOGRAM(encoder_cache_hit_rate);

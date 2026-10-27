@@ -456,14 +456,8 @@ class LongCatAudioDiTPipelineImpl final : public torch::nn::Module {
     torch::Tensor pred_latent = y.slice(1, prompt_dur);  // (B, gen_len, 64)
     pred_latent = pred_latent.permute({0, 2, 1}).to(torch::kFloat32);
     // (B, 64, gen_len)
-    torch::Tensor waveform;
-    try {
-      waveform = vae_->decode(pred_latent).squeeze(1);  // (B, num_samples)
-    } catch (const std::exception& e) {
-      LOG(ERROR) << "[LongCat-AudioDiT] VAE decode failed: " << e.what();
-      waveform = torch::zeros({batch_size, vae_->downsampling_ratio_ * gen_len},
-                              noise_opts);
-    }
+    torch::Tensor waveform =
+        vae_->decode(pred_latent).squeeze(1);  // (B, num_samples)
 
     waveform = waveform.cpu().to(torch::kFloat32).contiguous();
     DiTForwardOutput out;

@@ -87,6 +87,7 @@ std::optional<ForwardOutput> EmbedVLMWorkerImpl::step(
   }
 
   // driver prepare model output
+  Timer sampling_timer;
   ForwardOutput output;
   SampleOutput sample_output;
   if (sampling_params.selected_token_idxes.defined() &&
@@ -113,6 +114,11 @@ std::optional<ForwardOutput> EmbedVLMWorkerImpl::step(
     output.sample_output = sample_output;
   }
   ret = device_.synchronize_default_stream();
+  if (sampling_params.selected_token_idxes.defined() &&
+      input.sampling_params.is_embeddings) {
+    COUNTER_ADD(execution_latency_seconds_sampling,
+                sampling_timer.elapsed_seconds());
+  }
   return output;
 }
 

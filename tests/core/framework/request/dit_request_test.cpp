@@ -17,8 +17,11 @@ limitations under the License.
 
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <string>
 #include <utility>
+
+#include "core/common/metrics.h"
 
 namespace xllm {
 namespace {
@@ -40,7 +43,11 @@ TEST(DiTRequestTest, GeneratesImageOutputByRequestKind) {
   DiTRequest request = create_request(DiTRequestKind::kImage);
   request.handle_forward_output(torch::zeros({1, 3, 2, 2}));
 
+  const int64_t before =
+      HISTOGRAM_dit_output_build_latency_milliseconds.count();
   DiTRequestOutput output = request.generate_output();
+  EXPECT_EQ(HISTOGRAM_dit_output_build_latency_milliseconds.count(),
+            before + 1);
 
   ASSERT_EQ(output.outputs.size(), 1u);
   EXPECT_FALSE(output.outputs[0].image.empty());
@@ -55,7 +62,11 @@ TEST(DiTRequestTest, GeneratesVideoOutputByRequestKind) {
   DiTRequest request = create_request(DiTRequestKind::kVideo, params);
   request.handle_forward_output(torch::zeros({1, 1, 3, 2, 2}));
 
+  const int64_t before =
+      HISTOGRAM_dit_output_build_latency_milliseconds.count();
   DiTRequestOutput output = request.generate_output();
+  EXPECT_EQ(HISTOGRAM_dit_output_build_latency_milliseconds.count(),
+            before + 1);
 
   ASSERT_EQ(output.outputs.size(), 1u);
   EXPECT_FALSE(output.outputs[0].video.empty());
@@ -71,7 +82,11 @@ TEST(DiTRequestTest, GeneratesAudioOutputByRequestKind) {
   DiTRequest request = create_request(DiTRequestKind::kAudio, params);
   request.handle_forward_output(torch::zeros({1, 32}));
 
+  const int64_t before =
+      HISTOGRAM_dit_output_build_latency_milliseconds.count();
   DiTRequestOutput output = request.generate_output();
+  EXPECT_EQ(HISTOGRAM_dit_output_build_latency_milliseconds.count(),
+            before + 1);
 
   ASSERT_EQ(output.outputs.size(), 1u);
   ASSERT_GE(output.outputs[0].audio.size(), 12u);
@@ -85,13 +100,36 @@ TEST(DiTRequestTest, GeneratesTextOutputByRequestKind) {
   DiTRequest request = create_request(DiTRequestKind::kText);
   request.handle_forward_text_output("generated text");
 
+  const int64_t before =
+      HISTOGRAM_dit_output_build_latency_milliseconds.count();
   DiTRequestOutput output = request.generate_output();
+  EXPECT_EQ(HISTOGRAM_dit_output_build_latency_milliseconds.count(),
+            before + 1);
 
   ASSERT_EQ(output.outputs.size(), 1u);
   EXPECT_EQ(output.outputs[0].text, "generated text");
   EXPECT_TRUE(output.outputs[0].image.empty());
   EXPECT_TRUE(output.outputs[0].video.empty());
   EXPECT_TRUE(output.outputs[0].audio.empty());
+}
+
+TEST(DiTRequestTest, MultipleImagesProduceOneOutputBuildSample) {
+  DiTGenerationParams params;
+  params.num_images_per_prompt = 2;
+  DiTRequest request = create_request(DiTRequestKind::kImage, params);
+  request.handle_forward_output(torch::zeros({2, 3, 2, 2}));
+  const int64_t before =
+      HISTOGRAM_dit_output_build_latency_milliseconds.count();
+
+  const DiTRequestOutput output = request.generate_output();
+
+  EXPECT_EQ(HISTOGRAM_dit_output_build_latency_milliseconds.count(),
+            before + 1);
+  ASSERT_EQ(output.outputs.size(), 2u);
+  EXPECT_EQ(output.outputs[0].index, 0);
+  EXPECT_EQ(output.outputs[1].index, 1);
+  EXPECT_FALSE(output.outputs[0].image.empty());
+  EXPECT_EQ(output.outputs[0].image, output.outputs[1].image);
 }
 
 }  // namespace

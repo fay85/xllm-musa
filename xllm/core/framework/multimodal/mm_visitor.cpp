@@ -439,6 +439,10 @@ bool ProcessorCacheLookupVisitor::visit(const MMInputItem& input) {
   std::optional<MMDataItem> cache_hit;
   if (!input.is_embedding() && input.hash_key.has_value()) {
     cache_hit = cache_.lookup(input.hash_key.value());
+    MULTI_COUNTER_ADD_2_LABELS(mm_cache_lookups_total,
+                               "processor",
+                               cache_hit.has_value() ? "hit" : "miss",
+                               1);
   }
   if (!cache_hit.has_value()) {
     miss_inputs_.emplace_back(input);
@@ -466,6 +470,10 @@ bool EncoderCacheLookupVisitor::visit(MMDataItem& item) {
   }
   std::optional<torch::Tensor> cached =
       cache_->lookup(item.state().schedule_data().key);
+  MULTI_COUNTER_ADD_2_LABELS(mm_cache_lookups_total,
+                             "encoder",
+                             cached.has_value() ? "hit" : "miss",
+                             1);
   HISTOGRAM_OBSERVE(encoder_cache_hit_rate, cached.has_value() ? 100 : 0);
   if (!cached.has_value()) {
     return true;
@@ -508,7 +516,8 @@ bool MMSideOutputCacheVisitor::visit(MMDataItem& item) {
   const XXH3Key& key = item.state().schedule_data().key;
   auto ids = item.get<torch::Tensor>("audio|ctc_ids");
   auto conf = item.get<torch::Tensor>("audio|ctc_conf");
-  if (ids.has_value() && ids->defined() && conf.has_value() && conf->defined()) {
+  if (ids.has_value() && ids->defined() && conf.has_value() &&
+      conf->defined()) {
     cache_.insert(key, std::move(*ids), std::move(*conf));
     return true;
   }

@@ -845,8 +845,6 @@ void Sequence::generate_mm_embeddings_output(SequenceOutput& output) {
 }
 
 SequenceOutput Sequence::generate_output(const Tokenizer& tokenizer) {
-  AUTO_COUNTER(detokenization_latency_seconds_non_stream);
-
   SequenceOutputType seq_output_type = output_type();
 
   SequenceOutput output;
@@ -861,6 +859,8 @@ SequenceOutput Sequence::generate_output(const Tokenizer& tokenizer) {
     generate_embeddings_output(output);
     return output;
   }
+
+  AUTO_COUNTER(detokenization_latency_seconds_non_stream);
 
   // NOTE: enable_schedule_overlap will generate an extra '-1' token.
   // we need to ignore these '-1' tokens.

@@ -20,7 +20,6 @@ limitations under the License.
 #include <folly/MPMCQueue.h>
 #include <folly/futures/Future.h>
 
-#include <deque>
 #include <limits>
 #include <memory>
 #include <queue>
@@ -88,15 +87,9 @@ class DiTDynamicBatchScheduler : public DiTScheduler {
   void generate() override;
 
   // inc/dec pending requests
-  void incr_pending_requests(size_t count) override {
-    pending_requests_.fetch_add(count, std::memory_order_relaxed);
-  }
+  void incr_pending_requests(size_t count) override;
 
-  void decr_pending_requests() override {
-    const auto old_value =
-        pending_requests_.fetch_sub(1, std::memory_order_relaxed);
-    CHECK_GT(old_value, 0) << "pending requests underflow";
-  }
+  void decr_pending_requests() override;
 
   size_t num_pending_requests() override {
     return pending_requests_.load(std::memory_order_relaxed);
@@ -123,14 +116,14 @@ class DiTDynamicBatchScheduler : public DiTScheduler {
   // a batch of requests in running state
   std::vector<std::shared_ptr<DiTRequest>> running_requests_;
 
-  // requests popped from request_queue_ but deferred because they are not
-  // compatible with the current DiT batch.
-  std::deque<std::shared_ptr<DiTRequest>> deferred_requests_;
+  // Read deferred requests first. Batching stops at the first incompatible
+  // request, so at most one request remains deferred.
+  folly::MPMCQueue<std::shared_ptr<DiTRequest>> deferred_requests_;
 
   // response handler
   std::unique_ptr<DiTAsyncResponseProcessor> response_handler_;
 
-  // the number of requests that are waiting to be scheduled
+  // the number of requests whose input-handling tasks have not finished
   std::atomic<size_t> pending_requests_{0};
 
   // build a batch of requests from the priority queue

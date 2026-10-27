@@ -915,6 +915,7 @@ void MMChatServiceImpl::process_async_impl(std::shared_ptr<MMChatCall> call) {
       std::move(messages),
       std::move(request_params),
       std::move(payload),
+      call.get(),
       [call,
        model,
        master = master_,
@@ -929,7 +930,6 @@ void MMChatServiceImpl::process_async_impl(std::shared_ptr<MMChatCall> call) {
        is_force_reasoning = is_force_reasoning,
        stream_parser =
            stream_parser](const RequestOutput& req_output) mutable -> bool {
-        req_output.log_request_status();
         if (req_output.status.has_value()) {
           const auto& status = req_output.status.value();
           if (!status.ok()) {

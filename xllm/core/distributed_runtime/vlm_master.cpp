@@ -237,6 +237,7 @@ VLMMaster::~VLMMaster() {
 void VLMMaster::handle_request(std::string prompt,
                                MMData mm_data,
                                RequestParams sp,
+                               std::optional<Call*> call,
                                OutputCallback callback) {
   sp.timing = RequestTiming::start_ingress(std::move(sp.timing));
   scheduler_->incr_pending_requests(1);
@@ -250,6 +251,7 @@ void VLMMaster::handle_request(std::string prompt,
                          prompt = std::move(prompt),
                          mm_data = std::move(mm_data),
                          sp = std::move(sp),
+                         call,
                          callback = std::move(cb)]() mutable {
     AUTO_COUNTER(request_handling_latency_seconds_completion);
     ScopeGuard timing_guard([timing = sp.timing] {
@@ -278,7 +280,7 @@ void VLMMaster::handle_request(std::string prompt,
     rate_limit_guard.dismiss();
     // Retain a callback for rejection if the scheduler queue is full.
     auto request = request_factory_->create(
-        std::move(prompt), std::move(mm_data), sp, callback);
+        std::move(prompt), std::move(mm_data), sp, call, callback);
     if (!request) {
       return;
     }
@@ -300,6 +302,7 @@ void VLMMaster::handle_request(std::string prompt,
 void VLMMaster::handle_request(std::vector<Message> messages,
                                RequestParams sp,
                                BinaryPayload payload,
+                               std::optional<Call*> call,
                                OutputCallback callback,
                                bool use_prompt_as_is) {
   // Offline-only guard: fail loudly on the caller thread (pybind surfaces
@@ -321,6 +324,7 @@ void VLMMaster::handle_request(std::vector<Message> messages,
                          sp = std::move(sp),
                          payload = std::move(payload),
                          use_prompt_as_is,
+                         call,
                          callback = std::move(cb)]() mutable {
     AUTO_COUNTER(request_handling_latency_seconds_chat);
     ScopeGuard timing_guard([timing = sp.timing] {
@@ -350,6 +354,7 @@ void VLMMaster::handle_request(std::vector<Message> messages,
     auto request = request_factory_->create(std::move(messages),
                                             sp,
                                             std::move(payload),
+                                            call,
                                             callback,
                                             use_prompt_as_is);
     if (!request) {
@@ -383,8 +388,8 @@ void VLMMaster::handle_batch_request(std::vector<std::string> prompts,
                    std::move(mm_datas[i]),
                    // the sampling parameter may be shared
                    sps.size() == 1 ? sps[0] : std::move(sps[i]),
+                   /*call=*/std::nullopt,
                    [i, callback](const RequestOutput& output) {
-                     output.log_request_status();
                      return callback(i, output);
                    });
   }
@@ -423,8 +428,8 @@ void VLMMaster::handle_batch_request_with_image_urls(
         // the sampling parameter may be shared
         sps.size() == 1 ? sps[0] : std::move(sps[i]),
         BinaryPayload(),
+        /*call=*/std::nullopt,
         [i, callback](const RequestOutput& output) {
-          output.log_request_status();
           return callback(i, output);
         },
         /*use_prompt_as_is=*/true);
@@ -444,8 +449,8 @@ void VLMMaster::handle_batch_request(
                    // the sampling parameter may be shared
                    sps.size() == 1 ? sps[0] : std::move(sps[i]),
                    BinaryPayload(),
+                   /*call=*/std::nullopt,
                    [i, callback](const RequestOutput& output) {
-                     output.log_request_status();
                      return callback(i, output);
                    });
   }

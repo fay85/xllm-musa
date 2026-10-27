@@ -15,12 +15,15 @@ limitations under the License.
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <thread>
 #include <unordered_set>
 #include <vector>
 
+#include "common/metrics.h"
 #include "framework/request/incremental_decoder.h"
 #include "framework/request/sequence.h"
 
@@ -45,6 +48,18 @@ class StopAwareTokenizer final : public Tokenizer {
   }
 
   static constexpr int32_t kStopTokenId = 1000;
+};
+
+class DelayedStopAwareTokenizer final : public Tokenizer {
+ public:
+  std::string decode(const Slice<int32_t>& ids,
+                     bool skip_special_tokens) const override {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    return tokenizer_.decode(ids, skip_special_tokens);
+  }
+
+ private:
+  StopAwareTokenizer tokenizer_;
 };
 
 class SequenceStopOutputTest : public ::testing::Test {
@@ -108,6 +123,74 @@ class SequenceStopOutputTest : public ::testing::Test {
   std::unique_ptr<Sequence> sequence_;
   StopAwareTokenizer tokenizer_;
 };
+
+TEST_F(SequenceStopOutputTest, EmbeddingsDoNotRecordDetokenizationLatency) {
+  initialize(/*max_generated_tokens=*/8, /*stop_tokens=*/{});
+  sampling_param_.is_embeddings = true;
+  const std::vector<float> values = {1.0f, 2.0f, 3.0f};
+  sequence_->update_embeddings(torch::tensor(values));
+  const double latency_before =
+      COUNTER_VALUE(detokenization_latency_seconds_non_stream);
+
+  for (int32_t iteration = 0; iteration < 64; ++iteration) {
+    SequenceOutput output = sequence_->generate_output(tokenizer_);
+    ASSERT_TRUE(output.embeddings.has_value());
+    EXPECT_EQ(output.embeddings.value(), values);
+    EXPECT_EQ(output.index, 0u);
+    EXPECT_FALSE(output.mm_embeddings.has_value());
+    EXPECT_TRUE(output.text.empty());
+    EXPECT_TRUE(output.token_ids.empty());
+  }
+
+  EXPECT_EQ(COUNTER_VALUE(detokenization_latency_seconds_non_stream),
+            latency_before);
+}
+
+TEST_F(SequenceStopOutputTest, MmEmbeddingsDoNotRecordDetokenizationLatency) {
+  initialize(/*max_generated_tokens=*/8, /*stop_tokens=*/{});
+  sampling_param_.is_embeddings = true;
+  const torch::Tensor embedding = torch::tensor({{1.0f, 2.0f}, {3.0f, 4.0f}});
+  sequence_->update_mm_embeddings({embedding});
+  const double latency_before =
+      COUNTER_VALUE(detokenization_latency_seconds_non_stream);
+
+  for (int32_t iteration = 0; iteration < 64; ++iteration) {
+    SequenceOutput output = sequence_->generate_output(tokenizer_);
+    ASSERT_TRUE(output.mm_embeddings.has_value());
+    ASSERT_EQ(output.mm_embeddings->size(), 1u);
+    EXPECT_TRUE(
+        torch::equal(output.mm_embeddings->front().embedding, embedding));
+    EXPECT_EQ(output.index, 0u);
+    EXPECT_FALSE(output.embeddings.has_value());
+    EXPECT_TRUE(output.text.empty());
+    EXPECT_TRUE(output.token_ids.empty());
+  }
+
+  EXPECT_EQ(COUNTER_VALUE(detokenization_latency_seconds_non_stream),
+            latency_before);
+}
+
+TEST_F(SequenceStopOutputTest, NonStreamingTextRecordsDetokenizationLatency) {
+  initialize(/*max_generated_tokens=*/2, /*stop_tokens=*/{});
+  append_token('A');
+  append_token('B');
+  ASSERT_TRUE(sequence_->finished());
+  const DelayedStopAwareTokenizer delayed_tokenizer;
+  const double latency_before =
+      COUNTER_VALUE(detokenization_latency_seconds_non_stream);
+
+  SequenceOutput output = sequence_->generate_output(delayed_tokenizer);
+
+  EXPECT_GT(COUNTER_VALUE(detokenization_latency_seconds_non_stream),
+            latency_before);
+  EXPECT_EQ(output.text, "AB");
+  EXPECT_EQ(output.token_ids, (std::vector<int32_t>{'A', 'B'}));
+  EXPECT_EQ(output.index, 0u);
+  ASSERT_TRUE(output.finish_reason.has_value());
+  EXPECT_EQ(output.finish_reason.value(), "length");
+  EXPECT_FALSE(output.embeddings.has_value());
+  EXPECT_FALSE(output.mm_embeddings.has_value());
+}
 
 TEST_F(SequenceStopOutputTest, NonStreamingExcludesStopTokenFromText) {
   initialize(/*max_generated_tokens=*/8,

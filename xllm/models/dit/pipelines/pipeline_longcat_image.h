@@ -813,7 +813,6 @@ class LongCatImagePipelineImpl : public torch::nn::Module {
     }
 
     // Decode latents to images
-    torch::Tensor image;
     torch::Tensor unpacked_latents =
         unpack_latents(prepared_latents, height, width, vae_scale_factor_);
     unpacked_latents =
@@ -821,24 +820,7 @@ class LongCatImagePipelineImpl : public torch::nn::Module {
     // Ensure VAE input matches model dtype (VAE is loaded in bfloat16)
     unpacked_latents = unpacked_latents.to(options_.dtype());
 
-    if (!vae_) {
-      LOG(ERROR) << "[LongCatImage] VAE is null!";
-      return std::vector<torch::Tensor>{
-          {torch::zeros({1, 3, height, width}, options_)}};
-    }
-
-    try {
-      image = vae_->decode(unpacked_latents);
-    } catch (const std::exception& e) {
-      LOG(ERROR) << "[LongCatImage] VAE decode failed with exception: "
-                 << e.what();
-      return std::vector<torch::Tensor>{
-          {torch::zeros({1, 3, height, width}, options_)}};
-    } catch (...) {
-      LOG(ERROR) << "[LongCatImage] VAE decode failed with unknown exception";
-      return std::vector<torch::Tensor>{
-          {torch::zeros({1, 3, height, width}, options_)}};
-    }
+    torch::Tensor image = vae_->decode(unpacked_latents);
 
     image = vae_image_processor_->postprocess(image);
 

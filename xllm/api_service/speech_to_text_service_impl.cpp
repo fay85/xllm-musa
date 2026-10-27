@@ -678,6 +678,7 @@ void SpeechToTextServiceImpl::process_async_impl(
       std::move(messages),
       std::move(request_params),
       BinaryPayload(audio_bytes),
+      call.get(),
       [call,
        model = std::move(model),
        task = task_,
@@ -691,7 +692,6 @@ void SpeechToTextServiceImpl::process_async_impl(
        duration_s,
        stream_usage = std::optional<proto::Usage>()](
           const RequestOutput& req_output) mutable -> bool {
-        req_output.log_request_status();
         if (req_output.status.has_value()) {
           const auto& status = req_output.status.value();
           if (!status.ok()) {

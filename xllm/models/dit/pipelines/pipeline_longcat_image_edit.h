@@ -1059,7 +1059,6 @@ class LongCatImageEditPipelineImpl : public torch::nn::Module {
     }
 
     // Decode latents to images.
-    torch::Tensor image_out;
     torch::Tensor unpacked_latents = unpack_latents(prepared_latents,
                                                     calculated_height,
                                                     calculated_width,
@@ -1068,18 +1067,7 @@ class LongCatImageEditPipelineImpl : public torch::nn::Module {
         (unpacked_latents / vae_scaling_factor_) + vae_shift_factor_;
     unpacked_latents = unpacked_latents.to(options_.dtype());
 
-    try {
-      image_out = vae_->decode(unpacked_latents);
-    } catch (const std::exception& e) {
-      LOG(ERROR) << "[LongCatImageEdit] VAE decode failed: " << e.what();
-      return std::vector<torch::Tensor>{{torch::zeros(
-          {1, 3, calculated_height, calculated_width}, options_)}};
-    } catch (...) {
-      LOG(ERROR) << "[LongCatImageEdit] VAE decode failed with unknown "
-                    "exception";
-      return std::vector<torch::Tensor>{{torch::zeros(
-          {1, 3, calculated_height, calculated_width}, options_)}};
-    }
+    torch::Tensor image_out = vae_->decode(unpacked_latents);
 
     image_out = vae_image_processor_->postprocess(image_out);
     image_out = image_out.cpu().to(torch::kFloat32).contiguous();

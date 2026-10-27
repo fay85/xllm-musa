@@ -26,6 +26,7 @@ limitations under the License.
 #include <optional>
 #include <utility>
 
+#include "common/device_monitor.h"
 #include "common/macros.h"
 #include "common/metrics.h"
 #include "core/framework/config/load_config.h"
@@ -223,8 +224,6 @@ std::optional<ForwardOutput> VLMWorkerImpl::step_internal(
     }
   }
 
-  COUNTER_ADD(execution_latency_seconds_model, timer.elapsed_seconds());
-
   if (!enable_schedule_overlap() && !driver_ && !dp_driver_ &&
       !options_.enable_speculative_decode()) {
     if (sync_policy == ForwardSyncPolicy::LEGACY) {
@@ -298,8 +297,11 @@ std::optional<ForwardOutput> VLMWorkerImpl::step_internal(
     return output;
   }
 
-  auto ret = device_.synchronize_default_stream();
-  (void)ret;
+  int32_t ret = device_.synchronize_default_stream();
+  CHECK_EQ(ret, 0) << "synchronize_default_stream failed";
+  COUNTER_ADD(execution_latency_seconds_model, timer.elapsed_seconds());
+  DeviceMonitor::get_instance().update_active_activation_memory(
+      device_.index());
   return output;
 }
 

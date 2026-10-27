@@ -18,6 +18,20 @@ endif()
 
 cc_test(
   NAME
+    dit_executor_test
+  CPU_ONLY
+  SRCS
+    dit_executor_test.cpp
+    ${PROJECT_SOURCE_DIR}/xllm/core/runtime/dit_executor.cpp
+  DEPS
+    :batch
+    :common
+    glog::glog
+    GTest::gtest_main
+)
+
+cc_test(
+  NAME
     encoder_executor_test
   CPU_ONLY
   SRCS
@@ -101,6 +115,19 @@ if(USE_NPU)
   target_link_libraries(dflash2_prelaunch_lifecycle_test PRIVATE
     torch_npu torch_python Python::Python ascendcl hccl c_sec nnopbase)
   target_link_options(dflash2_prelaunch_lifecycle_test PRIVATE
+    "-Wl,--whole-archive"
+    "${CMAKE_BINARY_DIR}/third_party/spdlog/libspdlog.a"
+    "-Wl,--no-whole-archive")
+
+  # Isolate process-wide execution counters and the NPU worker lifecycle.
+  cc_test(
+    NAME vlm_execution_metrics_test
+    SRCS vlm_execution_metrics_test.cpp
+    DEPS :runtime :models :batch :block :platform GTest::gtest_main
+  )
+  target_link_libraries(vlm_execution_metrics_test PRIVATE
+    torch_npu torch_python Python::Python ascendcl hccl c_sec nnopbase)
+  target_link_options(vlm_execution_metrics_test PRIVATE
     "-Wl,--whole-archive"
     "${CMAKE_BINARY_DIR}/third_party/spdlog/libspdlog.a"
     "-Wl,--no-whole-archive")

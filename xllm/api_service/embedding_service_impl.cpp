@@ -114,6 +114,12 @@ void EmbeddingServiceImpl::process_async_impl(
   auto& input = rpc_request.input();
 
   auto saved_request_id = request_params.request_id;
+  if (master_->get_rate_limiter()->is_limited()) {
+    call->finish_with_error(api_service_internal::rate_limiter_rejection_status(
+        *master_->get_rate_limiter()));
+    return;
+  }
+
   // schedule the request
   master_->handle_request(
       std::move(input),
@@ -185,11 +191,18 @@ void MMEmbeddingServiceImpl::process_async_impl(
 
   BinaryPayload payload(call->take_request_iobuf());
 
+  if (master_->get_rate_limiter()->is_limited()) {
+    call->finish_with_error(api_service_internal::rate_limiter_rejection_status(
+        *master_->get_rate_limiter()));
+    return;
+  }
+
   // schedule the request
   master_->handle_request(
       std::move(messages),
       std::move(request_params),
       std::move(payload),
+      call.get(),
       [call,
        model,
        request_id = request_id,

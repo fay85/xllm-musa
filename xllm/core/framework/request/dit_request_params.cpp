@@ -16,12 +16,15 @@ limitations under the License.
 
 #include "core/framework/request/dit_request_params.h"
 
+#include <cstdint>
 #include <string>
 #include <utility>
 #include <variant>
 
 #include "core/common/instance_name.h"
+#include "core/common/metrics.h"
 #include "core/framework/request/dit_request_parser.h"
+#include "core/util/timer.h"
 #include "core/util/uuid.h"
 
 namespace xllm {
@@ -169,16 +172,19 @@ bool DiTRequestParams::parse_input_params(Status& status,
   }
 
   DiTInputParams parsed_input_params;
-  if (!parser_->parse_input(raw_input_params,
-                            generation_params,
-                            parsed_input_params,
-                            status,
-                            preserve_image_alpha)) {
-    return false;
+  Timer timer;
+  const bool success = parser_->parse_input(raw_input_params,
+                                            generation_params,
+                                            parsed_input_params,
+                                            status,
+                                            preserve_image_alpha);
+  if (success) {
+    input_params = std::move(parsed_input_params);
   }
 
-  input_params = std::move(parsed_input_params);
-  return true;
+  HISTOGRAM_OBSERVE(dit_input_parse_latency_milliseconds,
+                    static_cast<int64_t>(timer.elapsed_milliseconds()));
+  return success;
 }
 
 bool DiTRequestParams::verify_params(Status& status) const {

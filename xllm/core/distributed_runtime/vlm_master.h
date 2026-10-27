@@ -50,12 +50,14 @@ class VLMMaster : public Master {
   void handle_request(std::string prompt,
                       MMData mm_data,
                       RequestParams sp,
+                      std::optional<Call*> call,
                       OutputCallback callback);
 
   // chat
   void handle_request(std::vector<Message> messages,
                       RequestParams sp,
                       BinaryPayload payload,
+                      std::optional<Call*> call,
                       OutputCallback callback,
                       bool use_prompt_as_is = false);
 

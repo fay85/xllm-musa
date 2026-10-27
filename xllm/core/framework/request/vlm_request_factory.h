@@ -38,6 +38,7 @@ limitations under the License.
 
 namespace xllm {
 
+class Call;
 class Tokenizer;
 
 // Factory that assembles a domain Request aggregate for the VLM path from raw
@@ -62,6 +63,7 @@ class VLMRequestFactory final {
   std::shared_ptr<Request> create(std::string prompt,
                                   MMData mm_data,
                                   const RequestParams& sp,
+                                  std::optional<Call*> call,
                                   OutputCallback callback);
 
   // chat: decodes the multimodal payload and renders messages into a prompt,
@@ -69,6 +71,7 @@ class VLMRequestFactory final {
   std::shared_ptr<Request> create(std::vector<Message> messages,
                                   const RequestParams& sp,
                                   BinaryPayload payload,
+                                  std::optional<Call*> call,
                                   OutputCallback callback,
                                   bool use_prompt_as_is = false);
 
@@ -77,6 +80,7 @@ class VLMRequestFactory final {
                                          std::vector<int32_t> prompt_tokens,
                                          MMData mm_data,
                                          const RequestParams& sp,
+                                         std::optional<Call*> call,
                                          OutputCallback callback);
 
   // Builds the stopping checker, encoding any stop sequences. Returns

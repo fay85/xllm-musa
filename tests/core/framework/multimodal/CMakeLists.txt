@@ -12,3 +12,14 @@ cc_test(
     :multimodal
     GTest::gtest_main
 )
+
+cc_test(
+  NAME
+    mm_input_metrics_test
+  CPU_ONLY
+  SRCS
+    mm_input_metrics_test.cpp
+  DEPS
+    :multimodal
+    GTest::gtest_main
+)

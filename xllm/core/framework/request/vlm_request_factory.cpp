@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <algorithm>
 #include <optional>
 #include <stdexcept>
 #include <string>
@@ -115,6 +116,7 @@ VLMRequestFactory::VLMRequestFactory(MultimodalProcessorBase* processor,
 std::shared_ptr<Request> VLMRequestFactory::create(std::string prompt,
                                                    MMData mm_data,
                                                    const RequestParams& sp,
+                                                   std::optional<Call*> call,
                                                    OutputCallback callback) {
   // Guard the rate-limit slot acquired at the service entry. build_request
   // installs its own guard, so we dismiss ours before forwarding.
@@ -140,6 +142,7 @@ std::shared_ptr<Request> VLMRequestFactory::create(std::string prompt,
                        std::move(prompt_tokens),
                        std::move(mm_data),
                        sp,
+                       call,
                        std::move(callback));
 }
 
@@ -148,6 +151,7 @@ std::shared_ptr<Request> VLMRequestFactory::build_request(
     std::vector<int32_t> prompt_tokens,
     MMData mm_data,
     const RequestParams& sp,
+    std::optional<Call*> call,
     OutputCallback callback) {
   // Guard the rate-limit slot acquired at the service entry. Any early
   // return below releases it; success path dismisses right before Request
@@ -219,7 +223,9 @@ std::shared_ptr<Request> VLMRequestFactory::build_request(
                          sp.skip_special_tokens,
                          options_->enable_schedule_overlap(),
                          callback,
-                         nullptr);
+                         nullptr,
+                         /*decode_address=*/"",
+                         call);
   req_state.include_stop_str_in_output = sp.include_stop_str_in_output;
   req_state.timing = sp.timing;
 
@@ -272,6 +278,7 @@ std::shared_ptr<Request> VLMRequestFactory::create(
     std::vector<Message> messages,
     const RequestParams& sp,
     BinaryPayload payload,
+    std::optional<Call*> call,
     OutputCallback callback,
     bool use_prompt_as_is) {
   // Guard the rate-limit slot acquired at the service entry. The next hop
@@ -290,11 +297,21 @@ std::shared_ptr<Request> VLMRequestFactory::create(
     return nullptr;
   }
 
+  const bool has_mm_content =
+      std::any_of(messages.begin(), messages.end(), [](const Message& message) {
+        return message.has_mm_content();
+      });
   MMInput mm_inputs(std::move(payload));
-  Timer load_timer;
+  Timer transfer_timer;
   MMErrCode code = mm_input_transfer.trans(messages, mm_inputs);
-  HISTOGRAM_OBSERVE(mm_input_loading_latency_milliseconds,
-                    static_cast<int64_t>(load_timer.elapsed_milliseconds()));
+  if (has_mm_content) {
+    HISTOGRAM_OBSERVE(
+        mm_transfer_latency_milliseconds,
+        static_cast<int64_t>(transfer_timer.elapsed_milliseconds()));
+    MULTI_COUNTER_ADD(mm_input_stage_failures_total,
+                      "transfer",
+                      code == MMErrCode::SUCCESS ? 0 : 1);
+  }
   if (code != MMErrCode::SUCCESS) {
     std::string error_message = MMErrToString(code);
     LOG(ERROR) << error_message;
@@ -304,11 +321,12 @@ std::shared_ptr<Request> VLMRequestFactory::create(
 
   MMData mm_data;
   if (!mm_inputs.empty()) {
-    Timer preprocess_timer;
+    Timer processor_timer;
     bool ok = processor_->process_multimodal(mm_inputs, mm_data);
     HISTOGRAM_OBSERVE(
-        mm_preprocess_latency_milliseconds,
-        static_cast<int64_t>(preprocess_timer.elapsed_milliseconds()));
+        mm_processor_latency_milliseconds,
+        static_cast<int64_t>(processor_timer.elapsed_milliseconds()));
+    MULTI_COUNTER_ADD(mm_input_stage_failures_total, "processor", ok ? 0 : 1);
     if (!ok) {
       CALLBACK_WITH_ERROR(StatusCode::INVALID_ARGUMENT,
                           "Failed to process multimodal input.");
@@ -316,7 +334,6 @@ std::shared_ptr<Request> VLMRequestFactory::create(
     }
   }
 
-  Timer timer;
   std::optional<std::string> prompt;
   if (use_prompt_as_is) {
     // The request hands in a final prompt that is already assembled with
@@ -330,6 +347,7 @@ std::shared_ptr<Request> VLMRequestFactory::create(
       throw_prompt_as_is_error(messages);
     }
   } else {
+    AUTO_COUNTER(chat_template_latency_seconds);
     // Server-side template context for audio models (audio_token_id set):
     // the CTC region follows --use_ctc, so the rendered prompt and the
     // embedding injection cannot disagree. A request kwarg of the same name
@@ -347,11 +365,13 @@ std::shared_ptr<Request> VLMRequestFactory::create(
     CALLBACK_WITH_ERROR(StatusCode::INVALID_ARGUMENT, error_message);
     return nullptr;
   }
-  COUNTER_ADD(chat_template_latency_seconds, timer.elapsed_seconds());
 
   rate_limit_guard.dismiss();
-  return create(
-      std::move(prompt.value()), std::move(mm_data), sp, std::move(callback));
+  return create(std::move(prompt.value()),
+                std::move(mm_data),
+                sp,
+                call,
+                std::move(callback));
 }
 
 }  // namespace xllm

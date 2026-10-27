@@ -22,6 +22,7 @@ limitations under the License.
 #include <deque>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -114,7 +115,8 @@ class RequestState final {
                bool enable_schedule_overlap,
                const OutputFunc& output_func,
                const OutputsFunc& outputs_func,
-               const std::string& decode_address = "");
+               const std::string& decode_address = "",
+               std::optional<Call*> call = std::nullopt);
 
   // for profiling run, only provide prompt tokens
   RequestState(const std::vector<int32_t>& prompt_tokens);
@@ -207,6 +209,7 @@ class RequestState final {
   // This will be used in enable_scheduler_overlap
   bool handle_last_token_done = false;
 
+  // Non-owning; the online output callback retains the Call's shared owner.
   std::optional<Call*> call_;
   std::shared_ptr<RequestTiming> timing;
 

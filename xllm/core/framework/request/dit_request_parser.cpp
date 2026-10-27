@@ -27,6 +27,7 @@ limitations under the License.
 #include <vector>
 
 #include "audio_generation.pb.h"
+#include "core/common/metrics.h"
 #include "core/common/types.h"
 #include "core/framework/config/dit_config.h"
 #include "core/framework/request/dit_request_params.h"
@@ -34,6 +35,7 @@ limitations under the License.
 #include "core/framework/request/dit_source_decoder.h"
 #include "core/runtime/params_utils.h"
 #include "core/util/binary_payload.h"
+#include "core/util/timer.h"
 #include "core/util/utils.h"
 #include "image_generation.pb.h"
 #include "text_generation.pb.h"
@@ -93,22 +95,31 @@ bool decode_tensor_source(std::string_view name,
                           const BinaryPayload& binary_payload,
                           DiTTensorSources& tensor_sources,
                           Status& status) {
+  Timer timer;
+  const auto finish = [&timer](bool success) {
+    MULTI_HISTOGRAM_OBSERVE(dit_input_stage_host_latency_microseconds,
+                            "tensor_deserialize",
+                            static_cast<int64_t>(timer.elapsed_microseconds()));
+    MULTI_COUNTER_ADD(
+        dit_input_stage_failures_total, "tensor_deserialize", success ? 0 : 1);
+    return success;
+  };
   torch::Tensor tensor = util::proto_to_torch(proto_tensor, binary_payload);
   if (!tensor.defined()) {
     status = Status(StatusCode::INVALID_ARGUMENT,
                     "invalid " + std::string(name) + " tensor");
-    return false;
+    return finish(/*success=*/false);
   }
   std::optional<TensorParameters> parameters =
       proto_to_tensor_parameters(proto_tensor);
   if (!parameters.has_value()) {
     status = Status(StatusCode::INVALID_ARGUMENT,
                     "invalid " + std::string(name) + " tensor parameters");
-    return false;
+    return finish(/*success=*/false);
   }
   tensor_sources.add(
       std::string(name), std::move(tensor), std::move(*parameters));
-  return true;
+  return finish(/*success=*/true);
 }
 
 }  // namespace

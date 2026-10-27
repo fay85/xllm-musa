@@ -77,6 +77,7 @@ ModelOutput VlmExecutorImpl::run(const torch::Tensor& tokens,
     if (llm_executor_) {
       return llm_executor_->run(tokens, decode_positions, kv_caches, params);
     }
+    COUNTER_INC(num_model_execution_total_eager);
     return model_->forward(tokens, decode_positions, kv_caches, params);
   }
 
@@ -94,6 +95,7 @@ ModelOutput VlmExecutorImpl::run(const torch::Tensor& tokens,
   if (llm_executor_) {
     return llm_executor_->run(tokens, positions, kv_caches, params);
   }
+  COUNTER_INC(num_model_execution_total_eager);
   return model_->forward(tokens, positions, kv_caches, params);
 }
 

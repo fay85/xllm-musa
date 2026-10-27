@@ -29,7 +29,6 @@ cc_test(
   SRCS
     disagg_pd_scheduler_test.cpp
     continuous_scheduler_test.cpp
-    dit_scheduler_test.cpp
     fixed_steps_scheduler_test.cpp
     scheduler_policy_test.cpp
   DEPS
@@ -68,13 +67,40 @@ cc_test(
     GTest::gtest_main
     $<$<BOOL:${USE_NPU}>:nnopbase>
 )
-foreach(test_target scheduler_test pd_decode_restore_test pd_inflight_lifetime_test)
+# Isolate process-global response metrics without starting model workers.
+cc_test(
+  NAME
+    dit_scheduler_test
+  CPU_ONLY
+  SRCS
+    dit_scheduler_test.cpp
+  DEPS
+    :config
+    :scheduler
+    :xllm_server
+    :block
+    GTest::gtest_main
+    $<$<BOOL:${USE_NPU}>:torch_npu>
+    $<$<BOOL:${USE_NPU}>:torch_python>
+    $<$<BOOL:${USE_NPU}>:nnopbase>
+)
+set_tests_properties(
+  DiTResponseMetricsTest.OutputBuildEndsBeforeCallback
+  PROPERTIES TIMEOUT 60)
+
+foreach(test_target scheduler_test pd_decode_restore_test pd_inflight_lifetime_test dit_scheduler_test)
   target_link_libraries(${test_target}
                         PUBLIC
                         Python::Python
                         $<$<BOOL:${USE_NPU}>:ascendcl>
                         $<$<BOOL:${USE_NPU}>:hccl>
                         $<$<BOOL:${USE_NPU}>:c_sec>)
-  target_link_libraries(${test_target} PRIVATE
-    "$<LINK_GROUP:RESCAN,xtensor,xllm_server>")
+  if(test_target STREQUAL "dit_scheduler_test")
+    # Rescan execution/request archives without merging shared target cycles.
+    target_link_libraries(${test_target} PRIVATE
+      "$<LINK_GROUP:RESCAN,xtensor,xllm_server,$<TARGET_FILE:runtime>,$<TARGET_FILE:batch>,$<TARGET_FILE:request>,$<TARGET_FILE:kv_cache>,$<TARGET_FILE:block>,$<TARGET_FILE:block_hasher>>")
+  else()
+    target_link_libraries(${test_target} PRIVATE
+      "$<LINK_GROUP:RESCAN,xtensor,xllm_server>")
+  endif()
 endforeach()

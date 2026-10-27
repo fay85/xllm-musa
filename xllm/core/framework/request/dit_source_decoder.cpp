@@ -21,8 +21,10 @@ limitations under the License.
 #include <utility>
 
 #include "butil/base64.h"
+#include "core/common/metrics.h"
 #include "core/framework/multimodal/mm_codec.h"
 #include "core/util/threadpool.h"
+#include "core/util/timer.h"
 
 namespace xllm {
 
@@ -108,6 +110,18 @@ bool DiTSourceDecoder::decode(std::vector<MediaNamedTensor>& outputs,
                               Status& status,
                               int32_t audio_channels,
                               int64_t audio_sampling_rate) const {
+  if (inputs_.empty()) {
+    return true;
+  }
+  Timer timer;
+  const auto finish = [&timer](bool success) {
+    MULTI_HISTOGRAM_OBSERVE(dit_input_stage_host_latency_microseconds,
+                            "media_decode",
+                            static_cast<int64_t>(timer.elapsed_microseconds()));
+    MULTI_COUNTER_ADD(
+        dit_input_stage_failures_total, "media_decode", success ? 0 : 1);
+    return success;
+  };
   std::vector<torch::Tensor> prompt_audio_in_videos(inputs_.size());
   const IndexedDecodeFn decode_media = [&](size_t index,
                                            std::string_view modality,
@@ -148,7 +162,7 @@ bool DiTSourceDecoder::decode(std::vector<MediaNamedTensor>& outputs,
 
   std::vector<MediaNamedTensor> decoded_sources;
   if (!decode_inputs(decode_media, decoded_sources, status)) {
-    return false;
+    return finish(/*success=*/false);
   }
   outputs.reserve(outputs.size() + decoded_sources.size() + inputs_.size());
   for (size_t index = 0; index < decoded_sources.size(); ++index) {
@@ -160,7 +174,7 @@ bool DiTSourceDecoder::decode(std::vector<MediaNamedTensor>& outputs,
                            .tensor = std::move(prompt_audio_in_videos[index])});
     }
   }
-  return true;
+  return finish(/*success=*/true);
 }
 
 bool DiTSourceDecoder::decode_inputs(const IndexedDecodeFn& decode_fn,

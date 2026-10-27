@@ -155,6 +155,9 @@ class MMInputTransfer {
   MMErrCode trans(const std::vector<Message>& messages, MMInput& inputs);
 
  private:
+  MMErrCode process_item(const MMContent& content,
+                         MMInputItem& input,
+                         const BinaryPayload& payload);
   MMErrCode trans_parallel(const MMContentVec& mmc,
                            std::vector<MMInputItem>& inputs,
                            const BinaryPayload& payload);

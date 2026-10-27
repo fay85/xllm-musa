@@ -27,6 +27,7 @@ limitations under the License.
 
 #include "audio_generation.pb.h"
 #include "butil/base64.h"
+#include "core/common/metrics.h"
 #include "core/framework/multimodal/mm_codec.h"
 #include "core/util/binary_payload.h"
 #include "image_generation.pb.h"
@@ -36,6 +37,49 @@ limitations under the License.
 
 namespace xllm {
 namespace {
+
+struct InputMetricsSnapshot {
+  int64_t parse_count = 0;
+  int64_t media_count = 0;
+  int64_t tensor_count = 0;
+  double media_failures = 0;
+  double tensor_failures = 0;
+};
+
+InputMetricsSnapshot snapshot_input_metrics() {
+  bvar::LatencyRecorder* media_latency =
+      MULTI_HISTOGRAM_dit_input_stage_host_latency_microseconds.get_stats(
+          {"media_decode"});
+  bvar::LatencyRecorder* tensor_latency =
+      MULTI_HISTOGRAM_dit_input_stage_host_latency_microseconds.get_stats(
+          {"tensor_deserialize"});
+  bvar::Adder<double>* media_failures =
+      MULTI_COUNTER_dit_input_stage_failures_total.get_stats({"media_decode"});
+  bvar::Adder<double>* tensor_failures =
+      MULTI_COUNTER_dit_input_stage_failures_total.get_stats(
+          {"tensor_deserialize"});
+  CHECK_NE(media_latency, nullptr);
+  CHECK_NE(tensor_latency, nullptr);
+  CHECK_NE(media_failures, nullptr);
+  CHECK_NE(tensor_failures, nullptr);
+  return {.parse_count = HISTOGRAM_dit_input_parse_latency_milliseconds.count(),
+          .media_count = media_latency->count(),
+          .tensor_count = tensor_latency->count(),
+          .media_failures = media_failures->get_value(),
+          .tensor_failures = tensor_failures->get_value()};
+}
+
+void expect_input_metrics_delta(const InputMetricsSnapshot& before,
+                                const InputMetricsSnapshot& expected) {
+  const InputMetricsSnapshot after = snapshot_input_metrics();
+  EXPECT_EQ(after.parse_count - before.parse_count, expected.parse_count);
+  EXPECT_EQ(after.media_count - before.media_count, expected.media_count);
+  EXPECT_EQ(after.tensor_count - before.tensor_count, expected.tensor_count);
+  EXPECT_DOUBLE_EQ(after.media_failures - before.media_failures,
+                   expected.media_failures);
+  EXPECT_DOUBLE_EQ(after.tensor_failures - before.tensor_failures,
+                   expected.tensor_failures);
+}
 
 // Helper to build a minimal TextGenerationRequest.
 proto::TextGenerationRequest MakeTextRequest(const std::string& model,
@@ -146,6 +190,37 @@ bool decode_fails_with_invalid_argument(DiTRequestParams& params) {
   return !decoded && status.code() == StatusCode::INVALID_ARGUMENT;
 }
 
+TEST(DiTRequestParamsTest, PurePromptOnlyRecordsParseLatency) {
+  proto::Input image_input;
+  image_input.set_prompt("image prompt");
+  proto::AudioInput audio_input;
+  audio_input.set_prompt("audio prompt");
+  proto::VideoInput video_input;
+  video_input.set_prompt("video prompt");
+  proto::TextInput text_input;
+  text_input.set_prompt("text prompt");
+  const std::vector<std::pair<DiTRequestKind, DiTInputProto>> inputs = {
+      {DiTRequestKind::kImage, &image_input},
+      {DiTRequestKind::kAudio, &audio_input},
+      {DiTRequestKind::kVideo, &video_input},
+      {DiTRequestKind::kText, &text_input}};
+  for (const auto& [request_kind, input] : inputs) {
+    SCOPED_TRACE(static_cast<int32_t>(request_kind));
+    DiTRequestParams params(request_kind);
+    params.raw_input_params.input = input;
+    Status status;
+    const InputMetricsSnapshot before = snapshot_input_metrics();
+
+    ASSERT_TRUE(params.parse_input_params(status));
+    expect_input_metrics_delta(before, {.parse_count = 1});
+    EXPECT_TRUE(params.verify_params(status)) << status.message();
+    expect_input_metrics_delta(before, {.parse_count = 1});
+    params.input_params.prompt.clear();
+    EXPECT_FALSE(params.verify_params(status));
+    expect_input_metrics_delta(before, {.parse_count = 1});
+  }
+}
+
 TEST(DiTRequestParamsTest, LegacyImagesMapToOrderedUnknownSources) {
   proto::ImageGenerationRequest request = MakeImageRequest();
   request.mutable_input()->add_images(kTinyPngBase64);
@@ -154,7 +229,9 @@ TEST(DiTRequestParamsTest, LegacyImagesMapToOrderedUnknownSources) {
   DiTRequestParams params(request, "rid", "rtime");
 
   ASSERT_TRUE(params.request_parse_status.ok());
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   const DiTInputParams& input_params = decode_input(params);
+  expect_input_metrics_delta(before, {.parse_count = 1, .media_count = 1});
   ASSERT_EQ(input_params.media_sources.size(), 2u);
   EXPECT_EQ(input_params.media_sources.at(0).name, "unknown");
   EXPECT_EQ(input_params.media_sources.at(1).name, "unknown");
@@ -171,7 +248,9 @@ TEST(DiTRequestParamsTest, ConstructorCollectsMediaWithoutDecoding) {
   source->set_modality("image");
   source->set_base64("not-base64");
 
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   DiTRequestParams params(request, "rid", "rtime");
+  expect_input_metrics_delta(before, {});
 
   ASSERT_TRUE(params.request_parse_status.ok());
   const auto* input =
@@ -201,7 +280,9 @@ TEST(DiTRequestParamsTest, ImageSourcesSupportBase64AndBinaryInOrder) {
   DiTRequestParams params(request, "rid", "rtime", BinaryPayload(payload));
 
   ASSERT_TRUE(params.request_parse_status.ok());
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   const DiTInputParams& input_params = decode_input(params);
+  expect_input_metrics_delta(before, {.parse_count = 1, .media_count = 1});
   ASSERT_EQ(input_params.media_sources.size(), 2u);
   EXPECT_EQ(input_params.media_sources.at(0).name, "unknown");
   EXPECT_EQ(input_params.media_sources.at(1).name, "control_image");
@@ -229,8 +310,10 @@ TEST(DiTRequestParamsTest, VideoImageSourcesAreDecoded) {
   DiTRequestParams params(request, "rid", "rtime", BinaryPayload(payload));
 
   ASSERT_TRUE(params.request_parse_status.ok());
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   std::vector<torch::Tensor> images =
       decode_input(params).media_sources.get({"image", "last_image"});
+  expect_input_metrics_delta(before, {.parse_count = 1, .media_count = 1});
   EXPECT_EQ(images.size(), 2u);
 }
 
@@ -254,7 +337,9 @@ TEST(DiTRequestParamsTest,
       request, "rid", "rtime", BinaryPayload(TinyPngBytes()));
 
   ASSERT_TRUE(params.request_parse_status.ok());
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   const DiTInputParams& input_params = decode_input(params);
+  expect_input_metrics_delta(before, {.parse_count = 1, .media_count = 1});
   ASSERT_EQ(input_params.media_sources.size(), 3u);
   EXPECT_EQ(input_params.media_sources.at(0).name, "first");
   EXPECT_EQ(input_params.media_sources.at(1).name, "second");
@@ -288,7 +373,10 @@ TEST(DiTRequestParamsTest, FailedParallelImageDecodePreservesExistingInput) {
   params.input_params.media_sources.add("existing", "image", existing_tensor);
   Status status;
 
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   EXPECT_FALSE(params.parse_input_params(status));
+  expect_input_metrics_delta(
+      before, {.parse_count = 1, .media_count = 1, .media_failures = 1});
   EXPECT_EQ(status.code(), StatusCode::INVALID_ARGUMENT);
   EXPECT_EQ(params.input_params.prompt, "existing prompt");
   ASSERT_EQ(params.input_params.media_sources.size(), 1);
@@ -329,7 +417,9 @@ TEST(DiTRequestParamsTest, RejectsOutOfBoundsBinaryImage) {
       request, "rid", "rtime", BinaryPayload(TinyPngBytes()));
 
   ASSERT_TRUE(params.request_parse_status.ok());
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   EXPECT_TRUE(decode_fails_with_invalid_argument(params));
+  expect_input_metrics_delta(before, {.parse_count = 1});
 }
 
 TEST(DiTRequestParamsTest, RejectsOverflowingBinaryImageRange) {
@@ -346,7 +436,9 @@ TEST(DiTRequestParamsTest, RejectsOverflowingBinaryImageRange) {
       request, "rid", "rtime", BinaryPayload(TinyPngBytes()));
 
   ASSERT_TRUE(params.request_parse_status.ok());
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   EXPECT_TRUE(decode_fails_with_invalid_argument(params));
+  expect_input_metrics_delta(before, {.parse_count = 1});
 }
 
 TEST(DiTRequestParamsTest, RejectsEmptyImageSource) {
@@ -356,7 +448,9 @@ TEST(DiTRequestParamsTest, RejectsEmptyImageSource) {
   DiTRequestParams params(request, "rid", "rtime");
 
   ASSERT_TRUE(params.request_parse_status.ok());
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   EXPECT_TRUE(decode_fails_with_invalid_argument(params));
+  expect_input_metrics_delta(before, {.parse_count = 1});
 }
 
 TEST(DiTRequestParamsTest, BinaryTensorInputMatchesContentsInput) {
@@ -367,6 +461,7 @@ TEST(DiTRequestParamsTest, BinaryTensorInputMatchesContentsInput) {
   contents_tensor->add_shape(2);
   contents_tensor->mutable_contents()->add_fp32_contents(1.25f);
   contents_tensor->mutable_contents()->add_fp32_contents(-2.5f);
+  *contents_request.mutable_input()->mutable_latent() = *contents_tensor;
   DiTRequestParams contents_params(contents_request, "rid", "rtime");
 
   proto::ImageGenerationRequest binary_request = MakeImageRequest();
@@ -378,6 +473,7 @@ TEST(DiTRequestParamsTest, BinaryTensorInputMatchesContentsInput) {
   (*binary_tensor->mutable_parameters())["offset"].set_int64_param(2);
   (*binary_tensor->mutable_parameters())["len"].set_int64_param(2 *
                                                                 sizeof(float));
+  *binary_request.mutable_input()->mutable_latent() = *binary_tensor;
   const float values[] = {1.25f, -2.5f};
   std::string payload = "xx";
   payload.append(reinterpret_cast<const char*>(values), sizeof(values));
@@ -385,10 +481,18 @@ TEST(DiTRequestParamsTest, BinaryTensorInputMatchesContentsInput) {
       binary_request, "rid", "rtime", BinaryPayload(payload));
 
   ASSERT_TRUE(binary_params.request_parse_status.ok());
+  const InputMetricsSnapshot before_binary = snapshot_input_metrics();
   const DiTInputParams& binary_input = decode_input(binary_params);
+  expect_input_metrics_delta(before_binary,
+                             {.parse_count = 1, .tensor_count = 2});
+  const InputMetricsSnapshot before_contents = snapshot_input_metrics();
   const DiTInputParams& contents_input = decode_input(contents_params);
+  expect_input_metrics_delta(before_contents,
+                             {.parse_count = 1, .tensor_count = 2});
   EXPECT_TRUE(torch::equal(*binary_input.tensor_sources.get("prompt_embed"),
                            *contents_input.tensor_sources.get("prompt_embed")));
+  EXPECT_TRUE(torch::equal(*binary_input.tensor_sources.get("latent"),
+                           *contents_input.tensor_sources.get("latent")));
 }
 
 TEST(DiTRequestParamsTest, VideoBinaryTensorInputMatchesContentsInput) {
@@ -417,8 +521,14 @@ TEST(DiTRequestParamsTest, VideoBinaryTensorInputMatchesContentsInput) {
       binary_request, "rid", "rtime", BinaryPayload(payload));
 
   ASSERT_TRUE(binary_params.request_parse_status.ok());
+  const InputMetricsSnapshot before_binary = snapshot_input_metrics();
   const DiTInputParams& binary_input = decode_input(binary_params);
+  expect_input_metrics_delta(before_binary,
+                             {.parse_count = 1, .tensor_count = 1});
+  const InputMetricsSnapshot before_contents = snapshot_input_metrics();
   const DiTInputParams& contents_input = decode_input(contents_params);
+  expect_input_metrics_delta(before_contents,
+                             {.parse_count = 1, .tensor_count = 1});
   EXPECT_TRUE(torch::equal(*binary_input.tensor_sources.get("prompt_embed"),
                            *contents_input.tensor_sources.get("prompt_embed")));
 }
@@ -442,7 +552,9 @@ TEST(DiTRequestParamsTest, PromptTokenTagsDecodeFromPromptEmbedParameters) {
   DiTRequestParams params(request, "rid", "rtime");
 
   ASSERT_TRUE(params.request_parse_status.ok());
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   const DiTInputParams& input_params = decode_input(params);
+  expect_input_metrics_delta(before, {.parse_count = 1, .tensor_count = 1});
   const std::optional<NamedTensorConstRef> parsed_prompt_embed =
       input_params.tensor_sources.get_named_tensor("prompt_embed");
   ASSERT_TRUE(parsed_prompt_embed.has_value());
@@ -603,8 +715,14 @@ TEST(DiTRequestParamsTest, PromptAudioSupportsBase64AndBinary) {
 
   ASSERT_TRUE(base64_params.request_parse_status.ok());
   ASSERT_TRUE(binary_params.request_parse_status.ok());
+  const InputMetricsSnapshot before_base64 = snapshot_input_metrics();
   const DiTInputParams& base64_input = decode_input(base64_params);
+  expect_input_metrics_delta(before_base64,
+                             {.parse_count = 1, .media_count = 1});
+  const InputMetricsSnapshot before_binary = snapshot_input_metrics();
   const DiTInputParams& binary_input = decode_input(binary_params);
+  expect_input_metrics_delta(before_binary,
+                             {.parse_count = 1, .media_count = 1});
   ASSERT_EQ(base64_input.media_sources.size(), 1u);
   ASSERT_EQ(binary_input.media_sources.size(), 1u);
   EXPECT_EQ(base64_input.media_sources.at(0).name, "prompt_audio");
@@ -632,7 +750,9 @@ TEST(DiTRequestParamsTest, RejectsOutOfBoundsBinaryPromptAudio) {
       request, "rid", "rtime", BinaryPayload(TinyWavBytes()));
 
   ASSERT_TRUE(params.request_parse_status.ok());
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   EXPECT_TRUE(decode_fails_with_invalid_argument(params));
+  expect_input_metrics_delta(before, {.parse_count = 1});
 }
 
 TEST(DiTRequestParamsTest, AudioOutputTypeDefaultsAndValidates) {
@@ -653,6 +773,41 @@ TEST(DiTRequestParamsTest, AudioOutputTypeDefaultsAndValidates) {
   EXPECT_TRUE(verify_fails_with_invalid_argument(invalid_params));
 }
 
+TEST(DiTRequestParamsTest, InvalidTensorMetadataStopsBeforeLaterStages) {
+  proto::ImageGenerationRequest request = MakeImageRequest();
+  proto::Input* input = request.mutable_input();
+  proto::Tensor* prompt_embed = input->mutable_prompt_embed();
+  prompt_embed->set_datatype("FP32");
+  prompt_embed->add_shape(1);
+  prompt_embed->mutable_contents()->add_fp32_contents(2.0f);
+  proto::Tensor* pooled_prompt_embed = input->mutable_pooled_prompt_embed();
+  *pooled_prompt_embed = *prompt_embed;
+  // An empty metadata value fails after the tensor itself is deserialized.
+  (*pooled_prompt_embed->mutable_parameters())["empty_metadata"];
+  *input->mutable_latent() = *prompt_embed;
+  input->add_images(kTinyPngBase64);
+
+  DiTRequestParams params(request, "rid", "rtime");
+  params.input_params.prompt = "existing prompt";
+  const torch::Tensor existing_tensor = torch::ones({1});
+  params.input_params.tensor_sources.add("prompt_embed", existing_tensor);
+  Status status;
+  const InputMetricsSnapshot before = snapshot_input_metrics();
+
+  EXPECT_FALSE(params.parse_input_params(status));
+  expect_input_metrics_delta(
+      before, {.parse_count = 1, .tensor_count = 2, .tensor_failures = 1});
+  EXPECT_EQ(status.code(), StatusCode::INVALID_ARGUMENT);
+  EXPECT_EQ(status.message(), "invalid pooled_prompt_embed tensor parameters");
+  EXPECT_EQ(params.input_params.prompt, "existing prompt");
+  ASSERT_EQ(params.input_params.tensor_sources.size(), 1u);
+  const std::optional<torch::Tensor> preserved_tensor =
+      params.input_params.tensor_sources.get("prompt_embed");
+  ASSERT_TRUE(preserved_tensor.has_value());
+  EXPECT_TRUE(torch::equal(*preserved_tensor, existing_tensor));
+  EXPECT_TRUE(params.input_params.media_sources.empty());
+}
+
 TEST(DiTRequestParamsTest, RejectsBinaryTensorLengthMismatch) {
   proto::ImageGenerationRequest request = MakeImageRequest();
   proto::Tensor* tensor = request.mutable_input()->mutable_prompt_embed();
@@ -661,13 +816,18 @@ TEST(DiTRequestParamsTest, RejectsBinaryTensorLengthMismatch) {
   (*tensor->mutable_parameters())["is_binary"].set_bool_param(true);
   (*tensor->mutable_parameters())["offset"].set_int64_param(0);
   (*tensor->mutable_parameters())["len"].set_int64_param(sizeof(float));
+  *request.mutable_input()->mutable_latent() = *tensor;
+  request.mutable_input()->add_images(kTinyPngBase64);
 
   const std::string payload(sizeof(float), 0);
   DiTRequestParams params(request, "rid", "rtime", BinaryPayload(payload));
   ASSERT_TRUE(params.request_parse_status.ok());
   Status status;
 
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   EXPECT_FALSE(params.parse_input_params(status));
+  expect_input_metrics_delta(
+      before, {.parse_count = 1, .tensor_count = 1, .tensor_failures = 1});
   EXPECT_EQ(status.code(), StatusCode::INVALID_ARGUMENT);
 }
 
@@ -684,10 +844,16 @@ TEST(DiTRequestParamsTest, RejectsMissingOrInvalidBinaryImagePayload) {
       request, "rid", "rtime", BinaryPayload("nope"));
 
   ASSERT_TRUE(missing_params.request_parse_status.ok());
+  const InputMetricsSnapshot before_missing = snapshot_input_metrics();
   EXPECT_TRUE(decode_fails_with_invalid_argument(missing_params));
+  expect_input_metrics_delta(before_missing, {.parse_count = 1});
   ASSERT_TRUE(invalid_params.request_parse_status.ok());
   Status status;
+  const InputMetricsSnapshot before_invalid = snapshot_input_metrics();
   EXPECT_FALSE(invalid_params.parse_input_params(status));
+  expect_input_metrics_delta(
+      before_invalid,
+      {.parse_count = 1, .media_count = 1, .media_failures = 1});
   EXPECT_EQ(status.code(), StatusCode::INVALID_ARGUMENT);
 }
 
@@ -706,7 +872,9 @@ TEST(DiTRequestParamsTest, NullInputPointersPreserveExistingInput) {
     params.input_params.media_sources.add("existing", "image", existing_tensor);
     Status status;
 
+    const InputMetricsSnapshot before = snapshot_input_metrics();
     EXPECT_FALSE(params.parse_input_params(status));
+    expect_input_metrics_delta(before, {.parse_count = 1});
     EXPECT_EQ(status.code(), StatusCode::INVALID_ARGUMENT);
     EXPECT_EQ(status.message(), "input is missing");
     EXPECT_EQ(params.input_params.prompt, "existing prompt");
@@ -750,7 +918,9 @@ TEST(DiTRequestParamsTest, UnknownRequestKindCannotParseRawInput) {
     params.input_params.prompt = "existing prompt";
     Status status;
 
+    const InputMetricsSnapshot before = snapshot_input_metrics();
     EXPECT_FALSE(params.parse_input_params(status));
+    expect_input_metrics_delta(before, {});
     EXPECT_EQ(status.code(), StatusCode::INVALID_ARGUMENT);
     EXPECT_EQ(status.message(), "request kind is invalid");
     EXPECT_EQ(params.input_params.prompt, "existing prompt");
@@ -778,8 +948,11 @@ TEST(DiTRequestParamsTest, PreparsedOfflineInputRemainsUnchanged) {
     EXPECT_EQ(params.request_kind(), request_kind);
     ASSERT_TRUE(
         std::holds_alternative<std::monostate>(params.raw_input_params.input));
+    const InputMetricsSnapshot before = snapshot_input_metrics();
     ASSERT_TRUE(params.parse_input_params(status));
+    expect_input_metrics_delta(before, {});
     EXPECT_TRUE(params.verify_params(status)) << status.message();
+    expect_input_metrics_delta(before, {});
     EXPECT_TRUE(status.ok());
     EXPECT_EQ(params.input_params.prompt, "offline prompt");
     ASSERT_EQ(params.input_params.media_sources.size(), 1);
@@ -1257,9 +1430,12 @@ TEST(DiTRequestParamsTest,
   }
   (*parameters)["input_image_sizes"].add_int64_tensor_param(32);
   (*parameters)["input_image_sizes"].add_int64_tensor_param(32);
+  const InputMetricsSnapshot before = snapshot_input_metrics();
   auto params = parse_model_image_request(request, "rid", "time");
   ASSERT_TRUE(params.request_parse_status.ok())
       << params.request_parse_status.message();
+  expect_input_metrics_delta(
+      before, {.parse_count = 1, .media_count = 1, .tensor_count = 1});
   const auto& image = params.input_params.media_sources.at(0).tensor;
   EXPECT_EQ(image.sizes(), (torch::IntArrayRef{4, 32, 32}));
   EXPECT_EQ(image[3][0][0].item<int64_t>(), 64);

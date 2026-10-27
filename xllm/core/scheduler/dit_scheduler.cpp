@@ -38,6 +38,7 @@ namespace xllm {
 
 namespace {
 constexpr size_t kRequestQueueSize = 100;
+constexpr size_t kDeferredQueueSize = 1;
 
 bool prompt_audio_allows_batching(const DiTInputParams& lhs,
                                   const DiTInputParams& rhs) {
@@ -115,6 +116,7 @@ void DiTAsyncResponseProcessor::process_completed_request(
       return;
     }
 
+    AUTO_COUNTER(responsing_latency_seconds_non_stream);
     double end_2_end_latency_seconds = request->elapsed_seconds();
     HISTOGRAM_OBSERVE(end_2_end_latency_milliseconds,
                       static_cast<int64_t>(end_2_end_latency_seconds * 1000.0));
@@ -152,6 +154,7 @@ DiTDynamicBatchScheduler::DiTDynamicBatchScheduler(Engine* engine,
 DiTDynamicBatchScheduler::DiTDynamicBatchScheduler(const Options& options)
     : options_(options),
       request_queue_(kRequestQueueSize),
+      deferred_requests_(kDeferredQueueSize),
       server_label_(std::to_string(options.server_idx())) {
   response_handler_ =
       std::make_unique<DiTAsyncResponseProcessor>(options_.disable_log_stats());
@@ -212,6 +215,8 @@ bool DiTDynamicBatchScheduler::add_request(
   CHECK(request != nullptr);
 
   if (request_queue_.write(request)) {
+    GAUGE_SET(num_waiting_requests,
+              request_queue_.size() + deferred_requests_.size());
     return true;
   }
 
@@ -239,18 +244,28 @@ void DiTDynamicBatchScheduler::step(const absl::Duration& timeout) {
 
 void DiTDynamicBatchScheduler::generate() {}
 
+void DiTDynamicBatchScheduler::incr_pending_requests(size_t count) {
+  pending_requests_.fetch_add(count, std::memory_order_relaxed);
+  GAUGE_SET(num_pending_requests,
+            pending_requests_.load(std::memory_order_relaxed));
+}
+
+void DiTDynamicBatchScheduler::decr_pending_requests() {
+  const size_t old_value =
+      pending_requests_.fetch_sub(1, std::memory_order_relaxed);
+  CHECK_GT(old_value, 0) << "pending requests underflow";
+  GAUGE_SET(num_pending_requests,
+            pending_requests_.load(std::memory_order_relaxed));
+}
+
 std::vector<DiTBatch> DiTDynamicBatchScheduler::prepare_batch() {
   Timer timer;
 
-  int count = 0;
+  int32_t count = 0;
   std::shared_ptr<DiTRequest> request;
   auto read_next_request = [this](std::shared_ptr<DiTRequest>& next_request) {
-    if (!deferred_requests_.empty()) {
-      next_request = std::move(deferred_requests_.front());
-      deferred_requests_.pop_front();
-      return true;
-    }
-    return request_queue_.read(next_request);
+    return deferred_requests_.read(next_request) ||
+           request_queue_.read(next_request);
   };
 
   auto read_next_active_request =
@@ -273,7 +288,8 @@ std::vector<DiTBatch> DiTDynamicBatchScheduler::prepare_batch() {
     while (count < options_.max_request_per_batch() &&
            read_next_active_request(request)) {
       if (!is_compatible_dit_batch_request(batch_request, request)) {
-        deferred_requests_.emplace_back(std::move(request));
+        CHECK(deferred_requests_.write(std::move(request)))
+            << "deferred queue is full";
         break;
       }
 
@@ -286,6 +302,10 @@ std::vector<DiTBatch> DiTDynamicBatchScheduler::prepare_batch() {
   for (size_t idx = 0; idx < running_requests_.size(); ++idx) {
     auto request = running_requests_[idx];
     batches.add(request);
+  }
+
+  if (!batches.empty()) {
+    COUNTER_ADD(scheduling_latency_seconds, timer.elapsed_seconds());
   }
 
   GAUGE_SET(num_pending_requests,
@@ -345,6 +365,7 @@ void DiTDynamicBatchScheduler::process_batch_output() {
   }
 
   running_requests_.clear();
+  GAUGE_SET(num_running_requests, 0);
 }
 
 void DiTDynamicBatchScheduler::abort_all_requests() {
@@ -362,16 +383,17 @@ void DiTDynamicBatchScheduler::abort_all_requests() {
     abort_request(std::move(request));
   }
   running_requests_.clear();
-
-  for (auto& request : deferred_requests_) {
-    abort_request(std::move(request));
-  }
-  deferred_requests_.clear();
+  GAUGE_SET(num_running_requests, 0);
 
   std::shared_ptr<DiTRequest> request;
+  while (deferred_requests_.read(request)) {
+    abort_request(std::move(request));
+  }
   while (request_queue_.read(request)) {
     abort_request(std::move(request));
   }
+  GAUGE_SET(num_waiting_requests,
+            request_queue_.size() + deferred_requests_.size());
 }
 
 }  // namespace xllm

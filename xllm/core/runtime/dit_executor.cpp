@@ -29,6 +29,7 @@ DiTForwardInput DiTExecutor::prepare_inputs(DiTBatch& batch) {
 }
 
 DiTForwardOutput DiTExecutor::forward(const DiTForwardInput& input) {
+  COUNTER_INC(num_model_execution_total_eager);
   return model_->forward(input);
 }
 

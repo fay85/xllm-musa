@@ -15,15 +15,21 @@ limitations under the License.
 
 #include "framework/request/vlm_request_factory.h"
 
+#include <brpc/controller.h>
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <string>
+#include <thread>
+#include <utility>
 #include <vector>
 
+#include "api_service/call.h"
+#include "common/metrics.h"
 #include "common/options.h"
 #include "common/rate_limiter.h"
 #include "core/common/message.h"
@@ -33,12 +39,39 @@ limitations under the License.
 #include "framework/model/model_args.h"
 #include "framework/request/request_output.h"
 #include "framework/request/request_params.h"
+#include "framework/request/sequence.h"
 #include "framework/tokenizer/tokenizer.h"
 #include "framework/tokenizer/tokenizer_args.h"
 #include "xllm/processors/multimodal_processor.h"
 
 namespace xllm {
 namespace {
+
+constexpr char kTinyPngDataUrl[] =
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVQIHWP4z8AAAAMB"
+    "AQBb2/lEAAAAAElFTkSuQmCC";
+
+struct InputMetricsSnapshot {
+  int64_t transfer_count = HISTOGRAM_mm_transfer_latency_milliseconds.count();
+  int64_t processor_count = HISTOGRAM_mm_processor_latency_milliseconds.count();
+  double template_seconds = COUNTER_VALUE(chat_template_latency_seconds);
+  double transfer_failures =
+      MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "transfer");
+  double processor_failures =
+      MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "processor");
+};
+
+void expect_input_stage_failures(const InputMetricsSnapshot& before,
+                                 int64_t transfer = 0,
+                                 int64_t processor = 0) {
+  EXPECT_DOUBLE_EQ(
+      MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "transfer"),
+      before.transfer_failures + transfer);
+  EXPECT_DOUBLE_EQ(
+      MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "processor"),
+      before.processor_failures + processor);
+}
 
 // Deterministic tokenizer used for factory tests. It only participates in stop
 // sequence encoding here; encoding fails for any text containing "FAIL" so the
@@ -101,6 +134,10 @@ class FakeProcessor final : public MultimodalProcessorBase {
     process_prompt_succeed_ = succeed;
   }
 
+  void set_process_multimodal_succeed(bool succeed) {
+    process_multimodal_succeed_ = succeed;
+  }
+
   void set_prompt_tokens(std::vector<int32_t> tokens) {
     prompt_tokens_ = std::move(tokens);
   }
@@ -122,6 +159,7 @@ class FakeJinjaChatTemplate final : public JinjaChatTemplate {
       const ChatMessages& /*messages*/,
       const std::vector<xllm::JsonTool>& /*json_tools*/,
       const nlohmann::ordered_json& /*chat_template_kwargs*/) const override {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
     if (!succeed_) {
       return std::nullopt;
     }
@@ -139,6 +177,18 @@ class FakeJinjaChatTemplate final : public JinjaChatTemplate {
 
   bool succeed_ = true;
   std::string rendered_prompt_ = "rendered prompt";
+};
+
+class FakeCall final : public Call {
+ public:
+  explicit FakeCall(brpc::Controller* controller) : Call(controller) {}
+
+  bool is_disconnected() const override { return disconnected_; }
+
+  void disconnect() { disconnected_ = true; }
+
+ private:
+  bool disconnected_ = false;
 };
 
 // Records the last error surfaced through the OutputCallback.
@@ -199,6 +249,7 @@ TEST_F(VLMRequestFactoryTest,
   auto request = factory->create(/*prompt=*/"",
                                  /*mm_data=*/MMData{},
                                  sp,
+                                 /*call=*/std::nullopt,
                                  make_capture_callback(&capture));
 
   EXPECT_EQ(request, nullptr);
@@ -216,10 +267,12 @@ TEST_F(VLMRequestFactoryTest, FailsWhenProcessPromptFails) {
   processor_->set_process_prompt_succeed(false);
   CallbackCapture capture;
   RequestParams sp;
+  const InputMetricsSnapshot before;
 
   auto request = factory->create(/*prompt=*/"describe this",
                                  /*mm_data=*/MMData{},
                                  sp,
+                                 /*call=*/std::nullopt,
                                  make_capture_callback(&capture));
 
   EXPECT_EQ(request, nullptr);
@@ -227,6 +280,11 @@ TEST_F(VLMRequestFactoryTest, FailsWhenProcessPromptFails) {
   EXPECT_EQ(capture.status->code(), StatusCode::INVALID_ARGUMENT);
   EXPECT_EQ(capture.status->message(), "Failed to process prompt.");
   EXPECT_EQ(rate_limiter_.get_num_concurrent_requests(), 0);
+  EXPECT_EQ(HISTOGRAM_mm_transfer_latency_milliseconds.count(),
+            before.transfer_count);
+  EXPECT_EQ(HISTOGRAM_mm_processor_latency_milliseconds.count(),
+            before.processor_count);
+  expect_input_stage_failures(before);
 }
 
 TEST_F(VLMRequestFactoryTest, RejectsPromptLongerThanContext) {
@@ -238,6 +296,7 @@ TEST_F(VLMRequestFactoryTest, RejectsPromptLongerThanContext) {
   auto request = factory->create(/*prompt=*/"describe this",
                                  /*mm_data=*/MMData{},
                                  sp,
+                                 /*call=*/std::nullopt,
                                  make_capture_callback(&capture));
 
   EXPECT_EQ(request, nullptr);
@@ -257,6 +316,7 @@ TEST_F(VLMRequestFactoryTest, FailsWhenStopSequenceEncodingFails) {
   auto request = factory->create(/*prompt=*/"describe this",
                                  /*mm_data=*/MMData{},
                                  sp,
+                                 /*call=*/std::nullopt,
                                  make_capture_callback(&capture));
 
   EXPECT_EQ(request, nullptr);
@@ -276,6 +336,7 @@ TEST_F(VLMRequestFactoryTest,
   auto request = factory->create(/*prompt=*/"describe this",
                                  /*mm_data=*/MMData{},
                                  sp,
+                                 /*call=*/std::nullopt,
                                  make_capture_callback(&capture));
 
   ASSERT_NE(request, nullptr);
@@ -296,9 +357,11 @@ TEST_F(VLMRequestFactoryTest, MessageOverloadFailsWhenTemplateRejects) {
   std::vector<Message> messages;
   messages.emplace_back("user", content);
 
+  const InputMetricsSnapshot before;
   auto request = factory->create(messages,
                                  sp,
                                  /*payload=*/BinaryPayload(),
+                                 /*call=*/std::nullopt,
                                  make_capture_callback(&capture));
 
   EXPECT_EQ(request, nullptr);
@@ -307,6 +370,13 @@ TEST_F(VLMRequestFactoryTest, MessageOverloadFailsWhenTemplateRejects) {
   EXPECT_EQ(capture.status->message(),
             "Failed to construct prompt from messages");
   EXPECT_EQ(rate_limiter_.get_num_concurrent_requests(), 0);
+  EXPECT_EQ(HISTOGRAM_mm_transfer_latency_milliseconds.count(),
+            before.transfer_count);
+  EXPECT_EQ(HISTOGRAM_mm_processor_latency_milliseconds.count(),
+            before.processor_count);
+  EXPECT_GT(COUNTER_VALUE(chat_template_latency_seconds),
+            before.template_seconds);
+  expect_input_stage_failures(before);
 }
 
 TEST_F(VLMRequestFactoryTest, MessageOverloadCreatesRequestOnSuccess) {
@@ -322,9 +392,11 @@ TEST_F(VLMRequestFactoryTest, MessageOverloadCreatesRequestOnSuccess) {
   std::vector<Message> messages;
   messages.emplace_back("user", content);
 
+  const InputMetricsSnapshot before;
   auto request = factory->create(messages,
                                  sp,
                                  /*payload=*/BinaryPayload(),
+                                 /*call=*/std::nullopt,
                                  make_capture_callback(&capture));
 
   ASSERT_NE(request, nullptr);
@@ -332,9 +404,256 @@ TEST_F(VLMRequestFactoryTest, MessageOverloadCreatesRequestOnSuccess) {
   EXPECT_EQ(request->sequences().front()->request_timing(), sp.timing);
   EXPECT_FALSE(capture.called);
   EXPECT_EQ(rate_limiter_.get_num_concurrent_requests(), 1);
+  EXPECT_EQ(HISTOGRAM_mm_transfer_latency_milliseconds.count(),
+            before.transfer_count);
+  EXPECT_EQ(HISTOGRAM_mm_processor_latency_milliseconds.count(),
+            before.processor_count);
+  EXPECT_GT(COUNTER_VALUE(chat_template_latency_seconds),
+            before.template_seconds);
+  expect_input_stage_failures(before);
 }
 
-}  // namespace
+TEST_F(VLMRequestFactoryTest, MultiImagePromptAsIsRecordsOneTransferSample) {
+  auto factory = make_factory();
+  chat_template_->set_succeed(false);
+  CallbackCapture capture;
+  RequestParams sp;
+  sp.max_tokens = 16;
+  sp.n = 2;
+  MMContentVec content;
+  content.reserve(3);
+  content.emplace_back("text", std::string("describe these"));
+  content.emplace_back("image_url", ImageURL{.url = kTinyPngDataUrl});
+  content.emplace_back("image_url", ImageURL{.url = kTinyPngDataUrl});
+  std::vector<Message> messages;
+  messages.reserve(1);
+  messages.emplace_back("user", content);
+
+  const InputMetricsSnapshot before;
+  auto request = factory->create(std::move(messages),
+                                 sp,
+                                 /*payload=*/BinaryPayload(),
+                                 /*call=*/std::nullopt,
+                                 make_capture_callback(&capture),
+                                 /*use_prompt_as_is=*/true);
+
+  ASSERT_NE(request, nullptr);
+  EXPECT_FALSE(capture.called);
+  EXPECT_EQ(request->state().prompt, "describe these");
+  EXPECT_EQ(HISTOGRAM_mm_transfer_latency_milliseconds.count(),
+            before.transfer_count + 1);
+  EXPECT_EQ(HISTOGRAM_mm_processor_latency_milliseconds.count(),
+            before.processor_count + 1);
+  EXPECT_DOUBLE_EQ(COUNTER_VALUE(chat_template_latency_seconds),
+                   before.template_seconds);
+  expect_input_stage_failures(before);
+}
+
+TEST_F(VLMRequestFactoryTest, FailedMediaTransferStillRecordsOneSample) {
+  auto factory = make_factory();
+  CallbackCapture capture;
+  RequestParams sp;
+  MMContentVec content;
+  content.reserve(2);
+  content.emplace_back(
+      "image_url", ImageURL{.url = "data:image/png;base64,bm90LWFuLWltYWdl"});
+  content.emplace_back(
+      "image_url", ImageURL{.url = "data:image/png;base64,bm90LWFuLWltYWdl"});
+  std::vector<Message> messages;
+  messages.reserve(1);
+  messages.emplace_back("user", content);
+
+  const InputMetricsSnapshot before;
+  auto request = factory->create(std::move(messages),
+                                 sp,
+                                 /*payload=*/BinaryPayload(),
+                                 /*call=*/std::nullopt,
+                                 make_capture_callback(&capture));
+
+  EXPECT_EQ(request, nullptr);
+  ASSERT_TRUE(capture.status.has_value());
+  EXPECT_EQ(capture.status->code(), StatusCode::INVALID_ARGUMENT);
+  EXPECT_EQ(capture.status->message(), "Failed to decode multimodal input.");
+  EXPECT_EQ(rate_limiter_.get_num_concurrent_requests(), 0);
+  EXPECT_EQ(HISTOGRAM_mm_transfer_latency_milliseconds.count(),
+            before.transfer_count + 1);
+  EXPECT_EQ(HISTOGRAM_mm_processor_latency_milliseconds.count(),
+            before.processor_count);
+  EXPECT_DOUBLE_EQ(COUNTER_VALUE(chat_template_latency_seconds),
+                   before.template_seconds);
+  expect_input_stage_failures(before, /*transfer=*/1, /*processor=*/0);
+}
+
+TEST_F(VLMRequestFactoryTest, ProcessorFailureRetainsInputStageSamples) {
+  auto factory = make_factory();
+  processor_->set_process_multimodal_succeed(false);
+  CallbackCapture capture;
+  RequestParams sp;
+  MMContentVec content;
+  content.reserve(1);
+  content.emplace_back("image_url", ImageURL{.url = kTinyPngDataUrl});
+  std::vector<Message> messages;
+  messages.reserve(1);
+  messages.emplace_back("user", content);
+
+  const InputMetricsSnapshot before;
+  auto request = factory->create(std::move(messages),
+                                 sp,
+                                 /*payload=*/BinaryPayload(),
+                                 /*call=*/std::nullopt,
+                                 make_capture_callback(&capture));
+
+  EXPECT_EQ(request, nullptr);
+  ASSERT_TRUE(capture.status.has_value());
+  EXPECT_EQ(capture.status->message(), "Failed to process multimodal input.");
+  EXPECT_EQ(rate_limiter_.get_num_concurrent_requests(), 0);
+  EXPECT_EQ(HISTOGRAM_mm_transfer_latency_milliseconds.count(),
+            before.transfer_count + 1);
+  EXPECT_EQ(HISTOGRAM_mm_processor_latency_milliseconds.count(),
+            before.processor_count + 1);
+  EXPECT_DOUBLE_EQ(COUNTER_VALUE(chat_template_latency_seconds),
+                   before.template_seconds);
+  expect_input_stage_failures(before, /*transfer=*/0, /*processor=*/1);
+}
+
+enum class RequestInput { PROMPT, MESSAGES };
+
+class VLMRequestFactoryConnectionTest
+    : public VLMRequestFactoryTest,
+      public ::testing::WithParamInterface<RequestInput> {
+ protected:
+  std::shared_ptr<Request> create_request(VLMRequestFactory& factory,
+                                          const RequestParams& sp,
+                                          std::optional<Call*> call,
+                                          OutputCallback callback) {
+    if (GetParam() == RequestInput::PROMPT) {
+      return factory.create(/*prompt=*/"describe this",
+                            /*mm_data=*/MMData{},
+                            sp,
+                            call,
+                            std::move(callback));
+    }
+
+    MMContentVec content;
+    content.reserve(1);
+    content.emplace_back("text", std::string("hi"));
+    std::vector<Message> messages;
+    messages.reserve(1);
+    messages.emplace_back("user", std::move(content));
+    return factory.create(std::move(messages),
+                          sp,
+                          /*payload=*/BinaryPayload(),
+                          call,
+                          std::move(callback));
+  }
+};
+
+TEST_P(VLMRequestFactoryConnectionTest, OnlineCallLifetimeAndCancellation) {
+  auto factory = make_factory();
+  brpc::Controller controller;
+  auto call = std::make_shared<FakeCall>(&controller);
+  std::weak_ptr<FakeCall> weak_call = call;
+  RequestParams sp;
+  sp.max_tokens = 16;
+  sp.n = 2;
+
+  // Match the API callback's ownership of the non-owning RequestState call.
+  auto request = create_request(
+      *factory, sp, call.get(), [call](const RequestOutput& /*output*/) {
+        return !call->is_disconnected();
+      });
+
+  ASSERT_NE(request, nullptr);
+  ASSERT_TRUE(request->state().call_.has_value());
+  EXPECT_EQ(request->state().call_.value(), call.get());
+  ASSERT_TRUE(request->expand_sequences(/*share_prefix=*/false));
+  ASSERT_EQ(request->sequences().size(), 2);
+  request->update_connection_status();
+  EXPECT_FALSE(request->cancelled());
+  for (const auto& sequence : request->sequences()) {
+    EXPECT_FALSE(sequence->cancelled());
+  }
+
+  call->disconnect();
+  call.reset();
+  ASSERT_FALSE(weak_call.expired());
+  request->update_connection_status();
+  request->update_connection_status();
+  EXPECT_TRUE(request->cancelled());
+  for (const auto& sequence : request->sequences()) {
+    EXPECT_TRUE(sequence->cancelled());
+  }
+
+  request.reset();
+  EXPECT_TRUE(weak_call.expired());
+}
+
+TEST_P(VLMRequestFactoryConnectionTest, OfflineCallDoesNotCancel) {
+  auto factory = make_factory();
+  CallbackCapture capture;
+  RequestParams sp;
+  sp.max_tokens = 16;
+  sp.n = 2;
+
+  auto request = create_request(
+      *factory, sp, /*call=*/std::nullopt, make_capture_callback(&capture));
+
+  ASSERT_NE(request, nullptr);
+  EXPECT_FALSE(request->state().call_.has_value());
+  ASSERT_TRUE(request->expand_sequences(/*share_prefix=*/false));
+  ASSERT_EQ(request->sequences().size(), 2);
+  request->update_connection_status();
+  EXPECT_FALSE(request->cancelled());
+  for (const auto& sequence : request->sequences()) {
+    EXPECT_FALSE(sequence->cancelled());
+  }
+  EXPECT_FALSE(capture.called);
+}
+
+INSTANTIATE_TEST_SUITE_P(PromptAndMessages,
+                         VLMRequestFactoryConnectionTest,
+                         ::testing::Values(RequestInput::PROMPT,
+                                           RequestInput::MESSAGES));
+
+TEST_F(VLMRequestFactoryTest, OfflinePromptAsIsSkipsTemplateAndHasNoCall) {
+  auto factory = make_factory();
+  chat_template_->set_succeed(false);
+  CallbackCapture capture;
+  RequestParams sp;
+  sp.max_tokens = 16;
+  MMContentVec content;
+  content.reserve(2);
+  content.emplace_back("text", std::string("final "));
+  content.emplace_back("text", std::string("prompt"));
+  std::vector<Message> messages;
+  messages.reserve(1);
+  messages.emplace_back("user", std::move(content));
+
+  const InputMetricsSnapshot before;
+  auto request = factory->create(std::move(messages),
+                                 sp,
+                                 /*payload=*/BinaryPayload(),
+                                 /*call=*/std::nullopt,
+                                 make_capture_callback(&capture),
+                                 /*use_prompt_as_is=*/true);
+
+  ASSERT_NE(request, nullptr);
+  EXPECT_EQ(request->state().prompt, "final prompt");
+  EXPECT_FALSE(request->state().call_.has_value());
+  request->update_connection_status();
+  EXPECT_FALSE(request->cancelled());
+  ASSERT_EQ(request->sequences().size(), 1);
+  EXPECT_FALSE(request->sequences().front()->cancelled());
+  EXPECT_FALSE(capture.called);
+  EXPECT_EQ(HISTOGRAM_mm_transfer_latency_milliseconds.count(),
+            before.transfer_count);
+  EXPECT_EQ(HISTOGRAM_mm_processor_latency_milliseconds.count(),
+            before.processor_count);
+  EXPECT_DOUBLE_EQ(COUNTER_VALUE(chat_template_latency_seconds),
+                   before.template_seconds);
+  expect_input_stage_failures(before);
+}
+
 TEST_F(VLMRequestFactoryTest, InvalidHistoryReleasesSlot) {
   auto factory = make_factory();
   CallbackCapture capture;
@@ -343,17 +662,27 @@ TEST_F(VLMRequestFactoryTest, InvalidHistoryReleasesSlot) {
   Message::ToolCall call;
   call.function.arguments = "null";
   assistant.tool_calls = Message::ToolCallVec{call};
+  const InputMetricsSnapshot before;
   auto request = factory->create(ChatMessages{assistant},
                                  sp,
                                  /*payload=*/BinaryPayload(),
+                                 /*call=*/std::nullopt,
                                  make_capture_callback(&capture),
-                                 /*apply_chat_template=*/false);
+                                 /*use_prompt_as_is=*/false);
   EXPECT_EQ(request, nullptr);
   ASSERT_TRUE(capture.status.has_value());
   EXPECT_EQ(capture.status->reason(), FailureReason::INVALID_PARAMETER);
   EXPECT_EQ(capture.status->param(),
             "messages[0].tool_calls[0].function.arguments");
   EXPECT_EQ(rate_limiter_.get_num_concurrent_requests(), 0);
+  EXPECT_EQ(HISTOGRAM_mm_transfer_latency_milliseconds.count(),
+            before.transfer_count);
+  EXPECT_EQ(HISTOGRAM_mm_processor_latency_milliseconds.count(),
+            before.processor_count);
+  EXPECT_DOUBLE_EQ(COUNTER_VALUE(chat_template_latency_seconds),
+                   before.template_seconds);
+  expect_input_stage_failures(before);
 }
 
+}  // namespace
 }  // namespace xllm

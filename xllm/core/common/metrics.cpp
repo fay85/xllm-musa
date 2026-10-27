@@ -68,12 +68,37 @@ DEFINE_COUNTER(tokenization_latency_seconds,
 DEFINE_COUNTER(chat_template_latency_seconds,
                "Chat template latency in seconds");
 
-// multimodal preprocessing metrics
-DEFINE_HISTOGRAM(mm_input_loading_latency_milliseconds,
-                 "Latency of multimodal input loading and decoding in "
-                 "milliseconds");
-DEFINE_HISTOGRAM(mm_preprocess_latency_milliseconds,
-                 "Latency of multimodal input preprocessing in milliseconds");
+// multimodal metrics
+DEFINE_HISTOGRAM(mm_transfer_latency_milliseconds,
+                 "Latency of multimodal input transfer in milliseconds");
+DEFINE_HISTOGRAM(mm_processor_latency_milliseconds,
+                 "Latency of multimodal input processor in milliseconds");
+DEFINE_MULTI_COUNTER(mm_input_stage_failures_total,
+                     "stage",
+                     "Failed multimodal request stages: transfer or processor");
+DEFINE_MULTI_COUNTER_3_LABELS(mm_input_items_total,
+                              "modality",
+                              "representation",
+                              "result",
+                              "Completed multimodal input handler calls");
+DEFINE_MULTI_COUNTER_2_LABELS(mm_cache_lookups_total,
+                              "cache",
+                              "outcome",
+                              "Actual multimodal cache lookups");
+
+// DiT request metrics
+DEFINE_HISTOGRAM(dit_input_parse_latency_milliseconds,
+                 "Host latency of actual DiT input parsing in milliseconds");
+DEFINE_HISTOGRAM(dit_output_build_latency_milliseconds,
+                 "Host latency of DiT output construction in milliseconds");
+DEFINE_MULTI_HISTOGRAM(dit_input_stage_host_latency_microseconds,
+                       "stage",
+                       "Host latency of DiT media decode or tensor "
+                       "deserialization in microseconds");
+DEFINE_MULTI_COUNTER(
+    dit_input_stage_failures_total,
+    "stage",
+    "Normal-return failures of DiT media decode or tensor deserialization");
 
 DEFINE_HISTOGRAM(encoder_cache_hit_rate,
                  "Histogram of encoder cache hit rate in percent");

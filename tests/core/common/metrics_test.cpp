@@ -18,11 +18,144 @@ limitations under the License.
 #include <gtest/gtest.h>
 
 #include <cstddef>
+#include <cstdint>
+#include <string>
 #include <thread>
+#include <unordered_map>
 #include <vector>
 
 namespace xllm {
 namespace {
+
+class MetricsDumper final : public bvar::Dumper {
+ public:
+  bool dump(const std::string& name,
+            const butil::StringPiece& description) override {
+    values_[name] = description.as_string();
+    return true;
+  }
+
+  const std::unordered_map<std::string, std::string>& values() const {
+    return values_;
+  }
+
+ private:
+  std::unordered_map<std::string, std::string> values_;
+};
+
+TEST(MultimodalMetricsTest, ExportsFixedDimensionNames) {
+  MULTI_COUNTER_ADD(mm_input_stage_failures_total, "transfer", 1);
+  MULTI_COUNTER_ADD(mm_input_stage_failures_total, "processor", 0);
+  MULTI_COUNTER_ADD_3_LABELS(
+      mm_input_items_total, "image", "raw", "success", 1);
+  MULTI_COUNTER_ADD_3_LABELS(
+      mm_input_items_total, "unknown", "unknown", "failed", 1);
+  MULTI_COUNTER_ADD_2_LABELS(mm_cache_lookups_total, "processor", "miss", 1);
+  MULTI_COUNTER_ADD_2_LABELS(mm_cache_lookups_total, "encoder", "hit", 1);
+  MetricsDumper dumper;
+  const bvar::DumpOptions options;
+  MULTI_COUNTER_mm_input_stage_failures_total.dump(&dumper, &options);
+  MULTI_COUNTER_mm_input_items_total.dump(&dumper, &options);
+  MULTI_COUNTER_mm_cache_lookups_total.dump(&dumper, &options);
+
+  const auto& values = dumper.values();
+  EXPECT_EQ(values.count("mm_input_stage_failures_total_stage_transfer"), 1u);
+  EXPECT_EQ(values.count("mm_input_stage_failures_total_stage_processor"), 1u);
+  EXPECT_EQ(values.count("mm_input_items_total_modality_image_representation_"
+                         "raw_result_success"),
+            1u);
+  EXPECT_EQ(values.count("mm_input_items_total_modality_unknown_representation_"
+                         "unknown_result_failed"),
+            1u);
+  EXPECT_EQ(values.count("mm_cache_lookups_total_cache_processor_outcome_miss"),
+            1u);
+  EXPECT_EQ(values.count("mm_cache_lookups_total_cache_encoder_outcome_hit"),
+            1u);
+}
+
+TEST(MultimodalMetricsTest, ExposesExistingStageCountDenominators) {
+  EXPECT_EQ(bvar::Variable::describe_exposed(
+                "mm_transfer_latency_milliseconds_count"),
+            std::to_string(HISTOGRAM_mm_transfer_latency_milliseconds.count()));
+  EXPECT_EQ(
+      bvar::Variable::describe_exposed(
+          "mm_processor_latency_milliseconds_count"),
+      std::to_string(HISTOGRAM_mm_processor_latency_milliseconds.count()));
+}
+
+TEST(MultimodalMetricsTest, AccumulatesConcurrentUpdates) {
+  constexpr size_t kThreadCount = 4;
+  constexpr size_t kUpdatesPerThread = 100;
+  bvar::Adder<double>* lookups =
+      MULTI_COUNTER_mm_cache_lookups_total.get_stats({"encoder", "hit"});
+  bvar::Adder<double>* items =
+      MULTI_COUNTER_mm_input_items_total.get_stats({"image", "raw", "success"});
+  ASSERT_NE(lookups, nullptr);
+  ASSERT_NE(items, nullptr);
+  const double failures_before =
+      MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "transfer");
+  const double lookups_before = lookups->get_value();
+  const double items_before = items->get_value();
+  std::vector<std::thread> threads;
+  threads.reserve(kThreadCount);
+  for (size_t index = 0; index < kThreadCount; ++index) {
+    threads.emplace_back([] {
+      for (size_t update = 0; update < kUpdatesPerThread; ++update) {
+        MULTI_COUNTER_ADD(mm_input_stage_failures_total, "transfer", 2);
+        MULTI_COUNTER_ADD_2_LABELS(mm_cache_lookups_total, "encoder", "hit", 1);
+        MULTI_COUNTER_ADD_3_LABELS(
+            mm_input_items_total, "image", "raw", "success", 1);
+      }
+    });
+  }
+  for (std::thread& thread : threads) {
+    thread.join();
+  }
+  const double updates = static_cast<double>(kThreadCount * kUpdatesPerThread);
+  EXPECT_EQ(MULTI_COUNTER_VALUE(mm_input_stage_failures_total, "transfer"),
+            failures_before + 2 * updates);
+  EXPECT_EQ(lookups->get_value(), lookups_before + updates);
+  EXPECT_EQ(items->get_value(), items_before + updates);
+}
+
+TEST(DiTMetricsTest, ExportsRequestCountsAndFixedInputStages) {
+  EXPECT_EQ(
+      bvar::Variable::describe_exposed(
+          "dit_input_parse_latency_milliseconds_count"),
+      std::to_string(HISTOGRAM_dit_input_parse_latency_milliseconds.count()));
+  EXPECT_EQ(
+      bvar::Variable::describe_exposed(
+          "dit_output_build_latency_milliseconds_count"),
+      std::to_string(HISTOGRAM_dit_output_build_latency_milliseconds.count()));
+
+  for (const char* stage : {"media_decode", "tensor_deserialize"}) {
+    ASSERT_NE(
+        MULTI_HISTOGRAM_dit_input_stage_host_latency_microseconds.get_stats(
+            {stage}),
+        nullptr);
+    ASSERT_NE(MULTI_COUNTER_dit_input_stage_failures_total.get_stats({stage}),
+              nullptr);
+  }
+  MetricsDumper dumper;
+  const bvar::DumpOptions options;
+  MULTI_HISTOGRAM_dit_input_stage_host_latency_microseconds.dump(&dumper,
+                                                                 &options);
+  MULTI_COUNTER_dit_input_stage_failures_total.dump(&dumper, &options);
+  for (const char* stage : {"media_decode", "tensor_deserialize"}) {
+    const std::string count_name =
+        std::string("dit_input_stage_host_latency_microseconds_count_stage_") +
+        stage;
+    const std::string failure_name =
+        std::string("dit_input_stage_failures_total_stage_") + stage;
+    ASSERT_EQ(dumper.values().count(count_name), 1u);
+    EXPECT_EQ(
+        dumper.values().at(count_name),
+        std::to_string(MULTI_HISTOGRAM_dit_input_stage_host_latency_microseconds
+                           .get_stats({stage})
+                           ->count()));
+    EXPECT_EQ(dumper.values().count(failure_name), 1u);
+  }
+}
 
 TEST(PrefixCacheHitMetricsTest, UpdatesCumulativeTokenHitRate) {
   const double prompt_before = COUNTER_VALUE(prefix_cache_prompt_tokens_total);

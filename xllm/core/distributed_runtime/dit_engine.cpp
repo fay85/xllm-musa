@@ -143,6 +143,7 @@ DiTForwardOutput DiTEngine::step(std::vector<DiTBatch>& batches) {
   CHECK(forward_output.has_value()) << "DiT driver returned no output";
   DiTForwardOutput output = std::move(forward_output->dit_forward_output);
   batches[0].process_forward_output(output);
+  COUNTER_ADD(engine_latency_seconds, timer.elapsed_seconds());
   return output;
 }
 

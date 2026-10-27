@@ -18,6 +18,7 @@ limitations under the License.
 #include <algorithm>
 #include <atomic>
 
+#include "core/common/metrics.h"
 #include "core/util/blocking_counter.h"
 #include "core/util/threadpool.h"
 #include "mm_handler.h"
@@ -69,6 +70,40 @@ MMErrCode MMInputTransfer::trans(const std::vector<Message>& messages,
   return MMErrCode::SUCCESS;
 }
 
+MMErrCode MMInputTransfer::process_item(const MMContent& content,
+                                        MMInputItem& input,
+                                        const BinaryPayload& payload) {
+  MMErrCode code = mm_handlers_->process(content.type, content, input, payload);
+  const bool success = code == MMErrCode::SUCCESS;
+  const char* modality = "unknown";
+  const char* representation = "unknown";
+  if (content.type == "image_url") {
+    modality = "image";
+    representation = "raw";
+  } else if (content.type == "video_url") {
+    modality = "video";
+    representation = "raw";
+  } else if (content.type == "audio_url") {
+    modality = "audio";
+    representation = "raw";
+  } else if (content.type == "image_embedding") {
+    modality = "image";
+    representation = "embedding";
+  } else if (content.type == "video_embedding") {
+    modality = "video";
+    representation = "embedding";
+  } else if (content.type == "audio_embedding") {
+    modality = "audio";
+    representation = "embedding";
+  }
+  MULTI_COUNTER_ADD_3_LABELS(mm_input_items_total,
+                             modality,
+                             representation,
+                             success ? "success" : "failed",
+                             1);
+  return code;
+}
+
 MMErrCode MMInputTransfer::trans_parallel(const MMContentVec& mmc,
                                           std::vector<MMInputItem>& inputs,
                                           const BinaryPayload& payload) {
@@ -93,8 +128,7 @@ MMErrCode MMInputTransfer::trans_parallel(const MMContentVec& mmc,
           .input_index = out_idx,
       });
     } else {
-      MMErrCode code =
-          mm_handlers_->process(type, mmc[idx], inputs[out_idx], payload);
+      MMErrCode code = process_item(mmc[idx], inputs[out_idx], payload);
       if (code != MMErrCode::SUCCESS) {
         return code;
       }
@@ -113,8 +147,8 @@ MMErrCode MMInputTransfer::trans_parallel(const MMContentVec& mmc,
       if (error.load() == MMErrCode::SUCCESS) {
         ProcessTask& t = tasks[i];
         const std::string& type = mmc[t.content_index].type;
-        MMErrCode code = mm_handlers_->process(
-            type, mmc[t.content_index], inputs[t.input_index], payload);
+        MMErrCode code =
+            process_item(mmc[t.content_index], inputs[t.input_index], payload);
         if (code != MMErrCode::SUCCESS) {
           LOG(ERROR) << "process failed at input index " << t.input_index
                      << ", type=" << type;
@@ -139,7 +173,7 @@ MMErrCode MMInputTransfer::trans(const MMContentVec& mmc,
 
     if (type != "text") {
       MMInputItem input;
-      MMErrCode code = mm_handlers_->process(type, item, input, payload);
+      MMErrCode code = process_item(item, input, payload);
       if (code != MMErrCode::SUCCESS) {
         return code;
       }

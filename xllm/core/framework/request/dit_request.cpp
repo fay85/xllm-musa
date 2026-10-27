@@ -28,7 +28,9 @@ limitations under the License.
 #include <vector>
 
 #include "api_service/call.h"
+#include "core/common/metrics.h"
 #include "core/framework/multimodal/mm_codec.h"
+#include "core/util/timer.h"
 
 namespace xllm {
 namespace {
@@ -257,6 +259,7 @@ std::vector<DiTGenerationOutput> DiTRequest::generate_text_outputs() const {
 }
 
 const DiTRequestOutput DiTRequest::generate_output() {
+  Timer timer;
   DiTRequestOutput output;
   output.request_id = request_id_;
   output.service_request_id = service_request_id_;
@@ -278,6 +281,8 @@ const DiTRequestOutput DiTRequest::generate_output() {
       output.outputs = generate_text_outputs();
       break;
   }
+  HISTOGRAM_OBSERVE(dit_output_build_latency_milliseconds,
+                    static_cast<int64_t>(timer.elapsed_milliseconds()));
   return output;
 }
 
