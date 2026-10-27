@@ -707,8 +707,9 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
       util::is_deepseek_v4_dspark_model_type(args_.model_type());
   // VLM requests must hash image content so different images never share
   // cached blocks.
-  const BlockHasherType base_hasher_type =
-      options_.backend() == "vlm" ? BlockHasherType::MM : BlockHasherType::TEXT;
+  const BlockHasherType base_hasher_type = options_.backend() == "vlm"
+                                               ? BlockHasherType::MM
+                                               : BlockHasherType::TEXT;
   BlockManagerPool::Options options;
   options.num_blocks(kv_cache_cap.n_blocks())
       .hasher_type(mtp_hasher_type(base_hasher_type,

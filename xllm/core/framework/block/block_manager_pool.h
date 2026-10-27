@@ -71,8 +71,6 @@ class BlockManagerPool : public KVCacheManager {
     // For CompositeBlockManager.
     PROPERTY(std::vector<uint32_t>, manager_types) = {};
     PROPERTY(std::vector<uint32_t>, compress_ratios) = {};
-    // Advertised in the Native V2 Provider Descriptor. Zero means unknown.
-    PROPERTY(uint64_t, logical_kv_bytes_per_token) = 0;
     PROPERTY(uint32_t, max_seqs_per_batch) = 0;
     // Hasher type bound to the engine (TEXT for LLM, MM for VLM).
     PROPERTY(BlockHasherType, hasher_type) = BlockHasherType::TEXT;

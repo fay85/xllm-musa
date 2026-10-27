@@ -43,11 +43,6 @@ DEFINE_string(kv_cache_transfer_mode,
               "PUSH",
               "The mode of kv cache transfer(e.g. PUSH, PULL).");
 
-DEFINE_string(super_node_id,
-              "",
-              "Physical super-node id. Empty opts out of cross super-node "
-              "isolation.");
-
 DEFINE_int32(transfer_listen_port, 26000, "The KVCacheTranfer listen port.");
 
 DEFINE_bool(kv_push_dst_rotate,
@@ -63,7 +58,6 @@ void DisaggPDConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(disagg_pd_port);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(instance_role);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(kv_cache_transfer_mode);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(super_node_id);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(transfer_listen_port);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(kv_push_dst_rotate);
 }
@@ -75,7 +69,6 @@ void DisaggPDConfig::from_json(const JsonReader& json) {
   // instance role is different for prefill and decode instances, so we don't
   // need to assign it from json XLLM_CONFIG_ASSIGN_FROM_JSON(instance_role);
   XLLM_CONFIG_ASSIGN_FROM_JSON(kv_cache_transfer_mode);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(super_node_id);
   XLLM_CONFIG_ASSIGN_FROM_JSON(transfer_listen_port);
 }
 
@@ -93,8 +86,6 @@ void DisaggPDConfig::append_config_json(
   //      config_json, default_config, instance_role);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, kv_cache_transfer_mode);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, super_node_id);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, transfer_listen_port);
 }

@@ -17,8 +17,9 @@ limitations under the License.
 
 namespace xllm::runtime::musa {
 
-// Both full Decode and piecewise Prefill captures use a fresh logical MemPool.
-// Physical storage is shared only within the same executor and phase.
-inline constexpr bool supports_graph_vmm_pool() { return true; }
+// The MUSA graph executor currently provides only the native graph pool.  Keep
+// the backend on that pool even when the cross-platform VMM option defaults to
+// true; entering the VMM path would call the deliberately unimplemented stubs.
+inline constexpr bool supports_graph_vmm_pool() { return false; }
 
 }  // namespace xllm::runtime::musa

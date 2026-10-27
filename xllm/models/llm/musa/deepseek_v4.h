@@ -46,7 +46,6 @@ limitations under the License.
 #include "core/layers/common/word_embedding.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_decoder_layer.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_graph_sequence.h"
-#include "core/layers/musa/deepseek_v4/deepseek_v4_pcp_context.h"
 #include "core/layers/musa/deepseek_v4/dsa_metadata_builder_musa.h"
 #include "core/util/tensor_helper.h"
 #include "models/llm/llm_model_base.h"
@@ -1041,63 +1040,21 @@ class DeepseekV4ModelImpl
 
     std::optional<layer::dsv4_musa_sp::DeepseekV4SPContext>
         sequence_parallel_context = std::nullopt;
-    // Prefill context parallelism (PCP): split the fresh prompt across CP
-    // groups; each group keeps the existing sequence-parallel machinery over
-    // its own rows.  Disabled for DSpark/MTP-aux paths and multi-sequence
-    // prefills, matching the plain-SP constraints.
-    std::optional<layer::dsv4_musa_pcp::Context> pcp_context = std::nullopt;
+    // Target-only has no speculative lane to carry SP-local prefill state
+    // into the first decode step. Keep it on the regular TP prefill path;
+    // the MTP target retains the existing SP metadata contract.
     const bool target_only_model = model_args_.num_speculative_tokens() == 0;
-    // Draft/verify forwards from the speculative worker carry full-prompt
-    // positions with PCP-sharded hidden rows; neither PCP nor the plain SP
-    // shard may touch them under CP2.
-    // The main prefill writes a cache slot for every prompt token; spec
-    // draft/verify forwards write only their own rows, so their slot count
-    // is a strict subset of the token count.
-    const int64_t slot_count =
-        modified_input_params.attention.device.new_cache_slots.defined()
-            ? modified_input_params.attention.device.new_cache_slots.numel()
-            : -1;
-    // Chunked prefill can expose only the current chunk's cache slots, so
-    // slot_count is not required to equal the request's token tensor length.
-    // The batch type and single-sequence prefill metadata identify the real
-    // prompt lane; speculative forwards remain excluded by their explicit
-    // flag and short-token shape.
-    const bool full_prompt_prefill =
-        !modified_input_params.is_spec_verify &&
-        !modified_input_params.meta.is_graph_warmup &&
-        modified_input_params.meta.batch_forward_type.no_decode() &&
-        modified_input_params.meta.num_sequences == 1 && slot_count >= 0;
-    const bool spec_lane_forward =
-        modified_input_params.is_spec_verify ||
-        static_cast<int64_t>(tokens.size(0)) <=
-            model_args_.num_speculative_tokens() + 1 ||
-        !full_prompt_prefill;
-    if (parallel_args_.cp_size() > 1 && layer::dsv4_musa_pcp::enabled() &&
-        modified_input_params.meta.num_sequences == 1 && !spec_lane_forward) {
-      // PCP splits only the target Prefill lane; draft and verify calls
-      // keep the original group-local execution paths.
-      layer::dsv4_musa_pcp::build_context(static_cast<int64_t>(tokens.size(0)),
-                                          parallel_args_,
-                                          tokens,
-                                          &pcp_context);
-    }
-    const bool cp_world = parallel_args_.cp_size() > 1;
+    // This SP implementation replaces query_ranges by one rank-local range
+    // and compresses the globally concatenated tokens as one sequence. It
+    // cannot preserve request boundaries in a packed multi-sequence prefill.
+    // Keep B1's fast SP path and use ordinary TP for a real multi-request
+    // prefill until SP has a per-request interval/offset plan.
     if (!target_only_model && model_args_.dspark_block_size() == 0 &&
-        modified_input_params.meta.num_sequences == 1 &&
-        !pcp_context.has_value() && !(cp_world && spec_lane_forward)) {
+        modified_input_params.meta.num_sequences == 1) {
       sequence_parallel_context = layer::dsv4_musa_sp::build_context(
           tokens,
           modified_input_params.meta.batch_forward_type.no_decode(),
           parallel_args_.tp_group_);
-    }
-    if (pcp_context.has_value()) {
-      sequence_parallel_context = pcp_context->group_sp;
-    }
-    if (pcp_context.has_value()) {
-      // CP-group shard first (contiguous prompt halves), then the group-local
-      // SP shard narrows to this rank's rows.
-      h = layer::dsv4_musa_pcp::shard_rows(h, *pcp_context);
-      tokens = layer::dsv4_musa_pcp::shard_rows(tokens, *pcp_context);
     }
     if (sequence_parallel_context.has_value()) {
       h = layer::dsv4_musa_sp::local_shard(h,
@@ -1173,8 +1130,6 @@ class DeepseekV4ModelImpl
           sequence_parallel_context.has_value()
               ? &sequence_parallel_context.value()
               : nullptr);
-      layers_[i]->set_pcp_context(pcp_context.has_value() ? &pcp_context.value()
-                                                          : nullptr);
       h = layers_[i](h,
                      residual,
                      positions,
@@ -1188,43 +1143,19 @@ class DeepseekV4ModelImpl
         if (sequence_parallel_context.has_value()) {
           // Draft context injection consumes global token order on every TP
           // rank; discard SP padding before saving a captured layer output.
-          const auto& gather_context =
-              pcp_context.has_value() && pcp_context->global_sp.has_value()
-                  ? pcp_context->global_sp.value()
-                  : sequence_parallel_context.value();
           auxiliary_hidden = layer::dsv4_musa_sp::gather_global(
-              auxiliary_hidden, gather_context);
-        }
-        if (pcp_context.has_value()) {
-          // Each TP group has only its own CP rows after the SP gather.
-          // The draft consumes a full chunk aligned with global positions.
-          if (!pcp_context->global_sp.has_value()) {
-            auxiliary_hidden =
-                layer::dsv4_musa_pcp::relay_kv(auxiliary_hidden, *pcp_context);
-          }
-          CHECK_EQ(auxiliary_hidden.size(0), pcp_context->total_rows);
-          LOG_FIRST_N(INFO, 6) << "[DSV4_PCP_AUX_ROWS] layer=" << output_layer
-                               << " cp_rank=" << pcp_context->cp_rank
-                               << " rows=" << auxiliary_hidden.size(0);
+              auxiliary_hidden, sequence_parallel_context.value());
         }
         aux_capture_.capture_layer(
             output_layer, auxiliary_hidden, std::nullopt);
       }
     }
     if (sequence_parallel_context.has_value()) {
-      if (!pcp_context.has_value() || !pcp_context->global_sp.has_value()) {
-        h = layer::dsv4_musa_sp::gather_global(
-            h, sequence_parallel_context.value());
-      }
+      h = layer::dsv4_musa_sp::gather_global(h,
+                                             sequence_parallel_context.value());
       for (layer::DeepseekV4DecoderLayer& layer : layers_) {
         layer->set_sequence_parallel_context(nullptr);
-        layer->set_pcp_context(nullptr);
       }
-    }
-    if (pcp_context.has_value()) {
-      // Group-local gather produced each group's own rows; assemble the full
-      // prompt hidden states across groups.
-      layer::dsv4_musa_pcp::finish(h, *pcp_context);
     }
     if (is_sequence_sharded(fc1_ctx)) {
       h = gather_sequence(h, fc1_ctx);

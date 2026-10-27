@@ -103,16 +103,6 @@ message Routing {
   string prefill_name = 1;
 
   string decode_name = 2;
-
-  string prefill_incarnation_id = 3;
-
-  string decode_incarnation_id = 4;
-
-  uint64 coordinator_epoch = 5;
-
-  uint64 adjacency_generation = 6;
-
-  uint64 link_generation = 7;
 }
 
 message Empty {}

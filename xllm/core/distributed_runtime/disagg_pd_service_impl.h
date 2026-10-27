@@ -15,11 +15,9 @@ limitations under the License.
 
 #pragma once
 
-#include <cstdint>
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 
 #include "disagg_pd.pb.h"
 #include "framework/sampling/json_object_grammar.h"
@@ -50,18 +48,6 @@ class DisaggPDServiceImpl {
   virtual void unlink_instance(const proto::InstanceClusterInfo* request,
                                proto::Status* response);
 
-  virtual void ensure_link(const proto::EnsureLinkRequest* request,
-                           proto::EnsureLinkResult* response);
-
-  virtual void drain_link(const proto::DrainLinkRequest* request,
-                          proto::EnsureLinkResult* response);
-
-  virtual void query_request(const proto::AttemptControlRequest* request,
-                             proto::AttemptControlResponse* response);
-
-  virtual void cancel_request(const proto::AttemptControlRequest* request,
-                              proto::AttemptControlResponse* response);
-
   void release_reservation(const proto::ReleaseReservationRequest* request,
                            proto::ReleaseReservationResponse* response);
 
@@ -78,9 +64,6 @@ class DisaggPDServiceImpl {
   std::mutex json_object_grammar_mutex_;
   std::shared_ptr<const JsonObjectGrammar> json_object_grammar_;
   std::shared_ptr<const JsonObjectGrammar> json_reasoning_grammar_;
-  std::mutex ensured_links_mutex_;
-  std::unordered_map<std::string, uint64_t> ensured_links_;
-  uint64_t next_link_generation_ = 0;
 };
 
 }  // namespace xllm

@@ -28,8 +28,7 @@ class GlobalCaptureInstance final {
  public:
   static GlobalCaptureInstance& get_instance();
 
-  void begin_capture(const MusaMempoolId& pool,
-                     bool owns_user_pool_ref = false);
+  void begin_capture(const MusaMempoolId& pool);
   std::unique_ptr<PiecewiseGraphs> end_capture();
 
   void temporarily_end_graph();
@@ -50,7 +49,6 @@ class GlobalCaptureInstance final {
   static std::mutex capture_mutex_;
 
   bool is_capturing_ = false;
-  bool owns_user_pool_ref_ = false;
   MusaMempoolId graph_pool_{0, 0};
 
   std::unique_ptr<MusaGraphSegment> current_graph_;

@@ -1,0 +1,316 @@
+diff --git a/xllm/core/runtime/mtp_worker_impl.cpp b/xllm/core/runtime/mtp_worker_impl.cpp
+--- a/xllm/core/runtime/mtp_worker_impl.cpp
++++ b/xllm/core/runtime/mtp_worker_impl.cpp
+@@ -15,6 +15,9 @@
+ 
+ #include "mtp_worker_impl.h"
+ 
++#include <atomic>
++#include <sstream>
++#include <cstdlib>
+ #include <glog/logging.h>
+ #if defined(USE_NPU)
+ #include <acl/acl.h>
+@@ -72,6 +75,21 @@
+ #include "util/utils.h"
+ 
+ namespace xllm {
++namespace {
++inline std::string mtp_diag_stat(const torch::Tensor& t) {
++  if (!t.defined()) return "undef";
++  torch::Tensor f = t.to(torch::kFloat32);
++  std::ostringstream os;
++  os << t.sizes() << " nan=" << f.isnan().sum().item<int64_t>()
++     << " absmax=" << f.nan_to_num(0, 0, 0).abs().max().item<float>();
++  return os.str();
++}
++inline std::string mtp_diag_vec(const std::vector<int32_t>& v) {
++  std::ostringstream os; os << "[";
++  for (size_t i = 0; i < v.size() && i < 16; ++i) os << (i ? "," : "") << v[i];
++  os << "]"; return os.str();
++}
++}  // namespace
+ constexpr uint64_t MBUF_SIZE = 128 * 1024 * 1024;
+ 
+ namespace {
+@@ -1417,6 +1435,17 @@
+   timer.reset();
+   ForwardOutput draft_output =
+       run_worker_no_sync(*draft_impl_, prefill_input, draft_prepared).value();
++  if (std::getenv("XLLM_MTP_DIAG") != nullptr) {
++    static std::atomic<int> mtp_diag_pf{0};
++    if (mtp_diag_pf.fetch_add(1) < 6) {
++      compute_stream_->synchronize();
++      LOG(INFO) << "[MTP_DIAG] prefill target_emb=" << mtp_diag_stat(embeddings)
++                << " draft_in=" << mtp_diag_stat(prefill_input.input_params.embedding.input_embedding)
++                << " draft_logits=" << mtp_diag_stat(draft_output.logits)
++                << " draft_emb=" << mtp_diag_stat(draft_output.sample_output.embeddings)
++                << " target_logits=" << mtp_diag_stat(output.logits);
++    }
++  }
+   {
+     c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+     process_draft_sample_output(draft_output.sample_output);
+@@ -1793,6 +1822,36 @@
+     if (reuse_mtp_topk_state) {
+       current_draft_input.input_params.mtp_topk_state = mtp_topk_state;
+     }
++    {
++      static std::atomic<int> mtp_diag_in{0};
++      const torch::Tensor& dg_ie = current_draft_input.input_params.embedding.input_embedding;
++      if (std::getenv("XLLM_MTP_DIAG") != nullptr && dg_ie.defined() && dg_ie.size(0) > 1 && mtp_diag_in.fetch_add(1) < 16) {
++        compute_stream_->synchronize();
++        LOG(INFO) << "[MTP_DIAG] rows step=" << draft_idx
++                  << " tok=" << current_draft_input.token_ids.to(torch::kCPU).view({-1})
++                  << " row_absmax=" << dg_ie.to(torch::kFloat32).abs().amax(-1).to(torch::kCPU)
++                  << " row_sum=" << dg_ie.to(torch::kFloat32).sum(-1).to(torch::kCPU);
++        compute_stream_->synchronize();
++        LOG(INFO) << "[MTP_DIAG] decode_in step=" << draft_idx << " prelaunched=" << (use_prelaunched_first_draft && draft_idx == 0)
++                  << " input_emb=" << mtp_diag_stat(current_draft_input.input_params.embedding.input_embedding)
++                  << " mtp_tok_emb=" << mtp_diag_stat(current_draft_input.input_params.embedding.mtp_token_embedding)
++                  << " pos=" << (current_draft_input.positions_host.defined() ? current_draft_input.positions_host.view({-1}) : torch::Tensor())
++                  << " q=" << mtp_diag_vec(current_draft_input.input_params.attention.host.q_seq_lens)
++                  << " kv=" << mtp_diag_vec(current_draft_input.input_params.attention.host.kv_seq_lens)
++                  << " slots=" << mtp_diag_vec(current_draft_input.input_params.attention.host.new_cache_slots)
++                  << " bt=" << (current_draft_input.input_params.attention.host.block_tables.defined() ? current_draft_input.input_params.attention.host.block_tables.to(torch::kCPU).view({-1}).slice(0,0,4) : torch::Tensor())
++                  << " graph=" << current_draft_input.input_params.enable_graph
++                  << " bt_shape=" << (current_draft_input.input_params.attention.host.block_tables.defined()
++                        ? current_draft_input.input_params.attention.host.block_tables.sizes()
++                        : torch::IntArrayRef{})
++                  << " bt_row0=" << (current_draft_input.input_params.attention.host.block_tables.defined()
++                        ? current_draft_input.input_params.attention.host.block_tables.select(0,0).to(torch::kCPU).narrow(0,0,std::min<int64_t>(8,current_draft_input.input_params.attention.host.block_tables.size(1)))
++                        : torch::Tensor())
++                  << " bt_last_nonneg=" << (current_draft_input.input_params.attention.host.block_tables.defined()
++                        ? (current_draft_input.input_params.attention.host.block_tables.select(0,0) >= 0).to(torch::kInt32).sum().item<int64_t>()
++                        : -1);
++      }
++    }
+     std::optional<ForwardOutput> draft_output_opt;
+     if (use_prelaunched_first_draft && draft_idx == 0) {
+       draft_output_opt = std::move(pending_draft_context_.output);
+@@ -1897,6 +1956,22 @@
+         << "draft output is empty in speculative step";
+ 
+     draft_outputs.emplace_back(std::move(draft_output_opt.value()));
++    {
++      static std::atomic<int> mtp_diag_draft{0};
++      if (std::getenv("XLLM_MTP_DIAG") != nullptr && mtp_diag_draft.fetch_add(1) < 24) {
++        compute_stream_->synchronize();
++        const SampleOutput& so = draft_outputs.back().sample_output;
++        const torch::Tensor& lg = draft_outputs.back().logits;
++        std::ostringstream os;
++        os << "[MTP_DIAG] step=" << draft_idx << " next=" << (so.next_tokens.defined() ? so.next_tokens.to(torch::kCPU).view({-1}) : torch::Tensor());
++        if (lg.defined()) {
++          torch::Tensor f = lg.to(torch::kFloat32);
++          os << " logits=" << lg.sizes() << " nan=" << f.isnan().sum().item<int64_t>() << " inf=" << f.isinf().sum().item<int64_t>() << " absmax=" << f.nan_to_num(0,0,0).abs().max().item<float>() << " argmax=" << f.argmax(-1).to(torch::kCPU).view({-1});
++        } else { os << " logits=undef"; }
++        if (so.embeddings.defined()) { torch::Tensor e = so.embeddings.to(torch::kFloat32); os << " emb=" << e.sizes() << " emb_nan=" << e.isnan().sum().item<int64_t>() << " emb_absmax=" << e.nan_to_num(0,0,0).abs().max().item<float>(); }
++        LOG(INFO) << os.str();
++      }
++    }
+     const SamplingParameters& draft_sampling_params =
+         draft_prepared[draft_idx].sampling_params;
+     {
+@@ -4514,6 +4589,13 @@
+             bonus_token_ids,
+             /*mask_out_rejected_tokens=*/true);
+     (void)accepted_token_ids;
++    {
++      static std::atomic<int> mtp_diag_count{0};
++      if (std::getenv("XLLM_MTP_DIAG") != nullptr && mtp_diag_count.fetch_add(1) < 40) {
++        LOG(INFO) << "[MTP_DIAG] draft=" << draft_proposal.token_ids().to(torch::kCPU).view({-1})
++                  << " target=" << target_token_ids.to(torch::kCPU).view({-1});
++      }
++    }
+ 
+     sample_output.next_tokens = masked_accepted_token_ids;
+     sample_output.embeddings = target_embeddings;
+diff --git a/xllm/models/llm/qwen3_5_mtp_base.h b/xllm/models/llm/qwen3_5_mtp_base.h
+--- a/xllm/models/llm/qwen3_5_mtp_base.h
++++ b/xllm/models/llm/qwen3_5_mtp_base.h
+@@ -18,6 +18,8 @@
+ #include <glog/logging.h>
+ 
+ #include <algorithm>
++#include <atomic>
++#include <cstdlib>
+ #include <memory>
+ #include <string>
+ #include <utility>
+@@ -28,6 +30,11 @@
+ #include "models/llm/qwen3_next_hybrid_base.h"
+ #include "models/model_registry.h"
+ 
++#if defined(USE_MUSA)
++#include <musa_runtime.h>
++#include "torch_musa/csrc/core/MUSAStream.h"
++#include <cstdlib>
++#endif
+ namespace xllm {
+ 
+ namespace qwen3_5_mtp {
+@@ -178,13 +185,52 @@
+       embedding = embed_tokens_(tokens);
+     }
+     torch::Tensor hidden = input_params.embedding.input_embedding;
++    static const bool kMtpDiagLog = std::getenv("XLLM_MTP_DIAG") != nullptr;
++    if (kMtpDiagLog) {
++      LOG_FIRST_N(INFO, 12) << "[MTP_DIAG] tokens=" << tokens.numel()
++        << " mtp_tok_emb=" << input_params.embedding.mtp_token_embedding.defined()
++        << " input_emb=" << input_params.embedding.input_embedding.defined()
++        << (input_params.embedding.input_embedding.defined()
++                ? " in_rows=" + std::to_string(input_params.embedding.input_embedding.size(0))
++                : std::string());
++    }
+     if (hidden.defined() == false) {
++      LOG_FIRST_N(WARNING, 20) << "[MTP_DIAG] target hidden missing; falling back to token embedding, tokens=" << tokens.numel();
+       hidden = embedding;
+     }
+ 
++#if defined(USE_MUSA)
++    static std::atomic<int> diag_fwd_count{0};
++    bool diag_on = false;
++    if (std::getenv("XLLM_MTP_DIAG_FWD") != nullptr && tokens.numel() <= 4) {
++      musaStreamCaptureStatus st = musaStreamCaptureStatusNone;
++      musaStreamIsCapturing(c10::musa::getCurrentMUSAStream().stream(), &st);
++      diag_on = st == musaStreamCaptureStatusNone && diag_fwd_count.fetch_add(1) < 16;
++    }
++    auto diag = [&](const char* n, const torch::Tensor& t) {
++      if (!diag_on || !t.defined()) return;
++      torch::Tensor f = t.to(torch::kFloat32);
++      LOG(INFO) << "[MTP_FWD] " << n << " " << t.sizes() << " " << t.dtype()
++                << " nan=" << f.isnan().sum().item<int64_t>()
++                << " absmax=" << f.nan_to_num(0,0,0).abs().max().item<float>();
++    };
++    if (diag_on && !kv_caches.empty()) {
++      torch::Tensor kc = kv_caches[0].get_k_cache();
++      torch::Tensor vc = kv_caches[0].get_v_cache();
++      LOG(INFO) << "[MTP_FWD] kcache sizes=" << kc.sizes();
++      for (int b = 0; b < 3; ++b) {
++        diag((std::string("kblk") + std::to_string(b)).c_str(), kc.select(0, b));
++        diag((std::string("vblk") + std::to_string(b)).c_str(), vc.select(0, b));
++      }
++    }
++    diag("tok_emb", embedding); diag("hidden_in", hidden); diag("tokens", tokens.to(torch::kFloat32));
++#else
++    auto diag = [](const char*, const torch::Tensor&) {};
++#endif
+     embedding = std::get<0>(pre_fc_norm_embedding_->forward(embedding));
+     hidden = std::get<0>(pre_fc_norm_hidden_->forward(hidden));
+     torch::Tensor mtp_hidden = fc_(torch::cat({embedding, hidden}, -1));
++    diag("emb_norm", embedding); diag("hid_norm", hidden); diag("fc_out", mtp_hidden);
+ 
+     CHECK_EQ(kv_caches.size(), layers_.size());
+     torch::Tensor mrope_cos_sin;
+@@ -223,7 +269,9 @@
+       }
+ #endif
+     }
++    diag("layer_out", mtp_hidden); if (residual.has_value()) diag("residual", residual.value());
+     auto [new_mtp_hidden, new_res] = norm_->forward(mtp_hidden, residual);
++    diag("final", new_mtp_hidden);
+     mtp_hidden = new_mtp_hidden;
+     return ModelOutput(mtp_hidden);
+   }
+diff --git a/xllm/core/layers/musa/qwen3_next_attention.cpp b/xllm/core/layers/musa/qwen3_next_attention.cpp
+--- a/xllm/core/layers/musa/qwen3_next_attention.cpp
++++ b/xllm/core/layers/musa/qwen3_next_attention.cpp
+@@ -13,6 +13,7 @@
+ limitations under the License.
+ ==============================================================================*/
+ 
++#include "layers/musa/mtp_diag_tmp.h"
+ #include "layers/musa/qwen3_next_attention.h"
+ 
+ #include <glog/logging.h>
+@@ -163,7 +164,11 @@
+     const AttentionMetadata& attn_metadata,
+     KVCache& kv_cache,
+     const torch::Tensor& mrope_cos_sin) {
++  const bool dg = mtp_diag_tmp::on(hidden_states.size(0));
++  mtp_diag_tmp::log(dg, "attn_in", hidden_states);
+   torch::Tensor qkv = qkv_proj_->forward(hidden_states);
++  mtp_diag_tmp::log(dg, "qkv", qkv);
++  if (dg) LOG(INFO) << "[MTP_L] fused_qkv=" << use_fused_qkv_ << " fused_qk_norm_rope=" << fused_qk_norm_rope_enabled() << " pos=" << positions.sizes() << " " << positions.dtype();
+   if (use_fused_qkv_) {
+     torch::Tensor q_flat;
+     torch::Tensor k_flat;
+@@ -273,14 +278,19 @@
+       }
+     }
+   }
++  mtp_diag_tmp::log(dg, "q", q); mtp_diag_tmp::log(dg, "k", k); mtp_diag_tmp::log(dg, "v", v); mtp_diag_tmp::log(dg, "gate", gate);
+   torch::Tensor out =
+       std::get<0>(attn_->forward(attn_metadata, q, k, v, kv_cache));
++  mtp_diag_tmp::log(dg, "attn_out", out);
+   if (attn_output_gate_) {
+     // Capture-safe fused gating: compute sigmoid(gate) and multiply `out`
+     // in one launch without a temporary allocation or mutating `gate`.
+     xllm::kernel::musa::mul_sigmoid_gate_inplace(out, gate);
+   }
+-  return o_proj_->forward(out);
++  mtp_diag_tmp::log(dg, "gated", out);
++  torch::Tensor o_out = o_proj_->forward(out);
++  mtp_diag_tmp::log(dg, "o_proj", o_out);
++  return o_out;
+ }
+ 
+ void Qwen3NextAttentionImpl::load_state_dict(const StateDict& state_dict) {
+diff --git a/xllm/core/layers/musa/qwen3_next_hybrid_decoder_layer_base.cpp b/xllm/core/layers/musa/qwen3_next_hybrid_decoder_layer_base.cpp
+--- a/xllm/core/layers/musa/qwen3_next_hybrid_decoder_layer_base.cpp
++++ b/xllm/core/layers/musa/qwen3_next_hybrid_decoder_layer_base.cpp
+@@ -13,6 +13,7 @@
+ limitations under the License.
+ ==============================================================================*/
+ 
++#include "layers/musa/mtp_diag_tmp.h"
+ #include "layers/musa/qwen3_next_hybrid_decoder_layer_base.h"
+ 
+ #include <algorithm>
+@@ -144,6 +145,8 @@
+ 
+   // Post-attention norm
+   std::tie(x, residual) = post_norm_->forward(x, residual);
++  const bool dg = mtp_diag_tmp::on(x.size(0));
++  mtp_diag_tmp::log(dg, "post_norm", x);
+ 
+   // MLP forward
+   if (moe_mlp_) {
+@@ -151,6 +154,7 @@
+   } else {
+     x = mlp_(x);
+   }
++  mtp_diag_tmp::log(dg, "mlp_out", x);
+ 
+   return x;
+ }
+diff --git a/xllm/core/layers/musa/mtp_diag_tmp.h b/xllm/core/layers/musa/mtp_diag_tmp.h
+new file mode 100644
+--- /dev/null
++++ b/xllm/core/layers/musa/mtp_diag_tmp.h
+@@ -0,0 +1,25 @@
++#pragma once
++// TEMPORARY MTP NaN diagnostics (env XLLM_MTP_DIAG_FWD). Not for commit.
++#include <glog/logging.h>
++#include <musa_runtime.h>
++#include <torch/torch.h>
++#include <atomic>
++#include <cstdlib>
++#include "torch_musa/csrc/core/MUSAStream.h"
++namespace xllm::layer::mtp_diag_tmp {
++inline bool on(int64_t tokens) {
++  static const bool env = std::getenv("XLLM_MTP_DIAG_FWD") != nullptr;
++  static std::atomic<int> cnt{0};
++  if (!env || tokens > 4) return false;
++  musaStreamCaptureStatus st = musaStreamCaptureStatusNone;
++  musaStreamIsCapturing(c10::musa::getCurrentMUSAStream().stream(), &st);
++  return st == musaStreamCaptureStatusNone && cnt.fetch_add(1) < 400;
++}
++inline void log(bool enabled, const char* n, const torch::Tensor& t) {
++  if (!enabled || !t.defined()) return;
++  torch::Tensor f = t.to(torch::kFloat32);
++  LOG(INFO) << "[MTP_L] " << n << " " << t.sizes() << " " << t.dtype()
++            << " nan=" << f.isnan().sum().item<int64_t>()
++            << " absmax=" << f.nan_to_num(0, 0, 0).abs().max().item<float>();
++}
++}  // namespace xllm::layer::mtp_diag_tmp

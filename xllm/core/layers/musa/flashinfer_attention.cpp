@@ -709,7 +709,8 @@ void FlashInferAttentionImpl::decoder_forward(
     const bool fa3_shape_supported =
         query.scalar_type() == torch::kBFloat16 &&
         is_fa3_shape_supported(head_size_, num_heads_, num_kv_heads_);
-    const bool default_to_fa3 = fa3_shape_supported && gqa_ratio == 8;
+    // Match prefill: default FA3 decode for supported shapes (GQA 6/8 + hd256 + bf16).
+    const bool default_to_fa3 = fa3_shape_supported;
     const bool use_fa3 = fa3_setting < 0 ? default_to_fa3 : fa3_setting == 1;
     if (use_fa3 && fa3_shape_supported) {
       CHECK(decode_attn.block_table.defined())

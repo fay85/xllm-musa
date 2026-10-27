@@ -64,8 +64,14 @@ DEFINE_bool(enable_mtp_draft_body_tp1,
             "Whether to run the MTP draft body with tensor-parallel size 1 "
             "while keeping the draft LMHead on the target TP group.");
 
+#if defined(USE_MUSA)
+constexpr bool kMusaDefault_enable_mtp_draft_fp8_lm_head = true;
+#else
+constexpr bool kMusaDefault_enable_mtp_draft_fp8_lm_head = false;
+#endif
+
 DEFINE_bool(enable_mtp_draft_fp8_lm_head,
-            false,
+            kMusaDefault_enable_mtp_draft_fp8_lm_head,
             "MUSA only. Let the MTP draft propose tokens with a 128x128 "
             "block-FP8 copy of the target LMHead. Target verification keeps "
             "the original LMHead; only the draft proposals and their "
@@ -79,16 +85,28 @@ DEFINE_string(mtp_draft_vocab_path,
               "logit. Target verification keeps the full LMHead; only the "
               "draft proposals and their acceptance rate change.");
 
+#if defined(USE_MUSA)
+constexpr bool kMusaDefault_enable_mtp_target_fp8_lm_head = true;
+#else
+constexpr bool kMusaDefault_enable_mtp_target_fp8_lm_head = false;
+#endif
+
 DEFINE_bool(enable_mtp_target_fp8_lm_head,
-            false,
+            kMusaDefault_enable_mtp_target_fp8_lm_head,
             "MUSA only. Run the MTP target LMHead on a 128x128 block-FP8 "
             "copy of its weight, halving the bytes read per verify, and "
             "recompute the best logits of every token with the original "
             "weight. Greedy outputs match the original LMHead except near "
             "exact ties; other logits are approximate.");
 
+#if defined(USE_MUSA)
+constexpr bool kMusaDefault_enable_mtp_packed_verify_attention = true;
+#else
+constexpr bool kMusaDefault_enable_mtp_packed_verify_attention = false;
+#endif
+
 DEFINE_bool(enable_mtp_packed_verify_attention,
-            false,
+            kMusaDefault_enable_mtp_packed_verify_attention,
             "MUSA only. MTP target verification runs one causal FA3 decode "
             "call per sequence over all of its verify tokens instead of "
             "expanding every verify token into its own decode row, so each "

@@ -51,7 +51,6 @@ class ServiceConfig final {
          "num_request_handling_threads",
          "num_response_handling_threads",
          "health_check_interval_ms",
-         "enable_native_service_adapter",
          "enable_json_object_output",
          "enable_verbose_trace_log",
          "verbose_trace_log_path",
@@ -79,9 +78,6 @@ class ServiceConfig final {
   PROPERTY(int32_t, num_response_handling_threads) = 4;
 
   PROPERTY(int32_t, health_check_interval_ms) = 3000;
-
-  // Off keeps the legacy InstanceMetaInfo registration.
-  PROPERTY(bool, enable_native_service_adapter) = false;
 
   PROPERTY(bool, enable_json_object_output) = true;
 

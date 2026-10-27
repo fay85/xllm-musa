@@ -22,8 +22,14 @@ DEFINE_int32(max_tokens_per_batch, 10240, "Max number of tokens per batch.");
 
 DEFINE_int32(max_seqs_per_batch, 200, "Max number of sequences per batch.");
 
+#if defined(USE_MUSA)
+constexpr bool kMusaDefault_enable_schedule_overlap = true;
+#else
+constexpr bool kMusaDefault_enable_schedule_overlap = false;
+#endif
+
 DEFINE_bool(enable_schedule_overlap,
-            false,
+            kMusaDefault_enable_schedule_overlap,
             "Whether to enable schedule overlap.");
 
 DEFINE_double(prefill_scheduling_memory_usage_threshold,

@@ -492,8 +492,7 @@ DFlashWorkerImpl::DFlashWorkerImpl(const ParallelArgs& parallel_args,
             // but was only verified for DFlash2's dispatch path; other
             // block-diffusion algorithms (DFlash(1), DSpark) stay rejected.
             bool allow_cp = false;
-            if (parallel_args.cp_size() > 1 &&
-                (Platform::is_npu() || Platform::is_musa())) {
+            if (parallel_args.cp_size() > 1 && Platform::is_npu()) {
               const std::string model_type =
                   util::get_model_type(options.model_path(), options.backend());
               allow_cp = util::is_deepseek_v4_model_type(model_type) ||
@@ -575,7 +574,7 @@ bool DFlashWorkerImpl::init_model(const std::string& model_weights_path,
     // them after load destroys proposal quality.
     const bool uses_own_head_and_embedding =
         util::is_deepseek_v4_dspark_model_type(draft_args.model_type());
-    if (uses_own_head_and_embedding && !Platform::is_musa()) {
+    if (uses_own_head_and_embedding) {
       CHECK_EQ(parallel_args_.cp_size(), 1)
           << "DeepSeek-V4 DSpark does not support context parallelism yet.";
       LOG(INFO) << "Configured DeepSeek-V4 DSpark draft block size: "

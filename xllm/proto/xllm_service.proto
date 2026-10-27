@@ -33,7 +33,6 @@ import "rerank.proto";
 import "models.proto";
 import "anthropic.proto";
 import "common.proto";
-import "provider.proto";
 
 message HttpRequest {
 };
@@ -154,9 +153,4 @@ service XllmAPIService {
   rpc PauseHttp (HttpRequest) returns (HttpResponse);
   rpc Resume (ResumeRequest) returns (ResumeResponse);
   rpc ResumeHttp (HttpRequest) returns (HttpResponse);
-
-  rpc ExecuteProviderLifecycle (ProviderLifecycleCommand)
-      returns (ProviderLifecycleResponse);
-  rpc QueryProviderLifecycle (ProviderLifecycleCommand)
-      returns (ProviderLifecycleResponse);
 }; 

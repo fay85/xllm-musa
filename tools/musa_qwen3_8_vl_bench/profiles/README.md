@@ -30,10 +30,3 @@ bash stop_stack.sh
 可显式设置 `VL_ENABLE_GRAPH_VMM_POOL=true`；该路径已有原生GPU回归，尚不等同于完整VL性能资格。
 
 启动门控使用Service `/readyz`，不把 `/v1/models` 的200当作可接收流量。停止时先Engine，再前端/Coordinator，etcd最后停止。
-# Throughput profile added 2026-10-25
-
-`VL_PROFILE=throughput_k3_vmm` selects memory0.90, credit caps8192, RR,
-MTP K3, graph VMM enabled and16 requests per instance. The original
-`large_kv_rr` K2/VMM-off control and `baseline` remain available.
-See [the source release note](../../../MUSA_RELEASE_20261025.md) for the
-independently warmed C5/C6/C12 results and qualification boundaries.

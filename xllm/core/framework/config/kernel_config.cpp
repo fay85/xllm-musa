@@ -100,7 +100,7 @@ DEFINE_string(mmrs_comm_mode,
 
 #if defined(USE_MUSA)
 DEFINE_bool(enable_musa_fp8_skinny_gemm,
-            false,
+            true,
             "Run block-scaled FP8 linears with at most 8 input rows and at "
             "least 65536 output columns (LM heads) on the MP31 skinny FP8 "
             "GEMM; other shapes keep the muDNN GEMM.");

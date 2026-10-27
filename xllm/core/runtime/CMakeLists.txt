@@ -6,8 +6,6 @@ cc_library(
     runtime
   HDRS
     options.h
-    native_provider_contract.h
-    native_provider_runtime.h
     decode_graph_bucket.h
     forward_params.h
     dit_forward_params.h
@@ -27,7 +25,6 @@ cc_library(
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.h>
     $<$<BOOL:${USE_MUSA}>:musa_graph_executor_impl.h>
     $<$<BOOL:${USE_MUSA}>:musa/graph_memory_policy.h>
-    $<$<BOOL:${USE_MUSA}>:musa/prefill_graph_policy.h>
     $<$<BOOL:${USE_MUSA}>:musa/musa_model_args.h>
     $<$<BOOL:${USE_MUSA}>:musa/deepseek_v4_prefix_block_copy.h>
     py_executor_impl.h
@@ -92,8 +89,6 @@ cc_library(
     mm_embed_vlm_worker_impl.cpp
     worker_client.cpp
     xservice_client.cpp
-    native_provider_contract.cpp
-    native_provider_runtime.cpp
     params_utils.cpp
     draft_model_spec_worker_impl.cpp
     speculative_worker_impl.cpp
@@ -142,7 +137,6 @@ cc_library(
     absl::synchronization
     absl::flat_hash_map
     proto::xllm_proto
-    OpenSSL::Crypto
     $<$<BOOL:${USE_MLU}>:torch_mlu>
     $<$<BOOL:${USE_MLU}>::triton_jit>
     $<$<BOOL:${USE_MUSA}>:torch_musa>

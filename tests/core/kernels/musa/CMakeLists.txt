@@ -1,14 +1,6 @@
 # Copyright 2026 The xLLM Authors. All Rights Reserved.
 include(cc_test)
 
-# Registration and C++ dispatcher signatures can be checked without a device.
-cc_test(
-  NAME musa_custom_all_reduce_signature_test
-  SRCS musa_custom_all_reduce_signature_test.cpp
-  DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
-       GTest::gtest_main glog::glog
-)
-
 # CPU tensors exercise ownership without running a MUSA kernel or model.
 cc_test(
   NAME musa_tvmffi_lifetime_test
@@ -63,28 +55,4 @@ cc_test(
     torch
     GTest::gtest_main
     glog::glog
-)
-
-# Indexer scoring is isolated from model loading and uses one MUSA device.
-cc_test(
-  NAME deepseek_v4_indexer_metadata_test
-  SRCS deepseek_v4_indexer_metadata_test.cpp
-  DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
-       GTest::gtest_main glog::glog
-)
-
-# Cached Prefill Gate projection and routing numerical checks on MUSA.
-cc_test(
-  NAME deepseek_v4_prefill_gate_test
-  SRCS deepseek_v4_prefill_gate_test.cpp
-  DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
-       GTest::gtest_main glog::glog
-)
-
-# Packed compressor layouts and request-local Graph projection equivalence.
-cc_test(
-  NAME deepseek_v4_joint_projection_test
-  SRCS deepseek_v4_joint_projection_test.cpp
-  DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
-       GTest::gtest_main glog::glog
 )

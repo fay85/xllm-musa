@@ -1,0 +1,328 @@
+diff --git a/xllm/core/framework/model/model_input_params.h b/xllm/core/framework/model/model_input_params.h
+index 1dfd3087e..71d66f1d6 100644
+--- a/xllm/core/framework/model/model_input_params.h
++++ b/xllm/core/framework/model/model_input_params.h
+@@ -796,6 +796,9 @@ struct ExecutionBatchMetadata {
+ struct ModelEmbeddingInput {
+   // input embedding
+   mutable torch::Tensor input_embedding;
++  // Current-token embedding staged by the MTP graph path. Eager callers may
++  // leave this undefined and fall back to the normal embedding lookup.
++  torch::Tensor mtp_token_embedding;
+ 
+   // embedding ids of each sequence
+   std::vector<int32_t> embedding_ids;
+@@ -825,6 +828,7 @@ struct ModelEmbeddingInput {
+   ModelEmbeddingInput to(const torch::Device& device) const {
+     ModelEmbeddingInput out;
+     out.input_embedding = safe_to(input_embedding, device);
++    out.mtp_token_embedding = safe_to(mtp_token_embedding, device, true);
+     out.embedding_ids = embedding_ids;
+     out.linear_state_ids = linear_state_ids;
+     out.linear_state_indices = safe_to(linear_state_indices, device, true);
+diff --git a/xllm/core/framework/sampling/logits_utils.cpp b/xllm/core/framework/sampling/logits_utils.cpp
+index 0b63c3111..419cd8a26 100644
+--- a/xllm/core/framework/sampling/logits_utils.cpp
++++ b/xllm/core/framework/sampling/logits_utils.cpp
+@@ -17,6 +17,8 @@ limitations under the License.
+ 
+ #include <torch/torch.h>
+ 
++#include <algorithm>
++#include <limits>
+ #include <memory>
+ 
+ namespace xllm {
+@@ -114,6 +116,51 @@ void apply_top_k_top_p(torch::Tensor& logits,
+   }
+ #endif
+ 
++#if defined(USE_MUSA)
++  // MUSA: when both top_k and top_p are set, the NPU/MLU-only branch below
++  // would otherwise no-op and leave logits unfiltered. MTP rejection sampling
++  // reuses these logits; unfiltered full-vocab probs crush acceptance (~16%).
++  // Port of feihu-1016-dev USE_MUSA path (topk window + mask + scatter).
++  if (top_k.defined() || top_p.defined()) {
++    const int64_t vocab = logits.size(-1);
++    const float ninf = -std::numeric_limits<float>::infinity();
++    int64_t k;
++    if (top_k.defined()) {
++      // One host sync to size the topk window; avoids sorting full vocab.
++      k = top_k.max().item<int64_t>();
++      if (k <= 0) {
++        k = std::min<int64_t>(vocab, 1000);
++      }
++    } else {
++      k = std::min<int64_t>(vocab, 1000);
++    }
++    k = std::clamp(k, static_cast<int64_t>(1), vocab);
++
++    auto [sorted, idx] =
++        logits.topk(k, /*dim=*/-1, /*largest=*/true, /*sorted=*/true);
++    if (top_k.defined()) {
++      auto k_vals = top_k.clamp(1, vocab).unsqueeze(-1).to(torch::kLong);
++      auto k_mask =
++          torch::arange(k, sorted.device()).expand_as(sorted) >= k_vals;
++      sorted.masked_fill_(k_mask, ninf);
++    }
++    if (top_p.defined()) {
++      auto p = top_p.unsqueeze(-1);
++      auto probs = sorted.softmax(-1).to(torch::kFloat32);
++      auto cum = probs.cumsum(-1);
++      auto p_mask = cum > p;
++      p_mask.index_put_({torch::indexing::Ellipsis, 0}, false);
++      sorted.masked_fill_(p_mask, ninf);
++    }
++    logits.fill_(ninf);
++    logits.scatter_(/*dim=*/-1,
++                    /*index=*/idx,
++                    /*src=*/sorted.to(logits.scalar_type()));
++    return;
++  }
++  return;
++#endif
++
+   if (top_k.defined() && top_p.defined()) {
+ #if defined(USE_NPU)
+     constexpr int64_t kMaxInt64 = std::numeric_limits<int64_t>::max();
+diff --git a/xllm/core/framework/sampling/sampler.cpp b/xllm/core/framework/sampling/sampler.cpp
+index fce9d2cbf..0be74d36b 100644
+--- a/xllm/core/framework/sampling/sampler.cpp
++++ b/xllm/core/framework/sampling/sampler.cpp
+@@ -25,6 +25,9 @@ limitations under the License.
+ #include "core/framework/config/model_config.h"
+ #include "core/framework/sampling/json_object_grammar.h"
+ #include "logits_utils.h"
++#if defined(USE_MUSA)
++#include "core/kernels/musa/musa_ops_api.h"
++#endif
+ #include "sampling_params.h"
+ 
+ namespace xllm {
+@@ -203,7 +206,9 @@ torch::Tensor Sampler::greedy_sample(const torch::Tensor& probs) {
+ }
+ 
+ torch::Tensor Sampler::random_sample(const torch::Tensor& probs) {
+-#if defined(USE_MLU) || defined(USE_CUDA) || defined(USE_DCU)
++#if defined(USE_MUSA)
++  return xllm::kernel::musa::random_sample(probs);
++#elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_DCU)
+   xllm::kernel::RandomSampleParams params;
+   params.logits = probs;
+   return xllm::kernel::random_sample(params);
+diff --git a/xllm/core/layers/common/linear.h b/xllm/core/layers/common/linear.h
+index a54918483..0b1c71fca 100644
+--- a/xllm/core/layers/common/linear.h
++++ b/xllm/core/layers/common/linear.h
+@@ -233,6 +233,13 @@ class QKVParallelLinearImpl : public torch::nn::Module {
+   // Get FP8 input scale for fused RMSNorm+FP8 quantization
+   // For QKV, returns max of Q/K/V scales (per-tensor)
+   std::optional<torch::Tensor> get_input_scale() const;
++#if defined(USE_MUSA)
++  // Block-FP8 weight scales; used by Qwen3Next attention Q/G row reorder.
++  torch::Tensor weight_scale_inv() const { return weight_scale_inv_; }
++  bool is_weight_scale_inv_loaded() const {
++    return weight_scale_inv_is_loaded_;
++  }
++#endif
+ 
+  private:
+   // parameter members, must be registered
+diff --git a/xllm/core/layers/musa/qwen3_next_attention.cpp b/xllm/core/layers/musa/qwen3_next_attention.cpp
+index b2fcfa893..0e2940c45 100644
+--- a/xllm/core/layers/musa/qwen3_next_attention.cpp
++++ b/xllm/core/layers/musa/qwen3_next_attention.cpp
+@@ -283,6 +283,25 @@ void Qwen3NextAttentionImpl::load_state_dict(const StateDict& state_dict) {
+         {q_part.reshape({q_size_, hidden}), g_part.reshape({q_size_, hidden})},
+         0);
+     qg_rows.copy_(reordered);
++    // Block-FP8: the weight rows were permuted from per-head [q,g]
++    // interleave to [Q|G]; permute the [128-row] scale blocks identically,
++    // otherwise Q and G rows are dequantized with each other's scales.
++    torch::Tensor scale_inv = qkv_proj_->weight_scale_inv();
++    if (scale_inv.defined() && scale_inv.numel() > 0 &&
++        qkv_proj_->is_weight_scale_inv_loaded()) {
++      constexpr int64_t kBlock = 128;
++      CHECK_EQ(head_dim_ % kBlock, 0)
++          << "Q/G scale reorder requires head_dim % 128 == 0";
++      const int64_t blocks_per_head = head_dim_ / kBlock;
++      const int64_t qg_blocks = q_size_ * 2 / kBlock;
++      auto s_rows = scale_inv.slice(0, 0, qg_blocks);
++      auto s_3d = s_rows.view({num_heads_, 2 * blocks_per_head, scale_inv.size(1)});
++      auto sq = s_3d.slice(1, 0, blocks_per_head)
++                    .reshape({num_heads_ * blocks_per_head, scale_inv.size(1)});
++      auto sg = s_3d.slice(1, blocks_per_head, 2 * blocks_per_head)
++                    .reshape({num_heads_ * blocks_per_head, scale_inv.size(1)});
++      s_rows.copy_(torch::cat({sq, sg}, 0));
++    }
+     qkv_weight_reordered_ = true;
+   }
+ 
+diff --git a/xllm/core/runtime/musa_graph_executor_impl.cpp b/xllm/core/runtime/musa_graph_executor_impl.cpp
+index 1e365f366..5d27244dd 100644
+--- a/xllm/core/runtime/musa_graph_executor_impl.cpp
++++ b/xllm/core/runtime/musa_graph_executor_impl.cpp
+@@ -251,6 +251,15 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
+   } else {
+     max_seqs_per_batch = options.max_seqs_per_batch();
+   }
++  // Qwen3.5 MTP draft can emit two attention rows per live request (repair +
++  // current) after a fully accepted draft. Size persistent per-sequence
++  // metadata for both rows (feihu-1016-dev). Without this, graph capture for
++  // bucket>max_seqs silently truncates block_tables to max_seqs rows while
++  // the forward still runs on all token rows, collapsing MTP accept at C>1.
++  if (args_.model_type() == "qwen3_5_mtp" ||
++      args_.model_type() == "qwen3_5_moe_mtp") {
++    max_seqs_per_batch *= 2;
++  }
+   max_seqs_per_batch = ::xllm::runtime::get_decode_graph_token_bucket(
+       max_seqs_per_batch, options.enable_graph_mode_decode_no_padding());
+   auto tensor_options = torch::TensorOptions().device(device);
+@@ -488,6 +497,7 @@ size_t MusaGraphPersistentParam::get_persistent_tensor_bytes() const {
+   total += bytes(q_seq_lens_);
+   total += bytes(kv_seq_lens_);
+   total += bytes(persistent_embedding_);
++  total += bytes(persistent_mtp_token_embedding_);
+   total += bytes(aux_hidden_states_);
+   total += bytes(persistent_paged_kv_indptr_);
+   total += bytes(persistent_paged_kv_indices_);
+@@ -592,6 +602,10 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
+       params_for_capture->embedding.input_embedding =
+           persistent_embedding(padded_num_tokens);
+     }
++    if (params.embedding.mtp_token_embedding.defined()) {
++      params_for_capture->embedding.mtp_token_embedding =
++          persistent_mtp_token_embedding(padded_num_tokens);
++    }
+     if (!params.embedding.linear_state_ids.empty()) {
+       params_for_capture->embedding.linear_state_ids =
+           params.embedding.linear_state_ids;
+@@ -764,11 +778,15 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
+   // Copy block table data. In rec multi-round, block_tables may already be
+   // expanded to batch_size * beam_width rows while num_sequences still tracks
+   // the logical request count. Use the tensor's real row count here.
++  CHECK_GE(persistent_block_tables_.size(0), actual_batch_size)
++      << "MTP/decode graph persistent block_tables rows ("
++      << persistent_block_tables_.size(0)
++      << ") < live attention rows (" << actual_batch_size
++      << "); for qwen3_5_mtp the constructor must size max_seqs_per_batch*2";
+   const int64_t actual_block_table_batch =
+       is_rec_multi_round_mode()
+           ? params.attention.device.block_tables.size(0)
+-          : std::min<int64_t>(actual_batch_size,
+-                              persistent_block_tables_.size(0));
++          : actual_batch_size;
+   CHECK_GE(params.attention.device.block_tables.size(0),
+            actual_block_table_batch)
+       << "block_tables has fewer rows than the logical graph batch";
+@@ -836,6 +854,25 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
+         .copy_(embedding, /*non_blocking=*/true);
+   }
+ 
++  // Qwen3.5 MTP draft token embedding. The draft forward consumes it instead
++  // of running embed_tokens_ (IndexSelect) inside the captured graph, which
++  // is not capture-safe on MUSA and yields NaN/garbage draft hidden states.
++  const torch::Tensor& mtp_token_embedding =
++      params.embedding.mtp_token_embedding;
++  if (mtp_token_embedding.defined()) {
++    const int64_t mtp_embedding_tokens = mtp_token_embedding.size(0);
++    if (!persistent_mtp_token_embedding_.defined() ||
++        persistent_mtp_token_embedding_.numel() == 0) {
++      const int64_t max_tokens_per_batch = options_.max_tokens_per_batch();
++      persistent_mtp_token_embedding_ = torch::zeros(
++          {max_tokens_per_batch, mtp_token_embedding.size(1)},
++          mtp_token_embedding.options().device(device_));
++    }
++    persistent_mtp_token_embedding_
++        .slice(/*dim=*/0, /*start=*/0, /*end=*/mtp_embedding_tokens)
++        .copy_(mtp_token_embedding, /*non_blocking=*/true);
++  }
++
+   const bool is_decode_with_llmrec =
+       params.meta.batch_forward_type.is_decode() && params.has_llmrec_params();
+   const bool use_two_stage_decode =
+@@ -1700,6 +1737,22 @@ ModelInputParams MusaGraphExecutorImpl::maybe_precompute_embedding_for_graph(
+     return params;
+   }
+ 
++  // Qwen3.5 MTP draft: input_embedding carries the target hidden state, so
++  // the token embedding must also be precomputed outside the captured region
++  // and fed through the persistent MTP token-embedding buffer.
++  const bool is_qwen35_mtp = args_.model_type() == "qwen3_5_mtp" ||
++                             args_.model_type() == "qwen3_5_moe_mtp";
++  if (is_qwen35_mtp && params.embedding.input_embedding.defined() &&
++      !params.embedding.mtp_token_embedding.defined()) {
++    const int64_t vocab = embed_layer->weight().size(0);
++    // Placeholder (-1) rows are padding/rejected slots; clamp without a host
++    // sync so the lookup stays in-bounds.
++    torch::Tensor safe_tokens = tokens.clamp(/*min=*/0, /*max=*/vocab - 1);
++    ModelInputParams new_params = params;
++    new_params.embedding.mtp_token_embedding = embed_layer(safe_tokens);
++    return new_params;
++  }
++
+   if (params.embedding.input_embedding.defined()) {
+     return params;
+   }
+@@ -1776,12 +1829,9 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
+     return result;
+   }
+ 
+-  const bool is_qwen35_mtp = args_.model_type() == "qwen3_5_mtp" ||
+-                             args_.model_type() == "qwen3_5_moe_mtp";
+-  if (is_decode && is_qwen35_mtp) {
+-    COUNTER_INC(num_model_execution_total_eager);
+-    return model_->forward(tokens, positions, kv_caches, params);
+-  }
++  // Qwen3.5 MTP draft decode runs through the full decode graph (as in
++  // feihu-1016-dev). The previous forced-eager path produced NaN draft
++  // attention outputs; token embeddings are fed via the persistent MTP buffer.
+   const uint32_t bucket_num_tokens = get_bucket_num_tokens(n_tokens);
+ 
+   // Decode phase with full graph
+diff --git a/xllm/core/runtime/musa_graph_executor_impl.h b/xllm/core/runtime/musa_graph_executor_impl.h
+index ca9361cea..a61f5550f 100644
+--- a/xllm/core/runtime/musa_graph_executor_impl.h
++++ b/xllm/core/runtime/musa_graph_executor_impl.h
+@@ -153,6 +153,14 @@ class MusaGraphPersistentParam final {
+     }
+     return persistent_embedding_;
+   }
++  // Qwen3.5 MTP draft: token embedding precomputed outside graph capture.
++  torch::Tensor persistent_mtp_token_embedding(uint32_t actual_tokens) const {
++    if (actual_tokens > 0) {
++      return persistent_mtp_token_embedding_.slice(
++          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
++    }
++    return persistent_mtp_token_embedding_;
++  }
+   torch::Tensor persistent_linear_state_indices(
+       uint32_t actual_batch_size) const {
+     if (actual_batch_size > 0) {
+@@ -244,6 +252,7 @@ class MusaGraphPersistentParam final {
+   torch::Tensor q_seq_lens_;
+   torch::Tensor kv_seq_lens_;
+   torch::Tensor persistent_embedding_;
++  torch::Tensor persistent_mtp_token_embedding_;
+   torch::Tensor persistent_linear_state_indices_;
+   torch::Tensor persistent_kv_cache_tokens_nums_;
+   torch::Tensor persistent_num_accepted_tokens_;
+diff --git a/xllm/models/llm/qwen3_5_mtp_base.h b/xllm/models/llm/qwen3_5_mtp_base.h
+index bf0eb00f6..68ce1f27b 100644
+--- a/xllm/models/llm/qwen3_5_mtp_base.h
++++ b/xllm/models/llm/qwen3_5_mtp_base.h
+@@ -154,7 +154,13 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
+             metadata_build_options);
+     prepare_mrope(positions, attn_metadata);
+ 
+-    torch::Tensor embedding = embed_tokens_(tokens);
++    // MUSA graph execution precomputes the token embedding outside capture
++    // and supplies it through the persistent MTP buffer. Keep the embedding
++    // lookup fallback for eager and non-MUSA paths.
++    torch::Tensor embedding = input_params.embedding.mtp_token_embedding;
++    if (!embedding.defined()) {
++      embedding = embed_tokens_(tokens);
++    }
+     torch::Tensor hidden = input_params.embedding.input_embedding;
+     if (hidden.defined() == false) {
+       hidden = embedding;

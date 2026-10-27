@@ -3277,9 +3277,10 @@ bool MTPWorkerImpl::supports_combined_first_draft_execution() const {
   }
 
 #if defined(USE_MUSA)
-  // Opt-in: multi-seq overlap of first draft with host/scheduler work.
+  // Default ON: multi-seq overlap of first draft with host/scheduler work.
+  // Set XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT=0 to disable.
   static const bool musa_overlap_enabled =
-      ::xllm::util::get_bool_env("XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT", false);
+      ::xllm::util::get_bool_env("XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT", true);
   if (!musa_overlap_enabled) {
     return false;
   }
@@ -3341,7 +3342,7 @@ bool MTPWorkerImpl::can_use_combined_first_draft(
   // C=1 has no independent draft work to overlap; keep the one-row path
   // unless the next first draft should be prelaunched behind verification.
   static const bool allow_single_sequence = ::xllm::util::get_bool_env(
-      "XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT_C1", false);
+      "XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT_C1", true);
   if (input.input_params.meta.num_sequences <= 1 && !allow_single_sequence) {
     return false;
   }

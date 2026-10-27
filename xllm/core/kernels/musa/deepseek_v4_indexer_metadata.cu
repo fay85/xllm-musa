@@ -54,9 +54,9 @@ void check_table(const torch::Tensor& table,
 }
 
 __global__ void indexer_relu_weight_kernel(float* __restrict__ scores,
-                                           const float* __restrict__ weights,
-                                           int32_t elements,
-                                           int32_t capacity) {
+                                            const float* __restrict__ weights,
+                                            int32_t elements,
+                                            int32_t capacity) {
   for (int32_t offset =
            static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
        offset < elements;
@@ -65,61 +65,6 @@ __global__ void indexer_relu_weight_kernel(float* __restrict__ scores,
     // Do not use fmaxf: the framework preserves NaN and negative zero here.
     const float rectified = value < 0.0f ? 0.0f : value;
     scores[offset] = rectified * weights[offset / capacity];
-  }
-}
-
-__global__ void indexer_weighted_head_sum_kernel(
-    const float4* __restrict__ scores,
-    const float* __restrict__ weights,
-    float4* __restrict__ output,
-    int32_t total_tiles,
-    int32_t key_tiles,
-    int32_t capacity_vectors) {
-  constexpr int32_t kHeadLanes = 8;
-  constexpr int32_t kKeyVectors = 32;
-  constexpr int32_t kHeads = 64;
-  __shared__ float4 partial[kHeadLanes][kKeyVectors];
-  const int32_t key_lane = static_cast<int32_t>(threadIdx.x);
-  const int32_t head_lane = static_cast<int32_t>(threadIdx.y);
-  for (int32_t tile = static_cast<int32_t>(blockIdx.x); tile < total_tiles;
-       tile += static_cast<int32_t>(gridDim.x)) {
-    const int32_t row = tile / key_tiles;
-    const int32_t column = (tile % key_tiles) * kKeyVectors + key_lane;
-    float4 sum{0.0f, 0.0f, 0.0f, 0.0f};
-    if (column < capacity_vectors) {
-#pragma unroll
-      for (int32_t group = 0; group < kHeads / kHeadLanes; ++group) {
-        const int32_t head = group * kHeadLanes + head_lane;
-        const float4 value =
-            scores[(row * kHeads + head) * capacity_vectors + column];
-        const float weight = weights[row * kHeads + head];
-        sum.x = __fadd_rn(sum.x,
-                          __fmul_rn(value.x < 0.0f ? 0.0f : value.x, weight));
-        sum.y = __fadd_rn(sum.y,
-                          __fmul_rn(value.y < 0.0f ? 0.0f : value.y, weight));
-        sum.z = __fadd_rn(sum.z,
-                          __fmul_rn(value.z < 0.0f ? 0.0f : value.z, weight));
-        sum.w = __fadd_rn(sum.w,
-                          __fmul_rn(value.w < 0.0f ? 0.0f : value.w, weight));
-      }
-    }
-    partial[head_lane][key_lane] = sum;
-    __syncthreads();
-    if (head_lane == 0 && column < capacity_vectors) {
-      float4 total{0.0f, 0.0f, 0.0f, 0.0f};
-#pragma unroll
-      for (int32_t lane = 0; lane < kHeadLanes; ++lane) {
-        const float4 value = partial[lane][key_lane];
-        total.x = __fadd_rn(total.x, value.x);
-        total.y = __fadd_rn(total.y, value.y);
-        total.z = __fadd_rn(total.z, value.z);
-        total.w = __fadd_rn(total.w, value.w);
-      }
-      output[row * capacity_vectors + column] = total;
-    }
-    // A block can handle another tile; do not overwrite partial sums while
-    // lane zero still consumes the previous tile.
-    __syncthreads();
   }
 }
 
@@ -133,8 +78,8 @@ __global__ void indexer_relu_weight_vector_kernel(
            static_cast<int32_t>(blockIdx.x * blockDim.x + threadIdx.x);
        offset < vectors;
        offset += static_cast<int32_t>(gridDim.x * blockDim.x)) {
-    const int32_t head =
-        offset / (Capacity > 0 ? Capacity / 4 : capacity_vectors);
+    const int32_t head = offset /
+        (Capacity > 0 ? Capacity / 4 : capacity_vectors);
     const float weight = weights[head];
     float4 value = scores[offset];
     value.x = (value.x < 0.0f ? 0.0f : value.x) * weight;
@@ -148,15 +93,15 @@ __global__ void indexer_relu_weight_vector_kernel(
 template <int32_t Capacity>
 void launch_indexer_relu_weight_vector(const torch::Tensor& scores,
                                        const torch::Tensor& weights) {
-  indexer_relu_weight_vector_kernel<Capacity>
-      <<<launch_blocks(scores.numel() / 4),
-         kThreads,
-         0,
-         current_musa_stream(scores.device())>>>(
-          reinterpret_cast<float4*>(scores.data_ptr<float>()),
-          weights.data_ptr<float>(),
-          static_cast<int32_t>(scores.numel() / 4),
-          static_cast<int32_t>(scores.size(3) / 4));
+  indexer_relu_weight_vector_kernel<Capacity><<<
+      launch_blocks(scores.numel() / 4),
+      kThreads,
+      0,
+      current_musa_stream(scores.device())>>>(
+      reinterpret_cast<float4*>(scores.data_ptr<float>()),
+      weights.data_ptr<float>(),
+      static_cast<int32_t>(scores.numel() / 4),
+      static_cast<int32_t>(scores.size(3) / 4));
 }
 
 template <typename BlockIndex, typename Output>
@@ -407,11 +352,11 @@ __global__ void indexer_map_outputs_kernel(
 namespace {
 
 void gather_keys(const torch::Tensor& cache,
-                 const torch::Tensor& scales,
-                 const torch::Tensor& blocks,
-                 const torch::Tensor& keys,
-                 const torch::Tensor& valid_slots,
-                 torch::ScalarType output_dtype) {
+                                          const torch::Tensor& scales,
+                                          const torch::Tensor& blocks,
+                                          const torch::Tensor& keys,
+                                          const torch::Tensor& valid_slots,
+                                          torch::ScalarType output_dtype) {
   CHECK(cache.defined());
   CHECK(cache.device().is_privateuseone());
   CHECK(cache.dim() == 3 || (cache.dim() == 4 && cache.size(2) == 1));
@@ -505,44 +450,6 @@ void deepseek_v4_indexer_gather_keys_bf16(const torch::Tensor& cache,
   gather_keys(cache, scales, blocks, keys, valid_slots, torch::kBFloat16);
 }
 
-torch::Tensor deepseek_v4_indexer_weighted_sum(const torch::Tensor& scores,
-                                               const torch::Tensor& weights) {
-  CHECK(scores.defined());
-  CHECK(scores.device().is_privateuseone());
-  check_tensor(scores, scores, torch::kFloat32);
-  check_tensor(weights, scores, torch::kFloat32);
-  CHECK_EQ(scores.dim(), 4);
-  CHECK_EQ(weights.dim(), 2);
-  CHECK_EQ(scores.size(2), 64);
-  CHECK_GT(scores.numel(), 0);
-  CHECK_EQ(scores.size(3) % 4, 0);
-  CHECK_LE(scores.numel(), std::numeric_limits<int32_t>::max());
-  CHECK_EQ(weights.size(0), scores.size(0) * scores.size(1));
-  CHECK_EQ(weights.size(1), scores.size(2));
-  CHECK_EQ(
-      reinterpret_cast<uintptr_t>(scores.data_ptr<float>()) % alignof(float4),
-      0);
-  const XLLMOptionalDeviceGuard guard(scores.device());
-  torch::Tensor output = torch::empty(
-      {scores.size(0) * scores.size(1), scores.size(3)}, scores.options());
-  const int64_t key_tiles = (scores.size(3) / 4 + 31) / 32;
-  const int64_t total_tiles = output.size(0) * key_tiles;
-  const int32_t blocks =
-      static_cast<int32_t>(std::min<int64_t>(total_tiles, 4096));
-  indexer_weighted_head_sum_kernel<<<blocks,
-                                     dim3(32, 8),
-                                     0,
-                                     current_musa_stream(scores.device())>>>(
-      reinterpret_cast<const float4*>(scores.data_ptr<float>()),
-      weights.data_ptr<float>(),
-      reinterpret_cast<float4*>(output.data_ptr<float>()),
-      static_cast<int32_t>(total_tiles),
-      static_cast<int32_t>(key_tiles),
-      static_cast<int32_t>(scores.size(3) / 4));
-  check_musa_kernel_launch("dsv4 Indexer fused weighted head sum");
-  return output;
-}
-
 void deepseek_v4_indexer_relu_weight(const torch::Tensor& scores,
                                      const torch::Tensor& weights) {
   CHECK(scores.defined());
@@ -552,15 +459,13 @@ void deepseek_v4_indexer_relu_weight(const torch::Tensor& scores,
   CHECK_EQ(scores.dim(), 4);
   CHECK_EQ(weights.dim(), 2);
   CHECK_GT(scores.numel(), 0);
-  CHECK_LE(scores.numel(),
-           std::numeric_limits<int32_t>::max() -
-               static_cast<int64_t>(4096) * kThreads);
+  CHECK_LE(scores.numel(), std::numeric_limits<int32_t>::max() -
+                              static_cast<int64_t>(4096) * kThreads);
   CHECK_EQ(weights.size(0), scores.size(0) * scores.size(1));
   CHECK_EQ(weights.size(1), scores.size(2));
   const XLLMOptionalDeviceGuard guard(scores.device());
   if (scores.size(3) % 4 == 0 &&
-      reinterpret_cast<uintptr_t>(scores.data_ptr<float>()) % alignof(float4) ==
-          0) {
+      reinterpret_cast<uintptr_t>(scores.data_ptr<float>()) % alignof(float4) == 0) {
     if (scores.size(3) == 4096) {
       launch_indexer_relu_weight_vector<4096>(scores, weights);
     } else if (scores.size(3) == 8192) {

@@ -19,7 +19,6 @@ package xllm_service.proto;
 option cc_generic_services = true;
 
 import "disagg_pd.proto";
-import "provider.proto";
 
 message Empty {}
 
@@ -103,7 +102,6 @@ message HeartbeatRequest {
   LatencyMetrics latency_metrics = 4;
   XTensorHeartbeatInfo xtensor_info = 5;
   string incarnation_id = 6;
-  optional xllm.proto.EngineState engine_state = 7;
 }
 
 message InstanceID {

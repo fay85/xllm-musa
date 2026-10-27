@@ -15,17 +15,23 @@ limitations under the License.
 
 #pragma once
 
+#include "torch_musa/csrc/core/MUSAStream.h"
+
+// torch_musa's native MUSAGraph header expects this stream alias.
+namespace at::musa {
+using c10::musa::MUSAStream;
+}  // namespace at::musa
+
 #include <cstddef>
 #include <memory>
 #include <vector>
 
 #include "core/kernels/musa/attention_runner.h"
-#include "core/platform/musa_graph_handle.h"
-#include "torch_musa/csrc/core/MUSAStream.h"
+#include "torch_musa/csrc/aten/musa/MUSAGraph.h"
 
 namespace xllm::runtime::musa {
 
-using MusaGraphSegment = ::xllm::MusaGraphHandle;
+using MusaGraphSegment = at::musa::MUSAGraph;
 
 class PiecewiseGraphs final {
  public:

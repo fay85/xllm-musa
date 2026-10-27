@@ -19,7 +19,6 @@ option go_package = "jd.com/jd-infer/xllm;xllm";
 package xllm.proto;
 
 import "common.proto";
-import "provider.proto";
 import "tensor.proto";
 import "google/protobuf/struct.proto";
 
@@ -178,14 +177,7 @@ message ChatRequest {
   // whether to include stop strings or stop tokens in the output text.
   // default = false
   optional bool include_stop_str_in_output = 46;
-
-  RequestCorrelation correlation = 47;
-  optional uint64 remaining_deadline_ms = 48;
-  optional uint64 first_event_retry_budget_ms = 49;
-  optional uint64 first_event_dispatch_margin_ms = 50;
-  ExecutionPlan execution_plan = 51;
-  string kv_namespace = 52;
-  optional ResponseFormat response_format = 53;
+  optional ResponseFormat response_format = 47;
 }
 
 message ChatLogProbData {

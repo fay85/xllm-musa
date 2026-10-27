@@ -19,17 +19,13 @@ limitations under the License.
 #include <absl/time/clock.h>
 #include <absl/time/time.h>
 #include <glog/logging.h>
-#include <google/protobuf/util/json_util.h>
 #include <unistd.h>
 
 #include <algorithm>
-#include <nlohmann/json.hpp>
 #include <unordered_map>
 
 #include "core/framework/config/distributed_config.h"
-#include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/service_config.h"
-#include "core/runtime/native_provider_runtime.h"
 #include "util/env_var.h"
 #include "util/hash_util.h"
 #include "util/net.h"
@@ -49,94 +45,6 @@ static std::unordered_map<xllm_service::proto::InstanceType, std::string>
         {xllm_service::proto::InstanceType::DECODE, "XLLM:DECODE:"},
         {xllm_service::proto::InstanceType::MIX, "XLLM:MIX:"},
 };
-
-void fill_native_engine_state(NativeEngineStateBuilder& builder,
-                              const proto::ProviderDescriptor& descriptor,
-                              const BlockManagerPool& block_manager_pool,
-                              xllm_service::proto::HeartbeatRequest* request) {
-  const uint32_t dp_count = std::max<uint32_t>(descriptor.topology().dp(), 1);
-  const std::vector<size_t> free_blocks = block_manager_pool.num_free_blocks();
-  const std::vector<size_t> used_blocks = block_manager_pool.num_used_blocks();
-  // Prefix-cache blocks are not free, but the allocator can evict them.
-  // Reporting them as reclaimable lets the service admit the next request
-  // instead of waiting out the queue and returning 503.
-  const std::vector<size_t> prefix_cache_blocks =
-      block_manager_pool.num_blocks_in_prefix_cache();
-  NativeEngineStateSnapshot snapshot;
-  snapshot.observed_at_unix_ms =
-      static_cast<uint64_t>(absl::ToUnixMillis(absl::Now()));
-  snapshot.lifecycle = proto::ENGINE_LIFECYCLE_READY;
-  snapshot.kv_free_blocks.assign(dp_count, 0);
-  snapshot.kv_used_blocks.assign(dp_count, 0);
-  snapshot.prefix_cache_reclaimable_blocks.assign(dp_count, 0);
-  snapshot.kv_total_blocks.assign(dp_count, 0);
-  snapshot.admission_reserve_blocks.assign(dp_count, 0);
-  for (uint32_t rank = 0; rank < dp_count; ++rank) {
-    const uint64_t free = rank < free_blocks.size()
-                              ? static_cast<uint64_t>(free_blocks[rank])
-                              : 0;
-    const uint64_t used = rank < used_blocks.size()
-                              ? static_cast<uint64_t>(used_blocks[rank])
-                              : 0;
-    uint64_t total = free + used;
-    if (dp_count == 1 &&
-        static_cast<uint64_t>(block_manager_pool.num_blocks()) > total) {
-      total = block_manager_pool.num_blocks();
-    }
-    snapshot.kv_free_blocks[rank] = std::min(free, total);
-    snapshot.kv_used_blocks[rank] =
-        std::min(used, total - snapshot.kv_free_blocks[rank]);
-    snapshot.kv_total_blocks[rank] = total;
-    const uint64_t cached =
-        rank < prefix_cache_blocks.size()
-            ? static_cast<uint64_t>(prefix_cache_blocks[rank])
-            : 0;
-    const uint64_t occupied = total - snapshot.kv_free_blocks[rank];
-    snapshot.prefix_cache_reclaimable_blocks[rank] = std::min(cached, occupied);
-  }
-  std::string error;
-  const std::optional<proto::EngineState> state =
-      builder.build(snapshot, &error);
-  if (!state.has_value()) {
-    LOG(ERROR) << "Failed to build Native EngineState: " << error;
-    return;
-  }
-  *request->mutable_engine_state() = *state;
-}
-
-bool add_provider_descriptor_to_registration(
-    const proto::ProviderDescriptor& descriptor,
-    nlohmann::json* registration,
-    std::string* error) {
-  std::string descriptor_text;
-  google::protobuf::util::JsonPrintOptions options;
-  options.preserve_proto_field_names = true;
-  const google::protobuf::util::Status status =
-      google::protobuf::util::MessageToJsonString(
-          descriptor, &descriptor_text, options);
-  if (!status.ok()) {
-    if (error != nullptr) {
-      *error =
-          "Failed to encode Native Provider Descriptor: " + status.ToString();
-    }
-    return false;
-  }
-  nlohmann::json descriptor_json =
-      nlohmann::json::parse(descriptor_text, nullptr, false);
-  if (descriptor_json.is_discarded()) {
-    if (error != nullptr) {
-      *error = "Native Provider Descriptor JSON is invalid";
-    }
-    return false;
-  }
-  (*registration)["provider_id"] =
-      static_cast<int32_t>(descriptor.identity().provider_id());
-  (*registration)["provider_contract_version"] = descriptor.contract_version();
-  (*registration)["provider_profile_digest"] = descriptor.profile_digest();
-  (*registration)["backend_type"] = "xllm";
-  (*registration)["provider_descriptor"] = std::move(descriptor_json);
-  return true;
-}
 
 std::string parse_instance_name(const std::string& name) {
   if (name.empty()) return "";
@@ -268,12 +176,6 @@ void XServiceClient::set_scheduler(Scheduler* scheduler) {
 
 void XServiceClient::set_engine(Engine* engine) { engine_ = engine; }
 
-std::optional<proto::ProviderDescriptor>
-XServiceClient::get_provider_descriptor() const {
-  std::lock_guard<std::mutex> lock(registration_mutex_);
-  return provider_descriptor_;
-}
-
 XServiceClient::~XServiceClient() {
   exited_.store(true);
   if (heartbeat_thread_ && heartbeat_thread_->joinable()) {
@@ -367,36 +269,7 @@ void XServiceClient::register_instance(const InstanceInfo& instance_info) {
   }
 
   const std::string key = key_prefix + registered_info.name;
-  nlohmann::json registration = registered_info.serialize_to_json();
-  if (engine_ != nullptr && block_manager_pool_ != nullptr) {
-    std::string error;
-    const std::optional<NativeProviderDescriptorConfig> config =
-        collect_native_provider_descriptor_config(
-            registered_info, *engine_, *block_manager_pool_, &error);
-    if (config.has_value()) {
-      const std::optional<proto::ProviderDescriptor> descriptor =
-          build_native_provider_descriptor(*config, &error);
-      if (!descriptor.has_value() || !add_provider_descriptor_to_registration(
-                                         *descriptor, &registration, &error)) {
-        LOG(FATAL) << "Failed to build Native V2 registration: " << error;
-        return;
-      }
-      LOG(INFO) << "Attached Native Provider Descriptor, engine="
-                << descriptor->identity().engine_uid()
-                << ", model=" << descriptor->model().model_revision()
-                << ", connector=" << descriptor->kv().connector();
-      {
-        std::lock_guard<std::mutex> lock(registration_mutex_);
-        provider_descriptor_ = *descriptor;
-        engine_state_builder_ =
-            std::make_shared<NativeEngineStateBuilder>(*descriptor);
-      }
-    } else if (!error.empty()) {
-      LOG(FATAL) << "Native V2 registration is malformed: " << error;
-      return;
-    }
-  }
-  const std::string value = registration.dump();
+  const std::string value = registered_info.serialize_to_json().dump();
   {
     std::lock_guard<std::mutex> lock(registration_mutex_);
     instance_name_ = registered_info.name;
@@ -516,23 +389,8 @@ void XServiceClient::heartbeat() {
       req.mutable_latency_metrics()->set_recent_max_tbt(*max_tbt);
     }
 
-    std::shared_ptr<NativeEngineStateBuilder> engine_state_builder;
-    std::optional<proto::ProviderDescriptor> provider_descriptor;
-    {
-      std::lock_guard<std::mutex> state_lock(registration_mutex_);
-      engine_state_builder = engine_state_builder_;
-      provider_descriptor = provider_descriptor_;
-    }
-    if (engine_state_builder != nullptr && provider_descriptor.has_value()) {
-      fill_native_engine_state(*engine_state_builder,
-                               *provider_descriptor,
-                               *block_manager_pool_,
-                               &req);
-    }
-
-    // The engine pointer is also set for Native V2 registration. XTensor page
-    // reporting is a separate path and its default implementation aborts.
-    if (engine_ != nullptr && KVCacheConfig::get_instance().enable_xtensor()) {
+    // Collect XTensor info (worker free pages, model weight segments)
+    if (engine_ != nullptr) {
       std::vector<size_t> worker_free_phy_pages;
       std::unordered_map<std::string, std::vector<WeightSegment>>
           model_weight_segments;
@@ -656,17 +514,6 @@ std::vector<bool> XServiceClient::generations(
 
   for (size_t i = 0; i < outputs.size(); ++i) {
     const auto& output = outputs[i];
-    // Chunked prefill schedules the request before any token exists. Those
-    // ticks carry no sequence output. A V2 service rejects them for a missing
-    // attempt, so acknowledge them locally and wait for the real token.
-    const bool progress_without_output =
-        output.outputs.empty() && !output.status.has_value() &&
-        !output.finished && !output.finished_on_prefill_instance &&
-        !output.cancelled;
-    if (progress_without_output) {
-      results[i] = true;
-      continue;
-    }
     std::string target_service = master_addr;
     if (!output.target_xservice_addr.empty()) {
       target_service = output.target_xservice_addr;
@@ -691,31 +538,8 @@ std::vector<bool> XServiceClient::generations(
           static_cast<int32_t>(output.status.value().code()));
       gen_status->set_status_msg(output.status.value().message());
     }
-    if (output.decode_admission.has_value()) {
-      const DecodeAdmissionObservation& observed = *output.decode_admission;
-      req->set_decode_admission_disposition(observed.disposition);
-      req->set_decode_admission_reason(observed.reason);
-      req->set_decode_admission_attempts(observed.attempts);
-      req->set_decode_admission_rpc_duration_ns(observed.rpc_duration_ns);
-    }
     req->set_finished(output.finished);
     req->set_finished_on_prefill_instance(output.finished_on_prefill_instance);
-    if (output.output_event_seq.has_value()) {
-      req->set_output_event_seq(*output.output_event_seq);
-    }
-    if (output.attempt_seq.has_value()) {
-      req->set_attempt_seq(*output.attempt_seq);
-    }
-    req->set_sender_engine_uid(instance_name_);
-    req->set_sender_incarnation_id(incarnation_id_);
-    // Legacy services also supply service_request_id, but only V2 output
-    // carries an event sequence and requires the corresponding attempt.
-    if (output.output_event_seq.has_value() &&
-        !output.attempt_seq.has_value()) {
-      LOG(ERROR) << "V2 output missing attempt_seq, service_req="
-                 << output.service_request_id
-                 << " outputs=" << output.outputs.size();
-    }
     if (output.usage.has_value()) {
       proto::OutputUsage* proto_usage = req->mutable_usage();
       proto_usage->set_num_prompt_tokens(

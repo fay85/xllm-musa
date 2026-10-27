@@ -15,14 +15,18 @@ limitations under the License.
 
 #include "core/framework/config/execution_config.h"
 
-#include <glog/logging.h>
-
 #include "core/common/global_flags.h"
 #include "core/framework/config/config_utils.h"
 
+#if defined(USE_MUSA)
+constexpr bool kMusaDefault_enable_graph = true;
+#else
+constexpr bool kMusaDefault_enable_graph = false;
+#endif
+
 DEFINE_bool(
     enable_graph,
-    false,
+    kMusaDefault_enable_graph,
     "Whether to enable graph execution for decode phase. When enabled, "
     "the engine uses graph mode (CUDA Graph for GPU, ACL Graph for NPU, "
     "MLU Graph, or DCU Graph) to optimize decode performance by reducing "
@@ -38,8 +42,14 @@ DEFINE_bool(enable_graph_double_buffer,
             "Whether to enable double-buffered ACL graph persistent params "
             "and graph instances for NPU schedule-overlap decode.");
 
+#if defined(USE_MUSA)
+constexpr bool kMusaDefault_enable_graph_mode_decode_no_padding = true;
+#else
+constexpr bool kMusaDefault_enable_graph_mode_decode_no_padding = false;
+#endif
+
 DEFINE_bool(enable_graph_mode_decode_no_padding,
-            false,
+            kMusaDefault_enable_graph_mode_decode_no_padding,
             "Whether to enable graph execution for decode phase without "
             "padding. If true, graph will be captured with every actual num "
             "tokens, as stride is 1.");
@@ -103,25 +113,6 @@ DEFINE_bool(
     "Enable FIA for Qwen3.5 decode attention. Applies to both target and MTP "
     "draft models. Prefill attention is unaffected.");
 
-DEFINE_int32(
-    musa_prefill_graph_token_stride,
-    256,
-    "Token bucket stride for single-sequence MUSA Prefill graphs. "
-    "Decode buckets and exact multi-sequence GDN layouts are unchanged.");
-
-DEFINE_int32(musa_prefill_graph_max_entries,
-             32,
-             "Maximum retained Prefill graph keys per MUSA executor. Existing "
-             "keys replay at the limit; unseen keys execute eager before any "
-             "capture or VMM address-space allocation.");
-
-DEFINE_int32(musa_prefill_warmup_reserve_mb,
-             2048,
-             "Additional MiB excluded from the KV budget for MUSA piecewise "
-             "Prefill preparation peaks and graph overhead. Applies once to "
-             "the shared target/draft memory estimate, in addition to the "
-             "max_memory_utilization headroom.");
-
 namespace xllm {
 
 void ExecutionConfig::from_flags() {
@@ -140,9 +131,6 @@ void ExecutionConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(random_seed);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(python_graph_backend);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_fia_decode);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(musa_prefill_graph_token_stride);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(musa_prefill_graph_max_entries);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(musa_prefill_warmup_reserve_mb);
 }
 
 void ExecutionConfig::from_json(const JsonReader& json) {
@@ -161,9 +149,6 @@ void ExecutionConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(random_seed);
   XLLM_CONFIG_ASSIGN_FROM_JSON(python_graph_backend);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_fia_decode);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(musa_prefill_graph_token_stride);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(musa_prefill_graph_max_entries);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(musa_prefill_warmup_reserve_mb);
 }
 
 void ExecutionConfig::append_config_json(
@@ -199,12 +184,6 @@ void ExecutionConfig::append_config_json(
       config_json, default_config, python_graph_backend);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_fia_decode);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, musa_prefill_graph_token_stride);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, musa_prefill_graph_max_entries);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, musa_prefill_warmup_reserve_mb);
 }
 
 ExecutionConfig& ExecutionConfig::get_instance() {
@@ -217,11 +196,6 @@ void ExecutionConfig::initialize() {
   if (const auto& json_config = config::get_parsed_json_config()) {
     from_json(*json_config);
   }
-  CHECK_GT(musa_prefill_graph_token_stride(), 0);
-  CHECK_EQ(musa_prefill_graph_token_stride() % 16, 0)
-      << "MUSA Prefill stride must be a multiple of 16";
-  CHECK_GT(musa_prefill_graph_max_entries(), 0);
-  CHECK_GE(musa_prefill_warmup_reserve_mb(), 0);
 }
 
 }  // namespace xllm

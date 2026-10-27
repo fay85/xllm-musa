@@ -237,8 +237,6 @@ struct InstanceInfo {
   uint64_t register_ts_ms = 0;
   // DEFAULT/PREFILL/DECODE/MIX
   std::string type = "";
-  // Empty opts out of cross super-node isolation.
-  std::string super_node_id = "";
   // remote kv cache info
   std::vector<uint64_t> cluster_ids;
   std::vector<std::string> addrs;
@@ -295,9 +293,6 @@ struct InstanceInfo {
     json_val["addrs"] = addrs;
     json_val["dp_size"] = dp_size;
     json_val["kv_split_size"] = kv_split_size;
-    if (!super_node_id.empty()) {
-      json_val["super_node_id"] = super_node_id;
-    }
     json_val["cp_index_write_mode"] = cp_index_write_mode;
     json_val["ports"] = ports;
     json_val["ttft_profiling_data"] = ttft_profiling_data;

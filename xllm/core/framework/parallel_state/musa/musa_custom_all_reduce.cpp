@@ -26,11 +26,11 @@ limitations under the License.
 #include <limits>
 #include <mutex>
 #include <stdexcept>
-#include <unordered_map>
 #include <unordered_set>
+#include <unordered_map>
 
-#include "core/framework/parallel_state/musa/musa_custom_all_reduce_policy.h"
 #include "core/framework/parallel_state/musa_process_group.h"
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce_policy.h"
 #include "torch_musa/csrc/core/MUSAStream.h"
 
 namespace xllm {
@@ -272,17 +272,11 @@ void MusaCustomAllReduce::long_prefill_host_barrier() {
 
 void musa_long_prefill_host_barrier(ProcessGroup* process_group) {
   auto* musa_group = dynamic_cast<ProcessGroupImpl*>(process_group);
-  CHECK(musa_group != nullptr)
-      << "Long-prefill rendezvous requires a MUSA group";
+  CHECK(musa_group != nullptr) << "Long-prefill rendezvous requires a MUSA group";
   musa_group->long_prefill_host_barrier();
 }
 
-void register_musa_custom_all_reduce_kernel();
-
 void MusaCustomAllReduce::init() {
-  // Reference the kernel translation unit so its torch op registration is
-  // linked into this binary.
-  register_musa_custom_all_reduce_kernel();
   const c10::DeviceGuard device_guard(device_);
   CHECK(store_ != nullptr) << "Custom all-reduce requires a c10d store.";
 
@@ -397,11 +391,9 @@ std::optional<torch::Tensor> MusaCustomAllReduce::allreduce(
   }
   const char* graph_two_shot = std::getenv("XLLM_DSV4_GRAPH_TP_BF16_TWO_SHOT");
   const bool enable_graph_two_shot = group_name_ == "tp_group" &&
-                                     graph_two_shot != nullptr &&
-                                     std::string(graph_two_shot) == "1";
+      graph_two_shot != nullptr && std::string(graph_two_shot) == "1";
   auto reduce = [&]() {
-    op_all_reduce(
-        custom_ar_handle_, input, output, buffer_ptrs_[rank_], max_size_bytes_);
+    op_all_reduce(custom_ar_handle_, input, output, buffer_ptrs_[rank_], max_size_bytes_);
   };
   if (!enable_graph_two_shot) {
     reduce();
@@ -409,32 +401,21 @@ std::optional<torch::Tensor> MusaCustomAllReduce::allreduce(
   }
   // Serialize selection + launch + restore, including small/eager TP calls,
   // so another host thread cannot observe the temporary capture algorithm.
-  std::lock_guard<std::mutex> algorithm_lock(
-      g_custom_allreduce_algorithm_mutex);
+  std::lock_guard<std::mutex> algorithm_lock(g_custom_allreduce_algorithm_mutex);
   bool capture_two_shot = false;
-  if (input.dim() == 2 &&
-      musa_graph_tp_bf16_two_shot_shape(group_name_,
-                                        world_size_,
-                                        input.scalar_type() == torch::kBFloat16,
-                                        input.size(0),
-                                        input.size(1))) {
+  if (input.dim() == 2 && musa_graph_tp_bf16_two_shot_shape(
+          group_name_, world_size_, input.scalar_type() == torch::kBFloat16,
+          input.size(0), input.size(1))) {
     musaStreamCaptureStatus capture_status = musaStreamCaptureStatusNone;
-    CHECK_EQ(
-        musaStreamIsCapturing(c10::musa::getCurrentMUSAStream(device_.index()),
-                              &capture_status),
-        musaSuccess);
+    CHECK_EQ(musaStreamIsCapturing(c10::musa::getCurrentMUSAStream(device_.index()),
+                                   &capture_status), musaSuccess);
     capture_two_shot = capture_status == musaStreamCaptureStatusActive;
   }
-  musa_with_tp_two_shot(
-      capture_two_shot,
-      [&](int64_t algorithm) {
-        op_set_algorithm(custom_ar_handle_, algorithm);
-      },
-      reduce);
+  musa_with_tp_two_shot(capture_two_shot,
+      [&](int64_t algorithm) { op_set_algorithm(custom_ar_handle_, algorithm); }, reduce);
   if (capture_two_shot && input.size(0) == 112) {
-    LOG_FIRST_N(INFO, 1)
-        << "[DSV4_GRAPH_TP_TWO_SHOT_B16] rows=112 width=4096 bf16=1 "
-           "capture_algorithm=2 restored_host_algorithm=1";
+    LOG_FIRST_N(INFO, 1) << "[DSV4_GRAPH_TP_TWO_SHOT_B16] rows=112 width=4096 bf16=1 "
+                           "capture_algorithm=2 restored_host_algorithm=1";
   }
   return output;
 }

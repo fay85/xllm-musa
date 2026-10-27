@@ -20,7 +20,6 @@ package xllm.proto;
 option cc_generic_services = true;
 
 import "common.proto";
-import "provider.proto";
 import "tensor.proto";
 
 message ClusterInfos {
@@ -91,7 +90,6 @@ message DisaggRequest {
   bool json_reasoning_enabled = 41;
   // Identifies this reservation even when callers reuse a request ID.
   string reservation_id = 42;
-  optional uint64 service_attempt_seq = 43;
 
 }
 
@@ -225,17 +223,6 @@ message DisaggStreamGeneration {
   OutputUsage usage = 5;
   bool finished = 6;
   bool finished_on_prefill_instance = 7;
-  optional uint64 output_event_seq = 8;
-  optional uint64 attempt_seq = 9;
-  string sender_engine_uid = 10;
-  string sender_incarnation_id = 11;
-  // Actual Decode allocation evidence consumed by Service admission feedback.
-  // All four fields are present together; absent means unobserved, not rejected.
-  optional AdmissionDisposition decode_admission_disposition = 12;
-  optional AdmissionReason decode_admission_reason = 13;
-  optional uint32 decode_admission_attempts = 14;
-  optional uint64 decode_admission_rpc_duration_ns = 15;
-  optional bool prefill_resources_released = 16;
 }
 
 message DisaggStreamGenerations {
@@ -297,28 +284,6 @@ message InstanceClusterInfo {
   int32 dp_size = 6;
   // Prefill-side effective KV-split width for link_cluster on decode.
   int32 kv_split_size = 7;
-  // Fences a same-name Engine restart. Field number matches xllm-service.
-  string incarnation_id = 8;
-}
-
-message AttemptControlRequest {
-  RequestAttemptKey key = 1;
-  TransferGrantIdentity transfer_grant = 2;
-}
-
-message AttemptControlResponse {
-  bool ok = 1;
-  AdmissionReason reason = 2;
-  AttemptStatus status = 3;
-}
-
-message EnsureLinkRequest {
-  EnsureLinkSpec spec = 1;
-  InstanceClusterInfo prefill_cluster = 2;
-}
-
-message DrainLinkRequest {
-  EnsureLinkSpec spec = 1;
 }
 
 message ReleaseReservationRequest {
@@ -344,8 +309,4 @@ service DisaggPDService {
   rpc SendPullSignal(PullSignal) returns (Status) {}
   rpc LinkInstance(InstanceClusterInfo) returns (Status) {}
   rpc UnlinkInstance(InstanceClusterInfo) returns (Status) {}
-  rpc EnsureLink(EnsureLinkRequest) returns (EnsureLinkResult) {}
-  rpc DrainLink(DrainLinkRequest) returns (EnsureLinkResult) {}
-  rpc QueryRequest(AttemptControlRequest) returns (AttemptControlResponse) {}
-  rpc CancelRequest(AttemptControlRequest) returns (AttemptControlResponse) {}
 }

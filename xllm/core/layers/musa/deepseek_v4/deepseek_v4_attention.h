@@ -31,7 +31,6 @@ limitations under the License.
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/linear.h"
 #include "core/layers/common/rms_norm.h"
-#include "core/layers/musa/deepseek_v4/deepseek_v4_pcp_context.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_sp_context.h"
 
 namespace xllm {
@@ -78,27 +77,22 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
     sequence_parallel_context_ = context;
   }
 
-  // Prefill context parallelism (PCP): the earlier CP group streams its
-  // per-layer K/V rows and compressor recurrent state to the later group so
-  // the later group's cache and recurrence see the full causal history.
-  void set_pcp_context(dsv4_musa_pcp::Context* context) {
-    pcp_context_ = context;
-  }
-
  private:
   // Current accuracy-protected implementation.  A separately linked legacy
   // implementation may override only the Graph target-q6 route; keeping the
   // entry point split makes that performance A/B explicit and reversible.
-  std::tuple<torch::Tensor, std::optional<torch::Tensor>> forward_current_impl(
+  std::tuple<torch::Tensor, std::optional<torch::Tensor>>
+  forward_current_impl(
       const DSAMetadata& attn_metadata,
       torch::Tensor& hidden_states,
       KVCache& kv_cache,
       KVState& kv_state,
       bool is_prefill,
       bool is_chunked_prefill,
-      const std::
-          tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>&
-              compress_metadata);
+      const std::tuple<torch::Tensor,
+                       torch::Tensor,
+                       torch::Tensor,
+                       torch::Tensor>& compress_metadata);
 
   std::vector<std::pair<int64_t, int64_t>> build_query_ranges(
       const DSAMetadata& attn_metadata,
@@ -337,7 +331,6 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
   bool compressor_ape_loaded_ = false;
   bool indexer_compressor_ape_loaded_ = false;
   const dsv4_musa_sp::DeepseekV4SPContext* sequence_parallel_context_ = nullptr;
-  dsv4_musa_pcp::Context* pcp_context_ = nullptr;
 };
 TORCH_MODULE(DeepseekV4Attention);
 

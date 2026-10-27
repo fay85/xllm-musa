@@ -20,7 +20,6 @@ limitations under the License.
 #include <atomic>
 #include <functional>
 #include <mutex>
-#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <thread>
@@ -32,12 +31,9 @@ limitations under the License.
 #include "forward_params.h"
 #include "framework/block/block_manager_pool.h"
 #include "framework/request/request_output.h"
-#include "provider.pb.h"
 #include "scheduler/scheduler.h"
 #include "xservice.pb.h"
 namespace xllm {
-
-class NativeEngineStateBuilder;
 
 class XServiceClient {
  public:
@@ -53,7 +49,6 @@ class XServiceClient {
             const std::string& etcd_namespace = "");
   void set_scheduler(Scheduler* scheduler);
   void set_engine(Engine* engine);
-  std::optional<proto::ProviderDescriptor> get_provider_descriptor() const;
   bool initialize_done() { return initialize_done_; }
 
   std::string get_instance_name();
@@ -105,8 +100,6 @@ class XServiceClient {
   std::string incarnation_id_;
   std::string registration_key_;
   std::string registration_value_;
-  std::optional<proto::ProviderDescriptor> provider_descriptor_;
-  std::shared_ptr<NativeEngineStateBuilder> engine_state_builder_;
 
   std::string master_xservice_addr_;
   std::unordered_map<std::string, std::unique_ptr<brpc::Channel>>
@@ -118,7 +111,7 @@ class XServiceClient {
   std::unique_ptr<std::thread> reconcile_thread_;
 
   std::shared_mutex mutex_;
-  mutable std::mutex registration_mutex_;
+  std::mutex registration_mutex_;
   brpc::ChannelOptions chan_options_;
   std::unique_ptr<EtcdClient> etcd_client_;
   const BlockManagerPool* block_manager_pool_ = nullptr;  // not own

@@ -33,7 +33,6 @@ set(_TORCH_MUSA_KERNEL_SRCS
   causal_conv1d.cu
   gemma_norm.cu
   activation.cu
-  custom_all_reduce_ops.cu
   rope.cu
   mrope.cu
   gdn_state_commit.cu
@@ -147,9 +146,3 @@ cc_library(
     musa
     musart
 )
-
-# The custom all-reduce registration lives in this library. parallel_state
-# calls it, and this directory is configured after parallel_state.
-if(TARGET parallel_state)
-  target_link_libraries(parallel_state PUBLIC cuda_kernels)
-endif()

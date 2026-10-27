@@ -96,35 +96,6 @@ void drain_dispatch_queue(
   }
 }
 
-// A legacy HTTP-style allocation response is still authoritative on MUSA.
-// Translate its observed result, including retry count and RPC time, before
-// publishing any Prefill output. Missing evidence otherwise makes the Service
-// classify successful requests as UNKNOWN and reduce subsequent batch grants.
-void record_decode_admission(Request* request,
-                             const proto::DisaggResponse& response,
-                             uint64_t rpc_duration_ns) {
-  auto& observed = request->state().decode_admission;
-  if (!observed.has_value()) {
-    observed.emplace();
-  }
-  CHECK_LT(observed->attempts, std::numeric_limits<uint32_t>::max());
-  CHECK_LE(rpc_duration_ns,
-           std::numeric_limits<uint64_t>::max() - observed->rpc_duration_ns);
-  ++observed->attempts;
-  observed->rpc_duration_ns += rpc_duration_ns;
-  if (response.status_code() == 200) {
-    observed->disposition = proto::ADMISSION_DISPOSITION_ACCEPTED;
-    observed->reason = proto::ADMISSION_REASON_NONE;
-  } else if (is_permanent_rejection(response.status_code())) {
-    observed->disposition = proto::ADMISSION_DISPOSITION_PERMANENTLY_INFEASIBLE;
-    observed->reason = proto::ADMISSION_REASON_CONTEXT_TOO_LARGE;
-  } else {
-    observed->disposition =
-        proto::ADMISSION_DISPOSITION_TEMPORARILY_UNAVAILABLE;
-    observed->reason = proto::ADMISSION_REASON_KV_TEMPORARILY_INSUFFICIENT;
-  }
-}
-
 void send_reservation_release(const std::string& req_id,
                               const std::string& reservation_id,
                               const std::string& address) {
@@ -638,9 +609,6 @@ void DisaggPDScheduler::dispatch_requests() {
       req->set_req_id(requests[i]->request_id());
       req->set_reservation_id(requests[i]->state().pd_reservation_id);
       req->set_service_req_id(requests[i]->service_request_id());
-      if (requests[i]->v2_attempt_seq().has_value()) {
-        req->set_service_attempt_seq(*requests[i]->v2_attempt_seq());
-      }
       req->set_source_xservice_addr(requests[i]->source_xservice_addr());
       req->set_tokens_num(requests[i]->state().prompt_tokens.size());
       req->set_prompt(requests[i]->state().prompt);
@@ -712,16 +680,10 @@ void DisaggPDScheduler::dispatch_requests() {
     stub->AddNewRequests(&cntl, &reqs, &resps, nullptr);
     const double allocation_rpc_seconds =
         allocation_rpc_timer.elapsed_seconds();
-    const uint64_t allocation_rpc_duration_ns =
-        static_cast<uint64_t>(allocation_rpc_seconds * 1000000000.0);
     if (cntl.Failed()) {
       LOG(ERROR) << "Failed to add new requests to decode instance : "
                  << selected_instance << ", error text : " << cntl.ErrorText();
       for (auto& request : requests) {
-        // A failed RPC cannot prove that Decode rejected the reservation.
-        // Clear any earlier retry observation and let Service retain UNKNOWN
-        // ownership until its normal query/cancel cleanup proves termination.
-        request->state().decode_admission.reset();
         response_processor_->process_failed_request(
             request,
             {StatusCode::UNKNOWN,
@@ -745,8 +707,6 @@ void DisaggPDScheduler::dispatch_requests() {
       linked_instance_.emplace(selected_instance);
     }
     for (size_t i = 0; i < requests.size(); ++i) {
-      record_decode_admission(
-          requests[i].get(), resps.resps()[i], allocation_rpc_duration_ns);
       if (resps.resps()[i].status_code() != 200) {
         if (is_permanent_rejection(resps.resps()[i].status_code())) {
           LOG(ERROR) << "Decode rejected an oversized prompt, request_id="

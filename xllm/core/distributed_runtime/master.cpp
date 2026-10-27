@@ -431,33 +431,24 @@ std::optional<std::string> validate_model_cp(const Options& options,
   }
 
   if (Platform::is_musa()) {
-    // VLM+disagg_pd also runs under LLMEngine (see Master ctor), so CP is OK
-    // without speculative decoding when MTP is off.
-    const bool llm_engine_target = engine_type == EngineType::LLM ||
-                                   engine_type == EngineType::SSM ||
-                                   ((engine_type == EngineType::VLMSSM ||
-                                     engine_type == EngineType::VLM) &&
-                                    options.enable_disagg_pd());
+    const bool llm_engine_target =
+        engine_type == EngineType::LLM || engine_type == EngineType::SSM ||
+        (engine_type == EngineType::VLMSSM && options.enable_disagg_pd());
     if (!llm_engine_target) {
-      return "MUSA CP supports only LLM-engine generation: text, or VLM under "
-             "disaggregated PD (with or without speculative decoding)";
+      return "MUSA CP supports only LLM-engine generation: text, or VLM with "
+             "speculative decoding under disaggregated PD";
     }
     if (options.task_type() != "generate") {
       return "MUSA CP supports only the generate task";
     }
-    const bool deepseek_text_target = model_type == "deepseek_v4";
-    if (!is_qwen3_5_target_model_type(model_type) && !deepseek_text_target) {
-      return "MUSA CP supports only Qwen3.5 or DeepSeek-V4 text targets, got "
-             "model_type=" +
+    if (!is_qwen3_5_target_model_type(model_type)) {
+      return "MUSA CP supports only Qwen3.5 text targets, got model_type=" +
              model_type;
     }
     if (options.cp_size() != 2 || options.dp_size() != 1 ||
-        (deepseek_text_target ? (global_world_size % options.cp_size() != 0 ||
-                                 global_world_size / options.cp_size() < 1)
-                              : global_world_size != options.cp_size())) {
-      return "MUSA CP requires cp_size == 2, dp_size == 1; Qwen3.5 runs "
-             "world_size == cp_size (no tensor parallelism), DeepSeek-V4 "
-             "splits the world into CP groups over tensor-parallel ranks";
+        global_world_size != options.cp_size()) {
+      return "MUSA CP requires cp_size == 2, dp_size == 1 and world_size == "
+             "cp_size (no tensor parallelism)";
     }
     if (ParallelConfig::get_instance().kv_split_size_effective() != 1) {
       return "MUSA CP keeps the full KV cache on every CP rank; set "
@@ -795,9 +786,6 @@ Master::Master(const Options& options, EngineType type)
         .cp_size(options_.cp_size())
         .instance_role(options_.instance_role())
         .enable_disagg_pd(options_.enable_disagg_pd())
-        .kv_cache_transfer_mode(options_.kv_cache_transfer_mode())
-        .transfer_listen_port(options_.transfer_listen_port())
-        .enable_service_routing(options_.enable_service_routing())
         .npu_kernel_backend(options_.npu_kernel_backend())
         .enable_chunked_prefill(options_.enable_chunked_prefill())
         .enable_offline_inference(options_.enable_offline_inference())
@@ -824,14 +812,8 @@ Master::Master(const Options& options, EngineType type)
         .max_tokens_per_chunk_for_prefill(
             options_.max_tokens_per_chunk_for_prefill());
 
-    // VLMEngine has no KV transfer (get_cache_info/link_cluster unimplemented).
-    // Disaggregated VLM serving runs VLM workers under LLMEngine, matching
-    // the VLMSSM+disagg_pd speculative path.
-    if (options_.enable_disagg_pd()) {
-      engine_ = std::make_unique<LLMEngine>(eng_options);
-    } else {
-      engine_ = std::make_unique<VLMEngine>(eng_options);
-    }
+    auto engine = std::make_unique<VLMEngine>(eng_options);
+    engine_ = std::move(engine);
   } else if (type == EngineType::SSM || type == EngineType::VLMSSM) {
     if (type == EngineType::VLMSSM) {
       CHECK(!options_.enable_pd_ooc())
