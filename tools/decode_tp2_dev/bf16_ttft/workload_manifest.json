@@ -1,0 +1,50 @@
+[
+  {
+    "path": "/workspace/decode_tp2_dev_artifacts/performance_comparison_20261027/workloads_stable_kv/workload_c6.json",
+    "sha256": "d1e6f5da3de2d1fb00323e37cbead5ef32f9a6278ee4fd49bfcb38e956920dc9",
+    "measured_text_range": [
+      19511,
+      20467
+    ],
+    "measured_kv_range": [
+      0.773620122655764,
+      0.8079457904019307
+    ]
+  },
+  {
+    "path": "/workspace/decode_tp2_dev_artifacts/performance_comparison_20261027/workloads_stable_kv/workload_c12.json",
+    "sha256": "5e781bd7b1bd65c056390de32df52ce955eebf8a08b92de4307f33cfd7dd4f8a",
+    "measured_text_range": [
+      19511,
+      20467
+    ],
+    "measured_kv_range": [
+      0.773620122655764,
+      0.8079457904019307
+    ]
+  },
+  {
+    "path": "/workspace/decode_tp2_dev_artifacts/performance_comparison_20261027/workloads_stable_kv/workload_c16.json",
+    "sha256": "556f6f923d3780644690130c1fc2998f4dbcfd741d449c60f21057efbcaa4601",
+    "measured_text_range": [
+      19511,
+      20467
+    ],
+    "measured_kv_range": [
+      0.773620122655764,
+      0.8079457904019307
+    ]
+  },
+  {
+    "path": "/workspace/decode_tp2_dev_artifacts/performance_comparison_20261027/workloads_stable_kv/workload_c18.json",
+    "sha256": "5022e8ffd55e9ad2dfeabe10f4c666cb6cca37401244a915fcc18f4ac015e78e",
+    "measured_text_range": [
+      19511,
+      20467
+    ],
+    "measured_kv_range": [
+      0.773620122655764,
+      0.8079457904019307
+    ]
+  }
+]
