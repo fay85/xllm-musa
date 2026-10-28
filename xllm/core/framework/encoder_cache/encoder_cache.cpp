@@ -47,16 +47,24 @@ void EncoderCache::insert(const XXH3Key& key, torch::Tensor embedding) {
 
   torch::Tensor owned = embedding.clone();
   const int64_t size = static_cast<int64_t>(owned.nbytes());
-  if (size > max_size_) {
-    return;
+  if (!engine_managed_) {
+    if (size > max_size_) {
+      return;
+    }
+    evict_until_fit(size);
   }
-
-  evict_until_fit(size);
 
   lru_keys_.push_back(key);
   entries_.emplace(key,
                    Entry{std::move(owned), size, std::prev(lru_keys_.end())});
   current_size_ += size;
+}
+
+void EncoderCache::erase(const XXH3Key& key) {
+  EntryMap::iterator it = entries_.find(key);
+  if (it != entries_.end()) {
+    erase(it);
+  }
 }
 
 void EncoderCache::clear() {

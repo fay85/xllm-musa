@@ -66,6 +66,8 @@ LLMMaster::LLMMaster(const Options& options)
 
   if (options_.enable_service_routing()) {
     xservice_client_ = XServiceClient::get_instance();
+    // Native V2 registration derives its descriptor from the loaded engine.
+    xservice_client_->set_engine(engine_.get());
     if (!xservice_client_->init(options_.etcd_addr().value_or(""),
                                 options_.instance_name().value_or(""),
                                 engine_->block_manager_pool(),
@@ -118,8 +120,12 @@ LLMMaster::LLMMaster(const Options& options)
       ChatTemplate::create(engine_->tokenizer_args(), model_args_.model_type());
 
   tokenizer_ = engine_->tokenizer()->clone();
+  // Each thread clones the tokenizer on first use, about half a second for a
+  // large tokenizer.json. Pay that while the pool starts, not on a request.
   threadpool_ = std::make_unique<ThreadPool>(
       /*num_threads=*/options_.num_request_handling_threads(),
+      /*init_func=*/
+      [tokenizer = tokenizer_.get()]() { (void)tokenizer->vocab_size(); },
       /*cpu_binding=*/false,
       /*pool_name=*/"LLMMaster.request");
 

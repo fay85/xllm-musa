@@ -55,7 +55,8 @@ class KernelConfig final {
          "enable_dsa_cp",
          "flashcomm1_min_prefill_tokens",
          "enable_mmrs_fusion",
-         "mmrs_comm_mode"}};
+         "mmrs_comm_mode",
+         "enable_musa_fp8_skinny_gemm"}};
     return kOptionCategory;
   }
 
@@ -91,6 +92,10 @@ class KernelConfig final {
   PROPERTY(bool, enable_mmrs_fusion) = false;
 
   PROPERTY(std::string, mmrs_comm_mode) = "aiv";
+#endif
+
+#if defined(USE_MUSA)
+  PROPERTY(bool, enable_musa_fp8_skinny_gemm) = false;
 #endif
 };
 

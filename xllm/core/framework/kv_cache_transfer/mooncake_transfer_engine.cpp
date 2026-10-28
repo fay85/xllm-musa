@@ -20,10 +20,23 @@ limitations under the License.
 #include <algorithm>
 #include <cstdlib>
 #include <limits>
+#include <map>
 #include <numeric>
+#include <tuple>
 #include <unordered_set>
 
 #include "absl/strings/str_join.h"
+#include "framework/kv_cache_transfer/staged_read_plan.h"
+#include "util/env_var.h"
+#include "util/timer.h"
+#if defined(USE_MUSA)
+#include <chrono>
+#include <thread>
+
+#include "core/framework/kv_cache_transfer/mooncake_open_session_retry.h"
+#include "core/framework/kv_cache_transfer/mooncake_segment_reopen.h"
+#endif
+
 #include "common/metrics.h"
 #include "framework/kv_cache_transfer/kv_cache_transfer.h"
 #include "util/net.h"
@@ -228,6 +241,17 @@ bool MooncakeTransferEngineCore::open_session(const uint64_t cluster_id,
     return true;
   }
 
+#if defined(USE_MUSA)
+  // Reaching this branch means no application session remains for this peer.
+  // Mooncake closeSegment() does not evict its descriptor or connected QPs;
+  // reopening a recycled endpoint must refresh both before any peer refcount
+  // increment or publication in handles_. Fail closed if refresh fails.
+  if (!detail::prepare_mooncake_segment_reopen(
+          *engine_, remote_addr, /*invalidate_endpoints=*/true)) {
+    return false;
+  }
+#endif
+
   if (cluster_id != 0) {
     proto::MooncakeTransferEngineService_Stub* stub =
         get_or_create_stub_locked(cluster_id);
@@ -238,6 +262,46 @@ bool MooncakeTransferEngineCore::open_session(const uint64_t cluster_id,
 
     proto::SessionInfo request;
     request.set_addr(addr_);
+#if defined(USE_MUSA)
+    int32_t attempts = 0;
+    std::string error_text;
+    const auto result = detail::run_session_open_rpc(
+        [&](int64_t timeout_ms) -> detail::SessionOpenRpcResult {
+          ++attempts;
+          proto::Status response;
+          brpc::Controller cntl;
+          cntl.set_timeout_ms(timeout_ms);
+          // Only retry an unsent EHOSTDOWN explicitly. Automatic retries could
+          // mix in an ambiguous timeout/reset after a peer-side open succeeded.
+          cntl.set_max_retry(0);
+          stub->OpenSession(&cntl, &request, &response, nullptr);
+          error_text =
+              cntl.Failed() ? cntl.ErrorText() : response.ShortDebugString();
+          return {cntl.Failed(), cntl.ErrorCode(), response.ok()};
+        },
+        [&](int32_t delay_ms) {
+          LOG(WARNING) << "[MUSA_OPEN_SESSION_RETRY] cluster_id=" << cluster_id
+                       << ", remote_addr=" << remote_addr
+                       << ", attempt=" << attempts << ", delay_ms=" << delay_ms
+                       << ", error=" << error_text;
+          std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
+        },
+        []() -> int64_t {
+          return std::chrono::duration_cast<std::chrono::milliseconds>(
+                     std::chrono::steady_clock::now().time_since_epoch())
+              .count();
+        });
+    if (result.transport_failed || !result.peer_ok) {
+      LOG(ERROR) << "OpenSession failed, attempts=" << attempts
+                 << ", error_code=" << result.error_code
+                 << ", peer_ok=" << result.peer_ok << ", error=" << error_text;
+      return false;
+    }
+    if (attempts > 1) {
+      LOG(INFO) << "[MUSA_OPEN_SESSION_RECOVERED] cluster_id=" << cluster_id
+                << ", remote_addr=" << remote_addr << ", attempts=" << attempts;
+    }
+#else
     proto::Status response;
     brpc::Controller cntl;
     stub->OpenSession(&cntl, &request, &response, nullptr);
@@ -246,6 +310,7 @@ bool MooncakeTransferEngineCore::open_session(const uint64_t cluster_id,
                  << ", peer_ok=" << response.ok();
       return false;
     }
+#endif
 
     LOG(INFO) << "OpenSession RPC to " << remote_addr
               << ", local_addr=" << addr_;
@@ -543,6 +608,22 @@ bool MooncakeTransferEngineCore::has_reshard_plan(
   return cache_peer_links_.find(remote_addr) != cache_peer_links_.end();
 }
 
+bool MooncakeTransferEngineCore::is_cache_peer_current(
+    const WorkerCacheLayoutManifest& local_manifest,
+    const WorkerCacheLayoutManifest& peer_manifest,
+    CachePeerMode mode) const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  const auto peer = cache_peer_links_.find(peer_manifest.addr);
+  return local_cache_layout_.has_value() &&
+         local_cache_layout_->incarnation_id == local_manifest.incarnation_id &&
+         local_cache_layout_->layout_generation ==
+             local_manifest.layout_generation &&
+         peer != cache_peer_links_.end() && peer->second.mode == mode &&
+         peer->second.destination_incarnation == peer_manifest.incarnation_id &&
+         peer->second.destination_layout_generation ==
+             peer_manifest.layout_generation;
+}
+
 Status MooncakeTransferEngineCore::bind_outgoing_regions(
     const std::string& remote_addr,
     const std::vector<KVTransferMapping>& mappings,
@@ -751,6 +832,13 @@ bool MooncakeTransferEngine::set_local_peer(
   return true;
 }
 
+bool MooncakeTransferEngine::is_cache_peer_current(
+    const WorkerCacheLayoutManifest& local_manifest,
+    const WorkerCacheLayoutManifest& peer_manifest,
+    CachePeerMode mode) const {
+  return core_.is_cache_peer_current(local_manifest, peer_manifest, mode);
+}
+
 bool MooncakeTransferEngine::open_session(const uint64_t cluster_id,
                                           const std::string& remote_addr) {
   if (!core_.open_session(cluster_id, remote_addr)) {
@@ -833,8 +921,14 @@ bool MooncakeTransferEngine::link_sessions(
 
   ReshardPlanner planner;
   std::vector<size_t> selected_indices;
+#if defined(USE_MUSA)
+  std::vector<ReshardPlanTemplate> selected_plans;
+  const Status selection = planner.build_incoming_plans(
+      remote_manifests, *local_manifest, &selected_indices, &selected_plans);
+#else
   const Status selection = planner.select_sources(
       remote_manifests, *local_manifest, &selected_indices);
+#endif
   if (!selection.ok()) {
     LOG(ERROR) << "Remote cache layouts cannot cover local destination: "
                << selection.message();
@@ -843,6 +937,14 @@ bool MooncakeTransferEngine::link_sessions(
 
   const std::unordered_set<size_t> selected_set(selected_indices.begin(),
                                                 selected_indices.end());
+#if defined(USE_MUSA)
+  std::vector<std::shared_ptr<const ReshardPlanTemplate>> incoming_plans(
+      remote_manifests.size());
+  for (size_t index : selected_indices) {
+    incoming_plans[index] =
+        std::make_shared<ReshardPlanTemplate>(std::move(selected_plans[index]));
+  }
+#endif
   bool linked = true;
   for (size_t index = 0; index < remote_manifests.size(); ++index) {
     const bool active = selected_set.find(index) != selected_set.end();
@@ -881,6 +983,12 @@ bool MooncakeTransferEngine::link_sessions(
     LocalCachePeer cache_peer;
     cache_peer.local_manifest = *local_manifest;
     cache_peer.remote_manifest = remote_manifests[index];
+    cache_peer.mode = selected_set.find(index) != selected_set.end()
+                          ? CachePeerMode::ACTIVE
+                          : CachePeerMode::PLAN_ONLY;
+#if defined(USE_MUSA)
+    cache_peer.incoming_plan = std::move(incoming_plans[index]);
+#endif
     cache_peers_[remote_addrs[index]] = std::move(cache_peer);
   }
   return true;
@@ -910,6 +1018,46 @@ Status MooncakeTransferEngine::bind_outgoing_regions(
     std::vector<ByteRegion>* regions) const {
   return core_.bind_outgoing_regions(
       remote_addr, mappings, cache_namespace, layer_id, regions);
+}
+
+Status MooncakeTransferEngine::bind_incoming_regions(
+    const std::string& remote_addr,
+    const std::vector<KVTransferMapping>& mappings,
+    CacheNamespace cache_namespace,
+    int64_t layer_id,
+    std::vector<ByteRegion>* regions) {
+  if (regions == nullptr) {
+    return Status(StatusCode::INVALID_ARGUMENT,
+                  "incoming KV region output must not be null");
+  }
+  std::shared_ptr<const ReshardPlanTemplate> plan;
+  {
+    std::lock_guard<std::mutex> lock(session_mutex_);
+    const auto peer = cache_peers_.find(remote_addr);
+    if (peer == cache_peers_.end() ||
+        !is_cache_peer_current(peer->second.local_manifest,
+                               peer->second.remote_manifest,
+                               peer->second.mode)) {
+      return Status(StatusCode::UNAVAILABLE,
+                    "incoming KV peer is not currently negotiated");
+    }
+    if (peer->second.mode == CachePeerMode::PLAN_ONLY) {
+      regions->clear();
+      return Status();
+    }
+    if (peer->second.mode != CachePeerMode::ACTIVE ||
+        !peer->second.incoming_plan) {
+      return Status(StatusCode::UNAVAILABLE,
+                    "active incoming KV peer has no transfer plan");
+    }
+    plan = peer->second.incoming_plan;
+  }
+  return RequestRegionBinder().bind_pull(*plan,
+                                         mappings,
+                                         cache_namespace,
+                                         layer_id,
+                                         regions,
+                                         /*compact_strided_repeats=*/true);
 }
 
 Status MooncakeTransferEngine::bind_outgoing_regions_explicit(
@@ -1094,10 +1242,33 @@ bool MooncakeTransferEngine::move_memory_regions(
     opcode = TransferRequest::WRITE;
   }
 
-  std::vector<TransferRequest> entries;
-  entries.reserve(regions.size());
-  uint64_t total_bytes = 0;
+  std::vector<ByteRegion> flat_regions;
+  const std::vector<ByteRegion>* transfer_regions = &regions;
   for (const ByteRegion& region : regions) {
+    if (byte_region_repeats(region) > 1) {
+      transfer_regions = &flat_regions;
+      break;
+    }
+  }
+  if (transfer_regions == &flat_regions) {
+    for (const ByteRegion& region : regions) {
+      const uint64_t repeats = byte_region_repeats(region);
+      for (uint64_t piece = 0; piece < repeats; ++piece) {
+        ByteRegion flat = region;
+        flat.local_offset += piece * region.local_stride;
+        flat.remote_offset += piece * region.remote_stride;
+        flat.repeat_count = 1;
+        flat.local_stride = 0;
+        flat.remote_stride = 0;
+        flat_regions.emplace_back(flat);
+      }
+    }
+  }
+
+  std::vector<TransferRequest> entries;
+  entries.reserve(transfer_regions->size());
+  uint64_t total_bytes = 0;
+  for (const ByteRegion& region : *transfer_regions) {
     if (region.local_buffer_id >= local_segment_desc->buffers.size() ||
         region.remote_buffer_id >= remote_segment_desc->buffers.size()) {
       LOG(ERROR) << "MoonCake region buffer id out of range, local_id="
@@ -1181,6 +1352,393 @@ bool MooncakeTransferEngine::move_memory_regions(
     COUNTER_ADD(mooncake_transfer_bytes_total_write, total_bytes);
     HISTOGRAM_OBSERVE(mooncake_transfer_latency_microseconds_write,
                       latency_microseconds);
+  }
+  return true;
+}
+
+namespace {
+void append_fitting_pull_regions(std::vector<ByteRegion>* output,
+                                 const ByteRegion& region,
+                                 uint64_t staging_bytes) {
+  const uint64_t repeats = byte_region_repeats(region);
+  if (repeats <= 1 || region.length == 0) {
+    output->emplace_back(region);
+    return;
+  }
+  const uint64_t span = byte_region_remote_span(region);
+  const uint64_t payload = byte_region_payload_bytes(region);
+  const bool fits = span <= staging_bytes && span / 2 + span % 2 <= payload &&
+                    region.local_stride >= region.length &&
+                    region.remote_stride >= region.length;
+  if (fits) {
+    output->emplace_back(region);
+    return;
+  }
+  ByteRegion left = region;
+  ByteRegion right = region;
+  left.repeat_count = repeats / 2;
+  right.repeat_count = repeats - left.repeat_count;
+  right.local_offset += left.repeat_count * region.local_stride;
+  right.remote_offset += left.repeat_count * region.remote_stride;
+  append_fitting_pull_regions(output, left, staging_bytes);
+  append_fitting_pull_regions(output, right, staging_bytes);
+}
+
+bool try_extend_compact_pull_region(StagedReadRun& run,
+                                    const ByteRegion& region,
+                                    size_t end,
+                                    uint64_t staging_bytes) {
+  const uint64_t piece = region.length;
+  const uint64_t span = byte_region_remote_span(region);
+  const uint64_t payload = byte_region_payload_bytes(region);
+  if (piece == 0 || span == 0 || payload == 0 ||
+      run.remote_buffer_id != region.remote_buffer_id) {
+    return false;
+  }
+  if (span / 2 + span % 2 > payload) {
+    return false;
+  }
+  constexpr uint64_t kMax = std::numeric_limits<uint64_t>::max();
+  if (run.remote_offset > kMax - run.length ||
+      region.remote_offset > kMax - span ||
+      run.payload_bytes > kMax - payload) {
+    return false;
+  }
+  const uint64_t run_end = run.remote_offset + run.length;
+  if (region.remote_offset < run_end ||
+      region.remote_offset - run_end > piece) {
+    return false;
+  }
+  const uint64_t combined = region.remote_offset + span - run.remote_offset;
+  const uint64_t combined_payload = run.payload_bytes + payload;
+  if (combined > staging_bytes ||
+      combined / 2 + combined % 2 > combined_payload) {
+    return false;
+  }
+  run.length = combined;
+  run.payload_bytes = combined_payload;
+  run.end = end;
+  return true;
+}
+
+std::vector<size_t> remote_order(const std::vector<ByteRegion>& regions) {
+  std::vector<size_t> order(regions.size());
+  std::iota(order.begin(), order.end(), static_cast<size_t>(0));
+  std::sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+    const ByteRegion& x = regions[a];
+    const ByteRegion& y = regions[b];
+    return x.remote_buffer_id != y.remote_buffer_id
+               ? x.remote_buffer_id < y.remote_buffer_id
+               : x.remote_offset < y.remote_offset;
+  });
+  return order;
+}
+}  // namespace
+
+size_t MooncakeTransferEngine::count_remote_runs(
+    const std::vector<ByteRegion>& regions) {
+  const std::vector<size_t> order = remote_order(regions);
+  size_t runs = 0;
+  for (size_t i = 0; i < order.size(); ++i) {
+    const ByteRegion& cur = regions[order[i]];
+    if (i == 0) {
+      ++runs;
+      continue;
+    }
+    const ByteRegion& prev = regions[order[i - 1]];
+    if (prev.remote_buffer_id != cur.remote_buffer_id ||
+        prev.remote_offset + prev.length != cur.remote_offset) {
+      ++runs;
+    }
+  }
+  return runs;
+}
+
+bool MooncakeTransferEngine::move_memory_regions_staged(
+    const std::string& remote_addr,
+    const std::vector<ByteRegion>& regions,
+    double* read_ms,
+    double* scatter_ms) {
+  if (regions.empty()) {
+    return true;
+  }
+  const int64_t staging_mib =
+      util::get_int_env("XLLM_MUSA_PULL_STAGING_MB", 128);
+  CHECK_GE(staging_mib, 16);
+  CHECK_LE(staging_mib, 1024);
+  const int64_t kStagingBytes = staging_mib << 20;
+  std::lock_guard<std::mutex> lock(staging_mutex_);
+  TransferEngine* engine = core_.engine();
+  device_.set_device();
+  const torch::Device torch_device = device_.unwrap();
+  if (!staging_.defined()) {
+    torch::Tensor staging = torch::empty(
+        {kStagingBytes},
+        torch::TensorOptions().dtype(torch::kUInt8).device(torch_device));
+    const int32_t ret = engine->registerLocalMemory(
+        staging.data_ptr(), kStagingBytes, kWildcardLocation, true, true);
+    if (ret != 0) {
+      LOG(ERROR) << "registerLocalMemory for PULL staging failed, ret=" << ret;
+      return false;
+    }
+    auto desc = engine->getMetadata()->getSegmentDescByID(LOCAL_SEGMENT_ID);
+    bool found = false;
+    for (size_t i = 0; desc && i < desc->buffers.size(); ++i) {
+      if (desc->buffers[i].addr ==
+          reinterpret_cast<uint64_t>(staging.data_ptr())) {
+        staging_buf_id_ = i;
+        found = true;
+        break;
+      }
+    }
+    if (!found) {
+      LOG(ERROR) << "PULL staging buffer not found in local segment";
+      return false;
+    }
+    staging_ = staging;
+    LOG(INFO) << "PULL staging buffer registered, bytes=" << kStagingBytes
+              << ", buf_id=" << staging_buf_id_;
+  }
+  auto local_desc = engine->getMetadata()->getSegmentDescByID(LOCAL_SEGMENT_ID);
+  if (!local_desc) {
+    LOG(ERROR) << "local_segment_desc is null";
+    return false;
+  }
+
+  using Run = StagedReadRun;
+  std::vector<ByteRegion> fitting;
+  fitting.reserve(regions.size());
+  for (const ByteRegion& region : regions) {
+    append_fitting_pull_regions(
+        &fitting, region, static_cast<uint64_t>(kStagingBytes));
+  }
+  const std::vector<size_t> order = remote_order(fitting);
+  std::vector<Run> runs;
+  runs.reserve(order.size());
+  for (size_t i = 0; i < order.size(); ++i) {
+    const ByteRegion& cur = fitting[order[i]];
+    const bool extended =
+        !runs.empty() &&
+        try_extend_compact_pull_region(
+            runs.back(), cur, i + 1, static_cast<uint64_t>(kStagingBytes));
+    if (!extended) {
+      const uint64_t span = byte_region_remote_span(cur);
+      runs.emplace_back(Run{cur.remote_buffer_id,
+                            cur.remote_offset,
+                            span,
+                            byte_region_payload_bytes(cur),
+                            i,
+                            i + 1});
+    }
+  }
+  uint64_t payload_bytes = 0;
+  uint64_t read_bytes = 0;
+  for (const Run& run : runs) {
+    payload_bytes += run.payload_bytes;
+    read_bytes += run.length;
+  }
+  LOG_FIRST_N(INFO, 5) << "PULL staging plan, regions=" << fitting.size()
+                       << ", reads=" << runs.size()
+                       << ", payload_bytes=" << payload_bytes
+                       << ", read_bytes=" << read_bytes
+                       << ", staging_bytes=" << kStagingBytes;
+
+  const auto uint8_options =
+      torch::TensorOptions().dtype(torch::kUInt8).device(torch_device);
+  const auto index_options = torch::TensorOptions().dtype(torch::kLong);
+  double total_read_ms = 0.0;
+  double total_scatter_ms = 0.0;
+  size_t next = 0;
+  while (next < runs.size()) {
+    std::vector<ByteRegion> reads;
+    std::vector<uint64_t> run_stage_offset;
+    const size_t chunk_begin = next;
+    uint64_t used = 0;
+    while (next < runs.size() &&
+           used + runs[next].length <= static_cast<uint64_t>(kStagingBytes)) {
+      ByteRegion read;
+      read.local_buffer_id = staging_buf_id_;
+      read.local_offset = used;
+      read.remote_buffer_id = runs[next].remote_buffer_id;
+      read.remote_offset = runs[next].remote_offset;
+      read.length = runs[next].length;
+      reads.emplace_back(read);
+      run_stage_offset.emplace_back(used);
+      used += runs[next].length;
+      ++next;
+    }
+    if (next == chunk_begin) {
+      LOG(ERROR) << "PULL run of " << runs[next].length
+                 << " bytes exceeds staging capacity " << kStagingBytes;
+      return false;
+    }
+    Timer read_timer;
+    if (!move_memory_regions(remote_addr, reads, MoveOpcode::READ)) {
+      return false;
+    }
+    total_read_ms += read_timer.elapsed_seconds() * 1000.0;
+
+    Timer scatter_timer;
+    // (local buffer, length) -> (staging offsets, local offsets)
+    struct StridedScatter {
+      uint64_t local_buffer_id = 0;
+      int64_t length = 0;
+      int64_t stage_row = 0;
+      int64_t local_row = 0;
+      int64_t count = 0;
+      int64_t remote_stride_rows = 0;
+      int64_t local_stride_rows = 0;
+    };
+    std::map<std::pair<uint64_t, uint64_t>,
+             std::pair<std::vector<int64_t>, std::vector<int64_t>>>
+        groups;
+    std::vector<StridedScatter> strided_scatters;
+    for (size_t r = chunk_begin; r < next; ++r) {
+      const Run& run = runs[r];
+      const uint64_t stage_base = run_stage_offset[r - chunk_begin];
+      for (size_t k = run.begin; k < run.end; ++k) {
+        const ByteRegion& region = fitting[order[k]];
+        const uint64_t repeats = byte_region_repeats(region);
+        const int64_t length = static_cast<int64_t>(region.length);
+        if (repeats > 1 && length > 0 &&
+            region.local_stride % region.length == 0 &&
+            region.remote_stride % region.length == 0 &&
+            region.local_offset % region.length == 0 &&
+            (stage_base + region.remote_offset - run.remote_offset) %
+                    region.length ==
+                0) {
+          strided_scatters.push_back(StridedScatter{
+              region.local_buffer_id,
+              length,
+              static_cast<int64_t>(
+                  (stage_base + region.remote_offset - run.remote_offset) /
+                  region.length),
+              static_cast<int64_t>(region.local_offset / region.length),
+              static_cast<int64_t>(repeats),
+              static_cast<int64_t>(region.remote_stride / region.length),
+              static_cast<int64_t>(region.local_stride / region.length)});
+          continue;
+        }
+        auto& group = groups[{region.local_buffer_id, region.length}];
+        const uint64_t piece_count = repeats;
+        for (uint64_t piece = 0; piece < piece_count; ++piece) {
+          group.first.emplace_back(static_cast<int64_t>(
+              stage_base + region.remote_offset + piece * region.remote_stride -
+              run.remote_offset));
+          group.second.emplace_back(static_cast<int64_t>(
+              region.local_offset + piece * region.local_stride));
+        }
+      }
+    }
+    // Upload every aligned group's row indices with one H2D copy.
+    std::vector<int64_t> all_rows;
+    std::vector<std::tuple<uint64_t, int64_t, size_t, size_t>> aligned_groups;
+    std::vector<const std::pair<std::vector<int64_t>, std::vector<int64_t>>*>
+        unaligned_offsets;
+    std::vector<std::pair<uint64_t, int64_t>> unaligned_keys;
+    for (auto& [key, offsets] : groups) {
+      const uint64_t local_buffer_id = key.first;
+      const int64_t length = static_cast<int64_t>(key.second);
+      if (local_buffer_id >= local_desc->buffers.size()) {
+        LOG(ERROR) << "PULL staging scatter local buffer id out of range";
+        return false;
+      }
+      const auto& buffer = local_desc->buffers[local_buffer_id];
+      bool aligned = static_cast<int64_t>(buffer.length) % length == 0 &&
+                     kStagingBytes % length == 0;
+      for (size_t i = 0; aligned && i < offsets.first.size(); ++i) {
+        aligned =
+            offsets.first[i] % length == 0 && offsets.second[i] % length == 0;
+      }
+      if (!aligned) {
+        unaligned_offsets.emplace_back(&offsets);
+        unaligned_keys.emplace_back(local_buffer_id, length);
+        continue;
+      }
+      const size_t base = all_rows.size();
+      const size_t n = offsets.first.size();
+      all_rows.resize(base + 2 * n);
+      for (size_t i = 0; i < n; ++i) {
+        all_rows[base + i] = offsets.first[i] / length;
+        all_rows[base + n + i] = offsets.second[i] / length;
+      }
+      aligned_groups.emplace_back(local_buffer_id, length, base, n);
+    }
+    // NPU/MLU Qwen3.5 decode launches one packed kernel for the whole batch.
+    // Fold every strided repeat into that same row-index upload so scatter is
+    // one index_copy per buffer, not one launch per head or block.
+    std::map<std::pair<uint64_t, int64_t>, std::vector<const StridedScatter*>>
+        strided_by_key;
+    for (const StridedScatter& scatter : strided_scatters) {
+      if (scatter.local_buffer_id >= local_desc->buffers.size() ||
+          scatter.count <= 0 || scatter.length <= 0 ||
+          scatter.remote_stride_rows < 1 || scatter.local_stride_rows < 1) {
+        LOG(ERROR) << "PULL strided scatter is out of range";
+        return false;
+      }
+      strided_by_key[{scatter.local_buffer_id, scatter.length}].push_back(
+          &scatter);
+    }
+    for (auto& [key, scatters] : strided_by_key) {
+      size_t n = 0;
+      for (const StridedScatter* scatter : scatters) {
+        n += static_cast<size_t>(scatter->count);
+      }
+      const size_t base = all_rows.size();
+      all_rows.resize(base + 2 * n);
+      size_t cursor = 0;
+      for (const StridedScatter* scatter : scatters) {
+        for (int64_t piece = 0; piece < scatter->count; ++piece) {
+          all_rows[base + cursor] =
+              scatter->stage_row + piece * scatter->remote_stride_rows;
+          all_rows[base + n + cursor] =
+              scatter->local_row + piece * scatter->local_stride_rows;
+          ++cursor;
+        }
+      }
+      aligned_groups.emplace_back(key.first, key.second, base, n);
+    }
+    torch::Tensor device_rows;
+    if (!all_rows.empty()) {
+      device_rows = torch::from_blob(all_rows.data(),
+                                     {static_cast<int64_t>(all_rows.size())},
+                                     index_options)
+                        .to(torch_device);
+    }
+    for (const auto& [local_buffer_id, length, base, n] : aligned_groups) {
+      const auto& buffer = local_desc->buffers[local_buffer_id];
+      torch::Tensor dst = torch::from_blob(
+          reinterpret_cast<void*>(buffer.addr),
+          {static_cast<int64_t>(buffer.length) / length, length},
+          uint8_options);
+      torch::Tensor src_index = device_rows.narrow(
+          0, static_cast<int64_t>(base), static_cast<int64_t>(n));
+      torch::Tensor dst_index = device_rows.narrow(
+          0, static_cast<int64_t>(base + n), static_cast<int64_t>(n));
+      dst.index_copy_(
+          0, dst_index, staging_.view({-1, length}).index_select(0, src_index));
+    }
+    for (size_t g = 0; g < unaligned_offsets.size(); ++g) {
+      const auto& buffer = local_desc->buffers[unaligned_keys[g].first];
+      const int64_t length = unaligned_keys[g].second;
+      torch::Tensor dst_flat =
+          torch::from_blob(reinterpret_cast<void*>(buffer.addr),
+                           {static_cast<int64_t>(buffer.length)},
+                           uint8_options);
+      const auto& offsets = *unaligned_offsets[g];
+      for (size_t i = 0; i < offsets.first.size(); ++i) {
+        dst_flat.narrow(0, offsets.second[i], length)
+            .copy_(staging_.narrow(0, offsets.first[i], length));
+      }
+    }
+    device_.current_stream()->synchronize();
+    total_scatter_ms += scatter_timer.elapsed_seconds() * 1000.0;
+  }
+  if (read_ms != nullptr) {
+    *read_ms = total_read_ms;
+  }
+  if (scatter_ms != nullptr) {
+    *scatter_ms = total_scatter_ms;
   }
   return true;
 }

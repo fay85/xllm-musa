@@ -26,9 +26,8 @@ limitations under the License.
 
 #include "core/platform/cuda/cuda_utils.h"
 #elif defined(USE_MUSA)
-#include <c10/musa/MUSAGuard.h>
-
 #include "core/platform/musa/musa_utils.h"
+#include "torch_musa/csrc/core/MUSAGuard.h"
 #elif defined(USE_DCU)
 #include <c10/hip/HIPCachingAllocator.h>
 #endif

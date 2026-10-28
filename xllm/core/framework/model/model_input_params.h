@@ -19,6 +19,7 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <algorithm>
+#include <map>
 #include <cstdint>
 #include <cstring>
 #include <memory>
@@ -361,6 +362,12 @@ struct AttentionHostInput {
   std::vector<int32_t> ring_cur_seqlen;
   std::vector<int32_t> ring_cache_seqlen;
   torch::Tensor block_tables;
+
+  // MUSA graph replay keeps these paged-KV metadata tensors on the host
+  // structure while staging decode inputs.
+  torch::Tensor paged_kv_indptr;
+  torch::Tensor paged_kv_indices;
+  torch::Tensor paged_kv_last_page_len;
 
   const int32_t* graph_q_seq_lens_data = nullptr;
   const int32_t* graph_kv_seq_lens_data = nullptr;
@@ -796,6 +803,9 @@ struct ExecutionBatchMetadata {
 struct ModelEmbeddingInput {
   // input embedding
   mutable torch::Tensor input_embedding;
+  // Current-token embedding staged by the MTP graph path. Eager callers may
+  // leave this undefined and fall back to the normal embedding lookup.
+  torch::Tensor mtp_token_embedding;
 
   // embedding ids of each sequence
   std::vector<int32_t> embedding_ids;
@@ -825,6 +835,7 @@ struct ModelEmbeddingInput {
   ModelEmbeddingInput to(const torch::Device& device) const {
     ModelEmbeddingInput out;
     out.input_embedding = safe_to(input_embedding, device);
+    out.mtp_token_embedding = safe_to(mtp_token_embedding, device, true);
     out.embedding_ids = embedding_ids;
     out.linear_state_ids = linear_state_ids;
     out.linear_state_indices = safe_to(linear_state_indices, device, true);
@@ -946,6 +957,16 @@ struct ParallelInput {
 using LinearStatePrefixHash = PrefixHash;
 using LinearStateValidityMask = std::vector<int64_t>;
 
+struct GdnMtpVerifyCache {
+  struct LayerState {
+    torch::Tensor ssm_intermediate;
+    torch::Tensor conv_intermediate;
+    bool ssm_state_transposed = false;
+  };
+
+  bool enabled = false;
+  std::map<int32_t, LayerState> layer_states;
+};
 struct ExpertInput {
   torch::Tensor expert_load_data;
   torch::Tensor expert_array;
@@ -961,6 +982,7 @@ struct ExpertInput {
         safe_to(eplb_decode_token_mask, device, /*non_blocking=*/true);
     return out;
   }
+
 };
 
 struct GraphInput {
@@ -1068,6 +1090,7 @@ struct ModelInputParams {
     params.is_spec_verify = is_spec_verify;
     params.is_dflash_proposal = is_dflash_proposal;
     params.num_accepted_tokens = safe_to(num_accepted_tokens, device, true);
+    params.gdn_mtp_verify_cache = gdn_mtp_verify_cache;
     params.num_accepted_tokens_host = num_accepted_tokens_host;
 #if defined(USE_MUSA)
     params.attn_metadata = attn_metadata;
@@ -1246,6 +1269,7 @@ struct ModelInputParams {
   bool is_dflash_proposal = false;
   // Propagated to AttentionMetadata for caller-managed cacheless prefill.
   bool prefill_without_cache = false;
+  std::shared_ptr<GdnMtpVerifyCache> gdn_mtp_verify_cache;
   torch::Tensor num_accepted_tokens;
   // Backend-neutral state reused by the next MTP draft step.
   MtpTopkStatePtr mtp_topk_state;

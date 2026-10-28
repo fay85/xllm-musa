@@ -47,6 +47,13 @@ class DenseMLPImpl : public torch::nn::Module {
 
   torch::Tensor forward(const torch::Tensor& hidden_states);
 
+#if defined(USE_MUSA)
+  // forward() for hidden states already quantized to group-128 FP8.
+  torch::Tensor forward_block_fp8_quantized(const torch::Tensor& input,
+                                            const torch::Tensor& input_scale);
+  bool supports_block_fp8_quantized_input() const;
+#endif
+
   void load_state_dict(const StateDict& state_dict);
   void load_state_dict(const StateDict& state_dict,
                        const std::vector<std::string>& gate_up_name,
@@ -58,6 +65,12 @@ class DenseMLPImpl : public torch::nn::Module {
   std::optional<torch::Tensor> get_fp8_input_scale() const;
 
  private:
+#if defined(USE_MUSA)
+  // Whether gate_up output goes through the fused SwiGLU + FP8 quantization
+  // into down_proj, ignoring per-call sequence parallelism.
+  bool uses_fused_swiglu_quant() const;
+#endif
+
   bool is_gated_;
   int64_t intermediate_size_;
   ProcessGroup* process_group_;

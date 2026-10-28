@@ -18,6 +18,8 @@ limitations under the License.
 #include <absl/container/flat_hash_map.h>
 #include <torch/torch.h>
 
+#include <map>
+
 #include "torch_musa/csrc/core/MUSAStream.h"
 
 // torch_musa's native MUSAGraph header expects this stream alias.
@@ -25,6 +27,7 @@ namespace at::musa {
 using c10::musa::MUSAStream;
 }  // namespace at::musa
 
+#include "core/kernels/musa/piecewise_graphs.h"
 #include "torch_musa/csrc/aten/musa/MUSAGraph.h"
 #include "torch_musa/csrc/core/MUSACachingAllocator.h"
 
@@ -79,7 +82,19 @@ class MusaGraphPersistentParam final {
                                          const torch::Tensor& positions,
                                          const ModelInputParams& params,
                                          uint32_t padded_num_tokens = 0,
-                                         bool return_capture_params = false);
+                                         bool return_capture_params = false,
+                                         bool update_attention_plan = true);
+
+  // Prefill counterpart of update() for piecewise graphs. Capture params point
+  // every device input that the model reads inside its forward at persistent
+  // buffers. Rows from the live token count up to padded_num_tokens write no
+  // KV cache, and capture params size host lengths to the padded rows.
+  std::optional<ModelInputParams> update_prefill(
+      const torch::Tensor& tokens,
+      const torch::Tensor& positions,
+      const ModelInputParams& params,
+      uint32_t padded_num_tokens,
+      bool return_capture_params = false);
 
   // Getter methods for persistent tensors
   torch::Tensor persistent_tokens(uint32_t actual_tokens) const {
@@ -91,8 +106,9 @@ class MusaGraphPersistentParam final {
   }
   torch::Tensor persistent_positions(uint32_t actual_tokens) const {
     if (actual_tokens > 0) {
+      // Token axis is dim 0 for text and the last dim for VLM M-RoPE [3, seq].
       return persistent_positions_.slice(
-          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+          persistent_positions_.dim() - 1, /*start=*/0, /*end=*/actual_tokens);
     }
     return persistent_positions_;
   }
@@ -152,6 +168,14 @@ class MusaGraphPersistentParam final {
           /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
     }
     return persistent_embedding_;
+  }
+  // Qwen3.5 MTP draft: token embedding precomputed outside graph capture.
+  torch::Tensor persistent_mtp_token_embedding(uint32_t actual_tokens) const {
+    if (actual_tokens > 0) {
+      return persistent_mtp_token_embedding_.slice(
+          /*dim=*/0, /*start=*/0, /*end=*/actual_tokens);
+    }
+    return persistent_mtp_token_embedding_;
   }
   torch::Tensor persistent_linear_state_indices(
       uint32_t actual_batch_size) const {
@@ -221,6 +245,23 @@ class MusaGraphPersistentParam final {
   }
 
  private:
+  // Copies `mask` into the leading rows of persistent_linear_state_validity_
+  // through pinned memory and returns those rows.
+  torch::Tensor refresh_linear_state_validity(
+      const LinearStateValidityMask& mask);
+
+  // Generates FA3 scheduler metadata. One-sequence batches reuse the result
+  // until their query length or KV block count changes.
+  torch::Tensor fa3_scheduler_metadata(int32_t batch_size,
+                                       int32_t num_heads_q,
+                                       int32_t num_heads_kv,
+                                       int32_t head_dim,
+                                       int32_t max_seqlen_q,
+                                       int32_t max_seqlen_k,
+                                       int32_t window_size_left,
+                                       const torch::Tensor& cu_seqlens_q,
+                                       const torch::Tensor& seqused_k);
+
   bool can_use_llm_decode_fast_path(const torch::Tensor& tokens,
                                     const torch::Tensor& positions,
                                     const ModelInputParams& params) const;
@@ -244,6 +285,7 @@ class MusaGraphPersistentParam final {
   torch::Tensor q_seq_lens_;
   torch::Tensor kv_seq_lens_;
   torch::Tensor persistent_embedding_;
+  torch::Tensor persistent_mtp_token_embedding_;
   torch::Tensor persistent_linear_state_indices_;
   torch::Tensor persistent_kv_cache_tokens_nums_;
   torch::Tensor persistent_num_accepted_tokens_;
@@ -255,6 +297,22 @@ class MusaGraphPersistentParam final {
   torch::Tensor persistent_paged_kv_last_page_len_;
   torch::Tensor persistent_decode_qo_indptr_;
   torch::Tensor persistent_kv_seq_lens_delta_;
+
+  // Qwen3.5 MTP spec-verify expanded-decode attention (one row per validate
+  // token). Fixed addresses so the spec-verify graph can be replayed.
+  torch::Tensor persistent_expanded_kv_seq_lens_;
+  torch::Tensor persistent_expanded_block_tables_;
+  torch::Tensor persistent_expanded_paged_kv_indptr_;
+  torch::Tensor persistent_expanded_paged_kv_indices_;
+  torch::Tensor persistent_expanded_paged_kv_last_page_len_;
+  torch::Tensor persistent_expanded_qo_indptr_;
+  // Device copy of the canonical linear-state validity mask so the model's
+  // in-forward metadata build does not issue an H2D copy under capture.
+  torch::Tensor persistent_linear_state_validity_;
+
+  // Read-only FA3 scheduler metadata of one-sequence batches, keyed by
+  // (max_seqlen_q << 32) | kv_block_count.
+  std::unordered_map<int64_t, torch::Tensor> single_sequence_fa3_metadata_;
 };
 
 // MUSA graph executor using torch_musa MUSAGraph for memory management.
@@ -263,10 +321,12 @@ class MusaGraph final {
   // capture_stream: the stream to use for MUSA graph capture.
   explicit MusaGraph(MusaGraphPersistentParam& persistent_param,
                      at::DeviceIndex device_index,
-                     c10::musa::MUSAStream capture_stream)
+                     c10::musa::MUSAStream capture_stream,
+                     bool is_piecewise = false)
       : persistent_param_(persistent_param),
         device_index_(device_index),
-        capture_stream_(capture_stream) {}
+        capture_stream_(capture_stream),
+        is_piecewise_(is_piecewise) {}
 
   // Capture computation graph for given bucket num_tokens
   bool capture(CausalLM* model,
@@ -291,7 +351,15 @@ class MusaGraph final {
     return persistent_param_.hidden_states(actual_num_tokens);
   }
 
+  bool captured_without_padding() const {
+    return captured_actual_tokens_ == padded_num_tokens_;
+  }
+
  private:
+  void prepare_model_graph_metadata(CausalLM* model,
+                                    const torch::Tensor& positions,
+                                    ModelInputParams& params);
+
   // Print graph held tensors for debugging
   void print_graph_tensors() const;
 
@@ -308,8 +376,8 @@ class MusaGraph final {
   // On replay (graph_.replay() path), the captured graph already references
   // the persistent host buffer pointers from capture time; this method
   // refreshes their *contents* so the captured H2D copy sees fresh values.
-  // When attention.host paged-KV mirrors are populated (normal LLM-engine
-  // path), copies CPU->pinned host directly and avoids per-step D2H sync.
+  // Prefer host metadata when available to avoid blocking device-to-host
+  // copies.
   void refresh_persistent_paged_kv_host_mirrors(
       const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
       const AttentionHostInput& host_src);
@@ -317,17 +385,33 @@ class MusaGraph final {
   // Reference to persistent parameters (shared across multiple MusaGraph
   // instances).
   MusaGraphPersistentParam& persistent_param_;
+  CausalLM* model_{nullptr};
 
   at::DeviceIndex device_index_;
   // Native MUSA capture stream owned by MusaGraphExecutorImpl.
   c10::musa::MUSAStream capture_stream_;
 
+  // Prefill graphs are captured as segments separated by attention runners.
+  bool is_piecewise_ = false;
+
   uint32_t padded_num_tokens_ = 0;
+  uint32_t captured_actual_tokens_ = 0;
+
+  std::unique_ptr<ModelGraphMetadataState> model_graph_metadata_state_;
 
   // FA3 scheduler metadata consumed by the captured full-attention kernels.
   // Its address is fixed at capture time; replay copies freshly generated
   // values into the same storage before graph launch.
   torch::Tensor captured_fa3_scheduler_metadata_;
+  // Metadata most recently copied into captured_fa3_scheduler_metadata_.
+  torch::Tensor replayed_fa3_scheduler_metadata_;
+
+  // Spec-verify graphs: the GDN verify forward publishes per-layer conv/SSM
+  // checkpoint tensors through GdnMtpVerifyCache. Replay does not rerun the
+  // C++ forward, so republish the capture-time tensors (whose storage the
+  // replay rewrites) for the post-rejection commit.
+  bool is_spec_verify_graph_ = false;
+  std::map<int32_t, GdnMtpVerifyCache::LayerState> captured_verify_states_;
 
   // Mate FFI scratch tensors recorded during an eager warmup pass and replayed
   // during graph capture so the hook never calls torch::empty under capture.
@@ -381,6 +465,7 @@ class MusaGraph final {
 
   // Declare graph holders last so they are destroyed before the tensors and
   // host buffers whose addresses were retained during capture.
+  std::unique_ptr<PiecewiseGraphs> piecewise_graph_;
   at::musa::MUSAGraph graph_;
 };
 
@@ -419,6 +504,13 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
 
   // Lazy-loaded MUSA graphs for decode phase (by bucket_num_tokens).
   absl::flat_hash_map<uint32_t, std::unique_ptr<MusaGraph>> graphs_;
+  // Spec-verify (target validate) graphs keyed by (num_tokens, q_len).
+  absl::flat_hash_map<uint64_t, std::unique_ptr<MusaGraph>> spec_verify_graphs_;
+  // Piecewise prefill graphs keyed by get_prefill_graph_key().
+  absl::flat_hash_map<std::vector<int32_t>, std::unique_ptr<MusaGraph>>
+      prefill_graphs_;
+
+  int64_t max_tokens_for_graph_mode_ = 0;
 
   // Persistent parameters shared across all MusaGraph instances
   std::unique_ptr<MusaGraphPersistentParam> persistent_param_;
@@ -433,6 +525,19 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   // Get bucket num_tokens for given num_tokens.
   // Decode: 1/2/4/8 then multiples of 16, or exact when no_padding is enabled.
   uint32_t get_bucket_num_tokens(uint32_t num_tokens) const;
+
+  bool use_prefill_piecewise_graph(uint32_t num_tokens,
+                                   const ModelInputParams& params) const;
+
+  // Prefill graphs use the decode token buckets with padding. Multi-sequence
+  // GDN batches keep their exact token count, because their runners read the
+  // padded per-sequence layout recorded from host lengths.
+  uint32_t get_prefill_graph_num_tokens(uint32_t num_tokens,
+                                        const ModelInputParams& params) const;
+
+  std::vector<int32_t> get_prefill_graph_key(
+      uint32_t num_tokens,
+      const ModelInputParams& params) const;
 
   ModelOutput attach_aux_hidden_states_if_needed(
       const torch::Tensor& hidden_states,

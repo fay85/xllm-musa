@@ -29,10 +29,14 @@ limitations under the License.
 #include "common/macros.h"
 #include "common/metrics.h"
 #include "core/framework/config/load_config.h"
+#include "core/framework/config/model_config.h"
 #include "core/framework/multimodal/mm_visitor.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_input_params.h"
 #include "framework/state_dict/state_dict.h"
+#if defined(USE_CUDA) || defined(USE_MUSA)
+#include "layers/cuda/flashinfer_workspace.h"
+#endif
 #include "models/llm/py_causal_lm.h"
 #include "models/model_registry.h"
 #include "runtime/params_utils.h"
@@ -80,6 +84,20 @@ VLMWorkerImpl::VLMWorkerImpl(const ParallelArgs& parallel_args,
 
 bool VLMWorkerImpl::init_model(ModelContext& context) {
   CHECK(model_ == nullptr) << "Model is already initialized.";
+
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  // VLM workers do not share LLMWorkerImpl's workspace initialization.  The
+  // native MUSA graph path invokes FlashInfer planning during graph capture,
+  // so initialize its per-thread workspace before constructing attention
+  // layers; otherwise the FFI plan receives undefined tensors.
+  const auto& model_config = ModelConfig::get_instance();
+  if (!ModelConfig::is_python_model_impl(model_config.model_impl())) {
+    auto& ws = ::xllm::layer::flashinfer::FlashinferWorkspace::get_instance();
+    if (!ws.get_int_workspace_buffer().defined()) {
+      ws.initialize(device_);
+    }
+  }
+#endif
 
   // initialize model
   context.set_encoder_embedding_mode(false);

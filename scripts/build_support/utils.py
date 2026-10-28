@@ -507,6 +507,8 @@ def _run_dependencies_script_or_exit(script_path: str) -> None:
 
 
 def _validate_submodules_or_exit(repo_root: str) -> None:
+    if os.environ.get("XLLM_SKIP_SUBMODULE_CHECK") == "1":
+        return
     issues = _collect_submodule_init_issues(repo_root)
 
     if issues:
@@ -522,6 +524,8 @@ def _ensure_prebuild_dependencies_installed(
     script_path: str,
     force_install: bool = False,
 ) -> None:
+    if os.environ.get("XLLM_SKIP_DEPENDENCIES") == "1":
+        return
     mooncake_source_dir = _get_mooncake_source_dir(script_path)
     dependency_files = _get_required_dependency_files()
     missing_dependencies = _collect_missing_dependencies(dependency_files)

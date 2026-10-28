@@ -31,7 +31,30 @@ struct ByteRegion {
   uint64_t remote_buffer_id = 0;
   uint64_t remote_offset = 0;
   uint64_t length = 0;
+  // repeat_count > 1 is `repeat_count` pieces of `length` bytes. Piece i is at
+  // local_offset + i * local_stride and remote_offset + i * remote_stride.
+  // repeat_count <= 1 is one contiguous range; the stride fields are unused.
+  uint64_t repeat_count = 1;
+  uint64_t local_stride = 0;
+  uint64_t remote_stride = 0;
 };
+
+inline uint64_t byte_region_repeats(const ByteRegion& region) {
+  return region.repeat_count == 0 ? 1 : region.repeat_count;
+}
+
+inline uint64_t byte_region_payload_bytes(const ByteRegion& region) {
+  return byte_region_repeats(region) * region.length;
+}
+
+// Bytes from the first remote piece through the last, including gaps.
+inline uint64_t byte_region_remote_span(const ByteRegion& region) {
+  const uint64_t repeats = byte_region_repeats(region);
+  if (repeats <= 1) {
+    return region.length;
+  }
+  return (repeats - 1) * region.remote_stride + region.length;
+}
 
 struct StridedRegionTemplate {
   CacheNamespace cache_namespace = CacheNamespace::MAIN;
@@ -99,6 +122,14 @@ class ReshardPlanner final {
                         const WorkerCacheLayoutManifest& destination,
                         std::vector<size_t>* selected_indices) const;
 
+  // Incoming plans use the same per-span writers as source selection. Plans
+  // are indexed like sources; unselected sources have no regions.
+  Status build_incoming_plans(
+      const std::vector<WorkerCacheLayoutManifest>& sources,
+      const WorkerCacheLayoutManifest& destination,
+      std::vector<size_t>* selected_indices,
+      std::vector<ReshardPlanTemplate>* plans) const;
+
   Status validate_destination_coverage(
       const std::vector<WorkerCacheLayoutManifest>& sources,
       const WorkerCacheLayoutManifest& destination) const;
@@ -131,7 +162,17 @@ class RequestRegionBinder final {
               const std::vector<KVTransferMapping>& mappings,
               CacheNamespace cache_namespace,
               int64_t layer_id,
-              std::vector<ByteRegion>* regions) const;
+              std::vector<ByteRegion>* regions,
+              bool compact_strided_repeats = false) const;
+
+  // The plan describes remote source -> local destination. Request mappings
+  // and returned byte regions use the receiver's local/remote orientation.
+  Status bind_pull(const ReshardPlanTemplate& plan,
+                   const std::vector<KVTransferMapping>& mappings,
+                   CacheNamespace cache_namespace,
+                   int64_t layer_id,
+                   std::vector<ByteRegion>* regions,
+                   bool compact_strided_repeats = false) const;
 
   Status bind_explicit(const ReshardPlanTemplate& plan,
                        const std::vector<ExplicitResourceMapping>& mappings,

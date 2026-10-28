@@ -20,6 +20,7 @@ limitations under the License.
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace xllm {
@@ -56,6 +57,17 @@ void register_block_fp8_parameters(torch::nn::Module& module,
                                    torch::Tensor& weight,
                                    torch::Tensor& weight_scale_inv);
 
+// Each weight segment must be a multiple of 128 rows per rank, because a
+// scale row covers 128 weight rows.
+std::vector<int64_t> block_fp8_scale_shard_sizes(
+    const std::vector<int64_t>& weight_shard_sizes);
+
+// Quantizes a 16-bit [N, K] weight to float8_e4m3fn with one FP32
+// dequantization scale per 128x128 block, the layout of block-FP8
+// checkpoints. Returns {weight [N, K], weight_scale_inv [N / 128, K / 128]}.
+std::tuple<torch::Tensor, torch::Tensor> quantize_weight_to_block_fp8(
+    const torch::Tensor& weight);
+
 torch::Tensor matmul_forward(const torch::Tensor& input,
                              const torch::Tensor& weight,
                              const std::optional<torch::Tensor>& bias,
@@ -67,5 +79,20 @@ torch::Tensor block_fp8_or_bf16_forward(
     const torch::Tensor& weight_scale_inv,
     const std::optional<torch::Tensor>& bias,
     torch::Tensor& output_buffer);
+
+// Pre-quantized activation path (fused SwiGLU+FP8).
+torch::Tensor block_fp8_quantized_forward(
+    const torch::Tensor& quantized_input,
+    const torch::Tensor& input_scale,
+    const torch::Tensor& weight,
+    const torch::Tensor& weight_scale_inv,
+    const std::optional<torch::Tensor>& bias,
+    torch::Tensor& output_buffer);
+
+bool supports_block_fp8_quantized_input(
+    bool input_is_parallelized,
+    const QuantArgs& quant_args,
+    const torch::Tensor& weight,
+    const torch::Tensor& weight_scale_inv);
 
 }  // namespace xllm::layer::musa

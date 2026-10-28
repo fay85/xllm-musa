@@ -528,6 +528,8 @@ void CollectiveCommunicator::create_process_groups(
     }
     const int32_t cp_group_index =
         cp_topology->dp_rank() * tp_size + cp_topology->tp_rank();
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
     cp_group_ = create_process_group(
         global_rank,
         cp_local_rank,
@@ -540,7 +542,12 @@ void CollectiveCommunicator::create_process_groups(
         device);
     parallel_args_->cp_group_ = cp_group_.get();
     port += dp_size * tp_size;
+#else
+    LOG(FATAL) << "Explicit context-parallel process groups are not supported "
+                  "on this backend";
+#endif
 
+#if defined(USE_MLU)
     // Only MLU materializes the logical DCP topology as a collective.
     if constexpr (Platform::is_mlu()) {
       if (cp_topology->dcp_size() == 1) {
@@ -566,6 +573,7 @@ void CollectiveCommunicator::create_process_groups(
       }
       CHECK_EQ(parallel_args_->dcp_group_->rank(), cp_topology->dcp_rank());
     }
+#endif
     LOG(INFO) << "Context parallel topology: rank=" << global_rank
               << ", tp_rank=" << cp_topology->tp_rank()
               << ", tp_size=" << cp_topology->tp_size()

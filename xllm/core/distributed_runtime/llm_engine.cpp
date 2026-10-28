@@ -52,6 +52,7 @@ limitations under the License.
 #include "framework/kv_cache/kv_cache_estimation.h"
 #include "framework/kv_cache/kv_cache_shape.h"
 #include "framework/kv_cache/kv_cache_utils.h"
+#include "framework/kv_cache_transfer/push_route.h"
 #include "framework/model/model_args.h"
 #include "framework/model/mtp_utils.h"
 #include "framework/model_loader.h"
@@ -273,6 +274,18 @@ bool LLMEngine::init_model(MasterStatus master_status) {
     args_.num_speculative_tokens(options_.num_speculative_tokens());
   }
 
+  // The shared checkpoint also carries legacy MTP metadata. A DSpark draft
+  // owns all trained draft stages, not num_nextn_predict_layers caches.
+  if (options_.is_draft_engine() &&
+      options_.speculative_algorithm() == "DSpark" &&
+      util::is_deepseek_v4_model_type(args_.model_type())) {
+    CHECK_GT(args_.dspark_num_layers(), 0);
+    args_.model_type(std::string(util::kDeepseekV4DSparkModelType));
+    args_.n_layers(args_.dspark_num_layers());
+    args_.compress_ratios(std::vector<int32_t>(
+        static_cast<size_t>(args_.n_layers()), /*value=*/1));
+  }
+
   // A draft engine is fed token ids and detokenized by the target, so it
   // shares the target vocabulary and loads no tokenizer of its own.
   if (!options_.is_draft_engine()) {
@@ -304,6 +317,20 @@ bool LLMEngine::init_model(MasterStatus master_status) {
             << ", head_dim: " << head_dim_ << ", n_layers: " << args_.n_layers()
             << ", dtype: " << dtype_
             << ", kv_cache_dtype: " << options_.kv_cache_dtype();
+
+  if (options_.backend() == "vlm" && options_.max_encoder_cache_size() > 0) {
+    // A cached output holds one embedding row per multimodal token, plus one
+    // per deepstack layer.
+    const int64_t bytes_per_token =
+        args_.hidden_size() *
+        static_cast<int64_t>(1 + args_.mm_deepstack_visual_indexes().size()) *
+        static_cast<int64_t>(torch::elementSize(dtype_));
+    encoder_cache_directories_.reserve(dp_size_);
+    for (uint32_t dp_rank = 0; dp_rank < dp_size_; ++dp_rank) {
+      encoder_cache_directories_.emplace_back(
+          options_.max_encoder_cache_size() * 1024 * 1024, bytes_per_token);
+    }
+  }
 
   if (tokenizer_ != nullptr) {
     const int64_t tokenizer_vocab_size = tokenizer_->vocab_size();
@@ -672,16 +699,27 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
   kv_cache_shape.print_shapes();
 
   // initialize block manager
+  // DSpark takes request block mappings from the target and rebuilds draft
+  // context KV from target hidden states. Its SWA-only allocation manager
+  // must not independently enable the target's SWA+C4+C128 prefix policy.
+  const bool draft_uses_target_prefix_manager =
+      options_.is_draft_engine() &&
+      util::is_deepseek_v4_dspark_model_type(args_.model_type());
+  // VLM requests must hash image content so different images never share
+  // cached blocks.
+  const BlockHasherType base_hasher_type =
+      options_.backend() == "vlm" ? BlockHasherType::MM : BlockHasherType::TEXT;
   BlockManagerPool::Options options;
   options.num_blocks(kv_cache_cap.n_blocks())
-      .hasher_type(mtp_hasher_type(BlockHasherType::TEXT,
+      .hasher_type(mtp_hasher_type(base_hasher_type,
                                    options_.num_speculative_tokens(),
                                    options_.speculative_algorithm()))
       .block_size(kv_split_size_eff > 1 ? block_size * kv_split_size_eff
                                         : block_size)
       .host_num_blocks(kv_cache_cap.n_blocks() * options_.host_blocks_factor())
       .enable_linear_state(enable_state_cache)
-      .enable_prefix_cache(options_.enable_prefix_cache())
+      .enable_prefix_cache(!draft_uses_target_prefix_manager &&
+                           options_.enable_prefix_cache())
       .enable_disagg_pd(options_.enable_disagg_pd())
       .enable_kvcache_store(options_.enable_kvcache_store())
       .prefetch_batch_size(options_.prefetch_batch_size())
@@ -916,28 +954,66 @@ bool LLMEngine::pull_kv_blocks(const int32_t src_dp_size,
                                const std::vector<std::string>& src_addrs,
                                const int32_t dst_dp_rank,
                                const std::vector<KVTransferMapping>& mappings) {
-  int32_t src_world_size = src_cluster_ids.size();
-  int32_t src_tp_size = src_world_size / src_dp_size;
-  int32_t dst_world_size = options_.nnodes();
-  int32_t dst_tp_size = dst_world_size / dp_size_;
+  if (src_cluster_ids.empty() ||
+      src_cluster_ids.size() >
+          static_cast<size_t>(std::numeric_limits<int32_t>::max()) ||
+      src_addrs.size() != src_cluster_ids.size() || src_dp_size <= 0 ||
+      src_dp_rank < 0 || src_dp_rank >= src_dp_size || dp_size_ <= 0 ||
+      dst_dp_rank < 0 || dst_dp_rank >= dp_size_) {
+    LOG(ERROR) << "Invalid topology for KV cache pull.";
+    return false;
+  }
+  const int32_t src_world_size = static_cast<int32_t>(src_cluster_ids.size());
+  const int32_t dst_world_size = options_.nnodes();
+  if (src_world_size % src_dp_size != 0 || dst_world_size <= 0 ||
+      dst_world_size % dp_size_ != 0 ||
+      static_cast<size_t>(dst_world_size) > worker_clients_.size()) {
+    LOG(ERROR) << "Invalid worker counts for KV cache pull.";
+    return false;
+  }
+  const int32_t src_tp_size = src_world_size / src_dp_size;
+  const int32_t dst_tp_size = dst_world_size / dp_size_;
 
-  std::vector<bool> results;
-  results.reserve(dst_tp_size);
-  // Pull the KV cache for all workers in the current DP rank.
+  std::vector<folly::SemiFuture<bool>> futures;
+  futures.reserve(static_cast<size_t>(dst_tp_size) * src_tp_size);
+  // Submit every destination/source pull before waiting. This is important for
+  // heterogeneous TP: each destination owns an independent cache and the
+  // remote PULL may overlap. collectAll waits every submitted future, so an
+  // exception or a false result cannot release request-owned KV state while a
+  // sibling transfer is still using it.
   for (size_t tp_rank = 0; tp_rank < dst_tp_size; ++tp_rank) {
-    int32_t dst_worker_rank = dst_dp_rank * dst_tp_size + tp_rank;
-    // Determine the ranks of the remote workers connected to the current
-    // worker.
-    int32_t src_dp_worker_rank = dst_worker_rank % src_tp_size;
-    int32_t src_worker_rank = src_dp_rank * src_tp_size + src_dp_worker_rank;
-    results.push_back(worker_clients_[dst_worker_rank]->pull_kv_blocks(
-        src_cluster_ids[src_worker_rank],
-        src_addrs[src_worker_rank],
-        mappings));
+    const int32_t dst_worker_rank =
+        dst_dp_rank * dst_tp_size + static_cast<int32_t>(tp_rank);
+#if defined(USE_MUSA)
+    // Linking negotiated every source worker. Submit the request to the
+    // entire source DP group so the negotiated plans choose shard owners;
+    // known PLAN_ONLY peers complete without moving bytes.
+    std::vector<int32_t> src_tp_ranks;
+    src_tp_ranks.reserve(src_tp_size);
+    for (int32_t source_rank = 0; source_rank < src_tp_size; ++source_rank) {
+      src_tp_ranks.emplace_back(source_rank);
+    }
+#else
+    const std::vector<int32_t> src_tp_ranks = get_src_tp_ranks(
+        static_cast<int32_t>(tp_rank), src_tp_size, dst_tp_size);
+#endif
+    CHECK(!src_tp_ranks.empty())
+        << "no source TP rank for dst tp_rank " << tp_rank;
+    for (const int32_t src_dp_worker_rank : src_tp_ranks) {
+      const int32_t src_worker_rank =
+          src_dp_rank * src_tp_size + src_dp_worker_rank;
+      futures.emplace_back(
+          worker_clients_[dst_worker_rank]->pull_kv_blocks_async(
+              src_cluster_ids[src_worker_rank],
+              src_addrs[src_worker_rank],
+              mappings));
+    }
   }
 
-  for (bool result : results) {
-    if (!result) {
+  const std::vector<folly::Try<bool>> results =
+      folly::collectAll(std::move(futures)).get();
+  for (const folly::Try<bool>& result : results) {
+    if (!result.hasValue() || !result.value()) {
       return false;
     }
   }
@@ -1000,10 +1076,22 @@ void LLMEngine::prefetch_from_storage(
 void LLMEngine::get_cache_info(std::vector<uint64_t>& cluster_ids,
                                std::vector<std::string>& addrs,
                                std::vector<uint16_t>& ports) {
-  cluster_ids.reserve(worker_clients_num_);
-  addrs.reserve(worker_clients_num_);
-  ports.reserve(worker_clients_num_);
-  for (size_t worker_rank = 0; worker_rank < worker_clients_num_;
+  // MUSA prefill context parallelism leaves the full KV cache and the final
+  // recurrent state on the last CP rank, so that replica alone serves KV
+  // transfer and peers see a TP-only layout.
+  const bool kv_complete_on_last_cp_rank =
+      Platform::is_musa() && cp_size_ > 1 &&
+      ::xllm::ParallelConfig::get_instance().kv_split_size_effective() == 1;
+  const size_t first_published_worker =
+      kv_complete_on_last_cp_rank
+          ? worker_clients_num_ - worker_clients_num_ / cp_size_
+          : 0;
+  const size_t published_workers = worker_clients_num_ - first_published_worker;
+  cluster_ids.reserve(published_workers);
+  addrs.reserve(published_workers);
+  ports.reserve(published_workers);
+  for (size_t worker_rank = first_published_worker;
+       worker_rank < worker_clients_num_;
        ++worker_rank) {
     uint64_t cluster_id = 0;
     std::string addr;
@@ -1467,6 +1555,10 @@ std::vector<ForwardInput> LLMEngine::prepare_inputs(std::vector<Batch>& batch) {
     // below already sees the rotated live slot -- no apply step is needed here.
     batched_inputs.emplace_back(std::move(batch[dp_rank].prepare_forward_input(
         args_, threadpool_.get(), cp_size_)));
+    if (!encoder_cache_directories_.empty()) {
+      encoder_cache_directories_[dp_rank].plan(
+          batched_inputs[dp_rank].input_params.multimodal.mm_data);
+    }
     const BatchForwardType& current_batch_forward_type =
         batched_inputs[dp_rank].input_params.meta.batch_forward_type;
     dp_global_token_nums[dp_rank] =

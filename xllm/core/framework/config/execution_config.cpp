@@ -18,9 +18,15 @@ limitations under the License.
 #include "core/common/global_flags.h"
 #include "core/framework/config/config_utils.h"
 
+#if defined(USE_MUSA)
+constexpr bool kMusaDefault_enable_graph = true;
+#else
+constexpr bool kMusaDefault_enable_graph = false;
+#endif
+
 DEFINE_bool(
     enable_graph,
-    false,
+    kMusaDefault_enable_graph,
     "Whether to enable graph execution for decode phase. When enabled, "
     "the engine uses graph mode (CUDA Graph for GPU, ACL Graph for NPU, "
     "MLU Graph, or DCU Graph) to optimize decode performance by reducing "
@@ -36,8 +42,14 @@ DEFINE_bool(enable_graph_double_buffer,
             "Whether to enable double-buffered ACL graph persistent params "
             "and graph instances for NPU schedule-overlap decode.");
 
+#if defined(USE_MUSA)
+constexpr bool kMusaDefault_enable_graph_mode_decode_no_padding = true;
+#else
+constexpr bool kMusaDefault_enable_graph_mode_decode_no_padding = false;
+#endif
+
 DEFINE_bool(enable_graph_mode_decode_no_padding,
-            false,
+            kMusaDefault_enable_graph_mode_decode_no_padding,
             "Whether to enable graph execution for decode phase without "
             "padding. If true, graph will be captured with every actual num "
             "tokens, as stride is 1.");

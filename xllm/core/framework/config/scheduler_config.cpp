@@ -22,8 +22,14 @@ DEFINE_int32(max_tokens_per_batch, 10240, "Max number of tokens per batch.");
 
 DEFINE_int32(max_seqs_per_batch, 200, "Max number of sequences per batch.");
 
+#if defined(USE_MUSA)
+constexpr bool kMusaDefault_enable_schedule_overlap = true;
+#else
+constexpr bool kMusaDefault_enable_schedule_overlap = false;
+#endif
+
 DEFINE_bool(enable_schedule_overlap,
-            false,
+            kMusaDefault_enable_schedule_overlap,
             "Whether to enable schedule overlap.");
 
 DEFINE_double(prefill_scheduling_memory_usage_threshold,
@@ -39,6 +45,20 @@ DEFINE_int32(max_tokens_per_chunk_for_prefill,
 DEFINE_int32(chunked_match_frequency,
              2,
              "Number of sequence prefix cache match frequency.");
+
+DEFINE_int32(prefill_batch_wait_ms,
+             0,
+             "When the engine is idle, wait up to this many milliseconds for "
+             "requests that have been accepted but are still being "
+             "tokenized, so that requests arriving together are prefilled in "
+             "one batch. 0 disables the wait.");
+
+DEFINE_int32(decode_priority_max_wait_ms,
+             0,
+             "When prefill and decode run in separate batches, defer new "
+             "prefill requests while decode requests are running, until one "
+             "of them has waited this many milliseconds. Trades TTFT for "
+             "TPOT. 0 keeps the prefill-first behavior.");
 
 DEFINE_bool(enable_mix_batch,
             true,
@@ -90,6 +110,8 @@ void SchedulerConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_chunked_prefill);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(max_tokens_per_chunk_for_prefill);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(chunked_match_frequency);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(prefill_batch_wait_ms);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(decode_priority_max_wait_ms);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(use_zero_evict);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(max_decode_token_per_sequence);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(priority_strategy);
@@ -109,6 +131,8 @@ void SchedulerConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_chunked_prefill);
   XLLM_CONFIG_ASSIGN_FROM_JSON(max_tokens_per_chunk_for_prefill);
   XLLM_CONFIG_ASSIGN_FROM_JSON(chunked_match_frequency);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(prefill_batch_wait_ms);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(decode_priority_max_wait_ms);
   XLLM_CONFIG_ASSIGN_FROM_JSON(use_zero_evict);
   XLLM_CONFIG_ASSIGN_FROM_JSON(max_decode_token_per_sequence);
   XLLM_CONFIG_ASSIGN_FROM_JSON(priority_strategy);
@@ -137,6 +161,10 @@ void SchedulerConfig::append_config_json(
       config_json, default_config, max_tokens_per_chunk_for_prefill);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, chunked_match_frequency);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, prefill_batch_wait_ms);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, decode_priority_max_wait_ms);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, use_zero_evict);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(

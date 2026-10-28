@@ -24,6 +24,9 @@ limitations under the License.
 
 #include "common/types.h"
 #include "core/framework/kv_cache_transfer/kv_transfer_types.h"
+#if defined(USE_MUSA)
+#include "platform/layer_synchronizer.h"
+#endif
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_args.h"
 #if defined(USE_NPU)
@@ -45,6 +48,8 @@ namespace xllm {
 using KVPushSynchronizerImpl = NPULayerSynchronizerImpl;
 #elif defined(USE_MLU)
 using KVPushSynchronizerImpl = MLULayerSynchronizerImpl;
+#elif defined(USE_MUSA)
+using KVPushSynchronizerImpl = LayerSynchronizer;
 #elif defined(USE_DCU)
 using KVPushSynchronizerImpl = DCULayerSynchronizerImpl;
 #endif
@@ -195,7 +200,17 @@ class KVCacheTransfer {
       const std::string& src_addr,
       const std::vector<KVTransferMapping>& mappings);
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+  // Heterogeneous TP fallback transport: pull every source TP shard into
+  // temporary local buffers and merge them into the decode-side cache.
+  virtual bool pull_hetero_kv_blocks(
+      const std::vector<uint64_t>& src_cluster_ids,
+      const std::vector<std::string>& src_addrs,
+      const std::vector<KVTransferMapping>& mappings) {
+    return false;
+  }
+
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
   virtual folly::SemiFuture<std::vector<KVTransferTaskResult>>
   push_kv_blocks_async(
       const std::vector<TransferKVInfo>& transfer_kv_infos,
@@ -209,7 +224,8 @@ class KVCacheTransfer {
       const std::vector<TransferKVInfo>& transfer_kv_infos,
       const ParallelArgs& parallel_args);
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
   virtual std::vector<KVTransferTaskResult> push_kv_blocks(
       std::unordered_map<std::string, KVCacheInfo>& merged_kv_infos,
       std::shared_ptr<KVPushSynchronizerImpl>& layer_synchronizer,
@@ -244,9 +260,16 @@ class KVCacheTransfer {
       int32_t src_kv_split_size);
 
   // working thread
+#if defined(USE_MUSA)
+  // Heterogeneous-TP PULL reads several Prefill shards concurrently.
+  ThreadPool threadpool_{/*num_threads=*/2,
+                         /*cpu_binding=*/false,
+                         /*pool_name=*/"KVCacheTransfer.async"};
+#else
   ThreadPool threadpool_{/*num_threads=*/1,
                          /*cpu_binding=*/false,
                          /*pool_name=*/"KVCacheTransfer.async"};
+#endif
 };
 
 class KVCacheTransferFactory {

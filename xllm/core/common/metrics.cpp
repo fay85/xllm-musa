@@ -295,6 +295,9 @@ DEFINE_COUNTER(speculative_num_draft_tokens_constrained_total,
                "Draft speculative tokens from constrained rows");
 DEFINE_COUNTER(speculative_num_draft_tokens_plain_total,
                "Draft speculative tokens from plain rows");
+DEFINE_GAUGE(speculative_mean_tokens_per_decode_step,
+             "Cumulative mean tokens committed per speculative proposal "
+             "sequence (1.0 without accepted draft tokens)");
 
 // proto metrics
 DEFINE_COUNTER(proto_latency_seconds_proto2i,

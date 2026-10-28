@@ -19,6 +19,9 @@ limitations under the License.
 #include <optional>
 #include <tuple>
 
+#include "kernels/musa/musa_tvmffi_stream.h"
+#include "layers/musa/normalized_hidden_states.h"
+
 namespace xllm {
 namespace layer {
 
@@ -54,16 +57,20 @@ Qwen3HybridDecoderLayerImplBase::Qwen3HybridDecoderLayerImplBase(
       Qwen3NextRMSNorm(
           model_args.hidden_size(), model_args.rms_norm_eps(), options));
 
-  // Initialize the feed-forward block. Qwen3.5 uses a routed block; select the
-  // MUSA MoE path only for qwen3_5_moe_text (generic Qwen3-Next MoE differs).
+  // Initialize the feed-forward block. The target text model and its MTP
+  // draft body use different model_type strings, but share the same routed
+  // expert checkpoint. Keep both on the MUSA MoE path.
   auto mlp_only_layers = model_args.mlp_only_layers();
   const bool is_moe_layer =
       std::count(mlp_only_layers.begin(), mlp_only_layers.end(), layer_id) ==
           0 &&
       model_args.n_routed_experts() > 0 &&
       (layer_id + 1) % model_args.decoder_sparse_step() == 0;
+  const std::string& model_type = model_args.model_type();
   const bool use_qwen35_moe =
-      is_moe_layer && model_args.model_type() == "qwen3_5_moe_text";
+      is_moe_layer &&
+      (model_type == "qwen3_5_moe" || model_type == "qwen3_5_moe_text" ||
+       model_type == "qwen3_5_moe_mtp");
   if (use_qwen35_moe) {
     moe_mlp_ = register_module("mlp",
                                Qwen3_5FusedMoE(model_args,
@@ -123,23 +130,46 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
     const ModelInputParams& input_params,
     const torch::Tensor& mrope_cos_sin) {
   // Pre-attention norm
+  NormalizedHiddenStates normed;
+  const bool attention_takes_fp8 = attention_
+                                       ? attention_->supports_fp8_input()
+                                       : linear_attention_->supports_fp8_input();
   if (!residual.has_value()) {
     residual = x;
     x = std::get<0>(input_norm_->forward(x));
+  } else if (attention_takes_fp8 &&
+             input_norm_->supports_quant_fp8(x, residual.value())) {
+    std::tie(normed.fp8_values, normed.fp8_scales) =
+        input_norm_->forward_quant_fp8(
+            x, residual.value(), /*keep_normed_input=*/true);
   } else {
     std::tie(x, residual) = input_norm_->forward(x, residual);
   }
+  normed.values = x;
+  xllm::kernel::musa::sync_graph_preparation_stage(x.device());
 
   // Attention
   if (attention_) {
     x = attention_->forward(
-        positions, x, attn_metadata, kv_cache, mrope_cos_sin);
+        positions, normed, attn_metadata, kv_cache, mrope_cos_sin);
   } else {
-    x = linear_attention_->forward(x, attn_metadata, kv_cache, input_params);
+    x = linear_attention_->forward(
+        normed, attn_metadata, kv_cache, input_params);
   }
+  xllm::kernel::musa::sync_graph_preparation_stage(x.device());
 
   // Post-attention norm
+  if (mlp_ && mlp_->supports_block_fp8_quantized_input() &&
+      post_norm_->supports_quant_fp8(x, residual.value())) {
+    auto [quantized, scale] = post_norm_->forward_quant_fp8(
+        x, residual.value(), /*keep_normed_input=*/false);
+    xllm::kernel::musa::sync_graph_preparation_stage(x.device());
+    x = mlp_->forward_block_fp8_quantized(quantized, scale);
+    xllm::kernel::musa::sync_graph_preparation_stage(x.device());
+    return x;
+  }
   std::tie(x, residual) = post_norm_->forward(x, residual);
+  xllm::kernel::musa::sync_graph_preparation_stage(x.device());
 
   // MLP forward
   if (moe_mlp_) {
@@ -147,6 +177,7 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   } else {
     x = mlp_(x);
   }
+  xllm::kernel::musa::sync_graph_preparation_stage(x.device());
 
   return x;
 }

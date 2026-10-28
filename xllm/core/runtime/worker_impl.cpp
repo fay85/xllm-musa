@@ -97,6 +97,10 @@ limitations under the License.
 #include "layers/common/kv_shard_batch_metadata.h"
 #include "models/model_registry.h"
 #include "runtime/forward_params.h"
+#if defined(USE_MUSA)
+#include "runtime/musa/deepseek_v4_prefix_block_copy.h"
+#include "runtime/musa/musa_model_args.h"
+#endif
 #if defined(USE_NPU)
 #include "layers/npu/loader/rolling_weight_buffer.h"
 #endif
@@ -371,6 +375,12 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
                        const torch::Device& device,
                        const runtime::Options& options)
     : options_(options), device_(device), parallel_args_(parallel_args) {
+#if defined(USE_MUSA)
+  CHECK(!options_.enable_disagg_pd() ||
+        options_.kv_cache_transfer_mode() == "PULL")
+      << "MUSA PD requires kv_cache_transfer_mode=PULL; per-layer PUSH "
+         "synchronization is not implemented.";
+#endif
   if (options_.enable_speculative_decode() &&
       options_.num_decoding_tokens() == 1) {
     is_spec_draft_ = true;
@@ -601,14 +611,17 @@ bool WorkerImpl::allocate_kv_cache_with_transfer(
   return true;
 }
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
 bool WorkerImpl::allocate_kv_cache_with_transfer(
     std::shared_ptr<KVCacheTransfer> kv_cache_transfer,
     const KVCacheShape& kv_cache_shape) {
   CHECK(model_ != nullptr) << "Model is not initialized.";
   CHECK(kv_caches_.empty()) << "KV caches are already initialized.";
 
-  kv_cache_transfer_ = kv_cache_transfer;
+  CHECK(kv_cache_transfer != nullptr)
+      << "KV cache transfer backend must be initialized.";
+  kv_cache_transfer_ = std::move(kv_cache_transfer);
 
   if (!allocate_kv_cache_storage(kv_cache_shape,
                                  /*use_huge_page_allocator=*/true,
@@ -641,7 +654,8 @@ void WorkerImpl::get_cache_info(uint64_t& cluster_id,
                                 uint16_t& port) {
   cluster_id = 0;
   addr.clear();
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
   if (kv_cache_transfer_) {
     kv_cache_transfer_->get_cache_info(cluster_id, addr);
   }
@@ -1457,6 +1471,12 @@ std::shared_ptr<const JsonObjectGrammar> WorkerImpl::ensure_json_object_grammar(
 }
 
 void WorkerImpl::apply_kv_block_swaps(const ModelInputParams& input_params) {
+#if defined(USE_MUSA)
+  if (musa::apply_deepseek_v4_prefix_block_copies(
+          input_params.block_copy.swap_blocks, &kv_caches_, device_)) {
+    return;
+  }
+#endif
 #if defined(USE_CUDA) || defined(USE_MUSA) || defined(USE_DCU)
   if (::xllm::BeamSearchConfig::get_instance().enable_block_copy_kernel() &&
       can_use_cuda_block_copy_kernel(input_params)) {
@@ -1586,7 +1606,11 @@ bool WorkerImpl::can_use_cuda_block_copy_kernel(
 void WorkerImpl::execute_cuda_block_copy_kernel(
     const ModelInputParams& input_params) {
   CHECK(!kv_caches_.empty());
+#if defined(USE_MUSA)
+  xllm::kernel::musa::block_copy(
+#else
   xllm::kernel::cuda::block_copy(
+#endif
       cuda_block_copy_runtime_state_.k_cache_ptrs_device,
       cuda_block_copy_runtime_state_.v_cache_ptrs_device,
       input_params.block_copy.src_block_indices,
@@ -2112,7 +2136,11 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
     args.layers_to_capture(std::move(capture_layer_ids));
   }
 #else
-  if (options_.enable_speculative_decode()) {
+  if (options_.enable_speculative_decode()
+#if defined(USE_MUSA)
+      || options_.is_draft_engine()
+#endif
+  ) {
     args.num_speculative_tokens(options_.num_speculative_tokens());
     if (is_block_diffusion) {
       configure_block_diffusion_model(args, options_);
@@ -2142,6 +2170,11 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
         LOG(INFO) << "Overriding draft model_type from " << current_type
                   << " to " << it->second << " for speculative decoding";
         args.model_type(it->second);
+#if defined(USE_MUSA)
+        if (it->second == "deepseek_v4_mtp") {
+          musa::configure_deepseek_v4_mtp_model_args(args);
+        }
+#endif
       }
     }
   }
@@ -2343,7 +2376,10 @@ folly::SemiFuture<bool> WorkerImpl::pull_kv_blocks_async(
     uint64_t src_cluster_id,
     const std::string& src_addr,
     const std::vector<KVTransferMapping>& mappings) {
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
+  CHECK(kv_cache_transfer_ != nullptr)
+      << "KV cache transfer backend must be initialized before PULL.";
   return kv_cache_transfer_->pull_kv_blocks_async(
       src_cluster_id, src_addr, mappings);
 #else
@@ -2639,7 +2675,8 @@ void WorkerImpl::prepare_mla_prefixcache_inputs(
 int64_t WorkerImpl::get_num_layers() const {
   int64_t num_layers = context_.get_model_args().n_layers();
 #if !defined(USE_NPU)
-  if (is_spec_draft_) {
+  if (is_spec_draft_ && !util::is_deepseek_v4_dspark_model_type(
+                            context_.get_model_args().model_type())) {
     // for MTP draft models, the number of layers is the number of nextn
     // predict layers
     int64_t num_nextn_predict_layers =

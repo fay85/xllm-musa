@@ -506,9 +506,16 @@ class Qwen3_VisionTransformerImpl : public torch::nn::Module {
     cu_seqlens = F::pad(
         cu_seqlens, F::PadFuncOptions({1, 0}).mode(torch::kConstant).value(0));
 
+#if defined(USE_MUSA)
+    // The MUSA vision attention applies rotary in fp32; bf16 tables blur the
+    // 2-D patch positions that fine detail such as text depends on.
+    m_cos = rotary_pos_emb.cos().to(torch::kFloat32);
+    m_sin = rotary_pos_emb.sin().to(torch::kFloat32);
+#else
     m_cos = rotary_pos_emb.cos().type_as(hidden_states);
-    m_cos = m_cos.repeat({1, 2});
     m_sin = rotary_pos_emb.sin().type_as(hidden_states);
+#endif
+    m_cos = m_cos.repeat({1, 2});
     m_sin = m_sin.repeat({1, 2});
 
     torch::Tensor cu_seqlens_cpu = cu_seqlens.cpu();

@@ -16,6 +16,7 @@ limitations under the License.
 #include <ATen/ops/swish_glu.h>
 #include <c10/cuda/CUDAException.h>
 #include <c10/cuda/CUDAGuard.h>
+#include <glog/logging.h>
 #include <torch/cuda.h>
 
 #include <cstdint>
@@ -422,6 +423,10 @@ torch::Tensor matmul(torch::Tensor a,
       auto out_flat = out.view({output_features});
       auto input_flat = a.view({a.size(1)});
       at::mv_out(out_flat, b, input_flat);
+      return out;
+    }
+    if (!has_bias && skinny_bf16_gemm_supported(a, b, out)) {
+      skinny_bf16_gemm(a, b, out);
       return out;
     }
     auto bt = b.t();

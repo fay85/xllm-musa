@@ -202,6 +202,16 @@ std::shared_ptr<Request> VLMRequestFactory::build_request(
     stream = false;
   }
 
+  // Disaggregated PD responds through the batched callback.
+  OutputsFunc outputs_callback =
+      [callback](const std::vector<RequestOutput>& outputs) {
+        std::vector<bool> statuses;
+        statuses.reserve(outputs.size());
+        for (const RequestOutput& output : outputs) {
+          statuses.push_back(callback(output));
+        }
+        return statuses;
+      };
   RequestState req_state(std::move(prompt),
                          std::move(prompt_tokens),
                          std::move(mm_data),
@@ -216,18 +226,23 @@ std::shared_ptr<Request> VLMRequestFactory::build_request(
                          sp.skip_special_tokens,
                          options_->enable_schedule_overlap(),
                          callback,
-                         nullptr);
+                         outputs_callback,
+                         sp.decode_address);
   req_state.include_stop_str_in_output = sp.include_stop_str_in_output;
 
   rate_limit_guard.dismiss();
   // add one sequence, rest will be added by scheduler
-  return std::make_shared<Request>(sp.request_id,
-                                   sp.x_request_id,
-                                   sp.x_request_time,
-                                   std::move(req_state),
-                                   sp.service_request_id,
-                                   sp.source_xservice_addr,
-                                   rate_limiter_);
+  auto request = std::make_shared<Request>(sp.request_id,
+                                           sp.x_request_id,
+                                           sp.x_request_time,
+                                           std::move(req_state),
+                                           sp.service_request_id,
+                                           sp.source_xservice_addr,
+                                           rate_limiter_);
+  if (sp.v2_attempt_seq.has_value()) {
+    request->set_v2_attempt_seq(*sp.v2_attempt_seq);
+  }
+  return request;
 }
 
 std::optional<StoppingChecker> VLMRequestFactory::build_stopping_checker(

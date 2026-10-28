@@ -150,3 +150,37 @@ if(USE_MLU)
       glog::glog
   )
 endif()
+
+if(USE_MUSA)
+  cc_test(
+    NAME
+      parallel_state_reduce_test
+    CPU_ONLY
+    SRCS
+      parallel_state_reduce_test.cpp
+    DEPS
+      :parallel_state
+      :cuda_kernels
+      torch
+      GTest::gtest_main
+  )
+
+  include(cc_binary)
+  cc_binary(
+    NAME
+      musa_tp_custom_reduce_test
+    SRCS
+      musa_tp_custom_reduce_test.cpp
+    DEPS
+      :parallel_state
+      :platform
+      :cuda_kernels
+      torch
+      torch_musa
+      glog::glog
+  )
+  target_include_directories(musa_tp_custom_reduce_test
+    PRIVATE
+      ${PROJECT_SOURCE_DIR}/xllm
+  )
+endif()

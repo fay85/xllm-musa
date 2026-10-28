@@ -28,7 +28,8 @@ limitations under the License.
 #include "core/framework/config/kv_cache_config.h"
 #include "util/env_var.h"
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
 #include "framework/kv_cache_transfer/mooncake_kv_cache_transfer.h"
 #endif
 
@@ -394,7 +395,8 @@ std::vector<std::string> KVCacheTransfer::rotate_dst_rank(
   return rotated_keys;
 }
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
 folly::SemiFuture<std::vector<KVTransferTaskResult>>
 KVCacheTransfer::push_kv_blocks_async(
     const std::vector<TransferKVInfo>& transfer_kv_infos,
@@ -587,7 +589,8 @@ std::shared_ptr<KVCacheTransfer> KVCacheTransferFactory::create(
 
   int32_t device_id = device.index();
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
   LOG(INFO) << "Create Mooncake KVCacheTransfer.";
   std::shared_ptr<MooncakeKVCacheTransferBase> mooncake_transfer;
 #if defined(USE_NPU)

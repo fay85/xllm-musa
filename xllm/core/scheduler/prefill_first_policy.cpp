@@ -13,16 +13,43 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <absl/time/clock.h>
+#include <absl/time/time.h>
 #include <glog/logging.h>
 
 #include <cstdint>
 #include <limits>
+#include <memory>
 
 #include "core/framework/config/scheduler_config.h"
 #include "framework/request/priority_comparator.h"
+#include "framework/request/request.h"
 #include "scheduler/scheduler_policy.h"
 
 namespace xllm {
+
+namespace {
+
+// Running decodes keep the device until a waiting prefill request has been
+// queued for decode_priority_max_wait_ms.
+bool should_defer_new_prefill(const SchedulerState& state) {
+  const int32_t max_wait_ms =
+      ::xllm::SchedulerConfig::get_instance().decode_priority_max_wait_ms();
+  if (max_wait_ms <= 0 || state.decode_queue.empty() ||
+      state.prefill_queue.empty()) {
+    return false;
+  }
+  const absl::Time wait_deadline =
+      absl::Now() - absl::Milliseconds(max_wait_ms);
+  for (const std::shared_ptr<Request>& request : state.prefill_queue) {
+    if (request->created_time() <= wait_deadline) {
+      return false;
+    }
+  }
+  return true;
+}
+
+}  // namespace
 
 // =============================================================================
 // PrefillFirstPolicy::schedule
@@ -138,8 +165,10 @@ void PrefillFirstPolicy::schedule(
   schedule_prefill_from_queue(
       &state.chunk_queue, state, budget, finished, reserved_full_footprint);
   // Then new prefill requests.
-  schedule_prefill_from_queue(
-      &state.prefill_queue, state, budget, finished, reserved_full_footprint);
+  if (!should_defer_new_prefill(state)) {
+    schedule_prefill_from_queue(
+        &state.prefill_queue, state, budget, finished, reserved_full_footprint);
+  }
 
   if (!state.running_sequences.empty()) {
     state.last_step_prefill = true;

@@ -98,6 +98,14 @@ DEFINE_string(mmrs_comm_mode,
               "Communication mode for torch_npu MMRS: ai_cpu, aiv, or none.");
 #endif
 
+#if defined(USE_MUSA)
+DEFINE_bool(enable_musa_fp8_skinny_gemm,
+            true,
+            "Run block-scaled FP8 linears with at most 8 input rows and at "
+            "least 65536 output columns (LM heads) on the MP31 skinny FP8 "
+            "GEMM; other shapes keep the muDNN GEMM.");
+#endif
+
 namespace xllm {
 namespace {
 
@@ -137,6 +145,9 @@ void KernelConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_mmrs_fusion);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(mmrs_comm_mode);
 #endif
+#if defined(USE_MUSA)
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_musa_fp8_skinny_gemm);
+#endif
 }
 
 void KernelConfig::from_json(const JsonReader& json) {
@@ -163,12 +174,17 @@ void KernelConfig::from_json(const JsonReader& json) {
   CHECK(!json.value_or<bool>("enable_dsa_cp", false))
       << "enable_dsa_cp is only supported on NPU.";
 #endif
+#if defined(USE_MUSA)
+  XLLM_CONFIG_ASSIGN_FROM_JSON(enable_musa_fp8_skinny_gemm);
+#endif
 }
 
 void KernelConfig::append_config_json(
     nlohmann::ordered_json& config_json) const {
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
   const KernelConfig default_config;
+#endif
+#if defined(USE_NPU)
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_customize_mla_kernel);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
@@ -201,6 +217,10 @@ void KernelConfig::append_config_json(
       config_json, default_config, enable_mmrs_fusion);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, mmrs_comm_mode);
+#endif
+#if defined(USE_MUSA)
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, enable_musa_fp8_skinny_gemm);
 #endif
 }
 

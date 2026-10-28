@@ -25,6 +25,7 @@ limitations under the License.
 
 #include "core/common/macros.h"
 #include "core/kernels/musa/musa_ops_api.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/kernels/param.h"
 #include "core/util/env_var.h"
 
@@ -345,6 +346,11 @@ MateGdnPrefillScratch& mate_gdn_prefill_scratch() {
 torch::Tensor ensure_scratch_tensor(torch::Tensor& buf,
                                     torch::IntArrayRef sizes,
                                     const torch::TensorOptions& opts) {
+  // A captured graph keeps the address it recorded, so capture never borrows
+  // a buffer that a later eager call may reallocate.
+  if (is_stream_capturing()) {
+    return torch::empty(sizes, opts);
+  }
   // TileLang buffers must retain exact contiguous strides.
   const bool exact_reuse = buf.defined() && buf.sizes().equals(sizes) &&
                            buf.is_contiguous() &&
@@ -1659,10 +1665,11 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
     const char* env = std::getenv("XLLM_TOKEN_MAJOR_PREFILL_CONV");
     return env == nullptr || std::string(env) != "0";
   }();
-  // Each sequence owns a disjoint output and cache-state row.
-  if (use_token_major && x.is_contiguous() && weight.dim() == 2 &&
-      weight.size(1) == 4) {
-    torch::Tensor out = torch::empty_like(x);
+  // Each sequence owns a disjoint output and cache-state row. Token rows may be
+  // strided, as when they are a column range of a wider projection.
+  if (use_token_major && x.dim() == 2 && x.stride(1) == 1 &&
+      weight.dim() == 2 && weight.size(1) == 4) {
+    torch::Tensor out = torch::empty({x.size(0), x.size(1)}, x.options());
     causal_conv1d_fwd_token_major(x,
                                   weight,
                                   out,

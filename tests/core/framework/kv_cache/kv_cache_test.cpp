@@ -36,6 +36,9 @@ limitations under the License.
 #include "framework/kv_cache/kv_cache_shape.h"
 #include "framework/kv_cache/kv_cache_tensor_allocator.h"
 #include "framework/kv_cache/kv_cache_utils.h"
+#if defined(USE_MUSA)
+#include "framework/kv_cache/musa/deepseek_v4_kv_cache_impl.h"
+#endif
 #include "platform/device.h"
 #include "platform/platform.h"
 #include "worker.pb.h"
@@ -266,15 +269,22 @@ class HostKVCacheConfigTest : public ::testing::Test {
 };
 
 TEST(KVCacheTest, DeepSeekV4CacheGeometryUsesPlatformConstant) {
+  constexpr int64_t kBlockSize = 128;
   const Dsv4CacheGeometry geometry;
-#if defined(USE_MLU)
+#if defined(USE_MUSA)
+  EXPECT_EQ(geometry.logical_block_token_size(4, kBlockSize), 4 * kBlockSize);
+  EXPECT_EQ(geometry.logical_block_token_size(128, kBlockSize),
+            128 * kBlockSize);
+  EXPECT_EQ(geometry.compressed_physical_dim(4, kBlockSize), kBlockSize);
+  EXPECT_EQ(geometry.compressed_physical_dim(128, kBlockSize), kBlockSize);
+#elif defined(USE_MLU)
   EXPECT_EQ(geometry.compressed_block_token_size(), 128);
-  EXPECT_EQ(geometry.c4_physical_dim(), 32);
-  EXPECT_EQ(geometry.c128_physical_dim(), 1);
+  EXPECT_EQ(geometry.compressed_physical_dim(4, kBlockSize), 32);
+  EXPECT_EQ(geometry.compressed_physical_dim(128, kBlockSize), 1);
 #else
   EXPECT_EQ(geometry.compressed_block_token_size(), 2048);
-  EXPECT_EQ(geometry.c4_physical_dim(), 512);
-  EXPECT_EQ(geometry.c128_physical_dim(), 16);
+  EXPECT_EQ(geometry.compressed_physical_dim(4, kBlockSize), 512);
+  EXPECT_EQ(geometry.compressed_physical_dim(128, kBlockSize), 16);
 #endif
 }
 
@@ -284,10 +294,17 @@ TEST(KVCacheTest, DeepSeekV4FourDimCachesUseDeviceLayout) {
   constexpr int64_t kC128Count = 1;
   constexpr int64_t kBlockSize = 128;
   constexpr int64_t kHeadDim = 16;
+#if defined(USE_MUSA)
+  constexpr int64_t kCacheHeadDim = kHeadDim + kMusaDsv4FlashMlaRopeHeadDim;
+#else
+  constexpr int64_t kCacheHeadDim = kHeadDim;
+#endif
   constexpr int64_t kIndexHeadDim = 8;
   const Dsv4CacheGeometry geometry;
-  const int64_t c4_physical_dim = geometry.c4_physical_dim();
-  const int64_t c128_physical_dim = geometry.c128_physical_dim();
+  const int64_t c4_physical_dim =
+      geometry.compressed_physical_dim(4, kBlockSize);
+  const int64_t c128_physical_dim =
+      geometry.compressed_physical_dim(128, kBlockSize);
 
   KVCacheCapacity capacity;
   capacity.block_size(kBlockSize)
@@ -316,15 +333,15 @@ TEST(KVCacheTest, DeepSeekV4FourDimCachesUseDeviceLayout) {
   ASSERT_EQ(caches.size(), 3u);
 
   EXPECT_EQ(shape_vec(caches[0].get_swa_cache()),
-            dsv4_block_shape(kSwaCount, kBlockSize, 1, kHeadDim));
+            dsv4_block_shape(kSwaCount, kBlockSize, 1, kCacheHeadDim));
   EXPECT_FALSE(caches[0].get_compress_kv_state().defined());
 
   EXPECT_EQ(shape_vec(caches[1].get_k_cache()),
-            dsv4_block_shape(kC4Count, c4_physical_dim, 1, kHeadDim));
+            dsv4_block_shape(kC4Count, c4_physical_dim, 1, kCacheHeadDim));
   EXPECT_EQ(shape_vec(caches[1].get_index_cache()),
             dsv4_block_shape(kC4Count, c4_physical_dim, 1, kIndexHeadDim));
   EXPECT_EQ(shape_vec(caches[1].get_swa_cache()),
-            dsv4_block_shape(kSwaCount, kBlockSize, 1, kHeadDim));
+            dsv4_block_shape(kSwaCount, kBlockSize, 1, kCacheHeadDim));
   const std::optional<torch::Tensor> indexer_cache_scale =
       caches[1].get_indexer_cache_scale();
   if (indexer_cache_scale.has_value()) {
@@ -340,9 +357,9 @@ TEST(KVCacheTest, DeepSeekV4FourDimCachesUseDeviceLayout) {
   EXPECT_EQ(shape_vec(caches[1].get_compress_index_score_state()),
             (std::vector<int64_t>{kSwaCount, kBlockSize, 2 * kIndexHeadDim}));
   EXPECT_EQ(shape_vec(caches[2].get_k_cache()),
-            dsv4_block_shape(kC128Count, c128_physical_dim, 1, kHeadDim));
+            dsv4_block_shape(kC128Count, c128_physical_dim, 1, kCacheHeadDim));
   EXPECT_EQ(shape_vec(caches[2].get_swa_cache()),
-            dsv4_block_shape(kSwaCount, kBlockSize, 1, kHeadDim));
+            dsv4_block_shape(kSwaCount, kBlockSize, 1, kCacheHeadDim));
   EXPECT_EQ(shape_vec(caches[2].get_compress_kv_state()),
             (std::vector<int64_t>{kSwaCount, kBlockSize, kHeadDim}));
   EXPECT_EQ(shape_vec(caches[2].get_compress_score_state()),
@@ -366,6 +383,11 @@ TEST(KVCacheTest, DeepSeekV4DSparkUsesGroupedSwaCaches) {
   constexpr int64_t kSwaCount = 10;
   constexpr int64_t kBlockSize = 128;
   constexpr int64_t kHeadDim = 16;
+#if defined(USE_MUSA)
+  constexpr int64_t kCacheHeadDim = kHeadDim + kMusaDsv4FlashMlaRopeHeadDim;
+#else
+  constexpr int64_t kCacheHeadDim = kHeadDim;
+#endif
 
   KVCacheCapacity capacity;
   capacity.block_size(kBlockSize)
@@ -397,7 +419,7 @@ TEST(KVCacheTest, DeepSeekV4DSparkUsesGroupedSwaCaches) {
   ASSERT_EQ(caches.size(), 3U);
   for (const KVCache& cache : caches) {
     EXPECT_EQ(shape_vec(cache.get_swa_cache()),
-              dsv4_block_shape(kSwaCount, kBlockSize, 1, kHeadDim));
+              dsv4_block_shape(kSwaCount, kBlockSize, 1, kCacheHeadDim));
     EXPECT_FALSE(cache.get_k_cache().defined());
     EXPECT_FALSE(cache.get_index_cache().defined());
   }
@@ -1044,8 +1066,10 @@ TEST_F(HostKVCacheTest, HostKVCacheDeepSeekV4PerBlockType) {
   constexpr int64_t kIndexHeadDim = 8;
   constexpr double kHostFactor = 3.0;
   const Dsv4CacheGeometry geometry;
-  const int64_t c4_physical_dim = geometry.c4_physical_dim();
-  const int64_t c128_physical_dim = geometry.c128_physical_dim();
+  const int64_t c4_physical_dim =
+      geometry.compressed_physical_dim(4, kBlockSize);
+  const int64_t c128_physical_dim =
+      geometry.compressed_physical_dim(128, kBlockSize);
   // Host tensors insert the layer dim at index 1 of the device block shape.
 #if defined(USE_MLU)
   constexpr int64_t kHostTokenDim = 3;

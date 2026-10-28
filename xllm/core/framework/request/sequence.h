@@ -195,6 +195,17 @@ class Sequence final {
   size_t num_generated_tokens() const {
     return num_tokens_ - num_prompt_tokens_;
   }
+  // Unlike the scheduler's token count, usage excludes only the pending
+  // overlap placeholders actually present. A speculative finish can leave
+  // zero, one, or two placeholders, so subtracting a constant is incorrect.
+  size_t num_committed_generated_tokens() const {
+    size_t committed_end = num_tokens_;
+    while (committed_end > num_prompt_tokens_ &&
+           tokens_[committed_end - 1] < 0) {
+      --committed_end;
+    }
+    return committed_end - num_prompt_tokens_;
+  }
   Slice<int32_t> tokens() const { return {tokens_, num_tokens_}; }
   // get tokens in kv cache
   Slice<int32_t> cached_tokens() const {

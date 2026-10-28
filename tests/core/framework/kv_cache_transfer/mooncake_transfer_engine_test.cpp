@@ -207,7 +207,15 @@ class RecordingMooncakeTransferEngine final : public MooncakeTransferEngine {
     return true;
   }
 
+  bool is_cache_peer_current(
+      const WorkerCacheLayoutManifest& /*local_manifest*/,
+      const WorkerCacheLayoutManifest& /*peer_manifest*/,
+      CachePeerMode /*mode*/) const override {
+    return peers_current;
+  }
+
   bool move_result = true;
+  bool peers_current = true;
   std::unordered_set<std::string> planned_addrs;
   std::unordered_map<std::string, WorkerCacheLayoutManifest> remote_layouts;
   std::string failed_peer;
@@ -512,6 +520,253 @@ TEST(MooncakeTransferEngineTest, LinkFailureRollsBackEveryPcpSource) {
                     }),
       8);
 }
+
+#if defined(USE_MUSA)
+TEST(MooncakeTransferEngineTest, PullsReplicatedOwnerForEveryDestinationRank) {
+  for (int32_t rank = 0; rank < 8; ++rank) {
+    SCOPED_TRACE(rank);
+    const std::string destination_address =
+        "pull-destination-" + std::to_string(rank);
+    const WorkerCacheLayoutManifest destination =
+        make_pcp_manifest(rank,
+                          /*tp_size=*/8,
+                          /*cp_rank=*/0,
+                          /*cp_size=*/1,
+                          destination_address,
+                          /*cluster_id=*/1);
+    RecordingMooncakeTransferEngine transfer(/*listen_port=*/0,
+                                             torch::Device(torch::kCPU));
+    const Status layout_status = transfer.set_local_cache_layout(destination);
+    ASSERT_TRUE(layout_status.ok()) << layout_status.message();
+    std::vector<uint64_t> cluster_ids;
+    std::vector<std::string> addresses;
+    cluster_ids.reserve(8);
+    addresses.reserve(8);
+    for (int32_t source_rank = 0; source_rank < 8; ++source_rank) {
+      const std::string address = "pull-source-" + std::to_string(source_rank);
+      const uint64_t cluster_id = 10 + source_rank;
+      transfer.remote_layouts.emplace(address,
+                                      make_pcp_manifest(source_rank,
+                                                        /*tp_size=*/8,
+                                                        /*cp_rank=*/0,
+                                                        /*cp_size=*/1,
+                                                        address,
+                                                        cluster_id));
+      cluster_ids.emplace_back(cluster_id);
+      addresses.emplace_back(address);
+    }
+    ASSERT_TRUE(transfer.link_sessions(cluster_ids, addresses));
+    KVTransferMapping mapping;
+    mapping.group_id = cache_group_id(BlockType::KV);
+    mapping.local_ids = {1};
+    mapping.remote_ids = {0};
+    for (size_t index = 0; index < addresses.size(); ++index) {
+      std::vector<ByteRegion> regions(1);
+      const Status status = transfer.bind_incoming_regions(addresses[index],
+                                                           {mapping},
+                                                           CacheNamespace::MAIN,
+                                                           /*layer_id=*/0,
+                                                           &regions);
+      ASSERT_TRUE(status.ok()) << status.message();
+      if (index != 0) {
+        EXPECT_TRUE(regions.empty());
+        EXPECT_EQ(transfer.local_peer_calls[index].mode,
+                  CachePeerMode::PLAN_ONLY);
+        continue;
+      }
+      ASSERT_EQ(regions.size(), 1U);
+      EXPECT_EQ(regions[0].local_buffer_id, 1);
+      EXPECT_EQ(regions[0].remote_buffer_id, 10);
+      EXPECT_EQ(regions[0].local_offset, 1U);
+      EXPECT_EQ(regions[0].remote_offset, 0U);
+      EXPECT_EQ(regions[0].length, 1U);
+    }
+    std::vector<ByteRegion> regions;
+    const Status unknown = transfer.bind_incoming_regions("unknown-source",
+                                                          {mapping},
+                                                          CacheNamespace::MAIN,
+                                                          /*layer_id=*/0,
+                                                          &regions);
+    EXPECT_FALSE(unknown.ok());
+    transfer.peers_current = false;
+    const Status stale = transfer.bind_incoming_regions(addresses[1],
+                                                        {mapping},
+                                                        CacheNamespace::MAIN,
+                                                        /*layer_id=*/0,
+                                                        &regions);
+    EXPECT_FALSE(stale.ok());
+    for (size_t index = 0; index < addresses.size(); ++index) {
+      ASSERT_TRUE(transfer.close_session(cluster_ids[index], addresses[index]));
+    }
+    transfer.peers_current = true;
+    const Status closed = transfer.bind_incoming_regions(addresses[0],
+                                                         {mapping},
+                                                         CacheNamespace::MAIN,
+                                                         /*layer_id=*/0,
+                                                         &regions);
+    EXPECT_FALSE(closed.ok());
+  }
+}
+
+TEST(MooncakeTransferEngineTest, PullsMixedShardsWithoutDuplicateReplicaBytes) {
+  WorkerCacheLayoutManifest destination = make_pcp_manifest(
+      /*tp_rank=*/0,
+      /*tp_size=*/1,
+      /*cp_rank=*/0,
+      /*cp_size=*/1,
+      "mixed-destination",
+      /*cluster_id=*/1);
+  CacheTensorManifest replica = destination.tensors[0];
+  replica.role = static_cast<int32_t>(KVCacheTensorRole::VALUE);
+  replica.mooncake_buffer_id = 2;
+  replica.shard.spans[0].logical_tensor = "value";
+  destination.tensors.emplace_back(replica);
+  CacheTensorManifest& key = destination.tensors[0];
+  key.shape = {2, 1, 2, 1};
+  key.stride = {2, 2, 1, 1};
+  key.resource_stride_bytes = 2;
+  key.buffer_bytes = 4;
+  key.shard.kind = LogicalShardKind::SHARDED;
+  key.shard.spans[0].bytes_per_region = 2;
+
+  RecordingMooncakeTransferEngine transfer(/*listen_port=*/0,
+                                           torch::Device(torch::kCPU));
+  const Status layout_status = transfer.set_local_cache_layout(destination);
+  ASSERT_TRUE(layout_status.ok()) << layout_status.message();
+  for (int32_t rank = 0; rank < 2; ++rank) {
+    const std::string address = "mixed-source-" + std::to_string(rank);
+    WorkerCacheLayoutManifest source =
+        make_pcp_manifest(rank,
+                          /*tp_size=*/2,
+                          /*cp_rank=*/0,
+                          /*cp_size=*/1,
+                          address,
+                          /*cluster_id=*/10 + rank);
+    source.tensors[0].shard.kind = LogicalShardKind::SHARDED;
+    source.tensors[0].shard.spans[0].logical_offset_bytes = rank;
+    source.tensors[0].shard.spans[0].owner_tp_rank = rank;
+    replica.mooncake_buffer_id = 20 + rank;
+    source.tensors.emplace_back(replica);
+    transfer.remote_layouts.emplace(address, std::move(source));
+  }
+  ASSERT_TRUE(
+      transfer.link_sessions({10, 11}, {"mixed-source-0", "mixed-source-1"}));
+  KVTransferMapping mapping;
+  mapping.group_id = cache_group_id(BlockType::KV);
+  mapping.local_ids = {1};
+  mapping.remote_ids = {0};
+  uint64_t key_bytes = 0;
+  uint64_t replica_bytes = 0;
+  for (int32_t rank = 0; rank < 2; ++rank) {
+    std::vector<ByteRegion> regions;
+    const Status status =
+        transfer.bind_incoming_regions("mixed-source-" + std::to_string(rank),
+                                       {mapping},
+                                       CacheNamespace::MAIN,
+                                       /*layer_id=*/0,
+                                       &regions);
+    ASSERT_TRUE(status.ok()) << status.message();
+    for (const ByteRegion& region : regions) {
+      if (region.local_buffer_id == 1) {
+        key_bytes += region.length;
+        EXPECT_EQ(region.local_offset, 2U + rank);
+        EXPECT_EQ(region.remote_buffer_id, 10 + rank);
+        continue;
+      }
+      EXPECT_EQ(region.local_buffer_id, 2);
+      EXPECT_EQ(region.remote_buffer_id, 20);
+      EXPECT_EQ(rank, 0);
+      replica_bytes += region.length;
+    }
+  }
+  EXPECT_EQ(key_bytes, 2U);
+  EXPECT_EQ(replica_bytes, 1U);
+  EXPECT_TRUE(transfer.close_session(/*cluster_id=*/10, "mixed-source-0"));
+  EXPECT_TRUE(transfer.close_session(/*cluster_id=*/11, "mixed-source-1"));
+}
+
+TEST(MooncakeTransferEngineTest, PullsLowestReplicaInsideMatchingPartition) {
+  WorkerCacheLayoutManifest destination = make_pcp_manifest(
+      /*tp_rank=*/1,
+      /*tp_size=*/2,
+      /*cp_rank=*/0,
+      /*cp_size=*/1,
+      "partition-destination",
+      /*cluster_id=*/1);
+  destination.coordinates.kv_split_size = 2;
+  destination.coordinates.kv_split_rank = 1;
+  RecordingMooncakeTransferEngine transfer(/*listen_port=*/0,
+                                           torch::Device(torch::kCPU));
+  const Status layout_status = transfer.set_local_cache_layout(destination);
+  ASSERT_TRUE(layout_status.ok()) << layout_status.message();
+  for (int32_t rank = 0; rank < 2; ++rank) {
+    const std::string address = "partition-source-" + std::to_string(rank);
+    WorkerCacheLayoutManifest source =
+        make_pcp_manifest(rank,
+                          /*tp_size=*/2,
+                          /*cp_rank=*/0,
+                          /*cp_size=*/1,
+                          address,
+                          /*cluster_id=*/10 + rank);
+    source.coordinates.kv_split_size = 2;
+    source.coordinates.kv_split_rank = rank;
+    transfer.remote_layouts.emplace(address, std::move(source));
+  }
+  ASSERT_TRUE(transfer.link_sessions(
+      {10, 11}, {"partition-source-0", "partition-source-1"}));
+  KVTransferMapping mapping;
+  mapping.group_id = cache_group_id(BlockType::KV);
+  mapping.local_ids = {1};
+  mapping.remote_ids = {0};
+  std::vector<ByteRegion> regions;
+  const Status status = transfer.bind_incoming_regions("partition-source-1",
+                                                       {mapping},
+                                                       CacheNamespace::MAIN,
+                                                       /*layer_id=*/0,
+                                                       &regions);
+  ASSERT_TRUE(status.ok()) << status.message();
+  ASSERT_EQ(regions.size(), 1U);
+  EXPECT_EQ(regions[0].remote_buffer_id, 11);
+  EXPECT_EQ(regions[0].length, 1U);
+  EXPECT_EQ(transfer.local_peer_calls[0].mode, CachePeerMode::PLAN_ONLY);
+  EXPECT_EQ(transfer.local_peer_calls[1].mode, CachePeerMode::ACTIVE);
+  EXPECT_TRUE(transfer.close_session(/*cluster_id=*/10, "partition-source-0"));
+  EXPECT_TRUE(transfer.close_session(/*cluster_id=*/11, "partition-source-1"));
+}
+
+TEST(MooncakeTransferEngineTest, PlanOnlyPeerRequiresCurrentLayoutIdentity) {
+  MooncakeTransferEngineCore& core = MooncakeTransferEngineCore::get_instance();
+  const WorkerCacheLayoutManifest local =
+      make_peer_manifest("identity-local", "identity-local-incarnation", 1);
+  WorkerCacheLayoutManifest peer =
+      make_peer_manifest("identity-peer", "identity-peer-incarnation", 1);
+  const Status local_status = core.set_local_cache_layout(local);
+  ASSERT_TRUE(local_status.ok()) << local_status.message();
+  const Status peer_status =
+      core.set_cache_peer(peer, CachePeerMode::PLAN_ONLY);
+  ASSERT_TRUE(peer_status.ok()) << peer_status.message();
+  EXPECT_TRUE(
+      core.is_cache_peer_current(local, peer, CachePeerMode::PLAN_ONLY));
+  EXPECT_FALSE(core.is_cache_peer_current(local, peer, CachePeerMode::ACTIVE));
+  WorkerCacheLayoutManifest stale_local = local;
+  ++stale_local.layout_generation;
+  EXPECT_FALSE(
+      core.is_cache_peer_current(stale_local, peer, CachePeerMode::PLAN_ONLY));
+  const WorkerCacheLayoutManifest stale_peer = peer;
+  ++peer.layout_generation;
+  const Status newer_status =
+      core.set_cache_peer(peer, CachePeerMode::PLAN_ONLY);
+  ASSERT_TRUE(newer_status.ok()) << newer_status.message();
+  EXPECT_FALSE(
+      core.is_cache_peer_current(local, stale_peer, CachePeerMode::PLAN_ONLY));
+  EXPECT_TRUE(
+      core.is_cache_peer_current(local, peer, CachePeerMode::PLAN_ONLY));
+  const Status absent_status = core.set_cache_peer(peer, CachePeerMode::ABSENT);
+  ASSERT_TRUE(absent_status.ok()) << absent_status.message();
+  EXPECT_FALSE(
+      core.is_cache_peer_current(local, peer, CachePeerMode::PLAN_ONLY));
+}
+#endif
 
 TEST(MooncakeKVCacheTransferDefaultTest,
      MergeIncludesActiveAndPlanOnlyDestinations) {

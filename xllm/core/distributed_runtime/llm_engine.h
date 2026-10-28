@@ -28,6 +28,7 @@ limitations under the License.
 
 #include "common/macros.h"
 #include "core/distributed_runtime/master.h"
+#include "core/framework/multimodal/mm_visitor.h"
 #include "dist_manager.h"
 #include "engine.h"
 #include "framework/batch/batch.h"
@@ -206,6 +207,8 @@ class LLMEngine : public Engine {
   std::vector<std::vector<int32_t>> dp_batch_embedding_ids_;
   std::vector<std::vector<std::string>> dp_batch_request_ids_;
   std::vector<uint64_t> dp_batch_generations_;
+  // Encoder outputs the workers of each DP group cache, for VLM backends.
+  std::vector<EncoderCacheDirectory> encoder_cache_directories_;
 
   // For multi-node serving
   // engine brpc server, all workers connect to engine_server_,

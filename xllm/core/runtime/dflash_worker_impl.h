@@ -52,6 +52,7 @@ enum class DSparkSasMode : uint8_t {
   NOT_DSPARK,
   COMPATIBILITY,
   NATIVE,
+  MUSA_BLOCK,
 };
 
 inline DSparkSasMode classify_dspark_sas_mode(const ModelArgs& draft_args,
@@ -60,8 +61,12 @@ inline DSparkSasMode classify_dspark_sas_mode(const ModelArgs& draft_args,
       !util::is_deepseek_v4_dspark_model_type(draft_args.model_type())) {
     return DSparkSasMode::NOT_DSPARK;
   }
+#if defined(USE_MUSA)
+  return DSparkSasMode::MUSA_BLOCK;
+#else
   return draft_args.dspark_use_native_sas() ? DSparkSasMode::NATIVE
                                             : DSparkSasMode::COMPATIBILITY;
+#endif
 }
 
 }  // namespace dflash_detail

@@ -65,6 +65,8 @@ struct AtomicLogicalRegion {
   uint64_t logical_offset = 0;
   uint64_t physical_offset = 0;
   uint64_t length = 0;
+  uint64_t logical_stride = 0;
+  uint64_t physical_stride = 0;
   int32_t owner_tp_rank = 0;
   const CacheTensorManifest* tensor = nullptr;
   const WorkerCacheLayoutManifest* worker = nullptr;
@@ -72,6 +74,12 @@ struct AtomicLogicalRegion {
 
 struct PlannedAtomicRegion {
   uint64_t logical_offset = 0;
+  // Original span step. Head shards of one token are adjacent in logical
+  // order, so the compactor must follow this step instead of whichever
+  // neighbor sorts next.
+  uint64_t logical_series_stride = 0;
+  uint64_t local_series_stride = 0;
+  uint64_t remote_series_stride = 0;
   StridedRegionTemplate region;
 };
 
@@ -304,6 +312,8 @@ void expand_manifest(const WorkerCacheLayoutManifest& manifest,
         region.physical_offset =
             span.physical_offset_bytes + repeat * span.physical_stride_bytes;
         region.length = span.bytes_per_region;
+        region.logical_stride = span.logical_stride_bytes;
+        region.physical_stride = span.physical_stride_bytes;
         region.owner_tp_rank = span.owner_tp_rank;
         region.tensor = &tensor;
         region.worker = &manifest;
@@ -456,33 +466,52 @@ Status validate_coverage_for_sources(
       coverage.emplace_back(CoveragePoint{position, writers});
     }
 
+    // A CONV tensor's expansion depends on its shape, not on each scalar
+    // region. Cache that decision so feature-major layouts remain linear in
+    // their logical region count during coverage validation.
+    std::unordered_map<const CacheTensorManifest*, bool> expanded_conv_shapes;
     for (const AtomicLogicalRegion* destination : destinations) {
       const uint64_t destination_end = logical_end(*destination);
-      const bool expanded_shape =
-          compact_linear_source &&
-          std::all_of(sources.begin(),
-                      sources.end(),
-                      [tensor_role, destination, destination_end](
-                          const AtomicLogicalRegion* source) {
-                        if (tensor_role ==
-                            static_cast<int32_t>(KVCacheTensorRole::CONV)) {
-                          // The NPU CONV layout is [blocks, state_len, dim].
-                          return destination->tensor->shape.size() > 1 &&
-                                 source->tensor->shape.size() > 1 &&
-                                 destination->tensor->shape[1] >
-                                     source->tensor->shape[1];
-                        }
-                        if (tensor_role == static_cast<int32_t>(
-                                               KVCacheTensorRole::KPOOL_TAIL)) {
-                          return destination->tensor->shape.size() > 2 &&
-                                 source->tensor->shape.size() > 2 &&
-                                 destination->tensor->shape[2] >
-                                     source->tensor->shape[2] &&
-                                 destination_end > logical_end(*source);
-                        }
-                        return destination->tensor->physical_rows_per_resource >
-                               source->tensor->physical_rows_per_resource;
-                      });
+      bool expanded_shape = false;
+      if (compact_linear_source &&
+          tensor_role == static_cast<int32_t>(KVCacheTensorRole::CONV)) {
+        const auto [shape, inserted] =
+            expanded_conv_shapes.try_emplace(destination->tensor, false);
+        if (inserted) {
+#if defined(USE_MUSA)
+          constexpr size_t kStateAxis = 2;
+#else
+          constexpr size_t kStateAxis = 1;
+#endif
+          shape->second = std::all_of(
+              sources.begin(),
+              sources.end(),
+              [destination](const AtomicLogicalRegion* source) {
+                return destination->tensor->shape.size() > kStateAxis &&
+                       source->tensor->shape.size() > kStateAxis &&
+                       destination->tensor->shape[kStateAxis] >
+                           source->tensor->shape[kStateAxis];
+              });
+        }
+        expanded_shape = shape->second;
+      } else if (compact_linear_source) {
+        expanded_shape = std::all_of(
+            sources.begin(),
+            sources.end(),
+            [tensor_role, destination, destination_end](
+                const AtomicLogicalRegion* source) {
+              if (tensor_role ==
+                  static_cast<int32_t>(KVCacheTensorRole::KPOOL_TAIL)) {
+                return destination->tensor->shape.size() > 2 &&
+                       source->tensor->shape.size() > 2 &&
+                       destination->tensor->shape[2] >
+                           source->tensor->shape[2] &&
+                       destination_end > logical_end(*source);
+              }
+              return destination->tensor->physical_rows_per_resource >
+                     source->tensor->physical_rows_per_resource;
+            });
+      }
       auto next_point =
           std::upper_bound(coverage.begin(),
                            coverage.end(),
@@ -717,6 +746,69 @@ bool same_template_key(const StridedRegionTemplate& lhs,
              rhs.remote_explicit_resource_offsets;
 }
 
+// Byte-identical simplification of a compacted plan: a repeat whose stride
+// equals its region size on both sides is one contiguous span, and two
+// single-span templates of the same tensor/resource that touch on both sides
+// are one span. Without this, layouts with identical per-channel strides (e.g.
+// PD conv state with matching state_len) still bind one region per element.
+void fold_repeat_to_span(std::vector<StridedRegionTemplate>* templates) {
+  for (StridedRegionTemplate& t : *templates) {
+    if (t.repeat_count > 1 && t.local_stride == t.bytes_per_region &&
+        t.remote_stride == t.bytes_per_region &&
+        !multiply_overflows(t.bytes_per_region, t.repeat_count)) {
+      t.bytes_per_region *= t.repeat_count;
+      t.repeat_count = 1;
+      t.local_stride = 0;
+      t.remote_stride = 0;
+    }
+  }
+}
+
+void fold_contiguous_templates(std::vector<StridedRegionTemplate>* templates) {
+  fold_repeat_to_span(templates);
+  std::vector<StridedRegionTemplate> merged;
+  merged.reserve(templates->size());
+  for (StridedRegionTemplate& t : *templates) {
+    if (!merged.empty()) {
+      StridedRegionTemplate& prev = merged.back();
+      StridedRegionTemplate key = t;
+      key.bytes_per_region = prev.bytes_per_region;
+      if (prev.repeat_count == 1 && t.repeat_count == 1 &&
+          same_template_key(prev, key) &&
+          !add_overflows(prev.local_offset_in_resource,
+                         prev.bytes_per_region) &&
+          !add_overflows(prev.remote_offset_in_resource,
+                         prev.bytes_per_region) &&
+          prev.local_offset_in_resource + prev.bytes_per_region ==
+              t.local_offset_in_resource &&
+          prev.remote_offset_in_resource + prev.bytes_per_region ==
+              t.remote_offset_in_resource &&
+          !add_overflows(prev.bytes_per_region, t.bytes_per_region)) {
+        prev.bytes_per_region += t.bytes_per_region;
+        continue;
+      }
+      // Interleaved repeats that tile the same stride (e.g. one template per
+      // conv-state slot, stride = state_len * elem) widen into one repeat.
+      if (prev.repeat_count > 1 && t.repeat_count == prev.repeat_count &&
+          t.local_stride == prev.local_stride &&
+          t.remote_stride == prev.remote_stride &&
+          same_template_key(prev, key) &&
+          prev.local_offset_in_resource + prev.bytes_per_region ==
+              t.local_offset_in_resource &&
+          prev.remote_offset_in_resource + prev.bytes_per_region ==
+              t.remote_offset_in_resource &&
+          prev.bytes_per_region + t.bytes_per_region <= prev.local_stride &&
+          prev.bytes_per_region + t.bytes_per_region <= prev.remote_stride) {
+        prev.bytes_per_region += t.bytes_per_region;
+        continue;
+      }
+    }
+    merged.emplace_back(std::move(t));
+  }
+  *templates = std::move(merged);
+  fold_repeat_to_span(templates);
+}
+
 void compact_planned_regions(std::vector<PlannedAtomicRegion>* candidates,
                              std::vector<StridedRegionTemplate>* output) {
   std::sort(candidates->begin(),
@@ -742,25 +834,85 @@ void compact_planned_regions(std::vector<PlannedAtomicRegion>* candidates,
                               rhs.logical_offset);
             });
 
-  std::vector<uint64_t> last_logical_offsets;
-  last_logical_offsets.reserve(candidates->size());
+  struct OpenSeries {
+    uint64_t logical_stride = 0;
+    uint64_t local_stride = 0;
+    uint64_t remote_stride = 0;
+    uint64_t last_logical = 0;
+  };
+  std::vector<OpenSeries> open;
+  auto push_new = [&](const PlannedAtomicRegion& candidate) {
+    output->emplace_back(candidate.region);
+    OpenSeries series;
+    series.logical_stride = candidate.logical_series_stride;
+    series.local_stride = candidate.local_series_stride;
+    series.remote_stride = candidate.remote_series_stride;
+    series.last_logical = candidate.logical_offset;
+    open.emplace_back(series);
+  };
+
   for (const PlannedAtomicRegion& candidate : *candidates) {
+    bool placed = false;
+    if (candidate.logical_series_stride > 0 &&
+        candidate.local_series_stride >= candidate.region.bytes_per_region &&
+        candidate.remote_series_stride >= candidate.region.bytes_per_region) {
+      for (int index = static_cast<int>(output->size()) - 1; index >= 0;
+           --index) {
+        StridedRegionTemplate& previous = (*output)[static_cast<size_t>(index)];
+        if (!same_template_key(previous, candidate.region)) {
+          break;
+        }
+        const OpenSeries& series = open[static_cast<size_t>(index)];
+        if (series.logical_stride != candidate.logical_series_stride ||
+            series.local_stride != candidate.local_series_stride ||
+            series.remote_stride != candidate.remote_series_stride ||
+            series.logical_stride == 0) {
+          continue;
+        }
+        const uint64_t repeats =
+            previous.repeat_count == 0 ? 1 : previous.repeat_count;
+        const uint64_t last_local = previous.local_offset_in_resource +
+                                    (repeats - 1) * series.local_stride;
+        const uint64_t last_remote = previous.remote_offset_in_resource +
+                                     (repeats - 1) * series.remote_stride;
+        if (candidate.logical_offset !=
+                series.last_logical + series.logical_stride ||
+            candidate.region.local_offset_in_resource !=
+                last_local + series.local_stride ||
+            candidate.region.remote_offset_in_resource !=
+                last_remote + series.remote_stride) {
+          continue;
+        }
+        if (repeats == 1) {
+          previous.local_stride = series.local_stride;
+          previous.remote_stride = series.remote_stride;
+        }
+        ++previous.repeat_count;
+        open[static_cast<size_t>(index)].last_logical =
+            candidate.logical_offset;
+        placed = true;
+        break;
+      }
+      if (!placed) {
+        push_new(candidate);
+      }
+      continue;
+    }
+
     if (output->empty() ||
         !same_template_key(output->back(), candidate.region)) {
-      output->emplace_back(candidate.region);
-      last_logical_offsets.emplace_back(candidate.logical_offset);
+      push_new(candidate);
       continue;
     }
 
     StridedRegionTemplate& previous = output->back();
-    const uint64_t previous_logical = last_logical_offsets.back();
+    const uint64_t previous_logical = open.back().last_logical;
     if (candidate.logical_offset <= previous_logical ||
         candidate.region.local_offset_in_resource <=
             previous.local_offset_in_resource ||
         candidate.region.remote_offset_in_resource <=
             previous.remote_offset_in_resource) {
-      output->emplace_back(candidate.region);
-      last_logical_offsets.emplace_back(candidate.logical_offset);
+      push_new(candidate);
       continue;
     }
 
@@ -778,8 +930,7 @@ void compact_planned_regions(std::vector<PlannedAtomicRegion>* candidates,
                              local_stride == previous.local_stride &&
                              remote_stride == previous.remote_stride;
     if ((!can_start_repeat && !same_repeat) || logical_stride == 0) {
-      output->emplace_back(candidate.region);
-      last_logical_offsets.emplace_back(candidate.logical_offset);
+      push_new(candidate);
       continue;
     }
     if (can_start_repeat) {
@@ -787,8 +938,9 @@ void compact_planned_regions(std::vector<PlannedAtomicRegion>* candidates,
       previous.remote_stride = remote_stride;
     }
     ++previous.repeat_count;
-    last_logical_offsets.back() = candidate.logical_offset;
+    open.back().last_logical = candidate.logical_offset;
   }
+  fold_contiguous_templates(output);
 }
 
 bool same_bound_domain(const BoundRegion& lhs, const BoundRegion& rhs) {
@@ -817,7 +969,8 @@ Status bind_regions(
     const std::unordered_map<uint64_t, ResourceMappingView>* explicit_mappings,
     CacheNamespace cache_namespace,
     int64_t layer_id,
-    std::vector<ByteRegion>* regions) {
+    std::vector<ByteRegion>* regions,
+    bool compact_strided_repeats) {
   if (regions == nullptr) {
     return invalid("bound region output must not be null");
   }
@@ -890,24 +1043,48 @@ Status bind_regions(
             remote_id * region_template.remote_resource_stride;
       }
 
-      for (uint64_t repeat = 0; repeat < region_template.repeat_count;
-           ++repeat) {
+      const uint64_t repeats =
+          region_template.repeat_count == 0 ? 1 : region_template.repeat_count;
+      const bool pack_stride =
+          compact_strided_repeats && repeats > 1 &&
+          region_template.bytes_per_region > 0 &&
+          region_template.local_stride >= region_template.bytes_per_region &&
+          region_template.remote_stride >= region_template.bytes_per_region;
+      const uint64_t repeat_limit = pack_stride ? 1 : repeats;
+      for (uint64_t repeat = 0; repeat < repeat_limit; ++repeat) {
         if (multiply_overflows(repeat, region_template.local_stride) ||
             multiply_overflows(repeat, region_template.remote_stride)) {
           return invalid("strided request region overflows");
         }
         const uint64_t local_repeat = repeat * region_template.local_stride;
         const uint64_t remote_repeat = repeat * region_template.remote_stride;
+        if (pack_stride &&
+            (multiply_overflows(repeats - 1, region_template.local_stride) ||
+             multiply_overflows(repeats - 1, region_template.remote_stride))) {
+          return invalid("strided request region overflows");
+        }
+        const uint64_t packed_local_span =
+            pack_stride ? (repeats - 1) * region_template.local_stride : 0;
+        const uint64_t packed_remote_span =
+            pack_stride ? (repeats - 1) * region_template.remote_stride : 0;
         if (add_overflows(local_resource_base,
                           region_template.local_offset_in_resource) ||
             add_overflows(
                 local_resource_base + region_template.local_offset_in_resource,
                 local_repeat) ||
+            add_overflows(local_resource_base +
+                              region_template.local_offset_in_resource +
+                              local_repeat,
+                          packed_local_span) ||
             add_overflows(remote_resource_base,
                           region_template.remote_offset_in_resource) ||
             add_overflows(remote_resource_base +
                               region_template.remote_offset_in_resource,
-                          remote_repeat)) {
+                          remote_repeat) ||
+            add_overflows(remote_resource_base +
+                              region_template.remote_offset_in_resource +
+                              remote_repeat,
+                          packed_remote_span)) {
           return invalid("bound request region offset overflows");
         }
         BoundRegion item;
@@ -920,12 +1097,29 @@ Status bind_regions(
                                     region_template.remote_offset_in_resource +
                                     remote_repeat;
         item.region.length = region_template.bytes_per_region;
+        if (pack_stride) {
+          item.region.repeat_count = repeats;
+          item.region.local_stride = region_template.local_stride;
+          item.region.remote_stride = region_template.remote_stride;
+        }
+        const uint64_t local_tail =
+            item.region.repeat_count > 1
+                ? item.region.local_offset +
+                      (item.region.repeat_count - 1) * item.region.local_stride
+                : item.region.local_offset;
+        const uint64_t remote_tail =
+            item.region.repeat_count > 1
+                ? item.region.remote_offset +
+                      (item.region.repeat_count - 1) * item.region.remote_stride
+                : item.region.remote_offset;
         if (item.region.local_offset > region_template.local_buffer_bytes ||
+            local_tail > region_template.local_buffer_bytes ||
             item.region.length >
-                region_template.local_buffer_bytes - item.region.local_offset ||
+                region_template.local_buffer_bytes - local_tail ||
             item.region.remote_offset > region_template.remote_buffer_bytes ||
-            item.region.length > region_template.remote_buffer_bytes -
-                                     item.region.remote_offset) {
+            remote_tail > region_template.remote_buffer_bytes ||
+            item.region.length >
+                region_template.remote_buffer_bytes - remote_tail) {
           return invalid("bound request region exceeds its manifest buffer");
         }
         item.logical_tensor = region_template.logical_tensor;
@@ -972,6 +1166,11 @@ Status bind_regions(
       continue;
     }
     ByteRegion& previous = regions->back();
+    if (previous.repeat_count > 1 || item.region.repeat_count > 1) {
+      regions->emplace_back(item.region);
+      previous_domain = item;
+      continue;
+    }
     const bool adjacent =
         previous.local_buffer_id == item.region.local_buffer_id &&
         previous.remote_buffer_id == item.region.remote_buffer_id &&
@@ -992,16 +1191,17 @@ Status bind_regions(
   return Status();
 }
 
-}  // namespace
+struct SourceSelection {
+  std::vector<size_t> indices;
+  SpanWriters homogeneous_writers = SpanWriters::declared();
+  bool collapse_partitions = false;
+};
 
-Status ReshardPlanner::select_sources(
+Status select_source_writers(
     const std::vector<WorkerCacheLayoutManifest>& sources,
     const WorkerCacheLayoutManifest& destination,
-    std::vector<size_t>* selected_indices) const {
-  if (selected_indices == nullptr) {
-    return invalid("selected source index output must not be null");
-  }
-  selected_indices->clear();
+    SourceSelection* selection) {
+  selection->indices.clear();
   const Status destination_status = validate_worker_cache_layout(destination);
   if (!destination_status.ok()) {
     return invalid("invalid destination layout: " +
@@ -1073,7 +1273,28 @@ Status ReshardPlanner::select_sources(
   if (!coverage.ok()) {
     return coverage;
   }
-  selected_indices->swap(writers);
+  selection->indices.swap(writers);
+  selection->homogeneous_writers = std::move(homogeneous_writers);
+  selection->collapse_partitions = collapse_partitions;
+  return Status();
+}
+
+}  // namespace
+
+Status ReshardPlanner::select_sources(
+    const std::vector<WorkerCacheLayoutManifest>& sources,
+    const WorkerCacheLayoutManifest& destination,
+    std::vector<size_t>* selected_indices) const {
+  if (selected_indices == nullptr) {
+    return invalid("selected source index output must not be null");
+  }
+  selected_indices->clear();
+  SourceSelection selection;
+  const Status status = select_source_writers(sources, destination, &selection);
+  if (!status.ok()) {
+    return status;
+  }
+  *selected_indices = std::move(selection.indices);
   return Status();
 }
 
@@ -1140,14 +1361,11 @@ Status select_replicated_index_source_page(
   return Status();
 }
 
-}  // namespace
-
-Status ReshardPlanner::build_outgoing_plan(
-    const WorkerCacheLayoutManifest& source,
-    const WorkerCacheLayoutManifest& destination,
-    ReshardPlanTemplate* plan,
-    bool include_replicas,
-    int32_t source_cp_index_write_mode) const {
+Status build_outgoing_plan_impl(const WorkerCacheLayoutManifest& source,
+                                const WorkerCacheLayoutManifest& destination,
+                                ReshardPlanTemplate* plan,
+                                const SpanWriters& writers,
+                                int32_t source_cp_index_write_mode) {
   if (plan == nullptr) {
     return invalid("reshard plan output must not be null");
   }
@@ -1167,14 +1385,7 @@ Status ReshardPlanner::build_outgoing_plan(
 
   std::vector<AtomicLogicalRegion> source_regions;
   std::vector<AtomicLogicalRegion> destination_regions;
-  // The data plane is built for a peer the link already selected, so with
-  // `include_replicas` the source owns everything it holds -- including replica
-  // copies of a replicated tensor. Filtering by the declared owner would
-  // silently drop those bytes for every non-owning KV-split partition.
-  expand_manifest(source,
-                  include_replicas ? SpanWriters::everything()
-                                   : source_writers(source.coordinates),
-                  &source_regions);
+  expand_manifest(source, writers, &source_regions);
   expand_manifest(destination, SpanWriters::everything(), &destination_regions);
   const RegionGroups source_groups = group_regions(source_regions);
   const RegionGroups destination_groups = group_regions(destination_regions);
@@ -1201,6 +1412,15 @@ Status ReshardPlanner::build_outgoing_plan(
               logical_end(source_region), logical_end(destination_region));
           PlannedAtomicRegion candidate;
           candidate.logical_offset = logical_begin;
+          if (source_region.logical_stride > 0 &&
+              source_region.logical_stride ==
+                  destination_region.logical_stride &&
+              source_region.physical_stride >= source_region.length &&
+              destination_region.physical_stride >= destination_region.length) {
+            candidate.logical_series_stride = source_region.logical_stride;
+            candidate.local_series_stride = source_region.physical_stride;
+            candidate.remote_series_stride = destination_region.physical_stride;
+          }
           StridedRegionTemplate& region = candidate.region;
           region.cache_namespace = source_region.cache_namespace;
           region.layer_id = source_region.layer_id;
@@ -1245,11 +1465,64 @@ Status ReshardPlanner::build_outgoing_plan(
       source, source_cp_index_write_mode, plan);
 }
 
+}  // namespace
+
+Status ReshardPlanner::build_outgoing_plan(
+    const WorkerCacheLayoutManifest& source,
+    const WorkerCacheLayoutManifest& destination,
+    ReshardPlanTemplate* plan,
+    bool include_replicas,
+    int32_t source_cp_index_write_mode) const {
+  return build_outgoing_plan_impl(source,
+                                  destination,
+                                  plan,
+                                  include_replicas
+                                      ? SpanWriters::everything()
+                                      : source_writers(source.coordinates),
+                                  source_cp_index_write_mode);
+}
+
+Status ReshardPlanner::build_incoming_plans(
+    const std::vector<WorkerCacheLayoutManifest>& sources,
+    const WorkerCacheLayoutManifest& destination,
+    std::vector<size_t>* selected_indices,
+    std::vector<ReshardPlanTemplate>* plans) const {
+  if (selected_indices == nullptr || plans == nullptr) {
+    return invalid("incoming plan outputs must not be null");
+  }
+  selected_indices->clear();
+  plans->clear();
+  SourceSelection selection;
+  const Status selection_status =
+      select_source_writers(sources, destination, &selection);
+  if (!selection_status.ok()) {
+    return selection_status;
+  }
+  std::vector<ReshardPlanTemplate> incoming_plans(sources.size());
+  for (size_t index : selection.indices) {
+    const WorkerCacheLayoutManifest& source = sources[index];
+    const Status plan_status = build_outgoing_plan_impl(
+        source,
+        destination,
+        &incoming_plans[index],
+        selection.collapse_partitions ? source_writers(source.coordinates)
+                                      : selection.homogeneous_writers,
+        kCpIndexWriteModeReplicated);
+    if (!plan_status.ok()) {
+      return plan_status;
+    }
+  }
+  *selected_indices = std::move(selection.indices);
+  *plans = std::move(incoming_plans);
+  return Status();
+}
+
 Status RequestRegionBinder::bind(const ReshardPlanTemplate& plan,
                                  const std::vector<KVTransferMapping>& mappings,
                                  CacheNamespace cache_namespace,
                                  int64_t layer_id,
-                                 std::vector<ByteRegion>* regions) const {
+                                 std::vector<ByteRegion>* regions,
+                                 bool compact_strided_repeats) const {
   std::unordered_map<int32_t, ResourceMappingView> mappings_by_group;
   mappings_by_group.reserve(mappings.size());
   for (const KVTransferMapping& mapping : mappings) {
@@ -1268,7 +1541,47 @@ Status RequestRegionBinder::bind(const ReshardPlanTemplate& plan,
                       /*explicit_mappings=*/nullptr,
                       cache_namespace,
                       layer_id,
-                      regions);
+                      regions,
+                      compact_strided_repeats);
+}
+
+Status RequestRegionBinder::bind_pull(
+    const ReshardPlanTemplate& plan,
+    const std::vector<KVTransferMapping>& mappings,
+    CacheNamespace cache_namespace,
+    int64_t layer_id,
+    std::vector<ByteRegion>* regions,
+    bool compact_strided_repeats) const {
+  if (regions == nullptr) {
+    return invalid("bound region output must not be null");
+  }
+  std::vector<KVTransferMapping> source_mappings;
+  source_mappings.reserve(mappings.size());
+  for (const KVTransferMapping& mapping : mappings) {
+    KVTransferMapping source_mapping;
+    source_mapping.group_id = mapping.group_id;
+    source_mapping.local_ids = mapping.remote_ids;
+    source_mapping.remote_ids = mapping.local_ids;
+    source_mappings.emplace_back(std::move(source_mapping));
+  }
+  std::vector<ByteRegion> source_regions;
+  const Status status = bind(plan,
+                             source_mappings,
+                             cache_namespace,
+                             layer_id,
+                             &source_regions,
+                             compact_strided_repeats);
+  if (!status.ok()) {
+    return status;
+  }
+  for (ByteRegion& region : source_regions) {
+    std::swap(region.local_buffer_id, region.remote_buffer_id);
+    std::swap(region.local_offset, region.remote_offset);
+    // Plan strides are source/destination. bind_pull returns local = puller.
+    std::swap(region.local_stride, region.remote_stride);
+  }
+  *regions = std::move(source_regions);
+  return Status();
 }
 
 Status RequestRegionBinder::bind_explicit(
@@ -1304,7 +1617,8 @@ Status RequestRegionBinder::bind_explicit(
                       &mappings_by_tensor,
                       cache_namespace,
                       layer_id,
-                      regions);
+                      regions,
+                      /*compact_strided_repeats=*/false);
 }
 
 }  // namespace xllm

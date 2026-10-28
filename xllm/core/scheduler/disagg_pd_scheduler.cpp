@@ -36,7 +36,6 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
 #include "disagg_pd.pb.h"
-#include "disagg_pd_scheduler.h"
 #include "distributed_runtime/engine.h"
 #include "framework/batch/batch_factory.h"
 #include "framework/block/block_manager_pool.h"
@@ -94,6 +93,35 @@ void drain_dispatch_queue(
       return;
     }
     pending->push(std::move(incoming));
+  }
+}
+
+// A legacy HTTP-style allocation response is still authoritative on MUSA.
+// Translate its observed result, including retry count and RPC time, before
+// publishing any Prefill output. Missing evidence otherwise makes the Service
+// classify successful requests as UNKNOWN and reduce subsequent batch grants.
+void record_decode_admission(Request* request,
+                             const proto::DisaggResponse& response,
+                             uint64_t rpc_duration_ns) {
+  auto& observed = request->state().decode_admission;
+  if (!observed.has_value()) {
+    observed.emplace();
+  }
+  CHECK_LT(observed->attempts, std::numeric_limits<uint32_t>::max());
+  CHECK_LE(rpc_duration_ns,
+           std::numeric_limits<uint64_t>::max() - observed->rpc_duration_ns);
+  ++observed->attempts;
+  observed->rpc_duration_ns += rpc_duration_ns;
+  if (response.status_code() == 200) {
+    observed->disposition = proto::ADMISSION_DISPOSITION_ACCEPTED;
+    observed->reason = proto::ADMISSION_REASON_NONE;
+  } else if (is_permanent_rejection(response.status_code())) {
+    observed->disposition = proto::ADMISSION_DISPOSITION_PERMANENTLY_INFEASIBLE;
+    observed->reason = proto::ADMISSION_REASON_CONTEXT_TOO_LARGE;
+  } else {
+    observed->disposition =
+        proto::ADMISSION_DISPOSITION_TEMPORARILY_UNAVAILABLE;
+    observed->reason = proto::ADMISSION_REASON_KV_TEMPORARILY_INSUFFICIENT;
   }
 }
 
@@ -224,21 +252,24 @@ DisaggPDScheduler::DisaggPDScheduler(Engine* engine, const Options& options)
 }
 
 DisaggPDScheduler::~DisaggPDScheduler() {
-  // Clean up common threads (shared by both OOC and non-OOC modes)
+  // Stop accepting RPCs while the service and scheduler dependencies are alive.
+  // The RPC thread waits in Server::Join(), so Stop must precede its join.
+  auto rpc_server = ServerRegistry::get_instance().get_server(server_name_);
+  if (rpc_server != nullptr) {
+    rpc_server->stop();
+  }
   if (rpc_server_thread_ && rpc_server_thread_->joinable()) {
     rpc_server_thread_->join();
   }
 
-  // Clean up dispatch thread (created in base class for non-OOC mode,
-  // or in subclass for OOC mode)
+  // Both dispatch queues use a null request as their termination signal.
+  prefill_request_queue_.enqueue(nullptr);
+  prefill_request_queue_offline_.enqueue(nullptr);
   if (dispatch_thread_ && dispatch_thread_->joinable()) {
     dispatch_thread_->join();
   }
 
-  auto rpc_server = ServerRegistry::get_instance().get_server(server_name_);
   if (rpc_server != nullptr) {
-    rpc_server->stop();
-
     ServerRegistry::get_instance().unregister_server(server_name_);
   }
 }
@@ -607,6 +638,9 @@ void DisaggPDScheduler::dispatch_requests() {
       req->set_req_id(requests[i]->request_id());
       req->set_reservation_id(requests[i]->state().pd_reservation_id);
       req->set_service_req_id(requests[i]->service_request_id());
+      if (requests[i]->v2_attempt_seq().has_value()) {
+        req->set_service_attempt_seq(*requests[i]->v2_attempt_seq());
+      }
       req->set_source_xservice_addr(requests[i]->source_xservice_addr());
       req->set_tokens_num(requests[i]->state().prompt_tokens.size());
       req->set_prompt(requests[i]->state().prompt);
@@ -678,10 +712,16 @@ void DisaggPDScheduler::dispatch_requests() {
     stub->AddNewRequests(&cntl, &reqs, &resps, nullptr);
     const double allocation_rpc_seconds =
         allocation_rpc_timer.elapsed_seconds();
+    const uint64_t allocation_rpc_duration_ns =
+        static_cast<uint64_t>(allocation_rpc_seconds * 1000000000.0);
     if (cntl.Failed()) {
       LOG(ERROR) << "Failed to add new requests to decode instance : "
                  << selected_instance << ", error text : " << cntl.ErrorText();
       for (auto& request : requests) {
+        // A failed RPC cannot prove that Decode rejected the reservation.
+        // Clear any earlier retry observation and let Service retain UNKNOWN
+        // ownership until its normal query/cancel cleanup proves termination.
+        request->state().decode_admission.reset();
         response_processor_->process_failed_request(
             request,
             {StatusCode::UNKNOWN,
@@ -705,6 +745,8 @@ void DisaggPDScheduler::dispatch_requests() {
       linked_instance_.emplace(selected_instance);
     }
     for (size_t i = 0; i < requests.size(); ++i) {
+      record_decode_admission(
+          requests[i].get(), resps.resps()[i], allocation_rpc_duration_ns);
       if (resps.resps()[i].status_code() != 200) {
         if (is_permanent_rejection(resps.resps()[i].status_code())) {
           LOG(ERROR) << "Decode rejected an oversized prompt, request_id="
@@ -831,6 +873,18 @@ void DisaggPDScheduler::prefill_send_first_generation() {
       if (!options_.disable_log_stats()) {
         request->log_statistic(request->elapsed_seconds());
       }
+#if defined(USE_MUSA)
+      if (options_.kv_cache_transfer_mode() == "PULL") {
+        auto* pool = dynamic_cast<BlockManagerPool*>(kv_cache_manager_);
+        if (pool != nullptr) {
+          const size_t released = pool->reclaim_completed_pd_prefill_swa(
+              request->sequences()[0].get());
+          LOG(INFO) << "[DSV4_PD_PREFILL_RECLAIM] request_id="
+                    << request->request_id() << ", released_swa=" << released
+                    << ", free_swa=" << pool->swa_free_blocks();
+        }
+      }
+#endif
       requests.emplace_back(request);
       if (!request->state().stream) {
         non_stream_requests.emplace_back(request);
@@ -895,6 +949,8 @@ void DisaggPDScheduler::prefill_send_first_generation() {
       } else {
         gen->set_num_cached_tokens(static_cast<int32_t>(num_cached_tokens));
       }
+      gen->set_mrope_position_delta(
+          request->sequences()[0]->get_mrope_position_delta());
       if (request->sequences()[0]->first_token().has_value()) {
         auto token = gen->mutable_tokens()->Add();
         token->set_token_id(
@@ -999,6 +1055,12 @@ void DisaggPDScheduler::prefill_send_first_generation() {
       // TODO: Async call later
       proto::Status resp;
       brpc::Controller cntl;
+      // The first-token response was queued by ContinuousScheduler::step.
+      // Drain its response/RPC tasks before Decode may generate more tokens;
+      // waiting only after FirstGeneration allows Decode's SSE to overtake it.
+      response_processor_->wait_completion();
+      LOG_FIRST_N(INFO, 1)
+          << "[PD_FIRST_TOKEN_ORDER] responses_drained_before_decode_handoff";
       Timer rpc_timer;
       gen->set_upstream_elapsed_seconds(request->end_to_end_latency_seconds());
       stub->FirstGeneration(&cntl, &gens, &resp, nullptr);
@@ -1150,7 +1212,8 @@ bool DisaggPDScheduler::decode_recv_first_generation(
     int32_t src_dp_size,
     int32_t src_dp_rank,
     torch::Tensor mtp_bootstrap_embedding,
-    int32_t num_cached_tokens) {
+    int32_t num_cached_tokens,
+    int32_t mrope_position_delta) {
   Timer receive_timer;
   // push to request_queue_, and will be executed by engine.
   std::shared_ptr<Request> request = nullptr;
@@ -1184,6 +1247,7 @@ bool DisaggPDScheduler::decode_recv_first_generation(
   }
   request->record_num_prefix_cache_tokens(
       static_cast<size_t>(num_cached_tokens));
+  sequence->set_mrope_position_delta(mrope_position_delta);
   const bool need_mtp_bootstrap = options_.num_speculative_tokens() > 0;
   if (need_mtp_bootstrap) {
     const int32_t slot_id = sequence->get_embedding_block_id();
@@ -1276,13 +1340,23 @@ bool DisaggPDScheduler::decode_recv_first_generation(
             mapping.remote_ids.size() < blocks.size()) {
           local_begin = blocks.size() - mapping.remote_ids.size();
         }
+        // Slid-out SWA pages keep logical UINT64_MAX placeholders. Filter
+        // both sides together so valid local pages never pair with sentinels.
+        std::vector<uint64_t> filtered_remote_ids;
+        filtered_remote_ids.reserve(mapping.remote_ids.size());
         mapping.local_ids.reserve(blocks.size() - local_begin);
         for (size_t index = local_begin; index < blocks.size(); ++index) {
           const Block& block = blocks[index];
-          if (block.is_valid()) {
+          const size_t remote_index = index - local_begin;
+          const bool remote_valid = remote_index < mapping.remote_ids.size() &&
+                                    mapping.remote_ids[remote_index] !=
+                                        std::numeric_limits<uint64_t>::max();
+          if (block.is_valid() && remote_valid) {
             mapping.local_ids.emplace_back(static_cast<uint64_t>(block.id()));
+            filtered_remote_ids.emplace_back(mapping.remote_ids[remote_index]);
           }
         }
+        mapping.remote_ids = std::move(filtered_remote_ids);
       }
       if (mapping.local_ids.size() != mapping.remote_ids.size()) {
         LOG(ERROR) << "PULL KV mapping size mismatch, request_id=" << req_id

@@ -89,7 +89,7 @@ cc_test(
     GTest::gtest_main
 )
 
-if(USE_NPU OR USE_MLU)
+if(USE_NPU OR USE_MLU OR USE_MUSA)
 cc_test(
   NAME
     mooncake_transfer_engine_test
@@ -195,3 +195,14 @@ cc_test(
     GTest::gtest_main
 )
 endif()
+
+
+cc_test(
+  NAME
+    staged_read_plan_test
+  CPU_ONLY
+  SRCS
+    staged_read_plan_test.cpp
+  DEPS
+    GTest::gtest_main
+)

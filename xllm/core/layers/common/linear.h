@@ -117,6 +117,28 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
   // Get FP8 input scale for fused RMSNorm+FP8 quantization
   std::optional<torch::Tensor> get_input_scale() const;
 
+#if defined(USE_MUSA)
+  // Replaces the unquantized weight with a 128x128 block-FP8 quantization of
+  // `source_weight`, which must match this layer's weight shape.
+  void load_block_fp8_from(const torch::Tensor& source_weight);
+
+  // load_block_fp8_from() that also keeps `source_weight`: forward() then
+  // recomputes the `exact_top_k` largest outputs of every row with it.
+  void load_block_fp8_with_exact_top_k_from(const torch::Tensor& source_weight,
+                                            int64_t exact_top_k);
+
+  // Keeps a 128x128 block-FP8 copy of the `row_ids` rows of `source_weight`
+  // only. forward() still returns source_weight.size(0) output features: the
+  // kept rows land in their original columns and every other column is -inf.
+  void load_block_fp8_rows_from(const torch::Tensor& source_weight,
+                                const torch::Tensor& row_ids);
+
+  // forward() for an input already quantized to group-128 FP8.
+  torch::Tensor forward_block_fp8_quantized(torch::Tensor input,
+                                            torch::Tensor input_scale);
+  bool supports_block_fp8_quantized_input() const;
+#endif
+
  private:
   // parameter members, must be registered
   // we allocate the transpose since linear performs XA^T.
@@ -165,6 +187,12 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
 #if defined(USE_MUSA)
   bool block_fp8_resolved_unquantized_ = false;
   mutable torch::Tensor matmul_output_buffer_;
+  // Set by load_block_fp8_rows_from(): output column of each kept weight row.
+  torch::Tensor output_column_ids_;
+  int64_t full_out_features_ = 0;
+  // Set by load_block_fp8_with_exact_top_k_from().
+  torch::Tensor exact_weight_;
+  int64_t exact_top_k_ = 0;
 #endif
 };
 TORCH_MODULE(ColumnParallelLinear);
@@ -233,6 +261,18 @@ class QKVParallelLinearImpl : public torch::nn::Module {
   // Get FP8 input scale for fused RMSNorm+FP8 quantization
   // For QKV, returns max of Q/K/V scales (per-tensor)
   std::optional<torch::Tensor> get_input_scale() const;
+#if defined(USE_MUSA)
+  // Block-FP8 weight scales; used by Qwen3Next attention Q/G row reorder.
+  torch::Tensor weight_scale_inv() const { return weight_scale_inv_; }
+  bool is_weight_scale_inv_loaded() const {
+    return weight_scale_inv_is_loaded_;
+  }
+
+  // forward() for an input already quantized to group-128 FP8.
+  torch::Tensor forward_block_fp8_quantized(torch::Tensor input,
+                                            torch::Tensor input_scale);
+  bool supports_block_fp8_quantized_input() const;
+#endif
 
  private:
   // parameter members, must be registered
@@ -313,6 +353,13 @@ class RowParallelLinearImpl : public torch::nn::Module {
   torch::Tensor forward(torch::Tensor input);
 
   torch::Tensor forward(torch::Tensor input, RowParallelReduceMode reduce_mode);
+
+#if defined(USE_MUSA)
+  // Prefused dense SwiGLU+FP8 path: quantized activation + scale.
+  torch::Tensor forward_block_fp8_quantized(torch::Tensor input,
+                                            torch::Tensor input_scale);
+  bool supports_block_fp8_quantized_input() const;
+#endif
 
   // load the weight from the checkpoint
   void load_state_dict(const StateDict& state_dict);
@@ -419,7 +466,10 @@ class ReplicatedLinearImpl : public torch::nn::Module {
       const torch::TensorOptions& options,
       const LinearExtraArgs& linear_extra_args = LinearExtraArgs());
 
-  torch::Tensor forward(torch::Tensor input);
+  // Fixed-address output is supported by MUSA FP8 and plain matmul paths.
+  torch::Tensor forward(
+      torch::Tensor input,
+      const std::optional<torch::Tensor>& output = std::nullopt);
 
   // load the weight from the checkpoint
   void load_state_dict(const StateDict& state_dict);

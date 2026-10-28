@@ -1,0 +1,70 @@
+{
+  "container": "decode_TP2_dev",
+  "identity": {
+    "hostname": "worker38092",
+    "pid_namespace": "pid:[4026541194]",
+    "container_id": "6b0418c40f88a68d337ac91ad7b9dc027563e417f8d0bce4d144d3b638b9e657"
+  },
+  "mode": "standalone",
+  "private_etcd": "",
+  "host": "10.121.38.92",
+  "gpus": [
+    6,
+    7
+  ],
+  "custom_all_reduce": true,
+  "mtp_k": 3,
+  "draft_vocab": "",
+  "concurrency": 8,
+  "memory_utilization": 0.85,
+  "random_seed": 42,
+  "model_id": "Qwen3.8-27B-FP8",
+  "runtime_directory": "/workspace/decode_tp2_dev_artifacts/runtime",
+  "paths": {
+    "binary": "/workspace/decode_tp2_dev_artifacts/bin/xllm.native_tp2_pull_coalesced.r4",
+    "model": "/data/nfs_shared/models/Qwen3.8-27B-FP8",
+    "preload": "/workspace/artifacts/libmusa_backend_init.so",
+    "mooncake_lib": "/workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310/mooncake-common"
+  },
+  "ports": {
+    "http": 65100,
+    "master": 65200,
+    "transfer": [
+      65300,
+      65310
+    ],
+    "disagg": 65400,
+    "mooncake": [
+      [
+        31600,
+        31616
+      ],
+      [
+        31632,
+        31648
+      ]
+    ]
+  },
+  "environment": {
+    "MUSA_HOME": "/usr/local/musa",
+    "MATE_HOME": "/workspace/mate",
+    "MATE_WORKSPACE_BASE": "/opt/mate027_cache",
+    "MATE_MUSA_ARCH_LIST": "3.1",
+    "MATE_MUBIN_DIR": "/usr/local/lib/python3.10/dist-packages/mate_mubin/mubin",
+    "FLASHINFER_OPS_PATH": "/opt/mate027_cache/mp31/cached_ops_jd_k8d",
+    "XLLM_GDN_DECODE_BACKEND": "mate",
+    "XLLM_MATE_GDN_MTP": "1",
+    "XLLM_MATE_GDN_PREFILL": "1",
+    "XLLM_MUSA_POOL_COMPUTE_STREAM": "1",
+    "XLLM_USE_FA3": "1",
+    "XLLM_USE_FA3_DECODE": "1",
+    "XLLM_GRAPH_TIMING": "0",
+    "XLLM_SPEC_VERIFY_LARGE_BATCH_EAGER": "0",
+    "XLLM_PACKED_PREFILL_PIECEWISE": "0",
+    "XLLM_PIECEWISE_CAPTURE_FA3": "1",
+    "OMP_NUM_THREADS": "16",
+    "MKL_NUM_THREADS": "16",
+    "LD_LIBRARY_PATH": "/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib/python3.10/dist-packages/tilelang/lib:/usr/local/lib/python3.10/dist-packages/z3/lib:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/workspace/mudnn_3.4.0/lib:/workspace/MCCL_2.3.0/mccl/lib:/usr/local/openmpi/lib:/opt/intel/oneapi/mkl/lib/intel64:/usr/lib:/usr/lib/x86_64-linux-gnu",
+    "XLLM_MUSA_PULL_STAGING_MB": "512"
+  }
+}

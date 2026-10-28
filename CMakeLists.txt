@@ -6,10 +6,17 @@ option(USE_MLU "Enable MLU support" OFF)
 option(USE_ILU "Enable ILU support" OFF)
 option(USE_CUDA "Enable CUDA support" OFF)
 option(USE_MUSA "Enable MUSA support" OFF)
+set(XLLM_DSV4_PD_ROLE "prefill" CACHE STRING
+    "DeepSeek-V4 MUSA source role: prefill or decode")
+set_property(CACHE XLLM_DSV4_PD_ROLE PROPERTY STRINGS prefill decode)
+if(NOT XLLM_DSV4_PD_ROLE STREQUAL "prefill" AND
+   NOT XLLM_DSV4_PD_ROLE STREQUAL "decode")
+  message(FATAL_ERROR "XLLM_DSV4_PD_ROLE must be prefill or decode")
+endif()
 option(USE_DCU "Enable DCU support" OFF)
 option(USE_MACA "Enable MACA support" OFF)
-set(USE_ETCD ON CACHE BOOL "Build Mooncake etcd support" FORCE)
-set(STORE_USE_ETCD ON CACHE BOOL "Build Mooncake Store etcd support" FORCE)
+option(USE_ETCD "Build Mooncake etcd support" ON)
+option(STORE_USE_ETCD "Build Mooncake Store etcd support" ON)
 add_compile_definitions(YLT_ENABLE_IBV)
 add_definitions(-DYLT_ENABLE_IBV)
 set(YLT_ENABLE_IBV ON)
@@ -655,13 +662,15 @@ if(USE_MUSA)
   if(NOT _PYTHON_PLATLIB_RESULT EQUAL 0 OR "${_PYTHON_PLATLIB}" STREQUAL "")
     message(FATAL_ERROR "Failed to obtain Python platlib from sysconfig.get_paths()")
   endif()
-  set(_TVM_FFI_ROOT "${_PYTHON_PLATLIB}/tvm_ffi")
+  set(XLLM_TVM_FFI_ROOT "${_PYTHON_PLATLIB}/tvm_ffi" CACHE PATH
+      "TVM FFI headers and libraries for the MUSA runtime")
+  set(_TVM_FFI_ROOT "${XLLM_TVM_FFI_ROOT}")
   set(tvm_ffi_INCLUDE_DIR "${_TVM_FFI_ROOT}/include")
   set(tvm_ffi_LIB_DIR "${_TVM_FFI_ROOT}/lib")
   if(NOT IS_DIRECTORY "${tvm_ffi_INCLUDE_DIR}" OR
      NOT IS_DIRECTORY "${tvm_ffi_LIB_DIR}")
     message(FATAL_ERROR
-            "tvm_ffi is not installed under Python platlib: ${_PYTHON_PLATLIB}")
+            "TVM FFI headers or libraries missing under ${_TVM_FFI_ROOT}")
   endif()
   
 
@@ -874,26 +883,28 @@ endif()
 # Configure third_party first so xllm can link against real CMake targets.
 
 add_subdirectory(third_party)
-if(NOT TARGET build_etcd_wrapper OR NOT TARGET mooncake_store)
-  message(FATAL_ERROR
-    "Mooncake Store requires its etcd wrapper targets")
-endif()
+if(USE_ETCD OR STORE_USE_ETCD)
+  if(NOT TARGET build_etcd_wrapper OR NOT TARGET mooncake_store)
+    message(FATAL_ERROR
+      "Mooncake Store requires its etcd wrapper targets")
+  endif()
 
-if(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
-  set(MOONCAKE_ETCD_RUNTIME_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
-else()
-  set(MOONCAKE_ETCD_RUNTIME_DIR "${CMAKE_BINARY_DIR}")
+  if(CMAKE_RUNTIME_OUTPUT_DIRECTORY)
+    set(MOONCAKE_ETCD_RUNTIME_DIR "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}")
+  else()
+    set(MOONCAKE_ETCD_RUNTIME_DIR "${CMAKE_BINARY_DIR}")
+  endif()
+  set(MOONCAKE_ETCD_WRAPPER
+      "${CMAKE_BINARY_DIR}/third_party/Mooncake/mooncake-common/etcd/libetcd_wrapper.so")
+  add_custom_target(stage_mooncake_etcd_runtime ALL
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${MOONCAKE_ETCD_RUNTIME_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${MOONCAKE_ETCD_WRAPPER}"
+            "${MOONCAKE_ETCD_RUNTIME_DIR}/libetcd_wrapper.so"
+    DEPENDS build_etcd_wrapper
+    COMMENT "Staging Mooncake etcd runtime")
+  add_dependencies(mooncake_store stage_mooncake_etcd_runtime)
 endif()
-set(MOONCAKE_ETCD_WRAPPER
-    "${CMAKE_BINARY_DIR}/third_party/Mooncake/mooncake-common/etcd/libetcd_wrapper.so")
-add_custom_target(stage_mooncake_etcd_runtime ALL
-  COMMAND ${CMAKE_COMMAND} -E make_directory "${MOONCAKE_ETCD_RUNTIME_DIR}"
-  COMMAND ${CMAKE_COMMAND} -E copy_if_different
-          "${MOONCAKE_ETCD_WRAPPER}"
-          "${MOONCAKE_ETCD_RUNTIME_DIR}/libetcd_wrapper.so"
-  DEPENDS build_etcd_wrapper
-  COMMENT "Staging Mooncake etcd runtime")
-add_dependencies(mooncake_store stage_mooncake_etcd_runtime)
 if(TARGET brpc-static AND NOT TARGET brpc)
   add_library(brpc ALIAS brpc-static)
 endif()
