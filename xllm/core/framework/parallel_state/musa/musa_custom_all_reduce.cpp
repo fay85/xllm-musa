@@ -494,6 +494,37 @@ std::optional<torch::Tensor> MusaCustomAllReduce::allreduce(
   return output;
 }
 
+std::optional<torch::Tensor> MusaCustomAllReduce::allreduce_in_slices(
+    torch::Tensor& input) {
+  const int64_t bytes = static_cast<int64_t>(input.nbytes());
+  if (!enabled_ || !input.defined() || input.device() != device_ ||
+      !supported_dtype(input.scalar_type()) || !input.is_contiguous() ||
+      !is_16_byte_aligned(input) || bytes <= max_size_bytes_ ||
+      bytes % 16 != 0) {
+    return std::nullopt;
+  }
+  const int64_t align_elems = 16 / static_cast<int64_t>(input.element_size());
+  const int64_t num_slices = (bytes + max_size_bytes_ - 1) / max_size_bytes_;
+  const int64_t slice_elems =
+      ((input.numel() + num_slices - 1) / num_slices + align_elems - 1) /
+      align_elems * align_elems;
+  torch::Tensor flat_input = input.view({-1});
+  torch::Tensor output = torch::empty_like(input);
+  torch::Tensor flat_output = output.view({-1});
+  for (int64_t offset = 0; offset < flat_input.numel();
+       offset += slice_elems) {
+    const int64_t count = std::min(slice_elems, flat_input.numel() - offset);
+    torch::Tensor in_slice = flat_input.narrow(/*dim=*/0, offset, count);
+    const std::optional<torch::Tensor> reduced =
+        allreduce(in_slice, flat_output.narrow(/*dim=*/0, offset, count));
+    if (!reduced.has_value()) {
+      CHECK_EQ(offset, 0) << "TP custom all-reduce failed after a slice";
+      return std::nullopt;
+    }
+  }
+  return output;
+}
+
 std::optional<torch::Tensor> MusaCustomAllReduce::allreduce_tp(
     torch::Tensor& input) {
   if (!enable_tp_allreduce_ || group_name_ != "tp_group" || world_size_ <= 1) {
@@ -501,6 +532,18 @@ std::optional<torch::Tensor> MusaCustomAllReduce::allreduce_tp(
   }
   CHECK(enabled_) << "Explicit MUSA TP custom all-reduce was not initialized";
   std::optional<torch::Tensor> output = allreduce(input);
+  if (!output.has_value()) {
+    output = allreduce_in_slices(input);
+    if (output.has_value()) {
+      LOG_FIRST_N(INFO, 1) << "[MUSA_TP_REDUCE] backend=custom_slices, group="
+                           << group_name_ << ", rank=" << rank_
+                           << ", world_size=" << world_size_
+                           << ", dtype=" << input.scalar_type()
+                           << ", shape=" << input.sizes()
+                           << ", bytes=" << input.nbytes();
+      return output;
+    }
+  }
   if (output.has_value()) {
     LOG_FIRST_N(INFO, 1) << "[MUSA_TP_REDUCE] backend=custom, group="
                          << group_name_ << ", rank=" << rank_

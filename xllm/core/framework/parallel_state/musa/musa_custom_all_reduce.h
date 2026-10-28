@@ -60,6 +60,8 @@ class MusaCustomAllReduce {
 
  private:
   bool should_use(const torch::Tensor& input) const;
+  // Both ranks must slice identically; each slice fits the IPC buffer.
+  std::optional<torch::Tensor> allreduce_in_slices(torch::Tensor& input);
   void init();
   std::vector<int64_t> create_shared_buffer(int64_t size_in_bytes,
                                             const std::string& name);
