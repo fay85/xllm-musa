@@ -73,8 +73,54 @@ P/D 均通过编译、链接、`ldd -r` 和 `--help`。
 - 本轮候选修复提交：`2b66eece4`，在上述独立构建及有限样本中通过。
 - 测试期间远端推进到 `89e8b4153`，涉及 100 个文件，包括共有通信、Graph、请求及 PD 代码。
 - 本地已无冲突合并为 `06dae67c0`，保留双方历史；这不等于整合后的二进制验收通过。
-- 未将合并结果推送到 feihu-1016-dev，需与并行任务协调后验证最新基线再发布。
+- 当时未将合并结果推送到 feihu-1016-dev；获得接管授权后，继续完成下文最新合并版验收，再发布。
 - 旧 refine 工作树仍有 21 个已跟踪文件未提交修改。它属于旧实验状态，本轮没有自动提交或覆盖；旧全量 GSM8K 成绩也没有转移为新候选成绩。
+
+## 最新远端合并版验收
+
+用户确认另一任务已结束并授权接管后，冻结源码提交 `5a54ef075fbe64ddf8effa2b3de730060f4f4022`（含 `89e8b4153` 与本轮修复），使用其最新 P/D 构建缓存重编本轮修改及头文件消费者，复制受影响静态库后独立链接。所有未修改依赖复用，没有覆盖其他任务 source/build。
+
+独立证据目录：`/data/nfs_shared/jd/dsv4_review2_integrated_20261029`。
+
+### 必须保留的配置边界
+
+另一任务验证 `89e8b4153` 的 Decode VMM + 内置 Custom AR IPC 组合在 B16 动态捕获时会失败。本次使用其通过的绕行配置：
+
+- Decode：`--enable_graph_vmm_pool=false`；Graph 与 overlap 仍开启。
+- 使用新版内置 Custom AR，P/D 均不加载旧 `libxllm_custom_ar_native.so`。
+- Prefill VMM 保持原值；AOT、模型、Control 沿用 r14 资产。
+- 此处没有修复底层 VMM/IPC，也没有验证 Decode VMM=true 可运行。
+
+### 构建与身份
+
+- P SHA256：`934a83264d9a55a9a7a00b83392f8d3ff42b2d2793fc469327f29af500fe1189`。
+- D SHA256：`c652e080224329f41c9ae5b49424a1f30f6caa6c746d1dfa545d9d32c9f9abb6`。
+- 3159 个源码文件与 Git archive 逐字节比较，0 不一致；archive SHA256 为 `b01f0e9851991952c75005f3409f39548f9b392387984180d074ca939969e052`。
+- P94/P96/D90 共 24 个 rank 的 exe、启动 ticks、argv、Graph/VMM 与 preload 实际环境检查通过，maps 和核查 JSON 在 `runtime/<role>/`。
+- 10 项 CPU 测试再次通过；P/D 编译、链接、ldd/help 通过。该构建复用依赖，不是完全无缓存 clean build。
+
+### 正确性与性能
+
+新的同输入顺序 A/B（baseline 为恢复后的 r14；candidate 为最新合并版 + D VMM off + 内置 AR）：
+
+| 并发 | 正式请求 | r14 TTFT ms | 合并版 TTFT ms | r14 TPOT ms | 合并版 TPOT ms | 合并版输出 tok/s |
+|---|---:|---:|---:|---:|---:|---:|
+| B1 | 64 | 530.964 | 532.863 | 9.547 | 9.125 | 69.551 |
+| B2 | 64 | 534.174 | 533.725 | 11.493 | 10.680 | 124.102 |
+
+两版均 132/132 严格通过（含 4 条预热）；正式请求全部 20000 输入、100 输出、cached_tokens=16000。输入文件 SHA256：`4baff1c187bd8758e1b69685473dfbbe4a27c8c5180c0b6a6409b02125161afa`。
+这次同时合入了上游通信等改动并改变 VMM/AR 配置，因此不能把 TPOT 差异单独归因于 getenv 缓存或本轮清理。
+
+额外 B16 短窗使用另一组冻结输入：primer 2/2、B1 warm 2/2、B1 正式 6/6、B16 warm 16/16、B16 正式 16/16，共 42/42 严格通过。
+正式 B16：TTFT 2279.227 ms，TPOT 20.450 ms，输出 267.916 tok/s。预热 TPOT 119.972 ms 包含动态 Graph capture，未作为稳态性能。
+
+GSM8K 前 20 题：20/20 正常 stop，boxed 答案与原 r14 全部一致；正文与原 r14 仅 4/20 相同，但与另一任务同配置 `89e8 + D VMM off` 的 20 条正文全部逐字一致。不要将此标为全量 GSM8K 准确率。
+
+主要证据：`build.log`、`source_integrity.json`、`results.json`、`smoke_baseline/`、`smoke_candidate/`、`b16/`、`unit.log`。
+
+### 非默认快照比例
+
+`XLLM_DSV4_PREFIX_SNAPSHOT_PERCENT=65` 的解析与边界算术已覆盖单测，但本次端到端只验收默认 80%。修改比例须对参与 Prefill 的进程统一设置并重启，再检查 state snapshot/cache 命中和正文正确性；不能只改压测客户端的比例。
 
 ## 未在本轮完成的项目
 
