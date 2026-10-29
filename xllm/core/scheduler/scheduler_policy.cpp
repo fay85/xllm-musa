@@ -400,6 +400,9 @@ void SchedulerPolicy::schedule_prefill_from_queue(
         prefill_sequence->set_dp_rank(dp_rank);
       }
 
+      if (!prefill_sequence->kv_state().has_any_blocks()) {
+        allocate_shared_blocks_for(prefill_sequence.get(), state);
+      }
       size_t num_tokens = compute_prefill_tokens(
           prefill_sequence.get(),
           budget.remaining_token_budget - allocated_tokens,
@@ -553,6 +556,30 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
                                            kv_split_for_align,
                                            state.kv_cache_manager->block_size(),
                                            remaining_in_seq);
+
+  if (has_linear_attention_layers(state.model_args) &&
+      state.enable_prefix_cache &&
+      seq->num_tokens() > 3 * max_tokens_per_chunk &&
+      kv_cache_tokens_num >= 3 * max_tokens_per_chunk &&
+      remaining_in_seq > 0) {
+    const size_t block_size =
+        static_cast<size_t>(std::max<int32_t>(1, state.kv_cache_manager->block_size()));
+    const size_t cp_align =
+        static_cast<size_t>(std::max<int32_t>(1, kv_split_for_align)) * block_size;
+    const size_t fine_stride =
+        std::max<size_t>(cp_align, std::min<size_t>(max_tokens_per_chunk, 2048));
+    const size_t next_fine_boundary =
+        ((kv_cache_tokens_num / fine_stride) + 1) * fine_stride;
+    if (next_fine_boundary < seq->num_tokens()) {
+      num_tokens = std::min(num_tokens, next_fine_boundary - kv_cache_tokens_num);
+    } else if (seq->num_tokens() > cp_align) {
+      const size_t last_cp_boundary =
+          ((seq->num_tokens() - 1) / cp_align) * cp_align;
+      if (last_cp_boundary > kv_cache_tokens_num) {
+        num_tokens = std::min(num_tokens, last_cp_boundary - kv_cache_tokens_num);
+      }
+    }
+  }
 
   return num_tokens;
 }

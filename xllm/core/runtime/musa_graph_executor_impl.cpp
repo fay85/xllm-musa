@@ -46,11 +46,14 @@ limitations under the License.
 #include "core/layers/musa/flashinfer_planinfo.h"
 #include "core/platform/cuda/device_capture_lock.h"
 #include "core/platform/device.h"
+#include "core/platform/musa_vmm_capture_pool.h"
 #include "core/runtime/decode_graph_bucket.h"
 #include "core/runtime/musa/graph_memory_policy.h"
+#include "core/runtime/musa/prefill_graph_policy.h"
 #include "core/util/env_var.h"
 #include "core/util/rec_model_utils.h"
 #include "core/util/utils.h"
+#include "torch_musa/csrc/core/MUSAGuard.h"
 
 namespace xllm::runtime::musa {
 
@@ -93,8 +96,7 @@ bool s_use_fa3_decode(int64_t gqa_ratio) {
     }
     return std::string(env) == "1" ? int32_t{1} : int32_t{0};
   }();
-  // Default ON for supported GQA ratios (match FA3 shape: 6 or 8).
-  return setting < 0 ? (gqa_ratio == 6 || gqa_ratio == 8) : setting == 1;
+  return setting < 0 ? gqa_ratio == 8 : setting == 1;
 }
 
 // Phase D: wall+device time for packed/eager pure-prefill forwards.
@@ -1105,6 +1107,9 @@ void MusaGraphPersistentParam::set_aux_hidden_states(
   }
   const uint32_t result_tokens = value.size(0);
   if (aux_hidden_states_.numel() == 0) {
+    CHECK(c10::musa::currentStreamCaptureStatusMayInitCtx() ==
+          c10::musa::CaptureStatus::None)
+        << "Persistent auxiliary buffers must be prepared before graph capture";
     // Lazy initialization: create aux_hidden_states tensor if not already
     // created
     const int64_t max_tokens_per_batch = options_.max_tokens_per_batch();
@@ -1932,9 +1937,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       !::xllm::RecConfig::get_instance().enable_xattention_one_stage() &&
       is_decode_with_llmrec;
   const int32_t head_dim = args_.head_dim();
-  const int64_t tp_size = options_.world_size() /
-                          (std::max(options_.dp_size(), 1) *
-                           std::max(options_.cp_size(), 1));
+  const int64_t tp_size =
+      options_.world_size() /
+      (std::max(options_.dp_size(), 1) * std::max(options_.cp_size(), 1));
   const int64_t n_heads = args_.n_heads() / std::max(tp_size, int64_t{1});
   const int64_t total_kv_heads = args_.n_kv_heads().value_or(args_.n_heads());
   const int64_t n_kv_heads =
@@ -2366,8 +2371,11 @@ bool MusaGraph::capture(CausalLM* model,
                         std::vector<KVCache>& kv_cache,
                         uint32_t bucket_num_tokens,
                         const c10::musa::MempoolId_t& pool,
-                        MusaMemPool* pool_ptr) {
+                        std::unique_ptr<MusaMemPool> pool_owner) {
   model_ = model;
+  CHECK(pool_owner_ == nullptr);
+  pool_owner_ = std::move(pool_owner);
+  MusaMemPool* pool_ptr = pool_owner_.get();
   padded_num_tokens_ = bucket_num_tokens;
   const uint32_t actual_num_tokens = tokens.size(0);
   captured_actual_tokens_ = actual_num_tokens;
@@ -2504,6 +2512,12 @@ bool MusaGraph::capture(CausalLM* model,
   LOG(INFO) << "MUSA graph capture begin, bucket_num_tokens: "
             << bucket_num_tokens
             << ", actual_num_tokens: " << actual_num_tokens;
+  size_t physical_free_before_warmup = 0;
+  size_t physical_total = 0;
+  if (is_piecewise_) {
+    CHECK_EQ(musaMemGetInfo(&physical_free_before_warmup, &physical_total),
+             musaSuccess);
+  }
 
   {
     // Normal capture mode for decode.
@@ -2515,20 +2529,36 @@ bool MusaGraph::capture(CausalLM* model,
         std::getenv("XLLM_MUSA_GRAPH_SKIP_WARMUP");
     const bool skip_graph_warmup = skip_graph_warmup_env != nullptr &&
                                    std::string(skip_graph_warmup_env) == "1";
+    void* const capture_stream_handle =
+        reinterpret_cast<void*>(capture_stream.stream());
+    std::optional<xllm::kernel::musa::TvmffiStreamOverrideGuard>
+        ffi_capture_stream_guard;
+    ffi_capture_stream_guard.emplace(persistent_param_.device(),
+                                     capture_stream_handle);
     // Warmup and FFI recording run eagerly before capture and must not advance
     // DSV4 compressor/indexer state. The real captured forward below is the
     // first preparation pass allowed to mutate that state.
+    // For non-piecewise decode/verify graphs, the FFI recording forward below
+    // serves as the 2nd eager warmup pass, cutting preparation from 3 full
+    // eager forwards down to 2.
     xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(true);
-    for (int warmup_iter = 0; warmup_iter < (skip_graph_warmup ? 0 : 2);
+    const int num_warmup_iters =
+        skip_graph_warmup ? 0 : (is_piecewise_ ? 2 : 1);
+    for (int warmup_iter = 0; warmup_iter < num_warmup_iters;
          ++warmup_iter) {
       capture_stream.synchronize();
       {
         xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
-        model->forward(
+        auto warmup_output = model->forward(
             persistent_param_.persistent_tokens(padded_num_tokens_),
             persistent_param_.persistent_positions(padded_num_tokens_),
             kv_cache,
             graph_params_opt.value());
+        if (should_capture_graph_aux_hidden_states(args, options) &&
+            warmup_output.aux_hidden_states.defined()) {
+          persistent_param_.set_aux_hidden_states(
+              warmup_output.aux_hidden_states);
+        }
       }
       xllm::kernel::musa::sync_ffi_stream(persistent_param_.device());
       if (snapshot_linear_state) {
@@ -2543,6 +2573,16 @@ bool MusaGraph::capture(CausalLM* model,
       }
     }
     capture_stream.synchronize();
+
+    if (is_piecewise_) {
+      size_t physical_free_after_warmup = 0;
+      CHECK_EQ(musaMemGetInfo(&physical_free_after_warmup, &physical_total),
+               musaSuccess);
+      LOG(INFO) << "MUSA Prefill preparation: bucket_num_tokens="
+                << bucket_num_tokens << " physical_free_before_warmup="
+                << physical_free_before_warmup
+                << " physical_free_after_warmup=" << physical_free_after_warmup;
+    }
 
     // Record Mate FFI internal scratch allocations on one extra eager forward.
     // The Mate decode .so allocates via TVM-FFI's DLPackManagedTensorAllocator
@@ -2598,22 +2638,17 @@ bool MusaGraph::capture(CausalLM* model,
     // Begin graph capture (capture_mode defaults to
     // musaStreamCaptureModeGlobal)
     // graph_.capture_begin(pool);
-    void* const capture_stream_handle =
-        reinterpret_cast<void*>(capture_stream.stream());
-    std::optional<xllm::kernel::musa::TvmffiStreamOverrideGuard>
-        ffi_capture_stream_guard;
-    ffi_capture_stream_guard.emplace(persistent_param_.device(),
-                                     capture_stream_handle);
     xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(false);
     GlobalCaptureInstance& piecewise_capture =
         GlobalCaptureInstance::get_instance();
     if (is_piecewise_) {
-      piecewise_capture.begin_capture(pool);
+      piecewise_capture.begin_capture(pool, pool_ptr != nullptr);
     } else {
       if (s_graph_dump_directory() != nullptr) {
         graph_.enable_debug_mode();
       }
-      graph_.capture_begin(pool, musaStreamCaptureModeThreadLocal);
+      graph_.capture_begin(
+          pool, musaStreamCaptureModeThreadLocal, pool_ptr != nullptr);
     }
 
     if (!is_piecewise_) {
@@ -2965,77 +3000,115 @@ constexpr uint32_t kPhysicalPoolIdDecode = 1;
 constexpr uint32_t kPhysicalPoolIdPrefill = 2;
 }  // namespace
 
-struct MusaGraphExecutorImpl::VmmPoolState {};
+struct MusaGraphExecutorImpl::VmmPoolState {
+  std::unique_ptr<::xllm::MusaVmmCapturePool> capture_pool;
+};
 
 MusaGraphExecutorImpl::~MusaGraphExecutorImpl() {
+  // Drain submitted work before graph-owned pools and their physical pages
+  // are released. Each graph destroys its handles before its logical pool.
+  std::optional<c10::musa::MUSAGuard> device_guard;
+  if (!vmm_pools_.empty()) {
+    device_guard.emplace(device_.index());
+    CHECK_EQ(musaDeviceSynchronize(), musaSuccess);
+  }
   prefill_graphs_.clear();
   graphs_.clear();
+  spec_verify_graphs_.clear();
+  if (!vmm_pools_.empty()) {
+    // Persistent outputs can retain a block from a user pool. Drop those
+    // tensors and flush freeable pool blocks while their allocator is alive.
+    persistent_param_.reset();
+    Device::empty_cache(/*device_index=*/-1);
+  }
+  vmm_pools_.clear();
 }
 
 MusaGraphExecutorImpl::VmmPoolState&
 MusaGraphExecutorImpl::get_or_create_vmm_pool_state(uint32_t physical_pool_id) {
-  LOG(FATAL) << "Graph VMM pool is not enabled for MUSA builds";
+  std::lock_guard<std::mutex> lock(vmm_mutex_);
+  auto& slot = vmm_pools_[physical_pool_id];
+  if (!slot) {
+    auto state = std::make_unique<VmmPoolState>();
+    state->capture_pool =
+        std::make_unique<::xllm::MusaVmmCapturePool>(device_.index());
+    slot = std::move(state);
+    LOG(INFO) << "Created VMM pool state for executor " << this << ", device "
+              << device_.index() << ", physical_pool_id: " << physical_pool_id;
+  }
+  return *slot;
 }
 
-MusaMemPool* MusaGraphExecutorImpl::get_or_create_vmm_mempool(
-    uint32_t physical_pool_id,
-    uint32_t shape_id) {
-  (void)physical_pool_id;
-  (void)shape_id;
-  LOG(FATAL) << "Graph VMM pool is not enabled for MUSA builds";
-  return nullptr;
-}
-
-MusaMemPool* MusaGraphExecutorImpl::get_vmm_mempool(uint32_t physical_pool_id,
-                                                    uint32_t shape_id) {
-  (void)physical_pool_id;
-  (void)shape_id;
-  return nullptr;
-}
-
-void MusaGraphExecutorImpl::reset_vmm_allocator_offset(
+std::unique_ptr<MusaMemPool> MusaGraphExecutorImpl::create_vmm_mempool(
     uint32_t physical_pool_id) {
-  (void)physical_pool_id;
+  if (!supports_graph_vmm_pool() ||
+      !::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool()) {
+    return nullptr;
+  }
+  VmmPoolState& state = get_or_create_vmm_pool_state(physical_pool_id);
+  std::lock_guard<std::mutex> lock(vmm_mutex_);
+  auto pool = state.capture_pool->create_pool();
+  VLOG(kGraphExecutorLogVerboseLevel)
+      << "Created VMM MemPool for executor " << this
+      << ", physical_pool_id: " << physical_pool_id << ", pool_id: {"
+      << pool->id().first << ", " << pool->id().second << "}";
+  return pool;
 }
 
 MusaGraphExecutorImpl::GraphMemoryUsageStats
 MusaGraphExecutorImpl::get_graph_memory_usage_stats() {
   GraphMemoryUsageStats stats;
 
-  // MUSA builds have no graph VMM pool, so every graph shares graph_pool_.
-  const auto usage = get_graph_pool_memory_usage(device_.index(), graph_pool_);
-  stats.executor_total_bytes = usage.reserved_bytes;
-  stats.allocated_pool_bytes = usage.allocated_bytes;
-  stats.active_pool_bytes = usage.active_bytes;
-  stats.pool_high_water_mark_bytes = usage.allocated_bytes;
+  const bool vmm_enabled =
+      supports_graph_vmm_pool() &&
+      ::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool();
 
-  if (stats.executor_total_bytes == 0) {
-    const auto private_pool_usage =
-        get_private_pools_memory_usage(device_.index());
-    if (private_pool_usage.reserved_bytes >
-        baseline_private_pool_reserved_bytes_) {
-      stats.executor_total_bytes = private_pool_usage.reserved_bytes -
-                                   baseline_private_pool_reserved_bytes_;
+  if (!vmm_enabled) {
+    const auto usage =
+        get_graph_pool_memory_usage(device_.index(), graph_pool_);
+    stats.executor_total_bytes = usage.reserved_bytes;
+    stats.allocated_pool_bytes = usage.allocated_bytes;
+    stats.active_pool_bytes = usage.active_bytes;
+    stats.pool_high_water_mark_bytes = usage.allocated_bytes;
+
+    if (stats.executor_total_bytes == 0) {
+      const auto private_pool_usage =
+          get_private_pools_memory_usage(device_.index());
+      if (private_pool_usage.reserved_bytes >
+          baseline_private_pool_reserved_bytes_) {
+        stats.executor_total_bytes = private_pool_usage.reserved_bytes -
+                                     baseline_private_pool_reserved_bytes_;
+      }
+      if (private_pool_usage.allocated_bytes >
+          baseline_private_pool_allocated_bytes_) {
+        stats.allocated_pool_bytes = private_pool_usage.allocated_bytes -
+                                     baseline_private_pool_allocated_bytes_;
+      }
+      if (private_pool_usage.active_bytes >
+          baseline_private_pool_active_bytes_) {
+        stats.active_pool_bytes = private_pool_usage.active_bytes -
+                                  baseline_private_pool_active_bytes_;
+      }
+      stats.pool_high_water_mark_bytes = stats.allocated_pool_bytes;
     }
-    if (private_pool_usage.allocated_bytes >
-        baseline_private_pool_allocated_bytes_) {
-      stats.allocated_pool_bytes = private_pool_usage.allocated_bytes -
-                                   baseline_private_pool_allocated_bytes_;
+
+    if (stats.executor_total_bytes == 0) {
+      const size_t allocator_reserved_bytes =
+          get_allocator_reserved_bytes(device_.index());
+      if (allocator_reserved_bytes > baseline_allocator_reserved_bytes_) {
+        stats.executor_total_bytes =
+            allocator_reserved_bytes - baseline_allocator_reserved_bytes_;
+      }
     }
-    if (private_pool_usage.active_bytes > baseline_private_pool_active_bytes_) {
-      stats.active_pool_bytes =
-          private_pool_usage.active_bytes - baseline_private_pool_active_bytes_;
+  } else {
+    std::lock_guard<std::mutex> lock(vmm_mutex_);
+    for (const auto& kv : vmm_pools_) {
+      const VmmPoolState& pool_state = *kv.second;
+      stats.executor_total_bytes += pool_state.capture_pool->mapped_size();
+      stats.allocated_pool_bytes += pool_state.capture_pool->high_water_mark();
+      stats.active_pool_bytes += pool_state.capture_pool->current_offset();
     }
     stats.pool_high_water_mark_bytes = stats.allocated_pool_bytes;
-  }
-
-  if (stats.executor_total_bytes == 0) {
-    const size_t allocator_reserved_bytes =
-        get_allocator_reserved_bytes(device_.index());
-    if (allocator_reserved_bytes > baseline_allocator_reserved_bytes_) {
-      stats.executor_total_bytes =
-          allocator_reserved_bytes - baseline_allocator_reserved_bytes_;
-    }
   }
 
   stats.persistent_param_bytes =
@@ -3056,36 +3129,18 @@ void MusaGraphExecutorImpl::log_graph_memory_after_capture() {
   }
   last_logged_executor_total_bytes_ = stats.executor_total_bytes;
 
+  const bool vmm_enabled =
+      supports_graph_vmm_pool() &&
+      ::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool();
   auto to_mb = [](size_t bytes) { return bytes / (1024 * 1024); };
   LOG(INFO) << "GraphExecutorMemory Usage:"
+            << " enable_graph_vmm_pool=" << vmm_enabled
             << " executor_total_memory=" << to_mb(stats.executor_total_bytes)
             << " MB persistent_param=" << to_mb(stats.persistent_param_bytes)
             << " MB allocated_pool_memory=" << to_mb(stats.allocated_pool_bytes)
             << " MB active_pool_memory=" << to_mb(stats.active_pool_bytes)
             << " MB pool_high_water_mark="
             << to_mb(stats.pool_high_water_mark_bytes) << " MB";
-}
-
-// Get graph memory pool id for capture. When VMM is enabled, uses per-shape
-// MemPool under (physical_pool_id, shape_id).
-c10::musa::MempoolId_t MusaGraphExecutorImpl::get_mem_pool(
-    uint32_t physical_pool_id,
-    uint32_t shape_id) {
-  if (!supports_graph_vmm_pool()) {
-    // Non-VMM mode intentionally uses one pool per executor instance.
-    // Rationale: this executor is designed for single-threaded invocation, and
-    // concurrent run() on the same executor instance is not allowed.
-    // Under this contract, a per-instance pool is safe and keeps graph memory
-    // ownership tied to the executor lifecycle.
-    return graph_pool_;
-  }
-  // Per-shape VMM MemPool: look up pool for (physical_pool_id, shape_id).
-  MusaMemPool* pool = get_vmm_mempool(physical_pool_id, shape_id);
-  CHECK(pool != nullptr)
-      << "VMM MemPool for shape_id=" << shape_id
-      << ", physical_pool_id=" << physical_pool_id
-      << " not found; get_or_create_vmm_mempool must be called before capture";
-  return pool->id();
 }
 
 // Static method to get the MUSA capture stream for the current thread.
@@ -3270,8 +3325,9 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                     device_.index(),
                                     get_capture_stream(device_.index()),
                                     /*is_piecewise=*/true);
+    auto pool_owner = create_vmm_mempool(kPhysicalPoolIdPrefill);
     const c10::musa::MempoolId_t mem_pool =
-        get_mem_pool(kPhysicalPoolIdPrefill, graph_num_tokens);
+        pool_owner != nullptr ? pool_owner->id() : graph_pool_;
     const bool capture_success = graph->capture(model_,
                                                 args_,
                                                 options_,
@@ -3280,14 +3336,20 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                                 graph_params,
                                                 kv_caches,
                                                 graph_num_tokens,
-                                                mem_pool);
+                                                mem_pool,
+                                                std::move(pool_owner));
     CHECK(capture_success)
         << "Failed to capture MUSA piecewise prefill graph, num_tokens="
         << graph_num_tokens << " (actual num_tokens: " << n_tokens << ")";
     LOG(INFO) << "Lazy capturing MUSA piecewise prefill graph num_tokens="
               << graph_num_tokens << " (actual num_tokens: " << n_tokens
               << ") num_sequences=" << effective_num_sequences << " chunked="
-              << params.meta.batch_forward_type.is_chunked_prefill() << " done";
+              << params.meta.batch_forward_type.is_chunked_prefill()
+              << " retained_prefill_keys=" << prefill_graphs_.size() + 1
+              << " max_prefill_keys="
+              << ::xllm::ExecutionConfig::get_instance()
+                     .musa_prefill_graph_max_entries()
+              << " done";
     log_graph_memory_after_capture();
     auto& stored = prefill_graphs_[graph_key];
     stored = std::move(graph);
@@ -3368,13 +3430,9 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
         std::make_unique<MusaGraph>(*persistent_param_,
                                     device_.index(),
                                     get_capture_stream(device_.index()));
-    MusaMemPool* pool_ptr = nullptr;
-    if (::xllm::ExecutionConfig::get_instance().enable_graph_vmm_pool()) {
-      reset_vmm_allocator_offset(kPhysicalPoolIdDecode);
-      pool_ptr = get_or_create_vmm_mempool(kPhysicalPoolIdDecode, n_tokens);
-    }
+    auto pool_owner = create_vmm_mempool(kPhysicalPoolIdDecode);
     const c10::musa::MempoolId_t mem_pool =
-        get_mem_pool(kPhysicalPoolIdDecode, n_tokens);
+        pool_owner != nullptr ? pool_owner->id() : graph_pool_;
     const bool ok = graph->capture(model_,
                                    args_,
                                    options_,
@@ -3384,7 +3442,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                    kv_caches,
                                    n_tokens,
                                    mem_pool,
-                                   pool_ptr);
+                                   std::move(pool_owner));
     CHECK(ok) << "Failed to capture MUSA spec-verify graph, num_tokens="
               << n_tokens << " q_len=" << q_len;
     LOG(INFO) << "Lazy capturing MUSA spec-verify graph num_tokens=" << n_tokens
@@ -3568,14 +3626,9 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     VLOG(kGraphExecutorLogVerboseLevel)
         << "MusaGraphExecutorImpl::run() in decode capture mode";
 
-    MusaMemPool* pool_ptr = nullptr;
-    if (supports_graph_vmm_pool()) {
-      reset_vmm_allocator_offset(kPhysicalPoolIdDecode);
-      const uint32_t shape_id = graph_shape_key;
-      pool_ptr = get_or_create_vmm_mempool(kPhysicalPoolIdDecode, shape_id);
-    }
+    auto pool_owner = create_vmm_mempool(kPhysicalPoolIdDecode);
     const c10::musa::MempoolId_t mem_pool =
-        get_mem_pool(kPhysicalPoolIdDecode, graph_shape_key);
+        pool_owner != nullptr ? pool_owner->id() : graph_pool_;
 
     bool capture_success = graph->capture(model_,
                                           args_,
@@ -3586,7 +3639,7 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
                                           kv_caches,
                                           bucket_num_tokens,
                                           mem_pool,
-                                          pool_ptr);
+                                          std::move(pool_owner));
 
     if (capture_success) {
       LOG(INFO) << "Lazy capturing MUSA graph for bucket num_tokens: "
@@ -3658,9 +3711,28 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
       !params.embedding.linear_state_ids.empty()) {
     return false;
   }
-  return static_cast<int64_t>(num_tokens) <= max_tokens_for_graph_mode_ &&
-         static_cast<int64_t>(get_prefill_graph_num_tokens(
-             num_tokens, params)) <= options_.max_tokens_per_batch();
+  const int64_t bucket_num_tokens =
+      get_prefill_graph_num_tokens(num_tokens, params);
+  if (bucket_num_tokens <= 0 ||
+      bucket_num_tokens > max_tokens_for_graph_mode_ ||
+      bucket_num_tokens > options_.max_tokens_per_batch()) {
+    return false;
+  }
+  const bool cache_hit = prefill_graphs_.find(get_prefill_graph_key(
+                             num_tokens, params)) != prefill_graphs_.end();
+  const bool admitted =
+      can_admit_prefill_graph(prefill_graphs_.size(),
+                              execution_config.musa_prefill_graph_max_entries(),
+                              cache_hit);
+  if (!admitted) {
+    LOG_FIRST_N(WARNING, 8)
+        << "MUSA Prefill graph cache at limit: entries="
+        << prefill_graphs_.size()
+        << " limit=" << execution_config.musa_prefill_graph_max_entries()
+        << " bucket_num_tokens=" << bucket_num_tokens
+        << "; execute unseen shape eager without allocating another graph/VA";
+  }
+  return admitted;
 }
 
 uint32_t MusaGraphExecutorImpl::get_prefill_graph_num_tokens(
@@ -3672,8 +3744,13 @@ uint32_t MusaGraphExecutorImpl::get_prefill_graph_num_tokens(
   if (num_sequences > 1 && !params.embedding.linear_state_ids.empty()) {
     return num_tokens;
   }
-  return static_cast<uint32_t>(::xllm::runtime::get_decode_graph_token_bucket(
-      num_tokens, /*enable_no_padding=*/false));
+  const int64_t bucket_num_tokens =
+      prefill_graph_token_bucket(num_tokens,
+                                 ::xllm::ExecutionConfig::get_instance()
+                                     .musa_prefill_graph_token_stride());
+  return bucket_num_tokens <= options_.max_tokens_per_batch()
+             ? static_cast<uint32_t>(bucket_num_tokens)
+             : 0;
 }
 
 std::vector<int32_t> MusaGraphExecutorImpl::get_prefill_graph_key(

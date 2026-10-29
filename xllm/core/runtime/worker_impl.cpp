@@ -51,6 +51,9 @@ limitations under the License.
 #include "core/framework/config/beam_search_config.h"
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/execution_config.h"
+#if defined(USE_MUSA)
+#include "core/runtime/musa/prefill_graph_policy.h"
+#endif
 #include "core/framework/config/kernel_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/load_config.h"
@@ -699,7 +702,26 @@ std::tuple<int64_t, int64_t> WorkerImpl::estimate_kv_cache_capacity() {
   DeviceMonitor::get_instance().set_total_memory(device_id, total_memory);
   DeviceMonitor::get_instance().set_weight_memory(
       device_id, total_memory - available_memory - torch_cache);
-  return {available_memory + torch_cache, total_memory};
+  int64_t kv_available_memory = available_memory + torch_cache;
+#if defined(USE_MUSA)
+  const auto& execution_config = ExecutionConfig::get_instance();
+  const int64_t warmup_reserve = runtime::musa::prefill_warmup_reserve_bytes(
+      execution_config.musa_prefill_warmup_reserve_mb(),
+      options_.enable_graph(),
+      execution_config.enable_prefill_piecewise_graph());
+  CHECK_GT(kv_available_memory, warmup_reserve)
+      << "Not enough free memory for the MUSA Prefill preparation reserve";
+  kv_available_memory -= warmup_reserve;
+  if (warmup_reserve > 0) {
+    // Target/draft estimates on a shared device are combined with min(), not
+    // summed, so both report the same reserve without charging it twice.
+    LOG(INFO) << "MUSA Prefill KV budget: physical_available="
+              << available_memory << " warmup_reserve_bytes=" << warmup_reserve
+              << " kv_available_before_utilization=" << kv_available_memory
+              << " is_draft=" << options_.is_draft_engine();
+  }
+#endif
+  return {kv_available_memory, total_memory};
 }
 
 void WorkerImpl::process_group_test() {

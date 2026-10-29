@@ -4,8 +4,8 @@
 #   - explicit: values this stack still applies (edit config, then restart)
 # One-off overrides: export VL_<NAME> before sourcing (e.g. VL_MTP_K=1).
 
-KIT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-REPO_DIR=$(cd "$KIT_DIR/../.." && pwd)
+KIT_DIR=/workspace/xllm-mt-main/tools/musa_qwen3_8_vl_bench
+REPO_DIR=/workspace/xllm-mt-main
 
 PROFILE=${VL_PROFILE:-large_kv_rr}
 case "$PROFILE" in
@@ -18,8 +18,8 @@ HOST=${VL_HOST:-$(hostname -I | awk '{print $1}')}
 MODEL=${VL_MODEL:-/data/nfs_shared/models/Qwen3.8-27B-FP8}
 MODEL_ID=${VL_MODEL_ID:-Qwen3.8-27B-FP8}
 
-XLLM_BIN=${VL_XLLM_BIN:-$REPO_DIR/build/lib.linux-x86_64-cpython-310/xllm/xllm}
-XLLM_LIB_DIR=${VL_XLLM_LIB_DIR:-$REPO_DIR/build/cmake.linux-x86_64-cpython-310/mooncake-common}
+XLLM_BIN=${VL_XLLM_BIN:-/opt/xllm/releases/musa-prefill-bounded-20261026/bin/xllm}
+XLLM_LIB_DIR=${VL_XLLM_LIB_DIR:-/opt/xllm/releases/musa-prefill-bounded-20261026/lib:$REPO_DIR/build/cmake.linux-x86_64-cpython-310/mooncake-common}
 
 MASTER_BIN=${VL_MASTER_BIN:-$PROFILE_MASTER_BIN}
 RUST_TOKENIZERS_LIB=${VL_RUST_TOKENIZERS_LIB:-/opt/xllm_service/lib/librust_tokenizers.so}
@@ -31,7 +31,9 @@ MUSA_OPS_DIR=${VL_MUSA_OPS_DIR:-/opt/mate027_cache/mp31/cached_ops_jd_k8d}
 DATA_DIR=${VL_DATA_DIR:-/workspace/xllm_vl_bench_ref}
 WORK_DIR=${VL_WORK_DIR:-$HOME/xllm_vl_bench}
 MASTER_TOKENIZER=${VL_MASTER_TOKENIZER:-$WORK_DIR/master_tokenizer}
-PROMPTS=${VL_PROMPTS:-$WORK_DIR/vl_prompts_isl40960_n68.json}
+# Prompt set. bench.sh auto-reads isl/shared from this JSON (or filename);
+# export VL_PROMPTS=.../vl_prompts_text20k_pm1k.json is enough for 20k.
+PROMPTS=${VL_PROMPTS:-$WORK_DIR/vl_prompts_text20k_img50.json}
 RUNS_DIR=${VL_RUNS_DIR:-$WORK_DIR/runs}
 RESULTS_DIR=${VL_RESULTS_DIR:-$WORK_DIR/results}
 

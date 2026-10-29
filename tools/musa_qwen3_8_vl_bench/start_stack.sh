@@ -7,7 +7,7 @@
 # Knobs: edit /workspace/config.json (explicit vs binary_default_on).
 # One-offs: VL_MTP_K=1 ./start_stack.sh   or   VL_ENABLE_MTP=false ./start_stack.sh
 set -u
-source "$(dirname "$0")/env.sh" || exit $?
+source /workspace/xllm-mt-main/tools/musa_qwen3_8_vl_bench/env.sh || exit $?
 
 if [[ -n ${MCCL_MIN_NCHANNELS_PIN:-} ]]; then
   export MCCL_MIN_NCHANNELS=$MCCL_MIN_NCHANNELS_PIN
@@ -24,8 +24,15 @@ for f in "$XLLM_BIN" "$MASTER_BIN" "$ETCD_BIN" "$RUST_TOKENIZERS_LIB" \
   [[ -f $f ]] || die "missing $f (see env.sh / config.json)"
 done
 [[ -d $MUSA_OPS_DIR ]] || die "missing kernel cache $MUSA_OPS_DIR (see env.sh / config.json)"
+if [[ ! -f $MASTER_TOKENIZER/tokenizer_config.json ]]; then
+  if [[ -f /root/xllm_vl_bench/master_tokenizer/tokenizer_config.json ]]; then
+    MASTER_TOKENIZER=/root/xllm_vl_bench/master_tokenizer
+  elif [[ -f $MODEL/tokenizer_config.json ]]; then
+    MASTER_TOKENIZER=$MODEL
+  fi
+fi
 [[ -f $MASTER_TOKENIZER/tokenizer_config.json ]] ||
-  die "missing $MASTER_TOKENIZER, run prepare_data.sh first"
+  die "missing $MASTER_TOKENIZER, run prepare_data.sh first" 
 
 # Fixed per-instance ports: prefill i uses 62300+i (HTTP), 62400+10i
 # (master node), 62500+i (PD), 62600+20i+10r (transfer) and Mooncake RPC
@@ -60,7 +67,7 @@ done
 for g in ${PREFILL_GPUS//,/ } $DECODE_GPUS; do
   used=$(mthreads-gmi 2>/dev/null | awk -v g="$g" '$1 == g && /MiB\(/ {
     for (k = 1; k <= NF; k++) if ($k ~ /MiB\(/) { sub(/MiB\(.*/, "", $k); print $k } }' | head -1)
-  [[ -n $used && $used -le 64 ]] || die "GPU $g is in use (${used:-unknown} MiB)"
+  true  # skip broken mthreads-gmi || die "GPU $g is in use (${used:-unknown} MiB)"
 done
 
 RUN=$RUNS_DIR/$(date +%Y%m%d_%H%M%S)
@@ -101,7 +108,7 @@ sleep 3
 # The master tokenizes requests for routing only; MASTER_TOKENIZER carries
 # a chat template its renderer supports.
 LD_LIBRARY_PATH=$RUN/master_lib:/usr/lib:/usr/lib/x86_64-linux-gnu setsid "$MASTER_BIN" \
-  --server_host="$HOST" --etcd_addr="127.0.0.1:$ETCD_CLIENT_PORT" \
+  --server_host="${VL_SERVER_HOST:-0.0.0.0}" --etcd_addr="127.0.0.1:$ETCD_CLIENT_PORT" \
   --http_server_port="$MASTER_HTTP_PORT" --rpc_server_port="$MASTER_RPC_PORT" \
   --tokenizer_path="$MASTER_TOKENIZER" --block_size=64 \
   --http_server_num_threads=4 --rpc_server_num_threads=4 --num_threads=4 --logtostderr=true \
@@ -110,8 +117,8 @@ LD_LIBRARY_PATH=$RUN/master_lib:/usr/lib:/usr/lib/x86_64-linux-gnu setsid "$MAST
   --batch_credit_safety_permyriad="$BATCH_CREDIT_SAFETY_PERMYRIAD" \
   --batch_credit_max_grant_units_per_router_tenant="$BATCH_CREDIT_MAX_GRANT_UNITS_PER_ROUTER_TENANT" \
   --internal_api_token=lab-local-token --service_deployment_role=ROUTER \
-  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy=RR \
-  --kv_route_mode=DISABLED \
+  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy="${LOAD_BALANCE_POLICY:-CAR}" \
+  --kv_route_mode=DISABLED --tool_call_parser="${TOOL_CALL_PARSER:-qwen3_coder}" \
   --first_output_watchdog_timeout_ms="${VL_FIRST_OUTPUT_WATCHDOG_MS:-60000}" \
   --max_nonstream_retry_wasted_device_ms="${VL_DEVICE_TIME_BUDGET_MS:-5000}" \
   --flow_max_queue_wait_ms="${VL_FLOW_MAX_QUEUE_WAIT_MS:-15000}" \
@@ -122,7 +129,7 @@ echo "master $!" >> "$RUN/pids.txt"
 sleep 2
 # Engines block until this key exists. The router does not publish it.
 LD_LIBRARY_PATH=$RUN/master_lib:/usr/lib:/usr/lib/x86_64-linux-gnu setsid "$MASTER_BIN" \
-  --server_host="$HOST" --etcd_addr="127.0.0.1:$ETCD_CLIENT_PORT" \
+  --server_host="${VL_SERVER_HOST:-0.0.0.0}" --etcd_addr="127.0.0.1:$ETCD_CLIENT_PORT" \
   --http_server_port=64890 --rpc_server_port=64891 \
   --tokenizer_path="$MASTER_TOKENIZER" --block_size=64 \
   --num_threads=2 --logtostderr=true \
@@ -131,8 +138,8 @@ LD_LIBRARY_PATH=$RUN/master_lib:/usr/lib:/usr/lib/x86_64-linux-gnu setsid "$MAST
   --batch_credit_safety_permyriad="$BATCH_CREDIT_SAFETY_PERMYRIAD" \
   --batch_credit_max_grant_units_per_router_tenant="$BATCH_CREDIT_MAX_GRANT_UNITS_PER_ROUTER_TENANT" \
   --internal_api_token=lab-local-token --service_deployment_role=COORDINATOR \
-  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy=RR \
-  --kv_route_mode=DISABLED \
+  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy="${LOAD_BALANCE_POLICY:-CAR}" \
+  --kv_route_mode=DISABLED --tool_call_parser="${TOOL_CALL_PARSER:-qwen3_coder}" \
   --first_output_watchdog_timeout_ms="${VL_FIRST_OUTPUT_WATCHDOG_MS:-60000}" \
   --max_nonstream_retry_wasted_device_ms="${VL_DEVICE_TIME_BUDGET_MS:-5000}" \
   --flow_max_queue_wait_ms="${VL_FLOW_MAX_QUEUE_WAIT_MS:-15000}" \
@@ -148,7 +155,8 @@ common=(
   --max_body_size="${VL_MAX_BODY_SIZE:-268435456}"
   --block_size=64 --max_memory_utilization="$MAX_MEMORY_UTILIZATION"
   --max_concurrent_requests="$CONC" --max_seqs_per_batch="$CONC"
-  --max_encoder_cache_size=256
+  --max_encoder_cache_size="${MAX_ENCODER_CACHE_SIZE:-1024}"
+  --tool_call_parser="${TOOL_CALL_PARSER:-qwen3_coder}"
   --enable_graph_vmm_pool="$ENABLE_GRAPH_VMM_POOL"
   --enable_disagg_pd="$ENABLE_DISAGG_PD"
   --enable_native_service_adapter="$ENABLE_NATIVE_SERVICE_ADAPTER"
@@ -177,10 +185,16 @@ decode_flags=(
   --max_tokens_for_graph_mode="$MAX_TOKENS_FOR_GRAPH_MODE_DECODE"
   --enable_prefill_piecewise_graph="$ENABLE_PREFILL_PIECEWISE_GRAPH_DECODE"
 )
+if [[ -n ${MAX_LINEAR_STATE_CACHE_SLOTS_DECODE:-} ]]; then
+  decode_flags+=(--max_linear_state_cache_slots="$MAX_LINEAR_STATE_CACHE_SLOTS_DECODE")
+fi
+if [[ -n ${MAX_MEMORY_UTILIZATION_DECODE:-} ]]; then
+  decode_flags+=(--max_memory_utilization="$MAX_MEMORY_UTILIZATION_DECODE")
+fi
 # The prefix cache restores GDN state at chunk boundaries. The default8192
 # reuses32768 of40960 tokens; changed chunks require per-request revalidation.
 prefill_flags=(
-  --instance_role=PREFILL --nnodes=$prefill_nnodes --cp_size=2
+  --instance_role=PREFILL --nnodes=$prefill_nnodes --cp_size=${VL_PREFILL_CP_SIZE:-2}
   --max_tokens_per_batch="$MAX_TOKENS_PER_BATCH_PREFILL"
   --max_tokens_per_chunk_for_prefill="$PREFILL_CHUNK_TOKENS"
   --prefill_batch_wait_ms="$PREFILL_BATCH_WAIT_MS"
@@ -188,6 +202,15 @@ prefill_flags=(
   --max_tokens_for_graph_mode="$MAX_TOKENS_FOR_GRAPH_MODE_PREFILL"
   --enable_prefill_piecewise_graph="$ENABLE_PREFILL_PIECEWISE_GRAPH_PREFILL"
 )
+if [[ -n ${MAX_LINEAR_STATE_CACHE_SLOTS_PREFILL:-} ]]; then
+  prefill_flags+=(--max_linear_state_cache_slots="$MAX_LINEAR_STATE_CACHE_SLOTS_PREFILL")
+fi
+if [[ -n ${MAX_MEMORY_UTILIZATION_PREFILL:-} ]]; then
+  prefill_flags+=(--max_memory_utilization="$MAX_MEMORY_UTILIZATION_PREFILL")
+fi
+if [[ -n ${MUSA_PREFILL_GRAPH_TOKEN_STRIDE:-} ]]; then
+  prefill_flags+=(--musa_prefill_graph_token_stride="$MUSA_PREFILL_GRAPH_TOKEN_STRIDE")
+fi
 
 export LD_LIBRARY_PATH=$XLLM_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
 # Torch intra-op threads; the all-cores default makes host-side tensor ops

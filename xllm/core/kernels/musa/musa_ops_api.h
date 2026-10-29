@@ -334,7 +334,13 @@ void rescore_top_logits(const torch::Tensor& input,
 // returns the first one, which muDNN does not guarantee.
 bool row_argmax_supported(const torch::Tensor& input);
 
-torch::Tensor row_argmax(const torch::Tensor& input);
+torch::Tensor row_argmax(
+    const torch::Tensor& input,
+    const torch::Tensor& column_ids = torch::Tensor());
+
+void register_compact_vocab_column_ids(const torch::Tensor& compact_logits,
+                                       const torch::Tensor& column_ids);
+torch::Tensor lookup_compact_vocab_column_ids(const torch::Tensor& logits);
 
 // [repair, current] first-draft rows of every sequence, built from the
 // accepted target tokens like the non-chunked decode path of
@@ -452,6 +458,15 @@ std::tuple<torch::Tensor, torch::Tensor> fused_gated_rms_norm_quant_fp8(
     const torch::Tensor& gate,
     const torch::Tensor& weight,
     double eps);
+
+bool fused_gemma_rms_norm_quant_supported(const torch::Tensor& input,
+                                          const torch::Tensor& weight);
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+fused_gemma_rms_norm_quant_fp8(const torch::Tensor& input,
+                               const torch::Tensor& weight,
+                               double eps,
+                               bool write_normed);
 
 bool fused_add_gemma_rms_norm_quant_supported(const torch::Tensor& input,
                                               const torch::Tensor& residual,

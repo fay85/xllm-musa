@@ -2416,15 +2416,22 @@ inline void initialize_device_buffer_session(ReadContext& context,
   auto& session = *context.device_session;
   // POSIX shared-memory pages are not pinned merely because TensorOptions says
   // so. Own a genuinely pinned staging copy and keep it alive with ForwardInput
-  // until the asynchronous H2D has completed.
-  forward_input.input_host_buffer =
-      torch::empty({static_cast<int64_t>(payload_size)},
-                   torch::TensorOptions()
-                       .dtype(torch::kUInt8)
-                       .device(torch::kCPU)
-                       .pinned_memory(/*pinned_memory=*/true));
-  std::memcpy(
-      forward_input.input_host_buffer.data_ptr(), payload_base, payload_size);
+  // until the asynchronous H2D has completed. When unpacking from an already
+  // pinned input_host_buffer (e.g. packed_proto_to_forward_input_impl), reuse
+  // it directly without a second pinned allocation and memcpy.
+  if (!forward_input.input_host_buffer.defined() ||
+      forward_input.input_host_buffer.data_ptr() != payload_base ||
+      static_cast<uint64_t>(forward_input.input_host_buffer.numel()) <
+          payload_size) {
+    forward_input.input_host_buffer =
+        torch::empty({static_cast<int64_t>(payload_size)},
+                     torch::TensorOptions()
+                         .dtype(torch::kUInt8)
+                         .device(torch::kCPU)
+                         .pinned_memory(/*pinned_memory=*/true));
+    std::memcpy(
+        forward_input.input_host_buffer.data_ptr(), payload_base, payload_size);
+  }
   const torch::Tensor& host_input_buffer = forward_input.input_host_buffer;
   context.tensor_cursor =
       static_cast<const char*>(host_input_buffer.data_ptr()) +
@@ -2433,25 +2440,27 @@ inline void initialize_device_buffer_session(ReadContext& context,
   auto device_options =
       torch::TensorOptions().dtype(torch::kUInt8).device(device);
 
-  if (stream != nullptr) {
 #if defined(USE_NPU)
+  if (stream != nullptr) {
     auto& capture_lock =
         ::xllm::npu::DeviceCaptureLock::get_instance().get_lock(device.index());
     session.capture_lock_guard.emplace(capture_lock);
+  }
 #elif defined(USE_CUDA) || defined(USE_MUSA)
-    if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
-      auto& replay_lock =
-          ::xllm::cuda::DeviceCaptureLock::get_instance().get_read_lock(
-              device.index());
-      session.capture_lock_guard.emplace(replay_lock);
-    }
+  if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
+    auto& replay_lock =
+        ::xllm::cuda::DeviceCaptureLock::get_instance().get_read_lock(
+            device.index());
+    session.capture_lock_guard.emplace(replay_lock);
+  }
 #endif
+  if (stream != nullptr) {
     c10::StreamGuard stream_guard = stream->set_stream_guard();
     forward_input.device_input_buffer =
         safe_to(host_input_buffer, device_options, /*non_blocking=*/true);
   } else {
     forward_input.device_input_buffer =
-        safe_to(host_input_buffer, device_options);
+        safe_to(host_input_buffer, device_options, /*non_blocking=*/true);
   }
 
   session.owner_buffer = forward_input.device_input_buffer;
@@ -2609,20 +2618,39 @@ inline void deserialize_forward_input_payload(
   read_vector(context, input_params.parallel.dp_global_json_object_active);
   read_vector(context, input_params.parallel.dp_is_decode);
   read_vector(context, input_params.embedding.embedding_ids);
-  read_vector(context, input_params.embedding.linear_state_ids);
-  read_vector(context, input_params.embedding.linear_state_read_ids);
+  read_tensor_and_vector(context,
+                         input_params.embedding.linear_state_indices,
+                         input_params.embedding.linear_state_ids,
+                         stream);
+  read_tensor_and_vector(context,
+                         input_params.embedding.linear_state_read_indices,
+                         input_params.embedding.linear_state_read_ids,
+                         stream);
   normalize_linear_state_ids(input_params.embedding.linear_state_ids,
                              input_params.meta.num_sequences);
   if (materialize_device_buffer &&
-      !input_params.embedding.linear_state_ids.empty()) {
+      !input_params.embedding.linear_state_ids.empty() &&
+      !input_params.embedding.linear_state_indices.defined()) {
+    torch::Tensor host_ids = detail::int_vector_to_cpu_tensor(
+        input_params.embedding.linear_state_ids);
+    forward_input.retained_device_tensors.push_back(host_ids);
     input_params.embedding.linear_state_indices =
-        torch::tensor(input_params.embedding.linear_state_ids, torch::kInt)
-            .to(device, /*non_blocking=*/true);
-    if (!input_params.embedding.linear_state_read_ids.empty()) {
+        safe_to(host_ids, device, /*non_blocking=*/true);
+  }
+  if (materialize_device_buffer &&
+      !input_params.embedding.linear_state_read_ids.empty() &&
+      !input_params.embedding.linear_state_read_indices.defined()) {
+    if (input_params.embedding.linear_state_read_ids ==
+            input_params.embedding.linear_state_ids &&
+        input_params.embedding.linear_state_indices.defined()) {
       input_params.embedding.linear_state_read_indices =
-          torch::tensor(input_params.embedding.linear_state_read_ids,
-                        torch::kInt)
-              .to(device, true);
+          input_params.embedding.linear_state_indices;
+    } else {
+      torch::Tensor host_read_ids = detail::int_vector_to_cpu_tensor(
+          input_params.embedding.linear_state_read_ids);
+      forward_input.retained_device_tensors.push_back(host_read_ids);
+      input_params.embedding.linear_state_read_indices =
+          safe_to(host_read_ids, device, /*non_blocking=*/true);
     }
   }
   read_string_vector(context, input_params.embedding.request_ids);
@@ -3116,9 +3144,19 @@ inline void serialize_forward_input_sections(
                input_params.parallel.dp_global_json_object_active);
   write_vector(context.descriptor, input_params.parallel.dp_is_decode);
   write_vector(context.descriptor, input_params.embedding.embedding_ids);
-  write_vector(context.descriptor, input_params.embedding.linear_state_ids);
-  write_vector(context.descriptor,
-               input_params.embedding.linear_state_read_ids);
+  {
+    std::vector<int32_t> normalized_linear_state_ids =
+        input_params.embedding.linear_state_ids;
+    normalize_linear_state_ids(normalized_linear_state_ids,
+                               input_params.meta.num_sequences);
+    write_host_vector_or_tensor(context,
+                                normalized_linear_state_ids,
+                                input_params.embedding.linear_state_indices);
+    write_host_vector_or_tensor(
+        context,
+        input_params.embedding.linear_state_read_ids,
+        input_params.embedding.linear_state_read_indices);
+  }
   write_string_vector(context.descriptor, input_params.embedding.request_ids);
   write_vector(context.descriptor, input_params.embedding.extra_token_ids);
   // Mirror the read_* layout: write root + embedding mtp paths so the

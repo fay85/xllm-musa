@@ -32,6 +32,13 @@ class Qwen3NextRMSNormImpl : public torch::nn::Module {
   virtual std::tuple<torch::Tensor, std::optional<torch::Tensor>> forward(
       torch::Tensor& input,
       std::optional<torch::Tensor> residual = std::nullopt);
+#if defined(USE_MUSA)
+  void forward_out(const torch::Tensor& input, torch::Tensor& norm_out);
+  bool supports_quant_fp8(const torch::Tensor& input) const;
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> forward_quant_fp8(
+      const torch::Tensor& input,
+      bool keep_normed_input);
+#endif
   torch::Tensor weight() const { return weight_; }
   bool is_weight_loaded() const { return weight_is_loaded_; }
   double eps() const { return eps_; }

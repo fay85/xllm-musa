@@ -32,6 +32,8 @@ def exp(name, val):
 # Here we export the canonical names that start_stack consumes.
 
 exp("MAX_MEMORY_UTILIZATION", ex.get("max_memory_utilization"))
+exp("MAX_MEMORY_UTILIZATION_PREFILL", ex.get("max_memory_utilization_prefill"))
+exp("MAX_MEMORY_UTILIZATION_DECODE", ex.get("max_memory_utilization_decode"))
 exp("MTP_K", ex.get("num_speculative_tokens"))
 exp("ENABLE_MTP", ex.get("enable_mtp", True))
 exp("SPECULATIVE_ALGORITHM", ex.get("speculative_algorithm", "MTP"))
@@ -53,7 +55,15 @@ exp("MAX_TOKENS_PER_BATCH_DECODE", ex.get("max_tokens_per_batch_decode"))
 exp("MAX_TOKENS_FOR_GRAPH_MODE_PREFILL", ex.get("max_tokens_for_graph_mode_prefill"))
 exp("MAX_TOKENS_FOR_GRAPH_MODE_DECODE", ex.get("max_tokens_for_graph_mode_decode"))
 exp("MAX_TOKENS_PER_CHUNK_FOR_PREFILL_DECODE", ex.get("max_tokens_per_chunk_for_prefill_decode"))
+exp("MAX_LINEAR_STATE_CACHE_SLOTS_PREFILL", ex.get("max_linear_state_cache_slots_prefill"))
+exp("MAX_LINEAR_STATE_CACHE_SLOTS_DECODE", ex.get("max_linear_state_cache_slots_decode"))
+exp("MUSA_PREFILL_GRAPH_TOKEN_STRIDE", ex.get("musa_prefill_graph_token_stride"))
 exp("OMP_NUM_THREADS", ex.get("omp_num_threads"))
+exp("MAX_ENCODER_CACHE_SIZE", ex.get("max_encoder_cache_size", 1024))
+exp("LOAD_BALANCE_POLICY", ex.get("load_balance_policy", "CAR"))
+exp("TOOL_CALL_PARSER", ex.get("tool_call_parser", "qwen3_coder"))
+if "XLLM_MUSA_PCP_CUSTOM_AR" in ex and "XLLM_MUSA_PCP_CUSTOM_AR" not in os.environ:
+    exp("XLLM_MUSA_PCP_CUSTOM_AR", "1" if ex["XLLM_MUSA_PCP_CUSTOM_AR"] else "0")
 if ex.get("profile"):
     exp("PROFILE", ex.get("profile"))
 
@@ -68,6 +78,8 @@ if paths.get("model"):
     exp("MODEL", paths["model"])
 if paths.get("model_id"):
     exp("MODEL_ID", paths["model_id"])
+if paths.get("prompts") and not os.environ.get("VL_PROMPTS"):
+    exp("PROMPTS", paths["prompts"])
 if paths.get("xllm_bin"):
     exp("XLLM_BIN", paths["xllm_bin"])
 if paths.get("flashinfer_ops_path"):

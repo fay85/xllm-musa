@@ -26,6 +26,7 @@ limitations under the License.
 #include "core/framework/config/disagg_pd_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/scheduler_config.h"
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/kernels/ops_api.h"
 #include "core/util/env_var.h"
 
@@ -88,8 +89,8 @@ int32_t balanced_first_rows(int32_t num_rows,
         rows,
         history_rows,
         /*other_rank_kv_rows=*/replicate_final_state ? second_rows : 0);
-    const double second_cost = rank_cost(
-        rows, num_rows, history_rows, /*other_rank_kv_rows=*/rows);
+    const double second_cost =
+        rank_cost(rows, num_rows, history_rows, /*other_rank_kv_rows=*/rows);
     const double gap = std::abs(first_cost - second_cost);
     if (gap < best_gap) {
       best_gap = gap;
@@ -108,7 +109,96 @@ torch::Tensor slots_of(const Context& context, int32_t rank) {
 
 // The root never consumes what it sends, so only receivers make their stream
 // wait for the transfer.
+
+bool pcp_custom_dtype(const torch::Tensor& tensor) {
+  if (!tensor.defined() || tensor.numel() == 0 || !tensor.is_musa()) {
+    return false;
+  }
+  const auto dtype = tensor.scalar_type();
+  return dtype == torch::kFloat32 || dtype == torch::kFloat16 ||
+         dtype == torch::kBFloat16;
+}
+
+bool pcp_custom_ar_requested() {
+  static const bool enabled =
+      util::get_bool_env("XLLM_MUSA_PCP_CUSTOM_AR", false);
+  return enabled;
+}
+
+// CP=2 broadcast and allgather, expressed as a sum all-reduce. Chunks stay
+// inside the 8MiB custom-allreduce buffer. Both ranks must call together.
+std::optional<torch::Tensor> custom_sum(torch::Tensor input,
+                                        ProcessGroup* group) {
+  if (group == nullptr || !pcp_custom_ar_requested() ||
+      !musa_custom_allreduce_enabled(group) || !pcp_custom_dtype(input)) {
+    return std::nullopt;
+  }
+  input = input.contiguous();
+  const int64_t elem = static_cast<int64_t>(input.element_size());
+  constexpr int64_t kMaxBytes = 8 * 1024 * 1024;
+  int64_t align_elems = 1;
+  while (align_elems < 16 && (align_elems * elem) % 16 != 0) {
+    ++align_elems;
+  }
+  const int64_t max_elems = (kMaxBytes / elem) / align_elems * align_elems;
+  if (max_elems <= 0) {
+    return std::nullopt;
+  }
+  torch::Tensor flat = input.reshape({-1});
+  const int64_t bytes = flat.numel() * elem;
+  const int64_t padded_bytes = (bytes + 15) & ~static_cast<int64_t>(15);
+  if (padded_bytes != bytes) {
+    const int64_t padded_elems = padded_bytes / elem;
+    torch::Tensor padded = torch::zeros({padded_elems}, flat.options());
+    padded.narrow(/*dim=*/0, /*start=*/0, /*length=*/flat.numel()).copy_(flat);
+    flat = padded;
+  }
+  torch::Tensor output = torch::empty_like(flat);
+  for (int64_t offset = 0; offset < flat.numel(); offset += max_elems) {
+    const int64_t count = std::min(max_elems, flat.numel() - offset);
+    torch::Tensor in_slice = flat.narrow(/*dim=*/0, offset, count);
+    torch::Tensor out_slice = output.narrow(/*dim=*/0, offset, count);
+    const std::optional<torch::Tensor> reduced =
+        musa_allreduce_custom(group, in_slice, out_slice);
+    if (!reduced.has_value()) {
+      CHECK_EQ(offset, 0) << "PCP custom all-reduce failed after a chunk";
+      return std::nullopt;
+    }
+  }
+  if (output.numel() != input.numel()) {
+    output = output.narrow(/*dim=*/0, /*start=*/0, /*length=*/input.numel());
+  }
+  return output.view(input.sizes());
+}
+
+bool custom_broadcast(torch::Tensor& rows,
+                      int32_t root_rank,
+                      Context& context) {
+  if (!pcp_custom_ar_requested() || !pcp_custom_dtype(rows) ||
+      !musa_custom_allreduce_enabled(context.cp_group)) {
+    return false;
+  }
+  const bool root = context.cp_rank == root_rank;
+  torch::Tensor input =
+      root ? rows.contiguous() : torch::zeros(rows.sizes(), rows.options());
+  const std::optional<torch::Tensor> reduced =
+      custom_sum(input, context.cp_group);
+  CHECK(reduced.has_value())
+      << "PCP custom all-reduce failed after the CP group enabled it";
+  if (!root) {
+    rows.copy_(*reduced);
+  }
+  context.in_flight_sends.push_back(input);
+  context.in_flight_sends.push_back(*reduced);
+  LOG_FIRST_N(INFO, 1) << "[PCP_CUSTOM_AR] broadcast"
+                       << " root=" << root_rank << " bytes=" << rows.nbytes();
+  return true;
+}
+
 void broadcast_rows(torch::Tensor& rows, int32_t root_rank, Context& context) {
+  if (custom_broadcast(rows, root_rank, context)) {
+    return;
+  }
   if (context.cp_rank == root_rank) {
     context.cp_group->broadcast_async(rows, root_rank);
     context.in_flight_sends.emplace_back(rows);
@@ -281,7 +371,22 @@ torch::Tensor gather_rows(const torch::Tensor& local, const Context& context) {
                       /*dim=*/0);
   }
   // [cp_size, max_rows, ...]
-  torch::Tensor gathered = context.cp_group->allgather_base_sync(send);
+  torch::Tensor gathered;
+  if (pcp_custom_ar_requested() && pcp_custom_dtype(send) &&
+      musa_custom_allreduce_enabled(context.cp_group)) {
+    std::vector<int64_t> stacked_shape = send.sizes().vec();
+    stacked_shape.insert(stacked_shape.begin(), num_ranks(context));
+    torch::Tensor stacked = torch::zeros(stacked_shape, send.options());
+    stacked[context.cp_rank].copy_(send);
+    const std::optional<torch::Tensor> reduced =
+        custom_sum(stacked, context.cp_group);
+    CHECK(reduced.has_value()) << "PCP custom allgather failed";
+    gathered = *reduced;
+    LOG_FIRST_N(INFO, 1) << "[PCP_CUSTOM_AR] allgather bytes="
+                         << stacked.nbytes();
+  } else {
+    gathered = context.cp_group->allgather_base_sync(send);
+  }
   const int32_t cp_size = num_ranks(context);
   if (context.row_offsets.back() == cp_size * context.max_rows) {
     return gathered.flatten(/*start_dim=*/0, /*end_dim=*/1);
@@ -303,8 +408,13 @@ void expect_prefix_rows(torch::IntArrayRef shape,
   }
   PendingReceive receive;
   receive.rows = torch::empty(shape, options);
-  receive.work = context.cp_group->broadcast_async(
-      receive.rows, /*root_rank=*/context.cp_rank - 1);
+  // Custom all-reduce is a joint call with the sender, so the receiver only
+  // reserves storage here and enters the collective in take_prefix_rows.
+  if (!pcp_custom_ar_requested() || !pcp_custom_dtype(receive.rows) ||
+      !musa_custom_allreduce_enabled(context.cp_group)) {
+    receive.work = context.cp_group->broadcast_async(
+        receive.rows, /*root_rank=*/context.cp_rank - 1);
+  }
   context.pending_receives.emplace_back(std::move(receive));
 }
 
@@ -321,6 +431,8 @@ torch::Tensor take_prefix_rows(Context& context) {
   context.pending_receives.pop_front();
   if (receive.work.defined()) {
     receive.work->wait();
+  } else if (!custom_broadcast(receive.rows, context.cp_rank - 1, context)) {
+    LOG(FATAL) << "PCP custom all-reduce was selected but did not run";
   }
   return receive.rows;
 }

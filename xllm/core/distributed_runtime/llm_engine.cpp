@@ -707,9 +707,8 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
       util::is_deepseek_v4_dspark_model_type(args_.model_type());
   // VLM requests must hash image content so different images never share
   // cached blocks.
-  const BlockHasherType base_hasher_type = options_.backend() == "vlm"
-                                               ? BlockHasherType::MM
-                                               : BlockHasherType::TEXT;
+  const BlockHasherType base_hasher_type =
+      options_.backend() == "vlm" ? BlockHasherType::MM : BlockHasherType::TEXT;
   BlockManagerPool::Options options;
   options.num_blocks(kv_cache_cap.n_blocks())
       .hasher_type(mtp_hasher_type(base_hasher_type,
@@ -975,11 +974,16 @@ bool LLMEngine::pull_kv_blocks(const int32_t src_dp_size,
   const int32_t src_tp_size = src_world_size / src_dp_size;
   const int32_t dst_tp_size = dst_world_size / dp_size_;
 
-  std::vector<bool> results;
-  results.reserve(static_cast<size_t>(dst_tp_size) * src_tp_size);
-  // Pull the KV cache for all workers in the current DP rank.
+  std::vector<folly::SemiFuture<bool>> futures;
+  futures.reserve(static_cast<size_t>(dst_tp_size) * src_tp_size);
+  // Submit every destination/source pull before waiting. This is important for
+  // heterogeneous TP: each destination owns an independent cache and the
+  // remote PULL may overlap. collectAll waits every submitted future, so an
+  // exception or a false result cannot release request-owned KV state while a
+  // sibling transfer is still using it.
   for (size_t tp_rank = 0; tp_rank < dst_tp_size; ++tp_rank) {
-    int32_t dst_worker_rank = dst_dp_rank * dst_tp_size + tp_rank;
+    const int32_t dst_worker_rank =
+        dst_dp_rank * dst_tp_size + static_cast<int32_t>(tp_rank);
 #if defined(USE_MUSA)
     // Linking negotiated every source worker. Submit the request to the
     // entire source DP group so the negotiated plans choose shard owners;
@@ -995,18 +999,6 @@ bool LLMEngine::pull_kv_blocks(const int32_t src_dp_size,
 #endif
     CHECK(!src_tp_ranks.empty())
         << "no source TP rank for dst tp_rank " << tp_rank;
-    if (src_tp_ranks.size() == 1) {
-      const int32_t src_worker_rank =
-          src_dp_rank * src_tp_size + src_tp_ranks[0];
-      results.push_back(worker_clients_[dst_worker_rank]->pull_kv_blocks(
-          src_cluster_ids[src_worker_rank],
-          src_addrs[src_worker_rank],
-          mappings));
-      continue;
-    }
-    // Overlap the per-source bind/read of every covering Prefill shard.
-    std::vector<folly::SemiFuture<bool>> futures;
-    futures.reserve(src_tp_ranks.size());
     for (const int32_t src_dp_worker_rank : src_tp_ranks) {
       const int32_t src_worker_rank =
           src_dp_rank * src_tp_size + src_dp_worker_rank;
@@ -1016,13 +1008,12 @@ bool LLMEngine::pull_kv_blocks(const int32_t src_dp_size,
               src_addrs[src_worker_rank],
               mappings));
     }
-    for (auto& future : futures) {
-      results.push_back(std::move(future).get());
-    }
   }
 
-  for (bool result : results) {
-    if (!result) {
+  const std::vector<folly::Try<bool>> results =
+      folly::collectAll(std::move(futures)).get();
+  for (const folly::Try<bool>& result : results) {
+    if (!result.hasValue() || !result.value()) {
       return false;
     }
   }

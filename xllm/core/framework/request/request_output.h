@@ -26,6 +26,7 @@ limitations under the License.
 #include "core/common/types.h"
 #include "core/framework/multimodal/embedding_output.h"
 #include "core/framework/request/usage.h"
+#include "provider.pb.h"
 
 namespace xllm {
 
@@ -90,6 +91,16 @@ struct SequenceOutput {
   std::optional<float> confidence_ctc;
 };
 
+// Observed by Prefill at the actual AddNewRequests RPC boundary. Keeping the
+// fields together prevents partial evidence from changing Service feedback.
+struct DecodeAdmissionObservation {
+  proto::AdmissionDisposition disposition =
+      proto::ADMISSION_DISPOSITION_UNSPECIFIED;
+  proto::AdmissionReason reason = proto::ADMISSION_REASON_UNSPECIFIED;
+  uint32_t attempts = 0;
+  uint64_t rpc_duration_ns = 0;
+};
+
 struct RequestOutput {
   RequestOutput() = default;
 
@@ -129,6 +140,12 @@ struct RequestOutput {
   // whether the request is finished on prefill instance, only for stream
   // request in Disagg P/D mode.
   bool finished_on_prefill_instance = false;
+
+  std::optional<uint64_t> output_event_seq;
+  std::optional<uint64_t> attempt_seq;
+
+  // Successful generation alone does not substitute for Decode admission.
+  std::optional<DecodeAdmissionObservation> decode_admission;
 
   // whether the request is cancelled.
   bool cancelled = false;

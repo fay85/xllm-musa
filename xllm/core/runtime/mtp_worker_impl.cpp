@@ -147,6 +147,38 @@ torch::Tensor load_draft_vocab_ids(const std::string& path,
 layer::LmHead make_block_fp8_draft_lm_head(const layer::LmHead& target_head,
                                            const ModelContext& draft_context,
                                            const std::string& vocab_path) {
+  const ParallelArgs& parallel = draft_context.get_parallel_args();
+  ProcessGroup* source_group = parallel.lm_head_group_ != nullptr
+                                   ? parallel.lm_head_group_
+                                   : parallel.tp_group_;
+  const bool replicate_subset =
+      util::get_bool_env("XLLM_MUSA_MTP_REPLICATE_DRAFT_HEAD", false) &&
+      !vocab_path.empty() && source_group != nullptr &&
+      source_group->world_size() == 2;
+  if (replicate_subset) {
+    CHECK(parallel.single_rank_group_ != nullptr)
+        << "Replicated MTP draft head requires a single-rank process group";
+    ParallelArgs head_parallel = parallel;
+    head_parallel.lm_head_group_ = parallel.single_rank_group_;
+    const ModelContext head_context =
+        draft_context.with_parallel_args(head_parallel);
+    layer::LmHead replicated_head(head_context);
+    // Gather the original BF16 target-head shards once during model loading.
+    // The resulting compact FP8 proposal head is replicated; target and draft
+    // transformer bodies retain their TP groups and KV layouts.
+    torch::Tensor full_weight =
+        parallel_state::gather(target_head->weight(), source_group, /*dim=*/0);
+    const int64_t vocab_size = full_weight.size(0);
+    torch::Tensor global_ids = load_draft_vocab_ids(
+        vocab_path, vocab_size, /*rank_start=*/0, /*rank_end=*/vocab_size);
+    replicated_head->load_block_fp8_rows_from(full_weight, global_ids);
+    LOG(INFO) << "[MUSA_MTP_REPLICATED_DRAFT_HEAD] source_tp="
+              << source_group->world_size()
+              << " proposal_rows=" << global_ids.numel()
+              << " weight_bytes=" << replicated_head->weight().nbytes()
+              << " decode_allgather=false";
+    return replicated_head;
+  }
   layer::LmHead draft_head(draft_context);
   if (vocab_path.empty()) {
     draft_head->load_block_fp8_from(target_head->weight());
@@ -1211,6 +1243,10 @@ bool MTPWorkerImpl::init_model(const std::string& model_weights_path,
               !draft_vocab_path.empty()) {
             head = make_block_fp8_draft_lm_head(
                 head, draft_impl_->context_, draft_vocab_path);
+            if (draft_sampling_mode_ == DraftSamplingMode::GREEDY &&
+                !draft_vocab_path.empty()) {
+              head->set_defer_row_subset_expansion(true);
+            }
             LOG(INFO) << "MTP draft proposes with a block-FP8 LM head"
                       << (draft_vocab_path.empty()
                               ? std::string()
@@ -3341,8 +3377,8 @@ bool MTPWorkerImpl::can_use_combined_first_draft(
 #if defined(USE_MUSA)
   // C=1 has no independent draft work to overlap; keep the one-row path
   // unless the next first draft should be prelaunched behind verification.
-  static const bool allow_single_sequence = ::xllm::util::get_bool_env(
-      "XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT_C1", true);
+  static const bool allow_single_sequence =
+      ::xllm::util::get_bool_env("XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT_C1", true);
   if (input.input_params.meta.num_sequences <= 1 && !allow_single_sequence) {
     return false;
   }
@@ -3890,21 +3926,32 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
     validate_input.sampling_params.filter_bitmask = torch::Tensor();
   }
   auto& validate_sampling_params = validate_input.sampling_params;
+#if defined(USE_NPU) || defined(USE_MUSA)
+  // update_sampling_params() uses torch::arange + repeat_interleave on device
+  // tensors. For greedy decode batches without penalties or masks, reuse
+  // cached [0..total_num_val_tokens-1] indices and all-false do_sample controls.
 #if defined(USE_NPU)
-  // update_sampling_params() uses repeat_interleave on device tensors.  For a
-  // single greedy sequence that work only expands [0] and [false] into fixed
-  // validation controls, yet it lands on the final-draft -> target dependency
-  // chain.  Reuse stable controls after warmup and retain the generic builder
-  // for sampling, penalties, multi-sequence batches and other backends.
-  const bool use_stable_greedy_validate_sampling =
+  const bool allow_stable_greedy_controls =
       use_explicit_spec_verify_replay_update &&
-      validate_sampling_params.all_greedy_sample &&
       validate_sampling_params.selected_token_idxes.defined() &&
       validate_sampling_params.selected_token_idxes.numel() == 1 &&
       validate_sampling_params.sample_idxes.defined() &&
       validate_sampling_params.sample_idxes.numel() == 1 &&
       validate_sampling_params.do_sample.defined() &&
-      validate_sampling_params.do_sample.numel() == 1 &&
+      validate_sampling_params.do_sample.numel() == 1;
+#else
+  const bool allow_stable_greedy_controls =
+      validate_sampling_params.selected_token_idxes.defined() &&
+      validate_sampling_params.sample_idxes.defined() &&
+      validate_sampling_params.selected_token_idxes.numel() ==
+          validate_sampling_params.sample_idxes.numel() &&
+      validate_sampling_params.do_sample.defined() &&
+      !validate_sampling_params.filter_mask.defined() &&
+      !validate_sampling_params.filter_bitmask.defined();
+#endif
+  const bool use_stable_greedy_validate_sampling =
+      allow_stable_greedy_controls &&
+      validate_sampling_params.all_greedy_sample &&
       !validate_sampling_params.frequency_penalties.defined() &&
       !validate_sampling_params.presence_penalties.defined() &&
       !validate_sampling_params.repetition_penalties.defined() &&
@@ -3979,13 +4026,14 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
       input_params.gdn_mtp_verify_cache->enabled = true;
       input_params.gdn_mtp_verify_cache->layer_states.clear();
     }
-#endif
+#else
     if (!use_explicit_spec_verify_replay_update) {
       input_params.num_accepted_tokens =
           safe_to(specBuilder::make_cpu_int_tensor(accepted_prefix_lengths),
                   token_options,
                   /*non_blocking=*/true);
     }
+#endif
   }
 
 #if defined(USE_NPU)
@@ -4135,7 +4183,15 @@ void MTPWorkerImpl::prepare_validate_inputs(const ForwardInput& input,
         num_sequences,
         active_spec_verify_block_table_width(input_params));
   }
-  input_params.attention.rebuild_device_buffer(device_);
+  {
+    std::vector<AttentionInput::PackedIntInput> extra_int_inputs;
+    if (!accepted_prefix_lengths.empty()) {
+      extra_int_inputs.push_back({&accepted_prefix_lengths,
+                                  nullptr,
+                                  &input_params.num_accepted_tokens});
+    }
+    input_params.attention.rebuild_device_buffer(device_, extra_int_inputs);
+  }
   if (builds_expanded_spec_verify_attention()) {
     build_expanded_spec_verify_graph_input(
         input_params, device_, logical_block_size(), defer_expanded_paging);

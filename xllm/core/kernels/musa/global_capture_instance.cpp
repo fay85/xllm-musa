@@ -33,7 +33,8 @@ GlobalCaptureInstance& GlobalCaptureInstance::get_instance() {
 GlobalCaptureInstance::GlobalCaptureInstance() = default;
 GlobalCaptureInstance::~GlobalCaptureInstance() = default;
 
-void GlobalCaptureInstance::begin_capture(const MusaMempoolId& pool) {
+void GlobalCaptureInstance::begin_capture(const MusaMempoolId& pool,
+                                          bool owns_user_pool_ref) {
   CHECK(!is_capturing_) << "Already capturing, call end_capture() first";
 
   capture_lock_ = std::make_unique<std::lock_guard<std::mutex>>(capture_mutex_);
@@ -43,11 +44,13 @@ void GlobalCaptureInstance::begin_capture(const MusaMempoolId& pool) {
 
   is_capturing_ = true;
   graph_pool_ = pool;
+  owns_user_pool_ref_ = owns_user_pool_ref;
 
   current_piecewise_graph_ = std::make_unique<PiecewiseGraphs>();
 
   current_graph_ = std::make_unique<MusaGraphSegment>();
-  current_graph_->capture_begin(pool, musaStreamCaptureModeThreadLocal);
+  current_graph_->capture_begin(
+      pool, musaStreamCaptureModeThreadLocal, owns_user_pool_ref_);
 }
 
 std::unique_ptr<PiecewiseGraphs> GlobalCaptureInstance::end_capture() {
@@ -59,6 +62,7 @@ std::unique_ptr<PiecewiseGraphs> GlobalCaptureInstance::end_capture() {
   current_piecewise_graph_->add_graph(std::move(current_graph_));
 
   is_capturing_ = false;
+  owns_user_pool_ref_ = false;
 
   VLOG(kGraphExecutorLogVerboseLevel)
       << "MusaGlobalCaptureInstance::end_capture(), total graphs: "
@@ -98,7 +102,8 @@ void GlobalCaptureInstance::temporarily_begin_graph_locked() {
   CHECK(!current_graph_) << "Current graph already exists";
 
   current_graph_ = std::make_unique<MusaGraphSegment>();
-  current_graph_->capture_begin(graph_pool_, musaStreamCaptureModeThreadLocal);
+  current_graph_->capture_begin(
+      graph_pool_, musaStreamCaptureModeThreadLocal, owns_user_pool_ref_);
 
   VLOG(kGraphExecutorLogVerboseLevel)
       << "MusaGlobalCaptureInstance::temporarily_begin_graph()";

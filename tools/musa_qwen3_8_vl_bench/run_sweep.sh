@@ -2,6 +2,8 @@
 # Runs every concurrency level on a freshly started stack and prints one
 # table for all levels. Results and logs go to $RESULTS_DIR/sweep_<time>.
 # Usage: run_sweep.sh [CONCURRENCY ...]   (default: 5 6 12)
+# For 20k: export VL_PROMPTS=/root/xllm_vl_bench/vl_prompts_text20k_pm1k.json
+# then run_sweep; bench.sh auto-passes --isl/--shared from the JSON.
 set -u
 source "$(dirname "$0")/env.sh"
 

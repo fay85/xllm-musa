@@ -222,6 +222,7 @@ inline void clear_contiguous_input_buffer_tensor_targets(
     ModelInputParams& params) {
   params.embedding.input_embedding = torch::Tensor();
   params.embedding.linear_state_indices = torch::Tensor();
+  params.embedding.linear_state_read_indices = torch::Tensor();
   params.embedding.mtp_bootstrap_embeddings = torch::Tensor();
   params.block_copy.src_block_indices = torch::Tensor();
   params.block_copy.dst_block_indices = torch::Tensor();
@@ -268,6 +269,8 @@ inline bool add_model_tensors_to_plan(const ModelInputParams& source,
                   &target.embedding.input_embedding) &&
          plan.add(source.embedding.linear_state_indices,
                   &target.embedding.linear_state_indices) &&
+         plan.add(source.embedding.linear_state_read_indices,
+                  &target.embedding.linear_state_read_indices) &&
          plan.add(source.embedding.mtp_bootstrap_embeddings,
                   &target.embedding.mtp_bootstrap_embeddings) &&
          plan.add(source.block_copy.src_block_indices,
@@ -315,11 +318,15 @@ inline torch::Tensor int_vector_to_cpu_tensor(
   if (values.empty()) {
     return torch::Tensor();
   }
-  return torch::tensor(values,
-                       torch::TensorOptions()
-                           .dtype(torch::kInt)
-                           .device(torch::kCPU)
-                           .pinned_memory(true));
+  torch::Tensor tensor = torch::empty({static_cast<int64_t>(values.size())},
+                                      torch::TensorOptions()
+                                          .dtype(torch::kInt)
+                                          .device(torch::kCPU)
+                                          .pinned_memory(true));
+  std::memcpy(tensor.data_ptr<int32_t>(),
+              values.data(),
+              values.size() * sizeof(int32_t));
+  return tensor;
 }
 
 template <typename T>

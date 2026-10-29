@@ -203,8 +203,13 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
 
 torch::Tensor Sampler::greedy_sample(const torch::Tensor& probs) {
 #if defined(USE_MUSA)
+  const torch::Tensor column_ids =
+      xllm::kernel::musa::lookup_compact_vocab_column_ids(probs);
   if (xllm::kernel::musa::row_argmax_supported(probs)) {
-    return xllm::kernel::musa::row_argmax(probs);
+    return xllm::kernel::musa::row_argmax(probs, column_ids);
+  }
+  if (column_ids.defined()) {
+    return column_ids.index_select(/*dim=*/0, probs.argmax(/*dim=*/-1));
   }
 #endif
   return probs.argmax(/*dim=*/-1);

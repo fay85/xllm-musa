@@ -174,6 +174,9 @@ class RequestState final {
   std::string pd_reservation_id;
   std::string decode_rpc_address;
 
+  // Persist the real RPC result across temporary local dispatch retries.
+  std::optional<DecodeAdmissionObservation> decode_admission;
+
   torch::Tensor input_embedding;
 
   // multimodal

@@ -19,10 +19,13 @@ limitations under the License.
 
 #include <cstdint>
 #include <optional>
+#include <shared_mutex>
 #include <string>
 #include <torch/csrc/distributed/c10d/Store.hpp>
 #include <tuple>
 #include <vector>
+
+#include "core/platform/cuda/device_capture_lock.h"
 
 namespace xllm {
 
@@ -41,10 +44,15 @@ class MusaCustomAllReduce {
   MusaCustomAllReduce& operator=(const MusaCustomAllReduce&) = delete;
 
   bool enabled() const { return enabled_; }
+  c10::DeviceIndex device_index() const { return device_.index(); }
 
   std::optional<torch::Tensor> allreduce(
       torch::Tensor& input,
       const std::optional<torch::Tensor>& output = std::nullopt);
+
+  // Optional out-of-place reduction for the generic TP caller. Selection is
+  // fixed at group initialization; unsupported tensors retain the MCCL path.
+  std::optional<torch::Tensor> allreduce_tp(torch::Tensor& input);
 
   void finalize_graph_buffers();
   void long_prefill_host_barrier();
@@ -52,6 +60,8 @@ class MusaCustomAllReduce {
 
  private:
   bool should_use(const torch::Tensor& input) const;
+  // Both ranks must slice identically; each slice fits the IPC buffer.
+  std::optional<torch::Tensor> allreduce_in_slices(torch::Tensor& input);
   void init();
   std::vector<int64_t> create_shared_buffer(int64_t size_in_bytes,
                                             const std::string& name);
@@ -70,6 +80,7 @@ class MusaCustomAllReduce {
   c10::intrusive_ptr<c10d::Store> store_;
 
   bool enabled_ = false;
+  bool enable_tp_allreduce_ = false;
   bool fully_connected_ = true;
   int64_t max_size_bytes_ = 8 * 1024 * 1024;
   int64_t custom_ar_handle_ = 0;
@@ -79,10 +90,30 @@ class MusaCustomAllReduce {
   int64_t graph_capture_generation_ = 0;
 };
 
+bool musa_custom_allreduce_enabled(ProcessGroup* process_group);
+
 std::optional<torch::Tensor> musa_allreduce_custom(
     ProcessGroup* process_group,
     torch::Tensor& input,
     const std::optional<torch::Tensor>& output = std::nullopt);
+
+// Only tp_group participates; world/CP callers retain their existing policy.
+std::optional<torch::Tensor> musa_allreduce_tp_custom(
+    ProcessGroup* process_group,
+    torch::Tensor& input);
+
+std::vector<c10::DeviceIndex> musa_custom_allreduce_devices();
+
+// Side-thread allocations and KV restore must wait for graph capture on every
+// active local device, including an explicit device when custom AR is inactive.
+class MusaTpCaptureReadLock final {
+ public:
+  explicit MusaTpCaptureReadLock(
+      std::optional<c10::DeviceIndex> extra_device = std::nullopt);
+
+ private:
+  std::vector<std::shared_lock<std::shared_mutex>> locks_;
+};
 
 void finalize_musa_custom_allreduce_graphs();
 void musa_long_prefill_host_barrier(ProcessGroup* process_group);

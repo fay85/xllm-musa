@@ -125,6 +125,7 @@ __global__ void __launch_bounds__(kThreads)
     merge_argmax_kernel(const float* __restrict__ chunk_values,
                         const int64_t* __restrict__ chunk_indices,
                         int32_t chunks,
+                        const int64_t* __restrict__ column_ids,
                         int64_t* __restrict__ output) {
   __shared__ float values[kThreads];
   __shared__ int64_t indices[kThreads];
@@ -137,7 +138,10 @@ __global__ void __launch_bounds__(kThreads)
   }
   reduce_block_best(value, index, values, indices);
   if (threadIdx.x == 0) {
-    output[row] = indices[0];
+    const int64_t winner = indices[0];
+    output[row] =
+        (column_ids != nullptr && winner != kNoIndex) ? column_ids[winner]
+                                                      : winner;
   }
 }
 
@@ -145,7 +149,37 @@ bool is_16b_aligned(const torch::Tensor& tensor) {
   return reinterpret_cast<uintptr_t>(tensor.data_ptr()) % alignof(uint4) == 0;
 }
 
+struct CompactVocabEntry {
+  const void* data_ptr = nullptr;
+  int64_t cols = 0;
+  torch::Tensor column_ids;
+};
+
+thread_local CompactVocabEntry s_last_compact_vocab;
+
 }  // namespace
+
+void register_compact_vocab_column_ids(const torch::Tensor& compact_logits,
+                                       const torch::Tensor& column_ids) {
+  if (!compact_logits.defined() || !column_ids.defined()) {
+    s_last_compact_vocab = CompactVocabEntry{};
+    return;
+  }
+  s_last_compact_vocab.data_ptr = compact_logits.data_ptr();
+  s_last_compact_vocab.cols = compact_logits.size(-1);
+  s_last_compact_vocab.column_ids = column_ids;
+}
+
+torch::Tensor lookup_compact_vocab_column_ids(const torch::Tensor& logits) {
+  if (!logits.defined() || !s_last_compact_vocab.column_ids.defined()) {
+    return torch::Tensor();
+  }
+  if (logits.data_ptr() == s_last_compact_vocab.data_ptr &&
+      logits.size(-1) == s_last_compact_vocab.cols) {
+    return s_last_compact_vocab.column_ids;
+  }
+  return torch::Tensor();
+}
 
 bool row_argmax_supported(const torch::Tensor& input) {
   return input.defined() && !input.is_cpu() && input.dim() >= 1 &&
@@ -154,12 +188,21 @@ bool row_argmax_supported(const torch::Tensor& input) {
          input.numel() > 0 && is_16b_aligned(input);
 }
 
-torch::Tensor row_argmax(const torch::Tensor& input) {
+torch::Tensor row_argmax(const torch::Tensor& input,
+                         const torch::Tensor& column_ids) {
   CHECK(row_argmax_supported(input))
       << "unsupported row argmax input: " << input.sizes() << " "
       << input.scalar_type();
   const int64_t cols = input.size(-1);
   const int64_t rows = input.numel() / cols;
+  const int64_t* column_ids_ptr = nullptr;
+  if (column_ids.defined()) {
+    CHECK(column_ids.dim() == 1 && column_ids.size(0) == cols &&
+          column_ids.scalar_type() == torch::kLong &&
+          column_ids.is_contiguous() && column_ids.device() == input.device())
+        << "invalid row_argmax column_ids: " << column_ids.sizes();
+    column_ids_ptr = column_ids.data_ptr<int64_t>();
+  }
   const std::vector<int64_t> output_sizes(input.sizes().begin(),
                                           input.sizes().end() - 1);
   torch::Tensor output =
@@ -190,6 +233,7 @@ torch::Tensor row_argmax(const torch::Tensor& input) {
       chunk_values.data_ptr<float>(),
       chunk_indices.data_ptr<int64_t>(),
       static_cast<int32_t>(chunks),
+      column_ids_ptr,
       output.data_ptr<int64_t>());
   C10_CUDA_CHECK(cudaGetLastError());
   return output;

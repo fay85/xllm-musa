@@ -26,6 +26,8 @@ limitations under the License.
 #include <unordered_set>
 
 #include "absl/strings/str_join.h"
+#include "framework/kv_cache_transfer/staged_read_plan.h"
+#include "util/env_var.h"
 #include "util/timer.h"
 #if defined(USE_MUSA)
 #include <chrono>
@@ -1050,8 +1052,12 @@ Status MooncakeTransferEngine::bind_incoming_regions(
     }
     plan = peer->second.incoming_plan;
   }
-  return RequestRegionBinder().bind_pull(
-      *plan, mappings, cache_namespace, layer_id, regions);
+  return RequestRegionBinder().bind_pull(*plan,
+                                         mappings,
+                                         cache_namespace,
+                                         layer_id,
+                                         regions,
+                                         /*compact_strided_repeats=*/true);
 }
 
 Status MooncakeTransferEngine::bind_outgoing_regions_explicit(
@@ -1236,10 +1242,33 @@ bool MooncakeTransferEngine::move_memory_regions(
     opcode = TransferRequest::WRITE;
   }
 
-  std::vector<TransferRequest> entries;
-  entries.reserve(regions.size());
-  uint64_t total_bytes = 0;
+  std::vector<ByteRegion> flat_regions;
+  const std::vector<ByteRegion>* transfer_regions = &regions;
   for (const ByteRegion& region : regions) {
+    if (byte_region_repeats(region) > 1) {
+      transfer_regions = &flat_regions;
+      break;
+    }
+  }
+  if (transfer_regions == &flat_regions) {
+    for (const ByteRegion& region : regions) {
+      const uint64_t repeats = byte_region_repeats(region);
+      for (uint64_t piece = 0; piece < repeats; ++piece) {
+        ByteRegion flat = region;
+        flat.local_offset += piece * region.local_stride;
+        flat.remote_offset += piece * region.remote_stride;
+        flat.repeat_count = 1;
+        flat.local_stride = 0;
+        flat.remote_stride = 0;
+        flat_regions.emplace_back(flat);
+      }
+    }
+  }
+
+  std::vector<TransferRequest> entries;
+  entries.reserve(transfer_regions->size());
+  uint64_t total_bytes = 0;
+  for (const ByteRegion& region : *transfer_regions) {
     if (region.local_buffer_id >= local_segment_desc->buffers.size() ||
         region.remote_buffer_id >= remote_segment_desc->buffers.size()) {
       LOG(ERROR) << "MoonCake region buffer id out of range, local_id="
@@ -1328,6 +1357,70 @@ bool MooncakeTransferEngine::move_memory_regions(
 }
 
 namespace {
+void append_fitting_pull_regions(std::vector<ByteRegion>* output,
+                                 const ByteRegion& region,
+                                 uint64_t staging_bytes) {
+  const uint64_t repeats = byte_region_repeats(region);
+  if (repeats <= 1 || region.length == 0) {
+    output->emplace_back(region);
+    return;
+  }
+  const uint64_t span = byte_region_remote_span(region);
+  const uint64_t payload = byte_region_payload_bytes(region);
+  const bool fits = span <= staging_bytes && span / 2 + span % 2 <= payload &&
+                    region.local_stride >= region.length &&
+                    region.remote_stride >= region.length;
+  if (fits) {
+    output->emplace_back(region);
+    return;
+  }
+  ByteRegion left = region;
+  ByteRegion right = region;
+  left.repeat_count = repeats / 2;
+  right.repeat_count = repeats - left.repeat_count;
+  right.local_offset += left.repeat_count * region.local_stride;
+  right.remote_offset += left.repeat_count * region.remote_stride;
+  append_fitting_pull_regions(output, left, staging_bytes);
+  append_fitting_pull_regions(output, right, staging_bytes);
+}
+
+bool try_extend_compact_pull_region(StagedReadRun& run,
+                                    const ByteRegion& region,
+                                    size_t end,
+                                    uint64_t staging_bytes) {
+  const uint64_t piece = region.length;
+  const uint64_t span = byte_region_remote_span(region);
+  const uint64_t payload = byte_region_payload_bytes(region);
+  if (piece == 0 || span == 0 || payload == 0 ||
+      run.remote_buffer_id != region.remote_buffer_id) {
+    return false;
+  }
+  if (span / 2 + span % 2 > payload) {
+    return false;
+  }
+  constexpr uint64_t kMax = std::numeric_limits<uint64_t>::max();
+  if (run.remote_offset > kMax - run.length ||
+      region.remote_offset > kMax - span ||
+      run.payload_bytes > kMax - payload) {
+    return false;
+  }
+  const uint64_t run_end = run.remote_offset + run.length;
+  if (region.remote_offset < run_end ||
+      region.remote_offset - run_end > piece) {
+    return false;
+  }
+  const uint64_t combined = region.remote_offset + span - run.remote_offset;
+  const uint64_t combined_payload = run.payload_bytes + payload;
+  if (combined > staging_bytes ||
+      combined / 2 + combined % 2 > combined_payload) {
+    return false;
+  }
+  run.length = combined;
+  run.payload_bytes = combined_payload;
+  run.end = end;
+  return true;
+}
+
 std::vector<size_t> remote_order(const std::vector<ByteRegion>& regions) {
   std::vector<size_t> order(regions.size());
   std::iota(order.begin(), order.end(), static_cast<size_t>(0));
@@ -1369,7 +1462,11 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
   if (regions.empty()) {
     return true;
   }
-  constexpr int64_t kStagingBytes = 128LL << 20;
+  const int64_t staging_mib =
+      util::get_int_env("XLLM_MUSA_PULL_STAGING_MB", 128);
+  CHECK_GE(staging_mib, 16);
+  CHECK_LE(staging_mib, 1024);
+  const int64_t kStagingBytes = staging_mib << 20;
   std::lock_guard<std::mutex> lock(staging_mutex_);
   TransferEngine* engine = core_.engine();
   device_.set_device();
@@ -1408,29 +1505,43 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
     return false;
   }
 
-  struct Run {
-    uint64_t remote_buffer_id;
-    uint64_t remote_offset;
-    uint64_t length;
-    size_t begin;  // index into order
-    size_t end;
-  };
-  const std::vector<size_t> order = remote_order(regions);
-  std::vector<Run> runs;
-  for (size_t i = 0; i < order.size(); ++i) {
-    const ByteRegion& cur = regions[order[i]];
-    if (!runs.empty()) {
-      Run& last = runs.back();
-      if (last.remote_buffer_id == cur.remote_buffer_id &&
-          last.remote_offset + last.length == cur.remote_offset) {
-        last.length += cur.length;
-        last.end = i + 1;
-        continue;
-      }
-    }
-    runs.push_back(
-        Run{cur.remote_buffer_id, cur.remote_offset, cur.length, i, i + 1});
+  using Run = StagedReadRun;
+  std::vector<ByteRegion> fitting;
+  fitting.reserve(regions.size());
+  for (const ByteRegion& region : regions) {
+    append_fitting_pull_regions(
+        &fitting, region, static_cast<uint64_t>(kStagingBytes));
   }
+  const std::vector<size_t> order = remote_order(fitting);
+  std::vector<Run> runs;
+  runs.reserve(order.size());
+  for (size_t i = 0; i < order.size(); ++i) {
+    const ByteRegion& cur = fitting[order[i]];
+    const bool extended =
+        !runs.empty() &&
+        try_extend_compact_pull_region(
+            runs.back(), cur, i + 1, static_cast<uint64_t>(kStagingBytes));
+    if (!extended) {
+      const uint64_t span = byte_region_remote_span(cur);
+      runs.emplace_back(Run{cur.remote_buffer_id,
+                            cur.remote_offset,
+                            span,
+                            byte_region_payload_bytes(cur),
+                            i,
+                            i + 1});
+    }
+  }
+  uint64_t payload_bytes = 0;
+  uint64_t read_bytes = 0;
+  for (const Run& run : runs) {
+    payload_bytes += run.payload_bytes;
+    read_bytes += run.length;
+  }
+  LOG_FIRST_N(INFO, 5) << "PULL staging plan, regions=" << fitting.size()
+                       << ", reads=" << runs.size()
+                       << ", payload_bytes=" << payload_bytes
+                       << ", read_bytes=" << read_bytes
+                       << ", staging_bytes=" << kStagingBytes;
 
   const auto uint8_options =
       torch::TensorOptions().dtype(torch::kUInt8).device(torch_device);
@@ -1469,18 +1580,54 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
 
     Timer scatter_timer;
     // (local buffer, length) -> (staging offsets, local offsets)
+    struct StridedScatter {
+      uint64_t local_buffer_id = 0;
+      int64_t length = 0;
+      int64_t stage_row = 0;
+      int64_t local_row = 0;
+      int64_t count = 0;
+      int64_t remote_stride_rows = 0;
+      int64_t local_stride_rows = 0;
+    };
     std::map<std::pair<uint64_t, uint64_t>,
              std::pair<std::vector<int64_t>, std::vector<int64_t>>>
         groups;
+    std::vector<StridedScatter> strided_scatters;
     for (size_t r = chunk_begin; r < next; ++r) {
       const Run& run = runs[r];
       const uint64_t stage_base = run_stage_offset[r - chunk_begin];
       for (size_t k = run.begin; k < run.end; ++k) {
-        const ByteRegion& region = regions[order[k]];
+        const ByteRegion& region = fitting[order[k]];
+        const uint64_t repeats = byte_region_repeats(region);
+        const int64_t length = static_cast<int64_t>(region.length);
+        if (repeats > 1 && length > 0 &&
+            region.local_stride % region.length == 0 &&
+            region.remote_stride % region.length == 0 &&
+            region.local_offset % region.length == 0 &&
+            (stage_base + region.remote_offset - run.remote_offset) %
+                    region.length ==
+                0) {
+          strided_scatters.push_back(StridedScatter{
+              region.local_buffer_id,
+              length,
+              static_cast<int64_t>(
+                  (stage_base + region.remote_offset - run.remote_offset) /
+                  region.length),
+              static_cast<int64_t>(region.local_offset / region.length),
+              static_cast<int64_t>(repeats),
+              static_cast<int64_t>(region.remote_stride / region.length),
+              static_cast<int64_t>(region.local_stride / region.length)});
+          continue;
+        }
         auto& group = groups[{region.local_buffer_id, region.length}];
-        group.first.emplace_back(static_cast<int64_t>(
-            stage_base + (region.remote_offset - run.remote_offset)));
-        group.second.emplace_back(static_cast<int64_t>(region.local_offset));
+        const uint64_t piece_count = repeats;
+        for (uint64_t piece = 0; piece < piece_count; ++piece) {
+          group.first.emplace_back(static_cast<int64_t>(
+              stage_base + region.remote_offset + piece * region.remote_stride -
+              run.remote_offset));
+          group.second.emplace_back(static_cast<int64_t>(
+              region.local_offset + piece * region.local_stride));
+        }
       }
     }
     // Upload every aligned group's row indices with one H2D copy.
@@ -1516,6 +1663,40 @@ bool MooncakeTransferEngine::move_memory_regions_staged(
         all_rows[base + n + i] = offsets.second[i] / length;
       }
       aligned_groups.emplace_back(local_buffer_id, length, base, n);
+    }
+    // NPU/MLU Qwen3.5 decode launches one packed kernel for the whole batch.
+    // Fold every strided repeat into that same row-index upload so scatter is
+    // one index_copy per buffer, not one launch per head or block.
+    std::map<std::pair<uint64_t, int64_t>, std::vector<const StridedScatter*>>
+        strided_by_key;
+    for (const StridedScatter& scatter : strided_scatters) {
+      if (scatter.local_buffer_id >= local_desc->buffers.size() ||
+          scatter.count <= 0 || scatter.length <= 0 ||
+          scatter.remote_stride_rows < 1 || scatter.local_stride_rows < 1) {
+        LOG(ERROR) << "PULL strided scatter is out of range";
+        return false;
+      }
+      strided_by_key[{scatter.local_buffer_id, scatter.length}].push_back(
+          &scatter);
+    }
+    for (auto& [key, scatters] : strided_by_key) {
+      size_t n = 0;
+      for (const StridedScatter* scatter : scatters) {
+        n += static_cast<size_t>(scatter->count);
+      }
+      const size_t base = all_rows.size();
+      all_rows.resize(base + 2 * n);
+      size_t cursor = 0;
+      for (const StridedScatter* scatter : scatters) {
+        for (int64_t piece = 0; piece < scatter->count; ++piece) {
+          all_rows[base + cursor] =
+              scatter->stage_row + piece * scatter->remote_stride_rows;
+          all_rows[base + n + cursor] =
+              scatter->local_row + piece * scatter->local_stride_rows;
+          ++cursor;
+        }
+      }
+      aligned_groups.emplace_back(key.first, key.second, base, n);
     }
     torch::Tensor device_rows;
     if (!all_rows.empty()) {

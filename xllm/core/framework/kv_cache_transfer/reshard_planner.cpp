@@ -67,6 +67,8 @@ struct AtomicLogicalRegion {
   uint64_t logical_offset = 0;
   uint64_t physical_offset = 0;
   uint64_t length = 0;
+  uint64_t logical_stride = 0;
+  uint64_t physical_stride = 0;
   int32_t owner_tp_rank = 0;
   const CacheTensorManifest* tensor = nullptr;
   const WorkerCacheLayoutManifest* worker = nullptr;
@@ -74,6 +76,12 @@ struct AtomicLogicalRegion {
 
 struct PlannedAtomicRegion {
   uint64_t logical_offset = 0;
+  // Original span step. Head shards of one token are adjacent in logical
+  // order, so the compactor must follow this step instead of whichever
+  // neighbor sorts next.
+  uint64_t logical_series_stride = 0;
+  uint64_t local_series_stride = 0;
+  uint64_t remote_series_stride = 0;
   StridedRegionTemplate region;
 };
 
@@ -306,6 +314,8 @@ void expand_manifest(const WorkerCacheLayoutManifest& manifest,
         region.physical_offset =
             span.physical_offset_bytes + repeat * span.physical_stride_bytes;
         region.length = span.bytes_per_region;
+        region.logical_stride = span.logical_stride_bytes;
+        region.physical_stride = span.physical_stride_bytes;
         region.owner_tp_rank = span.owner_tp_rank;
         region.tensor = &tensor;
         region.worker = &manifest;
@@ -826,25 +836,85 @@ void compact_planned_regions(std::vector<PlannedAtomicRegion>* candidates,
                               rhs.logical_offset);
             });
 
-  std::vector<uint64_t> last_logical_offsets;
-  last_logical_offsets.reserve(candidates->size());
+  struct OpenSeries {
+    uint64_t logical_stride = 0;
+    uint64_t local_stride = 0;
+    uint64_t remote_stride = 0;
+    uint64_t last_logical = 0;
+  };
+  std::vector<OpenSeries> open;
+  auto push_new = [&](const PlannedAtomicRegion& candidate) {
+    output->emplace_back(candidate.region);
+    OpenSeries series;
+    series.logical_stride = candidate.logical_series_stride;
+    series.local_stride = candidate.local_series_stride;
+    series.remote_stride = candidate.remote_series_stride;
+    series.last_logical = candidate.logical_offset;
+    open.emplace_back(series);
+  };
+
   for (const PlannedAtomicRegion& candidate : *candidates) {
+    bool placed = false;
+    if (candidate.logical_series_stride > 0 &&
+        candidate.local_series_stride >= candidate.region.bytes_per_region &&
+        candidate.remote_series_stride >= candidate.region.bytes_per_region) {
+      for (int index = static_cast<int>(output->size()) - 1; index >= 0;
+           --index) {
+        StridedRegionTemplate& previous = (*output)[static_cast<size_t>(index)];
+        if (!same_template_key(previous, candidate.region)) {
+          break;
+        }
+        const OpenSeries& series = open[static_cast<size_t>(index)];
+        if (series.logical_stride != candidate.logical_series_stride ||
+            series.local_stride != candidate.local_series_stride ||
+            series.remote_stride != candidate.remote_series_stride ||
+            series.logical_stride == 0) {
+          continue;
+        }
+        const uint64_t repeats =
+            previous.repeat_count == 0 ? 1 : previous.repeat_count;
+        const uint64_t last_local = previous.local_offset_in_resource +
+                                    (repeats - 1) * series.local_stride;
+        const uint64_t last_remote = previous.remote_offset_in_resource +
+                                     (repeats - 1) * series.remote_stride;
+        if (candidate.logical_offset !=
+                series.last_logical + series.logical_stride ||
+            candidate.region.local_offset_in_resource !=
+                last_local + series.local_stride ||
+            candidate.region.remote_offset_in_resource !=
+                last_remote + series.remote_stride) {
+          continue;
+        }
+        if (repeats == 1) {
+          previous.local_stride = series.local_stride;
+          previous.remote_stride = series.remote_stride;
+        }
+        ++previous.repeat_count;
+        open[static_cast<size_t>(index)].last_logical =
+            candidate.logical_offset;
+        placed = true;
+        break;
+      }
+      if (!placed) {
+        push_new(candidate);
+      }
+      continue;
+    }
+
     if (output->empty() ||
         !same_template_key(output->back(), candidate.region)) {
-      output->emplace_back(candidate.region);
-      last_logical_offsets.emplace_back(candidate.logical_offset);
+      push_new(candidate);
       continue;
     }
 
     StridedRegionTemplate& previous = output->back();
-    const uint64_t previous_logical = last_logical_offsets.back();
+    const uint64_t previous_logical = open.back().last_logical;
     if (candidate.logical_offset <= previous_logical ||
         candidate.region.local_offset_in_resource <=
             previous.local_offset_in_resource ||
         candidate.region.remote_offset_in_resource <=
             previous.remote_offset_in_resource) {
-      output->emplace_back(candidate.region);
-      last_logical_offsets.emplace_back(candidate.logical_offset);
+      push_new(candidate);
       continue;
     }
 
@@ -862,8 +932,7 @@ void compact_planned_regions(std::vector<PlannedAtomicRegion>* candidates,
                              local_stride == previous.local_stride &&
                              remote_stride == previous.remote_stride;
     if ((!can_start_repeat && !same_repeat) || logical_stride == 0) {
-      output->emplace_back(candidate.region);
-      last_logical_offsets.emplace_back(candidate.logical_offset);
+      push_new(candidate);
       continue;
     }
     if (can_start_repeat) {
@@ -871,7 +940,7 @@ void compact_planned_regions(std::vector<PlannedAtomicRegion>* candidates,
       previous.remote_stride = remote_stride;
     }
     ++previous.repeat_count;
-    last_logical_offsets.back() = candidate.logical_offset;
+    open.back().last_logical = candidate.logical_offset;
   }
   fold_contiguous_templates(output);
 }
@@ -902,7 +971,8 @@ Status bind_regions(
     const std::unordered_map<uint64_t, ResourceMappingView>* explicit_mappings,
     CacheNamespace cache_namespace,
     int64_t layer_id,
-    std::vector<ByteRegion>* regions) {
+    std::vector<ByteRegion>* regions,
+    bool compact_strided_repeats) {
   if (regions == nullptr) {
     return invalid("bound region output must not be null");
   }
@@ -975,24 +1045,48 @@ Status bind_regions(
             remote_id * region_template.remote_resource_stride;
       }
 
-      for (uint64_t repeat = 0; repeat < region_template.repeat_count;
-           ++repeat) {
+      const uint64_t repeats =
+          region_template.repeat_count == 0 ? 1 : region_template.repeat_count;
+      const bool pack_stride =
+          compact_strided_repeats && repeats > 1 &&
+          region_template.bytes_per_region > 0 &&
+          region_template.local_stride >= region_template.bytes_per_region &&
+          region_template.remote_stride >= region_template.bytes_per_region;
+      const uint64_t repeat_limit = pack_stride ? 1 : repeats;
+      for (uint64_t repeat = 0; repeat < repeat_limit; ++repeat) {
         if (multiply_overflows(repeat, region_template.local_stride) ||
             multiply_overflows(repeat, region_template.remote_stride)) {
           return invalid("strided request region overflows");
         }
         const uint64_t local_repeat = repeat * region_template.local_stride;
         const uint64_t remote_repeat = repeat * region_template.remote_stride;
+        if (pack_stride &&
+            (multiply_overflows(repeats - 1, region_template.local_stride) ||
+             multiply_overflows(repeats - 1, region_template.remote_stride))) {
+          return invalid("strided request region overflows");
+        }
+        const uint64_t packed_local_span =
+            pack_stride ? (repeats - 1) * region_template.local_stride : 0;
+        const uint64_t packed_remote_span =
+            pack_stride ? (repeats - 1) * region_template.remote_stride : 0;
         if (add_overflows(local_resource_base,
                           region_template.local_offset_in_resource) ||
             add_overflows(
                 local_resource_base + region_template.local_offset_in_resource,
                 local_repeat) ||
+            add_overflows(local_resource_base +
+                              region_template.local_offset_in_resource +
+                              local_repeat,
+                          packed_local_span) ||
             add_overflows(remote_resource_base,
                           region_template.remote_offset_in_resource) ||
             add_overflows(remote_resource_base +
                               region_template.remote_offset_in_resource,
-                          remote_repeat)) {
+                          remote_repeat) ||
+            add_overflows(remote_resource_base +
+                              region_template.remote_offset_in_resource +
+                              remote_repeat,
+                          packed_remote_span)) {
           return invalid("bound request region offset overflows");
         }
         BoundRegion item;
@@ -1005,12 +1099,29 @@ Status bind_regions(
                                     region_template.remote_offset_in_resource +
                                     remote_repeat;
         item.region.length = region_template.bytes_per_region;
+        if (pack_stride) {
+          item.region.repeat_count = repeats;
+          item.region.local_stride = region_template.local_stride;
+          item.region.remote_stride = region_template.remote_stride;
+        }
+        const uint64_t local_tail =
+            item.region.repeat_count > 1
+                ? item.region.local_offset +
+                      (item.region.repeat_count - 1) * item.region.local_stride
+                : item.region.local_offset;
+        const uint64_t remote_tail =
+            item.region.repeat_count > 1
+                ? item.region.remote_offset +
+                      (item.region.repeat_count - 1) * item.region.remote_stride
+                : item.region.remote_offset;
         if (item.region.local_offset > region_template.local_buffer_bytes ||
+            local_tail > region_template.local_buffer_bytes ||
             item.region.length >
-                region_template.local_buffer_bytes - item.region.local_offset ||
+                region_template.local_buffer_bytes - local_tail ||
             item.region.remote_offset > region_template.remote_buffer_bytes ||
-            item.region.length > region_template.remote_buffer_bytes -
-                                     item.region.remote_offset) {
+            remote_tail > region_template.remote_buffer_bytes ||
+            item.region.length >
+                region_template.remote_buffer_bytes - remote_tail) {
           return invalid("bound request region exceeds its manifest buffer");
         }
         item.logical_tensor = region_template.logical_tensor;
@@ -1057,6 +1168,11 @@ Status bind_regions(
       continue;
     }
     ByteRegion& previous = regions->back();
+    if (previous.repeat_count > 1 || item.region.repeat_count > 1) {
+      regions->emplace_back(item.region);
+      previous_domain = item;
+      continue;
+    }
     const bool adjacent =
         previous.local_buffer_id == item.region.local_buffer_id &&
         previous.remote_buffer_id == item.region.remote_buffer_id &&
@@ -1306,6 +1422,15 @@ Status build_outgoing_plan_impl(const WorkerCacheLayoutManifest& source,
               logical_end(source_region), logical_end(destination_region));
           PlannedAtomicRegion candidate;
           candidate.logical_offset = logical_begin;
+          if (source_region.logical_stride > 0 &&
+              source_region.logical_stride ==
+                  destination_region.logical_stride &&
+              source_region.physical_stride >= source_region.length &&
+              destination_region.physical_stride >= destination_region.length) {
+            candidate.logical_series_stride = source_region.logical_stride;
+            candidate.local_series_stride = source_region.physical_stride;
+            candidate.remote_series_stride = destination_region.physical_stride;
+          }
           StridedRegionTemplate& region = candidate.region;
           region.cache_namespace = source_region.cache_namespace;
           region.layer_id = source_region.layer_id;
@@ -1406,7 +1531,8 @@ Status RequestRegionBinder::bind(const ReshardPlanTemplate& plan,
                                  const std::vector<KVTransferMapping>& mappings,
                                  CacheNamespace cache_namespace,
                                  int64_t layer_id,
-                                 std::vector<ByteRegion>* regions) const {
+                                 std::vector<ByteRegion>* regions,
+                                 bool compact_strided_repeats) const {
   std::unordered_map<int32_t, ResourceMappingView> mappings_by_group;
   mappings_by_group.reserve(mappings.size());
   for (const KVTransferMapping& mapping : mappings) {
@@ -1425,7 +1551,8 @@ Status RequestRegionBinder::bind(const ReshardPlanTemplate& plan,
                       /*explicit_mappings=*/nullptr,
                       cache_namespace,
                       layer_id,
-                      regions);
+                      regions,
+                      compact_strided_repeats);
 }
 
 Status RequestRegionBinder::bind_pull(
@@ -1433,7 +1560,8 @@ Status RequestRegionBinder::bind_pull(
     const std::vector<KVTransferMapping>& mappings,
     CacheNamespace cache_namespace,
     int64_t layer_id,
-    std::vector<ByteRegion>* regions) const {
+    std::vector<ByteRegion>* regions,
+    bool compact_strided_repeats) const {
   if (regions == nullptr) {
     return invalid("bound region output must not be null");
   }
@@ -1447,14 +1575,20 @@ Status RequestRegionBinder::bind_pull(
     source_mappings.emplace_back(std::move(source_mapping));
   }
   std::vector<ByteRegion> source_regions;
-  const Status status =
-      bind(plan, source_mappings, cache_namespace, layer_id, &source_regions);
+  const Status status = bind(plan,
+                             source_mappings,
+                             cache_namespace,
+                             layer_id,
+                             &source_regions,
+                             compact_strided_repeats);
   if (!status.ok()) {
     return status;
   }
   for (ByteRegion& region : source_regions) {
     std::swap(region.local_buffer_id, region.remote_buffer_id);
     std::swap(region.local_offset, region.remote_offset);
+    // Plan strides are source/destination. bind_pull returns local = puller.
+    std::swap(region.local_stride, region.remote_stride);
   }
   *regions = std::move(source_regions);
   return Status();
@@ -1493,7 +1627,8 @@ Status RequestRegionBinder::bind_explicit(
                       &mappings_by_tensor,
                       cache_namespace,
                       layer_id,
-                      regions);
+                      regions,
+                      /*compact_strided_repeats=*/false);
 }
 
 }  // namespace xllm

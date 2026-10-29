@@ -20,16 +20,10 @@ limitations under the License.
 
 #include <map>
 
-#include "torch_musa/csrc/core/MUSAStream.h"
-
-// torch_musa's native MUSAGraph header expects this stream alias.
-namespace at::musa {
-using c10::musa::MUSAStream;
-}  // namespace at::musa
-
 #include "core/kernels/musa/piecewise_graphs.h"
-#include "torch_musa/csrc/aten/musa/MUSAGraph.h"
+#include "core/platform/musa_graph_handle.h"
 #include "torch_musa/csrc/core/MUSACachingAllocator.h"
+#include "torch_musa/csrc/core/MUSAStream.h"
 
 // MUSA host_defines.h defines __noinline__ as a macro. Folly uses that token
 // inside __attribute__((__noinline__)), so leaving it defined creates a nested
@@ -338,7 +332,7 @@ class MusaGraph final {
                std::vector<KVCache>& kv_cache,
                uint32_t bucket_num_tokens,
                const c10::musa::MempoolId_t& pool,
-               MusaMemPool* pool_ptr = nullptr);
+               std::unique_ptr<MusaMemPool> pool_owner = nullptr);
 
   // Replay captured graph with new input data
   ModelOutput replay(const torch::Tensor& tokens,
@@ -381,6 +375,10 @@ class MusaGraph final {
   void refresh_persistent_paged_kv_host_mirrors(
       const std::shared_ptr<layer::AttentionMetadata>& attn_metadata,
       const AttentionHostInput& host_src);
+
+  // Declared before captured tensors and graph handles so it is destroyed
+  // after all users of its allocations. Physical storage outlives this graph.
+  std::unique_ptr<MusaMemPool> pool_owner_;
 
   // Reference to persistent parameters (shared across multiple MusaGraph
   // instances).
@@ -466,7 +464,7 @@ class MusaGraph final {
   // Declare graph holders last so they are destroyed before the tensors and
   // host buffers whose addresses were retained during capture.
   std::unique_ptr<PiecewiseGraphs> piecewise_graph_;
-  at::musa::MUSAGraph graph_;
+  ::xllm::MusaGraphHandle graph_;
 };
 
 // Executor implementation using MUSA graph optimization
@@ -529,7 +527,7 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   bool use_prefill_piecewise_graph(uint32_t num_tokens,
                                    const ModelInputParams& params) const;
 
-  // Prefill graphs use the decode token buckets with padding. Multi-sequence
+  // Prefill graphs use their own coarse token buckets. Multi-sequence
   // GDN batches keep their exact token count, because their runners read the
   // padded per-sequence layout recorded from host lengths.
   uint32_t get_prefill_graph_num_tokens(uint32_t num_tokens,
@@ -547,18 +545,6 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
       const torch::Tensor& tokens,
       const ModelInputParams& params) const;
 
-  // Get MUSA graph memory pool id for capture. When VMM is enabled, uses
-  // per-shape MemPool under (physical_pool_id, shape_id). Same physical_pool_id
-  // => reuse across different shapes (e.g. prefill vs decode are different
-  // pools).
-  c10::musa::MempoolId_t get_mem_pool(uint32_t physical_pool_id = 0,
-                                      uint32_t shape_id = 0);
-
-  // Switch VMM allocator to a new virtual address space before capture for the
-  // given physical pool. Enables physical memory reuse within that pool across
-  // shapes (max(shape) instead of sum(shape)).
-  void reset_vmm_allocator_offset(uint32_t physical_pool_id);
-
   struct VmmPoolState;
 
   struct GraphMemoryUsageStats {
@@ -570,9 +556,8 @@ class MusaGraphExecutorImpl final : public ExecutorImpl {
   };
 
   VmmPoolState& get_or_create_vmm_pool_state(uint32_t physical_pool_id);
-  MusaMemPool* get_or_create_vmm_mempool(uint32_t physical_pool_id,
-                                         uint32_t shape_id);
-  MusaMemPool* get_vmm_mempool(uint32_t physical_pool_id, uint32_t shape_id);
+  // Each new capture gets an empty logical pool and a fresh VA mapping.
+  std::unique_ptr<MusaMemPool> create_vmm_mempool(uint32_t physical_pool_id);
   GraphMemoryUsageStats get_graph_memory_usage_stats();
   void log_graph_memory_after_capture();
 
