@@ -185,23 +185,28 @@ inline void deepseek_v4_add_packed_tensor(
   specs.push_back(std::move(spec));
 }
 
+template <typename Visitor>
+inline void deepseek_v4_visit_cpu_metadata(layer::DSAMetadata& dsa,
+                                           Visitor&& visit) {
+  visit(dsa.seq_lens);
+  visit(dsa.seq_lens_q);
+  visit(dsa.actual_seq_lengths_query);
+  visit(dsa.actual_seq_lengths_kv);
+  visit(dsa.kv_cu_seq_lens);
+  visit(dsa.max_seqlen_q);
+  visit(dsa.max_seqlen_kv);
+  visit(dsa.input_positions);
+  visit(dsa.c4_pad_positions);
+  visit(dsa.c128_pad_positions);
+}
+
 inline void deepseek_v4_collect_cpu_metadata_tensors(
     layer::DSAMetadata& dsa,
     const torch::Device& runtime_device,
     std::vector<DeepseekV4PackedTensorSpec>& specs) {
-  deepseek_v4_add_packed_tensor(dsa.seq_lens, runtime_device, specs);
-  deepseek_v4_add_packed_tensor(dsa.seq_lens_q, runtime_device, specs);
-  deepseek_v4_add_packed_tensor(
-      dsa.actual_seq_lengths_query, runtime_device, specs);
-  deepseek_v4_add_packed_tensor(
-      dsa.actual_seq_lengths_kv, runtime_device, specs);
-  deepseek_v4_add_packed_tensor(dsa.kv_cu_seq_lens, runtime_device, specs);
-  deepseek_v4_add_packed_tensor(dsa.max_seqlen_q, runtime_device, specs);
-  deepseek_v4_add_packed_tensor(dsa.max_seqlen_kv, runtime_device, specs);
-  deepseek_v4_add_packed_tensor(dsa.input_positions, runtime_device, specs);
-  deepseek_v4_add_packed_tensor(dsa.c4_pad_positions, runtime_device, specs);
-  deepseek_v4_add_packed_tensor(dsa.c128_pad_positions, runtime_device, specs);
-
+  deepseek_v4_visit_cpu_metadata(dsa, [&](torch::Tensor& tensor) {
+    deepseek_v4_add_packed_tensor(tensor, runtime_device, specs);
+  });
   for (auto& layer_block_tables : dsa.block_tables) {
     for (auto& block_table : layer_block_tables) {
       deepseek_v4_add_packed_tensor(block_table, runtime_device, specs);
@@ -244,25 +249,9 @@ inline void deepseek_v4_collect_graph_cpu_metadata_slots(
     const torch::Device& runtime_device,
     std::vector<DeepseekV4GraphPackedTensorSlot>& slots,
     bool share_cache_groups = false) {
-  deepseek_v4_add_graph_packed_tensor_slot(dsa.seq_lens, runtime_device, slots);
-  deepseek_v4_add_graph_packed_tensor_slot(
-      dsa.seq_lens_q, runtime_device, slots);
-  deepseek_v4_add_graph_packed_tensor_slot(
-      dsa.actual_seq_lengths_query, runtime_device, slots);
-  deepseek_v4_add_graph_packed_tensor_slot(
-      dsa.actual_seq_lengths_kv, runtime_device, slots);
-  deepseek_v4_add_graph_packed_tensor_slot(
-      dsa.kv_cu_seq_lens, runtime_device, slots);
-  deepseek_v4_add_graph_packed_tensor_slot(
-      dsa.max_seqlen_q, runtime_device, slots);
-  deepseek_v4_add_graph_packed_tensor_slot(
-      dsa.max_seqlen_kv, runtime_device, slots);
-  deepseek_v4_add_graph_packed_tensor_slot(
-      dsa.input_positions, runtime_device, slots);
-  deepseek_v4_add_graph_packed_tensor_slot(
-      dsa.c4_pad_positions, runtime_device, slots);
-  deepseek_v4_add_graph_packed_tensor_slot(
-      dsa.c128_pad_positions, runtime_device, slots);
+  deepseek_v4_visit_cpu_metadata(dsa, [&](torch::Tensor& tensor) {
+    deepseek_v4_add_graph_packed_tensor_slot(tensor, runtime_device, slots);
+  });
 
   auto cache_key = [&](size_t layer, size_t cache, bool is_slot_mapping) {
     if (!share_cache_groups) {
@@ -754,97 +743,14 @@ class DeepseekV4ModelImpl
       layers_.push_back(layer);
     }
 
-    // Build DSA caches_info from compress_ratios
-    const auto& compress_ratios = model_args.compress_ratios();
-    const int32_t window_size = model_args.window_size();
-    // TODO: Wire runtime block_size into model metadata so this stays aligned
-    // with the DSv4 KV cache and block manager when the default changes.
-    const int32_t base_block_size = 128;  // default block size
-    CHECK_EQ(KVCacheConfig::get_instance().block_size(), base_block_size)
-        << "DeepSeek V4 currently only supports block_size=128.";
-
-    std::unordered_map<DSAGroupKey, int32_t, DSAGroupKeyHash> group_key_map;
-    auto register_group =
-        [&](DSACacheType type, int32_t ratio, int32_t block_size) -> int32_t {
-      DSAGroupKey key{ratio, type, block_size};
-      auto it = group_key_map.find(key);
-      if (it != group_key_map.end()) {
-        return it->second;
-      }
-      const int32_t gid = static_cast<int32_t>(group_infos_.size());
-      group_key_map.emplace(key, gid);
-      group_infos_.push_back({type, ratio, block_size});
-      return gid;
-    };
-
-    // Keep DSA group ids consistent with BlockManagerPool manager order:
-    // 1) sliding-window manager first
-    // 2) token managers in first-seen compress_ratio order
-    register_group(DSACacheType::SLIDING_WINDOW, 1, window_size);
-    for (const auto ratio : compress_ratios) {
-      const int32_t cr = deepseek_v4_normalize_compress_ratio(ratio);
-      if (cr == 4 || cr == 128) {
-        register_group(DSACacheType::TOKEN, cr, base_block_size);
-      }
-    }
-
-    caches_info_.resize(model_args.n_layers());
-
-    for (int32_t layer_id = 0; layer_id < model_args.n_layers(); ++layer_id) {
-      int32_t cr = (layer_id < static_cast<int32_t>(compress_ratios.size()))
-                       ? compress_ratios[layer_id]
-                       : 1;
-      cr = deepseek_v4_normalize_compress_ratio(cr);
-      // Build per-layer cache specs based on compress_ratio
-      struct CacheEntry {
-        DSACacheType type;
-        int32_t ratio;
-        int32_t block_size;
-      };
-      std::vector<CacheEntry> layer_caches;
-
-      if (cr == 1) {
-        // C1: 1 cache (swa)
-        layer_caches.push_back({DSACacheType::SLIDING_WINDOW, 1, window_size});
-      } else if (cr == 4) {
-        // C4: 8 caches
-        // compress_kv(TOKEN,4,128), compress_index(TOKEN,4,128),
-        // swa(SW,1,window), kv_state(SW,1,window), score_state(SW,1,window),
-        // idx_kv_state(SW,1,window), idx_score_state(SW,1,window),
-        // indexer_scale(TOKEN,4,128)
-        layer_caches.push_back({DSACacheType::TOKEN, 4, base_block_size});
-        layer_caches.push_back({DSACacheType::TOKEN, 4, base_block_size});
-        layer_caches.push_back({DSACacheType::SLIDING_WINDOW, 1, window_size});
-        layer_caches.push_back({DSACacheType::SLIDING_WINDOW, 1, window_size});
-        layer_caches.push_back({DSACacheType::SLIDING_WINDOW, 1, window_size});
-        layer_caches.push_back({DSACacheType::SLIDING_WINDOW, 1, window_size});
-        layer_caches.push_back({DSACacheType::SLIDING_WINDOW, 1, window_size});
-        layer_caches.push_back({DSACacheType::TOKEN, 4, base_block_size});
-      } else if (cr == 128) {
-        // C128: 4 caches
-        // compress_kv(TOKEN,128,128), swa(SW,1,window),
-        // kv_state(SW,1,window), score_state(SW,1,window)
-        layer_caches.push_back({DSACacheType::TOKEN, 128, base_block_size});
-        layer_caches.push_back({DSACacheType::SLIDING_WINDOW, 1, window_size});
-        layer_caches.push_back({DSACacheType::SLIDING_WINDOW, 1, window_size});
-        layer_caches.push_back({DSACacheType::SLIDING_WINDOW, 1, window_size});
-      }
-
-      for (const auto& ce : layer_caches) {
-        const int32_t gid = register_group(ce.type, ce.ratio, ce.block_size);
-        caches_info_[layer_id].push_back(
-            {gid, ce.type, ce.ratio, ce.block_size});
-      }
-    }
+    deepseek_v4_build_cache_specs(model_args_, caches_info_, group_infos_);
   }
 
   void load_state_dict(const StateDict& state_dict) override {
     LlmModelImplBase<layer::DeepseekV4DecoderLayer>::load_state_dict(
         state_dict);
     embed_tokens_->load_state_dict(state_dict.get_dict_with_prefix("embed."));
-    LOAD_WEIGHT(hc_head_fn);
-    LOAD_WEIGHT(hc_head_base);
-    LOAD_WEIGHT(hc_head_scale);
+    load_hc_head_state_dict(state_dict);
   }
 
   bool requires_graph_forward_metadata() { return true; }
@@ -1836,7 +1742,7 @@ class DeepseekV4ModelImpl
   }
 
   void build_precomputed_metadata(layer::DSAMetadata& dsa,
-                                  const ModelInputParams& params) const {
+                                  const ModelInputParams& /*params*/) const {
     dsa.c1_metadata = torch::Tensor();
     dsa.c4_metadata = torch::Tensor();
     dsa.c128_metadata = torch::Tensor();
@@ -1866,169 +1772,7 @@ class DeepseekV4ModelImpl
       return;
     }
 
-#if defined(USE_MUSA)
-    // The MUSA fallback consumes the raw DSA lengths and RoPE tables directly;
-    // the sparse-attention metadata kernels are not part of this minimal path.
-    return;
-#endif
-
-    const int64_t batch_size =
-        std::max<int64_t>(dsa.actual_seq_lengths_kv.size(0), 1);
-    const int64_t max_seqlen_q =
-        std::max<int64_t>(params.meta.q_max_seq_len,
-                          vector_max_or_zero(params.attention.host.q_seq_lens));
-    const int64_t max_seqlen_kv = std::max<int64_t>(
-        params.meta.kv_max_seq_len,
-        vector_max_or_zero(params.attention.host.kv_seq_lens));
-    const int64_t ori_win_left = std::max<int64_t>(window_size_ - 1, 0);
-    const int64_t sparse_topk = std::max<int64_t>(index_topk_, 1);
-    const bool is_prefill = params.meta.q_max_seq_len > 1;
-
-    const char* layout_kv = "PA_ND";
-    auto empty_int32_opt = as_empty_int32_tensor(dsa.actual_seq_lengths_query);
-    auto cu_seqlens_ori_kv_opt =
-        is_prefill ? as_optional_tensor(dsa.actual_seq_lengths_query)
-                   : empty_int32_opt;
-
-    xllm::kernel::SparseAttnSharedkvMetadataParams c1_params;
-    c1_params.num_heads_q = tp_num_heads_;
-    c1_params.num_heads_kv = 1;
-    c1_params.head_dim = head_dim_;
-    c1_params.cu_seqlens_q = as_optional_tensor(dsa.actual_seq_lengths_query);
-    c1_params.cu_seqlens_ori_kv = cu_seqlens_ori_kv_opt;
-    c1_params.cu_seqlens_cmp_kv = empty_int32_opt;
-    c1_params.seqused_q = empty_int32_opt;
-    c1_params.seqused_kv = as_optional_tensor(dsa.actual_seq_lengths_kv);
-    c1_params.batch_size = batch_size;
-    c1_params.max_seqlen_q = max_seqlen_q;
-    c1_params.max_seqlen_kv = max_seqlen_kv;
-    c1_params.ori_topk = 0;
-    c1_params.cmp_topk = 0;
-    c1_params.cmp_ratio = 1;
-    c1_params.ori_mask_mode = 4;
-    c1_params.cmp_mask_mode = 3;
-    c1_params.ori_win_left = ori_win_left;
-    c1_params.ori_win_right = 0;
-    c1_params.layout_q = "TND";
-    c1_params.layout_kv = layout_kv;
-    c1_params.has_ori_kv = true;
-    c1_params.has_cmp_kv = false;
-    dsa.c1_metadata = xllm::kernel::sparse_attn_sharedkv_metadata(c1_params);
-
-    xllm::kernel::SparseAttnSharedkvMetadataParams c4_params;
-    c4_params.num_heads_q = tp_num_heads_;
-    c4_params.num_heads_kv = 1;
-    c4_params.head_dim = head_dim_;
-    c4_params.cu_seqlens_q = as_optional_tensor(dsa.actual_seq_lengths_query);
-    c4_params.cu_seqlens_ori_kv = cu_seqlens_ori_kv_opt;
-    c4_params.cu_seqlens_cmp_kv = empty_int32_opt;
-    c4_params.seqused_q = empty_int32_opt;
-    c4_params.seqused_kv = as_optional_tensor(dsa.actual_seq_lengths_kv);
-    c4_params.batch_size = batch_size;
-    c4_params.max_seqlen_q = max_seqlen_q;
-    c4_params.max_seqlen_kv = max_seqlen_kv;
-    c4_params.ori_topk = 0;
-    c4_params.cmp_topk = sparse_topk;
-    c4_params.cmp_ratio = 4;
-    c4_params.ori_mask_mode = 4;
-    c4_params.cmp_mask_mode = 3;
-    c4_params.ori_win_left = ori_win_left;
-    c4_params.ori_win_right = 0;
-    c4_params.layout_q = "TND";
-    c4_params.layout_kv = layout_kv;
-    c4_params.has_ori_kv = true;
-    c4_params.has_cmp_kv = true;
-    dsa.c4_metadata = xllm::kernel::sparse_attn_sharedkv_metadata(c4_params);
-
-    xllm::kernel::SparseAttnSharedkvMetadataParams c128_params;
-    c128_params.num_heads_q = tp_num_heads_;
-    c128_params.num_heads_kv = 1;
-    c128_params.head_dim = head_dim_;
-    c128_params.cu_seqlens_q = as_optional_tensor(dsa.actual_seq_lengths_query);
-    c128_params.cu_seqlens_ori_kv = cu_seqlens_ori_kv_opt;
-    c128_params.cu_seqlens_cmp_kv = empty_int32_opt;
-    c128_params.seqused_q = empty_int32_opt;
-    c128_params.seqused_kv = as_optional_tensor(dsa.actual_seq_lengths_kv);
-    c128_params.batch_size = batch_size;
-    c128_params.max_seqlen_q = max_seqlen_q;
-    c128_params.max_seqlen_kv = max_seqlen_kv;
-    c128_params.ori_topk = 0;
-    c128_params.cmp_topk = 0;
-    c128_params.cmp_ratio = 128;
-    c128_params.ori_mask_mode = 4;
-    c128_params.cmp_mask_mode = 3;
-    c128_params.ori_win_left = ori_win_left;
-    c128_params.ori_win_right = 0;
-    c128_params.layout_q = "TND";
-    c128_params.layout_kv = layout_kv;
-    c128_params.has_ori_kv = true;
-    c128_params.has_cmp_kv = true;
-    dsa.c128_metadata =
-        xllm::kernel::sparse_attn_sharedkv_metadata(c128_params);
-
-    torch::Tensor query_lens;
-    if (dsa.actual_seq_lengths_query.defined() &&
-        dsa.actual_seq_lengths_query.dim() > 0 &&
-        dsa.actual_seq_lengths_query.size(0) > 1) {
-      query_lens = dsa.actual_seq_lengths_query
-                       .slice(
-                           /*dim=*/0,
-                           /*start=*/1,
-                           /*end=*/dsa.actual_seq_lengths_query.size(0))
-                       .clone();
-    } else if (dsa.seq_lens_q.defined()) {
-      query_lens = dsa.seq_lens_q;
-    }
-
-    torch::Tensor key_lens;
-    if (dsa.seq_lens.defined()) {
-      key_lens = dsa.seq_lens;
-    } else if (dsa.actual_seq_lengths_kv.defined()) {
-      key_lens = dsa.actual_seq_lengths_kv;
-    }
-
-    if (!query_lens.defined() || !key_lens.defined() ||
-        query_lens.numel() == 0 || key_lens.numel() == 0) {
-      return;
-    }
-
-    const int64_t global_index_num_heads =
-        std::max<int64_t>(index_n_heads_ > 0 ? index_n_heads_ : num_heads_, 1);
-    CHECK_EQ(global_index_num_heads % dp_local_tp_size_, 0)
-        << "[DSV4][PrecomputeMetadata] index/global heads must be divisible by "
-           "local tp size. global_index_num_heads="
-        << global_index_num_heads << ", local_tp_size=" << dp_local_tp_size_;
-    const int64_t qli_batch_size = std::max<int64_t>(key_lens.size(0), 1);
-    const int64_t index_head_dim =
-        std::max<int64_t>(index_head_dim_ > 0 ? index_head_dim_ : head_dim_, 1);
-    const int64_t qli_max_seqlen_q =
-        std::max<int64_t>(params.meta.q_max_seq_len,
-                          vector_max_or_zero(params.attention.host.q_seq_lens));
-    const int64_t qli_max_seqlen_k = std::max<int64_t>(
-        params.meta.kv_max_seq_len,
-        vector_max_or_zero(params.attention.host.kv_seq_lens));
-
-    xllm::kernel::QuantLightningIndexerMetadataParams qli_params;
-    qli_params.num_heads_q = global_index_num_heads;
-    qli_params.num_heads_k = 1;
-    qli_params.head_dim = index_head_dim;
-    qli_params.query_quant_mode = 0;
-    qli_params.key_quant_mode = 0;
-    qli_params.actual_seq_lengths_query = as_optional_tensor(query_lens);
-    qli_params.actual_seq_lengths_key = as_optional_tensor(key_lens);
-    qli_params.batch_size = qli_batch_size;
-    qli_params.max_seqlen_q = qli_max_seqlen_q;
-    qli_params.max_seqlen_k = qli_max_seqlen_k;
-    qli_params.layout_query = "TND";
-    qli_params.layout_key = "PA_BSND";
-    qli_params.sparse_count = sparse_topk;
-    qli_params.sparse_mode = 3;
-    qli_params.pre_tokens = std::numeric_limits<int64_t>::max();
-    qli_params.next_tokens = std::numeric_limits<int64_t>::max();
-    qli_params.cmp_ratio = 4;
-    qli_params.device = query_lens.device().str();
-    dsa.qli_metadata =
-        xllm::kernel::quant_lightning_indexer_metadata(qli_params);
+    // MUSA consumes raw DSA lengths and RoPE tables directly.
   }
 
   torch::Tensor hc_head(const torch::Tensor& x) {

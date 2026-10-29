@@ -117,6 +117,12 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
                             const std::string& w2_prefix,
                             int64_t rank,
                             int64_t world_size);
+  bool try_load_quantized_experts(const StateDict& state_dict,
+                                  const std::vector<std::string>& w13_prefixes,
+                                  const std::string& w2_prefix,
+                                  int64_t rank,
+                                  int64_t world_size,
+                                  bool packed_fp4);
   bool fp4_experts_loaded() const {
     return w13_packed_is_loaded_ && w2_packed_is_loaded_;
   }

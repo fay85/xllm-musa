@@ -1,5 +1,13 @@
 include(cc_test)
 
+# Compressor state storage and C4/C128 tail semantics use CPU tensors only.
+cc_test(
+  NAME deepseek_v4_compressor_state_test
+  CPU_ONLY
+  SRCS deepseek_v4_compressor_state_test.cpp
+  DEPS torch GTest::gtest_main
+)
+
 cc_test(
   NAME
     compressed_tensors_test

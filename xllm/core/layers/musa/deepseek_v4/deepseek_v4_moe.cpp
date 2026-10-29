@@ -14,8 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include "core/layers/musa/deepseek_v4/deepseek_v4_moe.h"
-#include "core/layers/musa/deepseek_v4/deepseek_v4_pd_reduce_scatter_policy.h"
-#include "core/layers/musa/deepseek_v4/deepseek_v4_sp_context.h"
 
 #include <cuda_runtime_api.h>
 #include <glog/logging.h>
@@ -33,6 +31,8 @@ limitations under the License.
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_moe_policy.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_pd_reduce_scatter_policy.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_sp_context.h"
 #include "core/layers/musa/musa_fp8_linear.h"
 
 // The shared CUDA source is remapped into kernel::musa by musamapping, while
@@ -40,20 +40,21 @@ limitations under the License.
 // MUSA declaration local to this implementation so the grouped FP8 path can
 // link against the actual MUSA archive symbol.
 namespace xllm::kernel::musa {
-std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
-moe_compute_index(const torch::Tensor &expert_id, int64_t num_experts);
-} // namespace xllm::kernel::musa
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
+    const torch::Tensor& expert_id,
+    int64_t num_experts);
+}  // namespace xllm::kernel::musa
 
 namespace xllm {
 namespace layer {
 namespace {
 
-bool has_w_style_shared_expert_weights(const StateDict &state_dict) {
+bool has_w_style_shared_expert_weights(const StateDict& state_dict) {
   static const std::vector<std::string> kSharedExpertWeightPrefixes = {
       "w1.", "w2.", "w3."};
-  for (const auto &item : state_dict) {
-    const std::string &name = item.first;
-    for (const std::string &prefix : kSharedExpertWeightPrefixes) {
+  for (const auto& item : state_dict) {
+    const std::string& name = item.first;
+    for (const std::string& prefix : kSharedExpertWeightPrefixes) {
       if (name.rfind(prefix, 0) == 0) {
         return true;
       }
@@ -62,7 +63,8 @@ bool has_w_style_shared_expert_weights(const StateDict &state_dict) {
   return false;
 }
 
-torch::Tensor swiglu(const torch::Tensor &gate, const torch::Tensor &up,
+torch::Tensor swiglu(const torch::Tensor& gate,
+                     const torch::Tensor& up,
                      double swiglu_limit) {
   auto gated = gate;
   auto up_clamped = up;
@@ -74,9 +76,10 @@ torch::Tensor swiglu(const torch::Tensor &gate, const torch::Tensor &up,
   return torch::silu(gated) * up_clamped;
 }
 
-bool all_tensors_defined(const std::vector<torch::Tensor> &tensors) {
-  return std::all_of(tensors.begin(), tensors.end(),
-                     [](const auto &tensor) { return tensor.defined(); });
+bool all_tensors_defined(const std::vector<torch::Tensor>& tensors) {
+  return std::all_of(tensors.begin(), tensors.end(), [](const auto& tensor) {
+    return tensor.defined();
+  });
 }
 
 // Physical B16 speculative verify is 16 * (N6+1) = 112 target rows. Keep
@@ -100,18 +103,18 @@ struct SharedExpertOverlapState {
   musaEvent_t shared_ready = nullptr;
 };
 
-SharedExpertOverlapState *get_shared_expert_overlap_state(int32_t device_id) {
+SharedExpertOverlapState* get_shared_expert_overlap_state(int32_t device_id) {
   using States =
       std::unordered_map<int32_t, std::unique_ptr<SharedExpertOverlapState>>;
-  thread_local States *states = new States();
-  auto &state = (*states)[device_id];
+  thread_local States* states = new States();
+  auto& state = (*states)[device_id];
   if (!state) {
     state = std::make_unique<SharedExpertOverlapState>(device_id);
   }
   return state.get();
 }
 
-bool is_packed_fp4_weight(const torch::Tensor &tensor,
+bool is_packed_fp4_weight(const torch::Tensor& tensor,
                           int64_t logical_out_features,
                           int64_t logical_in_features) {
   return tensor.defined() && tensor.dim() == 2 &&
@@ -120,14 +123,16 @@ bool is_packed_fp4_weight(const torch::Tensor &tensor,
          tensor.size(1) * 2 == logical_in_features;
 }
 
-bool is_fp4_scale(const torch::Tensor &tensor, int64_t logical_out_features,
+bool is_fp4_scale(const torch::Tensor& tensor,
+                  int64_t logical_out_features,
                   int64_t logical_in_features) {
   return tensor.defined() && tensor.dim() == 2 &&
          tensor.size(0) == logical_out_features &&
          tensor.size(1) * 32 == logical_in_features;
 }
 
-bool is_fp8_weight(const torch::Tensor &tensor, int64_t logical_out_features,
+bool is_fp8_weight(const torch::Tensor& tensor,
+                   int64_t logical_out_features,
                    int64_t logical_in_features) {
   return tensor.defined() && tensor.dim() == 2 &&
          (tensor.scalar_type() == torch::kFloat8_e4m3fn ||
@@ -136,7 +141,7 @@ bool is_fp8_weight(const torch::Tensor &tensor, int64_t logical_out_features,
          tensor.size(1) == logical_in_features;
 }
 
-bool is_fp8_block_scale(const torch::Tensor &tensor,
+bool is_fp8_block_scale(const torch::Tensor& tensor,
                         int64_t logical_out_features,
                         int64_t logical_in_features) {
   const auto ceil_div = [](int64_t value, int64_t divisor) {
@@ -149,8 +154,8 @@ bool is_fp8_block_scale(const torch::Tensor &tensor,
          tensor.size(1) == ceil_div(logical_in_features, 128);
 }
 
-torch::Tensor dequantize_fp8_block_weight(const torch::Tensor &weight,
-                                          const torch::Tensor &scale,
+torch::Tensor dequantize_fp8_block_weight(const torch::Tensor& weight,
+                                          const torch::Tensor& scale,
                                           torch::ScalarType output_dtype) {
   CHECK(is_fp8_weight(weight, weight.size(0), weight.size(1)))
       << "DeepseekV4 FP8 expert weight must be a 2D FP8 tensor.";
@@ -173,8 +178,8 @@ torch::Tensor dequantize_fp8_block_weight(const torch::Tensor &weight,
       .contiguous();
 }
 
-torch::Tensor unpack_fp4_weight(const torch::Tensor &packed,
-                                const torch::Tensor &scale,
+torch::Tensor unpack_fp4_weight(const torch::Tensor& packed,
+                                const torch::Tensor& scale,
                                 torch::ScalarType dtype) {
   CHECK(is_packed_fp4_weight(packed, packed.size(0), packed.size(1) * 2))
       << "DeepseekV4 FP4 expert weight expects packed int8 [out, in/2].";
@@ -188,8 +193,22 @@ torch::Tensor unpack_fp4_weight(const torch::Tensor &packed,
   auto low = byte_values_fp32 - high * 16;
 
   auto table = torch::tensor(
-      {0.0f, 0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 6.0f, 0.0f, -0.5f, -1.0f,
-       -1.5f, -2.0f, -3.0f, -4.0f, -6.0f},
+      {0.0f,
+       0.5f,
+       1.0f,
+       1.5f,
+       2.0f,
+       3.0f,
+       4.0f,
+       6.0f,
+       0.0f,
+       -0.5f,
+       -1.0f,
+       -1.5f,
+       -2.0f,
+       -3.0f,
+       -4.0f,
+       -6.0f},
       torch::TensorOptions().dtype(torch::kFloat32).device(packed.device()));
   auto low_values =
       table.index_select(/*dim=*/0, low.to(torch::kLong).view({-1}))
@@ -204,15 +223,20 @@ torch::Tensor unpack_fp4_weight(const torch::Tensor &packed,
   return (values * expanded_scale).to(dtype).contiguous();
 }
 
-} // namespace
+}  // namespace
 
 DeepseekV4SharedExpertImpl::DeepseekV4SharedExpertImpl(
-    int64_t hidden_size, int64_t intermediate_size,
-    const std::string &hidden_act, const QuantArgs &quant_args,
-    ProcessGroup *process_group, const torch::TensorOptions &options,
+    int64_t hidden_size,
+    int64_t intermediate_size,
+    const std::string& hidden_act,
+    const QuantArgs& quant_args,
+    ProcessGroup* process_group,
+    const torch::TensorOptions& options,
     double swiglu_limit)
-    : hidden_size_(hidden_size), intermediate_size_(intermediate_size),
-      swiglu_limit_(swiglu_limit), process_group_(process_group) {
+    : hidden_size_(hidden_size),
+      intermediate_size_(intermediate_size),
+      swiglu_limit_(swiglu_limit),
+      process_group_(process_group) {
   CHECK(process_group_ != nullptr)
       << "DeepseekV4SharedExpert requires a valid TP group.";
   CHECK_EQ(intermediate_size_ % process_group_->world_size(), 0)
@@ -220,19 +244,26 @@ DeepseekV4SharedExpertImpl::DeepseekV4SharedExpertImpl(
          "TP world size.";
   local_intermediate_size_ = intermediate_size_ / process_group_->world_size();
 
-  gate_up_proj_ = register_module(
-      "gate_up_proj", ColumnParallelLinear(hidden_size_, intermediate_size_ * 2,
-                                           /*bias=*/false,
-                                           /*gather_output=*/false, quant_args,
-                                           process_group_, options));
+  gate_up_proj_ = register_module("gate_up_proj",
+                                  ColumnParallelLinear(hidden_size_,
+                                                       intermediate_size_ * 2,
+                                                       /*bias=*/false,
+                                                       /*gather_output=*/false,
+                                                       quant_args,
+                                                       process_group_,
+                                                       options));
   act_ = register_module(
       "act", Activation(hidden_act, /*is_gated=*/true, swiglu_limit_));
-  down_proj_ = register_module(
-      "down_proj", RowParallelLinear(intermediate_size_, hidden_size_,
-                                     /*bias=*/false,
-                                     /*input_is_parallelized=*/true,
-                                     /*enable_result_reduction=*/false,
-                                     quant_args, process_group_, options));
+  down_proj_ =
+      register_module("down_proj",
+                      RowParallelLinear(intermediate_size_,
+                                        hidden_size_,
+                                        /*bias=*/false,
+                                        /*input_is_parallelized=*/true,
+                                        /*enable_result_reduction=*/false,
+                                        quant_args,
+                                        process_group_,
+                                        options));
 
   decode_gate_up_workspace_ = torch::empty(
       {kFp8GemvWorkspaceTokens, local_intermediate_size_ * 2}, options);
@@ -264,26 +295,35 @@ bool DeepseekV4SharedExpertImpl::fp8_decode_ready() const {
          down_weight_scale_.size(1) == local_intermediate_size_ / 128;
 }
 
-torch::Tensor
-DeepseekV4SharedExpertImpl::forward(const torch::Tensor &hidden_states) {
+torch::Tensor DeepseekV4SharedExpertImpl::forward(
+    const torch::Tensor& hidden_states) {
   auto input = hidden_states.reshape({-1, hidden_size_});
   const int64_t num_tokens = input.size(0);
   if (num_tokens > 0 && num_tokens <= kFp8GemvWorkspaceTokens &&
       input.is_contiguous() && fp8_decode_ready()) {
     auto gate_up = musa::fp8_linear_forward(
-        input, gate_up_proj_->weight(), gate_up_proj_->weight_scale(),
-        std::nullopt, std::nullopt, input.scalar_type(),
+        input,
+        gate_up_proj_->weight(),
+        gate_up_proj_->weight_scale(),
+        std::nullopt,
+        std::nullopt,
+        input.scalar_type(),
         decode_gate_up_workspace_.narrow(
             /*dim=*/0, /*start=*/0, /*length=*/num_tokens));
     auto activated = kernel::musa::deepseek_v4_shared_swiglu(
-        gate_up, swiglu_limit_,
+        gate_up,
+        swiglu_limit_,
         decode_activation_workspace_.narrow(
             /*dim=*/0, /*start=*/0, /*length=*/num_tokens));
     CHECK(activated.defined())
         << "DeepSeek-V4 MUSA shared-expert decode SwiGLU contract failed.";
     auto output = musa::fp8_linear_forward(
-        activated, down_proj_->weight(), down_weight_scale_, std::nullopt,
-        std::nullopt, input.scalar_type(),
+        activated,
+        down_proj_->weight(),
+        down_weight_scale_,
+        std::nullopt,
+        std::nullopt,
+        input.scalar_type(),
         decode_output_workspace_.narrow(
             /*dim=*/0, /*start=*/0, /*length=*/num_tokens));
     LOG_FIRST_N(INFO, 1)
@@ -298,15 +338,15 @@ DeepseekV4SharedExpertImpl::forward(const torch::Tensor &hidden_states) {
   return down_proj_->forward(activated).reshape(hidden_states.sizes());
 }
 
-void DeepseekV4SharedExpertImpl::load_down_scale(const StateDict &state_dict,
-                                                 const std::string &down_name) {
+void DeepseekV4SharedExpertImpl::load_down_scale(const StateDict& state_dict,
+                                                 const std::string& down_name) {
   const int64_t rank = process_group_->rank();
   const int64_t world_size = process_group_->world_size();
-  auto scale = state_dict.get_sharded_tensor(down_name + "scale", /*dim=*/1,
-                                             rank, world_size);
+  auto scale = state_dict.get_sharded_tensor(
+      down_name + "scale", /*dim=*/1, rank, world_size);
   if (!scale.defined()) {
-    scale = state_dict.get_sharded_tensor(down_name + "weight_scale", /*dim=*/1,
-                                          rank, world_size);
+    scale = state_dict.get_sharded_tensor(
+        down_name + "weight_scale", /*dim=*/1, rank, world_size);
   }
   if (scale.defined()) {
     down_weight_scale_ = scale.to(torch::kFloat32)
@@ -315,13 +355,14 @@ void DeepseekV4SharedExpertImpl::load_down_scale(const StateDict &state_dict,
   }
 }
 
-void DeepseekV4SharedExpertImpl::load_state_dict(const StateDict &state_dict) {
+void DeepseekV4SharedExpertImpl::load_state_dict(const StateDict& state_dict) {
   load_state_dict(state_dict, {"gate_proj.", "up_proj."}, "down_proj.");
 }
 
 void DeepseekV4SharedExpertImpl::load_state_dict(
-    const StateDict &state_dict, const std::vector<std::string> &gate_up_names,
-    const std::string &down_name) {
+    const StateDict& state_dict,
+    const std::vector<std::string>& gate_up_names,
+    const std::string& down_name) {
   CHECK_EQ(gate_up_names.size(), 2)
       << "DeepseekV4SharedExpert expects gate and up weight prefixes.";
   gate_up_proj_->load_state_dict(state_dict, gate_up_names);
@@ -329,10 +370,10 @@ void DeepseekV4SharedExpertImpl::load_state_dict(
   load_down_scale(state_dict, down_name);
 }
 
-DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs &model_args,
-                                     const QuantArgs &quant_args,
-                                     const ParallelArgs &parallel_args,
-                                     const torch::TensorOptions &options,
+DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs& model_args,
+                                     const QuantArgs& quant_args,
+                                     const ParallelArgs& parallel_args,
+                                     const torch::TensorOptions& options,
                                      int32_t layer_id)
     : num_total_experts_(model_args.n_routed_experts()),
       topk_(model_args.n_activated_experts() > 0
@@ -342,10 +383,12 @@ DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs &model_args,
       intermediate_size_(model_args.moe_intermediate_size() > 0
                              ? model_args.moe_intermediate_size()
                              : model_args.intermediate_size()),
-      n_shared_experts_(model_args.n_shared_experts()), layer_id_(layer_id),
+      n_shared_experts_(model_args.n_shared_experts()),
+      layer_id_(layer_id),
       num_layers_(static_cast<int32_t>(model_args.n_layers())),
       swiglu_limit_(static_cast<double>(model_args.swiglu_limit())),
-      hidden_act_(model_args.hidden_act()), options_(options),
+      hidden_act_(model_args.hidden_act()),
+      options_(options),
       tp_pg_(parallel_args.moe_tp_group_ != nullptr
                  ? parallel_args.moe_tp_group_
                  : parallel_args.tp_group_),
@@ -361,10 +404,10 @@ DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs &model_args,
   // Draft and B1 retain the existing arithmetic. Only the explicit target
   // model can opt into the separately measured large-row grouped FP8 path.
   if (model_args.model_type() == "deepseek_v4") {
-    const char *minimum =
+    const char* minimum =
         std::getenv("XLLM_DSV4_GROUPED_FP8_DECODE_MIN_TOKENS");
     if (minimum != nullptr) {
-      char *end = nullptr;
+      char* end = nullptr;
       const int64_t value =
           static_cast<int64_t>(std::strtoll(minimum, &end, 10));
       CHECK(end != minimum && *end == '\0' && (value == 77 || value == 112))
@@ -397,9 +440,13 @@ DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs &model_args,
   if (n_shared_experts_ > 0) {
     shared_experts_ = register_module(
         "shared_experts",
-        DeepseekV4SharedExpert(
-            hidden_size_, intermediate_size_ * n_shared_experts_, hidden_act_,
-            quant_args, tp_pg_, options, swiglu_limit_));
+        DeepseekV4SharedExpert(hidden_size_,
+                               intermediate_size_ * n_shared_experts_,
+                               hidden_act_,
+                               quant_args,
+                               tp_pg_,
+                               options,
+                               swiglu_limit_));
     shared_expert_gate_ = register_module(
         "shared_expert_gate",
         torch::nn::Linear(
@@ -425,11 +472,12 @@ void DeepseekV4MoEImpl::ensure_dense_expert_storage() {
         /*requires_grad=*/false);
   }
   if (!w2_.defined()) {
-    w2_ = register_parameter("w2",
-                             torch::empty({num_experts_per_rank_, hidden_size_,
-                                           local_intermediate_size_},
-                                          options_),
-                             /*requires_grad=*/false);
+    w2_ = register_parameter(
+        "w2",
+        torch::empty(
+            {num_experts_per_rank_, hidden_size_, local_intermediate_size_},
+            options_),
+        /*requires_grad=*/false);
   }
 }
 
@@ -454,17 +502,18 @@ void DeepseekV4MoEImpl::ensure_fp8_expert_storage() {
         /*requires_grad=*/false);
   }
   if (!w2_fp8_.defined()) {
-    w2_fp8_ =
-        register_parameter("w2_fp8",
-                           torch::empty({num_experts_per_rank_, hidden_size_,
-                                         local_intermediate_size_},
-                                        weight_options),
-                           /*requires_grad=*/false);
+    w2_fp8_ = register_parameter(
+        "w2_fp8",
+        torch::empty(
+            {num_experts_per_rank_, hidden_size_, local_intermediate_size_},
+            weight_options),
+        /*requires_grad=*/false);
   }
   if (!w2_fp8_scale_.defined()) {
     w2_fp8_scale_ = register_parameter(
         "w2_fp8_scale",
-        torch::empty({num_experts_per_rank_, (hidden_size_ + 127) / 128,
+        torch::empty({num_experts_per_rank_,
+                      (hidden_size_ + 127) / 128,
                       (local_intermediate_size_ + 127) / 128},
                      scale_options),
         /*requires_grad=*/false);
@@ -475,265 +524,206 @@ void DeepseekV4MoEImpl::ensure_packed_fp4_expert_storage() {
   const auto packed_options = options_.dtype(torch::kInt8);
   const auto scale_options = options_.dtype(torch::kFloat32);
   if (!w13_packed_.defined()) {
-    w13_packed_ = register_parameter(
-        "w13_packed",
-        torch::empty({num_experts_per_rank_, local_intermediate_size_ * 2,
-                      hidden_size_ / 2},
-                     packed_options),
-        /*requires_grad=*/false);
+    w13_packed_ = register_parameter("w13_packed",
+                                     torch::empty({num_experts_per_rank_,
+                                                   local_intermediate_size_ * 2,
+                                                   hidden_size_ / 2},
+                                                  packed_options),
+                                     /*requires_grad=*/false);
   }
   if (!w13_scale_.defined()) {
-    w13_scale_ = register_parameter(
-        "w13_scale",
-        torch::empty({num_experts_per_rank_, local_intermediate_size_ * 2,
-                      hidden_size_ / 32},
-                     scale_options),
-        /*requires_grad=*/false);
+    w13_scale_ = register_parameter("w13_scale",
+                                    torch::empty({num_experts_per_rank_,
+                                                  local_intermediate_size_ * 2,
+                                                  hidden_size_ / 32},
+                                                 scale_options),
+                                    /*requires_grad=*/false);
   }
   if (!w2_packed_.defined()) {
-    w2_packed_ =
-        register_parameter("w2_packed",
-                           torch::empty({num_experts_per_rank_, hidden_size_,
-                                         local_intermediate_size_ / 2},
-                                        packed_options),
-                           /*requires_grad=*/false);
+    w2_packed_ = register_parameter(
+        "w2_packed",
+        torch::empty(
+            {num_experts_per_rank_, hidden_size_, local_intermediate_size_ / 2},
+            packed_options),
+        /*requires_grad=*/false);
   }
   if (!w2_scale_.defined()) {
-    w2_scale_ =
-        register_parameter("w2_scale",
-                           torch::empty({num_experts_per_rank_, hidden_size_,
-                                         local_intermediate_size_ / 32},
-                                        scale_options),
-                           /*requires_grad=*/false);
+    w2_scale_ = register_parameter("w2_scale",
+                                   torch::empty({num_experts_per_rank_,
+                                                 hidden_size_,
+                                                 local_intermediate_size_ / 32},
+                                                scale_options),
+                                   /*requires_grad=*/false);
   }
 }
 
 bool DeepseekV4MoEImpl::try_load_packed_fp4_experts(
-    const StateDict &state_dict, const std::vector<std::string> &w13_prefixes,
-    const std::string &w2_prefix, int64_t rank, int64_t world_size) {
-  CHECK_EQ(w13_prefixes.size(), 2)
-      << "DeepseekV4 packed FP4 fused load expects two prefixes.";
+    const StateDict& state_dict,
+    const std::vector<std::string>& w13_prefixes,
+    const std::string& w2_prefix,
+    int64_t rank,
+    int64_t world_size) {
+  return try_load_quantized_experts(state_dict,
+                                    w13_prefixes,
+                                    w2_prefix,
+                                    rank,
+                                    world_size,
+                                    /*packed_fp4=*/true);
+}
 
-  if (w1_packed_list_.size() < static_cast<size_t>(num_experts_per_rank_)) {
-    w1_packed_list_.resize(num_experts_per_rank_);
-    w3_packed_list_.resize(num_experts_per_rank_);
-    w1_scale_list_.resize(num_experts_per_rank_);
-    w3_scale_list_.resize(num_experts_per_rank_);
-    w2_packed_list_.resize(num_experts_per_rank_);
-    w2_scale_list_.resize(num_experts_per_rank_);
+bool DeepseekV4MoEImpl::try_load_fp8_experts(
+    const StateDict& state_dict,
+    const std::vector<std::string>& w13_prefixes,
+    const std::string& w2_prefix,
+    int64_t rank,
+    int64_t world_size) {
+  return try_load_quantized_experts(state_dict,
+                                    w13_prefixes,
+                                    w2_prefix,
+                                    rank,
+                                    world_size,
+                                    /*packed_fp4=*/false);
+}
+
+bool DeepseekV4MoEImpl::try_load_quantized_experts(
+    const StateDict& state_dict,
+    const std::vector<std::string>& w13_prefixes,
+    const std::string& w2_prefix,
+    int64_t rank,
+    int64_t world_size,
+    bool packed_fp4) {
+  // Select storage and format validation once. Sharding, shard accumulation,
+  // and publication order are common to both checkpoint representations.
+  auto& w1_list = packed_fp4 ? w1_packed_list_ : w1_fp8_list_;
+  auto& w3_list = packed_fp4 ? w3_packed_list_ : w3_fp8_list_;
+  auto& w2_list = packed_fp4 ? w2_packed_list_ : w2_fp8_list_;
+  auto& s1_list = packed_fp4 ? w1_scale_list_ : w1_fp8_scale_list_;
+  auto& s3_list = packed_fp4 ? w3_scale_list_ : w3_fp8_scale_list_;
+  auto& s2_list = packed_fp4 ? w2_scale_list_ : w2_fp8_scale_list_;
+  auto& w13 = packed_fp4 ? w13_packed_ : w13_fp8_;
+  auto& s13 = packed_fp4 ? w13_scale_ : w13_fp8_scale_;
+  auto& w2_storage = packed_fp4 ? w2_packed_ : w2_fp8_;
+  auto& s2 = packed_fp4 ? w2_scale_ : w2_fp8_scale_;
+  bool& w13_loaded = packed_fp4 ? w13_packed_is_loaded_ : w13_fp8_is_loaded_;
+  bool& w2_loaded = packed_fp4 ? w2_packed_is_loaded_ : w2_fp8_is_loaded_;
+  bool& detected =
+      packed_fp4 ? packed_fp4_experts_detected_ : fp8_experts_detected_;
+  const auto valid_weight = packed_fp4 ? is_packed_fp4_weight : is_fp8_weight;
+  const auto valid_scale = packed_fp4 ? is_fp4_scale : is_fp8_block_scale;
+  auto ensure_storage = [this, packed_fp4]() {
+    if (packed_fp4) {
+      ensure_packed_fp4_expert_storage();
+    } else {
+      ensure_fp8_expert_storage();
+    }
+  };
+  CHECK_EQ(w13_prefixes.size(), 2)
+      << "DeepseekV4 quantized fused load expects two prefixes.";
+
+  if (w1_list.size() < static_cast<size_t>(num_experts_per_rank_)) {
+    w1_list.resize(num_experts_per_rank_);
+    w3_list.resize(num_experts_per_rank_);
+    s1_list.resize(num_experts_per_rank_);
+    s3_list.resize(num_experts_per_rank_);
+    w2_list.resize(num_experts_per_rank_);
+    s2_list.resize(num_experts_per_rank_);
   }
 
-  bool saw_packed_tensor = false;
+  bool saw_tensor = false;
   for (int64_t idx = 0; idx < num_experts_per_rank_; ++idx) {
     const std::string expert_prefix =
         std::to_string(start_expert_id_ + idx) + ".";
-    if (!w1_packed_list_[idx].defined()) {
+    if (!w1_list[idx].defined()) {
       auto w1 = state_dict.get_sharded_tensor(
           expert_prefix + w13_prefixes[0] + "weight", 0, rank, world_size);
       if (w1.defined()) {
-        if (!is_packed_fp4_weight(w1, local_intermediate_size_, hidden_size_)) {
+        if (!valid_weight(w1, local_intermediate_size_, hidden_size_)) {
           return false;
         }
         auto scale = state_dict.get_sharded_tensor(
             expert_prefix + w13_prefixes[0] + "scale", 0, rank, world_size);
-        CHECK(is_fp4_scale(scale, local_intermediate_size_, hidden_size_))
-            << "DeepseekV4 packed FP4 w1 scale size mismatch for "
+        CHECK(valid_scale(scale, local_intermediate_size_, hidden_size_))
+            << "DeepseekV4 quantized w1 scale size mismatch for "
             << state_dict.prefix() << expert_prefix << w13_prefixes[0];
-        w1_packed_list_[idx] = w1.contiguous();
-        w1_scale_list_[idx] = scale.to(torch::kFloat32).contiguous();
-        packed_fp4_experts_detected_ = true;
-        saw_packed_tensor = true;
+        w1_list[idx] = w1.contiguous();
+        s1_list[idx] = scale.to(torch::kFloat32).contiguous();
+        detected = true;
+        saw_tensor = true;
       }
     }
-    if (!w3_packed_list_[idx].defined()) {
+    if (!w3_list[idx].defined()) {
       auto w3 = state_dict.get_sharded_tensor(
           expert_prefix + w13_prefixes[1] + "weight", 0, rank, world_size);
       if (w3.defined()) {
-        if (!is_packed_fp4_weight(w3, local_intermediate_size_, hidden_size_)) {
+        if (!valid_weight(w3, local_intermediate_size_, hidden_size_)) {
           return false;
         }
         auto scale = state_dict.get_sharded_tensor(
             expert_prefix + w13_prefixes[1] + "scale", 0, rank, world_size);
-        CHECK(is_fp4_scale(scale, local_intermediate_size_, hidden_size_))
-            << "DeepseekV4 packed FP4 w3 scale size mismatch for "
+        CHECK(valid_scale(scale, local_intermediate_size_, hidden_size_))
+            << "DeepseekV4 quantized w3 scale size mismatch for "
             << state_dict.prefix() << expert_prefix << w13_prefixes[1];
-        w3_packed_list_[idx] = w3.contiguous();
-        w3_scale_list_[idx] = scale.to(torch::kFloat32).contiguous();
-        packed_fp4_experts_detected_ = true;
-        saw_packed_tensor = true;
+        w3_list[idx] = w3.contiguous();
+        s3_list[idx] = scale.to(torch::kFloat32).contiguous();
+        detected = true;
+        saw_tensor = true;
       }
     }
-    if (!w2_packed_list_[idx].defined()) {
+    if (!w2_list[idx].defined()) {
       auto w2 = state_dict.get_sharded_tensor(
           expert_prefix + w2_prefix + "weight", 1, rank, world_size);
       if (w2.defined()) {
-        if (!is_packed_fp4_weight(w2, hidden_size_, local_intermediate_size_)) {
+        if (!valid_weight(w2, hidden_size_, local_intermediate_size_)) {
           return false;
         }
         auto scale = state_dict.get_sharded_tensor(
             expert_prefix + w2_prefix + "scale", 1, rank, world_size);
-        CHECK(is_fp4_scale(scale, hidden_size_, local_intermediate_size_))
-            << "DeepseekV4 packed FP4 w2 scale size mismatch for "
+        CHECK(valid_scale(scale, hidden_size_, local_intermediate_size_))
+            << "DeepseekV4 quantized w2 scale size mismatch for "
             << state_dict.prefix() << expert_prefix << w2_prefix;
-        w2_packed_list_[idx] = w2.contiguous();
-        w2_scale_list_[idx] = scale.to(torch::kFloat32).contiguous();
-        packed_fp4_experts_detected_ = true;
-        saw_packed_tensor = true;
+        w2_list[idx] = w2.contiguous();
+        s2_list[idx] = scale.to(torch::kFloat32).contiguous();
+        detected = true;
+        saw_tensor = true;
       }
     }
   }
 
-  if (!w13_packed_is_loaded_ && all_tensors_defined(w1_packed_list_) &&
-      all_tensors_defined(w3_packed_list_) &&
-      all_tensors_defined(w1_scale_list_) &&
-      all_tensors_defined(w3_scale_list_)) {
-    ensure_packed_fp4_expert_storage();
+  if (!w13_loaded && all_tensors_defined(w1_list) &&
+      all_tensors_defined(w3_list) && all_tensors_defined(s1_list) &&
+      all_tensors_defined(s3_list)) {
+    ensure_storage();
     std::vector<torch::Tensor> packed_vec;
     std::vector<torch::Tensor> scale_vec;
     packed_vec.reserve(num_experts_per_rank_);
     scale_vec.reserve(num_experts_per_rank_);
     for (int64_t idx = 0; idx < num_experts_per_rank_; ++idx) {
-      packed_vec.push_back(
-          torch::cat({w1_packed_list_[idx], w3_packed_list_[idx]}, 0));
-      scale_vec.push_back(
-          torch::cat({w1_scale_list_[idx], w3_scale_list_[idx]}, 0));
+      packed_vec.emplace_back(torch::cat({w1_list[idx], w3_list[idx]}, 0));
+      scale_vec.emplace_back(torch::cat({s1_list[idx], s3_list[idx]}, 0));
     }
-    w13_packed_.copy_(torch::stack(packed_vec).to(w13_packed_.device()));
-    w13_scale_.copy_(torch::stack(scale_vec).to(w13_scale_.device()));
-    w13_packed_is_loaded_ = true;
-    w1_packed_list_.clear();
-    w3_packed_list_.clear();
-    w1_scale_list_.clear();
-    w3_scale_list_.clear();
+    w13.copy_(torch::stack(packed_vec).to(w13.device()));
+    s13.copy_(torch::stack(scale_vec).to(s13.device()));
+    w13_loaded = true;
+    w1_list.clear();
+    w3_list.clear();
+    s1_list.clear();
+    s3_list.clear();
   }
 
-  if (!w2_packed_is_loaded_ && all_tensors_defined(w2_packed_list_) &&
-      all_tensors_defined(w2_scale_list_)) {
-    ensure_packed_fp4_expert_storage();
-    w2_packed_.copy_(torch::stack(w2_packed_list_).to(w2_packed_.device()));
-    w2_scale_.copy_(torch::stack(w2_scale_list_).to(w2_scale_.device()));
-    w2_packed_is_loaded_ = true;
-    w2_packed_list_.clear();
-    w2_scale_list_.clear();
+  if (!w2_loaded && all_tensors_defined(w2_list) &&
+      all_tensors_defined(s2_list)) {
+    ensure_storage();
+    w2_storage.copy_(torch::stack(w2_list).to(w2_storage.device()));
+    s2.copy_(torch::stack(s2_list).to(s2.device()));
+    w2_loaded = true;
+    w2_list.clear();
+    s2_list.clear();
   }
 
-  return saw_packed_tensor || fp4_experts_loaded();
+  return saw_tensor || (w13_loaded && w2_loaded);
 }
 
-bool DeepseekV4MoEImpl::try_load_fp8_experts(
-    const StateDict &state_dict, const std::vector<std::string> &w13_prefixes,
-    const std::string &w2_prefix, int64_t rank, int64_t world_size) {
-  CHECK_EQ(w13_prefixes.size(), 2)
-      << "DeepseekV4 FP8 fused load expects two prefixes.";
-
-  if (w1_fp8_list_.size() < static_cast<size_t>(num_experts_per_rank_)) {
-    w1_fp8_list_.resize(num_experts_per_rank_);
-    w3_fp8_list_.resize(num_experts_per_rank_);
-    w1_fp8_scale_list_.resize(num_experts_per_rank_);
-    w3_fp8_scale_list_.resize(num_experts_per_rank_);
-    w2_fp8_list_.resize(num_experts_per_rank_);
-    w2_fp8_scale_list_.resize(num_experts_per_rank_);
-  }
-
-  bool saw_fp8_tensor = false;
-  for (int64_t idx = 0; idx < num_experts_per_rank_; ++idx) {
-    const std::string expert_prefix =
-        std::to_string(start_expert_id_ + idx) + ".";
-    if (!w1_fp8_list_[idx].defined()) {
-      auto w1 = state_dict.get_sharded_tensor(
-          expert_prefix + w13_prefixes[0] + "weight", 0, rank, world_size);
-      if (w1.defined()) {
-        if (!is_fp8_weight(w1, local_intermediate_size_, hidden_size_)) {
-          return false;
-        }
-        auto scale = state_dict.get_sharded_tensor(
-            expert_prefix + w13_prefixes[0] + "scale", 0, rank, world_size);
-        CHECK(is_fp8_block_scale(scale, local_intermediate_size_, hidden_size_))
-            << "DeepseekV4 FP8 w1 scale size mismatch for "
-            << state_dict.prefix() << expert_prefix << w13_prefixes[0];
-        w1_fp8_list_[idx] = w1.contiguous();
-        w1_fp8_scale_list_[idx] = scale.to(torch::kFloat32).contiguous();
-        fp8_experts_detected_ = true;
-        saw_fp8_tensor = true;
-      }
-    }
-    if (!w3_fp8_list_[idx].defined()) {
-      auto w3 = state_dict.get_sharded_tensor(
-          expert_prefix + w13_prefixes[1] + "weight", 0, rank, world_size);
-      if (w3.defined()) {
-        if (!is_fp8_weight(w3, local_intermediate_size_, hidden_size_)) {
-          return false;
-        }
-        auto scale = state_dict.get_sharded_tensor(
-            expert_prefix + w13_prefixes[1] + "scale", 0, rank, world_size);
-        CHECK(is_fp8_block_scale(scale, local_intermediate_size_, hidden_size_))
-            << "DeepseekV4 FP8 w3 scale size mismatch for "
-            << state_dict.prefix() << expert_prefix << w13_prefixes[1];
-        w3_fp8_list_[idx] = w3.contiguous();
-        w3_fp8_scale_list_[idx] = scale.to(torch::kFloat32).contiguous();
-        fp8_experts_detected_ = true;
-        saw_fp8_tensor = true;
-      }
-    }
-    if (!w2_fp8_list_[idx].defined()) {
-      auto w2 = state_dict.get_sharded_tensor(
-          expert_prefix + w2_prefix + "weight", 1, rank, world_size);
-      if (w2.defined()) {
-        if (!is_fp8_weight(w2, hidden_size_, local_intermediate_size_)) {
-          return false;
-        }
-        auto scale = state_dict.get_sharded_tensor(
-            expert_prefix + w2_prefix + "scale", 1, rank, world_size);
-        CHECK(is_fp8_block_scale(scale, hidden_size_, local_intermediate_size_))
-            << "DeepseekV4 FP8 w2 scale size mismatch for "
-            << state_dict.prefix() << expert_prefix << w2_prefix;
-        w2_fp8_list_[idx] = w2.contiguous();
-        w2_fp8_scale_list_[idx] = scale.to(torch::kFloat32).contiguous();
-        fp8_experts_detected_ = true;
-        saw_fp8_tensor = true;
-      }
-    }
-  }
-
-  if (!w13_fp8_is_loaded_ && all_tensors_defined(w1_fp8_list_) &&
-      all_tensors_defined(w3_fp8_list_) &&
-      all_tensors_defined(w1_fp8_scale_list_) &&
-      all_tensors_defined(w3_fp8_scale_list_)) {
-    ensure_fp8_expert_storage();
-    std::vector<torch::Tensor> weight_vec;
-    std::vector<torch::Tensor> scale_vec;
-    weight_vec.reserve(num_experts_per_rank_);
-    scale_vec.reserve(num_experts_per_rank_);
-    for (int64_t idx = 0; idx < num_experts_per_rank_; ++idx) {
-      weight_vec.push_back(
-          torch::cat({w1_fp8_list_[idx], w3_fp8_list_[idx]}, 0));
-      scale_vec.push_back(
-          torch::cat({w1_fp8_scale_list_[idx], w3_fp8_scale_list_[idx]}, 0));
-    }
-    w13_fp8_.copy_(torch::stack(weight_vec).to(w13_fp8_.device()));
-    w13_fp8_scale_.copy_(torch::stack(scale_vec).to(w13_fp8_scale_.device()));
-    w13_fp8_is_loaded_ = true;
-    w1_fp8_list_.clear();
-    w3_fp8_list_.clear();
-    w1_fp8_scale_list_.clear();
-    w3_fp8_scale_list_.clear();
-  }
-
-  if (!w2_fp8_is_loaded_ && all_tensors_defined(w2_fp8_list_) &&
-      all_tensors_defined(w2_fp8_scale_list_)) {
-    ensure_fp8_expert_storage();
-    w2_fp8_.copy_(torch::stack(w2_fp8_list_).to(w2_fp8_.device()));
-    w2_fp8_scale_.copy_(
-        torch::stack(w2_fp8_scale_list_).to(w2_fp8_scale_.device()));
-    w2_fp8_is_loaded_ = true;
-    w2_fp8_list_.clear();
-    w2_fp8_scale_list_.clear();
-  }
-
-  return saw_fp8_tensor || fp8_experts_loaded();
-}
-
-torch::Tensor DeepseekV4MoEImpl::apply_expert(const torch::Tensor &input,
+torch::Tensor DeepseekV4MoEImpl::apply_expert(const torch::Tensor& input,
                                               int64_t local_expert_id) const {
   torch::Tensor w1;
   torch::Tensor w3;
@@ -793,8 +783,10 @@ torch::Tensor DeepseekV4MoEImpl::apply_expert(const torch::Tensor &input,
 }
 
 torch::Tensor DeepseekV4MoEImpl::forward_grouped_fp8(
-    const torch::Tensor &input, const torch::Tensor &topk_ids,
-    const torch::Tensor &topk_weights, bool compact_rows) const {
+    const torch::Tensor& input,
+    const torch::Tensor& topk_ids,
+    const torch::Tensor& topk_weights,
+    bool compact_rows) const {
   if (!fp8_experts_loaded()) {
     return torch::Tensor();
   }
@@ -806,7 +798,8 @@ torch::Tensor DeepseekV4MoEImpl::forward_grouped_fp8(
     const auto valid_ids = local_ids.ge(start_expert_id_)
                                .logical_and(local_ids.lt(
                                    start_expert_id_ + num_experts_per_rank_));
-    local_ids = torch::where(valid_ids, local_ids - start_expert_id_,
+    local_ids = torch::where(valid_ids,
+                             local_ids - start_expert_id_,
                              torch::full_like(local_ids, -1));
   }
 
@@ -845,37 +838,57 @@ torch::Tensor DeepseekV4MoEImpl::forward_grouped_fp8(
   torch::Tensor padded_assignment;
   torch::Tensor padded_expert;
   torch::Tensor route_to_padded;
-  std::tie(sorted_input_fp8, sorted_input_scale, padded_assignment,
-           padded_expert, route_to_padded) =
+  std::tie(sorted_input_fp8,
+           sorted_input_scale,
+           padded_assignment,
+           padded_expert,
+           route_to_padded) =
       kernel::musa::deepseek_v4_fp8_moe_quant_prepare(
-          input, dst_to_src, expert_counts, topk_,
-          compact_rows ? 1 : kAlignmentM, max_padded_assignments);
+          input,
+          dst_to_src,
+          expert_counts,
+          topk_,
+          compact_rows ? 1 : kAlignmentM,
+          max_padded_assignments);
 
   auto gate_up =
-      compact_rows
-          ? kernel::musa::contiguous_moe_gemm_fp8(
-                sorted_input_fp8, sorted_input_scale, w13_fp8_, w13_fp8_scale_,
-                expert_counts, input.scalar_type())
-          : kernel::musa::ragged_moe_gemm_fp8(
-                sorted_input_fp8, sorted_input_scale, w13_fp8_, w13_fp8_scale_,
-                padded_expert, input.scalar_type(), kAlignmentM);
+      compact_rows ? kernel::musa::contiguous_moe_gemm_fp8(sorted_input_fp8,
+                                                           sorted_input_scale,
+                                                           w13_fp8_,
+                                                           w13_fp8_scale_,
+                                                           expert_counts,
+                                                           input.scalar_type())
+                   : kernel::musa::ragged_moe_gemm_fp8(sorted_input_fp8,
+                                                       sorted_input_scale,
+                                                       w13_fp8_,
+                                                       w13_fp8_scale_,
+                                                       padded_expert,
+                                                       input.scalar_type(),
+                                                       kAlignmentM);
   if (!gate_up.defined()) {
     return torch::Tensor();
   }
 
   auto [activated_fp8, activated_scale] =
-      kernel::musa::deepseek_v4_fp8_moe_swiglu_quantize(gate_up, padded_expert,
-                                                        swiglu_limit_);
+      kernel::musa::deepseek_v4_fp8_moe_swiglu_quantize(
+          gate_up, padded_expert, swiglu_limit_);
   if (!activated_fp8.defined() || !activated_scale.defined()) {
     return torch::Tensor();
   }
   auto down = compact_rows
-                  ? kernel::musa::contiguous_moe_gemm_fp8(
-                        activated_fp8, activated_scale, w2_fp8_, w2_fp8_scale_,
-                        expert_counts, input.scalar_type())
-                  : kernel::musa::ragged_moe_gemm_fp8(
-                        activated_fp8, activated_scale, w2_fp8_, w2_fp8_scale_,
-                        padded_expert, input.scalar_type(), kAlignmentM);
+                  ? kernel::musa::contiguous_moe_gemm_fp8(activated_fp8,
+                                                          activated_scale,
+                                                          w2_fp8_,
+                                                          w2_fp8_scale_,
+                                                          expert_counts,
+                                                          input.scalar_type())
+                  : kernel::musa::ragged_moe_gemm_fp8(activated_fp8,
+                                                      activated_scale,
+                                                      w2_fp8_,
+                                                      w2_fp8_scale_,
+                                                      padded_expert,
+                                                      input.scalar_type(),
+                                                      kAlignmentM);
   if (!down.defined()) {
     return torch::Tensor();
   }
@@ -884,19 +897,29 @@ torch::Tensor DeepseekV4MoEImpl::forward_grouped_fp8(
 }
 
 torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
-    const torch::Tensor &hidden_states, const torch::Tensor &topk_weights,
-    const torch::Tensor &topk_ids, const ModelInputParams &input_params,
-    bool skip_tp_allreduce, const torch::Tensor &output_buffer) {
-  return forward_with_selected_experts(hidden_states, topk_weights, topk_ids,
-                                       input_params, skip_tp_allreduce,
-                                       output_buffer, nullptr);
+    const torch::Tensor& hidden_states,
+    const torch::Tensor& topk_weights,
+    const torch::Tensor& topk_ids,
+    const ModelInputParams& input_params,
+    bool skip_tp_allreduce,
+    const torch::Tensor& output_buffer) {
+  return forward_with_selected_experts(hidden_states,
+                                       topk_weights,
+                                       topk_ids,
+                                       input_params,
+                                       skip_tp_allreduce,
+                                       output_buffer,
+                                       nullptr);
 }
 
 torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
-    const torch::Tensor &hidden_states, const torch::Tensor &topk_weights,
-    const torch::Tensor &topk_ids, const ModelInputParams &input_params,
-    bool skip_tp_allreduce, const torch::Tensor &output_buffer,
-    const dsv4_musa_sp::DeepseekV4SPContext *reduce_scatter_context) {
+    const torch::Tensor& hidden_states,
+    const torch::Tensor& topk_weights,
+    const torch::Tensor& topk_ids,
+    const ModelInputParams& input_params,
+    bool skip_tp_allreduce,
+    const torch::Tensor& output_buffer,
+    const dsv4_musa_sp::DeepseekV4SPContext* reduce_scatter_context) {
   CHECK((w13_is_loaded_ && w2_is_loaded_) || fp4_experts_loaded() ||
         fp8_experts_loaded())
       << "DeepseekV4MoE expert weights must be loaded before forward.";
@@ -917,7 +940,7 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
                                          input_2d.device().is_privateuseone() &&
                                          !kernel::musa::is_stream_capturing();
   torch::Tensor shared_output;
-  SharedExpertOverlapState *shared_overlap_state = nullptr;
+  SharedExpertOverlapState* shared_overlap_state = nullptr;
   if (use_shared_expert_overlap) {
     shared_overlap_state = get_shared_expert_overlap_state(
         static_cast<int32_t>(input_2d.device().index()));
@@ -942,13 +965,15 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
                              shared_overlap_state->stream.stream()),
              musaSuccess);
   }
-  const char *disable_fp8_gemv_env =
+  const char* disable_fp8_gemv_env =
       std::getenv("XLLM_DSV4_DISABLE_MOE_FP8_GEMV");
   const bool disable_fp8_gemv = disable_fp8_gemv_env != nullptr &&
                                 std::string(disable_fp8_gemv_env) == "1";
   const bool grouped_fp8_verify = dsv4_grouped_fp8_verify_eligible(
-      grouped_fp8_decode_min_tokens_, input_2d.size(0),
-      input_params.meta.q_max_seq_len, input_params.is_spec_verify,
+      grouped_fp8_decode_min_tokens_,
+      input_2d.size(0),
+      input_params.meta.q_max_seq_len,
+      input_params.is_spec_verify,
       input_params.meta.batch_forward_type.is_decode(),
       start_expert_id_ == 0 && num_experts_per_rank_ == num_total_experts_,
       fp8_experts_loaded());
@@ -976,12 +1001,18 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
       const auto valid_ids = local_ids.ge(start_expert_id_)
                                  .logical_and(local_ids.lt(
                                      start_expert_id_ + num_experts_per_rank_));
-      local_ids = torch::where(valid_ids, local_ids - start_expert_id_,
+      local_ids = torch::where(valid_ids,
+                               local_ids - start_expert_id_,
                                torch::full_like(local_ids, -1));
     }
     output = kernel::musa::deepseek_v4_fp8_moe_gemv_decode(
-        input_2d.contiguous(), local_ids, weights_2d.contiguous(), w13_fp8_,
-        w13_fp8_scale_, w2_fp8_, w2_fp8_scale_,
+        input_2d.contiguous(),
+        local_ids,
+        weights_2d.contiguous(),
+        w13_fp8_,
+        w13_fp8_scale_,
+        w2_fp8_,
+        w2_fp8_scale_,
         fp8_gemv_activation_workspace_.narrow(
             /*dim=*/0, /*start=*/0, /*length=*/num_assignments),
         fp8_gemv_routed_output_workspace_.narrow(
@@ -996,11 +1027,11 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     // is a deliberate experimental change and requires model accuracy gates.
     // Only the already-qualified target-q7 branch may switch row layout.
     // Prefill, B1, draft, ordinary Decode and the default path stay unchanged.
-    const char *compact_env = std::getenv("XLLM_DSV4_COMPACT_GROUPED_FP8");
+    const char* compact_env = std::getenv("XLLM_DSV4_COMPACT_GROUPED_FP8");
     const bool compact_rows = compact_env != nullptr && compact_env[0] == '1' &&
                               compact_env[1] == '\0';
-    output = forward_grouped_fp8(input_2d.contiguous(), ids_2d, weights_2d,
-                                 compact_rows);
+    output = forward_grouped_fp8(
+        input_2d.contiguous(), ids_2d, weights_2d, compact_rows);
     if (compact_rows) {
       LOG_FIRST_N(INFO, 1) << "[DSV4_COMPACT_GROUPED_FP8_VERIFY] rows="
                            << input_2d.size(0)
@@ -1017,7 +1048,7 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
   }
   if (!output.defined() && !input_params.meta.batch_forward_type.is_decode() &&
       fp8_experts_loaded()) {
-    const char *compact_prefill_env =
+    const char* compact_prefill_env =
         std::getenv("XLLM_DSV4_COMPACT_PREFILL_FP8");
     const bool compact_prefill =
         compact_prefill_env != nullptr &&
@@ -1032,8 +1063,8 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
             fp8_experts_loaded());
     // weights_2d retains the original non-Decode BF16 conversion above. Only
     // expert-row padding changes; the existing quant/SwiGLU/restore remains.
-    output = forward_grouped_fp8(input_2d.contiguous(), ids_2d, weights_2d,
-                                 compact_prefill);
+    output = forward_grouped_fp8(
+        input_2d.contiguous(), ids_2d, weights_2d, compact_prefill);
     if (compact_prefill) {
       LOG_FIRST_N(INFO, 2) << "[DSV4_COMPACT_PREFILL_FP8] rows="
                            << input_2d.size(0)
@@ -1088,7 +1119,7 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
       auto shared_output_2d =
           shared_output.reshape({-1, hidden_size_}).contiguous();
       const auto gate_weight = shared_expert_gate_->weight;
-      const auto is_aligned = [](const torch::Tensor &tensor) {
+      const auto is_aligned = [](const torch::Tensor& tensor) {
         return tensor.defined() &&
                reinterpret_cast<std::uintptr_t>(tensor.data_ptr()) % 16 == 0;
       };
@@ -1156,9 +1187,12 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     CHECK_EQ(output.size(0), reduce_scatter_context->total_tokens);
     CHECK_EQ(tp_pg_->rank(), reduce_scatter_context->rank);
     CHECK(dsv4_pd_reduce_scatter_eligible(
-        output.size(0), reduce_scatter_context->local_tokens,
-        tp_pg_->world_size(), is_prefill,
-        output.scalar_type() == torch::kBFloat16, false));
+        output.size(0),
+        reduce_scatter_context->local_tokens,
+        tp_pg_->world_size(),
+        is_prefill,
+        output.scalar_type() == torch::kBFloat16,
+        false));
     CHECK_EQ(reduce_scatter_context->local_valid_tokens,
              reduce_scatter_context->local_tokens);
     CHECK(
@@ -1212,7 +1246,7 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
   return output.reshape(hidden_states.sizes());
 }
 
-void DeepseekV4MoEImpl::load_experts(const StateDict &state_dict) {
+void DeepseekV4MoEImpl::load_experts(const StateDict& state_dict) {
   if (state_dict.size() == 0) {
     return;
   }
@@ -1224,16 +1258,16 @@ void DeepseekV4MoEImpl::load_experts(const StateDict &state_dict) {
       state_dict, prefixes, "down_proj.", rank, world_size);
   if (!saw_packed_fp4) {
     prefixes = {"w1.", "w3."};
-    saw_packed_fp4 = try_load_packed_fp4_experts(state_dict, prefixes, "w2.",
-                                                 rank, world_size);
+    saw_packed_fp4 = try_load_packed_fp4_experts(
+        state_dict, prefixes, "w2.", rank, world_size);
   }
   if (saw_packed_fp4 || packed_fp4_experts_detected_) {
     return;
   }
 
   std::vector<std::string> fp8_prefixes = {"gate_proj.", "up_proj."};
-  bool saw_fp8 = try_load_fp8_experts(state_dict, fp8_prefixes, "down_proj.",
-                                      rank, world_size);
+  bool saw_fp8 = try_load_fp8_experts(
+      state_dict, fp8_prefixes, "down_proj.", rank, world_size);
   if (!saw_fp8) {
     fp8_prefixes = {"w1.", "w3."};
     saw_fp8 =
@@ -1245,30 +1279,63 @@ void DeepseekV4MoEImpl::load_experts(const StateDict &state_dict) {
 
   ensure_dense_expert_storage();
   prefixes = {"gate_proj.", "up_proj."};
-  weight::load_moe_fused_weight(state_dict, prefixes, "weight", rank,
-                                world_size, start_expert_id_,
-                                num_experts_per_rank_, w1_list_, w3_list_, w13_,
-                                w1_is_loaded_, w3_is_loaded_, w13_is_loaded_);
+  weight::load_moe_fused_weight(state_dict,
+                                prefixes,
+                                "weight",
+                                rank,
+                                world_size,
+                                start_expert_id_,
+                                num_experts_per_rank_,
+                                w1_list_,
+                                w3_list_,
+                                w13_,
+                                w1_is_loaded_,
+                                w3_is_loaded_,
+                                w13_is_loaded_);
   if (!w13_is_loaded_) {
     prefixes = {"w1.", "w3."};
-    weight::load_moe_fused_weight(
-        state_dict, prefixes, "weight", rank, world_size, start_expert_id_,
-        num_experts_per_rank_, w1_list_, w3_list_, w13_, w1_is_loaded_,
-        w3_is_loaded_, w13_is_loaded_);
+    weight::load_moe_fused_weight(state_dict,
+                                  prefixes,
+                                  "weight",
+                                  rank,
+                                  world_size,
+                                  start_expert_id_,
+                                  num_experts_per_rank_,
+                                  w1_list_,
+                                  w3_list_,
+                                  w13_,
+                                  w1_is_loaded_,
+                                  w3_is_loaded_,
+                                  w13_is_loaded_);
   }
 
-  weight::load_moe_weight(state_dict, "down_proj.", "weight",
-                          /*dim=*/1, rank, world_size, start_expert_id_,
-                          num_experts_per_rank_, w2_list_, w2_, w2_is_loaded_);
+  weight::load_moe_weight(state_dict,
+                          "down_proj.",
+                          "weight",
+                          /*dim=*/1,
+                          rank,
+                          world_size,
+                          start_expert_id_,
+                          num_experts_per_rank_,
+                          w2_list_,
+                          w2_,
+                          w2_is_loaded_);
   if (!w2_is_loaded_) {
-    weight::load_moe_weight(state_dict, "w2.", "weight",
-                            /*dim=*/1, rank, world_size, start_expert_id_,
-                            num_experts_per_rank_, w2_list_, w2_,
+    weight::load_moe_weight(state_dict,
+                            "w2.",
+                            "weight",
+                            /*dim=*/1,
+                            rank,
+                            world_size,
+                            start_expert_id_,
+                            num_experts_per_rank_,
+                            w2_list_,
+                            w2_,
                             w2_is_loaded_);
   }
 }
 
-void DeepseekV4MoEImpl::load_state_dict(const StateDict &state_dict) {
+void DeepseekV4MoEImpl::load_state_dict(const StateDict& state_dict) {
   if (state_dict.size() == 0) {
     return;
   }
@@ -1281,8 +1348,8 @@ void DeepseekV4MoEImpl::load_state_dict(const StateDict &state_dict) {
     }
     if (shared_expert_state.size() > 0) {
       if (has_w_style_shared_expert_weights(shared_expert_state)) {
-        shared_experts_->load_state_dict(shared_expert_state, {"w1.", "w3."},
-                                         "w2.");
+        shared_experts_->load_state_dict(
+            shared_expert_state, {"w1.", "w3."}, "w2.");
       } else {
         shared_experts_->load_state_dict(shared_expert_state);
       }
@@ -1313,5 +1380,5 @@ void DeepseekV4MoEImpl::load_state_dict(const StateDict &state_dict) {
   }
 }
 
-} // namespace layer
-} // namespace xllm
+}  // namespace layer
+}  // namespace xllm

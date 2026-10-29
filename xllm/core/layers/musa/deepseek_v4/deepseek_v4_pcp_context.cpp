@@ -121,11 +121,7 @@ void build_context(int64_t total_rows,
           ? total_rows / 2
           : balanced_front_rows(total_rows);
   if (front_rows < 0 || front_rows >= total_rows) {
-    if (total_rows < 2 * kMinRowsPerGroup) {
-      // fall through with front_rows == 0
-    } else {
-      return;
-    }
+    return;
   }
   Context value;
   value.cross_group = cross_group;
