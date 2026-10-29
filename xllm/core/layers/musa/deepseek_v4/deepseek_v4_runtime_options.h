@@ -1,0 +1,200 @@
+/* Copyright 2026 The xLLM Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+#pragma once
+
+#include <array>
+#include <cstddef>
+#include <cstdlib>
+#include <string>
+
+namespace xllm::layer {
+
+// Launch-time options: changing the environment after first use is unsupported.
+// Own the value instead of retaining getenv's pointer across setenv/unsetenv.
+class DeepseekV4EnvValue final {
+ public:
+  explicit DeepseekV4EnvValue(const char* name) {
+    const char* value = std::getenv(name);
+    present_ = value != nullptr;
+    if (present_) {
+      value_ = value;
+    }
+    one_ = present_ && value_ == "1";
+    zero_ = present_ && value_ == "0";
+  }
+
+  bool present() const { return present_; }
+  bool is_one() const { return one_; }
+  bool is_zero() const { return zero_; }
+  const char* c_str() const { return present_ ? value_.c_str() : nullptr; }
+
+ private:
+  std::string value_;
+  bool present_ = false;
+  bool one_ = false;
+  bool zero_ = false;
+};
+
+enum class DeepseekV4Env : size_t {
+  BATCH_ATTENTION_PROJECTIONS,
+  BATCH_COMPRESSION,
+  BATCH_GATE_MATE_VERIFY,
+  BATCH_INDEXER_ACROSS_SEQUENCES,
+  BATCH_INDEXER_GEMM,
+  BATCH_INDEXER_HADAMARD,
+  BATCH_MATE_ACROSS_SEQUENCES,
+  BATCH_MATE_GROUPED_METADATA,
+  BATCH_MATE_METADATA,
+  BATCH_OUTPUT_PROJECTION,
+  BATCH_PAGED_SAS,
+  BATCH_QKV_PROJECTION,
+  BATCH_STATE_GATHER,
+  BATCH_STATE_PUBLISH_VIEWS,
+  C128_MATE_VERIFY,
+  CLEAR_DECODE_WORKSPACES_ON_REQUEST,
+  CLEAR_STATE_CACHE_ON_REQUEST,
+  COMPACT_GROUPED_FP8,
+  COMPACT_PREFILL_FP8,
+  DISABLE_BATCH_MATE_ACROSS_SEQUENCES,
+  DISABLE_FUSED_DENSE_DECODE,
+  DISABLE_GATE_GEMV,
+  DISABLE_GRAPH_COMPACT_INDEXER,
+  DISABLE_GRAPH_Q6_COMPRESSOR_STATE,
+  DISABLE_GRAPH_Q6_FREEZE,
+  DISABLE_GRAPH_Q6_INDEXER_STATE,
+  DISABLE_MATE_SPARSE_DECODE,
+  DISABLE_MOE_FP8_GEMV,
+  DISABLE_PAGED_DENSE_DECODE,
+  DISABLE_QKV_OVERLAP,
+  DYNAMIC_GRAPH_STATE,
+  DYNAMIC_SHORT_GRAPH_KEYS,
+  ENABLE_GRAPH_BATCHED_MATE_VERIFY,
+  ENABLE_LEGACY_GRAPH_Q6,
+  FP8_PACKED_ACTIVATIONS,
+  FUSED_PAGED_SAS,
+  FUSED_PROJECTION_NORM_COPY,
+  GLOBAL_SHORT_GRAPH_FAMILY,
+  GRAPH_BATCHED_INDEXER,
+  GRAPH_CAUSAL_SHORT_C4,
+  GRAPH_DYNAMIC_INDEXER,
+  GRAPH_JOINT_COMPRESSOR_PROJECTION,
+  GRAPH_Q6_FIRST_STATE_ONLY,
+  GROUPED_FP8_DECODE_MIN_TOKENS,
+  GROUPED_STATE_GATHER,
+  INDEXER_EXACT_RUNTIME_CAPACITY,
+  LEGACY_GRAPH_KV_LEN,
+  MATE_BATCHED_STATIC_LENGTHS,
+  MATE_GROUPED_METADATA,
+  MATE_MAX_SEQUENCES_PER_LAUNCH,
+  MATE_ROUTE_TRACE,
+  MATE_SHARE_METADATA,
+  MATE_VERIFY,
+  MULTI_PREFILL_COLLECTIVE_FENCE,
+  MULTI_PREFILL_LOCAL_MATE,
+  MULTI_SEQUENCE_WORKSPACE_TOKENS,
+  MUSA_TRACE,
+  PARTITIONED_C128_MATE,
+  PCP_SYNC_TRACE,
+  PREFILL_CORE_DUMP,
+  PREFILL_INDEXER_BF16_FP32,
+  PREFILL_INDEXER_MASK_ONCE,
+  PREFILL_INDEXER_ROPE_COPY,
+  PREFILL_MAIN_ROPE_COPY,
+  PREFILL_NATIVE_REDUCE_SCATTER,
+  SINGLE_INDEXER_GEMM,
+  SP_SKIP_MOE_ALLGATHER,
+  COUNT
+};
+
+inline constexpr std::array<const char*,
+                            static_cast<size_t>(DeepseekV4Env::COUNT)>
+    kDeepseekV4EnvNames = {
+        "XLLM_DSV4_BATCH_ATTENTION_PROJECTIONS",
+        "XLLM_DSV4_BATCH_COMPRESSION",
+        "XLLM_DSV4_BATCH_GATE_MATE_VERIFY",
+        "XLLM_DSV4_BATCH_INDEXER_ACROSS_SEQUENCES",
+        "XLLM_DSV4_BATCH_INDEXER_GEMM",
+        "XLLM_DSV4_BATCH_INDEXER_HADAMARD",
+        "XLLM_DSV4_BATCH_MATE_ACROSS_SEQUENCES",
+        "XLLM_DSV4_BATCH_MATE_GROUPED_METADATA",
+        "XLLM_DSV4_BATCH_MATE_METADATA",
+        "XLLM_DSV4_BATCH_OUTPUT_PROJECTION",
+        "XLLM_DSV4_BATCH_PAGED_SAS",
+        "XLLM_DSV4_BATCH_QKV_PROJECTION",
+        "XLLM_DSV4_BATCH_STATE_GATHER",
+        "XLLM_DSV4_BATCH_STATE_PUBLISH_VIEWS",
+        "XLLM_DSV4_C128_MATE_VERIFY",
+        "XLLM_DSV4_CLEAR_DECODE_WORKSPACES_ON_REQUEST",
+        "XLLM_DSV4_CLEAR_STATE_CACHE_ON_REQUEST",
+        "XLLM_DSV4_COMPACT_GROUPED_FP8",
+        "XLLM_DSV4_COMPACT_PREFILL_FP8",
+        "XLLM_DSV4_DISABLE_BATCH_MATE_ACROSS_SEQUENCES",
+        "XLLM_DSV4_DISABLE_FUSED_DENSE_DECODE",
+        "XLLM_DSV4_DISABLE_GATE_GEMV",
+        "XLLM_DSV4_DISABLE_GRAPH_COMPACT_INDEXER",
+        "XLLM_DSV4_DISABLE_GRAPH_Q6_COMPRESSOR_STATE",
+        "XLLM_DSV4_DISABLE_GRAPH_Q6_FREEZE",
+        "XLLM_DSV4_DISABLE_GRAPH_Q6_INDEXER_STATE",
+        "XLLM_DSV4_DISABLE_MATE_SPARSE_DECODE",
+        "XLLM_DSV4_DISABLE_MOE_FP8_GEMV",
+        "XLLM_DSV4_DISABLE_PAGED_DENSE_DECODE",
+        "XLLM_DSV4_DISABLE_QKV_OVERLAP",
+        "XLLM_DSV4_DYNAMIC_GRAPH_STATE",
+        "XLLM_DSV4_DYNAMIC_SHORT_GRAPH_KEYS",
+        "XLLM_DSV4_ENABLE_GRAPH_BATCHED_MATE_VERIFY",
+        "XLLM_DSV4_ENABLE_LEGACY_GRAPH_Q6",
+        "XLLM_DSV4_FP8_PACKED_ACTIVATIONS",
+        "XLLM_DSV4_FUSED_PAGED_SAS",
+        "XLLM_DSV4_FUSED_PROJECTION_NORM_COPY",
+        "XLLM_DSV4_GLOBAL_SHORT_GRAPH_FAMILY",
+        "XLLM_DSV4_GRAPH_BATCHED_INDEXER",
+        "XLLM_DSV4_GRAPH_CAUSAL_SHORT_C4",
+        "XLLM_DSV4_GRAPH_DYNAMIC_INDEXER",
+        "XLLM_DSV4_GRAPH_JOINT_COMPRESSOR_PROJECTION",
+        "XLLM_DSV4_GRAPH_Q6_FIRST_STATE_ONLY",
+        "XLLM_DSV4_GROUPED_FP8_DECODE_MIN_TOKENS",
+        "XLLM_DSV4_GROUPED_STATE_GATHER",
+        "XLLM_DSV4_INDEXER_EXACT_RUNTIME_CAPACITY",
+        "XLLM_DSV4_LEGACY_GRAPH_KV_LEN",
+        "XLLM_DSV4_MATE_BATCHED_STATIC_LENGTHS",
+        "XLLM_DSV4_MATE_GROUPED_METADATA",
+        "XLLM_DSV4_MATE_MAX_SEQUENCES_PER_LAUNCH",
+        "XLLM_DSV4_MATE_ROUTE_TRACE",
+        "XLLM_DSV4_MATE_SHARE_METADATA",
+        "XLLM_DSV4_MATE_VERIFY",
+        "XLLM_DSV4_MULTI_PREFILL_COLLECTIVE_FENCE",
+        "XLLM_DSV4_MULTI_PREFILL_LOCAL_MATE",
+        "XLLM_DSV4_MULTI_SEQUENCE_WORKSPACE_TOKENS",
+        "XLLM_DSV4_MUSA_TRACE",
+        "XLLM_DSV4_PARTITIONED_C128_MATE",
+        "XLLM_DSV4_PCP_SYNC_TRACE",
+        "XLLM_DSV4_PREFILL_CORE_DUMP",
+        "XLLM_DSV4_PREFILL_INDEXER_BF16_FP32",
+        "XLLM_DSV4_PREFILL_INDEXER_MASK_ONCE",
+        "XLLM_DSV4_PREFILL_INDEXER_ROPE_COPY",
+        "XLLM_DSV4_PREFILL_MAIN_ROPE_COPY",
+        "XLLM_DSV4_PREFILL_NATIVE_REDUCE_SCATTER",
+        "XLLM_DSV4_SINGLE_INDEXER_GEMM",
+        "XLLM_DSV4_SP_SKIP_MOE_ALLGATHER",
+};
+
+template <DeepseekV4Env Option>
+inline const DeepseekV4EnvValue& dsv4_runtime_option() {
+  static const DeepseekV4EnvValue value(
+      kDeepseekV4EnvNames[static_cast<size_t>(Option)]);
+  return value;
+}
+
+}  // namespace xllm::layer

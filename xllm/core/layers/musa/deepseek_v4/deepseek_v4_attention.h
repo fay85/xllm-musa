@@ -100,6 +100,16 @@ class DeepseekV4AttentionImpl final : public torch::nn::Module {
           tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>&
               compress_metadata);
 
+  std::tuple<torch::Tensor, std::optional<torch::Tensor>>
+  project_attention_output(const torch::Tensor& attn_output,
+                           const torch::Tensor& cos,
+                           const torch::Tensor& sin,
+                           bool is_graph,
+                           bool is_prefill,
+                           bool is_chunked_prefill,
+                           bool sequence_parallel,
+                           bool zero_local_sp_shard);
+
   std::vector<std::pair<int64_t, int64_t>> build_query_ranges(
       const DSAMetadata& attn_metadata,
       int64_t total_tokens) const;

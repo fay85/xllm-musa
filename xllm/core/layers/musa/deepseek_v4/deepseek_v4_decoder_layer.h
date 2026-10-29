@@ -60,12 +60,9 @@ class DeepseekV4DecoderLayerImpl final : public torch::nn::Module {
 
   void set_pcp_context(dsv4_musa_pcp::Context* context) {
     pcp_context_ = context;
-    if (context != nullptr) {
-      attention_->set_pcp_context(context);
+    attention_->set_pcp_context(context);
+    if (prefill_attention_) {
       prefill_attention_->set_pcp_context(context);
-    } else {
-      attention_->set_pcp_context(nullptr);
-      prefill_attention_->set_pcp_context(nullptr);
     }
   }
 

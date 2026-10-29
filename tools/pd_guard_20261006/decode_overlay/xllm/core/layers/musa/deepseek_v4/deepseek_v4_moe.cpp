@@ -37,6 +37,11 @@ limitations under the License.
 // musa_ops_api.h retains the historical CUDA namespace declaration. Keep the
 // MUSA declaration local to this implementation so the grouped FP8 path can
 // link against the actual MUSA archive symbol.
+#include <string_view>
+
+#include "core/layers/musa/deepseek_v4/deepseek_v4_execution_limits.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_runtime_options.h"
+
 namespace xllm::kernel::musa {
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
     const torch::Tensor& expert_id,
@@ -84,7 +89,8 @@ bool all_tensors_defined(const std::vector<torch::Tensor>& tensors) {
 // those rows on the fused FP8 GEMV path; falling back to ids_2d.to(kCPU)
 // invokes the scalar expert loop and is illegal during MUSA Graph capture.
 constexpr int64_t kFp8GemvWorkspaceTokens = 128;
-constexpr int64_t kPrefillCustomAllreduceWorkspaceTokens = 1024;
+constexpr int64_t kPrefillCustomAllreduceWorkspaceTokens =
+    kDsv4PrefillAllreduceWorkspaceRows;
 
 struct SharedExpertOverlapState {
   explicit SharedExpertOverlapState(int32_t device_id)
@@ -403,13 +409,15 @@ DeepseekV4MoEImpl::DeepseekV4MoEImpl(const ModelArgs& model_args,
   // model can opt into the separately measured large-row grouped FP8 path.
   if (model_args.model_type() == "deepseek_v4") {
     const char* minimum =
-        std::getenv("XLLM_DSV4_GROUPED_FP8_DECODE_MIN_TOKENS");
+        dsv4_runtime_option<DeepseekV4Env::GROUPED_FP8_DECODE_MIN_TOKENS>()
+            .c_str();
     if (minimum != nullptr) {
       char* end = nullptr;
       const int64_t value =
           static_cast<int64_t>(std::strtoll(minimum, &end, 10));
-      CHECK(end != minimum && *end == '\0' && (value == 77 || value == 112))
-          << "Grouped FP8 decode threshold must be77 or112";
+      CHECK(end != minimum && *end == '\0' &&
+            dsv4_grouped_verify_minimum_supported(value))
+          << "Grouped FP8 decode threshold must be 77 or 112";
       grouped_fp8_decode_min_tokens_ = value;
     }
   }
@@ -891,6 +899,79 @@ torch::Tensor DeepseekV4MoEImpl::forward_grouped_fp8(
       down, route_to_padded, topk_weights.contiguous(), /*output=*/{});
 }
 
+torch::Tensor DeepseekV4MoEImpl::forward_fp8_gemv(
+    const torch::Tensor& input_2d,
+    const torch::Tensor& ids_2d,
+    const torch::Tensor& weights_2d) {
+  const int64_t num_tokens = input_2d.size(0);
+  const int64_t num_assignments = num_tokens * topk_;
+  auto local_ids = ids_2d.scalar_type() == torch::kInt32
+                       ? ids_2d.contiguous()
+                       : ids_2d.to(torch::kInt32).contiguous();
+  if (start_expert_id_ != 0 || num_experts_per_rank_ != num_total_experts_) {
+    const auto valid_ids = local_ids.ge(start_expert_id_)
+                               .logical_and(local_ids.lt(
+                                   start_expert_id_ + num_experts_per_rank_));
+    local_ids = torch::where(valid_ids,
+                             local_ids - start_expert_id_,
+                             torch::full_like(local_ids, -1));
+  }
+  return kernel::musa::deepseek_v4_fp8_moe_gemv_decode(
+      input_2d.contiguous(),
+      local_ids,
+      weights_2d.contiguous(),
+      w13_fp8_,
+      w13_fp8_scale_,
+      w2_fp8_,
+      w2_fp8_scale_,
+      fp8_gemv_activation_workspace_.narrow(
+          /*dim=*/0, /*start=*/0, /*length=*/num_assignments),
+      fp8_gemv_routed_output_workspace_.narrow(
+          /*dim=*/0, /*start=*/0, /*length=*/num_assignments),
+      fp8_gemv_output_workspace_.narrow(
+          /*dim=*/0, /*start=*/0, /*length=*/num_tokens),
+      swiglu_limit_);
+}
+
+torch::Tensor DeepseekV4MoEImpl::forward_reference_experts(
+    const torch::Tensor& input_2d,
+    const torch::Tensor& ids_2d,
+    const torch::Tensor& weights_2d) {
+  auto output = torch::zeros_like(input_2d);
+  auto ids_cpu = ids_2d.to(torch::kLong).to(torch::kCPU).contiguous();
+  std::vector<std::vector<int64_t>> token_indices(num_experts_per_rank_);
+  std::vector<std::vector<int64_t>> topk_indices(num_experts_per_rank_);
+  for (int64_t token = 0; token < ids_cpu.size(0); ++token) {
+    for (int64_t k = 0; k < ids_cpu.size(1); ++k) {
+      const int64_t global_expert = ids_cpu.index({token, k}).item<int64_t>();
+      if (global_expert < start_expert_id_ ||
+          global_expert >= start_expert_id_ + num_experts_per_rank_) {
+        continue;
+      }
+      const int64_t local_expert = global_expert - start_expert_id_;
+      token_indices[local_expert].push_back(token);
+      topk_indices[local_expert].push_back(k);
+    }
+  }
+  for (int64_t local_expert = 0; local_expert < num_experts_per_rank_;
+       ++local_expert) {
+    if (token_indices[local_expert].empty()) {
+      continue;
+    }
+    auto index_options =
+        torch::TensorOptions().dtype(torch::kLong).device(input_2d.device());
+    auto token_idx = torch::tensor(token_indices[local_expert], index_options);
+    auto topk_idx = torch::tensor(topk_indices[local_expert], index_options);
+    auto expert_input = input_2d.index_select(/*dim=*/0, token_idx);
+    auto expert_output = apply_expert(expert_input, local_expert);
+    auto expert_weight = weights_2d.index({token_idx, topk_idx})
+                             .unsqueeze(-1)
+                             .to(output.dtype());
+    output.index_add_(/*dim=*/0, token_idx, expert_output * expert_weight);
+  }
+  return output;
+}
+
 torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     const torch::Tensor& hidden_states,
     const torch::Tensor& topk_weights,
@@ -903,7 +984,7 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
       << "DeepseekV4MoE expert weights must be loaded before forward.";
   const bool trace_decode_moe =
       input_params.meta.batch_forward_type.is_decode() &&
-      std::getenv("XLLM_DSV4_MUSA_TRACE") != nullptr;
+      dsv4_runtime_option<DeepseekV4Env::MUSA_TRACE>().present();
   if (trace_decode_moe) {
     LOG_FIRST_N(INFO, 1) << "[DSV4_MOE_TRACE] begin tokens="
                          << hidden_states.size(0) << " topk=" << topk_;
@@ -943,10 +1024,9 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
                              shared_overlap_state->stream.stream()),
              musaSuccess);
   }
-  const char* disable_fp8_gemv_env =
-      std::getenv("XLLM_DSV4_DISABLE_MOE_FP8_GEMV");
-  const bool disable_fp8_gemv = disable_fp8_gemv_env != nullptr &&
-                                std::string(disable_fp8_gemv_env) == "1";
+
+  const bool disable_fp8_gemv =
+      dsv4_runtime_option<DeepseekV4Env::DISABLE_MOE_FP8_GEMV>().is_one();
   const bool grouped_fp8_verify = dsv4_grouped_fp8_verify_eligible(
       grouped_fp8_decode_min_tokens_,
       input_2d.size(0),
@@ -969,35 +1049,8 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
   CHECK_EQ(ids_2d.size(0), input_2d.size(0))
       << "DeepseekV4MoE topk_ids token count mismatch.";
   torch::Tensor output;
-  if (!output.defined() && use_fp8_gemv) {
-    const int64_t num_tokens = input_2d.size(0);
-    const int64_t num_assignments = num_tokens * topk_;
-    auto local_ids = ids_2d.scalar_type() == torch::kInt32
-                         ? ids_2d.contiguous()
-                         : ids_2d.to(torch::kInt32).contiguous();
-    if (start_expert_id_ != 0 || num_experts_per_rank_ != num_total_experts_) {
-      const auto valid_ids = local_ids.ge(start_expert_id_)
-                                 .logical_and(local_ids.lt(
-                                     start_expert_id_ + num_experts_per_rank_));
-      local_ids = torch::where(valid_ids,
-                               local_ids - start_expert_id_,
-                               torch::full_like(local_ids, -1));
-    }
-    output = kernel::musa::deepseek_v4_fp8_moe_gemv_decode(
-        input_2d.contiguous(),
-        local_ids,
-        weights_2d.contiguous(),
-        w13_fp8_,
-        w13_fp8_scale_,
-        w2_fp8_,
-        w2_fp8_scale_,
-        fp8_gemv_activation_workspace_.narrow(
-            /*dim=*/0, /*start=*/0, /*length=*/num_assignments),
-        fp8_gemv_routed_output_workspace_.narrow(
-            /*dim=*/0, /*start=*/0, /*length=*/num_assignments),
-        fp8_gemv_output_workspace_.narrow(
-            /*dim=*/0, /*start=*/0, /*length=*/num_tokens),
-        swiglu_limit_);
+  if (use_fp8_gemv) {
+    output = forward_fp8_gemv(input_2d, ids_2d, weights_2d);
   }
 
   if (!output.defined() && grouped_fp8_verify) {
@@ -1005,9 +1058,9 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
     // is a deliberate experimental change and requires model accuracy gates.
     // Only the already-qualified target-q7 branch may switch row layout.
     // Prefill, B1, draft, ordinary Decode and the default path stay unchanged.
-    const char* compact_env = std::getenv("XLLM_DSV4_COMPACT_GROUPED_FP8");
-    const bool compact_rows = compact_env != nullptr && compact_env[0] == '1' &&
-                              compact_env[1] == '\0';
+
+    const bool compact_rows =
+        dsv4_runtime_option<DeepseekV4Env::COMPACT_GROUPED_FP8>().is_one();
     output = forward_grouped_fp8(
         input_2d.contiguous(), ids_2d, weights_2d, compact_rows);
     if (compact_rows) {
@@ -1030,39 +1083,7 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
   }
 
   if (!output.defined()) {
-    output = torch::zeros_like(input_2d);
-    auto ids_cpu = ids_2d.to(torch::kLong).to(torch::kCPU).contiguous();
-    std::vector<std::vector<int64_t>> token_indices(num_experts_per_rank_);
-    std::vector<std::vector<int64_t>> topk_indices(num_experts_per_rank_);
-    for (int64_t token = 0; token < ids_cpu.size(0); ++token) {
-      for (int64_t k = 0; k < ids_cpu.size(1); ++k) {
-        const int64_t global_expert = ids_cpu.index({token, k}).item<int64_t>();
-        if (global_expert < start_expert_id_ ||
-            global_expert >= start_expert_id_ + num_experts_per_rank_) {
-          continue;
-        }
-        const int64_t local_expert = global_expert - start_expert_id_;
-        token_indices[local_expert].push_back(token);
-        topk_indices[local_expert].push_back(k);
-      }
-    }
-    for (int64_t local_expert = 0; local_expert < num_experts_per_rank_;
-         ++local_expert) {
-      if (token_indices[local_expert].empty()) {
-        continue;
-      }
-      auto index_options =
-          torch::TensorOptions().dtype(torch::kLong).device(input_2d.device());
-      auto token_idx =
-          torch::tensor(token_indices[local_expert], index_options);
-      auto topk_idx = torch::tensor(topk_indices[local_expert], index_options);
-      auto expert_input = input_2d.index_select(/*dim=*/0, token_idx);
-      auto expert_output = apply_expert(expert_input, local_expert);
-      auto expert_weight = weights_2d.index({token_idx, topk_idx})
-                               .unsqueeze(-1)
-                               .to(output.dtype());
-      output.index_add_(/*dim=*/0, token_idx, expert_output * expert_weight);
-    }
+    output = forward_reference_experts(input_2d, ids_2d, weights_2d);
   }
 
   if (ep_pg_ != nullptr && ep_pg_->world_size() > 1) {
@@ -1070,35 +1091,35 @@ torch::Tensor DeepseekV4MoEImpl::forward_with_selected_experts(
   }
 
   if (shared_experts_ && !shared_output.defined()) {
-    auto shared_output = shared_experts_(input);
+    auto serial_shared_output = shared_experts_(input);
     if (shared_expert_gate_ && shared_expert_gate_is_loaded_) {
-      auto shared_output_2d =
-          shared_output.reshape({-1, hidden_size_}).contiguous();
+      auto serial_shared_output_2d =
+          serial_shared_output.reshape({-1, hidden_size_}).contiguous();
       const auto gate_weight = shared_expert_gate_->weight;
       const auto is_aligned = [](const torch::Tensor& tensor) {
         return tensor.defined() &&
                reinterpret_cast<std::uintptr_t>(tensor.data_ptr()) % 16 == 0;
       };
       const bool use_fused_shared_gate =
-          input_2d.is_contiguous() && shared_output_2d.is_contiguous() &&
+          input_2d.is_contiguous() && serial_shared_output_2d.is_contiguous() &&
           output.is_contiguous() &&
           (input_2d.scalar_type() == torch::kBFloat16 ||
            input_2d.scalar_type() == torch::kFloat16) &&
           gate_weight.scalar_type() == input_2d.scalar_type() &&
-          shared_output_2d.scalar_type() == input_2d.scalar_type() &&
+          serial_shared_output_2d.scalar_type() == input_2d.scalar_type() &&
           output.scalar_type() == input_2d.scalar_type() &&
           is_aligned(input_2d) && is_aligned(gate_weight) &&
-          is_aligned(shared_output_2d) && is_aligned(output);
+          is_aligned(serial_shared_output_2d) && is_aligned(output);
       if (use_fused_shared_gate) {
         output = kernel::musa::deepseek_v4_shared_expert_gate(
-            input_2d, gate_weight, shared_output_2d, output);
+            input_2d, gate_weight, serial_shared_output_2d, output);
       } else {
         auto gate = torch::sigmoid(shared_expert_gate_->forward(input));
-        shared_output.mul_(gate);
-        output.add_(shared_output.reshape_as(output));
+        serial_shared_output.mul_(gate);
+        output.add_(serial_shared_output.reshape_as(output));
       }
     } else {
-      output.add_(shared_output.reshape_as(output));
+      output.add_(serial_shared_output.reshape_as(output));
     }
   }
 

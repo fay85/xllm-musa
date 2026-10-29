@@ -4,6 +4,8 @@
 
 #include <cstdint>
 
+#include "core/layers/musa/deepseek_v4/deepseek_v4_execution_limits.h"
+
 namespace xllm::layer {
 
 inline bool dsv4_compact_prefill_fp8_eligible(int64_t rows,
@@ -13,7 +15,8 @@ inline bool dsv4_compact_prefill_fp8_eligible(int64_t rows,
   // These are post-SP-gather rows, not the local Attention shard. Preserve
   // small Prefill/hot and draft blocks. The extended 13616/16384-row full
   // pipeline and dynamic replay checks retain the BF16 router contract.
-  return rows >= 4096 && rows <= 16384 && is_prefill_like &&
+  return rows >= kDsv4PrefillReduceMinRows &&
+         rows <= kDsv4PrefillReduceMaxRows && is_prefill_like &&
          all_experts_local && fp8_ready;
 }
 
@@ -26,8 +29,9 @@ inline bool dsv4_grouped_fp8_verify_eligible(int64_t minimum_rows,
                                              bool is_decode,
                                              bool all_experts_local,
                                              bool fp8_ready) {
-  return (minimum_rows == 77 || minimum_rows == 112) && rows >= minimum_rows &&
-         rows <= 128 && query_width == 7 && rows % query_width == 0 &&
+  return dsv4_grouped_verify_minimum_supported(minimum_rows) &&
+         rows >= minimum_rows && rows <= kDsv4VerifyWorkspaceRows &&
+         query_width == kDsv4VerifyQueryWidth && rows % query_width == 0 &&
          is_verify && is_decode && all_experts_local && fp8_ready;
 }
 

@@ -123,6 +123,12 @@ class DeepseekV4MoEImpl final : public torch::nn::Module {
                                   int64_t rank,
                                   int64_t world_size,
                                   bool packed_fp4);
+  torch::Tensor forward_fp8_gemv(const torch::Tensor& input,
+                                 const torch::Tensor& ids,
+                                 const torch::Tensor& weights);
+  torch::Tensor forward_reference_experts(const torch::Tensor& input,
+                                          const torch::Tensor& ids,
+                                          const torch::Tensor& weights);
   bool fp4_experts_loaded() const {
     return w13_packed_is_loaded_ && w2_packed_is_loaded_;
   }

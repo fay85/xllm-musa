@@ -27,6 +27,7 @@ limitations under the License.
 #include "framework/block/block_manager.h"
 #include "framework/block/block_manager_pool.h"
 #include "framework/block/composite_block_manager.h"
+#include "framework/block/musa/deepseek_v4_prefix_snapshot_options.h"
 #include "framework/block/musa/deepseek_v4_prefix_transfer.h"
 #include "framework/model/model_input_params.h"
 #include "framework/request/sequence.h"
@@ -36,8 +37,16 @@ namespace xllm::musa {
 
 namespace {
 
-constexpr size_t kPrefixRateNumerator = 80;
-constexpr size_t kPrefixRateDenominator = 100;
+size_t prefix_snapshot_percent() {
+  static const size_t percent = [] {
+    const auto value = parse_deepseek_v4_prefix_snapshot_percent(
+        std::getenv("XLLM_DSV4_PREFIX_SNAPSHOT_PERCENT"));
+    CHECK(value.has_value())
+        << "XLLM_DSV4_PREFIX_SNAPSHOT_PERCENT must be an integer from 1 to 99";
+    return value.value();
+  }();
+  return percent;
+}
 constexpr size_t kMaxPrefixEntries = 64;
 
 using PrefixBlockSnapshot = std::map<BlockType, std::vector<Block>>;
@@ -257,6 +266,7 @@ PrefixPoolState* find_pool_state(const BlockManagerPool* owner) {
 
 void initialize_deepseek_v4_prefix_cache(const BlockManagerPool* owner,
                                          int32_t dp_size) {
+  (void)prefix_snapshot_percent();
   CHECK(owner != nullptr);
   CHECK_GT(dp_size, 0);
   std::lock_guard<std::mutex> lock(prefix_pool_states_mutex);
@@ -354,16 +364,13 @@ void prepare_deepseek_v4_prefix_snapshot(
   if (prompt_tokens == 0) {
     return;
   }
-  const size_t unaligned_prefix =
-      (prompt_tokens / kPrefixRateDenominator) * kPrefixRateNumerator +
-      ((prompt_tokens % kPrefixRateDenominator) * kPrefixRateNumerator) /
-          kPrefixRateDenominator;
-  const size_t prefix_tokens =
-      (unaligned_prefix / base_block_size) * base_block_size;
+  const size_t prefix_tokens = deepseek_v4_prefix_snapshot_tokens(
+      prompt_tokens, base_block_size, prefix_snapshot_percent());
   const size_t computed_before = sequence->kv_state().kv_cache_tokens_num();
-  const char* chunk_env = std::getenv("XLLM_DSV4_CHUNK_PREFIX_SNAPSHOT");
-  const bool allow_chunked =
-      chunk_env != nullptr && std::string(chunk_env) == "1";
+  static const bool allow_chunked = [] {
+    const char* value = std::getenv("XLLM_DSV4_CHUNK_PREFIX_SNAPSHOT");
+    return value != nullptr && std::string_view(value) == "1";
+  }();
   if (!deepseek_v4_prefix_snapshot_in_chunk(prompt_tokens,
                                             prefix_tokens,
                                             computed_before,

@@ -21,11 +21,13 @@ limitations under the License.
 #include <cctype>
 #include <cstdlib>
 #include <string>
+#include <string_view>
 
 #include "core/kernels/musa/musa_ops_api.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_gate_policy.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_prefill_gate_policy.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_runtime_options.h"
 
 namespace xllm {
 namespace layer {
@@ -108,10 +110,9 @@ std::tuple<torch::Tensor, torch::Tensor> DeepseekV4GateImpl::forward(
       << hidden_size_ << " got " << hidden_states.size(-1);
 
   const int64_t num_tokens = hidden_states.numel() / hidden_size_;
-  const char* disable_gate_gemv_env =
-      std::getenv("XLLM_DSV4_DISABLE_GATE_GEMV");
-  const bool disable_gate_gemv = disable_gate_gemv_env != nullptr &&
-                                 std::string(disable_gate_gemv_env) == "1";
+
+  const bool disable_gate_gemv =
+      dsv4_runtime_option<DeepseekV4Env::DISABLE_GATE_GEMV>().is_one();
   const bool batch_mate = batch_verify &&
                           num_tokens > decode_workspace_tokens_ &&
                           decode_logits_output_.defined() &&
@@ -251,9 +252,9 @@ void DeepseekV4GateImpl::load_state_dict(const StateDict& state_dict) {
     }
   }
   const auto decode_options = weight_.options().dtype(torch::kFloat32);
-  const char* batch_mate_env = std::getenv("XLLM_DSV4_BATCH_GATE_MATE_VERIFY");
+
   const bool batch_mate =
-      batch_mate_env != nullptr && std::string(batch_mate_env) == "1";
+      dsv4_runtime_option<DeepseekV4Env::BATCH_GATE_MATE_VERIFY>().is_one();
   const int64_t capacity =
       dsv4_gate_workspace_capacity(decode_workspace_tokens_, batch_mate);
   decode_logits_output_ =

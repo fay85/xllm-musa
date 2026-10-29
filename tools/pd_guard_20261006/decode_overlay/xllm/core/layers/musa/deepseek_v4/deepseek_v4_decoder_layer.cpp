@@ -19,12 +19,14 @@ limitations under the License.
 
 #include <cstdlib>
 #include <string>
+#include <string_view>
 
 #include "core/common/flash_comm1_context.h"
 #include "core/kernels/musa/deepseek_v4_hc_policy.h"
 #include "core/kernels/musa/musa_dsv4_ops_api.h"
 #include "core/layers/common/dsa_metadata.h"
 #include "core/layers/musa/deepseek_v4/deepseek_v4_gate_policy.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_runtime_options.h"
 
 namespace xllm {
 namespace layer {
@@ -48,15 +50,20 @@ DeepseekV4DecoderLayerImpl::DeepseekV4DecoderLayerImpl(
   norm_eps_ = static_cast<double>(args.rms_norm_eps());
 
   attention_ = register_module("attn", DeepseekV4Attention(context, layer_id));
-  CHECK(parallel_args.single_rank_group_ != nullptr)
-      << "DeepSeek-V4 prefill sequence parallel requires a single-rank "
-         "process group for replicated attention";
-  ParallelArgs prefill_parallel_args = parallel_args;
-  prefill_parallel_args.tp_group_ = parallel_args.single_rank_group_;
-  prefill_attention_ = register_module(
-      "prefill_attn",
-      DeepseekV4Attention(
-          args, quant_args, prefill_parallel_args, options, layer_id));
+  // The DSpark draft model is explicitly excluded from Prefill-SP in
+  // DeepseekV4ModelImpl::forward. Do not allocate/load a second full-head
+  // Attention and its workspaces for a lane that can never run.
+  if (args.dspark_block_size() == 0) {
+    CHECK(parallel_args.single_rank_group_ != nullptr)
+        << "DeepSeek-V4 prefill sequence parallel requires a single-rank "
+           "process group for replicated attention";
+    ParallelArgs prefill_parallel_args = parallel_args;
+    prefill_parallel_args.tp_group_ = parallel_args.single_rank_group_;
+    prefill_attention_ = register_module(
+        "prefill_attn",
+        DeepseekV4Attention(
+            args, quant_args, prefill_parallel_args, options, layer_id));
+  }
   attn_norm_ = register_module(
       "attn_norm", RMSNorm(hidden_size, args.rms_norm_eps(), options));
   ffn_norm_ = register_module(
@@ -108,7 +115,9 @@ void DeepseekV4DecoderLayerImpl::load_state_dict(const StateDict& state_dict) {
   }
   if (attn_state.size() > 0) {
     attention_->load_state_dict(attn_state);
-    prefill_attention_->load_state_dict(attn_state);
+    if (prefill_attention_) {
+      prefill_attention_->load_state_dict(attn_state);
+    }
   }
 
   auto attn_norm_state = state_dict.get_dict_with_prefix("attn_norm.");
@@ -204,6 +213,7 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
                    kv_cache.get_compress_index_score_state()};
   DeepseekV4Attention active_attention = attention_;
   if (sequence_parallel_context_ != nullptr) {
+    CHECK(prefill_attention_) << "DSpark draft cannot enter Prefill-SP";
     prefill_attention_->set_sequence_parallel_context(
         sequence_parallel_context_);
     active_attention = prefill_attention_;
@@ -249,11 +259,8 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
     ffn_input = gather_sequence(ffn_input, *fc1_ctx);
   }
 
-  const char* skip_sp_moe_gather_env =
-      std::getenv("XLLM_DSV4_SP_SKIP_MOE_ALLGATHER");
   const bool skip_sp_moe_gather =
-      skip_sp_moe_gather_env != nullptr &&
-      std::string(skip_sp_moe_gather_env) == "1" &&
+      dsv4_runtime_option<DeepseekV4Env::SP_SKIP_MOE_ALLGATHER>().is_one() &&
       sequence_parallel_context_ != nullptr;
   if (sequence_parallel_context_ != nullptr && !skip_sp_moe_gather) {
     const dsv4_musa_sp::DeepseekV4SPContext& sp = *sequence_parallel_context_;
@@ -293,11 +300,14 @@ torch::Tensor DeepseekV4DecoderLayerImpl::forward(
         << "DeepseekV4 hash gate requires input_ids for routing";
   }
   const bool batch_gate_verify = dsv4_batch_gate_verify_allowed(
-      ffn_input_2d.size(0), input_params.meta.num_sequences,
-      input_params.meta.q_max_seq_len, attn_metadata.dsa_metadata->is_acl_graph,
-      input_params.meta.batch_forward_type.is_decode(), input_params.is_spec_verify);
-  auto [topk_weights, topk_ids] = gate_->forward(
-      ffn_input_2d, gate_input_ids, batch_gate_verify);
+      ffn_input_2d.size(0),
+      input_params.meta.num_sequences,
+      input_params.meta.q_max_seq_len,
+      attn_metadata.dsa_metadata->is_acl_graph,
+      input_params.meta.batch_forward_type.is_decode(),
+      input_params.is_spec_verify);
+  auto [topk_weights, topk_ids] =
+      gate_->forward(ffn_input_2d, gate_input_ids, batch_gate_verify);
   ffn_input = moe_mlp_->forward_with_selected_experts(
       ffn_input, topk_weights, topk_ids, input_params);
 
