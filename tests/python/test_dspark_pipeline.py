@@ -32,7 +32,6 @@ from xllm.python.model_executor.model_output import DraftProposal, ModelOutput
 from xllm.python.model_executor.runners.base import BaseRunner
 from xllm.python.model_executor.runners.decode_cuda_graph import DecodeCudaGraphRunner
 from xllm.python.model_executor.runners.eager import EagerRunner
-from xllm.python.model_executor.runners.inductor import InductorRunner
 from xllm.python.model_executor.sampling_metadata import (
     ModelSamplingMetadata,
     ModelSamplingMetadataBuilder,
@@ -683,7 +682,7 @@ def test_cuda_runner_slices_replay_output_with_input_batch_counts(
         None,
     ],
 )
-@pytest.mark.parametrize("runner", ["graph", "inductor", "eager"])
+@pytest.mark.parametrize("runner", ["graph", "eager"])
 @pytest.mark.parametrize("with_batch_metadata", [False, True])
 def test_executor_uses_original_execute_interface(
     sampling: _SamplingInput | None,
@@ -725,9 +724,6 @@ def test_executor_uses_original_execute_interface(
 
     executor.eager_runner = Mock()
     executor.eager_runner.execute.side_effect = execute_model
-    inductor_runner = Mock()
-    inductor_runner.execute.side_effect = execute_model
-    executor.inductor_runner = inductor_runner if runner != "eager" else None
     executor.decode_graph_runner = Mock()
     executor.decode_graph_runner.can_execute.return_value = runner == "graph"
     executor.decode_graph_runner.execute.side_effect = execute_model
@@ -761,7 +757,6 @@ def test_executor_uses_original_execute_interface(
         synchronizer.synchronize_layer.assert_not_called()
         executor.decode_graph_runner.can_execute.assert_not_called()
         executor.decode_graph_runner.execute.assert_not_called()
-        inductor_runner.execute.assert_not_called()
         executor.eager_runner.execute.assert_not_called()
         assert model.calls == []
         return
@@ -769,7 +764,6 @@ def test_executor_uses_original_execute_interface(
         assert model.calls == []
     executor.decode_graph_runner.can_execute.assert_called_once()
     assert executor.decode_graph_runner.execute.call_count == int(runner == "graph")
-    assert inductor_runner.execute.call_count == int(runner == "inductor")
     assert executor.eager_runner.execute.call_count == int(runner == "eager")
     assert not hasattr(executor, "draft_pipeline")
     assert not hasattr(executor, "execute_pipeline")
@@ -777,21 +771,13 @@ def test_executor_uses_original_execute_interface(
     assert materialize_batch.call_args.kwargs["sampling"] is sampling
 
 
-@pytest.mark.parametrize("compiled", [False, True])
 @pytest.mark.parametrize("with_batch_builder", [False, True])
-def test_pipeline_runners_share_batch_carrier_without_host_cached_counts(
-    compiled: bool,
+def test_eager_pipeline_uses_batch_carrier_without_host_cached_counts(
     with_batch_builder: bool,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     model = _DraftModel()
     backend = SimpleNamespace(is_mla=False, prepare=Mock())
-    monkeypatch.setattr(torch, "compile", lambda model, **kwargs: model)
-    runner = (
-        InductorRunner(model.model, backend, torch.device("cpu"), backend="inductor")
-        if compiled
-        else EagerRunner(model.model, backend, torch.device("cpu"))
-    )
+    runner = EagerRunner(model.model, backend, torch.device("cpu"))
     sampling_builder = ModelSamplingMetadataBuilder()
     batch_builder = Mock()
     batch_builder.metadata_type = InputBatch

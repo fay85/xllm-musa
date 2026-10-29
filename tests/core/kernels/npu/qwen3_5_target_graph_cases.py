@@ -180,8 +180,8 @@ def _check_dspark_target_aclgraph_width(width: int, dp_rank: int | None = None) 
         LayerCache(None, None, conv=conv.clone(), ssm=ssm.clone()),
         LayerCache(key.clone(), value.clone()),
     ]
-    graph = ModelExecutor(model, {**config, "python_graph_backend": "aclgraph"}, 32, width)
-    eager = ModelExecutor(model, {**config, "python_graph_backend": "off"}, 32, width)
+    graph = ModelExecutor(model, {**config, "enable_graph": True}, 32, width)
+    eager = ModelExecutor(model, {**config, "enable_graph": False}, 32, width)
     graph.bind_kv_caches(caches)
     eager.bind_kv_caches(eager_caches)
     assert graph.decode_graph_runner is not None

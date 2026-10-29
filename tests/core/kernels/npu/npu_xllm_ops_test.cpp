@@ -1334,12 +1334,11 @@ with patch.object(
 ):
     model_executor = executor_module.ModelExecutor(
         FakeModel(),
-        {"python_graph_backend": "off"},
+        {"enable_graph": False},
         max_seqs_per_batch=3,
     )
     assert model_executor._num_attention_layers == 1
     assert model_executor.decode_graph_runner is None
-    assert model_executor.inductor_runner is None
 )PY");
 }
 

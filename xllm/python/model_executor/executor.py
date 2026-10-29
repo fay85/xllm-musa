@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 import torch
 import torch.nn as nn
 
+from scripts.logger import logger
 from xllm.python import distributed
 from xllm.python.attention.backend import (
     AttentionBackend,
@@ -46,9 +47,6 @@ from xllm.python.model_executor.sampling_metadata import ModelSamplingInput
 from xllm.python.models.multimodal import MultimodalInputs
 from xllm.python.platform import current_platform
 from xllm.python.registry import get_execution_metadata_builder_classes
-
-# Backend strings that mean "no graph execution" (matched case-insensitively).
-_DISABLED_GRAPH_BACKENDS = ("", "off", "none", "0")
 
 if TYPE_CHECKING:
     from xllm.python.models.aux_hidden_capture import AuxHiddenCapture
@@ -98,13 +96,6 @@ def _validate_qwen3_5_dcp_config(
         )
     if bool(config.get("enable_disagg_pd", False)):
         raise NotImplementedError("Qwen3.5 Python DCP does not yet support disaggregated P/D")
-
-
-def _resolve_graph_backend(config: dict) -> str:
-    graph_backend = str(config.get("python_graph_backend", "off")).lower()
-    if graph_backend in _DISABLED_GRAPH_BACKENDS and config.get("enable_graph", False) and current_platform.is_npu():
-        return "aclgraph"
-    return graph_backend
 
 
 def _create_attention_backend(
@@ -346,10 +337,15 @@ class ModelExecutor:
             int(num_decoding_tokens),
             1 if is_spec_draft and self._draft_query_width > 1 else int(config.get("num_speculative_tokens", 0)) + 1,
         )
-        # Resolve the graph backend before the attention backend so the V4.1
-        # CSA2 backend can validate its ACL-graph capacity at startup (C of
-        # 51361671) instead of at the first captured forward.
-        graph_backend = _resolve_graph_backend(config)
+        if "python_graph_backend" in config:
+            logger.warning(
+                "python_graph_backend has been removed and is ignored. Set "
+                "enable_graph=true to request graph execution; torch.compile "
+                "backends are no longer supported."
+            )
+        graph_enabled = bool(config.get("enable_graph", False))
+        if graph_enabled and not (current_platform.is_npu() or current_platform.is_cuda()):
+            raise NotImplementedError("Python graph execution requires CUDA or NPU")
         self.attention_backend = _create_attention_backend(
             first_attention,
             device,
@@ -357,7 +353,7 @@ class ModelExecutor:
             config,
             max_seqs_per_batch,
             num_decoding_tokens=num_decoding_tokens,
-            acl_graph_enabled=graph_backend == "aclgraph",
+            acl_graph_enabled=graph_enabled and current_platform.is_npu(),
         )
 
         self._configure_bidirectional_prompt_attention(config, device)
@@ -373,7 +369,6 @@ class ModelExecutor:
         if self.layerwise_split_size > 1 and config.get("model_type") != "glm_moe_dsa":
             raise NotImplementedError("Python layerwise split is supported only for GLM5.2")
         self.decode_graph_runner = None
-        self.inductor_runner = None
 
         model_type = str(config.get("model_type", ""))
         execution_metadata_builders = tuple(
@@ -384,19 +379,14 @@ class ModelExecutor:
         self.eager_runner.bind_execution_metadata_builders(execution_metadata_builders)
         self._execution_metadata_builders = self.eager_runner.execution_metadata_builders
 
-        if self.layerwise_split_size > 1 and graph_backend not in _DISABLED_GRAPH_BACKENDS:
+        if self.layerwise_split_size > 1 and graph_enabled:
             raise NotImplementedError(
-                "Python GLM5.2 layerwise split requires eager execution; "
-                f"graph backend '{graph_backend}' is not supported."
+                "Python GLM5.2 layerwise split requires eager execution; graph execution is not supported."
             )
         dp_size = int(config.get("dp_size", 1))
         dp_rank = int(config.get("dp_rank", 0))
         self.dp_size = dp_size
-        if dp_size > 1 and graph_backend not in (*_DISABLED_GRAPH_BACKENDS, "cudagraphs", "aclgraph"):
-            raise NotImplementedError("Python data parallel graph execution supports cudagraphs and aclgraph only")
-        if graph_backend in _DISABLED_GRAPH_BACKENDS:
-            pass
-        elif graph_backend == "cudagraphs":
+        if graph_enabled and current_platform.is_cuda():
             from xllm.python.model_executor.runners.decode_cuda_graph import (
                 DecodeCudaGraphRunner,
             )
@@ -410,7 +400,12 @@ class ModelExecutor:
                 dp_size,
                 dp_rank,
             )
-        elif graph_backend == "aclgraph":
+            logger.warning(
+                "enable_graph=true selected the CUDA graph runner, but its "
+                "warmup/capture path is not wired into ModelExecutor; "
+                "decode will run eagerly without CUDA graph capture/replay."
+            )
+        elif graph_enabled and current_platform.is_npu():
             from xllm.python.model_executor.runners.decode_acl_graph import (
                 DecodeAclGraphRunner,
             )
@@ -450,26 +445,6 @@ class ModelExecutor:
                 **eplv2_graph_kwargs,
             )
             self.decode_graph_runner.bind_execution_metadata_builders(execution_metadata_builders)
-        else:
-            if self.layerwise_split_size > 1:
-                raise NotImplementedError(
-                    "Python layerwise split requires eager execution; graph "
-                    f"backend '{graph_backend}' is not supported."
-                )
-            if self.eager_runner.cp_size > 1:
-                # CP is prefill-only and lives on eager_runner; a compile
-                # backend serves prefill through InductorRunner, which carries
-                # no cp_context, so CP would silently no-op. Reject rather than
-                # run without the requested sharding.
-                raise NotImplementedError(
-                    "Context-Parallel (cp_size > 1) is not supported with the "
-                    f"'{graph_backend}' graph backend; CP is eager-only. Use "
-                    "graph_backend=off/aclgraph, or set cp_size=1."
-                )
-            from xllm.python.model_executor.runners.inductor import InductorRunner
-
-            self.inductor_runner = InductorRunner(execution_model, self.attention_backend, device, graph_backend)
-            self.inductor_runner.bind_execution_metadata_builders(execution_metadata_builders)
 
     def _configure_bidirectional_prompt_attention(self, config: dict, device: torch.device) -> None:
         if not _is_qwen3_5_model_type(str(config.get("model_type", ""))):
@@ -528,8 +503,6 @@ class ModelExecutor:
         self.eager_runner.bind_layer_caches(layer_caches)
         if self.decode_graph_runner is not None:
             self.decode_graph_runner.bind_layer_caches(layer_caches)
-        if self.inductor_runner is not None:
-            self.inductor_runner.bind_layer_caches(layer_caches)
         self._kv_bound = True
 
     @staticmethod
@@ -689,21 +662,6 @@ class ModelExecutor:
             )
         if restore_history is not None:
             restore_history(self.attention_backend, metadata)
-        if self.inductor_runner is not None:
-            # Compiled execution must not capture request-specific Host events.
-            if layer_load_context is not None:
-                layer_load_context.synchronize_all_layers()
-            output = self.inductor_runner.execute(
-                input_ids,
-                positions,
-                metadata,
-                input_embedding,
-                layer_synchronizer=layer_synchronizer,
-                eplb=eplb,
-                input_batch=input_batch,
-                multimodal_inputs=multimodal_inputs,
-            )
-            return self._attach_persistent_aux_hidden_states(output, rows)
         output = self.eager_runner.execute(
             input_ids,
             positions,

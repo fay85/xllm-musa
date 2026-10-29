@@ -30,7 +30,6 @@ def test_executor_forwards_worker_eplb_state_to_eager_runner() -> None:
     executor._is_spec_draft = False
     executor.layerwise_split_size = 1
     executor.decode_graph_runner = None
-    executor.inductor_runner = None
     executor._execution_metadata_builders = ()
     executor.eager_runner = MagicMock()
     executor.eager_runner.execute.return_value = torch.ones(1)

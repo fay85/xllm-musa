@@ -20,7 +20,6 @@ limitations under the License.
 #include <string>
 
 #include "core/distributed_runtime/master.h"
-#include "core/framework/config/execution_config.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/parallel_config.h"
@@ -95,20 +94,15 @@ TEST(NpuCpCapabilityTest, RegistrationIsIdempotent) {
   }
 }
 
-TEST(NpuCpCapabilityTest, PythonCpAllowsAclGraphAndRejectsCompileBackends) {
-  ExecutionConfig& execution_config = ExecutionConfig::get_instance();
+TEST(NpuCpCapabilityTest, PythonCpAllowsGraphEnabledAndDisabled) {
   ModelConfig& model_config = ModelConfig::get_instance();
   ParallelConfig& parallel_config = ParallelConfig::get_instance();
-  const std::string original_python_graph_backend =
-      execution_config.python_graph_backend();
   const std::string original_model_impl = model_config.model_impl();
   const int32_t original_kv_split_size = parallel_config.kv_split_size();
   ScopeGuard config_guard([&] {
     parallel_config.kv_split_size(original_kv_split_size);
     model_config.model_impl(original_model_impl);
-    execution_config.python_graph_backend(original_python_graph_backend);
   });
-  execution_config.python_graph_backend("off");
   model_config.model_impl("python");
   parallel_config.kv_split_size(1);
 
@@ -126,24 +120,6 @@ TEST(NpuCpCapabilityTest, PythonCpAllowsAclGraphAndRejectsCompileBackends) {
                    .has_value());
 
   options.enable_graph(false);
-  execution_config.python_graph_backend("aclgraph");
-  EXPECT_FALSE(validate_model_cp(options,
-                                 EngineType::LLM,
-                                 "glm_moe_dsa",
-                                 /*global_world_size=*/16)
-                   .has_value());
-
-  execution_config.python_graph_backend("inductor");
-  const std::optional<std::string> graph_error = std::optional<std::string>(
-      "Python model-side CP requires Prefill to use EagerRunner; use "
-      "--python_graph_backend=off or decode-only aclgraph");
-  EXPECT_EQ(validate_model_cp(options,
-                              EngineType::LLM,
-                              "glm_moe_dsa",
-                              /*global_world_size=*/16),
-            graph_error);
-
-  execution_config.python_graph_backend("off");
   EXPECT_FALSE(validate_model_cp(options,
                                  EngineType::LLM,
                                  "glm_moe_dsa",
@@ -152,19 +128,14 @@ TEST(NpuCpCapabilityTest, PythonCpAllowsAclGraphAndRejectsCompileBackends) {
 }
 
 TEST(NpuCpCapabilityTest, PythonCpPreservesQwenAndRestrictsGlm) {
-  ExecutionConfig& execution_config = ExecutionConfig::get_instance();
   ModelConfig& model_config = ModelConfig::get_instance();
   ParallelConfig& parallel_config = ParallelConfig::get_instance();
-  const std::string original_python_graph_backend =
-      execution_config.python_graph_backend();
   const std::string original_model_impl = model_config.model_impl();
   const int32_t original_kv_split_size = parallel_config.kv_split_size();
   ScopeGuard config_guard([&] {
     parallel_config.kv_split_size(original_kv_split_size);
     model_config.model_impl(original_model_impl);
-    execution_config.python_graph_backend(original_python_graph_backend);
   });
-  execution_config.python_graph_backend("off");
   model_config.model_impl("python");
   parallel_config.kv_split_size(1);
 
@@ -315,13 +286,10 @@ TEST(NpuCpCapabilityTest, PythonCpPreservesQwenAndRestrictsGlm) {
 }
 
 TEST(NpuCpCapabilityTest, PythonGlm5NextCapabilityGate) {
-  ExecutionConfig& execution_config = ExecutionConfig::get_instance();
   KVCacheConfig& kv_cache_config = KVCacheConfig::get_instance();
   ModelConfig& model_config = ModelConfig::get_instance();
   ParallelConfig& parallel_config = ParallelConfig::get_instance();
   SchedulerConfig& scheduler_config = SchedulerConfig::get_instance();
-  const std::string original_python_graph_backend =
-      execution_config.python_graph_backend();
   const std::string original_model_impl = model_config.model_impl();
   const int32_t original_kv_split_size = parallel_config.kv_split_size();
   const bool original_chunked_prefill =
@@ -337,10 +305,8 @@ TEST(NpuCpCapabilityTest, PythonGlm5NextCapabilityGate) {
     scheduler_config.enable_chunked_prefill(original_chunked_prefill);
     parallel_config.kv_split_size(original_kv_split_size);
     model_config.model_impl(original_model_impl);
-    execution_config.python_graph_backend(original_python_graph_backend);
   });
   model_config.model_impl("python");
-  execution_config.python_graph_backend("off");
   parallel_config.kv_split_size(1);
   scheduler_config.enable_chunked_prefill(false);
   scheduler_config.enable_mix_batch(false);
@@ -368,7 +334,7 @@ TEST(NpuCpCapabilityTest, PythonGlm5NextCapabilityGate) {
                    .has_value());
   options.instance_role(InstanceRole::PREFILL);
 
-  execution_config.python_graph_backend("aclgraph");
+  options.enable_graph(true);
   EXPECT_FALSE(validate_model_cp(options,
                                  EngineType::LLM,
                                  "glm5_next",
@@ -423,16 +389,7 @@ TEST(NpuCpCapabilityTest, PythonGlm5NextCapabilityGate) {
 
   options.speculative_algorithm("MTP");
 
-  execution_config.python_graph_backend("inductor");
-  EXPECT_EQ(validate_model_cp(options,
-                              EngineType::LLM,
-                              "glm5_next",
-                              /*global_world_size=*/8),
-            std::optional<std::string>(
-                "Python model-side CP requires Prefill to use EagerRunner; use "
-                "--python_graph_backend=off or decode-only aclgraph"));
-
-  execution_config.python_graph_backend("off");
+  options.enable_graph(false);
   options.ep_size(2);
   EXPECT_FALSE(validate_model_cp(options,
                                  EngineType::LLM,
@@ -686,19 +643,14 @@ TEST(NpuCpCapabilityTest, PythonGlm5NextShardedKvIsAdmittedAtCpSizeOne) {
   // guard fired for this shape. m11 never carried that guard: the shape has
   // been admissible here since the cp1 early return landed, and nothing pinned
   // it until now.
-  ExecutionConfig& execution_config = ExecutionConfig::get_instance();
   ModelConfig& model_config = ModelConfig::get_instance();
   ParallelConfig& parallel_config = ParallelConfig::get_instance();
-  const std::string original_python_graph_backend =
-      execution_config.python_graph_backend();
   const std::string original_model_impl = model_config.model_impl();
   const int32_t original_kv_split_size = parallel_config.kv_split_size();
   ScopeGuard config_guard([&] {
     parallel_config.kv_split_size(original_kv_split_size);
     model_config.model_impl(original_model_impl);
-    execution_config.python_graph_backend(original_python_graph_backend);
   });
-  execution_config.python_graph_backend("off");
   model_config.model_impl("python");
   parallel_config.kv_split_size(2);
 

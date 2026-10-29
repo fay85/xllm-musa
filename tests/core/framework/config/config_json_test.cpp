@@ -100,7 +100,7 @@ inline constexpr std::string_view kInlineConfig = R"json({
   "max_seqs_per_batch": 64,
   "model_impl": "py",
   "disable_graph_warmup": true,
-  "python_graph_backend": "cudagraphs",
+  "enable_graph": true,
   "enable_fia_decode": true
 })json";
 
@@ -197,7 +197,7 @@ class ConfigFlagGuard final {
         old_model_impl_(FLAGS_model_impl),
         old_python_model_path_(FLAGS_python_model_path),
         old_disable_graph_warmup_(FLAGS_disable_graph_warmup),
-        old_python_graph_backend_(FLAGS_python_graph_backend),
+        old_enable_graph_(FLAGS_enable_graph),
         old_enable_fia_decode_(FLAGS_enable_fia_decode) {}
 
   ~ConfigFlagGuard() {
@@ -209,7 +209,7 @@ class ConfigFlagGuard final {
     FLAGS_model_impl = old_model_impl_;
     FLAGS_python_model_path = old_python_model_path_;
     FLAGS_disable_graph_warmup = old_disable_graph_warmup_;
-    FLAGS_python_graph_backend = old_python_graph_backend_;
+    FLAGS_enable_graph = old_enable_graph_;
     FLAGS_enable_fia_decode = old_enable_fia_decode_;
   }
 
@@ -222,7 +222,7 @@ class ConfigFlagGuard final {
   std::string old_model_impl_;
   std::string old_python_model_path_;
   bool old_disable_graph_warmup_;
-  std::string old_python_graph_backend_;
+  bool old_enable_graph_;
   bool old_enable_fia_decode_;
 };
 
@@ -235,7 +235,7 @@ class StartupConfigGuard final {
         scheduler_config_(SchedulerConfig::get_instance()),
         old_model_impl_(model_config_.model_impl()),
         old_python_model_path_(model_config_.python_model_path()),
-        old_python_graph_backend_(execution_config_.python_graph_backend()),
+        old_enable_graph_(execution_config_.enable_graph()),
         old_enable_fia_decode_(execution_config_.enable_fia_decode()),
         old_block_size_(kv_cache_config_.block_size()),
         old_enable_prefix_cache_(kv_cache_config_.enable_prefix_cache()),
@@ -247,7 +247,7 @@ class StartupConfigGuard final {
   ~StartupConfigGuard() {
     model_config_.model_impl(old_model_impl_)
         .python_model_path(old_python_model_path_);
-    execution_config_.python_graph_backend(old_python_graph_backend_)
+    execution_config_.enable_graph(old_enable_graph_)
         .enable_fia_decode(old_enable_fia_decode_);
     kv_cache_config_.block_size(old_block_size_)
         .enable_prefix_cache(old_enable_prefix_cache_);
@@ -263,7 +263,7 @@ class StartupConfigGuard final {
   SchedulerConfig& scheduler_config_;
   std::string old_model_impl_;
   std::string old_python_model_path_;
-  std::string old_python_graph_backend_;
+  bool old_enable_graph_;
   bool old_enable_fia_decode_;
   int32_t old_block_size_;
   bool old_enable_prefix_cache_;
@@ -379,13 +379,13 @@ TEST(ConfigJsonTest, FromJsonUsesParsedOverrides) {
   // them nor touches their gflags, so both keep their pre-call values.
   EXPECT_EQ(model_config.python_model_path(), "");
   EXPECT_TRUE(execution_config.disable_graph_warmup());
-  EXPECT_EQ(execution_config.python_graph_backend(), "cudagraphs");
+  EXPECT_TRUE(execution_config.enable_graph());
   EXPECT_TRUE(execution_config.enable_fia_decode());
 
   EXPECT_EQ(FLAGS_model_impl, "py");
   EXPECT_EQ(FLAGS_python_model_path, old_python_model_path);
   EXPECT_TRUE(FLAGS_disable_graph_warmup);
-  EXPECT_EQ(FLAGS_python_graph_backend, "cudagraphs");
+  EXPECT_TRUE(FLAGS_enable_graph);
   EXPECT_TRUE(FLAGS_enable_fia_decode);
 
   EXPECT_EQ(kv_cache_config.kv_cache_dtype(), "auto");
@@ -397,6 +397,56 @@ TEST(ExecutionConfigTest, GraphWarmupIsEnabledByDefault) {
   const ExecutionConfig execution_config;
 
   EXPECT_FALSE(execution_config.disable_graph_warmup());
+}
+
+TEST(ExecutionConfigTest, RemovedPythonGraphBackendWarnsWithoutEnablingGraphs) {
+  google::FlagSaver flag_saver;
+  google::SetCommandLineOption("logtostderr", "true");
+  ExecutionConfig execution_config;
+  const JsonReader json = config::parse_json_string(
+      R"json({"python_graph_backend":"cudagraphs"})json");
+
+  testing::internal::CaptureStderr();
+  execution_config.from_json(json);
+  const std::string warning = testing::internal::GetCapturedStderr();
+
+  EXPECT_FALSE(execution_config.enable_graph());
+  EXPECT_NE(
+      warning.find("python_graph_backend has been removed and is ignored"),
+      std::string::npos);
+  EXPECT_NE(warning.find("enable_graph=true"), std::string::npos);
+}
+
+TEST(ExecutionConfigTest, RemovedPythonGraphBackendDoesNotOverrideEnableGraph) {
+  google::FlagSaver flag_saver;
+  google::SetCommandLineOption("logtostderr", "true");
+  ExecutionConfig execution_config;
+  const JsonReader json = config::parse_json_string(
+      R"json({"python_graph_backend":"off","enable_graph":true})json");
+
+  testing::internal::CaptureStderr();
+  execution_config.from_json(json);
+  const std::string warning = testing::internal::GetCapturedStderr();
+
+  EXPECT_TRUE(execution_config.enable_graph());
+  EXPECT_NE(
+      warning.find("python_graph_backend has been removed and is ignored"),
+      std::string::npos);
+}
+
+TEST(ExecutionConfigTest, EnableGraphWithoutRemovedBackendDoesNotWarn) {
+  google::FlagSaver flag_saver;
+  google::SetCommandLineOption("logtostderr", "true");
+  ExecutionConfig execution_config;
+  const JsonReader json =
+      config::parse_json_string(R"json({"enable_graph":true})json");
+
+  testing::internal::CaptureStderr();
+  execution_config.from_json(json);
+  const std::string warning = testing::internal::GetCapturedStderr();
+
+  EXPECT_TRUE(execution_config.enable_graph());
+  EXPECT_TRUE(warning.empty());
 }
 
 TEST(KVCacheConfigValidationTest, AcceptsSupportedIndexerCacheDtypes) {
@@ -769,9 +819,7 @@ TEST(ConfigJsonTest, DumpStartupConfigWritesNonDefaultValuesOnly) {
 
   ModelConfig::get_instance().model_impl("python").python_model_path(
       "/tmp/xllm-python-model");
-  ExecutionConfig::get_instance()
-      .python_graph_backend("cudagraphs")
-      .enable_fia_decode(true);
+  ExecutionConfig::get_instance().enable_graph(true).enable_fia_decode(true);
   KVCacheConfig::get_instance().block_size(256).enable_prefix_cache(false);
   SchedulerConfig::get_instance()
       .max_tokens_per_batch(2048)
@@ -784,8 +832,7 @@ TEST(ConfigJsonTest, DumpStartupConfigWritesNonDefaultValuesOnly) {
   ASSERT_TRUE(std::filesystem::exists(dump_path));
   const nlohmann::ordered_json config_json = read_json_file(dump_path);
   EXPECT_EQ(config_json.at("model_impl").get<std::string>(), "python");
-  EXPECT_EQ(config_json.at("python_graph_backend").get<std::string>(),
-            "cudagraphs");
+  EXPECT_TRUE(config_json.at("enable_graph").get<bool>());
   EXPECT_TRUE(config_json.at("enable_fia_decode").get<bool>());
   EXPECT_EQ(config_json.at("block_size").get<int32_t>(), 256);
   EXPECT_FALSE(config_json.at("enable_prefix_cache").get<bool>());

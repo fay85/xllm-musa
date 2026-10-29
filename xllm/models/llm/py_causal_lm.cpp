@@ -544,10 +544,6 @@ py::dict PyCausalLM::build_config_dict(
   d["enable_graph"] = requires_eager_execution
                           ? false
                           : ExecutionConfig::get_instance().enable_graph();
-  d["python_graph_backend"] =
-      requires_eager_execution
-          ? std::string("off")
-          : ExecutionConfig::get_instance().python_graph_backend();
   // Bridge the aux-capture graph opt-in to the Python model: the graph-capable
   // target reads this to publish its capture through a persistent buffer
   // instead of returning the tuple the graph runner cannot accept.

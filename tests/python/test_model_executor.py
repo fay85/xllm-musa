@@ -56,7 +56,6 @@ from xllm.python.model_executor.execution_context import (  # noqa: E402
 from xllm.python.model_executor.executor import (  # noqa: E402
     ModelExecutor,
     _create_attention_backend,
-    _resolve_graph_backend,
 )
 from xllm.python.model_executor.forward_context import (  # noqa: E402
     ForwardContext,
@@ -169,10 +168,10 @@ def _v41_backend_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> dict
     }
 
 
-@pytest.mark.parametrize("graph_backend", ["off", "aclgraph"])
+@pytest.mark.parametrize("enable_graph", [False, True])
 @pytest.mark.parametrize("dp_size", [1, 2])
 def test_v41_executor_preserves_csa2_dispatch_after_main_integration(
-    graph_backend: str, dp_size: int, tmp_path: Path, _v41_backend_config: dict[str, object]
+    enable_graph: bool, dp_size: int, tmp_path: Path, _v41_backend_config: dict[str, object]
 ) -> None:
     """Exercise real CSA2 construction without launching NPU graph execution."""
     from xllm.python.attention.csa2_attention import Csa2AttentionBackend
@@ -181,7 +180,7 @@ def test_v41_executor_preserves_csa2_dispatch_after_main_integration(
     (tmp_path / "quant_model_description.json").write_text("{}", encoding="utf-8")
     config = {
         **_v41_backend_config,
-        "python_graph_backend": graph_backend,
+        "enable_graph": enable_graph,
         "window_size": 128,
         "index_topk": 8,
         "index_n_heads": 2,
@@ -204,8 +203,7 @@ def test_v41_executor_preserves_csa2_dispatch_after_main_integration(
     assert backend.graph_token_capacity_granularity == 1024
     assert executor._execution_metadata_builders == ()
     assert executor.eager_runner.cp_size == 1
-    assert executor.inductor_runner is None
-    if graph_backend == "off":
+    if not enable_graph:
         graph_runner.assert_not_called()
         assert executor.decode_graph_runner is None
     else:
@@ -474,14 +472,85 @@ def test_attention_blocks_until_its_host_copy_completes() -> None:
     assert synchronizer.calls == [0, 1]
 
 
-class TestNpuGraphBackendResolution:
-    @patch(
-        "xllm.python.model_executor.executor.current_platform.is_npu",
-        return_value=True,
-    )
-    def test_enable_graph_selects_aclgraph_on_npu(self, _mock_is_npu):
-        config = {"enable_graph": True, "python_graph_backend": "off"}
-        assert _resolve_graph_backend(config) == "aclgraph"
+class TestGraphRunnerSelection:
+    @pytest.mark.parametrize("platform", ["npu", "cuda", "unsupported"])
+    @pytest.mark.parametrize("enable_graph", [None, False, True])
+    @pytest.mark.parametrize("legacy_backend", [None, "off", "cudagraphs", "inductor"])
+    def test_graph_selection_uses_only_enable_graph_and_platform(
+        self, platform: str, enable_graph: bool | None, legacy_backend: str | None
+    ) -> None:
+        config: dict[str, object] = {"max_position_embeddings": 128}
+        if enable_graph is not None:
+            config["enable_graph"] = enable_graph
+        if legacy_backend is not None:
+            config["python_graph_backend"] = legacy_backend
+        with (
+            patch("xllm.python.model_executor.executor.current_platform.is_npu", return_value=platform == "npu"),
+            patch("xllm.python.model_executor.executor.current_platform.is_cuda", return_value=platform == "cuda"),
+            patch(
+                "xllm.python.model_executor.executor._create_attention_backend", return_value=StubAttentionBackend()
+            ) as create_attention_backend,
+            patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner") as acl_graph_runner,
+            patch("xllm.python.model_executor.runners.decode_cuda_graph.DecodeCudaGraphRunner") as cuda_graph_runner,
+            patch("xllm.python.model_executor.executor.logger.warning") as warning,
+        ):
+            if enable_graph and platform == "unsupported":
+                with pytest.raises(NotImplementedError, match="requires CUDA or NPU"):
+                    ModelExecutor(_FakeModel(num_layers=1), config, max_seqs_per_batch=4)
+                create_attention_backend.assert_not_called()
+            else:
+                executor = ModelExecutor(_FakeModel(num_layers=1), config, max_seqs_per_batch=4)
+                expected_runner = None
+                if enable_graph:
+                    expected_runner = (
+                        acl_graph_runner.return_value if platform == "npu" else cuda_graph_runner.return_value
+                    )
+                assert executor.decode_graph_runner is expected_runner
+                assert create_attention_backend.call_args.kwargs["acl_graph_enabled"] == (
+                    bool(enable_graph) and platform == "npu"
+                )
+
+            assert acl_graph_runner.call_count == int(bool(enable_graph) and platform == "npu")
+            assert cuda_graph_runner.call_count == int(bool(enable_graph) and platform == "cuda")
+            messages = [warning_call.args[0] for warning_call in warning.call_args_list]
+            cuda_graph_requested = bool(enable_graph) and platform == "cuda"
+            assert len(messages) == int(legacy_backend is not None) + int(cuda_graph_requested)
+            if legacy_backend is not None:
+                message = messages[0]
+                assert "python_graph_backend has been removed and is ignored" in message
+                assert "enable_graph=true" in message
+                assert "torch.compile backends are no longer supported" in message
+            if cuda_graph_requested:
+                message = messages[-1]
+                assert "enable_graph=true selected the CUDA graph runner" in message
+                assert "warmup/capture path is not wired into ModelExecutor" in message
+                assert "decode will run eagerly without CUDA graph capture/replay" in message
+
+    @pytest.mark.parametrize("platform", ["npu", "cuda"])
+    @pytest.mark.parametrize("enable_graph", [False, True])
+    def test_layerwise_split_requires_graph_disabled(self, platform: str, enable_graph: bool) -> None:
+        config = {
+            "model_type": "glm_moe_dsa",
+            "layerwise_split_size": 2,
+            "enable_graph": enable_graph,
+            "max_position_embeddings": 128,
+        }
+        with (
+            patch("xllm.python.model_executor.executor.current_platform.is_npu", return_value=platform == "npu"),
+            patch("xllm.python.model_executor.executor.current_platform.is_cuda", return_value=platform == "cuda"),
+            patch("xllm.python.model_executor.executor._create_attention_backend", return_value=StubAttentionBackend()),
+            patch("xllm.python.model_executor.executor.get_execution_metadata_builder_classes", return_value=()),
+            patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner") as acl_graph_runner,
+            patch("xllm.python.model_executor.runners.decode_cuda_graph.DecodeCudaGraphRunner") as cuda_graph_runner,
+        ):
+            if enable_graph:
+                with pytest.raises(NotImplementedError, match="layerwise split requires eager execution"):
+                    ModelExecutor(_FakeModel(num_layers=1), config, max_seqs_per_batch=4)
+            else:
+                executor = ModelExecutor(_FakeModel(num_layers=1), config, max_seqs_per_batch=4)
+                assert executor.decode_graph_runner is None
+            acl_graph_runner.assert_not_called()
+            cuda_graph_runner.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -1244,23 +1313,24 @@ class TestModelExecutorConstruction:
         model = _FakeModel(num_layers=1)
         capability = MagicMock(return_value=supported)
         model.supports_device_only_decode_inputs = capability
-        executor = ModelExecutor(model, {"python_graph_backend": "off"}, max_seqs_per_batch=4)
+        executor = ModelExecutor(model, {"enable_graph": False}, max_seqs_per_batch=4)
 
         assert executor.supports_device_only_decode_inputs(kv_page_size) is supported
         capability.assert_called_once_with(kv_page_size)
 
-    @pytest.mark.parametrize("graph_backend", ["off", "aclgraph"])
+    @pytest.mark.parametrize("enable_graph", [False, True])
     @pytest.mark.parametrize(
         "explicit_width,config_depth,expected_width",
         [(1, 0, 1), (1, 3, 4), (4, 1, 4)],
     )
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner")
     @patch("xllm.python.model_executor.executor._create_attention_backend")
     def test_decoding_width_reaches_backend_and_graph_runner(
         self,
         mock_create: MagicMock,
         mock_graph_runner: MagicMock,
-        graph_backend: str,
+        enable_graph: bool,
         explicit_width: int,
         config_depth: int,
         expected_width: int,
@@ -1269,7 +1339,7 @@ class TestModelExecutorConstruction:
         ModelExecutor(
             _FakeModel(num_layers=1),
             {
-                "python_graph_backend": graph_backend,
+                "enable_graph": enable_graph,
                 "num_speculative_tokens": config_depth,
                 "max_position_embeddings": 128,
             },
@@ -1278,26 +1348,27 @@ class TestModelExecutorConstruction:
         )
 
         assert mock_create.call_args.kwargs["num_decoding_tokens"] == expected_width
-        if graph_backend == "aclgraph":
+        if enable_graph:
             assert mock_graph_runner.call_args.kwargs["num_decoding_tokens"] == expected_width
         else:
             mock_graph_runner.assert_not_called()
 
-    @pytest.mark.parametrize("graph_backend", ["off", "aclgraph"])
+    @pytest.mark.parametrize("enable_graph", [False, True])
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner")
     @patch("xllm.python.model_executor.executor._create_attention_backend")
     def test_block_draft_width_is_independent_of_target_verify_width(
         self,
         mock_create: MagicMock,
         mock_graph_runner: MagicMock,
-        graph_backend: str,
+        enable_graph: bool,
     ) -> None:
         mock_create.return_value = StubAttentionBackend()
         model = _FakeModel(num_layers=1)
         executor = ModelExecutor(
             model,
             {
-                "python_graph_backend": graph_backend,
+                "enable_graph": enable_graph,
                 "num_speculative_tokens": 15,
                 "draft_query_width": 15,
                 "max_position_embeddings": 128,
@@ -1308,7 +1379,7 @@ class TestModelExecutorConstruction:
         )
         assert mock_create.call_args.kwargs["num_decoding_tokens"] == 1
         assert executor.eager_runner.model is model.model
-        if graph_backend == "aclgraph":
+        if enable_graph:
             assert mock_graph_runner.call_args.args[0] is model.model
             assert mock_graph_runner.call_args.kwargs["num_decoding_tokens"] == 1
 
@@ -1318,12 +1389,11 @@ class TestModelExecutorConstruction:
     )
     def test_valid_model_creates_executor(self, _mock_backend):
         model = _FakeModel(num_layers=3)
-        config = {"python_graph_backend": "off"}
+        config = {"enable_graph": False}
         executor = ModelExecutor(model, config, max_seqs_per_batch=4)
 
         assert executor._num_attention_layers == 3
         assert executor.decode_graph_runner is None
-        assert executor.inductor_runner is None
 
     @patch("xllm.python.model_executor.executor.get_execution_metadata_builder_classes")
     @patch(
@@ -1342,7 +1412,7 @@ class TestModelExecutorConstruction:
         config = {
             "enable_mega_moe": True,
             "model_type": "qwen3_5_moe",
-            "python_graph_backend": "off",
+            "enable_graph": False,
         }
 
         executor = ModelExecutor(
@@ -1396,7 +1466,7 @@ class TestModelExecutorConstruction:
                 )
                 self._param = nn.Parameter(torch.zeros(1))
 
-        ModelExecutor(_FakeGlmNext(), {"python_graph_backend": "off"}, max_seqs_per_batch=4)
+        ModelExecutor(_FakeGlmNext(), {"enable_graph": False}, max_seqs_per_batch=4)
         first_attention = mock_backend.call_args.args[0]
         assert first_attention.num_heads == 8
         assert first_attention.num_kv_heads == 1
@@ -1412,7 +1482,7 @@ class TestModelExecutorConstruction:
         model.layers[1].attention_kind = "mla"
         model.layers[0].head_dim = 128
         model.layers[1].head_dim = 512
-        ModelExecutor(model, {"python_graph_backend": "off"}, max_seqs_per_batch=4)
+        ModelExecutor(model, {"enable_graph": False}, max_seqs_per_batch=4)
         assert mock_backend.call_args.args[0] is model.layers[1]
 
     @patch("xllm.python.model_executor.executor._create_attention_backend")
@@ -1423,7 +1493,7 @@ class TestModelExecutorConstruction:
             layer.attention_kind = "mla"
         model.layers[2].head_dim *= 2
         with pytest.raises(ValueError, match="identical MLA configuration"):
-            ModelExecutor(model, {"python_graph_backend": "off"}, max_seqs_per_batch=4)
+            ModelExecutor(model, {"enable_graph": False}, max_seqs_per_batch=4)
         mock_backend.assert_not_called()
 
     @patch(
@@ -1505,7 +1575,7 @@ class TestModelExecutorConstruction:
                     "model_type": "glm5_next",
                     "cp_size": 1,
                     "enable_mla": True,
-                    "python_graph_backend": "off",
+                    "enable_graph": False,
                 },
                 max_seqs_per_batch=4,
                 num_decoding_tokens=1,
@@ -1546,7 +1616,7 @@ class TestModelExecutorConstruction:
             ModelExecutor(
                 model,
                 {
-                    "python_graph_backend": "off",
+                    "enable_graph": False,
                     "runtime_adaptive_speculative_decode_enabled": True,
                 },
                 max_seqs_per_batch=4,
@@ -1556,13 +1626,14 @@ class TestModelExecutorConstruction:
         "xllm.python.model_executor.executor._create_attention_backend",
         return_value=StubAttentionBackend(),
     )
-    def test_graph_backend_off_variants(self, _mock_backend):
-        for off_value in ("off", "", "none", "0"):
+    def test_graph_disabled_by_default_or_explicitly(self, _mock_backend: MagicMock) -> None:
+        for config in ({}, {"enable_graph": False}):
             model = _FakeModel(num_layers=1)
-            executor = ModelExecutor(model, {"python_graph_backend": off_value}, max_seqs_per_batch=4)
+            executor = ModelExecutor(model, config, max_seqs_per_batch=4)
             assert executor.decode_graph_runner is None
-            assert executor.inductor_runner is None
 
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: False)
+    @patch("xllm.python.model_executor.executor.current_platform.is_cuda", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_cuda_graph.DecodeCudaGraphRunner")
     @patch("xllm.python.model_executor.executor._create_attention_backend")
     def test_data_parallel_cuda_graph_is_supported(self, mock_create, mock_graph_runner):
@@ -1575,7 +1646,7 @@ class TestModelExecutorConstruction:
                 "dp_size": 2,
                 "dp_rank": 1,
                 "max_position_embeddings": 128,
-                "python_graph_backend": "cudagraphs",
+                "enable_graph": True,
             },
             max_seqs_per_batch=4,
         )
@@ -1590,23 +1661,8 @@ class TestModelExecutorConstruction:
             1,
         )
 
-    @patch("xllm.python.model_executor.executor._create_attention_backend")
-    def test_data_parallel_rejects_unsupported_graph_backend(self, mock_create):
-        mock_create.return_value = StubAttentionBackend()
-        model = _FakeModel(num_layers=1)
-
-        with pytest.raises(NotImplementedError, match="supports cudagraphs and aclgraph only"):
-            ModelExecutor(
-                model,
-                {
-                    "dp_size": 2,
-                    "max_position_embeddings": 128,
-                    "python_graph_backend": "inductor",
-                },
-                max_seqs_per_batch=4,
-            )
-
     @pytest.mark.parametrize("is_spec_draft", [False, True])
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner")
     @patch("xllm.python.model_executor.executor._create_attention_backend")
     def test_acl_graph_capacity_respects_decode_batch_limit(
@@ -1622,7 +1678,7 @@ class TestModelExecutorConstruction:
             model,
             {
                 "max_position_embeddings": 128,
-                "python_graph_backend": "aclgraph",
+                "enable_graph": True,
             },
             max_seqs_per_batch=256,
             num_decoding_tokens=4,
@@ -1649,6 +1705,7 @@ class TestModelExecutorConstruction:
             draft_query_width=1,
         )
 
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner")
     @patch("xllm.python.model_executor.executor._create_attention_backend")
     def test_acl_graph_glm_mega_moe_enables_legacy_token_mask(
@@ -1665,7 +1722,7 @@ class TestModelExecutorConstruction:
                 "enable_mega_moe": True,
                 "model_type": "glm_moe_dsa",
                 "max_position_embeddings": 128,
-                "python_graph_backend": "aclgraph",
+                "enable_graph": True,
             },
             max_seqs_per_batch=4,
         )
@@ -1683,6 +1740,7 @@ class TestModelExecutorConstruction:
             ("qwen3_5_moe", 2, 8, False),
         ],
     )
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner")
     @patch("xllm.python.model_executor.executor._create_attention_backend")
     def test_acl_graph_glm_eplv2_skips_legacy_megamoe_mask(
@@ -1701,7 +1759,7 @@ class TestModelExecutorConstruction:
                 "num_experts_per_tok": 2,
                 "mega_moe_num_max_tokens_per_rank": 4,
                 "max_position_embeddings": 128,
-                "python_graph_backend": "aclgraph",
+                "enable_graph": True,
             },
             max_seqs_per_batch=16,
             acl_graph_decode_batch_size_limit=16,
@@ -1718,6 +1776,7 @@ class TestModelExecutorConstruction:
         ("model_type", "tp_size", "mc2_capacity", "speculative_tokens"),
         [("glm5_next", 8, 3, 7), ("qwen3_5_moe", 4, 86, 0)],
     )
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner")
     @patch("xllm.python.model_executor.executor._create_attention_backend")
     def test_eplv2_graph_uses_model_mc2_capacity(
@@ -1741,7 +1800,7 @@ class TestModelExecutorConstruction:
                 "ep_size": tp_size,
                 "num_speculative_tokens": speculative_tokens,
                 "max_position_embeddings": 128,
-                "python_graph_backend": "aclgraph",
+                "enable_graph": True,
             },
             max_seqs_per_batch=128,
         )
@@ -1749,6 +1808,7 @@ class TestModelExecutorConstruction:
         assert mock_graph_runner.call_args.kwargs["num_decoding_tokens"] == speculative_tokens + 1
 
     @pytest.mark.parametrize("mc2_capacity", [3, 8])
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner")
     @patch("xllm.python.model_executor.executor._create_attention_backend")
     def test_glm_eplv2_graph_uses_megamoe_cap_instead_of_mc2(
@@ -1766,13 +1826,14 @@ class TestModelExecutorConstruction:
                 "ep_size": 8,
                 "enable_mega_moe": True,
                 "max_position_embeddings": 128,
-                "python_graph_backend": "aclgraph",
+                "enable_graph": True,
             },
             max_seqs_per_batch=16,
         )
         assert mock_graph_runner.call_args.kwargs["eplv2_graph_token_limit"] == 32
         assert mock_graph_runner.call_args.kwargs["enable_mega_moe_token_mask"] is False
 
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner")
     @patch("xllm.python.model_executor.executor.get_execution_metadata_builder_classes")
     @patch("xllm.python.model_executor.executor._create_attention_backend")
@@ -1795,7 +1856,7 @@ class TestModelExecutorConstruction:
             "enable_mega_moe": True,
             "model_type": "qwen3_5_moe",
             "max_position_embeddings": 128,
-            "python_graph_backend": "aclgraph",
+            "enable_graph": True,
         }
         ModelExecutor(
             model,
@@ -1809,6 +1870,7 @@ class TestModelExecutorConstruction:
         mock_builder_classes.assert_called_once_with("qwen3_5_moe")
         builder_class.from_config.assert_called_once_with(config)
 
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner")
     @patch("xllm.python.model_executor.executor._create_attention_backend")
     def test_acl_graph_data_parallel_passes_global_token_budget(
@@ -1827,7 +1889,7 @@ class TestModelExecutorConstruction:
                 "enable_mega_moe": True,
                 "model_type": "glm_moe_dsa",
                 "max_position_embeddings": 128,
-                "python_graph_backend": "aclgraph",
+                "enable_graph": True,
             },
             max_seqs_per_batch=17,
             num_decoding_tokens=4,
@@ -1852,6 +1914,7 @@ class TestModelExecutorConstruction:
             draft_query_width=1,
         )
 
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
     @patch("xllm.python.model_executor.runners.decode_acl_graph.DecodeAclGraphRunner")
     @patch("xllm.python.model_executor.executor._create_attention_backend")
     def test_acl_graph_forwards_nondefault_draft_query_width(
@@ -1866,7 +1929,7 @@ class TestModelExecutorConstruction:
             model,
             {
                 "max_position_embeddings": 128,
-                "python_graph_backend": "aclgraph",
+                "enable_graph": True,
                 "draft_query_width": 8,
             },
             max_seqs_per_batch=8,
@@ -2617,7 +2680,7 @@ class TestBindKvCaches:
         mock_builder_classes.return_value = (builder_class,)
         executor = ModelExecutor(
             _FakeModel(num_layers=1),
-            {"model_type": "cache_aware", "python_graph_backend": "off"},
+            {"model_type": "cache_aware", "enable_graph": False},
             max_seqs_per_batch=4,
         )
         kv = (torch.zeros(1), torch.zeros(1))
@@ -3052,12 +3115,9 @@ class TestExecuteRouting:
             runner.execute.assert_not_called()
             torch.testing.assert_close(output, torch.ones(1))
 
-    @pytest.mark.parametrize("runner_name", ["eager_runner", "inductor_runner"])
     @pytest.mark.parametrize("prefill,chunked", [(True, False), (False, True)])
     @patch("xllm.python.model_executor.executor._create_attention_backend")
-    def test_multimodal_inputs_reach_selected_runner(
-        self, mock_create: MagicMock, runner_name: str, prefill: bool, chunked: bool
-    ) -> None:
+    def test_multimodal_inputs_reach_eager_runner(self, mock_create: MagicMock, prefill: bool, chunked: bool) -> None:
         from xllm.python.models.multimodal import MultimodalInputs
 
         mock_create.return_value = StubAttentionBackend()
@@ -3065,7 +3125,7 @@ class TestExecuteRouting:
         executor.bind_kv_caches([(torch.zeros(1), torch.zeros(1))])
         runner = MagicMock()
         runner.execute.return_value = torch.ones(1)
-        setattr(executor, runner_name, runner)
+        executor.eager_runner = runner
         executor.decode_graph_runner = MagicMock()
         executor.decode_graph_runner.can_execute.return_value = True
         prepared = MultimodalInputs(torch.ones(1, 2), (torch.full((1, 2), 2.0),))
@@ -3099,8 +3159,8 @@ class TestExecuteRouting:
             is_spec_draft=True,
         )
         executor.bind_kv_caches([(torch.zeros(1), torch.zeros(1))])
-        executor.inductor_runner = MagicMock()
-        executor.inductor_runner.execute.return_value = torch.ones(1)
+        executor.eager_runner = MagicMock()
+        executor.eager_runner.execute.return_value = torch.ones(1)
         synchronizer = _HostLoadSynchronizer(3)
 
         executor.execute(
@@ -3172,27 +3232,6 @@ class TestExecuteRouting:
         assert graph.warmup.call_count == (2 if failed_event is None else 0)
         assert graph.execute.call_count == (2 if failed_event is None else 0)
 
-    @patch("xllm.python.model_executor.executor._create_attention_backend")
-    def test_inductor_waits_outside_compiled_execution(self, mock_create: MagicMock) -> None:
-        mock_create.return_value = StubAttentionBackend()
-        executor = ModelExecutor(_FakeModel(num_layers=1), {}, max_seqs_per_batch=4)
-        executor.bind_kv_caches([(torch.zeros(1), torch.zeros(1))])
-        synchronizer = _HostLoadSynchronizer(2)
-        executor.inductor_runner = MagicMock()
-
-        def compiled_execute(*args: object, **kwargs: object) -> torch.Tensor:
-            assert synchronizer.calls == [0, 1]
-            return torch.ones(1)
-
-        executor.inductor_runner.execute.side_effect = compiled_execute
-        executor.execute(
-            torch.ones(1),
-            torch.zeros(1),
-            SimpleNamespace(is_prefill=True, is_chunked_prefill=False),
-            layer_load_synchronizer=synchronizer,
-        )
-        executor.inductor_runner.execute.assert_called_once()
-
     @patch(
         "xllm.python.model_executor.executor._create_attention_backend",
     )
@@ -3214,7 +3253,7 @@ class TestExecuteRouting:
         model = _FakeModel(num_layers=1)
         executor = ModelExecutor(
             model,
-            {"enable_graph": False, "python_graph_backend": "off", "dp_size": dp_size},
+            {"enable_graph": False, "dp_size": dp_size},
             max_seqs_per_batch=4,
         )
         assert executor.decode_graph_runner is None
@@ -3263,27 +3302,6 @@ class TestExecuteRouting:
 
         from_runtime.assert_not_called()
         assert executor.eager_runner.execute.call_args.kwargs["input_batch"] is None
-
-    @patch(
-        "xllm.python.model_executor.executor._create_attention_backend",
-    )
-    def test_inductor_runner_takes_priority_over_eager(self, mock_create):
-        mock_create.return_value = StubAttentionBackend()
-        model = _FakeModel(num_layers=1)
-        executor = ModelExecutor(model, {}, max_seqs_per_batch=4)
-
-        kv = (torch.zeros(1), torch.zeros(1))
-        executor.bind_kv_caches([kv])
-
-        executor.inductor_runner = MagicMock()
-        executor.inductor_runner.execute.return_value = torch.ones(3)
-
-        metadata = MagicMock(spec=AttentionMetadata)
-        metadata.is_prefill = False
-        metadata.is_chunked_prefill = False
-        result = executor.execute(torch.zeros(1), torch.zeros(1), metadata)
-        executor.inductor_runner.execute.assert_called_once()
-        assert torch.equal(result, torch.ones(3))
 
     @patch(
         "xllm.python.model_executor.executor._create_attention_backend",

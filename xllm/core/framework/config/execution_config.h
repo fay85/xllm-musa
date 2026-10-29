@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <cstdint>
 #include <nlohmann/json_fwd.hpp>
-#include <string>
 
 #include "core/common/macros.h"
 #include "core/framework/config/option_category.h"
@@ -55,7 +54,6 @@ class ExecutionConfig final {
          "output_shm_size",
          "forward_execution_timeout_ms",
          "random_seed",
-         "python_graph_backend",
          "enable_fia_decode",
          "enable_graph_aux_hidden_states"}};
     return kOptionCategory;
@@ -88,8 +86,6 @@ class ExecutionConfig final {
   PROPERTY(int32_t, forward_execution_timeout_ms) = 300000;
 
   PROPERTY(int32_t, random_seed) = -1;
-
-  PROPERTY(std::string, python_graph_backend) = "off";
 
   PROPERTY(bool, enable_fia_decode) = false;
 

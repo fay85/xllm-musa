@@ -327,7 +327,7 @@ with patch.object(executor_module, "_create_attention_backend", return_value=Fak
     model_executor = executor_module.ModelExecutor(
         FakeModel(),
         {
-            "python_graph_backend": "cudagraphs",
+            "enable_graph": True,
             "max_position_embeddings": 64,
             "max_seqs_per_batch": 1024,
         },

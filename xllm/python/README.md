@@ -154,6 +154,17 @@ NPU) and torch selects it from the device.
 Execution orchestration: eager or graph runners, forward context, attention
 backend setup, cache binding, and lifecycle.
 
+`enable_graph` controls graph selection in the Python executor. When disabled,
+the executor uses eager execution. On NPU, enabling it selects ACL Graph.
+Models that require eager execution still disable graphs, and per-step
+graph admission determines whether a batch uses the graph runner or falls back
+to eager execution.
+
+On CUDA, `enable_graph=true` currently constructs `DecodeCudaGraphRunner`, but
+its warmup/capture lifecycle is not wired into `ModelExecutor`. Decode therefore
+continues to run eagerly without CUDA graph capture/replay, and initialization
+logs a warning. There is no `torch.compile` runner in `ModelExecutor`.
+
 ## Multimodal model integration
 
 Multimodal models implement `models.multimodal.SupportsMultimodal`. The C++
@@ -165,7 +176,7 @@ EncoderExecutor: cache lookup -> gather uncached item inputs
   model.encode_multimodal(data, token_counts)
 EncoderExecutor: scatter full item outputs -> cache -> gather scheduled rows and masks
   model.prepare_multimodal_inputs(input_ids, data) -> MultimodalInputs
-ModelExecutor -> eager / Inductor runner
+ModelExecutor -> eager runner
   language_model(input_ids, positions, inputs_embeds=..., deepstack_input_embeds=...)
 ```
 
@@ -212,7 +223,7 @@ multimodal data with the scheduled embeddings and masks for fusion.
 The language model consumes prepared tensors as explicit keyword arguments;
 model attributes do not carry request inputs between merge and forward. The
 existing `input_embedding` argument retains its speculative-decoding meaning.
-Prepared multimodal inputs use eager execution or the configured Inductor runner.
+Prepared multimodal inputs use eager execution.
 Pure decode continues to use the existing decode graph admission path. Supporting
 multimodal prefill graph replay requires a separate static-buffer contract.
 

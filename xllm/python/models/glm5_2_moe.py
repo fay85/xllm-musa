@@ -320,10 +320,6 @@ def validate_glm52_ep_execution_config(config: dict[str, object], cfg: Glm52Conf
         return
     # No MC2 window (CP decode, or geometry the HCCL buffer cannot serve):
     # every step runs the variable-length AllToAllV transport, eager-only.
-    # The spelling set mirrors the executor's graph-backend classification
-    # (""/"off"/"none"/"0" are soft-off; "disabled" pins eager regardless of
-    # --enable_graph), so the raise only fires when graphs would really run.
-    backend = str(config.get("python_graph_backend", "off")).lower()
-    if bool(config.get("enable_graph", False)) or backend not in ("", "off", "none", "0", "disabled"):
+    if bool(config.get("enable_graph", False)):
         raise ValueError("GLM5.2 AllToAllV EPLv2 is eager-only; disable graph execution")
     logger.info("GLM5.2 EPLv2 selects eager AllToAllV with TP source-token ownership")

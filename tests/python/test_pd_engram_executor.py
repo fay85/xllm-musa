@@ -23,7 +23,7 @@ import torch
 from xllm.python.model_executor.executor import ModelExecutor
 
 
-@pytest.mark.parametrize("runner_kind", ["eager", "inductor", "graph"])
+@pytest.mark.parametrize("runner_kind", ["eager", "graph"])
 def test_pd_history_is_restored_before_execution(runner_kind: str) -> None:
     backend = object()
     metadata = SimpleNamespace(
@@ -47,7 +47,6 @@ def test_pd_history_is_restored_before_execution(runner_kind: str) -> None:
     executor._restore_engram_history = restore
     executor.attention_backend = backend
     executor.decode_graph_runner = None
-    executor.inductor_runner = None
     runner = MagicMock()
     runner.supports_draft_to_target_overlap = False
 
@@ -61,8 +60,6 @@ def test_pd_history_is_restored_before_execution(runner_kind: str) -> None:
         runner.can_execute.return_value = True
         runner.warmup.side_effect = lambda *_args: events.append("warmup")
         executor.decode_graph_runner = runner
-    elif runner_kind == "inductor":
-        executor.inductor_runner = runner
     else:
         executor.eager_runner = runner
 

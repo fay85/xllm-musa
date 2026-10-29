@@ -93,15 +93,6 @@ DEFINE_int32(forward_execution_timeout_ms,
 
 DEFINE_int32(random_seed, -1, "Random seed for random number generator.");
 
-DEFINE_string(
-    python_graph_backend,
-    "off",
-    "Graph backend for the Python model executor. "
-    "Defaults to aclgraph on NPU when --enable_graph is enabled. "
-    "Values: off (eager), cudagraphs (CUDA decode graph with eager prefill), "
-    "aclgraph (NPU decode graph with eager prefill), "
-    "or any torch.compile backend name.");
-
 DEFINE_bool(
     enable_fia_decode,
     false,
@@ -141,12 +132,17 @@ void ExecutionConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(output_shm_size);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(forward_execution_timeout_ms);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(random_seed);
-  XLLM_CONFIG_ASSIGN_FROM_FLAG(python_graph_backend);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_fia_decode);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_graph_aux_hidden_states);
 }
 
 void ExecutionConfig::from_json(const JsonReader& json) {
+  if (json.contains("python_graph_backend")) {
+    LOG(WARNING)
+        << "python_graph_backend has been removed and is ignored. Set "
+        << "enable_graph=true to request graph execution; torch.compile "
+        << "backends are no longer supported.";
+  }
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph);
   XLLM_CONFIG_ASSIGN_FROM_JSON(disable_graph_warmup);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph_double_buffer);
@@ -161,7 +157,6 @@ void ExecutionConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(output_shm_size);
   XLLM_CONFIG_ASSIGN_FROM_JSON(forward_execution_timeout_ms);
   XLLM_CONFIG_ASSIGN_FROM_JSON(random_seed);
-  XLLM_CONFIG_ASSIGN_FROM_JSON(python_graph_backend);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_fia_decode);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph_aux_hidden_states);
 }
@@ -197,8 +192,6 @@ void ExecutionConfig::append_config_json(
       config_json, default_config, forward_execution_timeout_ms);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, random_seed);
-  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
-      config_json, default_config, python_graph_backend);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_fia_decode);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(

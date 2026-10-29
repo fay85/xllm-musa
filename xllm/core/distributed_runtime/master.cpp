@@ -21,7 +21,6 @@ limitations under the License.
 
 #include <array>
 #include <atomic>
-#include <boost/algorithm/string.hpp>
 #include <chrono>
 #include <csignal>
 #include <cstdio>
@@ -126,14 +125,6 @@ void validate_layerwise_split_size_startup_config(const Options& options,
       << "layerwise_split_size > 1 does not support KV split.";
 }
 
-bool is_python_cp_compatible_graph_backend(std::string_view graph_backend) {
-  std::string normalized_backend(graph_backend);
-  boost::algorithm::to_lower(normalized_backend);
-  return normalized_backend.empty() || normalized_backend == "off" ||
-         normalized_backend == "none" || normalized_backend == "0" ||
-         normalized_backend == "aclgraph";
-}
-
 }  // namespace
 
 std::optional<std::string> validate_model_cp(const Options& options,
@@ -229,9 +220,8 @@ std::optional<std::string> validate_model_cp(const Options& options,
     }
     // Native model-side CP is compatible with graph mode because the two are
     // phase-disjoint: CP only engages on batch_forward_type.no_decode(), while
-    // ACL graph captures/replays pure decode. The Python CP path applies the
-    // same phase split only to decode-only ACLGraph; other graph backends are
-    // rejected below.
+    // ACL graph captures/replays pure decode. The Python CP path uses the
+    // same phase split with decode-only ACLGraph.
     //
     // The one batch that satisfies both gates is spec-verify chunked prefill.
     // The graph executor only takes it for hybrid-linear-attention models, and
@@ -290,14 +280,6 @@ std::optional<std::string> validate_model_cp(const Options& options,
               options.speculative_algorithm())) {
         return "Python model-side CP does not support MTP speculative "
                "verification; run MTP on a cp_size=1 Decode instance";
-      }
-      // On NPU, the Python executor resolves enable_graph=true with an
-      // off-like backend to ACLGraph. ACLGraph handles Decode only, so Prefill
-      // still runs through EagerRunner and receives cp_context.
-      if (!is_python_cp_compatible_graph_backend(
-              ExecutionConfig::get_instance().python_graph_backend())) {
-        return "Python model-side CP requires Prefill to use EagerRunner; use "
-               "--python_graph_backend=off or decode-only aclgraph";
       }
       if (options.dp_size() != 1 && model_type != "glm5_next") {
         return "Python CP requires dp_size == 1";

@@ -174,9 +174,7 @@ def test_cp1_degree2_mega_pure_decode_preserves_base_and_graph(
 ) -> None:
     cfg = _config(tp=2, cp=1, dp_size=dp_size, world_size=2 * dp_size, ep_size=2 * dp_size, enable_mega_moe=True)
     cfg.validate()
-    validate_glm52_ep_execution_config(
-        {"enable_graph": graph, "python_graph_backend": "aclgraph" if graph else "off"}, cfg
-    )
+    validate_glm52_ep_execution_config({"enable_graph": graph}, cfg)
     moe = Glm52MoE(cfg, 0, torch.bfloat16, torch.device("cpu"))
     base = Mock(return_value=torch.ones(1, 8))
     monkeypatch.setattr(deepseek_v32.DeepseekV3MoE, "forward", base)
@@ -270,9 +268,8 @@ def test_cp2_degree2_mega_is_rejected_before_model_allocation() -> None:
 
 def test_eplv2_rejects_graph_before_model_allocation() -> None:
     cfg = _config()
-    for config in ({"enable_graph": True}, {"python_graph_backend": "aclgraph"}):
-        with pytest.raises(ValueError, match="eager-only"):
-            validate_glm52_ep_execution_config(config, cfg)
+    with pytest.raises(ValueError, match="eager-only"):
+        validate_glm52_ep_execution_config({"enable_graph": True}, cfg)
 
 
 @pytest.mark.parametrize("case", ("missing_mask", "wrong_dtype", "cp_decode", "graph"))
