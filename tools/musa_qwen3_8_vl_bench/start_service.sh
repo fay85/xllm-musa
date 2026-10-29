@@ -5,7 +5,7 @@
 # Order: 1) this script  2) full engine stack -- or use start_stack.sh which does both.
 # Does NOT start Prefill/Decode engines. Does NOT check GPU free.
 set -u
-source "$(dirname "$0")/env.sh" || exit $?
+source /workspace/xllm-mt-main/tools/musa_qwen3_8_vl_bench/env.sh || exit $?
 
 die() {
   echo "ERROR: $*" >&2
@@ -16,8 +16,15 @@ die() {
 for f in "$MASTER_BIN" "$ETCD_BIN" "$RUST_TOKENIZERS_LIB"; do
   [[ -f $f ]] || die "missing $f (see env.sh / config.json paths.*)"
 done
+if [[ ! -f $MASTER_TOKENIZER/tokenizer_config.json ]]; then
+  if [[ -f /root/xllm_vl_bench/master_tokenizer/tokenizer_config.json ]]; then
+    MASTER_TOKENIZER=/root/xllm_vl_bench/master_tokenizer
+  elif [[ -f $MODEL/tokenizer_config.json ]]; then
+    MASTER_TOKENIZER=$MODEL
+  fi
+fi
 [[ -f $MASTER_TOKENIZER/tokenizer_config.json ]] ||
-  die "missing $MASTER_TOKENIZER, run prepare_data.sh first"
+  die "missing $MASTER_TOKENIZER, run prepare_data.sh first" 
 
 ports=("$ETCD_CLIENT_PORT" "$ETCD_PEER_PORT" "$MASTER_HTTP_PORT" "$MASTER_RPC_PORT" 64890 64891)
 listening=$(ss -ltn)
@@ -66,8 +73,8 @@ LD_LIBRARY_PATH=$RUN/master_lib:/usr/lib:/usr/lib/x86_64-linux-gnu setsid "$MAST
   --batch_credit_safety_permyriad="$BATCH_CREDIT_SAFETY_PERMYRIAD" \
   --batch_credit_max_grant_units_per_router_tenant="$BATCH_CREDIT_MAX_GRANT_UNITS_PER_ROUTER_TENANT" \
   --internal_api_token=lab-local-token --service_deployment_role=ROUTER \
-  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy=RR \
-  --kv_route_mode=DISABLED \
+  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy="${LOAD_BALANCE_POLICY:-CAR}" \
+  --kv_route_mode=DISABLED --tool_call_parser="${TOOL_CALL_PARSER:-qwen3_coder}" \
   --first_output_watchdog_timeout_ms="${VL_FIRST_OUTPUT_WATCHDOG_MS:-60000}" \
   --max_nonstream_retry_wasted_device_ms="${VL_DEVICE_TIME_BUDGET_MS:-5000}" \
   --flow_max_queue_wait_ms="${VL_FLOW_MAX_QUEUE_WAIT_MS:-15000}" \
@@ -87,8 +94,8 @@ LD_LIBRARY_PATH=$RUN/master_lib:/usr/lib:/usr/lib/x86_64-linux-gnu setsid "$MAST
   --batch_credit_safety_permyriad="$BATCH_CREDIT_SAFETY_PERMYRIAD" \
   --batch_credit_max_grant_units_per_router_tenant="$BATCH_CREDIT_MAX_GRANT_UNITS_PER_ROUTER_TENANT" \
   --internal_api_token=lab-local-token --service_deployment_role=COORDINATOR \
-  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy=RR \
-  --kv_route_mode=DISABLED \
+  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy="${LOAD_BALANCE_POLICY:-CAR}" \
+  --kv_route_mode=DISABLED --tool_call_parser="${TOOL_CALL_PARSER:-qwen3_coder}" \
   --first_output_watchdog_timeout_ms="${VL_FIRST_OUTPUT_WATCHDOG_MS:-60000}" \
   --max_nonstream_retry_wasted_device_ms="${VL_DEVICE_TIME_BUDGET_MS:-5000}" \
   --flow_max_queue_wait_ms="${VL_FLOW_MAX_QUEUE_WAIT_MS:-15000}" \

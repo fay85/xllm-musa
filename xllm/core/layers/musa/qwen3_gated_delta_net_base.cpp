@@ -40,8 +40,13 @@ namespace {
 struct MtpVerifyStateIndicesEntry {
   uint64_t generation = 0;
   uint64_t checkpoint_generation = 0;
+  uint64_t base_generation = 0;
+  uint64_t conv_generation = 0;
+  torch::Tensor base_indices;
   torch::Tensor indices;
   torch::Tensor checkpoint_indices;
+  torch::Tensor conv_state_indices;
+  torch::Tensor conv_accepted;
 };
 
 struct MtpVerifyForwardContext {
@@ -255,29 +260,98 @@ torch::Tensor expand_sequence_tensor_to_batch(const torch::Tensor& tensor,
       .contiguous();
 }
 
+torch::Tensor get_mtp_base_state_indices(
+    const GdnMtpVerifyCache* cache,
+    const torch::Tensor& logical_state_indices,
+    const torch::Device& device,
+    int64_t checkpoint_stride,
+    int64_t batch_size) {
+  MtpVerifyForwardContext& context = mtp_verify_forward_context();
+  if (!context.active || context.cache != cache) {
+    return expand_sequence_tensor_to_batch(
+               build_linear_state_base_indices(logical_state_indices,
+                                               checkpoint_stride),
+               batch_size,
+               "linear_state_indices")
+        .to(device, torch::kInt32);
+  }
+  MtpVerifyStateIndicesEntry& entry = context.state_indices[cache];
+  if (!entry.base_indices.defined() ||
+      entry.base_generation != context.generation) {
+    entry.base_indices =
+        expand_sequence_tensor_to_batch(
+            build_linear_state_base_indices(logical_state_indices,
+                                            checkpoint_stride),
+            batch_size,
+            "linear_state_indices")
+            .to(device, torch::kInt32);
+    entry.base_generation = context.generation;
+  }
+  return entry.base_indices;
+}
+
+std::pair<torch::Tensor, torch::Tensor> get_mtp_conv_state_and_accepted(
+    const GdnMtpVerifyCache* cache,
+    const torch::Tensor& logical_state_indices,
+    const torch::Tensor& num_accepted_tokens,
+    const torch::Device& device,
+    int64_t batch_size) {
+  auto build_pair = [&]() {
+    auto state_indices =
+        expand_sequence_tensor_to_batch(
+            logical_state_indices, batch_size, "logical_state_indices")
+            .to(device, torch::kInt32)
+            .contiguous();
+    torch::Tensor accepted =
+        expand_sequence_tensor_to_batch(
+            num_accepted_tokens, batch_size, "num_accepted_tokens")
+            .to(device)
+            .contiguous();
+    if (accepted.scalar_type() != torch::kInt32 &&
+        accepted.scalar_type() != torch::kLong) {
+      accepted = accepted.to(torch::kInt32);
+    }
+    return std::make_pair(std::move(state_indices), std::move(accepted));
+  };
+  MtpVerifyForwardContext& context = mtp_verify_forward_context();
+  if (!context.active || context.cache != cache) {
+    return build_pair();
+  }
+  MtpVerifyStateIndicesEntry& entry = context.state_indices[cache];
+  if (!entry.conv_state_indices.defined() ||
+      !entry.conv_accepted.defined() ||
+      entry.conv_generation != context.generation) {
+    std::tie(entry.conv_state_indices, entry.conv_accepted) = build_pair();
+    entry.conv_generation = context.generation;
+  }
+  return {entry.conv_state_indices, entry.conv_accepted};
+}
+
 // MTP validation starts from the state after the previously accepted prefix,
 // not from the logical row base.  The checkpoint kernel then writes each
 // validated token to consecutive expanded SSM rows.
 torch::Tensor build_mtp_state_indices(
+    const GdnMtpVerifyCache* cache,
     const torch::Tensor& logical_state_indices,
     const torch::Tensor& num_accepted_tokens,
     const torch::Device& device,
     int64_t checkpoint_stride,
     int64_t batch_size,
     int64_t sequence_length) {
-  auto base = expand_sequence_tensor_to_batch(
-                  build_linear_state_base_indices(logical_state_indices,
-                                                  checkpoint_stride),
-                  batch_size,
-                  "linear_state_indices")
-                  .to(device, torch::kInt32);
-  auto accepted = expand_sequence_tensor_to_batch(
-                      num_accepted_tokens, batch_size, "num_accepted_tokens")
-                      .to(device, torch::kInt32);
+  auto base = get_mtp_base_state_indices(
+      cache, logical_state_indices, device, checkpoint_stride, batch_size);
+  auto accepted = get_mtp_conv_state_and_accepted(
+                      cache,
+                      logical_state_indices,
+                      num_accepted_tokens,
+                      device,
+                      batch_size)
+                      .second.to(device, torch::kInt32);
   return base + accepted.clamp(1, sequence_length) - 1;
 }
 
 torch::Tensor build_mtp_checkpoint_state_indices(
+    const GdnMtpVerifyCache* cache,
     const torch::Tensor& logical_state_indices,
     const torch::Device& device,
     int64_t checkpoint_stride,
@@ -285,12 +359,8 @@ torch::Tensor build_mtp_checkpoint_state_indices(
     int64_t sequence_length) {
   CHECK_EQ(checkpoint_stride, sequence_length)
       << "MTP checkpoint stride must equal validate sequence length";
-  auto base = expand_sequence_tensor_to_batch(
-                  build_linear_state_base_indices(logical_state_indices,
-                                                  checkpoint_stride),
-                  batch_size,
-                  "linear_state_indices")
-                  .to(device, torch::kInt32);
+  auto base = get_mtp_base_state_indices(
+      cache, logical_state_indices, device, checkpoint_stride, batch_size);
   auto offsets = torch::arange(sequence_length, base.options());
   return (base.unsqueeze(1) + offsets).contiguous();
 }
@@ -306,7 +376,8 @@ torch::Tensor get_mtp_state_indices(const GdnMtpVerifyCache* cache,
                                     int64_t sequence_length) {
   MtpVerifyForwardContext& context = mtp_verify_forward_context();
   if (!context.active || context.cache != cache) {
-    return build_mtp_state_indices(logical_state_indices,
+    return build_mtp_state_indices(cache,
+                                   logical_state_indices,
                                    num_accepted_tokens,
                                    device,
                                    checkpoint_stride,
@@ -315,7 +386,8 @@ torch::Tensor get_mtp_state_indices(const GdnMtpVerifyCache* cache,
   }
   MtpVerifyStateIndicesEntry& entry = context.state_indices[cache];
   if (!entry.indices.defined() || entry.generation != context.generation) {
-    entry.indices = build_mtp_state_indices(logical_state_indices,
+    entry.indices = build_mtp_state_indices(cache,
+                                            logical_state_indices,
                                             num_accepted_tokens,
                                             device,
                                             checkpoint_stride,
@@ -335,7 +407,8 @@ torch::Tensor get_mtp_checkpoint_state_indices(
     int64_t sequence_length) {
   MtpVerifyForwardContext& context = mtp_verify_forward_context();
   if (!context.active || context.cache != cache) {
-    return build_mtp_checkpoint_state_indices(logical_state_indices,
+    return build_mtp_checkpoint_state_indices(cache,
+                                              logical_state_indices,
                                               device,
                                               checkpoint_stride,
                                               batch_size,
@@ -345,7 +418,8 @@ torch::Tensor get_mtp_checkpoint_state_indices(
   if (!entry.checkpoint_indices.defined() ||
       entry.checkpoint_generation != context.generation) {
     entry.checkpoint_indices =
-        build_mtp_checkpoint_state_indices(logical_state_indices,
+        build_mtp_checkpoint_state_indices(cache,
+                                           logical_state_indices,
                                            device,
                                            checkpoint_stride,
                                            batch_size,
@@ -394,22 +468,12 @@ torch::Tensor run_spec_verify_conv(
   CHECK_EQ(weight.size(1), conv_kernel_size)
       << "spec conv weight width mismatch";
 
-  auto state_indices =
-      expand_sequence_tensor_to_batch(
-          logical_state_indices, batch_size, "logical_state_indices")
-          .to(mixed_qkv.device(), torch::kInt32)
-          .contiguous();
-  // Accepted counts stay on device: the GPU kernel selects the previous
-  // checkpoint (accepted-1) itself, so this path is graph-capture safe.
-  torch::Tensor accepted =
-      expand_sequence_tensor_to_batch(
-          num_accepted_tokens, batch_size, "num_accepted_tokens")
-          .to(mixed_qkv.device())
-          .contiguous();
-  if (accepted.scalar_type() != torch::kInt32 &&
-      accepted.scalar_type() != torch::kLong) {
-    accepted = accepted.to(torch::kInt32);
-  }
+  auto [state_indices, accepted] = get_mtp_conv_state_and_accepted(
+      verify_cache,
+      logical_state_indices,
+      num_accepted_tokens,
+      mixed_qkv.device(),
+      batch_size);
   // Downstream reshapes rely on a dense token-major [batch, seq, dim] buffer
   // even when the input is a strided column slice of the projection output.
   torch::Tensor output =
@@ -752,35 +816,42 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::conv_fused_ba_weight(
   }
   const torch::Tensor weight = fusable_ba_weight();
   const torch::Tensor& values = hidden_states.values;
-  if (!weight.defined() || !values.is_contiguous()) {
-    return torch::Tensor();
-  }
-  // The launch writes ba rows in token order, which is the padded
-  // [batch, seq] layout only when one sequence holds every token row.
-  bool single_sequence = false;
-  if (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill) {
-    // reshape_qkvz_with_pad() keeps one full-length sequence as a view.
-    const int64_t num_seqs =
-        attn_metadata.q_seq_lens_vec.empty()
-            ? attn_metadata.q_seq_lens.size(0)
-            : static_cast<int64_t>(attn_metadata.q_seq_lens_vec.size());
-    single_sequence = values.dim() == 2 && num_seqs == 1 &&
-                      values.size(0) == attn_metadata.max_query_len;
-  } else {
-    single_sequence = values.dim() == 3 && values.size(0) == 1;
-  }
-  if (!single_sequence) {
+  if (!weight.defined() || !values.defined() || !values.is_contiguous()) {
     return torch::Tensor();
   }
   const int64_t hidden_size = values.size(-1);
-  const int64_t seq_len = values.numel() / hidden_size;
+  int64_t batch = 0;
+  int64_t seq_len = 0;
+  if (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill) {
+    const bool has_host_lens = !attn_metadata.q_seq_lens_vec.empty();
+    batch = has_host_lens
+                ? static_cast<int64_t>(attn_metadata.q_seq_lens_vec.size())
+                : attn_metadata.q_seq_lens.size(0);
+    seq_len = attn_metadata.max_query_len;
+    const bool uniform_max_len =
+        batch == 1 ||
+        (has_host_lens &&
+         std::all_of(attn_metadata.q_seq_lens_vec.begin(),
+                     attn_metadata.q_seq_lens_vec.begin() + batch,
+                     [seq_len](int32_t len) { return len == seq_len; }));
+    if (values.dim() != 2 || !uniform_max_len || batch <= 0 ||
+        values.size(0) != batch * seq_len) {
+      return torch::Tensor();
+    }
+  } else {
+    if (values.dim() != 3) {
+      return torch::Tensor();
+    }
+    batch = values.size(0);
+    seq_len = values.size(1);
+  }
   const bool supported =
       xllm::kernel::musa::causal_conv1d_mtp_verify_with_projection_supported(
-          /*batch=*/1,
+          batch,
           seq_len,
           conv_kernel_size_,
           values.scalar_type(),
-          values.view({seq_len, hidden_size}),
+          values.view({batch * seq_len, hidden_size}),
           weight);
   return supported ? weight : torch::Tensor();
 }
@@ -876,7 +947,11 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
   torch::Tensor ba_padded;
   if (conv_ba_weight.defined()) {
     const torch::Tensor qkvz = project_qkvz(hidden_states);
-    qkvz_padded = qkvz.view({1, -1, qkvz.size(-1)});
+    if (attn_metadata.is_prefill || attn_metadata.is_chunked_prefill) {
+      qkvz_padded = reshape_qkvz_with_pad(attn_metadata, qkvz);
+    } else {
+      qkvz_padded = qkvz.view({hidden_states.values.size(0), -1, qkvz.size(-1)});
+    }
   } else {
     std::tie(qkvz_padded, ba_padded) =
         project_padded_inputs(hidden_states, attn_metadata);
@@ -1010,7 +1085,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
     const torch::Tensor ba_input =
         conv_ba_weight.defined()
             ? hidden_states.values.view(
-                  {seq_len, hidden_states.values.size(-1)})
+                  {batch_size * seq_len, hidden_states.values.size(-1)})
             : torch::Tensor();
     mixed_qkv = run_spec_verify_conv(pre_conv_mixed_qkv,
                                      conv_cache,
@@ -1628,6 +1703,17 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_unpad(
                    : attn_metadata.q_seq_lens.size(0);
   valid_batches.reserve(bs);
   int64_t max_len = attn_metadata.max_query_len;
+  const bool uniform_max_len =
+      bs == 1 ||
+      (has_host_lens &&
+       static_cast<int64_t>(attn_metadata.q_seq_lens_vec.size()) >= bs &&
+       std::all_of(attn_metadata.q_seq_lens_vec.begin(),
+                   attn_metadata.q_seq_lens_vec.begin() + bs,
+                   [max_len](int32_t len) { return len == max_len; }));
+  if (uniform_max_len && padded_qkvz.is_contiguous() &&
+      padded_qkvz.size(0) == bs * max_len) {
+    return padded_qkvz;
+  }
   const auto& ori_seq_lens = attn_metadata.q_seq_lens;
   auto reshaped_qkvz = padded_qkvz.view({bs, max_len, -1});
   // Fallback when host lengths are absent: stage the device q_seq_lens to the
@@ -1683,11 +1769,20 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_with_pad(
   if (!need_padding) {
     return qkvz.view({bs, -1, qkvz.size(-1)});
   }
-  // A single sequence already occupies the complete rectangular extent.
-  // Preserve its storage as a view instead of copying the full activation
-  // through slice(), stack(), and contiguous() in every GDN layer.
-  if (bs == 1 && qkvz.is_contiguous() && qkvz.size(0) == max_len) {
-    return qkvz.view({1, max_len, qkvz.size(-1)});
+  // When all sequences have uniform max_len (e.g. bs == 1, or MTP speculative
+  // verification where every sequence has K+1 tokens and qkvz.size(0) ==
+  // bs * max_len), preserve storage as a zero-copy view instead of slicing,
+  // stacking, and launching KernelConcatNy in every GDN layer.
+  const bool uniform_max_len =
+      bs == 1 ||
+      (has_host_lens &&
+       static_cast<int64_t>(attn_metadata.q_seq_lens_vec.size()) >= bs &&
+       std::all_of(attn_metadata.q_seq_lens_vec.begin(),
+                   attn_metadata.q_seq_lens_vec.begin() + bs,
+                   [max_len](int32_t len) { return len == max_len; }));
+  if (uniform_max_len && qkvz.is_contiguous() &&
+      qkvz.size(0) == bs * max_len) {
+    return qkvz.view({bs, max_len, qkvz.size(-1)});
   }
   std::vector<torch::Tensor> batches;
   batches.reserve(bs);

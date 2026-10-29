@@ -1007,7 +1007,8 @@ __device__ __forceinline__ float norm_fast_rsqrt(float value) {
 // would otherwise leave stalled.
 template <int32_t VectorsPerThread>
 __global__ void __launch_bounds__(kNormQuantMaxThreads / VectorsPerThread)
-    fused_add_gemma_rmsnorm_quant_kernel(__mt_bfloat16* __restrict__ input,
+    fused_add_gemma_rmsnorm_quant_kernel(const __mt_bfloat16* __restrict__ input,
+                                         __mt_bfloat16* __restrict__ normed_out,
                                          __mt_bfloat16* __restrict__ residual,
                                          const __mt_bfloat16* __restrict__ weight,
                                          __mt_fp8_e4m3* __restrict__ output_q,
@@ -1035,24 +1036,34 @@ __global__ void __launch_bounds__(kNormQuantMaxThreads / VectorsPerThread)
     const int32_t column = tid * kElemsPerThread + v * vector_stride;
     x_pack[v].vector =
         *reinterpret_cast<const int4*>(input + row_base + column);
-    r_pack[v].vector =
-        *reinterpret_cast<const int4*>(residual + row_base + column);
+    if (residual != nullptr) {
+      r_pack[v].vector =
+          *reinterpret_cast<const int4*>(residual + row_base + column);
+    }
     w_pack[v].vector = *reinterpret_cast<const int4*>(weight + column);
   }
   float values[VectorsPerThread][kElemsPerThread];
   float sum = 0.0f;
 #pragma unroll
   for (int32_t v = 0; v < VectorsPerThread; ++v) {
-    Bf16Pack8 sum_pack;
+    if (residual != nullptr) {
+      Bf16Pack8 sum_pack;
 #pragma unroll
-    for (int32_t i = 0; i < kElemsPerThread; ++i) {
-      values[v][i] = __bfloat162float(x_pack[v].values[i]) +
-                     __bfloat162float(r_pack[v].values[i]);
-      sum += values[v][i] * values[v][i];
-      sum_pack.values[i] = __float2bfloat16_rn(values[v][i]);
+      for (int32_t i = 0; i < kElemsPerThread; ++i) {
+        values[v][i] = __bfloat162float(x_pack[v].values[i]) +
+                       __bfloat162float(r_pack[v].values[i]);
+        sum += values[v][i] * values[v][i];
+        sum_pack.values[i] = __float2bfloat16_rn(values[v][i]);
+      }
+      *reinterpret_cast<int4*>(residual + row_base + tid * kElemsPerThread +
+                               v * vector_stride) = sum_pack.vector;
+    } else {
+#pragma unroll
+      for (int32_t i = 0; i < kElemsPerThread; ++i) {
+        values[v][i] = __bfloat162float(x_pack[v].values[i]);
+        sum += values[v][i] * values[v][i];
+      }
     }
-    *reinterpret_cast<int4*>(residual + row_base + tid * kElemsPerThread +
-                             v * vector_stride) = sum_pack.vector;
   }
 
 #pragma unroll
@@ -1083,8 +1094,8 @@ __global__ void __launch_bounds__(kNormQuantMaxThreads / VectorsPerThread)
       values[v][i] = __bfloat162float(normed_pack.values[i]);
       local_absmax = fmaxf(local_absmax, fabsf(values[v][i]));
     }
-    if (write_normed) {
-      *reinterpret_cast<int4*>(input + row_base + column) =
+    if (write_normed && normed_out != nullptr) {
+      *reinterpret_cast<int4*>(normed_out + row_base + column) =
           normed_pack.vector;
     }
 
@@ -1128,8 +1139,9 @@ int32_t norm_quant_vectors_per_thread(int64_t hidden) {
 }
 
 template <int32_t VectorsPerThread>
-void launch_fused_add_gemma_rmsnorm_quant(torch::Tensor& input,
-                                          torch::Tensor& residual,
+void launch_fused_add_gemma_rmsnorm_quant(const torch::Tensor& input,
+                                          torch::Tensor* normed_out,
+                                          torch::Tensor* residual,
                                           const torch::Tensor& weight,
                                           torch::Tensor& output_q,
                                           torch::Tensor& output_s,
@@ -1138,14 +1150,25 @@ void launch_fused_add_gemma_rmsnorm_quant(torch::Tensor& input,
                                           cudaStream_t stream) {
   const int64_t rows = input.size(0);
   const int64_t hidden = input.size(1);
+  __mt_bfloat16* normed_ptr =
+      (write_normed && normed_out != nullptr && normed_out->defined())
+          ? reinterpret_cast<__mt_bfloat16*>(
+                normed_out->data_ptr<at::BFloat16>())
+          : nullptr;
+  __mt_bfloat16* residual_ptr =
+      (residual != nullptr && residual->defined())
+          ? reinterpret_cast<__mt_bfloat16*>(
+                residual->data_ptr<at::BFloat16>())
+          : nullptr;
   fused_add_gemma_rmsnorm_quant_kernel<VectorsPerThread><<<
       static_cast<unsigned int>(rows),
       static_cast<unsigned int>(hidden /
                                 (kElemsPerThread * VectorsPerThread)),
       0,
       stream>>>(
-      reinterpret_cast<__mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
-      reinterpret_cast<__mt_bfloat16*>(residual.data_ptr<at::BFloat16>()),
+      reinterpret_cast<const __mt_bfloat16*>(input.data_ptr<at::BFloat16>()),
+      normed_ptr,
+      residual_ptr,
       reinterpret_cast<const __mt_bfloat16*>(weight.data_ptr<at::BFloat16>()),
       reinterpret_cast<__mt_fp8_e4m3*>(output_q.data_ptr<c10::Float8_e4m3fn>()),
       output_s.data_ptr<float>(),
@@ -1156,8 +1179,9 @@ void launch_fused_add_gemma_rmsnorm_quant(torch::Tensor& input,
       write_normed);
 }
 
-using NormQuantLaunch = void (*)(torch::Tensor&,
-                                 torch::Tensor&,
+using NormQuantLaunch = void (*)(const torch::Tensor&,
+                                 torch::Tensor*,
+                                 torch::Tensor*,
                                  const torch::Tensor&,
                                  torch::Tensor&,
                                  torch::Tensor&,
@@ -1320,22 +1344,77 @@ std::tuple<torch::Tensor, torch::Tensor> fused_gated_rms_norm_quant_fp8(
   return std::make_tuple(output_q, output_s);
 }
 
-bool fused_add_gemma_rms_norm_quant_supported(const torch::Tensor& input,
-                                               const torch::Tensor& residual,
-                                               const torch::Tensor& weight) {
-  return input.dim() == 2 && residual.sizes() == input.sizes() &&
-         weight.dim() == 1 && weight.size(0) == input.size(1) &&
+bool fused_gemma_rms_norm_quant_supported(const torch::Tensor& input,
+                                           const torch::Tensor& weight) {
+  return input.dim() == 2 && weight.dim() == 1 &&
+         weight.size(0) == input.size(1) &&
          input.scalar_type() == torch::kBFloat16 &&
-         residual.scalar_type() == torch::kBFloat16 &&
          weight.scalar_type() == torch::kBFloat16 && input.is_contiguous() &&
-         residual.is_contiguous() && weight.is_contiguous() &&
-         input.size(1) % kGroupSize == 0 &&
+         weight.is_contiguous() && input.size(1) % kGroupSize == 0 &&
          input.size(1) / kElemsPerThread <= kNormQuantMaxThreads &&
          (input.size(1) / kElemsPerThread) % kHardwareWarpThreads == 0 &&
          reinterpret_cast<uintptr_t>(input.data_ptr()) % alignof(int4) == 0 &&
-         reinterpret_cast<uintptr_t>(residual.data_ptr()) % alignof(int4) ==
-             0 &&
          reinterpret_cast<uintptr_t>(weight.data_ptr()) % alignof(int4) == 0;
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor>
+fused_gemma_rms_norm_quant_fp8(const torch::Tensor& input,
+                               const torch::Tensor& weight,
+                               double eps,
+                               bool write_normed) {
+  CHECK(fused_gemma_rms_norm_quant_supported(input, weight))
+      << "unsupported RMSNorm quant: input=" << input.sizes()
+      << ", weight=" << weight.sizes();
+  const int64_t rows = input.size(0);
+  const int64_t hidden = input.size(1);
+  const int32_t hidden_groups = static_cast<int32_t>(hidden / kGroupSize);
+  torch::Tensor normed_out =
+      write_normed ? torch::empty_like(input) : torch::Tensor();
+  torch::Tensor output_q = torch::empty(
+      {rows, hidden}, input.options().dtype(torch::kFloat8_e4m3fn));
+  torch::Tensor output_s = torch::empty(
+      {rows, hidden_groups}, input.options().dtype(torch::kFloat32));
+  if (rows == 0) {
+    return std::make_tuple(normed_out, output_q, output_s);
+  }
+
+  const at::cuda::OptionalCUDAGuard device_guard(device_of(input));
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+  NormQuantLaunch launch = launch_fused_add_gemma_rmsnorm_quant<1>;
+  switch (norm_quant_vectors_per_thread(hidden)) {
+    case 5:
+      launch = launch_fused_add_gemma_rmsnorm_quant<5>;
+      break;
+    case 4:
+      launch = launch_fused_add_gemma_rmsnorm_quant<4>;
+      break;
+    case 2:
+      launch = launch_fused_add_gemma_rmsnorm_quant<2>;
+      break;
+    default:
+      break;
+  }
+  launch(input,
+         write_normed ? &normed_out : nullptr,
+         /*residual=*/nullptr,
+         weight,
+         output_q,
+         output_s,
+         eps,
+         write_normed,
+         stream);
+  C10_CUDA_CHECK(cudaGetLastError());
+  return std::make_tuple(normed_out, output_q, output_s);
+}
+
+bool fused_add_gemma_rms_norm_quant_supported(const torch::Tensor& input,
+                                               const torch::Tensor& residual,
+                                               const torch::Tensor& weight) {
+  return fused_gemma_rms_norm_quant_supported(input, weight) &&
+         residual.sizes() == input.sizes() &&
+         residual.scalar_type() == torch::kBFloat16 &&
+         residual.is_contiguous() &&
+         reinterpret_cast<uintptr_t>(residual.data_ptr()) % alignof(int4) == 0;
 }
 
 std::tuple<torch::Tensor, torch::Tensor> fused_add_gemma_rms_norm_quant_fp8(
@@ -1374,8 +1453,15 @@ std::tuple<torch::Tensor, torch::Tensor> fused_add_gemma_rms_norm_quant_fp8(
     default:
       break;
   }
-  launch(
-      input, residual, weight, output_q, output_s, eps, write_normed, stream);
+  launch(input,
+         &input,
+         &residual,
+         weight,
+         output_q,
+         output_s,
+         eps,
+         write_normed,
+         stream);
   C10_CUDA_CHECK(cudaGetLastError());
   return std::make_tuple(output_q, output_s);
 }

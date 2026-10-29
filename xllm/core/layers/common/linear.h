@@ -132,6 +132,9 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
   // kept rows land in their original columns and every other column is -inf.
   void load_block_fp8_rows_from(const torch::Tensor& source_weight,
                                 const torch::Tensor& row_ids);
+  void set_defer_row_subset_expansion(bool defer) {
+    defer_row_subset_expansion_ = defer;
+  }
 
   // forward() for an input already quantized to group-128 FP8.
   torch::Tensor forward_block_fp8_quantized(torch::Tensor input,
@@ -190,6 +193,7 @@ class ColumnParallelLinearImpl : public torch::nn::Module {
   // Set by load_block_fp8_rows_from(): output column of each kept weight row.
   torch::Tensor output_column_ids_;
   int64_t full_out_features_ = 0;
+  bool defer_row_subset_expansion_ = false;
   // Set by load_block_fp8_with_exact_top_k_from().
   torch::Tensor exact_weight_;
   int64_t exact_top_k_ = 0;

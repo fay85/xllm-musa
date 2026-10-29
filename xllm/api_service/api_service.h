@@ -262,6 +262,18 @@ class APIService : public proto::XllmAPIService {
                   proto::HttpResponse* response,
                   ::google::protobuf::Closure* done) override;
 
+  void ExecuteProviderLifecycle(
+      ::google::protobuf::RpcController* controller,
+      const proto::ProviderLifecycleCommand* request,
+      proto::ProviderLifecycleResponse* response,
+      ::google::protobuf::Closure* done) override;
+
+  void QueryProviderLifecycle(
+      ::google::protobuf::RpcController* controller,
+      const proto::ProviderLifecycleCommand* request,
+      proto::ProviderLifecycleResponse* response,
+      ::google::protobuf::Closure* done) override;
+
  private:
   using ChatHttpHandler = std::function<void(ClosureGuard&,
                                              brpc::Controller*,

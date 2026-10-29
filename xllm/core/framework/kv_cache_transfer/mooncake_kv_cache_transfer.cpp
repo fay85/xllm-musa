@@ -15,6 +15,10 @@ limitations under the License.
 
 #include "framework/kv_cache_transfer/mooncake_kv_cache_transfer.h"
 
+#if defined(USE_MUSA)
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
+#endif
+
 #include <glog/logging.h>
 
 #include <algorithm>
@@ -702,6 +706,7 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
     const std::string& src_addr,
     const std::vector<KVTransferMapping>& mappings) {
 #if defined(USE_MUSA)
+  const MusaTpCaptureReadLock tp_capture_lock(device_id_);
   // Keep ReshardPlan bind_incoming_regions, but submit one (or few) Mooncake
   // READ batches across all layers. Per-layer submit+wait was ~15ms * 64
   // layers ~= 950ms on same-host RDMA.
@@ -736,12 +741,15 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
   // Heterogeneous TP yields per-token head-shard regions (~1 KiB each); read
   // their remote-contiguous runs through a staging buffer instead.
   uint64_t region_bytes = 0;
+  uint64_t logical_regions = 0;
   for (const ByteRegion& region : all_regions) {
-    region_bytes += region.length;
+    const uint64_t repeats = byte_region_repeats(region);
+    logical_regions += repeats;
+    region_bytes += region.length * repeats;
   }
   const bool staged =
-      all_regions.size() >= 4096 &&
-      region_bytes / std::max<uint64_t>(all_regions.size(), 1) < 16384;
+      logical_regions >= 4096 &&
+      region_bytes / std::max<uint64_t>(logical_regions, 1) < 16384;
   const size_t remote_runs = 0;
   double staged_read_ms = 0.0;
   double staged_scatter_ms = 0.0;
@@ -768,7 +776,8 @@ bool MooncakeKVCacheTransferDefault::pull_kv_blocks(
   LOG(INFO) << "[Mooncake][PDTransfer] direction=pull, cluster_id="
             << src_cluster_id << ", remote=" << src_addr
             << ", mapping_groups=" << mappings.size()
-            << ", layers=" << bind_layers << ", regions=" << all_regions.size()
+            << ", layers=" << bind_layers << ", regions=" << logical_regions
+            << ", packed_regions=" << all_regions.size()
             << ", bind_ms=" << bind_ms << ", move_ms=" << move_ms
             << ", success=true";
   return true;

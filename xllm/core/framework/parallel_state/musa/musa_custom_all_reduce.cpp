@@ -26,14 +26,17 @@ limitations under the License.
 #include <limits>
 #include <mutex>
 #include <stdexcept>
-#include <unordered_set>
 #include <unordered_map>
+#include <unordered_set>
 
-#include "core/framework/parallel_state/musa_process_group.h"
 #include "core/framework/parallel_state/musa/musa_custom_all_reduce_policy.h"
+#include "core/framework/parallel_state/musa_process_group.h"
+#include "core/util/env_var.h"
 #include "torch_musa/csrc/core/MUSAStream.h"
 
 namespace xllm {
+
+void register_musa_custom_all_reduce_kernel();
 
 namespace {
 
@@ -174,6 +177,14 @@ bool is_16_byte_aligned(const torch::Tensor& tensor) {
 
 }  // namespace
 
+bool musa_custom_allreduce_enabled(ProcessGroup* process_group) {
+  auto* musa_process_group = dynamic_cast<ProcessGroupImpl*>(process_group);
+  if (musa_process_group == nullptr) {
+    return false;
+  }
+  return musa_process_group->custom_allreduce_enabled();
+}
+
 std::optional<torch::Tensor> musa_allreduce_custom(
     ProcessGroup* process_group,
     torch::Tensor& input,
@@ -192,6 +203,17 @@ std::optional<torch::Tensor> musa_allreduce_custom(
   return musa_process_group->allreduce_custom(input, output);
 }
 
+std::optional<torch::Tensor> musa_allreduce_tp_custom(
+    ProcessGroup* process_group,
+    torch::Tensor& input) {
+  ProcessGroupImpl* musa_process_group =
+      dynamic_cast<ProcessGroupImpl*>(process_group);
+  if (musa_process_group == nullptr) {
+    return std::nullopt;
+  }
+  return musa_process_group->allreduce_tp_custom(input);
+}
+
 MusaCustomAllReduce::MusaCustomAllReduce(int32_t rank,
                                          int32_t world_size,
                                          const std::string& group_name,
@@ -201,14 +223,47 @@ MusaCustomAllReduce::MusaCustomAllReduce(int32_t rank,
       world_size_(world_size),
       group_name_(group_name),
       device_(device),
-      store_(std::move(store)) {
+      store_(std::move(store)),
+      enable_tp_allreduce_(
+          util::get_bool_env("XLLM_MUSA_ENABLE_TP_CUSTOM_AR", true)) {
+  if (group_name_ == "tp_group" && world_size_ > 1) {
+    CHECK(store_ != nullptr);
+    const std::string prefix = "xllm_custom_ar/tp_group/generic_policy/";
+    std::vector<std::string> keys;
+    keys.reserve(static_cast<size_t>(world_size_));
+    for (int32_t peer = 0; peer < world_size_; ++peer) {
+      keys.emplace_back(prefix + std::to_string(peer));
+    }
+    const uint8_t selected = enable_tp_allreduce_ ? 1 : 0;
+    store_->set(keys[rank_], std::vector<uint8_t>{selected});
+    store_->wait(keys);
+    for (const std::string& key : keys) {
+      CHECK(store_->get(key) == std::vector<uint8_t>{selected})
+          << "MUSA TP custom-allreduce policy must match on every rank";
+    }
+    LOG(INFO) << "[MUSA_TP_REDUCE_POLICY] group=" << group_name_
+              << ", rank=" << rank_ << ", world_size=" << world_size_
+              << ", enabled=" << enable_tp_allreduce_
+              << ", max_bytes=" << max_size_bytes_;
+  }
+  // cp_group is the prefill context-parallel pair. It uses the same two-stage
+  // algorithm as the world group; one-stage stays limited to non-generic TP.
   if (group_name_ != "tp_group" && group_name_ != "world_group" &&
-      group_name_ != "moe_tp_group") {
+      group_name_ != "moe_tp_group" && group_name_ != "cp_group") {
     return;
   }
   if (!supported_world_size(world_size_)) {
+    CHECK(!enable_tp_allreduce_ || group_name_ != "tp_group" ||
+          world_size_ <= 1)
+        << "Requested MUSA TP custom all-reduce has an unsupported group size";
     LOG(WARNING) << "Custom all-reduce disabled for " << group_name_
                  << ": unsupported world size " << world_size_;
+    return;
+  }
+  if (enable_tp_allreduce_ && group_name_ == "tp_group") {
+    // An explicitly selected collective must not silently change backend on
+    // only one rank after an IPC/device initialization failure.
+    init();
     return;
   }
   try {
@@ -272,11 +327,14 @@ void MusaCustomAllReduce::long_prefill_host_barrier() {
 
 void musa_long_prefill_host_barrier(ProcessGroup* process_group) {
   auto* musa_group = dynamic_cast<ProcessGroupImpl*>(process_group);
-  CHECK(musa_group != nullptr) << "Long-prefill rendezvous requires a MUSA group";
+  CHECK(musa_group != nullptr)
+      << "Long-prefill rendezvous requires a MUSA group";
   musa_group->long_prefill_host_barrier();
 }
 
 void MusaCustomAllReduce::init() {
+  // Keep the native dispatcher registrations when linking static archives.
+  register_musa_custom_all_reduce_kernel();
   const c10::DeviceGuard device_guard(device_);
   CHECK(store_ != nullptr) << "Custom all-reduce requires a c10d store.";
 
@@ -287,9 +345,12 @@ void MusaCustomAllReduce::init() {
   rank_data_ =
       torch::empty({8 * 1024 * 1024},
                    torch::TensorOptions().dtype(torch::kUInt8).device(device_));
-  // Small TP reductions use the stable one-stage path. The world group keeps
-  // the two-shot path used by the validated MUSA deployment.
-  const int64_t algorithm = group_name_ == "tp_group" ? 1 : 2;
+  // TP2 generic reductions use two-stage communication. The one-stage MUSA
+  // path produced malformed outputs in mixed-request Qwen3.8 MTP evaluation;
+  // the existing world-group policy also uses two-stage communication.
+  const bool tp2_generic =
+      enable_tp_allreduce_ && group_name_ == "tp_group" && world_size_ == 2;
+  const int64_t algorithm = group_name_ == "tp_group" && !tp2_generic ? 1 : 2;
   custom_ar_handle_ =
       op_init_custom_ar(meta_ptrs_, rank_data_, rank_, fully_connected_);
   op_set_algorithm(custom_ar_handle_, algorithm);
@@ -391,9 +452,11 @@ std::optional<torch::Tensor> MusaCustomAllReduce::allreduce(
   }
   const char* graph_two_shot = std::getenv("XLLM_DSV4_GRAPH_TP_BF16_TWO_SHOT");
   const bool enable_graph_two_shot = group_name_ == "tp_group" &&
-      graph_two_shot != nullptr && std::string(graph_two_shot) == "1";
+                                     graph_two_shot != nullptr &&
+                                     std::string(graph_two_shot) == "1";
   auto reduce = [&]() {
-    op_all_reduce(custom_ar_handle_, input, output, buffer_ptrs_[rank_], max_size_bytes_);
+    op_all_reduce(
+        custom_ar_handle_, input, output, buffer_ptrs_[rank_], max_size_bytes_);
   };
   if (!enable_graph_two_shot) {
     reduce();
@@ -401,21 +464,100 @@ std::optional<torch::Tensor> MusaCustomAllReduce::allreduce(
   }
   // Serialize selection + launch + restore, including small/eager TP calls,
   // so another host thread cannot observe the temporary capture algorithm.
-  std::lock_guard<std::mutex> algorithm_lock(g_custom_allreduce_algorithm_mutex);
+  std::lock_guard<std::mutex> algorithm_lock(
+      g_custom_allreduce_algorithm_mutex);
   bool capture_two_shot = false;
-  if (input.dim() == 2 && musa_graph_tp_bf16_two_shot_shape(
-          group_name_, world_size_, input.scalar_type() == torch::kBFloat16,
-          input.size(0), input.size(1))) {
+  if (input.dim() == 2 &&
+      musa_graph_tp_bf16_two_shot_shape(group_name_,
+                                        world_size_,
+                                        input.scalar_type() == torch::kBFloat16,
+                                        input.size(0),
+                                        input.size(1))) {
     musaStreamCaptureStatus capture_status = musaStreamCaptureStatusNone;
-    CHECK_EQ(musaStreamIsCapturing(c10::musa::getCurrentMUSAStream(device_.index()),
-                                   &capture_status), musaSuccess);
+    CHECK_EQ(
+        musaStreamIsCapturing(c10::musa::getCurrentMUSAStream(device_.index()),
+                              &capture_status),
+        musaSuccess);
     capture_two_shot = capture_status == musaStreamCaptureStatusActive;
   }
-  musa_with_tp_two_shot(capture_two_shot,
-      [&](int64_t algorithm) { op_set_algorithm(custom_ar_handle_, algorithm); }, reduce);
+  musa_with_tp_two_shot(
+      capture_two_shot,
+      [&](int64_t algorithm) {
+        op_set_algorithm(custom_ar_handle_, algorithm);
+      },
+      reduce);
   if (capture_two_shot && input.size(0) == 112) {
-    LOG_FIRST_N(INFO, 1) << "[DSV4_GRAPH_TP_TWO_SHOT_B16] rows=112 width=4096 bf16=1 "
-                           "capture_algorithm=2 restored_host_algorithm=1";
+    LOG_FIRST_N(INFO, 1)
+        << "[DSV4_GRAPH_TP_TWO_SHOT_B16] rows=112 width=4096 bf16=1 "
+           "capture_algorithm=2 restored_host_algorithm=1";
+  }
+  return output;
+}
+
+std::optional<torch::Tensor> MusaCustomAllReduce::allreduce_in_slices(
+    torch::Tensor& input) {
+  const int64_t bytes = static_cast<int64_t>(input.nbytes());
+  if (!enabled_ || !input.defined() || input.device() != device_ ||
+      !supported_dtype(input.scalar_type()) || !input.is_contiguous() ||
+      !is_16_byte_aligned(input) || bytes <= max_size_bytes_ ||
+      bytes % 16 != 0) {
+    return std::nullopt;
+  }
+  const int64_t align_elems = 16 / static_cast<int64_t>(input.element_size());
+  const int64_t num_slices = (bytes + max_size_bytes_ - 1) / max_size_bytes_;
+  const int64_t slice_elems =
+      ((input.numel() + num_slices - 1) / num_slices + align_elems - 1) /
+      align_elems * align_elems;
+  torch::Tensor flat_input = input.view({-1});
+  torch::Tensor output = torch::empty_like(input);
+  torch::Tensor flat_output = output.view({-1});
+  for (int64_t offset = 0; offset < flat_input.numel();
+       offset += slice_elems) {
+    const int64_t count = std::min(slice_elems, flat_input.numel() - offset);
+    torch::Tensor in_slice = flat_input.narrow(/*dim=*/0, offset, count);
+    const std::optional<torch::Tensor> reduced =
+        allreduce(in_slice, flat_output.narrow(/*dim=*/0, offset, count));
+    if (!reduced.has_value()) {
+      CHECK_EQ(offset, 0) << "TP custom all-reduce failed after a slice";
+      return std::nullopt;
+    }
+  }
+  return output;
+}
+
+std::optional<torch::Tensor> MusaCustomAllReduce::allreduce_tp(
+    torch::Tensor& input) {
+  if (!enable_tp_allreduce_ || group_name_ != "tp_group" || world_size_ <= 1) {
+    return std::nullopt;
+  }
+  CHECK(enabled_) << "Explicit MUSA TP custom all-reduce was not initialized";
+  std::optional<torch::Tensor> output = allreduce(input);
+  if (!output.has_value()) {
+    output = allreduce_in_slices(input);
+    if (output.has_value()) {
+      LOG_FIRST_N(INFO, 1) << "[MUSA_TP_REDUCE] backend=custom_slices, group="
+                           << group_name_ << ", rank=" << rank_
+                           << ", world_size=" << world_size_
+                           << ", dtype=" << input.scalar_type()
+                           << ", shape=" << input.sizes()
+                           << ", bytes=" << input.nbytes();
+      return output;
+    }
+  }
+  if (output.has_value()) {
+    LOG_FIRST_N(INFO, 1) << "[MUSA_TP_REDUCE] backend=custom, group="
+                         << group_name_ << ", rank=" << rank_
+                         << ", world_size=" << world_size_
+                         << ", dtype=" << input.scalar_type()
+                         << ", shape=" << input.sizes()
+                         << ", bytes=" << input.nbytes()
+                         << ", out_of_place=true";
+  } else {
+    LOG_FIRST_N(INFO, 1)
+        << "[MUSA_TP_REDUCE] backend=mccl, reason=unsupported_tensor, group="
+        << group_name_ << ", rank=" << rank_ << ", world_size=" << world_size_
+        << ", dtype=" << input.scalar_type() << ", shape=" << input.sizes()
+        << ", bytes=" << input.nbytes();
   }
   return output;
 }
@@ -537,6 +679,31 @@ void MusaCustomAllReduce::finalize_graph_buffers() {
               << ", generation=" << graph_capture_generation_;
   }
   ++graph_capture_generation_;
+}
+
+std::vector<c10::DeviceIndex> musa_custom_allreduce_devices() {
+  std::lock_guard<std::mutex> lock(g_custom_allreduce_instances_mutex);
+  std::vector<c10::DeviceIndex> devices;
+  devices.reserve(g_custom_allreduce_instances.size());
+  for (MusaCustomAllReduce* instance : g_custom_allreduce_instances) {
+    devices.emplace_back(instance->device_index());
+  }
+  return devices;
+}
+
+MusaTpCaptureReadLock::MusaTpCaptureReadLock(
+    std::optional<c10::DeviceIndex> extra_device) {
+  std::vector<c10::DeviceIndex> devices = musa_custom_allreduce_devices();
+  if (extra_device.has_value()) {
+    devices.emplace_back(*extra_device);
+  }
+  std::sort(devices.begin(), devices.end());
+  devices.erase(std::unique(devices.begin(), devices.end()), devices.end());
+  locks_.reserve(devices.size());
+  for (const c10::DeviceIndex device : devices) {
+    locks_.emplace_back(
+        cuda::DeviceCaptureLock::get_instance().get_read_lock(device));
+  }
 }
 
 void finalize_musa_custom_allreduce_graphs() {

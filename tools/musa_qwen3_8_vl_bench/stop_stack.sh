@@ -2,7 +2,7 @@
 # Stops exactly the processes start_stack.sh recorded for the latest run, or
 # for the run directory given as $1: SIGTERM first, SIGKILL after 10 s.
 set -u
-source "$(dirname "$0")/env.sh"
+source /workspace/xllm-mt-main/tools/musa_qwen3_8_vl_bench/env.sh
 
 pids_file=${1:-$RUNS_DIR/current}/pids.txt
 [[ -f $pids_file ]] || { echo "nothing to stop: no $pids_file"; exit 0; }

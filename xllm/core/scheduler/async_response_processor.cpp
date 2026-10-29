@@ -32,6 +32,30 @@ limitations under the License.
 
 namespace xllm {
 
+void assign_v2_output_identity(InstanceRole role,
+                               Request* request,
+                               RequestOutput* output,
+                               bool first_generated_token) {
+  if (output == nullptr || request == nullptr) {
+    return;
+  }
+  output->decode_admission = request->state().decode_admission;
+  if (request->service_request_id().empty() ||
+      !request->v2_attempt_seq().has_value()) {
+    if (first_generated_token) {
+      output->finished_on_prefill_instance = true;
+    }
+    return;
+  }
+  const bool prefill_event =
+      role == InstanceRole::PREFILL && first_generated_token;
+  if (prefill_event) {
+    output->finished_on_prefill_instance = true;
+  }
+  output->attempt_seq = request->v2_attempt_seq();
+  output->output_event_seq = request->allocate_output_event_seq(prefill_event);
+}
+
 AsyncResponseProcessor::AsyncResponseProcessor(
     const Tokenizer* tokenizer,
     const std::optional<InstanceRole>& role,
@@ -66,17 +90,20 @@ void AsyncResponseProcessor::process_failed_request(
     Status status) {
   // schedule the response handling
   const bool disable_log_stats = disable_log_stats_;
-  auto runnable = [disable_log_stats, request = request, status = status]() {
-    if (!disable_log_stats) {
-      request->log_error_statistic(status);
-    }
-    RequestOutput output;
-    output.request_id = request->request_id();
-    output.service_request_id = request->service_request_id();
-    output.target_xservice_addr = request->source_xservice_addr();
-    output.status = status;
-    request->state().output_func(output);
-  };
+  auto runnable =
+      [disable_log_stats, role = role_, request = request, status = status]() {
+        if (!disable_log_stats) {
+          request->log_error_statistic(status);
+        }
+        RequestOutput output;
+        output.request_id = request->request_id();
+        output.service_request_id = request->service_request_id();
+        output.target_xservice_addr = request->source_xservice_addr();
+        output.status = status;
+        assign_v2_output_identity(
+            role, request.get(), &output, /*first_generated_token=*/false);
+        request->state().output_func(output);
+      };
   if (request->state().response_thread_id < 0) {
     request->state().response_thread_id =
         response_threadpool_.schedule(runnable);
@@ -159,10 +186,11 @@ void AsyncResponseProcessor::batch_process_completed_requests(
           request->log_statistic(end_2_end_latency_seconds);
         }
       }
-      if (request->sequences()[0]->num_generated_tokens() == 1) {
-        // currently only support one sequence when enable_service_routing
-        request_output->finished_on_prefill_instance = true;
-      }
+      assign_v2_output_identity(
+          role_,
+          request.get(),
+          request_output,
+          request->sequences()[0]->num_generated_tokens() == 1);
       counter->decrement_count();
     };
     if (request->state().response_thread_id < 0) {
@@ -312,12 +340,10 @@ void AsyncResponseProcessor::batch_process_stream_requests(
         auto seq_output = seq->generate_streaming_output(size, *tokenizer_);
         if (seq_output.has_value()) {
           req_output->outputs.push_back(std::move(seq_output.value()));
-        }
-        if (seq->num_generated_tokens() == 1) {
-          // currently only support one sequence when enable_service_routing
-          // IMPROVE LATER: support enable_schedule_overlap in Default mode
-          // for stream request
-          req_output->finished_on_prefill_instance = true;
+          assign_v2_output_identity(role_,
+                                    request.get(),
+                                    req_output,
+                                    seq->num_generated_tokens() == 1);
         }
       }
       if (req_output->finished_on_prefill_instance) {

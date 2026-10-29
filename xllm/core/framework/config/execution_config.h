@@ -55,7 +55,10 @@ class ExecutionConfig final {
          "output_shm_size",
          "random_seed",
          "python_graph_backend",
-         "enable_fia_decode"}};
+         "enable_fia_decode",
+         "musa_prefill_graph_token_stride",
+         "musa_prefill_graph_max_entries",
+         "musa_prefill_warmup_reserve_mb"}};
     return kOptionCategory;
   }
 
@@ -88,6 +91,12 @@ class ExecutionConfig final {
   PROPERTY(std::string, python_graph_backend) = "off";
 
   PROPERTY(bool, enable_fia_decode) = false;
+
+  PROPERTY(int32_t, musa_prefill_graph_token_stride) = 64;
+
+  PROPERTY(int32_t, musa_prefill_graph_max_entries) = 32;
+
+  PROPERTY(int32_t, musa_prefill_warmup_reserve_mb) = 2048;
 };
 
 }  // namespace xllm

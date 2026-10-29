@@ -355,12 +355,12 @@ class MTPWorkerImpl : public DraftModelSpecWorkerImpl {
   std::shared_ptr<int> spec_verify_attention_buffer_owner_ =
       std::make_shared<int>(0);
 
-  // Stable validate-sampling controls for the common single-sequence greedy
-  // path.  Their values depend on speculative width, not tensor-parallel
-  // topology, and are rebuilt only when that width changes.
+  std::unique_ptr<detail::NpuJsonDraftTokenHandoff> json_draft_token_handoff_;
+#endif
+#if defined(USE_NPU) || defined(USE_MUSA)
+  // Stable validate-sampling controls for the greedy path.
   torch::Tensor mtp_validate_greedy_indices_;
   torch::Tensor mtp_validate_greedy_do_sample_;
-  std::unique_ptr<detail::NpuJsonDraftTokenHandoff> json_draft_token_handoff_;
 #endif
 };
 }  // namespace xllm

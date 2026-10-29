@@ -213,9 +213,23 @@ class Qwen3_5MtpModelImplBase : public Qwen3HybridModelImplBase {
     }
 #endif
 
+#if defined(USE_MUSA)
+    torch::Tensor fc_input = torch::empty(
+        {embedding.size(0), embedding.size(-1) + hidden.size(-1)},
+        embedding.options());
+    torch::Tensor norm_emb_view =
+        fc_input.narrow(/*dim=*/-1, /*start=*/0, /*length=*/embedding.size(-1));
+    torch::Tensor norm_hid_view = fc_input.narrow(/*dim=*/-1,
+                                                  /*start=*/embedding.size(-1),
+                                                  /*length=*/hidden.size(-1));
+    pre_fc_norm_embedding_->forward_out(embedding, norm_emb_view);
+    pre_fc_norm_hidden_->forward_out(hidden, norm_hid_view);
+    torch::Tensor mtp_hidden = fc_(fc_input);
+#else
     embedding = std::get<0>(pre_fc_norm_embedding_->forward(embedding));
     hidden = std::get<0>(pre_fc_norm_hidden_->forward(hidden));
     torch::Tensor mtp_hidden = fc_(torch::cat({embedding, hidden}, -1));
+#endif
 
     CHECK_EQ(kv_caches.size(), layers_.size());
     torch::Tensor mrope_cos_sin;

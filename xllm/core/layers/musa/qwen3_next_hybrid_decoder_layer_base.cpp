@@ -134,14 +134,23 @@ torch::Tensor Qwen3HybridDecoderLayerImplBase::forward(
   const bool attention_takes_fp8 = attention_
                                        ? attention_->supports_fp8_input()
                                        : linear_attention_->supports_fp8_input();
+  const bool keep_normed_input = !attention_;
   if (!residual.has_value()) {
     residual = x;
-    x = std::get<0>(input_norm_->forward(x));
+    if (attention_takes_fp8 && input_norm_->supports_quant_fp8(x)) {
+      torch::Tensor normed_x;
+      std::tie(normed_x, normed.fp8_values, normed.fp8_scales) =
+          input_norm_->forward_quant_fp8(x, keep_normed_input);
+      if (keep_normed_input) {
+        x = normed_x;
+      }
+    } else {
+      x = std::get<0>(input_norm_->forward(x));
+    }
   } else if (attention_takes_fp8 &&
              input_norm_->supports_quant_fp8(x, residual.value())) {
     std::tie(normed.fp8_values, normed.fp8_scales) =
-        input_norm_->forward_quant_fp8(
-            x, residual.value(), /*keep_normed_input=*/true);
+        input_norm_->forward_quant_fp8(x, residual.value(), keep_normed_input);
   } else {
     std::tie(x, residual) = input_norm_->forward(x, residual);
   }

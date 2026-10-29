@@ -673,7 +673,10 @@ void rms_norm_entry(torch::Tensor output,
                     double eps) {
   CHECK(input.scalar_type() == output.scalar_type());
   CHECK(input.scalar_type() == weight.scalar_type());
-  CHECK(output.is_contiguous());
+  CHECK(output.stride(-1) == 1)
+      << "gemma_rms_norm requires output last dim to be contiguous "
+         "(stride(-1)==1). Got strides="
+      << output.strides() << ", sizes=" << output.sizes();
   CHECK(weight.is_contiguous());
   CHECK(input.stride(-1) == 1)
       << "gemma_rms_norm requires the last dim to be contiguous "

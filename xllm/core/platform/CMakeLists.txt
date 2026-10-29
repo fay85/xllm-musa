@@ -16,6 +16,9 @@ cc_library(
     vmm_api.h
     shared_vmm_allocator.h
     vmm_torch_allocator.h
+    graph_pool_ref.h
+    $<$<BOOL:${USE_MUSA}>:musa_graph_handle.h>
+    $<$<BOOL:${USE_MUSA}>:musa_vmm_capture_pool.h>
     sleepable_allocator.h
     batch_memcpy.h
     layer_synchronizer.h

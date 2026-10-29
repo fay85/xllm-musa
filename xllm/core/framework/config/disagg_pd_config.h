@@ -51,6 +51,7 @@ class DisaggPDConfig final {
          "disagg_pd_port",
          "instance_role",
          "kv_cache_transfer_mode",
+         "super_node_id",
          "transfer_listen_port"}};
     return kOptionCategory;
   }
@@ -64,6 +65,9 @@ class DisaggPDConfig final {
   PROPERTY(std::string, instance_role) = "DEFAULT";
 
   PROPERTY(std::string, kv_cache_transfer_mode) = "PUSH";
+
+  // Empty opts out of cross super-node isolation.
+  PROPERTY(std::string, super_node_id);
 
   PROPERTY(int32_t, transfer_listen_port) = 26000;
 

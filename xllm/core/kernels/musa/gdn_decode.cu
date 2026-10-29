@@ -2824,6 +2824,7 @@ struct ConvSuperstateArgs {
   const accepted_t* accepted_tokens;
   scalar_t* out;
   int64_t o_bs, o_ds, o_ts;
+  int32_t batch;
   int32_t dim;
   bool silu_activation;
 };
@@ -2855,6 +2856,7 @@ ConvSuperstateArgs<scalar_t, accepted_t> make_conv_superstate_args(
   args.o_bs = out.stride(0);
   args.o_ds = out.stride(1);
   args.o_ts = out.stride(2);
+  args.batch = static_cast<int32_t>(x.size(0));
   args.dim = static_cast<int32_t>(x.size(1));
   args.silu_activation = silu_activation;
   return args;
@@ -2947,8 +2949,10 @@ __global__ void causal_conv1d_mtp_verify_superstate_kernel(
 }
 
 // The first conv_blocks blocks run the convolution of the only verify
-// sequence; every later block computes one column of
-// proj_output[kSeqLen, proj_cols] = proj_input * proj_weight^T.
+// First `args.batch * conv_blocks` blocks compute the superstate convolution
+// across all `args.batch` sequences; every later block computes one (seq_idx,
+// col) tile of proj_output[batch * kSeqLen, proj_cols] = proj_input *
+// proj_weight^T.
 template <typename scalar_t, typename accepted_t, int32_t kWidth,
           int32_t kSeqLen>
 __global__ void __launch_bounds__(skinny::kThreads)
@@ -2962,19 +2966,26 @@ __global__ void __launch_bounds__(skinny::kThreads)
         int32_t proj_k) {
   __shared__ float warp_partials[skinny::kWarps][kSeqLen];
   const int32_t block = static_cast<int32_t>(blockIdx.x);
-  if (block < conv_blocks) {
+  const int32_t total_conv_blocks = args.batch * conv_blocks;
+  if (block < total_conv_blocks) {
+    const int32_t b = block / conv_blocks;
     const int32_t d =
-        block * skinny::kThreads + static_cast<int32_t>(threadIdx.x);
+        (block % conv_blocks) * skinny::kThreads +
+        static_cast<int32_t>(threadIdx.x);
     if (d < args.dim) {
       conv1d_mtp_verify_superstate_channel<scalar_t, accepted_t, kWidth,
-                                           kSeqLen>(args, /*b=*/0, d);
+                                           kSeqLen>(args, b, d);
     }
     return;
   }
-  skinny::block_gemm<kSeqLen, 1>(proj_input,
+  const int32_t proj_block = block - total_conv_blocks;
+  const int32_t seq_idx = proj_block / proj_cols;
+  const int32_t col = proj_block % proj_cols;
+  const int64_t row_offset = static_cast<int64_t>(seq_idx) * kSeqLen;
+  skinny::block_gemm<kSeqLen, 1>(proj_input + row_offset * proj_k,
                                  proj_weight,
-                                 proj_output,
-                                 block - conv_blocks,
+                                 proj_output + row_offset * proj_cols,
+                                 col,
                                  proj_cols,
                                  proj_k,
                                  warp_partials);
@@ -3017,13 +3028,15 @@ void launch_causal_conv1d_mtp_verify_superstate_proj(
     cudaStream_t stream) {
   using scalar_t = __nv_bfloat16;
   constexpr int32_t kWidth = 4;
+  const int32_t batch = static_cast<int32_t>(x.size(0));
   const int32_t dim = static_cast<int32_t>(x.size(1));
   const int32_t conv_blocks =
       (dim + skinny::kThreads - 1) / skinny::kThreads;
   const int32_t proj_cols = static_cast<int32_t>(proj_weight.size(0));
+  const int32_t total_blocks = batch * (conv_blocks + proj_cols);
   causal_conv1d_mtp_verify_superstate_proj_kernel<scalar_t, accepted_t, kWidth,
                                                   kSeqLen>
-      <<<conv_blocks + proj_cols, skinny::kThreads, 0, stream>>>(
+      <<<total_blocks, skinny::kThreads, 0, stream>>>(
           make_conv_superstate_args<scalar_t, accepted_t>(
               x, weight, conv_state, cache_indices, accepted, out,
               /*silu_activation=*/true),
@@ -3264,8 +3277,9 @@ bool causal_conv1d_mtp_verify_with_projection_supported(
     return false;
   }
   const int64_t k = proj_input.size(1);
-  return batch == 1 && seq_len >= 2 && seq_len <= skinny::kMaxRows &&
-         conv_width == 4 && proj_input.size(0) == seq_len &&
+  return batch >= 1 && batch <= 16 && seq_len >= 2 &&
+         seq_len <= skinny::kMaxRows && conv_width == 4 &&
+         proj_input.size(0) == batch * seq_len &&
          proj_weight.size(0) >= 1 && proj_weight.size(1) == k &&
          k % skinny::kBf16PerVector == 0 &&
          k / skinny::kBf16PerVector <=

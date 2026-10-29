@@ -26,6 +26,7 @@ limitations under the License.
 #include "concurrent_block_manager_impl.h"
 #include "core/framework/block/sliding_window_block_manager.h"
 #include "core/framework/config/kv_cache_config.h"
+#include "core/framework/config/parallel_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "embedding_block_manager.h"
 #include "framework/kv_cache/deepseek_v4_cache_geometry.h"
@@ -225,10 +226,12 @@ CompositeBlockManager::LeafMap build_composite_leaves(
     CHECK_GT(options.linear_state_num_slots(), 0)
         << "linear_state_num_slots must be set when linear state is enabled";
     const bool linear_prefix_cache = prefix_cache_on && linear_participates;
+    const int32_t kv_split_align =
+        std::max<int32_t>(1, ParallelConfig::get_instance().kv_split_size_effective());
     int32_t chunk_stride =
-        SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill();
+        std::max<int32_t>(1, options.block_size()) * kv_split_align;
     if (linear_prefix_cache) {
-      CHECK_GT(chunk_stride, 0) << "max_tokens_per_chunk_for_prefill must be "
+      CHECK_GT(chunk_stride, 0) << "chunk_stride must be "
                                    "positive for linear state prefix cache";
     } else if (chunk_stride <= 0) {
       chunk_stride = 1;

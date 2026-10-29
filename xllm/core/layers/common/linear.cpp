@@ -712,12 +712,17 @@ torch::Tensor ColumnParallelLinearImpl::forward(torch::Tensor input) {
         input, weight_, weight_scale_inv_, bias, matmul_output_buffer_);
     if (output_column_ids_.defined()) {
       CHECK_EQ(output.dim(), 2) << "row-subset linear expects a 2-D output";
-      torch::Tensor full_output =
-          torch::full({output.size(0), full_out_features_},
-                      -std::numeric_limits<float>::infinity(),
-                      output.options());
-      full_output.index_copy_(/*dim=*/1, output_column_ids_, output);
-      output = full_output;
+      if (defer_row_subset_expansion_ && world_size_ == 1) {
+        xllm::kernel::musa::register_compact_vocab_column_ids(
+            output, output_column_ids_);
+      } else {
+        torch::Tensor full_output =
+            torch::full({output.size(0), full_out_features_},
+                        -std::numeric_limits<float>::infinity(),
+                        output.options());
+        full_output.index_copy_(/*dim=*/1, output_column_ids_, output);
+        output = full_output;
+      }
     }
     if (exact_weight_.defined()) {
       xllm::kernel::musa::rescore_top_logits(
