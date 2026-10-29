@@ -28,6 +28,11 @@ void deepseek_v4_indexer_gather_keys_bf16(const torch::Tensor& cache,
 void deepseek_v4_indexer_relu_weight(const torch::Tensor& scores,
                                      const torch::Tensor& weights);
 
+// Fuse ReLU, FP32 weighting, and the 64-head sum without modifying scores.
+// Input scores: [batch, queries, 64, keys]; output: [batch * queries, keys].
+torch::Tensor deepseek_v4_indexer_weighted_sum(const torch::Tensor& scores,
+                                               const torch::Tensor& weights);
+
 void deepseek_v4_indexer_mask_scores(const torch::Tensor& scores,
                                      const torch::Tensor& lengths,
                                      const torch::Tensor& valid_slots,

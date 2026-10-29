@@ -14,7 +14,6 @@ limitations under the License.
 ==============================================================================*/
 
 #include <c10/cuda/CUDAStream.h>
-#include <dlfcn.h>
 #include <glog/logging.h>
 #include <musa_runtime_api.h>
 #include <torch_musa/csrc/core/MUSAStream.h>
@@ -116,7 +115,8 @@ bool dsv4_mate_fused_dsa_enabled() { return true; }
 bool dsv4_mate_fused_dsa_h8_enabled() { return true; }
 
 std::string dsv4_mate_fused_dsa_uri(int64_t heads) {
-  return "dsa_model1_h" + std::to_string(heads) + "_topk512_extra128_bs128";
+  return "dsa_model1_mate027_h" + std::to_string(heads) +
+         "_topk512_extra128_bs128";
 }
 
 std::string dsv4_mate_prefill_uri(int64_t heads,
@@ -146,14 +146,6 @@ int dsv4_mate_prefill_redundant_runs() { return 1; }
 std::string dsv4_mate_metadata_uri() { return "mla_ops"; }
 
 bool dsv4_c128_device_metadata_enabled() { return true; }
-
-std::string dsv4_tilelang_runtime_library() {
-  return "/usr/local/lib/python3.10/dist-packages/tilelang/lib/libtvm.so";
-}
-
-std::string dsv4_tilelang_library() {
-  return "/usr/local/lib/python3.10/dist-packages/tilelang/lib/libtilelang.so";
-}
 
 ffi::Optional<ffi::Function> try_get_dsv4_mate_flashmla_function(
     bool direct_mla,
@@ -1087,34 +1079,12 @@ torch::Tensor try_dsv4_mate_flashmla_decode(
 
 bool ensure_dsv4_tilelang_musa_loader(std::string* reason) {
 #if defined(USE_MUSA)
-  struct LoaderStatus {
-    bool loaded = false;
-    std::string reason;
-  };
-  static const LoaderStatus status = []() {
-    LoaderStatus result;
-    void* handle =
-        dlopen(dsv4_tilelang_runtime_library().c_str(), RTLD_NOW | RTLD_GLOBAL);
-    if (handle == nullptr) {
-      const char* error = dlerror();
-      result.reason = "failed to load TileLang runtime: " +
-                      std::string(error == nullptr ? "unknown" : error);
-      return result;
-    }
-    handle = dlopen(dsv4_tilelang_library().c_str(), RTLD_LAZY | RTLD_GLOBAL);
-    if (handle == nullptr) {
-      const char* error = dlerror();
-      result.reason = "failed to load TileLang library: " +
-                      std::string(error == nullptr ? "unknown" : error);
-      return result;
-    }
-    result.loaded = true;
-    return result;
-  }();
-  if (!status.loaded && reason != nullptr) {
-    *reason = status.reason;
+  // Load only TileLang; its dependencies select the matching TVM runtime.
+  const bool loaded = ensure_tilelang_loader();
+  if (!loaded && reason != nullptr) {
+    *reason = "TileLang MUSA module loader unavailable; see TVM-FFI warning";
   }
-  return status.loaded;
+  return loaded;
 #else
   if (reason != nullptr) {
     *reason = "Mate sparse MLA requires a MUSA build";
@@ -1273,8 +1243,10 @@ torch::Tensor dsv4_model1_cache_bytes(const torch::Tensor& packed_cache) {
   CHECK_EQ(packed_cache.size(2), 1);
   CHECK_EQ(packed_cache.size(3), 584);
   const int64_t page_stride = packed_cache.stride(0);
-  CHECK_GE(page_stride, packed_cache.size(1) * 584);
-  return packed_cache.as_strided({packed_cache.size(0), page_stride},
+  const int64_t page_payload = packed_cache.size(1) * 584;
+  CHECK_GE(page_stride, page_payload);
+  // MATE 0.2.7 infers page size from the logical row width, not its stride.
+  return packed_cache.as_strided({packed_cache.size(0), page_payload},
                                  {page_stride, 1});
 }
 
@@ -1459,8 +1431,8 @@ __global__ void dsv4_local_sparse_prefill_split_metadata_kernel(
     if (compress_ratio == 1) {
       // C1 has no compressed history: its original-KV attention is causal
       // SWA, just like the dense reference, not full-history attention.
-      main_count = static_cast<int32_t>(
-          min(min(absolute_token + 1, kv_len), kSwaTopk));
+      main_count =
+          static_cast<int32_t>(min(min(absolute_token + 1, kv_len), kSwaTopk));
     } else if (compress_ratio == 4 && compressed_indices != nullptr) {
       const int64_t causal_compressed_len =
           min(compressed_len, (absolute_token + 1) / compress_ratio);
@@ -1473,8 +1445,8 @@ __global__ void dsv4_local_sparse_prefill_split_metadata_kernel(
       main_count = static_cast<int32_t>(
           min(compressed_len, (absolute_token + 1) / compress_ratio));
     }
-    swa_start = static_cast<int32_t>(
-        max(absolute_token - kSwaTopk + 1, int64_t{0}));
+    swa_start =
+        static_cast<int32_t>(max(absolute_token - kSwaTopk + 1, int64_t{0}));
     swa_count = static_cast<int32_t>(
         compress_ratio == 1
             ? 0
@@ -1493,8 +1465,8 @@ __global__ void dsv4_local_sparse_prefill_split_metadata_kernel(
     if (column < main_count) {
       value = compress_ratio == 4
                   ? source[column]
-                  : static_cast<int32_t>(compress_ratio == 1
-                                             ? swa_start + column : column);
+                  : static_cast<int32_t>(
+                        compress_ratio == 1 ? swa_start + column : column);
     }
     main_row[column] = value;
   }
@@ -1819,7 +1791,8 @@ Dsv4MateModel1Workspace& dsv4_model1_workspace(const torch::Tensor& q,
     musaDeviceProp properties{};
     check_musa_runtime(
         musaGetDeviceProperties(&properties, q.device().index()));
-    const int64_t metadata_parts = sequences *
+    const int64_t metadata_parts =
+        sequences *
         std::max<int64_t>(properties.multiProcessorCount /
                               std::max<int64_t>((heads + 63) / 64, 1),
                           1);
@@ -1836,7 +1809,8 @@ Dsv4MateModel1Workspace& dsv4_model1_workspace(const torch::Tensor& q,
     workspace.metadata = torch::empty({metadata_parts, 8}, i32_options);
     workspace.num_splits = torch::empty({batch + 1}, i32_options);
     if (request_width > 0) {
-      workspace.local_splits = torch::empty({sequences, request_width + 1}, i32_options);
+      workspace.local_splits =
+          torch::empty({sequences, request_width + 1}, i32_options);
     }
     workspace.glse =
         torch::empty({batch + metadata_parts, 1, heads}, f32_options);
@@ -1900,9 +1874,10 @@ torch::Tensor try_dsv4_mate_model1_sparse_decode(
   const int64_t heads = q.size(1);
   const bool has_batched_lengths = batched_topk_lengths.has_value() ||
                                    batched_extra_topk_lengths.has_value();
-  CHECK(request_width == 0 || (has_batched_lengths && heads == 8 &&
-        request_width == 7 && batch % request_width == 0 &&
-        batch / request_width > 1 && batch / request_width <= 16));
+  CHECK(request_width == 0 ||
+        (has_batched_lengths && heads == 8 && request_width == 7 &&
+         batch % request_width == 0 && batch / request_width > 1 &&
+         batch / request_width <= 16));
   if (has_batched_lengths) {
     if (!batched_topk_lengths.has_value() ||
         !batched_extra_topk_lengths.has_value() ||
@@ -1940,7 +1915,8 @@ torch::Tensor try_dsv4_mate_model1_sparse_decode(
     auto flat_extra_indices = extra_physical_indices.reshape({batch, -1});
     CHECK_GE(flat_indices.size(1), topk_length);
     CHECK_GE(flat_extra_indices.size(1), extra_topk_length);
-    const int64_t metadata_group = has_batched_lengths ? dsv4_mate_model1_metadata_group : 0;
+    const int64_t metadata_group =
+        has_batched_lengths ? dsv4_mate_model1_metadata_group : 0;
     auto& workspace = dsv4_model1_workspace(q, metadata_group, request_width);
     torch::Tensor indices_4d;
     if (flat_indices.size(1) == kTopk) {
@@ -1977,16 +1953,17 @@ torch::Tensor try_dsv4_mate_model1_sparse_decode(
           current_dsv4_cache_stream(), &capture_status, &capture_id));
     }
     const bool capturing = capture_status == musaStreamCaptureStatusActive;
-    const bool new_capture = (metadata_group != 0 || request_width > 0) &&
+    const bool new_capture =
+        (metadata_group != 0 || request_width > 0) &&
         (workspace.metadata_was_captured != capturing ||
          (capturing && workspace.metadata_capture_id != capture_id));
-    const bool refresh_metadata = new_capture || (request_width > 0 && !capturing) ||
+    const bool refresh_metadata =
+        new_capture || (request_width > 0 && !capturing) ||
         (has_batched_lengths
              ? (!workspace.metadata_valid ||
                 dsv4_mate_model1_metadata_key ==
                     std::numeric_limits<int64_t>::min() ||
-                workspace.cached_metadata_key !=
-                    dsv4_mate_model1_metadata_key)
+                workspace.cached_metadata_key != dsv4_mate_model1_metadata_key)
              : (!workspace.metadata_valid ||
                 workspace.cached_topk_length != effective_topk_length ||
                 workspace.cached_extra_topk_length !=
@@ -2059,6 +2036,18 @@ torch::Tensor try_dsv4_mate_model1_sparse_decode(
       }
       workspace.metadata_valid = true;
     }
+    CHECK_EQ(packed_cache.size(1), 128);
+    CHECK_EQ(extra_packed_cache.size(1), 128);
+    const int64_t main_span =
+        main_bytes.size(0) == 0
+            ? 0
+            : (main_bytes.size(0) - 1) * main_bytes.stride(0) +
+                  main_bytes.size(1);
+    const int64_t extra_span =
+        extra_bytes.size(0) == 0
+            ? 0
+            : (extra_bytes.size(0) - 1) * extra_bytes.stride(0) +
+                  extra_bytes.size(1);
     function.value()(to_ffi_tensor(q4d),
                      to_ffi_tensor(main_bytes.view(torch::kFloat8_e4m3fn)),
                      to_ffi_tensor(main_bytes.view(torch::kBFloat16)),
@@ -2076,7 +2065,16 @@ torch::Tensor try_dsv4_mate_model1_sparse_decode(
                      to_ffi_tensor(workspace.glse),
                      to_ffi_tensor(workspace.output_partial),
                      to_ffi_tensor(workspace.output),
-                     to_ffi_tensor(workspace.lse));
+                     to_ffi_tensor(workspace.lse),
+                     softmax_scale * 1.44269504,
+                     main_span,
+                     main_span,
+                     extra_span,
+                     extra_span,
+                     uint32_t{0x80000000U},
+                     uint32_t{6},
+                     uint32_t{0x80000000U},
+                     uint32_t{6});
     if (!use_current_stream) {
       wait_current_musa_stream_for_ffi(q.device());
     }
@@ -2500,7 +2498,8 @@ torch::Tensor try_dsv4_mate_model1_local_sparse_prefill(
           compress_ratio == 1
               ? std::max<int64_t>(
                     ((std::min<int64_t>(
-                          std::min<int64_t>(last_absolute_token + 1, kv.size(0)),
+                          std::min<int64_t>(last_absolute_token + 1,
+                                            kv.size(0)),
                           kSwaTopk) +
                       63) /
                      64) *
@@ -2585,29 +2584,29 @@ torch::Tensor try_dsv4_mate_model1_local_sparse_prefill(
               to_ffi_tensor(workspace.topk_length.narrow(0, first, count)),
               to_ffi_tensor(workspace.extra_kv),
               to_ffi_tensor(workspace.extra_indices.narrow(0, first, count)),
-              to_ffi_tensor(workspace.extra_topk_length.narrow(0, first, count)),
+              to_ffi_tensor(
+                  workspace.extra_topk_length.narrow(0, first, count)),
               to_ffi_tensor(workspace.sink),
               to_ffi_tensor(workspace.output.narrow(0, first, count)),
               to_ffi_tensor(workspace.max_logits.narrow(0, first, count)),
               to_ffi_tensor(workspace.lse.narrow(0, first, count)));
         }
-        LOG_FIRST_N(INFO, 1) << "[DSV4_LOCAL_PREFILL_PREPARE_ONCE] rows="
-                            << q.size(0) << " kv=" << kv.size(0)
-                            << " ratio=" << compress_ratio
-                            << " max_queries_per_launch="
-                            << max_queries_per_launch;
+        LOG_FIRST_N(INFO, 1)
+            << "[DSV4_LOCAL_PREFILL_PREPARE_ONCE] rows=" << q.size(0)
+            << " kv=" << kv.size(0) << " ratio=" << compress_ratio
+            << " max_queries_per_launch=" << max_queries_per_launch;
       } else {
         split_function.value()(to_ffi_tensor(q),
-                             to_ffi_tensor(workspace.main_kv),
-                             to_ffi_tensor(workspace.indices),
-                             to_ffi_tensor(workspace.topk_length),
-                             to_ffi_tensor(workspace.extra_kv),
-                             to_ffi_tensor(workspace.extra_indices),
-                             to_ffi_tensor(workspace.extra_topk_length),
-                             to_ffi_tensor(workspace.sink),
-                             to_ffi_tensor(workspace.output),
-                             to_ffi_tensor(workspace.max_logits),
-                             to_ffi_tensor(workspace.lse));
+                               to_ffi_tensor(workspace.main_kv),
+                               to_ffi_tensor(workspace.indices),
+                               to_ffi_tensor(workspace.topk_length),
+                               to_ffi_tensor(workspace.extra_kv),
+                               to_ffi_tensor(workspace.extra_indices),
+                               to_ffi_tensor(workspace.extra_topk_length),
+                               to_ffi_tensor(workspace.sink),
+                               to_ffi_tensor(workspace.output),
+                               to_ffi_tensor(workspace.max_logits),
+                               to_ffi_tensor(workspace.lse));
       }
       if (output.has_value()) {
         CHECK_EQ(output.value().sizes(), q.sizes());
@@ -2619,17 +2618,10 @@ torch::Tensor try_dsv4_mate_model1_local_sparse_prefill(
     }
   }
 
-  // The legacy fallback must still run via the outer <=60-query loop.
-  // Never send a full long query to an AOT with persistent-CTA reuse limits.
-  if (max_queries_per_launch > 0) {
-    return torch::Tensor();
-  }
-
-  // The legacy h16 URI was compiled with 64 heads. Keep using the validated
-  // binary until a correctly named H64 artifact can be rebuilt in the
-  // portable cache.
+  // The native MATE 0.2.7 prefill ABI uses one combined KV tensor.
+  // Version the URI so a legacy 11-tensor module cannot be called here.
   auto function = try_get_dsv4_mate_fused_dsa_function(
-      &reason, dsv4_mate_c4_prefill_uri(/*heads=*/16));
+      &reason, "dsa_model1_mate027_prefill_h64");
   if (!function.defined()) {
     static std::once_flag once;
     std::call_once(once, [&reason]() {
@@ -2670,17 +2662,29 @@ torch::Tensor try_dsv4_mate_model1_local_sparse_prefill(
     check_musa_kernel_launch("dsv4 kernel");
 
     bind_dsv4_local_prefill_tvmffi_current_stream(q.device());
-    function.value()(to_ffi_tensor(q),
-                     to_ffi_tensor(workspace.combined_kv),
-                     to_ffi_tensor(workspace.indices),
-                     to_ffi_tensor(workspace.topk_length),
-                     to_ffi_tensor(workspace.combined_kv),
-                     to_ffi_tensor(workspace.empty_indices),
-                     to_ffi_tensor(workspace.empty_lengths),
-                     to_ffi_tensor(workspace.sink),
-                     to_ffi_tensor(workspace.output),
-                     to_ffi_tensor(workspace.max_logits),
-                     to_ffi_tensor(workspace.lse));
+    const int64_t launch_limit =
+        max_queries_per_launch > 0
+            ? std::min<int64_t>(max_queries_per_launch, 60)
+            : std::min<int64_t>(q.size(0), 60);
+    const int64_t kv_span_bytes =
+        workspace.combined_kv.numel() * workspace.combined_kv.element_size();
+    for (int64_t first = 0; first < q.size(0); first += launch_limit) {
+      const int64_t count = std::min(launch_limit, q.size(0) - first);
+      function.value()(
+          to_ffi_tensor(q.narrow(0, first, count)),
+          to_ffi_tensor(workspace.combined_kv),
+          to_ffi_tensor(workspace.indices.narrow(0, first, count)),
+          to_ffi_tensor(workspace.output.narrow(0, first, count)),
+          to_ffi_tensor(workspace.max_logits.narrow(0, first, count)),
+          to_ffi_tensor(workspace.lse.narrow(0, first, count)),
+          to_ffi_tensor(workspace.topk_length.narrow(0, first, count)),
+          to_ffi_tensor(workspace.sink),
+          softmax_scale * 1.44269504,
+          static_cast<int32_t>(count),
+          kv_span_bytes);
+    }
+    LOG_FIRST_N(INFO, 1) << "[DSV4_MATE027_LOCAL_PREFILL] rows=" << q.size(0)
+                         << " kv=" << kv.size(0) << " ratio=" << compress_ratio;
     if (output.has_value()) {
       CHECK_EQ(output.value().sizes(), q.sizes());
       output.value().copy_(workspace.output);
@@ -2894,8 +2898,11 @@ __device__ __forceinline__ float dsv4_block_sum(float value,
   return scratch[0];
 }
 
-template <typename scalar_t, typename index_t, int32_t kContextSplits = 1,
-          int32_t kContextUnroll = 1, bool kBatchedSas = false>
+template <typename scalar_t,
+          typename index_t,
+          int32_t kContextSplits = 1,
+          int32_t kContextUnroll = 1,
+          bool kBatchedSas = false>
 __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
     dsv4_paged_decode_warp_fused_kernel(
         const scalar_t* __restrict__ q,
@@ -2929,12 +2936,13 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
         bool batched_verify,
         int64_t dynamic_compress_ratio) {
   const int64_t head = blockIdx.x;
-  const int64_t sequence_index = kBatchedSas
-      ? static_cast<int64_t>(blockIdx.z) / kContextSplits
-      : requested_sequence_index;
-  const int64_t query = kBatchedSas
-      ? sequence_index * static_cast<int64_t>(gridDim.y) + blockIdx.y
-      : blockIdx.y;
+  const int64_t sequence_index =
+      kBatchedSas ? static_cast<int64_t>(blockIdx.z) / kContextSplits
+                  : requested_sequence_index;
+  const int64_t query =
+      kBatchedSas
+          ? sequence_index * static_cast<int64_t>(gridDim.y) + blockIdx.y
+          : blockIdx.y;
   const int64_t total_len =
       kv_window_len + paged_compressed_kv_len + dense_compressed_kv_len;
   if (head >= num_heads || total_len <= 0) {
@@ -2957,9 +2965,8 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
   int64_t runtime_kv_window_len = kv_window_len;
   int64_t runtime_compressed_len = paged_compressed_kv_len;
   if (dynamic_kv_seq_lens != nullptr) {
-    const int64_t raw_runtime_kv_len =
-        static_cast<int64_t>(dynamic_kv_seq_lens[
-            batched_verify ? query : sequence_index]);
+    const int64_t raw_runtime_kv_len = static_cast<int64_t>(
+        dynamic_kv_seq_lens[batched_verify ? query : sequence_index]);
     const int64_t runtime_kv_len =
         raw_runtime_kv_len > 0 ? raw_runtime_kv_len : 0;
     const int64_t cache_capacity = max_blocks_per_seq * block_size;
@@ -2970,8 +2977,8 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
                                 : kv_window_len;
     runtime_kv_start = effective_runtime_kv_len - runtime_kv_window_len;
     if (dynamic_compress_ratio > 0) {
-      runtime_compressed_len = min(paged_compressed_kv_len,
-                                   runtime_kv_len / dynamic_compress_ratio);
+      runtime_compressed_len =
+          min(paged_compressed_kv_len, runtime_kv_len / dynamic_compress_ratio);
     }
   }
 
@@ -2998,14 +3005,14 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
     } else if (token < kv_window_len + paged_compressed_kv_len) {
       const int64_t compressed_token = token - kv_window_len;
       row_valid = compressed_token < runtime_compressed_len;
-      const int64_t flat =
-          row_valid ? dsv4_paged_flat_row_from_table(compressed_block_table,
-                                         compressed_sequence_index,
-                                         compressed_token,
-                                         compressed_block_size,
-                                         compressed_num_blocks,
-                                         compressed_max_blocks_per_seq)
-                    : int64_t{-1};
+      const int64_t flat = row_valid ? dsv4_paged_flat_row_from_table(
+                                           compressed_block_table,
+                                           compressed_sequence_index,
+                                           compressed_token,
+                                           compressed_block_size,
+                                           compressed_num_blocks,
+                                           compressed_max_blocks_per_seq)
+                                     : int64_t{-1};
       row_valid = row_valid && flat >= 0;
       row = row_valid ? compressed_cache + flat * compressed_row_width
                       : compressed_cache;
@@ -3064,13 +3071,14 @@ __global__ void __launch_bounds__(kDecodeAttentionBlockSize, 1)
   // across CTAs. Every output retains the original token accumulation order.
   // The default specialization folds back to the original unsplit loop.
   const int64_t context_tile = (head_dim + kContextSplits - 1) / kContextSplits;
-  const int64_t context_split = kBatchedSas
-      ? static_cast<int64_t>(blockIdx.z) % kContextSplits
-      : static_cast<int64_t>(blockIdx.z);
-  const int64_t context_begin = kContextSplits == 1
-      ? int64_t{0} : context_split * context_tile;
+  const int64_t context_split =
+      kBatchedSas ? static_cast<int64_t>(blockIdx.z) % kContextSplits
+                  : static_cast<int64_t>(blockIdx.z);
+  const int64_t context_begin =
+      kContextSplits == 1 ? int64_t{0} : context_split * context_tile;
   const int64_t context_end = kContextSplits == 1
-      ? head_dim : min(context_begin + context_tile, head_dim);
+                                  ? head_dim
+                                  : min(context_begin + context_tile, head_dim);
   for (int64_t dim = context_begin + threadIdx.x; dim < context_end;
        dim += blockDim.x) {
     float acc = 0.0f;
@@ -3815,16 +3823,15 @@ deepseek_v4_paged_attention_decode_with_paged_compressed_kv_impl(
   return out;
 }
 
-torch::Tensor deepseek_v4_paged_attention_sas(
-    const torch::Tensor& q,
-    const torch::Tensor& cache,
-    const torch::Tensor& block_table,
-    int64_t sequence_index,
-    int64_t kv_len,
-    int64_t window_size,
-    const torch::Tensor& attn_sink,
-    double softmax_scale,
-    const torch::Tensor& output) {
+torch::Tensor deepseek_v4_paged_attention_sas(const torch::Tensor& q,
+                                              const torch::Tensor& cache,
+                                              const torch::Tensor& block_table,
+                                              int64_t sequence_index,
+                                              int64_t kv_len,
+                                              int64_t window_size,
+                                              const torch::Tensor& attn_sink,
+                                              double softmax_scale,
+                                              const torch::Tensor& output) {
 #if defined(USE_DCU)
   return torch::Tensor();
 #else
@@ -3839,7 +3846,8 @@ torch::Tensor deepseek_v4_paged_attention_sas(
   CHECK_EQ(block_table.dim(), 2);
   CHECK_GE(sequence_index, 0);
   CHECK_LT(sequence_index, block_table.size(0));
-  CHECK(block_table.scalar_type() == torch::kInt32 || block_table.scalar_type() == torch::kInt64);
+  CHECK(block_table.scalar_type() == torch::kInt32 ||
+        block_table.scalar_type() == torch::kInt64);
   CHECK_EQ(output.sizes(), q.sizes());
   CHECK_EQ(output.scalar_type(), q.scalar_type());
   CHECK(!q.is_alias_of(output));
@@ -3849,7 +3857,8 @@ torch::Tensor deepseek_v4_paged_attention_sas(
   CHECK_LE(window_size, 512);
   CHECK_EQ(attn_sink.scalar_type(), torch::kFloat32);
   CHECK_EQ(attn_sink.numel(), q.size(1));
-  for (const torch::Tensor& tensor : {q, cache, block_table, attn_sink, output}) {
+  for (const torch::Tensor& tensor :
+       {q, cache, block_table, attn_sink, output}) {
     CHECK(tensor.is_contiguous());
     CHECK_EQ(tensor.device(), q.device());
   }
@@ -3862,19 +3871,39 @@ torch::Tensor deepseek_v4_paged_attention_sas(
     auto launch = [&](auto index_tag) {
       using Index = decltype(index_tag);
       dsv4_paged_decode_warp_fused_kernel<scalar_t, Index, 2>
-          <<<dim3(q.size(1), q.size(0), 2), kDecodeAttentionBlockSize, shared_bytes, stream>>>(
-              q.data_ptr<scalar_t>(), cache.data_ptr<scalar_t>(),
-              block_table.data_ptr<Index>(), nullptr, nullptr, nullptr, nullptr,
-              attn_sink.data_ptr<float>(), output.data_ptr<scalar_t>(),
-              sequence_index, kv_len - visible, visible,
-              cache.size(1), cache.size(0), block_table.size(1),
-              /*compressed_sequence_index=*/0, /*paged_compressed_kv_len=*/0,
-              /*compressed_block_size=*/0, /*compressed_num_blocks=*/0,
-              /*compressed_max_blocks_per_seq=*/0, q.size(1), q.size(2),
-              /*dense_compressed_kv_len=*/0, cache.size(-1), /*compressed_row_width=*/0,
-              static_cast<float>(softmax_scale), /*has_attn_sink=*/true,
-              /*precompute_probs=*/true, /*batched_verify=*/true,
-              /*dynamic_compress_ratio=*/0);
+          <<<dim3(q.size(1), q.size(0), 2),
+             kDecodeAttentionBlockSize,
+             shared_bytes,
+             stream>>>(q.data_ptr<scalar_t>(),
+                       cache.data_ptr<scalar_t>(),
+                       block_table.data_ptr<Index>(),
+                       nullptr,
+                       nullptr,
+                       nullptr,
+                       nullptr,
+                       attn_sink.data_ptr<float>(),
+                       output.data_ptr<scalar_t>(),
+                       sequence_index,
+                       kv_len - visible,
+                       visible,
+                       cache.size(1),
+                       cache.size(0),
+                       block_table.size(1),
+                       /*compressed_sequence_index=*/0,
+                       /*paged_compressed_kv_len=*/0,
+                       /*compressed_block_size=*/0,
+                       /*compressed_num_blocks=*/0,
+                       /*compressed_max_blocks_per_seq=*/0,
+                       q.size(1),
+                       q.size(2),
+                       /*dense_compressed_kv_len=*/0,
+                       cache.size(-1),
+                       /*compressed_row_width=*/0,
+                       static_cast<float>(softmax_scale),
+                       /*has_attn_sink=*/true,
+                       /*precompute_probs=*/true,
+                       /*batched_verify=*/true,
+                       /*dynamic_compress_ratio=*/0);
     };
     if (block_table.scalar_type() == torch::kInt32) {
       launch(int32_t{0});
@@ -3931,8 +3960,8 @@ torch::Tensor deepseek_v4_paged_attention_sas_batched(
   CHECK_LE(window_size, kDecodeAttentionBlockSize);
   CHECK_EQ(attn_sink.scalar_type(), torch::kFloat32);
   CHECK_EQ(attn_sink.numel(), q.size(1));
-  for (const torch::Tensor& tensor : {q, cache, block_table, kv_seq_lens,
-                                    attn_sink, output}) {
+  for (const torch::Tensor& tensor :
+       {q, cache, block_table, kv_seq_lens, attn_sink, output}) {
     CHECK(tensor.is_contiguous());
     CHECK_EQ(tensor.device(), q.device());
   }
@@ -3941,8 +3970,8 @@ torch::Tensor deepseek_v4_paged_attention_sas_batched(
   // grid is merged; every query in a sequence reads its same live full
   // context+diffusion-block window, never a per-query causal prefix.
   constexpr int32_t kContextSplits = 2;
-  const dim3 grid(q.size(1), query_rows_per_sequence,
-                  kContextSplits * block_table.size(0));
+  const dim3 grid(
+      q.size(1), query_rows_per_sequence, kContextSplits * block_table.size(0));
   const size_t shared_bytes =
       ((window_size + kDecodeAttentionBlockSize + 1) / 2) * 2 * sizeof(float) +
       window_size * sizeof(void*);
@@ -3950,22 +3979,41 @@ torch::Tensor deepseek_v4_paged_attention_sas_batched(
   DISPATCH_FLOATING_TYPES(q.scalar_type(), "dsv4_paged_sas_batched", [&] {
     auto launch = [&](auto index_tag) {
       using Index = decltype(index_tag);
-      dsv4_paged_decode_warp_fused_kernel<scalar_t, Index, kContextSplits,
-                                         /*kContextUnroll=*/1,
-                                         /*kBatchedSas=*/true>
+      dsv4_paged_decode_warp_fused_kernel<scalar_t,
+                                          Index,
+                                          kContextSplits,
+                                          /*kContextUnroll=*/1,
+                                          /*kBatchedSas=*/true>
           <<<grid, kDecodeAttentionBlockSize, shared_bytes, stream>>>(
-              q.data_ptr<scalar_t>(), cache.data_ptr<scalar_t>(),
-              block_table.data_ptr<Index>(), kv_seq_lens.data_ptr<int32_t>(),
-              nullptr, nullptr, nullptr, attn_sink.data_ptr<float>(),
-              output.data_ptr<scalar_t>(), /*requested_sequence_index=*/0,
-              /*kv_start=*/0, window_size, cache.size(1), cache.size(0),
-              block_table.size(1), /*compressed_sequence_index=*/0,
-              /*paged_compressed_kv_len=*/0, /*compressed_block_size=*/0,
-              /*compressed_num_blocks=*/0, /*compressed_max_blocks_per_seq=*/0,
-              q.size(1), q.size(2), /*dense_compressed_kv_len=*/0,
-              cache.size(-1), /*compressed_row_width=*/0,
-              static_cast<float>(softmax_scale), /*has_attn_sink=*/true,
-              /*precompute_probs=*/true, /*batched_verify=*/false,
+              q.data_ptr<scalar_t>(),
+              cache.data_ptr<scalar_t>(),
+              block_table.data_ptr<Index>(),
+              kv_seq_lens.data_ptr<int32_t>(),
+              nullptr,
+              nullptr,
+              nullptr,
+              attn_sink.data_ptr<float>(),
+              output.data_ptr<scalar_t>(),
+              /*requested_sequence_index=*/0,
+              /*kv_start=*/0,
+              window_size,
+              cache.size(1),
+              cache.size(0),
+              block_table.size(1),
+              /*compressed_sequence_index=*/0,
+              /*paged_compressed_kv_len=*/0,
+              /*compressed_block_size=*/0,
+              /*compressed_num_blocks=*/0,
+              /*compressed_max_blocks_per_seq=*/0,
+              q.size(1),
+              q.size(2),
+              /*dense_compressed_kv_len=*/0,
+              cache.size(-1),
+              /*compressed_row_width=*/0,
+              static_cast<float>(softmax_scale),
+              /*has_attn_sink=*/true,
+              /*precompute_probs=*/true,
+              /*batched_verify=*/false,
               /*dynamic_compress_ratio=*/0);
     };
     if (block_table.scalar_type() == torch::kInt32) {
@@ -4013,9 +4061,14 @@ torch::Tensor deepseek_v4_paged_attention_verify_compressed(
   CHECK_GE(compressed_capacity, 0);
   CHECK_LE(compressed_capacity, 384);
   CHECK(compression_ratio == 4 || compression_ratio == 128);
-  for (const torch::Tensor& tensor : {q, cache, block_table, kv_seq_lens,
-                                    compressed_cache, compressed_block_table,
-                                    attn_sink, output}) {
+  for (const torch::Tensor& tensor : {q,
+                                      cache,
+                                      block_table,
+                                      kv_seq_lens,
+                                      compressed_cache,
+                                      compressed_block_table,
+                                      attn_sink,
+                                      output}) {
     CHECK(tensor.is_contiguous());
     CHECK_EQ(tensor.device(), q.device());
   }
@@ -4036,7 +4089,8 @@ torch::Tensor deepseek_v4_paged_attention_verify_compressed(
   const char* splits_env = std::getenv("XLLM_DSV4_C128_CONTEXT_SPLITS");
   if (splits_env != nullptr) {
     const std::string requested(splits_env);
-    CHECK(requested == "1" || requested == "2" || requested == "4" || requested == "8")
+    CHECK(requested == "1" || requested == "2" || requested == "4" ||
+          requested == "8")
         << "C128 context splits must be 1, 2, 4 or 8";
     context_splits = static_cast<int32_t>(requested[0] - '0');
   }
@@ -4058,27 +4112,51 @@ torch::Tensor deepseek_v4_paged_attention_verify_compressed(
       const dim3 grid(q.size(1), q.size(0), kSplits);
       dsv4_paged_decode_warp_fused_kernel<scalar_t, Index, kSplits, kUnroll>
           <<<grid, block, shared_bytes, stream>>>(
-              q.data_ptr<scalar_t>(), cache.data_ptr<scalar_t>(),
-              block_table.data_ptr<Index>(), kv_seq_lens.data_ptr<int32_t>(),
-              nullptr, compressed_cache.data_ptr<scalar_t>(),
+              q.data_ptr<scalar_t>(),
+              cache.data_ptr<scalar_t>(),
+              block_table.data_ptr<Index>(),
+              kv_seq_lens.data_ptr<int32_t>(),
+              nullptr,
+              compressed_cache.data_ptr<scalar_t>(),
               compressed_block_table.data_ptr<Index>(),
-              attn_sink.data_ptr<float>(), output.data_ptr<scalar_t>(),
-              /*sequence_index=*/0, /*kv_start=*/0, kWindow,
-              cache.size(1), cache.size(0), block_table.size(1),
-              /*compressed_sequence_index=*/0, compressed_capacity,
-              compressed_cache.size(1), compressed_cache.size(0),
-              compressed_block_table.size(1), q.size(1), q.size(2),
-              /*dense_compressed_kv_len=*/0, cache.size(-1),
-              compressed_cache.size(-1), static_cast<float>(softmax_scale),
-              /*has_attn_sink=*/true, /*precompute_probs=*/true,
-              /*batched_verify=*/true, compression_ratio);
+              attn_sink.data_ptr<float>(),
+              output.data_ptr<scalar_t>(),
+              /*sequence_index=*/0,
+              /*kv_start=*/0,
+              kWindow,
+              cache.size(1),
+              cache.size(0),
+              block_table.size(1),
+              /*compressed_sequence_index=*/0,
+              compressed_capacity,
+              compressed_cache.size(1),
+              compressed_cache.size(0),
+              compressed_block_table.size(1),
+              q.size(1),
+              q.size(2),
+              /*dense_compressed_kv_len=*/0,
+              cache.size(-1),
+              compressed_cache.size(-1),
+              static_cast<float>(softmax_scale),
+              /*has_attn_sink=*/true,
+              /*precompute_probs=*/true,
+              /*batched_verify=*/true,
+              compression_ratio);
     };
     auto dispatch_splits = [&](auto index_tag, auto unroll_tag) {
       switch (context_splits) {
-        case 2: launch(index_tag, std::integral_constant<int32_t, 2>{}, unroll_tag); break;
-        case 4: launch(index_tag, std::integral_constant<int32_t, 4>{}, unroll_tag); break;
-        case 8: launch(index_tag, std::integral_constant<int32_t, 8>{}, unroll_tag); break;
-        default: launch(index_tag, std::integral_constant<int32_t, 1>{}, unroll_tag); break;
+        case 2:
+          launch(index_tag, std::integral_constant<int32_t, 2>{}, unroll_tag);
+          break;
+        case 4:
+          launch(index_tag, std::integral_constant<int32_t, 4>{}, unroll_tag);
+          break;
+        case 8:
+          launch(index_tag, std::integral_constant<int32_t, 8>{}, unroll_tag);
+          break;
+        default:
+          launch(index_tag, std::integral_constant<int32_t, 1>{}, unroll_tag);
+          break;
       }
     };
     const char* unroll_env = std::getenv("XLLM_DSV4_C128_CONTEXT_UNROLL");
@@ -4118,9 +4196,17 @@ torch::Tensor deepseek_v4_paged_attention_verify_c128(
     double softmax_scale,
     const torch::Tensor& output) {
   return deepseek_v4_paged_attention_verify_compressed(
-      q, cache, block_table, kv_seq_lens, compressed_cache,
-      compressed_block_table, compressed_capacity, /*compression_ratio=*/128,
-      attn_sink, softmax_scale, output);
+      q,
+      cache,
+      block_table,
+      kv_seq_lens,
+      compressed_cache,
+      compressed_block_table,
+      compressed_capacity,
+      /*compression_ratio=*/128,
+      attn_sink,
+      softmax_scale,
+      output);
 }
 
 torch::Tensor deepseek_v4_paged_attention_decode_with_paged_compressed_kv(
@@ -4250,17 +4336,26 @@ torch::Tensor deepseek_v4_mate_sparse_attention_decode_partitioned(
     int64_t query_width,
     const std::optional<torch::Tensor>& output) {
   CHECK(query_width == 7);
-  return try_dsv4_mate_model1_sparse_decode(
-      q, packed_cache, physical_indices, /*topk_length=*/0,
-      extra_packed_cache, extra_physical_indices, /*extra_topk_length=*/0,
-      attn_sink, softmax_scale, output, topk_lengths, extra_topk_lengths,
-      query_width);
+  return try_dsv4_mate_model1_sparse_decode(q,
+                                            packed_cache,
+                                            physical_indices,
+                                            /*topk_length=*/0,
+                                            extra_packed_cache,
+                                            extra_physical_indices,
+                                            /*extra_topk_length=*/0,
+                                            attn_sink,
+                                            softmax_scale,
+                                            output,
+                                            topk_lengths,
+                                            extra_topk_lengths,
+                                            query_width);
 }
 
 void deepseek_v4_mate_sparse_attention_set_metadata_key(int64_t metadata_key) {
   dsv4_mate_model1_metadata_key = metadata_key;
 }
-void deepseek_v4_mate_sparse_attention_set_metadata_group(int64_t metadata_group) {
+void deepseek_v4_mate_sparse_attention_set_metadata_group(
+    int64_t metadata_group) {
   dsv4_mate_model1_metadata_group = metadata_group;
 }
 
@@ -4302,8 +4397,7 @@ torch::Tensor deepseek_v4_mate_local_sparse_attention_prefill(
     int64_t compress_ratio,
     double softmax_scale,
     const std::optional<torch::Tensor>& output) {
-  const char* chunk_setting =
-      std::getenv("XLLM_DSV4_LONG_PREFILL_QUERY_CHUNK");
+  const char* chunk_setting = std::getenv("XLLM_DSV4_LONG_PREFILL_QUERY_CHUNK");
   if (chunk_setting != nullptr && q.dim() == 3 && kv.dim() == 2 &&
       kv.size(0) >= 4096) {
     char* end = nullptr;
@@ -4314,7 +4408,8 @@ torch::Tensor deepseek_v4_mate_local_sparse_attention_prefill(
       // The pinned H64 AOT has 60 persistent CTAs. Restrict each launch to
       // at most one query per CTA, avoiding barrier-phase reuse across
       // logical queries. All keys and absolute causal positions are kept.
-      auto owned_output = output.has_value() ? output.value() : torch::empty_like(q);
+      auto owned_output =
+          output.has_value() ? output.value() : torch::empty_like(q);
       CHECK_EQ(owned_output.sizes(), q.sizes());
       const char* prepare_once_env =
           std::getenv("XLLM_DSV4_PREFILL_PREPARE_ONCE");
@@ -4322,9 +4417,17 @@ torch::Tensor deepseek_v4_mate_local_sparse_attention_prefill(
                                 std::string(prepare_once_env) == "1" &&
                                 q.size(0) <= 4096;
       if (prepare_once) {
-        auto result = try_dsv4_mate_model1_local_sparse_prefill(
-            q, kv, compressed_kv, compressed_indices, attn_sink, q_abs_start,
-            compress_ratio, softmax_scale, owned_output, chunk);
+        auto result =
+            try_dsv4_mate_model1_local_sparse_prefill(q,
+                                                      kv,
+                                                      compressed_kv,
+                                                      compressed_indices,
+                                                      attn_sink,
+                                                      q_abs_start,
+                                                      compress_ratio,
+                                                      softmax_scale,
+                                                      owned_output,
+                                                      chunk);
         if (result.defined()) {
           return result;
         }
@@ -4341,15 +4444,22 @@ torch::Tensor deepseek_v4_mate_local_sparse_attention_prefill(
           row_indices = compressed_indices.narrow(0, first, count).contiguous();
         }
         auto result = try_dsv4_mate_model1_local_sparse_prefill(
-            q.narrow(0, first, count).contiguous(), kv, compressed_kv, row_indices,
-            attn_sink, q_abs_start + first, compress_ratio, softmax_scale,
+            q.narrow(0, first, count).contiguous(),
+            kv,
+            compressed_kv,
+            row_indices,
+            attn_sink,
+            q_abs_start + first,
+            compress_ratio,
+            softmax_scale,
             owned_output.narrow(0, first, count));
         if (!result.defined()) {
           return torch::Tensor();
         }
       }
-      LOG_FIRST_N(INFO, 1) << "[DSV4_LOCAL_PREFILL_QUERY_CHUNK] rows=" << q.size(0)
-                         << " chunk=" << chunk << " kv=" << kv.size(0);
+      LOG_FIRST_N(INFO, 1) << "[DSV4_LOCAL_PREFILL_QUERY_CHUNK] rows="
+                           << q.size(0) << " chunk=" << chunk
+                           << " kv=" << kv.size(0);
       return owned_output;
     }
   }

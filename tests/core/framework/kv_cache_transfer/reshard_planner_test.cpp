@@ -27,6 +27,7 @@ limitations under the License.
 
 #include "framework/kv_cache/cache_layout_builder.h"
 #include "framework/kv_cache/kv_cache_utils.h"
+#include "tests/core/framework/kv_cache_transfer/scoped_environment_variable.h"
 
 namespace xllm {
 
@@ -756,6 +757,53 @@ TEST(ReshardPlannerTest, MqaReplicationUsesOneStaticSourceWriter) {
     EXPECT_FALSE(owner_plan.regions.empty());
     EXPECT_TRUE(replica_plan.regions.empty());
   }
+}
+
+TEST(ReshardPlannerTest, PcpSelectsTp4HeadRangesForEveryTp8Destination) {
+  tests::ScopedEnvironmentVariable pcp("XLLM_DSV4_PCP");
+  ASSERT_TRUE(pcp.set("1"));
+  const auto sources =
+      make_instance(/*tp_size=*/4, /*global_heads=*/8, 3, "source");
+  const auto destinations =
+      make_instance(/*tp_size=*/8, /*global_heads=*/8, 17, "destination");
+  ReshardPlanner planner;
+  for (const auto& destination : destinations) {
+    std::vector<size_t> selected;
+    ASSERT_TRUE(planner.select_sources(sources, destination, &selected).ok());
+    ASSERT_EQ(selected.size(), 1);
+    EXPECT_EQ(selected.front(),
+              static_cast<size_t>(destination.coordinates.tp_rank / 2));
+    EXPECT_TRUE(
+        planner.validate_destination_coverage(sources, destination).ok());
+  }
+}
+
+TEST(ReshardPlannerTest, PcpRejectsMissingHeadCoverage) {
+  tests::ScopedEnvironmentVariable pcp("XLLM_DSV4_PCP");
+  ASSERT_TRUE(pcp.set("1"));
+  auto sources = make_instance(/*tp_size=*/4, /*global_heads=*/8, 3, "source");
+  for (auto& span : sources[2].tensors[0].shard.spans) {
+    span.logical_tensor = "unrelated_key";
+  }
+  const auto destination = make_head_manifest(
+      /*tp_rank=*/4, /*tp_size=*/8, /*global_heads=*/8, 17, "destination");
+  const Status status =
+      ReshardPlanner().validate_destination_coverage(sources, destination);
+  EXPECT_FALSE(status.ok());
+}
+
+TEST(ReshardPlannerTest, PcpRejectsFingerprintMismatch) {
+  tests::ScopedEnvironmentVariable pcp("XLLM_DSV4_PCP");
+  ASSERT_TRUE(pcp.set("1"));
+  const auto sources =
+      make_instance(/*tp_size=*/4, /*global_heads=*/8, 3, "source");
+  auto destination = make_head_manifest(
+      /*tp_rank=*/0, /*tp_size=*/8, /*global_heads=*/8, 17, "destination");
+  destination.fingerprint = "different-model";
+  const Status status =
+      ReshardPlanner().validate_destination_coverage(sources, destination);
+  EXPECT_FALSE(status.ok());
+  EXPECT_NE(status.message().find("incompatible"), std::string::npos);
 }
 
 TEST(ReshardPlannerTest, GqaReplicationUsesContiguousSourceWriters) {

@@ -14,6 +14,7 @@ limitations under the License.
 ==============================================================================*/
 
 #include <glog/logging.h>
+#include <tvm/ffi/container/tuple.h>
 
 #include <exception>
 #include <fstream>
@@ -69,7 +70,7 @@ torch::Tensor deepseek_v4_gate_bf16_fp32(
   auto weight_contig = weight.contiguous();
   auto out_contig = out.contiguous();
   auto input_batched = input_contig.unsqueeze(0);
-  auto weight_nt = weight_contig.unsqueeze(0).transpose(1, 2);
+  auto weight_batched = weight_contig.unsqueeze(0);
   auto output_batched = out_contig.unsqueeze(0);
 
   try {
@@ -82,25 +83,31 @@ torch::Tensor deepseek_v4_gate_bf16_fp32(
     const tvm::ffi::Function run = [&]() {
       if (uri == "gemm_ops") {
         static const tvm::ffi::Optional<tvm::ffi::Function> default_run = [] {
-          return get_module("gemm_ops")->GetFunction("bmm_fp16");
+          return get_module("gemm_ops")->GetFunction("bmm");
         }();
         if (!default_run.defined()) {
-          throw std::runtime_error("gemm_ops does not export bmm_fp16");
+          throw std::runtime_error("gemm_ops does not export MATE 0.2.7 bmm");
         }
         return default_run.value();
       }
-      auto run_opt = get_module(uri)->GetFunction("bmm_fp16");
+      auto run_opt = get_module(uri)->GetFunction("bmm");
       if (!run_opt.defined()) {
-        throw std::runtime_error(uri + " does not export bmm_fp16");
+        throw std::runtime_error(uri + " does not export MATE 0.2.7 bmm");
       }
       return run_opt.value();
     }();
     const auto invoke = [&]() {
       run(to_ffi_tensor(input_batched),
-          to_ffi_tensor(weight_nt),
+          to_ffi_tensor(weight_batched),
           to_ffi_tensor(output_batched),
           to_ffi_optional_tensor(std::nullopt),
-          std::string("auto"));
+          to_ffi_optional_tensor(std::nullopt),
+          to_ffi_optional_tensor(std::nullopt),
+          tvm::ffi::Tuple<int64_t, int64_t>(-1, -1),
+          tvm::ffi::Tuple<int64_t, int64_t>(-1, -1),
+          /*trans_a=*/false,
+          /*trans_b=*/true,
+          /*fixed_scale_layout=*/false);
     };
     // The router projection is immediately consumed by fused TopK and has no
     // independent work to overlap.  Run it on Torch's current MUSA stream so
@@ -128,7 +135,7 @@ torch::Tensor deepseek_v4_gate_bf16_fp32(
   if (!out.is_contiguous()) {
     out.copy_(out_contig);
   }
-  LOG_FIRST_N(INFO, 1) << "[DSV4_MUSA_GATE] Mate bmm_fp16 active: M=" << m
+  LOG_FIRST_N(INFO, 1) << "[DSV4_MUSA_GATE] Mate 0.2.7 bmm active: M=" << m
                        << " N=" << n << " K=" << k << " output=fp32";
   return out;
 }

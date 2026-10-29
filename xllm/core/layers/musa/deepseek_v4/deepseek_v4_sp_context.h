@@ -15,8 +15,8 @@ limitations under the License.
 
 #pragma once
 
-#include <torch/torch.h>
 #include <musa_runtime_api.h>
+#include <torch/torch.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -25,9 +25,9 @@ limitations under the License.
 #include <string>
 #include <utility>
 
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/framework/parallel_state/parallel_state.h"
 #include "core/framework/parallel_state/process_group.h"
-#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "core/kernels/musa/musa_ops_api.h"
 
 namespace xllm::layer::dsv4_musa_sp {
@@ -40,6 +40,10 @@ struct DeepseekV4SPContext {
   int64_t local_tokens = 0;
   int64_t local_valid_tokens = 0;
   int64_t local_offset = 0;
+  // Absolute position of this SP shard inside the full global prompt. Plain
+  // TP+SP leaves it zero; a PCP group's SP context carries the owning CP
+  // group's row start so RoPE tables and causal offsets stay global.
+  int64_t global_row_start = 0;
   // Hash routing consumes the same unsharded ids in every layer. Retaining
   // the model-owned view avoids another token collective around each MoE.
   torch::Tensor global_input_ids;
@@ -51,7 +55,8 @@ struct GatherGlobalAsync {
   c10::intrusive_ptr<c10d::Work> work;
 };
 
-inline bool long_prefill_rendezvous_enabled(const DeepseekV4SPContext& context) {
+inline bool long_prefill_rendezvous_enabled(
+    const DeepseekV4SPContext& context) {
   const char* setting = std::getenv("XLLM_DSV4_LONG_PREFILL_RENDEZVOUS");
   return context.total_tokens >= 4096 && setting != nullptr &&
          std::string(setting) == "1";
@@ -64,8 +69,8 @@ inline void begin_long_prefill_collective(const DeepseekV4SPContext& context) {
   // Do not let a fast rank launch spinning MCCL work while another rank is
   // still producing local tensors or reclaiming allocator storage. This is
   // opt-in and long-prefill-only; short B1 and Graph decode never enter it.
-  LOG_FIRST_N(INFO, 1)
-      << "[DSV4_LONG_PREFILL_RENDEZVOUS] total_tokens=" << context.total_tokens;
+  LOG_FIRST_N(INFO, 1) << "[DSV4_LONG_PREFILL_RENDEZVOUS] total_tokens="
+                       << context.total_tokens;
   CHECK_EQ(musaDeviceSynchronize(), musaSuccess);
   musa_long_prefill_host_barrier(context.process_group);
 }
@@ -160,7 +165,8 @@ inline torch::Tensor gather_global(const torch::Tensor& local_tensor,
     shape.insert(shape.begin(), context.world_size);
     gathered = torch::empty(shape, contiguous.options());
     begin_long_prefill_collective(context);
-    auto work = context.process_group->allgather_base_async(contiguous, gathered);
+    auto work =
+        context.process_group->allgather_base_async(contiguous, gathered);
     work->wait();
     finish_long_prefill_collective(context);
   } else {
