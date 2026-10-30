@@ -97,7 +97,8 @@ void apply_top_k_top_p_torch_impl(torch::Tensor& logits,
 void apply_top_k_top_p(torch::Tensor& logits,
                        const torch::Tensor& temperatures,
                        const torch::Tensor& top_k,
-                       const torch::Tensor& top_p) {
+                       const torch::Tensor& top_p,
+                       TopKSampleWindow* sample_window) {
   if (temperatures.defined()) {
     apply_temperatures(logits, temperatures);
   }
@@ -151,6 +152,13 @@ void apply_top_k_top_p(torch::Tensor& logits,
       auto p_mask = cum > p;
       p_mask.index_put_({torch::indexing::Ellipsis, 0}, false);
       sorted.masked_fill_(p_mask, ninf);
+    }
+    // k=5 still softmaxes the whole vocabulary after scatter. Keep the window
+    // so the sampler can draw from these k logits instead.
+    if (sample_window != nullptr && top_k.defined() && !top_p.defined() &&
+        k <= 32) {
+      sample_window->values = sorted;
+      sample_window->indices = idx.to(torch::kLong);
     }
     logits.fill_(ninf);
     logits.scatter_(/*dim=*/-1,

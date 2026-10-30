@@ -40,9 +40,16 @@ void apply_repetition_penalties(torch::Tensor& logits,
 void apply_temperatures(torch::Tensor& logits,
                         const torch::Tensor& temperatures);
 
+// Small top-k window kept for sampling without a full-vocabulary softmax.
+struct TopKSampleWindow {
+  torch::Tensor values;   // [rows, k], logit dtype, masked with -inf
+  torch::Tensor indices;  // [rows, k], int64 vocab ids
+};
+
 void apply_top_k_top_p(torch::Tensor& logits,
                        const torch::Tensor& temperatures,
                        const torch::Tensor& top_k,
-                       const torch::Tensor& top_p);
+                       const torch::Tensor& top_p,
+                       TopKSampleWindow* sample_window = nullptr);
 
 }  // namespace xllm
