@@ -71,6 +71,13 @@ void forward_output_to_proto(
     proto::ForwardOutput* pb_forward_output,
     const std::vector<MMDict>& mm_dict_vec = {});
 
+// Bring sample-output token tensors to CPU once so build_token()'s .item()
+// reads do not each synchronize the GPU stream.
+void ensure_sample_token_tensors_on_cpu(torch::Tensor& next_tokens,
+                                        torch::Tensor& logprobs,
+                                        torch::Tensor& top_tokens,
+                                        torch::Tensor& top_logprobs);
+
 Token build_token(int64_t index,
                   torch::Tensor token_ids,
                   torch::Tensor logprobs,

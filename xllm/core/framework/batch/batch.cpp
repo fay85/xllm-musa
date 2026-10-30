@@ -760,10 +760,19 @@ void Batch::process_beam_sequence_group(const ForwardOutput& output) {
 void Batch::process_sample_output(const SampleOutput& sample_output,
                                   bool replace_fake_token,
                                   bool force_requested_beam_result_size) {
-  const bool has_next_tokens = sample_output.next_tokens.defined() &&
-                               sample_output.next_tokens.numel() > 0;
+  // Bulk D2H once per step. Without this, build_token / per-token .item() on
+  // device tensors each call musaStreamSynchronize (smoke18 sync storm).
+  torch::Tensor next_tokens = sample_output.next_tokens;
+  torch::Tensor logprobs = sample_output.logprobs;
+  torch::Tensor top_tokens = sample_output.top_tokens;
+  torch::Tensor top_logprobs = sample_output.top_logprobs;
+  ensure_sample_token_tensors_on_cpu(
+      next_tokens, logprobs, top_tokens, top_logprobs);
+
+  const bool has_next_tokens =
+      next_tokens.defined() && next_tokens.numel() > 0;
   const bool next_tokens_are_spec_width =
-      has_next_tokens && sample_output.next_tokens.dim() == 2;
+      has_next_tokens && next_tokens.dim() == 2;
   if (sample_output.embeddings.defined() && !next_tokens_are_spec_width) {
     const int64_t num_seqs = sample_output.embeddings.size(0);
     int64_t output_idx = 0;
@@ -775,13 +784,13 @@ void Batch::process_sample_output(const SampleOutput& sample_output,
   }
   if (sample_output.embeddings.defined() && next_tokens_are_spec_width) {
     const int64_t num_embedding_rows = sample_output.embeddings.size(0);
-    const int64_t num_token_rows = sample_output.next_tokens.size(0);
+    const int64_t num_token_rows = next_tokens.size(0);
     int64_t output_idx = 0;
     const auto sequences = get_sequences();
     for (auto* seq : sequences) {
       CHECK_LT(output_idx, num_token_rows);
       CHECK_LT(output_idx, num_embedding_rows);
-      const auto curr_next_tokens = sample_output.next_tokens[output_idx];
+      const auto curr_next_tokens = next_tokens[output_idx];
 
       int64_t last_token_idx = -1;
       const int64_t num_tokens = curr_next_tokens.size(0);
@@ -805,10 +814,10 @@ void Batch::process_sample_output(const SampleOutput& sample_output,
     }
   }
 
-  // if sample_output.next_tokens not defined,
-  // sample_output.next_tokens.size(0) value is 0,
+  // if next_tokens not defined,
+  // next_tokens.size(0) value is 0,
   // this means all sequences are in prefill stage status.
-  const int64_t num_outputs = sample_output.next_tokens.size(0);
+  const int64_t num_outputs = next_tokens.size(0);
   for (size_t pos = 0;
        pos < sample_output.mm_dict_vec.size() && pos < sequences_.size();
        ++pos) {
@@ -848,17 +857,17 @@ void Batch::process_sample_output(const SampleOutput& sample_output,
     }
 
     if (next_tokens_are_spec_width) {
-      const auto curr_next_tokens = sample_output.next_tokens[output_idx];
-      const auto curr_logprobs = sample_output.logprobs.defined()
-                                     ? sample_output.logprobs[output_idx]
-                                     : sample_output.logprobs;
-      const auto curr_top_tokens = sample_output.top_tokens.defined()
-                                       ? sample_output.top_tokens[output_idx]
-                                       : sample_output.top_tokens;
+      const auto curr_next_tokens = next_tokens[output_idx];
+      const auto curr_logprobs = logprobs.defined()
+                                     ? logprobs[output_idx]
+                                     : logprobs;
+      const auto curr_top_tokens = top_tokens.defined()
+                                       ? top_tokens[output_idx]
+                                       : top_tokens;
       const auto curr_top_logprobs =
-          sample_output.top_logprobs.defined()
-              ? sample_output.top_logprobs[output_idx]
-              : sample_output.top_logprobs;
+          top_logprobs.defined()
+              ? top_logprobs[output_idx]
+              : top_logprobs;
 
       const int64_t num_tokens = curr_next_tokens.size(0);
       bool appended_token = false;
@@ -888,10 +897,10 @@ void Batch::process_sample_output(const SampleOutput& sample_output,
     }
 
     const auto token = build_token(output_idx,
-                                   sample_output.next_tokens,
-                                   sample_output.logprobs,
-                                   sample_output.top_tokens,
-                                   sample_output.top_logprobs);
+                                   next_tokens,
+                                   logprobs,
+                                   top_tokens,
+                                   top_logprobs);
 
     // always append a token, maybe true or fake token
     append_token_for_sequence(seq, token, 0, replace_fake_token);
