@@ -131,10 +131,35 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
   }
 
   // apply temperatures, top-k and top-p
-  apply_top_k_top_p(
-      sample_logits, sample_temperatures, sample_top_k, sample_top_p);
+  TopKSampleWindow topk_window;
+  apply_top_k_top_p(sample_logits,
+                    sample_temperatures,
+                    sample_top_k,
+                    sample_top_p,
+                    &topk_window);
   if (use_sample_indices) {
     logits.index_copy_(/*dim=*/0, params.sample_idxes, sample_logits);
+  }
+
+  // top_k<=32 and no top_p: sample inside the window. Full-vocab softmax and
+  // cumsum only renormalize k finite logits. Scatter the window probs back so
+  // MTP rejection still sees a dense distribution.
+  if (topk_window.values.defined() && params.all_random_sample &&
+      !params.logprobs) {
+    auto window_probs = torch::softmax(
+        topk_window.values, /*dim=*/-1, /*dtype=*/torch::kFloat32);
+    auto picks = random_sample(window_probs);
+    auto next_tokens =
+        topk_window.indices.gather(/*dim=*/-1, picks.view({-1, 1})).view({-1});
+    auto probs = torch::zeros(
+        {sample_logits.size(0), sample_logits.size(1)},
+        torch::TensorOptions()
+            .dtype(torch::kFloat32)
+            .device(sample_logits.device()));
+    probs.scatter_(/*dim=*/-1, /*index=*/topk_window.indices, /*src=*/window_probs);
+    output.probs = probs;
+    output.next_tokens = next_tokens.to(torch::kLong);
+    return output;
   }
 
   CHECK(params.do_sample.defined()) << "params.do_sample must be defined";
