@@ -24,6 +24,7 @@ limitations under the License.
 #include "common/metrics.h"
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/multimodal/mm_batch_data.h"
+#include "util/tensor_helper.h"
 #include "util/timer.h"
 #include "util/utils.h"
 
@@ -180,10 +181,10 @@ void proto_to_forward_output(const proto::ForwardOutput& pb_output,
 }
 
 void forward_output_to_proto(
-    const torch::Tensor& next_tokens,
-    const torch::Tensor& logprobs,
-    const torch::Tensor& top_tokens,
-    const torch::Tensor& top_logprobs,
+    const torch::Tensor& next_tokens_in,
+    const torch::Tensor& logprobs_in,
+    const torch::Tensor& top_tokens_in,
+    const torch::Tensor& top_logprobs_in,
     const torch::Tensor& embeddings,
     const std::vector<std::vector<torch::Tensor>>& mm_embeddings,
     const std::vector<SpeculativeTokenStats>& speculative_token_stats,
@@ -200,6 +201,13 @@ void forward_output_to_proto(
     proto::ForwardOutput* pb_forward_output,
     const std::vector<MMDict>& mm_dict_vec) {
   Timer timer;
+  // One bulk D2H for token ids / logprobs so build_token .item() stays on CPU.
+  torch::Tensor next_tokens = next_tokens_in;
+  torch::Tensor logprobs = logprobs_in;
+  torch::Tensor top_tokens = top_tokens_in;
+  torch::Tensor top_logprobs = top_logprobs_in;
+  ensure_sample_token_tensors_on_cpu(
+      next_tokens, logprobs, top_tokens, top_logprobs);
   // LLM decode fills next_tokens; DiT text diffusion (e.g. Cola-DLM) may leave
   // it undefined and only populate dit_text_output. Guard before
   // .size()/.dim().
@@ -415,11 +423,43 @@ void forward_output_to_proto(
   return;
 }
 
+void ensure_sample_token_tensors_on_cpu(torch::Tensor& next_tokens,
+                                        torch::Tensor& logprobs,
+                                        torch::Tensor& top_tokens,
+                                        torch::Tensor& top_logprobs) {
+  auto bring = [](torch::Tensor& t) {
+    if (t.defined() && !t.is_cpu()) {
+      // Blocking D2H: one stream sync for the whole tensor, not per .item().
+      t = safe_to(t, torch::kCPU, /*non_blocking=*/false);
+    }
+  };
+  bring(next_tokens);
+  bring(logprobs);
+  bring(top_tokens);
+  bring(top_logprobs);
+}
+
 Token build_token(int64_t index,
                   torch::Tensor token_ids,
                   torch::Tensor logprobs,
                   torch::Tensor top_tokens,
                   torch::Tensor top_logprobs) {
+  // Callers should bulk-D2H via ensure_sample_token_tensors_on_cpu first.
+  // Defensive: if a tensor is still on device, move it once here (still far
+  // cheaper than per-index .item() sync when the whole row is moved).
+  if (token_ids.defined() && !token_ids.is_cpu()) {
+    token_ids = safe_to(token_ids, torch::kCPU, /*non_blocking=*/false);
+  }
+  if (logprobs.defined() && !logprobs.is_cpu()) {
+    logprobs = safe_to(logprobs, torch::kCPU, /*non_blocking=*/false);
+  }
+  if (top_tokens.defined() && !top_tokens.is_cpu()) {
+    top_tokens = safe_to(top_tokens, torch::kCPU, /*non_blocking=*/false);
+  }
+  if (top_logprobs.defined() && !top_logprobs.is_cpu()) {
+    top_logprobs = safe_to(top_logprobs, torch::kCPU, /*non_blocking=*/false);
+  }
+
   Token token(token_ids[index].item<int64_t>());
   if (logprobs.defined()) {
     token.logprob = logprobs[index].item<float>();
