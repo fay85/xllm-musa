@@ -158,7 +158,9 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
     samples = torch::where(params.do_sample, random, greedy);
   }
   auto sample_indices = samples.to(torch::kLong);
-  output.probs = probs.to(logits.dtype());
+  // Softmax is already FP32, which random_sample and MTP rejection both read.
+  // Casting the full vocabulary back to the logit dtype only adds a CastOp.
+  output.probs = probs;
   output.next_tokens = sample_indices;
 
   if (params.logprobs) {
