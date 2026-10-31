@@ -4,12 +4,12 @@
 #   - explicit: values this stack still applies (edit config, then restart)
 # One-off overrides: export VL_<NAME> before sourcing (e.g. VL_MTP_K=1).
 
-KIT_DIR=/workspace/xllm-mt-main/tools/musa_qwen3_8_vl_bench
-REPO_DIR=/workspace/xllm-mt-main
+KIT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+REPO_DIR=$(cd "$KIT_DIR/../.." && pwd)
 
 PROFILE=${VL_PROFILE:-large_kv_rr}
 case "$PROFILE" in
-  large_kv_rr|baseline) source "$KIT_DIR/profiles/$PROFILE.env" ;;
+  large_kv_rr|baseline|d1029_unified) source "$KIT_DIR/profiles/$PROFILE.env" ;;
   *) echo "ERROR: unsupported VL_PROFILE=$PROFILE" >&2; return 1 ;;
 esac
 
@@ -41,7 +41,7 @@ PREFILL_GPUS=${VL_PREFILL_GPUS:-"0,1 2,3 4,5"}
 DECODE_GPUS=${VL_DECODE_GPUS:-"6 7"}
 
 CONC=${VL_CONC:-16}
-MTP_K=${VL_MTP_K:-3}
+MTP_K=${VL_MTP_K:-${PROFILE_MTP_K:-3}}
 ENABLE_MTP=${VL_ENABLE_MTP:-true}
 
 MAX_MEMORY_UTILIZATION=${VL_MAX_MEMORY_UTILIZATION:-$PROFILE_MEMORY_UTILIZATION}
