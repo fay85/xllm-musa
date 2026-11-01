@@ -10,8 +10,8 @@ acceptance run was not available on a healthy three-host topology.
 |---|---|---|
 | One Service binary for both models | **Yes, with the Native V2 fix below** | Qwen `xllm_master_serving` Router + Coordinator registered DeepSeek P/D and served a strict `1..10` request. The unmodified binary failed closed with `Native Provider Descriptor has invalid repeated fields`. |
 | One `xllm` binary for Qwen P/D | **Yes** | Using the Decode binary for all six Qwen Prefill ranks and two Decode ranks: 68/68 image checks; warmed C6 was TTFT 534.3 ms / TPOT 15.68 ms versus the paired-binary 546.0 / 15.17 ms baseline. |
-| One `xllm` binary for DeepSeek P/D | **No, not with the current source** | CMake selects different DeepSeek layer/kernel sources for `XLLM_DSV4_PD_ROLE=prefill` and `decode`; the decode overlay is not a runtime option. |
-| One `xllm` binary for both DeepSeek and Qwen | **Not claimed** | It would require merging or runtime-dispatching the role-specific DeepSeek overlay, then a new full P/D acceptance run. |
+| One `xllm` binary for DeepSeek P/D | **Starts and registers, but fails correctness** | Forcing the fixed Decode binary into both DeepSeek roles registered both engines and passed the short `1..10` request, but a 3072-token strict counting request returned `processes` instead of `1..50`. It is not a production candidate. |
+| One `xllm` binary for both DeepSeek and Qwen | **No production candidate** | Qwen's Decode binary works for both Qwen roles; DeepSeek still needs role-specific P/D behavior. A runtime overlay merge would require new correctness and performance validation. |
 | AOT in one flat directory | **No** | Six relative paths collide with different hashes, including five `mate_gdn_mtp_checkpoint_hq16_hv48_bf16_t{2..6}` binaries and `MANIFEST.txt`. |
 | AOT under one parent with model-specific roots | **Yes** | Keep `aot/deepseek` and `aot/qwen` as separate lookup roots. Do not flatten the six collisions. |
 
@@ -46,6 +46,9 @@ paths are included.
 
 - Qwen, one binary for all P/D roles: **68/68** intact-five-image checks.
 - DeepSeek fixed Native V2 Service: strict count request `1..10` passed.
+- DeepSeek one-Decode-binary-for-P/D experiment: short `1..10` passed, but
+  3072-token strict counting failed with output `processes`; this is the reason
+  the one-binary option is rejected for DeepSeek.
 - DeepSeek GSM8K smoke: 20 frozen questions produced the expected numeric
   answer on **20/20**; a literal string checker reported 19/20 only because
   one correct answer was returned as `60%` rather than `60`.
