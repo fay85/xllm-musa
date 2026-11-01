@@ -144,7 +144,11 @@ std::vector<std::string> cache_groups(
   for (size_t index = 0; index < options.manager_types().size(); ++index) {
     const BlockType block_type =
         static_cast<BlockType>(options.manager_types()[index]);
-    groups.emplace_back("group:" + std::to_string(cache_group_id(block_type)));
+    const std::string group =
+        "group:" + std::to_string(cache_group_id(block_type));
+    if (std::find(groups.begin(), groups.end(), group) == groups.end()) {
+      groups.emplace_back(group);
+    }
   }
   return groups;
 }
