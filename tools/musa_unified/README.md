@@ -7,6 +7,10 @@
 
 本次工具/pack的实际验证范围见[验证记录](VALIDATION_20261031.md)：隔离目录Qwen68/68、120条性能门禁通过；DeepSeek仅完成Control CPU启动，完整PD/GSM8K仍待健康机器验收。
 
+DeepSeek/Qwen 共用 Service、单二进制和 AOT 冲突的控制变量实验见
+[UNIFIED_MODEL_COMPATIBILITY_20261102.md](UNIFIED_MODEL_COMPATIBILITY_20261102.md)。其中
+Native V2 cache group 去重修复只影响 Service descriptor 构造，不改变模型数学或算子路径。
+
 ## 1. 当前已经验证的版本在哪里
 
 共享盘现有构建：
