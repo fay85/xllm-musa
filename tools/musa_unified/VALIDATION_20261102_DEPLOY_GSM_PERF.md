@@ -80,3 +80,33 @@ Evidence:
 
 These are **1P1D** numbers, not the unavailable healthy three-host 2P1D
 numbers. A full 2P1D run remains blocked by the 90 GPU3 hardware condition.
+
+## 2P1D + PCP follow-up on 92/94/96
+
+The two idle Qwen Decode processes on 92 were stopped by exact container-owned
+PIDs. A real PCP topology was then started with 92 as Control/P0, 94 as P1,
+and 96 as Decode. The Qwen Service control plane reported three registered
+engines (`2 Prefill + 1 Decode`) and `READY`; all three 8-rank groups were
+alive. No GPU reset was used.
+
+Strict `20K/100`, `cached_tokens=16000`, and `1..50` output gates passed:
+
+| Concurrency | TTFT mean | TPOT mean | Output throughput | Gate |
+|---:|---:|---:|---:|---|
+| B1 | **1177.97 ms** | **9.24 ms** | **47.70 tok/s** | passed |
+| B16 | **3274.84 ms** | **12.19 ms** | **210.36 tok/s** | passed |
+
+The B16 warm stage passed all 32 requests with exact cache accounting and
+TPOT mean `17.23 ms`; the formal B16 stage passed all 16 requests with TPOT
+`12.19 ms`. Evidence is under:
+
+```text
+/data/nfs_shared/jd/unified_toolkit_20261031/pcp_92_94_96_20261102/
+  perf_b1/summary.json
+  perf_b16/summary.json
+  gsm100/summary.json
+```
+
+A PCP GSM8K smoke over the first 100 frozen questions passed **98/100** with
+no HTTP errors. The full 1319 GSM run was not repeated on PCP after the
+single-thread 1P1D run; the 1P1D full score remains `1277/1319 = 96.82%`.
