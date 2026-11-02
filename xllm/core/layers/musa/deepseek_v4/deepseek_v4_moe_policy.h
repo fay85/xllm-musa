@@ -15,7 +15,7 @@ inline bool dsv4_compact_prefill_fp8_eligible(int64_t rows,
   // These are post-SP-gather rows, not the local Attention shard. Preserve
   // small Prefill/hot and draft blocks. The extended 13616/16384-row full
   // pipeline and dynamic replay checks retain the BF16 router contract.
-  return rows >= kDsv4PrefillReduceMinRows &&
+  return rows >= kDsv4CompactPrefillMinRows &&
          rows <= kDsv4PrefillReduceMaxRows && is_prefill_like &&
          all_experts_local && fp8_ready;
 }

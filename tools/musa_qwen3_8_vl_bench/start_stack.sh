@@ -7,7 +7,10 @@
 # Knobs: edit /workspace/config.json (explicit vs binary_default_on).
 # One-offs: VL_MTP_K=1 ./start_stack.sh   or   VL_ENABLE_MTP=false ./start_stack.sh
 set -u
-source /workspace/xllm-mt-main/tools/musa_qwen3_8_vl_bench/env.sh || exit $?
+if [[ ${VL_PROFILE:-} == d1029_unified ]]; then
+  exec bash "$(dirname "$0")/start_stack_d1029.sh" "$@"
+fi
+source "$(dirname "$0")/env.sh" || exit $?
 
 if [[ -n ${MCCL_MIN_NCHANNELS_PIN:-} ]]; then
   export MCCL_MIN_NCHANNELS=$MCCL_MIN_NCHANNELS_PIN

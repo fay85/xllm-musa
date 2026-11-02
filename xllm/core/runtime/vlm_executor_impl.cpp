@@ -13,15 +13,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "vlm_executor_impl.h"
+#include "core/runtime/vlm_executor_impl.h"
 
 #include <glog/logging.h>
 
-#include "common/global_flags.h"
-#include "common/metrics.h"
 #include "core/framework/config/execution_config.h"
-#include "platform/device.h"
-#include "platform/platform.h"
+#include "core/platform/platform.h"
+#include "core/runtime/base_executor_impl.h"
 
 namespace xllm {
 
@@ -34,9 +32,13 @@ VlmExecutorImpl::VlmExecutorImpl(CausalLM* model,
       device_(device),
       options_(options),
       encoder_executor_(options.max_encoder_cache_size() * 1024 * 1024) {
+  CHECK(model != nullptr);
   if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
     llm_executor_ = ExecutorImplFactory::get_instance().create_executor_impl(
         model, args, device, options, Platform::type_str());
+  } else if (model_ == nullptr) {
+    llm_executor_ =
+        std::make_unique<BaseExecutorImpl>(model, args, device, options);
   }
 }
 
@@ -52,6 +54,7 @@ ForwardInput VlmExecutorImpl::prepare_inputs(Batch& batch) {
 }
 
 MMDict VlmExecutorImpl::encode(const ModelInputParams& params) {
+  CHECK(model_ != nullptr) << "A language-only model cannot encode images";
   return model_->encode(params);
 }
 
@@ -61,6 +64,17 @@ ModelOutput VlmExecutorImpl::run(const torch::Tensor& tokens,
                                  const ModelInputParams& params) {
   torch::NoGradGuard no_grad;
   auto& mm_data = params.multimodal.mm_data;
+  // MTP draft models inherit the VLM runtime options but are CausalLMs.
+  // Select their language executor before any CausalVLM-only operation.
+  if (model_ == nullptr) {
+    CHECK(!mm_data.valid())
+        << "A language-only draft received unprocessed multimodal data";
+    const torch::Tensor draft_positions =
+        params.meta.batch_forward_type.is_decode()
+            ? collapse_mrope_decode_positions(positions)
+            : positions;
+    return llm_executor_->run(tokens, draft_positions, kv_caches, params);
+  }
 
   // Pure decode carries no multimodal data. Its mRoPE positions degenerate to
   // identical rows, so they collapse to the 1-D vector ordinary rope and the
