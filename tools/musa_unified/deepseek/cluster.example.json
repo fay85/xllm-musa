@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "cluster_name": "deepseek-d1029",
+  "pack_root": "/opt/xllm_pack",
+  "run_root": "/data/xllm_runs/deepseek-d1029",
+  "model_path": "/data/nfs_shared/models/DeepSeek-V4-Flash-0731-FP8-mt",
+  "model_id": "DeepSeek-V4-Flash-0731-FP8-mt",
+  "control": {
+    "host": "REPLACE_CONTROL_IP",
+    "http_port": 24888,
+    "rpc_port": 24889,
+    "etcd_port": 24379,
+    "etcd_peer_port": 24380
+  },
+  "decode": {
+    "host": "REPLACE_DECODE_IP",
+    "port": 25882,
+    "master_port": 26882,
+    "transfer_port": 28480,
+    "mooncake_port": 31480,
+    "pd_port": 7918
+  },
+  "prefill": [
+    {"host": "REPLACE_PREFILL0_IP", "port": 25881, "master_port": 26881,
+     "transfer_port": 28340, "mooncake_port": 31340, "pd_port": 7917},
+    {"host": "REPLACE_PREFILL1_IP", "port": 25881, "master_port": 26881,
+     "transfer_port": 28400, "mooncake_port": 31400, "pd_port": 7917}
+  ]
+}

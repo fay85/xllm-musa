@@ -1,0 +1,260 @@
+#!/bin/bash
+# Copyright 2026 The xLLM Authors. All Rights Reserved.
+# Starts etcd, the xllm-service master, two TP1 DECODE instances and three
+# CP2 PREFILL instances, then waits until the master answers. Logs and the
+# pid list go to $RUNS_DIR/<timestamp>; $RUNS_DIR/current points at the
+# latest run. Prints READY on success.
+set -euo pipefail
+source "$(dirname "$0")/env.sh" || exit $?
+
+if [[ -n $MCCL_MIN_NCHANNELS_PIN ]]; then
+  export MCCL_MIN_NCHANNELS=$MCCL_MIN_NCHANNELS_PIN
+fi
+
+die() {
+  echo "ERROR: $*" >&2
+  [[ -n ${RUN:-} ]] && echo "stop the processes started so far with stop_stack.sh" >&2
+  exit 1
+}
+
+for f in "$XLLM_BIN" "$MASTER_BIN" "$ETCD_BIN" "$RUST_TOKENIZERS_LIB" \
+    "$MUSA_PRELOAD" "$MODEL/config.json" "$KIT_DIR/draft_vocab_65536.txt" \
+    "$VL_PREFILL_XLLM_BIN" "$VL_DECODE_XLLM_BIN" \
+    "$(dirname "$VL_PREFILL_XLLM_BIN")/libasio.so" "$(dirname "$VL_DECODE_XLLM_BIN")/libasio.so"; do
+  [[ -f $f ]] || die "missing $f (see env.sh)"
+done
+[[ -d $MUSA_OPS_DIR ]] || die "missing kernel cache $MUSA_OPS_DIR (see env.sh)"
+[[ -f $MASTER_TOKENIZER/tokenizer_config.json ]] ||
+  die "missing $MASTER_TOKENIZER, run prepare_data.sh first"
+
+# Fixed per-instance ports: prefill i uses 62300+i (HTTP), 62400+10i
+# (master node), 62500+i (PD), 62600+20i+10r (transfer) and Mooncake RPC
+# 33000+100i+20r..+16; decode j uses 62700+j, 62800+10j, 62900+j, 63000+10j
+# and Mooncake RPC 34000+100j..+16.
+ports=("$ETCD_CLIENT_PORT" "$ETCD_PEER_PORT" "$MASTER_HTTP_PORT" "$MASTER_RPC_PORT" 64890 64891)
+prefill_nnodes=${VL_PREFILL_NNODES:-2}
+i=0
+for gpus in $PREFILL_GPUS; do
+  [[ $gpus =~ ^[0-9]+(,[0-9]+)*$ ]] || die "prefill group '$gpus' must be a comma-separated GPU list"
+  gpu_count=$(awk -F, '{print NF}' <<< "$gpus")
+  [[ $gpu_count == "$prefill_nnodes" ]] || die "prefill group '$gpus' has $gpu_count GPUs, expected $prefill_nnodes"
+  ports+=($((62300 + i)) $((62400 + 10 * i)) $((62401 + 10 * i)) $((62402 + 10 * i)) $((62500 + i)))
+  for ((r = 0; r < prefill_nnodes; r++)); do
+    ports+=($((62600 + 20 * i + 10 * r)) $(seq $((33000 + 100 * i + 20 * r)) $((33016 + 100 * i + 20 * r))))
+  done
+  i=$((i + 1))
+done
+j=0
+for gpu in $DECODE_GPUS; do
+  ports+=($((62700 + j)) $((62800 + 10 * j)) $((62801 + 10 * j)) $((62802 + 10 * j)) $((62900 + j)) $((63000 + 10 * j)))
+  ports+=($(seq $((34000 + 100 * j)) $((34016 + 100 * j))))
+  j=$((j + 1))
+done
+listening=$(ss -ltn)
+for p in "${ports[@]}"; do
+  grep -q ":$p " <<< "$listening" && die "port $p is in use"
+done
+
+# Other containers keep ~1 MiB contexts on every GPU; anything above 64 MiB
+# means another job is running there.
+for g in ${PREFILL_GPUS//,/ } $DECODE_GPUS; do
+  used=$(mthreads-gmi 2>/dev/null | awk -v g="$g" '$1 == g && /MiB\(/ {
+    for (k = 1; k <= NF; k++) if ($k ~ /MiB\(/) { sub(/MiB\(.*/, "", $k); print $k } }' | head -1)
+  [[ -n $used && $used -le 64 ]] || die "GPU $g is in use (${used:-unknown} MiB)"
+done
+
+RUN=$RUNS_DIR/$(date +%Y%m%d_%H%M%S)_$$
+mkdir -p "$RUNS_DIR"
+mkdir "$RUN" || die "run directory already exists"
+mkdir "$RUN/master_lib"
+[[ ! -e $RUNS_DIR/current || -L $RUNS_DIR/current ]] || die "current is not a symlink"
+ln -sfn "$RUN" "$RUNS_DIR/current"
+ln -sf "$RUST_TOKENIZERS_LIB" "$RUN/master_lib/librust_tokenizers.so"
+{
+  echo "xllm_bin=$XLLM_BIN md5=$(md5sum < "$XLLM_BIN" | cut -c1-32)"
+  echo "master_bin=$MASTER_BIN md5=$(md5sum < "$MASTER_BIN" | cut -c1-32)"
+  echo "xllm_commit=$(git -C "$REPO_DIR" rev-parse HEAD 2>/dev/null || echo unknown)"
+  echo "model=$MODEL conc=$CONC mtp_k=$MTP_K prefill_gpus=$PREFILL_GPUS decode_gpus=$DECODE_GPUS"
+  echo "batch_credit_max_grant_units=$BATCH_CREDIT_MAX_GRANT_UNITS batch_credit_max_grant_units_per_router_tenant=$BATCH_CREDIT_MAX_GRANT_UNITS_PER_ROUTER_TENANT"
+  echo "profile=$PROFILE enable_graph_vmm_pool=$ENABLE_GRAPH_VMM_POOL"
+  echo "service_vmodule=$SERVICE_VMODULE"
+  echo "max_memory_utilization=$MAX_MEMORY_UTILIZATION prefill_batch_wait_ms=$PREFILL_BATCH_WAIT_MS prefill_chunk_tokens=$PREFILL_CHUNK_TOKENS enable_in_batch_prefix_cache=$ENABLE_IN_BATCH_PREFIX_CACHE"
+  echo "mccl_min_nchannels=${MCCL_MIN_NCHANNELS:-unset} imccl_min_nchannels=${IMCCL_MIN_NCHANNELS:-unset}"
+  echo "batch_credit_safety_permyriad=$BATCH_CREDIT_SAFETY_PERMYRIAD"
+} > "$RUN/stack_info.txt"
+
+record_pid() {
+  python3 "$REPO_DIR/tools/musa_unified/processes.py" record \
+    --run "$RUN" --name "$1" --pid "$2" --expected-exe "$3" || die "failed to record process identity"
+}
+
+service_logging=()
+if [[ -n $SERVICE_VMODULE ]]; then
+  service_logging+=(--vmodule="$SERVICE_VMODULE")
+fi
+
+setsid "$ETCD_BIN" --name=vl-bench --data-dir="$RUN/etcd_data" \
+  --listen-client-urls="http://127.0.0.1:$ETCD_CLIENT_PORT" \
+  --advertise-client-urls="http://127.0.0.1:$ETCD_CLIENT_PORT" \
+  --listen-peer-urls="http://127.0.0.1:$ETCD_PEER_PORT" \
+  --initial-advertise-peer-urls="http://127.0.0.1:$ETCD_PEER_PORT" \
+  --initial-cluster="vl-bench=http://127.0.0.1:$ETCD_PEER_PORT" \
+  --initial-cluster-token="vl-bench-$(basename "$RUN")" --initial-cluster-state=new \
+  > "$RUN/etcd.log" 2>&1 < /dev/null &
+child_pid=$!
+echo "etcd $child_pid" >> "$RUN/pids.txt"
+record_pid etcd "$child_pid" "$ETCD_BIN"
+sleep 3
+
+# The master tokenizes requests for routing only; MASTER_TOKENIZER carries
+# a chat template its renderer supports.
+LD_LIBRARY_PATH=$RUN/master_lib:/usr/lib:/usr/lib/x86_64-linux-gnu setsid "$MASTER_BIN" \
+  --server_host="$HOST" --etcd_addr="127.0.0.1:$ETCD_CLIENT_PORT" \
+  --http_server_port="$MASTER_HTTP_PORT" --rpc_server_port="$MASTER_RPC_PORT" \
+  --tokenizer_path="$MASTER_TOKENIZER" --block_size=64 \
+  --http_server_num_threads=4 --rpc_server_num_threads=4 --num_threads=4 --logtostderr=true \
+  "${service_logging[@]}" \
+  --batch_credit_max_grant_units="$BATCH_CREDIT_MAX_GRANT_UNITS" \
+  --batch_credit_safety_permyriad="$BATCH_CREDIT_SAFETY_PERMYRIAD" \
+  --batch_credit_max_grant_units_per_router_tenant="$BATCH_CREDIT_MAX_GRANT_UNITS_PER_ROUTER_TENANT" \
+  --internal_api_token=lab-local-token --service_deployment_role=ROUTER \
+  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy=RR \
+  --kv_route_mode=DISABLED \
+  --first_output_watchdog_timeout_ms="${VL_FIRST_OUTPUT_WATCHDOG_MS:-60000}" \
+  --max_nonstream_retry_wasted_device_ms="${VL_DEVICE_TIME_BUDGET_MS:-5000}" \
+  --flow_max_queue_wait_ms="${VL_FLOW_MAX_QUEUE_WAIT_MS:-15000}" \
+  --default_request_deadline_ms="${VL_REQUEST_DEADLINE_MS:-300000}" \
+  --max_request_deadline_ms="${VL_REQUEST_DEADLINE_MS:-300000}" \
+  > "$RUN/master.log" 2>&1 < /dev/null &
+child_pid=$!
+echo "master $child_pid" >> "$RUN/pids.txt"
+record_pid master "$child_pid" "$MASTER_BIN"
+sleep 2
+# Engines block until this key exists. The router does not publish it.
+LD_LIBRARY_PATH=$RUN/master_lib:/usr/lib:/usr/lib/x86_64-linux-gnu setsid "$MASTER_BIN" \
+  --server_host="$HOST" --etcd_addr="127.0.0.1:$ETCD_CLIENT_PORT" \
+  --http_server_port=64890 --rpc_server_port=64891 \
+  --tokenizer_path="$MASTER_TOKENIZER" --block_size=64 \
+  --num_threads=2 --logtostderr=true \
+  "${service_logging[@]}" \
+  --batch_credit_max_grant_units="$BATCH_CREDIT_MAX_GRANT_UNITS" \
+  --batch_credit_safety_permyriad="$BATCH_CREDIT_SAFETY_PERMYRIAD" \
+  --batch_credit_max_grant_units_per_router_tenant="$BATCH_CREDIT_MAX_GRANT_UNITS_PER_ROUTER_TENANT" \
+  --internal_api_token=lab-local-token --service_deployment_role=COORDINATOR \
+  --native_pd_routing_policy=STATIC_BUCKET --load_balance_policy=RR \
+  --kv_route_mode=DISABLED \
+  --first_output_watchdog_timeout_ms="${VL_FIRST_OUTPUT_WATCHDOG_MS:-60000}" \
+  --max_nonstream_retry_wasted_device_ms="${VL_DEVICE_TIME_BUDGET_MS:-5000}" \
+  --flow_max_queue_wait_ms="${VL_FLOW_MAX_QUEUE_WAIT_MS:-15000}" \
+  --default_request_deadline_ms="${VL_REQUEST_DEADLINE_MS:-300000}" \
+  --max_request_deadline_ms="${VL_REQUEST_DEADLINE_MS:-300000}" \
+  > "$RUN/coordinator.log" 2>&1 < /dev/null &
+child_pid=$!
+echo "coordinator $child_pid" >> "$RUN/pids.txt"
+record_pid coordinator "$child_pid" "$MASTER_BIN"
+sleep 3
+
+common=(
+  --model="$MODEL" --model_id="$MODEL_ID" --host="$HOST" --backend=vlm --random_seed=-1
+  --max_body_size="${VL_MAX_BODY_SIZE:-268435456}"
+  --block_size=64 --max_memory_utilization="$MAX_MEMORY_UTILIZATION"
+  --max_concurrent_requests="$CONC" --max_seqs_per_batch="$CONC"
+  --enable_prefix_cache=true --max_encoder_cache_size=256 --enable_chunked_prefill=true
+  --enable_schedule_overlap=true --enable_graph=true --enable_graph_mode_decode_no_padding=true
+  --enable_graph_vmm_pool="$ENABLE_GRAPH_VMM_POOL"
+  --draft_model="$MODEL" --speculative_algorithm=MTP --num_speculative_tokens="$MTP_K"
+  --mtp_draft_vocab_path="$KIT_DIR/draft_vocab_65536.txt"
+  --enable_mtp_draft_fp8_lm_head=true --enable_mtp_target_fp8_lm_head=true
+  --enable_mtp_packed_verify_attention=true --enable_musa_fp8_skinny_gemm=true
+  --enable_disagg_pd=true --enable_native_service_adapter=true --kv_cache_transfer_mode=PULL --kv_split_size=1
+  --etcd_addr="127.0.0.1:$ETCD_CLIENT_PORT" --vmodule=disagg_pd_scheduler=1 --usercode_in_pthread=true
+)
+decode_flags=(
+  --instance_role=DECODE --nnodes=1 --node_rank=0
+  --max_tokens_per_batch=32768 --max_tokens_per_chunk_for_prefill=2048
+  --max_tokens_for_graph_mode=4096 --enable_prefill_piecewise_graph=false
+)
+# The prefix cache restores GDN state at chunk boundaries. The default8192
+# reuses32768 of40960 tokens; changed chunks require per-request revalidation.
+prefill_flags=(
+  --musa_prefill_graph_token_stride=256
+  --instance_role=PREFILL --nnodes=$prefill_nnodes --cp_size=2
+  --max_tokens_per_batch=8192 --max_tokens_per_chunk_for_prefill="$PREFILL_CHUNK_TOKENS"
+  --prefill_batch_wait_ms="$PREFILL_BATCH_WAIT_MS"
+  --enable_in_batch_prefix_cache="$ENABLE_IN_BATCH_PREFIX_CACHE"
+  --max_tokens_for_graph_mode=8192 --enable_prefill_piecewise_graph=true
+)
+
+export LD_LIBRARY_PATH=$XLLM_LIB_DIR${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+# Torch intra-op threads; the all-cores default makes host-side tensor ops
+# 10-20x slower.
+export OMP_NUM_THREADS=16
+# Kernel and graph backends the results depend on, pinned so that another
+# environment's defaults cannot change them.
+export XLLM_USE_FA3=1 XLLM_USE_FA3_DECODE=1 XLLM_PIECEWISE_CAPTURE_FA3=1
+export XLLM_GDN_DECODE_BACKEND=mate XLLM_MATE_GDN_PREFILL=1 XLLM_MATE_GDN_MTP=1
+export XLLM_MUSA_POOL_COMPUTE_STREAM=1 XLLM_PACKED_PREFILL_PIECEWISE=0 XLLM_SPEC_VERIFY_LARGE_BATCH_EAGER=0
+export XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT=1 XLLM_MUSA_MTP_COMBINED_FIRST_DRAFT_C1=1
+export MUSA_BACKEND_INIT_SO=$MUSA_PRELOAD
+unset MC_TCP_PROTO MC_FORCE_TCP
+
+start_instance() {  # name gpus mooncake_rpc_port flags...
+  local name=$1 gpus=$2 rpc=$3
+  local role_binary="$VL_DECODE_XLLM_BIN"
+  [[ $name == prefill* ]] && role_binary="$VL_PREFILL_XLLM_BIN"
+  local role_lib_dir
+  role_lib_dir=$(dirname "$role_binary")
+  shift 3
+  (
+    cd "$RUN" || exit 1
+    MUSA_VISIBLE_DEVICES=$gpus CUDA_VISIBLE_DEVICES=$gpus MTHREADS_VISIBLE_DEVICES=$gpus \
+      FLASHINFER_OPS_PATH=$MUSA_OPS_DIR MC_MIN_RPC_PORT=$rpc MC_MAX_RPC_PORT=$((rpc + 16)) \
+      LD_LIBRARY_PATH="$role_lib_dir:$LD_LIBRARY_PATH" LD_PRELOAD=$MUSA_PRELOAD setsid "$role_binary" "${common[@]}" "$@" \
+      > "$RUN/$name.log" 2>&1 < /dev/null &
+    child_pid=$!
+    echo "$name $child_pid" >> "$RUN/pids.txt"
+    record_pid "$name" "$child_pid" "$role_binary"
+  )
+}
+
+wait_for_log() {  # name pattern
+  for _ in $(seq 900); do
+    grep -aq "$2" "$RUN/$1.log" && return 0
+    grep -aqE "Check failed|terminate called|core dumped|out of memory|unknown command line flag|^F20" "$RUN/$1.log" && return 1
+    sleep 1
+  done
+  return 1
+}
+
+j=0
+for gpu in $DECODE_GPUS; do
+  start_instance "decode$j" "$gpu" $((34000 + 100 * j)) "${decode_flags[@]}" \
+    --port=$((62700 + j)) --master_node_addr="$HOST:$((62800 + 10 * j))" \
+    --transfer_listen_port=$((63000 + 10 * j)) --disagg_pd_port=$((62900 + j))
+  j=$((j + 1))
+done
+for ((k = 0; k < j; k++)); do
+  wait_for_log "decode$k" "Application startup complete" || die "decode$k failed to start, see $RUN/decode$k.log"
+done
+
+i=0
+for gpus in $PREFILL_GPUS; do
+  for ((r = 0; r < prefill_nnodes; r++)); do
+    start_instance "prefill${i}_r$r" "$gpus" $((33000 + 100 * i + 20 * r)) "${prefill_flags[@]}" \
+      --node_rank=$r --port=$((62300 + i)) --master_node_addr="$HOST:$((62400 + 10 * i))" \
+      --transfer_listen_port=$((62600 + 20 * i + 10 * r)) --disagg_pd_port=$((62500 + i))
+  done
+  i=$((i + 1))
+done
+for ((k = 0; k < i; k++)); do
+  wait_for_log "prefill${k}_r0" "Application startup complete" ||
+    die "prefill$k failed to start, see $RUN/prefill${k}_r0.log"
+done
+
+for _ in $(seq 180); do
+  curl -fsS -o /dev/null -m 2 "$MASTER_URL/readyz" && break
+  sleep 1
+done
+curl -fsS -o /dev/null -m 2 "$MASTER_URL/readyz" || die "master is not ready to accept traffic on $MASTER_URL/readyz"
+echo "logs: $RUN"
+echo READY

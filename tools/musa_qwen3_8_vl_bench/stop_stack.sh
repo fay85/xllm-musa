@@ -2,6 +2,10 @@
 # Stops exactly the processes start_stack.sh recorded for the latest run, or
 # for the run directory given as $1: SIGTERM first, SIGKILL after 10 s.
 set -u
+if [[ ${VL_PROFILE:-} == d1029_unified ]]; then
+  source "$(dirname "$0")/env.sh"
+  exec python3 "$REPO_DIR/tools/musa_unified/processes.py" stop --run "${1:-$RUNS_DIR/current}"
+fi
 source /workspace/xllm-mt-main/tools/musa_qwen3_8_vl_bench/env.sh
 
 pids_file=${1:-$RUNS_DIR/current}/pids.txt
