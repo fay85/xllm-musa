@@ -43,6 +43,13 @@ message StopSequence {
   repeated int32 seq_tokens = 1;
 }
 
+message MultimodalPrefixIdentity {
+  uint32 modality = 1;
+  int32 token_offset = 2;
+  int32 token_length = 3;
+  bytes content_hash = 4;
+}
+
 message DisaggRequest {
   // req id
   string req_id = 1;
@@ -92,7 +99,7 @@ message DisaggRequest {
   // Identifies this reservation even when callers reuse a request ID.
   string reservation_id = 42;
   optional uint64 service_attempt_seq = 43;
-
+  repeated MultimodalPrefixIdentity multimodal_prefix_identities = 44;
 }
 
 // response for DisaggRequests from decode instance.

@@ -35,6 +35,7 @@ limitations under the License.
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
+#include "core/framework/multimodal/mm_data.h"
 #include "disagg_pd.pb.h"
 #include "distributed_runtime/engine.h"
 #include "framework/batch/batch_factory.h"
@@ -646,6 +647,23 @@ void DisaggPDScheduler::dispatch_requests() {
       req->set_prompt(requests[i]->state().prompt);
       ADD_VECTOR_TO_PROTO(req->mutable_prompt_tokens(),
                           requests[i]->state().prompt_tokens);
+      const MMData& mm_data = requests[i]->sequences()[0]->mm_data();
+      if (mm_data.valid()) {
+        CHECK(mm_data.hold<MMItemVec>());
+        const auto& items = mm_data.items<MMItemVec>();
+        req->mutable_multimodal_prefix_identities()->Reserve(
+            static_cast<int32_t>(items.size()));
+        for (const auto& item : items) {
+          const auto& state = item.state();
+          const auto& key = state.schedule_data().key;
+          auto* identity = req->add_multimodal_prefix_identities();
+          identity->set_modality(static_cast<uint32_t>(item.type()));
+          identity->set_token_offset(state.token_pos().offset);
+          identity->set_token_length(state.token_pos().length);
+          identity->set_content_hash(reinterpret_cast<const char*>(key.data),
+                                     sizeof(key.data));
+        }
+      }
       req->set_stream(requests[i]->state().stream);
       req->set_x_request_id(requests[i]->x_request_id());
       req->set_x_request_time(requests[i]->x_request_time());

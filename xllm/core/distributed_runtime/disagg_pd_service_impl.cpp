@@ -13,11 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "disagg_pd_service_impl.h"
+#include "core/distributed_runtime/disagg_pd_service_impl.h"
 
 #include <glog/logging.h>
 
 #include <cstdint>
+#include <cstring>
 #include <limits>
 #include <string>
 #include <utility>
@@ -26,6 +27,7 @@ limitations under the License.
 #include "common/global_flags.h"
 #include "common/types.h"
 #include "core/framework/config/kv_cache_config.h"
+#include "core/framework/multimodal/mm_data.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "distributed_runtime/llm_engine.h"
 #include "framework/request/request_output.h"
@@ -131,6 +133,31 @@ std::shared_ptr<Request> DisaggPDServiceImpl::generate_request(
   std::string prompt = req.prompt();
   std::vector<int> prompt_tokens(req.prompt_tokens().begin(),
                                  req.prompt_tokens().end());
+  MMData mm_data;
+  mm_data.items<MMItemVec>().reserve(
+      static_cast<size_t>(req.multimodal_prefix_identities_size()));
+  for (const auto& identity : req.multimodal_prefix_identities()) {
+    const uint32_t modality = identity.modality();
+    const bool valid_modality =
+        modality == MMType::IMAGE || modality == MMType::VIDEO ||
+        modality == MMType::AUDIO || modality == MMType::EMBEDDING;
+    const int64_t end =
+        static_cast<int64_t>(identity.token_offset()) + identity.token_length();
+    if (!valid_modality || identity.token_offset() < 0 ||
+        identity.token_length() <= 0 ||
+        end > static_cast<int64_t>(prompt_tokens.size()) ||
+        identity.content_hash().size() != XXH3_128BITS_HASH_VALUE_LEN) {
+      LOG(ERROR) << "Invalid multimodal prefix identity, request_id="
+                 << req.req_id();
+      return nullptr;
+    }
+    MMDataItem& item = mm_data.add(static_cast<MMType::Value>(modality));
+    auto& state = item.mutable_state();
+    state.mutable_token_pos().offset = identity.token_offset();
+    state.mutable_token_pos().length = identity.token_length();
+    auto& key = state.mutable_schedule_data().key;
+    std::memcpy(key.data, identity.content_hash().data(), sizeof(key.data));
+  }
 
   RequestSamplingParam sampling_param;
   sampling_param.frequency_penalty = req.frequency_penalty();
@@ -209,6 +236,7 @@ std::shared_ptr<Request> DisaggPDServiceImpl::generate_request(
                          output_callback,
                          batch_output_callback);
   req_state.include_stop_str_in_output = req.include_stop_str_in_output();
+  req_state.mm_data = std::move(mm_data);
 
   if (json_object) {
     std::string grammar_error;
@@ -594,7 +622,8 @@ void DisaggPDServiceImpl::ensure_link(const proto::EnsureLinkRequest* request,
   // the existing PULL path, so a repeated handshake is not required.
   std::vector<uint64_t> cluster_ids(cluster.cluster_ids().begin(),
                                     cluster.cluster_ids().end());
-  std::vector<std::string> addrs(cluster.addrs().begin(), cluster.addrs().end());
+  std::vector<std::string> addrs(cluster.addrs().begin(),
+                                 cluster.addrs().end());
   const bool linked = scheduler_->link_instance(cluster.instance_name(),
                                                 cluster_ids,
                                                 addrs,
