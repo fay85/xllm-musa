@@ -25,5 +25,31 @@ TEST(DeepseekV4JointBuildPolicyTest, RetainsQualifiedCachedPrefillTail) {
   EXPECT_EQ(kDsv4PrefillReduceMinRows, 4096);
 }
 
+TEST(DeepseekV4JointBuildPolicyTest,
+     RetainsGroupedVerifyThresholdWithoutWideningWidth) {
+  for (const int64_t minimum : {63, 77, 112}) {
+    EXPECT_TRUE(dsv4_grouped_fp8_verify_eligible(
+        minimum, minimum, 7, true, true, true, true));
+    EXPECT_FALSE(dsv4_grouped_fp8_verify_eligible(
+        minimum, minimum - 7, 7, true, true, true, true));
+    EXPECT_FALSE(dsv4_grouped_fp8_verify_eligible(
+        minimum, minimum, 6, true, true, true, true));
+  }
+  EXPECT_FALSE(dsv4_grouped_verify_minimum_supported(62));
+  EXPECT_FALSE(dsv4_grouped_verify_minimum_supported(64));
+  EXPECT_FALSE(
+      dsv4_grouped_fp8_verify_eligible(63, 133, 7, true, true, true, true));
+  EXPECT_FALSE(
+      dsv4_grouped_fp8_verify_eligible(63, 64, 7, true, true, true, true));
+  EXPECT_FALSE(
+      dsv4_grouped_fp8_verify_eligible(63, 63, 7, false, true, true, true));
+  EXPECT_FALSE(
+      dsv4_grouped_fp8_verify_eligible(63, 63, 7, true, false, true, true));
+  EXPECT_FALSE(
+      dsv4_grouped_fp8_verify_eligible(63, 63, 7, true, true, false, true));
+  EXPECT_FALSE(
+      dsv4_grouped_fp8_verify_eligible(63, 63, 7, true, true, true, false));
+}
+
 }  // namespace
 }  // namespace xllm::layer
