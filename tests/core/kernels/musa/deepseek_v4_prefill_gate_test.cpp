@@ -22,11 +22,11 @@ namespace xllm::kernel::musa {
 namespace {
 
 TEST(DeepseekV4PrefillGatePolicyTest, IncludesCachedTailAndExcludesDecode) {
-  for (const int64_t rows : {4096, 7232, 8000, 8192, 16384}) {
+  for (const int64_t rows : {2048, 4095, 4096, 7232, 8000, 8192, 16384}) {
     EXPECT_TRUE(
         layer::dsv4_prefill_gate_shape(rows, 4096, 256, 2, false, true));
   }
-  for (const int64_t rows : {1, 7, 112, 1000, 4095, 16385}) {
+  for (const int64_t rows : {1, 7, 112, 1000, 2047, 16385}) {
     EXPECT_FALSE(
         layer::dsv4_prefill_gate_shape(rows, 4096, 256, 2, false, true));
   }
@@ -72,7 +72,7 @@ class DeepseekV4PrefillGateTest : public ::testing::Test {
 
 TEST_F(DeepseekV4PrefillGateTest,
        MatchesFp32ProjectionAndRoutingWithinRoundingBound) {
-  for (const int64_t rows : {4096, 7232, 8000, 8192}) {
+  for (const int64_t rows : {2048, 4096, 7232, 8000, 8192}) {
     torch::Tensor input =
         (torch::randn({rows, 4096}) * 0.3).to(torch::kBFloat16).to(device_);
     torch::Tensor weight =

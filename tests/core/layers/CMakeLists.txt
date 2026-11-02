@@ -1,6 +1,13 @@
 include(cc_test)
 
 cc_test(
+  NAME deepseek_v4_joint_build_policy_test
+  CPU_ONLY
+  SRCS deepseek_v4_joint_build_policy_test.cpp
+  DEPS GTest::gtest_main
+)
+
+cc_test(
   NAME deepseek_v4_runtime_options_test
   CPU_ONLY
   SRCS deepseek_v4_runtime_options_test.cpp
