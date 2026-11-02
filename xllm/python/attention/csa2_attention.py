@@ -38,7 +38,6 @@ orchestrates caches and math.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from functools import lru_cache
 from typing import Any, Sequence
 
 import torch
@@ -94,14 +93,6 @@ class _SwaGroupMetadata:
     cache: torch.Tensor
 
 
-@lru_cache(maxsize=1)
-def _is_smla_a3() -> bool:
-    import xllm_runtime
-
-    return xllm_runtime.is_ascend_a3()
-
-
-# The A3 metadata validator accepts sparse compressed widths of 512 or 1024.
 _SMLA_CMP_TOPK_BLOCK = 512
 _SMLA_CMP_TOPK_MAX = 1024
 _SMLA_ORI_MASK_MODE = 4  # Window/compress masking over original KV rows.
@@ -109,24 +100,18 @@ _SMLA_CMP_MASK_MODE = 3  # Right-down causal masking over compressed rows.
 _SMLA_NO_MASK_MODE = 0
 
 
-def _supports_smla_va() -> bool:
-    """Check schemas and SoC; the linked OPP must also provide the ACLNN APIs.
-
-    Probe registration on each call so a late-loaded extension can be used.
-    ACLNN symbol or execution failures remain deployment errors.
-    """
-    return (
-        getattr(torch.ops.xllm_ops, "smla_va", None) is not None
-        and getattr(torch.ops.xllm_ops, "smla_va_metadata", None) is not None
-        and _is_smla_a3()
-    )
-
-
 @dataclass
-class _SmlaForwardState:
-    """Layer-shared inputs owned by one ForwardContext, never a request cache."""
+class _SmlaGraphState:
+    """ACL-graph-stable operands of the fused decode path for one graph bucket."""
 
-    inputs: dict[tuple[object, ...], dict[str, Any]]
+    rows: int
+    capacity: int
+    read_cols: int
+    cu_seqlens_q: torch.Tensor
+    expanded_ori_bt: torch.Tensor
+    seqused_cmp: dict[int, torch.Tensor]
+    cmp_residual: dict[int, torch.Tensor]
+    metadata: dict[int, torch.Tensor]
 
 
 @dataclass
@@ -492,6 +477,10 @@ def apply_interleaved_rope(
     return torch.cat((x[..., : dim - 2 * half], rotated), dim=-1)
 
 
+_SMLA_FORWARD_KEY = (__name__, "smla_forward_inputs")
+
+_SMLA_SUPPORTED_RATIOS = (0, 1, 2)  # V4.1 layer mix; ratio 0 needs no cmp inputs
+
 def _is_stream_capturing() -> bool:
     """ACL-graph capture probe (always ``False`` where ``torch_npu`` is absent)."""
     npu = getattr(torch, "npu", None)
@@ -666,6 +655,13 @@ def _v41_compressor_pool_triton(
         _log_v41_compressor_fallback(f"op raised: {exc}")
         return None
     return out
+
+
+def _round_cmp_width(topk: int) -> int:
+    """Ceil a compressed top-k width onto the operator's 512/1024 grid."""
+    if topk <= 0:
+        return 0
+    return min((topk + _SMLA_CMP_TOPK_BLOCK - 1) // _SMLA_CMP_TOPK_BLOCK * _SMLA_CMP_TOPK_BLOCK, _SMLA_CMP_TOPK_MAX)
 
 
 def _ensure_seq_lens_tensor(
@@ -1300,6 +1296,9 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         # Persistent QLI v3 indexer operands, one entry per (batch_rows,
         # token capacity) graph bucket; built in warmup, refreshed under capture.
         self._qli_state: dict[tuple[int, int], _QliGraphState] = {}
+        # Persistent SMLA operands, one entry per (batch_rows, token capacity)
+        # graph bucket; built in warmup, refreshed (never created) under capture.
+        self._smla_state: dict[tuple[int, int], _SmlaGraphState] = {}
 
     # -- V4 backend overrides ----------------------------------------------
 
@@ -1359,14 +1358,15 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         return self.supports_draft_to_target_overlap and dsa is not None and dsa.is_acl_graph
 
     def refresh_dsa_metadata_for_graph_replay(self, metadata: Any | None = None) -> None:
-        """Refresh DSA tensors and the QLI operand buffers outside capture.
+        """Refresh DSA tensors and the SMLA/QLI operand buffers outside capture.
 
         The inherited refresh rebuilds the DSA metadata and copies the replay
         values into the graph-captured tensors; the QLI branch rewrites its
         per-ratio sequence lengths / residuals plus the indexer's tiling
-        metadata. This runs before every graph replay, so it must never
-        allocate a new state, build one under capture, or read a device value
-        back to the host.
+        metadata, and the SMLA branch rewrites the fused tail's PA_BBND block
+        table, sequence lengths and metadata buffer. This runs before every
+        graph replay, so it must never allocate a new state, build one under
+        capture, or read a device value back to the host.
         """
         if self._block_query_width:
             return
@@ -1375,6 +1375,10 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         dsa = getattr(resolved, "dsa_metadata", None)
         if dsa is None:
             return
+        key = (int(dsa.seq_lens.numel()), int(getattr(dsa, "graph_token_capacity", 0) or 0))
+        state = self._smla_state.get(key)
+        if state is not None:
+            self._refresh_smla_state(dsa, state)
         if not getattr(dsa, "qli_refresh_in_target_graph", False):
             for state in self._qli_replay_states(dsa):
                 self._refresh_qli_state(dsa, state)
@@ -2659,6 +2663,9 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         the attention sink contributes only to the softmax normalizer
         (kernel.py:310-389). All index math is tensor arithmetic, so the whole
         method replays correctly inside a captured ACL graph.
+
+        The torch implementation below stays the reference tail; a decode-graph
+        step is dispatched to :meth:`_csa2_attention_smla` instead.
         """
         mode = layer.mode
         layer_id = layer.layer_id
@@ -2670,6 +2677,26 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         mapping = self._resolve_cache_mapping(layer_id, ratio)
         query_layout = shared.query_layout
         shared_window = query_layout is not None and query_layout.shared_window
+        # Native SMLA is selected only for the validated V4.1 Flash dimensions.
+        # The fused decode-graph tail and the reference tail share this single
+        # capability predicate, so the fused path can never outrun the shapes it
+        # was validated for. SMLA uses a causal window; shared-window blocks also
+        # need future rows within the block and keep the non-causal reference.
+        use_smla = (
+            not shared_window
+            and q.device.type == "npu"
+            and head_dim == 512
+            and q.dtype == torch.bfloat16
+            and win == 128
+            and (topk is None or topk.size(-1) <= _SMLA_CMP_TOPK_MAX)
+        )
+        if (
+            use_smla
+            and getattr(dsa, "is_acl_graph", False)
+            and cp_context is None
+            and all(int(length) == 1 for length in q_lens)
+        ):
+            return self._csa2_attention_smla(q, layer, dsa, topk, shared)
         if isinstance(dsa, Csa2BlockAttentionMetadata):
             swa_bt = dsa.block_table
         else:
@@ -2681,6 +2708,9 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         global_q_lens = list(cp_context.global_q_lens) if cp_context is not None else q_lens
         global_ctx_lens = _ensure_seq_lens_tensor(dsa.seq_lens, q.device) if cp_context is not None else ctx_lens
 
+
+        # Pure-torch tail only: the fused path reads the persistent caches
+        # directly and never materializes these.
         sinks = layer.attn_sink.to(torch.float32)
         swa_flat = layer_cache.swa.view(-1, head_dim) if layer_cache.swa is not None else None
         out = torch.empty_like(q)
@@ -2699,18 +2729,6 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             # Window rows at fixed capacity: [win ring candidates ; chunk].
             # Ring candidate c sits at absolute position prev - win + c; which
             # candidates a given query may read is decided per query below.
-            # Native SMLA is selected only for the validated V4.1 Flash dimensions.
-            # SMLA uses a causal window; shared-window blocks also need future
-            # rows within the block and retain the non-causal reference path.
-            use_smla = (
-                not shared_window
-                and q.device.type == "npu"
-                and head_dim == 512
-                and q.dtype == torch.bfloat16
-                and win == 128
-                and (topk is None or topk.size(-1) <= _SMLA_CMP_TOPK_MAX)
-                and _supports_smla_va()
-            )
             if use_smla and global_q_len == 1 and swa_flat is not None and swa_bt is not None:
                 from xllm.python.kernels_npu.triton.smla_window_pack import (
                     can_pack_smla_window,
@@ -2861,7 +2879,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         shared: CSA2SharedRuntime,
         sinks: torch.Tensor,
     ) -> torch.Tensor:
-        """Run the vLLM DSV4.1 A3 SMLA kernel with the existing cache layout.
+        """Run the vLLM DSV4.1 SMLA kernel with the existing cache layout.
 
         The SWA ring and current chunk form one temporary paged KV view.
         Compressed KV stays in its shared paged cache. Independent compressed
@@ -2882,16 +2900,12 @@ class Csa2AttentionBackend(DsaAttentionBackend):
                     "or [num_blocks, block_size, 1, head_dim]"
                 )
         ratio = ratio if has_compressed else 0
-        compressed_width = (
-            (topk.size(-1) + _SMLA_CMP_TOPK_BLOCK - 1) // _SMLA_CMP_TOPK_BLOCK * _SMLA_CMP_TOPK_BLOCK
-            if has_compressed
-            else 0
-        )
+        compressed_width = _round_cmp_width(int(topk.size(-1))) if has_compressed else 0
         context = get_forward_context()
-        state = context.layer_shared_cache.get(_SmlaForwardState)
+        state = context.layer_shared_cache.get(_SMLA_FORWARD_KEY)
         if state is None:
-            state = _SmlaForwardState({})
-            context.layer_shared_cache[_SmlaForwardState] = state
+            state = {}
+            context.layer_shared_cache[_SMLA_FORWARD_KEY] = state
         compressed_capacity = shared.key_block_table.size(1) * shared.key_cache.size(1) if has_compressed else 0
         # Keep tensor identities and available version counters so distinct
         # CP plans and eager in-place updates cannot reuse stale inputs.
@@ -2916,7 +2930,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             None if torch.is_inference(ctx_lens) else ctx_lens._version,
             None if torch.is_inference(global_ctx_lens) else global_ctx_lens._version,
         )
-        inputs = state.inputs.get(key)
+        inputs = state.get(key)
         if inputs is None:
             # Device arithmetic creates graph-safe constants and live lengths.
             starts = torch.arange(2, device=q.device, dtype=torch.int32) * q_len
@@ -2963,7 +2977,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
                 has_ori_kv=True,
                 has_cmp_kv=has_compressed,
             )
-            state.inputs[key] = inputs
+            state[key] = inputs
         block_size = self.window_size
         padding = (-window_kv.size(0)) % block_size
         ori_kv = torch.nn.functional.pad(window_kv, (0, 0, 0, padding)).view(-1, block_size, 1, q.size(-1))
@@ -3012,6 +3026,149 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             layout_kv="PA_BBND",
         )
         return output
+
+    # -- smla_va fused tail ------------------------------------------------
+
+    def _csa2_attention_smla(
+        self,
+        q: torch.Tensor,
+        layer: Any,
+        dsa: DsaMetadata,
+        topk: torch.Tensor | None,
+        shared: CSA2SharedRuntime,
+    ) -> torch.Tensor:
+        """One fused ``smla_va`` call for a decode-graph step, on persistent caches."""
+        smla_va_op = torch.ops.xllm_ops.smla_va
+        ratio = int(layer.mode.compress_ratio)
+        state = self._get_smla_state(dsa)
+        rows = state.rows
+        cmp_indices = cmp_kv = cmp_block_table = seqused_cmp = cmp_residual = None
+        if ratio > 0 and topk is not None and topk.size(-1) == 0:
+            # An indexer that produced no candidates selects no compressed rows.
+            # The reference tail degrades such a layer to the window-only path
+            # (``ratio = ratio if has_compressed else 0``); the fused tail must
+            # hand the operator the same contract instead of a zero-width grid.
+            ratio = 0
+        if ratio > 0:
+            if topk is None or shared.key_cache is None or shared.key_block_table is None:
+                raise RuntimeError(f"DeepSeek-V4.1 SMLA layer {layer.layer_id} ratio {ratio} is missing its compressed inputs")
+            # The indexer bakes the window-row offset in; PA_BBND rows are 0-based.
+            # The dispatch guarantees one query row per sequence, so the indexer's
+            # chunk offset is exactly one window.
+            query_rows = q.size(0) // max(rows, 1)
+            picks = torch.where(topk >= 0, topk - self.window_size - query_rows, -1).to(torch.int32)
+            width = _round_cmp_width(min(self.index_topk, max(state.capacity // ratio, 1)))
+            if picks.size(-1) > width:
+                raise RuntimeError(f"DeepSeek-V4.1 SMLA layer {layer.layer_id} indexer K {picks.size(-1)} > metadata width {width}")
+            picks = torch.nn.functional.pad(picks, (0, width - picks.size(-1)), value=-1)
+            cmp_indices = picks.reshape(rows, 1, width).contiguous()  # [rows, 1, width] int32, -1 pads
+            cmp_kv, cmp_block_table = shared.key_cache, shared.key_block_table  # already PA_BBND 4-D
+            seqused_cmp = state.seqused_cmp[ratio]
+            cmp_residual = state.cmp_residual[ratio] if ratio > 1 else None
+        out, _ = smla_va_op(
+            q,
+            ori_kv=self._kv_caches[layer.layer_id].swa, cmp_kv=cmp_kv,
+            ori_sparse_indices=None, cmp_sparse_indices=cmp_indices,
+            ori_block_table=state.expanded_ori_bt, cmp_block_table=cmp_block_table,
+            cu_seqlens_q=state.cu_seqlens_q, seqused_ori_kv=dsa.seq_lens,
+            seqused_cmp_kv=seqused_cmp, cmp_residual_kv=cmp_residual,
+            sinks=layer.attn_sink, metadata=state.metadata[ratio],
+            softmax_scale=self.scale,
+            cmp_ratio=ratio,  # aclnnSmlaVa contract: 0 when no cmp_kv is fed
+            ori_mask_mode=_SMLA_ORI_MASK_MODE,
+            cmp_mask_mode=_SMLA_CMP_MASK_MODE if ratio > 0 else _SMLA_NO_MASK_MODE,
+            ori_win_left=self.window_size - 1, ori_win_right=0,
+            layout_q="TND", layout_kv="PA_BBND",
+        )
+        return out
+
+    def _shared_swa_block_table(self, dsa: DsaMetadata | None) -> torch.Tensor | None:
+        """The read-side SWA block table shared by every layer's ring cache."""
+        if dsa is None or not self._kv_caches:
+            return None
+        mapping = self._resolve_cache_mapping(0, 0)
+        table = _get_layer_cache_tensor(dsa.block_tables, 0, mapping.ori_cache_idx)
+        if table is None or table.numel() == 0:
+            return None
+        return table
+
+    def _get_smla_state(self, dsa: DsaMetadata) -> _SmlaGraphState:
+        """Get (or, outside capture, build) this graph bucket's persistent operands."""
+        key = (int(dsa.seq_lens.numel()), int(getattr(dsa, "graph_token_capacity", 0) or 0))
+        state = self._smla_state.get(key)
+        if state is not None:
+            return state
+        if _is_stream_capturing():
+            raise RuntimeError(f"DeepSeek-V4.1 SMLA state missing for bucket {key} during capture")
+        rows, capacity = key
+        table = self._shared_swa_block_table(dsa)
+        if table is None:
+            raise RuntimeError("DeepSeek-V4.1 SMLA state needs the shared SWA block table")
+        device = dsa.seq_lens.device
+        read_cols = max(int(table.size(1)), 1)
+        # Absolute ori addressing: the operator maps a logical row to
+        # ``row // page`` and indexes the table by that block, so the table must
+        # cover every page the bucket can reach. The page is the SWA cache's
+        # second extent (``get_swa_blocks_per_seq(window, block_size)``), which
+        # equals the window only when the cache is allocated 1:1 with it.
+        page = self.window_size
+        for cache in self._kv_caches:
+            if cache.swa is not None and cache.swa.dim() >= 2:
+                page = int(cache.swa.size(1))
+                break
+        cols = max(read_cols, capacity // page + 1)
+        from xllm.python.kernels_npu._custom_op import _DSA_METADATA_BUFFER_ELEMENTS
+
+        ratio_dtypes = dict(dtype=torch.int32, device=device)
+        state = _SmlaGraphState(
+            rows=rows, capacity=capacity, read_cols=read_cols,
+            cu_seqlens_q=torch.arange(rows + 1, **ratio_dtypes),
+            expanded_ori_bt=torch.zeros((rows, cols), **ratio_dtypes),
+            seqused_cmp={r: torch.zeros(rows, **ratio_dtypes) for r in _SMLA_SUPPORTED_RATIOS if r > 0},
+            cmp_residual={r: torch.zeros(rows, **ratio_dtypes) for r in _SMLA_SUPPORTED_RATIOS if r > 0},
+            metadata={r: torch.zeros(_DSA_METADATA_BUFFER_ELEMENTS, **ratio_dtypes) for r in _SMLA_SUPPORTED_RATIOS},
+        )
+        self._refresh_smla_state(dsa, state)
+        self._smla_state[key] = state
+        return state
+
+    def _refresh_smla_state(self, dsa: DsaMetadata, state: _SmlaGraphState) -> None:
+        """Write one step's lengths, block table and tiling into the bucket's buffers, in place."""
+        table = self._shared_swa_block_table(dsa)
+        if table is None or int(table.size(1)) != state.read_cols:
+            raise RuntimeError(
+                f"DeepSeek-V4.1 SMLA bucket {state.rows}x{state.capacity} lost its SWA read-side "
+                f"block table (expected width {state.read_cols}); captured operands are stale"
+            )
+        metadata_op = torch.ops.xllm_ops.smla_va_metadata
+        # Absolute ori addressing: re-apply the ring modulo to every addressable column.
+        cols = torch.arange(int(state.expanded_ori_bt.size(1)), device=table.device) % state.read_cols
+        state.expanded_ori_bt.copy_(table[:, cols].clamp_min(0))
+        for ratio in state.metadata:
+            has_cmp = ratio > 0
+            if has_cmp:
+                state.seqused_cmp[ratio].copy_(torch.div(dsa.seq_lens, ratio, rounding_mode="floor"))
+                state.cmp_residual[ratio].copy_(torch.remainder(dsa.seq_lens, ratio))
+            cmp_capacity = max(state.capacity // ratio, 1) if has_cmp else 0  # mirrors _run_indexer's floor
+            state.metadata[ratio].copy_(
+                metadata_op(
+                    self.num_heads, 1, self.head_dim,
+                    cu_seqlens_q=state.cu_seqlens_q,
+                    seqused_ori_kv=dsa.seq_lens,
+                    seqused_cmp_kv=state.seqused_cmp[ratio] if has_cmp else None,
+                    cmp_residual_kv=state.cmp_residual[ratio] if has_cmp else None,
+                    batch_size=state.rows, max_seqlen_q=1,
+                    max_seqlen_ori_kv=state.capacity, max_seqlen_cmp_kv=cmp_capacity,
+                    ori_topk=0,
+                    cmp_topk=_round_cmp_width(min(self.index_topk, cmp_capacity)) if has_cmp else 0,
+                    cmp_ratio=ratio,  # aclnnSmlaVaMetadata contract: 0 when no cmp_kv
+                    ori_mask_mode=_SMLA_ORI_MASK_MODE,
+                    cmp_mask_mode=_SMLA_CMP_MASK_MODE if has_cmp else _SMLA_NO_MASK_MODE,
+                    ori_win_left=self.window_size - 1, ori_win_right=0,
+                    layout_q="TND", layout_kv="PA_BBND",
+                    has_ori_kv=True, has_cmp_kv=has_cmp,
+                )
+            )
 
     # -- cache gather helpers -------------------------------------------------
 

@@ -1052,7 +1052,6 @@ def test_draft_swa_tail_matches_explicit_context_plus_block(graph: bool, token_r
     backend = object.__new__(Csa2AttentionBackend)
     backend.window_size, backend.scale = win, dim**-0.5
     query_layout = Csa2QueryLayout(width, token_rows=token_rows, shared_window=True)
-    backend._smla_fallback_reason = lambda *_: "CPU oracle"
     backend._resolve_cache_mapping = lambda *_: SimpleNamespace(ori_cache_idx=0)
     history = torch.randn(2, win, dim)
     cache = torch.zeros(2, win, 1, dim)

@@ -26,7 +26,6 @@ from xllm.python.attention.csa2_attention import (
     Csa2QueryLayout,
     CSA2SharedRuntime,
     _rebase_qli_picks,
-    _supports_smla_va,
 )
 from xllm.python.model_executor.dsa_cp import build_dsa_cp_context
 from xllm.python.model_executor.forward_context import ForwardContext, forward_context
@@ -35,10 +34,18 @@ from xllm.python.model_executor.forward_context import ForwardContext, forward_c
 @pytest.fixture(autouse=True)
 def _require_smla() -> None:
     if not hasattr(torch, "npu") or not torch.npu.is_available():
-        pytest.skip("smla_va requires an A3 NPU")
-    if not _supports_smla_va():
-        pytest.skip("smla_va is packaged for A3 only")
-    if not hasattr(torch.ops.xllm_ops, "smla_va"):
+        pytest.skip("smla_va requires an Ascend NPU")
+    # The schemas live in the packaged ``custom_ops_lib``; ``xllm_export`` is a
+    # pybind *embedded* module that only the serving binary can bring up, so a
+    # plain pytest process must register the ops through the packaged library.
+    try:
+        import custom_ops_lib  # noqa: F401
+    except ImportError:
+        try:
+            from xllm.python.kernels_npu import _custom_op  # noqa: F401
+        except ImportError:  # pragma: no cover - non-Ascend hosts
+            pytest.skip("smla_va ops module is unavailable")
+    if not hasattr(torch.ops.xllm_ops, "smla_va") or not hasattr(torch.ops.xllm_ops, "smla_va_metadata"):
         pytest.skip("smla_va native registration is required")
 
 
@@ -195,7 +202,7 @@ def test_smla_saturated_ring_large_chunk(rank: int | None) -> None:
     # The oracle consumes exactly the same production-style local indices.
     from unittest.mock import patch
 
-    with patch.object(csa2, "_supports_smla_va", return_value=False):
+    with patch.object(csa2, "_SMLA_CMP_TOPK_MAX", -1):
         expected = backend._csa2_attention(q, kv, layer, dsa, local_lens, lengths, picks, shared, plan)
     torch.testing.assert_close(actual, expected, rtol=0.02, atol=0.003)
 
@@ -215,21 +222,10 @@ def test_smla_rounds_compressed_index_width(topk: int, monkeypatch: pytest.Monke
     monkeypatch.setattr(torch.ops.xllm_ops, "smla_va", tracked)
     with forward_context(_context(backend, dsa)):
         actual = backend._csa2_attention(q, kv, layer, dsa, [3], dsa.seq_lens, picks, shared)
-    monkeypatch.setattr(csa2, "_supports_smla_va", lambda: False)
+    monkeypatch.setattr(csa2, "_SMLA_CMP_TOPK_MAX", -1)
     expected = backend._csa2_attention(q, kv, layer, dsa, [3], dsa.seq_lens, picks, shared)
     assert widths == [1024]
     torch.testing.assert_close(actual, expected, rtol=0.02, atol=0.003)
-
-
-@pytest.mark.parametrize("name", ["smla_va", "smla_va_metadata"])
-def test_smla_missing_schema_uses_reference(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    backend, layer, dsa, shared, q, kv, picks = _case([3], "npu", history=140)
-    monkeypatch.setattr(torch.ops.xllm_ops, name, None)
-    assert not _supports_smla_va()
-    actual = backend._csa2_attention(q, kv, layer, dsa, [3], dsa.seq_lens, picks, shared)
-    cpu, cpu_layer, cpu_dsa, cpu_shared, cpu_q, cpu_kv, cpu_picks = _case([3], "cpu", history=140)
-    expected = cpu._csa2_attention(cpu_q, cpu_kv, cpu_layer, cpu_dsa, [3], cpu_dsa.seq_lens, cpu_picks, cpu_shared)
-    torch.testing.assert_close(actual.cpu(), expected, rtol=0.02, atol=0.003)
 
 
 def test_smla_large_topk_uses_reference(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -456,3 +452,46 @@ def test_smla_native_schema_supports_fake_tensors(layout: str, return_lse: bool)
         expected_lse = (1, 3, 16) if layout == "TND" else (1, 1, 3, 16)
         assert lse.shape == (expected_lse if return_lse else (0,))
         assert lse.dtype == torch.float32
+
+
+@pytest.mark.parametrize(
+    "q_lens,graph,shared_window,expected",
+    [
+        ([1], True, False, True),  # validated decode-graph step -> fused tail
+        ([1], False, False, False),  # eager single token -> reference tail (`_smla_attention`)
+        ([1], True, True, False),  # shared-window needs non-causal rows -> reference tail
+        ([2], True, False, False),  # q_len>1 is not a decode-graph step
+    ],
+)
+def test_smla_fused_tail_only_on_validated_decode_graph(
+    q_lens: list[int],
+    graph: bool,
+    shared_window: bool,
+    expected: bool,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The fused and reference tails share one capability predicate; only a validated decode-graph step is taken over."""
+    backend, layer, dsa, shared, q, kv, picks = _case(q_lens, "npu", ratio=1)
+    # The serving cache is PA_BBND ``[blocks, block_size, 1, head_dim]``; the
+    # shared fixture builds the 3-D ring the reference tail consumes, so lift it
+    # to the layout the fused tail reads directly.
+    swa = backend._kv_caches[0].swa
+    if swa.dim() == 3:
+        backend._kv_caches[0].swa = swa.unsqueeze(2)
+    if shared.key_cache is not None and shared.key_cache.dim() == 3:
+        shared.key_cache = shared.key_cache.unsqueeze(2)
+    dsa.is_acl_graph = graph
+    shared.query_layout = Csa2QueryLayout(sum(q_lens), shared_window=shared_window)
+    calls = []
+    fused = backend._csa2_attention_smla
+
+    def tracked(*args: Any, **kwargs: Any) -> torch.Tensor:
+        calls.append(True)
+        return fused(*args, **kwargs)
+
+    monkeypatch.setattr(backend, "_csa2_attention_smla", tracked)
+    with forward_context(_context(backend, dsa)):
+        actual = backend._csa2_attention(q, kv, layer, dsa, q_lens, dsa.seq_lens, picks, shared)
+    torch.npu.synchronize()
+    assert bool(calls) is expected
+    assert actual.shape == q.shape
