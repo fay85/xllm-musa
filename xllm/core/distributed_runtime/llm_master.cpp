@@ -121,8 +121,7 @@ LLMMaster::LLMMaster(const Options& options)
   threadpool_ = std::make_unique<ThreadPool>(
       /*num_threads=*/options_.num_request_handling_threads(),
       /*cpu_binding=*/false,
-      /*pool_name=*/"LLMMaster.request",
-      "master_request_pool_" + std::to_string(options_.server_idx()));
+      /*pool_name=*/"LLMMaster.request");
 
   request_factory_ = std::make_unique<LLMRequestFactory>(
       tokenizer_.get(),
