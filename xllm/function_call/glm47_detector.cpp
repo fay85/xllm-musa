@@ -729,6 +729,7 @@ StreamingParseResult Glm47Detector::parse_streaming_increment(
     }
 
     // Send tool name first if not sent yet
+    const bool name_already_sent = current_tool_name_sent_;
     if (!current_tool_name_sent_) {
       // Only send function name when we're sure it's complete:
       // - Either we have <arg_key> (arguments started)
@@ -744,7 +745,16 @@ StreamingParseResult Glm47Detector::parse_streaming_increment(
       // Store the tool call info
       prev_tool_call_arr_[current_tool_id_]["name"] = func_name;
       prev_tool_call_arr_[current_tool_id_]["arguments"] = "";
-    } else {
+    }
+
+    // Normally the name and the arguments arrive in different increments and
+    // the arguments are emitted by the next call. That assumption breaks when
+    // this increment already closes the tool call: the name and the whole
+    // argument list (including </tool_call>) may arrive together, and the last
+    // tool call of a response is never followed by another increment, so
+    // deferring its arguments drops them for good. Handle the arguments in the
+    // same pass in that case.
+    if (name_already_sent || is_tool_end_flag) {
       // Process XML to JSON streaming
       size_t current_raw_length = func_args_raw.size();
 

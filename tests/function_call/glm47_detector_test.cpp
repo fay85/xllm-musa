@@ -519,19 +519,23 @@ TEST_F(Glm47DetectorTest, StreamingKeepsNormalTextBetweenToolCalls) {
   ASSERT_GE(result1.calls.size(), 1);
   EXPECT_EQ(result1.calls[0].name.value(), "get_weather");
 
-  // Finalizes the first call; the following text stays buffered together with
-  // the second marker.
+  // The first call is now fully consumed by result1, so the inter-call text is
+  // released together with the next call's name instead of waiting for the
+  // increment that closes it. The order the client sees is unchanged: the first
+  // call, then this text, then the second call.
   auto result2 = detector_->parse_streaming_increment(
       "中间说明<tool_call>calculate<arg_key>expression</arg_key>", tools_);
-  EXPECT_EQ(result2.normal_text, "");
-  EXPECT_GE(result2.calls.size(), 1);
+  EXPECT_EQ(result2.normal_text, "中间说明");
+  ASSERT_GE(result2.calls.size(), 1);
+  EXPECT_TRUE(result2.calls[0].name.has_value());
+  EXPECT_EQ(result2.calls[0].name.value(), "calculate");
 
   auto result3 = detector_->parse_streaming_increment(
       "<arg_value>1 + 2</arg_value></tool_call>", tools_);
-  EXPECT_EQ(result3.normal_text, "中间说明");
-  ASSERT_GE(result3.calls.size(), 1);
-  EXPECT_TRUE(result3.calls[0].name.has_value());
-  EXPECT_EQ(result3.calls[0].name.value(), "calculate");
+  EXPECT_TRUE(result3.normal_text.empty());
+  std::string args3 = collect_streamed_args(result3);
+  ASSERT_FALSE(args3.empty());
+  EXPECT_EQ(nlohmann::json::parse(args3)["expression"], "1 + 2");
 }
 
 // Object/array arg values also end with '}'. Streaming must still emit the
@@ -967,6 +971,46 @@ TEST_F(Glm47DetectorTest, NonStreamingParseWithUtf8) {
   nlohmann::json params = nlohmann::json::parse(call.parameters);
   EXPECT_EQ(params["city"], "北京");
   EXPECT_EQ(params["date"], "2024-06-27");
+}
+
+// Regression: a tool call whose name and closing tag arrive in the same
+// increment used to emit the name and defer the arguments to the next
+// increment. For the last tool call of a response there is no next increment,
+// so the arguments were lost and the client saw an empty argument list.
+TEST_F(Glm47DetectorTest, StreamingCompleteToolCallInSingleIncrement) {
+  auto result = detector_->parse_streaming_increment(
+      "<tool_call>get_weather<arg_key>city</arg_key>"
+      "<arg_value>Beijing</arg_value></tool_call>",
+      tools_);
+
+  ASSERT_FALSE(result.calls.empty());
+  EXPECT_EQ(result.calls[0].name.value_or(""), "get_weather");
+  // The arguments have to be in this very result, not in some later one.
+  std::string args = collect_streamed_args(result);
+  ASSERT_FALSE(args.empty());
+  EXPECT_EQ(nlohmann::json::parse(args)["city"], "Beijing");
+}
+
+// The production shape: the last tool call closes inside the final increment.
+// Its name, arguments and closing tag all arrive together, and nothing follows.
+TEST_F(Glm47DetectorTest, StreamingLastToolCallArgsNotLost) {
+  auto first = detector_->parse_streaming_increment(
+      "<tool_call>get_weather<arg_key>city</arg_key>"
+      "<arg_value>Beijing</arg_value></tool_call>"
+      "<tool_call>calculate<arg_key>expression</arg_key><arg_value>",
+      tools_);
+  ASSERT_FALSE(first.calls.empty());
+  EXPECT_EQ(first.calls[0].name.value_or(""), "get_weather");
+  EXPECT_EQ(nlohmann::json::parse(collect_streamed_args(first))["city"],
+            "Beijing");
+
+  // Final increment for the second call: no increment follows this one.
+  auto second = detector_->parse_streaming_increment(
+      "1+1</arg_value></tool_call>", tools_);
+
+  std::string args = collect_streamed_args(second);
+  ASSERT_FALSE(args.empty());
+  EXPECT_EQ(nlohmann::json::parse(args)["expression"], "1+1");
 }
 
 }  // namespace function_call
