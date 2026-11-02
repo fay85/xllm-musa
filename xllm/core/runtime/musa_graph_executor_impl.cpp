@@ -1566,7 +1566,11 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
       }
     }
     params_for_capture->attention.device.q_seq_lens =
-        q_seq_lens(static_cast<uint32_t>(graph_num_sequences + 1));
+        update_attention_plan && use_llm_decode_fast_path &&
+                !compact_dsv4_mtp_decode
+            ? persistent_decode_qo_indptr(
+                  static_cast<uint32_t>(graph_num_sequences))
+            : q_seq_lens(static_cast<uint32_t>(graph_num_sequences + 1));
     params_for_capture->attention.device.kv_seq_lens =
         kv_seq_lens(static_cast<uint32_t>(graph_num_sequences + 1));
     params_for_capture->attention.device.new_cache_slots =
@@ -2544,8 +2548,7 @@ bool MusaGraph::capture(CausalLM* model,
     xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(true);
     const int num_warmup_iters =
         skip_graph_warmup ? 0 : (is_piecewise_ ? 2 : 1);
-    for (int warmup_iter = 0; warmup_iter < num_warmup_iters;
-         ++warmup_iter) {
+    for (int warmup_iter = 0; warmup_iter < num_warmup_iters; ++warmup_iter) {
       capture_stream.synchronize();
       {
         xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
