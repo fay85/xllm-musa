@@ -1,5 +1,17 @@
 include(cc_test)
 
+# CPU tensors exercise the VLM/text-MTP dispatch in the MUSA runtime build.
+if(USE_MUSA)
+  cc_test(
+    NAME vlm_executor_eager_draft_test
+    CPU_ONLY
+    SRCS vlm_executor_eager_draft_test.cpp
+    DEPS :runtime :models :batch :block :platform torch glog::glog GTest::gtest_main
+  )
+  target_link_libraries(vlm_executor_eager_draft_test PRIVATE
+    musa_python torch_python Python::Python tvm_ffi)
+endif()
+
 cc_test(
   NAME
     encoder_executor_test
