@@ -1860,13 +1860,16 @@ torch::Tensor FusedMoEImpl::select_experts(
   moe_init_routing_params.row_idx_type = 0;
   std::vector<int64_t> expert_range = {local_expert_start, local_expert_end};
   moe_init_routing_params.active_expert_range = expert_range;
-  // quant_mode=-1 with a pre-supplied scale means "input is already
-  // quantized to int8; expand the per-token scale alongside the activation
-  // rows".  quant_mode=1 lets the operator quantize a bf16 input
-  // internally (matching the Python reference).  The -1+scale contract
-  // has been validated on NPU hardware against the reference path
-  // (bit-exact MoE outputs on Qwen3.5-35B-A3B w8a8).
-  moe_init_routing_params.quant_mode = input_scale.has_value() ? -1 : 1;
+  // Always use quant_mode=-1: the NPU op must not quantize internally.
+  // With a pre-supplied scale (delayed AllGather path), -1 means the input
+  // is already quantized to int8; the op expands the per-token scale
+  // alongside the activation rows (validated bit-exact on Qwen3.5-35B-A3B
+  // w8a8).  Without a scale (normal path), -1 leaves the bf16 activation
+  // unquantized so the caller (forward_expert) handles dynamic
+  // quantization via dynamic_quant.  quant_mode=1 would make the op call
+  // aclnnDynamicQuantV2 internally, which fails on some models (e.g.
+  // deepseek_v4) and double-quantizes on others.
+  moe_init_routing_params.quant_mode = -1;
   // TODO: NPU moe_init_routing_v2 is equivalent to moe_gen_idx +
   // moe_expand_input (and the token_count/cusum outputs) on other backends.
   auto [expand_hidden_states, expand_row_ids, group_list, dynamic_scale] =
