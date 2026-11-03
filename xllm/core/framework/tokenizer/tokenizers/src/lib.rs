@@ -5,7 +5,7 @@ use std::{collections::HashMap, str::FromStr};
 use std::fs;
 use std::ffi::{c_char, CStr};
 use std::io;
-use tokenizers::tokenizer::Tokenizer;
+use tokenizers::tokenizer::{Tokenizer, NormalizedString, Normalizer};
 
 pub struct TokenizerWrapper {
     tokenizer: Tokenizer,
@@ -220,5 +220,120 @@ extern "C" fn tokenizers_token_to_id(
             Some(id) => id as i32,
             None => -1,
         };
+    }
+}
+
+// Apply the tokenizer's configured normalizer without encoding or adding tokens.
+#[no_mangle]
+extern "C" fn tokenizers_normalize(
+    handle: *mut TokenizerWrapper,
+    data: *const u8,
+    len: usize,
+    out_data: *mut *const u8,
+    out_len: *mut usize,
+) -> i32 {
+    unsafe {
+        *out_data = std::ptr::null();
+        *out_len = 0;
+        let wrapper = &mut *handle;
+        wrapper.decode_str.clear();
+        let text = match std::str::from_utf8(std::slice::from_raw_parts(data, len)) {
+            Ok(text) => text,
+            Err(_) => return 1,
+        };
+        let mut normalized = NormalizedString::from(text);
+        if let Some(normalizer) = wrapper.tokenizer.get_normalizer() {
+            match normalizer.normalize(&mut normalized) {
+                Ok(()) => {}
+                Err(_) => return 2,
+            }
+        }
+        wrapper.decode_str = normalized.get().to_owned();
+        *out_data = wrapper.decode_str.as_ptr();
+        *out_len = wrapper.decode_str.len();
+        0
+    }
+}
+
+#[cfg(test)]
+mod normalize_tests {
+    use super::*;
+
+    fn tokenizer() -> TokenizerWrapper {
+        TokenizerWrapper::from_str(
+            r#"{"version":"1.0","truncation":null,"padding":null,
+            "added_tokens":[],"normalizer":{"type":"Sequence","normalizers":[
+              {"type":"Lowercase"},{"type":"Strip","strip_left":true,"strip_right":true}]},
+            "pre_tokenizer":null,"post_processor":null,"decoder":null,
+            "model":{"type":"WordLevel","vocab":{"[UNK]":0},"unk_token":"[UNK]"}}"#,
+        )
+    }
+
+    #[test]
+    fn normalizes_without_encoding() {
+        let mut wrapper = tokenizer();
+        let text = "  ÉCOLE  ";
+        let mut data = std::ptr::null();
+        let mut len = 0;
+        assert_eq!(
+            tokenizers_normalize(
+                &mut wrapper,
+                text.as_ptr(),
+                text.len(),
+                &mut data,
+                &mut len,
+            ),
+            0
+        );
+        assert_eq!(
+            unsafe { std::slice::from_raw_parts(data, len) },
+            "école".as_bytes()
+        );
+    }
+
+    #[test]
+    fn empty_normalized_result_is_success() {
+        let mut wrapper = tokenizer();
+        let text = "  ";
+        let mut data = std::ptr::null();
+        let mut len = 99;
+        assert_eq!(
+            tokenizers_normalize(
+                &mut wrapper,
+                text.as_ptr(),
+                text.len(),
+                &mut data,
+                &mut len,
+            ),
+            0
+        );
+        assert!(!data.is_null());
+        assert_eq!(len, 0);
+    }
+
+    #[test]
+    fn invalid_utf8_clears_previous_output() {
+        let mut wrapper = tokenizer();
+        let mut data = std::ptr::null();
+        let mut len = 0;
+        assert_eq!(
+            tokenizers_normalize(&mut wrapper, b"OK".as_ptr(), 2, &mut data, &mut len),
+            0
+        );
+        assert_eq!(len, 2);
+        let invalid = [0xff];
+        assert_eq!(
+            tokenizers_normalize(
+                &mut wrapper,
+                invalid.as_ptr(),
+                invalid.len(),
+                &mut data,
+                &mut len,
+            ),
+            1
+        );
+        assert!(data.is_null());
+        assert_eq!(len, 0);
+        assert!(wrapper.decode_str.is_empty());
     }
 }

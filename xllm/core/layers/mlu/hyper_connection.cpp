@@ -117,7 +117,8 @@ MHCPreImpl::MHCPreImpl(int64_t hc_mult,
 }
 
 MHCPreOutput MHCPreImpl::forward(const torch::Tensor& x,
-                                 const std::optional<torch::Tensor>& rsqrt) {
+                                 const std::optional<torch::Tensor>& rsqrt,
+                                 const std::optional<torch::Tensor>& pre_mix) {
   torch::Tensor x_hc = flat_hc(x, hc_mult_, dim_);
   torch::Tensor x_flat = x_hc.reshape({x_hc.size(0), hc_mult_ * dim_});
 
@@ -143,7 +144,8 @@ MHCPreOutput MHCPreImpl::forward(const torch::Tensor& x,
                                                              sinkhorn_iters_,
                                                              hc_eps_);
 
-  torch::Tensor output = kernel::mlu::fused_mul_reduce_sum(x_hc, pre);
+  torch::Tensor output =
+      kernel::mlu::fused_mul_reduce_sum(x_hc, pre_mix.value_or(pre));
   std::vector<int64_t> out_shape = leading_shape(x, /*tail_dims=*/2);
   out_shape.emplace_back(dim_);
   output = output.reshape(out_shape);
@@ -153,7 +155,7 @@ MHCPreOutput MHCPreImpl::forward(const torch::Tensor& x,
 
   out_shape.emplace_back(hc_mult_);
   comb = comb.reshape(out_shape);
-  return {output, post, comb};
+  return {output, post, comb, pre};
 }
 
 std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>

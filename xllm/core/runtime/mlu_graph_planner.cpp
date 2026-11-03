@@ -346,7 +346,9 @@ GraphDecision MluGraphPlanner::plan(const GraphStepMetadata& step) const {
   key.multi_block_table_column_counts.reserve(params.multi_block_tables.size());
   for (const torch::Tensor& table : params.multi_block_tables) {
     CHECK_EQ(table.dim(), 2);
-    key.multi_block_table_column_counts.push_back(table.size(1));
+    key.multi_block_table_column_counts.push_back(
+        config_.capabilities.graph_dynamic_multi_block_tables ? 0
+                                                              : table.size(1));
   }
   if (get_key_size(key) > kMaxGraphKeyFields) {
     return EagerReason::UNSUPPORTED_INPUT;

@@ -203,7 +203,8 @@ GraphPersistentParam::GraphPersistentParam(const torch::Tensor& tokens,
                                            const torch::Tensor& positions,
                                            ModelInputParams params,
                                            const GraphLayout& layout,
-                                           int64_t main_block_table_columns)
+                                           int64_t main_block_table_columns,
+                                           bool dynamic_multi_block_tables)
     : params_(std::move(params)) {
   const torch::Tensor& input_embedding = params_.embedding.input_embedding;
   if (input_embedding.defined()) {
@@ -280,8 +281,11 @@ GraphPersistentParam::GraphPersistentParam(const torch::Tensor& tokens,
         torch::TensorOptions().dtype(torch::kBool).device(tokens.device()));
   }
   params_.expert.eplb_decode_token_mask = torch::Tensor();
-  for (auto& table : params_.multi_block_tables) {
-    table = allocate_rows(table, table.size(0) + extra_rows);
+  dynamic_multi_block_tables_ = dynamic_multi_block_tables;
+  if (!dynamic_multi_block_tables_) {
+    for (auto& table : params_.multi_block_tables) {
+      table = allocate_rows(table, table.size(0) + extra_rows);
+    }
   }
 }
 
@@ -290,6 +294,9 @@ void GraphPersistentParam::update_input_buffer(const torch::Tensor& tokens,
                                                const ModelInputParams& params,
                                                const GraphLayout& layout) {
   params_.meta.kv_max_seq_len = params.meta.kv_max_seq_len;
+  params_.meta.actual_num_sequences = params.meta.num_sequences;
+  params_.embedding.engram_lookback_token_ids =
+      params.embedding.engram_lookback_token_ids;
   if (mtp_topk_input_ != nullptr) {
     CHECK(params.mtp_topk_state != nullptr);
     mtp_topk_input_->update(*params.mtp_topk_state);
@@ -341,11 +348,18 @@ void GraphPersistentParam::update_input_buffer(const torch::Tensor& tokens,
                        params.linear_state_validity_mask_tensor,
                        "state_mask");
   }
-  CHECK_EQ(params_.multi_block_tables.size(), params.multi_block_tables.size());
-  for (std::size_t i = 0; i < params.multi_block_tables.size(); ++i) {
-    check_graph_tensor(params_.multi_block_tables[i],
-                       params.multi_block_tables[i],
-                       "multi_block_tables");
+  if (dynamic_multi_block_tables_) {
+    // Only eager callbacks read these tables; captured segments read their
+    // fixed-width selection outputs instead.
+    params_.multi_block_tables = params.multi_block_tables;
+  } else {
+    CHECK_EQ(params_.multi_block_tables.size(),
+             params.multi_block_tables.size());
+    for (std::size_t i = 0; i < params.multi_block_tables.size(); ++i) {
+      check_graph_tensor(params_.multi_block_tables[i],
+                         params.multi_block_tables[i],
+                         "multi_block_tables");
+    }
   }
   const int64_t extra_requests = layout.padded_num_reqs - layout.num_reqs;
   const int64_t extra_rows = extra_requests * layout.tokens_per_request /
@@ -419,10 +433,11 @@ void GraphPersistentParam::update_input_buffer(const torch::Tensor& tokens,
     }
     copy_host(attention.kv_seq_lens.narrow(0, kv_rows, extra_rows), tail);
   }
-  if (padded_reqs || tokens.size(0) < attention.new_cache_slots.size(0)) {
+  const int64_t slot_rows = params.attention.device.new_cache_slots.size(0);
+  if (padded_reqs || slot_rows < attention.new_cache_slots.size(0)) {
     attention.new_cache_slots.fill_(layout.cache_pad_slot);
   }
-  attention.new_cache_slots.narrow(0, 0, tokens.size(0))
+  attention.new_cache_slots.narrow(0, 0, slot_rows)
       .copy_(params.attention.device.new_cache_slots);
   if (attention.block_tables.defined()) {
     const int64_t block_rows = params.attention.device.block_tables.size(0);
@@ -508,14 +523,17 @@ void GraphPersistentParam::update_input_buffer(const torch::Tensor& tokens,
     params_.linear_state_validity_mask_tensor.narrow(0, 0, mask.numel())
         .copy_(mask);
   }
-  for (size_t i = 0; i < params.multi_block_tables.size(); ++i) {
-    if (padded_reqs) {
-      params_.multi_block_tables[i].zero_();
-      params_.multi_block_tables[i]
-          .narrow(0, 0, params.multi_block_tables[i].size(0))
-          .copy_(params.multi_block_tables[i]);
-    } else {
-      copy_rows(params_.multi_block_tables[i], params.multi_block_tables[i], 0);
+  if (!dynamic_multi_block_tables_) {
+    for (size_t i = 0; i < params.multi_block_tables.size(); ++i) {
+      if (padded_reqs) {
+        params_.multi_block_tables[i].zero_();
+        params_.multi_block_tables[i]
+            .narrow(0, 0, params.multi_block_tables[i].size(0))
+            .copy_(params.multi_block_tables[i]);
+      } else {
+        copy_rows(
+            params_.multi_block_tables[i], params.multi_block_tables[i], 0);
+      }
     }
   }
   if (params_.linear_state_validity_mask_tensor.defined()) {
@@ -873,12 +891,13 @@ ModelOutput MluGraphExecutorImpl::run(const torch::Tensor& tokens,
         graph_params.linear_state_validity_mask_tensor = torch::Tensor();
       }
     }
-    auto buffers =
-        std::make_unique<GraphPersistentParam>(tokens,
-                                               positions,
-                                               std::move(graph_params),
-                                               layout,
-                                               main_block_table_columns_);
+    auto buffers = std::make_unique<GraphPersistentParam>(
+        tokens,
+        positions,
+        std::move(graph_params),
+        layout,
+        main_block_table_columns_,
+        mtp_capabilities_.graph_dynamic_multi_block_tables);
     auto graph = std::make_unique<MluGraph>(
         std::move(buffers), mtp_capabilities_.enable_piecewise_graph);
     active_graph = graph.get();

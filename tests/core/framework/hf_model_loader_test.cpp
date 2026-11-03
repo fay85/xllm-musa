@@ -28,6 +28,7 @@ limitations under the License.
 #include "core/framework/model/mtp_utils.h"
 #include "core/framework/model/rec_causal_lm.h"
 #include "core/platform/device.h"
+#include "core/platform/platform.h"
 #include "core/runtime/options.h"
 #include "core/util/model_config_utils.h"
 #include "models/llm/deepseek_v41.h"
@@ -1846,6 +1847,65 @@ TEST(HFModelLoaderTest, DeepseekV41RejectsInvalidVisionArgs) {
   valid.mm_patch_size(14);
   valid.mm_image_patch_size(14);
   EXPECT_NO_FATAL_FAILURE(validate_deepseek_v41_args(valid, policy));
+}
+
+TEST(HFModelLoaderTest, LoadMluSmoothQuantWithoutModelSpecificMetadata) {
+  for (const std::string global_format : {"int-quantized", "fakequant"}) {
+    for (bool omit_group_format : {false, true}) {
+      SCOPED_TRACE(global_format);
+      SCOPED_TRACE(omit_group_format);
+      auto raw = mixed_quant_config();
+      auto& quant = raw["quantization_config"];
+      quant["format"] = global_format;
+      auto& dense = quant["config_groups"]["dense_w8a8"];
+      dense["format"] = nullptr;
+      if (omit_group_format) {
+        dense.erase("format");
+      }
+      JsonReader reader;
+      ASSERT_TRUE(reader.parse_text(raw.dump()));
+      QuantArgs args;
+      const bool supported = global_format != "fakequant" || Platform::is_mlu();
+      ASSERT_EQ(load_quant_cfg(reader, args), supported);
+      EXPECT_EQ(reader.data(), raw);
+      if (!supported) {
+        continue;
+      }
+      EXPECT_TRUE(args.is_compressed_tensors_w8a8_dynamic());
+      EXPECT_EQ(args.compressed_groups().size(), 2);
+      const auto expert =
+          args.for_module("model.layers.3.mlp.experts.7.gate_proj");
+      EXPECT_EQ(expert.bits(), 4);
+      EXPECT_EQ(expert.group_size(), 128);
+      EXPECT_TRUE(expert.preserve_smooth());
+      const auto attention = args.for_module("model.layers.3.self_attn.o_proj");
+      EXPECT_EQ(attention.bits(), 8);
+      EXPECT_TRUE(attention.preserve_smooth());
+    }
+  }
+}
+
+TEST(HFModelLoaderTest, RejectFakeQuantWithoutSmoothOrExplicitInt4Layout) {
+  for (const std::string invalid :
+       {"missing_smooth", "missing_int4_layout", "unknown_format"}) {
+    SCOPED_TRACE(invalid);
+    auto raw = mixed_quant_config();
+    auto& quant = raw["quantization_config"];
+    quant["format"] = "fakequant";
+    auto& dense = quant["config_groups"]["dense_w8a8"];
+    dense["format"] = nullptr;
+    if (invalid == "missing_smooth") {
+      dense["weights"].erase("preserve_smooth");
+    } else if (invalid == "missing_int4_layout") {
+      quant["config_groups"]["experts_w4a8"]["format"] = nullptr;
+    } else {
+      dense["format"] = "unsupported-format";
+    }
+    JsonReader reader;
+    ASSERT_TRUE(reader.parse_text(raw.dump()));
+    QuantArgs args;
+    EXPECT_FALSE(load_quant_cfg(reader, args));
+  }
 }
 
 }  // namespace xllm

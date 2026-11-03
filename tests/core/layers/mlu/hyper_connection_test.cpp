@@ -379,6 +379,38 @@ class HyperConnectionTest : public ::testing::Test {
   torch::TensorOptions options_;
 };
 
+TEST_F(HyperConnectionTest, DelayedPreMixUsesPreviousSublayerCoefficients) {
+  config_.dim = 5120;
+  config_.norm_eps = 1e-20;
+  const auto weights = pre_weights();
+  MHCPre hc(config_.hc_mult,
+            config_.dim,
+            config_.sinkhorn_iters,
+            config_.hc_eps,
+            config_.norm_eps,
+            options_);
+  hc->load_state_dict(StateDict(weights));
+  torch::Tensor x = seeded("v41.delayed.x",
+                           {3, config_.hc_mult, config_.dim},
+                           torch::kBFloat16,
+                           options_.device());
+  torch::Tensor pre =
+      torch::zeros({3, config_.hc_mult}, options_.dtype(torch::kFloat32));
+  pre.select(1, 0).fill_(1);
+  const auto first = hc->forward(x, std::nullopt, pre);
+  test::verify_tensor_close(first.output.cpu(), x.select(1, 0).cpu(), 0, 0);
+  torch::Tensor next = x * 0.75;
+  const auto second = hc->forward(next, std::nullopt, first.pre);
+  torch::Tensor expected = (next.to(torch::kFloat32) * first.pre.unsqueeze(-1))
+                               .sum(1)
+                               .to(torch::kBFloat16);
+  test::verify_tensor_close(second.output.cpu(), expected.cpu(), 1e-3, 1e-3);
+  const auto ordinary = hc->forward(next);
+  EXPECT_TRUE(torch::equal(second.pre, ordinary.pre));
+  EXPECT_TRUE(torch::equal(second.post, ordinary.post));
+  EXPECT_TRUE(torch::equal(second.comb, ordinary.comb));
+}
+
 TEST_F(HyperConnectionTest, HCPreMatchesOfficialReference) {
   const int64_t batch_size = 1;
   const int64_t seq_len = 2;

@@ -45,7 +45,8 @@ class GraphPersistentParam final {
                        const torch::Tensor& positions,
                        ModelInputParams params,
                        const GraphLayout& layout,
-                       int64_t main_block_table_columns);
+                       int64_t main_block_table_columns,
+                       bool dynamic_multi_block_tables = false);
 
   void update_input_buffer(const torch::Tensor& tokens,
                            const torch::Tensor& positions,
@@ -58,6 +59,7 @@ class GraphPersistentParam final {
   torch::Tensor tokens_;
   torch::Tensor positions_;
   ModelInputParams params_;
+  bool dynamic_multi_block_tables_ = false;
   bool use_mrope_ = false;
   torch::Tensor output_;
   torch::Tensor aux_hidden_states_;

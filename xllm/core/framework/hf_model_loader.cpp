@@ -165,12 +165,21 @@ bool load_ct_int_config(const nlohmann::json& config, QuantArgs& args) {
     scheme.bits = weights.value("num_bits", 0);
     scheme.preserve_smooth = weights.value("preserve_smooth", false);
     const bool w4 = scheme.bits == 4;
-    const std::string format =
-        group.value("format", config.value("format", "int-quantized"));
+    const auto format_it = group.find("format");
+    const std::string format = format_it != group.end() && !format_it->is_null()
+                                   ? format_it->get<std::string>()
+                                   : config.value("format", "int-quantized");
+    // MLU SmoothQuant exporters may retain the fakequant label for W8A8.
+    // W4A8 still requires an explicit LE-packed format; its layout differs.
+    const bool mlu_smooth_w8a8 = Platform::is_mlu() && scheme.bits == 8 &&
+                                 scheme.preserve_smooth &&
+                                 format == "fakequant";
+    const bool supported_format =
+        format == (w4 ? "int4-le-pack-quantized" : "int-quantized") ||
+        mlu_smooth_w8a8;
     if ((scheme.bits != 4 && scheme.bits != 8) ||
         !is_compressed_int_scheme(weights, scheme.bits, false) ||
-        !is_compressed_int_scheme(activations, 8, true) ||
-        format != (w4 ? "int4-le-pack-quantized" : "int-quantized") ||
+        !is_compressed_int_scheme(activations, 8, true) || !supported_format ||
         !weights.value("symmetric", true) ||
         !activations.value("symmetric", true) ||
         weights.value("strategy", "channel") != (w4 ? "group" : "channel") ||
@@ -529,7 +538,7 @@ bool load_quant_cfg(const JsonReader& reader, QuantArgs& quant_args) {
   if (auto v = reader.value<std::string>("quantization_config.quant_method")) {
     quant_args.quant_method() = v.value();
   }
-  // Checkpoint format parsing is independent of backend execution support.
+  // The scheme parser validates backend-specific export formats.
   const nlohmann::json data = reader.data();
   const nlohmann::json* ct_config =
       get_compressed_tensors_config(data, reader, "quantization_config");

@@ -4,7 +4,23 @@ sidebar:
   order: 83
 ---
 
-## Overview
+## MLU FP8 Engram
+
+The native MLU DeepSeek-V4.1 implementation keeps FP8 Engram tables and scales in host memory by default. Omitting the flag or passing `{}` enables offload. Select placement through the server arguments:
+
+```bash
+# Default: host tables, preserving existing TP row sharding
+xllm --engram_config='{"cpu_offload":true}'
+
+# Disable offload: keep tables on the MLU device
+xllm --engram_config='{"cpu_offload":false}'
+```
+
+The host path reuses hash generation, gathers the referenced FP8 rows and scales on CPU, and transfers them through pinned staging buffers to the existing device dequantization, collective and projection path. A stream host callback refreshes rows during graph replay. The full tables use pageable host memory; only staging buffers are pinned.
+
+MLU currently rejects `dp_shared_memory=true` at initialization. With TP=8, the two tables require approximately 23.60 GiB host memory per rank, or 188.83 GiB across the node, plus loading and execution buffers. Projection weights remain on MLU. The following sections describe the NPU path, whose defaults and supported table formats differ.
+
+## NPU overview
 
 Under the DeepSeek-V4.1 W8A8 (Eco-Tech int8) export, the Engram n-gram table holds about **27.7 GiB of HBM per card**. `engram_config.cpu_offload` moves that table into **host memory** (pageable CPU memory) to free the HBM budget, at the cost of one NPU->CPU id sync per step plus a CPU int8 dequant and an H2D upload of the touched rows. That path is served by the fused CPU lookup op (`xllm_ops.engram_int8_lookup_cpu`); only the int8 table can be offloaded.
 
@@ -16,7 +32,7 @@ The config is a **raw JSON string** carried by the C++ gflag `engram_config` and
 xllm --engram-config '{"cpu_offload":true,"dp_shared_memory":false}'
 ```
 
-xLLM itself is **off by default**: with no `--engram-config`, `EngramConfig()` is `{"cpu_offload":false,"dp_shared_memory":false}` (equivalent to `{}`) and the HBM path is used; enabling offload requires **passing the flag explicitly** (e.g. `--engram-config '{"cpu_offload":true}'`). A deployment launcher that wants it on by default supplies the flag itself; xLLM does not know about that layer.
+The NPU path is **off by default**: with no `--engram-config`, `EngramConfig()` is `{"cpu_offload":false,"dp_shared_memory":false}` (equivalent to `{}`) and the HBM path is used; enabling offload requires **passing the flag explicitly** (e.g. `--engram-config '{"cpu_offload":true}'`). A deployment launcher that wants it on by default supplies the flag itself; xLLM does not know about that layer.
 
 ## Switch semantics
 

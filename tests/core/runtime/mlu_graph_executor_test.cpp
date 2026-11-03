@@ -1158,6 +1158,43 @@ TEST_F(MluGraphExecutorTest, CaptureValidatesExternalEmbeddingLayout) {
                "input_embedding graph input device changed");
 }
 
+TEST_F(MluGraphExecutorTest,
+       EagerPageTablesAndEngramHistoryRefreshAcrossReplay) {
+  auto first = prepare_inputs(/*batch_size=*/4, /*seed=*/114);
+  const auto ints = tensor_options_.dtype(torch::kInt32);
+  // Grouped caches use page tables instead of an ordinary slot mapping.
+  first.input_params.attention.device.new_cache_slots = torch::empty({0}, ints);
+  first.input_params.multi_block_tables = {torch::ones({4, 1}, ints)};
+  first.input_params.embedding.engram_lookback_token_ids = {1, 2, 3, 4};
+  mlu::GraphLayout layout;
+  layout.num_reqs = 4;
+  layout.padded_num_reqs = 4;
+  layout.padded_num_tokens = 4;
+  mlu::GraphPersistentParam buffers(first.token_ids,
+                                    first.positions,
+                                    first.input_params,
+                                    layout,
+                                    /*main_block_table_columns=*/256,
+                                    /*dynamic_multi_block_tables=*/true);
+  buffers.update_input_buffer(
+      first.token_ids, first.positions, first.input_params, layout);
+  auto next = prepare_inputs(/*batch_size=*/2, /*seed=*/115);
+  next.input_params.attention.device.new_cache_slots = torch::empty({0}, ints);
+  next.input_params.multi_block_tables = {torch::full({2, 256}, 7, ints)};
+  next.input_params.embedding.engram_lookback_token_ids = {8, 9};
+  layout.num_reqs = 2;
+  buffers.update_input_buffer(
+      next.token_ids, next.positions, next.input_params, layout);
+  EXPECT_TRUE(torch::equal(buffers.params_.attention.device.new_cache_slots,
+                           torch::zeros({4}, ints)));
+  EXPECT_EQ(buffers.params_.meta.actual_num_sequences, 2);
+  EXPECT_EQ(buffers.params_.meta.num_sequences, 4);
+  EXPECT_EQ(buffers.params_.embedding.engram_lookback_token_ids,
+            next.input_params.embedding.engram_lookback_token_ids);
+  EXPECT_TRUE(torch::equal(buffers.params_.multi_block_tables[0],
+                           next.input_params.multi_block_tables[0]));
+}
+
 TEST_F(MluGraphExecutorTest, PersistentInputsClearShrunkTailsAndDefaults) {
   auto full = prepare_inputs(/*batch_size=*/4, /*seed=*/114);
   const auto ints = tensor_options_.dtype(torch::kInt32);

@@ -17,6 +17,17 @@ typedef struct {
   size_t len;
 } TokenizerEncodeResult;
 
+TokenizerHandle tokenizers_new_from_str(const char* data, size_t len);
+
+// Returned text is owned by the handle until its next decode/normalize call.
+// Returns 0 on success (including an empty result), 1 for invalid UTF-8, or
+// 2 for a normalizer error. Failures clear the output pointer and length.
+int32_t tokenizers_normalize(TokenizerHandle handle,
+                             const char* data,
+                             size_t len,
+                             const char** normalized_data,
+                             size_t* normalized_len);
+
 TokenizerHandle tokenizers_new_from_path(const char* path);
 
 void tokenizers_encode(TokenizerHandle handle,

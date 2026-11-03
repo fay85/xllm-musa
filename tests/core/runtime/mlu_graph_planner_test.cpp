@@ -522,6 +522,21 @@ TEST(MluGraphPlannerTest, InvalidOffsetsAndDistinctMultiTablesStaySeparate) {
             EagerReason::INVALID_LAYOUT);
 }
 
+TEST(MluGraphPlannerTest, EagerMultiTablesDoNotSpecializeOnHistoryWidth) {
+  auto config = qwen_config();
+  config.capabilities.enable_piecewise_graph = true;
+  config.capabilities.graph_dynamic_multi_block_tables = true;
+  MluGraphPlanner planner(config);
+  auto short_input = decode_input(16);
+  auto long_input = decode_input(32768);
+  short_input.multi_block_tables = {torch::zeros({3, 2}, torch::kInt32),
+                                    torch::zeros({3, 1}, torch::kInt32)};
+  long_input.multi_block_tables = {torch::zeros({3, 3}, torch::kInt32),
+                                   torch::zeros({3, 256}, torch::kInt32)};
+  EXPECT_TRUE(std::get<GraphPlan>(planner.plan({3, short_input})).key ==
+              std::get<GraphPlan>(planner.plan({3, long_input})).key);
+}
+
 TEST(MluGraphPlannerTest, NonDecodeAndTokenLimitReturnReasons) {
   GraphPlannerConfig config = qwen_config();
   config.max_tokens = 3;

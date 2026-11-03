@@ -84,8 +84,8 @@ DEFINE_string(engram_config,
               "Engram host-offload switches as a raw JSON object string, e.g. "
               "'{\"cpu_offload\":true,\"dp_shared_memory\":true}'. Forwarded "
               "verbatim to the Python executor, which parses and validates it "
-              "(xllm/python/models/engram_config.py). \"{}\" disables both "
-              "switches.");
+              "(xllm/python/models/engram_config.py). MLU defaults to "
+              "cpu_offload=true; NPU defaults to both switches disabled.");
 
 // NOTE: This is an experimental flag,
 //       it needs to be removed after the function is stable.

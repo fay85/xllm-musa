@@ -18,6 +18,11 @@ cc_library(
     deepseek_v32/deepseek_v32_decoder_layer.h
     deepseek_v32/deepseek_v32_sparse_moe_block.h
     deepseek_v32/deepseek_v32_indexer.h
+    deepseek_v41/deepseek_v41_decoder_layer.h
+    deepseek_v41/deepseek_v41_attention.h
+    deepseek_v41/deepseek_v41_attention_utils.h
+    deepseek_v41/deepseek_v41_indexer.h
+    deepseek_v41/deepseek_v41_engram.h
     deepseek_v4/compressor.h
     deepseek_v4/dsa_cache_mapping.h
     deepseek_v4/dsa_empty_dp_input.h
@@ -57,6 +62,11 @@ cc_library(
     deepseek_v32/deepseek_v32_decoder_layer.cpp
     deepseek_v32/deepseek_v32_sparse_moe_block.cpp
     deepseek_v32/deepseek_v32_indexer.cpp
+    deepseek_v41/deepseek_v41_decoder_layer.cpp
+    deepseek_v41/deepseek_v41_attention.cpp
+    deepseek_v41/deepseek_v41_indexer.cpp
+    deepseek_v41/deepseek_v41_engram.cpp
+    deepseek_v41/deepseek_v41_hash.cpp
     deepseek_v4/compressor.cpp
     deepseek_v4/dsa_empty_dp_input.cpp
     deepseek_v4/dsa_metadata_builder_mlu.cpp
@@ -83,6 +93,7 @@ cc_library(
     qwen3_5/qwen3_next_rms_norm.cpp
     moe_softplus_topk.cpp
   DEPS
+    rust_tokenizers
     :common_layers
     :util
 )

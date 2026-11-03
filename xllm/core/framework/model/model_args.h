@@ -251,8 +251,8 @@ struct ModelArgs {
   PROPERTY(int32_t, engram_n_heads) = 0;
   PROPERTY(int32_t, engram_head_dim) = 0;
   // -1 = "unset": matches DeepseekV41Config.engram_pad_token_id in
-  // xllm/python/models/deepseek_v41.py, whose guard rejects an enabled engram
-  // with an unset pad id. Keep this and the deepseek_v41 loader default equal.
+  // xllm/python/models/deepseek_v41.py. Both Python and MLU Engram validate
+  // this id when enabled. Keep this and the deepseek_v41 loader default equal.
   PROPERTY(int32_t, engram_pad_token_id) = -1;
   PROPERTY(int32_t, engram_compressed_vocab_size) = 0;
   PROPERTY(int32_t, dspark_n_routed_experts) = 0;

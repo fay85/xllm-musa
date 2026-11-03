@@ -59,6 +59,9 @@ limitations under the License.
 #include "core/framework/xtensor/options.h"
 #include "core/framework/xtensor/xtensor_allocator.h"
 #include "core/platform/device_name_utils.h"
+#if defined(USE_MLU)
+#include "core/kernels/mlu/bangc/include/deepseek_v41_constants.h"
+#endif
 #if defined(USE_NPU)
 #include "core/platform/npu/npu_python_runtime.h"
 #endif
@@ -471,11 +474,16 @@ void validate_config(const std::string& model_type) {
                  << "Disabling enable_schedule_overlap.";
     scheduler_config.enable_schedule_overlap(false);
   }
-  // TODO: support other block sizes in the future
-  if (kv_cache_config.block_size() != 16 && kv_cache_config.block_size() != 1 &&
-      model_config.backend() != "dit") {
-    LOG(FATAL) << "Currently, block_size must be 16 for MLU backend, we will "
-                  "support other block sizes in the future.";
+  if (util::is_deepseek_v41_model_type(model_args.model_type())) {
+    CHECK_EQ(kv_cache_config.block_size(),
+             kernel::mlu::bangc::kDeepseekV41MluKVBlockSize)
+        << "MLU DeepSeek V4.1 requires block_size "
+        << kernel::mlu::bangc::kDeepseekV41MluKVBlockSize << ", got "
+        << kv_cache_config.block_size();
+  } else if (kv_cache_config.block_size() != 16 &&
+             kv_cache_config.block_size() != 1 &&
+             model_config.backend() != "dit") {
+    LOG(FATAL) << "MLU requires block_size 1 or 16.";
   }
   if (disagg_pd_config.enable_disagg_pd()) {
     if (model_config.backend() != "llm") {

@@ -101,6 +101,7 @@ FusedMoEImpl::FusedMoEImpl(const ModelArgs& model_args,
       enable_result_reduction_(moe_args.enable_result_reduction),
       hidden_act_(model_args.hidden_act()),
       swiglu_limit_(model_args.model_type() == "deepseek_v4" ||
+                            model_args.model_type() == "deepseek_v41" ||
                             model_args.model_type() == "glm5_next"
                         ? std::make_optional(model_args.swiglu_limit())
                         : std::nullopt),

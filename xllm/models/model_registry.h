@@ -76,6 +76,9 @@ struct MtpModelCapabilities {
   int64_t graph_block_table_extra_columns = 1;
   int64_t graph_cache_pad_slot = 0;
   bool enable_piecewise_graph = false;
+  // Grouped page tables are consumed only by piecewise eager callbacks.
+  // Their widths do not specialize captured kernels or own captured storage.
+  bool graph_dynamic_multi_block_tables = false;
   bool native_draft_owns_embedding_and_lm_head = false;
   bool python_draft_owns_embedding_and_lm_head = false;
 };

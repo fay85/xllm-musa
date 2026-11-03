@@ -351,10 +351,8 @@ inline bool load_deepseek_v41_model_args(const JsonReader& json,
   LOAD_ARG_OR(engram_n_heads, "text_config.engram_n_heads", 0);
   LOAD_ARG_OR(engram_head_dim, "text_config.engram_head_dim", 0);
   // -1 is the "unset" sentinel, matching DeepseekV41Config.engram_pad_token_id
-  // in xllm/python/models/deepseek_v41.py. This args loader only feeds the
-  // Python impl via PyCausalLM::build_config_dict; C++ never indexes a tensor
-  // with this value. Keeping 2 here would overwrite Python's sentinel in the
-  // service path and defeat its "engram enabled but pad id unset" guard.
+  // in xllm/python/models/deepseek_v41.py. Python and MLU Engram reject an
+  // unset or out-of-vocabulary pad id when enabled.
   LOAD_ARG_OR(engram_pad_token_id, "text_config.engram_pad_token_id", -1);
   LOAD_ARG_OR(engram_compressed_vocab_size,
               "text_config.engram_compressed_vocab_size",

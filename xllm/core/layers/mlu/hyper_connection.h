@@ -60,6 +60,7 @@ struct MHCPreOutput final {
   torch::Tensor output;
   torch::Tensor post;
   torch::Tensor comb;
+  torch::Tensor pre;
 };
 
 class MHCPreImpl final : public torch::nn::Module {
@@ -77,7 +78,8 @@ class MHCPreImpl final : public torch::nn::Module {
 
   MHCPreOutput forward(
       const torch::Tensor& x,
-      const std::optional<torch::Tensor>& rsqrt = std::nullopt);
+      const std::optional<torch::Tensor>& rsqrt = std::nullopt,
+      const std::optional<torch::Tensor>& pre_mix = std::nullopt);
 
   std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
   fused_post_pre_norm(const torch::Tensor& x,

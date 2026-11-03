@@ -381,3 +381,20 @@ cc_test(
 )
 
 add_subdirectory(deepseek_v32)
+
+cc_test(
+  NAME deepseek_v41_graph_test
+  SRCS deepseek_v41_graph_test.cpp
+  DEPS :tests_utils :mlu_layers :common_layers :model_context :parallel_state
+       :state_dict xllm::mlu_ops torch glog::glog GTest::gtest_main
+)
+
+cc_test(
+  NAME deepseek_v41_engram_test
+  RUN_SERIAL
+  SRCS deepseek_v41_engram_test.cpp
+  DEPS :tests_utils :config :mlu_layers :common_layers :model_context
+       :parallel_state :state_dict torch glog::glog GTest::gtest_main
+  ENVIRONMENT
+    "PYTHONPATH=${_xllm_build_import_root}:$ENV{PYTHONPATH};OMP_NUM_THREADS=1;MKL_NUM_THREADS=1"
+)

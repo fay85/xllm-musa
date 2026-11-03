@@ -4,7 +4,23 @@ sidebar:
   order: 83
 ---
 
-## 概述
+## MLU FP8 Engram
+
+MLU 原生 DeepSeek-V4.1 默认将 Engram FP8 表及 scale 保存在 host 内存。未传参数或传入 `{}` 时均启用；可通过服务启动参数显式选择：
+
+```bash
+# 默认：表在 host，保留原有 TP 行切分
+xllm --engram_config='{"cpu_offload":true}'
+
+# 关闭卸载：表常驻 MLU device
+xllm --engram_config='{"cpu_offload":false}'
+```
+
+host 路径复用已有 hash 计算：CPU 收集当前 token 命中的 FP8 行及 scale，经 pinned staging buffer 搬到 MLU，沿用 device 反量化、集合通信和投影。Graph replay 使用流上的 host callback 更新命中行，避免复用旧 token 的查表结果。大表本体无需锁页，仅 staging buffer 锁页。
+
+当前 MLU 不支持 `dp_shared_memory=true`，请求该配置会在初始化时报错。双表在 TP=8 下合计约占每 rank 23.60 GiB host 内存；节点内各 rank 分片合计约 188.83 GiB，另需加载和运行缓冲。仅卸载大表及 scale，投影等小权重仍在 MLU。以下章节介绍 NPU 路径，其默认值和支持的表格式与 MLU 不同。
+
+## NPU 概述
 
 DeepSeek-V4.1 的 Engram n-gram 表在 W8A8（Eco-Tech int8）导出下每卡约 **27.7 GiB** 的常驻显存（可被卸载释放）。`engram_config.cpu_offload` 把这部分表搬到 **host 内存**（pageable CPU 内存），换取 HBM 预算，代价是每步一次 NPU→CPU 的 id 同步 + CPU int8 去量化 + 命中行的 H2D 回传。该路径由融合 CPU 查表算子（`xllm_ops.engram_int8_lookup_cpu`）承担，仅 int8 表可卸载。
 
@@ -16,7 +32,7 @@ DeepSeek-V4.1 的 Engram n-gram 表在 W8A8（Eco-Tech int8）导出下每卡约
 xllm --engram-config '{"cpu_offload":true,"dp_shared_memory":false}'
 ```
 
-xLLM 自身**默认全关**：不传 `--engram-config` 时 `EngramConfig()` 为 `{"cpu_offload":false,"dp_shared_memory":false}`（等价 `{}`），走 HBM 路径；要开启卸载必须**显式传入**该参数（如 `--engram-config '{"cpu_offload":true}'`）。部署侧的启动脚本若需要默认开启，由该脚本自行下发参数，xLLM 不感知其形态。
+NPU 路径**默认全关**：不传 `--engram-config` 时 `EngramConfig()` 为 `{"cpu_offload":false,"dp_shared_memory":false}`（等价 `{}`），走 HBM 路径；要开启卸载必须**显式传入**该参数（如 `--engram-config '{"cpu_offload":true}'`）。部署侧的启动脚本若需要默认开启，由该脚本自行下发参数，xLLM 不感知其形态。
 
 ## 开关语义
 

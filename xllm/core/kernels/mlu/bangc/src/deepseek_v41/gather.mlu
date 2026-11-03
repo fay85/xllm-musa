@@ -1,0 +1,98 @@
+/* Copyright 2026 The xLLM Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#include <bang.h>
+
+#include "kernels/mlu/bangc/include/deepseek_v41_constants.h"
+#include "kernels/mlu/bangc/src/deepseek_v41/launch.h"
+namespace {
+using xllm::kernel::mlu::bangc::kDeepseekV41MluKVBlockSize;
+__nram__ int16_t row[512];
+__mlu_global__ void gather(int16_t* swa,
+                           const int16_t* compressed,
+                           const int16_t* current,
+                           const int32_t* swa_table,
+                           const int32_t* comp_table,
+                           const int64_t* topk,
+                           int32_t count,
+                           int64_t position,
+                           int32_t window,
+                           int32_t swa_columns,
+                           int16_t* output,
+                           int32_t* length) {
+  const int32_t win = position + 1 < window ? position + 1 : window;
+  if (taskId == 0) {
+    *length = win + count;
+  }
+  for (int32_t col = taskId; col < win + count; col += taskDim) {
+    const bool is_window = col < win;
+    const int64_t logical =
+        is_window ? position - win + 1 + col : topk[col - win];
+    const int64_t physical =
+        is_window ? static_cast<int64_t>(
+                        swa_table[(logical / kDeepseekV41MluKVBlockSize) %
+                                  swa_columns]) *
+                            kDeepseekV41MluKVBlockSize +
+                        logical % kDeepseekV41MluKVBlockSize
+                  : static_cast<int64_t>(
+                        comp_table[logical / kDeepseekV41MluKVBlockSize]) *
+                            kDeepseekV41MluKVBlockSize +
+                        logical % kDeepseekV41MluKVBlockSize;
+    const int16_t* source =
+        is_window && logical == position
+            ? current
+            : (is_window ? swa : compressed) + physical * 512;
+    __memcpy(row, source, 512 * sizeof(int16_t), GDRAM2NRAM);
+    __memcpy(output + col * 512, row, 512 * sizeof(int16_t), NRAM2GDRAM);
+  }
+  if (taskId == 0) {
+    const int64_t target =
+        static_cast<int64_t>(
+            swa_table[(position / kDeepseekV41MluKVBlockSize) % swa_columns]) *
+            kDeepseekV41MluKVBlockSize +
+        position % kDeepseekV41MluKVBlockSize;
+    __memcpy(row, current, 512 * sizeof(int16_t), GDRAM2NRAM);
+    __memcpy(swa + target * 512, row, 512 * sizeof(int16_t), NRAM2GDRAM);
+  }
+}
+}  // namespace
+void deepseek_v41_gather_launch(cnrtQueue_t queue,
+                                const void* swa,
+                                const void* compressed,
+                                const void* current,
+                                const int32_t* swa_table,
+                                const int32_t* comp_table,
+                                const int64_t* topk,
+                                int32_t count,
+                                int64_t position,
+                                int32_t window,
+                                int32_t swa_columns,
+                                void* output,
+                                int32_t* length) {
+  cnrtDim3_t grid = {32, 1, 1};
+  gather<<<grid, cnrtFuncTypeBlock, queue>>>(
+      static_cast<int16_t*>(const_cast<void*>(swa)),
+      static_cast<const int16_t*>(compressed),
+      static_cast<const int16_t*>(current),
+      swa_table,
+      comp_table,
+      topk,
+      count,
+      position,
+      window,
+      swa_columns,
+      static_cast<int16_t*>(output),
+      length);
+}
