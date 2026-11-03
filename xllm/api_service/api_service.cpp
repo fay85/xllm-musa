@@ -23,6 +23,7 @@ limitations under the License.
 
 #include <filesystem>
 #include <limits>
+#include <nlohmann/json.hpp>
 
 #include "api_service/call.h"
 #include "api_service/chat_json_parser.h"
@@ -47,6 +48,8 @@ limitations under the License.
 #include "core/framework/config/multimodal_config.h"
 #include "core/framework/config/profile_config.h"
 #include "core/framework/config/service_config.h"
+#include "core/framework/lora/lora_request.h"
+#include "core/framework/lora/lora_runtime.h"
 #include "core/util/closure_guard.h"
 #include "embedding.pb.h"
 #include "image_generation.pb.h"
@@ -1696,6 +1699,265 @@ void APIService::StopProfileHttp(::google::protobuf::RpcController* controller,
   }
   LOG(INFO) << "Profiler stopped.";
   // Success: return HTTP 200 with empty body
+}
+
+namespace {
+
+// Shared plumbing for the LoRA adapter management endpoints: parse the
+// JSON body from the HTTP request attachment. Returns nullopt and fails
+// the controller with a structured 400 response on a malformed body.
+std::optional<nlohmann::json> parse_lora_http_json(brpc::Controller* ctrl) {
+  const std::string body = ctrl->request_attachment().to_string();
+  try {
+    nlohmann::json j = nlohmann::json::parse(body);
+    if (!j.is_object()) {
+      api_service::write_bad_request(ctrl, "expected a json object");
+      return std::nullopt;
+    }
+    return j;
+  } catch (const std::exception& e) {
+    api_service::write_bad_request(ctrl, std::string("bad json: ") + e.what());
+    return std::nullopt;
+  }
+}
+
+void write_lora_json_response(brpc::Controller* ctrl,
+                              const nlohmann::json& body) {
+  ctrl->response_attachment().append(body.dump());
+}
+
+// #506 review: brpc defaults failed HTTP handlers to 200; clients parsing
+// only the status code would read a structured error as success. Route
+// every LoRA endpoint failure through the shared public_error helpers so
+// the status code matches the payload semantics.
+void write_lora_http_error(brpc::Controller* ctrl,
+                           const api_service::PublicHttpError& error) {
+  api_service::write_http_error(ctrl, error);
+}
+
+api_service::PublicHttpError lora_disabled_error() {
+  return {/*status_code=*/503,
+          "lora_disabled",
+          "service_unavailable_error",
+          "LoRA is disabled; start the server with --enable_lora",
+          /*retryable=*/false,
+          std::nullopt};
+}
+
+api_service::PublicHttpError lora_not_found_error(std::string lora_name) {
+  return {/*status_code=*/404,
+          "lora_adapter_not_found",
+          "invalid_request_error",
+          "adapter not registered",
+          /*retryable=*/false,
+          std::move(lora_name)};
+}
+
+api_service::PublicHttpError lora_conflict_error(std::string lora_name) {
+  return {/*status_code=*/409,
+          "lora_name_conflict",
+          "invalid_request_error",
+          "adapter name already bound to a different path",
+          /*retryable=*/false,
+          std::move(lora_name)};
+}
+
+api_service::PublicHttpError lora_internal_error(std::string message) {
+  return {/*status_code=*/500,
+          "lora_internal_error",
+          "server_error",
+          std::move(message),
+          /*retryable=*/false,
+          std::nullopt};
+}
+
+}  // namespace
+
+void APIService::LoadLoraAdapterHttp(
+    ::google::protobuf::RpcController* controller,
+    const proto::HttpRequest* request,
+    proto::HttpResponse* response,
+    ::google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  if (!request || !response || !controller) {
+    LOG(ERROR) << "brpc request | response | controller is null";
+    return;
+  }
+  auto ctrl = reinterpret_cast<brpc::Controller*>(controller);
+
+  if (!LoRARuntime::instance().enabled()) {
+    write_lora_http_error(ctrl, lora_disabled_error());
+    return;
+  }
+  auto j = parse_lora_http_json(ctrl);
+  if (!j.has_value()) {
+    return;
+  }
+  // #506 review: typed extraction. Bare get<std::string>() throws
+  // nlohmann::json::type_error when the field is not a string, and the
+  // exception would escape the brpc handler instead of producing a
+  // structured JSON error.
+  if (!j->contains("lora_name") || !j->contains("lora_path") ||
+      !(*j)["lora_name"].is_string() || !(*j)["lora_path"].is_string()) {
+    api_service::write_bad_request(
+        ctrl,
+        "expected {\"lora_name\":..., \"lora_path\":...} (strings) in the "
+        "body");
+    return;
+  }
+  const std::string lora_name = (*j)["lora_name"].get<std::string>();
+  const std::string lora_path = (*j)["lora_path"].get<std::string>();
+  std::string base_model_name;
+  if (j->contains("base_model_name") && (*j)["base_model_name"].is_string()) {
+    base_model_name = (*j)["base_model_name"].get<std::string>();
+  }
+
+  // #506 review (multi-master): route by base_model_name when provided;
+  // fall back to the default master only when it is not. An arbitrary
+  // masters_ iteration order would send the broadcast to a random model's
+  // workers.
+  Master* master = master_;
+  if (!base_model_name.empty()) {
+    master = get_model_master(base_model_name);
+    if (master == nullptr) {
+      api_service::write_bad_request(
+          ctrl, "base_model_name '" + base_model_name + "' has no master");
+      return;
+    }
+  }
+  if (master == nullptr) {
+    write_lora_http_error(ctrl, lora_internal_error("no master registered"));
+    return;
+  }
+  // The API process owns id allocation: register first so the whole
+  // cluster binds this name to one id, then broadcast with the id so
+  // every worker adopts it verbatim (a worker-side id would be a second,
+  // independent allocation and could diverge -- #506 review finding).
+  const LoRARequest api_req{
+      lora_name, /*int_id=*/0, lora_path, base_model_name};
+  const auto id_opt =
+      LoRARuntime::instance().registry().register_adapter(api_req);
+  if (!id_opt.has_value()) {
+    write_lora_http_error(ctrl, lora_conflict_error(lora_name));
+    return;
+  }
+  const uint64_t lora_int_id = *id_opt;
+
+  const bool broadcast_ok = master->load_lora_broadcast(
+      lora_name, lora_path, base_model_name, lora_int_id);
+  if (!broadcast_ok) {
+    // Roll back the API-side entry so a retry starts clean instead of
+    // idempotently returning the id of an adapter no worker installed.
+    LoRARuntime::instance().unload(lora_name);
+    write_lora_http_error(
+        ctrl, lora_internal_error("load failed; see server log for details"));
+    return;
+  }
+  write_lora_json_response(ctrl,
+                           {{"status", "ok"},
+                            {"lora_name", lora_name},
+                            {"lora_int_id", lora_int_id}});
+}
+
+void APIService::UnloadLoraAdapterHttp(
+    ::google::protobuf::RpcController* controller,
+    const proto::HttpRequest* request,
+    proto::HttpResponse* response,
+    ::google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  if (!request || !response || !controller) {
+    LOG(ERROR) << "brpc request | response | controller is null";
+    return;
+  }
+  auto ctrl = reinterpret_cast<brpc::Controller*>(controller);
+
+  if (!LoRARuntime::instance().enabled()) {
+    write_lora_http_error(ctrl, lora_disabled_error());
+    return;
+  }
+  auto j = parse_lora_http_json(ctrl);
+  if (!j.has_value()) {
+    return;
+  }
+  // #506 review: same typed-extraction guard as the load handler.
+  if (!j->contains("lora_name") || !(*j)["lora_name"].is_string()) {
+    api_service::write_bad_request(
+        ctrl, "expected {\"lora_name\":...} (string) in the body");
+    return;
+  }
+  const std::string lora_name = (*j)["lora_name"].get<std::string>();
+
+  // #506 review (multi-master): unload targets the same master that would
+  // serve the adapter; the default master is the only sane fallback.
+  Master* master = master_;
+  if (master == nullptr) {
+    write_lora_http_error(ctrl, lora_internal_error("no master registered"));
+    return;
+  }
+  // #506 review (critical): verify the API-side entry exists BEFORE
+  // broadcasting. Broadcasting first and checking afterwards would let a
+  // stray name unload real weights on the workers while the API side then
+  // reports "adapter not registered" -- the workers and the API registry
+  // diverge and nothing is cleaned up.
+  if (!LoRARuntime::instance().registry().lookup(lora_name).has_value()) {
+    write_lora_http_error(ctrl, lora_not_found_error(lora_name));
+    return;
+  }
+  const bool broadcast_ok = master->unload_lora_broadcast(lora_name);
+  if (!broadcast_ok) {
+    write_lora_http_error(
+        ctrl, lora_internal_error("unload failed; see server log for details"));
+    return;
+  }
+  // Drop the API-side bookkeeping entry as well: the API process's own
+  // registry is what lookup_and_pin resolves against, so keeping the
+  // name would route new requests to an adapter whose weights the
+  // workers just released. unload marks the entry "unloading" (new
+  // lookups fail immediately) and defers the actual erase until the
+  // last in-flight pin releases.
+  //
+  // #506 review (D2): if the local unload reports false here the workers
+  // HAVE already released the weights, so the client-visible end state
+  // ("adapter gone") is reached either way. Returning an error would
+  // make a retry an unconditional failure loop (the lookup above now
+  // rejects the name because unregister marked it unloading/erased).
+  // Treat it as idempotent success and log the divergence for operators.
+  if (!LoRARuntime::instance().unload(lora_name)) {
+    LOG(WARNING) << "[LoRA unload] workers released adapter '" << lora_name
+                 << "' but the API-side unload reported false (concurrent "
+                    "unload or drain race); treating as idempotent success";
+  }
+  write_lora_json_response(ctrl, {{"status", "ok"}, {"lora_name", lora_name}});
+}
+
+void APIService::ListLoraAdaptersHttp(
+    ::google::protobuf::RpcController* controller,
+    const proto::HttpRequest* request,
+    proto::HttpResponse* response,
+    ::google::protobuf::Closure* done) {
+  brpc::ClosureGuard done_guard(done);
+  if (!request || !response || !controller) {
+    LOG(ERROR) << "brpc request | response | controller is null";
+    return;
+  }
+  auto ctrl = reinterpret_cast<brpc::Controller*>(controller);
+
+  // #506 review: same enabled() guard as the load / unload handlers. On
+  // --enable_lora=false deployments an unguarded list returns 200 + []
+  // and callers cannot tell "LoRA off" from "no adapters loaded".
+  if (!LoRARuntime::instance().enabled()) {
+    write_lora_http_error(ctrl, lora_disabled_error());
+    return;
+  }
+
+  nlohmann::json adapters = nlohmann::json::array();
+  for (const auto& req : LoRARuntime::instance().registry().list()) {
+    adapters.push_back({{"lora_name", req.lora_name},
+                        {"lora_path", req.lora_path},
+                        {"base_model_name", req.base_model_name},
+                        {"int_id", req.lora_int_id}});
+  }
+  write_lora_json_response(ctrl, {{"lora_adapters", adapters}});
 }
 
 void APIService::LinkP2P(::google::protobuf::RpcController* controller,

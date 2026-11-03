@@ -244,6 +244,18 @@ bool Worker::update_weights(const std::string& weights_path) {
   return impl_->update_weights(weights_path);
 }
 
+bool Worker::load_lora_adapter(const std::string& lora_name,
+                               const std::string& lora_path,
+                               const std::string& base_model_name,
+                               uint64_t lora_int_id) {
+  return impl_->load_lora_adapter(
+      lora_name, lora_path, base_model_name, lora_int_id);
+}
+
+bool Worker::unload_lora_adapter(const std::string& lora_name) {
+  return impl_->unload_lora_adapter(lora_name);
+}
+
 folly::SemiFuture<bool> Worker::wakeup_async(const WakeupOptions& options) {
   folly::Promise<bool> promise;
   auto future = promise.getSemiFuture();

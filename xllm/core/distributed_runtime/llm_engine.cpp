@@ -1658,6 +1658,93 @@ bool LLMEngine::update_weights(const std::string& weights_path) {
   return true;
 }
 
+bool LLMEngine::load_lora_broadcast(const std::string& lora_name,
+                                    const std::string& lora_path,
+                                    const std::string& base_model_name,
+                                    uint64_t lora_int_id) {
+  if (worker_clients_.empty()) {
+    LOG(ERROR) << "No worker clients available for LoRA load broadcast.";
+    return false;
+  }
+  LOG(INFO) << "Broadcasting LoadLoraAdapter '" << lora_name
+            << "' path=" << lora_path << " id=" << lora_int_id << " to "
+            << worker_clients_num_ << " worker(s)";
+  std::vector<folly::SemiFuture<bool>> futures;
+  futures.reserve(worker_clients_num_);
+  for (auto& worker : worker_clients_) {
+    futures.emplace_back(worker->load_lora_adapter_async(
+        lora_name, lora_path, base_model_name, lora_int_id));
+  }
+  auto results = folly::collectAll(futures).get();
+  bool all_ok = true;
+  for (const auto& r : results) {
+    if (!r.hasValue() || !r.value()) {
+      all_ok = false;
+      break;
+    }
+  }
+  if (!all_ok) {
+    // #506 review (critical): compensate the workers that DID succeed so
+    // the cluster returns to the pre-load state. Without this, the API
+    // side rolls back and a retry re-registers the name with a fresh id,
+    // while the succeeded workers still bind the name to the old id --
+    // the forced-id mismatch then makes every retry fail permanently.
+    std::vector<folly::SemiFuture<bool>> rollback;
+    rollback.reserve(worker_clients_.size());
+    for (size_t i = 0; i < worker_clients_.size(); ++i) {
+      const bool worker_ok = results[i].hasValue() && results[i].value();
+      if (worker_ok) {
+        rollback.emplace_back(
+            worker_clients_[i]->unload_lora_adapter_async(lora_name));
+      }
+    }
+    if (!rollback.empty()) {
+      auto rollback_results = folly::collectAll(rollback).get();
+      for (const auto& r : rollback_results) {
+        if (!r.hasValue() || !r.value()) {
+          // #506 review: a failed rollback leaves a worker holding the
+          // adapter while the API side forgets the name/id. Every future
+          // load of the same name re-registers with a fresh id and hits
+          // the forced-id conflict on that worker. That is a state
+          // divergence an operator must clear (restart or manual unload),
+          // so surface it at ERROR, not WARNING.
+          LOG(ERROR) << "LoadLoraAdapter rollback unload FAILED on a worker; "
+                        "it may still hold the adapter under id="
+                     << lora_int_id
+                     << " while the API side drops the binding. Manual "
+                        "unload or worker restart needed to resync.";
+        }
+      }
+    }
+    LOG(ERROR) << "LoadLoraAdapter broadcast failed on a worker; rolled "
+                  "back the workers that succeeded";
+    return false;
+  }
+  return true;
+}
+
+bool LLMEngine::unload_lora_broadcast(const std::string& lora_name) {
+  if (worker_clients_.empty()) {
+    LOG(ERROR) << "No worker clients available for LoRA unload broadcast.";
+    return false;
+  }
+  LOG(INFO) << "Broadcasting UnloadLoraAdapter '" << lora_name << "' to "
+            << worker_clients_num_ << " worker(s)";
+  std::vector<folly::SemiFuture<bool>> futures;
+  futures.reserve(worker_clients_num_);
+  for (auto& worker : worker_clients_) {
+    futures.emplace_back(worker->unload_lora_adapter_async(lora_name));
+  }
+  auto results = folly::collectAll(futures).get();
+  for (const auto& r : results) {
+    if (!r.hasValue() || !r.value()) {
+      LOG(ERROR) << "UnloadLoraAdapter broadcast failed on a worker.";
+      return false;
+    }
+  }
+  return true;
+}
+
 bool LLMEngine::start_profile() {
   LOG(INFO) << "Starting profiler on " << worker_clients_num_ << " worker(s).";
   if (worker_clients_.empty()) {

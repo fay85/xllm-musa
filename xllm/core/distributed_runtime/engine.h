@@ -171,6 +171,25 @@ class Engine {
     return false;
   }
 
+  // Multi-tenant LoRA serving: broadcast adapter load / unload to all
+  // workers so the CPU->device copy runs on each worker's own
+  // threadpool thread (primed device context). Implementations should
+  // fan out via RemoteWorker::load_lora_adapter_async and fail if any
+  // worker fails. lora_int_id is the API-assigned adapter id every
+  // worker must adopt.
+  virtual bool load_lora_broadcast(const std::string& lora_name,
+                                   const std::string& lora_path,
+                                   const std::string& base_model_name,
+                                   uint64_t lora_int_id) {
+    LOG(FATAL) << " load_lora_broadcast is not implemented!";
+    return false;
+  }
+
+  virtual bool unload_lora_broadcast(const std::string& lora_name) {
+    LOG(FATAL) << " unload_lora_broadcast is not implemented!";
+    return false;
+  }
+
   virtual bool wakeup(const WakeupOptions& options) {
     LOG(FATAL) << " wakeup is not implemented!";
     return false;

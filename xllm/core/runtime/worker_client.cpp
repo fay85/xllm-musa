@@ -176,6 +176,19 @@ folly::SemiFuture<bool> WorkerClient::update_weights_async(
   LOG(FATAL) << "WorkerClient Method update_weights is UnImplemented.";
 }
 
+folly::SemiFuture<bool> WorkerClient::load_lora_adapter_async(
+    const std::string& /*lora_name*/,
+    const std::string& /*lora_path*/,
+    const std::string& /*base_model_name*/,
+    uint64_t /*lora_int_id*/) {
+  LOG(FATAL) << "WorkerClient Method load_lora_adapter is UnImplemented.";
+}
+
+folly::SemiFuture<bool> WorkerClient::unload_lora_adapter_async(
+    const std::string& /*lora_name*/) {
+  LOG(FATAL) << "WorkerClient Method unload_lora_adapter is UnImplemented.";
+}
+
 folly::SemiFuture<bool> WorkerClient::start_profile_async() {
   return worker_->start_profile_async();
 }

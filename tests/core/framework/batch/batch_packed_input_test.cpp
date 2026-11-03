@@ -59,6 +59,21 @@ bool tensor_equals_vector(const torch::Tensor& tensor,
   return true;
 }
 
+TEST(BatchPackedInputTest, ModelInputConversionExpandsMixedAdapterIds) {
+  ModelInputParams input_params;
+  input_params.adapter_ids = {7, 0, 11};
+#if defined(USE_NPU)
+  input_params.attention.host.q_seq_lens = {2, 1, 3};
+#else
+  input_params.attention.host.q_seq_lens = {0, 2, 3, 6};
+#endif
+  const ModelInputParams converted =
+      input_params.to(torch::Device(torch::kCPU));
+  ASSERT_TRUE(converted.adapter_ids_per_token.defined());
+  EXPECT_TRUE(tensor_equals_vector<int64_t>(converted.adapter_ids_per_token,
+                                            {7, 7, 0, 11, 11, 11}));
+}
+
 TEST(BatchPackedInputTest, PackedProtoLazyUnpackPreservesLinearReadWriteIds) {
   RequestSamplingParam sampling_param;
   sampling_param.logprobs = true;

@@ -150,6 +150,15 @@ class RemoteWorker : public WorkerClient {
   folly::SemiFuture<bool> update_weights_async(
       const std::string& weights_path) override;
 
+  // Multi-tenant LoRA serving.
+  folly::SemiFuture<bool> load_lora_adapter_async(
+      const std::string& lora_name,
+      const std::string& lora_path,
+      const std::string& base_model_name,
+      uint64_t lora_int_id) override;
+  folly::SemiFuture<bool> unload_lora_adapter_async(
+      const std::string& lora_name) override;
+
   folly::SemiFuture<bool> start_profile_async() override;
 
   folly::SemiFuture<bool> stop_profile_async() override;

@@ -142,6 +142,19 @@ class WorkerService : public proto::DistributeWorker {
                      proto::Status* resp,
                      ::google::protobuf::Closure* done);
 
+  // Multi-tenant LoRA serving: run the adapter load on this worker's
+  // threadpool (same executor as ExecuteModel / model init) so the
+  // CPU->device copy happens on a thread with a primed device context.
+  void LoadLoraAdapter(::google::protobuf::RpcController* controller,
+                       const proto::LoadLoraAdapterRequest* req,
+                       proto::Status* resp,
+                       ::google::protobuf::Closure* done) override;
+
+  void UnloadLoraAdapter(::google::protobuf::RpcController* controller,
+                         const proto::UnloadLoraAdapterRequest* req,
+                         proto::Status* resp,
+                         ::google::protobuf::Closure* done) override;
+
   void Sleep(::google::protobuf::RpcController* controller,
              const proto::SleepRequest* req,
              proto::Status* resp,

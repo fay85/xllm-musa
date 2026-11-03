@@ -96,6 +96,14 @@ class LLMMaster : public Master {
 
   bool update_weights(const std::string& weights_path) override;
 
+  // Multi-tenant LoRA serving: delegate to the engine's worker
+  // broadcast so every TP/D DP rank installs the adapter.
+  bool load_lora_broadcast(const std::string& lora_name,
+                           const std::string& lora_path,
+                           const std::string& base_model_name,
+                           uint64_t lora_int_id) override;
+  bool unload_lora_broadcast(const std::string& lora_name) override;
+
   bool link_p2p(const std::vector<std::string>& remote_addrs) override;
 
   bool unlink_p2p(const std::vector<std::string>& remote_addrs) override;

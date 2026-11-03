@@ -38,6 +38,7 @@ limitations under the License.
 #include "core/distributed_runtime/llm_master.h"
 #include "core/distributed_runtime/rec_master.h"
 #include "core/distributed_runtime/vlm_master.h"
+#include "core/framework/lora/lora_runtime.h"
 #include "core/framework/request/rec_type.h"
 #include "core/framework/request/request_params.h"
 #include "core/util/binary_payload.h"
@@ -713,7 +714,27 @@ void ChatServiceImpl::process_async_impl(std::shared_ptr<ChatCall> call) {
     return;
   }
 
-  LLMMaster* master = get_model_master(model);
+  // LoRA lookup: the `model` field may name a registered LoRA adapter
+  // instead of a base model. If so, pin it (drain-safe) and resolve the
+  // master via the adapter's base model. Base-model requests keep
+  // adapter_id unset and the whole chain no-ops.
+  //
+  // Pin lifetime: the guard is a shared_ptr so it can travel with the
+  // request. Every early return below destroys the local handle and
+  // unpins; the dispatch path moves the handle into the response
+  // callback, which lives in RequestState until the request is
+  // destroyed -- so unload drains in-flight requests as designed.
+  LoRAAdapterPinGuardPtr lora_pin_guard;
+  std::optional<LoRARegistry::PinnedAdapter> lora_pinned;
+  if (LoRARuntime::instance().enabled()) {
+    lora_pinned = LoRARuntime::instance().registry().lookup_and_pin(model);
+    if (lora_pinned.has_value()) {
+      lora_pin_guard = std::make_shared<LoRAAdapterPinGuard>(
+          LoRARuntime::instance().registry(), lora_pinned->int_id);
+    }
+  }
+  LLMMaster* master = get_model_master(
+      lora_pinned.has_value() ? lora_pinned->req.base_model_name : model);
   if (unlikely(master == nullptr)) {
     call->finish_with_error(api_service_internal::model_not_supported_status());
     return;
@@ -730,6 +751,10 @@ void ChatServiceImpl::process_async_impl(std::shared_ptr<ChatCall> call) {
   RequestParams request_params(
       rpc_request, call->get_x_request_id(), call->get_x_request_time());
   request_params.timing = call->request_timing();
+  if (lora_pinned.has_value()) {
+    request_params.adapter_id = lora_pinned->int_id;
+    request_params.adapter_name = lora_pinned->req.lora_name;
+  }
   std::vector<Message> messages;
   messages.reserve(rpc_request.messages_size());
   for (const auto& message : rpc_request.messages()) {
@@ -805,6 +830,7 @@ void ChatServiceImpl::process_async_impl(std::shared_ptr<ChatCall> call) {
       [call,
        model,
        master = master,
+       lora_pin_guard = std::move(lora_pin_guard),
        stream = std::move(saved_streaming),
        include_usage = include_usage,
        first_message_sent = std::unordered_set<size_t>(),

@@ -214,6 +214,10 @@ class RequestState final {
   std::shared_ptr<RequestTiming> timing;
 
   std::vector<SampleSlot> sample_slots;
+  // LoRA adapter int_id for this request. 0 = no adapter (base model).
+  // Set by the request factory from RequestParams::adapter_id.
+  uint64_t adapter_id = 0;
+
 
   std::shared_ptr<const JsonObjectGrammar> json_object_grammar;
   bool json_reasoning_enabled = false;

@@ -132,6 +132,14 @@ class LLMEngine : public Engine {
 
   bool update_weights(const std::string& weights_path) override;
 
+  // Multi-tenant LoRA serving: fan adapter load / unload out to all
+  // workers via RemoteWorker and fail if any worker fails.
+  bool load_lora_broadcast(const std::string& lora_name,
+                           const std::string& lora_path,
+                           const std::string& base_model_name,
+                           uint64_t lora_int_id) override;
+  bool unload_lora_broadcast(const std::string& lora_name) override;
+
   bool start_profile() override;
 
   bool stop_profile() override;

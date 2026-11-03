@@ -783,6 +783,11 @@ void BatchInputBuilder::process_sequences_multithreaded() {
       state_.q_seq_lens.emplace_back(state.q_seq_lens[i] + q_seq_len_offset);
     }
 #endif
+    // adapter_ids is per-sequence and layout-independent: append verbatim on
+    // every backend (see single-sequence path above).
+    state_.adapter_ids.insert(state_.adapter_ids.end(),
+                              state.adapter_ids.begin(),
+                              state.adapter_ids.end());
 
     state_.kv_cache_tokens_nums.insert(state_.kv_cache_tokens_nums.end(),
                                        state.kv_cache_tokens_nums.begin(),
@@ -925,6 +930,11 @@ void BatchInputBuilder::process_single_sequence(
   state.seq_lens.push_back(state.seq_lens.back() + seq_len);
   state.q_seq_lens.push_back(state.q_seq_lens.back() + padded_q_seq_len);
 #endif
+  // adapter_ids is per-sequence (one id per sequence), independent of the
+  // cumulative-vs-per-seq seq_lens layout, so it is pushed on every backend
+  // rather than inside a USE_NPU branch (otherwise LoRA routing is silently
+  // dropped on CUDA/MLU/MUSA/ILU/DCU and every adapter request runs base).
+  state.adapter_ids.push_back(sequence->adapter_id());
   // Process multi-modal input
   process_multi_modal_inputs(
       sequence, n_kv_cache_tokens, q_seq_len, seq_index, state_ptr);
@@ -1335,6 +1345,10 @@ void BatchInputBuilder::padding_decode_batch_size(
         state_.q_seq_lens.push_back(state_.q_seq_lens.back() +
                                     num_decoding_tokens);
 #endif
+        // Padding sequences carry no adapter (id 0 = base); still push one per
+        // padded sequence so adapter_ids stays aligned with seq_lens and the
+        // downstream size check does not reject the whole batch.
+        state_.adapter_ids.push_back(0);
         state_.block_tables_vec.emplace_back();
         if (!state_.multi_block_tables.empty()) {
           for (auto& mgr_tables : state_.multi_block_tables) {
@@ -1410,6 +1424,7 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
   input_params.attention.host.kv_seq_lens = std::move(state_.seq_lens);
   input_params.attention.host.q_cu_seq_lens = std::move(q_cu_seq_lens);
   input_params.attention.host.q_seq_lens = std::move(state_.q_seq_lens);
+  input_params.adapter_ids = std::move(state_.adapter_ids);
   input_params.attention.device.new_cache_slots =
       torch::tensor(state_.new_token_slot_ids, torch::kInt);
 

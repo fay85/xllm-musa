@@ -55,6 +55,20 @@ class Master {
 
   virtual bool update_weights(const std::string& weights_path) { return false; }
 
+  // Multi-tenant LoRA serving. Default: not supported by this master
+  // type; the HTTP layer rejects with an explicit error. lora_int_id is
+  // the API-assigned adapter id every worker must adopt.
+  virtual bool load_lora_broadcast(const std::string& lora_name,
+                                   const std::string& lora_path,
+                                   const std::string& base_model_name,
+                                   uint64_t lora_int_id) {
+    return false;
+  }
+
+  virtual bool unload_lora_broadcast(const std::string& lora_name) {
+    return false;
+  }
+
   virtual bool link_p2p(const std::vector<std::string>& remote_addrs) {
     return false;
   }

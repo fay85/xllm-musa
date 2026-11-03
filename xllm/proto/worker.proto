@@ -98,6 +98,28 @@ message UpdateWeightsRequest {
   string weights_path = 1;
 }
 
+// Multi-tenant LoRA serving: load an adapter on this worker. The CPU->NPU
+// copy must run on the worker's own threadpool thread (same executor as
+// ExecuteModel / model init) where torch_npu's opapi memcpy stream is
+// primed; running it on the API handler thread crashes with
+// aclrtMemcpy 107017 on CANN 8.5.
+message LoadLoraAdapterRequest {
+  string lora_name = 1;
+  string lora_path = 2;
+  string base_model_name = 3;
+  // Adapter int id assigned by the API process. The API's registry owns id
+  // allocation so the whole cluster routes one name to one id; the worker
+  // must adopt it verbatim instead of allocating its own.
+  uint64 lora_int_id = 4;
+}
+
+// Multi-tenant LoRA serving: mark an adapter for unload. Removal is
+// deferred until the last in-flight request unpins it (drain semantics
+// in LoRARegistry).
+message UnloadLoraAdapterRequest {
+  string lora_name = 1;
+}
+
 message P2PLinkWorkerRequest {
   string remote_addr = 1; 
 }
@@ -474,6 +496,8 @@ service DistributeWorker {
   rpc Sleep (SleepRequest)  returns (Status);
   rpc Wakeup (WakeupRequest) returns (Status);
   rpc UpdateWeights (UpdateWeightsRequest) returns (Status);
+  rpc LoadLoraAdapter (LoadLoraAdapterRequest) returns (Status);
+  rpc UnloadLoraAdapter (UnloadLoraAdapterRequest) returns (Status);
   rpc StartProfile (Empty) returns (Status);
   rpc StopProfile (Empty) returns (Status);
 }

@@ -60,6 +60,15 @@ class WorkerClient {
   virtual folly::SemiFuture<bool> update_weights_async(
       const std::string& weights_path);
 
+  // Multi-tenant LoRA serving.
+  virtual folly::SemiFuture<bool> load_lora_adapter_async(
+      const std::string& lora_name,
+      const std::string& lora_path,
+      const std::string& base_model_name,
+      uint64_t lora_int_id);
+  virtual folly::SemiFuture<bool> unload_lora_adapter_async(
+      const std::string& lora_name);
+
   // Start/stop online timeline profiling on the underlying worker.
   virtual folly::SemiFuture<bool> start_profile_async();
 

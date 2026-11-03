@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include "core/framework/lora/lora_runtime.h"
+
 namespace xllm::api_service_internal {
 
 Status rate_limiter_rejection_status(const RateLimiter& rate_limiter) {
@@ -36,9 +38,17 @@ Status model_not_supported_status() {
 
 Status admit_rpc_request(const std::string& model,
                          const absl::flat_hash_set<std::string>& models,
-                         RateLimiter* rate_limiter) {
+                         RateLimiter* rate_limiter,
+                         bool supports_lora) {
+  // Only services that resolve and pin an adapter may admit its name.
+  // Otherwise a request can pass admission and silently execute the base.
   if (!models.contains(model)) {
-    return model_not_supported_status();
+    const bool is_lora_adapter =
+        supports_lora && LoRARuntime::instance().enabled() &&
+        LoRARuntime::instance().registry().lookup(model).has_value();
+    if (!is_lora_adapter) {
+      return model_not_supported_status();
+    }
   }
 
   CHECK(rate_limiter != nullptr);

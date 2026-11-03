@@ -25,6 +25,7 @@ add_subdirectory(request)
 add_subdirectory(eplb)
 add_subdirectory(dit_cache)
 add_subdirectory(speculative)
+add_subdirectory(lora)
 
 
 cc_library(

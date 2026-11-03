@@ -1141,6 +1141,36 @@ struct ModelInputParams {
       params.rec_params = llmrec->to(device);
     }
 
+    // Multi-tenant LoRA routing. Propagate adapter_ids and, if any sequence
+    // actually routes to an adapter, materialise adapter_ids_per_token on
+    // device via repeat_interleave so MoE expert grouped-gemm delta /
+    // slow-path per-token masking can index straight into it. The per-seq
+    // vector keeps zeros (0 = base row) so wrapper slicing stays aligned;
+    // only the per-token expansion needs the all-nonzero guard, because a
+    // pure-base batch still fills adapter_ids with zeros for every sequence
+    // (#506 review finding: without the guard each stock decode step builds
+    // a CPU tensor and pays one H2D copy for nothing).
+    params.adapter_ids = adapter_ids;
+    const bool batch_has_adapters =
+        std::any_of(adapter_ids.begin(), adapter_ids.end(), [](uint64_t id) {
+          return id != 0;
+        });
+    if (batch_has_adapters) {
+      std::vector<int64_t> host;
+      host.reserve(1024);
+      for (size_t si = 0; si < adapter_ids.size(); ++si) {
+        const int64_t seq_len = get_q_seq_len(static_cast<int32_t>(si));
+        CHECK_GE(seq_len, 0);
+        for (int64_t t = 0; t < seq_len; ++t) {
+          host.push_back(static_cast<int64_t>(adapter_ids[si]));
+        }
+      }
+      if (!host.empty()) {
+        auto host_t = torch::tensor(host, torch::kInt64);
+        params.adapter_ids_per_token = safe_to(host_t, device, true);
+      }
+    }
+
     return params;
   }
 
@@ -1190,11 +1220,13 @@ struct ModelInputParams {
   }
 
   int32_t get_q_seq_len(int32_t seq_idx) const {
+    CHECK_GE(seq_idx, 0);
 #if defined(USE_NPU)
-    CHECK(seq_idx < attention.host.q_seq_lens.size()) << "seq_idx out of range";
+    CHECK_LT(static_cast<size_t>(seq_idx), attention.host.q_seq_lens.size())
+        << "seq_idx out of range";
     return attention.host.q_seq_lens[seq_idx];
 #else
-    CHECK(seq_idx < attention.host.q_seq_lens.size() - 1)
+    CHECK_LT(static_cast<size_t>(seq_idx) + 1, attention.host.q_seq_lens.size())
         << "seq_idx out of range";
     return attention.host.q_seq_lens[seq_idx + 1] -
            attention.host.q_seq_lens[seq_idx];
@@ -1353,6 +1385,19 @@ struct ModelInputParams {
 
   // Flag for graph capture/replay mode.
   bool enable_graph = false;
+
+  // Multi-tenant LoRA routing: per-sequence adapter int_id (0 = base model)
+  // populated from Sequence::adapter_id() and index-aligned with
+  // attention.host.q_seq_lens (one entry per sequence in the batch).
+  // Consumed by LoRA wrappers via current_lora_context() to pick the right
+  // adapter A/B tensors for each seq.
+  std::vector<uint64_t> adapter_ids;
+
+  // Per-token adapter id tensor, built lazily on the device in to(device)
+  // from (adapter_ids, q_seq_lens_vec) via repeat_interleave. Used by MoE
+  // expert LoRA (fused grouped-gemm delta) and the slow-path per-token
+  // masking. Undefined when adapter_ids is empty (pure-base batch).
+  torch::Tensor adapter_ids_per_token;
 };
 
 }  // namespace xllm

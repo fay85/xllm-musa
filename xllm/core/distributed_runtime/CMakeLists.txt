@@ -136,6 +136,7 @@ cc_library(
     :runtime
     :model
     :models
+    :lora
     $<$<BOOL:${USE_NPU}>:npu_layers>
     :chat_template
     glog::glog

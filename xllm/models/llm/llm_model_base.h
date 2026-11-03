@@ -23,6 +23,7 @@ limitations under the License.
 
 #include "core/common/interruption_bus.h"
 #include "core/framework/kv_cache/kv_cache.h"
+#include "core/framework/lora/lora_context.h"
 #include "core/framework/model/model_input_params.h"
 #include "core/framework/model/model_output.h"
 #include "core/framework/model_context.h"
@@ -30,6 +31,7 @@ limitations under the License.
 #include "core/layers/common/lm_head.h"
 #include "core/layers/common/rms_norm.h"
 #include "core/util/rec_model_utils.h"
+#include "models/llm/lora_bootstrap.h"
 #include "models/model_registry.h"
 
 namespace xllm {
@@ -103,11 +105,36 @@ class LlmModelImplBase : public torch::nn::Module {
           << "Rec multi-round mode requires unshared_v_caches per layer.";
     }
 
+    // Multi-tenant LoRA: push a LoRAContext frame so LoRA-wrapped
+    // Linear layers (QKV / o_proj / gate_up / down) can read the
+    // per-batch adapter routing without extending Linear::forward.
+    // set_lora_context_layer updates layer_index on the top frame
+    // each iteration; LoRAScope pops on scope exit.
+    LoRAContextFrame lora_frame;
+    lora_frame.adapter_ids = &modified_input_params.adapter_ids;
+    lora_frame.adapter_ids_per_token =
+        &modified_input_params.adapter_ids_per_token;
+    // The QKV / column / row wrappers slice the [num_tokens, hidden] hidden
+    // state into per-seq chunks with q_seq_lens_vec; without it the first
+    // guard in every wrapper rejects the batch and the delta silently
+    // never applies.
+    std::vector<int32_t> lora_q_seq_lens;
+    lora_q_seq_lens.reserve(modified_input_params.adapter_ids.size());
+    for (size_t i = 0; i < modified_input_params.adapter_ids.size(); ++i) {
+      const int32_t length =
+          modified_input_params.get_q_seq_len(static_cast<int32_t>(i));
+      CHECK_GE(length, 0);
+      lora_q_seq_lens.emplace_back(length);
+    }
+    lora_frame.q_seq_lens_vec = &lora_q_seq_lens;
+    LoRAScope _lora_scope(lora_frame);
+
     std::optional<torch::Tensor> residual;
     for (size_t i = 0; i < layers_.size(); i++) {
       if (!modified_input_params.synchronize_layer(static_cast<uint32_t>(i))) {
         return ModelOutput();
       }
+      set_lora_context_layer(static_cast<int32_t>(i));
       if (llmrec_params != nullptr) {
         attn_metadata.full_k_cache = llmrec_params->full_k_caches[i];
         attn_metadata.full_v_cache = llmrec_params->full_v_caches[i];
@@ -173,6 +200,10 @@ template <typename LlmModelType>
 class LlmForCausalLMImplBase : public torch::nn::Module {
  public:
   LlmForCausalLMImplBase(const ModelContext& context) {
+    // Arm the LoRA hot-swap executor before any module builds so
+    // /v1/load_lora_adapter works from the first request (#506 review
+    // finding: init alone leaves the executor dead). No-op when disabled.
+    bootstrap_lora_runtime(context);
     tie_word_embeddings = context.get_model_args().tie_word_embeddings();
     embedding_mode_ = context.get_model_args().embedding_mode();
     // register submodules

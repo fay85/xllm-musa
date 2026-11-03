@@ -1,0 +1,511 @@
+/* Copyright 2026 The xLLM Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#include "layers/common/lora/lora_qkv_parallel_linear.h"
+
+#include <glog/logging.h>
+#include <torch/torch.h>
+
+#include "framework/lora/lora_context.h"
+#include "framework/lora/lora_runtime.h"
+#if defined(USE_NPU)
+#include <string_view>
+
+#include "framework/lora/ascendc/ascendc_lora_storage.h"
+#include "framework/lora/ascendc/xllm_lora_ascendc_binding.h"
+#endif  // USE_NPU
+
+namespace xllm {
+namespace layer {
+
+LoRAQKVParallelLinearImpl::LoRAQKVParallelLinearImpl(
+    int64_t hidden_size,
+    int64_t num_heads,
+    int64_t num_kv_heads,
+    int64_t head_size,
+    int64_t num_kv_head_replicas,
+    bool bias,
+    bool gather_output,
+    const ParallelArgs& parallel_args,
+    const torch::TensorOptions& options,
+    const QuantArgs& quant_args,
+    bool q_has_gate)
+    : hidden_size_(hidden_size) {
+  // Cache TP topology for LoRA weight sharding logic.
+  tp_rank_ = parallel_args.tp_group_->rank();
+  tp_world_size_ = parallel_args.tp_group_->world_size();
+
+  // Match base's per-partition sizing exactly. When q_has_gate=true
+  // (Qwen3-Next attn_output_gate), num_heads passed in already accounts
+  // for the fused q+gate lanes (num_heads_attn * 2), so q_size_local is
+  // naturally the fused lane width. The PEFT adapter for such a model
+  // must also carry a B_q sized to the fused lane; if it does not, the
+  // shape check in set_lora_weights / per-proj slicing will trip.
+  //   q_size_local  = num_heads * head_size          (already tp-partitioned)
+  //   kv_size_local = num_kv_heads * head_size       (with kv_head_replicas)
+  q_size_local_ = num_heads * head_size;
+  kv_size_local_ = num_kv_heads * head_size;
+  out_size_local_ = q_size_local_ + 2 * kv_size_local_;
+  head_size_ = head_size;
+  num_heads_local_ = num_heads;  // fused (attn*2) when q_has_gate=true
+  q_has_gate_ = q_has_gate;
+
+  // Base linear owns the vanilla forward + weight loading path. NOT
+  // register_module'd here on purpose — see the note in the header. Base
+  // is held as a plain member; attention's load_state_dict("qkv_proj.")
+  // routes through this wrapper's load_state_dict, which forwards to
+  // base_->load_state_dict, so the on-disk state_dict key layout stays
+  // "qkv_proj.weight" (identical to vanilla xllm).
+  base_ = QKVParallelLinear(hidden_size,
+                            num_heads,
+                            num_kv_heads,
+                            head_size,
+                            num_kv_head_replicas,
+                            bias,
+                            gather_output,
+                            parallel_args,
+                            options,
+                            quant_args);
+}
+
+torch::Tensor LoRAQKVParallelLinearImpl::forward(torch::Tensor input) {
+  auto y = base_->forward(input);
+
+  // Reorder helper for the Qwen3-Next attn_output_gate case.
+  //
+  // Root cause: base's qkv_proj weight is written on disk in per-head
+  // interleaved layout [q0,g0,q1,g1,...,q31,g31], and
+  // qwen3_next_attention.cpp load_state_dict() rewrites it in-place to the
+  // grouped layout [q0,q1,...,q31,g0,g1,...,g31] so the forward output is
+  // [Q_grouped | G_grouped | K | V]. The PEFT adapter's B_q is trained on
+  // the same on-disk interleaved layout, but xllm's LoRA install path never
+  // applies the equivalent reorder -- so the delta added into the fused q
+  // lane lands in per-head interleaved slots while base already put
+  // Q_grouped there. Every LoRA delta value gets applied to the wrong half
+  // of the head, silently corrupting all of q_proj's fine-tune signal. Fix:
+  // reorder q_delta from interleaved to grouped just before it is
+  // concatenated with k/v. Only fires when q_has_gate_ is true; otherwise
+  // returns the tensor unchanged.
+  auto reorder_q_delta_if_gated = [&](torch::Tensor q_delta) -> torch::Tensor {
+    if (!q_has_gate_) return q_delta;
+    const int64_t T = q_delta.size(0);
+    const int64_t attn_heads_local = num_heads_local_ / 2;
+    auto qg_3d = q_delta.view({T, attn_heads_local, 2, head_size_});
+    auto q_part = qg_3d.slice(2, 0, 1).contiguous().view(
+        {T, attn_heads_local * head_size_});
+    auto g_part = qg_3d.slice(2, 1, 2).contiguous().view(
+        {T, attn_heads_local * head_size_});
+    return torch::cat({q_part, g_part}, /*dim=*/-1);
+  };
+
+  // Legacy hardcoded path (Spike Day 5b). Kept behind lora_active_ so
+  // unit tests still work without a LoRARuntime. Real production path
+  // uses the per-request routing below.
+  if (lora_active_ && lora_rank_ > 0) {
+    auto lora_intermediate = torch::matmul(input, lora_a_.transpose(0, 1));
+    auto delta = torch::matmul(lora_intermediate, lora_b_.transpose(0, 1));
+    y = y + (delta * lora_scaling_).to(y.dtype());
+  }
+
+  // M10 per-request per-proj real LoRA. QKV wrapper concatenates Q/K/V
+  // deltas along the last dim to match the base's fused output.
+  const auto* ctx = current_lora_context();
+  if (ctx == nullptr || ctx->adapter_ids == nullptr ||
+      ctx->q_seq_lens_vec == nullptr || ctx->layer_index < 0) {
+    return y;
+  }
+  const auto& adapter_ids = *ctx->adapter_ids;
+  const auto& q_seq_lens = *ctx->q_seq_lens_vec;
+  if (adapter_ids.empty() || adapter_ids.size() != q_seq_lens.size()) {
+    return y;
+  }
+
+  // Fast path: batch is pure-base.
+  bool any_nonzero = false;
+  for (auto id : adapter_ids) {
+    if (id != 0) {
+      any_nonzero = true;
+      break;
+    }
+  }
+  if (!any_nonzero) return y;
+
+  // P1a Phase 0 fast path: batch uses one non-zero adapter (99% prod).
+  // Skip per-seq slice/matmul loop; do 2 matmuls on full [T, hidden]:
+  //   tmp = x @ A^T                    [T, r]
+  //   delta_q = tmp @ B_q_local^T      [T, q_local]
+  //   delta_k = tmp @ B_k_local^T      [T, kv_local]
+  //   delta_v = tmp @ B_v_local^T      [T, kv_local]
+  //   y[:, q_local .. q_local+2*kv_local] += cat([q,k,v], -1)
+  // For base-only sequences interleaved with adapter sequences we still
+  // fall back to per-seq (see below); this fast path requires *all*
+  // non-zero ids match one adapter and no base-only seq is present.
+  {
+    uint64_t sole_aid = 0;
+    bool single_adapter = true;
+    for (auto id : adapter_ids) {
+      if (id == 0) {
+        single_adapter = false;  // any base-only seq disqualifies fast path
+        break;
+      }
+      if (sole_aid == 0) {
+        sole_aid = id;
+      } else if (id != sole_aid) {
+        single_adapter = false;
+        break;
+      }
+    }
+    if (single_adapter && sole_aid != 0) {
+      auto& runtime = LoRARuntime::instance();
+      const std::optional<LoRARuntime::ProjDelta> q_pd =
+          runtime.get_per_proj_delta(sole_aid, ctx->layer_index, "q_proj");
+      const std::optional<LoRARuntime::ProjDelta> k_pd =
+          runtime.get_per_proj_delta(sole_aid, ctx->layer_index, "k_proj");
+      const std::optional<LoRARuntime::ProjDelta> v_pd =
+          runtime.get_per_proj_delta(sole_aid, ctx->layer_index, "v_proj");
+      if (!q_pd.has_value() && !k_pd.has_value() && !v_pd.has_value()) {
+        return y;
+      }
+      // A is the same for Q/K/V? No — three independent A matrices. But
+      // each proj has its own A. We do 3 shrinks + 3 expands (each on
+      // the full [T, hidden] input, no slicing).
+      auto shrink_expand = [&](const LoRARuntime::ProjDelta* pd,
+                               int64_t out_local) -> torch::Tensor {
+        if (pd == nullptr) {
+          return torch::zeros({input.size(0), out_local}, input.options());
+        }
+        // tmp: [T, hidden] @ [hidden, r] -> [T, r]
+        auto tmp = torch::matmul(input, pd->A.transpose(0, 1));
+        // B [out_full, r] -> slice rows to local: [out_local, r].
+        // For q_proj under TP: out_full = q_hidden_total, sliced evenly
+        // per tp_rank. For k/v_proj when TP > num_kv_heads (GQA replicas),
+        // out_full = kv_hidden_total which is smaller than out_local *
+        // tp_world_size; several ranks share the same kv head. Compute
+        // the actual shard count from B.size(0) / out_local so each rank
+        // picks the correct slice.
+        torch::Tensor B_local = pd->B;
+        if (tp_world_size_ > 1 && pd->B.size(0) > out_local) {
+          const int64_t num_shards = pd->B.size(0) / out_local;
+          const int64_t shard_idx =
+              (num_shards > 0) ? (tp_rank_ * num_shards / tp_world_size_) : 0;
+          const int64_t start = shard_idx * out_local;
+          B_local = pd->B.slice(0, start, start + out_local);
+        }
+        // d: [T, r] @ [r, out_local] -> [T, out_local]
+        auto d = torch::matmul(tmp, B_local.transpose(0, 1));
+        return (d * pd->scaling).to(input.dtype());
+      };
+      auto q_delta = reorder_q_delta_if_gated(
+          shrink_expand(q_pd.has_value() ? &*q_pd : nullptr, q_size_local_));
+      auto k_delta =
+          shrink_expand(k_pd.has_value() ? &*k_pd : nullptr, kv_size_local_);
+      auto v_delta =
+          shrink_expand(v_pd.has_value() ? &*v_pd : nullptr, kv_size_local_);
+      auto qkv_delta = torch::cat({q_delta, k_delta, v_delta}, /*dim=*/-1);
+      y = y + qkv_delta;
+      return y;
+    }
+  }
+
+#if defined(USE_NPU)
+  // AscendC LoRA slow_path (mixed adapter batch) -- optional kernel
+  // acceleration for the multi-adapter case. Replaces the per-seq ATen loop
+  // below with batched bgmv_shrink + bgmv_expand when:
+  //   USE_ASCENDC_LORA env is set
+  //   adapter_ids.size() > 1 (single-adapter batch is the fast path above)
+  //   input is on NPU
+  //   storage has a bucket for this layer AND at least one active bucket has
+  //     rank R <= 64 (the vllm-ascend bgmv_expand kernel hard-caps rank at
+  //     64; R > 64 adapters such as jingxitao r=256 fall through to the ATen
+  //     per-seq path below, which is rank-agnostic and numerically correct)
+  //   all tokens route to a registered adapter (base-only token -> ATen)
+  //
+  // P4 fix (mixed-batch delta-drop): the original slow_path committed to the
+  // kernel path and `return y`ed unconditionally once entered, so a batch
+  // whose every bucket was R > 64 had every bucket skipped and returned base
+  // y with zero delta -- the ATen fallback was unreachable. We add an
+  // envelope pre-flight: if no active bucket across q/k/v is R <= 64, break
+  // out so control falls through to the ATen per-seq apply.
+  do {
+    if (std::getenv("DISABLE_ASCENDC_SPRINT_GAMMA") != nullptr) break;
+    {
+      static bool first_attempt = true;
+      if (first_attempt) {
+        first_attempt = false;
+        LOG(INFO) << "[AscendC LoRA slow_path multishape] first attempt";
+      }
+    }
+    if (std::getenv("USE_ASCENDC_LORA") == nullptr) break;
+    if (adapter_ids.size() <= 1) break;
+    if (!input.device().is_privateuseone()) break;
+
+    auto& storage = AscendCLoRAStorage::instance();
+    auto qb = storage.get_bucketed(ctx->layer_index, "q_proj");
+    auto kb = storage.get_bucketed(ctx->layer_index, "k_proj");
+    auto vb = storage.get_bucketed(ctx->layer_index, "v_proj");
+    if (qb.num_buckets() == 0 && kb.num_buckets() == 0 &&
+        vb.num_buckets() == 0) {
+      break;
+    }
+    if (!storage.slot_lookup_dev().defined() ||
+        !storage.bucket_lookup_dev().defined()) {
+      break;
+    }
+    if (ctx->adapter_ids_per_token == nullptr ||
+        !ctx->adapter_ids_per_token->defined()) {
+      break;
+    }
+    if (ctx->adapter_ids_per_token->numel() != input.size(0)) {
+      break;
+    }
+
+    // A single unsupported bucket requires a whole-batch ATen fallback;
+    // entering the kernel path would otherwise omit that adapter's delta.
+    bool has_valid_bucket = false;
+    auto all_buckets_in_envelope =
+        [&](const AscendCLoRAStorage::BucketedStackedView& bv) {
+          for (int b = 0; b < bv.num_buckets(); ++b) {
+            const auto& view = bv.buckets[b];
+            if (!view.valid) continue;
+            has_valid_bucket = true;
+            if (view.A_stacked.size(1) > 64 ||
+                view.A_stacked.size(2) != input.size(1)) {
+              return false;
+            }
+          }
+          return true;
+        };
+    if (!all_buckets_in_envelope(qb) || !all_buckets_in_envelope(kb) ||
+        !all_buckets_in_envelope(vb) || !has_valid_bucket) {
+      LOG_FIRST_N(WARNING, 20)
+          << "[AscendC LoRA slow_path] unsupported bucket at layer="
+          << ctx->layer_index
+          << "; falling back to per-seq ATen apply (kernel rank ceiling 64).";
+      break;
+    }
+
+    auto per_tok_slot =
+        storage.slot_lookup_dev().index_select(0, *ctx->adapter_ids_per_token);
+    auto per_tok_bucket = storage.bucket_lookup_dev().index_select(
+        0, *ctx->adapter_ids_per_token);
+
+    // Any -1 in slot -> the batch contains a base or unregistered adapter
+    // token, which the kernel path does not handle (ATen per-seq fallback
+    // below handles it correctly). Bail to keep semantics safe.
+    auto has_neg = (per_tok_slot < 0).any().to(torch::kCPU).item<bool>();
+    if (has_neg) break;
+
+    LOG_EVERY_N(INFO, 100) << "[AscendC LoRA slow_path multishape] enter aids="
+                           << adapter_ids.size()
+                           << " layer=" << ctx->layer_index
+                           << " q_buckets=" << qb.num_buckets()
+                           << " k_buckets=" << kb.num_buckets()
+                           << " v_buckets=" << vb.num_buckets();
+
+    // TP shard helper: slice B_stacked along dim=1 (H_out_full -> out_local).
+    auto shard_B = [&](const torch::Tensor& B_full, int64_t out_local) {
+      if (tp_world_size_ <= 1 || B_full.size(1) <= out_local) return B_full;
+      const int64_t num_shards = B_full.size(1) / out_local;
+      if (num_shards <= 0) return B_full;
+      const int64_t shard_idx = tp_rank_ * num_shards / tp_world_size_;
+      const int64_t start = shard_idx * out_local;
+      return B_full.slice(1, start, start + out_local);
+    };
+
+    // Dispatch one proj across all its rank buckets. Tokens are partitioned
+    // by per_tok_bucket == b; each partition launches its own bgmv_shrink +
+    // bgmv_expand, scattered back into y via index_add along dim=0. Buckets
+    // are all supported: the pre-flight rejects the entire kernel path
+    // before any output mutation if even one bucket is unsupported.
+    const auto buf_options =
+        torch::TensorOptions().dtype(torch::kFloat32).device(input.device());
+    auto dispatch_proj = [&](const AscendCLoRAStorage::BucketedStackedView& bv,
+                             int64_t out_local,
+                             int64_t y_slice_offset,
+                             int64_t y_slice_size,
+                             float scaling_hint,
+                             const char* proj_name) {
+      (void)scaling_hint;
+      (void)y_slice_size;
+      const bool needs_gate_reorder = q_has_gate_ && proj_name != nullptr &&
+                                      std::string_view(proj_name) == "q_proj";
+      for (int b = 0; b < bv.num_buckets(); ++b) {
+        const auto& view = bv.buckets[b];
+        if (!view.valid) continue;
+        const int64_t R = view.A_stacked.size(1);
+        if (R > 64) continue;  // kernel rank ceiling
+        if (view.A_stacked.size(2) != input.size(1)) continue;
+
+        auto mask = (per_tok_bucket == static_cast<int64_t>(b));
+        auto sub_token_ids = torch::nonzero(mask).squeeze(-1);
+        if (sub_token_ids.numel() == 0) continue;
+
+        auto sub_input = input.index_select(0, sub_token_ids);
+        auto sub_slot = per_tok_slot.index_select(0, sub_token_ids);
+        const int64_t sub_B = sub_input.size(0);
+
+        auto sub_buf = torch::zeros({sub_B, R}, buf_options);
+        auto B_shard = shard_B(view.B_stacked, out_local);
+        auto sub_y = torch::zeros({sub_B, out_local}, input.options());
+        xllm::bgmv_shrink(sub_input,
+                          view.A_stacked,
+                          sub_slot,
+                          sub_buf,
+                          static_cast<double>(view.scaling));
+        xllm::bgmv_expand(sub_buf,
+                          B_shard,
+                          sub_slot,
+                          sub_y,
+                          /*slice_offset=*/0,
+                          out_local);
+        // Qwen3-Next attn_output_gate: reorder q_delta from per-head
+        // interleaved to grouped before scatter so it lands in the correct
+        // half of each head (same fix as the ATen paths).
+        if (needs_gate_reorder) {
+          sub_y = reorder_q_delta_if_gated(sub_y);
+        }
+        auto y_slice_view =
+            y.slice(1, y_slice_offset, y_slice_offset + y_slice_size);
+        y_slice_view.index_add_(0, sub_token_ids, sub_y);
+      }
+    };
+
+    dispatch_proj(
+        qb, q_size_local_, /*y_offset=*/0, q_size_local_, 1.0f, "q_proj");
+    dispatch_proj(
+        kb, kv_size_local_, q_size_local_, kv_size_local_, 1.0f, "k_proj");
+    dispatch_proj(vb,
+                  kv_size_local_,
+                  q_size_local_ + kv_size_local_,
+                  kv_size_local_,
+                  1.0f,
+                  "v_proj");
+
+    return y;
+  } while (false);
+#endif  // USE_NPU
+
+  // Fallback per-seq apply: slice y along dim=0 by q_seq_lens, look up
+  // (int_id, layer, {q_proj,k_proj,v_proj}), stack Q/K/V deltas into
+  // one [seq_tokens, q_size + 2*kv_size] slab, add to that slice.
+  auto& runtime = LoRARuntime::instance();
+  int64_t tok_off = 0;
+  for (size_t seq_idx = 0; seq_idx < adapter_ids.size(); ++seq_idx) {
+    const int32_t seq_len = q_seq_lens[seq_idx];
+    if (seq_len <= 0) continue;
+    const uint64_t aid = adapter_ids[seq_idx];
+    if (aid == 0) {
+      tok_off += seq_len;
+      continue;
+    }
+
+    const std::optional<LoRARuntime::ProjDelta> q_pd =
+        runtime.get_per_proj_delta(aid, ctx->layer_index, "q_proj");
+    const std::optional<LoRARuntime::ProjDelta> k_pd =
+        runtime.get_per_proj_delta(aid, ctx->layer_index, "k_proj");
+    const std::optional<LoRARuntime::ProjDelta> v_pd =
+        runtime.get_per_proj_delta(aid, ctx->layer_index, "v_proj");
+    if (!q_pd.has_value() && !k_pd.has_value() && !v_pd.has_value()) {
+      tok_off += seq_len;
+      continue;
+    }
+
+    auto x_seq = input.slice(0, tok_off, tok_off + seq_len);
+    // Compute per-proj delta on the fused output. Use zeros as filler
+    // for missing proj slots so the concat shape stays correct.
+    // TP shard: dummy adapter's B is stored at full out size, but this
+    // rank only handles [tp_rank * out_size, (tp_rank+1) * out_size).
+    // Slice B to the local shard before matmul so the delta shape
+    // matches base linear's local output.
+    auto make_delta = [&](const LoRARuntime::ProjDelta* pd, int64_t out_size) {
+      if (pd == nullptr) {
+        return torch::zeros({x_seq.size(0), out_size}, x_seq.options());
+      }
+      auto tmp = torch::matmul(x_seq, pd->A.transpose(0, 1));
+      // B is [out_full, rank]. Slice per shard so this rank picks its
+      // portion of the output. For k/v_proj with GQA replicas the shard
+      // count is smaller than tp_world_size, so derive it from B.size(0).
+      torch::Tensor B_local = pd->B;
+      if (tp_world_size_ > 1 && pd->B.size(0) > out_size) {
+        const int64_t num_shards = pd->B.size(0) / out_size;
+        const int64_t shard_idx =
+            (num_shards > 0) ? (tp_rank_ * num_shards / tp_world_size_) : 0;
+        const int64_t start = shard_idx * out_size;
+        B_local = pd->B.slice(0, start, start + out_size);
+      }
+      auto d = torch::matmul(tmp, B_local.transpose(0, 1));
+      return (d * pd->scaling).to(x_seq.dtype());
+    };
+    auto q_delta = reorder_q_delta_if_gated(
+        make_delta(q_pd.has_value() ? &*q_pd : nullptr, q_size_local_));
+    auto k_delta =
+        make_delta(k_pd.has_value() ? &*k_pd : nullptr, kv_size_local_);
+    auto v_delta =
+        make_delta(v_pd.has_value() ? &*v_pd : nullptr, kv_size_local_);
+    auto qkv_delta = torch::cat({q_delta, k_delta, v_delta}, /*dim=*/-1);
+
+    auto y_view = y.slice(0, tok_off, tok_off + seq_len);
+    y_view.copy_(y_view + qkv_delta);
+    tok_off += seq_len;
+  }
+  return y;
+}
+
+void LoRAQKVParallelLinearImpl::load_state_dict(
+    const StateDict& state_dict,
+    const std::vector<std::string>& prefixes) {
+  // Passthrough: base handles the fused q/k/v load. We do not touch the
+  // LoRA A/B tensors here — those are set separately via
+  // set_lora_weights (Spike) or load_lora_state_dict (adapter manager).
+  base_->load_state_dict(state_dict, prefixes);
+}
+
+void LoRAQKVParallelLinearImpl::load_state_dict(const StateDict& state_dict) {
+  base_->load_state_dict(state_dict);
+}
+
+void LoRAQKVParallelLinearImpl::set_lora_weights(const torch::Tensor& lora_a,
+                                                 const torch::Tensor& lora_b,
+                                                 double scaling) {
+  // Sanity checks — surface shape mismatches early instead of getting
+  // an opaque matmul dispatch error at forward time.
+  CHECK_EQ(lora_a.dim(), 2)
+      << "lora_a must be 2-D [rank, hidden], got dim=" << lora_a.dim();
+  CHECK_EQ(lora_b.dim(), 2)
+      << "lora_b must be 2-D [out_local, rank], got dim=" << lora_b.dim();
+  CHECK_EQ(lora_a.size(1), hidden_size_)
+      << "lora_a hidden dim mismatch: got " << lora_a.size(1) << ", expected "
+      << hidden_size_;
+  CHECK_EQ(lora_b.size(0), out_size_local_)
+      << "lora_b out_local dim mismatch: got " << lora_b.size(0)
+      << ", expected " << out_size_local_ << " (q_local=" << q_size_local_
+      << " + 2*kv_local=" << kv_size_local_ << ")";
+  CHECK_EQ(lora_a.size(0), lora_b.size(1))
+      << "lora_a rank " << lora_a.size(0) << " != lora_b rank "
+      << lora_b.size(1);
+
+  lora_a_ = lora_a.contiguous();
+  lora_b_ = lora_b.contiguous();
+  lora_rank_ = lora_a.size(0);
+  lora_scaling_ = scaling;
+  lora_active_ = true;
+
+  LOG(INFO) << "LoRAQKVParallelLinear: activated adapter with rank="
+            << lora_rank_ << ", scaling=" << lora_scaling_
+            << ", tp_rank=" << tp_rank_ << "/" << tp_world_size_;
+}
+
+}  // namespace layer
+}  // namespace xllm

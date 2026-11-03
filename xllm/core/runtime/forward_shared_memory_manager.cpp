@@ -116,7 +116,9 @@ inline bool is_aligned_for_cuda_zero_copy(const void* ptr) {
 // v3: embedding.engram_history follows extra_token_ids and precedes the
 // root and embedding mtp_shifted_token_ids tensors.
 // v4: V4.1 request lookback ids precede extra_token_ids and engram_history.
-constexpr uint64_t kRawInputFormatTag = 0x584C4C4D00000004ULL;
+// v5: per-seq adapter_ids follows execution_batch.is_prefilling in the
+// descriptor section (multi-tenant LoRA routing).
+constexpr uint64_t kRawInputFormatTag = 0x584C4C4D00000005ULL;
 
 struct RawInputLayoutHeader final {
   uint64_t format_tag = kRawInputFormatTag;
@@ -2561,6 +2563,7 @@ inline void deserialize_forward_input_payload(
   read_vector(context, input_params.execution_batch.num_computed_tokens);
   read_vector(context, input_params.execution_batch.query_start_loc);
   read_vector(context, input_params.execution_batch.is_prefilling);
+  read_vector(context, input_params.adapter_ids);
   read_tensor_and_vector(context,
                          input_params.attention.device.q_seq_lens,
                          input_params.attention.host.q_seq_lens,
@@ -3071,6 +3074,9 @@ inline void serialize_forward_input_sections(
   write_vector(context.descriptor,
                input_params.execution_batch.query_start_loc);
   write_vector(context.descriptor, input_params.execution_batch.is_prefilling);
+  // Multi-tenant LoRA routing: per-seq adapter ids must reach every TP rank,
+  // else non-rank0 workers see an empty vector and skip the delta.
+  write_vector(context.descriptor, input_params.adapter_ids);
 
   write_host_vector_or_tensor(context,
                               input_params.attention.host.q_seq_lens,

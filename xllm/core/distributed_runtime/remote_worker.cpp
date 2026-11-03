@@ -374,6 +374,46 @@ folly::SemiFuture<bool> RemoteWorker::update_weights_async(
   return future;
 }
 
+folly::SemiFuture<bool> RemoteWorker::load_lora_adapter_async(
+    const std::string& lora_name,
+    const std::string& lora_path,
+    const std::string& base_model_name,
+    uint64_t lora_int_id) {
+  folly::Promise<bool> promise;
+  auto future = promise.getSemiFuture();
+  threadpool_.schedule([this,
+                        lora_name,
+                        lora_path,
+                        base_model_name,
+                        lora_int_id,
+                        promise = std::move(promise)]() mutable {
+    if (!channel_->load_lora_adapter(
+            lora_name, lora_path, base_model_name, lora_int_id)) {
+      LOG(ERROR) << "LoadLoraAdapter failed";
+      promise.setValue(false);
+    } else {
+      promise.setValue(true);
+    }
+  });
+  return future;
+}
+
+folly::SemiFuture<bool> RemoteWorker::unload_lora_adapter_async(
+    const std::string& lora_name) {
+  folly::Promise<bool> promise;
+  auto future = promise.getSemiFuture();
+  threadpool_.schedule(
+      [this, lora_name, promise = std::move(promise)]() mutable {
+        if (!channel_->unload_lora_adapter(lora_name)) {
+          LOG(ERROR) << "UnloadLoraAdapter failed";
+          promise.setValue(false);
+        } else {
+          promise.setValue(true);
+        }
+      });
+  return future;
+}
+
 folly::SemiFuture<bool> RemoteWorker::start_profile_async() {
   folly::Promise<bool> promise;
   auto future = promise.getSemiFuture();

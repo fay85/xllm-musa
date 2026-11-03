@@ -118,6 +118,17 @@ class CommChannel {
 
   virtual bool update_weights(const std::string& weights_path);
 
+  // Multi-tenant LoRA serving: load / unload an adapter on this worker.
+  // The load must execute on the worker's own threadpool (see
+  // WorkerService::LoadLoraAdapter), which this RPC provides. lora_int_id
+  // is assigned by the API process and adopted verbatim so the name->id
+  // binding is identical on every rank.
+  virtual bool load_lora_adapter(const std::string& lora_name,
+                                 const std::string& lora_path,
+                                 const std::string& base_model_name,
+                                 uint64_t lora_int_id);
+  virtual bool unload_lora_adapter(const std::string& lora_name);
+
   virtual bool wakeup(const WakeupOptions& options);
 
   virtual bool start_profile();

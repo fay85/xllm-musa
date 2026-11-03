@@ -440,6 +440,40 @@ bool CommChannel::update_weights(const std::string& weights_path) {
   return true;
 }
 
+bool CommChannel::load_lora_adapter(const std::string& lora_name,
+                                    const std::string& lora_path,
+                                    const std::string& base_model_name,
+                                    uint64_t lora_int_id) {
+  proto::LoadLoraAdapterRequest req;
+  proto::Status s;
+  brpc::Controller cntl;
+
+  req.set_lora_name(lora_name);
+  req.set_lora_path(lora_path);
+  req.set_base_model_name(base_model_name);
+  req.set_lora_int_id(lora_int_id);
+  stub_->LoadLoraAdapter(&cntl, &req, &s, nullptr);
+  if (cntl.Failed() || !s.ok()) {
+    LOG(ERROR) << "LoadLoraAdapter failed: " << cntl.ErrorText();
+    return false;
+  }
+  return true;
+}
+
+bool CommChannel::unload_lora_adapter(const std::string& lora_name) {
+  proto::UnloadLoraAdapterRequest req;
+  proto::Status s;
+  brpc::Controller cntl;
+
+  req.set_lora_name(lora_name);
+  stub_->UnloadLoraAdapter(&cntl, &req, &s, nullptr);
+  if (cntl.Failed() || !s.ok()) {
+    LOG(ERROR) << "UnloadLoraAdapter failed: " << cntl.ErrorText();
+    return false;
+  }
+  return true;
+}
+
 bool CommChannel::wakeup(const WakeupOptions& options) {
   proto::Status s;
   brpc::Controller cntl;

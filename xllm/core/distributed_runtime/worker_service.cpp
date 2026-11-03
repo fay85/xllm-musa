@@ -848,6 +848,39 @@ void WorkerService::UpdateWeights(::google::protobuf::RpcController* controller,
   });
 }
 
+void WorkerService::LoadLoraAdapter(
+    ::google::protobuf::RpcController* controller,
+    const proto::LoadLoraAdapterRequest* req,
+    proto::Status* resp,
+    ::google::protobuf::Closure* done) {
+  // Runs on the worker's threadpool: same executor as ExecuteModel and
+  // model init, so the device memcpy stream is already primed for this
+  // thread and .to(device) succeeds. Running the load inline in the
+  // API handler thread reproducibly crashes with aclrtMemcpy 107017 on
+  // CANN 8.5 -- this is the whole reason the load is an RPC.
+  threadpool_->schedule([this, controller, req, resp, done]() mutable {
+    brpc::ClosureGuard done_guard(done);
+    bool status =
+        worker_->load_lora_adapter(req->lora_name(),
+                                   req->lora_path(),
+                                   req->base_model_name(),
+                                   static_cast<uint64_t>(req->lora_int_id()));
+    resp->set_ok(status);
+  });
+}
+
+void WorkerService::UnloadLoraAdapter(
+    ::google::protobuf::RpcController* controller,
+    const proto::UnloadLoraAdapterRequest* req,
+    proto::Status* resp,
+    ::google::protobuf::Closure* done) {
+  threadpool_->schedule([this, controller, req, resp, done]() mutable {
+    brpc::ClosureGuard done_guard(done);
+    bool status = worker_->unload_lora_adapter(req->lora_name());
+    resp->set_ok(status);
+  });
+}
+
 void WorkerService::Sleep(::google::protobuf::RpcController* controller,
                           const proto::SleepRequest* req,
                           proto::Status* resp,

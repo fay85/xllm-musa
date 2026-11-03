@@ -59,6 +59,7 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/kv_cache/kv_cache_estimation.h"
+#include "core/framework/lora/lora_runtime.h"
 #include "core/platform/platform.h"
 #include "core/platform/sleepable_allocator.h"
 #if defined(USE_NPU)
@@ -1913,6 +1914,27 @@ bool WorkerImpl::update_weights(const std::string& weights_path) {
 
   this->load_model(std::move(model_loader));
   return true;
+}
+
+bool WorkerImpl::load_lora_adapter(const std::string& lora_name,
+                                   const std::string& lora_path,
+                                   const std::string& base_model_name,
+                                   uint64_t lora_int_id) {
+  // Runs on this worker's threadpool thread: same executor as
+  // ExecuteModel / model init, so the device memcpy stream is primed
+  // for this thread and .to(device) succeeds. This is the whole point
+  // of routing the load through the LoadLoraAdapter RPC instead of
+  // running it inline in the API handler thread (where the
+  // CPU->device copy fails with aclrtMemcpy 107017 on CANN 8.5).
+  // lora_int_id comes from the API process: adopt it verbatim so the
+  // name->id binding is identical on every rank (#506 review finding).
+  auto id_opt = LoRARuntime::instance().load_and_activate_hotswap(
+      lora_name, lora_path, base_model_name, lora_int_id);
+  return id_opt.has_value() && *id_opt == lora_int_id;
+}
+
+bool WorkerImpl::unload_lora_adapter(const std::string& lora_name) {
+  return LoRARuntime::instance().unload(lora_name);
 }
 
 bool WorkerImpl::start_profile() {

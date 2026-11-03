@@ -33,6 +33,7 @@ limitations under the License.
 #include "core/common/metrics.h"
 #include "core/framework/config/distributed_config.h"
 #include "core/framework/config/service_config.h"
+#include "core/framework/lora/lora_runtime.h"
 #include "core/util/closure_guard.h"
 
 namespace xllm {
@@ -611,6 +612,35 @@ TEST(RequestAdmissionTest, SleepingModelIsNotAConcurrencyLimit) {
   EXPECT_NE(rejected.reason(), FailureReason::CONCURRENCY_LIMIT_REACHED);
   EXPECT_TRUE(rate_limiter.is_sleeping());
   EXPECT_TRUE(rate_limiter.try_wakeup());
+}
+
+TEST(RequestAdmissionTest, AdapterAdmissionRequiresServiceOptIn) {
+  auto& runtime = LoRARuntime::instance();
+  const LoRAConfig previous_config = runtime.config();
+  LoRAConfig config = previous_config;
+  config.enable_lora = true;
+  runtime.init(config);
+  const auto id = runtime.registry().register_adapter(
+      {"admission-test-adapter", 0, "/unused/test/path", "supported-model"});
+  EXPECT_TRUE(id.has_value());
+  ServiceConfig::get_instance().max_concurrent_requests(1);
+  RateLimiter rate_limiter;
+  const absl::flat_hash_set<std::string> models = {"supported-model"};
+  const Status unsupported = api_service_internal::admit_rpc_request(
+      "admission-test-adapter", models, &rate_limiter);
+  EXPECT_EQ(unsupported.reason(), FailureReason::MODEL_NOT_FOUND);
+  EXPECT_EQ(rate_limiter.get_num_concurrent_requests(), 0);
+  const Status supported =
+      api_service_internal::admit_rpc_request("admission-test-adapter",
+                                              models,
+                                              &rate_limiter,
+                                              /*supports_lora=*/true);
+  EXPECT_TRUE(supported.ok());
+  if (supported.ok()) {
+    rate_limiter.decrease_one_request();
+  }
+  runtime.unload("admission-test-adapter");
+  runtime.init(previous_config);
 }
 
 }  // namespace

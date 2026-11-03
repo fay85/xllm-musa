@@ -120,6 +120,10 @@ class BatchInputBuilder {
     std::vector<int32_t> selected_token_idxes;
     std::vector<int32_t> sample_idxes;
 
+    // LoRA adapter int_id per sequence, index-aligned with q_seq_lens.
+    // Consumed by ModelInputParams::to(device) to build adapter_ids_per_token.
+    std::vector<uint64_t> adapter_ids;
+
     // Unique token tracking
     std::vector<std::vector<int64_t>> unique_token_ids_vec;
     std::vector<std::vector<int32_t>> unique_token_counts_vec;

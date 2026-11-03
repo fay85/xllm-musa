@@ -55,6 +55,17 @@ class Worker {
 
   bool update_weights(const std::string& weights_path);
 
+  // Multi-tenant LoRA serving: load / unload an adapter in this
+  // process's LoRARuntime. Call from a threadpool thread that shares
+  // the model-init executor (see WorkerService::LoadLoraAdapter).
+  // lora_int_id is assigned by the API process and must be adopted
+  // verbatim so the name->id binding matches on every rank.
+  bool load_lora_adapter(const std::string& lora_name,
+                         const std::string& lora_path,
+                         const std::string& base_model_name,
+                         uint64_t lora_int_id);
+  bool unload_lora_adapter(const std::string& lora_name);
+
   folly::SemiFuture<bool> wakeup_async(const WakeupOptions& options);
 
   // Start/stop online timeline profiling on this worker's device.

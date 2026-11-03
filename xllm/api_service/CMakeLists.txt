@@ -71,6 +71,7 @@ cc_library(
     :chat_template
     :chat_template_base
     :util
+    :lora
     glog::glog
     proto::xllm_proto
     absl::flat_hash_set

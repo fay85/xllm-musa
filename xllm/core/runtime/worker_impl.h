@@ -189,6 +189,17 @@ class WorkerImpl {
   // `reload_weights`). `weights_path` empty = reuse the original model path.
   virtual bool update_weights(const std::string& weights_path);
 
+  // Multi-tenant LoRA serving: load / unload an adapter in this
+  // process's LoRARuntime. The hotswap queue routes the actual device
+  // install to the pinned executor thread that owns the device
+  // context. Must be called from a thread that shares the model-init
+  // executor (worker threadpool), never the API handler thread.
+  virtual bool load_lora_adapter(const std::string& lora_name,
+                                 const std::string& lora_path,
+                                 const std::string& base_model_name,
+                                 uint64_t lora_int_id);
+  virtual bool unload_lora_adapter(const std::string& lora_name);
+
   // Start/stop online timeline profiling on this worker's device. CUDA only
   // for now; on other backends these are no-ops returning false.
   virtual bool start_profile();

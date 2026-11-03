@@ -222,6 +222,23 @@ class APIService : public proto::XllmAPIService {
                        proto::HttpResponse* response,
                        ::google::protobuf::Closure* done) override;
 
+  // Multi-tenant LoRA serving. POST /v1/load_lora_adapter,
+  // POST /v1/unload_lora_adapter, GET /v1/lora_adapters.
+  void LoadLoraAdapterHttp(::google::protobuf::RpcController* controller,
+                           const proto::HttpRequest* request,
+                           proto::HttpResponse* response,
+                           ::google::protobuf::Closure* done) override;
+
+  void UnloadLoraAdapterHttp(::google::protobuf::RpcController* controller,
+                             const proto::HttpRequest* request,
+                             proto::HttpResponse* response,
+                             ::google::protobuf::Closure* done) override;
+
+  void ListLoraAdaptersHttp(::google::protobuf::RpcController* controller,
+                            const proto::HttpRequest* request,
+                            proto::HttpResponse* response,
+                            ::google::protobuf::Closure* done) override;
+
   void LinkP2P(::google::protobuf::RpcController* controller,
                const proto::P2PLinkRequest* request,
                proto::Status* response,

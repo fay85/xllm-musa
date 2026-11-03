@@ -32,6 +32,7 @@ Status model_not_supported_status();
 
 Status admit_rpc_request(const std::string& model,
                          const absl::flat_hash_set<std::string>& models,
-                         RateLimiter* rate_limiter);
+                         RateLimiter* rate_limiter,
+                         bool supports_lora = false);
 
 }  // namespace xllm::api_service_internal

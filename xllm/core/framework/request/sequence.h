@@ -111,6 +111,10 @@ struct SequenceParams {
 
   int32_t bos_token_id = 0;
 
+  // LoRA adapter int_id for this sequence (0 = base model, no adapter).
+  // Propagated from RequestState::adapter_id via Request::create_sequences_group.
+  uint64_t adapter_id = 0;
+
   // request id for suffix-decoding request identity
   std::string request_id;
 
@@ -291,6 +295,9 @@ class Sequence final {
   const std::shared_ptr<RequestTiming>& request_timing() const {
     return sequence_params_.request_timing;
   }
+  // LoRA adapter int_id assigned to this sequence. Reads through
+  // sequence_params_ like request_id() -- the value already lives there.
+  uint64_t adapter_id() const { return sequence_params_.adapter_id; }
   std::string sample_sequence_id() const {
     return sequence_params_.request_id + "#" + std::to_string(index_);
   }

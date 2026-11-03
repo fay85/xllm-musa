@@ -27,6 +27,38 @@ limitations under the License.
 
 namespace xllm {
 
+// LoRA prefix cache isolation: set a thread-local adapter_id used by
+// xxh3_128bits_hash to seed the first block's hash. adapter_id == 0 means
+// base (no seeding, byte-identical to pre-patch behavior). Callers (typically
+// BlockManagerPool::allocate_shared/cache) must reset to 0 after each
+// match/insert to avoid cross-request contamination.
+void set_prefix_cache_adapter_id(uint64_t adapter_id);
+
+// Read the current thread-local adapter seed (used by the RAII scope to
+// save/restore across nesting).
+uint64_t get_prefix_cache_adapter_id();
+
+// RAII scope guard around the thread-local adapter seed: sets the seed on
+// construction and restores the PREVIOUS value on destruction, so an early
+// return or a thrown CHECK between set and reset cannot leak the seed into
+// unrelated hash operations on the same thread. Saving/restoring the prior
+// value (rather than unconditionally clearing to 0) makes the guard safe to
+// nest: an inner scope restores its enclosing scope's seed, not base.
+class PrefixCacheAdapterIdScope {
+ public:
+  explicit PrefixCacheAdapterIdScope(uint64_t adapter_id)
+      : prev_(get_prefix_cache_adapter_id()) {
+    set_prefix_cache_adapter_id(adapter_id);
+  }
+  PrefixCacheAdapterIdScope(const PrefixCacheAdapterIdScope&) = delete;
+  PrefixCacheAdapterIdScope& operator=(const PrefixCacheAdapterIdScope&) =
+      delete;
+  ~PrefixCacheAdapterIdScope() { set_prefix_cache_adapter_id(prev_); }
+
+ private:
+  uint64_t prev_;
+};
+
 void xxh3_128bits_hash(const uint8_t* pre_hash_value,
                        const Slice<int32_t>& token_ids,
                        uint8_t* hash_value);

@@ -26,6 +26,7 @@ limitations under the License.
 #include "core/common/flash_comm1_context.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/kv_cache/kv_cache.h"
+#include "core/framework/lora/lora_context.h"
 #include "core/framework/model/aux_hidden_capture.h"
 #include "core/framework/model/model_input_params.h"
 #include "core/framework/model/model_output.h"
@@ -37,6 +38,7 @@ limitations under the License.
 #include "core/layers/common/lm_head.h"
 #include "core/layers/common/qwen3_next_rms_norm.h"
 #include "core/layers/common/word_embedding.h"
+#include "models/llm/lora_bootstrap.h"
 #if defined(USE_NPU)
 #include "core/layers/npu_torch/qwen3_next_hybrid_decoder_layer_base.h"
 #elif defined(USE_MLU)
@@ -191,8 +193,34 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
       if (mrope_cos_sin.defined()) break;
     }
 
+    // Multi-tenant LoRA: push a LoRAContext frame so LoRA-wrapped Linear
+    // layers (QKV / o_proj) in the full-attention layers can read the
+    // per-batch adapter routing without extending the layer forward
+    // signature. The hybrid model does not derive from LlmModelImplBase, so
+    // this wiring mirrors the loop in llm_model_base.h. set_lora_context_layer
+    // updates layer_index on the top frame each iteration; LoRAScope pops on
+    // scope exit. adapter_ids_per_token is already materialised by
+    // ModelInputParams::to() on the worker before forward().
+    LoRAContextFrame lora_frame;
+    lora_frame.adapter_ids = &input_params.adapter_ids;
+    lora_frame.adapter_ids_per_token = &input_params.adapter_ids_per_token;
+    // The wrappers slice the [num_tokens, hidden] hidden state into per-seq
+    // chunks with q_seq_lens_vec; without it the first guard in every wrapper
+    // rejects the batch and the delta silently never applies.
+    std::vector<int32_t> lora_q_seq_lens;
+    lora_q_seq_lens.reserve(input_params.adapter_ids.size());
+    for (size_t i = 0; i < input_params.adapter_ids.size(); ++i) {
+      const int32_t length =
+          input_params.get_q_seq_len(static_cast<int32_t>(i));
+      CHECK_GE(length, 0);
+      lora_q_seq_lens.emplace_back(length);
+    }
+    lora_frame.q_seq_lens_vec = &lora_q_seq_lens;
+    LoRAScope _lora_scope(lora_frame);
+
     std::optional<torch::Tensor> residual = std::nullopt;
     for (size_t i = 0; i < layers_.size(); i++) {
+      set_lora_context_layer(static_cast<int32_t>(i));
 #if defined(USE_MUSA)
       if (attn_metadata.plan_info != nullptr) {
         attn_metadata.plan_info->layer_id = static_cast<int32_t>(i);
@@ -328,6 +356,10 @@ class Qwen3HybridModelImplBase : public Qwen3HybridModelModule {
 class Qwen3HybridForCausalLMImplBase : public torch::nn::Module {
  public:
   explicit Qwen3HybridForCausalLMImplBase(const ModelContext& context) {
+    // Arm the LoRA hot-swap executor before any module builds so
+    // /v1/load_lora_adapter works from the first request (#506 review
+    // finding: init alone leaves the executor dead). No-op when disabled.
+    bootstrap_lora_runtime(context);
     tie_word_embeddings_ = context.get_model_args().tie_word_embeddings();
     lm_head_ = register_module("lm_head", layer::LmHead(context));
   }

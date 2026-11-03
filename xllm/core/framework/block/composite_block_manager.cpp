@@ -25,6 +25,7 @@ limitations under the License.
 #include "concurrent_block_manager_impl.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/scheduler_config.h"
+#include "core/framework/prefix_cache/block_hasher.h"
 #include "core/util/utils.h"
 #include "embedding_block_manager.h"
 #include "framework/kv_cache/deepseek_v4_cache_geometry.h"
@@ -458,6 +459,11 @@ void CompositeBlockManager::cache_full_blocks_for_sequence(Sequence* seq) {
       publish_mode_ == PrefixCachePublishMode::EXPLICIT) {
     return;
   }
+  // LoRA prefix-cache isolation: seed the published block hashes with this
+  // sequence's adapter id. This is the single full-block publish entry (all
+  // cache_for_sequence / deallocate flush paths route through here), so the
+  // guard here covers every scheduler's publish path.
+  PrefixCacheAdapterIdScope adapter_scope(seq->adapter_id());
   KVCacheState& kv = seq->kv_state();
 
   size_t cacheable_tokens =
@@ -898,6 +904,12 @@ void CompositeBlockManager::allocate_shared_for_sequence(
   if (seq == nullptr || combination_ == LeafCombination::UNSUPPORTED) {
     return;
   }
+  // LoRA prefix-cache isolation: seed the block hash with this sequence's
+  // adapter id for the whole probe/mount flow, so different adapters never
+  // share a prefix chain. Sunk here (not only in BlockManagerPool) because
+  // some schedulers (PD-OOC, disagg-decode) reach the hashing paths through
+  // BlockManagerPool::allocate/try_allocate, which hold no pool-level guard.
+  PrefixCacheAdapterIdScope adapter_scope(seq->adapter_id());
   if (combination_ == LeafCombination::FLAT_KV_LINEAR &&
       kv_state.prefix_cache_matched()) {
     return;
@@ -985,6 +997,9 @@ void CompositeBlockManager::cache_for_sequence(Sequence* seq,
       publish_mode_ == PrefixCachePublishMode::EXPLICIT) {
     return;
   }
+  // LoRA prefix-cache isolation: seed the mid-step (chunked-prefill) flush
+  // hashes with this sequence's adapter id, same as the full-block path.
+  PrefixCacheAdapterIdScope adapter_scope(seq->adapter_id());
   switch (combination_) {
     case LeafCombination::FLAT_KV:
     case LeafCombination::FLAT_KV_LINEAR: {
