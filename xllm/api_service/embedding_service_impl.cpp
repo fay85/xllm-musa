@@ -28,6 +28,7 @@ limitations under the License.
 #include "core/framework/config/model_config.h"
 #include "core/framework/request/request_params.h"
 #include "core/util/binary_payload.h"
+#include "core/util/scope_guard.h"
 #include "core/util/utils.h"
 #include "core/util/uuid.h"
 
@@ -155,10 +156,14 @@ void MMEmbeddingServiceImpl::process_async_impl(
   const auto& rpc_request = call->request();
   // check if model is supported
   const auto& model = rpc_request.model();
-  if (!models_.contains(model)) {
-    call->finish_with_error(api_service_internal::model_not_supported_status());
+  const Status admission_status = api_service_internal::admit_rpc_request(
+      model, models_, master_->get_rate_limiter());
+  if (!admission_status.ok()) {
+    call->finish_with_error(admission_status);
     return;
   }
+  xllm::ScopeGuard rate_limit_guard(
+      [this] { master_->get_rate_limiter()->decrease_one_request(); });
 
   // create RequestParams for embeddings request
   // set is_embeddings and max_tokens = 1 to control engine step once.
@@ -168,8 +173,10 @@ void MMEmbeddingServiceImpl::process_async_impl(
   auto& req_messages = rpc_request.messages();
 
   std::vector<Message> messages;
-  if (!mm_service_utils::build_messages<MMEmbeddingCall>(
-          req_messages, messages, call, master_->get_image_limit())) {
+  const Status messages_status = mm_service_utils::build_messages(
+      req_messages, messages, master_->get_image_limit());
+  if (!messages_status.ok()) {
+    call->finish_with_error(messages_status);
     return;
   }
 
@@ -191,13 +198,8 @@ void MMEmbeddingServiceImpl::process_async_impl(
 
   BinaryPayload payload(call->take_request_iobuf());
 
-  if (master_->get_rate_limiter()->is_limited()) {
-    call->finish_with_error(api_service_internal::rate_limiter_rejection_status(
-        *master_->get_rate_limiter()));
-    return;
-  }
-
   // schedule the request
+  rate_limit_guard.dismiss();
   master_->handle_request(
       std::move(messages),
       std::move(request_params),

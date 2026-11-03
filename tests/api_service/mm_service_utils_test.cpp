@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <gtest/gtest.h>
 
-#include <memory>
 #include <string>
 #include <vector>
 
@@ -26,23 +25,6 @@ limitations under the License.
 
 namespace xllm::mm_service_utils {
 namespace {
-
-class FakeCall final {
- public:
-  bool finish_with_error(const StatusCode& code,
-                         const std::string& error_message) {
-    code_ = code;
-    error_message_ = error_message;
-    return true;
-  }
-
-  StatusCode code() const { return code_; }
-  const std::string& error_message() const { return error_message_; }
-
- private:
-  StatusCode code_ = StatusCode::OK;
-  std::string error_message_;
-};
 
 TEST(MMServiceUtilsTest, ReservesCombinedPayloadCapacity) {
   const std::vector<std::string> outputs = {"image", "audio", "video"};
@@ -117,13 +99,13 @@ TEST(MMServiceUtilsTest, RejectsInvalidMessageContentType) {
   proto::MMChatRequest request;
   proto::MMInputData* content = request.add_messages()->add_content();
   content->set_type("invalid");
-  auto call = std::make_shared<FakeCall>();
   std::vector<Message> messages;
 
-  EXPECT_FALSE(
-      build_messages(request.messages(), messages, call, /*image_limit=*/1));
-  EXPECT_EQ(call->code(), StatusCode::INVALID_ARGUMENT);
-  EXPECT_EQ(call->error_message(), "message content type is invalid.");
+  const Status status =
+      build_messages(request.messages(), messages, /*image_limit=*/1);
+  EXPECT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), StatusCode::INVALID_ARGUMENT);
+  EXPECT_EQ(status.message(), "message content type is invalid.");
 }
 
 TEST(MMServiceUtilsTest, RejectsMessageExceedingImageLimit) {
@@ -134,13 +116,13 @@ TEST(MMServiceUtilsTest, RejectsMessageExceedingImageLimit) {
     content->set_type("image_url");
     content->mutable_image_url()->set_url(url);
   }
-  auto call = std::make_shared<FakeCall>();
   std::vector<Message> messages;
 
-  EXPECT_FALSE(
-      build_messages(request.messages(), messages, call, /*image_limit=*/1));
-  EXPECT_EQ(call->code(), StatusCode::INVALID_ARGUMENT);
-  EXPECT_EQ(call->error_message(),
+  const Status status =
+      build_messages(request.messages(), messages, /*image_limit=*/1);
+  EXPECT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), StatusCode::INVALID_ARGUMENT);
+  EXPECT_EQ(status.message(),
             "Number of images in a single message exceeds the allowed image "
             "limit.");
 }
@@ -165,11 +147,11 @@ TEST(MMServiceUtilsTest, PreservesRequestStrings) {
   audio->set_type("audio_url");
   audio->mutable_audio_url()->set_url(payload);
   (*audio->mutable_audio_url()->mutable_headers())["key"] = "audio";
-  auto call = std::make_shared<FakeCall>();
   std::vector<Message> messages;
 
-  ASSERT_TRUE(
-      build_messages(request.messages(), messages, call, /*image_limit=*/1));
+  const Status status =
+      build_messages(request.messages(), messages, /*image_limit=*/1);
+  ASSERT_TRUE(status.ok());
   ASSERT_TRUE(text->has_text());
   EXPECT_EQ(text->text(), payload);
   EXPECT_EQ(image->image_url().url(), payload);
@@ -195,12 +177,12 @@ TEST(MMServiceUtilsTest, PreservesTextOnValidationFailure) {
   const std::string payload(4096, 'x');
   text->set_text(payload);
   message->add_content()->set_type("invalid");
-  auto call = std::make_shared<FakeCall>();
   std::vector<Message> messages;
 
-  EXPECT_FALSE(
-      build_messages(request.messages(), messages, call, /*image_limit=*/1));
-  EXPECT_EQ(call->code(), StatusCode::INVALID_ARGUMENT);
+  const Status status =
+      build_messages(request.messages(), messages, /*image_limit=*/1);
+  EXPECT_FALSE(status.ok());
+  EXPECT_EQ(status.code(), StatusCode::INVALID_ARGUMENT);
   EXPECT_TRUE(text->has_text());
   EXPECT_EQ(text->text(), payload);
 }
@@ -212,15 +194,15 @@ TEST(MMServiceUtilsTest, BuildsValidMessages) {
   proto::MMInputData* content = message->add_content();
   content->set_type("text");
   content->set_text("hello");
-  auto call = std::make_shared<FakeCall>();
   std::vector<Message> messages;
 
-  ASSERT_TRUE(
-      build_messages(request.messages(), messages, call, /*image_limit=*/1));
+  const Status status =
+      build_messages(request.messages(), messages, /*image_limit=*/1);
+  ASSERT_TRUE(status.ok());
   ASSERT_EQ(messages.size(), 1u);
   EXPECT_EQ(messages.front().role, "user");
-  EXPECT_EQ(call->code(), StatusCode::OK);
-  EXPECT_TRUE(call->error_message().empty());
+  EXPECT_EQ(status.code(), StatusCode::OK);
+  EXPECT_TRUE(status.message().empty());
 }
 
 }  // namespace

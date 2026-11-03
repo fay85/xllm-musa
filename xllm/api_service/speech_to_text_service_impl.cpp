@@ -517,10 +517,14 @@ void SpeechToTextServiceImpl::process_async_impl(
   if (model.empty()) {
     model = *models_.begin();
   }
-  if (!models_.contains(model)) {
-    call->finish_with_error(api_service_internal::model_not_supported_status());
+  const Status admission_status = api_service_internal::admit_rpc_request(
+      model, models_, master_->get_rate_limiter());
+  if (!admission_status.ok()) {
+    call->finish_with_error(admission_status);
     return;
   }
+  ScopeGuard admission_guard(
+      [this] { master_->get_rate_limiter()->decrease_one_request(); });
 
   const std::string response_format = rpc_request.response_format().empty()
                                           ? std::string(kJsonFormat)
@@ -589,14 +593,6 @@ void SpeechToTextServiceImpl::process_async_impl(
                             "Expected `file` to be a file-like object.");
     return;
   }
-
-  if (master_->get_rate_limiter()->is_limited()) {
-    call->finish_with_error(api_service_internal::rate_limiter_rejection_status(
-        *master_->get_rate_limiter()));
-    return;
-  }
-  ScopeGuard admission_guard(
-      [this] { master_->get_rate_limiter()->decrease_one_request(); });
 
   std::string audio_bytes;
   const uint64_t max_bytes =

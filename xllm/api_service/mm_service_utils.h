@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <cstdint>
 #include <limits>
-#include <memory>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -86,12 +85,10 @@ auto* initialize_generation_response(Response& response,
   return response.mutable_output();
 }
 
-template <typename Call>
-bool build_messages(const google::protobuf::RepeatedPtrField<
-                        xllm::proto::MMChatMessage>& req_messages,
-                    std::vector<Message>& out_messages,
-                    std::shared_ptr<Call> call,
-                    int image_limit) {
+inline Status build_messages(const google::protobuf::RepeatedPtrField<
+                                 xllm::proto::MMChatMessage>& req_messages,
+                             std::vector<Message>& out_messages,
+                             int32_t image_limit) {
   out_messages.clear();
   out_messages.reserve(req_messages.size());
 
@@ -133,9 +130,8 @@ bool build_messages(const google::protobuf::RepeatedPtrField<
       } else if (item.type() == "audio_embedding") {
         contents.emplace_back("audio_embedding", item.audio_embedding());
       } else {
-        call->finish_with_error(StatusCode::INVALID_ARGUMENT,
-                                "message content type is invalid.");
-        return false;
+        return {StatusCode::INVALID_ARGUMENT,
+                "message content type is invalid."};
       }
     }
 
@@ -165,15 +161,14 @@ bool build_messages(const google::protobuf::RepeatedPtrField<
 
   for (auto& msg : out_messages) {
     if (msg.calc_count("image_url") > image_limit) {
-      call->finish_with_error(StatusCode::INVALID_ARGUMENT,
-                              "Number of images in a single message exceeds "
-                              "the allowed image limit.");
-      return false;
+      return {StatusCode::INVALID_ARGUMENT,
+              "Number of images in a single message exceeds "
+              "the allowed image limit."};
     }
   }
 
-  return true;
-};
+  return {};
+}
 
 }  // namespace mm_service_utils
 }  // namespace xllm

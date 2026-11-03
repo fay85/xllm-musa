@@ -27,6 +27,7 @@ limitations under the License.
 #include "core/framework/request/dit_request_output.h"
 #include "core/framework/request/dit_request_params.h"
 #include "core/util/binary_payload.h"
+#include "core/util/scope_guard.h"
 #include "core/util/utils.h"
 #include "core/util/uuid.h"
 
@@ -101,6 +102,9 @@ void ImageGenerationServiceImpl::process_async_impl(
     return;
   }
 
+  xllm::ScopeGuard rate_limit_guard(
+      [this] { master_->get_rate_limiter()->decrease_one_request(); });
+
   // create DiTRequestParams for image generation request
   DiTRequestParams request_params(rpc_request,
                                   call->get_x_request_id(),
@@ -110,6 +114,7 @@ void ImageGenerationServiceImpl::process_async_impl(
   auto saved_request_id = request_params.request_id;
   std::string output_type = request_params.generation_params.output_type;
   // schedule the request
+  rate_limit_guard.dismiss();
   master_->handle_request(
       std::move(request_params),
       call.get(),

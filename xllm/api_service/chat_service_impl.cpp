@@ -42,6 +42,7 @@ limitations under the License.
 #include "core/framework/request/rec_type.h"
 #include "core/framework/request/request_params.h"
 #include "core/util/binary_payload.h"
+#include "core/util/scope_guard.h"
 #include "core/util/utils.h"
 #include "core/util/uuid.h"
 
@@ -893,21 +894,20 @@ void MMChatServiceImpl::process_async_impl(std::shared_ptr<MMChatCall> call) {
   const auto& rpc_request = call->request();
   const auto& req_messages = rpc_request.messages();
   const auto& model = rpc_request.model();
-  if (!models_.contains(model)) {
-    call->finish_with_error(api_service_internal::model_not_supported_status());
+  const Status admission_status = api_service_internal::admit_rpc_request(
+      model, models_, master_->get_rate_limiter());
+  if (!admission_status.ok()) {
+    call->finish_with_error(admission_status);
     return;
   }
+  xllm::ScopeGuard rate_limit_guard(
+      [this] { master_->get_rate_limiter()->decrease_one_request(); });
 
   std::vector<Message> messages;
-  if (!mm_service_utils::build_messages<MMChatCall>(
-          req_messages, messages, call, master_->get_image_limit())) {
-    return;
-  }
-
-  // Check if the request is being rate-limited.
-  if (master_->get_rate_limiter()->is_limited()) {
-    call->finish_with_error(api_service_internal::rate_limiter_rejection_status(
-        *master_->get_rate_limiter()));
+  const Status messages_status = mm_service_utils::build_messages(
+      req_messages, messages, master_->get_image_limit());
+  if (!messages_status.ok()) {
+    call->finish_with_error(messages_status);
     return;
   }
 
@@ -941,6 +941,7 @@ void MMChatServiceImpl::process_async_impl(std::shared_ptr<MMChatCall> call) {
   BinaryPayload payload(call->take_request_iobuf());
 
   // schedule the request
+  rate_limit_guard.dismiss();
   master_->handle_request(
       std::move(messages),
       std::move(request_params),

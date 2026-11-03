@@ -34,7 +34,9 @@ limitations under the License.
 #include "core/framework/config/distributed_config.h"
 #include "core/framework/config/service_config.h"
 #include "core/framework/lora/lora_runtime.h"
+#include "core/framework/request/request_base.h"
 #include "core/util/closure_guard.h"
+#include "core/util/scope_guard.h"
 
 namespace xllm {
 namespace {
@@ -432,6 +434,61 @@ class RateLimitMetricsTest : public testing::Test {
  private:
   int32_t previous_limit_ = 0;
 };
+
+TEST_F(RateLimitMetricsTest, AdmissionGuardReleasesEarlyReturn) {
+  const absl::flat_hash_set<std::string> models = {"supported-model"};
+  for (int32_t limit : {0, 1}) {
+    SCOPED_TRACE(limit);
+    ServiceConfig::get_instance().max_concurrent_requests(limit);
+    RateLimiter rate_limiter;
+    const auto prepare_request = [&]() -> Status {
+      const Status status = api_service_internal::admit_rpc_request(
+          /*model=*/"supported-model", models, &rate_limiter);
+      if (!status.ok()) {
+        return status;
+      }
+      xllm::ScopeGuard rate_limit_guard(
+          [&rate_limiter] { rate_limiter.decrease_one_request(); });
+      EXPECT_EQ(rate_limiter.get_num_concurrent_requests(), 1);
+      return {StatusCode::INVALID_ARGUMENT, "Invalid input"};
+    };
+    for (int32_t attempt = 0; attempt < 2; ++attempt) {
+      EXPECT_EQ(prepare_request().code(), StatusCode::INVALID_ARGUMENT);
+      EXPECT_EQ(rate_limiter.get_num_concurrent_requests(), 0);
+    }
+  }
+}
+
+TEST_F(RateLimitMetricsTest, AdmissionHandoffReleasesExactlyOnce) {
+  const absl::flat_hash_set<std::string> models = {"supported-model"};
+  for (bool finish_immediately : {false, true}) {
+    SCOPED_TRACE(finish_immediately);
+    RateLimiter rate_limiter;
+    std::unique_ptr<RequestBase> request;
+    {
+      ASSERT_TRUE(api_service_internal::admit_rpc_request(
+                      /*model=*/"supported-model", models, &rate_limiter)
+                      .ok());
+      xllm::ScopeGuard rate_limit_guard(
+          [&rate_limiter] { rate_limiter.decrease_one_request(); });
+      rate_limit_guard.dismiss();
+      request = std::make_unique<RequestBase>(/*request_id=*/"request",
+                                              /*x_request_id=*/"x-request",
+                                              /*x_request_time=*/"time",
+                                              /*service_request_id=*/"",
+                                              /*source_xservice_addr=*/"",
+                                              &rate_limiter);
+      EXPECT_EQ(rate_limiter.get_num_concurrent_requests(), 1);
+      if (finish_immediately) {
+        request.reset();
+      }
+    }
+    EXPECT_EQ(rate_limiter.get_num_concurrent_requests(),
+              finish_immediately ? 0 : 1);
+    request.reset();
+    EXPECT_EQ(rate_limiter.get_num_concurrent_requests(), 0);
+  }
+}
 
 TEST_F(RateLimitMetricsTest, NonStreamConcurrencyRejectionCountsOnce) {
   using CompletionCall =
