@@ -23,14 +23,19 @@ from typing import Any
 import torch
 import torch.nn as nn
 
+from xllm.python import distributed
 from xllm.python.attention.backend import (
     AttentionBackend,
     AttentionMetadata,
     LayerCache,
 )
-from xllm.python.model_executor.execution_context import ExecutionMetadataBuilder
+from xllm.python.model_executor.execution_context import (
+    ExecutionMetadataBuilder,
+    GraphExecutionSupport,
+)
 from xllm.python.model_executor.forward_context import EplbRuntimeState, LayerSynchronizer
 from xllm.python.model_executor.input_batch import InputBatch
+from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.model_executor.model_output import DraftProposal, ModelOutput
 
 ModelExecutionOutput = torch.Tensor | tuple[torch.Tensor, torch.Tensor] | ModelOutput
@@ -51,7 +56,7 @@ class BaseRunner(ABC):
     def __init__(
         self,
         model: nn.Module,
-        attention_backend: AttentionBackend,
+        attention_backend: AttentionBackend | None,
         device: torch.device,
     ) -> None:
         self.model = model
@@ -63,11 +68,31 @@ class BaseRunner(ABC):
     def bind_layer_caches(self, layer_caches: list[LayerCache]) -> None:
         self.layer_caches = layer_caches
 
+    def can_execute(self, inputs: ModelInput) -> bool:
+        """Whether this backend can execute the step; graph backends specialize it."""
+        return True
+
+    def _agree_on_graph_execution(self, can_execute: bool, dp_size: int) -> bool:
+        """Coordinate explicit model admission; retain legacy geometry-only policy."""
+        if dp_size == 1 or not isinstance(self.model, GraphExecutionSupport):
+            return can_execute
+        return distributed.dp_all_true(can_execute, self.device, dp_size)
+
     def bind_execution_metadata_builders(
         self,
         builders: Sequence[ExecutionMetadataBuilder],
     ) -> None:
         self.execution_metadata_builders = tuple(builders)
+
+    def warmup(
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        metadata: AttentionMetadata,
+        input_embedding: torch.Tensor | None = None,
+    ) -> None:
+        """Backends may prepare state here or capture lazily during execute."""
+        return None
 
     @staticmethod
     def _slice_output(

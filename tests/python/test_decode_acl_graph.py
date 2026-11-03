@@ -41,6 +41,7 @@ from xllm.python.attention.dsa_metadata import (
 )
 from xllm.python.attention.expanded_decode_metadata import ExpandedDecodeMetadata
 from xllm.python.model_executor.input_batch import InputBatch
+from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.model_executor.model_output import DraftProposal, ModelOutput
 from xllm.python.model_executor.runners.decode_acl_graph import (
     DecodeAclGraphRunner,
@@ -53,14 +54,23 @@ from xllm.python.model_executor.sampling_metadata import (
 from xllm.python.models.engram_config import EngramConfig
 
 
-def _runner() -> DecodeAclGraphRunner:
+class _SamplingModel(nn.Identity):
+    def __init__(self) -> None:
+        super().__init__()
+        self.sampling_builder = ModelSamplingMetadataBuilder()
+
+    def can_execute_graph(self, inputs: ModelInput) -> bool:
+        return inputs.input_batch is not None and self.sampling_builder.can_execute_graph(inputs.input_batch.sampling)
+
+
+def _runner(model: nn.Module | None = None) -> DecodeAclGraphRunner:
     attention_backend = SimpleNamespace(
         page_size=4,
         is_mla=False,
         graph_uses_dsa_metadata=lambda _: False,
     )
     return DecodeAclGraphRunner(
-        nn.Identity(),
+        nn.Identity() if model is None else model,
         attention_backend,
         torch.device("cpu"),
         max_batch=8,
@@ -158,7 +168,7 @@ def test_expanded_draft_proposal_has_shared_plan_with_empty_dp(query_width: int)
         metadata.dp_execution_token_counts = (2 * query_width, query_width)
         metadata.raw_dp_execution_token_counts = (2 * query_width, 0)
         metadata.dp_is_decode = (True, True)
-        assert runner.can_execute(batch.input_ids, metadata)
+        assert runner.can_execute(ModelInput(batch.input_ids, batch.input_ids, metadata))
         plans.append(runner._shared_graph_plan(metadata, batch.num_tokens))
     assert plans == [(True, query_width, 2)] * 2
 
@@ -213,7 +223,7 @@ def test_csa2_ring_paging_admission_and_dummy_replay(
     metadata.dp_execution_token_counts = (query_width,) * dp_size
     metadata.raw_dp_execution_token_counts = (query_width,) + (0,) * (dp_size - 1)
     metadata.dp_is_decode = (True,) * dp_size
-    assert runner.can_execute(batch.input_ids, metadata)
+    assert runner.can_execute(ModelInput(batch.input_ids, batch.input_ids, metadata))
     normalized = runner._normalize_dsa_metadata(metadata)
     assert len(normalized.multi_block_tables) == 1
     assert normalized.multi_block_tables[0] is metadata.multi_block_tables[0]
@@ -241,7 +251,7 @@ def test_csa2_ring_paging_admission_and_dummy_replay(
     dummy.paged_kv_indices = torch.zeros(query_width, dtype=torch.int32)
     dummy.paged_kv_last_page_len = torch.ones(query_width, dtype=torch.int32)
     runner.dp_rank = dp_size - 1
-    assert runner.can_execute(empty_batch.input_ids, dummy)
+    assert runner.can_execute(ModelInput(empty_batch.input_ids, empty_batch.input_ids, dummy))
     assert runner._shared_graph_plan(metadata, query_width) == runner._shared_graph_plan(dummy, query_width)
     normalized_dummy = runner._normalize_dsa_metadata(dummy)
     assert normalized_dummy.multi_block_tables[0].shape == (query_width, 1)
@@ -300,10 +310,10 @@ def test_ordinary_paging_still_rejects_insufficient_history_capacity(dp_size: in
     metadata.dp_execution_token_counts = (4,) * dp_size
     metadata.dp_is_decode = (True,) * dp_size
     if dp_size == 1:
-        assert not runner.can_execute(torch.arange(4), metadata)
+        assert not runner.can_execute(ModelInput(torch.arange(4), torch.arange(4), metadata))
     else:
         with pytest.raises(RuntimeError, match="cannot hold the KV length"):
-            runner.can_execute(torch.arange(4), metadata)
+            runner.can_execute(ModelInput(torch.arange(4), torch.arange(4), metadata))
 
 
 def test_draft_graph_key_keeps_whole_query_blocks() -> None:
@@ -452,7 +462,7 @@ def _metadata(linear_state_indices: torch.Tensor | None) -> SimpleNamespace:
 
 @pytest.mark.parametrize("sampling_mode", ["greedy", "filter", "penalty", "probabilities", "confidence", "missing"])
 def test_sampling_graph_admission_checks_request_capability(sampling_mode: str) -> None:
-    runner = _runner()
+    runner = _runner(_SamplingModel())
     runner.bind_execution_metadata_builders((ModelSamplingMetadataBuilder(),))
     sampling = SimpleNamespace(
         is_unconstrained_greedy=sampling_mode not in ("filter", "penalty"),
@@ -461,7 +471,9 @@ def test_sampling_graph_admission_checks_request_capability(sampling_mode: str) 
     )
     batch = replace(_query_batch(4, 1), sampling=None if sampling_mode == "missing" else sampling)
 
-    assert runner.can_execute(batch.input_ids, _metadata(None), input_batch=batch) == (sampling_mode == "greedy")
+    assert runner.can_execute(ModelInput(batch.input_ids, batch.positions, _metadata(None), input_batch=batch)) == (
+        sampling_mode == "greedy"
+    )
 
 
 @pytest.mark.parametrize("empty_peer", [False, True])
@@ -492,7 +504,7 @@ def test_sampling_graph_admission_is_unanimous_across_dp(
 
     monkeypatch.setattr(distributed, "dp_all_true", agree, raising=False)
     for rank in range(2):
-        runner = _runner()
+        runner = _runner(_SamplingModel())
         runner.dp_size = 2
         runner.dp_rank = rank
         runner.bind_execution_metadata_builders((ModelSamplingMetadataBuilder(),))
@@ -501,12 +513,14 @@ def test_sampling_graph_admission_is_unanimous_across_dp(
             is_unconstrained_greedy=sampling_allowed[rank], return_probs=False, return_confidence=False
         )
         batch = replace(_query_batch(0 if empty_peer and rank == 1 else 4, 1), sampling=sampling)
-        assert runner.can_execute(batch.input_ids, _metadata(None), input_batch=batch) == all(votes)
+        assert runner.can_execute(
+            ModelInput(batch.input_ids, batch.positions, _metadata(None), input_batch=batch)
+        ) == all(votes)
     assert calls == [0, 1]
 
 
 def test_sampling_graph_admission_propagates_dp_agreement_failure(monkeypatch: pytest.MonkeyPatch) -> None:
-    runner = _runner()
+    runner = _runner(_SamplingModel())
     runner.dp_size = 2
     runner.bind_execution_metadata_builders((ModelSamplingMetadataBuilder(),))
     monkeypatch.setattr(runner, "_can_execute_inner", MagicMock(return_value=True))
@@ -519,7 +533,7 @@ def test_sampling_graph_admission_propagates_dp_agreement_failure(monkeypatch: p
     sampling = SimpleNamespace(is_unconstrained_greedy=True, return_probs=False, return_confidence=False)
     batch = replace(_query_batch(4, 1), sampling=sampling)
     with pytest.raises(RuntimeError, match="DP host agreement failed"):
-        runner.can_execute(batch.input_ids, _metadata(None), input_batch=batch)
+        runner.can_execute(ModelInput(batch.input_ids, batch.positions, _metadata(None), input_batch=batch))
 
 
 def test_sampling_graph_admission_does_not_gate_models_without_sampling(
@@ -530,7 +544,7 @@ def test_sampling_graph_admission_does_not_gate_models_without_sampling(
     monkeypatch.setattr(runner, "_can_execute_inner", MagicMock(return_value=True))
     gather = MagicMock(side_effect=AssertionError("unexpected DP admission collective"))
     monkeypatch.setattr(distributed, "dp_all_true", gather, raising=False)
-    assert runner.can_execute(torch.arange(4), _metadata(None), input_batch=None)
+    assert runner.can_execute(ModelInput(torch.arange(4), torch.arange(4), _metadata(None), input_batch=None))
     gather.assert_not_called()
 
 
@@ -620,7 +634,10 @@ def test_eplv2_graph_admission_uses_padded_token_rows_for_dflash2(limit: int, se
         # Three 8-row sequences capture a padded 32-row graph. A 24-row
         # communication cap is insufficient even though the active rows fit.
         metadata.linear_state_indices = torch.arange(sequences)
-        assert runner.can_execute(torch.arange(sequences * 8), metadata) is expected
+        assert (
+            runner.can_execute(ModelInput(torch.arange(sequences * 8), torch.arange(sequences * 8), metadata))
+            is expected
+        )
 
 
 def test_accepted_tokens_use_live_per_sequence_graph_buffer() -> None:
@@ -886,6 +903,8 @@ def test_capture_preserves_live_state_until_first_replay(monkeypatch: pytest.Mon
     torch.testing.assert_close(metadata.linear_state_indices, slots)
     assert metadata.has_initial_state.tolist() == [1] * slots.numel()
     assert metadata.num_accepted_tokens.tolist() == [verify_width] * slots.numel()
+    npu.graph_pool_handle.assert_called_once_with()
+    assert npu.graph.call_args.kwargs["pool"] is npu.graph_pool_handle.return_value
 
 
 def test_explicit_verify_reuses_row_aligned_paging_metadata() -> None:
@@ -923,7 +942,7 @@ def test_explicit_verify_reuses_row_aligned_paging_metadata() -> None:
     assert resolved[4] is metadata.paged_kv_indices
     assert resolved[5] is metadata.paged_kv_last_page_len
     input_ids = torch.arange(4, dtype=torch.int32)
-    assert runner.can_execute(input_ids, metadata)
+    assert runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), metadata))
     entry = runner._allocate_entry(8, input_ids, input_ids, metadata)
     assert entry.static_metadata.is_spec_verify
     assert entry.static_metadata.q_seq_lens.tolist() == [2, 2, 2, 2]
@@ -937,7 +956,13 @@ def test_explicit_verify_reuses_row_aligned_paging_metadata() -> None:
 def test_verify_graph_requires_explicit_metadata() -> None:
     runner = _runner()
     metadata = _metadata(torch.tensor([1, 2], dtype=torch.int32))
-    assert not runner.can_execute(torch.arange(4, dtype=torch.int32), metadata)
+    assert not runner.can_execute(
+        ModelInput(
+            torch.arange(4, dtype=torch.int32),
+            torch.arange(4, dtype=torch.int32),
+            metadata,
+        )
+    )
 
 
 @pytest.mark.parametrize("dp_size", [1, 2])
@@ -1011,7 +1036,13 @@ def test_dsa_graph_tables_use_compressed_block_counts() -> None:
     metadata.kv_seq_lens_host_values = None
     metadata.paged_kv_indptr = torch.tensor([0, 1], dtype=torch.int32)
     metadata.paged_kv_last_page_len = torch.tensor([1], dtype=torch.int32)
-    assert not runner.can_execute(torch.arange(4, dtype=torch.int32), metadata)
+    assert not runner.can_execute(
+        ModelInput(
+            torch.arange(4, dtype=torch.int32),
+            torch.arange(4, dtype=torch.int32),
+            metadata,
+        )
+    )
 
 
 @pytest.mark.parametrize("async_graph_inputs", [False, True])
@@ -1248,7 +1279,13 @@ def test_dsv4_decode_admits_scheduler_slots_when_top_level_mapping_is_empty() ->
     metadata.multi_block_tables = (torch.tensor([[10, 0], [20, 0], [30, 0], [40, 0]], dtype=torch.int32),)
     metadata.new_cache_slots_host_values = [301, 302, 401, 402]
 
-    assert runner.can_execute(torch.arange(4, dtype=torch.int32), metadata)
+    assert runner.can_execute(
+        ModelInput(
+            torch.arange(4, dtype=torch.int32),
+            torch.arange(4, dtype=torch.int32),
+            metadata,
+        )
+    )
     assert runner._effective_slot_mapping(metadata, 4, torch.device("cpu")).tolist() == [
         301,
         302,
@@ -1262,14 +1299,26 @@ def test_decode_rejects_mismatched_linear_state_validity_mask() -> None:
     metadata = _metadata(torch.arange(4, dtype=torch.int32))
     metadata.has_initial_state = torch.ones(3, dtype=torch.int32)
 
-    assert not runner.can_execute(torch.arange(4, dtype=torch.int32), metadata)
+    assert not runner.can_execute(
+        ModelInput(
+            torch.arange(4, dtype=torch.int32),
+            torch.arange(4, dtype=torch.int32),
+            metadata,
+        )
+    )
 
 
 def test_decode_rejects_mismatched_linear_state_indices_without_cache_probe() -> None:
     runner = _runner()
     metadata = _metadata(torch.arange(3, dtype=torch.int32))
 
-    assert not runner.can_execute(torch.arange(4, dtype=torch.int32), metadata)
+    assert not runner.can_execute(
+        ModelInput(
+            torch.arange(4, dtype=torch.int32),
+            torch.arange(4, dtype=torch.int32),
+            metadata,
+        )
+    )
 
 
 def test_fill_entry_uses_scheduler_slots_for_dsv4_decode() -> None:
@@ -1337,8 +1386,20 @@ def test_dp_real_and_dummy_decode_share_graph_admission() -> None:
     )
     input_ids = torch.tensor([1], dtype=torch.int32)
 
-    assert real_runner.can_execute(input_ids, make_metadata(is_dummy=False))
-    assert dummy_runner.can_execute(input_ids, make_metadata(is_dummy=True))
+    assert real_runner.can_execute(
+        ModelInput(
+            input_ids,
+            torch.zeros_like(input_ids),
+            make_metadata(is_dummy=False),
+        )
+    )
+    assert dummy_runner.can_execute(
+        ModelInput(
+            input_ids,
+            torch.zeros_like(input_ids),
+            make_metadata(is_dummy=True),
+        )
+    )
 
 
 def test_dsa_graph_positions_are_refreshed_from_current_input() -> None:
@@ -1387,8 +1448,11 @@ def test_dp_empty_rank_uses_group_wide_acl_graph_bucket() -> None:
         return_value=True,
     ):
         assert runner.can_execute(
-            torch.zeros(1, dtype=torch.int32),
-            _dp_metadata((5, 0)),
+            ModelInput(
+                torch.zeros(1, dtype=torch.int32),
+                torch.zeros(1, dtype=torch.int32),
+                _dp_metadata((5, 0)),
+            )
         )
 
 
@@ -1431,9 +1495,27 @@ def test_dp_mtp_target_dummy_rank_uses_shared_graph_bucket() -> None:
         "_has_compatible_decode_metadata",
         return_value=True,
     ):
-        assert active_runner.can_execute(torch.zeros(4, dtype=torch.int32), metadata)
-        assert empty_runner.can_execute(torch.zeros(1, dtype=torch.int32), metadata)
-        assert draft_runner.can_execute(torch.zeros(4, dtype=torch.int32), metadata)
+        assert active_runner.can_execute(
+            ModelInput(
+                torch.zeros(4, dtype=torch.int32),
+                torch.zeros(4, dtype=torch.int32),
+                metadata,
+            )
+        )
+        assert empty_runner.can_execute(
+            ModelInput(
+                torch.zeros(1, dtype=torch.int32),
+                torch.zeros(1, dtype=torch.int32),
+                metadata,
+            )
+        )
+        assert draft_runner.can_execute(
+            ModelInput(
+                torch.zeros(4, dtype=torch.int32),
+                torch.zeros(4, dtype=torch.int32),
+                metadata,
+            )
+        )
 
 
 def test_dp_expanded_verify_and_dummy_rank_share_graph_decision() -> None:
@@ -1465,8 +1547,20 @@ def test_dp_expanded_verify_and_dummy_rank_share_graph_decision() -> None:
         "_has_compatible_decode_metadata",
         return_value=True,
     ):
-        assert runners[0].can_execute(torch.zeros(4, dtype=torch.int32), active)
-        assert runners[1].can_execute(torch.zeros(1, dtype=torch.int32), dummy)
+        assert runners[0].can_execute(
+            ModelInput(
+                torch.zeros(4, dtype=torch.int32),
+                torch.zeros(4, dtype=torch.int32),
+                active,
+            )
+        )
+        assert runners[1].can_execute(
+            ModelInput(
+                torch.zeros(1, dtype=torch.int32),
+                torch.zeros(1, dtype=torch.int32),
+                dummy,
+            )
+        )
         busy_plan = runners[0]._shared_graph_plan(active, 4)
         empty_plan = runners[1]._shared_graph_plan(dummy, 1)
         assert busy_plan == empty_plan == (True, 4, 1)
@@ -1489,8 +1583,20 @@ def test_dp_expanded_verify_and_dummy_rank_share_graph_decision() -> None:
         "_has_compatible_decode_metadata",
         return_value=True,
     ):
-        assert wide_runners[0].can_execute(torch.zeros(4, dtype=torch.int32), active)
-        assert wide_runners[1].can_execute(torch.zeros(1, dtype=torch.int32), dummy)
+        assert wide_runners[0].can_execute(
+            ModelInput(
+                torch.zeros(4, dtype=torch.int32),
+                torch.zeros(4, dtype=torch.int32),
+                active,
+            )
+        )
+        assert wide_runners[1].can_execute(
+            ModelInput(
+                torch.zeros(1, dtype=torch.int32),
+                torch.zeros(1, dtype=torch.int32),
+                dummy,
+            )
+        )
 
 
 def test_dp_plain_decode_with_empty_rank_keeps_width_one() -> None:
@@ -1520,8 +1626,26 @@ def test_dp_plain_decode_with_empty_rank_keeps_width_one() -> None:
     ):
         assert runners[0]._shared_graph_plan(active, 4) == (False, 1, 4)
         assert runners[1]._shared_graph_plan(dummy, 1) == (False, 1, 4)
-        assert runners[0].can_execute(torch.zeros(4, dtype=torch.int32), active) is False
-        assert runners[1].can_execute(torch.zeros(1, dtype=torch.int32), dummy) is False
+        assert (
+            runners[0].can_execute(
+                ModelInput(
+                    torch.zeros(4, dtype=torch.int32),
+                    torch.zeros(4, dtype=torch.int32),
+                    active,
+                )
+            )
+            is False
+        )
+        assert (
+            runners[1].can_execute(
+                ModelInput(
+                    torch.zeros(1, dtype=torch.int32),
+                    torch.zeros(1, dtype=torch.int32),
+                    dummy,
+                )
+            )
+            is False
+        )
 
 
 def test_dp_empty_spec_rank_matches_busy_verify_graph_key() -> None:
@@ -1559,8 +1683,20 @@ def test_dp_empty_spec_rank_matches_busy_verify_graph_key() -> None:
         busy_key = DecodeAclGraphRunner._graph_key(4, busy_plan[0], None, (), verify_width=busy_plan[1])
         empty_key = DecodeAclGraphRunner._graph_key(4, empty_plan[0], None, (), verify_width=empty_plan[1])
         assert busy_key == empty_key
-        assert runners[0].can_execute(torch.zeros(4, dtype=torch.int32), active)
-        assert runners[1].can_execute(torch.zeros(1, dtype=torch.int32), dummy)
+        assert runners[0].can_execute(
+            ModelInput(
+                torch.zeros(4, dtype=torch.int32),
+                torch.zeros(4, dtype=torch.int32),
+                active,
+            )
+        )
+        assert runners[1].can_execute(
+            ModelInput(
+                torch.zeros(1, dtype=torch.int32),
+                torch.zeros(1, dtype=torch.int32),
+                dummy,
+            )
+        )
 
         unmarked = _expanded_verify_metadata(4)
         unmarked.dp_execution_token_counts = (4, 1)
@@ -1601,10 +1737,40 @@ def test_dflash_draft_graph_capacity_uses_sequence_count() -> None:
     ):
         assert runners[0]._shared_graph_plan(active, 16) == (False, 1, 2)
         assert runners[1]._shared_graph_plan(dummy, 1) == (False, 1, 2)
-        assert runners[0].can_execute(torch.zeros(16, dtype=torch.int32), active)
-        assert runners[1].can_execute(torch.zeros(1, dtype=torch.int32), dummy)
-        assert runners[0].can_execute(torch.zeros(10, dtype=torch.int32), misaligned) is False
-        assert runners[1].can_execute(torch.zeros(1, dtype=torch.int32), misaligned) is False
+        assert runners[0].can_execute(
+            ModelInput(
+                torch.zeros(16, dtype=torch.int32),
+                torch.zeros(16, dtype=torch.int32),
+                active,
+            )
+        )
+        assert runners[1].can_execute(
+            ModelInput(
+                torch.zeros(1, dtype=torch.int32),
+                torch.zeros(1, dtype=torch.int32),
+                dummy,
+            )
+        )
+        assert (
+            runners[0].can_execute(
+                ModelInput(
+                    torch.zeros(10, dtype=torch.int32),
+                    torch.zeros(10, dtype=torch.int32),
+                    misaligned,
+                )
+            )
+            is False
+        )
+        assert (
+            runners[1].can_execute(
+                ModelInput(
+                    torch.zeros(1, dtype=torch.int32),
+                    torch.zeros(1, dtype=torch.int32),
+                    misaligned,
+                )
+            )
+            is False
+        )
 
 
 def test_dp_uneven_sequences_stay_in_graph_with_full_batch_capacity() -> None:
@@ -1635,8 +1801,20 @@ def test_dp_uneven_sequences_stay_in_graph_with_full_batch_capacity() -> None:
         return_value=True,
     ):
         assert runners[0].max_batch == 8
-        assert runners[0].can_execute(torch.zeros(48, dtype=torch.int32), active)
-        assert runners[1].can_execute(torch.zeros(1, dtype=torch.int32), dummy)
+        assert runners[0].can_execute(
+            ModelInput(
+                torch.zeros(48, dtype=torch.int32),
+                torch.zeros(48, dtype=torch.int32),
+                active,
+            )
+        )
+        assert runners[1].can_execute(
+            ModelInput(
+                torch.zeros(1, dtype=torch.int32),
+                torch.zeros(1, dtype=torch.int32),
+                dummy,
+            )
+        )
 
 
 def test_dp_spec_verify_width_six_pads_to_bucket_eight() -> None:
@@ -1665,8 +1843,20 @@ def test_dp_spec_verify_width_six_pads_to_bucket_eight() -> None:
         return_value=True,
     ):
         assert runners[0]._shared_graph_plan(active, 6) == (True, 6, 1)
-        assert runners[0].can_execute(torch.zeros(6, dtype=torch.int32), active)
-        assert runners[1].can_execute(torch.zeros(6, dtype=torch.int32), active)
+        assert runners[0].can_execute(
+            ModelInput(
+                torch.zeros(6, dtype=torch.int32),
+                torch.zeros(6, dtype=torch.int32),
+                active,
+            )
+        )
+        assert runners[1].can_execute(
+            ModelInput(
+                torch.zeros(6, dtype=torch.int32),
+                torch.zeros(6, dtype=torch.int32),
+                active,
+            )
+        )
 
 
 def test_dp_spec_verify_refuses_bucket_not_divisible_by_width() -> None:
@@ -1698,8 +1888,26 @@ def test_dp_spec_verify_refuses_bucket_not_divisible_by_width() -> None:
     ):
         assert runners[0]._shared_graph_plan(active, 2) == (True, 3, None)
         assert runners[1]._shared_graph_plan(dummy, 1) == (True, 3, None)
-        assert runners[0].can_execute(torch.zeros(2, dtype=torch.int32), active) is False
-        assert runners[1].can_execute(torch.zeros(1, dtype=torch.int32), dummy) is False
+        assert (
+            runners[0].can_execute(
+                ModelInput(
+                    torch.zeros(2, dtype=torch.int32),
+                    torch.zeros(2, dtype=torch.int32),
+                    active,
+                )
+            )
+            is False
+        )
+        assert (
+            runners[1].can_execute(
+                ModelInput(
+                    torch.zeros(1, dtype=torch.int32),
+                    torch.zeros(1, dtype=torch.int32),
+                    dummy,
+                )
+            )
+            is False
+        )
 
 
 def test_dp_spec_verify_uses_num_decoding_tokens_on_every_rank() -> None:
@@ -1782,8 +1990,26 @@ def test_dp_spec_verify_stays_eager_when_active_count_is_not_a_multiple() -> Non
         "_has_compatible_decode_metadata",
         return_value=True,
     ):
-        assert runners[0].can_execute(torch.zeros(6, dtype=torch.int32), active) is False
-        assert runners[1].can_execute(torch.zeros(1, dtype=torch.int32), dummy) is False
+        assert (
+            runners[0].can_execute(
+                ModelInput(
+                    torch.zeros(6, dtype=torch.int32),
+                    torch.zeros(6, dtype=torch.int32),
+                    active,
+                )
+            )
+            is False
+        )
+        assert (
+            runners[1].can_execute(
+                ModelInput(
+                    torch.zeros(1, dtype=torch.int32),
+                    torch.zeros(1, dtype=torch.int32),
+                    dummy,
+                )
+            )
+            is False
+        )
 
 
 def test_dp_kpool_spans_must_match_shared_bucket_layout() -> None:
@@ -1806,9 +2032,21 @@ def test_dp_kpool_spans_must_match_shared_bucket_layout() -> None:
     mismatched.kpool_query_lens = (1,) * 8
 
     with patch.object(DecodeAclGraphRunner, "_has_compatible_decode_metadata", return_value=True):
-        assert runner.can_execute(torch.zeros(8, dtype=torch.int32), aligned)
+        assert runner.can_execute(
+            ModelInput(
+                torch.zeros(8, dtype=torch.int32),
+                torch.zeros(8, dtype=torch.int32),
+                aligned,
+            )
+        )
         with pytest.raises(RuntimeError, match="shared bucket layout"):
-            runner.can_execute(torch.zeros(8, dtype=torch.int32), mismatched)
+            runner.can_execute(
+                ModelInput(
+                    torch.zeros(8, dtype=torch.int32),
+                    torch.zeros(8, dtype=torch.int32),
+                    mismatched,
+                )
+            )
     assert runner._graph_kpool_query_lens(aligned, 8, 8, 8) == (8,)
     assert runner._graph_kpool_query_lens(aligned, 1, 8, 8) == (8,)
 
@@ -1825,17 +2063,35 @@ def test_dp_kpool_spans_must_match_shared_bucket_layout() -> None:
         patch.object(DecodeAclGraphRunner, "_has_compatible_decode_metadata", return_value=True),
         pytest.raises(RuntimeError, match="must be uniform"),
     ):
-        runner.can_execute(torch.zeros(16, dtype=torch.int32), uneven)
+        runner.can_execute(
+            ModelInput(
+                torch.zeros(16, dtype=torch.int32),
+                torch.zeros(16, dtype=torch.int32),
+                uneven,
+            )
+        )
     with (
         patch.object(DecodeAclGraphRunner, "_has_compatible_decode_metadata", return_value=True),
         pytest.raises(RuntimeError, match="positive lengths"),
     ):
-        runner.can_execute(torch.zeros(16, dtype=torch.int32), short)
+        runner.can_execute(
+            ModelInput(
+                torch.zeros(16, dtype=torch.int32),
+                torch.zeros(16, dtype=torch.int32),
+                short,
+            )
+        )
     with (
         patch.object(DecodeAclGraphRunner, "_has_compatible_decode_metadata", return_value=True),
         pytest.raises(RuntimeError, match="positive lengths"),
     ):
-        runner.can_execute(torch.zeros(8, dtype=torch.int32), nonpositive)
+        runner.can_execute(
+            ModelInput(
+                torch.zeros(8, dtype=torch.int32),
+                torch.zeros(8, dtype=torch.int32),
+                nonpositive,
+            )
+        )
 
 
 def _aligned_dp_decode_metadata(rows: int) -> SimpleNamespace:
@@ -1874,8 +2130,21 @@ def test_dp_all_decode_row_mismatch_raises() -> None:
     mismatched.kv_seq_lens_host_values = [1]
     mismatched.slot_mapping = torch.zeros(1, dtype=torch.int32)
 
-    assert runner.can_execute(torch.zeros(8, dtype=torch.int32), aligned)
-    assert runner.can_execute(torch.zeros(8, dtype=torch.int32), aligned, torch.zeros(8, 4))
+    assert runner.can_execute(
+        ModelInput(
+            torch.zeros(8, dtype=torch.int32),
+            torch.zeros(8, dtype=torch.int32),
+            aligned,
+        )
+    )
+    assert runner.can_execute(
+        ModelInput(
+            torch.zeros(8, dtype=torch.int32),
+            torch.zeros(8, dtype=torch.int32),
+            aligned,
+            torch.zeros(8, 4),
+        )
+    )
     narrow = _aligned_dp_decode_metadata(8)
     narrow.paged_kv_indptr = None
     narrow.paged_kv_indices = None
@@ -1884,7 +2153,13 @@ def test_dp_all_decode_row_mismatch_raises() -> None:
     narrow.kv_seq_lens = torch.full((8,), 5, dtype=torch.int32)
     narrow.kv_seq_lens_host_values = [5] * 8
     with pytest.raises(RuntimeError, match="cannot hold the KV length"):
-        runner.can_execute(torch.zeros(8, dtype=torch.int32), narrow)
+        runner.can_execute(
+            ModelInput(
+                torch.zeros(8, dtype=torch.int32),
+                torch.zeros(8, dtype=torch.int32),
+                narrow,
+            )
+        )
     fits = _aligned_dp_decode_metadata(8)
     fits.paged_kv_indptr = None
     fits.paged_kv_indices = None
@@ -1892,32 +2167,75 @@ def test_dp_all_decode_row_mismatch_raises() -> None:
     fits.block_table = torch.zeros((8, 1), dtype=torch.int32)
     fits.kv_seq_lens = torch.full((8,), 4, dtype=torch.int32)
     fits.kv_seq_lens_host_values = [4] * 8
-    assert runner.can_execute(torch.zeros(8, dtype=torch.int32), fits)
+    assert runner.can_execute(
+        ModelInput(
+            torch.zeros(8, dtype=torch.int32),
+            torch.zeros(8, dtype=torch.int32),
+            fits,
+        )
+    )
     with pytest.raises(RuntimeError, match="input_embedding does not match"):
-        runner.can_execute(torch.zeros(8, dtype=torch.int32), aligned, torch.zeros(3, 4))
+        runner.can_execute(
+            ModelInput(
+                torch.zeros(8, dtype=torch.int32),
+                torch.zeros(8, dtype=torch.int32),
+                aligned,
+                torch.zeros(3, 4),
+            )
+        )
     with pytest.raises(RuntimeError, match="does not match token rows"):
-        runner.can_execute(torch.zeros(8, dtype=torch.int32), mismatched)
+        runner.can_execute(
+            ModelInput(
+                torch.zeros(8, dtype=torch.int32),
+                torch.zeros(8, dtype=torch.int32),
+                mismatched,
+            )
+        )
 
     bad_q_cu = _aligned_dp_decode_metadata(8)
     bad_q_cu.q_cu_seq_lens = torch.zeros(3, dtype=torch.int32)
     bad_indices = _aligned_dp_decode_metadata(8)
     bad_indices.linear_state_indices = torch.zeros(3, dtype=torch.int32)
     with pytest.raises(RuntimeError, match="q_cu_seq_lens does not match"):
-        runner.can_execute(torch.zeros(8, dtype=torch.int32), bad_q_cu)
+        runner.can_execute(
+            ModelInput(
+                torch.zeros(8, dtype=torch.int32),
+                torch.zeros(8, dtype=torch.int32),
+                bad_q_cu,
+            )
+        )
     with pytest.raises(RuntimeError, match="linear_state_indices does not match"):
-        runner.can_execute(torch.zeros(8, dtype=torch.int32), bad_indices)
+        runner.can_execute(
+            ModelInput(
+                torch.zeros(8, dtype=torch.int32),
+                torch.zeros(8, dtype=torch.int32),
+                bad_indices,
+            )
+        )
 
     bad_initial_state = _aligned_dp_decode_metadata(8)
     bad_initial_state.has_initial_state = torch.ones(3, dtype=torch.int32)
     with pytest.raises(RuntimeError, match="has_initial_state does not match"):
-        runner.can_execute(torch.zeros(8, dtype=torch.int32), bad_initial_state)
+        runner.can_execute(
+            ModelInput(
+                torch.zeros(8, dtype=torch.int32),
+                torch.zeros(8, dtype=torch.int32),
+                bad_initial_state,
+            )
+        )
 
     runner.layer_caches = [SimpleNamespace(conv=object(), kpool_tail=None)]
     missing_indices = _aligned_dp_decode_metadata(8)
     missing_indices.linear_state_indices = None
     missing_indices.raw_dp_execution_token_counts = (8, 0)
     with pytest.raises(RuntimeError, match="missing linear_state_indices"):
-        runner.can_execute(torch.zeros(8, dtype=torch.int32), missing_indices)
+        runner.can_execute(
+            ModelInput(
+                torch.zeros(8, dtype=torch.int32),
+                torch.zeros(8, dtype=torch.int32),
+                missing_indices,
+            )
+        )
 
     empty_runner = DecodeAclGraphRunner(
         nn.Identity(),
@@ -1934,7 +2252,13 @@ def test_dp_all_decode_row_mismatch_raises() -> None:
     placeholder.dp_execution_token_counts = (8, 1)
     placeholder.raw_dp_execution_token_counts = (8, 0)
     placeholder.linear_state_indices = None
-    assert empty_runner.can_execute(torch.zeros(1, dtype=torch.int32), placeholder)
+    assert empty_runner.can_execute(
+        ModelInput(
+            torch.zeros(1, dtype=torch.int32),
+            torch.zeros(1, dtype=torch.int32),
+            placeholder,
+        )
+    )
 
 
 def test_dp_kpool_spans_keep_complete_groups_only() -> None:
@@ -1961,8 +2285,20 @@ def test_dp_kpool_spans_keep_complete_groups_only() -> None:
     empty.is_spec_verify = True
 
     with patch.object(DecodeAclGraphRunner, "_has_compatible_decode_metadata", return_value=True):
-        assert runners[0].can_execute(torch.zeros(6, dtype=torch.int32), active)
-        assert runners[1].can_execute(torch.zeros(6, dtype=torch.int32), empty)
+        assert runners[0].can_execute(
+            ModelInput(
+                torch.zeros(6, dtype=torch.int32),
+                torch.zeros(6, dtype=torch.int32),
+                active,
+            )
+        )
+        assert runners[1].can_execute(
+            ModelInput(
+                torch.zeros(6, dtype=torch.int32),
+                torch.zeros(6, dtype=torch.int32),
+                empty,
+            )
+        )
     assert runners[0]._graph_kpool_query_lens(active, 6, 8, 6) == (6,)
     assert runners[1]._graph_kpool_query_lens(empty, 6, 8, 6) == (6,)
     assert runners[0]._graph_kpool_query_lens(empty, 8, 16, 8) == (8, 8)
@@ -2007,7 +2343,13 @@ def test_dp_expanded_verify_without_placeholder_folds_to_sequences() -> None:
         return_value=True,
     ):
         for runner in runners:
-            assert runner.can_execute(torch.zeros(8, dtype=torch.int32), metadata)
+            assert runner.can_execute(
+                ModelInput(
+                    torch.zeros(8, dtype=torch.int32),
+                    torch.zeros(8, dtype=torch.int32),
+                    metadata,
+                )
+            )
 
 
 def _expanded_verify_metadata(rows: int) -> SimpleNamespace:
@@ -2070,7 +2412,16 @@ def test_dp_mtp_target_fallback_is_group_wide(
         ),
     ):
         for runner in runners:
-            assert runner.can_execute(torch.zeros(width, dtype=torch.int32), metadata) is admitted
+            assert (
+                runner.can_execute(
+                    ModelInput(
+                        torch.zeros(width, dtype=torch.int32),
+                        torch.zeros(width, dtype=torch.int32),
+                        metadata,
+                    )
+                )
+                is admitted
+            )
 
 
 def test_kda_verify_graph_is_enabled_by_default() -> None:
@@ -2082,7 +2433,13 @@ def test_kda_verify_graph_is_enabled_by_default() -> None:
         patch.dict(os.environ, {"XLLM_NO_VERIFY_GRAPH": "0"}),
         patch.object(runner, "_has_compatible_decode_metadata", return_value=True),
     ):
-        assert runner.can_execute(torch.zeros(4, dtype=torch.int32), metadata)
+        assert runner.can_execute(
+            ModelInput(
+                torch.zeros(4, dtype=torch.int32),
+                torch.zeros(4, dtype=torch.int32),
+                metadata,
+            )
+        )
 
 
 def test_dp_mixed_step_does_not_enter_acl_decode_graph() -> None:
@@ -2103,21 +2460,36 @@ def test_dp_mixed_step_does_not_enter_acl_decode_graph() -> None:
         return_value=True,
     ):
         assert not runner.can_execute(
-            torch.zeros(3, dtype=torch.int32),
-            _dp_metadata((3, 2), dp_is_decode=(0, 1)),
+            ModelInput(
+                torch.zeros(3, dtype=torch.int32),
+                torch.zeros(3, dtype=torch.int32),
+                _dp_metadata((3, 2), dp_is_decode=(0, 1)),
+            )
         )
         missing_step_type = _dp_metadata((3, 2))
         del missing_step_type.dp_is_decode
         with pytest.raises(RuntimeError, match="requires dp_is_decode"):
-            runner.can_execute(torch.zeros(3, dtype=torch.int32), missing_step_type)
+            runner.can_execute(
+                ModelInput(
+                    torch.zeros(3, dtype=torch.int32),
+                    torch.zeros(3, dtype=torch.int32),
+                    missing_step_type,
+                )
+            )
         assert not runner.can_execute(
-            torch.zeros(1, 3, dtype=torch.int32),
-            _dp_metadata((3, 2), dp_is_decode=(0, 1)),
+            ModelInput(
+                torch.zeros(1, 3, dtype=torch.int32),
+                torch.zeros(1, 3, dtype=torch.int32),
+                _dp_metadata((3, 2), dp_is_decode=(0, 1)),
+            )
         )
         with pytest.raises(RuntimeError, match="must be one-dimensional"):
             runner.can_execute(
-                torch.zeros(1, 8, dtype=torch.int32),
-                _dp_metadata((8, 8)),
+                ModelInput(
+                    torch.zeros(1, 8, dtype=torch.int32),
+                    torch.zeros(1, 8, dtype=torch.int32),
+                    _dp_metadata((8, 8)),
+                )
             )
 
 
@@ -2143,7 +2515,13 @@ def test_dp_acl_graph_requires_group_wide_token_counts() -> None:
         ),
         pytest.raises(RuntimeError, match="valid dp_execution_token_counts"),
     ):
-        runner.can_execute(torch.zeros(3, dtype=torch.int32), metadata)
+        runner.can_execute(
+            ModelInput(
+                torch.zeros(3, dtype=torch.int32),
+                torch.zeros(3, dtype=torch.int32),
+                metadata,
+            )
+        )
 
 
 def test_xfia_graph_accepts_device_only_lengths() -> None:
@@ -2188,13 +2566,13 @@ def test_xfia_draft_proposal_graph_accepts_request_scoped_metadata(num_sequences
     metadata.q_cu_seq_lens = torch.arange(1, num_sequences + 1, dtype=torch.int32) * query_width
     metadata.kv_cu_seq_lens = torch.arange(1, num_sequences + 1, dtype=torch.int32) * 129
     input_ids = torch.zeros(num_tokens, dtype=torch.int32)
-    assert runner.can_execute(input_ids, metadata)
+    assert runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), metadata))
     table, lengths, host_lengths, *_ = runner._decode_metadata(metadata)
     assert table.shape == (num_tokens, 2)
     assert lengths.tolist() == [129] * num_tokens
     assert host_lengths is None
     metadata.is_dflash_proposal = False
-    assert not runner.can_execute(input_ids, metadata)
+    assert not runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), metadata))
 
 
 # ---------------------------------------------------------------------------
@@ -2903,16 +3281,14 @@ def test_graph_admission_preserves_short_circuit(
 ) -> None:
     runner = _runner()
     runner.dp_size = dp_size
-    builder = ModelSamplingMetadataBuilder()
-    runner.bind_execution_metadata_builders((builder,))
     monkeypatch.setattr(runner, "_can_execute_inner", MagicMock(return_value=False))
-    admission = MagicMock(side_effect=AssertionError("Rejected geometry must skip sampling admission"))
-    monkeypatch.setattr(builder, "can_execute_graph", admission)
+    admission = MagicMock(side_effect=AssertionError("Rejected geometry must skip model admission"))
+    monkeypatch.setattr(runner.model, "can_execute_graph", admission, raising=False)
     agreement = MagicMock(return_value=False)
     monkeypatch.setattr(distributed, "dp_all_true", agreement, raising=False)
     batch = _query_batch(4, 1)
 
-    assert not runner.can_execute(batch.input_ids, _metadata(None), input_batch=batch)
+    assert not runner.can_execute(ModelInput(batch.input_ids, batch.positions, _metadata(None), input_batch=batch))
     admission.assert_not_called()
     assert agreement.call_count == (1 if dp_size > 1 else 0)
 
@@ -2962,3 +3338,24 @@ def test_host_dsa_fill_rejects_expanded_kv_length_beyond_table_capacity() -> Non
     )
     with pytest.raises(RuntimeError, match="page count exceeds block-table capacity"):
         runner._fill_entry(entry, input_ids, input_ids, metadata, 4, None)
+
+
+def test_multimodal_rejection_skips_graph_layout_but_participates_in_dp(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runner = _runner(_SamplingModel())
+    runner.dp_size = 2
+    layout = MagicMock(side_effect=AssertionError("Multimodal eager inputs do not require graph metadata"))
+    monkeypatch.setattr(runner, "_can_execute_inner", layout)
+    agreement = MagicMock(return_value=False)
+    monkeypatch.setattr(distributed, "dp_all_true", agreement, raising=False)
+    assert not runner.can_execute(
+        ModelInput(
+            torch.ones(1),
+            torch.ones(1),
+            SimpleNamespace(),
+            multimodal_inputs=SimpleNamespace(),
+        )
+    )
+    layout.assert_not_called()
+    agreement.assert_called_once_with(False, torch.device("cpu"), 2)

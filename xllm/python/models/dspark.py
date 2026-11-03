@@ -20,7 +20,7 @@ import torch
 import torch.nn as nn
 
 from xllm.python.models.base import PyModelBase
-from xllm.python.models.dspark_pipeline import DSparkPipeline
+from xllm.python.models.dspark_model import DSparkModel
 
 
 class DSparkMarkovHead(nn.Module):
@@ -66,9 +66,9 @@ class DSparkConfidenceHead(nn.Module):
 
 
 class DSparkForCausalLMBase(PyModelBase):
-    """Assembles the execution pipeline and exposes the causal-LM bridge."""
+    """Own DSpark modules and expose the causal-LM bridge."""
 
-    model: DSparkPipeline
+    model: DSparkModel
 
     def __init__(
         self,
@@ -105,7 +105,7 @@ class DSparkForCausalLMBase(PyModelBase):
             if enable_confidence_head
             else None
         )
-        self.model = DSparkPipeline(
+        self.model = DSparkModel(
             backbone=backbone,
             lm_head=lm_head,
             markov_head=markov_head,

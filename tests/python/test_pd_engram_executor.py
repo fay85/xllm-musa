@@ -20,11 +20,14 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
+from xllm.python.model_executor.execution_pipeline import SingleModelExecutionPipeline
 from xllm.python.model_executor.executor import ModelExecutor
+from xllm.python.model_executor.runner import RunnerConfig
 
 
 @pytest.mark.parametrize("runner_kind", ["eager", "graph"])
-def test_pd_history_is_restored_before_execution(runner_kind: str) -> None:
+@pytest.mark.parametrize("overlap_enabled", [False, True])
+def test_pd_history_restore_ownership_follows_execution_path(runner_kind: str, overlap_enabled: bool) -> None:
     backend = object()
     metadata = SimpleNamespace(
         is_prefill=False,
@@ -46,12 +49,20 @@ def test_pd_history_is_restored_before_execution(runner_kind: str) -> None:
     executor.model = SimpleNamespace(model=SimpleNamespace(restore_engram_history=restore))
     executor._restore_engram_history = restore
     executor.attention_backend = backend
+    executor.execution_pipeline = SingleModelExecutionPipeline(
+        torch.nn.Identity(),
+        (),
+        RunnerConfig(torch.device("cpu")),
+        restore_history=lambda metadata: restore(backend, metadata),
+    )
     executor.decode_graph_runner = None
     runner = MagicMock()
-    runner.supports_draft_to_target_overlap = False
+    runner.supports_draft_to_target_overlap = overlap_enabled
+    deferred_restore = runner_kind == "graph" and overlap_enabled
+    expected_events = (["warmup"] if runner_kind == "graph" else []) + ([] if deferred_restore else ["restore"])
 
     def execute(*_args: object, **_kwargs: object) -> torch.Tensor:
-        assert events[-1] == "restore"
+        assert events == expected_events
         events.append("execute")
         return torch.ones(1)
 
@@ -65,4 +76,4 @@ def test_pd_history_is_restored_before_execution(runner_kind: str) -> None:
 
     result = executor.execute(torch.zeros(1), torch.zeros(1), metadata)
     assert torch.equal(result, torch.ones(1))
-    assert events == (["warmup"] if runner_kind == "graph" else []) + ["restore", "execute"]
+    assert events == expected_events + ["execute"]

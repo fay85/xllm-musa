@@ -15,7 +15,7 @@
 """Empty-DP coverage for the NPU ACL decode-graph runner."""
 
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 import torch
@@ -23,6 +23,7 @@ import torch.nn as nn
 
 from xllm.python.attention.backend import LayerCache
 from xllm.python.attention.dsa_metadata import build_cache_specs
+from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.model_executor.runners.decode_acl_graph import (
     DecodeAclGraphRunner,
 )
@@ -216,7 +217,7 @@ def test_empty_dp_shard_without_manager_tables_replays_the_graph() -> None:
     assert view.kv_seq_lens_host_values == [1]
     assert view.is_dummy is True
 
-    assert runner.can_execute(input_ids, metadata)
+    assert runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), metadata))
 
 
 def test_empty_dp_shard_normalized_entry_fills_and_keeps_table_zero() -> None:
@@ -243,7 +244,7 @@ def test_mismatched_manager_table_count_falls_back_to_eager() -> None:
     # manager export must stay on the eager runner rather than raise inside
     # the captured fill.
     assert runner._normalize_dsa_metadata(metadata) is metadata
-    assert not runner.can_execute(input_ids, metadata)
+    assert not runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), metadata))
 
 
 def test_token_capacity_bucket_is_group_wide_and_bounded_by_max_model_len() -> None:
@@ -253,12 +254,12 @@ def test_token_capacity_bucket_is_group_wide_and_bounded_by_max_model_len() -> N
     in_range = _dsa_metadata()
     in_range.dp_global_kv_max_seq_lens = (1, 200)
     assert runner._token_capacity_bucket(in_range) == 2
-    assert runner.can_execute(input_ids, in_range)
+    assert runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), in_range))
 
     beyond_model_len = _dsa_metadata()
     beyond_model_len.dp_global_kv_max_seq_lens = (1, 100000)
     assert runner._token_capacity_bucket(beyond_model_len) > (512 + 127) // 128
-    assert not runner.can_execute(input_ids, beyond_model_len)
+    assert not runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), beyond_model_len))
 
 
 def test_graph_key_partitions_by_token_capacity_bucket() -> None:
@@ -290,7 +291,7 @@ def test_busy_dsa_rank_admits_without_flat_scheduler_slots() -> None:
     assert runner._has_effective_slot_mapping(metadata, 1)
     # The DSA flat slots are a zero-reader field; keep the static buffer shaped.
     assert runner._effective_slot_mapping(metadata, 1, torch.device("cpu")).tolist() == [0]
-    assert runner.can_execute(input_ids, metadata)
+    assert runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), metadata))
 
     positions = torch.zeros_like(input_ids)
     entry = runner._allocate_entry(4, input_ids, positions, metadata)
@@ -325,13 +326,29 @@ def test_non_dsa_rank_still_requires_a_flat_slot_source() -> None:
         runner._effective_slot_mapping(metadata, 1, torch.device("cpu"))
 
 
-def test_non_capturable_moe_quant_mode_is_never_admitted() -> None:
-    """The fp8/none torch MoE must keep every rank on the eager runner.
+@pytest.mark.parametrize("graph_capturable", [False, True])
+def test_legacy_moe_capability_still_gates_target(graph_capturable: bool) -> None:
+    backend = SimpleNamespace(page_size=128, is_mla=False, moe_graph_capturable=graph_capturable)
+    runner = DecodeAclGraphRunner(
+        nn.Identity(),
+        backend,
+        torch.device("cpu"),
+        max_batch=8,
+        max_model_len=512,
+    )
+    assert (
+        runner.can_execute(
+            ModelInput(
+                torch.tensor([1], dtype=torch.int32),
+                torch.tensor([1], dtype=torch.int32),
+                _decode_metadata(False),
+            )
+        )
+        is graph_capturable
+    )
 
-    The capability marker lives on the attention backend and is derived from
-    the shared model config, so the admission check is static and each rank of
-    a DP group returns the same verdict.
-    """
+
+def test_graph_admission_consumes_model_capability(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = SimpleNamespace(page_size=128, is_mla=False)
     runner = DecodeAclGraphRunner(
         nn.Identity(),
@@ -343,13 +360,14 @@ def test_non_capturable_moe_quant_mode_is_never_admitted() -> None:
     input_ids = torch.tensor([1], dtype=torch.int32)
     metadata = _decode_metadata(False)
 
-    # No marker (non-V4.1 backends): the legacy admission is unchanged.
-    assert runner.can_execute(input_ids, metadata)
-    backend.moe_graph_capturable = True
-    assert runner.can_execute(input_ids, metadata)
-    # Marker present and False: never admit, regardless of the batch shape.
-    backend.moe_graph_capturable = False
-    assert not runner.can_execute(input_ids, metadata)
+    assert runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), metadata))
+    admission = Mock(return_value=True)
+    monkeypatch.setattr(runner.model, "can_execute_graph", admission, raising=False)
+    inputs = ModelInput(input_ids, torch.zeros_like(input_ids), metadata)
+    assert runner.can_execute(inputs)
+    admission.assert_called_once_with(inputs)
+    admission.return_value = False
+    assert not runner.can_execute(inputs)
 
 
 @pytest.mark.parametrize("num_sequences", [1, 2])

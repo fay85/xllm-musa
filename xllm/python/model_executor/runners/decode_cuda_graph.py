@@ -21,6 +21,7 @@ import torch.nn as nn
 
 from xllm.python import kernels
 from xllm.python.attention.backend import AttentionBackend, AttentionMetadata
+from xllm.python.model_executor.execution_context import can_execute_graph
 from xllm.python.model_executor.forward_context import (
     EplbRuntimeState,
     ForwardContext,
@@ -28,6 +29,7 @@ from xllm.python.model_executor.forward_context import (
     forward_context,
 )
 from xllm.python.model_executor.input_batch import InputBatch
+from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.model_executor.runners.base import BaseRunner, ModelExecutionOutput
 
 _CAPTURE_WARMUP_STEPS = 2
@@ -113,22 +115,22 @@ class DecodeCudaGraphRunner(BaseRunner):
         self._stream: torch.cuda.Stream | None = None
         self._warmed_up = False
 
-    def can_execute(
-        self,
-        input_ids: torch.Tensor,
-        metadata: AttentionMetadata,
-        input_embedding: torch.Tensor | None = None,
-        *,
-        input_batch: InputBatch | None = None,
-    ) -> bool:
-        graph_key = self._graph_key(input_ids, metadata)
-        return (
-            input_embedding is None
+    def can_execute(self, inputs: ModelInput) -> bool:
+        metadata = inputs.metadata
+        graph_key = (
+            self._graph_key(inputs.input_ids, metadata)
+            if inputs.eplb is None and inputs.multimodal_inputs is None
+            else None
+        )
+        can_execute = (
+            graph_key is not None
+            and inputs.input_embedding is None
             and not metadata.is_prefill
             and not metadata.is_chunked_prefill
-            and graph_key is not None
             and graph_key in self._graphs
+            and can_execute_graph(self.model, inputs)
         )
+        return self._agree_on_graph_execution(can_execute, self.dp_size)
 
     def warmup(
         self,

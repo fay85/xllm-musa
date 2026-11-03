@@ -39,7 +39,7 @@ import torch
 import torch.nn as nn
 
 from scripts.logger import logger
-from xllm.python import distributed, kernels
+from xllm.python import kernels
 from xllm.python.attention.backend import (
     AttentionBackend,
     AttentionMetadata,
@@ -49,7 +49,7 @@ from xllm.python.attention.expanded_decode_metadata import (
     ExpandedDecodeMetadata,
     resolve_expanded_decode_metadata,
 )
-from xllm.python.model_executor.execution_context import GraphAdmissionMetadataBuilder
+from xllm.python.model_executor.execution_context import can_execute_graph
 from xllm.python.model_executor.forward_context import (
     AclGraphCaptureContext,
     AclGraphExecutionState,
@@ -60,6 +60,8 @@ from xllm.python.model_executor.forward_context import (
     forward_context,
 )
 from xllm.python.model_executor.input_batch import InputBatch
+from xllm.python.model_executor.model_input import ModelInput
+from xllm.python.model_executor.runners.acl_graph_capture import capture_acl_graph
 from xllm.python.model_executor.runners.base import (
     BaseRunner,
     GraphInputPreparation,
@@ -495,33 +497,16 @@ class DecodeAclGraphRunner(BaseRunner):
                 admission_batch = batch_size // self._draft_query_width
         return is_expanded, verify_width, admission_batch
 
-    def can_execute(
-        self,
-        input_ids: torch.Tensor,
-        metadata: AttentionMetadata,
-        input_embedding: torch.Tensor | None = None,
-        *,
-        input_batch: InputBatch | None = None,
-    ) -> bool:
-        metadata = self._normalize_dsa_metadata(metadata)
-        can_execute = self._can_execute_inner(input_ids, metadata, input_embedding)
-        admission_builders = tuple(
-            builder
-            for builder in self.execution_metadata_builders
-            if isinstance(builder, GraphAdmissionMetadataBuilder)
-        )
-        if not admission_builders:
-            return can_execute
-        can_execute = (
-            can_execute
-            and input_batch is not None
-            and all(builder.can_execute_graph(input_batch, metadata) for builder in admission_builders)
-        )
-        if self.dp_size == 1:
-            return can_execute
-        # The decision is CPU metadata. Keep DP agreement off the device stream
-        # so a preceding target cannot block early draft submission.
-        return distributed.dp_all_true(can_execute, self.device, self.dp_size)
+    def can_execute(self, inputs: ModelInput) -> bool:
+        can_execute = False
+        if inputs.multimodal_inputs is None:
+            metadata = self._normalize_dsa_metadata(inputs.metadata)
+            if metadata is not inputs.metadata:
+                inputs = replace(inputs, metadata=metadata)
+            can_execute = self._can_execute_inner(
+                inputs.input_ids, metadata, inputs.input_embedding
+            ) and can_execute_graph(self.model, inputs)
+        return self._agree_on_graph_execution(can_execute, self.dp_size)
 
     def _normalize_dsa_metadata(
         self,
@@ -2893,7 +2878,6 @@ class DecodeAclGraphRunner(BaseRunner):
             for _ in range(_CAPTURE_WARMUP_STEPS):
                 self._forward_static(entry)
         torch.npu.synchronize()
-        entry.graph = torch.npu.NPUGraph()
         capture_context = AclGraphCaptureContext(self._stream, [])
         context = ForwardContext(
             self.attention_backend,
@@ -2910,8 +2894,10 @@ class DecodeAclGraphRunner(BaseRunner):
         # one live pool per graph key.
         if self._graph_pool is None:
             self._graph_pool = torch.npu.graph_pool_handle()
-        with forward_context(context), torch.npu.graph(entry.graph, pool=self._graph_pool, stream=self._stream):
-            entry.static_output = self._forward_static(entry)
+        with forward_context(context):
+            entry.graph, entry.static_output = capture_acl_graph(
+                lambda: self._forward_static(entry), self._stream, pool=self._graph_pool
+            )
         entry.graph_tasks = capture_context.tasks
 
     def _forward_static(self, entry: _DecodeGraphEntry) -> ModelExecutionOutput:

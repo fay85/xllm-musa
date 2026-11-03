@@ -115,7 +115,7 @@ class EplbRuntimeState:
 
 @dataclass(frozen=True, slots=True)
 class ForwardContext:
-    attention_backend: AttentionBackend
+    attention_backend: AttentionBackend | None
     device: torch.device
     metadata: AttentionMetadata
     layer_caches: list[LayerCache]

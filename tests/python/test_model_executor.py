@@ -35,6 +35,8 @@ import pytest
 import torch
 import torch.nn as nn
 
+from xllm.python import distributed
+
 # conftest.py stands in for xllm.python, whose import would bind the active
 # platform's kernel package and reach for operators from the C++ binary.
 from xllm.python.attention.backend import (  # noqa: E402
@@ -67,6 +69,7 @@ from xllm.python.model_executor.forward_context import (  # noqa: E402
     wait_for_layer_load,
 )
 from xllm.python.model_executor.input_batch import InputBatch  # noqa: E402
+from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.model_executor.runners.decode_acl_graph import (  # noqa: E402
     DecodeAclGraphRunner,
 )
@@ -1184,7 +1187,7 @@ class TestModelExecutorConstruction:
         monkeypatch.setattr(
             sys.modules[ModelExecutor.__module__], "_create_attention_backend", lambda *args, **kwargs: backend
         )
-        config = {"model_type": model_type, "python_graph_backend": "off"}
+        config = {"model_type": model_type, "enable_graph": False}
         if jev_prompt_attention is not None:
             config["jev_prompt_attention"] = jev_prompt_attention
         executor = ModelExecutor(model, config, max_seqs_per_batch=1, is_spec_draft=True)
@@ -1235,7 +1238,7 @@ class TestModelExecutorConstruction:
         )
         executor = ModelExecutor(
             model,
-            {"model_type": model_type, "jev_prompt_attention": "bidirectional", "python_graph_backend": "off"},
+            {"model_type": model_type, "jev_prompt_attention": "bidirectional", "enable_graph": False},
             max_seqs_per_batch=1,
         )
 
@@ -1943,6 +1946,8 @@ class TestDecodeCudaGraphDataParallelKeys:
     @staticmethod
     def _runner(dp_rank: int = 0) -> DecodeCudaGraphRunner:
         runner = object.__new__(DecodeCudaGraphRunner)
+        runner.model = nn.Identity()
+        runner.device = torch.device("cpu")
         runner.max_batch = 16
         runner.dp_size = 2
         runner.dp_rank = dp_rank
@@ -2005,9 +2010,50 @@ class TestDecodeCudaGraphDataParallelKeys:
         metadata = self._metadata([3, 1])
         graph_key = runner._graph_key(input_ids, metadata)
 
-        assert not runner.can_execute(input_ids, metadata)
+        assert not runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), metadata))
         runner._graphs[graph_key] = object()
-        assert runner.can_execute(input_ids, metadata)
+        assert runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), metadata))
+
+    @pytest.mark.parametrize("allowed", [False, True])
+    def test_model_admission_is_honored(self, allowed: bool, monkeypatch: pytest.MonkeyPatch) -> None:
+        runner = self._runner()
+        input_ids = torch.zeros(3, dtype=torch.int32)
+        metadata = self._metadata([3, 1])
+        runner._graphs[runner._graph_key(input_ids, metadata)] = object()
+        admission = MagicMock(return_value=allowed)
+        monkeypatch.setattr(runner.model, "can_execute_graph", admission, raising=False)
+        agreement = MagicMock(return_value=allowed)
+        monkeypatch.setattr(distributed, "dp_all_true", agreement, raising=False)
+        inputs = ModelInput(input_ids, torch.zeros_like(input_ids), metadata)
+        assert runner.can_execute(inputs) is allowed
+        admission.assert_called_once_with(inputs)
+        agreement.assert_called_once_with(allowed, runner.device, 2)
+
+    @pytest.mark.parametrize("context_name", ["eplb", "multimodal_inputs"])
+    def test_unsupported_graph_context_is_rejected(self, context_name: str) -> None:
+        runner = self._runner()
+        input_ids = torch.zeros(3, dtype=torch.int32)
+        metadata = self._metadata([3, 1])
+        runner._graphs[runner._graph_key(input_ids, metadata)] = object()
+        assert not runner.can_execute(
+            ModelInput(
+                input_ids,
+                torch.zeros_like(input_ids),
+                metadata,
+                **{context_name: SimpleNamespace()},
+            )
+        )
+
+    def test_remote_model_veto_rejects_local_graph(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        runner = self._runner()
+        monkeypatch.setattr(runner.model, "can_execute_graph", MagicMock(return_value=True), raising=False)
+        input_ids = torch.zeros(3, dtype=torch.int32)
+        metadata = self._metadata([3, 1])
+        runner._graphs[runner._graph_key(input_ids, metadata)] = object()
+        agreement = MagicMock(return_value=False)
+        monkeypatch.setattr(distributed, "dp_all_true", agreement, raising=False)
+        assert not runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), metadata))
+        agreement.assert_called_once_with(True, runner.device, 2)
 
     def test_execute_accepts_base_runner_context_keywords(self):
         runner = self._runner()
@@ -2160,7 +2206,7 @@ class TestDecodeAclGraphSpeculativeMetadata:
         runner = self._runner()
         input_ids = torch.arange(4, dtype=torch.int32)
 
-        assert runner.can_execute(input_ids, self._metadata())
+        assert runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), self._metadata()))
 
     def test_execute_accepts_base_runner_context_keywords(self) -> None:
         runner = self._runner()
@@ -2197,23 +2243,29 @@ class TestDecodeAclGraphSpeculativeMetadata:
             return_value=True,
         ):
             admitted = runner.can_execute(
-                torch.zeros(8, dtype=torch.int32),
-                SimpleNamespace(
-                    is_prefill=False,
-                    is_chunked_prefill=False,
-                    dp_execution_token_counts=(8, 8),
-                    dp_is_decode=(1, 1),
-                ),
+                ModelInput(
+                    torch.zeros(8, dtype=torch.int32),
+                    torch.zeros(8, dtype=torch.int32),
+                    SimpleNamespace(
+                        is_prefill=False,
+                        is_chunked_prefill=False,
+                        dp_execution_token_counts=(8, 8),
+                        dp_is_decode=(1, 1),
+                    ),
+                )
             )
             assert admitted
             rejected = runner.can_execute(
-                torch.zeros(8, dtype=torch.int32),
-                SimpleNamespace(
-                    is_prefill=False,
-                    is_chunked_prefill=False,
-                    dp_execution_token_counts=(8, 64),
-                    dp_is_decode=(1, 1),
-                ),
+                ModelInput(
+                    torch.zeros(8, dtype=torch.int32),
+                    torch.zeros(8, dtype=torch.int32),
+                    SimpleNamespace(
+                        is_prefill=False,
+                        is_chunked_prefill=False,
+                        dp_execution_token_counts=(8, 64),
+                        dp_is_decode=(1, 1),
+                    ),
+                )
             )
             assert not rejected
 
@@ -2243,7 +2295,16 @@ class TestDecodeAclGraphSpeculativeMetadata:
             dp_is_decode=(1,) * dp_size,
         )
         with patch.object(runner, "_has_compatible_decode_metadata", return_value=True):
-            assert runner.can_execute(torch.zeros(local_rows, dtype=torch.int32), metadata) is expected
+            assert (
+                runner.can_execute(
+                    ModelInput(
+                        torch.zeros(local_rows, dtype=torch.int32),
+                        torch.zeros(local_rows, dtype=torch.int32),
+                        metadata,
+                    )
+                )
+                is expected
+            )
 
     def test_mtp3_batch_eight_uses_32_row_graph_bucket(self) -> None:
         runner = DecodeAclGraphRunner(
@@ -2285,8 +2346,11 @@ class TestDecodeAclGraphSpeculativeMetadata:
             return_value=True,
         ):
             assert runner.can_execute(
-                torch.zeros(32, dtype=torch.int32),
-                metadata,
+                ModelInput(
+                    torch.zeros(32, dtype=torch.int32),
+                    torch.zeros(32, dtype=torch.int32),
+                    metadata,
+                )
             )
 
     def test_warmup_validates_capacity_without_capturing(self) -> None:
@@ -3074,6 +3138,12 @@ class TestExecuteRouting:
             nn.Identity(), SimpleNamespace(page_size=4, is_mla=False), torch.device("cpu"), 4, 8
         )
         runner.bind_execution_metadata_builders((builder,))
+        monkeypatch.setattr(
+            runner.model,
+            "can_execute_graph",
+            lambda inputs: builder.can_execute_graph(inputs.input_batch.sampling),
+            raising=False,
+        )
         monkeypatch.setattr(runner, "_can_execute_inner", MagicMock(return_value=True))
         monkeypatch.setattr(runner, "warmup", MagicMock())
         monkeypatch.setattr(runner, "execute", MagicMock(return_value=torch.zeros(1)))
@@ -3127,7 +3197,7 @@ class TestExecuteRouting:
         runner.execute.return_value = torch.ones(1)
         executor.eager_runner = runner
         executor.decode_graph_runner = MagicMock()
-        executor.decode_graph_runner.can_execute.return_value = True
+        executor.decode_graph_runner.can_execute.return_value = False
         prepared = MultimodalInputs(torch.ones(1, 2), (torch.full((1, 2), 2.0),))
         result = executor.execute(
             torch.zeros(1),
@@ -3137,7 +3207,8 @@ class TestExecuteRouting:
         )
         assert runner.execute.call_args.kwargs["multimodal_inputs"] is prepared
         torch.testing.assert_close(result, torch.ones(1))
-        executor.decode_graph_runner.can_execute.assert_not_called()
+        executor.decode_graph_runner.can_execute.assert_called_once()
+        assert executor.decode_graph_runner.can_execute.call_args.args[0].multimodal_inputs is prepared
         executor.decode_graph_runner.execute.assert_not_called()
 
     @pytest.mark.parametrize(

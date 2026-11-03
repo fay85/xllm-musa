@@ -46,6 +46,9 @@ class InputBatch:
     speculative query blocks.
     num_computed_tokens counts the logical cached prefix before each request's query.
     An empty tuple means these cached-prefix counts are not available on host.
+    hidden_states optionally carries an upstream stage's output, with num_tokens
+    rows on the input device. It remains unpadded when binding graph inputs;
+    the consuming module's builder owns its metadata and persistent storage.
     """
 
     input_ids: torch.Tensor
@@ -60,6 +63,7 @@ class InputBatch:
     is_padding: torch.Tensor | None
     is_dummy: bool
     sampling: ModelSamplingInput | None = None
+    hidden_states: torch.Tensor | None = None
 
     @classmethod
     def from_runtime(
@@ -136,6 +140,7 @@ class InputBatch:
             is_padding=is_padding,
             is_dummy=self.is_dummy,
             sampling=self.sampling,
+            hidden_states=self.hidden_states,
         )
 
     @classmethod

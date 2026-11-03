@@ -32,8 +32,10 @@ import pytest
 import torch
 import torch.nn as nn
 
+from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.model_executor.runners.decode_acl_graph import DecodeAclGraphRunner
 from xllm.python.model_executor.runners.decode_cuda_graph import _decode_bucket
+
 
 def _runner(
     *,
@@ -113,7 +115,7 @@ def test_active_and_idle_ranks_fold_to_the_same_graph_bucket() -> None:
         assert runner.max_batch == 64  # merged-tree scheduler publishes the full seq budget (no /dp_size)
         metadata = _metadata(rows, spec_verify_width=6, counts=counts, dp_size=4)
         row_tokens = torch.zeros(rows, dtype=torch.int32)
-        decisions.append(runner.can_execute(row_tokens, metadata))
+        decisions.append(runner.can_execute(ModelInput(row_tokens, torch.zeros_like(row_tokens), metadata)))
     assert decisions == [True, True, True, True]
 
 
@@ -126,7 +128,7 @@ def test_per_sequence_state_tensors_admit_a_packed_verify() -> None:
     metadata = _metadata(96, spec_verify_width=6, counts=counts, dp_size=4, per_sequence_tensors=True)
     assert metadata.linear_state_indices.numel() == 16
     tokens = torch.zeros(96, dtype=torch.int32)
-    assert runner.can_execute(tokens, metadata) is True
+    assert runner.can_execute(ModelInput(tokens, torch.zeros_like(tokens), metadata)) is True
 
 
 def test_per_sequence_state_tensors_do_not_admit_a_plain_decode() -> None:
@@ -135,7 +137,7 @@ def test_per_sequence_state_tensors_do_not_admit_a_plain_decode() -> None:
     runner = _runner(dp_size=4, dp_rank=0, max_seqs_per_batch=64)
     metadata = _metadata(96, spec_verify_width=1, counts=(96, 96, 96, 96), dp_size=4, per_sequence_tensors=False)
     tokens = torch.zeros(96, dtype=torch.int32)
-    assert runner.can_execute(tokens, metadata) is False
+    assert runner.can_execute(ModelInput(tokens, torch.zeros_like(tokens), metadata)) is False
 
 
 def test_width_folds_to_sequence_count() -> None:
@@ -178,7 +180,7 @@ def test_plain_decode_inside_capacity_is_unchanged(rows: int) -> None:
     expected = _decode_bucket(rows) <= runner.max_batch
     metadata = _metadata(rows, spec_verify_width=1)
     tokens = torch.zeros(rows, dtype=torch.int32)
-    assert runner.can_execute(tokens, metadata) is expected
+    assert runner.can_execute(ModelInput(tokens, torch.zeros_like(tokens), metadata)) is expected
 
 
 def test_width_one_keeps_the_gate_blocked() -> None:
@@ -187,7 +189,7 @@ def test_width_one_keeps_the_gate_blocked() -> None:
     runner = _runner(dp_size=4, dp_rank=0, max_seqs_per_batch=16, num_decoding_tokens=6)
     metadata = _metadata(4, spec_verify_width=1, counts=(4, 4, 4, 4), dp_size=4)
     tokens = torch.zeros(4, dtype=torch.int32)
-    assert runner.can_execute(tokens, metadata) is False
+    assert runner.can_execute(ModelInput(tokens, torch.zeros_like(tokens), metadata)) is False
 
 
 # --------------------------------------------------------------------------

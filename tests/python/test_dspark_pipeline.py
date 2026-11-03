@@ -26,20 +26,22 @@ from torch import nn
 
 from xllm.python import distributed
 from xllm.python.model_executor.executor import ModelExecutor
-from xllm.python.model_executor.forward_context import ForwardContext, forward_context
 from xllm.python.model_executor.input_batch import InputBatch
+from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.model_executor.model_output import DraftProposal, ModelOutput
+from xllm.python.model_executor.runner import RunnerConfig
 from xllm.python.model_executor.runners.base import BaseRunner
 from xllm.python.model_executor.runners.decode_cuda_graph import DecodeCudaGraphRunner
-from xllm.python.model_executor.runners.eager import EagerRunner
 from xllm.python.model_executor.sampling_metadata import (
+    ModelSamplingInput,
     ModelSamplingMetadata,
     ModelSamplingMetadataBuilder,
     prepare_sampling_input,
     sample_logits,
 )
 from xllm.python.models.base import PyModelBase
-from xllm.python.models.dspark_pipeline import DSparkPipeline
+from xllm.python.models.dspark_model import DSparkModel
+from xllm.python.pipelines.dspark_pipeline import DSparkExecutionPipeline
 
 
 class _Backbone(nn.Module):
@@ -101,7 +103,7 @@ class _DraftModel(PyModelBase):
         super().__init__()
         self.calls: list[str] = []
         self.previous_tokens: list[torch.Tensor] = []
-        self.model = DSparkPipeline(
+        self.model = DSparkModel(
             backbone=_Backbone(self.calls),
             lm_head=_LMHead(self.calls, vocab_size),
             markov_head=_MarkovHead(self.calls, self.previous_tokens, vocab_size),
@@ -185,21 +187,39 @@ def _sampling_batch(sampling: _SamplingInput | None, num_tokens: int = 3) -> Inp
     )
 
 
-def _context(
-    sampling: _SamplingInput | None,
-    num_tokens: int,
+def _make_eager_pipeline(
+    model: DSparkModel,
     *,
     tp_size: int = 1,
-) -> ForwardContext:
-    return ForwardContext(
-        Mock(),
-        torch.device("cpu"),
-        Mock(),
-        [],
-        execution_contexts={
-            ModelSamplingMetadata: ModelSamplingMetadata(sampling, num_tokens, tp_size),
-        },
+    use_native_tp: bool = False,
+) -> DSparkExecutionPipeline:
+    builder = ModelSamplingMetadataBuilder(tp_size=tp_size, use_native_tp=use_native_tp)
+    backend = SimpleNamespace(is_mla=False, prepare=Mock())
+    pipeline = model.create_execution_pipeline((builder,), RunnerConfig(torch.device("cpu")), attention_backend=backend)
+    assert isinstance(pipeline, DSparkExecutionPipeline)
+    return pipeline
+
+
+def _pipeline_inputs(
+    input_ids: torch.Tensor,
+    positions: torch.Tensor,
+    sampling: ModelSamplingInput | None,
+    *,
+    width: int = 3,
+) -> ModelInput:
+    input_batch = InputBatch.from_runtime(
+        input_ids,
+        positions,
+        _batch_metadata(input_ids.numel(), width),
+        is_dummy=False,
+        sampling=sampling,
     )
+    metadata = SimpleNamespace(
+        is_prefill=False,
+        is_chunked_prefill=False,
+        slot_mapping=torch.arange(input_ids.numel()),
+    )
+    return ModelInput(input_ids, positions, metadata, input_batch=input_batch)
 
 
 @pytest.mark.parametrize(
@@ -272,8 +292,8 @@ def test_pipeline_syncs_each_sample_before_remapping_and_markov_feedback(
 
     sync = Mock(side_effect=broadcast)
     monkeypatch.setattr(distributed, "broadcast_", sync)
-    with forward_context(_context(sampling, input_ids.numel(), tp_size=2)):
-        output = model.model(input_ids, positions)
+    pipeline = _make_eager_pipeline(model.model, tp_size=2)
+    output = pipeline.execute(_pipeline_inputs(input_ids, positions, sampling))
 
     assert sync.call_count == 3
     assert sampling_runtime.sample_logits.call_count == 3
@@ -349,8 +369,8 @@ def test_pipeline_matches_separate_draft_head_and_markov(
     model.calls.clear()
     model.previous_tokens.clear()
 
-    with forward_context(_context(sampling, input_ids.numel())):
-        output = model.model(input_ids, positions)
+    pipeline = _make_eager_pipeline(model.model)
+    output = pipeline.execute(_pipeline_inputs(input_ids, positions, sampling, width=width))
 
     assert isinstance(model.model, PyModelBase)
     assert isinstance(output, ModelOutput)
@@ -373,9 +393,9 @@ def test_pipeline_matches_separate_draft_head_and_markov(
         assert output.draft_proposal.draft_probs is None
 
 
-@pytest.mark.parametrize("padding_requests", [0, 1, 2])
-def test_pipeline_computes_local_query_blocks_including_graph_padding(
-    padding_requests: int,
+@pytest.mark.parametrize("padding_tokens", [0, 1, 2])
+def test_pipeline_excludes_decoder_graph_padding_from_later_stages(
+    padding_tokens: int,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     model = _DraftModel()
@@ -384,22 +404,27 @@ def test_pipeline_computes_local_query_blocks_including_graph_padding(
     positions = torch.arange(input_ids.numel())
     sampling = _SamplingInput(return_probs=True, return_confidence=True)
     expected = _reference(model, input_ids, positions, width, sampling)
-    padded_input_ids = torch.cat((input_ids, input_ids.new_full((padding_requests * width,), 2)))
-    padded_positions = torch.arange(padded_input_ids.numel())
-    expected_hidden = model.model.backbone(padded_input_ids, padded_positions)
+    expected_hidden = model.model.backbone(input_ids, positions)
+    padded_hidden = torch.cat((expected_hidden, expected_hidden.new_full((padding_tokens, 2), 2)))
+    pipeline = _make_eager_pipeline(model.model)
+    graph = Mock()
+    graph.can_execute.return_value = True
+    graph.execute.side_effect = lambda *args, **kwargs: BaseRunner._slice_output(
+        (model.model.compute_logits(padded_hidden, None), padded_hidden), input_ids.numel()
+    )
+    pipeline.entry_runner.graph_runner = graph
     lm_head_forward = Mock(wraps=model.model.lm_head.forward)
     monkeypatch.setattr(model.model.lm_head, "forward", lm_head_forward)
 
-    with forward_context(_context(sampling, padded_input_ids.numel())):
-        output = model.model(padded_input_ids, padded_positions)
+    output = pipeline.execute(_pipeline_inputs(input_ids, positions, sampling))
 
+    graph.execute.assert_called_once()
     lm_head_forward.assert_called_once()
-    assert torch.equal(lm_head_forward.call_args.args[0], expected_hidden)
-    assert output.draft_proposal.token_ids.shape == (input_ids.numel() // width + padding_requests, width)
-    trimmed = BaseRunner._slice_output(output, input_ids.numel(), num_reqs=2)
-    assert torch.equal(trimmed.draft_proposal.token_ids, expected.draft_proposal.token_ids)
-    assert torch.equal(trimmed.draft_confidence_probs, expected.draft_confidence_probs)
-    torch.testing.assert_close(trimmed.draft_proposal.draft_probs, expected.draft_proposal.draft_probs)
+    assert torch.equal(lm_head_forward.call_args.args[0], padded_hidden)
+    assert output.draft_proposal.token_ids.shape == (2, width)
+    assert torch.equal(output.draft_proposal.token_ids, expected.draft_proposal.token_ids)
+    assert torch.equal(output.draft_confidence_probs, expected.draft_confidence_probs)
+    torch.testing.assert_close(output.draft_proposal.draft_probs, expected.draft_proposal.draft_probs)
 
 
 def test_prepare_sampling_input_adapts_only_the_owned_copy(sampling_runtime: ModuleType) -> None:
@@ -459,59 +484,50 @@ def test_prepare_sampling_input_greedy_skips_parameter_transfer(sampling_runtime
 
 def test_pipeline_uses_current_anchor_tokens_without_storing_request_state() -> None:
     model = _DraftModel()
+    pipeline = _make_eager_pipeline(model.model)
     positions = torch.arange(3)
-    with forward_context(_context(_SamplingInput(), 3)):
-        first = model.model(torch.tensor([1, 0, 0]), positions)
-    with forward_context(_context(_SamplingInput(), 3)):
-        second = model.model(torch.tensor([4, 0, 0]), positions)
+    first = pipeline.execute(_pipeline_inputs(torch.tensor([1, 0, 0]), positions, _SamplingInput()))
+    second = pipeline.execute(_pipeline_inputs(torch.tensor([4, 0, 0]), positions, _SamplingInput()))
     raw = model.model.backbone(torch.tensor([1]), torch.tensor([0]))
     assert first.draft_proposal.token_ids.tolist() == [[2, 3, 4]]
     assert second.draft_proposal.token_ids.tolist() == [[5, 6, 0]]
     assert isinstance(raw, torch.Tensor)
-    assert type(model.model) is DSparkPipeline
+    assert type(model.model) is DSparkModel
     assert not hasattr(model.model, "model")
     assert type(model.model.backbone) is _Backbone
-    assert not isinstance(model.model.backbone, DSparkPipeline)
+    assert not isinstance(model.model.backbone, DSparkModel)
     assert list(model.children()) == [model.model]
 
 
-@pytest.mark.parametrize("missing", ["context", "metadata", "sampling"])
+def test_model_does_not_expose_an_alternative_pipeline_forward() -> None:
+    model = _DraftModel()
+    with pytest.raises(NotImplementedError, match="forward"):
+        model.model(torch.tensor([1, 0, 0]), torch.arange(3))
+    assert model.calls == []
+
+
+@pytest.mark.parametrize("missing", ["input_batch", "sampling"])
 def test_pipeline_requires_sampling_before_backbone(missing: str) -> None:
     model = _DraftModel()
-    context = _context(None, 3)
-    if missing == "metadata":
-        context.execution_contexts.clear()
-    context_scope = nullcontext() if missing == "context" else forward_context(context)
-    with context_scope, pytest.raises(RuntimeError, match="requires sampling metadata"):
-        model.model(torch.tensor([1, 0, 0]), torch.arange(3))
+    pipeline = _make_eager_pipeline(model.model)
+    inputs = _pipeline_inputs(torch.tensor([1, 0, 0]), torch.arange(3), None)
+    if missing == "input_batch":
+        inputs.input_batch = None
+    with pytest.raises(RuntimeError, match="requires sampling metadata"):
+        pipeline.execute(inputs)
     assert model.calls == []
 
 
 @pytest.mark.parametrize("width,num_tokens", [(0, 3), (-1, 3), (3, 2)])
 def test_pipeline_rejects_invalid_query_blocks_before_backbone(width: int, num_tokens: int) -> None:
     model = _DraftModel(width=width)
-    with (
-        forward_context(_context(_SamplingInput(), num_tokens)),
-        pytest.raises(ValueError, match="complete query blocks"),
-    ):
-        model.model(torch.zeros(num_tokens, dtype=torch.long), torch.arange(num_tokens))
-    assert model.calls == []
-
-
-def test_runner_trims_pipeline_graph_padding() -> None:
-    model = _DraftModel()
-    with forward_context(_context(_SamplingInput(return_probs=True, return_confidence=True), 6)):
-        output = model.model(torch.arange(8), torch.arange(8))
-    assert output.draft_proposal.token_ids.shape == (2, 3)
-    trimmed = BaseRunner._slice_output(output, 3, num_reqs=1, clone=True)
-    tensors = (
-        (output.draft_proposal.token_ids, trimmed.draft_proposal.token_ids),
-        (output.draft_proposal.draft_probs, trimmed.draft_proposal.draft_probs),
-        (output.draft_confidence_probs, trimmed.draft_confidence_probs),
+    pipeline = _make_eager_pipeline(model.model)
+    inputs = _pipeline_inputs(
+        torch.zeros(num_tokens, dtype=torch.long), torch.arange(num_tokens), _SamplingInput(), width=1
     )
-    for original, actual in tensors:
-        assert torch.equal(actual, original[:1])
-        assert actual.data_ptr() != original.data_ptr()
+    with pytest.raises(ValueError, match="complete query blocks"):
+        pipeline.execute(inputs)
+    assert model.calls == []
 
 
 @pytest.mark.parametrize("output_kind", ["tensor", "tuple", "pipeline"])
@@ -700,6 +716,7 @@ def test_executor_uses_original_execute_interface(
     executor._is_spec_draft = True
     executor._execution_metadata_builders = (builder,)
     executor.layerwise_split_size = 1
+    executor.execution_pipeline = model.model.create_execution_pipeline((builder,), RunnerConfig(torch.device("cpu")))
 
     synchronizer = Mock()
     synchronizer.size.return_value = 4
@@ -711,16 +728,13 @@ def test_executor_uses_original_execute_interface(
         metadata: object,
         input_embedding: torch.Tensor | None = None,
         **kwargs: object,
-    ) -> ModelOutput:
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         synchronizer.synchronize_layer.assert_called_once_with(3)
-        context = _context(None, input_ids.numel())
         input_batch = kwargs["input_batch"]
         assert input_batch.sampling is sampling
         assert input_batch.num_computed_tokens == ()
         assert "sampling_input" not in kwargs
-        context.execution_contexts[ModelSamplingMetadata] = builder.build(input_batch, metadata)
-        with forward_context(context):
-            return model.model(input_ids, positions)
+        return executor.execution_pipeline.entry_runner.model(input_ids, positions, input_embedding)
 
     executor.eager_runner = Mock()
     executor.eager_runner.execute.side_effect = execute_model
@@ -762,9 +776,13 @@ def test_executor_uses_original_execute_interface(
         return
     if sampling is None:
         assert model.calls == []
-    executor.decode_graph_runner.can_execute.assert_called_once()
-    assert executor.decode_graph_runner.execute.call_count == int(runner == "graph")
-    assert executor.eager_runner.execute.call_count == int(runner == "eager")
+        executor.decode_graph_runner.can_execute.assert_not_called()
+        executor.decode_graph_runner.execute.assert_not_called()
+        executor.eager_runner.execute.assert_not_called()
+    else:
+        executor.decode_graph_runner.can_execute.assert_called_once()
+        assert executor.decode_graph_runner.execute.call_count == int(runner == "graph")
+        assert executor.eager_runner.execute.call_count == int(runner == "eager")
     assert not hasattr(executor, "draft_pipeline")
     assert not hasattr(executor, "execute_pipeline")
     materialize_batch.assert_called_once()
@@ -777,13 +795,17 @@ def test_eager_pipeline_uses_batch_carrier_without_host_cached_counts(
 ) -> None:
     model = _DraftModel()
     backend = SimpleNamespace(is_mla=False, prepare=Mock())
-    runner = EagerRunner(model.model, backend, torch.device("cpu"))
     sampling_builder = ModelSamplingMetadataBuilder()
     batch_builder = Mock()
     batch_builder.metadata_type = InputBatch
     builders = (batch_builder, sampling_builder) if with_batch_builder else (sampling_builder,)
-    runner.bind_execution_metadata_builders(builders)
-    assert runner.execution_metadata_builders == builders
+    pipeline = model.model.create_execution_pipeline(
+        builders,
+        RunnerConfig(torch.device("cpu")),
+        attention_backend=backend,
+    )
+    runner = pipeline.entry_runner.eager_runner
+    assert runner.execution_metadata_builders == ((batch_builder,) if with_batch_builder else ())
 
     input_ids = torch.tensor([1, 0, 0])
     positions = torch.arange(3)
@@ -803,12 +825,7 @@ def test_eager_pipeline_uses_batch_carrier_without_host_cached_counts(
         slot_mapping=torch.arange(3),
     )
 
-    output = runner.execute(
-        input_ids,
-        positions,
-        metadata,
-        input_batch=input_batch,
-    )
+    output = pipeline.execute(ModelInput(input_ids, positions, metadata, input_batch=input_batch))
 
     assert output.draft_proposal.token_ids.tolist() == [[2, 3, 4]]
     backend.prepare.assert_called_once_with(metadata)
@@ -823,7 +840,7 @@ def test_persistent_sampling_metadata_refreshes_greedy_inputs() -> None:
     metadata = SimpleNamespace()
     first_sampling = _SamplingInput()
     next_sampling = _SamplingInput()
-    assert builder.can_execute_graph(_sampling_batch(first_sampling), metadata)
+    assert builder.can_execute_graph(first_sampling)
     persistent = builder.allocate_persistent(_sampling_batch(first_sampling), metadata)
     builder.update_persistent(persistent, _sampling_batch(next_sampling, 6), metadata)
     assert persistent.sampling is next_sampling
@@ -844,7 +861,7 @@ def test_graph_sampling_rejects_unsupported_inputs_before_updating(sampling: _Sa
     metadata = SimpleNamespace()
     first_sampling = _SamplingInput()
     persistent = builder.allocate_persistent(_sampling_batch(first_sampling), metadata)
-    assert not builder.can_execute_graph(_sampling_batch(sampling), metadata)
+    assert not builder.can_execute_graph(sampling)
     with pytest.raises(ValueError, match="Pipeline graph execution requires"):
         builder.allocate_persistent(_sampling_batch(sampling), metadata)
     with pytest.raises(ValueError, match="Pipeline graph execution requires"):
@@ -998,10 +1015,8 @@ def test_pipeline_carries_native_tp_sampling_backend(
         is_unconstrained_greedy=False,
         parameters=_SamplingParameters(all_greedy_sample=False),
     )
-    context = _context(sampling, 3, tp_size=4)
-    context.execution_contexts[ModelSamplingMetadata].use_native_tp = True
-    with forward_context(context):
-        output = model.model(torch.tensor([1, 0, 0]), torch.arange(3))
+    pipeline = _make_eager_pipeline(model.model, tp_size=4, use_native_tp=True)
+    output = pipeline.execute(_pipeline_inputs(torch.tensor([1, 0, 0]), torch.arange(3), sampling))
     assert output.draft_proposal.token_ids.tolist() == [[2, 3, 4]]
     assert sampling_runtime.tp_all_gather.call_count == 3
     broadcast.assert_not_called()

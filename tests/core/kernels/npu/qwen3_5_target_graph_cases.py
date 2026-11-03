@@ -25,6 +25,7 @@ import torch
 from xllm.python.attention.backend import LayerCache
 from xllm.python.attention.expanded_decode_metadata import ExpandedDecodeMetadata
 from xllm.python.model_executor.executor import ModelExecutor
+from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.models.qwen3_5 import Qwen3_5ForCausalLM
 
 _DEVICE = torch.device(f"npu:{os.environ.get('LOCAL_RANK', '0')}")
@@ -230,7 +231,7 @@ def _check_dspark_target_aclgraph_width(width: int, dp_rank: int | None = None) 
             metadata.dp_is_decode = (0, 1) if is_prefill else (1, 1)
             kv_length = 2 if is_prefill else 2 + (step + 1) * width
             metadata.dp_global_kv_max_seq_lens = tuple(kv_length if count else 0 for count in dp_request_counts[step])
-        assert graph.decode_graph_runner.can_execute(ids, metadata) == (not is_prefill)
+        assert graph.decode_graph_runner.can_execute(ModelInput(ids, positions, metadata)) == (not is_prefill)
         if not slots:
             before = tuple(state.clone() for state in _live_cache_states(eager_caches, width))
         expected = eager.execute(ids, positions, metadata, input_batch_metadata=batch)

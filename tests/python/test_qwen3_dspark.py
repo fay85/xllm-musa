@@ -22,7 +22,7 @@ import pytest
 import torch
 
 from xllm.python import kernels
-from xllm.python.models.dspark_pipeline import DSparkPipeline
+from xllm.python.models.dspark_model import DSparkModel
 from xllm.python.models.qwen3_dspark import (
     Qwen3DSparkConfig,
     Qwen3DSparkForCausalLM,
@@ -77,13 +77,13 @@ def test_config_requires_positive_markov_rank() -> None:
     with pytest.raises(ValueError, match="markov_rank > 0"):
         _config(markov_rank=0)
 
+
 @pytest.mark.parametrize("query_width", [1, 3, 15])
 def test_pipeline_uses_runtime_query_width(query_width: int) -> None:
-    model = Qwen3DSparkForCausalLM(
-        _config_dict(draft_query_width=query_width, num_speculative_tokens=16)
-    )
+    model = Qwen3DSparkForCausalLM(_config_dict(draft_query_width=query_width, num_speculative_tokens=16))
 
     assert model.model._query_width == query_width
+
 
 def test_pipeline_requires_runtime_query_width() -> None:
     config = _config_dict(num_speculative_tokens=16)
@@ -169,7 +169,7 @@ def test_checkpoint_loads_dspark_heads(monkeypatch: pytest.MonkeyPatch) -> None:
 
     model.load_weights([_StateDict(tensors)], tp_rank=0, tp_size=1)
 
-    assert isinstance(model.model, DSparkPipeline)
+    assert isinstance(model.model, DSparkModel)
     assert "model.backbone.fc.weight" in dict(model.named_parameters())
     torch.testing.assert_close(model.model.hot_token_ids, tensors["d2t"] + torch.arange(8))
 

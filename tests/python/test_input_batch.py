@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
@@ -82,6 +83,8 @@ def test_bind_graph_inputs_only_changes_graph_owned_fields(cached_counts: list[i
         is_dummy=False,
         sampling=sampling,
     )
+    hidden = torch.ones(6, 2)
+    batch = replace(batch, hidden_states=hidden)
     is_padding = torch.tensor([False, False, False, False, False, False, True, True])
 
     padded = batch.bind_graph_inputs(
@@ -97,6 +100,8 @@ def test_bind_graph_inputs_only_changes_graph_owned_fields(cached_counts: list[i
     assert padded.is_padding is is_padding
     assert padded.num_computed_tokens == tuple(cached_counts)
     assert padded.sampling is sampling
+    assert padded.hidden_states is hidden
+    assert padded.hidden_states.shape[0] == padded.num_tokens
 
 
 def test_input_batch_rejects_inconsistent_upstream_fields() -> None:

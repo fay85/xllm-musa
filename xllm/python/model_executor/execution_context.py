@@ -20,6 +20,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from xllm.python.model_executor.input_batch import InputBatch
+from xllm.python.model_executor.model_input import ModelInput
 
 if TYPE_CHECKING:
     from xllm.python.attention.backend import AttentionMetadata, LayerCache
@@ -63,14 +64,20 @@ class RegisteredExecutionMetadataBuilder(ExecutionMetadataBuilder, Protocol):
 
 
 @runtime_checkable
-class GraphAdmissionMetadataBuilder(Protocol):
-    """Optional builder capability for request-dependent graph admission."""
+class GraphExecutionSupport(Protocol):
+    """Model/module computation admission, including its metadata contract.
 
-    def can_execute_graph(
-        self,
-        input_batch: InputBatch,
-        metadata: AttentionMetadata,
-    ) -> bool: ...
+    Composite implementations aggregate their direct components and their own
+    constraints. This is a side-effect-free check, not a graph/eager selector;
+    graph backends separately validate their storage and execution context.
+    """
+
+    def can_execute_graph(self, inputs: ModelInput) -> bool: ...
+
+
+def can_execute_graph(module: object, inputs: ModelInput) -> bool:
+    """Query an explicit capability; legacy modules keep backend-only admission."""
+    return not isinstance(module, GraphExecutionSupport) or module.can_execute_graph(inputs)
 
 
 @runtime_checkable

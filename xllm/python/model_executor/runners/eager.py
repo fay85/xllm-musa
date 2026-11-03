@@ -26,6 +26,7 @@ from xllm.python.model_executor.forward_context import (
     forward_context,
 )
 from xllm.python.model_executor.input_batch import InputBatch
+from xllm.python.model_executor.model_output import ModelOutput
 from xllm.python.model_executor.runners.base import BaseRunner, ModelExecutionOutput
 from xllm.python.models.multimodal import MultimodalInputs
 
@@ -92,7 +93,7 @@ class EagerRunner(BaseRunner):
         multimodal_inputs: MultimodalInputs | None = None,
     ) -> ModelExecutionOutput:
         cp_context = None
-        is_mla = self.attention_backend.is_mla
+        is_mla = self.attention_backend is not None and self.attention_backend.is_mla
         is_empty_rank = bool(getattr(metadata, "is_dummy", False))
         is_mla_cp_prefill = (
             not is_empty_rank and self.cp_size > 1 and is_mla and (metadata.is_prefill or metadata.is_chunked_prefill)
@@ -113,7 +114,10 @@ class EagerRunner(BaseRunner):
             raise NotImplementedError("Python Context-Parallel does not support mixed batches")
 
         use_cp_context = (
-            not is_empty_rank and self.cp_size > 1 and (metadata.is_prefill or (is_mla and metadata.is_chunked_prefill))
+            self.attention_backend is not None
+            and not is_empty_rank
+            and self.cp_size > 1
+            and (metadata.is_prefill or (is_mla and metadata.is_chunked_prefill))
         )
         if use_cp_context:
             seq_lens = _per_seq_lens_from_metadata(
@@ -146,7 +150,8 @@ class EagerRunner(BaseRunner):
         # Admission and context construction must finish before prepare(). A
         # sharded MLA backend enters CP collectives during prepare, so rejecting
         # unsupported batches afterwards could leave peer ranks deadlocked.
-        self.attention_backend.prepare(metadata)
+        if self.attention_backend is not None:
+            self.attention_backend.prepare(metadata)
 
         with forward_context(
             ForwardContext(
@@ -165,7 +170,11 @@ class EagerRunner(BaseRunner):
             # hidden state as input_embedding; the MTP body fuses it with the
             # token embedding. Regular steps take the 2-arg path.
             if multimodal_inputs is not None:
-                return self.model(input_ids, positions, **multimodal_inputs.forward_kwargs())
-            if input_embedding is None:
-                return self.model(input_ids, positions)
-            return self.model(input_ids, positions, input_embedding)
+                output = self.model(input_ids, positions, **multimodal_inputs.forward_kwargs())
+            elif input_embedding is None:
+                output = self.model(input_ids, positions)
+            else:
+                output = self.model(input_ids, positions, input_embedding)
+        if isinstance(output, ModelOutput) and input_batch is not None:
+            return self._slice_output(output, input_batch.num_tokens, num_reqs=input_batch.num_reqs)
+        return output

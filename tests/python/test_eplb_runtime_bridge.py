@@ -18,8 +18,10 @@ from unittest.mock import MagicMock
 import pytest
 import torch
 
+from xllm.python.model_executor.execution_pipeline import SingleModelExecutionPipeline
 from xllm.python.model_executor.executor import ModelExecutor
 from xllm.python.model_executor.forward_context import EplbRuntimeState
+from xllm.python.model_executor.runner import RunnerConfig
 from xllm.python.model_executor.runners.decode_acl_graph import DecodeAclGraphRunner
 
 
@@ -29,6 +31,9 @@ def test_executor_forwards_worker_eplb_state_to_eager_runner() -> None:
     executor._restore_engram_history = None
     executor._is_spec_draft = False
     executor.layerwise_split_size = 1
+    executor.execution_pipeline = SingleModelExecutionPipeline(
+        torch.nn.Identity(), (), RunnerConfig(torch.device("cpu"))
+    )
     executor.decode_graph_runner = None
     executor._execution_metadata_builders = ()
     executor.eager_runner = MagicMock()

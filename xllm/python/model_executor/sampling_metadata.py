@@ -43,15 +43,6 @@ class ModelSamplingInput(Protocol):
     is_unconstrained_greedy: bool
 
 
-def _supports_graph_sampling(sampling: ModelSamplingInput | None) -> bool:
-    return (
-        sampling is not None
-        and sampling.is_unconstrained_greedy
-        and not sampling.return_probs
-        and not sampling.return_confidence
-    )
-
-
 def prepare_sampling_input(
     sampling_input: ModelSamplingInput,
     logits: torch.Tensor,
@@ -122,6 +113,15 @@ class ModelSamplingMetadataBuilder:
         self._tp_size = tp_size
         self._use_native_tp = use_native_tp
 
+    def can_execute_graph(self, sampling: ModelSamplingInput | None) -> bool:
+        """Admit only the sampling computation supported by persistent metadata."""
+        return (
+            sampling is not None
+            and sampling.is_unconstrained_greedy
+            and not sampling.return_probs
+            and not sampling.return_confidence
+        )
+
     @classmethod
     def from_config(cls, config: Mapping[str, object]) -> ModelSamplingMetadataBuilder:
         # V4/V4.1 drafts currently reuse C++ TP communicators rather than
@@ -156,13 +156,6 @@ class ModelSamplingMetadataBuilder:
             self._use_native_tp,
         )
 
-    def can_execute_graph(
-        self,
-        input_batch: InputBatch,
-        metadata: AttentionMetadata,
-    ) -> bool:
-        return _supports_graph_sampling(input_batch.sampling)
-
     def allocate_persistent(
         self,
         input_batch: InputBatch,
@@ -186,11 +179,10 @@ class ModelSamplingMetadataBuilder:
         persistent_metadata.sampling = input_batch.sampling
         persistent_metadata.num_tokens = input_batch.num_tokens
 
-    @staticmethod
-    def _validate_graph_sampling(sampling: ModelSamplingInput | None) -> None:
+    def _validate_graph_sampling(self, sampling: ModelSamplingInput | None) -> None:
         if sampling is None:
             raise ValueError("Pipeline graph execution requires sampling input")
-        if not _supports_graph_sampling(sampling):
+        if not self.can_execute_graph(sampling):
             raise ValueError(
                 "Pipeline graph execution requires unconstrained greedy sampling without probabilities or confidence"
             )

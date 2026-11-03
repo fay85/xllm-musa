@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+from functools import partial
 from typing import TYPE_CHECKING, Any
 
 import torch
@@ -31,6 +32,7 @@ from xllm.python.layers.attention import Attention
 from xllm.python.model_executor.execution_context import (
     LayerCacheAwareExecutionMetadataBuilder,
 )
+from xllm.python.model_executor.execution_pipeline import create_execution_pipeline
 from xllm.python.model_executor.forward_context import (
     EplbRuntimeState,
     LayerLoadContext,
@@ -41,7 +43,9 @@ from xllm.python.model_executor.input_batch import (
     InputBatch,
     InputBatchMetadata,
 )
-from xllm.python.model_executor.runners.base import ModelExecutionOutput
+from xllm.python.model_executor.model_input import ModelInput
+from xllm.python.model_executor.runner import RunnerConfig
+from xllm.python.model_executor.runners.base import BaseRunner, ModelExecutionOutput
 from xllm.python.model_executor.runners.eager import EagerRunner
 from xllm.python.model_executor.sampling_metadata import ModelSamplingInput
 from xllm.python.models.multimodal import MultimodalInputs
@@ -358,93 +362,55 @@ class ModelExecutor:
 
         self._configure_bidirectional_prompt_attention(config, device)
 
-        execution_model = model.model
-        self.eager_runner = EagerRunner(execution_model, self.attention_backend, device)
-        # Context-Parallel: shard prefill sequences across the CP group. Decode
-        # stays on the non-CP path (CP is prefill-only, eager-only in v1).
-        self.eager_runner.cp_size = int(config.get("cp_size", 1))
-        self.eager_runner.cp_rank = int(config.get("cp_rank", 0))
-        self.layerwise_split_size = int(config.get("layerwise_split_size", 1))
-        self.layerwise_split_rank = int(config.get("layerwise_split_rank", 0))
-        if self.layerwise_split_size > 1 and config.get("model_type") != "glm_moe_dsa":
-            raise NotImplementedError("Python layerwise split is supported only for GLM5.2")
-        self.decode_graph_runner = None
-
         model_type = str(config.get("model_type", ""))
         execution_metadata_builders = tuple(
             builder
             for builder_class in get_execution_metadata_builder_classes(model_type)
             if (builder := builder_class.from_config(config)) is not None
         )
-        self.eager_runner.bind_execution_metadata_builders(execution_metadata_builders)
-        self._execution_metadata_builders = self.eager_runner.execution_metadata_builders
+        self._execution_metadata_builders = execution_metadata_builders
+        self.layerwise_split_size = int(config.get("layerwise_split_size", 1))
+        self.layerwise_split_rank = int(config.get("layerwise_split_rank", 0))
+        if self.layerwise_split_size > 1 and config.get("model_type") != "glm_moe_dsa":
+            raise NotImplementedError("Python layerwise split is supported only for GLM5.2")
+        self.dp_size = int(config.get("dp_size", 1))
+        runner_config = RunnerConfig(
+            device=device,
+            model_config=config,
+            enable_graph=graph_enabled,
+            max_seqs_per_batch=max_seqs_per_batch,
+            num_decoding_tokens=num_decoding_tokens,
+            acl_graph_decode_batch_size_limit=acl_graph_decode_batch_size_limit,
+            is_spec_draft=is_spec_draft,
+        )
+        restore_history = (
+            partial(self._restore_engram_history, self.attention_backend)
+            if self._restore_engram_history is not None
+            else None
+        )
+        self.execution_pipeline = create_execution_pipeline(
+            model.model,
+            execution_metadata_builders,
+            runner_config,
+            attention_backend=self.attention_backend,
+            restore_history=restore_history,
+        )
 
-        if self.layerwise_split_size > 1 and graph_enabled:
-            raise NotImplementedError(
-                "Python GLM5.2 layerwise split requires eager execution; graph execution is not supported."
-            )
-        dp_size = int(config.get("dp_size", 1))
-        dp_rank = int(config.get("dp_rank", 0))
-        self.dp_size = dp_size
-        if graph_enabled and current_platform.is_cuda():
-            from xllm.python.model_executor.runners.decode_cuda_graph import (
-                DecodeCudaGraphRunner,
-            )
+    @property
+    def eager_runner(self) -> EagerRunner:
+        return self.execution_pipeline.entry_runner.eager_runner
 
-            self.decode_graph_runner = DecodeCudaGraphRunner(
-                execution_model,
-                self.attention_backend,
-                device,
-                max_seqs_per_batch,
-                int(config["max_position_embeddings"]),
-                dp_size,
-                dp_rank,
-            )
-            logger.warning(
-                "enable_graph=true selected the CUDA graph runner, but its "
-                "warmup/capture path is not wired into ModelExecutor; "
-                "decode will run eagerly without CUDA graph capture/replay."
-            )
-        elif graph_enabled and current_platform.is_npu():
-            from xllm.python.model_executor.runners.decode_acl_graph import (
-                DecodeAclGraphRunner,
-            )
+    @eager_runner.setter
+    def eager_runner(self, runner: EagerRunner) -> None:
+        self.execution_pipeline.entry_runner.eager_runner = runner
 
-            # Per-rank Graph-safe cap, times TP for the runner's pre-shard rows.
-            eplv2_policy = getattr(execution_model, "_comm_policy", None)
-            eplv2_graph_kwargs: dict[str, int] = {}
-            if eplv2_policy is not None and int(config.get("expert_parallel_degree", 0)) == 2:
-                tp_size = int(config.get("tp_size", 1))
-                per_rank_rows = eplv2_policy.graph_token_limit
-                eplv2_graph_kwargs["eplv2_graph_token_limit"] = per_rank_rows * tp_size
-            glm_eplv2 = (
-                config.get("model_type") in ("glm5_next", "glm5_next_text")
-                and int(config.get("expert_parallel_degree", 0)) == 2
-                and int(config.get("ep_size", 1)) > 1
-            )
-            self.decode_graph_runner = DecodeAclGraphRunner(
-                execution_model,
-                self.attention_backend,
-                device,
-                max_seqs_per_batch,
-                int(config["max_position_embeddings"]),
-                dp_size,
-                dp_rank,
-                acl_graph_decode_batch_size_limit,
-                # MTP spec-verify packs (num_speculative_tokens+1) token rows
-                # per logical sequence; the runner sizes its static paging
-                # buffer in token rows, so pass the row multiplier so capacity
-                # matches the captured expanded-verify graph (item 二). Take
-                # the max of the explicit ctor param and the config-derived
-                # width so a caller that passes num_decoding_tokens still wins
-                # (single source of truth, no param/config divergence).
-                num_decoding_tokens=num_decoding_tokens,
-                enable_mega_moe_token_mask=bool(config.get("enable_mega_moe", False) and not glm_eplv2),
-                is_spec_draft=is_spec_draft,
-                draft_query_width=int(config.get("draft_query_width", 1) or 1),
-                **eplv2_graph_kwargs,
-            )
-            self.decode_graph_runner.bind_execution_metadata_builders(execution_metadata_builders)
+    @property
+    def decode_graph_runner(self) -> BaseRunner | None:
+        return self.execution_pipeline.entry_runner.graph_runner
+
+    @decode_graph_runner.setter
+    def decode_graph_runner(self, runner: BaseRunner | None) -> None:
+        self.execution_pipeline.entry_runner.graph_runner = runner
 
     def _configure_bidirectional_prompt_attention(self, config: dict, device: torch.device) -> None:
         if not _is_qwen3_5_model_type(str(config.get("model_type", ""))):
@@ -624,53 +590,21 @@ class ModelExecutor:
             else:
                 layer_load_context.synchronize_event(draft_load_event_index)
             layer_load_context = None
-        rows = input_ids.numel()
-        restore_history = self._restore_engram_history
-        graph_runner = self.decode_graph_runner
-        if (
-            graph_runner is not None
-            and multimodal_inputs is None
-            and (eplb is None or current_platform.is_npu())
-            and graph_runner.can_execute(input_ids, metadata, input_embedding, input_batch=input_batch)
-        ):
-            # Replay bypasses Python attention calls. Also protect first-capture
-            # state snapshots and warmup before entering the graph runner.
-            if layer_load_context is not None:
-                layer_load_context.synchronize_all_layers()
-            graph_runner.warmup(
-                input_ids,
-                positions,
-                metadata,
-                input_embedding,
-            )
-            # Only the overlap runner restores history with its deferred
-            # input preparation. Other graph paths retain executor ownership.
-            if restore_history is not None and not getattr(graph_runner, "supports_draft_to_target_overlap", False):
-                restore_history(self.attention_backend, metadata)
-            output = graph_runner.execute(
-                input_ids,
-                positions,
-                metadata,
-                input_embedding,
+        output = self.execution_pipeline.execute(
+            ModelInput(
+                input_ids=input_ids,
+                positions=positions,
+                metadata=metadata,
+                input_embedding=input_embedding,
+                layer_synchronizer=layer_synchronizer,
                 eplb=eplb,
                 input_batch=input_batch,
+                layer_load_context=layer_load_context,
+                multimodal_inputs=multimodal_inputs,
             )
-            return self._attach_persistent_aux_hidden_states(
-                output,
-                rows,
-                graph_rows=getattr(graph_runner, "last_padded_batch_size", None),
-            )
-        if restore_history is not None:
-            restore_history(self.attention_backend, metadata)
-        output = self.eager_runner.execute(
-            input_ids,
-            positions,
-            metadata,
-            input_embedding,
-            layer_synchronizer=layer_synchronizer,
-            eplb=eplb,
-            input_batch=input_batch,
-            layer_load_context=layer_load_context,
-            multimodal_inputs=multimodal_inputs,
         )
-        return self._attach_persistent_aux_hidden_states(output, rows)
+        return self._attach_persistent_aux_hidden_states(
+            output,
+            input_ids.numel(),
+            graph_rows=self.execution_pipeline.entry_runner.last_graph_rows,
+        )

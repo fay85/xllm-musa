@@ -30,6 +30,7 @@ from types import ModuleType, SimpleNamespace
 import pytest
 import torch
 
+from tests.python.test_dspark_pipeline import _make_eager_pipeline, _pipeline_inputs
 from xllm.python import kernels
 from xllm.python.attention.csa2_attention import (
     Csa2QueryLayout,
@@ -41,7 +42,7 @@ from xllm.python.attention.csa2_block_metadata import (
     Csa2BlockAttentionMetadataBuilder,
 )
 from xllm.python.model_executor.forward_context import ForwardContext, forward_context
-from xllm.python.model_executor.sampling_metadata import ModelSamplingMetadata, ModelSamplingMetadataBuilder
+from xllm.python.model_executor.sampling_metadata import ModelSamplingMetadataBuilder
 from xllm.python.models import deepseek_v41_dspark as dsp
 from xllm.python.models.deepseek_v41_dspark import (
     CSA2_MODE_SWA,
@@ -50,7 +51,7 @@ from xllm.python.models.deepseek_v41_dspark import (
     anchor_first_query_block,
     dspark_swa_mode,
 )
-from xllm.python.models.dspark_pipeline import DSparkPipeline
+from xllm.python.models.dspark_model import DSparkModel
 from xllm.python.registry import get_execution_metadata_builder_classes, get_model_class
 
 # Tiny draft geometry: hidden 32 / head_dim 64 (QDQ group 32) / rope 16 /
@@ -1315,7 +1316,7 @@ def test_pipeline_matches_sequential_greedy_markov(monkeypatch: pytest.MonkeyPat
     torch.manual_seed(29)
     model = DeepseekV41DSparkForCausalLM(_config_dict())
     _load(model, _build_checkpoint(model.cfg, lambda key, shape: torch.randn(shape)))
-    assert isinstance(model.model, DSparkPipeline)
+    assert isinstance(model.model, DSparkModel)
     assert ModelSamplingMetadataBuilder in get_execution_metadata_builder_classes("deepseek_v41_dspark")
     assert Csa2BlockAttentionMetadataBuilder in get_execution_metadata_builder_classes("deepseek_v41_dspark")
     hidden = torch.randn(6, model.cfg.hidden_size)
@@ -1332,15 +1333,8 @@ def test_pipeline_matches_sequential_greedy_markov(monkeypatch: pytest.MonkeyPat
     monkeypatch.setitem(sys.modules, "xllm_runtime", runtime)
     input_ids = torch.tensor([2, 7, 7, 4, 7, 7], dtype=torch.int64)
     positions = torch.arange(6, dtype=torch.int64)
-    context = ForwardContext(
-        _DraftStubBackend(),
-        torch.device("cpu"),
-        SimpleNamespace(),
-        [],
-        execution_contexts={ModelSamplingMetadata: ModelSamplingMetadata(sampling, 6)},
-    )
-    with forward_context(context):
-        output = model.model(input_ids, positions)
+    pipeline = _make_eager_pipeline(model.model)
+    output = pipeline.execute(_pipeline_inputs(input_ids, positions, sampling))
     base_logits = model.model.lm_head(hidden).view(2, 3, model.cfg.vocab_size)
     previous = input_ids.view(2, 3)[:, 0]
     expected_steps = []
