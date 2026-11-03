@@ -1726,7 +1726,7 @@ void write_lora_json_response(brpc::Controller* ctrl,
   ctrl->response_attachment().append(body.dump());
 }
 
-// #506 review: brpc defaults failed HTTP handlers to 200; clients parsing
+// brpc defaults failed HTTP handlers to 200; clients parsing
 // only the status code would read a structured error as success. Route
 // every LoRA endpoint failure through the shared public_error helpers so
 // the status code matches the payload semantics.
@@ -1740,6 +1740,15 @@ api_service::PublicHttpError lora_disabled_error() {
           "lora_disabled",
           "service_unavailable_error",
           "LoRA is disabled; start the server with --enable_lora",
+          /*retryable=*/false,
+          std::nullopt};
+}
+
+api_service::PublicHttpError lora_updating_disabled_error() {
+  return {/*status_code=*/403,
+          "lora_updating_disabled",
+          "permission_error",
+          "Runtime LoRA updating is disabled",
           /*retryable=*/false,
           std::nullopt};
 }
@@ -1789,11 +1798,15 @@ void APIService::LoadLoraAdapterHttp(
     write_lora_http_error(ctrl, lora_disabled_error());
     return;
   }
+  if (!LoRARuntime::instance().config().allow_runtime_lora_updating) {
+    write_lora_http_error(ctrl, lora_updating_disabled_error());
+    return;
+  }
   auto j = parse_lora_http_json(ctrl);
   if (!j.has_value()) {
     return;
   }
-  // #506 review: typed extraction. Bare get<std::string>() throws
+  // Typed extraction. Bare get<std::string>() throws
   // nlohmann::json::type_error when the field is not a string, and the
   // exception would escape the brpc handler instead of producing a
   // structured JSON error.
@@ -1812,7 +1825,7 @@ void APIService::LoadLoraAdapterHttp(
     base_model_name = (*j)["base_model_name"].get<std::string>();
   }
 
-  // #506 review (multi-master): route by base_model_name when provided;
+  // Route by base_model_name when provided;
   // fall back to the default master only when it is not. An arbitrary
   // masters_ iteration order would send the broadcast to a random model's
   // workers.
@@ -1832,7 +1845,7 @@ void APIService::LoadLoraAdapterHttp(
   // The API process owns id allocation: register first so the whole
   // cluster binds this name to one id, then broadcast with the id so
   // every worker adopts it verbatim (a worker-side id would be a second,
-  // independent allocation and could diverge -- #506 review finding).
+  // independent allocation and could diverge).
   const LoRARequest api_req{
       lora_name, /*int_id=*/0, lora_path, base_model_name};
   const auto id_opt =
@@ -1875,11 +1888,15 @@ void APIService::UnloadLoraAdapterHttp(
     write_lora_http_error(ctrl, lora_disabled_error());
     return;
   }
+  if (!LoRARuntime::instance().config().allow_runtime_lora_updating) {
+    write_lora_http_error(ctrl, lora_updating_disabled_error());
+    return;
+  }
   auto j = parse_lora_http_json(ctrl);
   if (!j.has_value()) {
     return;
   }
-  // #506 review: same typed-extraction guard as the load handler.
+  // Same typed-extraction guard as the load handler.
   if (!j->contains("lora_name") || !(*j)["lora_name"].is_string()) {
     api_service::write_bad_request(
         ctrl, "expected {\"lora_name\":...} (string) in the body");
@@ -1887,20 +1904,26 @@ void APIService::UnloadLoraAdapterHttp(
   }
   const std::string lora_name = (*j)["lora_name"].get<std::string>();
 
-  // #506 review (multi-master): unload targets the same master that would
-  // serve the adapter; the default master is the only sane fallback.
-  Master* master = master_;
-  if (master == nullptr) {
-    write_lora_http_error(ctrl, lora_internal_error("no master registered"));
-    return;
-  }
-  // #506 review (critical): verify the API-side entry exists BEFORE
+  // Verify the API-side entry exists BEFORE
   // broadcasting. Broadcasting first and checking afterwards would let a
   // stray name unload real weights on the workers while the API side then
   // reports "adapter not registered" -- the workers and the API registry
   // diverge and nothing is cleaned up.
-  if (!LoRARuntime::instance().registry().lookup(lora_name).has_value()) {
+  const auto registry_req =
+      LoRARuntime::instance().registry().lookup(lora_name);
+  if (!registry_req.has_value()) {
     write_lora_http_error(ctrl, lora_not_found_error(lora_name));
+    return;
+  }
+  // Route unload to the same model master selected during load. Using the
+  // default master here leaves adapters loaded on non-default workers.
+  Master* master = master_;
+  if (!registry_req->base_model_name.empty()) {
+    master = get_model_master(registry_req->base_model_name);
+  }
+  if (master == nullptr) {
+    write_lora_http_error(
+        ctrl, lora_internal_error("no master for adapter base model"));
     return;
   }
   const bool broadcast_ok = master->unload_lora_broadcast(lora_name);
@@ -1916,7 +1939,7 @@ void APIService::UnloadLoraAdapterHttp(
   // lookups fail immediately) and defers the actual erase until the
   // last in-flight pin releases.
   //
-  // #506 review (D2): if the local unload reports false here the workers
+  // If the local unload reports false here the workers
   // HAVE already released the weights, so the client-visible end state
   // ("adapter gone") is reached either way. Returning an error would
   // make a retry an unconditional failure loop (the lookup above now
@@ -1942,7 +1965,7 @@ void APIService::ListLoraAdaptersHttp(
   }
   auto ctrl = reinterpret_cast<brpc::Controller*>(controller);
 
-  // #506 review: same enabled() guard as the load / unload handlers. On
+  // Same enabled() guard as the load / unload handlers. On
   // --enable_lora=false deployments an unguarded list returns 200 + []
   // and callers cannot tell "LoRA off" from "no adapters loaded".
   if (!LoRARuntime::instance().enabled()) {

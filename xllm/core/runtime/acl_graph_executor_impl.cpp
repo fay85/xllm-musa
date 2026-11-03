@@ -150,6 +150,31 @@ uint64_t mix_graph_key(uint64_t hash, uint64_t value) {
   return hash ^ (value + 0x9e3779b97f4a7c15ull + (hash << 6) + (hash >> 2));
 }
 
+uint64_t adapter_aware_graph_key_impl(
+    uint64_t base_key,
+    const std::vector<uint64_t>& adapter_ids) {
+  // A batch that routes entirely to the base (all ids zero) is the same graph
+  // as a non-LoRA batch, and adapter_ids is sized by the sequence count.
+  // Mixing it unconditionally would fragment the non-LoRA graph cache (the
+  // same token bucket would split by sequence count) and would also change
+  // every existing key. Only a batch that actually carries an adapter needs a
+  // route-specific key.
+  bool has_adapter = false;
+  for (const uint64_t adapter_id : adapter_ids) {
+    if (adapter_id != 0) {
+      has_adapter = true;
+      break;
+    }
+  }
+  if (!has_adapter) return base_key;
+
+  uint64_t hash = mix_graph_key(base_key, adapter_ids.size());
+  for (const uint64_t adapter_id : adapter_ids) {
+    hash = mix_graph_key(hash, adapter_id);
+  }
+  return hash;
+}
+
 // Single source for the speculative-verify base graph key: FIA refreshes
 // dynamic host parameters before every replay, so the PA-only plan class must
 // not create equivalent FIA graph variants. Capture/replay and static MTP
@@ -362,6 +387,11 @@ uint64_t get_mla_graph_key(uint32_t bucket_num_tokens,
   return kMlaGraphKeyMask | (hash & kMlaGraphKeyPayloadMask);
 }
 }  // namespace
+
+uint64_t adapter_aware_graph_key(uint64_t base_key,
+                                 const std::vector<uint64_t>& adapter_ids) {
+  return adapter_aware_graph_key_impl(base_key, adapter_ids);
+}
 
 bool AclGraph::capture(CausalLM* model,
                        const runtime::Options& options,
@@ -1704,20 +1734,26 @@ uint64_t AclGraphExecutorImpl::get_graph_key(
           ::xllm::ExecutionConfig::get_instance().enable_fia_decode());
       // State slots and accepted lengths are mutable task arguments, not
       // tensor shapes. update_graph_tasks() installs them on each replay.
-      return base_key | kSpecVerifyGraphKeyMask;
+      // LoRA routing is fixed at capture time, so it belongs in the key.
+      return adapter_aware_graph_key(base_key | kSpecVerifyGraphKeyMask,
+                                     params.adapter_ids);
     }
-    return static_cast<uint64_t>(bucket_num_tokens) | kSpecVerifyGraphKeyMask |
-           (q_max_seq_len << kSpecVerifyQMaxSeqLenShift);
+    const uint64_t base_key = static_cast<uint64_t>(bucket_num_tokens) |
+                              kSpecVerifyGraphKeyMask |
+                              (q_max_seq_len << kSpecVerifyQMaxSeqLenShift);
+    return adapter_aware_graph_key(base_key, params.adapter_ids);
   }
   if (model_->supports_mla_graph_kv_bucketing()) {
     const int32_t capture_kv_seq_len_bucket =
         get_mla_capture_kv_seq_len_bucket(params, options_);
-    return specialize_dp_ep_graph_key(
+    const uint64_t base_key = specialize_dp_ep_graph_key(
         get_mla_graph_key(bucket_num_tokens, capture_kv_seq_len_bucket),
         params);
+    return adapter_aware_graph_key(base_key, params.adapter_ids);
   }
-  return specialize_dp_ep_graph_key(static_cast<uint64_t>(bucket_num_tokens),
-                                    params);
+  const uint64_t base_key = specialize_dp_ep_graph_key(
+      static_cast<uint64_t>(bucket_num_tokens), params);
+  return adapter_aware_graph_key(base_key, params.adapter_ids);
 }
 
 }  // namespace xllm::npu

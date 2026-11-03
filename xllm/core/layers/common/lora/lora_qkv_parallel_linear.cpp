@@ -110,16 +110,16 @@ torch::Tensor LoRAQKVParallelLinearImpl::forward(torch::Tensor input) {
     return torch::cat({q_part, g_part}, /*dim=*/-1);
   };
 
-  // Legacy hardcoded path (Spike Day 5b). Kept behind lora_active_ so
-  // unit tests still work without a LoRARuntime. Real production path
-  // uses the per-request routing below.
+  // Direct hardcoded path, kept behind lora_active_ so unit tests still work
+  // without a LoRARuntime. Production requests use the per-request routing
+  // below.
   if (lora_active_ && lora_rank_ > 0) {
     auto lora_intermediate = torch::matmul(input, lora_a_.transpose(0, 1));
     auto delta = torch::matmul(lora_intermediate, lora_b_.transpose(0, 1));
     y = y + (delta * lora_scaling_).to(y.dtype());
   }
 
-  // M10 per-request per-proj real LoRA. QKV wrapper concatenates Q/K/V
+  // Per-request per-proj LoRA. QKV wrapper concatenates Q/K/V
   // deltas along the last dim to match the base's fused output.
   const auto* ctx = current_lora_context();
   if (ctx == nullptr || ctx->adapter_ids == nullptr ||
@@ -226,18 +226,17 @@ torch::Tensor LoRAQKVParallelLinearImpl::forward(torch::Tensor input) {
   //   USE_ASCENDC_LORA env is set
   //   adapter_ids.size() > 1 (single-adapter batch is the fast path above)
   //   input is on NPU
-  //   storage has a bucket for this layer AND at least one active bucket has
-  //     rank R <= 64 (the vllm-ascend bgmv_expand kernel hard-caps rank at
-  //     64; R > 64 adapters such as jingxitao r=256 fall through to the ATen
-  //     per-seq path below, which is rank-agnostic and numerically correct)
+  //   storage has a bucket for this layer AND every active bucket is in
+  //     envelope: rank R <= 64 (the vllm-ascend bgmv_expand kernel hard-caps
+  //     rank at 64) and in-dim matches. A batch with any out-of-envelope
+  //     bucket (e.g. jingxitao r=256) falls through to the ATen per-seq path
+  //     below, which is rank-agnostic and numerically correct.
   //   all tokens route to a registered adapter (base-only token -> ATen)
   //
-  // P4 fix (mixed-batch delta-drop): the original slow_path committed to the
-  // kernel path and `return y`ed unconditionally once entered, so a batch
-  // whose every bucket was R > 64 had every bucket skipped and returned base
-  // y with zero delta -- the ATen fallback was unreachable. We add an
-  // envelope pre-flight: if no active bucket across q/k/v is R <= 64, break
-  // out so control falls through to the ATen per-seq apply.
+  // Envelope pre-flight: the kernel path returns unconditionally once entered,
+  // so a batch with an unsupported bucket would otherwise omit that adapter's
+  // delta. If any active bucket across q/k/v is out of envelope, break out so
+  // control falls through to the ATen per-seq apply.
   do {
     if (std::getenv("DISABLE_ASCENDC_SPRINT_GAMMA") != nullptr) break;
     {
@@ -301,11 +300,19 @@ torch::Tensor LoRAQKVParallelLinearImpl::forward(torch::Tensor input) {
     auto per_tok_bucket = storage.bucket_lookup_dev().index_select(
         0, *ctx->adapter_ids_per_token);
 
-    // Any -1 in slot -> the batch contains a base or unregistered adapter
-    // token, which the kernel path does not handle (ATen per-seq fallback
-    // below handles it correctly). Bail to keep semantics safe.
-    auto has_neg = (per_tok_slot < 0).any().to(torch::kCPU).item<bool>();
-    if (has_neg) break;
+    // The per-token slot vector stays on the device; instead of syncing it
+    // back, reject the whole kernel path when any non-base adapter in this
+    // batch has no AscendC storage slot (registration failed or was skipped).
+    // Such an adapter would otherwise look like a base token and silently
+    // lose its delta.
+    bool all_adapters_registered = true;
+    for (auto id : adapter_ids) {
+      if (id != 0 && !storage.has_adapter(id)) {
+        all_adapters_registered = false;
+        break;
+      }
+    }
+    if (!all_adapters_registered) break;
 
     LOG_EVERY_N(INFO, 100) << "[AscendC LoRA slow_path multishape] enter aids="
                            << adapter_ids.size()
@@ -468,7 +475,8 @@ void LoRAQKVParallelLinearImpl::load_state_dict(
     const std::vector<std::string>& prefixes) {
   // Passthrough: base handles the fused q/k/v load. We do not touch the
   // LoRA A/B tensors here — those are set separately via
-  // set_lora_weights (Spike) or load_lora_state_dict (adapter manager).
+  // set_lora_weights (direct test flow) or load_lora_state_dict
+  // (adapter manager).
   base_->load_state_dict(state_dict, prefixes);
 }
 

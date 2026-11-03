@@ -1041,6 +1041,7 @@ void CompositeBlockManager::trim_prefetch_blocks(Sequence* seq,
   if (seq == nullptr) {
     return;
   }
+  PrefixCacheAdapterIdScope adapter_scope(seq->adapter_id());
   // Prefetch finalization is deliberately leaf-owned. In particular, the
   // LINEAR and SWA leaves collapse their sparse temporary vectors differently
   // from full-cache KV/C4/C128 leaves; the composite only fans out the same

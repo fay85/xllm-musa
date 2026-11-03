@@ -17,12 +17,15 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <cstdlib>
 #include <mutex>
 
 #include "lora_metrics.h"
 
 #if defined(USE_NPU)
 #include <acl/acl.h>
+
+#include "framework/lora/ascendc/ascendc_lora_storage.h"
 #endif
 
 namespace xllm {
@@ -32,13 +35,30 @@ LoRARuntime& LoRARuntime::instance() {
   return g;
 }
 
+LoRARuntime::~LoRARuntime() {
+  std::queue<LoadTask> pending;
+  {
+    std::lock_guard<std::mutex> lk(task_mu_);
+    executor_stop_.store(true);
+    pending.swap(task_queue_);
+  }
+  task_cv_.notify_all();
+  while (!pending.empty()) {
+    pending.front().result.set_value(std::nullopt);
+    pending.pop();
+  }
+  if (executor_thread_.joinable()) {
+    executor_thread_.join();
+  }
+}
+
 void LoRARuntime::init(const LoRAConfig& config) {
   {
     std::lock_guard g(materialise_mu_);
     config_ = config;
     loader_ = std::make_unique<LoRAAdapterLoader>(config_);
   }
-  // P1-A.3: bind the final-removal callback so per_proj_device_pool_ frees
+  // Bind the final-removal callback so per_proj_device_pool_ frees
   // its per-adapter tensors at the exact moment the registry drops the last
   // reference (either synchronous unregister with pin=0, or the deferred
   // unpin after a drain).
@@ -58,15 +78,16 @@ void LoRARuntime::init(const LoRAConfig& config) {
         LOG(INFO) << "[LoRARuntime] freed per_proj device pool for id="
                   << int_id << " slots=" << slot_count;
       }
-      // Also drop legacy P0-A dummy pool entry if the same int_id sits there.
+      // Also drop the whole-block dummy pool entry if the same int_id sits
+      // there.
       auto dp = device_pool_.find(int_id);
       if (dp != device_pool_.end()) {
         device_pool_.erase(dp);
       }
-      // P1 hot-swap HBM leak fix (C4 stress test 07-21): also erase the
-      // MoE expert pool. Without this, each hot-swap of a MoE-experts
-      // adapter (Qwen3-30B-A3B) accumulates ~1.6 GB per rank; ~2 churns
-      // exhaust NPU 61 GB and crash the process with PTA memory error.
+      // Erase the MoE expert pool too: otherwise each hot-swap of a
+      // MoE-experts adapter (Qwen3-30B-A3B) accumulates ~1.6 GB per rank, and
+      // ~2 churns exhaust the 61 GB NPU and crash the process with a PTA
+      // memory error.
       auto mp = moe_expert_lora_pool_.find(int_id);
       if (mp != moe_expert_lora_pool_.end()) {
         const size_t layers = mp->second.size();
@@ -78,6 +99,13 @@ void LoRARuntime::init(const LoRAConfig& config) {
     // Drop metrics bvars AFTER releasing materialise_mu_ (LoRAMetrics
     // takes its own shared_mutex; keep locks disjoint).
     LoRAMetrics::instance().remove_adapter(int_id);
+#if defined(USE_NPU)
+    // Retire the kernel slab slot after the pools are gone. New forwards stop
+    // routing here once the lookup entry is cleared; an in-flight kernel that
+    // already resolved this slot keeps reading its own data (the slab is
+    // zeroed, not freed).
+    AscendCLoRAStorage::instance().unregister_adapter(int_id);
+#endif
   });
   LOG(INFO) << "[LoRARuntime] initialised, enable=" << config_.enable_lora;
 }
@@ -94,10 +122,9 @@ void LoRARuntime::set_model_device_dtype(torch::Device device,
   LOG(INFO) << "[LoRARuntime] model registered device=" << device
             << " dtype=" << dtype;
 
-  // Path C prod v3 hot-swap: spawn the pinned executor thread here so it
-  // inherits our aclrtSetDevice state (ModelContext ctor called
-  // aclrtSetDevice(device_id) earlier on this same thread).
-  // #506 review: exchange(true) is the single test-and-set point, so two
+  // Spawn the pinned executor thread here so it inherits our aclrtSetDevice
+  // state (ModelContext ctor called aclrtSetDevice(device_id) earlier on this
+  // same thread). exchange(true) is the single test-and-set point, so two
   // concurrent callers cannot both observe false and spawn two threads.
   if (!executor_started_.exchange(true)) {
     const int32_t device_index = device.index();
@@ -108,7 +135,7 @@ void LoRARuntime::set_model_device_dtype(torch::Device device,
   }
 }
 
-// W4-A3: set the hot-swap install config so the pinned executor thread
+// Set the hot-swap install config so the pinned executor thread
 // knows whether to run per-proj-only or per-proj + moe-experts (and with
 // what TP + MoE args). Called from model ctor.
 void LoRARuntime::set_hotswap_config(const HotswapConfig& cfg) {
@@ -130,12 +157,12 @@ void LoRARuntime::executor_loop(int32_t device_index, torch::ScalarType dtype) {
   if (ret != 0) {
     LOG(ERROR) << "[LoRARuntime] executor_loop aclrtSetDevice(" << device_index
                << ") failed, err=" << ret;
-    // #506 review C1: this thread is the sole consumer of task_queue_. If it
-    // exits here, any task already enqueued (and any that races in before
-    // executor_failed_ is observed) would block forever on fut.get(). Mark
-    // the failure and drain the queue under task_mu_ so the flag flip and the
-    // drain are atomic against load_and_activate_hotswap's check-and-enqueue;
-    // fulfil every pending promise with nullopt so callers fail fast.
+    // This thread is the sole consumer of task_queue_. If it exits here, any
+    // task already enqueued (and any that races in before executor_failed_ is
+    // observed) would block forever on fut.get(). Mark the failure and drain
+    // the queue under task_mu_ so the flag flip and the drain are atomic
+    // against load_and_activate_hotswap's check-and-enqueue; fulfil every
+    // pending promise with nullopt so callers fail fast.
     std::queue<LoadTask> pending;
     {
       std::lock_guard<std::mutex> lk(task_mu_);
@@ -162,77 +189,92 @@ void LoRARuntime::executor_loop(int32_t device_index, torch::ScalarType dtype) {
       task_queue_.pop();
     }
 
-    LOG(INFO) << "[LoRARuntime] executor picked up task name='" << task.name
-              << "'";
-    torch::Device dev(torch::kPrivateUse1, device_index);
+    try {
+      LOG(INFO) << "[LoRARuntime] executor picked up task name='" << task.name
+                << "'";
+      torch::Device dev(torch::kPrivateUse1, device_index);
 
-    // W4-A3: read hotswap config, prefer per-proj (+ optional moe experts)
-    // install. Fall back to whole-block install if config not set (legacy
-    // Path C prod v3 path).
-    HotswapConfig cfg;
-    bool have_cfg = false;
-    {
-      std::lock_guard<std::mutex> lk(materialise_mu_);
-      cfg = hotswap_config_;
-      have_cfg = hotswap_config_set_;
-    }
-
-    std::optional<uint64_t> id_opt;
-    if (have_cfg && cfg.install_per_proj) {
-      id_opt = install_static_adapter_on_device_per_proj(task.name,
-                                                         task.path,
-                                                         task.base_model_name,
-                                                         dev,
-                                                         dtype,
-                                                         cfg.tp,
-                                                         task.forced_int_id);
-      if (id_opt.has_value()) {
-        LOG(INFO) << "[LoRARuntime] hot-swap per-proj installed '" << task.name
-                  << "' id=" << *id_opt;
-      } else {
-        LOG(WARNING) << "[LoRARuntime] hot-swap per-proj install returned "
-                     << "nullopt for '" << task.name
-                     << "'; MoE-only adapters can still succeed via next step";
+      // Read the hotswap config: prefer the per-proj installer (+ optional
+      // MoE experts), falling back to the whole-block installer when no
+      // config was set.
+      HotswapConfig cfg;
+      bool have_cfg = false;
+      {
+        std::lock_guard<std::mutex> lk(materialise_mu_);
+        cfg = hotswap_config_;
+        have_cfg = hotswap_config_set_;
       }
-      // MoE experts install: shares int_id with per-proj via registry
-      // idempotency. Real MoE fine-tuned adapters have both attn (per-proj)
-      // and experts tensors; attn-only adapters are handled by per-proj only.
-      if (cfg.install_moe_experts) {
-        auto moe_id =
-            install_static_adapter_on_moe_experts(task.name,
+
+      std::optional<uint64_t> id_opt;
+      if (have_cfg && cfg.install_per_proj) {
+        id_opt = install_static_adapter_on_device_per_proj(task.name,
+                                                           task.path,
+                                                           task.base_model_name,
+                                                           dev,
+                                                           dtype,
+                                                           cfg.tp,
+                                                           task.forced_int_id);
+        if (id_opt.has_value()) {
+          LOG(INFO) << "[LoRARuntime] hot-swap per-proj installed '"
+                    << task.name << "' id=" << *id_opt;
+        } else {
+          LOG(WARNING)
+              << "[LoRARuntime] hot-swap per-proj install returned "
+              << "nullopt for '" << task.name
+              << "'; MoE-only adapters can still succeed via next step";
+        }
+        // MoE experts install: shares int_id with per-proj via registry
+        // idempotency. Real MoE fine-tuned adapters have both attn (per-proj)
+        // and experts tensors; attn-only adapters are handled by per-proj only.
+        if (cfg.install_moe_experts) {
+          auto moe_id =
+              install_static_adapter_on_moe_experts(task.name,
+                                                    task.path,
+                                                    task.base_model_name,
+                                                    dev,
+                                                    dtype,
+                                                    cfg.tp,
+                                                    cfg.num_experts_total,
+                                                    cfg.num_experts_per_rank,
+                                                    cfg.start_expert_id,
+                                                    cfg.moe_intermediate_size,
+                                                    task.forced_int_id);
+          if (moe_id.has_value()) {
+            LOG(INFO) << "[LoRARuntime] hot-swap MoE-experts installed '"
+                      << task.name << "' id=" << *moe_id;
+            // If per-proj skipped (e.g. attn-only refused because adapter
+            // contains only experts), surface moe id as the result.
+            if (!id_opt.has_value()) id_opt = moe_id;
+          }
+        }
+      } else {
+        id_opt = install_static_adapter_on_device(task.name,
                                                   task.path,
                                                   task.base_model_name,
                                                   dev,
                                                   dtype,
-                                                  cfg.tp,
-                                                  cfg.num_experts_total,
-                                                  cfg.num_experts_per_rank,
-                                                  cfg.start_expert_id,
-                                                  cfg.moe_intermediate_size,
                                                   task.forced_int_id);
-        if (moe_id.has_value()) {
-          LOG(INFO) << "[LoRARuntime] hot-swap MoE-experts installed '"
-                    << task.name << "' id=" << *moe_id;
-          // If per-proj skipped (e.g. attn-only refused because adapter
-          // contains only experts), surface moe id as the result.
-          if (!id_opt.has_value()) id_opt = moe_id;
+      }
+      // Keep observability failures from changing the load result or escaping
+      // the executor thread after an adapter was installed successfully.
+      if (id_opt.has_value()) {
+        try {
+          LoRAMetrics::instance().set_state(*id_opt, 1);
+        } catch (const std::exception& e) {
+          LOG(ERROR)
+              << "[LoRARuntime] failed to update active-state metric for '"
+              << task.name << "': " << e.what();
         }
       }
-    } else {
-      id_opt = install_static_adapter_on_device(task.name,
-                                                task.path,
-                                                task.base_model_name,
-                                                dev,
-                                                dtype,
-                                                task.forced_int_id);
-    }
-    task.result.set_value(id_opt);
-    // #506 review: converge the active-state transition here -- the single
-    // point every successful install path (per-proj, MoE-experts, whole-
-    // block fallback) flows through -- instead of per-installer call sites,
-    // so MoE-only and whole-block adapters do not stay at state 0.
-    if (id_opt.has_value()) {
-      LoRAMetrics::instance().set_state(*id_opt, 1);
+      task.result.set_value(id_opt);
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "[LoRARuntime] hot-swap task failed for '" << task.name
+                 << "': " << e.what();
+      task.result.set_value(std::nullopt);
+    } catch (...) {
+      LOG(ERROR) << "[LoRARuntime] hot-swap task failed for '" << task.name
+                 << "' with an unknown exception";
+      task.result.set_value(std::nullopt);
     }
   }
 
@@ -264,13 +306,18 @@ std::optional<uint64_t> LoRARuntime::load_and_activate_hotswap(
 
   {
     std::lock_guard<std::mutex> lk(task_mu_);
-    // #506 review C1: check-and-enqueue under task_mu_ so it is serialized
-    // against executor_loop's failure drain (which sets executor_failed_ and
-    // empties the queue under the same lock). Without this a task enqueued
-    // after the drain would wait on fut.get() forever.
+    // Check-and-enqueue under task_mu_ so it is serialized against
+    // executor_loop's failure drain (which sets executor_failed_ and empties
+    // the queue under the same lock). Without this a task enqueued after the
+    // drain would wait on fut.get() forever.
     if (executor_failed_.load()) {
       LOG(ERROR) << "[LoRARuntime] executor thread failed to start; refuse "
                     "hot-swap for '"
+                 << lora_name << "'";
+      return std::nullopt;
+    }
+    if (executor_stop_.load()) {
+      LOG(ERROR) << "[LoRARuntime] executor is stopping; refuse hot-swap for '"
                  << lora_name << "'";
       return std::nullopt;
     }
@@ -289,11 +336,11 @@ bool LoRARuntime::pick_whole_block_ab(const LoRAAdapter& adapter,
                                       torch::ScalarType dtype,
                                       torch::Tensor* A_out,
                                       torch::Tensor* B_out) const {
-  // Path C is a *whole-decoder-block* delta -- one A/B for the whole
-  // model. A real PEFT adapter has A/B per (layer, module). For MVP we
-  // pick a first (module, layer=0) pair whose shapes match [rank, hidden]
-  // / [hidden, rank] and treat that as the model-level delta. Real
-  // per-proj / per-layer routing is P0-C.
+  // Whole-block delta: one A/B pair for the entire model. A real PEFT adapter
+  // carries A/B per (layer, module); this fallback picks a first pair whose
+  // shapes match [rank, hidden] / [hidden, rank] and treats it as the
+  // model-level delta. It is only used when the per-proj installer is not
+  // configured.
   //
   // Preference order: q_proj > gate_proj > any first pair.
   static const std::vector<std::string> kPreferSubstr = {
@@ -331,10 +378,9 @@ bool LoRARuntime::pick_whole_block_ab(const LoRAAdapter& adapter,
     }
   }
 
-  // PICK_NO_CAST_APPLIED: skipping in-place .to(dtype) here — safetensors
-  // mmap tensor + torch::to on CPU crashes torch_npu's opapi allocator on
-  // ctor thread. Callers (install_static / load_and_activate) do their
-  // own clone + cast now.
+  // Do not cast in place here: .to(dtype) on a safetensors mmap tensor
+  // crashes torch_npu's opapi allocator on the ctor thread. Callers clone the
+  // tensor first and then cast.
   return true;
 }
 
@@ -425,21 +471,16 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_device(
             << " B=" << B_cpu.sizes() << " A.dtype=" << A_cpu.dtype()
             << " A.device=" << A_cpu.device();
 
-  // KEY DIFFERENCE vs load_and_activate: perform the CPU->NPU migration
-  // on this thread, which is the model ctor thread and thus has a valid
-  // NPU context (V60 experiment 2026-07-06 confirmed).
-  // STATIC_TO_CLONE_APPLIED: safetensors-loaded tensors have mmap backing
-  // that crashes torch_npu's opapi copy from ctor thread. Clone to a fresh
-  // cpu allocator buffer, then .to(device).
+  // Migrate on this thread: it is the model ctor thread and therefore has a
+  // valid NPU context.
+  //
+  // Safetensors tensors are mmap-backed, and both .to(dtype) and .clone() on
+  // them crash torch_npu's opapi copy when issued from the ctor thread.
+  // Materialize into a fresh heap tensor with torch::empty + copy_; .to(device)
+  // then proceeds.
   LOG(INFO) << "[LoRARuntime] static preload '" << lora_name
             << "' A_cpu.dtype=" << A_cpu.dtype() << " sizes=" << A_cpu.sizes()
             << " storage=" << A_cpu.storage().nbytes() << "B";
-  // DIRECT_TO_APPLIED: even .clone() crashes on safetensors mmap tensors on
-  // ctor thread. Try single-step .to(device, dtype).
-  //
-  // Strategy: build a fresh CPU tensor via torch::empty (same allocator as
-  // V60 randn) and copy_ from mmap tensor - this materializes into normal
-  // heap. Then .to(device) proceeds.
   torch::Tensor A_dev, B_dev;
   try {
     LOG(INFO) << "[LoRARuntime] materializing A_cpu via torch::empty+copy_";
@@ -486,13 +527,11 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_device(
   return id_opt;
 }
 
-// TP-aware overload. For the current whole-block delta path we don't
-// actually shard the A/B tensors -- every rank keeps the full copy and
-// runs the delta locally on its own slice of h (which atb has already
-// all_reduce'd back to full hidden by the time we get here). The
-// TPInfo is stored on the resulting ActiveDelta so downstream code
-// (and future M10 per-proj work) can see it, but for now the code
-// path is identical to the non-TP overload.
+// TP-aware overload. The whole-block delta path does not shard A/B: every
+// rank keeps the full copy and runs the delta locally on its own slice of h
+// (which atb has already all_reduce'd back to full hidden by the time we get
+// here). The TPInfo is stored on the resulting ActiveDelta for per-proj
+// consumers; the code path is otherwise identical to the non-TP overload.
 std::optional<uint64_t> LoRARuntime::install_static_adapter_on_device(
     const std::string& lora_name,
     const std::string& lora_path,
@@ -505,7 +544,7 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_device(
     LOG(WARNING) << "[LoRARuntime] TP shard skeleton engaged (tp_size="
                  << tp.tp_size << " tp_rank=" << tp.tp_rank
                  << ") but whole-block delta ignores it -- delta stays "
-                    "kReplicated. Per-proj sharding is P1 (M10).";
+                    "kReplicated.";
   }
   auto id = install_static_adapter_on_device(
       lora_name, lora_path, base_model_name, device, dtype, forced_int_id);
@@ -576,7 +615,7 @@ std::optional<LoRARuntime::ActiveDelta> LoRARuntime::get_delta_by_int_id(
   return it->second;
 }
 
-// M10 per-proj installer. Loads full adapter, then walks every tensor in
+// Per-proj installer. Loads full adapter, then walks every tensor in
 // adapter.tensors (canonicalized keys like "layers.5.self_attn.q_proj#A"),
 // parses (layer_index, proj_name), .to(device), and populates the pool.
 std::optional<uint64_t> LoRARuntime::install_static_adapter_on_device_per_proj(
@@ -597,15 +636,15 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_device_per_proj(
     return std::nullopt;
   }
 
-  // Phase A W1 A1.3: idempotent guard BEFORE the disk load (#506 review --
-  // checking after loader_->load still paid the full safetensors read on
-  // reload). Same name+path callers resolve through the registry first;
-  // a pool hit means the adapter is already materialised.
+  // Idempotent guard before the disk load: checking after loader_->load()
+  // still paid the full safetensors read on reload. Callers that install the
+  // same name+path resolve through the registry first; a pool hit means the
+  // adapter is already materialised.
   //
-  // #506 review C2: resolve the registry id OUTSIDE materialise_mu_. Holding
-  // materialise_mu_ while calling registry_.lookup() (which takes the registry
-  // lock) establishes the order materialise_mu_ -> registry_mu_, while the
-  // unload path holds registry_mu_ and fires on_final_removal_ which takes
+  // Resolve the registry id OUTSIDE materialise_mu_. Holding materialise_mu_
+  // while calling registry_.lookup() (which takes the registry lock)
+  // establishes the order materialise_mu_ -> registry_mu_, while the unload
+  // path holds registry_mu_ and fires on_final_removal_, which takes
   // materialise_mu_ (registry_mu_ -> materialise_mu_). Those opposite orders
   // deadlock. Looking up first, then entering materialise_mu_ only for the
   // pool check, keeps the two locks from ever nesting in conflicting orders.
@@ -624,10 +663,6 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_device_per_proj(
       lora_name, /*int_id=*/forced_int_id, lora_path, base_model_name};
   auto adapter_opt = loader_->load(req);
   if (!adapter_opt) return std::nullopt;
-
-  const auto id_opt = registry_.register_adapter(req);
-  if (!id_opt) return std::nullopt;
-  const uint64_t int_id = *id_opt;
 
   // Parse canonical keys "layers.{L}.{module_path}.{proj}#A|#B" into
   // (layer_index, proj_name) and pair the A/B tensors up.
@@ -730,18 +765,19 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_device_per_proj(
   }
 
   // Materialize each (A, B) pair on device.
-  int32_t installed = 0, skipped = 0;
+  int32_t installed = 0;
   std::unordered_map<ProjKey, ProjDelta, ProjKeyHash> per_proj;
   for (auto& [pk, ab] : pairs) {
     if (!ab.first.defined() || !ab.second.defined()) {
-      ++skipped;
-      continue;
+      LOG(ERROR) << "[LoRARuntime] incomplete A/B pair for '" << lora_name
+                 << "' at layer=" << pk.layer_index << " proj=" << pk.proj_name;
+      return std::nullopt;
     }
     torch::Tensor A_cpu = ab.first;
     torch::Tensor B_cpu = ab.second;
 
     // TP-shard skeleton: for now we keep A/B replicated (whole hidden).
-    // Per-proj Column/Row sharding is a P1 optimization; the current
+    // Per-proj Column/Row sharding is not implemented yet; the current
     // ATB backend doesn't run per-proj anyway.
     (void)tp;
 
@@ -754,8 +790,7 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_device_per_proj(
       LOG(ERROR) << "[LoRARuntime] per-proj .to(device) failed for '"
                  << lora_name << "' key=layers." << pk.layer_index << "."
                  << pk.proj_name << ": " << e.what();
-      ++skipped;
-      continue;
+      return std::nullopt;
     }
 
     ProjDelta pd;
@@ -767,15 +802,58 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_device_per_proj(
     ++installed;
   }
 
+  if (per_proj.empty()) {
+    LOG(ERROR) << "[LoRARuntime] no usable per-proj weights for '" << lora_name
+               << "'";
+    return std::nullopt;
+  }
+  // Publish the name only after every requested projection is materialized.
+  const auto id_opt = registry_.register_adapter(req);
+  if (!id_opt) return std::nullopt;
+  const uint64_t int_id = *id_opt;
+
   {
     std::lock_guard g(materialise_mu_);
     per_proj_device_pool_[int_id] = std::move(per_proj);
   }
+#if defined(USE_NPU)
+  // Publish the adapter into the kernel-side slab so the AscendC slow path can
+  // dispatch it. Registration failure (bucket full, shape mismatch) is not
+  // fatal: the wrappers check AscendCLoRAStorage::has_adapter() on the host
+  // side and take the ATen fallback for that adapter. A partial registration
+  // is rolled back as a whole so the adapter is never half-dispatchable.
+  if (std::getenv("USE_ASCENDC_LORA") != nullptr &&
+      std::getenv("DISABLE_ASCENDC_SPRINT_GAMMA") == nullptr) {
+    auto& storage = AscendCLoRAStorage::instance();
+    bool registered_all = true;
+    {
+      std::lock_guard g(materialise_mu_);
+      auto it = per_proj_device_pool_.find(int_id);
+      if (it != per_proj_device_pool_.end()) {
+        for (const auto& [key, pd] : it->second) {
+          if (storage.register_adapter(int_id,
+                                       key.layer_index,
+                                       key.proj_name,
+                                       pd.A,
+                                       pd.B,
+                                       pd.scaling) < 0) {
+            registered_all = false;
+            break;
+          }
+        }
+      }
+    }
+    if (!registered_all) {
+      storage.unregister_adapter(int_id);
+      LOG(WARNING) << "[LoRARuntime] AscendC registration incomplete for id="
+                   << int_id << "; the adapter stays on the ATen path";
+    }
+  }
+#endif
   LOG(INFO) << "[LoRARuntime] installed per-proj adapter '" << lora_name
             << "' id=" << int_id << " slots=" << installed
-            << " skipped=" << skipped << " r=" << adapter_opt->r
-            << " scaling=" << adapter_opt->scaling;
-  // P1-D: adapter is now active on device.
+            << " r=" << adapter_opt->r << " scaling=" << adapter_opt->scaling;
+  // Adapter is now active on device.
   LoRAMetrics::instance().set_state(int_id, 1);
   LoRAMetrics::instance().set_device_slots(int_id, installed);
   return int_id;
@@ -793,12 +871,12 @@ std::optional<LoRARuntime::ProjDelta> LoRARuntime::get_per_proj_delta(
   if (pit == it->second.end()) return std::nullopt;
   // Copy under the lock: the tensors are refcounted handles, so the returned
   // value keeps the device storage alive even if unload erases the pool entry
-  // right after we release materialise_mu_ (#506 review C3).
+  // right after we release materialise_mu_.
   return pit->second;
 }
 
 // ---------------------------------------------------------------------
-// Day 1 Phase 1: MoE expert LoRA install path.
+// MoE expert LoRA install path.
 // ---------------------------------------------------------------------
 //
 // Parses adapter tensors keyed like
@@ -917,10 +995,10 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_moe_experts(
   }
   const uint64_t int_id = *id_opt;
 
-  // Phase A W1 A1.3: idempotent guard. If this int_id already has MoE experts
-  // installed, skip the expensive re-load. Same name+path caller (via
-  // register_adapter idempotency) sees the pool intact; genuine re-load
-  // requires unload first.
+  // Idempotent guard. If this int_id already has MoE experts installed, skip
+  // the expensive re-load. The same name+path caller (via register_adapter
+  // idempotency) sees the pool intact; a genuine re-load requires an unload
+  // first.
   {
     std::lock_guard g(materialise_mu_);
     if (moe_expert_lora_pool_.count(int_id) > 0) {
@@ -956,13 +1034,13 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_moe_experts(
   }
 
   if (by_layer_proj.empty()) {
-    // #506 review P1: distinguish a legitimate empty (the adapter carries no
-    // expert tensors at all -- e.g. an attn-only adapter that was routed here)
-    // from a real failure (the adapter HAS expert tensors but none landed in
-    // this rank's expert range while this rank is supposed to own some). The
-    // latter is a mis-configured expert range: returning success would leave
-    // this rank's MoE experts silently running on base weights with no signal
-    // for the caller to roll back.
+    // Distinguish a legitimate empty (the adapter carries no expert tensors at
+    // all -- e.g. an attn-only adapter that was routed here) from a real
+    // failure (the adapter HAS expert tensors but none landed in this rank's
+    // expert range while this rank is supposed to own some). The latter is a
+    // mis-configured expert range: returning success would leave this rank's
+    // MoE experts silently running on base weights with no signal for the
+    // caller to roll back.
     if (total_expert_tensors > 0 && num_experts_per_rank > 0) {
       LOG(ERROR) << "[LoRARuntime] MoE install '" << lora_name
                  << "': adapter has " << total_expert_tensors
@@ -985,11 +1063,11 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_moe_experts(
   const int32_t tp_rank = std::max(0, tp.tp_rank);
   const int32_t local_intermediate = intermediate_size / tp_world;
 
-  // #506 review P1: a slot whose expert-tensor count does not match this
-  // rank's quota is a real partial load, not something to silently drop.
-  // stack_experts flips this flag; after the layer loop we refuse the whole
-  // install (nullopt) so the caller rolls back instead of registering an
-  // adapter whose MoE experts are half-materialised.
+  // A slot whose expert-tensor count does not match this rank's quota is a
+  // real partial load, not something to silently drop. stack_experts flips
+  // this flag; after the layer loop we refuse the whole install (nullopt) so
+  // the caller rolls back instead of registering an adapter whose MoE experts
+  // are half-materialised.
   bool slot_count_mismatch = false;
 
   auto stack_experts = [&](const std::vector<Slot>& slots,
@@ -1120,10 +1198,10 @@ std::optional<uint64_t> LoRARuntime::install_static_adapter_on_moe_experts(
     }
   }
 
-  // #506 review P1: a partial expert load (a slot with the wrong tensor
-  // count) must not register as a successful adapter. Refuse before touching
-  // the pool so the caller's rollback path runs instead of silently serving
-  // half-materialised MoE experts on base weights.
+  // A partial expert load (a slot with the wrong tensor count) must not
+  // register as a successful adapter. Refuse before touching the pool so the
+  // caller's rollback path runs instead of silently serving half-materialised
+  // MoE experts on base weights.
   if (slot_count_mismatch) {
     LOG(ERROR) << "[LoRARuntime] MoE install '" << lora_name
                << "' id=" << int_id
@@ -1155,7 +1233,7 @@ std::optional<LoRARuntime::MoeExpertDelta> LoRARuntime::get_moe_expert_delta(
   if (it == moe_expert_lora_pool_.end()) return std::nullopt;
   auto lit = it->second.find(layer_index);
   if (lit == it->second.end()) return std::nullopt;
-  // Copy under the lock (see get_per_proj_delta, #506 review C3).
+  // Copy under the lock (see get_per_proj_delta).
   return lit->second;
 }
 

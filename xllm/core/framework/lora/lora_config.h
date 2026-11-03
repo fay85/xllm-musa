@@ -27,7 +27,7 @@ namespace xllm {
 // ---------------------------------------------------------------------------
 // LoRA runtime configuration.
 //
-// Mirrors the vLLM CLI surface (see reference_multilora_engines memory) so
+// Mirrors the vLLM CLI surface so
 // the same launch flags work on business gateways that already integrate
 // with vLLM.
 //
@@ -78,6 +78,17 @@ struct LoRAConfig {
   // false, only the static --lora-modules set is served.
   bool allow_runtime_lora_updating = true;
 
+  // Adapter-affinity batching. The scheduler keeps the number of distinct
+  // adapter ids in a decode batch at or below max_loras_per_batch, so
+  // requests that would push the batch onto the mixed-adapter slow path are
+  // deferred. Set it equal to max_loras to disable gating (strict FIFO); set
+  // it to 1 for strict affinity (pure fast path).
+  int32_t max_loras_per_batch = 16;
+
+  // Wall-clock milliseconds a request may wait before the affinity gate
+  // force-admits it, accepting one mixed-adapter step. 0 disables deferral.
+  int32_t lora_drain_wait_thresh = 200;
+
   // Parse the raw --lora-modules CLI value ("name1=path1,name2=path2") into
   // the vector form. Bad tokens are logged and skipped.
   static std::vector<std::pair<std::string, std::string>> parse_modules(
@@ -93,6 +104,8 @@ struct LoRAConfig {
 // stays consistent with the rest of xllm.
 DECLARE_bool(enable_lora);
 DECLARE_int32(max_loras);
+DECLARE_int32(max_loras_per_batch);
+DECLARE_int32(lora_drain_wait_thresh);
 DECLARE_int32(max_cpu_loras);
 DECLARE_int32(max_lora_rank);
 DECLARE_string(lora_target_modules);

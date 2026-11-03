@@ -357,8 +357,8 @@ class Qwen3HybridForCausalLMImplBase : public torch::nn::Module {
  public:
   explicit Qwen3HybridForCausalLMImplBase(const ModelContext& context) {
     // Arm the LoRA hot-swap executor before any module builds so
-    // /v1/load_lora_adapter works from the first request (#506 review
-    // finding: init alone leaves the executor dead). No-op when disabled.
+    // /v1/load_lora_adapter works from the first request: init alone leaves
+    // the executor dead. No-op when disabled.
     bootstrap_lora_runtime(context);
     tie_word_embeddings_ = context.get_model_args().tie_word_embeddings();
     lm_head_ = register_module("lm_head", layer::LmHead(context));

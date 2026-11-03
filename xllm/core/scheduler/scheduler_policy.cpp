@@ -31,6 +31,8 @@ limitations under the License.
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "framework/batch/batch_factory.h"
+#include "framework/lora/lora_config.h"
+#include "framework/lora/lora_metrics.h"
 #include "framework/model/model_args.h"
 #include "framework/request/priority_comparator.h"
 #include "util/timer.h"
@@ -949,12 +951,51 @@ void SchedulerPolicy::schedule_decode_from_queue(RequestPriorityQueue* queue,
     return;
   }
 
+  // Adapter-affinity gate, rebuilt per tick so flag changes apply immediately.
+  AffinityGate gate;
+  gate.enabled =
+      FLAGS_enable_lora && FLAGS_max_loras_per_batch < FLAGS_max_loras;
+  gate.K = FLAGS_max_loras_per_batch;
+  gate.max_wait_ms = FLAGS_lora_drain_wait_thresh;
+  std::vector<std::shared_ptr<Request>> deferred;
+  // Put deferred requests back on every exit path (the loop below has early
+  // returns); the priority queue re-heapifies on push, so order is preserved.
+  struct DeferredRestore {
+    RequestPriorityQueue* queue;
+    std::vector<std::shared_ptr<Request>>* deferred;
+    ~DeferredRestore() {
+      for (auto& r : *deferred) queue->push(r);
+    }
+  } deferred_restore{queue, &deferred};
+
   while (!queue->empty() &&
          budget.remaining_token_budget >
              static_cast<size_t>(state.min_speculative_tokens_required) &&
          budget.latency_budget > budget.estimate_latency &&
          budget.remaining_seq_budget > 0) {
     std::shared_ptr<Request> request = queue->top();
+
+    // Adapter-affinity gate: skip requests that would over-diversify the
+    // batch. The wait is bounded by wall-clock age, so a request cannot be
+    // deferred forever.
+    if (gate.enabled) {
+      const uint64_t aid =
+          !request->sequences().empty() && request->sequences()[0]
+              ? request->sequences()[0]->adapter_id()
+              : 0;
+      request->set_elapsed_time_ms();
+      const AffinityGate::Decision decision =
+          gate.decide(aid, request->get_elapsed_time_ms());
+      if (decision == AffinityGate::DEFER) {
+        queue->pop_top();
+        deferred.emplace_back(request);
+        LoRAMetrics::instance().inc_affinity_deferred("deferred");
+        continue;
+      }
+      if (decision == AffinityGate::FORCE_ADMIT) {
+        LoRAMetrics::instance().inc_affinity_deferred("forced_admit");
+      }
+    }
 
     const size_t num_sequences = request->sequences().size();
     std::vector<Sequence*> candidate_sequences;
@@ -1134,6 +1175,13 @@ void SchedulerPolicy::schedule_decode_from_queue(RequestPriorityQueue* queue,
       request->record_first_batched_time();
       request->mark_first_scheduled(state.scheduled_timestamp);
       state.running_requests.emplace_back(request);
+      if (gate.enabled) {
+        const uint64_t admitted_aid =
+            !request->sequences().empty() && request->sequences()[0]
+                ? request->sequences()[0]->adapter_id()
+                : 0;
+        gate.record_admit(admitted_aid);
+      }
       state.running_sequences.insert(state.running_sequences.end(),
                                      candidate_sequences.begin(),
                                      candidate_sequences.end());
@@ -1149,6 +1197,16 @@ void SchedulerPolicy::schedule_decode_from_queue(RequestPriorityQueue* queue,
 
     // Budget exhausted: partial schedule or fail.
     if (!has_enough_budget) {
+      // handle_abnormal_decode_request commits a partial schedule when
+      // candidate sequences exist; count that request as admitted.
+      if (gate.enabled && !candidate_sequences.empty() &&
+          !request->check_beam_search()) {
+        const uint64_t admitted_aid =
+            !request->sequences().empty() && request->sequences()[0]
+                ? request->sequences()[0]->adapter_id()
+                : 0;
+        gate.record_admit(admitted_aid);
+      }
       handle_abnormal_decode_request(queue,
                                      state,
                                      budget,
@@ -1197,6 +1255,14 @@ void SchedulerPolicy::schedule_decode_from_queue(RequestPriorityQueue* queue,
     }
 
     // Cannot preempt or single request left.
+    if (gate.enabled && !candidate_sequences.empty() &&
+        !request->check_beam_search()) {
+      const uint64_t admitted_aid =
+          !request->sequences().empty() && request->sequences()[0]
+              ? request->sequences()[0]->adapter_id()
+              : 0;
+      gate.record_admit(admitted_aid);
+    }
     handle_abnormal_decode_request(queue,
                                    state,
                                    budget,
@@ -1208,6 +1274,12 @@ void SchedulerPolicy::schedule_decode_from_queue(RequestPriorityQueue* queue,
                                    allocated_estimate_latency,
                                    /*budget_exhausted=*/false);
     break;
+  }
+
+  // gate.size() is the number of distinct adapters admitted in this batch.
+  if (gate.enabled) {
+    LoRAMetrics::instance().observe_batch_lora(gate.size(),
+                                               state.running_sequences.size());
   }
 }
 

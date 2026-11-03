@@ -26,6 +26,7 @@ cc_library(
   DEPS
     :config
     :request
+    :request_timing
     :runtime
     :common
     :mposition

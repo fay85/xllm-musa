@@ -29,7 +29,7 @@ namespace xllm {
 // model's device / dtype so /v1/load_lora_adapter knows where to place
 // weights, and set_model_device_dtype also spawns the pinned executor
 // thread that owns the NPU context -- without it every dynamic load fails
-// with "executor not started" (#506 review finding). The hot-swap install
+// with "executor not started". The hot-swap install
 // config passes the TP / MoE shape the executor needs to pick between the
 // per-proj and MoE-experts installers.
 //
@@ -52,7 +52,16 @@ inline void bootstrap_lora_runtime(const ModelContext& context) {
   const ParallelArgs& parallel_args = context.get_parallel_args();
 
   LoRARuntime::HotswapConfig cfg;
-  cfg.tp = TPInfo{parallel_args.tp_size(), parallel_args.rank()};
+  const int32_t tp_size = std::max<int32_t>(1, parallel_args.tp_size());
+  const int32_t tp_rank = parallel_args.tp_group_ != nullptr
+                              ? parallel_args.tp_group_->rank()
+                              : parallel_args.rank() % tp_size;
+  if (parallel_args.tp_group_ == nullptr && tp_size > 1) {
+    LOG(WARNING) << "[LoRA bootstrap] tp_group is unavailable; assuming TP "
+                    "rank "
+                 << tp_rank << " from global rank " << parallel_args.rank();
+  }
+  cfg.tp = TPInfo{tp_size, tp_rank};
   cfg.install_per_proj = true;
   // MoE discriminator: only MoE checkpoints carry activated experts, so a
   // positive num_experts_per_tok is the reliable "is MoE" probe. Dense

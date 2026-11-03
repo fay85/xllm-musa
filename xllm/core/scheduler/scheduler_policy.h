@@ -15,6 +15,7 @@ limitations under the License.
 
 #pragma once
 
+#include <absl/container/flat_hash_set.h>
 #include <folly/MPMCQueue.h>
 
 #include <cstdint>
@@ -258,6 +259,31 @@ class SchedulerPolicy {
                              const std::vector<size_t>& token_budgets,
                              SchedulerState& state);
   void clear_mtp_bootstrap(Request* request, const SchedulerState& state);
+
+  // Adapter-affinity gate for decode batches. Tracks the distinct adapter
+  // ids admitted in the batch under construction (base=0 occupies a slot too)
+  // and defers requests that would push the batch past K distinct adapters.
+  // The fast forward path needs one non-zero adapter and no base mixed in, so
+  // K=1 keeps the batch strictly on it; K>=2 admits mixed batches (slow
+  // path) as a capacity release valve. Anti-starvation is wall-clock based:
+  // a request whose age exceeds max_wait_ms is force-admitted.
+  struct AffinityGate {
+    enum Decision { ADMIT, DEFER, FORCE_ADMIT };
+    absl::flat_hash_set<uint64_t> active_ids;
+    int32_t K = 1;
+    int32_t max_wait_ms = 200;
+    bool enabled = false;
+
+    Decision decide(uint64_t aid, int32_t elapsed_ms) const {
+      if (!enabled) return ADMIT;
+      if (active_ids.contains(aid)) return ADMIT;
+      if (static_cast<int32_t>(active_ids.size()) < K) return ADMIT;
+      if (elapsed_ms >= max_wait_ms) return FORCE_ADMIT;
+      return DEFER;
+    }
+    void record_admit(uint64_t aid) { active_ids.insert(aid); }
+    size_t size() const { return active_ids.size(); }
+  };
 
   BatchMode batch_mode_;
   const ContinuousScheduler::Options& options_;

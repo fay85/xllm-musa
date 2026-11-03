@@ -2,26 +2,23 @@
  * Copyright (c) 2026 xllm authors.
  * SPDX-License-Identifier: Apache-2.0
  *
- * AscendC LoRA kernel bindings (Commit B scope: bgmv decode path only).
- * sgmv variants (prefill) reserved for Phase 2.
- * Backend: vllm-ascend libvllm_ascend_kernels.so dlopen'd at first call.
- * Dispatcher (torch.ops._C_xllm_lora) registration is Commit A known issue
- * (orphan singleton under -Wl,-Bsymbolic); slow_path bypasses via direct
- * C++ call.
+ * AscendC LoRA kernel bindings for the bgmv decode path. sgmv variants
+ * (prefill) are not implemented.
+ * Backend: vllm-ascend libvllm_ascend_kernels.so, dlopen'd on first call.
+ * The torch dispatcher registration path (torch.ops._C_xllm_lora) is unusable
+ * here -- an orphan singleton under -Wl,-Bsymbolic -- so the slow path calls
+ * the C++ wrappers directly.
  *
  * Header exposing the four AscendC LoRA kernel op wrappers defined in
  * xllm_lora_ascendc_binding.cpp for direct C++ callers. This avoids the
  * torch dispatcher registration path, which is affected by the
  * xllm/pybind/CMakeLists.txt:28 `-Wl,-Bsymbolic` link flag (needed for
  * ffmpeg neon PIC linking) that stops TORCH_LIBRARY static registration
- * from reaching the process-wide c10::Dispatcher singleton — see the
- * xllm-ascendc-bgmv-feasibility-2026-08-26 memory (sprint 08-27 lesson
- * 11).
+ * from reaching the process-wide c10::Dispatcher singleton.
  *
  * The wrappers themselves are unchanged; they still dlopen
  * libvllm_ascend_kernels.so on first call, forward to the mangled
- * `vllm_ascend::*_impl` symbols with argtypes verified via the ctypes PoC
- * (Phase 0, 4/4 kernel PASS).
+ * `vllm_ascend::*_impl` symbols with argtypes matching the exported symbols.
  */
 #pragma once
 

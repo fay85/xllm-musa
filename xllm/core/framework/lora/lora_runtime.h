@@ -35,25 +35,19 @@ limitations under the License.
 namespace xllm {
 
 // LoRARuntime is the process-global singleton that ties the LoRA modules
-// together for the model forward path. It is deliberately narrow-featured
-// so P0-A can end-to-end demonstrate load-via-API without waiting on M4
-// (LoraCache) or M8 (Scheduler).
+// together for the model forward path: the adapter registry, the per-layer
+// routing context, and the device-resident A/B pools.
 //
-// Concretely:
-//   - A single model-level dummy A/B pair (Path C semantics) can be
-//     dynamically installed by loading an adapter.
-//   - The A/B tensors are moved to the model's inference device once at
-//     load time; there is no eviction / hot-swap yet.
-//   - forward() paths call `active_delta()` and, if it returns a valid
-//     value, use those tensors as the whole-block LoRA delta.
+// The forward path calls get_per_proj_delta() for the (int_id, layer, proj)
+// it is executing; a null result means the adapter contributes no delta
+// there and the layer keeps its base output.
 //
-// Multi-tenant, per-request routing is P0-B / P0-C work. This singleton
-// only holds "the currently applied adapter" -- the last one loaded wins.
-// That's enough to prove the full end-to-end HTTP -> loader -> registry ->
-// forward path from a single curl call.
-// Path C prod v3 M10 TP shard skeleton. When TP > 1, per-proj LoRA deltas
-// need to shard A/B differently depending on which xllm Linear the delta
-// hooks into:
+// Adapters are installed either from the model ctor (install_static_adapter_*
+// on a thread that owns the NPU context) or at runtime through the pinned
+// executor thread (load_and_activate_hotswap).
+//
+// TP shard strategy for a per-proj delta. When TP > 1, A/B are sharded
+// according to the xllm Linear the delta hooks into:
 //   - ColumnParallelLinear (Q/K/V/gate/up):
 //       A [rank, hidden]         replicated on every rank
 //       B [hidden/tp, rank]      column-sharded (each rank owns a slice)
@@ -61,12 +55,9 @@ namespace xllm {
 //       A [rank, hidden/tp]      row-sharded
 //       B [hidden, rank]         replicated, delta gets all_reduce'd
 //
-// Whole-block delta on the current NPU path (atb output is already all-
-// reduced back to full hidden) uses REPLICATED for both A and B; each
-// rank keeps the full tensor and computes the same delta locally. No
-// cross-rank comm needed.
-//
-// This enum is the skeleton; the actual per-proj sharding is P1 work.
+// The whole-block delta (atb output is already all-reduced back to full
+// hidden) uses kReplicated for both A and B: each rank keeps the full tensor
+// and computes the same delta locally, so no cross-rank comm is needed.
 enum class LoRAShardStrategy {
   kReplicated = 0,     // whole tensor on every rank (current whole-block)
   kColumnSharded = 1,  // dim-shard on last dim (for Column-parallel proj)
@@ -81,6 +72,7 @@ struct TPInfo {
 class LoRARuntime {
  public:
   static LoRARuntime& instance();
+  ~LoRARuntime();
 
   // One-time init; must be called before any adapter API is used. Copies
   // config by value so later registry / cache modules can inspect it
@@ -95,7 +87,7 @@ class LoRARuntime {
   // per engine today).
   void set_model_device_dtype(torch::Device device, torch::ScalarType dtype);
 
-  // W4-A3: hot-swap install config. Passed from model ctor so that
+  // Hot-swap install config. Passed from the model ctor so that
   // load_and_activate_hotswap knows whether to run per-proj + moe-experts
   // installers (and with what TP + MoE args) or only per-proj (dense).
   // Idempotent; last caller wins (single model per engine today).
@@ -124,7 +116,7 @@ class LoRARuntime {
                                             const std::string& lora_path,
                                             const std::string& base_model_name);
 
-  // Path C prod v3 static preload path.
+  // Static preload path.
   //
   // Load a PEFT adapter from disk, pick a whole-block A/B pair, cast to
   // the given dtype, .to(device) IN THIS THREAD, register it with the
@@ -134,9 +126,8 @@ class LoRARuntime {
   // model init has completed the .to(device) will crash with
   // aclrtMemcpy 107017 -- see docs/lora_investigation.
   //
-  // Distinct from load_and_activate() which keeps tensors on CPU and
-  // defers migration; that path is broken on CANN 8.5 + torch_npu 2.7.1
-  // and only survives via ctor-time dummy fill.
+  // Distinct from load_and_activate(), which keeps tensors on CPU and
+  // defers migration to the forward thread.
   std::optional<uint64_t> install_static_adapter_on_device(
       const std::string& lora_name,
       const std::string& lora_path,
@@ -145,12 +136,10 @@ class LoRARuntime {
       torch::ScalarType dtype,
       uint64_t forced_int_id = 0);
 
-  // TP-aware overload. Same as above but the caller passes tp_size/tp_rank
-  // so we can (in future M10 work) shard A/B before .to(device). For the
-  // current whole-block delta path we ignore the info and store the full
-  // tensor on every rank (kReplicated). This overload exists so callers
-  // can start passing the info now and the internal sharding lights up
-  // when M10 lands, without another API break.
+  // TP-aware overload. Same as above, but the caller provides tp_size/tp_rank
+  // so A/B can be sharded before .to(device). The current whole-block delta
+  // path stores the full tensor on every rank (kReplicated); per-proj deltas
+  // use the tp info to pick their LoRAShardStrategy.
   std::optional<uint64_t> install_static_adapter_on_device(
       const std::string& lora_name,
       const std::string& lora_path,
@@ -160,14 +149,11 @@ class LoRARuntime {
       TPInfo tp,
       uint64_t forced_int_id = 0);
 
-  // Path C prod v3 multi-adapter: look up the device-resident A/B for a
-  // specific adapter by its int_id. Returns std::nullopt if int_id unknown
-  // or the adapter was installed without a device pool entry.
-  //
-  // Populated by install_static_adapter_on_device when it succeeds.
+  // Unregister the adapter and drop it from the active/pending slots if it is
+  // the one currently installed. Returns false when the name is unknown.
   bool unload(const std::string& lora_name);
 
-  // Path C prod v3 hot-swap: enqueue a load task to the pinned executor
+  // Hot-swap: enqueue a load task to the pinned executor
   // thread which owns the NPU device context. Blocks until the executor
   // completes the install. Returns the assigned int_id, or nullopt on
   // failure. Callable from any thread (HTTP handler etc.).
@@ -202,21 +188,19 @@ class LoRARuntime {
     float scaling;
     std::string name;
     uint64_t int_id;
-    // TP shard tag. kReplicated is the current whole-block default; the
-    // sharded variants light up when M10 per-proj delta ships.
+    // TP shard tag. kReplicated is the whole-block default.
     LoRAShardStrategy shard = LoRAShardStrategy::kReplicated;
     TPInfo tp{};
   };
   std::optional<ActiveDelta> active_delta();
 
-  // Path C prod v3 multi-adapter: look up the device-resident A/B for a
-  // specific adapter by its int_id. Populated by
-  // install_static_adapter_on_device on ctor thread. Returns nullopt if the
-  // int_id is not known (base-model request or adapter installed without
-  // device weights).
+  // Look up the device-resident A/B for a specific adapter by its int_id.
+  // Populated by install_static_adapter_on_device on the ctor thread.
+  // Returns nullopt if the int_id is not known (base-model request or
+  // adapter installed without device weights).
   std::optional<ActiveDelta> get_delta_by_int_id(uint64_t int_id);
 
-  // ---- M10 per-proj/per-layer delta support ----
+  // ---- Per-proj/per-layer delta support ----
   //
   // ProjKey identifies a specific weight in a decoder layer, e.g.
   // (layer=5, proj="q_proj"). PEFT convention: proj is one of
@@ -245,8 +229,8 @@ class LoRARuntime {
   };
 
   // Materialize every (layer, proj) tensor of the adapter onto device and
-  // register in the per-proj pool. Call from the model ctor thread (V60
-  // rules).
+  // register in the per-proj pool. Callable only from a thread that owns the
+  // NPU context (in practice the model ctor).
   std::optional<uint64_t> install_static_adapter_on_device_per_proj(
       const std::string& lora_name,
       const std::string& lora_path,
@@ -261,18 +245,15 @@ class LoRARuntime {
   // adapter doesn't have anything at that slot (e.g. adapter only
   // targets q_proj/k_proj/v_proj but not gate_proj).
   //
-  // #506 review C3: returns a VALUE copy (not a pointer into the pool). The
-  // ProjDelta's A/B are torch::Tensors, so the copy made under materialise_mu_
-  // retains ownership of the device storage via refcount; a concurrent
-  // UnloadLoraAdapter that erases the pool entry cannot free tensors the
-  // forward thread still holds. Returning a raw pointer here was a
-  // use-after-free: the lock released on return and the forward dereferenced
-  // it unlocked while unload could erase the pool.
+  // Returns a VALUE copy, not a pointer into the pool. The ProjDelta's A/B are
+  // refcounted torch::Tensors, so the copy taken under materialise_mu_ keeps
+  // the device storage alive even if a concurrent unload erases the pool entry
+  // while the forward thread is still using it.
   std::optional<ProjDelta> get_per_proj_delta(uint64_t int_id,
                                               int32_t layer_index,
                                               const std::string& proj_name);
 
-  // ---- MoE expert LoRA (Day 1 Phase 1) ----
+  // ---- MoE expert LoRA ----
   //
   // For MoE models like Qwen3-30B-A3B, adapter safetensors carry per-expert
   // LoRA weights, e.g.
@@ -299,8 +280,9 @@ class LoRARuntime {
   };
 
   // Materialize an adapter's experts.{E}.{proj} tensors onto device and
-  // register in the MoE expert pool. Must be called from the model ctor
-  // thread (V60 rules) -- xllm can only do CPU->NPU .to() there.
+  // register in the MoE expert pool. Callable only from a thread that owns
+  // the NPU context (in practice the model ctor), the only place where the
+  // CPU->NPU .to() is valid.
   //
   // Preconditions: (1) the same adapter has already been installed via
   // install_static_adapter_on_device_per_proj (which parses adapter_config,
@@ -337,10 +319,9 @@ class LoRARuntime {
   // std::nullopt if the adapter has no MoE tensors for this layer (or the
   // adapter id is unknown).
   //
-  // #506 review C3: returns a VALUE copy (not a pool pointer) for the same
-  // use-after-free reason as get_per_proj_delta -- the tensors are refcounted
-  // handles, so a concurrent unload erasing the pool cannot free storage the
-  // caller still holds.
+  // Returns a VALUE copy for the same lifetime reason as get_per_proj_delta:
+  // the refcounted tensor handles keep the storage alive across a concurrent
+  // unload that erases the pool entry.
   std::optional<MoeExpertDelta> get_moe_expert_delta(uint64_t int_id,
                                                      int32_t layer_index);
 
@@ -380,7 +361,7 @@ class LoRARuntime {
   // Currently-active adapter's device tensors. Guarded by materialise_mu_.
   std::optional<ActiveDelta> active_;
 
-  // Path C prod v3 hot-swap: pinned executor thread + task queue.
+  // Hot-swap: pinned executor thread + task queue.
   struct LoadTask {
     std::string name;
     std::string path;
@@ -395,41 +376,41 @@ class LoRARuntime {
   std::queue<LoadTask> task_queue_;
   std::atomic<bool> executor_stop_{false};
   std::thread executor_thread_;
-  // #506 review: test-and-set under concurrency. Written (test-and-set) in
-  // set_model_device_dtype, read in load_and_activate_hotswap; a plain bool
-  // there is a data race that could spawn two executor threads.
+  // Test-and-set under concurrency: written in set_model_device_dtype, read in
+  // load_and_activate_hotswap. A plain bool there is a data race that could
+  // spawn two executor threads.
   std::atomic<bool> executor_started_{false};
-  // #506 review C1: set by executor_loop when it cannot start (e.g.
-  // aclrtSetDevice fails) and exits. load_and_activate_hotswap checks it
-  // before enqueuing so callers fail fast with nullopt instead of blocking
-  // forever on a promise no live consumer will ever fulfil.
+  // Set by executor_loop when it cannot start (e.g. aclrtSetDevice fails) and
+  // exits. load_and_activate_hotswap checks it before enqueuing so callers
+  // fail fast with nullopt instead of blocking forever on a promise no live
+  // consumer will ever fulfil.
   std::atomic<bool> executor_failed_{false};
 
-  // W4-A3: hot-swap install config. Guarded by materialise_mu_ (writes
+  // Hot-swap install config. Guarded by materialise_mu_ (writes
   // are rare from model ctor; reads from executor_loop task pickup).
   HotswapConfig hotswap_config_{};
   bool hotswap_config_set_ = false;
 
   void executor_loop(int32_t device_index, torch::ScalarType dtype);
 
-  // Path C prod v3 multi-adapter: int_id -> device-resident A/B/scaling.
+  // int_id -> device-resident A/B/scaling.
   // Written by install_static_adapter_on_device from ctor thread.
   // Read by get_delta_by_int_id from forward thread. Guarded by
   // materialise_mu_.
   std::unordered_map<uint64_t, ActiveDelta> device_pool_;
 
-  // M10 per-proj device pool: int_id -> ((layer, proj) -> ProjDelta).
-  // Populated by install_static_adapter_on_device_per_proj at ctor time
-  // (V60 window). Read by get_per_proj_delta from Linear wrappers.
+  // Per-proj device pool: int_id -> ((layer, proj) -> ProjDelta).
+  // Populated by install_static_adapter_on_device_per_proj at ctor time.
+  // Read by get_per_proj_delta from Linear wrappers.
   // Guarded by materialise_mu_.
   std::unordered_map<uint64_t,
                      std::unordered_map<ProjKey, ProjDelta, ProjKeyHash>>
       per_proj_device_pool_;
 
-  // Day 1 Phase 1: MoE expert LoRA pool. int_id -> (layer_index ->
-  // MoeExpertDelta). Populated by install_static_adapter_on_moe_experts
-  // at ctor time. Read by get_moe_expert_delta from FusedMoEImpl::forward.
-  // Guarded by materialise_mu_.
+  // MoE expert LoRA pool. int_id -> (layer_index -> MoeExpertDelta).
+  // Populated by install_static_adapter_on_moe_experts at ctor time. Read by
+  // get_moe_expert_delta from FusedMoEImpl::forward. Guarded by
+  // materialise_mu_.
   std::unordered_map<uint64_t, std::unordered_map<int32_t, MoeExpertDelta>>
       moe_expert_lora_pool_;
 };

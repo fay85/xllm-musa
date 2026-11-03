@@ -153,10 +153,10 @@ torch::Tensor LoRAColumnParallelLinearImpl::forward(torch::Tensor input) {
   // tokens by rank and launches gate + up bgmv_shrink/expand per bucket,
   // scattering into y's two inter-size halves via index_add.
   //
-  // P4 fix (mixed-batch delta-drop): the kernel only serves rank <= 64 (the
-  // vllm-ascend bgmv_expand ceiling). An envelope pre-flight below breaks out
-  // if any active bucket is unsupported, so R > 64 adapters fall through to the
-  // rank-agnostic ATen per-seq path instead of silently returning zero delta.
+  // Envelope pre-flight: the kernel only serves rank <= 64 (the
+  // vllm-ascend bgmv_expand ceiling). If any active bucket is unsupported,
+  // control breaks out so R > 64 adapters fall through to the rank-agnostic
+  // ATen per-seq path instead of silently returning zero delta.
   do {
     if (std::getenv("DISABLE_ASCENDC_SPRINT_GAMMA") != nullptr) break;
     {
@@ -215,9 +215,18 @@ torch::Tensor LoRAColumnParallelLinearImpl::forward(torch::Tensor input) {
         storage.slot_lookup_dev().index_select(0, *ctx->adapter_ids_per_token);
     auto per_tok_bucket = storage.bucket_lookup_dev().index_select(
         0, *ctx->adapter_ids_per_token);
-    // Any -1 in slot -> base or unregistered token the kernel path does not
-    // handle; bail to the ATen per-seq fallback which does.
-    if ((per_tok_slot < 0).any().to(torch::kCPU).item<bool>()) break;
+    // The per-token slot vector stays on the device; instead of syncing it
+    // back, reject the whole kernel path when any non-base adapter in this
+    // batch has no AscendC storage slot. Such an adapter would otherwise look
+    // like a base token and silently lose its delta.
+    bool all_adapters_registered = true;
+    for (auto id : adapter_ids) {
+      if (id != 0 && !storage.has_adapter(id)) {
+        all_adapters_registered = false;
+        break;
+      }
+    }
+    if (!all_adapters_registered) break;
 
     LOG_EVERY_N(INFO, 100) << "[AscendC Column multishape] enter aids="
                            << adapter_ids.size()

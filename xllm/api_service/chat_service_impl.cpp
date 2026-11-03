@@ -733,8 +733,12 @@ void ChatServiceImpl::process_async_impl(std::shared_ptr<ChatCall> call) {
           LoRARuntime::instance().registry(), lora_pinned->int_id);
     }
   }
-  LLMMaster* master = get_model_master(
-      lora_pinned.has_value() ? lora_pinned->req.base_model_name : model);
+  LLMMaster* master =
+      lora_pinned.has_value() && lora_pinned->req.base_model_name.empty()
+          ? master_
+          : get_model_master(lora_pinned.has_value()
+                                 ? lora_pinned->req.base_model_name
+                                 : model);
   if (unlikely(master == nullptr)) {
     call->finish_with_error(api_service_internal::model_not_supported_status());
     return;

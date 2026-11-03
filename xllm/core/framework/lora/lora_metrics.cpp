@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <cstring>
+
 namespace xllm {
 
 namespace {
@@ -57,13 +59,17 @@ LoRAMetrics::LoRAMetrics() {
       "xllm_lora_requests_info", std::list<std::string>{"lora_name", "state"});
   active_adapters_count_ = std::make_unique<bvar::Status<int64_t>>(
       "xllm_lora_active_adapters_count", 0);
-  // W4-A4 batch-level metrics (global).
+  // Batch-level metrics (global).
   batch_fast_path_total_ =
       std::make_unique<bvar::Adder<int64_t>>("xllm_lora_batch_fast_path_total");
   batch_slow_path_total_ =
       std::make_unique<bvar::Adder<int64_t>>("xllm_lora_batch_slow_path_total");
   batch_distinct_adapters_ = std::make_unique<bvar::LatencyRecorder>(
       "xllm_lora_batch_distinct_adapters");
+  affinity_deferred_total_ = std::make_unique<bvar::Adder<int64_t>>(
+      "xllm_lora_adapter_affinity_deferred_total");
+  affinity_forced_admit_total_ = std::make_unique<bvar::Adder<int64_t>>(
+      "xllm_lora_adapter_affinity_forced_admit_total");
   LOG(INFO) << "[LoRAMetrics] initialised";
 }
 
@@ -72,7 +78,7 @@ LoRAMetrics::~LoRAMetrics() = default;
 void LoRAMetrics::add_adapter(uint64_t int_id, const std::string& lora_name) {
   const std::string safe = sanitise_bvar_name(lora_name);
   std::unique_lock lock(mu_);
-  // #506 review: id_to_name_ is authoritative even when the name repeats
+  // id_to_name_ is authoritative even when the name repeats
   // (drain-revive, reload with a fresh id). Overwrite unconditionally so
   // remove_adapter(int_id) -> name -> per_adapter_ never dereferences a
   // stale binding.
@@ -82,7 +88,7 @@ void LoRAMetrics::add_adapter(uint64_t int_id, const std::string& lora_name) {
     // the existing bvars so historical counters/histograms carry over.
     return;
   }
-  // #506 review (AICR): bvar names are built from sanitise_bvar_name(lora_name)
+  // bvar names are built from sanitise_bvar_name(lora_name)
   // (non-[A-Za-z0-9_] -> '_'), but the de-dup above keys on the raw lora_name.
   // Two distinct adapters whose names collide only in sanitised form (e.g.
   // "biz-a" and "biz_a" both -> "biz_a") would otherwise register identically
@@ -123,7 +129,7 @@ void LoRAMetrics::remove_adapter(uint64_t int_id) {
   if (id_it == id_to_name_.end()) return;
   const std::string lora_name = id_it->second;
   id_to_name_.erase(id_it);
-  // #506 review: a name can be bound to more than one live int_id
+  // a name can be bound to more than one live int_id
   // (drain-revive, reload-after-unload). Only tear the per-name bvars
   // down when this was the LAST id pointing at the name, otherwise the
   // surviving id's observations silently no-op against erased bvars.
@@ -229,7 +235,7 @@ void LoRAMetrics::inc_errors(uint64_t adapter_id) {
 
 void LoRAMetrics::set_state(uint64_t adapter_id, int state) {
   if (adapter_id == 0) return;
-  std::shared_lock lock(mu_);
+  std::unique_lock lock(mu_);
   std::string name = name_of(id_to_name_, adapter_id);
   if (name.empty()) return;
   auto it = per_adapter_.find(name);
@@ -316,7 +322,7 @@ size_t LoRAMetrics::adapter_count() const {
   return per_adapter_.size();
 }
 
-// W4-A4: observe a scheduler batch's LoRA distribution. Fast path is
+// Observe a scheduler batch's LoRA distribution. Fast path is
 // (0 or 1) distinct adapters, slow path is 2+. total_seqs unused today
 // but included for future hit-rate weighting.
 void LoRAMetrics::observe_batch_lora(size_t distinct_count, size_t total_seqs) {
@@ -328,6 +334,15 @@ void LoRAMetrics::observe_batch_lora(size_t distinct_count, size_t total_seqs) {
     if (batch_fast_path_total_) (*batch_fast_path_total_) << 1;
   } else {
     if (batch_slow_path_total_) (*batch_slow_path_total_) << 1;
+  }
+}
+
+void LoRAMetrics::inc_affinity_deferred(const char* reason) {
+  if (reason == nullptr) return;
+  if (std::strcmp(reason, "deferred") == 0) {
+    if (affinity_deferred_total_) (*affinity_deferred_total_) << 1;
+  } else if (std::strcmp(reason, "forced_admit") == 0) {
+    if (affinity_forced_admit_total_) (*affinity_forced_admit_total_) << 1;
   }
 }
 

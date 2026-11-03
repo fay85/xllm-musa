@@ -53,6 +53,15 @@ namespace xllm::npu {
 
 struct AclGraphTaskUpdateContext;
 
+// Mix the per-sequence LoRA routing vector into a graph cache key. Adapter
+// branches and weight tensors are fixed during capture, so a base warmup
+// graph (or another adapter's graph) must never be replayed for a LoRA
+// request. Batches whose ids are all zero (no adapter) keep the original key
+// unchanged, so non-LoRA graph caching and the static-MTP key lookup are not
+// affected.
+uint64_t adapter_aware_graph_key(uint64_t base_key,
+                                 const std::vector<uint64_t>& adapter_ids);
+
 struct StaticGraphTaskSignature {
   int64_t linear_state_id = 0;
   int64_t num_accepted_tokens = 0;

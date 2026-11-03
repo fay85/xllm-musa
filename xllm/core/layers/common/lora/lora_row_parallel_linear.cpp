@@ -185,16 +185,16 @@ torch::Tensor LoRARowParallelLinearImpl::forward(torch::Tensor input) {
   //   * output = all_reduce(combined) -> full base + full delta in ONE
   //   collective
   //
-  // Legacy path (fallback, enable_lora_row_parallel_all_reduce=true,
+  // Fallback path (enable_lora_row_parallel_all_reduce=true,
   // fused_ar_=false):
   //   * A slice as above, tmp_local same
   //   * all-reduce on rank-dim tmp [T, r=16]
   //   * delta = tmp_full @ B^T * scaling  (replicated)
   //   * y is already reduced by base, y += delta
   //
-  // Cost win of fused vs legacy: 1 AR per proj vs 2. On NPU HCCL where
+  // Cost win of fused vs fallback: 1 AR per proj vs 2. On NPU HCCL where
   // launch latency dominates, this halves the collective count and reclaims
-  // most of the ~17% overhead the legacy path incurs.
+  // most of the ~17% overhead the fallback path incurs.
   const auto* ctx = current_lora_context();
   if (ctx == nullptr || ctx->adapter_ids == nullptr ||
       ctx->q_seq_lens_vec == nullptr || ctx->layer_index < 0) {
@@ -292,10 +292,10 @@ torch::Tensor LoRARowParallelLinearImpl::forward(torch::Tensor input) {
   // Row A_stacked [N, R, H_in_full] is TP-sharded on dim=2 per tp_rank;
   // B_stacked [N, H_out, R] is not sharded.
   //
-  // P4 fix (mixed-batch delta-drop): the kernel only serves rank <= 64 (the
-  // vllm-ascend bgmv_expand ceiling). An envelope pre-flight below breaks out
-  // if any active bucket is unsupported, so R > 64 adapters fall through to the
-  // rank-agnostic ATen per-seq path instead of silently returning zero delta.
+  // Envelope pre-flight: the kernel only serves rank <= 64 (the vllm-ascend
+  // bgmv_expand ceiling). If any active bucket is unsupported, control breaks
+  // out so R > 64 adapters fall through to the rank-agnostic ATen per-seq path
+  // instead of silently returning zero delta.
   //
   // Reduction note: in fused-AR mode (wrapper_owns_reduction_) y from
   // base_->forward is a per-rank partial on the out-dim and MUST be
@@ -366,9 +366,18 @@ torch::Tensor LoRARowParallelLinearImpl::forward(torch::Tensor input) {
         storage.slot_lookup_dev().index_select(0, *ctx->adapter_ids_per_token);
     auto per_tok_bucket = storage.bucket_lookup_dev().index_select(
         0, *ctx->adapter_ids_per_token);
-    // Any -1 in slot -> base or unregistered token the kernel path does not
-    // handle; bail to the ATen per-seq fallback which does.
-    if ((per_tok_slot < 0).any().to(torch::kCPU).item<bool>()) break;
+    // The per-token slot vector stays on the device; instead of syncing it
+    // back, reject the whole kernel path when any non-base adapter in this
+    // batch has no AscendC storage slot. Such an adapter would otherwise look
+    // like a base token and silently lose its delta.
+    bool all_adapters_registered = true;
+    for (auto id : adapter_ids) {
+      if (id != 0 && !storage.has_adapter(id)) {
+        all_adapters_registered = false;
+        break;
+      }
+    }
+    if (!all_adapters_registered) break;
 
     LOG_EVERY_N(INFO, 100) << "[AscendC Row multishape] enter proj="
                            << proj_name_ << " aids=" << adapter_ids.size()
@@ -427,11 +436,11 @@ torch::Tensor LoRARowParallelLinearImpl::forward(torch::Tensor input) {
   } while (false);
 #endif  // USE_NPU
 
-  // Slow path: per-seq, one all-reduce per adapter-bearing seq (legacy) or
-  // deferred to a single reduction at the end (fused). Fused mode wins big
-  // here — legacy issues N collectives per proj per layer for an N-seq
-  // batch; fused issues 1. Interleaved base + adapter seqs are still the
-  // main cost driver; adapter-affinity batching at the gateway helps.
+  // Slow path: per-seq, one all-reduce per adapter-bearing seq in fallback
+  // mode, or deferred to a single reduction at the end in fused mode. Fused
+  // mode issues 1 collective per proj per layer for an N-seq batch; fallback
+  // issues N. Interleaved base + adapter seqs are still the main cost driver;
+  // adapter-affinity batching at the gateway helps.
   auto& runtime = LoRARuntime::instance();
   int64_t tok_off = 0;
   for (size_t seq_idx = 0; seq_idx < adapter_ids.size(); ++seq_idx) {

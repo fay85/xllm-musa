@@ -47,6 +47,19 @@ DEFINE_int32(max_cpu_loras,
 // fit; the largest common practical rank in production is 32.
 DEFINE_int32(max_lora_rank, 32, "Upper bound on any single adapter's rank r.");
 
+// Adapter-affinity gate. Caps the number of distinct adapters in one decode
+// batch; requests beyond the cap wait (bounded by lora_drain_wait_thresh)
+// instead of pushing the batch onto the mixed-adapter slow path.
+DEFINE_int32(max_loras_per_batch,
+             16,
+             "Maximum number of distinct adapters in one decode batch. Set "
+             "equal to max_loras to disable affinity gating.");
+
+DEFINE_int32(lora_drain_wait_thresh,
+             200,
+             "Wall-clock milliseconds a deferred request may wait before the "
+             "adapter-affinity gate force-admits it. 0 disables deferral.");
+
 // Whitelist of PEFT target_modules the engine will accept. HuggingFace
 // adapters that name modules outside this set are refused so we never
 // silently ignore a Q/K/V-only vs full attention mismatch.
@@ -163,6 +176,10 @@ void LoRAConfig::load_from_flags() {
   lora_target_modules = split_comma(FLAGS_lora_target_modules);
   lora_modules = parse_modules(FLAGS_lora_modules);
   allow_runtime_lora_updating = FLAGS_allow_runtime_lora_updating;
+  max_loras_per_batch = FLAGS_max_loras_per_batch;
+  if (max_loras_per_batch < 1) max_loras_per_batch = 1;
+  if (max_loras_per_batch > max_loras) max_loras_per_batch = max_loras;
+  lora_drain_wait_thresh = FLAGS_lora_drain_wait_thresh;
 
   if (enable_lora) {
     LOG(INFO) << "[LoRAConfig] enabled: max_loras=" << max_loras

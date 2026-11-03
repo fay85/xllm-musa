@@ -13,9 +13,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-// Per-adapter observability metrics for multi-LoRA (P1-D).
+// Per-adapter observability metrics for multi-LoRA.
 //
-// Design (2026-07-09 explore report):
+// Design:
 // - Latency (TTFT / inter-token / E2E) uses
 // bvar::MultiDimension<LatencyRecorder>
 //   with a single "lora_name" label. get_stats({name}) lazily creates a
@@ -36,10 +36,9 @@ limitations under the License.
 //   MultiDimension<Adder> keyed by (lora_name, state) so scrapers can see
 //   both running and waiting counts per adapter without a JSON parse.
 //
-// All access is thread-safe. Reads take a shared_lock; add_adapter and
-// remove_adapter take a unique_lock. Hot-path metric observations use
-// the sub-bvars directly under a shared_lock -- <100ns overhead when the
-// adapter's entry already exists.
+// All access is thread-safe. Map reads and thread-safe bvar observations use
+// a shared_lock. Map mutations and the compound state/count update use a
+// unique_lock so the global active count describes a consistent state.
 
 #pragma once
 
@@ -137,12 +136,17 @@ class LoRAMetrics {
   };
   std::vector<Snapshot> snapshot_all() const;
 
-  // W4-A4: batch-level LoRA metrics (global, not per-adapter). Called from
+  // Batch-level LoRA metrics (global, not per-adapter). Called from
   // scheduler prepare_batch once per assembled batch.
   //   distinct_count = number of distinct non-zero adapter_ids in the batch
   //   total_seqs     = total sequences in the batch (for hit-rate ratio)
   // fast_path = (distinct_count <= 1), slow_path = (distinct_count >= 2)
   void observe_batch_lora(size_t distinct_count, size_t total_seqs);
+
+  // Adapter-affinity scheduler gate counters. reason is "deferred" when a
+  // request is skipped to keep the batch homogeneous, "forced_admit" when
+  // the wait threshold is hit.
+  void inc_affinity_deferred(const char* reason);
 
   // For test / debug: how many adapters are currently tracked.
   size_t adapter_count() const;
@@ -171,10 +175,14 @@ class LoRAMetrics {
   // Global gauge: how many adapters are currently in `active` state.
   std::unique_ptr<bvar::Status<int64_t>> active_adapters_count_;
 
-  // W4-A4 batch-level counters (global, not per-adapter).
+  // Batch-level counters (global, not per-adapter).
   std::unique_ptr<bvar::Adder<int64_t>> batch_fast_path_total_;
   std::unique_ptr<bvar::Adder<int64_t>> batch_slow_path_total_;
   std::unique_ptr<bvar::LatencyRecorder> batch_distinct_adapters_;
+
+  // Adapter-affinity gate counters.
+  std::unique_ptr<bvar::Adder<int64_t>> affinity_deferred_total_;
+  std::unique_ptr<bvar::Adder<int64_t>> affinity_forced_admit_total_;
 };
 
 }  // namespace xllm

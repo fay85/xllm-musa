@@ -36,8 +36,8 @@ namespace xllm {
 // Threading model:
 //   - lookup / list / lookup_and_pin hold a shared_lock. lookup_and_pin
 //     mutates only the atomic Entry::pin_count, which is safe under the
-//     shared lock (#506 review; it is the per-request hot path and must
-//     not serialise concurrent resolvers on the same device).
+//     shared lock: it is the per-request hot path and must not serialise
+//     concurrent resolvers on the same device.
 //   - register / unregister / unpin hold a unique_lock (they mutate the
 //     maps or the unloading state).
 // This lets a hot request path resolve model="biz-A" -> id concurrently
@@ -58,8 +58,8 @@ class LoRARegistry {
   // Idempotency (matches vLLM /v1/load_lora_adapter): if `lora_name` is
   // already registered and points to the same path, we return the existing
   // int_id and no state changes. If the same name is registered with a
-  // different path, this is a caller error and we log + reject unless the
-  // caller opted into "load_inplace" (P1).
+  // different path, this is a caller error: reject; the caller must unload
+  // the adapter before loading a different path under the same name.
   //
   // int_id numbering is monotonically increasing and never reuses freed ids
   // for the lifetime of the process, so an adapter that was unloaded and
@@ -95,24 +95,25 @@ class LoRARegistry {
   // scheduled for drain).
   bool unregister(const std::string& lora_name);
 
-  // P1-A.3: register a callback fired at the moment an adapter entry is
+  // Register a callback fired at the moment an adapter entry is
   // finally erased from the map (either synchronously from unregister when
   // refcount is 0, or deferred from unpin when the last ref drops after
   // an unloading mark). The callback receives the int_id so downstream
   // pools (per_proj_device_pool_, host cache, metric bvars) can free
   // their per-adapter state at the same moment the registry forgets it.
   //
-  // Called with the registry mutex held; keep the callback body short.
+  // Called after releasing the registry mutex; callbacks may acquire other
+  // subsystem locks.
   using FinalRemovalCallback = std::function<void(uint64_t int_id)>;
   void set_on_final_removal(FinalRemovalCallback cb) {
     std::unique_lock lock(mu_);
     on_final_removal_ = std::move(cb);
   }
 
-  // P1-D: symmetric hook fired when register_adapter first creates an
+  // Symmetric hook fired when register_adapter first creates an
   // entry (idempotent no-ops on re-register skip the callback). Used by
-  // LoRAMetrics to allocate its per-adapter bvars. Called with the
-  // registry mutex held; keep the callback body short.
+  // LoRAMetrics to allocate its per-adapter bvars. Called with the registry
+  // mutex held; keep the callback body short.
   using RegisterCallback =
       std::function<void(uint64_t int_id, const std::string& lora_name)>;
   void set_on_register(RegisterCallback cb) {
@@ -125,7 +126,7 @@ class LoRARegistry {
 
   size_t size() const;
 
-  // P1-A.4: probe whether an int_id still has an entry (may be unloading).
+  // Probe whether an int_id still has an entry (may be unloading).
   // Used by /v1/unload_lora_adapter drain polling to know when the last
   // in-flight request finished and the entry was erased.
   bool contains(uint64_t int_id) const;
@@ -135,8 +136,8 @@ class LoRARegistry {
     LoRARequest req;
     // Live in-flight requests. When >0, the entry cannot be freed.
     // Atomic: lookup_and_pin increments under a shared_lock (concurrent
-    // resolvers), unpin decrements under a unique_lock (#506 review -- a
-    // plain int would be a data race under the shared lock).
+    // resolvers) and unpin decrements under a unique_lock; a plain int would
+    // be a data race under the shared lock.
     std::atomic<int32_t> pin_count{0};
     // A caller has requested unregister but requests are still using it.
     bool unloading = false;

@@ -15,15 +15,15 @@ limitations under the License.
 
 // Composition-based LoRA wrapper around QKVParallelLinear.
 //
-// Design decisions (from Spike Day 2 code reading):
+// Design decisions:
 //   Base linear forward is non-virtual + private weight members, so we wrap
 //   by composition rather than inheritance.
 //   Wrapper owns a base QKVParallelLinear (held by value, NOT registered
 //   as a submodule -- registering would rewrite checkpoint keys to
 //   qkv_proj.base.weight and break weight loading) plus the LoRA A/B
 //   tensors. Base weight loading path is unchanged; adapter A/B
-//   are set via set_lora_weights (Spike phase) or load_lora_state_dict
-//   (real adapter manager, later phases).
+//   are set via set_lora_weights (direct/test flow) or load_lora_state_dict
+//   (adapter manager).
 //   Delta path: y = base(x); delta = B(A(x)) * scaling; return y + delta.
 //   Fused Q/K/V is handled by treating lora_A as a single [rank, hidden]
 //   projection and lora_B as [q_size + 2*kv_size_local, rank] (col-shard
@@ -102,9 +102,9 @@ class LoRAQKVParallelLinearImpl : public torch::nn::Module {
     return base_->is_weight_offset_loaded();
   }
 
-  // ---- LoRA-specific interface (Spike + future adapter manager) ----
+  // ---- LoRA-specific interface (test flow + adapter manager) ----
 
-  // Set LoRA weights directly (Spike hardcoded flow).
+  // Set LoRA weights directly (direct test flow).
   //   lora_a: [rank, hidden_size]                     replicated under TP
   //   lora_b: [q_size + 2 * kv_size_local, rank]      col-sharded under TP
   //   scaling: alpha / rank (typically pre-multiplied into B for real loads)

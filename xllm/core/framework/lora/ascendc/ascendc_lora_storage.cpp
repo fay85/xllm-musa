@@ -2,7 +2,7 @@
  * Copyright (c) 2026 xllm authors.
  * SPDX-License-Identifier: Apache-2.0
  *
- * Multi-rank multi-adapter storage (sprint γ+1). See header for the
+ * Multi-rank multi-adapter storage. See header for the
  * design rationale (rank-only bucketing based on the observation that
  * adapters have a single rank across all layer/proj registers).
  */
@@ -33,7 +33,7 @@ void AscendCLoRAStorage::update_lookup_locked(uint64_t int_id,
     bucket_lookup_dev_ =
         torch::full({kMaxIntId}, static_cast<int64_t>(-1), opts);
     LOG(INFO) << "[AscendCLoRAStorage] slot+bucket lookup dev alloc ["
-              << kMaxIntId << "] int64 on device (sprint γ+1)";
+              << kMaxIntId << "] int64 on device";
   }
 
   auto slot_scalar =
@@ -182,6 +182,15 @@ int AscendCLoRAStorage::register_adapter(uint64_t int_id,
     }
   }
 
+  // Idempotent re-register: this (layer, proj) is already materialized in
+  // this slot. Do not copy_ again -- a forward may be reading the slab right
+  // now, and an in-place overwrite would expose a half-written A/B. A
+  // genuine weight refresh must unregister_adapter() first.
+  auto& registered = registered_slots_[int_id];
+  if (!registered.insert({layer_idx, proj}).second) {
+    return slot;
+  }
+
   auto& view = storage_[{layer_idx, proj}].buckets[bucket_id];
   view.A_stacked[slot].copy_(A);
   view.B_stacked[slot].copy_(B);
@@ -214,6 +223,7 @@ void AscendCLoRAStorage::unregister_adapter(uint64_t int_id) {
   int32_t bucket_id = it->second.bucket_id;
   int32_t slot = it->second.slot;
   int_id_to_location_.erase(it);
+  registered_slots_.erase(int_id);
 
   for (auto& kv : storage_) {
     auto& bucketed = kv.second;
@@ -237,6 +247,11 @@ AscendCLoRAStorage::BucketedStackedView AscendCLoRAStorage::get_bucketed(
   auto it = storage_.find({layer_idx, proj});
   if (it == storage_.end()) return {};
   return it->second;
+}
+
+bool AscendCLoRAStorage::has_adapter(uint64_t int_id) const {
+  std::shared_lock<std::shared_mutex> lock(mu_);
+  return int_id_to_location_.find(int_id) != int_id_to_location_.end();
 }
 
 int AscendCLoRAStorage::active_count() const {

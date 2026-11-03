@@ -7,8 +7,7 @@
  * first-call via dlopen (kernel .so must be on the runtime linker path;
  * production packaging exports LD_LIBRARY_PATH before launch).
  *
- * Kernel argtype tables (from vllm-ascend 0.11.0+, verified via ctypes
- * PoC 2026-08-27):
+ * Kernel argtype tables (vllm-ascend 0.11.0+):
  *   bgmv_shrink_impl:
  *     (dtype, stream, x, w, idx, idx_size, y,
  *      batch, tpc, hidden, rank, scale) — 12 params

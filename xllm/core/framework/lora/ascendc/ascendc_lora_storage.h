@@ -2,9 +2,9 @@
  * Copyright (c) 2026 xllm authors.
  * SPDX-License-Identifier: Apache-2.0
  *
- * AscendCLoRAStorage — multi-rank multi-adapter storage (sprint γ+1).
+ * AscendCLoRAStorage — multi-rank multi-adapter storage.
  *
- * DESIGN NOTE (sprint γ+1 v1):
+ * DESIGN NOTE:
  *   Adapters in practice have a single rank across all layer/proj registers
  *   (adapter_config.json has one "r" value). hidden_in is a model property,
  *   also constant across all (layer, proj) for a given adapter. hidden_out
@@ -32,9 +32,9 @@
  *   3. Per bucket, launch bgmv_shrink/expand on that bucket's slab.
  *   4. Scatter results back to y.
  *
- * Historical: sprint γ' assumed all adapters at (layer, proj) share the
- * same rank slab. Crashed pod when 2nd adapter had different rank. See
- * project-xllm-v010-r11-binpack-2026-08-31 for the crash story.
+ * Adapters at the same (layer, proj) must not be assumed to share one rank
+ * slab: buckets are keyed by rank, so an adapter with a different rank gets
+ * its own bucket instead of reinterpreting another adapter's slab.
  */
 #pragma once
 
@@ -44,6 +44,7 @@
 #include <shared_mutex>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace xllm {
@@ -96,6 +97,11 @@ class AscendCLoRAStorage {
   // Remove int_id: free the slot in its rank bucket and zero the slab
   // entries across all (layer, proj) that stored this adapter.
   void unregister_adapter(uint64_t int_id);
+
+  // Whether int_id has a slot in this storage. The wrappers use this
+  // host-side check to decide between the kernel path and the ATen fallback
+  // without syncing the per-token slot vector back from the device.
+  bool has_adapter(uint64_t int_id) const;
 
   struct StackedView {
     torch::Tensor A_stacked;  // [N, R, H_in]
@@ -170,6 +176,12 @@ class AscendCLoRAStorage {
 
   std::unordered_map<uint64_t, AdapterLocation> int_id_to_location_;
   std::unordered_map<KeyType, BucketedStackedView, KeyHash> storage_;
+  // (layer, proj) pairs already materialized for an int_id. Re-registering a
+  // pair that is present is a no-op: copy_ into a slot a forward may be
+  // reading would expose a half-written slab. A genuine weight refresh must
+  // unregister_adapter() first.
+  std::unordered_map<uint64_t, std::unordered_set<KeyType, KeyHash>>
+      registered_slots_;
 
   // Global rank bucket table (rank_of_bucket_[bucket_id] = rank).
   std::vector<int64_t> rank_of_bucket_;

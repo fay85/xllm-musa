@@ -18,6 +18,7 @@ limitations under the License.
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <thread>
@@ -67,7 +68,8 @@ TEST(RequestTokenAccountingTest, ConcurrentCommitCountsOnce) {
   EXPECT_EQ(accounting.snapshot().output_tokens, 8u);
 }
 
-Sequence make_decode_ready_sequence(bool enable_schedule_overlap) {
+Sequence make_decode_ready_sequence(bool enable_schedule_overlap,
+                                    uint64_t adapter_id = 0) {
   static RequestSamplingParam sampling_param;
   static StoppingChecker stopping_checker;
 
@@ -80,6 +82,7 @@ Sequence make_decode_ready_sequence(bool enable_schedule_overlap) {
   params.rec_type = RecType::kNone;
   params.bos_token_id = 0;
   params.request_id = "generated_tokens_req";
+  params.adapter_id = adapter_id;
   params.sampling_param = &sampling_param;
   params.stopping_checker = &stopping_checker;
 
@@ -99,6 +102,31 @@ Sequence make_decode_ready_sequence(bool enable_schedule_overlap) {
   // path treats new tokens as generated decode tokens.
   sequence.kv_state().set_kv_cache_tokens_num(sequence.num_prompt_tokens());
   return sequence;
+}
+
+TEST(SequenceHashTest, DirectHashingUsesAdapterAndRestoresAmbientScope) {
+  Sequence base = make_decode_ready_sequence(false);
+  Sequence adapter = make_decode_ready_sequence(false, 42);
+  Sequence nested = make_decode_ready_sequence(false, 42);
+  base.update_block_hashes(2, BlockHasherType::TEXT);
+  adapter.update_block_hashes(2, BlockHasherType::TEXT);
+  {
+    PrefixCacheAdapterIdScope unrelated_scope(777);
+    nested.update_block_hashes(2, BlockHasherType::TEXT);
+    EXPECT_EQ(get_prefix_cache_adapter_id(), 777u);
+  }
+  const auto base_hashes = base.block_hashes(2);
+  const auto adapter_hashes = adapter.block_hashes(2);
+  const auto nested_hashes = nested.block_hashes(2);
+  ASSERT_EQ(base_hashes.size(), 1u);
+  ASSERT_EQ(adapter_hashes.size(), 1u);
+  ASSERT_EQ(nested_hashes.size(), 1u);
+  EXPECT_NE(
+      std::memcmp(base_hashes[0].data, adapter_hashes[0].data, sizeof(XXH3Key)),
+      0);
+  EXPECT_EQ(std::memcmp(
+                adapter_hashes[0].data, nested_hashes[0].data, sizeof(XXH3Key)),
+            0);
 }
 
 class UsageTokenizer final : public Tokenizer {

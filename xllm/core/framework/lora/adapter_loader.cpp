@@ -66,6 +66,14 @@ std::optional<LoRAAdapter> LoRAAdapterLoader::load(const LoRARequest& req) {
   if (!load_weights(weights_path.string(), &adapter)) {
     return std::nullopt;
   }
+  for (const auto& [key, tensor] : adapter.tensors) {
+    if (key.find(".experts.") != std::string::npos) {
+      LOG(ERROR) << "[LoRAAdapterLoader] '" << req.lora_name
+                 << "': MoE expert LoRA forward is not implemented; "
+                    "refusing an adapter that would silently ignore weights";
+      return std::nullopt;
+    }
+  }
 
   LOG(INFO) << "[LoRAAdapterLoader] loaded '" << req.lora_name
             << "' r=" << adapter.r << " scaling=" << adapter.scaling
@@ -92,65 +100,79 @@ bool LoRAAdapterLoader::parse_config(
     return false;
   }
 
-  // Reject non-LoRA PEFT variants explicitly. DoRA and IA3 need extra
-  // machinery we don't have yet.
-  if (j.value("peft_type", std::string("LORA")) != "LORA") {
-    LOG(ERROR) << "[LoRAAdapterLoader] " << path << ": peft_type != LORA (got '"
-               << j.value("peft_type", "?") << "'), refusing";
-    return false;
-  }
-  if (j.value("bias", std::string("none")) != "none") {
-    LOG(ERROR) << "[LoRAAdapterLoader] " << path << ": bias != none, refusing";
-    return false;
-  }
-  if (j.value("use_dora", false)) {
-    LOG(ERROR) << "[LoRAAdapterLoader] " << path << ": use_dora=true, refusing";
-    return false;
-  }
-
-  const int32_t r = j.value("r", 0);
-  const int32_t lora_alpha = j.value("lora_alpha", 0);
-  if (r <= 0) {
-    LOG(ERROR) << "[LoRAAdapterLoader] " << path << ": r=" << r
-               << " must be > 0";
-    return false;
-  }
-  if (r > config_.max_lora_rank) {
-    LOG(ERROR) << "[LoRAAdapterLoader] " << path << ": r=" << r
-               << " exceeds max_lora_rank=" << config_.max_lora_rank;
-    return false;
-  }
-  out->r = r;
-  out->scaling = lora_alpha > 0 ? static_cast<float>(lora_alpha) / r : 1.0f;
-
-  // target_modules whitelist check.
-  if (j.contains("target_modules")) {
-    for (const auto& m : j["target_modules"]) {
-      const std::string mod = m.get<std::string>();
-      if (!contains(config_.lora_target_modules, mod)) {
-        LOG(ERROR) << "[LoRAAdapterLoader] " << path << ": target_modules "
-                   << "contains '" << mod
-                   << "' which is not in --lora-target-modules whitelist";
-        return false;
-      }
-      out->target_modules.push_back(mod);
-    }
-  }
-
-  // Optional base-model check: only enforced if the caller passed one.
-  if (!expected_base_model_name.empty() &&
-      j.contains("base_model_name_or_path")) {
-    const std::string got = j["base_model_name_or_path"].get<std::string>();
-    if (got != expected_base_model_name) {
+  try {
+    // Reject non-LoRA PEFT variants explicitly. DoRA and IA3 need extra
+    // machinery we don't have yet.
+    if (j.value("peft_type", std::string("LORA")) != "LORA") {
       LOG(ERROR) << "[LoRAAdapterLoader] " << path
-                 << ": base_model_name_or_path='" << got
-                 << "' does not match expected='" << expected_base_model_name
-                 << "'";
+                 << ": peft_type != LORA (got '" << j.value("peft_type", "?")
+                 << "'), refusing";
       return false;
     }
-  }
+    if (j.value("bias", std::string("none")) != "none") {
+      LOG(ERROR) << "[LoRAAdapterLoader] " << path
+                 << ": bias != none, refusing";
+      return false;
+    }
+    if (j.value("use_dora", false)) {
+      LOG(ERROR) << "[LoRAAdapterLoader] " << path
+                 << ": use_dora=true, refusing";
+      return false;
+    }
 
-  return true;
+    const int32_t r = j.value("r", 0);
+    const int32_t lora_alpha = j.value("lora_alpha", 0);
+    if (r <= 0) {
+      LOG(ERROR) << "[LoRAAdapterLoader] " << path << ": r=" << r
+                 << " must be > 0";
+      return false;
+    }
+    if (r > config_.max_lora_rank) {
+      LOG(ERROR) << "[LoRAAdapterLoader] " << path << ": r=" << r
+                 << " exceeds max_lora_rank=" << config_.max_lora_rank;
+      return false;
+    }
+    out->r = r;
+    out->scaling = lora_alpha > 0 ? static_cast<float>(lora_alpha) / r : 1.0f;
+
+    // target_modules whitelist check.
+    if (j.contains("target_modules")) {
+      if (!j["target_modules"].is_array()) {
+        LOG(ERROR) << "[LoRAAdapterLoader] " << path
+                   << ": target_modules must be an array of strings";
+        return false;
+      }
+      for (const auto& m : j["target_modules"]) {
+        const std::string mod = m.get<std::string>();
+        if (!contains(config_.lora_target_modules, mod)) {
+          LOG(ERROR) << "[LoRAAdapterLoader] " << path << ": target_modules "
+                     << "contains '" << mod
+                     << "' which is not in --lora-target-modules whitelist";
+          return false;
+        }
+        out->target_modules.push_back(mod);
+      }
+    }
+
+    // Optional base-model check: only enforced if the caller passed one.
+    if (!expected_base_model_name.empty() &&
+        j.contains("base_model_name_or_path")) {
+      const std::string got = j["base_model_name_or_path"].get<std::string>();
+      if (got != expected_base_model_name) {
+        LOG(ERROR) << "[LoRAAdapterLoader] " << path
+                   << ": base_model_name_or_path='" << got
+                   << "' does not match expected='" << expected_base_model_name
+                   << "'";
+        return false;
+      }
+    }
+
+    return true;
+  } catch (const std::exception& e) {
+    LOG(ERROR) << "[LoRAAdapterLoader] " << path
+               << ": invalid adapter_config.json fields: " << e.what();
+    return false;
+  }
 }
 
 std::optional<std::string> LoRAAdapterLoader::canonicalize_weight_name(

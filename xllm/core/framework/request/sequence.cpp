@@ -1075,6 +1075,9 @@ Slice<int32_t> Sequence::hash_tokens(BlockHasherType hasher_type) const {
 
 void Sequence::update_block_hashes(uint32_t block_size,
                                    BlockHasherType hasher_type) {
+  // The sequence owns adapter identity. Seed every hash-producing path here,
+  // including direct leaf prefetch/offload calls outside composite scopes.
+  PrefixCacheAdapterIdScope adapter_scope(adapter_id());
   if (block_size == 0) {
     return;
   }
