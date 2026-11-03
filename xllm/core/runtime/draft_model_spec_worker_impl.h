@@ -54,7 +54,7 @@ class DraftModelSpecWorkerImpl : public SpeculativeWorkerImpl {
 
   bool allocate_kv_cache(const KVCacheShape& kv_cache_shape) override;
 
-#if defined(USE_NPU) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
   bool allocate_kv_cache_with_transfer(
       const KVCacheShape& kv_cache_shape) override;
 #endif

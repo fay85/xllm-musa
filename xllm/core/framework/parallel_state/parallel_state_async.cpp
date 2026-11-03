@@ -13,8 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "core/framework/parallel_state/parallel_state.h"
 #include "core/util/utils.h"
-#include "parallel_state.h"
+
+#if defined(USE_MUSA)
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
+#endif
 
 namespace xllm {
 namespace parallel_state {
@@ -77,6 +81,17 @@ ReduceAsyncCtx launch_reduce(torch::Tensor input, ProcessGroup* process_group) {
   }
 
   ctx.tensor = input.contiguous();
+#if defined(USE_MUSA)
+  std::optional<torch::Tensor> custom_output =
+      musa_allreduce_tp_custom(process_group, ctx.tensor);
+  if (custom_output.has_value()) {
+    // Custom AR enqueues on the producer/consumer stream and returns separate
+    // output storage. Preserve that tensor instead of changing the in-place
+    // ProcessGroup API or waiting for an unrelated MCCL work handle.
+    ctx.tensor = std::move(custom_output.value());
+    return ctx;
+  }
+#endif
   ctx.work = process_group->allreduce_async(ctx.tensor);
   return ctx;
 }

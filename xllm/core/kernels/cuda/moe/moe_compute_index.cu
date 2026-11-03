@@ -33,6 +33,16 @@ namespace xllm::kernel::cuda {
 
 constexpr int32_t kMoeIndexBlock = 256;
 
+__global__ void moe_cast_i64_to_i32_kernel(const int64_t* input,
+                                           int32_t* output,
+                                           int64_t count) {
+  const int64_t index = static_cast<int64_t>(blockIdx.x) * blockDim.x +
+                        threadIdx.x;
+  if (index < count) {
+    output[index] = static_cast<int32_t>(input[index]);
+  }
+}
+
 // ---- Phase 1: histogram ----
 __global__ void
 #ifdef USE_DCU
@@ -116,7 +126,19 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
   int64_t N = expert_id.numel();
   int32_t E = static_cast<int32_t>(num_experts);
   CHECK_LE(E, kMoeIndexBlock) << "num_experts cannot exceed " << kMoeIndexBlock;
-  auto expert_id_i32 = expert_id.to(torch::kInt32).contiguous();
+  torch::Tensor expert_id_i32;
+  if (expert_id.scalar_type() == torch::kInt32) {
+    expert_id_i32 = expert_id.contiguous();
+  } else {
+    CHECK_EQ(expert_id.scalar_type(), torch::kInt64);
+    expert_id_i32 = torch::empty(expert_id.sizes(),
+                                 expert_id.options().dtype(torch::kInt32));
+    constexpr int32_t kThreads = 256;
+    const int32_t blocks = static_cast<int32_t>((N + kThreads - 1) / kThreads);
+    moe_cast_i64_to_i32_kernel<<<blocks, kThreads, 0, stream>>>(
+        expert_id.data_ptr<int64_t>(), expert_id_i32.data_ptr<int32_t>(), N);
+    CHECK_EQ(musaGetLastError(), musaSuccess);
+  }
   auto opt_i32 = expert_id_i32.options();
 
   auto expert_sizes = torch::zeros({num_experts}, opt_i32);

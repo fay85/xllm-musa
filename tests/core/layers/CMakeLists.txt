@@ -1,6 +1,28 @@
 include(cc_test)
 
 cc_test(
+  NAME deepseek_v4_joint_build_policy_test
+  CPU_ONLY
+  SRCS deepseek_v4_joint_build_policy_test.cpp
+  DEPS GTest::gtest_main
+)
+
+cc_test(
+  NAME deepseek_v4_runtime_options_test
+  CPU_ONLY
+  SRCS deepseek_v4_runtime_options_test.cpp
+  DEPS GTest::gtest_main
+)
+
+# Compressor state storage and C4/C128 tail semantics use CPU tensors only.
+cc_test(
+  NAME deepseek_v4_compressor_state_test
+  CPU_ONLY
+  SRCS deepseek_v4_compressor_state_test.cpp
+  DEPS torch GTest::gtest_main
+)
+
+cc_test(
   NAME
     dflash2_grouped_conv_common_test
   CPU_ONLY

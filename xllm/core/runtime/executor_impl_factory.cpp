@@ -25,6 +25,8 @@ limitations under the License.
 #include "runtime/mlu_graph_executor_impl.h"
 #elif defined(USE_CUDA)
 #include "runtime/cuda_graph_executor_impl.h"
+#elif defined(USE_MUSA)
+#include "runtime/musa_graph_executor_impl.h"
 #elif defined(USE_DCU)
 #include "runtime/dcu_graph_executor_impl.h"
 #endif

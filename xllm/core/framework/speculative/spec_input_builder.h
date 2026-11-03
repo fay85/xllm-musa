@@ -219,6 +219,11 @@ void update_execution_batch_metadata(ModelInputParams& input_params,
 // Packs a host int32 vector into a pinned CPU tensor for async H2D staging.
 torch::Tensor make_cpu_int_tensor(const std::vector<int32_t>& values);
 
+// Copies a host tensor to the device with a non-blocking H2D copy. A dtype
+// change is applied on the host first, into pinned memory on MUSA.
+torch::Tensor host_to_device_async(const torch::Tensor& host_tensor,
+                                   const torch::TensorOptions& device_options);
+
 // Stages token_ids/positions into both the host and device tensors of `input`
 // with async H2D copies, toggling device_tensors_ready around the write.
 void set_token_position_tensors(ForwardInput& input,

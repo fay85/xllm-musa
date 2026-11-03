@@ -101,7 +101,7 @@ class SpeculativeWorkerImpl : public WorkerImpl {
   // allocate kv cache. blocking call
   bool allocate_kv_cache(const KVCacheShape& kv_cache_shape) override;
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
   bool allocate_kv_cache_with_transfer(
       const KVCacheShape& kv_cache_shape) override;
 #endif

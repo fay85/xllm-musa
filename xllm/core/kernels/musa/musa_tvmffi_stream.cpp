@@ -272,7 +272,13 @@ void sync_ffi_stream_for_preparation(const torch::Device& device) {
 }
 
 void sync_graph_preparation_stage(const torch::Device& device) {
-  if (!s_force_ffi_preparation_sync) {
+  if (!s_force_ffi_preparation_sync || !is_torch_device(device)) {
+    return;
+  }
+  if (get_forced_tvmffi_stream(device.index()) != nullptr ||
+      current_stream_is_valid(device.index())) {
+    // Both PyTorch and TVM-FFI kernels launch on the exact same non-null
+    // MUSA stream (e.g. capture_stream), so no host stream sync is needed.
     return;
   }
   sync_current_stream_for_preparation(device);
@@ -342,7 +348,7 @@ TvmffiStreamGuard::TvmffiStreamGuard(const torch::Device& device)
 }
 
 TvmffiStreamGuard::~TvmffiStreamGuard() {
-  if (active_ && s_force_ffi_preparation_sync) {
+  if (active_ && s_force_ffi_preparation_sync && needs_sync_) {
     sync_current_stream_for_preparation(device_);
     sync_ffi_stream_for_preparation(device_);
   } else if (active_ && needs_sync_) {

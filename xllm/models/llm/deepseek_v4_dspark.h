@@ -26,7 +26,11 @@ limitations under the License.
 #include "core/framework/model_loader.h"
 #include "core/layers/common/linear.h"
 #include "core/layers/common/rms_norm.h"
+#if defined(USE_MUSA)
+#include "models/llm/musa/deepseek_v4.h"
+#else
 #include "models/llm/deepseek_v4.h"
+#endif
 #include "models/llm/dspark_confidence_head.h"
 #include "models/llm/dspark_markov_head.h"
 #include "models/llm/dspark_weight_source.h"
@@ -87,12 +91,16 @@ class DeepseekV4DSparkModelImpl final : public DeepseekV4ModelImpl {
     }
 
     const auto options = context.get_tensor_options();
+    auto projection_quant_args = context.get_quant_args();
+#if defined(USE_MUSA)
+    projection_quant_args.weight_block_size().clear();
+#endif
     main_proj_ = register_module(
         "main_proj",
         layer::ReplicatedLinear(args.hidden_size() * capture_count,
                                 args.hidden_size(),
                                 /*bias=*/false,
-                                context.get_quant_args(),
+                                projection_quant_args,
                                 options));
     main_norm_ = register_module(
         "main_norm",

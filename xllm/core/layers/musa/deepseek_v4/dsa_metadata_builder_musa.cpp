@@ -1,0 +1,1070 @@
+/* Copyright 2026 The xLLM Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://github.com/jd-opensource/xllm/blob/main/LICENSE
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+#include "core/layers/musa/deepseek_v4/dsa_metadata_builder_musa.h"
+
+#include <algorithm>
+#include <cstdlib>
+#include <glog/logging.h>
+#include <string>
+
+#include "core/framework/model/model_input_params.h"
+#include "core/layers/common/attention_metadata.h"
+#include "core/layers/common/attention_metadata_builder.h"
+#include "core/layers/common/dsa_metadata.h"
+#include "core/layers/musa/deepseek_v4/deepseek_v4_graph_sequence.h"
+#include "core/util/tensor_helper.h"
+#include "core/kernels/musa/musa_tvmffi_stream.h"
+#include "framework/block/musa/deepseek_v4_prefix_transfer.h"
+
+namespace xllm::layer {
+
+namespace {
+
+bool dsv4_log_graph_metadata_enabled() {
+  const char* value = std::getenv("XLLM_DSV4_LOG_GRAPH_METADATA");
+  return value != nullptr && std::string(value) == "1";
+}
+
+std::string dsv4_metadata_prefix(const torch::Tensor& tensor,
+                                 int64_t limit = 16) {
+  if (!tensor.defined() || tensor.numel() == 0) {
+    return "[]";
+  }
+  auto host = tensor.to(torch::kCPU).to(torch::kInt64).contiguous().view(-1);
+  std::string result = "[";
+  const int64_t count = std::min<int64_t>(host.numel(), limit);
+  for (int64_t index = 0; index < count; ++index) {
+    if (index != 0) {
+      result += ",";
+    }
+    result += std::to_string(host[index].item<int64_t>());
+  }
+  if (host.numel() > count) {
+    result += ",...";
+  }
+  result += "]";
+  return result;
+}
+
+constexpr char kDsv4StateBlockIndicesMetadataKey[] =
+    "__musa_dsv4_state_block_indices";
+constexpr char kDsv4PrefillResetBlocksMetadataKey[] =
+    "__musa_dsv4_prefill_reset_blocks";
+constexpr char kDsv4PrefillStateReadIndicesMetadataKey[] =
+    "__musa_dsv4_prefill_state_read_indices";
+constexpr char kDsv4HostSequenceLengthsMetadataKey[] =
+    "__musa_dsv4_host_sequence_lengths";
+
+torch::Device infer_metadata_device(const ModelInputParams& params,
+                                    const torch::Tensor& positions) {
+  if (positions.defined()) {
+    return positions.device();
+  }
+  if (params.attention.device.kv_seq_lens.defined()) {
+    return params.attention.device.kv_seq_lens.device();
+  }
+  if (params.attention.device.q_seq_lens.defined()) {
+    return params.attention.device.q_seq_lens.device();
+  }
+  if (params.attention.device.new_cache_slots.defined()) {
+    return params.attention.device.new_cache_slots.device();
+  }
+  if (params.attention.device.block_tables.defined()) {
+    return params.attention.device.block_tables.device();
+  }
+  return torch::Device(torch::kCPU);
+}
+
+int64_t vector_max_or_zero(const std::vector<int32_t>& values) {
+  if (values.empty()) {
+    return 0;
+  }
+  return *std::max_element(values.begin(), values.end());
+}
+
+bool is_cumulative_lengths(const std::vector<int32_t>& values,
+                           int32_t num_sequences) {
+  if (num_sequences <= 0 ||
+      values.size() != static_cast<size_t>(num_sequences + 1) ||
+      values.empty() || values.front() != 0) {
+    return false;
+  }
+  for (size_t i = 1; i < values.size(); ++i) {
+    if (values[i] < values[i - 1]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+std::vector<int32_t> normalize_sequence_lengths(
+    const std::vector<int32_t>& values,
+    int32_t num_sequences) {
+  if (!is_cumulative_lengths(values, num_sequences)) {
+    return values;
+  }
+  std::vector<int32_t> lens;
+  lens.reserve(static_cast<size_t>(num_sequences));
+  for (int32_t i = 0; i < num_sequences; ++i) {
+    lens.push_back(values[static_cast<size_t>(i + 1)] -
+                   values[static_cast<size_t>(i)]);
+  }
+  return lens;
+}
+
+std::vector<int32_t> resolve_query_lengths(const ModelInputParams& params,
+                                           const std::vector<int32_t>& ctx_lens,
+                                           int32_t batch_size) {
+  std::vector<int32_t> q_lens = normalize_sequence_lengths(
+      params.attention.host.q_seq_lens, params.meta.num_sequences);
+  if (static_cast<int32_t>(q_lens.size()) == batch_size) {
+    return q_lens;
+  }
+  if (params.meta.batch_forward_type.no_decode()) {
+    return ctx_lens;
+  }
+  return std::vector<int32_t>(static_cast<size_t>(batch_size), 1);
+}
+
+std::vector<int32_t> tensor_to_host_int32(const torch::Tensor& tensor) {
+  if (!tensor.defined() || tensor.numel() == 0) {
+    return {};
+  }
+  auto host = tensor.to(torch::kCPU, torch::kInt32).contiguous().view(-1);
+  const auto* data = host.data_ptr<int32_t>();
+  return std::vector<int32_t>(data, data + host.numel());
+}
+
+torch::Tensor pad_block_table(const torch::Tensor& block_table,
+                              int32_t target_rows,
+                              int32_t target_cols,
+                              int32_t pad_value) {
+  if (!block_table.defined() || block_table.dim() != 2 ||
+      (block_table.size(0) >= target_rows &&
+       block_table.size(1) >= target_cols)) {
+    return block_table;
+  }
+
+  const int64_t rows = std::max<int64_t>(target_rows, block_table.size(0));
+  const int64_t cols = std::max<int64_t>(target_cols, block_table.size(1));
+  auto padded = torch::full({rows, cols}, pad_value, block_table.options());
+  padded.slice(/*dim=*/0, /*start=*/0, /*end=*/block_table.size(0))
+      .slice(/*dim=*/1, /*start=*/0, /*end=*/block_table.size(1))
+      .copy_(block_table);
+  return padded;
+}
+
+}  // namespace
+
+AttentionMetadata DSAMetadataBuilderMusa::build(
+    const ModelInputParams& params,
+    const torch::Tensor& positions,
+    const torch::Tensor& dsa_cos_sin,
+    const std::vector<std::vector<DSACacheInfo>>& caches_info,
+    const std::vector<DSAGroupInfo>& group_infos,
+    const torch::Tensor& dsa_c4_cos_sin,
+    const torch::Tensor& dsa_c128_cos_sin) {
+  // 1. Build base AttentionMetadata (q_cu_seq_lens, block_table, etc.)
+  AttentionMetadata attn_metadata =
+      AttentionMetadataBuilder::build(params,
+                                      /*enable_mla=*/false,
+                                      /*attn_mask=*/{},
+                                      infer_metadata_device(params, positions));
+
+  // 2. Build DSA-specific fields
+  auto dsa_metadata = std::make_shared<DSAMetadata>();
+  build_dsa_fields(params,
+                   positions,
+                   dsa_cos_sin,
+                   dsa_c4_cos_sin,
+                   dsa_c128_cos_sin,
+                   caches_info,
+                   group_infos,
+                   *dsa_metadata);
+
+  // 3. Keep DSA metadata independent while syncing base attention tensors.
+  if (attn_metadata.attn_mask.defined()) {
+    dsa_metadata->attn_mask = attn_metadata.attn_mask.clone();
+  }
+
+  if (attn_metadata.mrope_cos.defined() && !dsa_metadata->cos_table.defined()) {
+    dsa_metadata->cos_table = attn_metadata.mrope_cos;
+  }
+  if (attn_metadata.mrope_sin.defined() && !dsa_metadata->sin_table.defined()) {
+    dsa_metadata->sin_table = attn_metadata.mrope_sin;
+  }
+
+  // 4. Attach to AttentionMetadata
+  attn_metadata.dsa_metadata = std::move(dsa_metadata);
+
+  return attn_metadata;
+}
+
+void DSAMetadataBuilderMusa::build_dsa_fields(
+    const ModelInputParams& params,
+    const torch::Tensor& positions,
+    const torch::Tensor& dsa_cos_sin,
+    const torch::Tensor& dsa_c4_cos_sin,
+    const torch::Tensor& dsa_c128_cos_sin,
+    const std::vector<std::vector<DSACacheInfo>>& caches_info,
+    const std::vector<DSAGroupInfo>& group_infos,
+    DSAMetadata& dsa) {
+  std::vector<int32_t> ctx_lens_vec = normalize_sequence_lengths(
+      params.attention.host.kv_seq_lens, params.meta.num_sequences);
+  if (ctx_lens_vec.empty()) {
+    // Some MUSA decode rebuilds carry the lengths only in device attention
+    // metadata. Keep the model-private DSA path independent of the public
+    // builder's host-vector convention by recovering those rows here.
+    ctx_lens_vec = tensor_to_host_int32(params.attention.device.kv_seq_lens);
+    ctx_lens_vec =
+        normalize_sequence_lengths(ctx_lens_vec, params.meta.num_sequences);
+  }
+  if (ctx_lens_vec.empty() && !params.multi_block_tables.empty() &&
+      params.multi_block_tables.front().defined() &&
+      params.multi_block_tables.front().dim() == 2) {
+    const int64_t rows = params.multi_block_tables.front().size(0);
+    const int32_t fallback_len =
+        std::max<int32_t>(params.meta.kv_max_seq_len, 1);
+    ctx_lens_vec.assign(static_cast<size_t>(rows), fallback_len);
+  }
+  const int32_t batch_size = static_cast<int32_t>(ctx_lens_vec.size());
+  std::vector<int32_t> q_lens_vec =
+      resolve_query_lengths(params, ctx_lens_vec, batch_size);
+  if (q_lens_vec.empty() && batch_size > 0) {
+    q_lens_vec = tensor_to_host_int32(params.attention.device.q_seq_lens);
+    q_lens_vec =
+        normalize_sequence_lengths(q_lens_vec, params.meta.num_sequences);
+  }
+  if (q_lens_vec.size() != static_cast<size_t>(batch_size)) {
+    q_lens_vec.assign(static_cast<size_t>(batch_size), 1);
+  }
+
+  // Attention consumes these host values in every DSA layer. Keep one
+  // MUSA-private CPU sidecar so the layer loop does not copy the equivalent
+  // device tensors back to the host twice per layer. The public metadata ABI
+  // and the graph-owned device tensors remain unchanged.
+  if (batch_size > 0) {
+    std::vector<int32_t> host_sequence_lengths;
+    host_sequence_lengths.reserve(static_cast<size_t>(2 * batch_size));
+    host_sequence_lengths.insert(
+        host_sequence_lengths.end(), q_lens_vec.begin(), q_lens_vec.end());
+    host_sequence_lengths.insert(
+        host_sequence_lengths.end(), ctx_lens_vec.begin(), ctx_lens_vec.end());
+    dsa.cp_input_dict[kDsv4HostSequenceLengthsMetadataKey] =
+        torch::tensor(
+            host_sequence_lengths,
+            torch::TensorOptions().dtype(torch::kInt32).device(torch::kCPU))
+            .view({2, batch_size});
+  }
+
+  dsa.input_positions = positions;
+  const bool is_acl_graph = params.enable_graph;
+  const torch::Device metadata_device(torch::kCPU);
+
+  // Build per-batch sequence length metadata.
+  build_seq_lengths(
+      params, metadata_device, batch_size, ctx_lens_vec, q_lens_vec, dsa);
+  dsa.is_acl_graph = is_acl_graph;
+  if (dsv4_batched_sas_query_layout(q_lens_vec, is_acl_graph)) {
+    const char* sas_env = std::getenv("XLLM_DSV4_BATCH_PAGED_SAS");
+    if (sas_env != nullptr && std::string(sas_env) == "1") {
+      // Keep the public CPU control lengths unchanged. The draft layers
+      // share one device vector constructed from the same normalized values.
+      dsa.cp_input_dict[kDsv4BatchedSasKvLengths] = torch::tensor(
+          ctx_lens_vec, torch::TensorOptions().dtype(torch::kInt32).device(
+                            infer_metadata_device(params, positions)));
+    }
+  }
+  std::vector<int32_t> prefix_snapshot_values;
+  for (const BlockTransferInfo& transfer : params.block_copy.swap_blocks) {
+    const musa::DeepseekV4PrefixTransfer decoded =
+        musa::decode_deepseek_v4_prefix_transfer(transfer);
+    if (decoded.kind != musa::DeepseekV4PrefixTransferKind::STATE_SNAPSHOT) {
+      continue;
+    }
+    prefix_snapshot_values.emplace_back(decoded.src_block_id);
+    prefix_snapshot_values.emplace_back(decoded.prefix_tokens);
+  }
+  if (!prefix_snapshot_values.empty()) {
+    dsa.cp_input_dict[musa::kDeepseekV4PrefixSnapshotMetadataKey] =
+        torch::tensor(prefix_snapshot_values,
+                      torch::TensorOptions().dtype(torch::kInt32))
+            .view({-1, 2});
+  }
+  // The eager MTP target carrier expands one logical request into q2 decode
+  // rows while retaining the original single request id.  Mark that private
+  // DSV4 shape as compact speculative verification too; otherwise attention
+  // interprets the two rows as two independent sequences.  Graph metadata
+  // already carries is_spec_verify/q_max_seq_len explicitly.
+  const bool eager_mtp_q2 =
+      !params.is_spec_verify && params.meta.num_sequences == 2 &&
+      params.embedding.embedding_ids.size() == 1 && q_lens_vec.size() == 2 &&
+      q_lens_vec[0] == 1 && q_lens_vec[1] == 1;
+  if ((params.is_spec_verify || eager_mtp_q2) &&
+      params.meta.q_max_seq_len > 1) {
+    dsa.num_speculative_tokens = params.meta.q_max_seq_len - 1;
+  } else if (eager_mtp_q2) {
+    dsa.num_speculative_tokens = 1;
+  }
+
+  // Keep base RoPE tables in metadata. Per-forward cos/sin slices are
+  // calculated in DeepseekV4ModelImpl::forward to align with MindIE timing.
+  if (dsa_cos_sin.defined()) {
+    auto cos_sin_chunks = dsa_cos_sin.chunk(/*chunks=*/2, /*dim=*/-1);
+    dsa.cos_table = cos_sin_chunks[0].contiguous();
+    dsa.sin_table = cos_sin_chunks[1].contiguous();
+  }
+
+  if (positions.defined()) {
+    build_positions(params, batch_size, ctx_lens_vec, q_lens_vec, dsa);
+  }
+
+  (void)dsa_c4_cos_sin;
+  (void)dsa_c128_cos_sin;
+
+  // --- Block tables / slots expansion ---
+  if (!params.multi_block_tables.empty() && !caches_info.empty()) {
+    std::vector<torch::Tensor> active_multi_block_tables =
+        params.multi_block_tables;
+    if (group_infos.size() == 1 &&
+        group_infos.front().type == DSACacheType::SLIDING_WINDOW &&
+        active_multi_block_tables.size() > 1) {
+      // A SWA-only draft inherits the target's composite manager tables.
+      // DeepSeek-V4 registers SWA first, followed by C4/C128; only the first
+      // table addresses this model's caches. Never mutate the target carrier.
+      CHECK_LE(active_multi_block_tables.size(), 3);
+      active_multi_block_tables.resize(1);
+    }
+    int32_t manager_num =
+        static_cast<int32_t>(active_multi_block_tables.size());
+    if (manager_num == 1 && batch_size == 1 &&
+        active_multi_block_tables[0].defined() &&
+        active_multi_block_tables[0].dim() == 2 &&
+        active_multi_block_tables[0].size(0) > 1 &&
+        static_cast<size_t>(active_multi_block_tables[0].size(0)) <=
+            group_infos.size()) {
+      const auto packed = active_multi_block_tables[0].contiguous();
+      std::vector<torch::Tensor> unpacked_tables;
+      unpacked_tables.reserve(packed.size(0));
+      for (int64_t m = 0; m < packed.size(0); ++m) {
+        unpacked_tables.push_back(packed[m].unsqueeze(0).contiguous());
+      }
+      active_multi_block_tables = std::move(unpacked_tables);
+      manager_num = static_cast<int32_t>(active_multi_block_tables.size());
+      LOG(WARNING)
+          << "DSAMetadataBuilder detected packed multi_block_tables layout "
+             "([manager, blocks]) while batch_size==1; auto-unpacked to "
+             "[manager][batch, blocks]. manager_num="
+          << manager_num;
+    }
+
+    CHECK_EQ(batch_size, static_cast<int32_t>(ctx_lens_vec.size()))
+        << "DSAMetadataBuilder: batch_size mismatch with ctx_lens size.";
+    CHECK_LE(manager_num, static_cast<int32_t>(group_infos.size()))
+        << "DSAMetadataBuilder: manager_num(" << manager_num
+        << ") exceeds group_infos size(" << group_infos.size()
+        << "), cannot align manager/group mapping.";
+    int32_t graph_block_table_capacity_cols = 0;
+    if (is_acl_graph && params.attention.device.block_tables.defined() &&
+        params.attention.device.block_tables.dim() == 2) {
+      graph_block_table_capacity_cols =
+          static_cast<int32_t>(params.attention.device.block_tables.size(1));
+    }
+    if (is_acl_graph && graph_block_table_capacity_cols > 0) {
+      for (int32_t m = 0; m < manager_num; ++m) {
+        const auto& block_table = active_multi_block_tables[m];
+        CHECK(block_table.defined() && block_table.dim() == 2)
+            << "DSAMetadataBuilder: ACL graph multi_block_tables manager " << m
+            << " must be a 2-D tensor.";
+        CHECK_LE(block_table.size(1), graph_block_table_capacity_cols)
+            << "DSAMetadataBuilder: ACL graph multi_block_tables exceeds "
+            << "bucket column capacity: manager_id=" << m
+            << ", required_cols=" << block_table.size(1)
+            << ", capacity_cols=" << graph_block_table_capacity_cols;
+      }
+    }
+    const int32_t n_layers = static_cast<int32_t>(caches_info.size());
+    const auto& ctx_lens = ctx_lens_vec;
+    const int64_t graph_slot_capacity =
+        is_acl_graph && positions.defined() ? positions.numel() : 0;
+    int64_t total_tokens = 0;
+    for (int32_t len : ctx_lens) {
+      total_tokens += len;
+    }
+
+    std::vector<torch::Tensor> proc_slots(manager_num);
+    std::vector<torch::Tensor> proc_bt(manager_num);
+    for (int32_t m = 0; m < manager_num; ++m) {
+      process_group(active_multi_block_tables[m],
+                    group_infos[m],
+                    ctx_lens,
+                    q_lens_vec,
+                    batch_size,
+                    total_tokens,
+                    graph_slot_capacity,
+                    graph_block_table_capacity_cols,
+                    proc_bt[m],
+                    proc_slots[m]);
+    }
+
+    if (dsv4_log_graph_metadata_enabled()) {
+      const auto cpu_options =
+          torch::TensorOptions().dtype(torch::kInt32).device(torch::kCPU);
+      LOG(INFO) << "[DSV4_GRAPH_META] graph=" << is_acl_graph
+                << " batch=" << batch_size << " managers=" << manager_num
+                << " q_lens="
+                << dsv4_metadata_prefix(torch::tensor(q_lens_vec, cpu_options))
+                << " ctx_lens=" << dsv4_metadata_prefix(
+                       torch::tensor(ctx_lens_vec, cpu_options));
+      for (int32_t m = 0; m < manager_num; ++m) {
+        LOG(INFO) << "[DSV4_GRAPH_META] manager=" << m
+                  << " type=" << static_cast<int32_t>(group_infos[m].type)
+                  << " bt=" << dsv4_metadata_prefix(proc_bt[m])
+                  << " slots=" << dsv4_metadata_prefix(proc_slots[m]);
+      }
+    }
+
+    // Compressor and indexer recurrent states share the active SWA block.
+    // Resolve that block once per request and carry it through DSV4-private
+    // metadata; the attention layers otherwise repeat a device reduction over
+    // the same block-table row four times per compressed layer.
+    for (int32_t m = 0; m < manager_num; ++m) {
+      if (group_infos[m].type != DSACacheType::SLIDING_WINDOW ||
+          !proc_bt[m].defined() || proc_bt[m].dim() != 2) {
+        continue;
+      }
+      if (is_acl_graph) {
+        // Graph attention ignores the host state-block index carrier and
+        // derives recurrent slots from the persistent device block table.
+        // Do not construct/copy this eager-only CPU snapshot for Graph.
+        continue;
+      }
+      // State-block lookup is an eager host-side optimization. Its CPU
+      // snapshot and safe_to(device) transfer are forbidden during MUSA
+      // Graph capture; attention can derive the same slots directly from the
+      // graph-resident block table when this metadata carrier is absent.
+      if (kernel::musa::is_stream_capturing()) {
+        break;
+      }
+      auto state_block_indices =
+          torch::full({proc_bt[m].size(0)},
+                      -1,
+                      torch::TensorOptions().dtype(torch::kInt64));
+      const auto block_table =
+          proc_bt[m].to(torch::kCPU, torch::kInt32).contiguous();
+      const auto block_table_access = block_table.accessor<int32_t, 2>();
+      auto state_block_access = state_block_indices.accessor<int64_t, 1>();
+      for (int64_t row = 0; row < block_table.size(0); ++row) {
+        for (int64_t column = block_table.size(1); column > 0; --column) {
+          const int32_t block_id = block_table_access[row][column - 1];
+          if (block_id >= 0) {
+            state_block_access[row] = block_id;
+            break;
+          }
+        }
+      }
+      if (params.meta.batch_forward_type.no_decode()) {
+        std::vector<int64_t> reset_blocks;
+        reset_blocks.reserve(block_table.size(0));
+        for (int64_t row = 0; row < block_table.size(0); ++row) {
+          if (state_block_access[row] >= 0) {
+            reset_blocks.emplace_back(state_block_access[row]);
+          }
+        }
+        const auto target = infer_metadata_device(params, positions);
+        dsa.cp_input_dict[kDsv4PrefillResetBlocksMetadataKey] =
+            reset_blocks.empty()
+                ? torch::empty(
+                      {0}, torch::TensorOptions().dtype(torch::kInt64).device(target))
+                : safe_to(torch::tensor(reset_blocks, torch::kInt64), target, true);
+      }
+      if (params.meta.batch_forward_type.no_decode()) {
+        auto read_indices = state_block_indices.clone();
+        auto read_access = read_indices.accessor<int64_t, 1>();
+        bool different_source = false;
+        for (int64_t row = 0; row < block_table.size(0); ++row) {
+          const int64_t cached = static_cast<int64_t>(ctx_lens_vec[row]) -
+                                 q_lens_vec[row];
+          if (cached <= 0) continue;
+          bool restored_to_destination = false;
+          for (const auto& transfer : params.block_copy.swap_blocks) {
+            const auto decoded = musa::decode_deepseek_v4_prefix_transfer(transfer);
+            if (decoded.kind == musa::DeepseekV4PrefixTransferKind::BLOCK_COPY &&
+                decoded.block_type == BlockType::SWA &&
+                decoded.dst_block_id == state_block_access[row]) {
+              restored_to_destination = true;
+              break;
+            }
+          }
+          // Prefix restore copies the snapshot into the destination state
+          // page. Ordinary chunk continuation must instead read the page
+          // containing the preceding chunk's final token, not the newly
+          // allocated page at the end of this chunk.
+          if (!restored_to_destination) {
+            const int64_t source_column = (cached - 1) / group_infos[m].block_size;
+            CHECK_LT(source_column, block_table.size(1));
+            CHECK_GE(block_table_access[row][source_column], 0)
+                << "Previous prefill state page was released before continuation";
+            read_access[row] = block_table_access[row][source_column];
+            different_source |= read_access[row] != state_block_access[row];
+          }
+        }
+        if (different_source) {
+          dsa.cp_input_dict[kDsv4PrefillStateReadIndicesMetadataKey] = safe_to(
+              read_indices, infer_metadata_device(params, positions), true);
+        }
+      }
+      dsa.cp_input_dict[kDsv4StateBlockIndicesMetadataKey] = safe_to(
+          state_block_indices, infer_metadata_device(params, positions), true);
+      break;
+    }
+
+    // Keep expanded metadata on host. DeepSeek V4 packs these small tensors
+    // into one contiguous transfer for both graph and non-graph NPU forwards.
+
+    // Step 3: expand by layer using group_id
+    dsa.block_tables.resize(n_layers);
+    dsa.slot_mappings.resize(n_layers);
+    for (int32_t lid = 0; lid < n_layers; ++lid) {
+      const auto& lci = caches_info[lid];
+      dsa.block_tables[lid].resize(lci.size());
+      dsa.slot_mappings[lid].resize(lci.size());
+      for (size_t ci = 0; ci < lci.size(); ++ci) {
+        int32_t gid = lci[ci].group_id;
+        if (gid < manager_num) {
+          dsa.block_tables[lid][ci] = proc_bt[gid];
+          dsa.slot_mappings[lid][ci] = proc_slots[gid];
+        }
+      }
+    }
+  }
+
+  // Attach cache spec pointer
+  dsa.caches_info = &caches_info;
+}
+
+torch::Tensor DSAMetadataBuilderMusa::expand_blocks_to_slots(
+    const torch::Tensor& block_table,
+    const DSAGroupInfo& gi,
+    const std::vector<int32_t>& ctx_lens,
+    int32_t batch_size,
+    int64_t total_tokens) {
+  const int32_t bs = gi.block_size;
+  auto slots = torch::full({total_tokens}, -1, torch::kInt32);
+  auto slots_acc = slots.accessor<int32_t, 1>();
+  auto bt_acc = block_table.accessor<int32_t, 2>();
+  const int32_t max_blocks = static_cast<int32_t>(block_table.size(1));
+
+  int64_t start_idx = 0;
+  for (int32_t seq = 0; seq < batch_size; ++seq) {
+    int64_t token_len = ctx_lens[seq];
+    int64_t slot_num = compute_slot_num(gi, token_len);
+    if (seq >= block_table.size(0)) {
+      // ACL graph capture pads sequence-len vectors to bucket size while the
+      // request-shaped CPU multi_block_tables only contains real batch rows.
+      // Treat missing padded rows as dummy rows filled with -1.
+      start_idx += token_len;
+      continue;
+    }
+
+    int64_t filled = 0;
+    for (int32_t blk = 0; blk < max_blocks && filled < slot_num; ++blk) {
+      int32_t block_id = bt_acc[seq][blk];
+      if (block_id < 0) break;
+      for (int32_t off = 0; off < bs && filled < slot_num; ++off) {
+        slots_acc[start_idx + filled] =
+            static_cast<int32_t>(static_cast<int64_t>(block_id) * bs + off);
+        ++filled;
+      }
+    }
+    start_idx += token_len;
+  }
+  return slots;
+}
+
+int64_t DSAMetadataBuilderMusa::compute_slot_num(const DSAGroupInfo& gi,
+                                                 int64_t token_len) {
+  if (gi.type == DSACacheType::TOKEN) {
+    return token_len / gi.ratio;
+  }
+  // SLIDING_WINDOW
+  const int32_t bs = gi.block_size;
+  if (token_len > bs) {
+    return token_len % bs + bs;
+  }
+  int64_t n = token_len % bs;
+  return (n == 0 && token_len > 0) ? bs : n;
+}
+
+void DSAMetadataBuilderMusa::process_group(const torch::Tensor& raw_bt,
+                                           const DSAGroupInfo& gi,
+                                           const std::vector<int32_t>& ctx_lens,
+                                           const std::vector<int32_t>& q_lens,
+                                           int32_t batch_size,
+                                           int64_t total_tokens,
+                                           int64_t graph_slot_capacity,
+                                           int32_t block_table_capacity_cols,
+                                           torch::Tensor& out_bt,
+                                           torch::Tensor& out_slots) {
+  if (gi.type == DSACacheType::TOKEN) {
+    process_token_group(raw_bt,
+                        gi.ratio,
+                        gi.block_size,
+                        ctx_lens,
+                        q_lens,
+                        batch_size,
+                        total_tokens,
+                        graph_slot_capacity,
+                        block_table_capacity_cols,
+                        out_bt,
+                        out_slots);
+  } else if (gi.type == DSACacheType::SLIDING_WINDOW) {
+    process_swa_group(raw_bt,
+                      gi.block_size,
+                      ctx_lens,
+                      q_lens,
+                      batch_size,
+                      graph_slot_capacity,
+                      block_table_capacity_cols,
+                      out_bt,
+                      out_slots);
+  } else {
+    auto raw_slots =
+        expand_blocks_to_slots(raw_bt, gi, ctx_lens, batch_size, total_tokens);
+    out_slots =
+        torch::where(raw_slots.eq(-1), torch::zeros_like(raw_slots), raw_slots);
+    out_bt = raw_bt;
+  }
+}
+
+void DSAMetadataBuilderMusa::process_token_group(
+    const torch::Tensor& raw_bt,
+    int32_t ratio,
+    int32_t block_size,
+    const std::vector<int32_t>& ctx_lens,
+    const std::vector<int32_t>& q_lens,
+    int32_t batch_size,
+    int64_t total_tokens,
+    int64_t graph_slot_capacity,
+    int32_t block_table_capacity_cols,
+    torch::Tensor& out_bt,
+    torch::Tensor& out_slots) {
+  CHECK_EQ(static_cast<int32_t>(ctx_lens.size()), batch_size)
+      << "process_token_group requires ctx_lens.size == batch_size, got "
+      << ctx_lens.size() << " vs " << batch_size;
+  CHECK_EQ(static_cast<int32_t>(q_lens.size()), batch_size)
+      << "process_token_group requires q_lens.size == batch_size, got "
+      << q_lens.size() << " vs " << batch_size;
+  CHECK_GT(ratio, 0) << "process_token_group requires ratio > 0, got " << ratio;
+  CHECK_GT(block_size, 0) << "process_token_group requires block_size > 0, got "
+                          << block_size;
+  CHECK_EQ(raw_bt.dim(), 2)
+      << "process_token_group requires raw_bt dim == 2, got " << raw_bt.dim();
+
+  int64_t query_total_tokens = 0;
+  for (const int q_len : q_lens) {
+    query_total_tokens += static_cast<int64_t>(q_len);
+  }
+
+  // Token caches commit one row only when a sequence crosses a compression
+  // boundary. Count rows per sequence so multi-batch padding/dummy rows do not
+  // become cache writes.
+  int64_t committed_rows = 0;
+  for (int32_t seq = 0; seq < batch_size; ++seq) {
+    const int64_t ctx_len = static_cast<int64_t>(ctx_lens[seq]);
+    const int64_t q_len =
+        std::clamp<int64_t>(static_cast<int64_t>(q_lens[seq]), 0, ctx_len);
+    const int64_t prev_ctx_len = ctx_len - q_len;
+    committed_rows += ctx_len / ratio - prev_ctx_len / ratio;
+  }
+
+  // Token caches write only the compressed rows produced by the current
+  // forward step. Padded RoPE/compressor rows must not become cache writes.
+  const int64_t out_slot_rows =
+      graph_slot_capacity > 0
+          ? std::max<int64_t>(graph_slot_capacity, committed_rows)
+          : committed_rows;
+  auto out_slots_tensor = torch::full({out_slot_rows}, -1, raw_bt.options());
+  auto out_slots_acc = out_slots_tensor.accessor<int32_t, 1>();
+  auto raw_bt_acc = raw_bt.accessor<int32_t, 2>();
+  const int64_t semantic_cols = raw_bt.size(1);
+  const int64_t block_size_i64 = static_cast<int64_t>(block_size);
+
+  auto slot_for_compressed_index = [&](int32_t seq,
+                                       int64_t compressed_idx) -> int32_t {
+    if (seq >= raw_bt.size(0) || semantic_cols <= 0) {
+      return -1;
+    }
+    const int64_t block_idx = compressed_idx / block_size_i64;
+    if (block_idx >= semantic_cols) {
+      return -1;
+    }
+    const int32_t block_id = raw_bt_acc[seq][block_idx];
+    if (block_id < 0) {
+      return -1;
+    }
+    const int64_t block_offset = compressed_idx % block_size_i64;
+    return static_cast<int32_t>(
+        static_cast<int64_t>(block_id) * block_size_i64 + block_offset);
+  };
+
+  const bool fixed_sequence_slots =
+      dsv4_fixed_graph_sequences(graph_slot_capacity, q_lens);
+  const int64_t sequence_stride = fixed_sequence_slots
+      ? dsv4_graph_compressed_stride(q_lens.front(), ratio) : 0;
+  int64_t write_idx = 0;
+  int64_t written_rows = 0;
+  for (int32_t seq = 0; seq < batch_size; ++seq) {
+    const int64_t ctx_len = static_cast<int64_t>(ctx_lens[seq]);
+    const int64_t q_len =
+        std::clamp<int64_t>(static_cast<int64_t>(q_lens[seq]), 0, ctx_len);
+    const int64_t prev_ctx_len = ctx_len - q_len;
+    const int64_t prev_committed = prev_ctx_len / ratio;
+    const int64_t committed = ctx_len / ratio;
+    const int64_t new_committed = committed - prev_committed;
+    if (fixed_sequence_slots) {
+      CHECK_LE(new_committed, sequence_stride);
+      write_idx = seq * sequence_stride;
+    }
+    for (int64_t i = 0; i < new_committed; ++i) {
+      out_slots_acc[write_idx++] =
+          slot_for_compressed_index(seq, prev_committed + i);
+      ++written_rows;
+    }
+  }
+
+  CHECK_EQ(written_rows, committed_rows)
+      << "process_token_group committed slot count mismatch: write_idx="
+      << write_idx << ", committed_rows=" << committed_rows
+      << ", query_total_tokens=" << query_total_tokens << ", ratio=" << ratio
+      << ", batch_size=" << batch_size << ", total_tokens=" << total_tokens;
+  out_slots = out_slots_tensor;
+  out_bt = graph_slot_capacity > 0
+               ? pad_block_table(
+                     raw_bt,
+                     batch_size,
+                     std::max<int32_t>(block_table_capacity_cols,
+                                       static_cast<int32_t>(raw_bt.size(1))),
+                     /*pad_value=*/-1)
+               : raw_bt;
+}
+
+void DSAMetadataBuilderMusa::process_swa_group(
+    const torch::Tensor& raw_bt,
+    int32_t block_size,
+    const std::vector<int32_t>& ctx_lens,
+    const std::vector<int32_t>& q_lens,
+    int32_t batch_size,
+    int64_t graph_slot_capacity,
+    int32_t block_table_capacity_cols,
+    torch::Tensor& out_bt,
+    torch::Tensor& out_slots) {
+  CHECK_EQ(static_cast<int32_t>(ctx_lens.size()), batch_size)
+      << "process_swa_group requires ctx_lens.size == batch_size, got "
+      << ctx_lens.size() << " vs " << batch_size;
+  CHECK_EQ(static_cast<int32_t>(q_lens.size()), batch_size)
+      << "process_swa_group requires q_lens.size == batch_size, got "
+      << q_lens.size() << " vs " << batch_size;
+  CHECK_GT(block_size, 0) << "process_swa_group requires block_size > 0, got "
+                          << block_size;
+  CHECK_EQ(raw_bt.dim(), 2)
+      << "process_swa_group requires raw_bt dim == 2, got " << raw_bt.dim();
+
+  int64_t query_total_tokens = 0;
+  for (int32_t seq = 0; seq < batch_size; ++seq) {
+    query_total_tokens += std::clamp<int64_t>(
+        static_cast<int64_t>(q_lens[seq]), 0, ctx_lens[seq]);
+  }
+
+  // SWA cache writes only the tokens produced by the current forward step.
+  // Do not reuse the full-context raw_slots prefix here: decode has one kv row,
+  // and prefix slot 0 would incorrectly overwrite cache row 0.
+  const int64_t out_slot_rows =
+      graph_slot_capacity > 0
+          ? std::max<int64_t>(graph_slot_capacity, query_total_tokens)
+          : query_total_tokens;
+  auto out_slots_tensor = torch::full({out_slot_rows}, -1, raw_bt.options());
+  auto out_slots_acc = out_slots_tensor.accessor<int32_t, 1>();
+  auto raw_bt_acc = raw_bt.accessor<int32_t, 2>();
+  const int64_t semantic_cols = raw_bt.size(1);
+  const int64_t storage_cols =
+      graph_slot_capacity > 0 && block_table_capacity_cols > 0
+          ? std::max<int64_t>(block_table_capacity_cols, raw_bt.size(1))
+          : raw_bt.size(1);
+  const int64_t block_size_i64 = static_cast<int64_t>(block_size);
+  const bool compact_raw_rows = raw_bt.size(0) < batch_size;
+  auto raw_row_for_sequence = [&](int32_t seq) -> int32_t {
+    if (!compact_raw_rows) {
+      return seq;
+    }
+    int32_t raw_seq = 0;
+    for (int32_t s = 0; s < seq; ++s) {
+      if (ctx_lens[s] > 0) {
+        ++raw_seq;
+      }
+    }
+    return ctx_lens[seq] > 0 ? raw_seq : -1;
+  };
+
+  auto slot_for_position = [&](int32_t raw_seq, int64_t pos) -> int32_t {
+    if (semantic_cols <= 0) {
+      return -1;
+    }
+    const int64_t block_idx = (pos / block_size_i64) % semantic_cols;
+    const int32_t block_id = raw_bt_acc[raw_seq][block_idx];
+    if (block_id < 0) {
+      return -1;
+    }
+    const int64_t block_offset = pos % block_size_i64;
+    return static_cast<int32_t>(
+        static_cast<int64_t>(block_id) * block_size_i64 + block_offset);
+  };
+
+  int64_t write_idx = 0;
+  for (int32_t seq = 0; seq < batch_size; ++seq) {
+    const int64_t ctx_len = static_cast<int64_t>(ctx_lens[seq]);
+    const int64_t q_len =
+        std::clamp<int64_t>(static_cast<int64_t>(q_lens[seq]), 0, ctx_len);
+    const int32_t raw_seq = raw_row_for_sequence(seq);
+    if (raw_seq < 0 || raw_seq >= raw_bt.size(0)) {
+      write_idx += q_len;
+      continue;
+    }
+    const int64_t q_start = ctx_len - q_len;
+    for (int64_t i = 0; i < q_len; ++i) {
+      out_slots_acc[write_idx++] = slot_for_position(raw_seq, q_start + i);
+    }
+  }
+
+  out_slots = out_slots_tensor;
+
+  const int32_t current_cols = static_cast<int32_t>(semantic_cols);
+  int32_t max_dst_len = 0;
+  std::vector<int32_t> dst_lens(batch_size);
+  for (int32_t s = 0; s < batch_size; ++s) {
+    const int64_t ctx_len = std::max<int64_t>(ctx_lens[s], 0);
+    dst_lens[s] = static_cast<int32_t>((ctx_len + block_size - 1) / block_size);
+    max_dst_len = std::max(max_dst_len, dst_lens[s]);
+  }
+  max_dst_len = std::max(max_dst_len, current_cols);
+  if (graph_slot_capacity > 0) {
+    max_dst_len =
+        std::max<int32_t>(max_dst_len, static_cast<int32_t>(storage_cols));
+  }
+
+  auto new_bt = torch::full({batch_size, max_dst_len}, -1, raw_bt.options());
+  auto new_acc = new_bt.accessor<int32_t, 2>();
+  auto old_acc = raw_bt.accessor<int32_t, 2>();
+
+  for (int32_t s = 0; s < batch_size; ++s) {
+    const int32_t raw_seq = raw_row_for_sequence(s);
+    if (raw_seq < 0 || raw_seq >= raw_bt.size(0)) {
+      continue;
+    }
+    const int32_t retained_cols = std::min(current_cols, dst_lens[s]);
+    const int32_t start_col = dst_lens[s] - retained_cols;
+    for (int32_t j = 0; j < retained_cols; ++j) {
+      const int32_t logical_col = start_col + j;
+      // Keep the read-side block table aligned with slot_for_position().
+      const int32_t physical_col = logical_col % current_cols;
+      new_acc[s][logical_col] = old_acc[raw_seq][physical_col];
+    }
+  }
+  out_bt = new_bt;
+}
+
+void DSAMetadataBuilderMusa::build_seq_lengths(
+    const ModelInputParams& params,
+    const torch::Device& target_device,
+    int32_t batch_size,
+    const std::vector<int32_t>& ctx_lens,
+    const std::vector<int32_t>& q_lens_vec,
+    DSAMetadata& dsa_metadata) {
+  auto int_options =
+      torch::TensorOptions().dtype(torch::kInt32).device(target_device);
+  CHECK_EQ(static_cast<int32_t>(ctx_lens.size()), batch_size)
+      << "build_seq_lengths requires ctx_lens.size == batch_size, got "
+      << ctx_lens.size() << " vs " << batch_size;
+  CHECK_EQ(static_cast<int32_t>(q_lens_vec.size()), batch_size)
+      << "build_seq_lengths requires q_lens.size == batch_size, got "
+      << q_lens_vec.size() << " vs " << batch_size;
+
+  torch::Tensor kv_lens = torch::tensor(ctx_lens, int_options);
+  torch::Tensor q_lens = torch::tensor(q_lens_vec, int_options);
+  dsa_metadata.seq_lens = kv_lens;
+  dsa_metadata.actual_seq_lengths_kv = kv_lens;
+  // cumsum with leading 0: shape (batch_size+1,)
+  auto cumsum = torch::cumsum(q_lens, /*dim=*/0, /*dtype=*/torch::kInt32);
+  dsa_metadata.actual_seq_lengths_query =
+      torch::cat({torch::zeros({1}, int_options), cumsum});
+  dsa_metadata.seq_lens_q = q_lens;
+
+  // Precompute the kv cumulative sequence lengths once per forward so the
+  // per-layer indexer metadata builder can reuse it instead of running a
+  // host-side cumsum on every DSA layer (kv_lens is identical across layers
+  // within one forward).
+  if (kv_lens.numel() > 0) {
+    torch::Tensor kv_lens_i32 = kv_lens.to(torch::kInt32);
+    torch::Tensor kv_cumsum =
+        torch::cumsum(kv_lens_i32, /*dim=*/0, /*dtype=*/torch::kInt32);
+    dsa_metadata.kv_cu_seq_lens =
+        torch::cat({torch::zeros({1}, int_options), kv_cumsum});
+  }
+
+  if (kv_lens.numel() > 0) {
+    dsa_metadata.max_seqlen_kv = torch::max(kv_lens).to(torch::kInt32);
+  } else {
+    dsa_metadata.max_seqlen_kv = torch::zeros({1}, int_options);
+  }
+
+  if (q_lens.numel() > 0) {
+    dsa_metadata.max_seqlen_q = torch::max(q_lens).to(torch::kInt32);
+  } else {
+    dsa_metadata.max_seqlen_q = torch::zeros({1}, int_options);
+  }
+
+  dsa_metadata.max_query_len = std::max<int64_t>(
+      params.meta.q_max_seq_len, vector_max_or_zero(q_lens_vec));
+  dsa_metadata.max_seq_len = std::max<int64_t>(params.meta.kv_max_seq_len,
+                                               vector_max_or_zero(ctx_lens));
+}
+
+void DSAMetadataBuilderMusa::build_positions(
+    const ModelInputParams& params,
+    int32_t batch_size,
+    const std::vector<int32_t>& ctx_lens,
+    const std::vector<int32_t>& q_lens_vec,
+    DSAMetadata& dsa_metadata) {
+  if (!dsa_metadata.input_positions.defined()) return;
+
+  auto input_positions = dsa_metadata.input_positions;
+  int64_t num_tokens = input_positions.size(0);
+  const bool is_acl_graph = params.enable_graph;
+  const auto target_device = input_positions.device();
+  const auto pos_dtype = input_positions.scalar_type();
+  auto cpu_options =
+      torch::TensorOptions().dtype(pos_dtype).device(torch::kCPU);
+
+  const bool has_host_lens =
+      static_cast<int32_t>(ctx_lens.size()) == batch_size &&
+      static_cast<int32_t>(q_lens_vec.size()) == batch_size;
+  if (has_host_lens) {
+    const bool fixed_sequence_positions =
+        is_acl_graph && dsv4_fixed_graph_sequences(num_tokens, q_lens_vec);
+    std::vector<int64_t> c4_positions;
+    std::vector<int64_t> c128_positions;
+    c4_positions.reserve(
+        static_cast<size_t>(std::max<int64_t>(num_tokens / 4 + batch_size, 0)));
+    c128_positions.reserve(static_cast<size_t>(
+        std::max<int64_t>(num_tokens / 128 + batch_size, 0)));
+    for (int32_t seq = 0; seq < batch_size; ++seq) {
+      const int64_t kv_len = ctx_lens[seq];
+      int64_t q_len = q_lens_vec[seq];
+      q_len = std::clamp<int64_t>(q_len, 0, kv_len);
+      const int64_t start_pos = kv_len - q_len;
+      for (int64_t i = 0; i < q_len; ++i) {
+        const int64_t pos = start_pos + i;
+        const int64_t next_pos = pos + 1;
+        if (next_pos % 4 == 0) {
+          c4_positions.push_back(next_pos - 4);
+        }
+        if (next_pos % 128 == 0) {
+          c128_positions.push_back(next_pos - 128);
+        }
+      }
+      if (fixed_sequence_positions) {
+        // Every request owns a fixed interval, even on a step with no C128
+        // emission. Use the physical width, not the clamped valid q_len:
+        // a dummy row has KV=0 and must not truncate preceding live positions.
+        // Padding positions are paired with -1 cache slots.
+        c4_positions.resize((seq + 1) *
+            dsv4_graph_compressed_stride(q_lens_vec.front(), 4), 0);
+        c128_positions.resize((seq + 1) *
+            dsv4_graph_compressed_stride(q_lens_vec.front(), 128), 0);
+      }
+    }
+
+    const int64_t c4_target =
+        is_acl_graph
+            ? num_tokens
+            : std::min<int64_t>(num_tokens, num_tokens / 4 + batch_size);
+    const int64_t c128_target =
+        is_acl_graph
+            ? num_tokens
+            : std::min<int64_t>(num_tokens, num_tokens / 128 + batch_size);
+    c4_positions.resize(static_cast<size_t>(std::max<int64_t>(c4_target, 0)),
+                        0);
+    c128_positions.resize(
+        static_cast<size_t>(std::max<int64_t>(c128_target, 0)), 0);
+
+    dsa_metadata.c4_pad_positions = torch::tensor(c4_positions, cpu_options);
+    dsa_metadata.c128_pad_positions =
+        torch::tensor(c128_positions, cpu_options);
+    return;
+  }
+
+  std::vector<int64_t> host_positions;
+  host_positions.reserve(static_cast<size_t>(std::max<int64_t>(num_tokens, 0)));
+  if (static_cast<int64_t>(host_positions.size()) < num_tokens &&
+      input_positions.device().is_cpu()) {
+    auto positions_cpu = input_positions.contiguous();
+    if (positions_cpu.scalar_type() == torch::kInt64) {
+      auto acc = positions_cpu.accessor<int64_t, 1>();
+      for (int64_t i = static_cast<int64_t>(host_positions.size());
+           i < num_tokens;
+           ++i) {
+        host_positions.push_back(acc[i]);
+      }
+    } else {
+      auto positions_i64 = positions_cpu.to(torch::kInt64);
+      auto acc = positions_i64.accessor<int64_t, 1>();
+      for (int64_t i = static_cast<int64_t>(host_positions.size());
+           i < num_tokens;
+           ++i) {
+        host_positions.push_back(acc[i]);
+      }
+    }
+  }
+
+  if (static_cast<int64_t>(host_positions.size()) > num_tokens) {
+    host_positions.resize(static_cast<size_t>(num_tokens));
+  }
+  if (static_cast<int64_t>(host_positions.size()) < num_tokens) {
+    host_positions.resize(static_cast<size_t>(num_tokens), 0);
+  }
+
+  auto build_compressed_positions = [&](int64_t ratio) {
+    std::vector<int64_t> compressed;
+    compressed.reserve(host_positions.size() / ratio + batch_size);
+    for (const int64_t pos : host_positions) {
+      if ((pos + 1) % ratio == 0) {
+        compressed.push_back((pos + 1) - ratio);
+      }
+    }
+    const int64_t target =
+        is_acl_graph
+            ? num_tokens
+            : std::min<int64_t>(num_tokens, num_tokens / ratio + batch_size);
+    compressed.resize(static_cast<size_t>(std::max<int64_t>(target, 0)), 0);
+    auto tensor = torch::tensor(compressed, cpu_options);
+    return tensor;
+  };
+
+  dsa_metadata.c4_pad_positions = build_compressed_positions(4);
+  dsa_metadata.c128_pad_positions = build_compressed_positions(128);
+}
+
+}  // namespace xllm::layer

@@ -33,8 +33,10 @@ void EncoderExecutor::prepare(const ModelInputParams& params,
   if (!data.valid()) {
     return;
   }
+  EncoderCacheCommandVisitor commands(cache_.get());
   if (cache_) {
-    EncoderCacheLookupVisitor lookup(cache_.get());
+    CHECK(data.foreach (commands));
+    EncoderCacheLookupVisitor lookup(cache_.get(), commands);
     CHECK(data.foreach (lookup));
   }
   EncoderInputGatherVisitor inputs;
@@ -47,7 +49,7 @@ void EncoderExecutor::prepare(const ModelInputParams& params,
   CHECK(scatter.finish());
 
   if (cache_) {
-    EncoderCacheInsertVisitor insert(cache_.get());
+    EncoderCacheInsertVisitor insert(cache_.get(), commands);
     CHECK(data.foreach (insert));
   }
   EncoderEmbeddingGatherVisitor gather(params.attention.host.kv_seq_lens,

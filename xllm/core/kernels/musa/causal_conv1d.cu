@@ -748,7 +748,7 @@ void causal_conv1d_fwd_token_major(const at::Tensor& x,
                                    const at::Tensor& has_initial_state,
                                    bool silu_activation,
                                    int64_t pad_slot_id) {
-  TORCH_CHECK(x.dim() == 2 && x.is_contiguous());
+  TORCH_CHECK(x.dim() == 2 && x.stride(1) == 1);
   TORCH_CHECK(out.sizes() == x.sizes() && out.is_contiguous());
   TORCH_CHECK(weight.dim() == 2 && weight.size(1) == 4);
   TORCH_CHECK(weight.size(0) == x.size(1));

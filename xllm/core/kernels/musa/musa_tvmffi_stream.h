@@ -184,5 +184,7 @@ void end_ffi_alloc_replay();
 
 FfiAllocMode get_ffi_alloc_mode();
 
+// Bind the exact Torch stream, including its valid null default-stream handle.
+// Callers that require a non-null pooled stream must use TvmffiStreamGuard.
 void bind_tvmffi_stream_to_current_torch_stream(const torch::Device& device);
 }  // namespace xllm::kernel::musa

@@ -83,6 +83,7 @@ class WorkerImpl {
 
   // Whether this worker owns recurrent request state.
   bool has_request_state_cache() const;
+  const std::vector<KVCache>& kv_caches() const { return kv_caches_; }
 
   // allocate kv cache. blocking call
   virtual bool allocate_kv_cache(const KVCacheShape& kv_cache_shape);
@@ -90,7 +91,8 @@ class WorkerImpl {
   virtual bool allocate_kv_cache_with_transfer(
       const KVCacheShape& kv_cache_shape);
 
-#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_DCU) || \
+    defined(USE_MUSA)
   virtual bool allocate_kv_cache_with_transfer(
       std::shared_ptr<KVCacheTransfer> kv_cache_transfer,
       const KVCacheShape& kv_cache_shape);

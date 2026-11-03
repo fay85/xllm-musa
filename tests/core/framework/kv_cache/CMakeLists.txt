@@ -23,6 +23,9 @@ target_link_libraries(cache_layout_builder_test
                       $<$<BOOL:${USE_NPU}>:hccl>
                       $<$<BOOL:${USE_NPU}>:c_sec>
                       $<$<BOOL:${USE_NPU}>:nnopbase>)
+if(USE_MUSA)
+  target_link_libraries(cache_layout_builder_test PRIVATE :reshard_planner)
+endif()
 
 cc_test(
   NAME
@@ -41,6 +44,9 @@ target_link_libraries(kv_cache_estimation_test
                       $<$<BOOL:${USE_NPU}>:hccl>
                       $<$<BOOL:${USE_NPU}>:c_sec>
                       $<$<BOOL:${USE_NPU}>:nnopbase>)
+if(USE_MUSA)
+  target_link_libraries(kv_cache_estimation_test PRIVATE :kv_cache)
+endif()
 
 cc_test(
   NAME

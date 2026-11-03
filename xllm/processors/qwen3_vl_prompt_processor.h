@@ -39,6 +39,10 @@ class Qwen3VLPromptProcessor final : public PromptProcessor {
   bool find_mm_spans(const std::vector<int32_t>& token_ids,
                      MMData& mm_data) override;
 
+  std::string_view segment_delimiter() const override {
+    return vision_end_token_;
+  }
+
  private:
   std::pair<TokenType, size_t> find_vision_token(const std::string& prompt,
                                                  size_t begin);

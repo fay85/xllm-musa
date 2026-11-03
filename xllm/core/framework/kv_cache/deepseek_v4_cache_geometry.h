@@ -29,6 +29,25 @@ constexpr int64_t kDsv4CompressedBlockTokenSize = 2048;
 
 class Dsv4CacheGeometry final {
  public:
+  [[nodiscard]] constexpr int64_t logical_block_token_size(
+      int32_t compress_ratio,
+      int64_t block_size) const {
+#if defined(USE_MUSA)
+    return static_cast<int64_t>(compress_ratio) * block_size;
+#else
+    (void)compress_ratio;
+    (void)block_size;
+    return kDsv4CompressedBlockTokenSize;
+#endif
+  }
+
+  [[nodiscard]] constexpr int64_t compressed_physical_dim(
+      int32_t compress_ratio,
+      int64_t block_size) const {
+    return logical_block_token_size(compress_ratio, block_size) /
+           compress_ratio;
+  }
+
   [[nodiscard]] constexpr int64_t compressed_block_token_size() const {
     return kDsv4CompressedBlockTokenSize;
   }

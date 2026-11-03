@@ -21,7 +21,7 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 
-#include "block_manager.h"
+#include "core/framework/block/block_manager.h"
 #include "framework/block/embedding_block_manager.h"
 #include "framework/block/kv_cache_manager.h"
 
@@ -75,6 +75,8 @@ class BlockManagerPool : public KVCacheManager {
     // For CompositeBlockManager.
     PROPERTY(std::vector<uint32_t>, manager_types) = {};
     PROPERTY(std::vector<uint32_t>, compress_ratios) = {};
+    // Advertised in the Native V2 Provider Descriptor. Zero means unknown.
+    PROPERTY(uint64_t, logical_kv_bytes_per_token) = 0;
     PROPERTY(uint32_t, max_seqs_per_batch) = 0;
     // Hasher type bound to the engine (TEXT for LLM, MM for VLM).
     PROPERTY(BlockHasherType, hasher_type) = BlockHasherType::TEXT;
@@ -92,7 +94,7 @@ class BlockManagerPool : public KVCacheManager {
 
   explicit BlockManagerPool(const Options& options, int32_t dp_size = 1);
 
-  ~BlockManagerPool() = default;
+  ~BlockManagerPool();
 
   bool allocate(Sequence* sequence) override;
   bool allocate(std::vector<Sequence*>& sequences) override;
@@ -106,6 +108,18 @@ class BlockManagerPool : public KVCacheManager {
   void deallocate(Request* request) override;
   void deallocate(std::vector<Sequence*>& sequences) override;
   void deallocate(Sequence* sequence) override;
+
+  void deallocate_without_cache(Sequence* sequence);
+
+  // Call only after completed prefill work is synchronized, before admitting
+  // another prefill. Non-virtual to preserve existing manager ABI.
+  size_t reclaim_completed_prefill_swa(Sequence* sequence);
+  // MUSA PULL: call on the scheduler thread after prefill synchronization and
+  // before publishing source mappings to the asynchronous handoff thread.
+  // Keep the live tail and compressed history pinned until PULL completes.
+  size_t reclaim_completed_pd_prefill_swa(Sequence* sequence);
+  size_t swa_free_blocks() const;
+  void reset_swa_prefix_cache();
 
   void allocate_shared(Sequence* sequence) override;
   void cache(Sequence* sequence) override;

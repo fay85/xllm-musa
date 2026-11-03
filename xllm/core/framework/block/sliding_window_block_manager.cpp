@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "sliding_window_block_manager.h"
+#include "core/framework/block/sliding_window_block_manager.h"
 
 #include <algorithm>
 #include <iterator>

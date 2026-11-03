@@ -42,6 +42,7 @@ limitations under the License.
 #include "framework/request/sequence.h"
 #include "framework/sampling/sampling_params.h"
 #if defined(USE_MUSA)
+#include "core/framework/parallel_state/musa/musa_custom_all_reduce.h"
 #include "layers/common/attention_metadata.h"
 #endif
 #include "models/vlm/mposition/mposition.h"
@@ -1364,6 +1365,12 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
   if (!use_mrope_) {
     forward_input.positions =
         torch::tensor(state_.flatten_positions_vec, torch::kInt);
+  } else if (state_.batch_forward_type.is_decode()) {
+    // Every M-RoPE axis of a decode token holds the same position, so decode
+    // batches carry the [seq] positions of text and share its decode path.
+    forward_input.positions = torch::cat(state_.mrope_positions_vec, /*dim=*/1)
+                                  .select(/*dim=*/0, /*index=*/0)
+                                  .contiguous();
   } else {
     forward_input.positions = torch::cat(state_.mrope_positions_vec, 1);
   }
@@ -1449,6 +1456,9 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
       std::move(batch_mm_data_vec),
       /*materialize_tensors=*/commit_sequence_state_);
 
+#if defined(USE_MUSA)
+  const MusaTpCaptureReadLock tp_capture_lock(Platform::current_device());
+#endif
   // Setup block tables
   // DFlash2 checks future capacity before prelaunch. Keep a missing page
   // distinct from the valid physical block 0.

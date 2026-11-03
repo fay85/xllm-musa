@@ -18,6 +18,7 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <optional>
+#include <tuple>
 
 #include "framework/state_dict/state_dict.h"
 #include "framework/state_dict/utils.h"
@@ -33,6 +34,15 @@ class RmsNormGatedImpl final : public torch::nn::Module {
 
   torch::Tensor forward(torch::Tensor& input,
                         std::optional<torch::Tensor> gate = std::nullopt);
+
+  // Whether forward_quant_fp8() accepts `input` rows.
+  bool supports_quant_fp8(const torch::Tensor& input) const;
+
+  // Gated forward fused with group-128 FP8 quantization of the result.
+  // Returns {fp8 [rows, dim], scales [rows, 1]}.
+  std::tuple<torch::Tensor, torch::Tensor> forward_quant_fp8(
+      const torch::Tensor& input,
+      const torch::Tensor& gate);
 
   void load_state_dict(const StateDict& state_dict);
 

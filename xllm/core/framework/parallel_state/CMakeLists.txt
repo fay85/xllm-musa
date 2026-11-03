@@ -16,6 +16,8 @@ cc_library(
     $<$<BOOL:${USE_NPU}>:npu_process_group.h>
     $<$<BOOL:${USE_MLU}>:mlu_process_group.h>
     $<$<BOOL:${USE_MUSA}>:musa_process_group.h>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_custom_all_reduce.h>
+    $<$<BOOL:${USE_MUSA}>:musa/musa_custom_all_reduce_policy.h>
     $<$<OR:$<BOOL:${USE_CUDA}>,$<BOOL:${USE_DCU}>>:cuda_process_group.h>
     $<$<BOOL:${USE_ILU}>:ilu_process_group.h>
     collective_communicator_base.h
@@ -31,6 +33,7 @@ cc_library(
     parallel_state.cpp
     parallel_state_async.cpp
     process_group.cpp
+    $<$<BOOL:${USE_MUSA}>:musa/musa_custom_all_reduce.cpp>
     $<$<BOOL:${USE_NPU}>:npu_rank_table_env.cpp>
     $<$<BOOL:${USE_NPU}>:npu_process_group.cpp>
     $<$<BOOL:${USE_NPU}>:mega_moe_comm_resource.cpp>

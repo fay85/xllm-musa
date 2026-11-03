@@ -32,6 +32,13 @@ bool fail_topo(const std::string& msg, std::string* reason) {
 }
 
 PdTopoResult check_hetero_pd_req(const std::string& kv_mode) {
+#if defined(USE_MUSA)
+  // MUSA PD uses PULL: each Decode worker reads every Prefill shard that
+  // covers it through the per-peer ReshardPlan built in link_sessions.
+  if (kv_mode == "PULL") {
+    return PdTopoResult{PdTopoStatus::ALLOW_HETERO, ""};
+  }
+#endif
   if (kv_mode != "PUSH") {
     return PdTopoResult{PdTopoStatus::DENY_HETERO,
                         "hetero pd requires kv_mode=PUSH"};

@@ -184,9 +184,13 @@ void SamplingParameters::init(
   do_sample.reserve(sample_idxes.size());
   for (const auto idx : sample_idxes) {
     const auto* p = req_sampling_params[idx];
-    // need to do sample if any of following is true
-    const bool sample = p->do_sample || p->temperature != 0.0 ||
-                        p->top_p != 1.0 || p->top_k > 0;
+    // OpenAI-compatible temperature=0 is greedy even when a caller leaves a
+    // non-default top_p/top_k in the request. SGLang's GSM8K protocol uses
+    // temperature=0, top_p=0.95 and still takes argmax. Treating top_p=0.95
+    // as random here makes xLLM's DeepSeek Graph+DSpark answers nondeterministic
+    // and diverges from the reference protocol. An explicit do_sample=true
+    // still opts into sampling at temperature zero.
+    const bool sample = p->do_sample || p->temperature != 0.0;
     do_sample.push_back(sample ? 1 : 0);
   }
   this->sample_idxes = torch::tensor(sample_idxes, int_tensor_options);

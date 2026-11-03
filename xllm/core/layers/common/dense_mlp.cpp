@@ -17,9 +17,15 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <cmath>
+
 #include "common/flash_comm1_context.h"
 #include "kernels/ops_api.h"
+#if defined(USE_MUSA)
+#include "kernels/musa/musa_ops_api.h"
+#endif
 #include "platform/platform.h"
+#include "util/env_var.h"
 
 namespace xllm {
 namespace layer {
@@ -153,8 +159,20 @@ torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
     return down_proj_->forward(gate_up);
   }
 
+#if defined(USE_MUSA)
+  const bool use_fused_path =
+      uses_fused_swiglu_quant() && !use_fc1_sequence_parallel &&
+      gate_up.dim() == 2 && gate_up.size(0) > 0 &&
+      gate_up.scalar_type() == torch::kBFloat16 && gate_up.is_contiguous();
+  if (use_fused_path) {
+    auto [quantized, scale] =
+        xllm::kernel::musa::fused_swiglu_quant_fp8(gate_up, 128);
+    return down_proj_->forward_block_fp8_quantized(quantized, scale);
+  }
+#endif
+
   torch::Tensor output;
-  if (!Platform::is_npu() && !Platform::is_musa()) {
+  if (!Platform::is_npu()) {
     const int64_t batch_size = gate_up.sizes()[0];
     output = torch::empty(
         {batch_size, intermediate_size_ / process_group_->world_size()},
@@ -169,6 +187,38 @@ torch::Tensor DenseMLPImpl::forward(const torch::Tensor& hidden_states) {
   }
   return down_proj_->forward(output);
 }
+
+#if defined(USE_MUSA)
+bool DenseMLPImpl::uses_fused_swiglu_quant() const {
+  static const bool use_fused_swiglu_quant =
+      util::get_bool_env("XLLM_FUSED_DENSE_SWIGLU_FP8", true);
+  const bool has_swiglu_limit = std::isfinite(swiglu_limit_) &&
+                                swiglu_limit_ > 0.0 &&
+                                swiglu_limit_ < 1000000.0;
+  return use_fused_swiglu_quant && is_gated_ && !is_smoothquant_ &&
+         hidden_act_ == "silu" && !has_swiglu_limit &&
+         down_proj_->supports_block_fp8_quantized_input();
+}
+
+bool DenseMLPImpl::supports_block_fp8_quantized_input() const {
+  const FlashComm1Context* fc1_ctx = get_current_flash_comm1_context();
+  const bool use_fc1_sequence_parallel =
+      apply_fc1_sequence_parallel_ && fc1_ctx && is_sequence_sharded(*fc1_ctx);
+  return !use_fc1_sequence_parallel && uses_fused_swiglu_quant() &&
+         gate_up_proj_->supports_block_fp8_quantized_input();
+}
+
+torch::Tensor DenseMLPImpl::forward_block_fp8_quantized(
+    const torch::Tensor& input,
+    const torch::Tensor& input_scale) {
+  CHECK(supports_block_fp8_quantized_input());
+  torch::Tensor gate_up =
+      gate_up_proj_->forward_block_fp8_quantized(input, input_scale);
+  auto [quantized, scale] =
+      xllm::kernel::musa::fused_swiglu_quant_fp8(gate_up, /*group_size=*/128);
+  return down_proj_->forward_block_fp8_quantized(quantized, scale);
+}
+#endif
 
 void DenseMLPImpl::load_state_dict(const StateDict& state_dict) {
   gate_proj_weight_seen_ =

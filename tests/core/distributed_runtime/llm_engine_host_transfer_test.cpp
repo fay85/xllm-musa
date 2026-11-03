@@ -76,6 +76,138 @@ class ClientEngine final : public LLMEngine {
       : LLMEngine(std::move(options), std::move(clients)) {}
 };
 
+#if defined(USE_MUSA)
+class RecordingPullWorker final : public WorkerClient {
+ public:
+  struct PullCall {
+    uint64_t cluster_id;
+    std::string address;
+    std::vector<KVTransferMapping> mappings;
+  };
+
+  bool pull_kv_blocks(uint64_t cluster_id,
+                      const std::string& address,
+                      const std::vector<KVTransferMapping>& mappings) override {
+    calls_.push_back({cluster_id, address, mappings});
+    return address != failed_address_;
+  }
+
+  folly::SemiFuture<bool> pull_kv_blocks_async(
+      uint64_t cluster_id,
+      const std::string& address,
+      const std::vector<KVTransferMapping>& mappings) override {
+    return folly::makeSemiFuture(pull_kv_blocks(cluster_id, address, mappings));
+  }
+
+  std::vector<PullCall> calls_;
+  std::string failed_address_;
+};
+
+class LLMEnginePullRouteTest : public ::testing::Test {
+ protected:
+  void create_engine(int32_t world_size, int32_t dp_size) {
+    std::vector<std::shared_ptr<WorkerClient>> clients;
+    clients.reserve(world_size);
+    workers_.reserve(world_size);
+    for (int32_t rank = 0; rank < world_size; ++rank) {
+      auto worker = std::make_shared<RecordingPullWorker>();
+      clients.emplace_back(worker);
+      workers_.emplace_back(std::move(worker));
+    }
+    runtime::Options options;
+    options.world_size(world_size).nnodes(world_size).dp_size(dp_size);
+    engine_ =
+        std::make_unique<ClientEngine>(std::move(options), std::move(clients));
+  }
+
+  std::vector<std::shared_ptr<RecordingPullWorker>> workers_;
+  std::unique_ptr<ClientEngine> engine_;
+};
+
+TEST_F(LLMEnginePullRouteTest, VisitsAllSourcesInOnlyTheRequestedDpGroup) {
+  create_engine(/*world_size=*/16, /*dp_size=*/2);
+  std::vector<uint64_t> cluster_ids;
+  std::vector<std::string> addresses;
+  cluster_ids.reserve(16);
+  addresses.reserve(16);
+  for (int32_t rank = 0; rank < 16; ++rank) {
+    cluster_ids.emplace_back(100 + rank);
+    addresses.emplace_back("source-" + std::to_string(rank));
+  }
+  KVTransferMapping mapping;
+  mapping.group_id = cache_group_id(BlockType::C4);
+  mapping.local_ids = {3};
+  mapping.remote_ids = {7};
+  mapping.remote_shared_num = 1;
+
+  ASSERT_TRUE(engine_->pull_kv_blocks(/*src_dp_size=*/2,
+                                      /*src_dp_rank=*/1,
+                                      cluster_ids,
+                                      addresses,
+                                      /*dst_dp_rank=*/1,
+                                      {mapping}));
+  for (size_t rank = 0; rank < 8; ++rank) {
+    EXPECT_TRUE(workers_[rank]->calls_.empty());
+  }
+  for (size_t rank = 8; rank < 16; ++rank) {
+    const auto& calls = workers_[rank]->calls_;
+    ASSERT_EQ(calls.size(), 8U) << "destination rank " << rank;
+    for (size_t index = 0; index < calls.size(); ++index) {
+      EXPECT_EQ(calls[index].cluster_id, cluster_ids[8 + index]);
+      EXPECT_EQ(calls[index].address, addresses[8 + index]);
+      ASSERT_EQ(calls[index].mappings.size(), 1U);
+      EXPECT_EQ(calls[index].mappings[0].group_id, mapping.group_id);
+      EXPECT_EQ(calls[index].mappings[0].local_ids, mapping.local_ids);
+      EXPECT_EQ(calls[index].mappings[0].remote_ids, mapping.remote_ids);
+      EXPECT_EQ(calls[index].mappings[0].remote_shared_num,
+                mapping.remote_shared_num);
+    }
+  }
+}
+
+TEST_F(LLMEnginePullRouteTest, PropagatesFailureFromANonmatchingSourceRank) {
+  create_engine(/*world_size=*/2, /*dp_size=*/1);
+  workers_[1]->failed_address_ = "source-0";
+  EXPECT_FALSE(engine_->pull_kv_blocks(/*src_dp_size=*/1,
+                                       /*src_dp_rank=*/0,
+                                       {10, 11},
+                                       {"source-0", "source-1"},
+                                       /*dst_dp_rank=*/0,
+                                       {}));
+}
+
+TEST_F(LLMEnginePullRouteTest, RejectsInvalidTopologyBeforeDispatch) {
+  create_engine(/*world_size=*/2, /*dp_size=*/1);
+  EXPECT_FALSE(engine_->pull_kv_blocks(/*src_dp_size=*/0,
+                                       /*src_dp_rank=*/0,
+                                       {10, 11},
+                                       {"source-0", "source-1"},
+                                       /*dst_dp_rank=*/0,
+                                       {}));
+  EXPECT_FALSE(engine_->pull_kv_blocks(/*src_dp_size=*/1,
+                                       /*src_dp_rank=*/0,
+                                       {10, 11},
+                                       {"source-0"},
+                                       /*dst_dp_rank=*/0,
+                                       {}));
+  EXPECT_FALSE(engine_->pull_kv_blocks(/*src_dp_size=*/1,
+                                       /*src_dp_rank=*/1,
+                                       {10, 11},
+                                       {"source-0", "source-1"},
+                                       /*dst_dp_rank=*/0,
+                                       {}));
+  EXPECT_FALSE(engine_->pull_kv_blocks(/*src_dp_size=*/1,
+                                       /*src_dp_rank=*/0,
+                                       {10, 11},
+                                       {"source-0", "source-1"},
+                                       /*dst_dp_rank=*/1,
+                                       {}));
+  for (const auto& worker : workers_) {
+    EXPECT_TRUE(worker->calls_.empty());
+  }
+}
+#endif
+
 struct TransferTopology {
   uint32_t workers_;
   uint32_t dp_;

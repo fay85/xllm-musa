@@ -32,9 +32,30 @@ class Qwen3NextRMSNormImpl : public torch::nn::Module {
   virtual std::tuple<torch::Tensor, std::optional<torch::Tensor>> forward(
       torch::Tensor& input,
       std::optional<torch::Tensor> residual = std::nullopt);
+#if defined(USE_MUSA)
+  void forward_out(const torch::Tensor& input, torch::Tensor& norm_out);
+  bool supports_quant_fp8(const torch::Tensor& input) const;
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> forward_quant_fp8(
+      const torch::Tensor& input,
+      bool keep_normed_input);
+#endif
   torch::Tensor weight() const { return weight_; }
   bool is_weight_loaded() const { return weight_is_loaded_; }
   double eps() const { return eps_; }
+
+#if defined(USE_MUSA)
+  bool supports_quant_fp8(const torch::Tensor& input,
+                          const torch::Tensor& residual) const;
+
+  // forward(input, residual) that also quantizes the normalized rows to
+  // group-128 FP8. `residual` receives input + residual; `input` receives the
+  // normalized rows only when `keep_normed_input` is set.
+  // Returns {fp8 [rows, dim], scales [rows, dim / 128]}.
+  std::tuple<torch::Tensor, torch::Tensor> forward_quant_fp8(
+      torch::Tensor& input,
+      torch::Tensor& residual,
+      bool keep_normed_input);
+#endif
 
   void load_state_dict(const StateDict& state_dict);
 

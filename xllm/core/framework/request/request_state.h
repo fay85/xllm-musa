@@ -181,6 +181,9 @@ class RequestState final {
   // P-side link generation observed before requesting a Decode reservation.
   uint64_t decode_link_epoch = 0;
 
+  // Persist the real RPC result across temporary local dispatch retries.
+  std::optional<DecodeAdmissionObservation> decode_admission;
+
   torch::Tensor input_embedding;
 
   // multimodal

@@ -29,6 +29,7 @@ limitations under the License.
 #include "layers/common/linear.h"
 #include "layers/common/partial_rotary_embedding.h"
 #include "layers/common/qwen3_next_rms_norm.h"
+#include "layers/musa/normalized_hidden_states.h"
 
 namespace xllm {
 namespace layer {
@@ -43,10 +44,13 @@ class Qwen3NextAttentionImpl final : public torch::nn::Module {
                          int32_t layer_id);
 
   torch::Tensor forward(const torch::Tensor& positions,
-                        const torch::Tensor& hidden_states,
+                        const NormalizedHiddenStates& hidden_states,
                         const AttentionMetadata& attn_metadata,
                         KVCache& kv_cache,
                         const torch::Tensor& mrope_cos_sin);
+
+  // Whether forward() consumes NormalizedHiddenStates::fp8_values.
+  bool supports_fp8_input() const;
 
   torch::Tensor build_mrope_cos_sin(const torch::Tensor& positions) const;
 

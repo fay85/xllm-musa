@@ -23,7 +23,6 @@ limitations under the License.
 #include <cstring>
 #include <fstream>
 #include <optional>
-#include <source_location>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -96,11 +95,10 @@ inline void print_tensor(
     int num = 10,
     bool part = true,
     bool print_value = true,
-    const std::source_location& loc = std::source_location::current()) {
+    const char* file = __builtin_FILE(),
+    int line = __builtin_LINE()) {
   auto& log_stream =
-      google::LogMessage(
-          loc.file_name(), static_cast<int>(loc.line()), google::GLOG_INFO)
-          .stream();
+      google::LogMessage(file, line, google::GLOG_INFO).stream();
   if (!tensor.defined()) {
     log_stream << tensor_name << ", Undefined tensor." << std::endl;
     return;

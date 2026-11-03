@@ -58,7 +58,7 @@ void apply_dflash2_runtime_block_size(ModelArgs& args,
             << ", candidate tokens: " << runtime_block_size - 1;
 }
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
 // `python_v41_draft` must mirror the draft model_type selection below: it is
 // true exactly when the draft resolves the python DeepseekV41DSparkForCausalLM
 // class, and every other DSpark draft (any checkpoint generation under the
@@ -148,6 +148,7 @@ void configure_deepseek_v4_dspark_args(ModelArgs& args,
   args.engram_layer_ids({});
   args.engram_num_embeddings({});
 
+#if defined(USE_NPU)
   args.dspark_use_native_sas(
       KernelConfig::get_instance().enable_dspark_native_sas() &&
       !python_v41_draft);
@@ -165,6 +166,9 @@ bool supports_block_diffusion_draft(std::string_view algorithm) {
   }
   if (Platform::is_mlu()) {
     return SpeculativeConfig::is_dflash2_algorithm(algorithm);
+  }
+  if (Platform::is_musa()) {
+    return algorithm == "DSpark";
   }
   return false;
 }
@@ -319,6 +323,8 @@ void configure_block_diffusion_model(ModelArgs& args,
       is_dspark && args.model_type() == "qwen3" && Platform::is_npu() &&
       ModelConfig::is_python_model_impl(
           ModelConfig::get_instance().model_impl());
+  CHECK(!Platform::is_musa() || is_deepseek_v4_dspark)
+      << "MUSA block-diffusion draft requires DeepSeek-V4 DSpark.";
   std::string draft_model_type = std::string(kDFlashDraftModelType);
   if (is_dspark) {
     draft_model_type = std::string(kDSparkDraftModelType);
@@ -351,7 +357,7 @@ void configure_block_diffusion_model(ModelArgs& args,
     args.dummy_token_count(
         std::max<int32_t>(1, options.num_speculative_tokens()));
   }
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MUSA)
   if (is_deepseek_v4_dspark) {
     configure_deepseek_v4_dspark_args(args, options, python_v41_draft);
   }

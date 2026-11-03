@@ -427,6 +427,7 @@ namespace xllm::kernel::cuda {
 //       output, input, weight, eps, support_pdl());
 // }
 
+#if !defined(USE_MUSA)
 void rms_norm(torch::Tensor output,  // [..., hidden_size]
               torch::Tensor input,   // [..., hidden_size]
               torch::Tensor weight,  // [hidden_size]
@@ -513,6 +514,8 @@ void fused_add_rms_norm(torch::Tensor& input,     // [..., hidden_size]
 // ============================================================================
 // Fused RMSNorm + Static FP8 Quantization Host Functions
 // ============================================================================
+
+#endif  // !defined(USE_MUSA)
 
 void rms_norm_static_fp8_quant(torch::Tensor& out,    // [..., hidden_size], FP8
                                torch::Tensor& input,  // [..., hidden_size]

@@ -60,6 +60,9 @@ inline __device__ __host__ T div_up(T m, T n) {
   return (m + n - 1) / n;
 }
 
+// With k_cache_void set, every token also gets num_heads_v warps that copy its
+// value heads to v_cache, and the key warps store their result to k_cache,
+// both at the token's slot like reshape_paged_cache.
 template <typename scalar_t, int head_dim, bool interleave>
 __global__ void fused_qknorm_rope_kernel(void* qkv_void,
                                          int const num_heads_q,
@@ -73,12 +76,18 @@ __global__ void fused_qknorm_rope_kernel(void* qkv_void,
                                          void const* cos_sin_cache_void,
                                          int32_t const* position_ids,
                                          int const num_tokens,
-                                         int const rotary_dim) {
+                                         int const rotary_dim,
+                                         void* k_cache_void,
+                                         void* v_cache_void,
+                                         int32_t const* slot_ids,
+                                         int const num_heads_v) {
   using T = scalar_t;
   T* qkv = reinterpret_cast<T*>(qkv_void);
   T const* q_weight = reinterpret_cast<T const*>(q_weight_void);
   T const* k_weight = reinterpret_cast<T const*>(k_weight_void);
   T const* cos_sin_cache = reinterpret_cast<T const*>(cos_sin_cache_void);
+  T* k_cache = reinterpret_cast<T*>(k_cache_void);
+  T* v_cache = reinterpret_cast<T*>(v_cache_void);
 
   int const warps_per_block = blockDim.x / 32;
   int const warp_id = threadIdx.x / 32;
@@ -87,16 +96,15 @@ __global__ void fused_qknorm_rope_kernel(void* qkv_void,
   int const global_warp_idx = blockIdx.x * warps_per_block + warp_id;
 
   int const total_qk_heads = num_heads_q + num_heads_k;
+  int const total_warp_heads =
+      k_cache != nullptr ? total_qk_heads + num_heads_v : total_qk_heads;
 
-  int const token_idx = global_warp_idx / total_qk_heads;
-  int const local_head_idx = global_warp_idx % total_qk_heads;
+  int const token_idx = global_warp_idx / total_warp_heads;
+  int const local_head_idx = global_warp_idx % total_warp_heads;
 
   if (token_idx >= num_tokens) {
     return;
   }
-
-  bool const is_q = local_head_idx < num_heads_q;
-  int const head_idx = is_q ? local_head_idx : local_head_idx - num_heads_q;
 
   static_assert(head_dim % (32 * 2) == 0, "head_dim must be divisible by 64");
   constexpr int kNumElemsPerThread = head_dim / 32;
@@ -106,6 +114,28 @@ __global__ void fused_qknorm_rope_kernel(void* qkv_void,
                 "numSizeBytes must be a multiple of 4");
   constexpr int kVecSize = kElemSizeBytes / 4;
   using vec_T = typename packed_as<uint, kVecSize>::type;
+
+  if (local_head_idx >= total_qk_heads) {
+    int64_t const slot = slot_ids[token_idx];
+    if (slot < 0) {
+      return;
+    }
+    int const v_head_idx = local_head_idx - total_qk_heads;
+    int64_t const src = static_cast<int64_t>(token_idx) *
+                            total_heads_per_token * head_dim +
+                        static_cast<int64_t>(k_head_offset + num_heads_k +
+                                             v_head_idx) *
+                            head_dim +
+                        lane_id * kNumElemsPerThread;
+    int64_t const dst = (slot * num_heads_v + v_head_idx) * head_dim +
+                        lane_id * kNumElemsPerThread;
+    *reinterpret_cast<vec_T*>(&v_cache[dst]) =
+        *reinterpret_cast<vec_T const*>(&qkv[src]);
+    return;
+  }
+
+  bool const is_q = local_head_idx < num_heads_q;
+  int const head_idx = is_q ? local_head_idx : local_head_idx - num_heads_q;
 
   int offset_warp;
   if (is_q) {
@@ -202,6 +232,14 @@ __global__ void fused_qknorm_rope_kernel(void* qkv_void,
           static_cast<scalar_t>(elements[i]);
     }
     *reinterpret_cast<vec_T*>(&qkv[offset_thread]) = vec;
+    if (!is_q && k_cache != nullptr) {
+      int64_t const slot = slot_ids[token_idx];
+      if (slot >= 0) {
+        int64_t const dst = (slot * num_heads_k + head_idx) * head_dim +
+                            lane_id * kNumElemsPerThread;
+        *reinterpret_cast<vec_T*>(&k_cache[dst]) = vec;
+      }
+    }
   }
 }
 
@@ -230,12 +268,18 @@ void launch_fused_qknorm_rope(void* qkv,
                               void const* cos_sin_cache,
                               bool const interleave,
                               int32_t const* position_ids,
+                              void* k_cache,
+                              void* v_cache,
+                              int32_t const* slot_ids,
+                              int const num_heads_v,
                               cudaStream_t stream) {
   constexpr int kBlockSize = 256;
 
   int const warps_per_block = kBlockSize / 32;
-  int const total_qk_heads = num_heads_q + num_heads_k;
-  int const total_warps = num_tokens * total_qk_heads;
+  int const total_warp_heads = k_cache != nullptr
+                                   ? num_heads_q + num_heads_k + num_heads_v
+                                   : num_heads_q + num_heads_k;
+  int const total_warps = num_tokens * total_warp_heads;
 
   int const grid_size = div_up(total_warps, warps_per_block);
   dim3 gridDim(grid_size);
@@ -257,7 +301,11 @@ void launch_fused_qknorm_rope(void* qkv,
                                                cos_sin_cache,
                                                position_ids,
                                                num_tokens,
-                                               rotary_dim);
+                                               rotary_dim,
+                                               k_cache,
+                                               v_cache,
+                                               slot_ids,
+                                               num_heads_v);
       });
       break;
     case 128:
@@ -275,7 +323,11 @@ void launch_fused_qknorm_rope(void* qkv,
                                                cos_sin_cache,
                                                position_ids,
                                                num_tokens,
-                                               rotary_dim);
+                                               rotary_dim,
+                                               k_cache,
+                                               v_cache,
+                                               slot_ids,
+                                               num_heads_v);
       });
       break;
     case 256:
@@ -293,7 +345,11 @@ void launch_fused_qknorm_rope(void* qkv,
                                                cos_sin_cache,
                                                position_ids,
                                                num_tokens,
-                                               rotary_dim);
+                                               rotary_dim,
+                                               k_cache,
+                                               v_cache,
+                                               slot_ids,
+                                               num_heads_v);
       });
       break;
     default:
@@ -306,18 +362,27 @@ void launch_fused_qknorm_rope(void* qkv,
 
 namespace xllm::kernel::musa {
 
-void fused_qk_norm_rope(torch::Tensor& qkv,
-                        int64_t num_heads_q,
-                        int64_t num_heads_k,
-                        int64_t num_heads_v,
-                        int64_t head_dim,
-                        double eps,
-                        const torch::Tensor& q_weight,
-                        const torch::Tensor& k_weight,
-                        const torch::Tensor& cos_sin_cache,
-                        bool interleaved,
-                        const torch::Tensor& position_ids,
-                        int64_t k_head_offset) {
+namespace {
+
+bool is_16b_aligned(const torch::Tensor& tensor) {
+  return reinterpret_cast<uintptr_t>(tensor.data_ptr()) % 16 == 0;
+}
+
+void run_fused_qk_norm_rope(torch::Tensor& qkv,
+                            int64_t num_heads_q,
+                            int64_t num_heads_k,
+                            int64_t num_heads_v,
+                            int64_t head_dim,
+                            double eps,
+                            const torch::Tensor& q_weight,
+                            const torch::Tensor& k_weight,
+                            const torch::Tensor& cos_sin_cache,
+                            bool interleaved,
+                            const torch::Tensor& position_ids,
+                            int64_t k_head_offset,
+                            void* k_cache,
+                            void* v_cache,
+                            int32_t const* slot_ids) {
   CHECK(qkv.is_contiguous()) << "qkv must be contiguous";
   CHECK(position_ids.is_contiguous()) << "position_ids must be contiguous";
   CHECK(position_ids.scalar_type() == torch::kInt32)
@@ -365,6 +430,10 @@ void fused_qk_norm_rope(torch::Tensor& qkv,
         cos_sin_cache.data_ptr(),
         interleaved,
         reinterpret_cast<int32_t const*>(position_ids.data_ptr()),
+        k_cache,
+        v_cache,
+        slot_ids,
+        static_cast<int>(num_heads_v),
         stream);
   } else if (qkv.scalar_type() == at::ScalarType::Half) {
     launch_fused_qknorm_rope<__half>(
@@ -383,11 +452,99 @@ void fused_qk_norm_rope(torch::Tensor& qkv,
         cos_sin_cache.data_ptr(),
         interleaved,
         reinterpret_cast<int32_t const*>(position_ids.data_ptr()),
+        k_cache,
+        v_cache,
+        slot_ids,
+        static_cast<int>(num_heads_v),
         stream);
   } else {
     CHECK(false) << "Unsupported dtype for fused_qk_norm_rope: "
                  << qkv.scalar_type();
   }
+}
+
+}  // namespace
+
+void fused_qk_norm_rope(torch::Tensor& qkv,
+                        int64_t num_heads_q,
+                        int64_t num_heads_k,
+                        int64_t num_heads_v,
+                        int64_t head_dim,
+                        double eps,
+                        const torch::Tensor& q_weight,
+                        const torch::Tensor& k_weight,
+                        const torch::Tensor& cos_sin_cache,
+                        bool interleaved,
+                        const torch::Tensor& position_ids,
+                        int64_t k_head_offset) {
+  run_fused_qk_norm_rope(qkv,
+                         num_heads_q,
+                         num_heads_k,
+                         num_heads_v,
+                         head_dim,
+                         eps,
+                         q_weight,
+                         k_weight,
+                         cos_sin_cache,
+                         interleaved,
+                         position_ids,
+                         k_head_offset,
+                         /*k_cache=*/nullptr,
+                         /*v_cache=*/nullptr,
+                         /*slot_ids=*/nullptr);
+}
+
+bool fused_qk_norm_rope_cache_supported(const torch::Tensor& qkv,
+                                        const torch::Tensor& k_cache,
+                                        const torch::Tensor& v_cache,
+                                        const torch::Tensor& slot_mapping,
+                                        int64_t num_heads_kv,
+                                        int64_t head_dim) {
+  return k_cache.defined() && v_cache.defined() && slot_mapping.defined() &&
+         k_cache.dim() == 4 && k_cache.sizes() == v_cache.sizes() &&
+         k_cache.size(2) == num_heads_kv && k_cache.size(3) == head_dim &&
+         k_cache.scalar_type() == qkv.scalar_type() &&
+         v_cache.scalar_type() == qkv.scalar_type() &&
+         k_cache.is_contiguous() && v_cache.is_contiguous() &&
+         is_16b_aligned(k_cache) && is_16b_aligned(v_cache) &&
+         is_16b_aligned(qkv) && slot_mapping.dim() == 1 &&
+         slot_mapping.scalar_type() == torch::kInt &&
+         slot_mapping.is_contiguous() && slot_mapping.numel() == qkv.size(0);
+}
+
+void fused_qk_norm_rope_with_cache(torch::Tensor& qkv,
+                                   int64_t num_heads_q,
+                                   int64_t num_heads_kv,
+                                   int64_t head_dim,
+                                   double eps,
+                                   const torch::Tensor& q_weight,
+                                   const torch::Tensor& k_weight,
+                                   const torch::Tensor& cos_sin_cache,
+                                   bool interleaved,
+                                   const torch::Tensor& position_ids,
+                                   int64_t k_head_offset,
+                                   torch::Tensor& k_cache,
+                                   torch::Tensor& v_cache,
+                                   const torch::Tensor& slot_mapping) {
+  CHECK(fused_qk_norm_rope_cache_supported(
+      qkv, k_cache, v_cache, slot_mapping, num_heads_kv, head_dim))
+      << "unsupported paged cache for fused QK-norm RoPE: k_cache="
+      << k_cache.sizes() << ", slot_mapping=" << slot_mapping.sizes();
+  run_fused_qk_norm_rope(qkv,
+                         num_heads_q,
+                         num_heads_kv,
+                         num_heads_kv,
+                         head_dim,
+                         eps,
+                         q_weight,
+                         k_weight,
+                         cos_sin_cache,
+                         interleaved,
+                         position_ids,
+                         k_head_offset,
+                         k_cache.data_ptr(),
+                         v_cache.data_ptr(),
+                         slot_mapping.data_ptr<int32_t>());
 }
 
 }  // namespace xllm::kernel::musa

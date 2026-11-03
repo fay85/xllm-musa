@@ -38,6 +38,10 @@ struct Options {
   // model backend
   PROPERTY(std::string, backend);
 
+  // executor inputs carry [3, num_tokens] M-RoPE positions, e.g. an MTP
+  // draft whose target is a VLM
+  PROPERTY(bool, mrope_positions) = false;
+
   // devices for execute model
   PROPERTY(std::vector<torch::Device>, devices);
 

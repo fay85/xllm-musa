@@ -57,7 +57,10 @@ class ExecutionConfig final {
          "random_seed",
          "python_graph_backend",
          "enable_fia_decode",
-         "enable_graph_aux_hidden_states"}};
+         "enable_graph_aux_hidden_states",
+         "musa_prefill_graph_token_stride",
+         "musa_prefill_graph_max_entries",
+         "musa_prefill_warmup_reserve_mb"}};
     return kOptionCategory;
   }
 
@@ -99,6 +102,12 @@ class ExecutionConfig final {
   // every draft) stays eager. Off by default so the runtime behaviour is
   // unchanged until the graph path is validated on hardware.
   PROPERTY(bool, enable_graph_aux_hidden_states) = false;
+
+  PROPERTY(int32_t, musa_prefill_graph_token_stride) = 64;
+
+  PROPERTY(int32_t, musa_prefill_graph_max_entries) = 32;
+
+  PROPERTY(int32_t, musa_prefill_warmup_reserve_mb) = 2048;
 };
 
 }  // namespace xllm

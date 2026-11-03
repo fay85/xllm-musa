@@ -670,6 +670,21 @@ TEST(SpecDecodeInputBuilderTest, CalcSlotIdUsesDcpLogicalBlockSize) {
             7 * 128 + 22);
 }
 
+TEST(DraftProbsBuilderTest, ValidateProposalPreservesDenseDistribution) {
+  auto draft_probs =
+      torch::tensor({{0.1f, 0.2f, 0.7f}, {0.6f, 0.1f, 0.3f}}, torch::kFloat32);
+  auto token_ids = torch::tensor({1, 0}, torch::kInt64);
+  const DraftProposal proposal = build_validate_proposal(
+      {token_ids}, {draft_probs}, /*draft_probs_required=*/true);
+  proposal.validate(/*expected_batch_size=*/2,
+                    /*expected_vocab_size=*/3,
+                    /*expected_num_speculative_tokens=*/1);
+  ASSERT_TRUE(proposal.draft_probs().has_value());
+  EXPECT_TRUE(torch::allclose(proposal.draft_probs().value().select(1, 0),
+                              draft_probs));
+  EXPECT_TRUE(torch::equal(proposal.token_ids().select(1, 0), token_ids));
+}
+
 // One block-table column is a logical block: with kv_split_size=4 a physical
 // block of 128 tokens spans 512 tokens, so position 200 stays in column 0 and
 // 513 is the first position of column 1. Reading the table with the physical

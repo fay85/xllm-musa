@@ -49,11 +49,15 @@ __global__ void scatter_selected_state_kernel(
   if (accepted_count == 0 || accepted_count > verify_sequence_length) {
     return;
   }
+  const int64_t logical_state = logical_state_indices[sequence_index];
+  if (logical_state < 0) {
+    return;
+  }
   const int64_t selected_step = accepted_count - 1;
   const int64_t source_state =
       sequence_index * verify_sequence_length + selected_step;
   const int64_t destination_state =
-      logical_state_indices[sequence_index] * checkpoint_stride +
+      logical_state * checkpoint_stride +
       (add_step_to_destination ? selected_step : 0);
 
   int64_t value_index = static_cast<int64_t>(blockIdx.x) * blockDim.x +
@@ -147,7 +151,8 @@ void scatter_gdn_mtp_verify_states(torch::Tensor& ssm_cache,
 
   const at::cuda::OptionalCUDAGuard device_guard(accepted_tokens.device());
   cudaStream_t stream = c10::cuda::getCurrentCUDAStream().stream();
-  if (ssm_cache.defined() && ssm_cache.numel() > 0) {
+  if (ssm_cache.defined() && ssm_cache.numel() > 0 &&
+      ssm_intermediate.defined() && ssm_intermediate.numel() > 0) {
     scatter_selected_state(ssm_cache,
                            ssm_intermediate,
                            logical_state_indices,

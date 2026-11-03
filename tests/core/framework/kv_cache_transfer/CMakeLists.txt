@@ -89,7 +89,7 @@ cc_test(
     GTest::gtest_main
 )
 
-if(USE_NPU OR USE_MLU)
+if(USE_NPU OR USE_MLU OR USE_MUSA)
 cc_test(
   NAME
     mooncake_transfer_engine_test

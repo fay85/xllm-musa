@@ -36,6 +36,8 @@ limitations under the License.
 #if defined(USE_NPU)
 #include "models/llm/qwen3_5.h"
 #include "models/vlm/npu/qwen3_vl.h"
+#elif defined(USE_MUSA)
+#include "models/vlm/qwen3_vl.h"
 #elif defined(USE_MLU) || defined(USE_DCU)
 #include "core/layers/common/qwen3_next_rms_norm.h"
 #include "core/layers/common/rms_norm.h"
@@ -46,7 +48,7 @@ limitations under the License.
 #endif
 
 namespace xllm {
-#if !defined(USE_NPU)
+#if !defined(USE_NPU) && !defined(USE_MUSA)
 
 namespace detail {
 
@@ -359,7 +361,7 @@ REGISTER_MODEL_ARGS(qwen3_5_moe, [&] {
 });
 
 // Text-only model registrations. On NPU these are handled by llm/qwen3_5.h.
-#if !defined(USE_NPU)
+#if !defined(USE_NPU) && !defined(USE_MUSA)
 // qwen3_5 without vision config (text-only serving).
 // Model args are already registered by the VLM registration above.
 REGISTER_CAUSAL_MODEL_WITH_VARNAME(qwen3_5_lm, qwen3_5, Qwen3_5ForCausalLM);

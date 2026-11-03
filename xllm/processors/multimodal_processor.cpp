@@ -27,6 +27,13 @@ limitations under the License.
 
 namespace xllm {
 
+namespace {
+
+// Each distinct shared prefix contributes one cached segment per image.
+constexpr size_t kMaxCachedSegments = 256;
+
+}  // namespace
+
 MultimodalProcessorBase::MultimodalProcessorBase(
     std::shared_ptr<Tokenizer> tokenizer,
     const TokenizerArgs& tokenizer_args)
@@ -36,14 +43,88 @@ MultimodalProcessorBase::~MultimodalProcessorBase() = default;
 
 bool MultimodalProcessorBase::tokenize(const std::string& prompt,
                                        std::vector<int32_t>& token_ids) const {
+  return tokenize(prompt, /*segment_delimiter=*/{}, token_ids);
+}
+
+bool MultimodalProcessorBase::tokenize(const std::string& prompt,
+                                       std::string_view segment_delimiter,
+                                       std::vector<int32_t>& token_ids) const {
   Timer timer;
-  if (!tokenizer_->encode(prompt, &token_ids)) {
+  const bool reuse_segments =
+      !segment_delimiter.empty() && segment_reuse_enabled_.load();
+  const bool ok =
+      reuse_segments ? tokenize_segments(prompt, segment_delimiter, token_ids)
+                     : tokenizer_->encode(prompt, &token_ids);
+  if (!ok) {
     LOG(ERROR) << "Failed to encode prompt: " + prompt;
     return false;
   }
 
   pad_to_max_length(token_ids);
   COUNTER_ADD(tokenization_latency_seconds, timer.elapsed_seconds());
+  return true;
+}
+
+bool MultimodalProcessorBase::tokenize_segments(
+    const std::string& prompt,
+    std::string_view segment_delimiter,
+    std::vector<int32_t>& token_ids) const {
+  token_ids.clear();
+  size_t begin = 0;
+  for (size_t end = prompt.find(segment_delimiter, begin);
+       end != std::string::npos;
+       end = prompt.find(segment_delimiter, begin)) {
+    const size_t segment_end = end + segment_delimiter.size();
+    if (!append_cached_segment(prompt.substr(begin, segment_end - begin),
+                               token_ids)) {
+      return false;
+    }
+    begin = segment_end;
+  }
+  std::vector<int32_t> tail_ids;
+  if (!tokenizer_->encode(prompt.substr(begin), &tail_ids)) {
+    return false;
+  }
+  token_ids.insert(token_ids.end(), tail_ids.begin(), tail_ids.end());
+
+  // Segment independence relies on the tokenizer splitting at special tokens;
+  // confirm it once against whole-prompt encoding.
+  if (!segment_reuse_verified_.exchange(true)) {
+    std::vector<int32_t> whole_ids;
+    if (!tokenizer_->encode(prompt, &whole_ids)) {
+      return false;
+    }
+    if (whole_ids != token_ids) {
+      LOG(WARNING) << "Segmented prompt encoding differs from whole-prompt "
+                      "encoding; disabling segment reuse";
+      segment_reuse_enabled_.store(false);
+      token_ids = std::move(whole_ids);
+    }
+  }
+  return true;
+}
+
+bool MultimodalProcessorBase::append_cached_segment(
+    std::string segment,
+    std::vector<int32_t>& token_ids) const {
+  {
+    std::lock_guard<std::mutex> lock(segment_cache_mutex_);
+    auto it = segment_cache_.find(segment);
+    if (it != segment_cache_.end()) {
+      token_ids.insert(token_ids.end(), it->second.begin(), it->second.end());
+      return true;
+    }
+  }
+  std::vector<int32_t> segment_ids;
+  if (!tokenizer_->encode(segment, &segment_ids)) {
+    return false;
+  }
+  token_ids.insert(token_ids.end(), segment_ids.begin(), segment_ids.end());
+  std::lock_guard<std::mutex> lock(segment_cache_mutex_);
+  if (segment_cache_.size() >= kMaxCachedSegments) {
+    segment_cache_.clear();
+  }
+  segment_cache_.emplace(std::move(segment), std::move(segment_ids));
   return true;
 }
 

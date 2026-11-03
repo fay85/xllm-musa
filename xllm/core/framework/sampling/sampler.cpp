@@ -26,6 +26,9 @@ limitations under the License.
 #include "core/framework/config/model_config.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "logits_utils.h"
+#if defined(USE_MUSA)
+#include "core/kernels/musa/musa_ops_api.h"
+#endif
 #include "sampling_params.h"
 
 namespace xllm {
@@ -163,10 +166,38 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
   }
 
   // apply temperatures, top-k and top-p
-  apply_top_k_top_p(
-      sample_logits, sample_temperatures, sample_top_k, sample_top_p);
+  TopKSampleWindow topk_window;
+  apply_top_k_top_p(sample_logits,
+                    sample_temperatures,
+                    sample_top_k,
+                    sample_top_p,
+                    &topk_window);
   publish_logits(
       logits, sample_logits, params.sample_idxes, use_sample_indices);
+  if (use_sample_indices) {
+    logits.index_copy_(/*dim=*/0, params.sample_idxes, sample_logits);
+  }
+
+  // top_k<=32 and no top_p: sample inside the window. Full-vocab softmax and
+  // cumsum only renormalize k finite logits. Scatter the window probs back so
+  // MTP rejection still sees a dense distribution.
+  if (topk_window.values.defined() && params.all_random_sample &&
+      !params.logprobs) {
+    auto window_probs = torch::softmax(
+        topk_window.values, /*dim=*/-1, /*dtype=*/torch::kFloat32);
+    auto picks = random_sample(window_probs);
+    auto next_tokens =
+        topk_window.indices.gather(/*dim=*/-1, picks.view({-1, 1})).view({-1});
+    auto probs = torch::zeros(
+        {sample_logits.size(0), sample_logits.size(1)},
+        torch::TensorOptions()
+            .dtype(torch::kFloat32)
+            .device(sample_logits.device()));
+    probs.scatter_(/*dim=*/-1, /*index=*/topk_window.indices, /*src=*/window_probs);
+    output.probs = probs;
+    output.next_tokens = next_tokens.to(torch::kLong);
+    return output;
+  }
 
   CHECK(params.do_sample.defined()) << "params.do_sample must be defined";
   CHECK_EQ(params.do_sample.dim(), 1)
@@ -189,6 +220,8 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
     samples = torch::where(params.do_sample, random, greedy);
   }
   auto sample_indices = samples.to(torch::kLong);
+  // The MUSA top-k window path returns FP32 above. This fallback keeps the
+  // historical dtype used by the other backends.
   output.probs = probs.to(prob_dtype);
   output.next_tokens = sample_indices;
 
@@ -254,11 +287,23 @@ SampleOutput Sampler::forward(torch::Tensor& logits,
 }
 
 torch::Tensor Sampler::greedy_sample(const torch::Tensor& probs) {
+#if defined(USE_MUSA)
+  const torch::Tensor column_ids =
+      xllm::kernel::musa::lookup_compact_vocab_column_ids(probs);
+  if (xllm::kernel::musa::row_argmax_supported(probs)) {
+    return xllm::kernel::musa::row_argmax(probs, column_ids);
+  }
+  if (column_ids.defined()) {
+    return column_ids.index_select(/*dim=*/0, probs.argmax(/*dim=*/-1));
+  }
+#endif
   return probs.argmax(/*dim=*/-1);
 }
 
 torch::Tensor Sampler::random_sample(const torch::Tensor& probs) {
-#if defined(USE_MLU) || defined(USE_CUDA) || defined(USE_DCU)
+#if defined(USE_MUSA)
+  return xllm::kernel::musa::random_sample(probs);
+#elif defined(USE_MLU) || defined(USE_CUDA) || defined(USE_DCU)
   xllm::kernel::RandomSampleParams params;
   params.logits = probs;
   return xllm::kernel::random_sample(params);

@@ -21,6 +21,7 @@ limitations under the License.
 
 #include <cstdint>
 #include <deque>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -68,6 +69,22 @@ class RequestBase {
 
   const std::string& x_request_time() const { return x_request_time_; }
 
+  void set_v2_attempt_seq(uint64_t attempt_seq) {
+    v2_attempt_seq_ = attempt_seq;
+  }
+
+  std::optional<uint64_t> v2_attempt_seq() const { return v2_attempt_seq_; }
+
+  uint64_t allocate_output_event_seq(bool prefill_event) {
+    if (prefill_event) {
+      return 0;
+    }
+    if (next_v2_output_event_seq_ == 0) {
+      next_v2_output_event_seq_ = 1;
+    }
+    return next_v2_output_event_seq_++;
+  }
+
  protected:
   // request create time
   absl::Time created_time_;
@@ -90,6 +107,9 @@ class RequestBase {
   // ScopeGuard on the failure path, or the Request itself on success). The
   // destructor decrements exactly once when non-null.
   RateLimiter* rate_limiter_ = nullptr;
+
+  std::optional<uint64_t> v2_attempt_seq_;
+  uint64_t next_v2_output_event_seq_ = 0;
 };
 
 }  // namespace xllm

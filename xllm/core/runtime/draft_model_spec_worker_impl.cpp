@@ -26,7 +26,9 @@ limitations under the License.
 #include "core/framework/kv_cache/kv_cache_estimation.h"
 #include "core/framework/kv_cache/kv_cache_shape.h"
 #include "core/framework/kv_cache_transfer/hierarchy_kv_cache_transfer.h"
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
 #include "core/framework/kv_cache_transfer/mooncake_kv_cache_transfer.h"
+#endif
 #include "core/framework/model/model_args.h"
 #include "core/framework/model/model_input_params.h"
 #include "core/framework/parallel_state/process_group.h"
@@ -169,8 +171,9 @@ KVCacheShape build_speculative_draft_kv_cache_shape(
   // A replicated draft pool owns `replicated_block_pages` physical rows per
   // logical block on every rank, so the block manager's logical block ids still
   // index it directly and the draft's slots stay logical token slots.
-  draft_capacity.n_blocks(target_kv_cache_shape.key_cache_shape()[0] *
-                          replicated_block_pages)
+  draft_capacity
+      .n_blocks(target_kv_cache_shape.key_cache_shape()[0] *
+                replicated_block_pages)
       .block_size(block_size)
       .replicated_block_pages(replicated_block_pages)
       .enable_mla_kv_cache_quant(draft_mla_packed_c8);
@@ -376,7 +379,7 @@ bool DraftModelSpecWorkerImpl::allocate_kv_cache(
                         });
 }
 
-#if defined(USE_NPU) || defined(USE_MLU)
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
 bool DraftModelSpecWorkerImpl::allocate_kv_cache_with_transfer(
     const KVCacheShape& kv_cache_shape) {
   CHECK(impl_ != nullptr);

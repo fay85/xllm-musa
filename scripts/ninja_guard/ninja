@@ -1,0 +1,98 @@
+#!/bin/bash
+# Drop-in ninja wrapper: exclusive lock + .ninja_log backup/restore.
+# Install by prepending scripts/ninja_guard to PATH (see _build_cuda_graph_musa.sh).
+#
+# Do NOT kill ninja with SIGKILL (pkill -9); that truncates .ninja_log.
+set -euo pipefail
+
+GUARD_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REAL_NINJA="${GUARD_DIR}/ninja.real"
+if [ ! -x "${REAL_NINJA}" ]; then
+  # Find system ninja without picking up this wrapper on PATH.
+  _PATH_NO_GUARD="$(echo ":${PATH}:" | sed "s|:${GUARD_DIR}:|:|g;s|^:||;s|:$||")"
+  SYS_NINJA="$(PATH="${_PATH_NO_GUARD}" command -v ninja 2>/dev/null || true)"
+  if [ -z "${SYS_NINJA}" ]; then
+    SYS_NINJA="$(command -v /usr/bin/ninja 2>/dev/null || command -v /usr/local/bin/ninja 2>/dev/null || true)"
+  fi
+  if [ -z "${SYS_NINJA}" ] || [ "${SYS_NINJA}" = "${BASH_SOURCE[0]}" ]; then
+    echo "ninja_guard: system ninja not found" >&2
+    exit 127
+  fi
+  ln -sf "${SYS_NINJA}" "${REAL_NINJA}"
+fi
+
+BUILD_DIR=""
+args=("$@")
+# Short-circuit informational invocations (e.g. cmake's `ninja --version` probe
+# during --regenerate-during-build). Holding the build lock for these reentrant
+# calls would deadlock the outer ninja_guard that already owns it.
+i=0
+while [ "${i}" -lt "$#" ]; do
+  case "${args[$i]}" in
+    --version|-V|--help|-h|-t)
+      exec "${REAL_NINJA}" "$@"
+      ;;
+  esac
+  i=$((i + 1))
+done
+i=0
+while [ "${i}" -lt "$#" ]; do
+  if [ "${args[$i]}" = "-C" ] && [ $((i + 1)) -lt "$#" ]; then
+    BUILD_DIR="${args[$((i + 1))]}"
+    break
+  fi
+  i=$((i + 1))
+done
+if [ -z "${BUILD_DIR}" ]; then
+  BUILD_DIR="$(pwd)"
+fi
+BUILD_DIR="$(cd "${BUILD_DIR}" && pwd)"
+
+LOG="${BUILD_DIR}/.ninja_log"
+GOOD="${BUILD_DIR}/.ninja_log.good"
+LOCK="${BUILD_DIR}/.ninja_build.lock"
+
+_ninja_log_truncated() {
+  local f="$1"
+  [ ! -f "${f}" ] && return 1
+  [ ! -s "${f}" ] && return 0
+  local last
+  last="$(tail -c1 "${f}" | od -An -tu1 | tr -d " \n")"
+  [ "${last}" != "10" ]
+}
+
+mkdir -p "${BUILD_DIR}"
+if _ninja_log_truncated "${LOG}"; then
+  if [ -f "${GOOD}" ]; then
+    echo "ninja_guard: truncated ${LOG}, restoring from ${GOOD}" >&2
+    cp -f "${GOOD}" "${LOG}"
+  else
+    echo "ninja_guard: warning: ${LOG} looks truncated and no ${GOOD} backup exists" >&2
+  fi
+fi
+
+exec 9>"${LOCK}"
+if ! flock -n 9; then
+  echo "ninja_guard: waiting for lock ${LOCK} ..." >&2
+  flock 9
+fi
+
+echo "ninja_guard: ${REAL_NINJA} $*" >&2
+"${REAL_NINJA}" "$@" &
+NINJA_PID=$!
+
+_on_signal() {
+  kill -TERM "${NINJA_PID}" 2>/dev/null || true
+  wait "${NINJA_PID}" 2>/dev/null || true
+  exit 130
+}
+trap _on_signal INT TERM
+
+wait "${NINJA_PID}"
+RC=$?
+trap - INT TERM
+
+if [ "${RC}" -eq 0 ] && [ -f "${LOG}" ] && ! _ninja_log_truncated "${LOG}"; then
+  cp -f "${LOG}" "${GOOD}"
+fi
+exit "${RC}"

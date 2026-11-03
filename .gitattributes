@@ -1,0 +1,4 @@
+tools/musa_unified/** text eol=lf
+tools/musa_qwen3_8_vl_bench/*.sh text eol=lf
+tools/musa_qwen3_8_vl_bench/*.py text eol=lf
+tools/musa_qwen3_8_vl_bench/profiles/*.env text eol=lf

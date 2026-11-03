@@ -20,6 +20,7 @@ limitations under the License.
 #include <brpc/server.h>
 
 #include <cstdint>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <thread>
@@ -77,6 +78,9 @@ class MooncakeTransferEngineCore {
   bool has_outgoing_plan(const std::string& remote_addr,
                          CacheNamespace cache_namespace) const;
   bool has_reshard_plan(const std::string& remote_addr) const;
+  bool is_cache_peer_current(const WorkerCacheLayoutManifest& local_manifest,
+                             const WorkerCacheLayoutManifest& peer_manifest,
+                             CachePeerMode mode) const;
   Status bind_outgoing_regions(const std::string& remote_addr,
                                const std::vector<KVTransferMapping>& mappings,
                                CacheNamespace cache_namespace,
@@ -175,6 +179,16 @@ class MooncakeTransferEngine {
                                    const std::vector<ByteRegion>& regions,
                                    MoveOpcode move_opcode);
 
+  // Heterogeneous-TP PULL produces many small, destination-strided regions
+  // whose source bytes are contiguous (one source block holds its whole head
+  // shard). Read the remote-contiguous runs into a registered device staging
+  // buffer with few large requests, then scatter on device.
+  bool move_memory_regions_staged(const std::string& remote_addr,
+                                  const std::vector<ByteRegion>& regions,
+                                  double* read_ms,
+                                  double* scatter_ms);
+  static size_t count_remote_runs(const std::vector<ByteRegion>& regions);
+
   bool link_sessions(const std::vector<uint64_t>& cluster_ids,
                      const std::vector<std::string>& remote_addrs);
 
@@ -189,6 +203,12 @@ class MooncakeTransferEngine {
                                CacheNamespace cache_namespace,
                                int64_t layer_id,
                                std::vector<ByteRegion>* regions) const;
+  virtual Status bind_incoming_regions(
+      const std::string& remote_addr,
+      const std::vector<KVTransferMapping>& mappings,
+      CacheNamespace cache_namespace,
+      int64_t layer_id,
+      std::vector<ByteRegion>* regions);
   Status bind_outgoing_regions_explicit(
       const std::string& remote_addr,
       const std::vector<ExplicitResourceMapping>& mappings,
@@ -230,17 +250,26 @@ class MooncakeTransferEngine {
                                CachePeerMode mode);
   virtual bool set_local_peer(const WorkerCacheLayoutManifest& manifest,
                               CachePeerMode mode);
+  virtual bool is_cache_peer_current(
+      const WorkerCacheLayoutManifest& local_manifest,
+      const WorkerCacheLayoutManifest& peer_manifest,
+      CachePeerMode mode) const;
 
  private:
   // Preserve the exact identity used by idempotent ABSENT requests.
   struct LocalCachePeer {
     WorkerCacheLayoutManifest local_manifest;
     WorkerCacheLayoutManifest remote_manifest;
+    CachePeerMode mode = CachePeerMode::ABSENT;
+    std::shared_ptr<const ReshardPlanTemplate> incoming_plan;
   };
 
   uint16_t listen_port_;
   std::vector<uint64_t> buf_bytes_;
   Device device_;
+  std::mutex staging_mutex_;
+  torch::Tensor staging_;
+  uint64_t staging_buf_id_ = 0;
   MooncakeTransferEngineCore& core_;
   std::mutex session_mutex_;
   std::unordered_map<std::string, int32_t> session_ref_counts_;

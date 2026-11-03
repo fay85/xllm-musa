@@ -15,7 +15,7 @@ limitations under the License.
 
 #pragma once
 
-#include "block_manager_impl.h"
+#include "core/framework/block/block_manager_impl.h"
 
 namespace xllm {
 

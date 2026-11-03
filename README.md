@@ -123,3 +123,20 @@ If you think this repository is helpful to you, welcome to cite us:
   year={2025}
 }
 ```
+
+## Tensor parallel (TP2/TP4) for Qwen3.5-27B dense — `/workspace/serve_tp.sh`
+
+xllm runs TP as one process per rank (`--nnodes=TP --node_rank=i`, all ranks see the same
+`MUSA_VISIBLE_DEVICES`, rank i uses device i). Rank 0 serves HTTP. The row-parallel all-reduce
+uses torch_musa ProcessGroupMCCL and captures cleanly in MUSA graphs (piecewise + full, MTP K=1).
+
+```bash
+TP=2 GPU_IDS=1,2     PORT=19190 bash /workspace/serve_tp.sh   # logs /tmp/tp2_r*.log, pids /tmp/tp2.pids
+TP=4 GPU_IDS=0,1,2,7 PORT=19190 MASTER_PORT=23490 bash /workspace/serve_tp.sh
+```
+Env: MODEL, MODEL_ID, PORT, MASTER_PORT (default PORT+2300; each rank also binds a few ports
+above it, so keep instances >=10 apart), K (MTP, default 1), CONC (default 4), GM (0.85), LOG_DIR.
+Needs the per-shard Mate GDN kernels (hq8_hv24 for TP2, hq4_hv12 for TP4) in
+`/opt/mate027_cache/mp31/cached_ops_jd` — build with `/opt/mate027_cache/compile_tp_gdn_20261021.py`.
+Stop by killing the exact PIDs in `${LOG_DIR}/tp${TP}.pids`.
+Not supported yet: Qwen3.5-35B MoE (fused MoE asserts world_size==1).

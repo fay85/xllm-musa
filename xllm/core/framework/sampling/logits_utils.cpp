@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <torch/torch.h>
 
+#include <algorithm>
+#include <limits>
 #include <memory>
 
 namespace xllm {
@@ -95,7 +97,8 @@ void apply_top_k_top_p_torch_impl(torch::Tensor& logits,
 void apply_top_k_top_p(torch::Tensor& logits,
                        const torch::Tensor& temperatures,
                        const torch::Tensor& top_k,
-                       const torch::Tensor& top_p) {
+                       const torch::Tensor& top_p,
+                       TopKSampleWindow* sample_window) {
   if (temperatures.defined()) {
     apply_temperatures(logits, temperatures);
   }
@@ -112,6 +115,58 @@ void apply_top_k_top_p(torch::Tensor& logits,
     logits = xllm::kernel::apply_top_k_top_p(params);
     return;
   }
+#endif
+
+#if defined(USE_MUSA)
+  // MUSA: when both top_k and top_p are set, the NPU/MLU-only branch below
+  // would otherwise no-op and leave logits unfiltered. MTP rejection sampling
+  // reuses these logits; unfiltered full-vocab probs crush acceptance (~16%).
+  // Port of feihu-1016-dev USE_MUSA path (topk window + mask + scatter).
+  if (top_k.defined() || top_p.defined()) {
+    const int64_t vocab = logits.size(-1);
+    const float ninf = -std::numeric_limits<float>::infinity();
+    int64_t k;
+    if (top_k.defined()) {
+      // One host sync to size the topk window; avoids sorting full vocab.
+      k = top_k.max().item<int64_t>();
+      if (k <= 0) {
+        k = std::min<int64_t>(vocab, 1000);
+      }
+    } else {
+      k = std::min<int64_t>(vocab, 1000);
+    }
+    k = std::clamp(k, static_cast<int64_t>(1), vocab);
+
+    auto [sorted, idx] =
+        logits.topk(k, /*dim=*/-1, /*largest=*/true, /*sorted=*/true);
+    if (top_k.defined()) {
+      auto k_vals = top_k.clamp(1, vocab).unsqueeze(-1).to(torch::kLong);
+      auto k_mask =
+          torch::arange(k, sorted.device()).expand_as(sorted) >= k_vals;
+      sorted.masked_fill_(k_mask, ninf);
+    }
+    if (top_p.defined()) {
+      auto p = top_p.unsqueeze(-1);
+      auto probs = sorted.softmax(-1).to(torch::kFloat32);
+      auto cum = probs.cumsum(-1);
+      auto p_mask = cum > p;
+      p_mask.index_put_({torch::indexing::Ellipsis, 0}, false);
+      sorted.masked_fill_(p_mask, ninf);
+    }
+    // k=5 still softmaxes the whole vocabulary after scatter. Keep the window
+    // so the sampler can draw from these k logits instead.
+    if (sample_window != nullptr && top_k.defined() && !top_p.defined() &&
+        k <= 32) {
+      sample_window->values = sorted;
+      sample_window->indices = idx.to(torch::kLong);
+    }
+    logits.fill_(ninf);
+    logits.scatter_(/*dim=*/-1,
+                    /*index=*/idx,
+                    /*src=*/sorted.to(logits.scalar_type()));
+    return;
+  }
+  return;
 #endif
 
   if (top_k.defined() && top_p.defined()) {

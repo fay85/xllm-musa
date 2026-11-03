@@ -17,12 +17,20 @@ limitations under the License.
 
 #include <gtest/gtest.h>
 
+#include <algorithm>
+#include <cstdint>
+#include <cstring>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "framework/kv_cache/deepseek_v4_cache_geometry.h"
 #include "framework/kv_cache/kv_shard_layout.h"
 #include "layers/common/kv_shard_batch_metadata.h"
+#if defined(USE_MUSA)
+#include "framework/kv_cache/kv_cache_shape.h"
+#include "framework/kv_cache_transfer/reshard_planner.h"
+#endif
 
 namespace xllm {
 
@@ -212,7 +220,11 @@ TEST(CacheLayoutBuilderTest, DescribesCompositeConvState) {
   context.linear_value_head_count = 2;
   context.linear_key_head_dim = 3;
   KVCacheTensor tensor{KVCacheTensorRole::CONV,
+#if defined(USE_MUSA)
+                       torch::zeros({2, 15, 5}),
+#else
                        torch::zeros({2, 5, 15}),
+#endif
                        cache_group_id(BlockType::LINEAR),
                        /*sequence_scoped=*/true};
   std::string error;
@@ -222,12 +234,45 @@ TEST(CacheLayoutBuilderTest, DescribesCompositeConvState) {
   const LogicalShardDescriptor& descriptor = *tensor.shard_descriptor;
   EXPECT_EQ(descriptor.kind, LogicalShardKind::COMPOSITE);
   EXPECT_EQ(descriptor.resource_scope, CacheResourceScope::SEQUENCE);
+#if defined(USE_MUSA)
+  ASSERT_EQ(descriptor.spans.size(), 25U);
+  EXPECT_EQ(descriptor.spans[0].logical_tensor, "conv_key_a");
+  EXPECT_EQ(descriptor.spans[10].logical_tensor, "conv_key_b");
+  EXPECT_EQ(descriptor.spans[20].logical_tensor, "conv_value");
+  EXPECT_EQ(descriptor.spans[0].repeat_count, 3U);
+  EXPECT_EQ(descriptor.spans[0].logical_offset_bytes, 24U);
+  EXPECT_EQ(descriptor.spans[0].physical_stride_bytes, 20U);
+  EXPECT_EQ(descriptor.spans[5].physical_offset_bytes, 60U);
+#else
   ASSERT_EQ(descriptor.spans.size(), 5U);
   EXPECT_EQ(descriptor.spans[0].logical_tensor, "conv_key_a");
   EXPECT_EQ(descriptor.spans[2].logical_tensor, "conv_key_b");
   EXPECT_EQ(descriptor.spans[4].logical_tensor, "conv_value");
   EXPECT_EQ(descriptor.spans[0].repeat_count, 5U);
+#endif
 }
+
+#if defined(USE_MUSA)
+TEST(CacheLayoutBuilderTest, RejectsInvalidMusaConvStorage) {
+  CacheTensorLayoutContext context;
+  context.linear_key_head_count = 2;
+  context.linear_value_head_count = 2;
+  context.linear_key_head_dim = 2;
+  const std::vector<torch::Tensor> invalid_tensors = {
+      torch::zeros({4, 3, 12}),
+      torch::zeros({4, 11, 3}),
+      torch::zeros({4, 3, 12}).transpose(1, 2)};
+  for (const torch::Tensor& value : invalid_tensors) {
+    KVCacheTensor tensor{KVCacheTensorRole::CONV,
+                         value,
+                         cache_group_id(BlockType::LINEAR),
+                         /*sequence_scoped=*/true};
+    std::string error;
+    EXPECT_FALSE(describe_cache_tensor(context, &tensor, &error));
+    EXPECT_FALSE(error.empty());
+  }
+}
+#endif
 
 TEST(CacheLayoutBuilderTest, HybridMlaKeepsKPoolTailSequenceScopedReplica) {
   CacheTensorLayoutContext context;
@@ -468,6 +513,256 @@ TEST(CacheLayoutBuilderTest, SkipsSpanRecordingForTensorsWithoutTokenAxis) {
   EXPECT_EQ(context.group_block_capacities.at(cache_group_id(BlockType::KV)),
             32);
 }
+
+TEST(CacheLayoutBuilderTest, RejectsOrdinaryNoncontiguousAttentionStorage) {
+  CacheTensorLayoutContext context;
+  context.tp_size = 8;
+  context.kv_head_count = 1;
+  context.block_token_capacity = 128;
+  const torch::Tensor storage = torch::zeros({3, 128, 1, 16});
+  for (KVCacheTensorRole role :
+       {KVCacheTensorRole::KEY, KVCacheTensorRole::VALUE}) {
+    SCOPED_TRACE(role.to_string());
+    KVCacheTensor tensor{role,
+                         storage.narrow(/*dim=*/3, /*start=*/0, /*length=*/8),
+                         cache_group_id(BlockType::KV)};
+    ASSERT_FALSE(tensor.tensor.is_contiguous());
+    ASSERT_FALSE(tensor.shard_descriptor.has_value());
+    std::string error;
+    EXPECT_FALSE(describe_cache_tensor(context, &tensor, &error));
+    EXPECT_NE(error.find("must be contiguous"), std::string::npos);
+  }
+}
+
+#if defined(USE_MUSA)
+std::vector<KVCache> make_musa_grouped_caches() {
+  KVCacheCapacity capacity;
+  capacity.block_size(128).swa_count(3).c4_count(96).c128_count(3);
+  ModelArgs model_args;
+  model_args.model_type("deepseek_v4");
+  const KVCacheShape shape(capacity, model_args, /*world_size=*/8);
+  KVCacheCreateOptions options;
+  options.device(torch::Device(torch::kCPU))
+      .dtype(torch::kBFloat16)
+      .num_layers(3)
+      .model_type("deepseek_v4")
+      .block_size(128)
+      .head_dim(512)
+      .index_head_dim(128)
+      .window_size(128)
+      .compress_ratios({1, 4, 128});
+  std::vector<KVCache> caches;
+  allocate_kv_caches(caches, shape, options);
+  return caches;
+}
+
+WorkerCacheLayoutManifest make_musa_page_manifest(
+    const KVCacheTensor& cache_tensor,
+    const std::string& address,
+    int32_t tp_rank) {
+  WorkerCacheLayoutManifest manifest;
+  manifest.incarnation_id = address + "-incarnation";
+  manifest.layout_generation = 1;
+  manifest.fingerprint = "musa-dsv4-model1-padding-test";
+  manifest.backend = "musa";
+  manifest.layout_family = "grouped";
+  manifest.addr = address;
+  manifest.coordinates.tp_rank = tp_rank;
+  manifest.coordinates.tp_size = 8;
+  const torch::Tensor& tensor = cache_tensor.tensor;
+  CacheTensorManifest description;
+  description.role = static_cast<int32_t>(KVCacheTensorRole::VALUE);
+  description.group_id = cache_tensor.group_id;
+  description.scalar_type = static_cast<int32_t>(tensor.scalar_type());
+  description.element_bytes = tensor.element_size();
+  description.shape = tensor.sizes().vec();
+  description.stride = tensor.strides().vec();
+  description.contiguous = tensor.is_contiguous();
+  description.resource_count = static_cast<uint64_t>(tensor.size(0));
+  description.resource_stride_bytes =
+      static_cast<uint64_t>(tensor.stride(0)) * tensor.element_size();
+  description.buffer_bytes = tensor.nbytes();
+  description.block_token_capacity = 128;
+  description.shard = cache_tensor.shard_descriptor.value();
+  manifest.tensors.reserve(1);
+  manifest.tensors.emplace_back(std::move(description));
+  return manifest;
+}
+
+TEST(CacheLayoutBuilderTest, MusaGroupedModel1BytesDoNotRedefineTokenCapacity) {
+  const std::vector<KVCache> caches = make_musa_grouped_caches();
+  ASSERT_EQ(caches.size(), 3U);
+  CacheTensorLayoutContext context;
+  context.tp_rank = 7;
+  context.tp_size = 8;
+  context.kv_head_count = 1;
+  context.index_head_count = 64;
+  context.block_token_capacity = 128;
+  record_group_block_capacities(caches, &context);
+  EXPECT_TRUE(context.group_block_capacities.empty());
+  for (BlockType type : {BlockType::SWA, BlockType::C4, BlockType::C128}) {
+    EXPECT_EQ(effective_block_token_capacity(context, cache_group_id(type)),
+              128);
+  }
+  int64_t model1_tensor_count = 0;
+  for (const KVCache& cache : caches) {
+    for (KVCacheTensor tensor : cache.get_cache_tensors()) {
+      SCOPED_TRACE(tensor.role.to_string());
+      std::string error;
+      ASSERT_TRUE(describe_cache_tensor(context, &tensor, &error)) << error;
+      ASSERT_TRUE(tensor.shard_descriptor.has_value());
+      ASSERT_TRUE(tensor.tensor.is_contiguous());
+      model1_tensor_count += tensor.role == KVCacheTensorRole::VALUE ? 1 : 0;
+    }
+  }
+  EXPECT_EQ(model1_tensor_count, 4);
+}
+
+TEST(CacheLayoutBuilderTest, MusaGroupedModel1TransfersWholeFinalPage) {
+  constexpr int64_t kTokenBytes = 584;
+  constexpr int64_t kPayloadBytes = 128 * kTokenBytes;
+  constexpr int64_t kPageBytes = 74880;
+  const std::vector<KVCache> sources = make_musa_grouped_caches();
+  const std::vector<KVCache> destinations = make_musa_grouped_caches();
+  ASSERT_EQ(sources.size(), 3U);
+  ASSERT_EQ(destinations.size(), 3U);
+  for (int64_t layer_id : {1, 2}) {
+    const BlockType compressed_type =
+        layer_id == 1 ? BlockType::C4 : BlockType::C128;
+    const auto source_tensors = sources[layer_id].get_cache_tensors();
+    const auto destination_tensors = destinations[layer_id].get_cache_tensors();
+    for (BlockType type : {BlockType::SWA, compressed_type}) {
+      SCOPED_TRACE("layer=" + std::to_string(layer_id) +
+                   ", group=" + std::to_string(cache_group_id(type)));
+      const auto matches = [type](const KVCacheTensor& tensor) {
+        return tensor.role == KVCacheTensorRole::VALUE &&
+               tensor.group_id == cache_group_id(type);
+      };
+      const auto source =
+          std::find_if(source_tensors.begin(), source_tensors.end(), matches);
+      const auto destination = std::find_if(
+          destination_tensors.begin(), destination_tensors.end(), matches);
+      ASSERT_NE(source, source_tensors.end());
+      ASSERT_NE(destination, destination_tensors.end());
+      const torch::Tensor source_kernel =
+          sources[layer_id].get_block_type_tensors(type).at(
+              KVCacheTensorRole::VALUE);
+      const torch::Tensor destination_kernel =
+          destinations[layer_id].get_block_type_tensors(type).at(
+              KVCacheTensorRole::VALUE);
+      const int64_t block_count = source_kernel.size(0);
+      ASSERT_GT(block_count, 1);
+      EXPECT_EQ(source_kernel.sizes().vec(),
+                (std::vector<int64_t>{block_count, 128, 1, kTokenBytes}));
+      EXPECT_EQ(
+          source_kernel.strides().vec(),
+          (std::vector<int64_t>{kPageBytes, kTokenBytes, kTokenBytes, 1}));
+      EXPECT_FALSE(source_kernel.is_contiguous());
+      EXPECT_EQ(source->tensor.sizes().vec(),
+                (std::vector<int64_t>{block_count, kPageBytes}));
+      EXPECT_EQ(source->tensor.data_ptr(), source_kernel.data_ptr());
+      EXPECT_EQ(source->tensor.storage().unsafeGetStorageImpl(),
+                source_kernel.storage().unsafeGetStorageImpl());
+      EXPECT_EQ(source->tensor.nbytes(),
+                static_cast<size_t>(block_count * kPageBytes));
+      ASSERT_TRUE(source->shard_descriptor.has_value());
+      ASSERT_TRUE(destination->shard_descriptor.has_value());
+      const LogicalShardDescriptor& descriptor = *source->shard_descriptor;
+      EXPECT_EQ(descriptor.kind, LogicalShardKind::REPLICATED);
+      EXPECT_EQ(descriptor.resource_scope, CacheResourceScope::BLOCK);
+      ASSERT_EQ(descriptor.spans.size(), 1U);
+      EXPECT_EQ(descriptor.spans[0].bytes_per_region, kPageBytes);
+      EXPECT_EQ(descriptor.spans[0].repeat_count, 1U);
+      EXPECT_EQ(descriptor.spans[0].owner_tp_rank, 0);
+
+      source->tensor.fill_(17);
+      source->tensor[block_count - 1]
+          .narrow(/*dim=*/0, /*start=*/kPayloadBytes, /*length=*/128)
+          .fill_(85);
+      source_kernel[block_count - 1].fill_(31);
+      destination->tensor.fill_(239);
+      // Instance coverage validates the complete TP topology even when only
+      // rank 0 owns the replicated page's outgoing bytes.
+      std::vector<WorkerCacheLayoutManifest> source_manifests;
+      source_manifests.reserve(8);
+      for (int32_t tp_rank = 0; tp_rank < 8; ++tp_rank) {
+        source_manifests.emplace_back(make_musa_page_manifest(
+            *source, "source-" + std::to_string(tp_rank), tp_rank));
+      }
+      const WorkerCacheLayoutManifest& source_manifest =
+          source_manifests.front();
+      WorkerCacheLayoutManifest destination_manifest =
+          make_musa_page_manifest(*destination, "destination", /*tp_rank=*/7);
+      const Status source_status =
+          validate_worker_cache_layout(source_manifest);
+      ASSERT_TRUE(source_status.ok()) << source_status.message();
+      const Status destination_status =
+          validate_worker_cache_layout(destination_manifest);
+      ASSERT_TRUE(destination_status.ok()) << destination_status.message();
+      ReshardPlanner planner;
+      const Status coverage_status = planner.validate_destination_coverage(
+          source_manifests, destination_manifest);
+      ASSERT_TRUE(coverage_status.ok()) << coverage_status.message();
+      ReshardPlanTemplate plan;
+      const Status plan_status = planner.build_outgoing_plan(
+          source_manifest, destination_manifest, &plan);
+      ASSERT_TRUE(plan_status.ok()) << plan_status.message();
+      KVTransferMapping mapping;
+      mapping.group_id = cache_group_id(type);
+      mapping.local_ids = {static_cast<uint64_t>(block_count - 1)};
+      mapping.remote_ids = {static_cast<uint64_t>(block_count - 1)};
+      std::vector<ByteRegion> regions;
+      const Status bind_status =
+          RequestRegionBinder().bind_pull(plan,
+                                          {mapping},
+                                          CacheNamespace::MAIN,
+                                          /*layer_id=*/0,
+                                          &regions);
+      ASSERT_TRUE(bind_status.ok()) << bind_status.message();
+      ASSERT_EQ(regions.size(), 1U);
+      const ByteRegion& region = regions.front();
+      EXPECT_EQ(region.length, kPageBytes);
+      ASSERT_EQ(region.remote_offset + region.length, source->tensor.nbytes());
+      ASSERT_EQ(region.local_offset + region.length,
+                destination->tensor.nbytes());
+      std::memcpy(destination->tensor.data_ptr<uint8_t>() + region.local_offset,
+                  source->tensor.data_ptr<uint8_t>() + region.remote_offset,
+                  static_cast<size_t>(region.length));
+      EXPECT_TRUE(torch::equal(destination_kernel[block_count - 1],
+                               source_kernel[block_count - 1]));
+      EXPECT_TRUE(torch::equal(destination->tensor[block_count - 1],
+                               source->tensor[block_count - 1]));
+      EXPECT_TRUE(
+          torch::equal(destination->tensor[block_count - 1].narrow(
+                           /*dim=*/0, /*start=*/kPayloadBytes, /*length=*/128),
+                       torch::full({128}, 85, torch::kUInt8)));
+      EXPECT_EQ(
+          destination->tensor[block_count - 1][kPageBytes - 1].item<uint8_t>(),
+          85);
+      EXPECT_TRUE(torch::equal(
+          destination->tensor.narrow(
+              /*dim=*/0, /*start=*/0, /*length=*/block_count - 1),
+          torch::full({block_count - 1, kPageBytes}, 239, torch::kUInt8)));
+      EXPECT_EQ(destination_kernel.sizes().vec(), source_kernel.sizes().vec());
+      EXPECT_EQ(destination_kernel.strides().vec(),
+                source_kernel.strides().vec());
+    }
+  }
+}
+
+TEST(CacheLayoutBuilderTest, RejectsMusaModel1StorageMissingFinalPadding) {
+  constexpr int64_t kPageBytes = 74880;
+  const torch::Tensor storage =
+      torch::empty({3 * kPageBytes - 128}, torch::kUInt8);
+  DeepSeekV4KVCacheTensors tensors;
+  tensors.compressed_block_type = BlockType::C4;
+  tensors.mate_key_cache =
+      storage.as_strided({3, 128, 1, 584}, {kPageBytes, 584, 584, 1});
+  KVCache cache(tensors);
+  EXPECT_DEATH(cache.get_cache_tensors(),
+               "must include the final page padding");
+}
+#endif
 
 }  // namespace
 

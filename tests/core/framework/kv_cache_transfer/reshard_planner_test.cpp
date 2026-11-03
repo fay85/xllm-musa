@@ -22,10 +22,12 @@ limitations under the License.
 #include <cstring>
 #include <limits>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 #include "framework/kv_cache/cache_layout_builder.h"
 #include "framework/kv_cache/kv_cache_utils.h"
+#include "tests/core/framework/kv_cache_transfer/scoped_environment_variable.h"
 
 namespace xllm {
 
@@ -165,10 +167,18 @@ WorkerCacheLayoutManifest make_conv_manifest(uint64_t state_count,
   tensor.mooncake_buffer_id = static_cast<int64_t>(buffer_id);
   tensor.scalar_type = 0;
   tensor.element_bytes = 1;
+#if defined(USE_MUSA)
+  tensor.shape = {static_cast<int64_t>(kResourceCount),
+                  1,
+                  static_cast<int64_t>(state_count)};
+  tensor.stride = {
+      static_cast<int64_t>(state_count), static_cast<int64_t>(state_count), 1};
+#else
   tensor.shape = {static_cast<int64_t>(kResourceCount),
                   static_cast<int64_t>(state_count),
                   1};
   tensor.stride = {static_cast<int64_t>(state_count), 1, 1};
+#endif
   tensor.contiguous = true;
   tensor.resource_count = kResourceCount;
   tensor.resource_stride_bytes = state_count;
@@ -747,6 +757,53 @@ TEST(ReshardPlannerTest, MqaReplicationUsesOneStaticSourceWriter) {
     EXPECT_FALSE(owner_plan.regions.empty());
     EXPECT_TRUE(replica_plan.regions.empty());
   }
+}
+
+TEST(ReshardPlannerTest, PcpSelectsTp4HeadRangesForEveryTp8Destination) {
+  tests::ScopedEnvironmentVariable pcp("XLLM_DSV4_PCP");
+  ASSERT_TRUE(pcp.set("1"));
+  const auto sources =
+      make_instance(/*tp_size=*/4, /*global_heads=*/8, 3, "source");
+  const auto destinations =
+      make_instance(/*tp_size=*/8, /*global_heads=*/8, 17, "destination");
+  ReshardPlanner planner;
+  for (const auto& destination : destinations) {
+    std::vector<size_t> selected;
+    ASSERT_TRUE(planner.select_sources(sources, destination, &selected).ok());
+    ASSERT_EQ(selected.size(), 1);
+    EXPECT_EQ(selected.front(),
+              static_cast<size_t>(destination.coordinates.tp_rank / 2));
+    EXPECT_TRUE(
+        planner.validate_destination_coverage(sources, destination).ok());
+  }
+}
+
+TEST(ReshardPlannerTest, PcpRejectsMissingHeadCoverage) {
+  tests::ScopedEnvironmentVariable pcp("XLLM_DSV4_PCP");
+  ASSERT_TRUE(pcp.set("1"));
+  auto sources = make_instance(/*tp_size=*/4, /*global_heads=*/8, 3, "source");
+  for (auto& span : sources[2].tensors[0].shard.spans) {
+    span.logical_tensor = "unrelated_key";
+  }
+  const auto destination = make_head_manifest(
+      /*tp_rank=*/4, /*tp_size=*/8, /*global_heads=*/8, 17, "destination");
+  const Status status =
+      ReshardPlanner().validate_destination_coverage(sources, destination);
+  EXPECT_FALSE(status.ok());
+}
+
+TEST(ReshardPlannerTest, PcpRejectsFingerprintMismatch) {
+  tests::ScopedEnvironmentVariable pcp("XLLM_DSV4_PCP");
+  ASSERT_TRUE(pcp.set("1"));
+  const auto sources =
+      make_instance(/*tp_size=*/4, /*global_heads=*/8, 3, "source");
+  auto destination = make_head_manifest(
+      /*tp_rank=*/0, /*tp_size=*/8, /*global_heads=*/8, 17, "destination");
+  destination.fingerprint = "different-model";
+  const Status status =
+      ReshardPlanner().validate_destination_coverage(sources, destination);
+  EXPECT_FALSE(status.ok());
+  EXPECT_NE(status.message().find("incompatible"), std::string::npos);
 }
 
 TEST(ReshardPlannerTest, GqaReplicationUsesContiguousSourceWriters) {
@@ -1498,6 +1555,275 @@ TEST(RequestRegionBinderTest, RejectsOutOfRangeNonContiguousResourceIds) {
   EXPECT_FALSE(status.ok());
   EXPECT_TRUE(regions.empty());
 }
+
+TEST(ReshardPlannerTest, PullBindsDifferentSlotsAndCheckpointStrides) {
+  const WorkerCacheLayoutManifest source = make_ssm_manifest(
+      /*tp_rank=*/0,
+      /*tp_size=*/1,
+      /*global_heads=*/4,
+      /*buffer_id=*/3,
+      "source",
+      /*checkpoint_stride=*/1);
+  const WorkerCacheLayoutManifest destination = make_ssm_manifest(
+      /*tp_rank=*/0,
+      /*tp_size=*/1,
+      /*global_heads=*/4,
+      /*buffer_id=*/17,
+      "destination",
+      /*checkpoint_stride=*/5);
+  ReshardPlanTemplate plan;
+  ASSERT_TRUE(
+      ReshardPlanner().build_outgoing_plan(source, destination, &plan).ok());
+  KVTransferMapping mapping;
+  mapping.group_id = cache_group_id(BlockType::LINEAR);
+  mapping.local_ids = {2};
+  mapping.remote_ids = {1};
+  std::vector<ByteRegion> regions;
+  ASSERT_TRUE(RequestRegionBinder()
+                  .bind_pull(plan,
+                             {mapping},
+                             CacheNamespace::MAIN,
+                             /*layer_id=*/0,
+                             &regions)
+                  .ok());
+  ASSERT_EQ(regions.size(), 1U);
+  EXPECT_EQ(regions[0].local_buffer_id, 17U);
+  EXPECT_EQ(regions[0].remote_buffer_id, 3U);
+  EXPECT_EQ(regions[0].local_offset, 2U * 5U * 4U);
+  EXPECT_EQ(regions[0].remote_offset, 1U * 4U);
+  EXPECT_EQ(regions[0].length, 4U);
+}
+
+TEST(ReshardPlannerTest, PullRejectsInvalidMappingsAndLayout) {
+  const WorkerCacheLayoutManifest source = make_ssm_manifest(
+      /*tp_rank=*/0,
+      /*tp_size=*/1,
+      /*global_heads=*/4,
+      /*buffer_id=*/3,
+      "source",
+      /*checkpoint_stride=*/1);
+  WorkerCacheLayoutManifest destination = make_ssm_manifest(
+      /*tp_rank=*/0,
+      /*tp_size=*/1,
+      /*global_heads=*/4,
+      /*buffer_id=*/17,
+      "destination",
+      /*checkpoint_stride=*/5);
+  ReshardPlanTemplate plan;
+  ASSERT_TRUE(
+      ReshardPlanner().build_outgoing_plan(source, destination, &plan).ok());
+  KVTransferMapping mapping;
+  mapping.group_id = cache_group_id(BlockType::LINEAR);
+  mapping.local_ids = {2};
+  mapping.remote_ids = {kResourceCount};
+  std::vector<ByteRegion> regions;
+  EXPECT_FALSE(RequestRegionBinder()
+                   .bind_pull(plan,
+                              {mapping},
+                              CacheNamespace::MAIN,
+                              /*layer_id=*/0,
+                              &regions)
+                   .ok());
+  mapping.remote_ids = {1, 2};
+  EXPECT_FALSE(RequestRegionBinder()
+                   .bind_pull(plan,
+                              {mapping},
+                              CacheNamespace::MAIN,
+                              /*layer_id=*/0,
+                              &regions)
+                   .ok());
+  mapping.remote_ids = {1};
+  EXPECT_FALSE(RequestRegionBinder()
+                   .bind_pull(plan,
+                              {mapping},
+                              CacheNamespace::MAIN,
+                              /*layer_id=*/0,
+                              /*regions=*/nullptr)
+                   .ok());
+  destination.backend = "incompatible-backend";
+  EXPECT_FALSE(
+      ReshardPlanner().build_outgoing_plan(source, destination, &plan).ok());
+  destination.backend = source.backend;
+  destination.tensors[0].scalar_type = 1;
+  EXPECT_FALSE(
+      ReshardPlanner().build_outgoing_plan(source, destination, &plan).ok());
+}
+
+#if defined(USE_MUSA)
+void append_musa_pull_tensor(WorkerCacheLayoutManifest* manifest,
+                             KVCacheTensorRole role,
+                             const torch::Tensor& tensor,
+                             const CacheTensorLayoutContext& context,
+                             int64_t buffer_id,
+                             CacheNamespace cache_namespace) {
+  const bool sequence_scoped =
+      role == KVCacheTensorRole::CONV || role == KVCacheTensorRole::SSM;
+  const int32_t group_id =
+      cache_group_id(sequence_scoped ? BlockType::LINEAR : BlockType::KV);
+  KVCacheTensor cache_tensor{role, tensor, group_id, sequence_scoped};
+  std::string error;
+  ASSERT_TRUE(describe_cache_tensor(context, &cache_tensor, &error)) << error;
+  ASSERT_TRUE(cache_tensor.shard_descriptor.has_value());
+  CacheTensorManifest description;
+  description.cache_namespace = cache_namespace;
+  description.layer_id = 0;
+  description.role =
+      static_cast<int32_t>(static_cast<KVCacheTensorRole::Value>(role));
+  description.group_id = group_id;
+  description.mooncake_buffer_id = buffer_id;
+  description.scalar_type = static_cast<int32_t>(tensor.scalar_type());
+  description.element_bytes = tensor.element_size();
+  description.shape = tensor.sizes().vec();
+  description.stride = tensor.strides().vec();
+  description.contiguous = tensor.is_contiguous();
+  description.resource_count = kResourceCount;
+  description.physical_rows_per_resource =
+      role == KVCacheTensorRole::SSM ? context.linear_ssm_checkpoint_stride : 1;
+  description.resource_stride_bytes = tensor.stride(0) * tensor.element_size() *
+                                      description.physical_rows_per_resource;
+  description.buffer_bytes = tensor.nbytes();
+  description.block_token_capacity = sequence_scoped ? 0 : kTokenCount;
+  description.shard = *cache_tensor.shard_descriptor;
+  manifest->tensors.emplace_back(std::move(description));
+}
+
+TEST(ReshardPlannerTest, MusaPullCopiesCommittedHybridAndDraftState) {
+  const torch::Tensor source_conv = torch::arange(4 * 12 * 3, torch::kInt)
+                                        .remainder(127)
+                                        .to(torch::kUInt8)
+                                        .reshape({4, 12, 3});
+  const torch::Tensor source_ssm =
+      torch::arange(4 * 2 * 2 * 2, torch::kUInt8).reshape({4, 2, 2, 2});
+  const torch::Tensor source_draft =
+      torch::arange(4 * 3 * 2, torch::kUInt8).reshape({4, 3, 2, 1});
+  const torch::Tensor destination_conv =
+      torch::full({4, 12, 7}, 231, torch::kUInt8);
+  const torch::Tensor destination_ssm =
+      torch::full({4 * 5, 2, 2, 2}, 231, torch::kUInt8);
+  const torch::Tensor destination_draft =
+      torch::full({4, 3, 2, 1}, 231, torch::kUInt8);
+  WorkerCacheLayoutManifest source = make_head_manifest(
+      /*tp_rank=*/0,
+      /*tp_size=*/1,
+      /*global_heads=*/2,
+      /*buffer_id=*/3,
+      "source");
+  WorkerCacheLayoutManifest destination = make_head_manifest(
+      /*tp_rank=*/0,
+      /*tp_size=*/1,
+      /*global_heads=*/2,
+      /*buffer_id=*/17,
+      "destination");
+  source.backend = "musa";
+  destination.backend = "musa";
+  source.tensors.clear();
+  destination.tensors.clear();
+  source.tensors.reserve(3);
+  destination.tensors.reserve(3);
+  CacheTensorLayoutContext context;
+  context.linear_key_head_count = 2;
+  context.linear_value_head_count = 2;
+  context.linear_key_head_dim = 2;
+  context.kv_head_count = 2;
+  context.block_token_capacity = kTokenCount;
+  context.linear_ssm_checkpoint_stride = 1;
+  append_musa_pull_tensor(&source,
+                          KVCacheTensorRole::CONV,
+                          source_conv,
+                          context,
+                          /*buffer_id=*/3,
+                          CacheNamespace::MAIN);
+  append_musa_pull_tensor(&source,
+                          KVCacheTensorRole::SSM,
+                          source_ssm,
+                          context,
+                          /*buffer_id=*/5,
+                          CacheNamespace::MAIN);
+  append_musa_pull_tensor(&source,
+                          KVCacheTensorRole::KEY,
+                          source_draft,
+                          context,
+                          /*buffer_id=*/7,
+                          CacheNamespace::SPEC_DRAFT);
+  context.linear_ssm_checkpoint_stride = 5;
+  append_musa_pull_tensor(&destination,
+                          KVCacheTensorRole::CONV,
+                          destination_conv,
+                          context,
+                          /*buffer_id=*/17,
+                          CacheNamespace::MAIN);
+  append_musa_pull_tensor(&destination,
+                          KVCacheTensorRole::SSM,
+                          destination_ssm,
+                          context,
+                          /*buffer_id=*/19,
+                          CacheNamespace::MAIN);
+  append_musa_pull_tensor(&destination,
+                          KVCacheTensorRole::KEY,
+                          destination_draft,
+                          context,
+                          /*buffer_id=*/23,
+                          CacheNamespace::SPEC_DRAFT);
+  ASSERT_EQ(source.tensors.size(), 3U);
+  ASSERT_EQ(destination.tensors.size(), 3U);
+  ReshardPlanner planner;
+  ASSERT_TRUE(
+      planner.validate_destination_coverage({source}, destination).ok());
+  ReshardPlanTemplate plan;
+  ASSERT_TRUE(planner.build_outgoing_plan(source, destination, &plan).ok());
+  KVTransferMapping state_mapping;
+  state_mapping.group_id = cache_group_id(BlockType::LINEAR);
+  state_mapping.local_ids = {2};
+  state_mapping.remote_ids = {1};
+  KVTransferMapping draft_mapping;
+  draft_mapping.group_id = cache_group_id(BlockType::KV);
+  draft_mapping.local_ids = {2};
+  draft_mapping.remote_ids = {1};
+  const std::unordered_map<uint64_t, torch::Tensor> source_buffers = {
+      {3, source_conv}, {5, source_ssm}, {7, source_draft}};
+  const std::unordered_map<uint64_t, torch::Tensor> destination_buffers = {
+      {17, destination_conv}, {19, destination_ssm}, {23, destination_draft}};
+  uint64_t copied_bytes = 0;
+  size_t bound_region_count = 0;
+  for (CacheNamespace cache_namespace :
+       {CacheNamespace::MAIN, CacheNamespace::SPEC_DRAFT}) {
+    std::vector<ByteRegion> regions;
+    const Status bind_status =
+        RequestRegionBinder().bind_pull(plan,
+                                        {state_mapping, draft_mapping},
+                                        cache_namespace,
+                                        /*layer_id=*/0,
+                                        &regions);
+    ASSERT_TRUE(bind_status.ok()) << bind_status.message();
+    ASSERT_FALSE(regions.empty());
+    bound_region_count += regions.size();
+    for (const ByteRegion& region : regions) {
+      const torch::Tensor& local =
+          destination_buffers.at(region.local_buffer_id);
+      const torch::Tensor& remote = source_buffers.at(region.remote_buffer_id);
+      ASSERT_LE(region.local_offset + region.length, local.nbytes());
+      ASSERT_LE(region.remote_offset + region.length, remote.nbytes());
+      std::memcpy(local.data_ptr<uint8_t>() + region.local_offset,
+                  remote.data_ptr<uint8_t>() + region.remote_offset,
+                  static_cast<size_t>(region.length));
+      copied_bytes += region.length;
+    }
+  }
+  EXPECT_EQ(copied_bytes, 12U * 3U + 2U * 2U * 2U + 3U * 2U);
+  EXPECT_EQ(bound_region_count, 14U);
+  const torch::Tensor expected_conv = torch::full_like(destination_conv, 231);
+  expected_conv[2]
+      .narrow(/*dim=*/1, /*start=*/0, /*length=*/3)
+      .copy_(source_conv[1]);
+  const torch::Tensor expected_ssm = torch::full_like(destination_ssm, 231);
+  expected_ssm[2 * 5].copy_(source_ssm[1]);
+  const torch::Tensor expected_draft = torch::full_like(destination_draft, 231);
+  expected_draft[2].copy_(source_draft[1]);
+  EXPECT_TRUE(torch::equal(destination_conv, expected_conv));
+  EXPECT_TRUE(torch::equal(destination_ssm, expected_ssm));
+  EXPECT_TRUE(torch::equal(destination_draft, expected_draft));
+}
+#endif
 
 }  // namespace
 
