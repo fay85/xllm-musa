@@ -602,16 +602,12 @@ std::vector<Batch> ContinuousScheduler::schedule_request(
       return batch;
     }
 
-    // Restore waiters only progress once blocks free up; do not spin on them.
-    if (if_queue_not_empty() && decode_restore_waiting_.empty()) {
-      continue;
-    }
-
     const auto now = absl::Now();
-    if (now > deadline) {
+    if (now >= deadline) {
       break;
     }
-    // wait for new requests to arrive
+    // Queued requests may still be waiting for resources. Bound every empty
+    // batch retry, including completion sources without a direct notifier.
     constexpr uint64_t kStepSleepTimeMs = 1;
     const auto time_to_sleep =
         std::min(absl::Milliseconds(kStepSleepTimeMs), deadline - now);

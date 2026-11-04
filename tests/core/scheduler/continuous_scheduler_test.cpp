@@ -6,6 +6,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <functional>
 #include <future>
 #include <limits>
 #include <optional>
@@ -46,10 +47,32 @@ class ScopedConfigValue final {
   T old_;
 };
 
-class ControllablePrefetchBlockManagerPool final : public BlockManagerPool {
+class ControllableBlockManagerPool final : public BlockManagerPool {
  public:
-  explicit ControllablePrefetchBlockManagerPool(const Options& options)
+  explicit ControllableBlockManagerPool(const Options& options)
       : BlockManagerPool(options, /*dp_size=*/1) {}
+
+  bool has_pending_async_block_release() const override {
+    return pending_async_release_.load();
+  }
+
+  void set_pending_async_release(bool pending) {
+    pending_async_release_.store(pending);
+  }
+
+  using BlockManagerPool::allocate;
+
+  bool allocate(Sequence* sequence, size_t num_tokens) override {
+    if (has_pending_async_block_release()) {
+      ++blocked_allocation_calls_;
+      return false;
+    }
+    return BlockManagerPool::allocate(sequence, num_tokens);
+  }
+
+  size_t blocked_allocation_calls() const {
+    return blocked_allocation_calls_.load();
+  }
 
   void prefetch_from_storage(std::shared_ptr<Request> request,
                              PrefetchDoneCallback done) override {
@@ -77,6 +100,8 @@ class ControllablePrefetchBlockManagerPool final : public BlockManagerPool {
   size_t prefetch_calls() const { return prefetch_calls_; }
 
  private:
+  std::atomic<bool> pending_async_release_{false};
+  std::atomic<size_t> blocked_allocation_calls_{0};
   bool prefetch_ready_ = true;
   size_t prefetch_calls_ = 0;
   std::vector<std::pair<std::shared_ptr<Request>, PrefetchDoneCallback>>
@@ -133,8 +158,7 @@ class FakeEngine : public Engine {
     configure_prefix_cache(options);
     opt.enable_prefix_cache(options.enable_prefix_cache());
     fake_tokenizer_ = std::make_unique<FakeTokenizer>();
-    fake_block_manager_ =
-        std::make_unique<ControllablePrefetchBlockManagerPool>(opt);
+    fake_block_manager_ = std::make_unique<ControllableBlockManagerPool>(opt);
   }
   ForwardOutput step(std::vector<Batch>& batch) { return {}; }
   void update_last_step_result(std::vector<Batch>& batch) { NOT_IMPLEMENTED(); }
@@ -157,6 +181,14 @@ class FakeEngine : public Engine {
     fake_block_manager_->set_prefetch_ready(ready);
   }
 
+  void set_pending_async_release(bool pending) {
+    fake_block_manager_->set_pending_async_release(pending);
+  }
+
+  size_t blocked_allocation_calls() const {
+    return fake_block_manager_->blocked_allocation_calls();
+  }
+
   size_t prefetch_calls() const {
     return fake_block_manager_->prefetch_calls();
   }
@@ -164,7 +196,7 @@ class FakeEngine : public Engine {
  private:
   ScopedConfigValue<bool> prefix_cache_config_;
   std::unique_ptr<Tokenizer> fake_tokenizer_;
-  std::unique_ptr<ControllablePrefetchBlockManagerPool> fake_block_manager_;
+  std::unique_ptr<ControllableBlockManagerPool> fake_block_manager_;
   ModelArgs model_args_;
 };
 
@@ -190,6 +222,10 @@ class TestContinuousScheduler final : public ContinuousScheduler {
   }
 
   size_t scheduler_queue_size() { return request_queue_.size(); }
+
+  void after_next_prepare_batch(std::function<void()> callback) {
+    prepared_callback_ = std::move(callback);
+  }
 
   void report_queues() { report_request_queue_metrics(); }
   void set_extra_queue(size_t count, bool report = true) {
@@ -234,6 +270,16 @@ class TestContinuousScheduler final : public ContinuousScheduler {
   }
 
  protected:
+  std::vector<Batch> prepare_batch() override {
+    auto batch = ContinuousScheduler::prepare_batch();
+    if (prepared_callback_) {
+      auto callback = std::move(prepared_callback_);
+      prepared_callback_ = nullptr;
+      callback();
+    }
+    return batch;
+  }
+
   void append_request_queue_metrics(
       std::vector<std::pair<std::string, size_t>>& queues) override {
     if (report_extra_queue_) {
@@ -242,6 +288,7 @@ class TestContinuousScheduler final : public ContinuousScheduler {
   }
 
  private:
+  std::function<void()> prepared_callback_;
   size_t extra_queue_size_ = 0;
   bool report_extra_queue_ = false;
 };
@@ -851,8 +898,6 @@ class BlockedOverlapScheduler final : public ContinuousScheduler {
     return std::vector<Batch>(1);
   }
 
-  bool if_queue_not_empty() override { return prepare_calls_ < 3; }
-
  private:
   size_t prepare_calls_ = 0;
 };
@@ -1143,10 +1188,77 @@ TEST(ContinuousSchedulerTest, DrainsInflightBatchBeforeRetryingBlockedQueue) {
   BlockedOverlapScheduler scheduler(
       &engine, options, request->sequences().front().get());
 
-  scheduler.step(absl::ZeroDuration());
+  scheduler.step(absl::Seconds(5));
 
   EXPECT_EQ(scheduler.prepare_calls(), 1u);
   EXPECT_EQ(engine.completed_batches(), 1u);
+}
+
+TEST(ContinuousSchedulerTest, ResourceBlockedQueueRespectsSchedulingTimeout) {
+  ScopedConfigValue<bool> mix_batch(
+      SchedulerConfig::get_instance().enable_mix_batch(), true);
+  for (const absl::Duration timeout :
+       {absl::ZeroDuration(), absl::Milliseconds(5)}) {
+    ContinuousScheduler::Options options =
+        create_scheduler_options(64, 4, 0, 64, 1);
+    options.enable_schedule_overlap(false);
+    options.enable_chunked_prefill(true);
+    FakeEngine engine(/*num_blocks=*/64, /*block_size=*/32);
+    engine.set_pending_async_release(true);
+    TestContinuousScheduler scheduler(&engine, options);
+    auto request = generate_request_with_prompt_tokens({1, 2}, 4, 30000);
+    ASSERT_TRUE(scheduler.add_request(request));
+
+    auto scheduled = std::async(
+        std::launch::async, [&scheduler, timeout] { scheduler.step(timeout); });
+    const std::future_status status =
+        scheduled.wait_for(std::chrono::seconds(1));
+    if (status != std::future_status::ready) {
+      // Release the resource only for regression cleanup; request and queue
+      // state after cleanup must not be used for the timeout assertions.
+      engine.set_pending_async_release(false);
+    }
+    scheduled.get();
+
+    ASSERT_EQ(status, std::future_status::ready);
+    EXPECT_TRUE(scheduler.get_running_requests().empty());
+    EXPECT_EQ(scheduler.get_waiting_requests_num(), 1u);
+    EXPECT_GT(engine.blocked_allocation_calls(), 0u);
+    // Each retry waits up to 1ms rather than spinning on a nonempty queue.
+    EXPECT_LE(engine.blocked_allocation_calls(),
+              static_cast<size_t>(absl::ToInt64Milliseconds(timeout)) + 1);
+  }
+}
+
+TEST(ContinuousSchedulerTest,
+     ResourceBlockedQueueResumesWithoutCompletionNotification) {
+  ScopedConfigValue<bool> mix_batch(
+      SchedulerConfig::get_instance().enable_mix_batch(), true);
+  ContinuousScheduler::Options options =
+      create_scheduler_options(64, 4, 0, 64, 1);
+  options.enable_schedule_overlap(false);
+  options.enable_chunked_prefill(true);
+  FakeEngine engine(/*num_blocks=*/64, /*block_size=*/32);
+  engine.set_pending_async_release(true);
+  TestContinuousScheduler scheduler(&engine, options);
+  auto request = generate_request_with_prompt_tokens({1, 2}, 4, 30000);
+  ASSERT_TRUE(scheduler.add_request(request));
+
+  // Complete the simulated release on the scheduling thread between rounds.
+  // Changing the flag concurrently with a failed allocation could make the
+  // policy mistake temporary resource pressure for an unrecoverable failure.
+  scheduler.after_next_prepare_batch(
+      [&engine] { engine.set_pending_async_release(false); });
+  auto scheduled = std::async(
+      std::launch::async, [&scheduler] { scheduler.step(absl::Seconds(5)); });
+  const std::future_status status = scheduled.wait_for(std::chrono::seconds(1));
+  scheduled.get();
+
+  EXPECT_EQ(status, std::future_status::ready);
+  EXPECT_EQ(engine.blocked_allocation_calls(), 1u);
+  ASSERT_EQ(scheduler.get_running_requests().size(), 1u);
+  EXPECT_EQ(scheduler.get_running_requests().front(), request);
+  EXPECT_EQ(scheduler.get_waiting_requests_num(), 0u);
 }
 
 TEST(ContinuousSchedulerTest, CancelledOverlapRequestReleasesBeforeResult) {
