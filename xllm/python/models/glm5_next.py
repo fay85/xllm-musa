@@ -295,17 +295,20 @@ class Glm5NextConfig:
 
         # KDA linear_attn_config (transformers stores it as a dict)
         lac = pick("linear_attn_config", default=None) or {}
-        kda_heads = int(lac.get("num_heads", 64))
-        kda_dim = int(lac.get("head_dim", 128))
-        conv_k = int(lac.get("short_conv_kernel_size", 4))
-        full_attn_layers = lac.get("full_attn_layers")
+        # The C++ bridge reflects flattened ModelArgs, not the original
+        # nested HF dictionary. Honor both contracts instead of silently
+        # rebuilding custom/tiny checkpoints with the production defaults.
+        kda_heads = int(lac.get("num_heads", pick("linear_num_key_heads", default=64)))
+        kda_dim = int(lac.get("head_dim", pick("linear_key_head_dim", default=128)))
+        conv_k = int(lac.get("short_conv_kernel_size", pick("linear_conv_kernel_dim", default=4)))
+        full_attn_layers = lac.get("full_attn_layers", pick("full_attn_layers", default=None))
         if full_attn_layers is None:
             full_attn_layers = [i for i in range(n_layers) if i % 4 == 3]
 
         # Forget-gate lower-bound resolution — mirrors reference config __post_init__:
         # the dict key is ``gate_lower_bound`` (NOT ``lower_bound``); field default
         # is -5.0; if safe_gate (default True) and the bound is None, force -5.0.
-        lower_bound = lac.get("gate_lower_bound", -5.0)
+        lower_bound = lac.get("gate_lower_bound", pick("linear_lower_bound", default=-5.0))
         if lac.get("safe_gate", True) and lower_bound is None:
             lower_bound = -5.0
 
@@ -906,7 +909,10 @@ class Glm5NextIndexer(nn.Module):
         self.index_kpool_compress = cfg.index_kpool_compress
         self.index_kpool_always_select_tail = cfg.index_kpool_always_select_tail
         self._uses_npu_compressed_tail = (
-            device.type in ("npu", "privateuseone")
+            # Legacy private name retained for existing NPU test fixtures.
+            # MUSA uses the same device-neutral Torch cache/tail contract;
+            # the NPU-only fused updater still remains unavailable on MUSA.
+            device.type in ("npu", "privateuseone", "musa")
             and self.index_kpool > 1
             and self.index_kpool_compress
             and self.index_kpool_always_select_tail
@@ -3036,6 +3042,26 @@ def _call_process_weights_after_loading(module: nn.Module) -> None:
 _HC_PATTERN = re.compile(r"^model\.layers\.(\d+)\.(attn|ffn)_hc\.(fn|base|scale)$")
 
 
+def _load_bf16_expert_shards(
+    loader: QLinearWeightLoader,
+    destination: Glm5NextExperts,
+    prefix: str,
+    expert_start: int,
+    expert_end: int,
+    world: int,
+    rank: int,
+) -> None:
+    """Bounded offline per-expert loading; no inference or device fallback."""
+    for local_index, expert in enumerate(range(expert_start, expert_end)):
+        expert_prefix = prefix + f"experts.{expert}."
+        gate = loader.load_shard(expert_prefix + "gate_proj.weight", 0, world, rank)
+        up = loader.load_shard(expert_prefix + "up_proj.weight", 0, world, rank)
+        destination.gate_up_proj.data[local_index, :destination.intermediate_dim].copy_(gate)
+        destination.gate_up_proj.data[local_index, destination.intermediate_dim:].copy_(up)
+        down = loader.load_shard(expert_prefix + "down_proj.weight", 1, world, rank)
+        destination.down_proj.data[local_index].copy_(down)
+
+
 def _real_ckpt_aliases(name: str) -> list:
     """Candidate real-checkpoint keys for a model state-dict key.
 
@@ -3116,6 +3142,7 @@ class Glm5NextForCausalLM(PyModelBase):
         # must resolve to the aliased name too (it calls sd.get_tensor(name)).
         _orig_find = L._w8.find
         _orig_load_tensor = L._w8.load_tensor
+        _orig_load_shard = L._w8.load_shard
 
         def _resolve(name):
             if _orig_find(name) is not None:
@@ -3134,10 +3161,22 @@ class Glm5NextForCausalLM(PyModelBase):
             assert resolved is not None, f"checkpoint tensor not found: {name}"
             return _orig_load_tensor(resolved)
 
+        def _aliased_load_shard(
+            name: str,
+            dim: int,
+            world: int | None = None,
+            rank: int | None = None,
+        ) -> torch.Tensor:
+            resolved = _resolve(name)
+            assert resolved is not None, f"checkpoint tensor not found: {name}"
+            return _orig_load_shard(resolved, dim, world, rank)
+
         L._w8.find = _aliased_find
         L._w8.load_tensor = _aliased_load_tensor
         L.find = _aliased_find
         L.load_tensor = _aliased_load_tensor
+        L._w8.load_shard = _aliased_load_shard
+        L.load_shard = _aliased_load_shard
 
         # embed_tokens: HiddenParallelEmbedding — shard the hidden dim (dim 1).
         L.load_fp("model.embed_tokens.weight", dim=1)
@@ -3398,6 +3437,19 @@ class Glm5NextForCausalLM(PyModelBase):
             # params are lazily created only on the W8A8 path).
             ref = moe_mod.shared_experts.gate_up_proj.weight
             moe_mod.experts = Glm5NextExperts(self.cfg, ref.dtype, ref.device)
+        if (
+            moe_mod.experts.gate_up_proj.device.type == "musa"
+            and L.find(mlp + "experts.gate_up_proj") is None
+        ):
+            # Keep the public per-expert checkpoint load bounded: do not stack
+            # all 288 full BF16 experts on the host before TP slicing them.
+            # L.load_tensor performs explicit offline FP8 scale conversion;
+            # all online expert inference remains BF16 on MUSA.
+            _load_bf16_expert_shards(
+                L, moe_mod.experts, mlp, expert_start, expert_end,
+                self.cfg.moe_tp_size, self.cfg.moe_tp_rank,
+            )
+            return
         # Build per-expert [2*inter, hidden] gate_up as [n_exp, 2*inter, hidden]
         # with layout [gate | up] along dim 1. Shard gate/up SEPARATELY then cat
         # (see _load_mlp comment: a contiguous shard of the cat'd tensor crosses

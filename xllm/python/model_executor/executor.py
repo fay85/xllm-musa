@@ -118,6 +118,16 @@ def _create_attention_backend(
         raise NotImplementedError(
             f"DeepSeek-V4.1 runs on NPU only; no attention backend available for device type '{device.type}'"
         )
+    if current_platform.is_musa():
+        if model_type not in ("glm5_next", "glm5_next_text"):
+            raise NotImplementedError("Initial Python MUSA attention supports GLM5 Next text only")
+        if bool(config.get("enable_graph", False)) or acl_graph_enabled or num_decoding_tokens != 1:
+            raise NotImplementedError("Initial MUSA GLM requires eager execution without speculative tokens")
+        if any(int(config.get(axis, 1)) != 1 for axis in ("cp_size", "dp_size", "ep_size", "dcp_size", "layerwise_split_size")):
+            raise NotImplementedError("Initial MUSA GLM supports TP only, without CP/DP/EP/DCP/layerwise split")
+        from xllm.python.attention.musa_glm_reference import MusaGlmReferenceBackend
+
+        return MusaGlmReferenceBackend(device)
     if _is_deepseek_v4_model_type(model_type) and current_platform.is_npu():
         if model_type == "deepseek_v41":
             # The V4.1 CSA2 backend is NPU-only; it runs eagerly on NPU until

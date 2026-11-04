@@ -27,6 +27,7 @@ avoids a name shadow that would break one or the other.
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Optional, Sequence
 
 import torch
@@ -58,6 +59,10 @@ class W8A8WeightLoader:
         self._state_dicts = state_dicts
         self.tp_size = tp_size
         self.tp_rank = tp_rank
+        shard_fp8 = os.environ.get("XLLM_MUSA_FP8_SHARD_BEFORE_DEQUANT", "0")
+        if shard_fp8 not in ("0", "1"):
+            raise ValueError("XLLM_MUSA_FP8_SHARD_BEFORE_DEQUANT must be 0 or 1")
+        self._shard_fp8_before_dequant = shard_fp8 == "1"
 
     def find(self, name: str) -> Optional[StateDict]:
         for sd in self._state_dicts:
@@ -68,7 +73,18 @@ class W8A8WeightLoader:
     def load_tensor(self, name: str) -> torch.Tensor:
         sd = self.find(name)
         assert sd is not None, f"checkpoint tensor not found: {name}"
-        return sd.get_tensor(name)
+        tensor = sd.get_tensor(name)
+        if tensor.dtype == torch.float8_e4m3fn:
+            from xllm.python.models.fp8_block_weight import dequantize_fp8_block_to_bf16
+
+            if not name.endswith(".weight"):
+                raise ValueError(f"Unrecognized GLM FP8 parameter layout: {name}")
+            scale_name = name[:-len("weight")] + "weight_scale_inv"
+            scale_dict = self.find(scale_name)
+            if scale_dict is None:
+                raise ValueError(f"FP8 weight has no explicit block scale_inv: {name}")
+            return dequantize_fp8_block_to_bf16(tensor, scale_dict.get_tensor(scale_name))
+        return tensor
 
     def shard(
         self,
@@ -103,6 +119,28 @@ class W8A8WeightLoader:
         p.data.copy_(tensor)  # copy_ streams H2D + dtype/device cast in one shot
 
     def load_shard(self, name: str, dim: int, world: Optional[int] = None, rank: Optional[int] = None) -> torch.Tensor:
+        if self._shard_fp8_before_dequant:
+            sd = self.find(name)
+            assert sd is not None, f"checkpoint tensor not found: {name}"
+            tensor = sd.get_tensor(name)
+            if tensor.dtype == torch.float8_e4m3fn:
+                from xllm.python.models.fp8_block_weight import (
+                    dequantize_fp8_block_shard_to_bf16,
+                )
+
+                if not name.endswith(".weight"):
+                    raise ValueError(f"Unrecognized GLM FP8 parameter layout: {name}")
+                scale_name = name[:-len("weight")] + "weight_scale_inv"
+                scale_dict = self.find(scale_name)
+                if scale_dict is None:
+                    raise ValueError(f"FP8 weight has no explicit block scale_inv: {name}")
+                return dequantize_fp8_block_shard_to_bf16(
+                    tensor,
+                    scale_dict.get_tensor(scale_name),
+                    dim,
+                    self.tp_size if world is None else world,
+                    self.tp_rank if rank is None else rank,
+                )
         return self.shard(self.load_tensor(name), dim=dim, world=world, rank=rank)
 
     def copy_replicated(self, name: str) -> None:

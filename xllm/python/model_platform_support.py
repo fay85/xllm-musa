@@ -30,7 +30,9 @@ MODEL_PLATFORM_SUPPORT: dict[str, dict[str, bool]] = {
     # fails fast at registry lookup.
     "deepseek_v41": {"cuda": False, "npu": True},
     "glm5_2": {"cuda": False, "npu": True},
-    "glm5_next": {"cuda": False, "npu": True},
+    # Experimental MUSA admission: BF16 eager TP text only. This is an
+    # implementation capability, NOT a completed full-checkpoint/PD claim.
+    "glm5_next": {"cuda": False, "npu": True, "musa": True},
     "glm5_next_vl": {"cuda": False, "npu": True},
     "glm5_next_mtp": {"cuda": False, "npu": True},
     "deepseek_v32_mtp": {"cuda": False, "npu": True},

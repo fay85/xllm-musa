@@ -59,6 +59,12 @@ _world_initialized = False
 def _backend_for(device: torch.device) -> str:
     if device.type == "cuda":
         return "nccl"
+    if device.type == "musa":
+        import torch_musa  # noqa: F401
+
+        return "mccl"
+    if device.type not in ("npu", "privateuseone"):
+        raise NotImplementedError(f"No supported collective backend for {device.type}")
     import torch_npu  # noqa: F401
 
     return "hccl"
@@ -668,6 +674,16 @@ def _symm_buffer(group: ProcessGroup, group_name: str, x: torch.Tensor) -> torch
 
 @torch.library.custom_op("xllm_ops::all_reduce_", mutates_args={"x"})
 def all_reduce_(x: torch.Tensor, group_name: str = "tp") -> None:
+    if x.device.type == "musa":
+        native_name = {
+            "tp": "tp_all_reduce",
+            "moe_tp": "moe_tp_all_reduce",
+            "moe_ep": "moe_ep_all_reduce",
+        }.get(group_name)
+        native_op = _native_runtime_op(native_name) if native_name is not None else None
+        if native_op is not None:
+            native_op(x)
+            return
     group = _require_group(x, group_name)
     buffer = _symm_buffer(group, group_name, x)
     if buffer is None:

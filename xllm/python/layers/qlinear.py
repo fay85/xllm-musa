@@ -114,6 +114,15 @@ class QLinearWeightLoader:
     def load_tensor(self, name):
         return self._w8.load_tensor(name)
 
+    def load_shard(
+        self,
+        name: str,
+        dim: int,
+        world: int | None = None,
+        rank: int | None = None,
+    ) -> torch.Tensor:
+        return self._w8.load_shard(name, dim, world, rank)
+
     def shard(self, t, dim, world=None, rank=None):
         return self._w8.shard(t, dim, world, rank)
 

@@ -23,6 +23,8 @@ from pathlib import Path
 import pytest
 import torch
 
+import xllm
+
 _PYTHON_ROOT = Path(__file__).parents[2] / "xllm" / "python"
 
 
@@ -133,6 +135,8 @@ def _install_python_package_stub() -> None:
     distributed.all_reduce_ = lambda *args, **kwargs: None
 
     sys.modules["xllm.python"] = package
+    # Match normal import binding so mock.patch can resolve dotted targets.
+    xllm.python = package
     sys.modules["xllm.python.kernels"] = kernels
     sys.modules["xllm.python.kernels_npu"] = kernels_npu
     sys.modules["xllm.python.distributed"] = distributed

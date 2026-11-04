@@ -200,7 +200,13 @@ ModelOutput PyExecutorImpl::run(const torch::Tensor& tokens,
   // Build or reuse attention metadata.
   std::shared_ptr<layer::AttentionMetadata> attn_metadata =
       params.attn_metadata;
-  if (!attn_metadata) {
+  bool rebuild_metadata = !attn_metadata;
+#if defined(USE_MUSA)
+  // MUSA may provide a native-attention placeholder without Python GLM's
+  // scheduler lengths, paging and recurrent-state metadata.
+  rebuild_metadata = rebuild_metadata || args_.model_type() == "glm5_next";
+#endif
+  if (rebuild_metadata) {
     attn_metadata = std::make_shared<layer::AttentionMetadata>(
         layer::AttentionMetadataBuilder::build(
             params, enable_mla_, std::nullopt, device_));
