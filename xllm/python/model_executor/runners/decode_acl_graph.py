@@ -325,6 +325,7 @@ class DecodeAclGraphRunner(BaseRunner):
         self._draft_query_width = max(1, int(draft_query_width))
         self._eplv2_graph_token_limit = eplv2_graph_token_limit
         self._graphs: dict[_GraphKey, _DecodeGraphEntry] = {}
+        self._graph_pool: Any | None = None
         self._paged_kv_indices_buffer: torch.Tensor | None = None
         self._max_blocks_per_sequence: int = 0
         self._stream: torch.npu.Stream | None = None
@@ -2904,7 +2905,12 @@ class DecodeAclGraphRunner(BaseRunner):
             eplb=getattr(entry, "eplb", None),
             execution_contexts=entry.execution_contexts,
         )
-        with forward_context(context), torch.npu.graph(entry.graph, stream=self._stream):
+        # Every graph replays serially on ``self._stream``, so one shared pool
+        # lets capture scratch reach a high-water mark instead of accumulating
+        # one live pool per graph key.
+        if self._graph_pool is None:
+            self._graph_pool = torch.npu.graph_pool_handle()
+        with forward_context(context), torch.npu.graph(entry.graph, pool=self._graph_pool, stream=self._stream):
             entry.static_output = self._forward_static(entry)
         entry.graph_tasks = capture_context.tasks
 
