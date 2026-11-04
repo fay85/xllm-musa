@@ -32,7 +32,11 @@ TEST(CacheLayoutBuilderTest, HybridMlaKeepsRecurrentStateSharded) {
   context.linear_key_head_dim = 3;
   context.linear_ssm_checkpoint_stride = 4;
   KVCacheTensor conv{KVCacheTensorRole::CONV,
+#if defined(USE_MUSA)
+                     torch::zeros({3, 18, 6}),
+#else
                      torch::zeros({3, 6, 18}),
+#endif
                      cache_group_id(BlockType::LINEAR),
                      /*sequence_scoped=*/true};
   KVCacheTensor ssm{KVCacheTensorRole::SSM,
@@ -48,7 +52,16 @@ TEST(CacheLayoutBuilderTest, HybridMlaKeepsRecurrentStateSharded) {
   EXPECT_EQ(ssm_layout.kind, LogicalShardKind::SHARDED);
   EXPECT_EQ(conv_layout.resource_scope, CacheResourceScope::SEQUENCE);
   EXPECT_EQ(ssm_layout.resource_scope, CacheResourceScope::SEQUENCE);
+#if defined(USE_MUSA)
+  // MUSA stores [slot, channel, time]: each head has one span per time step.
+  ASSERT_EQ(conv_layout.spans.size(), 36U);
+  EXPECT_EQ(conv_layout.spans[0].repeat_count, 3U);
+  EXPECT_EQ(conv_layout.spans[0].physical_stride_bytes, 6U * 4U);
+  EXPECT_EQ(conv_layout.spans[12].logical_tensor, "conv_key_b");
+  EXPECT_EQ(conv_layout.spans[24].logical_tensor, "conv_value");
+#else
   ASSERT_EQ(conv_layout.spans.size(), 6U);
+#endif
   ASSERT_EQ(ssm_layout.spans.size(), 2U);
   EXPECT_EQ(conv_layout.spans[0].owner_tp_rank, 1);
   EXPECT_EQ(conv_layout.spans[0].logical_offset_bytes, 2U * 3U * 4U);

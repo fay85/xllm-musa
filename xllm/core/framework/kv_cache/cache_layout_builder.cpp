@@ -582,13 +582,13 @@ bool describe_cache_tensor(const CacheTensorLayoutContext& context,
   effective_context.block_token_capacity =
       effective_block_token_capacity(context, cache_tensor->group_id);
 
-#if !defined(USE_NPU) && !defined(USE_MLU)
+#if !defined(USE_NPU) && !defined(USE_MLU) && !defined(USE_MUSA)
   // Preserve the existing MLA transfer contract on other backends.
   if (effective_context.enable_mla) {
     return describe_replicated_tensor(cache_tensor, error);
   }
 #endif
-  // NPU/MLU hybrid MLA + linear-attention models shard recurrent state by TP.
+  // Hybrid MLA + linear-attention models shard recurrent state by TP.
   // Resolve CONV/SSM before the MLA replica fallback so each destination rank
   // receives the corresponding source rank's state rather than rank 0's copy.
   // The CONV/SSM descriptors consume only the linear-attention geometry and
@@ -602,8 +602,8 @@ bool describe_cache_tensor(const CacheTensorLayoutContext& context,
       context.linear_value_head_count > 0) {
     return describe_ssm(context, cache_tensor, error);
   }
-#if defined(USE_NPU) || defined(USE_MLU)
-  // NPU/MLU MLA attention and index caches are logical replicas even when
+#if defined(USE_NPU) || defined(USE_MLU) || defined(USE_MUSA)
+  // MLA attention and index caches are logical replicas even when
   // physical cache formats differ from ordinary K/V layouts. The deterministic
   // TP owner prevents duplicate writes while every destination replica is
   // populated.

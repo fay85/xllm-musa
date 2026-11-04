@@ -274,14 +274,30 @@ XServiceClient::get_provider_descriptor() const {
   return provider_descriptor_;
 }
 
-XServiceClient::~XServiceClient() {
-  exited_.store(true);
+XServiceClient::~XServiceClient() { stop_background_tasks(); }
+
+bool XServiceClient::wait_for_stop(std::chrono::milliseconds interval) {
+  std::unique_lock<std::mutex> lock(wait_mutex_);
+  return stop_cv_.wait_for(lock, interval, [this]() { return exited_.load(); });
+}
+
+void XServiceClient::stop_background_tasks() {
+  std::lock_guard<std::mutex> stop_lock(stop_mutex_);
+  {
+    std::lock_guard<std::mutex> wait_lock(wait_mutex_);
+    exited_.store(true);
+  }
+  stop_cv_.notify_all();
   if (heartbeat_thread_ && heartbeat_thread_->joinable()) {
     heartbeat_thread_->join();
   }
   if (reconcile_thread_ && reconcile_thread_->joinable()) {
     reconcile_thread_->join();
   }
+  register_done_.store(false);
+  scheduler_ = nullptr;
+  engine_ = nullptr;
+  block_manager_pool_ = nullptr;
 }
 
 std::string XServiceClient::get_instance_name() { return instance_name_; }
@@ -289,18 +305,23 @@ std::string XServiceClient::get_instance_name() { return instance_name_; }
 bool XServiceClient::register_instance_with_retry(const std::string& key,
                                                   const std::string& value) {
   int retry_cnt = 0;
-  while (!etcd_client_->register_instance(
-      key, value, ::xllm::DistributedConfig::get_instance().etcd_ttl())) {
+  while (!exited_.load()) {
+    if (etcd_client_->register_instance(
+            key, value, ::xllm::DistributedConfig::get_instance().etcd_ttl())) {
+      return true;
+    }
     if (retry_cnt >= 30) {
       LOG(ERROR) << "Register instance failed! key: " << key;
       return false;
     }
 
     LOG(WARNING) << "Register instance failed, wait 2s! key: " << key;
-    sleep(2);
+    if (wait_for_stop(std::chrono::seconds(2))) {
+      return false;
+    }
     retry_cnt++;
   }
-  return true;
+  return false;
 }
 
 bool XServiceClient::reconcile_registration() {
@@ -329,11 +350,12 @@ bool XServiceClient::reconcile_registration() {
 }
 
 void XServiceClient::reconcile_registration_loop() {
-  while (!exited_.load()) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int64_t>(
-        ::xllm::DistributedConfig::get_instance().heart_beat_interval() *
-        1000)));
-    if (!register_done_.load()) continue;
+  const std::chrono::milliseconds interval(static_cast<int64_t>(
+      ::xllm::DistributedConfig::get_instance().heart_beat_interval() * 1000));
+  while (!wait_for_stop(interval)) {
+    if (!register_done_.load()) {
+      continue;
+    }
 
     if (!reconcile_registration()) {
       LOG(ERROR) << "Failed to reconcile instance registration in etcd.";
@@ -484,11 +506,12 @@ InstanceInfo XServiceClient::get_instance_info(
 }
 
 void XServiceClient::heartbeat() {
-  while (!exited_.load()) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(static_cast<int64_t>(
-        ::xllm::DistributedConfig::get_instance().heart_beat_interval() *
-        1000)));
-    if (!register_done_.load()) continue;
+  const std::chrono::milliseconds interval(static_cast<int64_t>(
+      ::xllm::DistributedConfig::get_instance().heart_beat_interval() * 1000));
+  while (!wait_for_stop(interval)) {
+    if (!register_done_.load()) {
+      continue;
+    }
 
     if (block_manager_pool_ == nullptr || scheduler_ == nullptr) continue;
 

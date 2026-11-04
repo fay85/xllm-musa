@@ -17,6 +17,8 @@ limitations under the License.
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <pybind11/embed.h>
+
+#include "core/util/folly_bthread_compat.h"
 namespace py = pybind11;
 #include <torch/torch.h>
 
@@ -699,6 +701,7 @@ void initialize_musa_backend() {
 #endif
 
 int main(int argc, char** argv) {
+  xllm::initialize_folly_bthread_compatibility();
   // Check for --help flag before parsing other flags
   for (int i = 1; i < argc; ++i) {
     std::string arg(argv[i]);

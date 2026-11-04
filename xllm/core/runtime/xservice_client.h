@@ -18,6 +18,8 @@ limitations under the License.
 #include <brpc/channel.h>
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <functional>
 #include <mutex>
 #include <optional>
@@ -47,6 +49,8 @@ class XServiceClient {
   }
 
   ~XServiceClient();
+  // Join telemetry before the owning scheduler/engine is destroyed.
+  void stop_background_tasks();
   bool init(const std::string& etcd_addr,
             const std::string& instance_name = "",
             const BlockManagerPool* block_manager_pool = nullptr,
@@ -70,6 +74,8 @@ class XServiceClient {
   std::vector<bool> generations(const std::vector<RequestOutput>& outputs);
 
  private:
+  friend class XServiceClientLifecycleTest;
+  bool wait_for_stop(std::chrono::milliseconds interval);
   bool register_instance_with_retry(const std::string& key,
                                     const std::string& value);
   bool reconcile_registration();
@@ -100,6 +106,9 @@ class XServiceClient {
 
   std::atomic_bool exited_{false};
   std::atomic_bool register_done_{false};
+  std::mutex stop_mutex_;
+  std::mutex wait_mutex_;
+  std::condition_variable stop_cv_;
   bool initialize_done_ = false;
   std::string instance_name_;
   std::string incarnation_id_;

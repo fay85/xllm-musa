@@ -1,7 +1,7 @@
 include(cc_test)
 
 set(cache_layout_builder_test_sources cache_layout_builder_test.cpp)
-if(USE_NPU OR USE_MLU)
+if(USE_NPU OR USE_MLU OR USE_MUSA)
   list(APPEND cache_layout_builder_test_sources
     cache_layout_builder_hybrid_mla_test.cpp)
 endif()
