@@ -295,13 +295,14 @@ def test_fused_pool_selection_does_not_materialize_history_mask(
         **kwargs: object,
     ) -> tuple[torch.Tensor, None]:
         calls.append(
-            (
-                query.shape,
-                tail,
-                kwargs["actual_seq_k"],
-                kwargs["block_table"].shape,
-                kwargs["mask_mode"],
-            )
+            {
+                "query_shape": query.shape,
+                "tail": tail,
+                "actual_seq_k": kwargs["actual_seq_k"],
+                "block_table_shape": kwargs["block_table"].shape,
+                "mask_mode": kwargs["mask_mode"],
+                "sparse_indices_mode": kwargs["sparse_indices_mode"],
+            }
         )
         return output, None
 
@@ -324,13 +325,18 @@ def test_fused_pool_selection_does_not_materialize_history_mask(
     )
     assert len(calls) == 1
     row_lengths = lengths if query_len == 1 else positions.reshape(-1) + 1
-    assert calls[0][0] == torch.Size([3 * query_len, 1, indexer.n_heads, indexer.head_dim])
+    assert calls[0]["query_shape"] == torch.Size([3 * query_len, 1, indexer.n_heads, indexer.head_dim])
     expected_tail = torch.remainder(row_lengths, 4).to(torch.int32).cpu()
+    if not always_select_tail:
+        # The dense path never appends the tail in this mode, and the compact
+        # kernel layout would otherwise place it inside the topk slice.
+        expected_tail = torch.zeros_like(expected_tail)
     expected_pools = torch.div(row_lengths, 4, rounding_mode="floor").to(torch.int32).cpu()
-    torch.testing.assert_close(calls[0][1].cpu(), expected_tail)
-    torch.testing.assert_close(calls[0][2].cpu(), expected_pools)
-    assert calls[0][3] == torch.Size([3 * query_len, 2048])
-    assert calls[0][4] == 3
+    torch.testing.assert_close(calls[0]["tail"].cpu(), expected_tail)
+    torch.testing.assert_close(calls[0]["actual_seq_k"].cpu(), expected_pools)
+    assert calls[0]["block_table_shape"] == torch.Size([3 * query_len, 2048])
+    assert calls[0]["mask_mode"] == 3
+    assert calls[0]["sparse_indices_mode"] == 1
     output_width = 11 if always_select_tail else 8
     torch.testing.assert_close(actual, output.reshape(3, query_len, -1)[..., :output_width].long())
 
@@ -379,6 +385,42 @@ def test_fused_pool_selection_mtp_preserves_causal_tail_across_pool_boundary(
             valid = actual[batch_idx, query_idx]
             valid = valid[valid >= 0].sort().values.cpu()
             torch.testing.assert_close(valid, torch.tensor(list(expected_row), dtype=torch.int64))
+
+
+@pytest.mark.skipif(not os.getenv("XLLM_KDA_TEST_NPU_DEVICE"), reason="NPU device not configured")
+@torch.inference_mode()
+def test_fused_pool_selection_compact_indices_leave_no_interior_holes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    pytest.importorskip("torch_npu")
+    from xllm.python.kernels_npu.sparse_attention import pool_key_indexer
+
+    device = torch.device(os.environ["XLLM_KDA_TEST_NPU_DEVICE"])
+    torch.npu.set_device(device)
+    monkeypatch.setattr(glm5_next.kernels, "pool_key_indexer", pool_key_indexer, raising=False)
+    indexer = _indexer(device)
+    indexer.index_kpool_always_select_tail = True
+
+    # index_topk=8 and index_kpool=4 select at most two pools, so a 5-token
+    # row has one complete pool plus one tail token. The legacy layout leaves
+    # four -1 holes before the tail; compact must keep the row contiguous.
+    query = torch.ones(1, 1, indexer.n_heads, indexer.head_dim, device=device, dtype=torch.bfloat16)
+    weights = torch.ones(1, 1, indexer.n_heads, device=device, dtype=torch.bfloat16)
+    lengths = torch.tensor([5], device=device, dtype=torch.int32)
+    mask = torch.ones(1, 1, device=device, dtype=torch.bool)
+    cache = torch.zeros(1, 16, 1, indexer.head_dim, device=device, dtype=torch.bfloat16)
+    tables = torch.tensor([[0]], device=device, dtype=torch.int32)
+
+    actual = indexer._select_topk_fused_pa(query, weights, lengths, mask, cache, tables)
+    assert actual is not None
+
+    row = actual[0, 0]
+    valid = row[row >= 0]
+    valid_count = valid.numel()
+    assert valid_count == 5
+    assert not (row[:valid_count] < 0).any(), "compact indices must not leave interior -1 holes"
+    assert (row[valid_count:] < 0).all(), "remaining slots must be -1 padding"
+    torch.testing.assert_close(valid.cpu(), torch.tensor([0, 1, 2, 3, 4], dtype=torch.int64))
 
 
 def test_compressed_kpool_completes_pool_across_forward_boundary() -> None:

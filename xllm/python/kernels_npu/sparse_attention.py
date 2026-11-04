@@ -18,11 +18,6 @@ from __future__ import annotations
 
 import torch
 
-try:
-    import cann_ops_transformer  # noqa: F401
-except ImportError:
-    cann_ops_transformer = None
-
 
 def pool_key_indexer(
     query: torch.Tensor,
@@ -42,8 +37,16 @@ def pool_key_indexer(
     layout_k: str = "BSND",
     mask_mode: int = 3,
     quant_mode: int = -1,
+    sparse_indices_mode: int = 0,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Run CANN's fused pool-key indexer for supported layouts."""
+    """Run CANN's fused pool-key indexer for supported layouts.
+
+    ``sparse_indices_mode`` selects the index layout of the appended tail:
+    0 keeps the legacy layout (tail at a fixed ``topk`` offset, with ``-1``
+    holes when fewer than ``topk / pool_size`` pools are valid), while 1 packs
+    the tail directly after the valid expanded indices so every ``-1`` stays
+    at the end of the row. Both modes select the same valid token set.
+    """
     if layout_q == "BSND":
         if query.dim() != 4 or query.size(-1) != 128 or query.numel() == 0:
             raise ValueError("query must have shape [B, S1, N1, 128]")
@@ -165,11 +168,7 @@ def pool_key_indexer(
         raise ValueError("pool_size must be in [1, 128]")
     if topk < 1 or topk > 8192 or topk % pool_size != 0:
         raise ValueError("topk must be in [1, 8192] and divisible by pool_size")
-    try:
-        op = torch.ops.cann_ops_transformer.pool_key_indexer
-    except (AttributeError, RuntimeError) as exc:
-        raise NotImplementedError("CANN pool_key_indexer is unavailable in this runtime") from exc
-    return op(
+    return torch.ops.xllm_ops.pool_key_indexer(
         query,
         pool_key,
         weights,
@@ -186,6 +185,7 @@ def pool_key_indexer(
         mask_mode=mask_mode,
         quant_mode=quant_mode,
         return_value=return_value,
+        sparse_indices_mode=sparse_indices_mode,
     )
 
 
