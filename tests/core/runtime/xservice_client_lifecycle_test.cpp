@@ -22,6 +22,7 @@ limitations under the License.
 #include <thread>
 #include <utility>
 
+#include "core/distributed_runtime/disagg_pd_service_impl.h"
 #include "core/framework/config/distributed_config.h"
 #include "core/runtime/xservice_client.h"
 
@@ -65,6 +66,19 @@ class XServiceClientLifecycleTest : public ::testing::Test {
         });
   }
 
+  void construct_rpc_with_initialized_client() {
+    XServiceClient* singleton = XServiceClient::get_instance();
+    const bool was_initialized = singleton->initialize_done_;
+    // Exercise the out-of-line RPC constructor against this translation unit's
+    // singleton layout. No RPC is served and no etcd connection is required.
+    singleton->initialize_done_ = true;
+    {
+      DisaggPDServiceImpl service(/*scheduler=*/nullptr, /*engine=*/nullptr);
+      EXPECT_TRUE(singleton->initialize_done());
+    }
+    singleton->initialize_done_ = was_initialized;
+  }
+
   std::unique_ptr<XServiceClient> client_;
   double old_interval_ = 0.5;
 };
@@ -73,6 +87,11 @@ TEST_F(XServiceClientLifecycleTest, StopIsIdempotentWithoutInitialization) {
   client_->stop_background_tasks();
   client_->stop_background_tasks();
   EXPECT_TRUE(tasks_joined());
+}
+
+TEST_F(XServiceClientLifecycleTest,
+       RpcServiceSeesInitializedSingletonAcrossTranslationUnits) {
+  construct_rpc_with_initialized_client();
 }
 
 TEST_F(XServiceClientLifecycleTest, StopWakesLongIntervalPeriodicTasks) {
