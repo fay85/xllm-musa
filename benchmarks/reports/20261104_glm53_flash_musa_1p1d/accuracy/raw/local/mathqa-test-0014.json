@@ -1,0 +1,69 @@
+{
+  "question_id": "mathqa-test-0014",
+  "endpoint": "http://10.121.32.9:49080/v1/chat/completions",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na man bought 20 shares of rs . 50 at 5 discount , the rate of dividend being 13 . the rate of interest obtained is :\n\nA. 27 %\nB. 87 %\nC. 15 %\nD. 66 %\nE. 88 %"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false,
+    "model": "glm-5.3-flash"
+  },
+  "ground_truth": "C",
+  "started_at": "2026-11-04T13:40:56.141143+08:00",
+  "protocol_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+  "scorer_version": "final-visible-v2-think-boundary",
+  "client_read_timeout_seconds": 900,
+  "http_status": 200,
+  "response": {
+    "id": "chatcmpl-15263923581749589600-tGA5jt6ZZwY73STXZBLDdN",
+    "object": "chat.completion",
+    "created": 1793770856,
+    "model": "glm-5.3-flash",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "Investment 20×45=900, dividend 20×6.5=130, rate 130/900≈14.4% → 15%.</think>Investment = 20 × 45 = 900. Dividend = 20 × (13% of 50) = 130. Rate = 130/900 ≈ 14.4% ≈ 15%.\n\nANSWER: C"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 114,
+      "completion_tokens": 86,
+      "total_tokens": 200,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  },
+  "final_content": "Investment = 20 × 45 = 900. Dividend = 20 × (13% of 50) = 130. Rate = 130/900 ≈ 14.4% ≈ 15%.\n\nANSWER: C",
+  "reasoning_boundary_present": true,
+  "reasoning_separate_field": false,
+  "answer": "C",
+  "format_error": null,
+  "truncated": false,
+  "finish_reason": "stop",
+  "usage": {
+    "prompt_tokens": 114,
+    "completion_tokens": 86,
+    "total_tokens": 200,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "correct": true,
+  "elapsed_seconds": 70.52072193101048,
+  "reused_from": "评测/paired_protocol_v1/local/mathqa-test-0014.json",
+  "reused_source_sha256": "087eb57cf027a5b951b469e28d42269e4d1d528f5750742f4acdb2fe69c87bb1",
+  "original_protocol_sha256": "72118cfda00ba19dbd669852165472af40a76dd71e66bf9148256913e9fc9610",
+  "reuse_reason": "Exact request JSON equality and same question/ground-truth; original response unchanged"
+}

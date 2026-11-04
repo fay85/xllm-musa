@@ -1,0 +1,21 @@
+{
+  "captured_real_input_tokens_validated": true,
+  "matched_requests": [
+    {
+      "question_id": "mathqa-test-0033",
+      "token_count": 155,
+      "all_ids_equal_low": true,
+      "all_ids_equal_high": false,
+      "all_ids_equal_max": false,
+      "decoded_prefix": "[gMASK]<sop><|system|>Reasoning Effort: Low<|user|>",
+      "variant_prefixes": {
+        "low": "[gMASK]<sop><|system|>Reasoning Effort: Low<|user|>",
+        "high": "[gMASK]<sop><|system|>Reasoning Effort: High<|user|>",
+        "max": "[gMASK]<sop><|system|>Reasoning Effort: Max<|user|>"
+      }
+    }
+  ],
+  "capture_payload_sha256": "ad870499128294845b7d6b1d19ccaa6887d9e07eb686ed583c6ef14a0e9e8027",
+  "template_sha256": "2614a3c896d53e265f564c23701173c0049f985dacfbae79fc4bcd9f5ba083f4",
+  "scope": "Observed actual Router->Prefill token IDs match low template exactly; official internal implementation remains opaque"
+}

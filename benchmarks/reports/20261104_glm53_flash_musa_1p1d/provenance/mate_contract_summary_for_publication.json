@@ -1,0 +1,11 @@
+{
+  "runtime_mate": "0.2.8.post1",
+  "installed_mega_moe_py_sha256": "01dc1864722b6e4522663854c01f69ea9a40db4a8edce880173eb29dc294d840",
+  "checked_contract": {
+    "fp8_fp8_mega_moe_accepts_activation_clamp": true,
+    "split_prefill_forwards_activation_clamp_to_stage1": true,
+    "this_GLM_MegaMoE_path_integrated_and_qualified": false
+  },
+  "correction": "Earlier statement that split-prefill does not support activation_clamp was inaccurate for installed version",
+  "source_details_retained_locally": "Full installed-source inspection is retained in local evidence; third-party SDK implementation not redistributed"
+}

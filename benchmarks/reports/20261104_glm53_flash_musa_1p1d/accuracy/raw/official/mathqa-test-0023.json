@@ -1,0 +1,73 @@
+{
+  "question_id": "mathqa-test-0023",
+  "endpoint": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\ndiana is painting statues . she has 1 / 2 of a gallon of paint remaining . each statue requires 1 / 16 gallon of paint . how many statues can she paint ?\n\nA. 8\nB. 20\nC. 28\nD. 14\nE. 19"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false,
+    "model": "glm-5.3-flash"
+  },
+  "ground_truth": "A",
+  "started_at": "2026-11-04T14:18:18.589412+08:00",
+  "protocol_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+  "scorer_version": "final-visible-v2-think-boundary",
+  "client_read_timeout_seconds": 900,
+  "http_status": 200,
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "(1/2) ÷ (1/16) = 8\n\nANSWER: A",
+          "reasoning_content": "(1/2)/(1/16)=8.",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1793773101,
+    "id": "20261104141818509d5dcfc32142cf",
+    "model": "glm-5.3-flash",
+    "object": "chat.completion",
+    "request_id": "20261104141818509d5dcfc32142cf",
+    "usage": {
+      "completion_tokens": 33,
+      "completion_tokens_details": {
+        "reasoning_tokens": 11
+      },
+      "prompt_tokens": 121,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 154
+    }
+  },
+  "final_content": "(1/2) ÷ (1/16) = 8\n\nANSWER: A",
+  "reasoning_boundary_present": false,
+  "reasoning_separate_field": true,
+  "answer": "A",
+  "format_error": null,
+  "truncated": false,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 33,
+    "completion_tokens_details": {
+      "reasoning_tokens": 11
+    },
+    "prompt_tokens": 121,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 154
+  },
+  "correct": true,
+  "elapsed_seconds": 3.3974108819966204
+}

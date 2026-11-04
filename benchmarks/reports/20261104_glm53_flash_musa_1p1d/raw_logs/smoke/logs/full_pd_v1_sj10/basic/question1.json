@@ -1,0 +1,44 @@
+{
+  "request": {
+    "model": "glm-5.3-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "中国的首都是哪里？请用一句话回答。"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 512,
+    "stream": false
+  },
+  "started_at": "2026-11-04T13:17:48.364826+08:00",
+  "real_model": true,
+  "http_status": 200,
+  "response": {
+    "id": "chatcmpl-15263923581749589600-fvTh9jiuxuPUpKFbqfYZYK",
+    "object": "chat.completion",
+    "created": 1793769468,
+    "model": "glm-5.3-flash",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "</think>中国的首都是北京。"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 22,
+      "completion_tokens": 7,
+      "total_tokens": 29,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  },
+  "elapsed_seconds": 81.33518892386928
+}

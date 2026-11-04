@@ -1,0 +1,101 @@
+{
+  "frozen_at": "2026-11-04T17:08:48.143514+08:00",
+  "status": "stopped_by_user_after0062_0065_findings",
+  "implementation_commit": "30b7051ef1c840a9635794e6950f7507ee01b829",
+  "planned_each_side": 100,
+  "official_full": {
+    "completed": 100,
+    "correct": 93,
+    "accuracy": 0.93,
+    "prompt_tokens": 12779,
+    "completion_tokens": 13776,
+    "format_errors": 1,
+    "truncated": 0
+  },
+  "paired_same_questions": {
+    "count": 65,
+    "official_correct": 62,
+    "official_accuracy": 0.9538461538461539,
+    "local_correct": 60,
+    "local_accuracy": 0.9230769230769231,
+    "local_minus_official_percentage_points": -3.076923076923077,
+    "matching_answers": 63,
+    "answer_agreement_all_paired": 0.9692307692307692,
+    "valid_pairs": 64,
+    "answer_agreement_valid_pairs": 0.984375,
+    "official_prompt_tokens": 8419,
+    "official_completion_tokens": 7358,
+    "local_prompt_tokens": 8419,
+    "local_completion_tokens": 11938,
+    "local_format_errors": 1,
+    "local_truncated": 1
+  },
+  "local_transport_failure_ids": [
+    "mathqa-test-0031"
+  ],
+  "local_unattempted_ids": [
+    "mathqa-test-0066",
+    "mathqa-test-0067",
+    "mathqa-test-0068",
+    "mathqa-test-0069",
+    "mathqa-test-0070",
+    "mathqa-test-0071",
+    "mathqa-test-0072",
+    "mathqa-test-0073",
+    "mathqa-test-0074",
+    "mathqa-test-0075",
+    "mathqa-test-0076",
+    "mathqa-test-0077",
+    "mathqa-test-0078",
+    "mathqa-test-0079",
+    "mathqa-test-0080",
+    "mathqa-test-0081",
+    "mathqa-test-0082",
+    "mathqa-test-0083",
+    "mathqa-test-0084",
+    "mathqa-test-0085",
+    "mathqa-test-0086",
+    "mathqa-test-0087",
+    "mathqa-test-0088",
+    "mathqa-test-0089",
+    "mathqa-test-0090",
+    "mathqa-test-0091",
+    "mathqa-test-0092",
+    "mathqa-test-0093",
+    "mathqa-test-0094",
+    "mathqa-test-0095",
+    "mathqa-test-0096",
+    "mathqa-test-0097",
+    "mathqa-test-0098",
+    "mathqa-test-0099"
+  ],
+  "local_wrong_or_invalid_in_completed": [
+    "mathqa-test-0020",
+    "mathqa-test-0037",
+    "mathqa-test-0042",
+    "mathqa-test-0062",
+    "mathqa-test-0065"
+  ],
+  "discordant_ids": [
+    "mathqa-test-0062",
+    "mathqa-test-0065"
+  ],
+  "performance": {
+    "status": "not_run_user_deferred",
+    "groups": [
+      {
+        "input": 256,
+        "output": 256,
+        "measured": 0
+      },
+      {
+        "input": 2048,
+        "output": 256,
+        "measured": 0
+      }
+    ]
+  },
+  "no_full_local100_score": true,
+  "primary_score_never_replaced_by_repeats": true,
+  "protocol_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b"
+}

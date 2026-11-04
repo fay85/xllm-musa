@@ -1,0 +1,50 @@
+Processing /work/artifacts/wheels/flash_attn_3-0.2.8.post1+musa-py3-none-any.whl
+Processing /work/artifacts/wheels/flash_kda-0.2.8.post1+musa-py3-none-any.whl
+Processing /work/artifacts/wheels/mate-0.2.8.post1-py3-none-any.whl
+Processing /work/artifacts/wheels/mate_mubin-0.2.8.post1-py3-none-any.whl
+Processing /work/artifacts/wheels/tilelang_musa-0.1.12+musa.5-cp38-abi3-linux_x86_64.whl
+Installing collected packages: tilelang-musa, mate-mubin, mate, flash-kda, flash-attn-3
+  Attempting uninstall: tilelang-musa
+    Found existing installation: tilelang_musa 0.1.12+musa.2
+    Uninstalling tilelang_musa-0.1.12+musa.2:
+      Successfully uninstalled tilelang_musa-0.1.12+musa.2
+  Attempting uninstall: mate-mubin
+    Found existing installation: mate-mubin 0.2.7
+    Uninstalling mate-mubin-0.2.7:
+      Successfully uninstalled mate-mubin-0.2.7
+  Attempting uninstall: mate
+    Found existing installation: mate 0.2.7
+    Uninstalling mate-0.2.7:
+      Successfully uninstalled mate-0.2.7
+  Attempting uninstall: flash-attn-3
+    Found existing installation: flash_attn_3 0.2.7+musa
+    Uninstalling flash_attn_3-0.2.7+musa:
+      Successfully uninstalled flash_attn_3-0.2.7+musa
+
+Successfully installed flash-attn-3-0.2.8.post1+musa flash-kda-0.2.8.post1+musa mate-0.2.8.post1 mate-mubin-0.2.8.post1 tilelang-musa-0.1.12+musa.5
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-7.2.2, pluggy-1.6.0 -- /usr/bin/python
+cachedir: .pytest_cache
+rootdir: /work/source/xllm-musa
+collecting ... collected 5 items
+
+tests/musa/test_glm_mate_primitives.py::test_rmsnorm[128] 2026-11-04 11:47:18  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r1_l32_v8` with `out_idx=None`
+2026-11-04 11:47:21  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r1_l32_v8`
+PASSED
+tests/musa/test_glm_mate_primitives.py::test_rmsnorm[512] PASSED
+tests/musa/test_glm_mate_primitives.py::test_rmsnorm[4096] 2026-11-04 11:47:22  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r1_l128_v8` with `out_idx=None`
+2026-11-04 11:47:24  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r1_l128_v8`
+PASSED
+tests/musa/test_glm_mate_primitives.py::test_hyperconnection[1] 2026-11-04 11:47:39  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `mhc_pre_big_fuse_kernel` with `out_idx=None`
+2026-11-04 11:47:43  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `mhc_pre_big_fuse_kernel`
+PASSED
+tests/musa/test_glm_mate_primitives.py::test_hyperconnection[17] PASSED
+
+=============================== warnings summary ===============================
+tests/musa/test_glm_mate_primitives.py::test_hyperconnection[1]
+  /usr/local/lib/python3.10/dist-packages/tilelang/cache/kernel_cache.py:401: DeprecationWarning: `tl.disable_tma_lower` is deprecated and will be removed in v0.1.10. Use `T.copy(..., disable_tma=True)` per-copy instead.
+    kernel = JITKernel(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 5 passed, 1 warning in 52.49s =========================

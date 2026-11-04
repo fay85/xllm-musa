@@ -1,0 +1,15 @@
+{
+  "at": "2026-11-04T17:06:37.018444+08:00",
+  "user_requested_stop": true,
+  "original_repeat_pid": 611151,
+  "source_fd": 3,
+  "source_port": 41830,
+  "peer": [
+    "10.121.32.9",
+    49880
+  ],
+  "new_requests_sent": 0,
+  "primary_score_unchanged": true,
+  "scope": "Only receive existing in-flight0065 repeat01; no further baseline or performance requests",
+  "response_pending": true
+}

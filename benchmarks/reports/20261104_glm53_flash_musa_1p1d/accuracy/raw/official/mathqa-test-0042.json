@@ -1,0 +1,73 @@
+{
+  "question_id": "mathqa-test-0042",
+  "endpoint": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\n$ 350 is divided among a , b , and c so that a receives half as much as b , and b receives half as much as c . how much money is c ' s share ?\n\nA. $ 200\nB. $ 225\nC. $ 250\nD. $ 275\nE. $ 300"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false,
+    "model": "glm-5.3-flash"
+  },
+  "ground_truth": "C",
+  "started_at": "2026-11-04T14:19:37.070013+08:00",
+  "protocol_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+  "scorer_version": "final-visible-v2-think-boundary",
+  "client_read_timeout_seconds": 900,
+  "http_status": 200,
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "Let a = x, b = 2x, c = 4x. Then 7x = 350, so x = 50, and c = 4x = $200.\n\nANSWER: A",
+          "reasoning_content": "a=100, b=200, c=400 → 700, no. Wait total 350: a=x, b=2x, c=4x → 7x=350, x=50, c=200. A.",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1793773179,
+    "id": "20261104141937e407602ea8c540ca",
+    "model": "glm-5.3-flash",
+    "object": "chat.completion",
+    "request_id": "20261104141937e407602ea8c540ca",
+    "usage": {
+      "completion_tokens": 98,
+      "completion_tokens_details": {
+        "reasoning_tokens": 51
+      },
+      "prompt_tokens": 128,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 226
+    }
+  },
+  "final_content": "Let a = x, b = 2x, c = 4x. Then 7x = 350, so x = 50, and c = 4x = $200.\n\nANSWER: A",
+  "reasoning_boundary_present": false,
+  "reasoning_separate_field": true,
+  "answer": "A",
+  "format_error": null,
+  "truncated": false,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 98,
+    "completion_tokens_details": {
+      "reasoning_tokens": 51
+    },
+    "prompt_tokens": 128,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 226
+  },
+  "correct": false,
+  "elapsed_seconds": 2.6669629320385866
+}

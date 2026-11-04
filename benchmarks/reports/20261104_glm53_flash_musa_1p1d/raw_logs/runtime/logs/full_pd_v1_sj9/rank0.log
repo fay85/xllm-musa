@@ -1,0 +1,440 @@
+[xllm_musa_backend_init] registered PrivateUse1 backend name musa
+[xllm_musa_backend_init] registered TorchMUSA hooks
+[xllm_musa_backend_init] installed CUDA-to-MUSA dispatch bridge
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+W20261104 13:03:46.090692    56 config.cpp:751] Invalid port range [40500, 40500], falling back to default [15000, 17000]
+I20261104 13:03:46.094681    56 xllm.cpp:696] Registered torch_musa PrivateUse1 backend name=musa and hooks
+I20261104 13:03:46.094755    56 verbose_trace_logger.cpp:68] Verbose trace logging is disabled.
+I20261104 13:03:46.095058    56 xllm.cpp:567] set worker role to local worker
+W20261104 13:03:46.097071    56 model_config.cpp:164] use_cpp_chat_template is not supported for model_type=glm5_next, forcing use_cpp_chat_template=false.
+I20261104 13:03:46.098385    56 config_utils.cpp:207] Dumped startup config to /work/logs/full_pd_v1_sj9/resolved_rank0.json
+I20261104 13:03:46.234226    56 master.cpp:519] 
+I20261104 13:03:46.234267    56 master.cpp:520]       █     █     █▄   ▄█
+I20261104 13:03:46.234270    56 master.cpp:529] ▀█▄ ▀ █     █     █ ▀▄▀ █  version 0.11.0
+I20261104 13:03:46.234273    56 master.cpp:530]   █▶  █     █     █     █  model   /model
+I20261104 13:03:46.234275    56 master.cpp:532] ▄█▀ ▄ █▄▄▄▄ █▄▄▄▄ █     █  backend llm
+I20261104 13:03:46.234277    56 master.cpp:534] 
+I20261104 13:03:46.234279    56 master.cpp:670] Master init options: Options: [model_path: /model, draft_model_path: , backend: llm, limit_image_per_prompt: 8, block_size: 128, max_cache_size: 1073741824, max_memory_utilization: 0.98, enable_prefix_cache: 0, max_encoder_cache_size: 0, max_processor_cache_items: 256, max_linear_state_cache_slots: 8, max_tokens_per_batch: 256, max_seqs_per_batch: 2, max_tokens_per_chunk_for_prefill: 256, num_speculative_tokens: 0, speculative_algorithm: MTP, draft_sampling_mode: greedy, speculative_suffix_cache_max_depth: 64, speculative_suffix_max_spec_factor: 1, speculative_suffix_max_spec_offset: 0, speculative_suffix_min_token_prob: 0.1, speculative_suffix_max_cached_requests: -1, speculative_suffix_use_tree_spec: 0, enable_mtp_draft_body_tp1: 0, enable_adaptive_speculative_decode: 0, adaptive_speculative_min_gain: 0, num_request_handling_threads: 4, communication_backend: mccl, rank_tablefile: , expert_parallel_degree: 0, task_type: generate, enable_mla: 1, enable_chunked_prefill: 1, enable_flashcomm1: 0, flashcomm1_min_prefill_tokens: 8192, enable_mmrs_fusion: 0, mmrs_comm_mode: aiv, cp_size: 1, master_node_addr: 10.121.32.7:40200, instance_role: PREFILL, transfer_listen_port: 40400, nnodes: 8, node_rank: 0, enable_schedule_overlap: 0, enable_disagg_pd: 1, enable_pd_ooc: 0, disable_log_stats: 0, kv_cache_dtype: auto, kv_cache_transfer_mode: PULL, etcd_addr: 10.121.32.9:49079, etcd_namespace: xiaopang1104-full_pd_v1, enable_service_routing: 1, enable_kvcache_store: 0, prefetch_timeout: 120000, prefetch_batch_size: 2, layers_wise_copy_batchs: 4, store_protocol: tcp, store_rdma_devices: , store_master_server_address: , store_metadata_server: , store_local_hostname: , enable_multi_stream_parallel: 0, disable_ttft_profiling: 0, enable_forward_interruption: 0, enable_graph: 0, enable_graph_mode_decode_no_padding: 1, enable_prefill_piecewise_graph: 0, max_tokens_for_graph_mode: 2048, server_idx: 0]
+I20261104 13:03:46.234346    56 master.cpp:675] Resolved CP config: cp_size=1, world_size=8, dp_size=1, ep_size=1, cp_sharding_stage=disabled, instance_role=PREFILL
+I20261104 13:03:46.234351    56 master.cpp:753] Creating engine with devices: musa:0
+W20261104 13:03:46.234367    56 master.cpp:762] Force to disable schedule overlap for prefill instance in disagg pd mode.
+I20261104 13:03:46.234404    56 dist_manager.cpp:201] Multi-node serving world_size = 8, each_node_ranks = 1, current node rank = 0, nnodes = 8, dp_size = 1, cp_size = 1, ep_size = 1, tp_size = 8
+I20261104 13:03:46.234568    56 xllm_server_registry.cpp:22] Register server CollectiveServer0.
+I20261104 13:03:46.234874    92 worker_server.cpp:102] Create worker server with device: 0
+I20261104 13:03:46.234942    92 threadpool.cpp:32] ThreadPool created, thread count 5, pool name WorkerService.copy, cpu_binding false.
+W20261104 13:03:46.237931    56 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 9, new concurrency: 8
+I20261104 13:03:46.238994    56 server.cpp:1200] Server[xllm::CollectiveService] is serving on port=40200.
+I20261104 13:03:46.239008    56 server.cpp:1203] Check out http://worker32007:40200 in web browser.
+I20261104 13:03:46.239127    56 xllm_server.cpp:302] CollectiveServer0 server started on address 10.121.32.7:40200, idle_timeout_sec: -1, num_threads: 8
+I20261104 13:03:46.614542    92 threadpool.cpp:32] ThreadPool created, thread count 4, pool name WorkerService.request, cpu_binding false.
+I20261104 13:03:46.615108    92 xllm_server_registry.cpp:22] Register server DistributeWorkerServer0.
+W20261104 13:03:46.615789    92 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 9, new concurrency: 8
+I20261104 13:03:46.616514    92 server.cpp:1200] Server[xllm::WorkerService] is serving on port=35725.
+I20261104 13:03:46.616528    92 server.cpp:1203] Check out http://worker32007:35725 in web browser.
+I20261104 13:03:46.616536    92 xllm_server.cpp:302] DistributeWorker server started on address 10.121.32.7:35725, idle_timeout_sec: -1, num_threads: 8
+I20261104 13:03:46.616542    92 worker_server.cpp:152] Worker 0: server address: 10.121.32.7:35725
+I20261104 13:03:46.617182    92 worker_server.cpp:520] Worker#0 connect to 10.121.32.7:40200 success.
+I20261104 13:03:47.188619    92 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group world_group, rank=0, world_size=8, algorithm=2, max_bytes=8388608
+I20261104 13:03:47.239389    56 threadpool.cpp:32] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261104 13:03:47.239636    56 threadpool.cpp:32] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+E20261104 13:03:47.240538    56 comm_channel.cpp:52] Hello request failed: [E2001][10.121.32.7:35725]Server is not initialized
+I20261104 13:03:47.846644    92 musa_custom_all_reduce.cpp:244] [MUSA_TP_REDUCE_POLICY] group=tp_group, rank=0, world_size=8, enabled=0, max_bytes=8388608
+I20261104 13:03:47.854301    92 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group tp_group, rank=0, world_size=8, algorithm=1, max_bytes=8388608
+I20261104 13:03:47.917723    92 collective_communicator.cpp:651] MoE TP communicator reuses TP group: tp_size=8, dp_size=1
+I20261104 13:03:47.917769    92 worker_server.cpp:197] Worker CP config: cp_size=1, cp_group_size=8, cp_sharding_stage=disabled, instance_role=PREFILL
+I20261104 13:03:47.917794    92 threadpool.cpp:32] ThreadPool created, thread count 1, pool name Worker.async, cpu_binding false.
+I20261104 13:03:47.917932    92 threadpool.cpp:32] ThreadPool created, thread count 1, pool name WorkerImpl.schedule, cpu_binding false.
+I20261104 13:03:50.241010    56 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:35725, global_rank_: 0
+I20261104 13:03:50.241098    56 threadpool.cpp:32] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261104 13:03:50.241334    56 threadpool.cpp:32] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261104 13:03:50.242409    56 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:36485, global_rank_: 1
+I20261104 13:03:50.242426    56 threadpool.cpp:32] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261104 13:03:50.242547    56 threadpool.cpp:32] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261104 13:03:50.243337    56 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:40193, global_rank_: 2
+I20261104 13:03:50.243351    56 threadpool.cpp:32] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261104 13:03:50.243464    56 threadpool.cpp:32] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261104 13:03:50.244345    56 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:40329, global_rank_: 3
+I20261104 13:03:50.244359    56 threadpool.cpp:32] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261104 13:03:50.244455    56 threadpool.cpp:32] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261104 13:03:50.245318    56 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:32985, global_rank_: 4
+I20261104 13:03:50.245335    56 threadpool.cpp:32] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261104 13:03:50.245440    56 threadpool.cpp:32] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261104 13:03:50.246253    56 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:36921, global_rank_: 5
+I20261104 13:03:50.246269    56 threadpool.cpp:32] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261104 13:03:50.246357    56 threadpool.cpp:32] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261104 13:03:50.247177    56 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:38783, global_rank_: 6
+I20261104 13:03:50.247193    56 threadpool.cpp:32] ThreadPool created, thread count 1, pool name RemoteWorker.request, cpu_binding false.
+I20261104 13:03:50.247294    56 threadpool.cpp:32] ThreadPool created, thread count 4, pool name RemoteWorker.copy, cpu_binding false.
+I20261104 13:03:50.248174    56 remote_worker.cpp:57] RemoteWorker Hello connected, server_address: 10.121.32.7:34333, global_rank_: 7
+I20261104 13:03:50.248263    56 dist_manager.cpp:331] Started cluster health check thread
+I20261104 13:03:50.248287    56 threadpool.cpp:32] ThreadPool created, thread count 8, pool name LLMEngine.link, cpu_binding false.
+I20261104 13:03:55.496661    56 threadpool.cpp:32] ThreadPool created, thread count 16, pool name LLMEngine.forward_input, cpu_binding false.
+I20261104 13:03:55.502916    56 hf_model_loader.cpp:1266] Success to parse image preprocess args file: /model/processor_config.json
+I20261104 13:03:55.503161    56 hf_model_loader.cpp:1387] Success to parse video preprocess args file: /model/processor_config.json
+I20261104 13:03:55.503363    56 threadpool.cpp:32] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261104 13:03:55.505764    56 llm_engine.cpp:259] Initializing model from: /model
+I20261104 13:03:55.505813    56 tokenizer_factory.cpp:33] Create fast tokenizer.
+I20261104 13:03:56.315961    56 llm_engine.cpp:315] Block info, block_size: 128, n_local_kv_heads: 8, head_dim: 256, n_layers: 45, dtype: BFloat16, kv_cache_dtype: auto
+I20261104 13:03:57.149286    56 llm_engine.cpp:349] Tokenizer/model vocab differ: tokenizer=154856, model=154880
+I20261104 13:03:57.149336    56 llm_engine.cpp:355] Initializing model with ModelArgs: [model_type: glm5_next, encoder_embedding_mode: 0, embedding_mode: 0, dtype: bfloat16, hidden_size: 4096, hidden_act: silu, intermediate_size: 12288, moe_intermediate_size: 2048, n_routed_experts: 288, n_activated_experts: 0, num_experts_per_tok: 8, n_layers: 45, n_encoder_layers: 0, head_dim: 256, decoder_head_dim: 0, n_heads: 64, decoder_n_heads: 0, n_kv_heads: 64, decoder_n_kv_heads: -1, vocab_size: 154880, rms_norm_eps: 1e-05, layer_norm_eps: 0, rotary_dim: 0, rope_theta: 10000, rope_scaling_rope_type: default, rope_scaling_factor: 0, rope_scaling_low_freq_factor: 0, rope_scaling_high_freq_factor: 0, rope_scaling_original_max_position_embeddings: 0, rope_scaling_mrope_section: [], max_position_embeddings: 1048576, use_absolute_position_embedding: 0, bos_token_id: 0, eos_token_id: -1, pad_token_id: 154820, attn_scalar: 0, no_bias: 0, qkv_bias: 0, stop_token_ids: [154829, 154827, 154820, ], vision_start_token_id: 0, vision_end_token_id: 0, vision_token_id: 0, image_token_id: 154854, video_token_id: 154855, vision_custom_adapter: , vision_max_slice_nums: 0, mm_dropout: 0, mm_hidden_act: silu, mm_hidden_size: 1024, mm_image_size: 448, mm_intermediate_size: 4096, mm_num_channels: 3, mm_initializer_range: 0.02, mm_layer_norm_eps: 1e-05, mm_num_attention_heads: 16, mm_num_beam_groups: 0, mm_num_beams: 0, mm_num_hidden_layers: 24, mm_num_return_sequences: 0, mm_output_attentions: 0, mm_output_hidden_states: 0, mm_output_scores: 0, mm_patch_size: 14, mm_projection_dim: 4096, mm_spatial_merge_size: 2, mm_spatial_patch_size: 0, mm_remove_invalid_values: 0, mm_repetition_penalty: 0, mm_return_dict: 0, mm_return_dict_in_generate: 0, mm_temperature: 0, mm_tie_encoder_decoder: 0, mm_tie_word_embeddings: 0, mm_top_k: 0, mm_top_p: 0, mm_torchscript: 0, mm_use_bfloat16: 0, mm_head_dim: 0, mm_vocab_size: 0, mm_window_size: 0, mm_fullatt_block_indexes: [], mm_deepstack_visual_indexes: [], mm_tokens_per_second: 0, mm_temporal_patch_size: 2, mm_projector_type: , mm_projector_hidden_act: , mm_projector_n_layers: 0, mm_vision_feature_layer: 0, mm_vision_feature_select_strategy: , mm_image_do_center_crop: 0, mm_image_crop_height_size: 335, mm_image_crop_width_size: 335, mm_image_do_resize: 0, mm_image_resize_shortest_edge: 335, mm_image_resample: 335, mm_image_do_rescale: 1, mm_video_do_rescale: 1, mm_image_rescale_factor: 0, mm_image_do_normalize: 0, mm_image_normalize_mean: [0.481455, 0.457827, 0.408211, ], mm_image_normalize_std: [0.26863, 0.261303, 0.275777, ], mm_image_shortest_edge: 0, mm_image_longest_edge: 0, mm_image_min_pixels: 0, mm_image_max_pixels: 0, mm_image_patch_size: 14, mm_image_temporal_patch_size: 2, mm_image_merge_size: 2, mm_image_min_tokens: 16, mm_image_max_tokens: 8000, mm_image_token_index: 0, mm_video_normalize_mean: [0.481455, 0.457827, 0.408211, ], mm_video_normalize_std: [0.26863, 0.261303, 0.275777, ], mm_video_shortest_edge: 0, mm_video_longest_edge: 0, mm_video_patch_size: 14, mm_video_temporal_patch_size: 2, mm_video_merge_size: 2, mm_video_min_tokens: 16, mm_video_max_tokens: 240000, mm_video_max_pixels: 0, mm_pad_token_id: 0, tie_word_embeddings: 0, use_sliding_window: 0, sliding_window: -1, max_window_layers: 0, query_num: 0, num_speculative_tokens: 0, in_channels: -1, out_channels: -1, down_block_types: [], up_block_types: [], block_out_channels: [], layers_per_block: 1, latent_channels: -1, norm_num_groups: -1, sample_size: -1, scale_factor: 0, shift_factor: 0, mid_block_add_attention: 1, force_upcast: 1, use_quant_conv: 0, use_post_quant_conv: 0, joint_attention_dim: 0, pooled_projection_dim: 0, guidance_embeds: 1, axes_dims_rope: [], num_single_layers: 0, d_model: 0, num_layers: 0, d_kv: 0, d_ff: 0, act_fn: , is_gated_act: 1, relative_attention_num_buckets: 0, relative_attention_max_distance: 0, num_train_timesteps: 0, shift: 0, use_dynamic_shifting: 0, base_shift: 0, max_shift: 0, base_image_seq_len: 0, max_image_seq_len: 0]
+I20261104 13:03:57.149399    56 llm_engine.cpp:356] Initializing model with quant args: QuantArgs: [quant_method: fp8, quantize_type: , bits: 0, moe_weight_bits: 8, only_expert_per_group: 0, group_size: 0, desc_act: 0, is_sym: 0, activation_dynamic: 1, preserve_smooth: 0, compressed_groups: 0, fmt: e4m3, ignored_modules: 0, quant_version: , quant_desc_count: 0]
+I20261104 13:03:57.149403    56 llm_engine.cpp:357] Initializing model with tokenizer args: TokenizerArgs: [tokenizer_type: fast, add_bos_token: 0, add_eos_token: 0, bos_token: , eos_token: <|endoftext|>, pad_token: <|endoftext|>, tokenizer_class: TokenizersBackend, pattern: ]
+I20261104 13:03:57.149407    56 llm_engine.cpp:358] Initializing model with random seed: 1104
+I20261104 13:03:57.154088  1938 hf_model_loader.cpp:1266] Success to parse image preprocess args file: /model/processor_config.json
+I20261104 13:03:57.154187  1938 hf_model_loader.cpp:1387] Success to parse video preprocess args file: /model/processor_config.json
+I20261104 13:03:57.154491  1938 threadpool.cpp:32] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261104 13:03:57.157418  1938 tokenizer_factory.cpp:33] Create fast tokenizer.
+I20261104 13:04:34.125975  1938 worker_impl.cpp:2283] Temporarily setting ATen threads to 1 during weight loading, tp_world_size=8, prev_threads=2
+I20261104 13:04:34.126200  3455 hf_model_loader.cpp:626] Loading model weights from /model/model-00009-of-00062.safetensors
+I20261104 13:04:34.126175  3387 hf_model_loader.cpp:626] Loading model weights from /model/model-00001-of-00062.safetensors
+I20261104 13:04:34.126190  3429 hf_model_loader.cpp:626] Loading model weights from /model/model-00006-of-00062.safetensors
+I20261104 13:04:34.126274  3575 hf_model_loader.cpp:626] Loading model weights from /model/model-00024-of-00062.safetensors
+I20261104 13:04:34.126222  3479 hf_model_loader.cpp:626] Loading model weights from /model/model-00012-of-00062.safetensors
+I20261104 13:04:34.126175  3405 hf_model_loader.cpp:626] Loading model weights from /model/model-00003-of-00062.safetensors
+I20261104 13:04:34.126214  3470 hf_model_loader.cpp:626] Loading model weights from /model/model-00011-of-00062.safetensors
+I20261104 13:04:34.126183  3412 hf_model_loader.cpp:626] Loading model weights from /model/model-00004-of-00062.safetensors
+I20261104 13:04:34.126233  3504 hf_model_loader.cpp:626] Loading model weights from /model/model-00015-of-00062.safetensors
+I20261104 13:04:34.126299  3591 hf_model_loader.cpp:626] Loading model weights from /model/model-00026-of-00062.safetensors
+I20261104 13:04:34.126302  3598 hf_model_loader.cpp:626] Loading model weights from /model/model-00027-of-00062.safetensors
+I20261104 13:04:34.126230  3495 hf_model_loader.cpp:626] Loading model weights from /model/model-00014-of-00062.safetensors
+I20261104 13:04:34.126296  3614 hf_model_loader.cpp:626] Loading model weights from /model/model-00029-of-00062.safetensors
+I20261104 13:04:34.126291  3583 hf_model_loader.cpp:626] Loading model weights from /model/model-00025-of-00062.safetensors
+I20261104 13:04:34.126312  3621 hf_model_loader.cpp:626] Loading model weights from /model/model-00030-of-00062.safetensors
+I20261104 13:04:34.126236  3511 hf_model_loader.cpp:626] Loading model weights from /model/model-00016-of-00062.safetensors
+I20261104 13:04:34.126247  3527 hf_model_loader.cpp:626] Loading model weights from /model/model-00018-of-00062.safetensors
+I20261104 13:04:34.126300  3606 hf_model_loader.cpp:626] Loading model weights from /model/model-00028-of-00062.safetensors
+I20261104 13:04:34.126194  3447 hf_model_loader.cpp:626] Loading model weights from /model/model-00008-of-00062.safetensors
+I20261104 13:04:34.126195  3421 hf_model_loader.cpp:626] Loading model weights from /model/model-00005-of-00062.safetensors
+I20261104 13:04:34.126241  3519 hf_model_loader.cpp:626] Loading model weights from /model/model-00017-of-00062.safetensors
+I20261104 13:04:34.126224  3487 hf_model_loader.cpp:626] Loading model weights from /model/model-00013-of-00062.safetensors
+I20261104 13:04:34.126315  3627 hf_model_loader.cpp:626] Loading model weights from /model/model-00031-of-00062.safetensors
+I20261104 13:04:34.126204  3437 hf_model_loader.cpp:626] Loading model weights from /model/model-00007-of-00062.safetensors
+I20261104 13:04:34.126259  3535 hf_model_loader.cpp:626] Loading model weights from /model/model-00019-of-00062.safetensors
+I20261104 13:04:34.126209  3463 hf_model_loader.cpp:626] Loading model weights from /model/model-00010-of-00062.safetensors
+I20261104 13:04:34.126271  3567 hf_model_loader.cpp:626] Loading model weights from /model/model-00023-of-00062.safetensors
+I20261104 13:04:34.126186  3397 hf_model_loader.cpp:626] Loading model weights from /model/model-00002-of-00062.safetensors
+I20261104 13:04:34.126264  3559 hf_model_loader.cpp:626] Loading model weights from /model/model-00022-of-00062.safetensors
+I20261104 13:04:34.126256  3551 hf_model_loader.cpp:626] Loading model weights from /model/model-00021-of-00062.safetensors
+I20261104 13:04:34.126320  3633 hf_model_loader.cpp:626] Loading model weights from /model/model-00032-of-00062.safetensors
+I20261104 13:04:34.126269  3543 hf_model_loader.cpp:626] Loading model weights from /model/model-00020-of-00062.safetensors
+I20261104 13:04:38.950052  3387 hf_model_loader.cpp:626] Loading model weights from /model/model-00033-of-00062.safetensors
+I20261104 13:04:39.354890  3437 hf_model_loader.cpp:626] Loading model weights from /model/model-00039-of-00062.safetensors
+I20261104 13:04:39.355022  3479 hf_model_loader.cpp:626] Loading model weights from /model/model-00044-of-00062.safetensors
+I20261104 13:04:39.355146  3519 hf_model_loader.cpp:626] Loading model weights from /model/model-00049-of-00062.safetensors
+I20261104 13:04:39.355232  3527 hf_model_loader.cpp:626] Loading model weights from /model/model-00050-of-00062.safetensors
+I20261104 13:04:39.355317  3575 hf_model_loader.cpp:626] Loading model weights from /model/model-00056-of-00062.safetensors
+I20261104 13:04:39.355386  3447 hf_model_loader.cpp:626] Loading model weights from /model/model-00040-of-00062.safetensors
+I20261104 13:04:41.550153  3535 hf_model_loader.cpp:626] Loading model weights from /model/model-00051-of-00062.safetensors
+I20261104 13:04:41.550172  3397 hf_model_loader.cpp:626] Loading model weights from /model/model-00034-of-00062.safetensors
+I20261104 13:04:41.550173  3591 hf_model_loader.cpp:626] Loading model weights from /model/model-00058-of-00062.safetensors
+I20261104 13:04:41.550199  3567 hf_model_loader.cpp:626] Loading model weights from /model/model-00055-of-00062.safetensors
+I20261104 13:04:41.550203  3455 hf_model_loader.cpp:626] Loading model weights from /model/model-00041-of-00062.safetensors
+I20261104 13:04:41.550218  3412 hf_model_loader.cpp:626] Loading model weights from /model/model-00036-of-00062.safetensors
+I20261104 13:04:41.550210  3559 hf_model_loader.cpp:626] Loading model weights from /model/model-00054-of-00062.safetensors
+I20261104 13:04:41.550251  3495 hf_model_loader.cpp:626] Loading model weights from /model/model-00046-of-00062.safetensors
+I20261104 13:04:41.550246  3405 hf_model_loader.cpp:626] Loading model weights from /model/model-00035-of-00062.safetensors
+I20261104 13:04:41.550254  3621 hf_model_loader.cpp:626] Loading model weights from /model/model-00062-of-00062.safetensors
+I20261104 13:04:41.550256  3470 hf_model_loader.cpp:626] Loading model weights from /model/model-00043-of-00062.safetensors
+I20261104 13:04:41.550295  3614 hf_model_loader.cpp:626] Loading model weights from /model/model-00061-of-00062.safetensors
+I20261104 13:04:41.550300  3598 hf_model_loader.cpp:626] Loading model weights from /model/model-00059-of-00062.safetensors
+I20261104 13:04:41.550261  3583 hf_model_loader.cpp:626] Loading model weights from /model/model-00057-of-00062.safetensors
+I20261104 13:04:41.550316  3543 hf_model_loader.cpp:626] Loading model weights from /model/model-00052-of-00062.safetensors
+I20261104 13:04:41.550309  3606 hf_model_loader.cpp:626] Loading model weights from /model/model-00060-of-00062.safetensors
+I20261104 13:04:41.550271  3504 hf_model_loader.cpp:626] Loading model weights from /model/model-00047-of-00062.safetensors
+I20261104 13:04:41.550350  3429 hf_model_loader.cpp:626] Loading model weights from /model/model-00038-of-00062.safetensors
+I20261104 13:04:41.550308  3511 hf_model_loader.cpp:626] Loading model weights from /model/model-00048-of-00062.safetensors
+I20261104 13:04:41.550252  3463 hf_model_loader.cpp:626] Loading model weights from /model/model-00042-of-00062.safetensors
+I20261104 13:04:41.550210  3551 hf_model_loader.cpp:626] Loading model weights from /model/model-00053-of-00062.safetensors
+I20261104 13:04:41.550319  3487 hf_model_loader.cpp:626] Loading model weights from /model/model-00045-of-00062.safetensors
+I20261104 13:04:41.550316  3421 hf_model_loader.cpp:626] Loading model weights from /model/model-00037-of-00062.safetensors
+I20261104 13:11:55.577881   102 comm_channel.cpp:650] Init_model_async succeed.
+I20261104 13:12:02.747583   107 comm_channel.cpp:650] Init_model_async succeed.
+I20261104 13:12:02.750849  1938 worker_impl.cpp:2300] Weight loading completed, restored ATen threads=1
+I20261104 13:12:02.751226   102 comm_channel.cpp:650] Init_model_async succeed.
+I20261104 13:12:02.751860   106 comm_channel.cpp:650] Init_model_async succeed.
+I20261104 13:12:02.752406   107 comm_channel.cpp:650] Init_model_async succeed.
+I20261104 13:12:02.752656   102 comm_channel.cpp:650] Init_model_async succeed.
+I20261104 13:12:02.752774   106 comm_channel.cpp:650] Init_model_async succeed.
+I20261104 13:12:02.754276   107 comm_channel.cpp:650] Init_model_async succeed.
+I20261104 13:12:02.758107    56 llm_engine.cpp:538] worker #0: available memory: 4.50 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.98, max_cache_size: 1.00 GB
+I20261104 13:12:02.758183    56 llm_engine.cpp:538] worker #1: available memory: 4.50 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.98, max_cache_size: 1.00 GB
+I20261104 13:12:02.758188    56 llm_engine.cpp:538] worker #2: available memory: 4.50 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.98, max_cache_size: 1.00 GB
+I20261104 13:12:02.758193    56 llm_engine.cpp:538] worker #3: available memory: 4.50 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.98, max_cache_size: 1.00 GB
+I20261104 13:12:02.758198    56 llm_engine.cpp:538] worker #4: available memory: 4.50 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.98, max_cache_size: 1.00 GB
+I20261104 13:12:02.758203    56 llm_engine.cpp:538] worker #5: available memory: 4.50 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.98, max_cache_size: 1.00 GB
+I20261104 13:12:02.758206    56 llm_engine.cpp:538] worker #6: available memory: 4.50 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.98, max_cache_size: 1.00 GB
+I20261104 13:12:02.758210    56 llm_engine.cpp:538] worker #7: available memory: 4.50 GB, total memory: 79.92 GB. Using max_memory_utilization: 0.98, max_cache_size: 1.00 GB
+I20261104 13:12:02.758265    56 llm_engine.cpp:620] kv cache capacity: 1.00 GB, blocks: 410, slot_size: 1024, index_slot_size: 514, indexer_layers: 11, scale_slot_size: 0, linear_slot_size: 542720, linear_blocks: 10, state_slots: 10, gdn_state_bytes: 17.60 MB, kpool_state_bytes: 0.00 B, max_linear_state_cache_slots: 8, reserved_state_bytes: 175.98 MB, n_layers: 45, kv_cache_dtype: auto
+I20261104 13:12:02.758287    56 kv_cache_shape.cpp:249] Initializing k cache with shape: [410 128 1 512]
+I20261104 13:12:02.758291    56 kv_cache_shape.cpp:257] Initializing indexer cache with shape: [410 128 1 257]
+I20261104 13:12:02.758293    56 kv_cache_shape.cpp:269] Initializing conv cache with shape: [10 3072 3]
+I20261104 13:12:02.758296    56 kv_cache_shape.cpp:273] Initializing ssm cache with shape: [10 8 128 128]
+I20261104 13:12:02.758611  1938 kv_cache_transfer.cpp:594] Create Mooncake KVCacheTransfer.
+I20261104 13:12:02.758788  1938 threadpool.cpp:32] ThreadPool created, thread count 2, pool name KVCacheTransfer.async, cpu_binding false.
+I20261104 13:12:02.759913  1938 transfer_engine_impl.cpp:976] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I20261104 13:12:02.759931  1938 transfer_engine_impl.cpp:115] Transfer Engine parseHostNameWithPort. server_name: 10.121.32.7 port: 40400
+I20261104 13:12:02.759958  1938 transfer_engine_impl.cpp:182] Transfer Engine RPC using P2P handshake, listening on 10.121.32.7:16981
+I20261104 13:12:02.760172  1938 transfer_engine_impl.cpp:263] Auto-discovering topology...
+I20261104 13:12:02.792786  1938 topology.cpp:127] Device mlx5_0 port 1 is available
+I20261104 13:12:02.820134  1938 topology.cpp:127] Device mlx5_1 port 1 is available
+I20261104 13:12:02.844187  1938 topology.cpp:127] Device mlx5_bond_0 port 1 is available
+I20261104 13:12:02.867991  1938 topology.cpp:127] Device mlx5_2 port 1 is available
+I20261104 13:12:02.872736  1938 topology.cpp:127] Device mlx5_3 port 1 is available
+I20261104 13:12:02.896025  1938 topology.cpp:127] Device mlx5_4 port 1 is available
+I20261104 13:12:02.919998  1938 topology.cpp:127] Device mlx5_5 port 1 is available
+I20261104 13:12:02.948181  1938 topology.cpp:127] Device mlx5_6 port 1 is available
+I20261104 13:12:02.953236  1938 topology.cpp:127] Device mlx5_7 port 1 is available
+I20261104 13:12:02.976150  1938 topology.cpp:127] Device mlx5_8 port 1 is available
+I20261104 13:12:03.017872  1938 topology.cpp:127] Device mlx5_9 port 1 is available
+I20261104 13:12:03.020915  1938 transfer_engine_impl.cpp:278] Topology discovery complete. Found 11 HCAs.
+I20261104 13:12:03.020936  1938 rdma_transport.cpp:76] [RDMA] Relaxed ordering disabled via MC_IB_PCI_RELAXED_ORDERING=0. Falling back to strict ordering.
+I20261104 13:12:03.020984  1938 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261104 13:12:03.025974  1938 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_6/ (network state: with network device)
+I20261104 13:12:03.026979  1938 rdma_context.cpp:288] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0c:07
+I20261104 13:12:03.026995  1938 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261104 13:12:03.031884  1938 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_0/ (network state: with network device)
+I20261104 13:12:03.032801  1938 rdma_context.cpp:288] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:02:07
+I20261104 13:12:03.032819  1938 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261104 13:12:03.118626  1938 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_1/ (network state: with network device)
+I20261104 13:12:03.119836  1938 rdma_context.cpp:288] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:00:07
+I20261104 13:12:03.119856  1938 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261104 13:12:03.146085  1938 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_bond_0/ (network state: with network device)
+I20261104 13:12:03.147197  1938 rdma_context.cpp:288] RDMA device: mlx5_bond_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:0a:79:20:07
+I20261104 13:12:03.147212  1938 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261104 13:12:03.153075  1938 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_2/ (network state: with network device)
+I20261104 13:12:03.153978  1938 rdma_context.cpp:288] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:04:07
+I20261104 13:12:03.153993  1938 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261104 13:12:03.159143  1938 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_3/ (network state: with network device)
+I20261104 13:12:03.160007  1938 rdma_context.cpp:288] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:06:07
+I20261104 13:12:03.160025  1938 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261104 13:12:03.185396  1938 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_4/ (network state: with network device)
+I20261104 13:12:03.186378  1938 rdma_context.cpp:288] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0a:07
+I20261104 13:12:03.186393  1938 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261104 13:12:03.192824  1938 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_5/ (network state: with network device)
+I20261104 13:12:03.193840  1938 rdma_context.cpp:288] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:08:07
+I20261104 13:12:03.193857  1938 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261104 13:12:03.220660  1938 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_7/ (network state: with network device)
+I20261104 13:12:03.221941  1938 rdma_context.cpp:288] RDMA device: mlx5_7, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:64:01:07
+I20261104 13:12:03.221962  1938 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261104 13:12:03.228754  1938 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_8/ (network state: with network device)
+I20261104 13:12:03.229903  1938 rdma_context.cpp:288] RDMA device: mlx5_8, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:6e:01:07
+I20261104 13:12:03.229923  1938 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261104 13:12:03.235849  1938 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_9/ (network state: with network device)
+I20261104 13:12:03.236897  1938 rdma_context.cpp:288] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:15:0e:07
+I20261104 13:12:03.237131  1938 transfer_engine_impl.cpp:393] installTransport, type=rdma
+I20261104 13:12:03.237138  1938 mooncake_transfer_engine.cpp:197] [Mooncake][PDTransferEngine] transfer engine init success, handshake_endpoint=10.121.32.7:40400
+I20261104 13:12:03.260118  1938 server.cpp:1200] Server[xllm::MooncakeTransferEngineService] is serving on port=40400.
+I20261104 13:12:03.260138  1938 server.cpp:1203] Check out http://worker32007:40400 in web browser.
+I20261104 13:12:03.260146  1938 mooncake_transfer_engine.cpp:217] [Mooncake][PDTransferEngine] ready, handshake_endpoint=10.121.32.7:40400, data_endpoint=10.121.32.7:16981
+I20261104 13:12:03.537014  1938 mooncake_transfer_engine.cpp:758] register_memory success, total_buf_num=90
+I20261104 13:12:03.537055  1938 mooncake_kv_cache_transfer.cpp:700] register_kv_cache_impl success, registered_layers=45, buffers=90
+I20261104 13:12:03.542824    56 llm_engine.cpp:926] KV token capacity: dp_rank=0, kv_split_size=1, estimated_kv_token_capacity=52352 (upper bound)
+I20261104 13:12:03.542877    56 llm_engine.cpp:219] Successfully initialized kv cache
+I20261104 13:12:03.549685    56 xservice_client.cpp:904] Successfully connected to xservice: 10.121.32.9:49083
+I20261104 13:12:03.549894    56 xservice_client.cpp:904] Successfully connected to xservice: 10.121.32.9:49081
+I20261104 13:12:03.550938    56 threadpool.cpp:32] ThreadPool created, thread count 4, pool name AsyncResponseProcessor.response, cpu_binding false.
+I20261104 13:12:04.597244    56 threadpool.cpp:32] ThreadPool created, thread count 1, pool name AsyncResponseProcessor.rpc, cpu_binding false.
+I20261104 13:12:04.597548    56 threadpool.cpp:32] ThreadPool created, thread count 16, pool name AsyncResponseProcessor.generate_output, cpu_binding false.
+I20261104 13:12:05.478796    56 threadpool.cpp:32] ThreadPool created, thread count 1, pool name DisaggPDScheduler.prefill, cpu_binding false.
+I20261104 13:12:05.479076    56 threadpool.cpp:32] ThreadPool created, thread count 1, pool name DisaggPDScheduler.reservation_release, cpu_binding false.
+E20261104 13:12:05.479681    56 xllm_server_registry.cpp:55] Server DisaggPDServer0 doesn't exist.
+I20261104 13:12:05.479734  6043 xllm_server_registry.cpp:22] Register server DisaggPDServer0.
+W20261104 13:12:05.481088  6043 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 256, new concurrency: 8
+I20261104 13:12:05.481623  6043 server.cpp:1200] Server[xllm::DisaggPDService] is serving on port=40300.
+I20261104 13:12:05.481629  6043 server.cpp:1203] Check out http://worker32007:40300 in web browser.
+I20261104 13:12:05.481642  6043 xllm_server.cpp:302] Disagg PD server started on address 10.121.32.7:40300, idle_timeout_sec: -1, num_threads: 8
+I20261104 13:12:05.579782    56 disagg_pd_scheduler.cpp:304] Instance info: instance name = 10.121.32.7:40100, instance rpc_address = 10.121.32.7:40300, instance type = PREFILL
+I20261104 13:12:05.580130  1323 mooncake_kv_cache_transfer.cpp:278] get_cache_info success, cluster_id=513543441376910800, addr=10.121.32.7:16981
+I20261104 13:12:05.583122    56 disagg_pd_scheduler.cpp:323] Instance declares kv_split_size = 1, cp_index_write_mode = 1 (replicated), dp_size = 1
+I20261104 13:12:05.584120    56 xservice_client.cpp:406] Attached Native Provider Descriptor, engine=10.121.32.7:40100, model=glm-5.3-flash, connector=pull
+I20261104 13:12:05.585950    56 xservice_client.cpp:435] Success register instance to etcd.
+I20261104 13:12:05.585974    56 chat_template.cpp:46] Using Jinja chat template for model_type: glm5_next
+I20261104 13:12:05.800730    56 jinja_chat_template.cpp:102] Jinja chat template init succeed.
+I20261104 13:12:06.668859    56 threadpool.cpp:32] ThreadPool created, thread count 4, pool name LLMMaster.request, cpu_binding false.
+I20261104 13:12:07.672164    56 xllm_server_registry.cpp:22] Register server HttpServer.
+I20261104 13:12:07.672214    56 xllm_server.cpp:89] Use API route mode: master_node
+W20261104 13:12:07.674047    56 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 256, new concurrency: 8
+I20261104 13:12:07.674185    56 server.cpp:1200] Server[xllm::APIService] is serving on port=40100.
+I20261104 13:12:07.674190    56 server.cpp:1203] Check out http://worker32007:40100 in web browser.
+I20261104 13:12:07.674196    56 xllm_server.cpp:163] Brpc Server started on port 40100, idle_timeout_s: -1, num_threads: 8
+I20261104 13:12:07.674204    56 xllm_server.cpp:176]      Started server process [56]
+I20261104 13:12:07.674207    56 xllm_server.cpp:177]      Waiting for application startup.
+I20261104 13:12:07.674209    56 xllm_server.cpp:178]      Application startup complete.
+I20261104 13:12:17.961356  6042 disagg_pd_scheduler.cpp:437] Create rpc channel to instance: 10.121.32.9:41100
+W20261104 13:12:17.963263  6049 batch.cpp:401] dp_balance_shuffle_seqs is not implemented for current device
+2026-11-04 13:12:55  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `mhc_pre_big_fuse_kernel` with `out_idx=None`
+2026-11-04 13:13:04  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `mhc_pre_big_fuse_kernel`
+2026-11-04 13:13:25  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r4_l128_v8` with `out_idx=None`
+2026-11-04 13:13:34  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r4_l128_v8`
+I20261104 13:15:27.496385  6049 request.cpp:161] x-request-id: 01a1a4f8-dcd2-75b4-9230-a2b8667909af, x-request-time: , request_id: chatcmpl-15263923581749589600-yhKhu9DSVjreoGmDcuNRTt, sequence 0, max_tokens: 512, temperature: 0, finish_reason: , prompt_tokens: 28, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 189535.0ms, total_latency: 189535.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:15:27.496448  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-yhKhu9DSVjreoGmDcuNRTt, released_swa=0, free_swa=0
+I20261104 13:15:27.505440  6040 disagg_pd_scheduler.cpp:1080] [PD_FIRST_TOKEN_ORDER] responses_drained_before_decode_handoff
+I20261104 13:15:27.529870  3736 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261104 13:15:27.530104  3736 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261104 13:15:27.530242  3736 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261104 13:15:27.530387  3736 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261104 13:15:27.530534  3736 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261104 13:15:27.530650  3736 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261104 13:15:27.530756  3736 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261104 13:15:27.532563  3736 rdma_endpoint.cpp:669] Received RDMA ready ACK.
+I20261104 13:19:05.163466  6049 request.cpp:161] x-request-id: 01a1a4fd-f1ce-72bb-83f1-123dfcb0bb09, x-request-time: , request_id: chatcmpl-15263923581749589600-fvTh9jiuxuPUpKFbqfYZYK, sequence 0, max_tokens: 512, temperature: 0, finish_reason: , prompt_tokens: 22, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 76293.0ms, total_latency: 76294.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:19:05.163555  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-fvTh9jiuxuPUpKFbqfYZYK, released_swa=0, free_swa=0
+I20261104 13:19:51.925206  6049 request.cpp:161] x-request-id: 01a1a4ff-2f86-741d-8eb0-bb9e99cbf6aa, x-request-time: , request_id: chatcmpl-15263923581749589600-MxTJ5tgGcqiGzYjcB24PFJ, sequence 0, max_tokens: 512, temperature: 0, finish_reason: , prompt_tokens: 21, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 41748.0ms, total_latency: 41748.2ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:19:51.925271  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-MxTJ5tgGcqiGzYjcB24PFJ, released_swa=0, free_swa=0
+2026-11-04 13:17:50  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r2_l128_v8` with `out_idx=None`
+2026-11-04 13:18:00  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r2_l128_v8`
+2026-11-04 13:18:25  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r2_l32_v8` with `out_idx=None`
+2026-11-04 13:18:35  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r2_l32_v8`
+2026-11-04 13:19:11  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r1_l128_v8` with `out_idx=None`
+2026-11-04 13:19:21  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `tilelang_rmsnorm_kernel_bfloat16_outbfloat16_hhidden_size_wb0p0_q0_r1_l128_v8`
+I20261104 13:22:33.396598  6049 request.cpp:161] x-request-id: 01a1a501-0c0a-79aa-a286-f52fa1afed1d, x-request-time: , request_id: chatcmpl-15263923581749589600-vKDhnkfJmtvYjmHMErgPpZ, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 126, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 81688.0ms, total_latency: 81688.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:22:33.396680  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-vKDhnkfJmtvYjmHMErgPpZ, released_swa=0, free_swa=0
+I20261104 13:24:33.792374  6049 request.cpp:161] x-request-id: 01a1a503-79b4-7a80-aa9d-beea173e7f40, x-request-time: , request_id: chatcmpl-15263923581749589600-rWLTiuXEACa9EGWJkADbfE, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 112, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 42483.0ms, total_latency: 42483.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:24:33.792454  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-rWLTiuXEACa9EGWJkADbfE, released_swa=0, free_swa=0
+I20261104 13:26:32.047446  6049 request.cpp:161] x-request-id: 01a1a505-4609-7886-ad55-331abd2c9d53, x-request-time: , request_id: chatcmpl-15263923581749589600-E7rkxXaGkLead8aFdmwDDd, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 120, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 42866.0ms, total_latency: 42866.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:26:32.047516  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-E7rkxXaGkLead8aFdmwDDd, released_swa=0, free_swa=0
+I20261104 13:27:24.002491  6049 request.cpp:161] x-request-id: 01a1a506-8b5d-7482-96ba-1fd38b0d07e7, x-request-time: , request_id: chatcmpl-15263923581749589600-V4E3RD6wKPG7kgJCLj3MUa, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 120, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12027.0ms, total_latency: 12027.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:27:24.002568  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-V4E3RD6wKPG7kgJCLj3MUa, released_swa=0, free_swa=0
+I20261104 13:28:08.365262  6049 request.cpp:161] x-request-id: 01a1a507-3a38-7aa8-83ad-0ccb39e43182, x-request-time: , request_id: chatcmpl-15263923581749589600-SqiP9nMKu6B6qcZokkyQKg, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 110, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11143.0ms, total_latency: 11144.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:28:08.365334  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-SqiP9nMKu6B6qcZokkyQKg, released_swa=0, free_swa=0
+I20261104 13:28:56.982278  6049 request.cpp:161] x-request-id: 01a1a507-fce5-74ac-bf62-6f1b98b3dd61, x-request-time: , request_id: chatcmpl-15263923581749589600-zoC5oRJrjUgARRE93mSF22, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 105, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 10406.0ms, total_latency: 10407.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:28:56.982354  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-zoC5oRJrjUgARRE93mSF22, released_swa=0, free_swa=0
+I20261104 13:29:57.229281  6049 request.cpp:161] x-request-id: 01a1a508-dd8d-747f-a7bf-955507ab4b82, x-request-time: , request_id: chatcmpl-15263923581749589600-VdZ3J8kqLanPrgVVz7z4kS, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 185, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 13142.0ms, total_latency: 13142.4ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:29:57.229357  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-VdZ3J8kqLanPrgVVz7z4kS, released_swa=0, free_swa=0
+I20261104 13:30:53.933370  6049 request.cpp:161] x-request-id: 01a1a509-bdf7-7fce-a7ea-2ce0dcde7919, x-request-time: , request_id: chatcmpl-15263923581749589600-YqHAJFgpBUVeSYxMjqzq3Q, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 154, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12395.0ms, total_latency: 12396.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:30:53.933450  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-YqHAJFgpBUVeSYxMjqzq3Q, released_swa=0, free_swa=0
+I20261104 13:31:38.676826  6049 request.cpp:161] x-request-id: 01a1a50a-724b-7cd8-a5ec-5f16fd770823, x-request-time: , request_id: chatcmpl-15263923581749589600-DBgwoCuL5sQHveSa9ehywq, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 113, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 10974.0ms, total_latency: 10974.8ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:31:38.676918  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-DBgwoCuL5sQHveSa9ehywq, released_swa=0, free_swa=0
+I20261104 13:32:31.638473  6049 request.cpp:161] x-request-id: 01a1a50b-3f01-7ec8-b210-df6532d20561, x-request-time: , request_id: chatcmpl-15263923581749589600-YxF2hnK2fLPPmyGSeSYJnJ, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 121, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11531.0ms, total_latency: 11531.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:32:31.638550  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-YxF2hnK2fLPPmyGSeSYJnJ, released_swa=0, free_swa=0
+I20261104 13:33:26.899050  6049 request.cpp:161] x-request-id: 01a1a50c-173e-737d-9f90-523f15383984, x-request-time: , request_id: chatcmpl-15263923581749589600-wdDbuoVG4BUSXnZrVqaXnS, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 124, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11435.0ms, total_latency: 11435.2ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:33:26.899127  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-wdDbuoVG4BUSXnZrVqaXnS, released_swa=0, free_swa=0
+I20261104 13:34:07.496685  6049 request.cpp:161] x-request-id: 01a1a50c-b43e-77ed-9100-1e67c9f0af12, x-request-time: , request_id: chatcmpl-15263923581749589600-Cb4VpoCJUK4nAtU8ibcvTP, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 139, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11840.0ms, total_latency: 11840.6ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:34:07.496752  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-Cb4VpoCJUK4nAtU8ibcvTP, released_swa=0, free_swa=0
+I20261104 13:35:06.719575  6049 request.cpp:161] x-request-id: 01a1a50d-9a6d-75f3-840b-2dc7ce57fbe1, x-request-time: , request_id: chatcmpl-15263923581749589600-tCF7nTMgBTdTkGyGnLKQTf, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 127, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11655.0ms, total_latency: 11656.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:35:06.719651  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-tCF7nTMgBTdTkGyGnLKQTf, released_swa=0, free_swa=0
+I20261104 13:35:59.141831  6049 request.cpp:161] x-request-id: 01a1a50e-68eb-7e95-b1f1-238da0b496aa, x-request-time: , request_id: chatcmpl-15263923581749589600-6XCfkJyEy4CLWvE6SpAWDe, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 120, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11200.0ms, total_latency: 11200.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:35:59.141914  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-6XCfkJyEy4CLWvE6SpAWDe, released_swa=0, free_swa=0
+I20261104 13:41:07.330639  6049 request.cpp:161] x-request-id: 01a1a513-1f21-765d-868e-8db5b608bba7, x-request-time: , request_id: chatcmpl-15263923581749589600-tGA5jt6ZZwY73STXZBLDdN, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 114, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11085.0ms, total_latency: 11085.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:41:07.330713  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-tGA5jt6ZZwY73STXZBLDdN, released_swa=0, free_swa=0
+I20261104 13:42:16.562382  6049 request.cpp:161] x-request-id: 01a1a514-328e-79df-b6d1-0a91f6d3d667, x-request-time: , request_id: chatcmpl-15263923581749589600-st7p8zYmvPwyrAavucaMAX, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 92, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 9818.0ms, total_latency: 9818.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:42:16.562448  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-st7p8zYmvPwyrAavucaMAX, released_swa=0, free_swa=0
+I20261104 13:42:44.327564  6049 request.cpp:161] x-request-id: 01a1a514-98c8-7f78-bc54-536c94286e43, x-request-time: , request_id: chatcmpl-15263923581749589600-8dzGJrfXjyMjKGmGSZptiM, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 113, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 10935.0ms, total_latency: 10936.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:42:44.327628  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-8dzGJrfXjyMjKGmGSZptiM, released_swa=0, free_swa=0
+I20261104 13:43:40.375416  6049 request.cpp:161] x-request-id: 01a1a515-7536-7305-80c9-e05848efd093, x-request-time: , request_id: chatcmpl-15263923581749589600-fBfUJZ2WHbSxHGf6wjAetq, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 104, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11031.0ms, total_latency: 11031.3ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:43:40.375483  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-fBfUJZ2WHbSxHGf6wjAetq, released_swa=0, free_swa=0
+I20261104 13:45:50.983654  6049 request.cpp:161] x-request-id: 01a1a517-73ae-7a69-9de2-4c2809118217, x-request-time: , request_id: chatcmpl-15263923581749589600-a3MGAz3puQUc9M5yRq6kEt, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 114, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 10959.0ms, total_latency: 10959.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:45:50.983722  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-a3MGAz3puQUc9M5yRq6kEt, released_swa=0, free_swa=0
+I20261104 13:46:42.471908  6049 request.cpp:161] x-request-id: 01a1a518-3bba-7673-aafd-b8b2ecc06ddc, x-request-time: , request_id: chatcmpl-15263923581749589600-AWL7Liazitnhjf6KDGMcqD, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 120, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11225.0ms, total_latency: 11225.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:46:42.471979  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-AWL7Liazitnhjf6KDGMcqD, released_swa=0, free_swa=0
+I20261104 13:47:36.086290  6049 request.cpp:161] x-request-id: 01a1a519-0683-7cc7-b1cb-5088a4ab9d61, x-request-time: , request_id: chatcmpl-15263923581749589600-CiqU2yQ7zVcuh4QwVt6LFW, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 161, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12936.0ms, total_latency: 12936.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:47:36.086359  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-CiqU2yQ7zVcuh4QwVt6LFW, released_swa=0, free_swa=0
+I20261104 13:57:10.235105  6049 request.cpp:161] x-request-id: 01a1a521-cd7e-7444-a7f3-e6dfdc500ba1, x-request-time: , request_id: chatcmpl-15263923581749589600-Pju3qW6Dpxi2Ja3SpYMvQh, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 140, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11859.0ms, total_latency: 11859.4ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:57:10.235189  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-Pju3qW6Dpxi2Ja3SpYMvQh, released_swa=0, free_swa=0
+I20261104 13:59:11.488852  6049 request.cpp:161] x-request-id: 01a1a523-a509-7270-b706-794a20d5cccd, x-request-time: , request_id: chatcmpl-15263923581749589600-kGJhQ2zVdiGqtA3yuoyfao, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 148, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12398.0ms, total_latency: 12398.3ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 13:59:11.488940  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-kGJhQ2zVdiGqtA3yuoyfao, released_swa=0, free_swa=0
+I20261104 14:00:52.196790  6049 request.cpp:161] x-request-id: 01a1a525-3336-7935-b5d8-56a71a46b6fa, x-request-time: , request_id: chatcmpl-15263923581749589600-cCU9eNvGsKEAJcsjQirnsY, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 121, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11173.0ms, total_latency: 11173.2ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:00:52.196877  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-cCU9eNvGsKEAJcsjQirnsY, released_swa=0, free_swa=0
+I20261104 14:01:27.894080  6049 request.cpp:161] x-request-id: 01a1a525-be56-7014-a9d0-e30a6d12a8f0, x-request-time: , request_id: chatcmpl-15263923581749589600-wUos5HoGynUBkLbGk9mZXB, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 123, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11254.0ms, total_latency: 11254.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:01:27.894152  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-wUos5HoGynUBkLbGk9mZXB, released_swa=0, free_swa=0
+I20261104 14:02:29.324411  6049 request.cpp:161] x-request-id: 01a1a526-aaa3-7863-9e14-724551136886, x-request-time: , request_id: chatcmpl-15263923581749589600-nPdGQC5iy2CLjhqBUt4Juw, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 158, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12191.0ms, total_latency: 12191.9ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:02:29.324478  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-nPdGQC5iy2CLjhqBUt4Juw, released_swa=0, free_swa=0
+I20261104 14:03:37.859555  6049 request.cpp:161] x-request-id: 01a1a527-b9c5-78d8-861f-a31bd185c6b5, x-request-time: , request_id: chatcmpl-15263923581749589600-wuXfjZ2NnuLajsBPzuJv5X, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 129, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11306.0ms, total_latency: 11306.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:03:37.859627  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-wuXfjZ2NnuLajsBPzuJv5X, released_swa=0, free_swa=0
+I20261104 14:04:53.799347  6049 request.cpp:161] x-request-id: 01a1a528-e2ee-7200-b90c-63e6905f0d2b, x-request-time: , request_id: chatcmpl-15263923581749589600-fJUHK3KkoYQwKsxHznZdaz, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 133, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11184.0ms, total_latency: 11184.3ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:04:53.799415  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-fJUHK3KkoYQwKsxHznZdaz, released_swa=0, free_swa=0
+I20261104 14:05:59.315094  6049 request.cpp:161] x-request-id: 01a1a529-deb3-71e3-b707-747f5f5a6345, x-request-time: , request_id: chatcmpl-15263923581749589600-jqifk55FxPVsSoempdBHia, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 176, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12245.0ms, total_latency: 12245.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:05:59.315166  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-jqifk55FxPVsSoempdBHia, released_swa=0, free_swa=0
+I20261104 14:10:13.904569  6049 request.cpp:161] x-request-id: 01a1a52d-c735-7157-8cc6-5d211be02567, x-request-time: , request_id: chatcmpl-15263923581749589600-RpJqYxXYenpMMJM2tq2Vbf, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 108, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 10705.0ms, total_latency: 10705.3ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:10:13.904644  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-RpJqYxXYenpMMJM2tq2Vbf, released_swa=0, free_swa=0
+I20261104 14:11:03.896123  6049 request.cpp:161] x-request-id: 01a1a52e-87ff-76cb-95fa-e3093992cfb3, x-request-time: , request_id: chatcmpl-15263923581749589600-nnZQVQASWKfqT5dJzPex7W, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 123, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11343.0ms, total_latency: 11343.6ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:11:03.896202  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-nnZQVQASWKfqT5dJzPex7W, released_swa=0, free_swa=0
+I20261104 14:13:58.162119  6049 request.cpp:161] x-request-id: 01a1a531-2f9c-728a-a144-ddb81ec1b8e0, x-request-time: , request_id: chatcmpl-15263923581749589600-JpbPFF3seC7LgYtfU7Qewg, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 143, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11627.0ms, total_latency: 11627.8ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:13:58.162184  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-JpbPFF3seC7LgYtfU7Qewg, released_swa=0, free_swa=0
+I20261104 14:14:41.178910  6049 request.cpp:161] x-request-id: 01a1a531-d209-7f05-9c19-de6097834fe5, x-request-time: , request_id: chatcmpl-15263923581749589600-5Ppoosaw8UAp4EybTFEDYc, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 186, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 13063.0ms, total_latency: 13063.4ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:14:41.178985  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-5Ppoosaw8UAp4EybTFEDYc, released_swa=0, free_swa=0
+I20261104 14:16:05.518193  6049 request.cpp:161] x-request-id: 01a1a533-222e-7f2f-89e8-68d6ed195af6, x-request-time: , request_id: chatcmpl-15263923581749589600-Q9iRfiTU9uzzBWQj4z4ECC, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 123, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11350.0ms, total_latency: 11351.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:16:05.518270  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-Q9iRfiTU9uzzBWQj4z4ECC, released_swa=0, free_swa=0
+I20261104 14:18:12.665995  6049 request.cpp:161] x-request-id: 01a1a535-109e-7a7d-845f-ab58e607c89d, x-request-time: , request_id: chatcmpl-15263923581749589600-Ji2pRtvzEtdbTG3xZF3nGq, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 145, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11922.0ms, total_latency: 11922.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:18:12.666074  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-Ji2pRtvzEtdbTG3xZF3nGq, released_swa=0, free_swa=0
+I20261104 14:36:46.276062  6049 request.cpp:161] x-request-id: 01a1a546-0976-790e-9630-8fdf5495315c, x-request-time: , request_id: chatcmpl-15263923581749589600-8decXUFAxcoqMw55A6eemY, sequence 0, max_tokens: 256, temperature: 0, finish_reason: , prompt_tokens: 202, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 13250.0ms, total_latency: 13251.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:36:46.276137  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-8decXUFAxcoqMw55A6eemY, released_swa=0, free_swa=0
+I20261104 14:38:00.427945  6049 request.cpp:161] x-request-id: 01a1a547-3049-77dc-87e8-f2fbfa83c0c9, x-request-time: , request_id: chatcmpl-15263923581749589600-MeRTheoW3Rw5PdrbG6kKTL, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 145, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11927.0ms, total_latency: 11927.9ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 14:38:00.428023  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-MeRTheoW3Rw5PdrbG6kKTL, released_swa=0, free_swa=0
+I20261104 15:01:00.769234  6049 request.cpp:161] x-request-id: 01a1a55c-4335-7f45-8e5d-369645d0c057, x-request-time: , request_id: chatcmpl-15263923581749589600-Uz2bycDAxLMzqrKPW83UYW, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 118, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11170.0ms, total_latency: 11170.2ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:01:00.769307  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-Uz2bycDAxLMzqrKPW83UYW, released_swa=0, free_swa=0
+I20261104 15:01:41.612280  6017 xservice_client.cpp:904] Successfully connected to xservice: 10.121.32.9:49881
+I20261104 15:02:59.468707  6049 request.cpp:161] x-request-id: 01a1a55e-0c73-79f3-ba98-1c706b8c64df, x-request-time: , request_id: chatcmpl-15263923581749589600-HchvxMBE72aJo76tSNHima, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 155, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12342.0ms, total_latency: 12342.8ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:02:59.468796  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-HchvxMBE72aJo76tSNHima, released_swa=0, free_swa=0
+I20261104 15:04:23.158078  6049 request.cpp:161] x-request-id: 01a1a55f-5610-79f4-a404-f334ef1be0a1, x-request-time: , request_id: chatcmpl-15263923581749589600-6uKazPkWxTV2BS8YajnqNW, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 125, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11646.0ms, total_latency: 11646.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:04:23.158154  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-6uKazPkWxTV2BS8YajnqNW, released_swa=0, free_swa=0
+I20261104 15:05:17.361734  6049 request.cpp:161] x-request-id: 01a1a560-2ad8-7bca-b302-25e6d982dedd, x-request-time: , request_id: chatcmpl-15263923581749589600-GnRda7Lthu7wpLpM5emAVG, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 126, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11388.0ms, total_latency: 11388.6ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:05:17.361795  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-GnRda7Lthu7wpLpM5emAVG, released_swa=0, free_swa=0
+I20261104 15:06:05.551867  6049 request.cpp:161] x-request-id: 01a1a560-e9ee-7503-aa1a-56985151bea7, x-request-time: , request_id: chatcmpl-15263923581749589600-zKzFzbrvVeyGEaznte85A5, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 110, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11127.0ms, total_latency: 11127.6ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:06:05.551944  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-zKzFzbrvVeyGEaznte85A5, released_swa=0, free_swa=0
+I20261104 15:07:51.599236  6049 request.cpp:161] x-request-id: 01a1a562-8348-7723-bf53-2492dbc1a619, x-request-time: , request_id: chatcmpl-15263923581749589600-cQBEdxGVAgLoEsreaCPJuP, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 159, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11908.0ms, total_latency: 11909.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:07:51.599304  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-cQBEdxGVAgLoEsreaCPJuP, released_swa=0, free_swa=0
+I20261104 15:13:23.266947  6049 request.cpp:161] x-request-id: 01a1a567-916f-7de4-b0d6-7ef89f07053e, x-request-time: , request_id: chatcmpl-15263923581749589600-NwG8U8UpsNSw3fmmx5XSUj, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 201, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12746.0ms, total_latency: 12746.2ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:13:23.267019  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-NwG8U8UpsNSw3fmmx5XSUj, released_swa=0, free_swa=0
+I20261104 15:14:27.419492  6049 request.cpp:161] x-request-id: 01a1a568-8e55-78a2-a3ff-5dd8b1ba5949, x-request-time: , request_id: chatcmpl-15263923581749589600-NRkkd4LjcdBfKDbEWiR9Ss, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 141, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11678.0ms, total_latency: 11678.2ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:14:27.419557  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-NRkkd4LjcdBfKDbEWiR9Ss, released_swa=0, free_swa=0
+I20261104 15:14:53.593696  6049 request.cpp:161] x-request-id: 01a1a568-f2b7-711d-aace-ed543a05e106, x-request-time: , request_id: chatcmpl-15263923581749589600-XV2RzSnP2rbZewSSYcSyxV, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 139, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12157.0ms, total_latency: 12158.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:14:53.593756  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-XV2RzSnP2rbZewSSYcSyxV, released_swa=0, free_swa=0
+I20261104 15:15:37.240513  6049 request.cpp:161] x-request-id: 01a1a569-9c22-76ce-ad35-de6b212c8a2c, x-request-time: , request_id: chatcmpl-15263923581749589600-B3LuYEYXxwZzV9tEnBtNnG, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 142, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12438.0ms, total_latency: 12438.4ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:15:37.240600  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-B3LuYEYXxwZzV9tEnBtNnG, released_swa=0, free_swa=0
+I20261104 15:21:38.199932  6049 request.cpp:161] x-request-id: 01a1a56f-225e-7364-ae29-dc00eb7dd3e7, x-request-time: , request_id: chatcmpl-15263923581749589600-8kqWJ94w68JHEvqAzx5kkz, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 128, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11824.0ms, total_latency: 11824.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:21:38.200016  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-8kqWJ94w68JHEvqAzx5kkz, released_swa=0, free_swa=0
+I20261104 15:22:59.845530  6049 request.cpp:161] x-request-id: 01a1a570-62ec-7c82-82a2-a8c3bbe05738, x-request-time: , request_id: chatcmpl-15263923581749589600-dAStuBqF7A8H9obVdc63Xx, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 136, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11407.0ms, total_latency: 11407.8ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:22:59.845592  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-dAStuBqF7A8H9obVdc63Xx, released_swa=0, free_swa=0
+I20261104 15:24:46.584270  6049 request.cpp:161] x-request-id: 01a1a571-fed8-79d8-91ab-355840bcbee1, x-request-time: , request_id: chatcmpl-15263923581749589600-rw6TiojKQHprAmqsszYZBz, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 160, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12226.0ms, total_latency: 12226.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:24:46.584334  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-rw6TiojKQHprAmqsszYZBz, released_swa=0, free_swa=0
+I20261104 15:26:05.716539  6049 request.cpp:161] x-request-id: 01a1a573-3754-7878-85b4-dfc3ec9a90a8, x-request-time: , request_id: chatcmpl-15263923581749589600-XuUs9AYKpHgJiUfxB3UAUj, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 120, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11830.0ms, total_latency: 11830.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:26:05.716614  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-XuUs9AYKpHgJiUfxB3UAUj, released_swa=0, free_swa=0
+I20261104 15:33:21.444011  6049 request.cpp:161] x-request-id: 01a1a579-ddc6-7bde-95e2-aad7bc768386, x-request-time: , request_id: chatcmpl-15263923581749589600-SgDKoLuH4apqbFx3mFzodB, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 138, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11732.0ms, total_latency: 11732.6ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:33:21.444082  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-SgDKoLuH4apqbFx3mFzodB, released_swa=0, free_swa=0
+I20261104 15:36:10.388206  6049 request.cpp:161] x-request-id: 01a1a57c-708e-77e8-a217-79b19ebfd47c, x-request-time: , request_id: chatcmpl-15263923581749589600-h3upJ6EAvngmhrt2zECmEz, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 122, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12027.0ms, total_latency: 12028.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:36:10.388290  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-h3upJ6EAvngmhrt2zECmEz, released_swa=0, free_swa=0
+I20261104 15:37:22.578514  6049 request.cpp:161] x-request-id: 01a1a57d-8b7c-7c34-b7e3-9480e1bcb769, x-request-time: , request_id: chatcmpl-15263923581749589600-Pvsg64acVmq7EwfBLkwQfx, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 141, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11788.0ms, total_latency: 11788.4ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:37:22.578595  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-Pvsg64acVmq7EwfBLkwQfx, released_swa=0, free_swa=0
+I20261104 15:38:44.105144  6049 request.cpp:161] x-request-id: 01a1a57e-ca7b-727f-a18e-52a427929b12, x-request-time: , request_id: chatcmpl-15263923581749589600-KMw9mx9GrZCrkJbPTuYgNV, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 125, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11653.0ms, total_latency: 11653.2ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:38:44.105211  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-KMw9mx9GrZCrkJbPTuYgNV, released_swa=0, free_swa=0
+I20261104 15:41:31.873297  6049 request.cpp:161] x-request-id: 01a1a581-5aa5-7368-a9b3-0a7a00597169, x-request-time: , request_id: chatcmpl-15263923581749589600-bFY4imPg9rpxrioeMgpGWS, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 121, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11442.0ms, total_latency: 11443.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:41:31.873371  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-bFY4imPg9rpxrioeMgpGWS, released_swa=0, free_swa=0
+I20261104 15:43:04.957371  6049 request.cpp:161] x-request-id: 01a1a582-c466-7b0b-9d5c-a5be5609db60, x-request-time: , request_id: chatcmpl-15263923581749589600-eG3qxJA6S6cSrVBcXbtavo, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 125, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11918.0ms, total_latency: 11918.2ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:43:04.957454  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-eG3qxJA6S6cSrVBcXbtavo, released_swa=0, free_swa=0
+I20261104 15:45:08.144364  6049 request.cpp:161] x-request-id: 01a1a584-a95b-72ad-8e78-3245918f6064, x-request-time: , request_id: chatcmpl-15263923581749589600-AQ4uQnG5qFohHsXrujdQzA, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 105, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 10955.0ms, total_latency: 10955.8ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:45:08.144443  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-AQ4uQnG5qFohHsXrujdQzA, released_swa=0, free_swa=0
+I20261104 15:45:57.735347  6049 request.cpp:161] x-request-id: 01a1a585-6686-7e8a-bdf7-a464820db605, x-request-time: , request_id: chatcmpl-15263923581749589600-xYz5cs492shDRp8Q2hUu5h, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 141, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12119.0ms, total_latency: 12120.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:45:57.735430  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-xYz5cs492shDRp8Q2hUu5h, released_swa=0, free_swa=0
+I20261104 15:47:05.671918  6049 request.cpp:161] x-request-id: 01a1a586-737e-7d86-9e3b-958e76243ab9, x-request-time: , request_id: chatcmpl-15263923581749589600-BKWqahostEHtMEpcHiY7eW, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 102, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11201.0ms, total_latency: 11201.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:47:05.671983  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-BKWqahostEHtMEpcHiY7eW, released_swa=0, free_swa=0
+I20261104 15:47:44.150626  6049 request.cpp:161] x-request-id: 01a1a587-0b14-7099-b33b-504d246f0bcb, x-request-time: , request_id: chatcmpl-15263923581749589600-TtrEQbvk2yv8ygWQnnCYCA, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 105, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 10872.0ms, total_latency: 10873.0ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:47:44.150695  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-TtrEQbvk2yv8ygWQnnCYCA, released_swa=0, free_swa=0
+I20261104 15:48:33.225594  6049 request.cpp:161] x-request-id: 01a1a587-c92b-7ca8-8ff5-a7a687b640ec, x-request-time: , request_id: chatcmpl-15263923581749589600-hu6HuwzoywyDnxCejtWuM8, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 115, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11285.0ms, total_latency: 11285.8ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:48:33.225670  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-hu6HuwzoywyDnxCejtWuM8, released_swa=0, free_swa=0
+I20261104 15:49:21.004065  6049 request.cpp:161] x-request-id: 01a1a588-866c-7101-b7c4-0dd9809abd31, x-request-time: , request_id: chatcmpl-15263923581749589600-kjmqVzwnfWdQCcV2ZdCF8t, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 129, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 10614.0ms, total_latency: 10615.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:49:21.004143  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-kjmqVzwnfWdQCcV2ZdCF8t, released_swa=0, free_swa=0
+I20261104 15:50:50.359103  6049 request.cpp:161] x-request-id: 01a1a589-df6f-7404-a68f-56d2e4e9ed57, x-request-time: , request_id: chatcmpl-15263923581749589600-CwM25hiQQfDjexNbs36FrN, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 127, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11646.0ms, total_latency: 11646.9ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:50:50.359169  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-CwM25hiQQfDjexNbs36FrN, released_swa=0, free_swa=0
+I20261104 15:51:45.405201  6049 request.cpp:161] x-request-id: 01a1a58a-b6e2-7579-9701-dc2c9be50144, x-request-time: , request_id: chatcmpl-15263923581749589600-QwH3xJKSKX744VZ8aKSJ8u, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 130, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11538.0ms, total_latency: 11538.2ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:51:45.405268  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-QwH3xJKSKX744VZ8aKSJ8u, released_swa=0, free_swa=0
+I20261104 15:53:53.998204  6049 request.cpp:161] x-request-id: 01a1a58c-ac80-7c7d-a85e-67abf993fd2a, x-request-time: , request_id: chatcmpl-15263923581749589600-TeL2DoPstqcdnbKZzBWrVG, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 134, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11717.0ms, total_latency: 11717.4ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:53:53.998268  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-TeL2DoPstqcdnbKZzBWrVG, released_swa=0, free_swa=0
+I20261104 15:55:09.854717  6049 request.cpp:161] x-request-id: 01a1a58d-d691-7710-85c5-c4fa0abe8406, x-request-time: , request_id: chatcmpl-15263923581749589600-rAMkGWgUdVDVyAYnJCdvZQ, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 124, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11268.0ms, total_latency: 11268.7ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:55:09.854791  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-rAMkGWgUdVDVyAYnJCdvZQ, released_swa=0, free_swa=0
+I20261104 15:56:18.141714  6049 request.cpp:161] x-request-id: 01a1a58e-e27a-7ab1-80a4-18bd97d1c20a, x-request-time: , request_id: chatcmpl-15263923581749589600-iijgVkXRnrSYh9MwpCWJx7, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 116, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 10971.0ms, total_latency: 10971.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:56:18.141789  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-iijgVkXRnrSYh9MwpCWJx7, released_swa=0, free_swa=0
+I20261104 15:57:06.355598  6049 request.cpp:161] x-request-id: 01a1a58f-9da7-77ac-8727-0ba098d7e017, x-request-time: , request_id: chatcmpl-15263923581749589600-YHoGJ3ZGGF8YJ3cePhteti, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 107, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11267.0ms, total_latency: 11267.8ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:57:06.355671  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-YHoGJ3ZGGF8YJ3cePhteti, released_swa=0, free_swa=0
+I20261104 15:58:08.732513  6049 request.cpp:161] x-request-id: 01a1a590-9050-7e7c-a45d-ac0e03f4b698, x-request-time: , request_id: chatcmpl-15263923581749589600-gat74seZCDJEonoVFu6jBv, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 119, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11523.0ms, total_latency: 11523.1ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:58:08.732581  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-gat74seZCDJEonoVFu6jBv, released_swa=0, free_swa=0
+I20261104 15:58:39.420760  6049 request.cpp:161] x-request-id: 01a1a591-034e-75c9-ba8c-c0d8eecfb1f2, x-request-time: , request_id: chatcmpl-15263923581749589600-V6MKfN8ztmUhSDzzmH4Dzw, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 160, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12773.0ms, total_latency: 12773.9ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 15:58:39.420845  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-V6MKfN8ztmUhSDzzmH4Dzw, released_swa=0, free_swa=0
+I20261104 16:50:57.533015  6049 request.cpp:161] x-request-id: 01a1a5c0-ec2b-726a-8bba-1b4c1af71397, x-request-time: , request_id: chatcmpl-15263923581749589600-77fC5SNup4d4QTaqMEhyDy, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 116, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11081.0ms, total_latency: 11081.2ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 16:50:57.533082  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-77fC5SNup4d4QTaqMEhyDy, released_swa=0, free_swa=0
+I20261104 16:51:46.150048  6049 request.cpp:161] x-request-id: 01a1a5c1-ab13-7326-ab1c-83b588dc80c4, x-request-time: , request_id: chatcmpl-15263923581749589600-StxQxVHZeZuxBiPAzhDgqo, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 116, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 10826.0ms, total_latency: 10826.9ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 16:51:46.150113  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-StxQxVHZeZuxBiPAzhDgqo, released_swa=0, free_swa=0
+I20261104 16:52:36.596782  6049 request.cpp:161] x-request-id: 01a1a5c2-6ec2-7d05-8c6c-b74abbbed70e, x-request-time: , request_id: chatcmpl-15263923581749589600-acSy2jyjbWnUzKu7dNiNMa, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 116, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 11178.0ms, total_latency: 11178.9ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 16:52:36.596866  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-acSy2jyjbWnUzKu7dNiNMa, released_swa=0, free_swa=0
+I20261104 16:54:10.107326  6049 request.cpp:161] x-request-id: 01a1a5c3-d748-7546-8376-57c8be14579b, x-request-time: , request_id: chatcmpl-15263923581749589600-VfGsQTf32LrruP2K2VYiE6, sequence 0, max_tokens: 4096, temperature: 0, finish_reason: , prompt_tokens: 160, num_prefix_cache_tokens: 0, generated_tokens: 1, ttft: 12394.0ms, total_latency: 12394.4ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s
+I20261104 16:54:10.107396  6049 disagg_pd_scheduler.cpp:900] [DSV4_PD_PREFILL_RECLAIM] request_id=chatcmpl-15263923581749589600-VfGsQTf32LrruP2K2VYiE6, released_swa=0, free_swa=0

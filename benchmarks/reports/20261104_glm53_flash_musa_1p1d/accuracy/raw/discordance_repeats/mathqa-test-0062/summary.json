@@ -1,0 +1,78 @@
+{
+  "question_id": "mathqa-test-0062",
+  "additional_trials_requested_per_side": 3,
+  "not_used_to_replace_primary_score": true,
+  "settings": {
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096
+  },
+  "sides": {
+    "official": {
+      "initial_answer": "D",
+      "initial_completion_tokens": 96,
+      "completed_http_trials": 3,
+      "valid_trials": 3,
+      "answers": [
+        "D",
+        "D",
+        "D"
+      ],
+      "histogram": {
+        "D": 3
+      },
+      "completion_tokens": [
+        426,
+        291,
+        84
+      ],
+      "prompt_tokens": [
+        116,
+        116,
+        116
+      ],
+      "truncated": 0,
+      "format_errors": 0,
+      "all_three_match_initial": true,
+      "content_sha256": [
+        "89f88599707f74173f08e79ca32353b309c12b67d14877ec23750df6667bf123",
+        "87957de2a17fd4dfd8be2330a544e201118991636c0996bca28f00540da037b4",
+        "b55abda93c21fcac1720931bbf579b7445baa1bfedd413c1ce2af21f7b2a641f"
+      ]
+    },
+    "local": {
+      "initial_answer": "B",
+      "initial_completion_tokens": 54,
+      "completed_http_trials": 3,
+      "valid_trials": 3,
+      "answers": [
+        "B",
+        "B",
+        "B"
+      ],
+      "histogram": {
+        "B": 3
+      },
+      "completion_tokens": [
+        54,
+        54,
+        54
+      ],
+      "prompt_tokens": [
+        116,
+        116,
+        116
+      ],
+      "truncated": 0,
+      "format_errors": 0,
+      "all_three_match_initial": true,
+      "content_sha256": [
+        "b042e62aed43b6811894fc85ab5ae5f0aaac66d8e18e116b93357d4e816b459b",
+        "b042e62aed43b6811894fc85ab5ae5f0aaac66d8e18e116b93357d4e816b459b",
+        "b042e62aed43b6811894fc85ab5ae5f0aaac66d8e18e116b93357d4e816b459b"
+      ]
+    }
+  },
+  "complete": true
+}

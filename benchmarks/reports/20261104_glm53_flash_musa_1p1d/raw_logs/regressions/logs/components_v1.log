@@ -1,0 +1,40 @@
+Processing /work/artifacts/wheels/flash_attn_3-0.2.8.post1+musa-py3-none-any.whl
+Processing /work/artifacts/wheels/flash_kda-0.2.8.post1+musa-py3-none-any.whl
+Processing /work/artifacts/wheels/mate-0.2.8.post1-py3-none-any.whl
+Processing /work/artifacts/wheels/mate_mubin-0.2.8.post1-py3-none-any.whl
+Processing /work/artifacts/wheels/tilelang_musa-0.1.12+musa.5-cp38-abi3-linux_x86_64.whl
+Installing collected packages: tilelang-musa, mate-mubin, mate, flash-kda, flash-attn-3
+  Attempting uninstall: tilelang-musa
+    Found existing installation: tilelang_musa 0.1.12+musa.2
+    Uninstalling tilelang_musa-0.1.12+musa.2:
+      Successfully uninstalled tilelang_musa-0.1.12+musa.2
+  Attempting uninstall: mate-mubin
+    Found existing installation: mate-mubin 0.2.7
+    Uninstalling mate-mubin-0.2.7:
+      Successfully uninstalled mate-mubin-0.2.7
+  Attempting uninstall: mate
+    Found existing installation: mate 0.2.7
+    Uninstalling mate-0.2.7:
+      Successfully uninstalled mate-0.2.7
+  Attempting uninstall: flash-attn-3
+    Found existing installation: flash_attn_3 0.2.7+musa
+    Uninstalling flash_attn_3-0.2.7+musa:
+      Successfully uninstalled flash_attn_3-0.2.7+musa
+
+Successfully installed flash-attn-3-0.2.8.post1+musa flash-kda-0.2.8.post1+musa mate-0.2.8.post1 mate-mubin-0.2.8.post1 tilelang-musa-0.1.12+musa.5
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+============================= test session starts ==============================
+platform linux -- Python 3.10.12, pytest-7.2.2, pluggy-1.6.0 -- /usr/bin/python
+cachedir: .pytest_cache
+rootdir: /work/source/xllm-musa
+collecting ... collected 5 items
+
+tests/musa/test_glm_kda.py::test_mate_kda_matches_recurrence_and_preserves_input[1] 2026-11-04 11:42:59  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `gated_deltanet_kda_decode` with `out_idx=None`
+2026-11-04 11:43:01  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `gated_deltanet_kda_decode`
+PASSED
+tests/musa/test_glm_kda.py::test_mate_kda_matches_recurrence_and_preserves_input[17] PASSED
+tests/musa/test_glm_kda.py::test_mate_kda_matches_recurrence_and_preserves_input[65] PASSED
+tests/musa/test_glm_kda.py::test_mate_kda_matches_recurrence_and_preserves_input[129] PASSED
+tests/musa/test_glm_kda.py::test_mate_kda_matches_recurrence_and_preserves_input[257] PASSED
+
+========================= 5 passed in 75.07s (0:01:15) =========================

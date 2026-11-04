@@ -1,0 +1,1851 @@
+{
+  "prepared_at": "2026-11-04T17:16:05.406469+08:00",
+  "measured_implementation_commit": "30b7051ef1c840a9635794e6950f7507ee01b829",
+  "note": "Result commit is separate from measured implementation; complete originals remain in local task/NFS; no API/SSH credential document included",
+  "files": [
+    {
+      "path": "accuracy/questions.jsonl",
+      "source_relative_to_local_task": "评测/mathqa_author_first100/test.jsonl",
+      "bytes": 48973,
+      "original_sha256": "6365abf8e0701de3f25c2cc38ef2b77a912c13e48cd93c8d2c7bdbc5442e6ba9",
+      "published_sha256": "6365abf8e0701de3f25c2cc38ef2b77a912c13e48cd93c8d2c7bdbc5442e6ba9",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/protocol.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/requests_without_model_or_credentials.json",
+      "bytes": 65200,
+      "original_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+      "published_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/summary.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/stopped_snapshot/summary.json",
+      "bytes": 2590,
+      "original_sha256": "308bd0f9f33faf8b968f4aee424d7bdf1c9c02106e4ccde9432016292be8a315",
+      "published_sha256": "308bd0f9f33faf8b968f4aee424d7bdf1c9c02106e4ccde9432016292be8a315",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/per_question.csv",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/stopped_snapshot/per_question.csv",
+      "bytes": 7608,
+      "original_sha256": "72648488df0cf7d2735eabd319585d94d3c5c54ab0f06d86c19f0e7a23e11697",
+      "published_sha256": "72648488df0cf7d2735eabd319585d94d3c5c54ab0f06d86c19f0e7a23e11697",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/per_question.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/stopped_snapshot/per_question.json",
+      "bytes": 43741,
+      "original_sha256": "1c7fabecb7fe8dcac0e4054b9713506a9349267a0a4914bafdd5fdb2b6489311",
+      "published_sha256": "1c7fabecb7fe8dcac0e4054b9713506a9349267a0a4914bafdd5fdb2b6489311",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0000.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0000.json",
+      "bytes": 2648,
+      "original_sha256": "c24e892a3ea8604e6b2dbafae2069fc4e77adb2b4e3d017ad133104bcf9e14ed",
+      "published_sha256": "c24e892a3ea8604e6b2dbafae2069fc4e77adb2b4e3d017ad133104bcf9e14ed",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0001.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0001.json",
+      "bytes": 2543,
+      "original_sha256": "0d7960bf5ad460398eb21a4a205342588923600bb566ca60f4058e0e6bb54b13",
+      "published_sha256": "0d7960bf5ad460398eb21a4a205342588923600bb566ca60f4058e0e6bb54b13",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0002.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0002.json",
+      "bytes": 2559,
+      "original_sha256": "3c087d7d2b4ea7fc510dfbf76ee95894cb420d7b239e326d01b0b53c582ecb34",
+      "published_sha256": "3c087d7d2b4ea7fc510dfbf76ee95894cb420d7b239e326d01b0b53c582ecb34",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0003.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0003.json",
+      "bytes": 2415,
+      "original_sha256": "ad4adab587049aef7cc070dfa3b2b57307b1c5c374826ace21b27b970a8aec6d",
+      "published_sha256": "ad4adab587049aef7cc070dfa3b2b57307b1c5c374826ace21b27b970a8aec6d",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0004.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0004.json",
+      "bytes": 2371,
+      "original_sha256": "a14cb9e1c89819a8630cbdfaf5430094ac7b1b02d60bd950a1dc78c4d7dfb4c0",
+      "published_sha256": "a14cb9e1c89819a8630cbdfaf5430094ac7b1b02d60bd950a1dc78c4d7dfb4c0",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0005.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0005.json",
+      "bytes": 2458,
+      "original_sha256": "43b8464e6bce3f8fe4843d2fec49d97880b52c118a9aa5645919ab0c581d9002",
+      "published_sha256": "43b8464e6bce3f8fe4843d2fec49d97880b52c118a9aa5645919ab0c581d9002",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0006.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0006.json",
+      "bytes": 2742,
+      "original_sha256": "cef269dc5f552169c62c3d8d548314caf9bcfb1bf2fac6d1802bc4509c14120d",
+      "published_sha256": "cef269dc5f552169c62c3d8d548314caf9bcfb1bf2fac6d1802bc4509c14120d",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0007.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0007.json",
+      "bytes": 2731,
+      "original_sha256": "c459b832c5288168e35be40d3c6271935f427ef21ac4988adc6327ad7ca3209c",
+      "published_sha256": "c459b832c5288168e35be40d3c6271935f427ef21ac4988adc6327ad7ca3209c",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0008.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0008.json",
+      "bytes": 2451,
+      "original_sha256": "717d7cda9472aadb1de444c64161f1be025915bc114d767108feaf7c76a36928",
+      "published_sha256": "717d7cda9472aadb1de444c64161f1be025915bc114d767108feaf7c76a36928",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0009.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0009.json",
+      "bytes": 2407,
+      "original_sha256": "12d0b9544ac1272c5cd8f17353e64aaad158032ea9acf32f8ec17dab07142d2e",
+      "published_sha256": "12d0b9544ac1272c5cd8f17353e64aaad158032ea9acf32f8ec17dab07142d2e",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0010.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0010.json",
+      "bytes": 2282,
+      "original_sha256": "316c43dacc26489087b5343e0ff381788a3c8f942be43b6bf3c0a8c99485d36c",
+      "published_sha256": "316c43dacc26489087b5343e0ff381788a3c8f942be43b6bf3c0a8c99485d36c",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0011.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0011.json",
+      "bytes": 2465,
+      "original_sha256": "f127aaf625c9653a6cd2cd09493911b42a1614c3914ce863c60ad5d764009223",
+      "published_sha256": "f127aaf625c9653a6cd2cd09493911b42a1614c3914ce863c60ad5d764009223",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0012.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0012.json",
+      "bytes": 2461,
+      "original_sha256": "f895ef550df6ab4ad34d839e9aca264f666f63e346fe20c973946bf48f47d5d6",
+      "published_sha256": "f895ef550df6ab4ad34d839e9aca264f666f63e346fe20c973946bf48f47d5d6",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0013.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0013.json",
+      "bytes": 2734,
+      "original_sha256": "dc63ea1537fd5eb558081e1b70feb704ce891e02f2d0c02b120036cf6c3173fd",
+      "published_sha256": "dc63ea1537fd5eb558081e1b70feb704ce891e02f2d0c02b120036cf6c3173fd",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0014.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0014.json",
+      "bytes": 2544,
+      "original_sha256": "586e9c7f4e5503006847d0d2c3fc546d88ea5245b4266236e083afa041817d5b",
+      "published_sha256": "586e9c7f4e5503006847d0d2c3fc546d88ea5245b4266236e083afa041817d5b",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0015.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0015.json",
+      "bytes": 2122,
+      "original_sha256": "14a6775cab3e3503217b145d3ed074f7ef7e770c22b666163648efeaa80c0696",
+      "published_sha256": "14a6775cab3e3503217b145d3ed074f7ef7e770c22b666163648efeaa80c0696",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0016.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0016.json",
+      "bytes": 2341,
+      "original_sha256": "26949440180fa4e16fb443e4c5ba19ebcf50b67aaf5eeb3dfa43bc0f543a6edb",
+      "published_sha256": "26949440180fa4e16fb443e4c5ba19ebcf50b67aaf5eeb3dfa43bc0f543a6edb",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0017.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0017.json",
+      "bytes": 2508,
+      "original_sha256": "a6ada63958046cdb5ee42dac70e70dd419c7dac3c835c3953bc28c8eb62c2a6b",
+      "published_sha256": "a6ada63958046cdb5ee42dac70e70dd419c7dac3c835c3953bc28c8eb62c2a6b",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0018.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0018.json",
+      "bytes": 2319,
+      "original_sha256": "1af0509d6d903fd6eaf07bc94907881a9e1d021179fc2cd38878cda86a3384e1",
+      "published_sha256": "1af0509d6d903fd6eaf07bc94907881a9e1d021179fc2cd38878cda86a3384e1",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0019.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0019.json",
+      "bytes": 2388,
+      "original_sha256": "17817f8349b1dec5102f2e3c3faeb0515aa0bda4df4eb71cf76904ba3a10490f",
+      "published_sha256": "17817f8349b1dec5102f2e3c3faeb0515aa0bda4df4eb71cf76904ba3a10490f",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0020.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0020.json",
+      "bytes": 3046,
+      "original_sha256": "da0efeec35dc114b0b4be4c8aec403356c410155d2a77351f12460546904a3c5",
+      "published_sha256": "da0efeec35dc114b0b4be4c8aec403356c410155d2a77351f12460546904a3c5",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0021.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0021.json",
+      "bytes": 3136,
+      "original_sha256": "1eb3c1ed9863c558cd5a6c6fcd850dd3e5ad7d88c233bb871472405d8143e9c0",
+      "published_sha256": "1eb3c1ed9863c558cd5a6c6fcd850dd3e5ad7d88c233bb871472405d8143e9c0",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0022.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0022.json",
+      "bytes": 2642,
+      "original_sha256": "73d3e5f5cb8ec290e7352cab84587a723a9ff5935e21ae7c2b25bf80360d2f34",
+      "published_sha256": "73d3e5f5cb8ec290e7352cab84587a723a9ff5935e21ae7c2b25bf80360d2f34",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0023.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0023.json",
+      "bytes": 2256,
+      "original_sha256": "c77019a95facfc44f9bc35a58e71d790235afe6abbf3297cda7e950cabb8c2a3",
+      "published_sha256": "c77019a95facfc44f9bc35a58e71d790235afe6abbf3297cda7e950cabb8c2a3",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0024.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0024.json",
+      "bytes": 2499,
+      "original_sha256": "d194e6a268f11d69593fb725cfdad8d1f7e92881feb7243214785fae55993625",
+      "published_sha256": "d194e6a268f11d69593fb725cfdad8d1f7e92881feb7243214785fae55993625",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0025.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0025.json",
+      "bytes": 2789,
+      "original_sha256": "14614c1d5fbe81e4f07fea04c859815e25aa37c76763478d3c096c0b4352cb70",
+      "published_sha256": "14614c1d5fbe81e4f07fea04c859815e25aa37c76763478d3c096c0b4352cb70",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0026.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0026.json",
+      "bytes": 2839,
+      "original_sha256": "81d3e2643fbcf3741e71f496346a0bb699535aea6f81fcdc9e72459ab0ce8cd3",
+      "published_sha256": "81d3e2643fbcf3741e71f496346a0bb699535aea6f81fcdc9e72459ab0ce8cd3",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0027.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0027.json",
+      "bytes": 2362,
+      "original_sha256": "6b095acd4cef87e7634951015486938fd8881da3e72614ff335935c4c8eb42df",
+      "published_sha256": "6b095acd4cef87e7634951015486938fd8881da3e72614ff335935c4c8eb42df",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0028.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0028.json",
+      "bytes": 2909,
+      "original_sha256": "d1f2ce3d11c088365ffdec5976b1db8237aace0f8bae55609aa52865a06f888d",
+      "published_sha256": "d1f2ce3d11c088365ffdec5976b1db8237aace0f8bae55609aa52865a06f888d",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0029.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0029.json",
+      "bytes": 2399,
+      "original_sha256": "a057791f1c4c8e05bb9d9cd56815b62710b6d638e1a8f4658ccc2ad616f3c4c1",
+      "published_sha256": "a057791f1c4c8e05bb9d9cd56815b62710b6d638e1a8f4658ccc2ad616f3c4c1",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0030.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0030.json",
+      "bytes": 2756,
+      "original_sha256": "75e8b17a89f344ed37701a26ce6072cb393dddd5cc95c8618686f40c58bf9207",
+      "published_sha256": "75e8b17a89f344ed37701a26ce6072cb393dddd5cc95c8618686f40c58bf9207",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0031.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0031.json",
+      "bytes": 5915,
+      "original_sha256": "c19a56502efde6b063f05a744f2681ece079a06b313414fe18aedae3a5c97ad9",
+      "published_sha256": "c19a56502efde6b063f05a744f2681ece079a06b313414fe18aedae3a5c97ad9",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0032.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0032.json",
+      "bytes": 2366,
+      "original_sha256": "6307bfde6ffecc817ee94b4557225d3c2ef88ced6a48de0b5c2fb6c681d85c4b",
+      "published_sha256": "6307bfde6ffecc817ee94b4557225d3c2ef88ced6a48de0b5c2fb6c681d85c4b",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0033.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0033.json",
+      "bytes": 2536,
+      "original_sha256": "753d11a4b391972a178af4b4324171e45ca3a377ee07d39f1223e8eaaeb94ea0",
+      "published_sha256": "753d11a4b391972a178af4b4324171e45ca3a377ee07d39f1223e8eaaeb94ea0",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0034.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0034.json",
+      "bytes": 2527,
+      "original_sha256": "6446399beb5d45010ca6d898d4c6c26c7430fd7cc7caab720fdc2ae0c16d2f35",
+      "published_sha256": "6446399beb5d45010ca6d898d4c6c26c7430fd7cc7caab720fdc2ae0c16d2f35",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0035.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0035.json",
+      "bytes": 2421,
+      "original_sha256": "09af401230bb866c2d7aba9ba5c8078bbe62d46d147d343296bdab16d692abea",
+      "published_sha256": "09af401230bb866c2d7aba9ba5c8078bbe62d46d147d343296bdab16d692abea",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0036.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0036.json",
+      "bytes": 2561,
+      "original_sha256": "863ce2a96bea0bca75c500387eb20fb98cd8f9a91bde01b472753d4def854421",
+      "published_sha256": "863ce2a96bea0bca75c500387eb20fb98cd8f9a91bde01b472753d4def854421",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0037.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0037.json",
+      "bytes": 3422,
+      "original_sha256": "8597b6355825ec5b421571012f6019be43438b8a4256c2fb241be2c13e64673c",
+      "published_sha256": "8597b6355825ec5b421571012f6019be43438b8a4256c2fb241be2c13e64673c",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0038.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0038.json",
+      "bytes": 2920,
+      "original_sha256": "354588bd991ed43167d17001eb77cda06e79d559474aec5698735b027b4a9f22",
+      "published_sha256": "354588bd991ed43167d17001eb77cda06e79d559474aec5698735b027b4a9f22",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0039.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0039.json",
+      "bytes": 2293,
+      "original_sha256": "80bc41082d494a2a1f65a674a04ee92bc064e85880431550c75ca4e05f712d59",
+      "published_sha256": "80bc41082d494a2a1f65a674a04ee92bc064e85880431550c75ca4e05f712d59",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0040.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0040.json",
+      "bytes": 2355,
+      "original_sha256": "d2a96f3de2bff93c19b4785866dad6a3fee9c3fe579822052a5ced6b9f19ecde",
+      "published_sha256": "d2a96f3de2bff93c19b4785866dad6a3fee9c3fe579822052a5ced6b9f19ecde",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0041.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0041.json",
+      "bytes": 2453,
+      "original_sha256": "0fead88b421cd98ec0424cabb865d4131514468116f5412e0f302c5a31ea4f75",
+      "published_sha256": "0fead88b421cd98ec0424cabb865d4131514468116f5412e0f302c5a31ea4f75",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0042.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0042.json",
+      "bytes": 2443,
+      "original_sha256": "5631b71d3bb9f167eb51ae3924bb513d0d556d6162e2c0f37b71d0cadac2ff96",
+      "published_sha256": "5631b71d3bb9f167eb51ae3924bb513d0d556d6162e2c0f37b71d0cadac2ff96",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0043.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0043.json",
+      "bytes": 2822,
+      "original_sha256": "6b213c22a0bf1a1a05982824ba69799a68e408af2560fc1ab7648534042129bc",
+      "published_sha256": "6b213c22a0bf1a1a05982824ba69799a68e408af2560fc1ab7648534042129bc",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0044.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0044.json",
+      "bytes": 2587,
+      "original_sha256": "ed68a6b75973e039b2a7b46f30920ddac6327d95e246476ce9a403fc9558b0fc",
+      "published_sha256": "ed68a6b75973e039b2a7b46f30920ddac6327d95e246476ce9a403fc9558b0fc",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0045.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0045.json",
+      "bytes": 3046,
+      "original_sha256": "ccf52a3cb80dc33436cbc445e3a5093a68688c972336d0ff4d416de5f4f6fe58",
+      "published_sha256": "ccf52a3cb80dc33436cbc445e3a5093a68688c972336d0ff4d416de5f4f6fe58",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0046.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0046.json",
+      "bytes": 3603,
+      "original_sha256": "a74c3b6fee76ed76e292a87b038cb1fab516d36dd700771eecee67d993347bb8",
+      "published_sha256": "a74c3b6fee76ed76e292a87b038cb1fab516d36dd700771eecee67d993347bb8",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0047.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0047.json",
+      "bytes": 2469,
+      "original_sha256": "e230de64f1ee480e79f7a729a8b6df14a71ec1475401dfe0581e45fc217aba9f",
+      "published_sha256": "e230de64f1ee480e79f7a729a8b6df14a71ec1475401dfe0581e45fc217aba9f",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0048.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0048.json",
+      "bytes": 2336,
+      "original_sha256": "8ba2c82b7ba291e5ca544cffdd4f96f545f467c147b93813ae789b895f2e6733",
+      "published_sha256": "8ba2c82b7ba291e5ca544cffdd4f96f545f467c147b93813ae789b895f2e6733",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0049.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0049.json",
+      "bytes": 3355,
+      "original_sha256": "4a7364cc992e2c2607d9fb0e1ed995dfc1025ccdf2919238f7094a38a49f0930",
+      "published_sha256": "4a7364cc992e2c2607d9fb0e1ed995dfc1025ccdf2919238f7094a38a49f0930",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0050.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0050.json",
+      "bytes": 2393,
+      "original_sha256": "432213b6728371b731a0c0cbccc91e1166297c2d324ed64c7900e71f06d54ce0",
+      "published_sha256": "432213b6728371b731a0c0cbccc91e1166297c2d324ed64c7900e71f06d54ce0",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0051.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0051.json",
+      "bytes": 2800,
+      "original_sha256": "acc33d0822b84fc78d70048f7d31f62096c4c3a0aceaa4cc40508554eb4a0b46",
+      "published_sha256": "acc33d0822b84fc78d70048f7d31f62096c4c3a0aceaa4cc40508554eb4a0b46",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0052.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0052.json",
+      "bytes": 2355,
+      "original_sha256": "d6addfe8cd6f4a429dd19534a1e4cdee7bc778d3b81583feac7c03aa66771133",
+      "published_sha256": "d6addfe8cd6f4a429dd19534a1e4cdee7bc778d3b81583feac7c03aa66771133",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0053.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0053.json",
+      "bytes": 2629,
+      "original_sha256": "8f161a38bd02d968fa54ca739f70bb914c43837747269a97f1c1c3d4de8906ef",
+      "published_sha256": "8f161a38bd02d968fa54ca739f70bb914c43837747269a97f1c1c3d4de8906ef",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0054.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0054.json",
+      "bytes": 2183,
+      "original_sha256": "48f0d6923906c82ee5a85646776fa891a1801ce60d7297d63956572e4b4149b5",
+      "published_sha256": "48f0d6923906c82ee5a85646776fa891a1801ce60d7297d63956572e4b4149b5",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0055.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0055.json",
+      "bytes": 2328,
+      "original_sha256": "e81890c0162f3500edb8ec9173ee02dd1af6d679388f21d739d5bef6519a6eae",
+      "published_sha256": "e81890c0162f3500edb8ec9173ee02dd1af6d679388f21d739d5bef6519a6eae",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0056.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0056.json",
+      "bytes": 2329,
+      "original_sha256": "7435f3e5eed88be9eba93bf9597e6a8c806e086958e097b6316cc2b9182938fb",
+      "published_sha256": "7435f3e5eed88be9eba93bf9597e6a8c806e086958e097b6316cc2b9182938fb",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0057.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0057.json",
+      "bytes": 2532,
+      "original_sha256": "b260a756d587b4a307327512d36cafc7362b1d5801400d2dd23b160f8a43cb45",
+      "published_sha256": "b260a756d587b4a307327512d36cafc7362b1d5801400d2dd23b160f8a43cb45",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0058.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0058.json",
+      "bytes": 2590,
+      "original_sha256": "c81e9410b35a0926450f8d10f5b27d59d48b23cbee82dbbf9c533a3f5d6f7958",
+      "published_sha256": "c81e9410b35a0926450f8d10f5b27d59d48b23cbee82dbbf9c533a3f5d6f7958",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0059.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0059.json",
+      "bytes": 2860,
+      "original_sha256": "2f7bd95047c9feea7f2331849f340d9cd5ec9dedb8f455c12cdc62ea076a4a3f",
+      "published_sha256": "2f7bd95047c9feea7f2331849f340d9cd5ec9dedb8f455c12cdc62ea076a4a3f",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0060.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0060.json",
+      "bytes": 2506,
+      "original_sha256": "0988401b15973376b9dc4c4f410e9d01df3eacf2ac5ebf1e25c9e8c70ebb9e92",
+      "published_sha256": "0988401b15973376b9dc4c4f410e9d01df3eacf2ac5ebf1e25c9e8c70ebb9e92",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0061.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0061.json",
+      "bytes": 2488,
+      "original_sha256": "2a2c9088f540c641cbcd60f1165412aea04c77ed4152d1bc4479d88525d4f773",
+      "published_sha256": "2a2c9088f540c641cbcd60f1165412aea04c77ed4152d1bc4479d88525d4f773",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0062.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0062.json",
+      "bytes": 2748,
+      "original_sha256": "cda1f437399290389ba3e5c77ac7affa963034bc7dfa275873da3905e0673a29",
+      "published_sha256": "cda1f437399290389ba3e5c77ac7affa963034bc7dfa275873da3905e0673a29",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0063.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0063.json",
+      "bytes": 2324,
+      "original_sha256": "23b1d55abbb3fa28f366821e06fc2e9c0e115b8adebf310accea736fa5f212b9",
+      "published_sha256": "23b1d55abbb3fa28f366821e06fc2e9c0e115b8adebf310accea736fa5f212b9",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0064.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0064.json",
+      "bytes": 2222,
+      "original_sha256": "cd20480b2ea9def2ecd1f3dec586242545485fb16ac58f37a55f4bc08dfac75a",
+      "published_sha256": "cd20480b2ea9def2ecd1f3dec586242545485fb16ac58f37a55f4bc08dfac75a",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0065.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0065.json",
+      "bytes": 4048,
+      "original_sha256": "2cb742867fc78f8c61bea9d1b1d493f3f7ea920786e1f2141e6ccc15d6c7f7bd",
+      "published_sha256": "2cb742867fc78f8c61bea9d1b1d493f3f7ea920786e1f2141e6ccc15d6c7f7bd",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0066.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0066.json",
+      "bytes": 2213,
+      "original_sha256": "dfc6e432935ace38daf14c049531278af38d2a1a5f813b06c853b7f20092f925",
+      "published_sha256": "dfc6e432935ace38daf14c049531278af38d2a1a5f813b06c853b7f20092f925",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0067.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0067.json",
+      "bytes": 2378,
+      "original_sha256": "853ba601aae20419d95ad4f21fc759c590b521019314ee5d5137944d549d437f",
+      "published_sha256": "853ba601aae20419d95ad4f21fc759c590b521019314ee5d5137944d549d437f",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0068.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0068.json",
+      "bytes": 2347,
+      "original_sha256": "3287426b3f042d6617073858da3c7662c5bac5cf6287d1bf9f0f26fdfb3ae5c0",
+      "published_sha256": "3287426b3f042d6617073858da3c7662c5bac5cf6287d1bf9f0f26fdfb3ae5c0",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0069.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0069.json",
+      "bytes": 3031,
+      "original_sha256": "c6196d43fbc739dd0fc0dc2765120e531d1777b71ffcf50c1789ee3b86650615",
+      "published_sha256": "c6196d43fbc739dd0fc0dc2765120e531d1777b71ffcf50c1789ee3b86650615",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0070.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0070.json",
+      "bytes": 2362,
+      "original_sha256": "a470c0878341fea1373fbebcc78240b4a69310b293cfa431f3a56777ee3cc1d4",
+      "published_sha256": "a470c0878341fea1373fbebcc78240b4a69310b293cfa431f3a56777ee3cc1d4",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0071.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0071.json",
+      "bytes": 2606,
+      "original_sha256": "98da3a6f88ded51f77c44f69f999d72c0ff4fc7ee727de67820297a6e32803ba",
+      "published_sha256": "98da3a6f88ded51f77c44f69f999d72c0ff4fc7ee727de67820297a6e32803ba",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0072.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0072.json",
+      "bytes": 2415,
+      "original_sha256": "4050a9a8f417f6860563387ffe5c96929213544e4787d821a2d47051f9bf74d5",
+      "published_sha256": "4050a9a8f417f6860563387ffe5c96929213544e4787d821a2d47051f9bf74d5",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0073.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0073.json",
+      "bytes": 3349,
+      "original_sha256": "d3da9007965a26ca47cc8829dad6d5b9212415615236ee41b9a07aab139a75f2",
+      "published_sha256": "d3da9007965a26ca47cc8829dad6d5b9212415615236ee41b9a07aab139a75f2",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0074.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0074.json",
+      "bytes": 2182,
+      "original_sha256": "15efedbab294e2efa428006f472d142ba64bfb6cf9eaecb3c57b6f2b37ffc632",
+      "published_sha256": "15efedbab294e2efa428006f472d142ba64bfb6cf9eaecb3c57b6f2b37ffc632",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0075.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0075.json",
+      "bytes": 2410,
+      "original_sha256": "abe04585b580106f6ab557159e75f03865f3b0dc2c4bfacaa873d457776c22b3",
+      "published_sha256": "abe04585b580106f6ab557159e75f03865f3b0dc2c4bfacaa873d457776c22b3",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0076.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0076.json",
+      "bytes": 2481,
+      "original_sha256": "e9b3e3cc0aaee6bb1248e3f48cd1480d65e2705f96af23362de0f85ca4a82975",
+      "published_sha256": "e9b3e3cc0aaee6bb1248e3f48cd1480d65e2705f96af23362de0f85ca4a82975",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0077.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0077.json",
+      "bytes": 2232,
+      "original_sha256": "ab0fc9859fbec3d595c25fa73b1d01b470d40bd1e0605027abcf6e019d39388c",
+      "published_sha256": "ab0fc9859fbec3d595c25fa73b1d01b470d40bd1e0605027abcf6e019d39388c",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0078.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0078.json",
+      "bytes": 2530,
+      "original_sha256": "c85f73a82f2a4b8c7846fbd073c240b344c829620a5b300ddf6d459449d8ccd2",
+      "published_sha256": "c85f73a82f2a4b8c7846fbd073c240b344c829620a5b300ddf6d459449d8ccd2",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0079.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0079.json",
+      "bytes": 2477,
+      "original_sha256": "72751e37c149ecbc3275c2414c5ddaaed9fca53d0c92badba863dc4d21588b10",
+      "published_sha256": "72751e37c149ecbc3275c2414c5ddaaed9fca53d0c92badba863dc4d21588b10",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0080.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0080.json",
+      "bytes": 2691,
+      "original_sha256": "c78e91f9b68444dfc0114e08cca22b5226154dae078c6e05472df7a53de3fc85",
+      "published_sha256": "c78e91f9b68444dfc0114e08cca22b5226154dae078c6e05472df7a53de3fc85",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0081.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0081.json",
+      "bytes": 2493,
+      "original_sha256": "3576888b0f19587f00c2550c98b5193dd9c27db9dab93c081ff4713e88588758",
+      "published_sha256": "3576888b0f19587f00c2550c98b5193dd9c27db9dab93c081ff4713e88588758",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0082.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0082.json",
+      "bytes": 2489,
+      "original_sha256": "52d655a14e1b21f6415b4fb89b1ba7c175148677bd3daa1b9e6b2069cbd8f45c",
+      "published_sha256": "52d655a14e1b21f6415b4fb89b1ba7c175148677bd3daa1b9e6b2069cbd8f45c",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0083.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0083.json",
+      "bytes": 2307,
+      "original_sha256": "6f00e467d4329068770f94cd369e3a9190f8c14d0f9edf5c650b9159abe737cd",
+      "published_sha256": "6f00e467d4329068770f94cd369e3a9190f8c14d0f9edf5c650b9159abe737cd",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0084.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0084.json",
+      "bytes": 2211,
+      "original_sha256": "35fc1afc6e94a881f9485ad6db35e157fe8a984f82b2ee74d06c2962e3a55a2d",
+      "published_sha256": "35fc1afc6e94a881f9485ad6db35e157fe8a984f82b2ee74d06c2962e3a55a2d",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0085.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0085.json",
+      "bytes": 2662,
+      "original_sha256": "a1c7ce3cd6fd4beb17629766aced66b0f9e2b2868a0b7a26e7a7472d79eff675",
+      "published_sha256": "a1c7ce3cd6fd4beb17629766aced66b0f9e2b2868a0b7a26e7a7472d79eff675",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0086.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0086.json",
+      "bytes": 2466,
+      "original_sha256": "49836562ab5e7802390b612de513be5d0f0d04bfdaa6260ca1c7c5b443233da1",
+      "published_sha256": "49836562ab5e7802390b612de513be5d0f0d04bfdaa6260ca1c7c5b443233da1",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0087.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0087.json",
+      "bytes": 3004,
+      "original_sha256": "c7ee88f3b10a5f8d6c3fff4fb9b199e0767b0ec7880b2518568faf9ca8bc7edd",
+      "published_sha256": "c7ee88f3b10a5f8d6c3fff4fb9b199e0767b0ec7880b2518568faf9ca8bc7edd",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0088.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0088.json",
+      "bytes": 2497,
+      "original_sha256": "3e87bf9433ce28bbed7d155d57f35fc5858096977332c9900f640c4a41f7e3d9",
+      "published_sha256": "3e87bf9433ce28bbed7d155d57f35fc5858096977332c9900f640c4a41f7e3d9",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0089.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0089.json",
+      "bytes": 2447,
+      "original_sha256": "12bb040c1b464c5e5eb9a7b35fadfd1110cd28bb6ad90ddac64fb4f983c5e0c3",
+      "published_sha256": "12bb040c1b464c5e5eb9a7b35fadfd1110cd28bb6ad90ddac64fb4f983c5e0c3",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0090.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0090.json",
+      "bytes": 3354,
+      "original_sha256": "78cb2e9101415a214a5f95eaa54ec9f6a1aaa6d46ada078ba5488cc34e7931d9",
+      "published_sha256": "78cb2e9101415a214a5f95eaa54ec9f6a1aaa6d46ada078ba5488cc34e7931d9",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0091.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0091.json",
+      "bytes": 2356,
+      "original_sha256": "a44b98abfd114b6fd2d498a218c599e187e17d8220c30b1c3985b3630354a059",
+      "published_sha256": "a44b98abfd114b6fd2d498a218c599e187e17d8220c30b1c3985b3630354a059",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0092.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0092.json",
+      "bytes": 2847,
+      "original_sha256": "fd424008382324d6850593764a9f65169b0983419f374212b6ad87d74a88de85",
+      "published_sha256": "fd424008382324d6850593764a9f65169b0983419f374212b6ad87d74a88de85",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0093.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0093.json",
+      "bytes": 3564,
+      "original_sha256": "1147349c40cd7a116df44c46836f289dd2dc956153bdf664a379a3bdd1383267",
+      "published_sha256": "1147349c40cd7a116df44c46836f289dd2dc956153bdf664a379a3bdd1383267",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0094.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0094.json",
+      "bytes": 2602,
+      "original_sha256": "2bb5d5cf94559677b4c01f863aa16a664d2faae6a90d499017ffffa4d33ee133",
+      "published_sha256": "2bb5d5cf94559677b4c01f863aa16a664d2faae6a90d499017ffffa4d33ee133",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0095.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0095.json",
+      "bytes": 2615,
+      "original_sha256": "f46ef708aa18f1301467c80ee83fe3e981ef7bf1e07ef6e7ea5fd40b745e324d",
+      "published_sha256": "f46ef708aa18f1301467c80ee83fe3e981ef7bf1e07ef6e7ea5fd40b745e324d",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0096.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0096.json",
+      "bytes": 2457,
+      "original_sha256": "bf2ed7afbb158d4f7dde9cc77c41ae4d6a33ac201eca707a5e5152c56f81cb67",
+      "published_sha256": "bf2ed7afbb158d4f7dde9cc77c41ae4d6a33ac201eca707a5e5152c56f81cb67",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0097.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0097.json",
+      "bytes": 2421,
+      "original_sha256": "f45cd88682565f3b0131369e2d9b91e9e8186a61b5937fbb15a8346171ff9906",
+      "published_sha256": "f45cd88682565f3b0131369e2d9b91e9e8186a61b5937fbb15a8346171ff9906",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0098.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0098.json",
+      "bytes": 6238,
+      "original_sha256": "9a585f20e395702045798a0be64edde3241c9e2cde45a599343624aa243a26d4",
+      "published_sha256": "9a585f20e395702045798a0be64edde3241c9e2cde45a599343624aa243a26d4",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/official/mathqa-test-0099.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/official/mathqa-test-0099.json",
+      "bytes": 2597,
+      "original_sha256": "dad43963968128777d9aeea077158bedd0a85d2fcc599578dd2d65ad9ab20b2b",
+      "published_sha256": "dad43963968128777d9aeea077158bedd0a85d2fcc599578dd2d65ad9ab20b2b",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0000.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0000.json",
+      "bytes": 2748,
+      "original_sha256": "bc4f12b16f8a3b4face857745b8e71bcfedee6a8558790f7048e11719b2b6e8e",
+      "published_sha256": "bc4f12b16f8a3b4face857745b8e71bcfedee6a8558790f7048e11719b2b6e8e",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0001.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0001.json",
+      "bytes": 2632,
+      "original_sha256": "3128817f8bba0dfde50f992513c6a900e2fe2c06c5a3314e33edaeb238d76f03",
+      "published_sha256": "3128817f8bba0dfde50f992513c6a900e2fe2c06c5a3314e33edaeb238d76f03",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0002.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0002.json",
+      "bytes": 2722,
+      "original_sha256": "f04df4be2bd249f99510a726fa06c4c4b62a0a401dd904f4bad9d073cdcd69f3",
+      "published_sha256": "f04df4be2bd249f99510a726fa06c4c4b62a0a401dd904f4bad9d073cdcd69f3",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0003.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0003.json",
+      "bytes": 2442,
+      "original_sha256": "7f30ba78931b1c2ac064404ecc3ed57a0228852ed4b7e9186682e24ed11e002a",
+      "published_sha256": "7f30ba78931b1c2ac064404ecc3ed57a0228852ed4b7e9186682e24ed11e002a",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0004.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0004.json",
+      "bytes": 2453,
+      "original_sha256": "378ba0807e14d05228011beeaf481a7cc999b7870f54374cbc698ad43a8fc833",
+      "published_sha256": "378ba0807e14d05228011beeaf481a7cc999b7870f54374cbc698ad43a8fc833",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0005.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0005.json",
+      "bytes": 2521,
+      "original_sha256": "16e87750a48967f636ade9d5d6683fe184db78125990920458ba241f42dbb602",
+      "published_sha256": "16e87750a48967f636ade9d5d6683fe184db78125990920458ba241f42dbb602",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0006.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0006.json",
+      "bytes": 2809,
+      "original_sha256": "63c00651a28a6778cf9f7c30ff1aa632556784a1b086e6902bd1cbf51af2206c",
+      "published_sha256": "63c00651a28a6778cf9f7c30ff1aa632556784a1b086e6902bd1cbf51af2206c",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0007.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0007.json",
+      "bytes": 2663,
+      "original_sha256": "f414330fb3094a8cfeb37d0c7e2d3354b97aae658afdaa841329e3f2e48ac123",
+      "published_sha256": "f414330fb3094a8cfeb37d0c7e2d3354b97aae658afdaa841329e3f2e48ac123",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0008.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0008.json",
+      "bytes": 2485,
+      "original_sha256": "1a7560f3597b8a631c206e79ed72072e31a3bfd144985323df8d2c15a4fbe441",
+      "published_sha256": "1a7560f3597b8a631c206e79ed72072e31a3bfd144985323df8d2c15a4fbe441",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0009.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0009.json",
+      "bytes": 2499,
+      "original_sha256": "698f7b6105a8abe3a2a4a94459391aabd581c9ee5d5a60a8904f3fbb1aad7fed",
+      "published_sha256": "698f7b6105a8abe3a2a4a94459391aabd581c9ee5d5a60a8904f3fbb1aad7fed",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0010.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0010.json",
+      "bytes": 2442,
+      "original_sha256": "d3b8226b47ee6db4e4d7f7ad717d6aba5faa85ee7fc1bad384a2b11954df215d",
+      "published_sha256": "d3b8226b47ee6db4e4d7f7ad717d6aba5faa85ee7fc1bad384a2b11954df215d",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0011.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0011.json",
+      "bytes": 2606,
+      "original_sha256": "79577576feaf3a5bbdcb4d774d4ba3e66b2b81e33419051a0368fa58dcd09c4d",
+      "published_sha256": "79577576feaf3a5bbdcb4d774d4ba3e66b2b81e33419051a0368fa58dcd09c4d",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0012.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0012.json",
+      "bytes": 2657,
+      "original_sha256": "b24c09fa3d699efcb1c263a49e5c29ee75fb57b480f6e0204c6c0a9ef29bd2e2",
+      "published_sha256": "b24c09fa3d699efcb1c263a49e5c29ee75fb57b480f6e0204c6c0a9ef29bd2e2",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0013.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0013.json",
+      "bytes": 3582,
+      "original_sha256": "ce2688d9adc4d37641b77835bb095500a62d69f03ae89c081b7bc3e24615aa45",
+      "published_sha256": "ce2688d9adc4d37641b77835bb095500a62d69f03ae89c081b7bc3e24615aa45",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0014.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0014.json",
+      "bytes": 2607,
+      "original_sha256": "3478e2afb8d42af05977dbba65fbcc88e8d4a52a1d4d9813b82dbca9596b2caa",
+      "published_sha256": "3478e2afb8d42af05977dbba65fbcc88e8d4a52a1d4d9813b82dbca9596b2caa",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0015.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0015.json",
+      "bytes": 2289,
+      "original_sha256": "40bba358a86607e1c72779a1c5fbfc74f0fd544dffb9fe094a45e0d10cc06c6d",
+      "published_sha256": "40bba358a86607e1c72779a1c5fbfc74f0fd544dffb9fe094a45e0d10cc06c6d",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0016.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0016.json",
+      "bytes": 2527,
+      "original_sha256": "be8da5aa6e3365065684e1f135797cdde3e9d928ef2a19122d192d33c71b396e",
+      "published_sha256": "be8da5aa6e3365065684e1f135797cdde3e9d928ef2a19122d192d33c71b396e",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0017.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0017.json",
+      "bytes": 2715,
+      "original_sha256": "c3013db46f06dbf9d9f7bf547c733a0cdec320c5ae45416af6328e9752a17925",
+      "published_sha256": "c3013db46f06dbf9d9f7bf547c733a0cdec320c5ae45416af6328e9752a17925",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0018.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0018.json",
+      "bytes": 2505,
+      "original_sha256": "45749b20c4b698e86c17c6a65108fbf9e0be51e2cf85503600b0094dcecbf777",
+      "published_sha256": "45749b20c4b698e86c17c6a65108fbf9e0be51e2cf85503600b0094dcecbf777",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0019.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0019.json",
+      "bytes": 2553,
+      "original_sha256": "f490055141a660547220e6635aad7be8751de820f1e15f5f7dbc7ff7eb4aaa55",
+      "published_sha256": "f490055141a660547220e6635aad7be8751de820f1e15f5f7dbc7ff7eb4aaa55",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0020.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0020.json",
+      "bytes": 5268,
+      "original_sha256": "71faea516b7685a0c57ece4b056c1730d6ff14db76413ebc5883ff1901e58cb4",
+      "published_sha256": "71faea516b7685a0c57ece4b056c1730d6ff14db76413ebc5883ff1901e58cb4",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0021.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0021.json",
+      "bytes": 3035,
+      "original_sha256": "e8da85f55bc44674626f9e3dbd109ff87501bcbe929418452a45bb62580d588a",
+      "published_sha256": "e8da85f55bc44674626f9e3dbd109ff87501bcbe929418452a45bb62580d588a",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0022.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0022.json",
+      "bytes": 2918,
+      "original_sha256": "13030cd2edbeec4c53f6cd9b619ece596023224c74ea434244ef3a6f162064ef",
+      "published_sha256": "13030cd2edbeec4c53f6cd9b619ece596023224c74ea434244ef3a6f162064ef",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0023.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0023.json",
+      "bytes": 2435,
+      "original_sha256": "da59f127c9ce4d4c8cbdb6e5c019ea1f69f893fb23c0f08ecda52c9c86c3fbdb",
+      "published_sha256": "da59f127c9ce4d4c8cbdb6e5c019ea1f69f893fb23c0f08ecda52c9c86c3fbdb",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0024.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0024.json",
+      "bytes": 2645,
+      "original_sha256": "94946bde527ead2a37875e519dce35233e967737d026c4c7fdc535d94050b259",
+      "published_sha256": "94946bde527ead2a37875e519dce35233e967737d026c4c7fdc535d94050b259",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0025.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0025.json",
+      "bytes": 2769,
+      "original_sha256": "91cf6b933dd4d234ece152d65947d3ae369ca60fd21e548f60e444c148be67ee",
+      "published_sha256": "91cf6b933dd4d234ece152d65947d3ae369ca60fd21e548f60e444c148be67ee",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0026.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0026.json",
+      "bytes": 2737,
+      "original_sha256": "e1108036651aeffd43b7ffe213ada699a3937f8000663bc0472de0a09043f0ae",
+      "published_sha256": "e1108036651aeffd43b7ffe213ada699a3937f8000663bc0472de0a09043f0ae",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0027.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0027.json",
+      "bytes": 2136,
+      "original_sha256": "d95ff97d0fdffb86ec243a35bc094d20e720b3d524323a525ea72a45022cfff1",
+      "published_sha256": "d95ff97d0fdffb86ec243a35bc094d20e720b3d524323a525ea72a45022cfff1",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0028.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0028.json",
+      "bytes": 2610,
+      "original_sha256": "81ff521ee3ba36a82a2a184aa5931a69ad1ea9fda6000a28c37248823a52715e",
+      "published_sha256": "81ff521ee3ba36a82a2a184aa5931a69ad1ea9fda6000a28c37248823a52715e",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0029.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0029.json",
+      "bytes": 2636,
+      "original_sha256": "378ec4ec4d38e2f0f52a8f5c70bc378ed99792f4a94ba984a2d2e2c4f93a9010",
+      "published_sha256": "378ec4ec4d38e2f0f52a8f5c70bc378ed99792f4a94ba984a2d2e2c4f93a9010",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0030.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0030.json",
+      "bytes": 2388,
+      "original_sha256": "50835d13bad08bd039268b301791cd6403f727c8170edc26cf44b7a5c5a13e0c",
+      "published_sha256": "50835d13bad08bd039268b301791cd6403f727c8170edc26cf44b7a5c5a13e0c",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0031.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0031.json",
+      "bytes": 1617,
+      "original_sha256": "bf70197776a1d93bb1e40b72c6863eb66ad2ec3dfbf4fdc9fc7df51dc2779f50",
+      "published_sha256": "bf70197776a1d93bb1e40b72c6863eb66ad2ec3dfbf4fdc9fc7df51dc2779f50",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0032.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0032.json",
+      "bytes": 2214,
+      "original_sha256": "f99c7da39a6c8a8037ed46a684243a816193b8f366e3b97026730c29cc9bb9fe",
+      "published_sha256": "f99c7da39a6c8a8037ed46a684243a816193b8f366e3b97026730c29cc9bb9fe",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0033.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0033.json",
+      "bytes": 2588,
+      "original_sha256": "69728b5bf52d5a8bb782c48cc8017b3e79d15e03accde5ad30fc11b23eceafb2",
+      "published_sha256": "69728b5bf52d5a8bb782c48cc8017b3e79d15e03accde5ad30fc11b23eceafb2",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0034.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0034.json",
+      "bytes": 2285,
+      "original_sha256": "59014d17c83aa7e56250bf145cbaeaa43d0d0bf8ee97043c1b4b51452783cdf1",
+      "published_sha256": "59014d17c83aa7e56250bf145cbaeaa43d0d0bf8ee97043c1b4b51452783cdf1",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0035.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0035.json",
+      "bytes": 2223,
+      "original_sha256": "fa869a9b8e82dc4ceac32cf429a067862b1e8ef6aeb46cd30b3f1e1deb88e661",
+      "published_sha256": "fa869a9b8e82dc4ceac32cf429a067862b1e8ef6aeb46cd30b3f1e1deb88e661",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0036.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0036.json",
+      "bytes": 2273,
+      "original_sha256": "db848e5b11180302c57b1faa6a2dbc21cfa1a5d055f1c7701fc544dd5e178d43",
+      "published_sha256": "db848e5b11180302c57b1faa6a2dbc21cfa1a5d055f1c7701fc544dd5e178d43",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0037.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0037.json",
+      "bytes": 3304,
+      "original_sha256": "6a4ca2c522636918c5b38d740284ba60fcaee6f9ebe80cf59308f63e2b805638",
+      "published_sha256": "6a4ca2c522636918c5b38d740284ba60fcaee6f9ebe80cf59308f63e2b805638",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0038.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0038.json",
+      "bytes": 2645,
+      "original_sha256": "60f9922d1befc2d4a0a8e2d6ce56679f5f07eaba7dee1180fbd63717c65c0924",
+      "published_sha256": "60f9922d1befc2d4a0a8e2d6ce56679f5f07eaba7dee1180fbd63717c65c0924",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0039.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0039.json",
+      "bytes": 2112,
+      "original_sha256": "152619c2a0c4f536bd0a8bf718e9a0ef863ba08834fef9d4ae21e6285cc29cc4",
+      "published_sha256": "152619c2a0c4f536bd0a8bf718e9a0ef863ba08834fef9d4ae21e6285cc29cc4",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0040.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0040.json",
+      "bytes": 2141,
+      "original_sha256": "9e799df683ef4bbddec8bd3f5185f456bd23eeae47bfa195f37409152b44d81d",
+      "published_sha256": "9e799df683ef4bbddec8bd3f5185f456bd23eeae47bfa195f37409152b44d81d",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0041.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0041.json",
+      "bytes": 3071,
+      "original_sha256": "2ca85c9845800d616f9de7e5bb14d3fe22f16a4ef756d52396cc3719bda43033",
+      "published_sha256": "2ca85c9845800d616f9de7e5bb14d3fe22f16a4ef756d52396cc3719bda43033",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0042.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0042.json",
+      "bytes": 2280,
+      "original_sha256": "eefff15657f3f89b3ffc5b47a1a545c01b083722be95225787a803bb0b385bf3",
+      "published_sha256": "eefff15657f3f89b3ffc5b47a1a545c01b083722be95225787a803bb0b385bf3",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0043.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0043.json",
+      "bytes": 2674,
+      "original_sha256": "6434dafa70537959a4bc4bf0a76e99ced2366d69c104e3cdddbb7a1d2fe815fe",
+      "published_sha256": "6434dafa70537959a4bc4bf0a76e99ced2366d69c104e3cdddbb7a1d2fe815fe",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0044.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0044.json",
+      "bytes": 2448,
+      "original_sha256": "578d2ff477dcd7b5cf6cc2e39d4fa7f7d02bd1d8d9f09c970839f2bb7b5b6b1f",
+      "published_sha256": "578d2ff477dcd7b5cf6cc2e39d4fa7f7d02bd1d8d9f09c970839f2bb7b5b6b1f",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0045.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0045.json",
+      "bytes": 3439,
+      "original_sha256": "a8e57847e4d62c9f85265e3e0fca734b53567027fcce26eca55695e46d83696b",
+      "published_sha256": "a8e57847e4d62c9f85265e3e0fca734b53567027fcce26eca55695e46d83696b",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0046.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0046.json",
+      "bytes": 2351,
+      "original_sha256": "7c4dc1cd7144f6ba5ceb686fd47c9facabdfcd8bab34e838e15f5c02d5cea055",
+      "published_sha256": "7c4dc1cd7144f6ba5ceb686fd47c9facabdfcd8bab34e838e15f5c02d5cea055",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0047.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0047.json",
+      "bytes": 2214,
+      "original_sha256": "6c6bd0e238a5789dac86f7773f245c0c08e4a602ea52f566f03c8e4adb8e7934",
+      "published_sha256": "6c6bd0e238a5789dac86f7773f245c0c08e4a602ea52f566f03c8e4adb8e7934",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0048.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0048.json",
+      "bytes": 2236,
+      "original_sha256": "0f253389fc4bc50ca47076f24b5806ac21d7218f3d2d73bd1fff2b2774a7228c",
+      "published_sha256": "0f253389fc4bc50ca47076f24b5806ac21d7218f3d2d73bd1fff2b2774a7228c",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0049.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0049.json",
+      "bytes": 2575,
+      "original_sha256": "4110b7940a2c9c5d53e0eff727e9aea2849a2049b7368a8342d5f83541591439",
+      "published_sha256": "4110b7940a2c9c5d53e0eff727e9aea2849a2049b7368a8342d5f83541591439",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0050.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0050.json",
+      "bytes": 2234,
+      "original_sha256": "51715909d55b27bee4c34afb76c0e8629b4748da399b9c5653d19e490145a3b1",
+      "published_sha256": "51715909d55b27bee4c34afb76c0e8629b4748da399b9c5653d19e490145a3b1",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0051.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0051.json",
+      "bytes": 2449,
+      "original_sha256": "778c394dd603d36e7ba50a3fe5c68e3dba3a30ca44d5a973edc7c23ddfed00ae",
+      "published_sha256": "778c394dd603d36e7ba50a3fe5c68e3dba3a30ca44d5a973edc7c23ddfed00ae",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0052.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0052.json",
+      "bytes": 2058,
+      "original_sha256": "099c9227653c73b710f7233451a045cdfdba510485fbb0a05e9836e0b454534a",
+      "published_sha256": "099c9227653c73b710f7233451a045cdfdba510485fbb0a05e9836e0b454534a",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0053.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0053.json",
+      "bytes": 2399,
+      "original_sha256": "67cbe84a2ff32afd2538cf4675e5c799fa96f5a1a0cbfe77f124ee604ac0a5a9",
+      "published_sha256": "67cbe84a2ff32afd2538cf4675e5c799fa96f5a1a0cbfe77f124ee604ac0a5a9",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0054.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0054.json",
+      "bytes": 1980,
+      "original_sha256": "57527b05d438ba7ba6f9c9798efe3553af4cc616c54bff0101ae8f3171abc894",
+      "published_sha256": "57527b05d438ba7ba6f9c9798efe3553af4cc616c54bff0101ae8f3171abc894",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0055.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0055.json",
+      "bytes": 2161,
+      "original_sha256": "b63ac6a399123caa65994eeffde54b70d920b323bde1930c5ce08ea0eddfedeb",
+      "published_sha256": "b63ac6a399123caa65994eeffde54b70d920b323bde1930c5ce08ea0eddfedeb",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0056.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0056.json",
+      "bytes": 2116,
+      "original_sha256": "e3f64656d3f81c0c7737a319e6cf29db1be74970a495a0bcedd6df9d655d8b04",
+      "published_sha256": "e3f64656d3f81c0c7737a319e6cf29db1be74970a495a0bcedd6df9d655d8b04",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0057.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0057.json",
+      "bytes": 2294,
+      "original_sha256": "44c9feef8f1af7dfdb3a58f234fdc0b8832e71e001dd213540a9d5942b18e8d4",
+      "published_sha256": "44c9feef8f1af7dfdb3a58f234fdc0b8832e71e001dd213540a9d5942b18e8d4",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0058.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0058.json",
+      "bytes": 2397,
+      "original_sha256": "5241feff90ddac4c8c81e74deff3853ae2d50f4a63405aa588cf91ad5e9c90bb",
+      "published_sha256": "5241feff90ddac4c8c81e74deff3853ae2d50f4a63405aa588cf91ad5e9c90bb",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0059.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0059.json",
+      "bytes": 2421,
+      "original_sha256": "73bf8151b63cba3a7f97ca5971c5b00a35b11efed2f7b7b1bfd767e198cf2be9",
+      "published_sha256": "73bf8151b63cba3a7f97ca5971c5b00a35b11efed2f7b7b1bfd767e198cf2be9",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0060.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0060.json",
+      "bytes": 2277,
+      "original_sha256": "8c24337a3a3ad357d7284a98bab677f9e279817a14de70066ef900233b535a43",
+      "published_sha256": "8c24337a3a3ad357d7284a98bab677f9e279817a14de70066ef900233b535a43",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0061.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0061.json",
+      "bytes": 2278,
+      "original_sha256": "781ee34516c41883f662ccc1fc5ac411ea018b19ee780336ce50709051cdcd8f",
+      "published_sha256": "781ee34516c41883f662ccc1fc5ac411ea018b19ee780336ce50709051cdcd8f",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0062.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0062.json",
+      "bytes": 2297,
+      "original_sha256": "37b5b12e57be7d3c2c9aba819c12a162a5e51c0b5dd3e0497b9aef53e25b802a",
+      "published_sha256": "37b5b12e57be7d3c2c9aba819c12a162a5e51c0b5dd3e0497b9aef53e25b802a",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0063.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0063.json",
+      "bytes": 2116,
+      "original_sha256": "dbfcf89cc4fa64aaf5f5410642d917532c60e6bdea27afa9eecea916b8aef6a6",
+      "published_sha256": "dbfcf89cc4fa64aaf5f5410642d917532c60e6bdea27afa9eecea916b8aef6a6",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0064.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0064.json",
+      "bytes": 2023,
+      "original_sha256": "6216a12a7f711317df6fe34803e48fa4d5a2d60f4f76593d3e41643bd1312d81",
+      "published_sha256": "6216a12a7f711317df6fe34803e48fa4d5a2d60f4f76593d3e41643bd1312d81",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local/mathqa-test-0065.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local/mathqa-test-0065.json",
+      "bytes": 27304,
+      "original_sha256": "dee041ee03895d6795a30f4c54904a9f966432d3a29bf262d24e90440666c304",
+      "published_sha256": "dee041ee03895d6795a30f4c54904a9f966432d3a29bf262d24e90440666c304",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/discordance_repeats/mathqa-test-0062/local/repeat-01.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/discordance_repeats/mathqa-test-0062/local/repeat-01.json",
+      "bytes": 2523,
+      "original_sha256": "d7c1d0f3e1052cf11e4bcc6f94d1edc17f1c69e282adec99136e761ef2326ded",
+      "published_sha256": "d7c1d0f3e1052cf11e4bcc6f94d1edc17f1c69e282adec99136e761ef2326ded",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/discordance_repeats/mathqa-test-0062/local/repeat-02.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/discordance_repeats/mathqa-test-0062/local/repeat-02.json",
+      "bytes": 2523,
+      "original_sha256": "6ec47f2728b25d4dba8b805d37b496c36866fb2f064b94b0981586d8517e28f5",
+      "published_sha256": "6ec47f2728b25d4dba8b805d37b496c36866fb2f064b94b0981586d8517e28f5",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/discordance_repeats/mathqa-test-0062/local/repeat-03.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/discordance_repeats/mathqa-test-0062/local/repeat-03.json",
+      "bytes": 2524,
+      "original_sha256": "324c783f396370524034428d04394bad04b792020a2e6b349897217c7b8166f1",
+      "published_sha256": "324c783f396370524034428d04394bad04b792020a2e6b349897217c7b8166f1",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/discordance_repeats/mathqa-test-0062/official/repeat-01.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/discordance_repeats/mathqa-test-0062/official/repeat-01.json",
+      "bytes": 4250,
+      "original_sha256": "3fb599eaf56b78a7a7754545c390734e14821089b5eeccc9b7263729ab2ad439",
+      "published_sha256": "3fb599eaf56b78a7a7754545c390734e14821089b5eeccc9b7263729ab2ad439",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/discordance_repeats/mathqa-test-0062/official/repeat-02.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/discordance_repeats/mathqa-test-0062/official/repeat-02.json",
+      "bytes": 3797,
+      "original_sha256": "5441373be9beb4ef69620a5b4d502685d693a5583389597a45b0f7c20c5130fa",
+      "published_sha256": "5441373be9beb4ef69620a5b4d502685d693a5583389597a45b0f7c20c5130fa",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/discordance_repeats/mathqa-test-0062/official/repeat-03.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/discordance_repeats/mathqa-test-0062/official/repeat-03.json",
+      "bytes": 2854,
+      "original_sha256": "f068afa929612ddcabb92c1c5a13343266efba221877a061f89d7c087842dc49",
+      "published_sha256": "f068afa929612ddcabb92c1c5a13343266efba221877a061f89d7c087842dc49",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/discordance_repeats/mathqa-test-0062/summary.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/discordance_repeats/mathqa-test-0062/summary.json",
+      "bytes": 1790,
+      "original_sha256": "fa6515666601b4574b3bf4dee818d59dd452eeea060d0ec98d04a6854d89c040",
+      "published_sha256": "fa6515666601b4574b3bf4dee818d59dd452eeea060d0ec98d04a6854d89c040",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/discordance_repeats/mathqa-test-0065/official/repeat-01.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/discordance_repeats/mathqa-test-0065/official/repeat-01.json",
+      "bytes": 3751,
+      "original_sha256": "e6f0865d7236a70145e956f6b1603f5270bddc7d5f0e73f271fa200e4bc4263f",
+      "published_sha256": "e6f0865d7236a70145e956f6b1603f5270bddc7d5f0e73f271fa200e4bc4263f",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/discordance_repeats/mathqa-test-0065/official/repeat-02.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/discordance_repeats/mathqa-test-0065/official/repeat-02.json",
+      "bytes": 5281,
+      "original_sha256": "46558d164bda09658f74174aba7163d7be865abee4605ff2fe703a67ee89ce35",
+      "published_sha256": "46558d164bda09658f74174aba7163d7be865abee4605ff2fe703a67ee89ce35",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/discordance_repeats/mathqa-test-0065/official/repeat-03.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/discordance_repeats/mathqa-test-0065/official/repeat-03.json",
+      "bytes": 4377,
+      "original_sha256": "3e82cfdd36fe6484e0574f9425c0557dfe739c05fa2d1a3f290b90e21b47117a",
+      "published_sha256": "3e82cfdd36fe6484e0574f9425c0557dfe739c05fa2d1a3f290b90e21b47117a",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/discordance_repeats/mathqa-test-0065/summary.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/discordance_repeats/mathqa-test-0065/summary.json",
+      "bytes": 1426,
+      "original_sha256": "0a3cc37e7fd7ad933d0a955ce74916dfd79168b9ad0fa1a65bbde533313ec713",
+      "published_sha256": "0a3cc37e7fd7ad933d0a955ce74916dfd79168b9ad0fa1a65bbde533313ec713",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local_failed_attempts/mathqa-test-0031_deadline900_attempt1.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local_failed_attempts/mathqa-test-0031_deadline900_attempt1.json",
+      "bytes": 1616,
+      "original_sha256": "d6e11cf7e13bb962e146168efa0651882fd266d243ef4879c50eafa3a275b046",
+      "published_sha256": "d6e11cf7e13bb962e146168efa0651882fd266d243ef4879c50eafa3a275b046",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/local_failed_attempts/mathqa-test-0031_runtime_flags_ineffective_attempt2.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/local_failed_attempts/mathqa-test-0031_runtime_flags_ineffective_attempt2.json",
+      "bytes": 1617,
+      "original_sha256": "bf70197776a1d93bb1e40b72c6863eb66ad2ec3dfbf4fdc9fc7df51dc2779f50",
+      "published_sha256": "bf70197776a1d93bb1e40b72c6863eb66ad2ec3dfbf4fdc9fc7df51dc2779f50",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/raw/stopped_inflight_0065/status.json",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/stopped_inflight_0065/status.json",
+      "bytes": 391,
+      "original_sha256": "169d28df0a28d79e8c18be3480fd240ecd3697a111f68883cf8d1bab28f2359c",
+      "published_sha256": "169d28df0a28d79e8c18be3480fd240ecd3697a111f68883cf8d1bab28f2359c",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/analysis.md",
+      "source_relative_to_local_task": "评测/paired_protocol_v2/错误样本分析.md",
+      "bytes": 5416,
+      "original_sha256": "4c758f2c15a8e195cb73b52526ff63beae2108007e8d9caa89888c80c6119766",
+      "published_sha256": "4c758f2c15a8e195cb73b52526ff63beae2108007e8d9caa89888c80c6119766",
+      "redactions": []
+    },
+    {
+      "path": "accuracy/evaluation_protocol.md",
+      "source_relative_to_local_task": "快速精度验收协议.md",
+      "bytes": 5457,
+      "original_sha256": "b63d0dd3839b08bc5555409e03b4a18e87235a71260e16e6b6e20b30d2349bb5",
+      "published_sha256": "b63d0dd3839b08bc5555409e03b4a18e87235a71260e16e6b6e20b30d2349bb5",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/regressions/logs/components_v1.log",
+      "source_relative_to_local_task": "证据/发布候选日志/regressions/logs/components_v1.log",
+      "bytes": 2787,
+      "original_sha256": "ffd30caa095e168d578b6472a51bfa56cdd0a741e442d6d6cb1926c3a004cb6b",
+      "published_sha256": "ffd30caa095e168d578b6472a51bfa56cdd0a741e442d6d6cb1926c3a004cb6b",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/regressions/logs/components_v2.log",
+      "source_relative_to_local_task": "证据/发布候选日志/regressions/logs/components_v2.log",
+      "bytes": 3920,
+      "original_sha256": "d8884dcbe7e88a8b901c3023c8e113a2d492ba31ed137cc3a70377b5f9b7c969",
+      "published_sha256": "d8884dcbe7e88a8b901c3023c8e113a2d492ba31ed137cc3a70377b5f9b7c969",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/regressions/logs/test_cache_layout_v2.log",
+      "source_relative_to_local_task": "证据/发布候选日志/regressions/logs/test_cache_layout_v2.log",
+      "bytes": 7732,
+      "original_sha256": "941063e68d35b854eff0c5838aae10b3c4fda344a56c8a026ed69b03b4439456",
+      "published_sha256": "941063e68d35b854eff0c5838aae10b3c4fda344a56c8a026ed69b03b4439456",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/regressions/logs/test_folly_v1.log",
+      "source_relative_to_local_task": "证据/发布候选日志/regressions/logs/test_folly_v1.log",
+      "bytes": 966,
+      "original_sha256": "f141638143fcf5ee5f05068d17fbaac67530656fe00f556be2e818f4a5491641",
+      "published_sha256": "f141638143fcf5ee5f05068d17fbaac67530656fe00f556be2e818f4a5491641",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/regressions/logs/test_fp8_offline_v1.log",
+      "source_relative_to_local_task": "证据/发布候选日志/regressions/logs/test_fp8_offline_v1.log",
+      "bytes": 99,
+      "original_sha256": "cb5a733ab19a6025a26ee806d142c928977bdd95f37118914e5ba374fb4000e3",
+      "published_sha256": "cb5a733ab19a6025a26ee806d142c928977bdd95f37118914e5ba374fb4000e3",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/regressions/logs/test_kpool_fixture_binding_v2.log",
+      "source_relative_to_local_task": "证据/发布候选日志/regressions/logs/test_kpool_fixture_binding_v2.log",
+      "bytes": 98,
+      "original_sha256": "e8c2ebdecc6c68bd31c948de0b0c1dd4c57dd47d093194a6c1d241c65727824d",
+      "published_sha256": "e8c2ebdecc6c68bd31c948de0b0c1dd4c57dd47d093194a6c1d241c65727824d",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/regressions/logs/test_lifecycle_abi_v4.log",
+      "source_relative_to_local_task": "证据/发布候选日志/regressions/logs/test_lifecycle_abi_v4.log",
+      "bytes": 1379,
+      "original_sha256": "ab6b0ed7a625452cd7f39d7a83e187dd6e2f8f8253204ab360b81cf152e78d44",
+      "published_sha256": "ab6b0ed7a625452cd7f39d7a83e187dd6e2f8f8253204ab360b81cf152e78d44",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/regressions/logs/test_python_model_regressions_v1.log",
+      "source_relative_to_local_task": "证据/发布候选日志/regressions/logs/test_python_model_regressions_v1.log",
+      "bytes": 3459,
+      "original_sha256": "4271514d968f195645ba7152e57f0c8b9692d33eb80bfb43ae69a0fc10f749e3",
+      "published_sha256": "4271514d968f195645ba7152e57f0c8b9692d33eb80bfb43ae69a0fc10f749e3",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_long_deadline_router/service.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_long_deadline_router/service.log",
+      "bytes": 432329,
+      "original_sha256": "02da4c8e488ca8054f869f45c1d1983d945c8d6a4fe7fe9e14d65eaa426f42e9",
+      "published_sha256": "02da4c8e488ca8054f869f45c1d1983d945c8d6a4fe7fe9e14d65eaa426f42e9",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj10/rank0.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj10/rank0.log",
+      "bytes": 239374,
+      "original_sha256": "37016e165da5e6e8efffe5d0d9410d4a8ccb12ac29b9c28709456ae02bab805f",
+      "published_sha256": "37016e165da5e6e8efffe5d0d9410d4a8ccb12ac29b9c28709456ae02bab805f",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj10/rank1.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj10/rank1.log",
+      "bytes": 189121,
+      "original_sha256": "09a18609e424c6a17855d95ed59a3f708fac876895223edebbb8a1b7351a6e2d",
+      "published_sha256": "09a18609e424c6a17855d95ed59a3f708fac876895223edebbb8a1b7351a6e2d",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj10/rank2.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj10/rank2.log",
+      "bytes": 189139,
+      "original_sha256": "01fe7210018ac9366da06389555499d0569764f9877f319fa28b1e18c808ca04",
+      "published_sha256": "01fe7210018ac9366da06389555499d0569764f9877f319fa28b1e18c808ca04",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj10/rank3.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj10/rank3.log",
+      "bytes": 189187,
+      "original_sha256": "6f9c3bdc3074988dd93bd2b338be4bef759b89fd6de193c814a4d39d840a6ecb",
+      "published_sha256": "6f9c3bdc3074988dd93bd2b338be4bef759b89fd6de193c814a4d39d840a6ecb",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj10/rank4.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj10/rank4.log",
+      "bytes": 189180,
+      "original_sha256": "d08ccff67c4851d18b21da40988fb492fa7476d2bbd33acb30bf7882871b39a6",
+      "published_sha256": "d08ccff67c4851d18b21da40988fb492fa7476d2bbd33acb30bf7882871b39a6",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj10/rank5.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj10/rank5.log",
+      "bytes": 189165,
+      "original_sha256": "c7f5ee9cbaa85429a7cb021550a56d47a8603b072777b7ba75bf065bdc50869b",
+      "published_sha256": "c7f5ee9cbaa85429a7cb021550a56d47a8603b072777b7ba75bf065bdc50869b",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj10/rank6.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj10/rank6.log",
+      "bytes": 189425,
+      "original_sha256": "8946d5c4a318208f4b9dcb3cbb6fa992e9aaacfe0ca78b8751cd116d8efbd8c0",
+      "published_sha256": "8946d5c4a318208f4b9dcb3cbb6fa992e9aaacfe0ca78b8751cd116d8efbd8c0",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj10/rank7.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj10/rank7.log",
+      "bytes": 189130,
+      "original_sha256": "a0e03d6fc00168f7aaa7554a2288feb2e40812d0570947dd41f9028ecd81b32e",
+      "published_sha256": "a0e03d6fc00168f7aaa7554a2288feb2e40812d0570947dd41f9028ecd81b32e",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj10/status.json",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj10/status.json",
+      "bytes": 257,
+      "original_sha256": "de7f78f641d91c296968efd02bedb3ac331eb602312d5bf816c5b47a8f7ac91d",
+      "published_sha256": "de7f78f641d91c296968efd02bedb3ac331eb602312d5bf816c5b47a8f7ac91d",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj9/rank0.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj9/rank0.log",
+      "bytes": 86886,
+      "original_sha256": "3423c3c83bc6e37208a9c90208f765062a658a529b1720f145c08af9e4d7457c",
+      "published_sha256": "3423c3c83bc6e37208a9c90208f765062a658a529b1720f145c08af9e4d7457c",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj9/rank1.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj9/rank1.log",
+      "bytes": 23117,
+      "original_sha256": "76cb9d3a0a6daffc7f869788e40f37f1cd2be065de4efd79b5e7df12355da4fd",
+      "published_sha256": "76cb9d3a0a6daffc7f869788e40f37f1cd2be065de4efd79b5e7df12355da4fd",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj9/rank2.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj9/rank2.log",
+      "bytes": 23117,
+      "original_sha256": "82a8700c3780baac4aa256e37625c25ee437d7cd854351a9575d3f13a7956581",
+      "published_sha256": "82a8700c3780baac4aa256e37625c25ee437d7cd854351a9575d3f13a7956581",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj9/rank3.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj9/rank3.log",
+      "bytes": 23117,
+      "original_sha256": "0e083783abe0f1a035c56ad74ba517bca4c20fe06e1371ec1664a6912b16e624",
+      "published_sha256": "0e083783abe0f1a035c56ad74ba517bca4c20fe06e1371ec1664a6912b16e624",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj9/rank4.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj9/rank4.log",
+      "bytes": 23117,
+      "original_sha256": "e4de66aa0c511eb13c023b527e9ba19f6f481c5172d33dc864c87dae51578d77",
+      "published_sha256": "e4de66aa0c511eb13c023b527e9ba19f6f481c5172d33dc864c87dae51578d77",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj9/rank5.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj9/rank5.log",
+      "bytes": 23117,
+      "original_sha256": "538ce40803ffec95e98cd4723f66c86bf741d59c5bf9999c79adb69424115463",
+      "published_sha256": "538ce40803ffec95e98cd4723f66c86bf741d59c5bf9999c79adb69424115463",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj9/rank6.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj9/rank6.log",
+      "bytes": 23117,
+      "original_sha256": "95fc2aa1c95d0fee17c038b7f7acd3f428bc427678066132492c7b3068b77cfc",
+      "published_sha256": "95fc2aa1c95d0fee17c038b7f7acd3f428bc427678066132492c7b3068b77cfc",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj9/rank7.log",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj9/rank7.log",
+      "bytes": 23117,
+      "original_sha256": "6e545f57723048d46c6f2e4ba2a8ecabdb586764d21760284027a575e8b970d0",
+      "published_sha256": "6e545f57723048d46c6f2e4ba2a8ecabdb586764d21760284027a575e8b970d0",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/runtime/logs/full_pd_v1_sj9/status.json",
+      "source_relative_to_local_task": "证据/发布候选日志/runtime/logs/full_pd_v1_sj9/status.json",
+      "bytes": 249,
+      "original_sha256": "1fb3e6e02169b784f01d94ec91077ca3806a8946b29ebdf585c9cdf060114e70",
+      "published_sha256": "1fb3e6e02169b784f01d94ec91077ca3806a8946b29ebdf585c9cdf060114e70",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/smoke/logs/full_pd_v1_sj10/basic/done.json",
+      "source_relative_to_local_task": "证据/发布候选日志/smoke/logs/full_pd_v1_sj10/basic/done.json",
+      "bytes": 16,
+      "original_sha256": "9f36571880fede9f527cb8568099eceb8ee5ee1200b888cd1e56ad8e04f6bb3a",
+      "published_sha256": "9f36571880fede9f527cb8568099eceb8ee5ee1200b888cd1e56ad8e04f6bb3a",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/smoke/logs/full_pd_v1_sj10/basic/question0.json",
+      "source_relative_to_local_task": "证据/发布候选日志/smoke/logs/full_pd_v1_sj10/basic/question0.json",
+      "bytes": 984,
+      "original_sha256": "964c280b1f53950d231ec49178c438e325d25b99dc52fd2a06be38bd7215f85f",
+      "published_sha256": "964c280b1f53950d231ec49178c438e325d25b99dc52fd2a06be38bd7215f85f",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/smoke/logs/full_pd_v1_sj10/basic/question1.json",
+      "source_relative_to_local_task": "证据/发布候选日志/smoke/logs/full_pd_v1_sj10/basic/question1.json",
+      "bytes": 1001,
+      "original_sha256": "eabc9adc1a8a084b081a188de66c2bce6c362a48a6d4d9c4f11cad0ee8f65e20",
+      "published_sha256": "eabc9adc1a8a084b081a188de66c2bce6c362a48a6d4d9c4f11cad0ee8f65e20",
+      "redactions": []
+    },
+    {
+      "path": "raw_logs/smoke/logs/full_pd_v1_sj10/basic/question2.json",
+      "source_relative_to_local_task": "证据/发布候选日志/smoke/logs/full_pd_v1_sj10/basic/question2.json",
+      "bytes": 1211,
+      "original_sha256": "08f50d492ca4983a848e415c16c450d870e3f0f1fe1b4b9c263bf39123d7f923",
+      "published_sha256": "08f50d492ca4983a848e415c16c450d870e3f0f1fe1b4b9c263bf39123d7f923",
+      "redactions": []
+    },
+    {
+      "path": "performance/README.md",
+      "source_relative_to_local_task": "性能/本轮未运行说明.md",
+      "bytes": 892,
+      "original_sha256": "23e163d5a10fe2cd03e53d8705d3353a090aed731a9de4ff62b414d06b4ca9eb",
+      "published_sha256": "23e163d5a10fe2cd03e53d8705d3353a090aed731a9de4ff62b414d06b4ca9eb",
+      "redactions": []
+    },
+    {
+      "path": "performance/status.json",
+      "source_relative_to_local_task": "性能/执行状态.json",
+      "bytes": 427,
+      "original_sha256": "e7bb92b3c4852d0bc843e79ddd420bf6716fc6ff2642a99ec85b5071db1cb7af",
+      "published_sha256": "e7bb92b3c4852d0bc843e79ddd420bf6716fc6ff2642a99ec85b5071db1cb7af",
+      "redactions": []
+    },
+    {
+      "path": "performance/metrics_guide.md",
+      "source_relative_to_local_task": "性能/指标解释与结果读取方法.md",
+      "bytes": 2009,
+      "original_sha256": "e67d8288f3c4475721633a7aab9ace282ed8962366cbcd2d0e503d0f7dc0afa3",
+      "published_sha256": "e67d8288f3c4475721633a7aab9ace282ed8962366cbcd2d0e503d0f7dc0afa3",
+      "redactions": []
+    },
+    {
+      "path": "performance/planned_protocol.md",
+      "source_relative_to_local_task": "性能基线测量协议.md",
+      "bytes": 5479,
+      "original_sha256": "4c50ee12c741f3875aa8bf614e2c60ab7f92587e68d5a638292f46d6b8718f79",
+      "published_sha256": "4c50ee12c741f3875aa8bf614e2c60ab7f92587e68d5a638292f46d6b8718f79",
+      "redactions": []
+    },
+    {
+      "path": "regression_results.md",
+      "source_relative_to_local_task": "回归测试结果与覆盖边界.md",
+      "bytes": 2485,
+      "original_sha256": "04433168b6bd73bb797b4030f7f73f29ff03ae75cad2eac627d901d636b4a47b",
+      "published_sha256": "04433168b6bd73bb797b4030f7f73f29ff03ae75cad2eac627d901d636b4a47b",
+      "redactions": []
+    },
+    {
+      "path": "provenance/source_binary_runtime_manifest.json",
+      "source_relative_to_local_task": "源码与编译产物清单.json",
+      "bytes": 41940,
+      "original_sha256": "bfb2d9d6b645967ac37dcf43985223d664423f7bab840c3bf6b56c8afc835f1e",
+      "published_sha256": "bfb2d9d6b645967ac37dcf43985223d664423f7bab840c3bf6b56c8afc835f1e",
+      "redactions": []
+    },
+    {
+      "path": "provenance/actual_low_effort_tokens_verified.json",
+      "source_relative_to_local_task": "证据/actual_low_effort_tokens_verified.json",
+      "bytes": 903,
+      "original_sha256": "6c3b83cfbcd59b0c418de0b04660823d3b067747a6886782d43b2e685f07b5cc",
+      "published_sha256": "6c3b83cfbcd59b0c418de0b04660823d3b067747a6886782d43b2e685f07b5cc",
+      "redactions": []
+    },
+    {
+      "path": "provenance/local_http_keepalive_recovery_0065.json",
+      "source_relative_to_local_task": "证据/local_http_keepalive_recovery_0065.json",
+      "bytes": 1437,
+      "original_sha256": "433e53bcbd43d2c1240e51f75471ec2ba41ca3164c70a7822beb2e07dc87dc4f",
+      "published_sha256": "433e53bcbd43d2c1240e51f75471ec2ba41ca3164c70a7822beb2e07dc87dc4f",
+      "redactions": []
+    },
+    {
+      "path": "provenance/mate_contract_summary_for_publication.json",
+      "source_relative_to_local_task": "证据/mate_contract_summary_for_publication.json",
+      "bytes": 624,
+      "original_sha256": "2eb424f5a0a1389bda8318f386aed8cd6bc675c543b003843cff7951e984e71a",
+      "published_sha256": "2eb424f5a0a1389bda8318f386aed8cd6bc675c543b003843cff7951e984e71a",
+      "redactions": []
+    },
+    {
+      "path": "README.md",
+      "source_relative_to_local_task": "GitHub结果README.md",
+      "bytes": 9183,
+      "original_sha256": "0f33d42118758f5981fc3b572a874aed05b3a150b03ccf88695a838ce26ba0c8",
+      "published_sha256": "0ff80dfe07c18442354c21a3187b19622061b0e7a05962754d7a4e7ed3de3768",
+      "redactions": [
+        "added_offline_verification_usage"
+      ]
+    },
+    {
+      "path": "model_adaptation.md",
+      "source_relative_to_local_task": "对glm-5.3-flash模型适配的说明/对GLM53flash的模型结构适配说明.md",
+      "bytes": 40533,
+      "original_sha256": "dc888cf500da37a26b6f20bdd8294a379d3205cf2a943aa15a9570bcca17be59",
+      "published_sha256": "c94359810b962a0fc41636e436b44631b38f6d65f33799bce11b10d4dddb2f3e",
+      "redactions": [
+        "documentation_links_use_immutable_source_commit"
+      ]
+    },
+    {
+      "path": "verify_results.py",
+      "source_relative_to_local_task": "verify_published_partial_results.py",
+      "bytes": 2535,
+      "original_sha256": "8566954dddf1432fbb296baa9781f697c1ff8f7d8de02f57583445d253971f36",
+      "published_sha256": "8566954dddf1432fbb296baa9781f697c1ff8f7d8de02f57583445d253971f36",
+      "redactions": []
+    }
+  ]
+}

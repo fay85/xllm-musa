@@ -1,0 +1,73 @@
+{
+  "question_id": "mathqa-test-0062",
+  "endpoint": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\ntoday is thursday . i came home from a trip 3 days before the day after last monday . how many days have i been home ?\n\nA. 1 day\nB. 2 days\nC. 7 days\nD. 6 days\nE. 10 days"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false,
+    "model": "glm-5.3-flash"
+  },
+  "ground_truth": "D",
+  "started_at": "2026-11-04T14:20:44.524855+08:00",
+  "protocol_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+  "scorer_version": "final-visible-v2-think-boundary",
+  "client_read_timeout_seconds": 900,
+  "http_status": 200,
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "**D**\n\nLast Monday was 6 days ago (Saturday). The day after that Monday was Tuesday; 3 days before Tuesday was the previous Saturday. From Saturday to today (Thursday) = 6 days.\n\nANSWER: D",
+          "reasoning_content": "Today Thursday. Last Monday = 6 days ago (if today is Thursday, last Monday is previous week? Day after last Monday = last Tuesday, 3 days before = previous Saturday. From Saturday to Thursday: 6 days.",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1793773247,
+    "id": "20261104142044abf2e5f77ca04373",
+    "model": "glm-5.3-flash",
+    "object": "chat.completion",
+    "request_id": "20261104142044abf2e5f77ca04373",
+    "usage": {
+      "completion_tokens": 96,
+      "completion_tokens_details": {
+        "reasoning_tokens": 47
+      },
+      "prompt_tokens": 116,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 212
+    }
+  },
+  "final_content": "**D**\n\nLast Monday was 6 days ago (Saturday). The day after that Monday was Tuesday; 3 days before Tuesday was the previous Saturday. From Saturday to today (Thursday) = 6 days.\n\nANSWER: D",
+  "reasoning_boundary_present": false,
+  "reasoning_separate_field": true,
+  "answer": "D",
+  "format_error": null,
+  "truncated": false,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 96,
+    "completion_tokens_details": {
+      "reasoning_tokens": 47
+    },
+    "prompt_tokens": 116,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 212
+  },
+  "correct": true,
+  "elapsed_seconds": 2.8681667409837246
+}

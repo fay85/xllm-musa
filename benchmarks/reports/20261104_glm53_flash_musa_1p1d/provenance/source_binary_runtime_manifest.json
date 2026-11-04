@@ -1,0 +1,1060 @@
+{
+  "git_commit": "30b7051ef1c840a9635794e6950f7507ee01b829",
+  "base_commit": "7005a557b577955407f619adf7871bbcff19cb34",
+  "branch": "xiaopang1104benchmark1P1D",
+  "github": "https://github.com/fay85/xllm-musa/tree/xiaopang1104benchmark1P1D",
+  "binary_sha256": "6b152a270bd30755ecf9788097f0395af1682a5234d9e3e7f3285c744df0b609",
+  "binary_name": "xllm_glm_v4",
+  "build_image": "sha256:09b8f5f4a467fc73332dee57b36a2e5610ba3264357dfc87f103cf7bd7430be3",
+  "build_mate": "0.2.7",
+  "runtime_mate": "0.2.8.post1",
+  "runtime_image_sj10": "sha256:e4bb9ca184b6a0e0bce8bc216bf4380c162aa15b19a21d5c6f8729c95314dad5",
+  "precision": "FP8 checkpoint expanded per TP shard to BF16; not native FP8 inference",
+  "files": [
+    {
+      "path": "tests/core/framework/kv_cache/CMakeLists.txt",
+      "sha256": "d878e505f33abee5a02521e43014eeae289edbb7973cca4bc1c22512f444501b"
+    },
+    {
+      "path": "tests/core/framework/kv_cache/cache_layout_builder_hybrid_mla_test.cpp",
+      "sha256": "6d48fa5ac2543d81509e9e3fe5bffdf99033879b5b84208ddbe21769ed5f578c"
+    },
+    {
+      "path": "tests/core/runtime/xservice_client_lifecycle_test.cpp",
+      "sha256": "2ee91a8a7b5b6ecbcec53e15c0eba33dc9f4d7dd9302880d64a14d2c032b278d"
+    },
+    {
+      "path": "tests/core/scheduler/CMakeLists.txt",
+      "sha256": "4407b332f86fe17cb55be4437b19a4c54efee6658441fa0cec2b41063a88e7f9"
+    },
+    {
+      "path": "tests/core/util/CMakeLists.txt",
+      "sha256": "d4c8763c0bb118d0f09e5abf7df0dd6656ada414288f19db3c9131059f9fdc2b"
+    },
+    {
+      "path": "tests/core/util/folly_bthread_compat_test.cpp",
+      "sha256": "25c33cc5ed9cd19993cb750b00cd08202cf9f07c76cb694b60ee910bd5f0269d"
+    },
+    {
+      "path": "tests/musa/test_glm_kda.py",
+      "sha256": "49d9882e0cb941762b4d86df111fb63d6aef282f6d8585d497407d69ccc8da7b"
+    },
+    {
+      "path": "tests/musa/test_glm_mate_primitives.py",
+      "sha256": "0ad3f7408cd71e08e3fe572fc36dcfa6b8757fe0063a6bb9b3060644090b9a5b"
+    },
+    {
+      "path": "tests/python/conftest.py",
+      "sha256": "19417cefdd25ee66a78c2b236aedba89a8520c7aa3f17145a653f9cfe179c395"
+    },
+    {
+      "path": "tests/python/test_fp8_block_weight.py",
+      "sha256": "51563b78441edeecfa3d9a8dcc867fef6d6f52fa2ab6eca3aa92d11d43f1c922"
+    },
+    {
+      "path": "xllm/core/distributed_runtime/llm_master.cpp",
+      "sha256": "879e4dffc0051fdfef50a7911e7c3b34a04aadb8b55707a0e8515d8b4beb000b"
+    },
+    {
+      "path": "xllm/core/framework/kv_cache/cache_layout_builder.cpp",
+      "sha256": "8d0aa29ccaa06b39e237bfeaf6815d16abface11c3e337266615d93b06079204"
+    },
+    {
+      "path": "xllm/core/runtime/py_executor_impl.cpp",
+      "sha256": "b9aa73804081023dce4995f379f559f536456c8696f3f5607fce403e6eadf7d1"
+    },
+    {
+      "path": "xllm/core/runtime/xservice_client.cpp",
+      "sha256": "862efb79a97cec711a2d50cd563b7ead519842229d4cb8be7d02dd09e3747a48"
+    },
+    {
+      "path": "xllm/core/runtime/xservice_client.h",
+      "sha256": "0de26211f4b748c222363ac2b990078a540a22b3948f88c1c3edd03e1c8f99d6"
+    },
+    {
+      "path": "xllm/core/util/CMakeLists.txt",
+      "sha256": "b6e7705549a69a10ca7599f09a8954260011c3218f17aaa69a983a669317aa2a"
+    },
+    {
+      "path": "xllm/core/util/folly_bthread_compat.h",
+      "sha256": "211661cde8ef3b28b0d7682a6db0087fba5621060c4198e755f5ec5a10593229"
+    },
+    {
+      "path": "xllm/models/model_registry.cpp",
+      "sha256": "673d4a26fbe19643b5e22046d5ecc63fd232a293e9bb625e920e645b45265e09"
+    },
+    {
+      "path": "xllm/models/models.h",
+      "sha256": "7e8446a4929e5f45b643a65e69447a3d276787dab072ca547da9ae5188944ea8"
+    },
+    {
+      "path": "xllm/python/README.md",
+      "sha256": "7d07b6ba7afa4158244f1cfc962149624584510b257a095241a8edc30927eb2c"
+    },
+    {
+      "path": "xllm/python/__init__.py",
+      "sha256": "42677600520658368d0a9a98024ec63a0411960a2224add8f9879c347a591478"
+    },
+    {
+      "path": "xllm/python/_npu_bootstrap.py",
+      "sha256": "a4ed4d14f74740aa5460049b23bef1682a236a3043d7f0d6e8e47e15d7bfa2dd"
+    },
+    {
+      "path": "xllm/python/attention/__init__.py",
+      "sha256": "121d0a13c5ed320223172084a35453a83b85cc10eb740d5f9bd4bed183b06d7c"
+    },
+    {
+      "path": "xllm/python/attention/backend.py",
+      "sha256": "de5e7dd0f012d90aeb00379bf87663c72c1d965eed20ff8a6eddda1b47c2abb8"
+    },
+    {
+      "path": "xllm/python/attention/csa2_attention.py",
+      "sha256": "87d78d0595029742679a821c8b9c875e2de5f8ede960c60f99185b2aa8b8b628"
+    },
+    {
+      "path": "xllm/python/attention/csa_attention.py",
+      "sha256": "ad5907f329fb61ec952162ebd4a1e8f06f415f479121ca0ca35db8ff99823916"
+    },
+    {
+      "path": "xllm/python/attention/dense_dcp_backend.py",
+      "sha256": "625e18b1fcfbaedea1dbecc34fe1ec0b0137d07ebc83e6fbd81bdd7ef753eaa4"
+    },
+    {
+      "path": "xllm/python/attention/dense_dcp_execution.py",
+      "sha256": "625971c57408136da1614fc849c01f8ab6843f706d15336951d6be26836d8ee0"
+    },
+    {
+      "path": "xllm/python/attention/dense_dcp_metadata.py",
+      "sha256": "e9d67f32d76e2f3f67873c9b2ec377d40c9ac53e109922cf37ed4c9b1b083579"
+    },
+    {
+      "path": "xllm/python/attention/dense_dcp_metadata_builder.py",
+      "sha256": "d0f07c12759dbf58d69e931a224e909372baca30bbc0c9cb650aa772234f40e5"
+    },
+    {
+      "path": "xllm/python/attention/dsa_attention.py",
+      "sha256": "6cdb8878da14bf49dfaa7bcbc29d1451e09af52ddbf3807af8846c83411c27eb"
+    },
+    {
+      "path": "xllm/python/attention/dsa_metadata.py",
+      "sha256": "43cfab946f047be5aca94e97f81eb5e62cb02b158e6217c331ff9a0bc5066d05"
+    },
+    {
+      "path": "xllm/python/attention/expanded_decode_metadata.py",
+      "sha256": "7b0628af709c14b74ac81572722f68b5e7496e257b2366e8021a89c06f541f27"
+    },
+    {
+      "path": "xllm/python/attention/flashinfer.py",
+      "sha256": "7a48b789a9b59ee05f14b9a3e3b4e5addd457bf07f2110053a752ebd0fa28085"
+    },
+    {
+      "path": "xllm/python/attention/kda_linear_attention.py",
+      "sha256": "758aa725fda51190761cf95086a9593e921a3895941b9b9c8c619fd1af2aa664"
+    },
+    {
+      "path": "xllm/python/attention/kv_shard_layout.py",
+      "sha256": "d0c71f647f0a921fe21c8124fc5c12db63c11537f15858ff516ad0120f4c2b3d"
+    },
+    {
+      "path": "xllm/python/attention/musa_glm_reference.py",
+      "sha256": "a831a2e7a462c66cf8bcac75c9a19a643232c180fbd73a904ab84147ac441ac7"
+    },
+    {
+      "path": "xllm/python/attention/npu_paged_attention.py",
+      "sha256": "4ff74377212b59a1f9b2b5312914f28e62050b785a4147ea72ed6753803f657d"
+    },
+    {
+      "path": "xllm/python/attention/sfa_dcp_backend.py",
+      "sha256": "33eebd4d73171929e22497188b79f65f5f7b8a9e630e7220438fc68e4de113f6"
+    },
+    {
+      "path": "xllm/python/distributed/__init__.py",
+      "sha256": "98b156fb40b661da99c4f1f17a237726ee42d81c8e1d81b78c272fa487fccd69"
+    },
+    {
+      "path": "xllm/python/distributed/all_gather_nz_bytes.py",
+      "sha256": "0ee0f75f7976f0963a7c1af48736508dc5f77e0e302e158957bdfe7533a5b1d5"
+    },
+    {
+      "path": "xllm/python/distributed/collectives.py",
+      "sha256": "e873649686c58522f6e9a673d13d3b566ff79459f4b385566b5d15b5250c5a8b"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/__init__.py",
+      "sha256": "d0f00b8a5c95aa911f26085f32cb97eac4d051c3116678f6197db141bf617e24"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/_custom_op.py",
+      "sha256": "cd63f332fc58f6cd4ec667722e47612d8148b90c15364694e1d142a2941a0344"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/activation.py",
+      "sha256": "970bed17e6935a30f6c5e96c7fc22dfc89ff7d612d00d6d4d76b82fffa774bae"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/attention.py",
+      "sha256": "31580f8c571f9dae4f05c182d4d2f2d227579b564cda6c5ac7a33fbf79f57c86"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/causal_conv1d.py",
+      "sha256": "487c0fc515eeec893442fe26992a694dfa05d1681eb44e4ffae40bfabc96407f"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/flashinfer/__init__.py",
+      "sha256": "22b59590939aaf341a659589eb9e13f563c0c3df24eaa32f3847e94405b6015c"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/flashinfer/gated_delta_net.py",
+      "sha256": "b0a4f7644d47293578ac976021bdbdf28c85bad82d7844c1c85384038dc92f65"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/gated_delta_net.py",
+      "sha256": "4c44960af953cd9dd923fb3544c9a5443944506df62ea07dcb80ef1c7c217c66"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/linear.py",
+      "sha256": "7655c9acae4ac31c57cc83df6316139e96be29295b4a02388956fb77f1233103"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/mla.py",
+      "sha256": "29d03433ae0dc18a9e384a01f9e8b423087b30163b1e4be9ce47420b7399ada4"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/moe.py",
+      "sha256": "2df6ed6c5555eeee0d8a041d32f658499df4777b4e0f33ffcb2e2be77ac3ae74"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/normalization.py",
+      "sha256": "25db0086f87e0159c985041f4a80718c8d40659e0db672a1f890cabdb1cd72ea"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/quantization.py",
+      "sha256": "3eb12bb8635cc6bf44ad0473b8a0c9cc08a531aa70267171277d9fa9509c90e8"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/rotary_embedding.py",
+      "sha256": "0d282abffbfacbcd9e77d8f53c947b7454fc528d102bc100ade74e709d9837a4"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/sparse_attention.py",
+      "sha256": "f0439caf3412d14f8d1e5556a7919c5b2d65b99aceae0aa10c5c6e563bff0277"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/__init__.py",
+      "sha256": "f3044b2900a383c7dcdceb23491c616465985180a1f2887c9206afa65d585abc"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/causal_conv1d.py",
+      "sha256": "b8e40a22fdd33d915e60e7ae1baa082fd690eff807b5f4bc21986db9eaa2ee2f"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/LICENSE",
+      "sha256": "1350bfbef13ce4d3d3bdaa2f1fc4b1d1117d846732a2a62f891a67f3d5356d0d"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/__init__.py",
+      "sha256": "d00a2bebd883dd1d1bf79615a4e65e3d4009862c13b3b6fabe5f2d036e0b7f62"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/chunk.py",
+      "sha256": "3a0457a5deb838953a7cc8fa5dca395886af1097cb52fb09ae6161718780aeba"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/chunk_delta_h.py",
+      "sha256": "c7c0d6dace2fac13ec7662e7bffd59be9e01d471dffc1494547f1b2f424882ee"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/chunk_o.py",
+      "sha256": "9388ccd8fffdf5a46b4c903f30488be90c41e4b52953870cfc369f10c34f4fb1"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/chunk_scaled_dot_kkt.py",
+      "sha256": "1c7cc9a4908320f951a122e10463931d86ba50c7407e59f7f6618daea019b29e"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/cumsum.py",
+      "sha256": "e2a25718ae4e7651d83a98a31bce6903f6bbf5e13bc37fc71c09462a2ae1717d"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/fused_recurrent.py",
+      "sha256": "9e57970230741d8be238ca791901617cb03cc2dd37a6b61fc20f258a9b0e4e58"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/index.py",
+      "sha256": "3ebfec4ca810ef6bf735a4b8c16c2cc485ca2a988b2eb269b3cca84e9b932161"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/kda.py",
+      "sha256": "18039a52f641eab21a68d08f4da80f4f10cc70711ad99deef3141cce446dc9e4"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/kda_chunk_delta_h.py",
+      "sha256": "390960db0f521b0cb33c842023d6d9ff8341c48ae37d308d06f477c642b7a218"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/kda_intra.py",
+      "sha256": "765baa810f1b6e3f6e2b4a18016b748ad82aaf0da727b233f17082bf42f3e19b"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/kda_intra_token_parallel.py",
+      "sha256": "e424ff05b51cbc5f2d20f61dd4d004a23488be316671b21917f0f4809387d497"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/kda_l2norm.py",
+      "sha256": "88f47ada238e1be6bf0e873a732fdb94bf04afd4c39349c3e1f1d0fbaafdf57b"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/kda_op.py",
+      "sha256": "49775f3d137cc995701e7fa0aff7f76f0aed9c922e7ae6952b97357fbf60cf3a"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/op.py",
+      "sha256": "8a6441f4ed8a63999d2b3ee8fcf780385dbaa232df797214c1961df4dbec0c10"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/solve_tril.py",
+      "sha256": "70083014c1447a576f8e7ffdaf60eada8f3ccb533e09a3391aa09b92824f99b1"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/utils.py",
+      "sha256": "e67943033b8101edd84efa22e3ae7a97425100ab43df2f3aadcbe09b40e7ddfe"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fla/wy_fast.py",
+      "sha256": "9cf711cf4c9b921c91de5665fea421c94238d4acf4dced43a5b471e4e324de2c"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/fused_moe.py",
+      "sha256": "b0db17066cb86057c95e75d89dc6a81fb0a7e047637021c94cb3a27af700cd03"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/gated_delta_net.py",
+      "sha256": "3edb52354d65668c2d455e8e86d82036ffe5fd6c557e5180bd7d6d5ccb9ef6e6"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/gdn_prefill.py",
+      "sha256": "ea3a040197704471d50d714591141ad18330e79356fb3023e730607484132eb6"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/l2_norm.py",
+      "sha256": "873fbf38419158e6dd8dafa7f713e04c26679083ba36a0c3c3d715877cc7bf5e"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/rms_norm.py",
+      "sha256": "58445bb630bfa438b8c6d09487c8d8f65415ce458957d776ae11f0357f9540f3"
+    },
+    {
+      "path": "xllm/python/kernels_cuda/triton/silu_and_mul.py",
+      "sha256": "11ed0fee878c34d29c17713603f4f2ec262795ace0e0c8cf0030bf7a3f3ed408"
+    },
+    {
+      "path": "xllm/python/kernels_musa/__init__.py",
+      "sha256": "57e2f80eb6ed14c87456ec7020513fb2b676090cd413fcd63d19f2e7e61aebd4"
+    },
+    {
+      "path": "xllm/python/kernels_musa/glm_reference.py",
+      "sha256": "e2d5050751e68fbe07b17c6a91224d4b90c0f6aa891c207e9c65a98f4eb0449c"
+    },
+    {
+      "path": "xllm/python/kernels_musa/kda.py",
+      "sha256": "6d445c38685dcb767a9a3665431affad9001bc53ac61f47c8d4cb2f6bd96dbb1"
+    },
+    {
+      "path": "xllm/python/kernels_musa/mate_ops.py",
+      "sha256": "e771ef2d9cd09eefe8f6ea7ffb89d83e04ece4f2bed6f597fbaed4f659f4c64a"
+    },
+    {
+      "path": "xllm/python/kernels_npu/__init__.py",
+      "sha256": "255f4c3f2490388b75e2969cd68a6f104c6b4caa874265d100067f1209ead682"
+    },
+    {
+      "path": "xllm/python/kernels_npu/_custom_op.py",
+      "sha256": "021310a8cd7e5e70da45499c6635f91d8a7dc3ce3cf61f459abd1857280fb02b"
+    },
+    {
+      "path": "xllm/python/kernels_npu/activation.py",
+      "sha256": "b52d619f03ae927238c5d6cd1718d223808fc189bf283352fa6e29dbed52f8db"
+    },
+    {
+      "path": "xllm/python/kernels_npu/attention.py",
+      "sha256": "e52537a6f127c431dd5a46745aceba7f28e5e1076730d380e99ebf03378d465f"
+    },
+    {
+      "path": "xllm/python/kernels_npu/causal_conv1d.py",
+      "sha256": "c134e7bce69a366b0a66befdfcd5fb66027e36a894842a0a2258e71af1952ebe"
+    },
+    {
+      "path": "xllm/python/kernels_npu/dsa.py",
+      "sha256": "49b69f872ffad595e52c46f2ea825d3b673a126ed2abd175acb4a3a35c50b4ba"
+    },
+    {
+      "path": "xllm/python/kernels_npu/gated_delta_net.py",
+      "sha256": "f9fb996c6bb9d8d9ca5e5b588b6f0782d05f2404902af178cc4c99b79152d41c"
+    },
+    {
+      "path": "xllm/python/kernels_npu/hyper_connection.py",
+      "sha256": "56f7a40cc63c1ae558050796629dff576f0cf59f022f0c48f80fe1cd8cdb5034"
+    },
+    {
+      "path": "xllm/python/kernels_npu/linear.py",
+      "sha256": "9f1f73030691a47087d7f6707500625b0bc8e5ad44768387bdc765e56edce425"
+    },
+    {
+      "path": "xllm/python/kernels_npu/mla.py",
+      "sha256": "b4f9debdade70e39cbc46aae9d95a6a45d62d19bff85602892f680f9c700aa07"
+    },
+    {
+      "path": "xllm/python/kernels_npu/moe.py",
+      "sha256": "0478990a08417844ad3373a7a57cafa6ebe10f49c4e1da55bc886635dbfb58b4"
+    },
+    {
+      "path": "xllm/python/kernels_npu/normalization.py",
+      "sha256": "2de1674a3b7e61d653e34c25ebfa10d3513125d100d9df6affe02ce0ff9604fd"
+    },
+    {
+      "path": "xllm/python/kernels_npu/quantization.py",
+      "sha256": "b530f56eba25989fb516b84d67cd8dd1132473d4b2bbb6b82f56ad616d5db57e"
+    },
+    {
+      "path": "xllm/python/kernels_npu/rotary_embedding.py",
+      "sha256": "29f58ed60fb127231755b339b01736d10c4907650cd4731054e114b864d46396"
+    },
+    {
+      "path": "xllm/python/kernels_npu/sparse_attention.py",
+      "sha256": "7df159c3c13a10a26ac751331967cffe28e459766b25af5fc2e71113a0611a87"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/__init__.py",
+      "sha256": "21fb1a0bedeb3e56f126c81b0604d2309b603396f7ce08ed4740595ec6fd5a7a"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/apply_token_bitmask.py",
+      "sha256": "0813fc476be33d1ffc2e38a86cb6577a307d722e51daa829e9d4142439f382b7"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/causal_conv1d.py",
+      "sha256": "09bebb5a8d693080e2929b898f5e1566c1bf5604de4954c4fc01136346e271cc"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/causal_conv1d_decode.py",
+      "sha256": "c9e5d0d5a04652a6ac83b54a256425f7dad9d2a0d93ddd739d2ede9fd261317b"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/chunk_gated_delta_rule_fwd_h.py",
+      "sha256": "eef2ce08cad5540d0ac4f556bed54073a75cf381e89ac779964f09ceb16de180"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/fused_gdn_gating.py",
+      "sha256": "c2c113d284f7c6075658850c5c2a209d22085951e125c1c2533595eac18bc43c"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/fused_sigmoid_gating_delta_rule.py",
+      "sha256": "c04aa6b5f8c0dae9691b704f2261ed27bfc4ecb57fe89087dc9b4914a62c84ab"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/rope.py",
+      "sha256": "18f9c8c28d33aea490eca68eeb3613552f4dab50638586a1c5a33abe817f1b68"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/sfa_dcp_remap.py",
+      "sha256": "c376ffb5b7f500b54391e0648ffbab980ef0efadb851c628bd5ee2928323697d"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/spec_verify_attention_tiling_update.py",
+      "sha256": "fbd77f0d0668ea6adff332cb6b5649d86a17313fb8496b94c6c25f2391b45b54"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/spec_verify_token_update.py",
+      "sha256": "828d8349831fa5ffe2b285dce508f96ed7ffaa0ecae3417c066bcafd1061a436"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/split_qkv_rmsnorm_mrope.py",
+      "sha256": "ff798cbf54017229bd9dc2badc9f721f4b0376859e7e38c07f6ee15ac9a921b2"
+    },
+    {
+      "path": "xllm/python/kernels_npu/tilelang/utils.py",
+      "sha256": "f23ce273d9e17887589ec7780b832bc2b4ff8757f0ae83bb2ea2e64c1daf36f1"
+    },
+    {
+      "path": "xllm/python/kernels_npu/triton/__init__.py",
+      "sha256": "4055a4366de56f2a31ac472adb8f92c2d0585e3e95e349fce42965932699ec74"
+    },
+    {
+      "path": "xllm/python/kernels_npu/triton/dcp_packed_a2a.py",
+      "sha256": "65dcea67c5dfc09032f41e34e99c27b6d03afd9e57b4c8d539f40de63d92a3d1"
+    },
+    {
+      "path": "xllm/python/kernels_npu/triton/eh_norm.py",
+      "sha256": "f238e059573612d3c3d82e3b1a448f142d85ca576c1b76a0404878d7d8a58fac"
+    },
+    {
+      "path": "xllm/python/kernels_npu/triton/kpool_compress.py",
+      "sha256": "a6a0b1c693237a8b42a1c960f5347979c3bf0c59d8dd56c2fc8cff420baf0ab2"
+    },
+    {
+      "path": "xllm/python/kernels_npu/triton/rms_norm.py",
+      "sha256": "b1bc6e00ea20a0b6ef6d60842bcb1fdc27c039a1def15e17cc4e9d69d3cd589c"
+    },
+    {
+      "path": "xllm/python/kernels_npu/triton/rope_siso.py",
+      "sha256": "9a9c54f43563527db8d9e6743a8604257c7af2367c4f88f45a327a3727a5707a"
+    },
+    {
+      "path": "xllm/python/kernels_npu/triton/split_qkv_rmsnorm_rope.py",
+      "sha256": "74e7fe9ea5064a764f8632d92a9540452000b0e73a54d7a1cad5f63618a464bb"
+    },
+    {
+      "path": "xllm/python/kernels_npu/triton/utils.py",
+      "sha256": "9e18c7a7a7442e5b86eb798758a013d0022e65b79be000586b2f0ea74a413fb6"
+    },
+    {
+      "path": "xllm/python/layers/__init__.py",
+      "sha256": "9366cfc3d239f156e96504607c1d344f9f29faf0a2f0c4d439ab1858797727a1"
+    },
+    {
+      "path": "xllm/python/layers/attention.py",
+      "sha256": "524b074b55108d9535b8604dbee3f19538f824ea23212c69529511bf285f0a0c"
+    },
+    {
+      "path": "xllm/python/layers/cuda/__init__.py",
+      "sha256": "badd71d1c326902334b8d7891aa8286da0b6c3bfb70700abc54a712ef0f0a442"
+    },
+    {
+      "path": "xllm/python/layers/cuda/qwen3_5/__init__.py",
+      "sha256": "6382751d99a9d88e356db575c3c8116913e823f61f366a6bcd8c13ac44038307"
+    },
+    {
+      "path": "xllm/python/layers/cuda/qwen3_5/attention.py",
+      "sha256": "229f19c269da1b4ad77604c92dbefc3832dc8f5c5a33630250622d72790daadb"
+    },
+    {
+      "path": "xllm/python/layers/cuda/qwen3_5/decoder_layer.py",
+      "sha256": "2f342ba16a9f70787981e9ac6aed512a41c6937c3151d8138ee05545d3e58389"
+    },
+    {
+      "path": "xllm/python/layers/cuda/qwen3_5/gated_delta_net.py",
+      "sha256": "195e03a5b16dd27c384e133cde1ba1e72c0b6586cfcf5c389853376a355c2aa5"
+    },
+    {
+      "path": "xllm/python/layers/cuda/qwen3_5/moe.py",
+      "sha256": "930fb6291a45752722a419cfbb20d3a0deca8aee73e5fb11852ea05ab34a5e38"
+    },
+    {
+      "path": "xllm/python/layers/embedding.py",
+      "sha256": "74a95212f1070cb0b9b5aeb809223ab32e65ec49acd6ce2ff3149ed6ba33a945"
+    },
+    {
+      "path": "xllm/python/layers/fused_moe.py",
+      "sha256": "a77a18b0b8e191650ae4a40b33197adf5d953785a40c4aca68049144275e5149"
+    },
+    {
+      "path": "xllm/python/layers/gated_mlp.py",
+      "sha256": "4622cfca825d15ed3bbb2e2860f6bbc2ce3f463ea1a30c397f8f44c8fc337ee5"
+    },
+    {
+      "path": "xllm/python/layers/layernorm.py",
+      "sha256": "90ecb996e8afc9475c9a5fb012ba974d946fa91bb8814695608cd59f24665437"
+    },
+    {
+      "path": "xllm/python/layers/linear.py",
+      "sha256": "26a7a55dad6d8c5697f2ccf5d5966fb684f0856c634166247eae8b5818527747"
+    },
+    {
+      "path": "xllm/python/layers/moe_parallel.py",
+      "sha256": "4af2c7d5c5c030be41ad9b47c088178e4a9b897cdd529df99be4294876532ecb"
+    },
+    {
+      "path": "xllm/python/layers/npu/__init__.py",
+      "sha256": "46bf7abb80ef4e21423a5f1e50351fad0f9ae38dfc1d7d01cd3c6de15eb84b5a"
+    },
+    {
+      "path": "xllm/python/layers/npu/glm5_next_metadata.py",
+      "sha256": "3de33d6500cf5d9a69574c7eb5423bf45ad9771d569cf386f8da663f79b00efd"
+    },
+    {
+      "path": "xllm/python/layers/npu/layernorm.py",
+      "sha256": "229a2eaa8b9173551e0a07fd78764f8223d965d06f74d670e87f1d74ea7a9d94"
+    },
+    {
+      "path": "xllm/python/layers/npu/mega_moe_metadata.py",
+      "sha256": "164a9234569ba73688aa7324bfaec1f43ee0875293cd344d8beada4c5f941dd6"
+    },
+    {
+      "path": "xllm/python/layers/npu/mega_moe_metadata_builder.py",
+      "sha256": "397689815e52d5f7a85c67e22374a22b56eab5788950477b08a6c380799ba0d0"
+    },
+    {
+      "path": "xllm/python/layers/npu/qwen3_5/__init__.py",
+      "sha256": "7ca5155f7b52e20ebe83e687b114e296bde30dad334e0df2bbfe025941521235"
+    },
+    {
+      "path": "xllm/python/layers/npu/qwen3_5/attention.py",
+      "sha256": "cbeb3b62b72e2cb8689163322baab388ac677432d004b336a42a17342be48e81"
+    },
+    {
+      "path": "xllm/python/layers/npu/qwen3_5/decoder_layer.py",
+      "sha256": "838b65581f463fff2ca557e5e3351fbe75ff41c862a7ade57926169852ff2bf3"
+    },
+    {
+      "path": "xllm/python/layers/npu/qwen3_5/gated_delta_net.py",
+      "sha256": "d415b2dfd70482b5a5075dd78a65bba74eb3a9d1e2139df5a2579e29b0077d27"
+    },
+    {
+      "path": "xllm/python/layers/npu/qwen3_5/gdn_metadata.py",
+      "sha256": "689710c08e463aff3031650e536fbf59cbcca2dc00e382ec7d4ef9aa7e38a8b8"
+    },
+    {
+      "path": "xllm/python/layers/npu/qwen3_5/gdn_metadata_builder.py",
+      "sha256": "6c9948818c569562e587bdb610b451ae16f0e920da0833e307482b8d1c40a3e9"
+    },
+    {
+      "path": "xllm/python/layers/npu/qwen3_5/moe.py",
+      "sha256": "8406e4cfb6cdfbdfaa7fb638eef7094a42bbdb577ed4d62b64476ff496b48ae4"
+    },
+    {
+      "path": "xllm/python/layers/npu/qwen3_5/moe_metadata.py",
+      "sha256": "4cd20881939b0b3bdf27e39aa85a8fd52ef185fecaa159cb2f57d7b5faf7383f"
+    },
+    {
+      "path": "xllm/python/layers/npu/qwen3_5/moe_metadata_builder.py",
+      "sha256": "0cdda557d4d2735f3b0586b78959431dfd67b4daaead03c44efcf9e71629dbd9"
+    },
+    {
+      "path": "xllm/python/layers/qlinear.py",
+      "sha256": "39d6e93875a162188f424023896efa6fee7bedc9e5208686ba5c0108ac935258"
+    },
+    {
+      "path": "xllm/python/layers/qwen3_5/__init__.py",
+      "sha256": "320a6f648f63ec5a05f94215d235c8bff4c2481e0372246de345bf24e6a43532"
+    },
+    {
+      "path": "xllm/python/layers/qwen3_5/common.py",
+      "sha256": "112fe9f87f5225762e055350b8a41a7f7e01c6ba5e9f77f2be24b1bfcfc9f7bf"
+    },
+    {
+      "path": "xllm/python/layers/qwen3_5/decoder_layer.py",
+      "sha256": "e339bea7a220345d51f5eaa4812a9af62fca12affed9e7caf02807394af7bf9f"
+    },
+    {
+      "path": "xllm/python/layers/qwen3_5/factory.py",
+      "sha256": "cbd065859ade7a956ef16c55e38efb6f547af3751f574b51235c372975fca15d"
+    },
+    {
+      "path": "xllm/python/layers/rotary_embedding.py",
+      "sha256": "a3c352ba3844c24f704f619fd482d8a1332b17aa2b7f7aa048a90a794fc4df64"
+    },
+    {
+      "path": "xllm/python/layers/sequence_parallel.py",
+      "sha256": "5965b4111332fe57886b7d14d7e38f5eb496dffeff8c66b3a45eb3fb3a145896"
+    },
+    {
+      "path": "xllm/python/layers/sequence_parallel_metadata.py",
+      "sha256": "6b27c2b7770eb314ffb0c480d8842621a6e179cfa803027ab311e00bbd9fde26"
+    },
+    {
+      "path": "xllm/python/layers/sfa_dcp.py",
+      "sha256": "5146463066f1330370fd20d2121880e4a47a508b0114f22e75b528dd390855f6"
+    },
+    {
+      "path": "xllm/python/layers/sfa_dcp_ref.py",
+      "sha256": "ef1b21187fd6601fd1fc24f9a95f995d764ca0c77738903e355daa38a0c7c402"
+    },
+    {
+      "path": "xllm/python/model_executor/__init__.py",
+      "sha256": "2270b2dbd3ac20e04f0f80df8f02cca762346f6f90554b466ef851b2701a4ecf"
+    },
+    {
+      "path": "xllm/python/model_executor/cp_utils.py",
+      "sha256": "6af19cd046f45a3b2adc58102b7cbbff82b8d4c424fcc7d37cd270311ca75a5f"
+    },
+    {
+      "path": "xllm/python/model_executor/dsa_cp.py",
+      "sha256": "f7f82dcae9bd573f586f800777e18afcb0e5174bdd5c17fc2987493f047b9aca"
+    },
+    {
+      "path": "xllm/python/model_executor/execution_context.py",
+      "sha256": "0e779b0ab0143115765d4b4a4425f75997b679492a3975dfd64005a667a54338"
+    },
+    {
+      "path": "xllm/python/model_executor/executor.py",
+      "sha256": "a4b0f6f0cf934e65ace2b8becdfef0ca46c7d52a5344fbbbf1de7c842c3481c2"
+    },
+    {
+      "path": "xllm/python/model_executor/forward_context.py",
+      "sha256": "668d0a41a83bf7c393ef1eace261465cdf6e674b25cf9289c940f1df24c91886"
+    },
+    {
+      "path": "xllm/python/model_executor/input_batch.py",
+      "sha256": "13faea81d0a05d02b65925a3b9edaa254a93f950816e0ec033eaee4d77d281f9"
+    },
+    {
+      "path": "xllm/python/model_executor/runners/__init__.py",
+      "sha256": "6337a9612ca64896168b84cf0f63b2c66e4977b936fa48a7990ef14848720877"
+    },
+    {
+      "path": "xllm/python/model_executor/runners/base.py",
+      "sha256": "b20ed9b0f5983a39259223acf4a367f11aa362fd9798a8822e86777d6de92654"
+    },
+    {
+      "path": "xllm/python/model_executor/runners/decode_acl_graph.py",
+      "sha256": "a65ae7162e9f619306529340a2aa8211e7e4ff4b1c1acabd5731b2e07aaf5006"
+    },
+    {
+      "path": "xllm/python/model_executor/runners/decode_cuda_graph.py",
+      "sha256": "ec8edc3c21bed18d73e1164e44c6159d19aa0f204758ddd2cc19076ac7466231"
+    },
+    {
+      "path": "xllm/python/model_executor/runners/eager.py",
+      "sha256": "fcc1b084dfed78f5db1e91b6bf54c44d18a550be41feb6ee342366d5ce16e0a3"
+    },
+    {
+      "path": "xllm/python/model_executor/runners/inductor.py",
+      "sha256": "79d0ff3f671976266e4b8df4547babfa3175b44c475a00428db889a89d9dbcbd"
+    },
+    {
+      "path": "xllm/python/model_executor/v4_cp_context.py",
+      "sha256": "15acabe61e3aab8642299a167b7fd6108a4ce6ca30b6bfd3d4be1050ab73c855"
+    },
+    {
+      "path": "xllm/python/model_loader/__init__.py",
+      "sha256": "25ac7f2bf242ef9ba4d86531144f9058973f528c27b83fbc1413f8e90a91bb51"
+    },
+    {
+      "path": "xllm/python/model_loader/draft_weight_loaders.py",
+      "sha256": "0f4a146aa0bce3de49c94624779797a84544b0b9c31a51eed36a76ed67a514f2"
+    },
+    {
+      "path": "xllm/python/model_loader/module_loaders.py",
+      "sha256": "1eddc9c8bb1c9488626732a390c3728cb4fa9b09681ca443da57960b74d4c313"
+    },
+    {
+      "path": "xllm/python/model_loader/parallel_load_context.py",
+      "sha256": "6b0cc82f24478ecd8ee25650bbf00b65808122f49044aaca8a6cb5d937115c6c"
+    },
+    {
+      "path": "xllm/python/model_loader/scoped_weight_loader.py",
+      "sha256": "e07cb9006934423cc8262f5577f88fa205bde7f2b5b9baf99f79a496491c7646"
+    },
+    {
+      "path": "xllm/python/model_loader/sharding.py",
+      "sha256": "eb7e56ff1ce8c0503b10be7ed146de8214ebc4a04fd92db230d4b892344b406d"
+    },
+    {
+      "path": "xllm/python/model_platform_support.py",
+      "sha256": "da09c5f26d31fb7917b0fae6e6617c9422c6eb13b8b4b631e5210f7757edf8d1"
+    },
+    {
+      "path": "xllm/python/models/__init__.py",
+      "sha256": "2ec9c1cf6056495e4ecdf6fdb3d4a20125edbc2a614e74f15a2a53096ed30e8d"
+    },
+    {
+      "path": "xllm/python/models/aux_hidden_capture.py",
+      "sha256": "a444be6481dde0875e80322527a3eb416b80bba00ddf3fa66c47de42bfb6e5c5"
+    },
+    {
+      "path": "xllm/python/models/base.py",
+      "sha256": "b147f95cf8c8bbc473a97a5f46ea967b2a321a5fad7222e62a2266164e296cfe"
+    },
+    {
+      "path": "xllm/python/models/deepseek_v32.py",
+      "sha256": "909e76313ec262e2072525f7d6ba0136f855fec9a43a549209aa62771a414b54"
+    },
+    {
+      "path": "xllm/python/models/deepseek_v32_mtp.py",
+      "sha256": "0755ae0f5175c5a9de856852903ae4040d1804ccf67d990f1c41cb8637891ebe"
+    },
+    {
+      "path": "xllm/python/models/deepseek_v4.py",
+      "sha256": "11c9e9e3942a489d9cc41e1f1691f681765d67d08a3bf2e362812c26a17b0534"
+    },
+    {
+      "path": "xllm/python/models/deepseek_v41.py",
+      "sha256": "1e4d96de96cf3f311dfcde82cfdb3d34d48fe90ffb15338066c4d5524246ef1e"
+    },
+    {
+      "path": "xllm/python/models/deepseek_v41_engram.py",
+      "sha256": "ee9791ae220505956b7b34b06110f338a3536e0286e02d2f8a4558332eae6059"
+    },
+    {
+      "path": "xllm/python/models/deepseek_v4_dspark.py",
+      "sha256": "e4b3a0a48fbcac1187e368cdca152262a36fab5d77abc297407896fd1ca951db"
+    },
+    {
+      "path": "xllm/python/models/deepseek_v4_mtp.py",
+      "sha256": "dab234a4939d33588dd138dfb833666a66c420c734899d21a4a24d0f82c75057"
+    },
+    {
+      "path": "xllm/python/models/dspark.py",
+      "sha256": "247a52054cd4d099c7dad50ad30b88a045a41d2fce4e2380c81697d03b75e834"
+    },
+    {
+      "path": "xllm/python/models/engram_config.py",
+      "sha256": "872b9fc44d5e11a49f192936e67014be71c35e974d26071bf7f221f88caa7592"
+    },
+    {
+      "path": "xllm/python/models/engram_shared_memory.py",
+      "sha256": "c62ec1c68a80b2ef8630264c1b0a30403e2e95589788b51283534fb7ebdad3de"
+    },
+    {
+      "path": "xllm/python/models/fp8_block_weight.py",
+      "sha256": "0eda00a29fc3c67302ed3a682c772a9dd1e6aeccf684b9f1934a1f1a6f47e7ef"
+    },
+    {
+      "path": "xllm/python/models/glm5_2.py",
+      "sha256": "e8b6b55eeee522929cdd6dc150afbe73e1333b5496692f617beaa01a67efdc28"
+    },
+    {
+      "path": "xllm/python/models/glm5_next.py",
+      "sha256": "25f9f5a25173d02f264ba38c0bc749d3735519be042adec2247058f65b548ac4"
+    },
+    {
+      "path": "xllm/python/models/glm5_next_kpool.py",
+      "sha256": "d56dfb326b5a6c0eebd8f933beeee8d0e6462ef39c3757579fbbbbe7a32504cf"
+    },
+    {
+      "path": "xllm/python/models/glm5_next_mtp.py",
+      "sha256": "f13c586dd4d2d5ab017d6e38f0c26f4e3201fc2d1c6874326e75e192000fe785"
+    },
+    {
+      "path": "xllm/python/models/glm5_next_vl.py",
+      "sha256": "7570ce0763c449854108216e07fe65e05b6ddfe34e3c529997086ca2d291dd0d"
+    },
+    {
+      "path": "xllm/python/models/glm5_next_weight.py",
+      "sha256": "5475361c308f7e4e31833841c9fc1f67b9aa39fca799042bec465cfd494d64ef"
+    },
+    {
+      "path": "xllm/python/models/joyai_asr.py",
+      "sha256": "35d5f23a22c85c52374a3b6ae6a0d390750c8960d22884885a5e78540cff1b90"
+    },
+    {
+      "path": "xllm/python/models/kimi_k3.py",
+      "sha256": "26c207d874e1a4efc417ee1fb8eea09cda524d9a9be5e7c0645114d558a213e7"
+    },
+    {
+      "path": "xllm/python/models/kimi_k3_moe.py",
+      "sha256": "6b7ba3a0648467fbc2246e732b5ced98ae37cad0b654a1b22b231d78fa1e2c48"
+    },
+    {
+      "path": "xllm/python/models/kimi_k3_vit.py",
+      "sha256": "a1a783ea7e26e15840d086720259c035f574b4d6cc4b4ce117f3e13def2706b4"
+    },
+    {
+      "path": "xllm/python/models/multimodal.py",
+      "sha256": "50ce1701a90380c733fc4c71510dfc212c034758327a094fb4e62e5d2c472d84"
+    },
+    {
+      "path": "xllm/python/models/qwen2.py",
+      "sha256": "0c3f5ebf17bf3af19aff7eed2aaf3f57d8cdd918bd7334f49d32bfddfe09098c"
+    },
+    {
+      "path": "xllm/python/models/qwen3.py",
+      "sha256": "bcc8524f4b8e5826fe43efb682eefe9298e764858959ecf9d90a681269e98fef"
+    },
+    {
+      "path": "xllm/python/models/qwen3_5.py",
+      "sha256": "14aad212227a976a4e803a429fea18793ab175c0ed5323a30c7a5aaf9c862284"
+    },
+    {
+      "path": "xllm/python/models/qwen3_dflash.py",
+      "sha256": "67def8ab4e9d83db92c556867333bfa444b7bccfa7152eec057f89eabb1f4e4e"
+    },
+    {
+      "path": "xllm/python/models/qwen3_dflash2.py",
+      "sha256": "ed7b25debf232c113e301a43fe6d9aefdc50e467558533063f56ba864fc6ee02"
+    },
+    {
+      "path": "xllm/python/models/qwen3_dspark.py",
+      "sha256": "3cf5e8c409e5297f9fac37dd8c1de272a98ab3397444685b14bfea0546b8bbb9"
+    },
+    {
+      "path": "xllm/python/models/qwen3_vl.py",
+      "sha256": "b2f13d71e821aca17e893c95b30506b71088af23cbf4477bae5c89d614584c96"
+    },
+    {
+      "path": "xllm/python/models/weight_utils.py",
+      "sha256": "6d744560d37c56afa23291ce0de935d074806c45b29243f4ff22ef88dc510b26"
+    },
+    {
+      "path": "xllm/python/npu_streams.py",
+      "sha256": "568d6a2e29f3f075b242ee42445d76af1c5e73abe20e6bd32632be366a7aa82a"
+    },
+    {
+      "path": "xllm/python/platform.py",
+      "sha256": "bedeb3ebf28cad6dc2c89d6427566ff91168c2be0848046144f9431a0287ebde"
+    },
+    {
+      "path": "xllm/python/registry.py",
+      "sha256": "29647c13ff80e31b683dbc98a6ba00d9a74dbb1404b261f0fbb3a9e3e51cc5f6"
+    },
+    {
+      "path": "xllm/server/xllm_server.cpp",
+      "sha256": "a7ff0b5265aaa4368544b4cdd8cba7f0397a25edbeaf133810410e8b68407eee"
+    },
+    {
+      "path": "xllm/xllm.cpp",
+      "sha256": "e2884c5fff73e41f581f051e052e2cf0c85d155f6bbc9c493249a6a2b8b5a7be"
+    }
+  ],
+  "validation_status": "Stopped by user after official100 and local65 HTTP200 initialresponses; same65 scores62 vs60;0062 stable discordance and0065 truncation; full local100 and both performance groups NOT completed",
+  "superseded_binary": {
+    "name": "xllm_glm_v3",
+    "sha256": "e3a98aabf3841ffe00cac83ba1ebdcb939e237912834f0ed5f9b49bc1c5030b5",
+    "reason": "mixed class layout offsets 0x2 vs 0x88; not qualified for PD"
+  },
+  "runtime_image_sj9": "sha256:579005c0d3dab354f26389271360ddcaadab9e642bfbd05ef070aab4baaa3089",
+  "runtime_image_note": "Same Dockerfile/base/wheel inputs built separately on each host; image IDs are explicitly distinct, not bit-identical.",
+  "full_model_path": "/data/nfs_shared/models/GLM-5.3-Flash",
+  "full_deployment": {
+    "sj9": {
+      "container": "xiaopang1104_glm_prefill_sj9",
+      "id": "72fc75439b35d1c29dd7354dd2e942aacde4ddc5f14231d7ceed3cae8544b5e9",
+      "role": "PREFILL",
+      "TP": 8
+    },
+    "sj10": {
+      "container": "xiaopang1104_glm_decode_sj10",
+      "id": "23d60952b5b09751293547d0c274506efa43165c22b8753e2a22c4624cf00994",
+      "role": "DECODE",
+      "TP": 8
+    },
+    "mode": "eager",
+    "binary": "xllm_glm_v4",
+    "scope": "Text-only; graph/MTP/VL/EP not qualified"
+  },
+  "build_snapshot": {
+    "host": "sj10",
+    "tag": "xiaopang-archive/1104:worker32009-920207d28961",
+    "image_id": "sha256:e7b22909b5fc0bf30559e9599a0ee53b05f352ea342f4e7b0549d44157122abd",
+    "original_container_removed": true
+  },
+  "container_cleanup": {
+    "verified_at": "2026-11-04T13:26:50+08:00",
+    "own_containers_remaining": {
+      "sj9": 1,
+      "sj10": 1
+    },
+    "archived_and_removed": {
+      "sj9": 29,
+      "sj10": 136
+    },
+    "sj11_sj12": "not accessed in this task"
+  },
+  "hardware_observed": {
+    "sj9_sj10_gmi_name": "X10000",
+    "memory_per_gpu_MiB": 81920,
+    "gpu_count_each_host": 8,
+    "driver": "3.3.8-server",
+    "gmi_version": "zjlab-gmi 2.3.3",
+    "note": "Record actual GMI output; no independently verified mapping from OEM name to S5000 retail SKU"
+  },
+  "source_archive": {
+    "git_commit": "30b7051ef1c840a9635794e6950f7507ee01b829",
+    "archive": "source_30b7051ef1c8.tar.gz",
+    "sha256": "5deb36d61df5146420af2cab515b4a831d0966e40767b09d223d6305519e381c",
+    "scope": "Tracked top-level source; dependency/submodule contents supplied by pinned build image, not vendored in git archive"
+  },
+  "accuracy_protocol": {
+    "active": "paired_protocol_v2",
+    "dataset": "MathQA author release original test rows 0..99",
+    "requests_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+    "superseded_protocol": "paired_protocol_v1; five questions had transformed options in third-party mirror; retain original records",
+    "pilot10_both_correct": 10,
+    "official_quota_blocked_after_pilot": false,
+    "local100": "Stopped by user:65 initial HTTP200 responses,60correct;0031 transportfailure,34notattempted",
+    "full100_passed": false,
+    "quota_history": "v1 0010 failed1113; user replenished14:17; v2 resumed successfully",
+    "official100": {
+      "http_successes": 100,
+      "correct": 93,
+      "accuracy": 0.93,
+      "format_errors": 1,
+      "truncated": 0,
+      "prompt_tokens": 12779,
+      "completion_tokens": 13776
+    },
+    "partial_snapshot": "评测/paired_protocol_v2/stopped_snapshot/summary.json"
+  },
+  "runtime_overrides": {
+    "at": "2026-11-04T14:23:38+08:00",
+    "router_and_coordinator_default_request_deadline_ms": 3600000,
+    "router_and_coordinator_max_request_deadline_ms": 3600000,
+    "mechanism": "bRPC reloadable flags",
+    "record": "records/mathqa_deadline_extension_1424.json"
+  },
+  "tool_calling_gate": {
+    "passed": false,
+    "scope": "Current configured PD deployment; parser empty, raw XML in content, finish_reason stop",
+    "record": "评测/automationbench_v106/tool_gate_local_v1/summary.json",
+    "automationbench_tasks_run": 0,
+    "decision": "Fallback MathQA100 per user"
+  },
+  "deadline_effective_correction": {
+    "at": "2026-11-04T15:01:41.030448+08:00",
+    "runtime_flags_query_ms": 3600000,
+    "actual_new_request_failure_seconds": 900,
+    "status": "Resolved by additionalRouter startupflags; runtimeflags-only approach retained as failedhistory"
+  },
+  "long_deadline_router": {
+    "at": "2026-11-04T15:03:30.209484+08:00",
+    "endpoint": "http://10.121.32.9:49880/v1/chat/completions",
+    "container": "xiaopang1104_glm_decode_sj10",
+    "pid_inside_container": 8446,
+    "startup_deadline_ms": 3600000,
+    "wire_remaining_deadline_ms": 3599516,
+    "wire_evidence": "证据/long_deadline_protocol_fields.json",
+    "pcap_sha256": "9ffb740402ea101df15994b1adb1ffef0bf9ad6b69e831c360e514cd6abbce7a",
+    "model_processes_restarted": false,
+    "original_control_plane_retained": true,
+    "sampling_and_prompt_unchanged": true,
+    "long_request_completion_still_to_verify": false,
+    "first_inference": {
+      "question_id": "mathqa-test-0033",
+      "http_status": 200,
+      "answer": "A",
+      "matches_reference": true,
+      "output_tokens": 103
+    },
+    "execution_plan_deadline_budget": {
+      "remaining_ms": 3599538,
+      "output_ms": 3599538
+    },
+    "execution_plan_schema": "开发仓库/xllm/proto/provider.proto DeadlineBudget fields1/4, contained in ExecutionPlan field14",
+    "long_request_evidence": "0065 GPU4096tokens length after2873.2508seconds; originalHTTP200 received after3132.0929seconds with VPN response delivery delay"
+  },
+  "control_binaries": {
+    "at": "2026-11-04T15:29:58.790848+08:00",
+    "source": "Unchanged prebuilt control binaries supplied by1102-dev image; no claim of recompiling their source this task",
+    "binaries": [
+      {
+        "path": "/opt/xllm_service/bin/xllm_master_serving",
+        "bytes": 116257504,
+        "sha256": "5ade8b09391c7fced1f286ef83d4f078d668c3e83b4f21f6b3ebeae724c45ee5"
+      },
+      {
+        "path": "/opt/xllm_service/bin/etcd",
+        "bytes": 23625880,
+        "sha256": "17d19f93c2919f9f40f650521a56417508770ea1a658e62ef80919286a7ee79d"
+      }
+    ],
+    "control_service_embedded_build_id": "service:73b7e684b94ef75a0e951ba55fc9af068d9ed956-dirty+engine:c3c9d95a7dabcc36d3baea12fe2f6645d31b495c+adapter:ee93fb9405a258239b09ff252917a74b6203f66018aaae0a63273d488aaede7f",
+    "embedded_engine_id_is_not_current_worker_commit": true
+  },
+  "github_fork_backup": "https://github.com/LiuYixuan1999717/xllm-musa/tree/xiaopang1104benchmark1P1D",
+  "upstream_branch_push_evidence": "证据/github_upstream_personal_branch_push_1104.json",
+  "no_MR_created": true,
+  "full_model_launch_path": "/data/nfs_shared/models/GLM-5.3-Flash-FP8",
+  "live_model_bind_path": "/model",
+  "model_directory_name_observation": {
+    "evidence": "证据/glm_structure_and_log_scan.json",
+    "same_live_and_host_inode": 204999870,
+    "config_sha256": "bb8f01c42cb92a52ca72e65afb4d5bd8d11aef083cd210e8de25dfb904f23e9f",
+    "old_host_name_exists": false,
+    "operator_and_time_of_rename_unknown": true,
+    "no_model_reload_performed": true
+  },
+  "performance": {
+    "status": "not_run_user_deferred",
+    "measured_requests": 0
+  }
+}

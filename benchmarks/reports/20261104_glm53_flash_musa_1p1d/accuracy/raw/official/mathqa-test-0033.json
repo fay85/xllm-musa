@@ -1,0 +1,73 @@
+{
+  "question_id": "mathqa-test-0033",
+  "endpoint": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthree walls have wallpaper covering a combined area of 300 square meters . by overlapping the wallpaper to cover a wall with an area of 180 square meters , the area that is covered by exactly two layers of wallpaper is 34 square meters . what is the area that is covered with three layers of wallpaper ?\n\nA. 43 square meters\nB. 36 square meters\nC. 42 square meters\nD. 83.3 square meters\nE. 120 square meters"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false,
+    "model": "glm-5.3-flash"
+  },
+  "ground_truth": "A",
+  "started_at": "2026-11-04T14:19:06.596772+08:00",
+  "protocol_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+  "scorer_version": "final-visible-v2-think-boundary",
+  "client_read_timeout_seconds": 900,
+  "http_status": 200,
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "ANSWER: A",
+          "reasoning_content": "Total 300, wall 180, overlap = 300−180=120. Regions: x = exactly two, y = exactly three, x+2y=120, x=34 → y=43. A.",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1793773148,
+    "id": "20261104141906084c62fe3b3b4d12",
+    "model": "glm-5.3-flash",
+    "object": "chat.completion",
+    "request_id": "20261104141906084c62fe3b3b4d12",
+    "usage": {
+      "completion_tokens": 52,
+      "completion_tokens_details": {
+        "reasoning_tokens": 46
+      },
+      "prompt_tokens": 155,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 207
+    }
+  },
+  "final_content": "ANSWER: A",
+  "reasoning_boundary_present": false,
+  "reasoning_separate_field": true,
+  "answer": "A",
+  "format_error": null,
+  "truncated": false,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 52,
+    "completion_tokens_details": {
+      "reasoning_tokens": 46
+    },
+    "prompt_tokens": 155,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 207
+  },
+  "correct": true,
+  "elapsed_seconds": 1.799280917039141
+}

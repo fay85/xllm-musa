@@ -1,0 +1,18 @@
+{
+  "status": "deferred_by_user",
+  "at": "2026-11-04T17:08:04.923249+08:00",
+  "description": "用户明确停止当前基线扩展与两组性能；256/256、2048/256均未运行，留待MegaMoE接入与精度排查之后",
+  "formal_requests_completed": 0,
+  "groups": [
+    {
+      "input": 256,
+      "output": 256,
+      "measured": 0
+    },
+    {
+      "input": 2048,
+      "output": 256,
+      "measured": 0
+    }
+  ]
+}

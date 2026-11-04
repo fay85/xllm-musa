@@ -1,0 +1,1402 @@
+[
+  {
+    "question_id": "mathqa-test-0000",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na shopkeeper sold an article offering a discount of 5 % and earned a profit of 31.1 % . what would have been the percentage of profit earned if no discount had been offered ?\n\nA. 38\nB. 27.675\nC. 30\nD. data inadequate\nE. none of these"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0001",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nwhat will be the difference between simple and compound interest at 14 % per annum on a sum of rs . 1000 after 4 years ?\n\nA. 129\nB. 130\nC. 124\nD. 133\nE. 145"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0002",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthere are 28 stations between hyderabad and bangalore . how many second class tickets have to be printed , so that a passenger can travel from any station to any other station ?\n\nA. 156\nB. 167\nC. 870\nD. 352\nE. 380"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0003",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe present population of a town is 3888 . population increase rate is 20 % p . a . find the population of town before 2 years ?\n\nA. 2500\nB. 2100\nC. 3500\nD. 3600\nE. 2700"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0004",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe triplicate ratio of 1 : 9 is ?\n\nA. 1 : 0\nB. 1 : 8\nC. 1 : 7\nD. 1 : 2\nE. 1 : 729"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0005",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe sum of all the integers s such that - 26 < s < 24 is\n\nA. 0\nB. - 2\nC. - 25\nD. - 49\nE. - 51"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0006",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na full stationary oil tank that is a right circular cylinder has a radius of 100 feet and a height of 25 feet . oil is pumped from the stationary tank to an oil truck that has a tank that is a right circular cylinder until the truck ' s tank is completely filled . if the truck ' s tank has a radius of 6 feet and a height of 10 feet , how far ( in feet ) did the oil level drop in the stationary tank ?\n\nA. 0.036\nB. 0.36\nC. 0.6\nD. 6\nE. 3.6"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0007",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\neach week a restaurant serving mexican food uses the same volume of chili paste , which comes in either 35 - ounce cans or 25 - ounce cans of chili paste . if the restaurant must order 20 more of the smaller cans than the larger cans to fulfill its weekly needs , then how manysmallercans are required to fulfill its weekly needs ?\n\nA. 60\nB. 70\nC. 80\nD. 100\nE. 120"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0008",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nif n is an integer and 101 n ^ 2 is less than or equal to 10000 , what is the greatest possible value of n ?\n\nA. 7\nB. 8\nC. 9\nD. 10\nE. 11"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0009",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na constructor estimates that 10 people can paint mr khans house in 4 days . if he uses 5 people instead of 10 , how long will they take to complete the job ?\n\nA. 10\nB. 4\nC. 5\nD. 8\nE. 6"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0010",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe population of a town is 8000 . it decreases annually at the rate of 20 % p . a . what will be its population after 3 years ?\n\nA. 5100\nB. 4096\nC. 5200\nD. 5400\nE. 5500"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0011",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe percentage profit earned by selling an article for rs . 1920 is equal to the percentage loss incurred by selling the same article for rs . 1280 . at what price should the article be sold to make 40 % profit ?\n\nA. 2000\nB. 2778\nC. 2299\nD. 2778\nE. 2240"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0012",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nrunning at the same constant rate , 6 identical machines can produce a total of 360 bottles per minute . at this rate , how many bottles could 10 such machines produce in 4 minutes ?\n\nA. 648\nB. 1800\nC. 2400\nD. 10800\nE. 10900"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0013",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthere are 1000 buildings in a street . a sign - maker is contracted to number the houses from 1 to 1000 . how many zeroes will he need ?\n\nA. 190\nB. 191\nC. 192\nD. 193\nE. 194"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0014",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na man bought 20 shares of rs . 50 at 5 discount , the rate of dividend being 13 . the rate of interest obtained is :\n\nA. 27 %\nB. 87 %\nC. 15 %\nD. 66 %\nE. 88 %"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0015",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\n? % of 360 = 108\n\nA. 30\nB. 36\nC. 64\nD. 72\nE. none of these"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0016",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na train 300 m long is running at a speed of 45 km / hr . in what time will it pass a bridge 150 m long ?\n\nA. 40\nB. 36\nC. 41\nD. 42\nE. 34"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0017",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nwhat is the sum of all digits for the number 10 ^ 29 - 41 ?\n\nA. 257\nB. 242\nC. 231\nD. 202\nE. 187"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0018",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na train running at the speed of 120 km / hr crosses a pole in 18 seconds . what is the length of the train ?\n\nA. 560\nB. 570\nC. 580\nD. 590\nE. 600"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0019",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na train 100 meters long completely crosses a 300 meters long bridge in 45 seconds . what is the speed of the train is ?\n\nA. 32 kmph\nB. 76 kmph\nC. 34 kmph\nD. 43 kmph\nE. 40 kmph"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0020",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\neach month a retailer sells 100 identical items . on each item he makes a profit of $ 40 that constitutes 10 % of the item ' s price to the retailer . if the retailer contemplates giving a 5 % discount on the items he sells , what is the least number of items he will have to sell each month to justify the policy of the discount ?\n\nA. 191\nB. 213\nC. 221\nD. 223\nE. 226"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0021",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe average age of 15 students of a class is 14 years . out of these , the average age of 5 students is 14 years and that of the other 9 students is 16 years . tee age of the 15 th student is ?\n\nA. 3 years\nB. 4 years\nC. 5 years\nD. 6 years\nE. 7 years"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0022",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nbookman purchased 55 copies of a new book released recently , 10 of which are hardback and sold for $ 20 each , and rest are paperback and sold for $ 10 each . if 14 copies were sold and the total value of the remaining books was 460 , how many paperback copies were sold ?\n\nA. 10\nB. 11\nC. 12\nD. 13\nE. 9"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0023",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\ndiana is painting statues . she has 1 / 2 of a gallon of paint remaining . each statue requires 1 / 16 gallon of paint . how many statues can she paint ?\n\nA. 8\nB. 20\nC. 28\nD. 14\nE. 19"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0024",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nif the price of gasoline increases by 25 % and a driver intends to spend only 20 % more on gasoline , by how much percent should the driver reduce the quantity of gasoline that he buys ?\n\nA. 2 %\nB. 3 %\nC. 4 %\nD. 5 %\nE. 6 %"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0025",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nan art gallery has only paintings and sculptures . currently , 1 / 3 of the pieces of art are displayed , and 1 / 6 of the pieces on display are sculptures . if 1 / 3 of the pieces not on display are paintings , and 1000 sculptures are not on display , how many pieces of art does the gallery have ?\n\nA. 360\nB. 2250\nC. 540\nD. 640\nE. 720"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0026",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\njohn and ingrid pay 30 % and 40 % tax annually , respectively . if john makes $ 60000 and ingrid makes $ 72000 , what is their combined tax rate ?\n\nA. 32 %\nB. 34.4 %\nC. 35 %\nD. 35.6 %\nE. 36.4 %"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0027",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe lenght of a room is 5.5 m and width is 4 m . find the cost of paving the floor by slabs at the rate of rs . 900 per sq . metre .\n\nA. s . 19,800\nB. s . 15,600\nC. s . 16,500\nD. s . 17,600\nE. s . 17,900"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0028",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na factory that employs 1000 assembly line workers pays each of these workers $ 5 per hour for the first 40 hours worked during a week and 1 ½ times that rate for hours worked in excess of 40 . what was the total payroll for the assembly - line workers for a week in which 30 percent of them worked 15 hours , 50 percent worked 40 hours , and the rest worked 50 hours ?\n\nA. $ 180,000\nB. $ 185,000\nC. $ 190,000\nD. $ 177,500\nE. $ 205,000"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0029",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na corporation double its annual bonus to 100 of its employees . what percent of the employees ’ new bonus is the increase ?\n\nA. 50 %\nB. 12 %\nC. 8 %\nD. 6 %\nE. 5 %"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0030",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na and b together do a work in 20 days . b and c together in 15 days and c and a in 12 days . then b alone can finish same work in how many days ?\n\nA. 50\nB. 60\nC. 45\nD. 35\nE. 48"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0031",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\ntwo trains of equal length , running with the speeds of 60 and 16 kmph , take 50 seconds to cross each other while they are running in the same direction . what time will they take to cross each other if they are running in opposite directions ?\n\nA. 10.11\nB. 8.11\nC. 77.2\nD. 13.15\nE. 22.22"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0032",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\ncalculate the ratio between x and y if 30 % of x equal to 50 % of y ?\n\nA. 4 : 5\nB. 3 : 5\nC. 3 : 7\nD. 3 : 2\nE. 4 : 5"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0033",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthree walls have wallpaper covering a combined area of 300 square meters . by overlapping the wallpaper to cover a wall with an area of 180 square meters , the area that is covered by exactly two layers of wallpaper is 34 square meters . what is the area that is covered with three layers of wallpaper ?\n\nA. 43 square meters\nB. 36 square meters\nC. 42 square meters\nD. 83.3 square meters\nE. 120 square meters"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0034",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na meeting has to be conducted with 6 managers . find the number of ways in which the managers may be selected from among 9 managers , if there are 2 managers who refuse to attend the meeting together .\n\nA. 36\nB. 40\nC. 42\nD. 45\nE. 49"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0035",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na trader bought a car at 20 % discount on its original price . he sold it at a 40 % increase on the price he bought it . what percent of profit did he make on the original price ?\n\nA. 82 %\nB. 52 %\nC. 12 %\nD. 19 %\nE. 22 %"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0036",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nwhat is the unit digit in the product ( 3 ^ 65 x 6 ^ 59 x 7 ^ 71 ) ?\n\nA. 18\nB. 12\nC. 69\nD. 32\nE. 4"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0037",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na start walking from a place at a uniform speed of 6 kmph in a particular direction . after half an hour , b starts from the same place and walks in the same direction as a at a uniform speed and overtakes a after 1 hour 48 minutes . find the speed of b .\n\nA. 4.7 kmph\nB. 6.6 kmph\nC. 4 kmph\nD. 7 kmph\nE. 5.3 kmph"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0038",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\noak street begins at pine street and runs directly east for 2 kilometers until it ends when it meets maple street . oak street is intersected every 400 meters by a perpendicular street , and each of those streets other than pine street and maple street is given a number beginning at 1 st street ( one block east of pine street ) and continuing consecutively ( 2 nd street , 3 rd street , etc . . . ) until the highest - numbered street one block west of maple street . what is the highest - numbered street that intersects oak street ?\n\nA. 4 th\nB. 5 th\nC. 6 th\nD. 7 th\nE. 8 th"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0039",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\n50 percent of the members of a study group are women , and 30 percent of those women are lawyers . if one member of the study group is to be selected at random , what is the probability that the member selected is a woman lawyer ?\n\nA. 0.16\nB. 0.25\nC. 0.45\nD. 0.35\nE. 0.15"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0040",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe cross - section of a cannel is a trapezium in shape . if the cannel is 14 m wide at the top and 8 m wide at the bottom and the area of cross - section is 550 sq m , the depth of cannel is ?\n\nA. 76\nB. 28\nC. 50\nD. 80\nE. 25"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0041",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nkim finds a 4 - meter tree branch and marks it off in thirds and fifths . she then breaks the branch along all the markings and removes one piece of every distinct length . what fraction of the original branch remains ?\n\nA. 2 / 5\nB. 7 / 5\nC. 3 / 5\nD. 8 / 15\nE. 1 / 2"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0042",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\n$ 350 is divided among a , b , and c so that a receives half as much as b , and b receives half as much as c . how much money is c ' s share ?\n\nA. $ 200\nB. $ 225\nC. $ 250\nD. $ 275\nE. $ 300"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0043",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nin an it company , there are a total of 90 employees including 50 programmers . the number of male employees is 80 , including 35 male programmers . how many employees must be selected to guaranty that we have 3 programmers of the same sex ?\n\nA. 10\nB. 45\nC. 55\nD. 35\nE. 65"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0044",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe cost of one photocopy is $ 0.02 . however , a 25 % discount is offered on orders of more than 100 photocopies . if arthur and david have to make 80 copies each , how much will each of them save if they submit a single order of 160 copies ?\n\nA. $ 0.32\nB. $ 0.40\nC. $ 0.45\nD. $ 0.48\nE. $ 0.54"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0045",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\n( 3 x + 1 ) ( 2 x - 5 ) = ax ^ 2 + kx + n . what is the value of a - n + k ?\n\nA. 5\nB. 8\nC. 9\nD. 14\nE. 11"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0046",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nif 6 men and 8 women can do a piece of work in 10 days while 26 men and 48 women can do the same in 2 days , the time taken by 15 men and 20 women in doing the same type of work will be ?\n\nA. 5\nB. 4\nC. 6\nD. 7\nE. 8"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0047",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe maximum number of students among them 1345 pens and 775 pencils can be distributed in such a way that each student gets the same number of pens and same number of pencils is :\n\nA. 91\nB. 10\nC. 6\nD. 5\nE. none of these"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0048",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na sum of rs . 1360 has been divided among a , b and c such that a gets 2 / 3 of what b gets and b gets 1 / 4 of what c gets . b ' s share is :\n\nA. rs . 120\nB. rs . 160\nC. rs . 240\nD. rs . 300\nE. rs . 500"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0049",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nhow many cuboids of length 5 m , width 3 m and height 2 m can be farmed from a cuboid of 18 m length , 15 m width and 2 m height .\n\nA. 106\nB. 109\nC. 108\nD. 101\nE. 104"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0050",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\ntwo - third of a positive number and 16 / 216 of its reciprocal are equal . find the positive number .\n\nA. 4 / 12\nB. 4 / 17\nC. 4 / 15\nD. 4 / 11\nE. 4 / 03"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0051",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nfind large number from below question the difference of two numbers is 1365 . on dividing the larger number by the smaller , we get 6 as quotient and the 15 as remainder\n\nA. 1235\nB. 1346\nC. 1378\nD. 1635\nE. 1489"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0052",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe average of first three prime numbers greater than 5 is ?\n\nA. 12.6\nB. 12.9\nC. 22.3\nD. 10.3\nE. 12.7"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0053",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nin a recent election , james received 0.5 percent of the 2,000 votes cast . to win the election , a candidate needed to receive more than 50 percent of the vote . how many additional votes would james have needed to win the election ?\n\nA. 901\nB. 989\nC. 990\nD. 991\nE. 1,001"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0054",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nif 12 : 8 : : x : 16 , then find the value of x\n\nA. 18\nB. 24\nC. 28\nD. 16\nE. 20"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0055",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nwhat least number must be subtracted from 3832 so that the remaining number is divisible by 5 ?\n\nA. 1\nB. 2\nC. 3\nD. 4\nE. 5"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0056",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nfind the length of the wire required to go 14 times round a square field containing 5625 m 2 .\n\nA. 15840\nB. 3388\nC. 4200\nD. 8766\nE. 66711"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0057",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nhow many bricks , each measuring 25 cm x 11.25 cm x 6 cm , will be needed to build a wall of 1 m x 2 m x 20 cm ?\n\nA. 5600\nB. 6000\nC. 237\nD. 7200\nE. 8600"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0058",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nspanish language broadcast records last 90 min on each of two sides . if it takes 3 hours to translate one hour of broadcast , how long will it take to translate 16 full records ?\n\nA. 144 hours\nB. 124 hours\nC. 134 hours\nD. 154 hours\nE. 164 hours"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0059",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na began business with rs . 45000 and was joined afterwards by b with rs . 5400 . when did b join if the profits at the end of the year were divided in the ratio of 2 : 1 ?\n\nA. 7\nB. 8\nC. 9\nD. 6\nE. 5"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0060",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na can do a piece of work in 4 hours ; b and c together can do it in 3 hours , which a and c together can do it in 2 hours . how long will b alone take to do it ?\n\nA. 15 hours\nB. 14 hours\nC. 12 hours\nD. 74 hours\nE. 79 hours"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0061",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nhow many seconds will a 650 meter long train moving with a speed of 63 km / hr take to cross a man walking with a speed of 3 km / hr in the direction of the train ?\n\nA. 48\nB. 36\nC. 26\nD. 39\nE. 18"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0062",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\ntoday is thursday . i came home from a trip 3 days before the day after last monday . how many days have i been home ?\n\nA. 1 day\nB. 2 days\nC. 7 days\nD. 6 days\nE. 10 days"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0063",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nan article is bought for rs . 675 and sold for rs . 1100 , find the gain percent ?\n\nA. 65 %\nB. 64 %\nC. 63 %\nD. 62 %\nE. 61 %"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0064",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nin one hour , a boat goes 19 km along the stream and 5 km against the stream . the speed of the boat in still water ( in km / hr ) is :\n\nA. 2\nB. 4\nC. 7\nD. 12\nE. 15"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0065",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na salesperson received a commission of 3 percent of the sale price for each of the first 100 machines that she sold and 4 percent of the sale price for each machine that she sold after the first 100 . if the sale price of each machine was $ 10,000 and the salesperson received a $ 45,000 commission , how many machines did she sell ?\n\nA. 140\nB. 103\nC. 105\nD. 115\nE. 120"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0066",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nsolve the equation for x : 6 x - 27 + 3 x = 4 + 9 - x\n\nA. 1\nB. 2\nC. 3\nD. 4\nE. 5"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0067",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na profit of rs . 900 is divided between x and y in the ratio of 1 / 2 : 1 / 3 . what is the difference between their profit shares ?\n\nA. s . 280\nB. s . 180\nC. s . 380\nD. s . 50\nE. s . 90"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0068",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na is two years older than b who is twice as old as c . if the total of the ages of a , b and c be 27 , the how old is b ?\n\nA. 7\nB. 9\nC. 8\nD. 11\nE. 10"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0069",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\ncalculate the share of y , if rs . 2880 is divided among x , y and z in the ratio 3 : 5 : 8 ?\n\nA. 540\nB. 520\nC. 140\nD. 560\nE. 240"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0070",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\n3 years ago , paula was 3 times as old as karl . in 9 years , paula will be twice as old as karl . what is the sum of their ages now ?\n\nA. 42\nB. 46\nC. 50\nD. 54\nE. 58"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0071",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na train running at the speed of 50 km / hr crosses a post in 4 seconds . what is the length of the train ?\n\nA. 90\nB. 120\nC. 60\nD. 95\nE. 75"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0072",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nif soundharya rows 49 km upstream and 77 km down steam taking 7 hours each , then the speed of the stream\n\nA. 6 kmph\nB. 5 kmph\nC. 2 kmph\nD. 3 kmph\nE. 4 kmph"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0073",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe digital sum of a number is the sum of its digits . for how many of the positive integers 24 - 140 inclusive is the digital sum a multiple of 7 ?\n\nA. 7\nB. 8\nC. 14\nD. 15\nE. 20"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0074",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe ratio of 2 numbers is 2 : 5 and their h . c . f . is 6 . their l . c . m . is ?\n\nA. 20\nB. 24\nC. 52\nD. 36\nE. 60"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0075",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\n20 beavers , working together in a constant pace , can build a dam in 6 hours . how many hours will it take 12 beavers that work at the same pace , to build the same dam ?\n\nA. 10 .\nB. 4 .\nC. 5 .\nD. 6\nE. 8 ."
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0076",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nif a student loses 6 kilograms , he will weigh twice as much as his sister . together they now weigh 126 kilograms . what is the student ' s present weight in kilograms ?\n\nA. 82\nB. 84\nC. 86\nD. 88\nE. 90"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0077",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na person buys an article at rs . 575 . at what price should he sell the article so as to make a profit of 15 % ?\n\nA. 600\nB. 277\nC. 269\nD. 661.25\nE. 281"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0078",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\ntwo consultants can type up a report in 12.5 hours and edit it in 7.5 hours . if mary needs 30 hours to type the report and jim needs 12 hours to edit it alone , how many t hours will it take if jim types the report and mary edits it immediately after he is done ?\n\nA. 41.4\nB. 34.1\nC. 13.4\nD. 12.4\nE. 10.8"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0079",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nan amount of rs . 1638 was divided among a , b and c , in the ratio 1 / 2 : 1 / 3 : 1 / 4 . find the share of a ?\n\nA. 656\nB. 456\nC. 756\nD. 745\nE. 720"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0080",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nwhat least value should be replaced by * in 2551112 * so the number become divisible by 6\n\nA. 3\nB. 4\nC. 5\nD. 6\nE. 7"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0081",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nwhat number is obtained by adding the units digits of 734 ^ 100 and 347 ^ 83 ?\n\nA. 7\nB. 8\nC. 9\nD. 10\nE. 11"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0082",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nin two triangles , the ratio of the areas is 4 : 3 and the ratio of their heights is 3 : 4 . find the ratio of their bases .\n\nA. 2 : 3\nB. 4 : 5\nC. 16 : 9\nD. 7 : 9\nE. 8 : 5"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0083",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na trader sells 40 metres of cloth for rs . 8200 at a profit of rs . 15 per metre of cloth . how much profit will the trder earn on 40 metres of cloth ?\n\nA. rs . 950\nB. rs . 1500\nC. rs . 600\nD. rs . 1200\nE. none of these"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0084",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nwhat is the probability of drawing a queen from a deck of 52 cards ?\n\nA. 4 / 13\nB. 1 / 13\nC. 4\nD. 1\nE. 2 / 13"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0085",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na thief goes away with a santro car at a speed of 50 kmph . the theft has been discovered after half an hour and the owner sets off in a bike at 60 kmph when will the owner over take the thief from the start ?\n\nA. a ) 2\nB. b ) 5\nC. c ) 7\nD. d ) 5\nE. e ) 8"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0086",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe average weight of 18 boys in a class is 50.25 kg and that of the remaining 8 boys is 45.15 kg . find the average weights of all the boys in the class .\n\nA. 48.68077\nB. 42.25983\nC. 50\nD. 51.25388\nE. 52.25"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0087",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nhow many words , with or without meaning , can be formed using all letters of the word good using each letter exactly once ?\n\nA. 18\nB. 20\nC. 22\nD. 23\nE. 24"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0088",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nin right triangle abc , ac is the hypotenuse . if ac is 40 and ab + bc = 60 , what is the area of the triangle abc ?\n\nA. 225\nB. 450\nC. 25 √ 2\nD. 500\nE. 200 √ 2"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0089",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe ratio of the area of a square to that of the square drawn on its diagonal is\n\nA. 1 : 2\nB. 1 : 0\nC. 1 : 7\nD. 1 : 5\nE. 1 : 6"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0090",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na 4 digit number divisible by 7 becomes divisible by 3 when 19 is added to it . the largest such number is :\n\nA. 4461\nB. 4473\nC. 4479\nD. 4487\nE. 4491"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0091",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nwhat is the probability for a family with 3 children to have a girl and two boys ( assuming the probability of having a boy or a girl is equal ) ?\n\nA. 1 / 8\nB. 1 / 4\nC. 1 / 2\nD. 3 / 8\nE. 5 / 8"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0092",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na manufacturer produces a certain men ' s athletic shoe in integer sizes from 8 to 17 . for this particular shoe , each unit increase in size corresponds to a 1 / 5 - inch increase in the length of the shoe . if the largest size of this shoe is 30 % longer than the smallest size , how long , in inches , is the shoe in size 15 ?\n\nA. 6.8\nB. 7.4\nC. 7.7\nD. 8.2\nE. 8.6"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0093",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nif x + | x | + y = 7 and x + | y | - y = 5 what is x + y = ?\n\nA. 1\nB. - 1\nC. 3\nD. 5\nE. 13"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0094",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na 240 m long train running at the speed of 120 km / hr crosses another train running in opposite direction at the speed of 80 km / hr in 9 sec . what is the length of the other train ?\n\nA. 260\nB. 250\nC. 240\nD. 230\nE. 220"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0095",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\n34 . the side surface of a cylinder is rolled with a rectangular plate . if the perimeter of the circular base is 9 feet , and the diagonal of the rectangular plate was 15 ft . what is height of the of the cylinder ?\n\nA. 12\nB. 15\nC. 10\nD. 8\nE. 14"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0096",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nwhat quantity of water should be added to reduce 9 liters of 50 % acidic liquid to 30 % acidic liquid ?\n\nA. 6 liters\nB. 8 liters\nC. 10 liters\nD. 12 liters\nE. 15 liters"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0097",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na man gains 20 % by selling an article for a certain price . if the sells it at double the price , the percentage of profit will be :\n\nA. 327\nB. 140\nC. 277\nD. 178\nE. 112"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0098",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nthe average weight of 20 persons sitting in a boat had some value . a new person added to them whose weight was 46 kg only . due to his arrival , the average weight of all the persons decreased by 5 kg . find the average weight of first 20 persons ?\n\nA. 55\nB. 56\nC. 57\nD. 58\nE. 59"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  },
+  {
+    "question_id": "mathqa-test-0099",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na and b can together finish a work in 40 days . they worked together for 10 days and then b left . after another 18 days , a finished the remaining work . in how many days a alone can finish the job ?\n\nA. 10\nB. 24\nC. 60\nD. 30\nE. 20"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false
+  }
+]

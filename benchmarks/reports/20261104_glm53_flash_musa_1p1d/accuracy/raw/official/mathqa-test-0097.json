@@ -1,0 +1,73 @@
+{
+  "question_id": "mathqa-test-0097",
+  "endpoint": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na man gains 20 % by selling an article for a certain price . if the sells it at double the price , the percentage of profit will be :\n\nA. 327\nB. 140\nC. 277\nD. 178\nE. 112"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false,
+    "model": "glm-5.3-flash"
+  },
+  "ground_truth": "D",
+  "started_at": "2026-11-04T14:22:35.946772+08:00",
+  "protocol_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+  "scorer_version": "final-visible-v2-think-boundary",
+  "client_read_timeout_seconds": 900,
+  "http_status": 200,
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "Cost = 100, selling price = 120 (20% gain). Double the price = 240, so profit = 140/100 = 140%.\n\nANSWER: B",
+          "reasoning_content": "CP=100, SP=120, double=240, profit 140%. B",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1793773358,
+    "id": "20261104142236146755aef9434191",
+    "model": "glm-5.3-flash",
+    "object": "chat.completion",
+    "request_id": "20261104142236146755aef9434191",
+    "usage": {
+      "completion_tokens": 56,
+      "completion_tokens_details": {
+        "reasoning_tokens": 17
+      },
+      "prompt_tokens": 115,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 171
+    }
+  },
+  "final_content": "Cost = 100, selling price = 120 (20% gain). Double the price = 240, so profit = 140/100 = 140%.\n\nANSWER: B",
+  "reasoning_boundary_present": false,
+  "reasoning_separate_field": true,
+  "answer": "B",
+  "format_error": null,
+  "truncated": false,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 56,
+    "completion_tokens_details": {
+      "reasoning_tokens": 17
+    },
+    "prompt_tokens": 115,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 171
+  },
+  "correct": false,
+  "elapsed_seconds": 2.419322295987513
+}

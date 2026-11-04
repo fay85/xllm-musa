@@ -1,0 +1,44 @@
+{
+  "request": {
+    "model": "glm-5.3-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "请计算 1.5 + 2.8，并给出结果。"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 512,
+    "stream": false
+  },
+  "started_at": "2026-11-04T13:12:15.313326+08:00",
+  "real_model": true,
+  "http_status": 200,
+  "response": {
+    "id": "chatcmpl-15263923581749589600-yhKhu9DSVjreoGmDcuNRTt",
+    "object": "chat.completion",
+    "created": 1793769135,
+    "model": "glm-5.3-flash",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "</think>1.5 + 2.8 = **4.3**"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 28,
+      "completion_tokens": 16,
+      "total_tokens": 44,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  },
+  "elapsed_seconds": 333.04994063219056
+}

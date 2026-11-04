@@ -1,0 +1,75 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+[==========] Running 23 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 22 tests from CacheLayoutBuilderTest
+[ RUN      ] CacheLayoutBuilderTest.HybridMlaKeepsRecurrentStateSharded
+[       OK ] CacheLayoutBuilderTest.HybridMlaKeepsRecurrentStateSharded (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.DescribesTokenMajorGqaHeads
+[       OK ] CacheLayoutBuilderTest.DescribesTokenMajorGqaHeads (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.SelectsStableOwnerForMqaReplicas
+[       OK ] CacheLayoutBuilderTest.SelectsStableOwnerForMqaReplicas (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.SelectsContiguousReplicaGroupForGqaHeads
+[       OK ] CacheLayoutBuilderTest.SelectsContiguousReplicaGroupForGqaHeads (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.DescribesMlaAsWholeResourceReplica
+[       OK ] CacheLayoutBuilderTest.DescribesMlaAsWholeResourceReplica (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.DescribesSharedIndexerKeyAsReplica
+[       OK ] CacheLayoutBuilderTest.DescribesSharedIndexerKeyAsReplica (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.DescribesSharedIndexerScaleAsReplica
+[       OK ] CacheLayoutBuilderTest.DescribesSharedIndexerScaleAsReplica (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.DescribesSequenceScopedSsmHeads
+[       OK ] CacheLayoutBuilderTest.DescribesSequenceScopedSsmHeads (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.DescribesCheckpointedSsmRowsPerLogicalSlot
+[       OK ] CacheLayoutBuilderTest.DescribesCheckpointedSsmRowsPerLogicalSlot (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.DescribesCompositeConvState
+[       OK ] CacheLayoutBuilderTest.DescribesCompositeConvState (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.RejectsInvalidMusaConvStorage
+[       OK ] CacheLayoutBuilderTest.RejectsInvalidMusaConvStorage (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.HybridMlaKeepsKPoolTailSequenceScopedReplica
+[       OK ] CacheLayoutBuilderTest.HybridMlaKeepsKPoolTailSequenceScopedReplica (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.RecordsPerPoolSpansFromTensors
+[       OK ] CacheLayoutBuilderTest.RecordsPerPoolSpansFromTensors (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.DescribesTypedPoolAgainstRecordedSpan
+[       OK ] CacheLayoutBuilderTest.DescribesTypedPoolAgainstRecordedSpan (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.FailsWhenPoolSpansConflict
+
+[WARNING] /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest-death-test.cc:1102:: Death tests use fork(), which is unsafe particularly in a threaded context. For this test, Google Test detected 2 threads. See https://github.com/google/googletest/blob/main/docs/advanced.md#death-tests-and-threads for more explanation and suggested solutions, especially if this is the last message you see before your test times out.
+[       OK ] CacheLayoutBuilderTest.FailsWhenPoolSpansConflict (75 ms)
+[ RUN      ] CacheLayoutBuilderTest.SkipsSpanRecordingForMlaLayouts
+[       OK ] CacheLayoutBuilderTest.SkipsSpanRecordingForMlaLayouts (40 ms)
+[ RUN      ] CacheLayoutBuilderTest.SkipsSpanRecordingForUniformPools
+[       OK ] CacheLayoutBuilderTest.SkipsSpanRecordingForUniformPools (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.SkipsSpanRecordingForTensorsWithoutTokenAxis
+[       OK ] CacheLayoutBuilderTest.SkipsSpanRecordingForTensorsWithoutTokenAxis (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.RejectsOrdinaryNoncontiguousAttentionStorage
+[       OK ] CacheLayoutBuilderTest.RejectsOrdinaryNoncontiguousAttentionStorage (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.MusaGroupedModel1BytesDoNotRedefineTokenCapacity
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I20261104 12:05:53.812974  4328 kv_cache.cpp:436] [DSV4][KVCacheInit] layer_crs: [1,4,128]
+I20261104 12:05:53.813045  4328 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_1 shapes: swa_cache=[3, 128, 1, 576]
+I20261104 12:05:53.813048  4328 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_4 shapes: key_cache=[96, 128, 1, 576], mate_key_cache=[96, 128, 1, 584], index_cache=[96, 128, 1, 128], indexer_cache_scale=[96, 128, 1], swa_cache=[3, 128, 1, 576], mate_extra_k_cache=[3, 128, 1, 584], compress_kv_state=[3, 128, 1024], compress_score_state=[3, 128, 1024], compress_index_kv_state=[3, 128, 256], compress_index_score_state=[3, 128, 256]
+I20261104 12:05:53.813058  4328 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_128 shapes: key_cache=[3, 128, 1, 576], mate_key_cache=[3, 128, 1, 584], swa_cache=[3, 128, 1, 576], mate_extra_k_cache=[3, 128, 1, 584], compress_kv_state=[3, 128, 512], compress_score_state=[3, 128, 512]
+[       OK ] CacheLayoutBuilderTest.MusaGroupedModel1BytesDoNotRedefineTokenCapacity (0 ms)
+[ RUN      ] CacheLayoutBuilderTest.MusaGroupedModel1TransfersWholeFinalPage
+I20261104 12:05:53.813252  4328 kv_cache.cpp:436] [DSV4][KVCacheInit] layer_crs: [1,4,128]
+I20261104 12:05:53.813256  4328 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_1 shapes: swa_cache=[3, 128, 1, 576]
+I20261104 12:05:53.813258  4328 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_4 shapes: key_cache=[96, 128, 1, 576], mate_key_cache=[96, 128, 1, 584], index_cache=[96, 128, 1, 128], indexer_cache_scale=[96, 128, 1], swa_cache=[3, 128, 1, 576], mate_extra_k_cache=[3, 128, 1, 584], compress_kv_state=[3, 128, 1024], compress_score_state=[3, 128, 1024], compress_index_kv_state=[3, 128, 256], compress_index_score_state=[3, 128, 256]
+I20261104 12:05:53.813261  4328 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_128 shapes: key_cache=[3, 128, 1, 576], mate_key_cache=[3, 128, 1, 584], swa_cache=[3, 128, 1, 576], mate_extra_k_cache=[3, 128, 1, 584], compress_kv_state=[3, 128, 512], compress_score_state=[3, 128, 512]
+I20261104 12:05:53.813333  4328 kv_cache.cpp:436] [DSV4][KVCacheInit] layer_crs: [1,4,128]
+I20261104 12:05:53.813336  4328 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_1 shapes: swa_cache=[3, 128, 1, 576]
+I20261104 12:05:53.813338  4328 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_4 shapes: key_cache=[96, 128, 1, 576], mate_key_cache=[96, 128, 1, 584], index_cache=[96, 128, 1, 128], indexer_cache_scale=[96, 128, 1], swa_cache=[3, 128, 1, 576], mate_extra_k_cache=[3, 128, 1, 584], compress_kv_state=[3, 128, 1024], compress_score_state=[3, 128, 1024], compress_index_kv_state=[3, 128, 256], compress_index_score_state=[3, 128, 256]
+I20261104 12:05:53.813340  4328 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_128 shapes: key_cache=[3, 128, 1, 576], mate_key_cache=[3, 128, 1, 584], swa_cache=[3, 128, 1, 576], mate_extra_k_cache=[3, 128, 1, 584], compress_kv_state=[3, 128, 512], compress_score_state=[3, 128, 512]
+[       OK ] CacheLayoutBuilderTest.MusaGroupedModel1TransfersWholeFinalPage (673 ms)
+[ RUN      ] CacheLayoutBuilderTest.RejectsMusaModel1StorageMissingFinalPadding
+
+[WARNING] /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest-death-test.cc:1102:: Death tests use fork(), which is unsafe particularly in a threaded context. For this test, Google Test detected 256 threads. See https://github.com/google/googletest/blob/main/docs/advanced.md#death-tests-and-threads for more explanation and suggested solutions, especially if this is the last message you see before your test times out.
+[       OK ] CacheLayoutBuilderTest.RejectsMusaModel1StorageMissingFinalPadding (275 ms)
+[----------] 22 tests from CacheLayoutBuilderTest (1065 ms total)
+
+[----------] 1 test from KVShardLayoutTest
+[ RUN      ] KVShardLayoutTest.MapsTokensAndSlots
+[       OK ] KVShardLayoutTest.MapsTokensAndSlots (0 ms)
+[----------] 1 test from KVShardLayoutTest (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 23 tests from 2 test suites ran. (1066 ms total)
+[  PASSED  ] 23 tests.

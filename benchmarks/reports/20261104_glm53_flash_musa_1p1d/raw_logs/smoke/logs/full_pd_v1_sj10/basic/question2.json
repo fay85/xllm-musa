@@ -1,0 +1,44 @@
+{
+  "request": {
+    "model": "glm-5.3-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "把 Hello 翻译成中文。"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 512,
+    "stream": false
+  },
+  "started_at": "2026-11-04T13:19:09.701413+08:00",
+  "real_model": true,
+  "http_status": 200,
+  "response": {
+    "id": "chatcmpl-15263923581749589600-MxTJ5tgGcqiGzYjcB24PFJ",
+    "object": "chat.completion",
+    "created": 1793769550,
+    "model": "glm-5.3-flash",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "</think>\"Hello\" 翻译成中文是：\n\n- **你好**（nǐ hǎo）— 最常用的翻译\n- **您好**（nín hǎo）— 更正式、礼貌的说法\n- **哈喽**（hā lou）— 音译，口语中常用，比较随意\n\n根据场合选择合适的用法即可。"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 21,
+      "completion_tokens": 75,
+      "total_tokens": 96,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  },
+  "elapsed_seconds": 95.73871277133003
+}
