@@ -945,7 +945,6 @@ def _async_all_to_all(
     input_split_sizes: list[int],
     group_name: str,
 ) -> tuple[torch.Tensor, object | None]:
-    """vLLM-style all-to-all-v wrapper used by eager prefill only."""
     if group_name != "moe_ep":
         raise ValueError("Kimi MoE uses the mainline moe_ep group")
     group = distributed.moe_ep_group(input_tensor.device)
@@ -1153,9 +1152,7 @@ class FusedAllGatherTokenDispatcher(MoETokenDispatcher):
         )
 
 
-class VllmAllToAllTokenDispatcher(MoETokenDispatcher):
-    """vLLM-Ascend all-to-all dispatcher for eager sequence-parallel prefill."""
-
+class VaAllToAllTokenDispatcher(MoETokenDispatcher):
     def __init__(
         self,
         config: MoEParallelConfig,
@@ -1193,17 +1190,11 @@ class VllmAllToAllTokenDispatcher(MoETokenDispatcher):
     ) -> MoETokenDispatchOutput:
         hidden_states = token_dispatch_input.hidden_states
         routing = token_dispatch_input.routing
-        # npu_moe_token_permute uses the fused path only with int64 expert
-        # indices on this Ascend runtime.  The router keeps int32 ids for
-        # MC2/routing kernels, so widen only in the vLLM-style prefill path.
         topk_ids = routing.topk_ids.to(torch.int64)
         topk_weights = routing.topk_weights
         hidden_shape = hidden_states.shape
         hidden_states = hidden_states.reshape(-1, hidden_states.shape[-1])
 
-        # Match vLLM-Ascend: compute variable splits from token counts, then
-        # use the fused NPU permutation instead of Python sorting and a second
-        # expert-id all-to-all.
         local_counts = torch.histc(
             topk_ids.to(torch.float32),
             bins=self._num_experts,
@@ -1431,9 +1422,6 @@ class MC2TokenDispatcher(MoETokenDispatcher):
         self._quantized = quantized
         self._enable_v2 = hasattr(torch_npu, "npu_moe_distribute_dispatch_v2")
         soc_version = int(torch_npu.npu.get_soc_version())
-        # A3/A5 dispatch-v2 requires the explicit TP arguments even when the
-        # MoE TP group is logically size one. This matches vLLM-Ascend's
-        # A3/A5 path and avoids dispatch tiling with an incomplete contract.
         self._need_tp_arguments = (
             _SOC_VERSION_A3_MIN <= soc_version <= _SOC_VERSION_A3_MAX
             or soc_version == _SOC_VERSION_A5
@@ -2300,12 +2288,12 @@ class AllToAllCommMethod(MoECommMethod):
         config: MoEParallelConfig,
         num_experts: int,
         quantized: bool,
-        vllm_prefill: bool = False,
+        va_prefill: bool = False,
     ) -> None:
         super().__init__(
             (
-                VllmAllToAllTokenDispatcher(config, num_experts, quantized)
-                if vllm_prefill
+                VaAllToAllTokenDispatcher(config, num_experts, quantized)
+                if va_prefill
                 else AllToAllTokenDispatcher(config, num_experts, quantized)
             ),
             AllToAllPrepareAndFinalize(config),
@@ -2339,7 +2327,7 @@ class AdaptiveMoECommMethod(MoECommMethod):
         quantized: bool,
         device: torch.device,
         all_gather_config: MoEParallelConfig | None = None,
-        vllm_prefill: bool = False,
+        va_prefill: bool = False,
     ) -> None:
         self._config = config
         self._all_gather = AllGatherCommMethod(
@@ -2350,9 +2338,7 @@ class AdaptiveMoECommMethod(MoECommMethod):
             device,
         )
         self._all_to_all = (
-            AllToAllCommMethod(config, num_experts, quantized, vllm_prefill=vllm_prefill)
-            if config.ep_size > 1
-            else None
+            AllToAllCommMethod(config, num_experts, quantized, va_prefill=va_prefill) if config.ep_size > 1 else None
         )
         self._active: MoECommMethod | None = None
 
@@ -2404,7 +2390,7 @@ def build_moe_comm_method(
     quantized: bool,
     device: torch.device,
     all_gather_config: MoEParallelConfig | None = None,
-    vllm_prefill: bool = False,
+    va_prefill: bool = False,
 ) -> MoECommMethod:
     """Build the configured reusable MoE communication method."""
     comm_type = config.comm_type
@@ -2428,7 +2414,7 @@ def build_moe_comm_method(
             quantized,
             device,
             all_gather_config=all_gather_config,
-            vllm_prefill=vllm_prefill,
+            va_prefill=va_prefill,
         )
     if comm_type == MoECommType.MC2:
         return MC2CommMethod(config, num_experts, quantized, device)
@@ -2854,7 +2840,7 @@ class KimiK3MoE(MoE):
                 quantized=quantized,
                 device=device,
                 all_gather_config=parallel_config,
-                vllm_prefill=True,
+                va_prefill=True,
             )
         else:
             prefill_comm_method = decode_comm_method
@@ -2953,8 +2939,6 @@ class KimiK3MoE(MoE):
                 )[:sequence_parallel_tokens]
                 shared_output = self._runner._unwrap_tensor(self.shared_experts(full_input))
                 if self.tp_size > 1:
-                    # This is vLLM's maybe_pad_and_reduce semantics: sum the
-                    # TP partials while returning this rank's sequence shard.
                     pad_size = (-shared_output.shape[0]) % self.tp_size
                     if pad_size > 0:
                         shared_output = F.pad(shared_output, (0, 0, 0, pad_size))

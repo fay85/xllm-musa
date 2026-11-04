@@ -171,7 +171,7 @@ def test_single_encoder_rank_preserves_media_attention_boundaries(monkeypatch: p
     assert [output.shape[0] for output in outputs] == [1, 2]
 
 
-def test_encoder_data_mode_matches_vllm_greedy_assignment() -> None:
+def test_encoder_data_mode_matches_va_greedy_assignment() -> None:
     assignment, image_counts, rank_loads = _get_load_balance_assignment(
         [1000, 100, 200, 50],
         num_ranks=2,
