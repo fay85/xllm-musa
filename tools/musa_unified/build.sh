@@ -60,7 +60,7 @@ PY
 )"
 python3 - <<'PY'
 from importlib.metadata import version
-for name, expected in {'mate':'0.2.7','apache-tvm-ffi':'0.1.11.post1+musa.1','tilelang-musa':'0.1.12+musa.2'}.items():
+for name, expected in {'mate':'0.2.8.post1','apache-tvm-ffi':'0.1.11.post1+musa.1','tilelang-musa':'0.1.12+musa.5'}.items():
     if version(name) != expected:
         raise RuntimeError(f'{name} must be {expected}')
 PY

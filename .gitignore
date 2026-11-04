@@ -8,6 +8,7 @@
 
 # CMake
 /build*
+scripts/ninja_guard/ninja.real
 
 # vcpkg
 /.vcpkg*

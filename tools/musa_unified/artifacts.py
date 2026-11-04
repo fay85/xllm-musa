@@ -23,10 +23,10 @@ BASE_IMAGE_ID = "sha256:f19c55daf710fc2899b057a3faf62c82c1a72cf4f0c67faf420520ef
 PACKAGES = {
     "torch": "2.9.1",
     "torch-musa": "2.9.1",
-    "mate": "0.2.7",
+    "mate": "0.2.8.post1",
     "mate-mubin": "0.2.7",
     "apache-tvm-ffi": "0.1.11.post1+musa.1",
-    "tilelang-musa": "0.1.12+musa.2",
+    "tilelang-musa": "0.1.12+musa.5",
 }
 
 

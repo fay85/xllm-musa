@@ -35,13 +35,12 @@ resolve_mate_home() {
   local candidate
   if [[ -n "${MATE_HOME:-}" ]]; then
     candidate="${MATE_HOME}"
-    [[ -f "${candidate}/version.txt" ]] &&
-      [[ "$(tr -d '[:space:]' < "${candidate}/version.txt")" == "0.2.7" ]] && {
+    [[ -f "${candidate}/version.txt" ]] && {
       printf '%s\n' "${candidate}"
       return
     }
   fi
-  for candidate in /opt/mate_0.2.7 /workspace/mate_0.2.7 /data/feihu/mate_0.2.7; do
+  for candidate in /opt/mate_0.2.7 /workspace/mate_0.2.7; do
     if [[ -f "${candidate}/version.txt" ]]; then
       printf '%s\n' "${candidate}"
       return
@@ -53,9 +52,9 @@ resolve_mate_home() {
 
 MATE_HOME="$(resolve_mate_home)" || exit 1
 export MATE_HOME
-MATE_VERSION="$(tr -d '[:space:]' < "${MATE_HOME}/version.txt")"
-[[ "${MATE_VERSION}" == "0.2.7" ]] || {
-  echo "Expected Mate 0.2.7, found ${MATE_VERSION} at ${MATE_HOME}" >&2
+MATE_VERSION="$(python3 -c 'from importlib.metadata import version; print(version("mate"))')"
+[[ "${MATE_VERSION}" == "0.2.8.post1" ]] || {
+  echo "Expected Mate 0.2.8.post1, found ${MATE_VERSION}" >&2
   exit 1
 }
 export MATE_MUSA_ARCH_LIST="${MATE_MUSA_ARCH_LIST:-3.1}"
@@ -65,7 +64,7 @@ filtered_pythonpath=""
 IFS=: read -ra pythonpath_entries <<< "${PYTHONPATH:-}"
 for pythonpath_entry in "${pythonpath_entries[@]}"; do
   case "${pythonpath_entry}" in
-    /workspace/mate_0.2.* | /data/feihu/mate_0.2.*) continue ;;
+    /workspace/mate_0.2.*) continue ;;
   esac
   filtered_pythonpath="${filtered_pythonpath:+${filtered_pythonpath}:}${pythonpath_entry}"
 done
@@ -74,9 +73,9 @@ python3 - <<'PY'
 from importlib.metadata import version
 
 expected = {
-    "mate": "0.2.7",
+    "mate": "0.2.8.post1",
     "apache-tvm-ffi": "0.1.11.post1+musa.1",
-    "tilelang-musa": "0.1.12+musa.2",
+    "tilelang-musa": "0.1.12+musa.5",
 }
 for package, expected_version in expected.items():
     installed_version = version(package)
@@ -89,8 +88,6 @@ if [[ -z "${MATE_WORKSPACE_BASE:-}" ||
       "${MATE_WORKSPACE_BASE}" == */mate027_cache ]]; then
   if [[ -d /opt/mate027_cache ]]; then
     MATE_WORKSPACE_BASE=/opt/mate027_cache
-  elif [[ -d /data/feihu/mate027_cache ]]; then
-    MATE_WORKSPACE_BASE=/data/feihu/mate027_cache
   else
     MATE_WORKSPACE_BASE="${MATE_HOME}"
   fi
@@ -206,7 +203,7 @@ if [ -f /usr/lib/x86_64-linux-gnu/libmusa.so.5.1.0 ] && [ ! -s /usr/lib/x86_64-l
   cp -f "${MUSA_RUNTIME}" /usr/lib/x86_64-linux-gnu/libmusa.so.5.1.0
 fi
 
-# Container: /workspace/*  ==  Host: /data/feihu/*
+# Container paths are used directly; no host-side source-tree fallback.
 BUILD_DIR=build/cmake.linux-x86_64-cpython-310
 REF="${XLLM_MUSA_REF}"
 # Only seed vcpkg when missing. Never rm+cp on every run (that + cache wipe => vcpkg reinstall loop).
@@ -214,6 +211,24 @@ if [ ! -d "${BUILD_DIR}/vcpkg_installed" ] && [ -d "${REF}/${BUILD_DIR}/vcpkg_in
   echo "==> First-time init: copy vcpkg_installed from xllm-musa reference (${REF})"
   mkdir -p "${BUILD_DIR}"
   cp -a "${REF}/${BUILD_DIR}/vcpkg_installed" "${BUILD_DIR}/"
+fi
+
+# Rewrite absolute paths in the generated CMake/Ninja metadata when the
+# cache came from another checkout.  Preserve the cache, compiled third-party
+# libraries, vcpkg_installed, and build.ninja; this is intentionally not a
+# reset or a dependency rebuild.
+CACHED_SOURCE=""
+if [ -f "${BUILD_DIR}/CMakeCache.txt" ]; then
+  CACHED_SOURCE="$(sed -n 's/^CMAKE_HOME_DIRECTORY:INTERNAL=//p' \
+    "${BUILD_DIR}/CMakeCache.txt" | head -n 1)"
+fi
+if [ -n "${CACHED_SOURCE}" ] && [ "${CACHED_SOURCE}" != "${SCRIPT_DIR}" ]; then
+  echo "==> Rewriting stale CMake source paths: ${CACHED_SOURCE} -> ${SCRIPT_DIR}"
+  grep -RIl --exclude='*.a' --exclude='*.so' --exclude='*.so.*' \
+    --exclude='*.o' --exclude='*.d' "${CACHED_SOURCE}" "${BUILD_DIR}" \
+    2>/dev/null | while IFS= read -r generated_file; do
+      sed -i "s|${CACHED_SOURCE}|${SCRIPT_DIR}|g" "${generated_file}"
+    done
 fi
 
 # FULL_RESET=1 only: wipes cmake cache and forces vcpkg reinstall (avoid in normal use).
