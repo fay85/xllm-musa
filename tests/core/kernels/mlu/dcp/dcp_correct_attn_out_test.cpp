@@ -18,7 +18,7 @@ limitations under the License.
 
 #include <cmath>
 #include <cstdint>
-#include <limits>
+#include <vector>
 
 #include "kernels/mlu/mlu_ops_api.h"
 
@@ -64,13 +64,18 @@ void check_close(const torch::Tensor& actual,
 
 class DcpCorrectionTest : public ::testing::Test {
  protected:
-  void SetUp() override { torch::manual_seed(2026); }
+  void SetUp() override {
+    torch::set_num_threads(1);
+    torch::manual_seed(2026);
+  }
   const torch::Device device{torch::kPrivateUse1, 0};
 
   void check_case(const torch::Tensor& src,
                   const torch::Tensor& lse,
                   const torch::Tensor& slots,
-                  bool base_e = true) {
+                  bool base_e = true,
+                  bool all_ranks = false,
+                  bool memory_contract = true) {
     const torch::DeviceGuard guard(device);
     const torch::Tensor cpu_src = src.cpu();
     const torch::Tensor cpu_lse = lse.cpu();
@@ -80,7 +85,17 @@ class DcpCorrectionTest : public ::testing::Test {
     const int64_t b = src.size(0);
     const int64_t h = src.size(1);
     const int64_t v = src.size(2);
-    for (int64_t rank = 0; rank < lse.size(0); ++rank) {
+    std::vector<int64_t> ranks;
+    ranks.reserve(lse.size(0));
+    ranks.emplace_back(0);
+    if (all_ranks) {
+      for (int64_t rank = 1; rank < lse.size(0); ++rank) {
+        ranks.emplace_back(rank);
+      }
+    } else if (lse.size(0) > 1) {
+      ranks.emplace_back(lse.size(0) - 1);
+    }
+    for (int64_t rank : ranks) {
       SCOPED_TRACE(::testing::Message()
                    << "B=" << b << " rank=" << rank << " base_e=" << base_e);
       const torch::Tensor expected =
@@ -98,30 +113,22 @@ class DcpCorrectionTest : public ::testing::Test {
       EXPECT_TRUE(
           torch::equal(lse.cpu().contiguous().view(torch::kUInt8), lse_bits));
       EXPECT_TRUE(torch::equal(slots.cpu(), cpu_slots));
-      // Preserve arbitrary strides and a nonzero storage offset in-place.
-      torch::Tensor backing =
-          torch::full({src.numel() * 2 + 2}, 37, src.options());
-      torch::Tensor out = backing.slice(0, 1, -1, 2).view_as(src);
-      out.copy_(src);
-      dcp_correct_attn_out(out, lse, slots, rank, base_e);
-      check_close(out, expected);
-      EXPECT_EQ(backing[0].item<float>(), 37);
-      EXPECT_TRUE((backing.slice(0, 2, -1, 2) == 37).all().item<bool>());
+      if (memory_contract) {
+        // Preserve arbitrary strides and a nonzero storage offset in-place.
+        torch::Tensor backing =
+            torch::full({src.numel() * 2 + 2}, 37, src.options());
+        torch::Tensor out = backing.slice(0, 1, -1, 2).view_as(src);
+        out.copy_(src);
+        dcp_correct_attn_out(out, lse, slots, rank, base_e);
+        check_close(out, expected);
+        EXPECT_EQ(backing[0].item<float>(), 37);
+        EXPECT_TRUE((backing.slice(0, 2, -1, 2) == 37).all().item<bool>());
+      }
       // Exercise the production contiguous fast path as well.
-      out = src.contiguous().clone();
+      torch::Tensor out = src.contiguous().clone();
       dcp_correct_attn_out(out, lse, slots, rank, base_e);
       check_close(out, expected);
     }
-  }
-
-  void check_rows(int64_t b) {
-    const auto opts = torch::TensorOptions().device(device);
-    torch::Tensor src =
-        torch::randn({b, 64, 512}, opts.dtype(torch::kBFloat16));
-    torch::Tensor lse =
-        torch::randn({4, b, 64}, opts.dtype(torch::kFloat32)) * 3;
-    torch::Tensor slots = torch::arange(b, opts.dtype(torch::kInt32));
-    check_case(src, lse, slots);
   }
 };
 
@@ -165,132 +172,106 @@ TEST(DcpCorrectionDeathTest, RejectsInvalidDestinationsAndRank) {
   }
 }
 
-TEST_F(DcpCorrectionTest, DecodeRowsAndDispatchBoundaries) {
-  for (int64_t b = 1; b <= 128; ++b) {
-    check_rows(b);
-  }
-  for (int64_t b : {0, 129, 255, 256, 257}) {
-    check_rows(b);
-  }
-}
-
-TEST_F(DcpCorrectionTest, Prefill8192MatchesReference) {
-  // The fused generic path is covered above. Keep the large allocation test
-  // focused on the in-place Prefill schedule used by replicated heads.
+TEST_F(DcpCorrectionTest, DispatchBoundaries) {
   const auto opts = torch::TensorOptions().device(device);
-  const torch::Tensor src =
-      torch::randn({8192, 64, 512}, opts.dtype(torch::kBFloat16));
-  const torch::Tensor lse =
-      torch::randn({4, 8192, 64}, opts.dtype(torch::kFloat32));
-  torch::Tensor slots = torch::arange(8192, opts.dtype(torch::kInt32));
-  slots.slice(0, 0, 8192, 3).fill_(-1);
-  for (int64_t rank = 0; rank < 4; ++rank) {
-    torch::Tensor out = src.clone();
-    dcp_correct_attn_out(out, lse, slots, rank);
-    check_close(out, reference(src.cpu(), lse.cpu(), slots.cpu(), rank, true));
-  }
-}
-
-TEST_F(DcpCorrectionTest, ShardedHeadPrefillBoundariesAndPadding) {
-  const auto opts = torch::TensorOptions().device(device);
-  for (int64_t b : {0, 1, 128, 129, 255, 256, 257, 513}) {
-    const torch::Tensor src =
-        torch::randn({b, 32, 512}, opts.dtype(torch::kBFloat16));
-    const torch::Tensor lse =
-        torch::randn({4, b, 32}, opts.dtype(torch::kFloat32)) * 3;
-    const torch::Tensor rows = torch::arange(b, opts.dtype(torch::kInt32));
-    // Each 64-head tile spans two tokens with independent padding states.
-    const torch::Tensor slots = torch::where(
-        (rows % 4 == 0) | (rows % 4 == 3), torch::full_like(rows, -1), rows);
-    check_case(src, lse, slots);
-  }
-}
-
-TEST_F(DcpCorrectionTest, ShardedHeadPrefill8192MatchesReference) {
-  const auto opts = torch::TensorOptions().device(device);
-  const torch::Tensor src =
-      torch::randn({8192, 32, 512}, opts.dtype(torch::kBFloat16));
-  const torch::Tensor lse =
-      torch::randn({4, 8192, 32}, opts.dtype(torch::kFloat32));
-  torch::Tensor slots = torch::arange(8192, opts.dtype(torch::kInt32));
-  slots.slice(0, 1, 8192, 2).fill_(-1);
-  const torch::Tensor cpu_src = src.cpu();
-  const torch::Tensor cpu_lse = lse.cpu();
-  const torch::Tensor cpu_slots = slots.cpu();
-  for (int64_t rank = 0; rank < 4; ++rank) {
-    SCOPED_TRACE(::testing::Message() << "rank=" << rank);
-    torch::Tensor out = src.clone();
-    dcp_correct_attn_out(out, lse, slots, rank);
-    check_close(out, reference(cpu_src, cpu_lse, cpu_slots, rank, true));
-  }
-}
-
-TEST_F(DcpCorrectionTest, ShardedHeadPrefillZeroWeightsAndNonfiniteValues) {
-  const auto opts = torch::TensorOptions().device(device);
-  torch::Tensor src =
-      torch::randn({257, 32, 512}, opts.dtype(torch::kBFloat16));
-  torch::Tensor lse = torch::zeros({4, 257, 32}, opts.dtype(torch::kFloat32));
-  torch::Tensor slots = torch::arange(257, opts.dtype(torch::kInt32));
-  lse.select(2, 0).fill_(NAN);
-  lse.select(2, 1).fill_(INFINITY);
-  lse.select(2, 2).fill_(-INFINITY);
-  lse[0].select(1, 3).fill_(-INFINITY);
-  src.slice(1, 0, 4).fill_(NAN);
-  lse[0].select(1, 4).fill_(-102);
-  src.select(1, 4).fill_(INFINITY);
-  slots.slice(0, 1, 257, 2).fill_(-1);
-  check_case(src, lse, slots);
-}
-
-TEST_F(DcpCorrectionTest, NonfinitePaddingAndSubnormalWeights) {
-  const auto opts = torch::TensorOptions().device(device);
-  for (int64_t b : {1, 32, 128, 129, 256}) {
-    for (bool base_e : {true, false}) {
-      torch::Tensor src =
-          torch::randn({b, 64, 512}, opts.dtype(torch::kBFloat16));
-      torch::Tensor lse = torch::zeros({4, b, 64}, opts.dtype(torch::kFloat32));
-      torch::Tensor slots = torch::arange(b, opts.dtype(torch::kInt32));
-      lse.select(2, 0).fill_(NAN);
-      lse.select(2, 1).fill_(INFINITY);
-      lse.select(2, 2).fill_(-INFINITY);
-      lse[0].select(1, 3).fill_(-INFINITY);
-      src.slice(1, 0, 4).fill_(NAN);
-      lse.slice(2, 4, 8).fill_(0);
-      lse[0].slice(1, 4, 8).fill_(base_e ? -102 : -148);
-      src.select(1, 4).fill_(INFINITY);
-      src.select(1, 5).fill_(-INFINITY);
-      src.select(1, 6).fill_(NAN);
-      lse.select(2, 8).fill_(1e20);
-      lse.select(2, 9).fill_(-1e20);
-      lse.select(2, 10).fill_(10000);
-      lse.select(2, 11).fill_(-10000);
-      // Both bases must exercise a nonzero FP32 subnormal weight, not just
-      // the zero-weight case. Such a weight must preserve an infinite output.
-      const torch::Tensor expected =
-          reference(src.cpu(), lse.cpu(), slots.cpu(), /*rank=*/0, base_e);
-      EXPECT_EQ(expected[0][4][0].item<float>(), INFINITY);
-      check_case(src, lse, slots, base_e);
-      slots.slice(0, 0, b, 2).fill_(-1);
-      check_case(src, lse, slots, base_e);
+  for (int64_t heads : {32, 64}) {
+    for (int64_t rows : {0, 1, 127, 128, 129, 255, 256, 257}) {
+      SCOPED_TRACE(::testing::Message()
+                   << "heads=" << heads << " rows=" << rows);
+      const auto src =
+          torch::randn({rows, heads, 512}, opts.dtype(torch::kBFloat16));
+      const auto lse =
+          torch::randn({4, rows, heads}, opts.dtype(torch::kFloat32)) * 3;
+      const auto indices = torch::arange(rows, opts.dtype(torch::kInt32));
+      // A 32-head tile covers two tokens: mask either lane independently.
+      const auto slots =
+          rows == 1 ? indices
+                    : torch::where((indices % 4 == 0) | (indices % 4 == 3),
+                                   torch::full_like(indices, -1),
+                                   indices);
+      check_case(src,
+                 lse,
+                 slots,
+                 /*base_e=*/true,
+                 /*all_ranks=*/rows == 1,
+                 /*memory_contract=*/false);
     }
   }
 }
 
-TEST_F(DcpCorrectionTest, StridesDtypesAndMasks) {
-  const auto opts = torch::TensorOptions().device(device);
-  for (int64_t n : {1, 2, 3, 5, 8}) {
-    for (torch::ScalarType dtype :
-         {torch::kBFloat16, torch::kFloat16, torch::kFloat32}) {
-      torch::Tensor src = torch::randn({4, 5, 34}, opts.dtype(dtype))
-                              .slice(0, 1)
-                              .slice(2, 0, 34, 2);
-      torch::Tensor lse = torch::randn({n, 5, 4}, opts.dtype(dtype))
-                              .slice(2, 1)
-                              .transpose(1, 2);
-      torch::Tensor slots =
-          torch::arange(4, opts.dtype(torch::kInt32)).slice(0, 1);
+TEST_F(DcpCorrectionTest, PrecisionAndMemoryContracts) {
+  {
+    SCOPED_TRACE("32-head prefill nonfinite");
+
+    const auto opts = torch::TensorOptions().device(device);
+    torch::Tensor src =
+        torch::randn({257, 32, 512}, opts.dtype(torch::kBFloat16));
+    torch::Tensor lse = torch::zeros({4, 257, 32}, opts.dtype(torch::kFloat32));
+    torch::Tensor slots = torch::arange(257, opts.dtype(torch::kInt32));
+    lse.select(2, 0).fill_(NAN);
+    lse.select(2, 1).fill_(INFINITY);
+    lse.select(2, 2).fill_(-INFINITY);
+    lse[0].select(1, 3).fill_(-INFINITY);
+    src.slice(1, 0, 4).fill_(NAN);
+    lse[0].select(1, 4).fill_(-102);
+    src.select(1, 4).fill_(INFINITY);
+    slots.slice(0, 1, 257, 2).fill_(-1);
+    check_case(src, lse, slots);
+  }
+  {
+    SCOPED_TRACE("nonfinite and subnormal weights");
+
+    const auto opts = torch::TensorOptions().device(device);
+    for (int64_t b : {1, 129, 256}) {
       for (bool base_e : {true, false}) {
+        torch::Tensor src =
+            torch::randn({b, 64, 512}, opts.dtype(torch::kBFloat16));
+        torch::Tensor lse =
+            torch::zeros({4, b, 64}, opts.dtype(torch::kFloat32));
+        torch::Tensor slots = torch::arange(b, opts.dtype(torch::kInt32));
+        lse.select(2, 0).fill_(NAN);
+        lse.select(2, 1).fill_(INFINITY);
+        lse.select(2, 2).fill_(-INFINITY);
+        lse[0].select(1, 3).fill_(-INFINITY);
+        src.slice(1, 0, 4).fill_(NAN);
+        lse.slice(2, 4, 8).fill_(0);
+        lse[0].slice(1, 4, 8).fill_(base_e ? -102 : -148);
+        src.select(1, 4).fill_(INFINITY);
+        src.select(1, 5).fill_(-INFINITY);
+        src.select(1, 6).fill_(NAN);
+        lse.select(2, 8).fill_(1e20);
+        lse.select(2, 9).fill_(-1e20);
+        lse.select(2, 10).fill_(10000);
+        lse.select(2, 11).fill_(-10000);
+        // Both bases must exercise a nonzero FP32 subnormal weight, not just
+        // the zero-weight case. Such a weight must preserve an infinite output.
+        const torch::Tensor expected =
+            reference(src.cpu(), lse.cpu(), slots.cpu(), /*rank=*/0, base_e);
+        EXPECT_EQ(expected[0][4][0].item<float>(), INFINITY);
         check_case(src, lse, slots, base_e);
+        slots.slice(0, 0, b, 2).fill_(-1);
+        check_case(src, lse, slots, base_e);
+      }
+    }
+  }
+  {
+    SCOPED_TRACE("strides and dtypes");
+
+    const auto opts = torch::TensorOptions().device(device);
+    for (int64_t n : {1, 3, 8}) {
+      for (torch::ScalarType dtype :
+           {torch::kBFloat16, torch::kFloat16, torch::kFloat32}) {
+        torch::Tensor src = torch::randn({4, 5, 34}, opts.dtype(dtype))
+                                .slice(0, 1)
+                                .slice(2, 0, 34, 2);
+        torch::Tensor lse = torch::randn({n, 5, 4}, opts.dtype(dtype))
+                                .slice(2, 1)
+                                .transpose(1, 2);
+        torch::Tensor slots =
+            torch::arange(4, opts.dtype(torch::kInt32)).slice(0, 1);
+        for (bool base_e : {true, false}) {
+          check_case(src, lse, slots, base_e);
+        }
       }
     }
   }

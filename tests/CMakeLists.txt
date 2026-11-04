@@ -2,6 +2,10 @@ if(NOT BUILD_TESTING)
   return()
 endif()
 
+add_test(NAME grouped_gtest_runner_test
+  COMMAND "${Python_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/grouped_gtest_runner_test.py")
+set_tests_properties(grouped_gtest_runner_test PROPERTIES LABELS cpu)
+
 if(USE_NPU)
   add_test(
     NAME python_executor_test

@@ -13,6 +13,7 @@ include(CMakeParseArguments)
 # ARGS: Command line arguments to test case
 # ENVIRONMENT: Environment entries applied to each registered case
 # RUN_SERIAL: Prevent each case from overlapping other CTest cases
+# GTEST_SUITE: Register a whole suite as one CTest entry, retaining GTest XML
 #
 # Usage:
 # cc_library(
@@ -42,7 +43,7 @@ function(cc_test)
   cmake_parse_arguments(
     CC_TEST # prefix
     "CPU_ONLY;RUN_SERIAL" # options
-    "NAME" # one value args
+    "NAME;GTEST_SUITE" # one value args
     "SRCS;COPTS;LINKOPTS;DEPS;INCLUDES;ARGS;DATA;ENVIRONMENT" # multi value args
     ${ARGN}
   )
@@ -124,11 +125,24 @@ function(cc_test)
 
   add_dependencies(all_tests ${CC_TEST_NAME})
 
-  gtest_add_tests(
-    TARGET ${CC_TEST_NAME}
-    EXTRA_ARGS ${CC_TEST_ARGS}
-    TEST_LIST _cc_test_${CC_TEST_NAME}_tests
-  )
+  if(CC_TEST_GTEST_SUITE)
+    set(_cc_test_${CC_TEST_NAME}_tests ${CC_TEST_GTEST_SUITE})
+    add_test(NAME ${CC_TEST_GTEST_SUITE}
+      COMMAND "${Python_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/scripts/build_support/grouped_gtest.py"
+        --binary "$<TARGET_FILE:${CC_TEST_NAME}>"
+        --suite "${CC_TEST_GTEST_SUITE}"
+        --output-root "${CMAKE_BINARY_DIR}/Testing/GTest"
+        -- ${CC_TEST_ARGS})
+    set_tests_properties(${CC_TEST_GTEST_SUITE} PROPERTIES
+      WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+      SKIP_RETURN_CODE 77)
+  else()
+    gtest_add_tests(
+      TARGET ${CC_TEST_NAME}
+      EXTRA_ARGS ${CC_TEST_ARGS}
+      TEST_LIST _cc_test_${CC_TEST_NAME}_tests
+    )
+  endif()
 
   if(CC_TEST_CPU_ONLY)
     set_tests_properties(${_cc_test_${CC_TEST_NAME}_tests}

@@ -99,7 +99,16 @@ TEST_F(Glm5NextMetadataTest,
       prepare(params);
       EXPECT_TRUE(torch::equal(params.attn_metadata->linear_state_read_indices,
                                torch::tensor({1, 1}, torch::kInt32)));
-      EXPECT_TRUE(params.attn_metadata->chunk_indices.defined());
+      EXPECT_FALSE(params.attn_metadata->chunk_indices.defined());
+      ASSERT_TRUE(params.attn_metadata->batch.defined());
+      ASSERT_TRUE(params.attn_metadata->token_block_offset.defined());
+      EXPECT_EQ(params.attn_metadata->tot, 2);
+      EXPECT_TRUE(torch::equal(params.attn_metadata->batch.narrow(
+                                   /*dim=*/0, /*start=*/0, /*length=*/2),
+                               torch::tensor({0, 1}, torch::kInt32)));
+      EXPECT_TRUE(torch::equal(params.attn_metadata->token_block_offset.narrow(
+                                   /*dim=*/0, /*start=*/0, /*length=*/2),
+                               torch::tensor({0, 0}, torch::kInt32)));
       if (device_indices) {
         EXPECT_EQ(params.attn_metadata->linear_state_read_indices.data_ptr(),
                   params.embedding.linear_state_read_indices.data_ptr());

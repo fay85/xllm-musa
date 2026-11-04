@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import sys
+import time
 from typing import Any
 
 from setuptools import Command, Extension, find_namespace_packages, setup
@@ -931,7 +932,7 @@ class TestUT(Command):
 
     # Whitelist: tests that must run sequentially (not in parallel with others)
     # Add test names here if they use fork() or have device initialization conflicts
-    # Note: Use CTest test-name patterns; gtest cases are registered individually.
+    # Use CTest names; selected suites retain per-case results in GTest XML.
     SEQUENTIAL_TESTS = [
         "python_executor_test",
         "ReduceScatterMultiDeviceTest",
@@ -939,6 +940,8 @@ class TestUT(Command):
         "DeepEPMultiDeviceTest",
         "AttentionMultiDeviceTest",
         "Glm5AttentionDcpTest",
+        "DecoderDpParallelTest",
+        "V32DecoderParallelTest",
         "FusedMoEAll2AllMultiDeviceTest",
         "SparseMoECollectiveTest",
     ]
@@ -1030,6 +1033,7 @@ class TestUT(Command):
                 )
 
             # Step 2: Run sequential tests one by one
+            serial_started = time.monotonic()
             for idx, test_name in enumerate(self.SEQUENTIAL_TESTS, start=2):
                 logger.info("=" * 80)
                 logger.info(f"Step {idx}: Running {test_name} sequentially...")
@@ -1037,10 +1041,12 @@ class TestUT(Command):
                 # Use pattern matching to include all test cases under the test class
                 # e.g., ReduceScatterMultiDeviceTest matches ReduceScatterMultiDeviceTest.BasicTest, etc.
                 run_subprocess_with_streaming(
-                    ["ctest", "--output-on-failure", "--repeat", "until-pass:5", "-R", test_name],
+                    ["ctest", "--output-on-failure", "--parallel", "1", "--repeat", "until-pass:5", "-R", test_name],
                     f"Sequential test {test_name} failed.",
                     warn_if_no_tests=True,
                 )
+
+            logger.info("Serial test groups wall time: %.2f sec", time.monotonic() - serial_started)
 
             logger.info("=" * 80)
             logger.info("All tests passed!")

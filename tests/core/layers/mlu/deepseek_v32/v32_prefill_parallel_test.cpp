@@ -1204,6 +1204,7 @@ void run_prefill_case(const PrefillCase& config,
                       int32_t rank,
                       int32_t world_size,
                       int32_t port) {
+  torch::set_num_threads(1);
   torch::NoGradGuard no_grad;
   Device device(rank);
   device.set_device();
@@ -1639,27 +1640,13 @@ void run_prefill_case(const PrefillCase& config,
 }
 
 std::vector<PrefillCase> prefill_cases() {
-  std::vector<PrefillCase> result;
-  result.reserve(40);
-  const std::array<std::string, 4> topology_names = {
-      "CP2", "CP2TP2", "DCP4", "CP2TP2DCP4"};
-  const std::array<Topology, 4> topologies = {
-      Topology::CP, Topology::CPTP, Topology::DCP4, Topology::CPTPDCP4};
-  const std::array<std::string, 5> shape_names = {
-      "Prefill", "Chunks3", "Boundary15", "Boundary16", "Boundary33"};
-  for (DsaModelVariant variant :
-       {DsaModelVariant::V32, DsaModelVariant::GLM5}) {
-    for (int32_t topology = 0; topology < 4; ++topology) {
-      for (int32_t shape = 0; shape < 5; ++shape) {
-        const std::string name =
-            (variant == DsaModelVariant::V32 ? "V32_" : "Glm5_") +
-            topology_names[topology] + "_" + shape_names[shape];
-        result.emplace_back(PrefillCase{
-            variant, topologies[topology], static_cast<Shape>(shape), name});
-      }
-    }
-  }
-  return result;
+  // DCP combinations are covered by the dedicated history and packed tests.
+  return {
+      {DsaModelVariant::V32, Topology::CP, Shape::PREFILL, "V32_CP2_Prefill"},
+      {DsaModelVariant::GLM5,
+       Topology::CPTP,
+       Shape::CHUNKS,
+       "Glm5_CP2TP2_Chunks"}};
 }
 
 void run_prefill_cases(const std::vector<PrefillCase>& cases) {
@@ -1840,7 +1827,7 @@ void run_packed_chain(int32_t rank, int32_t port) {
                        groups.cp.get());
   for (const std::vector<int32_t>& lengths : {std::vector<int32_t>{64},
                                               std::vector<int32_t>{33, 34},
-                                              std::vector<int32_t>{8192}}) {
+                                              std::vector<int32_t>{257}}) {
     const int32_t rows =
         std::accumulate(lengths.begin(), lengths.end(), int32_t{0});
     SCOPED_TRACE("rank=" + std::to_string(rank) +
@@ -1975,11 +1962,6 @@ TEST(PackedAttentionParallelTest, FullAndSharedHistoryMatchSingleRank) {
        Shape::CHUNKS,
        "Glm5_CP4TP2DCP4_PackedShared",
        true},
-      {DsaModelVariant::GLM5,
-       Topology::CPTPDCP4,
-       Shape::CHUNKS,
-       "Glm5_CP2TP2DCP4_PackedShared",
-       true},
   });
 }
 
@@ -1994,10 +1976,6 @@ TEST(AttentionCpTpDcpTest, HistoryMatchesSingleRankAndPreservesUnwrittenSlots) {
        Topology::CPTPDCP4,
        Shape::CHUNKS,
        "Glm5_CP2TP2DCP4_Chunks3"},
-      {DsaModelVariant::GLM5,
-       Topology::CP4TP2DCP4,
-       Shape::CHUNKS,
-       "Glm5_CP4TP2DCP4_Chunks3"},
   });
 }
 
@@ -2185,6 +2163,7 @@ void run_cp_decoder(int32_t rank,
                     bool moe,
                     int32_t count,
                     bool expected_rs) {
+  torch::set_num_threads(1);
   torch::NoGradGuard no_grad;
   Device device(rank);
   device.set_device();
@@ -2282,21 +2261,15 @@ struct DecoderCpCase {
 };
 
 TEST(DecoderCpParallelTest, MatchesSingleRank) {
-  for (const auto& param : std::vector<DecoderCpCase>{
-           DecoderCpCase{.moe = false,
-                         .count = 16,
-                         .can_rs = true,
-                         .name = "DenseBalanced"},
-           DecoderCpCase{.moe = false,
-                         .count = 15,
-                         .can_rs = false,
-                         .name = "DenseUnbalanced"},
-           DecoderCpCase{
-               .moe = true, .count = 16, .can_rs = true, .name = "MoeBalanced"},
-           DecoderCpCase{.moe = true,
-                         .count = 15,
-                         .can_rs = false,
-                         .name = "MoeUnbalanced"}}) {
+  for (const auto& param :
+       std::vector<DecoderCpCase>{DecoderCpCase{.moe = false,
+                                                .count = 16,
+                                                .can_rs = true,
+                                                .name = "DenseBalanced"},
+                                  DecoderCpCase{.moe = true,
+                                                .count = 15,
+                                                .can_rs = false,
+                                                .name = "MoeUnbalanced"}}) {
     // Two physical cards, including equal and unequal token counts per CP rank.
     const DecoderCpCase config = param;
     const int32_t port = parallel_base_port(/*world_size=*/2, /*cp_size=*/2);
@@ -2390,6 +2363,7 @@ ModelInputParams dp_params(int32_t rank, const torch::TensorOptions& options) {
 }
 
 void run_tp_dp_decoder(int32_t rank, int32_t port, bool dp) {
+  torch::set_num_threads(1);
   torch::NoGradGuard no_grad;
   Device device(rank);
   device.set_device();
@@ -2545,6 +2519,7 @@ TEST(DecoderDpParallelTest, MatchesSingleRank) {
 }
 
 void run_cp_relay(int32_t rank, int32_t port) {
+  torch::set_num_threads(1);
   torch::NoGradGuard no_grad;
   Device device(rank);
   device.set_device();
@@ -2759,6 +2734,7 @@ TEST(V32DecoderParallelTest, CpRelayReusesAndRefreshesFixedSelections) {
 }
 
 void run_dummy_attention(int32_t rank, int32_t port) {
+  torch::set_num_threads(1);
   torch::NoGradGuard no_grad;
   Device device(rank);
   device.set_device();

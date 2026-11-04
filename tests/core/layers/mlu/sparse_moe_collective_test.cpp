@@ -17,12 +17,9 @@ limitations under the License.
 #include <framework/graphs/MLUGraph.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <sys/wait.h>
 #include <torch/torch.h>
-#include <unistd.h>
 
-#include <cerrno>
-#include <exception>
+#include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -35,6 +32,8 @@ limitations under the License.
 #include "platform/device.h"
 #include "platform/model_stream_registry.h"
 #include "platform/platform.h"
+#include "tests/core/forked_rank_session.h"
+#include "tests/core/layers/mlu/deep_ep_test_scope.h"
 #include "util/net.h"
 
 namespace xllm::layer {
@@ -160,16 +159,16 @@ void check_selected(Device& device,
   torch_mlu::synchronize();
 }
 
+thread_local std::unique_ptr<ProcessGroup> rank_collective;
+
 int32_t run_rank(int32_t rank,
                  int32_t world_size,
                  int32_t port,
                  bool use_ep,
                  bool with_shared,
                  bool graph_replay,
-                 bool use_cp,
-                 bool use_deep_ep) {
-  // Bound a failed collective, including a peer that exits during setup.
-  ::alarm(180);
+                 bool use_cp = false,
+                 bool use_deep_ep = false) {
   if (Platform::device_count() < world_size) {
     return kExitCodeSkip;
   }
@@ -177,20 +176,23 @@ int32_t run_rank(int32_t rank,
   Device device(rank);
   device.set_device();
   EPLBConfig::get_instance().expert_parallel_degree(use_deep_ep ? 2 : 1);
-  auto collective = create_process_group(rank,
-                                         world_size,
-                                         world_size,
-                                         port,
-                                         /*trans=*/false,
-                                         "127.0.0.1",
-                                         "selected_moe_collective_test",
-                                         device.unwrap());
+  if (!rank_collective) {
+    rank_collective = create_process_group(rank,
+                                           world_size,
+                                           world_size,
+                                           port,
+                                           /*trans=*/false,
+                                           "127.0.0.1",
+                                           "selected_moe_collective_test",
+                                           device.unwrap());
+  }
+  ProcessGroup* collective = rank_collective.get();
   ProcessGroup single_rank(/*rank=*/0, /*world_size=*/1, device.unwrap());
-  ParallelArgs parallel_args = make_parallel_args(
-      rank, world_size, use_ep, collective.get(), &single_rank);
+  ParallelArgs parallel_args =
+      make_parallel_args(rank, world_size, use_ep, collective, &single_rank);
   if (use_cp) {
     parallel_args.tp_group_ = &single_rank;
-    parallel_args.cp_group_ = collective.get();
+    parallel_args.cp_group_ = collective;
   }
   const ParallelArgs reference_args = make_parallel_args(
       /*rank=*/0,
@@ -200,6 +202,7 @@ int32_t run_rank(int32_t rank,
       &single_rank);
   const auto options =
       torch::TensorOptions().dtype(torch::kBFloat16).device(device.unwrap());
+  ::xllm::test::DeepEpTestScope deep_ep_scope;
   const ModelArgs model_args = make_model_args(with_shared);
   ModelStreamRegistry streams(device.unwrap());
   SparseMoEBlock block(model_args,
@@ -273,7 +276,7 @@ int32_t run_rank(int32_t rank,
     for (const std::vector<int32_t>& lengths :
          {std::vector<int32_t>{128}, {129}, {65, 129}, {1, 0, 7}}) {
       const auto context = glm5_next_pcp::build_context(
-          lengths, rank, collective.get(), /*chunk_size=*/64, device.unwrap());
+          lengths, rank, collective, /*chunk_size=*/64, device.unwrap());
       const torch::Tensor full =
           make_values(context.geometry.total_tokens, 16, 0.5f, options);
       const torch::Tensor local = glm5_next_pcp::shard_rows(full, context);
@@ -288,7 +291,7 @@ int32_t run_rank(int32_t rank,
               .mul(10.0f);
       torch::Tensor local = full.narrow(0, offset, lengths[rank]);
       const torch::Tensor actual =
-          block->forward_cp(local, std::nullopt, lengths, collective.get());
+          block->forward_cp(local, std::nullopt, lengths, collective);
       if (local.size(0) == 0) {
         CHECK_EQ(actual.sizes(), local.sizes());
         continue;
@@ -341,128 +344,190 @@ int32_t run_rank(int32_t rank,
   return 0;
 }
 
-void run_collective_test(int32_t world_size,
-                         bool use_ep,
-                         bool with_shared,
-                         bool graph_replay,
-                         bool use_cp = false,
-                         bool use_deep_ep = false) {
-  const int32_t port = net::get_local_free_port();
-  std::vector<pid_t> children;
-  children.reserve(world_size);
-  for (int32_t rank = 0; rank < world_size; ++rank) {
-    const pid_t child = ::fork();
-    CHECK_GE(child, 0) << "Cannot fork selected MoE rank " << rank;
-    if (child == 0) {
-      int32_t result = 1;
-      // A child process boundary must report setup or device failures to GTest.
-      try {
-        result = run_rank(rank,
-                          world_size,
-                          port,
-                          use_ep,
-                          with_shared,
-                          graph_replay,
-                          use_cp,
-                          use_deep_ep);
-      } catch (const std::exception& error) {
-        LOG(ERROR) << "Selected MoE rank " << rank << ": " << error.what();
-      }
-      ::_exit(result);
-    }
-    children.emplace_back(child);
-  }
-  bool skipped = false;
-  for (pid_t child : children) {
-    int status = 0;
-    pid_t waited;
-    do {
-      waited = ::waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    EXPECT_EQ(waited, child);
-    EXPECT_TRUE(WIFEXITED(status))
-        << "Child " << child << ", status " << status;
-    if (!WIFEXITED(status)) {
-      continue;
-    }
-    const int32_t exit_code = WEXITSTATUS(status);
-    skipped = skipped || exit_code == kExitCodeSkip;
-    EXPECT_TRUE(exit_code == 0 || exit_code == kExitCodeSkip)
-        << "Child " << child << " exited with " << exit_code;
-  }
-  if (skipped && !::testing::Test::HasFailure()) {
-    GTEST_SKIP() << "Requires " << world_size << " visible MLU devices";
-  }
+std::vector<::xllm::test::ForkedRankSession::Case> collective_cases() {
+  return {
+      {"EpSharedMatchesUnshardedReference",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         return run_rank(rank,
+                         /*world_size=*/2,
+                         port,
+                         /*use_ep=*/true,
+                         /*with_shared=*/true,
+                         /*graph_replay=*/false);
+       }},
+      {"DeepEpTpShardPreservesSelectedRows",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         return run_rank(rank,
+                         /*world_size=*/2,
+                         port,
+                         /*use_ep=*/true,
+                         /*with_shared=*/false,
+                         /*graph_replay=*/false,
+                         /*use_cp=*/false,
+                         /*use_deep_ep=*/true);
+       }},
+      {"DeepEpTpShardSharedGraphPreservesRows",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         return run_rank(rank,
+                         /*world_size=*/2,
+                         port,
+                         /*use_ep=*/true,
+                         /*with_shared=*/true,
+                         /*graph_replay=*/true,
+                         /*use_cp=*/false,
+                         /*use_deep_ep=*/true);
+       }},
+      {"CpSharedPreservesRaggedAndEmptyRanks",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         return run_rank(rank,
+                         /*world_size=*/2,
+                         port,
+                         /*use_ep=*/true,
+                         /*with_shared=*/true,
+                         /*graph_replay=*/false,
+                         /*use_cp=*/true);
+       }},
+      {"CpWithoutSharedPreservesRaggedRanks",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         return run_rank(rank,
+                         /*world_size=*/2,
+                         port,
+                         /*use_ep=*/true,
+                         /*with_shared=*/false,
+                         /*graph_replay=*/false,
+                         /*use_cp=*/true);
+       }},
+      {"TpSharedMatchesUnshardedReference",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         return run_rank(rank,
+                         /*world_size=*/2,
+                         port,
+                         /*use_ep=*/false,
+                         /*with_shared=*/true,
+                         /*graph_replay=*/false);
+       }},
+      {"EpWithoutSharedMatchesUnshardedReference",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         return run_rank(rank,
+                         /*world_size=*/2,
+                         port,
+                         /*use_ep=*/true,
+                         /*with_shared=*/false,
+                         /*graph_replay=*/false);
+       }},
+      {"SingleRankWithoutSharedPreservesOutput",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         return run_rank(rank,
+                         /*world_size=*/1,
+                         port,
+                         /*use_ep=*/false,
+                         /*with_shared=*/false,
+                         /*graph_replay=*/false);
+       }},
+      {"EpSharedGraphUsesUpdatedInputsAndRoutes",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         return run_rank(rank,
+                         /*world_size=*/2,
+                         port,
+                         /*use_ep=*/true,
+                         /*with_shared=*/true,
+                         /*graph_replay=*/true);
+       }},
+  };
 }
-
-TEST(SparseMoECollectiveTest, EpSharedMatchesUnshardedReference) {
-  run_collective_test(/*world_size=*/2,
-                      /*use_ep=*/true,
-                      /*with_shared=*/true,
-                      /*graph_replay=*/false);
-}
-
-TEST(SparseMoECollectiveTest, DeepEpTpShardPreservesSelectedRows) {
-  run_collective_test(/*world_size=*/2,
-                      /*use_ep=*/true,
-                      /*with_shared=*/false,
-                      /*graph_replay=*/false,
-                      /*use_cp=*/false,
-                      /*use_deep_ep=*/true);
-}
-
-TEST(SparseMoECollectiveTest, DeepEpTpShardSharedGraphPreservesRows) {
-  run_collective_test(/*world_size=*/2,
-                      /*use_ep=*/true,
-                      /*with_shared=*/true,
-                      /*graph_replay=*/true,
-                      /*use_cp=*/false,
-                      /*use_deep_ep=*/true);
-}
-
-TEST(SparseMoECollectiveTest, CpSharedPreservesRaggedAndEmptyRanks) {
-  run_collective_test(/*world_size=*/2,
-                      /*use_ep=*/true,
-                      /*with_shared=*/true,
-                      /*graph_replay=*/false,
-                      /*use_cp=*/true);
-}
-
-TEST(SparseMoECollectiveTest, CpWithoutSharedPreservesRaggedRanks) {
-  run_collective_test(/*world_size=*/2,
-                      /*use_ep=*/true,
-                      /*with_shared=*/false,
-                      /*graph_replay=*/false,
-                      /*use_cp=*/true);
-}
-
-TEST(SparseMoECollectiveTest, TpSharedMatchesUnshardedReference) {
-  run_collective_test(/*world_size=*/2,
-                      /*use_ep=*/false,
-                      /*with_shared=*/true,
-                      /*graph_replay=*/false);
-}
-
-TEST(SparseMoECollectiveTest, EpWithoutSharedMatchesUnshardedReference) {
-  run_collective_test(/*world_size=*/2,
-                      /*use_ep=*/true,
-                      /*with_shared=*/false,
-                      /*graph_replay=*/false);
-}
-
-TEST(SparseMoECollectiveTest, SingleRankWithoutSharedPreservesOutput) {
-  run_collective_test(/*world_size=*/1,
-                      /*use_ep=*/false,
-                      /*with_shared=*/false,
-                      /*graph_replay=*/false);
-}
-
-TEST(SparseMoECollectiveTest, EpSharedGraphUsesUpdatedInputsAndRoutes) {
-  run_collective_test(/*world_size=*/2,
-                      /*use_ep=*/true,
-                      /*with_shared=*/true,
-                      /*graph_replay=*/true);
-}
-
 }  // namespace
+
+class SparseMoECollectiveTest : public ::testing::Test {
+ protected:
+  static void SetUpTestSuite() {
+    failed_ = false;
+    const int32_t port = net::get_local_free_port();
+    ASSERT_GT(port, 0);
+    session_ = std::make_unique<::xllm::test::ForkedRankSession>(
+        2, port, collective_cases(), [] { rank_collective.reset(); });
+  }
+  static void TearDownTestSuite() {
+    if (session_) {
+      ::xllm::test::expect_rank_result(session_->close());
+      session_.reset();
+    }
+  }
+  void run_case(const std::string& name, bool single_rank = false) {
+    if (failed_) {
+      GTEST_SKIP() << "Earlier rank failure in this suite";
+    }
+    if (single_rank) {
+      const auto closed = session_->close();
+      if (closed.status != ::xllm::test::ForkedRankSession::Status::PASSED) {
+        failed_ = true;
+        ::xllm::test::expect_rank_result(closed);
+        return;
+      }
+      ::xllm::test::ForkedRankSession fresh(
+          1, net::get_local_free_port(), collective_cases(), [] {
+            rank_collective.reset();
+          });
+      const auto result = fresh.run(name);
+      failed_ =
+          result.status == ::xllm::test::ForkedRankSession::Status::FAILED;
+      ::xllm::test::expect_rank_result(result);
+      ::xllm::test::expect_rank_result(fresh.close());
+    } else {
+      const auto result = session_->run(name);
+      failed_ =
+          result.status == ::xllm::test::ForkedRankSession::Status::FAILED;
+      ::xllm::test::expect_rank_result(result);
+    }
+  }
+
+ private:
+  inline static std::unique_ptr<::xllm::test::ForkedRankSession> session_;
+  inline static bool failed_ = false;
+};
+
+TEST_F(SparseMoECollectiveTest, EpSharedMatchesUnshardedReference) {
+  run_case("EpSharedMatchesUnshardedReference");
+}
+
+TEST_F(SparseMoECollectiveTest, DeepEpTpShardPreservesSelectedRows) {
+  run_case("DeepEpTpShardPreservesSelectedRows");
+}
+
+TEST_F(SparseMoECollectiveTest, DeepEpTpShardSharedGraphPreservesRows) {
+  run_case("DeepEpTpShardSharedGraphPreservesRows");
+}
+
+TEST_F(SparseMoECollectiveTest, CpSharedPreservesRaggedAndEmptyRanks) {
+  run_case("CpSharedPreservesRaggedAndEmptyRanks");
+}
+
+TEST_F(SparseMoECollectiveTest, CpWithoutSharedPreservesRaggedRanks) {
+  run_case("CpWithoutSharedPreservesRaggedRanks");
+}
+
+TEST_F(SparseMoECollectiveTest, TpSharedMatchesUnshardedReference) {
+  run_case("TpSharedMatchesUnshardedReference");
+}
+
+TEST_F(SparseMoECollectiveTest, EpWithoutSharedMatchesUnshardedReference) {
+  run_case("EpWithoutSharedMatchesUnshardedReference");
+}
+
+TEST_F(SparseMoECollectiveTest, EpSharedGraphUsesUpdatedInputsAndRoutes) {
+  run_case("EpSharedGraphUsesUpdatedInputsAndRoutes");
+}
+
+TEST_F(SparseMoECollectiveTest, SingleRankWithoutSharedPreservesOutput) {
+  run_case("SingleRankWithoutSharedPreservesOutput", /*single_rank=*/true);
+}
+
 }  // namespace xllm::layer

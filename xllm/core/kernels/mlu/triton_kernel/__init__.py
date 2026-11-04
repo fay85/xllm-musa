@@ -16,7 +16,7 @@
 
 These .py files are shipped inside the installed ``xllm`` package and located at
 runtime via the dotted module path (e.g. ``xllm.core.kernels.mlu.triton_kernel.
-fused_gdn_gating``) consumed by ``triton_compile.py``'s ``_import_dotted_module``
+fused_post_conv_prep``) consumed by ``triton_compile.py``'s ``_import_dotted_module``
 fallback, which resolves the leaf .py under the top-level package's install dir.
 This avoids baking a build-machine source-tree path into the compiled binaries.
 """

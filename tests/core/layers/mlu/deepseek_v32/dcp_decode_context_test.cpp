@@ -38,77 +38,85 @@ TEST(DcpDecodeContextTest, LocalizesOnlyOwnedCacheWriteSlots) {
       torch::equal(local_slots, torch::tensor({-1, -1, -1, 0, 3, -1, 4})));
 }
 
-// localize_topk runs the fused Triton localizer, so the top-k tests operate
-// on device tensors.
-TEST(DcpDecodeContextTest, PacksOwnedTopkAndUpdatesEachContextLength) {
-  const torch::Device device(Platform::type_torch(), 0);
-  const torch::TensorOptions options =
-      torch::TensorOptions().dtype(torch::kInt32).device(device);
-  const DcpDecodeContext context(
-      KVShardLayout(/*physical_block_size=*/4, /*dcp_size=*/2, /*dcp_rank=*/0),
-      /*dcp_group=*/nullptr);
-  DsaTopkState global_state(
-      torch::tensor({{4, 0, 8, 1, 12}, {5, 6, 7, 2, 3}}, options),
-      torch::tensor({4, 3}, options));
+TEST(DcpDecodeContextTest, PacksTopkAcrossTopologiesAndEmptyRows) {
+  torch::set_num_threads(1);
+  {
+    SCOPED_TRACE("PacksOwnedTopkAndUpdatesEachContextLength");
 
-  DsaTopkState local_state = context.localize_topk(global_state);
-  Device(device).synchronize_default_stream();
+    const torch::Device device(Platform::type_torch(), 0);
+    const torch::TensorOptions options =
+        torch::TensorOptions().dtype(torch::kInt32).device(device);
+    const DcpDecodeContext context(
+        KVShardLayout(
+            /*physical_block_size=*/4, /*dcp_size=*/2, /*dcp_rank=*/0),
+        /*dcp_group=*/nullptr);
+    DsaTopkState global_state(
+        torch::tensor({{4, 0, 8, 1, 12}, {5, 6, 7, 2, 3}}, options),
+        torch::tensor({4, 3}, options));
 
-  EXPECT_TRUE(torch::equal(
-      local_state.block_tables().cpu(),
-      torch::tensor({{0, 4, 1, 0, 0}, {0, 0, 0, 0, 0}}, torch::kInt32)));
-  EXPECT_TRUE(torch::equal(local_state.context_lens().cpu(),
-                           torch::tensor({3, 0}, torch::kInt32)));
-}
+    DsaTopkState local_state = context.localize_topk(global_state);
+    Device(device).synchronize_default_stream();
 
-TEST(DcpDecodeContextTest, DcpOnePreservesValidTopkEntries) {
-  const torch::Device device(Platform::type_torch(), 0);
-  const torch::TensorOptions options =
-      torch::TensorOptions().dtype(torch::kInt32).device(device);
-  const DcpDecodeContext context(
-      KVShardLayout(/*physical_block_size=*/4, /*dcp_size=*/1, /*dcp_rank=*/0),
-      /*dcp_group=*/nullptr);
-  DsaTopkState global_state(torch::tensor({{7, 3, 9, 11}}, options),
-                            torch::tensor({2}, options));
+    EXPECT_TRUE(torch::equal(
+        local_state.block_tables().cpu(),
+        torch::tensor({{0, 4, 1, 0, 0}, {0, 0, 0, 0, 0}}, torch::kInt32)));
+    EXPECT_TRUE(torch::equal(local_state.context_lens().cpu(),
+                             torch::tensor({3, 0}, torch::kInt32)));
+  }
+  {
+    SCOPED_TRACE("DcpOnePreservesValidTopkEntries");
 
-  DsaTopkState local_state = context.localize_topk(global_state);
-  Device(device).synchronize_default_stream();
+    const torch::Device device(Platform::type_torch(), 0);
+    const torch::TensorOptions options =
+        torch::TensorOptions().dtype(torch::kInt32).device(device);
+    const DcpDecodeContext context(
+        KVShardLayout(
+            /*physical_block_size=*/4, /*dcp_size=*/1, /*dcp_rank=*/0),
+        /*dcp_group=*/nullptr);
+    DsaTopkState global_state(torch::tensor({{7, 3, 9, 11}}, options),
+                              torch::tensor({2}, options));
 
-  EXPECT_TRUE(torch::equal(local_state.block_tables().cpu(),
-                           torch::tensor({{7, 3, 0, 0}}, torch::kInt32)));
-  EXPECT_TRUE(torch::equal(local_state.context_lens().cpu(),
-                           torch::tensor({2}, torch::kInt32)));
-}
+    DsaTopkState local_state = context.localize_topk(global_state);
+    Device(device).synchronize_default_stream();
 
-TEST(DcpDecodeContextTest, FourRanksLocalizeBlockBoundariesAndEmptyRows) {
-  Device dev(0);
-  dev.set_device();
-  const torch::Device device = dev.unwrap();
-  torch::Tensor table = torch::full({3, 2048}, -1, torch::kInt32);
-  table[0].slice(0, 0, 9).copy_(
-      torch::tensor({0, 15, 16, 31, 32, 47, 48, 63, 64}, torch::kInt32));
-  table[1][0] = 1000000;  // Ignored because this row has zero valid entries.
-  table[2][0] = -1;       // Padding inside a nonempty row.
-  const torch::Tensor lens = torch::tensor({9, 0, 1}, torch::kInt32);
-  for (int32_t rank = 0; rank < 4; ++rank) {
-    DcpDecodeContext context(KVShardLayout(16, 4, rank), nullptr);
-    const DsaTopkState result =
-        context.localize_topk(DsaTopkState(table.to(device), lens.to(device)));
-    torch::Tensor expected = torch::zeros_like(table);
-    torch::Tensor expected_lens = torch::zeros_like(lens);
-    auto out = expected.accessor<int32_t, 2>();
-    auto counts = expected_lens.accessor<int32_t, 1>();
-    const auto input = table.accessor<int32_t, 2>();
-    for (int32_t col = 0; col < 9; ++col) {
-      const int32_t slot = input[0][col];
-      if ((slot / 16) % 4 != rank) {
-        continue;
+    EXPECT_TRUE(torch::equal(local_state.block_tables().cpu(),
+                             torch::tensor({{7, 3, 0, 0}}, torch::kInt32)));
+    EXPECT_TRUE(torch::equal(local_state.context_lens().cpu(),
+                             torch::tensor({2}, torch::kInt32)));
+  }
+  {
+    SCOPED_TRACE("FourRanksLocalizeBlockBoundariesAndEmptyRows");
+
+    Device dev(0);
+    dev.set_device();
+    const torch::Device device = dev.unwrap();
+    torch::Tensor table = torch::full({3, 2048}, -1, torch::kInt32);
+    table[0].slice(0, 0, 9).copy_(
+        torch::tensor({0, 15, 16, 31, 32, 47, 48, 63, 64}, torch::kInt32));
+    table[1][0] = 1000000;  // Ignored because this row has zero valid entries.
+    table[2][0] = -1;       // Padding inside a nonempty row.
+    const torch::Tensor lens = torch::tensor({9, 0, 1}, torch::kInt32);
+    for (int32_t rank = 0; rank < 4; ++rank) {
+      SCOPED_TRACE(::testing::Message() << "rank=" << rank);
+      DcpDecodeContext context(KVShardLayout(16, 4, rank), nullptr);
+      const DsaTopkState result = context.localize_topk(
+          DsaTopkState(table.to(device), lens.to(device)));
+      torch::Tensor expected = torch::zeros_like(table);
+      torch::Tensor expected_lens = torch::zeros_like(lens);
+      auto out = expected.accessor<int32_t, 2>();
+      auto counts = expected_lens.accessor<int32_t, 1>();
+      const auto input = table.accessor<int32_t, 2>();
+      for (int32_t col = 0; col < 9; ++col) {
+        const int32_t slot = input[0][col];
+        if ((slot / 16) % 4 != rank) {
+          continue;
+        }
+        out[0][counts[0]++] = slot / 64 * 16 + slot % 16;
       }
-      out[0][counts[0]++] = slot / 64 * 16 + slot % 16;
+      dev.synchronize_default_stream();
+      EXPECT_TRUE(torch::equal(result.block_tables().cpu(), expected));
+      EXPECT_TRUE(torch::equal(result.context_lens().cpu(), expected_lens));
     }
-    dev.synchronize_default_stream();
-    EXPECT_TRUE(torch::equal(result.block_tables().cpu(), expected));
-    EXPECT_TRUE(torch::equal(result.context_lens().cpu(), expected_lens));
   }
 }
 

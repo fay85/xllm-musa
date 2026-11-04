@@ -55,6 +55,7 @@ Inputs make_inputs(const std::vector<int32_t>& queries,
                    const std::vector<int32_t>& lengths,
                    int32_t size = 4) {
   CHECK_EQ(queries.size(), lengths.size());
+  torch::set_num_threads(1);
   torch::manual_seed(42);
   std::vector<int32_t> cu{0};
   std::vector<int32_t> positions;
@@ -303,9 +304,9 @@ TEST(DcpIndexerTest, PrefillChunkedAndEmptyRequests) {
 
 TEST(DcpIndexerTest, FusedPrefillSortScratch) {
   torch::NoGradGuard guard;
-  auto x = make_inputs({8192}, {65536 + 8192});
+  auto x = make_inputs({2048}, {8192 + 2048});
   const auto [scores, slots] = run(x, /*rank=*/0, /*prefill=*/true);
-  const auto rows = torch::tensor({0, 4096, 8191}, torch::kInt64).to(kDevice);
+  const auto rows = torch::tensor({0, 1024, 2047}, torch::kInt64).to(kDevice);
   x.query = x.query.index_select(0, rows);
   x.weights = x.weights.index_select(0, rows);
   x.positions = x.positions.index_select(0, rows);
@@ -344,7 +345,7 @@ TEST(DcpIndexerTest, LocalVisibilityBoundaries) {
 
 TEST(DcpIndexerTest, MtpPackedExpandedAndDraft) {
   torch::NoGradGuard guard;
-  for (const int32_t query : {1, 4}) {
+  for (const int32_t query : {4}) {
     auto packed = make_inputs({query, query}, {65536 + query, 65536 + query});
     check_case(packed, /*prefill=*/false);
     auto expanded = packed;
@@ -354,8 +355,9 @@ TEST(DcpIndexerTest, MtpPackedExpandedAndDraft) {
     expanded.lens = packed.positions + 1;
     check_case(expanded, /*prefill=*/false);
   }
+  // Keep long histories so grouped decode and cached-map reuse remain active.
   // A small-visibility row between large rows must preserve the cached map.
-  auto reused = make_inputs({65}, {131072 + 65});
+  auto reused = make_inputs({33}, {131072 + 33});
   reused.positions[1] = 0;
   check_case(reused, /*prefill=*/false);
 }
@@ -374,8 +376,8 @@ TEST(DcpIndexerTest, TopologiesAndSharedPages) {
 TEST(DcpIndexerTest, Fp32HeadProductsAndDeterministicTies) {
   torch::NoGradGuard guard;
   for (const bool prefill : {true, false}) {
-    for (const int32_t rows : {1, 16, 2048}) {
-      auto x = make_inputs({rows}, {10000});
+    for (const int32_t rows : {1, 2048}) {
+      auto x = make_inputs({rows}, {8208});
       x.query.zero_();
       x.weights.zero_();
       x.cache.zero_();

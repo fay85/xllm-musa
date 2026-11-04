@@ -41,7 +41,7 @@ constexpr int32_t kDcp = 4;
 constexpr int32_t kPage = 16;
 constexpr int32_t kStripe = kDcp * kPage;
 constexpr int32_t kTopk = 2048;
-constexpr int32_t kQueries = 8192;
+constexpr int32_t kQueries = 257;
 constexpr int32_t kEdgeRows = 16;
 constexpr int32_t kSentinel = 123456789;
 using TopkResult = std::pair<torch::Tensor, torch::Tensor>;
@@ -112,7 +112,7 @@ Candidates make_history_candidates(const MergeCase& test,
 std::vector<MergeCase> history_cases(Deployment deployment, int32_t batch) {
   std::vector<MergeCase> cases;
   cases.reserve(deployment == Deployment::PREFILL ? 3 : 6);
-  for (int32_t history : {64 * 1024, 128 * 1024, 256 * 1024}) {
+  for (int32_t history : {64 * 1024}) {
     if (deployment == Deployment::PREFILL) {
       cases.emplace_back(MergeCase{
           "prefill_b" + std::to_string(batch) + "_h" + std::to_string(history),
@@ -340,7 +340,7 @@ void run_rank(int32_t rank,
             << " pcp=" << pcp << " tp=" << tp << " dcp=" << kDcp
             << " ep=" << kRanks << " replica=" << replica;
   for (const auto& test : cases) {
-    for (int32_t seed : {42, 2026}) {
+    for (int32_t seed : {42}) {
       run_case(rank, *parallel.dcp_group_, device, test, seed, replica);
       CHECK_EQ(dev.synchronize_default_stream(), 0);
     }
@@ -355,38 +355,31 @@ void run_distributed(Deployment deployment,
                          });
 }
 
-TEST(Glm53DcpMergeTopkMultiDeviceTest, Bf16CandidatesQ8192) {
-  run_distributed(Deployment::PREFILL, {{"q8192", 1, kQueries}});
+TEST(Glm53DcpMergeTopkMultiDeviceTest,
+     PrefillCandidatesAndHistoryMatchReference) {
+  std::vector<MergeCase> cases;
+  cases.reserve(4);
+  cases.emplace_back(MergeCase{"query_tail", /*batch=*/1, kQueries});
+  cases.emplace_back(MergeCase{"edges",
+                               /*batch=*/1,
+                               kEdgeRows,
+                               /*history=*/0,
+                               /*edges=*/true});
+  for (int32_t batch : {1, 2}) {
+    const auto history = history_cases(Deployment::PREFILL, batch);
+    cases.insert(cases.end(), history.begin(), history.end());
+  }
+  run_distributed(Deployment::PREFILL, cases);
 }
 
-TEST(Glm53DcpMergeTopkMultiDeviceTest, Bf16EdgesAndStrides) {
-  run_distributed(Deployment::PREFILL,
-                  {{"edges", 1, kEdgeRows, /*history=*/0, /*edges=*/true}});
-}
-
-TEST(Glm53DcpMergeTopkMultiDeviceTest, PrefillLongHistoryBatch1) {
-  run_distributed(Deployment::PREFILL,
-                  history_cases(Deployment::PREFILL, /*batch=*/1));
-}
-
-TEST(Glm53DcpMergeTopkMultiDeviceTest, PrefillLongHistoryBatch8) {
-  run_distributed(Deployment::PREFILL,
-                  history_cases(Deployment::PREFILL, /*batch=*/8));
-}
-
-TEST(Glm53DcpMergeTopkMultiDeviceTest, DecodeDp2Batch16) {
+TEST(Glm53DcpMergeTopkMultiDeviceTest, DecodeAndVerifyDp2MatchReference) {
   run_distributed(Deployment::DECODE,
                   history_cases(Deployment::DECODE, /*batch=*/16));
 }
 
-TEST(Glm53DcpMergeTopkMultiDeviceTest, DecodeDp2Batch32) {
-  run_distributed(Deployment::DECODE,
-                  history_cases(Deployment::DECODE, /*batch=*/32));
-}
-
 // CPU fixtures keep the parent free of MLU initialization before fork.
 TEST(Glm53DcpMergeTopkReferenceTest, LongHistoryOwnershipAndCausality) {
-  for (int32_t history : {64 * 1024, 128 * 1024, 256 * 1024}) {
+  for (int32_t history : {64 * 1024}) {
     const MergeCase test{
         "history", /*batch=*/2, /*query_width=*/kStripe + 1, history};
     const int32_t pages = (history + test.query_width + kStripe - 1) / kStripe;

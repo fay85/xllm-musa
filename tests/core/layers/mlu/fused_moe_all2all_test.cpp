@@ -18,9 +18,7 @@ limitations under the License.
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <sys/wait.h>
 #include <torch/torch.h>
-#include <unistd.h>
 
 #include <cmath>
 #include <cstring>
@@ -38,6 +36,9 @@ limitations under the License.
 #include "platform/device.h"
 #include "platform/model_stream_registry.h"
 #include "platform/platform.h"
+#include "tests/core/forked_rank_session.h"
+#include "tests/core/layers/mlu/deep_ep_test_scope.h"
+#include "util/net.h"
 #include "util/tensor_helper.h"
 
 #if defined(USE_MLU)
@@ -53,21 +54,27 @@ namespace test {
 // Special exit code definition for skipping test
 constexpr int32_t EXIT_CODE_SKIP = 77;
 
+namespace {
+thread_local std::unique_ptr<xllm::ProcessGroup> rank_process_group;
+
 // Helper function to create ProcessGroup
-std::unique_ptr<xllm::ProcessGroup> create_test_process_group(
-    int32_t rank,
-    int32_t world_size,
-    int32_t port,
-    const std::string& host,
-    const torch::Device& device) {
-  return xllm::create_process_group(rank,
-                                    world_size,
-                                    world_size,
-                                    port,
-                                    false,
-                                    host,
-                                    "fused_moe_all2all_test_group",
-                                    device);
+xllm::ProcessGroup* create_test_process_group(int32_t rank,
+                                              int32_t world_size,
+                                              int32_t port,
+                                              const std::string& host,
+                                              const torch::Device& device) {
+  if (!rank_process_group) {
+    rank_process_group =
+        xllm::create_process_group(rank,
+                                   world_size,
+                                   world_size,
+                                   port,
+                                   false,
+                                   host,
+                                   "fused_moe_all2all_test_group",
+                                   device);
+  }
+  return rank_process_group.get();
 }
 
 struct All2AllTestParams {
@@ -269,11 +276,10 @@ int32_t run_all2all_basic_test_child(All2AllTestParams params) {
                          << ": Failed to create ProcessGroup";
 
     // 4. Create ParallelArgs with EP mode
-    ParallelArgs parallel_args(
-        params.rank, params.world_size, process_group.get());
-    parallel_args.moe_ep_group_ = process_group.get();
+    ParallelArgs parallel_args(params.rank, params.world_size, process_group);
+    parallel_args.moe_ep_group_ = process_group;
     parallel_args.ep_size_ = params.world_size;
-    parallel_args.moe_tp_group_ = process_group.get();
+    parallel_args.moe_tp_group_ = process_group;
 
     // 5. Create tensor options
     // Note: smoothquant mode still uses BF16 for input/output, with int8 for
@@ -285,6 +291,7 @@ int32_t run_all2all_basic_test_child(All2AllTestParams params) {
                        .requires_grad(false);
 
     // 6. Create model args and quant args
+    ::xllm::test::DeepEpTestScope deep_ep_scope;
     ModelArgs model_args = create_model_args(params);
     QuantArgs quant_args = create_quant_args(params);
     ModelStreamRegistry stream_registry(device);
@@ -395,17 +402,17 @@ int32_t run_all2all_selected_route_test_child(All2AllTestParams params) {
     CHECK(process_group) << "Rank " << params.rank
                          << ": Failed to create ProcessGroup";
 
-    ParallelArgs parallel_args(
-        params.rank, params.world_size, process_group.get());
-    parallel_args.moe_ep_group_ = process_group.get();
+    ParallelArgs parallel_args(params.rank, params.world_size, process_group);
+    parallel_args.moe_ep_group_ = process_group;
     parallel_args.ep_size_ = params.world_size;
-    parallel_args.moe_tp_group_ = process_group.get();
+    parallel_args.moe_tp_group_ = process_group;
 
     auto options = torch::TensorOptions()
                        .dtype(torch::kBFloat16)
                        .device(device)
                        .requires_grad(false);
 
+    ::xllm::test::DeepEpTestScope deep_ep_scope;
     ModelArgs model_args = create_model_args(params);
     QuantArgs quant_args = create_quant_args(params);
     ModelStreamRegistry stream_registry(device);
@@ -455,214 +462,188 @@ int32_t run_all2all_selected_route_test_child(All2AllTestParams params) {
   }
 }
 
-// Multi-process test fixture
+std::vector<::xllm::test::ForkedRankSession::Case> all2all_cases() {
+  return {
+      {"BasicAll2AllFlow",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         All2AllTestParams params{};
+         params.device_index = -1;
+         params.hidden_size = 512;
+         params.intermediate_size = 256;
+         params.num_experts = 4;
+         params.top_k = 2;
+         params.batch_size = 2;
+         params.seq_len = 4;
+         params.is_smoothquant = false;
+         params.rank = rank;
+         params.world_size = 2;
+         params.port = port;
+         params.host = "127.0.0.1";
+         return run_all2all_basic_test_child(params);
+       }},
+      {"SmoothQuantAll2AllFlow",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         All2AllTestParams params{};
+         params.device_index = -1;
+         params.hidden_size = 512;
+         params.intermediate_size = 256;
+         params.num_experts = 4;
+         params.top_k = 2;
+         params.batch_size = 2;
+         params.seq_len = 4;
+         params.is_smoothquant = true;
+         params.rank = rank;
+         params.world_size = 2;
+         params.port = port;
+         params.host = "127.0.0.1";
+         return run_all2all_smoothquant_test_child(params);
+       }},
+      {"BasicAll2AllPreciseValidation",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         All2AllTestParams params = ([]() {
+           All2AllTestParams params{};
+           params.device_index = -1;
+           params.hidden_size = 512;
+           params.intermediate_size = 256;
+           params.num_experts = 4;
+           params.top_k = 2;
+           params.batch_size = 2;
+           params.seq_len = 4;
+           params.is_smoothquant = false;
+           params.expected_min = 835584.0;
+           params.expected_max = 1269760.0;
+           params.expected_sum = 4209990000.0;
+           params.perform_precise_validation = true;
+           return params;
+         })();
+         params.rank = rank;
+         params.world_size = 2;
+         params.port = port;
+         params.host = "127.0.0.1";
+         return run_all2all_basic_test_child(params);
+       }},
+      {"SmoothQuantAll2AllPreciseValidation",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         All2AllTestParams params = ([]() {
+           All2AllTestParams params{};
+           params.device_index = -1;
+           params.hidden_size = 512;
+           params.intermediate_size = 256;
+           params.num_experts = 4;
+           params.top_k = 2;
+           params.batch_size = 2;
+           params.seq_len = 4;
+           params.is_smoothquant = true;
+           // Note: min=0 is valid for SmoothQuant due to quantization effects
+           params.expected_min = 0.0;
+           params.expected_max = 0.104004;
+           params.expected_sum = 3.88289;
+           params.perform_precise_validation = true;
+           return params;
+         })();
+         params.rank = rank;
+         params.world_size = 2;
+         params.port = port;
+         params.host = "127.0.0.1";
+         return run_all2all_smoothquant_test_child(params);
+       }},
+      {"W4A8All2AllSmoke",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         All2AllTestParams params = ([]() {
+           All2AllTestParams params{};
+           params.device_index = -1;
+           params.hidden_size = 512;
+           params.intermediate_size = 256;
+           params.num_experts = 4;
+           params.top_k = 2;
+           params.batch_size = 2;
+           params.seq_len = 4;
+           params.is_smoothquant = true;
+           params.moe_weight_bits = 4;
+           params.group_size = 128;
+           params.perform_precise_validation = false;
+           return params;
+         })();
+         params.rank = rank;
+         params.world_size = 2;
+         params.port = port;
+         params.host = "127.0.0.1";
+         return run_all2all_smoothquant_test_child(params);
+       }},
+      {"SelectedRouteMatchesGateRouteAll2All",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         All2AllTestParams params = ([]() {
+           All2AllTestParams params{};
+           params.device_index = -1;
+           params.hidden_size = 512;
+           params.intermediate_size = 256;
+           params.num_experts = 4;
+           params.top_k = 2;
+           params.batch_size = 2;
+           params.seq_len = 4;
+           params.is_smoothquant = false;
+           return params;
+         })();
+         params.rank = rank;
+         params.world_size = 2;
+         params.port = port;
+         params.host = "127.0.0.1";
+         return run_all2all_selected_route_test_child(params);
+       }},
+  };
+}
+}  // namespace
+
 class FusedMoEAll2AllMultiDeviceTest : public ::testing::Test {
  protected:
-  void SetUp() override {
-    world_size_ = 2;
-    port_ = 29501;  // Different port from deep_ep_tests
-    host_ = "127.0.0.1";
-    hidden_size_ = 512;
-    intermediate_size_ = 256;
-    num_experts_ = 4;
-    top_k_ = 2;
-    batch_size_ = 2;
-    seq_len_ = 4;
+  static void SetUpTestSuite() {
+    const int32_t port = net::get_local_free_port();
+    ASSERT_GT(port, 0);
+    session_ = std::make_unique<::xllm::test::ForkedRankSession>(
+        2, port, all2all_cases(), [] { rank_process_group.reset(); });
   }
-
-  // Runs multi-process test with params built from fixture (optionally
-  // is_smoothquant). Use this for basic flow tests.
-  void run_test(int32_t (*test_fn)(All2AllTestParams),
-                bool is_smoothquant = false) {
-    run_test_impl(test_fn, [this, is_smoothquant](int32_t rank) {
-      All2AllTestParams params;
-      params.rank = rank;
-      params.world_size = world_size_;
-      params.port = port_;
-      params.host = host_;
-      params.device_index = -1;
-      params.hidden_size = hidden_size_;
-      params.intermediate_size = intermediate_size_;
-      params.num_experts = num_experts_;
-      params.top_k = top_k_;
-      params.batch_size = batch_size_;
-      params.seq_len = seq_len_;
-      params.is_smoothquant = is_smoothquant;
-      return params;
-    });
+  static void TearDownTestSuite() {
+    if (session_) {
+      ::xllm::test::expect_rank_result(session_->close());
+      session_.reset();
+    }
   }
-
-  // Runs multi-process test with custom params from factory (e.g. for precise
-  // validation tests). params_factory(rank) is called per rank; the returned
-  // params should have rank set by the factory or will be overwritten.
-  // Named separately to avoid overload ambiguity with run_test(..., bool).
-  void run_test_with_params(
-      int32_t (*test_fn)(All2AllTestParams),
-      std::function<All2AllTestParams(int32_t rank)> params_factory) {
-    run_test_impl(test_fn, params_factory);
+  void run_case(const std::string& name) {
+    ::xllm::test::expect_rank_result(session_->run(name));
   }
 
  private:
-  void run_test_impl(
-      int32_t (*test_fn)(All2AllTestParams),
-      std::function<All2AllTestParams(int32_t rank)> params_factory) {
-    std::vector<pid_t> child_pids;
-
-    for (int32_t rank = 0; rank < world_size_; ++rank) {
-      pid_t pid = fork();
-      if (pid == 0) {
-        All2AllTestParams params = params_factory(rank);
-        params.rank = rank;
-        params.world_size = world_size_;
-        int32_t exit_code = test_fn(params);
-        _exit(exit_code);
-      } else if (pid > 0) {
-        child_pids.push_back(pid);
-      } else {
-        LOG(FATAL) << "Failed to fork rank " << rank;
-      }
-    }
-
-    bool any_failed = false;
-    bool any_skipped = false;
-
-    for (size_t i = 0; i < child_pids.size(); ++i) {
-      int32_t status;
-      waitpid(child_pids[i], &status, 0);
-      if (WIFEXITED(status)) {
-        int32_t exit_code = WEXITSTATUS(status);
-        if (exit_code == EXIT_CODE_SKIP) {
-          any_skipped = true;
-        } else if (exit_code != 0) {
-          any_failed = true;
-          LOG(ERROR) << "Rank " << i << " failed with code " << exit_code;
-        }
-      } else {
-        any_failed = true;
-        LOG(ERROR) << "Rank " << i << " crashed (signal).";
-      }
-    }
-
-    if (any_skipped) {
-      GTEST_SKIP() << "Test skipped due to insufficient devices.";
-    } else {
-      ASSERT_FALSE(any_failed) << "FusedMoE All2All Test Failed.";
-    }
-  }
-
- protected:
-  int32_t world_size_;
-  int32_t port_;
-  std::string host_;
-  int64_t hidden_size_;
-  int64_t intermediate_size_;
-  int64_t num_experts_;
-  int64_t top_k_;
-  int64_t batch_size_;
-  int64_t seq_len_;
+  inline static std::unique_ptr<::xllm::test::ForkedRankSession> session_;
 };
 
 TEST_F(FusedMoEAll2AllMultiDeviceTest, BasicAll2AllFlow) {
-  run_test(run_all2all_basic_test_child, /*is_smoothquant=*/false);
+  run_case("BasicAll2AllFlow");
 }
 
 TEST_F(FusedMoEAll2AllMultiDeviceTest, SmoothQuantAll2AllFlow) {
-  run_test(run_all2all_smoothquant_test_child, /*is_smoothquant=*/true);
+  run_case("SmoothQuantAll2AllFlow");
 }
 
 TEST_F(FusedMoEAll2AllMultiDeviceTest, BasicAll2AllPreciseValidation) {
-  // Expected values obtained from running with seeded tensors:
-  // min=835584, max=1.26976e+06, sum=4.20999e+09
-  run_test_with_params(run_all2all_basic_test_child, [](int32_t /*rank*/) {
-    All2AllTestParams params;
-    params.rank = 0;
-    params.world_size = 2;
-    params.port = 29503;  // Different port to avoid conflicts
-    params.host = "127.0.0.1";
-    params.device_index = -1;
-    params.hidden_size = 512;
-    params.intermediate_size = 256;
-    params.num_experts = 4;
-    params.top_k = 2;
-    params.batch_size = 2;
-    params.seq_len = 4;
-    params.is_smoothquant = false;
-    params.expected_min = 835584.0;
-    params.expected_max = 1269760.0;
-    params.expected_sum = 4209990000.0;
-    params.perform_precise_validation = true;
-    return params;
-  });
+  run_case("BasicAll2AllPreciseValidation");
 }
 
 TEST_F(FusedMoEAll2AllMultiDeviceTest, SmoothQuantAll2AllPreciseValidation) {
-  // Expected values obtained from running with seeded tensors:
-  // min=0, max=0.104004, sum=3.88289
-  run_test_with_params(
-      run_all2all_smoothquant_test_child, [](int32_t /*rank*/) {
-        All2AllTestParams params;
-        params.rank = 0;
-        params.world_size = 2;
-        params.port = 29504;  // Different port to avoid conflicts
-        params.host = "127.0.0.1";
-        params.device_index = -1;
-        params.hidden_size = 512;
-        params.intermediate_size = 256;
-        params.num_experts = 4;
-        params.top_k = 2;
-        params.batch_size = 2;
-        params.seq_len = 4;
-        params.is_smoothquant = true;
-        // Note: min=0 is valid for SmoothQuant due to quantization effects
-        params.expected_min = 0.0;
-        params.expected_max = 0.104004;
-        params.expected_sum = 3.88289;
-        params.perform_precise_validation = true;
-        return params;
-      });
+  run_case("SmoothQuantAll2AllPreciseValidation");
 }
 
 TEST_F(FusedMoEAll2AllMultiDeviceTest, W4A8All2AllSmoke) {
-  run_test_with_params(run_all2all_smoothquant_test_child,
-                       [](int32_t /*rank*/) {
-                         All2AllTestParams params;
-                         params.rank = 0;
-                         params.world_size = 2;
-                         params.port = 29505;
-                         params.host = "127.0.0.1";
-                         params.device_index = -1;
-                         params.hidden_size = 512;
-                         params.intermediate_size = 256;
-                         params.num_experts = 4;
-                         params.top_k = 2;
-                         params.batch_size = 2;
-                         params.seq_len = 4;
-                         params.is_smoothquant = true;
-                         params.moe_weight_bits = 4;
-                         params.group_size = 128;
-                         params.perform_precise_validation = false;
-                         return params;
-                       });
+  run_case("W4A8All2AllSmoke");
 }
 
 TEST_F(FusedMoEAll2AllMultiDeviceTest, SelectedRouteMatchesGateRouteAll2All) {
-  run_test_with_params(run_all2all_selected_route_test_child,
-                       [](int32_t /*rank*/) {
-                         All2AllTestParams params;
-                         params.rank = 0;
-                         params.world_size = 2;
-                         params.port = 29506;
-                         params.host = "127.0.0.1";
-                         params.device_index = -1;
-                         params.hidden_size = 512;
-                         params.intermediate_size = 256;
-                         params.num_experts = 4;
-                         params.top_k = 2;
-                         params.batch_size = 2;
-                         params.seq_len = 4;
-                         params.is_smoothquant = false;
-                         return params;
-                       });
+  run_case("SelectedRouteMatchesGateRouteAll2All");
 }
 
 }  // namespace test

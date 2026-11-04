@@ -270,6 +270,8 @@ cc_test(
 cc_test(
   NAME
     sparse_moe_collective_test
+  GTEST_SUITE SparseMoECollectiveTest
+  RUN_SERIAL
   SRCS
     sparse_moe_collective_test.cpp
   DEPS
@@ -311,6 +313,8 @@ cc_test(
 cc_test(
   NAME
     fused_moe_all2all_test
+  GTEST_SUITE FusedMoEAll2AllMultiDeviceTest
+  RUN_SERIAL
   SRCS
     fused_moe_all2all_test.cpp
   DEPS

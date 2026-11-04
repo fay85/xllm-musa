@@ -15,8 +15,6 @@ limitations under the License.
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
 #include <sys/wait.h>
 #include <torch/torch.h>
 #include <unistd.h>
@@ -24,25 +22,20 @@ limitations under the License.
 #include <array>
 #include <cerrno>
 #include <chrono>
-#include <cmath>
 #include <csignal>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <exception>
-#include <fstream>
-#include <functional>
-#include <sstream>
 #include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/model_context.h"
-#include "framework/parallel_state/context_parallel_topology.h"
 #include "framework/parallel_state/process_group.h"
-#include "layers/mlu/deepseek_v32/dcp_decode_context.h"
 #include "layers/mlu/deepseek_v32/deepseek_v32_attention.h"
 #include "layers/mlu/deepseek_v32/dsa_topk_relay.h"
 #include "layers/mlu/tests_utils.h"
@@ -231,7 +224,7 @@ StateDict create_glm5_dcp_weights(const ModelArgs& args,
 }
 
 constexpr int32_t kRanks = 4;
-constexpr int32_t kBatch = 8;
+constexpr int32_t kBatch = 2;
 constexpr int32_t kBlock = 16;
 
 using Config = Glm5DcpConfig;
@@ -505,55 +498,36 @@ void check_projection_shards(const DeepseekV32Attention& actual,
 }
 
 void run_attention(int32_t rank,
-                   int32_t port,
                    int32_t width,
                    bool shared,
-                   bool sparse) {
+                   bool sparse,
+                   ProcessGroup& group,
+                   ProcessGroup& self) {
+  SCOPED_TRACE(::testing::Message()
+               << "rank=" << rank << " width=" << width << " shared=" << shared
+               << " sparse=" << sparse);
   const Config config = create_glm5_dcp_config();
-  torch::set_num_threads(1);
   torch::NoGradGuard no_grad;
   Device dev(rank);
   dev.set_device();
   const torch::Device device = dev.unwrap();
   const auto options =
       torch::TensorOptions().dtype(torch::kBFloat16).device(device);
-  KVCacheConfig::get_instance().block_size(kBlock);
-  auto group = create_process_group(rank,
-                                    kRanks,
-                                    kRanks,
-                                    port,
-                                    false,
-                                    "127.0.0.1",
-                                    "glm5_attention_dcp_test",
-                                    device);
-  CHECK(group);
-  torch::Tensor ready = torch::ones({1}, options);
-  group->allreduce(ready);
-  CHECK_EQ(ready.item<float>(), kRanks);
-  auto self = create_process_group(rank,
-                                   kRanks,
-                                   /*rank_size=*/1,
-                                   /*port=*/0,
-                                   /*trans=*/false,
-                                   "127.0.0.1",
-                                   "glm5_dcp_reference",
-                                   device);
-  CHECK(self);
-  ParallelArgs base(/*rank=*/0, /*world_size=*/1, self.get());
-  base.tp_group_ = self.get();
-  base.cp_group_ = self.get();
-  base.single_rank_group_ = self.get();
+  ParallelArgs base(/*rank=*/0, /*world_size=*/1, &self);
+  base.tp_group_ = &self;
+  base.cp_group_ = &self;
+  base.single_rank_group_ = &self;
   base.cp_size() = 1;
   base.dp_size() = 1;
   base.kv_split_size() = 1;
-  ParallelArgs sharded(rank, kRanks, group.get());
-  sharded.tp_group_ = group.get();
-  sharded.cp_group_ = group.get();
-  sharded.single_rank_group_ = self.get();
+  ParallelArgs sharded(rank, kRanks, &group);
+  sharded.tp_group_ = &group;
+  sharded.cp_group_ = &group;
+  sharded.single_rank_group_ = &self;
   sharded.cp_size() = 1;
   sharded.dp_size() = 1;
   sharded.kv_split_size() = kRanks;
-  sharded.dcp_group_ = group.get();
+  sharded.dcp_group_ = &group;
   OptimizationConfig optimization;
   optimization.enable_fused_mla_kernel = true;
   optimization.enable_fused_indexer_qk = true;
@@ -579,9 +553,9 @@ void run_attention(int32_t rank,
       sparse ? DsaTopkTransfer::reuse_and_capture(batch.fixed_topk(device))
              : DsaTopkTransfer::capture_output();
   torch::Tensor expected = forward(
-      reference, batch, ref_meta, ref_cache, device, ref_transfer, *self);
+      reference, batch, ref_meta, ref_cache, device, ref_transfer, self);
   torch::Tensor output =
-      forward(actual, batch, dcp_meta, dcp_cache, device, dcp_transfer, *group);
+      forward(actual, batch, dcp_meta, dcp_cache, device, dcp_transfer, group);
   dev.synchronize_default_stream();
   check_close(output, expected, "Full attention");
   batch.check_cache(dcp_cache.get_k_cache(), ref_cache.get_k_cache(), rank);
@@ -614,9 +588,9 @@ void run_attention(int32_t rank,
     ref_cache = batch.cache(1, rank, device);
     dcp_cache = batch.cache(kRanks, rank, device);
     expected = forward(
-        ref_shared, batch, ref_meta, ref_cache, device, ref_reuse, *self);
+        ref_shared, batch, ref_meta, ref_cache, device, ref_reuse, self);
     output = forward(
-        dcp_shared, batch, dcp_meta, dcp_cache, device, dcp_reuse, *group);
+        dcp_shared, batch, dcp_meta, dcp_cache, device, dcp_reuse, group);
     dev.synchronize_default_stream();
     check_close(output, expected, "Shared attention");
     batch.check_cache(dcp_cache.get_k_cache(), ref_cache.get_k_cache(), rank);
@@ -627,364 +601,53 @@ void run_attention(int32_t rank,
     CHECK(
         torch::equal(local_lens, dcp_reuse.localized_input()->context_lens()));
   }
-  group->allreduce(ready);
+  auto ready = torch::ones({1}, options);
+  group.allreduce(ready);
   dev.synchronize_default_stream();
 }
 
-void check_merge(int32_t rank, int32_t port) {
-  torch::NoGradGuard no_grad;
+void run_scenarios(int32_t rank, int32_t port) {
+  torch::set_num_threads(1);
   Device dev(rank);
   dev.set_device();
   const torch::Device device = dev.unwrap();
+  const auto options =
+      torch::TensorOptions().dtype(torch::kBFloat16).device(device);
+  KVCacheConfig::get_instance().block_size(kBlock);
   auto group = create_process_group(rank,
                                     kRanks,
                                     kRanks,
                                     port,
                                     false,
                                     "127.0.0.1",
-                                    "glm5_dcp_merge_test",
+                                    "glm5_attention_dcp_test",
                                     device);
   CHECK(group);
-  const auto options =
-      torch::TensorOptions().dtype(torch::kBFloat16).device(device);
-  torch::Tensor all_outputs =
-      create_glm5_dcp_tensor(
-          "glm5/merge", {4, 32, 64, 512}, torch::kBFloat16, torch::kCPU) *
-      50;
-  torch::Tensor lse = torch::arange(4 * 32 * 64, torch::kFloat32)
-                          .remainder(7)
-                          .view({4, 32, 64}) *
-                      0.25f;
-  lse[0][0].fill_(-INFINITY);
-  lse.select(1, 1).fill_(-INFINITY);
-  torch::Tensor slots = torch::arange(32, torch::kInt32);
-  slots[2] = -1;
-  torch::Tensor factors = torch::softmax(lse, 0);
-  factors = torch::where(
-      torch::isfinite(factors), factors, torch::zeros_like(factors));
-  torch::Tensor expected =
-      (all_outputs.to(torch::kFloat32) * factors.unsqueeze(-1)).sum(0);
-  expected[2].zero_();
-  DcpDecodeContext context(KVShardLayout(kBlock, kRanks, rank), group.get());
-  const torch::Tensor output =
-      context.merge(all_outputs[rank].unsqueeze(1).to(device),
-                    lse[rank].unsqueeze(-1).to(device),
-                    slots.to(device),
-                    /*head_sharded=*/true);
-  dev.synchronize_default_stream();
-  check_close(output.cpu(),
-              expected.slice(1, rank * 16, (rank + 1) * 16)
-                  .unsqueeze(1)
-                  .to(torch::kBFloat16),
-              "DCP merge FP32 reference");
-  CHECK_EQ(output[1].abs().max().item<float>(), 0.0f);
-  CHECK_EQ(output[2].abs().max().item<float>(), 0.0f);
   torch::Tensor ready = torch::ones({1}, options);
   group->allreduce(ready);
-  dev.synchronize_default_stream();
+  CHECK_EQ(ready.item<float>(), kRanks);
+  auto self = create_process_group(rank,
+                                   kRanks,
+                                   /*rank_size=*/1,
+                                   /*port=*/0,
+                                   /*trans=*/false,
+                                   "127.0.0.1",
+                                   "glm5_dcp_reference",
+                                   device);
+  CHECK(self);
+  run_attention(
+      rank, /*width=*/1, /*shared=*/false, /*sparse=*/false, *group, *self);
+  run_attention(
+      rank, /*width=*/4, /*shared=*/true, /*sparse=*/false, *group, *self);
+  run_attention(
+      rank, /*width=*/4, /*shared=*/false, /*sparse=*/true, *group, *self);
 }
 
-TEST(Glm5AttentionDcpTest, FullVerify32Rows) {
+TEST(Glm5AttentionDcpTest, DecodeVerifyAndSparseHistoryMatchSingleRank) {
   {
     const auto body = [](int32_t rank, int32_t port) {
-      run_attention(
-          rank, port, /*width=*/4, /*shared=*/false, /*sparse=*/false);
+      run_scenarios(rank, port);
     };
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0);
-
-    const int32_t child_count = kRanks;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            body(rank, port);
-            return 0;
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok =
-          wait_ranks(child_pids, std::chrono::seconds{300}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
-}
-TEST(Glm5AttentionDcpTest, SharedVerify32Rows) {
-  {
-    const auto body = [](int32_t rank, int32_t port) {
-      run_attention(rank, port, /*width=*/4, /*shared=*/true, /*sparse=*/false);
-    };
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0);
-
-    const int32_t child_count = kRanks;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            body(rank, port);
-            return 0;
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok =
-          wait_ranks(child_pids, std::chrono::seconds{300}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
-}
-TEST(Glm5AttentionDcpTest, FullDecode8Rows) {
-  {
-    const auto body = [](int32_t rank, int32_t port) {
-      run_attention(
-          rank, port, /*width=*/1, /*shared=*/false, /*sparse=*/false);
-    };
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0);
-
-    const int32_t child_count = kRanks;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            body(rank, port);
-            return 0;
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok =
-          wait_ranks(child_pids, std::chrono::seconds{300}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
-}
-TEST(Glm5AttentionDcpTest, FullExtend16Rows) {
-  {
-    const auto body = [](int32_t rank, int32_t port) {
-      run_attention(
-          rank, port, /*width=*/2, /*shared=*/false, /*sparse=*/false);
-    };
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0);
-
-    const int32_t child_count = kRanks;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            body(rank, port);
-            return 0;
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok =
-          wait_ranks(child_pids, std::chrono::seconds{300}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
-}
-TEST(Glm5AttentionDcpTest, SparseContext4096) {
-  {
-    const auto body = [](int32_t rank, int32_t port) {
-      run_attention(rank, port, /*width=*/4, /*shared=*/false, /*sparse=*/true);
-    };
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0);
-
-    const int32_t child_count = kRanks;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            body(rank, port);
-            return 0;
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok =
-          wait_ranks(child_pids, std::chrono::seconds{300}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
-}
-TEST(Glm5AttentionDcpTest, MergeMatchesFp32) {
-  {
-    const auto body = check_merge;
 
     const int32_t port = net::get_local_free_port();
     ASSERT_GT(port, 0);

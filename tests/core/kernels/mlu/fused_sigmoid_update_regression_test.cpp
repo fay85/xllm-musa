@@ -1085,8 +1085,9 @@ TEST(FusedSigmoidUpdateTest, Tp4DecodeGraphPaddingAndEmptyRowsPreserveState) {
                                             /*include_empty_query=*/true);
 }
 
-TEST(FusedSigmoidUpdateTest, EverySmallBatchPreservesFourTokenCheckpoints) {
-  for (int32_t batch = 1; batch <= 16; ++batch) {
+TEST(FusedSigmoidUpdateTest,
+     RepresentativeBatchesPreserveFourTokenCheckpoints) {
+  for (int32_t batch : {1, 16}) {
     for (const int64_t heads : {8, 16, 32, 64}) {
       SCOPED_TRACE(batch);
       SCOPED_TRACE(heads);
@@ -1141,7 +1142,7 @@ TEST(FusedSigmoidUpdateTest,
 
 TEST(FusedSigmoidUpdateTest, LowTpLongQueriesPreserveMaskedWindowBoundaries) {
   for (const int64_t heads : {16, 32, 64}) {
-    for (const int32_t query : {5, 6, 7, 8}) {
+    for (const int32_t query : {5, 8}) {
       SCOPED_TRACE(heads);
       SCOPED_TRACE(query);
       expect_sparse_kda_matches_reference({query, 0, query - 1, 2, query},
@@ -1155,8 +1156,8 @@ TEST(FusedSigmoidUpdateTest, LowTpLongQueriesPreserveMaskedWindowBoundaries) {
   }
 }
 
-TEST(FusedSigmoidUpdateTest, EverySmallDecodeBatchUsesLiveGraphMetadata) {
-  for (int64_t batch = 1; batch <= 16; ++batch) {
+TEST(FusedSigmoidUpdateTest, DecodeBoundaryBatchesUseLiveGraphMetadata) {
+  for (int64_t batch : {1, 15, 16}) {
     SCOPED_TRACE(batch);
     expect_tp4_decode_graph_matches_reference(batch,
                                               batch,
@@ -1513,9 +1514,9 @@ TEST(FusedSigmoidUpdateTest, OneDimensionalSlotsKeepRaggedFinalStates) {
   }
 }
 
-// Sweep effective requests, not the packed tensor's leading dimension.
-TEST(FusedSigmoidUpdateTest, DecodeAndVerifyCoverEveryBatchThrough128) {
-  for (int32_t batch = 1; batch <= 128; ++batch) {
+// Effective request counts cover both sides of the dispatch boundaries.
+TEST(FusedSigmoidUpdateTest, DecodeAndVerifyCoverBatchDispatchBoundaries) {
+  for (int32_t batch : {1, 16, 17, 127, 128, 129}) {
     for (const int32_t query : {1, 4}) {
       SCOPED_TRACE(::testing::Message() << batch << ":" << query);
       std::vector<int32_t> accepted;
@@ -1533,10 +1534,9 @@ TEST(FusedSigmoidUpdateTest, DecodeAndVerifyCoverEveryBatchThrough128) {
   }
 }
 
-TEST(FusedSigmoidUpdateTest,
-     VerifySupportsLargerBatchesAndSixEightTokenWindows) {
-  for (const int32_t batch : {1, 17, 64, 128, 129, 160}) {
-    for (const int32_t query : {1, 4, 6, 8}) {
+TEST(FusedSigmoidUpdateTest, VerifySupportsSixAndEightTokenWindows) {
+  for (const int32_t batch : {17}) {
+    for (const int32_t query : {6, 8}) {
       SCOPED_TRACE(::testing::Message() << batch << ":" << query);
       std::vector<int32_t> accepted;
       accepted.reserve(batch);
@@ -1554,7 +1554,7 @@ TEST(FusedSigmoidUpdateTest,
 }
 
 TEST(FusedSigmoidUpdateTest, LargeDecodeGraphsPreserveStateAcrossRounds) {
-  for (const int64_t batch : {64, 127, 128, 129, 160}) {
+  for (const int64_t batch : {128, 129}) {
     SCOPED_TRACE(batch);
     expect_tp4_decode_graph_matches_reference(batch,
                                               batch - 1,

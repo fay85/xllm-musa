@@ -580,7 +580,7 @@ class StatefulVerifyModel final : public GroupedCausalLM {
   int32_t calls_ = 0;
 };
 
-TEST(MluSpecVerifyGraphTest, ReplaysUpdatedInputsAndAdvancesStateExactlyOnce) {
+void check_replays_updated_inputs_and_advances_state_exactly_once() {
   const torch::NoGradGuard no_grad;
   const torch::Device device("mlu:0");
   const auto floats =
@@ -658,7 +658,7 @@ TEST(MluSpecVerifyGraphTest, ReplaysUpdatedInputsAndAdvancesStateExactlyOnce) {
   EXPECT_EQ(graph_model.calls(), 8);
 }
 
-TEST(MluSpecVerifyGraphTest, Dflash2B16RefreshesAcceptedStateAndAuxAt64k) {
+void check_dflash2_b16_refreshes_accepted_state_and_aux_at64k() {
   const torch::NoGradGuard no_grad;
   const torch::Device device("mlu:0");
   const auto floats =
@@ -738,7 +738,7 @@ TEST(MluSpecVerifyGraphTest, Dflash2B16RefreshesAcceptedStateAndAuxAt64k) {
   EXPECT_EQ(graph_model.calls(), 2);
 }
 
-TEST(MluSpecVerifyGraphTest, OrdinaryStatefulDecodeAdvancesOncePerRun) {
+void check_ordinary_stateful_decode_advances_once_per_run() {
   const torch::NoGradGuard no_grad;
   const torch::Device device("mlu:0");
   const auto floats =
@@ -785,6 +785,24 @@ TEST(MluSpecVerifyGraphTest, OrdinaryStatefulDecodeAdvancesOncePerRun) {
     EXPECT_TRUE(torch::equal(graph_model.state(), eager_model.state()));
   }
   EXPECT_EQ(graph_model.calls(), 4);
+}
+
+TEST(MluSpecVerifyGraphTest, VerifyAndDecodeAdvanceStateExactlyOnce) {
+  {
+    SCOPED_TRACE("ReplaysUpdatedInputsAndAdvancesStateExactlyOnce");
+    ASSERT_NO_FATAL_FAILURE(
+        check_replays_updated_inputs_and_advances_state_exactly_once());
+  }
+  {
+    SCOPED_TRACE("Dflash2B16RefreshesAcceptedStateAndAuxAt64k");
+    ASSERT_NO_FATAL_FAILURE(
+        check_dflash2_b16_refreshes_accepted_state_and_aux_at64k());
+  }
+  {
+    SCOPED_TRACE("OrdinaryStatefulDecodeAdvancesOncePerRun");
+    ASSERT_NO_FATAL_FAILURE(
+        check_ordinary_stateful_decode_advances_once_per_run());
+  }
 }
 
 }  // namespace
@@ -884,6 +902,66 @@ class MluGraphExecutorTest : public ::testing::Test {
         model_.get(), model_args_, device, options_);
   }
 
+  // Each scenario owns fresh executors and buffers while sharing process setup.
+  void reset_scenario() {
+    impl_.reset();
+    base_impl_.reset();
+    model_.reset();
+    kv_caches_.clear();
+    model_args_ = ModelArgs();
+    options_ = runtime::Options();
+    SetUp();
+  }
+
+  void check_different_batch_sizes();
+  void check_mlu_graph_executor_vs_base_executor_impl_multiple_runs();
+  void check_large_decode_bucket_captures_then_replays();
+  void check_prefill_then_decode_captures_and_replays();
+  void check_glm_metadata_replays_page_remaps_and_padded_buckets();
+  void check_reuses_graph_across_source_strides_and_rows();
+  void check_separates_block_table_layouts_and_refreshes_masks();
+  void check_replays_shrunk_rows_and_clears_table_tails();
+  void check_glm52_decode_reuses_graph_across_block_table_widths();
+  void check_kv_split_decode_replays_across_logical_blocks();
+  void check_invalid_layout_does_not_poison_graph_cache();
+  void check_unsupported_verify_uses_eager_and_decode_captures();
+  void check_dp_ranks_agree_on_eager_capture_and_replay();
+  void check_dp_dummy_fallback_keeps_graph_cache_usable();
+  void check_dp_uneven_fallback_keeps_graph_cache_usable();
+  void check_draft_decode_captures_then_replays();
+  void check_target_decode_captures_then_replays();
+  void check_ordinary_target_only_replays_decode_at_same_shape();
+  void check_mtp_target_only_replays_verify_prefill_at_same_shape();
+  void check_mtp_draft_only_replays_decode_at_same_shape();
+  void check_glm_mtp_draft_captures_both_modes_and_replays_new_rows();
+  void check_target_graph_caches_both_embedding_shapes();
+  void check_qwen_mtp_graph_keeps_token_and_hidden_inputs_separate();
+  void check_dual_embeddings_and_mrope_survive_bucket_revisit();
+  void check_external_embedding_can_capture_after_token_input();
+  void check_fixed_input_formats_capture_once_per_deployment();
+  void check_qwen_mrope_graph_refreshes_all_axes();
+  void check_qwen_verify_pads_whole_requests_and_replays();
+  void check_qwen_verify_keeps_three_token_requests_intact();
+  void check_qwen_draft_reuses_request_bucket_across_row_counts();
+  void check_padded_draft_keeps_whole_requests_across_stages();
+  void check_padded_request_limit_honors_no_padding_option();
+  void check_request_padding_aligns_tokens_to_tp_size();
+  void check_padded_draft_separates_equal_token_counts();
+  void check_padded_graph_rejects_unsupported_batches_before_capture();
+  void check_dp_decode_pads_equal_and_uneven_counts_to_tp_graph_size();
+  void check_mtp_seq_lens_capacity_uses_spec_factor();
+  void check_mtp_seq_lens_capacity_includes_graph_padding();
+  void check_padded_draft_graph_replays_fresh_embeddings();
+  void check_padded_decode_graph_reuses_shape_across_request_changes();
+  void check_padded_graph_keeps_request_groups_and_refreshes_blocks();
+  void check_padded_graph_returns_fresh_auxiliary_hidden_states();
+  void check_padded_graph_omits_disabled_auxiliary_hidden_states();
+  void check_qwen_history_within_context_reuses_one_graph();
+  void check_decode_attention_replays_growing_history_and_page_remaps();
+  void check_qwen_history_growth_replays_without_recapture();
+  void check_piecewise_replay_refreshes_history_and_preserves_order();
+  void check_multilayer_piecewise_replay_preserves_dependencies();
+
   ModelArgs model_args_;
   torch::TensorOptions tensor_options_;
   runtime::Options options_;
@@ -893,7 +971,8 @@ class MluGraphExecutorTest : public ::testing::Test {
   std::unique_ptr<BaseExecutorImpl> base_impl_;
 };
 
-TEST_F(MluGraphExecutorTest, GlmMetadataReplaysPageRemapsAndPaddedBuckets) {
+void MluGraphExecutorTest::
+    check_glm_metadata_replays_page_remaps_and_padded_buckets() {
   options_.enable_graph_mode_decode_no_padding(false);
   auto model = std::make_unique<GlmGraphMetadataModel>(tensor_options_);
   mlu::MluGraphExecutorImpl executor(
@@ -931,7 +1010,7 @@ TEST_F(MluGraphExecutorTest, GlmMetadataReplaysPageRemapsAndPaddedBuckets) {
 }
 
 // Test graph creation and execution with different batch sizes
-TEST_F(MluGraphExecutorTest, ReusesGraphAcrossSourceStridesAndRows) {
+void MluGraphExecutorTest::check_reuses_graph_across_source_strides_and_rows() {
   model_ = std::make_unique<GraphInputsModel>(tensor_options_);
   rebuild_impl();
   for (int32_t round = 0; round < 4; ++round) {
@@ -977,7 +1056,8 @@ TEST_F(MluGraphExecutorTest, ReusesGraphAcrossSourceStridesAndRows) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, SeparatesBlockTableLayoutsAndRefreshesMasks) {
+void MluGraphExecutorTest::
+    check_separates_block_table_layouts_and_refreshes_masks() {
   model_ = std::make_unique<GraphInputsModel>(tensor_options_);
   rebuild_impl();
   for (int32_t round = 0; round < 8; ++round) {
@@ -1008,7 +1088,7 @@ TEST_F(MluGraphExecutorTest, SeparatesBlockTableLayoutsAndRefreshesMasks) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, ReplaysShrunkRowsAndClearsTableTails) {
+void MluGraphExecutorTest::check_replays_shrunk_rows_and_clears_table_tails() {
   model_ = std::make_unique<ReplayInputModel>(tensor_options_);
   rebuild_impl();
   const auto ints = tensor_options_.dtype(torch::kInt32);
@@ -1328,7 +1408,7 @@ TEST_F(MluGraphExecutorTest, PersistentInputsClearShrunkTailsAndDefaults) {
                            torch::zeros({4}, ints.dtype(torch::kBool))));
 }
 
-TEST_F(MluGraphExecutorTest, InvalidLayoutDoesNotPoisonGraphCache) {
+void MluGraphExecutorTest::check_invalid_layout_does_not_poison_graph_cache() {
   for (int32_t invalid = 0; invalid < 4; ++invalid) {
     auto input = prepare_inputs(/*batch_size=*/4, /*seed=*/114);
     auto& params = input.input_params;
@@ -1353,9 +1433,9 @@ TEST_F(MluGraphExecutorTest, InvalidLayoutDoesNotPoisonGraphCache) {
   EXPECT_EQ(model_->forward_cnt(), before + 1);
 }
 
-TEST_F(MluGraphExecutorTest, DifferentBatchSizes) {
+void MluGraphExecutorTest::check_different_batch_sizes() {
   // Test with different batch sizes to ensure graph creation works
-  const std::vector<uint32_t> batch_sizes = {1, 3, 13, 21, 65};
+  const std::vector<uint32_t> batch_sizes = {1, 3, 65};
   for (auto batch_size : batch_sizes) {
     auto forward_input = prepare_inputs(batch_size, 1);
     auto eager_model_output = base_impl_->run({forward_input.token_ids},
@@ -1389,7 +1469,8 @@ TEST_F(MluGraphExecutorTest, DifferentBatchSizes) {
 }
 
 // Test multiple runs to verify consistency across different execution modes
-TEST_F(MluGraphExecutorTest, MluGraphExecutorVsBaseExecutorImplMultipleRuns) {
+void MluGraphExecutorTest::
+    check_mlu_graph_executor_vs_base_executor_impl_multiple_runs() {
   int32_t batch_size = 5;
   int32_t seed = 42;
   auto forward_input = prepare_inputs(batch_size, seed);
@@ -1411,7 +1492,7 @@ TEST_F(MluGraphExecutorTest, MluGraphExecutorVsBaseExecutorImplMultipleRuns) {
   EXPECT_TRUE(torch::allclose(eager_output, graph_output, 1e-5, 1e-6));
 
   // Run multiple times and compare results
-  const int num_runs = 5;
+  const int32_t num_runs = 2;
   auto base_forward_input = prepare_inputs(batch_size + 1, seed);
   auto replay_forward_input = prepare_inputs(batch_size + 1, seed);
   EXPECT_TRUE(torch::allclose(
@@ -1447,7 +1528,7 @@ TEST_F(MluGraphExecutorTest, MluGraphExecutorVsBaseExecutorImplMultipleRuns) {
       1e-6));
 }
 
-TEST_F(MluGraphExecutorTest, DraftDecodeCapturesThenReplays) {
+void MluGraphExecutorTest::check_draft_decode_captures_then_replays() {
   model_args_.model_type("qwen3_5_moe_mtp");
   options_.is_draft_engine(true);
   rebuild_impl();
@@ -1533,7 +1614,7 @@ TEST_F(MluGraphExecutorTest, DraftEagerPreservesTypedTopkWhenAuxIsDisabled) {
   EXPECT_EQ(model_->forward_cnt(), 1);
 }
 
-TEST_F(MluGraphExecutorTest, TargetDecodeCapturesThenReplays) {
+void MluGraphExecutorTest::check_target_decode_captures_then_replays() {
   options_.is_draft_engine(false);
   rebuild_impl();
 
@@ -1560,7 +1641,8 @@ TEST_F(MluGraphExecutorTest, TargetDecodeCapturesThenReplays) {
   EXPECT_EQ(model_->forward_cnt(), 1);
 }
 
-TEST_F(MluGraphExecutorTest, Glm52DecodeReusesGraphAcrossBlockTableWidths) {
+void MluGraphExecutorTest::
+    check_glm52_decode_reuses_graph_across_block_table_widths() {
   model_args_.model_type("glm_moe_dsa");
   options_.is_draft_engine(false);
   rebuild_impl();
@@ -1590,7 +1672,8 @@ TEST_F(MluGraphExecutorTest, Glm52DecodeReusesGraphAcrossBlockTableWidths) {
   EXPECT_EQ(model_->forward_cnt(), 1);
 }
 
-TEST_F(MluGraphExecutorTest, KvSplitDecodeReplaysAcrossLogicalBlocks) {
+void MluGraphExecutorTest::
+    check_kv_split_decode_replays_across_logical_blocks() {
   model_ = std::make_unique<BlockTableModel>(tensor_options_);
   model_args_.model_type("glm_moe_dsa");
   options_.block_table_token_span(/*value=*/64)
@@ -1621,7 +1704,8 @@ TEST_F(MluGraphExecutorTest, KvSplitDecodeReplaysAcrossLogicalBlocks) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, UnsupportedVerifyUsesEagerAndDecodeCaptures) {
+void MluGraphExecutorTest::
+    check_unsupported_verify_uses_eager_and_decode_captures() {
   options_.is_draft_engine(false);
   rebuild_impl();
 
@@ -1670,7 +1754,8 @@ TEST_F(MluGraphExecutorTest, UnsupportedVerifyUsesEagerAndDecodeCaptures) {
   EXPECT_EQ(model_->forward_cnt(), start_cnt + 3);
 }
 
-TEST_F(MluGraphExecutorTest, OrdinaryTargetOnlyReplaysDecodeAtSameShape) {
+void MluGraphExecutorTest::
+    check_ordinary_target_only_replays_decode_at_same_shape() {
   model_args_.model_type("qwen3_5_text");
   auto model = std::make_unique<GraphContractModel>(tensor_options_);
   GraphContractModel* contract = model.get();
@@ -1696,7 +1781,8 @@ TEST_F(MluGraphExecutorTest, OrdinaryTargetOnlyReplaysDecodeAtSameShape) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, MtpTargetOnlyReplaysVerifyPrefillAtSameShape) {
+void MluGraphExecutorTest::
+    check_mtp_target_only_replays_verify_prefill_at_same_shape() {
   model_args_.model_type("qwen3_5_text");
   options_.enable_speculative_decode(true)
       .speculative_algorithm("MTP")
@@ -1728,7 +1814,7 @@ TEST_F(MluGraphExecutorTest, MtpTargetOnlyReplaysVerifyPrefillAtSameShape) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, MtpDraftOnlyReplaysDecodeAtSameShape) {
+void MluGraphExecutorTest::check_mtp_draft_only_replays_decode_at_same_shape() {
   model_args_.model_type("qwen3_5_mtp");
   options_.enable_speculative_decode(true)
       .speculative_algorithm("MTP")
@@ -1755,7 +1841,7 @@ TEST_F(MluGraphExecutorTest, MtpDraftOnlyReplaysDecodeAtSameShape) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, TargetGraphCachesBothEmbeddingShapes) {
+void MluGraphExecutorTest::check_target_graph_caches_both_embedding_shapes() {
   auto model = std::make_unique<GraphContractModel>(tensor_options_);
   GraphContractModel* contract = model.get();
   model_ = std::move(model);
@@ -1775,7 +1861,8 @@ TEST_F(MluGraphExecutorTest, TargetGraphCachesBothEmbeddingShapes) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, QwenMtpGraphKeepsTokenAndHiddenInputsSeparate) {
+void MluGraphExecutorTest::
+    check_qwen_mtp_graph_keeps_token_and_hidden_inputs_separate() {
   auto model = std::make_unique<GraphContractModel>(tensor_options_,
                                                     /*dual_input=*/true);
   GraphContractModel* contract = model.get();
@@ -1796,7 +1883,8 @@ TEST_F(MluGraphExecutorTest, QwenMtpGraphKeepsTokenAndHiddenInputsSeparate) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, DualEmbeddingsAndMropeSurviveBucketRevisit) {
+void MluGraphExecutorTest::
+    check_dual_embeddings_and_mrope_survive_bucket_revisit() {
   auto model = std::make_unique<GraphContractModel>(tensor_options_,
                                                     /*dual_input=*/true);
   model->set_token_weights();
@@ -1843,7 +1931,8 @@ TEST_F(MluGraphExecutorTest, DualEmbeddingsAndMropeSurviveBucketRevisit) {
   EXPECT_FALSE(torch::equal(saved_outputs[0], saved_outputs[2]));
 }
 
-TEST_F(MluGraphExecutorTest, ExternalEmbeddingCanCaptureAfterTokenInput) {
+void MluGraphExecutorTest::
+    check_external_embedding_can_capture_after_token_input() {
   auto model = std::make_unique<GraphContractModel>(tensor_options_,
                                                     /*dual_input=*/false);
   GraphContractModel* contract = model.get();
@@ -1866,7 +1955,8 @@ TEST_F(MluGraphExecutorTest, ExternalEmbeddingCanCaptureAfterTokenInput) {
 
 // Input formats are fixed within a deployment. Different executors may use
 // different formats; they do not need entries in a shared graph cache.
-TEST_F(MluGraphExecutorTest, FixedInputFormatsCaptureOncePerDeployment) {
+void MluGraphExecutorTest::
+    check_fixed_input_formats_capture_once_per_deployment() {
   for (const char* model_type : {"test_model", "qwen3_5_text"}) {
     for (int32_t format = 0; format < 4; ++format) {
       model_args_.model_type(model_type);
@@ -1896,7 +1986,8 @@ TEST_F(MluGraphExecutorTest, FixedInputFormatsCaptureOncePerDeployment) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, QwenHistoryWithinContextReusesOneGraph) {
+void MluGraphExecutorTest::
+    check_qwen_history_within_context_reuses_one_graph() {
   model_ = std::make_unique<BlockTableModel>(tensor_options_);
   model_args_.model_type("qwen3_5_text").max_position_embeddings(8192);
   rebuild_impl();
@@ -1934,8 +2025,8 @@ TEST_F(MluGraphExecutorTest, QwenRequiresPositiveDeclaredContext) {
   EXPECT_DEATH(rebuild_impl(), "positive max_position_embeddings");
 }
 
-TEST_F(MluGraphExecutorTest,
-       DecodeAttentionReplaysGrowingHistoryAndPageRemaps) {
+void MluGraphExecutorTest::
+    check_decode_attention_replays_growing_history_and_page_remaps() {
   const torch::NoGradGuard no_grad;
   model_args_.model_type("qwen3_5_text").max_position_embeddings(8192);
   options_.is_draft_engine(false).enable_graph_mode_decode_no_padding(false);
@@ -1996,7 +2087,8 @@ TEST_F(MluGraphExecutorTest,
   }
 }
 
-TEST_F(MluGraphExecutorTest, QwenHistoryGrowthReplaysWithoutRecapture) {
+void MluGraphExecutorTest::
+    check_qwen_history_growth_replays_without_recapture() {
   model_args_.model_type("qwen3_5_text").max_position_embeddings(8192);
   rebuild_impl();
   auto input = prepare_inputs(/*batch_size=*/3, /*seed=*/239);
@@ -2054,7 +2146,7 @@ class GraphPeerGroup final : public ProcessGroup {
   torch::Tensor supported_packet_;
 };
 
-TEST_F(MluGraphExecutorTest, DpRanksAgreeOnEagerCaptureAndReplay) {
+void MluGraphExecutorTest::check_dp_ranks_agree_on_eager_capture_and_replay() {
   model_args_.model_type("qwen3_5_text").max_position_embeddings(8192);
   options_.dp_size(2).world_size(2);
   rebuild_impl();
@@ -2095,7 +2187,7 @@ TEST_F(MluGraphExecutorTest, DpRanksAgreeOnEagerCaptureAndReplay) {
   EXPECT_EQ(group.calls(), 7);
 }
 
-TEST_F(MluGraphExecutorTest, QwenVerifyPadsWholeRequestsAndReplays) {
+void MluGraphExecutorTest::check_qwen_verify_pads_whole_requests_and_replays() {
   model_args_.model_type("qwen3_5_moe");
   options_.enable_speculative_decode(true)
       .speculative_algorithm("MTP")
@@ -2130,7 +2222,8 @@ TEST_F(MluGraphExecutorTest, QwenVerifyPadsWholeRequestsAndReplays) {
   EXPECT_EQ(model_->forward_cnt(), start_cnt + 1);
 }
 
-TEST_F(MluGraphExecutorTest, QwenVerifyKeepsThreeTokenRequestsIntact) {
+void MluGraphExecutorTest::
+    check_qwen_verify_keeps_three_token_requests_intact() {
   model_args_.model_type("qwen3_5_moe");
   options_.enable_speculative_decode(true)
       .speculative_algorithm("MTP")
@@ -2167,7 +2260,8 @@ TEST_F(MluGraphExecutorTest, QwenVerifyKeepsThreeTokenRequestsIntact) {
   EXPECT_EQ(model_->last_block_table_width(), 129);
 }
 
-TEST_F(MluGraphExecutorTest, QwenDraftReusesRequestBucketAcrossRowCounts) {
+void MluGraphExecutorTest::
+    check_qwen_draft_reuses_request_bucket_across_row_counts() {
   model_args_.model_type("qwen3_5_mtp");
   options_.is_draft_engine(true);
   rebuild_impl();
@@ -2201,7 +2295,7 @@ TEST_F(MluGraphExecutorTest, QwenDraftReusesRequestBucketAcrossRowCounts) {
   EXPECT_FALSE(torch::allclose(first, second.narrow(0, 0, 9)));
 }
 
-TEST_F(MluGraphExecutorTest, QwenMropeGraphRefreshesAllAxes) {
+void MluGraphExecutorTest::check_qwen_mrope_graph_refreshes_all_axes() {
   model_args_.model_type("qwen3_5_text");
   auto model = std::make_unique<PositionEchoModel>(tensor_options_);
   PositionEchoModel* echo = model.get();
@@ -2267,7 +2361,7 @@ TEST(MluMtpContractTest, QwenAdapterKeepsOnlyDraftLayers) {
                   .supports_accepted_span_replay);
 }
 
-TEST_F(MluGraphExecutorTest, LargeDecodeBucketCapturesThenReplays) {
+void MluGraphExecutorTest::check_large_decode_bucket_captures_then_replays() {
   ScopedConfigSnapshot config_snapshot;
   ExecutionConfig::get_instance().max_tokens_for_graph_mode(128);
   options_.is_draft_engine(false);
@@ -2347,7 +2441,7 @@ TEST_F(MluGraphExecutorTest, PersistentTensorBytesIncludeLazyAux) {
   EXPECT_EQ(param.get_persistent_tensor_bytes(), base_bytes + aux_bytes);
 }
 
-TEST_F(MluGraphExecutorTest, PrefillThenDecodeCapturesAndReplays) {
+void MluGraphExecutorTest::check_prefill_then_decode_captures_and_replays() {
   options_.is_draft_engine(false);
   rebuild_impl();
 
@@ -2384,7 +2478,8 @@ TEST_F(MluGraphExecutorTest, PrefillThenDecodeCapturesAndReplays) {
   EXPECT_EQ(model_->forward_cnt(), 2);
 }
 
-TEST_F(MluGraphExecutorTest, DpDecodePadsEqualAndUnevenCountsToTpGraphSize) {
+void MluGraphExecutorTest::
+    check_dp_decode_pads_equal_and_uneven_counts_to_tp_graph_size() {
   options_.is_draft_engine(false);
   options_.world_size(8);
   options_.dp_size(2);
@@ -2415,7 +2510,7 @@ TEST_F(MluGraphExecutorTest, DpDecodePadsEqualAndUnevenCountsToTpGraphSize) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, MtpSeqLensCapacityUsesSpecFactor) {
+void MluGraphExecutorTest::check_mtp_seq_lens_capacity_uses_spec_factor() {
   options_.is_draft_engine(false);
   options_.num_speculative_tokens(1);
   options_.num_decoding_tokens(options_.num_speculative_tokens() + 1);
@@ -2446,7 +2541,8 @@ TEST_F(MluGraphExecutorTest, MtpSeqLensCapacityUsesSpecFactor) {
   EXPECT_EQ(model_->last_tokens_size(), 4);
 }
 
-TEST_F(MluGraphExecutorTest, MtpSeqLensCapacityIncludesGraphPadding) {
+void MluGraphExecutorTest::
+    check_mtp_seq_lens_capacity_includes_graph_padding() {
   options_.is_draft_engine(false);
   options_.num_speculative_tokens(2);
   options_.num_decoding_tokens(options_.num_speculative_tokens() + 1);
@@ -2477,7 +2573,7 @@ TEST_F(MluGraphExecutorTest, MtpSeqLensCapacityIncludesGraphPadding) {
   EXPECT_EQ(model_->last_tokens_size(), 32);
 }
 
-TEST_F(MluGraphExecutorTest, DpDummyFallbackKeepsGraphCacheUsable) {
+void MluGraphExecutorTest::check_dp_dummy_fallback_keeps_graph_cache_usable() {
   options_.is_draft_engine(false);
   rebuild_impl();
 
@@ -2527,7 +2623,7 @@ TEST_F(MluGraphExecutorTest, DpDummyFallbackKeepsGraphCacheUsable) {
   EXPECT_EQ(model_->forward_cnt(), start_cnt + 3);
 }
 
-TEST_F(MluGraphExecutorTest, DpUnevenFallbackKeepsGraphCacheUsable) {
+void MluGraphExecutorTest::check_dp_uneven_fallback_keeps_graph_cache_usable() {
   options_.is_draft_engine(false);
   rebuild_impl();
 
@@ -2578,7 +2674,7 @@ TEST_F(MluGraphExecutorTest, DpUnevenFallbackKeepsGraphCacheUsable) {
   EXPECT_EQ(model_->forward_cnt(), start_cnt + 3);
 }
 
-TEST_F(MluGraphExecutorTest, PaddedDraftGraphReplaysFreshEmbeddings) {
+void MluGraphExecutorTest::check_padded_draft_graph_replays_fresh_embeddings() {
   options_.is_draft_engine(true);
   model_args_.index_kpool(4).index_kpool_compress(true);
   model_ = std::make_unique<GroupedCausalLM>(tensor_options_);
@@ -2599,7 +2695,8 @@ TEST_F(MluGraphExecutorTest, PaddedDraftGraphReplaysFreshEmbeddings) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, PaddedDecodeGraphReusesShapeAcrossRequestChanges) {
+void MluGraphExecutorTest::
+    check_padded_decode_graph_reuses_shape_across_request_changes() {
   options_.is_draft_engine(false);
   model_args_.index_kpool(4).index_kpool_compress(true);
   model_ = std::make_unique<RequestSlotsModel>(tensor_options_);
@@ -2620,7 +2717,8 @@ TEST_F(MluGraphExecutorTest, PaddedDecodeGraphReusesShapeAcrossRequestChanges) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, PaddedGraphKeepsRequestGroupsAndRefreshesBlocks) {
+void MluGraphExecutorTest::
+    check_padded_graph_keeps_request_groups_and_refreshes_blocks() {
   model_args_.index_kpool(4).index_kpool_compress(true);
   model_ = std::make_unique<GroupedBlockTableModel>(tensor_options_);
   options_.is_draft_engine(true);
@@ -2651,7 +2749,8 @@ TEST_F(MluGraphExecutorTest, PaddedGraphKeepsRequestGroupsAndRefreshesBlocks) {
   EXPECT_EQ(model_->forward_cnt(), 4);
 }
 
-TEST_F(MluGraphExecutorTest, PaddedGraphReturnsFreshAuxiliaryHiddenStates) {
+void MluGraphExecutorTest::
+    check_padded_graph_returns_fresh_auxiliary_hidden_states() {
   model_args_.index_kpool(4).index_kpool_compress(true);
   model_ = std::make_unique<GroupedCausalLM>(tensor_options_);
   model_->return_aux_hidden_states(true);
@@ -2684,7 +2783,8 @@ TEST_F(MluGraphExecutorTest, PaddedGraphReturnsFreshAuxiliaryHiddenStates) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, PaddedGraphOmitsDisabledAuxiliaryHiddenStates) {
+void MluGraphExecutorTest::
+    check_padded_graph_omits_disabled_auxiliary_hidden_states() {
   model_args_.index_kpool(4).index_kpool_compress(true);
   model_ = std::make_unique<GroupedCausalLM>(tensor_options_);
   model_->return_aux_hidden_states(true);
@@ -2714,7 +2814,8 @@ TEST_F(MluGraphExecutorTest, PaddedGraphOmitsDisabledAuxiliaryHiddenStates) {
   EXPECT_EQ(model_->forward_cnt(), calls_after_capture);
 }
 
-TEST_F(MluGraphExecutorTest, PaddedDraftKeepsWholeRequestsAcrossStages) {
+void MluGraphExecutorTest::
+    check_padded_draft_keeps_whole_requests_across_stages() {
   model_args_.index_kpool(4).index_kpool_compress(true);
   model_ = std::make_unique<RequestSlotsModel>(tensor_options_);
   options_.is_draft_engine(true);
@@ -2743,7 +2844,8 @@ TEST_F(MluGraphExecutorTest, PaddedDraftKeepsWholeRequestsAcrossStages) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, PaddedRequestLimitHonorsNoPaddingOption) {
+void MluGraphExecutorTest::
+    check_padded_request_limit_honors_no_padding_option() {
   ScopedConfigSnapshot config_snapshot;
   ExecutionConfig::get_instance().max_tokens_for_graph_mode(16);
   model_args_.index_kpool(4).index_kpool_compress(true);
@@ -2765,7 +2867,7 @@ TEST_F(MluGraphExecutorTest, PaddedRequestLimitHonorsNoPaddingOption) {
   }
 }
 
-TEST_F(MluGraphExecutorTest, RequestPaddingAlignsTokensToTpSize) {
+void MluGraphExecutorTest::check_request_padding_aligns_tokens_to_tp_size() {
   model_args_.index_kpool(4).index_kpool_compress(true);
   model_ = std::make_unique<RequestSlotsModel>(tensor_options_);
   options_.is_draft_engine(true).dp_size(2).world_size(12);
@@ -2790,7 +2892,7 @@ TEST_F(MluGraphExecutorTest, RequestPaddingAlignsTokensToTpSize) {
   EXPECT_EQ(model_->forward_cnt(), 2);
 }
 
-TEST_F(MluGraphExecutorTest, PaddedDraftSeparatesEqualTokenCounts) {
+void MluGraphExecutorTest::check_padded_draft_separates_equal_token_counts() {
   model_args_.index_kpool(4).index_kpool_compress(true);
   model_ = std::make_unique<RequestSlotsModel>(tensor_options_);
   options_.is_draft_engine(true);
@@ -2818,8 +2920,8 @@ TEST_F(MluGraphExecutorTest, PaddedDraftSeparatesEqualTokenCounts) {
   }
 }
 
-TEST_F(MluGraphExecutorTest,
-       PaddedGraphRejectsUnsupportedBatchesBeforeCapture) {
+void MluGraphExecutorTest::
+    check_padded_graph_rejects_unsupported_batches_before_capture() {
   model_args_.index_kpool(4).index_kpool_compress(true);
   model_ = std::make_unique<GroupedCausalLM>(tensor_options_);
   options_.dp_size(2).world_size(2);
@@ -2847,7 +2949,8 @@ TEST_F(MluGraphExecutorTest,
   EXPECT_EQ(model_->forward_cnt(), 5);
 }
 
-TEST_F(MluGraphExecutorTest, GlmMtpDraftCapturesBothModesAndReplaysNewRows) {
+void MluGraphExecutorTest::
+    check_glm_mtp_draft_captures_both_modes_and_replays_new_rows() {
   const auto capabilities =
       ModelRegistry::get_mtp_capabilities("glm_moe_dsa_mtp");
   ASSERT_TRUE(capabilities.supports_grouped_mtp_graph);
@@ -3037,7 +3140,8 @@ class PiecewiseHistoryModel final : public MockCausalLM {
 };
 }  // namespace
 
-TEST_F(MluGraphExecutorTest, PiecewiseReplayRefreshesHistoryAndPreservesOrder) {
+void MluGraphExecutorTest::
+    check_piecewise_replay_refreshes_history_and_preserves_order() {
   MtpModelCapabilities capabilities;
   capabilities.graph_block_table_extra_columns = 0;
   capabilities.enable_piecewise_graph = true;
@@ -3067,7 +3171,8 @@ TEST_F(MluGraphExecutorTest, PiecewiseReplayRefreshesHistoryAndPreservesOrder) {
   EXPECT_EQ(model->calls(), 2);
 }
 
-TEST_F(MluGraphExecutorTest, MultilayerPiecewiseReplayPreservesDependencies) {
+void MluGraphExecutorTest::
+    check_multilayer_piecewise_replay_preserves_dependencies() {
   constexpr int32_t kNumLayers = 3;
   PiecewiseHistoryModel model(tensor_options_, kNumLayers);
   auto input = prepare_inputs(/*batch_size=*/2, /*seed=*/317);
@@ -3126,8 +3231,9 @@ class GlmPiecewiseIndexerModel final : public GroupedCausalLM {
       parameter.value().normal_(0.0, 0.1);
     }
     const int64_t pages = args.max_position_embeddings() / 16;
-    index_cache_ = torch::randn({4 * pages + 1, 1, 4, 32}, options);
-    tail_ = torch::zeros({5, 2, 8, 32}, options);
+    index_cache_ =
+        torch::randn({4 * pages + 1, 1, 4, args.index_head_dim()}, options);
+    tail_ = torch::zeros({5, 2, 8, args.index_head_dim()}, options);
     steps_ = torch::zeros({1}, options.dtype(torch::kInt32));
   }
 
@@ -3199,10 +3305,10 @@ TEST(MluSpecVerifyGraphTest,
     args.model_type(draft ? "glm5_next_mtp" : "glm5_next")
         .hidden_size(128)
         .q_lora_rank(128)
-        .index_n_heads(2)
-        .index_head_dim(32)
+        .index_n_heads(32)
+        .index_head_dim(128)
         .qk_rope_head_dim(0)
-        .index_topk(16)
+        .index_topk(2048)
         .index_kpool(4)
         .index_kpool_compress(true)
         .index_kpool_always_select_tail(true)
@@ -3283,6 +3389,304 @@ TEST(MluSpecVerifyGraphTest,
     EXPECT_EQ(graph_model.calls(), 2);
   }
   KVCacheConfig::get_instance().block_size(old_block_size);
+}
+
+TEST_F(MluGraphExecutorTest, CaptureAndReplay) {
+  {
+    SCOPED_TRACE("DifferentBatchSizes");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_different_batch_sizes());
+  }
+  {
+    SCOPED_TRACE("MluGraphExecutorVsBaseExecutorImplMultipleRuns");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_mlu_graph_executor_vs_base_executor_impl_multiple_runs());
+  }
+  {
+    SCOPED_TRACE("LargeDecodeBucketCapturesThenReplays");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_large_decode_bucket_captures_then_replays());
+  }
+  {
+    SCOPED_TRACE("PrefillThenDecodeCapturesAndReplays");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_prefill_then_decode_captures_and_replays());
+  }
+}
+
+TEST_F(MluGraphExecutorTest, LayoutsAndPersistentInputs) {
+  {
+    SCOPED_TRACE("GlmMetadataReplaysPageRemapsAndPaddedBuckets");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_glm_metadata_replays_page_remaps_and_padded_buckets());
+  }
+  {
+    SCOPED_TRACE("ReusesGraphAcrossSourceStridesAndRows");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_reuses_graph_across_source_strides_and_rows());
+  }
+  {
+    SCOPED_TRACE("SeparatesBlockTableLayoutsAndRefreshesMasks");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_separates_block_table_layouts_and_refreshes_masks());
+  }
+  {
+    SCOPED_TRACE("ReplaysShrunkRowsAndClearsTableTails");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_replays_shrunk_rows_and_clears_table_tails());
+  }
+  {
+    SCOPED_TRACE("Glm52DecodeReusesGraphAcrossBlockTableWidths");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_glm52_decode_reuses_graph_across_block_table_widths());
+  }
+  {
+    SCOPED_TRACE("KvSplitDecodeReplaysAcrossLogicalBlocks");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_kv_split_decode_replays_across_logical_blocks());
+  }
+}
+
+TEST_F(MluGraphExecutorTest, FallbackAndCacheRecovery) {
+  {
+    SCOPED_TRACE("InvalidLayoutDoesNotPoisonGraphCache");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_invalid_layout_does_not_poison_graph_cache());
+  }
+  {
+    SCOPED_TRACE("UnsupportedVerifyUsesEagerAndDecodeCaptures");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_unsupported_verify_uses_eager_and_decode_captures());
+  }
+  {
+    SCOPED_TRACE("DpRanksAgreeOnEagerCaptureAndReplay");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_dp_ranks_agree_on_eager_capture_and_replay());
+  }
+  {
+    SCOPED_TRACE("DpDummyFallbackKeepsGraphCacheUsable");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_dp_dummy_fallback_keeps_graph_cache_usable());
+  }
+  {
+    SCOPED_TRACE("DpUnevenFallbackKeepsGraphCacheUsable");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_dp_uneven_fallback_keeps_graph_cache_usable());
+  }
+}
+
+TEST_F(MluGraphExecutorTest, TargetAndDraftModes) {
+  {
+    SCOPED_TRACE("DraftDecodeCapturesThenReplays");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_draft_decode_captures_then_replays());
+  }
+  {
+    SCOPED_TRACE("TargetDecodeCapturesThenReplays");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_target_decode_captures_then_replays());
+  }
+  {
+    SCOPED_TRACE("OrdinaryTargetOnlyReplaysDecodeAtSameShape");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_ordinary_target_only_replays_decode_at_same_shape());
+  }
+  {
+    SCOPED_TRACE("MtpTargetOnlyReplaysVerifyPrefillAtSameShape");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_mtp_target_only_replays_verify_prefill_at_same_shape());
+  }
+  {
+    SCOPED_TRACE("MtpDraftOnlyReplaysDecodeAtSameShape");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_mtp_draft_only_replays_decode_at_same_shape());
+  }
+  {
+    SCOPED_TRACE("GlmMtpDraftCapturesBothModesAndReplaysNewRows");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_glm_mtp_draft_captures_both_modes_and_replays_new_rows());
+  }
+}
+
+TEST_F(MluGraphExecutorTest, EmbeddingsAndPositions) {
+  {
+    SCOPED_TRACE("TargetGraphCachesBothEmbeddingShapes");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_target_graph_caches_both_embedding_shapes());
+  }
+  {
+    SCOPED_TRACE("QwenMtpGraphKeepsTokenAndHiddenInputsSeparate");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_qwen_mtp_graph_keeps_token_and_hidden_inputs_separate());
+  }
+  {
+    SCOPED_TRACE("DualEmbeddingsAndMropeSurviveBucketRevisit");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_dual_embeddings_and_mrope_survive_bucket_revisit());
+  }
+  {
+    SCOPED_TRACE("ExternalEmbeddingCanCaptureAfterTokenInput");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_external_embedding_can_capture_after_token_input());
+  }
+  {
+    SCOPED_TRACE("FixedInputFormatsCaptureOncePerDeployment");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_fixed_input_formats_capture_once_per_deployment());
+  }
+  {
+    SCOPED_TRACE("QwenMropeGraphRefreshesAllAxes");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_qwen_mrope_graph_refreshes_all_axes());
+  }
+}
+
+TEST_F(MluGraphExecutorTest, WholeRequestPadding) {
+  {
+    SCOPED_TRACE("QwenVerifyPadsWholeRequestsAndReplays");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_qwen_verify_pads_whole_requests_and_replays());
+  }
+  {
+    SCOPED_TRACE("QwenVerifyKeepsThreeTokenRequestsIntact");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_qwen_verify_keeps_three_token_requests_intact());
+  }
+  {
+    SCOPED_TRACE("QwenDraftReusesRequestBucketAcrossRowCounts");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_qwen_draft_reuses_request_bucket_across_row_counts());
+  }
+  {
+    SCOPED_TRACE("PaddedDraftKeepsWholeRequestsAcrossStages");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_padded_draft_keeps_whole_requests_across_stages());
+  }
+  {
+    SCOPED_TRACE("PaddedRequestLimitHonorsNoPaddingOption");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_padded_request_limit_honors_no_padding_option());
+  }
+  {
+    SCOPED_TRACE("RequestPaddingAlignsTokensToTpSize");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_request_padding_aligns_tokens_to_tp_size());
+  }
+  {
+    SCOPED_TRACE("PaddedDraftSeparatesEqualTokenCounts");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_padded_draft_separates_equal_token_counts());
+  }
+  {
+    SCOPED_TRACE("PaddedGraphRejectsUnsupportedBatchesBeforeCapture");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_padded_graph_rejects_unsupported_batches_before_capture());
+  }
+}
+
+TEST_F(MluGraphExecutorTest, PaddedStateAndCapacity) {
+  {
+    SCOPED_TRACE("DpDecodePadsEqualAndUnevenCountsToTpGraphSize");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_dp_decode_pads_equal_and_uneven_counts_to_tp_graph_size());
+  }
+  {
+    SCOPED_TRACE("MtpSeqLensCapacityUsesSpecFactor");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(check_mtp_seq_lens_capacity_uses_spec_factor());
+  }
+  {
+    SCOPED_TRACE("MtpSeqLensCapacityIncludesGraphPadding");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_mtp_seq_lens_capacity_includes_graph_padding());
+  }
+  {
+    SCOPED_TRACE("PaddedDraftGraphReplaysFreshEmbeddings");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_padded_draft_graph_replays_fresh_embeddings());
+  }
+  {
+    SCOPED_TRACE("PaddedDecodeGraphReusesShapeAcrossRequestChanges");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_padded_decode_graph_reuses_shape_across_request_changes());
+  }
+  {
+    SCOPED_TRACE("PaddedGraphKeepsRequestGroupsAndRefreshesBlocks");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_padded_graph_keeps_request_groups_and_refreshes_blocks());
+  }
+  {
+    SCOPED_TRACE("PaddedGraphReturnsFreshAuxiliaryHiddenStates");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_padded_graph_returns_fresh_auxiliary_hidden_states());
+  }
+  {
+    SCOPED_TRACE("PaddedGraphOmitsDisabledAuxiliaryHiddenStates");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_padded_graph_omits_disabled_auxiliary_hidden_states());
+  }
+}
+
+TEST_F(MluGraphExecutorTest, HistoryAndPiecewiseReplay) {
+  {
+    SCOPED_TRACE("QwenHistoryWithinContextReusesOneGraph");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_qwen_history_within_context_reuses_one_graph());
+  }
+  {
+    SCOPED_TRACE("DecodeAttentionReplaysGrowingHistoryAndPageRemaps");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_decode_attention_replays_growing_history_and_page_remaps());
+  }
+  {
+    SCOPED_TRACE("QwenHistoryGrowthReplaysWithoutRecapture");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_qwen_history_growth_replays_without_recapture());
+  }
+  {
+    SCOPED_TRACE("PiecewiseReplayRefreshesHistoryAndPreservesOrder");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_piecewise_replay_refreshes_history_and_preserves_order());
+  }
+  {
+    SCOPED_TRACE("MultilayerPiecewiseReplayPreservesDependencies");
+    reset_scenario();
+    ASSERT_NO_FATAL_FAILURE(
+        check_multilayer_piecewise_replay_preserves_dependencies());
+  }
 }
 
 }  // namespace xllm

@@ -555,19 +555,6 @@ torch::Tensor causal_conv1d_fn(
     bool inplace_final_state = true,
     const std::optional<torch::Tensor>& read_cache_indices_opt = std::nullopt);
 
-std::pair<torch::Tensor, torch::Tensor> fused_recurrent_gated_delta_rule(
-    const torch::Tensor& q,
-    const torch::Tensor& k,
-    const torch::Tensor& v,
-    const torch::Tensor& g,
-    const std::optional<torch::Tensor>& beta_opt = std::nullopt,
-    const std::optional<torch::Tensor>& initial_state_opt = std::nullopt,
-    bool inplace_final_state = true,
-    const std::optional<torch::Tensor>& cu_seqlens_opt = std::nullopt,
-    const std::optional<torch::Tensor>& ssm_state_indices_opt = std::nullopt,
-    const std::optional<torch::Tensor>& num_accepted_tokens_opt = std::nullopt,
-    bool use_qk_l2norm_in_kernel = true);
-
 std::pair<torch::Tensor, torch::Tensor>
 fused_recurrent_gated_delta_rule_packed_decode(
     const torch::Tensor& mixed_qkv,
@@ -632,13 +619,6 @@ torch::Tensor causal_conv1d_update_decode(
         std::nullopt,
     const std::optional<torch::Tensor>& initial_state_idx_opt = std::nullopt);
 
-std::pair<torch::Tensor, torch::Tensor> fused_gdn_gating(
-    const torch::Tensor& A_log,
-    const torch::Tensor& a,
-    const torch::Tensor& b,
-    const torch::Tensor& dt_bias,
-    float beta = 1.0f,
-    float threshold = 20.0f);
 // BF16 scores[4,Q,2048], topk=2048; INT32 slots/mapping and contiguous outputs.
 // Global TopK: score descending; tied candidates follow device torch::topk.
 // Invalid slots/NaNs are excluded. Valid slots occupy the output prefix;

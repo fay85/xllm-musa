@@ -385,7 +385,7 @@ class Qwen3_5GatedDeltaNetTest : public ::testing::Test {
   KVCache kv_cache_;
 };
 
-// Prefill path exercises causal_conv1d_fn + fused_gdn_gating +
+// Prefill path exercises causal_conv1d_fn + fused_post_conv_prep +
 // ChunkGatedDeltaRule. MLU parallel reductions in these kernels can be mildly
 // non-deterministic, so we validate shape, finiteness, and determinism rather
 // than exact golden values.

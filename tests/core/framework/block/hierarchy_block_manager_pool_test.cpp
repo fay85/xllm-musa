@@ -3440,7 +3440,8 @@ TEST(HierarchyBlockManagerPoolTest,
       .linear_state_num_slots(80)
       .host_num_blocks_by_type({{BlockType::KV, 128}, {BlockType::LINEAR, 80}})
       .enable_kvcache_store(true)
-      .prefetch_batch_size(8);
+      .prefetch_batch_size(8)
+      .prefetch_valid_blocks_per_batch(8);
   FakePrefetchEngine engine(/*worker_count=*/1,
                             /*timeout_ms=*/-1,
                             /*batch_size=*/8);
@@ -3565,7 +3566,8 @@ TEST(HierarchyBlockManagerPoolTest,
       .linear_state_num_slots(80)
       .host_num_blocks_by_type({{BlockType::KV, 128}, {BlockType::LINEAR, 80}})
       .enable_kvcache_store(true)
-      .prefetch_batch_size(8);
+      .prefetch_batch_size(8)
+      .prefetch_valid_blocks_per_batch(8);
   FakePrefetchEngine engine(/*worker_count=*/1,
                             /*timeout_ms=*/-1,
                             /*batch_size=*/8);

@@ -907,21 +907,24 @@ Glm52ForCausalLM create_model(const ModelArgs& args,
 
 std::vector<KVCache> create_caches(const ModelArgs& args,
                                    const torch::TensorOptions& options,
-                                   int32_t splits = 1) {
+                                   int32_t splits = 1,
+                                   int32_t block_size = 1) {
   std::vector<KVCache> caches;
   caches.reserve(kLayers);
   for (int32_t layer = 0; layer < kLayers; ++layer) {
-    auto cache =
-        create_mla_cache(args, options, kBlocks / splits, /*block_size=*/1);
+    auto cache = create_mla_cache(args, options, kBlocks / splits, block_size);
     cache.get_index_cache().fill_(kIndexSentinel);
     caches.emplace_back(std::move(cache));
   }
   return caches;
 }
 
-ModelInputParams input_params(const torch::Device& device, bool decode) {
-  const int32_t rows = decode ? 1 : kPrefill;
-  const int32_t length = decode ? kPrefill + 1 : kPrefill;
+ModelInputParams input_params(const torch::Device& device,
+                              bool decode,
+                              int32_t prefill = kPrefill,
+                              int32_t splits = 1) {
+  const int32_t rows = decode ? 1 : prefill;
+  const int32_t length = decode ? prefill + 1 : prefill;
   const auto ints = torch::TensorOptions().dtype(torch::kInt32).device(device);
   ModelInputParams params;
   params.meta.batch_forward_type =
@@ -934,23 +937,25 @@ ModelInputParams input_params(const torch::Device& device, bool decode) {
   params.attention.device.q_seq_lens = torch::tensor({0, rows}, ints);
   params.attention.device.kv_seq_lens = torch::tensor({0, length}, ints);
   params.attention.device.new_cache_slots =
-      torch::arange(decode ? kPrefill : 0, length, ints);
+      torch::arange(decode ? prefill : 0, length, ints);
   params.attention.device.block_tables =
-      torch::arange(kBlocks, ints).view(/*size=*/{1, -1});
+      torch::arange(kBlocks / splits, ints).view(/*size=*/{1, -1});
   return params;
 }
 
 ModelOutput forward(Glm52ForCausalLM& model,
                     std::vector<KVCache>& caches,
                     const torch::Device& device,
-                    bool decode) {
+                    bool decode,
+                    int32_t prefill = kPrefill,
+                    int32_t splits = 1) {
   const auto ints = torch::TensorOptions().dtype(torch::kInt32).device(device);
-  const int32_t begin = decode ? kPrefill : 0;
-  const int32_t end = decode ? kPrefill + 1 : kPrefill;
+  const int32_t begin = decode ? prefill : 0;
+  const int32_t end = decode ? prefill + 1 : prefill;
   const torch::Tensor positions = torch::arange(begin, end, ints);
   const torch::Tensor tokens = (positions * 3 + 7).remainder(/*other=*/64);
   return model->forward(
-      tokens, positions, caches, input_params(device, decode));
+      tokens, positions, caches, input_params(device, decode, prefill, splits));
 }
 
 void check_output(const ModelOutput& output, int32_t rows) {
@@ -1113,7 +1118,12 @@ void run_parallel(int32_t rank, int32_t port, bool dcp) {
   Device dev(rank);
   dev.set_device();
   const torch::Device device = dev.unwrap();
-  KVCacheConfig::get_instance().block_size(/*value=*/1);
+  const int32_t block_size = dcp ? 16 : 1;
+  const int32_t splits = dcp ? 2 : 1;
+  // Cross a complete logical DCP block so both ranks receive cache writes,
+  // then decode into the partially filled next block.
+  const int32_t prefill = dcp ? block_size * splits + 1 : kPrefill;
+  KVCacheConfig::get_instance().block_size(block_size);
   const auto options =
       torch::TensorOptions().device(device).dtype(torch::kBFloat16);
   auto groups = create_cp_tp_groups(
@@ -1124,7 +1134,10 @@ void run_parallel(int32_t rank, int32_t port, bool dcp) {
     actual_parallel.kv_split_size() = 2;
     actual_parallel.dcp_group_ = groups.world.get();
   }
-  const ModelArgs args = model_args();
+  ModelArgs args = model_args();
+  if (dcp) {
+    args.index_topk() = 2048;
+  }
   Weights weights = model_weights(args);
   // Distinct row gains keep LayerNorm variance above epsilon across CP
   // reductions.
@@ -1139,13 +1152,15 @@ void run_parallel(int32_t rank, int32_t port, bool dcp) {
   }
   auto reference = create_model(args, reference_parallel, options, weights);
   auto actual = create_model(args, actual_parallel, options, weights);
-  auto expected_cache = create_caches(args, options);
-  auto actual_cache = create_caches(args, options, dcp ? 2 : 1);
+  auto expected_cache = create_caches(args, options, /*splits=*/1, block_size);
+  auto actual_cache = create_caches(args, options, splits, block_size);
   for (const bool decode : {false, true}) {
-    const auto expected = forward(reference, expected_cache, device, decode);
-    const auto output = forward(actual, actual_cache, device, decode);
+    const auto expected =
+        forward(reference, expected_cache, device, decode, prefill);
+    const auto output =
+        forward(actual, actual_cache, device, decode, prefill, splits);
     dev.synchronize_default_stream();
-    check_output(output, decode ? 1 : kPrefill);
+    check_output(output, decode ? 1 : prefill);
     expect_close(output.hidden_states,
                  expected.hidden_states,
                  /*rtol=*/0.02,
@@ -1161,15 +1176,27 @@ void run_parallel(int32_t rank, int32_t port, bool dcp) {
         keys = keys.index_select(0, slots);
         index = index.index_select(0, slots);
       }
-      const int32_t length = decode ? kPrefill + 1 : kPrefill;
+      keys = keys.flatten(/*start_dim=*/0, /*end_dim=*/2);
+      index = index.flatten(/*start_dim=*/0, /*end_dim=*/2);
+      const int32_t length = decode ? prefill + 1 : prefill;
+      const torch::Tensor local_slots =
+          torch::arange(keys.size(0), torch::kInt64).to(device);
+      // Derive global slots independently of KVShardLayout: each logical
+      // block interleaves one physical block from each DCP rank.
       const torch::Tensor slots =
-          torch::arange(keys.size(0), torch::kInt64).to(device) *
-              (dcp ? 2 : 1) +
-          (dcp ? rank : 0);
+          dcp ? (torch::floor_divide(local_slots, block_size) * splits + rank) *
+                        block_size +
+                    local_slots.remainder(block_size)
+              : local_slots;
       const torch::Tensor written = slots < length;
       const torch::Tensor untouched = written.logical_not();
-      const torch::Tensor actual_keys = actual_cache[layer].get_k_cache();
-      const torch::Tensor actual_index = actual_cache[layer].get_index_cache();
+      EXPECT_TRUE(written.any().item<bool>());
+      const torch::Tensor actual_keys =
+          actual_cache[layer].get_k_cache().flatten(/*start_dim=*/0,
+                                                    /*end_dim=*/2);
+      const torch::Tensor actual_index =
+          actual_cache[layer].get_index_cache().flatten(/*start_dim=*/0,
+                                                        /*end_dim=*/2);
       expect_close(actual_keys.index({written}),
                    keys.index({written}),
                    /*rtol=*/0.02,

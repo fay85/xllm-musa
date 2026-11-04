@@ -1,3 +1,12 @@
+include(cc_test)
+
+cc_test(
+  NAME forked_rank_session_test
+  CPU_ONLY
+  SRCS forked_rank_session_test.cpp
+  DEPS GTest::gtest_main
+)
+
 add_subdirectory(common)
 add_subdirectory(distributed_runtime)
 add_subdirectory(framework)

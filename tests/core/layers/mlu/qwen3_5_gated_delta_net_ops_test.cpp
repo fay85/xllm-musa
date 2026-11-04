@@ -37,9 +37,7 @@ namespace {
 using xllm::kernel::mlu::causal_conv1d_fn;
 using xllm::kernel::mlu::causal_conv1d_update_decode;
 using xllm::kernel::mlu::ChunkGatedDeltaRule;
-using xllm::kernel::mlu::fused_gdn_gating;
 using xllm::kernel::mlu::fused_post_conv_prep;
-using xllm::kernel::mlu::fused_recurrent_gated_delta_rule;
 using xllm::kernel::mlu::fused_recurrent_gated_delta_rule_packed_decode;
 using xllm::kernel::mlu::fused_sigmoid_gating_delta_rule_update;
 
@@ -80,19 +78,27 @@ class Qwen3_5GatedDeltaNetOpsTest : public ::testing::Test {
     xllm_device.synchronize_default_stream();
   }
 
+  void check_fused_post_conv_prep_matches_reference();
+  void check_fused_post_conv_prep_supports_no_l2_norm();
+  void check_causal_conv1d_fn_prefill();
+  void check_causal_conv1d_update_decode();
+  void check_causal_conv1d_update_decode_supports_defaults_and_no_activation();
+  void check_causal_conv1d_update_decode_supports_varlen();
+  void check_fused_recurrent_gated_delta_rule_packed_decode();
+  void check_chunk_gated_delta_rule_forward();
+  void check_fused_sigmoid_gating_delta_rule_update_matches_reference();
+  void
+  check_fused_sigmoid_gating_delta_rule_update_supports_dense_kda_and_out_of_place_state();
+  void
+  check_fused_sigmoid_gating_delta_rule_update_common_api_passes_accepted_prefix();
+  void check_causal_conv1d_update_uses_accepted_prefix(int64_t query_width);
+  void check_fused_sigmoid_gating_delta_rule_update_rebased_checkpoint(
+      int64_t query_width);
+
   static torch::Device device_;
 };
 
 torch::Device Qwen3_5GatedDeltaNetOpsTest::device_ = torch::kCPU;
-
-class Qwen3_5GatedDeltaNetSpecVerifyOpsTest
-    : public Qwen3_5GatedDeltaNetOpsTest,
-      public ::testing::WithParamInterface<int64_t> {};
-
-std::string spec_verify_width_name(
-    const ::testing::TestParamInfo<int64_t>& info) {
-  return "Width" + std::to_string(info.param);
-}
 
 // Build the (batch, token_block_offset, tot) triple used by the MLU
 // causal_conv1d_fn kernel. Mirrors the layout prepared by the Qwen3.5 model
@@ -399,44 +405,14 @@ torch::Tensor select_rebased_checkpoint_rows(
 }
 
 // ===========================================================================
-// fused_gdn_gating: computes (g, beta) from A_log, a, b, dt_bias.
+// Gating is exercised through the production fused_post_conv_prep path.
 // ===========================================================================
-TEST_F(Qwen3_5GatedDeltaNetOpsTest, FusedGdnGatingShapeAndDeterminism) {
-  // num_heads must be one of {4,8,12,16,24,32,48,64} (algo table).
-  const int64_t num_heads = 16;
-  const int64_t num_tokens = 32;
-  auto opts = torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
-
-  auto a = MakeNoise("gdn_gating.a", {num_tokens, num_heads}, 0.02f);
-  auto b = MakeNoise("gdn_gating.b", {num_tokens, num_heads}, 0.02f);
-  auto a_log = MakeNoise("gdn_gating.A_log", {num_heads}, 0.02f);
-  auto dt_bias = MakeOnes({num_heads}, torch::kBFloat16);
-
-  auto [g, beta] = fused_gdn_gating(
-      a_log, a, b, dt_bias, /*beta=*/1.0f, /*threshold=*/20.0f);
-  Sync();
-
-  // g: [1, num_tokens, num_heads] fp32, beta: [1, num_tokens, num_heads] bf16.
-  EXPECT_EQ(g.sizes(), torch::IntArrayRef({1, num_tokens, num_heads}));
-  EXPECT_EQ(g.scalar_type(), torch::kFloat32);
-  EXPECT_EQ(beta.sizes(), torch::IntArrayRef({1, num_tokens, num_heads}));
-  EXPECT_EQ(beta.scalar_type(), torch::kBFloat16);
-
-  auto g_cpu = g.flatten().to(torch::kFloat32).cpu();
-  EXPECT_TRUE(torch::isfinite(g_cpu).all().item<bool>()) << "g must be finite";
-
-  // Determinism: same inputs -> same outputs.
-  auto [g2, beta2] = fused_gdn_gating(
-      a_log, a, b, dt_bias, /*beta=*/1.0f, /*threshold=*/20.0f);
-  Sync();
-  EXPECT_TRUE(torch::allclose(g, g2, /*rtol=*/1e-5, /*atol=*/1e-6));
-  EXPECT_TRUE(torch::allclose(beta, beta2, /*rtol=*/1e-3, /*atol=*/1e-4));
-}
 
 // ===========================================================================
 // fused_post_conv_prep: split + q/k l2norm + gating after causal conv.
 // ===========================================================================
-TEST_F(Qwen3_5GatedDeltaNetOpsTest, FusedPostConvPrepMatchesReference) {
+void Qwen3_5GatedDeltaNetOpsTest::
+    check_fused_post_conv_prep_matches_reference() {
   const int64_t num_k_heads = 16;
   const int64_t num_v_heads = 32;
   const int64_t head_k_dim = 128;
@@ -502,7 +478,8 @@ TEST_F(Qwen3_5GatedDeltaNetOpsTest, FusedPostConvPrepMatchesReference) {
   EXPECT_TRUE(torch::allclose(beta, beta_ref, /*rtol=*/1e-4, /*atol=*/1e-4));
 }
 
-TEST_F(Qwen3_5GatedDeltaNetOpsTest, FusedPostConvPrepSupportsNoL2Norm) {
+void Qwen3_5GatedDeltaNetOpsTest::
+    check_fused_post_conv_prep_supports_no_l2_norm() {
   const int64_t num_k_heads = 2;
   const int64_t num_v_heads = 4;
   const int64_t head_k_dim = 128;
@@ -547,7 +524,7 @@ TEST_F(Qwen3_5GatedDeltaNetOpsTest, FusedPostConvPrepSupportsNoL2Norm) {
 // ===========================================================================
 // causal_conv1d_fn: prefill path. x is [channels, num_tokens].
 // ===========================================================================
-TEST_F(Qwen3_5GatedDeltaNetOpsTest, CausalConv1dFnPrefill) {
+void Qwen3_5GatedDeltaNetOpsTest::check_causal_conv1d_fn_prefill() {
   // channels must be in the pre-compiled dim_to_algo_id set.
   const int64_t channels = 1024;
   const int64_t conv_kernel = 4;
@@ -616,7 +593,7 @@ TEST_F(Qwen3_5GatedDeltaNetOpsTest, CausalConv1dFnPrefill) {
 // ===========================================================================
 // causal_conv1d_update_decode: decode path. x is [batch, dim, seqlen].
 // ===========================================================================
-TEST_F(Qwen3_5GatedDeltaNetOpsTest, CausalConv1dUpdateDecode) {
+void Qwen3_5GatedDeltaNetOpsTest::check_causal_conv1d_update_decode() {
   // dim must be in the pre-compiled dim_to_algo_id set.
   const int64_t dim = 1024;
   const int64_t width = 4;
@@ -685,8 +662,8 @@ TEST_F(Qwen3_5GatedDeltaNetOpsTest, CausalConv1dUpdateDecode) {
       << "conv1d_update_decode should be deterministic for fixed inputs";
 }
 
-TEST_F(Qwen3_5GatedDeltaNetOpsTest,
-       CausalConv1dUpdateDecodeSupportsDefaultsAndNoActivation) {
+void Qwen3_5GatedDeltaNetOpsTest::
+    check_causal_conv1d_update_decode_supports_defaults_and_no_activation() {
   const int64_t dim = 1024;
   const int64_t width = 4;
   const int64_t batch_size = 2;
@@ -720,7 +697,8 @@ TEST_F(Qwen3_5GatedDeltaNetOpsTest,
                               /*atol=*/5e-2));
 }
 
-TEST_F(Qwen3_5GatedDeltaNetOpsTest, CausalConv1dUpdateDecodeSupportsVarlen) {
+void Qwen3_5GatedDeltaNetOpsTest::
+    check_causal_conv1d_update_decode_supports_varlen() {
   const int64_t dim = 1024;
   const int64_t width = 4;
   const int64_t batch_size = 2;
@@ -843,9 +821,9 @@ void run_causal_conv1d_update_spec_verify_test(
       << ", mean state diff: " << state_abs_diff.mean().item<float>();
 }
 
-TEST_P(Qwen3_5GatedDeltaNetSpecVerifyOpsTest,
-       CausalConv1dUpdateUsesAcceptedPrefix) {
-  const int32_t q_max_seq_len = static_cast<int32_t>(GetParam());
+void Qwen3_5GatedDeltaNetOpsTest::
+    check_causal_conv1d_update_uses_accepted_prefix(int64_t query_width) {
+  const int32_t q_max_seq_len = static_cast<int32_t>(query_width);
   const std::string key_prefix =
       "conv1d_spec_width" + std::to_string(q_max_seq_len);
   run_causal_conv1d_update_spec_verify_test(
@@ -856,7 +834,8 @@ TEST_P(Qwen3_5GatedDeltaNetSpecVerifyOpsTest,
 // fused_recurrent_gated_delta_rule_packed_decode: decode path.
 // mixed_qkv: [B, qkv_dim], ssm_cache: [num_slots, HV, V, K] (fp32).
 // ===========================================================================
-TEST_F(Qwen3_5GatedDeltaNetOpsTest, FusedRecurrentGatedDeltaRulePackedDecode) {
+void Qwen3_5GatedDeltaNetOpsTest::
+    check_fused_recurrent_gated_delta_rule_packed_decode() {
   // K == V == 128 (qwen3.5) keeps the state K/V layout ambiguity harmless.
   const int64_t H = 8;
   const int64_t HV = 8;
@@ -953,8 +932,8 @@ TEST_F(Qwen3_5GatedDeltaNetOpsTest, FusedRecurrentGatedDeltaRulePackedDecode) {
 // ===========================================================================
 // fused_sigmoid_gating_delta_rule_update: fused gating + recurrent update.
 // ===========================================================================
-TEST_F(Qwen3_5GatedDeltaNetOpsTest,
-       FusedSigmoidGatingDeltaRuleUpdateMatchesReference) {
+void Qwen3_5GatedDeltaNetOpsTest::
+    check_fused_sigmoid_gating_delta_rule_update_matches_reference() {
   const int64_t num_k_heads = 16;
   const int64_t num_v_heads = 32;
   const int64_t head_k_dim = 128;
@@ -1065,8 +1044,8 @@ TEST_F(Qwen3_5GatedDeltaNetOpsTest,
       << ", mean state diff: " << state_abs_diff.mean().item<float>();
 }
 
-TEST_F(Qwen3_5GatedDeltaNetOpsTest,
-       FusedSigmoidGatingDeltaRuleUpdateSupportsDenseKdaAndOutOfPlaceState) {
+void Qwen3_5GatedDeltaNetOpsTest::
+    check_fused_sigmoid_gating_delta_rule_update_supports_dense_kda_and_out_of_place_state() {
   const int64_t batch_size = 2;
   const int64_t num_tokens = 2;
   const int64_t num_k_heads = 1;
@@ -1192,8 +1171,8 @@ TEST_F(Qwen3_5GatedDeltaNetOpsTest,
       final_state, final_state_ref, /*rtol=*/1e-2, /*atol=*/1e-2));
 }
 
-TEST_F(Qwen3_5GatedDeltaNetOpsTest,
-       FusedSigmoidGatingDeltaRuleUpdateCommonApiPassesAcceptedPrefix) {
+void Qwen3_5GatedDeltaNetOpsTest::
+    check_fused_sigmoid_gating_delta_rule_update_common_api_passes_accepted_prefix() {
   const int64_t num_k_heads = 16;
   const int64_t num_v_heads = 32;
   const int64_t head_k_dim = 128;
@@ -1422,25 +1401,21 @@ void run_rebased_ssm_checkpoint_group_test(const torch::Device& device,
       << "Rebased Checkpoint Group second iteration checkpoint mismatch";
 }
 
-TEST_P(Qwen3_5GatedDeltaNetSpecVerifyOpsTest,
-       FusedSigmoidGatingDeltaRuleUpdateRebasedCheckpoint) {
-  const int64_t q_max_seq_len = GetParam();
+void Qwen3_5GatedDeltaNetOpsTest::
+    check_fused_sigmoid_gating_delta_rule_update_rebased_checkpoint(
+        int64_t query_width) {
+  const int64_t q_max_seq_len = query_width;
   const std::string key_prefix =
       "sigmoid_rebased_width" + std::to_string(q_max_seq_len);
   run_rebased_ssm_checkpoint_group_test(device_, key_prefix, q_max_seq_len);
 }
-
-INSTANTIATE_TEST_SUITE_P(SpecVerifyWidths,
-                         Qwen3_5GatedDeltaNetSpecVerifyOpsTest,
-                         ::testing::Values(int64_t{2}, int64_t{3}, int64_t{4}),
-                         spec_verify_width_name);
 
 // ===========================================================================
 // ChunkGatedDeltaRule: prefill chunked kernel.
 // num_k_heads in {1,2,4,8,16,32}, num_v_heads in {1,2,4,6,8,12,16,24,32,48,64}
 // and num_v_heads % num_k_heads == 0.
 // ===========================================================================
-TEST_F(Qwen3_5GatedDeltaNetOpsTest, ChunkGatedDeltaRuleForward) {
+void Qwen3_5GatedDeltaNetOpsTest::check_chunk_gated_delta_rule_forward() {
   const int64_t num_k_heads = 4;  // Hg
   const int64_t num_v_heads = 8;  // H
   const int64_t head_k_dim = 128;
@@ -1521,6 +1496,81 @@ TEST_F(Qwen3_5GatedDeltaNetOpsTest, ChunkGatedDeltaRuleForward) {
   Sync();
   EXPECT_TRUE(torch::allclose(o, o2, /*rtol=*/1e-3, /*atol=*/1e-4))
       << "chunk GDN should be deterministic for fixed inputs";
+}
+
+TEST_F(Qwen3_5GatedDeltaNetOpsTest, PostConvPrepMatchesProductionModes) {
+  {
+    SCOPED_TRACE("FusedPostConvPrepMatchesReference");
+    ASSERT_NO_FATAL_FAILURE(check_fused_post_conv_prep_matches_reference());
+  }
+  {
+    SCOPED_TRACE("FusedPostConvPrepSupportsNoL2Norm");
+    ASSERT_NO_FATAL_FAILURE(check_fused_post_conv_prep_supports_no_l2_norm());
+  }
+}
+
+TEST_F(Qwen3_5GatedDeltaNetOpsTest, ConvolutionPrefillDecodeAndVarlen) {
+  {
+    SCOPED_TRACE("CausalConv1dFnPrefill");
+    ASSERT_NO_FATAL_FAILURE(check_causal_conv1d_fn_prefill());
+  }
+  {
+    SCOPED_TRACE("CausalConv1dUpdateDecode");
+    ASSERT_NO_FATAL_FAILURE(check_causal_conv1d_update_decode());
+  }
+  {
+    SCOPED_TRACE("CausalConv1dUpdateDecodeSupportsDefaultsAndNoActivation");
+    ASSERT_NO_FATAL_FAILURE(
+        check_causal_conv1d_update_decode_supports_defaults_and_no_activation());
+  }
+  {
+    SCOPED_TRACE("CausalConv1dUpdateDecodeSupportsVarlen");
+    ASSERT_NO_FATAL_FAILURE(
+        check_causal_conv1d_update_decode_supports_varlen());
+  }
+}
+
+TEST_F(Qwen3_5GatedDeltaNetOpsTest, RecurrentAndChunkOutputsMatchReference) {
+  {
+    SCOPED_TRACE("FusedRecurrentGatedDeltaRulePackedDecode");
+    ASSERT_NO_FATAL_FAILURE(
+        check_fused_recurrent_gated_delta_rule_packed_decode());
+  }
+  {
+    SCOPED_TRACE("ChunkGatedDeltaRuleForward");
+    ASSERT_NO_FATAL_FAILURE(check_chunk_gated_delta_rule_forward());
+  }
+}
+
+TEST_F(Qwen3_5GatedDeltaNetOpsTest,
+       SigmoidUpdatePreservesStateAndAcceptedPrefix) {
+  {
+    SCOPED_TRACE("FusedSigmoidGatingDeltaRuleUpdateMatchesReference");
+    ASSERT_NO_FATAL_FAILURE(
+        check_fused_sigmoid_gating_delta_rule_update_matches_reference());
+  }
+  {
+    SCOPED_TRACE(
+        "FusedSigmoidGatingDeltaRuleUpdateSupportsDenseKdaAndOutOfPlaceState");
+    ASSERT_NO_FATAL_FAILURE(
+        check_fused_sigmoid_gating_delta_rule_update_supports_dense_kda_and_out_of_place_state());
+  }
+  {
+    SCOPED_TRACE(
+        "FusedSigmoidGatingDeltaRuleUpdateCommonApiPassesAcceptedPrefix");
+    ASSERT_NO_FATAL_FAILURE(
+        check_fused_sigmoid_gating_delta_rule_update_common_api_passes_accepted_prefix());
+  }
+}
+
+TEST_F(Qwen3_5GatedDeltaNetOpsTest, VerifyWidthsPreserveAcceptedCheckpoints) {
+  for (int64_t width : {2, 3, 4}) {
+    SCOPED_TRACE(width);
+    ASSERT_NO_FATAL_FAILURE(
+        check_causal_conv1d_update_uses_accepted_prefix(width));
+    ASSERT_NO_FATAL_FAILURE(
+        check_fused_sigmoid_gating_delta_rule_update_rebased_checkpoint(width));
+  }
 }
 
 }  // namespace

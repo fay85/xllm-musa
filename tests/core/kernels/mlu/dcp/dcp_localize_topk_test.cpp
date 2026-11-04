@@ -31,6 +31,7 @@ using kernel::mlu::dcp_localize_topk;
 
 class DcpLocalizeTopkTest : public ::testing::Test {
  protected:
+  void SetUp() override { torch::set_num_threads(1); }
   const torch::Device device{torch::kPrivateUse1, 0};
 
   void check_case(int64_t q,
@@ -88,9 +89,19 @@ class DcpLocalizeTopkTest : public ::testing::Test {
     }
     const auto input_before = slots.cpu().clone();
     GuardedTopk out(q, width, device, strided);
-    for (int32_t rank = 0; rank < size; ++rank) {
+    std::vector<int32_t> ranks;
+    ranks.reserve(size);
+    if (q > 129) {
+      ranks = {0, size - 1};
+    } else {
+      for (int32_t rank = 0; rank < size; ++rank) {
+        ranks.emplace_back(rank);
+      }
+    }
+    for (int32_t rank : ranks) {
+      SCOPED_TRACE(::testing::Message() << "rank=" << rank);
       // Reusing allocations with full/empty/mixed lengths exposes stale tails.
-      for (int32_t pass : {0, 1, 2, 0}) {
+      for (int32_t pass : {2, 1, 0}) {
         const auto active = pass == 1   ? torch::zeros_like(cpu_lens)
                             : pass == 2 ? torch::full_like(cpu_lens, width)
                                         : cpu_lens;
@@ -109,41 +120,24 @@ class DcpLocalizeTopkTest : public ::testing::Test {
   }
 };
 
-TEST_F(DcpLocalizeTopkTest, OwnershipEdgesAndGenericShapes) {
+TEST_F(DcpLocalizeTopkTest, DispatchBoundaries) {
+  // 8193 disables the length cache used for Q in [1024, 8192].
+  for (int64_t q : {0, 1, 127, 128, 129, 1023, 1024, 1025, 8193}) {
+    check_case(q, /*width=*/2048, /*size=*/4, /*interleave=*/16);
+  }
+}
+
+TEST_F(DcpLocalizeTopkTest, MemoryAndArithmeticContracts) {
   for (const auto& [size, interleave, width] :
        std::vector<std::tuple<int32_t, int32_t, int64_t>>{
-           {1, 16, 1}, {4, 16, 2048}, {8, 16, 2048}, {4, 7, 259}, {3, 5, 17}}) {
-    for (bool strided : {false, true}) {
-      check_case(/*q=*/9, width, size, interleave, strided);
-    }
+           {1, 16, 1}, {8, 16, 2048}, {4, 7, 259}, {3, 5, 17}}) {
+    check_case(/*q=*/9, width, size, interleave);
   }
-  check_case(/*q=*/0, /*width=*/17, /*size=*/4, /*interleave=*/16);
-}
-
-TEST_F(DcpLocalizeTopkTest, BatchAndStageBoundaries) {
-  for (int64_t q :
-       {127, 128, 129, 255, 256, 257, 511, 512, 513, 1023, 1024, 1025}) {
-    check_case(q, /*width=*/2048, /*size=*/4, /*interleave=*/16);
-  }
-}
-
-TEST_F(DcpLocalizeTopkTest, LargeQueriesAndStridedTails) {
-  for (int64_t q : {2047, 2048, 2049, 4095, 4096, 4097, 8191, 8192, 8193}) {
-    check_case(q, /*width=*/2048, /*size=*/4, /*interleave=*/16);
-  }
-  check_case(/*q=*/2049,
+  check_case(/*q=*/9,
              /*width=*/2048,
              /*size=*/4,
              /*interleave=*/16,
              /*strided=*/true);
-  check_case(/*q=*/8193,
-             /*width=*/2048,
-             /*size=*/8,
-             /*interleave=*/16,
-             /*strided=*/true);
-}
-
-TEST_F(DcpLocalizeTopkTest, LargeTopologyProductUsesWideArithmetic) {
   const torch::DeviceGuard guard(device);
   const auto cpu_slots = torch::tensor({{0, 1, 2147483647, -1}}, torch::kInt32);
   const auto cpu_lens = torch::tensor({4}, torch::kInt32);

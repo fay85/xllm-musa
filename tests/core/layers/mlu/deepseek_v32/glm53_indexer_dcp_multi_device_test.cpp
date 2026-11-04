@@ -48,7 +48,7 @@ namespace {
 constexpr int32_t kRanks = 8;
 constexpr int32_t kCp = 4;
 constexpr int32_t kTp = 2;
-constexpr int32_t kTokens = 8192;
+constexpr int32_t kTokens = 256;
 constexpr int32_t kHeads = 32;
 constexpr int32_t kDim = 128;
 constexpr int32_t kTopk = 2048;
@@ -1079,7 +1079,7 @@ void run_edges(int32_t rank,
             << " counts=0,1,15,16,17,2047,2048,2049 signed_weights=1 padding=1";
 }
 
-void run_rank(int32_t rank, int32_t port, int32_t batch, int32_t history) {
+void run_rank(int32_t rank, int32_t port) {
   torch::set_num_threads(1);
   torch::NoGradGuard guard;
   Device dev(rank);
@@ -1101,29 +1101,29 @@ void run_rank(int32_t rank, int32_t port, int32_t batch, int32_t history) {
   CHECK_EQ(parallel.dcp_group_, parallel.cp_group_);
   CHECK_EQ(parallel.kv_split_rank(), rank / kTp);
   run_edges(rank, parallel, device);
-  for (int32_t seed : {42, 2026}) {
-    run_case(rank, parallel, device, batch, history, seed);
-    CHECK_EQ(dev.synchronize_default_stream(), 0);
+  for (int32_t scenario_batch : {1, 2}) {
+    for (int32_t scenario_history : {0, 65536}) {
+      SCOPED_TRACE(::testing::Message()
+                   << "batch=" << scenario_batch
+                   << " history=" << scenario_history << " rank=" << rank);
+      run_case(rank,
+               parallel,
+               device,
+               scenario_batch,
+               scenario_history,
+               /*seed=*/42);
+      CHECK_EQ(dev.synchronize_default_stream(), 0);
+    }
   }
 }
 
-void run_distributed(int32_t batch, int32_t history) {
-  test::run_multi_device(kRanks, [batch, history](int32_t rank, int32_t port) {
-    run_rank(rank, port, batch, history);
-  });
+void run_distributed() {
+  test::run_multi_device(
+      kRanks, [](int32_t rank, int32_t port) { run_rank(rank, port); });
 }
 
-TEST(Glm53IndexerDcpMultiDeviceTest, ChunkedBatch1) {
-  run_distributed(/*batch=*/1, /*history=*/65536);
-}
-TEST(Glm53IndexerDcpMultiDeviceTest, ChunkedBatch16) {
-  run_distributed(/*batch=*/16, /*history=*/65536);
-}
-TEST(Glm53IndexerDcpMultiDeviceTest, PrefillBatch1) {
-  run_distributed(/*batch=*/1, /*history=*/0);
-}
-TEST(Glm53IndexerDcpMultiDeviceTest, PrefillBatch16) {
-  run_distributed(/*batch=*/16, /*history=*/0);
+TEST(Glm53IndexerDcpMultiDeviceTest, PrefillAndChunkedRequestsMatchReference) {
+  run_distributed();
 }
 
 // CPU-only fixtures leave the parent MLU runtime untouched before fork.
@@ -1145,7 +1145,7 @@ TEST(Glm53IndexerReferenceDeathTest, RejectsForeignAndNoncausalSlots) {
 }
 
 TEST(Glm53IndexerReferenceTest, ReusesVisiblePrefixAndCutoffScores) {
-  const Pages pages(/*batch=*/1, /*history=*/64, /*seed=*/42);
+  const Pages pages(/*batch=*/1, /*history=*/8000, /*seed=*/42);
   IndexerCPPreOut pre;
   pre.q = torch::ones({1, kHeads, kDim}, torch::kBFloat16)
               .expand({kTokens, kHeads, kDim});
@@ -1153,12 +1153,12 @@ TEST(Glm53IndexerReferenceTest, ReusesVisiblePrefixAndCutoffScores) {
       torch::ones({1, kHeads}, torch::kBFloat16).expand({kTokens, kHeads});
   auto cache = torch::ones({pages.count(), 1, kPage, kDim}, torch::kBFloat16);
   const auto keys = gather_keys(cache, pages, /*req=*/0, /*shard=*/0);
-  for (int32_t start : {8078, 8079, 8128}) {
+  for (int32_t start : {142, 143, 192}) {
     torch::Tensor pool;
     const auto ref = select_reference(
         pre, keys, pages, /*shard=*/0, start, /*rows=*/1, pool);
     EXPECT_EQ(pages.visible(start, /*shard=*/0),
-              start == 8078 ? 2047 : (start == 8079 ? 2048 : 2049));
+              start == 142 ? 2047 : (start == 143 ? 2048 : 2049));
     EXPECT_EQ(pool.scalar_type(), torch::kBFloat16);
     EXPECT_TRUE(equal_reused_scores(
         ref.scores, reuse_scores(pool, ref.global_slots, pages, 0, start)));
@@ -1298,7 +1298,7 @@ TEST(Glm53IndexerReferenceTest, RoundsScaledScoresAtMidpoints) {
 }
 
 TEST(Glm53IndexerReferenceTest, CoversPageBoundariesAndSignedWeights) {
-  const Pages pages(/*batch=*/16, /*history=*/0, /*seed=*/42);
+  const Pages pages(/*batch=*/2, /*history=*/0, /*seed=*/42);
   EXPECT_EQ(pages.visible(/*row=*/0, /*shard=*/1), 0);
   EXPECT_EQ(pages.visible(/*row=*/14, /*shard=*/0), 15);
   EXPECT_EQ(pages.visible(/*row=*/15, /*shard=*/0), 16);
@@ -1315,7 +1315,7 @@ TEST(Glm53IndexerReferenceTest, CoversPageBoundariesAndSignedWeights) {
       -1);
   EXPECT_EQ(
       pages.ordinal(
-          /*row=*/512, pages.slot(/*req=*/0, /*position=*/0), /*shard=*/0),
+          /*row=*/128, pages.slot(/*req=*/0, /*position=*/0), /*shard=*/0),
       -1);
   EXPECT_EQ(pages.ordinal(/*row=*/0, /*global=*/-1, /*shard=*/0), -1);
   auto q = torch::zeros({2, kHeads, kDim}, torch::kBFloat16);

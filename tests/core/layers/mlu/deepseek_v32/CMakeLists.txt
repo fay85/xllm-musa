@@ -18,9 +18,31 @@ cc_test(
   NAME
     deepseek_v2_attention_multi_device_test
   SRCS
-    deepseek_v32_attention_multi_device_test.cpp
     v32_prefill_parallel_test.cpp
     dsa_deep_ep_decoder_test.cpp
+  DEPS
+    :tests_utils
+    :config
+    :block
+    :mlu_layers
+    :model_context
+    :parallel_state
+    :state_dict
+    GTest::gtest_main
+    torch
+    glog::glog
+  ENVIRONMENT
+    "PYTHONPATH=${_xllm_build_import_root}:$ENV{PYTHONPATH}"
+)
+
+# Keep the parent free of device initialization while reusing forked ranks.
+cc_test(
+  NAME
+    attention_multi_device_test
+  GTEST_SUITE AttentionMultiDeviceTest
+  RUN_SERIAL
+  SRCS
+    deepseek_v32_attention_multi_device_test.cpp
   DEPS
     :tests_utils
     :config
@@ -39,6 +61,7 @@ cc_test(
 # This target forks MLU ranks and must remain isolated from layer_test, which
 # may initialize an MLU device before the candidate collective test runs.
 cc_test(
+  RUN_SERIAL
   NAME
     dcp_indexer_candidate_multi_device_test
   SRCS
@@ -69,6 +92,7 @@ cc_test(
 
 # Forks four ranks; keep separate from binaries that initialize MLU in the parent.
 cc_test(
+  RUN_SERIAL
   NAME
     glm5_attention_dcp_test
   SRCS
@@ -111,10 +135,7 @@ cc_test(
 # Each distributed scenario consumes all eight cards, including under ctest -j.
 if(TARGET glm53_indexer_dcp_multi_device_test)
   set_tests_properties(
-    Glm53IndexerDcpMultiDeviceTest.ChunkedBatch1
-    Glm53IndexerDcpMultiDeviceTest.ChunkedBatch16
-    Glm53IndexerDcpMultiDeviceTest.PrefillBatch1
-    Glm53IndexerDcpMultiDeviceTest.PrefillBatch16
+    Glm53IndexerDcpMultiDeviceTest.PrefillAndChunkedRequestsMatchReference
     PROPERTIES RUN_SERIAL TRUE
   )
 endif()
@@ -127,11 +148,7 @@ cc_test(
   ENVIRONMENT "PYTHONPATH=${_xllm_build_import_root}:$ENV{PYTHONPATH}"
 )
 set_tests_properties(
-  Glm53DcpMergeTopkMultiDeviceTest.Bf16CandidatesQ8192
-  Glm53DcpMergeTopkMultiDeviceTest.Bf16EdgesAndStrides
-  Glm53DcpMergeTopkMultiDeviceTest.PrefillLongHistoryBatch1
-  Glm53DcpMergeTopkMultiDeviceTest.PrefillLongHistoryBatch8
-  Glm53DcpMergeTopkMultiDeviceTest.DecodeDp2Batch16
-  Glm53DcpMergeTopkMultiDeviceTest.DecodeDp2Batch32
+  Glm53DcpMergeTopkMultiDeviceTest.PrefillCandidatesAndHistoryMatchReference
+  Glm53DcpMergeTopkMultiDeviceTest.DecodeAndVerifyDp2MatchReference
   PROPERTIES RUN_SERIAL TRUE
 )

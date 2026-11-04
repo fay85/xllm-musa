@@ -13,19 +13,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include <framework/core/device.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
-#include <sys/wait.h>
 #include <torch/torch.h>
-#include <unistd.h>
 
 #include <algorithm>
 #include <array>
-#include <cerrno>
-#include <chrono>
-#include <csignal>
 #include <cstdio>
 #include <cstring>
 #include <exception>
@@ -34,7 +30,6 @@ limitations under the License.
 #include <optional>
 #include <sstream>
 #include <string>
-#include <thread>
 #include <unordered_map>
 
 #include "core/framework/config/kv_cache_config.h"
@@ -55,6 +50,7 @@ limitations under the License.
 #include "layers/mlu/tests_utils.h"
 #include "platform/device.h"
 #include "platform/platform.h"
+#include "tests/core/forked_rank_session.h"
 #include "util/net.h"
 
 namespace xllm {
@@ -62,74 +58,6 @@ namespace layer {
 namespace test {
 
 namespace {
-bool child_failed(int32_t initial_parts) {
-  const auto* result =
-      ::testing::UnitTest::GetInstance()->current_test_info()->result();
-  for (int32_t idx = initial_parts; idx < result->total_part_count(); ++idx) {
-    if (result->GetTestPartResult(idx).failed()) {
-      return true;
-    }
-  }
-  return false;
-}
-
-void stop_ranks(const std::vector<pid_t>& pids,
-                const std::vector<bool>& finished) {
-  for (size_t idx = 0; idx < pids.size(); ++idx) {
-    if (!finished[idx]) {
-      ::kill(pids[idx], SIGKILL);
-    }
-  }
-  for (size_t idx = 0; idx < pids.size(); ++idx) {
-    if (finished[idx]) {
-      continue;
-    }
-    int status = 0;
-    while (::waitpid(pids[idx], &status, 0) < 0 && errno == EINTR) {
-    }
-  }
-}
-
-bool wait_ranks(const std::vector<pid_t>& pids,
-                std::chrono::milliseconds timeout,
-                bool& skipped) {
-  std::vector<bool> finished(pids.size(), false);
-  const auto deadline = std::chrono::steady_clock::now() + timeout;
-  size_t remaining = pids.size();
-  int32_t skip_count = 0;
-  while (remaining > 0 && std::chrono::steady_clock::now() < deadline) {
-    for (size_t idx = 0; idx < pids.size(); ++idx) {
-      if (finished[idx]) {
-        continue;
-      }
-      int status = 0;
-      const pid_t pid = ::waitpid(pids[idx], &status, WNOHANG);
-      if (pid == 0 || (pid < 0 && errno == EINTR)) {
-        continue;
-      }
-      finished[idx] = true;
-      --remaining;
-      if (pid < 0 || !WIFEXITED(status) ||
-          (WEXITSTATUS(status) != 0 && WEXITSTATUS(status) != 77)) {
-        LOG(ERROR) << "Rank " << idx << " wait status=" << status
-                   << " waitpid=" << pid << " errno=" << errno;
-        stop_ranks(pids, finished);
-        return false;
-      }
-      skip_count += WEXITSTATUS(status) == 77 ? 1 : 0;
-    }
-    if (remaining > 0) {
-      std::this_thread::sleep_for(std::chrono::milliseconds{10});
-    }
-  }
-  if (remaining > 0) {
-    stop_ranks(pids, finished);
-    return false;
-  }
-  skipped = skip_count == static_cast<int32_t>(pids.size());
-  return skip_count == 0 || skipped;
-}
-
 std::unique_ptr<ProcessGroup> create_test_process_group(
     int32_t rank,
     int32_t world_size,
@@ -167,163 +95,6 @@ std::unique_ptr<ProcessGroup> create_test_self_group(
 }
 
 constexpr int32_t EXIT_CODE_SKIP = 77;
-
-constexpr std::chrono::seconds kChildProcessTimeout{120};
-constexpr std::chrono::seconds kChildTerminationGracePeriod{2};
-constexpr std::chrono::milliseconds kChildPollInterval{10};
-
-struct ChildWaitResult {
-  bool any_failed = false;
-  bool any_skipped = false;
-  bool timed_out = false;
-};
-
-pid_t wait_for_pid(pid_t pid, int* status, int options) {
-  pid_t result;
-  do {
-    result = ::waitpid(pid, status, options);
-  } while (result < 0 && errno == EINTR);
-  return result;
-}
-
-void record_child_status(size_t rank, int status, ChildWaitResult& result) {
-  if (WIFEXITED(status)) {
-    const int32_t exit_code = WEXITSTATUS(status);
-    if (exit_code == EXIT_CODE_SKIP) {
-      result.any_skipped = true;
-    } else if (exit_code != 0) {
-      result.any_failed = true;
-      LOG(ERROR) << "Rank " << rank << " failed with code " << exit_code;
-    }
-    return;
-  }
-
-  result.any_failed = true;
-  if (WIFSIGNALED(status)) {
-    LOG(ERROR) << "Rank " << rank << " terminated by signal "
-               << WTERMSIG(status);
-  } else {
-    LOG(ERROR) << "Rank " << rank << " ended unexpectedly";
-  }
-}
-
-bool reap_children_until(
-    const std::vector<pid_t>& child_pids,
-    std::vector<bool>& finished,
-    const std::chrono::steady_clock::time_point& deadline) {
-  while (std::chrono::steady_clock::now() < deadline) {
-    bool all_finished = true;
-    for (size_t rank = 0; rank < child_pids.size(); ++rank) {
-      if (finished[rank]) {
-        continue;
-      }
-
-      int status = 0;
-      const pid_t wait_result =
-          wait_for_pid(child_pids[rank], &status, WNOHANG);
-      if (wait_result == child_pids[rank] ||
-          (wait_result < 0 && errno == ECHILD)) {
-        finished[rank] = true;
-        continue;
-      }
-      if (wait_result < 0) {
-        LOG(ERROR) << "Failed to reap rank " << rank << ": "
-                   << std::strerror(errno);
-      }
-      all_finished = false;
-    }
-    if (all_finished) {
-      return true;
-    }
-    std::this_thread::sleep_for(kChildPollInterval);
-  }
-  return false;
-}
-
-void signal_unfinished_children(const std::vector<pid_t>& child_pids,
-                                const std::vector<bool>& finished,
-                                int signal_number) {
-  for (size_t rank = 0; rank < child_pids.size(); ++rank) {
-    if (finished[rank]) {
-      continue;
-    }
-    if (::kill(child_pids[rank], signal_number) != 0 && errno != ESRCH) {
-      LOG(ERROR) << "Failed to signal rank " << rank << ": "
-                 << std::strerror(errno);
-    }
-  }
-}
-
-void terminate_and_reap_children(const std::vector<pid_t>& child_pids,
-                                 std::vector<bool>& finished) {
-  signal_unfinished_children(child_pids, finished, SIGTERM);
-  const auto term_deadline =
-      std::chrono::steady_clock::now() + kChildTerminationGracePeriod;
-  if (reap_children_until(child_pids, finished, term_deadline)) {
-    return;
-  }
-
-  signal_unfinished_children(child_pids, finished, SIGKILL);
-  const auto kill_deadline =
-      std::chrono::steady_clock::now() + kChildTerminationGracePeriod;
-  reap_children_until(child_pids, finished, kill_deadline);
-  for (size_t rank = 0; rank < child_pids.size(); ++rank) {
-    if (!finished[rank]) {
-      LOG(ERROR) << "Unable to reap timed-out rank " << rank;
-    }
-  }
-}
-
-ChildWaitResult wait_for_children(
-    const std::vector<pid_t>& child_pids,
-    std::chrono::steady_clock::duration timeout = kChildProcessTimeout) {
-  ChildWaitResult result;
-  std::vector<bool> finished(child_pids.size(), false);
-  size_t remaining = child_pids.size();
-  const auto deadline = std::chrono::steady_clock::now() + timeout;
-
-  while (remaining > 0 && std::chrono::steady_clock::now() < deadline) {
-    bool made_progress = false;
-    for (size_t rank = 0; rank < child_pids.size(); ++rank) {
-      if (finished[rank]) {
-        continue;
-      }
-
-      int status = 0;
-      const pid_t wait_result =
-          wait_for_pid(child_pids[rank], &status, WNOHANG);
-      if (wait_result == child_pids[rank]) {
-        finished[rank] = true;
-        --remaining;
-        made_progress = true;
-        record_child_status(rank, status, result);
-      } else if (wait_result < 0) {
-        result.any_failed = true;
-        finished[rank] = true;
-        --remaining;
-        made_progress = true;
-        LOG(ERROR) << "Failed waiting for rank " << rank << ": "
-                   << std::strerror(errno);
-      }
-    }
-    if (remaining > 0 && !made_progress) {
-      std::this_thread::sleep_for(kChildPollInterval);
-    }
-  }
-
-  if (remaining == 0) {
-    return result;
-  }
-
-  result.any_failed = true;
-  result.timed_out = true;
-  const int64_t timeout_ms =
-      std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count();
-  LOG(ERROR) << "Timed out waiting for " << remaining
-             << " multi-device test rank(s) after " << timeout_ms << " ms";
-  terminate_and_reap_children(child_pids, finished);
-  return result;
-}
 
 struct Glm5DcpConfig {
   ModelArgs args;
@@ -1000,16 +771,26 @@ class DistributedAttentionChildContext final {
                           << ": failed to create process group";
     CHECK(self_group_) << "Rank " << rank << ": failed to create self group";
 
+    configure(enable_context_parallel);
+  }
+
+  void configure(bool enable_context_parallel) {
     parallel_args_ =
-        std::make_unique<ParallelArgs>(rank, world_size, process_group_.get());
+        std::make_unique<ParallelArgs>(process_group_->rank(),
+                                       process_group_->world_size(),
+                                       process_group_.get());
     // Keep the CP output-baseline tests on the supported replicated-KV path.
     // Dedicated DCP tests must opt into KV sharding explicitly.
     parallel_args_->kv_split_size() = 1;
-    parallel_args_->tp_group_ = process_group_.get();
+    parallel_args_->tp_size() =
+        enable_context_parallel ? 1 : process_group_->world_size();
+    parallel_args_->tp_group_ =
+        enable_context_parallel ? self_group_.get() : process_group_.get();
     parallel_args_->single_rank_group_ = self_group_.get();
-    parallel_args_->cp_group_ = process_group_.get();
+    parallel_args_->cp_group_ =
+        enable_context_parallel ? process_group_.get() : self_group_.get();
     if (enable_context_parallel) {
-      parallel_args_->cp_size() = world_size;
+      parallel_args_->cp_size() = process_group_->world_size();
     }
   }
 
@@ -1022,6 +803,7 @@ class DistributedAttentionChildContext final {
   const torch::TensorOptions& options() const { return options_; }
 
   xllm::ProcessGroup* process_group() const { return process_group_.get(); }
+  xllm::ProcessGroup* self_group() const { return self_group_.get(); }
 
  private:
   xllm::Device xllm_device_;
@@ -1031,6 +813,24 @@ class DistributedAttentionChildContext final {
   std::unique_ptr<ParallelArgs> parallel_args_;
   torch::TensorOptions options_;
 };
+
+thread_local std::unique_ptr<DistributedAttentionChildContext> rank_context;
+
+DistributedAttentionChildContext& attention_context(
+    int32_t rank,
+    int32_t world_size,
+    int32_t port,
+    const std::string& host,
+    bool enable_context_parallel) {
+  KVCacheConfig::get_instance().block_size(16);
+  if (!rank_context) {
+    rank_context = std::make_unique<DistributedAttentionChildContext>(
+        rank, world_size, port, host, enable_context_parallel);
+  } else {
+    rank_context->configure(enable_context_parallel);
+  }
+  return *rank_context;
+}
 
 template <typename ChildBody>
 int32_t run_distributed_attention_child(int32_t rank,
@@ -1047,7 +847,7 @@ int32_t run_distributed_attention_child(int32_t rank,
     }
 
     KVCacheConfig::get_instance().block_size(16);
-    DistributedAttentionChildContext context(
+    auto& context = attention_context(
         rank, world_size, port, host, enable_context_parallel);
     return child_body(context);
   } catch (const std::exception& e) {
@@ -1082,13 +882,28 @@ struct AttentionRunResult {
   int64_t local_token_num = 0;
 };
 
-void check_repl_output_contract(const AttentionRunResult& result,
-                                int64_t token_num,
-                                int64_t hidden_size,
-                                const std::string& label) {
+torch::Tensor restore_attention_output(
+    DeepseekV32AttentionImpl::ForwardResult result,
+    const v32_cp::DeepseekV32CPContext* cp_context,
+    ProcessGroup* tp_group) {
+  if (result.layout == PostAttnLayout::TP_SHARD) {
+    return parallel_state::reduce(result.output, tp_group);
+  }
+  if (result.layout == PostAttnLayout::PACKED_LOCAL) {
+    CHECK(cp_context != nullptr);
+    return v32_cp::gather_and_restore_global(result.output, *cp_context);
+  }
+  CHECK(result.layout == PostAttnLayout::REPLICATED);
+  return result.output;
+}
+
+void check_fallback_output_contract(const AttentionRunResult& result,
+                                    int64_t token_num,
+                                    int64_t hidden_size,
+                                    const std::string& label) {
   CHECK(!result.used_cp) << label << " unexpectedly used context parallel";
-  CHECK(result.layout == PostAttnLayout::REPLICATED)
-      << label << " must report replicated attention output";
+  CHECK(result.layout == PostAttnLayout::TP_SHARD)
+      << label << " must report the ordinary TP attention output";
   CHECK_EQ(result.local_token_num, token_num)
       << label << " local token count mismatch";
   CHECK_EQ(result.local_output.sizes(), result.global_output.sizes())
@@ -1133,16 +948,12 @@ torch::Tensor run_attention_decode_once(const ModelArgs& args,
                                         const torch::Tensor& positions,
                                         const torch::Tensor& hidden_states,
                                         KVCache& kv_cache,
-                                        bool enable_full_weight_path,
                                         bool enable_fused_mla_kernel) {
-  ParallelArgs effective_parallel_args = parallel_args;
-  effective_parallel_args.cp_size() =
-      enable_full_weight_path ? parallel_args.world_size() : 1;
   OptimizationConfig optimization_config;
   optimization_config.enable_fused_mla_kernel = enable_fused_mla_kernel;
   optimization_config.enable_fused_indexer_qk = false;
   DeepseekV32Attention attention(
-      args, quant_args, effective_parallel_args, options, optimization_config);
+      args, quant_args, parallel_args, options, optimization_config);
   attention->load_state_dict(state_dict);
   const auto ints = options.dtype(torch::kInt32);
   ModelInputParams params;
@@ -1159,8 +970,10 @@ torch::Tensor run_attention_decode_once(const ModelArgs& args,
       {static_cast<int32_t>(KVCacheConfig::get_instance().block_size())}, ints);
   const auto metadata = AttentionMetadataBuilder::build(
       params, /*enable_mla=*/true, /*compute_dtype=*/"bfloat16");
-  return attention->forward(positions, hidden_states, metadata, kv_cache)
-      .output;
+  return restore_attention_output(
+      attention->forward(positions, hidden_states, metadata, kv_cache),
+      /*cp_context=*/nullptr,
+      parallel_args.tp_group_);
 }
 
 AttentionRunResult run_attention_prefill_once(
@@ -1173,7 +986,7 @@ AttentionRunResult run_attention_prefill_once(
     const torch::Tensor& positions,
     const torch::Tensor& hidden_states,
     KVCache& kv_cache,
-    bool enable_full_weight_path,
+    bool enable_context_parallel,
     BatchForwardType batch_forward_type = BatchForwardType::PREFILL,
     int32_t prefix_len = 0,
     bool build_cp_context = true,
@@ -1183,7 +996,7 @@ AttentionRunResult run_attention_prefill_once(
         nullptr) {
   ParallelArgs effective_parallel_args = parallel_args;
   effective_parallel_args.cp_size() =
-      enable_full_weight_path ? parallel_args.world_size() : 1;
+      enable_context_parallel ? parallel_args.cp_size() : 1;
   ModelContext model_context(
       effective_parallel_args, args, quant_args, options);
   DeepseekV32Attention attention(model_context, enable_indexer);
@@ -1196,7 +1009,7 @@ AttentionRunResult run_attention_prefill_once(
   std::optional<layer::v32_cp::DeepseekV32CPContext> cp_ctx;
   torch::Tensor local_positions = positions;
   torch::Tensor local_hidden_states = hidden_states;
-  if (build_cp_context && enable_full_weight_path && args.index_n_heads() > 0) {
+  if (build_cp_context && enable_context_parallel && args.index_n_heads() > 0) {
     if (cp_ctx_cache != nullptr && cp_ctx_cache->has_value()) {
       cp_ctx = *cp_ctx_cache;
     } else {
@@ -1237,19 +1050,16 @@ AttentionRunResult run_attention_prefill_once(
                                              kv_cache,
                                              cp_ctx ? &cp_ctx.value() : nullptr,
                                              topk_transfer);
-  result.local_output = std::move(attention_result.output);
+  result.local_output = attention_result.output;
   result.layout = attention_result.layout;
-  result.global_output = result.local_output;
   result.used_cp = cp_ctx.has_value();
   result.local_token_num =
       cp_ctx.has_value() ? cp_ctx->comm_plan.tokens_per_rank.at(cp_ctx->rank)
                          : result.local_output.size(0);
-  if (cp_ctx.has_value()) {
-    result.global_output = layer::v32_cp::restore_gathered_to_global_order(
-        layer::v32_cp::all_gather_across_ranks(result.local_output,
-                                               cp_ctx.value()),
-        cp_ctx.value());
-  }
+  result.global_output =
+      restore_attention_output(std::move(attention_result),
+                               cp_ctx ? &cp_ctx.value() : nullptr,
+                               effective_parallel_args.tp_group_);
   result.k_cache = kv_cache.get_k_cache().clone();
   if (kv_cache.get_index_cache().defined()) {
     result.index_cache = kv_cache.get_index_cache().clone();
@@ -1267,11 +1077,13 @@ int32_t run_glm_decode_child(int32_t rank,
       world_size,
       port,
       host,
-      /*enable_context_parallel=*/false,
+      /*enable_context_parallel=*/true,
       [enable_fused_mla_kernel](DistributedAttentionChildContext& context) {
         xllm::Device& xllm_device = context.xllm_device();
         const torch::Device& device = context.device();
         ParallelArgs& parallel_args = context.parallel_args();
+        CHECK_EQ(parallel_args.tp_group_->world_size(), 1)
+            << "Full-weight decode requires one complete projection per rank";
         const torch::TensorOptions& options = context.options();
         ModelArgs model_args = create_glm5_attention_model_args();
         QuantArgs quant_args = create_default_quant_args();
@@ -1309,7 +1121,6 @@ int32_t run_glm_decode_child(int32_t rank,
                                       positions,
                                       hidden_states,
                                       reference_cache,
-                                      /*enable_full_weight_path=*/true,
                                       enable_fused_mla_kernel);
 
         torch::Tensor full_weight_output =
@@ -1321,7 +1132,6 @@ int32_t run_glm_decode_child(int32_t rank,
                                       positions,
                                       hidden_states,
                                       full_weight_kv_cache,
-                                      /*enable_full_weight_path=*/true,
                                       enable_fused_mla_kernel);
 
         xllm_device.synchronize_default_stream();
@@ -1331,7 +1141,7 @@ int32_t run_glm_decode_child(int32_t rank,
             << "DeepseekV32Attention decode replicated hidden size mismatch";
         check_tensor_same_across_ranks(
             full_weight_output,
-            parallel_args.tp_group_,
+            context.process_group(),
             "DeepseekV32Attention decode replicated");
         check_tensors_close(full_weight_output,
                             expected,
@@ -1376,7 +1186,7 @@ int32_t run_attention_prefill_fallback_test_child(int32_t rank,
       world_size,
       port,
       host,
-      /*enable_context_parallel=*/false,
+      /*enable_context_parallel=*/true,
       [](DistributedAttentionChildContext& context) {
         xllm::Device& xllm_device = context.xllm_device();
         const torch::Device& device = context.device();
@@ -1415,13 +1225,14 @@ int32_t run_attention_prefill_fallback_test_child(int32_t rank,
                                                       true);
 
         xllm_device.synchronize_default_stream();
-        check_repl_output_contract(repl_result,
-                                   seq_len,
-                                   model_args.hidden_size(),
-                                   "DeepseekV32Attention prefill fallback");
+        CHECK_EQ(parallel_args.tp_group_->world_size(), 1);
+        check_fallback_output_contract(repl_result,
+                                       seq_len,
+                                       model_args.hidden_size(),
+                                       "DeepseekV32Attention prefill fallback");
         check_tensor_same_across_ranks(
             repl_result.global_output,
-            parallel_args.tp_group_,
+            context.process_group(),
             "DeepseekV32Attention prefill fallback output");
         return 0;
       });
@@ -1441,31 +1252,28 @@ int32_t run_prefill_share_child(int32_t rank,
       return EXIT_CODE_SKIP;
     }
 
-    KVCacheConfig::get_instance().block_size(16);
-    const int32_t device_index = rank;
-    xllm::Device xllm_device(device_index);
-    xllm_device.set_device();
-    torch::Device device = xllm_device.unwrap();
-    auto process_group =
-        create_test_process_group(rank, world_size, port, host, device);
-    CHECK(process_group) << "Rank " << rank
-                         << ": failed to create process group";
-    auto self_group = create_test_self_group(rank, world_size, host, device);
-    CHECK(self_group) << "Rank " << rank << ": failed to create self group";
+    auto& context = attention_context(rank, world_size, port, host, use_cp);
+    xllm::Device& xllm_device = context.xllm_device();
+    const torch::Device& device = context.device();
+    ProcessGroup* process_group = context.process_group();
+    ProcessGroup* self_group = context.self_group();
 
-    ParallelArgs parallel_args(rank, world_size, process_group.get());
+    ParallelArgs parallel_args(rank, world_size, process_group);
     // This GLM-5.2 case validates rank-local top-k reuse with DCP KV shards.
     parallel_args.kv_split_size() = world_size;
-    parallel_args.dcp_group_ = process_group.get();
-    parallel_args.tp_group_ = process_group.get();
-    parallel_args.single_rank_group_ = self_group.get();
-    parallel_args.cp_group_ = process_group.get();
+    parallel_args.dcp_group_ = process_group;
+    parallel_args.tp_size() = use_cp ? 1 : world_size;
+    parallel_args.tp_group_ = use_cp ? self_group : process_group;
+    parallel_args.single_rank_group_ = self_group;
+    parallel_args.cp_size() = use_cp ? world_size : 1;
+    parallel_args.cp_group_ = use_cp ? process_group : self_group;
 
     auto options = torch::TensorOptions()
                        .dtype(torch::kBFloat16)
                        .device(device)
                        .requires_grad(false);
     ModelArgs model_args = create_glm5_attention_model_args();
+    model_args.index_topk() = 2048;
     QuantArgs quant_args = create_default_quant_args();
     StateDict state_dict = create_attention_state_dict(model_args, options);
 
@@ -1494,7 +1302,7 @@ int32_t run_prefill_share_child(int32_t rank,
                                    positions,
                                    hidden_states,
                                    full_layer_cache,
-                                   /*enable_full_weight_path=*/true,
+                                   /*enable_context_parallel=*/use_cp,
                                    BatchForwardType::PREFILL,
                                    /*prefix_len=*/0,
                                    /*build_cp_context=*/use_cp,
@@ -1545,7 +1353,7 @@ int32_t run_prefill_share_child(int32_t rank,
                                    positions,
                                    hidden_states,
                                    shared_layer_cache,
-                                   /*enable_full_weight_path=*/true,
+                                   /*enable_context_parallel=*/use_cp,
                                    BatchForwardType::PREFILL,
                                    /*prefix_len=*/0,
                                    /*build_cp_context=*/use_cp,
@@ -1601,7 +1409,7 @@ int32_t run_sparse_prefill_child(int32_t rank,
       world_size,
       port,
       host,
-      /*enable_context_parallel=*/true,
+      /*enable_context_parallel=*/use_cp,
       [rank, world_size, use_cp, second_length, duplicate_slot](
           DistributedAttentionChildContext& context) {
         const auto& options = context.options();
@@ -1670,10 +1478,9 @@ int32_t run_sparse_prefill_child(int32_t rank,
         auto run = [&](bool sharded) {
           ParallelArgs parallel = context.parallel_args();
           if (sharded) {
-            parallel.cp_size() = world_size;
             parallel.kv_split_size() = world_size;
             parallel.dcp_group_ = parallel.process_group_;
-          } else {
+          } else if (use_cp) {
             ProcessGroup* self = parallel.single_rank_group_;
             parallel = ParallelArgs(/*rank=*/0, /*world_size=*/1, self);
             parallel.tp_group_ = self;
@@ -1681,6 +1488,13 @@ int32_t run_sparse_prefill_child(int32_t rank,
             parallel.dcp_group_ = self;
             parallel.single_rank_group_ = self;
             parallel.kv_split_size() = 1;
+          } else {
+            // Isolate KV sharding from TP partitioning: the INT8 projection's
+            // activation scales and BF16 reductions depend on the TP layout.
+            // The replicated-KV reference uses the same projection shards,
+            // while normal attention resolves the independent global TopK.
+            parallel.kv_split_size() = 1;
+            parallel.dcp_group_ = parallel.single_rank_group_;
           }
           ModelContext model_context(parallel, args, quant_args, options);
           DeepseekV32Attention attention(model_context,
@@ -1767,9 +1581,8 @@ int32_t run_sparse_prefill_child(int32_t rank,
                                            cache,
                                            cp ? &*cp : nullptr,
                                            &transfer);
-          torch::Tensor global_output =
-              cp ? v32_cp::gather_and_restore_global(output.output, *cp)
-                 : output.output;
+          torch::Tensor global_output = restore_attention_output(
+              std::move(output), cp ? &*cp : nullptr, parallel.tp_group_);
           context.xllm_device().synchronize_default_stream();
           CHECK(torch::equal(topk.block_tables(), initial_topk));
           CHECK(transfer.output() != nullptr);
@@ -2343,1336 +2156,443 @@ int32_t run_cp_position_cache_child(int32_t rank,
       });
 }
 
+std::vector<::xllm::test::ForkedRankSession::Case> attention_cases() {
+  return {
+      {"CpIndexerDefaultPositionsMatchSingleRankCache",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_cp_position_cache_child(
+               rank, world_size, port, host, DsaModelVariant::GLM5);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"CpIndexerYarnPositionsMatchSingleRankCache",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_cp_position_cache_child(
+               rank, world_size, port, host, DsaModelVariant::V32);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"Glm5DecodeFullWeightsMatchSingleRank",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [enable_fused_mla_kernel = false](
+                                   int32_t rank,
+                                   int32_t world_size,
+                                   int32_t port,
+                                   const std::string& host) {
+           return run_glm_decode_child(rank,
+                                       world_size,
+                                       port,
+                                       host,
+                                       (/*enable_fused_mla_kernel=*/false));
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"Glm5FusedDecodeFullWeightsMatchSingleRank",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [enable_fused_mla_kernel = true](
+                                   int32_t rank,
+                                   int32_t world_size,
+                                   int32_t port,
+                                   const std::string& host) {
+           return run_glm_decode_child(rank,
+                                       world_size,
+                                       port,
+                                       host,
+                                       (/*enable_fused_mla_kernel=*/true));
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"PrefillShortSeqFallsBackToReplicatedPath",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_attention_prefill_fallback_test_child(
+               rank, world_size, port, host);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"PrefillRejectsMissingTopkSlot",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_prefill_share_child(
+               rank, world_size, port, host, /*missing_slot=*/true);
+         };
+         return child_fn(rank, 2, port, "127.0.0.1");
+       }},
+      {"EmptyDcpPrefillLeavesResidentCacheUnchanged",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_distributed_attention_child(
+               rank,
+               world_size,
+               port,
+               host,
+               /*enable_context_parallel=*/true,
+               [world_size](DistributedAttentionChildContext& context) {
+                 ParallelArgs parallel = context.parallel_args();
+                 parallel.kv_split_size() = world_size;
+                 parallel.dcp_group_ = parallel.process_group_;
+                 const auto& options = context.options();
+                 ModelArgs args = create_glm5_attention_model_args();
+                 args.index_topk() = 2048;
+                 QuantArgs quant_args = create_default_quant_args();
+                 StateDict weights = create_attention_state_dict(args, options);
+                 KVCache cache = create_decode_kv_cache(args, options);
+                 torch::Tensor original = cache.get_k_cache().clone();
+                 torch::Tensor tokens =
+                     torch::empty({0}, options.dtype(torch::kInt32));
+                 AttentionRunResult result = run_attention_prefill_once(
+                     args,
+                     quant_args,
+                     parallel,
+                     options,
+                     weights,
+                     tokens,
+                     tokens,
+                     torch::empty({0, args.hidden_size()}, options),
+                     cache,
+                     /*enable_context_parallel=*/true,
+                     BatchForwardType::PREFILL,
+                     /*prefix_len=*/0,
+                     /*build_cp_context=*/false);
+                 CHECK_EQ(result.global_output.size(0), 0);
+                 CHECK_EQ(result.global_output.size(1), args.hidden_size());
+                 CHECK(torch::equal(cache.get_k_cache(), original));
+                 return 0;
+               });
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"DcpPrefillRejectsMissingTopkSlot",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_prefill_share_child(rank,
+                                          world_size,
+                                          port,
+                                          host,
+                                          /*missing_slot=*/true,
+                                          /*use_cp=*/false);
+         };
+         return child_fn(rank, 2, port, "127.0.0.1");
+       }},
+      {"DcpPrefillRejectsDuplicateSourceSlots",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_sparse_prefill_child(rank,
+                                           world_size,
+                                           port,
+                                           host,
+                                           /*use_cp=*/false,
+                                           /*second_length=*/33,
+                                           /*duplicate_slot=*/true);
+         };
+         return child_fn(rank, 2, port, "127.0.0.1");
+       }},
+      {"DcpSparsePrefillMatchesUnshardedAttention",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_sparse_prefill_child(rank,
+                                           world_size,
+                                           port,
+                                           host,
+                                           /*use_cp=*/false);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"CpDcpSparsePrefillMatchesUnshardedAttention",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_sparse_prefill_child(rank,
+                                           world_size,
+                                           port,
+                                           host,
+                                           /*use_cp=*/true);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"DcpPrefillAtBlockBoundaryMatchesUnsharded",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_sparse_prefill_child(rank,
+                                           world_size,
+                                           port,
+                                           host,
+                                           /*use_cp=*/false,
+                                           /*second_length=*/15);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"CpDcpPrefillTailBlockMatchesUnsharded",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_sparse_prefill_child(rank,
+                                           world_size,
+                                           port,
+                                           host,
+                                           /*use_cp=*/true,
+                                           /*second_length=*/16);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"Glm52PrefillCpReusesRankLocalTopkState",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_prefill_share_child(rank, world_size, port, host);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"DcpMergePreservesRemotePrefixCacheContribution",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_dcp_remote_prefix_cache_merge_test_child(
+               rank, world_size, port, host);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"DummyRunOutputLayerYieldsNoSparseTopk",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_attention_topk_share_dummy_run_test_child(
+               rank, world_size, port, host);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"SharedLayerReusesFullLayerSparseBlockTable",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_attention_topk_share_test_child(
+               rank, world_size, port, host);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+      {"SharedLayerReuseShapeMatchesDecodeBucket",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         const auto child_fn = [](int32_t rank,
+                                  int32_t world_size,
+                                  int32_t port,
+                                  const std::string& host) {
+           return run_attention_topk_share_bucket_test_child(
+               rank, world_size, port, host);
+         };
+         const int32_t code = child_fn(rank, 2, port, "127.0.0.1");
+         torch_mlu::synchronize();
+         return code;
+       }},
+  };
+}
 }  // namespace
 
-TEST(AttentionMultiDeviceProcessTest, TimedOutChildIsTerminatedAndReaped) {
-  const pid_t child_pid = ::fork();
-  ASSERT_GE(child_pid, 0) << "Failed to fork timeout test child";
-  if (child_pid == 0) {
-    while (true) {
-      ::pause();
+class AttentionMultiDeviceTest : public ::testing::Test {
+ protected:
+  static void SetUpTestSuite() {
+    failed_ = false;
+    const int32_t port = net::get_local_free_port();
+    ASSERT_GT(port, 0);
+    session_ = std::make_unique<::xllm::test::ForkedRankSession>(
+        2, port, attention_cases(), [] { rank_context.reset(); });
+  }
+  static void TearDownTestSuite() {
+    if (session_) {
+      ::xllm::test::expect_rank_result(session_->close());
+      session_.reset();
     }
   }
-
-  const std::vector<pid_t> child_pids{child_pid};
-  const ChildWaitResult result =
-      wait_for_children(child_pids, std::chrono::milliseconds{50});
-  EXPECT_TRUE(result.any_failed);
-  EXPECT_TRUE(result.timed_out);
-
-  int status = 0;
-  errno = 0;
-  EXPECT_EQ(wait_for_pid(child_pid, &status, WNOHANG), -1);
-  EXPECT_EQ(errno, ECHILD) << "Timed-out child was not fully reaped";
-}
-
-// Two physical cards; each rank also runs its own single-rank reference.
-TEST(AttentionMultiDeviceTest, CpIndexerDefaultPositionsMatchSingleRankCache) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    const auto child_fn = [](int32_t rank,
-                             int32_t world_size,
-                             int32_t port,
-                             const std::string& host) {
-      return run_cp_position_cache_child(
-          rank, world_size, port, host, DsaModelVariant::GLM5);
-    };
-    const std::string failure_message =
-        "Default RoPE CP index cache differs from single rank.";
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-    const int32_t child_count = world_size_;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            return child_fn(rank, world_size_, port, host_);
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
+  void run_case(const std::string& name, bool isolated = false) {
+    if (failed_) {
+      GTEST_SKIP() << "Earlier rank failure in this suite";
     }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
+    ::xllm::test::ForkedRankSession::Result result;
+    if (isolated) {
+      result = session_->close();
+      failed_ =
+          result.status == ::xllm::test::ForkedRankSession::Status::FAILED;
+      ASSERT_EQ(result.status, ::xllm::test::ForkedRankSession::Status::PASSED)
+          << result.message;
+      // Device-side assertion scenarios must exit without touching the context
+      // again.
+      ::xllm::test::ForkedRankSession fresh(
+          2, net::get_local_free_port(), attention_cases());
+      result = fresh.run(name);
+      const auto closed = fresh.close();
+      if (result.status == ::xllm::test::ForkedRankSession::Status::PASSED) {
+        result = closed;
+      }
     } else {
-      children_ok = wait_ranks(
-          child_pids, std::chrono::milliseconds{120000}, children_skipped);
+      result = session_->run(name);
     }
+    failed_ = result.status == ::xllm::test::ForkedRankSession::Status::FAILED;
+    ::xllm::test::expect_rank_result(result);
+  }
 
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << failure_message << " "
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
-}
-TEST(AttentionMultiDeviceTest, CpIndexerYarnPositionsMatchSingleRankCache) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
+ private:
+  inline static std::unique_ptr<::xllm::test::ForkedRankSession> session_;
+  inline static bool failed_ = false;
+};
 
-  {
-    const auto child_fn = [](int32_t rank,
-                             int32_t world_size,
-                             int32_t port,
-                             const std::string& host) {
-      return run_cp_position_cache_child(
-          rank, world_size, port, host, DsaModelVariant::V32);
-    };
-    const std::string failure_message =
-        "YaRN CP index cache differs from single rank.";
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-    const int32_t child_count = world_size_;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            return child_fn(rank, world_size_, port, host_);
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok = wait_ranks(
-          child_pids, std::chrono::milliseconds{120000}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << failure_message << " "
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
-}
-TEST(AttentionMultiDeviceTest, Glm5DecodeFullWeightsMatchSingleRank) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    {
-      const auto child_fn = [enable_fused_mla_kernel = false](
-                                int32_t rank,
-                                int32_t world_size,
-                                int32_t port,
-                                const std::string& host) {
-        return run_glm_decode_child(
-            rank, world_size, port, host, (/*enable_fused_mla_kernel=*/false));
-      };
-      const std::string failure_message =
-          "Attention multi-device equivalence test failed.";
-
-      const int32_t port = net::get_local_free_port();
-      ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-      const int32_t child_count = world_size_;
-      const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                        ->current_test_info()
-                                        ->result()
-                                        ->total_part_count();
-      std::vector<pid_t> child_pids;
-      child_pids.reserve(child_count);
-      bool children_ok = true;
-      bool children_skipped = false;
-      for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-        const pid_t pid = ::fork();
-        if (pid == 0) {
-          try {
-            if (Platform::device_count() < child_count) {
-              ::_exit(77);
-            }
-            const auto rank_body = [&](int32_t rank) {
-              return child_fn(rank, world_size_, port, host_);
-            };
-            const int32_t code = rank_body(child_rank);
-            std::fflush(nullptr);
-            ::_exit(child_failed(initial_parts) ? 1 : code);
-          } catch (const std::exception& error) {
-            LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-            ::_exit(1);
-          }
-        }
-        if (pid < 0) {
-          children_ok = false;
-          break;
-        }
-        child_pids.emplace_back(pid);
-      }
-      if (!children_ok) {
-        stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-      } else {
-        children_ok = wait_ranks(
-            child_pids, std::chrono::milliseconds{120000}, children_skipped);
-      }
-
-      if (children_ok && children_skipped) {
-        GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                        "physical MLU cards";
-      }
-      ASSERT_EQ(children_ok, true) << failure_message << " "
-                                   << "forked ranks failed, timed out, or "
-                                      "require more physical MLU cards";
-    };
-  };
+TEST_F(AttentionMultiDeviceTest,
+       CpIndexerDefaultPositionsMatchSingleRankCache) {
+  run_case("CpIndexerDefaultPositionsMatchSingleRankCache");
 }
 
-// Two physical cards using the fused MLA decode kernel.
-TEST(AttentionMultiDeviceTest, Glm5FusedDecodeFullWeightsMatchSingleRank) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    {
-      const auto child_fn = [enable_fused_mla_kernel = true](
-                                int32_t rank,
-                                int32_t world_size,
-                                int32_t port,
-                                const std::string& host) {
-        return run_glm_decode_child(
-            rank, world_size, port, host, (/*enable_fused_mla_kernel=*/true));
-      };
-      const std::string failure_message =
-          "Attention multi-device equivalence test failed.";
-
-      const int32_t port = net::get_local_free_port();
-      ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-      const int32_t child_count = world_size_;
-      const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                        ->current_test_info()
-                                        ->result()
-                                        ->total_part_count();
-      std::vector<pid_t> child_pids;
-      child_pids.reserve(child_count);
-      bool children_ok = true;
-      bool children_skipped = false;
-      for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-        const pid_t pid = ::fork();
-        if (pid == 0) {
-          try {
-            if (Platform::device_count() < child_count) {
-              ::_exit(77);
-            }
-            const auto rank_body = [&](int32_t rank) {
-              return child_fn(rank, world_size_, port, host_);
-            };
-            const int32_t code = rank_body(child_rank);
-            std::fflush(nullptr);
-            ::_exit(child_failed(initial_parts) ? 1 : code);
-          } catch (const std::exception& error) {
-            LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-            ::_exit(1);
-          }
-        }
-        if (pid < 0) {
-          children_ok = false;
-          break;
-        }
-        child_pids.emplace_back(pid);
-      }
-      if (!children_ok) {
-        stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-      } else {
-        children_ok = wait_ranks(
-            child_pids, std::chrono::milliseconds{120000}, children_skipped);
-      }
-
-      if (children_ok && children_skipped) {
-        GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                        "physical MLU cards";
-      }
-      ASSERT_EQ(children_ok, true) << failure_message << " "
-                                   << "forked ranks failed, timed out, or "
-                                      "require more physical MLU cards";
-    };
-  };
+TEST_F(AttentionMultiDeviceTest, CpIndexerYarnPositionsMatchSingleRankCache) {
+  run_case("CpIndexerYarnPositionsMatchSingleRankCache");
 }
 
-TEST(AttentionMultiDeviceTest, PrefillShortSeqFallsBackToReplicatedPath) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    {
-      const auto child_fn = [](int32_t rank,
-                               int32_t world_size,
-                               int32_t port,
-                               const std::string& host) {
-        return run_attention_prefill_fallback_test_child(
-            rank, world_size, port, host);
-      };
-      const std::string failure_message =
-          "Attention multi-device prefill fallback test failed.";
-
-      const int32_t port = net::get_local_free_port();
-      ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-      const int32_t child_count = world_size_;
-      const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                        ->current_test_info()
-                                        ->result()
-                                        ->total_part_count();
-      std::vector<pid_t> child_pids;
-      child_pids.reserve(child_count);
-      bool children_ok = true;
-      bool children_skipped = false;
-      for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-        const pid_t pid = ::fork();
-        if (pid == 0) {
-          try {
-            if (Platform::device_count() < child_count) {
-              ::_exit(77);
-            }
-            const auto rank_body = [&](int32_t rank) {
-              return child_fn(rank, world_size_, port, host_);
-            };
-            const int32_t code = rank_body(child_rank);
-            std::fflush(nullptr);
-            ::_exit(child_failed(initial_parts) ? 1 : code);
-          } catch (const std::exception& error) {
-            LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-            ::_exit(1);
-          }
-        }
-        if (pid < 0) {
-          children_ok = false;
-          break;
-        }
-        child_pids.emplace_back(pid);
-      }
-      if (!children_ok) {
-        stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-      } else {
-        children_ok = wait_ranks(
-            child_pids, std::chrono::milliseconds{120000}, children_skipped);
-      }
-
-      if (children_ok && children_skipped) {
-        GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                        "physical MLU cards";
-      }
-      ASSERT_EQ(children_ok, true) << failure_message << " "
-                                   << "forked ranks failed, timed out, or "
-                                      "require more physical MLU cards";
-    };
-  };
+TEST_F(AttentionMultiDeviceTest, Glm5DecodeFullWeightsMatchSingleRank) {
+  run_case("Glm5DecodeFullWeightsMatchSingleRank");
 }
 
-TEST(AttentionMultiDeviceTest, PrefillRejectsMissingTopkSlot) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    const auto child_fn = [](int32_t rank,
-                             int32_t world_size,
-                             int32_t port,
-                             const std::string& host) {
-      return run_prefill_share_child(
-          rank, world_size, port, host, /*missing_slot=*/true);
-    };
-    const std::string failure_message =
-        "Prefill must reject a top-k slot absent from the input K.";
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-    const int32_t child_count = world_size_;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            return child_fn(rank, world_size_, port, host_);
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok = wait_ranks(
-          child_pids, std::chrono::milliseconds{120000}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << failure_message << " "
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
+TEST_F(AttentionMultiDeviceTest, Glm5FusedDecodeFullWeightsMatchSingleRank) {
+  run_case("Glm5FusedDecodeFullWeightsMatchSingleRank");
 }
 
-TEST(AttentionMultiDeviceTest, EmptyDcpPrefillLeavesResidentCacheUnchanged) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    const auto child_fn = [](int32_t rank,
-                             int32_t world_size,
-                             int32_t port,
-                             const std::string& host) {
-      return run_distributed_attention_child(
-          rank,
-          world_size,
-          port,
-          host,
-          /*enable_context_parallel=*/true,
-          [world_size](DistributedAttentionChildContext& context) {
-            ParallelArgs parallel = context.parallel_args();
-            parallel.kv_split_size() = world_size;
-            parallel.dcp_group_ = parallel.process_group_;
-            const auto& options = context.options();
-            ModelArgs args = create_glm5_attention_model_args();
-            QuantArgs quant_args = create_default_quant_args();
-            StateDict weights = create_attention_state_dict(args, options);
-            KVCache cache = create_decode_kv_cache(args, options);
-            torch::Tensor original = cache.get_k_cache().clone();
-            torch::Tensor tokens =
-                torch::empty({0}, options.dtype(torch::kInt32));
-            AttentionRunResult result = run_attention_prefill_once(
-                args,
-                quant_args,
-                parallel,
-                options,
-                weights,
-                tokens,
-                tokens,
-                torch::empty({0, args.hidden_size()}, options),
-                cache,
-                /*enable_full_weight_path=*/true,
-                BatchForwardType::PREFILL,
-                /*prefix_len=*/0,
-                /*build_cp_context=*/false);
-            CHECK_EQ(result.global_output.size(0), 0);
-            CHECK_EQ(result.global_output.size(1), args.hidden_size());
-            CHECK(torch::equal(cache.get_k_cache(), original));
-            return 0;
-          });
-    };
-    const std::string failure_message =
-        "Empty DCP prefill must leave the resident cache unchanged.";
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-    const int32_t child_count = world_size_;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            return child_fn(rank, world_size_, port, host_);
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok = wait_ranks(
-          child_pids, std::chrono::milliseconds{120000}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << failure_message << " "
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
+TEST_F(AttentionMultiDeviceTest, PrefillShortSeqFallsBackToReplicatedPath) {
+  run_case("PrefillShortSeqFallsBackToReplicatedPath");
 }
 
-TEST(AttentionMultiDeviceTest, DcpPrefillRejectsMissingTopkSlot) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    const auto child_fn = [](int32_t rank,
-                             int32_t world_size,
-                             int32_t port,
-                             const std::string& host) {
-      return run_prefill_share_child(rank,
-                                     world_size,
-                                     port,
-                                     host,
-                                     /*missing_slot=*/true,
-                                     /*use_cp=*/false);
-    };
-    const std::string failure_message =
-        "DCP prefill must reject a top-k slot absent from the input K.";
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-    const int32_t child_count = world_size_;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            return child_fn(rank, world_size_, port, host_);
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok = wait_ranks(
-          child_pids, std::chrono::milliseconds{120000}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << failure_message << " "
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
+TEST_F(AttentionMultiDeviceTest, EmptyDcpPrefillLeavesResidentCacheUnchanged) {
+  run_case("EmptyDcpPrefillLeavesResidentCacheUnchanged");
 }
 
-TEST(AttentionMultiDeviceTest, DcpPrefillRejectsDuplicateSourceSlots) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    const auto child_fn = [](int32_t rank,
-                             int32_t world_size,
-                             int32_t port,
-                             const std::string& host) {
-      return run_sparse_prefill_child(rank,
-                                      world_size,
-                                      port,
-                                      host,
-                                      /*use_cp=*/false,
-                                      /*second_length=*/33,
-                                      /*duplicate_slot=*/true);
-    };
-    const std::string failure_message =
-        "DCP prefill must reject duplicate valid source slots.";
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-    const int32_t child_count = world_size_;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            return child_fn(rank, world_size_, port, host_);
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok = wait_ranks(
-          child_pids, std::chrono::milliseconds{120000}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << failure_message << " "
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
+TEST_F(AttentionMultiDeviceTest, DcpSparsePrefillMatchesUnshardedAttention) {
+  run_case("DcpSparsePrefillMatchesUnshardedAttention");
 }
 
-TEST(AttentionMultiDeviceTest, DcpSparsePrefillMatchesUnshardedAttention) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    const auto child_fn = [](int32_t rank,
-                             int32_t world_size,
-                             int32_t port,
-                             const std::string& host) {
-      return run_sparse_prefill_child(rank,
-                                      world_size,
-                                      port,
-                                      host,
-                                      /*use_cp=*/false);
-    };
-    const std::string failure_message =
-        "DCP sparse prefill must match unsharded attention.";
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-    const int32_t child_count = world_size_;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            return child_fn(rank, world_size_, port, host_);
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok = wait_ranks(
-          child_pids, std::chrono::milliseconds{120000}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << failure_message << " "
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
+TEST_F(AttentionMultiDeviceTest, CpDcpSparsePrefillMatchesUnshardedAttention) {
+  run_case("CpDcpSparsePrefillMatchesUnshardedAttention");
 }
 
-TEST(AttentionMultiDeviceTest, CpDcpSparsePrefillMatchesUnshardedAttention) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    const auto child_fn = [](int32_t rank,
-                             int32_t world_size,
-                             int32_t port,
-                             const std::string& host) {
-      return run_sparse_prefill_child(rank,
-                                      world_size,
-                                      port,
-                                      host,
-                                      /*use_cp=*/true);
-    };
-    const std::string failure_message =
-        "CP+DCP sparse prefill must match unsharded attention.";
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-    const int32_t child_count = world_size_;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            return child_fn(rank, world_size_, port, host_);
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok = wait_ranks(
-          child_pids, std::chrono::milliseconds{120000}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << failure_message << " "
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
+TEST_F(AttentionMultiDeviceTest, DcpPrefillAtBlockBoundaryMatchesUnsharded) {
+  run_case("DcpPrefillAtBlockBoundaryMatchesUnsharded");
 }
 
-TEST(AttentionMultiDeviceTest, DcpPrefillAtBlockBoundaryMatchesUnsharded) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    const auto child_fn = [](int32_t rank,
-                             int32_t world_size,
-                             int32_t port,
-                             const std::string& host) {
-      return run_sparse_prefill_child(rank,
-                                      world_size,
-                                      port,
-                                      host,
-                                      /*use_cp=*/false,
-                                      /*second_length=*/15);
-    };
-    const std::string failure_message =
-        "DCP block-aligned prefill must match unsharded attention.";
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-    const int32_t child_count = world_size_;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            return child_fn(rank, world_size_, port, host_);
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok = wait_ranks(
-          child_pids, std::chrono::milliseconds{120000}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << failure_message << " "
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
+TEST_F(AttentionMultiDeviceTest, CpDcpPrefillTailBlockMatchesUnsharded) {
+  run_case("CpDcpPrefillTailBlockMatchesUnsharded");
 }
 
-TEST(AttentionMultiDeviceTest, CpDcpPrefillTailBlockMatchesUnsharded) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    const auto child_fn = [](int32_t rank,
-                             int32_t world_size,
-                             int32_t port,
-                             const std::string& host) {
-      return run_sparse_prefill_child(rank,
-                                      world_size,
-                                      port,
-                                      host,
-                                      /*use_cp=*/true,
-                                      /*second_length=*/16);
-    };
-    const std::string failure_message =
-        "CP+DCP tail-block prefill must match unsharded attention.";
-
-    const int32_t port = net::get_local_free_port();
-    ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-    const int32_t child_count = world_size_;
-    const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                      ->current_test_info()
-                                      ->result()
-                                      ->total_part_count();
-    std::vector<pid_t> child_pids;
-    child_pids.reserve(child_count);
-    bool children_ok = true;
-    bool children_skipped = false;
-    for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-      const pid_t pid = ::fork();
-      if (pid == 0) {
-        try {
-          if (Platform::device_count() < child_count) {
-            ::_exit(77);
-          }
-          const auto rank_body = [&](int32_t rank) {
-            return child_fn(rank, world_size_, port, host_);
-          };
-          const int32_t code = rank_body(child_rank);
-          std::fflush(nullptr);
-          ::_exit(child_failed(initial_parts) ? 1 : code);
-        } catch (const std::exception& error) {
-          LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-          ::_exit(1);
-        }
-      }
-      if (pid < 0) {
-        LOG(ERROR) << "fork failed: " << std::strerror(errno);
-        children_ok = false;
-        break;
-      }
-      child_pids.emplace_back(pid);
-    }
-    if (!children_ok) {
-      stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-    } else {
-      children_ok = wait_ranks(
-          child_pids, std::chrono::milliseconds{120000}, children_skipped);
-    }
-
-    if (children_ok && children_skipped) {
-      GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                      "physical MLU cards";
-    }
-    ASSERT_EQ(children_ok, true)
-        << failure_message << " "
-        << "forked ranks failed, timed out, or require more physical MLU cards";
-  };
+TEST_F(AttentionMultiDeviceTest, Glm52PrefillCpReusesRankLocalTopkState) {
+  run_case("Glm52PrefillCpReusesRankLocalTopkState");
 }
 
-TEST(AttentionMultiDeviceTest, Glm52PrefillCpReusesRankLocalTopkState) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    {
-      const auto child_fn = [](int32_t rank,
-                               int32_t world_size,
-                               int32_t port,
-                               const std::string& host) {
-        return run_prefill_share_child(rank, world_size, port, host);
-      };
-      const std::string failure_message =
-          "GLM5.2 PCP cross-layer top-k share test failed.";
-
-      const int32_t port = net::get_local_free_port();
-      ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-      const int32_t child_count = world_size_;
-      const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                        ->current_test_info()
-                                        ->result()
-                                        ->total_part_count();
-      std::vector<pid_t> child_pids;
-      child_pids.reserve(child_count);
-      bool children_ok = true;
-      bool children_skipped = false;
-      for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-        const pid_t pid = ::fork();
-        if (pid == 0) {
-          try {
-            if (Platform::device_count() < child_count) {
-              ::_exit(77);
-            }
-            const auto rank_body = [&](int32_t rank) {
-              return child_fn(rank, world_size_, port, host_);
-            };
-            const int32_t code = rank_body(child_rank);
-            std::fflush(nullptr);
-            ::_exit(child_failed(initial_parts) ? 1 : code);
-          } catch (const std::exception& error) {
-            LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-            ::_exit(1);
-          }
-        }
-        if (pid < 0) {
-          children_ok = false;
-          break;
-        }
-        child_pids.emplace_back(pid);
-      }
-      if (!children_ok) {
-        stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-      } else {
-        children_ok = wait_ranks(
-            child_pids, std::chrono::milliseconds{120000}, children_skipped);
-      }
-
-      if (children_ok && children_skipped) {
-        GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                        "physical MLU cards";
-      }
-      ASSERT_EQ(children_ok, true) << failure_message << " "
-                                   << "forked ranks failed, timed out, or "
-                                      "require more physical MLU cards";
-    };
-  };
+TEST_F(AttentionMultiDeviceTest,
+       DcpMergePreservesRemotePrefixCacheContribution) {
+  run_case("DcpMergePreservesRemotePrefixCacheContribution");
 }
 
-TEST(AttentionMultiDeviceTest, DcpMergePreservesRemotePrefixCacheContribution) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    {
-      const auto child_fn = [](int32_t rank,
-                               int32_t world_size,
-                               int32_t port,
-                               const std::string& host) {
-        return run_dcp_remote_prefix_cache_merge_test_child(
-            rank, world_size, port, host);
-      };
-      const std::string failure_message =
-          "DCP remote prefix-cache merge test failed.";
-
-      const int32_t port = net::get_local_free_port();
-      ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-      const int32_t child_count = world_size_;
-      const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                        ->current_test_info()
-                                        ->result()
-                                        ->total_part_count();
-      std::vector<pid_t> child_pids;
-      child_pids.reserve(child_count);
-      bool children_ok = true;
-      bool children_skipped = false;
-      for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-        const pid_t pid = ::fork();
-        if (pid == 0) {
-          try {
-            if (Platform::device_count() < child_count) {
-              ::_exit(77);
-            }
-            const auto rank_body = [&](int32_t rank) {
-              return child_fn(rank, world_size_, port, host_);
-            };
-            const int32_t code = rank_body(child_rank);
-            std::fflush(nullptr);
-            ::_exit(child_failed(initial_parts) ? 1 : code);
-          } catch (const std::exception& error) {
-            LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-            ::_exit(1);
-          }
-        }
-        if (pid < 0) {
-          children_ok = false;
-          break;
-        }
-        child_pids.emplace_back(pid);
-      }
-      if (!children_ok) {
-        stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-      } else {
-        children_ok = wait_ranks(
-            child_pids, std::chrono::milliseconds{120000}, children_skipped);
-      }
-
-      if (children_ok && children_skipped) {
-        GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                        "physical MLU cards";
-      }
-      ASSERT_EQ(children_ok, true) << failure_message << " "
-                                   << "forked ranks failed, timed out, or "
-                                      "require more physical MLU cards";
-    };
-  };
+TEST_F(AttentionMultiDeviceTest, DummyRunOutputLayerYieldsNoSparseTopk) {
+  run_case("DummyRunOutputLayerYieldsNoSparseTopk");
 }
 
-TEST(AttentionMultiDeviceTest, DummyRunOutputLayerYieldsNoSparseTopk) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    {
-      const auto child_fn = [](int32_t rank,
-                               int32_t world_size,
-                               int32_t port,
-                               const std::string& host) {
-        return run_attention_topk_share_dummy_run_test_child(
-            rank, world_size, port, host);
-      };
-      const std::string failure_message =
-          "Attention dummy-run top-k share test failed.";
-
-      const int32_t port = net::get_local_free_port();
-      ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-      const int32_t child_count = world_size_;
-      const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                        ->current_test_info()
-                                        ->result()
-                                        ->total_part_count();
-      std::vector<pid_t> child_pids;
-      child_pids.reserve(child_count);
-      bool children_ok = true;
-      bool children_skipped = false;
-      for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-        const pid_t pid = ::fork();
-        if (pid == 0) {
-          try {
-            if (Platform::device_count() < child_count) {
-              ::_exit(77);
-            }
-            const auto rank_body = [&](int32_t rank) {
-              return child_fn(rank, world_size_, port, host_);
-            };
-            const int32_t code = rank_body(child_rank);
-            std::fflush(nullptr);
-            ::_exit(child_failed(initial_parts) ? 1 : code);
-          } catch (const std::exception& error) {
-            LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-            ::_exit(1);
-          }
-        }
-        if (pid < 0) {
-          children_ok = false;
-          break;
-        }
-        child_pids.emplace_back(pid);
-      }
-      if (!children_ok) {
-        stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-      } else {
-        children_ok = wait_ranks(
-            child_pids, std::chrono::milliseconds{120000}, children_skipped);
-      }
-
-      if (children_ok && children_skipped) {
-        GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                        "physical MLU cards";
-      }
-      ASSERT_EQ(children_ok, true) << failure_message << " "
-                                   << "forked ranks failed, timed out, or "
-                                      "require more physical MLU cards";
-    };
-  };
+TEST_F(AttentionMultiDeviceTest, SharedLayerReusesFullLayerSparseBlockTable) {
+  run_case("SharedLayerReusesFullLayerSparseBlockTable");
 }
 
-TEST(AttentionMultiDeviceTest, SharedLayerReusesFullLayerSparseBlockTable) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
-
-  {
-    {
-      const auto child_fn = [](int32_t rank,
-                               int32_t world_size,
-                               int32_t port,
-                               const std::string& host) {
-        return run_attention_topk_share_test_child(
-            rank, world_size, port, host);
-      };
-      const std::string failure_message =
-          "Attention cross-layer top-k share test failed.";
-
-      const int32_t port = net::get_local_free_port();
-      ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-      const int32_t child_count = world_size_;
-      const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                        ->current_test_info()
-                                        ->result()
-                                        ->total_part_count();
-      std::vector<pid_t> child_pids;
-      child_pids.reserve(child_count);
-      bool children_ok = true;
-      bool children_skipped = false;
-      for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-        const pid_t pid = ::fork();
-        if (pid == 0) {
-          try {
-            if (Platform::device_count() < child_count) {
-              ::_exit(77);
-            }
-            const auto rank_body = [&](int32_t rank) {
-              return child_fn(rank, world_size_, port, host_);
-            };
-            const int32_t code = rank_body(child_rank);
-            std::fflush(nullptr);
-            ::_exit(child_failed(initial_parts) ? 1 : code);
-          } catch (const std::exception& error) {
-            LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-            ::_exit(1);
-          }
-        }
-        if (pid < 0) {
-          children_ok = false;
-          break;
-        }
-        child_pids.emplace_back(pid);
-      }
-      if (!children_ok) {
-        stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-      } else {
-        children_ok = wait_ranks(
-            child_pids, std::chrono::milliseconds{120000}, children_skipped);
-      }
-
-      if (children_ok && children_skipped) {
-        GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                        "physical MLU cards";
-      }
-      ASSERT_EQ(children_ok, true) << failure_message << " "
-                                   << "forked ranks failed, timed out, or "
-                                      "require more physical MLU cards";
-    };
-  };
+TEST_F(AttentionMultiDeviceTest, SharedLayerReuseShapeMatchesDecodeBucket) {
+  run_case("SharedLayerReuseShapeMatchesDecodeBucket");
 }
 
-TEST(AttentionMultiDeviceTest, SharedLayerReuseShapeMatchesDecodeBucket) {
-  const int32_t world_size_ = 2;
-  const std::string host_ = "127.0.0.1";
+TEST_F(AttentionMultiDeviceTest, PrefillRejectsMissingTopkSlot) {
+  run_case("PrefillRejectsMissingTopkSlot", /*isolated=*/true);
+}
 
-  {
-    {
-      const auto child_fn = [](int32_t rank,
-                               int32_t world_size,
-                               int32_t port,
-                               const std::string& host) {
-        return run_attention_topk_share_bucket_test_child(
-            rank, world_size, port, host);
-      };
-      const std::string failure_message =
-          "Attention cross-layer top-k share bucket test failed.";
+TEST_F(AttentionMultiDeviceTest, DcpPrefillRejectsMissingTopkSlot) {
+  run_case("DcpPrefillRejectsMissingTopkSlot", /*isolated=*/true);
+}
 
-      const int32_t port = net::get_local_free_port();
-      ASSERT_GT(port, 0) << "Failed to allocate a TCP rendezvous port";
-
-      const int32_t child_count = world_size_;
-      const int32_t initial_parts = ::testing::UnitTest::GetInstance()
-                                        ->current_test_info()
-                                        ->result()
-                                        ->total_part_count();
-      std::vector<pid_t> child_pids;
-      child_pids.reserve(child_count);
-      bool children_ok = true;
-      bool children_skipped = false;
-      for (int32_t child_rank = 0; child_rank < child_count; ++child_rank) {
-        const pid_t pid = ::fork();
-        if (pid == 0) {
-          try {
-            if (Platform::device_count() < child_count) {
-              ::_exit(77);
-            }
-            const auto rank_body = [&](int32_t rank) {
-              return child_fn(rank, world_size_, port, host_);
-            };
-            const int32_t code = rank_body(child_rank);
-            std::fflush(nullptr);
-            ::_exit(child_failed(initial_parts) ? 1 : code);
-          } catch (const std::exception& error) {
-            LOG(ERROR) << "Rank " << child_rank << ": " << error.what();
-            ::_exit(1);
-          }
-        }
-        if (pid < 0) {
-          children_ok = false;
-          break;
-        }
-        child_pids.emplace_back(pid);
-      }
-      if (!children_ok) {
-        stop_ranks(child_pids, std::vector<bool>(child_pids.size(), false));
-      } else {
-        children_ok = wait_ranks(
-            child_pids, std::chrono::milliseconds{120000}, children_skipped);
-      }
-
-      if (children_ok && children_skipped) {
-        GTEST_SKIP() << "forked ranks failed, timed out, or require more "
-                        "physical MLU cards";
-      }
-      ASSERT_EQ(children_ok, true) << failure_message << " "
-                                   << "forked ranks failed, timed out, or "
-                                      "require more physical MLU cards";
-    };
-  };
+TEST_F(AttentionMultiDeviceTest, DcpPrefillRejectsDuplicateSourceSlots) {
+  run_case("DcpPrefillRejectsDuplicateSourceSlots", /*isolated=*/true);
 }
 
 }  // namespace test

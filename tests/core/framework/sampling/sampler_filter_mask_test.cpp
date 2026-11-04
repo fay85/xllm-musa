@@ -49,6 +49,10 @@ torch::Device get_random_sample_device() {
 }
 
 TEST(SamplerFilterMaskTest, TokenLookupUsesOriginalLogitsInMixedBatch) {
+  if (uses_device_random_sample() && Platform::device_count() == 0) {
+    GTEST_SKIP() << "Sampling backend device is unavailable";
+  }
+
   SamplingParameters params = make_greedy_params(/*batch_size=*/3);
   params.logprobs = true;
   params.max_top_logprobs = 3;
@@ -58,27 +62,33 @@ TEST(SamplerFilterMaskTest, TokenLookupUsesOriginalLogitsInMixedBatch) {
   torch::Tensor logits =
       torch::tensor({{5.F, 4.F, 1.F}, {1.F, 5.F, 2.F}, {4.F, 2.F, 1.F}});
   const torch::Tensor original = logits.clone();
+  const torch::Device device = get_random_sample_device();
+  params = params.to(device, torch::kFloat32);
+  logits = logits.to(device);
 
   const SampleOutput output = Sampler().forward(logits, params);
   const torch::Tensor expected = original.log_softmax(/*dim=*/-1);
+  const torch::Tensor next_tokens = output.next_tokens.to(torch::kCPU);
+  const torch::Tensor top_tokens = output.top_tokens.to(torch::kCPU);
+  const torch::Tensor top_logprobs = output.top_logprobs.to(torch::kCPU);
   EXPECT_TRUE(
-      torch::equal(output.next_tokens, torch::tensor({0, 1, 0}, torch::kLong)));
-  EXPECT_TRUE(torch::equal(output.top_tokens[0],
-                           torch::tensor({2, 0, -1}, torch::kLong)));
-  EXPECT_TRUE(torch::equal(output.top_tokens[2],
-                           torch::tensor({1, -1, -1}, torch::kLong)));
-  EXPECT_NEAR(output.top_logprobs.index({0, 0}).item<float>(),
+      torch::equal(next_tokens, torch::tensor({0, 1, 0}, torch::kLong)));
+  EXPECT_TRUE(
+      torch::equal(top_tokens[0], torch::tensor({2, 0, -1}, torch::kLong)));
+  EXPECT_TRUE(
+      torch::equal(top_tokens[2], torch::tensor({1, -1, -1}, torch::kLong)));
+  EXPECT_NEAR(top_logprobs.index({0, 0}).item<float>(),
               expected.index({0, 2}).item<float>(),
               1e-6F);
-  EXPECT_NEAR(output.top_logprobs.index({0, 1}).item<float>(),
+  EXPECT_NEAR(top_logprobs.index({0, 1}).item<float>(),
               expected.index({0, 0}).item<float>(),
               1e-6F);
-  EXPECT_NEAR(output.top_logprobs.index({2, 0}).item<float>(),
+  EXPECT_NEAR(top_logprobs.index({2, 0}).item<float>(),
               expected.index({2, 1}).item<float>(),
               1e-6F);
-  EXPECT_TRUE(torch::isneginf(output.top_logprobs.index({2, 1})).item<bool>());
-  EXPECT_EQ(output.top_tokens.index({1, 0}).item<int64_t>(), 1);
-  EXPECT_TRUE(torch::isneginf(output.top_logprobs.index({1, 1})).item<bool>());
+  EXPECT_TRUE(torch::isneginf(top_logprobs.index({2, 1})).item<bool>());
+  EXPECT_EQ(top_tokens.index({1, 0}).item<int64_t>(), 1);
+  EXPECT_TRUE(torch::isneginf(top_logprobs.index({1, 1})).item<bool>());
 }
 
 TEST(SamplerFilterMaskTest, TokenLookupUsesSampleIndicesBeforeMaskMutation) {

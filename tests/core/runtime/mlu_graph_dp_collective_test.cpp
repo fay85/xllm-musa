@@ -343,7 +343,143 @@ void run_topk_scenario(Scenario scenario,
   }
 }
 
-int32_t run_child(Scenario scenario, int32_t rank, int32_t port) {
+int32_t run_device_scenario(Scenario scenario,
+                            int32_t rank,
+                            const torch::Device& device,
+                            ProcessGroup& group) {
+  if (scenario == Scenario::MTP_MODE_MISMATCH ||
+      scenario == Scenario::MTP_SCHEMA_MISMATCH ||
+      scenario == Scenario::MTP_FIELD_BOUNDARY_MISMATCH ||
+      scenario == Scenario::MTP_PARTIAL_HIT) {
+    run_topk_scenario(scenario, rank, device, group);
+    return 0;
+  }
+
+  const auto hidden =
+      torch::TensorOptions().dtype(torch::kBFloat16).device(device);
+  CountingModel model(hidden);
+  ModelArgs args;
+  args.model_type("qwen3_5_text")
+      .dtype("bfloat16")
+      .hidden_size(kHiddenSize)
+      .max_position_embeddings(
+          scenario == Scenario::CONTEXT_DIFFERENCE ? 8192 + rank * 16 : 8192);
+  runtime::Options options;
+  options.block_size(16).dp_size(kWorldSize).world_size(kWorldSize);
+  if (scenario == Scenario::VLM_ALL_SUPPORTED ||
+      scenario == Scenario::VLM_ONE_REJECTED ||
+      scenario == Scenario::VLM_PARTIAL_HIT) {
+    ExecutionConfig::get_instance().enable_graph(true);
+    options.backend("vlm").enable_graph(true);
+    Executor executor(&model, args, device, options);
+    StepInput input = make_input(rank, device, /*batch_size=*/3);
+    if (scenario == Scenario::VLM_ONE_REJECTED) {
+      if (rank == 1) {
+        // Keep the VLM pure-decode path, but reject this rank in the graph
+        // planner before the DP action is agreed.
+        input.params.meta.q_max_seq_len = 0;
+      } else {
+        prove_local_vlm_graph(executor, model, input, rank);
+      }
+      executor.set_dp_process_group(&group);
+      set_embedding(input, rank, /*step=*/2);
+      run_vlm_step(executor, input);
+      CHECK_EQ(model.forward_count(), rank == 0 ? 2 : 1)
+          << "VLM ranks must run eager when one rank rejects graph";
+      set_embedding(input, rank, /*step=*/3);
+      run_vlm_step(executor, input);
+      CHECK_EQ(model.forward_count(), rank == 0 ? 3 : 2)
+          << "VLM ranks must keep agreeing on eager";
+      return 0;
+    }
+    if (scenario == Scenario::VLM_PARTIAL_HIT && rank == 0) {
+      prove_local_vlm_graph(executor, model, input, rank);
+    }
+    executor.set_dp_process_group(&group);
+    set_embedding(input, rank, /*step=*/2);
+    run_vlm_step(executor, input);
+    CHECK_EQ(model.forward_count(),
+             scenario == Scenario::VLM_PARTIAL_HIT && rank == 0 ? 2 : 1)
+        << "VLM ranks must capture together";
+    set_embedding(input, rank, /*step=*/3);
+    run_vlm_step(executor, input);
+    CHECK_EQ(model.forward_count(),
+             scenario == Scenario::VLM_PARTIAL_HIT && rank == 0 ? 2 : 1)
+        << "VLM ranks must replay together";
+    return 0;
+  }
+  MluGraphExecutorImpl executor(&model, args, device, options);
+  StepInput input = make_input(rank, device, /*batch_size=*/3);
+
+  if (scenario == Scenario::ONE_REJECTED) {
+    if (rank == 1) {
+      input.params.meta.batch_forward_type = BatchForwardType::PREFILL;
+    } else {
+      prove_local_graph(executor, model, input, rank);
+    }
+    executor.set_dp_process_group(&group);
+    set_embedding(input, rank, /*step=*/2);
+    run_step(executor, input);
+    CHECK_EQ(model.forward_count(), rank == 0 ? 2 : 1)
+        << "Both ranks must take eager when one rank rejects graph";
+    set_embedding(input, rank, /*step=*/3);
+    run_step(executor, input);
+    CHECK_EQ(model.forward_count(), rank == 0 ? 3 : 2)
+        << "Repeated one-sided rejection must remain eager on both ranks";
+    return 0;
+  }
+
+  if (scenario == Scenario::PLAN_MISMATCH) {
+    if (rank == 1) {
+      const auto ints =
+          torch::TensorOptions().dtype(torch::kInt32).device(device);
+      input.params.multi_block_tables.emplace_back(torch::zeros({3, 2}, ints));
+    }
+    // Both plans capture and replay locally before their different
+    // multi-table layouts are compared through the real DP group.
+    prove_local_graph(executor, model, input, rank);
+    executor.set_dp_process_group(&group);
+    set_embedding(input, rank, /*step=*/2);
+    run_step(executor, input);
+    CHECK_EQ(model.forward_count(), 2)
+        << "Both ranks must take eager for incompatible graph packets";
+    return 0;
+  }
+
+  if (scenario == Scenario::EMBEDDING_MISMATCH) {
+    prove_local_graph(executor, model, input, rank);
+    executor.set_dp_process_group(&group);
+    if (rank == 1) {
+      input.params.embedding.input_embedding = torch::Tensor();
+    } else {
+      set_embedding(input, rank, /*step=*/2);
+    }
+    run_step(executor, input);
+    CHECK_EQ(model.forward_count(), 2)
+        << "Both ranks must run eager for different embedding presence";
+    return 0;
+  }
+
+  if (scenario == Scenario::PARTIAL_HIT && rank == 0) {
+    prove_local_graph(executor, model, input, rank);
+  }
+  executor.set_dp_process_group(&group);
+  set_embedding(input, rank, /*step=*/2);
+  run_step(executor, input);
+  CHECK_EQ(model.forward_count(),
+           scenario == Scenario::PARTIAL_HIT && rank == 0 ? 2 : 1)
+      << "All ranks must capture when any compatible rank misses";
+  set_embedding(input, rank, /*step=*/3);
+  run_step(executor, input);
+  CHECK_EQ(model.forward_count(),
+           scenario == Scenario::PARTIAL_HIT && rank == 0 ? 2 : 1)
+      << "All ranks must replay after coordinated capture";
+  return 0;
+}
+
+int32_t run_child(const std::vector<Scenario>& scenarios,
+                  int32_t rank,
+                  int32_t port) {
   try {
     if (Platform::device_count() < kWorldSize) {
       return kSkip;
@@ -362,134 +498,13 @@ int32_t run_child(Scenario scenario, int32_t rank, int32_t port) {
                              device);
     CHECK(group);
     verify_group(*group, rank, device);
-    if (scenario == Scenario::MTP_MODE_MISMATCH ||
-        scenario == Scenario::MTP_SCHEMA_MISMATCH ||
-        scenario == Scenario::MTP_FIELD_BOUNDARY_MISMATCH ||
-        scenario == Scenario::MTP_PARTIAL_HIT) {
-      run_topk_scenario(scenario, rank, device, *group);
-      return 0;
+    for (Scenario scenario : scenarios) {
+      LOG(INFO) << "DP graph scenario=" << static_cast<int32_t>(scenario)
+                << " rank=" << rank;
+      CHECK_EQ(run_device_scenario(scenario, rank, device, *group), 0);
+      CHECK_EQ(xllm_device.synchronize_default_stream(), 0);
+      verify_group(*group, rank, device);
     }
-
-    const auto hidden =
-        torch::TensorOptions().dtype(torch::kBFloat16).device(device);
-    CountingModel model(hidden);
-    ModelArgs args;
-    args.model_type("qwen3_5_text")
-        .dtype("bfloat16")
-        .hidden_size(kHiddenSize)
-        .max_position_embeddings(
-            scenario == Scenario::CONTEXT_DIFFERENCE ? 8192 + rank * 16 : 8192);
-    runtime::Options options;
-    options.block_size(16).dp_size(kWorldSize).world_size(kWorldSize);
-    if (scenario == Scenario::VLM_ALL_SUPPORTED ||
-        scenario == Scenario::VLM_ONE_REJECTED ||
-        scenario == Scenario::VLM_PARTIAL_HIT) {
-      ExecutionConfig::get_instance().enable_graph(true);
-      options.backend("vlm").enable_graph(true);
-      Executor executor(&model, args, device, options);
-      StepInput input = make_input(rank, device, /*batch_size=*/3);
-      if (scenario == Scenario::VLM_ONE_REJECTED) {
-        if (rank == 1) {
-          // Keep the VLM pure-decode path, but reject this rank in the graph
-          // planner before the DP action is agreed.
-          input.params.meta.q_max_seq_len = 0;
-        } else {
-          prove_local_vlm_graph(executor, model, input, rank);
-        }
-        executor.set_dp_process_group(group.get());
-        set_embedding(input, rank, /*step=*/2);
-        run_vlm_step(executor, input);
-        CHECK_EQ(model.forward_count(), rank == 0 ? 2 : 1)
-            << "VLM ranks must run eager when one rank rejects graph";
-        set_embedding(input, rank, /*step=*/3);
-        run_vlm_step(executor, input);
-        CHECK_EQ(model.forward_count(), rank == 0 ? 3 : 2)
-            << "VLM ranks must keep agreeing on eager";
-        return 0;
-      }
-      if (scenario == Scenario::VLM_PARTIAL_HIT && rank == 0) {
-        prove_local_vlm_graph(executor, model, input, rank);
-      }
-      executor.set_dp_process_group(group.get());
-      set_embedding(input, rank, /*step=*/2);
-      run_vlm_step(executor, input);
-      CHECK_EQ(model.forward_count(),
-               scenario == Scenario::VLM_PARTIAL_HIT && rank == 0 ? 2 : 1)
-          << "VLM ranks must capture together";
-      set_embedding(input, rank, /*step=*/3);
-      run_vlm_step(executor, input);
-      CHECK_EQ(model.forward_count(),
-               scenario == Scenario::VLM_PARTIAL_HIT && rank == 0 ? 2 : 1)
-          << "VLM ranks must replay together";
-      return 0;
-    }
-    MluGraphExecutorImpl executor(&model, args, device, options);
-    StepInput input = make_input(rank, device, /*batch_size=*/3);
-
-    if (scenario == Scenario::ONE_REJECTED) {
-      if (rank == 1) {
-        input.params.meta.batch_forward_type = BatchForwardType::PREFILL;
-      } else {
-        prove_local_graph(executor, model, input, rank);
-      }
-      executor.set_dp_process_group(group.get());
-      set_embedding(input, rank, /*step=*/2);
-      run_step(executor, input);
-      CHECK_EQ(model.forward_count(), rank == 0 ? 2 : 1)
-          << "Both ranks must take eager when one rank rejects graph";
-      set_embedding(input, rank, /*step=*/3);
-      run_step(executor, input);
-      CHECK_EQ(model.forward_count(), rank == 0 ? 3 : 2)
-          << "Repeated one-sided rejection must remain eager on both ranks";
-      return 0;
-    }
-
-    if (scenario == Scenario::PLAN_MISMATCH) {
-      if (scenario == Scenario::PLAN_MISMATCH && rank == 1) {
-        const auto ints =
-            torch::TensorOptions().dtype(torch::kInt32).device(device);
-        input.params.multi_block_tables.emplace_back(
-            torch::zeros({3, 2}, ints));
-      }
-      // Both plans capture and replay locally before their different
-      // multi-table layouts are compared through the real DP group.
-      prove_local_graph(executor, model, input, rank);
-      executor.set_dp_process_group(group.get());
-      set_embedding(input, rank, /*step=*/2);
-      run_step(executor, input);
-      CHECK_EQ(model.forward_count(), 2)
-          << "Both ranks must take eager for incompatible graph packets";
-      return 0;
-    }
-
-    if (scenario == Scenario::EMBEDDING_MISMATCH) {
-      prove_local_graph(executor, model, input, rank);
-      executor.set_dp_process_group(group.get());
-      if (rank == 1) {
-        input.params.embedding.input_embedding = torch::Tensor();
-      } else {
-        set_embedding(input, rank, /*step=*/2);
-      }
-      run_step(executor, input);
-      CHECK_EQ(model.forward_count(), 2)
-          << "Both ranks must run eager for different embedding presence";
-      return 0;
-    }
-
-    if (scenario == Scenario::PARTIAL_HIT && rank == 0) {
-      prove_local_graph(executor, model, input, rank);
-    }
-    executor.set_dp_process_group(group.get());
-    set_embedding(input, rank, /*step=*/2);
-    run_step(executor, input);
-    CHECK_EQ(model.forward_count(),
-             scenario == Scenario::PARTIAL_HIT && rank == 0 ? 2 : 1)
-        << "All ranks must capture when any compatible rank misses";
-    set_embedding(input, rank, /*step=*/3);
-    run_step(executor, input);
-    CHECK_EQ(model.forward_count(),
-             scenario == Scenario::PARTIAL_HIT && rank == 0 ? 2 : 1)
-        << "All ranks must replay after coordinated capture";
     return 0;
   } catch (const std::exception& error) {
     LOG(ERROR) << "DP graph collective rank " << rank
@@ -548,7 +563,7 @@ ChildOutcome wait_children(const std::vector<pid_t>& pids) {
   return skipped == kWorldSize ? ChildOutcome::SKIPPED : ChildOutcome::PASSED;
 }
 
-void run_scenario(Scenario scenario) {
+void run_scenarios(const std::vector<Scenario>& scenarios) {
   const int32_t port = net::get_local_free_port();
   ASSERT_GT(port, 0);
   std::vector<pid_t> pids;
@@ -556,7 +571,7 @@ void run_scenario(Scenario scenario) {
   for (int32_t rank = 0; rank < kWorldSize; ++rank) {
     const pid_t pid = ::fork();
     if (pid == 0) {
-      _exit(run_child(scenario, rank, port));
+      _exit(run_child(scenarios, rank, port));
     }
     if (pid < 0) {
       for (const pid_t child : pids) {
@@ -576,56 +591,26 @@ void run_scenario(Scenario scenario) {
   EXPECT_EQ(outcome, ChildOutcome::PASSED);
 }
 
-TEST(MluGraphDpCollectiveTest, AllRanksCaptureThenReplay) {
-  run_scenario(Scenario::ALL_SUPPORTED);
+TEST(MluGraphDpCollectiveTest, DecodeRanksAgreeOnCaptureReplayAndFallback) {
+  run_scenarios({Scenario::ALL_SUPPORTED,
+                 Scenario::ONE_REJECTED,
+                 Scenario::PLAN_MISMATCH,
+                 Scenario::CONTEXT_DIFFERENCE,
+                 Scenario::EMBEDDING_MISMATCH,
+                 Scenario::PARTIAL_HIT});
 }
 
-TEST(MluGraphDpCollectiveTest, OneRankRejectsSoAllRunEager) {
-  run_scenario(Scenario::ONE_REJECTED);
+TEST(MluGraphDpCollectiveTest, MtpRanksAgreeOnSchemaAndCacheActions) {
+  run_scenarios({Scenario::MTP_MODE_MISMATCH,
+                 Scenario::MTP_SCHEMA_MISMATCH,
+                 Scenario::MTP_FIELD_BOUNDARY_MISMATCH,
+                 Scenario::MTP_PARTIAL_HIT});
 }
 
-TEST(MluGraphDpCollectiveTest, DifferentPlansMakeAllRunEager) {
-  run_scenario(Scenario::PLAN_MISMATCH);
-}
-
-TEST(MluGraphDpCollectiveTest, DifferentStorageContextsStillCaptureAndReplay) {
-  run_scenario(Scenario::CONTEXT_DIFFERENCE);
-}
-
-TEST(MluGraphDpCollectiveTest, DifferentEmbeddingPresenceMakesAllRunEager) {
-  run_scenario(Scenario::EMBEDDING_MISMATCH);
-}
-
-TEST(MluGraphDpCollectiveTest, PartialCacheHitRecapturesThenReplays) {
-  run_scenario(Scenario::PARTIAL_HIT);
-}
-
-TEST(MluGraphDpCollectiveTest, MtpProducerAndReuseRanksBothRunEager) {
-  run_scenario(Scenario::MTP_MODE_MISMATCH);
-}
-
-TEST(MluGraphDpCollectiveTest, DifferentMtpSchemasMakeAllRanksRunEager) {
-  run_scenario(Scenario::MTP_SCHEMA_MISMATCH);
-}
-
-TEST(MluGraphDpCollectiveTest, DifferentKeyFieldBoundariesMakeAllRunEager) {
-  run_scenario(Scenario::MTP_FIELD_BOUNDARY_MISMATCH);
-}
-
-TEST(MluGraphDpCollectiveTest, MtpPartialCacheHitRecapturesThenReplays) {
-  run_scenario(Scenario::MTP_PARTIAL_HIT);
-}
-
-TEST(MluGraphDpCollectiveTest, VlmAllRanksCaptureThenReplay) {
-  run_scenario(Scenario::VLM_ALL_SUPPORTED);
-}
-
-TEST(MluGraphDpCollectiveTest, VlmOneRankRejectsSoAllRunEager) {
-  run_scenario(Scenario::VLM_ONE_REJECTED);
-}
-
-TEST(MluGraphDpCollectiveTest, VlmPartialCacheHitRecapturesThenReplays) {
-  run_scenario(Scenario::VLM_PARTIAL_HIT);
+TEST(MluGraphDpCollectiveTest, VlmRanksAgreeOnCaptureReplayAndFallback) {
+  run_scenarios({Scenario::VLM_ALL_SUPPORTED,
+                 Scenario::VLM_ONE_REJECTED,
+                 Scenario::VLM_PARTIAL_HIT});
 }
 
 }  // namespace

@@ -25,6 +25,7 @@ limitations under the License.
 #include "core/layers/mlu/deepseek_v32/deepseek_v32_attention.h"
 #include "core/layers/mlu/fused_moe.h"
 #include "layers/mlu/tests_utils.h"
+#include "tests/core/layers/mlu/glm5_next_kpool_test_utils.h"
 
 namespace xllm::layer {
 namespace {
@@ -267,21 +268,25 @@ TEST(CompressedTensorsMluTest, AttentionPreservesBothCheckpointFormats) {
 }
 
 TEST(CompressedTensorsMluTest, KpoolProjectionRemainsBfloat16) {
+  const test::BlockSizeGuard block_size_guard(/*block_size=*/16);
   torch::DeviceGuard guard(mlu_options().device());
   test::MockProcessGroup pg(mlu_options().device());
   ParallelArgs parallel(0, 1, &pg);
   parallel.tp_group_ = &pg;
   auto args = attention_args(/*nope=*/true);
-  args.index_n_heads() = 2;
-  args.index_head_dim() = 64;
-  args.index_topk() = 16;
+  args.index_n_heads() = 32;
+  args.index_head_dim() = 128;
+  args.index_topk() = 2048;
   args.index_kpool() = 4;
   Glm5NextKPoolIndexer indexer(args,
                                attention_quant(/*compressed=*/true),
                                parallel,
                                /*rotary_emb=*/nullptr,
                                mlu_options());
-  const auto weight = torch::full({128, 128}, 0.01, torch::kBFloat16);
+  const auto weight = torch::full(
+      {args.index_n_heads() * args.index_head_dim(), args.q_lora_rank()},
+      0.01,
+      torch::kBFloat16);
   indexer->load_state_dict(
       StateDict({{"wq_b.weight", weight}},
                 "model.language_model.layers.45.self_attn.indexer."));

@@ -54,6 +54,8 @@ ModelArgs make_draft_args() {
       .dflash2_conv_kernel_size(2)
       .dflash2_selector_rank(8)
       .dflash2_selector_top_k(4);
+  // One target hidden state matches the checkpoint's 128-by-128 fc weight.
+  args.dflash2_target_layer_ids() = {0};
   return args;
 }
 

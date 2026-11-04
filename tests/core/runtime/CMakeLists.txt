@@ -326,16 +326,9 @@ if(USE_MLU)
       glog::glog
   )
   set_tests_properties(
-    MluGraphDpCollectiveTest.AllRanksCaptureThenReplay
-    MluGraphDpCollectiveTest.OneRankRejectsSoAllRunEager
-    MluGraphDpCollectiveTest.DifferentPlansMakeAllRunEager
-    MluGraphDpCollectiveTest.DifferentStorageContextsStillCaptureAndReplay
-    MluGraphDpCollectiveTest.DifferentKeyFieldBoundariesMakeAllRunEager
-    MluGraphDpCollectiveTest.DifferentEmbeddingPresenceMakesAllRunEager
-    MluGraphDpCollectiveTest.PartialCacheHitRecapturesThenReplays
-    MluGraphDpCollectiveTest.VlmAllRanksCaptureThenReplay
-    MluGraphDpCollectiveTest.VlmOneRankRejectsSoAllRunEager
-    MluGraphDpCollectiveTest.VlmPartialCacheHitRecapturesThenReplays
+    MluGraphDpCollectiveTest.DecodeRanksAgreeOnCaptureReplayAndFallback
+    MluGraphDpCollectiveTest.MtpRanksAgreeOnSchemaAndCacheActions
+    MluGraphDpCollectiveTest.VlmRanksAgreeOnCaptureReplayAndFallback
     PROPERTIES RUN_SERIAL TRUE TIMEOUT 150)
 endif()
 
