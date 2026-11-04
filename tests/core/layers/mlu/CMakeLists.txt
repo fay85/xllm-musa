@@ -388,7 +388,7 @@ add_subdirectory(deepseek_v32)
 
 cc_test(
   NAME deepseek_v41_graph_test
-  SRCS deepseek_v41_graph_test.cpp
+  SRCS deepseek_v41_graph_test.cpp deepseek_v41_sparse_verify_test.cpp
   DEPS :tests_utils :mlu_layers :common_layers :model_context :parallel_state
        :state_dict xllm::mlu_ops torch glog::glog GTest::gtest_main
 )
@@ -399,6 +399,17 @@ cc_test(
   SRCS deepseek_v41_engram_test.cpp
   DEPS :tests_utils :config :mlu_layers :common_layers :model_context
        :parallel_state :state_dict torch glog::glog GTest::gtest_main
+  ENVIRONMENT
+    "PYTHONPATH=${_xllm_build_import_root}:$ENV{PYTHONPATH};OMP_NUM_THREADS=1;MKL_NUM_THREADS=1"
+)
+
+# Fork real CP/EP ranks before device initialization in this isolated binary.
+cc_test(
+  NAME deepseek_v41_engram_cp_test
+  RUN_SERIAL
+  SRCS deepseek_v41_engram_cp_test.cpp
+  DEPS :config :mlu_layers :common_layers :model_context :parallel_state
+       :state_dict :platform :util torch torch_mlu glog::glog GTest::gtest_main
   ENVIRONMENT
     "PYTHONPATH=${_xllm_build_import_root}:$ENV{PYTHONPATH};OMP_NUM_THREADS=1;MKL_NUM_THREADS=1"
 )

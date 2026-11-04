@@ -27,6 +27,8 @@ limitations under the License.
 namespace xllm::layer {
 // One forward's cross-layer selection. KV itself remains framework-owned.
 struct Csa2Context {
+  // Each defined entry has shape {query_rows, k}: one top-k list per query.
+  // A selection with no keys keeps the two-dimensional shape {query_rows, 0}.
   std::vector<torch::Tensor> topk;
   std::vector<torch::Tensor> candidates;
   std::vector<torch::Tensor> block_tables;

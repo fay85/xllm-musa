@@ -9,7 +9,7 @@ sidebar:
 The native MLU DeepSeek-V4.1 implementation keeps FP8 Engram tables and scales in host memory by default. Omitting the flag or passing `{}` enables offload. Select placement through the server arguments:
 
 ```bash
-# Default: host tables, preserving existing TP row sharding
+# Default: host tables, preserving existing TP/EP row sharding
 xllm --engram_config='{"cpu_offload":true}'
 
 # Disable offload: keep tables on the MLU device
@@ -18,7 +18,7 @@ xllm --engram_config='{"cpu_offload":false}'
 
 The host path reuses hash generation, gathers the referenced FP8 rows and scales on CPU, and transfers them through pinned staging buffers to the existing device dequantization, collective and projection path. A stream host callback refreshes rows during graph replay. The full tables use pageable host memory; only staging buffers are pinned.
 
-MLU currently rejects `dp_shared_memory=true` at initialization. With TP=8, the two tables require approximately 23.60 GiB host memory per rank, or 188.83 GiB across the node, plus loading and execution buffers. Projection weights remain on MLU. The following sections describe the NPU path, whose defaults and supported table formats differ.
+MLU currently rejects `dp_shared_memory=true` at initialization. With EP=8, the two tables require approximately 23.60 GiB host memory per rank, or 188.83 GiB across the node, plus loading and execution buffers. Projection weights remain on MLU. The following sections describe the NPU path, whose defaults and supported table formats differ.
 
 ## NPU overview
 

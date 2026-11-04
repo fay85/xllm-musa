@@ -33,27 +33,6 @@ limitations under the License.
 #include "models/model_registry.h"
 
 namespace xllm {
-namespace dspark_detail {
-
-template <typename Module>
-void load_vocab_weight(VocabularyWeightSelector& selector,
-                       const StateDict& dedicated_state_dict,
-                       const StateDict& fallback_state_dict,
-                       Module& module) {
-  if (dedicated_state_dict.size() > 0 &&
-      selector.should_load(/*dedicated=*/true)) {
-    module->load_state_dict(dedicated_state_dict);
-    selector.mark_loaded(/*dedicated=*/true);
-  }
-  if (fallback_state_dict.size() > 0 &&
-      selector.should_load(/*dedicated=*/false)) {
-    module->load_state_dict(fallback_state_dict);
-    selector.mark_loaded(/*dedicated=*/false);
-  }
-}
-
-}  // namespace dspark_detail
-
 // DeepSeek-V4-0731 stores the DSpark draft in mtp.0/1/2. Unlike the preview
 // model's serial MTP layer, these are ordinary V4 decoder layers: target layer
 // outputs are combined once and written as shared context KV for every draft

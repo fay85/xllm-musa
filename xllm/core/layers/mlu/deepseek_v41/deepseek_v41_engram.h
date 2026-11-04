@@ -28,7 +28,9 @@ class DeepseekV41EngramImpl final : public torch::nn::Module {
  public:
   class HashState final {
    public:
-    HashState(const DeepseekV41EngramImpl& owner, int64_t rows);
+    HashState(const DeepseekV41EngramImpl& owner,
+              int64_t rows,
+              int64_t query_width = 1);
     void prepare(const ModelInputParams& input);
     torch::Tensor forward(const torch::Tensor& tokens);
     std::pair<torch::Tensor, torch::Tensor> lookup_rows() const;
@@ -41,7 +43,8 @@ class DeepseekV41EngramImpl final : public torch::nn::Module {
     torch::Tensor host_weight_rows_, host_scale_rows_;
     std::vector<int32_t> lengths_;
   };
-  std::unique_ptr<HashState> create_hash_state(int64_t rows) const;
+  std::unique_ptr<HashState> create_hash_state(int64_t rows,
+                                               int64_t query_width = 1) const;
   DeepseekV41EngramImpl(const ModelContext& context, int32_t engram_id);
   void load_state_dict(const StateDict& state);
   void load_hash_state(const StateDict& state);
@@ -49,7 +52,8 @@ class DeepseekV41EngramImpl final : public torch::nn::Module {
   torch::Tensor forward(const torch::Tensor& hidden,
                         const torch::Tensor& tokens,
                         const ModelInputParams& input,
-                        HashState* hash_state = nullptr);
+                        HashState* hash_state = nullptr,
+                        const torch::Tensor& row_indices = {});
 
  private:
   void compute_hashes(const int64_t* tokens,
@@ -61,7 +65,7 @@ class DeepseekV41EngramImpl final : public torch::nn::Module {
                         torch::Tensor& scale_rows) const;
   ModelArgs args_;
   int32_t engram_id_;
-  ProcessGroup* tp_group_;
+  ProcessGroup* lookup_group_;
   torch::TensorOptions options_;
   int64_t table_start_;
   int64_t table_end_;

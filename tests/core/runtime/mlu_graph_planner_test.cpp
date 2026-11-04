@@ -394,9 +394,11 @@ TEST(MluGraphPlannerTest, GroupedStagesAndRestrictionsStayDistinct) {
   params.meta.batch_forward_type = BatchForwardType::PREFILL;
   expect_eager(MluGraphPlanner(config), 3, params, EagerReason::NON_DECODE);
   params.meta.batch_forward_type = BatchForwardType::DECODE;
-  config.options.cp_size(2);
-  expect_eager(
-      MluGraphPlanner(config), 3, params, EagerReason::UNSUPPORTED_INPUT);
+  for (int32_t cp : {2, 4, 8}) {
+    config.options.cp_size(cp);
+    EXPECT_TRUE(std::holds_alternative<GraphPlan>(
+        MluGraphPlanner(config).plan({3, params})));
+  }
   config.options.cp_size(1);
   params.prefill_without_cache = true;
   expect_eager(
@@ -441,6 +443,49 @@ TEST(MluGraphPlannerTest, GroupedVerifyChecksStageAndDpMetadata) {
   params.parallel.dp_is_decode = {1, 1};
   params.num_accepted_tokens = torch::ones({2}, torch::kInt32);
   expect_eager(planner, 3, params, EagerReason::INVALID_LAYOUT);
+}
+
+TEST(MluGraphPlannerTest, FlatVerifyBucketsPreserveWholeRequests) {
+  GraphPlannerConfig config = qwen_config();
+  config.options.enable_speculative_decode(true).speculative_algorithm(
+      "DSpark");
+  config.capabilities.supports_grouped_mtp_graph = true;
+  config.capabilities.graph_dynamic_multi_block_tables = true;
+  const auto model_managed_input = [](int64_t rows) {
+    auto params = grouped_input(rows);
+    params.multi_block_tables = {params.attention.device.block_tables};
+    params.attention.device.block_tables = torch::Tensor();
+    return params;
+  };
+  for (int32_t cp : {1, 4, 8}) {
+    config.options.cp_size(cp);
+    const MluGraphPlanner planner(config);
+    for (const int64_t requests : {1, 3, 8}) {
+      ModelInputParams params = model_managed_input(requests * 6);
+      params.meta.spec_verify_width = 6;
+      const auto decision = planner.plan({requests * 6, params});
+      ASSERT_TRUE(std::holds_alternative<GraphPlan>(decision));
+      const auto& plan = std::get<GraphPlan>(decision);
+      EXPECT_EQ(plan.layout.tokens_per_request, 6);
+      EXPECT_EQ(plan.layout.attention_row_query_len, 1);
+      EXPECT_EQ(plan.layout.padded_num_tokens % 6, 0);
+      EXPECT_GE(plan.layout.padded_num_reqs, requests);
+      const auto decode =
+          planner.plan({plan.layout.padded_num_tokens,
+                        model_managed_input(plan.layout.padded_num_tokens)});
+      ASSERT_TRUE(std::holds_alternative<GraphPlan>(decode));
+      EXPECT_NE(get_key_fields(plan.key),
+                get_key_fields(std::get<GraphPlan>(decode).key));
+    }
+  }
+  const MluGraphPlanner planner(config);
+  ModelInputParams partial = model_managed_input(6);
+  partial.meta.spec_verify_width = 6;
+  partial.multi_block_tables[0] = partial.multi_block_tables[0].slice(0, 0, 5);
+  expect_eager(planner, 6, partial, EagerReason::INVALID_LAYOUT);
+  partial = model_managed_input(5);
+  partial.meta.spec_verify_width = 6;
+  expect_eager(planner, 5, partial, EagerReason::INVALID_LAYOUT);
 }
 
 TEST(MluGraphPlannerTest, GroupedPaddingKeepsRequestsAndTpAlignment) {
@@ -638,6 +683,7 @@ TEST(MluGraphPlannerTest, Dflash2VerifyPreservesB16GroupsAt64kHistory) {
   config.options.enable_speculative_decode(true)
       .speculative_algorithm("DFlash2")
       .num_decoding_tokens(4)
+      .cp_size(4)
       .world_size(8);
   config.capabilities.supports_grouped_mtp_graph = true;
   config.capabilities.replay_family = MtpReplayFamily::GLM5;

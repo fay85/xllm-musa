@@ -29,18 +29,29 @@ class DeepseekV41DecoderLayerImpl final : public torch::nn::Module {
   DeepseekV41DecoderLayerImpl(const ModelContext& context, int32_t layer_id);
   void load_state_dict(const StateDict& state);
   std::unique_ptr<DeepseekV41EngramImpl::HashState> create_hash_state(
-      int64_t rows) const;
+      int64_t rows,
+      int64_t query_width = 1) const;
   void load_hash_state(const StateDict& state);
   void verify_loaded_weights(const std::string& prefix) const;
-  torch::Tensor forward(torch::Tensor hidden,
-                        torch::Tensor& pre_mix,
-                        const torch::Tensor& tokens,
+  void write_context_kv(const torch::Tensor& hidden,
                         const torch::Tensor& positions,
                         const torch::Tensor& rope,
-                        std::vector<KVCache>& caches,
-                        const ModelInputParams& input,
-                        Csa2Context& shared,
-                        DeepseekV41EngramImpl::HashState* hash_state = nullptr);
+                        const torch::Tensor& cache_slots,
+                        KVCache& cache) {
+    attention_->write_context_kv(hidden, positions, rope, cache_slots, cache);
+  }
+  torch::Tensor forward(
+      torch::Tensor hidden,
+      torch::Tensor& pre_mix,
+      const torch::Tensor& tokens,
+      const torch::Tensor& positions,
+      const torch::Tensor& rope,
+      std::vector<KVCache>& caches,
+      const ModelInputParams& input,
+      Csa2Context& shared,
+      DeepseekV41EngramImpl::HashState* hash_state = nullptr,
+      const mlu_v4_cp::DeepseekV4CpContext* cp_context = nullptr,
+      torch::Tensor* attention_input = nullptr);
 
  private:
   DeepseekV41Attention attention_{nullptr};

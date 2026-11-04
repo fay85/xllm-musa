@@ -96,7 +96,7 @@ class DeepseekV41EngramTest : public ::testing::Test {
   std::string saved_config_;
 };
 
-TEST_F(DeepseekV41EngramTest, DefaultHostMatchesDevice) {
+TEST_F(DeepseekV41EngramTest, DefaultHostMatchesDeviceAndSelectedRows) {
   torch::InferenceMode inference;
   torch::DeviceGuard guard(options_.device());
   auto host = create("{}");
@@ -108,6 +108,12 @@ TEST_F(DeepseekV41EngramTest, DefaultHostMatchesDevice) {
   auto actual = host->forward(hidden, tokens, input_);
   auto expected = device->forward(hidden, tokens, input_);
   EXPECT_TRUE(torch::equal(actual.cpu(), expected.cpu()));
+  auto indices = torch::tensor({3, 0}, torch::kInt64).to(options_.device());
+  EXPECT_TRUE(torch::equal(
+      host->forward(
+              hidden.index_select(0, indices), tokens, input_, nullptr, indices)
+          .cpu(),
+      expected.index_select(0, indices).cpu()));
 }
 
 TEST_F(DeepseekV41EngramTest, HostLookupSupportsStridedCheckpointRows) {
@@ -156,40 +162,43 @@ TEST_F(DeepseekV41EngramTest, GraphReplayRefreshesHostRowsAndHistory) {
   torch::DeviceGuard guard(options_.device());
   auto host = create(R"({"cpu_offload":true})");
   auto device = create(R"({"cpu_offload":false})");
-  auto state = host->create_hash_state(/*rows=*/4);
-  auto tokens =
-      torch::tensor({2, 5, 1, 7}, torch::kInt64).to(options_.device());
-  auto hidden =
-      torch::linspace(-1, 1, 4 * 2 * 8).reshape({4, 2, 8}).to(options_);
-  input_.meta.num_sequences = 4;
-  input_.meta.actual_num_sequences = 4;
-  input_.attention.host.q_seq_lens.resize(4 + 1);
-  for (int32_t seq = 0; seq <= 4; ++seq) {
-    input_.attention.host.q_seq_lens[seq] = seq;
-  }
-  input_.embedding.engram_lookback_token_ids.assign(8, 1);
-  state->prepare(input_);
-  auto warmup = host->forward(hidden, tokens, input_, state.get());
-  EXPECT_TRUE(torch::equal(warmup.cpu(),
-                           device->forward(hidden, tokens, input_).cpu()));
-  torch_mlu::synchronize();
-  torch_mlu::MLUGraph graph;
-  torch::Tensor output;
-  {
-    torch_mlu::mlu::MLUStreamGuard stream(
-        torch_mlu::getStreamFromPool(/*isHighPriority=*/false, /*device=*/0));
-    graph.capture_begin();
-    output = host->forward(hidden, tokens, input_, state.get());
-    graph.capture_end();
-  }
-  for (int32_t round = 0; round < 3; ++round) {
-    tokens.copy_(
-        torch::tensor({round + 1, 7 - round, 4, round}, torch::kInt64));
-    input_.embedding.engram_lookback_token_ids.assign(8, round + 1);
+  for (const int32_t query_width : {1, 2}) {
+    auto state = host->create_hash_state(/*rows=*/4, query_width);
+    auto tokens =
+        torch::tensor({2, 5, 1, 7}, torch::kInt64).to(options_.device());
+    auto hidden =
+        torch::linspace(-1, 1, 4 * 2 * 8).reshape({4, 2, 8}).to(options_);
+    input_.meta.num_sequences = 4 / query_width;
+    input_.meta.actual_num_sequences = 4 / query_width;
+    input_.attention.host.q_seq_lens.resize(4 / query_width + 1);
+    for (int32_t seq = 0; seq <= 4 / query_width; ++seq) {
+      input_.attention.host.q_seq_lens[seq] = seq * query_width;
+    }
+    input_.embedding.engram_lookback_token_ids.assign(8 / query_width, 1);
     state->prepare(input_);
-    auto expected = device->forward(hidden, tokens, input_);
-    graph.replay();
-    EXPECT_TRUE(torch::equal(output.cpu(), expected.cpu()));
+    auto warmup = host->forward(hidden, tokens, input_, state.get());
+    EXPECT_TRUE(torch::equal(warmup.cpu(),
+                             device->forward(hidden, tokens, input_).cpu()));
+    torch_mlu::synchronize();
+    torch_mlu::MLUGraph graph;
+    torch::Tensor output;
+    {
+      torch_mlu::mlu::MLUStreamGuard stream(
+          torch_mlu::getStreamFromPool(/*isHighPriority=*/false, /*device=*/0));
+      graph.capture_begin();
+      output = host->forward(hidden, tokens, input_, state.get());
+      graph.capture_end();
+    }
+    for (int32_t round = 0; round < 3; ++round) {
+      tokens.copy_(
+          torch::tensor({round + 1, 7 - round, 4, round}, torch::kInt64));
+      input_.embedding.engram_lookback_token_ids.assign(8 / query_width,
+                                                        round + 1);
+      state->prepare(input_);
+      auto expected = device->forward(hidden, tokens, input_);
+      graph.replay();
+      EXPECT_TRUE(torch::equal(output.cpu(), expected.cpu()));
+    }
   }
 }
 

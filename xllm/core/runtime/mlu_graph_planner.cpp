@@ -169,8 +169,8 @@ bool supports_ordinary_graph(const xllm::runtime::Options& options,
 
 bool supports_grouped_graph(const xllm::runtime::Options& options,
                             const xllm::ModelInputParams& params) {
-  if (options.cp_size() > 1 || params.meta.q_max_seq_len <= 0 ||
-      params.meta.num_sequences <= 0 || params.prefill_without_cache ||
+  if (params.meta.q_max_seq_len <= 0 || params.meta.num_sequences <= 0 ||
+      params.prefill_without_cache ||
       !(params.meta.batch_forward_type.is_decode() ||
         (params.is_spec_verify &&
          params.meta.batch_forward_type.is_chunked_prefill()))) {
@@ -189,7 +189,8 @@ bool supports_grouped_graph(const xllm::runtime::Options& options,
                  0) != params.parallel.dp_is_decode.end())) {
     return false;
   }
-  return params.attention.device.block_tables.defined() &&
+  return (params.attention.device.block_tables.defined() ||
+          !params.multi_block_tables.empty()) &&
          params.attention.device.q_seq_lens.defined() &&
          params.attention.device.kv_seq_lens.defined() &&
          params.attention.device.new_cache_slots.defined();
@@ -207,7 +208,10 @@ std::optional<GraphLayout> get_graph_layout(
     return std::nullopt;
   }
   const auto& spans = params.attention.host.kpool_query_lens;
-  const int64_t tokens_per_request = spans.empty() ? offsets[1] : spans.front();
+  const int64_t tokens_per_request =
+      grouped && params.meta.spec_verify_width > 1
+          ? params.meta.spec_verify_width
+          : (spans.empty() ? offsets[1] : spans.front());
   if (tokens_per_request <= 0 || tokens % tokens_per_request != 0) {
     return std::nullopt;
   }
@@ -265,17 +269,28 @@ std::optional<GraphLayout> get_graph_layout(
          params.num_accepted_tokens.numel() != layout.num_reqs)))) {
     return std::nullopt;
   }
+  if (!grouped) {
+    return layout;
+  }
   const auto& attention = params.attention.device;
-  if (grouped &&
-      (attention.q_seq_lens.numel() != static_cast<int64_t>(offsets.size()) ||
-       attention.kv_seq_lens.numel() != static_cast<int64_t>(offsets.size()) ||
-       attention.block_tables.size(0) !=
-           tokens / layout.attention_row_query_len ||
-       attention.new_cache_slots.numel() != tokens ||
-       (params.embedding.linear_state_indices.defined() &&
-        params.embedding.linear_state_indices.numel() != layout.num_reqs) ||
-       (!params.linear_state_validity_mask.empty() &&
-        params.linear_state_validity_mask.size() != layout.num_reqs))) {
+  const int64_t attention_rows = tokens / layout.attention_row_query_len;
+  const bool paging_rows_match =
+      params.multi_block_tables.empty()
+          ? attention.block_tables.defined() &&
+                attention.block_tables.size(0) == attention_rows
+          : std::all_of(params.multi_block_tables.begin(),
+                        params.multi_block_tables.end(),
+                        [attention_rows](const torch::Tensor& table) {
+                          return table.defined() && table.dim() == 2 &&
+                                 table.size(0) == attention_rows;
+                        });
+  if (attention.q_seq_lens.numel() != static_cast<int64_t>(offsets.size()) ||
+      attention.kv_seq_lens.numel() != static_cast<int64_t>(offsets.size()) ||
+      !paging_rows_match || attention.new_cache_slots.numel() != tokens ||
+      (params.embedding.linear_state_indices.defined() &&
+       params.embedding.linear_state_indices.numel() != layout.num_reqs) ||
+      (!params.linear_state_validity_mask.empty() &&
+       params.linear_state_validity_mask.size() != layout.num_reqs)) {
     return std::nullopt;
   }
   return layout;
@@ -319,9 +334,10 @@ GraphDecision MluGraphPlanner::plan(const GraphStepMetadata& step) const {
   if (!topk_schema.has_value()) {
     return EagerReason::UNSUPPORTED_INPUT;
   }
-  const bool grouped = config_.capabilities.supports_grouped_mtp_graph &&
-                       (config_.state_required || options.is_draft_engine() ||
-                        params.is_spec_verify);
+  const bool grouped =
+      config_.capabilities.supports_grouped_mtp_graph &&
+      (config_.state_required || options.is_draft_engine() ||
+       params.is_spec_verify || params.meta.spec_verify_width > 1);
   if (grouped ? !supports_grouped_graph(options, params)
               : !supports_ordinary_graph(options, params)) {
     return EagerReason::UNSUPPORTED_INPUT;

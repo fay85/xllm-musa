@@ -149,6 +149,163 @@ TEST(DeepseekV41GraphTest, NativeHashStateMatchesFullCheckpointReference) {
   }
 }
 
+TEST(DeepseekV41GraphTest, VerifyRejectionRetainsInteriorCompressorRows) {
+  torch::manual_seed(91);
+  const torch::Device device(torch::kPrivateUse1, 0);
+  const torch::DeviceGuard guard(device);
+  const auto options =
+      torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  ModelArgs args;
+  args.hidden_size() = 32;
+  args.n_heads() = 8;
+  args.head_dim() = 512;
+  args.q_lora_rank() = 16;
+  args.qk_rope_head_dim() = 64;
+  args.o_groups() = 1;
+  args.o_lora_rank() = 8;
+  args.window_size() = 16;
+  args.rms_norm_eps() = 1e-6;
+  args.compress_ratios() = {2};
+  args.kv_source_layer_ids() = {0};
+  args.index_head_dim() = 128;
+  args.num_speculative_tokens() = 5;
+  test::MockProcessGroup group(device);
+  ParallelArgs parallel(/*rank=*/0, /*world_size=*/1, &group);
+  parallel.tp_group_ = &group;
+  DeepseekV41Attention attention(
+      ModelContext(parallel, args, QuantArgs(), options), 0);
+  auto random = [&](std::vector<int64_t> shape) {
+    return torch::randn(shape, options) * 0.1;
+  };
+  attention->load_state_dict(StateDict({
+      {"wq_a.weight", random({16, 32})},
+      {"wkv.weight", random({512, 32})},
+      {"q_norm.weight", torch::ones({16}, options)},
+      {"kv_norm.weight", torch::ones({512}, options)},
+      {"wq_b.weight", random({4096, 16})},
+      {"wo_a.weight", random({1, 8, 4096})},
+      {"wo_b.weight", random({32, 8})},
+      {"attn_sink", torch::zeros({8}, options)},
+      {"compressor.wkv.weight", random({512, 32})},
+      {"compressor.wgate.weight", random({512, 32})},
+      {"compressor.norm.weight", torch::ones({512}, options)},
+      {"indexer.wk.weight", random({128, 512})},
+      {"indexer.k_norm.weight", torch::ones({128}, options)},
+  }));
+  auto make_cache = [&]() {
+    DeepSeekV4KVCacheTensors tensors;
+    tensors.swa_cache = torch::zeros({2, 128, 1, 512}, options);
+    tensors.key_cache = torch::zeros({2, 128, 1, 512}, options);
+    tensors.index_cache = torch::zeros({2, 128, 1, 128}, options);
+    tensors.compress_kv_state =
+        torch::zeros({2, 32, 512}, options.dtype(torch::kFloat32));
+    tensors.compress_score_state = torch::zeros_like(tensors.compress_kv_state);
+    std::vector<KVCache> caches;
+    caches.emplace_back(tensors);
+    return caches;
+  };
+  auto actual = make_cache();
+  auto reference = make_cache();
+  auto hidden = random({20, 32});
+  auto rope =
+      torch::cat({torch::ones({32, 64}, options.dtype(torch::kFloat32)),
+                  torch::zeros({32, 64}, options.dtype(torch::kFloat32))},
+                 -1);
+  auto run = [&](std::vector<KVCache>& caches, int64_t begin, int64_t count) {
+    ModelInputParams input;
+    input.meta.num_sequences = 1;
+    input.attention.host.q_seq_lens = {0, static_cast<int32_t>(count)};
+    auto table =
+        torch::tensor({0, 1}, options.dtype(torch::kInt32)).view({1, 2});
+    input.multi_block_tables = {table, table};
+    Csa2Context shared;
+    shared.topk.emplace_back(
+        torch::empty({count, 0}, options.dtype(torch::kInt64)));
+    shared.candidates.resize(1);
+    return attention->forward(
+        hidden.slice(0, begin, begin + count),
+        torch::arange(begin, begin + count, options.dtype(torch::kInt64)),
+        rope,
+        caches,
+        input,
+        shared);
+  };
+  run(actual, 0, 1);
+  run(actual, 1, 6);
+  // Reject the proposals after position two, then cross the odd C2 boundary.
+  run(reference, 0, 3);
+  auto output = run(actual, 3, 1);
+  auto expected = run(reference, 3, 1);
+  torch_mlu::synchronize();
+  EXPECT_TRUE(
+      torch::equal(actual[0].get_k_cache().flatten(0, 2).slice(0, 0, 2),
+                   reference[0].get_k_cache().flatten(0, 2).slice(0, 0, 2)));
+  EXPECT_TRUE(torch::allclose(output, expected, 0.02, 0.02));
+
+  // Flat DSpark verify is regrouped into contiguous request chunks before
+  // attention. Replay must refresh the chunk's positions and host KV lengths,
+  // including a rejection that resumes inside the previous chunk.
+  auto graph_caches = make_cache();
+  auto eager_caches = make_cache();
+  run(graph_caches, 0, 1);
+  run(eager_caches, 0, 1);
+  ModelInputParams input;
+  input.enable_graph = true;
+  input.meta.actual_num_sequences = 1;
+  input.meta.num_sequences = 1;
+  input.meta.kv_max_seq_len = 7;
+  input.attention.host.q_seq_lens = {0, 6};
+  input.attention.host.kv_seq_lens = {0, 7};
+  Csa2Context shared;
+  shared.selected_kv = torch::empty(
+      {6 * (args.window_size() + args.index_topk()), 1, 1, args.head_dim()},
+      options);
+  shared.selected_lengths = torch::empty({6}, options.dtype(torch::kInt32));
+  shared.topk.emplace_back(torch::empty({6, 0}, options.dtype(torch::kInt64)));
+  shared.candidates.resize(1);
+  auto table = torch::tensor({0, 1}, options.dtype(torch::kInt32)).view({1, 2});
+  shared.block_tables = {table, table};
+  auto graph_hidden = hidden.slice(0, 1, 7).clone();
+  auto positions = torch::arange(1, 7, options.dtype(torch::kInt64));
+  auto graph_forward = [&]() {
+    return attention->forward(
+        graph_hidden, positions, rope, graph_caches, input, shared);
+  };
+  // Compile lazy attention kernels before capture; cache writes are confined
+  // to the callback, which PiecewiseGraph records without executing.
+  graph_forward();
+  kernel::mlu::PiecewiseGraph graph(input.meta.kv_max_seq_len);
+  input.graph.eager_context = &graph;
+  torch::Tensor graph_output;
+  torch_mlu::synchronize();
+  {
+    torch_mlu::mlu::MLUStreamGuard stream(
+        torch_mlu::getStreamFromPool(false, 0));
+    graph.capture_begin(torch_mlu::graph_pool_handle());
+    graph_output = graph_forward();
+    graph.capture_end();
+  }
+  torch_mlu::synchronize();
+  ASSERT_GT(graph.num_graphs(), 0);
+  ASSERT_EQ(graph.num_eager_segments(), 1);
+  for (int32_t begin : {1, 3, 7}) {
+    graph_hidden.copy_(hidden.slice(0, begin, begin + 6));
+    positions.copy_(torch::arange(begin, begin + 6, positions.options()));
+    input.meta.kv_max_seq_len = begin + 6;
+    input.attention.host.kv_seq_lens = {0, begin + 6};
+    auto eager_output = run(eager_caches, begin, 6);
+    graph.replay();
+    torch_mlu::synchronize();
+    EXPECT_TRUE(torch::allclose(graph_output, eager_output, 0.02, 0.02));
+    EXPECT_TRUE(torch::equal(graph_caches[0].get_swa_cache(),
+                             eager_caches[0].get_swa_cache()));
+    EXPECT_TRUE(torch::equal(graph_caches[0].get_k_cache(),
+                             eager_caches[0].get_k_cache()));
+    EXPECT_TRUE(torch::equal(graph_caches[0].get_index_cache(),
+                             eager_caches[0].get_index_cache()));
+  }
+}
+
 TEST(DeepseekV41GraphTest, HashReplayUpdatesTokensHistoryAndPadding) {
   const torch::Device device(torch::kPrivateUse1, 0);
   const torch::DeviceGuard guard(device);
@@ -212,6 +369,41 @@ TEST(DeepseekV41GraphTest, HashReplayUpdatesTokensHistoryAndPadding) {
   EXPECT_TRUE(torch::equal(output[0].cpu(), expected[0]));
   EXPECT_TRUE(torch::equal(output[1].cpu(),
                            torch::tensor({0, 11, 24, 41}, torch::kInt64)));
+
+  // Verify blocks are grouped by request: later rows read earlier tokens in
+  // the same block, and only the first rows use the request's lookback.
+  auto grouped = engram->create_hash_state(3, /*query_width=*/3);
+  auto reference = engram->create_hash_state(3);
+  auto block = torch::tensor({2, 3, 1}, tokens.options());
+  input.meta.actual_num_sequences = 1;
+  input.embedding.engram_lookback_token_ids = {4, 5};
+  grouped->prepare(input);
+  input.meta.actual_num_sequences = 3;
+  input.embedding.engram_lookback_token_ids = {4, 5, 2, 4, 3, 2};
+  reference->prepare(input);
+  auto grouped_output = grouped->forward(block);
+  auto reference_output = reference->forward(block);
+  torch_mlu::synchronize();
+  EXPECT_TRUE(torch::equal(grouped_output, reference_output));
+  torch_mlu::MLUGraph verify_graph;
+  {
+    torch_mlu::mlu::MLUStreamGuard stream(
+        torch_mlu::getStreamFromPool(false, 0));
+    verify_graph.capture_begin();
+    grouped_output = grouped->forward(block);
+    verify_graph.capture_end();
+  }
+  block.copy_(torch::tensor({3, 2, 1}, block.options()));
+  input.meta.actual_num_sequences = 1;
+  input.embedding.engram_lookback_token_ids = {6, 7};
+  grouped->prepare(input);
+  input.meta.actual_num_sequences = 3;
+  input.embedding.engram_lookback_token_ids = {6, 7, 3, 6, 2, 3};
+  reference->prepare(input);
+  reference_output = reference->forward(block);
+  verify_graph.replay();
+  torch_mlu::synchronize();
+  EXPECT_TRUE(torch::equal(grouped_output, reference_output));
 }
 
 class DeepseekV41PagedIndexerTest : public ::testing::TestWithParam<int64_t> {};

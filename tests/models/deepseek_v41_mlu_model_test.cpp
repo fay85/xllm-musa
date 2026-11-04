@@ -16,17 +16,23 @@ limitations under the License.
 #include <gtest/gtest.h>
 #include <torch/torch.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <memory>
+#include <numeric>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
 
+#include "core/framework/config/model_config.h"
 #include "core/framework/model_loader.h"
 #include "core/layers/common/attention_metadata.h"
+#include "core/runtime/mlu_graph_executor_impl.h"
+#include "core/runtime/options.h"
 #include "models/llm/mlu/deepseek_v41.h"
 #include "tests/core/layers/mlu/tests_utils.h"
 
@@ -122,45 +128,53 @@ class DeepseekV41MluModelTest : public ::testing::Test {
 
   Weights make_weights() const {
     const auto options = torch::TensorOptions().dtype(torch::kBFloat16);
+    const int64_t hidden = args_.hidden_size();
+    const int64_t hc = args_.hc_mult();
+    const int64_t hc_mixes = hc * hc + 2 * hc;
     Weights weights{
-        {"embed.weight", torch::full({4, 128}, 0.25, options)},
-        {"norm.weight", torch::ones({128}, options)},
-        {"layers.0.attn.wq_a.weight", torch::zeros({128, 128}, options)},
+        {"embed.weight", torch::full({4, hidden}, 0.25, options)},
+        {"norm.weight", torch::ones({hidden}, options)},
+        {"layers.0.attn.wq_a.weight", torch::zeros({128, hidden}, options)},
         {"layers.0.attn.wq_b.weight", torch::zeros({512, 128}, options)},
-        {"layers.0.attn.wkv.weight", torch::zeros({512, 128}, options)},
+        {"layers.0.attn.wkv.weight", torch::zeros({512, hidden}, options)},
         {"layers.0.attn.q_norm.weight", torch::ones({128}, options)},
         {"layers.0.attn.kv_norm.weight", torch::ones({512}, options)},
         {"layers.0.attn.wo_a.weight", torch::zeros({1, 128, 512}, options)},
-        {"layers.0.attn.wo_b.weight", torch::zeros({128, 128}, options)},
+        {"layers.0.attn.wo_b.weight", torch::zeros({hidden, 128}, options)},
         {"layers.0.attn.attn_sink", torch::zeros({1}, torch::kFloat32)},
-        {"layers.0.attn_norm.weight", torch::ones({128}, options)},
-        {"layers.0.ffn_norm.weight", torch::ones({128}, options)},
-        {"layers.0.ffn.gate.weight", torch::zeros({2, 128}, options)},
+        {"layers.0.attn_norm.weight", torch::ones({hidden}, options)},
+        {"layers.0.ffn_norm.weight", torch::ones({hidden}, options)},
+        {"layers.0.ffn.gate.weight", torch::zeros({2, hidden}, options)},
     };
     for (const std::string prefix :
          {"layers.0.hc_attn_pre.", "layers.0.hc_ffn_pre."}) {
-      weights.emplace(prefix + "hc_fn", torch::zeros({8, 256}, options));
-      weights.emplace(prefix + "hc_base", torch::zeros({8}, torch::kFloat32));
+      weights.emplace(prefix + "hc_fn",
+                      torch::zeros({hc_mixes, hc * hidden}, options));
+      weights.emplace(prefix + "hc_base",
+                      torch::zeros({hc_mixes}, torch::kFloat32));
       weights.emplace(prefix + "hc_scale", torch::ones({3}, torch::kFloat32));
     }
     for (int32_t expert = 0; expert < 2; ++expert) {
       const std::string prefix =
           "layers.0.ffn.experts." + std::to_string(expert) + ".";
       for (const std::string projection : {"w1", "w2", "w3"}) {
-        weights.emplace(prefix + projection + ".weight",
-                        torch::zeros({128, 128}, options));
+        weights.emplace(
+            prefix + projection + ".weight",
+            torch::zeros(projection == "w2" ? std::vector<int64_t>{hidden, 128}
+                                            : std::vector<int64_t>{128, hidden},
+                         options));
       }
     }
     const int32_t ratio = args_.compress_ratios().front();
     if (ratio > 0) {
       weights.emplace("layers.0.attn.compressor.wkv.weight",
-                      torch::zeros({512, 128}, options));
+                      torch::zeros({512, hidden}, options));
       weights.emplace("layers.0.attn.compressor.norm.weight",
                       torch::ones({512}, options));
       weights.emplace("layers.0.attn.indexer.wq_b.weight",
                       torch::zeros({128, 128}, options));
       weights.emplace("layers.0.attn.indexer.weights_proj.weight",
-                      torch::zeros({1, 128}, options));
+                      torch::zeros({1, hidden}, options));
       weights.emplace("layers.0.attn.indexer.wk.weight",
                       torch::zeros({128, 512}, options));
       weights.emplace("layers.0.attn.indexer.k_norm.weight",
@@ -168,7 +182,7 @@ class DeepseekV41MluModelTest : public ::testing::Test {
     }
     if (ratio == 2) {
       weights.emplace("layers.0.attn.compressor.wgate.weight",
-                      torch::zeros({512, 128}, options));
+                      torch::zeros({512, hidden}, options));
     }
     return weights;
   }
@@ -221,6 +235,514 @@ class DeepseekV41MluModelTest : public ::testing::Test {
   ModelArgs args_;
   std::filesystem::path path_;
 };
+
+// Count host model entries without replacing any V4.1 forward/metadata logic.
+class ExecutorV41Model final : public CausalLM {
+ public:
+  ExecutorV41Model(const ModelContext& context,
+                   const StateDict& weights,
+                   const StateDict& hashes)
+      : model_(context), options_(context.get_tensor_options()) {
+    model_->load_state_dict(weights);
+    model_->load_hash_state(hashes);
+    model_->verify_loaded_weights();
+  }
+
+  ModelOutput forward(const torch::Tensor& tokens,
+                      const torch::Tensor& positions,
+                      std::vector<KVCache>& caches,
+                      const ModelInputParams& input) override {
+    ++forward_count_;
+    return model_->forward(tokens, positions, caches, input);
+  }
+  bool requires_graph_forward_metadata() override { return true; }
+  std::unique_ptr<ModelGraphMetadataState> create_graph_forward_metadata_state()
+      override {
+    return std::make_unique<mlu::model::DeepseekV41GraphState>();
+  }
+  void prepare_graph_forward_metadata(ModelGraphMetadataState* state,
+                                      const torch::Tensor& positions,
+                                      ModelInputParams& input) override {
+    model_->prepare_graph_forward_metadata(state, positions, input);
+    graph_state_ = dynamic_cast<mlu::model::DeepseekV41GraphState*>(state);
+  }
+  layer::WordEmbedding get_word_embedding() override {
+    return model_->get_word_embedding();
+  }
+  torch::Tensor logits(const torch::Tensor& hidden,
+                       const torch::Tensor& /*selected*/) override {
+    return hidden;
+  }
+  void load_model(std::unique_ptr<ModelLoader> /*loader*/) override {}
+  torch::Device device() const override { return options_.device(); }
+  const torch::TensorOptions& options() const override { return options_; }
+  void prepare_expert_weight(
+      int32_t /*layer_id*/,
+      const std::vector<int32_t>& /*expert_ids*/) override {}
+  void update_expert_weight(int32_t /*layer_id*/) override {}
+  int32_t forward_count() const { return forward_count_; }
+  const mlu::model::DeepseekV41GraphState* graph_state() const {
+    return graph_state_;
+  }
+
+ private:
+  mlu::model::DeepseekV41Model model_;
+  torch::TensorOptions options_;
+  int32_t forward_count_ = 0;
+  const mlu::model::DeepseekV41GraphState* graph_state_ = nullptr;
+};
+
+// Observe the same public aux_hidden_states tensor that the draft consumes.
+// Layer 0's entering residual is exactly the token embedding, so its expected
+// capture needs neither a duplicate decoder nor a Python/backend comparison.
+class DeepseekV41CaptureTest : public DeepseekV41MluModelTest {
+ protected:
+  void SetUp() override {
+    DeepseekV41MluModelTest::SetUp();
+    saved_engram_config_ = ModelConfig::get_instance().engram_config();
+    ModelConfig::get_instance().engram_config() = R"({"cpu_offload":false})";
+  }
+
+  void TearDown() override {
+    ModelConfig::get_instance().engram_config() = saved_engram_config_;
+    DeepseekV41MluModelTest::TearDown();
+  }
+
+  void expect_entering_residual(bool with_engram, double value_scale) {
+    torch::InferenceMode inference;
+    torch::DeviceGuard guard(options_.device());
+    // MLU kernels require hc_mult=4 and MoE hidden_size >= 256.
+    args_.layers_to_capture({0}).window_size(16).hc_mult(4).hidden_size(256);
+    auto weights = make_weights();
+    weights["embed.weight"] = torch::arange(4 * 256, torch::kFloat32)
+                                  .remainder(31)
+                                  .sub(15)
+                                  .div(16)
+                                  .reshape({4, 256})
+                                  .to(torch::kBFloat16);
+    const StateDict hashes({
+        {"token_map", torch::arange(4, torch::kInt64)},
+        {"multipliers", torch::tensor({{1, 3}}, torch::kInt64)},
+        {"primes", torch::tensor({{7}}, torch::kInt64)},
+        {"offsets", torch::tensor({{0}}, torch::kInt64)},
+    });
+    if (with_engram) {
+      args_.engram_layer_ids({0})
+          .engram_num_embeddings({7})
+          .engram_head_dim(32)
+          .engram_pad_token_id(0);
+      // E4M3 byte 0x38 and E8M0 byte 127 decode to 1. Zero keys make the
+      // gate ~0.5; a signed value vector produces a non-collinear residual
+      // change. All values are deterministic and exactly BF16-representable.
+      weights.emplace("layers.0.engram.embed.weight",
+                      torch::full({7, 32}, 0x38, torch::kUInt8));
+      weights.emplace("layers.0.engram.embed.scale",
+                      torch::full({7, 1}, 127, torch::kUInt8));
+      auto wkv = torch::zeros({1280, 32}, torch::kBFloat16);
+      auto values = torch::arange(256, torch::kFloat32)
+                        .remainder(2)
+                        .mul(2)
+                        .sub(1)
+                        .mul(value_scale / 32);
+      wkv.slice(0, 1024).copy_(values.unsqueeze(1).expand({256, 32}));
+      weights.emplace("layers.0.engram.wkv.weight", wkv);
+      weights.emplace("layers.0.engram.q_weight",
+                      torch::ones({4, 256}, torch::kBFloat16));
+      weights.emplace("layers.0.engram.k_weight",
+                      torch::ones({4, 256}, torch::kBFloat16));
+    }
+    const auto context = make_context();
+    mlu::model::DeepseekV41Model model(context);
+    const StateDict state(weights);
+    model->load_state_dict(state);
+    model->load_hash_state(hashes);
+    model->verify_loaded_weights();
+
+    const auto host_tokens = torch::tensor({0, 2}, torch::kInt64);
+    const auto tokens = host_tokens.to(options_.device());
+    const auto positions = torch::arange(2, tokens.options());
+    const auto expected = weights.at("embed.weight")
+                              .index_select(0, host_tokens)
+                              .to(torch::kFloat32);
+    ModelInputParams input;
+    input.meta.batch_forward_type = BatchForwardType::PREFILL;
+    input.meta.num_sequences = 1;
+    input.meta.actual_num_sequences = 1;
+    input.meta.q_max_seq_len = 2;
+    input.meta.kv_max_seq_len = 2;
+    input.attention.host.q_seq_lens = {0, 2};
+    input.attention.host.kv_seq_lens = {0, 2};
+    input.embedding.engram_lookback_token_ids = {0};
+    input.multi_block_tables = {torch::zeros({1, 1}, torch::kInt32)};
+    DeepSeekV4KVCacheTensors tensors;
+    tensors.swa_cache = torch::zeros({1, 1, 128, 512}, options_);
+    std::vector<KVCache> caches;
+    caches.reserve(1);
+    caches.emplace_back(tensors);
+
+    // This independent Engram call is only diagnostic. The correctness
+    // assertion below always uses the entering embedding, even after a fix.
+    torch::Tensor after_engram = expected;
+    if (with_engram) {
+      layer::DeepseekV41Engram engram(context, /*engram_id=*/0);
+      engram->load_state_dict(state.get_dict_with_prefix("layers.0.engram."));
+      engram->load_hash_state(hashes);
+      auto hidden = expected.to(options_).unsqueeze(1).repeat({1, 4, 1});
+      after_engram = engram->forward(hidden, tokens, input)
+                         .to(torch::kFloat32)
+                         .mean(1)
+                         .cpu();
+      if (value_scale != 0) {
+        ASSERT_GT((after_engram - expected).abs().max().item<float>(), 0.1f)
+            << "Fixture must inject a visible Engram contribution";
+      }
+    }
+    const auto result = model->forward(tokens, positions, caches, input);
+    ASSERT_TRUE(result.aux_hidden_states.defined());
+    const auto actual = result.aux_hidden_states.cpu().to(torch::kFloat32);
+    ASSERT_EQ(actual.sizes(), expected.sizes());
+    ASSERT_TRUE(torch::isfinite(actual).all().item<bool>());
+    const auto diff = actual - expected;
+    const double max_abs = diff.abs().max().item<double>();
+    const double mean_abs = diff.abs().mean().item<double>();
+    const double relative_l2 = (diff.norm() / expected.norm()).item<double>();
+    const double cosine =
+        ((actual * expected).sum() / (actual.norm() * expected.norm()))
+            .item<double>();
+    const double post_engram_max_abs =
+        (actual - after_engram).abs().max().item<double>();
+    RecordProperty("max_abs", std::to_string(max_abs));
+    RecordProperty("mean_abs", std::to_string(mean_abs));
+    RecordProperty("relative_l2", std::to_string(relative_l2));
+    RecordProperty("cosine", std::to_string(cosine));
+    RecordProperty("post_engram_max_abs", std::to_string(post_engram_max_abs));
+    LOG(INFO) << "Capture difference: with_engram=" << with_engram
+              << " value_scale=" << value_scale << " max_abs=" << max_abs
+              << " mean_abs=" << mean_abs << " relative_l2=" << relative_l2
+              << " cosine=" << cosine
+              << " post_engram_max_abs=" << post_engram_max_abs;
+    // No tolerance is needed: capture only averages four identical HC lanes.
+    EXPECT_TRUE(torch::equal(actual, expected))
+        << "DSpark must receive the residual entering layer 0, before Engram. "
+        << "max_abs=" << max_abs << ", relative_l2=" << relative_l2
+        << ", distance to post-Engram features=" << post_engram_max_abs;
+  }
+
+ private:
+  std::string saved_engram_config_;
+};
+
+TEST_F(DeepseekV41CaptureTest, CapturesEnteringResidualWithoutEngram) {
+  expect_entering_residual(/*with_engram=*/false, /*value_scale=*/0);
+}
+
+TEST_F(DeepseekV41CaptureTest, CapturesEnteringResidualWithZeroEngramValue) {
+  expect_entering_residual(/*with_engram=*/true, /*value_scale=*/0);
+}
+
+TEST_F(DeepseekV41CaptureTest, CapturesEnteringResidualBeforeEngramInjection) {
+  expect_entering_residual(/*with_engram=*/true, /*value_scale=*/0.5);
+}
+
+TEST_F(DeepseekV41CaptureTest,
+       DSparkExecutorRegroupsRealModelAndReplaysAfterCandidateRejection) {
+  torch::InferenceMode inference;
+  torch::DeviceGuard guard(options_.device());
+  ModelConfig::get_instance().engram_config() = R"({"cpu_offload":true})";
+  constexpr int32_t kWidth = 6;
+  constexpr int32_t kRequests = 2;
+  args_.dtype("bfloat16")
+      .hidden_size(256)
+      .hc_mult(4)
+      .n_heads(8)
+      .vocab_size(8)
+      .window_size(16)
+      .index_topk(4)
+      .num_speculative_tokens(kWidth - 1)
+      .layers_to_capture({0})
+      .engram_layer_ids({0})
+      .engram_num_embeddings({18})
+      .engram_head_dim(32)
+      .engram_max_ngram_size(3)
+      .engram_compressed_vocab_size(8)
+      .engram_pad_token_id(0);
+  set_cache_role(2);
+  auto weights = make_weights();
+  // Nonzero, nonuniform projections make stale tokens, histories and cache
+  // pages visible. MoE remains zero so attention/cache failures stay isolated.
+  const auto patterned = [](std::vector<int64_t> shape, double scale) {
+    const int64_t elements = std::accumulate(
+        shape.begin(), shape.end(), int64_t{1}, std::multiplies<int64_t>());
+    return (torch::arange(elements, torch::kFloat32).mul(0.17).sin() * scale)
+        .reshape(shape)
+        .to(torch::kBFloat16);
+  };
+  weights["embed.weight"] = patterned({8, 256}, 0.5);
+  weights["layers.0.attn.wq_b.weight"] = patterned({4096, 128}, 0.01);
+  weights["layers.0.attn.wo_a.weight"] = patterned({1, 128, 4096}, 0.01);
+  weights["layers.0.attn.attn_sink"] = torch::zeros({8}, torch::kFloat32);
+  for (const std::string name : {"wq_a",
+                                 "wkv",
+                                 "wo_b",
+                                 "compressor.wkv",
+                                 "compressor.wgate",
+                                 "indexer.wq_b",
+                                 "indexer.weights_proj",
+                                 "indexer.wk"}) {
+    auto& weight = weights.at("layers.0.attn." + name + ".weight");
+    weight = patterned(weight.sizes().vec(), 0.02);
+  }
+  weights.emplace(
+      "layers.0.engram.embed.weight",
+      torch::arange(18).add(0x30).unsqueeze(1).expand({18, 32}).contiguous().to(
+          torch::kUInt8));
+  weights.emplace("layers.0.engram.embed.scale",
+                  torch::full({18, 1}, 127, torch::kUInt8));
+  // Zero keys fix the gate near 0.5. Distinct signed value directions for
+  // the two hash columns make a history-only change visible after final norm.
+  auto engram_wkv = torch::zeros({1280, 64}, torch::kBFloat16);
+  auto value_rows = engram_wkv.slice(0, 1024);
+  auto channels = torch::arange(256, torch::kFloat32);
+  value_rows.slice(1, 0, 32).copy_(
+      channels.remainder(2).mul(2).sub(1).div(32).unsqueeze(1));
+  value_rows.slice(1, 32, 64).copy_(channels.remainder(4)
+                                        .ge(2)
+                                        .to(torch::kFloat32)
+                                        .mul(2)
+                                        .sub(1)
+                                        .div(32)
+                                        .unsqueeze(1));
+  weights.emplace("layers.0.engram.wkv.weight", engram_wkv);
+  weights.emplace("layers.0.engram.q_weight",
+                  torch::ones({4, 256}, torch::kBFloat16));
+  weights.emplace("layers.0.engram.k_weight",
+                  torch::ones({4, 256}, torch::kBFloat16));
+  const StateDict hashes({
+      {"token_map", torch::arange(8, torch::kInt64)},
+      {"multipliers", torch::tensor({{1, 3, 5}}, torch::kInt64)},
+      {"primes", torch::tensor({{7, 11}}, torch::kInt64)},
+      {"offsets", torch::tensor({{0, 7}}, torch::kInt64)},
+  });
+  const auto context = make_context();
+  ExecutorV41Model graph_model(context, StateDict(weights), hashes);
+  ExecutorV41Model eager_model(context, StateDict(weights), hashes);
+  runtime::Options executor_options;
+  executor_options.block_size(128)
+      .dp_size(1)
+      .num_decoding_tokens(kWidth)
+      .num_speculative_tokens(kWidth - 1)
+      .enable_speculative_decode(true)
+      .speculative_algorithm("DSpark")
+      .enable_graph_aux_hidden_states(true);
+  mlu::MluGraphExecutorImpl executor(
+      &graph_model, args_, options_.device(), executor_options);
+  const auto ints = options_.dtype(torch::kInt32);
+  const auto longs = options_.dtype(torch::kInt64);
+  const auto make_cache = [&]() {
+    DeepSeekV4KVCacheTensors tensors;
+    tensors.swa_cache = torch::zeros({4, 128, 1, 512}, options_);
+    tensors.key_cache = torch::zeros_like(tensors.swa_cache);
+    tensors.index_cache = torch::zeros({4, 128, 1, 128}, options_);
+    tensors.compress_kv_state =
+        torch::zeros({4, 32, 512}, options_.dtype(torch::kFloat32));
+    tensors.compress_score_state = torch::zeros_like(tensors.compress_kv_state);
+    std::vector<KVCache> caches;
+    caches.reserve(1);
+    caches.emplace_back(tensors);
+    return caches;
+  };
+  const auto cache_tensors = [](const std::vector<KVCache>& caches) {
+    return std::vector<torch::Tensor>{caches[0].get_swa_cache(),
+                                      caches[0].get_k_cache(),
+                                      caches[0].get_index_cache(),
+                                      caches[0].get_compress_kv_state(),
+                                      caches[0].get_compress_score_state()};
+  };
+  const auto copy_cache = [&](std::vector<KVCache>& to,
+                              const std::vector<KVCache>& from) {
+    auto destination = cache_tensors(to);
+    const auto source = cache_tensors(from);
+    for (size_t index = 0; index < source.size(); ++index) {
+      destination[index].copy_(source[index]);
+    }
+  };
+  const auto expect_cache = [&](const std::vector<KVCache>& actual,
+                                const std::vector<KVCache>& expected) {
+    const auto left = cache_tensors(actual);
+    const auto right = cache_tensors(expected);
+    for (size_t index = 0; index < left.size(); ++index) {
+      EXPECT_TRUE(torch::allclose(left[index], right[index], 0.02, 0.02))
+          << "Cache tensor " << index;
+    }
+  };
+  // Eager input keeps real request chunks; it never calls group_verify_input.
+  const auto make_input = [&](const std::vector<int32_t>& lengths,
+                              const std::vector<int32_t>& begins,
+                              const std::vector<int32_t>& blocks,
+                              std::vector<int32_t> history) {
+    ModelInputParams input;
+    input.meta.batch_forward_type = BatchForwardType::DECODE;
+    input.meta.num_sequences = kRequests;
+    input.meta.actual_num_sequences = kRequests;
+    input.meta.q_max_seq_len =
+        *std::max_element(lengths.begin(), lengths.end());
+    input.attention.host.q_seq_lens = {0};
+    input.attention.host.kv_seq_lens = {0};
+    input.attention.host.q_seq_lens.reserve(kRequests + 1);
+    input.attention.host.kv_seq_lens.reserve(kRequests + 1);
+    for (int32_t seq = 0; seq < kRequests; ++seq) {
+      input.attention.host.q_seq_lens.emplace_back(
+          input.attention.host.q_seq_lens.back() + lengths[seq]);
+      const int32_t end = begins[seq] + lengths[seq];
+      input.meta.kv_max_seq_len = std::max(input.meta.kv_max_seq_len, end);
+      input.attention.host.kv_seq_lens.emplace_back(
+          input.attention.host.kv_seq_lens.back() + end);
+    }
+    input.attention.host.q_cu_seq_lens = input.attention.host.q_seq_lens;
+    input.embedding.engram_lookback_token_ids = std::move(history);
+    auto table = torch::tensor(blocks, ints).view({kRequests, 1});
+    input.multi_block_tables = {table, table.clone()};
+    return input;
+  };
+  const auto make_positions = [&](const std::vector<int32_t>& begins,
+                                  int32_t count) {
+    return torch::cat({torch::arange(begins[0], begins[0] + count, longs),
+                       torch::arange(begins[1], begins[1] + count, longs)});
+  };
+  const auto flatten_verify = [&](const ModelInputParams& grouped,
+                                  const std::vector<int32_t>& begins) {
+    ModelInputParams flat = grouped;
+    flat.meta.num_sequences = kRequests * kWidth;
+    flat.meta.actual_num_sequences = kRequests * kWidth;
+    flat.meta.spec_verify_width = kWidth;
+    flat.meta.q_max_seq_len = 1;
+    // Metadata-owning models use one planner state ID per logical request.
+    flat.embedding.linear_state_ids = {1, 2};
+    flat.embedding.linear_state_indices =
+        torch::tensor(flat.embedding.linear_state_ids, ints);
+    flat.attention.host.q_seq_lens = {0};
+    flat.attention.host.kv_seq_lens = {0};
+    flat.attention.host.q_seq_lens.reserve(kRequests * kWidth + 1);
+    flat.attention.host.kv_seq_lens.reserve(kRequests * kWidth + 1);
+    for (int32_t seq = 0; seq < kRequests; ++seq) {
+      for (int32_t row = 0; row < kWidth; ++row) {
+        flat.attention.host.q_seq_lens.emplace_back(
+            flat.attention.host.q_seq_lens.back() + 1);
+        flat.attention.host.kv_seq_lens.emplace_back(
+            flat.attention.host.kv_seq_lens.back() + begins[seq] + row + 1);
+      }
+    }
+    flat.attention.host.q_cu_seq_lens = flat.attention.host.q_seq_lens;
+    flat.attention.device.q_seq_lens =
+        torch::tensor(flat.attention.host.q_seq_lens, ints);
+    flat.attention.device.kv_seq_lens =
+        torch::tensor(flat.attention.host.kv_seq_lens, ints);
+    for (auto& table : flat.multi_block_tables) {
+      table = table.repeat_interleave(kWidth, 0);
+    }
+    flat.attention.device.block_tables = flat.multi_block_tables[0];
+    flat.attention.device.new_cache_slots =
+        flat.multi_block_tables[0].flatten() * 128 +
+        make_positions(begins, kWidth).to(torch::kInt32);
+    return flat;
+  };
+  auto graph_cache = make_cache();
+  auto eager_cache = make_cache();
+  auto prefix_cache = make_cache();
+  int32_t captured_forward_count = 0;
+  torch::Tensor previous_output;
+  torch::Tensor previous_expected;
+  std::vector<int32_t> blocks;
+  std::vector<int32_t> history;
+  torch::Tensor last_tokens;
+  const std::vector<int32_t> begins{1, 3};
+  for (int32_t round = 0; round < 3; ++round) {
+    SCOPED_TRACE(round);
+    blocks = {round, 3 - round};
+    for (auto& tensor : cache_tensors(prefix_cache)) {
+      tensor.zero_();
+    }
+    auto prefix_input = make_input({1, 3}, {0, 0}, blocks, {-1, -1, -1, -1});
+    eager_model.forward(torch::tensor({1, 2, 3, 4}, longs),
+                        torch::tensor({0, 0, 1, 2}, longs),
+                        prefix_cache,
+                        prefix_input);
+    copy_cache(graph_cache, prefix_cache);
+    copy_cache(eager_cache, prefix_cache);
+    history = {round + 1, 7 - round, 3 + round, 1 + round};
+    auto grouped = make_input({kWidth, kWidth}, begins, blocks, history);
+    auto flat = flatten_verify(grouped, begins);
+    // The first replay changes history and physical pages only; the second
+    // also changes tokens. Both must be visible at the comparison tolerance.
+    const int32_t token_shift = round == 1 ? 0 : round;
+    last_tokens = (torch::arange(kRequests * kWidth, longs) + token_shift)
+                      .remainder(7)
+                      .add(1);
+    const auto positions = make_positions(begins, kWidth);
+    const auto expected =
+        eager_model.forward(last_tokens, positions, eager_cache, grouped);
+    const auto actual = executor.run(last_tokens, positions, graph_cache, flat);
+    EXPECT_TRUE(torch::allclose(
+        actual.hidden_states, expected.hidden_states, 0.02, 0.02));
+    EXPECT_TRUE(
+        torch::equal(actual.aux_hidden_states, expected.aux_hidden_states));
+    expect_cache(graph_cache, eager_cache);
+    ASSERT_NE(graph_model.graph_state(), nullptr);
+    const auto& state = *graph_model.graph_state();
+    ASSERT_TRUE(state.verify_input.has_value());
+    EXPECT_EQ(state.verify_input->meta.num_sequences, kRequests);
+    EXPECT_EQ(state.verify_input->attention.host.q_seq_lens,
+              (std::vector<int32_t>{0, kWidth, 2 * kWidth}));
+    ASSERT_EQ(state.hashes.size(), 1);
+    ASSERT_NE(state.hashes[0], nullptr);
+    // This also observes query_width=6: independent decode hashes would have
+    // needed 24 history IDs, while the real grouped HashState accepts four.
+    EXPECT_EQ(state.verify_input->embedding.engram_lookback_token_ids, history);
+    if (round == 0) {
+      captured_forward_count = graph_model.forward_count();
+      ASSERT_GT(captured_forward_count, 0);
+    } else {
+      EXPECT_EQ(graph_model.forward_count(), captured_forward_count)
+          << "Expected graph replay, not eager execution or recapture";
+      EXPECT_FALSE(
+          torch::allclose(actual.hidden_states, previous_output, 0.02, 0.02));
+      EXPECT_FALSE(torch::allclose(
+          expected.hidden_states, previous_expected, 0.02, 0.02))
+          << "Fixture must expose stale history at the verification tolerance";
+    }
+    previous_output = actual.hidden_states.clone();
+    previous_expected = expected.hidden_states.clone();
+  }
+  // Keep only the first two verified tokens in an independent reference.
+  // The graph cache still contains all rejected proposals, including the raw
+  // compressor rows that must survive an interior rejection at an odd boundary.
+  copy_cache(eager_cache, prefix_cache);
+  const auto accepted = last_tokens.view({kRequests, kWidth})
+                            .slice(1, 0, 2)
+                            .contiguous()
+                            .flatten();
+  auto accepted_input = make_input({2, 2}, begins, blocks, history);
+  eager_model.forward(
+      accepted, make_positions(begins, 2), eager_cache, accepted_input);
+  const std::vector<int32_t> resumed_begins{3, 5};
+  history = {accepted[1].item<int32_t>(),
+             accepted[0].item<int32_t>(),
+             accepted[3].item<int32_t>(),
+             accepted[2].item<int32_t>()};
+  auto resumed = make_input({kWidth, kWidth}, resumed_begins, blocks, history);
+  auto flat = flatten_verify(resumed, resumed_begins);
+  auto tokens = (last_tokens + 2).remainder(7).add(1);
+  const auto positions = make_positions(resumed_begins, kWidth);
+  const auto expected =
+      eager_model.forward(tokens, positions, eager_cache, resumed);
+  const auto actual = executor.run(tokens, positions, graph_cache, flat);
+  EXPECT_EQ(graph_model.forward_count(), captured_forward_count);
+  EXPECT_TRUE(torch::allclose(
+      actual.hidden_states, expected.hidden_states, 0.02, 0.02));
+  EXPECT_TRUE(
+      torch::equal(actual.aux_hidden_states, expected.aux_hidden_states));
+  expect_cache(graph_cache, eager_cache);
+}
 
 TEST_F(DeepseekV41MluModelTest, EmbeddingModeLoadsWithoutLanguageModelHead) {
   args_.embedding_mode(true);
@@ -305,6 +827,46 @@ TEST_F(DeepseekV41MluModelTest,
     EXPECT_TRUE(torch::equal(model->logits(hidden, torch::Tensor()).cpu(),
                              torch::full({2, 4}, 64, torch::kBFloat16)));
   }
+}
+
+TEST_F(DeepseekV41MluModelTest,
+       VerifyMetadataGroupsRequestsAndReusesGatherStorage) {
+  args_.window_size(16).index_topk(4);
+  set_cache_role(2);
+  mlu::model::DeepseekV41Model model(make_context());
+  mlu::model::DeepseekV41GraphState state;
+  ModelInputParams input;
+  input.meta.batch_forward_type = BatchForwardType::DECODE;
+  input.meta.num_sequences = 6;
+  input.meta.actual_num_sequences = 3;
+  input.meta.spec_verify_width = 3;
+  input.attention.host.q_seq_lens = {0, 1, 2, 3, 4, 5, 6};
+  input.attention.host.kv_seq_lens = {0, 4, 9, 15, 16, 18, 21};
+  input.multi_block_tables = {
+      torch::arange(12, options_.dtype(torch::kInt32)).view({6, 2})};
+  auto positions = torch::arange(6, options_.dtype(torch::kInt64));
+
+  model->prepare_graph_forward_metadata(&state, positions, input);
+  ASSERT_TRUE(state.verify_input.has_value());
+  EXPECT_EQ(state.verify_input->meta.num_sequences, 2);
+  EXPECT_EQ(state.verify_input->meta.actual_num_sequences, 1);
+  EXPECT_EQ(state.verify_input->attention.host.q_seq_lens,
+            (std::vector<int32_t>{0, 3, 6}));
+  EXPECT_EQ(state.verify_input->attention.host.kv_seq_lens,
+            (std::vector<int32_t>{0, 6, 9}));
+  EXPECT_EQ(state.shared.topk.size(), 2);
+  EXPECT_EQ(state.shared.candidates.size(), 2);
+  EXPECT_EQ(state.shared.selected_lengths.numel(), 6);
+  EXPECT_EQ(state.shared.selected_kv.size(0), 6 * (16 + 4));
+  EXPECT_TRUE(torch::equal(state.shared.block_tables[0],
+                           input.multi_block_tables[0].slice(0, 0, 6, 3)));
+
+  const void* gather_address = state.shared.selected_kv.data_ptr();
+  input.attention.host.kv_seq_lens = {0, 6, 13, 21, 22, 24, 27};
+  model->prepare_graph_forward_metadata(&state, positions, input);
+  EXPECT_EQ(state.shared.selected_kv.data_ptr(), gather_address);
+  EXPECT_EQ(state.verify_input->attention.host.kv_seq_lens,
+            (std::vector<int32_t>{0, 8, 11}));
 }
 
 TEST_F(DeepseekV41MluModelTest,

@@ -17,6 +17,8 @@ limitations under the License.
 
 #include <cstdint>
 
+#include "core/framework/state_dict/state_dict.h"
+
 namespace xllm::dspark_detail {
 
 enum class VocabularyWeightSource : uint8_t {
@@ -56,5 +58,22 @@ class VocabularyWeightSelector final {
  private:
   VocabularyWeightSource source_ = VocabularyWeightSource::NONE;
 };
+
+template <typename Module>
+void load_vocab_weight(VocabularyWeightSelector& selector,
+                       const StateDict& dedicated_state_dict,
+                       const StateDict& fallback_state_dict,
+                       Module& module) {
+  if (dedicated_state_dict.size() > 0 &&
+      selector.should_load(/*dedicated=*/true)) {
+    module->load_state_dict(dedicated_state_dict);
+    selector.mark_loaded(/*dedicated=*/true);
+  }
+  if (fallback_state_dict.size() > 0 &&
+      selector.should_load(/*dedicated=*/false)) {
+    module->load_state_dict(fallback_state_dict);
+    selector.mark_loaded(/*dedicated=*/false);
+  }
+}
 
 }  // namespace xllm::dspark_detail

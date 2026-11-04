@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "core/common/global_flags.h"
 #include "core/framework/config/config_utils.h"
+#include "core/platform/platform.h"
 
 DEFINE_string(draft_model, "", "draft hf model path to the model file.");
 
@@ -161,6 +162,11 @@ void SpeculativeConfig::initialize() {
 }
 
 void SpeculativeConfig::validate() const {
+  if (Platform::is_mlu()) {
+    CHECK(!enable_adaptive_speculative_decode())
+        << "Adaptive speculative decoding is currently disabled on MLU. "
+        << "Set enable_adaptive_speculative_decode=false.";
+  }
   const DraftSamplingMode mode =
       parse_draft_sampling_mode(draft_sampling_mode());
   const std::string& algorithm = speculative_algorithm();

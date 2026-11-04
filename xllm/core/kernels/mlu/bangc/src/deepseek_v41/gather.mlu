@@ -19,7 +19,9 @@ limitations under the License.
 #include "kernels/mlu/bangc/src/deepseek_v41/launch.h"
 namespace {
 using xllm::kernel::mlu::bangc::kDeepseekV41MluKVBlockSize;
+constexpr int32_t kIndexTileSize = 128;
 __nram__ int16_t row[512];
+__nram__ int64_t index_tile[kIndexTileSize];
 __mlu_global__ void gather(int16_t* swa,
                            const int16_t* compressed,
                            const int16_t* current,
@@ -33,31 +35,49 @@ __mlu_global__ void gather(int16_t* swa,
                            int16_t* output,
                            int32_t* length) {
   const int32_t win = position + 1 < window ? position + 1 : window;
-  if (taskId == 0) {
-    *length = win + count;
-  }
-  for (int32_t col = taskId; col < win + count; col += taskDim) {
-    const bool is_window = col < win;
-    const int64_t logical =
-        is_window ? position - win + 1 + col : topk[col - win];
+  for (int32_t col = taskId; col < win; col += taskDim) {
+    const int64_t logical = position - win + 1 + col;
     const int64_t physical =
-        is_window ? static_cast<int64_t>(
-                        swa_table[(logical / kDeepseekV41MluKVBlockSize) %
-                                  swa_columns]) *
-                            kDeepseekV41MluKVBlockSize +
-                        logical % kDeepseekV41MluKVBlockSize
-                  : static_cast<int64_t>(
-                        comp_table[logical / kDeepseekV41MluKVBlockSize]) *
-                            kDeepseekV41MluKVBlockSize +
-                        logical % kDeepseekV41MluKVBlockSize;
+        static_cast<int64_t>(
+            swa_table[(logical / kDeepseekV41MluKVBlockSize) % swa_columns]) *
+            kDeepseekV41MluKVBlockSize +
+        logical % kDeepseekV41MluKVBlockSize;
     const int16_t* source =
-        is_window && logical == position
-            ? current
-            : (is_window ? swa : compressed) + physical * 512;
+        logical == position ? current : swa + physical * 512;
     __memcpy(row, source, 512 * sizeof(int16_t), GDRAM2NRAM);
     __memcpy(output + col * 512, row, 512 * sizeof(int16_t), NRAM2GDRAM);
   }
+
+  // Block tasks cannot share a prefix scan. Scan the small index stream once
+  // per task and distribute the compacted rows by their stable output rank.
+  // Bounded tiles support arbitrary top-k widths without scratch or barriers.
+  int32_t valid_count = 0;
+  for (int64_t begin = 0; begin < count; begin += kIndexTileSize) {
+    const int32_t size = count - begin < kIndexTileSize
+                             ? static_cast<int32_t>(count - begin)
+                             : kIndexTileSize;
+    __memcpy(index_tile, topk + begin, size * sizeof(int64_t), GDRAM2NRAM);
+    for (int32_t index = 0; index < size; ++index) {
+      const int64_t logical = index_tile[index];
+      if (logical < 0) {
+        continue;
+      }
+      const int32_t col = win + valid_count++;
+      if (col % taskDim != taskId) {
+        continue;
+      }
+      const int64_t physical =
+          static_cast<int64_t>(
+              comp_table[logical / kDeepseekV41MluKVBlockSize]) *
+              kDeepseekV41MluKVBlockSize +
+          logical % kDeepseekV41MluKVBlockSize;
+      __memcpy(
+          row, compressed + physical * 512, 512 * sizeof(int16_t), GDRAM2NRAM);
+      __memcpy(output + col * 512, row, 512 * sizeof(int16_t), NRAM2GDRAM);
+    }
+  }
   if (taskId == 0) {
+    *length = win + valid_count;
     const int64_t target =
         static_cast<int64_t>(
             swa_table[(position / kDeepseekV41MluKVBlockSize) % swa_columns]) *

@@ -104,8 +104,9 @@ void DeepseekV41DecoderLayerImpl::load_state_dict(const StateDict& state) {
 }
 
 std::unique_ptr<DeepseekV41EngramImpl::HashState>
-DeepseekV41DecoderLayerImpl::create_hash_state(int64_t rows) const {
-  return engram_ ? engram_->create_hash_state(rows) : nullptr;
+DeepseekV41DecoderLayerImpl::create_hash_state(int64_t rows,
+                                               int64_t query_width) const {
+  return engram_ ? engram_->create_hash_state(rows, query_width) : nullptr;
 }
 
 void DeepseekV41DecoderLayerImpl::load_hash_state(const StateDict& state) {
@@ -136,18 +137,38 @@ torch::Tensor DeepseekV41DecoderLayerImpl::forward(
     std::vector<KVCache>& caches,
     const ModelInputParams& input,
     Csa2Context& shared,
-    DeepseekV41EngramImpl::HashState* hash_state) {
+    DeepseekV41EngramImpl::HashState* hash_state,
+    const mlu_v4_cp::DeepseekV4CpContext* cp_context,
+    torch::Tensor* attention_input) {
+  // DSpark captures the layer input before Engram injection.
+  if (attention_input != nullptr) {
+    *attention_input =
+        hidden.to(torch::kFloat32).mean(1).to(hidden.scalar_type());
+  }
   if (engram_) {
-    hidden = engram_->forward(hidden, tokens, input, hash_state);
+    hidden = engram_->forward(
+        hidden,
+        tokens,
+        input,
+        hash_state,
+        cp_context ? cp_context->local_row_indices : torch::Tensor());
   }
   auto attn = attn_hc_->forward(hidden, std::nullopt, pre_mix);
   torch::Tensor x = std::get<0>(attn_norm_(attn.output, std::nullopt));
-  x = attention_->forward(x, positions, rope, caches, input, shared);
+  x = attention_->forward(
+      x, positions, rope, caches, input, shared, cp_context);
   hidden = std::get<0>(post_->forward(x, hidden, attn.post, attn.comb));
   auto ffn = ffn_hc_->forward(hidden, std::nullopt, attn.pre);
   x = std::get<0>(ffn_norm_(ffn.output, std::nullopt));
-  const auto route = moe_->prep_route(x);
-  x = moe_->forward_selected(x, route.reduce_weight, route.expert_id, input);
+  if (cp_context != nullptr) {
+    x = moe_->forward_cp(x,
+                         std::nullopt,
+                         cp_context->geometry.tokens_per_rank,
+                         cp_context->cp_group);
+  } else {
+    const auto route = moe_->prep_route(x);
+    x = moe_->forward_selected(x, route.reduce_weight, route.expert_id, input);
+  }
   pre_mix = ffn.pre;
   return std::get<0>(post_->forward(x, hidden, ffn.post, ffn.comb));
 }

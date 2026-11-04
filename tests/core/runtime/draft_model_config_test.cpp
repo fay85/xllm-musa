@@ -100,6 +100,49 @@ TEST(DraftModelConfigDeathTest, RejectsInvalidRuntimeGeometry) {
   }
 }
 
+TEST(DraftModelConfigTest, ConfiguresNativeV41DSparkGeometry) {
+  char path[] = "/tmp/xllm-v41-dspark-config-XXXXXX";
+  ASSERT_NE(mkdtemp(path), nullptr);
+  const std::string model_path(path);
+  {
+    std::ofstream config(model_path + "/config.json");
+    config << R"({"dspark_block_size":5})";
+    ASSERT_TRUE(config.good());
+  }
+  ModelArgs args;
+  args.model_type("deepseek_v41")
+      .n_layers(2)
+      .dspark_num_layers(3)
+      .dspark_n_routed_experts(128)
+      .dspark_num_experts_per_tok(3)
+      .compress_ratios({2, 1, 0, 0, 0})
+      .kv_source_layer_ids({0, 1})
+      .index_source_layer_ids({0})
+      .engram_layer_ids({1})
+      .layers_to_capture({0, 1});
+  runtime::Options options;
+  options.is_draft_engine(true)
+      .speculative_algorithm("DSpark")
+      .model_path(model_path)
+      .num_speculative_tokens(5);
+  configure_block_diffusion_model(args, options);
+  EXPECT_EQ(args.model_type(), "deepseek_v41_dspark");
+  EXPECT_EQ(args.n_layers(), 3);
+  EXPECT_EQ(args.n_routed_experts(), 128);
+  EXPECT_EQ(args.num_experts_per_tok(), 3);
+  EXPECT_EQ(args.n_activated_experts(), 3);
+  EXPECT_EQ(args.compress_ratios(), (std::vector<int32_t>{0, 0, 0}));
+  EXPECT_EQ(args.dspark_block_size(), 5);
+  EXPECT_TRUE(args.requires_eager_execution());
+  EXPECT_TRUE(args.dspark_use_native_sas());
+  EXPECT_TRUE(args.draft_query_uses_decode());
+  EXPECT_TRUE(args.layers_to_capture().empty());
+  EXPECT_TRUE(args.kv_source_layer_ids().empty());
+  EXPECT_TRUE(args.index_source_layer_ids().empty());
+  EXPECT_TRUE(args.engram_layer_ids().empty());
+  std::filesystem::remove_all(model_path);
+}
+
 TEST(DraftModelConfigDeathTest, RejectsUnsupportedDraftAlgorithmsOnMlu) {
   for (const std::string& algorithm : {"DFlash", "DSpark"}) {
     ModelArgs args;

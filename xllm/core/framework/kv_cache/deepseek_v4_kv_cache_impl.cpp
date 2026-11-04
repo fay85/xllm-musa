@@ -605,7 +605,7 @@ DeepSeekV4KVCacheTensors create_dsv4_cache_tensors(
   const int64_t c128_count = pool_counts[2];
 
   DeepSeekV4KVCacheTensors tensors;
-  if (compress_ratio == 1) {
+  if (compress_ratio == 0 || compress_ratio == 1) {
     tensors.swa_cache = allocate_tensor(
         KVCacheTensorRole::WINDOW,
         dsv4_block_shape(swa_count, block_size, n_heads, head_dim),
@@ -748,7 +748,7 @@ std::string dsv4_shape_summary(const DeepSeekV4KVCacheTensors& tensors,
             << ", swa_cache=" << tensor_shape_string(tensors.swa_cache);
     return summary.str();
   }
-  if (compress_ratio == 1) {
+  if (compress_ratio == 0 || compress_ratio == 1) {
     summary << "swa_cache=" << tensor_shape_string(tensors.swa_cache);
   } else if (compress_ratio == 4) {
     summary << "key_cache=" << tensor_shape_string(tensors.key_cache)

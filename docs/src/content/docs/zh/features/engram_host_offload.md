@@ -9,7 +9,7 @@ sidebar:
 MLU 原生 DeepSeek-V4.1 默认将 Engram FP8 表及 scale 保存在 host 内存。未传参数或传入 `{}` 时均启用；可通过服务启动参数显式选择：
 
 ```bash
-# 默认：表在 host，保留原有 TP 行切分
+# 默认：表在 host，保留原有 TP/EP 行切分
 xllm --engram_config='{"cpu_offload":true}'
 
 # 关闭卸载：表常驻 MLU device
@@ -18,7 +18,7 @@ xllm --engram_config='{"cpu_offload":false}'
 
 host 路径复用已有 hash 计算：CPU 收集当前 token 命中的 FP8 行及 scale，经 pinned staging buffer 搬到 MLU，沿用 device 反量化、集合通信和投影。Graph replay 使用流上的 host callback 更新命中行，避免复用旧 token 的查表结果。大表本体无需锁页，仅 staging buffer 锁页。
 
-当前 MLU 不支持 `dp_shared_memory=true`，请求该配置会在初始化时报错。双表在 TP=8 下合计约占每 rank 23.60 GiB host 内存；节点内各 rank 分片合计约 188.83 GiB，另需加载和运行缓冲。仅卸载大表及 scale，投影等小权重仍在 MLU。以下章节介绍 NPU 路径，其默认值和支持的表格式与 MLU 不同。
+当前 MLU 不支持 `dp_shared_memory=true`，请求该配置会在初始化时报错。双表在 EP=8 下合计约占每 rank 23.60 GiB host 内存；节点内各 rank 分片合计约 188.83 GiB，另需加载和运行缓冲。仅卸载大表及 scale，投影等小权重仍在 MLU。以下章节介绍 NPU 路径，其默认值和支持的表格式与 MLU 不同。
 
 ## NPU 概述
 

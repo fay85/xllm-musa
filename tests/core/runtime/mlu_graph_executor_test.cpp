@@ -599,7 +599,7 @@ void check_replays_updated_inputs_and_advances_state_exactly_once() {
       .block_table_token_span(/*value=*/64)
       .num_decoding_tokens(4)
       .dp_size(1)
-      .cp_size(1)
+      .cp_size(4)
       .enable_speculative_decode(true)
       .speculative_algorithm("MTP")
       .is_draft_engine(false);
@@ -677,7 +677,7 @@ void check_dflash2_b16_refreshes_accepted_state_and_aux_at64k() {
       .num_decoding_tokens(4)
       .num_speculative_tokens(3)
       .dp_size(1)
-      .cp_size(1)
+      .cp_size(4)
       .enable_speculative_decode(true)
       .speculative_algorithm("DFlash2")
       .enable_graph_aux_hidden_states(true)

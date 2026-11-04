@@ -618,37 +618,15 @@ Master::Master(const Options& options, EngineType type)
        options_.num_speculative_tokens() > 0)) {
     model_type = util::get_model_type(model_path, options_.backend());
   }
-  // V4.1 speculative decoding is implemented
-  // only for the python-path DSpark draft; every other V4.1 speculative setup
-  // is rejected before any engine/worker is built. Prefix-cache support is a
-  // property of the cache groups and is resolved in the block layer
-  // (leaf_participates_in_prefix_cache), not here.
+  // Reject unsupported speculative combinations before creating workers.
   if (util::is_deepseek_v41_model_type(model_type)) {
     const bool v41_speculative_requested =
         options_.num_speculative_tokens() > 0 ||
         !options_.draft_model_path().value_or("").empty();
     if (v41_speculative_requested) {
-      // Timing: ModelConfig is populated from the deployment config
-      // (flags/JSON) before master validation runs and before any
-      // engine/worker is constructed, so the singleton reads here are safe.
-      // Split so a failure names the misconfigured leg: the implementation
-      // first, then the algorithm. The second gate is the shared
-      // is_v41_python_dspark_spec pairing (also consumed by the speculative
-      // engine's defense-in-depth check); with the python leg asserted above
-      // it fails only on the algorithm leg. When both legs are misconfigured
-      // only the first error surfaces on purpose: fixing the reported
-      // implementation leg reruns this validation and then names the
-      // algorithm leg.
-      const std::string model_impl = ModelConfig::get_instance().model_impl();
-      CHECK(ModelConfig::is_python_model_impl(model_impl))
-          << "DeepSeek-V4.1 does not support speculative decoding on the "
-             "native model executor: the grouped KV (C1/C2) is not "
-             "implemented in the native speculative path.";
-      CHECK(SpeculativeConfig::is_v41_python_dspark_spec(
-          model_impl, options_.speculative_algorithm()))
-          << "DeepSeek-V4.1 does not support speculative decoding except "
-             "for the DSpark algorithm: the grouped KV (C1/C2) is not "
-             "implemented in the other speculative paths.";
+      CHECK(SpeculativeConfig::is_dspark_algorithm(
+          options_.speculative_algorithm()))
+          << "DeepSeek-V4.1 speculative decoding requires DSpark.";
     }
   }
   const std::optional<std::string> speculative_error =

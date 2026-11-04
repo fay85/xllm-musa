@@ -40,7 +40,9 @@ DeepseekV41EngramImpl::DeepseekV41EngramImpl(const ModelContext& context,
                                              int32_t engram_id)
     : args_(context.get_model_args()),
       engram_id_(engram_id),
-      tp_group_(context.get_parallel_args().tp_group_),
+      lookup_group_(context.get_parallel_args().cp_size() > 1
+                        ? context.get_parallel_args().moe_ep_group_
+                        : context.get_parallel_args().tp_group_),
       options_(context.get_tensor_options()) {
   CHECK_GT(args_.vocab_size(), 0) << "Engram vocab_size must be positive";
   CHECK_GE(args_.engram_pad_token_id(), 0)
@@ -76,9 +78,9 @@ DeepseekV41EngramImpl::DeepseekV41EngramImpl(const ModelContext& context,
   cpu_offload_ = config.is_boolean() ? config.get<bool>()
                                      : config.value("cpu_offload", true);
   const int64_t rows = args_.engram_num_embeddings().at(engram_id_);
-  table_start_ = rows * tp_group_->rank() / tp_group_->world_size();
-  table_end_ = rows * (tp_group_->rank() + 1) / tp_group_->world_size();
-  LOG(INFO) << "Engram " << engram_id_ << " rank " << tp_group_->rank()
+  table_start_ = rows * lookup_group_->rank() / lookup_group_->world_size();
+  table_end_ = rows * (lookup_group_->rank() + 1) / lookup_group_->world_size();
+  LOG(INFO) << "Engram " << engram_id_ << " rank " << lookup_group_->rank()
             << ": table rows [" << table_start_ << ", " << table_end_
             << ") stored on " << (cpu_offload_ ? "host" : "MLU");
   // Decode raw E4M3 bytes by lookup; no FP8 arithmetic is needed on MLU.
@@ -248,12 +250,16 @@ void DeepseekV41EngramImpl::compute_hashes(const int64_t* tokens,
 }
 
 DeepseekV41EngramImpl::HashState::HashState(const DeepseekV41EngramImpl& owner,
-                                            int64_t rows)
-    : owner_(owner), lengths_(rows, 1) {
+                                            int64_t rows,
+                                            int64_t query_width)
+    : owner_(owner) {
+  CHECK_GT(query_width, 0);
+  CHECK_EQ(rows % query_width, 0);
+  lengths_.assign(rows / query_width, static_cast<int32_t>(query_width));
   const int64_t depth = owner.args_.engram_max_ngram_size() - 1;
   auto host = torch::TensorOptions().dtype(torch::kInt64).pinned_memory(true);
   host_tokens_ = torch::empty({rows}, host);
-  host_history_ = torch::empty({rows, depth}, host);
+  host_history_ = torch::empty({rows / query_width, depth}, host);
   host_hashes_ =
       torch::empty({rows, depth * owner.args_.engram_n_heads()}, host);
   history_ =
@@ -311,14 +317,16 @@ torch::Tensor DeepseekV41EngramImpl::HashState::forward(
 }
 
 std::unique_ptr<DeepseekV41EngramImpl::HashState>
-DeepseekV41EngramImpl::create_hash_state(int64_t rows) const {
-  return std::make_unique<HashState>(*this, rows);
+DeepseekV41EngramImpl::create_hash_state(int64_t rows,
+                                         int64_t query_width) const {
+  return std::make_unique<HashState>(*this, rows, query_width);
 }
 
 torch::Tensor DeepseekV41EngramImpl::forward(const torch::Tensor& hidden,
                                              const torch::Tensor& tokens,
                                              const ModelInputParams& input,
-                                             HashState* hash_state) {
+                                             HashState* hash_state,
+                                             const torch::Tensor& row_indices) {
   const int64_t depth = args_.engram_max_ngram_size() - 1;
   const int64_t cols = args_.engram_n_heads() * depth;
   const int64_t dim = args_.engram_head_dim();
@@ -373,7 +381,10 @@ torch::Tensor DeepseekV41EngramImpl::forward(const torch::Tensor& hidden,
       scales;
   rows = rows.view({hashes.size(0), cols, dim}) * owned.unsqueeze(-1);
   rows = rows.to(hidden.scalar_type());
-  rows = parallel_state::reduce(rows, tp_group_);
+  rows = parallel_state::reduce(rows, lookup_group_);
+  if (row_indices.defined()) {
+    rows = rows.index_select(0, row_indices);
+  }
   torch::Tensor kv =
       torch::matmul(rows.flatten(1), weights_.at("wkv.weight").t());
   const int64_t width = args_.hidden_size();

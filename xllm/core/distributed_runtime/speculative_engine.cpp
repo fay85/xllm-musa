@@ -23,7 +23,6 @@ limitations under the License.
 #include <utility>
 
 #include "common/metrics.h"
-#include "core/framework/config/model_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/kv_cache/kv_cache_estimation.h"
@@ -157,24 +156,11 @@ template <typename TargetEngine>
 bool SpeculativeEngineBase<TargetEngine>::allocate_kv_cache() {
   KVCacheCapacity target_kv_cache_cap = engine_->estimate_kv_cache_capacity();
 
-  // Defense-in-depth. The primary gate is in Master::Master, which rejects
-  // V4.1 speculative options before any engine is built; a library caller that
-  // constructs this engine directly still fails fast here. The check sits ahead
-  // of every early return so it covers all three speculative branches --
-  // external-draft MTP, embedded-eagle3, and Suffix -- instead of silently
-  // taking the C4/C128-only grouped accounting below. DeepSeek-V4.1 groups its
-  // KV cache as TOKEN (C1/C2), which that accounting does not recognize.
+  // Library callers may construct the engine without the master admission gate.
   if (util::is_deepseek_v41_model_type(model_args_.model_type())) {
-    // The python-path DSpark draft is the only V4.1 speculative setup the
-    // grouped-KV (C1/C2) accounting below supports; every other algorithm and
-    // the native executor still fail fast here.
-    LOG_IF(FATAL,
-           !SpeculativeConfig::is_v41_python_dspark_spec(
-               ModelConfig::get_instance().model_impl(),
-               options_.speculative_algorithm()))
-        << "DeepSeek-V4.1 grouped KV (C1/C2) is not supported in the "
-           "speculative path except for the DSpark algorithm on the python "
-           "model implementation";
+    CHECK(SpeculativeConfig::is_dspark_algorithm(
+        options_.speculative_algorithm()))
+        << "DeepSeek-V4.1 speculative decoding requires DSpark.";
   }
 
   if (!use_draft_engine_) {
@@ -192,7 +178,9 @@ bool SpeculativeEngineBase<TargetEngine>::allocate_kv_cache() {
       draft_engine_->estimate_kv_cache_capacity();
 
   if (target_kv_cache_cap.c4_count() > 0 ||
-      target_kv_cache_cap.c128_count() > 0) {
+      target_kv_cache_cap.c128_count() > 0 ||
+      target_kv_cache_cap.c2_count() > 0 ||
+      target_kv_cache_cap.c1_count() > 0) {
     draft_kv_cache_cap.n_blocks() = target_kv_cache_cap.n_blocks();
     return engine_->allocate_kv_cache(target_kv_cache_cap) &&
            draft_engine_->allocate_kv_cache(draft_kv_cache_cap);

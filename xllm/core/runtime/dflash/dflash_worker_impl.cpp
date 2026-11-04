@@ -369,6 +369,16 @@ DFlashWorkerImpl::DFlashWorkerImpl(const ParallelArgs& parallel_args,
             // exemption is python-impl only -- the native/ATB glm_moe_dsa
             // has no aux capture and keeps the startup-time rejection.
             bool allow_cp = false;
+            // Native MLU V4.1 restores captured target features to global rows
+            // before handing them to DSpark; the existing draft path is reused.
+            if (parallel_args.cp_size() > 1 && Platform::is_mlu() &&
+                !ModelConfig::is_python_model_impl(
+                    ModelConfig::get_instance().model_impl())) {
+              allow_cp = util::is_deepseek_v41_model_type(util::get_model_type(
+                             options.model_path(), options.backend())) &&
+                         SpeculativeConfig::is_dspark_algorithm(
+                             options.speculative_algorithm());
+            }
             if (parallel_args.cp_size() > 1 && Platform::is_npu()) {
               const std::string model_type =
                   util::get_model_type(options.model_path(), options.backend());

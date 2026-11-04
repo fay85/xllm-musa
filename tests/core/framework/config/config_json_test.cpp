@@ -92,6 +92,43 @@ TEST(SpeculativeConfigValidationTest,
   }
 }
 
+TEST(SpeculativeConfigValidationTest, AllowsDisabledAdaptiveDecode) {
+  google::FlagSaver flag_saver;
+  google::SetCommandLineOption("enable_adaptive_speculative_decode", "false");
+  SpeculativeConfig config;
+  EXPECT_NO_FATAL_FAILURE(config.initialize());
+  EXPECT_FALSE(config.enable_adaptive_speculative_decode());
+}
+
+TEST(SpeculativeConfigValidationTest, ValidatesAdaptiveDecodeFromFlags) {
+  google::FlagSaver flag_saver;
+  google::SetCommandLineOption("enable_adaptive_speculative_decode", "true");
+  SpeculativeConfig config;
+#if defined(USE_MLU)
+  EXPECT_DEATH(config.initialize(),
+               "Adaptive speculative decoding is currently disabled on MLU.*"
+               "Set enable_adaptive_speculative_decode=false");
+#else
+  EXPECT_NO_FATAL_FAILURE(config.initialize());
+  EXPECT_TRUE(config.enable_adaptive_speculative_decode());
+#endif
+}
+
+TEST(SpeculativeConfigValidationTest, ValidatesAdaptiveDecodeFromJson) {
+  google::FlagSaver flag_saver;
+  SpeculativeConfig config;
+  config.from_json(config::parse_json_string(
+      R"json({"enable_adaptive_speculative_decode":true})json"));
+  ASSERT_TRUE(config.enable_adaptive_speculative_decode());
+#if defined(USE_MLU)
+  EXPECT_DEATH(config.validate(),
+               "Adaptive speculative decoding is currently disabled on MLU.*"
+               "Set enable_adaptive_speculative_decode=false");
+#else
+  EXPECT_NO_FATAL_FAILURE(config.validate());
+#endif
+}
+
 inline constexpr std::string_view kInlineConfig = R"json({
   "block_size": 16,
   "max_memory_utilization": 0.5,
