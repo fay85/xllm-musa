@@ -10,15 +10,26 @@ MLU 原生 DeepSeek-V4.1 默认将 Engram FP8 表及 scale 保存在 host 内存
 
 ```bash
 # 默认：表在 host，保留原有 TP/EP 行切分
-xllm --engram_config='{"cpu_offload":true}'
+xllm --engram_config='{"placement":"cpu","replication":"none"}'
+
+# 同机模型 ranks 跨 DP/TP 共享一份完整 FP8 表及 scale
+xllm --engram_config='{"placement":"cpu","replication":"per_node"}'
 
 # 关闭卸载：表常驻 MLU device
-xllm --engram_config='{"cpu_offload":false}'
+xllm --engram_config='{"placement":"gpu"}'
 ```
 
 host 路径复用已有 hash 计算：CPU 收集当前 token 命中的 FP8 行及 scale，经 pinned staging buffer 搬到 MLU，沿用 device 反量化、集合通信和投影。Graph replay 使用流上的 host callback 更新命中行，避免复用旧 token 的查表结果。大表本体无需锁页，仅 staging buffer 锁页。
 
-当前 MLU 不支持 `dp_shared_memory=true`，请求该配置会在初始化时报错。双表在 EP=8 下合计约占每 rank 23.60 GiB host 内存；节点内各 rank 分片合计约 188.83 GiB，另需加载和运行缓冲。仅卸载大表及 scale，投影等小权重仍在 MLU。以下章节介绍 NPU 路径，其默认值和支持的表格式与 MLU 不同。
+`replication=per_node` 默认关闭，开启时要求 `placement=cpu`。加载时利用模型的 world 进程组收集 kernel boot ID，识别同机 ranks。每台主机的首个 rank 创建匿名 `memfd` 存储，其余同机 ranks 通过 `/proc/<pid>/fd/<fd>` 映射同一份存储。同一模型实例的同机 ranks 跨 attention DP/TP 组共享一张完整表，不同主机各保留一份完整副本。同机 ranks 必须处于同一 PID namespace，且有权限访问 leader 的文件描述符。使用不同 world 组的独立服务实例之间不共享表。
+
+加载是模型 world 组上的集合操作。各 rank 仅复制按同机 rank 数分配给自己的 checkpoint 行，初始化等待所有 ranks 完成后才允许查表。单机 attention DP2 × TP4 时，8 个 ranks 分工填充同一份完整表。最后一个映射及文件描述符释放后，存储自动回收；无需命名共享文件或持久化转换缓存。Engram 层的 eager 和 graph 回归覆盖 DP2 × TP4；原生 MLU V4.1 整模型仍要求 DP1，模型及运行时的完整 DP 接入需后续完成。
+
+MLU 原生配置只接受与 SGLang 同名的字符串选项：`placement`（`cpu` 或 `gpu`）和 `replication`（`none` 或 `per_node`）。默认值为 `placement=cpu`、`replication=none`；`placement=gpu` 对应 MLU device 存储。
+
+共享表保留原始 FP8 E4M3 权重字节及 E8M0 scale 字节，不提前将整表展开成 FP16/BF16。各 rank 独立查询本轮全部命中行，仅将这些行及 scale 经自己的 pinned staging buffer 搬到 MLU 反量化；此模式跳过 Engram 查表结果的 AllReduce。Graph replay 复用同一份共享表和已有 host callback。
+
+默认 host 分片模式下，双表在单机 TP=8 时约占每 rank 23.60 GiB，节点内合计约 188.83 GiB。机内共享模式下，每台主机保留一份完整物理表，共享范围不随 attention DP/TP 切分而缩小。各进程都映射完整共享表，直接累加进程 RSS 会重复统计共享页，应看 PSS 或节点物理内存；加载及运行缓冲另计。投影等小权重仍在 MLU。以下章节介绍 NPU 路径，其默认值和支持的表格式与 MLU 不同。
 
 ## NPU 概述
 

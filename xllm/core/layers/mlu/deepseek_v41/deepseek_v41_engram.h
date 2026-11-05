@@ -66,10 +66,12 @@ class DeepseekV41EngramImpl final : public torch::nn::Module {
   ModelArgs args_;
   int32_t engram_id_;
   ProcessGroup* lookup_group_;
+  ProcessGroup* world_group_;
   torch::TensorOptions options_;
   int64_t table_start_;
   int64_t table_end_;
   bool cpu_offload_;
+  bool node_shared_memory_ = false;
   std::unordered_map<std::string, torch::Tensor> weights_;
   torch::Tensor token_map_, multipliers_, primes_, offsets_, fp8_values_;
 };

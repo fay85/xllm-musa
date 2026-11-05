@@ -10,15 +10,26 @@ The native MLU DeepSeek-V4.1 implementation keeps FP8 Engram tables and scales i
 
 ```bash
 # Default: host tables, preserving existing TP/EP row sharding
-xllm --engram_config='{"cpu_offload":true}'
+xllm --engram_config='{"placement":"cpu","replication":"none"}'
+
+# Same-host model ranks share one complete FP8 table and its scales across DP/TP
+xllm --engram_config='{"placement":"cpu","replication":"per_node"}'
 
 # Disable offload: keep tables on the MLU device
-xllm --engram_config='{"cpu_offload":false}'
+xllm --engram_config='{"placement":"gpu"}'
 ```
 
 The host path reuses hash generation, gathers the referenced FP8 rows and scales on CPU, and transfers them through pinned staging buffers to the existing device dequantization, collective and projection path. A stream host callback refreshes rows during graph replay. The full tables use pageable host memory; only staging buffers are pinned.
 
-MLU currently rejects `dp_shared_memory=true` at initialization. With EP=8, the two tables require approximately 23.60 GiB host memory per rank, or 188.83 GiB across the node, plus loading and execution buffers. Projection weights remain on MLU. The following sections describe the NPU path, whose defaults and supported table formats differ.
+`replication=per_node` is opt-in and requires `placement=cpu`. The model world process group discovers ranks on the same host using the kernel boot ID. Each host's first rank creates anonymous `memfd` storage; its peers map the same storage through `/proc/<pid>/fd/<fd>`. All model ranks on that host share one full table across attention DP/TP groups, and different hosts hold separate complete copies. Same-host ranks must share a PID namespace and have permission to access the leader's file descriptors. Independent server instances with separate world groups do not share tables.
+
+Loading is collective over the model world group. Each rank copies only its row range assigned among the ranks on its host, then initialization waits for all ranks to finish. For one host with attention DP2 × TP4, all eight ranks fill one table together. Storage is released with the last mapping and file descriptor; no named shared-memory file or persistent converted cache is created. Engram-layer eager and graph tests cover this DP2 × TP4 layout; the complete native MLU V4.1 model still requires DP1 until its model/runtime DP integration is added.
+
+The native MLU configuration accepts only the string options `placement` (`cpu` or `gpu`) and `replication` (`none` or `per_node`), using the same names as SGLang. Defaults are `placement=cpu` and `replication=none`; `placement=gpu` selects MLU device storage.
+
+The shared table keeps the original FP8 E4M3 weight bytes and E8M0 scale bytes. It is never expanded to FP16/BF16 in full. Each rank independently looks up all referenced rows, transfers only those rows and scales through its pinned staging buffers, and dequantizes them on MLU. The Engram row-result AllReduce is skipped in this mode. Graph replay uses the same shared table and existing host callback.
+
+With TP=8 on one host, the default sharded host path requires approximately 23.60 GiB per rank, or 188.83 GiB across the node for the two tables. Node sharing keeps one complete physical table per host regardless of the attention DP/TP split. Every process maps the full shared table, so summing per-process RSS overcounts shared pages; use PSS or node-wide physical memory accounting. Loading and execution buffers are additional. Projection weights remain on MLU. The following sections describe the NPU path, whose defaults and supported table formats differ.
 
 ## NPU overview
 

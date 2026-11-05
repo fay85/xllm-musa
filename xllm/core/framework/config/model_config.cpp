@@ -81,11 +81,11 @@ DEFINE_int32(flashinfer_workspace_buffer_size,
 
 DEFINE_string(engram_config,
               "{}",
-              "Engram host-offload switches as a raw JSON object string, e.g. "
-              "'{\"cpu_offload\":true,\"dp_shared_memory\":true}'. Forwarded "
-              "verbatim to the Python executor, which parses and validates it "
-              "(xllm/python/models/engram_config.py). MLU defaults to "
-              "cpu_offload=true; NPU defaults to both switches disabled.");
+              "Engram configuration as a JSON object. Native MLU accepts "
+              "placement (cpu/gpu) and replication (none/per_node), e.g. "
+              "'{\"placement\":\"cpu\",\"replication\":\"per_node\"}', "
+              "defaulting to cpu/none. The Python NPU executor accepts "
+              "cpu_offload and dp_shared_memory, both disabled by default.");
 
 // NOTE: This is an experimental flag,
 //       it needs to be removed after the function is stable.

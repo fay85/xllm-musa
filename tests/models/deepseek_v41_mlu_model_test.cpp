@@ -300,7 +300,7 @@ class DeepseekV41CaptureTest : public DeepseekV41MluModelTest {
   void SetUp() override {
     DeepseekV41MluModelTest::SetUp();
     saved_engram_config_ = ModelConfig::get_instance().engram_config();
-    ModelConfig::get_instance().engram_config() = R"({"cpu_offload":false})";
+    ModelConfig::get_instance().engram_config() = R"({"placement":"gpu"})";
   }
 
   void TearDown() override {
@@ -448,7 +448,7 @@ TEST_F(DeepseekV41CaptureTest,
        DSparkExecutorRegroupsRealModelAndReplaysAfterCandidateRejection) {
   torch::InferenceMode inference;
   torch::DeviceGuard guard(options_.device());
-  ModelConfig::get_instance().engram_config() = R"({"cpu_offload":true})";
+  ModelConfig::get_instance().engram_config() = R"({"placement":"cpu"})";
   constexpr int32_t kWidth = 6;
   constexpr int32_t kRequests = 2;
   args_.dtype("bfloat16")

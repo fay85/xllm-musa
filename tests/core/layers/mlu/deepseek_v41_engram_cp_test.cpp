@@ -110,7 +110,7 @@ void verify_cp_engram(ProcessGroup& group, const torch::Device& device) {
   });
   for (bool cpu_offload : {true, false}) {
     ModelConfig::get_instance().engram_config() =
-        cpu_offload ? R"({"cpu_offload":true})" : R"({"cpu_offload":false})";
+        cpu_offload ? R"({"placement":"cpu"})" : R"({"placement":"gpu"})";
     DeepseekV41Engram sharded(
         ModelContext(cp_parallel, args, QuantArgs(), options), /*engram_id=*/0);
     DeepseekV41Engram reference(

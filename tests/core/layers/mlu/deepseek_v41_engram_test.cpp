@@ -100,7 +100,7 @@ TEST_F(DeepseekV41EngramTest, DefaultHostMatchesDeviceAndSelectedRows) {
   torch::InferenceMode inference;
   torch::DeviceGuard guard(options_.device());
   auto host = create("{}");
-  auto device = create(R"({"cpu_offload":false})");
+  auto device = create(R"({"placement":"gpu"})");
   auto tokens =
       torch::tensor({2, 5, 1, 7}, torch::kInt64).to(options_.device());
   auto hidden =
@@ -116,10 +116,30 @@ TEST_F(DeepseekV41EngramTest, DefaultHostMatchesDeviceAndSelectedRows) {
       expected.index_select(0, indices).cpu()));
 }
 
+TEST_F(DeepseekV41EngramTest, SharedHostMatchesDeviceWithStridedFp8Checkpoint) {
+  torch::InferenceMode inference;
+  torch::DeviceGuard guard(options_.device());
+  auto device = create(R"({"placement":"gpu"})");
+  weights_["embed.weight"] = weights_.at("embed.weight")
+                                 .view(torch::kFloat8_e4m3fn)
+                                 .t()
+                                 .contiguous()
+                                 .t();
+  weights_["embed.scale"] =
+      weights_.at("embed.scale").expand({18, 2}).contiguous().slice(1, 0, 1);
+  auto host = create(R"({"placement":"cpu","replication":"per_node"})");
+  auto tokens =
+      torch::tensor({2, 5, 1, 7}, torch::kInt64).to(options_.device());
+  auto hidden =
+      torch::linspace(-1, 1, 4 * 2 * 8).reshape({4, 2, 8}).to(options_);
+  EXPECT_TRUE(torch::equal(host->forward(hidden, tokens, input_).cpu(),
+                           device->forward(hidden, tokens, input_).cpu()));
+}
+
 TEST_F(DeepseekV41EngramTest, HostLookupSupportsStridedCheckpointRows) {
   torch::InferenceMode inference;
   torch::DeviceGuard guard(options_.device());
-  auto device = create(R"({"cpu_offload":false})");
+  auto device = create(R"({"placement":"gpu"})");
   weights_["embed.weight"] = weights_.at("embed.weight").t().contiguous().t();
   weights_["embed.scale"] =
       weights_.at("embed.scale").expand({18, 2}).contiguous().slice(1, 0, 1);
@@ -157,11 +177,17 @@ TEST_F(DeepseekV41EngramTest, HashClampsLargeTokensAndBreaksOnImageOrPadding) {
   EXPECT_TRUE(torch::equal(actual, expected));
 }
 
-TEST_F(DeepseekV41EngramTest, GraphReplayRefreshesHostRowsAndHistory) {
+class DeepseekV41EngramGraphTest : public DeepseekV41EngramTest,
+                                   public ::testing::WithParamInterface<bool> {
+};
+
+TEST_P(DeepseekV41EngramGraphTest, GraphReplayRefreshesHostRowsAndHistory) {
   torch::InferenceMode inference;
   torch::DeviceGuard guard(options_.device());
-  auto host = create(R"({"cpu_offload":true})");
-  auto device = create(R"({"cpu_offload":false})");
+  auto host =
+      create(GetParam() ? R"({"placement":"cpu","replication":"per_node"})"
+                        : R"({"placement":"cpu","replication":"none"})");
+  auto device = create(R"({"placement":"gpu"})");
   for (const int32_t query_width : {1, 2}) {
     auto state = host->create_hash_state(/*rows=*/4, query_width);
     auto tokens =
@@ -202,6 +228,10 @@ TEST_F(DeepseekV41EngramTest, GraphReplayRefreshesHostRowsAndHistory) {
   }
 }
 
+INSTANTIATE_TEST_SUITE_P(HostPlacement,
+                         DeepseekV41EngramGraphTest,
+                         ::testing::Bool());
+
 TEST_F(DeepseekV41EngramTest, HostLookupMasksUnownedShardRows) {
   torch::InferenceMode inference;
   torch::DeviceGuard guard(options_.device());
@@ -213,7 +243,7 @@ TEST_F(DeepseekV41EngramTest, HostLookupMasksUnownedShardRows) {
     // Construct with the sharded group; the mock reduction leaves this rank's
     // masked contribution intact, so compare it with the same device shard.
     auto host_shard = create("{}", context);
-    auto device_shard = create(R"({"cpu_offload":false})", context);
+    auto device_shard = create(R"({"placement":"gpu"})", context);
     auto tokens =
         torch::tensor({2, 5, 1, 7}, torch::kInt64).to(options_.device());
     auto hidden = torch::ones({4, 2, 8}, options_);
@@ -224,10 +254,44 @@ TEST_F(DeepseekV41EngramTest, HostLookupMasksUnownedShardRows) {
 }
 
 TEST_F(DeepseekV41EngramTest, RejectsUnknownOrUnsupportedConfiguration) {
-  EXPECT_DEATH(create(R"({"cpu_offlaod":true})"), "Unknown Engram");
-  EXPECT_DEATH(create(R"({"cpu_offload":"true"})"), "must be boolean");
-  EXPECT_DEATH(create(R"({"dp_shared_memory":true})"),
-               "does not support dp_shared_memory");
+  EXPECT_DEATH(create("true"), "must be a JSON object");
+  EXPECT_DEATH(create("false"), "must be a JSON object");
+  for (const std::string key : {"cpu_offload",
+                                "tp_shared_memory",
+                                "node_shared_memory",
+                                "dp_shared_memory"}) {
+    EXPECT_DEATH(create("{\"" + key + "\":true}"), "Unknown Engram");
+  }
+  EXPECT_DEATH(create(R"({"placement":true})"), "must be a string");
+  EXPECT_DEATH(create(R"({"replication":true})"), "must be a string");
+  EXPECT_DEATH(create(R"({"placement":"disk"})"), "placement must be");
+  EXPECT_DEATH(create(R"({"replication":"per_rank"})"), "replication must be");
+  EXPECT_DEATH(create(R"({"placement":"gpu","replication":"per_node"})"),
+               "requires placement=cpu");
+  ParallelArgs parallel(/*rank=*/0, /*world_size=*/1, nullptr);
+  parallel.tp_group_ = &group_;
+  ModelContext context(parallel, args_, QuantArgs(), options_);
+  EXPECT_DEATH(
+      create(R"({"placement":"cpu","replication":"per_node"})", context),
+      "requires the model world process group");
+}
+
+TEST_F(DeepseekV41EngramTest, PlacementAndReplicationMatchDefaultOutput) {
+  torch::InferenceMode inference;
+  torch::DeviceGuard guard(options_.device());
+  auto tokens =
+      torch::tensor({2, 5, 1, 7}, torch::kInt64).to(options_.device());
+  auto hidden = torch::ones({4, 2, 8}, options_);
+  auto expected =
+      create(R"({"placement":"gpu"})")->forward(hidden, tokens, input_).cpu();
+  for (const std::string config :
+       {"{}",
+        R"({"placement":"gpu","replication":"none"})",
+        R"({"placement":"cpu","replication":"none"})",
+        R"({"placement":"cpu","replication":"per_node"})"}) {
+    EXPECT_TRUE(torch::equal(
+        create(config)->forward(hidden, tokens, input_).cpu(), expected));
+  }
 }
 
 TEST_F(DeepseekV41EngramTest, RejectsInvalidPadAndLayerConfiguration) {

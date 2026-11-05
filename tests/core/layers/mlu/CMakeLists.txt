@@ -413,3 +413,14 @@ cc_test(
   ENVIRONMENT
     "PYTHONPATH=${_xllm_build_import_root}:$ENV{PYTHONPATH};OMP_NUM_THREADS=1;MKL_NUM_THREADS=1"
 )
+
+# Forks real TP ranks before MLU initialization in the parent process.
+cc_test(
+  NAME engram_shared_memory_test
+  RUN_SERIAL
+  SRCS engram_shared_memory_test.cpp
+  DEPS :config :mlu_layers :model_context :parallel_state :state_dict :util
+       torch glog::glog GTest::gtest_main
+  ENVIRONMENT
+    "PYTHONPATH=${_xllm_build_import_root}:$ENV{PYTHONPATH};OMP_NUM_THREADS=1;MKL_NUM_THREADS=1"
+)

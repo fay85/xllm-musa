@@ -26,6 +26,7 @@ limitations under the License.
 
 #include "framework/config/model_config.h"
 #include "framework/parallel_state/parallel_state.h"
+#include "layers/mlu/deepseek_v41/engram_shared_memory.h"
 #include "util/json_reader.h"
 
 namespace xllm::layer {
@@ -43,6 +44,7 @@ DeepseekV41EngramImpl::DeepseekV41EngramImpl(const ModelContext& context,
       lookup_group_(context.get_parallel_args().cp_size() > 1
                         ? context.get_parallel_args().moe_ep_group_
                         : context.get_parallel_args().tp_group_),
+      world_group_(context.get_parallel_args().process_group_),
       options_(context.get_tensor_options()) {
   CHECK_GT(args_.vocab_size(), 0) << "Engram vocab_size must be positive";
   CHECK_GE(args_.engram_pad_token_id(), 0)
@@ -63,26 +65,38 @@ DeepseekV41EngramImpl::DeepseekV41EngramImpl(const ModelContext& context,
   CHECK(reader.parse_text(ModelConfig::get_instance().engram_config()))
       << "Invalid Engram JSON configuration";
   const auto config = reader.data();
-  CHECK(config.is_object() || config.is_boolean())
-      << "engram_config must be a JSON object or boolean";
-  if (config.is_object()) {
-    for (const auto& [key, value] : config.items()) {
-      CHECK(key == "cpu_offload" || key == "dp_shared_memory")
-          << "Unknown Engram configuration key: " << key;
-      CHECK(value.is_boolean())
-          << "Engram configuration " << key << " must be boolean";
-    }
-    CHECK(!config.value("dp_shared_memory", false))
-        << "MLU Engram does not support dp_shared_memory";
+  CHECK(config.is_object()) << "engram_config must be a JSON object";
+  for (const auto& [key, value] : config.items()) {
+    CHECK(key == "placement" || key == "replication")
+        << "Unknown Engram configuration key: " << key;
+    CHECK(value.is_string())
+        << "Engram configuration " << key << " must be a string";
   }
-  cpu_offload_ = config.is_boolean() ? config.get<bool>()
-                                     : config.value("cpu_offload", true);
+  const std::string placement = config.value("placement", std::string("cpu"));
+  const std::string replication =
+      config.value("replication", std::string("none"));
+  CHECK(placement == "cpu" || placement == "gpu")
+      << "Engram placement must be cpu or gpu";
+  CHECK(replication == "none" || replication == "per_node")
+      << "Engram replication must be none or per_node";
+  cpu_offload_ = placement == "cpu";
+  node_shared_memory_ = replication == "per_node";
+  CHECK(!node_shared_memory_ || cpu_offload_)
+      << "Engram replication=per_node requires placement=cpu";
+  CHECK(!node_shared_memory_ || world_group_ != nullptr)
+      << "Engram per_node sharing requires the model world process group";
   const int64_t rows = args_.engram_num_embeddings().at(engram_id_);
-  table_start_ = rows * lookup_group_->rank() / lookup_group_->world_size();
-  table_end_ = rows * (lookup_group_->rank() + 1) / lookup_group_->world_size();
+  table_start_ = node_shared_memory_ ? 0
+                                     : rows * lookup_group_->rank() /
+                                           lookup_group_->world_size();
+  table_end_ = node_shared_memory_ ? rows
+                                   : rows * (lookup_group_->rank() + 1) /
+                                         lookup_group_->world_size();
   LOG(INFO) << "Engram " << engram_id_ << " rank " << lookup_group_->rank()
             << ": table rows [" << table_start_ << ", " << table_end_
-            << ") stored on " << (cpu_offload_ ? "host" : "MLU");
+            << ") stored on " << (cpu_offload_ ? "host" : "MLU")
+            << (node_shared_memory_ ? " (shared across same-host model ranks)"
+                                    : "");
   // Decode raw E4M3 bytes by lookup; no FP8 arithmetic is needed on MLU.
   torch::Tensor bytes = torch::arange(256, torch::kInt16).to(torch::kUInt8);
   fp8_values_ = bytes.view(torch::kFloat8_e4m3fn)
@@ -101,15 +115,24 @@ void DeepseekV41EngramImpl::load_state_dict(const StateDict& state) {
       CHECK_EQ(value.dim(), 2) << "Invalid Engram " << name << " shape";
       CHECK_EQ(value.size(0), args_.engram_num_embeddings()[engram_id_])
           << "Invalid Engram " << name << " rows";
-      value = value.slice(0, table_start_, table_end_)
-                  .contiguous()
-                  .view(torch::kUInt8);
+      CHECK_EQ(value.element_size(), 1) << "Engram tables must use FP8 bytes";
       CHECK_GT(value.size(1), 0) << "Empty Engram " << name << " row";
       if (name == "embed.weight") {
         CHECK_EQ(value.size(1), args_.engram_head_dim());
       } else {
         CHECK_EQ(args_.engram_head_dim() % value.size(1), 0);
       }
+      if (node_shared_memory_) {
+        weights_[name] = load_shared_engram_tensor(
+            value,
+            "layer_" + std::to_string(args_.engram_layer_ids()[engram_id_]) +
+                "." + name,
+            *world_group_);
+        continue;
+      }
+      value = value.slice(0, table_start_, table_end_)
+                  .contiguous()
+                  .view(torch::kUInt8);
       if (cpu_offload_) {
         // Own the host shard independently of the checkpoint mmap lifetime.
         weights_[name] = value.cpu().contiguous().clone();
@@ -381,7 +404,9 @@ torch::Tensor DeepseekV41EngramImpl::forward(const torch::Tensor& hidden,
       scales;
   rows = rows.view({hashes.size(0), cols, dim}) * owned.unsqueeze(-1);
   rows = rows.to(hidden.scalar_type());
-  rows = parallel_state::reduce(rows, lookup_group_);
+  if (!node_shared_memory_) {
+    rows = parallel_state::reduce(rows, lookup_group_);
+  }
   if (row_indices.defined()) {
     rows = rows.index_select(0, row_indices);
   }
