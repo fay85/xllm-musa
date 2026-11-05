@@ -134,7 +134,7 @@ void PrefillFirstPolicy::schedule(
                                       budget.latency_budget,
                                       /*for_prefill=*/false,
                                       state);
-    schedule_decode_from_queue(&state.decode_queue, state, budget);
+    schedule_decode_from_queue(&state.decode_queue, state, budget, finished);
   }
 }
 

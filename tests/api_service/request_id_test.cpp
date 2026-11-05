@@ -18,8 +18,14 @@ limitations under the License.
 #include <brpc/channel.h>
 #include <brpc/closure_guard.h>
 #include <brpc/controller.h>
+#include <brpc/details/controller_private_accessor.h>
 #include <brpc/server.h>
+#include <butil/fd_guard.h>
 #include <gtest/gtest.h>
+#include <netinet/in.h>
+#include <poll.h>
+#include <sys/socket.h>
+#include <unistd.h>
 
 #include <atomic>
 #include <chrono>
@@ -517,8 +523,22 @@ class BlockingCancelController final : public brpc::Controller {
   bool released_ = false;
 };
 
+void attach_http_socket(brpc::Controller& controller) {
+  // These lifecycle tests do not dispatch through a server. Supply the HTTP
+  // receiving socket that CreateProgressiveAttachment requires, using brpc's
+  // protocol accessor only in the fixture; no production fallback is needed.
+  brpc::SocketId id;
+  ASSERT_EQ(brpc::Socket::Create(brpc::SocketOptions{}, &id), 0);
+  brpc::SocketUniquePtr socket;
+  ASSERT_EQ(brpc::Socket::Address(id, &socket), 0);
+  brpc::ControllerPrivateAccessor accessor(&controller);
+  accessor.set_request_protocol(brpc::PROTOCOL_HTTP).set_peer_id(id);
+  accessor.move_in_server_receiving_sock(socket);
+}
+
 TEST(StreamCallTest, StreamStartWaitsForInFlightDisconnectCheck) {
   BlockingCancelController controller;
+  attach_http_socket(controller);
   proto::CompletionRequest request;
   request.set_stream(true);
   proto::CompletionResponse response;
@@ -544,7 +564,7 @@ TEST(StreamCallTest, StreamStartWaitsForInFlightDisconnectCheck) {
   auto starting_future = starting.get_future();
   std::thread writer([&] {
     starting.set_value();
-    // No SSE writes are needed here: a standalone Controller has no socket.
+    // No SSE writes are needed to test the handoff synchronization.
     call.start_stream();
   });
   EXPECT_EQ(starting_future.wait_for(std::chrono::seconds(5)),
@@ -564,6 +584,7 @@ TEST(StreamCallTest, StreamStartWaitsForInFlightDisconnectCheck) {
 TEST(StreamCallTest, DoneCanReleaseControllerAndReenterDisconnectCheck) {
   std::unique_ptr<brpc::Controller> controller =
       std::make_unique<brpc::Controller>();
+  attach_http_socket(*controller);
   proto::CompletionRequest request;
   request.set_stream(true);
   proto::CompletionResponse response;
@@ -723,6 +744,7 @@ TEST(TokenSubmissionTest, CommitExceptionClearsStagedDelta) {
    public:
     bool IsCanceled() const override { return false; }
   } controller;
+  attach_http_socket(controller);
   CallbackClosure done([] { throw std::runtime_error("stream-open failure"); });
   proto::CompletionRequest request;
   request.set_stream(true);
@@ -782,6 +804,24 @@ TEST(StreamCallTest, InvalidPayloadLengthRejectsBeforeOpeningSse) {
 
 class StreamTestService final : public proto::XllmAPIService {
  public:
+  bool wait_held() {
+    std::unique_lock<std::mutex> lock(mutex_);
+    return changed_.wait_for(lock, std::chrono::seconds(5), [this] {
+      return held_call_ != nullptr;
+    });
+  }
+
+  bool observe_disconnect() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return held_call_ != nullptr && held_call_->is_disconnected();
+  }
+
+  void release() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    released_ = true;
+    changed_.notify_all();
+  }
+
   void CompletionsHttp(google::protobuf::RpcController* controller,
                        const proto::HttpRequest* /*request*/,
                        proto::HttpResponse* /*response*/,
@@ -804,6 +844,24 @@ class StreamTestService final : public proto::XllmAPIService {
     const std::string mode = http_controller->request_attachment().to_string();
     const Status rejected =
         Status::invalid_parameter("invalid value", "temperature");
+    if (mode == "hold" || mode == "hold_started") {
+      if (mode == "hold_started") {
+        proto::CompletionResponse chunk;
+        chunk.set_id("held-chunk");
+        EXPECT_TRUE(call.write(chunk));
+      }
+      {
+        std::unique_lock<std::mutex> lock(mutex_);
+        held_call_ = &call;
+        changed_.notify_all();
+        // No writes occur while held: disconnect polling must be independent
+        // of the next model delta or SSE Write failure.
+        changed_.wait(lock, [this] { return released_; });
+        held_call_ = nullptr;
+      }
+      call.finish_with_error(StatusCode::CANCELLED, "Client disconnected.");
+      return;
+    }
     if (mode == "before") {
       call.finish_with_error(rejected);
       return;
@@ -849,6 +907,12 @@ class StreamTestService final : public proto::XllmAPIService {
       }
     }
   }
+
+ private:
+  std::mutex mutex_;
+  std::condition_variable changed_;
+  CompletionStreamCall* held_call_ = nullptr;  // Guarded by mutex_.
+  bool released_ = false;
 };
 
 class StreamHttpTest : public ::testing::Test {
@@ -869,6 +933,7 @@ class StreamHttpTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    service_.release();
     server_.Stop(0);
     server_.Join();
   }
@@ -880,11 +945,82 @@ class StreamHttpTest : public ::testing::Test {
     channel_.CallMethod(nullptr, controller, nullptr, nullptr, nullptr);
   }
 
+  void check_socket_disconnect(bool started, bool reset) {
+    butil::fd_guard client(socket(AF_INET, SOCK_STREAM, 0));
+    ASSERT_GE(static_cast<int32_t>(client), 0);
+    sockaddr_in address{};
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    address.sin_port = htons(server_.listen_address().port);
+    ASSERT_EQ(
+        connect(client, reinterpret_cast<sockaddr*>(&address), sizeof(address)),
+        0);
+    const std::string body = started ? "hold_started" : "hold";
+    const std::string wire =
+        "POST /v1/completions HTTP/1.1\r\nHost: localhost\r\n"
+        "Content-Length: " +
+        std::to_string(body.size()) + "\r\n\r\n" + body;
+    ASSERT_EQ(::send(client, wire.data(), wire.size(), MSG_NOSIGNAL),
+              static_cast<ssize_t>(wire.size()));
+    ASSERT_TRUE(service_.wait_held());
+    pollfd readable{client, POLLIN, 0};
+    if (started) {
+      ASSERT_EQ(poll(&readable, /*nfds=*/1, /*timeout=*/5000), 1);
+      char buffer[4096];
+      const ssize_t size = recv(client, buffer, sizeof(buffer), 0);
+      ASSERT_GT(size, 0);
+      EXPECT_NE(
+          std::string(buffer, static_cast<size_t>(size)).find("HTTP/1.1 200"),
+          std::string::npos);
+    } else {
+      EXPECT_EQ(poll(&readable, /*nfds=*/1, /*timeout=*/0), 0);
+    }
+    EXPECT_FALSE(service_.observe_disconnect());
+    if (reset) {
+      linger reset_option{1, 0};
+      ASSERT_EQ(setsockopt(client,
+                           SOL_SOCKET,
+                           SO_LINGER,
+                           &reset_option,
+                           sizeof(reset_option)),
+                0);
+    } else {
+      ASSERT_EQ(shutdown(client, SHUT_RDWR), 0);
+    }
+    client.reset(-1);
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    bool disconnected = service_.observe_disconnect();
+    while (!disconnected && std::chrono::steady_clock::now() < deadline) {
+      std::this_thread::sleep_for(std::chrono::milliseconds(1));
+      disconnected = service_.observe_disconnect();
+    }
+    EXPECT_TRUE(disconnected);
+    // Idempotent polling before releasing the held call; still no SSE writes.
+    EXPECT_TRUE(service_.observe_disconnect());
+  }
+
  private:
   StreamTestService service_;
   brpc::Server server_;
   brpc::Channel channel_;
 };
+
+TEST_F(StreamHttpTest, SocketCloseBeforeSseIsDetectedWithoutWrites) {
+  check_socket_disconnect(/*started=*/false, /*reset=*/false);
+}
+
+TEST_F(StreamHttpTest, SocketCloseAfterSseIsDetectedWithoutWrites) {
+  check_socket_disconnect(/*started=*/true, /*reset=*/false);
+}
+
+TEST_F(StreamHttpTest, SocketResetBeforeSseIsDetectedWithoutWrites) {
+  check_socket_disconnect(/*started=*/false, /*reset=*/true);
+}
+
+TEST_F(StreamHttpTest, SocketResetAfterSseIsDetectedWithoutWrites) {
+  check_socket_disconnect(/*started=*/true, /*reset=*/true);
+}
 
 TEST_F(StreamHttpTest, SuccessfulStreamStillEndsWithDone) {
   const double successes = COUNTER_VALUE(server_request_total_ok);

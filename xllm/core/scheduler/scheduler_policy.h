@@ -159,6 +159,13 @@ class SchedulerPolicy {
 
  protected:
   // ===== Common phases (internal) =====
+  // Skip connection polling only when this request was polled in the same
+  // collection pass. Terminal state is still checked again before retirement.
+  bool collect_terminal(std::shared_ptr<Request>& request,
+                        SchedulerState& state,
+                        std::vector<std::shared_ptr<Request>>& finished,
+                        bool connection_status_updated = false);
+
   // Called after policy requeue; reset batch state and append new FCFS decode
   // handoffs behind all existing waiters and requeued requests.
   void reset_batch_state(SchedulerState& state);
@@ -214,9 +221,11 @@ class SchedulerPolicy {
                              ScheduleBudget& budget);
 
   // ===== Decode scheduling =====
-  void schedule_decode_from_queue(RequestPriorityQueue* queue,
-                                  SchedulerState& state,
-                                  ScheduleBudget& budget);
+  void schedule_decode_from_queue(
+      RequestPriorityQueue* queue,
+      SchedulerState& state,
+      ScheduleBudget& budget,
+      std::vector<std::shared_ptr<Request>>& finished);
 
   // ===== Preemption and error handling =====
   void handle_unschedulable_head(

@@ -294,53 +294,90 @@ void SchedulerPolicy::drain_request_queue(
   }
 }
 
+bool SchedulerPolicy::collect_terminal(
+    std::shared_ptr<Request>& request,
+    SchedulerState& state,
+    std::vector<std::shared_ptr<Request>>& finished,
+    bool connection_status_updated) {
+  if (request == nullptr) {
+    return false;
+  }
+  if (!connection_status_updated) {
+    request->update_connection_status();
+  }
+  if (!request->finished() && !request->cancelled()) {
+    return false;
+  }
+  if (state.release_failed_request) {
+    state.release_failed_request(request);
+  }
+  clear_mtp_bootstrap(request.get(), state);
+  state.kv_cache_manager->deallocate(request.get());
+  // Moving leaves running/handoff slots null, marking them collected.
+  finished.emplace_back(std::move(request));
+  return true;
+}
+
 std::vector<std::shared_ptr<Request>> SchedulerPolicy::collect_finished(
     SchedulerState& state) {
-  const size_t num_decode_waiters =
-      batch_mode_.priority_strategy == "fcfs" ? state.decode_queue.size() : 0;
   std::vector<std::shared_ptr<Request>> finished_requests;
   finished_requests.reserve(state.running_requests.size() +
-                            pending_decode_handoffs_.size() +
-                            num_decode_waiters);
-  auto collect_request =
-      [this, &state, &finished_requests](std::shared_ptr<Request>& slot) {
-        if (slot == nullptr) {
-          return;
-        }
-        slot->update_connection_status();
-        if (!slot->finished() && !slot->cancelled()) {
-          return;
-        }
-        if (state.release_failed_request) {
-          state.release_failed_request(slot);
-        }
-        clear_mtp_bootstrap(slot.get(), state);
-        state.kv_cache_manager->deallocate(slot.get());
-        // emplace_back(std::move(slot)) leaves slot null, marking it collected.
-        finished_requests.emplace_back(std::move(slot));
-      };
+                            pending_decode_handoffs_.size());
   for (auto it = state.running_requests.rbegin();
        it != state.running_requests.rend();
        ++it) {
-    collect_request(*it);
+    collect_terminal(*it, state, finished_requests);
   }
   for (auto it = pending_decode_handoffs_.rbegin();
        it != pending_decode_handoffs_.rend();
        ++it) {
-    collect_request(*it);
+    collect_terminal(*it, state, finished_requests);
   }
-  // Handoffs can terminate after joining the FCFS decode queue. Rotate the
-  // original entries once to clean even tail waiters without a decode budget,
-  // preserving live requests' order and reusing the same terminal cleanup.
-  // FCFS uses DequeQueue: this rotation requires FIFO push_back semantics.
+  // Poll every waiter: socket stop callbacks do not set Request::cancelled()
+  // until update_connection_status() observes them. A cancellation counter
+  // alone would miss disconnected clients that have no further SSE output.
+  // Avoid rebuilding ordered queues unless a waiter has terminated.
+  bool has_terminal_waiter = false;
+  size_t num_polled_waiters = 0;
+  for (const auto& request : state.decode_queue) {
+    request->update_connection_status();
+    ++num_polled_waiters;
+    if (request->finished() || request->cancelled()) {
+      has_terminal_waiter = true;
+      break;
+    }
+  }
+  if (!has_terminal_waiter) {
+    return finished_requests;
+  }
+  const size_t num_decode_waiters = state.decode_queue.size();
+  finished_requests.reserve(finished_requests.size() + num_decode_waiters);
+
+  // Hold live waiters until the queue is drained: immediate reinsertion into
+  // an ordered queue would repeatedly visit the same live head and skip tails.
+  std::vector<std::shared_ptr<Request>> live_waiters;
+  live_waiters.reserve(num_decode_waiters);
+  // Iteration and pop_top visit the same order: reuse polling of the scanned
+  // prefix, but still update the suffix after the first terminal waiter.
   for (size_t index = 0; index < num_decode_waiters; ++index) {
     std::shared_ptr<Request> request = state.decode_queue.top();
     state.decode_queue.pop_top();
-    collect_request(request);
-    if (request == nullptr) {
+    if (collect_terminal(
+            request,
+            state,
+            finished_requests,
+            /*connection_status_updated=*/index < num_polled_waiters)) {
       continue;
     }
-    state.decode_queue.push(std::move(request), /*if_back=*/true);
+    live_waiters.emplace_back(std::move(request));
+  }
+  for (std::shared_ptr<Request>& request : live_waiters) {
+    if (state.decode_queue.supports_sort()) {
+      // Deque queues retain their current order, including SLO reordering.
+      state.decode_queue.push(std::move(request), /*if_back=*/true);
+    } else {
+      state.decode_queue.push(std::move(request));
+    }
   }
   return finished_requests;
 }
@@ -398,13 +435,7 @@ void SchedulerPolicy::schedule_prefill_from_queue(
     }
 
     std::shared_ptr<Request> request(queue->top());
-    if (request->finished() || request->cancelled()) {
-      if (state.release_failed_request) {
-        state.release_failed_request(request);
-      }
-      clear_mtp_bootstrap(request.get(), state);
-      state.kv_cache_manager->deallocate(request.get());
-      finished.emplace_back(request);
+    if (collect_terminal(request, state, finished)) {
       queue->pop_top();
       continue;
     }
@@ -943,9 +974,11 @@ SchedulerPolicy::RestoreOutcome SchedulerPolicy::try_restore(
 // Decode scheduling
 // =============================================================================
 
-void SchedulerPolicy::schedule_decode_from_queue(RequestPriorityQueue* queue,
-                                                 SchedulerState& state,
-                                                 ScheduleBudget& budget) {
+void SchedulerPolicy::schedule_decode_from_queue(
+    RequestPriorityQueue* queue,
+    SchedulerState& state,
+    ScheduleBudget& budget,
+    std::vector<std::shared_ptr<Request>>& finished) {
   blocked_decode_.reset();
   if (queue == nullptr || queue->empty()) {
     return;
@@ -974,6 +1007,10 @@ void SchedulerPolicy::schedule_decode_from_queue(RequestPriorityQueue* queue,
          budget.latency_budget > budget.estimate_latency &&
          budget.remaining_seq_budget > 0) {
     std::shared_ptr<Request> request = queue->top();
+    if (collect_terminal(request, state, finished)) {
+      queue->pop_top();
+      continue;
+    }
 
     // Adapter-affinity gate: skip requests that would over-diversify the
     // batch. The wait is bounded by wall-clock age, so a request cannot be

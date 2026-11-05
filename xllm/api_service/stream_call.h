@@ -15,6 +15,7 @@ limitations under the License.
 
 #pragma once
 
+#include <brpc/callback.h>
 #include <brpc/controller.h>
 #include <butil/iobuf.h>
 #include <glog/logging.h>
@@ -109,7 +110,9 @@ class StreamCall : public Call {
         response_(response),
         use_arena_(use_arena) {
     stream_ = request_->stream();
-    if (!stream_) {
+    if (stream_) {
+      stream_stopped_ = std::make_shared<std::atomic<bool>>(false);
+    } else {
       controller_->http_response().set_content_type(
           "application/json; charset=utf-8");
     }
@@ -256,7 +259,12 @@ class StreamCall : public Call {
 
  protected:
   bool stream_connected() const {
-    return connection_status_.load(std::memory_order_relaxed) == 0;
+    return connection_status_.load(std::memory_order_relaxed) == 0 &&
+           (!stream_ || !stream_stopped_->load(std::memory_order_acquire));
+  }
+
+  static void on_stream_stopped(std::shared_ptr<std::atomic<bool>> stopped) {
+    stopped->store(true, std::memory_order_release);
   }
 
   // Writes the staged buffer to the progressive attachment and folds the
@@ -290,6 +298,9 @@ class StreamCall : public Call {
         return;
       }
       pa_ = controller_->CreateProgressiveAttachment();
+      // The callback can outlive both the Controller and this Call.
+      pa_->NotifyOnStopped(
+          brpc::NewCallback(on_stream_stopped, stream_stopped_));
       controller_->http_response().set_content_type(
           "text/event-stream; charset=utf-8");
       controller_->http_response().set_status_code(200);
@@ -310,7 +321,7 @@ class StreamCall : public Call {
 
   bool stream_ = false;
   // Output state is owned by the response worker. Only stream_started_ and
-  // connection_status_ are also read by the scheduler's disconnect polling.
+  // connection state are also read by the scheduler's disconnect polling.
   mutable std::mutex stream_mutex_;
   bool stream_started_ = false;
   bool stream_finished_ = false;
@@ -325,6 +336,8 @@ class StreamCall : public Call {
 
   // Monotonic write status; no other state is published through this atomic.
   std::atomic<int32_t> connection_status_{0};
+  // Created before publication and shared only with the attachment callback.
+  std::shared_ptr<std::atomic<bool>> stream_stopped_;
 };
 
 // Anthropic SSE stream call with custom event formatting

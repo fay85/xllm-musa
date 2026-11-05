@@ -30,6 +30,7 @@ limitations under the License.
 #include <tuple>
 #include <vector>
 
+#include "api_service/call.h"
 #include "continuous_scheduler.h"
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/kv_cache_store_config.h"
@@ -2974,6 +2975,283 @@ TEST(SchedulerPolicyTest, PdHandoffsExpandOnceAndPreserveNonFcfsAdmission) {
     }
   }
 }
+
+namespace {
+
+class CountingWaiterCall final : public Call {
+ public:
+  CountingWaiterCall(brpc::Controller* controller, bool disconnected)
+      : Call(controller), disconnected_(disconnected) {}
+
+  bool is_disconnected() const override {
+    ++poll_count_;
+    return disconnected_;
+  }
+
+  int32_t poll_count() const { return poll_count_; }
+
+ private:
+  const bool disconnected_;
+  mutable int32_t poll_count_ = 0;
+};
+
+using QueuedDecodeTestParam = std::tuple<std::string, bool, bool, bool>;
+
+class QueuedCancelledDecodeTest
+    : public testing::TestWithParam<QueuedDecodeTestParam> {};
+
+std::string queued_decode_test_name(
+    const testing::TestParamInfo<QueuedDecodeTestParam>& info) {
+  return std::get<0>(info.param) +
+         (std::get<1>(info.param) ? "_decode_first" : "_prefill_first") +
+         (std::get<2>(info.param) ? "_linear" : "_kv");
+}
+
+}  // namespace
+
+TEST_P(QueuedCancelledDecodeTest,
+       ReleasesResourcesWithoutConsumingBatchBudget) {
+  const auto& [strategy, decode_first, linear_attention, cancel_after_collect] =
+      GetParam();
+  ContinuousScheduler::Options options = create_scheduler_options(
+      /*max_tokens_per_batch=*/1,
+      /*max_seqs_per_batch=*/1,
+      /*num_speculative_tokens=*/0,
+      /*max_tokens_per_chunk_for_prefill=*/4,
+      /*dp_size=*/1,
+      strategy);
+  BatchMode mode{.enable_mix_batch = decode_first,
+                 .enable_chunked_prefill = true,
+                 .priority_strategy = strategy};
+  std::unique_ptr<SchedulerPolicy> policy;
+  if (decode_first) {
+    policy = std::make_unique<DecodeFirstPolicy>(mode, options);
+  } else {
+    policy = std::make_unique<PrefillFirstPolicy>(mode, options);
+  }
+  FakeEngine engine(/*num_blocks=*/16,
+                    /*block_size=*/4,
+                    /*enable_prefix_cache=*/false,
+                    linear_attention);
+  ProfileManager::Options profile_options;
+  profile_options.max_tokens_per_batch(1).max_seqs_per_batch(1);
+  ProfileManager profile_manager(&engine, profile_options);
+  BlockManagerPool* pool = engine.block_manager_pool();
+  const std::vector<size_t> initial_free_blocks = pool->num_free_blocks();
+  brpc::Controller controller;
+  CountingWaiterCall connected_call(&controller, /*disconnected=*/false);
+  CountingWaiterCall disconnected_call(&controller, /*disconnected=*/true);
+  auto requests = generate_request(
+      {7, 7, 7},
+      {8, 8, 8},
+      std::nullopt,
+      std::vector<int32_t>{static_cast<int32_t>(RequestPriority::HIGH),
+                           static_cast<int32_t>(RequestPriority::NORMAL),
+                           static_cast<int32_t>(RequestPriority::LOW)},
+      /*max_context_len=*/64);
+  DequeQueue prefill_queue;
+  DequeQueue chunk_queue;
+  std::unique_ptr<RequestPriorityQueue> decode_queue;
+  if (strategy == "fcfs" || strategy == "multi_slo_and_prio") {
+    decode_queue = std::make_unique<DequeQueue>();
+  } else {
+    decode_queue = std::make_unique<SetQueue>(
+        create_comparator(strategy, /*reverse=*/true));
+  }
+  for (size_t index = 0; index < requests.size(); ++index) {
+    const auto& request = requests[index];
+    request->state().call_ = &connected_call;
+    Sequence* sequence = request->sequences().front().get();
+    ASSERT_TRUE(pool->try_allocate(sequence));
+    sequence->append_token(Token(1));
+    ASSERT_FALSE(sequence->is_prefill_stage());
+    ASSERT_GT(sequence->kv_state().num_blocks(BlockType::KV), 0u);
+    ASSERT_EQ(sequence->has_linear_state_slot(), linear_attention);
+    ASSERT_FALSE(request->finished());
+    // Ordered sets require distinct deadlines; equal keys would collapse
+    // these requests into one entry under the deadline comparator.
+    request->state().scheduler_param.tpot_slo_ms =
+        static_cast<int32_t>((index + 1) * 1000);
+    request->set_deadline_ms();
+    if (decode_queue->supports_sort()) {
+      decode_queue->push(request, /*if_back=*/true);
+    } else {
+      decode_queue->push(request);
+    }
+  }
+  ASSERT_EQ(decode_queue->size(), 3u);
+  const std::shared_ptr<Request> cancelled =
+      cancel_after_collect ? decode_queue->top() : decode_queue->back();
+  Sequence* cancelled_sequence = cancelled->sequences().front().get();
+  const size_t cancelled_kv_blocks =
+      cancelled_sequence->kv_state().num_blocks(BlockType::KV);
+  const std::vector<size_t> allocated_free_blocks = pool->num_free_blocks();
+  std::vector<std::shared_ptr<Request>> live_requests;
+  live_requests.reserve(2);
+  for (const auto& request : *decode_queue) {
+    if (request == cancelled) {
+      continue;
+    }
+    live_requests.emplace_back(request);
+  }
+  std::list<std::shared_ptr<Request>> unified_queue;
+  std::deque<DecodeRestoreEntry> decode_restore_waiting;
+  std::vector<std::shared_ptr<Request>> running_requests;
+  std::vector<Sequence*> running_sequences;
+  std::vector<size_t> running_sequence_budgets;
+  running_requests.reserve(1);
+  running_sequences.reserve(1);
+  running_sequence_budgets.reserve(1);
+  bool last_step_prefill = false;
+  int32_t release_calls = 0;
+  SchedulerState state{
+      .prefill_queue = prefill_queue,
+      .chunk_queue = chunk_queue,
+      .decode_queue = *decode_queue,
+      .unified_queue = unified_queue,
+      .decode_restore_waiting = decode_restore_waiting,
+      .running_requests = running_requests,
+      .running_sequences = running_sequences,
+      .running_sequences_budgets = running_sequence_budgets,
+      .kv_cache_manager = pool,
+      .profile_manager = &profile_manager,
+      .response_processor = nullptr,
+      .model_args = engine.model_args(),
+      .last_step_prefill = last_step_prefill,
+      .options = options,
+      .min_speculative_tokens_required = 0,
+      .enable_prefix_cache = false,
+      .release_failed_request =
+          [&](const std::shared_ptr<Request>& request) {
+            EXPECT_EQ(request, cancelled);
+            ++release_calls;
+          },
+  };
+  ScheduleBudget budget{
+      .remaining_token_budget = 1,
+      .remaining_seq_budget = 1,
+      .latency_budget = std::numeric_limits<double>::max(),
+      .estimate_latency = 0,
+      .num_preempted_requests = 0,
+  };
+  if (!cancel_after_collect) {
+    // A cancelled tail must retire even when higher-priority live waiters
+    // consume the entire next batch, or no decode budget is available.
+    // Only the Call knows about the disconnect; no set_cancel() notification
+    // exists until collect_finished polls the tail's connection status.
+    cancelled->state().call_ = &disconnected_call;
+    ASSERT_FALSE(cancelled->cancelled());
+  }
+  auto finished = policy->collect_finished(state);
+  EXPECT_EQ(connected_call.poll_count(), cancel_after_collect ? 3 : 2);
+  EXPECT_EQ(disconnected_call.poll_count(), cancel_after_collect ? 0 : 1);
+  // Check both immediately after collection and after batch admission:
+  // reclamation must be prompt and must not run twice.
+  const auto expect_retired = [&] {
+    EXPECT_EQ(finished, (std::vector<std::shared_ptr<Request>>{cancelled}));
+    EXPECT_EQ(release_calls, 1);
+    EXPECT_FALSE(cancelled_sequence->has_any_blocks());
+    EXPECT_FALSE(cancelled_sequence->has_linear_state_slot());
+    EXPECT_EQ(pool->num_free_blocks().front(),
+              allocated_free_blocks.front() + cancelled_kv_blocks);
+  };
+  const auto expect_live_queue = [&] {
+    ASSERT_EQ(decode_queue->size(), live_requests.size());
+    EXPECT_EQ(decode_queue->top(), live_requests.front());
+    EXPECT_EQ(decode_queue->back(), live_requests.back());
+  };
+  if (cancel_after_collect) {
+    ASSERT_TRUE(finished.empty());
+    cancelled->set_cancel();
+  } else {
+    EXPECT_TRUE(cancelled->cancelled());
+    ASSERT_NO_FATAL_FAILURE(expect_live_queue());
+    EXPECT_TRUE(policy->collect_finished(state).empty());
+    expect_retired();
+    budget.remaining_token_budget = 0;
+    budget.remaining_seq_budget = 0;
+    policy->schedule(state, budget, finished);
+    EXPECT_TRUE(running_requests.empty());
+    EXPECT_TRUE(running_sequences.empty());
+    ASSERT_NO_FATAL_FAILURE(expect_live_queue());
+    budget.remaining_token_budget = 1;
+    budget.remaining_seq_budget = 1;
+  }
+  policy->schedule(state, budget, finished);
+
+  expect_retired();
+  EXPECT_EQ(running_requests,
+            (std::vector<std::shared_ptr<Request>>{live_requests.front()}));
+  EXPECT_EQ(
+      running_sequences,
+      (std::vector<Sequence*>{live_requests.front()->sequences()[0].get()}));
+  EXPECT_EQ(running_sequence_budgets, (std::vector<size_t>{1}));
+  ASSERT_EQ(decode_queue->size(), 1u);
+  EXPECT_EQ(decode_queue->top(), live_requests.back());
+  EXPECT_TRUE(prefill_queue.empty());
+  EXPECT_EQ(budget.remaining_token_budget, 0u);
+  EXPECT_EQ(budget.remaining_seq_budget, 0u);
+  EXPECT_EQ(budget.num_preempted_requests, 0u);
+  for (const auto& request : live_requests) {
+    EXPECT_GT(request->sequences()[0]->kv_state().num_blocks(BlockType::KV),
+              0u);
+    EXPECT_EQ(request->sequences()[0]->has_linear_state_slot(),
+              linear_attention);
+    pool->deallocate(request.get());
+  }
+  EXPECT_EQ(pool->num_free_blocks(), initial_free_blocks);
+}
+
+TEST(SchedulerPolicyTest, CollectFinishedPollsUnscannedSuffixOnce) {
+  HostRestoreBlockPool pool(/*num_blocks=*/16, /*dp_size=*/1);
+  const std::vector<size_t> initial_free_blocks = pool.num_free_blocks();
+  auto options = make_restore_options(/*token_budget=*/1, /*dp_size=*/1);
+  auto policy = create_scheduler_policy(decode_first_mode(), options);
+  RestoreHarness harness(&pool, options);
+  brpc::Controller controller;
+  CountingWaiterCall head_call(&controller, /*disconnected=*/true);
+  CountingWaiterCall tail_call(&controller, /*disconnected=*/true);
+  auto head = make_pd_decode(pool);
+  auto tail = make_pd_decode(pool);
+  head->state().call_ = &head_call;
+  tail->state().call_ = &tail_call;
+  harness.decode_queue().push(head, /*if_back=*/true);
+  harness.decode_queue().push(tail, /*if_back=*/true);
+
+  // Pre-scan stops at the head. The drain must reuse that poll while still
+  // detecting the disconnected tail, which has not yet been visited.
+  auto finished = policy->collect_finished(harness.state());
+
+  EXPECT_EQ(head_call.poll_count(), 1);
+  EXPECT_EQ(tail_call.poll_count(), 1);
+  EXPECT_TRUE(head->cancelled());
+  EXPECT_TRUE(tail->cancelled());
+  EXPECT_EQ(finished, (std::vector<std::shared_ptr<Request>>{head, tail}));
+  EXPECT_TRUE(harness.decode_queue().empty());
+  EXPECT_EQ(pool.num_free_blocks(), initial_free_blocks);
+}
+
+// Tail collection depends on queue ordering, so cover every queue strategy.
+INSTANTIATE_TEST_SUITE_P(CancelledTail,
+                         QueuedCancelledDecodeTest,
+                         testing::Combine(testing::Values("fcfs",
+                                                          "priority",
+                                                          "deadline",
+                                                          "multi_slo_and_prio"),
+                                          testing::Bool(),
+                                          testing::Bool(),
+                                          testing::Values(false)),
+                         queued_decode_test_name);
+
+// Admission uses the same terminal check for all strategies. One ordered
+// queue covers this later cancellation without repeating the full matrix.
+INSTANTIATE_TEST_SUITE_P(CancelledBeforeAdmission,
+                         QueuedCancelledDecodeTest,
+                         testing::Combine(testing::Values("priority"),
+                                          testing::Bool(),
+                                          testing::Bool(),
+                                          testing::Values(true)),
+                         queued_decode_test_name);
 
 TEST(SchedulerPolicyTest, TerminalRequestsBypassExpansionAndAdmission) {
   for (bool mix_batch : {false, true}) {
