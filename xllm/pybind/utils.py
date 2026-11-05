@@ -177,13 +177,3 @@ def _infer_model_type_and_backend(model_path: str) -> tuple[str | None, str]:
 
     model_type = _infer_model_type(model_path)
     return model_type, _get_model_backend(model_type)
-
-
-def _configure_cpp_chat_template(
-    use_cpp_chat_template: bool,
-    model_type: str,
-) -> None:
-    configure = getattr(xllm_export, "configure_cpp_chat_template", None)
-    if not callable(configure):
-        raise ValueError("xllm_export.configure_cpp_chat_template is not available. Please rebuild xllm_export.")
-    configure(use_cpp_chat_template, model_type)

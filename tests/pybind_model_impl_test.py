@@ -44,7 +44,7 @@ class PublicModelImplTest(unittest.TestCase):
         self._export.LLMMaster = Mock()
         self._export.VLMMaster = Mock()
         self._export.get_model_backend = Mock(return_value="llm")
-        self._export.configure_cpp_chat_template = Mock()
+        self._export.init_config_from_option = Mock(return_value=None)
         modules = {
             "xllm": package,
             "xllm.pybind": bindings,
@@ -208,9 +208,7 @@ class PythonModelPathTest(unittest.TestCase):
             utils._configure_python_model_path()
         # The rejected preset is left untouched: this process did not publish
         # it, so it has no business cleaning it up either.
-        self.assertEqual(
-            os.environ[self._VARIABLE], "/opt/custom/does-not-hold-the-package"
-        )
+        self.assertEqual(os.environ[self._VARIABLE], "/opt/custom/does-not-hold-the-package")
 
     def test_relocated_utils_fails_instead_of_guessing(self) -> None:
         # Drop utils.py two directories below the temporary root without any

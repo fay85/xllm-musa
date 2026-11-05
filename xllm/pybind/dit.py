@@ -17,11 +17,11 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import threading
 import uuid
 import weakref
 from pathlib import Path
-from types import TracebackType
 from typing import Sequence
 
 from xllm_export import (
@@ -33,9 +33,10 @@ from xllm_export import (
     DiTTensorSources,
     Options,
     StatusCode,
-    get_device_count,
+    init_config_from_option,
 )
 
+from xllm.pybind import utils
 from xllm.pybind.utils import get_free_port
 
 # The model also fixes the output modality.
@@ -113,36 +114,10 @@ class DiT:
             options.enable_rolling_load = enable_rolling_load
             options.rolling_load_num_cached_layers = rolling_load_num_cached_layers
             options.rolling_load_num_rolling_slots = rolling_load_num_rolling_slots
-            self._validate_options(options)
+            options.use_cpp_chat_template = False
+            init_config_from_option(options)
             self.master = DiTMaster(options)
             DiT._active = weakref.ref(self.master)
-
-    @staticmethod
-    def _validate_options(options: Options) -> None:
-        device_count = get_device_count()
-        if (
-            device_count < 1
-            or options.tp_size < 1
-            or options.sp_size < 1
-            or options.cfg_size not in (1, 2)
-            or options.tp_size * options.sp_size * options.cfg_size != device_count
-            or options.text_encoder_tp_size < 1
-            or device_count % options.text_encoder_tp_size != 0
-            or options.vae_size < 1
-            or device_count % options.vae_size != 0
-        ):
-            raise ValueError(
-                f"Invalid DiT topology: visible={device_count}, tp={options.tp_size}, "
-                f"sp={options.sp_size}, cfg={options.cfg_size}, "
-                f"text_encoder_tp={options.text_encoder_tp_size}, vae={options.vae_size}"
-            )
-        if options.dit_vae_image_size <= 0:
-            raise ValueError("dit_vae_image_size must be positive")
-        if options.enable_rolling_load:
-            if options.rolling_load_num_cached_layers < 1:
-                raise ValueError("rolling_load_num_cached_layers must be >= 1")
-            if not -1 <= options.rolling_load_num_rolling_slots <= options.rolling_load_num_cached_layers:
-                raise ValueError("rolling_load_num_rolling_slots must be between -1 and cached layers")
 
     def generate(
         self,
@@ -201,46 +176,31 @@ class DiT:
                 params.input_params.media_sources.add(
                     names[modality], modality, Path(path).read_bytes(), generation_params.audio_sampling_rate
                 )
-            return self._generate(master, params)
+            results: list[DiTRequestOutput] = []
+
+            def _on_output(output: DiTRequestOutput) -> bool:
+                results.append(output)
+                return True
+
+            master.handle_request(params, _on_output)
+            master.generate()
+            if len(results) != 1:
+                raise RuntimeError("DiT did not complete exactly one request")
+            output = results[0]
+            status = output.status
+            if status is not None and not status.ok:
+                if status.code == StatusCode.INVALID_ARGUMENT:
+                    raise ValueError(status.message)
+                raise RuntimeError(status.message)
+            if len(output.outputs) != 1:
+                raise RuntimeError("DiT did not return exactly one output")
+            return output.outputs[0]
         finally:
             self._lock.release()
 
-    @staticmethod
-    def _generate(master: DiTMaster, params: DiTRequestParams) -> DiTGenerationOutput:
-        results: list[DiTRequestOutput] = []
-
-        def _on_output(output: DiTRequestOutput) -> bool:
-            results.append(output)
-            return True
-
-        master.handle_request(params, _on_output)
-        master.generate()
-        if len(results) != 1:
-            raise RuntimeError("DiT did not complete exactly one request")
-        output = results[0]
-        status = output.status
-        if status is not None and not status.ok:
-            if status.code == StatusCode.INVALID_ARGUMENT:
-                raise ValueError(status.message)
-            raise RuntimeError(status.message)
-        if len(output.outputs) != 1:
-            raise RuntimeError("DiT did not return exactly one output")
-        return output.outputs[0]
-
-    def close(self) -> None:
-        if not self._lock.acquire(blocking=False):
-            raise RuntimeError("Cannot close DiT during generation")
+    def finish(self) -> None:
+        """Terminate the offline inference process and its descendants."""
         try:
-            with DiT._instance_lock:
-                if self.master is not None:
-                    self.master = None
-        finally:
-            self._lock.release()
-
-    def __enter__(self) -> DiT:
-        return self
-
-    def __exit__(
-        self, exc_type: type[BaseException] | None, exc_value: BaseException | None, traceback: TracebackType | None
-    ) -> None:
-        self.close()
+            utils.terminate_process(os.getpid())
+        except Exception:
+            pass

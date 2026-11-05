@@ -20,7 +20,7 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
-from xllm_export import Options, RequestOutput, VLMMaster
+from xllm_export import Options, RequestOutput, VLMMaster, init_config_from_option
 
 from . import utils
 from .errors import ValidationError
@@ -114,6 +114,7 @@ class VLM:
         options = Options()
         options.model_path = model
         options.model_impl = model_impl
+        options.use_cpp_chat_template = use_cpp_chat_template
         options.task_type = task
         options.enable_return_mm_full_embeddings = enable_return_mm_full_embeddings
         options.capture_hidden_state_layer = capture_hidden_state_layer
@@ -160,7 +161,7 @@ class VLM:
         options.input_shm_size = input_shm_size
         options.output_shm_size = output_shm_size
         options.disable_log_stats = disable_log_stats
-        utils._configure_cpp_chat_template(use_cpp_chat_template, model_type)
+        init_config_from_option(options, model_type)
         self.master = VLMMaster(options)
 
     def finish(self) -> None:

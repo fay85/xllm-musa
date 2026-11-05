@@ -161,6 +161,13 @@ MMErrCode ImageHandler::load(const MMContent& content,
                              const BinaryPayload& payload) {
   input.clear();
 
+  if (content.binary.has_value()) {
+    input.type = MMType::IMAGE;
+    input.raw_data = content.binary.value();
+    return input.raw_data.empty() ? MMErrCode::LOAD_DATA_ERR
+                                  : MMErrCode::SUCCESS;
+  }
+
   const auto& image_url = content.image_url;
   const auto& url = image_url.url;
 
@@ -197,6 +204,13 @@ MMErrCode VideoHandler::load(const MMContent& content,
                              MMInputItem& input,
                              const BinaryPayload& payload) {
   input.clear();
+
+  if (content.binary.has_value()) {
+    input.type = MMType::VIDEO;
+    input.raw_data = content.binary.value();
+    return input.raw_data.empty() ? MMErrCode::LOAD_DATA_ERR
+                                  : MMErrCode::SUCCESS;
+  }
 
   const auto& video_url = content.video_url;
   const auto& url = video_url.url;
@@ -247,6 +261,13 @@ MMErrCode AudioHandler::load(const MMContent& content,
                              const BinaryPayload& payload) {
   input.clear();
 
+  if (content.binary.has_value()) {
+    input.type = MMType::AUDIO;
+    input.raw_data = content.binary.value();
+    return input.raw_data.empty() ? MMErrCode::LOAD_DATA_ERR
+                                  : MMErrCode::SUCCESS;
+  }
+
   const auto& audio_url = content.audio_url;
   const auto& url = audio_url.url;
 
@@ -275,6 +296,9 @@ MMErrCode AudioHandler::decode(MMInputItem& input) {
 }
 
 MMHandlerSet::MMHandlerSet() {
+  handlers_["image"] = std::make_unique<ImageHandler>();
+  handlers_["video"] = std::make_unique<VideoHandler>();
+  handlers_["audio"] = std::make_unique<AudioHandler>();
   handlers_["image_url"] = std::make_unique<ImageHandler>();
   handlers_["video_url"] = std::make_unique<VideoHandler>();
   handlers_["audio_url"] = std::make_unique<AudioHandler>();

@@ -32,7 +32,7 @@ limitations under the License.
 #include "core/distributed_runtime/dit_master.h"
 #include "core/distributed_runtime/llm_master.h"
 #include "core/distributed_runtime/vlm_master.h"
-#include "core/framework/config/model_config.h"
+#include "core/framework/config/config_utils.h"
 #include "core/framework/multimodal/embedding_output.h"
 #include "core/framework/multimodal/mm_data.h"
 #include "core/framework/request/dit_input_sources.h"
@@ -61,6 +61,7 @@ PYBIND11_MODULE(xllm_export, m) {
       .def_readwrite("draft_model_path", &Options::draft_model_path_)
       .def_readwrite("backend", &Options::backend_)
       .def_readwrite("model_impl", &Options::model_impl_)
+      .def_readwrite("use_cpp_chat_template", &Options::use_cpp_chat_template_)
       .def_readwrite("limit_image_per_prompt",
                      &Options::limit_image_per_prompt_)
       .def_readwrite("block_size", &Options::block_size_)
@@ -375,12 +376,12 @@ PYBIND11_MODULE(xllm_export, m) {
             self.token, self.token_id, self.logprob);
       });
 
-  // export EmbeddingOutput
+  // 11. export EmbeddingOutput
   py::class_<EmbeddingOutput>(m, "EmbeddingOutput")
       .def_readonly("embedding", &EmbeddingOutput::embedding)
       .def_readonly("metadata", &EmbeddingOutput::metadata);
 
-  // 11. export SequenceOutput
+  // 12. export SequenceOutput
   py::class_<SequenceOutput>(m, "SequenceOutput")
       .def(py::init())
       .def_readwrite("index", &SequenceOutput::index)
@@ -395,7 +396,7 @@ PYBIND11_MODULE(xllm_export, m) {
         return "SequenceOutput({}: {!r})"_s.format(self.index, self.text);
       });
 
-  // 12. export MMType
+  // 13. export MMType
   py::enum_<MMType::Value>(m, "MMType")
       .value("NONE", MMType::Value::NONE)
       .value("IMAGE", MMType::Value::IMAGE)
@@ -403,7 +404,7 @@ PYBIND11_MODULE(xllm_export, m) {
       .value("AUDIO", MMType::Value::AUDIO)
       .export_values();
 
-  // 13. export MMData
+  // 14. export MMData
   py::class_<MMData>(m, "MMData")
       .def(py::init<int, const MMDict&>(), py::arg("ty"), py::arg("data"))
       .def("get",
@@ -424,7 +425,7 @@ PYBIND11_MODULE(xllm_export, m) {
         return ss.str();
       });
 
-  // 14. export VLMMaster
+  // 15. export VLMMaster
   py::class_<VLMMaster>(m, "VLMMaster")
       .def(py::init<const Options&>(),
            py::arg("options"),
@@ -436,6 +437,15 @@ PYBIND11_MODULE(xllm_export, m) {
                              BatchOutputCallback>(
                &VLMMaster::handle_batch_request),
            py::call_guard<py::gil_scoped_release>())
+      .def("handle_batch_request",
+           py::overload_cast<std::vector<std::vector<Message>>,
+                             std::vector<RequestParams>,
+                             BatchOutputCallback>(
+               &VLMMaster::handle_batch_request),
+           py::arg("conversations"),
+           py::arg("params"),
+           py::arg("callback"),
+           py::call_guard<py::gil_scoped_release>())
       // Offline-only entry aligned with vllm-ascend: prompts are used as-is
       // without re-applying the chat template. The online serving path keeps
       // applying the chat template via the messages-based request path.
@@ -446,14 +456,6 @@ PYBIND11_MODULE(xllm_export, m) {
                              BatchOutputCallback>(
                &VLMMaster::handle_batch_request_with_image_urls),
            py::call_guard<py::gil_scoped_release>())
-      .def("handle_batch_request_with_mm_urls",
-           &VLMMaster::handle_batch_request_with_mm_urls,
-           py::arg("prompts"),
-           py::arg("mm_urls"),
-           py::arg("params"),
-           py::arg("callback"),
-           py::arg("system_prompt") = "",
-           py::call_guard<py::gil_scoped_release>())
       .def("generate",
            &VLMMaster::generate,
            py::call_guard<py::gil_scoped_release>())
@@ -461,12 +463,12 @@ PYBIND11_MODULE(xllm_export, m) {
         return "VLMMaster({})"_s.format(self.options());
       });
 
-  // 15. export DiTRequestKind
+  // 16. export DiTRequestKind
   py::enum_<DiTRequestKind>(m, "DiTRequestKind")
       .value("IMAGE", DiTRequestKind::kImage)
       .value("VIDEO", DiTRequestKind::kVideo);
 
-  // 16. export DiTGenerationParams
+  // 17. export DiTGenerationParams
   py::class_<DiTGenerationParams>(m, "DiTGenerationParams")
       .def(py::init<>())
       .def_readwrite("width", &DiTGenerationParams::width)
@@ -486,7 +488,7 @@ PYBIND11_MODULE(xllm_export, m) {
       .def_readwrite("audio_sampling_rate",
                      &DiTGenerationParams::audio_sampling_rate);
 
-  // 17. export DiTMediaSources
+  // 18. export DiTMediaSources
   py::class_<DiTMediaSources>(m, "DiTMediaSources")
       .def(py::init<>())
       .def(
@@ -529,7 +531,7 @@ PYBIND11_MODULE(xllm_export, m) {
            py::arg("tensor"),
            py::arg("parameters") = TensorParameters{});
 
-  // 18. export DiTInputParams
+  // 19. export DiTInputParams
   py::class_<DiTInputParams>(m, "DiTInputParams")
       .def(py::init<>())
       .def_readwrite("prompt", &DiTInputParams::prompt)
@@ -539,14 +541,14 @@ PYBIND11_MODULE(xllm_export, m) {
       .def_readwrite("media_sources", &DiTInputParams::media_sources)
       .def_readwrite("tensor_sources", &DiTInputParams::tensor_sources);
 
-  // 19. export DiTRequestParams
+  // 20. export DiTRequestParams
   py::class_<DiTRequestParams>(m, "DiTRequestParams")
       .def(py::init<DiTRequestKind>(), py::arg("request_kind"))
       .def_readwrite("request_id", &DiTRequestParams::request_id)
       .def_readwrite("input_params", &DiTRequestParams::input_params)
       .def_readwrite("generation_params", &DiTRequestParams::generation_params);
 
-  // 20. export DiTGenerationOutput
+  // 21. export DiTGenerationOutput
   py::class_<DiTGenerationOutput>(m, "DiTGenerationOutput")
       .def_property_readonly("image",
                              [](const DiTGenerationOutput& output) {
@@ -556,12 +558,12 @@ PYBIND11_MODULE(xllm_export, m) {
         return py::bytes(output.video);
       });
 
-  // 21. export DiTRequestOutput
+  // 22. export DiTRequestOutput
   py::class_<DiTRequestOutput>(m, "DiTRequestOutput")
       .def_readonly("status", &DiTRequestOutput::status)
       .def_readonly("outputs", &DiTRequestOutput::outputs);
 
-  // 22. export DiTMaster
+  // 23. export DiTMaster
   py::class_<DiTMaster>(m, "DiTMaster")
       .def(py::init<const Options&>(),
            py::arg("options"),
@@ -583,27 +585,39 @@ PYBIND11_MODULE(xllm_export, m) {
       .def("generate",
            &DiTMaster::generate,
            py::call_guard<py::gil_scoped_release>())
-      .def("options",
-           &DiTMaster::options,
-           py::call_guard<py::gil_scoped_release>())
       .def("__repr__", [](const DiTMaster& self) {
         return "DiTMaster({})"_s.format(self.options());
       });
 
-  // 23. export helpers
+  // 24. export helpers
+  py::class_<MMContent>(m, "MMContent")
+      .def(py::init([](const std::string& type,
+                       const py::object& text,
+                       const py::object& binary) {
+             if (type == "text") {
+               return MMContent(type, text.cast<std::string>());
+             }
+             MMContent content(type, std::string());
+             content.binary = binary.cast<std::string>();
+             return content;
+           }),
+           py::arg("type"),
+           py::arg("text") = py::none(),
+           py::arg("binary") = py::none());
+
+  py::class_<Message>(m, "Message")
+      .def(py::init<const std::string&, const MMContentVec&>(),
+           py::arg("role"),
+           py::arg("content"));
+
+  m.def("init_config_from_option",
+        &config::init_config_from_option,
+        py::arg("options"),
+        py::arg("model_type") = "");
   m.def("get_device_count", &Platform::device_count);
   m.def("get_model_backend",
         &ModelRegistry::get_model_backend,
         py::arg("model_type"));
-  m.def(
-      "configure_cpp_chat_template",
-      [](bool use_cpp_chat_template, const std::string& model_type) {
-        ModelConfig::get_instance().use_cpp_chat_template(
-            use_cpp_chat_template);
-        ModelConfig::get_instance().normalize_cpp_chat_template(model_type);
-      },
-      py::arg("use_cpp_chat_template"),
-      py::arg("model_type"));
 }
 
 }  // namespace xllm

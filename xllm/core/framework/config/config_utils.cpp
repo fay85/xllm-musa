@@ -27,6 +27,7 @@ limitations under the License.
 #include <string>
 #include <system_error>
 
+#include "core/common/options.h"
 #include "core/framework/config/beam_search_config.h"
 #include "core/framework/config/disagg_pd_config.h"
 #include "core/framework/config/distributed_config.h"
@@ -205,6 +206,40 @@ void dump_startup_config() {
   }
 
   LOG(INFO) << "Dumped startup config to " << dump_path.string();
+}
+
+void init_config_from_option(const Options& options,
+                             const std::string& model_type) {
+  ModelConfig& model_config = ModelConfig::get_instance();
+  model_config.capture_hidden_state_layer(options.capture_hidden_state_layer())
+      .use_cpp_chat_template(options.use_cpp_chat_template());
+  model_config.normalize_cpp_chat_template(model_type);
+  MultimodalConfig::get_instance()
+      .enable_return_mm_full_embeddings(
+          options.enable_return_mm_full_embeddings())
+      .enable_return_embedding_modality_tags(
+          options.enable_return_embedding_modality_tags());
+  LoadConfig::get_instance()
+      .enable_manual_loader(options.enable_manual_loader())
+      .enable_rolling_load(options.enable_rolling_load())
+      .rolling_load_num_cached_layers(options.rolling_load_num_cached_layers())
+      .rolling_load_num_rolling_slots(options.rolling_load_num_rolling_slots());
+  DiTConfig::get_instance()
+      .dit_vae_image_size(options.dit_vae_image_size())
+      .dit_cache_policy(options.dit_cache_policy())
+      .dit_enable_text_encoder(options.dit_enable_text_encoder())
+      .dit_h3_task_type(options.dit_h3_task_type())
+      .dit_laser_attention_enabled(options.dit_laser_attention_enabled())
+      .max_requests_per_batch(options.max_requests_per_batch());
+  ParallelConfig::get_instance()
+      .tp_size(options.tp_size())
+      .sp_size(options.sp_size())
+      .cfg_size(options.cfg_size())
+      .dp_size(options.dp_size())
+      .vae_size(options.vae_size())
+      .text_encoder_tp_size(options.text_encoder_tp_size());
+  SchedulerConfig::get_instance().max_tokens_per_batch(
+      options.max_tokens_per_batch());
 }
 
 }  // namespace xllm::config

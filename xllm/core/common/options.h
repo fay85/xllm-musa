@@ -48,6 +48,8 @@ class Options {
   // runs them through the embedded Python graph backend.
   PROPERTY(std::string, model_impl) = "native";
 
+  PROPERTY(bool, use_cpp_chat_template) = true;
+
   // max image num per prompt, default 8
   PROPERTY(int32_t, limit_image_per_prompt) = 8;
 

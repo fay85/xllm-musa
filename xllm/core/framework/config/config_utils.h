@@ -23,6 +23,10 @@ limitations under the License.
 
 #include "core/util/json_reader.h"
 
+namespace xllm {
+class Options;
+}
+
 namespace xllm::config {
 
 JsonReader load_json_file(const std::string& config_path);
@@ -34,6 +38,9 @@ const std::optional<JsonReader>& get_parsed_json_config();
 bool is_flag_specified(const char* flag_name);
 
 void dump_startup_config();
+
+void init_config_from_option(const Options& options,
+                             const std::string& model_type = "");
 
 }  // namespace xllm::config
 

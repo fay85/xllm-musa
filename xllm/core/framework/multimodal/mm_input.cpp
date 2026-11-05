@@ -17,7 +17,6 @@ limitations under the License.
 
 #include <algorithm>
 #include <atomic>
-#include <variant>
 
 #include "core/common/metrics.h"
 #include "core/util/blocking_counter.h"
@@ -59,12 +58,9 @@ MMErrCode MMInputTransfer::trans(const std::vector<Message>& messages,
 
   for (size_t idx = 0; idx < messages.size(); ++idx) {
     const auto& message = messages[idx];
-    const MMContentVec* mmc = std::get_if<MMContentVec>(&message.content);
-    if (mmc == nullptr) {
-      continue;
-    }
+    const auto& mmc = std::get<MMContentVec>(message.content);
 
-    MMErrCode code = this->trans_parallel(*mmc, ins, inputs.payload());
+    MMErrCode code = this->trans_parallel(mmc, ins, inputs.payload());
     if (code != MMErrCode::SUCCESS) {
       return code;
     }
@@ -81,13 +77,13 @@ MMErrCode MMInputTransfer::process_item(const MMContent& content,
   const bool success = code == MMErrCode::SUCCESS;
   const char* modality = "unknown";
   const char* representation = "unknown";
-  if (content.type == "image_url") {
+  if (content.type == "image" || content.type == "image_url") {
     modality = "image";
     representation = "raw";
-  } else if (content.type == "video_url") {
+  } else if (content.type == "video" || content.type == "video_url") {
     modality = "video";
     representation = "raw";
-  } else if (content.type == "audio_url") {
+  } else if (content.type == "audio" || content.type == "audio_url") {
     modality = "audio";
     representation = "raw";
   } else if (content.type == "image_embedding") {
@@ -126,7 +122,8 @@ MMErrCode MMInputTransfer::trans_parallel(const MMContentVec& mmc,
       continue;
     }
 
-    if (type == "image_url" || type == "video_url" || type == "audio_url") {
+    if (type == "image" || type == "image_url" || type == "video" ||
+        type == "video_url" || type == "audio" || type == "audio_url") {
       tasks.emplace_back(ProcessTask{
           .content_index = idx,
           .input_index = out_idx,

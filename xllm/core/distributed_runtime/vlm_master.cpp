@@ -436,60 +436,6 @@ void VLMMaster::handle_batch_request_with_image_urls(
   }
 }
 
-void VLMMaster::handle_batch_request_with_mm_urls(
-    std::vector<std::string> prompts,
-    std::vector<std::vector<std::pair<std::string, std::string>>> mm_urls,
-    std::vector<RequestParams> sps,
-    BatchOutputCallback callback,
-    const std::string& system_prompt) {
-  CHECK_EQ(prompts.size(), mm_urls.size())
-      << "Number of prompts and multimodal inputs should be the same";
-  CHECK(prompts.size() == sps.size() || sps.size() == 1)
-      << "Number of prompts and sampling parameters should be the same";
-
-  std::vector<std::vector<Message>> conversations;
-  conversations.reserve(prompts.size());
-  for (size_t i = 0; i < prompts.size(); ++i) {
-    MMContentVec contents;
-    contents.reserve(mm_urls[i].size() + 1);
-    for (const auto& [type, value] : mm_urls[i]) {
-      if (type == "text") {
-        contents.emplace_back(type, value);
-      } else if (type == "image_url") {
-        contents.emplace_back(type, ImageURL{value, {}});
-      } else if (type == "video_url") {
-        contents.emplace_back(type, VideoURL{value, {}});
-      } else {
-        throw std::invalid_argument("Unsupported multimodal input type: " +
-                                    type);
-      }
-    }
-    contents.emplace_back("text", std::move(prompts[i]));
-    std::vector<Message> messages;
-    messages.reserve(system_prompt.empty() ? 1 : 2);
-    if (!system_prompt.empty()) {
-      messages.emplace_back("system", system_prompt);
-    }
-    messages.emplace_back("user", std::move(contents));
-    conversations.emplace_back(std::move(messages));
-  }
-  for (size_t i = 0; i < conversations.size(); ++i) {
-    if (get_rate_limiter()->is_limited()) {
-      callback(i,
-               RequestOutput(
-                   Status(StatusCode::RESOURCE_EXHAUSTED, "VLM rate limited")));
-      continue;
-    }
-    handle_request(std::move(conversations[i]),
-                   sps.size() == 1 ? sps[0] : std::move(sps[i]),
-                   BinaryPayload(),
-                   /*call=*/std::nullopt,
-                   [i, callback](const RequestOutput& output) {
-                     return callback(i, output);
-                   });
-  }
-}
-
 void VLMMaster::handle_batch_request(
     std::vector<std::vector<Message>> conversations,
     std::vector<RequestParams> sps,

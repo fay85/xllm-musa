@@ -22,7 +22,7 @@ import uuid
 from collections.abc import Callable, Sequence
 from typing import Any
 
-from xllm_export import LLMMaster, Options, RequestOutput, RequestParams, VLMMaster
+from xllm_export import LLMMaster, Options, RequestOutput, RequestParams, VLMMaster, init_config_from_option
 
 from . import utils
 from .errors import ValidationError
@@ -159,7 +159,6 @@ class LLM:
             raise ValueError("LLM does not support DiT backend models")
         if model_type is None:
             raise ValueError("model_type is required for offline inference")
-        utils._configure_cpp_chat_template(use_cpp_chat_template, model_type)
 
         model_impl = utils._normalize_model_impl(model_impl)
         if model_impl == "python":
@@ -167,6 +166,7 @@ class LLM:
         options = Options()
         options.model_path = model
         options.model_impl = model_impl
+        options.use_cpp_chat_template = use_cpp_chat_template
         options.task_type = task
         options.draft_model_path = draft_model
         options.backend = backend
@@ -216,6 +216,7 @@ class LLM:
         options.kv_cache_dtype = kv_cache_dtype
         options.disable_log_stats = disable_log_stats
         options.enable_sleep_mode = enable_sleep_mode
+        init_config_from_option(options, model_type)
         self._backend = backend
         if backend == "vlm":
             self.master = VLMMaster(options)

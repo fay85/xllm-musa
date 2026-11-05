@@ -19,7 +19,7 @@ import sys
 import time
 from typing import Any
 
-from xllm_export import LLMMaster, Options, RequestOutput, RequestParams
+from xllm_export import LLMMaster, Options, RequestOutput, RequestParams, init_config_from_option
 
 from . import utils
 from .errors import ValidationError
@@ -80,6 +80,7 @@ class Embedding:
         options = Options()
         options.model_path = model
         options.model_impl = model_impl
+        options.use_cpp_chat_template = use_cpp_chat_template
         options.task_type = "embed"
         options.draft_model_path = None
         options.backend = "llm"
@@ -116,7 +117,7 @@ class Embedding:
         options.is_local = is_local
         options.input_shm_size = input_shm_size
         options.output_shm_size = output_shm_size
-        utils._configure_cpp_chat_template(use_cpp_chat_template, model_type)
+        init_config_from_option(options, model_type)
         self.master = LLMMaster(options)
 
     def finish(self) -> None:

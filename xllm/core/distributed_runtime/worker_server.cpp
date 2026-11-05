@@ -370,13 +370,8 @@ void WorkerServer::create_spawn_server(int32_t local_rank,
   nlohmann::ordered_json worker_config;
   DiTConfig::get_instance().append_config_json(worker_config);
   LoadConfig::get_instance().append_config_json(worker_config);
-  const MultimodalConfig& mm_config = MultimodalConfig::get_instance();
-  worker_config["enable_return_mm_full_embeddings"] =
-      mm_config.enable_return_mm_full_embeddings();
-  worker_config["enable_return_embedding_modality_tags"] =
-      mm_config.enable_return_embedding_modality_tags();
-  worker_config["capture_hidden_state_layer"] =
-      ModelConfig::get_instance().capture_hidden_state_layer();
+  MultimodalConfig::get_instance().append_config_json(worker_config);
+  ModelConfig::get_instance().append_config_json(worker_config);
   const std::string worker_config_str = worker_config.dump();
   const char* argv[] = {spawn_worker_bin_path.c_str(),
                         master_node_addr.c_str(),
