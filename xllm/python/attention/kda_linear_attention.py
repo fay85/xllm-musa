@@ -617,19 +617,25 @@ def _kda_cp_zero_prior_segments(cp_rank: int, cp_size: int, num_seqs: int) -> li
 
 
 class _KdaCpHostPlan(NamedTuple):
-    """Per-call constant tensors of one CP forward shape.
+    """Per-call constant host values and tensors of one CP forward shape.
 
     Everything here depends ONLY on (seg_cu, cp_rank, cp_size,
     conv_state_len, device) -- the segment plan is identical across every
-    chunk of a request under chunked prefill, so the tensors are built once
+    chunk of a request under chunked prefill, so the values are built once
     and reused (n1 host prep slimming; bounded LRU below). Data-dependent
     tensors (row selections, halo/conv buffers, prefix states, the warm
     mask) are deliberately NOT here: their values change per call.
 
-    The index tensors (replay/early/late rows and cu, causal_rows,
-    halo_pos) live on ``device`` for the gather/select calls that consume
-    them. The conv-call metadata pair (conv_cu, empty_i64) is deliberately
-    CPU int64: the conv op marshals its qsl/si/ism arguments to host
+    The replay ``cu`` values (``replay_cu`` / ``early_cu`` / ``late_cu``)
+    are host tuples: ``chunk_kda_fwd`` consumes cu_seqlens as a host int
+    sequence, and FLA 26.9.x's default stable launcher derives chunk_indices
+    from it in a Python boolean context, which rejects a multi-element
+    tensor; every element read from a device tensor would also sync the
+    host. The row/index tensors
+    (early/late rows and idx, causal_rows, halo_pos) live on ``device`` for
+    the gather/select calls that consume them. The conv-call metadata pair
+    (conv_cu, empty_i64) is deliberately CPU int64: the conv op marshals
+    its qsl/si/ism arguments to host
     IntArrayRefs inside the C++ wrapper (``.to(torch::kCPU,
     torch::kInt64)``), which is a NO-OP on a tensor that is already
     cpu+int64+contiguous -- passing device tensors there made the wrapper
@@ -640,13 +646,13 @@ class _KdaCpHostPlan(NamedTuple):
 
     # int64 CPU seg_cu (the conv call's host query_start_loc).
     conv_cu: torch.Tensor
-    replay_cu: torch.Tensor  # int32 seg_cu (the full-batch replay call)
+    replay_cu: tuple[int, ...]  # seg_cu (the full-batch replay call)
     # int64 CPU empty (the conv call's host state_indices).
     empty_i64: torch.Tensor
-    early_cu: torch.Tensor | None  # int32 early replay cu_seqlens
+    early_cu: tuple[int, ...] | None  # early replay cu_seqlens
     early_rows: torch.Tensor | None  # int64 packed early row indices
     early_idx: torch.Tensor | None  # int64 early segment ids (index_copy)
-    late_cu: torch.Tensor | None  # int32 late replay cu_seqlens
+    late_cu: tuple[int, ...] | None  # late replay cu_seqlens
     late_rows: torch.Tensor | None  # int64 packed late row indices
     late_idx: torch.Tensor | None  # int64 late segment ids (index_copy)
     causal_rows: torch.Tensor  # int64 gathered-row of each causal chunk
@@ -690,11 +696,11 @@ def _kda_cp_host_plan(
     def packed_rows(segments: Sequence[int]) -> torch.Tensor:
         return torch.cat([torch.arange(seg_cu[s], seg_cu[s + 1], dtype=torch.int64, device=device) for s in segments])
 
-    def packed_cu(segments: Sequence[int]) -> torch.Tensor:
+    def packed_cu(segments: Sequence[int]) -> tuple[int, ...]:
         cu = [0]
         for segment in segments:
             cu.append(cu[-1] + (seg_cu_list[segment + 1] - seg_cu_list[segment]))
-        return torch.tensor(cu, dtype=torch.int32, device=device)
+        return tuple(cu)
 
     halo_pos_list: list[int] = []
     for half in (0, 1):
@@ -704,7 +710,7 @@ def _kda_cp_host_plan(
 
     plan = _KdaCpHostPlan(
         conv_cu=torch.tensor(seg_cu_list, dtype=torch.int64),
-        replay_cu=torch.tensor(seg_cu_list, dtype=torch.int32, device=device),
+        replay_cu=tuple(seg_cu_list),
         empty_i64=torch.empty(0, dtype=torch.int64),
         early_cu=packed_cu(early_segments) if early_segments else None,
         early_rows=packed_rows(early_segments) if early_segments else None,
@@ -862,7 +868,7 @@ def kda_cp_execute_linear(
     All reductions are transport-only: the exchanged values and
     every kernel input are identical to a synchronous schedule.
     The
-    per-shape host tensors (cu_seqlens views, early/late row packs,
+    per-shape host values and tensors (cu_seqlens tuples, early/late row packs,
     causal row indices, the halo tail positions) come from a bounded
     per-shape plan cache (_kda_cp_host_plan): one request's chunks reuse
     one plan. Row staging is ONE strided copy off the raw channel-first

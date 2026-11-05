@@ -444,11 +444,9 @@ def test_chunk_kda_varlen_matches_independent_sequences(npu_runtime: ModuleType)
     initial_state = _random((len(sequence_lengths), num_heads, head_dim, head_dim), torch.float32)
     a_log = _random((num_heads,), torch.float32)
     dt_bias = _random((num_heads * head_dim,), torch.float32)
-    cumulative_lengths = torch.tensor(
-        [0, sequence_lengths[0], num_tokens],
-        dtype=torch.int32,
-        device=device,
-    )
+    # chunk_kda_fwd consumes cu_seqlens as a host int sequence; FLA 26.9.x's
+    # stable launcher also rejects multi-element tensors there.
+    cumulative_lengths = [0, sequence_lengths[0], num_tokens]
     common_kwargs = dict(
         chunk_size=64,
         layout="BSND",
@@ -488,7 +486,7 @@ def test_chunk_kda_varlen_matches_independent_sequences(npu_runtime: ModuleType)
             beta[:, start:end],
             head_dim**-0.5,
             initial_state=initial_state[sequence_index : sequence_index + 1],
-            cu_seqlens=torch.tensor([0, sequence_length], dtype=torch.int32, device=device),
+            cu_seqlens=[0, sequence_length],
             **common_kwargs,
         )
         sequence_outputs.append(result[0])

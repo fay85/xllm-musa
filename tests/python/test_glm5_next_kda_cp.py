@@ -777,7 +777,7 @@ def test_kda_cp_host_plan_reuse_and_contents() -> None:
     assert plan.early_cu is None and plan.early_rows is None and plan.early_idx is None
     assert plan.late_cu is None and plan.late_rows is None and plan.late_idx is None
     torch.testing.assert_close(plan.conv_cu, torch.tensor(seg_cu, dtype=torch.int64))
-    torch.testing.assert_close(plan.replay_cu, torch.tensor(seg_cu, dtype=torch.int32))
+    assert plan.replay_cu == tuple(seg_cu)
     assert plan.causal_rows.tolist() == list(kda_cp_causal_summary_rows(2))
     # halo_pos: each segment's last conv_state_len packed positions, in the
     # halo payload's flat (half, sequence, window) row order.
@@ -809,8 +809,8 @@ def test_kda_cp_host_plan_reuse_and_contents() -> None:
     assert plan_zero.late_idx.tolist() == [1, 3]
     assert plan_zero.early_rows.tolist() == list(range(0, 128)) + list(range(256, 384))
     assert plan_zero.late_rows.tolist() == list(range(128, 256)) + list(range(384, 512))
-    assert plan_zero.early_cu.tolist() == [0, 128, 256]
-    assert plan_zero.late_cu.tolist() == [0, 128, 256]
+    assert plan_zero.early_cu == (0, 128, 256)
+    assert plan_zero.late_cu == (0, 128, 256)
     assert plan_zero.halo_pos.tolist() == plan.halo_pos.tolist()
 
     # LRU bound: distinct shapes beyond the capacity evict the oldest.
@@ -886,8 +886,10 @@ def test_kda_cp_host_plan_conv_metadata_is_cpu() -> None:
     is CPU int64: the conv op marshals qsl/si/ism to host IntArrayRefs in
     its C++ wrapper, and .to(kCPU, kInt64) is a no-op only on tensors that
     are ALREADY cpu+int64, so the plan tensors must live host-side for the
-    marshalling to stay sync-free (n6). The other plan tensors stay on the
-    plan's device for the gather/select calls that consume them."""
+    marshalling to stay sync-free (n6). The replay ``cu`` values are host
+    tuples (``chunk_kda_fwd`` consumes them as a host int sequence); the
+    row/index tensors stay on the plan's device for the gather/select calls
+    that consume them."""
     from xllm.python.attention.kda_linear_attention import _kda_cp_host_plan
 
     device = torch.device("cpu")
@@ -897,7 +899,8 @@ def test_kda_cp_host_plan_conv_metadata_is_cpu() -> None:
     assert plan.conv_cu.tolist() == seg_cu
     assert plan.empty_i64.device.type == "cpu" and plan.empty_i64.dtype == torch.int64
     assert plan.empty_i64.numel() == 0
-    assert plan.replay_cu.device.type == device.type
+    assert plan.replay_cu == tuple(seg_cu)
+    assert isinstance(plan.early_cu, tuple) and isinstance(plan.late_cu, tuple)
     assert plan.halo_pos.device.type == device.type
 
 
@@ -2128,6 +2131,12 @@ def _run_cp_pipeline_for_transport(
     reference_kernel = ascendc.chunk_kda_fwd
 
     def _recording_kernel(*args: Any, **kwargs: Any) -> Any:
+        cu = kwargs.get("cu_seqlens")
+        assert cu is None or not isinstance(cu, torch.Tensor), (
+            "chunk_kda_fwd cu_seqlens must be a host int sequence, not a torch.Tensor "
+            "(a device tensor syncs per element; FLA 26.9.x's stable launcher also rejects "
+            "multi-element tensors)"
+        )
         group.events.append(("replay", group.rank))
         return reference_kernel(*args, **kwargs)
 
@@ -2319,7 +2328,7 @@ def test_kda_cp_prepare_factors_match_fused_emission_npu() -> None:
         layout="BSND",
         initial_state=None,
         output_final_state=True,
-        cu_seqlens=torch.tensor([0, total], dtype=torch.int32, device=device),
+        cu_seqlens=[0, total],
         disable_recompute=True,
         state_v_first=True,
         **gate_kwargs,
