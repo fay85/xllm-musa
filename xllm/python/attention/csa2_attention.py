@@ -2516,7 +2516,12 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         if key is None or key_scale is None:
             raise RuntimeError("DeepSeek-V4.1 QLI v3 INT8 index plane disappeared after dispatch")
 
-        ctx_lens = _ensure_seq_lens_tensor(dsa.seq_lens, device)
+        cp_runtime = get_current_dsa_cp_runtime() if get_forward_context_or_none() is not None else None
+        ctx_lens = (
+            cp_runtime.local_context_lengths
+            if cp_runtime is not None
+            else _ensure_seq_lens_tensor(dsa.seq_lens, device)
+        )
         # TND packed-query offsets: host arithmetic over the chunk geometry, so
         # no capture-time allocation constraint applies (eager path).
         offsets = [0]
@@ -2955,7 +2960,9 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             if seq < len(dropped_rows) and dropped_rows[seq] > 0:
                 # The retained suffix has no preceding consumer-layer rows.
                 # Mask that missing prefix even when absolute positions are high.
-                retained = torch.arange(1, q_len + 1, device=q.device, dtype=torch.int32).view(-1, 1)
+                retained = (
+                    local_end - previous - q_len + torch.arange(1, q_len + 1, device=q.device, dtype=torch.int32)
+                ).view(-1, 1)
                 visible = torch.minimum(visible, retained)
             cmp_lens = torch.div(local_end, ratio, rounding_mode="floor") if ratio else None
             residual = local_end % ratio if ratio else None

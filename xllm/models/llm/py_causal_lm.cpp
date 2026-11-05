@@ -213,10 +213,16 @@ PyCausalLM::PyCausalLM(const ModelContext& context, bool is_vlm)
   }
   const bool is_qwen3_5_mega_moe_model =
       model_type == "qwen3_5_moe" || model_type == "qwen3_5_moe_text";
+  const bool is_dsv41_mega_moe_model = model_type == "deepseek_v41";
   const bool enable_glm_mega_moe = kernel_config.enable_mega_moe() &&
                                    is_glm_mega_moe_model && ep_size_ > 1 &&
                                    eplb_config.expert_parallel_degree() == 2 &&
                                    !eplb_config.enable_eplb();
+  const bool enable_dsv41_mega_moe =
+      kernel_config.enable_mega_moe() && is_dsv41_mega_moe_model &&
+      ep_size_ > 1 && ep_size_ == parallel_args.world_size() && cp_size_ == 1 &&
+      moe_tp_size_ == 1 && eplb_config.expert_parallel_degree() == 2 &&
+      !eplb_config.enable_eplb();
   const bool enable_qwen3_5_mega_moe =
       kernel_config.enable_mega_moe() && is_qwen3_5_mega_moe_model;
   if (kernel_config.enable_mega_moe() && !enable_glm_mega_moe &&
@@ -239,7 +245,8 @@ PyCausalLM::PyCausalLM(const ModelContext& context, bool is_vlm)
     CHECK_EQ(ep_size_, parallel_args.world_size())
         << "Qwen3.5 MegaMoe sequence parallelism requires EP == world size.";
   }
-  const bool enable_mega_moe = enable_glm_mega_moe || enable_qwen3_5_mega_moe;
+  const bool enable_mega_moe =
+      enable_glm_mega_moe || enable_dsv41_mega_moe || enable_qwen3_5_mega_moe;
   if (enable_mega_moe) {
     CHECK(moe_ep_group_ != nullptr)
         << "Python MegaMoE requires a MoE EP process group.";
@@ -273,6 +280,15 @@ PyCausalLM::PyCausalLM(const ModelContext& context, bool is_vlm)
         per_rank_rows *= 2;
       }
       comm_spec.max_num_tokens_per_rank = per_rank_rows;
+    } else if (is_dsv41_mega_moe_model) {
+      // EPLv2 routes the TP-local prefill rows through MegaMoE. The scheduler
+      // token budget is global to the DP batch, so TP bounds each rank's source
+      // rows; the runtime falls back to AllToAllV if an actual step exceeds it.
+      const int64_t max_tokens = static_cast<int64_t>(
+          SchedulerConfig::get_instance().max_tokens_per_batch());
+      CHECK_GT(max_tokens, 0);
+      comm_spec.max_num_tokens_per_rank =
+          (max_tokens + tp_size_ - 1) / tp_size_;
     } else {
       const int64_t dp_factor =
           std::max(static_cast<int64_t>(dp_size_), int64_t{1});
@@ -298,24 +314,34 @@ PyCausalLM::PyCausalLM(const ModelContext& context, bool is_vlm)
       model_args_.model_type() == "deepseek_v4" ||
       model_args_.model_type() == "deepseek_v41" ||
       util::is_deepseek_v4_dspark_model_type(model_args_.model_type());
-  // V4.1 FlashComm1 uses the Python SP/EP reduce-scatter collectives. Native
+  // V4.1 FC1 and EPLv2 use Python source-TP/expert collectives. Native
   // all-reduce ownership alone does not create their Python process groups.
-  // Resolve capability before creating FC1-only groups. Keep the effective
+  // Resolve capability before creating these groups. Keep the effective
   // switch in the same config dict passed to the Python model below.
   bool uses_v41_flashcomm1 = false;
+  bool uses_v41_eplv2 = false;
 #if defined(USE_NPU)
   if (model_args_.model_type() == "deepseek_v41" &&
-      KernelConfig::get_instance().enable_flashcomm1()) {
+      (KernelConfig::get_instance().enable_flashcomm1() ||
+       EPLBConfig::get_instance().expert_parallel_degree() == 2)) {
     config_dict_ = build_config_dict(parallel_args,
                                      context.get_speculative_runtime_config());
-    uses_v41_flashcomm1 = py::module_::import("xllm.python.models.deepseek_v41")
-                              .attr("DeepseekV41ForCausalLM")
-                              .attr("configure_flashcomm1")(config_dict_)
-                              .cast<bool>();
+    py::object v41_model =
+        py::module_::import("xllm.python.models.deepseek_v41")
+            .attr("DeepseekV41ForCausalLM");
+    uses_v41_flashcomm1 =
+        v41_model.attr("configure_flashcomm1")(config_dict_).cast<bool>();
+    if (EPLBConfig::get_instance().expert_parallel_degree() == 2) {
+      uses_v41_eplv2 = v41_model.attr("configure_expert_parallel")(config_dict_)
+                           .cast<bool>();
+    }
   }
 #endif
-  const bool needs_python_process_group =
-      !is_deepseek_v4 || uses_v41_flashcomm1 || dp_size_ > 1 || cp_size_ > 1;
+  const bool uses_v41_python_collectives =
+      uses_v41_flashcomm1 || uses_v41_eplv2;
+  const bool needs_python_process_group = !is_deepseek_v4 ||
+                                          uses_v41_python_collectives ||
+                                          dp_size_ > 1 || cp_size_ > 1;
   if (needs_python_process_group) {
     py::object init_process_group =
         py::module_::import("xllm.python.distributed")
@@ -324,7 +350,7 @@ PyCausalLM::PyCausalLM(const ModelContext& context, bool is_vlm)
     CHECK_GT(parallel_args.python_rendezvous_port_, 0);
     const int32_t global_rank = parallel_args.rank();
     const int32_t global_world_size = parallel_args.world_size();
-    if ((!is_deepseek_v4 || uses_v41_flashcomm1) && tp_size_ > 1) {
+    if ((!is_deepseek_v4 || uses_v41_python_collectives) && tp_size_ > 1) {
       init_process_group("tp",
                          parallel_args.python_rendezvous_host_,
                          parallel_args.python_rendezvous_port_,
@@ -357,7 +383,7 @@ PyCausalLM::PyCausalLM(const ModelContext& context, bool is_vlm)
                          global_world_size,
                          global_rank / moe_tp_size_);
     }
-    if ((!is_deepseek_v4 || uses_v41_flashcomm1) && ep_size_ > 1) {
+    if ((!is_deepseek_v4 || uses_v41_python_collectives) && ep_size_ > 1) {
       init_process_group("moe_ep",
                          parallel_args.python_rendezvous_host_,
                          parallel_args.python_rendezvous_port_,
@@ -599,6 +625,7 @@ py::dict PyCausalLM::build_config_dict(
   // admits the graph-capturable MC2 transport inside the capacity window,
   // while prefill and over-capacity steps stay on eager AllToAllV.
   if (model_args_.model_type() == "glm_moe_dsa" ||
+      model_args_.model_type() == "deepseek_v41" ||
       model_args_.model_type() == "glm5_next" ||
       model_args_.model_type() == "glm5_next_text" ||
       is_qwen3_5_target_model_type(model_args_.model_type())) {

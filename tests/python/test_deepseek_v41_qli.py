@@ -1715,3 +1715,20 @@ def test_qli_refresh_runs_inside_target_after_warmup(monkeypatch: pytest.MonkeyP
             assert value.data_ptr() == addresses[ratio]
             assert torch.equal(value, dsa.seq_lens // ratio)
             assert torch.equal(state.cmp_residual[ratio], dsa.seq_lens % ratio)
+
+
+def test_qli_v3_prefill_uses_dsa_cp_local_causal_lengths(monkeypatch: pytest.MonkeyPatch) -> None:
+    from xllm.python.model_executor.dsa_cp import DsaCpRuntime, build_dsa_cp_context
+    from xllm.python.model_executor.forward_context import ForwardContext, forward_context
+
+    recorder = _stub_qli(monkeypatch)
+    backend = _make_backend()
+    dsa = _make_dsa(is_acl_graph=False, seq_lens=[10, 5, 8, 12])
+    plan = build_dsa_cp_context(10, [3, 1, 2, 4], 2, 0)
+    local_lengths = plan.local_context_lengths(dsa.seq_lens)
+    context = ForwardContext(backend, torch.device("cpu"), SimpleNamespace(), [])
+    context.layer_shared_cache[DsaCpRuntime] = DsaCpRuntime(plan, local_lengths)
+    with forward_context(context):
+        _drive_prefill(backend, _StubIndexerLayer(2, 1), dsa, _make_shared(1), list(plan.local_q_lens))
+    assert recorder.indexer_calls[0]["seqused_k"].tolist() == [10, 5, 7, 0]
+    assert recorder.metadata_calls[0][1]["seqused_k"].tolist() == [10, 5, 7, 0]

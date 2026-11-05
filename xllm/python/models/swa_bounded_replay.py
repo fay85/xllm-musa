@@ -31,6 +31,7 @@ from scripts.logger import logger
 from xllm.python import distributed
 from xllm.python.layers.sequence_parallel import sp_all_gather, sp_shard
 from xllm.python.layers.sequence_parallel_metadata import build_flashcomm1_layout
+from xllm.python.model_executor.dsa_cp import DsaCpContext, DsaCpRuntime, build_dsa_cp_context
 from xllm.python.model_executor.forward_context import ForwardContext, forward_context, record_layer_event
 
 if TYPE_CHECKING:
@@ -80,6 +81,62 @@ def should_run_swa_bounded_replay(enabled: bool, context: ForwardContext) -> boo
     return True
 
 
+def _redistribute_dsa_cp_queries(shared: Any, source: DsaCpContext, target: DsaCpContext, device: torch.device) -> None:
+    """Rebase source-local picks and move the retained rows to compact owners."""
+    # Removing execution padding can change TP ownership even when every
+    # request already fits in the retained window. Use replicated geometry
+    # for this decision so all TP peers enter the same collectives.
+    if source.num_tokens == target.num_tokens and source.global_q_lens == target.global_q_lens:
+        return
+    # Empty query owners may not have published a candidate plane. Every TP
+    # peer agrees on plane presence before selecting the same collectives.
+    planes = torch.tensor(
+        [[shared.topk_idxs is not None, shared.candidate_blocks is not None, shared.candidates is not None]],
+        dtype=torch.int32,
+        device=device,
+    )
+    has_topk, has_blocks, has_candidates = distributed.tp_all_gather(planes, 0, source.world_size).any(0).cpu().tolist()
+    local_rows = sum(source.local_q_lens)
+    if has_topk:
+        width = 0 if shared.topk_idxs is None else shared.topk_idxs.size(-1)
+        picks = torch.full((local_rows, width), -1, dtype=torch.int32, device=device)
+        offset = 0
+        for seq, length in enumerate(source.local_q_lens):
+            if length and shared.topk_idxs is not None:
+                original = shared.topk_idxs[seq, :length]
+                picks[offset : offset + length] = torch.where(
+                    original >= 0, original - SWA_BOUNDED_QUERY_ROWS - length, -1
+                )
+            offset += length
+        picks = source.redistribute_suffix(picks, target, fill_value=-1)
+        compact = picks.new_full((len(target.local_q_lens), max(target.local_q_lens, default=0), picks.size(-1)), -1)
+        offset = 0
+        for seq, length in enumerate(target.local_q_lens):
+            segment = picks[offset : offset + length]
+            compact[seq, :length] = torch.where(segment >= 0, segment + SWA_BOUNDED_QUERY_ROWS + length, -1)
+            offset += length
+        shared.topk_idxs = compact
+        shared.topk_layer = SWA_BOUNDED_FIRST_CONSUMER - 1
+    if has_blocks:
+        blocks = shared.candidate_blocks
+        if blocks is None:
+            blocks = torch.empty((local_rows, 1, 0), dtype=torch.int32, device=device)
+        shared.candidate_blocks = source.redistribute_suffix(blocks, target, fill_value=-1)
+        shared.candidate_blocks_layer = SWA_BOUNDED_FIRST_CONSUMER - 1
+    if has_candidates:
+        candidates = shared.candidates
+        width = max((p.size(-1) for p in candidates if p is not None), default=0) if candidates else 0
+        packed = torch.zeros((local_rows, width), dtype=torch.bool, device=device)
+        offset = 0
+        for seq, length in enumerate(source.local_q_lens):
+            if candidates is not None and candidates[seq] is not None:
+                packed[offset : offset + length, : candidates[seq].size(-1)] = candidates[seq]
+            offset += length
+        packed = source.redistribute_suffix(packed, target)
+        shared.candidates = list(packed.split(target.local_q_lens))
+        shared.candidates_layer = SWA_BOUNDED_FIRST_CONSUMER - 1
+
+
 def run_swa_bounded_consumers(
     model: DeepseekV41Model,
     context: ForwardContext,
@@ -125,16 +182,22 @@ def run_swa_bounded_consumers(
         ],
     )
     shared = context.attention_backend._shared_runtime()
-    if shared.topk_idxs is not None:
+    # The source forward still owns its old query partition at this boundary.
+    # Consumer layers build a new partition from compact_dsa after cache reset.
+    cp_runtime = context.layer_shared_cache.get(DsaCpRuntime)
+    if cp_runtime is not None:
+        target_plan = build_dsa_cp_context(hidden.size(0), retained_lens, model.cfg.tp_size, model.cfg.tp_rank)
+        _redistribute_dsa_cp_queries(shared, cp_runtime.plan, target_plan, hidden.device)
+    elif shared.topk_idxs is not None:
         original = shared.topk_idxs
         compact = original.new_full((len(q_lens), max(retained_lens, default=0), original.size(-1)), -1)
         for seq, (drop, keep) in enumerate(zip(drops, retained_lens)):
             picks = original[seq, drop : drop + keep]
             compact[seq, :keep] = torch.where(picks >= 0, picks - drop, picks)
         shared.topk_idxs = compact
-    if shared.candidate_blocks is not None:
+    if cp_runtime is None and shared.candidate_blocks is not None:
         shared.candidate_blocks = shared.candidate_blocks.index_select(0, rows)
-    if shared.candidates is not None:
+    if cp_runtime is None and shared.candidates is not None:
         shared.candidates = [
             None if picks is None else picks[drop:].contiguous() for picks, drop in zip(shared.candidates, drops)
         ]

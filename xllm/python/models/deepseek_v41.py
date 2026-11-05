@@ -83,7 +83,7 @@ from xllm.python.layers.embedding import HiddenParallelEmbedding
 from xllm.python.layers.linear import ColumnParallelLinear, RowParallelLinear
 from xllm.python.layers.moe_parallel import ep_apply_local, ep_gather_tokens, ep_reduce_scatter
 from xllm.python.layers.sequence_parallel import sp_all_gather, sp_row_parallel_projection, sp_shard
-from xllm.python.layers.sequence_parallel_metadata import SpMetadata, build_flashcomm1_layout
+from xllm.python.layers.sequence_parallel_metadata import EpSpTokenLayout, SpMetadata, build_flashcomm1_layout
 from xllm.python.model_executor.forward_context import (
     ForwardContext,
     capturing_acl_graph,
@@ -135,6 +135,7 @@ from xllm.python.models.swa_bounded_replay import (
     validate_swa_bounded_replay,
 )
 from xllm.python.models.weight_utils import W8A8WeightLoader
+from xllm.python.npu_streams import shared_expert_stream
 
 if TYPE_CHECKING:
     from xllm_weight_loader import StateDict
@@ -370,6 +371,12 @@ class DeepseekV41Config(DeepseekV4Config):
     # Explicit runtime opt-in: approximate prefill, default full computation.
     enable_swa_bounded_replay: bool = False
     enable_flashcomm1: bool = False
+    expert_parallel_degree: int = 0
+    eplv2_shared_overlap: bool = True
+    enable_mega_moe: bool = False
+    mega_moe_context: torch.Tensor | None = None
+    mega_moe_ccl_buffer_size: int = 0
+    mega_moe_num_max_tokens_per_rank: int = 0
     flashcomm1_min_prefill_tokens: int = 8192
     # ``--enable_fused_mc2`` flag (PyCausalLM::build_config_dict bridges the
     # C++ ``enable_fused_mc2`` gflag - kernel_config.cpp: -1 auto / 0 off /
@@ -462,6 +469,12 @@ class DeepseekV41Config(DeepseekV4Config):
             enable_swa_bounded_replay=bool(_pick(merged, "enable_swa_bounded_replay", default=False)),
             enable_fused_mc2=bool(_pick(merged, "enable_fused_mc2", default=False)),
             enable_flashcomm1=bool(_pick(merged, "enable_flashcomm1", default=False)),
+            expert_parallel_degree=int(_pick(merged, "expert_parallel_degree", default=0)),
+            eplv2_shared_overlap=bool(_pick(merged, "eplv2_shared_overlap", default=True)),
+            enable_mega_moe=bool(_pick(merged, "enable_mega_moe", default=False)),
+            mega_moe_context=_pick(merged, "mega_moe_context", default=None),
+            mega_moe_ccl_buffer_size=int(_pick(merged, "mega_moe_ccl_buffer_size", default=0)),
+            mega_moe_num_max_tokens_per_rank=int(_pick(merged, "mega_moe_num_max_tokens_per_rank", default=0)),
             flashcomm1_min_prefill_tokens=int(_pick(merged, "flashcomm1_min_prefill_tokens", default=8192)),
             layers_to_capture=_int_list(merged, "layers_to_capture"),
             enable_graph_aux_hidden_states=bool(_pick(merged, "enable_graph_aux_hidden_states", default=False)),
@@ -1599,6 +1612,9 @@ class DeepseekV41Attention(Attention):
         if attn_out.size(0) > 0:
             attn_out = apply_interleaved_rope(attn_out, query_positions, cos_sin_cache, inverse=True)
         if cp_context is not None:
+            # DSA CP owns query rows only inside attention. Restore global
+            # tokens/local heads before the output projection selects FC1's
+            # token owners; MoE and EPLv2 never consume the CP query layout.
             attn_out = cp_context.restore_tp_heads(attn_out)
         # O path: grouped LoRA projection (model.py:783-789).
         out = attn_out.view(num_tokens, self.n_local_groups, -1)
@@ -1975,6 +1991,19 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         # ``--enable_fused_mc2`` (PyCausalLM::build_config_dict): gates the
         # decode MC2 dispatch/combine path; guard declines log one-shot.
         self.enable_fused_mc2 = cfg.enable_fused_mc2
+        self._eplv2_mega_moe_enabled = cfg.enable_mega_moe and cfg.expert_parallel_degree == 2
+        self._mega_moe_num_max_tokens_per_rank = cfg.mega_moe_num_max_tokens_per_rank
+        self._mega_moe_ccl_buffer_size = cfg.mega_moe_ccl_buffer_size
+        if self._eplv2_mega_moe_enabled:
+            if cfg.mega_moe_context is None or cfg.mega_moe_context.ndim != 1 or cfg.mega_moe_context.numel() == 0:
+                raise ValueError("V4.1 EPLv2 MegaMoE requires a one-dimensional communication context")
+            if self._mega_moe_ccl_buffer_size <= 0 or self._mega_moe_num_max_tokens_per_rank <= 0:
+                raise ValueError("V4.1 EPLv2 MegaMoE requires positive communication capacities")
+            self.register_buffer("mega_moe_context", cfg.mega_moe_context, persistent=False)
+        else:
+            self.register_buffer("mega_moe_context", torch.empty(0, dtype=torch.int32, device=device), persistent=False)
+        self.register_buffer("mega_moe_w13_scale", torch.empty(0, dtype=torch.int64, device=device), persistent=False)
+        self.register_buffer("mega_moe_w2_scale", torch.empty(0, dtype=torch.int64, device=device), persistent=False)
         # Deferred until the vision phase: the W8A8 expert path never reads
         # image_token_id or gate_bias_vl; both are staged for the torch-MoE
         # multimodal path only (see the class docstring).
@@ -2048,6 +2077,26 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         _log_fused_shared_act_fallback(hidden, shared, limit)
         return super()._run_shared_experts(hidden)
 
+    def process_weights_after_loading(self) -> None:
+        if self._eplv2_mega_moe_enabled and getattr(self, "_mega_moe_scales_encoded", False):
+            return
+        super().process_weights_after_loading()
+        if not self._eplv2_mega_moe_enabled:
+            return
+        for parameter in (self.experts_w13, self.experts_w2):
+            plain = parameter.data
+            parameter.data = torch.empty(0, dtype=plain.dtype, device=plain.device)
+            parameter.data = kernels.format_cast_nz(plain)
+        self.mega_moe_w13_scale = kernels.encode_mega_moe_scale(
+            self.experts_w13_scale,
+            self.experts_w13_offset.squeeze(-1),
+        )
+        self.mega_moe_w2_scale = kernels.encode_mega_moe_scale(
+            self.experts_w2_scale.float(),
+            self.experts_w2_offset.squeeze(-1),
+        )
+        self._mega_moe_scales_encoded = True
+
     def _mc2_ep_size(self) -> int:
         return self.cfg.ep_size if self.cfg.ep_size > 0 else self.cfg.tp_size
 
@@ -2081,6 +2130,8 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         the MC2 kernels require: dispatch and combine are collectives over the
         whole ``moe_ep`` group.
         """
+        if self.cfg.expert_parallel_degree == 2 and _eplv2_prefill_step(self.cfg):
+            return self._forward_eplv2(hidden, post_norm, sp_metadata)
         if sp_metadata is not None:
             return self._forward_flashcomm1(hidden, post_norm, sp_metadata)
         if self.enable_fused_mc2:
@@ -2179,6 +2230,103 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
             self.num_experts_per_rank,
             self.cfg.swiglu_limit,
         )
+
+    def _forward_eplv2(
+        self, hidden: torch.Tensor, post_norm: nn.Module | None, sp_metadata: SpMetadata | None
+    ) -> torch.Tensor:
+        """Dispatch unique source rows to expert owners and combine back once.
+
+        Ordinary TP inputs are sharded at the MoE boundary and gathered after
+        shared/routed addition. FC1 already owns source shards, so its path
+        needs neither this gather nor an additional EP reduction. Every EP
+        peer participates, including idle DP replicas and structural TP tails.
+        """
+        context = get_forward_context()
+        metadata = context.metadata
+        layout = sp_metadata
+        if layout is None:
+            ep_layout = EpSpTokenLayout.from_token_counts(
+                tuple(metadata.dp_execution_token_counts),
+                tuple(metadata.raw_dp_execution_token_counts),
+                tp_size=self.cfg.tp_size,
+                tp_rank=self.cfg.tp_rank,
+                dp_size=self.cfg.dp_size,
+                dp_rank=self.cfg.dp_rank,
+                compacted=True,
+            )
+            layout = SpMetadata.from_execution_rows(
+                hidden.shape[0], self.cfg.tp_size, self.cfg.tp_rank, ep_layout=ep_layout
+            )
+            hidden = sp_shard(hidden, layout)
+        normalized, weights, indices = self._w8a8_bias_topk(hidden, post_norm)
+        indices = indices.to(torch.int32)
+        mask = torch.arange(layout.local_rows, device=hidden.device) < layout.ep_layout.active_rows
+        shared_stream = None
+        if self.cfg.eplv2_shared_overlap and hidden.device.type in ("npu", "privateuseone"):
+            shared_stream = shared_expert_stream(hidden.device)
+        if shared_stream is None:
+            shared = self._run_gated_shared_experts(normalized)
+        else:
+            current = torch.npu.current_stream(hidden.device)
+            shared_stream.wait_stream(current)
+            normalized.record_stream(shared_stream)
+            with torch.npu.stream(shared_stream):
+                shared = self._run_gated_shared_experts(normalized)
+        dispatch_rows = max(1, (max(metadata.dp_execution_token_counts) + self.cfg.tp_size - 1) // self.cfg.tp_size)
+        use_mega_moe = self._eplv2_mega_moe_enabled and dispatch_rows <= self._mega_moe_num_max_tokens_per_rank
+        if use_mega_moe:
+            # Fixed-capacity dispatch requires identical source extents on
+            # every EP peer. Idle DP replicas retain a false-masked dummy row.
+            padding = dispatch_rows - normalized.shape[0]
+            dispatch_hidden = F.pad(normalized, (0, 0, 0, padding)) if padding else normalized
+            dispatch_indices = F.pad(indices, (0, 0, 0, padding)) if padding else indices
+            dispatch_weights = F.pad(weights, (0, 0, 0, padding)) if padding else weights
+            dispatch_mask = F.pad(mask, (0, padding)) if padding else mask
+            routed = kernels.mega_moe(
+                self.mega_moe_context,
+                dispatch_hidden.contiguous(),
+                dispatch_indices,
+                dispatch_weights.float(),
+                self.experts_w13,
+                self.experts_w2,
+                self.mega_moe_w13_scale,
+                self.mega_moe_w2_scale,
+                self.num_total_experts,
+                self.cfg.ep_size,
+                self._mega_moe_ccl_buffer_size,
+                self._mega_moe_num_max_tokens_per_rank,
+                x_active_mask=dispatch_mask,
+                swiglu_limit=self.cfg.swiglu_limit,
+            )
+            routed = routed[: normalized.shape[0]]
+        else:
+            routed = kernels.ep_moe_w8a8_alltoall(
+                normalized,
+                weights,
+                indices,
+                self.experts_w13,
+                self.experts_w2,
+                self.experts_w13_scale,
+                self.experts_w2_scale,
+                ep_size=self.cfg.ep_size,
+                ep_rank=self.cfg.ep_rank,
+                num_experts=self.num_total_experts,
+                x_active_mask=mask,
+                swiglu_limit=self.cfg.swiglu_limit,
+                swiglu_mode=1,
+            )
+        if shared_stream is not None:
+            current.wait_stream(shared_stream)
+            shared.record_stream(current)
+        output = (routed + shared).masked_fill(~mask[:, None], 0)
+        if not getattr(self, "_eplv2_logged", False):
+            logger.info(
+                f"EPLV2_ACTIVE layer={self.layer_id} source_rows={layout.local_rows} "
+                f"active_rows={layout.ep_layout.active_rows} fc1={sp_metadata is not None} "
+                f"backend={'megamoe' if use_mega_moe else 'alltoall'}"
+            )
+            self._eplv2_logged = True
+        return sp_all_gather(output, layout) if sp_metadata is None else output
 
     def _mc2_ep_rank(self, hidden: torch.Tensor) -> int:
         from xllm.python import distributed as _distributed
@@ -2674,6 +2822,45 @@ class _EngramHashGraph:
     ready_event: Any
 
 
+def _validate_eplv2(cfg: DeepseekV41Config, quant_mode: str, enable_eplb: bool = False) -> None:
+    """Keep source-owned AllToAllV on the supported static W8A8 expert layout."""
+    if cfg.expert_parallel_degree not in (0, 1, 2):
+        raise ValueError("V4.1 expert_parallel_degree must be 0, 1 or 2")
+    if cfg.expert_parallel_degree != 2:
+        return
+    if (
+        quant_mode != V41_QUANT_ASCEND
+        or cfg.cp_size != 1
+        or cfg.moe_tp_size != 1
+        or cfg.ep_size <= 1
+        or cfg.ep_size != cfg.tp_size * cfg.dp_size
+        or cfg.ep_rank != cfg.dp_rank * cfg.tp_size + cfg.tp_rank
+        or cfg.n_routed_experts % cfg.ep_size
+        or enable_eplb
+    ):
+        raise ValueError(
+            "V4.1 EPLv2 requires Ascend W8A8, CP=1, MoE TP=1, "
+            "DP-major EP=DP*TP>1, evenly partitioned experts and EPLB off"
+        )
+
+
+def _eplv2_prefill_step(cfg: DeepseekV41Config) -> bool:
+    """Select eager prefill AllToAllV symmetrically, retaining decode's transport."""
+    context = get_forward_context()
+    if context.acl_graph is not None or context.execution_state is not None:
+        return False
+    metadata = context.metadata
+    if getattr(metadata, "is_spec_verify", False):
+        return False
+    flags = tuple(getattr(metadata, "dp_is_decode", ()))
+    if not flags and cfg.dp_size == 1:
+        return bool(metadata.is_prefill or metadata.is_chunked_prefill)
+    raw = tuple(metadata.raw_dp_execution_token_counts)
+    if len(flags) != cfg.dp_size or len(raw) != cfg.dp_size:
+        raise ValueError("V4.1 EPLv2 requires replicated DP step types and raw token counts")
+    return any(count > 0 and int(flag) == 0 for count, flag in zip(raw, flags))
+
+
 def _validate_flashcomm1(cfg: DeepseekV41Config, quant_mode: str) -> None:
     """Disable FC1 once when the model cannot consume unique TP token owners."""
     if not cfg.enable_flashcomm1:
@@ -2683,7 +2870,6 @@ def _validate_flashcomm1(cfg: DeepseekV41Config, quant_mode: str) -> None:
         or quant_mode != V41_QUANT_ASCEND
         or cfg.tp_size <= 1
         or cfg.cp_size != 1
-        or cfg.enable_dsa_cp
         or cfg.moe_tp_size != 1
         or cfg.ep_size != cfg.tp_size * cfg.dp_size
         or cfg.ep_rank != cfg.dp_rank * cfg.tp_size + cfg.tp_rank
@@ -2693,7 +2879,7 @@ def _validate_flashcomm1(cfg: DeepseekV41Config, quant_mode: str) -> None:
         cfg.enable_flashcomm1 = False
         logger.warning(
             "V4.1 FlashComm1 disabled; falling back to the original execution path. "
-            "FlashComm1 requires Ascend W8A8, TP>1, CP=1, DSA CP off, "
+            "FlashComm1 requires Ascend W8A8, TP>1, CP=1, "
             "all-MoE layers, MoE TP=1, DP-major EP=DP*TP and min prefill tokens>=2; got "
             f"quant={quant_mode}, TP={cfg.tp_size}, CP={cfg.cp_size}, DSA CP={cfg.enable_dsa_cp}, "
             f"MoE TP={cfg.moe_tp_size}, EP={cfg.ep_size}, DP={cfg.dp_size}, "
@@ -2740,6 +2926,7 @@ class DeepseekV41Model(nn.Module):
         )
         validate_swa_bounded_replay(cfg, self.csa2_plan)
         _validate_flashcomm1(cfg, quant_mode)
+        _validate_eplv2(cfg, quant_mode, bool((config or {}).get("enable_eplb", False)))
         # Engram layout (None when the checkpoint has no engram layers).
         self.engram_layout: EngramLayout | None = None
         self.engram_hash: EngramHashState | None = None
@@ -3816,6 +4003,13 @@ class DeepseekV41ForCausalLM(PyModelBase):
             _validate_flashcomm1(cfg, _detect_v41_quant_mode(config))
         config["enable_flashcomm1"] = cfg.enable_flashcomm1
         return cfg.enable_flashcomm1
+
+    @staticmethod
+    def configure_expert_parallel(config: dict) -> bool:
+        """Validate EPLv2 before C++ creates the source-TP and expert groups."""
+        cfg = DeepseekV41Config.from_dict(config)
+        _validate_eplv2(cfg, _detect_v41_quant_mode(config), bool(config.get("enable_eplb", False)))
+        return cfg.expert_parallel_degree == 2
 
     def __init__(self, config: dict) -> None:
         super().__init__()

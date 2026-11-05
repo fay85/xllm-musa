@@ -68,6 +68,50 @@ class DsaCpContext:
         received = distributed.all_to_all(send, self.world_size, "tp")
         return received[: self.num_tokens]
 
+    def redistribute_suffix(self, values: torch.Tensor, target: DsaCpContext, *, fill_value: int = 0) -> torch.Tensor:
+        """Move retained query metadata from source owners to compact owners.
+
+        Only suffix rows cross TP; full source KV/index caches stay replicated.
+        Indexer widths can differ with each source rank's causal capacity, so
+        agree on the trailing shape before the fixed-size metadata gather.
+        """
+        if values.size(0) != sum(self.local_q_lens):
+            raise ValueError("DSA CP metadata rows do not match the source query plan")
+        if (target.world_size, target.rank) != (self.world_size, self.rank):
+            raise ValueError("DSA CP suffix redistribution requires the same TP topology")
+        if len(target.global_q_lens) != len(self.global_q_lens):
+            raise ValueError("DSA CP suffix redistribution requires the same packed requests")
+        shape = torch.tensor(values.shape[1:], dtype=torch.int64, device=values.device).unsqueeze(0)
+        shapes = distributed.tp_all_gather(shape, 0, self.world_size)
+        trailing = tuple(int(n) for n in shapes.amax(dim=0).cpu().tolist())
+        retained_rows = sum(target.global_q_lens)
+        packed = values.new_full((max(1, retained_rows), *trailing), fill_value)
+        owners: list[int] = []
+        source_offset = 0
+        retained_offset = 0
+        global_offset = 0
+        for length, keep, local_length in zip(self.global_q_lens, target.global_q_lens, self.local_q_lens):
+            if keep > length:
+                raise ValueError("DSA CP retained suffix exceeds its source sequence")
+            suffix_start = global_offset + length - keep
+            begin, end = max(suffix_start, self.start), min(global_offset + length, self.end)
+            if end > begin:
+                source_begin = source_offset + begin - max(global_offset, self.start)
+                dest_begin = retained_offset + begin - suffix_start
+                slices = (slice(dest_begin, dest_begin + end - begin), *(slice(0, n) for n in values.shape[1:]))
+                packed[slices] = values[source_begin : source_begin + end - begin]
+            owners.extend(min((suffix_start + row) // self.tokens_per_rank, self.world_size - 1) for row in range(keep))
+            source_offset += local_length
+            global_offset += length
+            retained_offset += keep
+        gathered = distributed.tp_all_gather(packed, 0, self.world_size)
+        owner_rows = torch.tensor(
+            [owner * packed.size(0) + row for row, owner in enumerate(owners)],
+            dtype=torch.int64,
+            device=values.device,
+        )
+        return target.shard(gathered.index_select(0, owner_rows))
+
 
 @dataclass(frozen=True)
 class DsaCpRuntime:

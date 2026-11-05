@@ -203,7 +203,7 @@ def mc2(monkeypatch: pytest.MonkeyPatch) -> _Mc2Recorder:
 
 def _make_moe(**overrides: Any) -> v41.DeepseekV41W8A8MoE:
     moe = object.__new__(v41.DeepseekV41W8A8MoE)
-    moe.cfg = SimpleNamespace(ep_size=2, tp_size=1, n_shared_experts=1, swiglu_limit=10.0)
+    moe.cfg = SimpleNamespace(ep_size=2, tp_size=1, n_shared_experts=1, swiglu_limit=10.0, expert_parallel_degree=0)
     moe.hash_layer = False
     moe.w4a8_dynamic = False
     moe.moe_tp_size = 1
@@ -346,7 +346,11 @@ def test_mc2_needs_a_forward_context(monkeypatch: pytest.MonkeyPatch, mc2: _Mc2R
         # the run cannot pad/gather/slice, so it declines on that instead.
         ({"dp_size": 2}, "DP token counts"),
         (
-            {"cfg": SimpleNamespace(ep_size=1, tp_size=1, n_shared_experts=1, swiglu_limit=10.0)},
+            {
+                "cfg": SimpleNamespace(
+                    ep_size=1, tp_size=1, n_shared_experts=1, swiglu_limit=10.0, expert_parallel_degree=0
+                )
+            },
             "ep_size",
         ),
     ],

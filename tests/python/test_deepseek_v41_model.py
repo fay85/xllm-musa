@@ -365,8 +365,13 @@ def test_dsa_cp_rejects_uneven_head_shards_at_construction() -> None:
 
 @pytest.mark.parametrize("rank", [0, 1])
 @pytest.mark.parametrize("batch_kind", ["prefill", "chunked_prefill", "decode", "decode_graph", "mixed", "dummy"])
-def test_dsa_cp_all_batch_types_match_original_tp(monkeypatch: pytest.MonkeyPatch, rank: int, batch_kind: str) -> None:
+@pytest.mark.parametrize("fc1", [False, True])
+def test_dsa_cp_all_batch_types_match_original_tp(
+    monkeypatch: pytest.MonkeyPatch, rank: int, batch_kind: str, fc1: bool
+) -> None:
     from xllm.python import distributed
+    from xllm.python.layers.sequence_parallel import sp_shard
+    from xllm.python.layers.sequence_parallel_metadata import SpMetadata
     from xllm.python.model_executor.dsa_cp import get_current_dsa_cp_runtime
 
     config = {**_DEEPSEEK_V41_TINY_CONFIG, "tp_size": 2, "tp_rank": rank, "engram_layer_ids": []}
@@ -443,6 +448,14 @@ def test_dsa_cp_all_batch_types_match_original_tp(monkeypatch: pytest.MonkeyPatc
 
     monkeypatch.setattr(distributed, "all_to_all", _exchange, raising=False)
     monkeypatch.setattr(distributed, "tp_all_reduce", lambda x: x)
+    projection_layouts = []
+
+    def sp_projection(linear: nn.Module, value: torch.Tensor, layout: SpMetadata) -> torch.Tensor:
+        assert value.size(0) == tokens
+        projection_layouts.append(layout)
+        return sp_shard(linear(value), layout)
+
+    monkeypatch.setattr(dq, "sp_row_parallel_projection", sp_projection)
     metadata = SimpleNamespace(
         is_prefill=batch_kind in ("prefill", "dummy"),
         is_chunked_prefill=batch_kind in ("mixed", "chunked_prefill"),
@@ -463,9 +476,12 @@ def test_dsa_cp_all_batch_types_match_original_tp(monkeypatch: pytest.MonkeyPatc
     with torch.no_grad(), forward_context(context):
         expected = baseline(hidden, positions, cos_sin_cache)
     context = ForwardContext(SimpleNamespace(execute_csa2_layer=_execute), torch.device("cpu"), metadata, [])
+    layout = SpMetadata.from_execution_rows(tokens, 2, rank) if fc1 else None
     with torch.no_grad(), forward_context(context):
-        torch.testing.assert_close(enabled(hidden, positions, cos_sin_cache), expected)
+        actual = enabled(hidden, positions, cos_sin_cache, sp_metadata=layout)
+        torch.testing.assert_close(actual, sp_shard(expected, layout) if fc1 else expected)
     assert exchange_calls == 1
+    assert len(projection_layouts) == int(fc1)
 
 
 def _tiny_model() -> DeepseekV41Model:

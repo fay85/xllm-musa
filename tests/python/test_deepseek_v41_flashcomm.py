@@ -135,7 +135,6 @@ def test_single_replica_without_flags_uses_local_forward_type(prefill: bool) -> 
     [
         dict(tp_size=1),
         dict(cp_size=2),
-        dict(enable_dsa_cp=True),
         dict(moe_tp_size=2),
         dict(ep_size=2),
         dict(ep_rank=1),
@@ -152,6 +151,13 @@ def test_unsupported_topology_disables_flashcomm1(changes: dict[str, object]) ->
     cfg = _config()
     _validate_flashcomm1(cfg, "none")
     assert not cfg.enable_flashcomm1
+
+
+def test_dsa_cp_preserves_flashcomm1_admission() -> None:
+    cfg = replace(_config(), enable_dsa_cp=True)
+    _validate_flashcomm1(cfg, "ascend")
+    assert cfg.enable_flashcomm1
+    assert build_flashcomm1_layout(cfg, _context((7, 1), (7, 0), (0, 1)), 7) is not None
 
 
 @pytest.mark.parametrize("raw", [(7, 3), (7, 0), (1, 7), (129, 4)])

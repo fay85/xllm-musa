@@ -16,7 +16,9 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, replace
+from threading import Barrier, local
 from types import SimpleNamespace
 
 import pytest
@@ -228,8 +230,9 @@ def test_multiple_requests_keep_each_final_row_and_aux_capture(persistent: bool)
 
 
 @pytest.mark.parametrize("compact,drop", [(False, 0), (True, 896), (True, 0)])
+@pytest.mark.parametrize("rank", [None, 0, 1, 2, 3])
 def test_smla_visibility_masks_only_the_missing_consumer_prefix(
-    compact: bool, drop: int, monkeypatch: pytest.MonkeyPatch
+    compact: bool, drop: int, rank: int | None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     from xllm.python.attention.csa2_attention import Csa2AttentionBackend
     from xllm.python.model_executor.forward_context import forward_context
@@ -252,21 +255,25 @@ def test_smla_visibility_masks_only_the_missing_consumer_prefix(
         [],
     )
     layer = SimpleNamespace(mode=SimpleNamespace(compress_ratio=0), attn_sink=None)
+    local_rows = 128 if rank is None else 32
+    local_end = 1024 if rank is None else 896 + 32 * (rank + 1)
     with forward_context(context):
         backend._smla_attention(
-            torch.zeros(128, 2, 8),
+            torch.zeros(local_rows, 2, 8),
             torch.zeros(256, 8),
             layer,
-            torch.tensor([1024]),
+            torch.tensor([local_end]),
             torch.tensor([1024]),
             128,
-            128,
+            local_rows,
             0,
             None,
             SimpleNamespace(),
             torch.zeros(2),
         )
     expected = torch.arange(1, 129, dtype=torch.int32).clamp(max=128) if drop else torch.full((128,), 128)
+    if rank is not None:
+        expected = expected[rank * 32 : (rank + 1) * 32]
     torch.testing.assert_close(seen[0].flatten(), expected, check_dtype=False)
 
 
@@ -308,3 +315,83 @@ def test_reference_attention_never_reads_dropped_consumer_ring(drop: int) -> Non
 def test_replay_selection_uses_one_sliding_window(length: int) -> None:
     context = ForwardContext(None, torch.device("cpu"), SimpleNamespace(dp_execution_token_counts=(length, 1)), [])
     assert should_run_swa_bounded_replay(True, context) == (length > 128)
+
+
+@pytest.mark.parametrize("lengths", [(1024,), (200, 3, 180), (1, 0, 300, 7), (40, 30), (0,)])
+@pytest.mark.parametrize("fused_candidates", [False, True])
+@pytest.mark.parametrize("execution_padding", [0, 37])
+def test_dsa_cp_replay_redistributes_source_query_metadata(
+    lengths: tuple[int, ...], fused_candidates: bool, execution_padding: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from xllm.python import distributed
+    from xllm.python.model_executor.dsa_cp import build_dsa_cp_context
+    from xllm.python.models.swa_bounded_replay import _redistribute_dsa_cp_queries
+
+    size = 4
+    kept = [min(length, 128) for length in lengths]
+    source = [
+        build_dsa_cp_context(max(1, sum(lengths)) + execution_padding, lengths, size, rank) for rank in range(size)
+    ]
+    target = [build_dsa_cp_context(max(1, sum(kept)), kept, size, rank) for rank in range(size)]
+    # Each global row carries its identity through a change of TP ownership.
+    global_ids = torch.arange(sum(lengths), dtype=torch.int32)
+    retained = torch.cat(
+        [
+            global_ids[sum(lengths[:seq]) + length - keep : sum(lengths[:seq]) + length]
+            for seq, (length, keep) in enumerate(zip(lengths, kept))
+        ]
+    )
+    barrier = Barrier(size)
+    inputs: dict[int, torch.Tensor] = {}
+    # A thread's rank is supplied by the worker; two barriers retain buffers
+    # until every reader has consumed the same collective, including empties.
+    worker_state = local()
+
+    def gather(value: torch.Tensor, dim: int, world_size: int) -> torch.Tensor:
+        assert dim == 0 and world_size == size
+        inputs[worker_state.rank] = value.clone()
+        barrier.wait(timeout=20)
+        result = torch.cat([inputs[rank] for rank in range(size)], dim=0)
+        barrier.wait(timeout=20)
+        return result
+
+    monkeypatch.setattr(distributed, "tp_all_gather", gather)
+
+    def run(rank: int) -> None:
+        worker_state.rank = rank
+        old, new = source[rank], target[rank]
+        ids = old.shard(global_ids)
+        width = 2 if ids.numel() else 0
+        topk = torch.full((len(lengths), max(old.local_q_lens, default=0), width), -1, dtype=torch.int32)
+        candidates = []
+        offset = 0
+        for seq, length in enumerate(old.local_q_lens):
+            if length:
+                topk[seq, :length, 0] = ids[offset : offset + length] + 128 + length
+            candidates.append((ids[offset : offset + length, None] % 2 == 0) if length else None)
+            offset += length
+        blocks = ids.view(-1, 1, 1) if ids.numel() and fused_candidates else None
+        shared = SimpleNamespace(
+            topk_idxs=topk,
+            candidate_blocks=blocks,
+            candidates=None if fused_candidates else candidates,
+        )
+        _redistribute_dsa_cp_queries(shared, old, new, torch.device("cpu"))
+        expected = new.shard(retained)
+        offset = 0
+        for seq, length in enumerate(new.local_q_lens):
+            if length:
+                torch.testing.assert_close(
+                    shared.topk_idxs[seq, :length, 0], expected[offset : offset + length] + 128 + length
+                )
+                assert (shared.topk_idxs[seq, :length, 1] == -1).all()
+            offset += length
+        if fused_candidates and sum(lengths):
+            torch.testing.assert_close(shared.candidate_blocks.flatten(), expected)
+        elif not fused_candidates and expected.numel():
+            actual = torch.cat([value for value in shared.candidates if value is not None], dim=0)
+            if expected.numel():
+                torch.testing.assert_close(actual[:, 0], expected % 2 == 0)
+
+    with ThreadPoolExecutor(max_workers=size) as pool:
+        list(pool.map(run, range(size)))
