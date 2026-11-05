@@ -80,3 +80,12 @@ cc_test(
   DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
        GTest::gtest_main glog::glog
 )
+
+# Native recurrent primitives and independent scalar C++ oracles; no interpreter startup.
+cc_test(
+  NAME recurrent_ops_test
+  SRCS recurrent_ops_test.cpp
+  DEPS :kda_kernels :causal_conv1d_state_kernel :rms_norm_sigmoid_gated_kernel
+       musa_python torch_python Python::Python torch
+       GTest::gtest_main glog::glog
+)
