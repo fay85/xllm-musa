@@ -1,0 +1,23 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+Note: Google Test filter = TypedMtpPrefixCacheTest.CompressedCheckpointRequiresNextToken
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from TypedMtpPrefixCacheTest
+[ RUN      ] TypedMtpPrefixCacheTest.CompressedCheckpointRequiresNextToken
+/work/repos/xllm-musa/tests/core/framework/block/mtp_prefix_cache_test.cpp:559: Failure
+Expected equality of these values:
+  sequence.kv_state().num_cached_blocks(BlockType::C4)
+    Which is: 32
+  1u
+    Which is: 1
+
+[  FAILED  ] TypedMtpPrefixCacheTest.CompressedCheckpointRequiresNextToken (0 ms)
+[----------] 1 test from TypedMtpPrefixCacheTest (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (0 ms total)
+[  PASSED  ] 0 tests.
+[  FAILED  ] 1 test, listed below:
+[  FAILED  ] TypedMtpPrefixCacheTest.CompressedCheckpointRequiresNextToken
+
+ 1 FAILED TEST

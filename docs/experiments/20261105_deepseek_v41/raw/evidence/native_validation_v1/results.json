@@ -1,0 +1,49 @@
+[
+  {
+    "name": "folly_bthread_compat_test",
+    "sha256": "341389bd6918b52b8d1443f8e447183896cdd74f00d2c280533f8fd5eeeb387c",
+    "exit": 0,
+    "elapsed_seconds": 1.4759361860342324
+  },
+  {
+    "name": "xservice_client_lifecycle_test",
+    "sha256": "46cd8d6b7f6934eec2592619db080cf9378f36fcadd8084c5d06f6d0d39d0162",
+    "exit": 0,
+    "elapsed_seconds": 1.7968277670443058
+  },
+  {
+    "name": "native_provider_cache_groups_test",
+    "sha256": "faef61462b3d58386db5d5c07e0618435edd2b1e228c28788fcd38c436fcf0b3",
+    "exit": 0,
+    "elapsed_seconds": 1.7261219001375139
+  },
+  {
+    "name": "draft_model_config_test",
+    "sha256": "733e47772fdfd6d05d895103a9929d78e135bd0237b8604c69674aea40ec4670",
+    "exit": 0,
+    "elapsed_seconds": 2.1458819350227714
+  },
+  {
+    "name": "deepseek_v41_cpp_template_test",
+    "sha256": "0316ccbe1bb5c30c0b080df4a46588c2f2ff2095bad1d714a6d0edc8ded054cd",
+    "exit": 0,
+    "elapsed_seconds": 1.498500551097095
+  },
+  {
+    "name": "mtp_prefix_cache_test",
+    "sha256": "61c8c8271e347140b312ebbcf51d47dcc5d89205a784a89c6081bf3fc6b1be7b",
+    "exit": -6,
+    "elapsed_seconds": 1.6443248349241912
+  },
+  {
+    "name": "concurrent_block_manager_test",
+    "sha256": "bba611622d3c3b38eac51f5c0c2d2dd8e4312d60c23e67b97dd6ace864fd4f75",
+    "exit": 0,
+    "elapsed_seconds": 2.732742273947224
+  },
+  {
+    "name": "xllm_binary",
+    "sha256": "7265c5997a5877d548178a3c80522034e3aeac6e5d3358763878588bf8bbfbb9",
+    "size": 340513104
+  }
+]

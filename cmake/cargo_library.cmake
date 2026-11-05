@@ -12,6 +12,12 @@ function(cargo_library)
       ${ARGN}
   )
 
+  if(XLLM_PREBUILT_RUST_BINDINGS)
+    include(prebuilt_rust_bindings)
+    xllm_import_rust_binding(${CARGO_NAME} "${CARGO_HDRS}")
+    return()
+  endif()
+
   string(REPLACE "-" "_" LIB_NAME ${CARGO_NAME})
   # set(CARGO_TARGET_DIR ${CMAKE_CURRENT_BINARY_DIR})
 

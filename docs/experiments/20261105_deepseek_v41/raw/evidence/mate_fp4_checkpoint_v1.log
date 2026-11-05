@@ -1,0 +1,3 @@
+I20261105 17:38:34.486185 59 validate_checkpoint_fp4.py:97] Checkpoint w1 status=PASS error=0.0
+I20261105 17:38:34.602788 59 validate_checkpoint_fp4.py:97] Checkpoint w3 status=PASS error=0.0
+I20261105 17:38:34.682170 59 validate_checkpoint_fp4.py:97] Checkpoint w2 status=PASS error=0.0

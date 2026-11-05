@@ -1,0 +1,282 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+BlockManagerPoolTest.
+  RejectsPrefillWithoutStateAndAllowsRetry
+SequenceMtpPrefixCacheTest.
+  BoundaryRewriteInvalidatesEveryStride
+  OverlapPlaceholdersNeverEnterHashChain
+  CopyRetainsMtpInvalidationPolicy
+CompositeMtpPrefixCacheTest.
+  PublishesCompletedKvWithConfirmedLookahead
+  InBatchBudgetDoesNotPublishUnwrittenKv
+  RealAppendPublishesEverySafeBlock
+  InBatchBoundsKvBudgetAndCapacitySeparately
+  PublicationPathsShareAnIdempotentCursor
+  FinalFlushKeepsPublishCursorAtSafeBoundary
+  NeverPublishesOverlapPlaceholderIdentity
+  TextOverlapHashStopsBeforePlaceholder
+HierarchyMtpPrefixCacheTest.
+  RestoresEveryBlockProvenByStoreHash
+  StoreDoesNotQueryWithoutNextToken
+  OffloadPreservesDeviceStampAndCompletedBoundary
+  HostMatchRejectsDifferentNextToken
+TypedMtpPrefixCacheTest.
+  CompressedCheckpointRequiresNextToken
+  DecodeOffloadWaitsForCompletedLookahead
+  DecodeOffloadUsesConfirmedMtpIdentity
+  StoreQueriesOnlyCompleteDependencyUnits
+TypedPrefixCacheTest.
+  DecodeOffloadUsesContentIdentityWithoutDeviceStamp
+CompositeBlockManagerTest.
+  BlockUtilizationUsesIndividualLeafCapacity
+  ZeroCapacityLeafStillReportsItsType
+  SampleSelectorsRetainRequiredHiddenPositions
+  ExplicitHostAllocationNeverPublishesProgress
+  ExplicitPublicationEnablesHostOnlySharedMatch
+  FailedHostGrowthRollsBackAllStagedLeaves
+  EmptyHostGrowthCannotPassCapacityValidation
+  ExplicitDeviceStatePreservesEmbeddingDispatch
+  EmbeddingLeafUsesExplicitState
+  SlidingWindowLeafAcceptsNullSequence
+  AllocateForSequence_SingleSeq
+  AllocateForSequence_DifferentBatchSeqs
+  AllocateForSequence_GrowSameSeq
+  AllocateContinuesAfterSatisfiedTokenManager
+  AllocateForSequence_NullSeqReturnsFalse
+  FailedGrowthKeepsCommittedBlocks
+  DeallocateToleratesRolledBackEmptySequence
+  TokenIncrease_AddsBlocksIncrementally
+  Dsv4CompressedAllocationUsesPlatformUnits
+  SlidingWindowReleasesSkippedPhysicalBlocks
+  SlidingWindowV4PrefetchKeepsGeometryUnit
+  SlidingWindowHostCursorLagRetryPreservesSpeculativeWindow
+  DeallocateConsumesBlocksFromOwnerManagers
+  DeallocateDispatchesWithoutInflatingRefCount
+  CapacityStatsUseBaseBlockUnits
+  Dsv4PrefixCacheHitOnRepeatedPrefix
+  Dsv4PrefixCacheMatchesAtCompressedUnitBoundary
+  Dsv4PrefixCacheMissCleanly
+  Dsv4PrefixCacheEvictsAtC128Capacity
+  SlidingWindowSlidOutBlocksEnterPrefixCache
+  SlidingWindowReclaimsUncachedBlockBeforeFullCacheUnit
+  Dsv4PrefixCachePostGrowCursorAdvances
+  Dsv4PrefixCacheSkipsPartialCacheUnitTail
+  Dsv4PrefixCacheExactRepeatPopsOneC128
+  Dsv4ExactRepeatRejectsEvictedPreviousSwaWindow
+  DecodeRoleSkipsSwaPrefixCache
+  DecodeInitialSwaAllocationKeepsOnlyWindowTail
+  DecodeInitialSwaAllocationCoversNonAlignedWindow
+  DecodeInitialSwaAllocationKeepsBlockContainingWindowStart
+  DecodeLinearWithoutPrefixCacheKeepsReceivedState
+  DecodeRoleLinearDefaultStrideReusesSlot
+  V4DefaultPrefixCacheKeepsRolePolicy
+V41PrefixCacheTest.
+  V41PrefixCacheDefaultsOnLikeV4
+  V41PrefixCacheFollowsV4EnableSwitch
+  V41PrefixCacheKeepsDeviceOnlyRolePolicy
+  V41PrefixCacheRejectsMissingSwaWindow
+  V41PrefixCacheRejectsMissingHistoryLeaves
+  V41SingleTokenGroupUsesItsOwnRestoreUnit
+  V41SampleSelectorsRetainRequiredHiddenPositions
+  V41DisabledPrefixCacheDoesNotPublishOrMount
+  V41PrefixCacheUsesCommonTokenBoundary
+  V41PrefixCachePublishesOnlyCompletedUnits
+  V41ChunkedPrefillSharesPrefixWithStandardSwitch
+  V41PrefixCacheUsesLargestParticipatingBlock
+  V41PrefixCacheMissesIfAnyRequiredGroupIsGone
+  V41PrefixCachePreservesSharedBlocksOnContinuation
+  V41PrefixCacheRequiresCompleteSwaWindow
+  V41ShortPrefixRestoresAvailableSwaHistory
+  V41PrefixCacheRejectsHoleInsideRequiredSwaTail
+  V41PrefixCacheMissesForDifferentTokenPrefix
+  V41PrefixCacheRecomputesDivergentSuffix
+  V41CancelledSharedAliasReleasesAllLeafUsage
+  V41CancelledPartialForwardDoesNotPublishUnfinishedUnit
+  V41PrefixPoolsDoNotSharePublishedEntries
+  V41PressureEvictsPrefixAndAllowsRepublication
+  V41HostAndStoreLeavesUseValidatedOptions
+  V41PrefixCacheAcceptsMultimodalHasher
+  V41MMPrefixCacheHitsSameImageAndTextOnly
+  V41MMPrefixCacheUsesImageIdentityAtBlockBoundary
+  V41MMPrefixCacheStillHashesTextSuffix
+  TokenRatiosDoNotImplyV41Identity
+V41SpecPrefixCacheTest.
+  SpecKeepsAllPrefixLeavesEnabled
+  SpecAllowsMMWithoutLookahead
+  SpecRejectsMtpLookaheadHashers
+  SpecSupportsHostOffloadAndStore
+  EnableSwitchDisablesSpecPrefix
+  VerifyAllocationPublishesOnlyAcceptedUnits
+  CancelledVerifyDoesNotPublishUnacceptedBoundary
+  SharedSpecRequestsKeepIndependentEmbeddingRows
+HierarchyBlockManagerPoolTest.
+  FlatKvHasSingleHostKvLeaf
+  TypedLayoutHasSwaC4C128HostLeaves
+  V41TokenGroupsOffloadAndRestoreCommonUnit
+  SwaTailBlocksClampToAvailableHistory
+  V41NarrowWindowOffloadKeepsSwaTails
+  V41DSparkOffloadsOnlyCommittedCheckpoints
+  V41DecodeUnsupportedLayoutNamesRoleAndLeaves
+  V41StorePrefetchGatesBothTokenGroups
+  V41StorePrefetchFitsCheckpointSwaCapacity
+  TypedLayoutHasPerDpRankLeaves
+  DecodeTypedLayoutKeepsSwaHostLeafForOffloadOnly
+  DecodeTypedLayoutProbesOnlyDeviceC4C128
+  DecodeTypedLayoutOffloadsNonPrefixSwaAndCompressedLeaves
+  AllocateSharedMountsMatchesWithoutH2d
+  AllocateSharedAdvertisesC128AlignedCopyUnits
+  SuccessfulAllocateBuildsTypedC128AlignedH2dPlan
+  Dsv4WideWindowPrefetchRetainsFullRestoreTail
+  Dsv4PrefetchClampsWindowToCheckpoint
+  IncompleteTiersDoNotCombineIntoHostRestore
+  PartialDsv4PrefillDoesNotReprobeAnUnmatchedHostTier
+  FlatKvRestoreBudgetRemainsBlockLinear
+  ZeroCopyRestoreTargetDoesNotReprobeHostCache
+  FailedHostGrowthRejectsAllocation
+  EmptyHostConfigurationRejectsAllocation
+  FailedHbmAllocationDoesNotQueueH2d
+  ExistingBlocksSkipHostCacheRematch
+  ExistingHostBlocksSkipPrefixRematch
+  ExistingBlocksSkipHbmPrefixRematch
+  HbmAllocationFailureDoesNotQueueH2d
+  HostAllocationFailureRejectsHbmAllocation
+  DecodeRetryKeepsMountedPrefixAfterHostGrowthFailure
+  DecodeRetryKeepsMountedPrefixAfterHbmGrowthFailure
+  LastDecodeRequestDeallocateDropsFailedGrowth
+  FlatKvChunkGrowthOffloadsCompletedBlocksIncrementally
+  D2hUsesHbmProgressInsteadOfRestoreTarget
+  D2hUsesSequenceDpRank
+  Dsv4ChunkGrowthOffloadsAllCompletedCacheGroups
+  Dsv4OffloadWaitsForCompleteC128Unit
+  Dsv4WideWindowOffloadsEveryTailBlock
+  Dsv4LargeChunksPersistEveryC128Checkpoint
+  Dsv4OneMillionTokensReuseHostBlocksWithSmallChunks
+  H2dRestoreIsPublishedToDevicePrefixCacheDuringAllocation
+  Dsv4HostRestoreAllocatesOnlySwaTailWindowAndCurrentChunk
+  H2dRestoreDescriptionsRemainOwnedByPoolUntilDispatch
+  H2dUsesCachedTokensInsteadOfPublishCursor
+  H2dUsesSequenceDpRank
+  SharedHostPrefixRestoresAndGrowsEveryInBatchSequence
+  SharedHostPrefixCopiesEveryPrivateDestination
+  CompleteC4C128CombinationCountsOneCopyUnit
+  CopyBudgetTrimFallsBackPastMissingSwaWindow
+  ExistingHostPrefixSkipsDuplicateD2h
+  OffloadCompletionOwnsBlocksAndPublishesOnlyAfterAllWorkersSucceed
+  StoragePrefetchTimeoutWaitsForWorkersToEnd
+  StoragePrefetchPublishesOnlyAfterAllTpWorkersEnd
+  CancelledStoragePrefetchReleasesReservedBlocks
+  FailedStoragePrefetchDoesNotPublishHostPrefix
+  MultiSequenceStoragePrefetchUsesOnlyFirstSequence
+  TypedStoragePrefetchRetainsLongestPrefixWithinHostCapacity
+  TypedStoragePrefetchStopsAtFirstIncompleteUnit
+  TypedLayoutSupportsStoragePrefetch
+  SupportsLinearCacheLayout
+  DecodeLinearLayoutOffloadsKvWithoutPrefixPrefetch
+  LinearTailHostPrefetchKeepsMatchedStateWithoutRegularUnit
+  LinearStorePrefetchRestoresPartialTailCheckpoint
+  LinearStorePrefetchDropsKvWhenOptionalCheckpointMisses
+  PrefetchLogsHostHitBeforeStoreGet
+  LinearStorePrefetchDoesNotRepeatMatchedPartialUnit
+  LinearTailHostOffloadBecomesVisibleAfterAllWorkersComplete
+  DecodeLinearOffloadUsesCanonicalMtpCheckpointHash
+  DecodeLinearCheckpointWindowFollowsCursor
+  DecodeLinearCheckpointRowTracksBoundaryOvershoot
+  LinearOptionalStoreMissLeavesSparseHostCheckpoint
+  DuplicateHostLinearCheckpointDoesNotOffloadRestoredPrefix
+  PrefillLinearOffloadsNewCheckpointsWhenHostFallsBehind
+  TryAllocateMatchesHbmAndFloorsHostCursor
+  ChunkedPrefillSwaCoversHostHitPlusChunk
+  DecodeStepReleasesSwaAndOffloadsCompletedUnit
+PrefetchResultTest.
+  UsesMinimumContiguousUnitPrefixAcrossWorkers
+  WorkersAdvanceIndependently
+  OptionalMissDoesNotStopGatePrefix
+  LogicalHitsAreSummedAcrossWorkers
+  WorkerFailureMarksSummaryUnsuccessful
+  StopsAfterCancellationOrTimeout
+StoragePrefetchRequestTest.
+  SwaMissPreservesCompressedGatePrefix
+LinearPrefetchSelectionTest.
+  KeepsLatestUnwrittenFullHit
+  CompletedNextGroupOverwritesEarlierAlias
+  HitPastKvPrefixOverwritesEarlierAlias
+  HostPrefixIsNotAPrefetchHit
+  HostPrefixIsNotInspected
+  PartialGroupReuseKeepsEarlierBatch
+  TailCheckpointInsidePrefixIsKept
+  KeepsDeepestFullHitInsideKvPrefix
+  MissPastKvPrefixDoesNotOverwrite
+  InvalidPastKvPrefixDoesNotOverwrite
+PrefixCacheModes/LinearStateWindowTest.
+  PrefillLeafUsesExplicitState/0  # GetParam() = false
+  PrefillLeafUsesExplicitState/1  # GetParam() = true
+  DecodeReceiverUsesExplicitState/0  # GetParam() = false
+  DecodeReceiverUsesExplicitState/1  # GetParam() = true
+  HostDecodeCheckpointDoesNotAdvanceSequenceHashes/0  # GetParam() = false
+  HostDecodeCheckpointDoesNotAdvanceSequenceHashes/1  # GetParam() = true
+  DecodeCheckpointPreserveRebuildsWindowAfterCrossingWithOneBlock/0  # GetParam() = false
+  DecodeCheckpointPreserveRebuildsWindowAfterCrossingWithOneBlock/1  # GetParam() = true
+  DecodeReceiverAllocationIsOwnedByLeaf/0  # GetParam() = false
+  DecodeReceiverAllocationIsOwnedByLeaf/1  # GetParam() = true
+  PrefillReceiverRejectsMissingStateAndRetries/0  # GetParam() = false
+  PrefillReceiverRejectsMissingStateAndRetries/1  # GetParam() = true
+  PrefillUsesTwoBlocksAndPublishesLogicalCheckpoints/0  # GetParam() = false
+  PrefillUsesTwoBlocksAndPublishesLogicalCheckpoints/1  # GetParam() = true
+  ExhaustionPreservesSourceAndRollsBackKvGrowth/0  # GetParam() = false
+  ExhaustionPreservesSourceAndRollsBackKvGrowth/1  # GetParam() = true
+  SharedDecodeReadSlotBecomesPrivateBeforeSwap/0  # GetParam() = false
+  SharedDecodeReadSlotBecomesPrivateBeforeSwap/1  # GetParam() = true
+  SharedSingleDecodeSlotRequiresPrivateWrite/0  # GetParam() = false
+  SharedSingleDecodeSlotRequiresPrivateWrite/1  # GetParam() = true
+  SharedCheckpointReadIsPrivateBeforeNonOverlapSwap/0  # GetParam() = false
+  SharedCheckpointReadIsPrivateBeforeNonOverlapSwap/1  # GetParam() = true
+  SharedCurrentDecodeWriteIsRejectedWithoutAllocation/0  # GetParam() = false
+  SharedCurrentDecodeWriteIsRejectedWithoutAllocation/1  # GetParam() = true
+  DecodeRollingExhaustionFallsBackToCurrentSource/0  # GetParam() = false
+  DecodeRollingExhaustionFallsBackToCurrentSource/1  # GetParam() = true
+  KvFailureDoesNotChangeLinearWindow/0  # GetParam() = false
+  KvFailureDoesNotChangeLinearWindow/1  # GetParam() = true
+  IncompleteKvGrowthRollsBackLinearAllocation/0  # GetParam() = false
+  IncompleteKvGrowthRollsBackLinearAllocation/1  # GetParam() = true
+  PrefillCapacityIsIndependentOfCheckpointStride/0  # GetParam() = false
+  PrefillCapacityIsIndependentOfCheckpointStride/1  # GetParam() = true
+  PrefillReusesTwoSlotsAcrossArbitraryChunks/0  # GetParam() = false
+  PrefillReusesTwoSlotsAcrossArbitraryChunks/1  # GetParam() = true
+  ColdPrefillRequiresPrivateWriteSlot/0  # GetParam() = false
+  ColdPrefillRequiresPrivateWriteSlot/1  # GetParam() = true
+  NonOverlapDecodePredictsAndRetiresCheckpoint/0  # GetParam() = false
+  NonOverlapDecodePredictsAndRetiresCheckpoint/1  # GetParam() = true
+  OverlapDecodePredictsAndResolvesCheckpoint/0  # GetParam() = false
+  OverlapDecodePredictsAndResolvesCheckpoint/1  # GetParam() = true
+  NullSequenceDoesNotAllocate/0  # GetParam() = false
+  NullSequenceDoesNotAllocate/1  # GetParam() = true
+  AllowsSpeculativeSpanAboveHalfStride/0  # GetParam() = false
+  AllowsSpeculativeSpanAboveHalfStride/1  # GetParam() = true
+  FlatPrefixMountRestoresCachedTokens/0  # GetParam() = false
+  FlatPrefixMountRestoresCachedTokens/1  # GetParam() = true
+  PrefixMountIsSparseAndMatchedOnlyOnce/0  # GetParam() = false
+  PrefixMountIsSparseAndMatchedOnlyOnce/1  # GetParam() = true
+  DuplicateHashesStillAllocateDistinctOutputs/0  # GetParam() = false
+  DuplicateHashesStillAllocateDistinctOutputs/1  # GetParam() = true
+  PrefixMissStaysMatchedUntilReset/0  # GetParam() = false
+  PrefixMissStaysMatchedUntilReset/1  # GetParam() = true
+  OverlapPrefillKeepsTwoBlocksWithoutCompletionHooks/0  # GetParam() = false
+  OverlapPrefillKeepsTwoBlocksWithoutCompletionHooks/1  # GetParam() = true
+  PoolReleasesCancelledSequenceBeforeResults/0  # GetParam() = false
+  PoolReleasesCancelledSequenceBeforeResults/1  # GetParam() = true
+Workers/HostOffloadCompletionTest.
+  PublishesOnlyCompleteCopiesAfterAllWorkersEnd/0  # GetParam() = 16-byte object <08-00 00-00 00-00 00-00 FF-FF FF-FF 00-01 00-00>
+  PublishesOnlyCompleteCopiesAfterAllWorkersEnd/1  # GetParam() = 16-byte object <08-00 00-00 00-00 00-00 02-00 00-00 00-00 00-00>
+  PublishesOnlyCompleteCopiesAfterAllWorkersEnd/2  # GetParam() = 16-byte object <08-00 00-00 00-00 00-00 02-00 00-00 01-00 00-31>
+  PublishesOnlyCompleteCopiesAfterAllWorkersEnd/3  # GetParam() = 16-byte object <02-00 00-00 00-00 00-00 FF-FF FF-FF 00-00 00-00>
+  PublishesOnlyCompleteCopiesAfterAllWorkersEnd/4  # GetParam() = 16-byte object <00-00 00-00 00-00 00-00 FF-FF FF-FF 00-00 00-00>
+  PublishesOnlyCompleteCopiesAfterAllWorkersEnd/5  # GetParam() = 16-byte object <09-00 00-00 00-00 00-00 FF-FF FF-FF 00-00 00-00>
+Completion/TypedHostOffloadTest.
+  PreservesTypedReservationsUntilAllCopiesEnd/0  # GetParam() = false
+  PreservesTypedReservationsUntilAllCopiesEnd/1  # GetParam() = true
+MultiChunkTail/LinearTailHostPrefetchTest.
+  RetainsTailBoundaryWithoutPublishingRegularCheckpoint/0  # GetParam() = 24-byte object <08-00 00-00 04-00 00-00 0D-00 00-00 00-00 00-00 00-00 00-00 00-00 00-00>
+  RetainsTailBoundaryWithoutPublishingRegularCheckpoint/1  # GetParam() = 24-byte object <08-00 00-00 04-00 00-00 0D-00 00-00 00-00 00-00 01-00 00-00 00-00 00-00>
+  RetainsTailBoundaryWithoutPublishingRegularCheckpoint/2  # GetParam() = 24-byte object <08-00 00-00 04-00 00-00 15-00 00-00 00-00 00-00 00-00 00-00 00-00 00-00>
+  RetainsTailBoundaryWithoutPublishingRegularCheckpoint/3  # GetParam() = 24-byte object <08-00 00-00 04-00 00-00 15-00 00-00 00-00 00-00 01-00 80-3F 23-56 00-00>
+  RetainsTailBoundaryWithoutPublishingRegularCheckpoint/4  # GetParam() = 24-byte object <00-20 00-00 80-00 00-00 28-23 00-00 00-00 00-00 00-00 00-00 00-00 00-00>
+  RetainsTailBoundaryWithoutPublishingRegularCheckpoint/5  # GetParam() = 24-byte object <00-20 00-00 80-00 00-00 28-23 00-00 00-00 00-00 01-00 00-00 00-00 00-00>

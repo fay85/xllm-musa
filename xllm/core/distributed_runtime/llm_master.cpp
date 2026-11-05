@@ -66,7 +66,8 @@ LLMMaster::LLMMaster(const Options& options)
 
   if (options_.enable_service_routing()) {
     xservice_client_ = XServiceClient::get_instance();
-    // Registration builds the Native V2 descriptor only when this pointer is set.
+    // Registration builds the Native V2 descriptor only when this pointer is
+    // set.
     xservice_client_->set_engine(engine_.get());
     if (!xservice_client_->init(options_.etcd_addr().value_or(""),
                                 options_.instance_name().value_or(""),
@@ -124,9 +125,8 @@ LLMMaster::LLMMaster(const Options& options)
   // large tokenizer.json. Pay that while the pool starts, not on a request.
   threadpool_ = std::make_unique<ThreadPool>(
       /*num_threads=*/options_.num_request_handling_threads(),
-      /*init_func=*/[tokenizer = tokenizer_.get()]() {
-        (void)tokenizer->vocab_size();
-      },
+      /*init_func=*/
+      [tokenizer = tokenizer_.get()]() { (void)tokenizer->vocab_size(); },
       /*cpu_binding=*/false,
       /*pool_name=*/"LLMMaster.request",
       "master_request_pool_" + std::to_string(options_.server_idx()));
@@ -144,6 +144,9 @@ LLMMaster::LLMMaster(const Options& options)
 }
 
 LLMMaster::~LLMMaster() {
+  if (xservice_client_ != nullptr) {
+    xservice_client_->stop_background_tasks();
+  }
   stoped_.store(true, std::memory_order_relaxed);
   LOG(INFO) << "LLMMaster stopping...";
 

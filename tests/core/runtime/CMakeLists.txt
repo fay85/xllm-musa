@@ -379,3 +379,25 @@ if(USE_DCU)
       hip::host
   )
 endif()
+
+if(USE_MUSA)
+  cc_test(
+    NAME xservice_client_lifecycle_test
+    CPU_ONLY
+    SRCS xservice_client_lifecycle_test.cpp
+    DEPS :runtime :models :batch :block :platform torch glog::glog GTest::gtest_main
+  )
+  target_link_libraries(xservice_client_lifecycle_test PRIVATE
+    musa_python torch_python Python::Python tvm_ffi)
+endif()
+
+if(USE_MUSA)
+  cc_test(
+    NAME native_provider_cache_groups_test
+    CPU_ONLY
+    SRCS native_provider_cache_groups_test.cpp
+    DEPS :runtime :models :batch :block :platform torch glog::glog GTest::gtest_main
+  )
+  target_link_libraries(native_provider_cache_groups_test PRIVATE
+    musa_python torch_python Python::Python tvm_ffi)
+endif()

@@ -1,0 +1,14 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+Note: Google Test filter = BlockManagerPoolTest.RejectsPrefillWithoutStateAndAllowsRetry
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from BlockManagerPoolTest
+[ RUN      ] BlockManagerPoolTest.RejectsPrefillWithoutStateAndAllowsRetry
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+W20261105 18:06:55.637796 16506 linear_state_block_manager.cpp:273] LINEAR prefill has no private write slot: request_id= seq_id=-1 read_slot=-1 free_slots=0
+[       OK ] BlockManagerPoolTest.RejectsPrefillWithoutStateAndAllowsRetry (0 ms)
+[----------] 1 test from BlockManagerPoolTest (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (0 ms total)
+[  PASSED  ] 1 test.

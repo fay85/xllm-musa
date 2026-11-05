@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "vocab_tokens_compared": 129280,
+  "compressed_vocab": 99092,
+  "token_map_mismatches": 0,
+  "multipliers_equal": true,
+  "tokenizers_version": "0.21.4",
+  "numpy_version": "1.23.5",
+  "sidecar_sha256": "3e2d686e32f041aed82b8298054daa1e2312c67175e977d49b32665957ba3627",
+  "reference_sha256": "11f35ecbead8150c35aa002b3d180ef290b05a25afe883a11884f94d476d3897",
+  "tokenizer_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+  "note": "CPU offline tokenizer preprocessing; no model tensor execution or weights converted"
+}

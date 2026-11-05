@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuites tests="5" failures="0" disabled="0" errors="0" time="0.03" timestamp="2026-11-05T18:05:22.477" name="AllTests">
+  <testsuite name="XServiceClientLifecycleTest" tests="5" failures="0" disabled="0" skipped="0" errors="0" time="0.03" timestamp="2026-11-05T18:05:22.477">
+    <testcase name="StopIsIdempotentWithoutInitialization" file="/work/repos/xllm-musa/tests/core/runtime/xservice_client_lifecycle_test.cpp" line="86" status="run" result="completed" time="0." timestamp="2026-11-05T18:05:22.477" classname="XServiceClientLifecycleTest" />
+    <testcase name="RpcServiceSeesInitializedSingletonAcrossTranslationUnits" file="/work/repos/xllm-musa/tests/core/runtime/xservice_client_lifecycle_test.cpp" line="93" status="run" result="completed" time="0." timestamp="2026-11-05T18:05:22.477" classname="XServiceClientLifecycleTest" />
+    <testcase name="StopWakesLongIntervalPeriodicTasks" file="/work/repos/xllm-musa/tests/core/runtime/xservice_client_lifecycle_test.cpp" line="97" status="run" result="completed" time="0." timestamp="2026-11-05T18:05:22.477" classname="XServiceClientLifecycleTest" />
+    <testcase name="ConcurrentStopsJoinEachTaskOnlyOnce" file="/work/repos/xllm-musa/tests/core/runtime/xservice_client_lifecycle_test.cpp" line="107" status="run" result="completed" time="0." timestamp="2026-11-05T18:05:22.477" classname="XServiceClientLifecycleTest" />
+    <testcase name="StopWaitsForInflightBorrowBeforeReturning" file="/work/repos/xllm-musa/tests/core/runtime/xservice_client_lifecycle_test.cpp" line="116" status="run" result="completed" time="0.03" timestamp="2026-11-05T18:05:22.478" classname="XServiceClientLifecycleTest" />
+  </testsuite>
+</testsuites>

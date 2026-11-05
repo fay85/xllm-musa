@@ -1,0 +1,17 @@
+{
+  "rank": 3,
+  "status": "PASS",
+  "cases": [
+    {
+      "tokens": 1,
+      "status": "PASS",
+      "max_abs_error": 0.0
+    },
+    {
+      "tokens": 17,
+      "status": "PASS",
+      "max_abs_error": 0.0
+    }
+  ],
+  "scope": "synthetic MoE, EP8 MCCL, same shared expert once; not full model or cross-host PD"
+}

@@ -28,3 +28,14 @@ cc_test(
 )
 target_link_libraries(util_test PRIVATE brpc leveldb::leveldb OpenSSL::SSL OpenSSL::Crypto)
 add_dependencies(util_test brpc-static)
+
+# Suppress actual madvise calls: the negative control uses an alternate stack.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  cc_test(
+    NAME folly_bthread_compat_test
+    CPU_ONLY
+    SRCS folly_bthread_compat_test.cpp
+    DEPS Folly::folly GTest::gtest_main
+    LINKOPTS "-Wl,--wrap=madvise"
+  )
+endif()

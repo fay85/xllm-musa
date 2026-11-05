@@ -1,0 +1,1565 @@
+........................................................................ [ 10%]
+.......................................ssFFFFFFF.........FFF.FF.F....s.. [ 20%]
+........sssFFF...F..s..s...........s..................F.FFFF....F..s.... [ 30%]
+........................................................................ [ 40%]
+...........................................sssssssssssssssssssssssssssss [ 50%]
+sssssssssssssssssssssssssssssssssssssssssssssssssssssss.s............... [ 60%]
+........................................................................ [ 70%]
+.....................................s.s.s.s.s.s.s.s.s.s.s.............. [ 80%]
+..........................................ssssssssss.......s.s.s.s.s.s.. [ 90%]
+............ssss..............................................ss...ss    [100%]
+=================================== FAILURES ===================================
+_________ test_engram_graph_staging_address_stable_across_eager_growth _________
+
+_engram_offload_lookup_op = None
+
+    def test_engram_graph_staging_address_stable_across_eager_growth(_engram_offload_lookup_op) -> None:
+        """The graph-visible block never moves, even when the eager path grows."""
+        head_sizes = [7, 11]
+        payload, scales = _int8_engram_payload(head_sizes, 32, 11)
+        off = _make_int8_embedding(head_sizes, 32, payload, scales, offload=True)
+    
+        ids = _engram_ids(head_sizes, 4, 1)
+>       graph_rows = off.local_block(ids, graph_visible=True).clone()
+
+tests/python/test_deepseek_v41_model.py:2271: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 4
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+----------------------------- Captured stderr call -----------------------------
+W20261105 16:30:32.659300 269 deepseek_v41_engram.py:800] engram host offload cannot allocate pinned CPU staging (RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.); the lookup op contract refuses unpinned staging, so set engram_config.cpu_offload=false on a host that cannot pin host memory
+_____________ test_engram_graph_staging_reserves_the_capacity_hint _____________
+
+_engram_offload_lookup_op = None
+
+    def test_engram_graph_staging_reserves_the_capacity_hint(_engram_offload_lookup_op) -> None:
+        """A runner-supplied bucket hint pre-sizes the block for every later bucket.
+    
+        Regression: capture is lazy and buckets warm up ascending, so
+        without the hint the block would be fixed at the first (smallest) bucket and
+        a larger decode bucket would raise. With the hint the first allocation
+        already covers the largest bucket.
+        """
+        head_sizes = [7, 11]
+        payload, scales = _int8_engram_payload(head_sizes, 32, 12)
+        off = _make_int8_embedding(head_sizes, 32, payload, scales, offload=True)
+    
+        off.set_graph_capacity_hint(512)
+>       small = off.local_block(_engram_ids(head_sizes, 4, 1), graph_visible=True)
+
+tests/python/test_deepseek_v41_model.py:2303: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 4
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+________ test_engram_graph_staging_fails_loud_beyond_captured_capacity _________
+
+_engram_offload_lookup_op = None
+
+    def test_engram_graph_staging_fails_loud_beyond_captured_capacity(_engram_offload_lookup_op) -> None:
+        """Beyond even the hint the block still raises instead of moving the address."""
+        head_sizes = [7, 11]
+        payload, scales = _int8_engram_payload(head_sizes, 32, 12)
+        off = _make_int8_embedding(head_sizes, 32, payload, scales, offload=True)
+    
+        off.set_graph_capacity_hint(512)
+>       _ = off.local_block(_engram_ids(head_sizes, 4, 1), graph_visible=True)
+
+tests/python/test_deepseek_v41_model.py:2322: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 4
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+________________ test_engram_graph_staging_matches_device_path _________________
+
+_engram_offload_lookup_op = None
+
+    def test_engram_graph_staging_matches_device_path(_engram_offload_lookup_op) -> None:
+        """Rows staged into the graph-visible block equal the device-path rows."""
+        head_sizes = [7, 11, 13, 5, 3]
+        dim = 32
+        payload, scales = _int8_engram_payload(head_sizes, dim, 13)
+        ref = _make_int8_embedding(head_sizes, dim, payload, scales)
+        off = _make_int8_embedding(head_sizes, dim, payload, scales, offload=True)
+        ids = _engram_ids(head_sizes, 9, 14)
+>       assert torch.equal(off.local_block(ids, graph_visible=True), ref.local_block(ids))
+
+tests/python/test_deepseek_v41_model.py:2344: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 9
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+_______________ test_engram_graph_replay_survives_eager_prefill ________________
+
+_engram_offload_lookup_op = None
+
+    def test_engram_graph_replay_survives_eager_prefill(_engram_offload_lookup_op) -> None:
+        """A large eager prefill must not disturb what a graph replay reads."""
+        layout = EngramLayout(
+            layer_ids=[1],
+            num_embeddings=[290],
+            max_ngram_size=3,
+            n_heads=2,
+            head_dim=32,
+            vocab_size=64,
+            compressed_vocab_size=16,
+            pad_token_id=0,
+        )
+        dim, hc_mult = 48, 2
+        off = _make_int8_engram(layout, dim, hc_mult, offload=True)
+    
+        replay_ids = torch.zeros(4, layout.n_hash_cols, dtype=torch.int64)
+>       off.prepare_embeddings(replay_ids, graph_visible=True)
+
+tests/python/test_deepseek_v41_model.py:2363: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1773: in prepare_embeddings
+    self._staged_local = self.embed_tokens.local_block(hash_ids, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 4
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+___________ test_engram_graph_visible_forward_keeps_the_graph_block ____________
+
+_engram_offload_lookup_op = None
+
+    def test_engram_graph_visible_forward_keeps_the_graph_block(_engram_offload_lookup_op) -> None:
+        """Warmup's ``embed(hash_ids)`` must not re-mount onto the eager block.
+    
+        Audit reproduction chain: runner pre-graph staging -> warmup layer call
+        ``embed(hash_ids)`` under ``in_acl_graph()`` -> capture ``embed(None)``.
+        Before the fix ``embed(hash_ids)`` unconditional re-mounted
+        ``_staged_local`` to the eager block, so the capture read -- and the
+        captured graph baked -- the eager address, which a long-context eager
+        prefill then moves.
+        """
+        layout = _engram_test_layout(layer_id=1)
+        off = _make_int8_engram(layout, 48, 2, offload=True)
+        ids = torch.zeros(4, layout.n_hash_cols, dtype=torch.int64)
+    
+        with forward_context(_graph_forward_context()):
+>           off.prepare_embeddings(ids, graph_visible=True)  # runner pre-graph staging
+
+tests/python/test_deepseek_v41_model.py:2403: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1773: in prepare_embeddings
+    self._staged_local = self.embed_tokens.local_block(hash_ids, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 4
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+______ test_engram_eager_forward_after_graph_staging_uses_the_eager_block ______
+
+_engram_offload_lookup_op = None
+
+    def test_engram_eager_forward_after_graph_staging_uses_the_eager_block(_engram_offload_lookup_op) -> None:
+        """An eager forward must not read the graph-visible block."""
+        layout = _engram_test_layout(layer_id=1)
+        off = _make_int8_engram(layout, 48, 2, offload=True)
+        ids = torch.zeros(4, layout.n_hash_cols, dtype=torch.int64)
+    
+        with forward_context(_graph_forward_context()):
+>           off.prepare_embeddings(ids, graph_visible=True)
+
+tests/python/test_deepseek_v41_model.py:2433: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1773: in prepare_embeddings
+    self._staged_local = self.embed_tokens.local_block(hash_ids, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 4
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+_______________ test_engram_embed_re_gathers_for_a_shorter_batch _______________
+
+_engram_offload_lookup_op = None
+
+    def test_engram_embed_re_gathers_for_a_shorter_batch(_engram_offload_lookup_op) -> None:
+        """A smaller explicit batch must re-gather, and
+        the case must actually discriminate the shape judge.
+    
+        ``prepare_embeddings`` and ``embed`` run in the SAME graph-visibility regime
+        (the default eager one: ``in_acl_graph()`` is False under plain pytest). If
+        ``prepare`` staged with ``graph_visible=True`` while ``embed`` computed
+        ``graph_visible=False``, the ``_staged_local_graph != graph_visible`` term
+        would be trivially true and force a re-gather regardless of the shape judge
+        -- the buggy ``<`` judge would then still pass, leaving the case with no
+        discriminating power. Keeping both undirected leaves the shape judge as the
+        only trigger, and the direct ``_staged_local`` assertion pins its outcome.
+        """
+        layout = _engram_test_layout(layer_id=1)
+        off = _make_int8_engram(layout, 48, 2, offload=True)
+        g = torch.Generator().manual_seed(31)
+        long_ids = torch.randint(0, layout.num_embeddings[0], (8, layout.n_hash_cols), generator=g)
+        short_ids = torch.randint(0, layout.num_embeddings[0], (3, layout.n_hash_cols), generator=g)
+    
+>       off.prepare_embeddings(long_ids)
+
+tests/python/test_deepseek_v41_model.py:2809: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1773: in prepare_embeddings
+    self._staged_local = self.embed_tokens.local_block(hash_ids, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 8
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+_____________ test_decoder_layer_routes_none_hashes_to_staged_rows _____________
+
+_engram_offload_lookup_op = None
+
+    def test_decoder_layer_routes_none_hashes_to_staged_rows(_engram_offload_lookup_op) -> None:
+        """The offloaded capture/replay call -- ``engram_hashes=None`` plus
+        a computed mask -- must still inject engram, reading the pre-graph staged
+        rows.
+    
+        That guard is the capture production entry: the host gather ran outside the
+        graph, so a captured graph passes ``hash_ids=None`` and only the mask. The
+        old guard (``engram_hashes is not None``) silently dropped the injection for
+        that call, so the capture read nothing and every replay diverged from eager.
+        Both halves are pinned here: the mask-only call injects and is bit-identical
+        to the explicit-hashes call, while ``(None, None)`` truly skips engram (equal
+        to the engram-disabled path).
+        """
+        layer = _make_engram_routing_decoder_layer()
+        eng = layer.engram
+        assert eng is not None and eng.offload is True
+    
+        hidden_size = layer.input_layernorm.weight.numel()
+        hc_mult = layer.hc.hc_mult
+        t = 5
+        g = torch.Generator().manual_seed(29)
+        hashes = torch.randint(
+            0,
+            eng.embed_tokens.num_embeddings,
+            (t, 1, eng.embed_tokens.n_hash_cols),
+            generator=g,
+        )
+        hidden = torch.randn(t, hc_mult, hidden_size, generator=g)
+        positions = torch.arange(t, dtype=torch.int64)
+        cos_sin_cache = torch.zeros(1)  # the attention stub ignores it
+        mask = torch.tensor([True, True, False, True, True])
+    
+        # The runner's pre-graph host staging pass fills the rows a replay reads.
+>       eng.prepare_embeddings(hashes[:, 0], graph_visible=False)
+
+tests/python/test_deepseek_v41_model.py:2931: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1773: in prepare_embeddings
+    self._staged_local = self.embed_tokens.local_block(hash_ids, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 5
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+_________ test_engram_offload_forward_without_hash_ids_matches_device __________
+
+_engram_offload_lookup_op = None
+
+    def test_engram_offload_forward_without_hash_ids_matches_device(_engram_offload_lookup_op) -> None:
+        """A graph-replay forward reads the staged rows (hash_ids=None) bit-identically."""
+        layout = EngramLayout(
+            layer_ids=[1],
+            num_embeddings=[290],
+            max_ngram_size=3,
+            n_heads=2,
+            head_dim=32,
+            vocab_size=64,
+            compressed_vocab_size=16,
+            pad_token_id=0,
+        )
+        dim, hc_mult = 48, 2
+        assert layout.n_hash_cols == 4
+        dev = _make_int8_engram(layout, dim, hc_mult, offload=False)
+        off = _make_int8_engram(layout, dim, hc_mult, offload=True)
+        assert off.offload is True
+        # Same table + gate weights on both paths.
+        with torch.no_grad():
+            off.embed_tokens.weight.copy_(dev.embed_tokens.weight)
+            off.embed_tokens.weight_scale.copy_(dev.embed_tokens.weight_scale)
+            off.wkv.weight.copy_(dev.wkv.weight)
+            off.q_weight.copy_(dev.q_weight)
+            off.k_weight.copy_(dev.k_weight)
+    
+        t = 4
+        hash_ids = torch.zeros(t, layout.n_hash_cols, dtype=torch.int64)
+        dev.prepare_embeddings(hash_ids)
+>       off.prepare_embeddings(hash_ids)
+
+tests/python/test_deepseek_v41_model.py:3007: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1773: in prepare_embeddings
+    self._staged_local = self.embed_tokens.local_block(hash_ids, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 4
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+_________ test_stage_engram_rows_reports_success_for_the_capture_gate __________
+
+_engram_offload_lookup_op = None
+
+    def test_stage_engram_rows_reports_success_for_the_capture_gate(_engram_offload_lookup_op) -> None:
+        """The staging hook records whether engram is usable this step.
+    
+        When the SWA cache is unbound (``hashes is None``) the pass stages nothing
+        and reports ``False``; the runner's first-capture gate then refuses the
+        capture, so the graph never reads a stale staging block.
+        """
+        layout = _engram_test_layout(layer_id=1)
+        token_ids = torch.tensor([ENGRAM_IMAGE_SENTINEL_BASE_ID, 0, 0, 0], dtype=torch.int64)
+    
+        # Cache unbound -> the hook reports not staged (the runner gate refuses it).
+        unbound = SimpleNamespace(
+            engram_offload_active=True,
+            engram_hash=object(),
+            layers=_fake_v41_layers(_make_int8_engram(layout, 48, 2, offload=True)),
+            cfg=SimpleNamespace(tp_rank=0),
+        )
+        unbound._compute_engram_hashes = lambda *args: (None, None)
+        assert dq.DeepseekV41Model.stage_engram_rows_outside_graph(unbound, None, None, token_ids, token_ids) is False
+    
+        # Staging succeeds -> the capture mask is the sentinel complement.
+        staged = SimpleNamespace(
+            engram_offload_active=True,
+            engram_hash=object(),
+            layers=_fake_v41_layers(_make_int8_engram(layout, 48, 2, offload=True)),
+            cfg=SimpleNamespace(tp_rank=0),
+        )
+        staged._compute_engram_hashes = lambda *args: (torch.zeros(4, 1, layout.n_hash_cols, dtype=torch.int32), None)
+>       assert dq.DeepseekV41Model.stage_engram_rows_outside_graph(staged, None, None, token_ids, token_ids) is True
+
+tests/python/test_deepseek_v41_model.py:3060: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41.py:3021: in stage_engram_rows_outside_graph
+    stage_offload_rows(
+xllm/python/models/deepseek_v41_engram.py:1979: in stage_offload_rows
+    engram.finish_stage_offload(graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1801: in finish_stage_offload
+    self._staged_local = self.embed_tokens.finish_stage_offload(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 4
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+_________ test_stage_engram_rows_makes_one_device_sync_for_all_layers __________
+
+_engram_offload_lookup_op = None
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3b9cf43a00>
+
+    def test_stage_engram_rows_makes_one_device_sync_for_all_layers(
+        _engram_offload_lookup_op, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The pre-graph staging pass drains the device ONCE for every engram layer.
+    
+        The per-layer entry (``prepare_embeddings`` -> ``_local_block_offload``)
+        synchronizes the whole device after queueing each layer's D2H copies, so the
+        old N-layer loop paid N blocking drains where N-1 waited on copies the first
+        drain had already retired. The batched two-phase pass must queue every
+        layer's D2H, drain once, then run each layer's CPU gather. Discriminating:
+        the old per-layer loop makes ``sync_calls == 2`` here, so ``== 1`` fails
+        before the fix.
+    
+        The batching only pays off if the queued D2H copies are themselves
+        non-blocking: a blocking ``copy_`` would stall the host on every layer
+        regardless of the drain count. So the test also spies the ``non_blocking``
+        argument of every copy whose destination is one of the two pinned host
+        staging buffers and asserts it is ``True`` -- dropping ``non_blocking=True``
+        from ``stage_ids_offload`` flips these to ``False`` and fails here, while the
+        sync count alone would not notice.
+    
+        The protective drain inside ``_ensure_host_scratch`` is deliberately NOT
+        counted: it only fires when the pinned scratch grows, so the layers are
+        pre-warmed (scratch + graph block sized) before the counter is installed.
+        """
+        import xllm.python.models.deepseek_v41_engram as engram_mod
+    
+        layout = _engram_test_layout(layer_id=1)
+        first = _make_int8_engram(layout, 48, 2, offload=True)
+        second = _make_int8_engram(layout, 48, 2, offload=True)
+        second.layer_hash_index = 1  # a distinct hash column for the second layer
+    
+        t = 4
+        generator = torch.Generator().manual_seed(101)
+        hashes = torch.randint(
+            0,
+            layout.num_embeddings[0],
+            (t, 2, layout.n_hash_cols),
+            generator=generator,
+            dtype=torch.int32,
+        )
+    
+        # Pre-warm the pinned scratch and the graph staging block so the counted
+        # pass hits only the batched drain (``_ensure_host_scratch`` syncs only on
+        # growth). These warm-up syncs run before the counter is installed.
+        for engram in (first, second):
+>           engram.prepare_embeddings(hashes[:, engram.layer_hash_index], graph_visible=True)
+
+tests/python/test_deepseek_v41_model.py:3113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1773: in prepare_embeddings
+    self._staged_local = self.embed_tokens.local_block(hash_ids, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 4
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+_______ test_stage_engram_rows_builds_dsa_metadata_for_the_first_capture _______
+
+_engram_offload_lookup_op = None
+
+    def test_stage_engram_rows_builds_dsa_metadata_for_the_first_capture(_engram_offload_lookup_op) -> None:
+        """The FIRST ACL graph capture must still inject Engram.
+    
+        The runner calls this staging hook BEFORE ``_capture``; on that first pass
+        ``metadata.dsa_metadata`` has not been built yet, because the capture's
+        warmup forward (which runs inside ``_capture``) is what normally builds it.
+        The hook must build the DSA metadata itself, or the hashing pass finds no
+        SWA group, reports "not staged", and the capture branch bakes an Engram-less
+        graph that every replay reuses (ACL replay never re-runs Python). This case
+        reproduces the first-capture ordering at the hook boundary.
+    
+        Discriminating: removing the DSA build makes ``swa_group_metadata(None)``
+        return None, so staging reports False and this case fails.
+        """
+        layout = _engram_test_layout(layer_id=1)
+        token_ids = torch.tensor([ENGRAM_IMAGE_SENTINEL_BASE_ID, 0, 0, 0], dtype=torch.int64)
+        positions = torch.arange(4, dtype=torch.int32)
+    
+        class _Metadata:
+            def __init__(self) -> None:
+                # The runner's ``attention_backend.prepare(graph_mode=True)`` set
+                # this before handing the metadata over; DSA metadata is still
+                # absent on the first capture.
+                self.dsa_graph_mode = True
+                self.dsa_metadata = None
+                self.dsa_positions = None
+    
+        class _Dsa:
+            seq_lens_q = torch.ones(4, dtype=torch.int32)
+    
+        class _SwaGroup:
+            cache = torch.zeros(64, dtype=torch.int32)
+            block_size = 4
+            slot_mapping = torch.zeros(4, dtype=torch.int32)
+            block_table = torch.zeros(4, 1, dtype=torch.int32)
+    
+        class _Backend:
+            def __init__(self) -> None:
+                self.calls: list[str] = []
+    
+            def reset_forward(self, metadata) -> None:
+                self.calls.append("reset_forward")
+                # Mirror the real backend reset_forward (csa_attention.py): it also
+                # clears dsa_positions/dsa_graph_mode. Without those the metadata
+                # restoration mutations (graph-flag restore, positions-after-reset
+                # ordering) would go unexercised in these cases; the builder-order
+                # case asserts the restored state.
+                metadata.dsa_metadata = None
+                metadata.dsa_positions = None
+                metadata.dsa_graph_mode = False
+    
+            def prepare_dsa_metadata_for_forward(self, metadata) -> None:
+                self.calls.append("prepare_dsa_metadata_for_forward")
+                metadata.dsa_metadata = _Dsa()
+    
+            def swa_group_metadata(self, dsa):
+                # Real backends return no SWA group while the DSA metadata is
+                # absent, which is what makes the un-built path skip engram.
+                return _SwaGroup() if dsa is not None else None
+    
+        class _Hash:
+            def ensure_cache(self, cache, block_size) -> bool:
+                return True
+    
+            def __call__(self, *args, **kwargs) -> torch.Tensor:
+                return torch.zeros(4, 1, layout.n_hash_cols, dtype=torch.int32)
+    
+        engram = _make_int8_engram(layout, 48, 2, offload=True)
+        backend = _Backend()
+        metadata = _Metadata()
+        model = SimpleNamespace(
+            engram_offload_active=True,
+            engram_hash=_Hash(),
+            layers=_fake_v41_layers(engram),
+            cfg=SimpleNamespace(tp_rank=0),
+        )
+        # Delegate through the class (call-time lookup) exactly like the real bound
+        # methods, so the whole first-capture hook is the production code path and a
+        # class-level mutation of the DSA builder is observable.
+        model._build_dsa_metadata_for_forward = lambda backend, metadata, positions: (
+            dq.DeepseekV41Model._build_dsa_metadata_for_forward(model, backend, metadata, positions)
+        )
+        model._compute_engram_hashes = lambda backend, metadata, input_ids, positions: (
+            dq.DeepseekV41Model._compute_engram_hashes(model, backend, metadata, input_ids, positions)
+        )
+    
+        assert metadata.dsa_metadata is None
+>       staged = dq.DeepseekV41Model.stage_engram_rows_outside_graph(model, backend, metadata, token_ids, positions)
+
+tests/python/test_deepseek_v41_model.py:3282: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41.py:3021: in stage_engram_rows_outside_graph
+    stage_offload_rows(
+xllm/python/models/deepseek_v41_engram.py:1979: in stage_offload_rows
+    engram.finish_stage_offload(graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1801: in finish_stage_offload
+    self._staged_local = self.embed_tokens.finish_stage_offload(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 4
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+______________ test_hc_pre_switch_gates_on_hc_mult_device_and_op _______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3b9de6cdf0>
+
+    def test_hc_pre_switch_gates_on_hc_mult_device_and_op(monkeypatch: pytest.MonkeyPatch) -> None:
+        """The fused decision is static (hc_mult + dtype/device + op)."""
+        device = torch.device("privateuseone")
+        monkeypatch.setattr(v41, "_get_hc_pre_fused_op", lambda: None)  # probe miss
+        assert v41._hc_pre_mode_decision(torch.bfloat16, device, 4) == _MODE_EAGER
+    
+        # The decision only probes the op's presence; it never calls it.
+        monkeypatch.setattr(v41, "_get_hc_pre_fused_op", lambda: object())
+>       assert v41._hc_pre_mode_decision(torch.bfloat16, device, 4) == _MODE_FUSED
+E       AssertionError: assert 'eager' == 'fused'
+E         - fused
+E         + eager
+
+tests/python/test_deepseek_v41_hc.py:259: AssertionError
+_________________ test_hc_pre_non_four_mult_fallback_is_silent _________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3b9d136590>
+
+    def test_hc_pre_non_four_mult_fallback_is_silent(monkeypatch: pytest.MonkeyPatch) -> None:
+        """hc_mult != 4 is an intentional eager fallback, not a missing-op alert."""
+        spy = _SpyLogger()
+        monkeypatch.setattr(v41, "logger", spy)
+        monkeypatch.setattr(v41, "_fused_hc_pre_fallback_logged", False)
+        monkeypatch.setattr(v41, "_get_hc_pre_fused_op", lambda: None)
+        device = torch.device("privateuseone")
+    
+        # Unsupported geometry: silent eager fallback.
+        v41._log_fused_hc_pre_fallback(torch.bfloat16, device, 2)
+        assert spy.warnings == []
+    
+        # A missing op at the supported geometry still warns, exactly once.
+        v41._log_fused_hc_pre_fallback(torch.bfloat16, device, 4)
+        v41._log_fused_hc_pre_fallback(torch.bfloat16, device, 4)
+>       assert len(spy.warnings) == 1 and "hc_pre" in spy.warnings[0]
+E       assert (0 == 1)
+E        +  where 0 = len([])
+E        +    where [] = <tests.python._deepseek_v41_fused_testkit._SpyLogger object at 0x7f3b9d136830>.warnings
+
+tests/python/test_deepseek_v41_hc.py:282: AssertionError
+________ test_hc_pre_fused_selected_logs_info_and_missing_op_warns_once ________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3b9cf3f430>
+
+    def test_hc_pre_fused_selected_logs_info_and_missing_op_warns_once(
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A fused selection is an info; a real missing op warns once -- never both."""
+        spy = _SpyLogger()
+        monkeypatch.setattr(v41, "logger", spy)
+        device = torch.device("privateuseone")
+    
+        # (a) The op resolves: the decision is fused and only the active-path info
+        # may fire.
+        _reset_hc_pre_log_state(monkeypatch)
+        monkeypatch.setattr(v41, "_get_hc_pre_fused_op", lambda: object())
+>       assert v41._hc_pre_mode_decision(torch.bfloat16, device, 4) == _MODE_FUSED
+E       AssertionError: assert 'eager' == 'fused'
+E         - fused
+E         + eager
+
+tests/python/test_deepseek_v41_hc.py:302: AssertionError
+______________________ test_hc_pre_falls_back_without_op _______________________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3b9de11b70>
+
+    def test_hc_pre_falls_back_without_op(monkeypatch: pytest.MonkeyPatch) -> None:
+        """No registered op: the module stays eager, bit for bit."""
+        if _hc_pre_va_op_available():
+            pytest.skip("hc_pre_va op registered; the NPU gates test covers this host")
+        device = "npu" if _npu_ready() else "cpu"
+    
+        # With the fused op missing, the module must take the eager path.
+        monkeypatch.setattr(v41, "_get_hc_pre_fused_op", lambda: None)
+        layer_on, inputs_on = _make_stubbed_layer(device, seed=83)
+        assert layer_on.hc._hc_pre_mode == _MODE_EAGER
+        pre_on, post_on, comb_on = _hc_mixes_of(layer_on.hc, inputs_on["hidden"])
+    
+        layer_off, inputs_off = _make_stubbed_layer(device, seed=83)
+        assert layer_off.hc._hc_pre_mode == _MODE_EAGER
+        pre_off, post_off, comb_off = _hc_mixes_of(layer_off.hc, inputs_off["hidden"])
+    
+        # Both runs are the untouched eager formula.
+        hc = layer_off.hc
+        x = inputs_off["hidden"]
+        flattened = x.flatten(-2).float()
+        rsqrt = torch.rsqrt(flattened.square().mean(-1, keepdim=True) + hc.norm_eps)
+        ref = v41._hc_split_sinkhorn(
+            F.linear(flattened, hc.hc_attn_fn) * rsqrt,
+            hc.hc_attn_scale,
+            hc.hc_attn_base,
+            hc.hc_mult,
+            hc.sinkhorn_iters,
+            hc.hc_eps,
+        )
+>       assert torch.equal(pre_off, ref[0]) and torch.equal(post_off, ref[1]) and torch.equal(comb_off, ref[2])
+E       assert (False)
+E        +  where False = <built-in method equal of type object at 0x7f3dd4ccf0c0>(tensor([[0.5744, 0.3180, 0.4843, 0.5625],\n        [0.5691, 0.3226, 0.4801, 0.5630],\n        [0.5738, 0.3262, 0.4819, 0.5620],\n        [0.5723, 0.3170, 0.4856, 0.5658],\n        [0.5748, 0.3236, 0.4831, 0.5648]]), tensor([[0.5744, 0.3180, 0.4843, 0.5625],\n        [0.5691, 0.3226, 0.4801, 0.5630],\n        [0.5738, 0.3262, 0.4819, 0.5620],\n        [0.5723, 0.3170, 0.4856, 0.5658],\n        [0.5748, 0.3236, 0.4831, 0.5648]], grad_fn=<AddBackward0>))
+E        +    where <built-in method equal of type object at 0x7f3dd4ccf0c0> = torch.equal
+
+tests/python/test_deepseek_v41_hc.py:518: AssertionError
+----------------------------- Captured stderr call -----------------------------
+W20261105 16:30:35.327698 269 deepseek_v41.py:520] DeepSeek-V4.1 quant mode detection: model_path missing; defaulting to bf16 (V41_QUANT_NONE)
+W20261105 16:30:35.347478 269 deepseek_v41.py:520] DeepSeek-V4.1 quant mode detection: model_path missing; defaulting to bf16 (V41_QUANT_NONE)
+________________ test_engram_offload_lookup_matches_hbm_bitwise ________________
+
+_engram_offload_lookup_op = None
+
+    def test_engram_offload_lookup_matches_hbm_bitwise(_engram_offload_lookup_op) -> None:
+        """Host gather + CPU dequant equals the device index_select bit for bit."""
+        head_sizes = [7, 11, 13, 5, 3]
+        dim = 32
+        payload, scales = _int8_engram_payload(head_sizes, dim, 2024)
+        ref = _make_int8_embedding(head_sizes, dim, payload, scales)
+        off = _make_int8_embedding(head_sizes, dim, payload, scales, offload=True)
+        assert off.offload is True
+        assert off.weight.device.type == "cpu"
+        assert off.weight.dtype == torch.int8
+    
+        ids = _engram_ids(head_sizes, 13, 7)
+>       out_off = off.lookup(ids)
+
+tests/python/test_deepseek_v41_engram.py:1355: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1668: in lookup
+    return self.gather_heads(self.local_block(indices))
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 13
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+__________________ test_engram_offload_tp_shards_match_hbm[1] __________________
+
+tp_size = 1, _engram_offload_lookup_op = None
+
+    @pytest.mark.parametrize("tp_size", [1, 2, 4, 8])
+    def test_engram_offload_tp_shards_match_hbm(tp_size: int, _engram_offload_lookup_op) -> None:
+        """Per-rank offload blocks (incl. foreign-row zeroing) match the HBM path.
+    
+        The ids sweep the full global table rather than one head's range, so most
+        columns fall outside a given rank's head slice and the owned/zeroing guard
+        is exercised on both the offload and HBM paths. ``tp_size`` must divide the
+        8-column head set (uniform-shard contract).
+        """
+        head_sizes = [7, 11, 13, 5, 3, 9, 4, 6]  # n_hash_cols = 8
+        dim = 32
+        payload, scales = _int8_engram_payload(head_sizes, dim, 99)
+        g = torch.Generator().manual_seed(11)
+        ids = torch.randint(0, sum(head_sizes), (9, len(head_sizes)), generator=g)
+        for rank in range(tp_size):
+            ref = _make_int8_embedding(head_sizes, dim, payload, scales, tp_size=tp_size, tp_rank=rank)
+            off = _make_int8_embedding(head_sizes, dim, payload, scales, tp_size=tp_size, tp_rank=rank, offload=True)
+>           assert torch.equal(off.local_block(ids), ref.local_block(ids))
+
+tests/python/test_deepseek_v41_engram.py:1413: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 9
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+__________________ test_engram_offload_tp_shards_match_hbm[2] __________________
+
+tp_size = 2, _engram_offload_lookup_op = None
+
+    @pytest.mark.parametrize("tp_size", [1, 2, 4, 8])
+    def test_engram_offload_tp_shards_match_hbm(tp_size: int, _engram_offload_lookup_op) -> None:
+        """Per-rank offload blocks (incl. foreign-row zeroing) match the HBM path.
+    
+        The ids sweep the full global table rather than one head's range, so most
+        columns fall outside a given rank's head slice and the owned/zeroing guard
+        is exercised on both the offload and HBM paths. ``tp_size`` must divide the
+        8-column head set (uniform-shard contract).
+        """
+        head_sizes = [7, 11, 13, 5, 3, 9, 4, 6]  # n_hash_cols = 8
+        dim = 32
+        payload, scales = _int8_engram_payload(head_sizes, dim, 99)
+        g = torch.Generator().manual_seed(11)
+        ids = torch.randint(0, sum(head_sizes), (9, len(head_sizes)), generator=g)
+        for rank in range(tp_size):
+            ref = _make_int8_embedding(head_sizes, dim, payload, scales, tp_size=tp_size, tp_rank=rank)
+            off = _make_int8_embedding(head_sizes, dim, payload, scales, tp_size=tp_size, tp_rank=rank, offload=True)
+>           assert torch.equal(off.local_block(ids), ref.local_block(ids))
+
+tests/python/test_deepseek_v41_engram.py:1413: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 9
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+__________________ test_engram_offload_tp_shards_match_hbm[4] __________________
+
+tp_size = 4, _engram_offload_lookup_op = None
+
+    @pytest.mark.parametrize("tp_size", [1, 2, 4, 8])
+    def test_engram_offload_tp_shards_match_hbm(tp_size: int, _engram_offload_lookup_op) -> None:
+        """Per-rank offload blocks (incl. foreign-row zeroing) match the HBM path.
+    
+        The ids sweep the full global table rather than one head's range, so most
+        columns fall outside a given rank's head slice and the owned/zeroing guard
+        is exercised on both the offload and HBM paths. ``tp_size`` must divide the
+        8-column head set (uniform-shard contract).
+        """
+        head_sizes = [7, 11, 13, 5, 3, 9, 4, 6]  # n_hash_cols = 8
+        dim = 32
+        payload, scales = _int8_engram_payload(head_sizes, dim, 99)
+        g = torch.Generator().manual_seed(11)
+        ids = torch.randint(0, sum(head_sizes), (9, len(head_sizes)), generator=g)
+        for rank in range(tp_size):
+            ref = _make_int8_embedding(head_sizes, dim, payload, scales, tp_size=tp_size, tp_rank=rank)
+            off = _make_int8_embedding(head_sizes, dim, payload, scales, tp_size=tp_size, tp_rank=rank, offload=True)
+>           assert torch.equal(off.local_block(ids), ref.local_block(ids))
+
+tests/python/test_deepseek_v41_engram.py:1413: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 9
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+__________________ test_engram_offload_tp_shards_match_hbm[8] __________________
+
+tp_size = 8, _engram_offload_lookup_op = None
+
+    @pytest.mark.parametrize("tp_size", [1, 2, 4, 8])
+    def test_engram_offload_tp_shards_match_hbm(tp_size: int, _engram_offload_lookup_op) -> None:
+        """Per-rank offload blocks (incl. foreign-row zeroing) match the HBM path.
+    
+        The ids sweep the full global table rather than one head's range, so most
+        columns fall outside a given rank's head slice and the owned/zeroing guard
+        is exercised on both the offload and HBM paths. ``tp_size`` must divide the
+        8-column head set (uniform-shard contract).
+        """
+        head_sizes = [7, 11, 13, 5, 3, 9, 4, 6]  # n_hash_cols = 8
+        dim = 32
+        payload, scales = _int8_engram_payload(head_sizes, dim, 99)
+        g = torch.Generator().manual_seed(11)
+        ids = torch.randint(0, sum(head_sizes), (9, len(head_sizes)), generator=g)
+        for rank in range(tp_size):
+            ref = _make_int8_embedding(head_sizes, dim, payload, scales, tp_size=tp_size, tp_rank=rank)
+            off = _make_int8_embedding(head_sizes, dim, payload, scales, tp_size=tp_size, tp_rank=rank, offload=True)
+>           assert torch.equal(off.local_block(ids), ref.local_block(ids))
+
+tests/python/test_deepseek_v41_engram.py:1413: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+xllm/python/models/deepseek_v41_engram.py:1647: in local_block
+    return self._local_block_offload(indices, graph_visible=graph_visible)
+xllm/python/models/deepseek_v41_engram.py:1526: in _local_block_offload
+    return self.finish_stage_offload(indices.shape[0], graph_visible=graph_visible)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = EngramEmbedding(), num_tokens = 9
+
+    def finish_stage_offload(self, num_tokens: int, *, graph_visible: bool = False) -> torch.Tensor:
+        """CPU gather + pinned->device upload for a staged pass (second half).
+    
+        The second half of :meth:`_local_block_offload`; must run after
+        :meth:`stage_ids_offload` staged the same ``num_tokens`` and after
+        exactly one :func:`_sync_accelerator` drain, so every queued D2H is
+        visible to the CPU gather below. ``graph_visible`` selects the same
+        destination staging block :meth:`stage_ids_offload` ensured. Returns the
+        selected staging slice.
+        """
+        assert self._ids_host is not None
+        assert self._owned_host is not None
+        assert self._rows_host is not None
+        staging = self._graph_staged_device if graph_visible else self._eager_staged_device
+        assert staging is not None
+    
+        flat = self._ids_host[:num_tokens].reshape(-1).to(torch.int64)
+        # Row-index correspondence for the reset mask below. ``_ids_host`` and
+        # ``_owned_host`` are freshly allocated C-contiguous tensors, so the k-th
+        # flat element maps to ``(token, col) = (k // width, k % width)`` (C
+        # order). ``rows_out = self._rows_host[:num_tokens].view(-1, self.dim)``
+        # has its k-th row produced from ``flat[k]``, and
+        # ``self._owned_host[:num_tokens].reshape(-1, 1)`` flattens ``owned`` in
+        # the same C order, so column k's mask lines up with ``owned[token, col]``
+        # and broadcasts over that row's ``dim`` features.
+        rows_out = self._rows_host[:num_tokens].view(-1, self.dim)
+        reason = self._engram_lookup_op_contract_error(flat, rows_out)
+        if reason:
+>           raise RuntimeError(
+                f"engram host offload cannot run the CPU int8 lookup op ({reason}); "
+                "the fused op is the only dequant path for the offloaded table"
+            )
+E           RuntimeError: engram host offload cannot run the CPU int8 lookup op (ids is on cpu contiguous=True pinned=False (this host cannot allocate pinned CPU memory: RuntimeError: MUSA driver initialization failed, you might not have a Mthreads GPU.; the offloaded table needs pinned staging, so set engram_config.cpu_offload=false)); the fused op is the only dequant path for the offloaded table
+
+xllm/python/models/deepseek_v41_engram.py:1483: RuntimeError
+____________ test_host_pin_failure_warns_once_and_raises_with_cause ____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7f3b9df96c80>
+
+    def test_host_pin_failure_warns_once_and_raises_with_cause(monkeypatch: pytest.MonkeyPatch) -> None:
+        """A host that cannot pin logs the real cause once, then fails loudly.
+    
+        ``_host_buffer`` swallows the ``pin_memory`` failure and falls back to an
+        unpinned buffer, so the only signal used to be a bare ``pinned=False`` far
+        from the cause. It now records why and warns once per failure episode: the
+        three sibling buffers of one (re)allocation log only on the first failure,
+        and the host-wide ``_host_pin_warned`` latch suppresses every later failure
+        until a pin actually succeeds (which re-arms the warning). The recorded
+        cause is per embedding (``self._host_pin_failure``), so a sibling layer's
+        allocation cannot overwrite it. The first lookup still refuses unpinned
+        staging and names the recorded cause
+        (``_engram_lookup_op_contract_error`` -> ``_pin_failure_hint``).
+    
+        Discriminating: dropping the ``_host_pin_warned`` gate logs all three
+        sibling buffers, so ``len(warnings) == 1`` becomes ``3`` on the first round;
+        never re-arming the latch on a successful pin keeps the second episode from
+        warning again, so the final ``== 2`` fails. Keeping the cause on a
+        module-global (rather than the instance) makes the sibling-pin assertion
+        ``emb._host_pin_failure is not None`` fail.
+        """
+        import scripts.logger as shared_logger
+        import xllm.python.models.deepseek_v41_engram as engram_mod
+    
+        # Reset the shared warning latch so an earlier case cannot mask this one.
+        monkeypatch.setattr(engram_mod, "_host_pin_warned", False)
+    
+        warnings: list[tuple[tuple[object, ...], dict[str, object]]] = []
+    
+        class _WarningRecorder:
+            """Minimal stand-in for the shared logger: records ``warning`` calls."""
+    
+            def warning(self, *args: object, **kwargs: object) -> None:
+                warnings.append((args, kwargs))
+    
+        # ``_host_buffer`` imports ``logger`` lazily from ``scripts.logger``, so
+        # replacing the module attribute intercepts the real caller (and nothing
+        # else: every importer that bound the old object keeps the real logger).
+        monkeypatch.setattr(shared_logger, "logger", _WarningRecorder(), raising=False)
+    
+        pin = {"fails": True}
+        real_empty = torch.empty
+    
+        def _pin_aware_empty(*args: object, **kwargs: object) -> torch.Tensor:
+            if kwargs.get("pin_memory") and pin["fails"]:
+                # Pin injection: mirror the accelerator-less host failure.
+                raise RuntimeError("no registered accelerator")
+            return real_empty(*args, **kwargs)
+    
+        monkeypatch.setattr(torch, "empty", _pin_aware_empty)
+    
+        head_sizes = [7, 11, 13, 5, 3]
+        payload, scales = _int8_engram_payload(head_sizes, 32, 4242)
+        emb = _make_int8_embedding(head_sizes, 32, payload, scales, offload=True)
+        assert emb.offload is True
+    
+        # Round 1: all three sibling buffers fail; only the first logs.
+        emb._ensure_host_scratch(4)
+        assert emb._ids_host_pinned is False
+        assert emb._rows_host_pinned is False
+        assert len(warnings) == 1
+        assert "cannot allocate pinned CPU staging" in warnings[0][0][0]
+        assert emb._host_pin_failure is not None
+    
+        # Round 2: a grow re-allocates the siblings and still fails; the latch holds.
+        emb._ensure_host_scratch(emb._host_capacity + 1)
+        assert len(warnings) == 1
+    
+        # A successful pin clears the stale cause (a success never warns)...
+        pin["fails"] = False
+        emb._ensure_host_scratch(emb._host_capacity + 1)
+>       assert emb._ids_host_pinned is True
+E       assert False is True
+E        +  where False = EngramEmbedding()._ids_host_pinned
+
+tests/python/test_deepseek_v41_engram.py:1592: AssertionError
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.10/dist-packages/torch_musa/core/device.py:134
+  /usr/local/lib/python3.10/dist-packages/torch_musa/core/device.py:134: UserWarning: MUSA initialization: MUSA driver initialization failed, you might not have a Mthreads GPU. (Triggered internally at /home/torch_musa/torch_musa/csrc/core/MUSAFunctions.cpp:93.)
+    return torch_musa._MUSAC._musa_getDeviceCount() > 0
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/python/test_deepseek_v41_model.py::test_engram_graph_staging_address_stable_across_eager_growth
+FAILED tests/python/test_deepseek_v41_model.py::test_engram_graph_staging_reserves_the_capacity_hint
+FAILED tests/python/test_deepseek_v41_model.py::test_engram_graph_staging_fails_loud_beyond_captured_capacity
+FAILED tests/python/test_deepseek_v41_model.py::test_engram_graph_staging_matches_device_path
+FAILED tests/python/test_deepseek_v41_model.py::test_engram_graph_replay_survives_eager_prefill
+FAILED tests/python/test_deepseek_v41_model.py::test_engram_graph_visible_forward_keeps_the_graph_block
+FAILED tests/python/test_deepseek_v41_model.py::test_engram_eager_forward_after_graph_staging_uses_the_eager_block
+FAILED tests/python/test_deepseek_v41_model.py::test_engram_embed_re_gathers_for_a_shorter_batch
+FAILED tests/python/test_deepseek_v41_model.py::test_decoder_layer_routes_none_hashes_to_staged_rows
+FAILED tests/python/test_deepseek_v41_model.py::test_engram_offload_forward_without_hash_ids_matches_device
+FAILED tests/python/test_deepseek_v41_model.py::test_stage_engram_rows_reports_success_for_the_capture_gate
+FAILED tests/python/test_deepseek_v41_model.py::test_stage_engram_rows_makes_one_device_sync_for_all_layers
+FAILED tests/python/test_deepseek_v41_model.py::test_stage_engram_rows_builds_dsa_metadata_for_the_first_capture
+FAILED tests/python/test_deepseek_v41_hc.py::test_hc_pre_switch_gates_on_hc_mult_device_and_op
+FAILED tests/python/test_deepseek_v41_hc.py::test_hc_pre_non_four_mult_fallback_is_silent
+FAILED tests/python/test_deepseek_v41_hc.py::test_hc_pre_fused_selected_logs_info_and_missing_op_warns_once
+FAILED tests/python/test_deepseek_v41_hc.py::test_hc_pre_falls_back_without_op
+FAILED tests/python/test_deepseek_v41_engram.py::test_engram_offload_lookup_matches_hbm_bitwise
+FAILED tests/python/test_deepseek_v41_engram.py::test_engram_offload_tp_shards_match_hbm[1]
+FAILED tests/python/test_deepseek_v41_engram.py::test_engram_offload_tp_shards_match_hbm[2]
+FAILED tests/python/test_deepseek_v41_engram.py::test_engram_offload_tp_shards_match_hbm[4]
+FAILED tests/python/test_deepseek_v41_engram.py::test_engram_offload_tp_shards_match_hbm[8]
+FAILED tests/python/test_deepseek_v41_engram.py::test_host_pin_failure_warns_once_and_raises_with_cause
+23 failed, 564 passed, 130 skipped, 1 warning in 56.24s
+CreatePlatform failed!

@@ -1,0 +1,49 @@
+ M CMakeLists.txt
+ M cmake/cargo_library.cmake
+ M scripts/ninja_guard/ninja
+ M scripts/ninja_safe.sh
+ M tests/core/runtime/CMakeLists.txt
+ M tests/core/util/CMakeLists.txt
+ M tests/python/test_deepseek_v41_engram.py
+ M tests/python/test_deepseek_v41_model.py
+ M xllm/api_service/chat_service_impl.cpp
+ M xllm/core/distributed_runtime/disagg_pd_service.cpp
+ M xllm/core/distributed_runtime/disagg_pd_service.h
+ M xllm/core/distributed_runtime/llm_master.cpp
+ M xllm/core/distributed_runtime/speculative_engine.h
+ M xllm/core/framework/block/block_manager.h
+ M xllm/core/framework/block/composite_block_manager.cpp
+ M xllm/core/framework/block/composite_block_manager.h
+ M xllm/core/framework/block/concurrent_block_manager_impl.cpp
+ M xllm/core/framework/block/concurrent_block_manager_impl.h
+ M xllm/core/framework/block/musa/deepseek_v4_prefix_cache_policy.cpp
+ M xllm/core/framework/block/sliding_window_block_manager.h
+ M xllm/core/runtime/draft_model_config.cpp
+ M xllm/core/runtime/native_provider_runtime.cpp
+ M xllm/core/runtime/native_provider_runtime.h
+ M xllm/core/runtime/py_executor_impl.cpp
+ M xllm/core/runtime/xservice_client.cpp
+ M xllm/core/runtime/xservice_client.h
+ M xllm/core/util/CMakeLists.txt
+ M xllm/models/model_registry.cpp
+ M xllm/models/models.h
+ M xllm/proto/disagg_pd.proto
+ M xllm/python/__init__.py
+ M xllm/python/distributed/collectives.py
+ M xllm/python/model_executor/executor.py
+ M xllm/python/model_platform_support.py
+ M xllm/python/models/deepseek_v41.py
+ M xllm/python/models/deepseek_v41_engram.py
+ M xllm/server/xllm_server.cpp
+ M xllm/xllm.cpp
+?? cmake/prebuilt_rust_bindings.cmake
+?? scripts/ninja_guard/ninja.real
+?? tests/core/runtime/native_provider_cache_groups_test.cpp
+?? tests/core/runtime/xservice_client_lifecycle_test.cpp
+?? tests/core/util/folly_bthread_compat_test.cpp
+?? tests/python/test_deepseek_v41_packed_experts.py
+?? tools/musa_deepseek_v41/
+?? xllm/core/util/folly_bthread_compat.h
+?? xllm/python/kernels_musa/
+
+STDERR:

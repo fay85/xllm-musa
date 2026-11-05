@@ -779,6 +779,10 @@ def test_engram_token_map_normalization_chain() -> None:
     assert normalize_token_text("  A\tB\nC ") == "a b c"
     # A lone space survives Strip via the private-use sentinel.
     assert normalize_token_text(" ") == " "
+    # StripAccents also removes spacing marks with combining class zero.
+    # Filtering only unicodedata.combining would retain this Bengali sign
+    # and shift subsequent first-seen compressed IDs in the real tokenizer.
+    assert normalize_token_text("ার") == normalize_token_text("র")
 
 
 def _tiny_engram_hash_state() -> EngramHashState:
@@ -1096,19 +1100,20 @@ def test_engram_hash_state_builder_roundtrip(tmp_path) -> None:
 
     tok = Tokenizer(
         models.WordLevel(
-            vocab={"[PAD]": 0, "Hello": 1, "hello": 2, "WORLD": 3, "x": 4},
+            vocab={"[PAD]": 0, "Hello": 1, "hello": 2, "WORLD": 3, "x": 4, "[EOS]": 5},
             unk_token="[PAD]",
         )
     )
+    tok.add_special_tokens(["[PAD]", "[EOS]"])
     tokenizer_path = tmp_path / "tokenizer.json"
     tok.save(str(tokenizer_path))
     config = {
         "model_type": "deepseek_v41",
-        "vocab_size": 5,
+        "vocab_size": 6,
         "engram_layer_ids": [1],
         "engram_num_embeddings": [1000],
         "engram_max_ngram_size": 3,
-        "engram_compressed_vocab_size": 4,  # [pad], hello, world, x
+        "engram_compressed_vocab_size": 5,  # [pad], hello, world, x, [eos]
         "engram_pad_token_id": 0,
     }
     (tmp_path / "config.json").write_text(json.dumps(config))
@@ -1119,7 +1124,7 @@ def test_engram_hash_state_builder_roundtrip(tmp_path) -> None:
     # First-seen compressed ids: [PAD]->0, Hello->1, hello->1, WORLD->2, x->3.
     sidecar = _load_engram_hash_state_sidecar(str(tmp_path))
     assert sidecar is not None
-    assert sidecar["token_map"].tolist() == [0, 1, 1, 2, 3]
+    assert sidecar["token_map"].tolist() == [0, 1, 1, 2, 3, 4]
     assert sidecar["multipliers"].shape == (1, 3)
     # The serving path accepts the generated sidecar.
     layout = EngramLayout(
@@ -1128,12 +1133,12 @@ def test_engram_hash_state_builder_roundtrip(tmp_path) -> None:
         max_ngram_size=3,
         n_heads=2,
         head_dim=32,
-        vocab_size=5,
-        compressed_vocab_size=4,
+        vocab_size=6,
+        compressed_vocab_size=5,
         pad_token_id=0,
     )
     state = EngramHashState.from_config(layout, {"model_path": str(tmp_path)})
-    assert state.token_map.tolist() == [0, 1, 1, 2, 3]
+    assert state.token_map.tolist() == [0, 1, 1, 2, 3, 4]
     assert torch.equal(state.multipliers, sidecar["multipliers"])
 
 

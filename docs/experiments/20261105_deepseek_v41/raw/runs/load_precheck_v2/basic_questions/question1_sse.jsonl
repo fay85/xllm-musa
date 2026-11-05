@@ -1,0 +1,14 @@
+{"elapsed_s": 10.095906478993129, "line": "data: {\"id\":\"chatcmpl-13785152481026009198-WVdntopumvwYX7PvZveABF\",\"object\":\"chat.completion.chunk\",\"created\":1793873997,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}]}"}
+{"elapsed_s": 10.096005555999, "line": ""}
+{"elapsed_s": 10.096028119005496, "line": "data: {\"id\":\"chatcmpl-13785152481026009198-WVdntopumvwYX7PvZveABF\",\"object\":\"chat.completion.chunk\",\"created\":1793873997,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"4\"}}]}"}
+{"elapsed_s": 10.096059320989298, "line": ""}
+{"elapsed_s": 11.148583522997797, "line": "data: {\"id\":\"chatcmpl-13785152481026009198-WVdntopumvwYX7PvZveABF\",\"object\":\"chat.completion.chunk\",\"created\":1793873997,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\".\"}}]}"}
+{"elapsed_s": 11.148675575997913, "line": ""}
+{"elapsed_s": 12.166886958992109, "line": "data: {\"id\":\"chatcmpl-13785152481026009198-WVdntopumvwYX7PvZveABF\",\"object\":\"chat.completion.chunk\",\"created\":1793873997,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"2\"}}]}"}
+{"elapsed_s": 12.166958899004385, "line": ""}
+{"elapsed_s": 13.199552456004312, "line": "data: {\"id\":\"chatcmpl-13785152481026009198-WVdntopumvwYX7PvZveABF\",\"object\":\"chat.completion.chunk\",\"created\":1793873997,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}"}
+{"elapsed_s": 13.199628391012084, "line": ""}
+{"elapsed_s": 13.19966612799908, "line": "data: {\"id\":\"chatcmpl-13785152481026009198-WVdntopumvwYX7PvZveABF\",\"object\":\"chat.completion.chunk\",\"created\":1793873997,\"model\":\"deepseek-v4.1-flash-0909\",\"usage\":{\"prompt_tokens\":21,\"completion_tokens\":4,\"total_tokens\":25,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"audio_tokens\":0}}}"}
+{"elapsed_s": 13.19969890799257, "line": ""}
+{"elapsed_s": 13.199714790011058, "line": "data: [DONE]"}
+{"elapsed_s": 13.199727475002874, "line": ""}

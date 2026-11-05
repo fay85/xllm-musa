@@ -1,0 +1,19 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+[==========] Running 5 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 5 tests from XServiceClientLifecycleTest
+[ RUN      ] XServiceClientLifecycleTest.StopIsIdempotentWithoutInitialization
+[       OK ] XServiceClientLifecycleTest.StopIsIdempotentWithoutInitialization (0 ms)
+[ RUN      ] XServiceClientLifecycleTest.RpcServiceSeesInitializedSingletonAcrossTranslationUnits
+[       OK ] XServiceClientLifecycleTest.RpcServiceSeesInitializedSingletonAcrossTranslationUnits (0 ms)
+[ RUN      ] XServiceClientLifecycleTest.StopWakesLongIntervalPeriodicTasks
+[       OK ] XServiceClientLifecycleTest.StopWakesLongIntervalPeriodicTasks (0 ms)
+[ RUN      ] XServiceClientLifecycleTest.ConcurrentStopsJoinEachTaskOnlyOnce
+[       OK ] XServiceClientLifecycleTest.ConcurrentStopsJoinEachTaskOnlyOnce (0 ms)
+[ RUN      ] XServiceClientLifecycleTest.StopWaitsForInflightBorrowBeforeReturning
+[       OK ] XServiceClientLifecycleTest.StopWaitsForInflightBorrowBeforeReturning (30 ms)
+[----------] 5 tests from XServiceClientLifecycleTest (30 ms total)
+
+[----------] Global test environment tear-down
+[==========] 5 tests from 1 test suite ran. (30 ms total)
+[  PASSED  ] 5 tests.

@@ -47,6 +47,8 @@ def initialize_runtime() -> None:
         backend_name = "xllm.python.kernels_cuda"
     elif current_platform.is_npu():
         backend_name = "xllm.python.kernels_npu"
+    elif current_platform.is_musa():
+        backend_name = "xllm.python.kernels_musa"
     else:
         device_type = current_platform.device_type()
         raise ImportError(

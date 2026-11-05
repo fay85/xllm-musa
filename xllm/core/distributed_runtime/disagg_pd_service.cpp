@@ -98,20 +98,18 @@ void DisaggPDService::UnlinkInstance(
   disagg_pd_service_impl_->unlink_instance(request, response);
 }
 
-void DisaggPDService::EnsureLink(
-    ::google::protobuf::RpcController* controller,
-    const proto::EnsureLinkRequest* request,
-    proto::EnsureLinkResult* response,
-    ::google::protobuf::Closure* done) {
+void DisaggPDService::EnsureLink(::google::protobuf::RpcController* controller,
+                                 const proto::EnsureLinkRequest* request,
+                                 proto::EnsureLinkResult* response,
+                                 ::google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
   disagg_pd_service_impl_->ensure_link(request, response);
 }
 
-void DisaggPDService::DrainLink(
-    ::google::protobuf::RpcController* controller,
-    const proto::DrainLinkRequest* request,
-    proto::EnsureLinkResult* response,
-    ::google::protobuf::Closure* done) {
+void DisaggPDService::DrainLink(::google::protobuf::RpcController* controller,
+                                const proto::DrainLinkRequest* request,
+                                proto::EnsureLinkResult* response,
+                                ::google::protobuf::Closure* done) {
   brpc::ClosureGuard done_guard(done);
   disagg_pd_service_impl_->drain_link(request, response);
 }
@@ -125,7 +123,7 @@ void DisaggPDService::QueryRequest(
   disagg_pd_service_impl_->query_request(request, response);
 }
 
-void DisaggPDService::CancelRequest(
+void DisaggPDService::CancelAttempt(
     ::google::protobuf::RpcController* controller,
     const proto::AttemptControlRequest* request,
     proto::AttemptControlResponse* response,

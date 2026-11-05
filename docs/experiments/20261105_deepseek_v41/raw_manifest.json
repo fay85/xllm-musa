@@ -1,0 +1,1837 @@
+[
+  {
+    "path": "raw/evidence/build_provenance_v1/manifest.json",
+    "bytes": 10569,
+    "sha256": "67d8345ab57629c285ea96af841f87010109a32980fda2d7a4de393d051171d5"
+  },
+  {
+    "path": "raw/evidence/cpu_baseline_regression.txt",
+    "bytes": 93164,
+    "sha256": "80cfb6926a7a4dfc98717718af25f3e213c366b7d32d4bb64cda1189ec7f3147"
+  },
+  {
+    "path": "raw/evidence/cpu_semantic_regression_v2.txt",
+    "bytes": 1434,
+    "sha256": "5dac79f7d392b9e7f0e061f98fb93fbfe9b541503e7d70a7214bb2287b1bd812"
+  },
+  {
+    "path": "raw/evidence/engram_sidecar_validation.json",
+    "bytes": 572,
+    "sha256": "3e60f6b293510eb71df396c02429aded6b10c54284798567d4fe97e056cec8dc"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/launch.json",
+    "bytes": 4919,
+    "sha256": "7fd61c52a6856ba0c5feae79b9ac784fafc93766b04267d78f93e80c8ef1bfd1"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank0.json",
+    "bytes": 315,
+    "sha256": "23471be13cd23d5add09e9d33bb828e8d2ccea7bc2bfc96deea8ba7729bd262b"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank0.log",
+    "bytes": 432,
+    "sha256": "3af17501ef9b9f41bd980f3b01bb943c2f8ac7d2189039035b11a40e2b92a676"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank1.json",
+    "bytes": 315,
+    "sha256": "a1c0f18ec6c08ccaa630b6b335bba2217115089fa3bff8f66927272ecf9cfbbc"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank1.log",
+    "bytes": 175,
+    "sha256": "b2573a9835f07e09fbf881a07c04fe5772c3fa96ae386f16119efaf0770b9a16"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank2.json",
+    "bytes": 315,
+    "sha256": "11bc77fb7a231ba3295effe827824c4e70b4eb6884e3a17f442b1cf9639f66cb"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank2.log",
+    "bytes": 175,
+    "sha256": "3c2f3fcabd7cb20b77264d3164e7e6aa4122d43adba7cccf71a0772e6615b36f"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank3.json",
+    "bytes": 315,
+    "sha256": "705d935e5cc8e7af1628fe24ef963c21d01f25dee196720b279a9b9380b7e3f4"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank3.log",
+    "bytes": 175,
+    "sha256": "75ea0151b36bd87f7732094ab0963953bda3abf48cceec90f9c9b61cbd465162"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank4.json",
+    "bytes": 315,
+    "sha256": "f209f017d23c0c2721ee90ea5ffef97516cd59078669eec0de313910af3f0756"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank4.log",
+    "bytes": 175,
+    "sha256": "9ad8ae473e6a7080edc8b196155c04a05a328fd9ea1bc2ec937c9b93655f72fa"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank5.json",
+    "bytes": 315,
+    "sha256": "a296c2c2d1c764b884819cd83c472500c8a907c58b42ce34e41fd2a1b6676133"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank5.log",
+    "bytes": 175,
+    "sha256": "56bfb843fc70f1ead6b2ae5d3fafcc4d2d8058a9b4a5a38060d97ef24001900c"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank6.json",
+    "bytes": 315,
+    "sha256": "9db4a5ebadb045df9c222e5f00268ec6296d13d9cc4592347fe8d1bb269931fd"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank6.log",
+    "bytes": 175,
+    "sha256": "1956502faf4c7108a2079eb1ee7e7700308b479785c9b8ac11270496dc07676b"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank7.json",
+    "bytes": 315,
+    "sha256": "120e38abc7ef83161ed647027d3ef2ad7c2be5402851eba5759a90dde216615b"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/rank7.log",
+    "bytes": 175,
+    "sha256": "c96ffd68eff2a23504518fc4141f3605efe0fdec9a92147dfe2917e0319878e5"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/result.json",
+    "bytes": 161,
+    "sha256": "66c907b8a002fad6b1e3ae82aad520089a35f6e37474704743ec22e1e215e60e"
+  },
+  {
+    "path": "raw/evidence/ep8_dev7_v1/status.json",
+    "bytes": 240,
+    "sha256": "43977d7daa174e536ea4b5e6a13f7c809766f435b44fdc87f91753fa7a6ddba0"
+  },
+  {
+    "path": "raw/evidence/mate_fp4_checkpoint_v1.json",
+    "bytes": 3775,
+    "sha256": "0c5ed81f7f2dd57d89a9a88a7d60c5ae7fc68690797174e9f20b9a32dc6d871a"
+  },
+  {
+    "path": "raw/evidence/mate_fp4_checkpoint_v1.log",
+    "bytes": 288,
+    "sha256": "2be2d4774d5f1858a30e88788d19965db203b055a310dc2ce13440f968afd6df"
+  },
+  {
+    "path": "raw/evidence/mate_fp4_primitive_v5.json",
+    "bytes": 13790,
+    "sha256": "00a122ebbb1539a47825347852a6173cf443773f45801f45b111f3db03dc5ee2"
+  },
+  {
+    "path": "raw/evidence/musa_csa2_fixture_dev7_v1.json",
+    "bytes": 466,
+    "sha256": "5231b142bcb0879768d75d58cacae6a7d609f0834c5686f9f5c5eeda9ab3b614"
+  },
+  {
+    "path": "raw/evidence/musa_csa2_fixture_dev7_v1.log",
+    "bytes": 2604,
+    "sha256": "bc5b56223e581ee69518fa42ec36304f6df4d566017b525ca7e4f4b49278922d"
+  },
+  {
+    "path": "raw/evidence/musa_csa2_fixture_v3.json",
+    "bytes": 466,
+    "sha256": "5231b142bcb0879768d75d58cacae6a7d609f0834c5686f9f5c5eeda9ab3b614"
+  },
+  {
+    "path": "raw/evidence/musa_csa2_fixture_v3.log",
+    "bytes": 2604,
+    "sha256": "b49295a0718dbffa172278b72db1f048686c8d8414b19b53a77290492e6f9e34"
+  },
+  {
+    "path": "raw/evidence/musa_primitives_v1.json",
+    "bytes": 1360,
+    "sha256": "f164c85246fd4c1f56576ec7628e1b2d1b4ec11ee332e26fb6ade854f2595cc5"
+  },
+  {
+    "path": "raw/evidence/musa_primitives_v1.log",
+    "bytes": 1422,
+    "sha256": "333861eb1d4fb0f3ef00d0b50d75773cf9ce8eee9245a9a081f1010ff242de28"
+  },
+  {
+    "path": "raw/evidence/native_build_v11.exit",
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/BlockManagerPoolTest.RejectsPrefillWithoutStateAndAllowsRetry.log",
+    "bytes": 908,
+    "sha256": "89cc7c62f4ae7734b38048476dfc7e813c762b80f290554ab58a1cff9f4f036f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/Completion_TypedHostOffloadTest.PreservesTypedReservationsUntilAllCopiesEnd_0.log",
+    "bytes": 916,
+    "sha256": "ac47fea7029abe25d640c184377fda43a0d1974e0eb016e105a552967493360c"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/Completion_TypedHostOffloadTest.PreservesTypedReservationsUntilAllCopiesEnd_1.log",
+    "bytes": 916,
+    "sha256": "1fcb9d59744ea5902ee0dd3fa7a4f7156c3bc4eb7dc9a559dac97c1eeb375dd0"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.AllocateContinuesAfterSatisfiedTokenManager.log",
+    "bytes": 894,
+    "sha256": "7c8c1e229e4ce1d35fb7c78d97269e1ece12736198b072543c39bc1f78d22011"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.AllocateForSequence_DifferentBatchSeqs.log",
+    "bytes": 884,
+    "sha256": "b31371d550c2c77060d9be5a3a23a747aec76c653a607da9512b832752238245"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.AllocateForSequence_GrowSameSeq.log",
+    "bytes": 870,
+    "sha256": "eee81be5cf75974128de6191995581a48767c49f4581813baadf060d10e459c1"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.AllocateForSequence_NullSeqReturnsFalse.log",
+    "bytes": 886,
+    "sha256": "ddfaa83000ef7ca5f0c7c7d4273475345206e06f0ef228d9d0236377d7a9e9b4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.AllocateForSequence_SingleSeq.log",
+    "bytes": 866,
+    "sha256": "1a32b2b0121dc488b6567ffd6a40a67007770ddac920255ae656408d9568e60d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.BlockUtilizationUsesIndividualLeafCapacity.log",
+    "bytes": 892,
+    "sha256": "68edc587733c1a07db384fb53fe767c510663b3a57daea2c15191f7f6e5821c9"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.CapacityStatsUseBaseBlockUnits.log",
+    "bytes": 868,
+    "sha256": "fa4cbe0604fbc7e7a0202c8ce100f57836e59b2041d4c8dcf1d5d5ffda18bcb8"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.DeallocateConsumesBlocksFromOwnerManagers.log",
+    "bytes": 890,
+    "sha256": "ba40a0d8917b33792b0bc6f3851f4ac2c6e7e6f061bd0e2126560caa08b1371b"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.DeallocateDispatchesWithoutInflatingRefCount.log",
+    "bytes": 896,
+    "sha256": "9f7bb0ceb137d0f4831d09418f5c0ad27e51768b29fb1e04ca5c5bb2d7e2227f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.DeallocateToleratesRolledBackEmptySequence.log",
+    "bytes": 889,
+    "sha256": "52cc1c46b5a8f6b59c06049e8be79233f2d8f70651976f3def86b8d46ad69040"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.DecodeInitialSwaAllocationCoversNonAlignedWindow.log",
+    "bytes": 904,
+    "sha256": "85e6d605f111be7c076e63089c557b2a3d0149e1b9552e5ef6f34cd4a834034c"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.DecodeInitialSwaAllocationKeepsBlockContainingWindowStart.log",
+    "bytes": 922,
+    "sha256": "1954583971c889c21da386de929884d1bdf40d624c4e8639aee51b9d637cd8b6"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.DecodeInitialSwaAllocationKeepsOnlyWindowTail.log",
+    "bytes": 898,
+    "sha256": "18deedbd6ec9effe94fb0c9898dd3f12b8e528165259a14ea350cf2b9c414445"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.DecodeLinearWithoutPrefixCacheKeepsReceivedState.log",
+    "bytes": 734,
+    "sha256": "ae093f2e85f0066e211e5953841754bd4f918a1ed7f8968976f97a3d38ee7c57"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.DecodeRoleLinearDefaultStrideReusesSlot.log",
+    "bytes": 707,
+    "sha256": "10cabe95e48c243d65a0e920e161d7f2df775c6b6a208c78e3054fedc0ef2b3d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.DecodeRoleSkipsSwaPrefixCache.log",
+    "bytes": 866,
+    "sha256": "890fe51bfd6d8115504c35ae0965a6e0066fdf8f1f27834678f95189085f5bdf"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.Dsv4CompressedAllocationUsesPlatformUnits.log",
+    "bytes": 890,
+    "sha256": "43ce490e46b7b068bdb3966655fb9160afc8c3e87f61aa56b364a58700910808"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.Dsv4ExactRepeatRejectsEvictedPreviousSwaWindow.log",
+    "bytes": 900,
+    "sha256": "2ea0d695d20861fb4ec5dffd1cf01d4d5f3d935a382747e1b55731613c21ddb5"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.Dsv4PrefixCacheEvictsAtC128Capacity.log",
+    "bytes": 874,
+    "sha256": "b6333e67d951683ae1bcb97d20510752f6318868bd3857951f6c31464eeba9cc"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.Dsv4PrefixCacheExactRepeatPopsOneC128.log",
+    "bytes": 882,
+    "sha256": "80caa409ec096f519697eb56ac66c0c3e939868365aae0117576cde685b72fc5"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.Dsv4PrefixCacheHitOnRepeatedPrefix.log",
+    "bytes": 876,
+    "sha256": "d13fe3314edc0d254084c630f3e6a48eed2bed2e5b5102a5154ac49a9ef716f4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.Dsv4PrefixCacheMatchesAtCompressedUnitBoundary.log",
+    "bytes": 900,
+    "sha256": "2d3b14d668ead1ef889789cb3cafcaca7e200d39ce878b2d8e52f2bddbe3caa5"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.Dsv4PrefixCacheMissCleanly.log",
+    "bytes": 860,
+    "sha256": "5ffd31b9d18e202638b87717917d5e7ab0e476818b7a78ab046f2fdb4e0b65c5"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.Dsv4PrefixCachePostGrowCursorAdvances.log",
+    "bytes": 882,
+    "sha256": "48b775674c2124ff524a53aa7c57f28fe7ef82741ef09ab7ea8ee5cc5b96cc8a"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.Dsv4PrefixCacheSkipsPartialCacheUnitTail.log",
+    "bytes": 888,
+    "sha256": "b859eb83f4ea7e96962196911cd87d2b8973fb89344e862180ac6c9cea80b111"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.EmbeddingLeafUsesExplicitState.log",
+    "bytes": 680,
+    "sha256": "dbc82df4d4ba0569544e671c9708517b0d54749e5666ac6c22d6e4999a113703"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.EmptyHostGrowthCannotPassCapacityValidation.log",
+    "bytes": 719,
+    "sha256": "ffc8b12747d53047f1c040484a0f6972a2f7ba8999d71d774e5c8c17afb42d5e"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.ExplicitDeviceStatePreservesEmbeddingDispatch.log",
+    "bytes": 725,
+    "sha256": "379a21dfadfc7ea0424c749bab8e0af87ea5ff378ea9e96b7c1d89af96e2b781"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.ExplicitHostAllocationNeverPublishesProgress.log",
+    "bytes": 722,
+    "sha256": "d46873aead665d63bb142f2e7d8946a0100f7575f7780f2488d35c523f6b1035"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.ExplicitPublicationEnablesHostOnlySharedMatch.log",
+    "bytes": 725,
+    "sha256": "39c420be30e28e21ce8fe397348624dbedf1e491d8f13e2a302018c4729b05db"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.FailedGrowthKeepsCommittedBlocks.log",
+    "bytes": 869,
+    "sha256": "ced75d00ae6872cca8f40daa0d73225c8280d785281234aa1b0a8e32c749735d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.FailedHostGrowthRollsBackAllStagedLeaves.log",
+    "bytes": 888,
+    "sha256": "71892446f67da91443635e5e734219a80dcea0da87f696e161a7d79f9a9e044f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.SampleSelectorsRetainRequiredHiddenPositions.log",
+    "bytes": 893,
+    "sha256": "b107cc470ff33c8d8eb21c2530f65c45393bd72e708c7e99ebe0b73b92b993dc"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.SlidingWindowHostCursorLagRetryPreservesSpeculativeWindow.log",
+    "bytes": 761,
+    "sha256": "f299b6680a7eefc916b95689f8e9766d66682dcfd83d0a90ca35f65d9cf404ec"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.SlidingWindowLeafAcceptsNullSequence.log",
+    "bytes": 878,
+    "sha256": "feead4762f5114192446427229ab4e0fd56cbb91cdc0b1856dddcbf784e925e2"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.SlidingWindowReclaimsUncachedBlockBeforeFullCacheUnit.log",
+    "bytes": 914,
+    "sha256": "e53854061c6e30856e5470125b9f361bfef0792827aa05e26c94b88070012441"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.SlidingWindowReleasesSkippedPhysicalBlocks.log",
+    "bytes": 892,
+    "sha256": "aa7538287895590bc4e439e68ee6cb24ad9fa62e8e4045881ac1aae5c121c84b"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.SlidingWindowSlidOutBlocksEnterPrefixCache.log",
+    "bytes": 892,
+    "sha256": "51394cd0346794cb5ce617c21fd6fd2bc66600b2ece745355fa72e12d12058ba"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.SlidingWindowV4PrefetchKeepsGeometryUnit.log",
+    "bytes": 710,
+    "sha256": "dd294d9a72e8e006819128e100bc68b105415a1861a297e5800514471bcfa514"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.TokenIncrease_AddsBlocksIncrementally.log",
+    "bytes": 882,
+    "sha256": "afa9d5191e97818701d4ecdd66b82e6f7d8ecfb6f5a593855cd1c909a953d6db"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.V4DefaultPrefixCacheKeepsRolePolicy.log",
+    "bytes": 878,
+    "sha256": "75d36c5b8149ba44e05f650bda05f6b06f97ce0da505c04ef7882f7f0a518f35"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeBlockManagerTest.ZeroCapacityLeafStillReportsItsType.log",
+    "bytes": 878,
+    "sha256": "890a1748a24c1924c29e8cae5c9860fad2691e9183f80b7471c460c114fd1cf6"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeMtpPrefixCacheTest.FinalFlushKeepsPublishCursorAtSafeBoundary.log",
+    "bytes": 726,
+    "sha256": "5801b3e2d3c39cef78e05539254b473d944583df36f09cd71b99ff31f623c752"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeMtpPrefixCacheTest.InBatchBoundsKvBudgetAndCapacitySeparately.log",
+    "bytes": 726,
+    "sha256": "8beebc9ce5eaa51aa43752c20f3bc02d2798548f947106ae22a0766977bcc428"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeMtpPrefixCacheTest.InBatchBudgetDoesNotPublishUnwrittenKv.log",
+    "bytes": 714,
+    "sha256": "30bb7cbb2fccf8e6b0d435fe35b55c1a74f7381cecd82fe923b23e1472e3fbed"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeMtpPrefixCacheTest.NeverPublishesOverlapPlaceholderIdentity.log",
+    "bytes": 720,
+    "sha256": "1d9fb97bfafb18cdea54d368fcd184f946e6b4651dddded6f6da8c477c91902f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeMtpPrefixCacheTest.PublicationPathsShareAnIdempotentCursor.log",
+    "bytes": 717,
+    "sha256": "bde6986d52c836e25a57a608629f31eaa1acc39da756a493f70dd605a31a5792"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeMtpPrefixCacheTest.PublishesCompletedKvWithConfirmedLookahead.log",
+    "bytes": 726,
+    "sha256": "bcd7ca18d06b1627d11873a9c3946abbc7790be0a3b26194df8b15ce50e95892"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeMtpPrefixCacheTest.RealAppendPublishesEverySafeBlock.log",
+    "bytes": 699,
+    "sha256": "6584928080e48726008834b687c5cc4c5d4c24779c32b38e666d5095bb5a13f7"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/CompositeMtpPrefixCacheTest.TextOverlapHashStopsBeforePlaceholder.log",
+    "bytes": 711,
+    "sha256": "dc300f28c6a74001a9ed2b7c30c8a9fe0663f702f577a532161396f2c94bbcad"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.AllocateSharedAdvertisesC128AlignedCopyUnits.log",
+    "bytes": 908,
+    "sha256": "4315ba03b9f4fff52188c4f38767cc53289e01d329da2bce27b19fb0963a1f4d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.AllocateSharedMountsMatchesWithoutH2d.log",
+    "bytes": 894,
+    "sha256": "a6ef572fa171114eea2c7cd7d6e3df34a1dd30d611a86b89dd1c5db8c49961e2"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.CancelledStoragePrefetchReleasesReservedBlocks.log",
+    "bytes": 748,
+    "sha256": "f967788b0878b8481a3a941bf75222f0082b36d6db0dc9234baaf810875293c5"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.ChunkedPrefillSwaCoversHostHitPlusChunk.log",
+    "bytes": 898,
+    "sha256": "d59d20283ba409e8956a18a65bd67760916a1307e0991628d91438d60e2fd3b0"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.CompleteC4C128CombinationCountsOneCopyUnit.log",
+    "bytes": 904,
+    "sha256": "5b052e6019f16e84865601b7de9fa6ebf59e5bb385de9f44c357e7899d42d65f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.CopyBudgetTrimFallsBackPastMissingSwaWindow.log",
+    "bytes": 906,
+    "sha256": "633e31de055238146cef6e9b06706f630ef53daa681be7e4b597c81b5ee4f5b7"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.D2hUsesHbmProgressInsteadOfRestoreTarget.log",
+    "bytes": 730,
+    "sha256": "4aaf1781e1967d64c2e33dadb8eda7e1e514cd16689239cb0b477fe0d82682bf"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.D2hUsesSequenceDpRank.log",
+    "bytes": 673,
+    "sha256": "777948be08ad76b59e84e8cc56f01d4c943e7b755ce9c6299d8e6b2ced8906f0"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.DecodeLinearCheckpointRowTracksBoundaryOvershoot.log",
+    "bytes": 754,
+    "sha256": "9e3d7e29f3316ce6130f6e08928cc3711e577a349c43f81819cfe4b2912498f4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.DecodeLinearCheckpointWindowFollowsCursor.log",
+    "bytes": 733,
+    "sha256": "742c580aa2bedb99c764f1c31496d7a0c3cad1cb43f22730b27f3cf5282a1d5d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.DecodeLinearLayoutOffloadsKvWithoutPrefixPrefetch.log",
+    "bytes": 757,
+    "sha256": "9f21c3e84cb608245146bce40bdcc63f014575392565292f47bdb81bce724a02"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.DecodeLinearOffloadUsesCanonicalMtpCheckpointHash.log",
+    "bytes": 757,
+    "sha256": "f966e1c3a41992b0962e81b790e62d224ee38a02682069fdad73fadbc7942bf3"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.DecodeRetryKeepsMountedPrefixAfterHbmGrowthFailure.log",
+    "bytes": 760,
+    "sha256": "8a7f06f166e93024750033c379262d65f41a21c9f49812a5110dcf0231b62c28"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.DecodeRetryKeepsMountedPrefixAfterHostGrowthFailure.log",
+    "bytes": 763,
+    "sha256": "303d3a8a02737447cdf1ec7045cec2c09c1f6645702aea6c8ef9c088bfec3261"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.DecodeStepReleasesSwaAndOffloadsCompletedUnit.log",
+    "bytes": 910,
+    "sha256": "2af63b3d71d8ee53537867bdf55615d1d37cca7da48bd8e09d053f43fbede971"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.DecodeTypedLayoutKeepsSwaHostLeafForOffloadOnly.log",
+    "bytes": 914,
+    "sha256": "4aa5003a064de95bba8bdff35536a292bdb61d120ef80674fb1de968fe9584c1"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.DecodeTypedLayoutOffloadsNonPrefixSwaAndCompressedLeaves.log",
+    "bytes": 932,
+    "sha256": "35fcac30b739b48b9249e6c2f799c991ba9bb0051a5d3ccfef46b8e0d6382488"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.DecodeTypedLayoutProbesOnlyDeviceC4C128.log",
+    "bytes": 898,
+    "sha256": "4b6e50ba821a24e6f4bc37b0f52b432d4d3d834a68ea14a8a2f53c51dc27dfe7"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.Dsv4ChunkGrowthOffloadsAllCompletedCacheGroups.log",
+    "bytes": 912,
+    "sha256": "f2cbbe815ea259881fa8af16e2a5d287025bf3d32d87cc9df7535f9df4368bad"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.Dsv4HostRestoreAllocatesOnlySwaTailWindowAndCurrentChunk.log",
+    "bytes": 932,
+    "sha256": "70b4fd8e31abda67c3d261e0a311a07401adb3c408decffc75c1ccdaf48f6701"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.Dsv4LargeChunksPersistEveryC128Checkpoint.log",
+    "bytes": 902,
+    "sha256": "369c2e23201e787741c44b721151aa611f228080b262bb36df5679bed09d1599"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.Dsv4OffloadWaitsForCompleteC128Unit.log",
+    "bytes": 890,
+    "sha256": "fe26a2ecd28f97bcea913c4ad7d2a8bb76511d8e5b5dedac95110ea3830fab60"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.Dsv4OneMillionTokensReuseHostBlocksWithSmallChunks.log",
+    "bytes": 921,
+    "sha256": "6a445f22fadc219be758a958366e9df0e66ca258361ae691016fbf3781134c8a"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.Dsv4PrefetchClampsWindowToCheckpoint.log",
+    "bytes": 892,
+    "sha256": "3d1e7f30b06f6433b966e7fad43db3e806b28e27e2607285252b7c1a74388101"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.Dsv4WideWindowOffloadsEveryTailBlock.log",
+    "bytes": 892,
+    "sha256": "d5101f4550c5a88584b3ec1600dd8f2a6fb7266df88e4d7aa3a77fc96cdacfb4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.Dsv4WideWindowPrefetchRetainsFullRestoreTail.log",
+    "bytes": 908,
+    "sha256": "f14cceb0ed1f9daa732a2e034f8d757ea4a40db754d46c2143f2cc521f164212"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.DuplicateHostLinearCheckpointDoesNotOffloadRestoredPrefix.log",
+    "bytes": 781,
+    "sha256": "5dbd7ab1156cb91442c39f278e810a65bed710eaea559c3b4798354be63b9f8e"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.EmptyHostConfigurationRejectsAllocation.log",
+    "bytes": 1187,
+    "sha256": "7fae2d32b75e2126b331f0de13e212b8be0724f2df1669b0e2372441e3ea7fdb"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.ExistingBlocksSkipHbmPrefixRematch.log",
+    "bytes": 712,
+    "sha256": "99bb7912f239bcb268c232417591af8ec38a91687ee276c70c080cfd2a592276"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.ExistingBlocksSkipHostCacheRematch.log",
+    "bytes": 712,
+    "sha256": "2865ff621ba036c4e2a4519487b1a738b5b0d8c3bbcd46a86db05df9084ae104"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.ExistingHostBlocksSkipPrefixRematch.log",
+    "bytes": 715,
+    "sha256": "919327f4001ad9da319f0970df34ee4555a5d89e21280ebcbe48a33f33a36c3f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.ExistingHostPrefixSkipsDuplicateD2h.log",
+    "bytes": 715,
+    "sha256": "9fd46711946e9aeae9826a1c81df61ae57b11884e18a2a4007191e7ed4789908"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.FailedHbmAllocationDoesNotQueueH2d.log",
+    "bytes": 712,
+    "sha256": "b5f5189bba5edf06d0de8f0ec0c4aa8d7fe5b3c9fe5bc0970c107fc374f06464"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.FailedHostGrowthRejectsAllocation.log",
+    "bytes": 709,
+    "sha256": "d3836ce94516c58cecbca641295df166d11f85b899527c92a2f716c5c6ff9983"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.FailedStoragePrefetchDoesNotPublishHostPrefix.log",
+    "bytes": 745,
+    "sha256": "9d9bbca49cc9df72c451b29645ca7ff082a6a0358f234d947a4a789e705fb286"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.FlatKvChunkGrowthOffloadsCompletedBlocksIncrementally.log",
+    "bytes": 769,
+    "sha256": "3943ab1e30e3e6369e3fdac44d74ecf52e4b711f68575f6212268d8dfc1d5fec"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.FlatKvHasSingleHostKvLeaf.log",
+    "bytes": 685,
+    "sha256": "300891183134875ef50ec715e7bb3c07fe68364d2ca3c4a9c7ea1dea7d019dd0"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.FlatKvRestoreBudgetRemainsBlockLinear.log",
+    "bytes": 721,
+    "sha256": "87ef9fe1a0cdd7cc46c74115af696751ad7d6e6cd7c091630fb9304118c2605d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.H2dRestoreDescriptionsRemainOwnedByPoolUntilDispatch.log",
+    "bytes": 766,
+    "sha256": "d0aee040c894356fe264bf45d300c261c9cabfde6a674f33f49743762807fc52"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.H2dRestoreIsPublishedToDevicePrefixCacheDuringAllocation.log",
+    "bytes": 932,
+    "sha256": "b1f9d322bebb6ead68c39ed821692c92976156d223df5a10c4720895257178e7"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.H2dUsesCachedTokensInsteadOfPublishCursor.log",
+    "bytes": 733,
+    "sha256": "0a07930aa10e79c65e24664410a8545f70f4ce45431925a146c7059cefa23ba0"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.H2dUsesSequenceDpRank.log",
+    "bytes": 673,
+    "sha256": "932f80803bf7eb0ec67d69ddbe1c04d70071da5be5310365f186f13ec19fa9c4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.HbmAllocationFailureDoesNotQueueH2d.log",
+    "bytes": 890,
+    "sha256": "8a9368c458d8df8f565b180d1252871af8c99303b70e9460f145233e65f3bc03"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.HostAllocationFailureRejectsHbmAllocation.log",
+    "bytes": 733,
+    "sha256": "395f05acbfd2c7d162752332f131a7eaba799bb9cdb801f47d171ae737a572a0"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.IncompleteTiersDoNotCombineIntoHostRestore.log",
+    "bytes": 904,
+    "sha256": "cdcdd6d8729b3364e1e85bf07d2c22235d9fd6cec836a64e9fc26af13f5ffccc"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.LastDecodeRequestDeallocateDropsFailedGrowth.log",
+    "bytes": 742,
+    "sha256": "3ad01ab17e394afb1f2d94a0a3968eb42a5c4fef19e43848338da47c15345423"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.LinearOptionalStoreMissLeavesSparseHostCheckpoint.log",
+    "bytes": 701,
+    "sha256": "3f80a5505b10ef9a891f64d96f15854bd452ba3490358d1fd657a7e5488a79ee"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.LinearStorePrefetchDoesNotRepeatMatchedPartialUnit.log",
+    "bytes": 1137,
+    "sha256": "512c113905f7ab298eb7c71f0fcb15da63108acca09b2e52283025c3bad6a2e6"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.LinearStorePrefetchDropsKvWhenOptionalCheckpointMisses.log",
+    "bytes": 6867,
+    "sha256": "a34a98be79e517e6646809302a9449e06685ae51863c89cfc4edaac746654e1f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.LinearStorePrefetchRestoresPartialTailCheckpoint.log",
+    "bytes": 15512,
+    "sha256": "95785c4ca5b7d372335c3e12fe50b810a71185eefccdd4df1aa03337007ab4b0"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.LinearTailHostOffloadBecomesVisibleAfterAllWorkersComplete.log",
+    "bytes": 784,
+    "sha256": "00b17c409cbb6bdf1289afc094d46d48e065ee3386ba4d9412efc77489574944"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.LinearTailHostPrefetchKeepsMatchedStateWithoutRegularUnit.log",
+    "bytes": 781,
+    "sha256": "e102928265f240286ffa1b1ba72077ff1bf30586a0daa46720e6179efd0b7c5b"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.MultiSequenceStoragePrefetchUsesOnlyFirstSequence.log",
+    "bytes": 757,
+    "sha256": "6d8a27dcd0efc84c0e82630fdf151c25fd6cac98c79ea8416c42f3775ee4a721"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.OffloadCompletionOwnsBlocksAndPublishesOnlyAfterAllWorkersSucceed.log",
+    "bytes": 1058,
+    "sha256": "201581a6123838dcd6462683919f55a99b314536e7dd05f30022e3fe9b987eb6"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.PartialDsv4PrefillDoesNotReprobeAnUnmatchedHostTier.log",
+    "bytes": 922,
+    "sha256": "ca20ada91df2afee6fa4fdb7b5dc65a3d707aa92a5434a8f2f033af52328108d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.PrefetchLogsHostHitBeforeStoreGet.log",
+    "bytes": 709,
+    "sha256": "f77e83a03de22861f9f34593e578b6d0f9fbc7ca4c743fc42c0f5c0446fb827e"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.PrefillLinearOffloadsNewCheckpointsWhenHostFallsBehind.log",
+    "bytes": 772,
+    "sha256": "7aa984e915d92e58ead6eefe5cc5f06c20edbc98a7fc1d564d221d853a9f0dd2"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.SharedHostPrefixCopiesEveryPrivateDestination.log",
+    "bytes": 745,
+    "sha256": "d504f6e942e512c3788bc374d9dd873bfca683bf8d0d8b8e20a3e837d0a0b86d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.SharedHostPrefixRestoresAndGrowsEveryInBatchSequence.log",
+    "bytes": 924,
+    "sha256": "af378c23a01ea8941b0de8a14a82b42bb5701a30605b6c4876285026b99bf8c0"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.StoragePrefetchPublishesOnlyAfterAllTpWorkersEnd.log",
+    "bytes": 754,
+    "sha256": "89de377175dbe4cc6ddf04b7ee52b6de2c2ffe52e9efe7a1f521fb3e802a97f4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.StoragePrefetchTimeoutWaitsForWorkersToEnd.log",
+    "bytes": 736,
+    "sha256": "672c37962ee37e4df96ae5fd898ebdb663e4fa8f9892bf7dad39d12f601d9d85"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.SuccessfulAllocateBuildsTypedC128AlignedH2dPlan.log",
+    "bytes": 914,
+    "sha256": "2ada15f81813c6876b39d93f837154a3de5de5502acc66e03a109dea62f9657a"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.SupportsLinearCacheLayout.log",
+    "bytes": 685,
+    "sha256": "dcd5a1ae9ff9f64824d8e2dd7496563d7004a094e215ad17b2b6559cd16eb7e3"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.SwaTailBlocksClampToAvailableHistory.log",
+    "bytes": 718,
+    "sha256": "eeb9b73fc2172f7d2768ce10224dbb8fb49b50131ac38700edb7f883be2fa80f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.TryAllocateMatchesHbmAndFloorsHostCursor.log",
+    "bytes": 900,
+    "sha256": "d9e8a1382af773db2a121e90edcc64e5c29075a29742d2283965d05ab0676a51"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.TypedLayoutHasPerDpRankLeaves.log",
+    "bytes": 878,
+    "sha256": "522dfa2bd8e0f27eedd4fc2c7d920150f25da9244ee6017c0896060a395e72be"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.TypedLayoutHasSwaC4C128HostLeaves.log",
+    "bytes": 886,
+    "sha256": "9b990277de45331e95afb688b2ecfc11ceb1bf125e35ff0c89786cf82a9378e4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.TypedLayoutSupportsStoragePrefetch.log",
+    "bytes": 888,
+    "sha256": "2fa848f03cc1c6f1c9fcdb8b8e436165127686d0184f861f9e05dd9e1fbeb92a"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.TypedStoragePrefetchRetainsLongestPrefixWithinHostCapacity.log",
+    "bytes": 936,
+    "sha256": "b1d913a00807f024d73434830b072ff5a91e76bfcff436ab10ce38781b3fc2b5"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.TypedStoragePrefetchStopsAtFirstIncompleteUnit.log",
+    "bytes": 912,
+    "sha256": "1f20a9ef5727a57ce1f90e4cfa725ea120f56ff1e0776b5b5c8c4edf07bee46a"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.V41DSparkOffloadsOnlyCommittedCheckpoints.log",
+    "bytes": 733,
+    "sha256": "352b71762cdc0d4efd31ebaa4eb8ac149d4195a233b561288cfe9319ba0509ee"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.V41DecodeUnsupportedLayoutNamesRoleAndLeaves.log",
+    "bytes": 1202,
+    "sha256": "73445252b08c8666733c922bd91c2d672cbcfe9c658c86396b3105b4e9ae769d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.V41NarrowWindowOffloadKeepsSwaTails.log",
+    "bytes": 715,
+    "sha256": "647986a215196d9db6a070dbf0181586b4745efa38b91e2152e69eb135e89ea8"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.V41StorePrefetchFitsCheckpointSwaCapacity.log",
+    "bytes": 733,
+    "sha256": "656920dfb465930f3b0219b4eeda4f0dba78ff196331c49561cc88f8c2459732"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.V41StorePrefetchGatesBothTokenGroups.log",
+    "bytes": 718,
+    "sha256": "3cb10f63d2e600e14124b087336ae760a9d9dab8675be3c781a498d31407d787"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.V41TokenGroupsOffloadAndRestoreCommonUnit.log",
+    "bytes": 733,
+    "sha256": "033fdeb7182641156f58c145b05b1de83b393c5f08d54c0e793c3e9a7194de8e"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyBlockManagerPoolTest.ZeroCopyRestoreTargetDoesNotReprobeHostCache.log",
+    "bytes": 742,
+    "sha256": "bf46ae9e661c7d3827bd6816b99a3a11aafb4736d265945e0410cad5747cda70"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyMtpPrefixCacheTest.HostMatchRejectsDifferentNextToken.log",
+    "bytes": 702,
+    "sha256": "5a86f47c9e77a3dcdee87afac44d499d26753318e0229cbdd7c9fa0fdf6d48a6"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyMtpPrefixCacheTest.OffloadPreservesDeviceStampAndCompletedBoundary.log",
+    "bytes": 741,
+    "sha256": "65147f1b5d04f22f58c310cda486a4623cc3f583e22aa1f132e7e25abf7fb00e"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyMtpPrefixCacheTest.RestoresEveryBlockProvenByStoreHash.log",
+    "bytes": 705,
+    "sha256": "0d554f94668a32bf60e54af0e714ab19c4f70792cd88a7c303732eb6d88ee7d6"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/HierarchyMtpPrefixCacheTest.StoreDoesNotQueryWithoutNextToken.log",
+    "bytes": 699,
+    "sha256": "72e146ba6dcbded992125fe90bcb2d710ea481f7124f7686f825d013a685dee9"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/LinearPrefetchSelectionTest.CompletedNextGroupOverwritesEarlierAlias.log",
+    "bytes": 720,
+    "sha256": "b00f77c4721ccb987f436566104427db5c273076ac40aacbc2cd5811f248df0e"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/LinearPrefetchSelectionTest.HitPastKvPrefixOverwritesEarlierAlias.log",
+    "bytes": 711,
+    "sha256": "bfe98f9445c874a973d825ba8cc5f25c7e785b16836a22b7fd58c07d148c5e90"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/LinearPrefetchSelectionTest.HostPrefixIsNotAPrefetchHit.log",
+    "bytes": 681,
+    "sha256": "24389a5ebc35f53a469f3c74b3870c30d60fb341939403d9bb4513dd667af9f9"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/LinearPrefetchSelectionTest.HostPrefixIsNotInspected.log",
+    "bytes": 672,
+    "sha256": "edc083ac2073db7941af63996cd7f9a331ec22b10e720683ab0066f6467629c4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/LinearPrefetchSelectionTest.InvalidPastKvPrefixDoesNotOverwrite.log",
+    "bytes": 705,
+    "sha256": "05119e54e86fa5a7e4b910b1fe147039b77561f83aeb864732d31f61a5d176a8"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/LinearPrefetchSelectionTest.KeepsDeepestFullHitInsideKvPrefix.log",
+    "bytes": 699,
+    "sha256": "372a1d2845523b88e9ac7bc8351421e6b834337f8e593aceb5f89b52a3ce949f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/LinearPrefetchSelectionTest.KeepsLatestUnwrittenFullHit.log",
+    "bytes": 681,
+    "sha256": "f8607d831df08aaf119c48a51a9768a491ec8ab281a55fe87497d232cec65bc1"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/LinearPrefetchSelectionTest.MissPastKvPrefixDoesNotOverwrite.log",
+    "bytes": 696,
+    "sha256": "67ae3bd6188bf5993854f2ef524e2bf6531d000840878215b182e6d44146a0af"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/LinearPrefetchSelectionTest.PartialGroupReuseKeepsEarlierBatch.log",
+    "bytes": 702,
+    "sha256": "c80a531e9c95c00f69fb0458cfad960c13305d51b127a8a8716312c263849e06"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/LinearPrefetchSelectionTest.TailCheckpointInsidePrefixIsKept.log",
+    "bytes": 696,
+    "sha256": "ed21020f60ea5f1f6b3a8e57dfba3856e211bbc3c7296c78784a224793b79580"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_0.log",
+    "bytes": 835,
+    "sha256": "3fb6658f2d7b95e38163685c2c1228f58543413215ca826a50a61ad97be116ba"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_1.log",
+    "bytes": 835,
+    "sha256": "970998b520e32030ab0f332414f6e0d2d6a6edb7fe3e2d062c7519abe236fd7f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_2.log",
+    "bytes": 835,
+    "sha256": "659b70ff58d156078e178861df858de8720dc36a047abf4020af9aeb81eb4404"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_3.log",
+    "bytes": 835,
+    "sha256": "2ee34dd20ebcce3f1e2c62a9da8e87c85e7c6f1dd19a464bfbbcc4a091c61793"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_4.log",
+    "bytes": 835,
+    "sha256": "2e84bc6d3a45a1c62fc3f8aa87b547af798eb4fc19ce33f1d892777dbb523b3f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_5.log",
+    "bytes": 835,
+    "sha256": "1df94267d3fc577c200eedab8c47b9b8f077b5227f1a9daaae2a92d73272f543"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefetchResultTest.LogicalHitsAreSummedAcrossWorkers.log",
+    "bytes": 654,
+    "sha256": "080d12485dd7fc06bd1ba2fdd5b0431c6b28678b6b288f10ff0a6a280850603d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefetchResultTest.OptionalMissDoesNotStopGatePrefix.log",
+    "bytes": 654,
+    "sha256": "ed824662f7b15bcd1364cfa2fab4661b378f1403295644d26deb37d78bd52c77"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefetchResultTest.StopsAfterCancellationOrTimeout.log",
+    "bytes": 648,
+    "sha256": "dcd274e4cc3b4daa647c6a8f6315cc4a570c4267f5ff43343fad56f3d679c2ca"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefetchResultTest.UsesMinimumContiguousUnitPrefixAcrossWorkers.log",
+    "bytes": 687,
+    "sha256": "81addaab9cbce27ed7a18228d659a90aeda37febe2e2bf4612fb69cea6c53038"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefetchResultTest.WorkerFailureMarksSummaryUnsuccessful.log",
+    "bytes": 666,
+    "sha256": "9033153c8d3a1f68e48453d9ee646b3739e7c380e64f85443abbc7f44a4532bc"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefetchResultTest.WorkersAdvanceIndependently.log",
+    "bytes": 636,
+    "sha256": "f7f6c10d1840cb5f66f3c550425880826b747d2a462576b4af1f68e0569c501d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.AllowsSpeculativeSpanAboveHalfStride_0.log",
+    "bytes": 769,
+    "sha256": "2351d0fd40921542d58e1cf314f7b25443e3eaf555573a9dd82680bd319d1c1e"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.AllowsSpeculativeSpanAboveHalfStride_1.log",
+    "bytes": 769,
+    "sha256": "7f0bc08f676efdefdbd4f277a188727382ade98fb48c5f837f511f6a71da6461"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.ColdPrefillRequiresPrivateWriteSlot_0.log",
+    "bytes": 988,
+    "sha256": "ecb06331101f8d123b8b09c387f270406cda6817bffd55fb8329675163d3bcb2"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.ColdPrefillRequiresPrivateWriteSlot_1.log",
+    "bytes": 988,
+    "sha256": "4302a405c7e9c9d33f608fa50e70e0efc151a9c797ad790d5ae979464af44595"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.DecodeCheckpointPreserveRebuildsWindowAfterCrossingWithOneBlock_0.log",
+    "bytes": 850,
+    "sha256": "c5888e45ca7b6009c545a9b13df2b81f68b9b1bd7d765191d08bc1a043d4f165"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.DecodeCheckpointPreserveRebuildsWindowAfterCrossingWithOneBlock_1.log",
+    "bytes": 850,
+    "sha256": "a47c5bebda1896da253d489336dad6e286be1bf3a7d02dc1c457d7fa7164d2ee"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.DecodeReceiverAllocationIsOwnedByLeaf_0.log",
+    "bytes": 772,
+    "sha256": "5db9a45fd17b67d14a92b801b2f5666e881a6dab5e2cadac334853d1ee56dafc"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.DecodeReceiverAllocationIsOwnedByLeaf_1.log",
+    "bytes": 772,
+    "sha256": "fa0f69645842a1435365695d8c646f9ca30a137b5782b20b08525e651919a6f6"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.DecodeReceiverUsesExplicitState_0.log",
+    "bytes": 754,
+    "sha256": "bc46264ec0c2fdb658335c4d482456f1441991639478cd32547f0c3d5293dcd8"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.DecodeReceiverUsesExplicitState_1.log",
+    "bytes": 754,
+    "sha256": "66c9be8185c5685d326fdb342e6570fb2d1f4da4a1d0f676268247b97aae380d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.DecodeRollingExhaustionFallsBackToCurrentSource_0.log",
+    "bytes": 802,
+    "sha256": "8624a4aa43ae465f091aa4782ecf26345057d8ee24766193272c3393bf5d8158"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.DecodeRollingExhaustionFallsBackToCurrentSource_1.log",
+    "bytes": 802,
+    "sha256": "903c382296c51e714583cda0a9be2151999d62c9238586c4c208e55bfbd80081"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.DuplicateHashesStillAllocateDistinctOutputs_0.log",
+    "bytes": 790,
+    "sha256": "56f7ea7ab96e18e855d4702ad932c243b650e7bc46a9f39f2268bc692c6715a2"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.DuplicateHashesStillAllocateDistinctOutputs_1.log",
+    "bytes": 790,
+    "sha256": "caa0e81a2f2c48bfa902a12522c6bcdbc51cd62cc25f878dc08938b7ff97477e"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.ExhaustionPreservesSourceAndRollsBackKvGrowth_0.log",
+    "bytes": 1018,
+    "sha256": "a254bd6436ca74cda88fbf12dc8463ad201213d7d661263f33921a7de53874b0"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.ExhaustionPreservesSourceAndRollsBackKvGrowth_1.log",
+    "bytes": 1018,
+    "sha256": "197cfd6c54aa10ec18b8d02c91be9ec222efa239af06c09d4a24b7ac3371d506"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.FlatPrefixMountRestoresCachedTokens_0.log",
+    "bytes": 766,
+    "sha256": "c62f0ec499c2f747d7e5fee741d2f9f19ee8adf87a4b52a90b61cdf0dd46da66"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.FlatPrefixMountRestoresCachedTokens_1.log",
+    "bytes": 766,
+    "sha256": "bdaf9ad06dbd02acb86e7ece87f2c8febe78cf0165a42cc59dcc618702448feb"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.HostDecodeCheckpointDoesNotAdvanceSequenceHashes_0.log",
+    "bytes": 805,
+    "sha256": "029b1eae55082e112fcc1b00f38ab9b7a122dc1a458e2539290232f142aa1d65"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.HostDecodeCheckpointDoesNotAdvanceSequenceHashes_1.log",
+    "bytes": 805,
+    "sha256": "4acc8414924e3125fd6dc95506dedf2436a42f1070d8460ef32ba7511e93a49e"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.IncompleteKvGrowthRollsBackLinearAllocation_0.log",
+    "bytes": 790,
+    "sha256": "d5d3cf5d72f72c92bbcc08a04f446db754207b969638c3247a5a5fa454ec4600"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.IncompleteKvGrowthRollsBackLinearAllocation_1.log",
+    "bytes": 790,
+    "sha256": "054f1982b53d06142f5d0e6738df38672454a2b0cda1ac2c0323053ffc8473b1"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.KvFailureDoesNotChangeLinearWindow_0.log",
+    "bytes": 763,
+    "sha256": "3368f20ba33d42aff623ffb88d92f45a82a7add4c92caa55d7b8f390c326418c"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.KvFailureDoesNotChangeLinearWindow_1.log",
+    "bytes": 763,
+    "sha256": "b38037e8999005aa5d95d20972e3ce7c8b8e42dc170b194114f229de877a58bc"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.NonOverlapDecodePredictsAndRetiresCheckpoint_0.log",
+    "bytes": 793,
+    "sha256": "ec0275d964986fa742c735a9d90c358e5823d6cf4ca28e22993219dd786efe37"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.NonOverlapDecodePredictsAndRetiresCheckpoint_1.log",
+    "bytes": 793,
+    "sha256": "d968b087d5beb5723958771903a7932d06d80ce1bfba9c5067f3901a406fba76"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.NullSequenceDoesNotAllocate_0.log",
+    "bytes": 742,
+    "sha256": "e7ff3b5631ccaf3a1244d7d1ea3c43987e1f570f39ad54e4b18a420c63c6e768"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.NullSequenceDoesNotAllocate_1.log",
+    "bytes": 742,
+    "sha256": "c97d6f69e3f791a34841905af5ebd6062b50c308d5b98392ef37bee0671baa28"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.OverlapDecodePredictsAndResolvesCheckpoint_0.log",
+    "bytes": 787,
+    "sha256": "bab4e50f1a88fc45ab9f1b94c69c6c18ff8bf991fabd38046ab3ba10d8b71a35"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.OverlapDecodePredictsAndResolvesCheckpoint_1.log",
+    "bytes": 787,
+    "sha256": "796f832c39d31b77e7a212e0eb3d454ac11f89d52ae286931715090773fab19a"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.OverlapPrefillKeepsTwoBlocksWithoutCompletionHooks_0.log",
+    "bytes": 811,
+    "sha256": "d30b168492ac9e9896aa4f236e053eaa2aea3e677c1dc43f09aa6dcd8e3028b7"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.OverlapPrefillKeepsTwoBlocksWithoutCompletionHooks_1.log",
+    "bytes": 811,
+    "sha256": "996268294fbea7b5febbe1fa82c70824476a4e44947bd3cdbec3335b07220f79"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PoolReleasesCancelledSequenceBeforeResults_0.log",
+    "bytes": 787,
+    "sha256": "aa00779c4e46cd7967eeff125eb3c79f15a687692497c08201162d22f36dce72"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PoolReleasesCancelledSequenceBeforeResults_1.log",
+    "bytes": 787,
+    "sha256": "44fb8019a5775060762e684e4d277938526d4ed8e94dc8b91791ac0d105cb89c"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefillCapacityIsIndependentOfCheckpointStride_0.log",
+    "bytes": 799,
+    "sha256": "3923266e9c9086d25287c1f8129fc9e178841ab2e49fc29881775f5235031eb8"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefillCapacityIsIndependentOfCheckpointStride_1.log",
+    "bytes": 799,
+    "sha256": "20f0a7fbc5d4709243621ba5b96045073e0f56085de60c1f81c6f7f826cec661"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefillLeafUsesExplicitState_0.log",
+    "bytes": 745,
+    "sha256": "f7c177214c7e2f91112b3acb783eb3677f03f6390ae3563071e1ca7f294e6c89"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefillLeafUsesExplicitState_1.log",
+    "bytes": 745,
+    "sha256": "76261858b32b0d1e5122b6c8f8f485a09518aecd284dfe41a6d62b0de3adafbc"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefillReceiverRejectsMissingStateAndRetries_0.log",
+    "bytes": 1016,
+    "sha256": "737e76cb6795804e9a5592eb334190919965f48905708446ac71f6d1104bdfd4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefillReceiverRejectsMissingStateAndRetries_1.log",
+    "bytes": 1016,
+    "sha256": "87db2e9bdaaeba15cf8aa57954b2e1474effdb64b41efbb67ca531599aabce64"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefillReusesTwoSlotsAcrossArbitraryChunks_0.log",
+    "bytes": 787,
+    "sha256": "2f17c448bc5f22b104ec0678e50e263acd6339f2512251db13c1a91a253c5ab5"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefillReusesTwoSlotsAcrossArbitraryChunks_1.log",
+    "bytes": 787,
+    "sha256": "1c0adcc913658156811111c12abf6e0959d3ec0c75b1779a77f366d2c8490fea"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefillUsesTwoBlocksAndPublishesLogicalCheckpoints_0.log",
+    "bytes": 811,
+    "sha256": "f25c0c44988b95a8bbb1869ab59b2553476a8b2e764bc98e30041871158501a2"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefillUsesTwoBlocksAndPublishesLogicalCheckpoints_1.log",
+    "bytes": 811,
+    "sha256": "0d9cb746eaaa28b785f62dfc669f3999eda4f61b03551c6724f6dabd03501980"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefixMissStaysMatchedUntilReset_0.log",
+    "bytes": 757,
+    "sha256": "8e065fbce85c9a4d147eb0be1f89e4f2b67a9265446f4a41ef0133c1a0b2cd26"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefixMissStaysMatchedUntilReset_1.log",
+    "bytes": 757,
+    "sha256": "1f18ee3bca94a665ee91a6f47c9963cfd1f63e5b4425310fde84c8a1670bd69f"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefixMountIsSparseAndMatchedOnlyOnce_0.log",
+    "bytes": 772,
+    "sha256": "1659a9c697dacbf85ce9571e49364bbc662abac4b4832d4a69ac9bf28adfc22b"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.PrefixMountIsSparseAndMatchedOnlyOnce_1.log",
+    "bytes": 772,
+    "sha256": "c5dc7693408066dfc5522dcdc082f8f03d8ceba37400ccd8a8dc7b51f7a545e9"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.SharedCheckpointReadIsPrivateBeforeNonOverlapSwap_0.log",
+    "bytes": 1090,
+    "sha256": "1d1584906802e89c5b0ba73a97818de7b0a590987fe7680e0021c00d89d52070"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.SharedCheckpointReadIsPrivateBeforeNonOverlapSwap_1.log",
+    "bytes": 1027,
+    "sha256": "50298efed8dc182264624e85c0b6fcd43d10f4a31be3efbea7e9e1a8937dbcb3"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.SharedCurrentDecodeWriteIsRejectedWithoutAllocation_0.log",
+    "bytes": 1015,
+    "sha256": "2d362b25a9039f00119f59adc5c36200e3087b86c10a15310013cceb1daa2055"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.SharedCurrentDecodeWriteIsRejectedWithoutAllocation_1.log",
+    "bytes": 1015,
+    "sha256": "9941d18ea1f6051ce4fbc0cdda50a178b4a2cc9f357feac4fd40920d4c71eb78"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.SharedDecodeReadSlotBecomesPrivateBeforeSwap_0.log",
+    "bytes": 1070,
+    "sha256": "f43afffa33e274501b71fe497d43b06d6a35f9208ee41cc80e1b977caa459fa3"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.SharedDecodeReadSlotBecomesPrivateBeforeSwap_1.log",
+    "bytes": 1012,
+    "sha256": "676c2e309809745b624c7f46111ee565b568f602b204fd9c235ac4b86999eec4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.SharedSingleDecodeSlotRequiresPrivateWrite_0.log",
+    "bytes": 1062,
+    "sha256": "6ce35dae5ad5c05e6b52bdfe22f142d3031e46e31a269a4c027618ca183e5374"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/PrefixCacheModes_LinearStateWindowTest.SharedSingleDecodeSlotRequiresPrivateWrite_1.log",
+    "bytes": 787,
+    "sha256": "533af80f563ade0d7fa454aa1860e5ece9c6776ce273af9e528771b1aef67cf4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/SequenceMtpPrefixCacheTest.BoundaryRewriteInvalidatesEveryStride.log",
+    "bytes": 706,
+    "sha256": "381a1598eff774992a30b09d213b6e109ee6ef28f062a64cdec6e1f08590b2e1"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/SequenceMtpPrefixCacheTest.CopyRetainsMtpInvalidationPolicy.log",
+    "bytes": 691,
+    "sha256": "a82d4ce4ea71be001f5f72f98a9b797eafa358ea5fdbaf1d13ff2e24f6b9e46b"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/SequenceMtpPrefixCacheTest.OverlapPlaceholdersNeverEnterHashChain.log",
+    "bytes": 709,
+    "sha256": "2d3498112b6353b99253fd08772ca7a16847c81047c24dc35210402c50e28def"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/StoragePrefetchRequestTest.SwaMissPreservesCompressedGatePrefix.log",
+    "bytes": 703,
+    "sha256": "3f89a68ca05022b456a93bf08df77bfa2adbf4959219e2330f1c05c8da546b11"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/TypedMtpPrefixCacheTest.CompressedCheckpointRequiresNextToken.log",
+    "bytes": 1035,
+    "sha256": "c525a55937c2579c17592d6599d89c96949d80a7156baecd69dce5ebc8c40492"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/TypedMtpPrefixCacheTest.DecodeOffloadUsesConfirmedMtpIdentity.log",
+    "bytes": 874,
+    "sha256": "b2af57118074ea94b21163798c315b76f98702467ec653f77769a072293f52f4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/TypedMtpPrefixCacheTest.DecodeOffloadWaitsForCompletedLookahead.log",
+    "bytes": 878,
+    "sha256": "09de418b6cd40c9a8ba64143cd50c3894088eaa0f9c5f87c6178feb46ea360d7"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/TypedMtpPrefixCacheTest.StoreQueriesOnlyCompleteDependencyUnits.log",
+    "bytes": 878,
+    "sha256": "30535ee5cdd45fd00e75f807b95f60232f88b1934d30490e8593f10f782179ed"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/TypedPrefixCacheTest.DecodeOffloadUsesContentIdentityWithoutDeviceStamp.log",
+    "bytes": 891,
+    "sha256": "de44394cd4599e129af7ab242b620239c17394ce04aefaa1b829daf299acf18d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.TokenRatiosDoNotImplyV41Identity.log",
+    "bytes": 651,
+    "sha256": "438993d8d4e16b04221ff077ee6bfdba0ae9c2428bdce1f4ece7a3050df6e1b3"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41CancelledPartialForwardDoesNotPublishUnfinishedUnit.log",
+    "bytes": 717,
+    "sha256": "edd79fd38f28c5c03e667b13f221d3ec47fa8932a34927abc4b945ff0f238a61"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41CancelledSharedAliasReleasesAllLeafUsage.log",
+    "bytes": 684,
+    "sha256": "67eb22e142f3c57feb766798c0a5d172c93ce3c9d53f5db229e7711ed6dc0afa"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41ChunkedPrefillSharesPrefixWithStandardSwitch.log",
+    "bytes": 696,
+    "sha256": "90851019ea77c4db81ef53e119e7a0901eee7fce74783162ecd83c4a087a2d54"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41DisabledPrefixCacheDoesNotPublishOrMount.log",
+    "bytes": 684,
+    "sha256": "23eb2547d92a1f4e6d40202194ec6e31f888726294ea99fcd93a03a9686836dc"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41HostAndStoreLeavesUseValidatedOptions.log",
+    "bytes": 675,
+    "sha256": "5a64b750f038a65be8e7e77d4f37efe051885793650791f2a87663652ba743a1"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41MMPrefixCacheHitsSameImageAndTextOnly.log",
+    "bytes": 675,
+    "sha256": "1c51d7b001b7e00dab6fee2851f7099b1408e880ba308c1145ba33e1199a094d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41MMPrefixCacheStillHashesTextSuffix.log",
+    "bytes": 666,
+    "sha256": "e518a1b941447695a422fd5cc66b2aea05d74c5c80966b4f4b90765da9450f76"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41MMPrefixCacheUsesImageIdentityAtBlockBoundary.log",
+    "bytes": 699,
+    "sha256": "b30df9251951d63e8d2e1be49d5bf4bba0daa0e1af56a71c0308e462d7a1efc0"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheAcceptsMultimodalHasher.log",
+    "bytes": 666,
+    "sha256": "a6eb5ea81d6a6ba83c34fc8d16bcbb667ca05dd271402263378433c3d1b0c974"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheDefaultsOnLikeV4.log",
+    "bytes": 645,
+    "sha256": "0b6f13d7f774e84d29e4597e3bc431e88fecc5243610cb5730f9e2af9d728e2a"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheFollowsV4EnableSwitch.log",
+    "bytes": 854,
+    "sha256": "9a1d6871c820a1e1c15cb64b7d87cb31fc03ef36d5666a6bac28cd2c78aa8d31"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheKeepsDeviceOnlyRolePolicy.log",
+    "bytes": 920,
+    "sha256": "417f46d121b08ed715bc681948ac124d2d5767e2fbf8d2cf5d985e8ec260604d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheMissesForDifferentTokenPrefix.log",
+    "bytes": 684,
+    "sha256": "1deccf328093423cc616082485b55f0b1e730425c873dcc428f5e7483f7001d3"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheMissesIfAnyRequiredGroupIsGone.log",
+    "bytes": 687,
+    "sha256": "51df120b264f7c92b9aec47a2bc2446c25812e623f2cb25a3b372350feb3e925"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCachePreservesSharedBlocksOnContinuation.log",
+    "bytes": 702,
+    "sha256": "20e3593ea936327dc716988aae4ec254deca372c43dc750e1d6d9a25d1382ea5"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCachePublishesOnlyCompletedUnits.log",
+    "bytes": 678,
+    "sha256": "c5f32e82f29ac16c54c5f1a4a2d6b99d7b5be2879a874a62b68765d43b98c81c"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheRecomputesDivergentSuffix.log",
+    "bytes": 672,
+    "sha256": "74ec79179eb7e6cacd1f05cf1178cf9733cbd442e3ff7452533fb6733b6d8e13"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheRejectsHoleInsideRequiredSwaTail.log",
+    "bytes": 693,
+    "sha256": "192005c5c4ff1e2efd092a942d31c6a015ffef9e4ffbe1113bc717fcdb622f57"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheRejectsMissingHistoryLeaves.log",
+    "bytes": 1138,
+    "sha256": "cb6fde9e1c259562d4bd9e3ef731f9c6f558c4408643a177b2c60763406d212d"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheRejectsMissingSwaWindow.log",
+    "bytes": 1129,
+    "sha256": "7ede1c7e451c51ce7d2613b5f01cbfc71e22112177cadcd561e4dffd2fb0df0e"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheRequiresCompleteSwaWindow.log",
+    "bytes": 672,
+    "sha256": "da3e10e6c0de58355cc6a71befc1034ce942c32acf2bc71c2534e05b57965a15"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheUsesCommonTokenBoundary.log",
+    "bytes": 666,
+    "sha256": "92f24cfd4313d93a7f903e7cdf17541acc6e1df592943ef33006b286552f1e55"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixCacheUsesLargestParticipatingBlock.log",
+    "bytes": 684,
+    "sha256": "fc54f0c36eba8bdae49d66b3774b53b9dbc5e5099a00e546d353b4cd7c491b14"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PrefixPoolsDoNotSharePublishedEntries.log",
+    "bytes": 675,
+    "sha256": "7afe2d348669a79c946b680ddb825c674e70d85d9590fcdb3e1eb145aee18879"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41PressureEvictsPrefixAndAllowsRepublication.log",
+    "bytes": 690,
+    "sha256": "3e8740b28b31f3c03330b9e4aacf30aa882f7e2b84de84a31e2f89bc826cc031"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41SampleSelectorsRetainRequiredHiddenPositions.log",
+    "bytes": 696,
+    "sha256": "fdaced2174710ace13dbf9060a2c6355a413721a52394c94075bcec2c122d8dd"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41ShortPrefixRestoresAvailableSwaHistory.log",
+    "bytes": 678,
+    "sha256": "ab258a44c4bc558fb1caf7587d9fc0ba2fa754bcbcb3799bde194cc027771dbc"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41PrefixCacheTest.V41SingleTokenGroupUsesItsOwnRestoreUnit.log",
+    "bytes": 675,
+    "sha256": "8e938ff6fed1f32061e13ec356536f0be57495e97dea49d0e319ec77cda91904"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41SpecPrefixCacheTest.CancelledVerifyDoesNotPublishUnacceptedBoundary.log",
+    "bytes": 716,
+    "sha256": "eaf8e13ec5ae8f398592201c2545bf6c713478fec4a704e1d162d477e20eff3c"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41SpecPrefixCacheTest.EnableSwitchDisablesSpecPrefix.log",
+    "bytes": 665,
+    "sha256": "e016d0642607bd5beec136fbaa17ee184a0f7fe04768aac5299533aa2d9c2c0a"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41SpecPrefixCacheTest.SharedSpecRequestsKeepIndependentEmbeddingRows.log",
+    "bytes": 713,
+    "sha256": "35e58cd3a90bec87ffba701586c27a00937153a869194b01fff83ce16fb1c444"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41SpecPrefixCacheTest.SpecAllowsMMWithoutLookahead.log",
+    "bytes": 659,
+    "sha256": "61a030049684ffa193f8d5f9a01e2d1adb7ae8bfb37236949d80c9cea950d22c"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41SpecPrefixCacheTest.SpecKeepsAllPrefixLeavesEnabled.log",
+    "bytes": 668,
+    "sha256": "d563a8831a65486aad5619a18e164468e507aa6befd4c98388f03c71e99fd060"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41SpecPrefixCacheTest.SpecRejectsMtpLookaheadHashers.log",
+    "bytes": 1585,
+    "sha256": "ca64bb6bba1836d83832c799eb9e6dc85264a40ec6a382f12798420b097e09b3"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41SpecPrefixCacheTest.SpecSupportsHostOffloadAndStore.log",
+    "bytes": 668,
+    "sha256": "6a1dbbb1f87cc386b94c621941faefc638c643d32c3b4cd0a09e76629d85183b"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/V41SpecPrefixCacheTest.VerifyAllocationPublishesOnlyAcceptedUnits.log",
+    "bytes": 701,
+    "sha256": "4b0539bf986840ed98369f5725293d6df18de05e7050038d6826861927db67c4"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_0.log",
+    "bytes": 771,
+    "sha256": "e3440548494e5544992a81a5cc5d1e15fa8da36501e686a0340a60a31ffdd219"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_1.log",
+    "bytes": 944,
+    "sha256": "673a9dcac27f71a32a64c6bc1291e719311b5c329c69753df1b929590f6a1f0e"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_2.log",
+    "bytes": 955,
+    "sha256": "642b0f73fc32df53ddb690af5540030525d7a3f38d3df546e1c1829e64a34e3c"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_3.log",
+    "bytes": 982,
+    "sha256": "33369d8cf92f26409a2fd550cba8d4f4930f961cb9c9bb6cfda10be7e9e86092"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_4.log",
+    "bytes": 982,
+    "sha256": "0a66b09a0f7ec7b76ffe575ddf064070b8165548f16a704e2b4fcf4426051c13"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_5.log",
+    "bytes": 982,
+    "sha256": "94fe20813bb2e16a1119e9ec6f143a50e7173da73dfcde490a384ca54f0f5f19"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/results.json",
+    "bytes": 62717,
+    "sha256": "c686d3f6799a4f15f017a9f2e8e269c77a5482901d52064f2ed8956f6f268773"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/summary.json",
+    "bytes": 28454,
+    "sha256": "e083efaf84338630717e6bb49e4948d2ce7c913a2412252d106535cb63dccf97"
+  },
+  {
+    "path": "raw/evidence/native_cache_cases_v1/test_list.txt",
+    "bytes": 14756,
+    "sha256": "43fa6563b87c1529a0ddf1af9d7294a54bf9f1f3c56da4d88f4f300a6870acdd"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/concurrent_block_manager_test.log",
+    "bytes": 1926,
+    "sha256": "18cf1544b44233c31a06f90efb52c4f51ff6ea3cac9d69cfbe16e66bc7cba566"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/concurrent_block_manager_test.xml",
+    "bytes": 2636,
+    "sha256": "897383a98699ac07345c742abf04d908027c4ad1f33792d9f4517a7a4d95a984"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/deepseek_v41_cpp_template_test.log",
+    "bytes": 1517,
+    "sha256": "2d7b598c06ccaf1f045b43f263d82d7ad8046a6326e4aed3a3112ecd9e25a65f"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/deepseek_v41_cpp_template_test.xml",
+    "bytes": 2323,
+    "sha256": "3daf01ec890e4447dd9504331818b80521755bb2025196447c1cb2ed5b6237d0"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/draft_model_config_test.log",
+    "bytes": 6536,
+    "sha256": "a1bc110d5deac650079787ffa27581962e3b6d86538ced7c6fc5c29504c46dc3"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/draft_model_config_test.xml",
+    "bytes": 4448,
+    "sha256": "ec55e4d5cb50cd4635f196f744c6c1f32a29021441322480ac3ea3e30db9c3bb"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/folly_bthread_compat_test.log",
+    "bytes": 966,
+    "sha256": "f141638143fcf5ee5f05068d17fbaac67530656fe00f556be2e818f4a5491641"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/folly_bthread_compat_test.xml",
+    "bytes": 1640,
+    "sha256": "ae60e07968d2cba6757260f045902a7e45cc81ec9ff04e88b763785b72caa959"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/git_head.txt",
+    "bytes": 50,
+    "sha256": "023d23425007dfa377c5d2e9d969b91c9d420018bc94dcff386300953cf3804d"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/git_status.txt",
+    "bytes": 1985,
+    "sha256": "6420128ed7187882a1c33dcd3af6bcb58bc971c9ce2ce0659b1332233de3a5fe"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/helpxml.txt",
+    "bytes": 142752,
+    "sha256": "c6edac86cdac15ad71a457c5f86a9de1a3decf867a5f52cfd8bf865c55633d48"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/ldd.txt",
+    "bytes": 5683,
+    "sha256": "5d7659623854abfe8f9d3cf0964e243a5b092131d6c95dbb2ebe3ecfd29d026e"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/mtp_prefix_cache_test.log",
+    "bytes": 4449,
+    "sha256": "42cc9e864ee1a6cde2e0d36dcb2a73fe2ca41b6095e0d6f09cdae1a10f96544f"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/native_provider_cache_groups_test.log",
+    "bytes": 929,
+    "sha256": "862f65ce04b0d728e6fe4070d036f70dc0bb70449dd5ec62cc36ac90f292168a"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/native_provider_cache_groups_test.xml",
+    "bytes": 1160,
+    "sha256": "0e38a99244d76b40b666ee9059c141be978057396283dea0cf875481d6eec697"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/results.json",
+    "bytes": 1480,
+    "sha256": "65bcdd5d2891bbf7b2c46041a3670ee11128389fbbee50693fce9aefc80556c5"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/xservice_client_lifecycle_test.log",
+    "bytes": 1322,
+    "sha256": "c81f67dc83c79f41058d727abca9ec3f90a6cc60e1f53419b9d9097590194bf1"
+  },
+  {
+    "path": "raw/evidence/native_validation_v1/xservice_client_lifecycle_test.xml",
+    "bytes": 1735,
+    "sha256": "6c9f9fd09365ee4b84200734cc5219bcd34256b8fd7b92d46f1b8daefa2434eb"
+  },
+  {
+    "path": "raw/evidence/packed_expert_cpu_tests.txt",
+    "bytes": 683,
+    "sha256": "5dfd55cd5027e025dfd6e58733a106d842b3222a2ae51dbb11dd7e665546a967"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/container_launch.json",
+    "bytes": 8134,
+    "sha256": "26db213b7c31b742141224af3b7d6b5305a75c26b57e172ecdbce0ab6b9751b8"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/rank0.log",
+    "bytes": 17918,
+    "sha256": "7d9903bfa2e4f5f64c8ed158391172605cb71135efa915ff2f157783fe2af7f6"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/rank1.log",
+    "bytes": 7900,
+    "sha256": "a72a5f138c2348e08592278ea911c6eb6ea1c13088b69dbbb8ea833783433450"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/rank2.log",
+    "bytes": 7900,
+    "sha256": "692c86b83f3c7efb75831cf9c03d4e7803c8d345b52e27fc4e43a1a70dc637c2"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/rank3.log",
+    "bytes": 7900,
+    "sha256": "b9084ede9608278b7be20c12362e6a44c7aada406db17ad7573a79d10c184974"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/rank4.log",
+    "bytes": 7900,
+    "sha256": "3f6b9d0ca6cce02b6375b07c5b56dc14cb3ccba24d0337646293c948784d420e"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/rank5.log",
+    "bytes": 7900,
+    "sha256": "0f9b7fa24706b4660414522e7fe3179a30857dad1282b6493e4d03eb348d1297"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/rank6.log",
+    "bytes": 7900,
+    "sha256": "b30f93ddffa561fd888a2d8dbf11818b2d5ea7d223b6bff25db986e97062cccd"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/rank7.log",
+    "bytes": 7900,
+    "sha256": "526a92ba2693959e5761570e58eb1fa2574c5ead40ffac2c38129ef52f807624"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/resolved_rank0.json",
+    "bytes": 789,
+    "sha256": "0bb23b0ad4f9cea9f5236e3a38b4850615055604d44b0f3f90a43cff81159af3"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/result.json",
+    "bytes": 159,
+    "sha256": "f77154a8454a01b6a7c76e1d46e0daa29e9949c05173ffb16bda1c8cb075a3da"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/role_config.json",
+    "bytes": 20880,
+    "sha256": "6a83ab3d3c467ab551ce96307dd85df5250b3abab4e4c2dfa5d519b57013117d"
+  },
+  {
+    "path": "raw/runs/load_precheck_v1/dev7/status.json",
+    "bytes": 249,
+    "sha256": "eb6b7168d75a3160c6dd7d0149f43e174522cb818a85154a9d59b5567d187149"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/basic_questions/answers.json",
+    "bytes": 1109,
+    "sha256": "d6808156d63d0845adee164d0e6e102a6c347da9e5b221901b0e4032c347c230"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/basic_questions/basic_gate.json",
+    "bytes": 1513,
+    "sha256": "0b573b5c93412fb764129b6179647632a493b31f49b6f039e947145b1eec5188"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/basic_questions/question1_request.json",
+    "bytes": 384,
+    "sha256": "4843a97dd4517bb0c59d134b789a34f047ee80e3ef3b368a0f7a1ae721788686"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/basic_questions/question1_sse.jsonl",
+    "bytes": 2211,
+    "sha256": "0c521175899b36884b9532977669959a2d2b70da38fb6c56e4894a2f1a4e1939"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/basic_questions/question2_request.json",
+    "bytes": 381,
+    "sha256": "84fc8445d5be56c26b6297a009a80aad0c93e734c0b540692086047942584719"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/basic_questions/question2_sse.jsonl",
+    "bytes": 1572,
+    "sha256": "e1039cc1386dc83d3984d4581fef287051bf203d3dc7e5f410ef8df8d3f44bc2"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/basic_questions.exit",
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/basic_questions_launcher.log",
+    "bytes": 1152,
+    "sha256": "168e702134f1d850adf6d839c822bffd46448e1f22192c9ddc77cf31ba52b063"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/container_after_shutdown.json",
+    "bytes": 23546,
+    "sha256": "c947fb4ec0d4c788da26c60e5b0507bccbfd8af18df497f0a2d98429f46d6fd7"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/container_before_shutdown.json",
+    "bytes": 23605,
+    "sha256": "3b7b3f8033e667d64b8761ee4319f7188d9e6b1a24dab540936bbb57b1e0e0ee"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/container_launch.json",
+    "bytes": 8180,
+    "sha256": "b6c7849fded9f1ecb15716f10162357294f23bf8dfb8f755080f2e3953801ac0"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/rank0.log",
+    "bytes": 34280,
+    "sha256": "da50c7bd6a3b28cf2dcbef2e43171b09910e972066449c0081ff7b982e7cd302"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/rank1.log",
+    "bytes": 16243,
+    "sha256": "63251f1a746d6f483a1e7956c73e9f214be43d273b690e3c63bdda78203e3774"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/rank2.log",
+    "bytes": 16243,
+    "sha256": "3295384266058357c98d4b1ade1f25cdef924b00679846317b8358ab9bb716dc"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/rank3.log",
+    "bytes": 16243,
+    "sha256": "417a7efadfc46d1f9a82295a41f7d8d775d455bdf4fd31843dd8a774f6812e31"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/rank4.log",
+    "bytes": 16243,
+    "sha256": "0e4e73cf585013f3d718f81fda632240ab4af5a6532e24e4db818b4edb52ed25"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/rank5.log",
+    "bytes": 16243,
+    "sha256": "5aad618eba41f19b5b83f075ef855c8c8ec372db28aede2ac7c27507df3d407d"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/rank6.log",
+    "bytes": 16243,
+    "sha256": "dbeaa95ffff710ff3d3dda973291ca6c1d229b552e48857aa1cd60faf3a46426"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/rank7.log",
+    "bytes": 16243,
+    "sha256": "e17d5ff10b2aaf6c024add0dffaf7c17ae17502e80861266e95818198e127d2a"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/resolved_rank0.json",
+    "bytes": 789,
+    "sha256": "0bb23b0ad4f9cea9f5236e3a38b4850615055604d44b0f3f90a43cff81159af3"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/result.json",
+    "bytes": 151,
+    "sha256": "ec14685e49f5fe479c57cffd7852150c24fb5fac2870aa499c08248299ba0e50"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/role_config.json",
+    "bytes": 20880,
+    "sha256": "3d48f2522390946e24f5d4592931ca7dbad398ac5dfd2072349ca34122197e33"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/status.json",
+    "bytes": 230,
+    "sha256": "c355a9526283a58d93524c462bd42ca76b177de926de0adc9c2730e7bc31ef8f"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/dev7/stop.request",
+    "bytes": 118,
+    "sha256": "f415f1da02adf3df869b837a9a6f1adc60feeada0f9e7f9f2f24c4d3b2472b42"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/gpu_after_shutdown.txt",
+    "bytes": 3147,
+    "sha256": "019921b8016068598e9b0a3e8c89ddbb77264d8cb5e63430380e5f014eb2b77c"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/gpu_before_shutdown.txt",
+    "bytes": 8055,
+    "sha256": "7a4423ce78c99e249cdc0f7a83a8ba7c990e7f4696f679ce952f792037682206"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/prompt_length_smoke/PASS",
+    "bytes": 94,
+    "sha256": "d980f8d6c720c17d5ca23457808e732925ea51b3c9a6eafb76fad74f67236979"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/prompt_length_smoke/input2048_request.json",
+    "bytes": 4554,
+    "sha256": "2ea7504dd54fd5f267677ece8107101ebe860ee29ad5d1c07a9cd2de5c08b5d0"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/prompt_length_smoke/input2048_sse.jsonl",
+    "bytes": 3859,
+    "sha256": "541fb5ec1e90bc6fd5c0af081e8e7c9c375f4c94dacac5f6f9e9dbb6f7dbe14b"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/prompt_length_smoke/input256_request.json",
+    "bytes": 970,
+    "sha256": "2cab49f2df16ef896be7857b76e615db2aefdde6c14045cacee4246e8d0f3c07"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/prompt_length_smoke/input256_sse.jsonl",
+    "bytes": 3858,
+    "sha256": "6af978f5a58c604cf8bcd9a16f84ce4a32c5ff008498ba22661aca11b065477d"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/prompt_length_smoke/results.json",
+    "bytes": 1219,
+    "sha256": "a32ab2ac00d7e576a11f82e768ca07baadfcf0d1e5e2d245a00e959ce000704e"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/prompt_length_smoke.exit",
+    "bytes": 2,
+    "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/prompt_length_smoke_launcher.log",
+    "bytes": 979,
+    "sha256": "e8863fed93059322d3391ae026d79ac9bdd5d0a16860327d656f52ee3a2a686c"
+  },
+  {
+    "path": "raw/runs/load_precheck_v2/shutdown_result.json",
+    "bytes": 194,
+    "sha256": "202583a260df366809ce62c7b2ab401edc71705a30bdda3f7576345911bbc33c"
+  }
+]

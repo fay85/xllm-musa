@@ -1,0 +1,2 @@
+# Preserve raw command output byte-for-byte, including its whitespace.
+raw/** -whitespace

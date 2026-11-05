@@ -1,0 +1,9 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+Note: Google Test filter = CompositeBlockManagerTest.FailedGrowthKeepsCommittedBlocks
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from CompositeBlockManagerTest
+[ RUN      ] CompositeBlockManagerTest.FailedGrowthKeepsCommittedBlocks
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+F20261105 18:07:22.101904 16583 composite_block_manager.cpp:393] Check failed: static_cast<int64_t>(c4->second.leaf->options().num_blocks()) * c4->second.leaf->block_size() == static_cast<int64_t>(c128->second.leaf->options().num_blocks()) * c128->second.leaf->block_size() (8192 vs. 262144) DSV4 C4 and C128 allocated pool capacity must stay aligned
+*** Check failure stack trace: ***

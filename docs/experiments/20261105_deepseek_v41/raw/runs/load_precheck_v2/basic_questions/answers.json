@@ -1,0 +1,48 @@
+[
+  {
+    "id": 1,
+    "question": "只输出计算结果，不要解释：1.3 + 2.9 = ?",
+    "expected": "4.2",
+    "content": "4.2",
+    "reasoning_content": "",
+    "finish_reason": "stop",
+    "usage": {
+      "prompt_tokens": 21,
+      "completion_tokens": 4,
+      "total_tokens": 25,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0
+      }
+    },
+    "elapsed_s": 13.200026998005342,
+    "passed": true
+  },
+  {
+    "id": 2,
+    "question": "只输出计算结果，不要解释：7 × 8 = ?",
+    "expected": "56",
+    "content": "56",
+    "reasoning_content": "",
+    "finish_reason": "stop",
+    "usage": {
+      "prompt_tokens": 17,
+      "completion_tokens": 2,
+      "total_tokens": 19,
+      "prompt_tokens_details": {
+        "cached_tokens": 0,
+        "audio_tokens": 0
+      },
+      "completion_tokens_details": {
+        "reasoning_tokens": 0,
+        "audio_tokens": 0
+      }
+    },
+    "elapsed_s": 3.6747420850151684,
+    "passed": true
+  }
+]

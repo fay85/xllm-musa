@@ -1,0 +1,12 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+Note: Google Test filter = PrefetchResultTest.StopsAfterCancellationOrTimeout
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from PrefetchResultTest
+[ RUN      ] PrefetchResultTest.StopsAfterCancellationOrTimeout
+[       OK ] PrefetchResultTest.StopsAfterCancellationOrTimeout (5 ms)
+[----------] 1 test from PrefetchResultTest (5 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (5 ms total)
+[  PASSED  ] 1 test.

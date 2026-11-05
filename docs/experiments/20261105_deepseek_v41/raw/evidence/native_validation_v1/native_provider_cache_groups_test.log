@@ -1,0 +1,15 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+[==========] Running 3 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 3 tests from NativeProviderCacheGroups
+[ RUN      ] NativeProviderCacheGroups.DistinguishesV41CompressedGroups
+[       OK ] NativeProviderCacheGroups.DistinguishesV41CompressedGroups (0 ms)
+[ RUN      ] NativeProviderCacheGroups.IncludesOrdinaryKvAndSpeculativeEmbedding
+[       OK ] NativeProviderCacheGroups.IncludesOrdinaryKvAndSpeculativeEmbedding (0 ms)
+[ RUN      ] NativeProviderCacheGroups.OrdinaryKvHasOneGroupAcrossDpRanks
+[       OK ] NativeProviderCacheGroups.OrdinaryKvHasOneGroupAcrossDpRanks (0 ms)
+[----------] 3 tests from NativeProviderCacheGroups (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 3 tests from 1 test suite ran. (0 ms total)
+[  PASSED  ] 3 tests.

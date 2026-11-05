@@ -134,21 +134,6 @@ std::string kv_layout_contract(const ModelArgs& args,
   return contract;
 }
 
-std::vector<std::string> cache_groups(
-    const BlockManagerPool::Options& options) {
-  if (options.manager_types().empty()) {
-    return {"group:" + std::to_string(cache_group_id(BlockType::KV))};
-  }
-  std::vector<std::string> groups;
-  groups.reserve(options.manager_types().size());
-  for (size_t index = 0; index < options.manager_types().size(); ++index) {
-    const BlockType block_type =
-        static_cast<BlockType>(options.manager_types()[index]);
-    groups.emplace_back("group:" + std::to_string(cache_group_id(block_type)));
-  }
-  return groups;
-}
-
 std::string head_shard_mapping_contract(const ModelArgs& args,
                                         uint32_t tp,
                                         uint32_t dp,
@@ -180,6 +165,23 @@ std::string scheduler_policy_contract(const SchedulerConfig& scheduler) {
 }
 
 }  // namespace
+
+std::vector<std::string> native_provider_cache_groups(
+    const BlockManagerPool& block_manager_pool) {
+  // manager_types encodes the allocator implementation (plain or sliding),
+  // not BlockType. Read the actual composite leaves so C1/C2 and optional
+  // recurrent/embedding state keep their distinct transfer identities.
+  const auto utilization =
+      block_manager_pool.block_utilization_by_type_per_dp();
+  CHECK(!utilization.empty());
+  std::vector<std::string> groups;
+  groups.reserve(utilization.front().size());
+  for (const auto& [block_type, usage] : utilization.front()) {
+    groups.emplace_back("group:" + std::to_string(cache_group_id(block_type)));
+  }
+  std::sort(groups.begin(), groups.end());
+  return groups;
+}
 
 std::optional<NativeProviderDescriptorConfig>
 collect_native_provider_descriptor_config(
@@ -312,7 +314,7 @@ collect_native_provider_descriptor_config(
       .hash_seed = kv_cache.xxh3_128bits_seed(),
       .logical_kv_bytes_per_token =
           block_manager_pool.options().logical_kv_bytes_per_token(),
-      .cache_groups = cache_groups(block_manager_pool.options()),
+      .cache_groups = native_provider_cache_groups(block_manager_pool),
       .head_shard_mapping_contract = head_shard_mapping_contract(
           model_args, tp, dp, cp, static_cast<uint32_t>(kv_split_size)),
       .connector = connector,

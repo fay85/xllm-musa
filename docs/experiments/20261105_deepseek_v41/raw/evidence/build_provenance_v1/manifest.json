@@ -1,0 +1,298 @@
+{
+  "base_commit": "0cfd82700e164e8aa7951064b652925dd6b24d18",
+  "branch": "xiaopangDeepseeekV41Flash",
+  "source_patch_sha256": "bf8cbb4815810cabb613d416c6f8ca04e1b0f8f5c136265ea3194dfe05c5dd35",
+  "changed_sources": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "20370bbbfead6b2a6c1de87c63da9baa5be11ca3fd7112fbc86ccb2edb509e7d",
+      "bytes": 34103
+    },
+    {
+      "path": "cmake/cargo_library.cmake",
+      "sha256": "7585e89156e2fc50bc4b132544fc65f47aaa474175dbd880212d827878fd7726",
+      "bytes": 3038
+    },
+    {
+      "path": "cmake/prebuilt_rust_bindings.cmake",
+      "sha256": "d130843aee1a787f21e30b1a5b61a02af4e256fa2afaa336b4d35a1ba37d2a59",
+      "bytes": 2369
+    },
+    {
+      "path": "scripts/ninja_guard/ninja",
+      "sha256": "20491b1a69ad6e60b5ede06612734eeca9969cde699268e5e31e976c292a3c35",
+      "bytes": 2717
+    },
+    {
+      "path": "scripts/ninja_guard/ninja.real",
+      "sha256": "696f9628a79d9ce50314cf9556d7cd1a1d1ec52b8fd52828f6f9db1719565b67",
+      "bytes": 372384
+    },
+    {
+      "path": "scripts/ninja_safe.sh",
+      "sha256": "9feff714645045eb10986c48146148fc52c441186377a96941bd899710f47b69",
+      "bytes": 406
+    },
+    {
+      "path": "tests/core/runtime/CMakeLists.txt",
+      "sha256": "c752ead084cbaf264d4c065854e5bf163cee2e9cfd68969991eb76cac649d9e0",
+      "bytes": 9665
+    },
+    {
+      "path": "tests/core/runtime/native_provider_cache_groups_test.cpp",
+      "sha256": "c852ca2639e5b362d47fe9bc110a5c7273de204b1519d022b4cc9381c3da5565",
+      "bytes": 2188
+    },
+    {
+      "path": "tests/core/runtime/xservice_client_lifecycle_test.cpp",
+      "sha256": "2ee91a8a7b5b6ecbcec53e15c0eba33dc9f4d7dd9302880d64a14d2c032b278d",
+      "bytes": 4597
+    },
+    {
+      "path": "tests/core/util/CMakeLists.txt",
+      "sha256": "22976c11761f4bbae05811a930072e9f31fef595a2de7383418cbe2f33a4e2e5",
+      "bytes": 995
+    },
+    {
+      "path": "tests/core/util/folly_bthread_compat_test.cpp",
+      "sha256": "25c33cc5ed9cd19993cb750b00cd08202cf9f07c76cb694b60ee910bd5f0269d",
+      "bytes": 6354
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_engram.py",
+      "sha256": "eda4620e6c402dc62f53d7c4ce3f80914235f4bdc95f674ccb586b7f0f5bebb4",
+      "bytes": 71978
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_model.py",
+      "sha256": "17126f84fcf20432e798ecf81ef43211aef008f46adbc89ec4298d3faa3681e4",
+      "bytes": 169538
+    },
+    {
+      "path": "tests/python/test_deepseek_v41_packed_experts.py",
+      "sha256": "ac4ebc6b224953cae4680b9d274d5b7ed2afe0934c21957f21d49a0c9c86f8c1",
+      "bytes": 3235
+    },
+    {
+      "path": "tools/musa_deepseek_v41/fix_image_compiler_wrapper.py",
+      "sha256": "d4ff3c52c82e7213ef7cab797632d71d6e8af1784d4e0c750f1419d29e622954",
+      "bytes": 1696
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_checkpoint_fp4.py",
+      "sha256": "e0f5a798a97388bfe226eae22f39c72d9687514a85dba4e60ed979021350b180",
+      "bytes": 5505
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_csa2_fixture.py",
+      "sha256": "87fa155246a567406dede63ba968837cdeea46a20e91aa26d9986ad51731a56b",
+      "bytes": 4538
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_ep8.py",
+      "sha256": "762a4a5f8958df179a9f494bb994ddb8f1dc918add12da7a0be9257f965eb615",
+      "bytes": 4046
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_mate_fp4.py",
+      "sha256": "913b07ef9fe021d70f265aaacb4ea2b4b7ed2bf3a7a04f6e4b10cf21c36ba048",
+      "bytes": 5915
+    },
+    {
+      "path": "tools/musa_deepseek_v41/validate_primitives.py",
+      "sha256": "7b4e300bde606ed2e53f64d8db1150b05c754451657b317fbc9d623581856179",
+      "bytes": 4698
+    },
+    {
+      "path": "xllm/api_service/chat_service_impl.cpp",
+      "sha256": "8a01e8923ceb698d0d001c7ce6e3f2797a34bc953a54f7eb0cd5b56209b3c0a3",
+      "bytes": 37878
+    },
+    {
+      "path": "xllm/core/distributed_runtime/disagg_pd_service.cpp",
+      "sha256": "09964fb98883cac0c96917071ab3b73f5dcf4710c1735ed70850ca43a6a09850",
+      "bytes": 5111
+    },
+    {
+      "path": "xllm/core/distributed_runtime/disagg_pd_service.h",
+      "sha256": "62d2e28f2b9b7f66e31072d8a23b94964e953e1cbb67a0f365c2a542465065fc",
+      "bytes": 4335
+    },
+    {
+      "path": "xllm/core/distributed_runtime/llm_master.cpp",
+      "sha256": "4009f1eb3536018d4f3dee7b114752584eb7c5a20ad773bcadb980cddbd4311b",
+      "bytes": 17549
+    },
+    {
+      "path": "xllm/core/distributed_runtime/speculative_engine.h",
+      "sha256": "fc589606159094e28071ae008c47c225cd8f4eb1d947436bfa3c56dec06e0faf",
+      "bytes": 4712
+    },
+    {
+      "path": "xllm/core/framework/block/block_manager.h",
+      "sha256": "f3db866f364ab08b0a7de1d0a6f24e568e82acdf6d3922581b9c768533c0aa8b",
+      "bytes": 12432
+    },
+    {
+      "path": "xllm/core/framework/block/composite_block_manager.cpp",
+      "sha256": "2b8e10f5b018cb66552742110dee093fb02b211afe91fd2721145907c884d01e",
+      "bytes": 50499
+    },
+    {
+      "path": "xllm/core/framework/block/composite_block_manager.h",
+      "sha256": "fad72aee507a480f95bfb4ee138b9cedb307bb7517fd6302bdc406452734dd84",
+      "bytes": 7394
+    },
+    {
+      "path": "xllm/core/framework/block/concurrent_block_manager_impl.cpp",
+      "sha256": "6f57ccbdd185fb4f1481198c9a368ba9b208308e3a2ff6b610e330f9b79af93a",
+      "bytes": 5375
+    },
+    {
+      "path": "xllm/core/framework/block/concurrent_block_manager_impl.h",
+      "sha256": "838f5e332187d15df6e6b9ce121b76e1c91565317cf5ea23bf1aec15e6c70985",
+      "bytes": 3202
+    },
+    {
+      "path": "xllm/core/framework/block/musa/deepseek_v4_prefix_cache_policy.cpp",
+      "sha256": "7013f24cd988f3e7e7255e2bedb8e3502c2413a00a8dcd9fd264d2c28ee38c4f",
+      "bytes": 21763
+    },
+    {
+      "path": "xllm/core/framework/block/sliding_window_block_manager.h",
+      "sha256": "04d434e7bb6d600eff010e0b7fe4a8f32b6f787616a2b543ab4aa667575fa392",
+      "bytes": 2075
+    },
+    {
+      "path": "xllm/core/runtime/draft_model_config.cpp",
+      "sha256": "daac2b762582c79db3c53ea90610cc79a4f111ebaafaa198b3cf76cf9b1fc681",
+      "bytes": 17251
+    },
+    {
+      "path": "xllm/core/runtime/native_provider_runtime.cpp",
+      "sha256": "f2cac0d15b75383a93ce9d4fdb0ef08b6a1524f1e526ee66b1ee3dda9bcdf623",
+      "bytes": 14043
+    },
+    {
+      "path": "xllm/core/runtime/native_provider_runtime.h",
+      "sha256": "e9518e929fa1ae0a61b649c4c5c944d8211b926f409f69d3b6d23c1632a2cb04",
+      "bytes": 1542
+    },
+    {
+      "path": "xllm/core/runtime/py_executor_impl.cpp",
+      "sha256": "a61513a6f1ed9500ecd7a88158a5482d7057567400d90e44a5afdad907bafd4a",
+      "bytes": 12038
+    },
+    {
+      "path": "xllm/core/runtime/xservice_client.cpp",
+      "sha256": "86ffbc31285bcddc58788b0ba2a8f856244448136c46a2093e745c0117b57012",
+      "bytes": 39967
+    },
+    {
+      "path": "xllm/core/runtime/xservice_client.h",
+      "sha256": "0de26211f4b748c222363ac2b990078a540a22b3948f88c1c3edd03e1c8f99d6",
+      "bytes": 5423
+    },
+    {
+      "path": "xllm/core/util/CMakeLists.txt",
+      "sha256": "b6e7705549a69a10ca7599f09a8954260011c3218f17aaa69a983a669317aa2a",
+      "bytes": 1603
+    },
+    {
+      "path": "xllm/core/util/folly_bthread_compat.h",
+      "sha256": "211661cde8ef3b28b0d7682a6db0087fba5621060c4198e755f5ec5a10593229",
+      "bytes": 1406
+    },
+    {
+      "path": "xllm/models/model_registry.cpp",
+      "sha256": "af3cba895e31c3d1694d274a2765fb70867ed2d0e2a3019b8bd23ae48e933e7c",
+      "bytes": 22533
+    },
+    {
+      "path": "xllm/models/models.h",
+      "sha256": "9c65429eea7a3e0d1a1212bb72e2c0bea2f3c4ce2e3ca0b998935e4f0b1cb4e1",
+      "bytes": 11230
+    },
+    {
+      "path": "xllm/proto/disagg_pd.proto",
+      "sha256": "7be5fda36e63c4c256b52405fd96d8e30c5e0b7a527dcef1cd9e2053727c3494",
+      "bytes": 12676
+    },
+    {
+      "path": "xllm/python/__init__.py",
+      "sha256": "f523869b24b54df40d4d903451b5a8ce0a8569d10369b9450625d3085329a78c",
+      "bytes": 3097
+    },
+    {
+      "path": "xllm/python/distributed/collectives.py",
+      "sha256": "80ad51536140c7f4bd90e4ea51fb7c1a1706a53f2ea06c747abfa35cef602a23",
+      "bytes": 41865
+    },
+    {
+      "path": "xllm/python/kernels_musa/__init__.py",
+      "sha256": "4f527386e3bb56b643b8b386d16f2432c6f8d5a46ebe8a9570fa4fcb3b49ec50",
+      "bytes": 2023
+    },
+    {
+      "path": "xllm/python/model_executor/executor.py",
+      "sha256": "b0c00f49d832dc279717eced8a73283e1739e0d15bab333d3f9f1f3f40456b20",
+      "bytes": 35025
+    },
+    {
+      "path": "xllm/python/model_platform_support.py",
+      "sha256": "3e1fd222f16965978cd940e1101d35d9d9f64e0a13f39bcc2072ced24b59fde7",
+      "bytes": 2052
+    },
+    {
+      "path": "xllm/python/models/deepseek_v41.py",
+      "sha256": "0221f873b1c44eca3e594c53888524c822e846ef34bcd95d658f592579e675a2",
+      "bytes": 213999
+    },
+    {
+      "path": "xllm/python/models/deepseek_v41_engram.py",
+      "sha256": "eb44d9d8d385bf198304db00c83b174735b13158737993feda3e7678f7cedfe9",
+      "bytes": 98362
+    },
+    {
+      "path": "xllm/server/xllm_server.cpp",
+      "sha256": "a7ff0b5265aaa4368544b4cdd8cba7f0397a25edbeaf133810410e8b68407eee",
+      "bytes": 10375
+    },
+    {
+      "path": "xllm/xllm.cpp",
+      "sha256": "1178945d590379c3933a66f8b6295b1ceb2cc8b17bd6df0c86e0c6919bd8cc1e",
+      "bytes": 33467
+    }
+  ],
+  "executables": [
+    {
+      "path": "/work/artifacts/bin/xllm",
+      "sha256": "7265c5997a5877d548178a3c80522034e3aeac6e5d3358763878588bf8bbfbb9",
+      "bytes": 340513104
+    },
+    {
+      "path": "/opt/xllm_service/bin/xllm_master_serving",
+      "sha256": "5ade8b09391c7fced1f286ef83d4f078d668c3e83b4f21f6b3ebeae724c45ee5",
+      "bytes": 116257504
+    },
+    {
+      "path": "/workspace/artifacts/libmusa_backend_init.so",
+      "sha256": "5a1d6db0c1f7f78cb96f8afcdd20d13712fe0006e2f90561dfc918ae58e2d9aa",
+      "bytes": 162712
+    }
+  ],
+  "dependencies": {
+    "torch": "2.9.1",
+    "torch_musa": "2.9.1",
+    "mate": "0.2.7",
+    "mate-mubin": "0.2.7",
+    "apache-tvm-ffi": "0.1.11.post1+musa.1",
+    "tilelang-musa": "0.1.12+musa.2",
+    "tokenizers": "0.21.4"
+  },
+  "image": "registry.mthreads.com/presale/devtech/xllm:1102-dev",
+  "image_id": "sha256:09b8f5f4a467fc73332dee57b36a2e5610ba3264357dfc87f103cf7bd7430be3",
+  "image_digest": "sha256:0db0efa929d5711b1b78037eb66829b084e40f7d21871c702ba1328e0aa79c8a",
+  "native_build_log": "native_build_v11.log",
+  "prebuilt_rust_limit": "Only two source/header-hash-matched Rust archives reused; dependency closure of historical Cargo build not fully established. C++ xLLM rebuilt."
+}

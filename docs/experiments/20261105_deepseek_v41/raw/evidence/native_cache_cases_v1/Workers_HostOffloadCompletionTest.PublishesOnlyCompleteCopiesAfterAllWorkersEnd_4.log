@@ -1,0 +1,14 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+Note: Google Test filter = Workers/HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd/4
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from Workers/HostOffloadCompletionTest
+[ RUN      ] Workers/HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd/4
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+E20261105 18:10:03.342052 17037 hierarchy_block_manager_pool.cpp:1339] Incomplete Host offload at dp_rank=0, expected workers=8, actual results=0
+[       OK ] Workers/HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd/4 (0 ms)
+[----------] 1 test from Workers/HostOffloadCompletionTest (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (0 ms total)
+[  PASSED  ] 1 test.

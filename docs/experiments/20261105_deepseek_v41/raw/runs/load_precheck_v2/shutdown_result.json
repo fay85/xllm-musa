@@ -1,0 +1,16 @@
+{
+  "container_exit": 0,
+  "rank_exit_codes": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "all_gpu_memory_zero": true,
+  "SIGKILL": false,
+  "host_or_driver_changes": false
+}

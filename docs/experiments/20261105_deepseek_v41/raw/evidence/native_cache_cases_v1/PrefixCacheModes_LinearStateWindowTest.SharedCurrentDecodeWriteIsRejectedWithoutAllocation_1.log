@@ -1,0 +1,14 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+Note: Google Test filter = PrefixCacheModes/LinearStateWindowTest.SharedCurrentDecodeWriteIsRejectedWithoutAllocation/1
+[==========] Running 1 test from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 1 test from PrefixCacheModes/LinearStateWindowTest
+[ RUN      ] PrefixCacheModes/LinearStateWindowTest.SharedCurrentDecodeWriteIsRejectedWithoutAllocation/1
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+W20261105 18:09:35.178037 16962 linear_state_block_manager.cpp:320] LINEAR decode has shared current write slot: request= seq=-1 slot=2
+[       OK ] PrefixCacheModes/LinearStateWindowTest.SharedCurrentDecodeWriteIsRejectedWithoutAllocation/1 (0 ms)
+[----------] 1 test from PrefixCacheModes/LinearStateWindowTest (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 1 test from 1 test suite ran. (0 ms total)
+[  PASSED  ] 1 test.

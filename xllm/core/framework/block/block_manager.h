@@ -241,6 +241,10 @@ class BlockManager {
   virtual void trim_prefetch_blocks(Sequence* /*seq*/,
                                     size_t /*max_hit_tokens*/) {}
 
+  // Reclaim completed sliding-window pages; other leaf types are unchanged.
+  virtual void release_out_of_window(Sequence* /*seq*/,
+                                     KVCacheState& /*kv_state*/) {}
+
   // Post-construction init hook: only the xtensor leaf needs it (KV tensors
   // must be created on the worker before VMM physical pages can be mapped to
   // reserve the padding block). Empty base default; the composite fans it out

@@ -645,19 +645,23 @@ def test_moe_active_segments_match_all_expert_reference(
     torch.testing.assert_close(actual, expected.to(dtype).view_as(hidden))
 
 
-def test_registry_resolves_deepseek_v41() -> None:
-    """V4.1 is registered, and NPU-gated: non-NPU platforms fail fast."""
+@pytest.mark.parametrize("platform", ["npu", "musa", "cpu", "cuda"])
+def test_registry_resolves_deepseek_v41(platform: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Only the platforms with an explicit V4.1 backend may resolve it."""
+    from xllm.python import registry
+
+    monkeypatch.setattr(registry.current_platform, "device_type", lambda: platform)
     names = ("deepseek_v41", "DeepseekV41ForCausalLM")
-    if _npu_available():
+    if platform in ("npu", "musa"):
         for name in names:
             assert get_model_class(name).__name__ == "DeepseekV41ForCausalLM"
         return
     for name in names:
-        with pytest.raises(NotImplementedError, match="supported platforms: \\['npu'\\]"):
+        with pytest.raises(NotImplementedError, match="supported platforms: \\['musa', 'npu'\\]"):
             get_model_class(name)
 
 
-def test_attention_backend_rejects_v41_off_npu(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_attention_backend_rejects_v41_on_cuda(monkeypatch: pytest.MonkeyPatch) -> None:
     """The executor rejects V4.1 before the CUDA branch can return a backend.
 
     Simulating the CUDA platform is the point: without the entry guard the
@@ -667,13 +671,30 @@ def test_attention_backend_rejects_v41_off_npu(monkeypatch: pytest.MonkeyPatch) 
     from xllm.python.model_executor import executor as executor_module
 
     monkeypatch.setattr(executor_module.current_platform, "is_npu", lambda: False)
+    monkeypatch.setattr(executor_module.current_platform, "is_musa", lambda: False)
     monkeypatch.setattr(executor_module.current_platform, "is_cuda", lambda: True)
-    with pytest.raises(NotImplementedError, match="runs on NPU only"):
+    with pytest.raises(NotImplementedError, match="no attention backend for device type 'cuda'"):
         executor_module._create_attention_backend(
             first_attention=object(),
             device=torch.device("cuda"),
             dtype=torch.float16,
             config={"model_type": "deepseek_v41"},
+        )
+
+
+@pytest.mark.parametrize("graph_config", [{"enable_graph": True}, {"python_graph_backend": "aclgraph"}])
+def test_musa_v41_rejects_graph_before_allocating_backend(
+    graph_config: dict, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from xllm.python.model_executor import executor as executor_module
+
+    monkeypatch.setattr(executor_module.current_platform, "is_musa", lambda: True)
+    with pytest.raises(NotImplementedError, match="requires eager execution"):
+        executor_module._create_attention_backend(
+            first_attention=object(),
+            device=torch.device("cpu"),
+            dtype=torch.bfloat16,
+            config={"model_type": "deepseek_v41", **graph_config},
         )
 
 

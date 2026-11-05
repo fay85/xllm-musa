@@ -59,3 +59,6 @@ compile_commands.json
 /local
 /logs
 /log
+
+# Local system-ninja link created by the build lock wrapper.
+/scripts/ninja_guard/ninja.real

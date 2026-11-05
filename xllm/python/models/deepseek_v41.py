@@ -17,7 +17,7 @@
 Faithful port of the official reference implementation
 (``/weights/DeepSeek/DeepSeek-V4.1-Flash/inference/model.py``; semantics
 spec: ``docs/deepseek_v41_reference_semantics.md``). The forward is pure
-torch and NPU-only (there is no CPU/CUDA attention backend); the reference
+torch, with an eager MUSA path (there is no CPU/CUDA attention backend); the reference
 dequant numerics are preserved by the inlined helpers at the bottom of
 this file (device-agnostic, unit-tested on CPU; ue8m0 decode, FP8 block
 dequant, MXFP4 dequant):
@@ -42,7 +42,8 @@ dequant, MXFP4 dequant):
     experts and one shared expert.
   * ``DeepseekV41ForCausalLM`` -- checkpoint-mode-aware construction and
     loading: ``fp8`` (official FP8-block/MXFP4 release, dequantized to bf16
-    at load), ``ascend`` (W8A8 export, existing kernel path) and ``none``.
+    at load on NPU; MUSA retains packed MXFP4 experts and dequantizes active
+    experts on GPU), ``ascend`` (NPU W8A8 export) and ``none`` (NPU).
 
 Vision and the DSpark draft model are out of scope here; their checkpoint
 tensors are simply not consumed. Engram IS implemented
@@ -1711,6 +1712,7 @@ class DeepseekV41MoE(nn.Module):
         layer_id: int,
         dtype: torch.dtype,
         device: torch.device,
+        packed_fp4: bool = False,
     ) -> None:
         super().__init__()
         self.cfg = cfg
@@ -1733,6 +1735,9 @@ class DeepseekV41MoE(nn.Module):
         self.gate_bias_vl_loaded = False
         inter = cfg.moe_intermediate_size
         hidden = cfg.hidden_size
+        self.packed_fp4 = packed_fp4
+        if packed_fp4 and (hidden % 32 or inter % 32):
+            raise ValueError("Packed MXFP4 experts require dimensions divisible by 32")
         # EP: every rank holds only its slice of the routed experts
         # (mirrors C++ FusedMoEImpl and DeepseekV4MoE). The forward
         # accumulates only the local expert slice and all-reduces the routed
@@ -1747,23 +1752,46 @@ class DeepseekV41MoE(nn.Module):
         self.ep_size = ep_size
         self.num_experts_per_rank = cfg.n_routed_experts // ep_size
         self.start_expert_id = ep_rank * self.num_experts_per_rank
-        # Stacked dequantized experts (fp8 mode dequantizes at load).
+        # The MUSA eager path retains the original checkpoint bytes. Only an
+        # active local expert is dequantized, on its GPU, immediately before
+        # its GEMMs. Expanding every expert at load would exceed TP8 capacity.
+        expert_dtype = torch.uint8 if packed_fp4 else dtype
+        packed_divisor = 2 if packed_fp4 else 1
         self.experts_w1 = nn.Parameter(
-            torch.empty(self.num_experts_per_rank, inter, hidden, dtype=dtype, device=device),
+            torch.empty(
+                self.num_experts_per_rank, inter, hidden // packed_divisor, dtype=expert_dtype, device=device
+            ),
             requires_grad=False,
         )
         self.experts_w2 = nn.Parameter(
-            torch.empty(self.num_experts_per_rank, hidden, inter, dtype=dtype, device=device),
+            torch.empty(
+                self.num_experts_per_rank, hidden, inter // packed_divisor, dtype=expert_dtype, device=device
+            ),
             requires_grad=False,
         )
         self.experts_w3 = nn.Parameter(
-            torch.empty(self.num_experts_per_rank, inter, hidden, dtype=dtype, device=device),
+            torch.empty(
+                self.num_experts_per_rank, inter, hidden // packed_divisor, dtype=expert_dtype, device=device
+            ),
             requires_grad=False,
         )
+        if packed_fp4:
+            for name, out_dim, in_dim in (("w1", inter, hidden), ("w2", hidden, inter), ("w3", inter, hidden)):
+                self.register_buffer(
+                    f"experts_{name}_scale",
+                    torch.empty(self.num_experts_per_rank, out_dim, in_dim // 32, dtype=torch.uint8, device=device),
+                )
         # One shared expert every token goes through (no routing weight).
         self.shared_w1 = nn.Linear(hidden, inter, bias=False, dtype=dtype, device=device)
         self.shared_w2 = nn.Linear(inter, hidden, bias=False, dtype=dtype, device=device)
         self.shared_w3 = nn.Linear(hidden, inter, bias=False, dtype=dtype, device=device)
+
+    def _expert_weight(self, name: str, local_slot: int) -> torch.Tensor:
+        weight = getattr(self, f"experts_{name}")[local_slot]
+        if not self.packed_fp4:
+            return weight
+        scale = getattr(self, f"experts_{name}_scale")[local_slot]
+        return dequant_fp4_group(weight, scale)
 
     def _selection_logits(
         self,
@@ -1830,15 +1858,19 @@ class DeepseekV41MoE(nn.Module):
         for local_slot, count in segments:
             rows = sorted_rows[offset : offset + count]
             expert_input = x[rows]
+            w1 = self._expert_weight("w1", local_slot)
+            w3 = self._expert_weight("w3", local_slot)
+            w2 = self._expert_weight("w2", local_slot)
             expert_out = _swiglu_clamped(
                 expert_input,
-                F.linear(expert_input, self.experts_w1[local_slot]),
-                F.linear(expert_input, self.experts_w3[local_slot]),
-                _StackedLinear(self.experts_w2, local_slot),
+                F.linear(expert_input, w1),
+                F.linear(expert_input, w3),
+                _StackedLinear(w2.unsqueeze(0), 0),
                 self.swiglu_limit,
                 sorted_weights[offset : offset + count],
             )
             y.index_add_(0, rows, expert_out.float())
+            del w1, w2, w3
             offset += count
         if self.ep_size > 1:
             from xllm.python import distributed as _distributed
@@ -2509,7 +2541,13 @@ class DeepseekV41DecoderLayer(nn.Module):
         elif quant_mode == V41_QUANT_ASCEND:
             self.mlp = DeepseekV41W8A8MoE(cfg, layer_id, dtype, device)
         else:
-            self.mlp = DeepseekV41MoE(cfg, layer_id, dtype, device)
+            self.mlp = DeepseekV41MoE(
+                cfg,
+                layer_id,
+                dtype,
+                device,
+                packed_fp4=device.type == "musa" and quant_mode == V41_QUANT_FP8,
+            )
 
     def forward(
         self,
@@ -3412,6 +3450,13 @@ class DeepseekV41ForCausalLM(PyModelBase):
         self.quant_mode = _detect_v41_quant_mode(config)
         dtype = self.resolve_dtype(config.get("dtype") or config.get("torch_dtype"))
         device = torch.device(config.get("device", "npu:0"))
+        if device.type == "musa":
+            if self.quant_mode != V41_QUANT_FP8 or dtype != torch.bfloat16:
+                raise NotImplementedError(
+                    "DeepSeek-V4.1 MUSA requires the official FP8/MXFP4 checkpoint and BF16 compute"
+                )
+            if int(config.get("num_speculative_tokens", 0)) != 0:
+                raise NotImplementedError("DeepSeek-V4.1 MUSA speculative decoding is not validated")
         self.model = DeepseekV41Model(self.cfg, dtype, device, self.quant_mode, config)
         tp = self.cfg.tp_size
         self.lm_head = ColumnParallelLinear(
@@ -3764,6 +3809,21 @@ class DeepseekV41ForCausalLM(PyModelBase):
                 ("w3", mlp.experts_w3),
             ):
                 prefix = ck + f"ffn.experts.{expert}.{name}"
+                if mlp.packed_fp4:
+                    if not is_fp8:
+                        raise ValueError("Packed MXFP4 storage requires the original fp8/MXFP4 checkpoint")
+                    weight = loader.load_tensor(prefix + ".weight")
+                    scale = loader.load_tensor(prefix + ".scale")
+                    if weight.element_size() != 1 or scale.element_size() != 1:
+                        raise ValueError(f"Invalid packed MXFP4 storage for {prefix}")
+                    if weight.shape != param.data[local_slot].shape:
+                        raise ValueError(f"Packed MXFP4 weight shape mismatch for {prefix}")
+                    target_scale = getattr(mlp, f"experts_{name}_scale")[local_slot]
+                    if scale.shape != target_scale.shape:
+                        raise ValueError(f"Packed MXFP4 scale shape mismatch for {prefix}")
+                    param.data[local_slot].copy_(weight.view(torch.uint8))
+                    target_scale.copy_(scale.view(torch.uint8))
+                    continue
                 if is_fp8:
                     weight = dequant_fp4_group(
                         loader.load_tensor(prefix + ".weight"),

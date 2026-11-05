@@ -1034,7 +1034,7 @@ void MMChatServiceImpl::process_async_rpc_impl(
   }
   master_->handle_request(std::move(messages),
                           std::move(request_params),
-                          /*payload=*/"",
+                          /*payload=*/BinaryPayload{},
                           callback);
 }
 

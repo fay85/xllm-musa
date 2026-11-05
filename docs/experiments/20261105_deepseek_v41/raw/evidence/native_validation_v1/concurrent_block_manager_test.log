@@ -1,0 +1,26 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+[==========] Running 7 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 4 tests from ConcurrentBlockManagerTest
+[ RUN      ] ConcurrentBlockManagerTest.SharedPrefixStaysUsedUntilLastSequenceRelease
+[       OK ] ConcurrentBlockManagerTest.SharedPrefixStaysUsedUntilLastSequenceRelease (0 ms)
+[ RUN      ] ConcurrentBlockManagerTest.ContinuesPrefixCacheFromExistingBlocks
+[       OK ] ConcurrentBlockManagerTest.ContinuesPrefixCacheFromExistingBlocks (0 ms)
+[ RUN      ] ConcurrentBlockManagerTest.AllocatesWhileBlocksReleaseConcurrently
+[       OK ] ConcurrentBlockManagerTest.AllocatesWhileBlocksReleaseConcurrently (108 ms)
+[ RUN      ] ConcurrentBlockManagerTest.PrefixCacheSharedBlockLifecycleLeak
+[       OK ] ConcurrentBlockManagerTest.PrefixCacheSharedBlockLifecycleLeak (468 ms)
+[----------] 4 tests from ConcurrentBlockManagerTest (576 ms total)
+
+[----------] 3 tests from ConcurrentModes/LinearConcurrentAllocationTest
+[ RUN      ] ConcurrentModes/LinearConcurrentAllocationTest.KeepsLiveSlotsUniqueUntilFinalRelease/0
+[       OK ] ConcurrentModes/LinearConcurrentAllocationTest.KeepsLiveSlotsUniqueUntilFinalRelease/0 (166 ms)
+[ RUN      ] ConcurrentModes/LinearConcurrentAllocationTest.KeepsLiveSlotsUniqueUntilFinalRelease/1
+[       OK ] ConcurrentModes/LinearConcurrentAllocationTest.KeepsLiveSlotsUniqueUntilFinalRelease/1 (168 ms)
+[ RUN      ] ConcurrentModes/LinearConcurrentAllocationTest.KeepsLiveSlotsUniqueUntilFinalRelease/2
+[       OK ] ConcurrentModes/LinearConcurrentAllocationTest.KeepsLiveSlotsUniqueUntilFinalRelease/2 (173 ms)
+[----------] 3 tests from ConcurrentModes/LinearConcurrentAllocationTest (508 ms total)
+
+[----------] Global test environment tear-down
+[==========] 7 tests from 2 test suites ran. (1084 ms total)
+[  PASSED  ] 7 tests.

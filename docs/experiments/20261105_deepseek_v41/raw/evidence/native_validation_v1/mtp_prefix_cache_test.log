@@ -1,0 +1,62 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+[==========] Running 264 tests from 17 test suites.
+[----------] Global test environment set-up.
+[----------] 1 test from BlockManagerPoolTest
+[ RUN      ] BlockManagerPoolTest.RejectsPrefillWithoutStateAndAllowsRetry
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+W20261105 18:05:29.666092 16437 linear_state_block_manager.cpp:273] LINEAR prefill has no private write slot: request_id= seq_id=-1 read_slot=-1 free_slots=0
+[       OK ] BlockManagerPoolTest.RejectsPrefillWithoutStateAndAllowsRetry (0 ms)
+[----------] 1 test from BlockManagerPoolTest (0 ms total)
+
+[----------] 3 tests from SequenceMtpPrefixCacheTest
+[ RUN      ] SequenceMtpPrefixCacheTest.BoundaryRewriteInvalidatesEveryStride
+[       OK ] SequenceMtpPrefixCacheTest.BoundaryRewriteInvalidatesEveryStride (0 ms)
+[ RUN      ] SequenceMtpPrefixCacheTest.OverlapPlaceholdersNeverEnterHashChain
+[       OK ] SequenceMtpPrefixCacheTest.OverlapPlaceholdersNeverEnterHashChain (0 ms)
+[ RUN      ] SequenceMtpPrefixCacheTest.CopyRetainsMtpInvalidationPolicy
+[       OK ] SequenceMtpPrefixCacheTest.CopyRetainsMtpInvalidationPolicy (0 ms)
+[----------] 3 tests from SequenceMtpPrefixCacheTest (0 ms total)
+
+[----------] 8 tests from CompositeMtpPrefixCacheTest
+[ RUN      ] CompositeMtpPrefixCacheTest.PublishesCompletedKvWithConfirmedLookahead
+[       OK ] CompositeMtpPrefixCacheTest.PublishesCompletedKvWithConfirmedLookahead (0 ms)
+[ RUN      ] CompositeMtpPrefixCacheTest.InBatchBudgetDoesNotPublishUnwrittenKv
+[       OK ] CompositeMtpPrefixCacheTest.InBatchBudgetDoesNotPublishUnwrittenKv (0 ms)
+[ RUN      ] CompositeMtpPrefixCacheTest.RealAppendPublishesEverySafeBlock
+[       OK ] CompositeMtpPrefixCacheTest.RealAppendPublishesEverySafeBlock (0 ms)
+[ RUN      ] CompositeMtpPrefixCacheTest.InBatchBoundsKvBudgetAndCapacitySeparately
+[       OK ] CompositeMtpPrefixCacheTest.InBatchBoundsKvBudgetAndCapacitySeparately (0 ms)
+[ RUN      ] CompositeMtpPrefixCacheTest.PublicationPathsShareAnIdempotentCursor
+[       OK ] CompositeMtpPrefixCacheTest.PublicationPathsShareAnIdempotentCursor (0 ms)
+[ RUN      ] CompositeMtpPrefixCacheTest.FinalFlushKeepsPublishCursorAtSafeBoundary
+[       OK ] CompositeMtpPrefixCacheTest.FinalFlushKeepsPublishCursorAtSafeBoundary (0 ms)
+[ RUN      ] CompositeMtpPrefixCacheTest.NeverPublishesOverlapPlaceholderIdentity
+[       OK ] CompositeMtpPrefixCacheTest.NeverPublishesOverlapPlaceholderIdentity (0 ms)
+[ RUN      ] CompositeMtpPrefixCacheTest.TextOverlapHashStopsBeforePlaceholder
+[       OK ] CompositeMtpPrefixCacheTest.TextOverlapHashStopsBeforePlaceholder (0 ms)
+[----------] 8 tests from CompositeMtpPrefixCacheTest (0 ms total)
+
+[----------] 4 tests from HierarchyMtpPrefixCacheTest
+[ RUN      ] HierarchyMtpPrefixCacheTest.RestoresEveryBlockProvenByStoreHash
+[       OK ] HierarchyMtpPrefixCacheTest.RestoresEveryBlockProvenByStoreHash (0 ms)
+[ RUN      ] HierarchyMtpPrefixCacheTest.StoreDoesNotQueryWithoutNextToken
+[       OK ] HierarchyMtpPrefixCacheTest.StoreDoesNotQueryWithoutNextToken (0 ms)
+[ RUN      ] HierarchyMtpPrefixCacheTest.OffloadPreservesDeviceStampAndCompletedBoundary
+[       OK ] HierarchyMtpPrefixCacheTest.OffloadPreservesDeviceStampAndCompletedBoundary (0 ms)
+[ RUN      ] HierarchyMtpPrefixCacheTest.HostMatchRejectsDifferentNextToken
+[       OK ] HierarchyMtpPrefixCacheTest.HostMatchRejectsDifferentNextToken (0 ms)
+[----------] 4 tests from HierarchyMtpPrefixCacheTest (0 ms total)
+
+[----------] 4 tests from TypedMtpPrefixCacheTest
+[ RUN      ] TypedMtpPrefixCacheTest.CompressedCheckpointRequiresNextToken
+/work/repos/xllm-musa/tests/core/framework/block/mtp_prefix_cache_test.cpp:559: Failure
+Expected equality of these values:
+  sequence.kv_state().num_cached_blocks(BlockType::C4)
+    Which is: 32
+  1u
+    Which is: 1
+
+[  FAILED  ] TypedMtpPrefixCacheTest.CompressedCheckpointRequiresNextToken (0 ms)
+[ RUN      ] TypedMtpPrefixCacheTest.DecodeOffloadWaitsForCompletedLookahead
+F20261105 18:05:29.666625 16437 composite_block_manager.cpp:393] Check failed: static_cast<int64_t>(c4->second.leaf->options().num_blocks()) * c4->second.leaf->block_size() == static_cast<int64_t>(c128->second.leaf->options().num_blocks()) * c128->second.leaf->block_size() (16384 vs. 524288) DSV4 C4 and C128 allocated pool capacity must stay aligned
+*** Check failure stack trace: ***

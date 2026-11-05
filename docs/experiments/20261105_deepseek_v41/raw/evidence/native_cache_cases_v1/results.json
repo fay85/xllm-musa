@@ -1,0 +1,1586 @@
+[
+  {
+    "name": "BlockManagerPoolTest.RejectsPrefillWithoutStateAndAllowsRetry",
+    "exit": 0,
+    "elapsed_s": 1.4688314630184323,
+    "log": "BlockManagerPoolTest.RejectsPrefillWithoutStateAndAllowsRetry.log"
+  },
+  {
+    "name": "SequenceMtpPrefixCacheTest.BoundaryRewriteInvalidatesEveryStride",
+    "exit": 0,
+    "elapsed_s": 1.4685002339538187,
+    "log": "SequenceMtpPrefixCacheTest.BoundaryRewriteInvalidatesEveryStride.log"
+  },
+  {
+    "name": "SequenceMtpPrefixCacheTest.OverlapPlaceholdersNeverEnterHashChain",
+    "exit": 0,
+    "elapsed_s": 1.4661949679721147,
+    "log": "SequenceMtpPrefixCacheTest.OverlapPlaceholdersNeverEnterHashChain.log"
+  },
+  {
+    "name": "SequenceMtpPrefixCacheTest.CopyRetainsMtpInvalidationPolicy",
+    "exit": 0,
+    "elapsed_s": 1.466813621809706,
+    "log": "SequenceMtpPrefixCacheTest.CopyRetainsMtpInvalidationPolicy.log"
+  },
+  {
+    "name": "CompositeMtpPrefixCacheTest.PublishesCompletedKvWithConfirmedLookahead",
+    "exit": 0,
+    "elapsed_s": 1.4661154700443149,
+    "log": "CompositeMtpPrefixCacheTest.PublishesCompletedKvWithConfirmedLookahead.log"
+  },
+  {
+    "name": "CompositeMtpPrefixCacheTest.InBatchBudgetDoesNotPublishUnwrittenKv",
+    "exit": 0,
+    "elapsed_s": 1.4662398430518806,
+    "log": "CompositeMtpPrefixCacheTest.InBatchBudgetDoesNotPublishUnwrittenKv.log"
+  },
+  {
+    "name": "CompositeMtpPrefixCacheTest.RealAppendPublishesEverySafeBlock",
+    "exit": 0,
+    "elapsed_s": 1.4659982610028237,
+    "log": "CompositeMtpPrefixCacheTest.RealAppendPublishesEverySafeBlock.log"
+  },
+  {
+    "name": "CompositeMtpPrefixCacheTest.InBatchBoundsKvBudgetAndCapacitySeparately",
+    "exit": 0,
+    "elapsed_s": 1.4661825550720096,
+    "log": "CompositeMtpPrefixCacheTest.InBatchBoundsKvBudgetAndCapacitySeparately.log"
+  },
+  {
+    "name": "CompositeMtpPrefixCacheTest.PublicationPathsShareAnIdempotentCursor",
+    "exit": 0,
+    "elapsed_s": 1.4660424748435616,
+    "log": "CompositeMtpPrefixCacheTest.PublicationPathsShareAnIdempotentCursor.log"
+  },
+  {
+    "name": "CompositeMtpPrefixCacheTest.FinalFlushKeepsPublishCursorAtSafeBoundary",
+    "exit": 0,
+    "elapsed_s": 1.4661427459213883,
+    "log": "CompositeMtpPrefixCacheTest.FinalFlushKeepsPublishCursorAtSafeBoundary.log"
+  },
+  {
+    "name": "CompositeMtpPrefixCacheTest.NeverPublishesOverlapPlaceholderIdentity",
+    "exit": 0,
+    "elapsed_s": 1.4660228351131082,
+    "log": "CompositeMtpPrefixCacheTest.NeverPublishesOverlapPlaceholderIdentity.log"
+  },
+  {
+    "name": "CompositeMtpPrefixCacheTest.TextOverlapHashStopsBeforePlaceholder",
+    "exit": 0,
+    "elapsed_s": 1.4660471507813781,
+    "log": "CompositeMtpPrefixCacheTest.TextOverlapHashStopsBeforePlaceholder.log"
+  },
+  {
+    "name": "HierarchyMtpPrefixCacheTest.RestoresEveryBlockProvenByStoreHash",
+    "exit": 0,
+    "elapsed_s": 1.4658424148801714,
+    "log": "HierarchyMtpPrefixCacheTest.RestoresEveryBlockProvenByStoreHash.log"
+  },
+  {
+    "name": "HierarchyMtpPrefixCacheTest.StoreDoesNotQueryWithoutNextToken",
+    "exit": 0,
+    "elapsed_s": 1.46593760792166,
+    "log": "HierarchyMtpPrefixCacheTest.StoreDoesNotQueryWithoutNextToken.log"
+  },
+  {
+    "name": "HierarchyMtpPrefixCacheTest.OffloadPreservesDeviceStampAndCompletedBoundary",
+    "exit": 0,
+    "elapsed_s": 1.4659027960151434,
+    "log": "HierarchyMtpPrefixCacheTest.OffloadPreservesDeviceStampAndCompletedBoundary.log"
+  },
+  {
+    "name": "HierarchyMtpPrefixCacheTest.HostMatchRejectsDifferentNextToken",
+    "exit": 0,
+    "elapsed_s": 1.46578757208772,
+    "log": "HierarchyMtpPrefixCacheTest.HostMatchRejectsDifferentNextToken.log"
+  },
+  {
+    "name": "TypedMtpPrefixCacheTest.CompressedCheckpointRequiresNextToken",
+    "exit": 1,
+    "elapsed_s": 1.4659753029700369,
+    "log": "TypedMtpPrefixCacheTest.CompressedCheckpointRequiresNextToken.log"
+  },
+  {
+    "name": "TypedMtpPrefixCacheTest.DecodeOffloadWaitsForCompletedLookahead",
+    "exit": -6,
+    "elapsed_s": 1.4158232440240681,
+    "log": "TypedMtpPrefixCacheTest.DecodeOffloadWaitsForCompletedLookahead.log"
+  },
+  {
+    "name": "TypedMtpPrefixCacheTest.DecodeOffloadUsesConfirmedMtpIdentity",
+    "exit": -6,
+    "elapsed_s": 1.5161042120307684,
+    "log": "TypedMtpPrefixCacheTest.DecodeOffloadUsesConfirmedMtpIdentity.log"
+  },
+  {
+    "name": "TypedMtpPrefixCacheTest.StoreQueriesOnlyCompleteDependencyUnits",
+    "exit": -6,
+    "elapsed_s": 1.4660177510231733,
+    "log": "TypedMtpPrefixCacheTest.StoreQueriesOnlyCompleteDependencyUnits.log"
+  },
+  {
+    "name": "TypedPrefixCacheTest.DecodeOffloadUsesContentIdentityWithoutDeviceStamp",
+    "exit": -6,
+    "elapsed_s": 1.41594543796964,
+    "log": "TypedPrefixCacheTest.DecodeOffloadUsesContentIdentityWithoutDeviceStamp.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.BlockUtilizationUsesIndividualLeafCapacity",
+    "exit": -6,
+    "elapsed_s": 1.4160886879544705,
+    "log": "CompositeBlockManagerTest.BlockUtilizationUsesIndividualLeafCapacity.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.ZeroCapacityLeafStillReportsItsType",
+    "exit": -6,
+    "elapsed_s": 1.416155498009175,
+    "log": "CompositeBlockManagerTest.ZeroCapacityLeafStillReportsItsType.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.SampleSelectorsRetainRequiredHiddenPositions",
+    "exit": -6,
+    "elapsed_s": 1.416338870069012,
+    "log": "CompositeBlockManagerTest.SampleSelectorsRetainRequiredHiddenPositions.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.ExplicitHostAllocationNeverPublishesProgress",
+    "exit": 0,
+    "elapsed_s": 1.4664854460861534,
+    "log": "CompositeBlockManagerTest.ExplicitHostAllocationNeverPublishesProgress.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.ExplicitPublicationEnablesHostOnlySharedMatch",
+    "exit": 0,
+    "elapsed_s": 1.4663698021322489,
+    "log": "CompositeBlockManagerTest.ExplicitPublicationEnablesHostOnlySharedMatch.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.FailedHostGrowthRollsBackAllStagedLeaves",
+    "exit": -6,
+    "elapsed_s": 1.4662852210458368,
+    "log": "CompositeBlockManagerTest.FailedHostGrowthRollsBackAllStagedLeaves.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.EmptyHostGrowthCannotPassCapacityValidation",
+    "exit": 0,
+    "elapsed_s": 1.466390980174765,
+    "log": "CompositeBlockManagerTest.EmptyHostGrowthCannotPassCapacityValidation.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.ExplicitDeviceStatePreservesEmbeddingDispatch",
+    "exit": 0,
+    "elapsed_s": 1.5163821859750897,
+    "log": "CompositeBlockManagerTest.ExplicitDeviceStatePreservesEmbeddingDispatch.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.EmbeddingLeafUsesExplicitState",
+    "exit": 0,
+    "elapsed_s": 1.566496891202405,
+    "log": "CompositeBlockManagerTest.EmbeddingLeafUsesExplicitState.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.SlidingWindowLeafAcceptsNullSequence",
+    "exit": -6,
+    "elapsed_s": 1.4662967789918184,
+    "log": "CompositeBlockManagerTest.SlidingWindowLeafAcceptsNullSequence.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.AllocateForSequence_SingleSeq",
+    "exit": -6,
+    "elapsed_s": 1.3658275951165706,
+    "log": "CompositeBlockManagerTest.AllocateForSequence_SingleSeq.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.AllocateForSequence_DifferentBatchSeqs",
+    "exit": -6,
+    "elapsed_s": 1.5159343741834164,
+    "log": "CompositeBlockManagerTest.AllocateForSequence_DifferentBatchSeqs.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.AllocateForSequence_GrowSameSeq",
+    "exit": -6,
+    "elapsed_s": 1.516162940999493,
+    "log": "CompositeBlockManagerTest.AllocateForSequence_GrowSameSeq.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.AllocateContinuesAfterSatisfiedTokenManager",
+    "exit": -6,
+    "elapsed_s": 1.5159739539958537,
+    "log": "CompositeBlockManagerTest.AllocateContinuesAfterSatisfiedTokenManager.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.AllocateForSequence_NullSeqReturnsFalse",
+    "exit": -6,
+    "elapsed_s": 1.4661033591255546,
+    "log": "CompositeBlockManagerTest.AllocateForSequence_NullSeqReturnsFalse.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.FailedGrowthKeepsCommittedBlocks",
+    "exit": -6,
+    "elapsed_s": 1.5166785470210016,
+    "log": "CompositeBlockManagerTest.FailedGrowthKeepsCommittedBlocks.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.DeallocateToleratesRolledBackEmptySequence",
+    "exit": -6,
+    "elapsed_s": 1.5174449610058218,
+    "log": "CompositeBlockManagerTest.DeallocateToleratesRolledBackEmptySequence.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.TokenIncrease_AddsBlocksIncrementally",
+    "exit": -6,
+    "elapsed_s": 1.416372352046892,
+    "log": "CompositeBlockManagerTest.TokenIncrease_AddsBlocksIncrementally.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.Dsv4CompressedAllocationUsesPlatformUnits",
+    "exit": -6,
+    "elapsed_s": 1.4163091760128736,
+    "log": "CompositeBlockManagerTest.Dsv4CompressedAllocationUsesPlatformUnits.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.SlidingWindowReleasesSkippedPhysicalBlocks",
+    "exit": -6,
+    "elapsed_s": 1.416523976949975,
+    "log": "CompositeBlockManagerTest.SlidingWindowReleasesSkippedPhysicalBlocks.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.SlidingWindowV4PrefetchKeepsGeometryUnit",
+    "exit": 0,
+    "elapsed_s": 1.4664733021054417,
+    "log": "CompositeBlockManagerTest.SlidingWindowV4PrefetchKeepsGeometryUnit.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.SlidingWindowHostCursorLagRetryPreservesSpeculativeWindow",
+    "exit": 0,
+    "elapsed_s": 1.5166765009053051,
+    "log": "CompositeBlockManagerTest.SlidingWindowHostCursorLagRetryPreservesSpeculativeWindow.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.DeallocateConsumesBlocksFromOwnerManagers",
+    "exit": -6,
+    "elapsed_s": 1.3660467190202326,
+    "log": "CompositeBlockManagerTest.DeallocateConsumesBlocksFromOwnerManagers.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.DeallocateDispatchesWithoutInflatingRefCount",
+    "exit": -6,
+    "elapsed_s": 1.5665645499248058,
+    "log": "CompositeBlockManagerTest.DeallocateDispatchesWithoutInflatingRefCount.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.CapacityStatsUseBaseBlockUnits",
+    "exit": -6,
+    "elapsed_s": 1.4660303490236402,
+    "log": "CompositeBlockManagerTest.CapacityStatsUseBaseBlockUnits.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.Dsv4PrefixCacheHitOnRepeatedPrefix",
+    "exit": -6,
+    "elapsed_s": 1.415975603973493,
+    "log": "CompositeBlockManagerTest.Dsv4PrefixCacheHitOnRepeatedPrefix.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.Dsv4PrefixCacheMatchesAtCompressedUnitBoundary",
+    "exit": -6,
+    "elapsed_s": 1.4161710569169372,
+    "log": "CompositeBlockManagerTest.Dsv4PrefixCacheMatchesAtCompressedUnitBoundary.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.Dsv4PrefixCacheMissCleanly",
+    "exit": -6,
+    "elapsed_s": 1.416215679841116,
+    "log": "CompositeBlockManagerTest.Dsv4PrefixCacheMissCleanly.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.Dsv4PrefixCacheEvictsAtC128Capacity",
+    "exit": -6,
+    "elapsed_s": 1.4164010880049318,
+    "log": "CompositeBlockManagerTest.Dsv4PrefixCacheEvictsAtC128Capacity.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.SlidingWindowSlidOutBlocksEnterPrefixCache",
+    "exit": -6,
+    "elapsed_s": 1.5164141820278019,
+    "log": "CompositeBlockManagerTest.SlidingWindowSlidOutBlocksEnterPrefixCache.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.SlidingWindowReclaimsUncachedBlockBeforeFullCacheUnit",
+    "exit": -6,
+    "elapsed_s": 1.516484981868416,
+    "log": "CompositeBlockManagerTest.SlidingWindowReclaimsUncachedBlockBeforeFullCacheUnit.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.Dsv4PrefixCachePostGrowCursorAdvances",
+    "exit": -6,
+    "elapsed_s": 1.4164796769618988,
+    "log": "CompositeBlockManagerTest.Dsv4PrefixCachePostGrowCursorAdvances.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.Dsv4PrefixCacheSkipsPartialCacheUnitTail",
+    "exit": -6,
+    "elapsed_s": 1.4661196859087795,
+    "log": "CompositeBlockManagerTest.Dsv4PrefixCacheSkipsPartialCacheUnitTail.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.Dsv4PrefixCacheExactRepeatPopsOneC128",
+    "exit": -6,
+    "elapsed_s": 1.4664356969296932,
+    "log": "CompositeBlockManagerTest.Dsv4PrefixCacheExactRepeatPopsOneC128.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.Dsv4ExactRepeatRejectsEvictedPreviousSwaWindow",
+    "exit": -6,
+    "elapsed_s": 1.4167563950177282,
+    "log": "CompositeBlockManagerTest.Dsv4ExactRepeatRejectsEvictedPreviousSwaWindow.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.DecodeRoleSkipsSwaPrefixCache",
+    "exit": -6,
+    "elapsed_s": 1.4163114409893751,
+    "log": "CompositeBlockManagerTest.DecodeRoleSkipsSwaPrefixCache.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.DecodeInitialSwaAllocationKeepsOnlyWindowTail",
+    "exit": -6,
+    "elapsed_s": 1.416470377938822,
+    "log": "CompositeBlockManagerTest.DecodeInitialSwaAllocationKeepsOnlyWindowTail.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.DecodeInitialSwaAllocationCoversNonAlignedWindow",
+    "exit": -6,
+    "elapsed_s": 1.5167207270860672,
+    "log": "CompositeBlockManagerTest.DecodeInitialSwaAllocationCoversNonAlignedWindow.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.DecodeInitialSwaAllocationKeepsBlockContainingWindowStart",
+    "exit": -6,
+    "elapsed_s": 1.5167365910019726,
+    "log": "CompositeBlockManagerTest.DecodeInitialSwaAllocationKeepsBlockContainingWindowStart.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.DecodeLinearWithoutPrefixCacheKeepsReceivedState",
+    "exit": 0,
+    "elapsed_s": 1.4664618540555239,
+    "log": "CompositeBlockManagerTest.DecodeLinearWithoutPrefixCacheKeepsReceivedState.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.DecodeRoleLinearDefaultStrideReusesSlot",
+    "exit": 0,
+    "elapsed_s": 1.466380946105346,
+    "log": "CompositeBlockManagerTest.DecodeRoleLinearDefaultStrideReusesSlot.log"
+  },
+  {
+    "name": "CompositeBlockManagerTest.V4DefaultPrefixCacheKeepsRolePolicy",
+    "exit": -6,
+    "elapsed_s": 1.4163981408346444,
+    "log": "CompositeBlockManagerTest.V4DefaultPrefixCacheKeepsRolePolicy.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheDefaultsOnLikeV4",
+    "exit": 0,
+    "elapsed_s": 1.4667735388502479,
+    "log": "V41PrefixCacheTest.V41PrefixCacheDefaultsOnLikeV4.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheFollowsV4EnableSwitch",
+    "exit": -6,
+    "elapsed_s": 1.5165979540906847,
+    "log": "V41PrefixCacheTest.V41PrefixCacheFollowsV4EnableSwitch.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheKeepsDeviceOnlyRolePolicy",
+    "exit": 0,
+    "elapsed_s": 1.5667246929369867,
+    "log": "V41PrefixCacheTest.V41PrefixCacheKeepsDeviceOnlyRolePolicy.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheRejectsMissingSwaWindow",
+    "exit": 0,
+    "elapsed_s": 1.6668144860304892,
+    "log": "V41PrefixCacheTest.V41PrefixCacheRejectsMissingSwaWindow.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheRejectsMissingHistoryLeaves",
+    "exit": 0,
+    "elapsed_s": 1.5668019091244787,
+    "log": "V41PrefixCacheTest.V41PrefixCacheRejectsMissingHistoryLeaves.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41SingleTokenGroupUsesItsOwnRestoreUnit",
+    "exit": 0,
+    "elapsed_s": 1.4667606970760971,
+    "log": "V41PrefixCacheTest.V41SingleTokenGroupUsesItsOwnRestoreUnit.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41SampleSelectorsRetainRequiredHiddenPositions",
+    "exit": 0,
+    "elapsed_s": 1.466543428832665,
+    "log": "V41PrefixCacheTest.V41SampleSelectorsRetainRequiredHiddenPositions.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41DisabledPrefixCacheDoesNotPublishOrMount",
+    "exit": 0,
+    "elapsed_s": 1.516787766944617,
+    "log": "V41PrefixCacheTest.V41DisabledPrefixCacheDoesNotPublishOrMount.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheUsesCommonTokenBoundary",
+    "exit": 0,
+    "elapsed_s": 1.5168020790442824,
+    "log": "V41PrefixCacheTest.V41PrefixCacheUsesCommonTokenBoundary.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCachePublishesOnlyCompletedUnits",
+    "exit": 0,
+    "elapsed_s": 1.5165302800014615,
+    "log": "V41PrefixCacheTest.V41PrefixCachePublishesOnlyCompletedUnits.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41ChunkedPrefillSharesPrefixWithStandardSwitch",
+    "exit": 0,
+    "elapsed_s": 1.5168134609702975,
+    "log": "V41PrefixCacheTest.V41ChunkedPrefillSharesPrefixWithStandardSwitch.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheUsesLargestParticipatingBlock",
+    "exit": 0,
+    "elapsed_s": 1.466559343971312,
+    "log": "V41PrefixCacheTest.V41PrefixCacheUsesLargestParticipatingBlock.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheMissesIfAnyRequiredGroupIsGone",
+    "exit": 0,
+    "elapsed_s": 1.466463782126084,
+    "log": "V41PrefixCacheTest.V41PrefixCacheMissesIfAnyRequiredGroupIsGone.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCachePreservesSharedBlocksOnContinuation",
+    "exit": 0,
+    "elapsed_s": 1.4664580691605806,
+    "log": "V41PrefixCacheTest.V41PrefixCachePreservesSharedBlocksOnContinuation.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheRequiresCompleteSwaWindow",
+    "exit": 0,
+    "elapsed_s": 1.466544043039903,
+    "log": "V41PrefixCacheTest.V41PrefixCacheRequiresCompleteSwaWindow.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41ShortPrefixRestoresAvailableSwaHistory",
+    "exit": 0,
+    "elapsed_s": 1.466455320129171,
+    "log": "V41PrefixCacheTest.V41ShortPrefixRestoresAvailableSwaHistory.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheRejectsHoleInsideRequiredSwaTail",
+    "exit": 0,
+    "elapsed_s": 1.4667258681729436,
+    "log": "V41PrefixCacheTest.V41PrefixCacheRejectsHoleInsideRequiredSwaTail.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheMissesForDifferentTokenPrefix",
+    "exit": 0,
+    "elapsed_s": 1.4666247069835663,
+    "log": "V41PrefixCacheTest.V41PrefixCacheMissesForDifferentTokenPrefix.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheRecomputesDivergentSuffix",
+    "exit": 0,
+    "elapsed_s": 1.466361747123301,
+    "log": "V41PrefixCacheTest.V41PrefixCacheRecomputesDivergentSuffix.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41CancelledSharedAliasReleasesAllLeafUsage",
+    "exit": 0,
+    "elapsed_s": 1.5165298031643033,
+    "log": "V41PrefixCacheTest.V41CancelledSharedAliasReleasesAllLeafUsage.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41CancelledPartialForwardDoesNotPublishUnfinishedUnit",
+    "exit": 0,
+    "elapsed_s": 1.4665238780435175,
+    "log": "V41PrefixCacheTest.V41CancelledPartialForwardDoesNotPublishUnfinishedUnit.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixPoolsDoNotSharePublishedEntries",
+    "exit": 0,
+    "elapsed_s": 1.5662103050854057,
+    "log": "V41PrefixCacheTest.V41PrefixPoolsDoNotSharePublishedEntries.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PressureEvictsPrefixAndAllowsRepublication",
+    "exit": 0,
+    "elapsed_s": 1.5164083139970899,
+    "log": "V41PrefixCacheTest.V41PressureEvictsPrefixAndAllowsRepublication.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41HostAndStoreLeavesUseValidatedOptions",
+    "exit": 0,
+    "elapsed_s": 1.4664533101022243,
+    "log": "V41PrefixCacheTest.V41HostAndStoreLeavesUseValidatedOptions.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41PrefixCacheAcceptsMultimodalHasher",
+    "exit": 0,
+    "elapsed_s": 1.4666501190513372,
+    "log": "V41PrefixCacheTest.V41PrefixCacheAcceptsMultimodalHasher.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41MMPrefixCacheHitsSameImageAndTextOnly",
+    "exit": 0,
+    "elapsed_s": 1.5165812268387526,
+    "log": "V41PrefixCacheTest.V41MMPrefixCacheHitsSameImageAndTextOnly.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41MMPrefixCacheUsesImageIdentityAtBlockBoundary",
+    "exit": 0,
+    "elapsed_s": 1.566772660939023,
+    "log": "V41PrefixCacheTest.V41MMPrefixCacheUsesImageIdentityAtBlockBoundary.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.V41MMPrefixCacheStillHashesTextSuffix",
+    "exit": 0,
+    "elapsed_s": 1.5167347509413958,
+    "log": "V41PrefixCacheTest.V41MMPrefixCacheStillHashesTextSuffix.log"
+  },
+  {
+    "name": "V41PrefixCacheTest.TokenRatiosDoNotImplyV41Identity",
+    "exit": 0,
+    "elapsed_s": 1.466575331054628,
+    "log": "V41PrefixCacheTest.TokenRatiosDoNotImplyV41Identity.log"
+  },
+  {
+    "name": "V41SpecPrefixCacheTest.SpecKeepsAllPrefixLeavesEnabled",
+    "exit": 0,
+    "elapsed_s": 1.4669418900739402,
+    "log": "V41SpecPrefixCacheTest.SpecKeepsAllPrefixLeavesEnabled.log"
+  },
+  {
+    "name": "V41SpecPrefixCacheTest.SpecAllowsMMWithoutLookahead",
+    "exit": 0,
+    "elapsed_s": 1.4669424719177186,
+    "log": "V41SpecPrefixCacheTest.SpecAllowsMMWithoutLookahead.log"
+  },
+  {
+    "name": "V41SpecPrefixCacheTest.SpecRejectsMtpLookaheadHashers",
+    "exit": 0,
+    "elapsed_s": 1.7170233929064125,
+    "log": "V41SpecPrefixCacheTest.SpecRejectsMtpLookaheadHashers.log"
+  },
+  {
+    "name": "V41SpecPrefixCacheTest.SpecSupportsHostOffloadAndStore",
+    "exit": 0,
+    "elapsed_s": 1.4657813631929457,
+    "log": "V41SpecPrefixCacheTest.SpecSupportsHostOffloadAndStore.log"
+  },
+  {
+    "name": "V41SpecPrefixCacheTest.EnableSwitchDisablesSpecPrefix",
+    "exit": 0,
+    "elapsed_s": 1.5158613740932196,
+    "log": "V41SpecPrefixCacheTest.EnableSwitchDisablesSpecPrefix.log"
+  },
+  {
+    "name": "V41SpecPrefixCacheTest.VerifyAllocationPublishesOnlyAcceptedUnits",
+    "exit": 0,
+    "elapsed_s": 1.3661780909169465,
+    "log": "V41SpecPrefixCacheTest.VerifyAllocationPublishesOnlyAcceptedUnits.log"
+  },
+  {
+    "name": "V41SpecPrefixCacheTest.CancelledVerifyDoesNotPublishUnacceptedBoundary",
+    "exit": 0,
+    "elapsed_s": 1.5166506359819323,
+    "log": "V41SpecPrefixCacheTest.CancelledVerifyDoesNotPublishUnacceptedBoundary.log"
+  },
+  {
+    "name": "V41SpecPrefixCacheTest.SharedSpecRequestsKeepIndependentEmbeddingRows",
+    "exit": 0,
+    "elapsed_s": 1.4161593951284885,
+    "log": "V41SpecPrefixCacheTest.SharedSpecRequestsKeepIndependentEmbeddingRows.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.FlatKvHasSingleHostKvLeaf",
+    "exit": 0,
+    "elapsed_s": 1.5668952020350844,
+    "log": "HierarchyBlockManagerPoolTest.FlatKvHasSingleHostKvLeaf.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.TypedLayoutHasSwaC4C128HostLeaves",
+    "exit": -6,
+    "elapsed_s": 1.4666991129051894,
+    "log": "HierarchyBlockManagerPoolTest.TypedLayoutHasSwaC4C128HostLeaves.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.V41TokenGroupsOffloadAndRestoreCommonUnit",
+    "exit": 0,
+    "elapsed_s": 1.516060217982158,
+    "log": "HierarchyBlockManagerPoolTest.V41TokenGroupsOffloadAndRestoreCommonUnit.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.SwaTailBlocksClampToAvailableHistory",
+    "exit": 0,
+    "elapsed_s": 1.466499974951148,
+    "log": "HierarchyBlockManagerPoolTest.SwaTailBlocksClampToAvailableHistory.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.V41NarrowWindowOffloadKeepsSwaTails",
+    "exit": 0,
+    "elapsed_s": 1.5173500538803637,
+    "log": "HierarchyBlockManagerPoolTest.V41NarrowWindowOffloadKeepsSwaTails.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.V41DSparkOffloadsOnlyCommittedCheckpoints",
+    "exit": 0,
+    "elapsed_s": 1.4663152918219566,
+    "log": "HierarchyBlockManagerPoolTest.V41DSparkOffloadsOnlyCommittedCheckpoints.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.V41DecodeUnsupportedLayoutNamesRoleAndLeaves",
+    "exit": 0,
+    "elapsed_s": 1.6663806610740721,
+    "log": "HierarchyBlockManagerPoolTest.V41DecodeUnsupportedLayoutNamesRoleAndLeaves.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.V41StorePrefetchGatesBothTokenGroups",
+    "exit": 0,
+    "elapsed_s": 1.51641243416816,
+    "log": "HierarchyBlockManagerPoolTest.V41StorePrefetchGatesBothTokenGroups.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.V41StorePrefetchFitsCheckpointSwaCapacity",
+    "exit": 0,
+    "elapsed_s": 1.616443702019751,
+    "log": "HierarchyBlockManagerPoolTest.V41StorePrefetchFitsCheckpointSwaCapacity.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.TypedLayoutHasPerDpRankLeaves",
+    "exit": -6,
+    "elapsed_s": 1.4166470379568636,
+    "log": "HierarchyBlockManagerPoolTest.TypedLayoutHasPerDpRankLeaves.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.DecodeTypedLayoutKeepsSwaHostLeafForOffloadOnly",
+    "exit": -6,
+    "elapsed_s": 1.516201154096052,
+    "log": "HierarchyBlockManagerPoolTest.DecodeTypedLayoutKeepsSwaHostLeafForOffloadOnly.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.DecodeTypedLayoutProbesOnlyDeviceC4C128",
+    "exit": -6,
+    "elapsed_s": 1.4672623039223254,
+    "log": "HierarchyBlockManagerPoolTest.DecodeTypedLayoutProbesOnlyDeviceC4C128.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.DecodeTypedLayoutOffloadsNonPrefixSwaAndCompressedLeaves",
+    "exit": -6,
+    "elapsed_s": 1.4171664100140333,
+    "log": "HierarchyBlockManagerPoolTest.DecodeTypedLayoutOffloadsNonPrefixSwaAndCompressedLeaves.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.AllocateSharedMountsMatchesWithoutH2d",
+    "exit": -6,
+    "elapsed_s": 1.417105460073799,
+    "log": "HierarchyBlockManagerPoolTest.AllocateSharedMountsMatchesWithoutH2d.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.AllocateSharedAdvertisesC128AlignedCopyUnits",
+    "exit": -6,
+    "elapsed_s": 1.4171266939956695,
+    "log": "HierarchyBlockManagerPoolTest.AllocateSharedAdvertisesC128AlignedCopyUnits.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.SuccessfulAllocateBuildsTypedC128AlignedH2dPlan",
+    "exit": -6,
+    "elapsed_s": 1.4170294960495085,
+    "log": "HierarchyBlockManagerPoolTest.SuccessfulAllocateBuildsTypedC128AlignedH2dPlan.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.Dsv4WideWindowPrefetchRetainsFullRestoreTail",
+    "exit": -6,
+    "elapsed_s": 1.46712567191571,
+    "log": "HierarchyBlockManagerPoolTest.Dsv4WideWindowPrefetchRetainsFullRestoreTail.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.Dsv4PrefetchClampsWindowToCheckpoint",
+    "exit": -6,
+    "elapsed_s": 1.5160311029758304,
+    "log": "HierarchyBlockManagerPoolTest.Dsv4PrefetchClampsWindowToCheckpoint.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.IncompleteTiersDoNotCombineIntoHostRestore",
+    "exit": -6,
+    "elapsed_s": 1.5169368099886924,
+    "log": "HierarchyBlockManagerPoolTest.IncompleteTiersDoNotCombineIntoHostRestore.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.PartialDsv4PrefillDoesNotReprobeAnUnmatchedHostTier",
+    "exit": -6,
+    "elapsed_s": 1.4165998781099916,
+    "log": "HierarchyBlockManagerPoolTest.PartialDsv4PrefillDoesNotReprobeAnUnmatchedHostTier.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.FlatKvRestoreBudgetRemainsBlockLinear",
+    "exit": 0,
+    "elapsed_s": 1.5163976640906185,
+    "log": "HierarchyBlockManagerPoolTest.FlatKvRestoreBudgetRemainsBlockLinear.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.ZeroCopyRestoreTargetDoesNotReprobeHostCache",
+    "exit": 0,
+    "elapsed_s": 1.4679905059747398,
+    "log": "HierarchyBlockManagerPoolTest.ZeroCopyRestoreTargetDoesNotReprobeHostCache.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.FailedHostGrowthRejectsAllocation",
+    "exit": 0,
+    "elapsed_s": 1.4673994879703969,
+    "log": "HierarchyBlockManagerPoolTest.FailedHostGrowthRejectsAllocation.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.EmptyHostConfigurationRejectsAllocation",
+    "exit": 0,
+    "elapsed_s": 1.617204180918634,
+    "log": "HierarchyBlockManagerPoolTest.EmptyHostConfigurationRejectsAllocation.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.FailedHbmAllocationDoesNotQueueH2d",
+    "exit": 0,
+    "elapsed_s": 1.5170319529715925,
+    "log": "HierarchyBlockManagerPoolTest.FailedHbmAllocationDoesNotQueueH2d.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.ExistingBlocksSkipHostCacheRematch",
+    "exit": 0,
+    "elapsed_s": 1.3671307740733027,
+    "log": "HierarchyBlockManagerPoolTest.ExistingBlocksSkipHostCacheRematch.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.ExistingHostBlocksSkipPrefixRematch",
+    "exit": 0,
+    "elapsed_s": 1.4672628280241042,
+    "log": "HierarchyBlockManagerPoolTest.ExistingHostBlocksSkipPrefixRematch.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.ExistingBlocksSkipHbmPrefixRematch",
+    "exit": 0,
+    "elapsed_s": 1.467225761152804,
+    "log": "HierarchyBlockManagerPoolTest.ExistingBlocksSkipHbmPrefixRematch.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.HbmAllocationFailureDoesNotQueueH2d",
+    "exit": -6,
+    "elapsed_s": 1.4673705419991165,
+    "log": "HierarchyBlockManagerPoolTest.HbmAllocationFailureDoesNotQueueH2d.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.HostAllocationFailureRejectsHbmAllocation",
+    "exit": 0,
+    "elapsed_s": 1.5672596129588783,
+    "log": "HierarchyBlockManagerPoolTest.HostAllocationFailureRejectsHbmAllocation.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.DecodeRetryKeepsMountedPrefixAfterHostGrowthFailure",
+    "exit": 0,
+    "elapsed_s": 1.5172244450077415,
+    "log": "HierarchyBlockManagerPoolTest.DecodeRetryKeepsMountedPrefixAfterHostGrowthFailure.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.DecodeRetryKeepsMountedPrefixAfterHbmGrowthFailure",
+    "exit": 0,
+    "elapsed_s": 1.4174941289238632,
+    "log": "HierarchyBlockManagerPoolTest.DecodeRetryKeepsMountedPrefixAfterHbmGrowthFailure.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.LastDecodeRequestDeallocateDropsFailedGrowth",
+    "exit": 0,
+    "elapsed_s": 1.4673264871817082,
+    "log": "HierarchyBlockManagerPoolTest.LastDecodeRequestDeallocateDropsFailedGrowth.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.FlatKvChunkGrowthOffloadsCompletedBlocksIncrementally",
+    "exit": 0,
+    "elapsed_s": 1.4674007480498403,
+    "log": "HierarchyBlockManagerPoolTest.FlatKvChunkGrowthOffloadsCompletedBlocksIncrementally.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.D2hUsesHbmProgressInsteadOfRestoreTarget",
+    "exit": 0,
+    "elapsed_s": 1.4674584290478379,
+    "log": "HierarchyBlockManagerPoolTest.D2hUsesHbmProgressInsteadOfRestoreTarget.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.D2hUsesSequenceDpRank",
+    "exit": 0,
+    "elapsed_s": 1.5172398628201336,
+    "log": "HierarchyBlockManagerPoolTest.D2hUsesSequenceDpRank.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.Dsv4ChunkGrowthOffloadsAllCompletedCacheGroups",
+    "exit": -6,
+    "elapsed_s": 1.467015212867409,
+    "log": "HierarchyBlockManagerPoolTest.Dsv4ChunkGrowthOffloadsAllCompletedCacheGroups.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.Dsv4OffloadWaitsForCompleteC128Unit",
+    "exit": -6,
+    "elapsed_s": 1.4172499619890004,
+    "log": "HierarchyBlockManagerPoolTest.Dsv4OffloadWaitsForCompleteC128Unit.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.Dsv4WideWindowOffloadsEveryTailBlock",
+    "exit": -6,
+    "elapsed_s": 1.4173505518119782,
+    "log": "HierarchyBlockManagerPoolTest.Dsv4WideWindowOffloadsEveryTailBlock.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.Dsv4LargeChunksPersistEveryC128Checkpoint",
+    "exit": -6,
+    "elapsed_s": 1.4658361210022122,
+    "log": "HierarchyBlockManagerPoolTest.Dsv4LargeChunksPersistEveryC128Checkpoint.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.Dsv4OneMillionTokensReuseHostBlocksWithSmallChunks",
+    "exit": -6,
+    "elapsed_s": 1.517131159082055,
+    "log": "HierarchyBlockManagerPoolTest.Dsv4OneMillionTokensReuseHostBlocksWithSmallChunks.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.H2dRestoreIsPublishedToDevicePrefixCacheDuringAllocation",
+    "exit": -6,
+    "elapsed_s": 1.4668450138997287,
+    "log": "HierarchyBlockManagerPoolTest.H2dRestoreIsPublishedToDevicePrefixCacheDuringAllocation.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.Dsv4HostRestoreAllocatesOnlySwaTailWindowAndCurrentChunk",
+    "exit": -6,
+    "elapsed_s": 1.4180298410356045,
+    "log": "HierarchyBlockManagerPoolTest.Dsv4HostRestoreAllocatesOnlySwaTailWindowAndCurrentChunk.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.H2dRestoreDescriptionsRemainOwnedByPoolUntilDispatch",
+    "exit": 0,
+    "elapsed_s": 1.4675727060530335,
+    "log": "HierarchyBlockManagerPoolTest.H2dRestoreDescriptionsRemainOwnedByPoolUntilDispatch.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.H2dUsesCachedTokensInsteadOfPublishCursor",
+    "exit": 0,
+    "elapsed_s": 1.51743105892092,
+    "log": "HierarchyBlockManagerPoolTest.H2dUsesCachedTokensInsteadOfPublishCursor.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.H2dUsesSequenceDpRank",
+    "exit": 0,
+    "elapsed_s": 1.466879019048065,
+    "log": "HierarchyBlockManagerPoolTest.H2dUsesSequenceDpRank.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.SharedHostPrefixRestoresAndGrowsEveryInBatchSequence",
+    "exit": -6,
+    "elapsed_s": 1.4162446551490575,
+    "log": "HierarchyBlockManagerPoolTest.SharedHostPrefixRestoresAndGrowsEveryInBatchSequence.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.SharedHostPrefixCopiesEveryPrivateDestination",
+    "exit": 0,
+    "elapsed_s": 1.4674210280645639,
+    "log": "HierarchyBlockManagerPoolTest.SharedHostPrefixCopiesEveryPrivateDestination.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.CompleteC4C128CombinationCountsOneCopyUnit",
+    "exit": -6,
+    "elapsed_s": 1.567185846855864,
+    "log": "HierarchyBlockManagerPoolTest.CompleteC4C128CombinationCountsOneCopyUnit.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.CopyBudgetTrimFallsBackPastMissingSwaWindow",
+    "exit": -6,
+    "elapsed_s": 1.4668561650905758,
+    "log": "HierarchyBlockManagerPoolTest.CopyBudgetTrimFallsBackPastMissingSwaWindow.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.ExistingHostPrefixSkipsDuplicateD2h",
+    "exit": 0,
+    "elapsed_s": 1.5160276989918202,
+    "log": "HierarchyBlockManagerPoolTest.ExistingHostPrefixSkipsDuplicateD2h.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.OffloadCompletionOwnsBlocksAndPublishesOnlyAfterAllWorkersSucceed",
+    "exit": -6,
+    "elapsed_s": 1.4173447520006448,
+    "log": "HierarchyBlockManagerPoolTest.OffloadCompletionOwnsBlocksAndPublishesOnlyAfterAllWorkersSucceed.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.StoragePrefetchTimeoutWaitsForWorkersToEnd",
+    "exit": 0,
+    "elapsed_s": 1.5163344349712133,
+    "log": "HierarchyBlockManagerPoolTest.StoragePrefetchTimeoutWaitsForWorkersToEnd.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.StoragePrefetchPublishesOnlyAfterAllTpWorkersEnd",
+    "exit": 0,
+    "elapsed_s": 1.4679202469997108,
+    "log": "HierarchyBlockManagerPoolTest.StoragePrefetchPublishesOnlyAfterAllTpWorkersEnd.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.CancelledStoragePrefetchReleasesReservedBlocks",
+    "exit": 0,
+    "elapsed_s": 1.5179426330141723,
+    "log": "HierarchyBlockManagerPoolTest.CancelledStoragePrefetchReleasesReservedBlocks.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.FailedStoragePrefetchDoesNotPublishHostPrefix",
+    "exit": 0,
+    "elapsed_s": 1.5178238549269736,
+    "log": "HierarchyBlockManagerPoolTest.FailedStoragePrefetchDoesNotPublishHostPrefix.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.MultiSequenceStoragePrefetchUsesOnlyFirstSequence",
+    "exit": 0,
+    "elapsed_s": 1.467622488969937,
+    "log": "HierarchyBlockManagerPoolTest.MultiSequenceStoragePrefetchUsesOnlyFirstSequence.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.TypedStoragePrefetchRetainsLongestPrefixWithinHostCapacity",
+    "exit": -6,
+    "elapsed_s": 1.416816801065579,
+    "log": "HierarchyBlockManagerPoolTest.TypedStoragePrefetchRetainsLongestPrefixWithinHostCapacity.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.TypedStoragePrefetchStopsAtFirstIncompleteUnit",
+    "exit": -6,
+    "elapsed_s": 1.4660998140461743,
+    "log": "HierarchyBlockManagerPoolTest.TypedStoragePrefetchStopsAtFirstIncompleteUnit.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.TypedLayoutSupportsStoragePrefetch",
+    "exit": -6,
+    "elapsed_s": 1.4188882519956678,
+    "log": "HierarchyBlockManagerPoolTest.TypedLayoutSupportsStoragePrefetch.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.SupportsLinearCacheLayout",
+    "exit": 0,
+    "elapsed_s": 1.4679847359657288,
+    "log": "HierarchyBlockManagerPoolTest.SupportsLinearCacheLayout.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.DecodeLinearLayoutOffloadsKvWithoutPrefixPrefetch",
+    "exit": 0,
+    "elapsed_s": 1.4659942840225995,
+    "log": "HierarchyBlockManagerPoolTest.DecodeLinearLayoutOffloadsKvWithoutPrefixPrefetch.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.LinearTailHostPrefetchKeepsMatchedStateWithoutRegularUnit",
+    "exit": 0,
+    "elapsed_s": 1.4681123199407011,
+    "log": "HierarchyBlockManagerPoolTest.LinearTailHostPrefetchKeepsMatchedStateWithoutRegularUnit.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.LinearStorePrefetchRestoresPartialTailCheckpoint",
+    "exit": 1,
+    "elapsed_s": 1.5180476461537182,
+    "log": "HierarchyBlockManagerPoolTest.LinearStorePrefetchRestoresPartialTailCheckpoint.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.LinearStorePrefetchDropsKvWhenOptionalCheckpointMisses",
+    "exit": 1,
+    "elapsed_s": 1.5175384990870953,
+    "log": "HierarchyBlockManagerPoolTest.LinearStorePrefetchDropsKvWhenOptionalCheckpointMisses.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.PrefetchLogsHostHitBeforeStoreGet",
+    "exit": 0,
+    "elapsed_s": 1.4165709828957915,
+    "log": "HierarchyBlockManagerPoolTest.PrefetchLogsHostHitBeforeStoreGet.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.LinearStorePrefetchDoesNotRepeatMatchedPartialUnit",
+    "exit": 1,
+    "elapsed_s": 1.5660898678470403,
+    "log": "HierarchyBlockManagerPoolTest.LinearStorePrefetchDoesNotRepeatMatchedPartialUnit.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.LinearTailHostOffloadBecomesVisibleAfterAllWorkersComplete",
+    "exit": 0,
+    "elapsed_s": 1.5173421769868582,
+    "log": "HierarchyBlockManagerPoolTest.LinearTailHostOffloadBecomesVisibleAfterAllWorkersComplete.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.DecodeLinearOffloadUsesCanonicalMtpCheckpointHash",
+    "exit": 0,
+    "elapsed_s": 1.4675601969938725,
+    "log": "HierarchyBlockManagerPoolTest.DecodeLinearOffloadUsesCanonicalMtpCheckpointHash.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.DecodeLinearCheckpointWindowFollowsCursor",
+    "exit": 0,
+    "elapsed_s": 1.4671187549829483,
+    "log": "HierarchyBlockManagerPoolTest.DecodeLinearCheckpointWindowFollowsCursor.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.DecodeLinearCheckpointRowTracksBoundaryOvershoot",
+    "exit": 0,
+    "elapsed_s": 1.417700754944235,
+    "log": "HierarchyBlockManagerPoolTest.DecodeLinearCheckpointRowTracksBoundaryOvershoot.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.LinearOptionalStoreMissLeavesSparseHostCheckpoint",
+    "exit": -6,
+    "elapsed_s": 1.4177452949807048,
+    "log": "HierarchyBlockManagerPoolTest.LinearOptionalStoreMissLeavesSparseHostCheckpoint.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.DuplicateHostLinearCheckpointDoesNotOffloadRestoredPrefix",
+    "exit": 0,
+    "elapsed_s": 1.467481252970174,
+    "log": "HierarchyBlockManagerPoolTest.DuplicateHostLinearCheckpointDoesNotOffloadRestoredPrefix.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.PrefillLinearOffloadsNewCheckpointsWhenHostFallsBehind",
+    "exit": 0,
+    "elapsed_s": 1.4676618028897792,
+    "log": "HierarchyBlockManagerPoolTest.PrefillLinearOffloadsNewCheckpointsWhenHostFallsBehind.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.TryAllocateMatchesHbmAndFloorsHostCursor",
+    "exit": -6,
+    "elapsed_s": 1.46786221396178,
+    "log": "HierarchyBlockManagerPoolTest.TryAllocateMatchesHbmAndFloorsHostCursor.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.ChunkedPrefillSwaCoversHostHitPlusChunk",
+    "exit": -6,
+    "elapsed_s": 1.5159446941688657,
+    "log": "HierarchyBlockManagerPoolTest.ChunkedPrefillSwaCoversHostHitPlusChunk.log"
+  },
+  {
+    "name": "HierarchyBlockManagerPoolTest.DecodeStepReleasesSwaAndOffloadsCompletedUnit",
+    "exit": -6,
+    "elapsed_s": 1.5172562850639224,
+    "log": "HierarchyBlockManagerPoolTest.DecodeStepReleasesSwaAndOffloadsCompletedUnit.log"
+  },
+  {
+    "name": "PrefetchResultTest.UsesMinimumContiguousUnitPrefixAcrossWorkers",
+    "exit": 0,
+    "elapsed_s": 1.5673233100678772,
+    "log": "PrefetchResultTest.UsesMinimumContiguousUnitPrefixAcrossWorkers.log"
+  },
+  {
+    "name": "PrefetchResultTest.WorkersAdvanceIndependently",
+    "exit": 0,
+    "elapsed_s": 1.4673720940481871,
+    "log": "PrefetchResultTest.WorkersAdvanceIndependently.log"
+  },
+  {
+    "name": "PrefetchResultTest.OptionalMissDoesNotStopGatePrefix",
+    "exit": 0,
+    "elapsed_s": 1.3670177508611232,
+    "log": "PrefetchResultTest.OptionalMissDoesNotStopGatePrefix.log"
+  },
+  {
+    "name": "PrefetchResultTest.LogicalHitsAreSummedAcrossWorkers",
+    "exit": 0,
+    "elapsed_s": 1.4663206590339541,
+    "log": "PrefetchResultTest.LogicalHitsAreSummedAcrossWorkers.log"
+  },
+  {
+    "name": "PrefetchResultTest.WorkerFailureMarksSummaryUnsuccessful",
+    "exit": 0,
+    "elapsed_s": 1.4177287281490862,
+    "log": "PrefetchResultTest.WorkerFailureMarksSummaryUnsuccessful.log"
+  },
+  {
+    "name": "PrefetchResultTest.StopsAfterCancellationOrTimeout",
+    "exit": 0,
+    "elapsed_s": 1.4661182169802487,
+    "log": "PrefetchResultTest.StopsAfterCancellationOrTimeout.log"
+  },
+  {
+    "name": "StoragePrefetchRequestTest.SwaMissPreservesCompressedGatePrefix",
+    "exit": 0,
+    "elapsed_s": 1.4176514849532396,
+    "log": "StoragePrefetchRequestTest.SwaMissPreservesCompressedGatePrefix.log"
+  },
+  {
+    "name": "LinearPrefetchSelectionTest.KeepsLatestUnwrittenFullHit",
+    "exit": 0,
+    "elapsed_s": 1.518580833915621,
+    "log": "LinearPrefetchSelectionTest.KeepsLatestUnwrittenFullHit.log"
+  },
+  {
+    "name": "LinearPrefetchSelectionTest.CompletedNextGroupOverwritesEarlierAlias",
+    "exit": 0,
+    "elapsed_s": 1.5182361910119653,
+    "log": "LinearPrefetchSelectionTest.CompletedNextGroupOverwritesEarlierAlias.log"
+  },
+  {
+    "name": "LinearPrefetchSelectionTest.HitPastKvPrefixOverwritesEarlierAlias",
+    "exit": 0,
+    "elapsed_s": 1.4182109420653433,
+    "log": "LinearPrefetchSelectionTest.HitPastKvPrefixOverwritesEarlierAlias.log"
+  },
+  {
+    "name": "LinearPrefetchSelectionTest.HostPrefixIsNotAPrefetchHit",
+    "exit": 0,
+    "elapsed_s": 1.4681666491087526,
+    "log": "LinearPrefetchSelectionTest.HostPrefixIsNotAPrefetchHit.log"
+  },
+  {
+    "name": "LinearPrefetchSelectionTest.HostPrefixIsNotInspected",
+    "exit": 0,
+    "elapsed_s": 1.5175083361100405,
+    "log": "LinearPrefetchSelectionTest.HostPrefixIsNotInspected.log"
+  },
+  {
+    "name": "LinearPrefetchSelectionTest.PartialGroupReuseKeepsEarlierBatch",
+    "exit": 0,
+    "elapsed_s": 1.4670710701029748,
+    "log": "LinearPrefetchSelectionTest.PartialGroupReuseKeepsEarlierBatch.log"
+  },
+  {
+    "name": "LinearPrefetchSelectionTest.TailCheckpointInsidePrefixIsKept",
+    "exit": 0,
+    "elapsed_s": 1.4685106030665338,
+    "log": "LinearPrefetchSelectionTest.TailCheckpointInsidePrefixIsKept.log"
+  },
+  {
+    "name": "LinearPrefetchSelectionTest.KeepsDeepestFullHitInsideKvPrefix",
+    "exit": 0,
+    "elapsed_s": 1.4682545708492398,
+    "log": "LinearPrefetchSelectionTest.KeepsDeepestFullHitInsideKvPrefix.log"
+  },
+  {
+    "name": "LinearPrefetchSelectionTest.MissPastKvPrefixDoesNotOverwrite",
+    "exit": 0,
+    "elapsed_s": 1.4685087448451668,
+    "log": "LinearPrefetchSelectionTest.MissPastKvPrefixDoesNotOverwrite.log"
+  },
+  {
+    "name": "LinearPrefetchSelectionTest.InvalidPastKvPrefixDoesNotOverwrite",
+    "exit": 0,
+    "elapsed_s": 1.4685237321536988,
+    "log": "LinearPrefetchSelectionTest.InvalidPastKvPrefixDoesNotOverwrite.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefillLeafUsesExplicitState/0",
+    "exit": 0,
+    "elapsed_s": 1.4684982930775732,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefillLeafUsesExplicitState_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefillLeafUsesExplicitState/1",
+    "exit": 0,
+    "elapsed_s": 1.4682666489388794,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefillLeafUsesExplicitState_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.DecodeReceiverUsesExplicitState/0",
+    "exit": 0,
+    "elapsed_s": 1.468396179843694,
+    "log": "PrefixCacheModes_LinearStateWindowTest.DecodeReceiverUsesExplicitState_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.DecodeReceiverUsesExplicitState/1",
+    "exit": 0,
+    "elapsed_s": 1.468408552929759,
+    "log": "PrefixCacheModes_LinearStateWindowTest.DecodeReceiverUsesExplicitState_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.HostDecodeCheckpointDoesNotAdvanceSequenceHashes/0",
+    "exit": 0,
+    "elapsed_s": 1.51851471606642,
+    "log": "PrefixCacheModes_LinearStateWindowTest.HostDecodeCheckpointDoesNotAdvanceSequenceHashes_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.HostDecodeCheckpointDoesNotAdvanceSequenceHashes/1",
+    "exit": 0,
+    "elapsed_s": 1.5185246490873396,
+    "log": "PrefixCacheModes_LinearStateWindowTest.HostDecodeCheckpointDoesNotAdvanceSequenceHashes_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.DecodeCheckpointPreserveRebuildsWindowAfterCrossingWithOneBlock/0",
+    "exit": 0,
+    "elapsed_s": 1.4684678679332137,
+    "log": "PrefixCacheModes_LinearStateWindowTest.DecodeCheckpointPreserveRebuildsWindowAfterCrossingWithOneBlock_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.DecodeCheckpointPreserveRebuildsWindowAfterCrossingWithOneBlock/1",
+    "exit": 0,
+    "elapsed_s": 1.468477652873844,
+    "log": "PrefixCacheModes_LinearStateWindowTest.DecodeCheckpointPreserveRebuildsWindowAfterCrossingWithOneBlock_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.DecodeReceiverAllocationIsOwnedByLeaf/0",
+    "exit": 0,
+    "elapsed_s": 1.5184595799073577,
+    "log": "PrefixCacheModes_LinearStateWindowTest.DecodeReceiverAllocationIsOwnedByLeaf_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.DecodeReceiverAllocationIsOwnedByLeaf/1",
+    "exit": 0,
+    "elapsed_s": 1.4683221098966897,
+    "log": "PrefixCacheModes_LinearStateWindowTest.DecodeReceiverAllocationIsOwnedByLeaf_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefillReceiverRejectsMissingStateAndRetries/0",
+    "exit": 0,
+    "elapsed_s": 1.5163016859441996,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefillReceiverRejectsMissingStateAndRetries_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefillReceiverRejectsMissingStateAndRetries/1",
+    "exit": 0,
+    "elapsed_s": 1.4683766518719494,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefillReceiverRejectsMissingStateAndRetries_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefillUsesTwoBlocksAndPublishesLogicalCheckpoints/0",
+    "exit": 0,
+    "elapsed_s": 1.4684956120327115,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefillUsesTwoBlocksAndPublishesLogicalCheckpoints_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefillUsesTwoBlocksAndPublishesLogicalCheckpoints/1",
+    "exit": 0,
+    "elapsed_s": 1.4663048489019275,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefillUsesTwoBlocksAndPublishesLogicalCheckpoints_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.ExhaustionPreservesSourceAndRollsBackKvGrowth/0",
+    "exit": 0,
+    "elapsed_s": 1.4685807130299509,
+    "log": "PrefixCacheModes_LinearStateWindowTest.ExhaustionPreservesSourceAndRollsBackKvGrowth_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.ExhaustionPreservesSourceAndRollsBackKvGrowth/1",
+    "exit": 0,
+    "elapsed_s": 1.4685943231452256,
+    "log": "PrefixCacheModes_LinearStateWindowTest.ExhaustionPreservesSourceAndRollsBackKvGrowth_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.SharedDecodeReadSlotBecomesPrivateBeforeSwap/0",
+    "exit": 0,
+    "elapsed_s": 1.4685842900071293,
+    "log": "PrefixCacheModes_LinearStateWindowTest.SharedDecodeReadSlotBecomesPrivateBeforeSwap_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.SharedDecodeReadSlotBecomesPrivateBeforeSwap/1",
+    "exit": 0,
+    "elapsed_s": 1.4686015730258077,
+    "log": "PrefixCacheModes_LinearStateWindowTest.SharedDecodeReadSlotBecomesPrivateBeforeSwap_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.SharedSingleDecodeSlotRequiresPrivateWrite/0",
+    "exit": 0,
+    "elapsed_s": 1.4690904279705137,
+    "log": "PrefixCacheModes_LinearStateWindowTest.SharedSingleDecodeSlotRequiresPrivateWrite_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.SharedSingleDecodeSlotRequiresPrivateWrite/1",
+    "exit": 0,
+    "elapsed_s": 1.4691005961503834,
+    "log": "PrefixCacheModes_LinearStateWindowTest.SharedSingleDecodeSlotRequiresPrivateWrite_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.SharedCheckpointReadIsPrivateBeforeNonOverlapSwap/0",
+    "exit": 0,
+    "elapsed_s": 1.4686621809378266,
+    "log": "PrefixCacheModes_LinearStateWindowTest.SharedCheckpointReadIsPrivateBeforeNonOverlapSwap_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.SharedCheckpointReadIsPrivateBeforeNonOverlapSwap/1",
+    "exit": 0,
+    "elapsed_s": 1.4702436490915716,
+    "log": "PrefixCacheModes_LinearStateWindowTest.SharedCheckpointReadIsPrivateBeforeNonOverlapSwap_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.SharedCurrentDecodeWriteIsRejectedWithoutAllocation/0",
+    "exit": 0,
+    "elapsed_s": 1.468702350044623,
+    "log": "PrefixCacheModes_LinearStateWindowTest.SharedCurrentDecodeWriteIsRejectedWithoutAllocation_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.SharedCurrentDecodeWriteIsRejectedWithoutAllocation/1",
+    "exit": 0,
+    "elapsed_s": 1.4671587399207056,
+    "log": "PrefixCacheModes_LinearStateWindowTest.SharedCurrentDecodeWriteIsRejectedWithoutAllocation_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.DecodeRollingExhaustionFallsBackToCurrentSource/0",
+    "exit": 0,
+    "elapsed_s": 1.4688393790274858,
+    "log": "PrefixCacheModes_LinearStateWindowTest.DecodeRollingExhaustionFallsBackToCurrentSource_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.DecodeRollingExhaustionFallsBackToCurrentSource/1",
+    "exit": 0,
+    "elapsed_s": 1.4688585260882974,
+    "log": "PrefixCacheModes_LinearStateWindowTest.DecodeRollingExhaustionFallsBackToCurrentSource_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.KvFailureDoesNotChangeLinearWindow/0",
+    "exit": 0,
+    "elapsed_s": 1.4688573831226677,
+    "log": "PrefixCacheModes_LinearStateWindowTest.KvFailureDoesNotChangeLinearWindow_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.KvFailureDoesNotChangeLinearWindow/1",
+    "exit": 0,
+    "elapsed_s": 1.4688750749919564,
+    "log": "PrefixCacheModes_LinearStateWindowTest.KvFailureDoesNotChangeLinearWindow_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.IncompleteKvGrowthRollsBackLinearAllocation/0",
+    "exit": 0,
+    "elapsed_s": 1.5190699270460755,
+    "log": "PrefixCacheModes_LinearStateWindowTest.IncompleteKvGrowthRollsBackLinearAllocation_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.IncompleteKvGrowthRollsBackLinearAllocation/1",
+    "exit": 0,
+    "elapsed_s": 1.518844692967832,
+    "log": "PrefixCacheModes_LinearStateWindowTest.IncompleteKvGrowthRollsBackLinearAllocation_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefillCapacityIsIndependentOfCheckpointStride/0",
+    "exit": 0,
+    "elapsed_s": 1.4690191259142011,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefillCapacityIsIndependentOfCheckpointStride_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefillCapacityIsIndependentOfCheckpointStride/1",
+    "exit": 0,
+    "elapsed_s": 1.4687906140461564,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefillCapacityIsIndependentOfCheckpointStride_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefillReusesTwoSlotsAcrossArbitraryChunks/0",
+    "exit": 0,
+    "elapsed_s": 1.4697571389842778,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefillReusesTwoSlotsAcrossArbitraryChunks_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefillReusesTwoSlotsAcrossArbitraryChunks/1",
+    "exit": 0,
+    "elapsed_s": 1.4695264198817313,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefillReusesTwoSlotsAcrossArbitraryChunks_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.ColdPrefillRequiresPrivateWriteSlot/0",
+    "exit": 0,
+    "elapsed_s": 1.568992564920336,
+    "log": "PrefixCacheModes_LinearStateWindowTest.ColdPrefillRequiresPrivateWriteSlot_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.ColdPrefillRequiresPrivateWriteSlot/1",
+    "exit": 0,
+    "elapsed_s": 1.5187864489853382,
+    "log": "PrefixCacheModes_LinearStateWindowTest.ColdPrefillRequiresPrivateWriteSlot_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.NonOverlapDecodePredictsAndRetiresCheckpoint/0",
+    "exit": 0,
+    "elapsed_s": 1.5663239429704845,
+    "log": "PrefixCacheModes_LinearStateWindowTest.NonOverlapDecodePredictsAndRetiresCheckpoint_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.NonOverlapDecodePredictsAndRetiresCheckpoint/1",
+    "exit": 0,
+    "elapsed_s": 1.5186279560439289,
+    "log": "PrefixCacheModes_LinearStateWindowTest.NonOverlapDecodePredictsAndRetiresCheckpoint_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.OverlapDecodePredictsAndResolvesCheckpoint/0",
+    "exit": 0,
+    "elapsed_s": 1.4688715569209307,
+    "log": "PrefixCacheModes_LinearStateWindowTest.OverlapDecodePredictsAndResolvesCheckpoint_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.OverlapDecodePredictsAndResolvesCheckpoint/1",
+    "exit": 0,
+    "elapsed_s": 1.4687362350523472,
+    "log": "PrefixCacheModes_LinearStateWindowTest.OverlapDecodePredictsAndResolvesCheckpoint_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.NullSequenceDoesNotAllocate/0",
+    "exit": 0,
+    "elapsed_s": 1.468589253956452,
+    "log": "PrefixCacheModes_LinearStateWindowTest.NullSequenceDoesNotAllocate_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.NullSequenceDoesNotAllocate/1",
+    "exit": 0,
+    "elapsed_s": 1.4686371970456094,
+    "log": "PrefixCacheModes_LinearStateWindowTest.NullSequenceDoesNotAllocate_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.AllowsSpeculativeSpanAboveHalfStride/0",
+    "exit": 0,
+    "elapsed_s": 1.4687152649275959,
+    "log": "PrefixCacheModes_LinearStateWindowTest.AllowsSpeculativeSpanAboveHalfStride_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.AllowsSpeculativeSpanAboveHalfStride/1",
+    "exit": 0,
+    "elapsed_s": 1.4665968881454319,
+    "log": "PrefixCacheModes_LinearStateWindowTest.AllowsSpeculativeSpanAboveHalfStride_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.FlatPrefixMountRestoresCachedTokens/0",
+    "exit": 0,
+    "elapsed_s": 1.4189648299943656,
+    "log": "PrefixCacheModes_LinearStateWindowTest.FlatPrefixMountRestoresCachedTokens_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.FlatPrefixMountRestoresCachedTokens/1",
+    "exit": 0,
+    "elapsed_s": 1.4689161099959165,
+    "log": "PrefixCacheModes_LinearStateWindowTest.FlatPrefixMountRestoresCachedTokens_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefixMountIsSparseAndMatchedOnlyOnce/0",
+    "exit": 0,
+    "elapsed_s": 1.5678024960216135,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefixMountIsSparseAndMatchedOnlyOnce_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefixMountIsSparseAndMatchedOnlyOnce/1",
+    "exit": 0,
+    "elapsed_s": 1.5175139389466494,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefixMountIsSparseAndMatchedOnlyOnce_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.DuplicateHashesStillAllocateDistinctOutputs/0",
+    "exit": 0,
+    "elapsed_s": 1.469385902164504,
+    "log": "PrefixCacheModes_LinearStateWindowTest.DuplicateHashesStillAllocateDistinctOutputs_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.DuplicateHashesStillAllocateDistinctOutputs/1",
+    "exit": 0,
+    "elapsed_s": 1.469023064011708,
+    "log": "PrefixCacheModes_LinearStateWindowTest.DuplicateHashesStillAllocateDistinctOutputs_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefixMissStaysMatchedUntilReset/0",
+    "exit": 0,
+    "elapsed_s": 1.4692194550298154,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefixMissStaysMatchedUntilReset_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PrefixMissStaysMatchedUntilReset/1",
+    "exit": 0,
+    "elapsed_s": 1.468981941929087,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PrefixMissStaysMatchedUntilReset_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.OverlapPrefillKeepsTwoBlocksWithoutCompletionHooks/0",
+    "exit": 0,
+    "elapsed_s": 1.4691771338693798,
+    "log": "PrefixCacheModes_LinearStateWindowTest.OverlapPrefillKeepsTwoBlocksWithoutCompletionHooks_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.OverlapPrefillKeepsTwoBlocksWithoutCompletionHooks/1",
+    "exit": 0,
+    "elapsed_s": 1.4689429099671543,
+    "log": "PrefixCacheModes_LinearStateWindowTest.OverlapPrefillKeepsTwoBlocksWithoutCompletionHooks_1.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PoolReleasesCancelledSequenceBeforeResults/0",
+    "exit": 0,
+    "elapsed_s": 1.4690011469647288,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PoolReleasesCancelledSequenceBeforeResults_0.log"
+  },
+  {
+    "name": "PrefixCacheModes/LinearStateWindowTest.PoolReleasesCancelledSequenceBeforeResults/1",
+    "exit": 0,
+    "elapsed_s": 1.4690080280415714,
+    "log": "PrefixCacheModes_LinearStateWindowTest.PoolReleasesCancelledSequenceBeforeResults_1.log"
+  },
+  {
+    "name": "Workers/HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd/0",
+    "exit": 0,
+    "elapsed_s": 1.4691480200272053,
+    "log": "Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_0.log"
+  },
+  {
+    "name": "Workers/HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd/1",
+    "exit": 0,
+    "elapsed_s": 1.469155834056437,
+    "log": "Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_1.log"
+  },
+  {
+    "name": "Workers/HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd/2",
+    "exit": 0,
+    "elapsed_s": 1.4691696050576866,
+    "log": "Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_2.log"
+  },
+  {
+    "name": "Workers/HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd/3",
+    "exit": 0,
+    "elapsed_s": 1.4709000440780073,
+    "log": "Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_3.log"
+  },
+  {
+    "name": "Workers/HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd/4",
+    "exit": 0,
+    "elapsed_s": 1.4691633379552513,
+    "log": "Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_4.log"
+  },
+  {
+    "name": "Workers/HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd/5",
+    "exit": 0,
+    "elapsed_s": 1.467226839857176,
+    "log": "Workers_HostOffloadCompletionTest.PublishesOnlyCompleteCopiesAfterAllWorkersEnd_5.log"
+  },
+  {
+    "name": "Completion/TypedHostOffloadTest.PreservesTypedReservationsUntilAllCopiesEnd/0",
+    "exit": -6,
+    "elapsed_s": 1.4194465731270611,
+    "log": "Completion_TypedHostOffloadTest.PreservesTypedReservationsUntilAllCopiesEnd_0.log"
+  },
+  {
+    "name": "Completion/TypedHostOffloadTest.PreservesTypedReservationsUntilAllCopiesEnd/1",
+    "exit": -6,
+    "elapsed_s": 1.4192093110177666,
+    "log": "Completion_TypedHostOffloadTest.PreservesTypedReservationsUntilAllCopiesEnd_1.log"
+  },
+  {
+    "name": "MultiChunkTail/LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint/0",
+    "exit": 0,
+    "elapsed_s": 1.469330821884796,
+    "log": "MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_0.log"
+  },
+  {
+    "name": "MultiChunkTail/LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint/1",
+    "exit": 0,
+    "elapsed_s": 1.4693387697916478,
+    "log": "MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_1.log"
+  },
+  {
+    "name": "MultiChunkTail/LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint/2",
+    "exit": 0,
+    "elapsed_s": 1.5194825930520892,
+    "log": "MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_2.log"
+  },
+  {
+    "name": "MultiChunkTail/LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint/3",
+    "exit": 0,
+    "elapsed_s": 1.5694142268039286,
+    "log": "MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_3.log"
+  },
+  {
+    "name": "MultiChunkTail/LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint/4",
+    "exit": 0,
+    "elapsed_s": 1.567699272185564,
+    "log": "MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_4.log"
+  },
+  {
+    "name": "MultiChunkTail/LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint/5",
+    "exit": 0,
+    "elapsed_s": 1.5176012238953263,
+    "log": "MultiChunkTail_LinearTailHostPrefetchTest.RetainsTailBoundaryWithoutPublishingRegularCheckpoint_5.log"
+  }
+]

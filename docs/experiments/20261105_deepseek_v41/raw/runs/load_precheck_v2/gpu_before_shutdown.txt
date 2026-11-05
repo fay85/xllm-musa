@@ -1,0 +1,118 @@
+Thu Nov  5 18:23:47 2026
+---------------------------------------------------------------------
+    mthreads-gmi:2.4.2           Driver Version:5.2.0-server
+---------------------------------------------------------------------
+ID   Name                 |PCIe                |%GPU  Mem             
+     Device Type   Perf   |Pcie Lane Width     |Temp  MPC Capable     
+                                               |      ECC Mode        
++-------------------------------------------------------------------+
+0    MTT S5000            |00000000:18:00.0    |0%    69971MiB(81920MiB)
+     Physical      N/A    |16x(16x)            |50C   YES             
+                                               |      On-die, EDC     
++-------------------------------------------------------------------+
+1    MTT S5000            |00000000:3a:00.0    |0%    69971MiB(81920MiB)
+     Physical      N/A    |16x(16x)            |49C   YES             
+                                               |      On-die, EDC     
++-------------------------------------------------------------------+
+2    MTT S5000            |00000000:4b:00.0    |0%    69971MiB(81920MiB)
+     Physical      N/A    |16x(16x)            |49C   YES             
+                                               |      On-die, EDC     
++-------------------------------------------------------------------+
+3    MTT S5000            |00000000:5c:00.0    |0%    69971MiB(81920MiB)
+     Physical      N/A    |16x(16x)            |50C   YES             
+                                               |      On-die, EDC     
++-------------------------------------------------------------------+
+4    MTT S5000            |00000000:9a:00.0    |0%    69971MiB(81920MiB)
+     Physical      N/A    |16x(16x)            |49C   YES             
+                                               |      On-die, EDC     
++-------------------------------------------------------------------+
+5    MTT S5000            |00000000:ba:00.0    |0%    69971MiB(81920MiB)
+     Physical      N/A    |16x(16x)            |49C   YES             
+                                               |      On-die, EDC     
++-------------------------------------------------------------------+
+6    MTT S5000            |00000000:ca:00.0    |0%    69971MiB(81920MiB)
+     Physical      N/A    |16x(16x)            |49C   YES             
+                                               |      On-die, EDC     
++-------------------------------------------------------------------+
+7    MTT S5000            |00000000:da:00.0    |0%    69971MiB(81920MiB)
+     Physical      N/A    |16x(16x)            |50C   YES             
+                                               |      On-die, EDC     
+---------------------------------------------------------------------
+
+---------------------------------------------------------------------
+Processes:
+ID   PID           Process name                           GPU Memory
+                                                               Usage
++-------------------------------------------------------------------+
+0    24611         /work/artifacts/bin/xllm                 69641MiB
+0    24612         /work/artifacts/bin/xllm                    47MiB
+0    24613         /work/artifacts/bin/xllm                    47MiB
+0    24614         /work/artifacts/bin/xllm                    47MiB
+0    24615         /work/artifacts/bin/xllm                    47MiB
+0    24616         /work/artifacts/bin/xllm                    47MiB
+0    24617         /work/artifacts/bin/xllm                    47MiB
+0    24618         /work/artifacts/bin/xllm                    47MiB
++-------------------------------------------------------------------+
+1    24611         /work/artifacts/bin/xllm                    47MiB
+1    24612         /work/artifacts/bin/xllm                 69641MiB
+1    24613         /work/artifacts/bin/xllm                    47MiB
+1    24614         /work/artifacts/bin/xllm                    47MiB
+1    24615         /work/artifacts/bin/xllm                    47MiB
+1    24616         /work/artifacts/bin/xllm                    47MiB
+1    24617         /work/artifacts/bin/xllm                    47MiB
+1    24618         /work/artifacts/bin/xllm                    47MiB
++-------------------------------------------------------------------+
+2    24611         /work/artifacts/bin/xllm                    47MiB
+2    24612         /work/artifacts/bin/xllm                    47MiB
+2    24613         /work/artifacts/bin/xllm                 69641MiB
+2    24614         /work/artifacts/bin/xllm                    47MiB
+2    24615         /work/artifacts/bin/xllm                    47MiB
+2    24616         /work/artifacts/bin/xllm                    47MiB
+2    24617         /work/artifacts/bin/xllm                    47MiB
+2    24618         /work/artifacts/bin/xllm                    47MiB
++-------------------------------------------------------------------+
+3    24611         /work/artifacts/bin/xllm                    47MiB
+3    24612         /work/artifacts/bin/xllm                    47MiB
+3    24613         /work/artifacts/bin/xllm                    47MiB
+3    24614         /work/artifacts/bin/xllm                 69641MiB
+3    24615         /work/artifacts/bin/xllm                    47MiB
+3    24616         /work/artifacts/bin/xllm                    47MiB
+3    24617         /work/artifacts/bin/xllm                    47MiB
+3    24618         /work/artifacts/bin/xllm                    47MiB
++-------------------------------------------------------------------+
+4    24611         /work/artifacts/bin/xllm                    47MiB
+4    24612         /work/artifacts/bin/xllm                    47MiB
+4    24613         /work/artifacts/bin/xllm                    47MiB
+4    24614         /work/artifacts/bin/xllm                    47MiB
+4    24615         /work/artifacts/bin/xllm                 69641MiB
+4    24616         /work/artifacts/bin/xllm                    47MiB
+4    24617         /work/artifacts/bin/xllm                    47MiB
+4    24618         /work/artifacts/bin/xllm                    47MiB
++-------------------------------------------------------------------+
+5    24611         /work/artifacts/bin/xllm                    47MiB
+5    24612         /work/artifacts/bin/xllm                    47MiB
+5    24613         /work/artifacts/bin/xllm                    47MiB
+5    24614         /work/artifacts/bin/xllm                    47MiB
+5    24615         /work/artifacts/bin/xllm                    47MiB
+5    24616         /work/artifacts/bin/xllm                 69641MiB
+5    24617         /work/artifacts/bin/xllm                    47MiB
+5    24618         /work/artifacts/bin/xllm                    47MiB
++-------------------------------------------------------------------+
+6    24611         /work/artifacts/bin/xllm                    47MiB
+6    24612         /work/artifacts/bin/xllm                    47MiB
+6    24613         /work/artifacts/bin/xllm                    47MiB
+6    24614         /work/artifacts/bin/xllm                    47MiB
+6    24615         /work/artifacts/bin/xllm                    47MiB
+6    24616         /work/artifacts/bin/xllm                    47MiB
+6    24617         /work/artifacts/bin/xllm                 69641MiB
+6    24618         /work/artifacts/bin/xllm                    47MiB
++-------------------------------------------------------------------+
+7    24611         /work/artifacts/bin/xllm                    47MiB
+7    24612         /work/artifacts/bin/xllm                    47MiB
+7    24613         /work/artifacts/bin/xllm                    47MiB
+7    24614         /work/artifacts/bin/xllm                    47MiB
+7    24615         /work/artifacts/bin/xllm                    47MiB
+7    24616         /work/artifacts/bin/xllm                    47MiB
+7    24617         /work/artifacts/bin/xllm                    47MiB
+7    24618         /work/artifacts/bin/xllm                 69641MiB
+---------------------------------------------------------------------

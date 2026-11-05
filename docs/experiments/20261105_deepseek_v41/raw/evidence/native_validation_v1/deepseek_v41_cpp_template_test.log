@@ -1,0 +1,23 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+[==========] Running 7 tests from 1 test suite.
+[----------] Global test environment set-up.
+[----------] 7 tests from DeepseekV41CppTemplate
+[ RUN      ] DeepseekV41CppTemplate.MixedMarkerAndImagesKeepPlaceholderCount
+[       OK ] DeepseekV41CppTemplate.MixedMarkerAndImagesKeepPlaceholderCount (0 ms)
+[ RUN      ] DeepseekV41CppTemplate.EscapedMarkerIsLiteralText
+[       OK ] DeepseekV41CppTemplate.EscapedMarkerIsLiteralText (0 ms)
+[ RUN      ] DeepseekV41CppTemplate.EscapedMarkerInStringMessageStaysLiteral
+[       OK ] DeepseekV41CppTemplate.EscapedMarkerInStringMessageStaysLiteral (0 ms)
+[ RUN      ] DeepseekV41CppTemplate.EscapedMarkerInStringMessageRestoresWithoutImage
+[       OK ] DeepseekV41CppTemplate.EscapedMarkerInStringMessageRestoresWithoutImage (0 ms)
+[ RUN      ] DeepseekV41CppTemplate.ContentOnlyImagesGetOnePlaceholderEach
+[       OK ] DeepseekV41CppTemplate.ContentOnlyImagesGetOnePlaceholderEach (0 ms)
+[ RUN      ] DeepseekV41CppTemplate.MatchingMarkersAreNotDoubled
+[       OK ] DeepseekV41CppTemplate.MatchingMarkersAreNotDoubled (0 ms)
+[ RUN      ] DeepseekV41CppTemplate.TextMarkerWithoutImagesSurvives
+[       OK ] DeepseekV41CppTemplate.TextMarkerWithoutImagesSurvives (0 ms)
+[----------] 7 tests from DeepseekV41CppTemplate (0 ms total)
+
+[----------] Global test environment tear-down
+[==========] 7 tests from 1 test suite ran. (0 ms total)
+[  PASSED  ] 7 tests.

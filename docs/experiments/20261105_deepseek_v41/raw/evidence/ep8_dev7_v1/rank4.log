@@ -1,0 +1,2 @@
+I20261105 17:46:57.402658 67 validate_ep8.py:72] rank=4 tokens=1 EP8 max_abs_error=0.0
+I20261105 17:46:58.844491 67 validate_ep8.py:72] rank=4 tokens=17 EP8 max_abs_error=0.0

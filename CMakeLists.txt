@@ -362,7 +362,10 @@ endif()
 
 # setup CMake module path, defines path for include() and find_package()
 list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-find_package(Rust REQUIRED)
+option(XLLM_PREBUILT_RUST_BINDINGS "Use explicitly validated image Rust bindings" OFF)
+if(NOT XLLM_PREBUILT_RUST_BINDINGS)
+  find_package(Rust REQUIRED)
+endif()
 
 if(UNIX)
   set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Og")

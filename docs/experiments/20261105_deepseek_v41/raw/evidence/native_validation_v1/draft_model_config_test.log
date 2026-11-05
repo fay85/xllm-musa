@@ -1,0 +1,59 @@
+Running main() from /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest_main.cc
+[==========] Running 15 tests from 2 test suites.
+[----------] Global test environment set-up.
+[----------] 1 test from DraftModelConfigDeathTest
+[ RUN      ] DraftModelConfigDeathTest.RequiresDraftPathForTargetCapture
+
+[WARNING] /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest-death-test.cc:1102:: Death tests use fork(), which is unsafe particularly in a threaded context. For this test, Google Test detected 2 threads. See https://github.com/google/googletest/blob/main/docs/advanced.md#death-tests-and-threads for more explanation and suggested solutions, especially if this is the last message you see before your test times out.
+[       OK ] DraftModelConfigDeathTest.RequiresDraftPathForTargetCapture (95 ms)
+[----------] 1 test from DraftModelConfigDeathTest (95 ms total)
+
+[----------] 14 tests from DraftCaptureConfigTest
+[ RUN      ] DraftCaptureConfigTest.ConfiguresTargetWithoutChangingModelGeometry
+[       OK ] DraftCaptureConfigTest.ConfiguresTargetWithoutChangingModelGeometry (0 ms)
+[ RUN      ] DraftCaptureConfigTest.ConvertsBoundaryIndicesForSharedDraftCapture
+[       OK ] DraftCaptureConfigTest.ConvertsBoundaryIndicesForSharedDraftCapture (0 ms)
+[ RUN      ] DraftCaptureConfigTest.PrefersLegacyPostLayerIndices
+[       OK ] DraftCaptureConfigTest.PrefersLegacyPostLayerIndices (0 ms)
+[ RUN      ] DraftCaptureConfigTest.AllowsEagleCaptureDefaultsForMissingConfig
+[       OK ] DraftCaptureConfigTest.AllowsEagleCaptureDefaultsForMissingConfig (0 ms)
+[ RUN      ] DraftCaptureConfigTest.RejectsMissingRequiredCaptureConfig
+
+[WARNING] /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest-death-test.cc:1102:: Death tests use fork(), which is unsafe particularly in a threaded context. For this test, Google Test detected 2 threads. See https://github.com/google/googletest/blob/main/docs/advanced.md#death-tests-and-threads for more explanation and suggested solutions, especially if this is the last message you see before your test times out.
+
+[WARNING] /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest-death-test.cc:1102:: Death tests use fork(), which is unsafe particularly in a threaded context. For this test, Google Test detected 2 threads. See https://github.com/google/googletest/blob/main/docs/advanced.md#death-tests-and-threads for more explanation and suggested solutions, especially if this is the last message you see before your test times out.
+[       OK ] DraftCaptureConfigTest.RejectsMissingRequiredCaptureConfig (177 ms)
+[ RUN      ] DraftCaptureConfigTest.RejectsEmbeddingCaptureBoundary
+
+[WARNING] /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest-death-test.cc:1102:: Death tests use fork(), which is unsafe particularly in a threaded context. For this test, Google Test detected 2 threads. See https://github.com/google/googletest/blob/main/docs/advanced.md#death-tests-and-threads for more explanation and suggested solutions, especially if this is the last message you see before your test times out.
+[       OK ] DraftCaptureConfigTest.RejectsEmbeddingCaptureBoundary (85 ms)
+[ RUN      ] DraftCaptureConfigTest.RejectsInvalidTargetCaptureLayers
+
+[WARNING] /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest-death-test.cc:1102:: Death tests use fork(), which is unsafe particularly in a threaded context. For this test, Google Test detected 2 threads. See https://github.com/google/googletest/blob/main/docs/advanced.md#death-tests-and-threads for more explanation and suggested solutions, especially if this is the last message you see before your test times out.
+
+[WARNING] /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest-death-test.cc:1102:: Death tests use fork(), which is unsafe particularly in a threaded context. For this test, Google Test detected 2 threads. See https://github.com/google/googletest/blob/main/docs/advanced.md#death-tests-and-threads for more explanation and suggested solutions, especially if this is the last message you see before your test times out.
+
+[WARNING] /workspace/vcpkg-xllm/buildtrees/gtest/src/v1.14.0-bcf93537a8.clean/googletest/src/gtest-death-test.cc:1102:: Death tests use fork(), which is unsafe particularly in a threaded context. For this test, Google Test detected 2 threads. See https://github.com/google/googletest/blob/main/docs/advanced.md#death-tests-and-threads for more explanation and suggested solutions, especially if this is the last message you see before your test times out.
+[       OK ] DraftCaptureConfigTest.RejectsInvalidTargetCaptureLayers (257 ms)
+[ RUN      ] DraftCaptureConfigTest.MaskRootAliasWinsOverTheTextConfigValue
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+W20261105 18:05:26.574852 16419 draft_model_config.cpp:243] Block-diffusion config drift: 'dspark_noise_token_id' resolved mask_token_id=128799 but 'text_config.dspark_noise_token_id' carries 1; the root-level value wins.
+[       OK ] DraftCaptureConfigTest.MaskRootAliasWinsOverTheTextConfigValue (0 ms)
+[ RUN      ] DraftCaptureConfigTest.MaskTextConfigFallbackResolves
+[       OK ] DraftCaptureConfigTest.MaskTextConfigFallbackResolves (0 ms)
+[ RUN      ] DraftCaptureConfigTest.MaskMissingEverywhereReturnsInvalid
+[       OK ] DraftCaptureConfigTest.MaskMissingEverywhereReturnsInvalid (0 ms)
+[ RUN      ] DraftCaptureConfigTest.MaskRootAliasesKeepTheirPrecedence
+[       OK ] DraftCaptureConfigTest.MaskRootAliasesKeepTheirPrecedence (0 ms)
+[ RUN      ] DraftCaptureConfigTest.BlockSizeRootKeyWinsOverTheTextConfigValue
+W20261105 18:05:26.575327 16419 draft_model_config.cpp:270] DSpark config drift: dspark_block_size=5 but text_config.dspark_block_size=7; the root-level value wins.
+[       OK ] DraftCaptureConfigTest.BlockSizeRootKeyWinsOverTheTextConfigValue (0 ms)
+[ RUN      ] DraftCaptureConfigTest.BlockSizeTextConfigFallbackResolves
+[       OK ] DraftCaptureConfigTest.BlockSizeTextConfigFallbackResolves (0 ms)
+[ RUN      ] DraftCaptureConfigTest.BlockSizeMissingEverywhereStaysZero
+[       OK ] DraftCaptureConfigTest.BlockSizeMissingEverywhereStaysZero (0 ms)
+[----------] 14 tests from DraftCaptureConfigTest (522 ms total)
+
+[----------] Global test environment tear-down
+[==========] 15 tests from 2 test suites ran. (617 ms total)
+[  PASSED  ] 15 tests.

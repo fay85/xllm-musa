@@ -1,0 +1,150 @@
+{
+  "status": "PASS",
+  "scope": "one real layer-0 expert, three projections, synthetic quantized activations; no MoE integration",
+  "cases": [
+    {
+      "projection": "w1",
+      "shape_N_K": [
+        2304,
+        5120
+      ],
+      "tokens": 17,
+      "status": "PASS",
+      "finite_elements": 39168,
+      "total_elements": 39168,
+      "close_elements": 39168,
+      "max_abs_error": 0.0,
+      "scale_min": 119,
+      "scale_max": 122,
+      "max_residual_exponent": 129,
+      "weight": {
+        "name": "layers.0.ffn.experts.0.w1.weight",
+        "file": "model-00003-of-00048.safetensors",
+        "entry": {
+          "dtype": "I8",
+          "shape": [
+            2304,
+            2560
+          ],
+          "data_offsets": [
+            594728408,
+            600626648
+          ]
+        },
+        "payload_sha256": "84c55fa21fcbf91d97372c49ab1556220d50fd613219b9fe975da493e071d9a4"
+      },
+      "scale": {
+        "name": "layers.0.ffn.experts.0.w1.scale",
+        "file": "model-00003-of-00048.safetensors",
+        "entry": {
+          "dtype": "F8_E8M0",
+          "shape": [
+            2304,
+            160
+          ],
+          "data_offsets": [
+            8015576,
+            8384216
+          ]
+        },
+        "payload_sha256": "4df334ae5e4ade9cc3930a2bdc1037f11c86c2d9e983265a2b99fc934523f124"
+      }
+    },
+    {
+      "projection": "w3",
+      "shape_N_K": [
+        2304,
+        5120
+      ],
+      "tokens": 17,
+      "status": "PASS",
+      "finite_elements": 39168,
+      "total_elements": 39168,
+      "close_elements": 39168,
+      "max_abs_error": 0.0,
+      "scale_min": 119,
+      "scale_max": 122,
+      "max_residual_exponent": 129,
+      "weight": {
+        "name": "layers.0.ffn.experts.0.w3.weight",
+        "file": "model-00003-of-00048.safetensors",
+        "entry": {
+          "dtype": "I8",
+          "shape": [
+            2304,
+            2560
+          ],
+          "data_offsets": [
+            606524888,
+            612423128
+          ]
+        },
+        "payload_sha256": "5d97e59e44062ca5935797ed44940f805e5f42805622c2af9c515a3aa9b28589"
+      },
+      "scale": {
+        "name": "layers.0.ffn.experts.0.w3.scale",
+        "file": "model-00003-of-00048.safetensors",
+        "entry": {
+          "dtype": "F8_E8M0",
+          "shape": [
+            2304,
+            160
+          ],
+          "data_offsets": [
+            8752856,
+            9121496
+          ]
+        },
+        "payload_sha256": "1b0736c3398262d06c130802ee3bee11eb21cbdf96c60639a00a9d262d5ad365"
+      }
+    },
+    {
+      "projection": "w2",
+      "shape_N_K": [
+        5120,
+        2304
+      ],
+      "tokens": 17,
+      "status": "PASS",
+      "finite_elements": 87040,
+      "total_elements": 87040,
+      "close_elements": 87040,
+      "max_abs_error": 0.0,
+      "scale_min": 119,
+      "scale_max": 123,
+      "max_residual_exponent": 130,
+      "weight": {
+        "name": "layers.0.ffn.experts.0.w2.weight",
+        "file": "model-00003-of-00048.safetensors",
+        "entry": {
+          "dtype": "I8",
+          "shape": [
+            5120,
+            1152
+          ],
+          "data_offsets": [
+            600626648,
+            606524888
+          ]
+        },
+        "payload_sha256": "45bf4d6f7d2c9e6b6bd6b12e8cafcbae83dca2b769061c6c952ee9274df77079"
+      },
+      "scale": {
+        "name": "layers.0.ffn.experts.0.w2.scale",
+        "file": "model-00003-of-00048.safetensors",
+        "entry": {
+          "dtype": "F8_E8M0",
+          "shape": [
+            5120,
+            72
+          ],
+          "data_offsets": [
+            8384216,
+            8752856
+          ]
+        },
+        "payload_sha256": "2952c7e29c793783ce608363d9cc81149821a94e8f5d988fd2591c4730f18a17"
+      }
+    }
+  ]
+}

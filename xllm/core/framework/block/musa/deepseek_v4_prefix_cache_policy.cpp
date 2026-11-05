@@ -312,14 +312,15 @@ bool try_restore_deepseek_v4_prefix(const BlockManagerPool* owner,
   sequence->update_block_hashes(base_block_size, hasher_type);
   const size_t full_blocks =
       std::min(sequence->tokens().size() / base_block_size,
-               sequence->block_hashes().size());
+               sequence->block_hashes(base_block_size).size());
   PrefixCache& cache = pool_state->caches[static_cast<size_t>(dp_rank)];
   for (size_t block_count = full_blocks; block_count > 0; --block_count) {
     const size_t prefix_tokens = block_count * base_block_size;
     if (prefix_tokens >= sequence->tokens().size()) {
       continue;
     }
-    const XXH3Key& key = sequence->block_hashes()[block_count - 1];
+    const XXH3Key& key =
+        sequence->block_hashes(base_block_size)[block_count - 1];
     auto entry_it = cache.find(key);
     if (entry_it == cache.end() || !entry_it->second.ready ||
         entry_it->second.prefix_tokens != prefix_tokens ||
@@ -390,10 +391,11 @@ void prepare_deepseek_v4_prefix_snapshot(
 
   sequence->update_block_hashes(base_block_size, hasher_type);
   const size_t block_count = prefix_tokens / base_block_size;
-  if (block_count == 0 || sequence->block_hashes().size() < block_count) {
+  if (block_count == 0 ||
+      sequence->block_hashes(base_block_size).size() < block_count) {
     return;
   }
-  const XXH3Key key = sequence->block_hashes()[block_count - 1];
+  const XXH3Key key = sequence->block_hashes(base_block_size)[block_count - 1];
   PrefixCache& cache = pool_state->caches[static_cast<size_t>(dp_rank)];
   if (cache.find(key) != cache.end()) {
     return;
