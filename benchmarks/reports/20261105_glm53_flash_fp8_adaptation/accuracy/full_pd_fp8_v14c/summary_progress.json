@@ -1,0 +1,55 @@
+{
+  "updated_at": "2026-11-05T10:47:03.575626+08:00",
+  "implementation": "v14c 1P1D per-roleTP8/EP8 eager recurrentKDA FP32TP",
+  "expected_questions": 100,
+  "completed_scored_questions": 100,
+  "original_attempts_finished": 100,
+  "original_transport_attempt_failures": 1,
+  "transport_recovery_scored_ids": [
+    "mathqa-test-0071"
+  ],
+  "original_attempts_including_transport_failure": {
+    "correct": 91,
+    "http200": 99,
+    "denominator": 100,
+    "accuracy_percent": 91.0
+  },
+  "complete": true,
+  "matched_subset": {
+    "local_correct": 92,
+    "official_correct": 93,
+    "agreement": 95,
+    "denominator": 100,
+    "local_accuracy_percent": 92.0,
+    "official_accuracy_percent": 93.0,
+    "local_minus_official_pp": -1.0,
+    "agreement_percent": 95.0
+  },
+  "local_errors": {
+    "http_or_transport": 0,
+    "truncated": 1,
+    "format": 1
+  },
+  "completion_tokens": {
+    "local": 17383,
+    "official_same_questions": 13776
+  },
+  "discordant_question_ids": [
+    "mathqa-test-0020",
+    "mathqa-test-0031",
+    "mathqa-test-0076",
+    "mathqa-test-0088",
+    "mathqa-test-0098"
+  ],
+  "wrong_to_label_ids": [
+    "mathqa-test-0031",
+    "mathqa-test-0037",
+    "mathqa-test-0042",
+    "mathqa-test-0076",
+    "mathqa-test-0088",
+    "mathqa-test-0093",
+    "mathqa-test-0097",
+    "mathqa-test-0098"
+  ],
+  "rules": "Original responses except explicit predeclared transport recovery0071; all attempts preserved, diagnostic repeats excluded. Dataset concerns never change frozen raw labels. Partial official accuracy uses same completed question IDs; not official full100 score or leaderboard reproduction."
+}

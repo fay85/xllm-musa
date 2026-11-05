@@ -1,0 +1,37 @@
+"""CPU-only LAN client. Preserve every attempt; never automatically retry."""
+from pathlib import Path
+import argparse,datetime,hashlib,json,os,re,time
+import requests
+p=argparse.ArgumentParser();p.add_argument('plan',type=Path);a=p.parse_args();plan=json.loads(a.plan.read_text())
+root=Path('/work');out=root/'eval'/plan['run'];out.mkdir(exist_ok=False)
+for name,digest in plan['source']['files'].items():assert hashlib.sha256((root/'source_v14c/xllm-musa'/name).read_bytes()).hexdigest()==digest
+(out/'job.json').write_text(json.dumps({'pid':os.getpid(),'started_at':datetime.datetime.now().astimezone().isoformat(),'plan_sha256':hashlib.sha256(a.plan.read_bytes()).hexdigest(),'client_location':'sj10 own container, CPU HTTP client; not a model worker','model_unchanged':True,'automatic_retries':False},indent=2))
+session=requests.Session();session.trust_env=False
+for item in plan['items']:
+ if (out/'STOP').exists():raise SystemExit('Explicit STOP; no next request submitted')
+ payload=item['request'];assert (payload['temperature'],payload['top_p'],payload['reasoning_effort'],payload['max_tokens'])==(0,1,'low',4096)
+ target=out/item['filename'];assert target.parent==out and not target.exists()
+ record={k:v for k,v in item.items() if k!='filename'};record.update(endpoint=plan['endpoint'],implementation=plan['source'],repeat_index=item.get('repeat_index',0),diagnostic_repeat_excluded_from_primary_score=item.get('repeat_index',0)>0,started_at=datetime.datetime.now().astimezone().isoformat(),client_location='sj10 CPU LAN',scorer_version='final-visible-v2-think-boundary')
+ record['request_sha256']=hashlib.sha256(json.dumps(payload,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+ temporary=target.with_suffix('.pending');temporary.write_text(json.dumps(record,ensure_ascii=False,indent=2))
+ start=time.monotonic()
+ try:
+  response=session.post(plan['endpoint'],json=payload,timeout=(20,3900));record['http_status']=response.status_code
+  try:body=response.json()
+  except ValueError:body={'unparsed_response':response.text}
+  record['response']=body
+  if response.status_code==200:
+   choice=body['choices'][0];message=choice.get('message',{});text=message.get('content') or '';final=text.rsplit('</think>',1)[-1];normalized=final.strip()
+   matches=re.findall(r'(?im)^\s*(?:\*\*)?ANSWER\s*:\s*([A-E])\b(?:\*\*)?\s*[.。]?\s*$',normalized)
+   answer,error=None,'missing_or_ambiguous_final_answer'
+   if matches and len({x.upper() for x in matches})==1:answer,error=matches[-1].upper(),None
+   elif re.fullmatch(r'[A-Ea-e][.。]?',normalized):answer,error=normalized[0].upper(),'bare_letter_instead_of_requested_format'
+   if '</think>' not in text and 'reasoning_content' not in message:answer,error=None,'missing_local_reasoning_boundary'
+   truncated=choice.get('finish_reason')=='length'
+   record.update(final_content=final,answer=answer,format_error=error,truncated=truncated,finish_reason=choice.get('finish_reason'),usage=body.get('usage'),correct=answer==item['ground_truth'] and not truncated,agrees_with_official=answer==item['official_answer'] and not truncated,reasoning_separate_field='reasoning_content' in message)
+  else:record['error']=body
+ except requests.RequestException as error:record['error']=f'{type(error).__name__}: {error}'
+ record['elapsed_seconds']=time.monotonic()-start;temporary.write_text(json.dumps(record,ensure_ascii=False,indent=2));temporary.replace(target)
+ print(json.dumps({k:record.get(k) for k in ['question_id','repeat_index','operational_retry_index','http_status','answer','correct','agrees_with_official','truncated','usage','error','elapsed_seconds']},ensure_ascii=False),flush=True)
+ if record.get('http_status')!=200:raise SystemExit(2)
+(out/'complete.json').write_text(json.dumps({'finished_at':datetime.datetime.now().astimezone().isoformat(),'items':len(plan['items'])},indent=2))

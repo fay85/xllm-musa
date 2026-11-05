@@ -1,0 +1,30 @@
+{
+  "qualified": true,
+  "comparison_correction": "Compare token count fields; router adds cached_tokens metadata. No request rerun or raw result edits.",
+  "checks": [
+    {
+      "prompt_tokens": 4,
+      "completion_tokens": 8,
+      "same_text": true,
+      "same_usage_counts": true,
+      "same_finish": true,
+      "pd_seconds": 153.9555578629952
+    },
+    {
+      "prompt_tokens": 4,
+      "completion_tokens": 8,
+      "same_text": true,
+      "same_usage_counts": true,
+      "same_finish": true,
+      "pd_seconds": 0.31086157402023673
+    },
+    {
+      "prompt_tokens": 140,
+      "completion_tokens": 8,
+      "same_text": true,
+      "same_usage_counts": true,
+      "same_finish": true,
+      "pd_seconds": 1.7796203920152038
+    }
+  ]
+}

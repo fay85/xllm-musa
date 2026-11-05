@@ -1,0 +1,8 @@
+{
+  "question_id": "mathqa-test-0071",
+  "scored_response_file": "mathqa-test-0071_transport_retry1.json",
+  "original_attempt_file": "mathqa-test-0071.json",
+  "original_attempt_sha256": "c614cc4e93e7dc34a663284785bf537c9a7beb8047f7423c0245c57c0355c663",
+  "rule": "First captured valid response after explicitly recorded transport recovery. Never select a higher-scoring answer. Original request was generated on server, but answer was not received; original answer remains unknown.",
+  "accepted_before_recovery_result_known": true
+}

@@ -86,6 +86,25 @@ class W8A8WeightLoader:
             return dequantize_fp8_block_to_bf16(tensor, scale_dict.get_tensor(scale_name))
         return tensor
 
+    def load_raw_fp8(self, name: str) -> tuple[torch.Tensor, torch.Tensor]:
+        """Read canonical checkpoint bytes and scales without dequantization."""
+        if not name.endswith(".weight"):
+            raise ValueError(f"FP8 loading requires a weight key: {name}")
+        scale_name = name[:-len("weight")] + "weight_scale_inv"
+        sd, scale_sd = self.find(name), self.find(scale_name)
+        if sd is None or scale_sd is None:
+            raise ValueError(f"Missing original FP8 weight or block scale: {name}")
+        weight, scale = sd.get_tensor(name), scale_sd.get_tensor(scale_name)
+        if weight.dtype != torch.float8_e4m3fn or weight.ndim != 2:
+            raise ValueError(f"Expected a two-dimensional E4M3 checkpoint weight: {name}")
+        if any(dim % 128 for dim in weight.shape):
+            raise ValueError(f"MegaMoE requires block-aligned expert dimensions: {name}")
+        if scale.dtype != torch.float32 or scale.shape != tuple(dim // 128 for dim in weight.shape):
+            raise ValueError(f"Invalid FP8 128x128 scale layout: {name}")
+        if not torch.isfinite(scale).all() or (scale < 0).any():
+            raise ValueError(f"Invalid FP8 scale values: {name}")
+        return weight, scale
+
     def shard(
         self,
         t: torch.Tensor,

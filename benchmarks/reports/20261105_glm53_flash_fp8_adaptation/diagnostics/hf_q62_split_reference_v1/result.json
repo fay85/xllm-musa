@@ -1,0 +1,2417 @@
+[
+  {
+    "position": 115,
+    "top20": [
+      {
+        "id": 10154,
+        "text": "Day",
+        "logit": 21.625
+      },
+      {
+        "id": 5842,
+        "text": "Last",
+        "logit": 20.25
+      },
+      {
+        "id": 15352,
+        "text": "Today",
+        "logit": 20.0
+      },
+      {
+        "id": 55972,
+        "text": "Trip",
+        "logit": 19.25
+      },
+      {
+        "id": 18,
+        "text": "3",
+        "logit": 18.375
+      },
+      {
+        "id": 34,
+        "text": "C",
+        "logit": 17.625
+      },
+      {
+        "id": 1,
+        "text": "\"",
+        "logit": 17.5
+      },
+      {
+        "id": 785,
+        "text": "The",
+        "logit": 17.5
+      },
+      {
+        "id": 37592,
+        "text": "Thursday",
+        "logit": 17.5
+      },
+      {
+        "id": 1282,
+        "text": "Tr",
+        "logit": 16.125
+      },
+      {
+        "id": 1292,
+        "text": "day",
+        "logit": 15.6875
+      },
+      {
+        "id": 10017,
+        "text": "\"The",
+        "logit": 15.625
+      },
+      {
+        "id": 39978,
+        "text": "Tuesday",
+        "logit": 15.625
+      },
+      {
+        "id": 35065,
+        "text": "Monday",
+        "logit": 15.1875
+      },
+      {
+        "id": 19604,
+        "text": "Three",
+        "logit": 15.0625
+      },
+      {
+        "id": 40297,
+        "text": "Wednesday",
+        "logit": 15.0
+      },
+      {
+        "id": 1986,
+        "text": "This",
+        "logit": 14.5625
+      },
+      {
+        "id": 4259,
+        "text": "last",
+        "logit": 14.4375
+      },
+      {
+        "id": 8855,
+        "text": "Reference",
+        "logit": 14.375
+      },
+      {
+        "id": 29996,
+        "text": "today",
+        "logit": 14.375
+      }
+    ]
+  },
+  {
+    "position": 116,
+    "top20": [
+      {
+        "id": 1283,
+        "text": " after",
+        "logit": 27.0
+      },
+      {
+        "id": 1573,
+        "text": " before",
+        "logit": 18.25
+      },
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 17.0
+      },
+      {
+        "id": 1899,
+        "text": " day",
+        "logit": 15.9375
+      },
+      {
+        "id": 25,
+        "text": ":",
+        "logit": 15.0
+      },
+      {
+        "id": 284,
+        "text": " =",
+        "logit": 14.75
+      },
+      {
+        "id": 8410,
+        "text": " trip",
+        "logit": 13.875
+      },
+      {
+        "id": 4636,
+        "text": " After",
+        "logit": 13.5
+      },
+      {
+        "id": 315,
+        "text": " of",
+        "logit": 13.5
+      },
+      {
+        "id": 330,
+        "text": " \"",
+        "logit": 13.1875
+      },
+      {
+        "id": 10689,
+        "text": "after",
+        "logit": 12.875
+      },
+      {
+        "id": 127849,
+        "text": " после",
+        "logit": 12.25
+      },
+      {
+        "id": 3351,
+        "text": " today",
+        "logit": 12.1875
+      },
+      {
+        "id": 2326,
+        "text": " three",
+        "logit": 12.125
+      },
+      {
+        "id": 28,
+        "text": "=",
+        "logit": 11.9375
+      },
+      {
+        "id": 44315,
+        "text": "-after",
+        "logit": 11.9375
+      },
+      {
+        "id": 1537,
+        "text": " last",
+        "logit": 11.8125
+      },
+      {
+        "id": 1378,
+        "text": " two",
+        "logit": 11.75
+      },
+      {
+        "id": 1760,
+        "text": " count",
+        "logit": 11.5625
+      },
+      {
+        "id": 320,
+        "text": " (",
+        "logit": 11.3125
+      }
+    ]
+  },
+  {
+    "position": 117,
+    "top20": [
+      {
+        "id": 1537,
+        "text": " last",
+        "logit": 27.25
+      },
+      {
+        "id": 7014,
+        "text": " Monday",
+        "logit": 18.625
+      },
+      {
+        "id": 1790,
+        "text": " next",
+        "logit": 16.125
+      },
+      {
+        "id": 7995,
+        "text": " Last",
+        "logit": 15.25
+      },
+      {
+        "id": 92417,
+        "text": " monday",
+        "logit": 14.125
+      },
+      {
+        "id": 4259,
+        "text": "last",
+        "logit": 13.9375
+      },
+      {
+        "id": 419,
+        "text": " this",
+        "logit": 13.8125
+      },
+      {
+        "id": 32938,
+        "text": "\tlast",
+        "logit": 13.5
+      },
+      {
+        "id": 47004,
+        "text": " LAST",
+        "logit": 13.4375
+      },
+      {
+        "id": 330,
+        "text": " \"",
+        "logit": 13.375
+      },
+      {
+        "id": 3351,
+        "text": " today",
+        "logit": 13.375
+      },
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 13.25
+      },
+      {
+        "id": 60094,
+        "text": "-last",
+        "logit": 13.1875
+      },
+      {
+        "id": 13662,
+        "text": " yesterday",
+        "logit": 13.125
+      },
+      {
+        "id": 1429,
+        "text": " most",
+        "logit": 13.0
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 13.0
+      },
+      {
+        "id": 12189,
+        "text": "_last",
+        "logit": 12.875
+      },
+      {
+        "id": 9107,
+        "text": ".last",
+        "logit": 12.8125
+      },
+      {
+        "id": 7589,
+        "text": " Tuesday",
+        "logit": 12.75
+      },
+      {
+        "id": 264,
+        "text": " a",
+        "logit": 12.6875
+      }
+    ]
+  },
+  {
+    "position": 118,
+    "top20": [
+      {
+        "id": 7014,
+        "text": " Monday",
+        "logit": 27.375
+      },
+      {
+        "id": 92417,
+        "text": " monday",
+        "logit": 22.875
+      },
+      {
+        "id": 7589,
+        "text": " Tuesday",
+        "logit": 16.625
+      },
+      {
+        "id": 35065,
+        "text": "Monday",
+        "logit": 15.5625
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 15.375
+      },
+      {
+        "id": 1537,
+        "text": " last",
+        "logit": 15.0
+      },
+      {
+        "id": 284,
+        "text": " =",
+        "logit": 14.5
+      },
+      {
+        "id": 7270,
+        "text": " Sunday",
+        "logit": 14.375
+      },
+      {
+        "id": 8673,
+        "text": " relative",
+        "logit": 14.1875
+      },
+      {
+        "id": 320,
+        "text": " (",
+        "logit": 14.0625
+      },
+      {
+        "id": 1615,
+        "text": " mon",
+        "logit": 13.8125
+      },
+      {
+        "id": 6602,
+        "text": " Friday",
+        "logit": 13.8125
+      },
+      {
+        "id": 3128,
+        "text": " Mon",
+        "logit": 13.4375
+      },
+      {
+        "id": 25,
+        "text": ":",
+        "logit": 13.375
+      },
+      {
+        "id": 7920,
+        "text": " Wednesday",
+        "logit": 13.25
+      },
+      {
+        "id": 7794,
+        "text": " Thursday",
+        "logit": 13.125
+      },
+      {
+        "id": 109714,
+        "text": "周一",
+        "logit": 12.4375
+      },
+      {
+        "id": 7728,
+        "text": " Saturday",
+        "logit": 12.3125
+      },
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 12.125
+      },
+      {
+        "id": 89427,
+        "text": " Mondays",
+        "logit": 11.875
+      }
+    ]
+  },
+  {
+    "position": 119,
+    "top20": [
+      {
+        "id": 284,
+        "text": " =",
+        "logit": 26.25
+      },
+      {
+        "id": 25,
+        "text": ":",
+        "logit": 22.375
+      },
+      {
+        "id": 374,
+        "text": " is",
+        "logit": 20.875
+      },
+      {
+        "id": 28,
+        "text": "=",
+        "logit": 18.875
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 18.625
+      },
+      {
+        "id": 11,
+        "text": ",",
+        "logit": 18.25
+      },
+      {
+        "id": 26,
+        "text": ";",
+        "logit": 17.5
+      },
+      {
+        "id": 7589,
+        "text": " Tuesday",
+        "logit": 17.0
+      },
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 16.75
+      },
+      {
+        "id": 13,
+        "text": ".",
+        "logit": 16.75
+      },
+      {
+        "id": 8673,
+        "text": " relative",
+        "logit": 16.375
+      },
+      {
+        "id": 1959,
+        "text": " —",
+        "logit": 16.25
+      },
+      {
+        "id": 504,
+        "text": " from",
+        "logit": 15.9375
+      },
+      {
+        "id": 11392,
+        "text": " →",
+        "logit": 15.9375
+      },
+      {
+        "id": 320,
+        "text": " (",
+        "logit": 15.875
+      },
+      {
+        "id": 60040,
+        "text": "=T",
+        "logit": 15.0625
+      },
+      {
+        "id": 1940,
+        "text": "…",
+        "logit": 14.9375
+      },
+      {
+        "id": 1573,
+        "text": " before",
+        "logit": 14.5625
+      },
+      {
+        "id": 21056,
+        "text": " �",
+        "logit": 14.5
+      },
+      {
+        "id": 2293,
+        "text": "—",
+        "logit": 14.3125
+      }
+    ]
+  },
+  {
+    "position": 120,
+    "top20": [
+      {
+        "id": 7589,
+        "text": " Tuesday",
+        "logit": 26.625
+      },
+      {
+        "id": 1537,
+        "text": " last",
+        "logit": 21.25
+      },
+      {
+        "id": 419,
+        "text": " this",
+        "logit": 19.375
+      },
+      {
+        "id": 3351,
+        "text": " today",
+        "logit": 18.25
+      },
+      {
+        "id": 13662,
+        "text": " yesterday",
+        "logit": 16.5
+      },
+      {
+        "id": 1790,
+        "text": " next",
+        "logit": 15.9375
+      },
+      {
+        "id": 7014,
+        "text": " Monday",
+        "logit": 15.8125
+      },
+      {
+        "id": 7920,
+        "text": " Wednesday",
+        "logit": 15.8125
+      },
+      {
+        "id": 39978,
+        "text": "Tuesday",
+        "logit": 15.75
+      },
+      {
+        "id": 38955,
+        "text": " Tue",
+        "logit": 15.625
+      },
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 15.4375
+      },
+      {
+        "id": 2503,
+        "text": " ...",
+        "logit": 15.0
+      },
+      {
+        "id": 6602,
+        "text": " Friday",
+        "logit": 14.9375
+      },
+      {
+        "id": 7728,
+        "text": " Saturday",
+        "logit": 14.75
+      },
+      {
+        "id": 82001,
+        "text": " Tues",
+        "logit": 14.6875
+      },
+      {
+        "id": 7270,
+        "text": " Sunday",
+        "logit": 14.625
+      },
+      {
+        "id": 7794,
+        "text": " Thursday",
+        "logit": 14.625
+      },
+      {
+        "id": 320,
+        "text": " (",
+        "logit": 14.4375
+      },
+      {
+        "id": 3681,
+        "text": " previous",
+        "logit": 14.1875
+      },
+      {
+        "id": 421,
+        "text": " if",
+        "logit": 13.9375
+      }
+    ]
+  },
+  {
+    "position": 121,
+    "top20": [
+      {
+        "id": 26,
+        "text": ";",
+        "logit": 23.25
+      },
+      {
+        "id": 11,
+        "text": ",",
+        "logit": 19.75
+      },
+      {
+        "id": 13,
+        "text": ".",
+        "logit": 19.125
+      },
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 17.75
+      },
+      {
+        "id": 320,
+        "text": " (",
+        "logit": 17.25
+      },
+      {
+        "id": 1537,
+        "text": " last",
+        "logit": 15.5625
+      },
+      {
+        "id": 315,
+        "text": " of",
+        "logit": 15.25
+      },
+      {
+        "id": 3351,
+        "text": " today",
+        "logit": 14.9375
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 14.9375
+      },
+      {
+        "id": 421,
+        "text": " if",
+        "logit": 14.3125
+      },
+      {
+        "id": 3697,
+        "text": " came",
+        "logit": 13.5
+      },
+      {
+        "id": 419,
+        "text": " this",
+        "logit": 13.25
+      },
+      {
+        "id": 66267,
+        "text": "-ish",
+        "logit": 12.8125
+      },
+      {
+        "id": 13662,
+        "text": " yesterday",
+        "logit": 12.6875
+      },
+      {
+        "id": 8673,
+        "text": " relative",
+        "logit": 12.1875
+      },
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 12.0
+      },
+      {
+        "id": 504,
+        "text": " from",
+        "logit": 11.6875
+      },
+      {
+        "id": 1431,
+        "text": " now",
+        "logit": 11.6875
+      },
+      {
+        "id": 75091,
+        "text": "(today",
+        "logit": 11.625
+      },
+      {
+        "id": 7,
+        "text": "(",
+        "logit": 11.375
+      }
+    ]
+  },
+  {
+    "position": 122,
+    "top20": [
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 25.75
+      },
+      {
+        "id": 3697,
+        "text": " came",
+        "logit": 19.875
+      },
+      {
+        "id": 8410,
+        "text": " trip",
+        "logit": 16.625
+      },
+      {
+        "id": 2326,
+        "text": " three",
+        "logit": 16.375
+      },
+      {
+        "id": 11460,
+        "text": " arrived",
+        "logit": 16.0
+      },
+      {
+        "id": 3351,
+        "text": " today",
+        "logit": 16.0
+      },
+      {
+        "id": 7589,
+        "text": " Tuesday",
+        "logit": 15.25
+      },
+      {
+        "id": 330,
+        "text": " \"",
+        "logit": 15.0
+      },
+      {
+        "id": 1537,
+        "text": " last",
+        "logit": 14.8125
+      },
+      {
+        "id": 2114,
+        "text": " home",
+        "logit": 14.625
+      },
+      {
+        "id": 7014,
+        "text": " Monday",
+        "logit": 14.4375
+      },
+      {
+        "id": 1899,
+        "text": " day",
+        "logit": 14.1875
+      },
+      {
+        "id": 1573,
+        "text": " before",
+        "logit": 14.0625
+      },
+      {
+        "id": 421,
+        "text": " if",
+        "logit": 14.0
+      },
+      {
+        "id": 13662,
+        "text": " yesterday",
+        "logit": 13.625
+      },
+      {
+        "id": 358,
+        "text": " I",
+        "logit": 13.375
+      },
+      {
+        "id": 7794,
+        "text": " Thursday",
+        "logit": 13.3125
+      },
+      {
+        "id": 5927,
+        "text": " returned",
+        "logit": 13.25
+      },
+      {
+        "id": 5001,
+        "text": " coming",
+        "logit": 13.0
+      },
+      {
+        "id": 7920,
+        "text": " Wednesday",
+        "logit": 12.75
+      }
+    ]
+  },
+  {
+    "position": 123,
+    "top20": [
+      {
+        "id": 18,
+        "text": "3",
+        "logit": 32.25
+      },
+      {
+        "id": 17,
+        "text": "2",
+        "logit": 19.75
+      },
+      {
+        "id": 16,
+        "text": "1",
+        "logit": 17.375
+      },
+      {
+        "id": 19,
+        "text": "4",
+        "logit": 16.375
+      },
+      {
+        "id": 98668,
+        "text": "10",
+        "logit": 16.25
+      },
+      {
+        "id": 2849,
+        "text": " days",
+        "logit": 16.125
+      },
+      {
+        "id": 20,
+        "text": "5",
+        "logit": 15.8125
+      },
+      {
+        "id": 21,
+        "text": "6",
+        "logit": 15.25
+      },
+      {
+        "id": 22,
+        "text": "7",
+        "logit": 14.5625
+      },
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 14.375
+      },
+      {
+        "id": 99064,
+        "text": "30",
+        "logit": 14.1875
+      },
+      {
+        "id": 24,
+        "text": "9",
+        "logit": 13.9375
+      },
+      {
+        "id": 15,
+        "text": "0",
+        "logit": 13.875
+      },
+      {
+        "id": 98886,
+        "text": "12",
+        "logit": 13.5625
+      },
+      {
+        "id": 23,
+        "text": "8",
+        "logit": 13.5625
+      },
+      {
+        "id": 1573,
+        "text": " before",
+        "logit": 13.4375
+      },
+      {
+        "id": 99082,
+        "text": "15",
+        "logit": 13.3125
+      },
+      {
+        "id": 99619,
+        "text": "23",
+        "logit": 13.25
+      },
+      {
+        "id": 99366,
+        "text": "13",
+        "logit": 13.125
+      },
+      {
+        "id": 98965,
+        "text": "11",
+        "logit": 13.125
+      }
+    ]
+  },
+  {
+    "position": 124,
+    "top20": [
+      {
+        "id": 2849,
+        "text": " days",
+        "logit": 31.375
+      },
+      {
+        "id": 1573,
+        "text": " before",
+        "logit": 23.625
+      },
+      {
+        "id": 13769,
+        "text": "days",
+        "logit": 16.375
+      },
+      {
+        "id": 1635,
+        "text": " years",
+        "logit": 16.25
+      },
+      {
+        "id": 21144,
+        "text": " Days",
+        "logit": 15.3125
+      },
+      {
+        "id": 1899,
+        "text": " day",
+        "logit": 15.25
+      },
+      {
+        "id": 5555,
+        "text": " weeks",
+        "logit": 15.1875
+      },
+      {
+        "id": 3951,
+        "text": " months",
+        "logit": 14.75
+      },
+      {
+        "id": 28254,
+        "text": "_days",
+        "logit": 14.625
+      },
+      {
+        "id": 44814,
+        "text": " días",
+        "logit": 13.9375
+      },
+      {
+        "id": 21411,
+        "text": " nights",
+        "logit": 13.4375
+      },
+      {
+        "id": 10,
+        "text": "+",
+        "logit": 13.3125
+      },
+      {
+        "id": 13227,
+        "text": " Before",
+        "logit": 13.1875
+      },
+      {
+        "id": 20514,
+        "text": "Days",
+        "logit": 13.125
+      },
+      {
+        "id": 129821,
+        "text": " дней",
+        "logit": 13.0625
+      },
+      {
+        "id": 47899,
+        "text": " jours",
+        "logit": 12.75
+      },
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 12.625
+      },
+      {
+        "id": 14790,
+        "text": "before",
+        "logit": 12.625
+      },
+      {
+        "id": 53780,
+        "text": ".days",
+        "logit": 12.5625
+      },
+      {
+        "id": 129725,
+        "text": " дня",
+        "logit": 12.375
+      }
+    ]
+  },
+  {
+    "position": 125,
+    "top20": [
+      {
+        "id": 1573,
+        "text": " before",
+        "logit": 30.0
+      },
+      {
+        "id": 6788,
+        "text": " earlier",
+        "logit": 17.75
+      },
+      {
+        "id": 284,
+        "text": " =",
+        "logit": 17.5
+      },
+      {
+        "id": 1283,
+        "text": " after",
+        "logit": 17.125
+      },
+      {
+        "id": 4134,
+        "text": " ago",
+        "logit": 16.0
+      },
+      {
+        "id": 14790,
+        "text": "before",
+        "logit": 16.0
+      },
+      {
+        "id": 4867,
+        "text": " prior",
+        "logit": 16.0
+      },
+      {
+        "id": 1182,
+        "text": " back",
+        "logit": 15.75
+      },
+      {
+        "id": 7589,
+        "text": " Tuesday",
+        "logit": 14.75
+      },
+      {
+        "id": 13227,
+        "text": " Before",
+        "logit": 14.625
+      },
+      {
+        "id": 56102,
+        "text": " BEFORE",
+        "logit": 14.0
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 13.9375
+      },
+      {
+        "id": 23642,
+        "text": "_before",
+        "logit": 13.875
+      },
+      {
+        "id": 45947,
+        "text": ".before",
+        "logit": 13.625
+      },
+      {
+        "id": 131601,
+        "text": " قبل",
+        "logit": 13.25
+      },
+      {
+        "id": 62785,
+        "text": "\tbefore",
+        "logit": 13.25
+      },
+      {
+        "id": 10222,
+        "text": "Before",
+        "logit": 13.125
+      },
+      {
+        "id": 330,
+        "text": " \"",
+        "logit": 12.6875
+      },
+      {
+        "id": 129972,
+        "text": " trước",
+        "logit": 12.4375
+      },
+      {
+        "id": 98422,
+        "text": "前",
+        "logit": 12.375
+      }
+    ]
+  },
+  {
+    "position": 126,
+    "top20": [
+      {
+        "id": 284,
+        "text": " =",
+        "logit": 23.5
+      },
+      {
+        "id": 7589,
+        "text": " Tuesday",
+        "logit": 22.0
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 18.25
+      },
+      {
+        "id": 429,
+        "text": " that",
+        "logit": 17.625
+      },
+      {
+        "id": 25,
+        "text": ":",
+        "logit": 17.5
+      },
+      {
+        "id": 11392,
+        "text": " →",
+        "logit": 16.5
+      },
+      {
+        "id": 374,
+        "text": " is",
+        "logit": 16.25
+      },
+      {
+        "id": 13,
+        "text": ".",
+        "logit": 16.25
+      },
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 16.0
+      },
+      {
+        "id": 432,
+        "text": " it",
+        "logit": 15.8125
+      },
+      {
+        "id": 1537,
+        "text": " last",
+        "logit": 15.4375
+      },
+      {
+        "id": 7014,
+        "text": " Monday",
+        "logit": 15.3125
+      },
+      {
+        "id": 1959,
+        "text": " —",
+        "logit": 14.8125
+      },
+      {
+        "id": 21056,
+        "text": " �",
+        "logit": 14.5625
+      },
+      {
+        "id": 7270,
+        "text": " Sunday",
+        "logit": 14.5
+      },
+      {
+        "id": 6602,
+        "text": " Friday",
+        "logit": 14.3125
+      },
+      {
+        "id": 7728,
+        "text": " Saturday",
+        "logit": 14.0625
+      },
+      {
+        "id": 2503,
+        "text": " ...",
+        "logit": 14.0
+      },
+      {
+        "id": 7794,
+        "text": " Thursday",
+        "logit": 13.6875
+      },
+      {
+        "id": 26,
+        "text": ";",
+        "logit": 13.6875
+      }
+    ]
+  },
+  {
+    "position": 127,
+    "top20": [
+      {
+        "id": 7728,
+        "text": " Saturday",
+        "logit": 23.75
+      },
+      {
+        "id": 3681,
+        "text": " previous",
+        "logit": 21.5
+      },
+      {
+        "id": 1537,
+        "text": " last",
+        "logit": 19.25
+      },
+      {
+        "id": 4867,
+        "text": " prior",
+        "logit": 18.25
+      },
+      {
+        "id": 2503,
+        "text": " ...",
+        "logit": 18.125
+      },
+      {
+        "id": 7270,
+        "text": " Sunday",
+        "logit": 17.375
+      },
+      {
+        "id": 7589,
+        "text": " Tuesday",
+        "logit": 16.375
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 16.25
+      },
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 15.5
+      },
+      {
+        "id": 6602,
+        "text": " Friday",
+        "logit": 15.4375
+      },
+      {
+        "id": 6788,
+        "text": " earlier",
+        "logit": 15.1875
+      },
+      {
+        "id": 320,
+        "text": " (",
+        "logit": 14.9375
+      },
+      {
+        "id": 37550,
+        "text": " preceding",
+        "logit": 14.8125
+      },
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 14.4375
+      },
+      {
+        "id": 279,
+        "text": " the",
+        "logit": 14.3125
+      },
+      {
+        "id": 1182,
+        "text": " back",
+        "logit": 14.1875
+      },
+      {
+        "id": 13662,
+        "text": " yesterday",
+        "logit": 13.875
+      },
+      {
+        "id": 330,
+        "text": " \"",
+        "logit": 13.75
+      },
+      {
+        "id": 1899,
+        "text": " day",
+        "logit": 13.6875
+      },
+      {
+        "id": 429,
+        "text": " that",
+        "logit": 13.5625
+      }
+    ]
+  },
+  {
+    "position": 128,
+    "top20": [
+      {
+        "id": 13,
+        "text": ".",
+        "logit": 22.125
+      },
+      {
+        "id": 26,
+        "text": ";",
+        "logit": 19.875
+      },
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 19.5
+      },
+      {
+        "id": 3681,
+        "text": " previous",
+        "logit": 19.0
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 18.625
+      },
+      {
+        "id": 320,
+        "text": " (",
+        "logit": 18.25
+      },
+      {
+        "id": 4867,
+        "text": " prior",
+        "logit": 17.5
+      },
+      {
+        "id": 1537,
+        "text": " last",
+        "logit": 17.0
+      },
+      {
+        "id": 1573,
+        "text": " before",
+        "logit": 16.0
+      },
+      {
+        "id": 3267,
+        "text": " past",
+        "logit": 14.4375
+      },
+      {
+        "id": 504,
+        "text": " from",
+        "logit": 14.25
+      },
+      {
+        "id": 6788,
+        "text": " earlier",
+        "logit": 13.875
+      },
+      {
+        "id": 315,
+        "text": " of",
+        "logit": 13.8125
+      },
+      {
+        "id": 11,
+        "text": ",",
+        "logit": 13.5625
+      },
+      {
+        "id": 2503,
+        "text": " ...",
+        "logit": 13.4375
+      },
+      {
+        "id": 1182,
+        "text": " back",
+        "logit": 13.375
+      },
+      {
+        "id": 2114,
+        "text": " home",
+        "logit": 13.0625
+      },
+      {
+        "id": 37550,
+        "text": " preceding",
+        "logit": 12.9375
+      },
+      {
+        "id": 421,
+        "text": " if",
+        "logit": 12.875
+      },
+      {
+        "id": 3697,
+        "text": " came",
+        "logit": 12.75
+      }
+    ]
+  },
+  {
+    "position": 129,
+    "top20": [
+      {
+        "id": 7794,
+        "text": " Thursday",
+        "logit": 22.25
+      },
+      {
+        "id": 5542,
+        "text": " From",
+        "logit": 20.125
+      },
+      {
+        "id": 11196,
+        "text": " Today",
+        "logit": 19.625
+      },
+      {
+        "id": 5379,
+        "text": " Home",
+        "logit": 17.25
+      },
+      {
+        "id": 7728,
+        "text": " Saturday",
+        "logit": 16.625
+      },
+      {
+        "id": 2014,
+        "text": " To",
+        "logit": 15.5
+      },
+      {
+        "id": 1416,
+        "text": " If",
+        "logit": 15.1875
+      },
+      {
+        "id": 8703,
+        "text": " Since",
+        "logit": 14.9375
+      },
+      {
+        "id": 21144,
+        "text": " Days",
+        "logit": 14.625
+      },
+      {
+        "id": 7270,
+        "text": " Sunday",
+        "logit": 14.375
+      },
+      {
+        "id": 7014,
+        "text": " Monday",
+        "logit": 14.0
+      },
+      {
+        "id": 35713,
+        "text": " Thu",
+        "logit": 13.875
+      },
+      {
+        "id": 13815,
+        "text": " Wait",
+        "logit": 13.625
+      },
+      {
+        "id": 7920,
+        "text": " Wednesday",
+        "logit": 13.25
+      },
+      {
+        "id": 6602,
+        "text": " Friday",
+        "logit": 13.1875
+      },
+      {
+        "id": 59615,
+        "text": " Yesterday",
+        "logit": 12.9375
+      },
+      {
+        "id": 37592,
+        "text": "Thursday",
+        "logit": 12.75
+      },
+      {
+        "id": 87459,
+        "text": " Hmm",
+        "logit": 12.6875
+      },
+      {
+        "id": 5005,
+        "text": " Then",
+        "logit": 12.4375
+      },
+      {
+        "id": 4695,
+        "text": " Now",
+        "logit": 12.4375
+      }
+    ]
+  },
+  {
+    "position": 130,
+    "top20": [
+      {
+        "id": 24127,
+        "text": " −",
+        "logit": 19.25
+      },
+      {
+        "id": 481,
+        "text": " -",
+        "logit": 19.25
+      },
+      {
+        "id": 27194,
+        "text": " minus",
+        "logit": 19.0
+      },
+      {
+        "id": 33103,
+        "text": "−",
+        "logit": 18.0
+      },
+      {
+        "id": 374,
+        "text": " is",
+        "logit": 17.75
+      },
+      {
+        "id": 311,
+        "text": " to",
+        "logit": 17.375
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 17.25
+      },
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 17.0
+      },
+      {
+        "id": 3351,
+        "text": " today",
+        "logit": 16.875
+      },
+      {
+        "id": 6222,
+        "text": "-S",
+        "logit": 16.125
+      },
+      {
+        "id": 25,
+        "text": ":",
+        "logit": 15.9375
+      },
+      {
+        "id": 11392,
+        "text": " →",
+        "logit": 15.9375
+      },
+      {
+        "id": 50683,
+        "text": "→",
+        "logit": 15.75
+      },
+      {
+        "id": 11,
+        "text": ",",
+        "logit": 15.0625
+      },
+      {
+        "id": 504,
+        "text": " from",
+        "logit": 14.9375
+      },
+      {
+        "id": 2114,
+        "text": " home",
+        "logit": 14.9375
+      },
+      {
+        "id": 3363,
+        "text": " means",
+        "logit": 14.625
+      },
+      {
+        "id": 1431,
+        "text": " now",
+        "logit": 14.5
+      },
+      {
+        "id": 1790,
+        "text": " next",
+        "logit": 14.125
+      },
+      {
+        "id": 284,
+        "text": " =",
+        "logit": 14.0625
+      }
+    ]
+  },
+  {
+    "position": 131,
+    "top20": [
+      {
+        "id": 7728,
+        "text": " Saturday",
+        "logit": 24.375
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 20.75
+      },
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 18.25
+      },
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 18.0
+      },
+      {
+        "id": 3681,
+        "text": " previous",
+        "logit": 16.375
+      },
+      {
+        "id": 25,
+        "text": ":",
+        "logit": 16.25
+      },
+      {
+        "id": 7589,
+        "text": " Tuesday",
+        "logit": 16.0
+      },
+      {
+        "id": 2503,
+        "text": " ...",
+        "logit": 15.875
+      },
+      {
+        "id": 284,
+        "text": " =",
+        "logit": 15.625
+      },
+      {
+        "id": 7270,
+        "text": " Sunday",
+        "logit": 15.0
+      },
+      {
+        "id": 13169,
+        "text": " Sat",
+        "logit": 14.75
+      },
+      {
+        "id": 6788,
+        "text": " earlier",
+        "logit": 14.375
+      },
+      {
+        "id": 2849,
+        "text": " days",
+        "logit": 14.25
+      },
+      {
+        "id": 4867,
+        "text": " prior",
+        "logit": 14.0625
+      },
+      {
+        "id": 7014,
+        "text": " Monday",
+        "logit": 14.0625
+      },
+      {
+        "id": 6602,
+        "text": " Friday",
+        "logit": 13.8125
+      },
+      {
+        "id": 7794,
+        "text": " Thursday",
+        "logit": 13.75
+      },
+      {
+        "id": 504,
+        "text": " from",
+        "logit": 13.6875
+      },
+      {
+        "id": 3968,
+        "text": " ~",
+        "logit": 13.375
+      },
+      {
+        "id": 33512,
+        "text": "Saturday",
+        "logit": 13.125
+      }
+    ]
+  },
+  {
+    "position": 132,
+    "top20": [
+      {
+        "id": 284,
+        "text": " =",
+        "logit": 22.5
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 21.125
+      },
+      {
+        "id": 25,
+        "text": ":",
+        "logit": 20.5
+      },
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 19.25
+      },
+      {
+        "id": 11392,
+        "text": " →",
+        "logit": 17.125
+      },
+      {
+        "id": 1959,
+        "text": " —",
+        "logit": 15.1875
+      },
+      {
+        "id": 21056,
+        "text": " �",
+        "logit": 15.0625
+      },
+      {
+        "id": 320,
+        "text": " (",
+        "logit": 14.6875
+      },
+      {
+        "id": 13789,
+        "text": " depends",
+        "logit": 14.3125
+      },
+      {
+        "id": 28,
+        "text": "=",
+        "logit": 13.875
+      },
+      {
+        "id": 1940,
+        "text": "…",
+        "logit": 13.75
+      },
+      {
+        "id": 504,
+        "text": " from",
+        "logit": 13.5625
+      },
+      {
+        "id": 13,
+        "text": ".",
+        "logit": 13.1875
+      },
+      {
+        "id": 1573,
+        "text": " before",
+        "logit": 12.8125
+      },
+      {
+        "id": 6788,
+        "text": " earlier",
+        "logit": 12.75
+      },
+      {
+        "id": 374,
+        "text": " is",
+        "logit": 12.6875
+      },
+      {
+        "id": 2474,
+        "text": " since",
+        "logit": 12.6875
+      },
+      {
+        "id": 2503,
+        "text": " ...",
+        "logit": 12.5625
+      },
+      {
+        "id": 3681,
+        "text": " previous",
+        "logit": 12.5625
+      },
+      {
+        "id": 3968,
+        "text": " ~",
+        "logit": 12.4375
+      }
+    ]
+  },
+  {
+    "position": 133,
+    "top20": [
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 23.0
+      },
+      {
+        "id": 2503,
+        "text": " ...",
+        "logit": 18.5
+      },
+      {
+        "id": 937,
+        "text": " ?",
+        "logit": 18.0
+      },
+      {
+        "id": 3783,
+        "text": " wait",
+        "logit": 16.125
+      },
+      {
+        "id": 2849,
+        "text": " days",
+        "logit": 14.625
+      },
+      {
+        "id": 504,
+        "text": " from",
+        "logit": 14.3125
+      },
+      {
+        "id": 7794,
+        "text": " Thursday",
+        "logit": 14.125
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 14.125
+      },
+      {
+        "id": 421,
+        "text": " if",
+        "logit": 14.0
+      },
+      {
+        "id": 23688,
+        "text": " ?\n\n",
+        "logit": 13.9375
+      },
+      {
+        "id": 3968,
+        "text": " ~",
+        "logit": 13.875
+      },
+      {
+        "id": 2474,
+        "text": " since",
+        "logit": 13.875
+      },
+      {
+        "id": 3351,
+        "text": " today",
+        "logit": 13.6875
+      },
+      {
+        "id": 20,
+        "text": "5",
+        "logit": 13.5625
+      },
+      {
+        "id": 3681,
+        "text": " previous",
+        "logit": 13.5
+      },
+      {
+        "id": 481,
+        "text": " -",
+        "logit": 13.5
+      },
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 13.4375
+      },
+      {
+        "id": 1246,
+        "text": " how",
+        "logit": 13.1875
+      },
+      {
+        "id": 714,
+        "text": " but",
+        "logit": 12.5625
+      },
+      {
+        "id": 6788,
+        "text": " earlier",
+        "logit": 12.5
+      }
+    ]
+  },
+  {
+    "position": 134,
+    "top20": [
+      {
+        "id": 20,
+        "text": "5",
+        "logit": 24.0
+      },
+      {
+        "id": 21,
+        "text": "6",
+        "logit": 19.75
+      },
+      {
+        "id": 17,
+        "text": "2",
+        "logit": 17.875
+      },
+      {
+        "id": 22,
+        "text": "7",
+        "logit": 14.75
+      },
+      {
+        "id": 19,
+        "text": "4",
+        "logit": 14.6875
+      },
+      {
+        "id": 18,
+        "text": "3",
+        "logit": 14.5
+      },
+      {
+        "id": 98886,
+        "text": "12",
+        "logit": 14.0625
+      },
+      {
+        "id": 16,
+        "text": "1",
+        "logit": 14.0625
+      },
+      {
+        "id": 23,
+        "text": "8",
+        "logit": 12.625
+      },
+      {
+        "id": 98668,
+        "text": "10",
+        "logit": 12.625
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 12.25
+      },
+      {
+        "id": 24,
+        "text": "9",
+        "logit": 12.0625
+      },
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 11.6875
+      },
+      {
+        "id": 98965,
+        "text": "11",
+        "logit": 11.3125
+      },
+      {
+        "id": 15,
+        "text": "0",
+        "logit": 10.8125
+      },
+      {
+        "id": 99367,
+        "text": "14",
+        "logit": 10.5625
+      },
+      {
+        "id": 2849,
+        "text": " days",
+        "logit": 10.5625
+      },
+      {
+        "id": 2503,
+        "text": " ...",
+        "logit": 10.5
+      },
+      {
+        "id": 99366,
+        "text": "13",
+        "logit": 10.375
+      },
+      {
+        "id": 220,
+        "text": " ",
+        "logit": 10.0
+      }
+    ]
+  },
+  {
+    "position": 135,
+    "top20": [
+      {
+        "id": 2849,
+        "text": " days",
+        "logit": 21.25
+      },
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 20.375
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 18.75
+      },
+      {
+        "id": 13,
+        "text": ".",
+        "logit": 16.875
+      },
+      {
+        "id": 320,
+        "text": " (",
+        "logit": 16.5
+      },
+      {
+        "id": 421,
+        "text": " if",
+        "logit": 15.5625
+      },
+      {
+        "id": 476,
+        "text": " or",
+        "logit": 14.5
+      },
+      {
+        "id": 2114,
+        "text": " home",
+        "logit": 14.125
+      },
+      {
+        "id": 10,
+        "text": "+",
+        "logit": 14.0625
+      },
+      {
+        "id": 3783,
+        "text": " wait",
+        "logit": 13.75
+      },
+      {
+        "id": 5555,
+        "text": " weeks",
+        "logit": 13.6875
+      },
+      {
+        "id": 382,
+        "text": ".\n\n",
+        "logit": 13.625
+      },
+      {
+        "id": 3681,
+        "text": " previous",
+        "logit": 13.375
+      },
+      {
+        "id": 4867,
+        "text": " prior",
+        "logit": 13.0625
+      },
+      {
+        "id": 4115,
+        "text": " hours",
+        "logit": 13.0
+      },
+      {
+        "id": 1182,
+        "text": " back",
+        "logit": 12.9375
+      },
+      {
+        "id": 6788,
+        "text": " earlier",
+        "logit": 12.75
+      },
+      {
+        "id": 11392,
+        "text": " →",
+        "logit": 12.75
+      },
+      {
+        "id": 11,
+        "text": ",",
+        "logit": 12.625
+      },
+      {
+        "id": 2503,
+        "text": " ...",
+        "logit": 12.5625
+      }
+    ]
+  },
+  {
+    "position": 136,
+    "top20": [
+      {
+        "id": 30,
+        "text": "?",
+        "logit": 21.25
+      },
+      {
+        "id": 1112,
+        "text": "...",
+        "logit": 20.125
+      },
+      {
+        "id": 13,
+        "text": ".",
+        "logit": 19.875
+      },
+      {
+        "id": 320,
+        "text": " (",
+        "logit": 19.25
+      },
+      {
+        "id": 4134,
+        "text": " ago",
+        "logit": 18.125
+      },
+      {
+        "id": 421,
+        "text": " if",
+        "logit": 17.625
+      },
+      {
+        "id": 2114,
+        "text": " home",
+        "logit": 17.0
+      },
+      {
+        "id": 1182,
+        "text": " back",
+        "logit": 16.625
+      },
+      {
+        "id": 1283,
+        "text": " after",
+        "logit": 16.625
+      },
+      {
+        "id": 382,
+        "text": ".\n\n",
+        "logit": 16.5
+      },
+      {
+        "id": 1573,
+        "text": " before",
+        "logit": 16.25
+      },
+      {
+        "id": 4867,
+        "text": " prior",
+        "logit": 15.875
+      },
+      {
+        "id": 6788,
+        "text": " earlier",
+        "logit": 15.875
+      },
+      {
+        "id": 3783,
+        "text": " wait",
+        "logit": 15.4375
+      },
+      {
+        "id": 2474,
+        "text": " since",
+        "logit": 14.75
+      },
+      {
+        "id": 2937,
+        "text": " later",
+        "logit": 14.6875
+      },
+      {
+        "id": 8304,
+        "text": " ahead",
+        "logit": 13.25
+      },
+      {
+        "id": 518,
+        "text": " at",
+        "logit": 13.125
+      },
+      {
+        "id": 389,
+        "text": " on",
+        "logit": 13.125
+      },
+      {
+        "id": 1940,
+        "text": "…",
+        "logit": 13.125
+      }
+    ]
+  },
+  {
+    "position": 137,
+    "top20": [
+      {
+        "id": 154842,
+        "text": "</think>",
+        "logit": 20.25
+      },
+      {
+        "id": 425,
+        "text": " B",
+        "logit": 19.875
+      },
+      {
+        "id": 21754,
+        "text": " Answer",
+        "logit": 17.25
+      },
+      {
+        "id": 13815,
+        "text": " Wait",
+        "logit": 16.375
+      },
+      {
+        "id": 87459,
+        "text": " Hmm",
+        "logit": 15.75
+      },
+      {
+        "id": 1988,
+        "text": " But",
+        "logit": 15.3125
+      },
+      {
+        "id": 33601,
+        "text": " Actually",
+        "logit": 15.3125
+      },
+      {
+        "id": 95893,
+        "text": " ANSW",
+        "logit": 13.8125
+      },
+      {
+        "id": 320,
+        "text": " (",
+        "logit": 12.875
+      },
+      {
+        "id": 362,
+        "text": " A",
+        "logit": 12.25
+      },
+      {
+        "id": 1416,
+        "text": " If",
+        "logit": 12.125
+      },
+      {
+        "id": 2055,
+        "text": " So",
+        "logit": 11.875
+      },
+      {
+        "id": 154827,
+        "text": "<|user|>",
+        "logit": 11.5
+      },
+      {
+        "id": 468,
+        "text": " E",
+        "logit": 11.5
+      },
+      {
+        "id": 7281,
+        "text": " Also",
+        "logit": 11.375
+      },
+      {
+        "id": 92851,
+        "text": " Likely",
+        "logit": 11.3125
+      },
+      {
+        "id": 11392,
+        "text": " →",
+        "logit": 11.125
+      },
+      {
+        "id": 4226,
+        "text": " answer",
+        "logit": 11.0625
+      },
+      {
+        "id": 2521,
+        "text": " Or",
+        "logit": 11.0
+      },
+      {
+        "id": 14646,
+        "text": " Need",
+        "logit": 11.0
+      }
+    ]
+  }
+]

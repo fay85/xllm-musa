@@ -1,0 +1,167 @@
+{
+  "file": "/root/.cache/tvm-ffi/libtorch_c_dlpack_addon_torch29-musa.so",
+  "file_sha256": "99fc27b7eb21b9fdcf952dba3ef1528857fb238d4f794e2b308d04b1da95ebfa",
+  "sections": {
+    ".note.gnu.property": {
+      "bytes": 32,
+      "type": 7,
+      "sha256": "d6cd20a8414b70fa5c66ad93440a165a54500b1d36fd8cbf6a34914c90f5bf54"
+    },
+    ".note.gnu.build-id": {
+      "bytes": 36,
+      "type": 7,
+      "sha256": "7423da5db86590564638961a7cb3570e4f87e756cdbe591805be37b99c11c6ee"
+    },
+    ".gnu.hash": {
+      "bytes": 216,
+      "type": 1879048182,
+      "sha256": "ca1fe7040b3bd1901441a30c6bbf894ca1aab2341030d764be1dacd87650ae16"
+    },
+    ".dynsym": {
+      "bytes": 6000,
+      "type": 11,
+      "sha256": "099ee389dea63b9f52f766b01eb0475ad8ef30da0dd5c8f787866b0a50fe2566"
+    },
+    ".dynstr": {
+      "bytes": 8240,
+      "type": 3,
+      "sha256": "f590a626f5852dd923858db4e22acf988f1cd298ed891c346e4d61b50e0e4522"
+    },
+    ".gnu.version": {
+      "bytes": 500,
+      "type": 1879048191,
+      "sha256": "1b2fc1e23bc514f689566ba09c4af50c203d550bb68dc0400af21a85d61b267a"
+    },
+    ".gnu.version_r": {
+      "bytes": 384,
+      "type": 1879048190,
+      "sha256": "dd88f5837a272d5be864bb26a7cf04e9b122eb3cf41858a5f5f04234b0a0eb45"
+    },
+    ".rela.dyn": {
+      "bytes": 2832,
+      "type": 4,
+      "sha256": "ea13960feb8864da19f30a5b18feeacf2005bcb005b4c47a4d22475a1fda717a"
+    },
+    ".rela.plt": {
+      "bytes": 4488,
+      "type": 4,
+      "sha256": "159e3f9f5332e2bf8681f34b6a5c5c95e42c128d218370d5d80201bea3a5e32b"
+    },
+    ".init": {
+      "bytes": 27,
+      "type": 1,
+      "sha256": "83a4a5333d540f9a7684b4147049bf2a2e826095e1ba961764ba887011c886c0"
+    },
+    ".plt": {
+      "bytes": 3008,
+      "type": 1,
+      "sha256": "0e63499d08bd1870d29ab9eb0bf9387b329db135576cb6e05734c22ef0a445aa"
+    },
+    ".plt.got": {
+      "bytes": 16,
+      "type": 1,
+      "sha256": "9128eb11852e3a6added6577496fb17bba853f2cdf5e08b378e9c55db70f3401"
+    },
+    ".plt.sec": {
+      "bytes": 2992,
+      "type": 1,
+      "sha256": "d921de95811e3b5733e1212c598542db205c9dcf14d3d6c2102f898b785bb708"
+    },
+    ".text": {
+      "bytes": 88882,
+      "type": 1,
+      "sha256": "03596032cec75905751a23f7b401bb2f4fcb84ef704866efa9519f0b978b3d9d"
+    },
+    ".fini": {
+      "bytes": 13,
+      "type": 1,
+      "sha256": "6a4f3e5efc7c1f7ee7d6f21afd9ed040ba1d7f0b97bb12b016f5b176cc558bd8"
+    },
+    ".rodata": {
+      "bytes": 13568,
+      "type": 1,
+      "sha256": "ade81fe4d2b18617cf1565a7567b122161bf12e8d4e3226542a58ec4f5930365"
+    },
+    ".eh_frame_hdr": {
+      "bytes": 1204,
+      "type": 1,
+      "sha256": "765d6a3fd882386f8267cc992e6471db9c332b661a19cc296790ac2b5bef08ec"
+    },
+    ".eh_frame": {
+      "bytes": 8156,
+      "type": 1,
+      "sha256": "5c6395124d2c1b09f62dee473a7eaa2517ff5a4c7a86e3e1afbb23a51c5c4695"
+    },
+    ".gcc_except_table": {
+      "bytes": 4840,
+      "type": 1,
+      "sha256": "c0797ca090595da6b13f86e7786fac3c8ed61c6d93b4ff18bab3ca221c3dfd04"
+    },
+    ".tbss": {
+      "bytes": 8,
+      "type": 8,
+      "sha256": null
+    },
+    ".init_array": {
+      "bytes": 16,
+      "type": 14,
+      "sha256": "803bd66727be69320603871dc1416ad9b73e3ccbaee82bbcb63126927f787f53"
+    },
+    ".fini_array": {
+      "bytes": 8,
+      "type": 15,
+      "sha256": "44891947736cc56bb8a09e6e514ef0820751c2fc2c8312c9b7ac1f15515a51e3"
+    },
+    ".data.rel.ro": {
+      "bytes": 368,
+      "type": 1,
+      "sha256": "945333b4626b78447e6ef4c9ae12238e221d72e1e506922783c9112cd0195500"
+    },
+    ".dynamic": {
+      "bytes": 576,
+      "type": 6,
+      "sha256": "8adf09d1fcd3c51fefb625b74d61bf4ae38c0cce26cc7ed0e1e4b252998c0c06"
+    },
+    ".got": {
+      "bytes": 408,
+      "type": 1,
+      "sha256": "c76903cde8580d1c809ac5352aab33af5a310ad05126294d66e06db880c463ed"
+    },
+    ".got.plt": {
+      "bytes": 1520,
+      "type": 1,
+      "sha256": "dccb75b77e4e0b7f5f1534927a9dfb83585c7d28c8c081c36fee18befa5215cf"
+    },
+    ".data": {
+      "bytes": 376,
+      "type": 1,
+      "sha256": "590fe9137328242f8a07436ca080dd122395ff8c0d5c448c2e4a970fd41a8bba"
+    },
+    ".bss": {
+      "bytes": 200,
+      "type": 8,
+      "sha256": null
+    },
+    ".comment": {
+      "bytes": 45,
+      "type": 1,
+      "sha256": "870f2f9d818ee55a81431c961308199a1a9afcbf8de379cc236abf98c80d6f66"
+    },
+    ".symtab": {
+      "bytes": 11256,
+      "type": 2,
+      "sha256": "7b06882285346c9c50f83b113ce416bd67e3e84a3032bf8c589ed8689ae3d5ef"
+    },
+    ".strtab": {
+      "bytes": 24346,
+      "type": 3,
+      "sha256": "efbe675798bff62d7f12f507acbdd195a1a8f6fbb01fa2c95248151f1e752eec"
+    },
+    ".shstrtab": {
+      "bytes": 306,
+      "type": 3,
+      "sha256": "715405a2725db1b39383f5a54341f7b02ce552d9261388a92de91112f0b4dc9c"
+    }
+  },
+  "read_only": true
+}

@@ -511,6 +511,7 @@ class _MlaOutputProjection(nn.Module):
 def test_kda_cp_projects_only_local_rows_and_overwrites_padding(monkeypatch) -> None:
     attention = glm5_next.Glm5NextKdaAttention.__new__(glm5_next.Glm5NextKdaAttention)
     nn.Module.__init__(attention)
+    attention.cfg = glm5_next.Glm5NextConfig(tp_size=2)
     attention.layer_id = 0
     attention.hidden_size = 3
     attention.head_dim = 2
@@ -685,7 +686,7 @@ def test_mla_cp_projects_global_rows_and_reshards_output() -> None:
     attention.kv_lora_rank = 3
     attention.num_heads_local = 2
     attention.v_head_dim = 3
-    attention.cfg = SimpleNamespace(tp_size=2)
+    attention.cfg = SimpleNamespace(tp_size=2, musa_tp_reduce_precision="native")
     attention.q_b_proj = nn.Linear(3, 4, bias=False)
     attention.kv_a_proj_with_mqa = nn.Identity()
     attention.o_proj = _MlaOutputProjection()

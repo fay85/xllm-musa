@@ -1,0 +1,290 @@
+[
+  {
+    "layer": 0,
+    "rank_slice": 0,
+    "batch_vs_single": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    }
+  },
+  {
+    "layer": 0,
+    "rank_slice": 7,
+    "batch_vs_single": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    }
+  },
+  {
+    "layer": 1,
+    "rank_slice": 0,
+    "batch_vs_single": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    }
+  },
+  {
+    "layer": 1,
+    "rank_slice": 7,
+    "batch_vs_single": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    }
+  },
+  {
+    "layer": 2,
+    "rank_slice": 0,
+    "batch_vs_single": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    }
+  },
+  {
+    "layer": 2,
+    "rank_slice": 7,
+    "batch_vs_single": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    }
+  },
+  {
+    "layer": 10,
+    "rank_slice": 0,
+    "batch_vs_single": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    }
+  },
+  {
+    "layer": 10,
+    "rank_slice": 7,
+    "batch_vs_single": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    }
+  },
+  {
+    "layer": 18,
+    "rank_slice": 0,
+    "batch_vs_single": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    }
+  },
+  {
+    "layer": 18,
+    "rank_slice": 7,
+    "batch_vs_single": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    }
+  },
+  {
+    "layer": 44,
+    "rank_slice": 0,
+    "batch_vs_single": {
+      "relative_rmse": 3.673692905437065e-09,
+      "max_abs": 2.384185791015625e-07,
+      "equal_fraction": 0.99951171875
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 3.673692905437065e-09,
+      "max_abs": 2.384185791015625e-07,
+      "equal_fraction": 0.99951171875
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 3.673692905437065e-09,
+      "max_abs": 2.384185791015625e-07,
+      "equal_fraction": 0.99951171875
+    }
+  },
+  {
+    "layer": 44,
+    "rank_slice": 7,
+    "batch_vs_single": {
+      "relative_rmse": 1.3138179383531678e-05,
+      "max_abs": 0.0009765625,
+      "equal_fraction": 0.99951171875
+    },
+    "batch_vs_fp32": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0,
+      "equal_fraction": 1.0
+    },
+    "single_vs_fp32": {
+      "relative_rmse": 1.3138177564542275e-05,
+      "max_abs": 0.0009765625,
+      "equal_fraction": 0.99951171875
+    },
+    "bmm_vs_separate": {
+      "relative_rmse": 1.3138177564542275e-05,
+      "max_abs": 0.0009765625,
+      "equal_fraction": 0.99951171875
+    }
+  }
+]

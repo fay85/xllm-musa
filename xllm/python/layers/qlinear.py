@@ -114,6 +114,9 @@ class QLinearWeightLoader:
     def load_tensor(self, name):
         return self._w8.load_tensor(name)
 
+    def load_raw_fp8(self, name: str) -> tuple[torch.Tensor, torch.Tensor]:
+        return self._w8.load_raw_fp8(name)
+
     def load_shard(
         self,
         name: str,

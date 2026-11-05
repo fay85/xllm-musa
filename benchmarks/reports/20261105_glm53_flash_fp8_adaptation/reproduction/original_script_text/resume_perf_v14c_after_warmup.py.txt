@@ -1,0 +1,58 @@
+"""Resume only unexecuted phases after independently validating the warmup."""
+from pathlib import Path
+import datetime
+import hashlib
+import json
+import os
+import subprocess
+
+root = Path("/work")
+out = root / "eval/perf_fp8_v14c_eager_v2"
+previous_exit = json.loads((root / "records/perf_fp8_v14c_eager_v2_exit.json").read_text())
+assert previous_exit["exit_code"] == 1
+validation_path = out / "input256_output256/warmup/raw_usage_validation.json"
+validation = json.loads(validation_path.read_text())
+assert validation["passed"] and validation["expected_rows"] == 1
+commands = json.loads((out / "commands.json").read_text())
+results = json.loads((out / "status.json").read_text())
+assert len(results) == 1 and results[0]["phase"] == "warmup" and results[0]["exit_code"] == 0
+assert not (out / "complete.json").exists()
+with (out / "resume_after_usage_validation.json").open("x") as stream:
+    json.dump({
+        "at": datetime.datetime.now().astimezone().isoformat(),
+        "reason": "Warmup HTTP and CLI succeeded, but SSE omitted usage. Exact request-ID matched native logs verify256/256. Resume remaining phases only.",
+        "warmup_replayed": False,
+        "model_unchanged": True,
+        "official_evalscope_code_unchanged": True,
+        "validation_sha256": hashlib.sha256(validation_path.read_bytes()).hexdigest(),
+        "original_wrapper_exit": previous_exit,
+    }, stream, indent=2)
+for item in commands[1:]:
+    phase_dir = out / f"input{item['input_tokens']}_output256" / item["phase"]
+    assert not phase_dir.exists(), "Never overwrite or rerun an already-created phase"
+    started = datetime.datetime.now().astimezone().isoformat()
+    (out / "active.json").write_text(json.dumps({"started_at": started, **item}, indent=2))
+    with (out / f"{item['phase']}_input{item['input_tokens']}.log").open("xb") as stream:
+        result = subprocess.run(
+            item["command"], stdout=stream, stderr=subprocess.STDOUT,
+            env=dict(os.environ, TOKENIZERS_PARALLELISM="false", LD_PRELOAD="", PYTHONPATH="/work/eval/perf_dependencies_v2"),
+        )
+    results.append({
+        **{k: v for k, v in item.items() if k != "command"},
+        "exit_code": result.returncode,
+        "started_at": started,
+        "finished_at": datetime.datetime.now().astimezone().isoformat(),
+    })
+    (out / "status.json").write_text(json.dumps(results, indent=2))
+    if result.returncode:
+        raise SystemExit(result.returncode)
+    subprocess.run([
+        "/baseline/eval/venv/bin/python", "/work/tools/validate_perf_phase_native_usage.py",
+        str(phase_dir), str(item["input_tokens"]), str(item["number"]),
+    ], check=True)
+(out / "complete.json").write_text(json.dumps({
+    "completed_at": datetime.datetime.now().astimezone().isoformat(),
+    "expected_each_shape": {"warmup": 1, "measured": 5},
+    "usage_verification": "Exact request-ID matched native completion logs; streaming usage absent.",
+    "accuracy_issues_retained_per_user_instruction": True,
+}, indent=2))

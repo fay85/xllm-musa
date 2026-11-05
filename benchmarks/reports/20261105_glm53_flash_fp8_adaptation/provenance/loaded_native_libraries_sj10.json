@@ -1,0 +1,11 @@
+{
+  "container_pid": 29451,
+  "files": {
+    "/usr/lib/x86_64-linux-gnu/libmusa.so.5.1.0": "07d4b8d322774052f38f110452bd3f20715706e1198445fbb8e3f3807ea366e6",
+    "/usr/local/lib/python3.10/dist-packages/torch_musa/lib/libmusa_python.so.2": "7ab52dc4b16240a8e157110b91b5aef6957ba10cedabbfd4ab55e3a8971cdb45",
+    "/usr/local/musa-5.1.0/lib/libmccl.so.2.28.9": "39e963279c94fba6c8c07838a6feabfa2bd067d4caef434e463a26802849809e",
+    "/usr/local/musa-5.1.0/lib/libmusa.so.5.1.0": "07d4b8d322774052f38f110452bd3f20715706e1198445fbb8e3f3807ea366e6",
+    "/workspace/artifacts/libmusa_backend_init.so": "5a1d6db0c1f7f78cb96f8afcdd20d13712fe0006e2f90561dfc918ae58e2d9aa"
+  },
+  "scope": "Actual mapped libraries in native rank0, read-only; not only ldconfig/SDK symlinks"
+}

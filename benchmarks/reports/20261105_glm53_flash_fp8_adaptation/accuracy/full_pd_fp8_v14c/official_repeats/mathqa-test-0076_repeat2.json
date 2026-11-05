@@ -1,0 +1,70 @@
+{
+  "question_id": "mathqa-test-0076",
+  "repeat_index": 2,
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nif a student loses 6 kilograms , he will weigh twice as much as his sister . together they now weigh 126 kilograms . what is the student ' s present weight in kilograms ?\n\nA. 82\nB. 84\nC. 86\nD. 88\nE. 90"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false,
+    "model": "glm-5.3-flash"
+  },
+  "endpoint": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "official_initial_sha256": "e9b3e3cc0aaee6bb1248e3f48cd1480d65e2705f96af23362de0f85ca4a82975",
+  "ground_truth": "C",
+  "diagnostic_repeat_excluded_from_primary_score": true,
+  "started_at": "2026-11-05T10:11:35.952588+08:00",
+  "http_status": 200,
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "s − 6 = 2(126 − s) → 3s = 258 → s = 86\n\nANSWER: C",
+          "reasoning_content": "2(s-6)=sister; s+sis=126, sis=126-s: 2s-12=126-s → s=46? Hmm. But standard answer 84? Check: student loses 6, weighs twice sister: s-6=2g, s+g=126 → s-6=2(126-s) → 3s=258 → 86. C.",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1793844699,
+    "id": "202611051011360d92e11697b640e3",
+    "model": "glm-5.3-flash",
+    "object": "chat.completion",
+    "request_id": "202611051011360d92e11697b640e3",
+    "usage": {
+      "completion_tokens": 118,
+      "completion_tokens_details": {
+        "reasoning_tokens": 86
+      },
+      "prompt_tokens": 119,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 237
+    }
+  },
+  "answer": "C",
+  "format_error": null,
+  "truncated": false,
+  "correct": true,
+  "usage": {
+    "completion_tokens": 118,
+    "completion_tokens_details": {
+      "reasoning_tokens": 86
+    },
+    "prompt_tokens": 119,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 237
+  },
+  "finish_reason": "stop",
+  "elapsed_seconds": 3.121732149971649
+}

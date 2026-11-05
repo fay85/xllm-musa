@@ -1,0 +1,16 @@
+"""Explicit attempt selection, decided before the transport recovery result."""
+from pathlib import Path
+import hashlib,json
+
+def load_scored(folder: Path, question: str):
+ original_path=folder/(question+'.json');original=json.loads(original_path.read_text()) if original_path.exists() else {};selected=original_path
+ policy_path=folder/'transport_recovery_policy.json'
+ if policy_path.exists():
+  policy=json.loads(policy_path.read_text())
+  if question==policy['question_id']:
+   assert policy['accepted_before_recovery_result_known']
+   assert hashlib.sha256(original_path.read_bytes()).hexdigest()==policy['original_attempt_sha256']
+   assert original.get('http_status')!=200 and 'elapsed_seconds' in original
+   selected=folder/policy['scored_response_file'];assert selected.parent==folder
+ record=json.loads(selected.read_text()) if selected.exists() else {}
+ return record,selected,original

@@ -1,0 +1,38 @@
+[
+  {
+    "input_tokens": 256,
+    "output_tokens": 256,
+    "phase": "warmup",
+    "number": 1,
+    "exit_code": 0,
+    "started_at": "2026-11-05T10:53:43.855664+08:00",
+    "finished_at": "2026-11-05T10:55:16.455876+08:00"
+  },
+  {
+    "input_tokens": 256,
+    "output_tokens": 256,
+    "phase": "measured",
+    "number": 5,
+    "exit_code": 0,
+    "started_at": "2026-11-05T11:00:29.660335+08:00",
+    "finished_at": "2026-11-05T11:07:40.595403+08:00"
+  },
+  {
+    "input_tokens": 2048,
+    "output_tokens": 256,
+    "phase": "warmup",
+    "number": 1,
+    "exit_code": 0,
+    "started_at": "2026-11-05T11:07:40.667975+08:00",
+    "finished_at": "2026-11-05T11:09:28.531690+08:00"
+  },
+  {
+    "input_tokens": 2048,
+    "output_tokens": 256,
+    "phase": "measured",
+    "number": 5,
+    "exit_code": 0,
+    "started_at": "2026-11-05T11:09:28.578302+08:00",
+    "finished_at": "2026-11-05T11:17:52.216971+08:00"
+  }
+]

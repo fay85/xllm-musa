@@ -1,0 +1,19 @@
+{
+  "at": "2026-11-05T00:14:38.126835+08:00",
+  "base_commit": "d2f5bda912de17ba6e90f62fd6dfc0eac5e59d3f",
+  "branch": "xiaopang1104benchmark1P1D",
+  "implementation": "v11 diagnostic: v8 + GPU FP32 TP sum + GPU FP32 explicit KDA recurrence; FP8 MegaMoE unchanged",
+  "files": {
+    "xllm/python/layers/qlinear.py": "b251ca15800c1dfd8db9ef63de273de6aad43db275cd3f06b43304e440551028",
+    "xllm/python/model_executor/executor.py": "22481dbcc4ca5f10addddee134e8dd4990ad1757de800f23d73eec1bfcd3ebbb",
+    "xllm/python/models/glm5_next.py": "aea08a953312aaa1f9b98b5f27a2e2a8aa00045c8a02278334ba1b42acab1bd1",
+    "xllm/python/models/glm5_next_weight.py": "ff65f7e4d6f20dc282de9ef37855f501fd334eacc03997c0c50c3328b3e39aa4",
+    "tests/musa/run_glm_mega_moe_regression.py": "8163473e36cd19b13da97686cb95728edd5c8964a937ad71c0cd8d88d6274521",
+    "tests/musa/run_glm_real_moe_regression.py": "2d3f31106942f4274af42f916b2dcd930de2ce4e57da59682847c41d16b01a11",
+    "tests/python/test_glm_musa_fp8_contracts.py": "9d4f6d7580ae58f937b21ded4b475a439004d199e74d9a16ae7855c2b42d3e75",
+    "xllm/python/kernels_musa/mega_moe.py": "27e92149f85fb1d335b4c96d7af2c45d0e24138c0edc3e73dd640e48cb91c8ef",
+    "xllm/python/kernels_musa/kda.py": "eccf11ba4b5528875848cc612c34a1a7d9fa3a14ae4eb4306c64be5b1c7bcabb"
+  },
+  "source_directory": "/data/nfs_shared/xiaopang/20261105_glm53_full_adaptation/source_diagnostic_v11/xllm-musa",
+  "diagnostic_only": true
+}

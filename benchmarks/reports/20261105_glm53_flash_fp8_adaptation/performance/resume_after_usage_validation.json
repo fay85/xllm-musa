@@ -1,0 +1,20 @@
+{
+  "at": "2026-11-05T11:00:29.659797+08:00",
+  "reason": "Warmup HTTP and CLI succeeded, but SSE omitted usage. Exact request-ID matched native logs verify256/256. Resume remaining phases only.",
+  "warmup_replayed": false,
+  "model_unchanged": true,
+  "official_evalscope_code_unchanged": true,
+  "validation_sha256": "c3697c657a183bb50548cda270fb85dae477b5767c44315821b99b5fac3085ae",
+  "original_wrapper_exit": {
+    "started_at": "2026-11-05T10:53:43.823535+08:00",
+    "command": [
+      "/usr/bin/python3",
+      "/work/tools/run_perf_v14c_v2.py"
+    ],
+    "pid": 36808,
+    "automatic_retries": false,
+    "automatic_signals": false,
+    "exit_code": 1,
+    "finished_at": "2026-11-05T10:55:16.500014+08:00"
+  }
+}

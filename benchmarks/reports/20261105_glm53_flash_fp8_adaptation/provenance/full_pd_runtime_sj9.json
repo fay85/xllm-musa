@@ -1,0 +1,67 @@
+{
+  "at": "2026-11-05T09:10:05.374961+08:00",
+  "hostname": "worker32007",
+  "container": "xiaopang1105_glm_prefill_sj9",
+  "container_id": "334d27f05cb7d559023d25065c8eecb1dc0bceacbbed97155c09d447bc301bae",
+  "image_tag": "sha256:579005c0d3dab354f26389271360ddcaadab9e642bfbd05ef070aab4baaa3089",
+  "image_id": "sha256:579005c0d3dab354f26389271360ddcaadab9e642bfbd05ef070aab4baaa3089",
+  "cpu_quota": 32000000000,
+  "memory_limit": 549755813888,
+  "shared_memory_size": 8589934592,
+  "binary": "/baseline/artifacts/xllm_glm_v4",
+  "binary_sha256": "6b152a270bd30755ecf9788097f0395af1682a5234d9e3e7f3285c744df0b609",
+  "source_directory": "/data/nfs_shared/xiaopang/20261105_glm53_full_adaptation/source_v14c/xllm-musa",
+  "source_manifest": {
+    "at": "2026-11-05T08:42:52.348737+08:00",
+    "base_commit": "d2f5bda912de17ba6e90f62fd6dfc0eac5e59d3f",
+    "branch": "xiaopang1104benchmark1P1D",
+    "implementation": "v14c reviewed candidate: FP8 MegaMoE and FP32 mHC controls; explicit MATE recurrent KDA and FP32 TP modes; no diagnostic overrides or dumps; CP test fixtures supply constructor config",
+    "candidate_not_qualified": true,
+    "files": {
+      "tests/musa/run_glm_mega_moe_regression.py": "d286a171c896d970fd8fa4da4ac1371fd2f9abc2cde9bb12af3e0e8fc848e490",
+      "tests/musa/run_glm_real_moe_regression.py": "c2ae78fd910dfb440907217e3d1243335fc54e01250d3aa9c83408585cede29e",
+      "tests/musa/test_glm_kda.py": "b8787935e3ef221e379878a26e7e3b2e895b711e6e1bbfc342ece9d72593a245",
+      "tests/python/test_glm_musa_fp8_contracts.py": "0b7c81b8db4d94bdeabb430633967839db64d6de95e9d4e15119d0f0a3e901cf",
+      "xllm/python/attention/musa_glm_reference.py": "e9c5a600507f9501215c2dfa3b872b1c97e527a56babcd0a49d3e7c2d51cefc2",
+      "xllm/python/kernels_musa/kda.py": "2b170f5b6b51cd054b03c9f5ed10dc6b9cd40f4b13b9c8faeea18f2524e8d2cf",
+      "xllm/python/kernels_musa/mega_moe.py": "9f5707893db3e1c11a514392eb6f7d948e1cd52538a399e13fe51a282599a148",
+      "xllm/python/layers/qlinear.py": "b251ca15800c1dfd8db9ef63de273de6aad43db275cd3f06b43304e440551028",
+      "xllm/python/model_executor/executor.py": "22481dbcc4ca5f10addddee134e8dd4990ad1757de800f23d73eec1bfcd3ebbb",
+      "xllm/python/models/glm5_next.py": "df0c9cfcee32c64d4f842fa5103eed55279fd5b9ab06dc2ed7002ac22739a5d1",
+      "xllm/python/models/glm5_next_weight.py": "ff65f7e4d6f20dc282de9ef37855f501fd334eacc03997c0c50c3328b3e39aa4",
+      "tests/python/test_glm5_next_cp.py": "63b29710e86270df25ff5f5dd4aa5cbb8e91b56efe99f54a9b723a33d4531311"
+    },
+    "required_environment_for_v12_math": {
+      "XLLM_MUSA_GLM_MOE_BACKEND": "mega_moe",
+      "XLLM_MUSA_GLM_KDA_PREFILL_MODE": "recurrent",
+      "XLLM_MUSA_GLM_TP_REDUCE_PRECISION": "fp32"
+    }
+  },
+  "role_config_sha256": "03b60c64a9d8e3f4f21b836624aae94c1ba1c367a149ca20816c60b88eef4d55",
+  "packages": {
+    "torch": "2.9.1",
+    "torch_musa": "2.9.1",
+    "mate": "0.2.8.post1",
+    "tilelang_musa": "0.1.12+musa.5"
+  },
+  "expert_layer_counts_per_rank": {
+    "0": 42,
+    "1": 42,
+    "2": 42,
+    "3": 42,
+    "4": 42,
+    "5": 42,
+    "6": 42,
+    "7": 42
+  },
+  "model_directory": "/data/nfs_shared/models/GLM-5.3-Flash",
+  "model_file_hashes": {
+    "config.json": "bb8f01c42cb92a52ca72e65afb4d5bd8d11aef083cd210e8de25dfb904f23e9f",
+    "model.safetensors.index.json": "3c3f40366a53c3fd7974b4eab7881a365a98c2a4329150befebab99fe7c18b05",
+    "tokenizer.json": "19e773648cb4e65de8660ea6365e10acca112d42a854923df93db4a6f333a82d",
+    "tokenizer_config.json": "98b1271574f41abf89427ae2dda030d94dc9478f0edc5a8bd240db213c6fd5fc",
+    "chat_template.jinja": "2614a3c896d53e265f564c23701173c0049f985dacfbae79fc4bcd9f5ba083f4"
+  },
+  "model_weight_content_hashes_reference": "Prior immutable weight manifests retained; this record does not rehash all tensors during serving",
+  "mechanism": "1P1D, each role TP8/routedEP8/sharedTP8, eager, recurrent KDA, FP32 TP sum"
+}

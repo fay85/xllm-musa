@@ -24,14 +24,21 @@ def recurrent_kda(
     *,
     lower_bound: float | None = -5.0,
     cu_seqlens: torch.Tensor | None = None,
+    prefill_mode: str = "chunk",
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Run chunk Prefill or recurrent Decode without mutating the caller state.
 
     Gate and beta inputs are logits: MATE applies the GLM safe gate and
     sigmoid internally, exactly once. Both paths consume and return FP32
-    state in [sequence, head, value, key] order. The scheduler owns slots;
+    state in [sequence, head, value, key] order. The optional recurrent prefill
+    uses the decode kernel sequentially; packed inputs remain chunk-only.
+    The scheduler owns slots;
     this adapter operates on dense snapshots, including prefix copy-on-write.
     """
+    if prefill_mode not in ("chunk", "recurrent"):
+        raise ValueError("MUSA KDA prefill mode must be chunk or recurrent")
+    if prefill_mode == "recurrent" and cu_seqlens is not None:
+        raise NotImplementedError("Recurrent KDA prefill requires dense per-sequence inputs")
     tensors = (query, key, value, raw_gate, beta_raw, a_log, dt_bias, initial_state)
     if query.device.type != "musa" or any(t.device != query.device for t in tensors):
         raise ValueError("KDA tensors must share one MUSA device")
@@ -61,6 +68,19 @@ def recurrent_kda(
     # the last dimension at this boundary, without a host compute path.
     q, k, v, gate, beta = (t.contiguous() for t in (query, key, value, raw_gate, beta_raw))
     state = initial_state.contiguous()
+    if prefill_mode == "recurrent" and tokens > 1:
+        # The same fused MATE recurrence executes every token in both modes.
+        # This avoids chunk/recurrent arithmetic differences but sacrifices
+        # parallel prefill throughput; select it explicitly for qualification.
+        parts = []
+        for index in range(tokens):
+            part, state = recurrent_kda(
+                q[:, index : index + 1], k[:, index : index + 1], v[:, index : index + 1],
+                gate[:, index : index + 1], beta[:, index : index + 1], a_log, dt_bias, state,
+                lower_bound=lower_bound, prefill_mode="recurrent",
+            )
+            parts.append(part)
+        return torch.cat(parts, 1), state
     if tokens > 1 or cu_seqlens is not None:
         return chunk_kda(
             q, k, v, gate, beta, scale=width**-0.5,

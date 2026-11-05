@@ -1,0 +1,11 @@
+﻿input_tokens,output_tokens,measured_index,request_id,latency_s,ttft_ms,tpot_ms,token_count_source
+256,256,1,chatcmpl-13638450038800729540-2GZUiJcksDjdbLUsfi8rm8,84.12804831378162,2095.5995796248317,321.69587738885014,Native completed-request log keyed by exact SSE request ID; streaming usage absent
+256,256,2,chatcmpl-13638450038800729540-bzPhDaUN2bZdUncT9wbKDf,84.86939501296729,2062.9290472716093,324.7312390811595,Native completed-request log keyed by exact SSE request ID; streaming usage absent
+256,256,3,chatcmpl-13638450038800729540-hrTYW9PuG2RhW7GBZKpxmE,84.33241977076977,2100.8946364745498,322.47656915409897,Native completed-request log keyed by exact SSE request ID; streaming usage absent
+256,256,4,chatcmpl-13638450038800729540-NQfdwr9kyX7UKa5xwEs5Kb,85.67518063914031,2126.0228445753455,327.64375605711746,Native completed-request log keyed by exact SSE request ID; streaming usage absent
+256,256,5,chatcmpl-13638450038800729540-hyf2x3MzgfaQ7pP5u8Pi6U,84.27896516676992,2113.3321449160576,322.2181687131524,Native completed-request log keyed by exact SSE request ID; streaming usage absent
+2048,256,1,chatcmpl-13638450038800729540-Brxpqjxs5RmHhQegZ4PdBu,100.15425058733672,17388.9414742589,324.5698396591287,Native completed-request log keyed by exact SSE request ID; streaming usage absent
+2048,256,2,chatcmpl-13638450038800729540-cyQexjras5oR48mKxGgFxv,99.47103202808648,17269.371163100004,322.35945437249603,Native completed-request log keyed by exact SSE request ID; streaming usage absent
+2048,256,3,chatcmpl-13638450038800729540-6CYFfKdXnVQXjkXLKCZTK4,97.81484642997384,16594.14083417505,318.51257096391686,Native completed-request log keyed by exact SSE request ID; streaming usage absent
+2048,256,4,chatcmpl-13638450038800729540-8o9mrAJckyQzdbzgwEKJi9,99.60795118845999,17012.776072137058,323.90264751499194,Native completed-request log keyed by exact SSE request ID; streaming usage absent
+2048,256,5,chatcmpl-13638450038800729540-3AaYpaJa94uusdyrZ3Y4xH,99.443847165443,16662.595972418785,324.6323576197028,Native completed-request log keyed by exact SSE request ID; streaming usage absent

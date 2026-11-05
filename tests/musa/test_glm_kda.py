@@ -36,7 +36,8 @@ def _reference(
 
 
 @pytest.mark.parametrize('tokens', [1, 17, 65, 129, 257])
-def test_mate_kda_matches_recurrence_and_preserves_input(tokens: int) -> None:
+@pytest.mark.parametrize('prefill_mode', ['chunk', 'recurrent'])
+def test_mate_kda_matches_recurrence_and_preserves_input(tokens: int, prefill_mode: str) -> None:
     torch.manual_seed(1104)
     shape = (1, tokens, 8, 128)
     q, k, v, gate = [torch.randn(shape, dtype=torch.bfloat16, device='musa') for _ in range(4)]
@@ -45,14 +46,17 @@ def test_mate_kda_matches_recurrence_and_preserves_input(tokens: int) -> None:
     bias = torch.zeros((8, 128), dtype=torch.float32, device='musa')
     initial = torch.randn((1, 8, 128, 128), device='musa') * 0.02
     saved = initial.clone()
-    actual, final = recurrent_kda(q, k, v, gate, beta, a_log, bias, initial)
+    actual, final = recurrent_kda(q, k, v, gate, beta, a_log, bias, initial, prefill_mode=prefill_mode)
     expected, expected_state = _reference(q, k, v, gate, beta, a_log, bias, initial)
     torch.musa.synchronize()
     torch.testing.assert_close(initial, saved, rtol=0, atol=0)
     torch.testing.assert_close(actual.cpu().double(), expected, rtol=0.03, atol=0.001)
     torch.testing.assert_close(final.cpu().double(), expected_state, rtol=0.03, atol=0.008)
     if tokens > 1:
-        first, state = recurrent_kda(q[:, :-1], k[:, :-1], v[:, :-1], gate[:, :-1], beta[:, :-1], a_log, bias, initial)
-        last, state = recurrent_kda(q[:, -1:], k[:, -1:], v[:, -1:], gate[:, -1:], beta[:, -1:], a_log, bias, state)
+        first, state = recurrent_kda(q[:, :-1], k[:, :-1], v[:, :-1], gate[:, :-1], beta[:, :-1], a_log, bias, initial, prefill_mode=prefill_mode)
+        last, state = recurrent_kda(q[:, -1:], k[:, -1:], v[:, -1:], gate[:, -1:], beta[:, -1:], a_log, bias, state, prefill_mode=prefill_mode)
         torch.testing.assert_close(last.float(), actual[:, -1:].float(), rtol=0.03, atol=0.001)
         torch.testing.assert_close(state, final, rtol=0.03, atol=0.008)
+        if prefill_mode == "recurrent":
+            torch.testing.assert_close(torch.cat((first, last), dim=1), actual, rtol=0, atol=0)
+            torch.testing.assert_close(state, final, rtol=0, atol=0)

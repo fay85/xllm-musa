@@ -1,0 +1,24 @@
+{
+  "passed": true,
+  "token_count_verification": "Native completed-request log per exact SSE request ID; never silently trust retokenization",
+  "sqlite": "glm-5.3-flash/parallel_1_number_1/benchmark_data.db",
+  "sqlite_sha256": "9f2cec970b6091d92e7868698fbbff1a1631c8b70d20af0afc47b4ccc14e8488",
+  "expected_rows": 1,
+  "input_tokens": 256,
+  "output_tokens": 256,
+  "checks": [
+    {
+      "row_index": 1,
+      "usage": {
+        "prompt_tokens": 256,
+        "completion_tokens": 256
+      },
+      "usage_source": "Native completed-request log keyed by exact SSE request ID; streaming usage absent",
+      "native_request_id": "chatcmpl-13638450038800729540-76KZ9w2TwFh5B42Eaz9jWv",
+      "record": "original_request_response_01.json",
+      "latency_s": 85.07050820905715,
+      "ttft_s": 2.152460261248052,
+      "tpot_s": 0.3251688154816043
+    }
+  ]
+}

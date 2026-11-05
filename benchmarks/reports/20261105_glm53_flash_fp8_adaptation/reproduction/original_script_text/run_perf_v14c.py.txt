@@ -1,0 +1,30 @@
+"""Official EvalScope warmup and measured runs; preserve raw rows for both."""
+import json,subprocess,datetime,os
+from pathlib import Path
+root=Path('/work')
+gate=json.loads((root/'records/accuracy_review_before_performance.json').read_text())
+assert gate['scored_questions_each_side']==100
+assert gate['discordance_repeats_reviewed'] or gate.get('user_waived_further_repeats',False)
+assert gate['approved_to_measure_current_baseline']
+assert gate['source_manifest']=='source_manifest_v14c.json'
+out=root/'eval/perf_fp8_v14c_eager_v1';out.mkdir(exist_ok=False)
+(out/'accuracy_review.json').write_text(json.dumps(gate,ensure_ascii=False,indent=2))
+commands=[]
+for n in [256,2048]:
+    for phase,count in [('warmup',1),('measured',5)]:
+        cmd=['/baseline/eval/venv/bin/python','/baseline/eval/venv/bin/evalscope','perf','--api','openai','--model','glm-5.3-flash','--url','http://10.121.32.9:49080/v1/chat/completions','--dataset','line_by_line','--dataset-path',str(root/f'eval/perf_inputs_v2/input{n}_output256.jsonl'),'--number',str(count),'--parallel','1','--warmup-num','0','--tokenizer-path','/model','--stream','--outputs-dir',str(out/f'input{n}_output256'/phase),'--no-timestamp','--no-test-connection','--connect-timeout','20','--read-timeout','900','--total-timeout','1800']
+        commands.append({'input_tokens':n,'output_tokens':256,'phase':phase,'number':count,'command':cmd})
+(out/'commands.json').write_text(json.dumps(commands,indent=2))
+(out/'protocol_note.txt').write_text('Each shape runs one separately recorded warmup request, then five measured requests. Both use unmodified official EvalScope CLI. Built-in warmup-num=0 because this version discards warmup raw rows. Do not combine warmup DB into measured statistics. All six prompt bodies per shape are identical.\n')
+results=[]
+for item in commands:
+    begin=datetime.datetime.now().astimezone().isoformat()
+    (out/'active.json').write_text(json.dumps({'started_at':begin,**item},indent=2))
+    with (out/f"{item['phase']}_input{item['input_tokens']}.log").open('wb') as log:
+        result=subprocess.run(item['command'],stdout=log,stderr=subprocess.STDOUT,env=dict(os.environ,TOKENIZERS_PARALLELISM='false',LD_PRELOAD=''))
+    results.append({k:v for k,v in item.items() if k!='command'}|{'exit_code':result.returncode,'started_at':begin,'finished_at':datetime.datetime.now().astimezone().isoformat()})
+    (out/'status.json').write_text(json.dumps(results,indent=2))
+    if result.returncode:raise SystemExit(result.returncode)
+    phase_dir=out/f"input{item['input_tokens']}_output256"/item['phase']
+    subprocess.run(['/baseline/eval/venv/bin/python','/baseline/tools/validate_perf_phase.py',str(phase_dir),str(item['input_tokens']),str(item['number'])],check=True)
+(out/'complete.json').write_text(json.dumps({'completed_at':datetime.datetime.now().astimezone().isoformat(),'expected_each_shape':{'warmup':1,'measured':5}},indent=2))

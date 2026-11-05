@@ -1,0 +1,36 @@
+2026-11-04 23:53:56  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:130): TileLang begins to compile kernel `gated_deltanet_kda_decode` with `out_idx=None`
+2026-11-04 23:53:58  [TileLang:tilelang.jit.kernel:INFO] (kernel.py:138): TileLang completes to compile kernel `gated_deltanet_kda_decode`
+{"layer": 0, "max_decode_vs_full_rmse": 0.004856044426560402, "max_split_vs_hf_rmse": 0.004393648821860552}
+{"layer": 1, "max_decode_vs_full_rmse": 0.004240002948790789, "max_split_vs_hf_rmse": 0.004090718924999237}
+{"layer": 2, "max_decode_vs_full_rmse": 0.004636600147932768, "max_split_vs_hf_rmse": 0.004360138438642025}
+{"layer": 4, "max_decode_vs_full_rmse": 0.004622593056410551, "max_split_vs_hf_rmse": 0.004408195149153471}
+{"layer": 5, "max_decode_vs_full_rmse": 0.005386302247643471, "max_split_vs_hf_rmse": 0.0046776956878602505}
+{"layer": 6, "max_decode_vs_full_rmse": 0.005134124308824539, "max_split_vs_hf_rmse": 0.004494030959904194}
+{"layer": 8, "max_decode_vs_full_rmse": 0.0047038099728524685, "max_split_vs_hf_rmse": 0.004104777239263058}
+{"layer": 9, "max_decode_vs_full_rmse": 0.007265197113156319, "max_split_vs_hf_rmse": 0.005297158844769001}
+{"layer": 10, "max_decode_vs_full_rmse": 0.004296427126973867, "max_split_vs_hf_rmse": 0.004487213678658009}
+{"layer": 12, "max_decode_vs_full_rmse": 0.010225041769444942, "max_split_vs_hf_rmse": 0.009611356072127819}
+{"layer": 13, "max_decode_vs_full_rmse": 0.004445874597877264, "max_split_vs_hf_rmse": 0.004193667322397232}
+{"layer": 14, "max_decode_vs_full_rmse": 0.0055680228397250175, "max_split_vs_hf_rmse": 0.005192265845835209}
+{"layer": 16, "max_decode_vs_full_rmse": 0.004707796964794397, "max_split_vs_hf_rmse": 0.005201457068324089}
+{"layer": 17, "max_decode_vs_full_rmse": 0.004885971080511808, "max_split_vs_hf_rmse": 0.005369238089770079}
+{"layer": 18, "max_decode_vs_full_rmse": 0.004504862241446972, "max_split_vs_hf_rmse": 0.004798938985913992}
+{"layer": 20, "max_decode_vs_full_rmse": 0.004968657158315182, "max_split_vs_hf_rmse": 0.004623033571988344}
+{"layer": 21, "max_decode_vs_full_rmse": 0.004452558234333992, "max_split_vs_hf_rmse": 0.004392934497445822}
+{"layer": 22, "max_decode_vs_full_rmse": 0.00437737675383687, "max_split_vs_hf_rmse": 0.004463755525648594}
+{"layer": 24, "max_decode_vs_full_rmse": 0.004773357883095741, "max_split_vs_hf_rmse": 0.004567797761410475}
+{"layer": 25, "max_decode_vs_full_rmse": 0.00411810539662838, "max_split_vs_hf_rmse": 0.004152466543018818}
+{"layer": 26, "max_decode_vs_full_rmse": 0.004625925328582525, "max_split_vs_hf_rmse": 0.004583508707582951}
+{"layer": 28, "max_decode_vs_full_rmse": 0.004344521090388298, "max_split_vs_hf_rmse": 0.006573316175490618}
+{"layer": 29, "max_decode_vs_full_rmse": 0.004553610924631357, "max_split_vs_hf_rmse": 0.004402283579111099}
+{"layer": 30, "max_decode_vs_full_rmse": 0.0043510328978300095, "max_split_vs_hf_rmse": 0.004112595226615667}
+{"layer": 32, "max_decode_vs_full_rmse": 0.004323303233832121, "max_split_vs_hf_rmse": 0.004144006408751011}
+{"layer": 33, "max_decode_vs_full_rmse": 0.0047692107036709785, "max_split_vs_hf_rmse": 0.004496918059885502}
+{"layer": 34, "max_decode_vs_full_rmse": 0.004132308065891266, "max_split_vs_hf_rmse": 0.0041785575449466705}
+{"layer": 36, "max_decode_vs_full_rmse": 0.004305585753172636, "max_split_vs_hf_rmse": 0.004118372220546007}
+{"layer": 37, "max_decode_vs_full_rmse": 0.004389396868646145, "max_split_vs_hf_rmse": 0.004780508577823639}
+{"layer": 38, "max_decode_vs_full_rmse": 0.0069656153209507465, "max_split_vs_hf_rmse": 0.007425915449857712}
+{"layer": 40, "max_decode_vs_full_rmse": 0.004522017668932676, "max_split_vs_hf_rmse": 0.004441601689904928}
+{"layer": 41, "max_decode_vs_full_rmse": 0.0049010696820914745, "max_split_vs_hf_rmse": 0.00464474456384778}
+{"layer": 42, "max_decode_vs_full_rmse": 0.006953767966479063, "max_split_vs_hf_rmse": 0.01041917223483324}
+{"layer": 44, "max_decode_vs_full_rmse": 0.004737497307360172, "max_split_vs_hf_rmse": 0.005056556314229965}

@@ -1,0 +1,453 @@
+{
+  "at": "2026-11-05T10:42:11.851339+08:00",
+  "rows": [
+    {
+      "question_id": "mathqa-test-0020",
+      "ground_truth": "D",
+      "official_initial": "B",
+      "local_initial": "D",
+      "official_repeats": [
+        {
+          "repeat_index": 1,
+          "http_status": 200,
+          "answer": "B",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 198,
+            "completion_tokens_details": {
+              "reasoning_tokens": 138
+            },
+            "prompt_tokens": 161,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 359
+          },
+          "elapsed_seconds": 4.221211373980623
+        },
+        {
+          "repeat_index": 2,
+          "http_status": 200,
+          "answer": "D",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 427,
+            "completion_tokens_details": {
+              "reasoning_tokens": 369
+            },
+            "prompt_tokens": 161,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 588
+          },
+          "elapsed_seconds": 7.433099870977458
+        },
+        {
+          "repeat_index": 3,
+          "http_status": 200,
+          "answer": "D",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 300,
+            "completion_tokens_details": {
+              "reasoning_tokens": 231
+            },
+            "prompt_tokens": 161,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 461
+          },
+          "elapsed_seconds": 5.764814359950833
+        }
+      ],
+      "official_completed": 3,
+      "official_valid_answer_set": [
+        "B",
+        "D"
+      ],
+      "official_repeat_truncations": 0,
+      "local_repeats": [],
+      "local_completed": 0,
+      "local_valid_answer_set": [],
+      "local_repeat_truncations": 0
+    },
+    {
+      "question_id": "mathqa-test-0031",
+      "ground_truth": "D",
+      "official_initial": "A",
+      "local_initial": "B",
+      "official_repeats": [
+        {
+          "repeat_index": 1,
+          "http_status": 200,
+          "answer": null,
+          "truncated": true,
+          "format_error": "missing_or_ambiguous_final_answer",
+          "usage": {
+            "completion_tokens": 4096,
+            "completion_tokens_details": {
+              "reasoning_tokens": 4094
+            },
+            "prompt_tokens": 145,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 4241
+          },
+          "elapsed_seconds": 56.29731856001308
+        },
+        {
+          "repeat_index": 2,
+          "http_status": 200,
+          "answer": "E",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 868,
+            "completion_tokens_details": {
+              "reasoning_tokens": 778
+            },
+            "prompt_tokens": 145,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 1013
+          },
+          "elapsed_seconds": 13.715599286020733
+        },
+        {
+          "repeat_index": 3,
+          "http_status": 200,
+          "answer": "E",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 1176,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1077
+            },
+            "prompt_tokens": 145,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 1321
+          },
+          "elapsed_seconds": 20.176470158970915
+        }
+      ],
+      "official_completed": 3,
+      "official_valid_answer_set": [
+        "E"
+      ],
+      "official_repeat_truncations": 1,
+      "local_repeats": [],
+      "local_completed": 0,
+      "local_valid_answer_set": [],
+      "local_repeat_truncations": 0
+    },
+    {
+      "question_id": "mathqa-test-0062",
+      "ground_truth": "D",
+      "official_initial": "D",
+      "local_initial": "D",
+      "official_repeats": [
+        {
+          "repeat_index": 1,
+          "http_status": 200,
+          "answer": "D",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 425,
+            "completion_tokens_details": {
+              "reasoning_tokens": 385
+            },
+            "prompt_tokens": 116,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 541
+          },
+          "elapsed_seconds": 7.3096734849968925
+        },
+        {
+          "repeat_index": 2,
+          "http_status": 200,
+          "answer": "D",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 68,
+            "completion_tokens_details": {
+              "reasoning_tokens": 34
+            },
+            "prompt_tokens": 116,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 184
+          },
+          "elapsed_seconds": 2.3074719539727084
+        },
+        {
+          "repeat_index": 3,
+          "http_status": 200,
+          "answer": "D",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 137,
+            "completion_tokens_details": {
+              "reasoning_tokens": 104
+            },
+            "prompt_tokens": 116,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 253
+          },
+          "elapsed_seconds": 3.1391181190265343
+        }
+      ],
+      "official_completed": 3,
+      "official_valid_answer_set": [
+        "D"
+      ],
+      "official_repeat_truncations": 0,
+      "local_repeats": [],
+      "local_completed": 0,
+      "local_valid_answer_set": [],
+      "local_repeat_truncations": 0
+    },
+    {
+      "question_id": "mathqa-test-0065",
+      "ground_truth": "A",
+      "official_initial": "A",
+      "local_initial": "A",
+      "official_repeats": [
+        {
+          "repeat_index": 1,
+          "http_status": 200,
+          "answer": "A",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 1834,
+            "completion_tokens_details": {
+              "reasoning_tokens": 1716
+            },
+            "prompt_tokens": 160,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 1994
+          },
+          "elapsed_seconds": 26.169192413042765
+        },
+        {
+          "repeat_index": 2,
+          "http_status": 200,
+          "answer": "A",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 545,
+            "completion_tokens_details": {
+              "reasoning_tokens": 468
+            },
+            "prompt_tokens": 160,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 705
+          },
+          "elapsed_seconds": 11.294575618987437
+        },
+        {
+          "repeat_index": 3,
+          "http_status": 200,
+          "answer": "D",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 402,
+            "completion_tokens_details": {
+              "reasoning_tokens": 332
+            },
+            "prompt_tokens": 160,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 562
+          },
+          "elapsed_seconds": 7.412973742000759
+        }
+      ],
+      "official_completed": 3,
+      "official_valid_answer_set": [
+        "A",
+        "D"
+      ],
+      "official_repeat_truncations": 0,
+      "local_repeats": [],
+      "local_completed": 0,
+      "local_valid_answer_set": [],
+      "local_repeat_truncations": 0
+    },
+    {
+      "question_id": "mathqa-test-0076",
+      "ground_truth": "C",
+      "official_initial": "C",
+      "local_initial": "B",
+      "official_repeats": [
+        {
+          "repeat_index": 1,
+          "http_status": 200,
+          "answer": "C",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 86,
+            "completion_tokens_details": {
+              "reasoning_tokens": 59
+            },
+            "prompt_tokens": 119,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 205
+          },
+          "elapsed_seconds": 2.597734061011579
+        },
+        {
+          "repeat_index": 2,
+          "http_status": 200,
+          "answer": "C",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 118,
+            "completion_tokens_details": {
+              "reasoning_tokens": 86
+            },
+            "prompt_tokens": 119,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 237
+          },
+          "elapsed_seconds": 3.121732149971649
+        },
+        {
+          "repeat_index": 3,
+          "http_status": 200,
+          "answer": "C",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 138,
+            "completion_tokens_details": {
+              "reasoning_tokens": 46
+            },
+            "prompt_tokens": 119,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 257
+          },
+          "elapsed_seconds": 2.8061002930044197
+        }
+      ],
+      "official_completed": 3,
+      "official_valid_answer_set": [
+        "C"
+      ],
+      "official_repeat_truncations": 0,
+      "local_repeats": [],
+      "local_completed": 0,
+      "local_valid_answer_set": [],
+      "local_repeat_truncations": 0
+    },
+    {
+      "question_id": "mathqa-test-0088",
+      "ground_truth": "D",
+      "official_initial": "D",
+      "local_initial": "B",
+      "official_repeats": [
+        {
+          "repeat_index": 1,
+          "http_status": 200,
+          "answer": "D",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 94,
+            "completion_tokens_details": {
+              "reasoning_tokens": 33
+            },
+            "prompt_tokens": 124,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 218
+          },
+          "elapsed_seconds": 2.2815527920029126
+        },
+        {
+          "repeat_index": 2,
+          "http_status": 200,
+          "answer": "D",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 92,
+            "completion_tokens_details": {
+              "reasoning_tokens": 29
+            },
+            "prompt_tokens": 124,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 216
+          },
+          "elapsed_seconds": 2.000245263974648
+        },
+        {
+          "repeat_index": 3,
+          "http_status": 200,
+          "answer": "D",
+          "truncated": false,
+          "format_error": null,
+          "usage": {
+            "completion_tokens": 83,
+            "completion_tokens_details": {
+              "reasoning_tokens": 39
+            },
+            "prompt_tokens": 124,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "total_tokens": 207
+          },
+          "elapsed_seconds": 2.128614373970777
+        }
+      ],
+      "official_completed": 3,
+      "official_valid_answer_set": [
+        "D"
+      ],
+      "official_repeat_truncations": 0,
+      "local_repeats": [],
+      "local_completed": 0,
+      "local_valid_answer_set": [],
+      "local_repeat_truncations": 0
+    }
+  ],
+  "all_listed_completed": false,
+  "rules": "Exactly the frozen request payload. Repeats excluded from primary accuracy. Variation is observed, not proof of its internal cause; deterministic local answers do not establish correctness."
+}

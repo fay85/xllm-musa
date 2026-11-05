@@ -1,0 +1,73 @@
+{
+  "question_id": "mathqa-test-0051",
+  "endpoint": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nfind large number from below question the difference of two numbers is 1365 . on dividing the larger number by the smaller , we get 6 as quotient and the 15 as remainder\n\nA. 1235\nB. 1346\nC. 1378\nD. 1635\nE. 1489"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false,
+    "model": "glm-5.3-flash"
+  },
+  "ground_truth": "D",
+  "started_at": "2026-11-04T14:20:18.184708+08:00",
+  "protocol_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+  "scorer_version": "final-visible-v2-think-boundary",
+  "client_read_timeout_seconds": 900,
+  "http_status": 200,
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "**Setting up equations:**\n\nLet the larger number be L and smaller be S.\n\n- L − S = 1365\n- L = 6S + 15 (quotient 6, remainder 15)\n\nSubstituting: 6S + 15 − S = 1365 → 5S = 1350 → S = 270\n\nL = 270 + 1365 = **1635**\n\nCheck: 1635 = 6(270) + 15 ✓\n\nANSWER: D",
+          "reasoning_content": "L= s+1365, L=6s+15 → 5s=1350, s=270, L=1635.",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1793773220,
+    "id": "20261104142018c796a3c100054682",
+    "model": "glm-5.3-flash",
+    "object": "chat.completion",
+    "request_id": "20261104142018c796a3c100054682",
+    "usage": {
+      "completion_tokens": 140,
+      "completion_tokens_details": {
+        "reasoning_tokens": 30
+      },
+      "prompt_tokens": 125,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 265
+    }
+  },
+  "final_content": "**Setting up equations:**\n\nLet the larger number be L and smaller be S.\n\n- L − S = 1365\n- L = 6S + 15 (quotient 6, remainder 15)\n\nSubstituting: 6S + 15 − S = 1365 → 5S = 1350 → S = 270\n\nL = 270 + 1365 = **1635**\n\nCheck: 1635 = 6(270) + 15 ✓\n\nANSWER: D",
+  "reasoning_boundary_present": false,
+  "reasoning_separate_field": true,
+  "answer": "D",
+  "format_error": null,
+  "truncated": false,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 140,
+    "completion_tokens_details": {
+      "reasoning_tokens": 30
+    },
+    "prompt_tokens": 125,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 265
+  },
+  "correct": true,
+  "elapsed_seconds": 2.5546111069852486
+}

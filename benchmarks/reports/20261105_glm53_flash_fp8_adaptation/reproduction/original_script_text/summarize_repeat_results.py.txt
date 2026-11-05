@@ -1,0 +1,26 @@
+"""Compare repeats without altering frozen initial scores or labels."""
+from pathlib import Path
+import datetime,json
+from scored_response import load_scored
+b=Path(__file__).resolve().parents[1];folder=b/'评测/full_pd_fp8_v14c';old=b.parent/'20261104第二步完成一次glm推理并跑通公开的评测集的对分/评测/paired_protocol_v2/official'
+ids=sorted({int(p.name.split('_')[0][-4:]) for directory in [folder,folder/'official_repeats'] for p in directory.glob('mathqa-test-*_repeat*.json')})
+rows=[]
+for i in ids:
+ q=f'mathqa-test-{i:04d}';initial=json.loads((old/(q+'.json')).read_text());row={'question_id':q,'ground_truth':initial['ground_truth'],'official_initial':initial['answer'],'local_initial':load_scored(folder,q)[0].get('answer')}
+ for name,directory in [('official',folder/'official_repeats'),('local',folder)]:
+  attempts=[]
+  for n in range(1,4):
+   p=directory/f'{q}_repeat{n}.json'
+   if not p.exists():continue
+   j=json.loads(p.read_text())
+   if 'elapsed_seconds' not in j:continue
+   assert j['request']==initial['request'], (q,name,n)
+   attempts.append({k:j.get(k) for k in ['repeat_index','http_status','answer','truncated','format_error','usage','elapsed_seconds']})
+  row[name+'_repeats']=attempts
+  row[name+'_completed']=len(attempts)
+  row[name+'_valid_answer_set']=sorted({a['answer'] for a in attempts if a.get('answer') and not a.get('truncated')})
+  row[name+'_repeat_truncations']=sum(bool(a.get('truncated')) for a in attempts)
+ rows.append(row)
+result={'at':datetime.datetime.now().astimezone().isoformat(),'rows':rows,'all_listed_completed':all(r['official_completed']==r['local_completed']==3 for r in rows),'rules':'Exactly the frozen request payload. Repeats excluded from primary accuracy. Variation is observed, not proof of its internal cause; deterministic local answers do not establish correctness.'}
+(folder/'repeat_summary.json').write_text(json.dumps(result,ensure_ascii=False,indent=2))
+print(json.dumps({'questions':len(rows),'completed_both_sides':[r['question_id'] for r in rows if r['official_completed']==r['local_completed']==3],'official_variation':[r['question_id'] for r in rows if len(r['official_valid_answer_set'])>1 or r['official_repeat_truncations']]},ensure_ascii=False))

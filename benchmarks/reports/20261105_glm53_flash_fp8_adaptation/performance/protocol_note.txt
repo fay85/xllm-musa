@@ -1,0 +1,1 @@
+Each shape runs one separately recorded warmup request, then five measured requests. Both use unmodified official EvalScope CLI. Built-in warmup-num=0 because this version discards warmup raw rows. Do not combine warmup DB into measured statistics. All six prompt bodies per shape are identical.

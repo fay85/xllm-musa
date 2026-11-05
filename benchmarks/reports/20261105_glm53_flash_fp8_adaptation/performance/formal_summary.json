@@ -1,0 +1,116 @@
+{
+  "model_implementation": "v14c: FP8 routed MegaMoE EP8; attention/shared TP8; eager; recurrent KDA; FP32 TP reduction",
+  "tool": "Unmodified EvalScope1.14.1 CLI, CPU client on sj10 LAN",
+  "accuracy_boundary": "User authorized performance with retained numerical/accuracy issues; no new trace.",
+  "rows": [
+    {
+      "input_tokens": 256,
+      "output_tokens": 256,
+      "concurrency": 1,
+      "measured_requests": 5,
+      "warmup_requests_excluded": 1,
+      "wall_time_s": 423.28498974163085,
+      "mean_latency_s": 84.65680178068578,
+      "mean_ttft_ms": 2099.7556505724788,
+      "mean_tpot_ms": 323.75312207887566,
+      "qps": 0.011812372564999181,
+      "output_throughput_tokens_per_s": 3.0239673766397903,
+      "official_evalscope_summary": {
+        "Test Duration (s)": 423.285,
+        "Concurrency": 1,
+        "Request Rate (req/s)": -1.0,
+        "Total Requests": 5,
+        "Success Requests": 5,
+        "Failed Requests": 0,
+        "Stream Requests": 5,
+        "Non-Stream Requests": 0,
+        "Req Throughput (req/s)": 0.0118,
+        "Avg Latency (s)": 84.6568,
+        "Avg Input Tokens": 256.0,
+        "Output Throughput (tok/s)": 3.024,
+        "Total Throughput (tok/s)": 6.0479,
+        "Avg TTFT (ms)": 2099.76,
+        "Avg TPOT (ms)": 323.75,
+        "Avg ITL (ms)": 325.03,
+        "Avg Output Tokens": 256.0,
+        "Input Throughput (tok/s)": 0.0,
+        "KV Cache Hit Rate (%)": 0.0
+      },
+      "decode_speed_inverse_mean_tpot_tokens_per_s": 3.0887733022582897,
+      "latency_s_range": [
+        84.12804831378162,
+        85.67518063914031
+      ],
+      "latency_s_sample_sd": 0.6344004661282109,
+      "ttft_ms_range": [
+        2062.9290472716093,
+        2126.0228445753455
+      ],
+      "ttft_ms_sample_sd": 23.712104528763724,
+      "tpot_ms_range": [
+        321.69587738885014,
+        327.64375605711746
+      ],
+      "tpot_ms_sample_sd": 2.4653433098731723
+    },
+    {
+      "input_tokens": 2048,
+      "output_tokens": 256,
+      "concurrency": 1,
+      "measured_requests": 5,
+      "warmup_requests_excluded": 1,
+      "wall_time_s": 496.4937774389982,
+      "mean_latency_s": 99.29838547986,
+      "mean_ttft_ms": 16985.56510321796,
+      "mean_tpot_ms": 322.7953740260473,
+      "qps": 0.01007061966776477,
+      "output_throughput_tokens_per_s": 2.578078634947781,
+      "official_evalscope_summary": {
+        "Test Duration (s)": 496.4938,
+        "Concurrency": 1,
+        "Request Rate (req/s)": -1.0,
+        "Total Requests": 5,
+        "Success Requests": 5,
+        "Failed Requests": 0,
+        "Stream Requests": 5,
+        "Non-Stream Requests": 0,
+        "Req Throughput (req/s)": 0.0101,
+        "Avg Latency (s)": 99.2984,
+        "Avg Input Tokens": 2048.0,
+        "Output Throughput (tok/s)": 2.5781,
+        "Total Throughput (tok/s)": 23.2027,
+        "Avg TTFT (ms)": 16985.57,
+        "Avg TPOT (ms)": 322.8,
+        "Avg ITL (ms)": 325.35,
+        "Avg Output Tokens": 256.0,
+        "Input Throughput (tok/s)": 0.0,
+        "KV Cache Hit Rate (%)": 0.0,
+        "Avg Decoded Tok/Iter": 1.0039,
+        "Spec. Accept Rate": 0.0039
+      },
+      "decode_speed_inverse_mean_tpot_tokens_per_s": 3.0979378283138193,
+      "latency_s_range": [
+        97.81484642997384,
+        100.15425058733672
+      ],
+      "latency_s_sample_sd": 0.877523511830516,
+      "ttft_ms_range": [
+        16594.14083417505,
+        17388.9414742589
+      ],
+      "ttft_ms_sample_sd": 354.09067730399056,
+      "tpot_ms_range": [
+        318.51257096391686,
+        324.6323576197028
+      ],
+      "tpot_ms_sample_sd": 2.5632849821572883
+    }
+  ],
+  "definitions": {
+    "qps": "Measured successful requests / (last completion time - first start time)",
+    "output_throughput": "Measured output tokens / same request window",
+    "decode_speed": "1 / mean TPOT; excludes TTFT and is not end-to-end throughput",
+    "tpot": "(latency - first visible chunk latency) / (256 - 1)",
+    "itl": "SSE chunk timing may merge tokens; not asserted to be individual GPU-token time"
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "request": {
+    "model": "glm-5.3-flash",
+    "messages": [
+      {
+        "role": "user",
+        "content": "请直接回答：中国的首都是哪里？"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 256,
+    "stream": false
+  },
+  "endpoint": "http://10.121.32.9:49080/v1/chat/completions",
+  "started_at": "2026-11-05T09:04:53.411103+08:00",
+  "source_manifest": "records/source_manifest_v14c.json",
+  "mechanism": "1P1D, each instance AttentionTP8 routedEP8 sharedTP8, recurrent KDA, FP32 TP reduction, eager",
+  "http_status": 200,
+  "response": {
+    "id": "chatcmpl-13638450038800729540-yV6HoSQYxEBpQpNrTxjJNe",
+    "object": "chat.completion",
+    "created": 1793840693,
+    "model": "glm-5.3-flash",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "</think>中国的首都是**北京**。"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 21,
+      "completion_tokens": 9,
+      "total_tokens": 30,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  },
+  "elapsed_seconds": 6.26901343598729
+}

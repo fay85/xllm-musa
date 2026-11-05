@@ -1,0 +1,96 @@
+{
+  "question_id": "mathqa-test-0061",
+  "repeat_index": 0,
+  "diagnostic_repeat_excluded_from_primary_score": false,
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nhow many seconds will a 650 meter long train moving with a speed of 63 km / hr take to cross a man walking with a speed of 3 km / hr in the direction of the train ?\n\nA. 48\nB. 36\nC. 26\nD. 39\nE. 18"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false,
+    "model": "glm-5.3-flash"
+  },
+  "endpoint": "http://10.121.32.9:49080/v1/chat/completions",
+  "implementation": {
+    "at": "2026-11-05T08:42:52.348737+08:00",
+    "base_commit": "d2f5bda912de17ba6e90f62fd6dfc0eac5e59d3f",
+    "branch": "xiaopang1104benchmark1P1D",
+    "implementation": "v14c reviewed candidate: FP8 MegaMoE and FP32 mHC controls; explicit MATE recurrent KDA and FP32 TP modes; no diagnostic overrides or dumps; CP test fixtures supply constructor config",
+    "candidate_not_qualified": true,
+    "files": {
+      "tests/musa/run_glm_mega_moe_regression.py": "d286a171c896d970fd8fa4da4ac1371fd2f9abc2cde9bb12af3e0e8fc848e490",
+      "tests/musa/run_glm_real_moe_regression.py": "c2ae78fd910dfb440907217e3d1243335fc54e01250d3aa9c83408585cede29e",
+      "tests/musa/test_glm_kda.py": "b8787935e3ef221e379878a26e7e3b2e895b711e6e1bbfc342ece9d72593a245",
+      "tests/python/test_glm_musa_fp8_contracts.py": "0b7c81b8db4d94bdeabb430633967839db64d6de95e9d4e15119d0f0a3e901cf",
+      "xllm/python/attention/musa_glm_reference.py": "e9c5a600507f9501215c2dfa3b872b1c97e527a56babcd0a49d3e7c2d51cefc2",
+      "xllm/python/kernels_musa/kda.py": "2b170f5b6b51cd054b03c9f5ed10dc6b9cd40f4b13b9c8faeea18f2524e8d2cf",
+      "xllm/python/kernels_musa/mega_moe.py": "9f5707893db3e1c11a514392eb6f7d948e1cd52538a399e13fe51a282599a148",
+      "xllm/python/layers/qlinear.py": "b251ca15800c1dfd8db9ef63de273de6aad43db275cd3f06b43304e440551028",
+      "xllm/python/model_executor/executor.py": "22481dbcc4ca5f10addddee134e8dd4990ad1757de800f23d73eec1bfcd3ebbb",
+      "xllm/python/models/glm5_next.py": "df0c9cfcee32c64d4f842fa5103eed55279fd5b9ab06dc2ed7002ac22739a5d1",
+      "xllm/python/models/glm5_next_weight.py": "ff65f7e4d6f20dc282de9ef37855f501fd334eacc03997c0c50c3328b3e39aa4",
+      "tests/python/test_glm5_next_cp.py": "63b29710e86270df25ff5f5dd4aa5cbb8e91b56efe99f54a9b723a33d4531311"
+    },
+    "required_environment_for_v12_math": {
+      "XLLM_MUSA_GLM_MOE_BACKEND": "mega_moe",
+      "XLLM_MUSA_GLM_KDA_PREFILL_MODE": "recurrent",
+      "XLLM_MUSA_GLM_TP_REDUCE_PRECISION": "fp32"
+    }
+  },
+  "official_reference": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/20261103重新开始进行glm5.3flash体系化推进部署/20261104第二步完成一次glm推理并跑通公开的评测集的对分/评测/paired_protocol_v2/official/mathqa-test-0061.json",
+  "official_reference_sha256": "2a2c9088f540c641cbcd60f1165412aea04c77ed4152d1bc4479d88525d4f773",
+  "ground_truth": "D",
+  "official_answer": "D",
+  "started_at": "2026-11-05T09:53:57.902251+08:00",
+  "protocol_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+  "request_sha256": "c14202c1ae5a2c3918947eab6c999e3a1c7593527ed99b6d87e4f74897579bf6",
+  "scorer_version": "final-visible-v2-think-boundary",
+  "http_status": 200,
+  "response": {
+    "id": "chatcmpl-13638450038800729540-ykDT7DwLsUYgjRJEJPXexZ",
+    "object": "chat.completion",
+    "created": 1793843637,
+    "model": "glm-5.3-flash",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "Relative speed 60 km/h = 50/3 m/s; 650/(50/3)=39. D</think>Relative speed = 63 − 3 = 60 km/hr = 60 × 5/18 = 50/3 m/s.\n\nTime = 650 ÷ (50/3) = 650 × 3/50 = 39 seconds.\n\nANSWER: D"
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 124,
+      "completion_tokens": 83,
+      "total_tokens": 207,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  },
+  "final_content": "Relative speed = 63 − 3 = 60 km/hr = 60 × 5/18 = 50/3 m/s.\n\nTime = 650 ÷ (50/3) = 650 × 3/50 = 39 seconds.\n\nANSWER: D",
+  "answer": "D",
+  "format_error": null,
+  "truncated": false,
+  "finish_reason": "stop",
+  "usage": {
+    "prompt_tokens": 124,
+    "completion_tokens": 83,
+    "total_tokens": 207,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    }
+  },
+  "correct": true,
+  "agrees_with_official": true,
+  "reasoning_separate_field": false,
+  "elapsed_seconds": 27.817622961010784
+}

@@ -1,0 +1,29 @@
+{
+  "at": "2026-11-05T10:37:32.098595+08:00",
+  "reason": "User waived further discordant-question repeats and trace; complete initial100 then performance",
+  "actions": [
+    {
+      "pid": 1664703,
+      "script": "queue_remote_discordance_repeats.py",
+      "start_ticks": "49524226",
+      "signal": "SIGTERM",
+      "scope": "local CPU queue/watcher only"
+    },
+    {
+      "pid": 1671185,
+      "script": "queue_tool_protocol_after_repeats.py",
+      "start_ticks": "49566749",
+      "signal": "SIGTERM",
+      "scope": "local CPU queue/watcher only"
+    },
+    {
+      "pid": 1620084,
+      "script": "watch_official_discordances.py",
+      "start_ticks": "49235569",
+      "signal": "SIGTERM",
+      "scope": "local CPU queue/watcher only"
+    }
+  ],
+  "model_processes_untouched": true,
+  "repeat_plan_launched": false
+}

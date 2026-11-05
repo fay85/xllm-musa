@@ -14,6 +14,8 @@
 
 from __future__ import annotations
 
+import os
+
 import torch
 import torch.nn as nn
 
@@ -123,8 +125,12 @@ def _create_attention_backend(
             raise NotImplementedError("Initial Python MUSA attention supports GLM5 Next text only")
         if bool(config.get("enable_graph", False)) or acl_graph_enabled or num_decoding_tokens != 1:
             raise NotImplementedError("Initial MUSA GLM requires eager execution without speculative tokens")
-        if any(int(config.get(axis, 1)) != 1 for axis in ("cp_size", "dp_size", "ep_size", "dcp_size", "layerwise_split_size")):
-            raise NotImplementedError("Initial MUSA GLM supports TP only, without CP/DP/EP/DCP/layerwise split")
+        if any(int(config.get(axis, 1)) != 1 for axis in ("cp_size", "dp_size", "dcp_size", "layerwise_split_size")):
+            raise NotImplementedError("MUSA GLM supports TP with optional MegaMoE EP, without CP/DP/DCP/layerwise split")
+        ep = int(config.get("ep_size", 1))
+        moe_backend = config.get("musa_moe_backend", os.getenv("XLLM_MUSA_GLM_MOE_BACKEND", "bf16"))
+        if ep > 1 and (moe_backend != "mega_moe" or ep != int(config.get("tp_size", 1))):
+            raise NotImplementedError("MUSA GLM EP requires MegaMoE over the attention TP ranks")
         from xllm.python.attention.musa_glm_reference import MusaGlmReferenceBackend
 
         return MusaGlmReferenceBackend(device)

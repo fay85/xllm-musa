@@ -1,0 +1,73 @@
+{
+  "question_id": "mathqa-test-0092",
+  "endpoint": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\na manufacturer produces a certain men ' s athletic shoe in integer sizes from 8 to 17 . for this particular shoe , each unit increase in size corresponds to a 1 / 5 - inch increase in the length of the shoe . if the largest size of this shoe is 30 % longer than the smallest size , how long , in inches , is the shoe in size 15 ?\n\nA. 6.8\nB. 7.4\nC. 7.7\nD. 8.2\nE. 8.6"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false,
+    "model": "glm-5.3-flash"
+  },
+  "ground_truth": "B",
+  "started_at": "2026-11-04T14:22:18.251483+08:00",
+  "protocol_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+  "scorer_version": "final-visible-v2-think-boundary",
+  "client_read_timeout_seconds": 900,
+  "http_status": 200,
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "Size 17 has 9 increments over size 8, so L₁₇ = L₈ + 9/5 = 1.3·L₈ → 0.3·L₈ = 1.8 → L₈ = 6 inches. Size 15 is 7 increments longer: 6 + 7/5 = 7.4 inches.\n\nANSWER: B",
+          "reasoning_content": "Sizes 8 to 17: 9 increments. Largest = 1.3× smallest. L17 = L8 + 9/5 = 1.3 L8 → 0.3L8 = 1.8 → L8=6, L15 = 6+7/5=7.4. B.",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1793773341,
+    "id": "2026110414221876e02236964a4744",
+    "model": "glm-5.3-flash",
+    "object": "chat.completion",
+    "request_id": "2026110414221876e02236964a4744",
+    "usage": {
+      "completion_tokens": 158,
+      "completion_tokens_details": {
+        "reasoning_tokens": 71
+      },
+      "prompt_tokens": 171,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 329
+    }
+  },
+  "final_content": "Size 17 has 9 increments over size 8, so L₁₇ = L₈ + 9/5 = 1.3·L₈ → 0.3·L₈ = 1.8 → L₈ = 6 inches. Size 15 is 7 increments longer: 6 + 7/5 = 7.4 inches.\n\nANSWER: B",
+  "reasoning_boundary_present": false,
+  "reasoning_separate_field": true,
+  "answer": "B",
+  "format_error": null,
+  "truncated": false,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 158,
+    "completion_tokens_details": {
+      "reasoning_tokens": 71
+    },
+    "prompt_tokens": 171,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 329
+  },
+  "correct": true,
+  "elapsed_seconds": 3.2027415430056863
+}

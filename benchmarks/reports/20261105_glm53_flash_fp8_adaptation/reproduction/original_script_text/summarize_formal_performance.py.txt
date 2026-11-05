@@ -1,0 +1,118 @@
+"""Summarize validated measured rows, keeping warmup separate."""
+from pathlib import Path
+import csv
+import json
+import statistics
+
+base = Path(__file__).resolve().parents[1]
+root = base / "评测/perf_fp8_v14c_eager_v2"
+assert (root / "complete.json").exists()
+shapes = []
+requests = []
+for length in [256, 2048]:
+    folder = root / f"input{length}_output256/measured"
+    validation = json.loads((folder / "raw_usage_validation.json").read_text())
+    assert validation["passed"] and validation["expected_rows"] == 5
+    raw = [json.loads((folder / c["record"]).read_text()) for c in validation["checks"]]
+    assert len(raw) == 5
+    official = json.loads(next(folder.rglob("benchmark_summary.json")).read_text())
+    assert official["Concurrency"] == 1 and official["Success Requests"] == official["Total Requests"] == 5
+    for record in raw:
+        assert record["verified_server_usage"] == {"prompt_tokens": length, "completion_tokens": 256}
+    metrics = [record["raw_metrics"] for record in raw]
+    elapsed = max(row["completed_time"] for row in metrics) - min(row["start_time"] for row in metrics)
+    row = {
+        "input_tokens": length,
+        "output_tokens": 256,
+        "concurrency": 1,
+        "measured_requests": 5,
+        "warmup_requests_excluded": 1,
+        "wall_time_s": elapsed,
+        "mean_latency_s": statistics.fmean(m["latency"] for m in metrics),
+        "mean_ttft_ms": 1000 * statistics.fmean(m["first_chunk_latency"] for m in metrics),
+        "mean_tpot_ms": 1000 * statistics.fmean(m["time_per_output_token"] for m in metrics),
+        "qps": 5 / elapsed,
+        "output_throughput_tokens_per_s": 1280 / elapsed,
+        "official_evalscope_summary": official,
+    }
+    row["decode_speed_inverse_mean_tpot_tokens_per_s"] = 1000 / row["mean_tpot_ms"]
+    for key, field, factor in [
+        ("latency_s", "latency", 1),
+        ("ttft_ms", "first_chunk_latency", 1000),
+        ("tpot_ms", "time_per_output_token", 1000),
+    ]:
+        values = [m[field] * factor for m in metrics]
+        row[key + "_range"] = [min(values), max(values)]
+        row[key + "_sample_sd"] = statistics.stdev(values)
+    assert abs(row["mean_latency_s"] - official["Avg Latency (s)"]) < 0.0001
+    assert abs(row["mean_ttft_ms"] - official["Avg TTFT (ms)"]) < 0.006
+    assert abs(row["mean_tpot_ms"] - official["Avg TPOT (ms)"]) < 0.006
+    assert abs(row["qps"] - official["Req Throughput (req/s)"]) < 0.0001
+    assert abs(row["output_throughput_tokens_per_s"] - official["Output Throughput (tok/s)"]) < 0.0001
+    shapes.append(row)
+    for index, record in enumerate(raw, 1):
+        m = record["raw_metrics"]
+        requests.append({
+            "input_tokens": length, "output_tokens": 256, "measured_index": index,
+            "request_id": record["native_request_id"],
+            "latency_s": m["latency"], "ttft_ms": 1000*m["first_chunk_latency"],
+            "tpot_ms": 1000*m["time_per_output_token"],
+            "token_count_source": record["usage_source"],
+        })
+result = {
+    "model_implementation": "v14c: FP8 routed MegaMoE EP8; attention/shared TP8; eager; recurrent KDA; FP32 TP reduction",
+    "tool": "Unmodified EvalScope1.14.1 CLI, CPU client on sj10 LAN",
+    "accuracy_boundary": "User authorized performance with retained numerical/accuracy issues; no new trace.",
+    "rows": shapes,
+    "definitions": {
+        "qps": "Measured successful requests / (last completion time - first start time)",
+        "output_throughput": "Measured output tokens / same request window",
+        "decode_speed": "1 / mean TPOT; excludes TTFT and is not end-to-end throughput",
+        "tpot": "(latency - first visible chunk latency) / (256 - 1)",
+        "itl": "SSE chunk timing may merge tokens; not asserted to be individual GPU-token time",
+    },
+}
+(root / "formal_summary.json").write_text(json.dumps(result, ensure_ascii=False, indent=2))
+with (root / "formal_requests.csv").open("w", encoding="utf-8-sig", newline="") as stream:
+    writer = csv.DictWriter(stream, fieldnames=list(requests[0]))
+    writer.writeheader()
+    writer.writerows(requests)
+lines = [
+    "# 两组正式性能结果",
+    "",
+    "sj9/sj10真实1P1D，P/D各8卡；Attention TP8、路由专家EP8、共享专家TP8。",
+    "当前为eager、MATE recurrent KDA、FP32 TP归约；路由专家FP8，其余相关投影/共享专家仍BF16。",
+    "按用户最新指示，保留精度问题后记录本基线；不是所有数值问题已解决的证明。",
+    "",
+    "官方EvalScope1.14.1，C1；每组独立1次暖机后5次正式请求；",
+    "temperature=0、top_p=1、reasoning_effort=low、stream=true、ignore_eos=true，前缀缓存关闭。",
+    "",
+    "| 输入/输出Token | 正式成功 | 平均TTFT ms | 平均TPOT ms/token | 平均端到端 s | QPS | 输出吞吐 token/s | 1/平均TPOT token/s |",
+    "|---|---:|---:|---:|---:|---:|---:|---:|",
+]
+for row in shapes:
+    lines.append(
+        f"| {row['input_tokens']}/256 | 5/5 | {row['mean_ttft_ms']:.2f} | "
+        f"{row['mean_tpot_ms']:.2f} | {row['mean_latency_s']:.4f} | "
+        f"{row['qps']:.6f} | {row['output_throughput_tokens_per_s']:.4f} | "
+        f"{row['decode_speed_inverse_mean_tpot_tokens_per_s']:.4f} |"
+    )
+lines += [
+    "",
+    "QPS与输出吞吐采用5个正式请求整体时间窗；最后一列只表示去掉TTFT后的平均解码间隔的倒数。",
+    "两者分母不同，不混为同一速度。每组只有5条，适合作为当前配置的初步基线，不能据此推断高并发峰值。",
+    "",
+    "当前流式服务未返回include_usage字段。每条SSE记录的唯一request ID均与native完成日志",
+    "交叉核对输入/生成Token数、prefix cache=0和length结束，并与EvalScope计数一致；",
+    "没有单独依赖客户端重新分词估计。全部原始SSE消息、SQLite、native完成行和校验JSON均保留。",
+    "",
+    "首次客户端缺uvicorn时未发出推理；补齐独立CPU依赖后，256/256暖机成功。",
+    "旧校验器因缺SSE usage退出，改用上述native日志核对后，续跑尚未执行的正式阶段；",
+    "没有重放暖机挑选结果，原失败日志也保留。模型与官方EvalScope计时实现均未修改。",
+    "",
+    "原始目录：评测/perf_fp8_v14c_eager_v2。warmup与measured分开保存。",
+    "formal_summary.json给出全精度统计与样本范围；formal_requests.csv列出每条正式请求。",
+    "本轮未抓新GPU trace，也未进行同条件BF16/graph/NVIDIA对照，因此不报告FP8加速倍数或算子归因。",
+]
+(base / "性能结果.md").write_text("\n".join(lines) + "\n")
+print(json.dumps({"rows": [{k:v for k,v in r.items() if k != "official_evalscope_summary"} for r in shapes]}, indent=2))

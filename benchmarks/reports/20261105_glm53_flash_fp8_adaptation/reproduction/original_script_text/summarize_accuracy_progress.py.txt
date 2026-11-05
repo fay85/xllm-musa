@@ -1,0 +1,28 @@
+"""Summarize immutable initial responses; repeats never replace their scores."""
+from pathlib import Path
+import csv,datetime,hashlib,json
+from scored_response import load_scored
+BASE=Path(__file__).resolve().parents[1]
+PREVIOUS=BASE.parent/'20261104第二步完成一次glm推理并跑通公开的评测集的对分'
+out=BASE/'评测/full_pd_fp8_v14c';rows=[];paired=[];original_attempts=0;transport_failures=0;recovery_used=[];original_correct=0;original_http200=0
+quality={20:'exact result223 and labelD correct; API answered213/B',31:'exact result28.947; no matching option',37:'no exact matching option',42:'computed200 vs label250',62:'elapsed5 vs inclusive6 convention',65:'computed137.5 vs nearest140',93:'computed3.2; no exact option',97:'computed140 vs label178',98:'computed151; no exact option'}
+for i in range(100):
+ q=f'mathqa-test-{i:04d}';official_path=PREVIOUS/f'评测/paired_protocol_v2/official/{q}.json';o=json.loads(official_path.read_text());assert o['http_status']==200
+ j,p,original=load_scored(out,q)
+ original_attempts+=int('elapsed_seconds' in original)
+ original_correct+=int('elapsed_seconds' in original and bool(original.get('correct')))
+ original_http200+=int('elapsed_seconds' in original and original.get('http_status')==200)
+ transport_failures+=int('elapsed_seconds' in original and original.get('http_status')!=200)
+ if p.name!=q+'.json' and 'elapsed_seconds' in j:recovery_used.append(q)
+ finished='elapsed_seconds' in j
+ if finished:
+  assert j['official_reference_sha256']==hashlib.sha256(official_path.read_bytes()).hexdigest()
+  assert j['request']==o['request'] and j['protocol_sha256']==o['protocol_sha256']
+  paired.append((j,o))
+ rows.append(dict(question_id=q,scored_response_file=p.name,original_attempt_transport_failure='elapsed_seconds' in original and original.get('http_status')!=200,ground_truth=o['ground_truth'],official_answer=o['answer'],local_answer=j.get('answer'),finished=finished,http_status=j.get('http_status'),local_correct=j.get('correct'),agreement=j.get('agrees_with_official'),format_error=j.get('format_error'),truncated=j.get('truncated'),local_prompt_tokens=(j.get('usage') or {}).get('prompt_tokens'),local_completion_tokens=(j.get('usage') or {}).get('completion_tokens'),official_completion_tokens=(o.get('usage') or {}).get('completion_tokens'),local_seconds=j.get('elapsed_seconds'),dataset_quality_note=quality.get(i,'')))
+n=len(paired);lc=sum(bool(j.get('correct')) for j,o in paired);oc=sum(bool(o['correct']) for j,o in paired);agree=sum(bool(j.get('agrees_with_official')) for j,o in paired)
+summary={'updated_at':datetime.datetime.now().astimezone().isoformat(),'implementation':'v14c 1P1D per-roleTP8/EP8 eager recurrentKDA FP32TP','expected_questions':100,'completed_scored_questions':n,'original_attempts_finished':original_attempts,'original_transport_attempt_failures':transport_failures,'transport_recovery_scored_ids':recovery_used,'original_attempts_including_transport_failure':{'correct':original_correct,'http200':original_http200,'denominator':original_attempts,'accuracy_percent':100*original_correct/original_attempts if original_attempts else None},'complete':n==100,'matched_subset':{'local_correct':lc,'official_correct':oc,'agreement':agree,'denominator':n,'local_accuracy_percent':100*lc/n if n else None,'official_accuracy_percent':100*oc/n if n else None,'local_minus_official_pp':100*(lc-oc)/n if n else None,'agreement_percent':100*agree/n if n else None},'local_errors':{'http_or_transport':sum(j.get('http_status')!=200 for j,o in paired),'truncated':sum(bool(j.get('truncated')) for j,o in paired),'format':sum(bool(j.get('format_error')) for j,o in paired)},'completion_tokens':{'local':sum((j.get('usage') or {}).get('completion_tokens',0) for j,o in paired),'official_same_questions':sum((o.get('usage') or {}).get('completion_tokens',0) for j,o in paired)},'discordant_question_ids':[j['question_id'] for j,o in paired if not j.get('agrees_with_official')],'wrong_to_label_ids':[j['question_id'] for j,o in paired if not j.get('correct')],'rules':'Original responses except explicit predeclared transport recovery0071; all attempts preserved, diagnostic repeats excluded. Dataset concerns never change frozen raw labels. Partial official accuracy uses same completed question IDs; not official full100 score or leaderboard reproduction.'}
+(out/'summary_progress.json').write_text(json.dumps(summary,ensure_ascii=False,indent=2))
+with (out/'逐题对照.csv').open('w',encoding='utf-8-sig',newline='') as f:
+ w=csv.DictWriter(f,fieldnames=list(rows[0]));w.writeheader();w.writerows(rows)
+print(json.dumps(summary,ensure_ascii=False,indent=2))

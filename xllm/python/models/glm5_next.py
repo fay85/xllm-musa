@@ -17,8 +17,9 @@
 Hybrid decoder: 3 of every 4 layers are KDA (Kimi Delta Attention) linear
 attention; the 4th is MLA full-attention driven by a DSA ``kPool`` sparse
 indexer. MLP is dense SwiGLU for the first ``first_k_dense_replace`` layers and
-DeepSeek-V2-style MoE (sigmoid + noaux_tc) thereafter. bf16 throughout, matching
-the patched HuggingFace ``Glm5NextForCausalLM`` reference for tensor alignment.
+DeepSeek-V2-style MoE (sigmoid + noaux_tc) thereafter. The default path uses
+BF16; explicit MUSA MegaMoE preserves FP8 routed weights and block scales.
+Tensor alignment follows the patched HuggingFace model reference.
 
 This implementation follows the transformers model semantics while routing
 supported fused operations through the active platform kernel API.
@@ -61,6 +62,7 @@ try:
 except ImportError:
     torch_npu = None  # type: ignore[assignment]
 
+from scripts.logger import logger
 from xllm.python import distributed, kernels
 from xllm.python.attention.backend import MlaIndexContext
 from xllm.python.layers.moe_parallel import Eplv2CommPolicy
@@ -255,6 +257,10 @@ class Glm5NextConfig:
     expert_parallel_degree: int = 0
     enable_mega_moe: bool = False
     enable_fused_mc2: bool = False
+    musa_moe_backend: str = "bf16"
+    musa_kda_prefill_mode: str = "chunk"
+    musa_tp_reduce_precision: str = "native"
+    musa_mega_moe_max_tokens: int = 256
     # 0-based post-layer indices threaded from the draft's target_layer_ids
     # (via ModelArgs). Empty => capture disabled (non-speculative serving).
     layers_to_capture: tuple[int, ...] = ()
@@ -377,6 +383,14 @@ class Glm5NextConfig:
             expert_parallel_degree=degree,
             enable_mega_moe=bool(pick("enable_mega_moe", default=False)),
             enable_fused_mc2=bool(pick("enable_fused_mc2", default=False)),
+            musa_moe_backend=str(pick("musa_moe_backend", default=os.getenv("XLLM_MUSA_GLM_MOE_BACKEND", "bf16"))),
+            musa_kda_prefill_mode=str(
+                pick("musa_kda_prefill_mode", default=os.getenv("XLLM_MUSA_GLM_KDA_PREFILL_MODE", "chunk"))
+            ),
+            musa_tp_reduce_precision=str(
+                pick("musa_tp_reduce_precision", default=os.getenv("XLLM_MUSA_GLM_TP_REDUCE_PRECISION", "native"))
+            ),
+            musa_mega_moe_max_tokens=int(pick("musa_mega_moe_max_tokens", default=os.getenv("XLLM_MUSA_GLM_MOE_MAX_TOKENS", "256"))),
             layers_to_capture=tuple(int(layer_id) for layer_id in pick("layers_to_capture", default=[])),
             # mHC fields: ModelArgs may emit a 0 default (un-plumbed); treat 0
             # /None as unset and fall back to the real 300B defaults.
@@ -389,6 +403,23 @@ class Glm5NextConfig:
         return cfg
 
     def _validate_moe_parallelism(self) -> None:
+        if self.musa_kda_prefill_mode not in ("chunk", "recurrent"):
+            raise ValueError("MUSA KDA prefill mode must be chunk or recurrent")
+        if self.musa_tp_reduce_precision not in ("native", "fp32"):
+            raise ValueError("MUSA TP reduction precision must be native or fp32")
+        if self.musa_moe_backend not in ("bf16", "mega_moe"):
+            raise ValueError("MUSA GLM MoE backend must be bf16 or mega_moe")
+        if self.musa_moe_backend == "mega_moe":
+            if (self.dp_size, self.cp_size, self.moe_tp_size) != (1, 1, 1):
+                raise ValueError("MUSA MegaMoE currently requires DP1/CP1/MoE-TP1")
+            if (self.ep_size, self.ep_rank) != (self.tp_size, self.tp_rank) or not 1 < self.ep_size <= 8:
+                raise ValueError("MUSA MegaMoE requires intranode EP over the attention TP ranks")
+            if self.expert_parallel_degree == 2 or self.enable_eplb:
+                raise ValueError("MUSA MegaMoE does not use NPU EPLv2/EPLB")
+            if self.hidden_size % 256 or self.moe_intermediate_size % 128:
+                raise ValueError("MUSA MegaMoE requires hidden/FFN widths aligned to 256/128")
+            if self.musa_mega_moe_max_tokens < 129:
+                raise ValueError("MUSA clamped MegaMoE requires capacity >=129 for padded split-prefill")
         if self.expert_parallel_degree not in (0, 1, 2):
             raise ValueError("expert_parallel_degree must be 0, 1 or 2")
         if self.enable_mega_moe:
@@ -471,6 +502,22 @@ class Glm5NextConfig:
 # ---------------------------------------------------------------------------
 # KDA (Kimi Delta Attention) linear-attention layer
 # ---------------------------------------------------------------------------
+def _reduce_tp_output(value: torch.Tensor, cfg: Glm5NextConfig) -> None:
+    """Optionally sum MUSA BF16 partials in FP32, then round the complete sum.
+
+    This doubles the collective payload. It is an explicit numerical mode,
+    not a performance optimization or an exception-driven fallback.
+    """
+    if cfg.musa_tp_reduce_precision == "native":
+        distributed.all_reduce_(value)
+        return
+    if value.device.type != "musa" or value.dtype != torch.bfloat16:
+        raise ValueError("FP32 MUSA TP reduction requires BF16 MUSA partials")
+    accumulated = value.float()
+    distributed.all_reduce_(accumulated)
+    value.copy_(accumulated.to(value.dtype))
+
+
 _KDA_IN_PROJ = (
     ("q_proj", "qkv_dim", 0),
     ("k_proj", "qkv_dim", 0),
@@ -723,7 +770,7 @@ class Glm5NextKdaAttention(Attention):
                 o = _zero_cp_padding(o, cp_context)
             return output_layout.reduce_scatter(o.reshape(-1, self.cfg.hidden_size)).unsqueeze(0)
         if self.tp > 1:
-            distributed.all_reduce_(o)
+            _reduce_tp_output(o, self.cfg)
         if cp_context is not None:
             o = _zero_cp_padding(o, cp_context)
         return o
@@ -1971,7 +2018,7 @@ class Glm5NextMlaAttention(Attention):
                 o = _zero_cp_padding(o, cp_context)
             return output_layout.reduce_scatter(o), topk
         if self.cfg.tp_size > 1:
-            distributed.all_reduce_(o)
+            _reduce_tp_output(o, self.cfg)
         if cp_context is not None:
             o = _zero_cp_padding(o, cp_context)
         return o, topk
@@ -2040,7 +2087,7 @@ class Glm5NextMLP(nn.Module):
         up = up.clamp(min=-self.swiglu_limit, max=self.swiglu_limit)
         out = self.down_proj(F.silu(gate) * up)
         if self.tp_size > 1 and not self.skip_tp_reduce:
-            distributed.all_reduce_(out)
+            _reduce_tp_output(out, self.cfg)
         return out
 
 
@@ -2303,6 +2350,9 @@ class Glm5NextMoE(nn.Module):
         # Eagerly building Glm5NextExperts' 3D bf16 params (~38GB/card at TP8)
         # alongside the int8 experts OOMs the 60GB card.
         self.experts: Optional[Glm5NextExperts] = None
+        self.musa_mega_experts: nn.Module | None = None
+        if cfg.musa_moe_backend == "mega_moe" and device.type != "musa":
+            raise ValueError("MUSA MegaMoE was selected on a non-MUSA device")
 
         self.shared_experts = Glm5NextMLP(
             cfg,
@@ -2382,6 +2432,17 @@ class Glm5NextMoE(nn.Module):
         token_layout: TokenParallelLayout | None = None,
         token_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
+        if self.cfg.musa_moe_backend == "mega_moe":
+            if token_layout is not None or token_mask is not None:
+                raise ValueError("MUSA MegaMoE requires replicated attention-TP rows")
+            if self.musa_mega_experts is None:
+                raise RuntimeError("MUSA MegaMoE weights have not been loaded")
+            _, weights, ids = self._topk(hidden_states)
+            routed = self.musa_mega_experts(hidden_states.reshape(-1, self.hidden), ids, weights)
+            shared = self.shared_experts(hidden_states)
+            if self.cfg.tp_size > 1:
+                _reduce_tp_output(shared, self.cfg)
+            return routed.view_as(hidden_states) + shared
         if token_layout is not None:
             return self._forward_sp(hidden_states, token_layout, token_mask)
         if token_mask is not None:
@@ -2404,7 +2465,7 @@ class Glm5NextMoE(nn.Module):
         out = self.experts(flat, topk_indices, topk_weights).view(*orig_shape)
         final = out + self.shared_experts(hidden_states)
         if self.cfg.tp_size > 1:
-            distributed.all_reduce_(final)
+            _reduce_tp_output(final, self.cfg)
         return final
 
     def _forward_w8a8(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -3109,6 +3170,16 @@ class Glm5NextForCausalLM(PyModelBase):
         device = torch.device(config.get("device", "npu:0" if torch_npu else "cpu"))
         self.dtype = dtype
         self.device = device
+        selected_precision = self.cfg.musa_tp_reduce_precision != "native" or self.cfg.musa_kda_prefill_mode != "chunk"
+        if selected_precision and device.type != "musa":
+            raise ValueError("MUSA numerical modes require a MUSA model device")
+        if self.cfg.musa_tp_reduce_precision == "fp32" and dtype != torch.bfloat16:
+            raise ValueError("FP32 MUSA TP reduction currently requires BF16 model outputs")
+        if device.type == "musa":
+            logger.info(
+                f"GLM MUSA numerical modes: KDA prefill={self.cfg.musa_kda_prefill_mode}, "
+                f"TP reduction={self.cfg.musa_tp_reduce_precision}, MoE={self.cfg.musa_moe_backend}"
+            )
         self.model = Glm5NextModel(self.cfg, dtype, device)
         self.lm_head = ColumnParallelLinear(
             self.cfg.hidden_size,
@@ -3143,6 +3214,7 @@ class Glm5NextForCausalLM(PyModelBase):
         _orig_find = L._w8.find
         _orig_load_tensor = L._w8.load_tensor
         _orig_load_shard = L._w8.load_shard
+        _orig_load_raw_fp8 = L._w8.load_raw_fp8
 
         def _resolve(name):
             if _orig_find(name) is not None:
@@ -3178,6 +3250,14 @@ class Glm5NextForCausalLM(PyModelBase):
         L._w8.load_shard = _aliased_load_shard
         L.load_shard = _aliased_load_shard
 
+        def _aliased_load_raw_fp8(name: str) -> tuple[torch.Tensor, torch.Tensor]:
+            resolved = _resolve(name)
+            if resolved is None:
+                raise ValueError(f"checkpoint FP8 tensor not found: {name}")
+            return _orig_load_raw_fp8(resolved)
+
+        L._w8.load_raw_fp8 = _aliased_load_raw_fp8
+
         # embed_tokens: HiddenParallelEmbedding — shard the hidden dim (dim 1).
         L.load_fp("model.embed_tokens.weight", dim=1)
         for i in range(self.cfg.n_layers):
@@ -3193,6 +3273,12 @@ class Glm5NextForCausalLM(PyModelBase):
             # mHC residual sites (always on, replicated).
             for hc in ("attn_hc", "ffn_hc"):
                 for w in ("fn", "base", "scale"):
+                    parameter = getattr(getattr(self.model.layers[i], hc), w)
+                    if parameter.device.type == "musa" and w in ("base", "scale"):
+                        # The checkpoint controls are FP32. Restore the target
+                        # dtype before copying, rather than rounding to BF16
+                        # and widening already-rounded values for MATE HcPre.
+                        parameter.data = parameter.data.float()
                     L.load_fp(p + hc + "." + w)
                 getattr(self.model.layers[i], hc).process_weights_after_loading()
         L.load_fp("model.norm.weight")
@@ -3482,6 +3568,49 @@ class Glm5NextForCausalLM(PyModelBase):
             )
         L.copy_in(mlp + "experts.down_proj", L.shard(dn, dim=2, world=self.cfg.moe_tp_size, rank=self.cfg.moe_tp_rank))
 
+    def _load_experts_musa_fp8(self, loader: QLinearWeightLoader, prefix: str, layer: int) -> None:
+        """Load complete rank-local experts; share one sequential IPC workspace."""
+        from xllm.python.kernels_musa.mega_moe import MegaMoEWorkspace, MusaMegaMoEExperts
+
+        cfg = self.cfg
+        moe = self.model.layers[layer].mlp
+        device = moe.gate.weight.device
+        if getattr(self, "_musa_mega_workspace", None) is None:
+            group = distributed.moe_ep_group(device)
+            if (group.rank(), group.size()) != (cfg.ep_rank, cfg.ep_size):
+                raise ValueError("MUSA MegaMoE group does not match the checkpoint expert partition")
+            self._musa_mega_workspace = MegaMoEWorkspace(
+                group, cfg.n_routed_experts, cfg.hidden_size, cfg.moe_intermediate_size,
+                cfg.num_experts_per_tok, cfg.musa_mega_moe_max_tokens,
+            )
+        count, width, hidden = moe.num_local_experts, cfg.moe_intermediate_size, cfg.hidden_size
+        # Pack original FP8 bytes on the host during loading, then transfer
+        # MATE's transformed tensors once. No expert GEMM executes on the CPU.
+        gate_up = torch.empty((count, 2 * width, hidden), dtype=torch.float8_e4m3fn, device="cpu")
+        down = torch.empty((count, hidden, width), dtype=torch.float8_e4m3fn, device="cpu")
+        gate_scale = torch.empty((count, 2 * width // 128, hidden // 128), dtype=torch.float32, device="cpu")
+        down_scale = torch.empty((count, hidden // 128, width // 128), dtype=torch.float32, device="cpu")
+        for local, expert in enumerate(range(moe.local_expert_start, moe.local_expert_end)):
+            key = prefix + f"experts.{expert}."
+            gate, gs = loader.load_raw_fp8(key + "gate_proj.weight")
+            up, us = loader.load_raw_fp8(key + "up_proj.weight")
+            dn, ds = loader.load_raw_fp8(key + "down_proj.weight")
+            gate_up[local, :width].copy_(gate)
+            gate_up[local, width:].copy_(up)
+            gate_scale[local, :width // 128].copy_(gs)
+            gate_scale[local, width // 128:].copy_(us)
+            down[local].copy_(dn)
+            down_scale[local].copy_(ds)
+        moe.musa_mega_experts = MusaMegaMoEExperts(
+            gate_up, gate_scale, down, down_scale, self._musa_mega_workspace, cfg.swiglu_limit,
+        )
+        logger.info(
+            f"GLM MUSA MegaMoE loaded layer={layer} EP={cfg.ep_size} rank={cfg.ep_rank} "
+            f"experts=[{moe.local_expert_start},{moe.local_expert_end}) "
+            f"weight_dtype={gate_up.dtype} scale_dtype={gate_scale.dtype} "
+            f"device={device} shared_TP={cfg.tp_size} clamp={cfg.swiglu_limit}"
+        )
+
     def _load_mlp(self, L, mlp: str, i: int) -> None:
         if self.cfg.is_moe(i):
             moe = self.model.layers[i].mlp
@@ -3493,6 +3622,13 @@ class Glm5NextForCausalLM(PyModelBase):
             # ``gate.e_score_correction_bias`` but the buffer is ``e_score_...``.
             e = L.load_tensor(mlp + "gate.e_score_correction_bias")
             L.copy_in(mlp + "e_score_correction_bias", e)
+            if self.cfg.musa_moe_backend == "mega_moe":
+                self._load_experts_musa_fp8(L, mlp, i)
+                # Shared experts remain attention-TP sharded BF16. Routed EP
+                # output is already reduced, so only this branch is all-reduced.
+                self._load_mlp_fp_or_w8a8(L, mlp + "shared_experts.")
+                _call_process_weights_after_loading(moe)
+                return
             # Expert branch: probe exp0's gate_proj for a weight_scale tensor.
             # Real W8A8 checkpoints carry weight_scale; bf16 checkpoints do not.
             is_w8a8 = L.find(mlp + "experts.0.gate_proj.weight_scale") is not None

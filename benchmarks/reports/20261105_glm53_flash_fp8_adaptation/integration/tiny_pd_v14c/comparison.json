@@ -1,0 +1,23 @@
+[
+  {
+    "prompt_tokens": 4,
+    "completion_tokens": 8,
+    "same_text": true,
+    "same_usage": false,
+    "same_finish": true
+  },
+  {
+    "prompt_tokens": 4,
+    "completion_tokens": 8,
+    "same_text": true,
+    "same_usage": false,
+    "same_finish": true
+  },
+  {
+    "prompt_tokens": 140,
+    "completion_tokens": 8,
+    "same_text": true,
+    "same_usage": false,
+    "same_finish": true
+  }
+]

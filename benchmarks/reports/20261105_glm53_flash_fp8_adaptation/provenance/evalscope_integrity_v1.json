@@ -1,0 +1,24 @@
+{
+  "version": "1.14.1",
+  "files": [
+    {
+      "file": "evalscope/perf/plugin/api/default_api.py",
+      "sha256": "db928516e5f74814b5c9ca482d91ab43be2bbc549c77750b177a7b2c013a0c40",
+      "matches_installed_wheel_record": true
+    },
+    {
+      "file": "evalscope/perf/plugin/api/openai_api.py",
+      "sha256": "37e8d3447913c136c3555ac88e052589e48c46d1cfda85911cf245165a47c913",
+      "matches_installed_wheel_record": true
+    },
+    {
+      "file": "evalscope/perf/utils/benchmark_util.py",
+      "sha256": "c15183d2116f06faf9d136bf21ddd155cc1666588928f110d14689ce34975344",
+      "matches_installed_wheel_record": true
+    }
+  ],
+  "ttft": "First observable text/reasoning/tool delta; excludes initial role-only/empty delta",
+  "tpot": "(request latency - first observable output latency)/(completion_tokens-1)",
+  "token_counts": "Require final server usage, not only tokenizer approximation",
+  "scope": "Installed distribution RECORD validation, not independent redownload/signature audit"
+}

@@ -1,0 +1,102 @@
+{
+  "source": "https://math-qa.github.io/math-QA/data/MathQA.zip",
+  "source_zip_sha256": "7344f30456a7aef3176d4866cc953b35b41bec44eda6b00cdbcfde2876b2f07a",
+  "test_json_sha256": "dfe7bc4691caf26842ccd4cf14e8f978327bab4f2989e0b076a4e6b38a9371d1",
+  "source_rows": 2985,
+  "selection": "original test rows 0..99, same questions and labels as v1",
+  "selected_rows": 100,
+  "subset_sha256": "6365abf8e0701de3f25c2cc38ef2b77a912c13e48cd93c8d2c7bdbc5442e6ba9",
+  "option_parser": "option-label boundaries; ast.literal_eval for list-encoded rows; never split comma within number",
+  "changed_questions": [
+    {
+      "question_id": "mathqa-test-0027",
+      "before": [
+        "s . 19",
+        "s . 15",
+        "s . 16",
+        "s . 17",
+        "s . 17"
+      ],
+      "after": [
+        "s . 19,800",
+        "s . 15,600",
+        "s . 16,500",
+        "s . 17,600",
+        "s . 17,900"
+      ],
+      "original_options": "a ) s . 19,800 , b ) s . 15,600 , c ) s . 16,500 , d ) s . 17,600 , e ) s . 17,900"
+    },
+    {
+      "question_id": "mathqa-test-0028",
+      "before": [
+        "$ 180",
+        "$ 185",
+        "$ 190",
+        "$ 177",
+        "$ 205"
+      ],
+      "after": [
+        "$ 180,000",
+        "$ 185,000",
+        "$ 190,000",
+        "$ 177,500",
+        "$ 205,000"
+      ],
+      "original_options": "a ) $ 180,000 , b ) $ 185,000 , c ) $ 190,000 , d ) $ 177,500 , e ) $ 205,000"
+    },
+    {
+      "question_id": "mathqa-test-0053",
+      "before": [
+        "901",
+        "989",
+        "990",
+        "991",
+        "1"
+      ],
+      "after": [
+        "901",
+        "989",
+        "990",
+        "991",
+        "1,001"
+      ],
+      "original_options": "a ) 901 , b ) 989 , c ) 990 , d ) 991 , e ) 1,001"
+    },
+    {
+      "question_id": "mathqa-test-0082",
+      "before": [
+        "2 : 3'",
+        "4 : 5'",
+        "16 : 9'",
+        "7 : 9'",
+        "8 : 5']"
+      ],
+      "after": [
+        "2 : 3",
+        "4 : 5",
+        "16 : 9",
+        "7 : 9",
+        "8 : 5"
+      ],
+      "original_options": "['a ) 2 : 3', 'b ) 4 : 5', 'c ) 16 : 9', 'd ) 7 : 9', 'e ) 8 : 5']"
+    },
+    {
+      "question_id": "mathqa-test-0095",
+      "before": [
+        "12'",
+        "15'",
+        "10'",
+        "8'",
+        "14']"
+      ],
+      "after": [
+        "12",
+        "15",
+        "10",
+        "8",
+        "14"
+      ],
+      "original_options": "['a ) 12', 'b ) 15', 'c ) 10', 'd ) 8', 'e ) 14']"
+    }
+  ]
+}

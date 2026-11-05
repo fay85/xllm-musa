@@ -1,0 +1,2175 @@
+{
+  "snapshot_not_final": false,
+  "files": [
+    {
+      "file": "0071连接失败与续测说明.md",
+      "sha256": "c690592d650f1bc95d712412d265764b5a8c536cfd6ef7f9cd15f78b60c3ae67",
+      "bytes": 2026
+    },
+    {
+      "file": "MATE协作问题与最小复现入口.md",
+      "sha256": "a92225da528f4ee35ee51b6f3489ee5bfbf7dbe4c3e87f947d70c11446070575",
+      "bytes": 3179
+    },
+    {
+      "file": "MathQA题面与标签疑点说明.md",
+      "sha256": "bbbd1ca7ce10af5a01c55aa5c9607e211ec72183b9e13dc557fe1c0367d81304",
+      "bytes": 5506
+    },
+    {
+      "file": "README.md",
+      "sha256": "a634606d212bb8a95639cb58b25a4a7cafe444e4b2ed30b657124ce1ea0afecb",
+      "bytes": 1914
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/basic/00.json",
+      "sha256": "6724b4e427fe311377832f87c489d2c107d10d4363b46bad127215cb7d921131",
+      "bytes": 1187
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/basic/01.json",
+      "sha256": "a7800ce13ffa37fc6b339872e16576c27d70ef0c072b7f1e5be183be9ed398b5",
+      "bytes": 1208
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/basic/02.json",
+      "sha256": "241c9f1044940be44c3be0274f95f6f755d649b1e4c7d016f2e8d555c5b35312",
+      "bytes": 1190
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/correctness2048.json",
+      "sha256": "60c7813c220bf3882e9cfb638665e92bf19fde4ad05da3187ac9f1f7b0e27746",
+      "bytes": 33281
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0000.json",
+      "sha256": "1def2803eab2eb7e2744074d71a6d082553208fd681e959b4da42f474b4d3058",
+      "bytes": 4927
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0001.json",
+      "sha256": "9a28dc846361f1abaa9c5e03e25125c486fa8bbe7ca3eb8c449092907791305f",
+      "bytes": 4792
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0002.json",
+      "sha256": "dfed0e3cefe12f15e2a9a41dac916ac2fc11b4369ab7f3ef8bebd1ff314e7f65",
+      "bytes": 4907
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0003.json",
+      "sha256": "b9efe8310359e4dd9998ce79d8cfefa08b5bfe38836912e5c8e539ed9fde2bce",
+      "bytes": 4595
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0004.json",
+      "sha256": "147c61e1ca394ce22eb718aff68e1484a0c23ee7c42c92300061731506d358fe",
+      "bytes": 4614
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0005.json",
+      "sha256": "384ae928b96106373c73b053c5d61f6996db241cc024401fc74f9504b81376cf",
+      "bytes": 4895
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0006.json",
+      "sha256": "fe5ea949d6754faf65d7bee2bf5b954076f788723f64204b050cafa79767ecf7",
+      "bytes": 4962
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0007.json",
+      "sha256": "9e1213fa2e57e881cb9d087ab58d33ef6cdb7c7c0cc38819c65f6e2217b76af0",
+      "bytes": 4831
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0008.json",
+      "sha256": "57eab5568f9e488de640b94f29c9ad412ba1c82aa7f572f2907bf305cf379b80",
+      "bytes": 4644
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0009.json",
+      "sha256": "100dd1bdd76550e0e6f16e260e9c54f0c7e7a1cae9e3704429bcb8d819de8a2b",
+      "bytes": 4658
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0010.json",
+      "sha256": "f4b3c9d90caecdedec7cf7ee5573f6388359816970a5d663aba8f6c12f346d70",
+      "bytes": 4602
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0011.json",
+      "sha256": "60b944404064e018cc205350aa4a65a2df7edb61359535747273f76962386a1e",
+      "bytes": 4779
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0012.json",
+      "sha256": "fcb31982f892b40fc1248e5423d8659c9a708debd5e4e28340f0539e0680c9a9",
+      "bytes": 4817
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0013.json",
+      "sha256": "c3cc912b872d92557282aee00a1a2b6afa8822f588291a0a8ee19583fc6e560b",
+      "bytes": 4885
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0014.json",
+      "sha256": "0177a0d8bdb2a252ea6c486e41a870ed4f856424b4a6222b25087ead3693e006",
+      "bytes": 4751
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0015.json",
+      "sha256": "fa12aeca5acfce522ca302cefc73d2e54e31e3ebe687b1c2760c9c3df9c529b3",
+      "bytes": 4480
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0016.json",
+      "sha256": "05a93b5eb054e2d156f457faec6ecee5bbd11fa0bd6df6f696109579ba0734ad",
+      "bytes": 4689
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0017.json",
+      "sha256": "76c03d79f03ce931d8c57762aa4870cb3cec6028bed56b396273e4043ab55c45",
+      "bytes": 4851
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0018.json",
+      "sha256": "86d0afeec770eea15e1641d93375042eb1264cabd6a9264bde68377fc561f7d2",
+      "bytes": 4665
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0019.json",
+      "sha256": "499c5b6f3d51ba85c4dced7d89995a79cf54dd1cc1ae1a3efc74fdd528e43280",
+      "bytes": 4712
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0020.json",
+      "sha256": "5e31ceed4941d5db87f1ee8586957af6873397fa80dec43fa10b99a3f47b248c",
+      "bytes": 6019
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0021.json",
+      "sha256": "e0650c38648d66603895601856a5073c25e733215ee590f86554bcfaff3f57f2",
+      "bytes": 5458
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0022.json",
+      "sha256": "792265ca808869b7bbcbcca43072a3bfdec109d01c88445a1920f6b2f9ef53fb",
+      "bytes": 5016
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0023.json",
+      "sha256": "972d638df46c64f4db05b724dd69ff2f9c6ee22f4d93151a5918afd51658363e",
+      "bytes": 4576
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0024.json",
+      "sha256": "c053ba4eb4f459104854ab50dad47a96331dbe095605a5829e1f0dd273f6a376",
+      "bytes": 4817
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0025.json",
+      "sha256": "090b07f642cf3b17175aac0e7fcab4bc27daae55697c7acfac062498a82c4af6",
+      "bytes": 5009
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0026.json",
+      "sha256": "a030a3d637a52febcd52635ef0f4ab37638dc828e3318a42c36693cd4d48ec8c",
+      "bytes": 4883
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0027.json",
+      "sha256": "a7220bccb20710fec7f003bf12b990837dedc4c8fbbd3fc978369a4e9a1b6a9f",
+      "bytes": 4648
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0028.json",
+      "sha256": "58ab2f72bca6c8af11f363a4417f0c8f2164d3eaa10553ba92e44cdf61ba6930",
+      "bytes": 5075
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0029.json",
+      "sha256": "a8ef61648e51081bc4df1f193266e62fdaee4252dc3e258e4e3cbccd8ba7cd71",
+      "bytes": 4758
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0030.json",
+      "sha256": "89200c07bda4f034f0868aa0b5337e2de1d56339cf20c33b9ed160eeda153e66",
+      "bytes": 4894
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0031.json",
+      "sha256": "23946a1fc92ee19f6159b9e16a686db5edddadd8298feacbe5b5b82efc9435a1",
+      "bytes": 7807
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0032.json",
+      "sha256": "b61918f8923661f8ebb890e4468fd7ce11505b76c8cf694276a67b692d228a06",
+      "bytes": 4710
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0033.json",
+      "sha256": "040e06be44436552bcb0c3b78c2fcc4e096e36bc8142975f0ef85e8554d1d535",
+      "bytes": 5025
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0034.json",
+      "sha256": "46aef9d2b6a98b471960ce81e276c19f5cae6012965489136ec68198b7223882",
+      "bytes": 4811
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0035.json",
+      "sha256": "903dd0ddd85b79e43b681c287a399b9d02dc3f370930d078beaacf6743f09ab8",
+      "bytes": 4759
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0036.json",
+      "sha256": "9404cef02a32c8081e54d28d7384589f12b005d0a168efe687cbc3206951fe6a",
+      "bytes": 4805
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0037.json",
+      "sha256": "e5fd8f95b69932096caf4285e863eb0af467b7849bbc6b89079ca43b2d48285a",
+      "bytes": 5765
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0038.json",
+      "sha256": "37fea23a35efb82bd45b1717534e7fd00ef08092bfe065763e4c09383906d32a",
+      "bytes": 4974
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0039.json",
+      "sha256": "100d0092b18c8b25974317901fa614716c3dd1ef4282109e329d43ddf41e46f2",
+      "bytes": 4644
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0040.json",
+      "sha256": "d52a69370627f9697bbe604652facf4afed27deadb4a0df8bc7e185a1bfa6fd8",
+      "bytes": 4676
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0041.json",
+      "sha256": "72290bc969a068ab289ad8775ee665883f341e430f1d45ac8cd231c126b7e613",
+      "bytes": 5154
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0042.json",
+      "sha256": "c5739f228e795109d7b05e05e6a1e13eaf7cd998afd48011d66281c6eb325755",
+      "bytes": 4730
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0043.json",
+      "sha256": "0d8ed2d1dea75452ccd919bf6a8b4e4fcc4190dd17a42d78e39c88b98b7e3741",
+      "bytes": 5200
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0044.json",
+      "sha256": "32e0c6e940ecaf0b6de4acd62eb42e73208974818bff9ad7b70a70dd9b2a62e1",
+      "bytes": 4945
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0045.json",
+      "sha256": "a76812cf67a9516e4b1740909adfeb1a037909e75110121bd71f7b54144c1470",
+      "bytes": 6518
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0046.json",
+      "sha256": "eef5ce2f127398be53ace96d6a3c97a677ace9a640e80bafd36b3d1ed51aeb0a",
+      "bytes": 5022
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0047.json",
+      "sha256": "054c19e5d68e45f3321c16eb12839eb4373b15feb271b0bf88bce20352dec7aa",
+      "bytes": 4866
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0048.json",
+      "sha256": "9e45c57bc2e590f85051a74411c66d10e84ef75b7bd6a24dedb03eb63604f6cd",
+      "bytes": 4771
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0049.json",
+      "sha256": "addc0c26d7078a653f7b74e8d09d43c455ac0fbe8f04d0057233559e4fb38d25",
+      "bytes": 4967
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0050.json",
+      "sha256": "21fca1bb51b3951af9048700c5c0eac7d1bcd93341f88498499ced79def41b05",
+      "bytes": 4698
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0051.json",
+      "sha256": "32f2ae272beb88382e5fbc7f679e89a24e0c631338194000ce0ac3b8a3fe0c02",
+      "bytes": 4726
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0052.json",
+      "sha256": "3dfa425f9fec33b5241533c243fd70281876077f94b1a31d200755b329e11949",
+      "bytes": 4592
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0053.json",
+      "sha256": "604eacd9aad5ec1b9f33091de969b42ed14849af70c7871a923912ae6a2a647c",
+      "bytes": 4943
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0054.json",
+      "sha256": "5bcecad1e2f8d4ef17f6c293b4fe7d2c40a30e3a5fbfa776f49112d79932f1d5",
+      "bytes": 4514
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0055.json",
+      "sha256": "c926cd66bbafdea1f23eb8de27b11f8be9cc1dbc9b783f7c18e8bb74a7812dee",
+      "bytes": 4686
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0056.json",
+      "sha256": "7fd92ef427e46c402df14f63944a818ec449aa868f16f4935badf18737b5650e",
+      "bytes": 4647
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0057.json",
+      "sha256": "de91ce150d85e69d2b61f0e9bd209f45c46439a6f580a4340828ff2b08949e01",
+      "bytes": 4841
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0058.json",
+      "sha256": "6a45773efa251941d45334f705fb37c789c55f31f6aba981d34af98d8eb49469",
+      "bytes": 4915
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0059.json",
+      "sha256": "7852d3f503d11e3a8ed8332df5b76b113d9e98b48f7a4639dfb49a9467d9d51c",
+      "bytes": 5350
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0060.json",
+      "sha256": "1d149495112a96594a5775df7ee6a2d89d58150893204444fdf09a284529186f",
+      "bytes": 4848
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0061.json",
+      "sha256": "8e0423ae535d51ced365fab74e847896196b4f1925eacf69a0fc00df11f1acc6",
+      "bytes": 4812
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0062.json",
+      "sha256": "fe7dfb15015d5ba54ad66ad2c05587738035a06c4c8d6100e9d1682557b53e4e",
+      "bytes": 5855
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0063.json",
+      "sha256": "b86426b97d2c095ca8cd7e2b091258cec46332acde2b3db8efeceb8f001cd9a9",
+      "bytes": 4650
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0064.json",
+      "sha256": "960151126590b1f4255229efd6ace74d5a53d564d5bfe915860df33e3f8d07b2",
+      "bytes": 4636
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0065.json",
+      "sha256": "eec862ab72f2726072a2bc2581d081a6ea8d669ee40de5fbf3e816a2a3652a8c",
+      "bytes": 6567
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0066.json",
+      "sha256": "32b08b69648c9d04f5042c64cee088db3326daefd52e70268f81681f44fd45b8",
+      "bytes": 4581
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0067.json",
+      "sha256": "ab98ad212afaae259f0c708c09c880d3c43666df085d65fb63201e89b5956ec1",
+      "bytes": 4752
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0068.json",
+      "sha256": "02c2aa697509ceaa048f698ece1e8249b3e78425dbbbce526c81c6a96bb6fbf9",
+      "bytes": 4661
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0069.json",
+      "sha256": "c3f1a4f755769a973968d07866a9f590c32c0b10f40aec28b83f58df0a79b3a7",
+      "bytes": 6151
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0070.json",
+      "sha256": "62c7aacf52b6373208444d8703fd1be1239fe448b23db65bc3e3a67efd20c238",
+      "bytes": 4791
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0071.json",
+      "sha256": "c614cc4e93e7dc34a663284785bf537c9a7beb8047f7423c0245c57c0355c663",
+      "bytes": 3645
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0071_transport_retry1.json",
+      "sha256": "17c202a9fc05bd98489bbf8f7861e5b7315adf50444eae28564775fea94f0543",
+      "bytes": 5168
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0072.json",
+      "sha256": "c63e1057ab1237685304eac2340016eacc6515f8070d9c53c8366234b13d11eb",
+      "bytes": 4811
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0073.json",
+      "sha256": "59cada54be0e757204442e39274168b23669f61395be8342cf602911f4fe0e7a",
+      "bytes": 5725
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0074.json",
+      "sha256": "7a36cac9692db0350fa66803806ae8f9b7b4257a68c3f29273f688c6f6c373a6",
+      "bytes": 4599
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0075.json",
+      "sha256": "9dde05cfa20bbef70326f88e251ba2ce4aa85630030968429b8b6fe2336277aa",
+      "bytes": 4790
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0076.json",
+      "sha256": "7e87f6009b3422c092451827f5ba4d5490e75a3cf9cc799684e9c3dd0e56f406",
+      "bytes": 5048
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0077.json",
+      "sha256": "4777cb0a8cd8c7ddcfc3044e7d41d82ef2dd0e7ef442e6c2be377846c31b1a11",
+      "bytes": 4616
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0078.json",
+      "sha256": "d28ae2443499033945afc4f69edd807c3f2b6cfbac6341cd6e92746a7508f331",
+      "bytes": 5314
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0079.json",
+      "sha256": "4cc5c97a2b5015bc8139c2adeba38c9215bf3f2a8227326d524c3f74003495c9",
+      "bytes": 4813
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0080.json",
+      "sha256": "dd40beb52231ebc860878487d565285f6c0c557c4dde4efceec6c151284b7f32",
+      "bytes": 4855
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0081.json",
+      "sha256": "da786ab1136b3fc34318738868cd1756d24580a2dfceceb5a437c09ba1146e9b",
+      "bytes": 5142
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0082.json",
+      "sha256": "a94103972975e5f85d1a965691758bc2b7cfcbd7b05477efe7fe914e4462bc79",
+      "bytes": 4756
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0083.json",
+      "sha256": "4b96072dec2fea52b3fb94966b44d49c22e954e0860427b7a8c55ad85a1b9bd0",
+      "bytes": 4773
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0084.json",
+      "sha256": "f4a6600639a4b09b298a74af262040f8edd294f225ac45aa0a578fd8738c6d8b",
+      "bytes": 4594
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0085.json",
+      "sha256": "2daf6cd33eb035cf8b5f6977c6793cbe022022c2ab80d75dd7f8d82ec28e40b8",
+      "bytes": 4998
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0086.json",
+      "sha256": "97665a584ed21738b216d4a6e8fd7d32d3b76d3d62287712dcc081cafe2d839a",
+      "bytes": 4854
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0087.json",
+      "sha256": "dffd92be330b892149bd8954a8808b9d8a6f01643e517ee9936d569b91f7d617",
+      "bytes": 5260
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0088.json",
+      "sha256": "338458ae113538db2157a49c4a221dd039ad0aca3d5f9d4b31c70f309829e245",
+      "bytes": 4838
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0089.json",
+      "sha256": "6558abd834533d0f829a03884facc1a2de81ff2c8606ec372c84968ed4b88beb",
+      "bytes": 4647
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0090.json",
+      "sha256": "e9f8fc6e93b980c7aef764888c38c57d177b2963539b88f2afff4390dbd0596d",
+      "bytes": 5375
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0091.json",
+      "sha256": "a7db3973383c64d0cd2e62f1273f51ff546f1b5853ed6b1bb0dcce337bae71d4",
+      "bytes": 4737
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0092.json",
+      "sha256": "430d9e9aca725ae750de6eada7153f209a446785e6d7b95de44ac252a92945cf",
+      "bytes": 5268
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0093.json",
+      "sha256": "d30654a2589c7528ce3855142d0c43da334f97929f0134c8906f46d4a63597c9",
+      "bytes": 5292
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0094.json",
+      "sha256": "4571b03f7251e042fb4180cd8d5a6f95f2dc2d2dfed5cd22bb4e0bd0464a91ec",
+      "bytes": 4890
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0095.json",
+      "sha256": "5333485a543fd8fd36c6c1e37e504d6791c749d5038b8adff89d235aef39c09c",
+      "bytes": 4978
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0096.json",
+      "sha256": "87fae0c1445902c640502856b3ad344750a163655108a1bde0a6bbe8de834679",
+      "bytes": 4854
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0097.json",
+      "sha256": "cbb0d1e00ff18832b7b40b7c9029022e9879d5ceb1c877450ea72099e87633ce",
+      "bytes": 4810
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0098.json",
+      "sha256": "4478d9eb01014d9af8ea0c0649dfca87bf36f8efb035aa38ecc7d522f2147064",
+      "bytes": 31349
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa-test-0099.json",
+      "sha256": "c4dda81d0b4e5a08b3b3a8063324957ac2ae9fae7876d58e1e273ffc1a77c613",
+      "bytes": 4982
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa_full_pd_v14c_remote_v1_complete.json",
+      "sha256": "71d23e6e940d91e556e1d02046263ec119dfb790ac80e88c5c96649283e60b0a",
+      "bytes": 70
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/mathqa_full_pd_v14c_remote_v1_exit.json",
+      "sha256": "8516ba4860fc1647f88fc9b41cdf0ef71698d14d7cce547c594eaaf530eb8346",
+      "bytes": 129
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0020_repeat1.json",
+      "sha256": "6f444c44553f6be363723ad1adbc2b858bd8f625edfd0b23e53ffe8146e9325d",
+      "bytes": 2899
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0020_repeat2.json",
+      "sha256": "ad0e7c03781a1efe6aec1b30d66111d82987d50e66ec136316bd0a765cc4f284",
+      "bytes": 3563
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0020_repeat3.json",
+      "sha256": "1fc693702cf21cbea52d7ae7b8895fc8c9522ce4d641532f4ea0dfaffe4ef715",
+      "bytes": 3121
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0031_repeat1.json",
+      "sha256": "f09919e4f11079809da243ef814fc1dca26109eb1786b7dbf315531834d8791c",
+      "bytes": 13266
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0031_repeat2.json",
+      "sha256": "74bde7ae53aa07e4ee321e9ec40df42cf07a806b1a1f2417fc304001994d236c",
+      "bytes": 4494
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0031_repeat3.json",
+      "sha256": "3971645fd1effc3ac5f786901fc606b6cb6b530cd2f7b706f7bc3de2cf60517c",
+      "bytes": 5103
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0062_repeat1.json",
+      "sha256": "a68f8e9f69b6b99c8dfd9c0ece0e8e1a725aa50541cfb39dba38bd5646087474",
+      "bytes": 3717
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0062_repeat2.json",
+      "sha256": "2c62a9c6613f7b297f59a121efdbcaeaa1dceaebc8b3f0da95b6b5fb5692c028",
+      "bytes": 2324
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0062_repeat3.json",
+      "sha256": "5bd90c2f3de8933a6591db30325b47c47843b4ed7b14372d7b06dac94e94e273",
+      "bytes": 2568
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0065_repeat1.json",
+      "sha256": "03468b9fc799710c13be5578a96693391226a307c40e8cb50e50a02c8a461879",
+      "bytes": 7834
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0065_repeat2.json",
+      "sha256": "e320201a5bb254695ed902f42f174ecb0256bdabb2b695b83b8ad38ca4ef3351",
+      "bytes": 3847
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0065_repeat3.json",
+      "sha256": "76db72e9a278522fa0a9ca97fe9a74e1dd88191a1120794d5f0d9426fe5764fe",
+      "bytes": 3527
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0076_repeat1.json",
+      "sha256": "834dc9e138475fbcd29cd494776566392d35fa294106ac5dadc58e42d460e1f2",
+      "bytes": 2259
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0076_repeat2.json",
+      "sha256": "9468e634b12eaf9a5c0fadd831311eeb1250bdcd794e249ab3a14dba1602bb5d",
+      "bytes": 2337
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0076_repeat3.json",
+      "sha256": "592d33940f8269f1e4b1be23377faf6da0c3d14583aef069126df623570fa7c2",
+      "bytes": 2361
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0088_repeat1.json",
+      "sha256": "f69bb06f82c5d967384f7f6e69da2d72d6a31a05749b86be6212ae77a4bdbcc4",
+      "bytes": 2231
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0088_repeat2.json",
+      "sha256": "111d88ef11984a4e271f09dbcc6646324f7db49569056f4e6d89beab9727914c",
+      "bytes": 2224
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/official_repeats/mathqa-test-0088_repeat3.json",
+      "sha256": "b1d4f9c9306182308f8c85091a1de809e4e7fa11e136e3297fb7a84be6f3a011",
+      "bytes": 2216
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/prompt_protocol_audit.json",
+      "sha256": "7c088864030a6dee74250fdf93d1edd9acfe00c23d795fae95b6a5bbdbe41850",
+      "bytes": 221
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/repeat_summary.json",
+      "sha256": "03d7e289c09b15a4387466436ad234219c3330b78da67e6b055dc99e96f6d4a1",
+      "bytes": 12585
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/selection_bce4b5bb7a.json",
+      "sha256": "62cc3d2b8589c680fc8df6f197357d77b6c2d317a362bf336e227fde9c6e63f1",
+      "bytes": 2930
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/selection_f4972c7d08.json",
+      "sha256": "bce561381e01ba6734ab503db04f0d726bf8fe00b4284c0d5d14eea28b352187",
+      "bytes": 2296
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/selection_fd505da7c8.json",
+      "sha256": "8c8354ded4b76cc20d4ae08f6a037d885daccf647b22b3fede3fa22f3e0c4c1f",
+      "bytes": 2242
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/summary_progress.json",
+      "sha256": "aaf18d6e700b71e28cee4d87161fe74b2e955072107e2286e8d3f15ae402c62d",
+      "bytes": 1633
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/transport_recovery_policy.json",
+      "sha256": "0d9b5940ff56ecccf723cc1098d28d1b5b1165adc7e10f2b40fd990e63a9defb",
+      "bytes": 536
+    },
+    {
+      "file": "accuracy/full_pd_fp8_v14c/逐题对照.csv",
+      "sha256": "6e67079d7b4a02a710c47acd6b4318268aa582aab6435b23173d8d6f82a83214",
+      "bytes": 11452
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0000.json",
+      "sha256": "c24e892a3ea8604e6b2dbafae2069fc4e77adb2b4e3d017ad133104bcf9e14ed",
+      "bytes": 2648
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0001.json",
+      "sha256": "0d7960bf5ad460398eb21a4a205342588923600bb566ca60f4058e0e6bb54b13",
+      "bytes": 2543
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0002.json",
+      "sha256": "3c087d7d2b4ea7fc510dfbf76ee95894cb420d7b239e326d01b0b53c582ecb34",
+      "bytes": 2559
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0003.json",
+      "sha256": "ad4adab587049aef7cc070dfa3b2b57307b1c5c374826ace21b27b970a8aec6d",
+      "bytes": 2415
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0004.json",
+      "sha256": "a14cb9e1c89819a8630cbdfaf5430094ac7b1b02d60bd950a1dc78c4d7dfb4c0",
+      "bytes": 2371
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0005.json",
+      "sha256": "43b8464e6bce3f8fe4843d2fec49d97880b52c118a9aa5645919ab0c581d9002",
+      "bytes": 2458
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0006.json",
+      "sha256": "cef269dc5f552169c62c3d8d548314caf9bcfb1bf2fac6d1802bc4509c14120d",
+      "bytes": 2742
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0007.json",
+      "sha256": "c459b832c5288168e35be40d3c6271935f427ef21ac4988adc6327ad7ca3209c",
+      "bytes": 2731
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0008.json",
+      "sha256": "717d7cda9472aadb1de444c64161f1be025915bc114d767108feaf7c76a36928",
+      "bytes": 2451
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0009.json",
+      "sha256": "12d0b9544ac1272c5cd8f17353e64aaad158032ea9acf32f8ec17dab07142d2e",
+      "bytes": 2407
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0010.json",
+      "sha256": "316c43dacc26489087b5343e0ff381788a3c8f942be43b6bf3c0a8c99485d36c",
+      "bytes": 2282
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0011.json",
+      "sha256": "f127aaf625c9653a6cd2cd09493911b42a1614c3914ce863c60ad5d764009223",
+      "bytes": 2465
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0012.json",
+      "sha256": "f895ef550df6ab4ad34d839e9aca264f666f63e346fe20c973946bf48f47d5d6",
+      "bytes": 2461
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0013.json",
+      "sha256": "dc63ea1537fd5eb558081e1b70feb704ce891e02f2d0c02b120036cf6c3173fd",
+      "bytes": 2734
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0014.json",
+      "sha256": "586e9c7f4e5503006847d0d2c3fc546d88ea5245b4266236e083afa041817d5b",
+      "bytes": 2544
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0015.json",
+      "sha256": "14a6775cab3e3503217b145d3ed074f7ef7e770c22b666163648efeaa80c0696",
+      "bytes": 2122
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0016.json",
+      "sha256": "26949440180fa4e16fb443e4c5ba19ebcf50b67aaf5eeb3dfa43bc0f543a6edb",
+      "bytes": 2341
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0017.json",
+      "sha256": "a6ada63958046cdb5ee42dac70e70dd419c7dac3c835c3953bc28c8eb62c2a6b",
+      "bytes": 2508
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0018.json",
+      "sha256": "1af0509d6d903fd6eaf07bc94907881a9e1d021179fc2cd38878cda86a3384e1",
+      "bytes": 2319
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0019.json",
+      "sha256": "17817f8349b1dec5102f2e3c3faeb0515aa0bda4df4eb71cf76904ba3a10490f",
+      "bytes": 2388
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0020.json",
+      "sha256": "da0efeec35dc114b0b4be4c8aec403356c410155d2a77351f12460546904a3c5",
+      "bytes": 3046
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0021.json",
+      "sha256": "1eb3c1ed9863c558cd5a6c6fcd850dd3e5ad7d88c233bb871472405d8143e9c0",
+      "bytes": 3136
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0022.json",
+      "sha256": "73d3e5f5cb8ec290e7352cab84587a723a9ff5935e21ae7c2b25bf80360d2f34",
+      "bytes": 2642
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0023.json",
+      "sha256": "c77019a95facfc44f9bc35a58e71d790235afe6abbf3297cda7e950cabb8c2a3",
+      "bytes": 2256
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0024.json",
+      "sha256": "d194e6a268f11d69593fb725cfdad8d1f7e92881feb7243214785fae55993625",
+      "bytes": 2499
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0025.json",
+      "sha256": "14614c1d5fbe81e4f07fea04c859815e25aa37c76763478d3c096c0b4352cb70",
+      "bytes": 2789
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0026.json",
+      "sha256": "81d3e2643fbcf3741e71f496346a0bb699535aea6f81fcdc9e72459ab0ce8cd3",
+      "bytes": 2839
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0027.json",
+      "sha256": "6b095acd4cef87e7634951015486938fd8881da3e72614ff335935c4c8eb42df",
+      "bytes": 2362
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0028.json",
+      "sha256": "d1f2ce3d11c088365ffdec5976b1db8237aace0f8bae55609aa52865a06f888d",
+      "bytes": 2909
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0029.json",
+      "sha256": "a057791f1c4c8e05bb9d9cd56815b62710b6d638e1a8f4658ccc2ad616f3c4c1",
+      "bytes": 2399
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0030.json",
+      "sha256": "75e8b17a89f344ed37701a26ce6072cb393dddd5cc95c8618686f40c58bf9207",
+      "bytes": 2756
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0031.json",
+      "sha256": "c19a56502efde6b063f05a744f2681ece079a06b313414fe18aedae3a5c97ad9",
+      "bytes": 5915
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0032.json",
+      "sha256": "6307bfde6ffecc817ee94b4557225d3c2ef88ced6a48de0b5c2fb6c681d85c4b",
+      "bytes": 2366
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0033.json",
+      "sha256": "753d11a4b391972a178af4b4324171e45ca3a377ee07d39f1223e8eaaeb94ea0",
+      "bytes": 2536
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0034.json",
+      "sha256": "6446399beb5d45010ca6d898d4c6c26c7430fd7cc7caab720fdc2ae0c16d2f35",
+      "bytes": 2527
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0035.json",
+      "sha256": "09af401230bb866c2d7aba9ba5c8078bbe62d46d147d343296bdab16d692abea",
+      "bytes": 2421
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0036.json",
+      "sha256": "863ce2a96bea0bca75c500387eb20fb98cd8f9a91bde01b472753d4def854421",
+      "bytes": 2561
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0037.json",
+      "sha256": "8597b6355825ec5b421571012f6019be43438b8a4256c2fb241be2c13e64673c",
+      "bytes": 3422
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0038.json",
+      "sha256": "354588bd991ed43167d17001eb77cda06e79d559474aec5698735b027b4a9f22",
+      "bytes": 2920
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0039.json",
+      "sha256": "80bc41082d494a2a1f65a674a04ee92bc064e85880431550c75ca4e05f712d59",
+      "bytes": 2293
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0040.json",
+      "sha256": "d2a96f3de2bff93c19b4785866dad6a3fee9c3fe579822052a5ced6b9f19ecde",
+      "bytes": 2355
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0041.json",
+      "sha256": "0fead88b421cd98ec0424cabb865d4131514468116f5412e0f302c5a31ea4f75",
+      "bytes": 2453
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0042.json",
+      "sha256": "5631b71d3bb9f167eb51ae3924bb513d0d556d6162e2c0f37b71d0cadac2ff96",
+      "bytes": 2443
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0043.json",
+      "sha256": "6b213c22a0bf1a1a05982824ba69799a68e408af2560fc1ab7648534042129bc",
+      "bytes": 2822
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0044.json",
+      "sha256": "ed68a6b75973e039b2a7b46f30920ddac6327d95e246476ce9a403fc9558b0fc",
+      "bytes": 2587
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0045.json",
+      "sha256": "ccf52a3cb80dc33436cbc445e3a5093a68688c972336d0ff4d416de5f4f6fe58",
+      "bytes": 3046
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0046.json",
+      "sha256": "a74c3b6fee76ed76e292a87b038cb1fab516d36dd700771eecee67d993347bb8",
+      "bytes": 3603
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0047.json",
+      "sha256": "e230de64f1ee480e79f7a729a8b6df14a71ec1475401dfe0581e45fc217aba9f",
+      "bytes": 2469
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0048.json",
+      "sha256": "8ba2c82b7ba291e5ca544cffdd4f96f545f467c147b93813ae789b895f2e6733",
+      "bytes": 2336
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0049.json",
+      "sha256": "4a7364cc992e2c2607d9fb0e1ed995dfc1025ccdf2919238f7094a38a49f0930",
+      "bytes": 3355
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0050.json",
+      "sha256": "432213b6728371b731a0c0cbccc91e1166297c2d324ed64c7900e71f06d54ce0",
+      "bytes": 2393
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0051.json",
+      "sha256": "acc33d0822b84fc78d70048f7d31f62096c4c3a0aceaa4cc40508554eb4a0b46",
+      "bytes": 2800
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0052.json",
+      "sha256": "d6addfe8cd6f4a429dd19534a1e4cdee7bc778d3b81583feac7c03aa66771133",
+      "bytes": 2355
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0053.json",
+      "sha256": "8f161a38bd02d968fa54ca739f70bb914c43837747269a97f1c1c3d4de8906ef",
+      "bytes": 2629
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0054.json",
+      "sha256": "48f0d6923906c82ee5a85646776fa891a1801ce60d7297d63956572e4b4149b5",
+      "bytes": 2183
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0055.json",
+      "sha256": "e81890c0162f3500edb8ec9173ee02dd1af6d679388f21d739d5bef6519a6eae",
+      "bytes": 2328
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0056.json",
+      "sha256": "7435f3e5eed88be9eba93bf9597e6a8c806e086958e097b6316cc2b9182938fb",
+      "bytes": 2329
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0057.json",
+      "sha256": "b260a756d587b4a307327512d36cafc7362b1d5801400d2dd23b160f8a43cb45",
+      "bytes": 2532
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0058.json",
+      "sha256": "c81e9410b35a0926450f8d10f5b27d59d48b23cbee82dbbf9c533a3f5d6f7958",
+      "bytes": 2590
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0059.json",
+      "sha256": "2f7bd95047c9feea7f2331849f340d9cd5ec9dedb8f455c12cdc62ea076a4a3f",
+      "bytes": 2860
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0060.json",
+      "sha256": "0988401b15973376b9dc4c4f410e9d01df3eacf2ac5ebf1e25c9e8c70ebb9e92",
+      "bytes": 2506
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0061.json",
+      "sha256": "2a2c9088f540c641cbcd60f1165412aea04c77ed4152d1bc4479d88525d4f773",
+      "bytes": 2488
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0062.json",
+      "sha256": "cda1f437399290389ba3e5c77ac7affa963034bc7dfa275873da3905e0673a29",
+      "bytes": 2748
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0063.json",
+      "sha256": "23b1d55abbb3fa28f366821e06fc2e9c0e115b8adebf310accea736fa5f212b9",
+      "bytes": 2324
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0064.json",
+      "sha256": "cd20480b2ea9def2ecd1f3dec586242545485fb16ac58f37a55f4bc08dfac75a",
+      "bytes": 2222
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0065.json",
+      "sha256": "2cb742867fc78f8c61bea9d1b1d493f3f7ea920786e1f2141e6ccc15d6c7f7bd",
+      "bytes": 4048
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0066.json",
+      "sha256": "dfc6e432935ace38daf14c049531278af38d2a1a5f813b06c853b7f20092f925",
+      "bytes": 2213
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0067.json",
+      "sha256": "853ba601aae20419d95ad4f21fc759c590b521019314ee5d5137944d549d437f",
+      "bytes": 2378
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0068.json",
+      "sha256": "3287426b3f042d6617073858da3c7662c5bac5cf6287d1bf9f0f26fdfb3ae5c0",
+      "bytes": 2347
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0069.json",
+      "sha256": "c6196d43fbc739dd0fc0dc2765120e531d1777b71ffcf50c1789ee3b86650615",
+      "bytes": 3031
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0070.json",
+      "sha256": "a470c0878341fea1373fbebcc78240b4a69310b293cfa431f3a56777ee3cc1d4",
+      "bytes": 2362
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0071.json",
+      "sha256": "98da3a6f88ded51f77c44f69f999d72c0ff4fc7ee727de67820297a6e32803ba",
+      "bytes": 2606
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0072.json",
+      "sha256": "4050a9a8f417f6860563387ffe5c96929213544e4787d821a2d47051f9bf74d5",
+      "bytes": 2415
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0073.json",
+      "sha256": "d3da9007965a26ca47cc8829dad6d5b9212415615236ee41b9a07aab139a75f2",
+      "bytes": 3349
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0074.json",
+      "sha256": "15efedbab294e2efa428006f472d142ba64bfb6cf9eaecb3c57b6f2b37ffc632",
+      "bytes": 2182
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0075.json",
+      "sha256": "abe04585b580106f6ab557159e75f03865f3b0dc2c4bfacaa873d457776c22b3",
+      "bytes": 2410
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0076.json",
+      "sha256": "e9b3e3cc0aaee6bb1248e3f48cd1480d65e2705f96af23362de0f85ca4a82975",
+      "bytes": 2481
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0077.json",
+      "sha256": "ab0fc9859fbec3d595c25fa73b1d01b470d40bd1e0605027abcf6e019d39388c",
+      "bytes": 2232
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0078.json",
+      "sha256": "c85f73a82f2a4b8c7846fbd073c240b344c829620a5b300ddf6d459449d8ccd2",
+      "bytes": 2530
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0079.json",
+      "sha256": "72751e37c149ecbc3275c2414c5ddaaed9fca53d0c92badba863dc4d21588b10",
+      "bytes": 2477
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0080.json",
+      "sha256": "c78e91f9b68444dfc0114e08cca22b5226154dae078c6e05472df7a53de3fc85",
+      "bytes": 2691
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0081.json",
+      "sha256": "3576888b0f19587f00c2550c98b5193dd9c27db9dab93c081ff4713e88588758",
+      "bytes": 2493
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0082.json",
+      "sha256": "52d655a14e1b21f6415b4fb89b1ba7c175148677bd3daa1b9e6b2069cbd8f45c",
+      "bytes": 2489
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0083.json",
+      "sha256": "6f00e467d4329068770f94cd369e3a9190f8c14d0f9edf5c650b9159abe737cd",
+      "bytes": 2307
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0084.json",
+      "sha256": "35fc1afc6e94a881f9485ad6db35e157fe8a984f82b2ee74d06c2962e3a55a2d",
+      "bytes": 2211
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0085.json",
+      "sha256": "a1c7ce3cd6fd4beb17629766aced66b0f9e2b2868a0b7a26e7a7472d79eff675",
+      "bytes": 2662
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0086.json",
+      "sha256": "49836562ab5e7802390b612de513be5d0f0d04bfdaa6260ca1c7c5b443233da1",
+      "bytes": 2466
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0087.json",
+      "sha256": "c7ee88f3b10a5f8d6c3fff4fb9b199e0767b0ec7880b2518568faf9ca8bc7edd",
+      "bytes": 3004
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0088.json",
+      "sha256": "3e87bf9433ce28bbed7d155d57f35fc5858096977332c9900f640c4a41f7e3d9",
+      "bytes": 2497
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0089.json",
+      "sha256": "12bb040c1b464c5e5eb9a7b35fadfd1110cd28bb6ad90ddac64fb4f983c5e0c3",
+      "bytes": 2447
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0090.json",
+      "sha256": "78cb2e9101415a214a5f95eaa54ec9f6a1aaa6d46ada078ba5488cc34e7931d9",
+      "bytes": 3354
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0091.json",
+      "sha256": "a44b98abfd114b6fd2d498a218c599e187e17d8220c30b1c3985b3630354a059",
+      "bytes": 2356
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0092.json",
+      "sha256": "fd424008382324d6850593764a9f65169b0983419f374212b6ad87d74a88de85",
+      "bytes": 2847
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0093.json",
+      "sha256": "1147349c40cd7a116df44c46836f289dd2dc956153bdf664a379a3bdd1383267",
+      "bytes": 3564
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0094.json",
+      "sha256": "2bb5d5cf94559677b4c01f863aa16a664d2faae6a90d499017ffffa4d33ee133",
+      "bytes": 2602
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0095.json",
+      "sha256": "f46ef708aa18f1301467c80ee83fe3e981ef7bf1e07ef6e7ea5fd40b745e324d",
+      "bytes": 2615
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0096.json",
+      "sha256": "bf2ed7afbb158d4f7dde9cc77c41ae4d6a33ac201eca707a5e5152c56f81cb67",
+      "bytes": 2457
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0097.json",
+      "sha256": "f45cd88682565f3b0131369e2d9b91e9e8186a61b5937fbb15a8346171ff9906",
+      "bytes": 2421
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0098.json",
+      "sha256": "9a585f20e395702045798a0be64edde3241c9e2cde45a599343624aa243a26d4",
+      "bytes": 6238
+    },
+    {
+      "file": "accuracy/official_initial100/mathqa-test-0099.json",
+      "sha256": "dad43963968128777d9aeea077158bedd0a85d2fcc599578dd2d65ad9ab20b2b",
+      "bytes": 2597
+    },
+    {
+      "file": "accuracy/official_repeats/mathqa-test-0062_repeat1.json",
+      "sha256": "3c2a1b34641f6b3cc2f3a30a4320941dd8a6c4b64e91c0c7c3bc5b2cc8cfb643",
+      "bytes": 2439
+    },
+    {
+      "file": "accuracy/official_repeats/mathqa-test-0062_repeat2.json",
+      "sha256": "a0fcf9b683ef4d25f220a9f64985cfa791a523274dd06b501a342a0556380fc6",
+      "bytes": 3306
+    },
+    {
+      "file": "accuracy/official_repeats/mathqa-test-0062_repeat3.json",
+      "sha256": "6b15041dc70226267d5854e4ca9b5b6042194b7e2f188b1857609fc6a1a60a57",
+      "bytes": 2504
+    },
+    {
+      "file": "accuracy/v11/mathqa-test-0062.json",
+      "sha256": "8a619243027c89dc7199f68998f8511c1db18b0e4410794cbdbae974616b0607",
+      "bytes": 6427
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0000.json",
+      "sha256": "aec9bf270965736ea503c9a1fb345a38edb94732dcac69fd638cfea35028d247",
+      "bytes": 4696
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0001.json",
+      "sha256": "ee6eca93f7627e25b033703173eb5b3bd0d6ea87000d09543e4496090a64d368",
+      "bytes": 4561
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0002.json",
+      "sha256": "3704661a86e9d5afdbd6ebd21936a2c259e3f5d83f32f88aa7a154784cab7e9c",
+      "bytes": 4677
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0003.json",
+      "sha256": "65281a5332ccecbd7c7aff4d553363ff5caa1850a21de694ff4d548fe00af81e",
+      "bytes": 4365
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0004.json",
+      "sha256": "f1e66413f39e371e7796a57cfd14e151d750d5303a8d427aba64f7a733fc7cca",
+      "bytes": 4383
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0005.json",
+      "sha256": "dd2e1b452db4cdde8e37428317fe52415b8b468f795626d0e120f997d56fe4eb",
+      "bytes": 4664
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0006.json",
+      "sha256": "87fac3e153b0156d8f709795f3c8d159d5e6616e3e2c6a5f11c2947263a20576",
+      "bytes": 4731
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0007.json",
+      "sha256": "d0363cc93f37236d8d8c88a1dc226ad5e4f163403e7ceef719a6f13ae283f14c",
+      "bytes": 4600
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0008.json",
+      "sha256": "c43513d26907d99914775ad0a80f1bd9b96cdd0812db155650ccea17438a379f",
+      "bytes": 4414
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0009.json",
+      "sha256": "fe39579bd06c54680de9c867942a2e63d2f40f1eddd4889b68c9aff44d2ec81a",
+      "bytes": 4427
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0062.json",
+      "sha256": "53914fed4449508974acf7e7c734481f0ceb87d8dd7d1be9965e30056774f5f5",
+      "bytes": 5624
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0062_repeat1.json",
+      "sha256": "de5ba27572b67ecc01e5ca9c1c6597dbe5bf9b8c1aeb6f543ff948ff96a35730",
+      "bytes": 5622
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0062_repeat2.json",
+      "sha256": "b73183c8c6db5d28e152c87ece37c7d7c589f61f23eaea8644e6e3e142dc165b",
+      "bytes": 5622
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0062_repeat3.json",
+      "sha256": "cdd3550fe2b81580da4b6e9604bdd3694749700861772f9f2814e35dd4cee2eb",
+      "bytes": 5622
+    },
+    {
+      "file": "accuracy/v12/mathqa-test-0065.json",
+      "sha256": "14ee1b82063f98353e549a9fcbdba51475b48cc9c51e753238796b7dccac4d8a",
+      "bytes": 6336
+    },
+    {
+      "file": "accuracy/v4/mathqa-test-0000.json",
+      "sha256": "6e7b1ae2bb893c1a24da3b3b0299727db270b99ac7e03c269b57ae73936fc7dc",
+      "bytes": 4398
+    },
+    {
+      "file": "accuracy/v4/mathqa-test-0031.json",
+      "sha256": "f61ad0da6ca7e73542cc1d66d92316d6fac1e186288981995ca9779190ff87ab",
+      "bytes": 7669
+    },
+    {
+      "file": "accuracy/v4/mathqa-test-0062.json",
+      "sha256": "236ac04b93f6d57f79703ace90d6170d52199cb2a9f49fc6e917d35219d5c455",
+      "bytes": 4192
+    },
+    {
+      "file": "accuracy/v4/mathqa-test-0062_repeat1.json",
+      "sha256": "efbd0c611ce4f4854d0f4e271a9cac15ca5e0b314cb48640d4915e5aaa0112c2",
+      "bytes": 4271
+    },
+    {
+      "file": "accuracy/v4/mathqa-test-0062_repeat2.json",
+      "sha256": "e8170b5b404340ec955c1c9eadc1f9f24b28b6b3a1086549e2a289b2f631df15",
+      "bytes": 4270
+    },
+    {
+      "file": "accuracy/v4/mathqa-test-0062_repeat3.json",
+      "sha256": "774fe842e63135910c7d7c3d3e6771ebe38611129c60235ffa6a12ad77717152",
+      "bytes": 4271
+    },
+    {
+      "file": "accuracy/v4/mathqa-test-0065.json",
+      "sha256": "3e8cfa37da934ac413b7d6ea403e9101151151121a582da61c06cb506b9edcf0",
+      "bytes": 4945
+    },
+    {
+      "file": "accuracy/v8/mathqa-test-0062.json",
+      "sha256": "55df954ce0ea8f61d61201de4735bf13139a1fee26ea5c2583f067708fa17330",
+      "bytes": 4321
+    },
+    {
+      "file": "accuracy/v8/mathqa-test-0065.json",
+      "sha256": "46bc6844845e3bf1db992ecf6ce9eae4ec737f36f6d6b197b3a5465a59754cf6",
+      "bytes": 3184
+    },
+    {
+      "file": "accuracy/v9/mathqa-test-0062.json",
+      "sha256": "f45c710b3d48c8209f5e24edda141c91f886a46c9a3eb4df2f56cc323f93f5d2",
+      "bytes": 4460
+    },
+    {
+      "file": "adaptation_report.md",
+      "sha256": "0a822975202fbd981db0153dcf9081fe771ecab8fc9543e99b7041219740cd82",
+      "bytes": 31218
+    },
+    {
+      "file": "diagnostics/diagnostic_evidence_v1.tar.gz",
+      "sha256": "28d5f977800fcfa9100ddadc349c6963e554ccc7a00a48670341f8a485c3f470",
+      "bytes": 157799
+    },
+    {
+      "file": "diagnostics/diagnostic_evidence_v2.tar.gz",
+      "sha256": "04cc28ab50f78c78887683734ae1cefbfb59f5d0aeaeb4cce56fe9a561b78957",
+      "bytes": 297430
+    },
+    {
+      "file": "diagnostics/diagnostic_evidence_v3.tar.gz",
+      "sha256": "9dd05b102a02b8ebc9ab9bb3d1412a0103375c7fad251de18423c4236f85564b",
+      "bytes": 93271
+    },
+    {
+      "file": "diagnostics/diagnostic_evidence_v4.tar.gz",
+      "sha256": "158f82c025e400796b4ba13b57d00330a703570eea5c8e8e5b31dc06d5d9f235",
+      "bytes": 65238
+    },
+    {
+      "file": "diagnostics/diagnostic_evidence_v5.tar.gz",
+      "sha256": "db65aae32bc5dcf8d1c5bcae80939f45cfadac8290f6df27ec06023e6ecc207a",
+      "bytes": 135681
+    },
+    {
+      "file": "diagnostics/forced_v13_comparison.json",
+      "sha256": "edcec3c1fb07fe7a8efd16905f10dc0e24f36642b107164f9f5c9a678a3444b4",
+      "bytes": 8787
+    },
+    {
+      "file": "diagnostics/full_pd_performance_evidence_v1.tar.gz",
+      "sha256": "4fc0312b7e987e6e5cfb346151db83f8faa873f10914d9064d076fa490360c00",
+      "bytes": 450927
+    },
+    {
+      "file": "diagnostics/hf_q62_fullprefill_fp32conv_v3_result.json",
+      "sha256": "c17fd0dfeeeb69b04457b1839372d1b57b7e8d5ae9646ab41a80b91d42e7a40e",
+      "bytes": 40260
+    },
+    {
+      "file": "diagnostics/hf_q62_fullprefill_v2/manifest.json",
+      "sha256": "f1a786c35b1cf017779aa76575fbf404487afb3e50791c84b8e8aa4723bab803",
+      "bytes": 2579
+    },
+    {
+      "file": "diagnostics/hf_q62_fullprefill_v2/result.json",
+      "sha256": "c4639bc79a9686223d0c5cc6ffcedff2bb5a7607fdbfbf14ab558212afd77f3c",
+      "bytes": 40276
+    },
+    {
+      "file": "diagnostics/hf_q62_fullprefill_v2.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "file": "diagnostics/hf_q62_fullprefill_v2.log",
+      "sha256": "06e52ebcb805cbd1ed242ffdf05ba7238467ed36a6caf00b8b50598e0157a52f",
+      "bytes": 29583
+    },
+    {
+      "file": "diagnostics/hf_q62_split_fp32conv_resume_v3_result.json",
+      "sha256": "7a6da768f65816ff052b2bd38039b0f454ec31b56a2df540ce10c36be36fb809",
+      "bytes": 40329
+    },
+    {
+      "file": "diagnostics/hf_q62_split_reference_v1/comparison_partial.json",
+      "sha256": "170c92e85fdc15524160742917e8d03eaa14cf42d501edaaacbcd52b490b399a",
+      "bytes": 3026
+    },
+    {
+      "file": "diagnostics/hf_q62_split_reference_v1/manifest.json",
+      "sha256": "03260a0710908ac42ac71fc1f55bdca92637e18293ccc468d0ec49215b34f6ec",
+      "bytes": 2635
+    },
+    {
+      "file": "diagnostics/hf_q62_split_reference_v1/result.json",
+      "sha256": "d07f789d71fca9d4276438b794fc071b6f68630d8251d9dcc726e6e31268e51e",
+      "bytes": 40316
+    },
+    {
+      "file": "diagnostics/hf_q62_split_reference_v1.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "file": "diagnostics/hf_q62_split_reference_v1.log",
+      "sha256": "cc81c6032130290bf56fa9ebac6176146af325c603a682776cbdc6c454de753f",
+      "bytes": 30074
+    },
+    {
+      "file": "diagnostics/hf_resident_q62_v1_result.json",
+      "sha256": "e6732b5e5b9d6ed25a7404e26f021259055756db1f6ba7a9e2031407bbd1726b",
+      "bytes": 2895
+    },
+    {
+      "file": "diagnostics/interruption/candidate_v8_rank0_bt.log",
+      "sha256": "4bcc3766c81f7cfcd0c69e1760cf0135d24bb91a564114e4893820985053c013",
+      "bytes": 416547
+    },
+    {
+      "file": "diagnostics/mhc_real_checkpoint_v1/passed.json",
+      "sha256": "3bb58d36d8ca09ab7fa5c05c99fc4c5f80642819d194c386ced5586d88b3c7df",
+      "bytes": 91
+    },
+    {
+      "file": "diagnostics/mhc_real_checkpoint_v1.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "file": "diagnostics/mhc_real_checkpoint_v1.log",
+      "sha256": "ad836c1995fb775f321686081dea45de3edc884c69dc806e9636455bf9275f44",
+      "bytes": 36741
+    },
+    {
+      "file": "diagnostics/real_fg_projection_v1.json",
+      "sha256": "17632a7af38b2d351e1abdb1bc055944802fe2c50d839c7e2380d091f014615e",
+      "bytes": 6044
+    },
+    {
+      "file": "diagnostics/real_kda_tp8_chunk1_v1.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "file": "diagnostics/real_kda_tp8_chunk1_v1.log",
+      "sha256": "42c5bd1a5809a19cf8ddddfc9aec66cf55280876e6453a81b6558c2d1d382d7a",
+      "bytes": 3697
+    },
+    {
+      "file": "diagnostics/real_kda_tp8_explicit_qk_v1.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "file": "diagnostics/real_kda_tp8_explicit_qk_v1.log",
+      "sha256": "097d6cdb7d2da0c5d152171c2d6b5f3e6c4bf02f8561ba99ae54f9c7cc407b81",
+      "bytes": 3997
+    },
+    {
+      "file": "diagnostics/real_kda_tp8_gpu_reference_all_v1.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "file": "diagnostics/real_kda_tp8_gpu_reference_all_v1.log",
+      "sha256": "91c2ed21278e0f5ae1cf00978ad5f39140071f7b0d59796e3f0a4a01fc4a725f",
+      "bytes": 3161
+    },
+    {
+      "file": "diagnostics/real_kda_tp8_heads_v1.exit",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "file": "diagnostics/real_kda_tp8_heads_v1.log",
+      "sha256": "faac0f03915ad60f0d14154f0f37aa61571c89421fcc94268367201f3a1b1564",
+      "bytes": 3690
+    },
+    {
+      "file": "diagnostics/real_projection_batch_v1.json",
+      "sha256": "9dbeebcf69ea40cc9f408e59e9f49287c6496024c93381a0ad5e318e565b26b3",
+      "bytes": 7344
+    },
+    {
+      "file": "diagnostics/regression_evidence_v1.tar.gz",
+      "sha256": "d589f7acf78573b36f51c29dc645db7bcef9d26aa2f49ddb8faf346892b1e179",
+      "bytes": 27102
+    },
+    {
+      "file": "diagnostics/v10/decode30.json",
+      "sha256": "691dcdf33b07cb9d29d9d2457bdf1b551208d488cb06528af3338b00566916d4",
+      "bytes": 4544
+    },
+    {
+      "file": "diagnostics/v10/prefill135.json",
+      "sha256": "923fadffb4fa97f3514d865d0b32e99bfb5826dce1722414fd58b21e69ff916b",
+      "bytes": 2527
+    },
+    {
+      "file": "diagnostics/v7/decode80.json",
+      "sha256": "c4c95abc3795b167fac5d80c36a893bbf33aeb6b7b3e4c51a947c25f3d6f4e19",
+      "bytes": 8324
+    },
+    {
+      "file": "diagnostics/v7/layer_comparison.json",
+      "sha256": "064754a63c39003b9d23adc698e43e894ba04a556e1c946326f013b39afe2907",
+      "bytes": 35946
+    },
+    {
+      "file": "diagnostics/v7/prefill135.json",
+      "sha256": "ee34229be1720250161f545b9d42c24727f4c27fb03811dcbb8ec49d0d955275",
+      "bytes": 2568
+    },
+    {
+      "file": "diagnostics/v9/decode30.json",
+      "sha256": "230d68647f3d4026b5c9545a18f19de25fdce34673e46f85b4064088a87433f9",
+      "bytes": 4578
+    },
+    {
+      "file": "diagnostics/v9/prefill135.json",
+      "sha256": "a57c88134f1fb002667b0efe990d051a0338202555834e81b1d6bbb7471e4216",
+      "bytes": 2554
+    },
+    {
+      "file": "integration/native_fp8_ep8_v14c_result.json",
+      "sha256": "9c16af57fe3c89e1947a35a03820536013a1c10b41c5485db1fc251254dfdc35",
+      "bytes": 3972
+    },
+    {
+      "file": "integration/tiny_pd_v14c/comparison.json",
+      "sha256": "c27e1e64c7eb166a73563bcac9689b5eb97a3b40d7ad2e6b6e5c39048f2a327b",
+      "bytes": 403
+    },
+    {
+      "file": "integration/tiny_pd_v14c/comparison_v2.json",
+      "sha256": "808d92550f959b542eb7fbf4714fc0ed29dee6746234a65f43096c76c0f3486e",
+      "bytes": 754
+    },
+    {
+      "file": "integration/tiny_pd_v14c/request0.json",
+      "sha256": "5718cb14349506882add6c1153bd2c4eb4494f9c5cb7cde4c9aabd1363bda35a",
+      "bytes": 999
+    },
+    {
+      "file": "integration/tiny_pd_v14c/request1.json",
+      "sha256": "9f4a2028c092e97346b2401b547867f7d3a9eff03256f4a83c7d2ae7abe5e7ed",
+      "bytes": 1001
+    },
+    {
+      "file": "integration/tiny_pd_v14c/request2.json",
+      "sha256": "e63778a2317741aea5c0514676fe0f9d47dc19fb1f39aa10828ceac60788fb00",
+      "bytes": 2361
+    },
+    {
+      "file": "performance/accuracy_review.json",
+      "sha256": "e68757287d682d7b6aef08197bb5f46ab78de380fc00ada79c18b67153a3fc50",
+      "bytes": 2658
+    },
+    {
+      "file": "performance/active.json",
+      "sha256": "be8234ba4931db84a71c443a2da53b9086c53f678f7e86b139b4e90059f60dcc",
+      "bytes": 875
+    },
+    {
+      "file": "performance/commands.json",
+      "sha256": "5f6c6f63bc5d6de9d7e8ac08515cf231f4c38f543f2c5e6bcacbf227be65d673",
+      "bytes": 3608
+    },
+    {
+      "file": "performance/complete.json",
+      "sha256": "8be008376d55e4a576ed75f88ee1dd91abd3fa9e55e3afaeae19b96f80b0c738",
+      "bytes": 280
+    },
+    {
+      "file": "performance/dependency_overlay_manifest.json",
+      "sha256": "b446fc9c3b6efff9f5318a0604564c2850f275426b540dee1ed66bda593585a9",
+      "bytes": 32382
+    },
+    {
+      "file": "performance/formal_requests.csv",
+      "sha256": "7895011aa220e6e93e1f4e95e14f6842ddf9ca22a1d0182e2069b690d512a43e",
+      "bytes": 2129
+    },
+    {
+      "file": "performance/formal_summary.json",
+      "sha256": "e04401f4c9b2d8b85aabd84abb69b0893e471b08915aecb2d4effb34f5a2461f",
+      "bytes": 4057
+    },
+    {
+      "file": "performance/input2048_output256/measured/glm-5.3-flash/benchmark.log",
+      "sha256": "43c48ca40440c623f448d1593360d45cb7bfdc49b1bf2acc259ee492de6a102a",
+      "bytes": 9602
+    },
+    {
+      "file": "performance/input2048_output256/measured/glm-5.3-flash/parallel_1_number_5/benchmark_args.json",
+      "sha256": "ed4f69dc1929eef03d989d46abb294af9c5ba58b179208af77bcc8591e8bd63b",
+      "bytes": 2255
+    },
+    {
+      "file": "performance/input2048_output256/measured/glm-5.3-flash/parallel_1_number_5/benchmark_data.db",
+      "sha256": "caac02a3ff51a542dc8a5ba68daebdbfcf5aadef8e31105ba886d07715a1764f",
+      "bytes": 385024
+    },
+    {
+      "file": "performance/input2048_output256/measured/glm-5.3-flash/parallel_1_number_5/benchmark_percentile.json",
+      "sha256": "9a430409253fe3a7843985541f3c1a5ce70091cb86c34f255736438b93482f49",
+      "bytes": 3671
+    },
+    {
+      "file": "performance/input2048_output256/measured/glm-5.3-flash/parallel_1_number_5/benchmark_summary.json",
+      "sha256": "48c7aca4f2236804f38ecb650ada355631a6f0601036e0d2a6ee8fb6947b1167",
+      "bytes": 670
+    },
+    {
+      "file": "performance/input2048_output256/measured/glm-5.3-flash/parallel_1_number_5/workload_throughput.json",
+      "sha256": "8707b0b54bc8ac86d850d2c8e79838aa59db05d47ddeaeca5ba227e9f3fb07da",
+      "bytes": 877
+    },
+    {
+      "file": "performance/input2048_output256/measured/glm-5.3-flash/parallel_1_number_5/workload_timeline.json",
+      "sha256": "98ce994498e6cd13dd579fae3aed66ed2c5b54023f055fc8060226228281f0df",
+      "bytes": 844
+    },
+    {
+      "file": "performance/input2048_output256/measured/glm-5.3-flash/performance_summary.txt",
+      "sha256": "3811d1cbe913156e6bce75e0183f6886b8575c238a4f4b09b9ee9b6c7f5e51d0",
+      "bytes": 5315
+    },
+    {
+      "file": "performance/input2048_output256/measured/original_request_response_01.json",
+      "sha256": "8d6d6bfe391dd0518e55220ffaab37586f93143f4f0d4e11e29ce7a5be805753",
+      "bytes": 91617
+    },
+    {
+      "file": "performance/input2048_output256/measured/original_request_response_02.json",
+      "sha256": "1b37e0489c47a22d01ebed1d9e8c680eaa2cf228465f9cf339987ee5cc1e7ced",
+      "bytes": 91602
+    },
+    {
+      "file": "performance/input2048_output256/measured/original_request_response_03.json",
+      "sha256": "81a3ea8a901cae87b3c28989684a33d69230233860e40c86b218665eec9ef87a",
+      "bytes": 91632
+    },
+    {
+      "file": "performance/input2048_output256/measured/original_request_response_04.json",
+      "sha256": "7199e9d0819f0f407a3249f7f2eb9b90b7fd3018e68a6625fd00172637e9d06c",
+      "bytes": 91638
+    },
+    {
+      "file": "performance/input2048_output256/measured/original_request_response_05.json",
+      "sha256": "dd46f59769e5b27b461f08602e19b068a2466e473bcd50f54e957743e13b3f63",
+      "bytes": 91614
+    },
+    {
+      "file": "performance/input2048_output256/measured/raw_usage_validation.json",
+      "sha256": "28f48059e54ddea1036e645995edd876dc8dd4dceab7742f5064d790a027ce76",
+      "bytes": 2772
+    },
+    {
+      "file": "performance/input2048_output256/warmup/glm-5.3-flash/benchmark.log",
+      "sha256": "cfcb9f51bef0b6e8072236fc302e930cc5db1ccd56668032db84820f524de321",
+      "bytes": 9085
+    },
+    {
+      "file": "performance/input2048_output256/warmup/glm-5.3-flash/parallel_1_number_1/benchmark_args.json",
+      "sha256": "353b2fbe8a9a21d59dcf377a5cb71bed46aa82d41172ae62eb402f0525367d65",
+      "bytes": 2253
+    },
+    {
+      "file": "performance/input2048_output256/warmup/glm-5.3-flash/parallel_1_number_1/benchmark_data.db",
+      "sha256": "00955ae35a5e02e031a14e2e2f83c7cb107ba3a7dc7a3e6b0fc44e0d22707e32",
+      "bytes": 81920
+    },
+    {
+      "file": "performance/input2048_output256/warmup/glm-5.3-flash/parallel_1_number_1/benchmark_percentile.json",
+      "sha256": "6bba08c19bba155b289924b21eaf42336cda4ca2c3ccf15c767f9a117b4c61c9",
+      "bytes": 3674
+    },
+    {
+      "file": "performance/input2048_output256/warmup/glm-5.3-flash/parallel_1_number_1/benchmark_summary.json",
+      "sha256": "d421284a95849ccd135323fa310f1b1de76b9e44d2c14c7e91e7f607d9296e6b",
+      "bytes": 669
+    },
+    {
+      "file": "performance/input2048_output256/warmup/glm-5.3-flash/parallel_1_number_1/workload_throughput.json",
+      "sha256": "d7df0c69636c06b69e4526bf4350196f5e9a3edb21410ea2e24cef03f9a1e035",
+      "bytes": 831
+    },
+    {
+      "file": "performance/input2048_output256/warmup/glm-5.3-flash/parallel_1_number_1/workload_timeline.json",
+      "sha256": "36b991427be04460ef0ae5fe5f337efd67659abc9dd18700e9fdfc5099abfa1a",
+      "bytes": 216
+    },
+    {
+      "file": "performance/input2048_output256/warmup/glm-5.3-flash/performance_summary.txt",
+      "sha256": "106c2afd509c39147c2b1163d55500e0853d3a565ff7dedc6384772f90fc1707",
+      "bytes": 5315
+    },
+    {
+      "file": "performance/input2048_output256/warmup/original_request_response_01.json",
+      "sha256": "2f1ed494fb2cfbc4f13d86c93db2c00ba558fe27c71aa3648814ad96745cc44a",
+      "bytes": 91617
+    },
+    {
+      "file": "performance/input2048_output256/warmup/raw_usage_validation.json",
+      "sha256": "b09abf0fdd839c34138ce7f091203521b2320e12c78b10a4face4eb47bf86f8d",
+      "bytes": 864
+    },
+    {
+      "file": "performance/input256_output256/measured/glm-5.3-flash/benchmark.log",
+      "sha256": "139bfd48e0d4ff1bd46e3807916976ecb15cfe717a10020b16027af4a980e690",
+      "bytes": 9203
+    },
+    {
+      "file": "performance/input256_output256/measured/glm-5.3-flash/parallel_1_number_5/benchmark_args.json",
+      "sha256": "7bfbaf3f72329db77d6f77e866be3155e8a72ac3fc63899b9ea3db4f68b815cf",
+      "bytes": 2253
+    },
+    {
+      "file": "performance/input256_output256/measured/glm-5.3-flash/parallel_1_number_5/benchmark_data.db",
+      "sha256": "22c3829437becc8d7e77d0c40d6fd9a56f634b4490a1180ce01e5ba1d32e9896",
+      "bytes": 376832
+    },
+    {
+      "file": "performance/input256_output256/measured/glm-5.3-flash/parallel_1_number_5/benchmark_percentile.json",
+      "sha256": "f4973519abed0653e2cbca968a3c65b0d16f7b5ad40b7117b74a107c79057b4c",
+      "bytes": 3619
+    },
+    {
+      "file": "performance/input256_output256/measured/glm-5.3-flash/parallel_1_number_5/benchmark_summary.json",
+      "sha256": "05f98c093b706b504cae451853a69b6395b277880bdb52d3feac59a86c9c9634",
+      "bytes": 597
+    },
+    {
+      "file": "performance/input256_output256/measured/glm-5.3-flash/parallel_1_number_5/workload_throughput.json",
+      "sha256": "54a62927dea24587e6da6dcc89d86d8a78cfb65eb61649a24d0a9f4e6e610534",
+      "bytes": 878
+    },
+    {
+      "file": "performance/input256_output256/measured/glm-5.3-flash/parallel_1_number_5/workload_timeline.json",
+      "sha256": "66b0267b3cc20f3e3d17c7e2d826a908415a70e483c130502bf1cd5a3843f36b",
+      "bytes": 838
+    },
+    {
+      "file": "performance/input256_output256/measured/glm-5.3-flash/performance_summary.txt",
+      "sha256": "a6e2b9639eb3dcb6418991b4deeea54eca48fdf273c8997e1bc36cc7698c0289",
+      "bytes": 4981
+    },
+    {
+      "file": "performance/input256_output256/measured/original_request_response_01.json",
+      "sha256": "1d36d01b7e03bc369c49f691af95b995fd2208c9acc9c9f1503fbafb6db49e90",
+      "bytes": 88371
+    },
+    {
+      "file": "performance/input256_output256/measured/original_request_response_02.json",
+      "sha256": "e8c476f3601cc191fcca93ff34990bea455928b53d1fc2b0641f0b1838a4d30f",
+      "bytes": 88372
+    },
+    {
+      "file": "performance/input256_output256/measured/original_request_response_03.json",
+      "sha256": "aa7ac4f1511c52e2b519c6dc22ebef52ad07631657ff9abc70a7a3d2537fb965",
+      "bytes": 88366
+    },
+    {
+      "file": "performance/input256_output256/measured/original_request_response_04.json",
+      "sha256": "c6bf449117cc38b2db1a244140a23bb0f6e72a8a61e5b1092c8092c93dca0c5d",
+      "bytes": 88363
+    },
+    {
+      "file": "performance/input256_output256/measured/original_request_response_05.json",
+      "sha256": "082aaa0567691a94dc0cf669153709fc200974a2b3d7410ba39589b6b93f794a",
+      "bytes": 88355
+    },
+    {
+      "file": "performance/input256_output256/measured/raw_usage_validation.json",
+      "sha256": "d6a6032ac8244d166773210629d8d8f35a8188f8ffdc04c2f515f5b50f7f74b9",
+      "bytes": 2773
+    },
+    {
+      "file": "performance/input256_output256/warmup/glm-5.3-flash/benchmark.log",
+      "sha256": "7a69c6934d766bf7388c9f53e64ac674a1e0d043a7045bdab65cc81b4b497c98",
+      "bytes": 8685
+    },
+    {
+      "file": "performance/input256_output256/warmup/glm-5.3-flash/parallel_1_number_1/benchmark_args.json",
+      "sha256": "bb534c1f91459441b7d4573d310208a7e129e4915cfe07140baa2b07d96272e9",
+      "bytes": 2251
+    },
+    {
+      "file": "performance/input256_output256/warmup/glm-5.3-flash/parallel_1_number_1/benchmark_data.db",
+      "sha256": "9f2cec970b6091d92e7868698fbbff1a1631c8b70d20af0afc47b4ccc14e8488",
+      "bytes": 77824
+    },
+    {
+      "file": "performance/input256_output256/warmup/glm-5.3-flash/parallel_1_number_1/benchmark_percentile.json",
+      "sha256": "18577a902e8b54814eeb64d1d21cd451a2c4a6f1b57c14277fed9c04a633b5fc",
+      "bytes": 3638
+    },
+    {
+      "file": "performance/input256_output256/warmup/glm-5.3-flash/parallel_1_number_1/benchmark_summary.json",
+      "sha256": "69fb5a1d84432a9fc2112df70d21e7077bede6bbeb470fa6a544f89e80ee7fe1",
+      "bytes": 598
+    },
+    {
+      "file": "performance/input256_output256/warmup/glm-5.3-flash/parallel_1_number_1/workload_throughput.json",
+      "sha256": "928fdb315dc45b7b9d5d03dcd7c29bdf750b3a7dbae8bc9b9b6946056faa8236",
+      "bytes": 836
+    },
+    {
+      "file": "performance/input256_output256/warmup/glm-5.3-flash/parallel_1_number_1/workload_timeline.json",
+      "sha256": "47baa529b9d7ee6977864cfb584413e4d00e632918bb45c72d5adf87fbd33bf3",
+      "bytes": 215
+    },
+    {
+      "file": "performance/input256_output256/warmup/glm-5.3-flash/performance_summary.txt",
+      "sha256": "77379fe58adb8866b73aae2f85148d4fa2c456ea88ab33860c21e88a4616ae60",
+      "bytes": 4981
+    },
+    {
+      "file": "performance/input256_output256/warmup/original_request_response_01.json",
+      "sha256": "ff17937f29f418b759c92c6ac9fada16b6fe1381dd17c157b74b118eaca97d4c",
+      "bytes": 88376
+    },
+    {
+      "file": "performance/input256_output256/warmup/raw_usage_validation.json",
+      "sha256": "c3697c657a183bb50548cda270fb85dae477b5767c44315821b99b5fac3085ae",
+      "bytes": 861
+    },
+    {
+      "file": "performance/inputs/perf_input2048_output256.jsonl",
+      "sha256": "5c4e31cc981259cebcba7dff258c3f25b378e3860b675993b2e5fbc4bec125d2",
+      "bytes": 25968
+    },
+    {
+      "file": "performance/inputs/perf_input256_output256.jsonl",
+      "sha256": "06619ab903947703bc4c56a9f4681f2ff6dfeb925082cac0e38cc01b43131623",
+      "bytes": 4464
+    },
+    {
+      "file": "performance/measured_input2048.log",
+      "sha256": "7263233f4d63ff23a5b06497122d27f3bb4ac59a8314b6180826b291df6df42a",
+      "bytes": 19140
+    },
+    {
+      "file": "performance/measured_input256.log",
+      "sha256": "954c4121504ce8e7218ce7ec2835832d7c919c2825163674a5dd17bbc35d9868",
+      "bytes": 18402
+    },
+    {
+      "file": "performance/protocol_note.txt",
+      "sha256": "bd275c8d46896cb7a86797d6aca565f6b42cb6f8bdd2cee4b09b3b813d5cdcf0",
+      "bytes": 296
+    },
+    {
+      "file": "performance/resume_after_usage_validation.json",
+      "sha256": "f810ae127299af9be2514d5d486f4a7619f9260f612d801412ea0e413f94fb12",
+      "bytes": 722
+    },
+    {
+      "file": "performance/status.json",
+      "sha256": "56315c588682ca759ef2d26f0dcd61c9b1274d477d0e0e13e186a34456d740c5",
+      "bytes": 920
+    },
+    {
+      "file": "performance/warmup_input2048.log",
+      "sha256": "dc7808ca6ad4354dfbac131529b8dd9dfd1a2fb4dc4b6bf51f2ae92ddb04a7a7",
+      "bytes": 17009
+    },
+    {
+      "file": "performance/warmup_input256.log",
+      "sha256": "bea116bb59e2a4838b0b0f84d7d352f73faba5d377aff01c5a45d1118f3644e2",
+      "bytes": 16266
+    },
+    {
+      "file": "provenance/accuracy_review_before_performance.json",
+      "sha256": "e68757287d682d7b6aef08197bb5f46ab78de380fc00ada79c18b67153a3fc50",
+      "bytes": 2658
+    },
+    {
+      "file": "provenance/checkpoint_key_families.json",
+      "sha256": "0bd613c8d5825f65bba1c55f7ea74b78c7a4f6296269f626046673512089c000",
+      "bytes": 7045
+    },
+    {
+      "file": "provenance/correctness2048_request_and_oracle.json",
+      "sha256": "88d5289b76eb49e04727cf1b030aba0fcf3d47f817fafe418e709196f7de614e",
+      "bytes": 26185
+    },
+    {
+      "file": "provenance/dependency_hashes_sj10.json",
+      "sha256": "49e0c1ce598f0541a8643df09cb6c5da9bea2fa78807d40ad09da0ccc5a37789",
+      "bytes": 21231
+    },
+    {
+      "file": "provenance/dependency_hashes_sj9.json",
+      "sha256": "4e72baa730717adfa2713a58a6b44abbb825697fd4db9b10590549ebde0928e4",
+      "bytes": 21231
+    },
+    {
+      "file": "provenance/dlpack_elf_sj10.json",
+      "sha256": "38a0700bce4ca543d6472d26116f089815f35afc9e92b11615772e5b9c2209c7",
+      "bytes": 4782
+    },
+    {
+      "file": "provenance/dlpack_elf_sj9.json",
+      "sha256": "3c885d7651393133ae0cc8a398a13ba9b09732e2284a0a662de6b8077d4657c1",
+      "bytes": 4782
+    },
+    {
+      "file": "provenance/evalscope_integrity_v1.json",
+      "sha256": "26d2990b3b6da51ce3692533251ebf1e51d961b5c88626370b58cdef515cf014",
+      "bytes": 1003
+    },
+    {
+      "file": "provenance/final_service_state_sj10.json",
+      "sha256": "689b10a7c5b7f872bfee3d14d555f744f9eca91f3aa36e14ca577d80a5baa05e",
+      "bytes": 9053
+    },
+    {
+      "file": "provenance/final_service_state_sj9.json",
+      "sha256": "d301433f80b17893a790f2c1f2833e75fb2bccc7742afc07dc7bbe1d7dd851a2",
+      "bytes": 8956
+    },
+    {
+      "file": "provenance/full_pd_performance_evidence_v1_manifest.json",
+      "sha256": "c13c961c4a80633d0d8edd7c18ab93bfdcdea6864a1cf1f45216d734cfc72501",
+      "bytes": 26474
+    },
+    {
+      "file": "provenance/full_pd_runtime_sj10.json",
+      "sha256": "eb8ca6d481b24463bfed591f1cd0b8497f8b8689d1a57f74fd17b10ed284d5dd",
+      "bytes": 3904
+    },
+    {
+      "file": "provenance/full_pd_runtime_sj9.json",
+      "sha256": "6bd72e0e6f61c72cd4b447aaeab2ae6bfacf8721831175263b7cb32afb83484f",
+      "bytes": 3904
+    },
+    {
+      "file": "provenance/jit_identity_sj10.json",
+      "sha256": "6ba43eda285d727f0276eaef760facb8dcc78e3cfd0c141fffd540e673a46ae3",
+      "bytes": 3309
+    },
+    {
+      "file": "provenance/jit_identity_sj9.json",
+      "sha256": "cf5341904999e6d93d4536283bfbbbca606086dbaa0e73918000e419287ae0f1",
+      "bytes": 4959
+    },
+    {
+      "file": "provenance/loaded_native_libraries_sj10.json",
+      "sha256": "9e9525ca44a3d1d7958ef59068331986801108f8d483ff25d156060bde33c2b2",
+      "bytes": 767
+    },
+    {
+      "file": "provenance/loaded_native_libraries_sj9.json",
+      "sha256": "81c4dd05f52a38c75f48982a094a2d430d094ff8bb9d3920eda57c9e2ea43384",
+      "bytes": 767
+    },
+    {
+      "file": "provenance/mathqa_dataset_manifest.json",
+      "sha256": "c71e13ae3bb2ce9a80c94c7ad6df3e7c9f44933195513c1543e17318e6797527",
+      "bytes": 2461
+    },
+    {
+      "file": "provenance/model_text_config_actual.json",
+      "sha256": "3433a31dd31dd5537f0581d00fd8215a7d4fd41a9ff6cb9930dfcf0ff16e10a2",
+      "bytes": 4534
+    },
+    {
+      "file": "provenance/perf_dependency_overlay_v2.json",
+      "sha256": "b446fc9c3b6efff9f5318a0604564c2850f275426b540dee1ed66bda593585a9",
+      "bytes": 32382
+    },
+    {
+      "file": "provenance/perf_extra_wheels_manifest.json",
+      "sha256": "837a627cf0696f2d6dde1039a57b488cd904e93484f1411704c4091237031ec4",
+      "bytes": 486
+    },
+    {
+      "file": "provenance/source_manifest_v10.json",
+      "sha256": "4487ab7ea1b00b466f22b6523f4664d5347f4c8c7c2354a9bc7115f42f4e897d",
+      "bytes": 1300
+    },
+    {
+      "file": "provenance/source_manifest_v11.json",
+      "sha256": "5e86bcc291c3c2413021e26deffa957c44ca06b45ceac51ddfc7b9f0c8e5331f",
+      "bytes": 1436
+    },
+    {
+      "file": "provenance/source_manifest_v12.json",
+      "sha256": "5a2fa5d0176710b1a3a7b7442e976388bd57c86e7a63002dcab9981cfc12222e",
+      "bytes": 1446
+    },
+    {
+      "file": "provenance/source_manifest_v14c.json",
+      "sha256": "100643ad4b1a91f0c6a38da82557f576f66260330896dec7e1016632fcd5bf67",
+      "bytes": 1939
+    },
+    {
+      "file": "provenance/source_manifest_v4.json",
+      "sha256": "842171d330000d98a1a42115e6144b5e08222ce4093c3b89fe94b9cf990d2e1a",
+      "bytes": 1126
+    },
+    {
+      "file": "provenance/source_manifest_v8.json",
+      "sha256": "0f6b967d63a24aba8d68f7af8341ad710d10a037297ca117cf22c6b775e2ad84",
+      "bytes": 1157
+    },
+    {
+      "file": "provenance/source_manifest_v9.json",
+      "sha256": "21127835c28af3c2ada5d08cc90dbddda50eef5d7cf2e1af1e8454e0c4f8d1e1",
+      "bytes": 1311
+    },
+    {
+      "file": "provenance/user_scope_change_no_repeats_no_trace.json",
+      "sha256": "964328d5b0889bac240bac8c241737ca591ebd0a0d6975f3d40e9556531d24f6",
+      "bytes": 830
+    },
+    {
+      "file": "reproduction/original_script_text/mathqa_remote_frozen.py.txt",
+      "sha256": "b68b3d9ea34f541f9a61e0a710ce7d850f0fb13ee51945b6ad6c91085f33cad0",
+      "bytes": 3857
+    },
+    {
+      "file": "reproduction/original_script_text/resume_perf_v14c_after_warmup.py.txt",
+      "sha256": "2616c81955d60846f774615f5782745358febedbcd08a86b7f06d7f57e89139c",
+      "bytes": 3009
+    },
+    {
+      "file": "reproduction/original_script_text/run_perf_v14c.py.txt",
+      "sha256": "627b8bff394198a3c49919d1c04aba635631c27f394586b50c77b123f4823842",
+      "bytes": 2923
+    },
+    {
+      "file": "reproduction/original_script_text/run_perf_v14c_v2.py.txt",
+      "sha256": "03aa4767e4130051cf843c890b98bfe0e59a81f1291035238a3a6c6ae17839a1",
+      "bytes": 3197
+    },
+    {
+      "file": "reproduction/original_script_text/scored_response.py.txt",
+      "sha256": "ab6ab32741ea518f67e7014322ff7315ad86f61da5551edd62bcc6a29d576f31",
+      "bytes": 898
+    },
+    {
+      "file": "reproduction/original_script_text/summarize_accuracy_progress.py.txt",
+      "sha256": "14292c2377b5cae3c6aafc7a7db3de36f8c2df44cd925fdbe334ca4e4bb961ec",
+      "bytes": 4657
+    },
+    {
+      "file": "reproduction/original_script_text/summarize_formal_performance.py.txt",
+      "sha256": "c5e177d7341c387b24970b566cf9687bb991b29ea161abea62a5aed7e166f8e5",
+      "bytes": 6772
+    },
+    {
+      "file": "reproduction/original_script_text/summarize_repeat_results.py.txt",
+      "sha256": "dcb1dfb335a1460e885210ac48c0a12ae7c2a3d448d9d96794af310de52aa7fa",
+      "bytes": 2253
+    },
+    {
+      "file": "reproduction/original_script_text/validate_perf_phase_native_usage.py.txt",
+      "sha256": "5e3e8d28ebb9469c2f41cb2ab0fb4879a7bb2f7e07f9e9b2d35f6166fca1a9f9",
+      "bytes": 4245
+    },
+    {
+      "file": "review_notes.md",
+      "sha256": "3e38d4e3b6ba967920b307546e4c5d2d572bf12ba44908da91033a4c83d2e01f",
+      "bytes": 4445
+    },
+    {
+      "file": "交付总览.md",
+      "sha256": "92ff9e7c93fae5ef2df48dcb3d1ec0ba85be3ee0c19909698cc660956afc9a5f",
+      "bytes": 4033
+    },
+    {
+      "file": "历史实验与诊断过程_截至1105上午.md",
+      "sha256": "cc71ccbc88192bead7f13ac056e39df6ab9eaa226ba7ee2fbeb9043f7742169d",
+      "bytes": 42806
+    },
+    {
+      "file": "图/forced_prefix_v13.png",
+      "sha256": "53e008922dc145cc0e725ff33bfbfd35990f3b6a79aa33c9c32ba38b5462f1bc",
+      "bytes": 95897
+    },
+    {
+      "file": "图/forced_prefix_v13.svg",
+      "sha256": "6801e17ff4906b37ad43d3e5bc4c2b6bd1a0a4c1b8611fb893772bbf78ac8886",
+      "bytes": 57333
+    },
+    {
+      "file": "图/mathqa_initial100_v14c.png",
+      "sha256": "b4874844480efab12b481d13db982136c155e9414294ec22a0fa73a0cb9dcc08",
+      "bytes": 201761
+    },
+    {
+      "file": "图/mathqa_initial100_v14c.svg",
+      "sha256": "2bb33f46f58da52c821b6b1026ad9526c4eecdb5df2b653a622fde5511124eee",
+      "bytes": 100394
+    },
+    {
+      "file": "图/prefill_decode_layer_divergence.png",
+      "sha256": "466dbed825c569d724434fa7e3c7d4500717fa607410575f9691b2b18e4d3c3a",
+      "bytes": 176478
+    },
+    {
+      "file": "图/prefill_decode_layer_divergence.svg",
+      "sha256": "0c2efaee404aceec8a3a923108a86b02468c63a64263b5e879b7e8d41d05cabc",
+      "bytes": 72206
+    },
+    {
+      "file": "图/stage_and_moe_diagnostic_v10.png",
+      "sha256": "f7b06d0ae76e6f2dc69295b503bb07fed31cb3ef9992aa2ea2fac4c482383d99",
+      "bytes": 152759
+    },
+    {
+      "file": "图/stage_and_moe_diagnostic_v10.svg",
+      "sha256": "16cad638e5e0b06e172985f2b0e1317ab994cca33b058c7d7ab01cee0437b70f",
+      "bytes": 63252
+    },
+    {
+      "file": "并行通信探针中断记录.md",
+      "sha256": "988fa1b666fddbbb64510f74f678578eca067d00219f34245f6b94971b2481c3",
+      "bytes": 6652
+    },
+    {
+      "file": "当前接入状态_0062与0065及数值边界.md",
+      "sha256": "d85504c205fdffc6b34ff950032e438cadb7e1eb4cb5ca3ac34f0ba1dd59ec07",
+      "bytes": 11464
+    },
+    {
+      "file": "当前运行与下一步.md",
+      "sha256": "b9d32372b7fe058179868630ba6eeebae4ded6baba34dd596637c9acc97e108a",
+      "bytes": 1548
+    },
+    {
+      "file": "性能结果.md",
+      "sha256": "36206eac4f21b80d8aeed1c06ab1139848ee639d85f7a90006a36e308cc8cfb0",
+      "bytes": 2087
+    },
+    {
+      "file": "本轮适配与验证详细报告.md",
+      "sha256": "0a822975202fbd981db0153dcf9081fe771ecab8fc9543e99b7041219740cd82",
+      "bytes": 31218
+    },
+    {
+      "file": "结果口径与复现入口.md",
+      "sha256": "0c3aae6b0597523135e2512a1db116a84989dc19515678b8419b173c3e42a047",
+      "bytes": 4688
+    },
+    {
+      "file": "给Albert的汇报与commit_message.txt",
+      "sha256": "afd8ef5e76aa0c5a91bbc8ef79ab09254cbaa72dba83c80aecda4a63aee3018b",
+      "bytes": 4040
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "passed": true,
+  "layers": 45,
+  "relative_rmse_limit": 0.01,
+  "cosine_min": 0.9999
+}

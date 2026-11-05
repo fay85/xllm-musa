@@ -1,0 +1,22 @@
+feat: integrate GLM FP8 MegaMoE and record paired evaluation.
+
+Albert，我已在sj9/sj10完成GLM-5.3-Flash新路径的1P1D部署、固定100题对分和两组性能基线。P、D各8张GPU，Attention为TP8，路由专家为EP8、每卡36个完整专家，共享专家仍TP8。当前使用eager、MATE recurrent KDA和FP32 TP归约。
+
+这次主要完成：保留原始FP8专家权重及128×128 scale，适配MATE布局、EP分组和共享工作区；区分路由结果与共享专家的归约，保留sigmoid/top8/归一化×2.5/clamp10。路由专家已实际在GPU上走MATE FP8 MegaMoE，不再加载成BF16后计算；共享专家和其他投影仍有BF16路径，不能称为全模型全FP8。KDA核心、mHC pre、普通RMSNorm也实际调用MATE；短卷积、sigmoid门控norm、mHC post、DSA/IndexPool等仍有我方Torch MUSA GPU实现，没有回退CPU推理。
+
+对分方面，未找到ModelScope模型卡中可严格对齐的AIME/AMC/MathQA分数；AutomationBench需要完整工具环境，本轮未搭建，也不声称复现其48.8%。我改用固定MathQA test前100道算术/应用选择题，对比官方glm-5.3-flash API。题目、选项和请求参数一致：temperature=0、top_p=1、reasoning_effort=low、max_tokens=4096，允许完整思考后提取A～E。官方93/100，本地92/100，差−1个百分点，答案一致95%；生成Token分别13776/17383。0071有一次连接采集失败，主分数采用事先固定的首次成功恢复结果，原始失败计0则本地91/100；0098生成4096Token后截断，无最终答案。原始失败及所有问题均保留，不改标签、不挑选复测最优答案。
+
+0062当前为D/301Token；通过保留mHC控制参数原始FP32、显式FP32 TP求和及MATE recurrent prefill的组合改善，不能归为单一已证实根因。0065当前为A/577Token并正常结束，本轮早期FP8版本已不再截断，不能把变化全部归给后面的KDA改动。仍有一个未解决边界：0062固定相同135Token前缀，末尾为“Thursday minus Saturday = ”时，逐步decode预测2、整段prefill预测5。这是单实例路径数值差异，不能定性为双机网络问题，也不是所有错题的已知共同原因。按最新要求，本轮记录问题后进入性能，不追加分歧复测或抓trace。
+
+正式测速使用未修改计时实现的EvalScope1.14.1，C1，每组1次暖机、5次正式请求，前缀缓存关闭、固定256Token输出：
+- 256输入/256输出：TTFT 2099.76ms，TPOT 323.75ms/token，端到端84.6568s，QPS 0.011812，输出吞吐3.0240token/s。
+- 2048输入/256输出：TTFT 16985.57ms，TPOT 322.80ms/token，端到端99.2984s，QPS 0.010071，输出吞吐2.5781token/s。
+两组各5/5成功；含暖机共12条的Token数均与同request ID的native完成日志交叉核对，补足当前流式接口缺usage的限制。独立2048输入正确性检查也通过，实际32Token输出、预算256，与正式定长测速分开记录。这是保留已知精度问题的当前配置基线，不是峰值QPS或FP8加速倍数。
+
+验证包括CPU559通过/116跳过、GPU KDA10通过、随机EP2/EP8和真实专家层数值回归，以及小模型单机/双机一致与正常退出。仍需后续接入和验证带GLM clamp的高性能MegaMoE decode、其他融合算子/FP8 sparse MLA及graph等能力。当前MegaMoE小输入补至129行走支持clamp的split-prefill，并保留同步/barrier，因此还有性能开销；不能宣称所有模块都已换成MATE或所有数值问题都已解决。MTP/视觉等未启用能力单独列出，不能与普通文本结构是否参与计算混淆。
+
+代码与原始日志、逐题表、性能SQLite/SSE、数值图、详细说明一同提交到共同仓库既有分支：
+https://github.com/fay85/xllm-musa/tree/xiaopang1104benchmark1P1D
+证据目录：benchmarks/reports/20261105_glm53_flash_fp8_adaptation/
+NFS归档：/data/nfs_shared/xiaopang/20261105_glm53_full_adaptation/交付报告/
+此次只提交个人分支，不向fork提交，不创建MR/PR。

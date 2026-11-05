@@ -1,0 +1,1269 @@
+{
+  "folders": {
+    "initial_prefill": "/work/logs/diagnostic_hidden_v7/step00000",
+    "decode": "/work/logs/diagnostic_hidden_v7/step00019",
+    "prefill": "/work/logs/diagnostic_hidden_v7/step00080"
+  },
+  "rows": [
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.009106412529945374,
+        "cosine": 0.9999619722366333,
+        "max_abs": 0.00018310546875
+      },
+      "layer": 0,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.006256012711673975,
+        "cosine": 0.9999831914901733,
+        "max_abs": 0.0001220703125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.009093153290450573,
+        "cosine": 0.9999619722366333,
+        "max_abs": 0.000244140625
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.009108200669288635,
+        "cosine": 0.999961793422699,
+        "max_abs": 0.00018310546875
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.010796558111906052,
+        "cosine": 0.9999474287033081,
+        "max_abs": 0.0008544921875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.00819328147917986,
+        "cosine": 0.9999656677246094,
+        "max_abs": 0.0003662109375
+      },
+      "layer": 1,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.007206825073808432,
+        "cosine": 0.9999730587005615,
+        "max_abs": 0.00048828125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.008506542071700096,
+        "cosine": 0.9999644756317139,
+        "max_abs": 0.00048828125
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.00821209792047739,
+        "cosine": 0.9999654293060303,
+        "max_abs": 0.0003662109375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.010093329474329948,
+        "cosine": 0.9999534487724304,
+        "max_abs": 0.0009765625
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.0055918158032000065,
+        "cosine": 0.9999902844429016,
+        "max_abs": 0.001953125
+      },
+      "layer": 2,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.0054021598771214485,
+        "cosine": 0.999990701675415,
+        "max_abs": 0.001953125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.005665042903274298,
+        "cosine": 0.9999903440475464,
+        "max_abs": 0.001953125
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.005480106454342604,
+        "cosine": 0.9999896287918091,
+        "max_abs": 0.001953125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.008463200181722641,
+        "cosine": 0.9999666810035706,
+        "max_abs": 0.001953125
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.042695771902799606,
+        "cosine": 0.9991273880004883,
+        "max_abs": 0.0150146484375
+      },
+      "layer": 3,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.008354288525879383,
+        "cosine": 0.9999716877937317,
+        "max_abs": 0.0029296875
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.04167165979743004,
+        "cosine": 0.9991562366485596,
+        "max_abs": 0.014404296875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.04167499020695686,
+        "cosine": 0.9991585612297058,
+        "max_abs": 0.014892578125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.033223241567611694,
+        "cosine": 0.9994542598724365,
+        "max_abs": 0.012451171875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.042793042957782745,
+        "cosine": 0.9991176724433899,
+        "max_abs": 0.0142822265625
+      },
+      "layer": 4,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.008711240254342556,
+        "cosine": 0.9999656081199646,
+        "max_abs": 0.0029296875
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.04174879193305969,
+        "cosine": 0.9991459846496582,
+        "max_abs": 0.013671875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.04183117300271988,
+        "cosine": 0.9991469979286194,
+        "max_abs": 0.01416015625
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.032878294587135315,
+        "cosine": 0.9994608759880066,
+        "max_abs": 0.011962890625
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.043611738830804825,
+        "cosine": 0.9991036653518677,
+        "max_abs": 0.0126953125
+      },
+      "layer": 5,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.010391812771558762,
+        "cosine": 0.999949038028717,
+        "max_abs": 0.00341796875
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.04240885749459267,
+        "cosine": 0.9991341829299927,
+        "max_abs": 0.0123291015625
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.04253695160150528,
+        "cosine": 0.9991345405578613,
+        "max_abs": 0.0125732421875
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.03345977142453194,
+        "cosine": 0.9994449615478516,
+        "max_abs": 0.0126953125
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.04617574065923691,
+        "cosine": 0.9989787936210632,
+        "max_abs": 0.012939453125
+      },
+      "layer": 6,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.015637263655662537,
+        "cosine": 0.999881386756897,
+        "max_abs": 0.0040283203125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.04096858948469162,
+        "cosine": 0.9991999864578247,
+        "max_abs": 0.0115966796875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.0412704236805439,
+        "cosine": 0.9991781115531921,
+        "max_abs": 0.0120849609375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.0355558916926384,
+        "cosine": 0.9993689656257629,
+        "max_abs": 0.0169677734375
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.046522919088602066,
+        "cosine": 0.998961865901947,
+        "max_abs": 0.0115966796875
+      },
+      "layer": 7,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.015877822414040565,
+        "cosine": 0.9998779892921448,
+        "max_abs": 0.00390625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.04122670739889145,
+        "cosine": 0.9991869926452637,
+        "max_abs": 0.0101318359375
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.04165315628051758,
+        "cosine": 0.999161958694458,
+        "max_abs": 0.0106201171875
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.0354028046131134,
+        "cosine": 0.9993740916252136,
+        "max_abs": 0.0159912109375
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.04709892347455025,
+        "cosine": 0.998944878578186,
+        "max_abs": 0.010986328125
+      },
+      "layer": 8,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.01730763539671898,
+        "cosine": 0.9998533129692078,
+        "max_abs": 0.00390625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.041986413300037384,
+        "cosine": 0.9991568326950073,
+        "max_abs": 0.00946044921875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.0425945483148098,
+        "cosine": 0.9991304874420166,
+        "max_abs": 0.00970458984375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.035420939326286316,
+        "cosine": 0.9993735551834106,
+        "max_abs": 0.01416015625
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.04883676767349243,
+        "cosine": 0.9988833069801331,
+        "max_abs": 0.01025390625
+      },
+      "layer": 9,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.02176438271999359,
+        "cosine": 0.9997646808624268,
+        "max_abs": 0.00537109375
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.04439550265669823,
+        "cosine": 0.9990617036819458,
+        "max_abs": 0.0087890625
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.04583384841680527,
+        "cosine": 0.9989995956420898,
+        "max_abs": 0.009368896484375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.03739171475172043,
+        "cosine": 0.9993023872375488,
+        "max_abs": 0.014495849609375
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.0745900571346283,
+        "cosine": 0.9975100159645081,
+        "max_abs": 0.018646240234375
+      },
+      "layer": 10,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.06814783066511154,
+        "cosine": 0.9977998733520508,
+        "max_abs": 0.017578125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.07103778421878815,
+        "cosine": 0.9974759817123413,
+        "max_abs": 0.01806640625
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.05196136236190796,
+        "cosine": 0.9987195134162903,
+        "max_abs": 0.0126953125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.07855081558227539,
+        "cosine": 0.9969161748886108,
+        "max_abs": 0.046875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.08371462672948837,
+        "cosine": 0.9968400001525879,
+        "max_abs": 0.02099609375
+      },
+      "layer": 11,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.06649741530418396,
+        "cosine": 0.997873842716217,
+        "max_abs": 0.015625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.07943633943796158,
+        "cosine": 0.9968777894973755,
+        "max_abs": 0.0185546875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.06550325453281403,
+        "cosine": 0.9980196952819824,
+        "max_abs": 0.0146484375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.0762830376625061,
+        "cosine": 0.9970886707305908,
+        "max_abs": 0.04296875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.08688675612211227,
+        "cosine": 0.9964452981948853,
+        "max_abs": 0.01953125
+      },
+      "layer": 12,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.07096888870000839,
+        "cosine": 0.997542142868042,
+        "max_abs": 0.01416015625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.0795079693198204,
+        "cosine": 0.9968804121017456,
+        "max_abs": 0.0166015625
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.070424385368824,
+        "cosine": 0.9976720213890076,
+        "max_abs": 0.01416015625
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.07595944404602051,
+        "cosine": 0.997109591960907,
+        "max_abs": 0.03759765625
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.09862468391656876,
+        "cosine": 0.9953456521034241,
+        "max_abs": 0.017578125
+      },
+      "layer": 13,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.08566700667142868,
+        "cosine": 0.9963879585266113,
+        "max_abs": 0.01513671875
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.08087446540594101,
+        "cosine": 0.996773898601532,
+        "max_abs": 0.015625
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.08516325801610947,
+        "cosine": 0.9965249300003052,
+        "max_abs": 0.0126953125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.07554782181978226,
+        "cosine": 0.9971424341201782,
+        "max_abs": 0.03369140625
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.1053699404001236,
+        "cosine": 0.9947022199630737,
+        "max_abs": 0.01708984375
+      },
+      "layer": 14,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.09209267050027847,
+        "cosine": 0.9958203434944153,
+        "max_abs": 0.0146484375
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.08327935636043549,
+        "cosine": 0.9965984225273132,
+        "max_abs": 0.014404296875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.09331157803535461,
+        "cosine": 0.9958438873291016,
+        "max_abs": 0.01220703125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.07624312490224838,
+        "cosine": 0.9970914721488953,
+        "max_abs": 0.0322265625
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.119049072265625,
+        "cosine": 0.9932681918144226,
+        "max_abs": 0.01953125
+      },
+      "layer": 15,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.09884201735258102,
+        "cosine": 0.9951722025871277,
+        "max_abs": 0.014892578125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.09756405651569366,
+        "cosine": 0.9953798055648804,
+        "max_abs": 0.015380859375
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.10842911899089813,
+        "cosine": 0.9944238662719727,
+        "max_abs": 0.01617431640625
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.07864866405725479,
+        "cosine": 0.9969100952148438,
+        "max_abs": 0.03076171875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.12170873582363129,
+        "cosine": 0.9929148554801941,
+        "max_abs": 0.01953125
+      },
+      "layer": 16,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.10137081146240234,
+        "cosine": 0.9949203729629517,
+        "max_abs": 0.015625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.09910751134157181,
+        "cosine": 0.9952026605606079,
+        "max_abs": 0.01611328125
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.1111619770526886,
+        "cosine": 0.9940874576568604,
+        "max_abs": 0.01513671875
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.08077725768089294,
+        "cosine": 0.9967390894889832,
+        "max_abs": 0.03271484375
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.14123627543449402,
+        "cosine": 0.9901595115661621,
+        "max_abs": 0.0185546875
+      },
+      "layer": 17,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.11959324777126312,
+        "cosine": 0.9929149746894836,
+        "max_abs": 0.01513671875
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.10241889953613281,
+        "cosine": 0.9947705268859863,
+        "max_abs": 0.0150146484375
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.1307184398174286,
+        "cosine": 0.9915664196014404,
+        "max_abs": 0.01580810546875
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.08536435663700104,
+        "cosine": 0.9963629245758057,
+        "max_abs": 0.0323486328125
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.19986030459403992,
+        "cosine": 0.9798799753189087,
+        "max_abs": 0.0389404296875
+      },
+      "layer": 18,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.17483435571193695,
+        "cosine": 0.984644889831543,
+        "max_abs": 0.035003662109375
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.11138920485973358,
+        "cosine": 0.9937861561775208,
+        "max_abs": 0.014892578125
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.18697425723075867,
+        "cosine": 0.9824118614196777,
+        "max_abs": 0.0352783203125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.07993102818727493,
+        "cosine": 0.9968096017837524,
+        "max_abs": 0.0321044921875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.3311803340911865,
+        "cosine": 0.9436022043228149,
+        "max_abs": 0.084228515625
+      },
+      "layer": 19,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.2657911479473114,
+        "cosine": 0.9643504619598389,
+        "max_abs": 0.061279296875
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.21203351020812988,
+        "cosine": 0.9776580333709717,
+        "max_abs": 0.046630859375
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.30580106377601624,
+        "cosine": 0.9521241188049316,
+        "max_abs": 0.07470703125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.07843934744596481,
+        "cosine": 0.996921956539154,
+        "max_abs": 0.0321044921875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.40850409865379333,
+        "cosine": 0.9130362868309021,
+        "max_abs": 0.1234130859375
+      },
+      "layer": 20,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.329792320728302,
+        "cosine": 0.9441577196121216,
+        "max_abs": 0.098876953125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.2559862434864044,
+        "cosine": 0.9679785370826721,
+        "max_abs": 0.0625
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.37538203597068787,
+        "cosine": 0.9270857572555542,
+        "max_abs": 0.1038818359375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.07148279249668121,
+        "cosine": 0.9974440932273865,
+        "max_abs": 0.031982421875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.45047181844711304,
+        "cosine": 0.8947098255157471,
+        "max_abs": 0.142578125
+      },
+      "layer": 21,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.3284379541873932,
+        "cosine": 0.9446941614151001,
+        "max_abs": 0.100830078125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.2654604911804199,
+        "cosine": 0.965025782585144,
+        "max_abs": 0.08154296875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.3879452347755432,
+        "cosine": 0.9228355884552002,
+        "max_abs": 0.1297607421875
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.06892716884613037,
+        "cosine": 0.997631311416626,
+        "max_abs": 0.0346527099609375
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.48643478751182556,
+        "cosine": 0.8818482160568237,
+        "max_abs": 0.2236328125
+      },
+      "layer": 22,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.353026419878006,
+        "cosine": 0.9373964071273804,
+        "max_abs": 0.1650390625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.3149857819080353,
+        "cosine": 0.9518145322799683,
+        "max_abs": 0.16748046875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.45274561643600464,
+        "cosine": 0.8995670080184937,
+        "max_abs": 0.22314453125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.07248733937740326,
+        "cosine": 0.9973757266998291,
+        "max_abs": 0.046875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.5008094310760498,
+        "cosine": 0.8730932474136353,
+        "max_abs": 0.30810546875
+      },
+      "layer": 23,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.37101277709007263,
+        "cosine": 0.9300183057785034,
+        "max_abs": 0.20806884765625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.33087241649627686,
+        "cosine": 0.9489938020706177,
+        "max_abs": 0.19921875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.4821969270706177,
+        "cosine": 0.8874567747116089,
+        "max_abs": 0.28564453125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.06676320731639862,
+        "cosine": 0.9977822303771973,
+        "max_abs": 0.0654296875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.4768785238265991,
+        "cosine": 0.888288676738739,
+        "max_abs": 0.3251953125
+      },
+      "layer": 24,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.361261785030365,
+        "cosine": 0.9344136714935303,
+        "max_abs": 0.2646484375
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.30143070220947266,
+        "cosine": 0.958320140838623,
+        "max_abs": 0.2001953125
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.4771365821361542,
+        "cosine": 0.8926101922988892,
+        "max_abs": 0.315673828125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.08917587995529175,
+        "cosine": 0.996021032333374,
+        "max_abs": 0.083984375
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.574889600276947,
+        "cosine": 0.8315816521644592,
+        "max_abs": 0.30859375
+      },
+      "layer": 25,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.37422147393226624,
+        "cosine": 0.9291000366210938,
+        "max_abs": 0.24169921875
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.40054556727409363,
+        "cosine": 0.9233536720275879,
+        "max_abs": 0.20050048828125
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.5865891575813293,
+        "cosine": 0.8321138620376587,
+        "max_abs": 0.2940673828125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.09041502326726913,
+        "cosine": 0.9959108829498291,
+        "max_abs": 0.083984375
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.5605486035346985,
+        "cosine": 0.8400139808654785,
+        "max_abs": 0.361328125
+      },
+      "layer": 26,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.33659958839416504,
+        "cosine": 0.9429473876953125,
+        "max_abs": 0.22314453125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.4290318787097931,
+        "cosine": 0.9116345047950745,
+        "max_abs": 0.25726318359375
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.5731779932975769,
+        "cosine": 0.840375542640686,
+        "max_abs": 0.3486328125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.09373398125171661,
+        "cosine": 0.9956124424934387,
+        "max_abs": 0.1005859375
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.5922117829322815,
+        "cosine": 0.8288463950157166,
+        "max_abs": 0.426025390625
+      },
+      "layer": 27,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.2975919246673584,
+        "cosine": 0.9566700458526611,
+        "max_abs": 0.214599609375
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.49116846919059753,
+        "cosine": 0.882322371006012,
+        "max_abs": 0.3701171875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.5958301424980164,
+        "cosine": 0.8303592205047607,
+        "max_abs": 0.408203125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.11324064433574677,
+        "cosine": 0.9938278198242188,
+        "max_abs": 0.146484375
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.5616017580032349,
+        "cosine": 0.8408352732658386,
+        "max_abs": 0.505859375
+      },
+      "layer": 28,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.2675705850124359,
+        "cosine": 0.9643937945365906,
+        "max_abs": 0.2086181640625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.480396032333374,
+        "cosine": 0.8836559653282166,
+        "max_abs": 0.47265625
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.5666459798812866,
+        "cosine": 0.8388808369636536,
+        "max_abs": 0.513671875
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.1116117611527443,
+        "cosine": 0.9940840005874634,
+        "max_abs": 0.15625
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.49112436175346375,
+        "cosine": 0.8744592070579529,
+        "max_abs": 0.794921875
+      },
+      "layer": 29,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.2487354874610901,
+        "cosine": 0.9696500301361084,
+        "max_abs": 0.2666015625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.43153026700019836,
+        "cosine": 0.9026589393615723,
+        "max_abs": 0.724609375
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.5015799403190613,
+        "cosine": 0.8687922954559326,
+        "max_abs": 0.84375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.1334153264760971,
+        "cosine": 0.9915709495544434,
+        "max_abs": 0.22265625
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.4672148525714874,
+        "cosine": 0.8860579133033752,
+        "max_abs": 0.78662109375
+      },
+      "layer": 30,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.23642098903656006,
+        "cosine": 0.9719107747077942,
+        "max_abs": 0.33740234375
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.4047899544239044,
+        "cosine": 0.915249228477478,
+        "max_abs": 0.677734375
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.4732019007205963,
+        "cosine": 0.8833891749382019,
+        "max_abs": 0.82958984375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.14415761828422546,
+        "cosine": 0.9900426864624023,
+        "max_abs": 0.3046875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.4835301339626312,
+        "cosine": 0.8773434162139893,
+        "max_abs": 0.7802734375
+      },
+      "layer": 31,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.2520156800746918,
+        "cosine": 0.9681808948516846,
+        "max_abs": 0.3310546875
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.41164442896842957,
+        "cosine": 0.9120838046073914,
+        "max_abs": 0.70703125
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.4888139069080353,
+        "cosine": 0.8753077983856201,
+        "max_abs": 0.818359375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.15650054812431335,
+        "cosine": 0.9887158274650574,
+        "max_abs": 0.3076171875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.49007609486579895,
+        "cosine": 0.8741649985313416,
+        "max_abs": 0.8828125
+      },
+      "layer": 32,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.2585308849811554,
+        "cosine": 0.9663630127906799,
+        "max_abs": 0.4287109375
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.41560477018356323,
+        "cosine": 0.9106623530387878,
+        "max_abs": 0.76171875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.4922811686992645,
+        "cosine": 0.8736650347709656,
+        "max_abs": 0.9462890625
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.1549564003944397,
+        "cosine": 0.9885655641555786,
+        "max_abs": 0.404296875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.4861648380756378,
+        "cosine": 0.8776750564575195,
+        "max_abs": 0.9609375
+      },
+      "layer": 33,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.26729485392570496,
+        "cosine": 0.9641185998916626,
+        "max_abs": 0.48583984375
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.4096355438232422,
+        "cosine": 0.9138321280479431,
+        "max_abs": 0.923828125
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.4883970618247986,
+        "cosine": 0.8768577575683594,
+        "max_abs": 1.060546875
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.162828266620636,
+        "cosine": 0.9870065450668335,
+        "max_abs": 0.380859375
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.3576914966106415,
+        "cosine": 0.9344199895858765,
+        "max_abs": 1.01953125
+      },
+      "layer": 34,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.20125029981136322,
+        "cosine": 0.9795980453491211,
+        "max_abs": 0.603515625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.2937532365322113,
+        "cosine": 0.9561486840248108,
+        "max_abs": 1.021484375
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.356341689825058,
+        "cosine": 0.9349760413169861,
+        "max_abs": 1.015625
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.11669927835464478,
+        "cosine": 0.9932447671890259,
+        "max_abs": 0.453125
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.38908401131629944,
+        "cosine": 0.923346757888794,
+        "max_abs": 1.1796875
+      },
+      "layer": 35,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.21591340005397797,
+        "cosine": 0.9765404462814331,
+        "max_abs": 0.689453125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.3146957457065582,
+        "cosine": 0.949964702129364,
+        "max_abs": 0.892578125
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.3878572881221771,
+        "cosine": 0.9234851598739624,
+        "max_abs": 1.21875
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.1189827099442482,
+        "cosine": 0.9930617809295654,
+        "max_abs": 0.5390625
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.3436371982097626,
+        "cosine": 0.9408195614814758,
+        "max_abs": 1.47265625
+      },
+      "layer": 36,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.18935801088809967,
+        "cosine": 0.9819614887237549,
+        "max_abs": 0.78125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.2783176600933075,
+        "cosine": 0.9614194631576538,
+        "max_abs": 1.07421875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.3420129120349884,
+        "cosine": 0.9412710666656494,
+        "max_abs": 1.375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.11965497583150864,
+        "cosine": 0.9929789304733276,
+        "max_abs": 0.4921875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.3587231934070587,
+        "cosine": 0.935369074344635,
+        "max_abs": 1.4140625
+      },
+      "layer": 37,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.19991059601306915,
+        "cosine": 0.9798909425735474,
+        "max_abs": 0.77734375
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.28304001688957214,
+        "cosine": 0.9599936008453369,
+        "max_abs": 1.09375
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.3544755280017853,
+        "cosine": 0.9367663860321045,
+        "max_abs": 1.31640625
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.1223372370004654,
+        "cosine": 0.992651104927063,
+        "max_abs": 0.5078125
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.38712430000305176,
+        "cosine": 0.92620849609375,
+        "max_abs": 1.505859375
+      },
+      "layer": 38,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.21343550086021423,
+        "cosine": 0.977306604385376,
+        "max_abs": 0.9755859375
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.2973793148994446,
+        "cosine": 0.9561343193054199,
+        "max_abs": 1.41796875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.38650789856910706,
+        "cosine": 0.9261584281921387,
+        "max_abs": 1.421630859375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.12151524424552917,
+        "cosine": 0.9927164316177368,
+        "max_abs": 0.546875
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.42955338954925537,
+        "cosine": 0.9102993607521057,
+        "max_abs": 1.896484375
+      },
+      "layer": 39,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.24098414182662964,
+        "cosine": 0.9712516665458679,
+        "max_abs": 1.00634765625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.31719282269477844,
+        "cosine": 0.9503793716430664,
+        "max_abs": 1.44921875
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.4262188673019409,
+        "cosine": 0.9112553000450134,
+        "max_abs": 2.01953125
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.12815843522548676,
+        "cosine": 0.9918978214263916,
+        "max_abs": 0.609375
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.4675655961036682,
+        "cosine": 0.8944168090820312,
+        "max_abs": 1.951171875
+      },
+      "layer": 40,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.2636774480342865,
+        "cosine": 0.9658529758453369,
+        "max_abs": 1.080078125
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.3324553966522217,
+        "cosine": 0.945189356803894,
+        "max_abs": 1.2568359375
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.4586789608001709,
+        "cosine": 0.8973791003227234,
+        "max_abs": 1.9912109375
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.14108812808990479,
+        "cosine": 0.9901337623596191,
+        "max_abs": 0.5390625
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.44248566031455994,
+        "cosine": 0.9012829065322876,
+        "max_abs": 1.62109375
+      },
+      "layer": 41,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.26891714334487915,
+        "cosine": 0.9635633826255798,
+        "max_abs": 0.951171875
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.30785179138183594,
+        "cosine": 0.952377438545227,
+        "max_abs": 1.158203125
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.43359389901161194,
+        "cosine": 0.9047630429267883,
+        "max_abs": 1.59765625
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.14903025329113007,
+        "cosine": 0.9890595078468323,
+        "max_abs": 0.58203125
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.4546857476234436,
+        "cosine": 0.8951771259307861,
+        "max_abs": 2.080078125
+      },
+      "layer": 42,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.3917968273162842,
+        "cosine": 0.924517810344696,
+        "max_abs": 1.734375
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.23255737125873566,
+        "cosine": 0.972612738609314,
+        "max_abs": 0.890625
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.4615980386734009,
+        "cosine": 0.8929097652435303,
+        "max_abs": 1.96875
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.1662251353263855,
+        "cosine": 0.9863021373748779,
+        "max_abs": 0.76953125
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.4585264027118683,
+        "cosine": 0.8952674865722656,
+        "max_abs": 2.609375
+      },
+      "layer": 43,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.40984830260276794,
+        "cosine": 0.918423056602478,
+        "max_abs": 2.515625
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.23593968152999878,
+        "cosine": 0.9720041751861572,
+        "max_abs": 1.12109375
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.4755301773548126,
+        "cosine": 0.8891732692718506,
+        "max_abs": 2.640625
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.18345841765403748,
+        "cosine": 0.983323335647583,
+        "max_abs": 1.03125
+      }
+    },
+    {
+      "decode_vs_hf_split": {
+        "relative_rmse": 0.2829698622226715,
+        "cosine": 0.9603846669197083,
+        "max_abs": 27.0
+      },
+      "layer": 44,
+      "decode_vs_prefill": {
+        "relative_rmse": 0.2608965337276459,
+        "cosine": 0.9659358263015747,
+        "max_abs": 22.0
+      },
+      "prefill_vs_hf": {
+        "relative_rmse": 0.12652790546417236,
+        "cosine": 0.9919797778129578,
+        "max_abs": 2.0
+      },
+      "decode_vs_hf": {
+        "relative_rmse": 0.2873656451702118,
+        "cosine": 0.9582206010818481,
+        "max_abs": 22.0
+      },
+      "initial_prefill_vs_hf": {
+        "relative_rmse": 0.16960538923740387,
+        "cosine": 0.986174464225769,
+        "max_abs": 6.21875
+      }
+    }
+  ]
+}

@@ -283,6 +283,7 @@ class MusaGlmReferenceBackend(AttentionBackend):
                 layer.forget_gate.dt_bias,
                 ssm,
                 lower_bound=layer.forget_gate.safe_gate_lower_bound,
+                prefill_mode=getattr(getattr(layer, "cfg", None), "musa_kda_prefill_mode", "chunk"),
             )
             outputs.append(output.squeeze(0))
             next_conv.append(concatenated[:, -(window - 1) :])

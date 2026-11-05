@@ -1,0 +1,33 @@
+{
+  "rank0_pid": 25630,
+  "loaded_jit_or_mate_libraries": {
+    "/opt/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops/mate_jit_mega_moe_prefill_mp31_stage1_actswiglu_lin0_full_v30_dual_sync_barrier_c4w3_r8_e288_mt256_topk8_h4096_ih2048_pool25600_l1ring25600_mps60_fm1_production_v1_layout3/mate_jit_mega_moe_prefill_mp31_stage1_actswiglu_lin0_full_v30_dual_sync_barrier_c4w3_r8_e288_mt256_topk8_h4096_ih2048_pool25600_l1ring25600_mps60_fm1_production_v1_layout3.so": "ef82cbe06f10ac41cc869ce3017b10749179421a7318c3e0428266e74e1ebf45",
+    "/opt/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops/mate_jit_mega_moe_prefill_mp31_stage2_remote_store_v3_dual_sync_barrier_r8_e288_mt256_topk8_h4096_ih2048_pool25600_l1ring25600_mps60_fm1_production_v1_layout3/mate_jit_mega_moe_prefill_mp31_stage2_remote_store_v3_dual_sync_barrier_r8_e288_mt256_topk8_h4096_ih2048_pool25600_l1ring25600_mps60_fm1_production_v1_layout3.so": "ee44bd69fd7903dc4254bf6c71805ca013228f6368d8496d2a026f2a0f147ae9",
+    "/opt/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops/mate_jit_mega_moe_prefill_mp31_stage3_reduce_r8_e288_mt256_topk8_h4096_ih2048_pool25600_l1ring25600_mps120_fm1_production_v1_layout3/mate_jit_mega_moe_prefill_mp31_stage3_reduce_r8_e288_mt256_topk8_h4096_ih2048_pool25600_l1ring25600_mps120_fm1_production_v1_layout3.so": "7cf63753e41770b5cd6f663f7391377934a709b69ce6b297936b9a9a055377d2",
+    "/opt/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops/mate_jit_tf32_hc_prenorm_32x32x32_3stages/mate_jit_tf32_hc_prenorm_32x32x32_3stages.so": "c4b63af90e72e6ad15a8a17b829126f6646d8aa64ea4bc0fd40117b9bef6ecde",
+    "/opt/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops/mate_jit_tf32_hc_prenorm_64x32x32_3stages/mate_jit_tf32_hc_prenorm_64x32x32_3stages.so": "2b15c096cdebbc7a98b0b2f0416b343b587bee2a7b3de3e9dd8c5805db240148",
+    "/opt/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops/mate_mega_moe_runtime_utils_layout3/mate_mega_moe_runtime_utils_layout3.so": "e4b592c6f3bf5c36161d04a304be98f2914d864fcd9acf6fa5bb29d98b7df52e",
+    "/root/.cache/tvm-ffi/libtorch_c_dlpack_addon_torch29-musa.so": "aab88d3c835ff4513d840f8eb846082b4b9390a73f0146d720b57c5fc8deff85",
+    "/root/.tilelang/cache/0.1.12_musa_5-x86_64/kernels/17b3084ba63b0102ae2b6873a6f2b762b7afd0e2aefd453a48d40e0bd5334bb3/executable.so": "e62e6a77ab0afdd31e17d0c82be452eda3703cf69b7c6d619b263e79ad2bc08e",
+    "/root/.tilelang/cache/0.1.12_musa_5-x86_64/kernels/1995530271f23978a41fc1a3603fd81c47329cf85ec03f01ce271ac009ab62fa/executable.so": "ba8ca018ecb9aacd4761317ddd4cc80cc50aee45619cf3db615f88fc15ba94f3",
+    "/root/.tilelang/cache/0.1.12_musa_5-x86_64/kernels/25af645cf508f6b5536e682f51e0050a04cfcd8d4a050fc1bbd93ff8c3e16734/executable.so": "e21358d044e5b6ff6d92880143818177a2d0cfc62efa70117c5c0130b743b98b",
+    "/root/.tilelang/cache/0.1.12_musa_5-x86_64/kernels/55cd18afbd729501993b641e5fa13c18742118bfc75cad17c8332294fa861e89/executable.so": "e6b84f8e9d2bc71b857ddfbf6bc1d4af9f80c36ce4dd44b962ecc0996da208b8",
+    "/root/.tilelang/cache/0.1.12_musa_5-x86_64/kernels/62235e86154d61fcc8674f0eaed986220debf0edcaa37bb824c37b91ecd4e523/executable.so": "03fff1f48e1d290694789049adf3827da728ddfcc90305a2bf711400b02cd0ec",
+    "/root/.tilelang/cache/0.1.12_musa_5-x86_64/kernels/8e8e183b00a20edee635f176040abf7a5f2213ab7544a572801dc9a838246bb5/executable.so": "97e9b041e5fdbabe276f7fb6f8754859a803b97b1a9f69e8e78cc6f378667652",
+    "/root/.tilelang/cache/0.1.12_musa_5-x86_64/kernels/8f08017512681ec1b09384168c71e76d076614b2f92108f70f43d995ec99f659/executable.so": "b9337cb9f4fcce97efc0d4b7989ba31abc6aa3e859bc0d8a5206c1df02fa793b",
+    "/root/.tilelang/cache/0.1.12_musa_5-x86_64/kernels/9f31422f50823eaf912dd8e6ff1f77666d2ad0b46f0a1926bdf2be5186e5028b/executable.so": "f7738f31707c950d0b168a4d59736aa949b60072397578d6db175aa3c0c51fea",
+    "/root/.tilelang/cache/0.1.12_musa_5-x86_64/kernels/a08a54f89cf03767725362d860ad1c38146306dda2a8f5748ff429a2808004a8/executable.so": "0697f294a95593354fc3e98208c57d0f6a9d412d74ca97402989ba712f1ff538",
+    "/root/.tilelang/cache/0.1.12_musa_5-x86_64/kernels/a1c20bcfdee961a7fbb2248864d586750db6bb52fe63ef3eef069b3753106e1e/executable.so": "61c7fb20a95932103156b7fca92d3b279d425d6d3e40b47e345de3688990bcea",
+    "/root/.tilelang/cache/0.1.12_musa_5-x86_64/kernels/ca7e83fe24aa5bec48d10311e4d5fed1dbae237b19a2e5f82c593de405e69b7e/executable.so": "a8737ca58dc75ac124735054a67624838bc725717b5baa94a7ae146ef7e45b21"
+  },
+  "selected_environment": {
+    "XLLM_MUSA_GLM_MOE_BACKEND": "mega_moe",
+    "MATE_EXTRA_MUSAFLAGS": "-DCCCL_DISABLE_FP16_SUPPORT -DCCCL_DISABLE_BF16_SUPPORT -DCCCL_DISABLE_NVFP8_SUPPORT",
+    "XLLM_MUSA_GLM_MOE_MAX_TOKENS": "256",
+    "XLLM_PROCESS_GROUP_ASYNC_TIMEOUT_SECONDS": "120",
+    "XLLM_MUSA_GLM_KDA_PREFILL_MODE": "recurrent",
+    "XLLM_MUSA_GLM_TP_REDUCE_PRECISION": "fp32",
+    "MCCL_TIMEOUT": "120"
+  },
+  "scope": "Loaded rank0 shared objects and explicit compilation/runtime env; not a claim of complete GPU code-object enumeration"
+}

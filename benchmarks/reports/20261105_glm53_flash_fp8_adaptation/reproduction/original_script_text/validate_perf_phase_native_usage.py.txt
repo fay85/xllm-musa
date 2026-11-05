@@ -1,0 +1,54 @@
+"""Check real EvalScope SQLite records and export human-readable original responses."""
+import argparse,base64,io,json,pickle,sqlite3,hashlib,re
+from pathlib import Path
+class PlainDataUnpickler(pickle.Unpickler):
+    def find_class(self,module,name):raise ValueError('Unexpected object in response record')
+def decode(value):return PlainDataUnpickler(io.BytesIO(base64.b64decode(value,validate=True))).load()
+def validate(root,n,count):
+    dbs=list(root.rglob('benchmark_data.db'));assert len(dbs)==1,dbs
+    with sqlite3.connect('file:'+str(dbs[0])+'?mode=ro',uri=True) as c:
+        c.row_factory=sqlite3.Row;rows=[dict(r) for r in c.execute('SELECT * FROM result ORDER BY start_time')]
+    assert len(rows)==count,(len(rows),count)
+    checks=[]
+    for i,row in enumerate(rows,1):
+        assert row['success']==1,row
+        request=json.loads(row['request'])
+        assert request['max_tokens']==256 and request['ignore_eos'] is True
+        assert request['reasoning_effort']=='low' and request['temperature']==0 and request['top_p']==1 and request['stream'] is True
+        messages=decode(row['response_messages'])
+        usage=[m['usage'] for m in messages if isinstance(m,dict) and isinstance(m.get('usage'),dict)]
+        ids={m['id'] for m in messages if isinstance(m,dict) and m.get('id')}
+        assert len(ids)==1,ids
+        request_id=next(iter(ids))
+        native_log=Path('/work/logs/full_pd_v14c_ports_sj10/rank0.log')
+        lines=[line for line in native_log.read_text().splitlines() if 'request_id: '+request_id+', sequence 0,' in line]
+        assert len(lines)==1,('Need exactly one native completed request record',request_id,len(lines))
+        line=lines[0]
+        def integer(field):
+            match=re.search(r'(?:^|, )'+re.escape(field)+r': (\d+)(?:,|$)',line)
+            assert match,(field,line)
+            return int(match.group(1))
+        native_usage={'prompt_tokens':integer('prompt_tokens'),'completion_tokens':integer('generated_tokens')}
+        assert integer('max_tokens')==256 and integer('num_prefix_cache_tokens')==0
+        assert 'finish_reason: length,' in line
+        assert native_usage=={'prompt_tokens':n,'completion_tokens':256},native_usage
+        if usage:
+            actual=usage[-1]
+            assert all(actual[key]==value for key,value in native_usage.items())
+            usage_source='SSE usage cross-checked with native request log'
+        else:
+            actual=native_usage
+            usage_source='Native completed-request log keyed by exact SSE request ID; streaming usage absent'
+
+        assert actual['prompt_tokens']==n and actual['completion_tokens']==256,actual
+        assert row['prompt_tokens']==n and row['completion_tokens']==256,row
+        assert 0<=row['first_chunk_latency']<=row['latency']
+        assert abs(row['time_per_output_token']-(row['latency']-row['first_chunk_latency'])/255)<1e-6
+        export=root/f'original_request_response_{i:02d}.json'
+        export.write_text(json.dumps({'row_index':i,'request':request,'response_messages':messages,'usage_source':usage_source,'native_request_id':request_id,'native_completion_log':line,'verified_server_usage':actual,'raw_metrics':{k:v for k,v in row.items() if k not in ['request','response_messages']}},ensure_ascii=False,indent=2))
+        checks.append({'row_index':i,'usage':actual,'usage_source':usage_source,'native_request_id':request_id,'record':export.name,'latency_s':row['latency'],'ttft_s':row['first_chunk_latency'],'tpot_s':row['time_per_output_token']})
+    r={'passed':True,'token_count_verification':'Native completed-request log per exact SSE request ID; never silently trust retokenization','sqlite':str(dbs[0].relative_to(root)),'sqlite_sha256':hashlib.sha256(dbs[0].read_bytes()).hexdigest(),'expected_rows':count,'input_tokens':n,'output_tokens':256,'checks':checks}
+    (root/'raw_usage_validation.json').write_text(json.dumps(r,ensure_ascii=False,indent=2))
+    print(json.dumps({'passed':True,'phase_dir':str(root),'rows':count,'input':n,'output':256}))
+if __name__=='__main__':
+    p=argparse.ArgumentParser();p.add_argument('root',type=Path);p.add_argument('input',type=int);p.add_argument('count',type=int);a=p.parse_args();validate(a.root,a.input,a.count)

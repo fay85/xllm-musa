@@ -1,0 +1,48 @@
+{
+  "request": {
+    "model": "tiny-random-not-real-glm",
+    "messages": [
+      {
+        "role": "user",
+        "content": "t5 t6 t7 t8"
+      }
+    ],
+    "max_tokens": 8,
+    "temperature": 0,
+    "stream": false
+  },
+  "fixture_only": true,
+  "expected_prompt_ids": [
+    5,
+    6,
+    7,
+    8
+  ],
+  "started_at": "2026-11-05T08:57:06.717345+08:00",
+  "http_status": 200,
+  "response": {
+    "id": "chatcmpl-13638450038800729540-35YugRZRq4RNYkmGVaNNb2",
+    "object": "chat.completion",
+    "created": 1793840226,
+    "model": "tiny-random-not-real-glm",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "t159 t251 t132 t115 t94 t209 t198 t211"
+        },
+        "finish_reason": "length"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 4,
+      "completion_tokens": 8,
+      "total_tokens": 12,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  },
+  "elapsed_seconds": 0.31086157402023673
+}

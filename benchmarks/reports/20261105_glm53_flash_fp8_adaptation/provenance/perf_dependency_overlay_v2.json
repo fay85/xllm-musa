@@ -1,0 +1,923 @@
+{
+  "original_venv_unchanged": true,
+  "model_environment_unchanged": true,
+  "copied_installed_distributions": {
+    "uvicorn": "0.41.0",
+    "fastapi": "0.135.1",
+    "sse-starlette": "3.5.1",
+    "uvloop": "0.23.0",
+    "starlette": "0.52.1"
+  },
+  "files": [
+    {
+      "file": "uvicorn-0.41.0.dist-info/INSTALLER",
+      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
+    },
+    {
+      "file": "uvicorn-0.41.0.dist-info/METADATA",
+      "sha256": "de0db10639f51644a56d7bd594133e4aaa188f6155c22b88129e99959eb675f7"
+    },
+    {
+      "file": "uvicorn-0.41.0.dist-info/RECORD",
+      "sha256": "2962e8ee741686f442b7f42aa5ec8a51d6e8c9701e6a45df8a911ca99dfef423"
+    },
+    {
+      "file": "uvicorn-0.41.0.dist-info/WHEEL",
+      "sha256": "58b82a17209f9bf2804afe161f2632d0fde933f9bb2792fd936b2474a2e2ac2f"
+    },
+    {
+      "file": "uvicorn-0.41.0.dist-info/entry_points.txt",
+      "sha256": "156d70fa191cf50830686a28bccbe6d1963bdf0fcd7327167460147c3b0d1b1c"
+    },
+    {
+      "file": "uvicorn-0.41.0.dist-info/licenses/LICENSE.md",
+      "sha256": "efe1acf3e62fb99c288b0ec73e5a773b7268ef4320fe757ea994214e4b63c371"
+    },
+    {
+      "file": "uvicorn/__init__.py",
+      "sha256": "7b0d218f24e5b4f6dad0d73dbebb96dc42d7fee95c25464c681d437b58633ce7"
+    },
+    {
+      "file": "uvicorn/__main__.py",
+      "sha256": "0d08b3cba9ca3f4cb084fa6708782644360831f72a64a544ccd2164198eab554"
+    },
+    {
+      "file": "uvicorn/_compat.py",
+      "sha256": "e97e3d73da2fce63078abd92decca29ce40ccd23c1729f0c36e23d650adb6225"
+    },
+    {
+      "file": "uvicorn/_subprocess.py",
+      "sha256": "7d0e094da8ee5dacba99573c2903467d7bba247a1a6f8e9a4ba93220c58930f9"
+    },
+    {
+      "file": "uvicorn/_types.py",
+      "sha256": "24333a13e86a67aa3f71266f8c350b8c0bfbecf147da92defd582ab217bca87e"
+    },
+    {
+      "file": "uvicorn/config.py",
+      "sha256": "6982b835cf8cd2ebdb4f82e6808bd8f1cd3491e904cf43f8056846f153288dc8"
+    },
+    {
+      "file": "uvicorn/importer.py",
+      "sha256": "9d1b74410deaa62dbae3e9ff991d25e790b675d33c9e8c133734f58ec59a6a6f"
+    },
+    {
+      "file": "uvicorn/lifespan/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "uvicorn/lifespan/off.py",
+      "sha256": "9df23aa87014a3ff3e0445cc04aa0743dc146ec5eb3da5cb09b0d24b4bca4abf"
+    },
+    {
+      "file": "uvicorn/lifespan/on.py",
+      "sha256": "8844cf163e921613c33dc75e1b17dae372ca226254ecc2398bb41451ea4170f1"
+    },
+    {
+      "file": "uvicorn/logging.py",
+      "sha256": "2013d2a36a910562518f90b69cdec8d5c8af1408fd8ca679033c64d09a4f07df"
+    },
+    {
+      "file": "uvicorn/loops/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "uvicorn/loops/asyncio.py",
+      "sha256": "6bcc0ee1f078a4293e44b202abb0a71abfdcc5023b3012c98fe1a8e14425743f"
+    },
+    {
+      "file": "uvicorn/loops/auto.py",
+      "sha256": "a5d4ec31caa46c4f1fbdd3602ecd72e1cea1b2e379f7c9993923a50b46b6dd2e"
+    },
+    {
+      "file": "uvicorn/loops/uvloop.py",
+      "sha256": "09af932fe5bcb5b7445b9baf2ff1ab32287b1bc7bfb7fbe135ebe2d8d2988c45"
+    },
+    {
+      "file": "uvicorn/main.py",
+      "sha256": "7b7093215d1cf34729d7adfd4ed9de8fb6f9baf76d80b2d6b5239c1d4f06bb9e"
+    },
+    {
+      "file": "uvicorn/middleware/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "uvicorn/middleware/asgi2.py",
+      "sha256": "610ad0366dd17a116db379b3937938cb0f1a0fc120b63d2d452dcde3962441ad"
+    },
+    {
+      "file": "uvicorn/middleware/message_logger.py",
+      "sha256": "2071195129c535a305505770b593b702e1404e761c4a8afe815b4e8db0b3b7c3"
+    },
+    {
+      "file": "uvicorn/middleware/proxy_headers.py",
+      "sha256": "c901b74e199985187d8e9f8021dec34216f959597ab68d210f51b40cfaed2e8c"
+    },
+    {
+      "file": "uvicorn/middleware/wsgi.py",
+      "sha256": "5676e791d08bdff72d2d6ce4d63dfdc6fc72b2ea000779126268bc4ec38ba4db"
+    },
+    {
+      "file": "uvicorn/protocols/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "uvicorn/protocols/http/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "uvicorn/protocols/http/auto.py",
+      "sha256": "61f5c6cb359369a136a7f8e44cf5ab2425ecc446909c2dcd2b4f86ed68269e5b"
+    },
+    {
+      "file": "uvicorn/protocols/http/flow_control.py",
+      "sha256": "d39d16560df512f3ce907c329c2a0c3f5cd7165fef3b753876eae5739bf2a785"
+    },
+    {
+      "file": "uvicorn/protocols/http/h11_impl.py",
+      "sha256": "f592d273a2b11e69ca1be652099adc0517237437a9fa22a0da72324c6c8202a7"
+    },
+    {
+      "file": "uvicorn/protocols/http/httptools_impl.py",
+      "sha256": "d00141148523de462a628186c3ac79d3b09a0e49ca7bd9d93daeb0255fb82e75"
+    },
+    {
+      "file": "uvicorn/protocols/utils.py",
+      "sha256": "d6129d0c29a8fc6b46acad7365f6bbd232fb1ebde60c4f119cbebd3b8ac74118"
+    },
+    {
+      "file": "uvicorn/protocols/websockets/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "uvicorn/protocols/websockets/auto.py",
+      "sha256": "a4010c22cc97435d822fa7df684250d9c4040bcc80afcb2bedb0b41fa87305fb"
+    },
+    {
+      "file": "uvicorn/protocols/websockets/websockets_impl.py",
+      "sha256": "978a4168702cbccf98fc1a0f85ef23d1fab50c28ea8cf2763d844351bba48d1b"
+    },
+    {
+      "file": "uvicorn/protocols/websockets/websockets_sansio_impl.py",
+      "sha256": "18e85ab94f1975cadb1ee7a3bc63e80dd83b1aa598b9d4d4bbd1d2c8b4aad96c"
+    },
+    {
+      "file": "uvicorn/protocols/websockets/wsproto_impl.py",
+      "sha256": "b953aba5f6b8b5d63e74d18025d729bc3631093ead33abe869e28af7326db29e"
+    },
+    {
+      "file": "uvicorn/py.typed",
+      "sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b"
+    },
+    {
+      "file": "uvicorn/server.py",
+      "sha256": "7d7937fff1c17f583ea21ff8fce5c8a5bf2d9d3c9a7f1b9646211eb7a49012f3"
+    },
+    {
+      "file": "uvicorn/supervisors/__init__.py",
+      "sha256": "c13f1e38422a4f5c96420cad66dbf9b5a58cba5ef1a13218d319b59b8a323d3c"
+    },
+    {
+      "file": "uvicorn/supervisors/basereload.py",
+      "sha256": "99838fa29352e9f553aea7d0e07cdc947ed7c3e555432ed90d220dbf9fe5bb4e"
+    },
+    {
+      "file": "uvicorn/supervisors/multiprocess.py",
+      "sha256": "fe553dd819dffc8aa26c59a6368a236372777d1e8bcd205aefa06999c48c7c77"
+    },
+    {
+      "file": "uvicorn/supervisors/statreload.py",
+      "sha256": "5cf684b555da6ac208d64906df65141bca03efe7d2d05c325e440b17d4183db0"
+    },
+    {
+      "file": "uvicorn/supervisors/watchfilesreload.py",
+      "sha256": "bbe32e626d0bb1930debbd2efd3b525a2301500db3e23d6c21edced80ebb129e"
+    },
+    {
+      "file": "uvicorn/workers.py",
+      "sha256": "94c0ae6e7d568bee21da3c6b5cd32684e259cbb64ff10c5b65b3f7ff63b58871"
+    },
+    {
+      "file": "fastapi-0.135.1.dist-info/INSTALLER",
+      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
+    },
+    {
+      "file": "fastapi-0.135.1.dist-info/METADATA",
+      "sha256": "af2b6a836e454e8ac3303646e582aaf1286df14c63b68eac9c1a00f073cdfd81"
+    },
+    {
+      "file": "fastapi-0.135.1.dist-info/RECORD",
+      "sha256": "7399c966e003dc823bd417b68f94037fef84a4f1689fc1675201339f2a8ff9af"
+    },
+    {
+      "file": "fastapi-0.135.1.dist-info/WHEEL",
+      "sha256": "59bd0049b563f09bd61e93a22293e2eee71f22025e0a2fff3f38afbe21004057"
+    },
+    {
+      "file": "fastapi-0.135.1.dist-info/entry_points.txt",
+      "sha256": "1827fe59b219c72193e0c526acf1a3d5c387619a06b0d3c702f3644fa86719e0"
+    },
+    {
+      "file": "fastapi-0.135.1.dist-info/licenses/LICENSE",
+      "sha256": "4ec89ffc81485b97fec584b2d4a961032eeffe834453894fd9c1274906cc744e"
+    },
+    {
+      "file": "fastapi/.agents/skills/fastapi/SKILL.md",
+      "sha256": "3c8b2bced3222051cad6032d06cae4ac40e8a1376255e308d2c6f405cf2ea355"
+    },
+    {
+      "file": "fastapi/.agents/skills/fastapi/references/dependencies.md",
+      "sha256": "2a23535c0554e80022af1ea4234885e967f6eb986352f0c632222544fbe37157"
+    },
+    {
+      "file": "fastapi/.agents/skills/fastapi/references/other-tools.md",
+      "sha256": "11ba6f843afd4d4b919901ea683eef7e54489267d58476f2813a700b6991123e"
+    },
+    {
+      "file": "fastapi/.agents/skills/fastapi/references/streaming.md",
+      "sha256": "6c76882a7c1b4e477b4d45509bfbb16a9527025106e2b76f00b57d9280f9ca92"
+    },
+    {
+      "file": "fastapi/__init__.py",
+      "sha256": "9f5e3bde65a0bde3c9b441d78e86b109f4fc3d2eaad5e7e709de1767e6b76181"
+    },
+    {
+      "file": "fastapi/__main__.py",
+      "sha256": "6ca78f5cb74ee12b1548ceabf525682e2724243711d9cd1c4cec5944aab6e984"
+    },
+    {
+      "file": "fastapi/_compat/__init__.py",
+      "sha256": "3d8391fbcbc9e6f6b842397cd7415c42625baa6a72c9e40ca19f51f3a09e1365"
+    },
+    {
+      "file": "fastapi/_compat/shared.py",
+      "sha256": "f49822d7a2248b0857767220030df6e6a39269291813fbb7a37dee1147962cf1"
+    },
+    {
+      "file": "fastapi/_compat/v2.py",
+      "sha256": "b12e81a171be6f23fbeeda6e56ce0da43ad3fc0cf1cad1a4b7287a6e139bcb92"
+    },
+    {
+      "file": "fastapi/applications.py",
+      "sha256": "77a6608b43d45dd0a10505425cc84623d7318e94ca5886d63b2b02a3862c7f78"
+    },
+    {
+      "file": "fastapi/background.py",
+      "sha256": "4c00f301eb613806aaa55bdc918b934f77383bd3751da150cac1423edd0cb205"
+    },
+    {
+      "file": "fastapi/cli.py",
+      "sha256": "3988596f4351fdd7ae4f9a1fc8f176368341cd90cd38ff126a579fda793e1ea0"
+    },
+    {
+      "file": "fastapi/concurrency.py",
+      "sha256": "c4718310e40003a72f1440d7e3aa2adebdadd59778b15beb79a4607481388ee3"
+    },
+    {
+      "file": "fastapi/datastructures.py",
+      "sha256": "3c7fc72c9aa064f8efe7694e98cd12f97fe29dded2fa4396129475935033660f"
+    },
+    {
+      "file": "fastapi/dependencies/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "fastapi/dependencies/models.py",
+      "sha256": "5cf22411aba41da4da173f4ba1e23d7ff4fede8b4e015928382d75dd3a456d62"
+    },
+    {
+      "file": "fastapi/dependencies/utils.py",
+      "sha256": "434b0b2ade506c141727f9e91082093cbcc68e6b1417a417d7f9875dc5e56e9f"
+    },
+    {
+      "file": "fastapi/encoders.py",
+      "sha256": "5cfb185964b4018bf3ef0ff05cfb225ed53c3af3f7f19bef21cc12c3d5b38c56"
+    },
+    {
+      "file": "fastapi/exception_handlers.py",
+      "sha256": "615713f19cb4db555861e79c81dca1e581148c420729c2eca5b9127f839f6c92"
+    },
+    {
+      "file": "fastapi/exceptions.py",
+      "sha256": "7d434e051748b142d4d139cef1a3418371e825ec89c57a7d515e83f3062ef652"
+    },
+    {
+      "file": "fastapi/logger.py",
+      "sha256": "23d34d8b7a2ff0072a6ec6c2f709755fe85d22d2a062dd974ebc757fdf59a65e"
+    },
+    {
+      "file": "fastapi/middleware/__init__.py",
+      "sha256": "a100f188555c7357d825438816fa619caee94d3e6492d99f2f7d905e9045befa"
+    },
+    {
+      "file": "fastapi/middleware/asyncexitstack.py",
+      "sha256": "44a1a54291b383718ba2ca9586bc41cbf34267da894bbcd078d1ede58df1fb4d"
+    },
+    {
+      "file": "fastapi/middleware/cors.py",
+      "sha256": "ca7c2359066873fbdb873677fd95dc7a8692aec9471473dda0ce76ad7af45945"
+    },
+    {
+      "file": "fastapi/middleware/gzip.py",
+      "sha256": "c4ce4f72c1fc425022999c38543bdc9939ea41a9ac95386c7dedc254ddafa1ad"
+    },
+    {
+      "file": "fastapi/middleware/httpsredirect.py",
+      "sha256": "acbf1e5cc9e62e28f05641fbff8d34cc7ae2d407a47de05de83eaab3c8b1f79d"
+    },
+    {
+      "file": "fastapi/middleware/trustedhost.py",
+      "sha256": "784e57191c466bb739ccf9cc2431a9dc1c5a2f6e64e625509619eff8f9343ecb"
+    },
+    {
+      "file": "fastapi/middleware/wsgi.py",
+      "sha256": "6bf14c0e8793c1c76283dc1d006ba6207f36a0315fba3e29c6d4312db030d8db"
+    },
+    {
+      "file": "fastapi/openapi/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "fastapi/openapi/constants.py",
+      "sha256": "69d1b39a2b352f51c9453137909e5f9874bf368abab4863aa56bff485ce81435"
+    },
+    {
+      "file": "fastapi/openapi/docs.py",
+      "sha256": "3dc8c7d129feca9f7b3b47b15e29dc1bc7a9b18ec04f2242e7aeb66cad4345aa"
+    },
+    {
+      "file": "fastapi/openapi/models.py",
+      "sha256": "e2c633f7f4e05dc34459e12b11b37cedc709fb65ed5c82005a7c8e7d080b7353"
+    },
+    {
+      "file": "fastapi/openapi/utils.py",
+      "sha256": "575ede6885766494c4403cf64db94307c9c89a675d515ada1194a8b2c3c03a67"
+    },
+    {
+      "file": "fastapi/param_functions.py",
+      "sha256": "50718d993a0160ea689fa46dac37115b22a09018cae33aef5b551818aea9c0c3"
+    },
+    {
+      "file": "fastapi/params.py",
+      "sha256": "3c0d6619b8fb7e61fe0456bb9cb13db3a26a1f8de21a1ae1a45f2cdf61f5e56f"
+    },
+    {
+      "file": "fastapi/py.typed",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "fastapi/requests.py",
+      "sha256": "cdac9ea4a15c89e9c1965bf7b27996236d06934a073552d4e030e1a9705be0b5"
+    },
+    {
+      "file": "fastapi/responses.py",
+      "sha256": "438a32856b61667b5a2ec0010e9a1ef35f77a82bd34c91a4def7e400e59b46c5"
+    },
+    {
+      "file": "fastapi/routing.py",
+      "sha256": "07c7a5bdf12fa7b0c8cdca6f72d532eebb12d0554060c7827af7b692f4fdb827"
+    },
+    {
+      "file": "fastapi/security/__init__.py",
+      "sha256": "6cef29366c6a5515d48df97698e2a25592e7d05a4143ad555185639a9a676c9c"
+    },
+    {
+      "file": "fastapi/security/api_key.py",
+      "sha256": "d817af2a2b5201a14a69a61e2450b89d780a38d8bdfe8cd4fc1857fb4719e9c3"
+    },
+    {
+      "file": "fastapi/security/base.py",
+      "sha256": "765e29bdb0be4718df6d680fb4259df0c554fbb081d92676dab2435d50973ba7"
+    },
+    {
+      "file": "fastapi/security/http.py",
+      "sha256": "1e8f6a16e45f15e2c9a23f745185728de288cc67d8d39261505cbb21f679f69c"
+    },
+    {
+      "file": "fastapi/security/oauth2.py",
+      "sha256": "a2c6302589904a961bb055d67c8931bccdb5c1ee2eaa45f019b35426539d68e8"
+    },
+    {
+      "file": "fastapi/security/open_id_connect_url.py",
+      "sha256": "3e3fa2aee91ba0c899f3ff5649b4f233dedc45c42288b635cb8faedd5a9bde44"
+    },
+    {
+      "file": "fastapi/security/utils.py",
+      "sha256": "13d608a1ecfe1f6935a012c4771a89122f2c575ba6ba72582a3407bd91b71516"
+    },
+    {
+      "file": "fastapi/sse.py",
+      "sha256": "557254d11b6f5b6e890ca69e430cf7c14036af08f9d15a2cea5d55274e008a13"
+    },
+    {
+      "file": "fastapi/staticfiles.py",
+      "sha256": "8a2ac622ddec758d90657777ea28ecdc28fe4f416e18575addc77dd2433d224c"
+    },
+    {
+      "file": "fastapi/templating.py",
+      "sha256": "e33b2e4d681c8dc11a8a7309140956ebe827b259ba020392d528a20d67e64319"
+    },
+    {
+      "file": "fastapi/testclient.py",
+      "sha256": "9c1bda0265fae9895d45e24d6573ce935b1fba8d90ea1b3c6cebc86827a9e8b4"
+    },
+    {
+      "file": "fastapi/types.py",
+      "sha256": "836b43f38d815070b60b7fcff0fd3a6a56d0e0c8426fd4726eb4a6a79ace0e05"
+    },
+    {
+      "file": "fastapi/utils.py",
+      "sha256": "0d7d15ae73307d5b19c51cfc222b50e36736fbef9f0f398566479131947650ca"
+    },
+    {
+      "file": "fastapi/websockets.py",
+      "sha256": "e35f6e9dc60e6c42991b461cad7b1c7d04182d25a8135d23ab154c7ad19d47df"
+    },
+    {
+      "file": "sse_starlette-3.5.1.dist-info/INSTALLER",
+      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
+    },
+    {
+      "file": "sse_starlette-3.5.1.dist-info/METADATA",
+      "sha256": "f212aaff8c6f4e0bfa69de5fcb87b1a323ea5e0e3332a7b730f12adb8cc627db"
+    },
+    {
+      "file": "sse_starlette-3.5.1.dist-info/RECORD",
+      "sha256": "6019b22fd3a024be2fb5c45d02d750a9e1a95230ccb92b57ab51281c50d1c091"
+    },
+    {
+      "file": "sse_starlette-3.5.1.dist-info/REQUESTED",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "sse_starlette-3.5.1.dist-info/WHEEL",
+      "sha256": "98e75747d0b7c0c568bfb71263c3d8f970b3a374a6996087bc642be5cb09a1aa"
+    },
+    {
+      "file": "sse_starlette-3.5.1.dist-info/direct_url.json",
+      "sha256": "6c592ce5d9b3f33fceb3e2b276c764693939364b306410a7a1ef0d3bb8778e9e"
+    },
+    {
+      "file": "sse_starlette-3.5.1.dist-info/licenses/AUTHORS",
+      "sha256": "c2ff63d2ecf128bbda8ab1b2016830a5da124202fbb97168685bb9946aed3f1a"
+    },
+    {
+      "file": "sse_starlette-3.5.1.dist-info/licenses/LICENSE",
+      "sha256": "80af6bfccbebd2c14d4aab96695cab9950e177190cc80f5ef819e99996883e8e"
+    },
+    {
+      "file": "sse_starlette-3.5.1.dist-info/top_level.txt",
+      "sha256": "f96bd5e4d31692afc9efaeac64fbac2aabfca4448cf83c6e822f7a2e9f687abe"
+    },
+    {
+      "file": "sse_starlette/__init__.py",
+      "sha256": "207ac6d90676f8b03ca934a758fa83522f1bf8a5b3e36ef89c950dc479202b99"
+    },
+    {
+      "file": "sse_starlette/_utils.py",
+      "sha256": "735f7bd66c765a5aff30dede9228fa25837e7b78bd2106d8de5e0ca8343f5440"
+    },
+    {
+      "file": "sse_starlette/event.py",
+      "sha256": "c1e3e392d3be9f48ec82e5c69a5bb7850a284167c960dad46bc883fd10ded8ad"
+    },
+    {
+      "file": "sse_starlette/py.typed",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "sse_starlette/sse.py",
+      "sha256": "d17cf291612d1b3bc3af68488130de528cb0fb0b72c055c127a25a058043e3b7"
+    },
+    {
+      "file": "uvloop-0.23.0.dist-info/INSTALLER",
+      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
+    },
+    {
+      "file": "uvloop-0.23.0.dist-info/METADATA",
+      "sha256": "fe11a50198ffd4d9f1cb20922dc638ad459d5e63e6c615b0c1c69448d3362977"
+    },
+    {
+      "file": "uvloop-0.23.0.dist-info/RECORD",
+      "sha256": "458244bd0014115aa382f237992f55e5c2e1e7f7b41c2f74cb1f1e85e7651b94"
+    },
+    {
+      "file": "uvloop-0.23.0.dist-info/REQUESTED",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "uvloop-0.23.0.dist-info/WHEEL",
+      "sha256": "19601a57dbc05e3d2e550552a4d2b517efcf28556daadd29a904dff2a0914f86"
+    },
+    {
+      "file": "uvloop-0.23.0.dist-info/direct_url.json",
+      "sha256": "4447994e9d22f8cbfc2e6e648ce928b8bc6621d2a367960b2e4b0cfcd6dfb5f1"
+    },
+    {
+      "file": "uvloop-0.23.0.dist-info/licenses/LICENSE-APACHE",
+      "sha256": "377025287798f9dcd819e1f826fa5fc5e2f382528691ab0528c5cf8c8c282c27"
+    },
+    {
+      "file": "uvloop-0.23.0.dist-info/licenses/LICENSE-MIT",
+      "sha256": "6dd4c399f26de043d77a2ad7e31db4cb5bf08ea8368b0a42d6e158635cc8ab62"
+    },
+    {
+      "file": "uvloop-0.23.0.dist-info/top_level.txt",
+      "sha256": "d9c0da96dc9e9987d012b075f6cda3166ba67894676ec64f27b2e3f40efc73a6"
+    },
+    {
+      "file": "uvloop/__init__.py",
+      "sha256": "1db6e9f617c96dfacef84b5ca5d362900177752e41130690e5f54b8ea1949f83"
+    },
+    {
+      "file": "uvloop/_noop.py",
+      "sha256": "4830094e25a113b8372b2b6d6e33dd962bfe5217ae6acfad297e3fcbf9ef3bf4"
+    },
+    {
+      "file": "uvloop/_testbase.py",
+      "sha256": "b116631d1fa7307bf8519db7024482b6012cbe0a3cb8ea8372114d3855628918"
+    },
+    {
+      "file": "uvloop/_version.py",
+      "sha256": "12f37c24dc3e2f670d6a1ef69e786a02af7c2fa0b6e10b971865572361095ed7"
+    },
+    {
+      "file": "uvloop/cbhandles.pxd",
+      "sha256": "816d2ca52f38c1b7ee107b9811b452b0788a4666f9a5f0c791866fc614c2f95a"
+    },
+    {
+      "file": "uvloop/cbhandles.pyx",
+      "sha256": "a876aa8e1e1d6ffc047babb212552729e167da303df75dce020bb33e8530b35d"
+    },
+    {
+      "file": "uvloop/dns.pyx",
+      "sha256": "a074ebdfa89ceaef45f9514002fd06f76298e383b7fb4c77cad70e015bc6993b"
+    },
+    {
+      "file": "uvloop/errors.pyx",
+      "sha256": "d9eb589fcf53877b48b0d30b977dd0b9cfb55a428a63bba63ce56f8a54f38bd9"
+    },
+    {
+      "file": "uvloop/handles/async_.pxd",
+      "sha256": "c6db164a2d00ebb8e8254e22169e495b3431c0d8f82c2abf28c0f20c333175e7"
+    },
+    {
+      "file": "uvloop/handles/async_.pyx",
+      "sha256": "1ddfc1822f08f6e259db4ff6a94b0761842dc2ae0b2ad8d3af74c74182a9f929"
+    },
+    {
+      "file": "uvloop/handles/basetransport.pxd",
+      "sha256": "4a20c3efb34fb614df8d7560d768092463356182995f0e0010af6dbf6da325e1"
+    },
+    {
+      "file": "uvloop/handles/basetransport.pyx",
+      "sha256": "1ad377bdda7a0c3921d60d1144f7a68f4af8c7e131b24c3e9b5ea9fef63f13d8"
+    },
+    {
+      "file": "uvloop/handles/check.pxd",
+      "sha256": "22e7c5af374c84b45ce7302387b2dbd2502ac3e51c96b615a3e520a88b3a789d"
+    },
+    {
+      "file": "uvloop/handles/check.pyx",
+      "sha256": "ef4779a32967167663109a3f1c1839258c36844dcfbe4537ae1cc02c311438af"
+    },
+    {
+      "file": "uvloop/handles/fsevent.pxd",
+      "sha256": "61f92543d4de8a4455d9044b34f02d904c2eff7bf0aec3aaf5c309c4557c5602"
+    },
+    {
+      "file": "uvloop/handles/fsevent.pyx",
+      "sha256": "454576f96841a363a35c59f4378f65e2d8750c567491d0beed882c2199140682"
+    },
+    {
+      "file": "uvloop/handles/handle.pxd",
+      "sha256": "40f8d408e6e40f0be3440645968945d6d357155f7e8c07f6d95d0ac1e88b74e0"
+    },
+    {
+      "file": "uvloop/handles/handle.pyx",
+      "sha256": "60e68dd5f48fce8fc8240dc86c6ec4d74a5cf9d6c037bcbc0f2199a0b821a3e3"
+    },
+    {
+      "file": "uvloop/handles/idle.pxd",
+      "sha256": "2f71abdadbb3287584076367ca4c236cdc9ec4d52572405d18528fb9f9f90195"
+    },
+    {
+      "file": "uvloop/handles/idle.pyx",
+      "sha256": "0578bf3d0ae06cf3769f7f90c9b1e8d022e15b69bd37b6de9f049be2aeeef3b2"
+    },
+    {
+      "file": "uvloop/handles/pipe.pxd",
+      "sha256": "2f3b043b0a6d92a35ae763b5232aa1c6ad9de29a73987af4c7c70cc0921965f9"
+    },
+    {
+      "file": "uvloop/handles/pipe.pyx",
+      "sha256": "f7120d012d7166e3ccf3b812f906151b0527ff826172a2b0a89a1b8e91c71a43"
+    },
+    {
+      "file": "uvloop/handles/poll.pxd",
+      "sha256": "69f011ea0031e763a798fa9a1dadf2e35c71b486316a6d70f57a0d651c4d3305"
+    },
+    {
+      "file": "uvloop/handles/poll.pyx",
+      "sha256": "9239614ab4723879c7dad2492e606d13478f96d5164caa6127a9a5f113f44218"
+    },
+    {
+      "file": "uvloop/handles/process.pxd",
+      "sha256": "14a0ae4165b30cbf2bd0dd69865c0f27fa46198dd366c3a5e6b0503f8025818a"
+    },
+    {
+      "file": "uvloop/handles/process.pyx",
+      "sha256": "c7cf601392420291ac856aa59fedaac5823f236eb6af9b9d98b0a7040c96fbec"
+    },
+    {
+      "file": "uvloop/handles/stream.pxd",
+      "sha256": "d3738616f1af316e3e7045c55cd5c2a4a5bc200018092502bdd32b722bba2cb3"
+    },
+    {
+      "file": "uvloop/handles/stream.pyx",
+      "sha256": "08b19ca6f53a46e82f35133ea4de11a5288c0eb989c5dd0e24d3de6676a65a30"
+    },
+    {
+      "file": "uvloop/handles/streamserver.pxd",
+      "sha256": "8480c3841d912b4967314b1c0d670697635191c95be8061f7217bbed811d69eb"
+    },
+    {
+      "file": "uvloop/handles/streamserver.pyx",
+      "sha256": "aae5b02a8febcf8273abe60d2d943b96670134b4b3401a5fdf59d2eb88e16eb5"
+    },
+    {
+      "file": "uvloop/handles/tcp.pxd",
+      "sha256": "c4d632f9d7f5b4ae72c0add5edad305a7a3db4003b247f85888439174dbde993"
+    },
+    {
+      "file": "uvloop/handles/tcp.pyx",
+      "sha256": "db68ac2cb27dfff53b071d9943058fdcca33b740d9eba68e2d1116eda74a18bb"
+    },
+    {
+      "file": "uvloop/handles/timer.pxd",
+      "sha256": "55c2d905fcddf62c6ec6626b13d3b7626c953b82df303c1c1bb50da496d3bb8d"
+    },
+    {
+      "file": "uvloop/handles/timer.pyx",
+      "sha256": "cd3df9016f56bfd1ffcd66bab30ec63a2e1207b1dabc65286c57b34c57d2aba1"
+    },
+    {
+      "file": "uvloop/handles/udp.pxd",
+      "sha256": "8109fd147e2b0225c347f91936a69870d30633314bf93d55d46f0923a24e1d4f"
+    },
+    {
+      "file": "uvloop/handles/udp.pyx",
+      "sha256": "9175c24b5846884ecacc7c205697ad950d8ed881d9a9e050d88598aef0ddf6fd"
+    },
+    {
+      "file": "uvloop/includes/__init__.py",
+      "sha256": "f8e519eb3afa3a9770efc3cab07622d40b8fef8129ed7072c72a1160eb91b602"
+    },
+    {
+      "file": "uvloop/includes/consts.pxi",
+      "sha256": "9ba2bd1c8525f06dc3f62388ccad02dff7215cac087ec8aaf3c8f754ebd4b94e"
+    },
+    {
+      "file": "uvloop/includes/debug.pxd",
+      "sha256": "7029e5ca9e87921420545ee50103c0df5c086b59f5a67e9e518ff0011621dee0"
+    },
+    {
+      "file": "uvloop/includes/flowcontrol.pxd",
+      "sha256": "ecfb99b44829e134b563788da996489e40ca239882ca5111adc2ea7b696cdc46"
+    },
+    {
+      "file": "uvloop/includes/python.pxd",
+      "sha256": "49207614f12c12dfc089feba97e490bc5a49dc8ed3ae06cbe25b22bbf2b2bbd9"
+    },
+    {
+      "file": "uvloop/includes/stdlib.pxi",
+      "sha256": "8f57b9c3a0428ed58569ec94f87940e5ebd3b91dc4b26bee1acd4669c611e443"
+    },
+    {
+      "file": "uvloop/includes/system.pxd",
+      "sha256": "13fe0d1a941a1a98bc35c9e86741694a669504c40397e90474718a902fc78db8"
+    },
+    {
+      "file": "uvloop/includes/uv.pxd",
+      "sha256": "c246b233109a23d472c536f5b2a90fe83754ea5ff0f6a975f12600a046123620"
+    },
+    {
+      "file": "uvloop/loop.cpython-310-x86_64-linux-gnu.so",
+      "sha256": "607ccac32ea2bb58bf3768f6506c984616f80ff471dbbbe04d67784bced51521"
+    },
+    {
+      "file": "uvloop/loop.pxd",
+      "sha256": "43a93ffe2279156acc3646598e4056579d50b96f8c5582320bbb2e59179f9288"
+    },
+    {
+      "file": "uvloop/loop.pyi",
+      "sha256": "0571706f416c83d008abedb2b1dd5a35d3b4f0201641e469872a93bbce5eeb4d"
+    },
+    {
+      "file": "uvloop/loop.pyx",
+      "sha256": "370e145b410830d247fcc630cb31f73a1d1854e56aa6685b5e56693c6fba3171"
+    },
+    {
+      "file": "uvloop/lru.pyx",
+      "sha256": "9c1678ceecb85e3b1d2e8aeaf8984d4bb58e6dc2e965632bd4e8f246fbfc15a2"
+    },
+    {
+      "file": "uvloop/pseudosock.pyx",
+      "sha256": "3371fba8c1855c4f5964bbd8c0e80197765c340e4e2929d9ecd5062c903b0250"
+    },
+    {
+      "file": "uvloop/py.typed",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "uvloop/request.pxd",
+      "sha256": "ef2c7c2651b41eed9cbff8b640267f59d2e5b068c8d33e5e33fb9e38e3a02bac"
+    },
+    {
+      "file": "uvloop/request.pyx",
+      "sha256": "ebef0399ee8ba13f3c079f8ccef9a9b8b9f7846b7579995e92f4311b4c76cbcb"
+    },
+    {
+      "file": "uvloop/server.pxd",
+      "sha256": "ff3443899323b26971251a34283cd2334c727e0da4f93ce51a59f9e30bd70be6"
+    },
+    {
+      "file": "uvloop/server.pyx",
+      "sha256": "eb00b9bd48401e79d4b3ba873895ef464828bf7f08798f31a7ac38e7eac24457"
+    },
+    {
+      "file": "uvloop/sslproto.pxd",
+      "sha256": "073f1106cb936d3266aeeabc68fde1b653585e6782f2b01728900b0d7d19598f"
+    },
+    {
+      "file": "uvloop/sslproto.pyx",
+      "sha256": "01dc136a04613ad272e8fc55751cdd8c142c4943fb930076a36d9894062abd4b"
+    },
+    {
+      "file": "starlette-0.52.1.dist-info/INSTALLER",
+      "sha256": "ceebae7b8927a3227e5303cf5e0f1f7b34bb542ad7250ac03fbcde36ec2f1508"
+    },
+    {
+      "file": "starlette-0.52.1.dist-info/METADATA",
+      "sha256": "c0ddc5837cca966a170fdeefb924a0dbd08f1cb1f310da1046a39faaeed0c535"
+    },
+    {
+      "file": "starlette-0.52.1.dist-info/RECORD",
+      "sha256": "c442618ad8f1b619247d6843504f6a46184b0333c8770e82ad08b1e1ed98b81f"
+    },
+    {
+      "file": "starlette-0.52.1.dist-info/WHEEL",
+      "sha256": "58b82a17209f9bf2804afe161f2632d0fde933f9bb2792fd936b2474a2e2ac2f"
+    },
+    {
+      "file": "starlette-0.52.1.dist-info/licenses/LICENSE.md",
+      "sha256": "dcb95677a02240243187e964f941847d19b17821cf99e5afae684fab328c19bf"
+    },
+    {
+      "file": "starlette/__init__.py",
+      "sha256": "a865cb2911350ee8e30a818d699e5619485a38c86519572c0a39cf1e03976064"
+    },
+    {
+      "file": "starlette/_exception_handler.py",
+      "sha256": "8b370c88fd95b956c8bf04d442384c95c85c680e7bf79f916b54829f92963d33"
+    },
+    {
+      "file": "starlette/_utils.py",
+      "sha256": "223ddaa95c3e1536c76c88b84d81db1d2e3a969c97924cc53743eeb565f07a3a"
+    },
+    {
+      "file": "starlette/applications.py",
+      "sha256": "c4adbc2c83f6519e59e1a418205a77de495689bb6401d0ce9cb370840485a2b3"
+    },
+    {
+      "file": "starlette/authentication.py",
+      "sha256": "ba9bce2483f1e7f1d7a2155aa580cf9277cf02af8fad7ce4ee0c579085998168"
+    },
+    {
+      "file": "starlette/background.py",
+      "sha256": "0fe5e952915181406765e035b4783330e82e6dee8809564594e03830bd2ad53f"
+    },
+    {
+      "file": "starlette/concurrency.py",
+      "sha256": "0fda37f055ea66daadf67588cdeb473cea56f78aeea8b4bc84db6710811f1efd"
+    },
+    {
+      "file": "starlette/config.py",
+      "sha256": "195c24a34a464aeb31b901cedf9b4bfcdb7f0292f47e65582f72221c76292d6e"
+    },
+    {
+      "file": "starlette/convertors.py",
+      "sha256": "175aec7b701a70df6bb1f2674deb839e36cde75affa2e1dcdd62f26248e45ffa"
+    },
+    {
+      "file": "starlette/datastructures.py",
+      "sha256": "d4d727638015f7a936c63d514382fa82a95d9a2441d60403145376fea0819930"
+    },
+    {
+      "file": "starlette/endpoints.py",
+      "sha256": "5ce0c82b53fd9619a2fcf1f79ad08f041e0c730ef28e3509713cdb93b6015e10"
+    },
+    {
+      "file": "starlette/exceptions.py",
+      "sha256": "b48a619596bc12c41f2b0dfec70e49dd93751a3691e147317c92baf40776846f"
+    },
+    {
+      "file": "starlette/formparsers.py",
+      "sha256": "35d9797465d9b68a732548ccd38339cd8852f2c4f7ddeff92702b64fb31de330"
+    },
+    {
+      "file": "starlette/middleware/__init__.py",
+      "sha256": "04e4673a3d27d262f5396514b353cb4eed520129af4fc90410303a71bba1b8fa"
+    },
+    {
+      "file": "starlette/middleware/authentication.py",
+      "sha256": "f914b0c09d29224accd2ffb6229f075d5076e31b52a7b39bcd1dce7d30bcc120"
+    },
+    {
+      "file": "starlette/middleware/base.py",
+      "sha256": "605a9ed6b1b880878ad86a55ddb7026251ad9d6ff34cbc08a2dc2f28cb06c2fb"
+    },
+    {
+      "file": "starlette/middleware/cors.py",
+      "sha256": "92563ec70dd2fa86c16982780b59f2a3aad7a68477f4ef5a945a3d37e2093519"
+    },
+    {
+      "file": "starlette/middleware/errors.py",
+      "sha256": "87be937d50eb7584afa410045a067dd55bcf6507b7bd1a4097a0a1a225c6f939"
+    },
+    {
+      "file": "starlette/middleware/exceptions.py",
+      "sha256": "ece812522060c074b854c9a9696970db5b8328d0e638cccb559ad60cb0d4a96a"
+    },
+    {
+      "file": "starlette/middleware/gzip.py",
+      "sha256": "fed86909172d82ec34b4c33a2768839408f9bd996897d4faef7207b5fbdfc501"
+    },
+    {
+      "file": "starlette/middleware/httpsredirect.py",
+      "sha256": "48d4e579a6002c6a084d5ef1c1b89ce2007a55874cf1895e6bfca4722533df58"
+    },
+    {
+      "file": "starlette/middleware/sessions.py",
+      "sha256": "2206644e481b3a153db5071e415d0a8cb022369f9d2a19e0707a6ee1561a0d74"
+    },
+    {
+      "file": "starlette/middleware/trustedhost.py",
+      "sha256": "6f22825323e07b9e19e0cce7cae9c3ff60ec31f25cd94b1f5786f60eef966137"
+    },
+    {
+      "file": "starlette/middleware/wsgi.py",
+      "sha256": "4f1a58447475da265121ad3d316576b046e2d1cd5c4c73c06eb57360ffc5eced"
+    },
+    {
+      "file": "starlette/py.typed",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": "starlette/requests.py",
+      "sha256": "1840659359b494ecb64c6749595617be79642e4520a18fde3d2b6e41307ff88d"
+    },
+    {
+      "file": "starlette/responses.py",
+      "sha256": "08d72dc83a57a63effef942a54ff6c7294442ffea8feb179dabf8f302d704b02"
+    },
+    {
+      "file": "starlette/routing.py",
+      "sha256": "f4f940f20c780dbcee78d9a99703f114e0546fbbb9c2b7f0f99bf361fabf281c"
+    },
+    {
+      "file": "starlette/schemas.py",
+      "sha256": "7c10e5235603285feb91021a96a0554343d0f7ede034687b4ffdfd3b213bad5d"
+    },
+    {
+      "file": "starlette/staticfiles.py",
+      "sha256": "08351e5d168ab2aa23280ad24e28efb0fb113d6667999744cb612a7eb193770d"
+    },
+    {
+      "file": "starlette/status.py",
+      "sha256": "3f94b138ddda296debc14a49edcc710f7bef1142cca4ef9a233cc94662f0c15b"
+    },
+    {
+      "file": "starlette/templating.py",
+      "sha256": "0fd318fa651d1b9f7d61ddd02af16cd8ab4284deada37b29899dfa20ce2d2747"
+    },
+    {
+      "file": "starlette/testclient.py",
+      "sha256": "d27b988796908b11386ee40266d08d67056a6de1cb9b57a736687cddb843e174"
+    },
+    {
+      "file": "starlette/types.py",
+      "sha256": "f3bc13bb0175d37e90c51b1ede62f9a8eb92f62e1af7168864ca938d8fa5befa"
+    },
+    {
+      "file": "starlette/websockets.py",
+      "sha256": "a61b168295dc958ade56183ec00c945a98015894e26cd1793e2fad3716e64056"
+    }
+  ],
+  "scope": "Only the CPU EvalScope subprocess receives this PYTHONPATH; no model process changes.",
+  "import_preflight": {
+    "exit_code": 0,
+    "stdout": "EvalScope perf import passed\n",
+    "stderr": ""
+  }
+}

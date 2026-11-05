@@ -1,0 +1,73 @@
+{
+  "question_id": "mathqa-test-0022",
+  "endpoint": "https://open.bigmodel.cn/api/paas/v4/chat/completions",
+  "request": {
+    "messages": [
+      {
+        "role": "user",
+        "content": "Solve the following multiple-choice mathematics problem. You may reason before answering. End your final response with exactly \"ANSWER: X\", where X is one of A, B, C, D, E. Select one option.\n\nbookman purchased 55 copies of a new book released recently , 10 of which are hardback and sold for $ 20 each , and rest are paperback and sold for $ 10 each . if 14 copies were sold and the total value of the remaining books was 460 , how many paperback copies were sold ?\n\nA. 10\nB. 11\nC. 12\nD. 13\nE. 9"
+      }
+    ],
+    "temperature": 0,
+    "top_p": 1,
+    "reasoning_effort": "low",
+    "max_tokens": 4096,
+    "stream": false,
+    "model": "glm-5.3-flash"
+  },
+  "ground_truth": "E",
+  "started_at": "2026-11-04T14:18:16.078645+08:00",
+  "protocol_sha256": "e0091d5c2c923243e14681f899b49b70f02a49ba661404bad9186985e6f35c4b",
+  "scorer_version": "final-visible-v2-think-boundary",
+  "client_read_timeout_seconds": 900,
+  "http_status": 200,
+  "response": {
+    "choices": [
+      {
+        "finish_reason": "stop",
+        "index": 0,
+        "message": {
+          "content": "**E**\n\nRemaining: 10(45−p) + 20(10−(14−p)) = 370 + 10p = 460 → p = 9\n\nANSWER: E",
+          "reasoning_content": "45 paperback, 10 hardback. Remaining value 460. Sold x paperback, 14−x hardback. Remaining: 10(45−x)+20(10−(14−x))=450−10x+20x−80=370+10x=460 → x=9.",
+          "role": "assistant"
+        }
+      }
+    ],
+    "created": 1793773098,
+    "id": "2026110414181639bd6b10d7c64cad",
+    "model": "glm-5.3-flash",
+    "object": "chat.completion",
+    "request_id": "2026110414181639bd6b10d7c64cad",
+    "usage": {
+      "completion_tokens": 112,
+      "completion_tokens_details": {
+        "reasoning_tokens": 66
+      },
+      "prompt_tokens": 148,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      },
+      "total_tokens": 260
+    }
+  },
+  "final_content": "**E**\n\nRemaining: 10(45−p) + 20(10−(14−p)) = 370 + 10p = 460 → p = 9\n\nANSWER: E",
+  "reasoning_boundary_present": false,
+  "reasoning_separate_field": true,
+  "answer": "E",
+  "format_error": null,
+  "truncated": false,
+  "finish_reason": "stop",
+  "usage": {
+    "completion_tokens": 112,
+    "completion_tokens_details": {
+      "reasoning_tokens": 66
+    },
+    "prompt_tokens": 148,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "total_tokens": 260
+  },
+  "correct": true,
+  "elapsed_seconds": 2.509650051011704
+}

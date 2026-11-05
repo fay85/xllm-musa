@@ -1,0 +1,14 @@
+[
+  {
+    "file": "annotated_doc-0.0.5-py3-none-any.whl",
+    "sha256": "117bac03a25ede5df5440e855b32d556049ca169ead221505badf432fed4b101"
+  },
+  {
+    "file": "sse_starlette-3.5.1-py3-none-any.whl",
+    "sha256": "a6cdcfec47b952911b1d99a7b8056429b5984039b875bf6575174220364b551f"
+  },
+  {
+    "file": "uvloop-0.23.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "9bf08e4b6362dd1c08623bbfa2d061e8bac0f1da8fc2007062cfe1dc360a49fa"
+  }
+]
