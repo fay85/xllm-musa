@@ -1,0 +1,10 @@
+Processing /work/scripts/benchmark_perf_wheels/sse_starlette-3.5.1-py3-none-any.whl
+Processing /work/scripts/benchmark_perf_wheels/uvloop-0.23.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl
+Requirement already satisfied: starlette>=0.49.1 in /usr/local/lib/python3.10/dist-packages (from sse-starlette==3.5.1) (0.52.1)
+Requirement already satisfied: anyio>=4.7.0 in /usr/local/lib/python3.10/dist-packages (from sse-starlette==3.5.1) (4.12.1)
+Requirement already satisfied: exceptiongroup>=1.0.2 in /usr/local/lib/python3.10/dist-packages (from anyio>=4.7.0->sse-starlette==3.5.1) (1.3.1)
+Requirement already satisfied: idna>=2.8 in /usr/local/lib/python3.10/dist-packages (from anyio>=4.7.0->sse-starlette==3.5.1) (3.20)
+Requirement already satisfied: typing_extensions>=4.5 in /usr/local/lib/python3.10/dist-packages (from anyio>=4.7.0->sse-starlette==3.5.1) (4.15.0)
+Installing collected packages: uvloop, sse-starlette
+
+Successfully installed sse-starlette-3.5.1 uvloop-0.23.0

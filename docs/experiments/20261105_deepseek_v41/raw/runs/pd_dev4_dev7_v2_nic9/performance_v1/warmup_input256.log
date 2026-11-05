@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/work/artifacts/bench_venv_v2/lib/python3.10/site-packages/evalscope/cli/start_perf.py", line 27, in execute
+    from evalscope.perf.main import PerfBenchmarkInterrupted, run_perf_benchmark
+  File "/work/artifacts/bench_venv_v2/lib/python3.10/site-packages/evalscope/perf/main.py", line 29, in <module>
+    from .utils.local_server import start_app
+  File "/work/artifacts/bench_venv_v2/lib/python3.10/site-packages/evalscope/perf/utils/local_server.py", line 8, in <module>
+    from sse_starlette.sse import EventSourceResponse
+ModuleNotFoundError: No module named 'sse_starlette'
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/work/artifacts/bench_venv_v2/bin/evalscope", line 6, in <module>
+    sys.exit(run_cmd())
+  File "/work/artifacts/bench_venv_v2/lib/python3.10/site-packages/evalscope/cli/cli.py", line 31, in run_cmd
+    cmd.execute()
+  File "/work/artifacts/bench_venv_v2/lib/python3.10/site-packages/evalscope/cli/start_perf.py", line 29, in execute
+    raise ImportError(
+ImportError: Failed to import run_perf_benchmark from evalscope.perf.main, due to No module named 'sse_starlette'. Please run `pip install 'evalscope[perf]'`.

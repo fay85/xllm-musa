@@ -1,0 +1,1 @@
+{"exit": 1, "command": ["/work/artifacts/bench_venv_v2/bin/python", "-m", "pip", "install", "sse_starlette", "uvloop", "-c", "/work/evidence/evalscope_perf_dependencies_v3/constraints.txt", "--report", "/work/evidence/evalscope_perf_dependencies_v3/pip_report.json"]}

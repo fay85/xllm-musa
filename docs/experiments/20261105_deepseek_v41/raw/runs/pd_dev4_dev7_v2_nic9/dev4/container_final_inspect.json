@@ -1,0 +1,560 @@
+{
+  "Id": "d32782b92ba4b8493db64b8e3f37950cd1bf702f5985f6dcc33ac4a4f8836fca",
+  "Created": "2026-11-05T10:59:04.681357342Z",
+  "Path": "python3",
+  "Args": [
+    "/work/scripts/pd_rank_supervisor.py",
+    "--config",
+    "/work/artifacts/prepared/pd_dev4_dev7_v2_nic9/dev4.json",
+    "--output",
+    "/work/runs/pd_dev4_dev7_v2_nic9/dev4"
+  ],
+  "State": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-11-05T10:59:05.145005487Z",
+    "FinishedAt": "2026-11-05T12:08:17.674353642Z"
+  },
+  "Image": "sha256:09b8f5f4a467fc73332dee57b36a2e5610ba3264357dfc87f103cf7bd7430be3",
+  "ResolvConfPath": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/containers/d32782b92ba4b8493db64b8e3f37950cd1bf702f5985f6dcc33ac4a4f8836fca/resolv.conf",
+  "HostnamePath": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/containers/d32782b92ba4b8493db64b8e3f37950cd1bf702f5985f6dcc33ac4a4f8836fca/hostname",
+  "HostsPath": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/containers/d32782b92ba4b8493db64b8e3f37950cd1bf702f5985f6dcc33ac4a4f8836fca/hosts",
+  "LogPath": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/containers/d32782b92ba4b8493db64b8e3f37950cd1bf702f5985f6dcc33ac4a4f8836fca/d32782b92ba4b8493db64b8e3f37950cd1bf702f5985f6dcc33ac4a4f8836fca-json.log",
+  "Name": "/xiaopang1105_dsv41_prefill_dev4_pd_dev4_dev7_v2_nic9",
+  "RestartCount": 0,
+  "Driver": "overlay2",
+  "Platform": "linux",
+  "MountLabel": "",
+  "ProcessLabel": "",
+  "AppArmorProfile": "docker-default",
+  "ExecIDs": null,
+  "HostConfig": {
+    "Binds": null,
+    "ContainerIDFile": "",
+    "LogConfig": {
+      "Type": "json-file",
+      "Config": {}
+    },
+    "NetworkMode": "host",
+    "PortBindings": {},
+    "RestartPolicy": {
+      "Name": "no",
+      "MaximumRetryCount": 0
+    },
+    "AutoRemove": false,
+    "VolumeDriver": "",
+    "VolumesFrom": null,
+    "ConsoleSize": [
+      0,
+      0
+    ],
+    "CapAdd": [
+      "IPC_LOCK"
+    ],
+    "CapDrop": null,
+    "CgroupnsMode": "private",
+    "Dns": [],
+    "DnsOptions": [],
+    "DnsSearch": [],
+    "ExtraHosts": [
+      "xiaopang1105_dsv41_prefill_dev4_pd_dev4_dev7_v2_nic9:10.20.34.24"
+    ],
+    "GroupAdd": null,
+    "IpcMode": "private",
+    "Cgroup": "",
+    "Links": null,
+    "OomScoreAdj": 0,
+    "PidMode": "",
+    "Privileged": false,
+    "PublishAllPorts": false,
+    "ReadonlyRootfs": false,
+    "SecurityOpt": null,
+    "UTSMode": "",
+    "UsernsMode": "",
+    "ShmSize": 34359738368,
+    "Runtime": "mthreads",
+    "Isolation": "",
+    "CpuShares": 0,
+    "Memory": 858993459200,
+    "NanoCpus": 64000000000,
+    "CgroupParent": "",
+    "BlkioWeight": 0,
+    "BlkioWeightDevice": [],
+    "BlkioDeviceReadBps": [],
+    "BlkioDeviceWriteBps": [],
+    "BlkioDeviceReadIOps": [],
+    "BlkioDeviceWriteIOps": [],
+    "CpuPeriod": 0,
+    "CpuQuota": 0,
+    "CpuRealtimePeriod": 0,
+    "CpuRealtimeRuntime": 0,
+    "CpusetCpus": "",
+    "CpusetMems": "",
+    "Devices": [
+      {
+        "PathOnHost": "/dev/mtgpu.0",
+        "PathInContainer": "/dev/mtgpu.0",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/mtgpu.1",
+        "PathInContainer": "/dev/mtgpu.1",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/mtgpu.2",
+        "PathInContainer": "/dev/mtgpu.2",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/mtgpu.3",
+        "PathInContainer": "/dev/mtgpu.3",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/mtgpu.4",
+        "PathInContainer": "/dev/mtgpu.4",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/mtgpu.5",
+        "PathInContainer": "/dev/mtgpu.5",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/mtgpu.6",
+        "PathInContainer": "/dev/mtgpu.6",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/mtgpu.7",
+        "PathInContainer": "/dev/mtgpu.7",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/dri/renderD128",
+        "PathInContainer": "/dev/dri/renderD128",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/dri/renderD129",
+        "PathInContainer": "/dev/dri/renderD129",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/dri/renderD130",
+        "PathInContainer": "/dev/dri/renderD130",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/dri/renderD131",
+        "PathInContainer": "/dev/dri/renderD131",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/dri/renderD132",
+        "PathInContainer": "/dev/dri/renderD132",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/dri/renderD133",
+        "PathInContainer": "/dev/dri/renderD133",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/dri/renderD134",
+        "PathInContainer": "/dev/dri/renderD134",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/dri/renderD135",
+        "PathInContainer": "/dev/dri/renderD135",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/issm0",
+        "PathInContainer": "/dev/infiniband/issm0",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/issm1",
+        "PathInContainer": "/dev/infiniband/issm1",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/issm10",
+        "PathInContainer": "/dev/infiniband/issm10",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/issm11",
+        "PathInContainer": "/dev/infiniband/issm11",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/issm2",
+        "PathInContainer": "/dev/infiniband/issm2",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/issm3",
+        "PathInContainer": "/dev/infiniband/issm3",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/issm4",
+        "PathInContainer": "/dev/infiniband/issm4",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/issm5",
+        "PathInContainer": "/dev/infiniband/issm5",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/issm6",
+        "PathInContainer": "/dev/infiniband/issm6",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/issm7",
+        "PathInContainer": "/dev/infiniband/issm7",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/issm9",
+        "PathInContainer": "/dev/infiniband/issm9",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/rdma_cm",
+        "PathInContainer": "/dev/infiniband/rdma_cm",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/umad0",
+        "PathInContainer": "/dev/infiniband/umad0",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/umad1",
+        "PathInContainer": "/dev/infiniband/umad1",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/umad10",
+        "PathInContainer": "/dev/infiniband/umad10",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/umad11",
+        "PathInContainer": "/dev/infiniband/umad11",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/umad2",
+        "PathInContainer": "/dev/infiniband/umad2",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/umad3",
+        "PathInContainer": "/dev/infiniband/umad3",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/umad4",
+        "PathInContainer": "/dev/infiniband/umad4",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/umad5",
+        "PathInContainer": "/dev/infiniband/umad5",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/umad6",
+        "PathInContainer": "/dev/infiniband/umad6",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/umad7",
+        "PathInContainer": "/dev/infiniband/umad7",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/umad9",
+        "PathInContainer": "/dev/infiniband/umad9",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/uverbs0",
+        "PathInContainer": "/dev/infiniband/uverbs0",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/uverbs1",
+        "PathInContainer": "/dev/infiniband/uverbs1",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/uverbs10",
+        "PathInContainer": "/dev/infiniband/uverbs10",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/uverbs11",
+        "PathInContainer": "/dev/infiniband/uverbs11",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/uverbs2",
+        "PathInContainer": "/dev/infiniband/uverbs2",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/uverbs3",
+        "PathInContainer": "/dev/infiniband/uverbs3",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/uverbs4",
+        "PathInContainer": "/dev/infiniband/uverbs4",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/uverbs5",
+        "PathInContainer": "/dev/infiniband/uverbs5",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/uverbs6",
+        "PathInContainer": "/dev/infiniband/uverbs6",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/uverbs7",
+        "PathInContainer": "/dev/infiniband/uverbs7",
+        "CgroupPermissions": "rwm"
+      },
+      {
+        "PathOnHost": "/dev/infiniband/uverbs9",
+        "PathInContainer": "/dev/infiniband/uverbs9",
+        "CgroupPermissions": "rwm"
+      }
+    ],
+    "DeviceCgroupRules": null,
+    "DeviceRequests": null,
+    "MemoryReservation": 0,
+    "MemorySwap": 1717986918400,
+    "MemorySwappiness": null,
+    "OomKillDisable": null,
+    "PidsLimit": 16384,
+    "Ulimits": [
+      {
+        "Name": "core",
+        "Hard": 0,
+        "Soft": 0
+      },
+      {
+        "Name": "memlock",
+        "Hard": -1,
+        "Soft": -1
+      },
+      {
+        "Name": "nofile",
+        "Hard": 1048576,
+        "Soft": 1048576
+      }
+    ],
+    "CpuCount": 0,
+    "CpuPercent": 0,
+    "IOMaximumIOps": 0,
+    "IOMaximumBandwidth": 0,
+    "Mounts": [
+      {
+        "Type": "bind",
+        "Source": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb",
+        "Target": "/work"
+      },
+      {
+        "Type": "bind",
+        "Source": "/data/nfs_shared/models/DeepSeek-V4.1-Flash",
+        "Target": "/data/nfs_shared/models/DeepSeek-V4.1-Flash",
+        "ReadOnly": true
+      }
+    ],
+    "MaskedPaths": [
+      "/proc/asound",
+      "/proc/acpi",
+      "/proc/kcore",
+      "/proc/keys",
+      "/proc/latency_stats",
+      "/proc/timer_list",
+      "/proc/timer_stats",
+      "/proc/sched_debug",
+      "/proc/scsi",
+      "/sys/firmware",
+      "/sys/devices/virtual/powercap"
+    ],
+    "ReadonlyPaths": [
+      "/proc/bus",
+      "/proc/fs",
+      "/proc/irq",
+      "/proc/sys",
+      "/proc/sysrq-trigger"
+    ],
+    "Init": true
+  },
+  "GraphDriver": {
+    "Data": {
+      "LowerDir": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/overlay2/22f52a278143aed9b96a99b42aed3d548923f574d197b6b84dea9502e78d5b8d-init/diff:/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/overlay2/d40039960365219218b07912c3a6a3d3cf89189728c45c5c140f0cdb54c524fc/diff:/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/overlay2/ef5d6af9f3787eb1c694a8d008cba9a86e6ac79f1fe5bdfdd962e8d0272a10a1/diff:/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/overlay2/d96efc3855ad1017e090c34b84afcef90c3ac2f1335cc686d7bbe6a160f7d039/diff:/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/overlay2/dd1194dfe021edaf9f395d6c5d6519bd429ee71e0dd6924cd804b1e9a72c5bfe/diff:/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/overlay2/30c2a17de032061c10a74f186969f4fa8bf50f9d51087a69cf7d4dcc69005381/diff",
+      "MergedDir": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/overlay2/22f52a278143aed9b96a99b42aed3d548923f574d197b6b84dea9502e78d5b8d/merged",
+      "UpperDir": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/overlay2/22f52a278143aed9b96a99b42aed3d548923f574d197b6b84dea9502e78d5b8d/diff",
+      "WorkDir": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/artifacts/docker_dev4/data/overlay2/22f52a278143aed9b96a99b42aed3d548923f574d197b6b84dea9502e78d5b8d/work"
+    },
+    "Name": "overlay2"
+  },
+  "Mounts": [
+    {
+      "Type": "bind",
+      "Source": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb",
+      "Destination": "/work",
+      "Mode": "",
+      "RW": true,
+      "Propagation": "rslave"
+    },
+    {
+      "Type": "bind",
+      "Source": "/data/nfs_shared/models/DeepSeek-V4.1-Flash",
+      "Destination": "/data/nfs_shared/models/DeepSeek-V4.1-Flash",
+      "Mode": "",
+      "RW": false,
+      "Propagation": "rprivate"
+    }
+  ],
+  "Config": {
+    "Hostname": "xiaopang1105_dsv41_prefill_dev4_pd_dev4_dev7_v2_nic9",
+    "Domainname": "",
+    "User": "",
+    "AttachStdin": false,
+    "AttachStdout": false,
+    "AttachStderr": false,
+    "Tty": false,
+    "OpenStdin": false,
+    "StdinOnce": false,
+    "Env": [
+      "MUSA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7",
+      "OMP_NUM_THREADS=2",
+      "MTHREADS_VISIBLE_DEVICES=all",
+      "CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7",
+      "MTHREADS_DRIVER_CAPABILITIES=all",
+      "TZ=Asia/Shanghai",
+      "FLASHINFER_OPS_PATH=/opt/mate027_cache/mp31/cached_ops_jd_k8d",
+      "PATH=/usr/local/musa/bin:/usr/local/musa/mudnn/bin:/usr/local/openmpi/bin:/root/.cargo/bin:/usr/local/bin:/usr/bin:/bin",
+      "LANG=C.UTF-8",
+      "DEBIAN_FRONTEND=noninteractive",
+      "MUSA_HOME=/usr/local/musa",
+      "MPI_DIR=/usr/local/openmpi",
+      "MPICC=/usr/local/openmpi/bin/mpicc",
+      "CPATH=/usr/local/openmpi/include:",
+      "LD_LIBRARY_PATH=/opt/xllm/releases/musa-prefill-bounded-20261026/lib:/workspace/mudnn_3.4.0/lib:/workspace/MCCL_2.3.0/mccl/lib:/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib:/usr/local/lib/python3.10/dist-packages/tilelang/lib:/usr/local/lib/python3.10/dist-packages/z3/lib:/usr/local/lib/python3.10/dist-packages/torch_musa/lib:/usr/local/lib/python3.10/dist-packages/torch/lib:/usr/local/musa/lib:/usr/local/openmpi/lib:/opt/intel/oneapi/mkl/lib/intel64:/usr/local/lib:/usr/lib:/usr/lib/x86_64-linux-gnu",
+      "PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple",
+      "TORCH_MUSA_ARCH_LIST=31",
+      "VCPKG_ROOT=/workspace/vcpkg-xllm",
+      "VCPKG_MANIFEST_INSTALL=OFF",
+      "MUSA_BACKEND_INIT_SO=/workspace/artifacts/libmusa_backend_init.so",
+      "MODEL_ROOT=/data/nfs_shared/models",
+      "MUDNN_HOME=/workspace/mudnn_3.4.0",
+      "MCCL_HOME=/workspace/MCCL_2.3.0/mccl",
+      "XLLM_BIN=/opt/xllm/releases/musa-prefill-bounded-20261026/bin/xllm",
+      "ENABLE_GRAPH=1",
+      "ENABLE_GRAPH_DECODE_NO_PADDING=1",
+      "ENABLE_PREFILL_PIECEWISE_GRAPH=1",
+      "ENABLE_PACKED_PREFILL=0",
+      "NUM_SPECULATIVE_TOKENS=0",
+      "ENABLE_SCHEDULE_OVERLAP=true",
+      "XLLM_SPEC_VERIFY_LARGE_BATCH_EAGER=0",
+      "XLLM_USE_FA3=1",
+      "XLLM_USE_FA3_DECODE=1",
+      "XLLM_MUSA_POOL_COMPUTE_STREAM=1",
+      "XLLM_PIECEWISE_CAPTURE_FA3=1",
+      "XLLM_GDN_DECODE_BACKEND=mate",
+      "MATE_HOME=/opt/mate_0.2.7",
+      "MATE_WORKSPACE_BASE=/opt/mate027_cache",
+      "MATE_MUBIN_DIR=/usr/local/lib/python3.10/dist-packages/mate_mubin/mubin",
+      "MATE_MUSA_ARCH_LIST=3.1",
+      "XLLM_PACKED_PREFILL_PIECEWISE=0",
+      "CARGO_NET_OFFLINE=true",
+      "XLLM_MATE_GDN_MTP=1",
+      "XLLM_MATE_GDN_PREFILL=1",
+      "XLLM_SKIP_SUBMODULE_CHECK=1",
+      "XLLM_SKIP_DEPENDENCIES=1",
+      "XLLM_USE_ETCD=OFF"
+    ],
+    "Cmd": [
+      "/work/scripts/pd_rank_supervisor.py",
+      "--config",
+      "/work/artifacts/prepared/pd_dev4_dev7_v2_nic9/dev4.json",
+      "--output",
+      "/work/runs/pd_dev4_dev7_v2_nic9/dev4"
+    ],
+    "Image": "registry.mthreads.com/presale/devtech/xllm:1102-dev",
+    "Volumes": null,
+    "WorkingDir": "/work/repos/xllm-musa",
+    "Entrypoint": [
+      "python3"
+    ],
+    "OnBuild": null,
+    "Labels": {
+      "com.mthreads.xllm.base-config": "sha256:bd360c2ee7e634c44b31e49eb509e087037a202e3a142c02c0ab4f37eaece5b4",
+      "com.mthreads.xllm.dependency-policy": "reuse existing third-party and Rust artifacts",
+      "org.opencontainers.image.revision": "be905d41fa9cbd7c247fb60227cc135431abb8d6",
+      "org.opencontainers.image.source": "https://github.com/fay85/xllm-musa",
+      "owner": "xiaopang",
+      "task": "deepseek-v41-1105"
+    }
+  },
+  "NetworkSettings": {
+    "Bridge": "",
+    "SandboxID": "54b444ead6ae3a35690fa059a00afc1c9857d10c0ee7e9340a1d6d5eebe3cd76",
+    "HairpinMode": false,
+    "LinkLocalIPv6Address": "",
+    "LinkLocalIPv6PrefixLen": 0,
+    "Ports": {},
+    "SandboxKey": "/run/xiaopang1105-docker-dev4/netns/default",
+    "SecondaryIPAddresses": null,
+    "SecondaryIPv6Addresses": null,
+    "EndpointID": "",
+    "Gateway": "",
+    "GlobalIPv6Address": "",
+    "GlobalIPv6PrefixLen": 0,
+    "IPAddress": "",
+    "IPPrefixLen": 0,
+    "IPv6Gateway": "",
+    "MacAddress": "",
+    "Networks": {
+      "host": {
+        "IPAMConfig": null,
+        "Links": null,
+        "Aliases": null,
+        "NetworkID": "ae7da2f315192e754d124629d24fec0f981526c4d7ea97ab22bca717b213033e",
+        "EndpointID": "",
+        "Gateway": "",
+        "IPAddress": "",
+        "IPPrefixLen": 0,
+        "IPv6Gateway": "",
+        "GlobalIPv6Address": "",
+        "GlobalIPv6PrefixLen": 0,
+        "MacAddress": "",
+        "DriverOpts": null
+      }
+    }
+  }
+}

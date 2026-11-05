@@ -1,0 +1,1 @@
+{"exit": 0, "command": ["python3", "/work/scripts/check_basic_questions.py", "--url", "http://10.20.34.28:29080/v1/chat/completions", "--output", "/work/runs/pd_dev4_dev7_v2_nic9/basic_questions", "--binary", "/work/artifacts/bin/xllm"]}

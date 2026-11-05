@@ -1,0 +1,4 @@
+{
+  "status": "CLIENT_RUNS_FINISHED_REQUIRES_RAW_USAGE_VALIDATION",
+  "note": "A zero CLI exit does not establish all requests succeeded. Verify row count, success flags, exact native input/output usage and phase separation before reporting performance."
+}

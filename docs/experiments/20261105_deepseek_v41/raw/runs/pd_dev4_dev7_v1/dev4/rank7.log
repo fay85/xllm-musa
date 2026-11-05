@@ -1,0 +1,156 @@
+[xllm_musa_backend_init] registered PrivateUse1 backend name musa
+[xllm_musa_backend_init] registered TorchMUSA hooks
+[xllm_musa_backend_init] installed CUDA-to-MUSA dispatch bridge
+I20261105 18:46:00.306047    59 xllm.cpp:719] Registered torch_musa PrivateUse1 backend name=musa and hooks
+I20261105 18:46:00.306155    59 verbose_trace_logger.cpp:68] Verbose trace logging is disabled.
+I20261105 18:46:00.306257    59 xllm.cpp:590] set worker role to local worker
+I20261105 18:46:00.428578    59 master.cpp:724] Master init options: Options: [model_path: /work/artifacts/model_view_0909, model_id: deepseek-v4.1-flash-0909, draft_model_path: , backend: llm, model_impl: python, limit_image_per_prompt: 8, block_size: 128, max_cache_size: 1073741824, max_memory_utilization: 0.9, enable_prefix_cache: 0, max_encoder_cache_size: 0, max_processor_cache_items: 256, max_linear_state_cache_slots: 0, max_tokens_per_batch: 256, max_seqs_per_batch: 2, max_tokens_per_chunk_for_prefill: 256, num_speculative_tokens: 0, speculative_algorithm: MTP, draft_sampling_mode: greedy, speculative_suffix_cache_max_depth: 64, speculative_suffix_max_spec_factor: 1, speculative_suffix_max_spec_offset: 0, speculative_suffix_min_token_prob: 0.1, speculative_suffix_max_cached_requests: -1, speculative_suffix_use_tree_spec: 0, enable_mtp_draft_body_tp1: 0, enable_adaptive_speculative_decode: 0, adaptive_speculative_min_gain: 0, num_request_handling_threads: 4, enable_eplb: 0, redundant_experts_num: 1, eplb_update_interval: 1000, eplb_min_peak_load_improvement: 0.05, communication_backend: mccl, rank_tablefile: , expert_parallel_degree: 0, task_type: generate, enable_mla: 0, npu_kernel_backend: AUTO, enable_chunked_prefill: 1, enable_flashcomm1: 0, flashcomm1_min_prefill_tokens: 8192, enable_mmrs_fusion: 0, mmrs_comm_mode: aiv, dp_size: 1, cp_size: 1, ep_size: 8, tp_size: 1, sp_size: 1, cfg_size: 1, vae_size: 1, text_encoder_tp_size: 1, instance_name: 10.20.34.24:21007, master_node_addr: 10.20.34.24:21100, instance_role: PREFILL, transfer_listen_port: 21307, nnodes: 8, node_rank: 7, enable_schedule_overlap: 0, enable_disagg_pd: 1, enable_pd_ooc: 0, enable_offline_inference: 0, enable_sleep_mode: 0, disable_log_stats: 0, kv_cache_dtype: auto, kv_cache_transfer_mode: PULL, etcd_addr: 10.20.34.28:29079, etcd_namespace: xiaopang1105-dsv41-pd_dev4_dev7_v1, enable_service_routing: 1, tool_call_parser: , reasoning_parser: , priority_strategy: fcfs, enable_online_preempt_offline: 1, host_blocks_factor: 0, enable_kvcache_store: 0, prefetch_timeout: 120000, prefetch_batch_size: 2, prefetch_valid_blocks_per_batch: 1, layers_wise_copy_batchs: 4, store_protocol: tcp, store_rdma_devices: , store_master_server_address: , store_metadata_server: , store_local_hostname: , enable_multi_stream_parallel: 0, enable_profile_step_time: 0, enable_profile_token_budget: 0, enable_latency_aware_schedule: 0, profile_max_prompt_length: 2048, enable_profile_kv_blocks: 1, disable_ttft_profiling: 0, enable_forward_interruption: 0, enable_graph: 0, enable_graph_mode_decode_no_padding: 1, enable_prefill_piecewise_graph: 0, max_tokens_for_graph_mode: 2048, max_global_ttft_ms: 2147483647, max_global_tpot_ms: 2147483647, max_requests_per_batch: 1, spawn_worker_path: , enable_shm: 0, input_shm_size: 1024, output_shm_size: 128, is_local: 1, beam_width: 1, rec_worker_max_concurrency: 1, master_status: WAKEUP, server_idx: 0]
+I20261105 18:46:00.428639    59 master.cpp:729] Resolved CP config: cp_size=1, world_size=8, dp_size=1, ep_size=8, cp_sharding_stage=disabled, instance_role=PREFILL
+I20261105 18:46:00.428647    59 master.cpp:807] Creating engine with devices: musa:7
+W20261105 18:46:00.428659    59 master.cpp:816] Force to disable schedule overlap for prefill instance in disagg pd mode.
+I20261105 18:46:00.428685    59 dist_manager.cpp:203] Multi-node serving world_size = 8, each_node_ranks = 1, current node rank = 7, nnodes = 8, dp_size = 1, cp_size = 1, ep_size = 8, tp_size = 8
+I20261105 18:46:00.486826   149 worker_server.cpp:109] Create worker server with device: 7
+I20261105 18:46:00.487423   149 threadpool.cpp:33] ThreadPool created, thread count 5, pool name WorkerService.copy, cpu_binding false.
+I20261105 18:46:00.642345   149 threadpool.cpp:33] ThreadPool created, thread count 4, pool name WorkerService.request, cpu_binding false.
+I20261105 18:46:00.642866   149 xllm_server_registry.cpp:22] Register server DistributeWorkerServer7.
+W20261105 18:46:00.646684   149 bthread.cpp:471] Fail to set concurrency by tag: 0, tag concurrency should be larger than old oncurrency. old concurrency: 9, new concurrency: 8
+I20261105 18:46:00.648250   149 server.cpp:1200] Server[xllm::WorkerService] is serving on port=38643.
+I20261105 18:46:00.648281   149 server.cpp:1203] Check out http://xiaopang1105_dsv41_prefill_dev4_pd_dev4_dev7_v1:38643 in web browser.
+I20261105 18:46:00.648346   149 xllm_server.cpp:302] DistributeWorker server started on address 10.20.34.24:38643, idle_timeout_sec: -1, num_threads: 8
+I20261105 18:46:00.648353   149 worker_server.cpp:159] Worker 7: server address: 10.20.34.24:38643
+I20261105 18:46:00.649300   149 worker_server.cpp:537] Worker#7 connect to 10.20.34.24:21100 success.
+I20261105 18:46:01.232441   149 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group world_group, rank=7, world_size=8, algorithm=2, max_bytes=8388608
+I20261105 18:46:01.926965   149 musa_custom_all_reduce.cpp:244] [MUSA_TP_REDUCE_POLICY] group=tp_group, rank=7, world_size=8, enabled=0, max_bytes=8388608
+I20261105 18:46:01.936112   149 musa_custom_all_reduce.cpp:364] Custom all-reduce enabled for group tp_group, rank=7, world_size=8, algorithm=1, max_bytes=8388608
+W20261105 18:46:01.937472   149 musa_custom_all_reduce.cpp:259] Custom all-reduce disabled for moe_tp_group: unsupported world size 1
+I20261105 18:46:02.339908   149 worker_server.cpp:209] Worker CP config: cp_size=1, cp_group_size=8, cp_sharding_stage=disabled, instance_role=PREFILL
+I20261105 18:46:02.339931   149 threadpool.cpp:33] ThreadPool created, thread count 1, pool name Worker.async, cpu_binding false.
+I20261105 18:46:02.340117   149 threadpool.cpp:33] ThreadPool created, thread count 1, pool name WorkerImpl.schedule, cpu_binding false.
+I20261105 18:46:02.429939    59 threadpool.cpp:33] ThreadPool created, thread count 0, pool name LLMEngine.link, cpu_binding false.
+I20261105 18:46:02.430042    59 threadpool.cpp:33] ThreadPool created, thread count 16, pool name LLMEngine.forward_input, cpu_binding false.
+I20261105 18:46:08.546759  1942 threadpool.cpp:33] ThreadPool created, thread count 32, pool name HFModelLoader.load_weights, cpu_binding false.
+I20261105 18:46:08.549974  1942 tokenizer_factory.cpp:33] Create fast tokenizer.
+I20261105 18:46:13.865704 59 deepseek_v41.py:3486] DeepSeek-V4.1 vision tower enabled: layers=32 hidden=1024 heads=16 patch=14 downsample=3 out=5120
+I20261105 18:46:13.885160 59 csa2_attention.py:1257] DeepSeek-V4.1 CSA2 graph_token_capacity_granularity=2048 (derived from max_model_len=1048576)
+I20261105 18:46:14.077931  1942 worker_impl.cpp:2374] Temporarily setting ATen threads to 1 during weight loading, tp_world_size=8, prev_threads=2
+I20261105 18:46:14.078045  3432 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00001-of-00048.safetensors
+I20261105 18:46:14.078075  3533 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00014-of-00048.safetensors
+I20261105 18:46:14.078097  3548 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00016-of-00048.safetensors
+I20261105 18:46:14.078112  3555 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00017-of-00048.safetensors
+I20261105 18:46:14.078117  3564 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00018-of-00048.safetensors
+I20261105 18:46:14.078065  3499 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00010-of-00048.safetensors
+I20261105 18:46:14.078069  3508 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00011-of-00048.safetensors
+I20261105 18:46:14.078061  3485 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00008-of-00048.safetensors
+I20261105 18:46:14.078253  3597 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00022-of-00048.safetensors
+I20261105 18:46:14.078403  3644 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00028-of-00048.safetensors
+I20261105 18:46:14.078065  3470 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00006-of-00048.safetensors
+I20261105 18:46:14.078444  3672 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00032-of-00048.safetensors
+I20261105 18:46:14.078068  3515 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00012-of-00048.safetensors
+I20261105 18:46:14.078065  3492 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00009-of-00048.safetensors
+I20261105 18:46:14.078197  3589 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00021-of-00048.safetensors
+I20261105 18:46:14.078253  3604 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00023-of-00048.safetensors
+I20261105 18:46:14.078253  3581 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00020-of-00048.safetensors
+I20261105 18:46:14.078253  3611 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00024-of-00048.safetensors
+I20261105 18:46:14.078054  3463 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00005-of-00048.safetensors
+I20261105 18:46:14.078395  3621 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00025-of-00048.safetensors
+I20261105 18:46:14.078401  3637 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00027-of-00048.safetensors
+I20261105 18:46:14.078403  3629 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00026-of-00048.safetensors
+I20261105 18:46:14.078082  3525 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00013-of-00048.safetensors
+I20261105 18:46:14.078047  3446 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00003-of-00048.safetensors
+I20261105 18:46:14.078060  3478 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00007-of-00048.safetensors
+I20261105 18:46:14.078052  3454 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00004-of-00048.safetensors
+I20261105 18:46:14.078410  3651 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00029-of-00048.safetensors
+I20261105 18:46:14.078416  3660 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00030-of-00048.safetensors
+I20261105 18:46:14.078423  3668 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00031-of-00048.safetensors
+I20261105 18:46:14.078119  3574 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00019-of-00048.safetensors
+I20261105 18:46:14.078047  3439 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00002-of-00048.safetensors
+I20261105 18:46:14.078081  3539 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00015-of-00048.safetensors
+I20261105 18:46:14.079627  3432 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00033-of-00048.safetensors
+I20261105 18:46:14.111529  3485 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00040-of-00048.safetensors
+I20261105 18:46:14.111636  3548 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00048-of-00048.safetensors
+I20261105 18:46:14.111706  3499 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00042-of-00048.safetensors
+I20261105 18:46:14.111959  3539 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00047-of-00048.safetensors
+I20261105 18:46:14.111982  3446 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00035-of-00048.safetensors
+I20261105 18:46:14.112087  3525 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00045-of-00048.safetensors
+I20261105 18:46:14.112274  3508 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00043-of-00048.safetensors
+I20261105 18:46:14.112366  3478 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00039-of-00048.safetensors
+I20261105 18:46:14.112437  3470 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00038-of-00048.safetensors
+I20261105 18:46:14.112830  3463 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00037-of-00048.safetensors
+I20261105 18:46:14.113031  3454 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00036-of-00048.safetensors
+I20261105 18:46:14.113049  3515 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00044-of-00048.safetensors
+I20261105 18:46:14.113143  3533 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00046-of-00048.safetensors
+I20261105 18:46:14.113174  3492 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00041-of-00048.safetensors
+I20261105 18:46:14.121683  3439 hf_model_loader.cpp:626] Loading model weights from /work/artifacts/model_view_0909/model-00034-of-00048.safetensors
+I20261105 18:54:58.949286  1942 worker_impl.cpp:2391] Weight loading completed, restored ATen threads=1
+I20261105 18:55:03.526342  1942 kv_cache_transfer.cpp:594] Create Mooncake KVCacheTransfer.
+I20261105 18:55:03.526530  1942 threadpool.cpp:33] ThreadPool created, thread count 2, pool name KVCacheTransfer.async, cpu_binding false.
+I20261105 18:55:03.527185  1942 transfer_engine_impl.cpp:976] Metrics reporting is disabled (set MC_TE_METRIC=1 to enable)
+I20261105 18:55:03.527207  1942 transfer_engine_impl.cpp:115] Transfer Engine parseHostNameWithPort. server_name: 10.20.34.24 port: 21307
+I20261105 18:55:03.527242  1942 transfer_engine_impl.cpp:182] Transfer Engine RPC using P2P handshake, listening on 10.20.34.24:21478
+I20261105 18:55:03.527443  1942 transfer_engine_impl.cpp:263] Auto-discovering topology...
+I20261105 18:55:03.557408  1942 topology.cpp:127] Device mlx5_0 port 1 is available
+I20261105 18:55:03.569249  1942 topology.cpp:127] Device mlx5_1 port 1 is available
+I20261105 18:55:03.595944  1942 topology.cpp:127] Device mlx5_2 port 1 is available
+I20261105 18:55:03.601583  1942 topology.cpp:127] Device mlx5_3 port 1 is available
+I20261105 18:55:03.623780  1942 topology.cpp:127] Device mlx5_4 port 1 is available
+I20261105 18:55:03.627760  1942 topology.cpp:127] Device mlx5_5 port 1 is available
+I20261105 18:55:03.631747  1942 topology.cpp:127] Device mlx5_6 port 1 is available
+I20261105 18:55:03.651858  1942 topology.cpp:127] Device mlx5_9 port 1 is available
+I20261105 18:55:03.656270  1942 topology.cpp:127] Device mlx5_10 port 1 is available
+I20261105 18:55:03.679824  1942 topology.cpp:127] Device mlx5_11 port 1 is available
+I20261105 18:55:03.698433  1942 topology.cpp:127] Device mlx5_bond_0 port 1 is available
+I20261105 18:55:03.700846  1942 transfer_engine_impl.cpp:278] Topology discovery complete. Found 11 HCAs.
+I20261105 18:55:03.700861  1942 rdma_transport.cpp:76] [RDMA] Relaxed ordering disabled via MC_IB_PCI_RELAXED_ORDERING=0. Falling back to strict ordering.
+I20261105 18:55:03.700899  1942 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261105 18:55:03.705703  1942 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_10/ (network state: with network device)
+I20261105 18:55:03.706790  1942 rdma_context.cpp:288] RDMA device: mlx5_10, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:29:08:18
+I20261105 18:55:03.706811  1942 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261105 18:55:03.712137  1942 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_0/ (network state: with network device)
+I20261105 18:55:03.713376  1942 rdma_context.cpp:288] RDMA device: mlx5_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:64:03:18
+I20261105 18:55:03.713402  1942 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261105 18:55:03.740710  1942 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_1/ (network state: with network device)
+I20261105 18:55:03.741966  1942 rdma_context.cpp:288] RDMA device: mlx5_1, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:6e:03:18
+I20261105 18:55:03.741989  1942 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261105 18:55:03.746774  1942 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_2/ (network state: with network device)
+I20261105 18:55:03.747905  1942 rdma_context.cpp:288] RDMA device: mlx5_2, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:29:04:18
+I20261105 18:55:03.747925  1942 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261105 18:55:03.753072  1942 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_3/ (network state: with network device)
+I20261105 18:55:03.754161  1942 rdma_context.cpp:288] RDMA device: mlx5_3, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:29:06:18
+I20261105 18:55:03.754187  1942 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261105 18:55:03.758767  1942 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_4/ (network state: with network device)
+I20261105 18:55:03.760021  1942 rdma_context.cpp:288] RDMA device: mlx5_4, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:29:00:18
+I20261105 18:55:03.760043  1942 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261105 18:55:03.798803  1942 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_5/ (network state: with network device)
+I20261105 18:55:03.799888  1942 rdma_context.cpp:288] RDMA device: mlx5_5, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:29:02:18
+I20261105 18:55:03.799906  1942 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261105 18:55:03.804275  1942 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_6/ (network state: with network device)
+I20261105 18:55:03.805384  1942 rdma_context.cpp:288] RDMA device: mlx5_6, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:29:0c:18
+I20261105 18:55:03.805402  1942 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261105 18:55:03.832501  1942 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_9/ (network state: with network device)
+I20261105 18:55:03.833563  1942 rdma_context.cpp:288] RDMA device: mlx5_9, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:29:0e:18
+I20261105 18:55:03.833580  1942 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261105 18:55:03.837728  1942 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_11/ (network state: with network device)
+I20261105 18:55:03.838708  1942 rdma_context.cpp:288] RDMA device: mlx5_11, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:ac:29:0a:18
+I20261105 18:55:03.838722  1942 rdma_context.cpp:205] Using SIEVE endpoint store
+I20261105 18:55:03.842880  1942 rdma_context.cpp:1324] Find best gid index: 3 on mlx5_bond_0/ (network state: with network device)
+I20261105 18:55:03.843966  1942 rdma_context.cpp:288] RDMA device: mlx5_bond_0, LID: 0, GID: (GID_Index 3) 00:00:00:00:00:00:00:00:00:00:ff:ff:0a:14:22:18
+I20261105 18:55:03.844080  1942 transfer_engine_impl.cpp:393] installTransport, type=rdma
+I20261105 18:55:03.844085  1942 mooncake_transfer_engine.cpp:197] [Mooncake][PDTransferEngine] transfer engine init success, handshake_endpoint=10.20.34.24:21307
+I20261105 18:55:03.857759  1942 server.cpp:1200] Server[xllm::MooncakeTransferEngineService] is serving on port=21307.
+I20261105 18:55:03.857777  1942 server.cpp:1203] Check out http://xiaopang1105_dsv41_prefill_dev4_pd_dev4_dev7_v1:21307 in web browser.
+I20261105 18:55:03.857786  1942 mooncake_transfer_engine.cpp:217] [Mooncake][PDTransferEngine] ready, handshake_endpoint=10.20.34.24:21307, data_endpoint=10.20.34.24:21478
+I20261105 18:55:03.867036  1942 kv_cache.cpp:436] [DSV4][KVCacheInit] layer_crs: [0,0,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,2,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+I20261105 18:55:03.867059  1942 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_0 shapes: swa_cache=[8, 128, 1, 512]
+I20261105 18:55:03.867063  1942 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_1 shapes: key_cache=[2784, 128, 1, 512], index_cache=[2784, 128, 1, 128], indexer_cache_scale=[2784, 128, 1], swa_cache=[8, 128, 1, 512]
+I20261105 18:55:03.867066  1942 kv_cache.cpp:440] [DSV4][KVCacheInit] cr_2 shapes: key_cache=[1392, 128, 1, 512], index_cache=[1392, 128, 1, 128], indexer_cache_scale=[1392, 128, 1], swa_cache=[8, 128, 1, 512], compress_kv_state=[8, 32, 512], compress_score_state=[8, 32, 512]
+I20261105 18:55:04.041495  1942 mooncake_transfer_engine.cpp:758] register_memory success, total_buf_num=58
+I20261105 18:55:04.041517  1942 mooncake_kv_cache_transfer.cpp:721] register_kv_cache_impl success, registered_layers=40, buffers=58
+I20261105 18:55:05.093278  1777 mooncake_kv_cache_transfer.cpp:299] get_cache_info success, cluster_id=1738974439300682555, addr=10.20.34.24:21478
+W20261105 18:55:19.569051 59 csa2_attention.py:319] the fused partial rotary op is unavailable (device=musa dtype=torch.bfloat16 dim=3 inverse=False cache_dtype=torch.float32 op_registered=False); staying on the eager path
+W20261105 18:55:19.657135 59 deepseek_v41.py:1077] the fused hc_post op is unavailable (device=musa dtype=torch.bfloat16 x_dim=2 residual_dim=3 post_dtype=torch.float32 comb_dtype=torch.float32 hc_mult=4 op_registered=False); staying on the eager path
+W20261105 18:55:20.885710 59 csa2_attention.py:520] fused V4.1 compressor is inactive (not an NPU device); staying on the pure-torch pooling path
+W20261105 18:55:20.924626 59 csa2_attention.py:1099] the QLI v3 indexer path is inactive (quant_lightning_indexer_v2_va / quant_lightning_indexer_v2_metadata_va are not registered); staying on the pure-torch indexer
+I20261105 18:57:27.441078    59 llm_master.cpp:151] LLMMaster stopping...
+E20261105 18:57:27.441536    59 xllm_server_registry.cpp:55] Server CollectiveServer0 doesn't exist.
+I20261105 18:57:27.441550    59 server.cpp:1260] Server[xllm::WorkerService] is going to quit
+I20261105 18:57:27.441808    59 xllm_server_registry.cpp:38] Unregister server DistributeWorkerServer7.

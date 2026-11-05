@@ -1,0 +1,29 @@
+{
+  "status": "prepared_not_measured",
+  "encoder": "/work/artifacts/model_view_0909/encoding/encoding.py",
+  "encoder_sha256": "502bdaec8a3fd88ebc24c4721a7038fbe42f2063c664638127056107920035c1",
+  "tokenizer_sha256": "c90dfa01249db1be4245780a052ede752e1361c612ac6d08e2bdada7d599476b",
+  "thinking_mode": "chat",
+  "temperature": 0,
+  "top_p": 1,
+  "prefix_cache": false,
+  "concurrency": 1,
+  "warmup_each_shape": 1,
+  "measured_each_shape": 5,
+  "same_body_repeated": true,
+  "groups": [
+    {
+      "file": "input256_output256.jsonl",
+      "input_tokens": 256,
+      "requested_output_tokens": 256,
+      "sha256": "b67a3743d8d8fe166e7c27b1d17951dc1bbc50c64fe6a9ed8265544eb84dfabd"
+    },
+    {
+      "file": "input2048_output256.jsonl",
+      "input_tokens": 2048,
+      "requested_output_tokens": 256,
+      "sha256": "c19fbccf98247a9bc0940aa559647d81af8d7d8f193ef4f0626027bf2ef6e4a4"
+    }
+  ],
+  "validation_required": "native service usage and rendered prompt must match target; exactly 256 actual output tokens, not just requested max_tokens"
+}

@@ -1,0 +1,13 @@
+[
+  {
+    "id": 1,
+    "question": "只输出计算结果，不要解释：1.3 + 2.9 = ?",
+    "expected": "4.2",
+    "content": "4",
+    "reasoning_content": "",
+    "finish_reason": null,
+    "usage": null,
+    "elapsed_s": 39.417103396961465,
+    "passed": false
+  }
+]

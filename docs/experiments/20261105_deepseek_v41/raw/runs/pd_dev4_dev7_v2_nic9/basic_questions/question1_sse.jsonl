@@ -1,0 +1,14 @@
+{"elapsed_s": 10.195815667975694, "line": "data: {\"id\":\"chatcmpl-17449177176239738291-gnEWHxqLtSa8D64v7Enpw2\",\"object\":\"chat.completion.chunk\",\"created\":1793876862,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}]}"}
+{"elapsed_s": 10.195901837898418, "line": ""}
+{"elapsed_s": 10.195929625071585, "line": "data: {\"id\":\"chatcmpl-17449177176239738291-gnEWHxqLtSa8D64v7Enpw2\",\"object\":\"chat.completion.chunk\",\"created\":1793876862,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"4\"}}]}"}
+{"elapsed_s": 10.195961291901767, "line": ""}
+{"elapsed_s": 19.078429776942357, "line": "data: {\"id\":\"chatcmpl-17449177176239738291-gnEWHxqLtSa8D64v7Enpw2\",\"object\":\"chat.completion.chunk\",\"created\":1793876862,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\".\"}}]}"}
+{"elapsed_s": 19.07854500389658, "line": ""}
+{"elapsed_s": 20.103014033054933, "line": "data: {\"id\":\"chatcmpl-17449177176239738291-gnEWHxqLtSa8D64v7Enpw2\",\"object\":\"chat.completion.chunk\",\"created\":1793876862,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"2\"}}]}"}
+{"elapsed_s": 20.103121398948133, "line": ""}
+{"elapsed_s": 21.13149128598161, "line": "data: {\"id\":\"chatcmpl-17449177176239738291-gnEWHxqLtSa8D64v7Enpw2\",\"object\":\"chat.completion.chunk\",\"created\":1793876862,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}"}
+{"elapsed_s": 21.131602444918826, "line": ""}
+{"elapsed_s": 21.131643814966083, "line": "data: {\"id\":\"chatcmpl-17449177176239738291-gnEWHxqLtSa8D64v7Enpw2\",\"object\":\"chat.completion.chunk\",\"created\":1793876862,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[],\"usage\":{\"prompt_tokens\":21,\"completion_tokens\":4,\"total_tokens\":25,\"prompt_tokens_details\":{\"cached_tokens\":0}}}"}
+{"elapsed_s": 21.131672617048025, "line": ""}
+{"elapsed_s": 21.131688721012324, "line": "data: [DONE]"}
+{"elapsed_s": 21.131701322970912, "line": ""}

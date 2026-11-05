@@ -1,0 +1,47 @@
+{
+  "recorded_at": "2026-11-05T19:48:32.503969+08:00",
+  "run_id": "pd_dev4_dev7_v2_nic9",
+  "model_alias": "0909",
+  "model_original_path": "/data/nfs_shared/models/DeepSeek-V4.1-Flash",
+  "model_view_relative": "artifacts/model_view_0909",
+  "weight_source_manifest": "0909权重来源确认.json",
+  "weight_manifest_sha256": "6a0a483fcacc34e920a9168e32d1e44a10adf750baa89ec9289ad8c7df7771d0",
+  "repository": "https://github.com/fay85/xllm-musa",
+  "branch": "xiaopangDeepseeekV41Flash",
+  "base_commit": "0cfd82700e164e8aa7951064b652925dd6b24d18",
+  "tested_code_commit": "1a4a8a398962b2b8e500c99d81a5f03c7ac73924",
+  "binary_relative": "artifacts/bin/xllm",
+  "binary_sha256": "7265c5997a5877d548178a3c80522034e3aeac6e5d3358763878588bf8bbfbb9",
+  "image": "registry.mthreads.com/presale/devtech/xllm:1102-dev",
+  "image_digest": "sha256:0db0efa929d5711b1b78037eb66829b084e40f7d21871c702ba1328e0aa79c8a",
+  "image_id": "sha256:09b8f5f4a467fc73332dee57b36a2e5610ba3264357dfc87f103cf7bd7430be3",
+  "mate": "0.2.7",
+  "torch_musa": "2.9.1",
+  "evalscope": "1.14.1",
+  "python": "3.10",
+  "roles": {
+    "P": "dev4",
+    "D": "dev7"
+  },
+  "attention_TP_per_role": 8,
+  "expert_EP_per_role": 8,
+  "MoE_TP_per_role": 1,
+  "eager": true,
+  "graph": false,
+  "prefix_cache": false,
+  "MTP": false,
+  "tp_custom_allreduce": false,
+  "tp_ep_communication": "MCCL",
+  "PD_transfer": "Mooncake PULL",
+  "MC_TE_FILTERS": "mlx5_9",
+  "driver_versions": {
+    "dev4": "5.1.0-server",
+    "dev7": "5.2.0-server"
+  },
+  "limits": [
+    "MATE MegaMoE is not the serving expert implementation",
+    "Official block32 activation quantization is not reproduced",
+    "2 simple questions only; not general model accuracy",
+    "Final evidence commit may add documentation/deployment scripts; tested model/native sources remain the tested_code_commit"
+  ]
+}

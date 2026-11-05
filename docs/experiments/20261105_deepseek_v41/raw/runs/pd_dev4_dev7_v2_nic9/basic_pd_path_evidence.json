@@ -1,0 +1,168 @@
+{
+  "status": "PASS_BASIC_PD_PATH",
+  "at": "2026-11-05T19:09:42.648002+08:00",
+  "scope": "Two elementary questions, actual P prefill and D decode, eight successful receiver-rank pulls each; not broad model numerical acceptance",
+  "request_ids": [
+    "chatcmpl-17449177176239738291-gnEWHxqLtSa8D64v7Enpw2",
+    "chatcmpl-17449177176239738291-mVVnrzBHGxGV6ovq8NbPQ3"
+  ],
+  "prefill": "dev4",
+  "decode": "dev7",
+  "TP": 8,
+  "EP": 8,
+  "MoE_TP": 1,
+  "mode": "eager",
+  "rows": [
+    {
+      "host": "dev4",
+      "rank": 0,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 0,
+      "log_sha256": "d59b744e4de4417d057a24e18ac33fd3f24c7aac04aa5c366e697b55f5e9c074"
+    },
+    {
+      "host": "dev4",
+      "rank": 1,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 0,
+      "log_sha256": "db154244844da40b6a2ddfa0cc3009cf12c55eb76844b576bfe3408f5434b9ed"
+    },
+    {
+      "host": "dev4",
+      "rank": 2,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 0,
+      "log_sha256": "2b5988692c488ca106ac1c894e706c0d52b9c8520fc759d599ec475121aaa2c0"
+    },
+    {
+      "host": "dev4",
+      "rank": 3,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 0,
+      "log_sha256": "b9f235bbfc2340ca60a4bb94efaf47d987be7a85cdd7043d6353f8b99d17695a"
+    },
+    {
+      "host": "dev4",
+      "rank": 4,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 0,
+      "log_sha256": "7e596185b84f1b67927e169f2608d807a3c0604ba480f58f38b836ffadb559b8"
+    },
+    {
+      "host": "dev4",
+      "rank": 5,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 0,
+      "log_sha256": "274b7da166bdb909390b074a004dc989f17eddf884293c026ce11f7cdc708027"
+    },
+    {
+      "host": "dev4",
+      "rank": 6,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 0,
+      "log_sha256": "ceddb14b3d8ebf91d35d991291bc39b77ab179dff8630df507306b787bbff7a0"
+    },
+    {
+      "host": "dev4",
+      "rank": 7,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 0,
+      "log_sha256": "3a51d7cfe66e7a3be491811eca9a450932a6e77fe09ee29e5dd79a6fa84be1a8"
+    },
+    {
+      "host": "dev7",
+      "rank": 0,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 2,
+      "log_sha256": "97cedadfe40e450892ee07bfd32f2450640d18c87e0564fc4e74435ae04444bd"
+    },
+    {
+      "host": "dev7",
+      "rank": 1,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 2,
+      "log_sha256": "12c01ddcee1d327f95e7da143904528c07a6fab02791c023db2cb7e796911f2d"
+    },
+    {
+      "host": "dev7",
+      "rank": 2,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 2,
+      "log_sha256": "dc1f9358330ddc3039e146325f8e0a3322a5003befa45feef3ea217e8e2bd891"
+    },
+    {
+      "host": "dev7",
+      "rank": 3,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 2,
+      "log_sha256": "6c69d95544e61b4bd3257d74208b19825c7b4316c9dadabb02a5f16734912b0b"
+    },
+    {
+      "host": "dev7",
+      "rank": 4,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 2,
+      "log_sha256": "33ad88d0bd8c5b6883f54815783d6cb0ff80b3113816889285613c9f3c753299"
+    },
+    {
+      "host": "dev7",
+      "rank": 5,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 2,
+      "log_sha256": "bfea3eabcf88553745443ac9617c338b818813f6a8235d6b3c304522882abef1"
+    },
+    {
+      "host": "dev7",
+      "rank": 6,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 2,
+      "log_sha256": "097975ac8254a0edfed8a1cff1bce96feda90cce7d353d92483cc45537633384"
+    },
+    {
+      "host": "dev7",
+      "rank": 7,
+      "rdma_device": "mlx5_9",
+      "successful_58_region_pulls": 2,
+      "log_sha256": "5a3c8856de9725c8f43cba7a77564193ada946f04c94d5405024ae7fbb8c8c62"
+    }
+  ],
+  "questions": [
+    {
+      "id": 1,
+      "question": "只输出计算结果，不要解释：1.3 + 2.9 = ?",
+      "expected": "4.2",
+      "content": "4.2",
+      "reasoning_content": "",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 21,
+        "completion_tokens": 4,
+        "total_tokens": 25,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "elapsed_s": 21.13538961089216,
+      "passed": true
+    },
+    {
+      "id": 2,
+      "question": "只输出计算结果，不要解释：7 × 8 = ?",
+      "expected": "56",
+      "content": "56",
+      "reasoning_content": "",
+      "finish_reason": "stop",
+      "usage": {
+        "prompt_tokens": 17,
+        "completion_tokens": 2,
+        "total_tokens": 19,
+        "prompt_tokens_details": {
+          "cached_tokens": 0
+        }
+      },
+      "elapsed_s": 3.9753965369891375,
+      "passed": true
+    }
+  ],
+  "binary_sha256": "7265c5997a5877d548178a3c80522034e3aeac6e5d3358763878588bf8bbfbb9"
+}

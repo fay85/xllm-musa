@@ -20,7 +20,7 @@ for index,question,expected in [(1,'只输出计算结果，不要解释：1.3 +
     delta=choice.get('delta',{});parts.append(delta.get('content') or '');reasoning.append(delta.get('reasoning_content') or '')
     if choice.get('finish_reason'):finish=choice['finish_reason']
  content=''.join(parts).strip()
- try:passed=decimal.Decimal(content)==expected and finish!='length'
+ try:passed=(decimal.Decimal(content)==expected and finish=='stop' and isinstance(usage,dict) and usage.get('prompt_tokens',0)>0 and usage.get('completion_tokens',0)>0)
  except decimal.InvalidOperation:passed=False
  results.append({'id':index,'question':question,'expected':str(expected),'content':content,'reasoning_content':''.join(reasoning),'finish_reason':finish,'usage':usage,'elapsed_s':time.perf_counter()-start,'passed':passed})
  (args.output/'answers.json').write_text(json.dumps(results,ensure_ascii=False,indent=2))

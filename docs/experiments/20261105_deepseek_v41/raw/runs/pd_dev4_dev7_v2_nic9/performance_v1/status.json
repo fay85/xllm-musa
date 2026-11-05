@@ -1,0 +1,11 @@
+[
+  {
+    "input_tokens": 256,
+    "requested_output_tokens": 256,
+    "phase": "warmup",
+    "count": 1,
+    "started_at": "2026-11-05T19:09:48.766936+08:00",
+    "finished_at": "2026-11-05T19:09:54.842624+08:00",
+    "exit_code": 1
+  }
+]

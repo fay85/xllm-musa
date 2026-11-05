@@ -1,0 +1,14 @@
+{
+  "at": "2026-11-05T20:08:10.037124+08:00",
+  "method": "one normal TERM via own supervisor stop.request",
+  "requests": [
+    {
+      "host": "dev4",
+      "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/runs/pd_dev4_dev7_v2_nic9/dev4/stop.request"
+    },
+    {
+      "host": "dev7",
+      "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261105\u8dd1\u901aPD\u5206\u79bb/runs/pd_dev4_dev7_v2_nic9/dev7/stop.request"
+    }
+  ]
+}

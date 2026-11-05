@@ -1,0 +1,330 @@
+2026-11-05 19:43:45 - evalscope - [32mINFO[0m: Save the result to: /work/runs/pd_dev4_dev7_v2_nic9/performance_v2/input2048_output256/measured/deepseek-v4.1-flash-0909[0m
+Running[perf]:   0%|          | 0/1 [00:00<?, ?it/s]                                                    2026-11-05 19:43:45 - evalscope - [32mINFO[0m: Starting benchmark with args: [0m
+Running[perf]:   0%|          | 0/1 [00:00<?, ?it/s]                                                    2026-11-05 19:43:45 - evalscope - [32mINFO[0m: {
+    "model": "deepseek-v4.1-flash-0909",
+    "model_id": "deepseek-v4.1-flash-0909",
+    "attn_implementation": null,
+    "api": "openai",
+    "tokenizer_path": "/work/artifacts/model_view_0909",
+    "port": 8877,
+    "url": "10.20.34.28:29080",
+    "headers": {},
+    "connect_timeout": 20,
+    "read_timeout": 1800,
+    "total_timeout": 3600,
+    "api_key": null,
+    "no_test_connection": true,
+    "scenario": null,
+    "number": 5,
+    "parallel": 1,
+    "rate": -1.0,
+    "warmup_num": 0.0,
+    "enable_pd_metrics": false,
+    "open_loop": false,
+    "sleep_interval": 5,
+    "duration": null,
+    "sla_auto_tune": false,
+    "sla_variable": "parallel",
+    "sla_params": null,
+    "sla_num_runs": 3,
+    "sla_upper_bound": 65536,
+    "sla_lower_bound": 1,
+    "sla_fixed_parallel": null,
+    "sla_number_multiplier": null,
+    "db_commit_interval": 1,
+    "queue_size_multiplier": 5,
+    "in_flight_task_multiplier": 2,
+    "num_workers": 1,
+    "log_every_n_query": 1,
+    "debug": false,
+    "enable_progress_tracker": false,
+    "visualizer": null,
+    "wandb_api_key": null,
+    "swanlab_api_key": null,
+    "swanlab_host": null,
+    "name": null,
+    "alias": null,
+    "outputs_dir": "/work/runs/pd_dev4_dev7_v2_nic9/performance_v2/input2048_output256/measured/deepseek-v4.1-flash-0909",
+    "no_timestamp": true,
+    "max_prompt_length": 131072,
+    "min_prompt_length": 0,
+    "prefix_length": 0,
+    "prefix_count": 1,
+    "prompt": null,
+    "query_template": null,
+    "apply_chat_template": true,
+    "image_width": 224,
+    "image_height": 224,
+    "image_format": "RGB",
+    "image_num": 1,
+    "image_patch_size": 28,
+    "dataset": "line_by_line",
+    "dataset_path": "/work/artifacts/benchmark_inputs_v1/input2048_output256.jsonl",
+    "data_source": null,
+    "dataset_offset": 0,
+    "dataset_args": null,
+    "frequency_penalty": null,
+    "repetition_penalty": null,
+    "logprobs": null,
+    "max_tokens": 2048,
+    "min_tokens": null,
+    "n_choices": null,
+    "seed": null,
+    "stop": null,
+    "stop_token_ids": null,
+    "stream": true,
+    "temperature": 0.0,
+    "top_p": null,
+    "top_k": null,
+    "extra_args": {},
+    "tokenize_prompt": false,
+    "multi_turn": false,
+    "min_turns": 1,
+    "max_turns": null,
+    "multi_turn_args": null
+}[0m
+Running[perf]:   0%|          | 0/1 [00:00<?, ?it/s]                                                    2026-11-05 19:43:45 - evalscope - [32mINFO[0m: uvloop event loop policy installed (asyncio.sleep precision improved)[0m
+Running[perf]:   0%|          | 0/1 [00:00<?, ?it/s]/usr/local/lib/python3.10/dist-packages/torch_musa/core/device.py:134: UserWarning: MUSA initialization: MUSA driver initialization failed, you might not have a Mthreads GPU. (Triggered internally at /home/torch_musa/torch_musa/csrc/core/MUSAFunctions.cpp:93.)
+  return torch_musa._MUSAC._musa_getDeviceCount() > 0
+No MUSA runtime is found, using MUSA_HOME='/usr/local/musa'
+
+Generating[requests]:   0%|          | 0/5 [00:00<?, ?it/s][A                                                    
+                                                           [A2026-11-05 19:43:51 - evalscope - [32mINFO[0m: Generating[requests]  80%| 4/5 [Elapsed: 00:00 < Remaining: 00:00, 7770.83it/s][0m
+Running[perf]:   0%|          | 0/1 [00:06<?, ?it/s]
+Generating[requests]:  80%|████████  | 4/5 [00:00<00:00, 3731.59it/s][AGenerating[requests]:  80%|████████  | 4/5 [00:00<00:00, 3356.11it/s]
+                                                    2026-11-05 19:43:51 - evalscope - [32mINFO[0m: Save the data base to: /work/runs/pd_dev4_dev7_v2_nic9/performance_v2/input2048_output256/measured/deepseek-v4.1-flash-0909/parallel_1_number_5/benchmark_data.db[0m
+Running[perf]:   0%|          | 0/1 [00:06<?, ?it/s]
+Processing[parallel_1_number_5]:   0%|          | 0/5 [00:00<?, ?it/s][A                                                    
+                                                                      [A2026-11-05 19:48:31 - evalscope - [32mINFO[0m: {
+  "Test Duration (s)": 280.0239,
+  "Concurrency": 1,
+  "Request Rate (req/s)": -1.0,
+  "Total Requests": 1,
+  "Success Requests": 1,
+  "Failed Requests": 0,
+  "Stream Requests": 1,
+  "Non-Stream Requests": 0,
+  "Req Throughput (req/s)": 0.0036,
+  "Avg Latency (s)": 280.0239,
+  "Avg Input Tokens": 2048.0,
+  "Output Throughput (tok/s)": 0.9142,
+  "Total Throughput (tok/s)": 8.2279,
+  "Avg TTFT (ms)": 29007.18,
+  "Avg TPOT (ms)": 984.38,
+  "Avg ITL (ms)": 984.38,
+  "Avg Output Tokens": 256.0,
+  "KV Cache Hit Rate (%)": 0.0
+}[0m
+Running[perf]:   0%|          | 0/1 [04:46<?, ?it/s]
+Processing[parallel_1_number_5]:   0%|          | 0/5 [04:40<?, ?it/s][A
+Processing[parallel_1_number_5]:  20%|██        | 1/5 [04:40<18:40, 280.03s/it][A                                                    
+                                                                               [A2026-11-05 19:48:31 - evalscope - [32mINFO[0m: Processing[parallel_1_number_5]  20%| 1/5 [Elapsed: 04:40 < Remaining: 18:40, 280.03s/it][0m
+Running[perf]:   0%|          | 0/1 [04:46<?, ?it/s]
+Processing[parallel_1_number_5]:  20%|██        | 1/5 [04:40<18:40, 280.03s/it][A                                                    
+                                                                               [A2026-11-05 19:53:10 - evalscope - [32mINFO[0m: {
+  "Test Duration (s)": 558.8056,
+  "Concurrency": 1,
+  "Request Rate (req/s)": -1.0,
+  "Total Requests": 2,
+  "Success Requests": 2,
+  "Failed Requests": 0,
+  "Stream Requests": 2,
+  "Non-Stream Requests": 0,
+  "Req Throughput (req/s)": 0.0036,
+  "Avg Latency (s)": 279.4027,
+  "Avg Input Tokens": 2048.0,
+  "Output Throughput (tok/s)": 0.9162,
+  "Total Throughput (tok/s)": 8.2462,
+  "Avg TTFT (ms)": 29104.66,
+  "Avg TPOT (ms)": 981.56,
+  "Avg ITL (ms)": 981.56,
+  "Avg Output Tokens": 256.0,
+  "KV Cache Hit Rate (%)": 0.0
+}[0m
+Running[perf]:   0%|          | 0/1 [09:24<?, ?it/s]
+Processing[parallel_1_number_5]:  20%|██        | 1/5 [09:18<18:40, 280.03s/it][A
+Processing[parallel_1_number_5]:  40%|████      | 2/5 [09:18<13:57, 279.29s/it][A                                                    
+                                                                               [A2026-11-05 19:53:10 - evalscope - [32mINFO[0m: Processing[parallel_1_number_5]  40%| 2/5 [Elapsed: 09:18 < Remaining: 13:57, 279.29s/it][0m
+Running[perf]:   0%|          | 0/1 [09:24<?, ?it/s]
+Processing[parallel_1_number_5]:  40%|████      | 2/5 [09:18<13:57, 279.29s/it][A                                                    
+                                                                               [A2026-11-05 19:57:49 - evalscope - [32mINFO[0m: {
+  "Test Duration (s)": 838.2786,
+  "Concurrency": 1,
+  "Request Rate (req/s)": -1.0,
+  "Total Requests": 3,
+  "Success Requests": 3,
+  "Failed Requests": 0,
+  "Stream Requests": 3,
+  "Non-Stream Requests": 0,
+  "Req Throughput (req/s)": 0.0036,
+  "Avg Latency (s)": 279.426,
+  "Avg Input Tokens": 2048.0,
+  "Output Throughput (tok/s)": 0.9162,
+  "Total Throughput (tok/s)": 8.2455,
+  "Avg TTFT (ms)": 29148.27,
+  "Avg TPOT (ms)": 981.48,
+  "Avg ITL (ms)": 981.48,
+  "Avg Output Tokens": 256.0,
+  "KV Cache Hit Rate (%)": 0.0
+}[0m
+Running[perf]:   0%|          | 0/1 [14:04<?, ?it/s]
+Processing[parallel_1_number_5]:  40%|████      | 2/5 [13:58<13:57, 279.29s/it][A
+Processing[parallel_1_number_5]:  60%|██████    | 3/5 [13:58<09:18, 279.38s/it][A                                                    
+                                                                               [A2026-11-05 19:57:49 - evalscope - [32mINFO[0m: Processing[parallel_1_number_5]  60%| 3/5 [Elapsed: 13:58 < Remaining: 09:18, 279.38s/it][0m
+Running[perf]:   0%|          | 0/1 [14:04<?, ?it/s]
+Processing[parallel_1_number_5]:  60%|██████    | 3/5 [13:58<09:18, 279.38s/it][A                                                    
+                                                                               [A2026-11-05 20:02:29 - evalscope - [32mINFO[0m: {
+  "Test Duration (s)": 1118.5398,
+  "Concurrency": 1,
+  "Request Rate (req/s)": -1.0,
+  "Total Requests": 4,
+  "Success Requests": 4,
+  "Failed Requests": 0,
+  "Stream Requests": 4,
+  "Non-Stream Requests": 0,
+  "Req Throughput (req/s)": 0.0036,
+  "Avg Latency (s)": 279.6347,
+  "Avg Input Tokens": 2048.0,
+  "Output Throughput (tok/s)": 0.9155,
+  "Total Throughput (tok/s)": 8.2393,
+  "Avg TTFT (ms)": 29205.54,
+  "Avg TPOT (ms)": 982.08,
+  "Avg ITL (ms)": 982.07,
+  "Avg Output Tokens": 256.0,
+  "KV Cache Hit Rate (%)": 0.0
+}[0m
+Running[perf]:   0%|          | 0/1 [18:44<?, ?it/s]
+Processing[parallel_1_number_5]:  60%|██████    | 3/5 [18:38<09:18, 279.38s/it][A
+Processing[parallel_1_number_5]:  80%|████████  | 4/5 [18:38<04:39, 279.73s/it][A                                                    
+                                                                               [A2026-11-05 20:02:29 - evalscope - [32mINFO[0m: Processing[parallel_1_number_5]  80%| 4/5 [Elapsed: 18:38 < Remaining: 04:39, 279.73s/it][0m
+Running[perf]:   0%|          | 0/1 [18:44<?, ?it/s]
+Processing[parallel_1_number_5]:  80%|████████  | 4/5 [18:38<04:39, 279.73s/it][A                                                    
+                                                                               [A2026-11-05 20:07:09 - evalscope - [32mINFO[0m: {
+  "Test Duration (s)": 1398.1628,
+  "Concurrency": 1,
+  "Request Rate (req/s)": -1.0,
+  "Total Requests": 5,
+  "Success Requests": 5,
+  "Failed Requests": 0,
+  "Stream Requests": 5,
+  "Non-Stream Requests": 0,
+  "Req Throughput (req/s)": 0.0036,
+  "Avg Latency (s)": 279.6323,
+  "Avg Input Tokens": 2048.0,
+  "Output Throughput (tok/s)": 0.9155,
+  "Total Throughput (tok/s)": 8.2394,
+  "Avg TTFT (ms)": 29254.91,
+  "Avg TPOT (ms)": 981.87,
+  "Avg ITL (ms)": 981.87,
+  "Avg Output Tokens": 256.0,
+  "KV Cache Hit Rate (%)": 0.0
+}[0m
+Running[perf]:   0%|          | 0/1 [23:24<?, ?it/s]
+Processing[parallel_1_number_5]:  80%|████████  | 4/5 [23:18<04:39, 279.73s/it][A
+Processing[parallel_1_number_5]: 100%|██████████| 5/5 [23:18<00:00, 279.69s/it][A                                                    
+                                                                               [A2026-11-05 20:07:09 - evalscope - [32mINFO[0m: Processing[parallel_1_number_5] 100%| 5/5 [Elapsed: 23:18 < Remaining: 00:00, 279.69s/it][0m
+Running[perf]:   0%|          | 0/1 [23:24<?, ?it/s]
+Processing[parallel_1_number_5]: 100%|██████████| 5/5 [23:18<00:00, 279.69s/it][AProcessing[parallel_1_number_5]: 100%|██████████| 5/5 [23:18<00:00, 279.65s/it]
+                                                    2026-11-05 20:07:09 - evalscope - [32mINFO[0m: 
+Benchmarking summary:
+┌───────────────────────────┬───────────┐
+│ Metric                    │     Value │
+├───────────────────────────┼───────────┤
+│ ── General ──             │           │
+│ Test Duration (s)         │   1398.16 │
+│ Concurrency               │         1 │
+│ Request Rate (req/s)      │        -1 │
+│ Total / Success / Failed  │ 5 / 5 / 0 │
+│ Req Throughput (req/s)    │         0 │
+│ ── Latency ──             │           │
+│ Avg Latency (s)           │   279.632 │
+│ Avg TTFT (ms)             │  29254.91 │
+│ Avg TPOT (ms)             │    981.87 │
+│ Avg ITL (ms)              │    981.87 │
+│ ── Tokens ──              │           │
+│ Avg Input Tokens          │      2048 │
+│ Avg Output Tokens         │       256 │
+│ Output Throughput (tok/s) │      0.92 │
+│ Total Throughput (tok/s)  │      8.24 │
+│ ── Multi-turn ──          │           │
+│ KV Cache Hit Rate (%)     │         0 │
+└───────────────────────────┴───────────┘[0m
+Running[perf]:   0%|          | 0/1 [23:24<?, ?it/s]                                                    2026-11-05 20:07:09 - evalscope - [32mINFO[0m: 
+Percentile results:
+┌────────────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+│ Metric         │      min │       1% │       5% │      10% │      25% │      50% │      75% │      90% │      95% │      99% │      max │
+├────────────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
+│ Latency (s)    │  278.781 │  278.781 │  278.781 │  278.781 │  279.473 │  279.623 │  280.024 │  280.261 │  280.261 │  280.261 │  280.261 │
+│ TTFT (ms)      │ 29007.18 │ 29007.18 │ 29007.18 │ 29007.18 │ 29202.15 │ 29235.49 │ 29377.34 │ 29452.39 │ 29452.39 │ 29452.39 │ 29452.39 │
+│ ITL (ms)       │   920.54 │   929.19 │   944.21 │   951.86 │   964.37 │   981.63 │   997.43 │   1013.1 │  1023.24 │  1042.96 │  1060.97 │
+│ TPOT (ms)      │   978.74 │   978.74 │   978.74 │   978.74 │   981.06 │   981.32 │   983.86 │   984.38 │   984.38 │   984.38 │   984.38 │
+│ Input tokens   │     2048 │     2048 │     2048 │     2048 │     2048 │     2048 │     2048 │     2048 │     2048 │     2048 │     2048 │
+│ Output tokens  │      256 │      256 │      256 │      256 │      256 │      256 │      256 │      256 │      256 │      256 │      256 │
+│ Output (tok/s) │     0.91 │     0.91 │     0.91 │     0.91 │     0.91 │     0.92 │     0.92 │     0.92 │     0.92 │     0.92 │     0.92 │
+│ Total (tok/s)  │     8.22 │     8.22 │     8.22 │     8.22 │     8.23 │     8.24 │     8.24 │     8.26 │     8.26 │     8.26 │     8.26 │
+│ Decode (tok/s) │     1.02 │     1.02 │     1.02 │     1.02 │     1.02 │     1.02 │     1.02 │     1.02 │     1.02 │     1.02 │     1.02 │
+└────────────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┴──────────┘[0m
+Running[perf]:   0%|          | 0/1 [23:24<?, ?it/s]                                                    2026-11-05 20:07:09 - evalscope - [32mINFO[0m: 
+Workload throughput (5 samples):
+┌─────────────────────┬───────────┬────────────┬─────────────────────┐
+│ Metric (tok/s)      │   Overall │   Last 30s │   Steady (drop 20%) │
+├─────────────────────┼───────────┼────────────┼─────────────────────┤
+│ Total Prompt tok/s  │      7.32 │       7.32 │                7.33 │
+│ New Prompt tok/s    │      7.32 │       7.32 │                7.33 │
+│ Cached Prompt tok/s │         0 │          0 │                   0 │
+│ Completion tok/s    │      0.92 │       0.92 │                0.92 │
+└─────────────────────┴───────────┴────────────┴─────────────────────┘[0m
+Running[perf]:   0%|          | 0/1 [23:24<?, ?it/s]                                                    2026-11-05 20:07:09 - evalscope - [32mINFO[0m: Save the summary to: /work/runs/pd_dev4_dev7_v2_nic9/performance_v2/input2048_output256/measured/deepseek-v4.1-flash-0909/parallel_1_number_5[0m
+Running[perf]:   0%|          | 0/1 [23:24<?, ?it/s]Running[perf]: 100%|██████████| 1/1 [23:24<00:00, 1404.38s/it]                                                              2026-11-05 20:07:09 - evalscope - [32mINFO[0m: Running[perf] 100%| 1/1 [Elapsed: 23:24 < Remaining: 00:00, 1404.38s/it][0m
+Running[perf]: 100%|██████████| 1/1 [23:24<00:00, 1404.38s/it]Running[perf]: 100%|██████████| 1/1 [23:24<00:00, 1404.38s/it]
+╭──────────────────────────────────────────────────────────────────────────────╮
+│ Performance Test Summary Report                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+
+Basic Information:
+┌───────────────────────┬──────────────────────────────────────────────────────┐
+│ Model                 │ deepseek-v4.1-flash-0909                             │
+│ Test Dataset          │ line_by_line                                         │
+│ API Type              │ openai                                               │
+│ Endpoint              │ 10.20.34.28:29080                                    │
+│ Total Generated       │ 1,280.0 tokens                                       │
+│ Avg Output Rate       │ 0.92 tok/s                                           │
+│ Total Test Time       │ 1398.16 s                                            │
+│ Output Path           │ /work/runs/pd_dev4_dev7_v2_nic9/performance_v2/inpu… │
+└───────────────────────┴──────────────────────────────────────────────────────┘
+
+
+            Performance Overview            
+┏━━━━━━┳━━━━━━┳━━━━━┳━━━━━┳━━━━━━━┳━━━━━━━━┓
+┃Conc. ┃ Rate ┃ Num ┃ RPS ┃ Gen/s ┃ Success┃
+┡━━━━━━╇━━━━━━╇━━━━━╇━━━━━╇━━━━━━━╇━━━━━━━━┩
+│    1 │    - │   5 │   0 │  0.92 │    100%│
+└──────┴──────┴─────┴─────┴───────┴────────┘
+
+
+                           Per-Request Metrics                            
+┏━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┓
+┃Conc. ┃ Rate ┃ Metric        ┃      avg ┃      p50 ┃      p99 ┃      max┃
+┡━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━┩
+│    1 │    - │ Latency (s)   │  279.632 │  279.623 │  280.261 │  280.261│
+│      │      │ TTFT (ms)     │ 29254.91 │ 29235.49 │ 29452.39 │ 29452.39│
+│      │      │ TPOT (ms)     │   981.87 │   981.32 │   984.38 │   984.38│
+│      │      │ Input Tokens  │     2048 │     2048 │     2048 │     2048│
+│      │      │ Output Tokens │      256 │      256 │      256 │      256│
+│      │      │ Cache Hit (%) │       0% │        - │        - │        -│
+│      │      │ Decode toks/s │     1.02 │        - │        - │        -│
+└──────┴──────┴───────────────┴──────────┴──────────┴──────────┴─────────┘
+
+
+                             Workload Throughput                             
+┏━━━━━━┳━━━━━━┳━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
+┃Conc. ┃ Rate ┃ Metric (tok/s)      ┃ Overall ┃ Last 30s ┃ Steady (drop 20%)┃
+┡━━━━━━╇━━━━━━╇━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━┩
+│    1 │    - │ Total Prompt tok/s  │    7.32 │     7.32 │              7.33│
+│      │      │ New Prompt tok/s    │    7.32 │     7.32 │              7.33│
+│      │      │ Cached Prompt tok/s │       0 │        0 │                 0│
+│      │      │ Completion tok/s    │    0.92 │     0.92 │              0.92│
+└──────┴──────┴─────────────────────┴─────────┴──────────┴──────────────────┘
+2026-11-05 20:07:09 - evalscope - [32mINFO[0m: Performance summary saved to: /work/runs/pd_dev4_dev7_v2_nic9/performance_v2/input2048_output256/measured/deepseek-v4.1-flash-0909/performance_summary.txt[0m
+2026-11-05 20:07:10 - evalscope - [32mINFO[0m: HTML report generated: /work/runs/pd_dev4_dev7_v2_nic9/performance_v2/input2048_output256/measured/deepseek-v4.1-flash-0909/perf_report.html[0m
+CreatePlatform failed!

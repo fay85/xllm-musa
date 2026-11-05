@@ -1,0 +1,165 @@
+{
+  "version": "1",
+  "pip_version": "26.0.1",
+  "install": [
+    {
+      "download_info": {
+        "url": "file:///work/scripts/benchmark_perf_wheels/sse_starlette-3.5.1-py3-none-any.whl",
+        "archive_info": {
+          "hash": "sha256=a6cdcfec47b952911b1d99a7b8056429b5984039b875bf6575174220364b551f",
+          "hashes": {
+            "sha256": "a6cdcfec47b952911b1d99a7b8056429b5984039b875bf6575174220364b551f"
+          }
+        }
+      },
+      "is_direct": true,
+      "is_yanked": false,
+      "requested": true,
+      "metadata": {
+        "metadata_version": "2.4",
+        "name": "sse-starlette",
+        "version": "3.5.1",
+        "dynamic": [
+          "license-file"
+        ],
+        "summary": "SSE plugin for Starlette",
+        "description_content_type": "text/markdown",
+        "author_email": "sysid <sysid@gmx.de>",
+        "license_expression": "BSD-3-Clause",
+        "license_file": [
+          "LICENSE",
+          "AUTHORS"
+        ],
+        "classifier": [
+          "Development Status :: 5 - Production/Stable",
+          "Environment :: Web Environment",
+          "Intended Audience :: Developers",
+          "Operating System :: OS Independent",
+          "Programming Language :: Python :: 3",
+          "Programming Language :: Python :: 3.10",
+          "Programming Language :: Python :: 3.11",
+          "Programming Language :: Python :: 3.12",
+          "Programming Language :: Python :: 3.13",
+          "Topic :: Internet :: WWW/HTTP"
+        ],
+        "requires_dist": [
+          "starlette>=0.49.1",
+          "anyio>=4.7.0",
+          "uvicorn>=0.34.0; extra == \"examples\"",
+          "fastapi>=0.115.12; extra == \"examples\"",
+          "pydantic>=2; extra == \"examples\"",
+          "sqlalchemy[asyncio]>=2.0.41; extra == \"examples-db\"",
+          "aiosqlite>=0.21.0; extra == \"examples-db\"",
+          "uvicorn>=0.34.0; extra == \"uvicorn\"",
+          "granian>=2.3.1; extra == \"granian\"",
+          "daphne>=4.2.0; extra == \"daphne\""
+        ],
+        "requires_python": ">=3.10",
+        "project_url": [
+          "Homepage, https://github.com/sysid/sse-starlette",
+          "Repository, https://github.com/sysid/sse-starlette",
+          "Issues, https://github.com/sysid/sse-starlette/issues",
+          "Source, https://github.com/sysid/sse-starlette"
+        ],
+        "provides_extra": [
+          "examples",
+          "examples-db",
+          "uvicorn",
+          "granian",
+          "daphne"
+        ],
+        "description": "# Server-Sent Events for [Starlette](https://github.com/encode/starlette) and [FastAPI](https://fastapi.tiangolo.com/)\n\n[![Downloads](https://static.pepy.tech/badge/sse-starlette/week)](https://pepy.tech/project/sse-starlette)\n[![PyPI Version][pypi-image]][pypi-url]\n[![Build Status][build-image]][build-url]\n\n> Background: https://sysid.github.io/server-sent-events/\n\nProduction ready Server-Sent Events implementation for Starlette and FastAPI following the [W3C SSE specification](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events).\n\n## Installation\n\n```bash\npip install sse-starlette\nuv add sse-starlette\n\n# To run the examples (fastapi, uvicorn, pydantic)\nuv add sse-starlette[examples]\n\n# Example 03 also needs the DB extras (sqlalchemy, aiosqlite)\nuv add sse-starlette[examples,examples-db]\n\n# Recommended ASGI server\nuv add sse-starlette[uvicorn,granian,daphne]\n```\n\n## Quick Start\n\n```python\nimport asyncio\nfrom starlette.applications import Starlette\nfrom starlette.routing import Route\nfrom sse_starlette import EventSourceResponse\n\nasync def generate_events():\n    for i in range(10):\n        yield {\"data\": f\"Event {i}\"}\n        await asyncio.sleep(1)\n\nasync def sse_endpoint(request):\n    return EventSourceResponse(generate_events())\n\napp = Starlette(routes=[Route(\"/events\", sse_endpoint)])\n```\n\n## Core Features\n\n- **Standards Compliant**: Full SSE specification implementation\n- **Framework Integration**: Native Starlette and FastAPI support\n- **Async/Await**: Built on modern Python async patterns\n- **Connection Management**: Automatic client disconnect detection\n- **Graceful Shutdown**: Proper cleanup on server termination with cooperative shutdown support\n- **Thread Safety**: Context-local event management for multi-threaded applications\n- **Multi-Loop Support**: Works correctly with multiple asyncio event loops\n\nFor a detailed look at the internal task coordination, shutdown detection, and cancellation\nflows, see [ARCHITECTURE.md](ARCHITECTURE.md).\n\n## Key Components\n\n### EventSourceResponse\n\nThe main response class that handles SSE streaming:\n\n```python\nfrom sse_starlette import EventSourceResponse\n\n# Basic usage\nasync def stream_data():\n    for item in data:\n        yield {\"data\": item, \"event\": \"update\", \"id\": str(item.id)}\n\nreturn EventSourceResponse(stream_data())\n```\n\n### ServerSentEvent\n\nFor structured event creation:\n\n```python\nfrom sse_starlette import ServerSentEvent\n\nevent = ServerSentEvent(\n    data=\"Custom message\",\n    event=\"notification\", \n    id=\"msg-123\",\n    retry=5000\n)\n```\n\n### JSONServerSentEvent\n\nFor an easy way to send json data as SSE events:\n\n```python\nfrom sse_starlette import JSONServerSentEvent\n\nevent = JSONServerSentEvent(\n    data={\"field\":\"value\"}, # Anything serializable with json.dumps\n)\n```\n\n## Advanced Usage\n\n### Custom Ping Configuration\n\n```python\nfrom sse_starlette import ServerSentEvent\n\ndef custom_ping():\n    return ServerSentEvent(comment=\"Custom ping message\")\n\nreturn EventSourceResponse(\n    generate_events(),\n    ping=10,  # Ping every 10 seconds\n    ping_message_factory=custom_ping\n)\n```\n\n### Multi-Threaded Usage\n\nsse-starlette now supports usage in multi-threaded applications and with multiple asyncio event loops:\n\n```python\nimport threading\nimport asyncio\nfrom sse_starlette import EventSourceResponse\n\ndef run_sse_in_thread():\n    \"\"\"SSE streaming works correctly in separate threads\"\"\"\n    loop = asyncio.new_event_loop()\n    asyncio.set_event_loop(loop)\n    \n    async def thread_events():\n        for i in range(5):\n            yield {\"data\": f\"Thread event {i}\"}\n            await asyncio.sleep(1)\n    \n    # This works without \"Event bound to different loop\" errors\n    response = EventSourceResponse(thread_events())\n    loop.close()\n\n# Start SSE in multiple threads\nfor i in range(3):\n    thread = threading.Thread(target=run_sse_in_thread)\n    thread.start()\n```\n\n### Database Streaming (Thread-Safe)\n\n```python\nasync def stream_database_results(request):\n    # CORRECT: Create session within generator context\n    async with AsyncSession() as session:\n        results = await session.execute(select(User))\n        for row in results:\n            if await request.is_disconnected():\n                break\n            yield {\"data\": row.name, \"id\": str(row.id)}\n\nreturn EventSourceResponse(stream_database_results(request))\n```\n\n### Error Handling and Timeouts\n\n```python\nasync def robust_stream(request):\n    try:\n        for i in range(100):\n            if await request.is_disconnected():\n                break\n            yield {\"data\": f\"Item {i}\"}\n            await asyncio.sleep(0.5)\n    except asyncio.CancelledError:\n        # Client disconnected - perform cleanup\n        raise\n\nreturn EventSourceResponse(\n    robust_stream(request),\n    send_timeout=30,  # Timeout hanging sends\n    headers={\"Cache-Control\": \"no-cache\"}\n)\n```\n\n### Memory Channels Alternative\n\nFor complex data flows, use memory channels instead of generators:\n\n```python\nimport anyio\nfrom functools import partial\n\nasync def data_producer(send_channel):\n    async with send_channel:\n        for i in range(10):\n            await send_channel.send({\"data\": f\"Item {i}\"})\n            await anyio.sleep(1)\n\nasync def channel_endpoint(request):\n    send_channel, receive_channel = anyio.create_memory_object_stream(10)\n    \n    return EventSourceResponse(\n        receive_channel,\n        data_sender_callable=partial(data_producer, send_channel)\n    )\n```\n\n### Cooperative Shutdown\n\nBy default, generators receive `CancelledError` immediately when the server shuts down. With\ncooperative shutdown, generators can detect the shutdown signal, send farewell events to clients,\nand exit gracefully within a configurable grace period.\n\n```python\nimport anyio\nfrom sse_starlette import EventSourceResponse\n\nasync def graceful_stream(request):\n    shutdown_event = anyio.Event()\n\n    async def generate():\n        try:\n            while not shutdown_event.is_set():\n                yield {\"data\": \"tick\"}\n                # Check for shutdown between iterations\n                with anyio.move_on_after(1.0):\n                    await shutdown_event.wait()\n            # Shutdown detected — send farewell event\n            yield {\"event\": \"shutdown\", \"data\": \"Server is shutting down\"}\n        except anyio.get_cancelled_exc_class():\n            # Grace period expired — generator force-cancelled\n            raise\n\n    return EventSourceResponse(\n        generate(),\n        shutdown_event=shutdown_event,       # Library sets this on shutdown\n        shutdown_grace_period=5.0,           # Seconds to wait before force-cancel\n    )\n```\n\n**How it works:**\n\n1. On server shutdown, the library sets your `shutdown_event`\n2. Your generator sees the event and can yield final events\n3. If the generator exits within `shutdown_grace_period`, shutdown is clean (no `CancelledError`)\n4. If the generator doesn't exit in time, it is force-cancelled as before\n\n**Important:** `shutdown_grace_period` should be less than your ASGI server's graceful shutdown\ntimeout (e.g. uvicorn's `--timeout-graceful-shutdown`), otherwise the process is killed before the\ngrace period expires.\n\nWithout `shutdown_event` (the default), behavior is identical to previous versions: immediate\ncancellation on server shutdown.\n\n## Configuration Options\n\n### EventSourceResponse Parameters\n\n| Parameter | Type | Default | Description |\n|-----------|------|---------|-------------|\n| `content` | `ContentStream` | Required | Async generator or iterable |\n| `ping` | `int` | 15 | Ping interval in seconds (`0` disables keep-alive pings) |\n| `sep` | `str` | `\"\\r\\n\"` | Line separator (`\\r\\n`, `\\r`, `\\n`) |\n| `send_timeout` | `float` | `None` | Send operation timeout in seconds |\n| `headers` | `dict` | `None` | Additional HTTP headers |\n| `ping_message_factory` | `Callable` | `None` | Custom ping message creator |\n| `shutdown_event` | `anyio.Event` | `None` | Event set by library on server shutdown |\n| `shutdown_grace_period` | `float` | `0` | Seconds to wait after setting `shutdown_event` before force-cancel |\n\n### Client Disconnection\n\n```python\nasync def monitored_stream(request):\n    events_sent = 0\n    try:\n        while events_sent < 100:\n            if await request.is_disconnected():\n                print(f\"Client disconnected after {events_sent} events\")\n                break\n            \n            yield {\"data\": f\"Event {events_sent}\"}\n            events_sent += 1\n            await asyncio.sleep(1)\n            \n    except asyncio.CancelledError:\n        print(\"Stream cancelled\")\n        raise\n```\n\n## Testing\n\nShutdown state is kept per thread and per server, so tests need no manual reset in the common case. That includes suites that start a real uvicorn server per test and stop it programmatically (`server.should_exit = True`): a stopped server does not affect streams served by a later one in the same process.\n\nOne exception: a real `SIGTERM`/`SIGINT` delivered to the process sets the process-wide `AppStatus.should_exit`, and nothing clears it (the process is expected to exit). If your tests send real signals to an in-process server and keep running, reset the flag between tests:\n\n```python\nimport pytest\nfrom sse_starlette.sse import AppStatus\n\n@pytest.fixture(autouse=True)\ndef reset_sse_app_status():\n    yield\n    AppStatus.should_exit = False\n```\n\n## Production Considerations\n\n### Performance Limits\n\n- **Memory**: Each connection maintains a buffer. Monitor memory usage.\n- **Connections**: Limited by system file descriptors and application design.\n- **Network**: High-frequency events can saturate bandwidth.\n\n### Error Recovery\n\nImplement client-side reconnection logic:\n\n```javascript\nfunction createEventSource(url) {\n    const eventSource = new EventSource(url);\n    \n    eventSource.onerror = function() {\n        setTimeout(() => {\n            createEventSource(url);  // Reconnect after delay\n        }, 5000);\n    };\n    \n    return eventSource;\n}\n```\n\n## Learning Resources\n\n### Examples Directory\n\nThe `examples/` directory contains production-ready patterns:\n\n- **`01_basic_sse.py`**: Fundamental SSE concepts\n- **`02_message_broadcasting.py`**: Multi-client message distribution  \n- **`03_database_streaming.py`**: Thread-safe database integration\n- **`04_advanced_features.py`**: Custom protocols and error handling\n\n### Demonstrations Directory  \n\nThe `examples/demonstrations/` directory provides educational scenarios:\n\n**Basic Patterns** (`basic_patterns/`):\n- Client disconnect detection and cleanup\n- Graceful server shutdown behavior\n\n**Production Scenarios** (`production_scenarios/`):\n- Load testing with concurrent clients\n- Network interruption handling\n\n**Advanced Patterns** (`advanced_patterns/`):\n- Memory channels vs generators\n- Error recovery and circuit breakers\n- Custom protocol development\n\nRun any demonstration:\n```bash\npython examples/demonstrations/basic_patterns/client_disconnect.py\npython examples/demonstrations/production_scenarios/load_simulations.py\npython examples/demonstrations/advanced_patterns/error_recovery.py\n```\n\n## Troubleshooting\n\n### Common Issues\n\n**Database session errors with async generators**\n- Create database sessions inside generators, not as dependencies\n\n**Hanging connections after client disconnect**  \n- Always check `await request.is_disconnected()` in loops\n- Use `send_timeout` parameter to detect dead connections\n\nIf you are using Postman, please see: https://github.com/sysid/sse-starlette/issues/47#issuecomment-1445953826\n\n### Performance Optimization\n\n```python\n# Connection limits\nclass ConnectionLimiter:\n    def __init__(self, max_connections=100):\n        self.semaphore = asyncio.Semaphore(max_connections)\n    \n    async def limited_endpoint(self, request):\n        async with self.semaphore:\n            return EventSourceResponse(generate_events())\n```\n\n## Network-Level Gotchas\n\nNetwork infrastructure components can buffer SSE streams, breaking real-time delivery. Here are the most common issues and solutions:\n\n### Reverse Proxy Buffering (Nginx/Apache)\n\n**Problem**: Nginx buffers responses by default, delaying SSE events until ~16KB accumulates.\n\n**Solution**: Add the `X-Accel-Buffering: no` header.\n\n**Nginx Configuration** (if you can't modify app headers):\n```nginx\nlocation /events {\n    proxy_pass http://localhost:8000;\n    proxy_http_version 1.1;\n    proxy_set_header Connection '';\n    proxy_buffering off;           # Disable for this location\n    chunked_transfer_encoding off;\n}\n```\n\n### CDN Issues\n\n**Cloudflare**: Buffers ~100KB before flushing to clients, breaking real-time delivery.\n**Akamai**: Edge servers buffer by default.\n\n### Load Balancer Problems\n\n**HAProxy**: Timeout settings must exceed heartbeat frequency.\n```haproxy\n# Ensure timeouts > ping interval\ntimeout client 60s    # If ping every 45s\ntimeout server 60s\n```\n\n**F5 Load Balancers**: Buffer responses by default.\n\n## Contributing\n\nSee examples and demonstrations for implementation patterns. Run tests with:\n\n```bash\nmake test-unit              # Unit tests only (default dev install)\nmake test                   # Unit + docker integration tests\nmake test-experimentation   # Optional experimentation tests (multi-consumer load tests)\n                            # Requires the `experimentation` dependency group:\n                            #   uv sync --group experimentation\n```\n\nThe `experimentation` group is opt-in (kept out of the default `dev` install) to keep the\ncontributor footprint small. See `tests/experimentation/` for the tests it enables.\n\n<!-- Badges -->\n[pypi-image]: https://badge.fury.io/py/sse-starlette.svg\n[pypi-url]: https://pypi.org/project/sse-starlette/\n[build-image]: https://github.com/sysid/sse-starlette/actions/workflows/build.yml/badge.svg\n[build-url]: https://github.com/sysid/sse-starlette/actions/workflows/build.yml\n[coverage-image]: https://codecov.io/gh/sysid/sse-starlette/branch/master/graph/badge.svg\n<!--[coverage-url]: https://codecov.io/gh/sysid/sse-starlette-->\n\n"
+      }
+    },
+    {
+      "download_info": {
+        "url": "file:///work/scripts/benchmark_perf_wheels/uvloop-0.23.0-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+        "archive_info": {
+          "hash": "sha256=9bf08e4b6362dd1c08623bbfa2d061e8bac0f1da8fc2007062cfe1dc360a49fa",
+          "hashes": {
+            "sha256": "9bf08e4b6362dd1c08623bbfa2d061e8bac0f1da8fc2007062cfe1dc360a49fa"
+          }
+        }
+      },
+      "is_direct": true,
+      "is_yanked": false,
+      "requested": true,
+      "metadata": {
+        "metadata_version": "2.4",
+        "name": "uvloop",
+        "version": "0.23.0",
+        "dynamic": [
+          "license-file"
+        ],
+        "summary": "Fast implementation of asyncio event loop on top of libuv",
+        "description_content_type": "text/x-rst",
+        "keywords": [
+          "asyncio",
+          "networking"
+        ],
+        "author_email": "Yury Selivanov <yury@magic.io>",
+        "license": "MIT License",
+        "license_file": [
+          "LICENSE-APACHE",
+          "LICENSE-MIT"
+        ],
+        "classifier": [
+          "Development Status :: 5 - Production/Stable",
+          "Framework :: AsyncIO",
+          "Intended Audience :: Developers",
+          "License :: OSI Approved :: Apache Software License",
+          "License :: OSI Approved :: MIT License",
+          "Operating System :: POSIX",
+          "Operating System :: MacOS :: MacOS X",
+          "Programming Language :: Python :: 3 :: Only",
+          "Programming Language :: Python :: 3.8",
+          "Programming Language :: Python :: 3.9",
+          "Programming Language :: Python :: 3.10",
+          "Programming Language :: Python :: 3.11",
+          "Programming Language :: Python :: 3.12",
+          "Programming Language :: Python :: 3.13",
+          "Programming Language :: Python :: Implementation :: CPython",
+          "Topic :: System :: Networking"
+        ],
+        "requires_dist": [
+          "aiohttp>=3.10.5; extra == \"test\"",
+          "flake8~=6.1; extra == \"test\"",
+          "psutil; extra == \"test\"",
+          "pycodestyle~=2.11.0; extra == \"test\"",
+          "pyOpenSSL~=25.3.0; python_version < \"3.9\" and extra == \"test\"",
+          "pyOpenSSL~=26.4.0; python_version >= \"3.9\" and extra == \"test\"",
+          "mypy>=0.800; extra == \"test\"",
+          "packaging>=20; extra == \"dev\"",
+          "setuptools>=60; extra == \"dev\"",
+          "Cython~=3.1; extra == \"dev\"",
+          "Sphinx~=4.1.2; extra == \"docs\"",
+          "sphinxcontrib-asyncio~=0.3.0; extra == \"docs\"",
+          "sphinx_rtd_theme~=0.5.2; extra == \"docs\""
+        ],
+        "requires_python": ">=3.8.1",
+        "project_url": [
+          "github, https://github.com/MagicStack/uvloop"
+        ],
+        "provides_extra": [
+          "test",
+          "dev",
+          "docs"
+        ],
+        "description": ".. image:: https://img.shields.io/github/actions/workflow/status/MagicStack/uvloop/tests.yml?branch=master\n    :target: https://github.com/MagicStack/uvloop/actions/workflows/tests.yml?query=branch%3Amaster\n\n.. image:: https://img.shields.io/pypi/v/uvloop.svg\n    :target: https://pypi.python.org/pypi/uvloop\n\n.. image:: https://pepy.tech/badge/uvloop\n    :target: https://pepy.tech/project/uvloop\n    :alt: PyPI - Downloads\n\n\nuvloop is a fast, drop-in replacement of the built-in asyncio\nevent loop.  uvloop is implemented in Cython and uses libuv\nunder the hood.\n\nThe project documentation can be found\n`here <http://uvloop.readthedocs.org/>`_.  Please also check out the\n`wiki <https://github.com/MagicStack/uvloop/wiki>`_.\n\n\nPerformance\n-----------\n\nuvloop makes asyncio 2-4x faster.\n\n.. image:: https://raw.githubusercontent.com/MagicStack/uvloop/master/performance.png\n    :target: http://magic.io/blog/uvloop-blazing-fast-python-networking/\n\nThe above chart shows the performance of an echo server with different\nmessage sizes.  The *sockets* benchmark uses ``loop.sock_recv()`` and\n``loop.sock_sendall()`` methods; the *streams* benchmark uses asyncio\nhigh-level streams, created by the ``asyncio.start_server()`` function;\nand the *protocol* benchmark uses ``loop.create_server()`` with a simple\necho protocol.  Read more about uvloop in a\n`blog post <http://magic.io/blog/uvloop-blazing-fast-python-networking/>`_\nabout it.\n\n\nInstallation\n------------\n\nuvloop requires Python 3.8 or greater and is available on PyPI.\nUse pip to install it::\n\n    $ pip install uvloop\n\nNote that it is highly recommended to **upgrade pip before** installing\nuvloop with::\n\n    $ pip install -U pip\n\n\nUsing uvloop\n------------\n\nAs of uvloop 0.18, the preferred way of using it is via the\n``uvloop.run()`` helper function:\n\n\n.. code:: python\n\n    import uvloop\n\n    async def main():\n        # Main entry-point.\n        ...\n\n    uvloop.run(main())\n\n``uvloop.run()`` works by simply configuring ``asyncio.run()``\nto use uvloop, passing all of the arguments to it, such as ``debug``,\ne.g. ``uvloop.run(main(), debug=True)``.\n\nWith Python 3.11 and earlier the following alternative\nsnippet can be used:\n\n.. code:: python\n\n    import asyncio\n    import sys\n\n    import uvloop\n\n    async def main():\n        # Main entry-point.\n        ...\n\n    if sys.version_info >= (3, 11):\n        with asyncio.Runner(loop_factory=uvloop.new_event_loop) as runner:\n            runner.run(main())\n    else:\n        uvloop.install()\n        asyncio.run(main())\n\n\nBuilding From Source\n--------------------\n\nTo build uvloop, you'll need Python 3.8 or greater:\n\n1. Clone the repository:\n\n   .. code::\n\n    $ git clone --recursive git@github.com:MagicStack/uvloop.git\n    $ cd uvloop\n\n2. Create a virtual environment and activate it:\n\n   .. code::\n\n    $ python3 -m venv uvloop-dev\n    $ source uvloop-dev/bin/activate\n\n3. Install development dependencies:\n\n   ..  code::\n\n    $ pip install -e .[dev]\n\n4. Build and run tests:\n\n   .. code::\n\n    $ make\n    $ make test\n\n\nLicense\n-------\n\nuvloop is dual-licensed under MIT and Apache 2.0 licenses.\n"
+      }
+    }
+  ],
+  "environment": {
+    "implementation_name": "cpython",
+    "implementation_version": "3.10.12",
+    "os_name": "posix",
+    "platform_machine": "x86_64",
+    "platform_release": "5.15.0-105-generic",
+    "platform_system": "Linux",
+    "platform_version": "#115-Ubuntu SMP Mon Apr 15 09:52:04 UTC 2024",
+    "python_full_version": "3.10.12",
+    "platform_python_implementation": "CPython",
+    "python_version": "3.10",
+    "sys_platform": "linux"
+  }
+}

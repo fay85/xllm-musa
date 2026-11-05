@@ -1,0 +1,30 @@
+{
+  "at": "2026-11-05T20:09:44.117555+08:00",
+  "host": "dev7",
+  "container": "xiaopang1105_dsv41_decode_dev7_pd_dev4_dev7_v2_nic9",
+  "container_state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-11-05T10:59:02.772071524Z",
+    "FinishedAt": "2026-11-05T12:09:11.644132778Z"
+  },
+  "rank_exit_codes": [
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "container_retained": true,
+  "gpu_report": "gpu_after_stop.txt"
+}

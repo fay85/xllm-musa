@@ -1,0 +1,4 @@
+{"elapsed_s": 10.504401600919664, "line": "data: {\"id\":\"chatcmpl-17449177176239738291-HGw5b9xFMcinYtouazDT4W\",\"object\":\"chat.completion.chunk\",\"created\":1793876114,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"}}]}"}
+{"elapsed_s": 10.504488792037591, "line": ""}
+{"elapsed_s": 10.504513577092439, "line": "data: {\"id\":\"chatcmpl-17449177176239738291-HGw5b9xFMcinYtouazDT4W\",\"object\":\"chat.completion.chunk\",\"created\":1793876114,\"model\":\"deepseek-v4.1-flash-0909\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"4\"}}]}"}
+{"elapsed_s": 10.504542208043858, "line": ""}

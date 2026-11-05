@@ -1,0 +1,9 @@
+{
+  "control_plane_was_ready": true,
+  "exit_codes": [
+    -15,
+    0,
+    0
+  ],
+  "automatic_kill": false
+}

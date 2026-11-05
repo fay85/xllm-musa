@@ -1,0 +1,200 @@
+{
+  "status": "PASS_FULL_RUN_PD_AND_NORMAL_EXIT",
+  "at": "2026-11-05T20:09:49.784849+08:00",
+  "request_count": 14,
+  "basic_questions": 2,
+  "warmup_requests": 2,
+  "measured_requests": 10,
+  "nonempty_pulls_per_decode_rank": 14,
+  "normal_rank_exits": 16,
+  "normal_container_exits": 2,
+  "request_shape_counts": [
+    {
+      "input_tokens": 17,
+      "output_tokens": 2,
+      "finish_reason": "stop",
+      "count": 1
+    },
+    {
+      "input_tokens": 21,
+      "output_tokens": 4,
+      "finish_reason": "stop",
+      "count": 1
+    },
+    {
+      "input_tokens": 256,
+      "output_tokens": 256,
+      "finish_reason": "length",
+      "count": 6
+    },
+    {
+      "input_tokens": 2048,
+      "output_tokens": 256,
+      "finish_reason": "length",
+      "count": 6
+    }
+  ],
+  "rank_log_evidence": [
+    {
+      "host": "dev4",
+      "rank": 0,
+      "final_log": "dev4/rank0.log",
+      "final_log_sha256": "2baa41df65cd6ea0cfdf18e182ef99efa65aab3dfcbc04bfeab9dcf2c3508950",
+      "successful_nonempty_pulls": 0,
+      "basic_snapshot_bytes": 38027,
+      "basic_snapshot_sha256": "d59b744e4de4417d057a24e18ac33fd3f24c7aac04aa5c366e697b55f5e9c074",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev4",
+      "rank": 1,
+      "final_log": "dev4/rank1.log",
+      "final_log_sha256": "21c57128dab1e73b091b9390341b27e8038e5ef877499af686d4d55dd9a7dec3",
+      "successful_nonempty_pulls": 0,
+      "basic_snapshot_bytes": 19367,
+      "basic_snapshot_sha256": "db154244844da40b6a2ddfa0cc3009cf12c55eb76844b576bfe3408f5434b9ed",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev4",
+      "rank": 2,
+      "final_log": "dev4/rank2.log",
+      "final_log_sha256": "a84b9227ca68b8f5a9d14f23fb3be6f3bf9064c923c2b001f1f93439f18f341b",
+      "successful_nonempty_pulls": 0,
+      "basic_snapshot_bytes": 19367,
+      "basic_snapshot_sha256": "2b5988692c488ca106ac1c894e706c0d52b9c8520fc759d599ec475121aaa2c0",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev4",
+      "rank": 3,
+      "final_log": "dev4/rank3.log",
+      "final_log_sha256": "2f32190766e49a823c69de54cec90004fac98f40e117422b776ffd5595d77fe5",
+      "successful_nonempty_pulls": 0,
+      "basic_snapshot_bytes": 19367,
+      "basic_snapshot_sha256": "b9f235bbfc2340ca60a4bb94efaf47d987be7a85cdd7043d6353f8b99d17695a",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev4",
+      "rank": 4,
+      "final_log": "dev4/rank4.log",
+      "final_log_sha256": "aa33c6d1dd417581582e001efc9381703817ec84adfdb736f0904c6ba4542d29",
+      "successful_nonempty_pulls": 0,
+      "basic_snapshot_bytes": 19367,
+      "basic_snapshot_sha256": "7e596185b84f1b67927e169f2608d807a3c0604ba480f58f38b836ffadb559b8",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev4",
+      "rank": 5,
+      "final_log": "dev4/rank5.log",
+      "final_log_sha256": "00a2bcf7859f2d59f2e0e21c18b64c3b5200df8c2ce224a2e42d9fa1491a0420",
+      "successful_nonempty_pulls": 0,
+      "basic_snapshot_bytes": 19367,
+      "basic_snapshot_sha256": "274b7da166bdb909390b074a004dc989f17eddf884293c026ce11f7cdc708027",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev4",
+      "rank": 6,
+      "final_log": "dev4/rank6.log",
+      "final_log_sha256": "665d8f93e8002cea725dc9a0a80a2754b89c96d0cf4c7574eefd580cc452625c",
+      "successful_nonempty_pulls": 0,
+      "basic_snapshot_bytes": 19367,
+      "basic_snapshot_sha256": "ceddb14b3d8ebf91d35d991291bc39b77ab179dff8630df507306b787bbff7a0",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev4",
+      "rank": 7,
+      "final_log": "dev4/rank7.log",
+      "final_log_sha256": "e83b953d09e295dcc9e2a15b97cf14ac80fba3c65f722fb00af9b0e7c2feade6",
+      "successful_nonempty_pulls": 0,
+      "basic_snapshot_bytes": 19367,
+      "basic_snapshot_sha256": "3a51d7cfe66e7a3be491811eca9a450932a6e77fe09ee29e5dd79a6fa84be1a8",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev7",
+      "rank": 0,
+      "final_log": "dev7/rank0.log",
+      "final_log_sha256": "185ee9d91eebd8b2b21cb938a4dd764c20746f0831e8865bdfa79c09311248e8",
+      "successful_nonempty_pulls": 14,
+      "basic_snapshot_bytes": 41606,
+      "basic_snapshot_sha256": "97cedadfe40e450892ee07bfd32f2450640d18c87e0564fc4e74435ae04444bd",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev7",
+      "rank": 1,
+      "final_log": "dev7/rank1.log",
+      "final_log_sha256": "adddae03c020bd2e016abb8827c81c328b758168308e85b2fb871d92a017d0c4",
+      "successful_nonempty_pulls": 14,
+      "basic_snapshot_bytes": 23366,
+      "basic_snapshot_sha256": "12c01ddcee1d327f95e7da143904528c07a6fab02791c023db2cb7e796911f2d",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev7",
+      "rank": 2,
+      "final_log": "dev7/rank2.log",
+      "final_log_sha256": "08d225c0dff4dd0fe89ae096473038ae2cbe9e3e603dba79eb52a5bb0e07bf5d",
+      "successful_nonempty_pulls": 14,
+      "basic_snapshot_bytes": 23368,
+      "basic_snapshot_sha256": "dc1f9358330ddc3039e146325f8e0a3322a5003befa45feef3ea217e8e2bd891",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev7",
+      "rank": 3,
+      "final_log": "dev7/rank3.log",
+      "final_log_sha256": "ecb9e14afb12da43f47dd2dad1f43406c16f87a1dbb3dc3df4685b278e50528f",
+      "successful_nonempty_pulls": 14,
+      "basic_snapshot_bytes": 23364,
+      "basic_snapshot_sha256": "6c69d95544e61b4bd3257d74208b19825c7b4316c9dadabb02a5f16734912b0b",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev7",
+      "rank": 4,
+      "final_log": "dev7/rank4.log",
+      "final_log_sha256": "410ac59be7e34a712731773fe69ff891a9b7aaff6f59a39e86024e80dcb0b79f",
+      "successful_nonempty_pulls": 14,
+      "basic_snapshot_bytes": 23365,
+      "basic_snapshot_sha256": "33ad88d0bd8c5b6883f54815783d6cb0ff80b3113816889285613c9f3c753299",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev7",
+      "rank": 5,
+      "final_log": "dev7/rank5.log",
+      "final_log_sha256": "4b7a6edc4310a05c47b8ce2564fd242bf9c2d29983f32a942316c8739722e563",
+      "successful_nonempty_pulls": 14,
+      "basic_snapshot_bytes": 23361,
+      "basic_snapshot_sha256": "bfea3eabcf88553745443ac9617c338b818813f6a8235d6b3c304522882abef1",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev7",
+      "rank": 6,
+      "final_log": "dev7/rank6.log",
+      "final_log_sha256": "44e8dd02dbe3191bc5591ffeecb6970a7bcb0e69faf83a208a637b5af5fe6348",
+      "successful_nonempty_pulls": 14,
+      "basic_snapshot_bytes": 23368,
+      "basic_snapshot_sha256": "097975ac8254a0edfed8a1cff1bce96feda90cce7d353d92483cc45537633384",
+      "rank_exit_code": 0
+    },
+    {
+      "host": "dev7",
+      "rank": 7,
+      "final_log": "dev7/rank7.log",
+      "final_log_sha256": "81affbf154e901accc627671d7e3286ee64e5bf6e18dd452a696ed2cbdbf778e",
+      "successful_nonempty_pulls": 14,
+      "basic_snapshot_bytes": 23356,
+      "basic_snapshot_sha256": "5a3c8856de9725c8f43cba7a77564193ada946f04c94d5405024ae7fbb8c8c62",
+      "rank_exit_code": 0
+    }
+  ],
+  "scope": "Successful true two-host request path and clean process exit; not a per-layer official numerical-equivalence audit."
+}

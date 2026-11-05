@@ -1,0 +1,10 @@
+{"at": "2026-11-05T18:52:29.752699+08:00", "ready": [false, true, false]}
+{"at": "2026-11-05T18:52:49.797371+08:00", "ready": [false, true, false]}
+{"at": "2026-11-05T18:53:09.841952+08:00", "ready": [false, true, false]}
+{"at": "2026-11-05T18:53:29.885631+08:00", "ready": [false, true, false]}
+{"at": "2026-11-05T18:53:49.929678+08:00", "ready": [false, true, false]}
+{"at": "2026-11-05T18:54:09.974235+08:00", "ready": [false, true, false]}
+{"at": "2026-11-05T18:54:30.019313+08:00", "ready": [false, true, false]}
+{"at": "2026-11-05T18:54:50.063097+08:00", "ready": [false, true, false]}
+{"at": "2026-11-05T18:55:10.109299+08:00", "ready": [true, true, false]}
+Basic answer failed or non-numeric format: inspect raw response before performance

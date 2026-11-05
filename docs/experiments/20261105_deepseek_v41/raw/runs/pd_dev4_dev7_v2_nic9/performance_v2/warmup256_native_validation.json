@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "phase": "warmup_not_measured",
+  "native_usage": {
+    "prompt_tokens": 256,
+    "completion_tokens": 256,
+    "source": "native_D_sequence_terminal"
+  },
+  "latency_s": 259.86455458099954,
+  "ttft_s": 6.225755630992353,
+  "tpot_s": 0.9946619566666949,
+  "request_parameters": {
+    "temperature": 0,
+    "top_p": 1,
+    "max_tokens": 256,
+    "ignore_eos": true,
+    "reasoning_effort": "none",
+    "chat_template_kwargs": {
+      "thinking_mode": "chat"
+    },
+    "stream": true
+  }
+}
