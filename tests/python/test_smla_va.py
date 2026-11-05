@@ -495,3 +495,35 @@ def test_smla_fused_tail_only_on_validated_decode_graph(
     torch.npu.synchronize()
     assert bool(calls) is expected
     assert actual.shape == q.shape
+
+@pytest.mark.parametrize("ratio", [1, 2])
+def test_smla_replayed_suffix_masks_uncomputed_ring(ratio: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The native replay path matches the reference even with a poisoned old ring."""
+    q_lens = [128, 3]
+
+    def make_case(device: str) -> tuple[Any, ...]:
+        case = _case(q_lens, device, ratio=ratio, history=72)
+        backend, _, dsa, _, _, _, _ = case
+        backend._kv_caches[0].swa[0].fill_(float("nan"))
+        context = _context(backend, dsa)
+        context.metadata.swa_bounded_replay_dropped_rows = (72, 0)
+        return (*case, context)
+
+    backend, layer, dsa, shared, q, kv, picks, context = make_case("cpu")
+    with forward_context(context):
+        expected = backend._csa2_attention(q, kv, layer, dsa, q_lens, dsa.seq_lens, picks, shared)
+    backend, layer, dsa, shared, q, kv, picks, context = make_case("npu")
+    native = backend._smla_attention
+    calls = []
+
+    def tracked(*args: Any, **kwargs: Any) -> torch.Tensor:
+        calls.append(True)
+        return native(*args, **kwargs)
+
+    monkeypatch.setattr(backend, "_smla_attention", tracked)
+    with forward_context(context):
+        actual = backend._csa2_attention(q, kv, layer, dsa, q_lens, dsa.seq_lens, picks, shared)
+    torch.npu.synchronize()
+    assert len(calls) == len(q_lens)
+    assert torch.isfinite(actual).all()
+    torch.testing.assert_close(actual.cpu(), expected, rtol=0.02, atol=0.003)

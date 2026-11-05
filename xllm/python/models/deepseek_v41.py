@@ -81,7 +81,11 @@ from xllm.python.distributed import (
 from xllm.python.layers.attention import Attention
 from xllm.python.layers.embedding import HiddenParallelEmbedding
 from xllm.python.layers.linear import ColumnParallelLinear, RowParallelLinear
+from xllm.python.layers.moe_parallel import ep_apply_local, ep_gather_tokens, ep_reduce_scatter
+from xllm.python.layers.sequence_parallel import sp_all_gather, sp_row_parallel_projection, sp_shard
+from xllm.python.layers.sequence_parallel_metadata import SpMetadata, build_flashcomm1_layout
 from xllm.python.model_executor.forward_context import (
+    ForwardContext,
     capturing_acl_graph,
     get_execution_buffer,
     get_forward_context,
@@ -365,6 +369,8 @@ class DeepseekV41Config(DeepseekV4Config):
     enable_dsa_cp: bool = False
     # Explicit runtime opt-in: approximate prefill, default full computation.
     enable_swa_bounded_replay: bool = False
+    enable_flashcomm1: bool = False
+    flashcomm1_min_prefill_tokens: int = 8192
     # ``--enable_fused_mc2`` flag (PyCausalLM::build_config_dict bridges the
     # C++ ``enable_fused_mc2`` gflag - kernel_config.cpp: -1 auto / 0 off /
     # 1 DFC / 2 MegaMoe - as >0). Decode-only slice: the dispatch/combine
@@ -455,6 +461,8 @@ class DeepseekV41Config(DeepseekV4Config):
             enable_dsa_cp=bool(_pick(merged, "enable_dsa_cp", default=False)),
             enable_swa_bounded_replay=bool(_pick(merged, "enable_swa_bounded_replay", default=False)),
             enable_fused_mc2=bool(_pick(merged, "enable_fused_mc2", default=False)),
+            enable_flashcomm1=bool(_pick(merged, "enable_flashcomm1", default=False)),
+            flashcomm1_min_prefill_tokens=int(_pick(merged, "flashcomm1_min_prefill_tokens", default=8192)),
             layers_to_capture=_int_list(merged, "layers_to_capture"),
             enable_graph_aux_hidden_states=bool(_pick(merged, "enable_graph_aux_hidden_states", default=False)),
             image_token_id=int(_pick(merged, "image_token_id", default=-1)),
@@ -1522,6 +1530,7 @@ class DeepseekV41Attention(Attention):
         hidden: torch.Tensor,
         positions: torch.Tensor,
         cos_sin_cache: torch.Tensor,
+        sp_metadata: SpMetadata | None = None,
     ) -> torch.Tensor:
         # The CSA2 layer context / RoPE helpers live in the attention backend
         # module (csa2_attention); the import is deferred so the model file
@@ -1595,7 +1604,10 @@ class DeepseekV41Attention(Attention):
         out = attn_out.view(num_tokens, self.n_local_groups, -1)
         wo_a = self.o_a_proj.weight.view(self.n_local_groups, self.o_lora_rank, -1)
         o_low = torch.einsum("tgd,grd->tgr", out, wo_a)
-        o = self.o_b_proj(o_low.reshape(num_tokens, -1))
+        projection_input = o_low.reshape(num_tokens, -1)
+        if sp_metadata is not None:
+            return sp_row_parallel_projection(self.o_b_proj, projection_input, sp_metadata)
+        o = self.o_b_proj(projection_input)
         if self.cfg.tp_size > 1 and self.quant_mode != V41_QUANT_ASCEND:
             # Row-parallel partial: sum the per-rank head-group contributions.
             from xllm.python import distributed as _distributed
@@ -2044,6 +2056,7 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         hidden: torch.Tensor,
         input_ids: torch.Tensor | None = None,
         post_norm: nn.Module | None = None,
+        sp_metadata: SpMetadata | None = None,
     ) -> torch.Tensor:
         """Decode-time MC2 expert path, or the portable base forward.
 
@@ -2068,6 +2081,8 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         the MC2 kernels require: dispatch and combine are collectives over the
         whole ``moe_ep`` group.
         """
+        if sp_metadata is not None:
+            return self._forward_flashcomm1(hidden, post_norm, sp_metadata)
         if self.enable_fused_mc2:
             reason = self._mc2_guard_reason(hidden)
             if reason is None:
@@ -2084,6 +2099,86 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
             else:
                 _log_moe_mc2_fallback(reason, self.enable_fused_mc2)
         return super().forward(hidden, input_ids, post_norm)
+
+    def _forward_flashcomm1(
+        self,
+        hidden: torch.Tensor,
+        post_norm: nn.Module | None,
+        sp_metadata: SpMetadata,
+    ) -> torch.Tensor:
+        """Gather unique EP source rows and reduce routed outputs to owners.
+
+        MoE TP=1 makes the shared expert replicated, so it runs only on the
+        local valid rows and is added after the routed EP reduce-scatter.
+        Dummy and structural padding rows never become real source tokens.
+        """
+        gathered = ep_gather_tokens(hidden, sp_metadata)
+        routed = self._forward_flashcomm1_routed(gathered, post_norm)
+        routed = ep_reduce_scatter(routed, sp_metadata)
+
+        def shared_forward(value: torch.Tensor) -> torch.Tensor:
+            normalized = post_norm(value) if post_norm is not None else value
+            return self._run_gated_shared_experts(normalized)
+
+        return routed + ep_apply_local(hidden, sp_metadata, shared_forward)
+
+    def _w8a8_bias_topk(
+        self,
+        hidden: torch.Tensor,
+        post_norm: nn.Module | None,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Return normalized expert inputs and bias-based routing results."""
+        if post_norm is not None:
+            hidden, gate_input = self._apply_post_norm(hidden, post_norm)
+        else:
+            gate_input = hidden.to(torch.float32)
+        logits = self._gate_logits(gate_input, None)
+        norm_type = {"softmax": 0, "sigmoid": 1, "sqrtsoftplus": 2}.get(self.scoring_func, 2)
+        topk_weights, topk_idx, _ = kernels.moe_gating_top_k_hash(
+            x=logits,
+            k=self.topk,
+            bias=getattr(self, "e_score_correction_bias", None),
+            input_ids=None,
+            tid2eid=None,
+            k_group=1,
+            group_count=1,
+            routed_scaling_factor=self.routed_scaling,
+            eps=1e-20,
+            group_select_mode=1,
+            renorm=0 if norm_type == 2 else 1,
+            norm_type=norm_type,
+            out_flag=False,
+        )
+        return hidden, topk_weights, topk_idx
+
+    def _forward_flashcomm1_routed(
+        self,
+        hidden: torch.Tensor,
+        post_norm: nn.Module | None,
+    ) -> torch.Tensor:
+        """Run V4.1 W8A8 routing and local experts before EP ReduceScatter.
+
+        The ordinary path retains DeepseekV4MoE.forward unchanged. FlashComm1
+        owns the EP token layout and reduction, so only its V4.1 bias-based
+        routing and grouped W8A8 expert calculation are performed here.
+        """
+        hidden, topk_weights, topk_idx = self._w8a8_bias_topk(hidden, post_norm)
+        topk_weights = self._ep_local_masked_weights(topk_weights, topk_idx)
+        return kernels.grouped_moe_with_selected_experts(
+            hidden,
+            topk_weights,
+            topk_idx.to(torch.int32),
+            self.experts_w13,
+            self.experts_w2,
+            self.experts_w13_scale,
+            self.experts_w2_scale,
+            self.experts_w13_offset,
+            self.experts_w2_offset,
+            self.num_total_experts,
+            self.start_expert_id,
+            self.num_experts_per_rank,
+            self.cfg.swiglu_limit,
+        )
 
     def _mc2_ep_rank(self, hidden: torch.Tensor) -> int:
         from xllm.python import distributed as _distributed
@@ -2260,36 +2355,9 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         global_bs = hidden.shape[0] * ep_size if self.dp_size == 1 else 0
         x_active_mask: torch.Tensor | None = None
 
-        # 1) FFN RMSNorm on this rank's rows (``_apply_post_norm`` is the V4.1
-        #    fused RMSNorm+cast; the guard already vetted the input). The base
-        #    class runs it after its DP gather, but the norm is row-wise, so on
-        #    the local rows it is identical while feeding the dispatch directly.
-        if post_norm is not None:
-            hidden, gate_input = self._apply_post_norm(hidden, post_norm)
-        else:
-            gate_input = hidden.to(torch.float32)
-
-        # 2) Gate + top-k exactly as the portable path. There is NO EP-local
-        #    weighting: dispatch routes unconsumed (token, expert) pairs away.
-        logits = self._gate_logits(gate_input, None)
-        norm_type = {"softmax": 0, "sigmoid": 1, "sqrtsoftplus": 2}.get(self.scoring_func, 2)
-        renorm = 0 if norm_type == 2 else 1
-        bias = getattr(self, "e_score_correction_bias", None)
-        topk_weights, topk_idx, _ = kernels.moe_gating_top_k_hash(
-            x=logits,
-            k=self.topk,
-            bias=bias,
-            input_ids=None,
-            tid2eid=None,
-            k_group=1,
-            group_count=1,
-            routed_scaling_factor=self.routed_scaling,
-            eps=1e-20,
-            group_select_mode=1,
-            renorm=renorm,
-            norm_type=norm_type,
-            out_flag=False,
-        )
+        # 1-2) Normalize local rows and route with the same W8A8 bias top-k
+        #      as FC1. Dispatch takes global expert weights without EP masking.
+        hidden, topk_weights, topk_idx = self._w8a8_bias_topk(hidden, post_norm)
         expert_ids = topk_idx.to(torch.int32)
         expert_scales = topk_weights.to(torch.float32)
 
@@ -2435,10 +2503,7 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         #    partials were already scattered-and-accumulated by ``combine_v2`` and
         #    the guard pins ``moe_tp_size == 1``, so no explicit reduction runs
         #    here (doing so would double the routed contribution).
-        shared_out = self._run_shared_experts(hidden)
-        if self.shared_expert_gate_is_loaded:
-            shared_gate = torch.sigmoid(self.shared_expert_gate(hidden))
-            shared_out = shared_gate * shared_out
+        shared_out = self._run_gated_shared_experts(hidden)
         return routed_out + shared_out
 
 
@@ -2525,6 +2590,7 @@ class DeepseekV41DecoderLayer(nn.Module):
         pre_mix: torch.Tensor | None = None,
         engram_hashes: torch.Tensor | None = None,
         engram_mask: torch.Tensor | None = None,
+        sp_metadata: SpMetadata | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         wait_for_layer_load(self.layer_id)
         if pre_mix is None:
@@ -2536,11 +2602,15 @@ class DeepseekV41DecoderLayer(nn.Module):
         # the rows were staged by the pre-graph host pass and only the gate
         # mask is computed in-graph (engram.embed(None) reads the staged rows).
         if self.engram is not None and (engram_hashes is not None or engram_mask is not None):
+            if sp_metadata is not None:
+                hidden = sp_all_gather(hidden, sp_metadata)
             hidden = self.engram(
                 hidden,
                 None if engram_hashes is None else engram_hashes[:, self.engram.layer_hash_index],
                 engram_mask,
             )
+            if sp_metadata is not None:
+                hidden = sp_shard(hidden, sp_metadata)
         residual = hidden
         if self.hc._hc_pre_mode == _HC_PRE_MODE_FUSED:
             # One op call replaces the hc_mixes + hc_pre collapse pair; the op
@@ -2554,7 +2624,11 @@ class DeepseekV41DecoderLayer(nn.Module):
             )
             x = self.hc.hc_pre(hidden, pre_mix)
         x = self.input_layernorm(x)
-        x = self.self_attn(x, positions, cos_sin_cache)
+        if sp_metadata is not None:
+            x = sp_all_gather(x, sp_metadata)
+            x = self.self_attn(x, positions, cos_sin_cache, sp_metadata=sp_metadata)
+        else:
+            x = self.self_attn(x, positions, cos_sin_cache)
         hidden = self.hc.hc_post(x, residual, attn_post, attn_comb)
 
         residual = hidden
@@ -2568,7 +2642,9 @@ class DeepseekV41DecoderLayer(nn.Module):
             )
             x = self.hc.hc_pre(hidden, attn_pre)
         post_norm = self.post_attention_layernorm
-        if isinstance(self.mlp, (DeepseekV41MoE, DeepseekV41W8A8MoE)):
+        if sp_metadata is not None:
+            x = self.mlp(x, post_norm=post_norm, sp_metadata=sp_metadata)
+        elif isinstance(self.mlp, (DeepseekV41MoE, DeepseekV41W8A8MoE)):
             # Delegate the FFN RMSNorm to the MoE. ``DeepseekV4MoE.forward``
             # pads+all-gathers ``hidden`` across DP BEFORE it takes the
             # gate/expert input, so the norm must run there for the fused op's
@@ -2596,6 +2672,35 @@ class _EngramHashGraph:
     hashes: torch.Tensor
     gate_mask: torch.Tensor
     ready_event: Any
+
+
+def _validate_flashcomm1(cfg: DeepseekV41Config, quant_mode: str) -> None:
+    """Disable FC1 once when the model cannot consume unique TP token owners."""
+    if not cfg.enable_flashcomm1:
+        return
+    if (
+        cfg.flashcomm1_min_prefill_tokens < 2
+        or quant_mode != V41_QUANT_ASCEND
+        or cfg.tp_size <= 1
+        or cfg.cp_size != 1
+        or cfg.enable_dsa_cp
+        or cfg.moe_tp_size != 1
+        or cfg.ep_size != cfg.tp_size * cfg.dp_size
+        or cfg.ep_rank != cfg.dp_rank * cfg.tp_size + cfg.tp_rank
+        or cfg.first_k_dense_replace != 0
+        or cfg.moe_layer_freq > 1
+    ):
+        cfg.enable_flashcomm1 = False
+        logger.warning(
+            "V4.1 FlashComm1 disabled; falling back to the original execution path. "
+            "FlashComm1 requires Ascend W8A8, TP>1, CP=1, DSA CP off, "
+            "all-MoE layers, MoE TP=1, DP-major EP=DP*TP and min prefill tokens>=2; got "
+            f"quant={quant_mode}, TP={cfg.tp_size}, CP={cfg.cp_size}, DSA CP={cfg.enable_dsa_cp}, "
+            f"MoE TP={cfg.moe_tp_size}, EP={cfg.ep_size}, DP={cfg.dp_size}, "
+            f"EP rank={cfg.ep_rank}, DP rank={cfg.dp_rank}, TP rank={cfg.tp_rank}, "
+            f"dense={cfg.first_k_dense_replace}, frequency={cfg.moe_layer_freq}, "
+            f"min prefill tokens={cfg.flashcomm1_min_prefill_tokens}"
+        )
 
 
 class DeepseekV41Model(nn.Module):
@@ -2634,6 +2739,7 @@ class DeepseekV41Model(nn.Module):
             cfg.index_source_layer_ids,
         )
         validate_swa_bounded_replay(cfg, self.csa2_plan)
+        _validate_flashcomm1(cfg, quant_mode)
         # Engram layout (None when the checkpoint has no engram layers).
         self.engram_layout: EngramLayout | None = None
         self.engram_hash: EngramHashState | None = None
@@ -3345,6 +3451,16 @@ class DeepseekV41Model(nn.Module):
         # skipped entirely off the speculative path.
         aux_capture = self.aux_hidden_capture
         aux_hidden_buffer = aux_capture.create_buffer(hidden.mean(dim=1)) if aux_capture.enabled else None
+        sp_metadata = build_flashcomm1_layout(self.cfg, context, hidden.size(0))
+        if sp_metadata is not None:
+            hidden = sp_shard(hidden, sp_metadata)
+            pre_mix = sp_shard(pre_mix, sp_metadata)
+            if not getattr(self, "_flashcomm1_logged", False):
+                logger.info(
+                    f"FLASHCOMM1_ACTIVE rows={sp_metadata.execution_rows} local={sp_metadata.local_rows} "
+                    f"tp={sp_metadata.tp_size} ep_dispatch={sp_metadata.ep_layout.dispatch_counts}"
+                )
+                self._flashcomm1_logged = True
         for layer_id, layer in enumerate(self.layers):
             if (
                 draft_to_target_overlap
@@ -3357,11 +3473,17 @@ class DeepseekV41Model(nn.Module):
             if layer_id == SWA_BOUNDED_FIRST_CONSUMER and should_run_swa_bounded_replay(
                 self.cfg.enable_swa_bounded_replay, context
             ):
+                if sp_metadata is not None:
+                    hidden = sp_all_gather(hidden, sp_metadata)
+                    pre_mix = sp_all_gather(pre_mix, sp_metadata)
                 return run_swa_bounded_consumers(
                     self, context, hidden, pre_mix, positions, input_ids, aux_hidden_buffer
                 )
             if aux_hidden_buffer is not None and aux_capture.should_capture(layer_id):
-                aux_capture.capture_layer(layer_id, hidden.mean(dim=1), None, aux_hidden_buffer)
+                captured = hidden.mean(dim=1)
+                if sp_metadata is not None:
+                    captured = sp_all_gather(captured, sp_metadata)
+                aux_capture.capture_layer(layer_id, captured, None, aux_hidden_buffer)
             layer_cos_sin_cache = self._layer_rope_cache(self.csa2_plan.mode(layer_id))
             hidden, pre_mix = layer(
                 hidden,
@@ -3371,11 +3493,15 @@ class DeepseekV41Model(nn.Module):
                 pre_mix,
                 engram_hashes,
                 engram_mask,
+                sp_metadata=sp_metadata,
             )
             record_layer_event(layer_id)
         # Final merge: the learned weighted sum with the LAST block's ffn_pre.
         merged = self.layers[-1].hc.hc_pre(hidden, pre_mix)
-        return aux_capture.finalize(self.norm(merged), aux_hidden_buffer)
+        result = self.norm(merged)
+        if sp_metadata is not None:
+            result = sp_all_gather(result, sp_metadata)
+        return aux_capture.finalize(result, aux_hidden_buffer)
 
 
 class _PlainRotaryEmbedding(nn.Module):
@@ -3681,6 +3807,15 @@ class DeepseekV41ForCausalLM(PyModelBase):
     # now dispatches its routing half through ``self._load_dsv4_moe_routing``.
     # Re-expose that static helper so the borrowed loader resolves it.
     _load_dsv4_moe_routing = staticmethod(DeepseekV4ForCausalLM._load_dsv4_moe_routing)
+
+    @staticmethod
+    def configure_flashcomm1(config: dict) -> bool:
+        """Resolve FC1 before C++ initializes its Python TP/EP process groups."""
+        cfg = DeepseekV41Config.from_dict(config)
+        if cfg.enable_flashcomm1:
+            _validate_flashcomm1(cfg, _detect_v41_quant_mode(config))
+        config["enable_flashcomm1"] = cfg.enable_flashcomm1
+        return cfg.enable_flashcomm1
 
     def __init__(self, config: dict) -> None:
         super().__init__()

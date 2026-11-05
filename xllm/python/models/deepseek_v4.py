@@ -1784,10 +1784,7 @@ class DeepseekV4MoE(nn.Module):
                 self.cfg.swiglu_limit,
             )
         # 4) Shared experts + C++-ordered TP/EP reductions.
-        shared_out = self._run_shared_experts(hidden)
-        if self.shared_expert_gate_is_loaded:
-            shared_gate = torch.sigmoid(self.shared_expert_gate(hidden))
-            shared_out = shared_gate * shared_out
+        shared_out = self._run_gated_shared_experts(hidden)
 
         output = self._reduce_moe_outputs(routed_out, shared_out)
         if need_slice:
@@ -1799,6 +1796,14 @@ class DeepseekV4MoE(nn.Module):
             start = self.dp_rank * padded_tokens
             output = output.narrow(0, start, token_counts[self.dp_rank])
         return output
+
+    def _run_gated_shared_experts(self, normalized: torch.Tensor) -> torch.Tensor:
+        """Run shared experts and apply the gate only when its weights are loaded."""
+        shared_out = self._run_shared_experts(normalized)
+        if self.shared_expert_gate_is_loaded:
+            shared_gate = torch.sigmoid(self.shared_expert_gate(normalized))
+            shared_out = shared_gate * shared_out
+        return shared_out
 
     def _run_shared_experts(self, hidden: torch.Tensor) -> torch.Tensor:
         """Run the shared expert on the MoE input.

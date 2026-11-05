@@ -19,6 +19,10 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass
 from numbers import Integral
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from xllm.python.model_executor.forward_context import ForwardContext
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,3 +130,56 @@ class SpMetadata:
             padded_rows=local_rows * tp_size,
             ep_layout=ep_layout,
         )
+
+
+class FlashComm1Config(Protocol):
+    """Scalar parallel configuration required for FlashComm1 admission."""
+
+    enable_flashcomm1: bool
+    flashcomm1_min_prefill_tokens: int
+    tp_size: int
+    tp_rank: int
+    dp_size: int
+    dp_rank: int
+
+
+def build_flashcomm1_layout(cfg: FlashComm1Config, context: ForwardContext, execution_rows: int) -> SpMetadata | None:
+    """Choose an EP-symmetric eager prefill path, including idle DP replicas.
+
+    Re-evaluate on SWA's compact metadata: short consumer suffixes can retain
+    the original layout while the source layers use sequence parallelism.
+    Graph warmup/capture, decode and verification keep their existing path.
+    DecodeAclGraphRunner requires all DP decode flags for graph admission;
+    a mixed prefill/decode step therefore runs eagerly on every replica.
+    """
+    if not cfg.enable_flashcomm1 or context.acl_graph is not None or context.execution_state is not None:
+        return None
+    metadata = context.metadata
+    if getattr(metadata, "is_spec_verify", False):
+        return None
+    flags = tuple(getattr(metadata, "dp_is_decode", ()))
+    counts = tuple(metadata.dp_execution_token_counts)
+    raw_counts = tuple(metadata.raw_dp_execution_token_counts)
+    if len(counts) != cfg.dp_size or len(raw_counts) != cfg.dp_size or counts[cfg.dp_rank] != execution_rows:
+        raise ValueError("FlashComm1 execution rows do not match the DP metadata")
+    if (flags or cfg.dp_size > 1) and len(flags) != cfg.dp_size:
+        raise ValueError("FlashComm1 requires a decode flag for every DP replica")
+    # Idle replicas can carry either decode flag. Ignore them in the vote,
+    # but retain their participation in the EP collectives once admitted.
+    # Use replicated metadata so a real decode replica vetoes FC1 globally.
+    active = tuple(rank for rank, rows in enumerate(raw_counts) if rows > 0)
+    prefill = (
+        all(int(flags[rank]) == 0 for rank in active) if flags else (metadata.is_prefill or metadata.is_chunked_prefill)
+    )
+    if not prefill or max((counts[rank] for rank in active), default=0) < cfg.flashcomm1_min_prefill_tokens:
+        return None
+    ep_layout = EpSpTokenLayout.from_token_counts(
+        counts,
+        raw_counts,
+        tp_size=cfg.tp_size,
+        tp_rank=cfg.tp_rank,
+        dp_size=cfg.dp_size,
+        dp_rank=cfg.dp_rank,
+        compacted=True,
+    )
+    return SpMetadata.from_execution_rows(execution_rows, cfg.tp_size, cfg.tp_rank, ep_layout=ep_layout)

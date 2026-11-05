@@ -481,6 +481,7 @@ _SMLA_FORWARD_KEY = (__name__, "smla_forward_inputs")
 
 _SMLA_SUPPORTED_RATIOS = (0, 1, 2)  # V4.1 layer mix; ratio 0 needs no cmp inputs
 
+
 def _is_stream_capturing() -> bool:
     """ACL-graph capture probe (always ``False`` where ``torch_npu`` is absent)."""
     npu = getattr(torch, "npu", None)
@@ -2708,7 +2709,6 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         global_q_lens = list(cp_context.global_q_lens) if cp_context is not None else q_lens
         global_ctx_lens = _ensure_seq_lens_tensor(dsa.seq_lens, q.device) if cp_context is not None else ctx_lens
 
-
         # Pure-torch tail only: the fused path reads the persistent caches
         # directly and never materializes these.
         sinks = layer.attn_sink.to(torch.float32)
@@ -2716,6 +2716,8 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         out = torch.empty_like(q)
         token_offset = 0
         global_token_offset = 0
+        context = get_forward_context_or_none()
+        dropped_rows = getattr(context.metadata, "swa_bounded_replay_dropped_rows", ()) if context else ()
         for seq, q_len in enumerate(q_lens):
             global_q_len = global_q_lens[seq]
             global_prev_ctx = global_ctx_lens[seq] - global_q_len
@@ -2753,10 +2755,12 @@ class Csa2AttentionBackend(DsaAttentionBackend):
                     token_offset += q_len
                     continue
             ring_pos = (global_prev_ctx - win) + torch.arange(win, device=q.device)
-            if swa_flat is not None and swa_bt is not None:
+            replayed_suffix = seq < len(dropped_rows) and dropped_rows[seq] > 0
+            if swa_flat is not None and swa_bt is not None and not replayed_suffix:
                 ring_rows = self._gather_swa_positions(swa_flat, swa_bt, seq, ring_pos.clamp_min(0), swa_bs)
             else:
-                # Profiling / warmup batches carry no block tables: keep the
+                # Replay excludes the old ring; profiling / warmup batches
+                # also carry no block tables. Keep the
                 # traced shapes intact with zeros; the mask below drops them.
                 ring_rows = q.new_zeros((win, kv_seq.size(-1)))
             # The production ring is allocated with empty(), not zeros().
@@ -2795,6 +2799,11 @@ class Csa2AttentionBackend(DsaAttentionBackend):
                 # Fixed chronological picks keep target reductions independent
                 # of chunk length; the draft retains its complete query block.
                 window_idxs = _window_visible_idxs(positions_seq, global_prev_ctx, win)
+            if replayed_suffix:
+                # The consumer has not computed the dropped rows. Its old ring
+                # can belong to another chunk or request; only this suffix is
+                # valid, matching SMLA's per-query replay visibility floor.
+                window_idxs = torch.where(window_idxs >= win, window_idxs, -1)
 
             # Compressed rows for the top-k picks (shared group cache),
             # gathered at the committed capacity; padding rows are unreachable
@@ -3051,7 +3060,9 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             ratio = 0
         if ratio > 0:
             if topk is None or shared.key_cache is None or shared.key_block_table is None:
-                raise RuntimeError(f"DeepSeek-V4.1 SMLA layer {layer.layer_id} ratio {ratio} is missing its compressed inputs")
+                raise RuntimeError(
+                    f"DeepSeek-V4.1 SMLA layer {layer.layer_id} ratio {ratio} is missing its compressed inputs"
+                )
             # The indexer bakes the window-row offset in; PA_BBND rows are 0-based.
             # The dispatch guarantees one query row per sequence, so the indexer's
             # chunk offset is exactly one window.
@@ -3059,7 +3070,9 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             picks = torch.where(topk >= 0, topk - self.window_size - query_rows, -1).to(torch.int32)
             width = _round_cmp_width(min(self.index_topk, max(state.capacity // ratio, 1)))
             if picks.size(-1) > width:
-                raise RuntimeError(f"DeepSeek-V4.1 SMLA layer {layer.layer_id} indexer K {picks.size(-1)} > metadata width {width}")
+                raise RuntimeError(
+                    f"DeepSeek-V4.1 SMLA layer {layer.layer_id} indexer K {picks.size(-1)} > metadata width {width}"
+                )
             picks = torch.nn.functional.pad(picks, (0, width - picks.size(-1)), value=-1)
             cmp_indices = picks.reshape(rows, 1, width).contiguous()  # [rows, 1, width] int32, -1 pads
             cmp_kv, cmp_block_table = shared.key_cache, shared.key_block_table  # already PA_BBND 4-D
@@ -3067,18 +3080,26 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             cmp_residual = state.cmp_residual[ratio] if ratio > 1 else None
         out, _ = smla_va_op(
             q,
-            ori_kv=self._kv_caches[layer.layer_id].swa, cmp_kv=cmp_kv,
-            ori_sparse_indices=None, cmp_sparse_indices=cmp_indices,
-            ori_block_table=state.expanded_ori_bt, cmp_block_table=cmp_block_table,
-            cu_seqlens_q=state.cu_seqlens_q, seqused_ori_kv=dsa.seq_lens,
-            seqused_cmp_kv=seqused_cmp, cmp_residual_kv=cmp_residual,
-            sinks=layer.attn_sink, metadata=state.metadata[ratio],
+            ori_kv=self._kv_caches[layer.layer_id].swa,
+            cmp_kv=cmp_kv,
+            ori_sparse_indices=None,
+            cmp_sparse_indices=cmp_indices,
+            ori_block_table=state.expanded_ori_bt,
+            cmp_block_table=cmp_block_table,
+            cu_seqlens_q=state.cu_seqlens_q,
+            seqused_ori_kv=dsa.seq_lens,
+            seqused_cmp_kv=seqused_cmp,
+            cmp_residual_kv=cmp_residual,
+            sinks=layer.attn_sink,
+            metadata=state.metadata[ratio],
             softmax_scale=self.scale,
             cmp_ratio=ratio,  # aclnnSmlaVa contract: 0 when no cmp_kv is fed
             ori_mask_mode=_SMLA_ORI_MASK_MODE,
             cmp_mask_mode=_SMLA_CMP_MASK_MODE if ratio > 0 else _SMLA_NO_MASK_MODE,
-            ori_win_left=self.window_size - 1, ori_win_right=0,
-            layout_q="TND", layout_kv="PA_BBND",
+            ori_win_left=self.window_size - 1,
+            ori_win_right=0,
+            layout_q="TND",
+            layout_kv="PA_BBND",
         )
         return out
 
@@ -3121,7 +3142,9 @@ class Csa2AttentionBackend(DsaAttentionBackend):
 
         ratio_dtypes = dict(dtype=torch.int32, device=device)
         state = _SmlaGraphState(
-            rows=rows, capacity=capacity, read_cols=read_cols,
+            rows=rows,
+            capacity=capacity,
+            read_cols=read_cols,
             cu_seqlens_q=torch.arange(rows + 1, **ratio_dtypes),
             expanded_ori_bt=torch.zeros((rows, cols), **ratio_dtypes),
             seqused_cmp={r: torch.zeros(rows, **ratio_dtypes) for r in _SMLA_SUPPORTED_RATIOS if r > 0},
@@ -3152,21 +3175,28 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             cmp_capacity = max(state.capacity // ratio, 1) if has_cmp else 0  # mirrors _run_indexer's floor
             state.metadata[ratio].copy_(
                 metadata_op(
-                    self.num_heads, 1, self.head_dim,
+                    self.num_heads,
+                    1,
+                    self.head_dim,
                     cu_seqlens_q=state.cu_seqlens_q,
                     seqused_ori_kv=dsa.seq_lens,
                     seqused_cmp_kv=state.seqused_cmp[ratio] if has_cmp else None,
                     cmp_residual_kv=state.cmp_residual[ratio] if has_cmp else None,
-                    batch_size=state.rows, max_seqlen_q=1,
-                    max_seqlen_ori_kv=state.capacity, max_seqlen_cmp_kv=cmp_capacity,
+                    batch_size=state.rows,
+                    max_seqlen_q=1,
+                    max_seqlen_ori_kv=state.capacity,
+                    max_seqlen_cmp_kv=cmp_capacity,
                     ori_topk=0,
                     cmp_topk=_round_cmp_width(min(self.index_topk, cmp_capacity)) if has_cmp else 0,
                     cmp_ratio=ratio,  # aclnnSmlaVaMetadata contract: 0 when no cmp_kv
                     ori_mask_mode=_SMLA_ORI_MASK_MODE,
                     cmp_mask_mode=_SMLA_CMP_MASK_MODE if has_cmp else _SMLA_NO_MASK_MODE,
-                    ori_win_left=self.window_size - 1, ori_win_right=0,
-                    layout_q="TND", layout_kv="PA_BBND",
-                    has_ori_kv=True, has_cmp_kv=has_cmp,
+                    ori_win_left=self.window_size - 1,
+                    ori_win_right=0,
+                    layout_q="TND",
+                    layout_kv="PA_BBND",
+                    has_ori_kv=True,
+                    has_cmp_kv=has_cmp,
                 )
             )
 

@@ -572,24 +572,46 @@ def test_mc2_dp1_keeps_the_single_replica_chain(monkeypatch: pytest.MonkeyPatch,
     assert out.shape == (_TOKENS, _MC2_HIDDEN)
 
 
-def test_mc2_dp_local_rows_no_gather_no_slice(monkeypatch: pytest.MonkeyPatch, mc2: _Mc2Recorder) -> None:
+@pytest.mark.parametrize("with_norm", [False, True])
+@pytest.mark.parametrize("scoring", ["softmax", "sigmoid", "sqrtsoftplus", "unknown"])
+def test_mc2_dp_local_rows_no_gather_no_slice(
+    with_norm: bool, scoring: str, monkeypatch: pytest.MonkeyPatch, mc2: _Mc2Recorder
+) -> None:
     """dp>1 mirrors the C++ mode-0 EP2 branch: local rows only.
     The post-norm, gate, dispatch and shared expert all run on THIS rank's rows; there is no DP pad/all-gather and no"""
-    moe = _make_moe(dp_size=3, dp_rank=1)
+    bias = torch.arange(_TOTAL_EXPERTS, dtype=torch.float32)
+    moe = _make_moe(dp_size=3, dp_rank=1, scoring_func=scoring, e_score_correction_bias=bias)
     token_counts = [2, 2, 2]
     local_rows = token_counts[moe.dp_rank]
     hidden = torch.randn(local_rows, _MC2_HIDDEN, dtype=torch.bfloat16)
 
+    normalized = hidden + 1 if with_norm else hidden
+    gate_input = normalized.float()
+    post_norm = object() if with_norm else None
     post_norm_rows: list[int] = []
+    shared_inputs: list[torch.Tensor] = []
 
-    def fake_post_norm(hidden: torch.Tensor, post_norm: Any) -> tuple[torch.Tensor, torch.Tensor]:
-        post_norm_rows.append(int(hidden.shape[0]))
-        return hidden, hidden.to(torch.float32)
+    def fake_post_norm(value: torch.Tensor, norm: Any) -> tuple[torch.Tensor, torch.Tensor]:
+        assert norm is post_norm
+        torch.testing.assert_close(value, hidden, rtol=0, atol=0)
+        post_norm_rows.append(int(value.shape[0]))
+        return normalized, gate_input
+
+    def gate_logits(value: torch.Tensor, input_ids: torch.Tensor | None) -> torch.Tensor:
+        assert input_ids is None and value.dtype == torch.float32
+        torch.testing.assert_close(value, gate_input, rtol=0, atol=0)
+        return value
+
+    def shared_experts(value: torch.Tensor) -> torch.Tensor:
+        shared_inputs.append(value)
+        return torch.full_like(value, 0.25)
 
     monkeypatch.setattr(moe, "_apply_post_norm", fake_post_norm)
+    monkeypatch.setattr(moe, "_gate_logits", gate_logits)
+    monkeypatch.setattr(moe, "_run_shared_experts", shared_experts)
 
     with forward_context(_context(token_counts=token_counts, dp_is_decode=[1, 1, 1])):
-        out = moe.forward(hidden, post_norm=object())
+        out = moe.forward(hidden, post_norm=post_norm)
 
     # No DP collective: the chain is the single-replica one, on local rows.
     assert "all_gather" not in _names(mc2)
@@ -603,10 +625,18 @@ def test_mc2_dp_local_rows_no_gather_no_slice(monkeypatch: pytest.MonkeyPatch, m
         "combine",
     ]
     # post_norm sees exactly this rank's rows, not a gathered block.
-    assert post_norm_rows == [local_rows]
+    assert post_norm_rows == ([local_rows] if with_norm else [])
+    assert len(shared_inputs) == 1
+    torch.testing.assert_close(shared_inputs[0], normalized, rtol=0, atol=0)
+    gating = next(kwargs for name, kwargs in mc2.calls if name == "gating")
+    norm_type = {"softmax": 0, "sigmoid": 1, "sqrtsoftplus": 2}.get(scoring, 2)
+    assert gating["bias"] is bias
+    assert gating["norm_type"] == norm_type
+    assert gating["renorm"] == (0 if norm_type == 2 else 1)
 
     dispatch = next(kwargs for name, kwargs in mc2.calls if name == "dispatch")
     assert dispatch["x"].shape == (local_rows, _MC2_HIDDEN)
+    torch.testing.assert_close(dispatch["x"], normalized, rtol=0, atol=0)
     assert dispatch["expert_ids"].shape[0] == local_rows
     assert dispatch["x_active_mask"] is None
     assert dispatch["global_bs"] == 0

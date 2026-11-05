@@ -2020,9 +2020,25 @@ def test_mhc_final_merge_is_learned_weighted_sum() -> None:
 
         def make_wrapper(orig, store):
             def wrapper(
-                hidden, positions, cos_sin_cache, input_ids=None, pre_mix=None, engram_hashes=None, engram_mask=None
+                hidden,
+                positions,
+                cos_sin_cache,
+                input_ids=None,
+                pre_mix=None,
+                engram_hashes=None,
+                engram_mask=None,
+                sp_metadata=None,
             ):
-                out, ffn_pre = orig(hidden, positions, cos_sin_cache, input_ids, pre_mix, engram_hashes, engram_mask)
+                out, ffn_pre = orig(
+                    hidden,
+                    positions,
+                    cos_sin_cache,
+                    input_ids,
+                    pre_mix,
+                    engram_hashes,
+                    engram_mask,
+                    sp_metadata=sp_metadata,
+                )
                 store["hidden"] = out.clone()
                 store["ffn_pre"] = ffn_pre.clone()
                 return out, ffn_pre

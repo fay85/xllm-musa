@@ -93,7 +93,7 @@ def test_compaction_preserves_source_cache_and_final_output_slot(
     monkeypatch.setattr(
         swa_bounded_replay.distributed,
         "dp_all_gather",
-        lambda value, counts, rank: torch.tensor([140, 1]),
+        lambda value, counts, rank: torch.tensor([128, 1]),
         raising=False,
     )
     positions = torch.arange(rows)
@@ -128,22 +128,23 @@ def test_compaction_preserves_source_cache_and_final_output_slot(
         pre_mix: torch.Tensor,
         hashes: object,
         mask: object,
+        sp_metadata: object = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         active = get_forward_context()
         assert active.metadata.swa_bounded_replay_active
-        assert active.metadata.dp_execution_token_counts == (140, 1)
-        assert active.metadata.raw_dp_execution_token_counts == (140, 0)
+        assert active.metadata.dp_execution_token_counts == (128, 1)
+        assert active.metadata.raw_dp_execution_token_counts == (128, 0)
         assert active.metadata.dsa_metadata.seq_lens is dsa.seq_lens
         compact_slots = active.metadata.dsa_metadata.slot_mappings[0]
-        torch.testing.assert_close(compact_slots[0], positions[-min(rows, 140) :])
+        torch.testing.assert_close(compact_slots[0], positions[-min(rows, 128) :])
         if rows > 1:
             assert compact_slots[1] is compressed_slots
         assert compact_slots[2] is None
-        assert active.metadata.dsa_metadata.seq_lens_q.item() == min(logical_rows, 140)
-        assert hidden.size(0) == min(rows, 140)
+        assert active.metadata.dsa_metadata.seq_lens_q.item() == min(logical_rows, 128)
+        assert hidden.size(0) == min(rows, 128)
         assert pos[-1].item() == rows - 1
         assert shared.key_cache is source_cache
-        assert torch.all(shared.topk_idxs[:, :, 0] == 128 + min(rows, 140) + 7)
+        assert torch.all(shared.topk_idxs[:, :, 0] == 128 + min(rows, 128) + 7)
         assert torch.all(shared.topk_idxs[:, :, 1] == -1)
         seen.append(hidden.size(0))
         return hidden + 1, pre_mix
@@ -153,11 +154,11 @@ def test_compaction_preserves_source_cache_and_final_output_slot(
     class _LastLayer:
         hc = last.hc
 
-        def __call__(self, *args: object) -> tuple[torch.Tensor, torch.Tensor]:
-            return layer(*args)
+        def __call__(self, *args: object, sp_metadata: object = None) -> tuple[torch.Tensor, torch.Tensor]:
+            return layer(*args, sp_metadata=sp_metadata)
 
     model = SimpleNamespace(
-        cfg=SimpleNamespace(dp_rank=0),
+        cfg=SimpleNamespace(dp_rank=0, enable_flashcomm1=False),
         aux_hidden_capture=SimpleNamespace(finalize=lambda hidden, buffer: hidden),
         layers=[None] * 21 + [layer] * 18 + [_LastLayer()],
         csa2_plan=SimpleNamespace(mode=lambda index: index),
@@ -169,7 +170,7 @@ def test_compaction_preserves_source_cache_and_final_output_slot(
     assert len(seen) == 19
     assert output.shape == (rows, 1)
     assert output[-1].item() == rows - 1 + 19
-    assert torch.count_nonzero(output[: max(0, rows - 140)]) == 0
+    assert torch.count_nonzero(output[: max(0, rows - 128)]) == 0
     assert dsa.seq_lens_q.item() == logical_rows
     assert metadata.dp_execution_token_counts == (1024, 1)
 
@@ -197,15 +198,16 @@ def test_multiple_requests_keep_each_final_row_and_aux_capture(persistent: bool)
     class _Layer:
         hc = SimpleNamespace(hc_pre=lambda value, mix: value[:, 0])
 
-        def __call__(self, *args: object) -> tuple[torch.Tensor, torch.Tensor]:
+        def __call__(self, *args: object, sp_metadata: object = None) -> tuple[torch.Tensor, torch.Tensor]:
             active = get_forward_context().metadata
-            assert active.dp_execution_token_counts == (283,)
-            assert active.dsa_metadata.seq_lens_q.tolist() == [140, 3, 140]
-            for seq, keep in enumerate([140, 3, 140]):
+            assert active.dp_execution_token_counts == (259,)
+            assert active.dsa_metadata.seq_lens_q.tolist() == [128, 3, 128]
+            for seq, keep in enumerate([128, 3, 128]):
                 assert torch.all(shared.topk_idxs[seq, :keep] == 128 + keep + 9)
             return args[0] + 1, args[4]
 
     model = SimpleNamespace(
+        cfg=SimpleNamespace(enable_flashcomm1=False),
         layers=[None] * 21 + [_Layer() for _ in range(19)],
         csa2_plan=SimpleNamespace(mode=lambda layer_id: layer_id),
         _layer_rope_cache=lambda mode: None,
@@ -214,18 +216,18 @@ def test_multiple_requests_keep_each_final_row_and_aux_capture(persistent: bool)
     )
     result = run_swa_bounded_consumers(model, context, hidden, torch.ones(total, 1), positions, positions, aux_buffer)
     output, aux = (result, capture.buffer) if persistent else result
-    kept = torch.cat((torch.arange(60, 200), torch.arange(200, 203), torch.arange(243, 383)))
+    kept = torch.cat((torch.arange(72, 200), torch.arange(200, 203), torch.arange(255, 383)))
     torch.testing.assert_close(output[kept, 0], kept.float() + 19, rtol=0, atol=0)
     # Capture takes the stream entering each layer, so layers 37/38/39 see 16/17/18
     # increments while the output has all 19.
     expected_aux = kept.float().unsqueeze(-1) + torch.tensor([16, 17, 18])
     torch.testing.assert_close(aux[kept], expected_aux, rtol=0, atol=0)
-    for dropped in (slice(0, 60), slice(203, 243)):
+    for dropped in (slice(0, 72), slice(203, 255)):
         assert torch.count_nonzero(output[dropped]) == 0
         assert torch.count_nonzero(aux[dropped]) == 0
 
 
-@pytest.mark.parametrize("compact,drop", [(False, 0), (True, 884), (True, 0)])
+@pytest.mark.parametrize("compact,drop", [(False, 0), (True, 896), (True, 0)])
 def test_smla_visibility_masks_only_the_missing_consumer_prefix(
     compact: bool, drop: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -252,17 +254,57 @@ def test_smla_visibility_masks_only_the_missing_consumer_prefix(
     layer = SimpleNamespace(mode=SimpleNamespace(compress_ratio=0), attn_sink=None)
     with forward_context(context):
         backend._smla_attention(
-            torch.zeros(140, 2, 8),
-            torch.zeros(268, 8),
+            torch.zeros(128, 2, 8),
+            torch.zeros(256, 8),
             layer,
             torch.tensor([1024]),
             torch.tensor([1024]),
-            140,
-            140,
+            128,
+            128,
             0,
             None,
             SimpleNamespace(),
             torch.zeros(2),
         )
-    expected = torch.arange(1, 141, dtype=torch.int32).clamp(max=128) if drop else torch.full((140,), 128)
+    expected = torch.arange(1, 129, dtype=torch.int32).clamp(max=128) if drop else torch.full((128,), 128)
     torch.testing.assert_close(seen[0].flatten(), expected, check_dtype=False)
+
+
+@pytest.mark.parametrize("drop", [0, 72])
+def test_reference_attention_never_reads_dropped_consumer_ring(drop: int) -> None:
+    """Reused/NaN ring rows below the replay floor cannot affect a suffix."""
+    from xllm.python.attention.csa2_attention import Csa2AttentionBackend
+    from xllm.python.model_executor.forward_context import forward_context
+
+    backend = object.__new__(Csa2AttentionBackend)
+    backend.window_size = 128
+    backend.scale = 1.0
+    backend.index_topk = 0
+    backend._kv_caches = [SimpleNamespace(swa=torch.full((1, 128, 1), 7.0))]
+    backend._resolve_cache_mapping = lambda layer_id, ratio: SimpleNamespace(ori_cache_idx=0)
+    reads: list[int] = []
+
+    def gather(*args: object) -> torch.Tensor:
+        reads.append(1)
+        return torch.full((128, 1), float("nan") if drop else 7.0)
+
+    backend._gather_swa_positions = gather
+    metadata = SimpleNamespace(swa_bounded_replay_dropped_rows=(drop,))
+    context = ForwardContext(backend, torch.device("cpu"), metadata, [])
+    dsa = SimpleNamespace(block_tables=[[torch.tensor([[0]])]], seq_lens=torch.tensor([200]))
+    layer = SimpleNamespace(mode=SimpleNamespace(compress_ratio=0), layer_id=0, attn_sink=torch.zeros(1))
+    shared = SimpleNamespace(query_layout=None)
+    with forward_context(context):
+        result = backend._csa2_attention(
+            torch.zeros(128, 1, 1), torch.ones(128, 1), layer, dsa, [128], torch.tensor([200]), None, shared
+        )
+    assert bool(reads) == (drop == 0)
+    expected_first = 1.0 / 2 if drop else (72 * 7.0 + 1) / 74
+    torch.testing.assert_close(result[0, 0, 0], torch.tensor(expected_first))
+    assert torch.isfinite(result).all()
+
+
+@pytest.mark.parametrize("length", [1, 127, 128, 129, 140, 2048])
+def test_replay_selection_uses_one_sliding_window(length: int) -> None:
+    context = ForwardContext(None, torch.device("cpu"), SimpleNamespace(dp_execution_token_counts=(length, 1)), [])
+    assert should_run_swa_bounded_replay(True, context) == (length > 128)

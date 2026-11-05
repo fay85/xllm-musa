@@ -298,8 +298,24 @@ PyCausalLM::PyCausalLM(const ModelContext& context, bool is_vlm)
       model_args_.model_type() == "deepseek_v4" ||
       model_args_.model_type() == "deepseek_v41" ||
       util::is_deepseek_v4_dspark_model_type(model_args_.model_type());
+  // V4.1 FlashComm1 uses the Python SP/EP reduce-scatter collectives. Native
+  // all-reduce ownership alone does not create their Python process groups.
+  // Resolve capability before creating FC1-only groups. Keep the effective
+  // switch in the same config dict passed to the Python model below.
+  bool uses_v41_flashcomm1 = false;
+#if defined(USE_NPU)
+  if (model_args_.model_type() == "deepseek_v41" &&
+      KernelConfig::get_instance().enable_flashcomm1()) {
+    config_dict_ = build_config_dict(parallel_args,
+                                     context.get_speculative_runtime_config());
+    uses_v41_flashcomm1 = py::module_::import("xllm.python.models.deepseek_v41")
+                              .attr("DeepseekV41ForCausalLM")
+                              .attr("configure_flashcomm1")(config_dict_)
+                              .cast<bool>();
+  }
+#endif
   const bool needs_python_process_group =
-      !is_deepseek_v4 || dp_size_ > 1 || cp_size_ > 1;
+      !is_deepseek_v4 || uses_v41_flashcomm1 || dp_size_ > 1 || cp_size_ > 1;
   if (needs_python_process_group) {
     py::object init_process_group =
         py::module_::import("xllm.python.distributed")
@@ -308,7 +324,7 @@ PyCausalLM::PyCausalLM(const ModelContext& context, bool is_vlm)
     CHECK_GT(parallel_args.python_rendezvous_port_, 0);
     const int32_t global_rank = parallel_args.rank();
     const int32_t global_world_size = parallel_args.world_size();
-    if (!is_deepseek_v4 && tp_size_ > 1) {
+    if ((!is_deepseek_v4 || uses_v41_flashcomm1) && tp_size_ > 1) {
       init_process_group("tp",
                          parallel_args.python_rendezvous_host_,
                          parallel_args.python_rendezvous_port_,
@@ -341,7 +357,7 @@ PyCausalLM::PyCausalLM(const ModelContext& context, bool is_vlm)
                          global_world_size,
                          global_rank / moe_tp_size_);
     }
-    if (!is_deepseek_v4 && ep_size_ > 1) {
+    if ((!is_deepseek_v4 || uses_v41_flashcomm1) && ep_size_ > 1) {
       init_process_group("moe_ep",
                          parallel_args.python_rendezvous_host_,
                          parallel_args.python_rendezvous_port_,
@@ -419,8 +435,10 @@ PyCausalLM::PyCausalLM(const ModelContext& context, bool is_vlm)
 
   py::module_ registry = py::module_::import("xllm.python.registry");
   py::object model_cls = registry.attr("get_model_class")(py::str(module_name));
-  config_dict_ = build_config_dict(parallel_args,
-                                   context.get_speculative_runtime_config());
+  if (!config_dict_) {
+    config_dict_ = build_config_dict(parallel_args,
+                                     context.get_speculative_runtime_config());
+  }
   // Publish the loader's authoritative quantization contract to Python models.
   // Model construction must choose packed parameter dtypes before load_weights.
   const auto& quant_args = context.get_quant_args();
@@ -564,6 +582,11 @@ py::dict PyCausalLM::build_config_dict(
   d["load_format"] = std::string("safetensors");
 #if defined(USE_NPU)
   d["enable_fused_mc2"] = KernelConfig::get_instance().enable_fused_mc2() > 0;
+  if (model_args_.model_type() == "deepseek_v41") {
+    d["enable_flashcomm1"] = KernelConfig::get_instance().enable_flashcomm1();
+    d["flashcomm1_min_prefill_tokens"] =
+        KernelConfig::get_instance().flashcomm1_min_prefill_tokens();
+  }
   d["enable_dsa_cp"] = KernelConfig::get_instance().enable_dsa_cp() &&
                        !speculative_runtime_config.is_draft_engine;
   // KDA CP prefill switch for glm5_next (the two-pass scheme is the only

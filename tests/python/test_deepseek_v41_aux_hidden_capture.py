@@ -43,6 +43,7 @@ import torch.nn as nn
 
 import xllm.python.models.deepseek_v41 as deepseek_v41_module
 from tests.python.test_deepseek_v41_model import _DEEPSEEK_V41_TINY_CONFIG
+from xllm.python.layers.sequence_parallel_metadata import SpMetadata
 from xllm.python.model_executor.executor import ModelExecutor
 from xllm.python.models.aux_hidden_capture import AuxHiddenCapture
 from xllm.python.models.deepseek_v41 import DeepseekV41Config, DeepseekV41Model
@@ -94,8 +95,9 @@ class _HcDeltaLayer(nn.Module):
         input_ids: torch.Tensor,
         pre_mix: torch.Tensor,
         *extra: object,
+        sp_metadata: SpMetadata | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        del positions, cos_sin_cache, input_ids, extra
+        del positions, cos_sin_cache, input_ids, extra, sp_metadata
         values = self.delta + self.hc_slots.view(1, -1, 1)
         return values.expand_as(hidden).contiguous(), pre_mix
 

@@ -14,10 +14,10 @@
 
 """Explicitly lossy V4.1 prefill consumer compaction.
 
-Keep the tested 140-row suffix in layers 21..39 after source layer 20 has
-written the complete main/index caches. Missing consumer SWA dependencies
-make this approximate. Only suffix outputs are valid; generation consumes
-the final row. Decode, including ACL graph capture/replay, is unchanged.
+Keep the model's 128-row sliding-window suffix in layers 21..39 after source
+layer 20 has written the complete main/index caches. Missing consumer SWA
+dependencies make this approximate. Only suffix outputs are valid; generation
+consumes the final row. Decode, including ACL graph capture/replay, is unchanged.
 """
 
 from __future__ import annotations
@@ -29,13 +29,15 @@ import torch
 
 from scripts.logger import logger
 from xllm.python import distributed
+from xllm.python.layers.sequence_parallel import sp_all_gather, sp_shard
+from xllm.python.layers.sequence_parallel_metadata import build_flashcomm1_layout
 from xllm.python.model_executor.forward_context import ForwardContext, forward_context, record_layer_event
 
 if TYPE_CHECKING:
     from xllm.python.models.deepseek_v41 import CSA2LayerPlan, DeepseekV41Config, DeepseekV41Model
 
 SWA_BOUNDED_FIRST_CONSUMER = 21
-SWA_BOUNDED_QUERY_ROWS = 140
+SWA_BOUNDED_QUERY_ROWS = 128
 
 
 class _MetadataView:
@@ -61,7 +63,7 @@ def validate_swa_bounded_replay(cfg: DeepseekV41Config, plan: CSA2LayerPlan) -> 
     ):
         raise ValueError("SWA bounded replay requires the V4.1 Flash 40-layer/source-20/window-128 layout")
     logger.warning(
-        "Lossy SWA bounded replay enabled: retain 140 query rows in layers 21..39; "
+        "Lossy SWA bounded replay enabled: retain 128 query rows in layers 21..39; "
         "prefix hidden states are approximate; decode uses full computation"
     )
 
@@ -139,7 +141,7 @@ def run_swa_bounded_consumers(
     counts = (hidden.size(0),)
     if len(metadata.dp_execution_token_counts) > 1:
         # Each replica can own several requests. Exchange the resulting row
-        # counts instead of assuming every replica retains exactly 140 rows.
+        # counts instead of assuming every replica retains exactly 128 rows.
         # The .cpu() below synchronizes the collective so subsequent MoE
         # gathers can use the actual per-replica counts on the host.
         local_count = torch.tensor([hidden.size(0)], dtype=torch.int64, device=hidden.device)
@@ -163,6 +165,10 @@ def run_swa_bounded_consumers(
     )
     compact_context = replace(context, metadata=view, layer_shared_cache={})
     captured = None
+    sp_metadata = build_flashcomm1_layout(model.cfg, compact_context, hidden.size(0))
+    if sp_metadata is not None:
+        hidden = sp_shard(hidden, sp_metadata)
+        pre_mix = sp_shard(pre_mix, sp_metadata)
     with forward_context(compact_context):
         for layer_id in range(SWA_BOUNDED_FIRST_CONSUMER, len(model.layers)):
             # Same capture point as the eager loop: a V4.1 target layer id names
@@ -170,7 +176,10 @@ def run_swa_bounded_consumers(
             if aux_hidden_buffer is not None and model.aux_hidden_capture.should_capture(layer_id):
                 if captured is None:
                     captured = hidden.new_zeros((original_rows, hidden.size(-1)))
-                captured.index_copy_(0, rows, hidden.mean(dim=1))
+                values = hidden.mean(dim=1)
+                if sp_metadata is not None:
+                    values = sp_all_gather(values, sp_metadata)
+                captured.index_copy_(0, rows, values)
                 model.aux_hidden_capture.capture_layer(layer_id, captured, None, aux_hidden_buffer)
             hidden, pre_mix = model.layers[layer_id](
                 hidden,
@@ -180,9 +189,12 @@ def run_swa_bounded_consumers(
                 pre_mix,
                 None,
                 None,
+                sp_metadata=sp_metadata,
             )
             record_layer_event(layer_id)
         result = model.norm(model.layers[-1].hc.hc_pre(hidden, pre_mix))
+        if sp_metadata is not None:
+            result = sp_all_gather(result, sp_metadata)
     # Preserve the executor's output indexing. Prefix logits are unsupported
     # for this opt-in mode; the final generation row remains in its old slot.
     full_result = result.new_zeros((original_rows, result.size(-1)))
