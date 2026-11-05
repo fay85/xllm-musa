@@ -65,8 +65,20 @@ DEFINE_int32(health_check_interval_ms,
 DEFINE_bool(enable_json_object_output,
             true,
             "Enable response_format json_object constrained decoding. When "
-            "disabled, json_object requests are accepted without applying "
-            "JSON grammar constraints.");
+            "disabled, builtin accepts json_object requests without "
+            "constraints; xgrammar rejects them.");
+
+DEFINE_string(
+    structured_output_backend,
+    "builtin",
+    "Structured output backend: builtin (json_object only) or xgrammar "
+    "(json_object, json_schema and regex; requires USE_XGRAMMAR and a single "
+    "NPU with native eager generation and performance switches disabled).");
+
+DEFINE_int64(xgrammar_cache_max_memory_bytes,
+             64 * 1024 * 1024,
+             "XGrammar compiler cache capacity in bytes; -1 means unlimited, "
+             "0 disables cache retention. Used only with xgrammar backend.");
 
 DEFINE_bool(enable_verbose_trace_log,
             false,
@@ -118,6 +130,8 @@ void ServiceConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(num_response_handling_threads);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(health_check_interval_ms);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_json_object_output);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(structured_output_backend);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(xgrammar_cache_max_memory_bytes);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_verbose_trace_log);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(verbose_trace_log_path);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(verbose_trace_log_max_size_mb);
@@ -139,6 +153,8 @@ void ServiceConfig::from_json(const JsonReader& json) {
   XLLM_CONFIG_ASSIGN_FROM_JSON(num_response_handling_threads);
   XLLM_CONFIG_ASSIGN_FROM_JSON(health_check_interval_ms);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_json_object_output);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(structured_output_backend);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(xgrammar_cache_max_memory_bytes);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_verbose_trace_log);
   XLLM_CONFIG_ASSIGN_FROM_JSON(verbose_trace_log_path);
   XLLM_CONFIG_ASSIGN_FROM_JSON(verbose_trace_log_max_size_mb);
@@ -170,6 +186,10 @@ void ServiceConfig::append_config_json(
       config_json, default_config, health_check_interval_ms);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_json_object_output);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, structured_output_backend);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, xgrammar_cache_max_memory_bytes);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_verbose_trace_log);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(

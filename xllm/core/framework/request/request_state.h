@@ -30,6 +30,7 @@ limitations under the License.
 #include "core/framework/request/request_timing.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "core/framework/sampling/sampling_params.h"
+#include "core/framework/sampling/xgrammar_constraint.h"
 #include "rec_type.h"
 #include "request_output.h"
 #include "sample_slot.h"
@@ -220,6 +221,7 @@ class RequestState final {
 
 
   std::shared_ptr<const JsonObjectGrammar> json_object_grammar;
+  std::shared_ptr<const CompiledXGrammar> xgrammar_constraint;
   bool json_reasoning_enabled = false;
 };
 

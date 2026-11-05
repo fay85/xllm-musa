@@ -38,6 +38,10 @@ class ServiceConfig final {
   void append_config_json(nlohmann::ordered_json& config_json) const;
   void initialize();
 
+  bool use_xgrammar() const {
+    return structured_output_backend() == "xgrammar";
+  }
+
   [[nodiscard]] static const OptionCategory& option_category() {
     static const OptionCategory kOptionCategory = {
         "SERVICE OPTIONS",
@@ -53,6 +57,8 @@ class ServiceConfig final {
          "num_response_handling_threads",
          "health_check_interval_ms",
          "enable_json_object_output",
+         "structured_output_backend",
+         "xgrammar_cache_max_memory_bytes",
          "enable_verbose_trace_log",
          "verbose_trace_log_path",
          "verbose_trace_log_max_size_mb",
@@ -85,6 +91,10 @@ class ServiceConfig final {
   PROPERTY(int32_t, health_check_interval_ms) = 3000;
 
   PROPERTY(bool, enable_json_object_output) = true;
+
+  PROPERTY(std::string, structured_output_backend) = "builtin";
+
+  PROPERTY(int64_t, xgrammar_cache_max_memory_bytes) = 64 * 1024 * 1024;
 
   PROPERTY(bool, enable_verbose_trace_log) = false;
 

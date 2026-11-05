@@ -59,6 +59,12 @@ class Tokenizer {
     return decode(Slice<int32_t>(&id, 1), /*skip_special_tokens=*/false);
   }
 
+  // Raw byte pieces for CPU grammar matching. Unsupported tokenizers return
+  // false; special token entries must be empty and token IDs remain unchanged.
+  virtual bool get_constraint_vocab(std::vector<std::string>* pieces) const {
+    return false;
+  }
+
   // Only for generative recommendation
   virtual bool encode(int64_t item_id, std::vector<int32_t>* token_ids) const {
     return false;

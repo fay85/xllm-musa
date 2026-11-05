@@ -1,5 +1,9 @@
 include(cc_library)
 
+if(USE_XGRAMMAR)
+  include(xgrammar)
+endif()
+
 add_subdirectory(sentencepiece)
 add_subdirectory(minja)
 add_subdirectory(brpc)

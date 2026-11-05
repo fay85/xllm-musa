@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.26)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
+option(USE_XGRAMMAR "Enable XGrammar C++ structured output" OFF)
+if(USE_XGRAMMAR)
+  add_compile_definitions(USE_XGRAMMAR)
+endif()
+
 option(USE_NPU "Enable NPU support" OFF)
 option(USE_MLU "Enable MLU support" OFF)
 option(USE_ILU "Enable ILU support" OFF)

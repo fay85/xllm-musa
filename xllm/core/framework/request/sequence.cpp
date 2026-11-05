@@ -260,6 +260,10 @@ Sequence::Sequence(size_t index,
     json_object_state_ = sequence_params_.json_object_grammar->initial_state(
         sequence_params_.json_reasoning_enabled);
   }
+  if (sequence_params_.xgrammar_constraint != nullptr) {
+    xgrammar_state_ =
+        std::make_unique<XGrammarState>(*sequence_params_.xgrammar_constraint);
+  }
   if (is_onerec_model()) {
     init_onerec_sequence(prompt_token_ids, std::move(input_embedding));
     return;
@@ -482,6 +486,15 @@ void Sequence::append_token(const Token& token) {
 
   const int32_t token_id = static_cast<int32_t>(token.id);
   if (!try_commit_json_object_token(token_id, /*token_offset=*/-1)) {
+    return;
+  }
+  if (xgrammar_state_ != nullptr && token_id >= 0 &&
+      !xgrammar_state_->accept_token(token_id)) {
+    LOG(ERROR) << "XGrammar token commit failed: request_id=" << request_id()
+               << ", sequence_index=" << index_ << ", token_id=" << token_id;
+    fail(Status(StatusCode::UNKNOWN,
+                "Generated token violates XGrammar constraint, token_id=" +
+                    std::to_string(token_id)));
     return;
   }
 

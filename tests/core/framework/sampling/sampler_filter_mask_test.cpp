@@ -16,10 +16,13 @@ limitations under the License.
 #include <gtest/gtest.h>
 
 #include <limits>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "core/framework/sampling/rec_sampler.h"
 #include "core/framework/sampling/sampler.h"
+#include "core/framework/sampling/xgrammar_constraint.h"
 #include "platform/platform.h"
 
 namespace xllm {
@@ -239,6 +242,46 @@ TEST(SamplerFilterMaskTest, GreedySamplingHonorsMixedRows) {
   EXPECT_EQ(output.next_tokens.index({0}).item<int64_t>(), 2);
   EXPECT_EQ(output.next_tokens.index({1}).item<int64_t>(), 1);
 }
+
+#if defined(USE_NPU) && defined(USE_XGRAMMAR)
+TEST(SamplerFilterMaskTest, XGrammarMasksConstrainNpuSampling) {
+  ASSERT_GT(Platform::device_count(), 0);
+  std::vector<std::string> pieces;
+  pieces.reserve(257);
+  for (int32_t id = 0; id < 256; ++id) {
+    pieces.emplace_back(1, static_cast<char>(id));
+  }
+  pieces.emplace_back();
+  XGrammarCompiler compiler(pieces,
+                            /*model_vocab_size=*/288,
+                            std::vector<int32_t>{256},
+                            /*cache_max_memory_bytes=*/0);
+  std::string error;
+  auto grammar = compiler.compile_regex("a", error);
+  ASSERT_NE(grammar, nullptr) << error;
+  const torch::Device device(Platform::type_torch(), /*index=*/0);
+  for (torch::ScalarType dtype : {torch::kFloat32, torch::kBFloat16}) {
+    SCOPED_TRACE(dtype);
+    XGrammarState state(*grammar);
+    for (const int32_t expected : {int32_t{'a'}, 256}) {
+      SamplingParameters params = make_greedy_params(/*batch_size=*/2);
+      const std::vector<XGrammarState*> states = {&state, nullptr};
+      params.filter_bitmask = build_xgrammar_filter_bitmask(states);
+      params = params.to(device, dtype);
+      torch::Tensor logits = torch::zeros({2, 288}, torch::kFloat32);
+      logits.index_put_({0, 'x'}, 100.0F);
+      logits.index_put_({0, expected}, 10.0F);
+      logits.index_put_({1, 'x'}, 100.0F);
+      logits = logits.to(device, dtype);
+      const SampleOutput output = Sampler().forward(logits, params);
+      const torch::Tensor tokens = output.next_tokens.to(torch::kCPU);
+      EXPECT_EQ(tokens[0].item<int32_t>(), expected);
+      EXPECT_EQ(tokens[1].item<int32_t>(), 'x');
+      ASSERT_TRUE(state.accept_token(tokens[0].item<int32_t>()));
+    }
+  }
+}
+#endif
 
 TEST(SamplerFilterMaskTest, RandomSamplingCannotSelectDisallowedToken) {
   if (uses_device_random_sample() && Platform::device_count() == 0) {

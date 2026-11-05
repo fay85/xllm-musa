@@ -42,6 +42,8 @@ namespace xllm {
 enum class ResponseFormatType : int8_t {
   NONE = 0,
   JSON_OBJECT = 1,
+  JSON_SCHEMA = 2,
+  REGEX = 3,
 };
 
 // Defined in core/framework/sampling/sampling_params.h and
@@ -211,6 +213,9 @@ struct RequestParams {
 
   ResponseFormatType response_format = ResponseFormatType::NONE;
   std::string response_format_error;
+  std::string response_format_schema;
+  bool response_format_strict = false;
+  std::string response_format_regex;
 
   bool is_sample_request = false;
 

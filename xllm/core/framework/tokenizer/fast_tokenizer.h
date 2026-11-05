@@ -37,6 +37,8 @@ class FastTokenizer : public Tokenizer {
 
   std::string decode_token(int32_t id) const override;
 
+  bool get_constraint_vocab(std::vector<std::string>* pieces) const override;
+
   std::optional<int32_t> token_to_id(
       const std::string_view& token) const override;
 

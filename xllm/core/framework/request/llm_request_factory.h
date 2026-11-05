@@ -26,6 +26,7 @@ limitations under the License.
 #include "common/message.h"
 #include "common/options.h"
 #include "common/rate_limiter.h"
+#include "core/framework/sampling/xgrammar_constraint.h"
 #include "framework/chat_template/chat_template.h"
 #include "framework/model/model_args.h"
 #include "framework/request/request.h"
@@ -47,8 +48,8 @@ class Tokenizer;
 //
 // The factory holds non-owning references to model configuration owned by
 // LLMMaster (tokenizer, chat template, model args, options, rate limiter); the
-// owner must outlive the factory. Only the JSON-object grammar cache is owned
-// here since it is built lazily and used solely during request creation.
+// owner must outlive the factory. Grammar compilers and caches are model-scoped
+// and owned here; sequences retain their immutable compilation results.
 class LLMRequestFactory final {
  public:
   // Turns a batch of request outputs into an xllm-service RPC response.
@@ -120,9 +121,13 @@ class LLMRequestFactory final {
       std::optional<ChatTemplateGenerationMode> generation_mode,
       const OutputCallback& callback);
 
+  std::shared_ptr<const CompiledXGrammar> compile_response_format(
+      const RequestParams& sp,
+      std::string& error);
+
   std::shared_ptr<const JsonObjectGrammar> get_json_object_grammar(
       bool reasoning_enabled,
-      std::string* error);
+      std::string& error);
 
   const Tokenizer* tokenizer_ = nullptr;
   const ChatTemplate* chat_template_ = nullptr;
@@ -132,6 +137,8 @@ class LLMRequestFactory final {
   std::string task_type_;
   RpcResponseHandler rpc_response_handler_;
 
+  const bool enable_xgrammar_output_;
+  std::unique_ptr<XGrammarCompiler> xgrammar_compiler_;
   std::mutex json_object_grammar_mutex_;
   std::shared_ptr<const JsonObjectGrammar> json_object_grammar_;
   std::shared_ptr<const JsonObjectGrammar> json_reasoning_grammar_;

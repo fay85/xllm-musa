@@ -422,6 +422,47 @@ void validate_config(const std::string& model_type) {
   SpeculativeConfig& speculative_config = SpeculativeConfig::get_instance();
   ExecutionConfig& execution_config = ExecutionConfig::get_instance();
 
+  const std::string& structured_output_backend =
+      ServiceConfig::get_instance().structured_output_backend();
+  CHECK(structured_output_backend == "builtin" ||
+        structured_output_backend == "xgrammar")
+      << "structured_output_backend must be builtin or xgrammar";
+  if (ServiceConfig::get_instance().use_xgrammar()) {
+#if !defined(USE_XGRAMMAR) || !defined(USE_NPU)
+    LOG(FATAL)
+        << "XGrammar requires a build with USE_XGRAMMAR=ON and USE_NPU=ON";
+#else
+    CHECK_GE(ServiceConfig::get_instance().xgrammar_cache_max_memory_bytes(),
+             -1)
+        << "xgrammar_cache_max_memory_bytes must be >= 0 or -1 (unlimited)";
+    const DistributedConfig& distributed_config =
+        DistributedConfig::get_instance();
+    CHECK(model_config.backend() == "llm" &&
+          model_config.task() == "generate" &&
+          model_config.model_impl() == "native")
+        << "XGrammar requires backend=llm, task=generate and model_impl=native";
+    CHECK(distributed_config.nnodes() == 1 &&
+          distributed_config.node_rank() == 0 &&
+          parallel_config.dp_size() == 1 && parallel_config.cp_size() == 1 &&
+          parallel_config.tp_size() <= 1 &&
+          DeviceNameUtils::parse_devices("auto").size() == 1)
+        << "XGrammar requires one visible NPU, nnodes=1, node_rank=0, "
+           "dp_size=1, cp_size=1 and tp_size<=1";
+    CHECK(!execution_config.enable_graph() &&
+          !execution_config.enable_prefill_piecewise_graph() &&
+          !scheduler_config.enable_schedule_overlap() &&
+          !scheduler_config.enable_chunked_prefill() &&
+          speculative_config.num_speculative_tokens() == 0 &&
+          !disagg_pd_config.enable_disagg_pd() &&
+          !distributed_config.enable_service_routing() &&
+          !kv_cache_config.enable_prefix_cache())
+        << "XGrammar requires graph, prefill_piecewise_graph, "
+           "schedule_overlap, "
+           "chunked_prefill, speculative decoding, disagg_pd, service_routing "
+           "and prefix_cache to be disabled";
+#endif
+  }
+
   ModelArgs model_args;
   if (!model_type.empty()) {
     JsonReader model_config_json;

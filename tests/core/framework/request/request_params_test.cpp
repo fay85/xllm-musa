@@ -112,7 +112,7 @@ TEST(RequestParamsTest, IgnoresJsonObjectResponseFormatWhenDisabled) {
 TEST(RequestParamsTest, RejectsUnsupportedResponseFormat) {
   ScopedJsonObjectOutput disabled(/*enabled=*/false);
   proto::ChatRequest request;
-  request.mutable_response_format()->set_type("text");
+  request.mutable_response_format()->set_type("unknown");
 
   RequestParams params(request, "", "");
   std::optional<Status> received_status;
@@ -128,6 +128,29 @@ TEST(RequestParamsTest, RejectsUnsupportedResponseFormat) {
   EXPECT_EQ(received_status->reason(), FailureReason::INVALID_PARAMETER);
   EXPECT_EQ(received_status->param(), "response_format");
   EXPECT_NE(received_status->message().find("json_object"), std::string::npos);
+}
+
+TEST(RequestParamsTest, ResponseFormatsRespectBackendSelection) {
+  const std::string previous =
+      ServiceConfig::get_instance().structured_output_backend();
+  for (const std::string backend : {"builtin", "xgrammar"}) {
+    ServiceConfig::get_instance().structured_output_backend(backend);
+    for (const std::string type : {"text", "", "regex", "json_schema"}) {
+      proto::ChatRequest request;
+      request.mutable_response_format()->set_type(type);
+      request.mutable_response_format()->set_regex("yes");
+      request.mutable_response_format()
+          ->mutable_json_schema()
+          ->mutable_schema();
+      const RequestParams params(request, "", "");
+      EXPECT_EQ(
+          params.response_format != ResponseFormatType::NONE,
+          backend == "xgrammar" && (type == "regex" || type == "json_schema"));
+      EXPECT_EQ(params.response_format_error.empty(),
+                backend == "xgrammar" || type == "text" || type.empty());
+    }
+  }
+  ServiceConfig::get_instance().structured_output_backend(previous);
 }
 
 TEST(RequestParamsTest, CompletionBeamDefaultsTopLogprobsWhenUnset) {

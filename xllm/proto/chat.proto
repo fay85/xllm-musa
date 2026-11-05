@@ -41,8 +41,17 @@ message ChatMessage {
   optional string tool_call_id = 5;
 }
 
+message JsonSchema {
+  optional string name = 1;
+  optional google.protobuf.Struct schema = 2;
+  optional bool strict = 3;
+}
+
 message ResponseFormat {
   optional string type = 1;
+  optional JsonSchema json_schema = 2;
+  // xLLM extension: constrain the entire output text with an XGrammar regex.
+  optional string regex = 3;
 }
 
 // Next Id: 45

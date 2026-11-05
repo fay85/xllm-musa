@@ -222,7 +222,9 @@ BatchInputBuilder::BatchInputBuilder(
       input_embeddings_vec_(input_embeddings_vec),
       mm_data_vec_(mm_data_vec),
       args_(args),
+      enable_xgrammar_output_(ServiceConfig::get_instance().use_xgrammar()),
       enable_json_object_output_(
+          !enable_xgrammar_output_ &&
           ServiceConfig::get_instance().enable_json_object_output()),
       thread_pool_(thread_pool),
       num_sequences_(sequences.size()),
@@ -724,6 +726,11 @@ void BatchInputBuilder::process_sequences_multithreaded() {
     state_.sampling_params.insert(state_.sampling_params.end(),
                                   state.sampling_params.begin(),
                                   state.sampling_params.end());
+    if (enable_xgrammar_output_) {
+      state_.xgrammar_states.insert(state_.xgrammar_states.end(),
+                                    state.xgrammar_states.begin(),
+                                    state.xgrammar_states.end());
+    }
     if (enable_json_object_output_) {
       state_.json_object_states.insert(state_.json_object_states.end(),
                                        state.json_object_states.begin(),
@@ -1128,6 +1135,9 @@ void BatchInputBuilder::handle_sampling_parameters(Sequence* sequence,
   state.selected_token_idxes.push_back(
       static_cast<int32_t>(state.flatten_tokens_vec.size() - 1));
   state.sampling_params.push_back(sequence->sampling_param());
+  if (enable_xgrammar_output_) {
+    state.xgrammar_states.emplace_back(sequence->xgrammar_state());
+  }
   if (enable_json_object_output_) {
     const JsonObjectGrammarState* json_state = sequence->json_object_state();
     state.json_object_states.push_back(
@@ -1547,7 +1557,12 @@ ForwardInput BatchInputBuilder::state_to_forward_input() {
                                        state_.unique_token_ids_vec,
                                        state_.unique_token_counts_vec,
                                        state_.unique_token_lens_vec);
-    if (!enable_json_object_output_) {
+    if (enable_xgrammar_output_) {
+      forward_input.sampling_params.filter_bitmask =
+          build_xgrammar_filter_bitmask(state_.xgrammar_states);
+    }
+    if (forward_input.sampling_params.filter_bitmask.defined() ||
+        !enable_json_object_output_) {
       return forward_input;
     }
     forward_input.json_object_states = std::move(state_.json_object_states);

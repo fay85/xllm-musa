@@ -13,11 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "llm_request_factory.h"
+#include "core/framework/request/llm_request_factory.h"
 
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <limits>
 #include <unordered_set>
 #include <utility>
 #include <vector>
@@ -54,17 +55,51 @@ LLMRequestFactory::LLMRequestFactory(const Tokenizer* tokenizer,
       options_(options),
       rate_limiter_(rate_limiter),
       task_type_(std::move(task_type)),
-      rpc_response_handler_(std::move(rpc_response_handler)) {
+      rpc_response_handler_(std::move(rpc_response_handler)),
+      enable_xgrammar_output_(ServiceConfig::get_instance().use_xgrammar()) {
   CHECK(tokenizer_ != nullptr);
   CHECK(chat_template_ != nullptr);
   CHECK(model_args_ != nullptr);
   CHECK(options_ != nullptr);
   CHECK(rate_limiter_ != nullptr);
+  if (enable_xgrammar_output_) {
+    std::vector<std::string> pieces;
+    if (!tokenizer_->get_constraint_vocab(&pieces)) {
+      LOG(ERROR) << "XGrammar requires a valid ByteLevel tokenizer vocabulary; "
+                    "structured output requests will be rejected";
+      return;
+    }
+    const int64_t model_vocab_size = model_args_->vocab_size();
+    if (model_vocab_size <= 0 ||
+        model_vocab_size > std::numeric_limits<int32_t>::max() ||
+        model_vocab_size < static_cast<int64_t>(pieces.size())) {
+      LOG(ERROR) << "Invalid XGrammar model vocabulary: model_vocab_size="
+                 << model_vocab_size
+                 << ", tokenizer_vocab_size=" << pieces.size()
+                 << "; expected tokenizer_vocab_size <= model_vocab_size <= "
+                 << std::numeric_limits<int32_t>::max()
+                 << " and model_vocab_size > 0; structured output requests "
+                    "will be rejected";
+      return;
+    }
+    pieces.resize(static_cast<size_t>(model_vocab_size));
+    std::vector<int32_t> stops(model_args_->stop_token_ids().begin(),
+                               model_args_->stop_token_ids().end());
+    const int32_t eos_token_id = model_args_->eos_token_id();
+    if (eos_token_id >= 0) {
+      stops.emplace_back(eos_token_id);
+    }
+    xgrammar_compiler_ = std::make_unique<XGrammarCompiler>(
+        pieces,
+        model_vocab_size,
+        stops,
+        ServiceConfig::get_instance().xgrammar_cache_max_memory_bytes());
+  }
 }
 
 std::shared_ptr<const JsonObjectGrammar>
 LLMRequestFactory::get_json_object_grammar(bool reasoning_enabled,
-                                           std::string* error) {
+                                           std::string& error) {
   std::lock_guard<std::mutex> lock(json_object_grammar_mutex_);
   std::shared_ptr<const JsonObjectGrammar>& grammar =
       reasoning_enabled ? json_reasoning_grammar_ : json_object_grammar_;
@@ -75,7 +110,7 @@ LLMRequestFactory::get_json_object_grammar(bool reasoning_enabled,
                                                  model_args_->stop_token_ids(),
                                                  model_args_->vocab_size(),
                                                  reasoning_enabled,
-                                                 error);
+                                                 &error);
   }
   return grammar;
 }
@@ -164,7 +199,8 @@ RequestSamplingParam LLMRequestFactory::build_sampling_param(
   RequestSamplingParam sampling_param = sp.to_sampling_param(best_of);
   sampling_param.json_object =
       ServiceConfig::get_instance().enable_json_object_output() &&
-      sp.response_format == ResponseFormatType::JSON_OBJECT;
+      sp.response_format == ResponseFormatType::JSON_OBJECT &&
+      !enable_xgrammar_output_;
   // Enforces the beam-search logprob requirements; see
   // RequestSamplingParam::enable_beam_search.
   sampling_param.enable_beam_search(sp.logprob_token_ids.empty() ? sp.beam_width
@@ -257,7 +293,7 @@ bool LLMRequestFactory::apply_json_object_grammar(
         ModelConfig::get_instance().reasoning_parser());
   }
   req_state.json_object_grammar =
-      get_json_object_grammar(reasoning_enabled, &grammar_error);
+      get_json_object_grammar(reasoning_enabled, grammar_error);
   if (req_state.json_object_grammar == nullptr) {
     CALLBACK_WITH_ERROR(
         StatusCode::INVALID_ARGUMENT,
@@ -268,6 +304,58 @@ bool LLMRequestFactory::apply_json_object_grammar(
   }
   req_state.json_reasoning_enabled = reasoning_enabled;
   return true;
+}
+
+std::shared_ptr<const CompiledXGrammar>
+LLMRequestFactory::compile_response_format(const RequestParams& sp,
+                                           std::string& error) {
+  if (sp.response_format == ResponseFormatType::NONE) {
+    return nullptr;
+  }
+  if (!enable_xgrammar_output_) {
+    if (sp.response_format != ResponseFormatType::JSON_OBJECT) {
+      error =
+          "json_schema and regex require structured_output_backend=xgrammar";
+    }
+    return nullptr;
+  }
+  if (xgrammar_compiler_ == nullptr) {
+    error =
+        "XGrammar requires a valid ByteLevel tokenizer and model vocabulary; "
+        "check initialization logs";
+    return nullptr;
+  }
+  if (sp.beam_width > 1 || sp.is_sample_request || sp.ignore_eos) {
+    error =
+        "XGrammar constraints require ordinary generation without beam search, "
+        "sample requests or ignore_eos";
+    return nullptr;
+  }
+  if (sp.stop_token_ids.has_value()) {
+    std::unordered_set<int32_t> model_stops = model_args_->stop_token_ids();
+    std::unordered_set<int32_t> request_stops(sp.stop_token_ids->begin(),
+                                              sp.stop_token_ids->end());
+    const int32_t eos_token_id = model_args_->eos_token_id();
+    if (eos_token_id >= 0) {
+      model_stops.insert(eos_token_id);
+      request_stops.insert(eos_token_id);
+    }
+    if (request_stops != model_stops) {
+      error =
+          "XGrammar constraints require the model's default stop token "
+          "IDs; overriding them is not supported";
+      return nullptr;
+    }
+  }
+  if (sp.response_format == ResponseFormatType::REGEX) {
+    return xgrammar_compiler_->compile_regex(sp.response_format_regex, error);
+  }
+  const bool json_object =
+      sp.response_format == ResponseFormatType::JSON_OBJECT;
+  return xgrammar_compiler_->compile_json_schema(
+      json_object ? R"({"type":"object"})" : sp.response_format_schema,
+      !json_object && sp.response_format_strict,
+      error);
 }
 
 std::shared_ptr<Request> LLMRequestFactory::create(
@@ -290,6 +378,16 @@ std::shared_ptr<Request> LLMRequestFactory::create(
                         "enable_qwen3_reranker is enabled",
                         sp.service_request_id,
                         sp.source_xservice_addr);
+    return nullptr;
+  }
+
+  std::string grammar_error;
+  auto xgrammar_constraint = compile_response_format(sp, grammar_error);
+  if (!grammar_error.empty()) {
+    callback(
+        {Status::invalid_parameter(std::move(grammar_error), "response_format"),
+         sp.service_request_id,
+         sp.source_xservice_addr});
     return nullptr;
   }
 
@@ -434,6 +532,7 @@ std::shared_ptr<Request> LLMRequestFactory::create(
       !apply_json_object_grammar(req_state, sp, generation_mode, callback)) {
     return nullptr;
   }
+  req_state.xgrammar_constraint = std::move(xgrammar_constraint);
   req_state.sample_slots = sp.sample_slots;
   req_state.timing = sp.timing;
   if (sp.adapter_id.has_value()) {

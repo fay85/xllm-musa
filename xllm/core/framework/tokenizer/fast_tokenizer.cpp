@@ -262,6 +262,52 @@ std::string FastTokenizer::decode_token(int32_t id) const {
   return byte_level_decoder_ ? decode_byte_level_piece(piece) : piece;
 }
 
+bool FastTokenizer::get_constraint_vocab(
+    std::vector<std::string>* pieces) const {
+  std::ifstream tokenizer_file(tokenizer_args_.vocab_file());
+  if (!tokenizer_file.is_open()) {
+    LOG(ERROR) << "Cannot open constraint vocabulary: "
+               << tokenizer_args_.vocab_file();
+    return false;
+  }
+  try {
+    const nlohmann::json tokenizer_json = nlohmann::json::parse(tokenizer_file);
+    if (!byte_level_decoder_ ||
+        tokenizer_json.at("decoder").at("type") != "ByteLevel") {
+      LOG(ERROR) << "XGrammar currently requires a ByteLevel decoder";
+      return false;
+    }
+    const size_t size = vocab_size();
+    pieces->clear();
+    pieces->reserve(size);
+    for (size_t token_id = 0; token_id < size; ++token_id) {
+      pieces->emplace_back(decode_token(static_cast<int32_t>(token_id)));
+    }
+    for (const auto& token :
+         tokenizer_json.value("added_tokens", nlohmann::json::array())) {
+      if (!token.value("special", false)) {
+        continue;
+      }
+      const auto& id = token.at("id");
+      if (!id.is_number_integer()) {
+        LOG(ERROR) << "Special token ID must be an integer";
+        return false;
+      }
+      const int64_t token_id = id.get<int64_t>();
+      if (token_id < 0 || static_cast<uint64_t>(token_id) >= pieces->size()) {
+        LOG(ERROR) << "Special token ID outside constraint vocabulary: "
+                   << token_id;
+        return false;
+      }
+      (*pieces)[static_cast<size_t>(token_id)].clear();
+    }
+  } catch (const nlohmann::json::exception& error) {
+    LOG(ERROR) << "Invalid constraint vocabulary: " << error.what();
+    return false;
+  }
+  return true;
+}
+
 std::optional<int32_t> FastTokenizer::token_to_id(
     const std::string_view& token) const {
   int32_t id = -1;

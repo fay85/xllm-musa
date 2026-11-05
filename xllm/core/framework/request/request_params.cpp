@@ -16,6 +16,9 @@ limitations under the License.
 
 #include "core/framework/request/request_params.h"
 
+#include <glog/logging.h>
+
+#include <cmath>
 #include <string>
 #include <type_traits>
 #include <unordered_set>
@@ -335,19 +338,68 @@ std::vector<xllm::JsonTool> parse_tools_from_proto(
   return tools;
 }
 
+// Protobuf Struct stores all numbers as doubles. Preserve integer schema bounds
+// for compilers that distinguish integer literals from floating-point literals.
+void normalize_schema_numbers(nlohmann::json& value) {
+  if (value.is_number_float()) {
+    const double number = value.get<double>();
+    constexpr double kMaxExactInteger = 9007199254740992.0;
+    if (std::isfinite(number) && number == std::trunc(number) &&
+        std::abs(number) <= kMaxExactInteger) {
+      value = static_cast<int64_t>(number);
+    }
+  } else if (value.is_structured()) {
+    for (auto& child : value) {
+      normalize_schema_numbers(child);
+    }
+  }
+}
+
 template <typename ChatRequest>
 void init_from_chat_request(RequestParams& params, const ChatRequest& request) {
   if constexpr (std::is_same_v<ChatRequest, proto::ChatRequest>) {
     if (request.has_response_format()) {
       const std::string& type = request.response_format().type();
-      if (type == "json_object") {
+      if (type.empty() || type == "text") {
+        params.response_format = ResponseFormatType::NONE;
+      } else if (type == "json_object") {
         if (ServiceConfig::get_instance().enable_json_object_output()) {
           params.response_format = ResponseFormatType::JSON_OBJECT;
+        } else if (ServiceConfig::get_instance().use_xgrammar()) {
+          params.response_format_error =
+              "json_object response format is not enabled";
+          LOG(ERROR) << params.response_format_error
+                     << "; structured_output_backend=xgrammar, "
+                        "enable_json_object_output=false";
+        }
+      } else if (!ServiceConfig::get_instance().use_xgrammar()) {
+        params.response_format_error =
+            "Unsupported response_format.type: " + type +
+            "; only json_object is supported";
+      } else if (type == "json_schema") {
+        const auto& format = request.response_format();
+        if (!format.has_json_schema() || !format.json_schema().has_schema()) {
+          params.response_format_error = "json_schema requires a schema object";
+        } else {
+          params.response_format = ResponseFormatType::JSON_SCHEMA;
+          auto schema = proto_struct_to_json(format.json_schema().schema());
+          normalize_schema_numbers(schema);
+          params.response_format_schema = schema.dump();
+          params.response_format_strict = format.json_schema().strict();
+        }
+      } else if (type == "regex") {
+        const auto& format = request.response_format();
+        if (!format.has_regex() || format.regex().empty()) {
+          params.response_format_error =
+              "regex requires a non-empty expression";
+        } else {
+          params.response_format = ResponseFormatType::REGEX;
+          params.response_format_regex = format.regex();
         }
       } else {
         params.response_format_error =
             "Unsupported response_format.type: " + type +
-            "; only json_object is supported";
+            "; supported types are json_object, json_schema and regex";
       }
     }
   }

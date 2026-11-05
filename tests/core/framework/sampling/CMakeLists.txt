@@ -46,6 +46,7 @@ cc_test(
   DEPS
     :platform
     :sampler
+    :xgrammar_constraint
     GTest::gtest_main
 )
 target_link_libraries(sampler_filter_mask_test
@@ -56,3 +57,16 @@ target_link_libraries(sampler_filter_mask_test
                       $<$<BOOL:${USE_NPU}>:hccl>
                       $<$<BOOL:${USE_NPU}>:c_sec>
                       $<$<BOOL:${USE_NPU}>:nnopbase>)
+
+if(USE_XGRAMMAR)
+  cc_test(
+    NAME
+      xgrammar_constraint_test
+    CPU_ONLY
+    SRCS
+      xgrammar_constraint_test.cpp
+    DEPS
+      :xgrammar_constraint
+      GTest::gtest_main
+  )
+endif()

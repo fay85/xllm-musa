@@ -27,6 +27,7 @@ limitations under the License.
 #include "core/common/message.h"
 #include "core/common/types.h"
 #include "core/framework/config/model_config.h"
+#include "core/framework/config/service_config.h"
 #include "framework/chat_template/chat_template.h"
 #include "framework/model/model_args.h"
 #include "framework/request/request_output.h"
@@ -67,6 +68,14 @@ class FakeTokenizer final : public Tokenizer {
 
   std::unique_ptr<Tokenizer> clone() const override {
     return std::make_unique<FakeTokenizer>(*this);
+  }
+
+  bool get_constraint_vocab(std::vector<std::string>* pieces) const override {
+    pieces->assign(static_cast<size_t>(vocab_size_), std::string());
+    for (int32_t id = 0; id < 256; ++id) {
+      (*pieces)[id] = std::string(1, static_cast<char>(id));
+    }
+    return true;
   }
 
  private:
@@ -121,6 +130,8 @@ OutputCallback make_capture_callback(CallbackCapture* capture) {
 class LLMRequestFactoryTest : public ::testing::Test {
  protected:
   void SetUp() override {
+    previous_backend_ =
+        ServiceConfig::get_instance().structured_output_backend();
     ModelConfig& model_config = ModelConfig::get_instance();
     original_enable_qwen3_reranker_ = model_config.enable_qwen3_reranker();
     model_config.enable_qwen3_reranker(false);
@@ -130,6 +141,7 @@ class LLMRequestFactoryTest : public ::testing::Test {
   }
 
   void TearDown() override {
+    ServiceConfig::get_instance().structured_output_backend(previous_backend_);
     ModelConfig::get_instance().enable_qwen3_reranker(
         original_enable_qwen3_reranker_);
   }
@@ -137,15 +149,19 @@ class LLMRequestFactoryTest : public ::testing::Test {
   std::unique_ptr<LLMRequestFactory> make_factory(
       int32_t vocab_size = 1000,
       int32_t max_position = 2048,
-      std::string task = "generate") {
+      std::string task = "generate",
+      int64_t model_vocab_size = 0) {
     tokenizer_ = std::make_unique<FakeTokenizer>(vocab_size);
     chat_template_ = std::make_unique<FakeChatTemplate>();
-    model_args_.vocab_size(vocab_size)
+    model_args_.vocab_size(model_vocab_size > 0 ? model_vocab_size : vocab_size)
         .max_position_embeddings(max_position)
         .eos_token_id(-1);
     // enable_chunked_prefill defaults true; keep it so the prompt length limit
     // is exactly max_position_embeddings.
     options_.enable_service_routing(false).num_speculative_tokens(0);
+    if (ServiceConfig::get_instance().use_xgrammar()) {
+      model_args_.eos_token_id(256);
+    }
     return std::make_unique<LLMRequestFactory>(
         tokenizer_.get(),
         chat_template_.get(),
@@ -156,13 +172,91 @@ class LLMRequestFactoryTest : public ::testing::Test {
         [](const std::vector<RequestOutput>&) { return std::vector<bool>{}; });
   }
 
+  std::shared_ptr<Request> make_request(LLMRequestFactory& factory,
+                                        const RequestParams& sp,
+                                        CallbackCapture& capture,
+                                        std::string prompt = "hello") {
+    return factory.create(
+        std::move(prompt), {}, sp, {}, make_capture_callback(&capture));
+  }
+
   std::unique_ptr<FakeTokenizer> tokenizer_;
   std::unique_ptr<FakeChatTemplate> chat_template_;
   ModelArgs model_args_;
   Options options_;
   RateLimiter rate_limiter_;
   bool original_enable_qwen3_reranker_ = false;
+  std::string previous_backend_;
 };
+
+#if defined(USE_XGRAMMAR)
+TEST_F(LLMRequestFactoryTest, XGrammarFailureIsIsolatedAndPreservesTokens) {
+  ServiceConfig::get_instance().structured_output_backend("xgrammar");
+  auto factory = make_factory(/*vocab_size=*/256,
+                              /*max_position=*/2048,
+                              /*task=*/"generate",
+                              /*model_vocab_size=*/288);
+  RequestParams sp;
+  sp.max_tokens = 16;
+  sp.response_format = ResponseFormatType::REGEX;
+  sp.response_format_regex = "yes";
+  CallbackCapture capture;
+  auto healthy = make_request(*factory, sp, capture);
+  ASSERT_NE(healthy, nullptr);
+  {
+    rate_limiter_.is_limited();
+    auto failed = make_request(*factory, sp, capture);
+    ASSERT_NE(failed, nullptr);
+    Sequence& sequence = *failed->sequences().front();
+    sequence.kv_state().set_kv_cache_tokens_num(sequence.num_prompt_tokens());
+    sequence.append_token('y');
+    const size_t num_tokens = sequence.num_tokens();
+    sequence.append_token('x');
+    EXPECT_TRUE(failed->finished());
+    EXPECT_EQ(sequence.num_tokens(), num_tokens);
+    const RequestOutput output = failed->generate_output(*tokenizer_);
+    ASSERT_TRUE(output.status.has_value());
+    EXPECT_TRUE(output.outputs.empty());
+  }
+  Sequence& sequence = *healthy->sequences().front();
+  sequence.kv_state().set_kv_cache_tokens_num(sequence.num_prompt_tokens());
+  for (const int32_t token_id :
+       {int32_t{'y'}, int32_t{'e'}, int32_t{'s'}, 256}) {
+    sequence.append_token(token_id);
+  }
+  EXPECT_FALSE(healthy->error_status().has_value());
+  EXPECT_TRUE(healthy->finished());
+}
+
+TEST_F(LLMRequestFactoryTest, XGrammarRejectsInvalidGrammarAndRequestModes) {
+  ServiceConfig::get_instance().structured_output_backend("xgrammar");
+  auto factory = make_factory();
+  for (int32_t mode = 0; mode < 5; ++mode) {
+    RequestParams sp;
+    sp.response_format = ResponseFormatType::REGEX;
+    sp.response_format_regex = mode == 0 ? "[" : "yes";
+    sp.beam_width = mode == 1 ? 2 : 0;
+    sp.is_sample_request = mode == 2;
+    sp.ignore_eos = mode == 3;
+    if (mode == 4) {
+      sp.stop_token_ids = std::vector<int32_t>{257};
+    }
+    CallbackCapture capture;
+    EXPECT_EQ(make_request(*factory, sp, capture, "FAIL"), nullptr);
+    ASSERT_TRUE(capture.status.has_value());
+    EXPECT_EQ(capture.status->code(), StatusCode::INVALID_ARGUMENT);
+    EXPECT_EQ(capture.status->param(), "response_format");
+    EXPECT_EQ(rate_limiter_.get_num_concurrent_requests(), 0);
+    rate_limiter_.is_limited();
+  }
+  RequestParams plain;
+  plain.ignore_eos = true;
+  CallbackCapture capture;
+  EXPECT_NE(make_request(*factory, plain, capture), nullptr);
+  EXPECT_FALSE(capture.called);
+}
+
+#endif
 
 TEST_F(LLMRequestFactoryTest, RerankerRejectsLogprobTokenIdsBeforeEncoding) {
   auto factory = make_factory();

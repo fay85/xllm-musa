@@ -37,6 +37,7 @@ limitations under the License.
 #include "core/framework/request/request_timing.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "core/framework/sampling/sampling_params.h"
+#include "core/framework/sampling/xgrammar_constraint.h"
 #include "core/framework/tokenizer/tokenizer.h"
 #include "core/util/slice.h"
 #include "finish_reason.h"
@@ -129,6 +130,7 @@ struct SequenceParams {
   StoppingChecker* stopping_checker;  // not owned
 
   std::shared_ptr<const JsonObjectGrammar> json_object_grammar;
+  std::shared_ptr<const CompiledXGrammar> xgrammar_constraint;
   bool json_reasoning_enabled = false;
   std::shared_ptr<RequestFailureState> request_failure_state;
   std::shared_ptr<SpeculativeTokenStats> speculative_token_stats;
@@ -373,6 +375,8 @@ class Sequence final {
     return json_object_state_.has_value() ? &json_object_state_.value()
                                           : nullptr;
   }
+
+  XGrammarState* xgrammar_state() const { return xgrammar_state_.get(); }
 
   // get the stopping criteria
   const StoppingChecker* stopping_checker() const {
@@ -703,6 +707,7 @@ class Sequence final {
   std::optional<OneRecState> onerec_state_;
 
   std::optional<JsonObjectGrammarState> json_object_state_;
+  std::unique_ptr<XGrammarState> xgrammar_state_;
 
   // NOTE: MUST FIXME Later
   // record all tokens num in last turn when the request is

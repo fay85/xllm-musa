@@ -271,6 +271,7 @@ void Request::create_sequences_group() {
   sequence_params.sampling_param = &(state_.sampling_param);
   sequence_params.stopping_checker = &(state_.stopping_checker);
   sequence_params.json_object_grammar = state_.json_object_grammar;
+  sequence_params.xgrammar_constraint = state_.xgrammar_constraint;
   sequence_params.json_reasoning_enabled = state_.json_reasoning_enabled;
   sequence_params.request_failure_state = failure_state_;
   sequence_params.speculative_token_stats = speculative_token_stats_;

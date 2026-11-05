@@ -36,6 +36,8 @@ class TokenizerProxy : public Tokenizer {
 
   std::string decode_token(int32_t id) const override;
 
+  bool get_constraint_vocab(std::vector<std::string>* pieces) const override;
+
   bool decode(const Slice<int32_t>& token_ids,
               bool skip_special_tokens,
               std::vector<int64_t>* item_ids) const override;

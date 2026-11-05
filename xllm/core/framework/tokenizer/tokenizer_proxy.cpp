@@ -50,6 +50,11 @@ std::string TokenizerProxy::decode_token(int32_t id) const {
   return get_tls_tokenizer()->decode_token(id);
 }
 
+bool TokenizerProxy::get_constraint_vocab(
+    std::vector<std::string>* pieces) const {
+  return get_tls_tokenizer()->get_constraint_vocab(pieces);
+}
+
 bool TokenizerProxy::decode(const Slice<int32_t>& token_ids,
                             bool skip_special_tokens,
                             std::vector<int64_t>* item_ids) const {

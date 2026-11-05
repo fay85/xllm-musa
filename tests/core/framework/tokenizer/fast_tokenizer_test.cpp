@@ -348,6 +348,14 @@ TEST_F(FastTokenizerTest, DecodeTokenPreservesByteLevelPieces) {
   EXPECT_EQ(tokenizer.decode_token(5), "\xE5\x8C\x97");
   EXPECT_EQ(tokenizer.decode_token(7), "\xC3");
   EXPECT_EQ(tokenizer.decode_token(8), "\xA9");
+  std::vector<std::string> pieces;
+  ASSERT_TRUE(tokenizer.get_constraint_vocab(&pieces));
+  ASSERT_EQ(pieces.size(), tokenizer.vocab_size());
+  EXPECT_EQ(pieces[0], "{");
+  EXPECT_EQ(pieces[1], "}");
+  EXPECT_EQ(pieces[3], " ");
+  EXPECT_EQ(pieces[7], "\xC3");
+  EXPECT_EQ(pieces[8], "\xA9");
 
   const std::vector<int32_t> split_utf8_ids = {7, 8};
   EXPECT_EQ(tokenizer.decode(split_utf8_ids, /*skip_special_tokens=*/false),
@@ -365,6 +373,8 @@ TEST_F(FastTokenizerTest, DecodeTokenKeepsNonByteLevelPieces) {
   FastTokenizer tokenizer(args);
 
   EXPECT_EQ(tokenizer.decode_token(15), "\xC2\xA1");
+  std::vector<std::string> pieces;
+  EXPECT_FALSE(tokenizer.get_constraint_vocab(&pieces));
 }
 
 TEST_F(FastTokenizerTest, ProxyForwardsDecodeToken) {

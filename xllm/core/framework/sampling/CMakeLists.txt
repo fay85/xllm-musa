@@ -2,6 +2,19 @@ include(cc_library)
 
 cc_library(
   NAME
+    xgrammar_constraint
+  HDRS
+    xgrammar_constraint.h
+  SRCS
+    xgrammar_constraint.cpp
+  DEPS
+    glog::glog
+    torch
+    $<$<BOOL:${USE_XGRAMMAR}>:xgrammar>
+)
+
+cc_library(
+  NAME
     json_object_grammar
   HDRS
     json_object_grammar.h

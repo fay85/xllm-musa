@@ -85,6 +85,7 @@ cc_library(
     :multimodal
     :util
     :json_object_grammar
+    :xgrammar_constraint
     glog::glog
     absl::strings
     absl::time
