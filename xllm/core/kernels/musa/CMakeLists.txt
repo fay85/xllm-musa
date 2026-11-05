@@ -17,6 +17,8 @@ set(_TORCH_MUSA_KERNEL_HDRS
   musa_tvmffi_stream.h
   gdn_ops.h
   kda.h
+  sparse_mla.h
+  glm5_next_kpool.h
   llm_decode_metadata_update.h
   attention_runner.h
   global_capture_instance.h
@@ -32,6 +34,9 @@ set(_TORCH_MUSA_KERNEL_SRCS
   gdn_decode.cu
   gdn_prefill.cpp
   kda.cpp
+  sparse_mla.cpp
+  sparse_mla_cache.cu
+  glm5_next_kpool.cu
   causal_conv1d.cu
   gemma_norm.cu
   activation.cu

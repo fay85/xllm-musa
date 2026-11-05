@@ -87,3 +87,17 @@ cc_test(
   DEPS :cuda_kernels musa_python torch_python Python::Python torch
        GTest::gtest_main glog::glog
 )
+
+cc_test(
+  NAME sparse_mla_test
+  SRCS sparse_mla_test.cpp
+  DEPS :cuda_kernels musa_python torch_python Python::Python torch
+       GTest::gtest_main glog::glog
+)
+
+cc_test(
+  NAME glm5_next_sparse_attention_test
+  SRCS glm5_next_sparse_attention_test.cpp
+  DEPS :musa_layers :common_layers :cuda_kernels :state_dict :parallel_state :kv_cache
+       musa_python torch_python Python::Python torch GTest::gtest_main glog::glog
+)
