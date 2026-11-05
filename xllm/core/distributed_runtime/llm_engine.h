@@ -35,6 +35,7 @@ limitations under the License.
 #include "framework/eplb/eplb_manager.h"
 #include "framework/eplb/eplb_policy.h"
 #include "framework/kv_cache/kv_cache_utils.h"
+#include "framework/parallel_state/linear_attention_parallel.h"
 #include "framework/quant_args.h"
 #include "framework/tokenizer/tokenizer.h"
 #include "framework/tokenizer/tokenizer_args.h"
@@ -203,6 +204,7 @@ class LLMEngine : public Engine {
   int64_t head_dim_ = 0;
   int64_t n_local_linear_v_heads_ = 0;
   int64_t n_local_linear_k_heads_ = 0;
+  LinearAttentionPolicy linear_attention_policy_;
 
   // common frequently used args
   uint32_t dp_size_ = 1;

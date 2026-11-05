@@ -21,6 +21,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <limits>
+#include <utility>
 #include <vector>
 
 #include "kernels/mlu/bangc/include/kpool_bangc.h"
@@ -281,6 +282,109 @@ TEST(KPoolKernelTest, LiveTopkRespectsPoolSize) {
         select_kpool_live(scores, /*count=*/512, positions, pool_size);
     EXPECT_TRUE(torch::equal(std::get<0>(actual.sort(-1)), expected))
         << "pool_size=" << pool_size;
+  }
+}
+
+// Sorted IDs torch.topk(count) selects from each row's first live[row]
+// scores (ties prefer lower IDs; NaN, +inf and -inf selections become -1),
+// built from first-occurrence argmax on the host.
+torch::Tensor small_topk(const torch::Tensor& scores,
+                         const torch::Tensor& live,
+                         int64_t count) {
+  const float inf = std::numeric_limits<float>::infinity();
+  torch::Tensor values = scores.cpu().clone();
+  values.masked_fill_(torch::arange(values.size(1))
+                          .unsqueeze(0)
+                          .ge(live.cpu().to(torch::kInt64).unsqueeze(1)),
+                      -inf);
+  // NaN ranks with +inf above every finite score.
+  values.masked_fill_(values.isnan(), inf);
+  torch::Tensor expected =
+      torch::full({values.size(0), count}, -1, torch::kInt64);
+  const torch::Tensor row_ids = torch::arange(values.size(0));
+  for (int64_t i = 0; i < std::min<int64_t>(count, values.size(1)); ++i) {
+    const torch::Tensor ids = values.argmax(/*dim=*/1);
+    const torch::Tensor best = values.gather(1, ids.unsqueeze(1)).squeeze(1);
+    expected.select(1, i).copy_(torch::where(best.isfinite(), ids, -1));
+    // Taken entries drop below every remaining finite score.
+    values.index_put_({row_ids, ids}, -inf);
+  }
+  return std::get<0>(expected.sort(-1));
+}
+
+// Native selection for count 1..3 on every dispatch path: the short kernel,
+// rows selected by whole clusters (one or two per cluster), single-core rows
+// (resident and streamed) and the one-part parts kernel, at and next to each
+// boundary, with unaligned lengths, ties, nonfinite scores and empty live
+// prefixes. Scores past a live prefix are finite and must be ignored.
+TEST(KPoolKernelTest, SmallCountsMatchTorchOnEveryPath) {
+  torch::manual_seed(20261029);
+  const torch::Device device(Platform::type_torch(), 0);
+  const auto opts =
+      torch::TensorOptions().dtype(torch::kFloat32).device(device);
+  const float inf = std::numeric_limits<float>::infinity();
+  const float nan = std::numeric_limits<float>::quiet_NaN();
+  const std::vector<std::pair<int64_t, int64_t>> shapes = {{1, 17},
+                                                           {5, 16383},
+                                                           {1, 16384},
+                                                           {4, 131072},
+                                                           {8, 12289},
+                                                           {9, 12289},
+                                                           {16, 32769},
+                                                           {17, 32769},
+                                                           {17, 65537},
+                                                           {2049, 16384},
+                                                           {2049, 65536}};
+  for (const auto& [rows, pools] : shapes) {
+    torch::Tensor scores = torch::randn({rows, pools}, opts);
+    // Row r % 6: plain, coarse ties, constant, NaN and +inf, -inf only after
+    // a few finite scores, all -inf.
+    for (int64_t row = 1; row < rows; row += 6) {
+      scores[row].mul_(2).round_();
+    }
+    for (int64_t row = 2; row < rows; row += 6) {
+      scores[row].fill_(0.5f);
+    }
+    for (int64_t row = 3; row < rows; row += 6) {
+      scores[row][pools / 3] = nan;
+      scores[row][pools - 1] = inf;
+    }
+    for (int64_t row = 4; row < rows; row += 6) {
+      scores[row].narrow(0, 2, pools - 2).fill_(-inf);
+    }
+    for (int64_t row = 5; row < rows; row += 6) {
+      scores[row].fill_(-inf);
+    }
+    const torch::Tensor full_live =
+        torch::full({rows}, pools, opts.dtype(torch::kInt32));
+    torch::Tensor live =
+        torch::randint(0, pools + 1, {rows}, full_live.options());
+    live[0] = static_cast<int32_t>(pools);
+    if (rows > 2) {
+      live[1] = 0;
+      live[2] = static_cast<int32_t>(pools - 37);
+    }
+    // live = (position + 1) / 4 floored: -1 and 4 * live + 2 both map.
+    torch::Tensor positions = live * 4 + 2;
+    positions.masked_fill_(live.eq(0), -1);
+    torch::Tensor live_scores = scores.clone();
+    live_scores.masked_fill_(torch::arange(pools, opts.dtype(torch::kInt64))
+                                 .unsqueeze(0)
+                                 .ge(live.to(torch::kInt64).unsqueeze(1)),
+                             1000.0f);
+    for (const int64_t count : {1, 2, 3}) {
+      torch::Tensor full_ids =
+          torch::empty({rows, count}, opts.dtype(torch::kInt64));
+      ASSERT_TRUE(bangc_kpool_select(scores, full_ids));
+      torch::Tensor live_ids = torch::empty_like(full_ids);
+      ASSERT_TRUE(bangc_kpool_select_live(live_scores, positions, live_ids));
+      EXPECT_TRUE(torch::equal(std::get<0>(full_ids.cpu().sort(-1)),
+                               small_topk(scores, full_live, count)))
+          << rows << "x" << pools << " count=" << count;
+      EXPECT_TRUE(torch::equal(std::get<0>(live_ids.cpu().sort(-1)),
+                               small_topk(live_scores, live, count)))
+          << "live " << rows << "x" << pools << " count=" << count;
+    }
   }
 }
 

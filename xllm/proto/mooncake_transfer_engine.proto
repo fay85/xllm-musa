@@ -70,6 +70,7 @@ message LogicalShardDescriptor {
   LogicalShardKind kind = 1;
   CacheResourceScope resource_scope = 2;
   repeated LogicalSpan spans = 3;
+  bool partitioned_across_cp = 4;
 }
 
 message ParallelCoordinates {

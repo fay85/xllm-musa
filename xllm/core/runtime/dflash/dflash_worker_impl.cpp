@@ -40,13 +40,13 @@ limitations under the License.
 #include "framework/model/model_args.h"
 #include "framework/sampling/sampling_params.h"
 #if defined(USE_NPU) || defined(USE_MLU)
+#include "framework/kv_cache_transfer/kv_transfer_completion.h"
 #include "framework/kv_cache_transfer/mooncake_kv_cache_transfer.h"
 #endif
 #if defined(USE_NPU)
 #include "core/kernels/npu/utils.h"
 #include "core/layers/common/expanded_decode_metadata_builder.h"
 #include "core/layers/npu_torch/deepseek_sparse_attention.h"
-#include "framework/kv_cache_transfer/kv_transfer_completion.h"
 #endif
 #include "core/framework/speculative/mtp_json_object_state.h"
 #include "core/framework/speculative/spec_input_builder.h"
@@ -351,8 +351,8 @@ DFlashWorkerImpl::DFlashWorkerImpl(const ParallelArgs& parallel_args,
           target_options(options),
           WorkerType::LLM,
           [&parallel_args, &device, &options] {
-            // The draft consumes the target's aux hidden states, which the
-            // worker does not expose under CP; reject cp_size > 1 except
+            // The draft consumes global token-aligned aux hidden states.
+            // MLU restores these rows for GLM-5-Next with DFlash2. NPU admits
             // the proven aux-hidden CP restore pairings (design.md §3.1
             // Gate B4): DeepSeek-V4 on NPU, or GLM-5-Next / glm_moe_dsa on
             // NPU with the DFlash2 algorithm specifically. GLM-5-Next's
@@ -379,16 +379,19 @@ DFlashWorkerImpl::DFlashWorkerImpl(const ParallelArgs& parallel_args,
                          SpeculativeConfig::is_dspark_algorithm(
                              options.speculative_algorithm());
             }
-            if (parallel_args.cp_size() > 1 && Platform::is_npu()) {
+            if (parallel_args.cp_size() > 1 &&
+                (Platform::is_npu() || Platform::is_mlu())) {
               const std::string model_type =
                   util::get_model_type(options.model_path(), options.backend());
-              allow_cp = util::is_deepseek_v4_model_type(model_type) ||
+              allow_cp = allow_cp ||
                          SpeculativeConfig::is_glm5_next_dflash2(
                              model_type, options.speculative_algorithm()) ||
-                         SpeculativeConfig::is_glm_moe_dsa_dflash2(
-                             model_type,
-                             options.speculative_algorithm(),
-                             ModelConfig::get_instance().model_impl());
+                         (Platform::is_npu() &&
+                          (util::is_deepseek_v4_model_type(model_type) ||
+                           SpeculativeConfig::is_glm_moe_dsa_dflash2(
+                               model_type,
+                               options.speculative_algorithm(),
+                               ModelConfig::get_instance().model_impl())));
             }
             if (!allow_cp) {
               CHECK_LE(parallel_args.cp_size(), 1)
@@ -1692,21 +1695,33 @@ std::vector<std::string> DFlashWorkerImpl::write_context_kv(
   CHECK(input.input_params.synchronize_draft_layer())
       << "Failed to wait for Draft Host KV load completion.";
 
-#if defined(USE_NPU)
-  // PD PUSH: the draft context-KV scattered below is not covered by the target
-  // push, so wire the draft push here. Overwrite layer_synchronizer with a
-  // draft-sized one (one event per draft layer); the target's was already
-  // waited on before this runs, so the overwrite is safe. No-op when
-  // transfer_kv_infos is empty. NPU-only: the scatter's record_event loop is
-  // NPU-gated, so a non-NPU push would stall on events that never record.
+#if defined(USE_MLU)
+  // The target's completed layer events must not be recorded by the draft.
+  ModelInputParams draft_input_params = input.input_params;
+  draft_input_params.parallel.layer_synchronizer.reset();
+  const ModelInputParams& context_input_params = draft_input_params;
+#else
+  const ModelInputParams& context_input_params = input.input_params;
+#endif
+
+#if defined(USE_NPU) || defined(USE_MLU)
+  // Draft context KV uses one completion event per draft layer, independently
+  // of the target's KV push.
   KVTransferCompletion kv_transfers;
   if (options_.kv_cache_transfer_mode() == "PUSH" &&
       !input.transfer_kv_infos.empty()) {
+#if defined(USE_NPU)
     std::shared_ptr<NPULayerSynchronizerImpl> layer_synchronizer =
         std::make_shared<NPULayerSynchronizerImpl>(
             draft_impl_->context_.get_model_args().n_layers());
     const_cast<ModelInputParams*>(&(input.input_params))
         ->parallel.layer_synchronizer = layer_synchronizer;
+#elif defined(USE_MLU)
+    std::shared_ptr<MLULayerSynchronizerImpl> layer_synchronizer =
+        std::make_shared<MLULayerSynchronizerImpl>(
+            draft_impl_->context_.get_model_args().n_layers());
+    draft_input_params.parallel.layer_synchronizer = layer_synchronizer;
+#endif
     kv_transfers.add(kv_cache_transfer_->push_kv_blocks_async(
                          input.transfer_kv_infos,
                          draft_impl_->context_.get_parallel_args(),
@@ -1720,9 +1735,9 @@ std::vector<std::string> DFlashWorkerImpl::write_context_kv(
       draft_impl_->write_context_kv(context_hidden,
                                     positions_device,
                                     new_cache_slots_device,
-                                    input.input_params);
+                                    context_input_params);
   // Model returns an empty ModelOutput (hidden_states undefined) when the
-  // per-layer NPULayerSynchronizer::record_event fails mid-scatter under
+  // per-layer completion event fails to record mid-scatter under
   // PD-PUSH transfer. Fail fast instead of silently continuing: subsequent
   // layers won't have been scattered and the PD transfer side would block
   // forever waiting on the missing per-layer event.
@@ -1737,7 +1752,7 @@ std::vector<std::string> DFlashWorkerImpl::write_context_kv(
   // written context-KV cache instead of a partially scattered one.
   compute_stream_->synchronize();
 
-#if defined(USE_NPU)
+#if defined(USE_NPU) || defined(USE_MLU)
   // Wait for the draft KV push (if any) so the source draft cache is not
   // overwritten by the next step while the transfer is still reading it
   // (mirrors step_internal's wait_kv_push()). No-op when no push was issued.

@@ -260,10 +260,19 @@ class SpanWriters final {
     return writers;
   }
 
+  SpanWriters without_cp_replicas() const {
+    SpanWriters writers = *this;
+    writers.omit_cp_replicas_ = true;
+    return writers;
+  }
+
   // Whether `tp_rank` writes this span when it expands `manifest`.
   bool writes(const CacheTensorManifest& tensor,
               const LogicalSpan& span,
               int32_t tp_rank) const {
+    if (omit_cp_replicas_ && !tensor.shard.partitioned_across_cp) {
+      return false;
+    }
     if (!by_declaration_) {
       return true;
     }
@@ -274,6 +283,7 @@ class SpanWriters final {
 
  private:
   bool by_declaration_ = false;
+  bool omit_cp_replicas_ = false;
   SpanOwnerMap resolved_;
 };
 
@@ -282,6 +292,33 @@ class SpanWriters final {
 SpanWriters source_writers(const ParallelCoordinates& coordinates) {
   return kv_split_spans_cp_and_tp(coordinates) ? SpanWriters::everything()
                                                : SpanWriters::declared();
+}
+
+bool has_cp_sharded_resources(const WorkerCacheLayoutManifest& manifest) {
+  return std::any_of(manifest.tensors.begin(),
+                     manifest.tensors.end(),
+                     [](const CacheTensorManifest& tensor) {
+                       return tensor.shard.partitioned_across_cp;
+                     });
+}
+
+SpanWriters collapsed_source_writers(const WorkerCacheLayoutManifest& source,
+                                     bool include_replicas = false) {
+  const bool has_cp_shards = has_cp_sharded_resources(source);
+  // Each recurrent head owner participates, so preserve TP ownership of
+  // replicated MLA/index tensors even for an already selected source peer.
+  SpanWriters writers = include_replicas && !has_cp_shards
+                            ? SpanWriters::everything()
+                            : source_writers(source.coordinates);
+  const auto& coordinates = source.coordinates;
+  if (has_cp_shards && !kv_split_spans_cp_and_tp(coordinates) &&
+      coordinates.cp_rank % (coordinates.cp_size / coordinates.kv_split_size) !=
+          0) {
+    // Later CP ranks still own recurrent heads, but their MLA/KPool replicas
+    // must not overwrite the copy sent by the first CP rank of this KV shard.
+    return writers.without_cp_replicas();
+  }
+  return writers;
 }
 
 void expand_manifest(const WorkerCacheLayoutManifest& manifest,
@@ -630,7 +667,6 @@ Status select_collapsed_writers(
   std::map<std::pair<int32_t, int32_t>, int32_t> cp_kv_ranks;
   const bool spans_cp_and_tp =
       kv_split_spans_cp_and_tp(sources.front().coordinates);
-  const SpanWriters span_writers = source_writers(sources.front().coordinates);
   for (size_t index = 0; index < sources.size(); ++index) {
     const ParallelCoordinates& coordinates = sources[index].coordinates;
     if (!spans_cp_and_tp) {
@@ -661,11 +697,19 @@ Status select_collapsed_writers(
       return invalid("CP replica group has an unexpected partition count");
     }
     required_groups->emplace(group);
-    // Lowest CP rank is the deterministic writer; replicas are PLAN_ONLY.
-    for (size_t index : cp_workers.begin()->second) {
-      if (has_logical_overlap(
-              sources[index], destination_groups, span_writers)) {
-        writers->emplace_back(index);
+    // Ordinary caches are CP replicas. Recurrent head shards may instead
+    // span all CP ranks; select those writers without duplicating other roles.
+    for (const auto& [cp_rank, indices] : cp_workers) {
+      for (size_t index : indices) {
+        if (cp_rank != cp_workers.begin()->first &&
+            !has_cp_sharded_resources(sources[index])) {
+          continue;
+        }
+        if (has_logical_overlap(sources[index],
+                                destination_groups,
+                                collapsed_source_writers(sources[index]))) {
+          writers->emplace_back(index);
+        }
       }
     }
   }
@@ -1063,7 +1107,7 @@ Status ReshardPlanner::select_sources(
         collapse_partitions ? source.coordinates.kv_split_rank : 0;
     expand_manifest(
         source,
-        collapse_partitions ? source_writers(source.coordinates)
+        collapse_partitions ? collapsed_source_writers(source)
                             : homogeneous_writers,
         &writer_regions[{source.coordinates.dp_rank, kv_partition}]);
   }
@@ -1171,10 +1215,12 @@ Status ReshardPlanner::build_outgoing_plan(
   // `include_replicas` the source owns everything it holds -- including replica
   // copies of a replicated tensor. Filtering by the declared owner would
   // silently drop those bytes for every non-owning KV-split partition.
-  expand_manifest(source,
-                  include_replicas ? SpanWriters::everything()
-                                   : source_writers(source.coordinates),
-                  &source_regions);
+  const SpanWriters writers =
+      !same_partition_sizes(source.coordinates, destination.coordinates)
+          ? collapsed_source_writers(source, include_replicas)
+          : (include_replicas ? SpanWriters::everything()
+                              : source_writers(source.coordinates));
+  expand_manifest(source, writers, &source_regions);
   expand_manifest(destination, SpanWriters::everything(), &destination_regions);
   const RegionGroups source_groups = group_regions(source_regions);
   const RegionGroups destination_groups = group_regions(destination_regions);

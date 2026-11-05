@@ -935,6 +935,50 @@ TEST(ReshardPlannerTest, PreservesKvSplitWhenDecodeCollapsesCpAndTp) {
   }
 }
 
+TEST(ReshardPlannerTest, CollapsesCpHeadShardsWithoutDuplicatingMlaReplicas) {
+  std::vector<WorkerCacheLayoutManifest> sources;
+  sources.reserve(4);
+  for (int32_t rank = 0; rank < 4; ++rank) {
+    auto source = make_ssm_manifest(
+        rank, 4, 4, 3 + rank, "source" + std::to_string(rank));
+    source.coordinates.tp_rank = rank % 2;
+    source.coordinates.tp_size = 2;
+    source.coordinates.cp_rank = rank / 2;
+    source.coordinates.cp_size = 2;
+    auto& state = source.tensors[0];
+    state.shard.partitioned_across_cp = true;
+    for (auto& span : state.shard.spans) {
+      span.owner_tp_rank = rank % 2;
+    }
+    auto replica = make_head_manifest(rank % 2, 2, 1, 20 + rank, "replica");
+    source.tensors.emplace_back(replica.tensors[0]);
+    sources.emplace_back(std::move(source));
+  }
+  auto destination = make_ssm_manifest(0, 1, 4, 30, "destination");
+  destination.tensors.emplace_back(
+      make_head_manifest(0, 1, 1, 31, "replica").tensors[0]);
+  std::vector<size_t> selected;
+  ReshardPlanner planner;
+  const Status status = planner.select_sources(sources, destination, &selected);
+  ASSERT_TRUE(status.ok()) << status.message();
+  EXPECT_EQ(selected, (std::vector<size_t>{0, 1, 2, 3}));
+  for (size_t index : selected) {
+    ReshardPlanTemplate plan;
+    const Status planned =
+        planner.build_outgoing_plan(sources[index],
+                                    destination,
+                                    &plan,
+                                    /*include_replicas=*/true);
+    ASSERT_TRUE(planned.ok()) << planned.message();
+    ASSERT_FALSE(plan.regions.empty());
+    for (const auto& region : plan.regions) {
+      if (index > 0) {
+        EXPECT_EQ(region.role, static_cast<int32_t>(KVCacheTensorRole::SSM));
+      }
+    }
+  }
+}
+
 TEST(ReshardPlannerTest, SelectsLowestCpReplicaForPartitionCollapse) {
   const std::vector<WorkerCacheLayoutManifest> sources = make_cp_instance(
       /*cp_size=*/4,
@@ -1403,8 +1447,9 @@ TEST(CacheLayoutTest, ManifestProtoRoundTripPreservesLayoutIdentityAndSpans) {
 }
 
 TEST(CacheLayoutTest, ManifestProtoRoundTripPreservesSsmResourceGeometry) {
-  const WorkerCacheLayoutManifest original = make_ssm_manifest(
+  WorkerCacheLayoutManifest original = make_ssm_manifest(
       /*tp_rank=*/0, /*tp_size=*/1, /*global_heads=*/4, 3, "source");
+  original.tensors[0].shard.partitioned_across_cp = true;
   proto::WorkerCacheLayoutManifest wire;
   cache_layout_to_proto(original, &wire);
   WorkerCacheLayoutManifest decoded;
@@ -1413,6 +1458,7 @@ TEST(CacheLayoutTest, ManifestProtoRoundTripPreservesSsmResourceGeometry) {
 
   ASSERT_TRUE(status.ok()) << status.message();
   ASSERT_EQ(decoded.tensors.size(), 1U);
+  EXPECT_TRUE(decoded.tensors[0].shard.partitioned_across_cp);
   EXPECT_EQ(decoded.tensors[0].resource_count, kResourceCount);
   EXPECT_EQ(decoded.tensors[0].physical_rows_per_resource, 3U);
   EXPECT_EQ(decoded.tensors[0].resource_stride_bytes,

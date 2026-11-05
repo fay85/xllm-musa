@@ -38,6 +38,7 @@ limitations under the License.
 #include "core/distributed_runtime/master.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/kv_cache_config.h"
+#include "core/framework/config/parallel_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/service_config.h"
 #include "core/framework/prefix_cache/block_hasher.h"
@@ -47,6 +48,7 @@ limitations under the License.
 #include "framework/kv_cache/kv_cache_utils.h"
 #include "framework/model/model_args.h"
 #include "framework/model_loader.h"
+#include "framework/parallel_state/linear_attention_parallel.h"
 #include "framework/parallel_state/parallel_state.h"
 #include "platform/platform.h"
 #include "runtime/llm_worker_impl.h"
@@ -157,6 +159,14 @@ bool VLMEngine::init_model(MasterStatus master_status) {
   CHECK(tokenizer_ != nullptr);
 
   args_ = model_loader->model_args();
+  const LinearAttentionPolicy linear_policy =
+      ModelRegistry::get_linear_attention_policy(args_.model_type());
+  const std::optional<std::string> linear_kv_split_error =
+      validate_linear_attention_kv_split(
+          args_,
+          linear_policy,
+          ParallelConfig::get_instance().kv_split_size_effective());
+  CHECK(!linear_kv_split_error.has_value()) << linear_kv_split_error.value();
   configure_prefix_cache(options_);
 
   quant_args_ = model_loader->quant_args();

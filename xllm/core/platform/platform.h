@@ -64,6 +64,8 @@ class Platform final {
   // KPool stores compressed index pages with a separate per-request tail.
   static constexpr bool uses_compressed_kpool_cache() { return is_mlu(); }
 
+  static constexpr bool requires_unsplit_linear_state() { return is_mlu(); }
+
   // Under KV splitting, each NPU rank retains the full indexer cache.
   // Logical block B maps to index pages [B * split, (B + 1) * split).
   // The replicated mode (the fixed default) writes

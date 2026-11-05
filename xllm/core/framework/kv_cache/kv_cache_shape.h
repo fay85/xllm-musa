@@ -44,7 +44,8 @@ class KVCacheShape final {
 
   KVCacheShape(const KVCacheCapacity& kv_cache_cap,
                const ModelArgs& model_args,
-               int64_t world_size);
+               int64_t world_size,
+               int64_t linear_head_tp_size = 0);
 
   const std::vector<int64_t>& key_cache_shape() const;
   const std::vector<int64_t>& value_cache_shape() const;

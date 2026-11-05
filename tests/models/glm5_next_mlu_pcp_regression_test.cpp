@@ -589,13 +589,14 @@ std::vector<LayerCacheTensors> make_cache_tensors(const torch::Device& device) {
   for (int32_t layer_id = 0; layer_id < kNumLayers; ++layer_id) {
     LayerCacheTensors layer;
     if (is_kda_layer(layer_id)) {
-      layer.conv = torch::zeros({kLinearStateBlocks,
-                                 conv_state_len,
-                                 3 * kLinearHeads * kLinearHeadDim},
-                                options);
+      layer.conv =
+          torch::zeros({kLinearStateBlocks,
+                        conv_state_len,
+                        3 * (kLinearHeads / kWorldSize) * kLinearHeadDim},
+                       options);
       layer.ssm = torch::zeros(
           {kLinearStateBlocks * checkpoint_stride,
-           kLinearHeads,
+           kLinearHeads / kWorldSize,
            kLinearHeadDim,
            kLinearHeadDim},
           options.dtype(resolve_ssm_dtype(
@@ -1003,14 +1004,22 @@ class BaselineSession final {
 // checkpoints_untouched.
 void check_caches(const std::string& prefix,
                   const std::vector<LayerCacheTensors>& tensors,
-                  BaselineSession& session) {
+                  BaselineSession& session,
+                  ProcessGroup* head_tp_group) {
   for (size_t layer_id = 0; layer_id < tensors.size(); ++layer_id) {
     const LayerCacheTensors& layer = tensors[layer_id];
     const std::string name = prefix + ".layer" + std::to_string(layer_id);
     if (layer.conv.defined()) {
-      session.check(name + ".conv", layer.conv);
+      // Preserve the frozen full-head baseline by materializing logical state.
+      std::vector<torch::Tensor> conv_parts;
+      conv_parts.reserve(3);
+      for (const auto& part : layer.conv.chunk(3, /*dim=*/2)) {
+        conv_parts.emplace_back(parallel_state::gather(
+            part.contiguous(), head_tp_group, /*dim=*/2));
+      }
+      session.check(name + ".conv", torch::cat(conv_parts, /*dim=*/2));
       session.check(name + ".ssm",
-                    layer.ssm
+                    parallel_state::gather(layer.ssm, head_tp_group, /*dim=*/1)
                         .view({kLinearStateBlocks,
                                kNumSpeculativeTokens + 1,
                                kLinearHeads,
@@ -1092,7 +1101,7 @@ bool run_scenario(const std::string& pass,
       session.check(name + ".aux_hidden", output.aux_hidden_states);
     }
     if (step.snapshot_caches && layers_to_capture.empty()) {
-      check_caches(name, cache_tensors, session);
+      check_caches(name, cache_tensors, session, parallel_args.process_group_);
     }
     const bool untouched = checkpoints_untouched(cache_tensors);
     LOG_IF(ERROR, !untouched)

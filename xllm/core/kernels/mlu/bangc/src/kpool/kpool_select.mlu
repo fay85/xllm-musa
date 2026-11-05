@@ -1094,8 +1094,10 @@ __mlu_func__ void coop_row(SelectBuffers* sb,
                            int32_t count,
                            int32_t row_count,
                            SelectTuning* tuning) {
-  // Maxima per core: the row holds about 2 * row_count of them.
-  const int32_t nb = (2 * row_count / kCoopCores + 63) / 64 * 64;
+  // Maxima per core: the row holds about 2 * row_count of them (at least one
+  // 64-group per core, which group_maxima divides by).
+  const int32_t grouped = (2 * row_count / kCoopCores + 63) / 64 * 64;
+  const int32_t nb = grouped > 64 ? grouped : 64;
   // Even 64-aligned split of the live prefix.
   int32_t part = ((live + kCoopCores - 1) / kCoopCores + 63) / 64 * 64;
   int32_t begin = coreId * part;

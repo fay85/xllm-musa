@@ -27,6 +27,7 @@ limitations under the License.
 #include "core/framework/model/dit_model.h"
 #include "core/framework/model/rec_causal_lm.h"
 #include "core/framework/model_context.h"
+#include "core/framework/parallel_state/linear_attention_parallel.h"
 #include "core/framework/tokenizer/tokenizer_args.h"
 #include "core/util/json_reader.h"
 #include "core/util/type_traits.h"  // IWYU pragma: keep
@@ -109,6 +110,7 @@ struct ModelMeta {
   QuantArgsLoader quant_args_loader;
   TokenizerArgsLoader tokenizer_args_loader;
   CpShardingMode cp_sharding_mode = CpShardingMode::NONE;
+  LinearHeadSharding linear_head_sharding = LinearHeadSharding::ATTENTION_TP;
   bool preserve_image_alpha = false;
 };
 
@@ -174,6 +176,14 @@ class ModelRegistry {
   // Read-only query of the registered CP sharding mode. Returns NONE when
   // `name` is unknown or the model did not opt into model-side CP.
   static CpShardingMode get_cp_sharding_mode(const std::string& name);
+
+  static void register_linear_head_sharding(const std::string& name,
+                                            LinearHeadSharding sharding);
+
+  // Resolve the native model registration before combining model head
+  // ownership with the backend's linear-state constraints.
+  static LinearAttentionPolicy get_linear_attention_policy(
+      const std::string& model_type);
 
   static CausalLMFactory get_causallm_factory(const std::string& name);
 

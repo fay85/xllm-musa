@@ -56,6 +56,7 @@ limitations under the License.
 #include "framework/model/model_args.h"
 #include "framework/model/mtp_utils.h"
 #include "framework/model_loader.h"
+#include "framework/parallel_state/linear_attention_parallel.h"
 #include "framework/xtensor/page_allocator.h"
 #include "framework/xtensor/phy_page_pool.h"
 #include "framework/xtensor/xtensor_allocator.h"
@@ -265,6 +266,14 @@ bool LLMEngine::init_model(MasterStatus master_status) {
       options_.is_draft_engine(),
       ModelConfig::is_python_model_impl(
           ModelConfig::get_instance().model_impl()));
+  linear_attention_policy_ =
+      ModelRegistry::get_linear_attention_policy(args_.model_type());
+  const std::optional<std::string> linear_kv_split_error =
+      validate_linear_attention_kv_split(
+          args_,
+          linear_attention_policy_,
+          ParallelConfig::get_instance().kv_split_size_effective());
+  CHECK(!linear_kv_split_error.has_value()) << linear_kv_split_error.value();
   configure_prefix_cache(options_);
   quant_args_ = model_loader->quant_args();
 
@@ -303,12 +312,14 @@ bool LLMEngine::init_model(MasterStatus master_status) {
   dtype_ = util::parse_dtype(args_.dtype(), options_.devices()[0]);
   // For qwen3_next hybrid attention.
   if (has_linear_attention_layers(args_)) {
+    const int64_t head_tp_size = linear_head_tp_size(
+        linear_attention_policy_, world_size, options_.cp_size());
     const int64_t linear_n_k_heads = args_.linear_num_key_heads();
     const int64_t linear_n_v_heads = args_.linear_num_value_heads();
     n_local_linear_k_heads_ =
-        std::max<int64_t>(1, linear_n_k_heads / world_size);
+        std::max<int64_t>(1, linear_n_k_heads / head_tp_size);
     n_local_linear_v_heads_ =
-        std::max<int64_t>(1, linear_n_v_heads / world_size);
+        std::max<int64_t>(1, linear_n_v_heads / head_tp_size);
   }
   // key + value for all layers
   LOG(INFO) << "Block info, block_size: " << options_.block_size()
@@ -637,7 +648,12 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
 
   // Validate host offload before constructing block managers or asking workers
   // to allocate potentially large pinned host tensors.
-  const KVCacheShape kv_cache_shape(kv_cache_cap, args_, dp_local_tp_size_);
+  const KVCacheShape kv_cache_shape(
+      kv_cache_cap,
+      args_,
+      dp_local_tp_size_,
+      linear_head_tp_size(
+          linear_attention_policy_, dp_local_tp_size_, options_.cp_size()));
   const int32_t kv_split_size_eff =
       ::xllm::ParallelConfig::get_instance().kv_split_size_effective();
   // Any registered role would fold more than one physical row per logical

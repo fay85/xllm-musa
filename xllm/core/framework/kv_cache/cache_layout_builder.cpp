@@ -76,6 +76,19 @@ bool get_head_placement(int64_t global_head_count,
   return true;
 }
 
+struct LinearHeadTpCoordinates {
+  int32_t rank;
+  int32_t size;
+};
+
+LinearHeadTpCoordinates resolve_linear_head_tp(
+    const CacheTensorLayoutContext& context) {
+  if (context.linear_head_tp_size > 0) {
+    return {context.linear_head_tp_rank, context.linear_head_tp_size};
+  }
+  return {context.tp_rank, context.tp_size};
+}
+
 uint64_t tensor_stride_bytes(const torch::Tensor& tensor, int64_t dim) {
   return static_cast<uint64_t>(tensor.stride(dim)) * tensor.element_size();
 }
@@ -252,12 +265,13 @@ bool describe_ssm(const CacheTensorLayoutContext& context,
   }
 
   const int64_t local_head_count = tensor.size(1);
+  const LinearHeadTpCoordinates head_tp = resolve_linear_head_tp(context);
   int64_t first_global_head = 0;
   int32_t replica_count = 1;
   if (!get_head_placement(context.linear_value_head_count,
                           local_head_count,
-                          context.tp_rank,
-                          context.tp_size,
+                          head_tp.rank,
+                          head_tp.size,
                           &first_global_head,
                           &replica_count,
                           error)) {
@@ -280,6 +294,7 @@ bool describe_ssm(const CacheTensorLayoutContext& context,
   descriptor.kind =
       replicated ? LogicalShardKind::REPLICATED : LogicalShardKind::SHARDED;
   descriptor.resource_scope = CacheResourceScope::SEQUENCE;
+  descriptor.partitioned_across_cp = head_tp.size > context.tp_size;
   descriptor.spans.reserve(static_cast<size_t>(local_head_count));
   const uint64_t checkpoint_stride =
       static_cast<uint64_t>(context.linear_ssm_checkpoint_stride);
@@ -316,12 +331,13 @@ bool append_conv_component(const CacheTensorLayoutContext& context,
                            uint64_t component_offset_bytes,
                            LogicalShardDescriptor* descriptor,
                            std::string* error) {
+  const LinearHeadTpCoordinates head_tp = resolve_linear_head_tp(context);
   int64_t first_global_head = 0;
   int32_t replica_count = 1;
   if (!get_head_placement(global_head_count,
                           local_head_count,
-                          context.tp_rank,
-                          context.tp_size,
+                          head_tp.rank,
+                          head_tp.size,
                           &first_global_head,
                           &replica_count,
                           error)) {
@@ -367,13 +383,14 @@ bool describe_conv(const CacheTensorLayoutContext& context,
                 error);
   }
 
+  const LinearHeadTpCoordinates head_tp = resolve_linear_head_tp(context);
   const int64_t local_key_heads =
-      context.linear_key_head_count >= context.tp_size
-          ? context.linear_key_head_count / context.tp_size
+      context.linear_key_head_count >= head_tp.size
+          ? context.linear_key_head_count / head_tp.size
           : 1;
   const int64_t local_value_heads =
-      context.linear_value_head_count >= context.tp_size
-          ? context.linear_value_head_count / context.tp_size
+      context.linear_value_head_count >= head_tp.size
+          ? context.linear_value_head_count / head_tp.size
           : 1;
   const int64_t expected_features =
       context.linear_key_head_dim * (local_key_heads * 2 + local_value_heads);
@@ -385,6 +402,7 @@ bool describe_conv(const CacheTensorLayoutContext& context,
   LogicalShardDescriptor descriptor;
   descriptor.kind = LogicalShardKind::COMPOSITE;
   descriptor.resource_scope = CacheResourceScope::SEQUENCE;
+  descriptor.partitioned_across_cp = head_tp.size > context.tp_size;
   descriptor.spans.reserve(
       static_cast<size_t>(local_key_heads * 2 + local_value_heads));
   const uint64_t bytes_per_head =
@@ -392,7 +410,7 @@ bool describe_conv(const CacheTensorLayoutContext& context,
       tensor.element_size();
   if (!append_conv_component(context,
                              tensor,
-                             "conv_key_a",
+                             /*logical_tensor=*/"conv_key_a",
                              context.linear_key_head_count,
                              local_key_heads,
                              /*component_offset_bytes=*/0,
@@ -401,7 +419,7 @@ bool describe_conv(const CacheTensorLayoutContext& context,
       !append_conv_component(
           context,
           tensor,
-          "conv_key_b",
+          /*logical_tensor=*/"conv_key_b",
           context.linear_key_head_count,
           local_key_heads,
           static_cast<uint64_t>(local_key_heads) * bytes_per_head,
@@ -410,7 +428,7 @@ bool describe_conv(const CacheTensorLayoutContext& context,
       !append_conv_component(
           context,
           tensor,
-          "conv_value",
+          /*logical_tensor=*/"conv_value",
           context.linear_value_head_count,
           local_value_heads,
           static_cast<uint64_t>(local_key_heads * 2) * bytes_per_head,

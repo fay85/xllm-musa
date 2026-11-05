@@ -57,5 +57,40 @@ TEST(CacheLayoutBuilderTest, HybridMlaKeepsRecurrentStateSharded) {
   EXPECT_EQ(ssm_layout.spans[0].repeat_count, 4U);
 }
 
+TEST(CacheLayoutBuilderTest, HybridMlaUsesFullHeadTpForRecurrentOffsets) {
+  for (int32_t rank = 0; rank < 8; ++rank) {
+    CacheTensorLayoutContext context;
+    context.enable_mla = true;
+    context.tp_size = 2;
+    context.tp_rank = rank % 2;
+    context.linear_head_tp_size = 8;
+    context.linear_head_tp_rank = rank;
+    context.linear_key_head_count = 8;
+    context.linear_value_head_count = 8;
+    context.linear_key_head_dim = 3;
+    context.linear_ssm_checkpoint_stride = 4;
+    KVCacheTensor conv{KVCacheTensorRole::CONV,
+                       torch::zeros({3, 6, 9}),
+                       cache_group_id(BlockType::LINEAR),
+                       true};
+    KVCacheTensor ssm{KVCacheTensorRole::SSM,
+                      torch::zeros({12, 1, 3, 3}),
+                      cache_group_id(BlockType::LINEAR),
+                      true};
+    std::string error;
+    ASSERT_TRUE(describe_cache_tensor(context, &conv, &error)) << error;
+    ASSERT_TRUE(describe_cache_tensor(context, &ssm, &error)) << error;
+    EXPECT_TRUE(conv.shard_descriptor->partitioned_across_cp);
+    EXPECT_TRUE(ssm.shard_descriptor->partitioned_across_cp);
+    ASSERT_EQ(conv.shard_descriptor->spans.size(), 3U);
+    ASSERT_EQ(ssm.shard_descriptor->spans.size(), 1U);
+    EXPECT_EQ(conv.shard_descriptor->spans[0].logical_offset_bytes,
+              static_cast<uint64_t>(rank) * 3 * 4);
+    EXPECT_EQ(ssm.shard_descriptor->spans[0].logical_offset_bytes,
+              static_cast<uint64_t>(rank) * 3 * 3 * 4);
+    EXPECT_EQ(ssm.shard_descriptor->spans[0].owner_tp_rank, rank % 2);
+  }
+}
+
 }  // namespace
 }  // namespace xllm

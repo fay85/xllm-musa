@@ -62,6 +62,8 @@ struct LogicalShardDescriptor {
   LogicalShardKind kind = LogicalShardKind::REPLICATED;
   CacheResourceScope resource_scope = CacheResourceScope::BLOCK;
   std::vector<LogicalSpan> spans;
+  // This resource has distinct logical shards on different CP ranks.
+  bool partitioned_across_cp = false;
 };
 
 // Producer-side semantic context used to construct descriptors. It is filled
@@ -81,6 +83,10 @@ struct CacheTensorLayoutContext {
   int64_t index_block_capacity = 0;
   int64_t kv_head_count = 0;
   int64_t index_head_count = 0;
+  // Zero size uses attention TP; otherwise recurrent heads have their own
+  // partition while owner_tp_rank remains in the published worker coordinates.
+  int32_t linear_head_tp_rank = 0;
+  int32_t linear_head_tp_size = 0;
   int64_t linear_key_head_count = 0;
   int64_t linear_value_head_count = 0;
   int64_t linear_key_head_dim = 0;

@@ -20,9 +20,11 @@ limitations under the License.
 #include <unistd.h>
 
 #include <cerrno>
+#include <unordered_map>
 #include <vector>
 
 #include "framework/parallel_state/process_group.h"
+#include "layers/common/attention_metadata_builder.h"
 #include "layers/mlu/glm5_next/glm5_next_kda.h"
 #include "layers/mlu/glm5_next/glm5_next_pcp_context.h"
 #include "platform/device.h"
@@ -45,7 +47,12 @@ using RankCheck = ::testing::AssertionResult (*)(Device&,
                                            int32_t rank) {
   torch::InferenceMode inference_mode;
   ProcessGroup single_rank(/*rank=*/0, /*world_size=*/1, device.unwrap());
-  ParallelArgs parallel(/*rank=*/0, /*world_size=*/1, &single_rank);
+  ParallelArgs parallel(rank,
+                        kWorldSize,
+                        /*dp_size=*/1,
+                        /*cp_size=*/kWorldSize,
+                        cp_group,
+                        /*ep_size=*/kWorldSize);
   parallel.tp_group_ = &single_rank;
   const auto options =
       torch::TensorOptions().device(device.unwrap()).dtype(torch::kBFloat16);
@@ -58,7 +65,8 @@ using RankCheck = ::testing::AssertionResult (*)(Device&,
         .to(device.unwrap());
   };
   ModelArgs args;
-  args.hidden_size(128)
+  args.model_type("glm5_next")
+      .hidden_size(128)
       .linear_num_key_heads(8)
       .linear_num_value_heads(8)
       .linear_key_head_dim(128)
@@ -94,10 +102,11 @@ using RankCheck = ::testing::AssertionResult (*)(Device&,
   context.local_metadata.tot = conv_blocks;
   const torch::Tensor targets = torch::tensor({2, 3, 4}, ints);
   for (const int64_t stride : {1, 4}) {
-    const torch::Tensor conv =
-        random_tensor({5, stride + 2, 3 * 8 * 128}, torch::kBFloat16);
+    const torch::Tensor conv = random_tensor(
+        {5, stride + 2, 3 * (8 / kWorldSize) * 128}, torch::kBFloat16);
     const torch::Tensor ssm =
-        random_tensor({5 * stride, 8, 128, 128}, torch::kFloat32) * 0.03f;
+        random_tensor({5 * stride, 8 / kWorldSize, 128, 128}, torch::kFloat32) *
+        0.03f;
     KVCache copied_cache(
         LinearAttentionKVCacheTensors{conv.clone(), ssm.clone()});
     KVCache direct_cache(
@@ -119,6 +128,10 @@ using RankCheck = ::testing::AssertionResult (*)(Device&,
     copied.embedding.linear_state_read_indices = targets;
     AttentionMetadata metadata{};
     metadata.is_chunked_prefill = true;
+    metadata.q_cu_seq_lens = torch::tensor(
+        {0, lengths[0], lengths[0] + lengths[1], context.geometry.total_tokens},
+        ints);
+    AttentionMetadataBuilder::build_linear_prefill(metadata, chunk_size);
     metadata.has_initial_states =
         torch::tensor({true, true, false}, options.dtype(torch::kBool));
     for (int32_t step = 0; step < 2; ++step) {
@@ -171,6 +184,150 @@ using RankCheck = ::testing::AssertionResult (*)(Device&,
           direct.embedding.linear_state_ids;
       direct.embedding.linear_state_read_indices = targets;
       metadata.has_initial_states.fill_(true);
+    }
+  }
+  return ::testing::AssertionSuccess();
+}
+
+::testing::AssertionResult check_kda_head_tp(Device& device,
+                                             ProcessGroup* cp_group,
+                                             int32_t rank) {
+  torch::InferenceMode guard;
+  ProcessGroup single(/*rank=*/0, /*world_size=*/1, device.unwrap());
+  ParallelArgs reference_parallel(/*rank=*/0, /*world_size=*/1, &single);
+  reference_parallel.tp_group_ = &single;
+  ParallelArgs parallel(rank,
+                        /*world_size=*/kWorldSize,
+                        /*dp_size=*/1,
+                        /*cp_size=*/kWorldSize,
+                        cp_group,
+                        /*ep_size=*/kWorldSize);
+  parallel.tp_group_ = &single;
+  parallel.cp_group_ = cp_group;
+  ModelArgs args;
+  args.model_type(/*model_type=*/"glm5_next")
+      .hidden_size(/*hidden_size=*/128)
+      .linear_num_key_heads(/*linear_num_key_heads=*/8)
+      .linear_num_value_heads(/*linear_num_value_heads=*/8)
+      .linear_key_head_dim(/*linear_key_head_dim=*/128)
+      .linear_value_head_dim(/*linear_value_head_dim=*/128)
+      .linear_conv_kernel_dim(/*linear_conv_kernel_dim=*/4)
+      .rms_norm_eps(/*rms_norm_eps=*/1e-6);
+  const auto options =
+      torch::TensorOptions().device(device.unwrap()).dtype(torch::kBFloat16);
+  const auto ints = options.dtype(torch::kInt32);
+  torch::manual_seed(/*seed=*/20261029);
+  const auto random = [&](const std::vector<int64_t>& shape) {
+    return (torch::randn(shape, torch::kFloat32) * 0.03f).to(options);
+  };
+  std::unordered_map<std::string, torch::Tensor> weights;
+  for (const std::string name : {"q_proj", "k_proj", "v_proj"}) {
+    weights.emplace(name + ".weight", random(/*shape=*/{1024, 128}));
+  }
+  weights.emplace(/*key=*/"b_proj.weight", random(/*shape=*/{8, 128}));
+  for (const std::string name : {"f_a_proj", "g_a_proj"}) {
+    weights.emplace(name + ".weight", random(/*shape=*/{128, 128}));
+  }
+  for (const std::string name : {"f_b_proj", "g_b_proj"}) {
+    weights.emplace(name + ".weight", random(/*shape=*/{1024, 128}));
+  }
+  for (const std::string name : {"q_conv1d", "k_conv1d", "v_conv1d"}) {
+    weights.emplace(name + ".weight", random(/*shape=*/{1024, 1, 4}));
+  }
+  weights.emplace(/*key=*/"o_proj.weight", random(/*shape=*/{128, 1024}));
+  weights.emplace(/*key=*/"o_norm.weight",
+                  torch::ones(/*size=*/{128}, options));
+  weights.emplace(/*key=*/"A_log", random(/*shape=*/{8}).to(torch::kFloat32));
+  weights.emplace(/*key=*/"dt_bias",
+                  random(/*shape=*/{1024}).to(torch::kFloat32));
+  const StateDict state_dict(std::move(weights));
+  Glm5NextKDA reference(args, QuantArgs(), reference_parallel, options);
+  Glm5NextKDA sharded(args, QuantArgs(), parallel, options);
+  reference->load_state_dict(state_dict);
+  sharded->load_state_dict(state_dict);
+  reference->verify_loaded_weights();
+  sharded->verify_loaded_weights();
+  constexpr int64_t kLocalHeads = 8 / kWorldSize;
+  constexpr int64_t kStride = 4;
+  KVCache reference_cache(LinearAttentionKVCacheTensors{
+      torch::zeros(/*size=*/{3, 6, 3 * 8 * 128}, options),
+      torch::zeros(/*size=*/{3 * kStride, 8, 128, 128},
+                   options.dtype(torch::kFloat32))});
+  KVCache sharded_cache(LinearAttentionKVCacheTensors{
+      torch::zeros(/*size=*/{3, 6, 3 * kLocalHeads * 128}, options),
+      torch::zeros(/*size=*/{3 * kStride, kLocalHeads, 128, 128},
+                   options.dtype(torch::kFloat32))});
+  ModelInputParams params;
+  params.embedding.linear_state_ids = {1, 2};
+  params.embedding.linear_state_indices = torch::tensor(/*data=*/{1, 2}, ints);
+  // Ragged packed requests, continuation, decode, then speculative
+  // verification.
+  for (int32_t step = 0; step < 4; ++step) {
+    const bool prefill = step < 2;
+    const bool verify = step == 3;
+    const std::vector<int32_t> lengths =
+        prefill ? std::vector<int32_t>{129, 67}
+                : std::vector<int32_t>{verify ? 4 : 1, verify ? 4 : 1};
+    const int32_t tokens = lengths[0] + lengths[1];
+    AttentionMetadata metadata{};
+    metadata.is_chunked_prefill = prefill || verify;
+    metadata.is_spec_verify = verify;
+    metadata.max_query_len = lengths[0];
+    metadata.q_cu_seq_lens =
+        torch::tensor(/*data=*/{0, lengths[0], tokens}, ints);
+    metadata.has_initial_states =
+        torch::full(/*size=*/{2}, step > 0, options.dtype(torch::kBool));
+    AttentionMetadataBuilder::build_linear_prefill(metadata, /*block_size=*/64);
+    params.meta.batch_forward_type = prefill || verify
+                                         ? BatchForwardType::CHUNKED_PREFILL
+                                         : BatchForwardType::DECODE;
+    params.is_spec_verify = verify;
+    params.num_accepted_tokens = torch::ones(/*size=*/{2}, ints);
+    const torch::Tensor hidden = random(/*shape=*/{tokens, 128}) / 0.03f;
+    const torch::Tensor expected =
+        reference->forward(hidden, metadata, reference_cache, params);
+    torch::Tensor actual;
+    if (prefill) {
+      const auto context = glm5_next_pcp::build_context(
+          lengths, rank, cp_group, /*chunk_size=*/64, device.unwrap());
+      const torch::Tensor local = glm5_next_pcp::shard_rows(hidden, context);
+      actual = glm5_next_pcp::gather_restore(
+          sharded->forward(local, metadata, sharded_cache, params, &context),
+          context);
+    } else {
+      actual = sharded->forward(hidden, metadata, sharded_cache, params);
+    }
+    const auto failure = [&](const char* item) {
+      return ::testing::AssertionFailure()
+             << item << " rank=" << rank << " step=" << step;
+    };
+    if (!torch::allclose(actual.to(torch::kFloat32),
+                         expected.to(torch::kFloat32),
+                         /*rtol=*/0.03,
+                         /*atol=*/0.003)) {
+      return failure(/*item=*/"KDA head-TP output");
+    }
+    const torch::Tensor expected_ssm = reference_cache.get_ssm_cache().narrow(
+        /*dim=*/1, rank * kLocalHeads, kLocalHeads);
+    if (!torch::allclose(sharded_cache.get_ssm_cache(),
+                         expected_ssm,
+                         /*rtol=*/0.02,
+                         /*atol=*/2e-5)) {
+      return failure(/*item=*/"KDA head-TP recurrent state");
+    }
+    std::vector<torch::Tensor> conv_parts;
+    conv_parts.reserve(/*new_cap=*/3);
+    for (const torch::Tensor& part :
+         reference_cache.get_conv_cache().split(/*split_size=*/8 * 128,
+                                                /*dim=*/2)) {
+      conv_parts.emplace_back(
+          part.narrow(/*dim=*/2, rank * kLocalHeads * 128, kLocalHeads * 128));
+    }
+    if (!torch::allclose(sharded_cache.get_conv_cache().to(torch::kFloat32),
+                         torch::cat(conv_parts, /*dim=*/2).to(torch::kFloat32),
+                         /*rtol=*/0.02,
+                         /*atol=*/2e-5)) {
+      return failure(/*item=*/"KDA head-TP convolution state");
     }
   }
   return ::testing::AssertionSuccess();
@@ -242,6 +399,11 @@ void check_two_ranks(RankCheck check) {
 
 TEST(Glm5NextStatePcpTest, KdaMatchesRestoreCopyAndPreservesSharedSource) {
   check_two_ranks(check_kda_state);
+}
+
+TEST(Glm5NextStatePcpTest,
+     HeadTpMatchesSingleRankThroughPrefillDecodeAndVerify) {
+  check_two_ranks(check_kda_head_tp);
 }
 
 TEST(Glm5NextStatePcpTest, KpoolMatchesCopyThroughVerifyAndDecode) {

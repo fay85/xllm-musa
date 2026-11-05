@@ -26,6 +26,7 @@ limitations under the License.
 #include "core/framework/config/model_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/model/model_args.h"
+#include "core/platform/platform.h"
 #include "core/util/dit_model_discovery.h"
 #include "llm/py_causal_lm.h"
 #include "models.h"
@@ -338,6 +339,28 @@ MtpModelCapabilities ModelRegistry::get_mtp_capabilities(
     return MtpModelCapabilities();
   }
   return it->second.mtp_capabilities;
+}
+
+void ModelRegistry::register_linear_head_sharding(const std::string& name,
+                                                  LinearHeadSharding sharding) {
+  get_instance()->model_registry_[name].linear_head_sharding = sharding;
+}
+
+LinearAttentionPolicy ModelRegistry::get_linear_attention_policy(
+    const std::string& model_type) {
+  std::string resolved_name;
+  std::string error;
+  CHECK(resolve_model_registration_name(model_type, &resolved_name, &error))
+      << error;
+
+  LinearAttentionPolicy policy;
+  policy.requires_unsplit_kv = Platform::requires_unsplit_linear_state();
+  const auto& registry = get_instance()->model_registry_;
+  const auto it = registry.find(resolved_name);
+  if (it != registry.end()) {
+    policy.head_sharding = it->second.linear_head_sharding;
+  }
+  return policy;
 }
 
 void ModelRegistry::configure_mtp_args(ModelArgs& args,

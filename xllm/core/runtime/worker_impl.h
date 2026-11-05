@@ -34,6 +34,7 @@ limitations under the License.
 #include "framework/model/causal_lm.h"
 #include "framework/model/model_input_params.h"
 #include "framework/model_context.h"
+#include "framework/parallel_state/linear_attention_parallel.h"
 #include "framework/parallel_state/parallel_args.h"
 #include "framework/parallel_state/parallel_state.h"
 #include "framework/sampling/beam_searcher.h"
@@ -329,6 +330,7 @@ class WorkerImpl {
 
   // model context, includes model args, parallel args and date type etc.
   mutable ModelContext context_;
+  LinearAttentionPolicy linear_attention_policy_;
 
   OptimizationConfig get_optimization_config() const {
     return context_.get_optimization_config();

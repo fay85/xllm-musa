@@ -271,9 +271,18 @@ Glm5NextKDAImpl::Glm5NextKDAImpl(const ModelArgs& args,
                                  float gate_lower_bound)
     : gate_lower_bound_(gate_lower_bound), norm_eps_(args.rms_norm_eps()) {
   (void)quant_args;
-  CHECK(parallel_args.tp_group_ != nullptr);
-  tp_size_ = parallel_args.tp_group_->world_size();
-  rank_ = parallel_args.tp_group_->rank();
+  ProcessGroup* head_tp_group = parallel_args.tp_group_;
+  if (parallel_args.cp_size() > 1) {
+    // MLU CP is admitted only with DP=1, so the world group is exactly the
+    // complete CP x TP head domain. DSA continues using the narrower TP group.
+    CHECK_EQ(parallel_args.dp_size(), 1);
+    head_tp_group = parallel_args.process_group_;
+    CHECK(head_tp_group != nullptr);
+    CHECK_EQ(head_tp_group->world_size(), parallel_args.world_size());
+  }
+  CHECK(head_tp_group != nullptr);
+  tp_size_ = head_tp_group->world_size();
+  rank_ = head_tp_group->rank();
   num_heads_ = args.linear_num_key_heads();
   head_dim_ = args.linear_key_head_dim();
   conv_kernel_size_ = args.linear_conv_kernel_dim();
@@ -309,7 +318,7 @@ Glm5NextKDAImpl::Glm5NextKDAImpl(const ModelArgs& args,
                                                    /*bias=*/false,
                                                    /*gather_output=*/false,
                                                    no_quant_args,
-                                                   parallel_args.tp_group_,
+                                                   head_tp_group,
                                                    options));
   g_b_proj_ = register_module("g_b_proj",
                               ColumnParallelLinear(head_dim_,
@@ -317,7 +326,7 @@ Glm5NextKDAImpl::Glm5NextKDAImpl(const ModelArgs& args,
                                                    /*bias=*/false,
                                                    /*gather_output=*/false,
                                                    no_quant_args,
-                                                   parallel_args.tp_group_,
+                                                   head_tp_group,
                                                    options));
 
   // torch_mlu's causal-conv kernels require activations, weights, and the
@@ -330,7 +339,7 @@ Glm5NextKDAImpl::Glm5NextKDAImpl(const ModelArgs& args,
                                                    /*bias=*/false,
                                                    /*gather_output=*/false,
                                                    no_quant_args,
-                                                   parallel_args.tp_group_,
+                                                   head_tp_group,
                                                    options));
   k_conv1d_ = register_module("k_conv1d",
                               ColumnParallelLinear(conv_kernel_size_,
@@ -338,7 +347,7 @@ Glm5NextKDAImpl::Glm5NextKDAImpl(const ModelArgs& args,
                                                    /*bias=*/false,
                                                    /*gather_output=*/false,
                                                    no_quant_args,
-                                                   parallel_args.tp_group_,
+                                                   head_tp_group,
                                                    options));
   v_conv1d_ = register_module("v_conv1d",
                               ColumnParallelLinear(conv_kernel_size_,
@@ -346,7 +355,7 @@ Glm5NextKDAImpl::Glm5NextKDAImpl(const ModelArgs& args,
                                                    /*bias=*/false,
                                                    /*gather_output=*/false,
                                                    no_quant_args,
-                                                   parallel_args.tp_group_,
+                                                   head_tp_group,
                                                    options));
 
   const torch::TensorOptions fp32_options = options.dtype(torch::kFloat32);
@@ -367,7 +376,7 @@ Glm5NextKDAImpl::Glm5NextKDAImpl(const ModelArgs& args,
                                               /*input_is_parallelized=*/true,
                                               /*enable_result_reduction=*/true,
                                               no_quant_args,
-                                              parallel_args.tp_group_,
+                                              head_tp_group,
                                               options));
   chunk_kda_ =
       register_module("chunk_kda", kernel::mlu::ChunkKDA(local_num_heads_));

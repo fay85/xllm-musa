@@ -91,6 +91,7 @@ limitations under the License.
 #include "framework/model/aux_hidden_capture.h"
 #include "framework/model/model_input_params.h"
 #include "framework/model_loader.h"
+#include "framework/parallel_state/linear_attention_parallel.h"
 #include "framework/parallel_state/npu_cp_plan.h"
 #include "framework/sampling/sampler.h"
 #include "framework/state_dict/state_dict.h"
@@ -635,7 +636,8 @@ bool WorkerImpl::allocate_kv_cache_with_transfer(
   kv_cache_transfer_->configure_cache_layout(parallel_args_,
                                              context_.get_model_args(),
                                              options_.block_size(),
-                                             /*is_spec_draft=*/false);
+                                             /*is_spec_draft=*/false,
+                                             linear_attention_policy_);
   kv_cache_transfer_->register_kv_cache(kv_caches_, kv_cache_shape, dtype_);
 
   status_ = Status::READY;
@@ -661,14 +663,16 @@ bool WorkerImpl::allocate_kv_cache_with_transfer(
     kv_cache_transfer_->configure_cache_layout(parallel_args_,
                                                context_.get_model_args(),
                                                options_.block_size(),
-                                               /*is_spec_draft=*/true);
+                                               /*is_spec_draft=*/true,
+                                               linear_attention_policy_);
     kv_cache_transfer_->register_kv_cache_spec(
         kv_caches_, kv_cache_shape, dtype_);
   } else {
     kv_cache_transfer_->configure_cache_layout(parallel_args_,
                                                context_.get_model_args(),
                                                options_.block_size(),
-                                               /*is_spec_draft=*/false);
+                                               /*is_spec_draft=*/false,
+                                               linear_attention_policy_);
     kv_cache_transfer_->register_kv_cache(kv_caches_, kv_cache_shape, dtype_);
   }
 
@@ -2153,6 +2157,14 @@ bool WorkerImpl::init_model(const std::string& model_weights_path,
       options_.speculative_algorithm(),
       options_.is_draft_engine(),
       ModelConfig::is_python_model_impl(context_.get_model_impl()));
+  linear_attention_policy_ =
+      ModelRegistry::get_linear_attention_policy(args.model_type());
+  const std::optional<std::string> linear_kv_split_error =
+      validate_linear_attention_kv_split(
+          args,
+          linear_attention_policy_,
+          parallel_args_.kv_split_size_effective());
+  CHECK(!linear_kv_split_error.has_value()) << linear_kv_split_error.value();
   auto quant_args = model_loader->quant_args();
   const bool embedding_mode = options_.task_type() == "embed";
   args.embedding_mode(embedding_mode);

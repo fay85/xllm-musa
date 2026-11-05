@@ -183,6 +183,7 @@ Status validate_contiguous_shape(const CacheTensorManifest& tensor) {
 
 void descriptor_to_proto(const LogicalShardDescriptor& descriptor,
                          proto::LogicalShardDescriptor* proto_descriptor) {
+  proto_descriptor->set_partitioned_across_cp(descriptor.partitioned_across_cp);
   proto_descriptor->set_kind(
       static_cast<proto::LogicalShardKind>(descriptor.kind));
   proto_descriptor->set_resource_scope(
@@ -213,6 +214,7 @@ Status descriptor_from_proto(
     return invalid("logical shard contains an unknown enum value");
   }
 
+  descriptor->partitioned_across_cp = proto_descriptor.partitioned_across_cp();
   descriptor->kind = static_cast<LogicalShardKind>(proto_descriptor.kind());
   descriptor->resource_scope =
       static_cast<CacheResourceScope>(proto_descriptor.resource_scope());

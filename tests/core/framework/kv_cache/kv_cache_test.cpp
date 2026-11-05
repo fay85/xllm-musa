@@ -38,6 +38,7 @@ limitations under the License.
 #include "framework/kv_cache/kv_cache_tensor_allocator.h"
 #include "framework/kv_cache/kv_cache_utils.h"
 #include "framework/kv_cache_transfer/scoped_environment_variable.h"
+#include "framework/parallel_state/linear_attention_parallel.h"
 #include "platform/device.h"
 #include "platform/platform.h"
 #include "worker.pb.h"
@@ -1720,6 +1721,45 @@ TEST_F(HostKVCacheConfigTest, RejectsPartialLinearAttentionCache) {
   ASSERT_TRUE(error.has_value());
   EXPECT_NE(error->find("requires both conv and SSM"), std::string::npos);
 }
+
+#if defined(USE_MLU)
+TEST(KVCacheTest, GlmNextHeadTpSizesStateIndependentlyOfAttention) {
+  ModelArgs args;
+  args.model_type("glm5_next")
+      .n_layers(2)
+      .n_heads(8)
+      .n_kv_heads(8)
+      .head_dim(128)
+      .layer_types({"linear_attention", "full_attention"})
+      .linear_num_key_heads(8)
+      .linear_num_value_heads(8)
+      .linear_key_head_dim(128)
+      .linear_value_head_dim(128)
+      .linear_conv_kernel_dim(4);
+  KVCacheCapacity capacity;
+  capacity.n_blocks(8)
+      .block_size(16)
+      .num_linear_state_blocks(4)
+      .linear_conv_state_len(6)
+      .linear_ssm_checkpoint_stride(4);
+  LinearAttentionPolicy policy;
+  policy.head_sharding = LinearHeadSharding::CP_TP;
+  for (const int64_t cp : {1, 2, 4, 8}) {
+    const int64_t attention_tp_size = 8 / cp;
+    const int64_t head_tp_size =
+        linear_head_tp_size(policy, attention_tp_size, cp);
+    const KVCacheShape shape(capacity, args, attention_tp_size, head_tp_size);
+    EXPECT_EQ(shape.conv_cache_shape(), (std::vector<int64_t>{4, 6, 384}));
+    EXPECT_EQ(shape.ssm_cache_shape(), (std::vector<int64_t>{16, 1, 128, 128}));
+    EXPECT_EQ(shape.key_cache_shape()[1], cp);
+    proto::KVCacheShape proto_shape;
+    shape.to_proto(&proto_shape);
+    const KVCacheShape restored = KVCacheShape::from_proto(proto_shape);
+    EXPECT_EQ(restored.conv_cache_shape(), shape.conv_cache_shape());
+    EXPECT_EQ(restored.ssm_cache_shape(), shape.ssm_cache_shape());
+  }
+}
+#endif
 
 TEST(KVCacheTest, KPoolShapeRoundTripKeepsRequestTailSeparateFromPages) {
   ModelArgs args;

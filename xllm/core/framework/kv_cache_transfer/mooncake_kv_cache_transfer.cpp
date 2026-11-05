@@ -30,6 +30,7 @@ limitations under the License.
 #include "framework/kv_cache/cache_layout_builder.h"
 #include "framework/kv_cache/kv_cache_utils.h"
 #include "framework/kv_cache_transfer/push_route.h"
+#include "framework/parallel_state/linear_attention_parallel.h"
 #include "framework/xtensor/global_xtensor.h"
 #include "framework/xtensor/xtensor_allocator.h"
 #include "util/net.h"
@@ -167,7 +168,8 @@ void MooncakeKVCacheTransferBase::configure_cache_layout(
     const ParallelArgs& parallel_args,
     const ModelArgs& model_args,
     int32_t block_token_capacity,
-    bool is_spec_draft) {
+    bool is_spec_draft,
+    const LinearAttentionPolicy& linear_policy) {
   CHECK_GT(parallel_args.dp_size(), 0);
   CHECK_GT(parallel_args.cp_size(), 0);
   CHECK_GT(parallel_args.world_size(), 0);
@@ -205,6 +207,10 @@ void MooncakeKVCacheTransferBase::configure_cache_layout(
   tensor_layout.kv_head_count =
       model_args.n_kv_heads().value_or(model_args.n_heads());
   tensor_layout.index_head_count = model_args.index_n_heads();
+  tensor_layout.linear_head_tp_size = static_cast<int32_t>(
+      linear_head_tp_size(linear_policy, tp_size, parallel_args.cp_size()));
+  tensor_layout.linear_head_tp_rank =
+      rank_in_dp % tensor_layout.linear_head_tp_size;
   tensor_layout.linear_key_head_count = model_args.linear_num_key_heads();
   tensor_layout.linear_value_head_count = model_args.linear_num_value_heads();
   tensor_layout.linear_key_head_dim = model_args.linear_key_head_dim();

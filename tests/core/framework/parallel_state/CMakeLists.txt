@@ -2,6 +2,17 @@ include(cc_test)
 
 cc_test(
   NAME
+    linear_attention_parallel_test
+  CPU_ONLY
+  SRCS
+    linear_attention_parallel_test.cpp
+  DEPS
+    :parallel_state
+    GTest::gtest_main
+)
+
+cc_test(
+  NAME
     context_parallel_topology_test
   CPU_ONLY
   SRCS

@@ -65,7 +65,6 @@ cc_test(
     causal_conv1d_fn_test.cpp
     chunk_gated_delta_rule_regression_test.cpp
     chunk_kda_test.cpp
-    chunk_kda_pcp_test.cpp
     fused_sigmoid_update_regression_test.cpp
   DEPS
     :triton_jit

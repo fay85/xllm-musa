@@ -328,6 +328,48 @@ TEST(MooncakeKVCacheTransferLayoutTest, PublishedTpWidthAndRankAlwaysAgree) {
   }
 }
 
+TEST(MooncakeKVCacheTransferLayoutTest,
+     LinearHeadPolicyKeepsWidthAndRankTogether) {
+  auto engine = std::make_unique<RecordingMooncakeTransferEngine>(
+      /*listen_port=*/0, torch::Device(torch::kCPU));
+  MooncakeKVCacheTransferDefault transfer(/*device_id=*/0,
+                                          /*listen_port=*/0,
+                                          torch::Device(torch::kCPU),
+                                          /*model_type=*/"test",
+                                          std::move(engine));
+  const ModelArgs args{};
+  constexpr int32_t kWorldSize = 16;
+  constexpr int32_t kDpSize = 2;
+  constexpr int32_t kCpSize = 4;
+  constexpr int32_t kTpSize = 2;
+  for (const LinearHeadSharding sharding :
+       {LinearHeadSharding::ATTENTION_TP, LinearHeadSharding::CP_TP}) {
+    const LinearAttentionPolicy policy{sharding, /*requires_unsplit_kv=*/false};
+    const int32_t expected_size =
+        sharding == LinearHeadSharding::CP_TP ? 8 : kTpSize;
+    for (int32_t rank = 0; rank < kWorldSize; ++rank) {
+      const ParallelArgs parallel(rank,
+                                  kWorldSize,
+                                  kDpSize,
+                                  kCpSize,
+                                  /*process_group=*/nullptr,
+                                  /*ep_size=*/1);
+      transfer.configure_cache_layout(parallel,
+                                      args,
+                                      /*block_token_capacity=*/128,
+                                      /*is_spec_draft=*/false,
+                                      policy);
+      const auto& context = transfer.pending_registration_context_;
+      ASSERT_TRUE(context.has_value());
+      EXPECT_EQ(context->tensor_layout.tp_size, kTpSize);
+      EXPECT_EQ(context->tensor_layout.tp_rank, rank % kTpSize);
+      EXPECT_EQ(context->tensor_layout.linear_head_tp_size, expected_size);
+      EXPECT_EQ(context->tensor_layout.linear_head_tp_rank,
+                rank % expected_size);
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Role axis: KEY / VALUE / INDEX are described independently by the production
 // layout builder, so each role carries its own shard kind, owner and byte

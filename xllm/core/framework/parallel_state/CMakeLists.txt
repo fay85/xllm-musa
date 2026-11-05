@@ -9,6 +9,7 @@ cc_library(
     npu_dp_ep_padding.h
     dit_mapping.h
     rank_generator.h
+    linear_attention_parallel.h
     parallel_args.h
     parallel_state.h
     process_group.h

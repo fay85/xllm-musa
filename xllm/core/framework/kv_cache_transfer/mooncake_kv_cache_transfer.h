@@ -35,10 +35,12 @@ class MooncakeKVCacheTransferBase : public KVCacheTransfer {
 
   void initialize(int32_t device_id) override;
 
-  void configure_cache_layout(const ParallelArgs& parallel_args,
-                              const ModelArgs& model_args,
-                              int32_t block_token_capacity,
-                              bool is_spec_draft) override;
+  void configure_cache_layout(
+      const ParallelArgs& parallel_args,
+      const ModelArgs& model_args,
+      int32_t block_token_capacity,
+      bool is_spec_draft,
+      const LinearAttentionPolicy& linear_policy = {}) override;
 
   void get_cache_info(uint64_t& cluster_id, std::string& addr) override;
 

@@ -40,6 +40,7 @@ limitations under the License.
 #include "core/layers/common/word_embedding.h"
 #include "core/layers/mlu/glm5_next/glm5_next_decoder_layer.h"
 #include "core/layers/mlu/glm5_next/glm5_next_pcp_context.h"
+#include "framework/parallel_state/linear_attention_parallel.h"
 #include "models/llm/llm_model_base.h"
 #include "models/llm/mlu/glm5_next_graph.h"
 #include "models/model_registry.h"
@@ -146,10 +147,13 @@ class Glm5NextModelImpl final
         << "GLM5-Next PCP requires a CP process group.";
     CHECK_GT(hc_mult_, 0) << "GLM5-Next requires hc_mult > 0.";
 
-    const int64_t tp_size = std::max<int64_t>(parallel_args.tp_size(), 1);
-    CHECK_EQ(args.linear_num_key_heads() % tp_size, 0)
-        << "GLM5-Next KDA head count must be divisible by TP size.";
-    local_linear_heads_ = args.linear_num_key_heads() / tp_size;
+    const int64_t head_tp_size = linear_head_tp_size(
+        ModelRegistry::get_linear_attention_policy(args.model_type()),
+        std::max<int64_t>(parallel_args.tp_size(), 1),
+        cp_size_);
+    CHECK_EQ(args.linear_num_key_heads() % head_tp_size, 0)
+        << "GLM5-Next KDA head count must be divisible by head TP size.";
+    local_linear_heads_ = args.linear_num_key_heads() / head_tp_size;
 
     blocks_ = register_module("layers", torch::nn::ModuleList());
     layers_.reserve(static_cast<size_t>(args.n_layers()));
@@ -389,6 +393,14 @@ class Glm5NextForCausalLMImpl final
 TORCH_MODULE(Glm5NextForCausalLM);
 
 REGISTER_CAUSAL_MODEL(glm5_next, Glm5NextForCausalLM);
+
+namespace {
+[[maybe_unused]] const bool kGlm5NextHeadShardingRegistered = []() {
+  ModelRegistry::register_linear_head_sharding("glm5_next",
+                                               LinearHeadSharding::CP_TP);
+  return true;
+}();
+}  // namespace
 
 }  // namespace model
 }  // namespace mlu
