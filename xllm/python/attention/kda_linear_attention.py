@@ -1826,11 +1826,7 @@ class KdaLinearAttentionMixin:
             k_in = l2_norm(key)
             v_in = value.to(torch.bfloat16).contiguous()
             beta = beta_raw.float().sigmoid()
-            cu_seqlens = (
-                q_cu.to(torch.int32)
-                if num_seqs != batch_size
-                else torch.tensor([0, seq_len], dtype=torch.int32, device=device)
-            )
+            cu_seqlens = _get_host_q_cu_seq_lens(metadata, num_seqs) if num_seqs != batch_size else [0, seq_len]
             # The AscendC kernel supports both the single-sequence and rank-4
             # B=1 varlen layouts. Keep all sequences in one call so launch
             # count is independent of the number of concurrent prefills;

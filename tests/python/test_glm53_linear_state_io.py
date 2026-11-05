@@ -252,6 +252,7 @@ def test_execute_linear_prefill_reads_source_and_writes_live(
         raw_gate_proj=torch.zeros(1, 1, 1, 2, dtype=torch.float32),
     )
 
+    assert kda_test_environment[0]["cu_seqlens"] == [0, 1]
     assert output.shape == (1, 1, 1, 2)
     assert torch.equal(conv_cache[1], original_conv[1])
     assert torch.equal(ssm_cache[1], original_ssm[1])
@@ -479,7 +480,7 @@ def test_plain_decode_keeps_fused_gate_without_verify_state(kda_test_environment
     assert kda_test_environment[0]["use_gate_in_kernel"] is True
     assert kda_test_environment[0]["use_beta_sigmoid_in_kernel"] is True
     assert torch.equal(kda_test_environment[0]["beta"], torch.ones(2, 1))
-    assert kda_test_environment[0]["cu_seqlens"].tolist() == [0, 1, 2]
+    assert [int(v) for v in kda_test_environment[0]["cu_seqlens"]] == [0, 1, 2]
 
 
 def test_varlen_prefill_uses_one_native_convolution(
@@ -510,7 +511,7 @@ def test_varlen_prefill_uses_one_native_convolution(
     assert causal_conv1d_reference[0]["query_start_loc"] == [0, 1, 3, 5]
     assert causal_conv1d_reference[0]["run_mode"] == 0
     assert [call["op"] for call in kda_test_environment] == ["chunk"]
-    assert [call["cu_seqlens"].tolist() for call in kda_test_environment] == [[0, 1, 3, 5]]
+    assert [[int(v) for v in call["cu_seqlens"]] for call in kda_test_environment] == [[0, 1, 3, 5]]
     expected_value = causal_conv1d_reference[0]["output"][:, -2:].reshape(1, 5, 1, 2)
     actual_value = kda_test_environment[0]["value"]
     torch.testing.assert_close(actual_value, expected_value, rtol=0, atol=0)
@@ -564,7 +565,7 @@ def test_varlen_prefill_uses_host_q_cu_without_device_to_host_sync(
     )
 
     assert causal_conv1d_reference[0]["query_start_loc"] == [0, 1, 3, 5]
-    assert kda_test_environment[0]["cu_seqlens"].tolist() == [0, 1, 3, 5]
+    assert [int(v) for v in kda_test_environment[0]["cu_seqlens"]] == [0, 1, 3, 5]
 
 
 def test_varlen_prefill_falls_back_to_matching_host_q_lens(
@@ -595,7 +596,7 @@ def test_varlen_prefill_falls_back_to_matching_host_q_lens(
     )
 
     assert causal_conv1d_reference[0]["query_start_loc"] == [0, 1, 3, 5]
-    assert kda_test_environment[0]["cu_seqlens"].tolist() == [0, 1, 3, 5]
+    assert [int(v) for v in kda_test_environment[0]["cu_seqlens"]] == [0, 1, 3, 5]
 
 
 def _verify_metadata(
