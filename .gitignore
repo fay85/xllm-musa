@@ -1,5 +1,6 @@
 # Visual Studio Code
 /.vscode*
+/.codex
 
 # Idea
 /.idea
@@ -8,7 +9,7 @@
 
 # CMake
 /build*
-scripts/ninja_guard/ninja.real
+/scripts/ninja_guard/ninja.real
 
 # vcpkg
 /.vcpkg*
