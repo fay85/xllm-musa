@@ -80,3 +80,10 @@ cc_test(
   DEPS :cuda_kernels tvm_ffi musa_python torch_python Python::Python torch
        GTest::gtest_main glog::glog
 )
+
+cc_test(
+  NAME kda_test
+  SRCS kda_test.cpp
+  DEPS :cuda_kernels musa_python torch_python Python::Python torch
+       GTest::gtest_main glog::glog
+)

@@ -16,6 +16,7 @@ set(_TORCH_MUSA_KERNEL_HDRS
   deepseek_v4_indexer_metadata.h
   musa_tvmffi_stream.h
   gdn_ops.h
+  kda.h
   llm_decode_metadata_update.h
   attention_runner.h
   global_capture_instance.h
@@ -30,6 +31,7 @@ set(_TORCH_MUSA_KERNEL_SRCS
   attention_prefill.cpp
   gdn_decode.cu
   gdn_prefill.cpp
+  kda.cpp
   causal_conv1d.cu
   gemma_norm.cu
   activation.cu
