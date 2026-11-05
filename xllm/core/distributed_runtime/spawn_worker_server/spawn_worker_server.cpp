@@ -95,6 +95,7 @@ SpawnWorkerServer::SpawnWorkerServer(const std::string& master_node_addr,
                                      bool enable_mtp_draft_body_tp1,
                                      const std::string& draft_sampling_mode,
                                      int32_t kv_split_size,
+                                     int32_t vae_size,
                                      int32_t comm_buffer_offset) {
   // TODO: pass whole xllm::runtime::Options here from main process.
   xllm::runtime::Options runner_options;
@@ -127,6 +128,7 @@ SpawnWorkerServer::SpawnWorkerServer(const std::string& master_node_addr,
       .tp_size(tp_size)
       .sp_size(effective_sp_size)
       .cfg_size(effective_cfg_size)
+      .vae_size(vae_size)
       .text_encoder_tp_size(effective_text_encoder_tp_size)
       .enable_shm(enable_shm)
       .input_shm_size(input_shm_size)
@@ -152,6 +154,7 @@ SpawnWorkerServer::SpawnWorkerServer(const std::string& master_node_addr,
       .tp_size(tp_size)
       .sp_size(effective_sp_size)
       .cfg_size(effective_cfg_size)
+      .vae_size(vae_size)
       .text_encoder_tp_size(effective_text_encoder_tp_size)
       .communication_backend(communication_backend);
   DistributedConfig::get_instance().master_node_addr(master_node_addr);

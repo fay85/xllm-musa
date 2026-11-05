@@ -249,7 +249,7 @@ struct Options {
 
   // dit
   // max requests per batch
-  PROPERTY(int, max_requests_per_batch) = 0;
+  PROPERTY(int32_t, max_requests_per_batch) = 0;
 
   // start with offline inference, default is false
   PROPERTY(bool, enable_offline_inference) = false;

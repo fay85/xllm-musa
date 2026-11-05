@@ -3597,9 +3597,10 @@ bool ForwardSharedMemoryManager::input_write(const ForwardInput& input) {
 bool ForwardSharedMemoryManager::input_read(
     ForwardInput& input,
     const torch::Device& device,
-    InputDeviceMaterializationPolicy policy) {
+    InputDeviceMaterializationPolicy policy,
+    std::stop_token stop_token) {
   while (true) {
-    if (cancelled()) {
+    if (cancelled() || stop_token.stop_requested()) {
       return false;
     }
     if (control_ptr_->version != last_version_) {

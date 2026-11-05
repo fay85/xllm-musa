@@ -201,6 +201,7 @@ Options create_options(const std::string& instance_name, bool is_local) {
   const ExecutionConfig& execution_config = ExecutionConfig::get_instance();
   const KernelConfig& kernel_config = KernelConfig::get_instance();
   const DiTConfig& dit_config = DiTConfig::get_instance();
+  const LoadConfig& load_config = LoadConfig::get_instance();
   const RecConfig& rec_config = RecConfig::get_instance();
 
 #if !defined(USE_NPU)
@@ -220,6 +221,11 @@ Options create_options(const std::string& instance_name, bool is_local) {
   options.model_path(model_config.model())
       .model_id(model_config.model_id())
       .task_type(model_config.task())
+      .enable_return_mm_full_embeddings(
+          mm_config.enable_return_mm_full_embeddings())
+      .capture_hidden_state_layer(model_config.capture_hidden_state_layer())
+      .enable_return_embedding_modality_tags(
+          mm_config.enable_return_embedding_modality_tags())
       .draft_model_path(speculative_config.draft_model())
       .backend(model_config.backend())
       .model_impl(model_config.model_impl())
@@ -328,6 +334,17 @@ Options create_options(const std::string& instance_name, bool is_local) {
       .max_global_ttft_ms(profile_config.max_global_ttft_ms())
       .max_global_tpot_ms(profile_config.max_global_tpot_ms())
       .max_requests_per_batch(dit_config.max_requests_per_batch())
+      .dit_vae_image_size(dit_config.dit_vae_image_size())
+      .dit_cache_policy(dit_config.dit_cache_policy())
+      .dit_enable_text_encoder(dit_config.dit_enable_text_encoder())
+      .dit_h3_task_type(dit_config.dit_h3_task_type())
+      .dit_laser_attention_enabled(dit_config.dit_laser_attention_enabled())
+      .enable_manual_loader(load_config.enable_manual_loader())
+      .enable_rolling_load(load_config.enable_rolling_load())
+      .rolling_load_num_cached_layers(
+          load_config.rolling_load_num_cached_layers())
+      .rolling_load_num_rolling_slots(
+          load_config.rolling_load_num_rolling_slots())
       .enable_shm(execution_config.enable_shm())
       .input_shm_size(execution_config.input_shm_size())
       .output_shm_size(execution_config.output_shm_size())

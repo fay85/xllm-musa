@@ -19,17 +19,31 @@ limitations under the License.
 #include <pybind11/stl_bind.h>
 #include <torch/python.h>
 
+#include <cstdint>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
 #include "api_service/call.h"
+#include "core/common/message.h"
 #include "core/common/options.h"
 #include "core/common/types.h"
+#include "core/distributed_runtime/dit_master.h"
 #include "core/distributed_runtime/llm_master.h"
 #include "core/distributed_runtime/vlm_master.h"
 #include "core/framework/config/model_config.h"
+#include "core/framework/multimodal/embedding_output.h"
 #include "core/framework/multimodal/mm_data.h"
+#include "core/framework/request/dit_input_sources.h"
+#include "core/framework/request/dit_request_params.h"
+#include "core/framework/request/dit_source_decoder.h"
 #include "core/framework/request/request_output.h"
 #include "core/framework/request/request_params.h"
 #include "core/framework/request/sample_slot.h"
+#include "core/platform/platform.h"
 #include "core/runtime/py_runtime_module.h"
+#include "core/util/binary_payload.h"
 #include "core/util/pybind_helper.h"
 #include "models/model_registry.h"
 
@@ -72,6 +86,12 @@ PYBIND11_MODULE(xllm_export, m) {
       .def_readwrite("expert_parallel_degree",
                      &Options::expert_parallel_degree_)
       .def_readwrite("task_type", &Options::task_type_)
+      .def_readwrite("enable_return_mm_full_embeddings",
+                     &Options::enable_return_mm_full_embeddings_)
+      .def_readwrite("capture_hidden_state_layer",
+                     &Options::capture_hidden_state_layer_)
+      .def_readwrite("enable_return_embedding_modality_tags",
+                     &Options::enable_return_embedding_modality_tags_)
       .def_readwrite("enable_chunked_prefill",
                      &Options::enable_chunked_prefill_)
       .def_readwrite("enable_flashcomm1", &Options::enable_flashcomm1_)
@@ -82,6 +102,27 @@ PYBIND11_MODULE(xllm_export, m) {
       .def_readwrite("master_node_addr", &Options::master_node_addr_)
       .def_readwrite("nnodes", &Options::nnodes_)
       .def_readwrite("node_rank", &Options::node_rank_)
+      .def_readwrite("tp_size", &Options::tp_size_)
+      .def_readwrite("sp_size", &Options::sp_size_)
+      .def_readwrite("cfg_size", &Options::cfg_size_)
+      .def_readwrite("text_encoder_tp_size", &Options::text_encoder_tp_size_)
+      .def_readwrite("max_requests_per_batch",
+                     &Options::max_requests_per_batch_)
+      .def_readwrite("dit_vae_image_size", &Options::dit_vae_image_size_)
+      .def_readwrite("dit_cache_policy", &Options::dit_cache_policy_)
+      .def_readwrite("dit_enable_text_encoder",
+                     &Options::dit_enable_text_encoder_)
+      .def_readwrite("dit_h3_task_type", &Options::dit_h3_task_type_)
+      .def_readwrite("dit_laser_attention_enabled",
+                     &Options::dit_laser_attention_enabled_)
+      .def_readwrite("enable_manual_loader", &Options::enable_manual_loader_)
+      .def_readwrite("enable_rolling_load", &Options::enable_rolling_load_)
+      .def_readwrite("rolling_load_num_cached_layers",
+                     &Options::rolling_load_num_cached_layers_)
+      .def_readwrite("rolling_load_num_rolling_slots",
+                     &Options::rolling_load_num_rolling_slots_)
+      .def_readwrite("vae_size", &Options::vae_size_)
+      .def_readwrite("npu_kernel_backend", &Options::npu_kernel_backend_)
       .def_readwrite("dp_size", &Options::dp_size_)
       .def_readwrite("cp_size", &Options::cp_size_)
       .def_readwrite("ep_size", &Options::ep_size_)
@@ -256,7 +297,7 @@ PYBIND11_MODULE(xllm_export, m) {
       .def_readwrite("is_sample_request", &RequestParams::is_sample_request)
       .def_readwrite("sample_slots", &RequestParams::sample_slots);
 
-  // 4. export Usage
+  // 5. export Usage
   py::class_<Usage>(m, "Usage")
       .def(py::init())
       .def_readwrite("num_prompt_tokens", &Usage::num_prompt_tokens)
@@ -275,7 +316,7 @@ PYBIND11_MODULE(xllm_export, m) {
       .def_property_readonly("cached_tokens", [](const Usage& self) {
         return self.num_cached_tokens;
       });
-  // 5. export RequestOutput
+  // 6. export RequestOutput
   py::class_<RequestOutput>(m, "RequestOutput")
       .def(py::init())
       .def_readwrite("request_id", &RequestOutput::request_id)
@@ -287,7 +328,7 @@ PYBIND11_MODULE(xllm_export, m) {
       .def_readwrite("finished", &RequestOutput::finished)
       .def_readwrite("cancelled", &RequestOutput::cancelled);
 
-  // 6. export StatusCode
+  // 7. export StatusCode
   py::enum_<StatusCode>(m, "StatusCode")
       .value("OK", StatusCode::OK)
       .value("CANCELLED", StatusCode::CANCELLED)
@@ -297,7 +338,7 @@ PYBIND11_MODULE(xllm_export, m) {
       .value("RESOURCE_EXHAUSTED", StatusCode::RESOURCE_EXHAUSTED)
       .export_values();
 
-  // 7. export Status
+  // 8. export Status
   py::class_<Status>(m, "Status")
       .def(py::init<StatusCode, const std::string&>(),
            py::arg("code"),
@@ -313,7 +354,7 @@ PYBIND11_MODULE(xllm_export, m) {
                                                         self.message());
       });
 
-  // 8. export LogProbData
+  // 9. export LogProbData
   py::class_<LogProbData>(m, "LogProbData")
       .def(py::init())
       .def_readwrite("token", &LogProbData::token)
@@ -325,7 +366,7 @@ PYBIND11_MODULE(xllm_export, m) {
             self.token, self.token_id, self.logprob);
       });
 
-  // 9. export LogProb
+  // 10. export LogProb
   py::class_<LogProb, LogProbData>(m, "LogProb")
       .def(py::init())
       .def_readwrite("top_logprobs", &LogProb::top_logprobs)
@@ -334,7 +375,12 @@ PYBIND11_MODULE(xllm_export, m) {
             self.token, self.token_id, self.logprob);
       });
 
-  // 10. export SequenceOutput
+  // export EmbeddingOutput
+  py::class_<EmbeddingOutput>(m, "EmbeddingOutput")
+      .def_readonly("embedding", &EmbeddingOutput::embedding)
+      .def_readonly("metadata", &EmbeddingOutput::metadata);
+
+  // 11. export SequenceOutput
   py::class_<SequenceOutput>(m, "SequenceOutput")
       .def(py::init())
       .def_readwrite("index", &SequenceOutput::index)
@@ -344,11 +390,12 @@ PYBIND11_MODULE(xllm_export, m) {
       .def_readwrite("finish_reason", &SequenceOutput::finish_reason)
       .def_readwrite("logprobs", &SequenceOutput::logprobs)
       .def_readwrite("embeddings", &SequenceOutput::embeddings)
+      .def_readonly("mm_embeddings", &SequenceOutput::mm_embeddings)
       .def("__repr__", [](const SequenceOutput& self) {
         return "SequenceOutput({}: {!r})"_s.format(self.index, self.text);
       });
 
-  // 11. export MMType
+  // 12. export MMType
   py::enum_<MMType::Value>(m, "MMType")
       .value("NONE", MMType::Value::NONE)
       .value("IMAGE", MMType::Value::IMAGE)
@@ -356,7 +403,7 @@ PYBIND11_MODULE(xllm_export, m) {
       .value("AUDIO", MMType::Value::AUDIO)
       .export_values();
 
-  // 12. export MMData
+  // 13. export MMData
   py::class_<MMData>(m, "MMData")
       .def(py::init<int, const MMDict&>(), py::arg("ty"), py::arg("data"))
       .def("get",
@@ -377,7 +424,7 @@ PYBIND11_MODULE(xllm_export, m) {
         return ss.str();
       });
 
-  // 13. export VLMMaster
+  // 14. export VLMMaster
   py::class_<VLMMaster>(m, "VLMMaster")
       .def(py::init<const Options&>(),
            py::arg("options"),
@@ -399,6 +446,14 @@ PYBIND11_MODULE(xllm_export, m) {
                              BatchOutputCallback>(
                &VLMMaster::handle_batch_request_with_image_urls),
            py::call_guard<py::gil_scoped_release>())
+      .def("handle_batch_request_with_mm_urls",
+           &VLMMaster::handle_batch_request_with_mm_urls,
+           py::arg("prompts"),
+           py::arg("mm_urls"),
+           py::arg("params"),
+           py::arg("callback"),
+           py::arg("system_prompt") = "",
+           py::call_guard<py::gil_scoped_release>())
       .def("generate",
            &VLMMaster::generate,
            py::call_guard<py::gil_scoped_release>())
@@ -406,7 +461,137 @@ PYBIND11_MODULE(xllm_export, m) {
         return "VLMMaster({})"_s.format(self.options());
       });
 
-  // 12. export helpers
+  // 15. export DiTRequestKind
+  py::enum_<DiTRequestKind>(m, "DiTRequestKind")
+      .value("IMAGE", DiTRequestKind::kImage)
+      .value("VIDEO", DiTRequestKind::kVideo);
+
+  // 16. export DiTGenerationParams
+  py::class_<DiTGenerationParams>(m, "DiTGenerationParams")
+      .def(py::init<>())
+      .def_readwrite("width", &DiTGenerationParams::width)
+      .def_readwrite("height", &DiTGenerationParams::height)
+      .def_readwrite("num_inference_steps",
+                     &DiTGenerationParams::num_inference_steps)
+      .def_readwrite("guidance_scale", &DiTGenerationParams::guidance_scale)
+      .def_readwrite("true_cfg_scale", &DiTGenerationParams::true_cfg_scale)
+      .def_readwrite("seed", &DiTGenerationParams::seed)
+      .def_readwrite("seed_is_set", &DiTGenerationParams::seed_is_set)
+      .def_readwrite("max_sequence_length",
+                     &DiTGenerationParams::max_sequence_length)
+      .def_readwrite("num_images_per_prompt",
+                     &DiTGenerationParams::num_images_per_prompt)
+      .def_readwrite("num_frames", &DiTGenerationParams::num_frames)
+      .def_readwrite("video_fps", &DiTGenerationParams::video_fps)
+      .def_readwrite("audio_sampling_rate",
+                     &DiTGenerationParams::audio_sampling_rate);
+
+  // 17. export DiTMediaSources
+  py::class_<DiTMediaSources>(m, "DiTMediaSources")
+      .def(py::init<>())
+      .def(
+          "add",
+          [](DiTMediaSources& self,
+             const std::string& name,
+             const std::string& modality,
+             const std::string& data,
+             int64_t audio_sampling_rate) {
+            const BinaryPayload payload{std::string_view(data)};
+            proto::MediaSource source;
+            source.set_name(name);
+            source.set_modality(modality);
+            source.set_type("binary");
+            source.mutable_binary()->set_offset(0);
+            source.mutable_binary()->set_length(data.size());
+            DiTSourceDecoder decoder(payload);
+            Status status;
+            // A video source may also append its prompt_audio_in_video track.
+            if (!decoder.add_source(source, status) ||
+                !decoder.decode(self.entries(),
+                                status,
+                                /*audio_channels=*/2,
+                                audio_sampling_rate)) {
+              throw py::value_error(status.message());
+            }
+          },
+          py::arg("name"),
+          py::arg("modality"),
+          py::arg("data"),
+          py::arg("audio_sampling_rate"),
+          py::call_guard<py::gil_scoped_release>());
+
+  // export DiTTensorSources
+  py::class_<DiTTensorSources>(m, "DiTTensorSources")
+      .def(py::init<>())
+      .def("add",
+           &DiTTensorSources::add,
+           py::arg("name"),
+           py::arg("tensor"),
+           py::arg("parameters") = TensorParameters{});
+
+  // 18. export DiTInputParams
+  py::class_<DiTInputParams>(m, "DiTInputParams")
+      .def(py::init<>())
+      .def_readwrite("prompt", &DiTInputParams::prompt)
+      .def_readwrite("negative_prompt", &DiTInputParams::negative_prompt)
+      .def_readwrite("prompt_2", &DiTInputParams::prompt_2)
+      .def_readwrite("negative_prompt_2", &DiTInputParams::negative_prompt_2)
+      .def_readwrite("media_sources", &DiTInputParams::media_sources)
+      .def_readwrite("tensor_sources", &DiTInputParams::tensor_sources);
+
+  // 19. export DiTRequestParams
+  py::class_<DiTRequestParams>(m, "DiTRequestParams")
+      .def(py::init<DiTRequestKind>(), py::arg("request_kind"))
+      .def_readwrite("request_id", &DiTRequestParams::request_id)
+      .def_readwrite("input_params", &DiTRequestParams::input_params)
+      .def_readwrite("generation_params", &DiTRequestParams::generation_params);
+
+  // 20. export DiTGenerationOutput
+  py::class_<DiTGenerationOutput>(m, "DiTGenerationOutput")
+      .def_property_readonly("image",
+                             [](const DiTGenerationOutput& output) {
+                               return py::bytes(output.image);
+                             })
+      .def_property_readonly("video", [](const DiTGenerationOutput& output) {
+        return py::bytes(output.video);
+      });
+
+  // 21. export DiTRequestOutput
+  py::class_<DiTRequestOutput>(m, "DiTRequestOutput")
+      .def_readonly("status", &DiTRequestOutput::status)
+      .def_readonly("outputs", &DiTRequestOutput::outputs);
+
+  // 22. export DiTMaster
+  py::class_<DiTMaster>(m, "DiTMaster")
+      .def(py::init<const Options&>(),
+           py::arg("options"),
+           py::call_guard<py::gil_scoped_release>())
+      .def(
+          "handle_request",
+          [](DiTMaster& self,
+             DiTRequestParams params,
+             DiTOutputCallback callback) {
+            if (self.get_rate_limiter()->is_limited()) {
+              callback(DiTRequestOutput(
+                  Status(StatusCode::RESOURCE_EXHAUSTED, "DiT rate limited")));
+              return;
+            }
+            self.handle_request(
+                std::move(params), std::nullopt, std::move(callback));
+          },
+          py::call_guard<py::gil_scoped_release>())
+      .def("generate",
+           &DiTMaster::generate,
+           py::call_guard<py::gil_scoped_release>())
+      .def("options",
+           &DiTMaster::options,
+           py::call_guard<py::gil_scoped_release>())
+      .def("__repr__", [](const DiTMaster& self) {
+        return "DiTMaster({})"_s.format(self.options());
+      });
+
+  // 23. export helpers
+  m.def("get_device_count", &Platform::device_count);
   m.def("get_model_backend",
         &ModelRegistry::get_model_backend,
         py::arg("model_type"));

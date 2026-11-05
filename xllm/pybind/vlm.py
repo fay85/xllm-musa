@@ -91,6 +91,9 @@ class VLM:
         use_cpp_chat_template: bool = True,
         disable_log_stats: bool = True,
         model_impl: str = "native",
+        enable_return_mm_full_embeddings: bool = False,
+        capture_hidden_state_layer: int = -1,
+        enable_return_embedding_modality_tags: bool = False,
         **kwargs: Any,
     ) -> None:
         signal.signal(signal.SIGTERM, lambda s, f: sys.exit(0))
@@ -112,6 +115,9 @@ class VLM:
         options.model_path = model
         options.model_impl = model_impl
         options.task_type = task
+        options.enable_return_mm_full_embeddings = enable_return_mm_full_embeddings
+        options.capture_hidden_state_layer = capture_hidden_state_layer
+        options.enable_return_embedding_modality_tags = enable_return_embedding_modality_tags
         options.draft_model_path = draft_model
         options.backend = "vlm"
         options.limit_image_per_prompt = limit_image_per_prompt

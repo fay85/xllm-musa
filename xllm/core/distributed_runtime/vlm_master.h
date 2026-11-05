@@ -22,6 +22,7 @@ limitations under the License.
 #include <optional>
 #include <string>
 #include <thread>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -73,6 +74,13 @@ class VLMMaster : public Master {
       std::vector<std::vector<std::string>> image_urls,
       std::vector<RequestParams> sps,
       BatchOutputCallback callback);
+
+  void handle_batch_request_with_mm_urls(
+      std::vector<std::string> prompts,
+      std::vector<std::vector<std::pair<std::string, std::string>>> mm_urls,
+      std::vector<RequestParams> sps,
+      BatchOutputCallback callback,
+      const std::string& system_prompt = "");
 
   // batch chat
   void handle_batch_request(std::vector<std::vector<Message>> conversations,

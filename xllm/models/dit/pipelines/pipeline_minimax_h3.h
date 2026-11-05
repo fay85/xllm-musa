@@ -33,7 +33,6 @@ limitations under the License.
 #include "core/common/message.h"
 #include "core/framework/chat_template/jinja_chat_template.h"
 #include "core/framework/config/dit_config.h"
-#include "core/framework/config/kernel_config.h"
 #include "core/framework/config/load_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/dit_model_context.h"
@@ -547,10 +546,6 @@ class MiniMaxH3PipelineImpl final : public torch::nn::Module {
     CHECK(text_encoder_tp_group_ != nullptr)
         << "MiniMax-H3 in-process encoder requires --text_encoder_tp_size";
     CHECK_GT(max_tokens, 0);
-#if defined(USE_NPU)
-    CHECK_EQ(KernelConfig::get_instance().npu_kernel_backend(), "TORCH")
-        << "MiniMax-H3 in-process encoder requires --npu_kernel_backend=TORCH";
-#endif
     const ModelArgs& model_args = loader->model_args();
     const TokenizerArgs& tokenizer_args = loader->tokenizer_args();
     std::shared_ptr<Tokenizer> tokenizer = loader->tokenizer();

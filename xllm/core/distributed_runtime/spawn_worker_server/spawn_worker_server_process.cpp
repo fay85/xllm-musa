@@ -23,7 +23,11 @@ limitations under the License.
 
 #include "core/distributed_runtime/spawn_worker_server/spawn_worker_protocol.h"
 #include "core/distributed_runtime/spawn_worker_server/spawn_worker_server.h"
+#include "core/framework/config/config_utils.h"
+#include "core/framework/config/dit_config.h"
+#include "core/framework/config/load_config.h"
 #include "core/framework/config/model_config.h"
+#include "core/framework/config/multimodal_config.h"
 #if defined(USE_NPU)
 #include "core/platform/npu/npu_python_runtime.h"
 #endif
@@ -69,6 +73,8 @@ limitations under the License.
 // @kv_split_size
 // @comm_buffer_offset
 // @model_impl
+// @vae_size
+// @worker_config (JSON of DiT/Load and embedding-capture config)
 int main(int argc, char* argv[]) {
   const std::optional<std::string> model_impl =
       xllm::spawn_worker_protocol::parse_model_impl(argc, argv);
@@ -158,9 +164,14 @@ int main(int argc, char* argv[]) {
           ? static_cast<int32_t>(atoi(argv[xllm::spawn_worker_protocol::
                                                kCommBufferOffsetArgumentIndex]))
           : 0;
+  const int32_t vae_size =
+      argc > xllm::spawn_worker_protocol::kVaeSizeArgumentIndex
+          ? static_cast<int32_t>(
+                atoi(argv[xllm::spawn_worker_protocol::kVaeSizeArgumentIndex]))
+          : 1;
   if (world_size < 1 || global_rank < 0 || global_rank >= world_size ||
       cp_size < 1 || ep_size < 1 || text_encoder_tp_size < 1 ||
-      kv_split_size < 0 || comm_buffer_offset < 0 ||
+      kv_split_size < 0 || comm_buffer_offset < 0 || vae_size < 1 ||
       (instance_role_str != "DEFAULT" && instance_role_str != "PREFILL" &&
        instance_role_str != "DECODE")) {
     LOG(ERROR) << "Invalid spawn worker topology: global_rank=" << global_rank
@@ -168,6 +179,16 @@ int main(int argc, char* argv[]) {
                << ", ep_size=" << ep_size << ", kv_split_size=" << kv_split_size
                << ", instance_role=" << instance_role_str;
     return 1;
+  }
+  // Apply before SpawnWorkerServer creates the worker and loads the model.
+  if (argc > xllm::spawn_worker_protocol::kWorkerConfigArgumentIndex) {
+    const xllm::JsonReader worker_config = xllm::config::parse_json_string(
+        argv[xllm::spawn_worker_protocol::kWorkerConfigArgumentIndex]);
+    xllm::DiTConfig::get_instance().from_json(worker_config);
+    xllm::LoadConfig::get_instance().from_json(worker_config);
+    xllm::MultimodalConfig::get_instance().from_json(worker_config);
+    // Carries only capture_hidden_state_layer; model_impl stays as parsed.
+    xllm::ModelConfig::get_instance().from_json(worker_config);
   }
   const xllm::InstanceRole instance_role(instance_role_str);
 
@@ -246,6 +267,7 @@ int main(int argc, char* argv[]) {
                                  enable_mtp_draft_body_tp1,
                                  draft_sampling_mode,
                                  kv_split_size,
+                                 vae_size,
                                  comm_buffer_offset);
 
   worker.run();

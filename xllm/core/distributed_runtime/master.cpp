@@ -37,11 +37,14 @@ limitations under the License.
 #include "core/common/instance_role_util.h"
 #include "core/common/xllm_build_info.h"
 #include "core/framework/config/distributed_config.h"
+#include "core/framework/config/dit_config.h"
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/kernel_config.h"
 #include "core/framework/config/kv_cache_config.h"
+#include "core/framework/config/load_config.h"
 #include "core/framework/config/model_config.h"
+#include "core/framework/config/multimodal_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/scheduler_config.h"
 #include "core/framework/config/speculative_config.h"
@@ -748,6 +751,14 @@ Master::Master(const Options& options, EngineType type)
   }
 
   if (type == EngineType::VLM) {
+    MultimodalConfig::get_instance()
+        .enable_return_mm_full_embeddings(
+            options_.enable_return_mm_full_embeddings())
+        .enable_return_embedding_modality_tags(
+            options_.enable_return_embedding_modality_tags());
+    ModelConfig::get_instance().capture_hidden_state_layer(
+        options_.capture_hidden_state_layer());
+
     runtime::Options eng_options;
     eng_options.model_path(options_.model_path())
         .devices(devices)
@@ -1005,16 +1016,43 @@ Master::Master(const Options& options, EngineType type)
 
     engine_ = std::make_unique<RecEngine>(eng_options);
   } else if (type == EngineType::DIT) {
+    LoadConfig::get_instance()
+        .enable_manual_loader(options_.enable_manual_loader())
+        .enable_rolling_load(options_.enable_rolling_load())
+        .rolling_load_num_cached_layers(
+            options_.rolling_load_num_cached_layers())
+        .rolling_load_num_rolling_slots(
+            options_.rolling_load_num_rolling_slots());
+    DiTConfig::get_instance()
+        .dit_vae_image_size(options_.dit_vae_image_size())
+        .dit_cache_policy(options_.dit_cache_policy())
+        .dit_enable_text_encoder(options_.dit_enable_text_encoder())
+        .dit_h3_task_type(options_.dit_h3_task_type())
+        .dit_laser_attention_enabled(options_.dit_laser_attention_enabled())
+        .max_requests_per_batch(options_.max_requests_per_batch());
+    ParallelConfig::get_instance()
+        .tp_size(options_.tp_size())
+        .sp_size(options_.sp_size())
+        .cfg_size(options_.cfg_size())
+        .dp_size(options_.dp_size())
+        .vae_size(options_.vae_size())
+        .text_encoder_tp_size(options_.text_encoder_tp_size());
+    // Rank 0 runs in this process and reads the batch limit from here.
+    SchedulerConfig::get_instance().max_tokens_per_batch(
+        options_.max_tokens_per_batch());
+
     // construct dit engine
     runtime::Options eng_options;
     eng_options.model_path(options.model_path())
         .model_id(options.model_id())
         .devices(devices)
         .backend(options.backend())
+        .max_tokens_per_batch(options_.max_tokens_per_batch())
         .npu_kernel_backend(options_.npu_kernel_backend())
         .enable_prefix_cache(options_.enable_prefix_cache())
         .enable_chunked_prefill(options_.enable_chunked_prefill())
         .enable_offline_inference(options_.enable_offline_inference())
+        .spawn_worker_path(options_.spawn_worker_path())
         .disable_log_stats(options_.disable_log_stats())
         .max_memory_utilization(options_.max_memory_utilization())
         .master_node_addr(options.master_node_addr())

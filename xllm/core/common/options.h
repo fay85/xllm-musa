@@ -124,6 +124,12 @@ class Options {
 
   PROPERTY(std::string, task_type);
 
+  PROPERTY(bool, enable_return_mm_full_embeddings) = false;
+
+  PROPERTY(int32_t, capture_hidden_state_layer) = -1;
+
+  PROPERTY(bool, enable_return_embedding_modality_tags) = false;
+
   PROPERTY(bool, enable_mla) = false;
 
   PROPERTY(std::string, npu_kernel_backend) = "AUTO";
@@ -234,6 +240,24 @@ class Options {
   // dit
   // max requests per batch
   PROPERTY(int, max_requests_per_batch) = 0;
+
+  PROPERTY(int64_t, dit_vae_image_size) = 1048576;
+
+  PROPERTY(std::string, dit_cache_policy) = "None";
+
+  PROPERTY(bool, dit_enable_text_encoder) = true;
+
+  PROPERTY(std::string, dit_h3_task_type) = "fl2va";
+
+  PROPERTY(bool, dit_laser_attention_enabled) = false;
+
+  PROPERTY(bool, enable_manual_loader) = false;
+
+  PROPERTY(bool, enable_rolling_load) = false;
+
+  PROPERTY(int32_t, rolling_load_num_cached_layers) = 2;
+
+  PROPERTY(int32_t, rolling_load_num_rolling_slots) = -1;
 
   // for offline inference: start with offline inference, default is false
   PROPERTY(bool, enable_offline_inference) = false;

@@ -242,7 +242,13 @@ void DiTDynamicBatchScheduler::step(const absl::Duration& timeout) {
   process_batch_output();
 }
 
-void DiTDynamicBatchScheduler::generate() {}
+void DiTDynamicBatchScheduler::generate() {
+  while (num_pending_requests() > 0 || request_queue_.size() > 0 ||
+         !deferred_requests_.isEmpty() || !running_requests_.empty()) {
+    step(absl::Milliseconds(50));
+  }
+  response_handler_->wait_completion();
+}
 
 void DiTDynamicBatchScheduler::incr_pending_requests(size_t count) {
   pending_requests_.fetch_add(count, std::memory_order_relaxed);

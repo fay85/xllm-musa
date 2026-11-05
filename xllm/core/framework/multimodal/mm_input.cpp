@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <atomic>
+#include <variant>
 
 #include "core/common/metrics.h"
 #include "core/util/blocking_counter.h"
@@ -58,9 +59,12 @@ MMErrCode MMInputTransfer::trans(const std::vector<Message>& messages,
 
   for (size_t idx = 0; idx < messages.size(); ++idx) {
     const auto& message = messages[idx];
-    const auto& mmc = std::get<MMContentVec>(message.content);
+    const MMContentVec* mmc = std::get_if<MMContentVec>(&message.content);
+    if (mmc == nullptr) {
+      continue;
+    }
 
-    MMErrCode code = this->trans_parallel(mmc, ins, inputs.payload());
+    MMErrCode code = this->trans_parallel(*mmc, ins, inputs.payload());
     if (code != MMErrCode::SUCCESS) {
       return code;
     }

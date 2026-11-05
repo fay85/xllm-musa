@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <chrono>
 #include <memory>
+#include <stop_token>
 #include <type_traits>
 
 #include "dit_forward_params.h"
@@ -129,7 +130,8 @@ class ForwardSharedMemoryManager : public SharedMemoryManager {
   bool input_read(ForwardInput& input,
                   const torch::Device& device,
                   InputDeviceMaterializationPolicy policy =
-                      InputDeviceMaterializationPolicy::MATERIALIZE_ON_READ);
+                      InputDeviceMaterializationPolicy::MATERIALIZE_ON_READ,
+                  std::stop_token stop_token = {});
   bool raw_output_write(
       const torch::Tensor& next_tokens,
       const torch::Tensor& logprobs,

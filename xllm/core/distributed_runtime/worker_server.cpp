@@ -32,15 +32,20 @@ limitations under the License.
 #include <cstdlib>
 #include <iterator>
 #include <memory>
+#include <nlohmann/json.hpp>
+#include <string>
 #include <utility>
 
 #include "common/metrics.h"
 #include "core/distributed_runtime/spawn_worker_server/spawn_worker_protocol.h"
+#include "core/framework/config/dit_config.h"
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/kernel_config.h"
 #include "core/framework/config/kv_cache_config.h"
+#include "core/framework/config/load_config.h"
 #include "core/framework/config/model_config.h"
+#include "core/framework/config/multimodal_config.h"
 #include "core/framework/config/parallel_config.h"
 #include "core/framework/config/service_config.h"
 #include "core/framework/config/speculative_config.h"
@@ -360,6 +365,19 @@ void WorkerServer::create_spawn_server(int32_t local_rank,
             << ", ep_size=" << parallel_args.ep_size()
             << ", cp_sharding_stage=" << cp_sharding_stage
             << ", instance_role=" << options.instance_role().to_string();
+  const std::string vae_size_str = std::to_string(options.vae_size());
+  // Spawned workers restore these process-local configs from one JSON arg.
+  nlohmann::ordered_json worker_config;
+  DiTConfig::get_instance().append_config_json(worker_config);
+  LoadConfig::get_instance().append_config_json(worker_config);
+  const MultimodalConfig& mm_config = MultimodalConfig::get_instance();
+  worker_config["enable_return_mm_full_embeddings"] =
+      mm_config.enable_return_mm_full_embeddings();
+  worker_config["enable_return_embedding_modality_tags"] =
+      mm_config.enable_return_embedding_modality_tags();
+  worker_config["capture_hidden_state_layer"] =
+      ModelConfig::get_instance().capture_hidden_state_layer();
+  const std::string worker_config_str = worker_config.dump();
   const char* argv[] = {spawn_worker_bin_path.c_str(),
                         master_node_addr.c_str(),
                         local_rank_ptr,
@@ -401,6 +419,8 @@ void WorkerServer::create_spawn_server(int32_t local_rank,
                         kv_split_size_ptr,
                         comm_buffer_offset_str.c_str(),
                         model_impl.c_str(),
+                        vae_size_str.c_str(),
+                        worker_config_str.c_str(),
                         nullptr};
   static_assert(std::size(argv) == spawn_worker_protocol::kArgumentCount + 1);
   pid_t pid;

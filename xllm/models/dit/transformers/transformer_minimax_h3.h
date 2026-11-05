@@ -1048,8 +1048,9 @@ class MiniMaxH3Transformer3DModelImpl final
 
   H3PreparedInputs prepare_inputs(const torch::Tensor& encoder_hidden_states,
                                   const torch::Tensor& position_ids) {
+    const torch::Tensor& weight = context_embedder_->weight;
     torch::Tensor text_embeds = context_embedder_->forward(
-        encoder_hidden_states.to(context_embedder_->weight.scalar_type()));
+        encoder_hidden_states.to(weight.device(), weight.scalar_type()));
     text_embeds = token_refiner_->forward(text_embeds);
     return {std::move(text_embeds), rope_->forward(position_ids)};
   }

@@ -66,6 +66,7 @@ class SpawnWorkerServer final {
                              bool enable_mtp_draft_body_tp1,
                              const std::string& draft_sampling_mode,
                              int32_t kv_split_size,
+                             int32_t vae_size,
                              int32_t comm_buffer_offset = 0);
 
   ~SpawnWorkerServer();

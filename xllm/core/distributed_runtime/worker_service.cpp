@@ -152,6 +152,10 @@ WorkerService::WorkerService(runtime::Options options,
 }
 
 WorkerService::~WorkerService() {
+  polling_stop_source_.request_stop();
+  if (polling_thread_ && polling_thread_->joinable()) {
+    polling_thread_->join();
+  }
   std::vector<std::shared_ptr<WorkerPrefetchSession>> sessions;
   {
     std::lock_guard<std::mutex> lock(prefetch_mutex_);
@@ -465,6 +469,7 @@ void WorkerService::create_polling_shm_thread(
        output_shm_manager = std::move(output_shm_manager)]() mutable {
         device_.set_device();
         Timer timer;
+        const std::stop_token stop_token = polling_stop_source_.get_token();
         while (true) {
           ForwardInput fwd_input;
           // NPU graph task updates cannot safely overlap an H2D enqueue from
@@ -474,9 +479,12 @@ void WorkerService::create_polling_shm_thread(
               options_.enable_schedule_overlap() && options_.enable_graph()
                   ? InputDeviceMaterializationPolicy::DEFER_TO_WORKER_PREPARE
                   : InputDeviceMaterializationPolicy::MATERIALIZE_ON_READ;
-          CHECK(input_shm_manager->input_read(
-              fwd_input, device_, materialization_policy))
-              << "Worker group execution was cancelled; restart the group";
+          if (!input_shm_manager->input_read(
+                  fwd_input, device_, materialization_policy, stop_token)) {
+            CHECK(!input_shm_manager->cancelled())
+                << "Worker group execution was cancelled; restart the group";
+            break;
+          }
           timer.reset();
           // model output variables
           torch::Tensor next_tokens;

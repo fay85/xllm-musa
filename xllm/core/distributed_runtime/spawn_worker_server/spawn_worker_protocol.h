@@ -23,7 +23,7 @@ limitations under the License.
 
 namespace xllm::spawn_worker_protocol {
 
-inline constexpr int32_t kArgumentCount = 41;
+inline constexpr int32_t kArgumentCount = 43;
 inline constexpr int32_t kMinimumArgumentCount = 34;
 inline constexpr int32_t kIndexerCacheDtypeArgumentIndex = 34;
 inline constexpr int32_t kEnableMtpDraftBodyTp1ArgumentIndex = 35;
@@ -32,6 +32,8 @@ inline constexpr int32_t kDraftSamplingModeArgumentIndex = 37;
 inline constexpr int32_t kKvSplitSizeArgumentIndex = 38;
 inline constexpr int32_t kCommBufferOffsetArgumentIndex = 39;
 inline constexpr int32_t kModelImplArgumentIndex = 40;
+inline constexpr int32_t kVaeSizeArgumentIndex = 41;
+inline constexpr int32_t kWorkerConfigArgumentIndex = 42;
 inline constexpr char kDefaultIndexerCacheDtype[] = "auto";
 inline constexpr char kDefaultDraftSamplingMode[] = "greedy";
 

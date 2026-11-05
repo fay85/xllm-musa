@@ -1245,6 +1245,7 @@ if __name__ == "__main__":
             "xllm/__init__",
             "xllm/pybind/llm",
             "xllm/pybind/vlm",
+            "xllm/pybind/dit",
             "xllm/pybind/embedding",
             "xllm/pybind/utils",
             "xllm/pybind/args",

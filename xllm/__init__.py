@@ -69,6 +69,8 @@ _PUBLIC_NAMES = {
     "LLMMaster",
     "VLM",
     "VLMMaster",
+    "DiT",
+    "DiTMaster",
     "Options",
     "SamplingParams",
     "BeamSearchParams",
@@ -113,6 +115,11 @@ def _load_public_api() -> None:
     except Exception:
         VLM = None
 
+    try:
+        from xllm.pybind.dit import DiT
+    except Exception:
+        DiT = None
+
     globals().update(
         {
             "ArgumentParser": ArgumentParser,
@@ -121,6 +128,8 @@ def _load_public_api() -> None:
             "LLMMaster": xllm_export.LLMMaster,
             "VLM": VLM,
             "VLMMaster": xllm_export.VLMMaster,
+            "DiT": DiT,
+            "DiTMaster": xllm_export.DiTMaster,
             "Options": xllm_export.Options,
             "SamplingParams": SamplingParams,
             "BeamSearchParams": BeamSearchParams,
@@ -157,6 +166,8 @@ __all__ = [
     "LLMMaster",
     "VLM",
     "VLMMaster",
+    "DiT",
+    "DiTMaster",
     "Options",
     "SamplingParams",
     "BeamSearchParams",

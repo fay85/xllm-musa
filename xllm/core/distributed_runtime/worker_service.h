@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <memory>
 #include <mutex>
+#include <stop_token>
 #include <string>
 #include <vector>
 
@@ -217,6 +218,7 @@ class WorkerService : public proto::DistributeWorker {
 
   std::unique_ptr<Worker> worker_;
 
+  std::stop_source polling_stop_source_;
   std::unique_ptr<std::thread> polling_thread_;
 
   std::mutex prefetch_mutex_;
