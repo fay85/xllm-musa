@@ -341,6 +341,7 @@ ScheduleResult FixedStepsScheduler::schedule_request(
       // Move running_requests_ and running_sequences_ into result
       result.requests = std::move(running_requests_);
       result.sequences = std::move(running_sequences_);
+      kv_cache_manager_->report_pool_occupancy();
       return result;
     }
     const auto now = absl::Now();
@@ -356,7 +357,8 @@ ScheduleResult FixedStepsScheduler::schedule_request(
                                absl::ToChronoNanoseconds(deadline - now);
     prefetch_request(wait_deadline);
   }
-  // return empty result
+  // Report the final empty scheduling state once, after any idle retries.
+  kv_cache_manager_->report_pool_occupancy();
   return result;
 }
 

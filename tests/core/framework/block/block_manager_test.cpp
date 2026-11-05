@@ -195,6 +195,7 @@ TEST(BlockManagerTest, Basic) {
 
   EXPECT_EQ(manager.num_free_blocks(), n_blocks - 1);
   EXPECT_EQ(manager.block_size(), block_size);
+  EXPECT_EQ(manager.num_total_blocks(), n_blocks - 1);
 
   // Allocate a block
   {
@@ -1749,6 +1750,7 @@ TEST(BlockManagerImplTest, RefcountZeroEntersFreeListAndCacheOnlyIsEvictable) {
   EXPECT_EQ(manager.num_used_blocks(), 0u);
   EXPECT_EQ(manager.num_free_blocks(), total - 2);
   EXPECT_EQ(manager.num_available_blocks(), total);
+  EXPECT_EQ(manager.num_total_blocks() - manager.num_free_blocks(), 2u);
 
   {
     std::vector<Block> matched = manager.allocate_shared(tokens);

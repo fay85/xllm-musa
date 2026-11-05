@@ -109,6 +109,9 @@ class KVCacheManager {
   virtual std::vector<std::unordered_map<BlockType, double>>
   block_utilization_by_type_per_dp() const = 0;
 
+  // Report current device/Host pool resource occupancy after batch preparation.
+  virtual void report_pool_occupancy() const {}
+
   // Predict which DP rank a fresh sequence would be assigned to during
   // allocation. Uses the same effective-headroom metric and round-robin
   // tie-break as the real allocation path so callers can perform accurate

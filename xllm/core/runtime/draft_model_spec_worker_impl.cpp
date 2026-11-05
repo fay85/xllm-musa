@@ -169,8 +169,9 @@ KVCacheShape build_speculative_draft_kv_cache_shape(
   // A replicated draft pool owns `replicated_block_pages` physical rows per
   // logical block on every rank, so the block manager's logical block ids still
   // index it directly and the draft's slots stay logical token slots.
-  draft_capacity.n_blocks(target_kv_cache_shape.key_cache_shape()[0] *
-                          replicated_block_pages)
+  draft_capacity
+      .n_blocks(target_kv_cache_shape.key_cache_shape()[0] *
+                replicated_block_pages)
       .block_size(block_size)
       .replicated_block_pages(replicated_block_pages)
       .enable_mla_kv_cache_quant(draft_mla_packed_c8);

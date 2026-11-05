@@ -533,13 +533,14 @@ HierarchyBlockManagerPool::HierarchyBlockManagerPool(
     if (per_type.empty()) {
       host_block_managers_.emplace_back(nullptr);
     } else {
-      host_block_managers_.emplace_back(std::make_unique<CompositeBlockManager>(
+      auto manager = std::make_unique<CompositeBlockManager>(
           std::move(per_type),
           composite->options(),
-          CompositeBlockManager::PrefixCachePublishMode::EXPLICIT));
+          CompositeBlockManager::PrefixCachePublishMode::EXPLICIT);
+      add_pool_metrics(*manager, i, "host");
+      host_block_managers_.emplace_back(std::move(manager));
     }
   }
-
   load_block_transfer_infos_.resize(host_block_managers_.size());
   offload_block_pair_queues_.resize(host_block_managers_.size());
 }

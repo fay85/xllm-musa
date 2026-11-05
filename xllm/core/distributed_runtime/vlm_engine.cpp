@@ -384,6 +384,8 @@ bool VLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
                                    options_.speculative_algorithm()))
       .max_seqs_per_batch(options_.max_seqs_per_batch())
       .num_speculative_tokens(options_.num_speculative_tokens())
+      .model_id(options_.model_id())
+      .server_idx(options_.server_idx())
       .model_type(args_.model_type())
       .num_embedding_blocks(
           static_cast<uint32_t>(kv_cache_shape.key_cache_shape()[0]))

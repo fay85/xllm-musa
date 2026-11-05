@@ -698,6 +698,8 @@ bool LLMEngine::allocate_kv_cache(const KVCacheCapacity& kv_cache_cap) {
       .num_layers(args_.n_layers())
       .slot_size(kv_cache_cap.slot_size())
       .model_id(options_.model_id())
+      .server_idx(options_.server_idx())
+      .is_draft_engine(options_.is_draft_engine())
       .model_type(args_.model_type())
       .max_seqs_per_batch(options_.max_seqs_per_batch())
       .num_speculative_tokens(options_.num_speculative_tokens())

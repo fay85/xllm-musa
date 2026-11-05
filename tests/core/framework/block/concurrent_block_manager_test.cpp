@@ -53,6 +53,7 @@ TEST(ConcurrentBlockManagerTest,
   ASSERT_EQ(second.size(), 1u);
   EXPECT_EQ(first.front().id(), second.front().id());
   ASSERT_EQ(second.front().ref_count(), 3u);
+  EXPECT_EQ(manager.num_total_blocks() - manager.num_free_blocks(), 1u);
   EXPECT_EQ(manager.num_used_blocks(), 1u);
 
   first.clear();
@@ -65,6 +66,7 @@ TEST(ConcurrentBlockManagerTest,
   second.clear();
   EXPECT_TRUE(second.empty());
   EXPECT_EQ(manager.num_used_blocks(), 0u);
+  EXPECT_EQ(manager.num_total_blocks() - manager.num_free_blocks(), 1u);
   release_prefix_cache(&manager);
   EXPECT_EQ(manager.num_free_blocks(), manager.num_total_blocks());
 }

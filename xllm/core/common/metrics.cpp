@@ -19,15 +19,15 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
-#include <initializer_list>
 #include <mutex>
 #include <string>
 
 namespace xllm {
 
-void set_multi_gauge_value(bvar::MultiDimension<bvar::Status<double>>& metric,
-                           std::initializer_list<std::string> labels,
-                           double value) {
+void set_multi_gauge_value(
+    bvar::MultiDimension<bvar::Status<double>>& metric,
+    const bvar::MultiDimension<bvar::Status<double>>::key_type& labels,
+    double value) {
   bvar::Status<double>* gauge = metric.get_stats(labels);
   if (gauge == nullptr) {
     LOG_EVERY_N(WARNING, 100) << "Failed to update multi gauge for labels "
@@ -102,6 +102,14 @@ DEFINE_MULTI_COUNTER(
 
 DEFINE_HISTOGRAM(encoder_cache_hit_rate,
                  "Histogram of encoder cache hit rate in percent");
+
+// Resident blocks/state slots, including evictable prefixes. Host copies use
+// their own manager. XTensor follows its existing used count
+// (padding/reserves).
+bvar::MultiDimension<bvar::Status<double>>
+    MULTI_GAUGE_kv_cache_pool_occupied_resources(
+        "kv_cache_pool_occupied_resources",
+        {"model_id", "server_idx", "dp_rank", "block_type", "memory_type"});
 
 // block manager metrics
 DEFINE_COUNTER(prefix_cache_latency_seconds_insert,

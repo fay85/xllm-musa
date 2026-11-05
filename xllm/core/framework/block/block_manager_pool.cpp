@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <limits>
+#include <string_view>
 #include <unordered_map>
 
 #include "block_manager_impl.h"
@@ -101,8 +102,10 @@ BlockManagerPool::BlockManagerPool(const Options& options, int32_t dp_size)
                                            /*participates_in_admission=*/false,
                                            /*supports_prefix_cache=*/false});
     }
-    block_managers_.emplace_back(std::make_unique<CompositeBlockManager>(
-        std::move(leaves), block_options));
+    auto manager = std::make_unique<CompositeBlockManager>(std::move(leaves),
+                                                           block_options);
+    add_pool_metrics(*manager, i, "device");
+    block_managers_.emplace_back(std::move(manager));
   }
   swap_block_transfer_infos_.clear();
   swap_block_transfer_infos_.resize(block_managers_.size());
@@ -440,6 +443,55 @@ BlockManagerPool::block_utilization_by_type_per_dp() const {
             ->block_utilization_by_type());
   }
   return utilization;
+}
+
+BlockManagerPool::~BlockManagerPool() {
+  for (const auto& metric : kv_cache_pool_metrics_) {
+    set_multi_gauge_value(
+        MULTI_GAUGE_kv_cache_pool_occupied_resources, metric.labels_, 0.0);
+  }
+}
+
+void BlockManagerPool::add_pool_metrics(const CompositeBlockManager& manager,
+                                        int32_t dp_rank,
+                                        const char* memory_type) {
+  // Only the target engine's allocation pool reports occupancy.
+  if (options_.is_draft_engine() || options_.model_id().empty()) {
+    return;
+  }
+  std::string model_id;
+  bvar::to_underscored_name(&model_id, options_.model_id());
+  kv_cache_pool_metrics_.reserve(kv_cache_pool_metrics_.size() +
+                                 manager.leaf_entries().size());
+  for (const auto& [type, entry] : manager.leaf_entries()) {
+    if (type == BlockType::EMBEDDING) {
+      continue;
+    }
+    kv_cache_pool_metrics_.emplace_back(
+        PoolMetric{entry.leaf.get(),
+                   options_.enable_xtensor() && type == BlockType::KV &&
+                       std::string_view(memory_type) == "device",
+                   {model_id,
+                    std::to_string(options_.server_idx()),
+                    std::to_string(dp_rank),
+                    block_type_label(type),
+                    memory_type}});
+  }
+}
+
+void BlockManagerPool::report_pool_occupancy() const {
+  for (const auto& metric : kv_cache_pool_metrics_) {
+    // Physically occupied resources include evictable prefix-cache residents.
+    // XTensor has virtual capacity, so keep its existing used-block count.
+    const BlockManager& manager = *metric.manager_;
+    const size_t occupied =
+        metric.use_used_blocks_
+            ? manager.num_used_blocks()
+            : manager.num_total_blocks() - manager.num_free_blocks();
+    set_multi_gauge_value(MULTI_GAUGE_kv_cache_pool_occupied_resources,
+                          metric.labels_,
+                          static_cast<double>(occupied));
+  }
 }
 
 void BlockManagerPool::reserve_xtensor_padding_blocks() {
