@@ -26,6 +26,7 @@ limitations under the License.
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -205,22 +206,18 @@ class StreamCall : public Call {
   // serialization failure or client disconnect. Inside TokenSubmission,
   // success means staged; commit() acknowledges the entire response delta,
   // including confirmed tokens whose text is held back or hidden.
-  bool write(const google::protobuf::Message& message) {
+  //
+  // `empty_array_field` materializes one omitted-or-empty repeated field as
+  // an empty JSON array. jsonify_empty_array stays off so unrelated empty
+  // fields (for example CompletionResponse.output_tensors) are not exposed.
+  bool write(const google::protobuf::Message& message,
+             std::string_view empty_array_field = {}) {
     if (stream_finished_) {
       return false;
     }
-    io_buf_.clear();
-    io_buf_.append("data: ");
-    butil::IOBufAsZeroCopyOutputStream json_output(&io_buf_);
-    std::string err_msg;
-    if (!json2pb::ProtoMessageToJson(
-            message, &json_output, json_options_, &err_msg)) {
-      LOG(ERROR) << "Failed to convert proto to json: " << err_msg;
-      finish_with_error(StatusCode::UNKNOWN, err_msg);
+    if (!serialize_stream_response(message, empty_array_field)) {
       return false;
     }
-    io_buf_.append("\n\n");
-
     return write_sse_event();
   }
 
@@ -258,6 +255,60 @@ class StreamCall : public Call {
   ::google::protobuf::Closure* done() { return done_; }
 
  protected:
+  // Serializes one SSE frame into io_buf_ without publishing it. Production
+  // code goes through write(); tests use this to exercise the exact bytes.
+  bool serialize_stream_response(const google::protobuf::Message& message,
+                                 std::string_view empty_array_field = {}) {
+    io_buf_.clear();
+    io_buf_.append("data: ");
+    std::string err_msg;
+    if (empty_array_field.empty()) {
+      butil::IOBufAsZeroCopyOutputStream json_output(&io_buf_);
+      if (!json2pb::ProtoMessageToJson(
+              message, &json_output, json_options_, &err_msg)) {
+        LOG(ERROR) << "Failed to convert proto to json: " << err_msg;
+        finish_with_error(StatusCode::UNKNOWN, err_msg);
+        return false;
+      }
+    } else {
+      std::string json_text;
+      if (!json2pb::ProtoMessageToJson(
+              message, &json_text, json_options_, &err_msg)) {
+        LOG(ERROR) << "Failed to convert proto to json: " << err_msg;
+        finish_with_error(StatusCode::UNKNOWN, err_msg);
+        return false;
+      }
+      nlohmann::json json =
+          nlohmann::json::parse(json_text, nullptr, /*allow_exceptions=*/false);
+      if (json.is_discarded() || !json.is_object()) {
+        LOG(ERROR) << "Failed to parse serialized SSE payload";
+        finish_with_error(StatusCode::UNKNOWN,
+                          "Failed to parse serialized SSE payload");
+        return false;
+      }
+      const std::string field(empty_array_field);
+      const auto existing = json.find(field);
+      if (existing != json.end() &&
+          (!existing->is_array() || !existing->empty())) {
+        LOG(ERROR) << "Refusing to materialize a non-empty field: " << field;
+        finish_with_error(
+            StatusCode::UNKNOWN,
+            "Refusing to materialize a non-empty field: " + field);
+        return false;
+      }
+      json[field] = nlohmann::json::array();
+      try {
+        io_buf_.append(json.dump());
+      } catch (const nlohmann::json::exception& error) {
+        LOG(ERROR) << "Failed to dump serialized SSE payload: " << error.what();
+        finish_with_error(StatusCode::UNKNOWN, error.what());
+        return false;
+      }
+    }
+    io_buf_.append("\n\n");
+    return true;
+  }
+
   bool stream_connected() const {
     return connection_status_.load(std::memory_order_relaxed) == 0 &&
            (!stream_ || !stream_stopped_->load(std::memory_order_acquire));

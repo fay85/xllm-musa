@@ -365,7 +365,7 @@ bool send_delta_to_client_brpc(
     response.set_model(model);
     auto* proto_usage = response.mutable_usage();
     api_service::set_proto_usage(proto_usage, usage);
-    if (!call->write(response)) {
+    if (!call->write(response, /*empty_array_field=*/"choices")) {
       return false;
     }
   }

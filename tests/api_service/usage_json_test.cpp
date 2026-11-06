@@ -23,6 +23,7 @@ limitations under the License.
 #include "api_service/stream_call.h"
 #include "api_service/utils.h"
 #include "chat.pb.h"
+#include "completion.pb.h"
 
 namespace xllm {
 namespace {
@@ -33,6 +34,18 @@ std::vector<JsonTool> make_test_tools() {
                                 "Get the weather",
                                 nlohmann::json{{"type", "object"}}))};
 }
+
+template <typename Request, typename Response>
+class InspectableStreamCall final : public StreamCall<Request, Response> {
+ public:
+  using Base = StreamCall<Request, Response>;
+  using Base::Base;
+
+  // Exercise the production SSE serializer without publishing a frame.
+  using Base::serialize_stream_response;
+
+  std::string serialized_frame() const { return this->io_buf_.to_string(); }
+};
 
 TEST(UsageJsonTest, ChatUsageSerializesOpenAICachedTokensField) {
   Usage usage;
@@ -98,6 +111,96 @@ TEST(UsageJsonTest, ChatUsagePrintsZeroCachedTokens) {
   EXPECT_EQ(json["usage"]["completion_tokens_details"]["reasoning_tokens"], 0);
   EXPECT_EQ(json["usage"]["completion_tokens_details"]["audio_tokens"], 0);
   EXPECT_EQ(json["usage"]["completion_tokens_details"].size(), 2);
+}
+
+TEST(UsageJsonTest, CompletionUsageChunkKeepsEmptyChoices) {
+  proto::CompletionRequest request;
+  request.set_stream(true);
+  proto::CompletionResponse response;
+  response.set_id("cmpl_usage");
+  response.set_object("text_completion");
+  response.set_created(123);
+  response.set_model("test_model");
+  Usage usage;
+  usage.num_prompt_tokens = 1024;
+  usage.num_generated_tokens = 32;
+  usage.num_total_tokens = 1056;
+  usage.num_cached_tokens = 512;
+  api_service::set_proto_usage(response.mutable_usage(), usage);
+
+  brpc::Controller controller;
+  InspectableStreamCall<proto::CompletionRequest, proto::CompletionResponse>
+      call(&controller,
+           brpc::DoNothing(),
+           &request,
+           &response,
+           /*use_arena=*/true);
+
+  // The default frame omits every empty repeated field, including choices.
+  ASSERT_TRUE(call.serialize_stream_response(response));
+  const nlohmann::json default_json =
+      nlohmann::json::parse(call.serialized_frame().substr(6));
+  EXPECT_FALSE(default_json.contains("choices"));
+  EXPECT_FALSE(default_json.contains("output_tensors"));
+
+  ASSERT_TRUE(call.serialize_stream_response(response,
+                                             /*empty_array_field=*/"choices"));
+  const std::string frame = call.serialized_frame();
+  ASSERT_EQ(frame.substr(0, 6), "data: ");
+  ASSERT_EQ(frame.substr(frame.size() - 2), "\n\n");
+  nlohmann::json json = nlohmann::json::parse(frame.substr(6));
+  ASSERT_TRUE(json.contains("choices"));
+  ASSERT_TRUE(json["choices"].is_array());
+  EXPECT_TRUE(json["choices"].empty());
+  EXPECT_EQ(json["id"], "cmpl_usage");
+  EXPECT_EQ(json["object"], "text_completion");
+  EXPECT_EQ(json["created"], 123);
+  EXPECT_EQ(json["model"], "test_model");
+  EXPECT_EQ(json["usage"]["prompt_tokens"], 1024);
+  EXPECT_EQ(json["usage"]["completion_tokens"], 32);
+  EXPECT_EQ(json["usage"]["total_tokens"], 1056);
+  EXPECT_EQ(json["usage"]["prompt_tokens_details"]["cached_tokens"], 512);
+  EXPECT_FALSE(json.contains("output_tensors"));
+  json.erase("choices");
+  EXPECT_EQ(json, default_json);
+}
+
+TEST(UsageJsonTest, ChatUsageChunkKeepsEmptyChoices) {
+  proto::ChatRequest request;
+  request.set_stream(true);
+  proto::ChatResponse response;
+  response.set_id("chatcmpl_usage");
+  response.set_object("chat.completion.chunk");
+  response.set_created(456);
+  response.set_model("test_model");
+  Usage usage;
+  usage.num_prompt_tokens = 64;
+  usage.num_generated_tokens = 8;
+  usage.num_total_tokens = 72;
+  usage.num_cached_tokens = 0;
+  api_service::set_proto_usage(response.mutable_usage(), usage);
+
+  brpc::Controller controller;
+  InspectableStreamCall<proto::ChatRequest, proto::ChatResponse> call(
+      &controller, brpc::DoNothing(), &request, &response, /*use_arena=*/true);
+
+  ASSERT_TRUE(call.serialize_stream_response(response,
+                                             /*empty_array_field=*/"choices"));
+  const std::string frame = call.serialized_frame();
+  ASSERT_EQ(frame.substr(0, 6), "data: ");
+  ASSERT_EQ(frame.substr(frame.size() - 2), "\n\n");
+  const nlohmann::json json = nlohmann::json::parse(frame.substr(6));
+  ASSERT_TRUE(json.contains("choices"));
+  ASSERT_TRUE(json["choices"].is_array());
+  EXPECT_TRUE(json["choices"].empty());
+  EXPECT_EQ(json["id"], "chatcmpl_usage");
+  EXPECT_EQ(json["object"], "chat.completion.chunk");
+  EXPECT_EQ(json["created"], 456);
+  EXPECT_EQ(json["model"], "test_model");
+  EXPECT_EQ(json["usage"]["prompt_tokens"], 64);
+  EXPECT_EQ(json["usage"]["completion_tokens"], 8);
+  EXPECT_EQ(json["usage"]["total_tokens"], 72);
+  EXPECT_EQ(json["usage"]["prompt_tokens_details"]["cached_tokens"], 0);
 }
 
 TEST(ToolCallResultTest, KeepsNormalTextWhenNoToolCallMarkerExists) {

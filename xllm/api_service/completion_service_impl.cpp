@@ -123,10 +123,9 @@ bool send_delta_to_client_brpc(std::shared_ptr<CompletionCall> call,
     response.set_id(request_id);
     response.set_created(created_time);
     response.set_model(model);
-    response.mutable_choices();
     auto* proto_usage = response.mutable_usage();
     api_service::set_proto_usage(proto_usage, usage);
-    if (!call->write(response)) {
+    if (!call->write(response, /*empty_array_field=*/"choices")) {
       return false;
     }
   }
