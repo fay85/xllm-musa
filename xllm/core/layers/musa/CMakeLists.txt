@@ -10,6 +10,8 @@ set(_MUSA_LAYERS_HDRS
   ../cuda/base_attention_impl.h
   ../cuda/flashinfer_workspace.h
   normalized_hidden_states.h
+  hyper_connection.h
+  glm5_next/glm5_next_decoder_layer.h
   pcp_context.h
   qwen3_gated_delta_net_base.h
   qwen3_next_attention.h
@@ -34,6 +36,8 @@ set(_MUSA_LAYERS_SRCS
   flashinfer_attention.cpp
   flashinfer_planinfo.cpp
   ../cuda/flashinfer_workspace.cpp
+  hyper_connection.cpp
+  glm5_next/glm5_next_decoder_layer.cpp
   pcp_context.cpp
   qwen3_gated_delta_net_base.cpp
   qwen3_next_attention.cpp

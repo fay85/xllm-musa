@@ -89,6 +89,13 @@ cc_test(
 )
 
 cc_test(
+  NAME mhc_ops_test
+  SRCS mhc_ops_test.cpp
+  DEPS :musa_layers :cuda_kernels :state_dict musa_python torch_python Python::Python torch
+       GTest::gtest_main glog::glog
+)
+
+cc_test(
   NAME sparse_mla_test
   SRCS sparse_mla_test.cpp
   DEPS :cuda_kernels musa_python torch_python Python::Python torch
