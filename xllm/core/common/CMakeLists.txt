@@ -4,8 +4,11 @@ cc_library(
   NAME 
     common
   HDRS
+    bounded_retry.h
     constants.h
     etcd_client.h
+    etcd_schema.h
+    registration_lifecycle.h
     global_flags.h
     instance_name.h
     instance_role_util.h

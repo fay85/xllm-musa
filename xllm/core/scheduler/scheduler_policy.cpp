@@ -285,6 +285,10 @@ void SchedulerPolicy::drain_request_queue(
     }
 
     // Request from prefill instance in disagg PD mode -- already has KV.
+    // Admission matched Decode's own prefix cache, which can extend into the
+    // previous turn's generated tokens. The handoff only carried Prefill's
+    // hit. Record the larger Decode match before this request joins decode.
+    queued->record_num_prefix_cache_tokens();
     if (batch_mode_.priority_strategy == "fcfs") {
       pending_decode_handoffs_.emplace_back(std::move(queued));
     } else {

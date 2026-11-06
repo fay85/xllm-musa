@@ -19,7 +19,6 @@ limitations under the License.
 #include <cstdint>
 #include <optional>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -271,6 +270,11 @@ struct InstanceInfo {
   uint64_t register_ts_ms = 0;
   // DEFAULT/PREFILL/DECODE/MIX
   std::string type = "";
+  // Physical Ascend super-pod id. Empty is a wildcard (engine opts out of cross
+  // super-node isolation). Registration copies the SUPER_POD_ID value that
+  // descriptor.topology.super_node_id publishes, so the top-level etcd/RPC
+  // field and the provider descriptor agree.
+  std::string super_node_id = "";
   // remote kv cache info
   std::vector<uint64_t> cluster_ids;
   std::vector<std::string> addrs;
@@ -295,15 +299,9 @@ struct InstanceInfo {
   // tpot profiling data
   std::vector<std::tuple<int32_t, int32_t, double>> tpot_profiling_data;
 
-  // XTensor mode: per-worker free physical pages
-  std::vector<size_t> worker_free_phy_pages;
   // XTensor mode: total physical pages per worker (all workers have the same
   // total)
   size_t total_phy_pages = 0;
-  // XTensor mode: model weight segments in GlobalXTensor (dp group 0 only)
-  // key: model_id, value: list of {offset, size} segments
-  std::unordered_map<std::string, std::vector<WeightSegment>>
-      model_weight_segments;
 
   nlohmann::json serialize_to_json() const {
     nlohmann::json json_val;
@@ -328,22 +326,16 @@ struct InstanceInfo {
     json_val["dp_size"] = dp_size;
     json_val["kv_split_size"] = kv_split_size;
     json_val["cp_index_write_mode"] = cp_index_write_mode;
+    // Emit only when set so instances that opt out (and older readers) see no
+    // key; an empty super_node_id is a wildcard, not a value to round-trip.
+    if (!super_node_id.empty()) {
+      json_val["super_node_id"] = super_node_id;
+    }
     json_val["ports"] = ports;
     json_val["ttft_profiling_data"] = ttft_profiling_data;
     json_val["tpot_profiling_data"] = tpot_profiling_data;
     // XTensor mode info
-    json_val["worker_free_phy_pages"] = worker_free_phy_pages;
     json_val["total_phy_pages"] = total_phy_pages;
-    // Serialize model_weight_segments: {model_id -> [{offset, size}, ...]}
-    nlohmann::json segments_json;
-    for (const auto& [model_id, segments] : model_weight_segments) {
-      nlohmann::json seg_array = nlohmann::json::array();
-      for (const auto& seg : segments) {
-        seg_array.push_back({{"offset", seg.offset}, {"size", seg.size}});
-      }
-      segments_json[model_id] = seg_array;
-    }
-    json_val["model_weight_segments"] = segments_json;
     return json_val;
   }
 };

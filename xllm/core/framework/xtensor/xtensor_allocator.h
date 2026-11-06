@@ -223,16 +223,6 @@ class XTensorAllocator {
   // Public for XTensorDistService to access num_layers
   ModelTensors* get_model_tensors(const std::string& model_id);
 
-  // ============== ETCD Registration Support ==============
-  // Get weight segments for a model (supports non-contiguous allocation)
-  // Returns ordered list of {offset, size} segments in GlobalXTensor
-  std::vector<WeightSegment> get_model_weight_segments(
-      const std::string& model_id) const;
-
-  // Get all model weight segments
-  std::unordered_map<std::string, std::vector<WeightSegment>>
-  get_all_model_weight_segments() const;
-
  private:
   XTensorAllocator() = default;
   ~XTensorAllocator();

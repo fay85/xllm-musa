@@ -18,6 +18,7 @@ limitations under the License.
 #include <atomic>
 #include <list>
 #include <map>
+#include <memory>
 #include <queue>
 #include <unordered_map>
 #include <vector>
@@ -129,6 +130,7 @@ class BlockManagerPool : public KVCacheManager {
   std::vector<size_t> num_blocks_in_prefix_cache() const override;
   std::vector<size_t> num_free_blocks() const override;
   std::vector<size_t> num_available_blocks() const override;
+  std::vector<size_t> num_total_blocks() const;
   std::vector<size_t> num_used_blocks() const override;
   double kv_cache_utilization() const override;
   std::vector<double> kv_cache_utilization_per_dp() const override;

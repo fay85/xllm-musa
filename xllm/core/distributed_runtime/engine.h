@@ -122,16 +122,6 @@ class Engine {
     NOT_IMPLEMENTED();
   };
 
-  // Get XTensor info for etcd registration (from dp group 0)
-  // worker_free_phy_pages: free pages per worker
-  // model_weight_segments: weight segments in GlobalXTensor per model
-  virtual void get_xtensor_info(
-      std::vector<size_t>& worker_free_phy_pages,
-      std::unordered_map<std::string, std::vector<WeightSegment>>&
-          model_weight_segments) {
-    NOT_IMPLEMENTED();
-  };
-
   virtual bool link_cluster(const std::vector<uint64_t>& cluster_ids,
                             const std::vector<std::string>& addrs,
                             const std::vector<uint16_t>& ports,

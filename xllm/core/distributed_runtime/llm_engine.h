@@ -103,11 +103,6 @@ class LLMEngine : public Engine {
                       std::vector<std::string>& addrs,
                       std::vector<uint16_t>& ports) override;
 
-  void get_xtensor_info(
-      std::vector<size_t>& worker_free_phy_pages,
-      std::unordered_map<std::string, std::vector<WeightSegment>>&
-          model_weight_segments) override;
-
   bool link_cluster(const std::vector<uint64_t>& cluster_ids,
                     const std::vector<std::string>& addrs,
                     const std::vector<uint16_t>& ports,

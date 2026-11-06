@@ -18,12 +18,18 @@ syntax = "proto3";
 package xllm_service.proto;
 option cc_generic_services = true;
 
+import "common.proto";
 import "disagg_pd.proto";
+import "provider.proto";
 
 message Empty {}
 
 message Status {
   bool ok = 1;
+  // Present on Generations per-item responses. Other RPCs may use status_msg
+  // to preserve a bounded remote rejection reason.
+  optional xllm.proto.GenerationDeliveryCode delivery_code = 2;
+  string status_msg = 3;
 }
 
 message StatusCode {
@@ -50,6 +56,12 @@ message InstanceMetaInfo {
   string incarnation_id = 11;
   uint64 register_ts_ms = 12;
   int32 kv_split_size = 13;
+  // Physical Ascend super-pod id. Empty means the instance does not participate
+  // in cross super-node isolation (wildcard). Tag 15 is intentionally aligned
+  // with xllm-service's InstanceMetaInfo.super_node_id so the two protos stay
+  // wire-compatible; tag 14 is reserved to match the Coordinator's layout
+  // (xllm-service occupies it with backend_type).
+  string super_node_id = 15;
   // Which pages of each INDEX resource the instance writes under
   // XLLM_CP_INDEX_WRITE_MODE: 0 = unspecified (legacy instance that
   // predates the field; admission keeps the legacy behavior), 1 =
@@ -57,7 +69,11 @@ message InstanceMetaInfo {
   // natural rows), 2 = sharded (only the rank's own stripe, at the
   // group-first page). Consulted by plan_kv_split_widths: a sharded
   // source cannot serve an equal-width kv_split_size > 1 destination.
-  optional int32 cp_index_write_mode = 14;
+  // Tag 16 (not 14): tag 14 is reserved for wire-compat with the
+  // Coordinator's backend_type, tag 15 carries super_node_id, so the
+  // CP index write mode moves to 16 to keep both engine-internal KV-split
+  // admission and the Coordinator wire contract intact.
+  optional int32 cp_index_write_mode = 16;
 }
 
 message KvCacheEvent {
@@ -80,33 +96,18 @@ message LatencyMetrics {
   int64 recent_max_tbt = 2;
 }
 
-// XTensor mode info for heartbeat updates
-message XTensorHeartbeatInfo {
-  // Per-worker free physical pages (index = worker rank)
-  repeated uint64 worker_free_phy_pages = 1;
-  // Model weight segments in GlobalXTensor (key: model_id)
-  // Ordered segments that concatenate to form the full model weights
-  map<string, WeightSegmentList> model_weight_segments = 3;
-}
-
-// A single weight segment in GlobalXTensor
-message WeightSegmentInfo {
-  uint64 offset = 1;  // Byte offset from GlobalXTensor base
-  uint64 size = 2;    // Segment size in bytes
-}
-
-// List of weight segments for a model
-message WeightSegmentList {
-  repeated WeightSegmentInfo segments = 1;
-}
-
 message HeartbeatRequest {
   string name = 1;
   KvCacheEvent cache_event = 2;
   LoadMetrics load_metrics = 3;
   LatencyMetrics latency_metrics = 4;
-  XTensorHeartbeatInfo xtensor_info = 5;
+  // Tag 5 was XTensorHeartbeatInfo xtensor_info. Scheduling never consumed
+  // it, and nothing fills it after the heartbeat stopped publishing XTensor
+  // page and weight segments.
+  reserved 5;
+  reserved "xtensor_info";
   string incarnation_id = 6;
+  xllm.proto.EngineState engine_state = 7;
 }
 
 message InstanceID {
@@ -118,9 +119,9 @@ message InstanceIDs {
 }
 
 service XllmRpcService {
-  rpc RegisterInstance(InstanceMetaInfo) returns (StatusCode) {}
   rpc GetInstanceInfo(InstanceID) returns (InstanceMetaInfo) {}
   rpc Heartbeat(HeartbeatRequest) returns (Status) {}
+  rpc PushKVEvents(xllm.proto.KVEventBatch) returns (Status) {}
   rpc GetStaticDecodeList(InstanceID) returns (InstanceIDs) {}
   rpc GetStaticPrefillList(InstanceID) returns (InstanceIDs) {}
   // xllm service receive response from decode instance directly in disagg pd mode.

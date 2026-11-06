@@ -160,9 +160,10 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 | `node_rank` | `int32` | `0` | Rank of the current node. |
 | `etcd_addr` | `string` | `""` | etcd address used to save instance metadata. |
 | `etcd_namespace` | `string` | `""` | Optional etcd namespace prefix for all xLLM keys, for example `prod-a`. |
+| `control_plane_shard_id` | `string` | `"default"` | Static ModelPool/tenant-quota xllm-service control-plane shard id. `default` keeps the legacy master key. Must be 1-64 ASCII letters, digits, `.`, `_`, or `-`. |
 | `enable_service_routing` | `bool` | `false` | Whether to enable xLLM service routing. |
-| `heart_beat_interval` | `double` | `0.5` | Heartbeat interval. |
-| `etcd_ttl` | `int32` | `3` | Time to live for etcd keys. |
+| `heart_beat_interval` | `double` | `0.5` | Heartbeat and membership reconciliation interval in seconds; must be in `(0, etcd_ttl / 3]` for service routing. |
+| `etcd_ttl` | `int32` | `15` | Engine membership lease TTL in seconds. Service routing requires at least 15 seconds because authoritative membership loss is fail-stop. |
 
 ## DisaggPDConfig
 
