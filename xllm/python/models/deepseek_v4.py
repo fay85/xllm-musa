@@ -1531,9 +1531,7 @@ class DeepseekV4MoE(nn.Module):
 
         Mirrors C++ ``fused_moe.cpp:843-850``.
         """
-        local_mask = (topk_idx >= self.start_expert_id) & (
-            topk_idx < self.start_expert_id + self.num_experts_per_rank
-        )
+        local_mask = (topk_idx >= self.start_expert_id) & (topk_idx < self.start_expert_id + self.num_experts_per_rank)
         return topk_weights * local_mask.to(topk_weights.dtype)
 
     def _apply_post_norm(
@@ -1560,16 +1558,13 @@ class DeepseekV4MoE(nn.Module):
     ) -> torch.Tensor:
         from xllm.python import kernels
 
-        # DP + EP MoE: every rank runs the gate and experts on the rank-gathered
-        # token set so the expert row counts and the moe_ep collective stay
-        # symmetric across DP replicas. Mirrors FusedMoEImpl::forward
-        # (fused_moe.cpp:2218-2258) and make_moe_dp_token_nums (:117-135).
         local_tokens = hidden.shape[0]
         if self.dp_size > 1 and distributed is None:
             raise RuntimeError("DeepSeek-V4 DP MoE requires xllm.python.distributed")
         need_slice = False
         padded_tokens = 0
         token_counts: list[int] = []
+        logits: torch.Tensor | None = None
         if self.dp_size > 1:
             ctx = get_forward_context()
             token_counts = [int(count) for count in ctx.metadata.dp_execution_token_counts]
@@ -1578,6 +1573,14 @@ class DeepseekV4MoE(nn.Module):
                 raise RuntimeError(
                     f"DeepSeek-V4 DP MoE local token count does not match metadata: {local_tokens} != {expected_tokens}"
                 )
+            if local_tokens == 0:
+                logits = hidden.new_empty((0, self.num_total_experts), dtype=torch.float32)
+            else:
+                if post_norm is not None:
+                    hidden, gate_input = self._apply_post_norm(hidden, post_norm)
+                else:
+                    gate_input = hidden.to(torch.float32)
+                logits = self._gate_logits(gate_input, None)
             # Python uses a dense padded all-gather so empty DP ranks remain
             # collectives-symmetric. Empty ranks are normalized from 0 to one
             # fake row (make_moe_dp_token_nums) and each rank slices its own
@@ -1593,13 +1596,22 @@ class DeepseekV4MoE(nn.Module):
                 world_size=self.dp_size,
                 group_name="dp",
             )
+            if logits is not None:
+                if pad_size > 0:
+                    logits = torch.nn.functional.pad(logits, (0, 0, 0, pad_size))
+                logits = distributed.all_gather(
+                    logits,
+                    dim=0,
+                    world_size=self.dp_size,
+                    group_name="dp",
+                )
             need_slice = True
 
         # Prepare input_ids: reshape to 1D + move to hidden's device (C++ :202-216).
         # Hash-routed layers need the ids gathered with the same layout as the
         # MoE hidden rows above so one gate row has one id.
         gate_input_ids = None
-        if input_ids is not None and input_ids.numel() > 0:
+        if (logits is None or self.hash_layer) and input_ids is not None and input_ids.numel() > 0:
             flat_ids = input_ids.reshape(-1).to(hidden.device)
             token_count = flat_ids.size(0)
             if token_count == local_tokens:
@@ -1624,17 +1636,12 @@ class DeepseekV4MoE(nn.Module):
             if gate_input_ids is not None:
                 gate_input_ids = gate_input_ids.reshape(-1).to(hidden.device)
 
-        # 1) FFN RMSNorm: when the caller delegates it (``post_norm``), run it on
-        # this already pad+all-gathered input so ``y`` feeds the experts and the
-        # exact fp32 widening feeds the gate -- once, on the same row set. The
-        # base method is the eager norm; ``DeepseekV41W8A8MoE`` fuses it. With no
-        # ``post_norm`` the caller pre-normalised ``hidden`` and the gate widens
-        # it itself (the pre-move behaviour).
-        if post_norm is not None:
-            hidden, gate_input = self._apply_post_norm(hidden, post_norm)
-        else:
-            gate_input = hidden.to(torch.float32)
-        logits = self._gate_logits(gate_input, gate_input_ids)
+        if logits is None:
+            if post_norm is not None:
+                hidden, gate_input = self._apply_post_norm(hidden, post_norm)
+            else:
+                gate_input = hidden.to(torch.float32)
+            logits = self._gate_logits(gate_input, gate_input_ids)
         norm_type = {"softmax": 0, "sigmoid": 1, "sqrtsoftplus": 2}.get(self.scoring_func, 2)
         renorm = 0 if norm_type == 2 else 1
 
@@ -1822,16 +1829,20 @@ class DeepseekV4MoE(nn.Module):
         reduces routed over MoE EP, then reduces shared over MoE TP before
         adding the two results (fused_moe.cpp:2158-2181).  Keeping this order
         also keeps every rank in both process groups in the same collective
-        sequence.
+        sequence. Routed partials accumulate in at least FP32 before
+        returning to the original output dtype.
         """
         ep_size = self.cfg.ep_size if self.cfg.ep_size > 0 else self.cfg.tp_size
         if distributed is None and (ep_size > 1 or self.moe_tp_size > 1):
             raise RuntimeError("Python distributed collectives are unavailable")
 
         if ep_size > 1:
+            accumulator = routed_out.to(torch.promote_types(routed_out.dtype, torch.float32))
             if self.moe_tp_size > 1:
-                distributed.moe_tp_all_reduce(routed_out)
-            distributed.moe_ep_all_reduce(routed_out)
+                distributed.moe_tp_all_reduce(accumulator)
+            distributed.moe_ep_all_reduce(accumulator)
+            routed_out.copy_(accumulator)
+            del accumulator
             if self.moe_tp_size > 1:
                 distributed.moe_tp_all_reduce(shared_out)
             return routed_out + shared_out

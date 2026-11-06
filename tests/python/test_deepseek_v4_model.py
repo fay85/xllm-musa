@@ -764,63 +764,68 @@ def test_moe_uses_dedicated_group_sizes() -> None:
     assert moe.start_expert_id == 3 * (cfg.n_routed_experts // cfg.ep_size)
 
 
-def test_moe_tp_ep_reduction_order_matches_cpp(monkeypatch: pytest.MonkeyPatch) -> None:
-    calls: list[str] = []
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16, torch.float32, torch.float64])
+@pytest.mark.parametrize("ep_size", [2, 0])
+def test_moe_tp_ep_reduction_order_matches_cpp(
+    monkeypatch: pytest.MonkeyPatch, dtype: torch.dtype, ep_size: int
+) -> None:
+    calls: list[tuple[str, torch.dtype]] = []
 
     class FakeDistributed:
         @staticmethod
         def moe_tp_all_reduce(tensor: torch.Tensor) -> None:
-            calls.append("moe_tp")
+            calls.append(("moe_tp", tensor.dtype))
             tensor.add_(10)
 
         @staticmethod
         def moe_ep_all_reduce(tensor: torch.Tensor) -> None:
-            calls.append("moe_ep")
+            calls.append(("moe_ep", tensor.dtype))
             tensor.add_(100)
 
     monkeypatch.setattr(deepseek_v4, "distributed", FakeDistributed)
-    owner = SimpleNamespace(
-        cfg=SimpleNamespace(ep_size=2, tp_size=1),
-        moe_tp_size=2,
-    )
-    routed = torch.zeros(2)
-    shared = torch.ones(2)
+    owner = SimpleNamespace(cfg=DeepseekV4Config(ep_size=ep_size, tp_size=16), moe_tp_size=2)
+    routed = torch.zeros(2, dtype=dtype)
+    shared = torch.ones(2, dtype=dtype)
 
     output = DeepseekV4MoE._reduce_moe_outputs(owner, routed, shared)
 
-    assert calls == ["moe_tp", "moe_ep", "moe_tp"]
-    assert torch.equal(output, torch.full((2,), 121.0))
+    reduction_dtype = torch.float32 if dtype in (torch.bfloat16, torch.float16) else dtype
+    assert calls == [("moe_tp", reduction_dtype), ("moe_ep", reduction_dtype), ("moe_tp", dtype)]
+    assert output.dtype == dtype
+    assert torch.equal(output, torch.full((2,), 121.0, dtype=dtype))
 
 
-def test_moe_ep_only_reduces_routed_output(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16, torch.float32, torch.float64])
+@pytest.mark.parametrize("ep_size", [2, 0])
+def test_moe_ep_only_reduces_routed_output(monkeypatch: pytest.MonkeyPatch, dtype: torch.dtype, ep_size: int) -> None:
     calls: list[str] = []
+    reduction_dtype = torch.float32 if dtype in (torch.bfloat16, torch.float16) else dtype
 
     class FakeDistributed:
         @staticmethod
         def moe_ep_all_reduce(tensor: torch.Tensor) -> None:
+            assert tensor.dtype == reduction_dtype
             calls.append("moe_ep")
             tensor.add_(100)
 
     monkeypatch.setattr(deepseek_v4, "distributed", FakeDistributed)
-    owner = SimpleNamespace(
-        cfg=SimpleNamespace(ep_size=2, tp_size=1),
-        moe_tp_size=1,
-    )
+    owner = SimpleNamespace(cfg=DeepseekV4Config(ep_size=ep_size, tp_size=16), moe_tp_size=1)
 
-    output = DeepseekV4MoE._reduce_moe_outputs(owner, torch.zeros(1), torch.ones(1))
+    output = DeepseekV4MoE._reduce_moe_outputs(owner, torch.zeros(1, dtype=dtype), torch.ones(1, dtype=dtype))
 
     assert calls == ["moe_ep"]
-    assert torch.equal(output, torch.full((1,), 101.0))
+    assert output.dtype == dtype
+    assert torch.equal(output, torch.full((1,), 101.0, dtype=dtype))
 
 
-def test_moe_tp_only_combines_before_one_reduce(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16, torch.float32])
+def test_moe_tp_only_combines_before_one_reduce(monkeypatch: pytest.MonkeyPatch, dtype: torch.dtype) -> None:
     calls: list[str] = []
 
     class FakeDistributed:
         @staticmethod
         def moe_tp_all_reduce(tensor: torch.Tensor) -> None:
+            assert tensor.dtype == dtype
             calls.append("moe_tp")
             tensor.mul_(2)
 
@@ -830,10 +835,13 @@ def test_moe_tp_only_combines_before_one_reduce(
         moe_tp_size=2,
     )
 
-    output = DeepseekV4MoE._reduce_moe_outputs(owner, torch.full((1,), 2.0), torch.full((1,), 3.0))
+    output = DeepseekV4MoE._reduce_moe_outputs(
+        owner, torch.full((1,), 2.0, dtype=dtype), torch.full((1,), 3.0, dtype=dtype)
+    )
 
     assert calls == ["moe_tp"]
-    assert torch.equal(output, torch.full((1,), 10.0))
+    assert output.dtype == dtype
+    assert torch.equal(output, torch.full((1,), 10.0, dtype=dtype))
 
 
 def test_v4_o_b_row_parallel_keeps_checkpoint_layout() -> None:

@@ -247,6 +247,7 @@ def _make_w8a8_moe(
     ``__new__`` + ``nn.Module.__init__`` keeps the real ``_apply_post_norm`` override (and its ``super()`` chain), while"""
     moe = v41.DeepseekV41W8A8MoE.__new__(v41.DeepseekV41W8A8MoE)
     nn.Module.__init__(moe)
+    moe.cfg = v41.DeepseekV41Config()
     moe.dp_size = dp_size
     moe.dp_rank = dp_rank
     moe.hash_layer = False
@@ -276,12 +277,11 @@ class _FakeAllGather:
 
 
 @pytest.mark.parametrize("dp_size", [2, 4])
-def test_v4_moe_fused_norm_cast_runs_after_the_dp_gather(
+def test_v41_moe_fused_norm_cast_runs_before_the_dp_gather(
     monkeypatch: pytest.MonkeyPatch,
     dp_size: int,
 ) -> None:
-    """dp_size in {2,4} + fused op: the gate routes the GATHERED rows' exact fp32.
-    The norm now runs inside the MoE after ``all_gather``, so the op's widened output describes the gathered gate/expert"""
+    """V4.1 normalizes and gates local rows once before DP communication."""
     monkeypatch.setattr(v4, "distributed", _FakeAllGather)
 
     captured: dict[str, torch.Tensor] = {}
@@ -305,27 +305,23 @@ def test_v4_moe_fused_norm_cast_runs_after_the_dp_gather(
     norm = v41.DeepseekV41RMSNorm(8, 1e-6, torch.bfloat16)
     moe = _make_w8a8_moe(dp_size, gate_logits=capture_gate_input)
     hidden = torch.randn(3, 8, dtype=torch.bfloat16)
-    gathered = hidden.repeat(dp_size, 1)
 
     with forward_context(_dp_forward_context([3] * dp_size)), pytest.raises(_StopForward):
         v4.DeepseekV4MoE.forward(moe, hidden, post_norm=norm)
 
-    # The op saw the GATHERED stream (dp_size * local 3 rows), not the local rows.
     assert len(op_calls) == 1
     op_input, op_y, op_gamma, op_epsilon = op_calls[0]
-    assert op_input.shape[0] == 3 * dp_size
-    assert torch.equal(op_input, gathered)
+    assert op_input.shape[0] == 3
+    assert torch.equal(op_input, hidden)
     assert torch.equal(op_gamma, norm.weight)
     assert op_epsilon == norm.eps
-    # ...and the gate routes exactly the op's widened result over those rows.
     gate_input = captured["gate_input"]
-    assert gate_input.shape[0] == 3 * dp_size
+    assert gate_input.shape[0] == 3
     assert torch.equal(gate_input, op_y.float())
 
 
-def test_v4_moe_without_post_norm_is_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
-    """No ``post_norm`` -> the V4 path widens the (gathered) hidden itself.
-    This keeps the unchanged V4 callers bit-for-bit: with dp_size=2 the gate widens the gathered bf16, exactly as before"""
+def test_v4_moe_without_post_norm_uses_local_gate_input(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without post_norm, the gate widens local hidden rows before any DP gather."""
     monkeypatch.setattr(v4, "distributed", _FakeAllGather)
 
     captured: dict[str, torch.Tensor] = {}
@@ -342,14 +338,17 @@ def test_v4_moe_without_post_norm_is_unchanged(monkeypatch: pytest.MonkeyPatch) 
         v4.DeepseekV4MoE.forward(moe_one, hidden)
     assert torch.equal(captured["gate_input"], hidden.to(torch.float32))
 
-    # dp_size=2: the gate widens the GATHERED hidden (6 rows), as before.
     captured.clear()
-    moe_two = SimpleNamespace(dp_size=2, dp_rank=0, _gate_logits=capture_gate_input)
+    moe_two = SimpleNamespace(
+        dp_size=2,
+        dp_rank=0,
+        cfg=v4.DeepseekV4Config(),
+        _gate_logits=capture_gate_input,
+    )
     with forward_context(_dp_forward_context([3, 3])), pytest.raises(_StopForward):
         v4.DeepseekV4MoE.forward(moe_two, hidden)
-    expected = torch.cat([hidden, hidden], dim=0).to(torch.float32)
-    assert captured["gate_input"].shape[0] == 6
-    assert torch.equal(captured["gate_input"], expected)
+    assert captured["gate_input"].shape[0] == hidden.shape[0]
+    assert torch.equal(captured["gate_input"], hidden.to(torch.float32))
 
 
 def test_v4_moe_fused_norm_cast_falls_back_to_eager(monkeypatch: pytest.MonkeyPatch) -> None:

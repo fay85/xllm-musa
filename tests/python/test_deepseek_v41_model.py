@@ -34,6 +34,7 @@ import torch
 import torch.nn as nn
 
 from tests.python._engram_reference import _reference_engram_lookup
+from xllm.python import kernels
 from xllm.python.attention import csa2_attention
 from xllm.python.attention.backend import LayerCache
 from xllm.python.attention.csa2_attention import (
@@ -62,6 +63,7 @@ from xllm.python.model_executor.forward_context import (
     ForwardContext,
     forward_context,
 )
+from xllm.python.models import deepseek_v4 as v4
 from xllm.python.models import deepseek_v41 as dq
 from xllm.python.models.deepseek_v41 import (
     CSA2_MODE_FULL,
@@ -554,6 +556,311 @@ def test_moe_bias_vl_shifts_only_visual_tokens() -> None:
     # Text-only tokens route on the unshifted scores.
     text_logits, _ = moe._selection_logits(gate_input, None)
     assert torch.allclose(text_logits, scores.expand(2, -1))
+
+
+class _RowIndexRoundingGate(nn.Module):
+    """CPU gate with deterministic FP32 roundoff tied to call-local row indices."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.weight = nn.Parameter(
+            torch.tensor([[0.25, -0.5], [0.75, 0.125]], dtype=torch.float32),
+            requires_grad=False,
+        )
+
+    def forward(self, gate_input: torch.Tensor) -> torch.Tensor:
+        assert gate_input.dtype == self.weight.dtype == torch.float32
+        logits = torch.nn.functional.linear(gate_input, self.weight)
+        row_roundoff = torch.arange(gate_input.shape[0], dtype=torch.float32, device=gate_input.device) * 2**-20
+        logits[:, 0] += row_roundoff
+        return logits
+
+
+@pytest.mark.parametrize("model_type", ["deepseek_v4", "deepseek_v41", "deepseek_v41_dspark"])
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16, torch.float32])
+@pytest.mark.parametrize("token_counts", [(3, 1, 0, 2), (0, 0, 0, 0)])
+@pytest.mark.parametrize("dp_rank", range(4))
+@pytest.mark.parametrize("with_norm", [False, True])
+def test_moe_dp_gathers_locally_normalized_hidden_and_precomputed_logits(
+    monkeypatch: pytest.MonkeyPatch,
+    model_type: str,
+    dtype: torch.dtype,
+    token_counts: tuple[int, ...],
+    dp_rank: int,
+    with_norm: bool,
+) -> None:
+    gate = _RowIndexRoundingGate()
+    moe_class = v4.DeepseekV4MoE if model_type == "deepseek_v4" else dq.DeepseekV41W8A8MoE
+    moe = moe_class.__new__(moe_class)
+    nn.Module.__init__(moe)
+    moe.dp_size = 4
+    moe.gate = gate
+    moe.num_total_experts = gate.weight.shape[0]
+    moe.dp_rank = dp_rank
+    moe.hash_layer = False
+    moe.scoring_func = "sigmoid"
+    moe.topk = 1
+    moe.routed_scaling = 1.0
+    config_class = v4.DeepseekV4Config if model_type == "deepseek_v4" else dq.DeepseekV41Config
+    moe.cfg = config_class(model_type=model_type, ep_size=2, tp_size=1, swiglu_limit=0.0)
+    moe.moe_tp_size = 1
+    moe.start_expert_id = 0
+    moe.num_experts_per_rank = 2
+    moe.uses_mx_formats = False
+    moe.w4a8_dynamic = False
+    moe.shared_expert_gate_is_loaded = False
+    for name in (
+        "experts_w13",
+        "experts_w2",
+        "experts_w13_scale",
+        "experts_w2_scale",
+        "experts_w13_offset",
+        "experts_w2_offset",
+    ):
+        setattr(moe, name, None)
+    padded_rows = max(1, max(token_counts))
+    raw_inputs = [
+        torch.tensor([[0.5, -0.25], [1.25, 0.5], [-0.5, 1.5]], dtype=dtype)[:count] + rank + 2**-12
+        for rank, count in enumerate(token_counts)
+    ]
+    local_ids = [torch.arange(count, dtype=torch.int64) + rank * 10 for rank, count in enumerate(token_counts)]
+
+    norm_inputs: list[torch.Tensor] = []
+    gate_inputs: list[torch.Tensor] = []
+    gather_kinds: list[str] = []
+    reduction_dtypes: list[torch.dtype] = []
+
+    def apply_norm(hidden: torch.Tensor, post_norm: nn.Module) -> tuple[torch.Tensor, torch.Tensor]:
+        norm_inputs.append(hidden.clone())
+        normalized = hidden * 0.5
+        return normalized, normalized.float()
+
+    original_gate = gate.forward
+
+    def record_gate(gate_input: torch.Tensor) -> torch.Tensor:
+        gate_inputs.append(gate_input.clone())
+        return original_gate(gate_input)
+
+    def all_gather(tensor: torch.Tensor, **kwargs: object) -> torch.Tensor:
+        assert kwargs == {"dim": 0, "world_size": 4, "group_name": "dp"}
+        if not gather_kinds:
+            expected = torch.nn.functional.pad(
+                normalized_inputs[dp_rank], (0, 0, 0, padded_rows - token_counts[dp_rank])
+            )
+            output = gathered_hidden
+            kind = "hidden"
+        elif gather_kinds == ["hidden"]:
+            expected = torch.nn.functional.pad(local_logits[dp_rank], (0, 0, 0, padded_rows - token_counts[dp_rank]))
+            output = gathered_logits
+            kind = "logits"
+        else:
+            raise AssertionError("Precomputed non-hash logits do not need input_ids communication")
+        torch.testing.assert_close(tensor, expected, rtol=0, atol=0)
+        gather_kinds.append(kind)
+        return output.clone()
+
+    def select_experts(**kwargs: object) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        torch.testing.assert_close(kwargs["x"], gathered_logits, rtol=0, atol=0)
+        weights, indices = torch.sigmoid(kwargs["x"]).topk(1, dim=-1)
+        return weights, indices, torch.empty(0)
+
+    def run_experts(
+        hidden: torch.Tensor,
+        weights: torch.Tensor,
+        indices: torch.Tensor,
+        *args: object,
+    ) -> torch.Tensor:
+        torch.testing.assert_close(hidden, gathered_hidden, rtol=0, atol=0)
+        expected_weights, expected_indices = torch.sigmoid(gathered_logits).topk(1, dim=-1)
+        torch.testing.assert_close(weights, expected_weights, rtol=0, atol=0)
+        torch.testing.assert_close(indices, expected_indices.to(torch.int32), rtol=0, atol=0)
+        return hidden * weights.to(hidden.dtype)
+
+    def run_shared_experts(hidden: torch.Tensor) -> torch.Tensor:
+        torch.testing.assert_close(hidden, gathered_hidden, rtol=0, atol=0)
+        return hidden * 0.5
+
+    def reduce_experts(partial: torch.Tensor) -> None:
+        reduction_dtypes.append(partial.dtype)
+        partial.mul_(2)
+
+    monkeypatch.setattr(moe, "_apply_post_norm", apply_norm)
+    monkeypatch.setattr(moe, "_run_shared_experts", run_shared_experts)
+    monkeypatch.setattr(gate, "forward", record_gate)
+    monkeypatch.setattr(v4, "distributed", SimpleNamespace(all_gather=all_gather, moe_ep_all_reduce=reduce_experts))
+    monkeypatch.setattr(
+        v4,
+        "get_forward_context",
+        lambda: SimpleNamespace(metadata=SimpleNamespace(dp_execution_token_counts=token_counts)),
+    )
+    monkeypatch.setattr(kernels, "moe_gating_top_k_hash", select_experts, raising=False)
+    monkeypatch.setattr(kernels, "grouped_moe_with_selected_experts", run_experts, raising=False)
+    for step in range(2):
+        if step:
+            raw_inputs = [hidden + 0.25 for hidden in raw_inputs]
+        normalized_inputs = [hidden * 0.5 if with_norm else hidden for hidden in raw_inputs]
+        local_logits = [original_gate(hidden.float()) for hidden in normalized_inputs]
+        gathered_hidden = torch.cat(
+            [
+                torch.nn.functional.pad(hidden, (0, 0, 0, padded_rows - count))
+                for hidden, count in zip(normalized_inputs, token_counts)
+            ]
+        )
+        gathered_logits = torch.cat(
+            [
+                torch.nn.functional.pad(logits, (0, 0, 0, padded_rows - count))
+                for logits, count in zip(local_logits, token_counts)
+            ]
+        )
+        norm_inputs.clear()
+        gate_inputs.clear()
+        gather_kinds.clear()
+        reduction_dtypes.clear()
+
+        output = v4.DeepseekV4MoE.forward(
+            moe, raw_inputs[dp_rank], local_ids[dp_rank], nn.Identity() if with_norm else None
+        )
+
+        expected_weights = torch.sigmoid(gathered_logits).topk(1, dim=-1).values.to(gathered_hidden.dtype)
+        expected_routed = (gathered_hidden * expected_weights).float().mul(2).to(gathered_hidden.dtype)
+        expected = expected_routed + gathered_hidden * 0.5
+        start = dp_rank * padded_rows
+        expected = expected[start : start + token_counts[dp_rank]]
+        torch.testing.assert_close(output, expected, rtol=0, atol=0)
+        assert output.shape == (token_counts[dp_rank], raw_inputs[dp_rank].shape[1])
+        assert output.dtype == raw_inputs[dp_rank].dtype
+        assert gather_kinds == ["hidden", "logits"]
+        assert reduction_dtypes == [torch.float32]
+        assert len(norm_inputs) == int(with_norm and token_counts[dp_rank] > 0)
+        assert len(gate_inputs) == int(token_counts[dp_rank] > 0)
+        if gate_inputs:
+            torch.testing.assert_close(gate_inputs[0], normalized_inputs[dp_rank].float(), rtol=0, atol=0)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float64])
+@pytest.mark.parametrize("moe_tp_size", [1, 2])
+@pytest.mark.parametrize("ep_size", [2, 0])
+def test_w8a8_moe_full_precision_reduction_is_unchanged(
+    monkeypatch: pytest.MonkeyPatch, dtype: torch.dtype, moe_tp_size: int, ep_size: int
+) -> None:
+    calls: list[str] = []
+
+    class FakeDistributed:
+        @staticmethod
+        def moe_tp_all_reduce(tensor: torch.Tensor) -> None:
+            assert tensor.dtype == dtype
+            calls.append("moe_tp")
+            tensor.add_(10)
+
+        @staticmethod
+        def moe_ep_all_reduce(tensor: torch.Tensor) -> None:
+            assert tensor.dtype == dtype
+            calls.append("moe_ep")
+            tensor.add_(100)
+
+    monkeypatch.setattr(v4, "distributed", FakeDistributed)
+    owner = SimpleNamespace(cfg=dq.DeepseekV41Config(ep_size=ep_size, tp_size=16), moe_tp_size=moe_tp_size)
+    output = v4.DeepseekV4MoE._reduce_moe_outputs(owner, torch.zeros(2, dtype=dtype), torch.ones(2, dtype=dtype))
+    assert calls == (["moe_tp", "moe_ep", "moe_tp"] if moe_tp_size > 1 else ["moe_ep"])
+    assert output.dtype == dtype
+    torch.testing.assert_close(
+        output, torch.full((2,), 121.0 if moe_tp_size > 1 else 101.0, dtype=dtype), rtol=0, atol=0
+    )
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+@pytest.mark.parametrize("ep_size", [16, 0])
+def test_w8a8_moe_ep_reduction_preserves_identical_dp_slots(
+    monkeypatch: pytest.MonkeyPatch, dtype: torch.dtype, ep_size: int
+) -> None:
+    magnitude = 128.0 if dtype == torch.bfloat16 else 2048.0
+    partials = (magnitude, -magnitude, 0.25, 0.25)
+
+    class FakeDistributed:
+        @staticmethod
+        def moe_ep_all_reduce(tensor: torch.Tensor) -> None:
+            for slot in range(4):
+                order = (0, 2, 3, 1) if slot == 0 else (0, 1, 2, 3)
+                for rank in order:
+                    tensor[slot].add_(partials[rank])
+
+    monkeypatch.setattr(v4, "distributed", FakeDistributed)
+    owner = SimpleNamespace(cfg=dq.DeepseekV41Config(ep_size=ep_size, tp_size=16), moe_tp_size=1)
+    routed = torch.zeros(4, 2, dtype=dtype)
+    shared = torch.zeros_like(routed)
+
+    output = v4.DeepseekV4MoE._reduce_moe_outputs(owner, routed, shared)
+
+    assert output.dtype == dtype
+    assert torch.equal(output, torch.full_like(output, 0.5))
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16, torch.float32, torch.float64])
+def test_w8a8_moe_tp_ep_reductions_accumulate_routed_in_fp32(
+    monkeypatch: pytest.MonkeyPatch, dtype: torch.dtype
+) -> None:
+    calls: list[tuple[str, torch.dtype]] = []
+
+    class FakeDistributed:
+        @staticmethod
+        def moe_tp_all_reduce(tensor: torch.Tensor) -> None:
+            calls.append(("moe_tp", tensor.dtype))
+            if len(calls) == 1:
+                tensor.add_(0.25)
+            else:
+                tensor.mul_(2)
+
+        @staticmethod
+        def moe_ep_all_reduce(tensor: torch.Tensor) -> None:
+            calls.append(("moe_ep", tensor.dtype))
+            tensor.add_(-2048.0).add_(0.25)
+
+    monkeypatch.setattr(v4, "distributed", FakeDistributed)
+    owner = SimpleNamespace(cfg=dq.DeepseekV41Config(ep_size=2, tp_size=16), moe_tp_size=2)
+    routed = torch.full((2,), 2048.0, dtype=dtype)
+    shared = torch.ones_like(routed)
+
+    output = v4.DeepseekV4MoE._reduce_moe_outputs(owner, routed, shared)
+
+    reduction_dtype = torch.float32 if dtype in (torch.bfloat16, torch.float16) else dtype
+    assert calls == [("moe_tp", reduction_dtype), ("moe_ep", reduction_dtype), ("moe_tp", dtype)]
+    assert output.dtype == dtype
+    assert torch.equal(output, torch.full_like(output, 2.5))
+
+
+@pytest.mark.parametrize("dtype", [torch.bfloat16, torch.float16])
+def test_w8a8_moe_fp32_reduces_all_routed_rows_once(monkeypatch: pytest.MonkeyPatch, dtype: torch.dtype) -> None:
+    calls: list[tuple[str, int, torch.dtype]] = []
+
+    class FakeDistributed:
+        @staticmethod
+        def moe_tp_all_reduce(tensor: torch.Tensor) -> None:
+            calls.append(("moe_tp", tensor.size(0), tensor.dtype))
+            if tensor.dtype == torch.float32:
+                tensor.add_(0.25)
+            else:
+                tensor.mul_(2)
+
+        @staticmethod
+        def moe_ep_all_reduce(tensor: torch.Tensor) -> None:
+            calls.append(("moe_ep", tensor.size(0), tensor.dtype))
+            tensor.add_(-2048.0).add_(0.25)
+
+    monkeypatch.setattr(v4, "distributed", FakeDistributed)
+    owner = SimpleNamespace(cfg=dq.DeepseekV41Config(ep_size=16, tp_size=16), moe_tp_size=2)
+    routed = torch.full((8193, 2), 2048.0, dtype=dtype)
+    shared = torch.ones_like(routed)
+
+    output = v4.DeepseekV4MoE._reduce_moe_outputs(owner, routed, shared)
+
+    assert calls == [
+        ("moe_tp", 8193, torch.float32),
+        ("moe_ep", 8193, torch.float32),
+        ("moe_tp", 8193, dtype),
+    ]
+    assert output.dtype == dtype
+    assert torch.equal(output, torch.full_like(output, 2.5))
+    assert torch.equal(routed, torch.full_like(routed, 0.5))
 
 
 @pytest.mark.parametrize("tokens", [0, 1, 6])

@@ -594,9 +594,7 @@ def _rms_norm(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor
 # ``rms_norm_cast_va(x, gamma, eps) -> (y, y_fp32)`` (ACLNN ``aclnnRmsNormCastVa``)
 # fuses the MoE FFN's ``post_attention_layernorm`` with the gate's
 # ``Tensor.float()`` widening: ``y_fp32`` is the widened ROUNDED result
-# (``y.float()``), NOT a separate fp32 normalisation. The norm sits in the MoE
-# (``post_norm=``) because the forward all-gathers ``hidden`` across DP BEFORE
-# the gate/expert input; RMSNorm is row-wise, so norm-then-gather holds.
+# (``y.float()``), NOT a separate fp32 normalisation.
 
 _rms_norm_cast_op: Any = None
 
@@ -623,12 +621,10 @@ def _rms_norm_cast_supported(x: torch.Tensor, weight: torch.Tensor) -> bool:
     whose CANN toolkit lacks ``aclnnRmsNormCastVa`` keep the bit-identical
     eager semantics.
 
-    Evaluated by ``DeepseekV41W8A8MoE._apply_post_norm`` on the MoE input, which
-    is already the pad+all-gathered DP stream (``DeepseekV4MoE.forward`` gathers
-    BEFORE the gate/expert input). Normalising there is what makes the fusion
-    valid under ``dp_size > 1``: RMSNorm is row-wise, so its fp32 routing input
-    describes exactly the gathered rows the gate routes (and padded rows are
-    zero, so they stay zero).
+    Evaluated by ``DeepseekV41W8A8MoE._apply_post_norm`` on local MoE rows.
+    RMSNorm is row-wise: the native result feeds the experts, and its exact
+    fp32 widening feeds the local gate. The normalized hidden and gate logits
+    are gathered afterwards.
 
     All clauses are static (dtype, device type, registered op), so the
     decision is graph-capture safe. The NPU-platform check sits last so the
@@ -2027,11 +2023,11 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         hidden: torch.Tensor,
         post_norm: nn.Module,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Fused RMSNorm+cast on the post-gather MoE input, eager if unguarded.
+        """Fused RMSNorm+cast on local MoE rows, eager if unguarded.
 
-        Runs AFTER ``DeepseekV4MoE.forward``'s DP pad+all-gather, so the op's
-        widened result describes the exact rows routed and consumed here (this
-        is what makes the fusion valid under ``dp_size > 1``). When the guard
+        Portable DP preparation and MC2 both normalize their local inputs before
+        communicating. The widened result describes the exact rows consumed by
+        the gate, while the model-dtype result feeds the experts. When the guard
         declines -- a missing op or an unsupported dtype/device/shape --
         the base eager norm runs once and the gate widens it, matching the
         pre-fusion behaviour bit for bit.
@@ -2793,12 +2789,6 @@ class DeepseekV41DecoderLayer(nn.Module):
         if sp_metadata is not None:
             x = self.mlp(x, post_norm=post_norm, sp_metadata=sp_metadata)
         elif isinstance(self.mlp, (DeepseekV41MoE, DeepseekV41W8A8MoE)):
-            # Delegate the FFN RMSNorm to the MoE. ``DeepseekV4MoE.forward``
-            # pads+all-gathers ``hidden`` across DP BEFORE it takes the
-            # gate/expert input, so the norm must run there for the fused op's
-            # fp32 routing input to describe the gathered rows. The MoE applies
-            # it exactly once (fused RMSNorm+cast when available, eager norm
-            # otherwise) and never double-normalises.
             x = self.mlp(x, input_ids, post_norm=post_norm)
         else:
             # Dense FFN keeps the eager RMSNorm and its single-argument MLP.
