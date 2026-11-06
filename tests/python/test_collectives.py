@@ -495,6 +495,66 @@ def test_native_runtime_bridge_bypasses_python_process_groups(monkeypatch):
     python_gather.assert_not_called()
 
 
+def test_native_runtime_without_instance_falls_back_to_python_groups(monkeypatch):
+    """A native collective that did not run must defer to the Python group."""
+    native_calls: list[str] = []
+
+    def declined(*args: object, **kwargs: object) -> None:
+        native_calls.append("declined")
+        return None
+
+    monkeypatch.setitem(
+        sys.modules,
+        "xllm_runtime",
+        SimpleNamespace(
+            tp_all_reduce=declined,
+            tp_all_gather=declined,
+            dp_all_gather=declined,
+            moe_tp_all_reduce=declined,
+            moe_ep_all_reduce=declined,
+        ),
+    )
+
+    python_calls: list[str] = []
+
+    def python_reduce(x: torch.Tensor, group_name: str) -> None:
+        python_calls.append(f"reduce:{group_name}")
+
+    def python_gather(x: torch.Tensor, dim: int, world_size: int, group_name: str) -> torch.Tensor:
+        python_calls.append(f"gather:{group_name}")
+        return torch.cat((x, x), dim=dim)
+
+    def python_gather_variable(x: torch.Tensor, token_counts: list[int], rank: int, group_name: str) -> torch.Tensor:
+        python_calls.append(f"gather_variable:{group_name}")
+        return torch.cat([x] * sum(token_counts), dim=0)
+
+    monkeypatch.setattr(collectives, "all_reduce_", python_reduce)
+    monkeypatch.setattr(collectives, "all_gather", python_gather)
+    monkeypatch.setattr(collectives, "all_gather_variable", python_gather_variable)
+
+    value = torch.tensor([[1.0]])
+    collectives.tp_all_reduce(value)
+    gathered = collectives.tp_all_gather(value, 1, 2)
+    dp_gathered, dp_offset = collectives.gather_dp_execution_tokens(value, (1, 1), rank=1)
+    dp_variable, _ = collectives.gather_dp_execution_tokens(torch.tensor([[1.0]]), (1, 3), rank=0)
+    collectives.moe_tp_all_reduce(value)
+    collectives.moe_ep_all_reduce(value)
+
+    assert native_calls == ["declined"] * 6
+    assert python_calls == [
+        "reduce:tp",
+        "gather:tp",
+        "gather:dp",
+        "gather_variable:dp",
+        "reduce:moe_tp",
+        "reduce:moe_ep",
+    ]
+    assert gathered.tolist() == [[1.0, 1.0]]
+    assert dp_gathered.tolist() == [[1.0], [1.0]]
+    assert dp_offset == 1
+    assert dp_variable.tolist() == [[1.0], [1.0], [1.0], [1.0]]
+
+
 def _run_gloo_workers(worker: Callable[[int, str], None], nprocs: int, rendezvous_path: Path) -> None:
     process_context = torch.multiprocessing.start_processes(
         worker,

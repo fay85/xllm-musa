@@ -75,16 +75,22 @@ TEST_F(PyRuntimeModuleTest, RegistersInRunningInterpreterAndPreservesIdentity) {
   EXPECT_TRUE(py::hasattr(module, "LayerLoadSynchronizer"));
 }
 
-TEST_F(PyRuntimeModuleTest, CallsCollectiveWithoutActiveModel) {
+TEST_F(PyRuntimeModuleTest, CollectivesWithoutActiveModelReturnNone) {
   py::gil_scoped_acquire gil;
   py::module_::import("torch");
   ensure_xllm_runtime_module();
   py::module_ module = py::module_::import("xllm_runtime");
   torch::Tensor input = torch::arange(4, torch::kFloat32);
-  torch::Tensor output =
-      module.attr("tp_all_reduce")(input).cast<torch::Tensor>();
-  EXPECT_TRUE(output.is_same(input));
+  // A collective without an owning PyCausalLM must report that it did not run,
+  // so the Python layer can fall back to its own process group instead of
+  // consuming a result that was never produced.
+  EXPECT_TRUE(module.attr("tp_all_reduce")(input).is_none());
+  EXPECT_TRUE(module.attr("tp_all_gather")(input, 0).is_none());
   EXPECT_TRUE(module.attr("tp_all_to_all")(input, 1).is_none());
+  EXPECT_TRUE(
+      module.attr("dp_all_gather")(input, std::vector<int32_t>{4}).is_none());
+  EXPECT_TRUE(module.attr("moe_tp_all_reduce")(input).is_none());
+  EXPECT_TRUE(module.attr("moe_ep_all_reduce")(input).is_none());
 }
 
 TEST_F(PyRuntimeModuleTest, ExposesInputBatchMetadata) {

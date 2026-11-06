@@ -89,12 +89,17 @@ def sample_logits(
             # Reuse the native TP group and select TP rank 0's slice, matching
             # broadcast(src=0) without creating a second Python process group.
             gathered_tokens = xllm_runtime.tp_all_gather(tokens, 0)
-            expected_shape = (tokens.shape[0] * tp_size, *tokens.shape[1:])
-            if gathered_tokens.shape != expected_shape:
-                raise RuntimeError(
-                    f"Native sampling TP gather returned {tuple(gathered_tokens.shape)}, expected {expected_shape}"
-                )
-            tokens = gathered_tokens.narrow(0, 0, tokens.shape[0])
+            if gathered_tokens is None:
+                # No native group owns this thread: fall back to the Python TP
+                # group, exactly like the non-native branch below.
+                distributed.broadcast_(tokens, src=0, group_name="tp")
+            else:
+                expected_shape = (tokens.shape[0] * tp_size, *tokens.shape[1:])
+                if gathered_tokens.shape != expected_shape:
+                    raise RuntimeError(
+                        f"Native sampling TP gather returned {tuple(gathered_tokens.shape)}, expected {expected_shape}"
+                    )
+                tokens = gathered_tokens.narrow(0, 0, tokens.shape[0])
         else:
             distributed.broadcast_(tokens, src=0, group_name="tp")
     return tokens, probabilities

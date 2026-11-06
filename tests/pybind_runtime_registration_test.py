@@ -96,12 +96,16 @@ import xllm_runtime
 for name in ({symbols},):
     assert hasattr(xllm_runtime, name), name
 
-# The native collective must operate in place on the tensor it is handed; a
-# copy would silently drop the reduction result.
+# Without an owning PyCausalLM the native collectives must report that they did
+# not run, so Python can fall back to its own process group instead of consuming
+# a result that was never produced.
 value = torch.arange(4, dtype=torch.float32)
-result = xllm_runtime.tp_all_reduce(value)
-assert result.data_ptr() == value.data_ptr()
+assert xllm_runtime.tp_all_reduce(value) is None
+assert xllm_runtime.tp_all_gather(value, 0) is None
 assert xllm_runtime.tp_all_to_all(value, 1) is None
+assert xllm_runtime.dp_all_gather(value, [4]) is None
+assert xllm_runtime.moe_tp_all_reduce(value) is None
+assert xllm_runtime.moe_ep_all_reduce(value) is None
 
 options = module.Options()
 assert options.model_impl == "native"

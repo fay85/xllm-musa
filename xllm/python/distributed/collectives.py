@@ -385,7 +385,12 @@ def layerwise_rank(device: torch.device | str) -> int:
 
 
 def _native_runtime_op(name: str) -> object | None:
-    """Return an embedded C++ collective when running under PyExecutorImpl."""
+    """Return an embedded C++ collective when running under PyExecutorImpl.
+
+    The returned collective yields ``None`` when no ``PyCausalLM`` instance owns
+    the calling thread; callers then fall back to the Python process group
+    instead of treating the call as completed.
+    """
     try:
         import xllm_runtime
     except ImportError:
@@ -395,16 +400,15 @@ def _native_runtime_op(name: str) -> object | None:
 
 def tp_all_reduce(x: torch.Tensor) -> None:
     op = _native_runtime_op("tp_all_reduce")
-    if op is not None:
-        op(x)
+    if op is not None and op(x) is not None:
         return
     all_reduce_(x, "tp")
 
 
 def tp_all_gather(x: torch.Tensor, dim: int, world_size: int) -> torch.Tensor:
     op = _native_runtime_op("tp_all_gather")
-    if op is not None:
-        return op(x, dim)
+    if op is not None and (output := op(x, dim)) is not None:
+        return output
     return all_gather(x, dim, world_size, "tp")
 
 
@@ -414,8 +418,8 @@ def dp_all_gather(
     rank: int,
 ) -> torch.Tensor:
     op = _native_runtime_op("dp_all_gather")
-    if op is not None:
-        return op(x, token_counts)
+    if op is not None and (output := op(x, token_counts)) is not None:
+        return output
     if all(count == token_counts[0] for count in token_counts):
         return all_gather(
             x,
@@ -450,16 +454,14 @@ def dp_all_true(value: bool, device: torch.device | str, world_size: int) -> boo
 
 def moe_tp_all_reduce(x: torch.Tensor) -> None:
     op = _native_runtime_op("moe_tp_all_reduce")
-    if op is not None:
-        op(x)
+    if op is not None and op(x) is not None:
         return
     all_reduce_(x, "moe_tp")
 
 
 def moe_ep_all_reduce(x: torch.Tensor) -> None:
     op = _native_runtime_op("moe_ep_all_reduce")
-    if op is not None:
-        op(x)
+    if op is not None and op(x) is not None:
         return
     all_reduce_(x, "moe_ep")
 

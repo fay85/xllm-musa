@@ -954,7 +954,7 @@ def test_sampling_native_tp_sync_uses_root_tokens(
     broadcast.assert_not_called()
 
 
-def test_sampling_native_tp_rejects_missing_or_wrong_native_group(sampling_runtime: ModuleType) -> None:
+def test_sampling_native_tp_rejects_wrong_native_group_shape(sampling_runtime: ModuleType) -> None:
     tokens = torch.tensor([1, 2])
     sampling_runtime.sample_logits = Mock(return_value=(tokens, None))
     sampling_runtime.tp_all_gather = Mock(return_value=tokens)
@@ -964,6 +964,26 @@ def test_sampling_native_tp_rejects_missing_or_wrong_native_group(sampling_runti
     )
     with pytest.raises(RuntimeError, match="Native sampling TP gather"):
         sample_logits(torch.zeros(2, 7), sampling, tp_size=4, use_native_tp=True)
+
+
+def test_sampling_native_tp_falls_back_to_python_broadcast(
+    sampling_runtime: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tokens = torch.tensor([1, 2])
+    root_tokens = torch.tensor([5, 6])
+    sampling_runtime.sample_logits = Mock(return_value=(tokens, None))
+    sampling_runtime.tp_all_gather = Mock(return_value=None)
+    broadcast = Mock(side_effect=lambda value, src, group_name: value.copy_(root_tokens))
+    monkeypatch.setattr(distributed, "broadcast_", broadcast)
+    sampling = _SamplingInput(
+        is_unconstrained_greedy=False,
+        parameters=_SamplingParameters(all_greedy_sample=False),
+    )
+    actual, probabilities = sample_logits(torch.zeros(2, 7), sampling, tp_size=4, use_native_tp=True)
+    broadcast.assert_called_once_with(tokens, src=0, group_name="tp")
+    assert torch.equal(actual, root_tokens)
+    assert probabilities is None
 
 
 def test_pipeline_carries_native_tp_sampling_backend(

@@ -108,19 +108,24 @@ void register_xllm_runtime_module(py::module_& m) {
           py::call_guard<py::gil_scoped_release>())
       .def("size", &LayerSynchronizer::size);
 
-  m.def("tp_all_reduce", [](torch::Tensor tensor) {
+  // Every collective below returns `None` when no PyCausalLM instance owns the
+  // calling thread, so the Python layer can fall back to its explicitly
+  // initialized process group. Returning the input tensor instead would make a
+  // collective that never ran look like a successful result.
+  m.def("tp_all_reduce", [](torch::Tensor tensor) -> py::object {
     PyCausalLM* py_causal_lm = PyCausalLM::active_instance();
-    if (py_causal_lm != nullptr) {
-      py_causal_lm->tp_all_reduce(tensor);
+    if (py_causal_lm == nullptr) {
+      return py::none();
     }
-    return tensor;
+    py_causal_lm->tp_all_reduce(tensor);
+    return py::cast(tensor);
   });
-  m.def("tp_all_gather", [](torch::Tensor tensor, int64_t dim) {
+  m.def("tp_all_gather", [](torch::Tensor tensor, int64_t dim) -> py::object {
     PyCausalLM* py_causal_lm = PyCausalLM::active_instance();
-    if (py_causal_lm != nullptr) {
-      return py_causal_lm->tp_all_gather(tensor, dim);
+    if (py_causal_lm == nullptr) {
+      return py::none();
     }
-    return tensor;
+    return py::cast(py_causal_lm->tp_all_gather(tensor, dim));
   });
   m.def("tp_all_to_all",
         [](const torch::Tensor& tensor, int64_t world_size) -> py::object {
@@ -135,26 +140,29 @@ void register_xllm_runtime_module(py::module_& m) {
         });
   m.def("dp_all_gather",
         [](torch::Tensor tensor,
-           const std::vector<int32_t>& execution_token_counts) {
+           const std::vector<int32_t>& execution_token_counts) -> py::object {
           PyCausalLM* py_causal_lm = PyCausalLM::active_instance();
-          if (py_causal_lm != nullptr) {
-            return py_causal_lm->dp_all_gather(tensor, execution_token_counts);
+          if (py_causal_lm == nullptr) {
+            return py::none();
           }
-          return tensor;
+          return py::cast(
+              py_causal_lm->dp_all_gather(tensor, execution_token_counts));
         });
-  m.def("moe_tp_all_reduce", [](torch::Tensor tensor) {
+  m.def("moe_tp_all_reduce", [](torch::Tensor tensor) -> py::object {
     PyCausalLM* py_causal_lm = PyCausalLM::active_instance();
-    if (py_causal_lm != nullptr) {
-      py_causal_lm->moe_tp_all_reduce(tensor);
+    if (py_causal_lm == nullptr) {
+      return py::none();
     }
-    return tensor;
+    py_causal_lm->moe_tp_all_reduce(tensor);
+    return py::cast(tensor);
   });
-  m.def("moe_ep_all_reduce", [](torch::Tensor tensor) {
+  m.def("moe_ep_all_reduce", [](torch::Tensor tensor) -> py::object {
     PyCausalLM* py_causal_lm = PyCausalLM::active_instance();
-    if (py_causal_lm != nullptr) {
-      py_causal_lm->moe_ep_all_reduce(tensor);
+    if (py_causal_lm == nullptr) {
+      return py::none();
     }
-    return tensor;
+    py_causal_lm->moe_ep_all_reduce(tensor);
+    return py::cast(tensor);
   });
   // The C++ side owns the MoE EP process group on the V4-family Python path
   // (they manage their own TP/moe_tp/EP splits), so expose its HCCL
