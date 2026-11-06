@@ -36,6 +36,8 @@ limitations under the License.
 #include "platform/device.h"
 #include "runtime/dflash/dflash2_worker_impl.h"
 #include "runtime/dspark_worker_impl.h"
+#include "runtime/llm_worker_impl.h"
+#include "runtime/vlm_worker_impl.h"
 #include "torch_npu/csrc/core/npu/NPUGraph.h"
 
 namespace xllm {
@@ -50,6 +52,10 @@ class DFlash2WorkerImplTestPeer final {
     worker.pending_draft_.emplace();
     worker.pending_draft_->accepted_host = accepted;
     worker.pending_draft_->ready = std::move(ready);
+  }
+
+  static WorkerImpl* target_impl(DFlash2WorkerImpl& worker) {
+    return worker.impl_.get();
   }
 
   static void finish(DFlash2WorkerImpl& worker, const ForwardInput& input) {
@@ -553,7 +559,8 @@ TEST(DFlash2PrelaunchIdentityTest, ReusesTargetAfterLinearSlotRotation) {
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(7).block_size(
       128);
-  DFlash2WorkerImpl worker(parallel_args, device.unwrap(), options);
+  DFlash2WorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   ForwardInput previous;
   previous.token_ids_host = torch::tensor({11}, torch::kInt32);
   previous.positions_host = torch::tensor({2048}, torch::kInt32);
@@ -622,7 +629,8 @@ TEST_P(DFlash2PrelaunchLifecycleTest,
       /*rank=*/0, /*world_size=*/1, /*process_group=*/nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(7);
-  DFlash2WorkerImpl worker(parallel_args, device.unwrap(), options);
+  DFlash2WorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   constexpr std::array<BlockType, 6> kBlockTypes = {BlockType::KV,
                                                     BlockType::SWA,
                                                     BlockType::C4,
@@ -749,8 +757,11 @@ TEST(DSparkStepLocalLifecycleTest, DestructionRetiresPendingContextWrites) {
   const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15);
-  auto worker = std::make_unique<DSparkWorkerImpl>(
-      parallel_args, device.unwrap(), options);
+  auto worker =
+      std::make_unique<DSparkWorkerImpl>(parallel_args,
+                                         device.unwrap(),
+                                         options,
+                                         /*worker_type=*/WorkerType::LLM);
   const torch::TensorOptions tensor_options =
       torch::TensorOptions().device(device.unwrap()).dtype(torch::kBFloat16);
   torch::Tensor lhs = torch::ones({4096, 4096}, tensor_options);
@@ -786,7 +797,8 @@ TEST(DSparkStepLocalLifecycleTest, PendingRowsFollowTheActualBatch) {
   const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15);
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   ForwardInput previous;
   previous.input_params.meta.num_sequences = 3;
   previous.input_params.meta.batch_forward_type = BatchForwardType::DECODE;
@@ -822,7 +834,8 @@ TEST(DSparkStepLocalLifecycleTest, UnsupportedInputsDoNotUseTheAsyncPath) {
   const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15);
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   ForwardInput input;
   input.input_params.meta.num_sequences = 1;
   input.input_params.meta.batch_forward_type = BatchForwardType::DECODE;
@@ -857,7 +870,8 @@ TEST(DSparkStepLocalLifecycleTest,
   const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15);
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   auto cache = std::make_shared<EmbeddingCache>(4, true);
   DSparkWorkerImplTestPeer::install_embedding_cache(worker, cache);
   ForwardInput identity;
@@ -947,8 +961,11 @@ TEST(DSparkStepLocalLifecycleTest,
   const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15);
-  auto worker = std::make_unique<DSparkWorkerImpl>(
-      parallel_args, device.unwrap(), options);
+  auto worker =
+      std::make_unique<DSparkWorkerImpl>(parallel_args,
+                                         device.unwrap(),
+                                         options,
+                                         /*worker_type=*/WorkerType::LLM);
   auto cache = std::make_shared<EmbeddingCache>(1, true);
   DSparkWorkerImplTestPeer::install_embedding_cache(*worker, cache);
   ForwardInput identity;
@@ -995,6 +1012,22 @@ TEST(DSparkStepLocalLifecycleTest,
   ASSERT_EQ(aclrtQueryEventStatus(ready->npu_event(), &after), ACL_SUCCESS);
   EXPECT_EQ(after, ACL_EVENT_RECORDED_STATUS_COMPLETE);
   EXPECT_EQ(marker.cpu().item<int32_t>(), 11);
+}
+
+TEST(DFlash2PrelaunchLifecycleTest, VlmTargetBuildsMultimodalWorker) {
+  Device device(/*device_index=*/0);
+  device.set_device();
+  device.init_device_context();
+  const ParallelArgs parallel_args(
+      /*rank=*/0, /*world_size=*/1, /*process_group=*/nullptr);
+  runtime::Options options;
+  options.enable_schedule_overlap(true).num_speculative_tokens(7);
+  DFlash2WorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::VLM);
+  WorkerImpl* target = DFlash2WorkerImplTestPeer::target_impl(worker);
+  ASSERT_NE(target, nullptr);
+  EXPECT_NE(dynamic_cast<VLMWorkerImpl*>(target), nullptr);
+  EXPECT_EQ(dynamic_cast<LLMWorkerImpl*>(target), nullptr);
 }
 
 }  // namespace

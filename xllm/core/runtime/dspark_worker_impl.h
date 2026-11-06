@@ -33,7 +33,8 @@ class DSparkWorkerImpl final : public DFlashWorkerImpl {
  public:
   DSparkWorkerImpl(const ParallelArgs& parallel_args,
                    const torch::Device& device,
-                   const runtime::Options& options);
+                   const runtime::Options& options,
+                   WorkerType worker_type);
 
   ~DSparkWorkerImpl() override;
 

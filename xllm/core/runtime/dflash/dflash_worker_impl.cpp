@@ -341,15 +341,20 @@ bool enable_dflash_proposal_xfia(const ParallelArgs& parallel_args,
          !options.enable_adaptive_speculative_decode();
 }
 
+// The target worker type must flow through to the speculative composite: a
+// VLM target built as the LLM worker keeps the text-only model bridge, so its
+// executor never creates the multimodal pipeline and image requests silently
+// lose their embeddings. Text-only deployments pass WorkerType::LLM explicitly.
 DFlashWorkerImpl::DFlashWorkerImpl(const ParallelArgs& parallel_args,
                                    const torch::Device& device,
-                                   const runtime::Options& options)
+                                   const runtime::Options& options,
+                                   WorkerType worker_type)
     : DraftModelSpecWorkerImpl(
           parallel_args,
           device,
           options,
           target_options(options),
-          WorkerType::LLM,
+          worker_type,
           [&parallel_args, &device, &options] {
             // The draft consumes global token-aligned aux hidden states.
             // MLU restores these rows for GLM-5-Next with DFlash2. NPU admits

@@ -71,8 +71,9 @@ struct DFlash2WorkerImpl::DraftGraph {
 
 DFlash2WorkerImpl::DFlash2WorkerImpl(const ParallelArgs& parallel_args,
                                      const torch::Device& device,
-                                     const runtime::Options& options)
-    : DFlashWorkerImpl(parallel_args, device, options),
+                                     const runtime::Options& options,
+                                     WorkerType worker_type)
+    : DFlashWorkerImpl(parallel_args, device, options, worker_type),
       sampling_process_group_(
           speculative_worker::sampling_process_group(parallel_args)) {
   prelaunch_enabled_ =

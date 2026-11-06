@@ -498,11 +498,17 @@ TEST_P(MluDFlashVerifyInputTest, ReplacesDecodeSpansOnlyForStatefulTargets) {
   for (bool has_state : {false, true}) {
     std::unique_ptr<DFlashWorkerImpl> worker;
     if (GetParam()) {
-      worker = std::make_unique<DFlash2WorkerImpl>(
-          parallel_args, device.unwrap(), options);
+      worker =
+          std::make_unique<DFlash2WorkerImpl>(parallel_args,
+                                              device.unwrap(),
+                                              options,
+                                              /*worker_type=*/WorkerType::LLM);
     } else {
-      worker = std::make_unique<DFlashWorkerImpl>(
-          parallel_args, device.unwrap(), options);
+      worker =
+          std::make_unique<DFlashWorkerImpl>(parallel_args,
+                                             device.unwrap(),
+                                             options,
+                                             /*worker_type=*/WorkerType::LLM);
     }
     DFlashWorkerImplTestPeer::set_target(
         *worker,
@@ -581,8 +587,11 @@ class MluDFlash2SamplingTest : public ::testing::TestWithParam<int32_t> {
         .enable_schedule_overlap(false);
     const ParallelArgs parallel_args(
         /*rank=*/0, /*world_size=*/1, /*process_group=*/nullptr);
-    worker_ = std::make_unique<DFlash2WorkerImpl>(
-        parallel_args, device_.unwrap(), options);
+    worker_ =
+        std::make_unique<DFlash2WorkerImpl>(parallel_args,
+                                            device_.unwrap(),
+                                            options,
+                                            /*worker_type=*/WorkerType::LLM);
   }
 
   std::unique_ptr<SamplingInputs> make_inputs(int64_t batch) {

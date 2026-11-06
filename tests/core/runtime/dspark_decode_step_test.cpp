@@ -34,6 +34,7 @@ limitations under the License.
 #include "runtime/dspark_worker_impl.h"
 #include "runtime/executor.h"
 #include "runtime/llm_worker_impl.h"
+#include "runtime/vlm_worker_impl.h"
 
 namespace xllm {
 
@@ -257,6 +258,10 @@ class DSparkWorkerImplTestPeer final {
   static size_t consumed_tensor_count(const DSparkWorkerImpl& worker) {
     return worker.consumed_context_tensors_.size();
   }
+
+  static WorkerImpl* target_impl(DSparkWorkerImpl& worker) {
+    return worker.impl_.get();
+  }
 };
 
 namespace {
@@ -282,7 +287,8 @@ TEST_P(DSparkDraftInputParityTest,
       .speculative_algorithm("dspark")
       .num_speculative_tokens(kQueryWidth)
       .block_size(block_size);
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   DSparkWorkerImplTestPeer::configure_draft_query(worker, kMaskTokenId);
   auto cache = std::make_shared<EmbeddingCache>(kInitialBatchSize, true);
   ForwardInput previous;
@@ -438,7 +444,10 @@ TEST(DSparkDecodeStepTest, IdleDecodeRetainsInputsUntilNextSubmission) {
   options.enable_schedule_overlap(true).num_speculative_tokens(5);
   std::weak_ptr<ForwardInput> final_input;
   {
-    DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+    DSparkWorkerImpl worker(parallel_args,
+                            device.unwrap(),
+                            options,
+                            /*worker_type=*/WorkerType::LLM);
     DSparkWorkerImplTestPeer::initialize_decode_modes(worker, true);
     auto target_input = std::make_shared<ForwardInput>();
     auto draft_input = std::make_shared<ForwardInput>();
@@ -479,7 +488,10 @@ TEST(DSparkDecodeStepTest, IdleDecodeKeepsSynchronousFallback) {
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(5);
   for (const bool warmup : {false, true}) {
-    DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+    DSparkWorkerImpl worker(parallel_args,
+                            device.unwrap(),
+                            options,
+                            /*worker_type=*/WorkerType::LLM);
     DSparkWorkerImplTestPeer::initialize_decode_modes(worker, warmup);
     ForwardOutput output;
     output.retained_inputs.emplace_back(std::make_shared<ForwardInput>());
@@ -499,7 +511,8 @@ TEST(DSparkDecodeStepTest, AsyncOutputDoesNotRequireDraftPrelaunch) {
   const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15);
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   ForwardInput input;
   input.input_params.meta.num_sequences = 1;
   input.input_params.meta.batch_forward_type = BatchForwardType::DECODE;
@@ -535,7 +548,8 @@ TEST(DSparkDecodeStepTest, SamplingConstraintsDoNotDisableAsyncOutput) {
   const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15);
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   DSparkWorkerImplTestPeer::initialize_decode_modes(worker, true);
   ForwardInput input;
   input.input_params.meta.num_sequences = 1;
@@ -572,7 +586,8 @@ TEST_P(DSparkDecodeStepFallbackTest,
   const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15);
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   auto cache = std::make_shared<EmbeddingCache>(1, true);
   ForwardInput previous;
   previous.input_params.meta.num_sequences = 1;
@@ -677,7 +692,10 @@ TEST(DSparkDecodeStepTest, AutomaticDecodeModesRespectConfigAndDeviceInputs) {
         .enable_adaptive_speculative_decode(test_case.adaptive)
         .num_speculative_tokens(15)
         .draft_sampling_mode(test_case.sampling_mode);
-    DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+    DSparkWorkerImpl worker(parallel_args,
+                            device.unwrap(),
+                            options,
+                            /*worker_type=*/WorkerType::LLM);
     DSparkWorkerImplTestPeer::set_parallel_sizes(
         worker, test_case.cp_size, test_case.kv_split_size);
     DSparkWorkerImplTestPeer::initialize_decode_modes(worker,
@@ -713,7 +731,10 @@ TEST(DSparkDecodeStepTest, PdDecodeDoesNotDisableAsyncOutputOrPrelaunch) {
   input.input_params.embedding.request_ids = {"request"};
   input.sampling_params.all_greedy_sample = true;
   for (const bool supports_device_inputs : {false, true}) {
-    DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+    DSparkWorkerImpl worker(parallel_args,
+                            device.unwrap(),
+                            options,
+                            /*worker_type=*/WorkerType::LLM);
     DSparkWorkerImplTestPeer::initialize_decode_modes(worker,
                                                       supports_device_inputs);
     EXPECT_TRUE(DSparkWorkerImplTestPeer::async_output_enabled(worker));
@@ -730,7 +751,8 @@ TEST(DSparkDecodeStepTest, BatchConstraintsSelectNormalPathAndAllowRecovery) {
   const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15);
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   DSparkWorkerImplTestPeer::initialize_decode_modes(worker, true);
   ForwardInput input;
   input.input_params.meta.num_sequences = 1;
@@ -800,7 +822,8 @@ TEST(DSparkDecodeStepTest, RestoreAndMultiTableDoNotDisableAsyncOrPrelaunch) {
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15).block_size(
       4);
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   DSparkWorkerImplTestPeer::initialize_decode_modes(worker, true);
   ForwardInput input;
   input.input_params.meta.num_sequences = 2;
@@ -880,7 +903,8 @@ TEST(DSparkDecodeStepTest,
   JsonObjectGrammar grammar({"{", "}", "stop"}, {2});
   input.json_object_states = {grammar.initial_state()};
 
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   DSparkWorkerImplTestPeer::initialize_decode_modes(worker, true);
   EXPECT_FALSE(DSparkWorkerImplTestPeer::can_prelaunch_draft_for_this_step(
       worker, input));
@@ -912,7 +936,8 @@ TEST(DSparkDecodeStepTest,
   const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15);
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   for (const int32_t num_tokens : {0, 1, 4, 64}) {
     SCOPED_TRACE(num_tokens);
     std::vector<int32_t> legacy_indices;
@@ -1138,7 +1163,10 @@ TEST_F(DSparkDecodeExecutionTest, PrelaunchFallsBackForPenaltyAndRecovers) {
       .draft_sampling_mode("greedy")
       .num_speculative_tokens(2)
       .block_size(4);
-  DSparkWorkerImpl worker(parallel_args, device_.unwrap(), options);
+  DSparkWorkerImpl worker(parallel_args,
+                          device_.unwrap(),
+                          options,
+                          /*worker_type=*/WorkerType::LLM);
   auto cache = std::make_shared<EmbeddingCache>(2, true);
   auto trace = std::make_shared<DecodeStepTrace>();
   trace->pending_at_draft.reserve(3);
@@ -1336,7 +1364,10 @@ TEST(DSparkDecodeStepTest, AsyncAcceptedOutputReplaysJsonForMixedRows) {
   const torch::Tensor accepted =
       torch::tensor({{0, 1, -1}, {0, 2, -1}, {2, 2, -1}}, torch::kLong);
   for (const auto dtype : {torch::kInt32, torch::kInt64}) {
-    DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+    DSparkWorkerImpl worker(parallel_args,
+                            device.unwrap(),
+                            options,
+                            /*worker_type=*/WorkerType::LLM);
     SampleOutput sample;
     sample.next_tokens = accepted.to(device.unwrap(), dtype);
     sample.embeddings =
@@ -1376,11 +1407,17 @@ TEST(DSparkDecodeStepTest, DraftQueryPreservesNonJsonSamplingMasks) {
         .block_size(16);
     std::unique_ptr<DFlashWorkerImpl> worker;
     if (algorithm == "DSpark") {
-      worker = std::make_unique<DSparkWorkerImpl>(
-          parallel_args, device.unwrap(), options);
+      worker =
+          std::make_unique<DSparkWorkerImpl>(parallel_args,
+                                             device.unwrap(),
+                                             options,
+                                             /*worker_type=*/WorkerType::LLM);
     } else {
-      worker = std::make_unique<DFlash2WorkerImpl>(
-          parallel_args, device.unwrap(), options);
+      worker =
+          std::make_unique<DFlash2WorkerImpl>(parallel_args,
+                                              device.unwrap(),
+                                              options,
+                                              /*worker_type=*/WorkerType::LLM);
     }
     ForwardInput input;
     input.input_params.meta.num_sequences = 1;
@@ -1451,11 +1488,17 @@ TEST(DSparkDecodeStepTest,
       options.speculative_algorithm(algorithm).num_speculative_tokens(2);
       std::unique_ptr<DFlashWorkerImpl> worker;
       if (algorithm == "DSpark") {
-        worker = std::make_unique<DSparkWorkerImpl>(
-            parallel_args, device.unwrap(), options);
+        worker =
+            std::make_unique<DSparkWorkerImpl>(parallel_args,
+                                               device.unwrap(),
+                                               options,
+                                               /*worker_type=*/WorkerType::LLM);
       } else {
         worker = std::make_unique<DFlash2WorkerImpl>(
-            parallel_args, device.unwrap(), options);
+            parallel_args,
+            device.unwrap(),
+            options,
+            /*worker_type=*/WorkerType::LLM);
       }
       // A transposed pinned destination exercises both dtype conversion and
       // contiguous normalization, without relying on the usual staging layout.
@@ -1509,7 +1552,8 @@ TEST(DSparkDecodeStepTest, JsonConsumesHostTokensOnlyAfterReadyEvent) {
   const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(15);
-  DSparkWorkerImpl worker(parallel_args, device.unwrap(), options);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   auto grammar = std::make_shared<JsonObjectGrammar>(
       std::vector<std::string>{"{", "}", "stop"},
       std::unordered_set<int32_t>{2});
@@ -1544,6 +1588,38 @@ TEST(DSparkDecodeStepTest, JsonConsumesHostTokensOnlyAfterReadyEvent) {
   EXPECT_TRUE(input.json_object_states.front().is_complete());
   EXPECT_TRUE(
       torch::equal(host_tokens, torch::tensor({{0, 1, -1}}, torch::kLong)));
+}
+
+TEST(DSparkDecodeStepTest, VlmTargetBuildsMultimodalWorker) {
+  Device device(/*device_index=*/0);
+  device.set_device();
+  device.init_device_context();
+  const ParallelArgs parallel_args(
+      /*rank=*/0, /*world_size=*/1, /*process_group=*/nullptr);
+  runtime::Options options;
+  options.enable_schedule_overlap(true).num_speculative_tokens(15);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::VLM);
+  WorkerImpl* target = DSparkWorkerImplTestPeer::target_impl(worker);
+  ASSERT_NE(target, nullptr);
+  EXPECT_NE(dynamic_cast<VLMWorkerImpl*>(target), nullptr);
+  EXPECT_EQ(dynamic_cast<LLMWorkerImpl*>(target), nullptr);
+}
+
+TEST(DSparkDecodeStepTest, TextTargetBuildsLlmWorker) {
+  Device device(/*device_index=*/0);
+  device.set_device();
+  device.init_device_context();
+  const ParallelArgs parallel_args(
+      /*rank=*/0, /*world_size=*/1, /*process_group=*/nullptr);
+  runtime::Options options;
+  options.enable_schedule_overlap(true).num_speculative_tokens(15);
+  DSparkWorkerImpl worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
+  WorkerImpl* target = DSparkWorkerImplTestPeer::target_impl(worker);
+  ASSERT_NE(target, nullptr);
+  EXPECT_NE(dynamic_cast<LLMWorkerImpl*>(target), nullptr);
+  EXPECT_EQ(dynamic_cast<VLMWorkerImpl*>(target), nullptr);
 }
 
 }  // namespace

@@ -56,15 +56,16 @@ Worker::Worker(const ParallelArgs& parallel_args,
     if (algorithm == "Eagle3") {
       impl_ = new Eagle3WorkerImpl(parallel_args, device, options, worker_type);
     } else if (algorithm == "DFlash") {
-      impl_ = new DFlashWorkerImpl(parallel_args, device, options);
+      impl_ = new DFlashWorkerImpl(parallel_args, device, options, worker_type);
     } else if (SpeculativeConfig::is_dflash2_algorithm(algorithm)) {
 #if !defined(USE_NPU) && !defined(USE_MLU)
       LOG(FATAL)
           << "DFlash2 speculative decoding is only supported on NPU and MLU.";
 #endif
-      impl_ = new DFlash2WorkerImpl(parallel_args, device, options);
+      impl_ =
+          new DFlash2WorkerImpl(parallel_args, device, options, worker_type);
     } else if (algorithm == "DSpark") {
-      impl_ = new DSparkWorkerImpl(parallel_args, device, options);
+      impl_ = new DSparkWorkerImpl(parallel_args, device, options, worker_type);
     } else if (algorithm == "Suffix") {
       impl_ = new SuffixWorkerImpl(parallel_args, device, options, worker_type);
     } else if (SpeculativeConfig::is_mtp_algorithm(algorithm)) {

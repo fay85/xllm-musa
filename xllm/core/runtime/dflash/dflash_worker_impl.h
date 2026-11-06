@@ -76,9 +76,14 @@ class DFlashWorkerImpl : public DraftModelSpecWorkerImpl {
   friend class DFlashWorkerImplTestPeer;
 
  public:
+  // VLM deployments must pass their real worker type so the target builds
+  // the multimodal pipeline; see the constructor definition for the silent
+  // failure it prevents. The argument is mandatory: omitting it is a compile
+  // error, so call sites cannot silently fall back to a text-only target.
   DFlashWorkerImpl(const ParallelArgs& parallel_args,
                    const torch::Device& device,
-                   const runtime::Options& options);
+                   const runtime::Options& options,
+                   WorkerType worker_type);
 
   ~DFlashWorkerImpl() override = default;
 

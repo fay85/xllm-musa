@@ -37,8 +37,9 @@ namespace xllm {
 
 DSparkWorkerImpl::DSparkWorkerImpl(const ParallelArgs& parallel_args,
                                    const torch::Device& device,
-                                   const runtime::Options& options)
-    : DFlashWorkerImpl(parallel_args, device, options),
+                                   const runtime::Options& options,
+                                   WorkerType worker_type)
+    : DFlashWorkerImpl(parallel_args, device, options, worker_type),
       sampling_process_group_(parallel_args.tp_group_ != nullptr
                                   ? parallel_args.tp_group_
                                   : parallel_args.process_group_) {}

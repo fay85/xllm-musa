@@ -42,6 +42,7 @@ limitations under the License.
 #include "core/runtime/mtp_worker_impl.h"
 #include "core/runtime/options.h"
 #include "core/runtime/speculative_worker_impl.h"
+#include "core/runtime/vlm_worker_impl.h"
 #include "core/util/scope_guard.h"
 #include "core/util/slice.h"
 #include "models/model_registry.h"
@@ -366,8 +367,11 @@ class TestDFlashWorker final : public DFlashWorkerImpl {
  public:
   TestDFlashWorker(const ParallelArgs& parallel_args,
                    const torch::Device& device,
-                   const runtime::Options& options)
-      : DFlashWorkerImpl(parallel_args, device, options) {}
+                   const runtime::Options& options,
+                   WorkerType worker_type)
+      : DFlashWorkerImpl(parallel_args, device, options, worker_type) {}
+
+  WorkerImpl* target_impl() const { return impl_.get(); }
 
   void replace_transfer_workers(std::unique_ptr<LLMWorkerImpl> target,
                                 std::unique_ptr<LLMWorkerImpl> draft) {
@@ -396,6 +400,40 @@ class MTPHostOffloadTest : public ::testing::Test {
     }
   }
 };
+
+// worker.cpp instantiates DFlashWorkerImpl directly for the DFlash branch,
+// so its VLM wiring needs its own coverage alongside the DSpark/DFlash2 tests.
+TEST_F(MTPHostOffloadTest, DFlashTargetTypeVlmBuildsMultimodalWorker) {
+  Device device(/*device_index=*/0);
+  device.set_device();
+  device.init_device_context();
+  const ParallelArgs parallel_args(
+      /*rank=*/0, /*world_size=*/1, /*process_group=*/nullptr);
+  runtime::Options options;
+  options.enable_schedule_overlap(true).num_speculative_tokens(15);
+  TestDFlashWorker worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::VLM);
+  WorkerImpl* target = worker.target_impl();
+  ASSERT_NE(target, nullptr);
+  EXPECT_NE(dynamic_cast<VLMWorkerImpl*>(target), nullptr);
+  EXPECT_EQ(dynamic_cast<LLMWorkerImpl*>(target), nullptr);
+}
+
+TEST_F(MTPHostOffloadTest, DFlashTargetTypeTextBuildsLlmWorker) {
+  Device device(/*device_index=*/0);
+  device.set_device();
+  device.init_device_context();
+  const ParallelArgs parallel_args(
+      /*rank=*/0, /*world_size=*/1, /*process_group=*/nullptr);
+  runtime::Options options;
+  options.enable_schedule_overlap(true).num_speculative_tokens(15);
+  TestDFlashWorker worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
+  WorkerImpl* target = worker.target_impl();
+  ASSERT_NE(target, nullptr);
+  EXPECT_NE(dynamic_cast<LLMWorkerImpl*>(target), nullptr);
+  EXPECT_EQ(dynamic_cast<VLMWorkerImpl*>(target), nullptr);
+}
 
 TEST(MTPAdaptiveValidateWidthTest, PreservesWidthForPreviousAcceptedTokens) {
   EXPECT_EQ(TestMTPWorker::preserve_checkpoint_width(
@@ -1100,8 +1138,11 @@ TEST_F(MTPHostOffloadTest, DFlashUsesSpeculativeHierarchyTransferLifecycle) {
   std::weak_ptr<HierarchyKVCacheTransfer> transfer_lifetime;
 
   {
-    auto worker = std::make_unique<TestDFlashWorker>(
-        parallel_args, device.unwrap(), options);
+    auto worker =
+        std::make_unique<TestDFlashWorker>(parallel_args,
+                                           device.unwrap(),
+                                           options,
+                                           /*worker_type=*/WorkerType::LLM);
     auto target = std::make_unique<HierarchyTransferTestWorker>(
         parallel_args, device.unwrap(), options, model_args);
     auto draft = std::make_unique<HierarchyTransferTestWorker>(
@@ -1156,7 +1197,7 @@ TEST_F(MTPHostOffloadTest, DFlash2AllowsGlm5NextContextParallelism) {
   // Construction must not CHECK-fail: allow_cp resolves true because
   // model_type == "glm5_next" && is_dflash2_algorithm("DFlash2").
   auto worker = std::make_unique<TestDFlashWorker>(
-      parallel_args, device.unwrap(), options);
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   EXPECT_NE(worker, nullptr);
 }
 
@@ -1182,7 +1223,7 @@ TEST_F(MTPHostOffloadTest, DeepseekV4StillAllowsContextParallelism) {
   options.model_path(model_config.path().string());
 
   auto worker = std::make_unique<TestDFlashWorker>(
-      parallel_args, device.unwrap(), options);
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   EXPECT_NE(worker, nullptr);
 }
 
@@ -1225,7 +1266,7 @@ TEST_F(MTPHostOffloadTest, DFlash2AllowsGlmMoeDsaContextParallelism) {
   // model_type == "glm_moe_dsa" && is_dflash2_algorithm("DFlash2") under the
   // python model impl.
   auto worker = std::make_unique<TestDFlashWorker>(
-      parallel_args, device.unwrap(), options);
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
   EXPECT_NE(worker, nullptr);
 }
 
