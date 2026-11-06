@@ -101,3 +101,10 @@ cc_test(
   DEPS :musa_layers :common_layers :cuda_kernels :state_dict :parallel_state :kv_cache
        musa_python torch_python Python::Python torch GTest::gtest_main glog::glog
 )
+
+cc_test(
+  NAME glm5_next_kda_layer_test
+  SRCS glm5_next_kda_layer_test.cpp
+  DEPS :musa_layers :common_layers :cuda_kernels :state_dict :parallel_state :kv_cache
+       musa_python torch_python Python::Python torch GTest::gtest_main glog::glog
+)
