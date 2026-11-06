@@ -154,6 +154,21 @@ void release_acl_tensors(const std::vector<aclTensor*>& tensors) {
   }
 }
 
+std::vector<aclTensor*> convert_to_acl_views(const torch::TensorList& tensors) {
+  std::vector<aclTensor*> views;
+  views.reserve(tensors.size());
+  for (const auto& tensor : tensors) {
+    views.push_back(aclnn::detail::convert_type(tensor));
+  }
+  return views;
+}
+
+std::vector<aclTensor*> convert_to_acl_views(
+    const std::optional<torch::TensorList>& tensors) {
+  return tensors.has_value() ? convert_to_acl_views(*tensors)
+                             : std::vector<aclTensor*>{};
+}
+
 void launch_aclnn_mega_moe(const torch::Tensor& context,
                            const torch::Tensor& x,
                            const torch::Tensor& topk_ids,
@@ -174,6 +189,8 @@ void launch_aclnn_mega_moe(const torch::Tensor& context,
                            int64_t num_max_tokens_per_rank,
                            char* activation,
                            float activation_clamp,
+                           int64_t topo_type,
+                           int64_t rank_num_per_server,
                            torch::Tensor& y,
                            torch::Tensor& expert_token_nums) {
   static const auto get_workspace_size_func_addr =
@@ -212,8 +229,12 @@ void launch_aclnn_mega_moe(const torch::Tensor& context,
       aclnn::detail::convert_type(expert_token_nums);
   aclTensorList* weight1 = create_acl_tensor_list(weight1_views);
   aclTensorList* weight2 = create_acl_tensor_list(weight2_views);
-  aclTensorList* weight_scales1 = create_acl_tensor_list(scale1_views);
-  aclTensorList* weight_scales2 = create_acl_tensor_list(scale2_views);
+  // Optional tensor lists must stay nullptr when absent.  An empty list is a
+  // present-but-empty input and is rejected by the aclnn parameter checks.
+  aclTensorList* weight_scales1 =
+      scale1_views.empty() ? nullptr : create_acl_tensor_list(scale1_views);
+  aclTensorList* weight_scales2 =
+      scale2_views.empty() ? nullptr : create_acl_tensor_list(scale2_views);
 
   // Keep the ABI aligned with the vendored ops-transformer MegaMoe API.
   // Optional shared-expert inputs precede the scalar attributes; omitting
@@ -301,8 +322,8 @@ void launch_aclnn_mega_moe(const torch::Tensor& context,
                               num_max_tokens_per_rank,
                               activation,
                               activation_params,
-                              /*topo_type=*/0,
-                              /*rank_num_per_server=*/2,
+                              topo_type,
+                              rank_num_per_server,
                               /*topk_weights_type=*/0,
                               /*combine_comm_mode=*/0,
                               y_acl,
@@ -600,45 +621,40 @@ std::tuple<torch::Tensor, torch::Tensor> apply_npu_mega_moe(
                           num_max_tokens_per_rank,
                           activation_ptr,
                           activation_clamp,
+                          topo_type,
+                          rank_num_per_server,
                           y,
                           expert_token_nums);
     return std::make_tuple(y, expert_token_nums);
   }
 
-  EXEC_NPU_CMD(aclnnMegaMoe,
-               context,
-               x,
-               topk_ids,
-               topk_weights,
-               weight1,
-               weight2,
-               weight_scales1,  // weight_scales1 (nullptr on A16W16)
-               weight_scales2,  // weight_scales2 (nullptr on A16W16)
-               bias1,           // bias1 (nullptr on A16W16)
-               bias2,           // bias2 (nullptr on A16W16)
-               x_active_mask,
-               //    no_tensor_list,    // shared_weight1 (no shared expert)
-               //    no_tensor_list,    // shared_weight2
-               //    no_tensor_list,    // shared_weight_scales1
-               //    no_tensor_list,    // shared_weight_scales2
-               //    no_tensor_list,    // shared_bias1
-               //    no_tensor_list,    // shared_bias2
-               moe_expert_num,
-               ep_world_size,
-               ccl_buffer_size,
-               max_recv_token_num,
-               dispatch_quant_mode,
-               resolved_dispatch_quant_out_dtype,
-               combine_quant_mode,
-               comm_alg_ptr,
-               num_max_tokens_per_rank,
-               activation_ptr,
-               activation_clamp,
-               //    topo_type,
-               //    rank_num_per_server,
-               //    topkWeightsType,
-               y,
-               expert_token_nums);
+  // A16W16 uses the same 39-argument aclnn entry as the W8A8 path.  Passing
+  // per-expert BF16 weights through the shared launcher keeps both precision
+  // paths on one ABI and avoids the stale 26-argument EXEC_NPU_CMD signature.
+  launch_aclnn_mega_moe(context,
+                        x,
+                        topk_ids,
+                        topk_weights,
+                        convert_to_acl_views(weight1),
+                        convert_to_acl_views(weight2),
+                        convert_to_acl_views(weight_scales1),
+                        convert_to_acl_views(weight_scales2),
+                        x_active_mask,
+                        moe_expert_num,
+                        ep_world_size,
+                        ccl_buffer_size,
+                        max_recv_token_num,
+                        dispatch_quant_mode,
+                        resolved_dispatch_quant_out_dtype,
+                        combine_quant_mode,
+                        comm_alg_ptr,
+                        num_max_tokens_per_rank,
+                        activation_ptr,
+                        activation_clamp,
+                        topo_type,
+                        rank_num_per_server,
+                        y,
+                        expert_token_nums);
 
   return std::make_tuple(y, expert_token_nums);
 }
