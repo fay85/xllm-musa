@@ -130,8 +130,13 @@ IndexCacheFootprint estimate_index_cache_footprint(
     return {slot_size, slot_size * block_size};
   }
   if (uses_compressed_tail) {
-    const int64_t pool_bytes = replication_factor * dtype_size * index_n_head *
-                               model_args.index_head_dim();
+    const int64_t pool_bytes = uses_musa_compressed_kpool_tail(model_args)
+                                   ? replication_factor * index_n_head *
+                                         (model_args.index_head_dim() +
+                                          static_cast<int64_t>(sizeof(float)))
+                                   : replication_factor * dtype_size *
+                                         index_n_head *
+                                         model_args.index_head_dim();
     const int64_t slot_size =
         (pool_bytes + model_args.index_kpool() - 1) / model_args.index_kpool();
     CHECK_EQ(block_size % model_args.index_kpool(), 0);
@@ -1086,7 +1091,9 @@ KVCacheCapacity estimate_kv_cache_capacity(
     const int64_t num_speculative_tokens =
         effective_num_speculative_tokens(options);
     CHECK_GE(num_speculative_tokens, 0);
-    if (uses_npu_compressed_kpool_tail(model_args)) {
+    if (uses_musa_compressed_kpool_tail(model_args)) {
+      kv_cache_cap.kpool_tail_len(model_args.index_kpool());
+    } else if (uses_npu_compressed_kpool_tail(model_args)) {
       // Preserve one complete pool plus speculative rows that may be rejected.
       // The verify base token advances the committed sequence and is already
       // covered by the regular pool tail.

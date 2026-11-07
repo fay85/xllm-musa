@@ -16,9 +16,9 @@ limitations under the License.
 #include "core/layers/musa/glm5_next_sparse_attention.h"
 
 #include <c10/core/StreamGuard.h>
-#include <c10/musa/MUSAGuard.h>
 #include <gtest/gtest.h>
 #include <musa_runtime_api.h>
+#include <torch_musa/csrc/core/MUSAGuard.h>
 #include <torch_musa/csrc/core/MUSAHooksInterface.h>
 
 #include <algorithm>
@@ -29,6 +29,11 @@ limitations under the License.
 #include <string>
 #include <unordered_map>
 #include <vector>
+
+#include "core/framework/kv_cache/kv_cache_estimation.h"
+#include "core/framework/kv_cache/kv_cache_shape.h"
+#include "core/framework/kv_cache/kv_cache_utils.h"
+#include "core/layers/musa/glm5_next/glm5_next_decoder_layer.h"
 
 namespace xllm::layer {
 namespace {
@@ -793,6 +798,354 @@ TEST_F(GlmSparseTest, ProductionDimensionsWithSyntheticWeights) {
                               expected.cpu().to(torch::kFloat32),
                               0.04,
                               0.01));
+}
+TEST_F(GlmSparseTest,
+       DecoderLayerSparseMoeFp8ScaleInvMatchesReferenceInPrefillAndDecode) {
+  auto args = model_args(8, 128, 128);
+  args.n_layers(4)
+      .layer_types({"linear_attention",
+                    "linear_attention",
+                    "linear_attention",
+                    "deepseek_sparse_attention"})
+      .mlp_layer_types({"dense", "dense", "dense", "sparse"})
+      .n_routed_experts(288)
+      .num_experts_per_tok(8)
+      .n_shared_experts(1)
+      .moe_intermediate_size(128)
+      .routed_scaling_factor(2.5f)
+      .norm_topk_prob(true)
+      .scoring_func("sigmoid")
+      .topk_method("noaux_tc")
+      .swiglu_limit(10.0f)
+      .hidden_act("silu")
+      .hc_mult(4)
+      .hc_sinkhorn_iters(4)
+      .hc_eps(1e-6f);
+
+  const Glm5NextLayerRole dense_role = resolve_glm5_next_layer_role(args, 0);
+  EXPECT_EQ(dense_role.attention, Glm5NextAttentionRole::KDA);
+  EXPECT_EQ(dense_role.mlp, Glm5NextMlpRole::DENSE);
+  const Glm5NextLayerRole sparse_role = resolve_glm5_next_layer_role(args, 3);
+  EXPECT_EQ(sparse_role.attention, Glm5NextAttentionRole::DSA);
+  EXPECT_EQ(sparse_role.mlp, Glm5NextMlpRole::SPARSE);
+
+  ProcessGroup group(0, 1, device_);
+  ParallelArgs parallel(0, 1, &group);
+  parallel.tp_group_ = &group;
+  QuantArgs quant_args;
+  quant_args.quant_method("fp8");
+  quant_args.weight_block_size({128, 128});
+  const auto opts =
+      torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
+  ModelContext context(parallel, args, quant_args, opts);
+
+  Weights attn_weights = make_weights(args);
+  Weights full_fp8;
+  Weights full_dense;
+  for (const auto& [name, tensor] : attn_weights) {
+    full_fp8["self_attn." + name] = tensor;
+    full_dense["self_attn." + name] = tensor;
+  }
+
+  const int64_t hidden = args.hidden_size();
+  const int64_t moe_inter = args.moe_intermediate_size();
+  const int64_t mix_size = args.hc_mult() * (args.hc_mult() + 2);
+  for (const std::string& prefix : {"attn_hc_pre.", "ffn_hc_pre."}) {
+    auto fn =
+        torch::randn({mix_size, args.hc_mult() * hidden}, torch::kBFloat16) *
+        0.01f;
+    auto base = torch::randn({mix_size}, torch::kFloat32) * 0.05f;
+    auto scale = torch::randn({3}, torch::kFloat32) * 0.05f;
+    full_fp8[prefix + "hc_fn"] = fn;
+    full_fp8[prefix + "hc_base"] = base;
+    full_fp8[prefix + "hc_scale"] = scale;
+    full_dense[prefix + "hc_fn"] = fn;
+    full_dense[prefix + "hc_base"] = base;
+    full_dense[prefix + "hc_scale"] = scale;
+  }
+  auto in_norm = torch::ones({hidden}, torch::kBFloat16);
+  auto post_norm = torch::ones({hidden}, torch::kBFloat16);
+  full_fp8["input_layernorm.weight"] = in_norm;
+  full_fp8["post_attention_layernorm.weight"] = post_norm;
+  full_dense["input_layernorm.weight"] = in_norm;
+  full_dense["post_attention_layernorm.weight"] = post_norm;
+
+  auto gate_w = torch::randn({288, hidden}, torch::kBFloat16) * 0.02f;
+  auto gate_b = torch::randn({288}, torch::kFloat32) * 0.01f;
+  full_fp8["mlp.gate.weight"] = gate_w;
+  full_fp8["mlp.gate.e_score_correction_bias"] = gate_b;
+  full_dense["mlp.gate.weight"] = gate_w;
+  full_dense["mlp.gate.e_score_correction_bias"] = gate_b;
+
+  auto quantize_128 = [&](const std::string& key, int64_t rows, int64_t cols) {
+    auto fp32 = torch::randn({rows, cols}, torch::kFloat32) * 0.02f;
+    auto scale =
+        torch::rand({(rows + 127) / 128, (cols + 127) / 128}, torch::kFloat32) *
+            0.01f +
+        0.01f;
+    auto expanded = scale.repeat_interleave(128, 0)
+                        .repeat_interleave(128, 1)
+                        .narrow(0, 0, rows)
+                        .narrow(1, 0, cols);
+    auto fp8 = (fp32 / expanded).to(torch::kFloat8_e4m3fn);
+    auto dequant = (fp8.to(torch::kFloat32) * expanded).to(torch::kBFloat16);
+    full_fp8[key + ".weight"] = fp8;
+    full_fp8[key + ".weight_scale_inv"] = scale;
+    full_dense[key + ".weight"] = dequant;
+  };
+
+  quantize_128("mlp.shared_experts.gate_proj", moe_inter, hidden);
+  quantize_128("mlp.shared_experts.up_proj", moe_inter, hidden);
+  quantize_128("mlp.shared_experts.down_proj", hidden, moe_inter);
+  for (int32_t e = 0; e < 288; ++e) {
+    const std::string ep = "mlp.experts." + std::to_string(e);
+    quantize_128(ep + ".gate_proj", moe_inter, hidden);
+    quantize_128(ep + ".up_proj", moe_inter, hidden);
+    quantize_128(ep + ".down_proj", hidden, moe_inter);
+  }
+
+  Glm5NextDecoderLayer fp8_layer(context, /*layer_id=*/3);
+  fp8_layer->load_state_dict(StateDict(full_fp8));
+  fp8_layer->verify_loaded_weights();
+
+  ModelContext dense_context(parallel, args, QuantArgs(), opts);
+  Glm5NextDecoderLayer dense_layer(dense_context, /*layer_id=*/3);
+  dense_layer->load_state_dict(StateDict(full_dense));
+  dense_layer->verify_loaded_weights();
+
+  auto x_prefill = torch::randn({5, 4, hidden}, opts) * 0.1f;
+  auto x_prefill_ref = x_prefill.clone();
+  auto pos_prefill = torch::arange(5, opts.dtype(torch::kInt64));
+  auto cache_fp8 = Glm5NextSparseAttentionImpl::create_cache(2, 3, opts);
+  auto cache_ref = Glm5NextSparseAttentionImpl::create_cache(2, 3, opts);
+  std::optional<torch::Tensor> residual;
+  ModelInputParams prefill_params;
+  prefill_params.meta.batch_forward_type = BatchForwardType::PREFILL;
+  auto out_prefill = fp8_layer->forward(x_prefill,
+                                        residual,
+                                        pos_prefill,
+                                        metadata(0, 5, device_),
+                                        cache_fp8,
+                                        prefill_params);
+  auto ref_prefill = dense_layer->forward(x_prefill_ref,
+                                          residual,
+                                          pos_prefill,
+                                          metadata(0, 5, device_),
+                                          cache_ref,
+                                          prefill_params);
+  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+  EXPECT_TRUE(torch::allclose(out_prefill.cpu().to(torch::kFloat32),
+                              ref_prefill.cpu().to(torch::kFloat32),
+                              0.04,
+                              0.02));
+
+  auto x_decode = torch::randn({1, 4, hidden}, opts) * 0.1f;
+  auto x_decode_ref = x_decode.clone();
+  auto pos_decode = torch::tensor({5}, opts.dtype(torch::kInt64));
+  ModelInputParams decode_params;
+  decode_params.meta.batch_forward_type = BatchForwardType::DECODE;
+  auto out_decode = fp8_layer->forward(x_decode,
+                                       residual,
+                                       pos_decode,
+                                       metadata(5, 1, device_),
+                                       cache_fp8,
+                                       decode_params);
+  auto ref_decode = dense_layer->forward(x_decode_ref,
+                                         residual,
+                                         pos_decode,
+                                         metadata(5, 1, device_),
+                                         cache_ref,
+                                         decode_params);
+  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+  EXPECT_TRUE(torch::allclose(out_decode.cpu().to(torch::kFloat32),
+                              ref_decode.cpu().to(torch::kFloat32),
+                              0.04,
+                              0.02));
+}
+
+TEST_F(GlmSparseTest, EngineKVCacheAndSharedSelectionCrossLayerForward) {
+  constexpr int64_t hidden = 256;
+  constexpr int64_t moe_inter = 128;
+  auto args = model_args(8, hidden, 512);
+  args.model_type("glm5_next");
+  args.n_layers(2);
+  args.enable_mla(true);
+  args.hc_mult(4);
+  args.hc_sinkhorn_iters(20);
+  args.hc_eps(1e-6f);
+  args.rms_norm_eps(1e-5f);
+  args.hidden_act("silu");
+  args.intermediate_size(512);
+  args.moe_intermediate_size(moe_inter);
+  args.n_routed_experts(288);
+  args.num_experts_per_tok(8);
+  args.n_shared_experts(1);
+  args.routed_scaling_factor(2.5f);
+  args.norm_topk_prob(true);
+  args.n_group(1);
+  args.topk_group(1);
+  args.scoring_func("sigmoid");
+  args.topk_method("noaux_tc");
+  args.swiglu_limit(10.0f);
+  args.layer_types({"deepseek_sparse_attention", "deepseek_sparse_attention"});
+  args.mlp_layer_types({"dense", "dense"});
+  args.indexer_types({"full", "shared"});
+
+  KVCacheEstimateOptions est_options;
+  est_options.dtype = torch::kBFloat16;
+  est_options.kv_cache_dtype = "auto";
+  est_options.cache_size_in_bytes = 64LL * 1024 * 1024;
+  est_options.block_size = 256;
+  est_options.world_size = 1;
+  est_options.n_local_kv_heads = 1;
+  est_options.max_seqs_per_batch = 2;
+  est_options.kpool_layout = KPoolCacheLayout::COMPRESSED_WITH_TAIL;
+
+  const KVCacheCapacity capacity =
+      estimate_kv_cache_capacity(args, est_options);
+  EXPECT_EQ(capacity.num_full_attention_layers(), 2);
+  EXPECT_EQ(capacity.num_indexer_layers(), 1);
+  EXPECT_EQ(capacity.kpool_tail_len(), 4);
+  EXPECT_EQ(capacity.index_block_size(), 64 * 132);
+
+  const KVCacheShape shape(capacity, args, /*world_size=*/1);
+  ASSERT_TRUE(shape.has_index_cache_shape());
+  ASSERT_TRUE(shape.has_kpool_tail_shape());
+  EXPECT_EQ(shape.key_cache_shape()[1], 256);
+  EXPECT_EQ(shape.key_cache_shape()[2], 1);
+  EXPECT_EQ(shape.key_cache_shape()[3], 512);
+  EXPECT_TRUE(shape.value_cache_shape().empty());
+  EXPECT_EQ(shape.index_cache_shape()[1], 64);
+  EXPECT_EQ(shape.index_cache_shape()[2], 1);
+  EXPECT_EQ(shape.index_cache_shape()[3], 132);
+  EXPECT_EQ(shape.kpool_tail_shape()[1], 2);
+  EXPECT_EQ(shape.kpool_tail_shape()[2], 4);
+  EXPECT_EQ(shape.kpool_tail_shape()[3], 128);
+
+  KVCacheCreateOptions create_options;
+  create_options.device(device_)
+      .dtype(torch::kBFloat16)
+      .num_layers(2)
+      .layer_types(args.layer_types())
+      .model_type(args.model_type())
+      .enable_lighting_indexer(true)
+      .indexer_cache_enabled_layers(
+          resolve_indexer_cache_enabled_layers(args, args.n_layers()));
+
+  KVCache cache_layer0(shape, create_options, /*layer_id=*/0);
+  KVCache cache_layer1(shape, create_options, /*layer_id=*/1);
+  EXPECT_TRUE(cache_layer0.get_k_cache().defined());
+  EXPECT_TRUE(cache_layer0.get_index_cache().defined());
+  EXPECT_EQ(cache_layer0.get_index_cache().scalar_type(), torch::kUInt8);
+  EXPECT_TRUE(cache_layer0.get_kpool_tail().defined());
+  EXPECT_EQ(cache_layer0.get_kpool_tail().scalar_type(), torch::kBFloat16);
+  EXPECT_TRUE(cache_layer1.get_k_cache().defined());
+  EXPECT_FALSE(cache_layer1.get_index_cache().defined());
+  EXPECT_FALSE(cache_layer1.get_kpool_tail().defined());
+
+  ProcessGroup group(0, 1, device_);
+  ParallelArgs parallel(0, 1, &group);
+  parallel.tp_group_ = &group;
+  const auto opts =
+      torch::TensorOptions().dtype(torch::kBFloat16).device(device_);
+  ModelContext context(parallel, args, QuantArgs(), opts);
+  Glm5NextDecoderLayer layer0(context, /*layer_id=*/0);
+  Glm5NextDecoderLayer layer1(context, /*layer_id=*/1);
+
+  const int64_t mix_size = args.hc_mult() * (args.hc_mult() + 2);
+  auto make_layer_weights = [&](bool include_indexer) {
+    auto base = make_weights(args);
+    Weights weights;
+    for (const auto& [k, v] : base) {
+      if (!include_indexer && k.rfind("indexer.", 0) == 0) {
+        continue;
+      }
+      weights["self_attn." + k] = v;
+    }
+    weights["input_layernorm.weight"] = torch::ones({hidden}, torch::kBFloat16);
+    weights["post_attention_layernorm.weight"] =
+        torch::ones({hidden}, torch::kBFloat16);
+    for (const std::string& prefix : {"attn_hc_pre.", "ffn_hc_pre."}) {
+      weights[prefix + "hc_fn"] =
+          torch::randn({mix_size, args.hc_mult() * hidden}, torch::kBFloat16) *
+          0.01f;
+      weights[prefix + "hc_base"] =
+          torch::randn({mix_size}, torch::kFloat32) * 0.05f;
+      weights[prefix + "hc_scale"] = torch::randn({3}, torch::kFloat32) * 0.05f;
+    }
+    weights["mlp.gate_proj.weight"] =
+        torch::randn({512, hidden}, torch::kBFloat16) * 0.02f;
+    weights["mlp.up_proj.weight"] =
+        torch::randn({512, hidden}, torch::kBFloat16) * 0.02f;
+    weights["mlp.down_proj.weight"] =
+        torch::randn({hidden, 512}, torch::kBFloat16) * 0.02f;
+    return weights;
+  };
+
+  layer0->load_state_dict(
+      StateDict(make_layer_weights(/*include_indexer=*/true)));
+  layer0->verify_loaded_weights();
+  layer1->load_state_dict(
+      StateDict(make_layer_weights(/*include_indexer=*/false)));
+  layer1->verify_loaded_weights();
+
+  auto x_prefill = torch::randn({5, 4, hidden}, opts) * 0.1f;
+  auto pos_prefill = torch::arange(5, opts.dtype(torch::kInt64));
+  std::optional<torch::Tensor> residual;
+  std::optional<PendingMHC> pending_mhc;
+  Selection shared_selection;
+  ModelInputParams prefill_params;
+  prefill_params.meta.batch_forward_type = BatchForwardType::PREFILL;
+  auto meta_prefill = metadata(0, 5, device_);
+
+  x_prefill = layer0->forward(x_prefill,
+                              residual,
+                              pos_prefill,
+                              meta_prefill,
+                              cache_layer0,
+                              prefill_params,
+                              &pending_mhc,
+                              /*is_last_layer=*/false,
+                              &shared_selection);
+  EXPECT_TRUE(shared_selection.lengths.defined());
+  auto out_prefill = layer1->forward(x_prefill,
+                                     residual,
+                                     pos_prefill,
+                                     meta_prefill,
+                                     cache_layer1,
+                                     prefill_params,
+                                     &pending_mhc,
+                                     /*is_last_layer=*/true,
+                                     &shared_selection);
+  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+  EXPECT_TRUE(torch::isfinite(out_prefill.cpu()).all().item<bool>());
+
+  auto x_decode = torch::randn({1, 4, hidden}, opts) * 0.1f;
+  auto pos_decode = torch::tensor({5}, opts.dtype(torch::kInt64));
+  ModelInputParams decode_params;
+  decode_params.meta.batch_forward_type = BatchForwardType::DECODE;
+  auto meta_decode = metadata(5, 1, device_);
+  Selection decode_shared_selection;
+  x_decode = layer0->forward(x_decode,
+                             residual,
+                             pos_decode,
+                             meta_decode,
+                             cache_layer0,
+                             decode_params,
+                             &pending_mhc,
+                             /*is_last_layer=*/false,
+                             &decode_shared_selection);
+  auto out_decode = layer1->forward(x_decode,
+                                    residual,
+                                    pos_decode,
+                                    meta_decode,
+                                    cache_layer1,
+                                    decode_params,
+                                    &pending_mhc,
+                                    /*is_last_layer=*/true,
+                                    &decode_shared_selection);
+  ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
+  EXPECT_TRUE(torch::isfinite(out_decode.cpu()).all().item<bool>());
 }
 }  // namespace
 }  // namespace xllm::layer

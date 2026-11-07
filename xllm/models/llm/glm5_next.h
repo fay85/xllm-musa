@@ -19,7 +19,7 @@ limitations under the License.
 
 namespace xllm {
 
-// Shared config loader for the Python implementation and the native MLU text
+// Shared config loader for the Python implementation and native MLU/MUSA text
 // model. Text-side fields in GLM-5.3-Flash checkpoints are nested under
 // text_config.
 
@@ -39,7 +39,8 @@ inline bool load_model_args(const JsonReader& json, ModelArgs* args) {
   // GLM-5.3-Flash config.json nests every text-side field under "text_config"
   // (verified against GLM-5.3-Flash-W8A8). Read those fields with an explicit
   // "text_config." prefix; do not rely on an implicit fallback in JsonReader.
-  LOAD_ARG_OR(dtype, "text_config.torch_dtype", "bfloat16");
+  LOAD_ARG_OR(dtype, "text_config.dtype", "bfloat16");
+  LOAD_ARG_OR(dtype, "text_config.torch_dtype", args->dtype());
   LOAD_ARG_OR(vocab_size, "text_config.vocab_size", 154880);
   LOAD_ARG_OR(hidden_size, "text_config.hidden_size", 4096);
   LOAD_ARG_OR(n_layers, "text_config.num_hidden_layers", 45);
@@ -211,7 +212,11 @@ inline bool load_model_args(const JsonReader& json, ModelArgs* args) {
 
   // Computed / convention parameters
   SET_ARG(head_dim, args->qk_nope_head_dim() + args->qk_rope_head_dim());
+  SET_ARG(enable_mla, true);
   SET_ARG(rope_scaling_rope_type, "default");
+#if defined(USE_MUSA)
+  SET_ARG(requires_eager_execution, true);
+#endif
   SET_ARG(stop_token_ids,
           std::unordered_set<int32_t>(args->eos_token_id_vec().begin(),
                                       args->eos_token_id_vec().end()));

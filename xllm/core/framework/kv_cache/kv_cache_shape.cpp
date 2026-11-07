@@ -486,11 +486,15 @@ void KVCacheShape::init_index_cache_shape(const KVCacheCapacity& kv_cache_cap,
       model_args.index_kpool_compress()) {
     CHECK_EQ(kv_cache_cap.block_size() % model_args.index_kpool(), 0)
         << "KPool cache block_size must be divisible by index_kpool.";
+    const int64_t pool_width =
+        uses_musa_compressed_kpool_tail(model_args)
+            ? model_args.index_head_dim() + static_cast<int64_t>(sizeof(float))
+            : model_args.index_head_dim();
     index_cache_shape_ = std::vector<int64_t>{
         index_block_count,
         kv_cache_cap.block_size() / model_args.index_kpool(),
         1,
-        model_args.index_head_dim()};
+        pool_width};
     return;
   }
   // GLM-next kPool packs [k, gate, valid] = index_head_dim*2+1 per token into

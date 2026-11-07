@@ -62,7 +62,9 @@ class Platform final {
   }
 
   // KPool stores compressed index pages with a separate per-request tail.
-  static constexpr bool uses_compressed_kpool_cache() { return is_mlu(); }
+  static constexpr bool uses_compressed_kpool_cache() {
+    return is_mlu() || is_musa();
+  }
 
   // Under KV splitting, each NPU rank retains the full indexer cache.
   // Logical block B maps to index pages [B * split, (B + 1) * split).
@@ -80,7 +82,7 @@ class Platform final {
   // Shared DSA layers reuse the previous full layer's top-k and never write
   // indexer cache, so those layers skip indexer-page allocation.
   static constexpr bool supports_dsa_indexer_cache_elision() {
-    return is_mlu() || is_npu();
+    return is_mlu() || is_npu() || is_musa();
   }
 
   // Host KV offload requires a batch memcpy provider with stream

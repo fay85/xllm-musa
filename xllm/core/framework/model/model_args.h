@@ -861,6 +861,16 @@ inline bool uses_npu_compressed_kpool_tail(const ModelArgs& args) {
 #endif
 }
 
+inline bool uses_musa_compressed_kpool_tail(const ModelArgs& args) {
+#if defined(USE_MUSA)
+  return args.index_kpool() == 4 && args.index_kpool_compress() &&
+         args.index_kpool_always_select_tail() && args.index_head_dim() == 128;
+#else
+  (void)args;
+  return false;
+#endif
+}
+
 inline std::ostream& operator<<(std::ostream& os, const ModelArgs& args) {
   os << "ModelArgs: [model_type: " << args.model_type();
   os << ", encoder_embedding_mode: " << args.encoder_embedding_mode();

@@ -116,6 +116,7 @@ limitations under the License.
 #include "llm/qwen3_moe.h"  // IWYU pragma: keep
 #elif defined(USE_MUSA)
 #include "llm/deepseek_v4_dspark.h"    // IWYU pragma: keep
+#include "llm/glm5_next.h"             // IWYU pragma: keep
 #include "llm/musa/deepseek_v4.h"      // IWYU pragma: keep
 #include "llm/musa/deepseek_v4_mtp.h"  // IWYU pragma: keep
 #include "llm/musa/glm5_next.h"        // IWYU pragma: keep

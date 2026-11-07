@@ -1674,4 +1674,57 @@ TEST(HFModelLoaderTest, RejectMixedPrecisionMalformedRegex) {
   }
 }
 
+TEST(HFModelLoaderTest, Glm5NextRegistersArgsLoaderAndParsesConfig) {
+  ModelArgsLoader loader = ModelRegistry::get_model_args_loader("glm5_next");
+  ASSERT_NE(loader, nullptr);
+  EXPECT_NE(ModelRegistry::get_model_args_loader("glm5_next_mtp"), nullptr);
+  EXPECT_NE(ModelRegistry::get_causallm_factory("glm5_next"), nullptr);
+  EXPECT_EQ(ModelRegistry::get_model_backend("glm5_next"), "llm");
+  EXPECT_TRUE(util::is_mla_model_type("glm5_next"));
+
+  JsonReader inline_reader;
+  ASSERT_TRUE(inline_reader.parse_text(R"({
+    "model_type": "glm5_next",
+    "text_config": {
+      "dtype": "float16",
+      "hidden_size": 4096,
+      "num_hidden_layers": 45,
+      "index_kpool": 4,
+      "index_kpool_compress": true,
+      "linear_attn_config": {
+        "num_heads": 64,
+        "head_dim": 128,
+        "short_conv_kernel_size": 4
+      }
+    }
+  })"));
+  ModelArgs inline_args;
+  ASSERT_TRUE(loader(inline_reader, &inline_args));
+  EXPECT_EQ(inline_args.model_type(), "glm5_next");
+  EXPECT_EQ(inline_args.dtype(), "float16");
+  EXPECT_EQ(inline_args.n_layers(), 45);
+  EXPECT_EQ(inline_args.index_kpool(), 4);
+  EXPECT_TRUE(inline_args.index_kpool_compress());
+  EXPECT_EQ(inline_args.linear_num_key_heads(), 64);
+  EXPECT_EQ(inline_args.linear_key_head_dim(), 128);
+  EXPECT_EQ(inline_args.linear_conv_kernel_dim(), 4);
+
+  const std::string checkpoint_config =
+      "/data/models/GLM-5.3-Flash/config.json";
+  if (std::filesystem::exists(checkpoint_config)) {
+    JsonReader file_reader;
+    ASSERT_TRUE(file_reader.parse(checkpoint_config));
+    ModelArgs file_args;
+    ASSERT_TRUE(loader(file_reader, &file_args));
+    EXPECT_EQ(file_args.model_type(), "glm5_next");
+    EXPECT_EQ(file_args.dtype(), "bfloat16");
+    EXPECT_EQ(file_args.n_layers(), 45);
+    EXPECT_EQ(file_args.hc_mult(), 4);
+    EXPECT_EQ(file_args.index_kpool(), 4);
+    EXPECT_TRUE(file_args.index_kpool_compress());
+    EXPECT_EQ(static_cast<int32_t>(file_args.layer_types().size()), 45);
+    EXPECT_EQ(static_cast<int32_t>(file_args.mlp_layer_types().size()), 45);
+  }
+}
+
 }  // namespace xllm

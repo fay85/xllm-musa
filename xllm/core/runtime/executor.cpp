@@ -31,7 +31,8 @@ Executor::Executor(CausalLM* model,
   std::string backend;
   if (ModelConfig::is_python_model_impl(model_config.model_impl())) {
     backend = "python";
-  } else if (options.backend() != "vlm" && options.enable_graph()) {
+  } else if (options.backend() != "vlm" && options.enable_graph() &&
+             !args.requires_eager_execution()) {
     backend = Platform::type_str();
   } else {
     backend = options.backend();

@@ -33,6 +33,8 @@ limitations under the License.
 #include "core/layers/musa/glm5_next_kda.h"
 #include "core/layers/musa/glm5_next_sparse_attention.h"
 #include "core/layers/musa/hyper_connection.h"
+#include "core/layers/musa/routed_moe.h"
+#include "core/layers/musa/routed_moe_gate.h"
 
 namespace xllm::layer {
 
@@ -54,8 +56,8 @@ struct Glm5NextLayerRole final {
 Glm5NextLayerRole resolve_glm5_next_layer_role(const ModelArgs& args,
                                                int32_t layer_id);
 
-// Model-independent mHC around the existing MUSA KDA and sparse-attention
-// layers. Sparse MoE is intentionally rejected until its MUSA path is wired.
+// Model-independent mHC around the MUSA KDA/DSA attention and Dense/Sparse-MoE
+// FFN layers.
 class Glm5NextDecoderLayerImpl final : public torch::nn::Module {
  public:
   Glm5NextDecoderLayerImpl(const ModelContext& context, int32_t layer_id);
@@ -63,18 +65,21 @@ class Glm5NextDecoderLayerImpl final : public torch::nn::Module {
   void load_state_dict(const StateDict& state_dict);
   void verify_loaded_weights() const;
 
-  torch::Tensor forward(torch::Tensor& hidden_states,
-                        std::optional<torch::Tensor>& residual,
-                        torch::Tensor& positions,
-                        const AttentionMetadata& attn_metadata,
-                        KVCache& kv_cache,
-                        const ModelInputParams& input_params,
-                        std::optional<PendingMHC>* pending_mhc = nullptr,
-                        bool is_last_layer = true);
+  torch::Tensor forward(
+      torch::Tensor& hidden_states,
+      std::optional<torch::Tensor>& residual,
+      torch::Tensor& positions,
+      const AttentionMetadata& attn_metadata,
+      KVCache& kv_cache,
+      const ModelInputParams& input_params,
+      std::optional<PendingMHC>* pending_mhc = nullptr,
+      bool is_last_layer = true,
+      kernel::musa::GlmKPoolSelection* shared_selection = nullptr);
 
  private:
   int32_t layer_id_ = 0;
   Glm5NextLayerRole role_;
+  bool enable_indexer_ = true;
 
   MHCPre attn_hc_pre_{nullptr};
   MHCPre ffn_hc_pre_{nullptr};
@@ -84,6 +89,8 @@ class Glm5NextDecoderLayerImpl final : public torch::nn::Module {
   Glm5NextKDA kda_{nullptr};
   Glm5NextSparseAttention sparse_attention_{nullptr};
   DenseMLP dense_mlp_{nullptr};
+  RoutedMoeGate sparse_gate_{nullptr};
+  RoutedMoe sparse_moe_{nullptr};
 };
 
 TORCH_MODULE(Glm5NextDecoderLayer);

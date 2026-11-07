@@ -55,8 +55,9 @@ class Glm5NextModelImpl final
                  ? args.n_layers()
                  : static_cast<int32_t>(args.mlp_layer_types().size()));
     for (const std::string& mlp_type : args.mlp_layer_types()) {
-      CHECK_EQ(mlp_type, "dense")
-          << "MUSA GLM5-Next currently supports only dense MLP layers.";
+      CHECK(mlp_type == "dense" || mlp_type == "sparse")
+          << "MUSA GLM5-Next supports only dense or sparse MLP layers, got: "
+          << mlp_type;
     }
     blocks_ = register_module("layers", torch::nn::ModuleList());
     layers_.reserve(static_cast<size_t>(args.n_layers()));
@@ -92,23 +93,13 @@ class Glm5NextModelImpl final
     std::vector<int32_t>& dp_token_nums =
         modified_input_params.parallel.dp_global_token_nums;
     std::replace(dp_token_nums.begin(), dp_token_nums.end(), 0, 1);
-    if (!modified_input_params.attn_metadata) {
-      modified_input_params.attn_metadata =
-          std::make_shared<layer::AttentionMetadata>(
-              layer::AttentionMetadataBuilder::build(modified_input_params,
-                                                     model_args_.enable_mla()));
-    }
-    if (modified_input_params.attn_metadata->is_prefill ||
-        modified_input_params.attn_metadata->is_chunked_prefill) {
-      layer::AttentionMetadataBuilder::build_linear_prefill(
-          *modified_input_params.attn_metadata,
-          /*block_size=*/64);
-    }
+    prepare_attention_metadata(modified_input_params);
     const layer::AttentionMetadata& attn_metadata =
         *modified_input_params.attn_metadata;
 
     std::optional<torch::Tensor> residual;
     std::optional<layer::PendingMHC> pending_mhc;
+    std::optional<kernel::musa::GlmKPoolSelection> shared_selection;
     for (size_t layer_id = 0; layer_id < layers_.size(); ++layer_id) {
       if (!modified_input_params.synchronize_layer(
               static_cast<uint32_t>(layer_id))) {
@@ -122,7 +113,9 @@ class Glm5NextModelImpl final
           kv_caches[layer_id],
           modified_input_params,
           &pending_mhc,
-          /*is_last_layer=*/layer_id + 1 == layers_.size());
+          /*is_last_layer=*/layer_id + 1 == layers_.size(),
+          shared_selection.has_value() ? &shared_selection.value()
+                                       : &shared_selection.emplace());
       if (!modified_input_params.record_layer(static_cast<uint32_t>(layer_id),
                                               hidden_states.device())) {
         return ModelOutput();
@@ -150,6 +143,38 @@ class Glm5NextModelImpl final
   }
 
  private:
+  void prepare_attention_metadata(ModelInputParams& params) const {
+    const bool ordinary_prefill =
+        params.meta.batch_forward_type.no_decode() && !params.is_spec_verify;
+    if (!params.attn_metadata ||
+        !params.attn_metadata->q_cu_seq_lens.defined()) {
+      params.attn_metadata = std::make_shared<layer::AttentionMetadata>(
+          layer::AttentionMetadataBuilder::build(params,
+                                                 model_args_.enable_mla(),
+                                                 /*compute_dtype=*/"half",
+                                                 /*attn_mask=*/std::nullopt,
+                                                 /*device=*/device_));
+    } else if (ordinary_prefill ||
+               (!params.attn_metadata->is_spec_verify &&
+                (params.attn_metadata->is_prefill ||
+                 params.attn_metadata->is_chunked_prefill)) ||
+               params.attn_metadata->linear_state_read_indices.defined()) {
+      params.attn_metadata =
+          std::make_shared<layer::AttentionMetadata>(*params.attn_metadata);
+    }
+    auto& metadata = *params.attn_metadata;
+    if (metadata.linear_state_read_indices.defined()) {
+      metadata.linear_state_read_indices = torch::Tensor();
+    }
+    params.embedding.linear_state_read_ids = params.embedding.linear_state_ids;
+    params.embedding.linear_state_read_indices =
+        params.embedding.linear_state_indices;
+    if (metadata.is_prefill || metadata.is_chunked_prefill) {
+      layer::AttentionMetadataBuilder::build_linear_prefill(metadata,
+                                                            /*block_size=*/64);
+    }
+  }
+
   torch::Device device_;
   int64_t hc_mult_ = 4;
   torch::nn::ModuleList blocks_{nullptr};

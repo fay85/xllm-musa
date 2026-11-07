@@ -56,11 +56,21 @@ class DsaTopkSharePlan final {
     has_indexer_ = has_dsa_indexer(args);
 
     if (!has_indexer_ ||
-        (args.index_topk_pattern().empty() && args.index_topk_freq() <= 1)) {
+        (args.indexer_types().empty() && args.index_topk_pattern().empty() &&
+         args.index_topk_freq() <= 1)) {
       return;
     }
 
-    if (!args.index_topk_pattern().empty()) {
+    if (!args.indexer_types().empty()) {
+      const std::vector<std::string>& indexer_types = args.indexer_types();
+      CHECK_EQ(static_cast<int64_t>(indexer_types.size()), num_layers)
+          << "DSA indexer_types length must equal num_hidden_layers.";
+      for (int32_t layer_id = 0; layer_id < num_layers; ++layer_id) {
+        decisions_[static_cast<size_t>(layer_id)].reuse_topk =
+            should_reuse_from_indexer_type(
+                indexer_types[static_cast<size_t>(layer_id)], layer_id);
+      }
+    } else if (!args.index_topk_pattern().empty()) {
       const std::string& pattern = args.index_topk_pattern();
       CHECK_EQ(static_cast<int64_t>(pattern.size()), num_layers)
           << "DSA top-k sharing pattern length must equal num_hidden_layers.";
@@ -133,6 +143,19 @@ class DsaTopkSharePlan final {
       return std::max<int32_t>(layer_id - offset + 1, 0) % freq != 0;
     }
     return std::max<int32_t>(layer_id - 1, 0) % freq != 0;
+  }
+
+  static bool should_reuse_from_indexer_type(const std::string& indexer_type,
+                                             int32_t layer_id) {
+    if (indexer_type == "shared") {
+      return true;
+    }
+    if (indexer_type == "full" || indexer_type.empty()) {
+      return false;
+    }
+    LOG(FATAL) << "Unsupported DSA indexer_type at layer " << layer_id << ": "
+               << indexer_type;
+    return false;
   }
 
   std::vector<DsaTopkShareDecision> decisions_;

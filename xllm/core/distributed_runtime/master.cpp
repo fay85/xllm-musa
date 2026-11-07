@@ -433,10 +433,11 @@ std::optional<std::string> validate_model_cp(const Options& options,
   if (Platform::is_musa()) {
     // VLM+disagg_pd also runs under LLMEngine (see Master ctor), so CP is OK
     // without speculative decoding when MTP is off.
-    const bool llm_engine_target =
-        engine_type == EngineType::LLM || engine_type == EngineType::SSM ||
-        ((engine_type == EngineType::VLMSSM || engine_type == EngineType::VLM) &&
-         options.enable_disagg_pd());
+    const bool llm_engine_target = engine_type == EngineType::LLM ||
+                                   engine_type == EngineType::SSM ||
+                                   ((engine_type == EngineType::VLMSSM ||
+                                     engine_type == EngineType::VLM) &&
+                                    options.enable_disagg_pd());
     if (!llm_engine_target) {
       return "MUSA CP supports only LLM-engine generation: text, or VLM under "
              "disaggregated PD (with or without speculative decoding)";
@@ -665,6 +666,15 @@ Master::Master(const Options& options, EngineType type)
   const std::optional<std::string> cp_error =
       validate_model_cp(options_, type, model_type, global_world_size);
   CHECK(!cp_error.has_value()) << cp_error.value();
+  if (Platform::is_musa() && (is_glm5_next_target_model_type(model_type) ||
+                              model_type == "glm5_next_mtp")) {
+    if (options_.block_size() != 256) {
+      LOG(WARNING) << "MUSA GLM5-Next requires block_size=256; overriding "
+                   << options_.block_size() << " -> 256.";
+      options_.block_size(256);
+    }
+    options_.enable_graph(false);
+  }
   options_.enable_mla(util::should_enable_mla(model_path, options_.backend()));
   print_startup_banner(model_path, options_.backend(), options_.node_rank());
   LOG(INFO) << "Master init options: " << options_.to_string();

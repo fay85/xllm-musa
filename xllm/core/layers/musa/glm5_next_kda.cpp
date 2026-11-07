@@ -379,8 +379,9 @@ torch::Tensor Glm5NextKDAImpl::forward(const torch::Tensor& hidden_states,
         !attn_metadata.is_mixed)
       << "KDA does not support speculative or mixed batches";
   CHECK(!attn_metadata.linear_state_read_indices.defined() &&
-        !input_params.embedding.linear_state_read_indices.defined() &&
-        input_params.embedding.linear_state_read_ids.empty())
+        (input_params.embedding.linear_state_read_ids.empty() ||
+         input_params.embedding.linear_state_read_ids ==
+             input_params.embedding.linear_state_ids))
       << "KDA requires restored in-place state slots";
   CHECK(!attn_metadata.is_dummy)
       << "GLM5-Next KDA does not accept dummy batches";

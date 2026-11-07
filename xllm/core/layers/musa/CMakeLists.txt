@@ -23,6 +23,8 @@ set(_MUSA_LAYERS_HDRS
   qwen3_5/qwen3_5_vision_attention.h
   rms_norm_gated.h
   musa_fp8_linear.h
+  routed_moe_gate.h
+  routed_moe.h
   deepseek_v4/deepseek_v4_attention.h
   deepseek_v4/deepseek_v4_decoder_layer.h
   deepseek_v4/dsa_metadata_builder_musa.h
@@ -49,6 +51,8 @@ set(_MUSA_LAYERS_SRCS
   qwen3_5/qwen3_5_vision_attention.cpp
   rms_norm_gated.cpp
   musa_fp8_linear.cpp
+  routed_moe_gate.cpp
+  routed_moe.cpp
   deepseek_v4/deepseek_v4_attention.cpp
   deepseek_v4/deepseek_v4_decoder_layer.cpp
   deepseek_v4/deepseek_v4_pcp_context.cpp

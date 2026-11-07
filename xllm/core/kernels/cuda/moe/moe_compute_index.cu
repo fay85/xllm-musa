@@ -32,12 +32,13 @@ limitations under the License.
 namespace xllm::kernel::cuda {
 
 constexpr int32_t kMoeIndexBlock = 256;
+constexpr int32_t kMaxMoeIndexExperts = 1024;
 
 __global__ void moe_cast_i64_to_i32_kernel(const int64_t* input,
                                            int32_t* output,
                                            int64_t count) {
-  const int64_t index = static_cast<int64_t>(blockIdx.x) * blockDim.x +
-                        threadIdx.x;
+  const int64_t index =
+      static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
   if (index < count) {
     output[index] = static_cast<int32_t>(input[index]);
   }
@@ -65,15 +66,16 @@ __launch_bounds__(kMoeIndexBlock, 1)
 // input:  expert_sizes  (per-expert counts)
 // output: expert_offsets (exclusive scan of counts)
 //         total_out      (total number of tokens, scalar)
+template <int32_t kScanBlock = kMoeIndexBlock>
 __global__ void
 #ifdef USE_DCU
-__launch_bounds__(kMoeIndexBlock, 1)
+__launch_bounds__(kScanBlock, 1)
 #endif
     moe_prefix_sum_kernel(const int32_t* __restrict__ expert_sizes,
                           int32_t* __restrict__ expert_offsets,
                           int32_t num_experts,
                           int64_t* __restrict__ total_out) {
-  using BlockScan = cub::BlockScan<int32_t, kMoeIndexBlock>;
+  using BlockScan = cub::BlockScan<int32_t, kScanBlock>;
   __shared__ typename BlockScan::TempStorage s_scan;
 
   int32_t val = (threadIdx.x < num_experts) ? expert_sizes[threadIdx.x] : 0;
@@ -125,7 +127,8 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
   auto stream = at::cuda::getCurrentCUDAStream();
   int64_t N = expert_id.numel();
   int32_t E = static_cast<int32_t>(num_experts);
-  CHECK_LE(E, kMoeIndexBlock) << "num_experts cannot exceed " << kMoeIndexBlock;
+  CHECK_LE(E, kMaxMoeIndexExperts)
+      << "num_experts cannot exceed " << kMaxMoeIndexExperts;
   torch::Tensor expert_id_i32;
   if (expert_id.scalar_type() == torch::kInt32) {
     expert_id_i32 = expert_id.contiguous();
@@ -156,11 +159,25 @@ std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> moe_compute_index(
       E);
 
   // Phase 2: prefix sum (1 block)
-  moe_prefix_sum_kernel<<<1, kMoeIndexBlock, 0, stream>>>(
-      expert_sizes.data_ptr<int32_t>(),
-      expert_offsets.data_ptr<int32_t>(),
-      E,
-      nullptr);
+  if (E <= 256) {
+    moe_prefix_sum_kernel<256>
+        <<<1, 256, 0, stream>>>(expert_sizes.data_ptr<int32_t>(),
+                                expert_offsets.data_ptr<int32_t>(),
+                                E,
+                                nullptr);
+  } else if (E <= 512) {
+    moe_prefix_sum_kernel<512>
+        <<<1, 512, 0, stream>>>(expert_sizes.data_ptr<int32_t>(),
+                                expert_offsets.data_ptr<int32_t>(),
+                                E,
+                                nullptr);
+  } else {
+    moe_prefix_sum_kernel<1024>
+        <<<1, 1024, 0, stream>>>(expert_sizes.data_ptr<int32_t>(),
+                                 expert_offsets.data_ptr<int32_t>(),
+                                 E,
+                                 nullptr);
+  }
 
   // Phase 3: place indices
   moe_place_indices_kernel<<<grid, kMoeIndexBlock, 0, stream>>>(
