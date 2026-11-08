@@ -50,10 +50,13 @@
 
 ---
 
-### 2.2 多模态推理（`--backend=vlm`）额外待补项
+### 2.2 多模态推理（`--backend=vlm`）必补项（已全部打通并完成真机 8 卡端到端 VLM 推理验证）
 
-6. **VLM Processor 注册与 MUSA 原生 Vision Tower**
-   - **现状**：`xllm/models/models.h` 的 `USE_MUSA` 分支尚未引入 `vlm/glm5_next_vlm.h`，且无 MUSA 原生视觉编码器与 VLM 模型类。
-   - **待办**：
-     - 引入 `vlm/glm5_next_vlm.h` 注册多模态 Processor；
-     - 实现 MUSA 原生 `model.visual.*`（`Conv3d` PatchEmbed 带 bias、Vision Attention、PatchMerger）及 `Glm5NextForConditionalGeneration` 封装，打通视觉特征与文本 embedding 的合并。
+6. **[已完成] VLM Processor 注册与 MUSA 原生 Vision Tower（`Glm5NextForConditionalGeneration`）**
+   - **修复**：
+     - 在 `xllm/models/llm/glm5_next.h` 中补齐 `vision_config.projection_intermediate_size`（`mm_projector_hidden_size=10240`）与 `mm_head_dim=64` 参数解析；
+     - 新增 `xllm/models/vlm/musa/glm5_next_vlm.h` 实现 MUSA 原生 `Glm5NextVisionTransformer`（`Conv3d` PatchEmbed 带 bias、2D Vision RoPE、24 层带 per-head `q_norm`/`k_norm` 与 `swiglu_limit=10.0` 的 `Glm5NextVisionBlock`、`Conv2d` 空间下采样、带 `post_projection_norm` LayerNorm 的 `Glm5NextVisionPatchMerger`）与 `Glm5NextForConditionalGeneration`，并在 `xllm/models/models.h` 的 `USE_MUSA` 分支引入 `vlm/glm5_next_multimodal.h` 与 `vlm/musa/glm5_next_vlm.h`；
+     - 在 `xllm/models/model_registry.cpp` 中保留双注册模型的 `llm` 默认后端映射，并在 `xllm/core/distributed_runtime/master.cpp` 中修正 `EngineType::VLM` 下的 `model_type` 解析与 `options_.block_size(256)` 传递。
+   - **验证**：
+     - 单元测试 `hf_model_loader_test --gtest_filter=*Glm5Next*`（含真实 `model-00062-of-00062.safetensors` 347 个视觉权重加载、与 PyTorch 参考数值对齐 `< 5e-3`、多图 varlen 视觉编码及 `merge_multimodal_embeddings` 验证）全部通过；
+     - 8x MTT S5000 (`--backend=vlm`) 真机服务启动成功，纯文本与多模态图文请求（几何图形空间位置/颜色识别、非正方形动态分辨率 OCR 识别）端到端推理输出准确。

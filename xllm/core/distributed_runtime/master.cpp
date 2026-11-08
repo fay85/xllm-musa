@@ -629,7 +629,9 @@ Master::Master(const Options& options, EngineType type)
     CHECK(!dcp_topology_error.has_value()) << dcp_topology_error.value();
   }
   std::string model_type;
-  if (options_.backend() == "llm" || native_qwen_dcp_requested ||
+  if (options_.backend() == "llm" ||
+      (Platform::is_musa() && options_.backend() == "vlm") ||
+      native_qwen_dcp_requested ||
       (options_.cp_size() > 1 &&
        (Platform::uses_model_cp_sharding() || Platform::is_musa())) ||
       (ModelConfig::is_python_model_impl(
@@ -787,8 +789,8 @@ Master::Master(const Options& options, EngineType type)
     runtime::Options eng_options;
     eng_options.model_path(options_.model_path())
         .devices(devices)
-        .backend(options.backend())
-        .block_size(options.block_size())
+        .backend(options_.backend())
+        .block_size(options_.block_size())
         .max_cache_size(options.max_cache_size())
         .max_memory_utilization(options.max_memory_utilization())
         .enable_prefix_cache(options_.enable_prefix_cache())

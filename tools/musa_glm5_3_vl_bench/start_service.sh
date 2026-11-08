@@ -9,6 +9,7 @@ ACTION="${1:-start}"
 XLLM_BIN="${GLM5_XLLM_BIN:-${REPO_ROOT}/build/lib.linux-x86_64-cpython-310/xllm/xllm}"
 MODEL_PATH="${GLM5_MODEL_PATH:-/data/nfs_shared/models/GLM-5.3-Flash}"
 MODEL_ID="${GLM5_MODEL_ID:-glm-5.3-flash}"
+BACKEND="${GLM5_BACKEND:-vlm}"
 HOST="${GLM5_HOST:-127.0.0.1}"
 BASE_PORT="${GLM5_PORT:-18901}"
 MASTER_ADDR="${GLM5_MASTER_ADDR:-127.0.0.1:29888}"
@@ -81,7 +82,7 @@ mkdir -p "${LOG_DIR}"
 stop_service
 
 echo "Binary: ${XLLM_BIN}"
-echo "Starting ${MODEL_ID} (${NNODES} ranks) from ${MODEL_PATH}..."
+echo "Starting ${MODEL_ID} (${NNODES} ranks, backend=${BACKEND}) from ${MODEL_PATH}..."
 echo "Logs: ${LOG_DIR}/rank_*.log"
 
 for ((r = 0; r < NNODES; ++r)); do
@@ -91,6 +92,7 @@ for ((r = 0; r < NNODES; ++r)); do
   setsid "${XLLM_BIN}" \
     --model="${MODEL_PATH}" \
     --model_id="${MODEL_ID}" \
+    --backend="${BACKEND}" \
     --task=generate \
     --host="${HOST}" \
     --port="${RANK_PORT}" \

@@ -264,7 +264,9 @@ void ModelRegistry::register_causalvlm_factory(const std::string& name,
                                                << " already registered.");
   } else {
     instance->model_registry_[name].causal_vlm_factory = factory;
-    instance->model_backend_[name] = "vlm";
+    if (instance->model_backend_.find(name) == instance->model_backend_.end()) {
+      instance->model_backend_[name] = "vlm";
+    }
   }
 }
 

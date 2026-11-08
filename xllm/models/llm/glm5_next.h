@@ -199,6 +199,12 @@ inline bool load_model_args(const JsonReader& json, ModelArgs* args) {
   LOAD_ARG_OR(mm_intermediate_size, "vision_config.intermediate_size", 4096);
   LOAD_ARG_OR(mm_num_attention_heads, "vision_config.num_heads", 16);
   LOAD_ARG_OR(mm_projection_dim, "vision_config.out_hidden_size", 4096);
+  LOAD_ARG_OR(mm_projector_hidden_size,
+              "vision_config.projection_intermediate_size",
+              10240);
+  LOAD_ARG_OR_FUNC(mm_head_dim, "vision_config.head_dim", [&] {
+    return args->mm_hidden_size() / args->mm_num_attention_heads();
+  });
   LOAD_ARG_OR(mm_patch_size, "vision_config.patch_size", 14);
   LOAD_ARG_OR(mm_layer_norm_eps, "vision_config.rms_norm_eps", 1e-5);
   LOAD_ARG_OR(mm_dropout, "vision_config.attention_dropout", 0.0f);

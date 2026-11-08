@@ -36,6 +36,12 @@ limitations under the License.
 #include "models/llm/mtp_model_base.h"
 #endif
 #include "models/model_registry.h"
+#if defined(USE_MUSA)
+#include <torch_musa/csrc/core/MUSAHooksInterface.h>
+
+#include "core/framework/state_dict/state_dict.h"
+#include "models/vlm/musa/glm5_next_vlm.h"
+#endif
 
 namespace xllm {
 
@@ -1679,6 +1685,11 @@ TEST(HFModelLoaderTest, Glm5NextRegistersArgsLoaderAndParsesConfig) {
   ASSERT_NE(loader, nullptr);
   EXPECT_NE(ModelRegistry::get_model_args_loader("glm5_next_mtp"), nullptr);
   EXPECT_NE(ModelRegistry::get_causallm_factory("glm5_next"), nullptr);
+#if defined(USE_MUSA)
+  EXPECT_NE(ModelRegistry::get_causalvlm_factory("glm5_next"), nullptr);
+  EXPECT_NE(ModelRegistry::get_multimodal_processor_factory("glm5_next"),
+            nullptr);
+#endif
   EXPECT_EQ(ModelRegistry::get_model_backend("glm5_next"), "llm");
   EXPECT_TRUE(util::is_mla_model_type("glm5_next"));
 
@@ -1709,8 +1720,13 @@ TEST(HFModelLoaderTest, Glm5NextRegistersArgsLoaderAndParsesConfig) {
   EXPECT_EQ(inline_args.linear_key_head_dim(), 128);
   EXPECT_EQ(inline_args.linear_conv_kernel_dim(), 4);
 
-  const std::string checkpoint_config =
-      "/data/models/GLM-5.3-Flash/config.json";
+  EXPECT_EQ(inline_args.mm_projector_hidden_size(), 10240);
+  EXPECT_EQ(inline_args.mm_head_dim(), 64);
+
+  std::string checkpoint_config = "/data/models/GLM-5.3-Flash/config.json";
+  if (!std::filesystem::exists(checkpoint_config)) {
+    checkpoint_config = "/data/nfs_shared/models/GLM-5.3-Flash/config.json";
+  }
   if (std::filesystem::exists(checkpoint_config)) {
     JsonReader file_reader;
     ASSERT_TRUE(file_reader.parse(checkpoint_config));
@@ -1724,7 +1740,138 @@ TEST(HFModelLoaderTest, Glm5NextRegistersArgsLoaderAndParsesConfig) {
     EXPECT_TRUE(file_args.index_kpool_compress());
     EXPECT_EQ(static_cast<int32_t>(file_args.layer_types().size()), 45);
     EXPECT_EQ(static_cast<int32_t>(file_args.mlp_layer_types().size()), 45);
+    EXPECT_EQ(file_args.mm_num_hidden_layers(), 24);
+    EXPECT_EQ(file_args.mm_hidden_size(), 1024);
+    EXPECT_EQ(file_args.mm_num_attention_heads(), 16);
+    EXPECT_EQ(file_args.mm_head_dim(), 64);
+    EXPECT_EQ(file_args.mm_intermediate_size(), 4096);
+    EXPECT_EQ(file_args.mm_projection_dim(), 4096);
+    EXPECT_EQ(file_args.mm_projector_hidden_size(), 10240);
+    EXPECT_EQ(file_args.image_token_id(), 154854);
+    EXPECT_EQ(file_args.video_token_id(), 154855);
   }
 }
+
+#if defined(USE_MUSA)
+TEST(HFModelLoaderTest, Glm5NextVisionTransformerVarlenAndCheckpointParity) {
+  if (!c10::is_privateuse1_backend_registered()) {
+    c10::register_privateuse1_backend("musa");
+  }
+  at::detail::getMUSAHooks().initMUSA();
+  torch::NoGradGuard guard;
+  const torch::Device device(torch::kPrivateUse1, 0);
+  const auto options =
+      torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+
+  ProcessGroup group(/*rank=*/0, /*world_size=*/1, device);
+  ParallelArgs parallel(/*rank=*/0, /*world_size=*/1, &group);
+  parallel.tp_group_ = &group;
+
+  ModelArgs args;
+  args.model_type("glm5_next")
+      .dtype("bfloat16")
+      .hidden_size(4096)
+      .n_layers(0)
+      .vocab_size(154880)
+      .hc_mult(4)
+      .linear_num_key_heads(64)
+      .swiglu_limit(10.0f)
+      .image_token_id(154854)
+      .video_token_id(154855)
+      .image_start_token_id(154830)
+      .image_end_token_id(154831)
+      .video_start_token_id(154832)
+      .video_end_token_id(154833)
+      .mm_num_hidden_layers(24)
+      .mm_hidden_act("silu")
+      .mm_hidden_size(1024)
+      .mm_num_attention_heads(16)
+      .mm_head_dim(64)
+      .mm_intermediate_size(4096)
+      .mm_projection_dim(4096)
+      .mm_projector_hidden_size(10240)
+      .mm_num_channels(3)
+      .mm_patch_size(14)
+      .mm_temporal_patch_size(2)
+      .mm_spatial_merge_size(2)
+      .mm_image_merge_size(2)
+      .mm_layer_norm_eps(1e-5f);
+
+  ModelContext context(parallel, args, QuantArgs(), options);
+  musa::model::Glm5NextVisionTransformer visual(context);
+
+  const std::string safetensor_path =
+      "/data/nfs_shared/models/GLM-5.3-Flash/"
+      "model-00062-of-00062.safetensors";
+  if (std::filesystem::exists(safetensor_path)) {
+    auto state_dict = StateDictFromSafeTensor::load(safetensor_path);
+    ASSERT_NE(state_dict, nullptr);
+    visual->load_state_dict(state_dict->get_dict_with_prefix("model.visual."));
+
+    visual->verify_loaded_weights("model.visual.");
+    const int64_t patch_dim = 3 * 2 * 14 * 14;
+    torch::Tensor pixel_values =
+        torch::arange(
+            0, 64 * patch_dim, torch::TensorOptions().dtype(torch::kFloat32))
+            .reshape({64, patch_dim})
+            .sin()
+            .to(options);
+    torch::Tensor grid_thw =
+        torch::tensor({{1, 8, 8}}, torch::TensorOptions().dtype(torch::kInt64));
+
+    torch::Tensor out = visual->forward(pixel_values, grid_thw);
+    ASSERT_EQ(out.dim(), 2);
+    EXPECT_EQ(out.size(0), 16);
+    EXPECT_EQ(out.size(1), 4096);
+    torch::Tensor out_cpu = out.to(torch::kCPU).to(torch::kFloat32);
+    EXPECT_TRUE(torch::all(torch::isfinite(out_cpu)).item<bool>());
+
+    const std::vector<float> expected_first5 = {-0.008056640625f,
+                                                0.03857421875f,
+                                                -0.07958984375f,
+                                                0.01300048828125f,
+                                                -0.02880859375f};
+    for (int64_t i = 0; i < static_cast<int64_t>(expected_first5.size()); ++i) {
+      EXPECT_NEAR(out_cpu[0][i].item<float>(), expected_first5[i], 5e-3f)
+          << "Mismatch at index " << i;
+    }
+
+    torch::Tensor multi_pixels =
+        torch::randn({96, patch_dim},
+                     torch::TensorOptions().dtype(torch::kFloat32))
+            .to(options);
+    torch::Tensor multi_grid = torch::tensor(
+        {{1, 8, 8}, {1, 4, 8}}, torch::TensorOptions().dtype(torch::kInt64));
+    torch::Tensor multi_out = visual->forward(multi_pixels, multi_grid);
+    ASSERT_EQ(multi_out.dim(), 2);
+    EXPECT_EQ(multi_out.size(0), 24);
+    EXPECT_EQ(multi_out.size(1), 4096);
+    EXPECT_TRUE(
+        torch::all(torch::isfinite(multi_out.to(torch::kCPU))).item<bool>());
+  }
+
+  args.mm_num_hidden_layers(1);
+  ModelContext light_ctx(parallel, args, QuantArgs(), options);
+  musa::model::Glm5NextForConditionalGeneration vlm(light_ctx);
+  torch::Tensor input_ids =
+      torch::tensor({10, 154830, 154854, 154854, 154831, 154855, 20},
+                    torch::TensorOptions().device(device).dtype(torch::kInt32));
+  torch::Tensor text_embeds = torch::zeros({7, 4096}, options);
+  torch::Tensor image_embeds = torch::full({2, 4096}, 2.5f, options);
+  torch::Tensor video_embeds = torch::full({1, 4096}, -1.5f, options);
+  torch::Tensor merged = vlm->merge_multimodal_embeddings(
+      text_embeds, image_embeds, input_ids == 154854);
+  merged = vlm->merge_multimodal_embeddings(
+      merged, video_embeds, input_ids == 154855);
+  torch::Tensor merged_cpu = merged.to(torch::kCPU).to(torch::kFloat32);
+  EXPECT_FLOAT_EQ(merged_cpu[0][0].item<float>(), 0.0f);
+  EXPECT_FLOAT_EQ(merged_cpu[1][0].item<float>(), 0.0f);
+  EXPECT_FLOAT_EQ(merged_cpu[2][0].item<float>(), 2.5f);
+  EXPECT_FLOAT_EQ(merged_cpu[3][0].item<float>(), 2.5f);
+  EXPECT_FLOAT_EQ(merged_cpu[4][0].item<float>(), 0.0f);
+  EXPECT_FLOAT_EQ(merged_cpu[5][0].item<float>(), -1.5f);
+  EXPECT_FLOAT_EQ(merged_cpu[6][0].item<float>(), 0.0f);
+}
+#endif
 
 }  // namespace xllm
