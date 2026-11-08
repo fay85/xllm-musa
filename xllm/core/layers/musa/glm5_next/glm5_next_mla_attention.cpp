@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/layers/musa/glm5_next_sparse_attention.h"
+#include "core/layers/musa/glm5_next/glm5_next_mla_attention.h"
 
 #include <algorithm>
 #include <vector>
@@ -34,11 +34,10 @@ StateDict weight_dict(const torch::Tensor& weight) {
 }
 }  // namespace
 
-Glm5NextSparseAttentionImpl::Glm5NextSparseAttentionImpl(
-    const ModelArgs& args,
-    const ParallelArgs& parallel,
-    torch::TensorOptions options,
-    bool enable_indexer)
+Glm5NextMLAAttentionImpl::Glm5NextMLAAttentionImpl(const ModelArgs& args,
+                                                   const ParallelArgs& parallel,
+                                                   torch::TensorOptions options,
+                                                   bool enable_indexer)
     : hidden_size_(args.hidden_size()),
       q_rank_(args.q_lora_rank()),
       heads_(args.n_heads()),
@@ -130,7 +129,7 @@ Glm5NextSparseAttentionImpl::Glm5NextSparseAttentionImpl(
   }
 }
 
-std::vector<std::string> Glm5NextSparseAttentionImpl::required_weights() const {
+std::vector<std::string> Glm5NextMLAAttentionImpl::required_weights() const {
   std::vector<std::string> names{"q_a_proj.weight",
                                  "kv_a_proj_with_mqa.weight",
                                  "q_b_proj.weight",
@@ -152,7 +151,7 @@ std::vector<std::string> Glm5NextSparseAttentionImpl::required_weights() const {
   return names;
 }
 
-bool Glm5NextSparseAttentionImpl::weights_ready() const {
+bool Glm5NextMLAAttentionImpl::weights_ready() const {
   for (const auto& name : required_weights()) {
     auto it = pending_.find(name);
     if (it == pending_.end()) {
@@ -165,7 +164,7 @@ bool Glm5NextSparseAttentionImpl::weights_ready() const {
   return true;
 }
 
-torch::Tensor Glm5NextSparseAttentionImpl::dense_weight(
+torch::Tensor Glm5NextMLAAttentionImpl::dense_weight(
     const std::string& name,
     torch::ScalarType dtype) const {
   const auto& stored = pending_.at(name);
@@ -193,7 +192,7 @@ torch::Tensor Glm5NextSparseAttentionImpl::dense_weight(
   return weight.to(dtype).contiguous();
 }
 
-void Glm5NextSparseAttentionImpl::load_state_dict(const StateDict& state) {
+void Glm5NextMLAAttentionImpl::load_state_dict(const StateDict& state) {
   const auto required = required_weights();
   for (const auto& [name, tensor] : state) {
     const bool wanted =
@@ -218,7 +217,7 @@ void Glm5NextSparseAttentionImpl::load_state_dict(const StateDict& state) {
   }
 }
 
-void Glm5NextSparseAttentionImpl::materialize_weights() {
+void Glm5NextMLAAttentionImpl::materialize_weights() {
   auto dense = [&](const std::string& name) {
     return dense_weight(name, torch::kBFloat16);
   };
@@ -255,7 +254,7 @@ void Glm5NextSparseAttentionImpl::materialize_weights() {
   }
 }
 
-void Glm5NextSparseAttentionImpl::verify_loaded_weights() const {
+void Glm5NextMLAAttentionImpl::verify_loaded_weights() const {
   if (!loaded_) {
     for (const auto& name : required_weights()) {
       CHECK(pending_.contains(name))
@@ -282,7 +281,7 @@ void Glm5NextSparseAttentionImpl::verify_loaded_weights() const {
   }
 }
 
-KVCache Glm5NextSparseAttentionImpl::create_cache(
+KVCache Glm5NextMLAAttentionImpl::create_cache(
     int64_t pages,
     int64_t state_slots,
     const torch::TensorOptions& options,
@@ -301,13 +300,13 @@ KVCache Glm5NextSparseAttentionImpl::create_cache(
   return KVCache(tensors);
 }
 
-std::pair<torch::Tensor, kernel::musa::GlmKPoolSelection>
-Glm5NextSparseAttentionImpl::forward(
+std::pair<torch::Tensor, kernel::musa::Glm5NextIndexerSelection>
+Glm5NextMLAAttentionImpl::forward(
     const torch::Tensor& positions,
     const torch::Tensor& hidden_states,
     const AttentionMetadata& metadata,
     KVCache& cache,
-    const kernel::musa::GlmKPoolSelection* shared_selection) {
+    const kernel::musa::Glm5NextIndexerSelection* shared_selection) {
   CHECK(loaded_)
       << "Load and verify the complete GLM attention state before forward";
   CHECK_EQ(hidden_states.dim(), 2);
@@ -329,7 +328,7 @@ Glm5NextSparseAttentionImpl::forward(
   auto q_norm = std::get<0>(q_norm_->forward(q_raw));
   auto latent = std::get<0>(kv_norm_->forward(c_raw));
   auto q = q_b_proj_->forward(q_norm).view({hidden_states.size(0), -1, 256});
-  kernel::musa::GlmKPoolSelection selection;
+  kernel::musa::Glm5NextIndexerSelection selection;
   auto pos = positions.to(torch::kInt64).contiguous();
   auto table = metadata.block_table.to(torch::kInt32).contiguous();
   CHECK_EQ(table.device(), hidden_states.device());
@@ -357,20 +356,20 @@ Glm5NextSparseAttentionImpl::forward(
         metadata.linear_state_read_indices.defined()
             ? metadata.linear_state_read_indices.to(torch::kInt32).contiguous()
             : ids;
-    selection = kernel::musa::glm5_next_kpool(iq.contiguous(),
-                                              key,
-                                              gate.contiguous(),
-                                              head_weights.contiguous(),
-                                              ape_,
-                                              pos,
-                                              cu,
-                                              ids,
-                                              read_ids,
-                                              table,
-                                              index_cache,
-                                              tail,
-                                              metadata.max_seq_len,
-                                              token_topk_);
+    selection = kernel::musa::glm5_next_indexer(iq.contiguous(),
+                                                key,
+                                                gate.contiguous(),
+                                                head_weights.contiguous(),
+                                                ape_,
+                                                pos,
+                                                cu,
+                                                ids,
+                                                read_ids,
+                                                table,
+                                                index_cache,
+                                                tail,
+                                                metadata.max_seq_len,
+                                                token_topk_);
   } else {
     selection = *shared_selection;
     CHECK_EQ(selection.tokens.size(1), ((token_topk_ + 3 + 127) / 128) * 128);
@@ -379,17 +378,17 @@ Glm5NextSparseAttentionImpl::forward(
   CHECK_EQ(slots.sizes(), pos.sizes());
   slots =
       torch::where(selection.rows.ge(0), slots, torch::full_like(slots, -1));
-  auto attention = glm5_next_sparse_attention(q,
-                                              latent,
-                                              w_k_,
-                                              w_v_,
-                                              selection.tokens,
-                                              selection.lengths,
-                                              selection.rows,
-                                              pos,
-                                              table,
-                                              slots,
-                                              main_cache);
+  auto attention = glm5_next_mla_attention(q,
+                                           latent,
+                                           w_k_,
+                                           w_v_,
+                                           selection.tokens,
+                                           selection.lengths,
+                                           selection.rows,
+                                           pos,
+                                           table,
+                                           slots,
+                                           main_cache);
   // MUSA Linear may reuse its matmul scratch on the next invocation. The
   // attention layer returns owned activations so callers can retain a prefill
   // result while extending the same layer's cache with subsequent forwards.

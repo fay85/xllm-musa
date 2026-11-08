@@ -5,8 +5,8 @@
 
 ## 1. 当前已完成模块
 
-- **KDA 算子与整层**：`xllm/core/kernels/musa/kda.cpp`、`xllm/core/layers/musa/glm5_next_kda.cpp`（含输入投影、causal conv1d、`flash_kda`、output gate、输出投影与状态索引管理）。
-- **Sparse MLA + IndexPool 算子与整层**：`xllm/core/kernels/musa/glm5_next_kpool.cu`、`xllm/core/kernels/musa/sparse_mla.cpp`、`xllm/core/layers/musa/glm5_next_sparse_attention.cpp`（含 FP8 block-scale 权重反量化、IndexPool TopK 选择、MLA KV cache 写入与稀疏注意力计算）。
+- **Linear Attention/KDA 算子与整层**：`xllm/core/kernels/musa/kda.cpp`、`xllm/core/layers/musa/glm5_next/glm5_next_linear_attention.cpp`（含输入投影、causal conv1d、`flash_kda`、output gate、输出投影与状态索引管理）。
+- **MLA + Indexer 算子与整层**：`xllm/core/kernels/musa/glm5_next_indexer.cu`、`xllm/core/kernels/musa/flash_mla_sparse.cpp`、`xllm/core/layers/musa/glm5_next/glm5_next_mla_attention.cpp`（含 FP8 block-scale 权重反量化、Indexer TopK 选择、MLA KV cache 写入与稀疏注意力计算）。
 - **mHC 算子与整层**：`xllm/core/kernels/musa/mhc_*.cu`、`xllm/core/layers/musa/hyper_connection.cpp`（含 `mhc_expand`、`MHCPre`、`MHCPost`、跨层 `PendingMHC` 融合与 `mhc_contract_mean`）。
 - **Decoder 与 CausalLM 骨架**：`xllm/core/layers/musa/glm5_next/glm5_next_decoder_layer.cpp`、`xllm/models/llm/musa/glm5_next.h`（已串联 KDA / Sparse Attention、mHC、Dense MLP 与 Sparse MoE）。
 
@@ -24,7 +24,7 @@
    - **修复**：
      - 在 `Glm5NextDecoderLayerImpl` 与 `Glm5NextModelImpl` 中打通 `sparse` MLP 分支，新增通用 MUSA `RoutedMoeGate` + `RoutedMoe`（`xllm/core/layers/musa/routed_moe_gate.{h,cpp}`、`xllm/core/layers/musa/routed_moe.{h,cpp}`，不改动 `deepseek_v4` 任何文件）（对齐 FP32 sigmoid router、`norm_topk_prob=true`、`routed_scaling_factor=2.5`、`swiglu_limit=10.0`、shared expert 分支、分片增量权重加载、`weight_scale_inv` FP8 128x128 block-scale 权重加载及 `verify_loaded_weights` 校验）；
      - 将 `xllm/core/kernels/cuda/moe/moe_compute_index.cu` 的 `moe_prefix_sum_kernel` 扩展至支持最多 1024 个专家（支持 GLM-5.3-Flash 的 `n_routed_experts=288` 单卡 EP=1 运行）。
-   - **验证**：`glm5_next_sparse_attention_test`（含新增的 288 专家 FP8 `weight_scale_inv` Prefill/Decode 整层测试 `DecoderLayerSparseMoeFp8ScaleInvMatchesReferenceInPrefillAndDecode` 及双卡 MCCL TP 测试）全部通过。
+   - **验证**：`glm5_next_mla_attention_test`（含新增的 288 专家 FP8 `weight_scale_inv` Prefill/Decode 整层测试 `DecoderLayerSparseMoeFp8ScaleInvMatchesReferenceInPrefillAndDecode` 及双卡 MCCL TP 测试）全部通过。
 
 3. **[已完成] Engine KV/Index Cache 分配与 MUSA 算子契约对齐**
    - **修复**：
@@ -41,7 +41,7 @@
 
 5. **[已完成] 端到端 LLM 推理真机验证（`/data/nfs_shared/models/GLM-5.3-Flash`）**
    - **运行时边界修复**：
-     - `xllm/core/layers/musa/glm5_next_kda.cpp`：兼容 `BatchInputBuilder` 默认填充的就地状态槽位（`linear_state_read_ids == linear_state_ids`）；
+     - `xllm/core/layers/musa/glm5_next/glm5_next_linear_attention.cpp`：兼容 `BatchInputBuilder` 默认填充的就地状态槽位（`linear_state_read_ids == linear_state_ids`）；
      - `xllm/models/llm/musa/glm5_next.h`：当 MUSA `BatchInputBuilder` 预置仅含 `fa3_metadata` 的 `params.attn_metadata`（`!q_cu_seq_lens.defined()`）时，在 `prepare_attention_metadata` 中补齐完整 `AttentionMetadataBuilder::build` 并同步就地 `linear_state_read_ids`。
    - **8x MTT S5000 (TP=8) 端到端验证结果**：
      - 62 个 safetensors 分片（45 层混合 KDA + DSA + Dense MLP + 288 专家 FP8 MoE）全部加载并通过 `verify_loaded_weights()`；

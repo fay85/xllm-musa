@@ -69,14 +69,14 @@ def main() -> None:
                         default=Path(__file__).with_name("sparse_attention_validation"))
     parser.add_argument("--tp-only", action="store_true")
     args = parser.parse_args()
-    binary = args.bin_dir.resolve() / "glm5_next_sparse_attention_test"
+    binary = args.bin_dir.resolve() / "glm5_next_mla_attention_test"
     if not binary.is_file():
-        parser.error(f"build glm5_next_sparse_attention_test first: {binary}")
+        parser.error(f"build glm5_next_mla_attention_test first: {binary}")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ, FLASHINFER_OPS_PATH=str(args.ops_path.resolve()))
     if not args.tp_only:
-        _single(args.bin_dir.resolve() / "sparse_mla_test", [],
-                args.output_dir / "xllm_cpp_sparse_mla_test.log", environment)
+        _single(args.bin_dir.resolve() / "flash_mla_sparse_test", [],
+                args.output_dir / "xllm_cpp_flash_mla_sparse_test.log", environment)
         _single(binary, ["--gtest_filter=-GlmSparseTest.McclTensorParallelWorker"],
                 args.output_dir / "glm_sparse_layer_test.log", environment)
     _tensor_parallel(binary, args.output_dir.resolve(), environment)

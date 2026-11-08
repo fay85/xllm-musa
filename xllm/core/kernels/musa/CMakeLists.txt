@@ -18,8 +18,8 @@ set(_TORCH_MUSA_KERNEL_HDRS
   gdn_ops.h
   kda.h
   mhc_ops.h
-  sparse_mla.h
-  glm5_next_kpool.h
+  flash_mla_sparse.h
+  glm5_next_indexer.h
   llm_decode_metadata_update.h
   attention_runner.h
   global_capture_instance.h
@@ -39,9 +39,9 @@ set(_TORCH_MUSA_KERNEL_SRCS
   mhc_pre.cu
   mhc_post.cu
   mhc_head.cu
-  sparse_mla.cpp
-  sparse_mla_cache.cu
-  glm5_next_kpool.cu
+  flash_mla_sparse.cpp
+  flash_mla_sparse_cache.cu
+  glm5_next_indexer.cu
   causal_conv1d.cu
   gemma_norm.cu
   activation.cu

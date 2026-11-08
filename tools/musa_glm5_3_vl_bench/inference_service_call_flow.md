@@ -242,7 +242,7 @@ KDA attention 选型已满足技能要求的 **MATE优先**：现有 `flash_kda.
 
 ## 7. DSA / sparse MLA：现有最完整的 MUSA 层
 
-入口：[Glm5NextSparseAttentionImpl](../../xllm/core/layers/musa/glm5_next_sparse_attention.cpp)。这里的“full_attn_layers”表示相对线性attention的层类型，长上下文实际仍由DSA选择稀疏token，并非总是dense全历史attention。
+入口：[Glm5NextMLAAttentionImpl](../../xllm/core/layers/musa/glm5_next/glm5_next_mla_attention.cpp)。这里的“full_attn_layers”表示相对线性attention的层类型，长上下文实际仍由DSA选择稀疏token，并非总是dense全历史attention。
 
 ### 7.1 投影、Indexer、attention调用顺序
 
@@ -427,7 +427,7 @@ curl http://127.0.0.1:18994/v1/chat/completions \
 
 ## 12. 本次证据、既有测试与未验证项
 
-本次完成：读取配置/模板与全部62个safetensors文件头；核对注册、layer调用方、kernel、CMake、runtime和其他backend；确认当前CMake cache为`USE_MUSA=ON, USE_CUDA=OFF, USE_NPU=OFF`。已有`xllm`、`kda_test`、`sparse_mla_test`、`glm5_next_sparse_attention_test`产物，但二进制时间不同，本次未重新构建，不能视为当前提交全量重编译证据。
+本次完成：读取配置/模板与全部62个safetensors文件头；核对注册、layer调用方、kernel、CMake、runtime和其他backend；确认当前CMake cache为`USE_MUSA=ON, USE_CUDA=OFF, USE_NPU=OFF`。已有`xllm`、`kda_test`、`flash_mla_sparse_test`、`glm5_next_mla_attention_test`产物，但二进制时间不同，本次未重新构建，不能视为当前提交全量重编译证据。
 
 环境读取结果：Torch/TorchMUSA 2.9.1；MATE 0.2.8.post1；flash_kda 0.2.8.post1+musa；Transformers 4.50.2；存在`/dev/mtgpu.0`–`.7`。`ldd xllm`解析到muDNN 3.4.0、MCCL 2.3.0、TVM-FFI、TorchMUSA及MUSA runtime，输出未见缺失依赖。这只证明动态依赖可解析，不证明GLM符号/产物已经链接到服务。
 
@@ -445,7 +445,7 @@ curl http://127.0.0.1:18994/v1/chat/completions \
 python tools/musa_glm5_3_vl_bench/compile_musa_kda.py --ops-path /path/to/cached_ops --jobs 2
 python tools/musa_glm5_3_vl_bench/compile_musa_sparse_mla.py --ops-path /path/to/cached_ops
 cmake --build build/cmake.linux-x86_64-cpython-310 \
-  --target kda_test sparse_mla_test glm5_next_sparse_attention_test -j 4
+  --target kda_test flash_mla_sparse_test glm5_next_mla_attention_test -j 4
 MATE_DISABLE_JIT=1 build/lib.linux-x86_64-cpython-310/xllm/kda_test
 python tools/musa_glm5_3_vl_bench/validate_musa_sparse_attention.py
 ```
@@ -466,10 +466,10 @@ python tools/musa_glm5_3_vl_bench/validate_musa_sparse_attention.py
 | native executor | [vlm_executor_impl.cpp](../../xllm/core/runtime/vlm_executor_impl.cpp)、[base_executor_impl.cpp](../../xllm/core/runtime/base_executor_impl.cpp) |
 | Python bridge/registry | [py_causal_lm.cpp](../../xllm/models/llm/py_causal_lm.cpp)、[registry.py](../../xllm/python/registry.py)、[runtime初始化](../../xllm/python/__init__.py) |
 | Python GLM text | [glm5_next.py](../../xllm/python/models/glm5_next.py)：KdaAttention/MlaAttention/Indexer/MLP/MoE/HyperConnection/DecoderLayer/Model |
-| Python GLM vision | [glm5_next_vl.py](../../xllm/python/models/glm5_next_vl.py)；[processor注册](../../xllm/models/vlm/glm5_next_vlm.h) |
+| Python GLM vision | [glm5_next_vl.py](../../xllm/python/models/glm5_next_vl.py)；[processor注册](../../xllm/models/vlm/glm5_next_multimodal.h) |
 | MLU native参考 | [model](../../xllm/models/llm/mlu/glm5_next.h)、[decoder](../../xllm/core/layers/mlu/glm5_next/glm5_next_decoder_layer.cpp)、[KDA](../../xllm/core/layers/mlu/glm5_next/glm5_next_kda.cpp)、[indexer](../../xllm/core/layers/mlu/glm5_next/glm5_next_kpool_indexer.cpp) |
-| MUSA GLM整层 | [sparse attention](../../xllm/core/layers/musa/glm5_next_sparse_attention.cpp)及同名`.h` |
-| MUSA GLM kernel | [KDA](../../xllm/core/kernels/musa/kda.cpp)、[IndexPool](../../xllm/core/kernels/musa/glm5_next_kpool.cu)、[sparse MLA](../../xllm/core/kernels/musa/sparse_mla.cpp)、[cache](../../xllm/core/kernels/musa/sparse_mla_cache.cu) |
+| MUSA GLM整层 | [MLA attention](../../xllm/core/layers/musa/glm5_next/glm5_next_mla_attention.cpp)及同名`.h` |
+| MUSA GLM kernel | [KDA](../../xllm/core/kernels/musa/kda.cpp)、[Indexer](../../xllm/core/kernels/musa/glm5_next_indexer.cu)、[sparse MLA](../../xllm/core/kernels/musa/flash_mla_sparse.cpp)、[cache](../../xllm/core/kernels/musa/flash_mla_sparse_cache.cu) |
 | 公共layer/kernel分发 | [linear.cpp](../../xllm/core/layers/common/linear.cpp)、[rms_norm.cpp](../../xllm/core/layers/common/rms_norm.cpp)、[ops_api.cpp](../../xllm/core/kernels/ops_api.cpp)、[activation.cu](../../xllm/core/kernels/musa/activation.cu) |
 | MUSA可复用模块 | [DSV4 decoder](../../xllm/core/layers/musa/deepseek_v4/deepseek_v4_decoder_layer.cpp)、[MoE](../../xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe.cpp)、[FP8 linear](../../xllm/core/layers/musa/musa_fp8_linear.cpp) |
 | build/state契约 | [MUSA layers CMake](../../xllm/core/layers/musa/CMakeLists.txt)、[kernel CMake](../../xllm/core/kernels/musa/CMakeLists.txt)、[kv_cache_shape.cpp](../../xllm/core/framework/kv_cache/kv_cache_shape.cpp) |

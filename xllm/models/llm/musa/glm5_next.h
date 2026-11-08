@@ -99,7 +99,7 @@ class Glm5NextModelImpl final
 
     std::optional<torch::Tensor> residual;
     std::optional<layer::PendingMHC> pending_mhc;
-    std::optional<kernel::musa::GlmKPoolSelection> shared_selection;
+    std::optional<kernel::musa::Glm5NextIndexerSelection> shared_selection;
     for (size_t layer_id = 0; layer_id < layers_.size(); ++layer_id) {
       if (!modified_input_params.synchronize_layer(
               static_cast<uint32_t>(layer_id))) {

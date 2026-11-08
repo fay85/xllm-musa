@@ -1,6 +1,6 @@
 # MUSA GLM KDA attention 整层
 
-实现：`xllm/core/layers/musa/glm5_next_kda.{h,cpp}`，构建入口为
+实现：`xllm/core/layers/musa/glm5_next/glm5_next_linear_attention.{h,cpp}`，构建入口为
 `xllm/core/layers/musa/CMakeLists.txt::musa_layers`。本次在工作区已有草稿上修复和补齐，
 未注册完整 GLM 模型：decoder、mHC、FFN/MoE、视觉塔仍是独立接入任务。
 
@@ -44,8 +44,8 @@ checkpoint_stride!=1 和 distinct source slots；prefix 恢复必须先完成拷
 ## 验证（2026-11-06）
 
 - `/usr/local/bin/clang-format` 20.1.6 格式化所有改动 C++；`git diff --check`。
-- 新测试 `tests/core/kernels/musa/glm5_next_kda_layer_test.cpp` / target
-  `glm5_next_kda_layer_test`：独立 FP32 逐 token 参考，packed 19/21 token，
+- 新测试 `tests/core/kernels/musa/glm5_next_linear_attention_layer_test.cpp` / target
+  `glm5_next_linear_attention_layer_test`：独立 FP32 逐 token 参考，packed 19/21 token，
   短 chunk、跨 MATE chunk 边界、decode、state 对比和槽复用 reset。
 - 源码与测试通过独立 g++ C++20 编译（沿用保存的 CMake include/define 参数）。
 - 已有算子二进制实机重跑 3/3 通过：
@@ -64,7 +64,7 @@ TORCH_MUSA_PYTHONPATH=/usr/local/lib/python3.10/dist-packages/torch_musa \
 CPLUS_INCLUDE_PATH=/usr/include/python3.10 \
 MUSAMAPPING_PATH=/usr/local/musa/tools/musaMapping \
 cmake --build build/cmake.linux-x86_64-cpython-310 \
-  --target glm5_next_kda_layer_test -j4
+  --target glm5_next_linear_attention_layer_test -j4
 ```
 
 被构建目录重新配置阻塞：vcpkg baseline `fba75d09065fcc76a25dcf386b1d00d33f5175af`

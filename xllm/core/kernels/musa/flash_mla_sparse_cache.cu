@@ -18,9 +18,9 @@ limitations under the License.
 #include <algorithm>
 #include <limits>
 
+#include "core/kernels/musa/flash_mla_sparse.h"
 #include "core/kernels/musa/musa_fp8_quant_utils.cuh"
 #include "core/kernels/musa/musa_kernel_utils.h"
-#include "core/kernels/musa/sparse_mla.h"
 
 namespace xllm::kernel::musa {
 namespace {

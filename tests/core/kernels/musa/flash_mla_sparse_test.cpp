@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/kernels/musa/sparse_mla.h"
+#include "core/kernels/musa/flash_mla_sparse.h"
 
 #include <c10/core/StreamGuard.h>
 #include <c10/musa/MUSAGuard.h>
@@ -25,7 +25,7 @@ limitations under the License.
 #include <cmath>
 #include <vector>
 
-#include "core/layers/musa/glm5_next_sparse_attention.h"
+#include "core/layers/musa/glm5_next/glm5_next_mla_attention.h"
 
 namespace xllm::kernel::musa {
 namespace {
@@ -116,12 +116,12 @@ TEST(SparseMlaTest, IndependentCandidatesHolesAndEmptyRows) {
       reference(query, cache.view({17, 512}), {{3, 9}, {7, 12}, {2}, {}});
   for (int64_t heads : {8, 16, 32, 64}) {
     for (int64_t repeat = 0; repeat < 2; ++repeat) {
-      auto result =
-          sparse_mla_bf16(query.narrow(1, 0, heads).contiguous().to(device),
-                          cache.to(device),
-                          indices.to(device),
-                          lengths.to(device),
-                          0.0625);
+      auto result = flash_mla_sparse_bf16(
+          query.narrow(1, 0, heads).contiguous().to(device),
+          cache.to(device),
+          indices.to(device),
+          lengths.to(device),
+          0.0625);
       ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
       EXPECT_TRUE(torch::allclose(result.cpu().to(torch::kFloat32),
                                   expected.narrow(1, 0, heads),
@@ -165,17 +165,17 @@ TEST(SparseMlaTest, PagedNopeAbsorptionMatchesExplicitKeysAndValues) {
   // Cache writer must install the current latent, and ignore the padded row.
   device_cache[0][0].zero_();
   device_cache[3][0].zero_();
-  auto result = layer::glm5_next_sparse_attention(q.to(device),
-                                                  latent.to(device),
-                                                  wk.to(device),
-                                                  wv.to(device),
-                                                  ids.to(device),
-                                                  lengths.to(device),
-                                                  rows.to(device),
-                                                  positions.to(device),
-                                                  table.to(device),
-                                                  slots.to(device),
-                                                  device_cache);
+  auto result = layer::glm5_next_mla_attention(q.to(device),
+                                               latent.to(device),
+                                               wk.to(device),
+                                               wv.to(device),
+                                               ids.to(device),
+                                               lengths.to(device),
+                                               rows.to(device),
+                                               positions.to(device),
+                                               table.to(device),
+                                               slots.to(device),
+                                               device_cache);
   ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
   EXPECT_TRUE(torch::allclose(result.cpu().to(torch::kFloat32),
                               expected,
@@ -187,19 +187,19 @@ TEST(SparseMlaTest, PagedNopeAbsorptionMatchesExplicitKeysAndValues) {
                    torch::TensorOptions().dtype(torch::kUInt8).device(device));
   auto all_slots = torch::arange(
       16, torch::TensorOptions().dtype(torch::kInt64).device(device));
-  sparse_mla_fp8_cache_write(
+  flash_mla_sparse_fp8_cache_write(
       cache.view({16, 512}).to(device), all_slots, fp8_cache);
-  auto fp8_result = layer::glm5_next_sparse_attention(q.to(device),
-                                                      latent.to(device),
-                                                      wk.to(device),
-                                                      wv.to(device),
-                                                      ids.to(device),
-                                                      lengths.to(device),
-                                                      rows.to(device),
-                                                      positions.to(device),
-                                                      table.to(device),
-                                                      slots.to(device),
-                                                      fp8_cache);
+  auto fp8_result = layer::glm5_next_mla_attention(q.to(device),
+                                                   latent.to(device),
+                                                   wk.to(device),
+                                                   wv.to(device),
+                                                   ids.to(device),
+                                                   lengths.to(device),
+                                                   rows.to(device),
+                                                   positions.to(device),
+                                                   table.to(device),
+                                                   slots.to(device),
+                                                   fp8_cache);
   ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
   auto records = fp8_cache.cpu().view({16, 528});
   auto quantized = records.narrow(1, 0, 512)
@@ -229,7 +229,7 @@ TEST(SparseMlaTest, InlineFp8CacheDecodeMatchesDequantizedReference) {
                    torch::TensorOptions().dtype(torch::kUInt8).device(device));
   auto slots = torch::arange(
       16, torch::TensorOptions().dtype(torch::kInt64).device(device));
-  sparse_mla_fp8_cache_write(latent, slots, cache);
+  flash_mla_sparse_fp8_cache_write(latent, slots, cache);
   ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
   auto bytes = cache.cpu().view({16, 528});
   auto values = bytes.narrow(1, 0, 512)
@@ -259,12 +259,12 @@ TEST(SparseMlaTest, InlineFp8CacheDecodeMatchesDequantizedReference) {
   auto expected = reference(query.squeeze(1), dequant, {{1, 9}, {}})[0];
   for (int64_t heads : {8, 16, 32, 64}) {
     for (int64_t repeat = 0; repeat < 2; ++repeat) {
-      auto out =
-          sparse_mla_nope_fp8(query.narrow(2, 0, heads).contiguous().to(device),
-                              cache,
-                              ids.to(device),
-                              lengths.to(device),
-                              0.0625);
+      auto out = flash_mla_sparse_nope_fp8(
+          query.narrow(2, 0, heads).contiguous().to(device),
+          cache,
+          ids.to(device),
+          lengths.to(device),
+          0.0625);
       ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
       EXPECT_TRUE(torch::allclose(out[0][0].cpu().to(torch::kFloat32),
                                   expected.narrow(0, 0, heads),

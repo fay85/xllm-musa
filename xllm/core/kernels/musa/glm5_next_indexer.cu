@@ -20,7 +20,7 @@ limitations under the License.
 #include <limits>
 #include <vector>
 
-#include "core/kernels/musa/glm5_next_kpool.h"
+#include "core/kernels/musa/glm5_next_indexer.h"
 #include "core/kernels/musa/musa_fp8_quant_utils.cuh"
 #include "core/kernels/musa/musa_kernel_utils.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
@@ -223,20 +223,20 @@ torch::Tensor own_logits(ffi::Tensor tensor,
 }
 }  // namespace
 
-GlmKPoolSelection glm5_next_kpool(const torch::Tensor& query,
-                                  const torch::Tensor& raw_key,
-                                  const torch::Tensor& gate,
-                                  const torch::Tensor& weights,
-                                  const torch::Tensor& ape,
-                                  const torch::Tensor& positions,
-                                  const torch::Tensor& cu_seqlens,
-                                  const torch::Tensor& state_ids,
-                                  const torch::Tensor& read_state_ids,
-                                  const torch::Tensor& block_table,
-                                  torch::Tensor& cache,
-                                  torch::Tensor& tail,
-                                  int64_t max_context,
-                                  int64_t token_topk) {
+Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
+                                           const torch::Tensor& raw_key,
+                                           const torch::Tensor& gate,
+                                           const torch::Tensor& weights,
+                                           const torch::Tensor& ape,
+                                           const torch::Tensor& positions,
+                                           const torch::Tensor& cu_seqlens,
+                                           const torch::Tensor& state_ids,
+                                           const torch::Tensor& read_state_ids,
+                                           const torch::Tensor& block_table,
+                                           torch::Tensor& cache,
+                                           torch::Tensor& tail,
+                                           int64_t max_context,
+                                           int64_t token_topk) {
   CHECK(query.device().is_privateuseone());
   XLLMDeviceGuard device_guard(query.device());
   CHECK(!is_stream_capturing());
@@ -277,9 +277,9 @@ GlmKPoolSelection glm5_next_kpool(const torch::Tensor& query,
   CHECK_LE(max_context, std::numeric_limits<int32_t>::max());
   const int64_t width = ((token_topk + 3 + 127) / 128) * 128;
   auto ints = query.options().dtype(torch::kInt32);
-  GlmKPoolSelection result{torch::empty({tokens, width}, ints),
-                           torch::empty({tokens}, ints),
-                           torch::empty({tokens}, ints)};
+  Glm5NextIndexerSelection result{torch::empty({tokens, width}, ints),
+                                  torch::empty({tokens}, ints),
+                                  torch::empty({tokens}, ints)};
   if (tokens == 0) {
     return result;
   }

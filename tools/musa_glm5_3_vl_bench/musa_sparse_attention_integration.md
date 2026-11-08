@@ -1,7 +1,7 @@
 <!-- Copyright 2026 The xLLM Authors. Licensed under the Apache License, Version 2.0. -->
 # GLM-5.3-Flash MUSA 完整 sparse attention 层
 
-日期：2026-11-05。完整层入口为 `Glm5NextSparseAttentionImpl::forward`，输入 `[T,hidden_size]`，输出 `[T,hidden_size]`。已接通输入融合投影、RMSNorm、完整 IndexPool/Indexer、NoPE sparse MLA、输出投影、TP reduction、权重加载及 KVCache/metadata。默认真实尺寸为 hidden=4096、Q rank=1536、64 heads。
+日期：2026-11-05。完整层入口为 `Glm5NextMLAAttentionImpl::forward`，输入 `[T,hidden_size]`，输出 `[T,hidden_size]`。已接通输入融合投影、RMSNorm、完整 IndexPool/Indexer、NoPE sparse MLA、输出投影、TP reduction、权重加载及 KVCache/metadata。默认真实尺寸为 hidden=4096、Q rank=1536、64 heads。
 
 这里完成的是可由模型调用的 C++ attention 层，并非整个 GLM 的 KDA/MoE/mHC/Vision 模型注册。真实 checkpoint 正在下载，尚未进行真实权重精度或整模型请求验证；下文的数值结果来自合成权重和实际 MUSA 设备计算。
 
@@ -9,11 +9,11 @@
 
 | 部分 | 实现 | 行为 |
 | --- | --- | --- |
-| 完整层 | [glm5_next_sparse_attention.h](../../xllm/core/layers/musa/glm5_next_sparse_attention.h)、[实现](../../xllm/core/layers/musa/glm5_next_sparse_attention.cpp) | `Glm5NextSparseAttention`、加载/验证权重、完整 forward、cache factory |
-| IndexPool | [glm5_next_kpool.h](../../xllm/core/kernels/musa/glm5_next_kpool.h)、[实现](../../xllm/core/kernels/musa/glm5_next_kpool.cu) | 压池、tail、Hadamard、FP8、MATE scoring、Top-K、展开 |
-| sparse MLA | [sparse_mla.h](../../xllm/core/kernels/musa/sparse_mla.h)、`sparse_mla.cpp`、`sparse_mla_cache.cu` | BF16/FP8 NoPE attention、主 cache 写入、逻辑索引到物理 slot 映射 |
+| 完整层 | [glm5_next_mla_attention.h](../../xllm/core/layers/musa/glm5_next/glm5_next_mla_attention.h)、[实现](../../xllm/core/layers/musa/glm5_next/glm5_next_mla_attention.cpp) | `Glm5NextMLAAttention`、加载/验证权重、完整 forward、cache factory |
+| Indexer | [glm5_next_indexer.h](../../xllm/core/kernels/musa/glm5_next_indexer.h)、[实现](../../xllm/core/kernels/musa/glm5_next_indexer.cu) | 压池、tail、Hadamard、FP8、MATE scoring、Top-K、展开 |
+| sparse MLA | [flash_mla_sparse.h](../../xllm/core/kernels/musa/flash_mla_sparse.h)、`flash_mla_sparse.cpp`、`flash_mla_sparse_cache.cu` | BF16/FP8 NoPE attention、主 cache 写入、逻辑索引到物理 slot 映射 |
 | 离线生成 | [compile_musa_sparse_mla.py](compile_musa_sparse_mla.py) | 导出 attention、Indexer metadata/scoring 模块及 ABI manifest |
-| 层级测试 | [glm5_next_sparse_attention_test.cpp](../../tests/core/kernels/musa/glm5_next_sparse_attention_test.cpp) | 公式参考、分块/状态/加载/TP/实际尺寸测试 |
+| 层级测试 | [glm5_next_mla_attention_test.cpp](../../tests/core/kernels/musa/glm5_next_mla_attention_test.cpp) | 公式参考、分块/状态/加载/TP/实际尺寸测试 |
 | 验证工具 | [validate_musa_sparse_attention.py](validate_musa_sparse_attention.py) | 算子及整层测试，两个独立进程、两张卡的真实 MCCL TP 测试 |
 
 ```text
@@ -76,11 +76,11 @@ Index cache 的物理布局已对照安装版 `csrc/templates/gemm/deep_gemm/pag
 支持 BF16/FP32 原始权重和 E4M3 权重及 FP32 `weight_scale_inv`（128×128 block）。FP8 矩阵在设备上反量化为 BF16 后再融合/分片，与 vLLM attention 的 BF16 计算语义对应；Indexer head-weight 副本保持 FP32。允许 weight 与 scale 分不同 shard 到达，未齐全时不会标记加载完成；原始 mmap Tensor 被 clone 保证存活，加载完成后释放暂存副本。不支持加载完成后在线重载，也不把 INT8/W4A8 当作已支持格式。
 
 ```cpp
-Glm5NextSparseAttention attention(args, parallel_args, options);
+Glm5NextMLAAttention attention(args, parallel_args, options);
 // 对每个 checkpoint shard：
 attention->load_state_dict(shard.get_dict_with_prefix(attention_prefix));
 attention->verify_loaded_weights();
-auto cache = Glm5NextSparseAttentionImpl::create_cache(
+auto cache = Glm5NextMLAAttentionImpl::create_cache(
     num_pages, num_state_slots, options, /*fp8_main_cache=*/false);
 auto [output, selection] = attention->forward(
     positions, hidden_states, metadata, cache);
@@ -102,7 +102,7 @@ export MUSAMAPPING_PATH=/usr/local/musa/tools/musamapping
 export PYTHON_INCLUDE_PATH=/usr/include/python3.10
 export PYTORCH_INSTALL_PATH=/usr/local/lib/python3.10/dist-packages/torch
 export CPATH=/usr/include/python3.10
-cmake --build build/cmake.linux-x86_64-cpython-310 --target glm5_next_sparse_attention_test sparse_mla_test -j 32
+cmake --build build/cmake.linux-x86_64-cpython-310 --target glm5_next_mla_attention_test flash_mla_sparse_test -j 32
 python tools/musa_glm5_3_vl_bench/validate_musa_sparse_attention.py
 ```
 

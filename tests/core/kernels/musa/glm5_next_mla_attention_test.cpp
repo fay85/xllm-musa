@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/layers/musa/glm5_next_sparse_attention.h"
+#include "core/layers/musa/glm5_next/glm5_next_mla_attention.h"
 
 #include <c10/core/StreamGuard.h>
 #include <gtest/gtest.h>
@@ -38,7 +38,7 @@ limitations under the License.
 namespace xllm::layer {
 namespace {
 using Weights = std::unordered_map<std::string, torch::Tensor>;
-using Selection = kernel::musa::GlmKPoolSelection;
+using Selection = kernel::musa::Glm5NextIndexerSelection;
 
 class GlmSparseTest : public ::testing::Test {
  protected:
@@ -197,20 +197,20 @@ TEST_F(GlmSparseTest, IndexPoolMatchesFormulaAcrossPageAndRequestBoundaries) {
   auto ids = torch::tensor({1, 2}, torch::kInt32).to(device_);
   auto cache = torch::zeros({4, 64, 1, 132}, opts.dtype(torch::kUInt8));
   auto tail = torch::zeros({3, 2, 4, 128}, opts);
-  auto selected = kernel::musa::glm5_next_kpool(q,
-                                                k,
-                                                gate,
-                                                weights,
-                                                ape,
-                                                positions,
-                                                cu,
-                                                ids,
-                                                ids,
-                                                table,
-                                                cache,
-                                                tail,
-                                                269,
-                                                8);
+  auto selected = kernel::musa::glm5_next_indexer(q,
+                                                  k,
+                                                  gate,
+                                                  weights,
+                                                  ape,
+                                                  positions,
+                                                  cu,
+                                                  ids,
+                                                  ids,
+                                                  table,
+                                                  cache,
+                                                  tail,
+                                                  269,
+                                                  8);
   ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
   auto decoded = decode_index_cache(cache);
   for (int64_t request = 0; request < 2; ++request) {
@@ -251,20 +251,20 @@ TEST_F(GlmSparseTest, ProductionTop512PoolsExpands2048TokensAndThreeTokenTail) {
   auto table = torch::arange(9, opts.dtype(torch::kInt32)).unsqueeze(0);
   auto cache = torch::zeros({9, 64, 1, 132}, opts.dtype(torch::kUInt8));
   auto tail = torch::zeros({2, 2, 4, 128}, opts);
-  auto selected = kernel::musa::glm5_next_kpool(q,
-                                                k,
-                                                gates,
-                                                weights,
-                                                ape,
-                                                positions,
-                                                cu,
-                                                states,
-                                                states,
-                                                table,
-                                                cache,
-                                                tail,
-                                                2053,
-                                                2048);
+  auto selected = kernel::musa::glm5_next_indexer(q,
+                                                  k,
+                                                  gates,
+                                                  weights,
+                                                  ape,
+                                                  positions,
+                                                  cu,
+                                                  states,
+                                                  states,
+                                                  table,
+                                                  cache,
+                                                  tail,
+                                                  2053,
+                                                  2048);
   ASSERT_EQ(musaDeviceSynchronize(), musaSuccess);
   auto pools = decode_index_cache(cache);
   EXPECT_EQ(selected.tokens.size(1), 2176);

@@ -92,12 +92,13 @@ Glm5NextDecoderLayerImpl::Glm5NextDecoderLayerImpl(const ModelContext& context,
       register_module("post_attention_layernorm",
                       RMSNorm(hidden_size, args.rms_norm_eps(), options));
   if (role_.attention == Glm5NextAttentionRole::KDA) {
-    kda_ = register_module("self_attn", Glm5NextKDA(context));
+    linear_attention_ =
+        register_module("self_attn", Glm5NextLinearAttention(context));
   } else {
     enable_indexer_ = DsaTopkSharePlan(args).layer_uses_indexer(layer_id);
-    sparse_attention_ = register_module(
+    mla_attention_ = register_module(
         "self_attn",
-        Glm5NextSparseAttention(args, parallel_args, options, enable_indexer_));
+        Glm5NextMLAAttention(args, parallel_args, options, enable_indexer_));
   }
   if (role_.mlp == Glm5NextMlpRole::DENSE) {
     dense_mlp_ =
@@ -124,10 +125,10 @@ Glm5NextDecoderLayerImpl::Glm5NextDecoderLayerImpl(const ModelContext& context,
 void Glm5NextDecoderLayerImpl::load_state_dict(const StateDict& state_dict) {
   const StateDict attention_state = state_dict.get_dict_with_prefix(
       std::vector<std::string>{"self_attn.", "attn."});
-  if (kda_) {
-    kda_->load_state_dict(attention_state);
+  if (linear_attention_) {
+    linear_attention_->load_state_dict(attention_state);
   } else {
-    sparse_attention_->load_state_dict(attention_state);
+    mla_attention_->load_state_dict(attention_state);
   }
   input_norm_->load_state_dict(
       state_dict.get_dict_with_prefix("input_layernorm."));
@@ -156,10 +157,10 @@ void Glm5NextDecoderLayerImpl::load_state_dict(const StateDict& state_dict) {
 void Glm5NextDecoderLayerImpl::verify_loaded_weights() const {
   attn_hc_pre_->verify_loaded_weights("attn_hc_pre.");
   ffn_hc_pre_->verify_loaded_weights("ffn_hc_pre.");
-  if (kda_) {
-    kda_->verify_loaded_weights("self_attn.");
+  if (linear_attention_) {
+    linear_attention_->verify_loaded_weights("self_attn.");
   } else {
-    sparse_attention_->verify_loaded_weights();
+    mla_attention_->verify_loaded_weights();
   }
   if (sparse_gate_) {
     sparse_gate_->verify_loaded_weights("mlp.gate.");
@@ -178,7 +179,7 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
     const ModelInputParams& input_params,
     std::optional<PendingMHC>* pending_mhc,
     bool is_last_layer,
-    kernel::musa::GlmKPoolSelection* shared_selection) {
+    kernel::musa::Glm5NextIndexerSelection* shared_selection) {
   residual = std::nullopt;
   const bool has_pending = pending_mhc != nullptr && pending_mhc->has_value();
   torch::Tensor residual_attention;
@@ -203,19 +204,19 @@ torch::Tensor Glm5NextDecoderLayerImpl::forward(
   }
 
   torch::Tensor attention_output;
-  if (kda_) {
-    attention_output =
-        kda_->forward(attention_input, attn_metadata, kv_cache, input_params);
+  if (linear_attention_) {
+    attention_output = linear_attention_->forward(
+        attention_input, attn_metadata, kv_cache, input_params);
   } else {
     if (!enable_indexer_) {
       CHECK_NOTNULL(shared_selection);
     }
-    auto [output, selection] = sparse_attention_->forward(
-        positions,
-        attention_input,
-        attn_metadata,
-        kv_cache,
-        enable_indexer_ ? nullptr : shared_selection);
+    auto [output, selection] =
+        mla_attention_->forward(positions,
+                                attention_input,
+                                attn_metadata,
+                                kv_cache,
+                                enable_indexer_ ? nullptr : shared_selection);
     if (enable_indexer_ && shared_selection != nullptr) {
       *shared_selection = std::move(selection);
     }

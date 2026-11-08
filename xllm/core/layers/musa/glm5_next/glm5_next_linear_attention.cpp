@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "layers/musa/glm5_next_kda.h"
+#include "layers/musa/glm5_next/glm5_next_linear_attention.h"
 
 #include <c10/core/DeviceGuard.h>
 #include <glog/logging.h>
@@ -71,13 +71,14 @@ torch::Tensor glm5_next_kda_apply_output_gate(
 
 }  // namespace
 
-Glm5NextKDAInputProjectionImpl::Glm5NextKDAInputProjectionImpl(
-    int64_t hidden_size,
-    int64_t num_heads,
-    int64_t head_dim,
-    int32_t rank,
-    int32_t tp_size,
-    const torch::TensorOptions& options)
+Glm5NextLinearAttentionInputProjectionImpl::
+    Glm5NextLinearAttentionInputProjectionImpl(
+        int64_t hidden_size,
+        int64_t num_heads,
+        int64_t head_dim,
+        int32_t rank,
+        int32_t tp_size,
+        const torch::TensorOptions& options)
     : rank_(rank), tp_size_(tp_size) {
   CHECK_GT(hidden_size, 0);
   CHECK_GT(num_heads, 0);
@@ -98,7 +99,7 @@ Glm5NextKDAInputProjectionImpl::Glm5NextKDAInputProjectionImpl(
                          /*requires_grad=*/false);
 }
 
-void Glm5NextKDAInputProjectionImpl::load_state_dict(
+void Glm5NextLinearAttentionInputProjectionImpl::load_state_dict(
     const StateDict& state_dict) {
   int64_t offset = 0;
   for (size_t index = 0; index < shard_sizes_.size(); ++index) {
@@ -123,7 +124,7 @@ void Glm5NextKDAInputProjectionImpl::load_state_dict(
   }
 }
 
-void Glm5NextKDAInputProjectionImpl::verify_loaded_weights(
+void Glm5NextLinearAttentionInputProjectionImpl::verify_loaded_weights(
     const std::string& prefix) const {
   for (size_t index = 0; index < loaded_.size(); ++index) {
     CHECK(loaded_[index]) << "Missing required weight after all shards loaded: "
@@ -131,7 +132,7 @@ void Glm5NextKDAInputProjectionImpl::verify_loaded_weights(
   }
 }
 
-torch::Tensor Glm5NextKDAInputProjectionImpl::forward(
+torch::Tensor Glm5NextLinearAttentionInputProjectionImpl::forward(
     const torch::Tensor& hidden_states) {
   kernel::MatmulParams params;
   params.a = hidden_states;
@@ -139,11 +140,12 @@ torch::Tensor Glm5NextKDAInputProjectionImpl::forward(
   return kernel::matmul(params);
 }
 
-Glm5NextKDAImpl::Glm5NextKDAImpl(const ModelArgs& args,
-                                 const QuantArgs& quant_args,
-                                 const ParallelArgs& parallel_args,
-                                 const torch::TensorOptions& options,
-                                 float gate_lower_bound)
+Glm5NextLinearAttentionImpl::Glm5NextLinearAttentionImpl(
+    const ModelArgs& args,
+    const QuantArgs& quant_args,
+    const ParallelArgs& parallel_args,
+    const torch::TensorOptions& options,
+    float gate_lower_bound)
     : gate_lower_bound_(gate_lower_bound) {
   (void)quant_args;
   CHECK_EQ(options.dtype().toScalarType(), torch::kBFloat16);
@@ -172,14 +174,14 @@ Glm5NextKDAImpl::Glm5NextKDAImpl(const ModelArgs& args,
   local_projection_size_ = local_num_heads_ * head_dim_;
   const QuantArgs no_quant_args{};
 
-  in_proj_qkvbfg_a_ =
-      register_module("in_proj_qkvbfg_a",
-                      Glm5NextKDAInputProjection(args.hidden_size(),
-                                                 num_heads_,
-                                                 head_dim_,
-                                                 static_cast<int32_t>(rank_),
-                                                 static_cast<int32_t>(tp_size_),
-                                                 options));
+  in_proj_qkvbfg_a_ = register_module(
+      "in_proj_qkvbfg_a",
+      Glm5NextLinearAttentionInputProjection(args.hidden_size(),
+                                             num_heads_,
+                                             head_dim_,
+                                             static_cast<int32_t>(rank_),
+                                             static_cast<int32_t>(tp_size_),
+                                             options));
   f_b_proj_ = register_module("f_b_proj",
                               ColumnParallelLinear(head_dim_,
                                                    projection_size_,
@@ -250,14 +252,16 @@ Glm5NextKDAImpl::Glm5NextKDAImpl(const ModelArgs& args,
                                               options));
 }
 
-Glm5NextKDAImpl::Glm5NextKDAImpl(const ModelContext& context)
-    : Glm5NextKDAImpl(context.get_model_args(),
-                      context.get_quant_args(),
-                      context.get_parallel_args(),
-                      context.get_tensor_options(),
-                      context.get_model_args().linear_lower_bound()) {}
+Glm5NextLinearAttentionImpl::Glm5NextLinearAttentionImpl(
+    const ModelContext& context)
+    : Glm5NextLinearAttentionImpl(
+          context.get_model_args(),
+          context.get_quant_args(),
+          context.get_parallel_args(),
+          context.get_tensor_options(),
+          context.get_model_args().linear_lower_bound()) {}
 
-void Glm5NextKDAImpl::load_state_dict(const StateDict& state_dict) {
+void Glm5NextLinearAttentionImpl::load_state_dict(const StateDict& state_dict) {
   for (const auto& entry : state_dict) {
     const auto dtype = entry.second.scalar_type();
     CHECK(dtype == torch::kBFloat16 || dtype == torch::kFloat32)
@@ -307,7 +311,8 @@ void Glm5NextKDAImpl::load_state_dict(const StateDict& state_dict) {
   }
 }
 
-void Glm5NextKDAImpl::verify_loaded_weights(const std::string& prefix) const {
+void Glm5NextLinearAttentionImpl::verify_loaded_weights(
+    const std::string& prefix) const {
   in_proj_qkvbfg_a_->verify_loaded_weights(prefix);
   CHECK(f_b_proj_ && f_b_proj_->is_weight_loaded())
       << "Missing required weight after all shards loaded: " << prefix
@@ -337,7 +342,7 @@ void Glm5NextKDAImpl::verify_loaded_weights(const std::string& prefix) const {
                           << prefix << "A_log";
 }
 
-torch::Tensor Glm5NextKDAImpl::get_linear_state_indices(
+torch::Tensor Glm5NextLinearAttentionImpl::get_linear_state_indices(
     const ModelInputParams& input_params,
     const torch::Device& device) const {
   if (input_params.embedding.linear_state_indices.defined()) {
@@ -358,7 +363,8 @@ torch::Tensor Glm5NextKDAImpl::get_linear_state_indices(
       torch::TensorOptions().dtype(torch::kInt).device(device));
 }
 
-int64_t Glm5NextKDAImpl::get_checkpoint_stride(const KVCache& kv_cache) const {
+int64_t Glm5NextLinearAttentionImpl::get_checkpoint_stride(
+    const KVCache& kv_cache) const {
   torch::Tensor conv_cache = kv_cache.get_conv_cache();
   torch::Tensor ssm_cache = kv_cache.get_ssm_cache();
   CHECK_GT(conv_cache.size(0), 0) << "GLM5-Next KDA conv cache must have rows";
@@ -367,10 +373,11 @@ int64_t Glm5NextKDAImpl::get_checkpoint_stride(const KVCache& kv_cache) const {
   return ssm_cache.size(0) / conv_cache.size(0);
 }
 
-torch::Tensor Glm5NextKDAImpl::forward(const torch::Tensor& hidden_states,
-                                       const AttentionMetadata& attn_metadata,
-                                       KVCache& kv_cache,
-                                       const ModelInputParams& input_params) {
+torch::Tensor Glm5NextLinearAttentionImpl::forward(
+    const torch::Tensor& hidden_states,
+    const AttentionMetadata& attn_metadata,
+    KVCache& kv_cache,
+    const ModelInputParams& input_params) {
   CHECK(hidden_states.device().is_privateuseone());
   c10::DeviceGuard device_guard(hidden_states.device());
   CHECK(!kernel::musa::is_stream_capturing())

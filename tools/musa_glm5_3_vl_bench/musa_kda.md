@@ -3,8 +3,8 @@
 ## 当前实现范围
 
 当前提供通用的 C++ 算子接口，位于
-[`kda.h`](../xllm/core/kernels/musa/kda.h) 和
-[`kda.cpp`](../xllm/core/kernels/musa/kda.cpp)：
+[`kda.h`](../../xllm/core/kernels/musa/kda.h) 和
+[`kda.cpp`](../../xllm/core/kernels/musa/kda.cpp)：
 
 - `xllm::kernel::musa::flash_kda`：对应当前安装的 `flash_kda.fwd`。
 - `xllm::kernel::musa::flash_kda_workspace_size`：对应 `flash_kda.get_workspace_size`，返回 `0`。
@@ -124,7 +124,7 @@ C++ 封装需要分配 MATE 两阶段共享的 workspace，因此必须使用与
 ## 预编译产物与部署
 
 当前脚本位于
-[`tools/musa_glm5_3_vl_bench/compile_musa_kda.py`](../tools/musa_glm5_3_vl_bench/compile_musa_kda.py)。
+[`compile_musa_kda.py`](compile_musa_kda.py)。
 虽然目录带有模型名称，脚本本身不读取模型配置或权重，也不按模型 heads、batch 或序列长度生成专用模块。
 
 在安装好 TorchMUSA、MATE 和编译工具链的环境中，于仓库根目录执行：

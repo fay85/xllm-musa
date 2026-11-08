@@ -21,7 +21,7 @@ limitations under the License.
 #include <vector>
 
 #include "core/framework/parallel_state/process_group.h"
-#include "core/layers/musa/glm5_next_kda.h"
+#include "core/layers/musa/glm5_next/glm5_next_linear_attention.h"
 
 namespace xllm::layer {
 namespace {

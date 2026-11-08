@@ -30,8 +30,8 @@ limitations under the License.
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/dense_mlp.h"
 #include "core/layers/common/rms_norm.h"
-#include "core/layers/musa/glm5_next_kda.h"
-#include "core/layers/musa/glm5_next_sparse_attention.h"
+#include "core/layers/musa/glm5_next/glm5_next_linear_attention.h"
+#include "core/layers/musa/glm5_next/glm5_next_mla_attention.h"
 #include "core/layers/musa/hyper_connection.h"
 #include "core/layers/musa/routed_moe.h"
 #include "core/layers/musa/routed_moe_gate.h"
@@ -74,7 +74,7 @@ class Glm5NextDecoderLayerImpl final : public torch::nn::Module {
       const ModelInputParams& input_params,
       std::optional<PendingMHC>* pending_mhc = nullptr,
       bool is_last_layer = true,
-      kernel::musa::GlmKPoolSelection* shared_selection = nullptr);
+      kernel::musa::Glm5NextIndexerSelection* shared_selection = nullptr);
 
  private:
   int32_t layer_id_ = 0;
@@ -86,8 +86,8 @@ class Glm5NextDecoderLayerImpl final : public torch::nn::Module {
   MHCPost hc_post_{nullptr};
   RMSNorm input_norm_{nullptr};
   RMSNorm post_norm_{nullptr};
-  Glm5NextKDA kda_{nullptr};
-  Glm5NextSparseAttention sparse_attention_{nullptr};
+  Glm5NextLinearAttention linear_attention_{nullptr};
+  Glm5NextMLAAttention mla_attention_{nullptr};
   DenseMLP dense_mlp_{nullptr};
   RoutedMoeGate sparse_gate_{nullptr};
   RoutedMoe sparse_moe_{nullptr};

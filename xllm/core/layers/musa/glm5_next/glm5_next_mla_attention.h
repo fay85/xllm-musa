@@ -26,9 +26,9 @@ limitations under the License.
 #include "core/framework/model/model_args.h"
 #include "core/framework/parallel_state/parallel_args.h"
 #include "core/framework/state_dict/state_dict.h"
-#include "core/kernels/musa/glm5_next_kpool.h"
+#include "core/kernels/musa/flash_mla_sparse.h"
+#include "core/kernels/musa/glm5_next_indexer.h"
 #include "core/kernels/musa/musa_tvmffi_stream.h"
-#include "core/kernels/musa/sparse_mla.h"
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/linear.h"
 #include "core/layers/common/rms_norm.h"
@@ -41,20 +41,20 @@ namespace xllm::layer {
 // strips its layer prefix. BF16/FP32 weights and E4M3 weights with FP32 128x128
 // block scales are accepted; projections run BF16, head-weight scoring runs
 // FP32 (as in vLLM).
-class Glm5NextSparseAttentionImpl final : public torch::nn::Module {
+class Glm5NextMLAAttentionImpl final : public torch::nn::Module {
  public:
-  Glm5NextSparseAttentionImpl(const ModelArgs& args,
-                              const ParallelArgs& parallel,
-                              torch::TensorOptions options,
-                              bool enable_indexer = true);
+  Glm5NextMLAAttentionImpl(const ModelArgs& args,
+                           const ParallelArgs& parallel,
+                           torch::TensorOptions options,
+                           bool enable_indexer = true);
   void load_state_dict(const StateDict& state);
   void verify_loaded_weights() const;
-  std::pair<torch::Tensor, kernel::musa::GlmKPoolSelection> forward(
+  std::pair<torch::Tensor, kernel::musa::Glm5NextIndexerSelection> forward(
       const torch::Tensor& positions,
       const torch::Tensor& hidden_states,
       const AttentionMetadata& metadata,
       KVCache& cache,
-      const kernel::musa::GlmKPoolSelection* shared_selection = nullptr);
+      const kernel::musa::Glm5NextIndexerSelection* shared_selection = nullptr);
 
   // Exact layer cache layout, using the existing IndexedKVCache ownership and
   // transfer interface. Slot zero of the tail pool is reserved for padding.
@@ -92,7 +92,10 @@ class Glm5NextSparseAttentionImpl final : public torch::nn::Module {
   torch::Tensor w_k_;
   torch::Tensor w_v_;
 };
-TORCH_MODULE(Glm5NextSparseAttention);
+TORCH_MODULE(Glm5NextMLAAttention);
+
+using Glm5NextSparseAttentionImpl = Glm5NextMLAAttentionImpl;
+using Glm5NextSparseAttention = Glm5NextMLAAttention;
 
 // GLM NoPE attention core after projections/norm and IndexPool selection.
 // q [T,H,256], latent [T,512], w_k/w_v [H,512,256] are BF16; heads are
@@ -103,18 +106,17 @@ TORCH_MODULE(Glm5NextSparseAttention);
 // For FP8 each row becomes an independent single-query decode item. The caller
 // supplies valid unique write slots [T] int64, or -1 for padded input rows.
 // All inputs are device tensors. This entry currently requires eager MP31.
-inline torch::Tensor glm5_next_sparse_attention(
-    const torch::Tensor& q,
-    const torch::Tensor& latent,
-    const torch::Tensor& w_k,
-    const torch::Tensor& w_v,
-    const torch::Tensor& candidates,
-    const torch::Tensor& lengths,
-    const torch::Tensor& rows,
-    const torch::Tensor& positions,
-    const torch::Tensor& block_table,
-    const torch::Tensor& slots,
-    torch::Tensor& cache) {
+inline torch::Tensor glm5_next_mla_attention(const torch::Tensor& q,
+                                             const torch::Tensor& latent,
+                                             const torch::Tensor& w_k,
+                                             const torch::Tensor& w_v,
+                                             const torch::Tensor& candidates,
+                                             const torch::Tensor& lengths,
+                                             const torch::Tensor& rows,
+                                             const torch::Tensor& positions,
+                                             const torch::Tensor& block_table,
+                                             const torch::Tensor& slots,
+                                             torch::Tensor& cache) {
   CHECK_EQ(q.dim(), 3);
   CHECK_EQ(q.size(2), 256);
   CHECK_EQ(q.scalar_type(), torch::kBFloat16);
@@ -143,27 +145,30 @@ inline torch::Tensor glm5_next_sparse_attention(
   CHECK_EQ(lengths.scalar_type(), torch::kInt32);
   CHECK(lengths.is_contiguous());
   // Map before cache mutation so unsupported metadata fails before writes.
-  auto indices = kernel::musa::sparse_mla_map_indices(
+  auto indices = kernel::musa::flash_mla_sparse_map_indices(
       candidates, rows, positions, block_table, cache.size(1), cache.size(0));
   auto q_latent = torch::bmm(q.transpose(0, 1), w_k.transpose(1, 2))
                       .transpose(0, 1)
                       .contiguous();
   torch::Tensor z;
   if (fp8) {
-    kernel::musa::sparse_mla_fp8_cache_write(latent.contiguous(), slots, cache);
-    z = kernel::musa::sparse_mla_nope_fp8(q_latent.unsqueeze(1),
-                                          cache,
-                                          indices.unsqueeze(1).unsqueeze(1),
-                                          lengths,
-                                          0.0625)
+    kernel::musa::flash_mla_sparse_fp8_cache_write(
+        latent.contiguous(), slots, cache);
+    z = kernel::musa::flash_mla_sparse_nope_fp8(
+            q_latent.unsqueeze(1),
+            cache,
+            indices.unsqueeze(1).unsqueeze(1),
+            lengths,
+            0.0625)
             .squeeze(1);
   } else {
-    kernel::musa::sparse_mla_cache_write(latent.contiguous(), slots, cache);
-    z = kernel::musa::sparse_mla_bf16(q_latent,
-                                      cache.view({-1, 1, 512}),
-                                      indices.unsqueeze(1),
-                                      lengths,
-                                      0.0625);
+    kernel::musa::flash_mla_sparse_cache_write(
+        latent.contiguous(), slots, cache);
+    z = kernel::musa::flash_mla_sparse_bf16(q_latent,
+                                            cache.view({-1, 1, 512}),
+                                            indices.unsqueeze(1),
+                                            lengths,
+                                            0.0625);
   }
   return torch::bmm(z.transpose(0, 1), w_v).transpose(0, 1).contiguous();
 }

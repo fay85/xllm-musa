@@ -37,14 +37,16 @@ namespace layer {
 
 // Packs the four head-sharded projections and two replicated low-rank
 // projections into one local GEMM. Checkpoint shards may arrive in any order.
-class Glm5NextKDAInputProjectionImpl final : public torch::nn::Module {
+class Glm5NextLinearAttentionInputProjectionImpl final
+    : public torch::nn::Module {
  public:
-  Glm5NextKDAInputProjectionImpl(int64_t hidden_size,
-                                 int64_t num_heads,
-                                 int64_t head_dim,
-                                 int32_t rank,
-                                 int32_t tp_size,
-                                 const torch::TensorOptions& options);
+  Glm5NextLinearAttentionInputProjectionImpl(
+      int64_t hidden_size,
+      int64_t num_heads,
+      int64_t head_dim,
+      int32_t rank,
+      int32_t tp_size,
+      const torch::TensorOptions& options);
 
   void load_state_dict(const StateDict& state_dict);
   void verify_loaded_weights(const std::string& prefix = "") const;
@@ -57,7 +59,7 @@ class Glm5NextKDAInputProjectionImpl final : public torch::nn::Module {
   std::array<bool, 6> loaded_{};
   torch::Tensor weight_;
 };
-TORCH_MODULE(Glm5NextKDAInputProjection);
+TORCH_MODULE(Glm5NextLinearAttentionInputProjection);
 
 // Packed eager KDA self-attention: [T, hidden] BF16 -> [T, hidden] BF16.
 // Cache uses framework MUSA layouts: conv [slots, 3*Hlocal*128, 3] BF16,
@@ -66,15 +68,15 @@ TORCH_MODULE(Glm5NextKDAInputProjection);
 // resets both histories via has_initial_states=false. MTP, mixed batches,
 // graph capture, distinct source slots and CP are explicitly unsupported.
 // Weight prefixes are stripped by the caller (typically self_attn.).
-class Glm5NextKDAImpl final : public torch::nn::Module {
+class Glm5NextLinearAttentionImpl final : public torch::nn::Module {
  public:
-  Glm5NextKDAImpl() = default;
-  Glm5NextKDAImpl(const ModelArgs& args,
-                  const QuantArgs& quant_args,
-                  const ParallelArgs& parallel_args,
-                  const torch::TensorOptions& options,
-                  float gate_lower_bound = -5.0f);
-  explicit Glm5NextKDAImpl(const ModelContext& context);
+  Glm5NextLinearAttentionImpl() = default;
+  Glm5NextLinearAttentionImpl(const ModelArgs& args,
+                              const QuantArgs& quant_args,
+                              const ParallelArgs& parallel_args,
+                              const torch::TensorOptions& options,
+                              float gate_lower_bound = -5.0f);
+  explicit Glm5NextLinearAttentionImpl(const ModelContext& context);
 
   void load_state_dict(const StateDict& state_dict);
   void verify_loaded_weights(const std::string& prefix = "") const;
@@ -99,7 +101,7 @@ class Glm5NextKDAImpl final : public torch::nn::Module {
   int32_t conv_kernel_size_ = 0;
   float gate_lower_bound_ = -5.0f;
 
-  Glm5NextKDAInputProjection in_proj_qkvbfg_a_{nullptr};
+  Glm5NextLinearAttentionInputProjection in_proj_qkvbfg_a_{nullptr};
   ColumnParallelLinear f_b_proj_{nullptr};
   ColumnParallelLinear g_b_proj_{nullptr};
   ColumnParallelLinear q_conv1d_{nullptr};
@@ -114,7 +116,13 @@ class Glm5NextKDAImpl final : public torch::nn::Module {
   DEFINE_WEIGHT(A_log);
 };
 
-TORCH_MODULE(Glm5NextKDA);
+TORCH_MODULE(Glm5NextLinearAttention);
+
+using Glm5NextKDAInputProjectionImpl =
+    Glm5NextLinearAttentionInputProjectionImpl;
+using Glm5NextKDAInputProjection = Glm5NextLinearAttentionInputProjection;
+using Glm5NextKDAImpl = Glm5NextLinearAttentionImpl;
+using Glm5NextKDA = Glm5NextLinearAttention;
 
 }  // namespace layer
 }  // namespace xllm

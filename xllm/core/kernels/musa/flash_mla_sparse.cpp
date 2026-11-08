@@ -13,7 +13,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "core/kernels/musa/sparse_mla.h"
+#include "core/kernels/musa/flash_mla_sparse.h"
 
 #include <c10/musa/MUSAGuard.h>
 #include <glog/logging.h>

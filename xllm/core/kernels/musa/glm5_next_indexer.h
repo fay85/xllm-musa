@@ -19,7 +19,7 @@ limitations under the License.
 
 namespace xllm::kernel::musa {
 
-struct GlmKPoolSelection {
+struct Glm5NextIndexerSelection {
   torch::Tensor
       tokens;  // [T,round_up(token_topk+3,128)], logical IDs, -1 holes
   torch::Tensor lengths;  // [T], candidate prefix end, including holes
@@ -38,19 +38,19 @@ struct GlmKPoolSelection {
 // Inputs and outputs stay on MUSA. Eager MP31 only; scoring is chunked to
 // bound logits storage. The same update/causal selection handles prefill,
 // chunked prefill, decode and multiple sequences.
-GlmKPoolSelection glm5_next_kpool(const torch::Tensor& query,
-                                  const torch::Tensor& raw_key,
-                                  const torch::Tensor& gate,
-                                  const torch::Tensor& weights,
-                                  const torch::Tensor& ape,
-                                  const torch::Tensor& positions,
-                                  const torch::Tensor& cu_seqlens,
-                                  const torch::Tensor& state_ids,
-                                  const torch::Tensor& read_state_ids,
-                                  const torch::Tensor& block_table,
-                                  torch::Tensor& cache,
-                                  torch::Tensor& tail,
-                                  int64_t max_context,
-                                  int64_t token_topk);
+Glm5NextIndexerSelection glm5_next_indexer(const torch::Tensor& query,
+                                           const torch::Tensor& raw_key,
+                                           const torch::Tensor& gate,
+                                           const torch::Tensor& weights,
+                                           const torch::Tensor& ape,
+                                           const torch::Tensor& positions,
+                                           const torch::Tensor& cu_seqlens,
+                                           const torch::Tensor& state_ids,
+                                           const torch::Tensor& read_state_ids,
+                                           const torch::Tensor& block_table,
+                                           torch::Tensor& cache,
+                                           torch::Tensor& tail,
+                                           int64_t max_context,
+                                           int64_t token_topk);
 
 }  // namespace xllm::kernel::musa

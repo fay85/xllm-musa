@@ -3,8 +3,8 @@ include(cc_library)
 # MUSA layers - FlashInfer/Mate path
 set(_MUSA_LAYERS_HDRS
   attention.h
-  glm5_next_sparse_attention.h
-  glm5_next_kda.h
+  glm5_next/glm5_next_mla_attention.h
+  glm5_next/glm5_next_linear_attention.h
   flashinfer_attention.h
   flashinfer_planinfo.h
   ../cuda/base_attention_impl.h
@@ -33,8 +33,8 @@ set(_MUSA_LAYERS_HDRS
 )
 set(_MUSA_LAYERS_SRCS
   attention.cpp
-  glm5_next_sparse_attention.cpp
-  glm5_next_kda.cpp
+  glm5_next/glm5_next_mla_attention.cpp
+  glm5_next/glm5_next_linear_attention.cpp
   flashinfer_attention.cpp
   flashinfer_planinfo.cpp
   ../cuda/flashinfer_workspace.cpp

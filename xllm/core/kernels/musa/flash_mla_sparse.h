@@ -61,4 +61,43 @@ torch::Tensor sparse_mla_map_indices(const torch::Tensor& logical,
                                      int64_t page_size,
                                      int64_t num_pages);
 
+inline torch::Tensor flash_mla_sparse_bf16(const torch::Tensor& query,
+                                           const torch::Tensor& cache,
+                                           const torch::Tensor& indices,
+                                           const torch::Tensor& lengths,
+                                           double scale) {
+  return sparse_mla_bf16(query, cache, indices, lengths, scale);
+}
+
+inline torch::Tensor flash_mla_sparse_nope_fp8(const torch::Tensor& query,
+                                               const torch::Tensor& cache,
+                                               const torch::Tensor& indices,
+                                               const torch::Tensor& lengths,
+                                               double scale) {
+  return sparse_mla_nope_fp8(query, cache, indices, lengths, scale);
+}
+
+inline void flash_mla_sparse_cache_write(const torch::Tensor& latent,
+                                         const torch::Tensor& slots,
+                                         torch::Tensor& cache) {
+  sparse_mla_cache_write(latent, slots, cache);
+}
+
+inline void flash_mla_sparse_fp8_cache_write(const torch::Tensor& latent,
+                                             const torch::Tensor& slots,
+                                             torch::Tensor& cache) {
+  sparse_mla_fp8_cache_write(latent, slots, cache);
+}
+
+inline torch::Tensor flash_mla_sparse_map_indices(
+    const torch::Tensor& logical,
+    const torch::Tensor& rows,
+    const torch::Tensor& positions,
+    const torch::Tensor& block_table,
+    int64_t page_size,
+    int64_t num_pages) {
+  return sparse_mla_map_indices(
+      logical, rows, positions, block_table, page_size, num_pages);
+}
+
 }  // namespace xllm::kernel::musa
