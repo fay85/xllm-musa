@@ -22,7 +22,7 @@ WAIT_READY="${GLM5_WAIT_READY:-1}"
 WAIT_TIMEOUT_SEC="${GLM5_WAIT_TIMEOUT_SEC:-180}"
 
 export FLASHINFER_OPS_PATH="${GLM5_FLASHINFER_OPS_PATH:-${REPO_ROOT}/build/mate_sparse_ops}"
-OPS_BACKUP_DIR="${GLM5_OPS_BACKUP_DIR:-/data/feihu/mate027_cache/glm5_3_mate_sparse_ops}"
+OPS_BACKUP_DIR="${GLM5_OPS_BACKUP_DIR:-/opt/mate027_cache/glm5_3_mate_sparse_ops}"
 
 ensure_ops_cache() {
   local required=(
@@ -48,11 +48,11 @@ ensure_ops_cache() {
     return 0
   fi
   [[ -d /opt/mate027_cache/.cache/mate/0.2.7/mp31/cached_ops ]] && cp -rn /opt/mate027_cache/.cache/mate/0.2.7/mp31/cached_ops/* "${FLASHINFER_OPS_PATH}/" 2>/dev/null || true
-  [[ -d /data/feihu/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops ]] && cp -rf /data/feihu/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops/* "${FLASHINFER_OPS_PATH}/" 2>/dev/null || true
+  [[ -d /opt/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops ]] && cp -rf /opt/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops/* "${FLASHINFER_OPS_PATH}/" 2>/dev/null || true
   [[ -d /opt/mate027_cache/mp31/cached_ops_jd_k8d ]] && cp -rf /opt/mate027_cache/mp31/cached_ops_jd_k8d/* "${FLASHINFER_OPS_PATH}/" 2>/dev/null || true
-  MATE_WORKSPACE_BASE=/data/feihu/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_kda.py" --ops-path "${FLASHINFER_OPS_PATH}" --jobs 4
-  MATE_WORKSPACE_BASE=/data/feihu/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_mhc.py" --ops-path "${FLASHINFER_OPS_PATH}"
-  MATE_WORKSPACE_BASE=/data/feihu/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_sparse_mla.py" --ops-path "${FLASHINFER_OPS_PATH}"
+  MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_kda.py" --ops-path "${FLASHINFER_OPS_PATH}" --jobs 4
+  MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_mhc.py" --ops-path "${FLASHINFER_OPS_PATH}"
+  MATE_WORKSPACE_BASE=/opt/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_sparse_mla.py" --ops-path "${FLASHINFER_OPS_PATH}"
 }
 
 PID_FILE="${LOG_DIR}/pids.txt"
