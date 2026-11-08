@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <chrono>
 #include <cstdint>
 #include <cstring>
 #include <limits>
@@ -47,10 +48,6 @@ void set_ensure_link_rejection(proto::EnsureLinkDisposition disposition,
   response->set_link_generation(0);
   response->set_replayed(false);
   response->set_reason(reason);
-}
-
-std::string ensured_link_key(const proto::ProviderEngineKey& prefill) {
-  return prefill.engine_uid() + "\n" + prefill.incarnation_id();
 }
 
 bool local_decode_matches(const proto::ProviderDescriptor& local,
@@ -605,62 +602,39 @@ void DisaggPDServiceImpl::ensure_link(const proto::EnsureLinkRequest* request,
     return;
   }
 
-  const std::string key = ensured_link_key(spec.prefill());
-  {
-    std::lock_guard<std::mutex> lock(ensured_links_mutex_);
-    const auto existing = ensured_links_.find(key);
-    if (existing != ensured_links_.end()) {
-      response->set_disposition(proto::ENSURE_LINK_DISPOSITION_READY);
-      response->set_link_generation(existing->second);
-      response->set_replayed(true);
-      response->set_reason("ready");
-      return;
-    }
-  }
-
-  // Record the prefill peer. On MUSA the Mooncake session is established by
-  // the existing PULL path, so a repeated handshake is not required.
-  std::vector<uint64_t> cluster_ids(cluster.cluster_ids().begin(),
-                                    cluster.cluster_ids().end());
-  std::vector<std::string> addrs(cluster.addrs().begin(),
-                                 cluster.addrs().end());
-  const bool linked = scheduler_->link_instance(cluster.instance_name(),
-                                                cluster_ids,
-                                                addrs,
-                                                ports,
-                                                cluster.dp_size(),
-                                                cluster.kv_split_size());
-  if (!linked) {
-    set_ensure_link_rejection(proto::ENSURE_LINK_DISPOSITION_FAILED,
-                              "physical-link-failed",
-                              response);
-    return;
-  }
-
-  uint64_t generation = 0;
-  bool replayed = false;
-  {
-    std::lock_guard<std::mutex> lock(ensured_links_mutex_);
-    const auto existing = ensured_links_.find(key);
-    if (existing != ensured_links_.end()) {
-      generation = existing->second;
-      replayed = true;
-    } else {
-      generation = ++next_link_generation_;
-      if (generation == 0) {
-        generation = ++next_link_generation_;
-      }
-      ensured_links_.emplace(key, generation);
-    }
-  }
-  response->set_disposition(proto::ENSURE_LINK_DISPOSITION_READY);
-  response->set_link_generation(generation);
-  response->set_replayed(replayed);
-  response->set_reason("ready");
-  if (!replayed) {
-    LOG(INFO) << "ensure_link ready prefill=" << spec.prefill().engine_uid()
+  const auto started = std::chrono::steady_clock::now();
+  *response = link_handshakes_.ensure(spec, cluster, [this, &cluster, &ports] {
+    const auto physical_started = std::chrono::steady_clock::now();
+    LOG(INFO) << "ensure_link physical_begin prefill="
+              << cluster.instance_name();
+    std::vector<uint64_t> cluster_ids(cluster.cluster_ids().begin(),
+                                      cluster.cluster_ids().end());
+    std::vector<std::string> addrs(cluster.addrs().begin(),
+                                   cluster.addrs().end());
+    const bool linked = scheduler_->link_instance(cluster.instance_name(),
+                                                  cluster_ids,
+                                                  addrs,
+                                                  ports,
+                                                  cluster.dp_size(),
+                                                  cluster.kv_split_size());
+    const double physical_ms =
+        std::chrono::duration<double, std::milli>(
+            std::chrono::steady_clock::now() - physical_started)
+            .count();
+    LOG(INFO) << "ensure_link physical_end prefill=" << cluster.instance_name()
+              << " linked=" << linked << " physical_ms=" << physical_ms;
+    return linked;
+  });
+  const double elapsed_ms = std::chrono::duration<double, std::milli>(
+                                std::chrono::steady_clock::now() - started)
+                                .count();
+  if (!response->replayed() || elapsed_ms >= 100.0) {
+    LOG(INFO) << "ensure_link result prefill=" << spec.prefill().engine_uid()
               << " decode=" << spec.decode().engine_uid()
-              << " link_generation=" << generation;
+              << " link_generation=" << response->link_generation()
+              << " disposition=" << response->disposition()
+              << " replayed=" << response->replayed()
+              << " elapsed_ms=" << elapsed_ms;
   }
 }
 
@@ -692,21 +666,9 @@ void DisaggPDServiceImpl::drain_link(const proto::DrainLinkRequest* request,
     return;
   }
 
-  // Drop the service-facing edge only. unlink_instance also clears in-flight
-  // decode requests, which would stall tokens already on this PULL path.
-  uint64_t generation = 1;
-  {
-    std::lock_guard<std::mutex> lock(ensured_links_mutex_);
-    const auto existing = ensured_links_.find(ensured_link_key(spec.prefill()));
-    if (existing != ensured_links_.end()) {
-      generation = existing->second;
-      ensured_links_.erase(existing);
-    }
-  }
-  response->set_disposition(proto::ENSURE_LINK_DISPOSITION_READY);
-  response->set_link_generation(generation);
-  response->set_replayed(false);
-  response->set_reason("drained");
+  // Retire the service-facing authority without disrupting transfers already
+  // owned by requests. The registry also fences completion of an older dial.
+  *response = link_handshakes_.drain(spec);
 }
 
 void DisaggPDServiceImpl::query_request(

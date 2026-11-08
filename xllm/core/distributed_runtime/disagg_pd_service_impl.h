@@ -19,8 +19,8 @@ limitations under the License.
 #include <memory>
 #include <mutex>
 #include <string>
-#include <unordered_map>
 
+#include "core/distributed_runtime/link_handshake_registry.h"
 #include "disagg_pd.pb.h"
 #include "framework/sampling/json_object_grammar.h"
 #include "runtime/xservice_client.h"
@@ -78,9 +78,7 @@ class DisaggPDServiceImpl {
   std::mutex json_object_grammar_mutex_;
   std::shared_ptr<const JsonObjectGrammar> json_object_grammar_;
   std::shared_ptr<const JsonObjectGrammar> json_reasoning_grammar_;
-  std::mutex ensured_links_mutex_;
-  std::unordered_map<std::string, uint64_t> ensured_links_;
-  uint64_t next_link_generation_ = 0;
+  LinkHandshakeRegistry link_handshakes_;
 };
 
 }  // namespace xllm
