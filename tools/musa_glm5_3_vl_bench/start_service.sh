@@ -22,6 +22,38 @@ WAIT_READY="${GLM5_WAIT_READY:-1}"
 WAIT_TIMEOUT_SEC="${GLM5_WAIT_TIMEOUT_SEC:-180}"
 
 export FLASHINFER_OPS_PATH="${GLM5_FLASHINFER_OPS_PATH:-${REPO_ROOT}/build/mate_sparse_ops}"
+OPS_BACKUP_DIR="${GLM5_OPS_BACKUP_DIR:-/data/feihu/mate027_cache/glm5_3_mate_sparse_ops}"
+
+ensure_ops_cache() {
+  local required=(
+    "prepare_kda_dtype_bf16_gate_1_varlen_1_normqk_1_seqlens_i64_arch_mp31/prepare_kda_dtype_bf16_gate_1_varlen_1_normqk_1_seqlens_i64_arch_mp31.so"
+    "sparse_mla_bf16_v1_mp31_h8/sparse_mla_bf16_v1_mp31_h8.so"
+    "sparse_mla_nope_fp8_v1_mp31_h8_splits64/sparse_mla_nope_fp8_v1_mp31_h8_splits64.so"
+    "glm_kpool_score_v1/glm_kpool_score_v1.so"
+    "gemm_ops/gemm_ops.so"
+  )
+  local missing=0
+  for rel in "${required[@]}"; do
+    if [[ ! -f "${FLASHINFER_OPS_PATH}/${rel}" ]]; then
+      missing=1
+      break
+    fi
+  done
+  [[ "${missing}" == "0" ]] && return 0
+
+  echo "Populating missing MUSA operator cache at ${FLASHINFER_OPS_PATH}..."
+  mkdir -p "${FLASHINFER_OPS_PATH}"
+  if [[ -d "${OPS_BACKUP_DIR}" ]]; then
+    cp -rf "${OPS_BACKUP_DIR}"/* "${FLASHINFER_OPS_PATH}/"
+    return 0
+  fi
+  [[ -d /opt/mate027_cache/.cache/mate/0.2.7/mp31/cached_ops ]] && cp -rn /opt/mate027_cache/.cache/mate/0.2.7/mp31/cached_ops/* "${FLASHINFER_OPS_PATH}/" 2>/dev/null || true
+  [[ -d /data/feihu/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops ]] && cp -rf /data/feihu/mate027_cache/.cache/mate/0.2.8/mp31/cached_ops/* "${FLASHINFER_OPS_PATH}/" 2>/dev/null || true
+  [[ -d /opt/mate027_cache/mp31/cached_ops_jd_k8d ]] && cp -rf /opt/mate027_cache/mp31/cached_ops_jd_k8d/* "${FLASHINFER_OPS_PATH}/" 2>/dev/null || true
+  MATE_WORKSPACE_BASE=/data/feihu/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_kda.py" --ops-path "${FLASHINFER_OPS_PATH}" --jobs 4
+  MATE_WORKSPACE_BASE=/data/feihu/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_mhc.py" --ops-path "${FLASHINFER_OPS_PATH}"
+  MATE_WORKSPACE_BASE=/data/feihu/mate027_cache MATE_MUSA_ARCH_LIST=3.1 python3 "${SCRIPT_DIR}/compile_musa_sparse_mla.py" --ops-path "${FLASHINFER_OPS_PATH}"
+}
 
 PID_FILE="${LOG_DIR}/pids.txt"
 
@@ -78,6 +110,7 @@ if [[ ! -d "${MODEL_PATH}" ]]; then
   exit 1
 fi
 
+ensure_ops_cache
 mkdir -p "${LOG_DIR}"
 stop_service
 
