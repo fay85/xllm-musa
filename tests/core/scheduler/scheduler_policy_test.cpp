@@ -42,6 +42,7 @@ limitations under the License.
 #include "framework/model/model_args.h"
 #include "framework/speculative/spec_input_builder.h"
 #include "runtime/forward_params.h"
+#include "scheduler/linear_prefix_admission_policy.h"
 #include "util/utils.h"
 
 namespace xllm {
@@ -471,6 +472,74 @@ std::vector<std::shared_ptr<Request>> generate_request(
   }
 
   return requests;
+}
+
+std::shared_ptr<Request> generate_token_request(
+    const std::vector<int32_t>& prompt_token_ids,
+    int32_t max_context_len) {
+  RequestSamplingParam sampling_param;
+  SchedulerParam scheduler_param;
+  scheduler_param.offline = false;
+  scheduler_param.priority = RequestPriority::NORMAL;
+
+  StoppingChecker stopping_checker;
+  stopping_checker.set_max_generated_tokens(1);
+  stopping_checker.set_max_context_len(max_context_len);
+  stopping_checker.set_ignore_eos(true);
+
+  RequestState req_state("x",
+                         prompt_token_ids,
+                         sampling_param,
+                         scheduler_param,
+                         stopping_checker,
+                         static_cast<size_t>(max_context_len),
+                         1,
+                         1,
+                         false,
+                         false,
+                         false,
+                         false,
+                         false,
+                         nullptr,
+                         nullptr);
+  return std::make_shared<Request>("1", "1", "1", std::move(req_state), "1");
+}
+
+class LinearPrefixTestScheduler final : public ContinuousScheduler {
+ public:
+  using ContinuousScheduler::ContinuousScheduler;
+
+  void plan_request(const std::shared_ptr<Request>& request) {
+    if (linear_prefix_admission_policy_ == nullptr) {
+      return;
+    }
+    for (const auto& sequence : request->sequences()) {
+      linear_prefix_admission_policy_->plan_checkpoint(sequence.get());
+    }
+  }
+
+  void clear_test_batch() {
+    running_requests_.clear();
+    running_sequences_.clear();
+    running_sequences_budgets_.clear();
+  }
+};
+
+bool prefill_prompt(LinearPrefixTestScheduler& scheduler,
+                    FakeEngine& engine,
+                    const std::vector<int32_t>& tokens,
+                    int32_t max_context_len) {
+  std::shared_ptr<Request> request =
+      generate_token_request(tokens, max_context_len);
+  Sequence* sequence = request->sequences().front().get();
+  BlockManagerPool* pool = engine.block_manager_pool();
+  scheduler.plan_request(request);
+  if (!pool->allocate(sequence, tokens.size())) {
+    return false;
+  }
+  sequence->kv_state().set_kv_cache_tokens_num(tokens.size());
+  pool->deallocate(sequence);
+  return true;
 }
 
 // dont not consider speculative decoding.
@@ -961,6 +1030,276 @@ TEST(SchedulerPolicyTest, LinearWarmPrefixPrefillPreservesTailCheckpoint) {
       engine.block_manager_pool()->deallocate(sequence);
     }
   }
+}
+
+TEST(SchedulerPolicyTest, HotFrontStopsAfterPartialTokenBudgets) {
+  ScopedConfigValue<bool> chunked_guard(
+      SchedulerConfig::get_instance().enable_chunked_prefill(), true);
+  ScopedConfigValue<bool> prefix_guard(
+      KVCacheConfig::get_instance().enable_prefix_cache(), true);
+  ScopedConfigValue<int32_t> chunk_guard(
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(), 16);
+  for (const int32_t kv_split_size : {1, 2}) {
+    SCOPED_TRACE(kv_split_size);
+    ScopedConfigValue<int32_t> cp_guard(
+        ParallelConfig::get_instance().cp_size(), kv_split_size);
+    ScopedConfigValue<int32_t> split_guard(
+        ParallelConfig::get_instance().kv_split_size(), kv_split_size);
+    ContinuousScheduler::Options options =
+        create_scheduler_options(3, 16, 0, 16, 1);
+    FakeEngine engine(32, 4, true, true);
+    LinearPrefixTestScheduler scheduler(&engine, options);
+    for (int32_t suffix : {2, 3, 4, 5}) {
+      std::vector<int32_t> tokens(12, suffix);
+      std::fill_n(tokens.begin(), 8, 1);
+      ASSERT_TRUE(prefill_prompt(scheduler,
+                                 engine,
+                                 tokens,
+                                 /*max_context_len=*/128));
+    }
+    std::vector<int32_t> tokens(12, 6);
+    std::fill_n(tokens.begin(), 8, 1);
+    std::shared_ptr<Request> request = generate_token_request(tokens, 128);
+    Sequence* sequence = request->sequences().front().get();
+    scheduler.add_request(request);
+    size_t cached_tokens = 0;
+    for (const size_t expected_tokens : {3u, 3u, 2u}) {
+      std::vector<Batch> batches = scheduler.prepare_batch_test();
+      ASSERT_EQ(batches.size(), 1u);
+      ASSERT_EQ(batches.front().size(), 1u);
+      EXPECT_EQ(batches.front().get_allowed_max_tokens().front(),
+                expected_tokens);
+      cached_tokens += expected_tokens;
+      sequence->kv_state().set_kv_cache_tokens_num(cached_tokens);
+    }
+    EXPECT_EQ(cached_tokens, 8u);
+    sequence->reset();
+  }
+}
+
+TEST(SchedulerPolicyTest, HotFrontStopsAtLogicalCheckpointWithKvSplit) {
+  constexpr int32_t kPhysicalBlockSize = 128;
+  constexpr int32_t kKvSplitSize = 2;
+  constexpr int32_t kBlockSize = kPhysicalBlockSize * kKvSplitSize;
+  constexpr int32_t kChunkSize = 2048;
+  constexpr size_t kPromptTokens = 4096;
+  constexpr int32_t kMaxContextTokens =
+      static_cast<int32_t>(kPromptTokens + 128);
+  ScopedConfigValue<bool> chunked_guard(
+      SchedulerConfig::get_instance().enable_chunked_prefill(), true);
+  ScopedConfigValue<bool> prefix_guard(
+      KVCacheConfig::get_instance().enable_prefix_cache(), true);
+  ScopedConfigValue<int32_t> chunk_guard(
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(),
+      kChunkSize);
+  ScopedConfigValue<int32_t> cp_guard(ParallelConfig::get_instance().cp_size(),
+                                      kKvSplitSize);
+  ScopedConfigValue<int32_t> split_guard(
+      ParallelConfig::get_instance().kv_split_size(), kKvSplitSize);
+  for (const size_t shared_tokens : {768u, 1024u}) {
+    SCOPED_TRACE(shared_tokens);
+    ContinuousScheduler::Options options =
+        create_scheduler_options(kChunkSize, 16, 0, kChunkSize, 1);
+    FakeEngine engine(/*num_blocks=*/128,
+                      kBlockSize,
+                      /*enable_prefix_cache=*/true,
+                      /*enable_linear_attention=*/true);
+    LinearPrefixTestScheduler scheduler(&engine, options);
+    for (int32_t suffix : {2, 3, 4, 5}) {
+      std::vector<int32_t> tokens(kPromptTokens, suffix);
+      std::fill_n(tokens.begin(), shared_tokens, 1);
+      ASSERT_TRUE(prefill_prompt(scheduler, engine, tokens, kMaxContextTokens));
+    }
+    std::vector<int32_t> tokens(kPromptTokens, 6);
+    std::fill_n(tokens.begin(), shared_tokens, 1);
+    std::shared_ptr<Request> request =
+        generate_token_request(tokens, kMaxContextTokens);
+    Sequence* sequence = request->sequences().front().get();
+    scheduler.add_request(request);
+    std::vector<Batch> batches = scheduler.prepare_batch_test();
+    ASSERT_EQ(batches.size(), 1u);
+    ASSERT_EQ(batches.front().size(), 1u);
+    const size_t chunk_tokens =
+        batches.front().get_allowed_max_tokens().front();
+    EXPECT_EQ(chunk_tokens, shared_tokens);
+    EXPECT_EQ(chunk_tokens % kBlockSize, 0u);
+    sequence->reset();
+    scheduler.clear_test_batch();
+
+    std::vector<int32_t> seed_tokens(kPromptTokens, 7);
+    std::fill_n(seed_tokens.begin(), kBlockSize, 1);
+    std::shared_ptr<Request> seed =
+        generate_token_request(seed_tokens, kMaxContextTokens);
+    Sequence* seed_sequence = seed->sequences().front().get();
+    ASSERT_TRUE(
+        engine.block_manager_pool()->allocate(seed_sequence, kBlockSize));
+    seed_sequence->kv_state().set_kv_cache_tokens_num(kBlockSize);
+    ASSERT_TRUE(
+        engine.block_manager_pool()->allocate(seed_sequence, 2 * kBlockSize));
+    engine.block_manager_pool()->deallocate(seed_sequence);
+    std::fill(tokens.begin() + shared_tokens, tokens.end(), 8);
+    std::shared_ptr<Request> hit_request =
+        generate_token_request(tokens, kMaxContextTokens);
+    Sequence* hit_sequence = hit_request->sequences().front().get();
+    scheduler.add_request(hit_request);
+    batches = scheduler.prepare_batch_test();
+    ASSERT_EQ(batches.size(), 1u);
+    ASSERT_EQ(batches.front().size(), 1u);
+    EXPECT_EQ(hit_sequence->kv_cache_tokens_num(), kBlockSize);
+    const size_t hit_chunk_tokens =
+        batches.front().get_allowed_max_tokens().front();
+    EXPECT_EQ(hit_chunk_tokens, shared_tokens - kBlockSize);
+    EXPECT_EQ(hit_sequence->kv_cache_tokens_num() + hit_chunk_tokens,
+              shared_tokens);
+    EXPECT_EQ(shared_tokens % kBlockSize, 0u);
+    hit_sequence->reset();
+  }
+}
+
+TEST(SchedulerPolicyTest, HotFrontLinearPrefixStopsChunkAndHits) {
+  constexpr int32_t kBlockSize = 128;
+  constexpr int32_t kChunkSize = 10240;
+  constexpr size_t kSharedTokens = 8192;
+  constexpr size_t kPromptTokens = 9000;
+  constexpr int32_t kMaxContextTokens =
+      static_cast<int32_t>(kPromptTokens + 128);
+  ScopedConfigValue<bool> chunked_guard(
+      SchedulerConfig::get_instance().enable_chunked_prefill(), true);
+  ScopedConfigValue<bool> prefix_guard(
+      KVCacheConfig::get_instance().enable_prefix_cache(), true);
+  ScopedConfigValue<int32_t> chunk_guard(
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(),
+      kChunkSize);
+  ContinuousScheduler::Options options =
+      create_scheduler_options(kChunkSize, 16, 0, kChunkSize, 1);
+  FakeEngine engine(/*num_blocks=*/256,
+                    kBlockSize,
+                    /*enable_prefix_cache=*/true,
+                    /*enable_linear_attention=*/true);
+  LinearPrefixTestScheduler scheduler(&engine, options);
+
+  auto make_prompt = [](int32_t suffix) {
+    std::vector<int32_t> tokens(kPromptTokens, suffix);
+    std::fill_n(tokens.begin(), kSharedTokens, 1);
+    return tokens;
+  };
+
+  auto drain = [&](const std::vector<int32_t>& tokens) {
+    std::shared_ptr<Request> request =
+        generate_token_request(tokens, kMaxContextTokens);
+    Sequence* sequence = request->sequences().front().get();
+    scheduler.add_request(request);
+    size_t cached_tokens = 0;
+    std::vector<size_t> chunks;
+    while (cached_tokens < tokens.size()) {
+      std::vector<Batch> batches = scheduler.prepare_batch_test();
+      EXPECT_EQ(batches.size(), 1u);
+      if (batches.size() != 1) {
+        break;
+      }
+      EXPECT_EQ(batches.front().size(), 1u);
+      if (batches.front().size() != 1) {
+        break;
+      }
+      const size_t chunk_tokens =
+          batches.front().get_allowed_max_tokens().front();
+      EXPECT_GT(chunk_tokens, 0u);
+      if (chunk_tokens == 0 || chunks.size() > 8) {
+        break;
+      }
+      chunks.emplace_back(chunk_tokens);
+      cached_tokens += chunk_tokens;
+      sequence->kv_state().set_kv_cache_tokens_num(cached_tokens);
+    }
+    EXPECT_EQ(cached_tokens, tokens.size());
+    engine.block_manager_pool()->deallocate(sequence);
+    scheduler.clear_test_batch();
+    return chunks;
+  };
+
+  for (int32_t suffix : {2, 3, 4, 5}) {
+    EXPECT_EQ(drain(make_prompt(suffix)), (std::vector<size_t>{8960, 40}));
+  }
+
+  std::shared_ptr<Request> branching =
+      generate_token_request(make_prompt(6), kMaxContextTokens);
+  Sequence* sequence = branching->sequences().front().get();
+  scheduler.add_request(branching);
+  std::vector<Batch> batches = scheduler.prepare_batch_test();
+  ASSERT_EQ(batches.size(), 1u);
+  ASSERT_EQ(batches.front().size(), 1u);
+  EXPECT_EQ(batches.front().get_allowed_max_tokens().front(), kSharedTokens);
+  std::vector<size_t> hot_chunks{
+      batches.front().get_allowed_max_tokens().front()};
+  sequence->kv_state().set_kv_cache_tokens_num(kSharedTokens);
+  for (size_t target_tokens : {8960u, 9000u}) {
+    batches = scheduler.prepare_batch_test();
+    ASSERT_EQ(batches.size(), 1u);
+    ASSERT_EQ(batches.front().size(), 1u);
+    hot_chunks.emplace_back(batches.front().get_allowed_max_tokens().front());
+    sequence->kv_state().set_kv_cache_tokens_num(target_tokens);
+  }
+  EXPECT_EQ(hot_chunks, (std::vector<size_t>{8192, 768, 40}));
+
+  scheduler.clear_test_batch();
+  std::shared_ptr<Request> hit_request =
+      generate_token_request(make_prompt(7), kMaxContextTokens);
+  Sequence* hit_sequence = hit_request->sequences().front().get();
+  scheduler.add_request(hit_request);
+  batches = scheduler.prepare_batch_test();
+  ASSERT_EQ(batches.size(), 1u);
+  ASSERT_EQ(batches.front().size(), 1u);
+  EXPECT_EQ(hit_sequence->kv_cache_tokens_num(), kSharedTokens);
+  EXPECT_EQ(batches.front().get_allowed_max_tokens().front(), 768u);
+  ASSERT_TRUE(hit_sequence->linear_prefix_checkpoint_tokens().has_value());
+  EXPECT_EQ(hit_sequence->linear_prefix_checkpoint_tokens().value(),
+            kSharedTokens);
+  engine.block_manager_pool()->deallocate(sequence);
+  engine.block_manager_pool()->deallocate(hit_sequence);
+}
+
+TEST(SchedulerPolicyTest, CachedPrefixPastCheckpointKeepsRemainingChunkBudget) {
+  ScopedConfigValue<bool> chunked_guard(
+      SchedulerConfig::get_instance().enable_chunked_prefill(), true);
+  ScopedConfigValue<bool> prefix_guard(
+      KVCacheConfig::get_instance().enable_prefix_cache(), true);
+  ScopedConfigValue<int32_t> chunk_guard(
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(), 16);
+  ContinuousScheduler::Options options =
+      create_scheduler_options(16, 16, 0, 16, 1);
+  FakeEngine engine(128, 4, true, true);
+  LinearPrefixTestScheduler scheduler(&engine, options);
+  auto make_prompt = [](int32_t suffix) {
+    std::vector<int32_t> tokens(40, suffix);
+    std::fill_n(tokens.begin(), 4, 1);
+    return tokens;
+  };
+  for (int32_t suffix : {2, 3, 4, 5}) {
+    std::shared_ptr<Request> observed =
+        generate_token_request(make_prompt(suffix), 128);
+    Sequence* sequence = observed->sequences().front().get();
+    scheduler.plan_request(observed);
+    for (size_t target_tokens : {16u, 32u, 40u}) {
+      ASSERT_TRUE(
+          engine.block_manager_pool()->allocate(sequence, target_tokens));
+      sequence->kv_state().set_kv_cache_tokens_num(target_tokens);
+    }
+    engine.block_manager_pool()->deallocate(sequence);
+  }
+  std::vector<int32_t> tokens = make_prompt(2);
+  std::fill(tokens.begin() + 32, tokens.end(), 6);
+  std::shared_ptr<Request> request = generate_token_request(tokens, 128);
+  Sequence* sequence = request->sequences().front().get();
+  scheduler.add_request(request);
+  std::vector<Batch> batches = scheduler.prepare_batch_test();
+  ASSERT_EQ(batches.size(), 1u);
+  ASSERT_EQ(batches.front().size(), 1u);
+  EXPECT_EQ(sequence->kv_cache_tokens_num(), 32u);
+  EXPECT_EQ(batches.front().get_allowed_max_tokens().front(), 8u);
+  ASSERT_TRUE(sequence->linear_prefix_checkpoint_tokens().has_value());
+  EXPECT_EQ(sequence->linear_prefix_checkpoint_tokens().value(), 4u);
+  sequence->kv_state().set_kv_cache_tokens_num(40);
+  engine.block_manager_pool()->deallocate(sequence);
 }
 
 TEST(SchedulerPolicyTest, DecodeFirstSkipsRedistributionForLinearModels) {

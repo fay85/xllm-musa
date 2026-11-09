@@ -62,6 +62,7 @@ struct SchedulerState {
 
   // Infrastructure.
   KVCacheManager* kv_cache_manager;
+  LinearPrefixAdmissionPolicy* linear_prefix_admission_policy = nullptr;
   ProfileManager* profile_manager;
   AsyncResponseProcessor* response_processor;
   const ModelArgs& model_args;

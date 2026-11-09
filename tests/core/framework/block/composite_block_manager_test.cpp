@@ -2632,6 +2632,23 @@ TEST_P(LinearStateWindowTest, PrefixMountIsSparseAndMatchedOnlyOnce) {
   manager->deallocate_for_sequence(&consumer);
 }
 
+TEST_P(LinearStateWindowTest, PrefixMountClampsToCachedCheckpoint) {
+  for (const bool concurrent : {false, true}) {
+    SCOPED_TRACE(concurrent);
+    auto manager = make_manager(16, 32, 0, concurrent);
+    Sequence producer = make_sequence(0, {7, 7, 7, 7, 7, 7, 1, 1, 1});
+    for (const size_t target : {4u, 9u}) {
+      ASSERT_TRUE(manager->allocate_sequence(&producer, target));
+      finish_input(producer, target);
+    }
+    manager->deallocate_for_sequence(&producer);
+    Sequence consumer = make_sequence(1, {7, 7, 7, 7, 7, 7, 2, 2, 2});
+    manager->allocate_shared_for_sequence(&consumer);
+    EXPECT_EQ(consumer.kv_cache_tokens_num(), GetParam() ? 4u : 0u);
+    manager->deallocate_for_sequence(&consumer);
+  }
+}
+
 TEST_P(LinearStateWindowTest, DuplicateHashesStillAllocateDistinctOutputs) {
   auto manager = make_manager();
   Sequence first = make_sequence(0, std::vector<int32_t>(9, 7));

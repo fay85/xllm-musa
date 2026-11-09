@@ -1121,9 +1121,8 @@ TEST_F(BlockManagerPoolTest,
       8192);
   BlockManagerPool pool(options, /*dp_size=*/1);
 
-  // 8321 tokens contain 65 complete KV/hash blocks, but only the 8192-token
-  // boundary is a regular Linear checkpoint. Seed the KV cache without
-  // publishing a recurrent state for either boundary.
+  // 8321 tokens contain 65 complete KV blocks. Seed the KV cache without a
+  // linear checkpoint; KV hashes alone must not restore the prefix.
   const std::vector<int32_t> prompt_tokens(8321, 7);
   Sequence cached_seq = make_sequence(0, prompt_tokens);
   ASSERT_TRUE(allocate_kv_prefix_for_test(pool, cached_seq));
@@ -1159,7 +1158,7 @@ TEST_F(BlockManagerPoolTest,
 }
 
 TEST_F(BlockManagerPoolTest,
-       IntermediatePrefillDoesNotPublishLinearStateBeforeCheckpoint) {
+       BlockAlignedIntermediatePrefillPublishesLinearCheckpoint) {
   BlockManagerPool::Options options;
   options.num_blocks(160)
       .host_num_blocks(0)
@@ -1193,8 +1192,7 @@ TEST_F(BlockManagerPoolTest,
       intermediate_seq.kv_state().blocks(BlockType::LINEAR).front().is_valid());
   intermediate_seq.reset();
 
-  // The next regular checkpoint was published while extending the producer
-  // from 8192 to 12288, so a request beyond that boundary may restore it.
+  // The 8192 boundary is published by the following grow and is reusable too.
   Sequence checkpoint_seq = make_sequence(2, std::vector<int32_t>(8193, 7));
   pool.allocate_shared(&checkpoint_seq);
   EXPECT_EQ(checkpoint_seq.kv_state().shared_blocks_num(BlockType::KV), 64u);
@@ -1795,7 +1793,9 @@ TEST(ConcurrentBlockManagerImplTest,
   uint8_t hash[XXH3_128BITS_HASH_VALUE_LEN] = {};
   hash[0] = 1;
   blocks[0].set_hash_value(hash);
-  other->cache(blocks);
+  EXPECT_DEATH(other->cache(blocks), "Prefix cache insert of block");
+  const std::vector<int32_t> tokens(4, 1);
+  EXPECT_DEATH(other->cache(tokens, blocks, 0), "Prefix cache insert of block");
 
   EXPECT_EQ(other->num_blocks_in_prefix_cache(), 0u);
   EXPECT_EQ(owner->num_blocks_in_prefix_cache(), 0u);
@@ -1820,6 +1820,13 @@ TEST(ConcurrentBlockManagerImplTest,
 
   owner->reset_prefix_cache();
   other->reset_prefix_cache();
+}
+
+TEST_F(BlockManagerPoolTest, LinearStatePoolRejectsZeroBlockSize) {
+  BlockManagerPool::Options options = make_linear_state_pool_options(32);
+  options.block_size(0);
+  EXPECT_DEATH(BlockManagerPool(options, /*dp_size=*/1),
+               "KV block_size must be positive");
 }
 
 }  // namespace xllm

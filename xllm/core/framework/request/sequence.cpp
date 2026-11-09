@@ -24,7 +24,6 @@ limitations under the License.
 
 #include <algorithm>
 #include <cstdint>
-#include <limits>
 #include <optional>
 #include <random>
 #include <string>
@@ -353,6 +352,7 @@ Sequence::Sequence(const Sequence& other, size_t index)
       num_prompt_tokens_(other.num_prompt_tokens_),
       block_hashes_by_stride_(other.block_hashes_by_stride_),
       hash_type_(other.hash_type_),
+      linear_prefix_checkpoint_(other.linear_prefix_checkpoint_),
       onerec_state_(other.onerec_state_),
       json_object_state_(other.json_object_state_),
       volatile_num_prompt_tokens_(other.volatile_num_prompt_tokens_),

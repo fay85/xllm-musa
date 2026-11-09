@@ -113,7 +113,8 @@ struct SequenceParams {
   int32_t bos_token_id = 0;
 
   // LoRA adapter int_id for this sequence (0 = base model, no adapter).
-  // Propagated from RequestState::adapter_id via Request::create_sequences_group.
+  // Propagated from RequestState::adapter_id via
+  // Request::create_sequences_group.
   uint64_t adapter_id = 0;
 
   // request id for suffix-decoding request identity
@@ -336,6 +337,14 @@ class Sequence final {
   const std::optional<const XXH3Key*> block_hash_at(BlockHasherType hasher_type,
                                                     size_t block_index,
                                                     uint32_t block_size);
+
+  std::optional<size_t> linear_prefix_checkpoint_tokens() const {
+    return linear_prefix_checkpoint_;
+  }
+
+  void set_linear_prefix_checkpoint_tokens(size_t token_count) {
+    linear_prefix_checkpoint_ = token_count;
+  }
 
   // Whether the prefill stage has been cached.
   bool if_cache_block_for_prefill() {
@@ -703,6 +712,8 @@ class Sequence final {
   std::map<uint32_t, std::vector<XXH3Key>> block_hashes_by_stride_;
 
   BlockHasherType hash_type_ = BlockHasherType::TEXT;
+
+  std::optional<size_t> linear_prefix_checkpoint_;
 
   std::optional<OneRecState> onerec_state_;
 

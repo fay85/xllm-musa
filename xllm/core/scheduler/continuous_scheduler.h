@@ -52,6 +52,7 @@ namespace xllm {
 class Engine;
 class RequestPriorityQueue;
 class SchedulerPolicy;
+class LinearPrefixAdmissionPolicy;
 struct SchedulerState;
 
 struct DecodeRestoreEntry {
@@ -325,6 +326,7 @@ class ContinuousScheduler : public Scheduler {
 
   // Policy object that encapsulates all batch-assembly logic.
   std::unique_ptr<SchedulerPolicy> policy_;
+  std::unique_ptr<LinearPrefixAdmissionPolicy> linear_prefix_admission_policy_;
 
   // the engine to run the batch
   Engine* engine_;

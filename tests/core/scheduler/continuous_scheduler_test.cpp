@@ -3,6 +3,7 @@
 #include <absl/time/clock.h>
 #include <gtest/gtest.h>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -26,6 +27,7 @@
 #include "distributed_runtime/engine.h"
 #include "framework/kv_cache/kv_cache_utils.h"
 #include "scheduler/async_response_processor.h"
+#include "scheduler/linear_prefix_admission_policy.h"
 #include "scheduler_factory.h"
 #include "util/scope_guard.h"
 #include "util/utils.h"
@@ -49,8 +51,9 @@ class ScopedConfigValue final {
 
 class ControllableBlockManagerPool final : public BlockManagerPool {
  public:
-  explicit ControllableBlockManagerPool(const Options& options)
-      : BlockManagerPool(options, /*dp_size=*/1) {}
+  explicit ControllableBlockManagerPool(const Options& options,
+                                        int32_t dp_size = 1)
+      : BlockManagerPool(options, dp_size) {}
 
   bool has_pending_async_block_release() const override {
     return pending_async_release_.load();
@@ -136,7 +139,8 @@ class FakeEngine : public Engine {
              bool enable_prefix_cache = false,
              bool enable_linear_attention = false,
              InstanceRole instance_role = InstanceRole::DEFAULT,
-             std::optional<int32_t> linear_state_num_slots = std::nullopt)
+             std::optional<int32_t> linear_state_num_slots = std::nullopt,
+             int32_t dp_size = 1)
       : prefix_cache_config_(
             KVCacheConfig::get_instance().enable_prefix_cache(),
             enable_prefix_cache) {
@@ -158,7 +162,8 @@ class FakeEngine : public Engine {
     configure_prefix_cache(options);
     opt.enable_prefix_cache(options.enable_prefix_cache());
     fake_tokenizer_ = std::make_unique<FakeTokenizer>();
-    fake_block_manager_ = std::make_unique<ControllableBlockManagerPool>(opt);
+    fake_block_manager_ =
+        std::make_unique<ControllableBlockManagerPool>(opt, dp_size);
   }
   ForwardOutput step(std::vector<Batch>& batch) { return {}; }
   void update_last_step_result(std::vector<Batch>& batch) { NOT_IMPLEMENTED(); }
@@ -175,6 +180,11 @@ class FakeEngine : public Engine {
 
   void set_model_args(ModelArgs model_args) {
     model_args_ = std::move(model_args);
+  }
+
+  void set_block_manager_options(const BlockManagerPool::Options& options) {
+    fake_block_manager_ =
+        std::make_unique<ControllableBlockManagerPool>(options);
   }
 
   void set_prefetch_ready(bool ready) {
@@ -198,6 +208,31 @@ class FakeEngine : public Engine {
   std::unique_ptr<Tokenizer> fake_tokenizer_;
   std::unique_ptr<ControllableBlockManagerPool> fake_block_manager_;
   ModelArgs model_args_;
+};
+
+class LinearPrefixExecutionEngine final : public FakeEngine {
+ public:
+  using FakeEngine::FakeEngine;
+
+  ForwardOutput step(std::vector<Batch>& batches) override {
+    for (Batch& batch : batches) {
+      if (batch.empty()) {
+        continue;
+      }
+      batch.prepare_forward_input(1, 0, model_args());
+      RawForwardOutput output;
+      output.outputs.reserve(batch.size());
+      for (size_t index = 0; index < batch.size(); ++index) {
+        RawSampleOutput sample;
+        RawToken token;
+        token.id = 1;
+        sample.tokens.emplace_back(std::move(token));
+        output.outputs.emplace_back(std::move(sample));
+      }
+      batch.process_sample_output(output, false);
+    }
+    return {};
+  }
 };
 
 class TestContinuousScheduler final : public ContinuousScheduler {
@@ -267,6 +302,16 @@ class TestContinuousScheduler final : public ContinuousScheduler {
 
   int32_t reserved_speculative_tokens() const {
     return min_speculative_tokens_required_;
+  }
+
+  bool linear_prefix_admission_enabled() const {
+    return linear_prefix_admission_policy_ != nullptr;
+  }
+
+  size_t plan_linear_checkpoint(Sequence* sequence) {
+    return linear_prefix_admission_policy_ == nullptr
+               ? 0
+               : linear_prefix_admission_policy_->plan_checkpoint(sequence);
   }
 
  protected:
@@ -478,6 +523,27 @@ std::shared_ptr<Request> generate_request_with_prompt_tokens(
 
   return std::make_shared<Request>(
       "1", "1", "1", std::move(req_state), service_request_id);
+}
+
+std::shared_ptr<Request> generate_linear_prefix_request(int32_t suffix,
+                                                        int32_t dp_rank = 0) {
+  std::vector<int32_t> tokens(24, suffix);
+  std::fill_n(tokens.begin(), 8, 1);
+  auto request = generate_request_with_prompt_tokens(
+      tokens, /*max_tokens=*/1, /*max_context_len=*/64);
+  request->sequences().front()->set_dp_rank(dp_rank);
+  request->state().output_func = [](const RequestOutput&) { return true; };
+  return request;
+}
+
+void learn_linear_prefixes(TestContinuousScheduler& scheduler,
+                           int32_t dp_size = 1) {
+  for (int32_t suffix = 2; suffix <= 5; ++suffix) {
+    auto request =
+        generate_linear_prefix_request(suffix, (suffix - 2) % dp_size);
+    Sequence* sequence = request->sequences().front().get();
+    scheduler.plan_linear_checkpoint(sequence);
+  }
 }
 
 TEST(AsyncResponseProcessorTest, MixedRequestsKeepTheirOwnRoutes) {
@@ -1143,6 +1209,213 @@ TEST(ContinuousSchedulerTest, InBatchPrefixCacheUsesGlobalConfig) {
                 global_enabled && in_batch_enabled);
     }
   }
+}
+
+TEST(ContinuousSchedulerTest, LearnsPrefixesWithoutCachePublication) {
+  ScopedConfigValue<bool> chunked(
+      SchedulerConfig::get_instance().enable_chunked_prefill(), true);
+  ScopedConfigValue<int32_t> chunk_size(
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(), 16);
+  ScopedConfigValue<bool> xtensor(
+      KVCacheConfig::get_instance().enable_xtensor(), false);
+  FakeEngine engine(/*num_blocks=*/64,
+                    /*block_size=*/4,
+                    /*enable_prefix_cache=*/true,
+                    /*enable_linear_attention=*/true);
+  ContinuousScheduler::Options options = create_scheduler_options(
+      /*max_tokens_per_batch=*/32,
+      /*max_seqs_per_batch=*/4,
+      /*num_speculative_tokens=*/0,
+      /*max_tokens_per_chunk_for_prefill=*/16,
+      /*dp_size=*/1);
+  options.enable_schedule_overlap(false);
+  TestContinuousScheduler scheduler(&engine, options);
+  for (int32_t suffix = 2; suffix <= 5; ++suffix) {
+    std::vector<int32_t> tokens(24, suffix);
+    std::fill_n(tokens.begin(), 8, 1);
+    auto observed = generate_request_with_prompt_tokens(
+        tokens, /*max_tokens=*/4, /*max_context_len=*/64);
+    EXPECT_EQ(
+        scheduler.plan_linear_checkpoint(observed->sequences().front().get()),
+        0u);
+  }
+  EXPECT_EQ(engine.block_manager_pool()->num_blocks_in_prefix_cache(),
+            std::vector<size_t>{0});
+  std::vector<int32_t> tokens(24, 6);
+  std::fill_n(tokens.begin(), 8, 1);
+  auto request = generate_request_with_prompt_tokens(
+      tokens, /*max_tokens=*/4, /*max_context_len=*/64);
+  ASSERT_TRUE(scheduler.add_request(request));
+  auto batches = scheduler.prepare_batch_test();
+  ASSERT_EQ(batches.size(), 1u);
+  ASSERT_EQ(batches.front().size(), 1u);
+  EXPECT_EQ(batches.front().get_allowed_max_tokens().front(), 8u);
+  engine.block_manager_pool()->deallocate(request.get());
+}
+
+TEST(ContinuousSchedulerTest, LinearStatisticsShareAcrossDpOnlyWithinOwner) {
+  ScopedConfigValue<bool> chunked(
+      SchedulerConfig::get_instance().enable_chunked_prefill(), true);
+  ScopedConfigValue<int32_t> chunk_size(
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(), 16);
+  ScopedConfigValue<bool> xtensor(
+      KVCacheConfig::get_instance().enable_xtensor(), false);
+  constexpr int32_t kDpSize = 2;
+  FakeEngine first_engine(
+      64, 4, true, true, InstanceRole::DEFAULT, std::nullopt, kDpSize);
+  FakeEngine second_engine(
+      64, 4, true, true, InstanceRole::DEFAULT, std::nullopt, kDpSize);
+  ContinuousScheduler::Options options =
+      create_scheduler_options(32, 4, 0, 16, kDpSize);
+  TestContinuousScheduler first_scheduler(&first_engine, options);
+  ContinuousScheduler::Options second_options = options;
+  second_options.server_idx(1);
+  TestContinuousScheduler second_scheduler(&second_engine, second_options);
+  learn_linear_prefixes(first_scheduler, kDpSize);
+  for (int32_t dp_rank = 0; dp_rank < kDpSize; ++dp_rank) {
+    auto first_probe = generate_linear_prefix_request(6, dp_rank);
+    auto second_probe = generate_linear_prefix_request(6, dp_rank);
+    EXPECT_EQ(first_scheduler.plan_linear_checkpoint(
+                  first_probe->sequences().front().get()),
+              8u);
+    EXPECT_EQ(second_scheduler.plan_linear_checkpoint(
+                  second_probe->sequences().front().get()),
+              0u);
+  }
+  learn_linear_prefixes(second_scheduler, kDpSize);
+  first_scheduler.reset_prefix_cache();
+  for (int32_t dp_rank = 0; dp_rank < kDpSize; ++dp_rank) {
+    auto first_probe = generate_linear_prefix_request(6, dp_rank);
+    auto second_probe = generate_linear_prefix_request(6, dp_rank);
+    EXPECT_EQ(first_scheduler.plan_linear_checkpoint(
+                  first_probe->sequences().front().get()),
+              0u);
+    EXPECT_EQ(second_scheduler.plan_linear_checkpoint(
+                  second_probe->sequences().front().get()),
+              8u);
+  }
+}
+
+TEST(ContinuousSchedulerTest, LinearAdmissionUsesResolvedSchedulerMode) {
+  struct TestCase {
+    const char* name;
+    bool prefix_cache = true;
+    bool linear_attention = true;
+    bool chunked_prefill = true;
+    bool mix_batch = false;
+    int32_t chunk_size = 16;
+    InstanceRole role = InstanceRole::DEFAULT;
+    const char* priority_strategy = "fcfs";
+    bool enabled = false;
+  };
+  const TestCase cases[] = {
+      {.name = "enabled", .enabled = true},
+      {.name = "prefix_cache_disabled", .prefix_cache = false},
+      {.name = "linear_state_disabled", .linear_attention = false},
+      {.name = "chunked_prefill_disabled", .chunked_prefill = false},
+      {.name = "invalid_chunk_size", .chunk_size = 0},
+      {.name = "regular_chunk_geometry", .chunk_size = 4},
+      {.name = "decode_role", .role = InstanceRole::DECODE},
+      {.name = "mix_batch_without_chunked",
+       .chunked_prefill = false,
+       .mix_batch = true},
+      {.name = "priority_enables_chunked",
+       .chunked_prefill = false,
+       .priority_strategy = "multi_slo_and_prio",
+       .enabled = true},
+  };
+  ScopedConfigValue<bool> xtensor(
+      KVCacheConfig::get_instance().enable_xtensor(), false);
+  for (const TestCase& test_case : cases) {
+    SCOPED_TRACE(test_case.name);
+    ScopedConfigValue<bool> chunked(
+        SchedulerConfig::get_instance().enable_chunked_prefill(),
+        test_case.chunked_prefill);
+    ScopedConfigValue<bool> mix_batch(
+        SchedulerConfig::get_instance().enable_mix_batch(),
+        test_case.mix_batch);
+    ScopedConfigValue<int32_t> chunk_size(
+        SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(),
+        test_case.chunk_size);
+    FakeEngine engine(64,
+                      4,
+                      test_case.prefix_cache,
+                      test_case.linear_attention,
+                      test_case.role);
+    ContinuousScheduler::Options options =
+        create_scheduler_options(32, 4, 0, 16, 1, test_case.priority_strategy);
+    options.enable_chunked_prefill(test_case.chunked_prefill);
+    TestContinuousScheduler scheduler(&engine, options);
+    EXPECT_EQ(scheduler.linear_prefix_admission_enabled(), test_case.enabled);
+    learn_linear_prefixes(scheduler);
+    auto probe = generate_linear_prefix_request(6);
+    EXPECT_EQ(
+        scheduler.plan_linear_checkpoint(probe->sequences().front().get()),
+        test_case.enabled ? 8u : 0u);
+  }
+}
+
+TEST(ContinuousSchedulerTest, GroupedLayoutDisablesLinearAdmission) {
+  ScopedConfigValue<bool> chunked(
+      SchedulerConfig::get_instance().enable_chunked_prefill(), true);
+  ScopedConfigValue<int32_t> chunk_size(
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(), 16);
+  ScopedConfigValue<bool> xtensor(
+      KVCacheConfig::get_instance().enable_xtensor(), false);
+  FakeEngine engine(64, 4, true, true);
+  BlockManagerPool::Options cache_options =
+      engine.block_manager_pool()->options();
+  cache_options.manager_types({1})
+      .compress_ratios({1})
+      .swa_num_blocks(16)
+      .swa_blocks_per_seq(2)
+      .sliding_window_size(4);
+  engine.set_block_manager_options(cache_options);
+  ContinuousScheduler::Options options =
+      create_scheduler_options(32, 4, 0, 16, 1);
+  TestContinuousScheduler scheduler(&engine, options);
+  EXPECT_FALSE(scheduler.linear_prefix_admission_enabled());
+  learn_linear_prefixes(scheduler);
+  auto probe = generate_linear_prefix_request(6);
+  EXPECT_EQ(scheduler.plan_linear_checkpoint(probe->sequences().front().get()),
+            0u);
+}
+
+TEST(ContinuousSchedulerTest, ScheduledPromptsTeachLinearCheckpoints) {
+  ScopedConfigValue<bool> chunked(
+      SchedulerConfig::get_instance().enable_chunked_prefill(), true);
+  ScopedConfigValue<int32_t> chunk_size(
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill(), 16);
+  ScopedConfigValue<bool> xtensor(
+      KVCacheConfig::get_instance().enable_xtensor(), false);
+  LinearPrefixExecutionEngine engine(64, 4, true, true);
+  ContinuousScheduler::Options options =
+      create_scheduler_options(32, 4, 0, 16, 1);
+  options.enable_schedule_overlap(false);
+  TestContinuousScheduler scheduler(&engine, options);
+  for (int32_t suffix = 2; suffix <= 5; ++suffix) {
+    auto request = generate_linear_prefix_request(suffix);
+    ASSERT_TRUE(scheduler.add_request(request));
+    for (int32_t step = 0; step < 4 && !request->finished(); ++step) {
+      scheduler.step(absl::ZeroDuration());
+    }
+    ASSERT_TRUE(request->finished());
+    scheduler.step(absl::ZeroDuration());
+  }
+  scheduler.wait_for_responses();
+  engine.block_manager_pool()->reset_prefix_cache();
+  EXPECT_EQ(engine.block_manager_pool()->num_blocks_in_prefix_cache(),
+            std::vector<size_t>{0});
+  auto probe = generate_linear_prefix_request(6);
+  ASSERT_TRUE(scheduler.add_request(probe));
+  scheduler.step(absl::ZeroDuration());
+  EXPECT_EQ(probe->sequences().front()->kv_cache_tokens_num(), 8u);
+  for (int32_t step = 0; step < 4 && !probe->finished(); ++step) {
+    scheduler.step(absl::ZeroDuration());
+  }
+  ASSERT_TRUE(probe->finished());
+  scheduler.step(absl::ZeroDuration());
+  scheduler.wait_for_responses();
 }
 
 TEST(ContinuousSchedulerTest, DecodeLinearEnablesInBatchPrefixReuse) {

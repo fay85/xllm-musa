@@ -48,3 +48,39 @@ The Qwen3-8B result above is not a benchmark of this change.
 :::note
 For disaggregated PD, prefix cache is supported in specific scheduler roles. See [Disaggregated PD](/en/features/disagg_pd/) for the supported configurations.
 :::
+
+## Hot Checkpoint Admission
+
+Each engine's scheduler maintains one block-hash compressed prefix tree shared by its DP
+ranks to plan extra LINEAR checkpoints from request prompts and their branching
+prefixes. Statistics are not shared across engines or processes, and cached
+blocks remain DP-local.
+The tree owns no KV blocks or LINEAR slots and does not depend on local cache
+residency. Checkpoints can therefore be rebuilt even after KV eviction.
+
+- Enabled automatically with prefix caching and chunked prefill on LINEAR caches
+  that support the effective block stride. No additional startup flags are needed.
+- By default, a prefix must have at least four distinct direct successor block
+  hashes. A sequence matches and then observes its prompt only on its first plan;
+  repeating an identical prompt, including parallel samples, does not add
+  successors.
+- Each sequence plans at most one extra stop and retains it across retries and
+  DP changes: the deepest eligible branching prefix on its match path. Candidates
+  must be block-aligned and must
+  not duplicate regular chunk or prompt-tail checkpoints.
+- A plan is not a cache hit. After initial prefix-cache matching, the scheduler
+  caps a chunk only if the checkpoint is still ahead. Restoring to or beyond the
+  checkpoint allows normal chunked prefill to continue.
+- Each statistics tree retains at most 65536 hashes by default, including hashes
+  on compressed edges. This is a hash-entry budget, not a request count. Capacity
+  pressure first trims long cold leaf suffixes, then evicts leaves without
+  orphaning descendants. An existing leaf can gain successors at capacity by
+  reclaiming space from other leaves while preserving its matched prefix.
+- Observations have a default lazy expiry of 10 minutes, reclaimed on the next
+  match or observation. Matching and
+  repeated observations still refresh access times. Metadata eviction does not
+  directly release physical checkpoints. Explicit prefix-cache resets also
+  clear the statistics tree.
+
+Extra stops may increase prefill work. Checkpoint publication remains subject to
+LINEAR slot availability.

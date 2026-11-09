@@ -51,6 +51,7 @@ limitations under the License.
 #include "framework/request/priority_comparator.h"
 #include "framework/request/request.h"
 #include "framework/request/sequence.h"
+#include "scheduler/linear_prefix_admission_policy.h"
 #include "scheduler/request_priority_queue.h"
 #include "scheduler/scheduler_policy.h"
 #include "util/timer.h"
@@ -166,6 +167,35 @@ ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
   enable_in_batch_prefix_cache_ =
       enable_prefix_cache_ &&
       ::xllm::KVCacheConfig::get_instance().enable_in_batch_prefix_cache();
+
+  const auto& cache_options = engine_->block_manager_pool()->options();
+  const int32_t block_size = kv_cache_manager_->block_size();
+  const int32_t chunk_size =
+      SchedulerConfig::get_instance().max_tokens_per_chunk_for_prefill();
+  LinearPrefixAdmissionPolicy::Options admission_options{
+      .chunk_size = chunk_size, .hasher_type = cache_options.hasher_type()};
+  const bool admission_enabled =
+      enable_prefix_cache_ && cache_options.enable_prefix_cache() &&
+      batch_mode_.enable_chunked_prefill &&
+      has_linear_attention_layers(engine_->model_args()) &&
+      cache_options.enable_linear_state() &&
+      cache_options.manager_types().empty() &&
+      !cache_options.enable_xtensor() && !cache_options.instance_is_decode() &&
+      block_size > 0 && chunk_size > 0 && block_size % chunk_size != 0;
+  if (admission_enabled) {
+    linear_prefix_admission_policy_ =
+        std::make_unique<LinearPrefixAdmissionPolicy>(
+            static_cast<size_t>(block_size), admission_options);
+  }
+  if (cache_options.enable_linear_state()) {
+    LOG(INFO) << "LinearPrefixAdmission: "
+              << (admission_enabled ? "enabled" : "disabled")
+              << " dp_size=" << options_.dp_size() << " block=" << block_size
+              << " chunk=" << chunk_size
+              << " max_entries=" << admission_options.max_entries
+              << " min_distinct_successors="
+              << admission_options.min_distinct_successors;
+  }
 
   last_batch_.resize(options_.dp_size());
 
@@ -560,6 +590,7 @@ SchedulerState ContinuousScheduler::make_state() {
       .running_sequences = running_sequences_,
       .running_sequences_budgets = running_sequences_budgets_,
       .kv_cache_manager = kv_cache_manager_,
+      .linear_prefix_admission_policy = linear_prefix_admission_policy_.get(),
       .profile_manager = profile_manager_.get(),
       .response_processor = response_processor_.get(),
       .model_args = engine_->model_args(),
@@ -1054,6 +1085,9 @@ bool ContinuousScheduler::try_complete_pause() {
 void ContinuousScheduler::reset_prefix_cache() {
   if (kv_cache_manager_ != nullptr) {
     kv_cache_manager_->reset_prefix_cache();
+  }
+  if (linear_prefix_admission_policy_ != nullptr) {
+    linear_prefix_admission_policy_->reset();
   }
 }
 

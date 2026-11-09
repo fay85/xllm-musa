@@ -35,6 +35,7 @@ limitations under the License.
 #include "framework/lora/lora_metrics.h"
 #include "framework/model/model_args.h"
 #include "framework/request/priority_comparator.h"
+#include "scheduler/linear_prefix_admission_policy.h"
 #include "util/timer.h"
 #include "util/utils.h"
 
@@ -117,7 +118,7 @@ void restore_skipped_requests(
 size_t maybe_cap_linear_state_prefill_chunk(size_t current_tokens,
                                             size_t candidate_tokens,
                                             const SchedulerState& state,
-                                            size_t prompt_tokens) {
+                                            Sequence* seq) {
   if (candidate_tokens == 0 || !state.enable_prefix_cache ||
       !has_linear_attention_layers(state.model_args) ||
       state.kv_cache_manager == nullptr) {
@@ -139,6 +140,7 @@ size_t maybe_cap_linear_state_prefill_chunk(size_t current_tokens,
 
   // Align to next checkpoint boundary
   const size_t stride = static_cast<size_t>(checkpoint_stride);
+  const size_t prompt_tokens = seq->num_prompt_tokens();
   const size_t offset = current_tokens % stride;
   size_t tokens_to_next_checkpoint = (offset == 0) ? stride : (stride - offset);
 
@@ -157,6 +159,17 @@ size_t maybe_cap_linear_state_prefill_chunk(size_t current_tokens,
   if (has_unaligned_tail && block_aligned_tail > current_tokens) {
     tokens_to_next_checkpoint = std::min(tokens_to_next_checkpoint,
                                          block_aligned_tail - current_tokens);
+  }
+
+  // A frequently reused front prefix can end between chunk boundaries. Stop
+  // the next chunk there once that prefix has been seen often enough.
+  const size_t hot_prefix =
+      state.linear_prefix_admission_policy == nullptr
+          ? 0
+          : state.linear_prefix_admission_policy->plan_checkpoint(seq);
+  if (seq->kv_state().prefix_cache_matched() && hot_prefix > current_tokens) {
+    tokens_to_next_checkpoint =
+        std::min(tokens_to_next_checkpoint, hot_prefix - current_tokens);
   }
 
   return std::min(candidate_tokens, tokens_to_next_checkpoint);
@@ -649,7 +662,7 @@ size_t SchedulerPolicy::compute_prefill_tokens(Sequence* seq,
                                            remaining_in_seq);
 
   return maybe_cap_linear_state_prefill_chunk(
-      kv_cache_tokens_num, num_tokens, state, seq->num_prompt_tokens());
+      kv_cache_tokens_num, num_tokens, state, seq);
 }
 
 bool SchedulerPolicy::allocate_for_prefill(Sequence* seq,
@@ -669,7 +682,7 @@ bool SchedulerPolicy::allocate_for_prefill(Sequence* seq,
     // Shared prefix matching can advance cached tokens after the chunk budget
     // was computed. Recap so the chunk still ends on a linear checkpoint.
     token_budget = maybe_cap_linear_state_prefill_chunk(
-        cached_tokens, token_budget, state, seq->num_prompt_tokens());
+        cached_tokens, token_budget, state, seq);
     target_tokens = std::min(cached_tokens + token_budget, seq->num_tokens());
     CHECK_GT(target_tokens, cached_tokens);
     *actual_tokens = target_tokens - cached_tokens;
@@ -679,6 +692,9 @@ bool SchedulerPolicy::allocate_for_prefill(Sequence* seq,
 
 void SchedulerPolicy::allocate_shared_blocks_for(Sequence* seq,
                                                  SchedulerState& state) {
+  if (state.linear_prefix_admission_policy != nullptr) {
+    state.linear_prefix_admission_policy->plan_checkpoint(seq);
+  }
   if (!seq->kv_state().has_any_blocks()) {
     state.kv_cache_manager->allocate_shared(seq);
     return;
