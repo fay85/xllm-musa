@@ -53,6 +53,8 @@ limitations under the License.
 #include "core/framework/config/execution_config.h"
 #if defined(USE_MUSA)
 #include "core/runtime/musa/prefill_graph_policy.h"
+#include "core/runtime/musa_pd_gpu_ticket.h"
+#include "core/runtime/pd_retirement_trace.h"
 #endif
 #include "core/framework/config/kernel_config.h"
 #include "core/framework/config/kv_cache_config.h"
@@ -383,6 +385,9 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
         options_.kv_cache_transfer_mode() == "PULL")
       << "MUSA PD requires kv_cache_transfer_mode=PULL; per-layer PUSH "
          "synchronization is not implemented.";
+  if (detail::pd_retire_trace_enabled()) {
+    detail::pd_retire_trace_registry().add(this, device_.index());
+  }
 #endif
   if (options_.enable_speculative_decode() &&
       options_.num_decoding_tokens() == 1) {
@@ -436,7 +441,13 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
 #endif
 }
 
-WorkerImpl::~WorkerImpl() = default;
+WorkerImpl::~WorkerImpl() {
+#if defined(USE_MUSA)
+  if (detail::pd_retire_trace_enabled()) {
+    detail::pd_retire_trace_registry().remove(this);
+  }
+#endif
+}
 
 bool WorkerImpl::has_request_state_cache() const {
   return std::any_of(
@@ -1645,6 +1656,11 @@ void WorkerImpl::execute_cuda_block_copy_kernel(
 
 folly::SemiFuture<std::optional<ForwardOutput>> WorkerImpl::step_async(
     const ForwardInput& input) {
+#if defined(USE_MUSA)
+  const std::shared_ptr<detail::PdRetireTraceState> pd_trace =
+      detail::pd_retire_trace_find(this);
+  const uint64_t pd_trace_epoch = detail::pd_retire_trace_admit(pd_trace);
+#endif
   ForwardInput input_on_device;
 
   prepare_work_before_execute(input, input_on_device);
@@ -1652,6 +1668,10 @@ folly::SemiFuture<std::optional<ForwardOutput>> WorkerImpl::step_async(
   folly::Promise<std::optional<ForwardOutput>> promise;
   auto future = promise.getSemiFuture();
   threadpool_.schedule([this,
+#if defined(USE_MUSA)
+                        pd_trace,
+                        pd_trace_epoch,
+#endif
                         input = std::move(input_on_device),
                         promise = std::move(promise)]() mutable {
     set_hierarchy_layer_synchronizer(input.input_params);
@@ -1659,6 +1679,36 @@ folly::SemiFuture<std::optional<ForwardOutput>> WorkerImpl::step_async(
     // run the model on the given input in working thread
     if (!enable_schedule_overlap()) {
       auto output = this->step(input);
+#if defined(USE_MUSA)
+      if (pd_trace != nullptr) {
+        const MUstream compute = compute_stream_->get_stream()->stream();
+        const MUstream prepare = prepare_stream_->get_stream()->stream();
+        const bool ordinary_owned_prepare =
+            prepare != nullptr && prepare != MU_STREAM_LEGACY &&
+            prepare != MU_STREAM_PER_THREAD &&
+            prepare_stream_->get_stream()->device_index() == device_.index();
+        const bool gpu_ticket_eligible =
+            ordinary_owned_prepare && options_.enable_disagg_pd() &&
+            options_.kv_cache_transfer_mode() == "PULL" &&
+            parallel_args_.world_size() == 1 && parallel_args_.dp_size() == 1 &&
+            parallel_args_.cp_size() == 1 && !options_.enable_sleep_mode() &&
+            options_.host_blocks_factor() <= 1.0 &&
+            !options_.enable_kvcache_store() &&
+            !::xllm::KVCacheConfig::get_instance().enable_xtensor() &&
+            !::xllm::LoadConfig::get_instance().enable_rolling_load() &&
+            (options_.instance_role() == InstanceRole::PREFILL ||
+             options_.instance_role() == InstanceRole::DECODE);
+        detail::pd_retire_trace_publish_gpu(
+            pd_trace,
+            pd_trace_epoch,
+            detail::MusaPdGpuTicket::record(
+                pd_trace_epoch, compute, prepare, gpu_ticket_eligible));
+      }
+      detail::pd_retire_trace_mark(pd_trace,
+                                   pd_trace_epoch,
+                                   /*submitted=*/true,
+                                   output.has_value());
+#endif
       if (output.has_value()) {
         output->is_graph_warmup = input.input_params.meta.is_graph_warmup;
       }
@@ -1676,6 +1726,36 @@ folly::SemiFuture<std::optional<ForwardOutput>> WorkerImpl::step_async(
       }
 
       auto output = this->step_for_schedule_overlap(input);
+#if defined(USE_MUSA)
+      if (pd_trace != nullptr) {
+        const MUstream compute = compute_stream_->get_stream()->stream();
+        const MUstream prepare = prepare_stream_->get_stream()->stream();
+        const bool ordinary_owned_prepare =
+            prepare != nullptr && prepare != MU_STREAM_LEGACY &&
+            prepare != MU_STREAM_PER_THREAD &&
+            prepare_stream_->get_stream()->device_index() == device_.index();
+        const bool gpu_ticket_eligible =
+            ordinary_owned_prepare && options_.enable_disagg_pd() &&
+            options_.kv_cache_transfer_mode() == "PULL" &&
+            parallel_args_.world_size() == 1 && parallel_args_.dp_size() == 1 &&
+            parallel_args_.cp_size() == 1 && !options_.enable_sleep_mode() &&
+            options_.host_blocks_factor() <= 1.0 &&
+            !options_.enable_kvcache_store() &&
+            !::xllm::KVCacheConfig::get_instance().enable_xtensor() &&
+            !::xllm::LoadConfig::get_instance().enable_rolling_load() &&
+            (options_.instance_role() == InstanceRole::PREFILL ||
+             options_.instance_role() == InstanceRole::DECODE);
+        detail::pd_retire_trace_publish_gpu(
+            pd_trace,
+            pd_trace_epoch,
+            detail::MusaPdGpuTicket::record(
+                pd_trace_epoch, compute, prepare, gpu_ticket_eligible));
+      }
+      detail::pd_retire_trace_mark(pd_trace,
+                                   pd_trace_epoch,
+                                   /*submitted=*/true,
+                                   output.has_value());
+#endif
 #if defined(USE_NPU)
       if (output.has_value() && !output->sample_output.next_tokens.defined() &&
           output->ready_event != nullptr && !output->retained_inputs.empty()) {
@@ -1739,6 +1819,11 @@ folly::SemiFuture<std::optional<ForwardOutput>> WorkerImpl::step_async(
       promise.setValue(output);
     }
   });
+#if defined(USE_MUSA)
+  detail::pd_retire_trace_mark(pd_trace,
+                               pd_trace_epoch,
+                               /*submitted=*/false);
+#endif
   return future;
 }
 
@@ -2402,8 +2487,18 @@ folly::SemiFuture<bool> WorkerImpl::pull_kv_blocks_async(
     defined(USE_MUSA)
   CHECK(kv_cache_transfer_ != nullptr)
       << "KV cache transfer backend must be initialized before PULL.";
-  return kv_cache_transfer_->pull_kv_blocks_async(
+#if defined(USE_MUSA)
+  const std::shared_ptr<detail::PdRetireTraceState> pd_trace =
+      detail::pd_retire_trace_find(this);
+  const uint64_t pd_trace_pull =
+      detail::pd_retire_trace_pull(pd_trace, /*pull_id=*/0, /*entering=*/true);
+#endif
+  auto transfer_future = kv_cache_transfer_->pull_kv_blocks_async(
       src_cluster_id, src_addr, mappings);
+#if defined(USE_MUSA)
+  detail::pd_retire_trace_pull(pd_trace, pd_trace_pull, /*entering=*/false);
+#endif
+  return transfer_future;
 #else
   folly::Promise<bool> promise;
   auto future = promise.getSemiFuture();

@@ -15,6 +15,10 @@ limitations under the License.
 
 #include "speculative_worker_impl.h"
 
+#if defined(USE_MUSA)
+#include "core/runtime/pd_retirement_trace.h"
+#endif
+
 #include "common/global_flags.h"
 #include "common/metrics.h"
 #include "core/framework/config/speculative_config.h"
@@ -231,6 +235,16 @@ SpeculativeWorkerImpl::SpeculativeWorkerImpl(
     LOG(FATAL) << "Unsupported speculative worker type: "
                << worker_type.to_string();
   }
+}
+
+folly::SemiFuture<bool> SpeculativeWorkerImpl::pull_kv_blocks_async(
+    const uint64_t src_cluster_id,
+    const std::string& src_addr,
+    const std::vector<KVTransferMapping>& mappings) {
+#if defined(USE_MUSA)
+  detail::pd_retire_trace_bind_execution_parent(this, impl_.get());
+#endif
+  return impl_->pull_kv_blocks_async(src_cluster_id, src_addr, mappings);
 }
 
 SpeculativeWorkerImpl::~SpeculativeWorkerImpl() {

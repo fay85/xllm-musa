@@ -26,6 +26,10 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:mlu_graph_planner.h>
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.h>
     $<$<BOOL:${USE_MUSA}>:musa_graph_executor_impl.h>
+    $<$<BOOL:${USE_MUSA}>:pd_retirement_trace.h>
+    $<$<BOOL:${USE_MUSA}>:pd_gpu_ticket.h>
+    $<$<BOOL:${USE_MUSA}>:pd_gpu_ticket_ledger.h>
+    $<$<BOOL:${USE_MUSA}>:musa_pd_gpu_ticket.h>
     $<$<BOOL:${USE_MUSA}>:musa/graph_memory_policy.h>
     $<$<BOOL:${USE_MUSA}>:musa/prefill_graph_policy.h>
     $<$<BOOL:${USE_MUSA}>:musa/musa_model_args.h>
@@ -72,6 +76,7 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:mlu_graph_planner.cpp>
     $<$<BOOL:${USE_CUDA}>:cuda_graph_executor_impl.cpp>
     $<$<BOOL:${USE_MUSA}>:musa_graph_executor_impl.cpp>
+    $<$<BOOL:${USE_MUSA}>:musa_pd_gpu_ticket.cpp>
     $<$<BOOL:${USE_MUSA}>:musa/musa_model_args.cpp>
     $<$<BOOL:${USE_MUSA}>:musa/deepseek_v4_prefix_block_copy.cpp>
     py_executor_impl.cpp
@@ -146,5 +151,6 @@ cc_library(
     $<$<BOOL:${USE_MLU}>:torch_mlu>
     $<$<BOOL:${USE_MLU}>::triton_jit>
     $<$<BOOL:${USE_MUSA}>:torch_musa>
+    $<$<BOOL:${USE_MUSA}>:musa>
     $<$<BOOL:${USE_DCU}>:hip::host>
 )

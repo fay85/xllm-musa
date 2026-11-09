@@ -127,9 +127,7 @@ class SpeculativeWorkerImpl : public WorkerImpl {
   folly::SemiFuture<bool> pull_kv_blocks_async(
       const uint64_t src_cluster_id,
       const std::string& src_addr,
-      const std::vector<KVTransferMapping>& mappings) override {
-    return impl_->pull_kv_blocks_async(src_cluster_id, src_addr, mappings);
-  };
+      const std::vector<KVTransferMapping>& mappings) override;
 
  protected:
   // Algorithm-specific virtual methods for subclasses to implement
