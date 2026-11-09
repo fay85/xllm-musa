@@ -1,0 +1,152 @@
+{
+  "copyright": "Copyright 2026 The xLLM Authors.",
+  "date": "2026-11-09",
+  "branch": "feat/musa-mtlink-ipc-20261109",
+  "parent_branch": "feihu-1016-dev",
+  "parent_commit": "9c84ea55b52f9564a2e2b9602224b77cfb744684",
+  "platform": {
+    "host": "worker32010",
+    "container": "albert_xllm_mate028",
+    "musa_sdk": "5.1",
+    "clang_format": "20.1.6"
+  },
+  "main_translation_units": {
+    "passed": true,
+    "count": 6,
+    "source_scope": "Public checkout source and xLLM headers; existing third-party headers and generated protocol/build headers reused.",
+    "complete_xllm_build": false,
+    "results": [
+      {
+        "source": "xllm/core/distributed_runtime/remote_worker.cpp",
+        "returncode": 0,
+        "elapsed_s": 20.92038443312049,
+        "source_sha256": "4f7ca4576a6b32c6d0097109e7311a6bf526171b576804d2fbe9f3f0abdb2431",
+        "object_sha256": "8931a3e8d26255bb3c24cf2ea2d055516f6ec296028a11ecc8b0bf23cbcc881a"
+      },
+      {
+        "source": "xllm/core/distributed_runtime/worker_service.cpp",
+        "returncode": 0,
+        "elapsed_s": 23.26275197789073,
+        "source_sha256": "1befb0b15d45d115cf5aa1073ca8b585fa9eaa84a5fe293869c08f21a89cc9dd",
+        "object_sha256": "d6d33b6741b4bc9d3828e23138d7a89abf68fd8f73420c60c7f935951593a7bd"
+      },
+      {
+        "source": "xllm/core/framework/kv_cache_transfer/mooncake_transfer_engine.cpp",
+        "returncode": 0,
+        "elapsed_s": 18.957890956196934,
+        "source_sha256": "19d817bd70b8569c1fd49ccfb108fa65b0cde16d2122efa6663b05c38ddfe972",
+        "object_sha256": "1a6c50b9f3d4c3d0c73094fe0b45483b23da6c3780a3d57a9765ebfbe5971f45"
+      },
+      {
+        "source": "xllm/core/runtime/worker_impl.cpp",
+        "returncode": 0,
+        "elapsed_s": 28.20969056431204,
+        "source_sha256": "f2ef034b47460c611e09b090fa115dda894245e5c25f5b3dfc98edf79000b636",
+        "object_sha256": "ba3e823fe3f7bf71ff0fdcd68a13b6db756bcda1b9f006c0f30b3c2ee4d1c1c4"
+      },
+      {
+        "source": "xllm/core/runtime/speculative_worker_impl.cpp",
+        "returncode": 0,
+        "elapsed_s": 22.87805501697585,
+        "source_sha256": "acb207776a73e27808165d5aa45c12f8feb07f0ca854f0d4a9296e39aa2b792e",
+        "object_sha256": "dfcef0c15c1bc41623a21c1060aabd6a4a519f01035086cd5530d2d429b32591"
+      },
+      {
+        "source": "xllm/core/runtime/musa_pd_gpu_ticket.cpp",
+        "returncode": 0,
+        "elapsed_s": 0.32730079907923937,
+        "source_sha256": "81e0c5c715d17cb34a7601c7593d82a8d574a7a8357a8e1d406c4e9d72c4e88a",
+        "object_sha256": "43e89c9946bb234f457ff2405e8b218e22cb082f5336c569c34c36beb25213f7"
+      }
+    ]
+  },
+  "host_cpu_tests": {
+    "passed": true,
+    "process_count": 30,
+    "device_libraries_linked": false,
+    "scope": "actual production CPU policy/trace/ledger headers plus existing actual ThreadPool/cpu_affinity objects; no RPC or GPU execution",
+    "source_sha256": {
+      "tests/musa_mtlink/check_case.cmake": "6baab6b01bfd072e6b7473672fb6bafc286ceb2b68a94b6eb41983948d6624a0",
+      "tests/musa_mtlink/README.md": "566d9d30a5abc69216c3628fa8dd7f63fe2df06765694ff96a7bf7a5c5b84d3c",
+      "tests/musa_mtlink/CMakeLists.txt": "3e4324928dd9727c9838492b703879fbb1f0d7853c9fb75b0c3c03e6eaffe055",
+      "tests/musa_mtlink/execution_binding_cpu_test.cpp": "c11109568d5e11d771caa3cee7db4655c3cbd9de2721881d2280928e91a5964e",
+      "tests/musa_mtlink/gpu_ledger_cpu_test.cpp": "0c62a34e57e22761378aa96cf8408fcecb2261531468f5372d5d4386736ace59",
+      "tests/musa_mtlink/queue_policy_cpu_test.cpp": "0b5a9f1ca8d1a09a1da29bb449f750bc0b4ebb90c4c0a6783e21672032a9167c",
+      "tests/musa_mtlink/retirement_state_cpu_test.cpp": "7a272bbe2484299df245e5bed11a799faa6f949c7ff72ecc7556b671da52e16d",
+      "xllm/core/distributed_runtime/pd_pull_queue_policy.h": "9b9e98e57032ad6c307f2d89d24072a9b6031b10b007a7290371247710308114",
+      "xllm/core/util/concurrentqueue.h": "248c50889f46c4e77558de3f199797e12c1c76b5cd606fb230a77ad5e2f03744",
+      "xllm/core/util/blocking_counter.h": "df2736d3feb71349ecc06a5c0c363ff513247cb5ea0a126ffb52cf9f8ae62c6c",
+      "xllm/core/util/concurrent_queue.h": "2bcb92ad330c639ac6ad57710d1e7e413b43670118b442dfeb3bc4180ab701db",
+      "xllm/core/util/threadpool.h": "f19b48978de881d52098f515b44f13b958d169ff3843c73113ba4c8314b77a44",
+      "xllm/core/util/lightweightsemaphore.h": "10c93714171a60b3b83108fc6b57350a58ec15ac43c25e9b1077753864559afb",
+      "xllm/core/runtime/pd_retirement_trace.h": "ae4a873f1fea20722be4e10c04524d9d7482e549decf9400bb4adaa3c2fc4eb5",
+      "xllm/core/runtime/pd_gpu_ticket.h": "c7048e1113be2b99cca26b9cb7644df15e9e4e2ee04398fd57962dc700ee47b4",
+      "xllm/core/runtime/pd_gpu_ticket_ledger.h": "9ae56765966f5214b2d00232ec8014df394bf187f32552316b9c4db5acc6b782"
+    }
+  },
+  "mooncake": {
+    "status": "PASS",
+    "source_pin": "bb2c0bee9f7839789c947556341556b4c02aaeda",
+    "parent_gitlink_changed": false,
+    "patch_sha256": "b3b68d83288b5941337ade70af9d0d02f52631f45e2ff3ae6138724d95ab3acf",
+    "patch_file_count": 11,
+    "source_cpp_cuda_preserved": true,
+    "verification_root": "/workspace/mtlink_publish_verify_mooncake_20261109_205037",
+    "evidence_directory": "reports/mtlink_publish_20261109/mooncake_verification",
+    "checks": [
+      "Windows fetch exact GitCode pin",
+      "Fresh local bundle checkout on dev10",
+      "Unapplied check rejects",
+      "Clean apply and final per-file SHA256 verification",
+      "Second apply is idempotent",
+      "Affected-file conflict rejects without changing any file hashes",
+      "Restored final check",
+      "Python py_compile",
+      "Regular standalone Mooncake CMake configure",
+      "Native mcc kernel object and static archive",
+      "Kernel-enabled transport C++ target",
+      "Kernel-off transport C++ target and no kernel archive",
+      "Invalid kernel ON plus intranode OFF rejected",
+      "Complete transfer_engine target compiled and archived (33 build steps)",
+      "CMake consumer inherits public class-layout macro",
+      "CMake consumer final ELF links real kernel transitively"
+    ],
+    "cpu_compiler": "/usr/bin/c++ (GNU 11.4.0)",
+    "extra_cmake_cxx_flags": "-I/workspace/mtlink_publish_verify_mooncake_20261109_205037/release_dependency_prefix/include",
+    "project_cpu_flags": "-Wall -Wextra -Wno-unused-parameter -fPIC -fcoroutines -O3 -std=gnu++20 -fno-tree-slp-vectorize",
+    "kernel_compiler": "/usr/local/musa/bin/mcc (MUSA 5.1.0)",
+    "kernel_flags": "-x musa -std=c++20 -O2 -fPIC --offload-arch=mp_31",
+    "dependency_metadata_adaptation": "Private copy of vcpkg share/package metadata. Private include/lib symlinks point to unchanged real installed files. Missing Debug import existence paths point to real Release archives; Release build uses actual Release paths. Original vcpkg is unchanged.",
+    "additional_dependency_inputs": [
+      "pybind11_INCLUDE_DIR from installed pybind11.get_include()",
+      "Consumer /usr/local/musa/lib link search path matching parent xLLM setup"
+    ],
+    "cuda_musa_header_or_type_shims": false,
+    "gpu_or_model_execution": false,
+    "consumer_executable_run": false,
+    "full_xllm_build_verified": false,
+    "original_source_or_service_mutation": false,
+    "prior_failures_retained": [
+      "Original vcpkg metadata references missing Debug archives",
+      "System-only dependency search lacks JsonCpp/glog/yaml-cpp",
+      "Standalone base target lacks global glog include until actual vcpkg include is supplied",
+      "Early-injected test consumer needs explicit existing MUSA library search path"
+    ],
+    "owned_files_ready_to_commit": [
+      "scripts/mtlink_prepare_mooncake.py",
+      "third_party/patches/mooncake_musa_ipc/mtlink.patch",
+      "third_party/patches/mooncake_musa_ipc/manifest.json",
+      "third_party/patches/mooncake_musa_ipc/README.md"
+    ]
+  },
+  "boundaries": {
+    "fresh_complete_xllm_build": false,
+    "new_gpu_execution": false,
+    "new_model_correctness_or_performance_test": false,
+    "consumer_elf_executed": false,
+    "original_source_dependencies_and_services_changed": false,
+    "existing_router_readyz_status": 200,
+    "all_existing_transfer_fences_retained": true,
+    "owner_closed": false
+  }
+}
