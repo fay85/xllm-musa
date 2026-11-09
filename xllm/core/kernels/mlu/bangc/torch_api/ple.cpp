@@ -24,6 +24,7 @@ limitations under the License.
 
 #include "framework/core/MLUStream.h"
 #include "kernels/mlu/bangc/src/ple/ple_launchers.h"
+#include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 
 namespace xllm::kernel::mlu::bangc {
 namespace {
@@ -46,15 +47,13 @@ void check_tensor(const torch::Tensor& tensor,
   CHECK(tensor.device().type() == torch::kPrivateUse1)
       << name << " must be on MLU";
   CHECK(tensor.layout() == torch::kStrided) << name << " must be strided";
-  CHECK(tensor.scalar_type() == dtype) << name << " has an invalid dtype";
-  CHECK(tensor.sizes().equals(shape))
-      << name << " expected shape " << shape << ", got " << tensor.sizes();
-  CHECK(tensor.is_contiguous()) << name << " must be contiguous";
+  detail::check_tensor(tensor,
+                       name,
+                       device != nullptr ? *device : tensor.device(),
+                       dtype,
+                       shape);
   CHECK(!tensor.is_conj() && !tensor.is_neg())
       << name << " must have resolved conjugate/negative bits";
-  if (device != nullptr) {
-    CHECK(tensor.device() == *device) << name << " must share the input device";
-  }
 }
 
 int32_t checked_rows(const torch::Tensor& tensor,

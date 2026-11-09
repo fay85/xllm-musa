@@ -15,6 +15,10 @@ limitations under the License.
 
 #include "layers/mlu/hyper_connection.h"
 
+#include <framework/core/MLUStream.h>
+#include <framework/core/device.h>
+#include <framework/core/stream_guard.h>
+#include <framework/graphs/MLUGraph.h>
 #include <gtest/gtest.h>
 #include <torch/torch.h>
 
@@ -25,6 +29,7 @@ limitations under the License.
 #include <vector>
 
 #include "framework/state_dict/state_dict.h"
+#include "layers/common/rms_norm.h"
 #include "layers/mlu/tests_utils.h"
 #include "platform/device.h"
 #include "platform/platform.h"
@@ -379,6 +384,40 @@ class HyperConnectionTest : public ::testing::Test {
   torch::TensorOptions options_;
 };
 
+TEST_F(HyperConnectionTest, StandalonePreNormMatchesUnfusedLoadedWeights) {
+  config_.dim = 5120;
+  config_.norm_eps = 1e-6;
+  MHCPre pre(config_.hc_mult,
+             config_.dim,
+             config_.sinkhorn_iters,
+             config_.hc_eps,
+             config_.norm_eps,
+             options_);
+  pre->load_state_dict(StateDict(pre_weights()));
+  const auto gamma = seeded(
+      "standalone.gamma", {config_.dim}, torch::kBFloat16, options_.device());
+  RMSNorm norm(config_.dim, config_.norm_eps, options_);
+  norm->load_state_dict(StateDict({{"weight", gamma}}));
+  for (const int64_t tokens : {1, 9, 89, 257, 640}) {
+    SCOPED_TRACE(tokens);
+    const auto residual = seeded("standalone.residual",
+                                 {tokens, 4, config_.dim},
+                                 torch::kBFloat16,
+                                 options_.device());
+    const auto mix = seeded(
+        "standalone.mix", {tokens, 4}, torch::kFloat32, options_.device());
+    auto expected = pre->forward(residual, std::nullopt, mix);
+    const auto expected_norm = std::get<0>(norm->forward(expected.output));
+    const auto [actual_norm, new_pre, post, comb] =
+        pre->fused_pre_norm(residual, mix, gamma);
+    test::verify_tensor_close(
+        actual_norm.cpu(), expected_norm.cpu(), 2e-2, 2e-2);
+    test::verify_tensor_close(new_pre.cpu(), expected.pre.cpu(), 2e-3, 2e-3);
+    test::verify_tensor_close(post.cpu(), expected.post.cpu(), 2e-3, 2e-3);
+    test::verify_tensor_close(comb.cpu(), expected.comb.cpu(), 2e-3, 2e-3);
+  }
+}
+
 TEST_F(HyperConnectionTest, DelayedPreMixUsesPreviousSublayerCoefficients) {
   config_.dim = 5120;
   config_.norm_eps = 1e-20;
@@ -409,6 +448,135 @@ TEST_F(HyperConnectionTest, DelayedPreMixUsesPreviousSublayerCoefficients) {
   EXPECT_TRUE(torch::equal(second.pre, ordinary.pre));
   EXPECT_TRUE(torch::equal(second.post, ordinary.post));
   EXPECT_TRUE(torch::equal(second.comb, ordinary.comb));
+}
+
+TEST_F(HyperConnectionTest, DelayedFusionChainsPreviousPreAndLoadedWeights) {
+  config_.dim = 5120;
+  config_.norm_eps = 1e-6;
+  const auto weights = pre_weights();
+  MHCPre hc(config_.hc_mult,
+            config_.dim,
+            config_.sinkhorn_iters,
+            config_.hc_eps,
+            config_.norm_eps,
+            options_);
+  hc->load_state_dict(StateDict(weights));
+  const torch::Tensor gamma = torch::ones({config_.dim}, options_);
+  for (const int64_t tokens : {1, 89, 321, 640}) {
+    SCOPED_TRACE(tokens);
+    torch::Tensor residual = seeded("chain.residual",
+                                    {tokens, 4, 5120},
+                                    torch::kBFloat16,
+                                    options_.device());
+    torch::Tensor x = residual.select(1, 0).contiguous();
+    torch::Tensor pre =
+        torch::zeros({tokens, 4}, options_.dtype(torch::kFloat32));
+    pre.select(1, 0).fill_(1);
+    auto initial = hc->forward(residual, std::nullopt, pre);
+    torch::Tensor post = initial.post;
+    torch::Tensor comb = initial.comb;
+    for (int32_t step = 0; step < 3; ++step) {
+      const torch::Tensor y =
+          post.unsqueeze(-1) * x.to(torch::kFloat32).unsqueeze(1) +
+          torch::bmm(comb.transpose(1, 2), residual.to(torch::kFloat32));
+      const torch::Tensor rounded = y.to(torch::kBFloat16).to(torch::kFloat32);
+      const torch::Tensor rms =
+          torch::rsqrt(y.flatten(1).square().mean(-1, true) + config_.norm_eps);
+      const auto expected_coefficients =
+          split_ref(linear_ref(rounded.flatten(1), weights.at("hc_fn")) * rms,
+                    weights.at("hc_scale"),
+                    weights.at("hc_base"),
+                    4,
+                    config_.sinkhorn_iters,
+                    config_.hc_eps);
+      const torch::Tensor z = (pre.unsqueeze(-1) * rounded).sum(1);
+      const torch::Tensor expected_norm =
+          z * torch::rsqrt(z.square().mean(-1, true) + config_.norm_eps);
+      torch::Tensor next_pre;
+      std::tie(x, residual, next_pre, post, comb) =
+          hc->fused_delayed_pre(x, residual, post, comb, pre, gamma);
+      auto check = [](const torch::Tensor& actual,
+                      const torch::Tensor& expected) {
+        const torch::Tensor a = actual.to(torch::kFloat64);
+        const torch::Tensor e = expected.to(torch::kFloat64);
+        EXPECT_LT(((a - e).square().sum() / e.square().sum().clamp_min(1e-30))
+                      .sqrt()
+                      .item<double>(),
+                  3e-3);
+      };
+      check(x, expected_norm);
+      check(residual, y);
+      check(next_pre, std::get<0>(expected_coefficients));
+      check(post, std::get<1>(expected_coefficients));
+      check(comb, std::get<2>(expected_coefficients));
+      pre = next_pre;
+    }
+  }
+}
+
+TEST_F(HyperConnectionTest,
+       DelayedFusionGraphReplaysChainAndMaterializedBoundary) {
+  config_.dim = 5120;
+  const auto weights = pre_weights();
+  MHCPre hc(config_.hc_mult,
+            config_.dim,
+            config_.sinkhorn_iters,
+            config_.hc_eps,
+            config_.norm_eps,
+            options_);
+  hc->load_state_dict(StateDict(weights));
+  MHCPost post_layer(config_.norm_eps);
+  torch::Tensor input =
+      seeded("graph.chain", {3, 4, 5120}, torch::kBFloat16, options_.device());
+  const torch::Tensor gamma = torch::ones({5120}, options_);
+  for (const bool materialize_boundary : {false, true}) {
+    auto call = [&]() {
+      torch::Tensor residual = input;
+      torch::Tensor pre = torch::zeros({3, 4}, options_.dtype(torch::kFloat32));
+      pre.select(1, 0).fill_(1);
+      auto coefficients = hc->forward(residual, std::nullopt, pre);
+      torch::Tensor x = coefficients.output;
+      torch::Tensor post = coefficients.post;
+      torch::Tensor comb = coefficients.comb;
+      pre = coefficients.pre;
+      for (int32_t step = 0; step < 3; ++step) {
+        if (materialize_boundary && step == 1) {
+          residual = std::get<0>(post_layer->forward(x, residual, post, comb));
+          // A residual-changing operation models the mandatory Engram barrier.
+          residual = (residual.to(torch::kFloat32) + 0.01).to(torch::kBFloat16);
+          coefficients = hc->forward(residual, std::nullopt, pre);
+          x = coefficients.output;
+          pre = coefficients.pre;
+          post = coefficients.post;
+          comb = coefficients.comb;
+        }
+        std::tie(x, residual, pre, post, comb) =
+            hc->fused_delayed_pre(x, residual, post, comb, pre, gamma);
+      }
+      residual = std::get<0>(post_layer->forward(x, residual, post, comb));
+      return std::make_tuple(residual, pre);
+    };
+    auto actual = call();
+    torch_mlu::synchronize();
+    torch_mlu::MLUGraph graph;
+    {
+      torch_mlu::mlu::MLUStreamGuard stream(
+          torch_mlu::getStreamFromPool(false, 0));
+      graph.capture_begin();
+      actual = call();
+      graph.capture_end();
+    }
+    for (int32_t replay = 0; replay < 2; ++replay) {
+      input.mul_(0.75);
+      torch_mlu::synchronize();
+      graph.replay();
+      torch_mlu::synchronize();
+      const auto expected = call();
+      torch_mlu::synchronize();
+      EXPECT_TRUE(torch::equal(std::get<0>(actual), std::get<0>(expected)));
+      EXPECT_TRUE(torch::equal(std::get<1>(actual), std::get<1>(expected)));
+    }
+  }
 }
 
 TEST_F(HyperConnectionTest, HCPreMatchesOfficialReference) {

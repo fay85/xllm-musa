@@ -13,6 +13,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
+#include "kernels/mlu/bangc/include/fused_mhc_decode.h"
+#include "kernels/mlu/bangc/include/fused_mhc_pre.h"
 #include "kernels/mlu/mlu_ops_api.h"
 
 namespace xllm::kernel::mlu {
@@ -87,6 +89,71 @@ fused_mhc(const torch::Tensor& x,
                             sinkhorn_iter,
                             eps);
   return {norm_out, residual_out, post_out, comb_out};
+}
+
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+fused_mhc_pre(const torch::Tensor& residual,
+              const torch::Tensor& pre_in,
+              const torch::Tensor& hc_fn,
+              const torch::Tensor& gamma,
+              const torch::Tensor& hc_scale,
+              const torch::Tensor& hc_base,
+              int64_t sinkhorn_iter,
+              double hc_eps,
+              double norm_eps) {
+  return bangc::fused_mhc_pre(residual,
+                              pre_in,
+                              hc_fn,
+                              hc_scale,
+                              hc_base,
+                              gamma,
+                              sinkhorn_iter,
+                              hc_eps,
+                              norm_eps);
+}
+
+std::tuple<torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor>
+fused_mhc_delayed_pre(const torch::Tensor& x,
+                      const torch::Tensor& residual_in,
+                      const torch::Tensor& hc_fn,
+                      const torch::Tensor& gamma,
+                      const torch::Tensor& post_in,
+                      const torch::Tensor& comb_in,
+                      const torch::Tensor& pre_in,
+                      const torch::Tensor& hc_scale,
+                      const torch::Tensor& hc_base,
+                      int64_t sinkhorn_iter,
+                      double hc_eps,
+                      double norm_eps) {
+  torch::Tensor norm_out = torch::empty_like(x);
+  torch::Tensor residual_out = torch::empty_like(residual_in);
+  torch::Tensor next_pre = torch::empty_like(pre_in);
+  torch::Tensor post_out = torch::empty_like(post_in);
+  torch::Tensor comb_out = torch::empty_like(comb_in);
+  // Decode token counts run the d-split kernel; large calls with 64-byte
+  // aligned tensors are handed to the prefill kernel when it is faster.
+  bangc::fused_mhc_decode(x,
+                          residual_in,
+                          post_in,
+                          comb_in,
+                          pre_in,
+                          hc_fn,
+                          hc_scale,
+                          hc_base,
+                          gamma,
+                          sinkhorn_iter,
+                          hc_eps,
+                          norm_eps,
+                          norm_out,
+                          residual_out,
+                          next_pre,
+                          post_out,
+                          comb_out);
+  return {norm_out, residual_out, next_pre, post_out, comb_out};
 }
 
 }  // namespace xllm::kernel::mlu

@@ -1,0 +1,904 @@
+/* Copyright 2026 The xLLM Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+// Standalone MHC Pre + RMSNorm for BF16, HC=4, D=5120.
+// Derived from the tuned delayed-pre MHC d-split pipeline. The input is the
+// already materialized four-lane residual: there is no Post calculation or
+// residual writeback. Projection and normalization share the same input load.
+// External pre_in compresses the residual; new_pre belongs to the next
+// boundary. As in the reference model, the projection stays FP32 through
+// rms/scale/base and Sinkhorn; only the compressed input is rounded to BF16.
+#include <bang.h>
+#include <cnrt.h>
+#include <stdint.h>
+
+#include "kernels/mlu/bangc/src/fused_mhc_common/device_helpers.h"
+#include "kernels/mlu/bangc/src/fused_mhc_common/launch_helpers.h"
+#include "kernels/mlu/bangc/src/fused_mhc_pre/launcher.h"
+#include "kernels/mlu/bangc/src/fused_mhc_pre/prefill_launcher.h"
+
+namespace {
+
+using xllm::kernel::mlu::bangc::fused_mhc_detail::apply_sigmoid;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::compute_sinkhorn_pairwise;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::fuse_mul_scalar_mul_vec_cast;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::make_plan;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::move_cvt_bf16_to_f32;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::Plan;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::query_topology;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::round_cap;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::row_sums;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::Topology;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::union_type;
+
+constexpr int32_t kDim = 5120;
+constexpr int32_t kHc = 4;
+constexpr int32_t kMix = 24;
+constexpr int32_t kRow = 32;  // partial row: mixes 0..23, padding 24..31
+constexpr int32_t kLtStride = 32768;  // WRAM LT group stride
+constexpr int32_t kCoef = 4;          // external pre_in per token
+
+constexpr int32_t kNramBytes = 496 * 1024;  // 16 KB left for the stack
+__nram__ __attribute__((aligned(128))) int8_t nram_pool[kNramBytes];
+__wram__ __attribute__((aligned(128))) int8_t wram_pool[512 * 1024];
+// cluster-local groups (P = 4): partials exchanged through SRAM, double
+// buffered by round parity, per round mix [4][32][32] | sums [4][64] floats
+constexpr int32_t kSramRound = 4 * (32 * 32 + 64);
+__mlu_shared__ __attribute__((aligned(128))) float sram_part[2 * kSramRound];
+// norm offload: z slices of the (at most two) Sinkhorn lanes of a cluster,
+// [parity][slot][R * DS] (R * DS <= 40960 floats for every P)
+constexpr int32_t kSramZSlot = 32 * 1280;
+__mlu_shared__ __attribute__((aligned(128))) float sram_z[2 * 2 * kSramZSlot];
+
+struct Params {
+  const bfloat16_t* residual_in;
+  const float* pre_in;
+  const bfloat16_t* hc_fn;
+  const float* hc_scale;
+  const float* hc_base;
+  const bfloat16_t* gamma;
+  bfloat16_t* norm_out;
+  float* next_pre;
+  float* post_out;
+  float* comb_out;
+  float* ws;
+  int32_t tokens;
+  int32_t group_tokens;  // tokens per group (ceil(T / G))
+  int32_t round_tokens;  // R
+  int32_t rounds;
+  int32_t sinkhorn_iter;
+  float hc_eps;
+  float norm_eps;
+};
+
+// ---------------------------------------------------------------- layout
+// round size cap: z [R][DS] f32 (and the norm staging [R][DS] bf16) stay on
+// chip; one round covers up to 64 tokens per group (a second round costs a
+// barrier and a serial phase B, ~6-9 us)
+constexpr int32_t align128(int32_t x) { return (x + 127) / 128 * 128; }
+template <int32_t P>
+struct Layout {
+  static_assert(P == 4 || P == 8 || P == 16, "unsupported group size");
+  static constexpr int32_t kDs = kDim / P;  // hidden slice per core
+  static constexpr int32_t kK = kHc * kDs;  // conv K per core
+  // Tokens per tile: 4 / 4 / 2 for P = 16 / 8 / 4. A conv with M < 4
+  // costs as M = 4; at P = 4 a token feeds the conv as two K-half pixels.
+  static constexpr int32_t kTile = P >= 8 ? 4 : 2;
+  // K > 4096 (P = 4): one LT group holds 4 rows of at most 4096 bf16, so the K
+  // slice is split into two halves, weight rows 0..23 = half 0, rows 24..47 =
+  // half 1
+  // P = 8 splits its K = 2560 as well, which keeps each FP32 accumulation
+  // chain short.
+  static constexpr bool kSplitK = kK > 2048;
+  static constexpr int32_t kKc = kSplitK ? kK / 2 : kK;  // conv channel count
+  static constexpr int32_t kCo =
+      kSplitK ? 2 * kMix : kRow;                    // conv output channels
+  static constexpr int32_t kPix = kSplitK ? 2 : 1;  // conv pixels per token
+  // conv of tile it runs kConvDefer iterations later, behind the hc_fn stream
+  // on io1 (which now starts after the setup wait): 240 KB / ~4 us at P = 4 (2
+  // tiles measured best: 3 leaves a longer serial conv tail). P = 8 also uses
+  // two tiles after splitting K; P = 16 uses one. BF16 projection tiles stay
+  // in a ring of kYbRing
+  static constexpr int32_t kConvDefer = kSplitK ? 2 : 1;
+  // P = 4 groups are exactly one cluster: partials go through SRAM with a
+  // cluster barrier
+  static constexpr bool kClusterLocal = P == 4;
+  static constexpr mluMemcpyDirection_t kPartSt =
+      kClusterLocal ? NRAM2SRAM : NRAM2GDRAM;
+  static constexpr mluMemcpyDirection_t kPartLd =
+      kClusterLocal ? SRAM2NRAM : GDRAM2NRAM;
+  static constexpr int32_t kYbRing = kConvDefer + 1;
+  // Retain the tuned projection-ring/weight-stream synchronization schedule.
+  // Split-K layouts record setup-stream readiness at ring-slot reuse
+  // boundaries.
+  static constexpr bool kTrackWeightsReady = kSplitK;
+  static constexpr int32_t kMaxRound = round_cap(P);
+  // NRAM carve-up (bytes)
+  // Tile-pipeline raw/FP32 inputs and conv partials are double-buffered;
+  // BF16 projection inputs use kYbRing slots and pre coefficients span a round.
+  static constexpr int32_t kRawB = align128(kTile * kHc * kDs * 2);
+  static constexpr int32_t kCoefB =
+      align128(round_cap(P) * kCoef * 4);  // round coefficients
+  static constexpr int32_t kYbB = align128(kTile * kHc * kDs * 2);
+  static constexpr int32_t kPartB = align128(kTile * kRow * 4);
+  static constexpr int32_t kConvOutB = align128(kTile * kPix * kCo * 4);
+  static constexpr int32_t kOffRaw = 0;  // 2 x [tile][4][DS] bf16
+  static constexpr int32_t kF32B = align128(kTile * kHc * kDs * 4);
+  static constexpr int32_t kOffF32 =
+      align128(kOffRaw + 2 * kRawB);  // 2 x [tile][4][DS] f32
+  static constexpr int32_t kOffY =
+      align128(kOffF32 + 2 * kF32B);  // [tile][4][DS] f32
+  static constexpr int32_t kOffYb =
+      align128(kOffY + kTile * kHc * kDs * 4);  // kYbRing x [tile][4][DS] bf16
+  static constexpr int32_t kOffCoef =
+      align128(kOffYb + kYbRing * kYbB);  // external pre [R]
+  static constexpr int32_t kOffPart =
+      align128(kOffCoef + kCoefB);  // 2 x [tile][32] f32
+  static constexpr int32_t kOffCo =
+      align128(kOffPart + 2 * kPartB);  // split-K conv output
+  static constexpr int32_t kOffSs =
+      align128(kOffCo + kConvOutB);  // round sums [Rs]
+  static constexpr int32_t kOffScr =
+      align128(kOffSs + 4 * kMaxRound * 4);  // row_sums scratch
+  static constexpr int32_t kOffGamma =
+      align128(kOffScr + 2 * kTile * 32 * 4);  // [DS] f32
+  static constexpr int32_t kOffGamma2 =
+      align128(kOffGamma + kDs * 4);  // partner [DS] f32
+  static constexpr int32_t kOffZ =
+      align128(kOffGamma2 + kDs * 4);  // [R][DS] f32
+  // norm staging [R][DS] bf16 and the phase B scratch alias the phase-A tile
+  // buffers (phase A of the round is complete and its stores are drained before
+  // phase B starts) when they fit there
+  static constexpr int32_t kNbBytes = align128(kMaxRound * kDs * 2);
+  static constexpr int32_t kBBytes =
+      80 * 1024;  // Sinkhorn ~61 KB + norm partials 16 KB
+  static constexpr int32_t kPhaseA = kOffCoef - kOffRaw;
+  static constexpr bool kBAlias = kPhaseA >= kBBytes;
+  static constexpr bool kNbAlias = kPhaseA >= kBBytes + kNbBytes;
+  static constexpr int32_t kOffNbSep = align128(kOffZ + kMaxRound * kDs * 4);
+  static constexpr int32_t kOffNb = kNbAlias ? kOffRaw + kBBytes : kOffNbSep;
+  static constexpr int32_t kOffBSep =
+      align128(kOffNbSep + (kNbAlias ? 0 : kNbBytes));
+  // partner norm staging (norm offload): after nb inside the phase-A region
+  // when it fits
+  static constexpr bool kNb2Alias =
+      kNbAlias && kPhaseA >= kBBytes + 2 * kNbBytes;
+  static_assert(kMaxRound * kDs <= kSramZSlot,
+                "z slice of a round must fit one SRAM slot");
+  static constexpr int32_t kOffB = kBAlias ? kOffRaw : kOffBSep;
+  static constexpr int32_t kOffNb2Sep =
+      align128(kOffBSep + (kBAlias ? 0 : kBBytes));
+  static constexpr int32_t kOffNb2 = kNb2Alias ? kOffNb + kNbBytes : kOffNb2Sep;
+  static constexpr int32_t kOffConst =
+      align128(kOffNb2Sep + (kNb2Alias ? 0 : kNbBytes));  // scale | base
+  static constexpr int32_t kEnd = kOffConst + 32 * 4;
+  static_assert(kEnd <= kNramBytes, "NRAM overflow");
+  static_assert(kK % 64 == 0, "conv K must be a multiple of 64");
+  static_assert(kDs % 32 == 0, "slice must be a multiple of 32");
+  static_assert(kKc * 2 * 4 <= kLtStride,
+                "4 weight rows must fit one LT group");
+};
+
+#define NRAM_AT(T, off) reinterpret_cast<T*>(nram_pool + (off))
+
+template <int32_t P>
+__mlu_func__ void load_weights(const Params& p, int32_t lane) {
+  using L = Layout<P>;
+  // weight row n, K index (h, d): hc_fn[n][h * 5120 + d0 + d] = (4n + h) * 5120
+  // + d0 + d, i.e. 96 segments of DS elements with a uniform 5120 stride. LT
+  // group g holds rows 4g..4g+3.
+  const bfloat16_t* src = p.hc_fn + lane * L::kDs;
+  if (L::kSplitK) {
+    // row n, half q (h = 2q, 2q + 1) -> weight row 24q + n: LT group (24q + n)
+    // / 4, offset
+    // ((n % 4) * 2 + h % 2) * DS. One 3-D copy per (LT group, half): DS x 2 h x
+    // 4 rows.
+    for (int32_t q = 0; q < 2; q++) {
+      for (int32_t g = 0; g < 6; g++) {
+        __memcpy_io1_async(
+            wram_pool + (6 * q + g) * kLtStride,
+            const_cast<bfloat16_t*>(src) + (16 * g + 2 * q) * kDim,
+            L::kDs * 2,
+            GDRAM2WRAM,
+            L::kDs * 2,
+            1,
+            2 * L::kDs * 2,
+            3,
+            kDim * 2,
+            1,
+            4 * kDim * 2,
+            3);
+      }
+    }
+    return;
+  }
+  __memcpy_io1_async(wram_pool,
+                     const_cast<bfloat16_t*>(src),
+                     L::kDs * 2,
+                     GDRAM2WRAM,
+                     L::kDs * 2,
+                     15,
+                     kLtStride,
+                     5,
+                     kDim * 2,
+                     15,
+                     16 * kDim * 2,
+                     5);
+  // Weight rows 24..31 are never written: the 32-wide conv leaves don't-care
+  // values in columns 24..31, which are never read. (NRAM2WRAM copies that
+  // start at a WRAM offset >= 32 KB fault on this toolchain, see notes.)
+}
+
+template <int32_t P>
+__mlu_global__ void fused_mhc_pre_kernel(Params p) {
+  using L = Layout<P>;
+  constexpr int32_t kDs = L::kDs;
+  constexpr int32_t kK = L::kK;
+  if (__is_mpu()) {
+    return;
+  }
+  const int32_t groups = taskDim / P;
+  const int32_t gid = taskId / P;
+  const int32_t lane = taskId % P;
+  const int32_t d0 = lane * kDs;
+  const int64_t tok_begin = static_cast<int64_t>(gid) * p.group_tokens;
+  int64_t tok_end = tok_begin + p.group_tokens;
+  if (tok_end > p.tokens) {
+    tok_end = p.tokens;
+  }
+  const int32_t R = p.round_tokens;
+  // Workspace per round parity, lane-major so that every core writes only its
+  // own contiguous region (sub-line GDRAM writes of several cores into one 128
+  // B line serialise for microseconds):
+  //   mix [G][P][R][32] (mixes 0..23), sums [G][P][Rs] (sum(y^2) at 0..R-1,
+  //   sum(z^2) at R..2R-1), Rs = 2R rounded up to 32 floats.
+  const int32_t Rs = (2 * R + 31) / 32 * 32;
+  const int64_t ws_mix_round = static_cast<int64_t>(groups) * P * R * kRow;
+  const int64_t ws_s_round = static_cast<int64_t>(groups) * P * Rs;
+  float* ws_mix = p.ws;
+  float* ws_s = p.ws + 2 * ws_mix_round;
+
+  bfloat16_t* raw0 = NRAM_AT(bfloat16_t, L::kOffRaw);
+  float* f320 = NRAM_AT(float, L::kOffF32);
+  float* y = NRAM_AT(float, L::kOffY);
+  bfloat16_t* yb0 = NRAM_AT(bfloat16_t, L::kOffYb);
+  float* coef = NRAM_AT(float, L::kOffCoef);  // external pre [R][4]
+  float* part0 = NRAM_AT(float, L::kOffPart);
+  float* ss =
+      NRAM_AT(float, L::kOffSs);  // sum(y^2) at [0, R), sum(z^2) at [R, 2R)
+  float* scr = NRAM_AT(float, L::kOffScr);
+  float* gamma = NRAM_AT(float, L::kOffGamma);
+  float* gamma2 =
+      NRAM_AT(float, L::kOffGamma2);  // gamma slice of the partner lane
+  float* zr = NRAM_AT(float, L::kOffZ);
+  bfloat16_t* nb = NRAM_AT(bfloat16_t, L::kOffNb);
+  float* bscr = NRAM_AT(float, L::kOffB);
+  float* cst = NRAM_AT(float, L::kOffConst);
+
+  auto round_range = [&](int32_t r, int64_t& rb, int32_t& rn) {
+    rb = tok_begin + static_cast<int64_t>(r) * R;
+    rn = static_cast<int32_t>(tok_end - rb);
+    if (rn > R) {
+      rn = R;
+    }
+    if (rn < 0) {
+      rn = 0;
+    }
+  };
+  // coefficients of a whole round, loaded before any tile DMA so that the
+  // scalar reads of the vector loop never depend on an in-flight transfer (p/c
+  // syncs do not order scalar loads)
+  auto load_round_coef = [&](int32_t r) {
+    int64_t rb;
+    int32_t rn;
+    round_range(r, rb, rn);
+    if (rn <= 0) {
+      return;
+    }
+    __memcpy_async(coef,
+                   const_cast<float*>(p.pre_in) + rb * kHc,
+                   rn * kHc * sizeof(float),
+                   GDRAM2NRAM);
+  };
+
+  // Four residual slices of tile `it` of the round starting at rb (rn tokens)
+  // into raw buffer it & 1
+  auto load_tile_of = [&](int64_t rb, int32_t rn, int32_t it) {
+    const int32_t i0 = it * L::kTile;
+    const int32_t tt = rn - i0 < L::kTile ? rn - i0 : L::kTile;
+    const int64_t t0 = rb + i0;
+    bfloat16_t* raw = raw0 + (it & 1) * (L::kRawB / 2);
+    __memcpy_async(
+        raw,
+        const_cast<bfloat16_t*>(p.residual_in) + t0 * kHc * kDim + d0,
+        kDs * 2,
+        GDRAM2NRAM,
+        kDs * 2,
+        kHc - 1,
+        kHc * kDs * 2,
+        tt - 1,
+        kDim * 2,
+        kHc - 1,
+        kHc * kDim * 2,
+        tt - 1);
+  };
+
+  // ---- setup: constants, round-0 coefficients and the first tile under one
+  // DMA wait
+  bfloat16_t* gamma_bf =
+      reinterpret_cast<bfloat16_t*>(y);  // staging, y is free until phase A
+  __memcpy_async(
+      gamma_bf, const_cast<bfloat16_t*>(p.gamma) + d0, kDs * 2, GDRAM2NRAM);
+  // lanes 2, 3 (same cluster as lanes 0, 1 for every P >= 4) normalise the
+  // slice of lane - 2 when it runs a Sinkhorn chunk
+  const bool helper_lane = lane == 2 || lane == 3;
+  if (helper_lane) {
+    __memcpy_async(gamma_bf + kDs,
+                   const_cast<bfloat16_t*>(p.gamma) + d0 - 2 * kDs,
+                   kDs * 2,
+                   GDRAM2NRAM);
+  }
+  __memcpy_async(cst, const_cast<float*>(p.hc_scale), 3 * 4, GDRAM2NRAM);
+  __memcpy_async(cst + 8, const_cast<float*>(p.hc_base), kMix * 4, GDRAM2NRAM);
+  load_round_coef(0);
+  {
+    int64_t rb0;
+    int32_t rn0;
+    round_range(0, rb0, rn0);
+    if (p.rounds > 0 && rn0 > 0) {
+      load_tile_of(rb0, rn0, 0);
+    }
+  }
+  __sync_io();
+  // hc_fn slice -> WRAM on io1, left in flight: only the convolutions wait for
+  // it (sync.pio1.csimd), the tile loads (io0) and the vector work of the first
+  // tile overlap with the 30..240 KB stream
+  // cores whose group has no tokens never convolve: skip their hc_fn stream
+  if (tok_begin < tok_end) {
+    load_weights<P>(p, lane);
+  }
+  __bang_bfloat162float(
+      gamma, gamma_bf, kDs);  // same compute queue as the later y writes
+  if (helper_lane) {
+    __bang_bfloat162float(gamma2, gamma_bf + kDs, kDs);
+  }
+
+  bool weights_ready = false;
+  for (int32_t r = 0; r < p.rounds; r++) {
+    int64_t rb;
+    int32_t rn;
+    round_range(r, rb, rn);
+    if (r > 0) {
+      load_round_coef(r);
+      __sync_io();
+    }
+    // partial exchange: GDRAM workspace (groups spanning clusters) or cluster
+    // SRAM (P = 4)
+    float* mix_g = L::kClusterLocal
+                       ? sram_part + (r & 1) * kSramRound
+                       : ws_mix + (r & 1) * ws_mix_round +
+                             static_cast<int64_t>(gid) * P * R * kRow;
+    float* s_g = L::kClusterLocal ? mix_g + P * R * kRow
+                                  : ws_s + (r & 1) * ws_s_round +
+                                        static_cast<int64_t>(gid) * P * Rs;
+    float* mix_l =
+        mix_g + static_cast<int64_t>(lane) * R * kRow;  // this core's rows
+    float* s_l = s_g + static_cast<int64_t>(lane) * Rs;
+
+    // Sinkhorn chunks of >= 8 consecutive tokens per lane (the 16 B / 64 B
+    // per-token outputs of different lanes never share a 128 B line; the vv
+    // Sinkhorn costs the same for 1..64 tokens). At most two Sinkhorn lanes (0,
+    // 1); their norm slices are normalised by lanes 2, 3 (same cluster) from z
+    // rows streamed into cluster SRAM during phase A, so a Sinkhorn lane runs
+    // no norm in phase B.
+    int32_t chunk = (rn + 1) / 2;
+    chunk = chunk < 8 ? 8 : (chunk + 7) / 8 * 8;
+    const int32_t nsk = (rn + chunk - 1) / chunk;  // <= 2 (rn <= 64)
+    const bool offload_z = lane < nsk;
+    const bool help_norm = (lane == 2 || lane == 3) && lane - 2 < nsk;
+    float* zs_slot = sram_z + ((r & 1) * 2 + lane % 2) * kSramZSlot;
+
+    // ---------------- phase A: tile pipeline (load -> move-engine bf16->f32 ->
+    // compute -> store)
+    const int32_t ntile = (rn + L::kTile - 1) / L::kTile;
+    auto load_tile = [&](int32_t it) { load_tile_of(rb, rn, it); };
+    auto conv_tile =
+        [&](int32_t it) {  // conv partial mixes of tile it into part[it & 1]
+          const int32_t i0 = it * L::kTile;
+          const int32_t tt = rn - i0 < L::kTile ? rn - i0 : L::kTile;
+          const bfloat16_t* yb = yb0 + (it % L::kYbRing) * (L::kYbB / 2);
+          float* part = part0 + (it & 1) * (L::kPartB / 4);
+          float* co = NRAM_AT(float, L::kOffCo);
+          if (!L::kTrackWeightsReady ||
+              !weights_ready) {  // hc_fn slice (io1) resident in WRAM
+            __asm__ volatile("sync.pio1.csimd;\n\t");
+            weights_ready = true;
+          }
+          if (L::kSplitK) {
+            __bang_conv(co,
+                        const_cast<bfloat16_t*>(yb),
+                        reinterpret_cast<bfloat16_t*>(wram_pool),
+                        L::kKc,
+                        1,
+                        tt * L::kPix,
+                        1,
+                        1,
+                        1,
+                        1,
+                        L::kCo);
+            for (int32_t t = 0; t < tt; t++) {
+              __bang_add(part + t * kRow,
+                         co + 2 * t * L::kCo,
+                         co + (2 * t + 1) * L::kCo + kMix,
+                         kMix);
+            }
+          } else {
+            __bang_conv(part,
+                        const_cast<bfloat16_t*>(yb),
+                        reinterpret_cast<bfloat16_t*>(wram_pool),
+                        kK,
+                        1,
+                        tt,
+                        1,
+                        1,
+                        1,
+                        1,
+                        kRow);
+          }
+        };
+    auto store_mix = [&](int32_t it) {
+      const int32_t i0 = it * L::kTile;
+      const int32_t tt = rn - i0 < L::kTile ? rn - i0 : L::kTile;
+      __memcpy_async(mix_l + i0 * kRow,
+                     part0 + (it & 1) * (L::kPartB / 4),
+                     tt * kRow * 4,
+                     L::kPartSt);
+    };
+    // input conversion of a tile on the move engine, one iteration ahead of its
+    // compute
+    auto cvt_tile = [&](int32_t it) {
+      const int32_t i0 = it * L::kTile;
+      const int32_t tt = rn - i0 < L::kTile ? rn - i0 : L::kTile;
+      move_cvt_bf16_to_f32(f320 + (it & 1) * (L::kF32B / 4),
+                           raw0 + (it & 1) * (L::kRawB / 2),
+                           kDs,
+                           tt * kHc);
+    };
+    // prologue: tile 0 (already loaded for round 0) converted on the vector
+    // unit, which is idle here; tile 1 is loaded without waiting (its
+    // conversion waits for it on the move queue)
+    if (ntile > 0) {
+      if (r > 0) {
+        load_tile(0);
+        __sync_io();
+      }
+      const int32_t tt0 = rn < L::kTile ? rn : L::kTile;
+      __bang_bfloat162float(f320, raw0, tt0 * kHc * kDs);
+      if (ntile > 1) {
+        load_tile(1);
+      }
+    }
+    // Iteration it loads it + 2 (io0), converts it + 1 (move), computes it,
+    // and stores the delayed projection partial; then syncs io0/move/compute
+    // (io1 = weights stream, not waited)
+    for (int32_t it = 0; it < ntile; it++) {
+      if (it + 1 < ntile) {
+        if (it == 0) {
+          __asm__ volatile(
+              "sync.pio0.cmv;\n\t");  // tile 1 load (prologue) done
+        }
+        cvt_tile(it + 1);
+      }
+      if (it + 2 < ntile) {
+        if (it == 0) {
+          // tile 2 reuses raw[0], which the prologue conversion above reads on
+          // the compute queue: io0 waits for it
+          __asm__ volatile("sync.psimd.cio0;\n\t");
+        }
+        load_tile(it + 2);
+      }
+      // Preserve the projection-ring reuse boundary and record that the
+      // asynchronous weight setup stream has completed.
+      if (L::kTrackWeightsReady && it >= L::kYbRing) {
+        __asm__ volatile("sync.pio1.csimd;\n\t");
+        weights_ready = true;
+      }
+      if (it >= L::kConvDefer + 1) {
+        store_mix(it - L::kConvDefer - 1);
+      }
+      const int32_t b = it & 1;
+      const int32_t i0 = it * L::kTile;
+      const int32_t tt = rn - i0 < L::kTile ? rn - i0 : L::kTile;
+      bfloat16_t* yb = yb0 + (it % L::kYbRing) * (L::kYbB / 2);
+      float* f32 =
+          f320 + b * (L::kF32B / 4);  // converted residual inputs (move engine)
+      // Input residual is already BF16: retain the converted FP32 values
+      // for compression, and keep only the BF16 projection ring. Unlike Post
+      // update, standalone Pre needs no FP32 -> BF16 -> FP32 round trip.
+      __bang_float2bfloat16_rn(yb, f32, tt * kHc * kDs);
+      __bang_mul(y, f32, f32, tt * kHc * kDs);
+      row_sums(ss + i0, y, tt, kK, scr);
+      // z = sum_h pre_in[h] * residual[h]: h outer, token inner, so
+      // consecutive vector ops are independent (a per-token mul -> fma -> fma
+      // -> fma chain exposes the vector pipe latency); the tile's pre_in values
+      // are read before the first op
+      {
+        float pr[L::kTile][kHc];
+#pragma unroll
+        for (int32_t t = 0; t < L::kTile; t++) {
+#pragma unroll
+          for (int32_t h = 0; h < kHc; h++) {
+            pr[t][h] = coef[(i0 + (t < tt ? t : 0)) * kHc + h];
+          }
+        }
+#pragma unroll
+        for (int32_t t = 0; t < L::kTile; t++) {
+          if (t < tt) {
+            __bang_mul_scalar(zr + (i0 + t) * kDs, f32 + t * kK, pr[t][0], kDs);
+          }
+        }
+#pragma unroll
+        for (int32_t h = 1; h < kHc; h++) {
+#pragma unroll
+          for (int32_t t = 0; t < L::kTile; t++) {
+            if (t < tt) {
+              float* z = zr + (i0 + t) * kDs;
+              __bang_fusion(
+                  FUSION_FMA, z, f32 + t * kK + h * kDs, pr[t][h], z, kDs, kDs);
+            }
+          }
+        }
+        // The standalone Pre writes BF16 before the separate RMSNorm.
+        // Reuse dead y storage without overwriting deferred projection inputs.
+        bfloat16_t* z_rounded = reinterpret_cast<bfloat16_t*>(y);
+        __bang_float2bfloat16_rn(z_rounded, zr + i0 * kDs, tt * kDs);
+        __bang_bfloat162float(zr + i0 * kDs, z_rounded, tt * kDs);
+        // z^2 into the y rows (y^2 was consumed by row_sums above, same queue,
+        // in order)
+        for (int32_t t = 0; t < tt; t++) {
+          float* z = zr + (i0 + t) * kDs;
+          __bang_mul(y + t * kDs, z, z, kDs);
+        }
+      }
+      row_sums(ss + R + i0, y, tt, kDs, scr);
+      if (offload_z) {  // z rows of this tile -> cluster SRAM for the helper
+                        // lane (move queue)
+        __asm__ volatile("sync.psimd.cmv;\n\t");
+        __memcpy_async(
+            zs_slot + i0 * kDs, zr + i0 * kDs, tt * kDs * 4, NRAM2SRAM);
+      }
+      if (it >= L::kConvDefer) {
+        conv_tile(it - L::kConvDefer);
+      }
+      __asm__ volatile("sync.pio0.pmv.psimd.cio0.cmv.csimd;\n\t");
+    }
+    if (ntile > 0) {
+      // both partial sums of the round as one whole-line store (partial-line
+      // writes cost ~1 us each), issued with the last tile's stores and covered
+      // by the same wait (the last iteration's sync already ordered the compute
+      // that produced them)
+      __memcpy_async(s_l, ss, Rs * 4, L::kPartSt);
+      if (ntile - L::kConvDefer - 1 >= 0) {
+        store_mix(ntile - L::kConvDefer - 1);
+        // A two-tile drain reuses this part slot on its second convolution.
+        // Finish its asynchronous store before the compute queue overwrites
+        // it (SRAM for P4, GDRAM for P8).
+        if (L::kConvDefer > 1) {
+          __sync_io_move_compute();
+        }
+      }
+      // the deferred convs write alternate part buffers: convolve them back
+      // to back, then one compute wait and their stores (covered by the final
+      // io wait below)
+      const int32_t j0 = ntile - L::kConvDefer > 0 ? ntile - L::kConvDefer : 0;
+      for (int32_t j = j0; j < ntile; j++) {
+        conv_tile(j);
+      }
+      __sync_compute();
+      for (int32_t j = j0; j < ntile; j++) {
+        store_mix(j);
+      }
+      __sync_io();
+      if (L::kTrackWeightsReady) {
+        __asm__ volatile(
+            "sync.pio1.csimd;\n\t");  // weight setup stream complete
+        __sync_compute();
+      }
+    }
+    if (L::kClusterLocal) {
+      __sync_io_move_compute();
+      __sync_all_ipu_within_cluster();
+    } else {
+      __sync_all_ipu();
+    }
+
+    // ---------------- phase B: Sinkhorn chunks of >= 8 consecutive tokens per
+    // lane (the 16 B / 64 B per-token outputs of different lanes never share a
+    // 128 B line; the vv Sinkhorn costs the same for 1..64 tokens). The partial
+    // loads of the norm and of the Sinkhorn are issued together.
+    const int32_t c0 = lane * chunk;
+    int32_t cn = rn - c0;
+    if (cn > chunk) {
+      cn = chunk;
+    }
+    float* mp = bscr;              // [P][cn][32], P * cn <= 256
+    float* m = bscr + 8192;        // [cn][32]
+    float* soa = m + 64 * kRow;    // [32][cn]
+    float* pre = soa + kRow * 64;  // [cn][4]
+    float* post = pre + (cn > 0 ? cn : 0) *
+                            kHc;  // [cn][4], adjacent to pre (one sigmoid pass)
+    float* comb = pre + 2 * 64 * kHc;  // [cn][16]
+    float* combt = comb + 64 * 16;     // [16][cn]
+    float* rs = combt + 64 * 16;       // [cn]
+    float* yp = rs + 64;               // [P][cn]
+    float* zp = yp + 64 * 32;          // [P][rn]
+    float* zsum = zp + 64 * 32;        // [rn]
+    // the z partials only feed the norm, which Sinkhorn lanes hand to their
+    // helper
+    if (rn > 0 && !offload_z) {
+      __memcpy_async(zp, s_g + R, rn * 4, L::kPartLd, rn * 4, Rs * 4, P - 1);
+    }
+    if (cn > 0) {
+      __memcpy_async(mp,
+                     mix_g + c0 * kRow,
+                     cn * kRow * 4,
+                     L::kPartLd,
+                     cn * kRow * 4,
+                     R * kRow * 4,
+                     P - 1);
+      __memcpy_async(yp, s_g + c0, cn * 4, L::kPartLd, cn * 4, Rs * 4, P - 1);
+    }
+    __sync_io();
+    if (L::kClusterLocal) {
+      __sync_move();
+    }
+    // norm_out slice(s) for all round tokens: z rows (src), gamma slice, bf16
+    // staging, hidden offset
+    auto norm_slice =
+        [&](const float* src, const float* g, bfloat16_t* stage, int32_t dd0) {
+          // per-token scales read 8 at a time before the 8 ops that use them (a
+          // scalar read between vector ops waits for the vector pipe)
+          for (int32_t i0 = 0; i0 < rn; i0 += 8) {
+            const int32_t n8 = rn - i0 < 8 ? rn - i0 : 8;
+            float sc[8];
+#pragma unroll
+            for (int32_t j = 0; j < 8; j++) {
+              sc[j] = zsum[i0 + (j < n8 ? j : 0)];
+            }
+            for (int32_t j = 0; j < n8; j++) {
+              fuse_mul_scalar_mul_vec_cast(
+                  stage + (i0 + j) * kDs, src + (i0 + j) * kDs, sc[j], g, kDs);
+            }
+          }
+          __sync_compute();
+          __memcpy_async(p.norm_out + rb * kDim + dd0,
+                         stage,
+                         kDs * 2,
+                         NRAM2GDRAM,
+                         kDim * 2,
+                         kDs * 2,
+                         rn - 1);
+        };
+    // helper chunk buffers: the Sinkhorn scratch below zp is unused on helper
+    // lanes
+    constexpr int32_t kChunkRows =
+        (16960 / 2) / kDs;  // rows of DS floats per chunk buffer
+    float* zbuf[2] = {bscr, bscr + kChunkRows * kDs};
+    const int32_t nch = (rn + kChunkRows - 1) / kChunkRows;
+    if (help_norm &&
+        rn > 0) {  // first partner chunk in flight during the own norm
+      __memcpy_async(zbuf[0],
+                     sram_z + ((r & 1) * 2 + (lane - 2) % 2) * kSramZSlot,
+                     (rn < kChunkRows ? rn : kChunkRows) * kDs * 4,
+                     SRAM2NRAM);
+    }
+    if (rn > 0 && !offload_z) {
+      __bang_sumpool(
+          zsum, zp, rn, P, 1, P, 1, 1, P);  // sum over the P lanes (H axis)
+      __bang_mul_scalar(zsum, zsum, 1.0f / kDim, rn);
+      __bang_add_scalar(zsum, zsum, p.norm_eps, rn);
+      __bang_rsqrt(zsum, zsum, rn);
+      __sync_compute();
+      norm_slice(zr, gamma, nb, d0);
+      if (help_norm) {
+        // slice of Sinkhorn lane lane - 2: streamed from cluster SRAM in chunks
+        // into two buffers in the (here unused) Sinkhorn scratch, overlapping
+        // each load with the previous chunk
+        bfloat16_t* nb2 = NRAM_AT(bfloat16_t, L::kOffNb2);
+        const float* zsrc =
+            sram_z + ((r & 1) * 2 + (lane - 2) % 2) * kSramZSlot;
+        for (int32_t c = 0; c < nch; c++) {
+          const int32_t row0 = c * kChunkRows;
+          const int32_t cnt = rn - row0 < kChunkRows ? rn - row0 : kChunkRows;
+          __sync_move();  // chunk c landed
+          if (c + 1 < nch) {
+            const int32_t row1 = row0 + kChunkRows;
+            const int32_t cnt1 =
+                rn - row1 < kChunkRows ? rn - row1 : kChunkRows;
+            __asm__ volatile(
+                "sync.psimd.cmv;\n\t");  // chunk c - 1 consumed its buffer
+            __memcpy_async(zbuf[(c + 1) & 1],
+                           const_cast<float*>(zsrc) + row1 * kDs,
+                           cnt1 * kDs * 4,
+                           SRAM2NRAM);
+          }
+          for (int32_t i0 = 0; i0 < cnt; i0 += 8) {
+            const int32_t n8 = cnt - i0 < 8 ? cnt - i0 : 8;
+            float sc[8];
+#pragma unroll
+            for (int32_t j = 0; j < 8; j++) {
+              sc[j] = zsum[row0 + i0 + (j < n8 ? j : 0)];
+            }
+            for (int32_t j = 0; j < n8; j++) {
+              fuse_mul_scalar_mul_vec_cast(nb2 + (row0 + i0 + j) * kDs,
+                                           zbuf[c & 1] + (i0 + j) * kDs,
+                                           sc[j],
+                                           gamma2,
+                                           kDs);
+            }
+          }
+        }
+        __sync_compute();
+        __memcpy_async(p.norm_out + rb * kDim + d0 - 2 * kDs,
+                       nb2,
+                       kDs * 2,
+                       NRAM2GDRAM,
+                       kDim * 2,
+                       kDs * 2,
+                       rn - 1);
+      }
+    }
+    if (cn > 0) {
+      __bang_sumpool(
+          m, mp, kRow, P, cn, P, 1, 1, P);           // [cn][32], sum over lanes
+      __bang_sumpool(rs, yp, cn, P, 1, P, 1, 1, P);  // [cn]
+      __bang_transpose(soa, m, cn, kRow);            // [32][cn]
+      __bang_mul_scalar(rs, rs, 1.0f / (kHc * kDim), cn);
+      __bang_add_scalar(rs, rs, p.norm_eps, cn);
+      __bang_rsqrt(rs, rs, cn);
+      __bang_cycle_mul(soa, soa, rs, kMix * cn, cn);
+      __bang_transpose(pre, soa, kHc, cn);
+      __bang_transpose(post, soa + kHc * cn, kHc, cn);
+      __bang_transpose(comb, soa + 2 * kHc * cn, kHc * kHc, cn);
+      __sync_compute();
+      const float s0 = cst[0], s1 = cst[1], s2 = cst[2];
+      __bang_fusion(FUSION_FMA, pre, pre, s0, cst + 8, cn * kHc, kHc);
+      __bang_fusion(FUSION_FMA, post, post, s1, cst + 8 + kHc, cn * kHc, kHc);
+      __bang_fusion(FUSION_FMA,
+                    comb,
+                    comb,
+                    s2,
+                    cst + 8 + 2 * kHc,
+                    cn * kHc * kHc,
+                    kHc * kHc);
+      apply_sigmoid(pre, 2 * cn * kHc);
+      __bang_mul_scalar(post, post, 2.0f, cn * kHc);
+      __bang_add_scalar(pre, pre, p.hc_eps, cn * kHc);
+      __bang_transpose(combt, comb, cn, kHc * kHc);
+      __sync_compute();
+      compute_sinkhorn_pairwise(combt, cn, p.sinkhorn_iter, p.hc_eps);
+      __bang_transpose(comb, combt, kHc * kHc, cn);
+      __sync_compute();
+      const int64_t g0 = rb + c0;
+      __memcpy_async(p.next_pre + g0 * kHc, pre, cn * kHc * 4, NRAM2GDRAM);
+      __memcpy_async(p.post_out + g0 * kHc, post, cn * kHc * 4, NRAM2GDRAM);
+      __memcpy_async(
+          p.comb_out + g0 * kHc * kHc, comb, cn * kHc * kHc * 4, NRAM2GDRAM);
+    }
+    __sync_io();
+  }
+}
+
+}  // namespace
+
+// ---------------------------------------------------------------- host
+
+extern "C" int64_t fused_mhc_pre_workspace_bytes(int64_t tokens) {
+  if (tokens <= 0) {
+    return 0;
+  }
+  const Topology topo = query_topology();
+  if (topo.clusters <= 0) {
+    return -1;
+  }
+  const Plan pl = make_plan(tokens, topo);
+  if (pl.p == 4) {
+    return 0;  // cluster-local groups exchange their partials in SRAM
+  }
+  const int64_t rs = (2 * pl.round_tokens + 31) / 32 * 32;
+  const int64_t per_round =
+      static_cast<int64_t>(pl.groups) * pl.p *
+      (static_cast<int64_t>(pl.round_tokens) * kRow + rs) * 4;
+  return 2 * per_round;
+}
+
+extern "C" int32_t fused_mhc_pre_launch(void* queue,
+                                        const void* const* in,
+                                        void* const* out,
+                                        void* workspace,
+                                        int64_t tokens,
+                                        int32_t dim,
+                                        int32_t sinkhorn_iter,
+                                        float hc_eps,
+                                        float norm_eps) {
+  if (dim != kDim || tokens < 0 || sinkhorn_iter <= 0) {
+    return 1;
+  }
+  if (tokens == 0) {
+    return 0;
+  }
+  if (tokens > (int64_t{1} << 30)) {
+    return 2;
+  }
+  const Topology topo = query_topology();
+  if (topo.clusters <= 0 || topo.cores_per_cluster != 4) {
+    return 3;
+  }
+  if (topo.clusters != 1 && topo.clusters != 2 && topo.clusters != 4 &&
+      topo.clusters != 8 && topo.clusters != 16) {
+    return 4;
+  }
+  // Token-owned tiles avoid repeated d-split round reductions at large T.
+  // Unaligned tensors keep the general path selected before any launch.
+  bool aligned = true;
+  for (int32_t i = 0; i < 6; ++i) {
+    aligned = aligned && (reinterpret_cast<uintptr_t>(in[i]) & 63) == 0;
+  }
+  for (int32_t i = 0; i < 4; ++i) {
+    aligned = aligned && (reinterpret_cast<uintptr_t>(out[i]) & 63) == 0;
+  }
+  if (tokens >= 257 && aligned) {
+    return fused_mhc_pre_prefill_launch(
+        queue, in, out, tokens, dim, sinkhorn_iter, hc_eps, norm_eps);
+  }
+  const Plan pl = make_plan(tokens, topo);
+  Params p;
+  p.residual_in = static_cast<const bfloat16_t*>(in[0]);
+  p.pre_in = static_cast<const float*>(in[1]);
+  p.hc_fn = static_cast<const bfloat16_t*>(in[2]);
+  p.hc_scale = static_cast<const float*>(in[3]);
+  p.hc_base = static_cast<const float*>(in[4]);
+  p.gamma = static_cast<const bfloat16_t*>(in[5]);
+  p.norm_out = static_cast<bfloat16_t*>(out[0]);
+  p.next_pre = static_cast<float*>(out[1]);
+  p.post_out = static_cast<float*>(out[2]);
+  p.comb_out = static_cast<float*>(out[3]);
+  p.ws = static_cast<float*>(workspace);
+  p.tokens = static_cast<int32_t>(tokens);
+  p.group_tokens = pl.group_tokens;
+  p.round_tokens = pl.round_tokens;
+  p.rounds = pl.rounds;
+  p.sinkhorn_iter = sinkhorn_iter;
+  p.hc_eps = hc_eps;
+  p.norm_eps = norm_eps;
+  cnrtDim3_t dims{
+      static_cast<uint32_t>(topo.clusters * topo.cores_per_cluster), 1, 1};
+  const cnrtFunctionType_t ft = union_type(topo.clusters);
+  cnrtQueue_t q = static_cast<cnrtQueue_t>(queue);
+  switch (pl.p) {
+    case 16:
+      fused_mhc_pre_kernel<16><<<dims, ft, q>>>(p);
+      break;
+    case 8:
+      fused_mhc_pre_kernel<8><<<dims, ft, q>>>(p);
+      break;
+    case 4:
+      fused_mhc_pre_kernel<4><<<dims, ft, q>>>(p);
+      break;
+    default:
+      return 5;
+  }
+  return 0;
+}

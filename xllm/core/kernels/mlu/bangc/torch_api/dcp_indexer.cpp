@@ -22,18 +22,18 @@ limitations under the License.
 
 #include "kernels/mlu/bangc/src/dcp_indexer/host.h"
 #include "kernels/mlu/bangc/src/dcp_indexer/params.h"
+#include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 
 namespace xllm::kernel::mlu::bangc {
 namespace {
 
 void check_tensor(const torch::Tensor& tensor,
+                  const char* name,
                   torch::ScalarType dtype,
                   int64_t dims,
                   const torch::Device& device) {
-  CHECK(tensor.defined());
-  CHECK_EQ(tensor.scalar_type(), dtype);
+  detail::check_tensor_properties(tensor, name, device, dtype);
   CHECK_EQ(tensor.dim(), dims);
-  CHECK(tensor.device() == device);
   CHECK(tensor.is_contiguous());
   CHECK(!tensor.is_conj() && !tensor.is_neg());
 }
@@ -54,13 +54,13 @@ std::tuple<torch::Tensor, torch::Tensor> dcp_indexer(
   CHECK(query.defined());
   CHECK(query.device().is_privateuseone());
   const torch::Device device = query.device();
-  check_tensor(query, torch::kBFloat16, 3, device);
-  check_tensor(k_cache, torch::kBFloat16, 4, device);
-  check_tensor(weights, torch::kBFloat16, 2, device);
-  check_tensor(block_table, torch::kInt32, 2, device);
-  check_tensor(q_cu_seq_lens, torch::kInt32, 1, device);
-  check_tensor(query_positions, torch::kInt32, 1, device);
-  check_tensor(kv_seq_lens, torch::kInt32, 1, device);
+  check_tensor(query, "query", torch::kBFloat16, 3, device);
+  check_tensor(k_cache, "k_cache", torch::kBFloat16, 4, device);
+  check_tensor(weights, "weights", torch::kBFloat16, 2, device);
+  check_tensor(block_table, "block_table", torch::kInt32, 2, device);
+  check_tensor(q_cu_seq_lens, "q_cu_seq_lens", torch::kInt32, 1, device);
+  check_tensor(query_positions, "query_positions", torch::kInt32, 1, device);
+  check_tensor(kv_seq_lens, "kv_seq_lens", torch::kInt32, 1, device);
   CHECK_EQ(query.size(1), detail::kHeads);
   CHECK_EQ(query.size(2), detail::kDim);
   const int64_t rows = query.size(0);

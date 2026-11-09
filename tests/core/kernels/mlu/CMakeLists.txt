@@ -44,6 +44,24 @@ cc_test(
 )
 
 cc_test(
+  NAME fused_mhc_pre_mlu_test
+  SRCS fused_mhc_pre_test.cpp
+  DEPS :mlu_kernels torch glog::glog GTest::gtest_main
+)
+
+cc_test(
+  NAME
+    fused_mhc_delayed_pre_mlu_test
+  SRCS
+    fused_mhc_delayed_pre_test.cpp
+  DEPS
+    :mlu_kernels
+    torch
+    glog::glog
+    GTest::gtest_main
+)
+
+cc_test(
   NAME
     scaled_quantize_mlu_test
   SRCS

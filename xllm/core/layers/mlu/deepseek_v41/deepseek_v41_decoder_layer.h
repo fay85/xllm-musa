@@ -33,6 +33,10 @@ class DeepseekV41DecoderLayerImpl final : public torch::nn::Module {
       int64_t query_width = 1) const;
   void load_hash_state(const StateDict& state);
   void verify_loaded_weights(const std::string& prefix) const;
+  bool has_engram() const { return static_cast<bool>(engram_); }
+  // Whether the MHC boundaries run the BangC fused kernels. Only fused layers
+  // can defer their post into the next layer's boundary.
+  bool uses_fused_mhc() const { return use_fused_mhc_; }
   void write_context_kv(const torch::Tensor& hidden,
                         const torch::Tensor& positions,
                         const torch::Tensor& rope,
@@ -49,17 +53,34 @@ class DeepseekV41DecoderLayerImpl final : public torch::nn::Module {
       std::vector<KVCache>& caches,
       const ModelInputParams& input,
       Csa2Context& shared,
+      std::optional<PendingMHC>& pending,
+      bool defer_post,
       DeepseekV41EngramImpl::HashState* hash_state = nullptr,
       const mlu_v4_cp::DeepseekV4CpContext* cp_context = nullptr,
       torch::Tensor* attention_input = nullptr);
 
  private:
+  // Original unfused boundaries for shapes the fused kernels do not support.
+  torch::Tensor forward_unfused(
+      torch::Tensor hidden,
+      torch::Tensor& pre_mix,
+      const torch::Tensor& positions,
+      const torch::Tensor& rope,
+      std::vector<KVCache>& caches,
+      const ModelInputParams& input,
+      Csa2Context& shared,
+      const mlu_v4_cp::DeepseekV4CpContext* cp_context);
+  torch::Tensor forward_moe(torch::Tensor x,
+                            const ModelInputParams& input,
+                            const mlu_v4_cp::DeepseekV4CpContext* cp_context);
+
   DeepseekV41Attention attention_{nullptr};
   DeepseekV41Engram engram_{nullptr};
   RMSNorm attn_norm_{nullptr}, ffn_norm_{nullptr};
   MHCPre attn_hc_{nullptr}, ffn_hc_{nullptr};
   MHCPost post_{nullptr};
   SparseMoEBlock moe_{nullptr};
+  bool use_fused_mhc_ = false;
 };
 TORCH_MODULE(DeepseekV41DecoderLayer);
 }  // namespace xllm::layer

@@ -23,6 +23,7 @@ DeepseekV41DecoderLayerImpl::DeepseekV41DecoderLayerImpl(
     int32_t layer_id) {
   const auto& args = context.get_model_args();
   const auto& options = context.get_tensor_options();
+  CHECK_GT(args.hc_sinkhorn_iters(), 0);
   const auto& quant = context.get_quant_args();
   const std::string prefix = "layers." + std::to_string(layer_id);
   attention_ = register_module("attn", DeepseekV41Attention(context, layer_id));
@@ -51,6 +52,8 @@ DeepseekV41DecoderLayerImpl::DeepseekV41DecoderLayerImpl(
                                    args.rms_norm_eps(),
                                    options));
   post_ = register_module("hc_post", MHCPost(args.rms_norm_eps()));
+  // Chosen once from the model shape, before any execution.
+  use_fused_mhc_ = attn_hc_->supports_fused_delayed_pre();
   QuantArgs moe_quant = quant;
   for (const auto& names : std::vector<std::pair<std::string, std::string>>{
            {"w13", "gate_proj"}, {"w13", "up_proj"}, {"w2", "down_proj"}}) {
@@ -137,10 +140,15 @@ torch::Tensor DeepseekV41DecoderLayerImpl::forward(
     std::vector<KVCache>& caches,
     const ModelInputParams& input,
     Csa2Context& shared,
+    std::optional<PendingMHC>& pending,
+    bool defer_post,
     DeepseekV41EngramImpl::HashState* hash_state,
     const mlu_v4_cp::DeepseekV4CpContext* cp_context,
     torch::Tensor* attention_input) {
-  // DSpark captures the layer input before Engram injection.
+  CHECK(!engram_ || !pending.has_value())
+      << "Pending MHC must be materialized before Engram";
+  // Capture boundaries require the preceding layer to materialize its post.
+  CHECK(attention_input == nullptr || !pending.has_value());
   if (attention_input != nullptr) {
     *attention_input =
         hidden.to(torch::kFloat32).mean(1).to(hidden.scalar_type());
@@ -153,6 +161,56 @@ torch::Tensor DeepseekV41DecoderLayerImpl::forward(
         hash_state,
         cp_context ? cp_context->local_row_indices : torch::Tensor());
   }
+  if (!use_fused_mhc_) {
+    CHECK(!pending.has_value() && !defer_post)
+        << "Unfused MHC layers cannot take or defer a pending post";
+    return forward_unfused(std::move(hidden),
+                           pre_mix,
+                           positions,
+                           rope,
+                           caches,
+                           input,
+                           shared,
+                           cp_context);
+  }
+  MHCPreOutput attn;
+  torch::Tensor x;
+  if (pending.has_value()) {
+    std::tie(x, hidden, attn.pre, attn.post, attn.comb) =
+        attn_hc_->fused_delayed_pre(pending->x,
+                                    pending->residual,
+                                    pending->post,
+                                    pending->comb,
+                                    pre_mix,
+                                    attn_norm_->weight());
+    pending.reset();
+  } else {
+    std::tie(x, attn.pre, attn.post, attn.comb) =
+        attn_hc_->fused_pre_norm(hidden, pre_mix, attn_norm_->weight());
+  }
+  x = attention_->forward(
+      x, positions, rope, caches, input, shared, cp_context);
+  MHCPreOutput ffn;
+  std::tie(x, hidden, ffn.pre, ffn.post, ffn.comb) = ffn_hc_->fused_delayed_pre(
+      x, hidden, attn.post, attn.comb, attn.pre, ffn_norm_->weight());
+  x = forward_moe(x, input, cp_context);
+  pre_mix = ffn.pre;
+  if (defer_post) {
+    pending.emplace(PendingMHC{x, hidden, ffn.post, ffn.comb});
+    return x;
+  }
+  return std::get<0>(post_->forward(x, hidden, ffn.post, ffn.comb));
+}
+
+torch::Tensor DeepseekV41DecoderLayerImpl::forward_unfused(
+    torch::Tensor hidden,
+    torch::Tensor& pre_mix,
+    const torch::Tensor& positions,
+    const torch::Tensor& rope,
+    std::vector<KVCache>& caches,
+    const ModelInputParams& input,
+    Csa2Context& shared,
+    const mlu_v4_cp::DeepseekV4CpContext* cp_context) {
   auto attn = attn_hc_->forward(hidden, std::nullopt, pre_mix);
   torch::Tensor x = std::get<0>(attn_norm_(attn.output, std::nullopt));
   x = attention_->forward(
@@ -160,17 +218,23 @@ torch::Tensor DeepseekV41DecoderLayerImpl::forward(
   hidden = std::get<0>(post_->forward(x, hidden, attn.post, attn.comb));
   auto ffn = ffn_hc_->forward(hidden, std::nullopt, attn.pre);
   x = std::get<0>(ffn_norm_(ffn.output, std::nullopt));
-  if (cp_context != nullptr) {
-    x = moe_->forward_cp(x,
-                         std::nullopt,
-                         cp_context->geometry.tokens_per_rank,
-                         cp_context->cp_group);
-  } else {
-    const auto route = moe_->prep_route(x);
-    x = moe_->forward_selected(x, route.reduce_weight, route.expert_id, input);
-  }
+  x = forward_moe(x, input, cp_context);
   pre_mix = ffn.pre;
   return std::get<0>(post_->forward(x, hidden, ffn.post, ffn.comb));
+}
+
+torch::Tensor DeepseekV41DecoderLayerImpl::forward_moe(
+    torch::Tensor x,
+    const ModelInputParams& input,
+    const mlu_v4_cp::DeepseekV4CpContext* cp_context) {
+  if (cp_context != nullptr) {
+    return moe_->forward_cp(x,
+                            std::nullopt,
+                            cp_context->geometry.tokens_per_rank,
+                            cp_context->cp_group);
+  }
+  const auto route = moe_->prep_route(x);
+  return moe_->forward_selected(x, route.reduce_weight, route.expert_id, input);
 }
 
 }  // namespace xllm::layer

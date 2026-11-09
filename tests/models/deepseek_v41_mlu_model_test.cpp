@@ -88,7 +88,7 @@ class DeepseekV41MluModelTest : public ::testing::Test {
     ASSERT_TRUE(tokenizer.good());
     args_.model_type("deepseek_v41")
         .n_layers(1)
-        .hidden_size(128)
+        .hidden_size(5120)
         .vocab_size(4)
         .n_heads(1)
         .head_dim(512)
@@ -98,7 +98,7 @@ class DeepseekV41MluModelTest : public ::testing::Test {
         .index_head_dim(128)
         .o_groups(1)
         .o_lora_rank(128)
-        .hc_mult(2)
+        .hc_mult(4)
         .hc_sinkhorn_iters(4)
         .hc_eps(1e-6)
         .rms_norm_eps(1e-5)
@@ -217,8 +217,9 @@ class DeepseekV41MluModelTest : public ::testing::Test {
     SCOPED_TRACE(name);
     GTEST_FLAG_SET(death_test_style, "threadsafe");
     auto weights = make_weights();
-    weights.emplace("head.weight",
-                    torch::full({4, 128}, 0.5, torch::kBFloat16));
+    weights.emplace(
+        "head.weight",
+        torch::full({4, args_.hidden_size()}, 0.5, torch::kBFloat16));
     ASSERT_EQ(weights.erase(name), 1);
     EXPECT_DEATH(
         {
@@ -293,8 +294,9 @@ class ExecutorV41Model final : public CausalLM {
 };
 
 // Observe the same public aux_hidden_states tensor that the draft consumes.
-// Layer 0's entering residual is exactly the token embedding, so its expected
-// capture needs neither a duplicate decoder nor a Python/backend comparison.
+// Zero attention/FFN weights preserve the BF16 embedding across layers, so
+// entering-residual capture has an independent oracle at materialized
+// boundaries.
 class DeepseekV41CaptureTest : public DeepseekV41MluModelTest {
  protected:
   void SetUp() override {
@@ -308,17 +310,41 @@ class DeepseekV41CaptureTest : public DeepseekV41MluModelTest {
     DeepseekV41MluModelTest::TearDown();
   }
 
-  void expect_entering_residual(bool with_engram, double value_scale) {
+  void expect_entering_residual(bool with_engram,
+                                double value_scale,
+                                int32_t capture_layer = 0,
+                                int64_t model_hidden_size = 5120) {
     torch::InferenceMode inference;
     torch::DeviceGuard guard(options_.device());
-    // MLU kernels require hc_mult=4 and MoE hidden_size >= 256.
-    args_.layers_to_capture({0}).window_size(16).hc_mult(4).hidden_size(256);
+    // Fused MHC runs for hc_mult=4 and hidden_size=5120; other hidden sizes
+    // take the unfused boundaries.
+    args_.layers_to_capture({capture_layer})
+        .n_layers(capture_layer + 1)
+        .compress_ratios(std::vector<int32_t>(capture_layer + 1, 0))
+        .window_size(16)
+        .hc_mult(4)
+        .hidden_size(model_hidden_size);
+    const int64_t hidden_size = args_.hidden_size();
     auto weights = make_weights();
-    weights["embed.weight"] = torch::arange(4 * 256, torch::kFloat32)
+    // Zero attention/FFN branches and uniform Sinkhorn preserve the BF16
+    // embedding across layer 0, giving an independent upper-layer oracle.
+    const auto first_layer_weights = weights;
+    for (int32_t layer_id = 1; layer_id <= capture_layer; ++layer_id) {
+      for (const auto& [name, tensor] : first_layer_weights) {
+        if (name.rfind("layers.0.", 0) == 0) {
+          weights.emplace("layers." + std::to_string(layer_id) + "." +
+                              name.substr(std::string("layers.0.").size()),
+                          tensor);
+        }
+      }
+    }
+    const std::string engram_prefix =
+        "layers." + std::to_string(capture_layer) + ".engram.";
+    weights["embed.weight"] = torch::arange(4 * hidden_size, torch::kFloat32)
                                   .remainder(31)
                                   .sub(15)
                                   .div(16)
-                                  .reshape({4, 256})
+                                  .reshape({4, hidden_size})
                                   .to(torch::kBFloat16);
     const StateDict hashes({
         {"token_map", torch::arange(4, torch::kInt64)},
@@ -327,29 +353,30 @@ class DeepseekV41CaptureTest : public DeepseekV41MluModelTest {
         {"offsets", torch::tensor({{0}}, torch::kInt64)},
     });
     if (with_engram) {
-      args_.engram_layer_ids({0})
+      args_.engram_layer_ids({capture_layer})
           .engram_num_embeddings({7})
           .engram_head_dim(32)
           .engram_pad_token_id(0);
       // E4M3 byte 0x38 and E8M0 byte 127 decode to 1. Zero keys make the
       // gate ~0.5; a signed value vector produces a non-collinear residual
       // change. All values are deterministic and exactly BF16-representable.
-      weights.emplace("layers.0.engram.embed.weight",
+      weights.emplace(engram_prefix + "embed.weight",
                       torch::full({7, 32}, 0x38, torch::kUInt8));
-      weights.emplace("layers.0.engram.embed.scale",
+      weights.emplace(engram_prefix + "embed.scale",
                       torch::full({7, 1}, 127, torch::kUInt8));
-      auto wkv = torch::zeros({1280, 32}, torch::kBFloat16);
-      auto values = torch::arange(256, torch::kFloat32)
+      auto wkv = torch::zeros({5 * hidden_size, 32}, torch::kBFloat16);
+      auto values = torch::arange(hidden_size, torch::kFloat32)
                         .remainder(2)
                         .mul(2)
                         .sub(1)
                         .mul(value_scale / 32);
-      wkv.slice(0, 1024).copy_(values.unsqueeze(1).expand({256, 32}));
-      weights.emplace("layers.0.engram.wkv.weight", wkv);
-      weights.emplace("layers.0.engram.q_weight",
-                      torch::ones({4, 256}, torch::kBFloat16));
-      weights.emplace("layers.0.engram.k_weight",
-                      torch::ones({4, 256}, torch::kBFloat16));
+      wkv.slice(0, 4 * hidden_size)
+          .copy_(values.unsqueeze(1).expand({hidden_size, 32}));
+      weights.emplace(engram_prefix + "wkv.weight", wkv);
+      weights.emplace(engram_prefix + "q_weight",
+                      torch::ones({4, hidden_size}, torch::kBFloat16));
+      weights.emplace(engram_prefix + "k_weight",
+                      torch::ones({4, hidden_size}, torch::kBFloat16));
     }
     const auto context = make_context();
     mlu::model::DeepseekV41Model model(context);
@@ -377,15 +404,19 @@ class DeepseekV41CaptureTest : public DeepseekV41MluModelTest {
     DeepSeekV4KVCacheTensors tensors;
     tensors.swa_cache = torch::zeros({1, 1, 128, 512}, options_);
     std::vector<KVCache> caches;
-    caches.reserve(1);
-    caches.emplace_back(tensors);
+    caches.reserve(capture_layer + 1);
+    for (int32_t layer_id = 0; layer_id <= capture_layer; ++layer_id) {
+      DeepSeekV4KVCacheTensors layer_tensors;
+      layer_tensors.swa_cache = torch::zeros_like(tensors.swa_cache);
+      caches.emplace_back(layer_tensors);
+    }
 
     // This independent Engram call is only diagnostic. The correctness
     // assertion below always uses the entering embedding, even after a fix.
     torch::Tensor after_engram = expected;
     if (with_engram) {
       layer::DeepseekV41Engram engram(context, /*engram_id=*/0);
-      engram->load_state_dict(state.get_dict_with_prefix("layers.0.engram."));
+      engram->load_state_dict(state.get_dict_with_prefix(engram_prefix));
       engram->load_hash_state(hashes);
       auto hidden = expected.to(options_).unsqueeze(1).repeat({1, 4, 1});
       after_engram = engram->forward(hidden, tokens, input)
@@ -423,7 +454,7 @@ class DeepseekV41CaptureTest : public DeepseekV41MluModelTest {
               << " post_engram_max_abs=" << post_engram_max_abs;
     // No tolerance is needed: capture only averages four identical HC lanes.
     EXPECT_TRUE(torch::equal(actual, expected))
-        << "DSpark must receive the residual entering layer 0, before Engram. "
+        << "DSpark must receive the entering residual before Engram. "
         << "max_abs=" << max_abs << ", relative_l2=" << relative_l2
         << ", distance to post-Engram features=" << post_engram_max_abs;
   }
@@ -444,6 +475,36 @@ TEST_F(DeepseekV41CaptureTest, CapturesEnteringResidualBeforeEngramInjection) {
   expect_entering_residual(/*with_engram=*/true, /*value_scale=*/0.5);
 }
 
+TEST_F(DeepseekV41CaptureTest, MaterializesPostBeforeUpperLayerCapture) {
+  expect_entering_residual(/*with_engram=*/false,
+                           /*value_scale=*/0,
+                           /*capture_layer=*/1);
+}
+
+TEST_F(DeepseekV41CaptureTest,
+       MaterializesPostBeforeUpperLayerEngramAndCapture) {
+  expect_entering_residual(/*with_engram=*/true,
+                           /*value_scale=*/0.5,
+                           /*capture_layer=*/1);
+}
+
+// Hidden sizes other than 5120 have no fused MHC kernel: the layers run the
+// unfused boundaries and never defer their post.
+TEST_F(DeepseekV41CaptureTest, UnsupportedHiddenSizeUsesUnfusedBoundaries) {
+  expect_entering_residual(/*with_engram=*/false,
+                           /*value_scale=*/0,
+                           /*capture_layer=*/1,
+                           /*model_hidden_size=*/256);
+}
+
+TEST_F(DeepseekV41CaptureTest,
+       UnsupportedHiddenSizeUsesUnfusedBoundariesWithEngram) {
+  expect_entering_residual(/*with_engram=*/true,
+                           /*value_scale=*/0.5,
+                           /*capture_layer=*/1,
+                           /*model_hidden_size=*/256);
+}
+
 TEST_F(DeepseekV41CaptureTest,
        DSparkExecutorRegroupsRealModelAndReplaysAfterCandidateRejection) {
   torch::InferenceMode inference;
@@ -452,7 +513,7 @@ TEST_F(DeepseekV41CaptureTest,
   constexpr int32_t kWidth = 6;
   constexpr int32_t kRequests = 2;
   args_.dtype("bfloat16")
-      .hidden_size(256)
+      .hidden_size(5120)
       .hc_mult(4)
       .n_heads(8)
       .vocab_size(8)
@@ -477,7 +538,8 @@ TEST_F(DeepseekV41CaptureTest,
         .reshape(shape)
         .to(torch::kBFloat16);
   };
-  weights["embed.weight"] = patterned({8, 256}, 0.5);
+  const int64_t hidden_size = args_.hidden_size();
+  weights["embed.weight"] = patterned({8, hidden_size}, 0.5);
   weights["layers.0.attn.wq_b.weight"] = patterned({4096, 128}, 0.01);
   weights["layers.0.attn.wo_a.weight"] = patterned({1, 128, 4096}, 0.01);
   weights["layers.0.attn.attn_sink"] = torch::zeros({8}, torch::kFloat32);
@@ -500,9 +562,9 @@ TEST_F(DeepseekV41CaptureTest,
                   torch::full({18, 1}, 127, torch::kUInt8));
   // Zero keys fix the gate near 0.5. Distinct signed value directions for
   // the two hash columns make a history-only change visible after final norm.
-  auto engram_wkv = torch::zeros({1280, 64}, torch::kBFloat16);
-  auto value_rows = engram_wkv.slice(0, 1024);
-  auto channels = torch::arange(256, torch::kFloat32);
+  auto engram_wkv = torch::zeros({5 * hidden_size, 64}, torch::kBFloat16);
+  auto value_rows = engram_wkv.slice(0, 4 * hidden_size);
+  auto channels = torch::arange(hidden_size, torch::kFloat32);
   value_rows.slice(1, 0, 32).copy_(
       channels.remainder(2).mul(2).sub(1).div(32).unsqueeze(1));
   value_rows.slice(1, 32, 64).copy_(channels.remainder(4)
@@ -514,9 +576,9 @@ TEST_F(DeepseekV41CaptureTest,
                                         .unsqueeze(1));
   weights.emplace("layers.0.engram.wkv.weight", engram_wkv);
   weights.emplace("layers.0.engram.q_weight",
-                  torch::ones({4, 256}, torch::kBFloat16));
+                  torch::ones({4, hidden_size}, torch::kBFloat16));
   weights.emplace("layers.0.engram.k_weight",
-                  torch::ones({4, 256}, torch::kBFloat16));
+                  torch::ones({4, hidden_size}, torch::kBFloat16));
   const StateDict hashes({
       {"token_map", torch::arange(8, torch::kInt64)},
       {"multipliers", torch::tensor({{1, 3, 5}}, torch::kInt64)},
@@ -744,13 +806,41 @@ TEST_F(DeepseekV41CaptureTest,
   expect_cache(graph_cache, eager_cache);
 }
 
+TEST_F(DeepseekV41MluModelTest, SelectsFusedMhcOnlyForSupportedShapes) {
+  {
+    layer::DeepseekV41DecoderLayer layer(make_context(), 0);
+    EXPECT_TRUE(layer->uses_fused_mhc());
+  }
+  {
+    args_.hidden_size(128);
+    layer::DeepseekV41DecoderLayer layer(make_context(), 0);
+    EXPECT_FALSE(layer->uses_fused_mhc());
+  }
+  {
+    args_.hidden_size(5120).hc_mult(2);
+    layer::DeepseekV41DecoderLayer layer(make_context(), 0);
+    EXPECT_FALSE(layer->uses_fused_mhc());
+  }
+}
+
+TEST_F(DeepseekV41MluModelTest, RejectsInvalidSinkhornIterations) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  EXPECT_DEATH(
+      {
+        args_.hc_sinkhorn_iters(0);
+        layer::DeepseekV41DecoderLayer layer(make_context(), 0);
+      },
+      "args.hc_sinkhorn_iters");
+}
+
 TEST_F(DeepseekV41MluModelTest, EmbeddingModeLoadsWithoutLanguageModelHead) {
   args_.embedding_mode(true);
   mlu::model::DeepseekV41ForCausalLM model(make_context());
   model->load_model(make_loader(make_weights()));
   auto tokens = torch::tensor({0, 2}, options_.dtype(torch::kInt64));
-  EXPECT_TRUE(torch::equal(model->get_input_embeddings(tokens).cpu(),
-                           torch::full({2, 128}, 0.25, torch::kBFloat16)));
+  EXPECT_TRUE(torch::equal(
+      model->get_input_embeddings(tokens).cpu(),
+      torch::full({2, args_.hidden_size()}, 0.25, torch::kBFloat16)));
 }
 
 TEST_F(DeepseekV41MluModelTest, TiedHeadLoadsFromEmbeddingWeights) {
@@ -758,9 +848,10 @@ TEST_F(DeepseekV41MluModelTest, TiedHeadLoadsFromEmbeddingWeights) {
   mlu::model::DeepseekV41ForCausalLM model(make_context());
   model->load_model(make_loader(make_weights()));
   ASSERT_TRUE(model->has_loaded_vocab_weights());
-  auto hidden = torch::ones({2, 128}, options_);
-  EXPECT_TRUE(torch::equal(model->logits(hidden, torch::Tensor()).cpu(),
-                           torch::full({2, 4}, 32, torch::kBFloat16)));
+  auto hidden = torch::ones({2, args_.hidden_size()}, options_);
+  EXPECT_TRUE(torch::equal(
+      model->logits(hidden, torch::Tensor()).cpu(),
+      torch::full({2, 4}, args_.hidden_size() * 0.25, torch::kBFloat16)));
 }
 
 TEST_F(DeepseekV41MluModelTest,
@@ -813,8 +904,9 @@ TEST_F(DeepseekV41MluModelTest,
     SCOPED_TRACE(ratio);
     set_cache_role(ratio);
     auto weights = make_weights();
-    weights.emplace("head.weight",
-                    torch::full({4, 128}, 0.5, torch::kBFloat16));
+    weights.emplace(
+        "head.weight",
+        torch::full({4, args_.hidden_size()}, 0.5, torch::kBFloat16));
     std::vector<Weights> shards(2);
     for (auto& [name, value] : weights) {
       const bool decoder = name.rfind("layers.", 0) == 0;
@@ -823,9 +915,10 @@ TEST_F(DeepseekV41MluModelTest,
     mlu::model::DeepseekV41ForCausalLM model(make_context());
     model->load_model(make_loader(std::move(shards)));
     ASSERT_TRUE(model->has_loaded_vocab_weights());
-    auto hidden = torch::ones({2, 128}, options_);
-    EXPECT_TRUE(torch::equal(model->logits(hidden, torch::Tensor()).cpu(),
-                             torch::full({2, 4}, 64, torch::kBFloat16)));
+    auto hidden = torch::ones({2, args_.hidden_size()}, options_);
+    EXPECT_TRUE(torch::equal(
+        model->logits(hidden, torch::Tensor()).cpu(),
+        torch::full({2, 4}, args_.hidden_size() * 0.5, torch::kBFloat16)));
   }
 }
 

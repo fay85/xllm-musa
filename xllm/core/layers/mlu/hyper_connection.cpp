@@ -180,6 +180,54 @@ MHCPreImpl::fused_post_pre_norm(const torch::Tensor& x,
       hc_eps_);
 }
 
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+MHCPreImpl::fused_pre_norm(const torch::Tensor& residual,
+                           const torch::Tensor& pre_mix,
+                           const torch::Tensor& gamma) {
+  CHECK_EQ(hc_mult_, 4);
+  CHECK_EQ(dim_, 5120);
+  const int64_t tokens = residual.numel() / (hc_mult_ * dim_);
+  return kernel::mlu::fused_mhc_pre(
+      flat_hc(residual, hc_mult_, dim_),
+      pre_mix.reshape({tokens, hc_mult_}).contiguous(),
+      hc_fn_,
+      gamma,
+      hc_scale_,
+      hc_base_,
+      sinkhorn_iters_,
+      hc_eps_,
+      norm_eps_);
+}
+
+std::tuple<torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor>
+MHCPreImpl::fused_delayed_pre(const torch::Tensor& x,
+                              const torch::Tensor& residual,
+                              const torch::Tensor& post,
+                              const torch::Tensor& comb,
+                              const torch::Tensor& pre,
+                              const torch::Tensor& gamma) {
+  CHECK_EQ(hc_mult_, 4);
+  CHECK_EQ(dim_, 5120);
+  const int64_t tokens = x.numel() / dim_;
+  return kernel::mlu::fused_mhc_delayed_pre(
+      flat_hidden(x, dim_),
+      flat_hc(residual, hc_mult_, dim_),
+      hc_fn_,
+      gamma,
+      post.reshape({tokens, hc_mult_}).contiguous(),
+      flat_matrix(comb, hc_mult_, hc_mult_),
+      pre.reshape({tokens, hc_mult_}).contiguous(),
+      hc_scale_,
+      hc_base_,
+      sinkhorn_iters_,
+      hc_eps_,
+      norm_eps_);
+}
+
 void MHCPreImpl::load_state_dict(const StateDict& state_dict) {
   if (state_dict.size() == 0) {
     return;

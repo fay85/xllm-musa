@@ -88,7 +88,31 @@ class MHCPreImpl final : public torch::nn::Module {
                       const torch::Tensor& comb,
                       const torch::Tensor& gamma);
 
+  std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+  fused_pre_norm(const torch::Tensor& residual,
+                 const torch::Tensor& pre_mix,
+                 const torch::Tensor& gamma);
+
+  std::tuple<torch::Tensor,
+             torch::Tensor,
+             torch::Tensor,
+             torch::Tensor,
+             torch::Tensor>
+  fused_delayed_pre(const torch::Tensor& x,
+                    const torch::Tensor& residual,
+                    const torch::Tensor& post,
+                    const torch::Tensor& comb,
+                    const torch::Tensor& pre,
+                    const torch::Tensor& gamma);
+
+  // TMO non-delayed fused_mhc (hc_mult 4, hidden 4096).
   bool supports_fused_mhc() const { return hc_mult_ == 4 && dim_ == 4096; }
+
+  // BangC fused_pre_norm / fused_delayed_pre (hc_mult 4, hidden 5120, BF16).
+  bool supports_fused_delayed_pre() const {
+    return hc_mult_ == 4 && dim_ == 5120 &&
+           hc_fn_.scalar_type() == torch::kBFloat16;
+  }
 
   void load_state_dict(const StateDict& state_dict);
   void verify_loaded_weights(const std::string& prefix) const;

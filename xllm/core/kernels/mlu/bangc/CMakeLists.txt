@@ -69,8 +69,17 @@ bang_add_library(xllm_mlu_dcp_indexer_kernel STATIC "${XLLM_DCP_INDEXER_SOURCE}"
   OPTIONS RELEASE -O2 RELWITHDEBINFO -O2 MINSIZEREL -O2)
 bang_add_library(xllm_mlu_dflash2_conv_kernels STATIC ${XLLM_DFLASH2_CONV_SOURCES}
   OPTIONS -Xbang-cnas -fno-instruction-combine)
+# The decode fused MHC kernel was tuned with CNAS software pipelining off; with
+# it on, the P = 4 path is ~0.6 us slower at T = 128.
+set(XLLM_FUSED_MHC_DECODE_SOURCE
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/fused_mhc_decode/fused_mhc_decode.mlu")
+list(REMOVE_ITEM XLLM_BANGC_KERNEL_SOURCES "${XLLM_FUSED_MHC_DECODE_SOURCE}")
+bang_add_library(xllm_mlu_fused_mhc_decode_kernel STATIC
+  "${XLLM_FUSED_MHC_DECODE_SOURCE}"
+  OPTIONS -Xbang-cnas -fno-soft-pipeline)
 foreach(bangc_target xllm_mlu_dflash2_conv_kernels
-    xllm_mlu_dcp_merge_kernel xllm_mlu_dcp_indexer_kernel)
+    xllm_mlu_dcp_merge_kernel xllm_mlu_dcp_indexer_kernel
+    xllm_mlu_fused_mhc_decode_kernel)
   target_include_directories(${bangc_target} PRIVATE
     "${PROJECT_SOURCE_DIR}/xllm/core" "${NEUWARE_HOME}/include")
   set_target_properties(${bangc_target} PROPERTIES POSITION_INDEPENDENT_CODE ON)
@@ -91,7 +100,8 @@ target_compile_definitions(xllm_mlu_ops PUBLIC
 target_link_libraries(xllm_mlu_ops
   PUBLIC torch
   PRIVATE xllm_mlu_dflash2_conv_kernels
-    xllm_mlu_dcp_merge_kernel xllm_mlu_dcp_indexer_kernel torch_mlu glog::glog
+    xllm_mlu_dcp_merge_kernel xllm_mlu_dcp_indexer_kernel
+    xllm_mlu_fused_mhc_decode_kernel torch_mlu glog::glog
     ${XLLM_BANGC_CNRT_LIBRARY})
 # Keep private archive symbols local, including glog/gflags registries that
 # may also be linked statically into the executable loading this library.

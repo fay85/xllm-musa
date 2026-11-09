@@ -24,17 +24,17 @@ limitations under the License.
 #include <vector>
 
 #include "kernels/mlu/bangc/src/dcp_merge_topk/launch.h"
+#include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 
 namespace xllm::kernel::mlu::bangc {
 namespace {
 void check_tensor(const torch::Tensor& tensor,
+                  const char* name,
                   torch::ScalarType dtype,
                   int64_t dims,
                   const torch::Device& device) {
-  CHECK(tensor.defined());
+  detail::check_tensor_properties(tensor, name, device, dtype);
   CHECK_EQ(tensor.dim(), dims);
-  CHECK_EQ(tensor.scalar_type(), dtype);
-  CHECK(tensor.device() == device);
   CHECK(!tensor.is_conj() && !tensor.is_neg());
   for (int64_t axis = 0; axis < dims; ++axis) {
     CHECK(tensor.size(axis) <= 1 || tensor.stride(axis) > 0)
@@ -147,9 +147,9 @@ void dcp_merge_topk(const torch::Tensor& scores,
   CHECK(scores.defined());
   CHECK(scores.device().is_privateuseone());
   const torch::Device device = scores.device();
-  check_tensor(scores, torch::kBFloat16, 3, device);
-  check_tensor(slots, torch::kInt32, 3, device);
-  check_tensor(mapping, torch::kInt32, 1, device);
+  check_tensor(scores, "scores", torch::kBFloat16, 3, device);
+  check_tensor(slots, "slots", torch::kInt32, 3, device);
+  check_tensor(mapping, "mapping", torch::kInt32, 1, device);
   CHECK(scores.sizes() == slots.sizes());
   CHECK(is_supported_shards(scores.size(0)))
       << "DCP merge supports power-of-two shard counts of at least 2, got "
@@ -158,8 +158,8 @@ void dcp_merge_topk(const torch::Tensor& scores,
   CHECK_EQ(topk, kTopk);
   const int64_t rows = scores.size(1);
   CHECK_EQ(mapping.size(0), rows);
-  check_tensor(output, torch::kInt32, 2, device);
-  check_tensor(lengths, torch::kInt32, 1, device);
+  check_tensor(output, "output", torch::kInt32, 2, device);
+  check_tensor(lengths, "lengths", torch::kInt32, 1, device);
   CHECK(output.sizes() == torch::IntArrayRef({rows, topk}));
   CHECK_EQ(lengths.size(0), rows);
   CHECK(output.is_contiguous() && lengths.is_contiguous())

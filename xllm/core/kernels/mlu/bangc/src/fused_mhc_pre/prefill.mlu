@@ -1,0 +1,858 @@
+/* Copyright 2026 The xLLM Authors. All Rights Reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://github.com/xLLM-AI/xllm/blob/main/LICENSE
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+==============================================================================*/
+
+// Standalone Pre + RMSNorm for large token counts. Adapted from the tuned
+// prefill tile pipeline without Post update or residual writeback. Each
+// cluster owns 8-token tiles; each core normalizes two complete tokens and
+// projects one HC slice for all tokens. Sinkhorn batches up to 64 tokens.
+// External pre_in compresses the materialized BF16 residual. As in the
+// reference model, the projection stays FP32 through rms/scale/base and
+// Sinkhorn; the compressed input is rounded to BF16 before RMSNorm.
+#include <bang.h>
+#include <cnrt.h>
+#include <stdint.h>
+
+#include "kernels/mlu/bangc/src/fused_mhc_common/device_helpers.h"
+#include "kernels/mlu/bangc/src/fused_mhc_common/launch_helpers.h"
+#include "kernels/mlu/bangc/src/fused_mhc_pre/prefill_launcher.h"
+
+namespace {
+
+using xllm::kernel::mlu::bangc::fused_mhc_detail::fuse_mul_scalar_mul_vec_cast;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::hc_split_sinkhorn;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::query_topology;
+using xllm::kernel::mlu::bangc::fused_mhc_detail::sum_to;
+
+constexpr int32_t kDim = 5120;
+constexpr int32_t kQ = 2560;     // compute chunk (half row)
+constexpr int32_t kHalf = 2560;  // K half used by the two resident weight sets
+constexpr int32_t kHc = 4;
+constexpr int32_t kMix = 24;
+constexpr int32_t kCores = 4;
+constexpr int32_t kTokensPerCore = 2;               // tokens per core per tile
+constexpr int32_t kTile = kCores * kTokensPerCore;  // 8 tokens per cluster tile
+constexpr int32_t kSuper = 32;  // tiles per Sinkhorn batch (64 tokens/core)
+constexpr int32_t kLtStride = 32768;  // WRAM LT stride
+
+// ---- NRAM carve-up (bytes) ------------------------------------------------
+constexpr int32_t kF32InB = kHc * kQ * 4;  // 40960
+constexpr int32_t kZ32B = kDim * 4;
+constexpr int32_t kZsqB = kQ * 4;
+static_assert(kDim * sizeof(bfloat16_t) == kZsqB, "BF16 z scratch must fit");
+constexpr int32_t kSs32B = kHc * kQ * 4;
+constexpr int32_t kGammaB = kDim * 4;
+constexpr int32_t kOut16B = kDim * 2;
+constexpr int32_t kConvInB = 8 * kHalf * 2;  // 40960 (8 tokens x 2560)
+constexpr int32_t kSharedB =
+    2 * kConvInB + 5120;  // conv buffers / mixes epilogue overlay
+
+constexpr int32_t kOffF32In = 0;
+// Five live chunk slots: load at phase t, square-sum at t+1,
+// compression at t+4; the phase barrier precedes slot reuse at t+5.
+constexpr int32_t kF32Slots = 5;
+constexpr int32_t kOffZ32 = kOffF32In + kF32Slots * kF32InB;
+constexpr int32_t kOffZsq = kOffZ32 + 2 * kZ32B;  // z of token a and b
+constexpr int32_t kOffSs32 = kOffZsq + kZsqB;
+constexpr int32_t kZbB = kQ * 4;
+constexpr int32_t kOffZb = kOffSs32 + kSs32B;
+constexpr int32_t kOffGamma = kOffZb + kZbB;
+constexpr int32_t kOffOut16 = kOffGamma + kGammaB;
+constexpr int32_t kOffShared = kOffOut16 + 2 * kOut16B;
+constexpr int32_t kParamSlotB = 128;  // two FP32 pre_in rows, aligned per slot
+constexpr int32_t kParamSlots = 4;
+constexpr int32_t kOffParams = kOffShared + kSharedB;
+constexpr int32_t kOffSsArr =
+    kOffParams +
+    kParamSlots * kParamSlotB;  // 2 x 64 floats (super tile parity)
+constexpr int32_t kOffScratch =
+    kOffSsArr + 512;  // sumpool scratch 64 floats x 4
+constexpr int32_t kOffScale = kOffScratch + 1024;  // hc_scale / hc_base
+constexpr int32_t kOffRms = kOffScale + 512;       // 64 floats
+constexpr int32_t kNramTotal = kOffRms + 256;
+static_assert(kNramTotal <= 512 * 1024 - 16 * 1024, "NRAM budget");
+
+// ---- SRAM carve-up ----------------------------------------------------------
+// Four input slots feed projection directly. FP32 chunks stay in a five-slot
+// NRAM ring until both reduction and compression have consumed them.
+constexpr int32_t kInTokB = kHc * kDim * 2;    // 40960
+constexpr int32_t kInSlotB = kTile * kInTokB;  // 327680
+constexpr int32_t kPartB =
+    kCores * kCores * kSuper * kTokensPerCore * kMix * 4;  // 98304
+// Projection reads tile q-2 before q's barrier; MPU then prefetches q+2.
+// Four input slots preserve that lifetime without BF16 staging copies.
+constexpr int32_t kInputSlots = 4;
+constexpr int32_t kOffPart = kInputSlots * kInSlotB;
+constexpr int32_t kSramTotal = kOffPart + 2 * kPartB;
+static_assert(kSramTotal <= 2 * 1024 * 1024 - 16 * 1024, "SRAM budget");
+
+__nram__ __attribute__((aligned(128))) int8_t nram_pool[kNramTotal];
+__mlu_shared__ __attribute__((aligned(128))) int8_t sram_pool[kSramTotal];
+__wram__ __attribute__((aligned(128))) int8_t wram_pool[512 * 1024];
+
+struct Params {
+  const bfloat16_t* residual_in;
+  const float* pre_in;
+  const bfloat16_t* hc_fn;
+  const float* hc_scale;
+  const float* hc_base;
+  const bfloat16_t* gamma;
+  bfloat16_t* norm_out;
+  float* next_pre;
+  float* post_out;
+  float* comb_out;
+  int64_t tokens;
+  int32_t sinkhorn_iter;
+  float hc_eps;
+  float norm_eps;
+};
+
+#if __BANG_ARCH__ > 500
+
+// ---- move-engine dtype conversion (SRAM -> NRAM)
+// ------------------------------------------ ROWS rows of ROW_BYTES source
+// bytes (multiple of 64); source/destination row strides in bytes.
+#define MHC_MOVE_CVT2D_SP(                                                  \
+    SP, BX, CVT, DST, SRC, ROW_BYTES, ROWS, SRC_STRIDE, DST_STRIDE, DS3)    \
+  do {                                                                      \
+    int32_t sn0_ = 64, sn3_ = (ROW_BYTES) / 64, ss3_ = 64, sn4_ = (ROWS),   \
+            ss4_ = (SRC_STRIDE);                                            \
+    int32_t dn0_ = 64, dn3_ = sn3_, ds3_ = (DS3), dn4_ = (ROWS),            \
+            ds4_ = (DST_STRIDE);                                            \
+    __asm__ volatile(                                                       \
+        "move.tiling.async." SP "." BX                                      \
+        " [%[dst]], [%[src]], %[sn0], 1, 0, 1, 0, %[sn3], %[ss3], %[sn4], " \
+        "%[ss4], 1, 0, "                                                    \
+        "%[dn0], 1, 0, 1, 0, %[dn3], %[ds3], %[dn4], %[ds4], 1, 0," CVT     \
+        ";" ::[dst] "r"(DST),                                               \
+        [src] "r"(SRC),                                                     \
+        [sn0] "r"(sn0_),                                                    \
+        [sn3] "r"(sn3_),                                                    \
+        [ss3] "r"(ss3_),                                                    \
+        [sn4] "r"(sn4_),                                                    \
+        [ss4] "r"(ss4_),                                                    \
+        [dn0] "r"(dn0_),                                                    \
+        [dn3] "r"(dn3_),                                                    \
+        [ds3] "r"(ds3_),                                                    \
+        [dn4] "r"(dn4_),                                                    \
+        [ds4] "r"(ds4_));                                                   \
+  } while (0)
+
+// SRAM bf16 -> NRAM f32.
+__mlu_func__ void cvt_sram_bf16_to_f32_async(float* dst,
+                                             const bfloat16_t* src,
+                                             int32_t elems,
+                                             int32_t rows,
+                                             int32_t src_stride,
+                                             int32_t dst_stride) {
+  MHC_MOVE_CVT2D_SP("nram.sram",
+                    "b16",
+                    ".cvt.rn.f32.bf16()",
+                    dst,
+                    src,
+                    elems * 2,
+                    rows,
+                    src_stride * 2,
+                    dst_stride * 4,
+                    128);
+}
+
+#define NRAM_AT(T, off) reinterpret_cast<T*>(nram_pool + (off))
+
+__mlu_func__ bfloat16_t* in_slot(int32_t tile) {
+  return reinterpret_cast<bfloat16_t*>(sram_pool +
+                                       (tile % kInputSlots) * kInSlotB);
+}
+
+__mlu_func__ void load_weights(const Params& p, int32_t core) {
+  // K-slice `core` of hc_fn (columns core*5120 ..): set A -> weight rows 0..23,
+  // set B -> weight rows 24..47 (LT groups 0..5 and 6..11).
+  const int64_t stride = static_cast<int64_t>(kHc) * kDim;
+  for (int32_t set = 0; set < 2; set++) {
+    for (int32_t g = 0; g < 6; g++) {
+      int8_t* dst = wram_pool + (set * 6 + g) * kLtStride;
+      const bfloat16_t* src =
+          p.hc_fn + (g * 4) * stride + core * kDim + set * kHalf;
+      __memcpy_io1_async(dst,
+                         const_cast<bfloat16_t*>(src),
+                         kHalf * 2,
+                         GDRAM2WRAM,
+                         kHalf * 2,
+                         stride * 2,
+                         3);
+    }
+  }
+}
+
+// Issue the SRAM -> NRAM load of conv chunk c (tokens 8*(c>>1).., K half c&1)
+// of tile slot.
+__mlu_func__ void conv_load(int32_t c,
+                            int32_t tile,
+                            int32_t core,
+                            bfloat16_t* dst) {
+  const bfloat16_t* slot = in_slot(tile);
+  const bfloat16_t* src = slot + static_cast<int64_t>(core) * kDim + c * kHalf;
+  __memcpy_async(dst,
+                 const_cast<bfloat16_t*>(src),
+                 kHalf * 2,
+                 SRAM2NRAM,
+                 kHalf * 2,
+                 kHc * kDim * 2,
+                 7);
+}
+
+// Conv chunk c (0 or 1): the tile's eight tokens, K half c. The SRAM -> NRAM
+// load of the chunk is issued one iteration earlier (conv_load); the odd chunk
+// of a pair is combined with the even one. Partial layout behind the two conv
+// input buffers: d1 (K half 0, [8][24]) is double buffered by tile parity at +0
+// / +1024, d2 (K half 1 conv output, [8][48]) at +2048, the gathered half-1
+// columns ([8][24]) at +4096.
+__mlu_func__ float* conv_d1(int32_t par) {
+  return NRAM_AT(float, kOffShared + 2 * kConvInB + par * 1024);
+}
+
+__mlu_func__ void conv_chunk(int32_t c, int32_t par = 0) {
+  bfloat16_t* cin = NRAM_AT(bfloat16_t, kOffShared + (c & 1) * kConvInB);
+  if ((c & 1) == 0) {
+    float* d1 = conv_d1(par);
+    __bang_conv(d1,
+                cin,
+                reinterpret_cast<bfloat16_t*>(wram_pool),
+                kHalf,
+                1,
+                8,
+                1,
+                1,
+                1,
+                1,
+                kMix);
+  } else {
+    float* d2 = NRAM_AT(float, kOffShared + 2 * kConvInB + 2048);
+    __bang_conv(d2,
+                cin,
+                reinterpret_cast<bfloat16_t*>(wram_pool),
+                kHalf,
+                1,
+                8,
+                1,
+                1,
+                1,
+                1,
+                2 * kMix);
+  }
+}
+
+// Move engine: half-1 columns 24..47 of d2 -> contiguous [8][24].
+__mlu_func__ void conv_gather_half1() {
+  float* d2 = NRAM_AT(float, kOffShared + 2 * kConvInB + 2048);
+  float* tmp = NRAM_AT(float, kOffShared + 2 * kConvInB + 4096);
+  __memcpy_async(
+      tmp, d2 + kMix, kMix * 4, NRAM2NRAM, kMix * 4, 2 * kMix * 4, 7);
+}
+
+// One vector add instead of eight 24-element adds.
+__mlu_func__ void conv_add_half1(int32_t par) {
+  float* tmp = NRAM_AT(float, kOffShared + 2 * kConvInB + 4096);
+  __bang_add(conv_d1(par), conv_d1(par), tmp, 8 * kMix);
+}
+
+// Publish the combined [8][24] partial of token group cg (owners 2cg, 2cg+1) of
+// tile q.
+__mlu_func__ void conv_store(int32_t q, int32_t core) {
+  float* d1 = conv_d1(q & 1);
+  float* part = reinterpret_cast<float*>(sram_pool + kOffPart +
+                                         ((q / kSuper) & 1) * kPartB);
+  const int32_t qq = q % kSuper;
+  for (int32_t o = 0; o < kCores; o++) {
+    __memcpy_async(
+        part + ((static_cast<int64_t>(o) * kCores + core) * kSuper + qq) *
+                   kTokensPerCore * kMix,
+        d1 + o * kTokensPerCore * kMix,
+        kTokensPerCore * kMix * 4,
+        NRAM2SRAM);
+  }
+}
+
+// Reduce the 4 K-slice partials of this core's tokens of super tile `sup`, run
+// scale/bias/sigmoid/Sinkhorn once for the whole batch and store the results.
+__mlu_func__ void mixes_end(const Params& p,
+                            int32_t sup,
+                            int32_t nts,
+                            int32_t core,
+                            int64_t token_begin,
+                            int64_t token_end) {
+  const int32_t nb = nts * kTokensPerCore;
+  const int32_t nbp = (nb + 15) & ~15;
+  const int32_t n = nbp * kMix;
+  int8_t* sh = nram_pool + kOffShared;
+  float* parts = reinterpret_cast<float*>(sh);
+  float* comb_buf = reinterpret_cast<float*>(sh + 24576);
+  float* pre_buf = reinterpret_cast<float*>(sh + 28672);
+  float* post_buf =
+      pre_buf + nbp * kHc;  // must directly follow pre (one sigmoid pass)
+  float* work = reinterpret_cast<float*>(sh + 30720);
+  float* rms = NRAM_AT(float, kOffRms);
+  float* ss_arr = NRAM_AT(float, kOffSsArr) + (sup & 1) * 64;
+  const float* part =
+      reinterpret_cast<const float*>(sram_pool + kOffPart + (sup & 1) * kPartB);
+  __memcpy(parts,
+           const_cast<float*>(part + static_cast<int64_t>(core) * kCores *
+                                         kSuper * kTokensPerCore * kMix),
+           n * 4,
+           SRAM2NRAM,
+           n * 4,
+           kSuper * kTokensPerCore * kMix * 4,
+           3);
+  __bang_add(parts, parts, parts + n, n);
+  __bang_add(parts + 2 * n, parts + 2 * n, parts + 3 * n, n);
+  __bang_add(parts, parts, parts + 2 * n, n);
+  __bang_mul_scalar(rms, ss_arr, 1.0f / (kHc * kDim), 64);
+  __bang_add_scalar(rms, rms, p.norm_eps, 64);
+  __bang_rsqrt(rms, rms, 64);
+  hc_split_sinkhorn(comb_buf,
+                    pre_buf,
+                    post_buf,
+                    parts,
+                    NRAM_AT(float, kOffScale),
+                    NRAM_AT(float, kOffScale) + 16,
+                    rms,
+                    work,
+                    nbp,
+                    p.sinkhorn_iter,
+                    p.hc_eps);
+  __sync_compute();
+  // Tiles whose kTokensPerCore tokens are all valid go out with one strided
+  // transfer per tensor; only a partial last tile needs its own transfer.
+  const int64_t g_first = token_begin +
+                          static_cast<int64_t>(sup * kSuper) * kTile +
+                          core * kTokensPerCore;
+  int32_t full = 0;
+  while (full < nts) {
+    const int64_t g0 = g_first + static_cast<int64_t>(full) * kTile;
+    if (token_end - g0 < kTokensPerCore) {
+      break;
+    }
+    full++;
+  }
+  if (full > 0) {
+    __memcpy_io1_async(p.next_pre + g_first * kHc,
+                       pre_buf,
+                       kTokensPerCore * kHc * 4,
+                       NRAM2GDRAM,
+                       kTile * kHc * 4,
+                       kTokensPerCore * kHc * 4,
+                       full - 1);
+    __memcpy_io1_async(p.post_out + g_first * kHc,
+                       post_buf,
+                       kTokensPerCore * kHc * 4,
+                       NRAM2GDRAM,
+                       kTile * kHc * 4,
+                       kTokensPerCore * kHc * 4,
+                       full - 1);
+    __memcpy_io1_async(p.comb_out + g_first * kHc * kHc,
+                       comb_buf,
+                       kTokensPerCore * kHc * kHc * 4,
+                       NRAM2GDRAM,
+                       kTile * kHc * kHc * 4,
+                       kTokensPerCore * kHc * kHc * 4,
+                       full - 1);
+  }
+  if (full < nts) {
+    const int64_t g0 = g_first + static_cast<int64_t>(full) * kTile;
+    const int64_t left = token_end - g0;
+    const int32_t v = left <= 0 ? 0 : static_cast<int32_t>(left);
+    if (v > 0) {
+      __memcpy_io1_async(p.next_pre + g0 * kHc,
+                         pre_buf + full * kTokensPerCore * kHc,
+                         v * kHc * 4,
+                         NRAM2GDRAM);
+      __memcpy_io1_async(p.post_out + g0 * kHc,
+                         post_buf + full * kTokensPerCore * kHc,
+                         v * kHc * 4,
+                         NRAM2GDRAM);
+      __memcpy_io1_async(p.comb_out + g0 * kHc * kHc,
+                         comb_buf + full * kTokensPerCore * kHc * kHc,
+                         v * kHc * kHc * 4,
+                         NRAM2GDRAM);
+    }
+  }
+  __sync_io_move_compute();
+}
+
+// V1 consumes the retained FP32 input and accumulates both half-row squares.
+__mlu_func__ void v1_chunk(const float* input, float* ss32, int32_t ch) {
+  if (ch == 0) {
+    __bang_mul(
+        ss32, const_cast<float*>(input), const_cast<float*>(input), kHc * kQ);
+  } else {
+    __bang_fusion(FUSION_FMA,
+                  ss32,
+                  const_cast<float*>(input),
+                  const_cast<float*>(input),
+                  ss32,
+                  kHc * kQ,
+                  kHc * kQ);
+  }
+}
+
+// Interleave V1's independent square accumulation with V2's compression chain.
+__mlu_func__ void v1_chunk_z(const float* input,
+                             float* ss32,
+                             int32_t ch,
+                             const float* yr,
+                             float* zh,
+                             const float* pz) {
+  __bang_mul_scalar(zh, const_cast<float*>(yr), pz[0], kQ);
+  v1_chunk(input, ss32, ch);
+  for (int32_t h = 1; h < kHc; ++h) {
+    __bang_fusion(
+        FUSION_FMA, zh, const_cast<float*>(yr) + h * kQ, pz[h], zh, kQ, kQ);
+  }
+}
+
+// Per-token FP32 external pre_in of this core's tokens
+// of tile q.
+__mlu_func__ void issue_params_load(const Params& p,
+                                    int32_t q,
+                                    int64_t token_begin,
+                                    int64_t token_end,
+                                    int32_t core) {
+  const int64_t g0 =
+      token_begin + static_cast<int64_t>(q) * kTile + core * kTokensPerCore;
+  const int64_t left = token_end - g0;
+  const int32_t v = left <= 0
+                        ? 0
+                        : (left < kTokensPerCore ? static_cast<int32_t>(left)
+                                                 : kTokensPerCore);
+  if (v <= 0) {
+    return;
+  }
+  float* pr = NRAM_AT(float, kOffParams + (q & 3) * kParamSlotB);
+  __memcpy_io0_async(
+      pr, const_cast<float*>(p.pre_in + g0 * kHc), v * kHc * 4, GDRAM2NRAM);
+}
+
+__mlu_func__ int32_t tile_valid(int32_t q,
+                                int64_t token_begin,
+                                int64_t token_end) {
+  const int64_t left =
+      token_end - (token_begin + static_cast<int64_t>(q) * kTile);
+  return left <= 0 ? 0 : (left < kTile ? static_cast<int32_t>(left) : kTile);
+}
+
+// MPU: residual rows of tile q -> input slot (token-interleaved).
+__mlu_func__ void mpu_load(const Params& p,
+                           int32_t q,
+                           int64_t token_begin,
+                           int64_t token_end) {
+  const int32_t v = tile_valid(q, token_begin, token_end);
+  if (v <= 0) {
+    return;
+  }
+  const int64_t g0 = token_begin + static_cast<int64_t>(q) * kTile;
+  bfloat16_t* dst = in_slot(q);
+  __memcpy_io0_async(dst,
+                     const_cast<bfloat16_t*>(p.residual_in + g0 * kHc * kDim),
+                     v * kHc * kDim * 2,
+                     GDRAM2SRAM);
+}
+
+// MPU prefetches inputs two tiles ahead after the IPUs finish the final
+// projection reads of tile q-2; the four-slot ring then safely reuses its slot.
+__mlu_func__ void mpu_main(const Params& p,
+                           int32_t my_tiles,
+                           int64_t token_begin,
+                           int64_t token_end) {
+  mpu_load(p, 0, token_begin, token_end);
+  if (my_tiles > 1) {
+    mpu_load(p, 1, token_begin, token_end);
+  }
+  __sync_io();
+  __sync_cluster();
+  for (int32_t q = 0; q < my_tiles; q++) {
+    __sync_io();
+    __sync_cluster();  // projection reads of input tile q-2 are complete
+    if (q + 2 < my_tiles) {
+      mpu_load(p, q + 2, token_begin, token_end);
+    }
+  }
+  __sync_io();
+  __sync_cluster();  // all input prefetches handed to the IPUs
+  __sync_io();
+}
+
+// ---- steady-state loop, unrolled by tile (4 iterations: token a/b x chunk
+// 0/1). Phase t loads chunk t, reduces t-1, compresses t-4, and stores norm.
+// The original Post pipeline's BF16 staging/conversion stages are absent. Chunk
+// i belongs to tile i/4, token (i/2)&1, chunk i&1; all of that is compile-time
+// given PH.
+struct LoopCtx {
+  const Params* p;
+  int32_t core;
+  int32_t my_tiles;
+  int32_t ntok_cluster;
+  int64_t token_begin;
+  int64_t token_end;
+  // pre_in of the token whose chunk-0 z was interleaved in the previous phase;
+  // its chunk-1 z (V2 of PH1/PH3) reuses them instead of scalar NRAM loads
+  float pc[kHc];
+  bool pc_ok;
+};
+
+__mlu_func__ bool tok_ok(const LoopCtx& c, int32_t tile, int32_t tok) {
+  return tile >= 0 && tile < c.my_tiles &&
+         tile * kTile + c.core * kTokensPerCore + tok < c.ntok_cluster;
+}
+
+template <int32_t PH>
+__mlu_func__ void loop_phase(LoopCtx& c, int32_t q) {
+  const Params& p = *c.p;
+  const int32_t core = c.core;
+  float* gamma32 = NRAM_AT(float, kOffGamma);
+  float* z32 = NRAM_AT(float, kOffZ32);
+  float* zsq = NRAM_AT(float, kOffZsq);
+  float* ss32 = NRAM_AT(float, kOffSs32);
+  float* scratch = NRAM_AT(float, kOffScratch);
+  float* ss_arr = NRAM_AT(float, kOffSsArr);
+  float* zs = scratch + 64 * 2;
+  bfloat16_t* out16 = NRAM_AT(bfloat16_t, kOffOut16);
+
+  // compile-time stage geometry: tile offset and in-tile position of the chunk
+  constexpr int32_t kC1d = PH, kV1d = PH - 1;
+  constexpr int32_t kV1t = kV1d >= 0 ? 0 : -1, kV1p = (kV1d + 4) % 4;
+  constexpr int32_t kV2t = -1, kV2p = PH;
+
+  // ================= move / DMA issue =================
+  // Input tile q-2 remains in SRAM until this tile's PH3 cluster barrier:
+  // load K half 0 at PH0, half 1 at PH1, convolve at PH1/PH2, store at PH3
+  // tile q-2: half-1 columns gathered at PH3; tile q-3: stored at PH1
+  if (PH == 3 && q - 2 >= 0 && q - 2 < c.my_tiles) {
+    conv_gather_half1();
+  }
+  if (PH == 1 && q - 3 >= 0 && q - 3 < c.my_tiles) {
+    conv_store(q - 3, core);
+  }
+  if ((PH == 0 || PH == 1) && q - 2 >= 0 && q - 2 < c.my_tiles) {
+    conv_load(PH, q - 2, core, NRAM_AT(bfloat16_t, kOffShared + PH * kConvInB));
+  }
+  if (PH == 0) {  // both tokens of tile q-2 (rmsnorm ran at PH3 of q-1)
+    for (int32_t kTk = 0; kTk < kTokensPerCore; kTk++) {
+      if (tok_ok(c, q - 2, kTk)) {
+        const int64_t g = c.token_begin + static_cast<int64_t>(q - 2) * kTile +
+                          core * kTokensPerCore + kTk;
+        __memcpy_io1_async(
+            p.norm_out + g * kDim, out16 + kTk * kDim, kDim * 2, NRAM2GDRAM);
+      }
+    }
+  }
+  if (PH == 1 && q + 1 >= 1 && q + 1 < c.my_tiles) {
+    issue_params_load(p, q + 1, c.token_begin, c.token_end, core);
+  }
+  {  // C1
+    constexpr int32_t tok = kC1d >> 1, ch = kC1d & 1;
+    if (tok_ok(c, q, tok)) {
+      cvt_sram_bf16_to_f32_async(
+          NRAM_AT(float, kOffF32In + ((4 * q + PH) % kF32Slots) * kF32InB),
+          in_slot(q) + (core * kTokensPerCore + tok) * kHc * kDim + ch * kQ,
+          kQ,
+          kHc,
+          kDim,
+          kQ);
+    }
+  }
+
+  // ================= compute =================
+  constexpr bool kZil = (kV2p & 1) == 0;  // z of a chunk-0 goes inside V1
+  const bool v2_ok = tok_ok(c, q + kV2t, kV2p >> 1);
+  {  // V2 : z of chunk t-4; token-end rmsnorm with its last chunk
+    const int32_t tile = q + kV2t;
+    constexpr int32_t tok = kV2p >> 1, ch = kV2p & 1;
+    if (!kZil && v2_ok) {
+      const float* yr =
+          NRAM_AT(float, kOffF32In + ((4 * q + PH - 4) % kF32Slots) * kF32InB);
+      const float* pre =
+          NRAM_AT(float, kOffParams + (tile & 3) * kParamSlotB) + tok * kHc;
+      float p0, p1, p2, p3;
+      if (c.pc_ok) {
+        p0 = c.pc[0];
+        p1 = c.pc[1];
+        p2 = c.pc[2];
+        p3 = c.pc[3];
+      } else {
+        p0 = pre[0];
+        p1 = pre[1];
+        p2 = pre[2];
+        p3 = pre[3];
+      }
+      c.pc_ok = false;
+      float* zh = z32 + tok * kDim + ch * kQ;
+      __bang_mul_scalar(zh, const_cast<float*>(yr), p0, kQ);
+      __bang_fusion(
+          FUSION_FMA, zh, const_cast<float*>(yr) + kQ, p1, zh, kQ, kQ);
+      __bang_fusion(
+          FUSION_FMA, zh, const_cast<float*>(yr) + 2 * kQ, p2, zh, kQ, kQ);
+      __bang_fusion(
+          FUSION_FMA, zh, const_cast<float*>(yr) + 3 * kQ, p3, zh, kQ, kQ);
+      // out16 may still feed PH0's asynchronous norm writeback. Reuse the
+      // compute-only square scratch, whose prior consumer has completed.
+      bfloat16_t* z_bf16 = reinterpret_cast<bfloat16_t*>(zsq);
+      __bang_float2bfloat16_rn(z_bf16, z32 + tok * kDim, kDim);
+      __bang_bfloat162float(z32 + tok * kDim, z_bf16, kDim);
+    }
+  }
+  if (PH == 1 && tok_ok(c, q - 1, 0)) {
+    // token a's z is complete after PH1's V2: its sum of squares is reduced
+    // here, outside PH3's scalar round trip
+    __bang_mul(zsq, z32, z32, kQ);
+    __bang_fusion(FUSION_FMA, zsq, z32 + kQ, z32 + kQ, zsq, kQ, kQ);
+    sum_to(zs, zsq, kQ, scratch + 64);
+  }
+  if (PH == 3) {  // rmsnorm of both tokens of tile q-1, one scalar round trip
+    const bool oka = tok_ok(c, q - 1, 0), okb = tok_ok(c, q - 1, 1);
+    float* zsqb = NRAM_AT(float, kOffZb);
+    if (okb) {
+      __bang_mul(zsqb, z32 + kDim, z32 + kDim, kQ);
+      __bang_fusion(
+          FUSION_FMA, zsqb, z32 + kDim + kQ, z32 + kDim + kQ, zsqb, kQ, kQ);
+      sum_to(zs + 1, zsqb, kQ, scratch + 192);
+    }
+    if (oka || okb) {
+      __sync_compute();
+      const float ra = 1.0f / sqrtf(zs[0] * (1.0f / kDim) + p.norm_eps);
+      const float rb = 1.0f / sqrtf(zs[1] * (1.0f / kDim) + p.norm_eps);
+      if (oka) {
+        fuse_mul_scalar_mul_vec_cast(out16, z32, ra, gamma32, kDim);
+      }
+      if (okb) {
+        fuse_mul_scalar_mul_vec_cast(
+            out16 + kDim, z32 + kDim, rb, gamma32, kDim);
+      }
+    }
+  }
+  {  // V1: running sums of residual squares of chunk t-1
+    const int32_t tile = q + kV1t;
+    constexpr int32_t tok = kV1p >> 1, ch = kV1p & 1;
+    if (tok_ok(c, tile, tok)) {
+      if (kZil && v2_ok) {
+        const int32_t t2 = q + kV2t;
+        const float* pz = NRAM_AT(float, kOffParams + (t2 & 3) * kParamSlotB) +
+                          (kV2p >> 1) * kHc;
+        float pzr[kHc];
+        for (int32_t h = 0; h < kHc; h++) {
+          pzr[h] = pz[h];
+        }
+        for (int32_t h = 0; h < kHc; h++) {
+          c.pc[h] = pzr[h];
+        }
+        c.pc_ok = true;
+        v1_chunk_z(
+            NRAM_AT(float,
+                    kOffF32In + ((4 * q + PH - 1) % kF32Slots) * kF32InB),
+            ss32,
+            ch,
+            NRAM_AT(float,
+                    kOffF32In + ((4 * q + PH - 4) % kF32Slots) * kF32InB),
+            z32 + (kV2p >> 1) * kDim + (kV2p & 1) * kQ,
+            pzr);
+      } else {
+        v1_chunk(NRAM_AT(float,
+                         kOffF32In + ((4 * q + PH - 1) % kF32Slots) * kF32InB),
+                 ss32,
+                 ch);
+      }
+      if (ch == 1) {
+        sum_to(ss_arr + ((tile / kSuper) & 1) * 64 +
+                   (tile % kSuper) * kTokensPerCore + tok,
+               ss32,
+               kHc * kQ,
+               scratch);
+      }
+    } else if (kZil && v2_ok) {  // no V1 this iteration: z on its own
+      const int32_t t2 = q + kV2t;
+      const float* yr =
+          NRAM_AT(float, kOffF32In + ((4 * q + PH - 4) % kF32Slots) * kF32InB);
+      const float* pz = NRAM_AT(float, kOffParams + (t2 & 3) * kParamSlotB) +
+                        (kV2p >> 1) * kHc;
+      const float p0 = pz[0], p1 = pz[1], p2 = pz[2], p3 = pz[3];
+      c.pc[0] = p0;
+      c.pc[1] = p1;
+      c.pc[2] = p2;
+      c.pc[3] = p3;
+      c.pc_ok = true;
+      float* zh = z32 + (kV2p >> 1) * kDim + (kV2p & 1) * kQ;
+      __bang_mul_scalar(zh, const_cast<float*>(yr), p0, kQ);
+      __bang_fusion(
+          FUSION_FMA, zh, const_cast<float*>(yr) + kQ, p1, zh, kQ, kQ);
+      __bang_fusion(
+          FUSION_FMA, zh, const_cast<float*>(yr) + 2 * kQ, p2, zh, kQ, kQ);
+      __bang_fusion(
+          FUSION_FMA, zh, const_cast<float*>(yr) + 3 * kQ, p3, zh, kQ, kQ);
+    }
+  }
+  // Projection of input tile q-2: half 0 at PH1 and half 1 at PH2.
+  if (PH == 1 && q - 2 >= 0 && q - 2 < c.my_tiles) {
+    conv_chunk(0, (q - 2) & 1);
+  }
+  if (PH == 2 && q - 2 >= 0 && q - 2 < c.my_tiles) {
+    conv_chunk(1, (q - 2) & 1);
+  }
+  if (PH == 0 && q - 3 >= 0 && q - 3 < c.my_tiles) {
+    conv_add_half1((q - 3) & 1);
+  }
+
+  // ================= barrier =================
+  // Drain IO at PH1 and PH3; other phases wait only on move and compute.
+  if (PH == 3 || PH == 1) {  // PH1: norm_out stores of PH0 land before PH3
+    __sync_io_move_compute();
+  } else {
+    __sync_io_move_compute(false, true, true, true, true, true);
+  }
+
+  // ================= after the barrier =================
+  constexpr int32_t kMixPh = 3;  // batch epilogue follows PH3's phase barrier
+  // Input tile q-2 has no remaining SRAM readers: hand its slot to the MPU.
+  if (PH == 3 && q < c.my_tiles) {
+    __sync_cluster();
+  }
+  // After the last input tile, only IPUs participate in the drain barrier.
+  if (PH == 3 && q == c.my_tiles) {
+    __sync_all_ipu_within_cluster();
+  }
+  if (PH == kMixPh) {
+    const int32_t qc = q - 3;  // partial of tile qc stored at PH1 of this tile
+    if (qc >= 0 && qc < c.my_tiles &&
+        ((qc % kSuper) == kSuper - 1 || qc == c.my_tiles - 1)) {
+      // the partial stores landed before this phase's cluster / IPU barrier;
+      // past the last tile there is none, so the IPUs meet explicitly
+      if (q > c.my_tiles) {
+        __sync_all_ipu_within_cluster();
+      }
+      mixes_end(
+          p, qc / kSuper, (qc % kSuper) + 1, core, c.token_begin, c.token_end);
+    }
+  }
+}
+
+#endif  // __BANG_ARCH__ > 500
+
+__mlu_global__ void fused_mhc_pre_prefill_kernel(Params p) {
+#if __BANG_ARCH__ > 500
+  const int32_t cl = taskIdY;
+  const int32_t ncl = taskDimY;
+  // Contiguous token range of this cluster, balanced at tile granularity.
+  const int64_t tiles_total = (p.tokens + kTile - 1) / kTile;
+  const int64_t base = tiles_total / ncl;
+  const int64_t rem = tiles_total % ncl;
+  const int64_t my_tiles64 = base + (cl < rem ? 1 : 0);
+  if (my_tiles64 == 0) {
+    return;
+  }
+  const int64_t tile_begin = cl * base + (cl < rem ? cl : rem);
+  const int64_t token_begin = tile_begin * kTile;
+  const int64_t token_end = (token_begin + my_tiles64 * kTile) < p.tokens
+                                ? (token_begin + my_tiles64 * kTile)
+                                : p.tokens;
+  const int32_t my_tiles = static_cast<int32_t>(my_tiles64);
+  if (__is_mpu()) {
+    mpu_main(p, my_tiles, token_begin, token_end);
+    return;
+  }
+  const int32_t core = coreId;
+  const int32_t ntok_cluster = static_cast<int32_t>(token_end - token_begin);
+
+  // ---- one-time setup: resident weights, gamma, scale/base, first params ----
+  load_weights(p, core);
+  {
+    bfloat16_t* tmp = NRAM_AT(bfloat16_t, kOffF32In);
+    __memcpy(tmp, const_cast<bfloat16_t*>(p.gamma), kDim * 2, GDRAM2NRAM);
+    __bang_bfloat162float(NRAM_AT(float, kOffGamma), tmp, kDim);
+    float* scale = NRAM_AT(float, kOffScale);
+    __memcpy(scale, const_cast<float*>(p.hc_scale), 3 * 4, GDRAM2NRAM);
+    __memcpy(scale + 16, const_cast<float*>(p.hc_base), kMix * 4, GDRAM2NRAM);
+    __bang_write_value(NRAM_AT(float, kOffSsArr), 128, 1.0f);
+    issue_params_load(p, 0, token_begin, token_end, core);
+    __sync_io_move_compute();
+  }
+  __sync_cluster();  // input slots 0 (and 1) landed
+
+  LoopCtx ctx;
+  ctx.p = &p;
+  ctx.core = core;
+  ctx.my_tiles = my_tiles;
+  ctx.ntok_cluster = ntok_cluster;
+  ctx.token_begin = token_begin;
+  ctx.token_end = token_end;
+  ctx.pc_ok = false;
+  for (int32_t q = 0; q < my_tiles + 3; ++q) {
+    loop_phase<0>(ctx, q);
+    loop_phase<1>(ctx, q);
+    loop_phase<2>(ctx, q);
+    loop_phase<3>(ctx, q);
+  }
+  __sync_cluster();  // release the MPU after the projection/output drain
+#endif
+}
+
+}  // namespace
+
+extern "C" int32_t fused_mhc_pre_prefill_launch(void* queue,
+                                                const void* const* in,
+                                                void* const* out,
+                                                int64_t tokens,
+                                                int32_t dim,
+                                                int32_t sinkhorn_iter,
+                                                float hc_eps,
+                                                float norm_eps) {
+  if (dim != kDim || tokens <= 0 || sinkhorn_iter <= 0) {
+    return 1;
+  }
+  // Every tensor is mandatory and must be 64-byte aligned (DMA / vector
+  // alignment of the row loads).
+  for (int32_t i = 0; i < 6; i++) {
+    if (in[i] == nullptr || (reinterpret_cast<uintptr_t>(in[i]) & 63) != 0) {
+      return 3;
+    }
+  }
+  for (int32_t i = 0; i < 4; i++) {
+    if (out[i] == nullptr || (reinterpret_cast<uintptr_t>(out[i]) & 63) != 0) {
+      return 3;
+    }
+  }
+  Params p;
+  p.residual_in = static_cast<const bfloat16_t*>(in[0]);
+  p.pre_in = static_cast<const float*>(in[1]);
+  p.hc_fn = static_cast<const bfloat16_t*>(in[2]);
+  p.hc_scale = static_cast<const float*>(in[3]);
+  p.hc_base = static_cast<const float*>(in[4]);
+  p.gamma = static_cast<const bfloat16_t*>(in[5]);
+  p.norm_out = static_cast<bfloat16_t*>(out[0]);
+  p.next_pre = static_cast<float*>(out[1]);
+  p.post_out = static_cast<float*>(out[2]);
+  p.comb_out = static_cast<float*>(out[3]);
+  p.tokens = tokens;
+  p.sinkhorn_iter = sinkhorn_iter;
+  p.hc_eps = hc_eps;
+  p.norm_eps = norm_eps;
+  const int32_t clusters = query_topology().clusters;
+  if (clusters <= 0) {
+    return 2;
+  }
+  int64_t tiles = (tokens + kTile - 1) / kTile;
+  uint32_t used = static_cast<uint32_t>(tiles < clusters ? tiles : clusters);
+  cnrtDim3_t dim3{4, used, 1};
+  fused_mhc_pre_prefill_kernel<<<dim3,
+                                 cnrtFuncTypeUnion1,
+                                 static_cast<cnrtQueue_t>(queue)>>>(p);
+  return 0;
+}

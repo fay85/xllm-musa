@@ -393,6 +393,42 @@ fused_mhc(const torch::Tensor& x,
           int64_t sinkhorn_iter,
           double eps);
 
+// Standalone Pre + RMSNorm with an external compression mix.
+std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>
+fused_mhc_pre(const torch::Tensor& residual,
+              const torch::Tensor& pre_in,
+              const torch::Tensor& hc_fn,
+              const torch::Tensor& gamma,
+              const torch::Tensor& hc_scale,
+              const torch::Tensor& hc_base,
+              int64_t sinkhorn_iter,
+              double hc_eps,
+              double norm_eps);
+
+// Delayed-pre fused MHC boundary (BangC, hc_mult = 4, hidden size 5120). The
+// updated residual streams are combined with pre_in, and the newly computed
+// pre is returned as next_pre for the following sub-layer. Any token count and
+// natural element alignment are accepted: decode token counts use the d-split
+// decode kernel, large 64-byte aligned calls the prefill kernel. Returns
+// {norm_out, residual_out, next_pre, post_out, comb_out}.
+std::tuple<torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor,
+           torch::Tensor>
+fused_mhc_delayed_pre(const torch::Tensor& x,
+                      const torch::Tensor& residual_in,
+                      const torch::Tensor& hc_fn,
+                      const torch::Tensor& gamma,
+                      const torch::Tensor& post_in,
+                      const torch::Tensor& comb_in,
+                      const torch::Tensor& pre_in,
+                      const torch::Tensor& hc_scale,
+                      const torch::Tensor& hc_base,
+                      int64_t sinkhorn_iter,
+                      double hc_eps,
+                      double norm_eps);
+
 void fused_mla_q(const torch::Tensor& input,
                  torch::Tensor& output,
                  torch::Tensor& output_scale,

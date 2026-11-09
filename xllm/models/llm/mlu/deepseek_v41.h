@@ -231,6 +231,7 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
     auto& shared = input.enable_graph ? graph_state_->shared : eager_shared;
     shared.topk.resize(input.meta.num_sequences * (cp_context ? 2 : 1));
     shared.candidates.resize(input.meta.num_sequences * (cp_context ? 2 : 1));
+    std::optional<layer::PendingMHC> pending;
     for (size_t id = 0; id < layers_.size(); ++id) {
       if (!input.synchronize_layer(id)) {
         return ModelOutput();
@@ -248,6 +249,8 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
           caches,
           input,
           shared,
+          pending,
+          can_defer_post(id),
           input.enable_graph ? graph_state_->hashes[id].get() : nullptr,
           cp_context ? &*cp_context : nullptr,
           capture ? &captured : nullptr);
@@ -259,6 +262,7 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
         return ModelOutput();
       }
     }
+    CHECK(!pending.has_value());
     hidden = kernel::mlu::fused_mul_reduce_sum(hidden, pre);
     auto [output, residual] = norm_(hidden, std::nullopt);
     // Capture still uses local query rows. Restore both outputs before the
@@ -276,6 +280,19 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
   }
 
  private:
+  // Layer `id` may leave its post to the next layer's fused delayed-pre
+  // boundary only when both layers run the fused MHC kernels and the next
+  // layer neither injects Engram nor captures its entering residual.
+  bool can_defer_post(size_t id) const {
+    if (id + 1 >= layers_.size()) {
+      return false;
+    }
+    const auto& next = layers_[id + 1];
+    return layers_[id]->uses_fused_mhc() && next->uses_fused_mhc() &&
+           !next->has_engram() &&
+           !aux_capture_.should_capture(static_cast<int32_t>(id + 1));
+  }
+
   // Generic verify expands each request into independent decode rows. V4.1
   // compression and Engram need the original contiguous request chunks.
   static ModelInputParams group_verify_input(const ModelInputParams& input) {
