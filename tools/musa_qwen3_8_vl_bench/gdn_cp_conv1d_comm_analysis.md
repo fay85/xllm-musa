@@ -16,7 +16,7 @@ Rank 1 计算其前 $K - 1 = 3$ 个 token 所需的历史状态，**仅仅是 Ra
 
 ---
 
-## 2. Profile 实证分析（基于 `/data/albert/Pkgs/profile/qwen3.8-27b-fp8`）
+## 2. Profile 实证分析（基于 `/data/nfs_shared/albert/Projects/xllm/qwen3.8-27b-fp8_search/torch_traces/`）
 
 以 Profile 中第二个 Prefill step 的第 0 个 GDN 层为例（基准时间 $T_0 = 2678239470000\ \mu\text{s}$），对比 `prefill0_rank0_pid34601` 与 `prefill0_rank1_pid34603`：
 
