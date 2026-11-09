@@ -18,6 +18,7 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cstdlib>
 #include <limits>
 #include <map>
@@ -1237,6 +1238,15 @@ bool MooncakeTransferEngine::move_memory_regions(
     return false;
   }
 
+  const bool local_ipc = local_segment_desc->protocol == "nvlink_intra";
+  const bool remote_ipc = remote_segment_desc->protocol == "nvlink_intra";
+  if (local_ipc != remote_ipc) {
+    LOG(ERROR) << "Mooncake PD protocol mismatch before submission, local="
+               << local_segment_desc->protocol
+               << ", remote=" << remote_segment_desc->protocol;
+    return false;
+  }
+
   TransferRequest::OpCode opcode = TransferRequest::READ;
   if (move_opcode == MoveOpcode::WRITE) {
     opcode = TransferRequest::WRITE;
@@ -1316,6 +1326,9 @@ bool MooncakeTransferEngine::move_memory_regions(
     entries.emplace_back(std::move(entry));
   }
 
+  static std::atomic<uint64_t> next_transfer_id{0};
+  const uint64_t transfer_id =
+      next_transfer_id.fetch_add(1, std::memory_order_relaxed) + 1;
   constexpr size_t kMaxRegionsPerBatch = 4096;
   Timer transfer_timer;
   for (size_t begin = 0; begin < entries.size(); begin += kMaxRegionsPerBatch) {
@@ -1342,6 +1355,16 @@ bool MooncakeTransferEngine::move_memory_regions(
 
   const int64_t latency_microseconds = static_cast<int64_t>(
       transfer_timer.elapsed_seconds() * static_cast<double>(1000000));
+  LOG(INFO) << "[Mooncake][PDRegionTransfer] transfer_id=" << transfer_id
+            << ", direction="
+            << (move_opcode == MoveOpcode::READ ? "pull" : "push")
+            << ", remote=" << remote_addr
+            << ", local_protocol=" << local_segment_desc->protocol
+            << ", remote_protocol=" << remote_segment_desc->protocol
+            << ", logical_regions=" << regions.size()
+            << ", submitted_regions=" << entries.size()
+            << ", bytes=" << total_bytes
+            << ", elapsed_us=" << latency_microseconds << ", completed=true";
   if (move_opcode == MoveOpcode::READ) {
     COUNTER_INC(mooncake_transfer_completed_total_read);
     COUNTER_ADD(mooncake_transfer_bytes_total_read, total_bytes);

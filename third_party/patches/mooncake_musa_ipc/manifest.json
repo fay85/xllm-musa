@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "copyright": "Copyright 2026 The xLLM Authors.",
+  "base_commit": "bb2c0bee9f7839789c947556341556b4c02aaeda",
+  "source_repository": "https://gitcode.com/xLLM-AI/Mooncake.git",
+  "patch_file": "mtlink.patch",
+  "patch_sha256": "b3b68d83288b5941337ade70af9d0d02f52631f45e2ff3ae6138724d95ab3acf",
+  "provenance": {
+    "host": "worker32010",
+    "container": "albert_xllm_mate028",
+    "source": "/workspace/mtlink_pd_dev_20261108/source_v12b_query_context/third_party/Mooncake",
+    "golden": "/workspace/mtlink_pd_dev_20261108/source_baseline/third_party/Mooncake",
+    "excluded_backup_paths": [
+      "mooncake-store/src/dummy_client.cpp.orig",
+      "mooncake-store/src/master_service.cpp.orig"
+    ],
+    "notes": "Complete pinned-commit overlay, including inherited dirty baseline and opt-in CMake integration. Exported C++/CUDA contents are unchanged."
+  },
+  "files": [
+    {
+      "path": "mooncake-common/common.cmake",
+      "before_sha256": "d70387d07cfc3ae28070584d855f503e740d7e0625c1be6fe6f4b26fbc2d0e74",
+      "after_sha256": "b5e39e6322a1ab0638d30ebe42a44b326ae048977bb770ecf2272de95d38e78d",
+      "before_mode": "100644",
+      "after_mode": "100644",
+      "experimental_sha256": "de4becd95b5da8dcda70755260335a29148cd7ce69107795ef191667083eb2b4",
+      "golden_sha256": "de4becd95b5da8dcda70755260335a29148cd7ce69107795ef191667083eb2b4",
+      "provenance": "experiment_source_with_build_integration"
+    },
+    {
+      "path": "mooncake-store/src/dummy_client.cpp",
+      "before_sha256": "63090a8ebe78d63f63e2510156fcbee87522dfa80289f70fd143ae5dfc09a1be",
+      "after_sha256": "f3c783c783941741fd727743297b0a29b58725341156c2c1162c78498fe37afe",
+      "before_mode": "100644",
+      "after_mode": "100644",
+      "experimental_sha256": "f3c783c783941741fd727743297b0a29b58725341156c2c1162c78498fe37afe",
+      "golden_sha256": "f3c783c783941741fd727743297b0a29b58725341156c2c1162c78498fe37afe",
+      "provenance": "experiment_source"
+    },
+    {
+      "path": "mooncake-store/src/master_service.cpp",
+      "before_sha256": "6c509ba14f236bf23deae65bc2478b795fbf658873ac9ae2da77cfacb1576676",
+      "after_sha256": "5343c48b9651dcb37ccb1407837202f3f14bafa8df91b493a792d48aef72924c",
+      "before_mode": "100644",
+      "after_mode": "100644",
+      "experimental_sha256": "5343c48b9651dcb37ccb1407837202f3f14bafa8df91b493a792d48aef72924c",
+      "golden_sha256": "5343c48b9651dcb37ccb1407837202f3f14bafa8df91b493a792d48aef72924c",
+      "provenance": "experiment_source"
+    },
+    {
+      "path": "mooncake-transfer-engine/include/transport/device/ibgda/os.h",
+      "before_sha256": "43e4c2450f6c52093b3e2aa1f0661c593a81e5e6883ad08a8c8ac140bdc58e98",
+      "after_sha256": "a6335758d903b9fc6b9544a8dd439dfb58c80c30f34675a29ec419c00b7993cb",
+      "before_mode": "100644",
+      "after_mode": "100644",
+      "experimental_sha256": "a6335758d903b9fc6b9544a8dd439dfb58c80c30f34675a29ec419c00b7993cb",
+      "golden_sha256": "a6335758d903b9fc6b9544a8dd439dfb58c80c30f34675a29ec419c00b7993cb",
+      "provenance": "experiment_source"
+    },
+    {
+      "path": "mooncake-transfer-engine/include/transport/intranode_nvlink_transport/intranode_nvlink_transport.h",
+      "before_sha256": "1930af7078c96cd67762644ff0c57d215fd7b664749a7f09f020ab13e67aa4c4",
+      "after_sha256": "6b09edb503ad7506a06a63d986a6bcf205a5b7c5e24a217ddda2169208709645",
+      "before_mode": "100644",
+      "after_mode": "100644",
+      "experimental_sha256": "6b09edb503ad7506a06a63d986a6bcf205a5b7c5e24a217ddda2169208709645",
+      "golden_sha256": "1930af7078c96cd67762644ff0c57d215fd7b664749a7f09f020ab13e67aa4c4",
+      "provenance": "experiment_source"
+    },
+    {
+      "path": "mooncake-transfer-engine/include/transport/intranode_nvlink_transport/musa_ipc_copy_kernel.h",
+      "before_sha256": null,
+      "after_sha256": "2414a22e9e95113bbd9d7a442040170e892177ef3689f448a2d39a2f3cb2e903",
+      "before_mode": null,
+      "after_mode": "100644",
+      "experimental_sha256": "2414a22e9e95113bbd9d7a442040170e892177ef3689f448a2d39a2f3cb2e903",
+      "golden_sha256": null,
+      "provenance": "experiment_source"
+    },
+    {
+      "path": "mooncake-transfer-engine/src/CMakeLists.txt",
+      "before_sha256": "766048521352130aef18a7888663d7ce1749c74a12820a5e8e9009a76385f1d7",
+      "after_sha256": "1a06326b0a119a35f7ce78330508628a09ce0044221268f8b6292097afb36631",
+      "before_mode": "100644",
+      "after_mode": "100644",
+      "provenance": "build_integration"
+    },
+    {
+      "path": "mooncake-transfer-engine/src/transfer_engine_impl.cpp",
+      "before_sha256": "1727ae3ac54e0c9d237bc889dc90f755286fc931f0214601d9c89fe8d54213ff",
+      "after_sha256": "9a9e96f5362364cc4ef400cb9415ac7937c561f57b2dca089f8bde390f985509",
+      "before_mode": "100644",
+      "after_mode": "100644",
+      "experimental_sha256": "9a9e96f5362364cc4ef400cb9415ac7937c561f57b2dca089f8bde390f985509",
+      "golden_sha256": "1727ae3ac54e0c9d237bc889dc90f755286fc931f0214601d9c89fe8d54213ff",
+      "provenance": "experiment_source"
+    },
+    {
+      "path": "mooncake-transfer-engine/src/transport/intranode_nvlink_transport/CMakeLists.txt",
+      "before_sha256": "c8bd26ae3c35073a17baca21a5490e8946d0a4aafc6cefbbea08dcdb81d4fbf4",
+      "after_sha256": "10de0999d66197d75c0817da216b5aa8e095bf97e332aa444fab39843872edb6",
+      "before_mode": "100644",
+      "after_mode": "100644",
+      "provenance": "build_integration"
+    },
+    {
+      "path": "mooncake-transfer-engine/src/transport/intranode_nvlink_transport/intranode_nvlink_transport.cpp",
+      "before_sha256": "1d1f109411fcc262616154e3376fe6754ca5dcea9739991b5c21326cc1753116",
+      "after_sha256": "dd72622cf7cce4c75652141c0debd008f646a838630b48c76ba3e1002d9d2105",
+      "before_mode": "100644",
+      "after_mode": "100644",
+      "experimental_sha256": "dd72622cf7cce4c75652141c0debd008f646a838630b48c76ba3e1002d9d2105",
+      "golden_sha256": "1d1f109411fcc262616154e3376fe6754ca5dcea9739991b5c21326cc1753116",
+      "provenance": "experiment_source"
+    },
+    {
+      "path": "mooncake-transfer-engine/src/transport/intranode_nvlink_transport/musa_ipc_copy_kernel.cu",
+      "before_sha256": null,
+      "after_sha256": "1f0b23bd66f51ef7916df306e0874e25850c1ee5d1cd109f389cd5de2906b767",
+      "before_mode": null,
+      "after_mode": "100644",
+      "experimental_sha256": "1f0b23bd66f51ef7916df306e0874e25850c1ee5d1cd109f389cd5de2906b767",
+      "golden_sha256": null,
+      "provenance": "experiment_source"
+    }
+  ]
+}

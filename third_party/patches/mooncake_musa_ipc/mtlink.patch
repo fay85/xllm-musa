@@ -1,0 +1,1790 @@
+diff --git a/mooncake-common/common.cmake b/mooncake-common/common.cmake
+index 6af779a2498f05acd2a894590a8eb856c4656054..7c0328a33ae169395c6e9825eb23be34f5129581 100644
+--- a/mooncake-common/common.cmake
++++ b/mooncake-common/common.cmake
+@@ -13,7 +13,8 @@ if(ENABLE_DEBUG_SYMBOLS)
+   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -g")
+ endif()
+ 
+-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
++if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND
++   NOT CMAKE_CXX_COMPILER MATCHES "mcc_wrapper")
+   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fcoroutines")
+   set(CMAKE_CXX_FLAGS_RELEASE
+       "${CMAKE_CXX_FLAGS_RELEASE} -fno-tree-slp-vectorize")
+@@ -167,6 +168,11 @@ if(ENABLE_MULTI_PROTOCOL)
+ endif()
+ option(USE_LRU_MASTER "option for using LRU in master service" OFF)
+ option(USE_INTRA_NVLINK "option for using IntraNode nvlink transport" OFF)
++option(USE_MUSA_IPC_COPY_KERNEL "Build the optional MUSA IPC copy kernel" OFF)
++if(USE_MUSA_IPC_COPY_KERNEL AND (NOT USE_MUSA OR NOT USE_INTRA_NVLINK))
++  message(FATAL_ERROR
++          "USE_MUSA_IPC_COPY_KERNEL requires USE_MUSA and USE_INTRA_NVLINK")
++endif()
+ option(USE_MLX5DV
+        "enable mlx5 direct verbs (libmlx5) for QP UDP source port override" OFF)
+ set(LRU_MAX_CAPACITY 1000)
+diff --git a/mooncake-store/src/dummy_client.cpp b/mooncake-store/src/dummy_client.cpp
+index ab8b8fabe541be3f19e84ce3b829e97f508deb58..ca77c9bb565a5b6ea990b9f752e18bee4c7f5d83 100644
+--- a/mooncake-store/src/dummy_client.cpp
++++ b/mooncake-store/src/dummy_client.cpp
+@@ -908,8 +908,8 @@ std::shared_ptr<BufferHandle> DummyClient::get_buffer(const std::string& key) {
+ 
+     auto [dummy_addr, size] = result.value();
+     void* local_ptr = reinterpret_cast<void*>(dummy_addr);
+-    auto release = [this, dummy_addr]() {
+-        (void)invoke_rpc<&RealClient::release_buffer_dummy, void>(dummy_addr,
++    auto release = [this, dummy_addr_value = dummy_addr]() {
++        (void)invoke_rpc<&RealClient::release_buffer_dummy, void>(dummy_addr_value,
+                                                                   client_id_);
+     };
+     ObserveTransferMetric(TransferOperationKind::kRead, "get_buffer", size,
+@@ -972,9 +972,9 @@ std::vector<std::shared_ptr<BufferHandle>> DummyClient::batch_get_buffer(
+         if (!alloc_results[i].has_value()) continue;
+         auto [dummy_addr, size] = alloc_results[i].value();
+         void* ptr = reinterpret_cast<void*>(dummy_addr);
+-        auto release = [this, dummy_addr]() {
++        auto release = [this, dummy_addr_value = dummy_addr]() {
+             (void)invoke_rpc<&RealClient::release_buffer_dummy, void>(
+-                dummy_addr, client_id_);
++                dummy_addr_value, client_id_);
+         };
+         results[miss_indices[i]] =
+             std::make_shared<BufferHandle>(ptr, size, std::move(release));
+diff --git a/mooncake-store/src/master_service.cpp b/mooncake-store/src/master_service.cpp
+index e899f21a9abbd71938f240fee3822f7f25bc253a..46c8da655437fdbc7534d1244cb92afdb7ffb746 100644
+--- a/mooncake-store/src/master_service.cpp
++++ b/mooncake-store/src/master_service.cpp
+@@ -4025,9 +4025,9 @@ tl::expected<CopyStartResponse, ErrorCode> MasterService::CopyStart(
+     auto& tenant_state = accessor.GetTenantState();
+     auto task_insert = tenant_state.replication_tasks.emplace(
+         std::piecewise_construct, std::forward_as_tuple(key),
+-        std::forward_as_tuple(client_id, std::chrono::system_clock::now(),
++        std::forward_as_tuple(ReplicationTask{client_id, std::chrono::system_clock::now(),
+                               ReplicationTask::Type::COPY, source->id(),
+-                              std::move(replica_ids), reserved_quota_charge));
++                              std::move(replica_ids), reserved_quota_charge}));
+     if (!task_insert.second) {
+         abort_reserved_quota();
+         return tl::make_unexpected(ErrorCode::OBJECT_HAS_REPLICATION_TASK);
+@@ -4305,9 +4305,9 @@ tl::expected<MoveStartResponse, ErrorCode> MasterService::MoveStart(
+     auto& tenant_state = accessor.GetTenantState();
+     auto task_insert = tenant_state.replication_tasks.emplace(
+         std::piecewise_construct, std::forward_as_tuple(key),
+-        std::forward_as_tuple(client_id, std::chrono::system_clock::now(),
++        std::forward_as_tuple(ReplicationTask{client_id, std::chrono::system_clock::now(),
+                               ReplicationTask::Type::MOVE, source->id(),
+-                              std::move(replica_ids), reserved_quota_charge));
++                              std::move(replica_ids), reserved_quota_charge}));
+     if (!task_insert.second) {
+         AbortTenantQuota(object_id.tenant_id, reserved_quota_charge);
+         return tl::make_unexpected(ErrorCode::OBJECT_HAS_REPLICATION_TASK);
+diff --git a/mooncake-transfer-engine/include/transport/device/ibgda/os.h b/mooncake-transfer-engine/include/transport/device/ibgda/os.h
+index bf8bfd4b5c3355c891ca4290d708ff41621551ff..b9c11ef990475703378f450079b7794e335a9118 100644
+--- a/mooncake-transfer-engine/include/transport/device/ibgda/os.h
++++ b/mooncake-transfer-engine/include/transport/device/ibgda/os.h
+@@ -20,7 +20,7 @@ static inline int close_ret(int fd) {
+ static inline ssize_t read_all(int fd, void *buf, size_t len) {
+     size_t total = 0;
+     while (total < len) {
+-        ssize_t n = read(fd, buf + total, len - total);
++        ssize_t n = read(fd, (char *)buf + total, len - total);
+         if (n == -1) {
+             return -1;
+         }
+@@ -35,7 +35,7 @@ static inline ssize_t read_all(int fd, void *buf, size_t len) {
+ static inline ssize_t write_all(int fd, const void *buf, size_t len) {
+     size_t total = 0;
+     while (total < len) {
+-        ssize_t n = write(fd, buf + total, len - total);
++        ssize_t n = write(fd, (const char *)buf + total, len - total);
+         if (n == -1) {
+             return -1;
+         }
+diff --git a/mooncake-transfer-engine/include/transport/intranode_nvlink_transport/intranode_nvlink_transport.h b/mooncake-transfer-engine/include/transport/intranode_nvlink_transport/intranode_nvlink_transport.h
+index 12eab425f5e6db7bc6161935fdb640fdbd775a10..0fc661444db5fef08b874dcfc4fc75ad3374e7af 100644
+--- a/mooncake-transfer-engine/include/transport/intranode_nvlink_transport/intranode_nvlink_transport.h
++++ b/mooncake-transfer-engine/include/transport/intranode_nvlink_transport/intranode_nvlink_transport.h
+@@ -11,6 +11,7 @@
+ #include <mutex>
+ #include <queue>
+ #include <string>
++#include <unordered_map>
+ #include <unordered_set>
+ #include <vector>
+ #include <utility>
+@@ -66,6 +67,68 @@ class IntraNodeNvlinkTransport : public Transport {
+     const char* getName() const override { return "nvlink_intraNode"; }
+ 
+    private:
++#ifdef USE_MUSA
++    struct MusaAllocation {
++        std::string payload;
++        size_t references = 0;
++    };
++    struct OpenedMusaEntry {
++        void* addr = nullptr;
++        int device = -1;
++        uint64_t export_base = 0;
++        uint64_t export_size = 0;
++        std::string remote_pci;
++    };
++    struct MusaBufferBinding {
++        uint64_t mapped_addr = 0;
++        std::string remote_pci;
++        bool resolved = false;
++    };
++    struct MusaSegmentBindings {
++        std::shared_ptr<SegmentDesc> desc;
++        std::vector<MusaBufferBinding> buffers;
++        size_t last_index = 0;
++    };
++    struct MusaBatchContext {
++        int device = -1;
++        std::string physical_pci;
++        std::unordered_map<uint64_t, MusaSegmentBindings> segments;
++        uint64_t logical_bindings = 0;
++        uint64_t payload_parses = 0;
++        uint64_t import_hits = 0;
++        uint64_t new_imports = 0;
++        bool remote_devices_differ = true;
++    };
++    int resolve_musa_region(uint64_t& addr, uint64_t length, uint64_t target_id,
++                            MusaBatchContext& context,
++                            size_t* logical_buffer_index = nullptr);
++    std::string host_boot_id_;
++    std::string process_incarnation_;
++    uint64_t allocation_generation_ = 0;
++    std::unordered_map<uint64_t, MusaAllocation> musa_allocations_;
++    std::unordered_map<uint64_t, uint64_t> musa_logical_allocations_;
++    std::unordered_map<std::string, OpenedMusaEntry> musa_imports_;
++    std::unordered_map<int, cudaStream_t> musa_streams_;
++    bool musa_validate_bytes_ = false;
++    bool musa_coalesce_ = false;
++    bool musa_batch_copy_ = false;
++    bool musa_batch_transfer_ = false;
++    bool musa_batch_kernel_ = false;
++#ifdef USE_MUSA_IPC_COPY_KERNEL
++    struct MusaKernelWorkspace {
++        void* descriptors = nullptr;
++        size_t capacity = 0;
++    };
++    std::unordered_map<int, MusaKernelWorkspace> musa_kernel_workspaces_;
++#endif
++    // Set during install; cached imports retain this policy for their lifetime.
++    bool musa_peer_unidir_ = false;
++    std::vector<unsigned char> musa_validation_source_;
++    std::vector<unsigned char> musa_validation_destination_;
++    bool validate_musa_copies(const std::vector<TransferTask*>& tasks,
++                              cudaStream_t stream);
++    void close_musa_imports();
++#endif
+     std::atomic_bool running_;
+ 
+     struct OpenedShmEntry {
+diff --git a/mooncake-transfer-engine/include/transport/intranode_nvlink_transport/musa_ipc_copy_kernel.h b/mooncake-transfer-engine/include/transport/intranode_nvlink_transport/musa_ipc_copy_kernel.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..97a9a1ef58889589c9e16e94e561d8e094abc6bb
+--- /dev/null
++++ b/mooncake-transfer-engine/include/transport/intranode_nvlink_transport/musa_ipc_copy_kernel.h
+@@ -0,0 +1,44 @@
++/* Copyright 2026 The xLLM Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    https://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++
++#pragma once
++
++#include <musa_runtime_api.h>
++
++#include <cstdint>
++
++namespace mooncake {
++
++inline constexpr uint64_t kMusaIpcCopyTileBytes = 65536;
++
++// Device-visible descriptors, prepared only after validating independent
++// copies. tile_end is the cumulative exclusive number of 64KiB tiles in this
++// and all preceding spans. Source/destination are non-owning IPC/device
++// addresses.
++struct MusaIpcCopySpan final {
++    uint64_t source;
++    uint64_t destination;
++    uint64_t bytes;
++    uint64_t tile_end;
++};
++
++// The caller owns the descriptor array, endpoint mappings and buffers until its
++// stream has drained. This function neither allocates nor synchronizes. All
++// descriptors must contain positive lengths and strictly increasing tile_end.
++extern "C" musaError_t mooncake_musa_ipc_copy_kernel(
++    const MusaIpcCopySpan* device_spans, uint32_t span_count,
++    uint64_t tile_count, musaStream_t stream);
++
++}  // namespace mooncake
+diff --git a/mooncake-transfer-engine/src/CMakeLists.txt b/mooncake-transfer-engine/src/CMakeLists.txt
+index e530dd6ab17acfdaaa9df043089d4c3a8e3ffcee..01151a89b264e75de02e4364b3713b0c629b9cdd 100644
+--- a/mooncake-transfer-engine/src/CMakeLists.txt
++++ b/mooncake-transfer-engine/src/CMakeLists.txt
+@@ -163,6 +163,12 @@ if(USE_INTRA_NVLINK)
+   target_compile_definitions(transfer_engine PUBLIC USE_INTRA_NVLINK)
+ endif()
+ 
++if(USE_MUSA_IPC_COPY_KERNEL)
++  # Consumers of the transport header must see the same class layout.
++  target_compile_definitions(transfer_engine PUBLIC USE_MUSA_IPC_COPY_KERNEL)
++  target_link_libraries(transfer_engine PUBLIC mooncake_musa_ipc_copy_kernel)
++endif()
++
+ if(USE_MLX5DV)
+   message(STATUS "Enabled USE_MLX5DV support (mlx5 direct verbs)")
+   target_link_libraries(transfer_engine PUBLIC mlx5)
+diff --git a/mooncake-transfer-engine/src/transfer_engine_impl.cpp b/mooncake-transfer-engine/src/transfer_engine_impl.cpp
+index 1ceb6abc7471bbe98736346593361fe4a7d91b2f..7236d08f2e3f957e2419aefafaf757298449a7ff 100644
+--- a/mooncake-transfer-engine/src/transfer_engine_impl.cpp
++++ b/mooncake-transfer-engine/src/transfer_engine_impl.cpp
+@@ -207,6 +207,37 @@ int TransferEngineImpl::init(const std::string& metadata_conn_string,
+         return 0;
+     }
+ 
++    // The intra-node backend is explicit opt-in. Compiling it must not change
++    // the existing automatic RDMA/TCP selection when the option is absent.
++    const char* intra_env = std::getenv("MC_INTRANODE_NVLINK");
++    if (intra_env != nullptr && std::strcmp(intra_env, "0") != 0 &&
++        std::strcmp(intra_env, "1") != 0) {
++        LOG(ERROR) << "MC_INTRANODE_NVLINK must be 0 or 1";
++        return -1;
++    }
++    if (intra_env != nullptr && std::strcmp(intra_env, "1") == 0) {
++#ifdef USE_INTRA_NVLINK
++        if (std::getenv("MC_FORCE_TCP") != nullptr ||
++            std::getenv("MC_FORCE_MNNVL") != nullptr) {
++            LOG(ERROR) << "Intra-node transport conflicts with an explicit "
++                          "network transport";
++            return -1;
++        }
++        Transport* intra_transport =
++            multi_transports_->installTransport("nvlink_intra", nullptr);
++        if (intra_transport == nullptr) {
++            LOG(ERROR) << "Failed to install explicitly requested intra-node "
++                          "transport";
++            return -1;
++        }
++        LOG(INFO) << "installTransport, type=nvlink_intra, explicit_opt_in=1";
++        return 0;
++#else
++        LOG(ERROR) << "MC_INTRANODE_NVLINK=1 requires USE_INTRA_NVLINK";
++        return -1;
++#endif
++    }
++
+     // Universal TCP force mechanism: if MC_FORCE_TCP is set, skip all other
+     // transport installation logic and use TCP transport only. This allows
+     // running metadata-only instances without requiring specialized hardware
+@@ -331,21 +362,10 @@ int TransferEngineImpl::init(const std::string& metadata_conn_string,
+             LOG(INFO) << "Using MACA transport";
+         }
+ 
+-#elif defined(USE_MNNVL) || defined(USE_INTRA_NVLINK)
++#elif defined(USE_MNNVL)
+ 
+         const char* force_mnnvl = getenv("MC_FORCE_MNNVL");
+-        const char* intra_env = getenv("MC_INTRANODE_NVLINK");
+-        // Explicit env var overrides take priority over HCA auto-detection
+-        if (intra_env) {
+-            Transport* t =
+-                multi_transports_->installTransport("nvlink_intra", nullptr);
+-            if (!t) {
+-                LOG(ERROR) << "Failed to install Intra-Node NVLink transport";
+-                return -1;
+-            }
+-            LOG(INFO) << "Using Intra-Node NVLink transport "
+-                         "(MC_INTRANODE_NVLINK set)";
+-        } else if (force_mnnvl || local_topology_->getHcaList().empty()) {
++        if (force_mnnvl || local_topology_->getHcaList().empty()) {
+             Transport* t =
+                 multi_transports_->installTransport("nvlink", nullptr);
+             if (!t) {
+@@ -353,7 +373,7 @@ int TransferEngineImpl::init(const std::string& metadata_conn_string,
+                 return -1;
+             }
+             LOG(INFO) << "Using cross-node NVLink transport "
+-                      << "(MC_FORCE_MNNVL or no HCA detected)";
++                         "(MC_FORCE_MNNVL or no HCA detected)";
+         } else {
+             Transport* t =
+                 multi_transports_->installTransport("rdma", local_topology_);
+diff --git a/mooncake-transfer-engine/src/transport/intranode_nvlink_transport/CMakeLists.txt b/mooncake-transfer-engine/src/transport/intranode_nvlink_transport/CMakeLists.txt
+index 524891a6358ba7e6af04538b0fd085e411f4c4ab..4aac732f4511e3ae42d27778e46551ae6a9a3761 100644
+--- a/mooncake-transfer-engine/src/transport/intranode_nvlink_transport/CMakeLists.txt
++++ b/mooncake-transfer-engine/src/transport/intranode_nvlink_transport/CMakeLists.txt
+@@ -5,3 +5,38 @@ add_library(intranode_nvlink_transport OBJECT ${INTRANODE_NVLINK_SOURCES})
+ if (USE_CUDA)
+ target_include_directories(intranode_nvlink_transport PUBLIC  CUDA::cudart "/usr/local/cuda/include")
+ endif()
++
++if(USE_MUSA)
++  target_include_directories(intranode_nvlink_transport PRIVATE /usr/local/musa/include)
++  target_link_libraries(intranode_nvlink_transport PRIVATE glog::glog JsonCpp::JsonCpp)
++endif()
++
++if(USE_MUSA_IPC_COPY_KERNEL)
++  # Compile native MUSA separately from the CUDA compatibility compiler used
++  # by xLLM. This also works in a standalone Mooncake C/C++ configuration.
++  find_program(MOONCAKE_MUSA_COMPILER mcc
++               HINTS "${MUSA_PATH}/bin" "$ENV{MUSA_HOME}/bin" /usr/local/musa/bin
++               REQUIRED)
++  set(MOONCAKE_MUSA_ARCH "mp_31" CACHE STRING "MUSA architecture for the IPC copy kernel")
++  if(NOT MOONCAKE_MUSA_ARCH MATCHES "^mp_[0-9]+$")
++    message(FATAL_ERROR "MOONCAKE_MUSA_ARCH must name one MUSA architecture, e.g. mp_31")
++  endif()
++  set(_musa_kernel_header
++      "${CMAKE_CURRENT_SOURCE_DIR}/../../../include/transport/intranode_nvlink_transport/musa_ipc_copy_kernel.h")
++  set(_musa_kernel_object "${CMAKE_CURRENT_BINARY_DIR}/musa_ipc_copy_kernel.o")
++  add_custom_command(
++    OUTPUT "${_musa_kernel_object}"
++    COMMAND "${MOONCAKE_MUSA_COMPILER}" -x musa -std=c++20 -O2 -fPIC
++            "--offload-arch=${MOONCAKE_MUSA_ARCH}"
++            "-I${CMAKE_CURRENT_SOURCE_DIR}/../../../include"
++            -c "${CMAKE_CURRENT_SOURCE_DIR}/musa_ipc_copy_kernel.cu"
++            -o "${_musa_kernel_object}"
++    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/musa_ipc_copy_kernel.cu" "${_musa_kernel_header}"
++    VERBATIM)
++  set_source_files_properties("${_musa_kernel_object}"
++                             PROPERTIES GENERATED TRUE EXTERNAL_OBJECT TRUE)
++  add_library(mooncake_musa_ipc_copy_kernel STATIC "${_musa_kernel_object}")
++  set_target_properties(mooncake_musa_ipc_copy_kernel PROPERTIES LINKER_LANGUAGE CXX)
++  target_compile_definitions(intranode_nvlink_transport PRIVATE USE_MUSA_IPC_COPY_KERNEL)
++  install(TARGETS mooncake_musa_ipc_copy_kernel ARCHIVE DESTINATION lib)
++endif()
+diff --git a/mooncake-transfer-engine/src/transport/intranode_nvlink_transport/intranode_nvlink_transport.cpp b/mooncake-transfer-engine/src/transport/intranode_nvlink_transport/intranode_nvlink_transport.cpp
+index 52ca987addffd9bc167fde83c2bc97cdb1b3d7f3..9770f19f7bca893ded6cd2238f6d6abc65077522 100644
+--- a/mooncake-transfer-engine/src/transport/intranode_nvlink_transport/intranode_nvlink_transport.cpp
++++ b/mooncake-transfer-engine/src/transport/intranode_nvlink_transport/intranode_nvlink_transport.cpp
+@@ -33,6 +33,1293 @@
+ #include "transfer_metadata.h"
+ #include "transport/transport.h"
+ 
++#ifdef USE_MUSA
++
++#include <cstdlib>
++#include <cstring>
++#include <fstream>
++#include <json/json.h>
++#include <limits>
++#include <sstream>
++#include <unistd.h>
++
++#ifdef USE_MUSA_IPC_COPY_KERNEL
++#include "transport/intranode_nvlink_transport/musa_ipc_copy_kernel.h"
++#endif
++
++#if defined(MUSART_VERSION) && MUSART_VERSION >= 50100
++#include <musa.h>
++#include <type_traits>
++#endif
++
++namespace mooncake {
++namespace {
++constexpr char kMusaIpcPrefix[] = "musa-ipc-v1:";
++constexpr size_t kMaxMusaImports = 8192;
++constexpr size_t kMusaValidationChunkBytes = 1024 * 1024;
++#if defined(MUSART_VERSION) && MUSART_VERSION >= 50100
++constexpr size_t kMaxMusaBatchCopySpans = 65536;
++#endif
++
++// Non-owning addresses remain valid until the submission drains under
++// register_mutex_. Buffer indices refer to fixed batch metadata snapshots.
++struct MusaCopySpan {
++    uint64_t local_addr = 0;
++    uint64_t remote_addr = 0;
++    uint64_t length = 0;
++    uint64_t remote_target = 0;
++    size_t local_buffer_index = 0;
++    size_t remote_buffer_index = 0;
++    size_t task_begin = 0;
++    size_t task_end = 0;
++    Transport::TransferRequest::OpCode opcode =
++        Transport::TransferRequest::READ;
++};
++
++bool same_musa_copy_binding(const MusaCopySpan& first,
++                            const MusaCopySpan& second) {
++    // Same-segment copies may alias and carry inter-region dependencies.
++    return first.remote_target != LOCAL_SEGMENT_ID &&
++           first.opcode == second.opcode &&
++           first.remote_target == second.remote_target &&
++           first.local_buffer_index == second.local_buffer_index &&
++           first.remote_buffer_index == second.remote_buffer_index;
++}
++
++bool forward_contiguous_musa_spans(const MusaCopySpan& first,
++                                   const MusaCopySpan& second) {
++    return same_musa_copy_binding(first, second) &&
++           second.local_addr >= first.local_addr &&
++           second.local_addr - first.local_addr == first.length &&
++           second.remote_addr >= first.remote_addr &&
++           second.remote_addr - first.remote_addr == first.length;
++}
++
++bool reverse_contiguous_musa_spans(const MusaCopySpan& first,
++                                   const MusaCopySpan& second) {
++    return same_musa_copy_binding(first, second) &&
++           first.local_addr >= second.local_addr &&
++           first.local_addr - second.local_addr == second.length &&
++           first.remote_addr >= second.remote_addr &&
++           first.remote_addr - second.remote_addr == second.length;
++}
++
++#if defined(MUSART_VERSION) && MUSART_VERSION >= 50100
++// The batch API does not order copies within its COPY set. Common direction
++// and physically separate local/remote devices exclude source/destination
++// dependencies; destination intervals must also be pairwise disjoint.
++const char* musa_batch_copy_fallback_reason(
++    const std::vector<MusaCopySpan>& spans, bool remote_devices_differ) {
++    if (spans.empty()) {
++        return "empty_copy_set";
++    }
++    if (spans.size() > kMaxMusaBatchCopySpans) {
++        return "span_limit";
++    }
++    const MusaCopySpan& first = spans.front();
++    if (first.remote_target == LOCAL_SEGMENT_ID) {
++        return "local_target";
++    }
++    if (!remote_devices_differ) {
++        return "same_physical_device";
++    }
++    std::vector<std::pair<uint64_t, uint64_t>> destinations;
++    destinations.reserve(spans.size());
++    for (const MusaCopySpan& span : spans) {
++        if (span.opcode != first.opcode) {
++            return "mixed_opcode";
++        }
++        if (span.remote_target != first.remote_target) {
++            return "mixed_remote_target";
++        }
++        const uint64_t destination =
++            span.opcode == Transport::TransferRequest::READ ? span.local_addr
++                                                            : span.remote_addr;
++        // Each original region passed the overflow and registration checks
++        // before coalescing. Merged spans retain those same end addresses.
++        destinations.emplace_back(destination, destination + span.length);
++    }
++    std::sort(destinations.begin(), destinations.end());
++    for (size_t index = 1; index < destinations.size(); ++index) {
++        if (destinations[index].first < destinations[index - 1].second) {
++            return "destination_overlap";
++        }
++    }
++    return "none";
++}
++#endif
++
++#if defined(MUSART_VERSION) && MUSART_VERSION >= 50100 && \
++    defined(MUSA_VERSION) && MUSA_VERSION >= 50100
++static_assert(std::is_same<musaStream_t, MUstream>::value,
++              "MUSA runtime and driver stream types must match");
++static_assert(sizeof(MUdeviceptr) >= sizeof(uint64_t),
++              "MUdeviceptr must represent validated span addresses");
++
++void log_musa_driver_error(const char* stage, MUresult error,
++                           size_t fail_index) {
++    const char* name = nullptr;
++    const char* detail = nullptr;
++    muGetErrorName(error, &name);
++    muGetErrorString(error, &detail);
++    LOG(ERROR) << "MUSA IPC driver batch failed: stage=" << stage
++               << " mu_rc=" << static_cast<int32_t>(error)
++               << " mu_name=" << (name != nullptr ? name : "unavailable")
++               << " mu_detail=" << (detail != nullptr ? detail : "unavailable")
++               << " failIdx=" << fail_index;
++}
++
++bool valid_musa_driver_context(musaStream_t stream, size_t fail_index) {
++    if (stream == nullptr || stream == musaStreamLegacy ||
++        stream == musaStreamPerThread) {
++        LOG(ERROR) << "MUSA IPC driver batch requires an ordinary stream"
++                   << " failIdx=" << fail_index;
++        return false;
++    }
++    // Only inspect the runtime's existing context. Never create, push or
++    // switch contexts to make the selected driver path appear compatible.
++    const MUstream driver_stream = stream;
++    MUcontext current_context = nullptr;
++    MUresult error = muCtxGetCurrent(&current_context);
++    if (error != MUSA_SUCCESS) {
++        log_musa_driver_error("muCtxGetCurrent", error, fail_index);
++        return false;
++    }
++    if (current_context == nullptr) {
++        LOG(ERROR) << "MUSA IPC driver batch has no current context"
++                   << " failIdx=" << fail_index;
++        return false;
++    }
++    MUcontext stream_context = nullptr;
++    error = muStreamGetCtx(driver_stream, &stream_context);
++    if (error != MUSA_SUCCESS) {
++        log_musa_driver_error("muStreamGetCtx", error, fail_index);
++        return false;
++    }
++    if (stream_context == nullptr || stream_context != current_context) {
++        LOG(ERROR) << "MUSA IPC driver batch context mismatch: current="
++                   << current_context << " stream_context=" << stream_context
++                   << " failIdx=" << fail_index;
++        return false;
++    }
++    return true;
++}
++#endif
++
++class MusaDeviceScope final {
++   public:
++    explicit MusaDeviceScope(int device) {
++        if (cudaGetDevice(&previous_) == cudaSuccess) {
++            ok_ = cudaSetDevice(device) == cudaSuccess;
++        }
++    }
++    ~MusaDeviceScope() {
++        if (ok_) {
++            cudaSetDevice(previous_);
++        }
++    }
++    bool ok() const { return ok_; }
++
++   private:
++    int previous_ = -1;
++    bool ok_ = false;
++};
++
++std::string musa_pci_id(int device) {
++    char pci[64] = {};
++    if (cudaDeviceGetPCIBusId(pci, sizeof(pci), device) != cudaSuccess) {
++        return {};
++    }
++    return pci;
++}
++
++bool contains_region(uint64_t start, uint64_t size, uint64_t addr,
++                     uint64_t length) {
++    return length > 0 && addr >= start && addr - start <= size &&
++           length <= size - (addr - start);
++}
++
++void finish_musa_tasks(const std::vector<Transport::TransferTask*>& tasks,
++                       bool success) {
++    for (Transport::TransferTask* task : tasks) {
++        for (Transport::Slice* slice : task->slice_list) {
++            if (slice->status == Transport::Slice::PENDING ||
++                slice->status == Transport::Slice::POSTED) {
++                if (success) {
++                    slice->markSuccess();
++                } else {
++                    slice->markFailed();
++                }
++            }
++        }
++        task->is_finished = true;
++    }
++}
++}  // namespace
++
++IntraNodeNvlinkTransport::IntraNodeNvlinkTransport() = default;
++
++void IntraNodeNvlinkTransport::close_musa_imports() {
++    for (const auto& entry : musa_imports_) {
++        MusaDeviceScope scope(entry.second.device);
++        if (!scope.ok() ||
++            cudaIpcCloseMemHandle(entry.second.addr) != cudaSuccess) {
++            LOG(FATAL) << "MUSA IPC mapping cleanup failed";
++        }
++    }
++    musa_imports_.clear();
++}
++
++IntraNodeNvlinkTransport::~IntraNodeNvlinkTransport() {
++    std::lock_guard<std::mutex> lock(register_mutex_);
++    // Every submission drains under this mutex before returning.
++#ifdef USE_MUSA_IPC_COPY_KERNEL
++    for (const auto& entry : musa_kernel_workspaces_) {
++        MusaDeviceScope scope(entry.first);
++        if (!scope.ok() || cudaFree(entry.second.descriptors) != cudaSuccess) {
++            LOG(FATAL) << "MUSA IPC kernel descriptor cleanup failed";
++        }
++    }
++    musa_kernel_workspaces_.clear();
++#endif
++    close_musa_imports();
++    for (const auto& entry : musa_streams_) {
++        MusaDeviceScope scope(entry.first);
++        if (!scope.ok() || cudaStreamDestroy(entry.second) != cudaSuccess) {
++            LOG(FATAL) << "MUSA IPC stream cleanup failed";
++        }
++    }
++}
++
++int IntraNodeNvlinkTransport::install(
++    std::string& local_server_name, std::shared_ptr<TransferMetadata> metadata,
++    std::shared_ptr<Topology> /*topology*/) {
++#ifdef USE_EVENT_DRIVEN_COMPLETION
++    LOG(ERROR) << "MUSA IPC synchronous completion requires "
++                  "USE_EVENT_DRIVEN_COMPLETION=OFF";
++    return ERR_INVALID_ARGUMENT;
++#endif
++    const char* coalesce = std::getenv("MC_IPC_COALESCE");
++    if (coalesce != nullptr && std::strcmp(coalesce, "0") != 0 &&
++        std::strcmp(coalesce, "1") != 0) {
++        LOG(ERROR) << "MC_IPC_COALESCE must be exactly 0 or 1";
++        return ERR_INVALID_ARGUMENT;
++    }
++    musa_coalesce_ = coalesce != nullptr && std::strcmp(coalesce, "1") == 0;
++    const char* batch_copy = std::getenv("MC_IPC_BATCH_COPY");
++    if (batch_copy != nullptr && std::strcmp(batch_copy, "0") != 0 &&
++        std::strcmp(batch_copy, "1") != 0) {
++        LOG(ERROR) << "MC_IPC_BATCH_COPY must be exactly 0 or 1";
++        return ERR_INVALID_ARGUMENT;
++    }
++    musa_batch_copy_ =
++        batch_copy != nullptr && std::strcmp(batch_copy, "1") == 0;
++    if (musa_batch_copy_ && !musa_coalesce_) {
++        LOG(ERROR) << "MC_IPC_BATCH_COPY=1 requires MC_IPC_COALESCE=1";
++        return ERR_INVALID_ARGUMENT;
++    }
++#if !defined(MUSART_VERSION) || MUSART_VERSION < 50100
++    if (musa_batch_copy_) {
++        LOG(ERROR) << "MC_IPC_BATCH_COPY=1 requires MUSA SDK 5.1 or newer";
++        return ERR_INVALID_ARGUMENT;
++    }
++#endif
++    const char* batch_engine = std::getenv("MC_IPC_BATCH_ENGINE");
++    if (batch_engine != nullptr && std::strcmp(batch_engine, "runtime") != 0 &&
++        std::strcmp(batch_engine, "transfer") != 0 &&
++        std::strcmp(batch_engine, "kernel") != 0) {
++        LOG(ERROR) << "MC_IPC_BATCH_ENGINE must be exactly runtime, transfer "
++                      "or kernel";
++        return ERR_INVALID_ARGUMENT;
++    }
++    musa_batch_transfer_ =
++        batch_engine != nullptr && std::strcmp(batch_engine, "transfer") == 0;
++    musa_batch_kernel_ =
++        batch_engine != nullptr && std::strcmp(batch_engine, "kernel") == 0;
++    if ((musa_batch_transfer_ || musa_batch_kernel_) &&
++        (!musa_batch_copy_ || !musa_coalesce_)) {
++        LOG(ERROR) << "MC_IPC_BATCH_ENGINE=" << batch_engine
++                   << " requires "
++                      "MC_IPC_BATCH_COPY=1 and MC_IPC_COALESCE=1";
++        return ERR_INVALID_ARGUMENT;
++    }
++#ifndef USE_MUSA_IPC_COPY_KERNEL
++    if (musa_batch_kernel_) {
++        LOG(ERROR) << "MC_IPC_BATCH_ENGINE=kernel requires "
++                      "USE_MUSA_IPC_COPY_KERNEL build support";
++        return ERR_INVALID_ARGUMENT;
++    }
++#endif
++#if !defined(MUSART_VERSION) || MUSART_VERSION < 50100 || \
++    !defined(MUSA_VERSION) || MUSA_VERSION < 50100
++    if (musa_batch_transfer_) {
++        LOG(ERROR)
++            << "MC_IPC_BATCH_ENGINE=transfer requires runtime and driver "
++               "MUSA SDK 5.1 or newer";
++        return ERR_INVALID_ARGUMENT;
++    }
++#endif
++    const char* peer_policy = std::getenv("MC_IPC_PEER_POLICY");
++    if (peer_policy != nullptr && std::strcmp(peer_policy, "default") != 0 &&
++        std::strcmp(peer_policy, "unidir") != 0) {
++        LOG(ERROR) << "MC_IPC_PEER_POLICY must be exactly default or unidir";
++        return ERR_INVALID_ARGUMENT;
++    }
++    musa_peer_unidir_ =
++        peer_policy != nullptr && std::strcmp(peer_policy, "unidir") == 0;
++#if !defined(MUSART_VERSION) || MUSART_VERSION < 50100
++    if (musa_peer_unidir_) {
++        LOG(ERROR)
++            << "MC_IPC_PEER_POLICY=unidir requires MUSA SDK 5.1 or newer";
++        return ERR_INVALID_ARGUMENT;
++    }
++#endif
++    const char* validate_bytes = std::getenv("MC_IPC_VALIDATE_BYTES");
++    if (validate_bytes != nullptr && std::strcmp(validate_bytes, "0") != 0 &&
++        std::strcmp(validate_bytes, "1") != 0) {
++        LOG(ERROR) << "MC_IPC_VALIDATE_BYTES must be exactly 0 or 1";
++        return ERR_INVALID_ARGUMENT;
++    }
++    musa_validate_bytes_ =
++        validate_bytes != nullptr && std::strcmp(validate_bytes, "1") == 0;
++    if (musa_validate_bytes_) {
++        musa_validation_source_.resize(kMusaValidationChunkBytes);
++        musa_validation_destination_.resize(kMusaValidationChunkBytes);
++    }
++    std::ifstream boot_id("/proc/sys/kernel/random/boot_id");
++    std::getline(boot_id, host_boot_id_);
++    if (host_boot_id_.empty()) {
++        LOG(ERROR) << "MUSA IPC requires a readable host boot identity";
++        return ERR_INVALID_ARGUMENT;
++    }
++    process_incarnation_ = host_boot_id_ + ":" + std::to_string(getpid()) +
++                           ":" + std::to_string(getCurrentTimeInNano());
++    metadata_ = std::move(metadata);
++    local_server_name_ = local_server_name;
++    auto desc = std::make_shared<SegmentDesc>();
++    desc->name = local_server_name_;
++    desc->protocol = "nvlink_intra";
++    LOG(INFO) << "MUSA IPC/MTLink transport installed: endpoint="
++              << local_server_name_ << " host_boot_id=" << host_boot_id_
++              << " completion=stream_synchronous byte_validation="
++              << musa_validate_bytes_ << " coalesce=" << musa_coalesce_
++              << " batch_copy_enabled=" << musa_batch_copy_ << " batch_engine="
++              << (musa_batch_kernel_
++                      ? "kernel"
++                      : (musa_batch_transfer_ ? "transfer" : "runtime"))
++              << " peer_policy=" << (musa_peer_unidir_ ? "unidir" : "default");
++    return metadata_->addLocalSegment(LOCAL_SEGMENT_ID, local_server_name_,
++                                      std::move(desc));
++}
++
++int IntraNodeNvlinkTransport::registerLocalMemory(void* addr, size_t length,
++                                                  const std::string& location,
++                                                  bool /*remote_accessible*/,
++                                                  bool update_metadata) {
++    std::lock_guard<std::mutex> lock(register_mutex_);
++    cudaPointerAttributes attr{};
++    if (length == 0 || cudaPointerGetAttributes(&attr, addr) != cudaSuccess ||
++        attr.type != cudaMemoryTypeDevice) {
++        LOG(ERROR) << "MUSA IPC only supports nonempty device allocations";
++        return ERR_INVALID_ARGUMENT;
++    }
++    MusaDeviceScope scope(attr.device);
++    CUdeviceptr base = 0;
++    size_t size = 0;
++    if (!scope.ok() ||
++        cuMemGetAddressRange(&base, &size,
++                             reinterpret_cast<CUdeviceptr>(addr)) !=
++            CUDA_SUCCESS ||
++        !contains_region(base, size, reinterpret_cast<uint64_t>(addr),
++                         length)) {
++        LOG(ERROR) << "MUSA IPC cannot resolve allocation: addr=" << addr
++                   << " length=" << length;
++        return ERR_INVALID_ARGUMENT;
++    }
++    const uint64_t logical_addr = reinterpret_cast<uint64_t>(addr);
++    if (musa_logical_allocations_.count(logical_addr)) {
++        return ERR_ADDRESS_OVERLAPPED;
++    }
++    auto allocation = musa_allocations_.find(base);
++    std::string payload;
++    if (allocation == musa_allocations_.end()) {
++        cudaIpcMemHandle_t handle{};
++        const cudaError_t error =
++            cudaIpcGetMemHandle(&handle, reinterpret_cast<void*>(base));
++        const std::string pci = musa_pci_id(attr.device);
++        if (error != cudaSuccess || pci.empty()) {
++            LOG(ERROR) << "MUSA IPC allocation is not exportable: addr=" << addr
++                       << " base=" << reinterpret_cast<void*>(base)
++                       << " size=" << size << " device=" << attr.device
++                       << " error=" << cudaGetErrorString(error);
++            return ERR_INVALID_ARGUMENT;
++        }
++        Json::Value value;
++        value["host_boot_id"] = host_boot_id_;
++        value["incarnation"] = process_incarnation_;
++        value["generation"] = Json::UInt64(++allocation_generation_);
++        value["base"] = Json::UInt64(base);
++        value["size"] = Json::UInt64(size);
++        value["pci"] = pci;
++        value["handle"] = serializeBinaryData(&handle, sizeof(handle));
++        payload = std::string(kMusaIpcPrefix) + value.toStyledString();
++    } else {
++        payload = allocation->second.payload;
++    }
++    BufferDesc desc;
++    desc.addr = logical_addr;
++    desc.length = length;
++    desc.name = location;
++    desc.shm_name = payload;
++    const int result = metadata_->addLocalMemoryBuffer(desc, update_metadata);
++    if (result != 0) {
++        metadata_->removeLocalMemoryBuffer(addr, false);
++        return result;
++    }
++    if (allocation == musa_allocations_.end()) {
++        allocation =
++            musa_allocations_.emplace(base, MusaAllocation{payload, 0}).first;
++    }
++    ++allocation->second.references;
++    musa_logical_allocations_.emplace(logical_addr, base);
++    LOG(INFO) << "MUSA IPC registered logical buffer: addr=" << addr
++              << " length=" << length
++              << " base=" << reinterpret_cast<void*>(base)
++              << " allocation_size=" << size
++              << " offset=" << logical_addr - base
++              << " physical_device=" << musa_pci_id(attr.device);
++    return 0;
++}
++
++int IntraNodeNvlinkTransport::unregisterLocalMemory(void* addr,
++                                                    bool update_metadata) {
++    std::lock_guard<std::mutex> lock(register_mutex_);
++    auto logical =
++        musa_logical_allocations_.find(reinterpret_cast<uint64_t>(addr));
++    if (logical == musa_logical_allocations_.end()) {
++        return ERR_ADDRESS_NOT_REGISTERED;
++    }
++    const int result =
++        metadata_->removeLocalMemoryBuffer(addr, update_metadata);
++    if (result != 0) {
++        return result;
++    }
++    auto allocation = musa_allocations_.find(logical->second);
++    if (--allocation->second.references == 0) {
++        musa_allocations_.erase(allocation);
++    }
++    musa_logical_allocations_.erase(logical);
++    return 0;
++}
++
++int IntraNodeNvlinkTransport::relocateSharedMemoryAddress(uint64_t& addr,
++                                                          uint64_t length,
++                                                          uint64_t target_id) {
++    MusaBatchContext context;
++    if (cudaGetDevice(&context.device) != cudaSuccess) {
++        return ERR_INVALID_ARGUMENT;
++    }
++    context.physical_pci = musa_pci_id(context.device);
++    return resolve_musa_region(addr, length, target_id, context);
++}
++
++int IntraNodeNvlinkTransport::resolve_musa_region(
++    uint64_t& addr, uint64_t length, uint64_t target_id,
++    MusaBatchContext& context, size_t* logical_buffer_index) {
++    if (context.physical_pci.empty()) {
++        return ERR_INVALID_ARGUMENT;
++    }
++    auto segment = context.segments.find(target_id);
++    if (segment == context.segments.end()) {
++        auto desc = metadata_->getSegmentDescByID(target_id);
++        if (!desc || desc->protocol != "nvlink_intra" ||
++            desc->buffers.empty()) {
++            return ERR_INVALID_ARGUMENT;
++        }
++        MusaSegmentBindings bindings;
++        bindings.buffers.resize(desc->buffers.size());
++        bindings.desc = std::move(desc);
++        segment =
++            context.segments.emplace(target_id, std::move(bindings)).first;
++    }
++    MusaSegmentBindings& bindings = segment->second;
++    const auto& buffers = bindings.desc->buffers;
++    size_t index = bindings.last_index;
++    if (!contains_region(buffers[index].addr, buffers[index].length, addr,
++                         length)) {
++        // Registration excludes overlapping logical ranges. Keep the original
++        // descriptor order on a miss, without sorting or spanning buffer IDs.
++        for (index = 0; index < buffers.size(); ++index) {
++            if (contains_region(buffers[index].addr, buffers[index].length,
++                                addr, length)) {
++                break;
++            }
++        }
++        if (index == buffers.size()) {
++            return ERR_INVALID_ARGUMENT;
++        }
++        bindings.last_index = index;
++    }
++    const BufferDesc& entry = buffers[index];
++    MusaBufferBinding& binding = bindings.buffers[index];
++    if (!binding.resolved) {
++        if (target_id == LOCAL_SEGMENT_ID) {
++            cudaPointerAttributes attr{};
++            if (cudaPointerGetAttributes(&attr,
++                                         reinterpret_cast<void*>(entry.addr)) !=
++                    cudaSuccess ||
++                attr.type != cudaMemoryTypeDevice ||
++                attr.device != context.device) {
++                return ERR_INVALID_ARGUMENT;
++            }
++            binding.mapped_addr = entry.addr;
++        } else {
++            if (entry.shm_name.size() > 4096 ||
++                entry.shm_name.compare(0, sizeof(kMusaIpcPrefix) - 1,
++                                       kMusaIpcPrefix) != 0) {
++                LOG(ERROR) << "MUSA IPC requires versioned MUSA metadata";
++                return ERR_INVALID_ARGUMENT;
++            }
++            const char* peer_policy = musa_peer_unidir_ ? "unidir" : "default";
++            const std::string key = std::to_string(target_id) + ":" +
++                                    context.physical_pci + ":" + peer_policy +
++                                    ":" + entry.shm_name;
++            auto imported = musa_imports_.find(key);
++            if (imported == musa_imports_.end()) {
++                if (musa_imports_.size() >= kMaxMusaImports) {
++                    LOG(ERROR) << "MUSA IPC import capacity check failed";
++                    return ERR_INVALID_ARGUMENT;
++                }
++                ++context.payload_parses;
++                Json::Value value;
++                Json::Reader reader;
++                if (!reader.parse(
++                        entry.shm_name.substr(sizeof(kMusaIpcPrefix) - 1),
++                        value, false) ||
++                    !value.isObject() || !value["base"].isUInt64() ||
++                    !value["size"].isUInt64() ||
++                    !value["generation"].isUInt64() ||
++                    !value["host_boot_id"].isString() ||
++                    value["host_boot_id"].asString() != host_boot_id_ ||
++                    !value["incarnation"].isString() ||
++                    value["incarnation"].asString().empty() ||
++                    !value["pci"].isString() ||
++                    value["pci"].asString().empty() ||
++                    !value["handle"].isString()) {
++                    LOG(ERROR)
++                        << "MUSA IPC invalid or cross-host export metadata";
++                    return ERR_INVALID_ARGUMENT;
++                }
++                const uint64_t base = value["base"].asUInt64();
++                const uint64_t size = value["size"].asUInt64();
++                if (!contains_region(base, size, entry.addr, entry.length)) {
++                    return ERR_INVALID_ARGUMENT;
++                }
++                const std::string handle_hex = value["handle"].asString();
++                if (handle_hex.size() != sizeof(cudaIpcMemHandle_t) * 2 ||
++                    !std::all_of(handle_hex.begin(), handle_hex.end(),
++                                 [](char c) {
++                                     return (c >= '0' && c <= '9') ||
++                                            (c >= 'a' && c <= 'f') ||
++                                            (c >= 'A' && c <= 'F');
++                                 })) {
++                    return ERR_INVALID_ARGUMENT;
++                }
++                std::vector<unsigned char> decoded;
++                deserializeBinaryData(handle_hex, decoded);
++                if (decoded.size() != sizeof(cudaIpcMemHandle_t)) {
++                    return ERR_INVALID_ARGUMENT;
++                }
++                cudaIpcMemHandle_t handle{};
++                memcpy(&handle, decoded.data(), sizeof(handle));
++                void* mapped = nullptr;
++                unsigned int import_flags = cudaIpcMemLazyEnablePeerAccess;
++#if defined(MUSART_VERSION) && MUSART_VERSION >= 50100
++                if (musa_peer_unidir_) {
++                    import_flags = musaIpcMemLazyUnidirInterleavePeerAccess;
++                }
++#endif
++                const cudaError_t error =
++                    cudaIpcOpenMemHandle(&mapped, handle, import_flags);
++                if (error != cudaSuccess) {
++                    LOG(ERROR) << "MUSA IPC import failed: local_pci="
++                               << context.physical_pci
++                               << " remote_pci=" << value["pci"].asString()
++                               << " peer_policy=" << peer_policy
++                               << " import_flags=" << import_flags
++                               << " error=" << cudaGetErrorString(error);
++                    return ERR_INVALID_ARGUMENT;
++                }
++                imported =
++                    musa_imports_
++                        .emplace(key,
++                                 OpenedMusaEntry{mapped, context.device, base,
++                                                 size, value["pci"].asString()})
++                        .first;
++                ++context.new_imports;
++                LOG(INFO) << "MUSA IPC/MTLink imported allocation: local_pci="
++                          << context.physical_pci
++                          << " remote_pci=" << value["pci"].asString()
++                          << " target=" << target_id
++                          << " generation=" << value["generation"].asUInt64()
++                          << " peer_policy=" << peer_policy
++                          << " import_flags=" << import_flags;
++            } else {
++                ++context.import_hits;
++            }
++            const OpenedMusaEntry& allocation = imported->second;
++            if (allocation.device != context.device ||
++                !contains_region(allocation.export_base, allocation.export_size,
++                                 entry.addr, entry.length)) {
++                return ERR_INVALID_ARGUMENT;
++            }
++            const uint64_t mapped_base =
++                reinterpret_cast<uint64_t>(allocation.addr);
++            const uint64_t logical_offset = entry.addr - allocation.export_base;
++            if (logical_offset >
++                std::numeric_limits<uint64_t>::max() - mapped_base) {
++                return ERR_INVALID_ARGUMENT;
++            }
++            binding.mapped_addr = mapped_base + logical_offset;
++            if (musa_batch_copy_) {
++                // Warm bindings use the PCI identity validated at cold import.
++                binding.remote_pci = allocation.remote_pci;
++                context.remote_devices_differ =
++                    context.remote_devices_differ &&
++                    !binding.remote_pci.empty() &&
++                    binding.remote_pci != context.physical_pci;
++            }
++        }
++        binding.resolved = true;
++        ++context.logical_bindings;
++    }
++    const uint64_t offset = addr - entry.addr;
++    if (offset > std::numeric_limits<uint64_t>::max() - binding.mapped_addr) {
++        return ERR_INVALID_ARGUMENT;
++    }
++    addr = binding.mapped_addr + offset;
++    if (logical_buffer_index != nullptr) {
++        *logical_buffer_index = index;
++    }
++    return 0;
++}
++
++Status IntraNodeNvlinkTransport::submitTransferTask(
++    const std::vector<TransferTask*>& tasks) {
++    if (tasks.empty()) {
++        return Status::OK();
++    }
++    const uint64_t lock_start = getCurrentTimeInNano();
++    std::lock_guard<std::mutex> lock(register_mutex_);
++    const uint64_t preflight_start = getCurrentTimeInNano();
++    const uint64_t lock_wait_ns = preflight_start - lock_start;
++    // No copies remain in flight between submissions. Bound stale generations.
++    if (musa_imports_.size() >= kMaxMusaImports / 2) {
++        close_musa_imports();
++    }
++    for (TransferTask* task : tasks) {
++        CHECK(task && task->request);
++        Slice* slice = getSliceCache().allocate();
++        slice->task = task;
++        slice->source_addr = static_cast<char*>(task->request->source);
++        slice->length = task->request->length;
++        slice->opcode = task->request->opcode;
++        slice->target_id = task->request->target_id;
++        slice->status = Slice::PENDING;
++        slice->ts = getCurrentTimeInNano();
++        task->total_bytes = slice->length;
++        task->slice_list.emplace_back(slice);
++        __atomic_fetch_add(&task->slice_count, 1, __ATOMIC_RELAXED);
++    }
++    auto fail = [&tasks](const std::string& reason) {
++        LOG(ERROR) << "MUSA IPC transfer failed: " << reason;
++        finish_musa_tasks(tasks, false);
++        // All tasks have terminal failure states; callers can poll and free.
++        return Status::OK();
++    };
++    cudaPointerAttributes first_attr{};
++    if (cudaPointerGetAttributes(&first_attr, tasks.front()->request->source) !=
++            cudaSuccess ||
++        first_attr.type != cudaMemoryTypeDevice) {
++        return fail("invalid local device pointer");
++    }
++    const int device = first_attr.device;
++    MusaDeviceScope scope(device);
++    if (!scope.ok()) {
++        return fail("cannot select local device");
++    }
++    MusaBatchContext context;
++    context.device = device;
++    context.physical_pci = musa_pci_id(device);
++    context.segments.reserve(2);
++    if (context.physical_pci.empty()) {
++        return fail("cannot resolve local physical device");
++    }
++    std::vector<MusaCopySpan> copy_spans;
++    if (musa_coalesce_) {
++        copy_spans.reserve(tasks.size());
++    }
++    uint64_t forward_contiguous_pairs = 0;
++    uint64_t reverse_contiguous_pairs = 0;
++    MusaCopySpan previous_region;
++    for (size_t task_index = 0; task_index < tasks.size(); ++task_index) {
++        TransferTask* task = tasks[task_index];
++        const TransferRequest& request = *task->request;
++        if (request.length == 0 || (request.opcode != TransferRequest::READ &&
++                                    request.opcode != TransferRequest::WRITE)) {
++            return fail("invalid region");
++        }
++        size_t local_buffer_index = 0;
++        uint64_t local_addr = reinterpret_cast<uint64_t>(request.source);
++        if (resolve_musa_region(
++                local_addr, request.length, LOCAL_SEGMENT_ID, context,
++                musa_coalesce_ ? &local_buffer_index : nullptr) != 0) {
++            return fail("local region/device is outside registered memory");
++        }
++        size_t remote_buffer_index = 0;
++        uint64_t remote_addr = request.target_offset;
++        if (resolve_musa_region(
++                remote_addr, request.length, request.target_id, context,
++                musa_coalesce_ ? &remote_buffer_index : nullptr) != 0) {
++            return fail("remote region/import validation");
++        }
++        task->slice_list.back()->local.dest_addr =
++            reinterpret_cast<char*>(remote_addr);
++        if (!musa_coalesce_) {
++            continue;
++        }
++        if (request.length >
++                std::numeric_limits<uint64_t>::max() - local_addr ||
++            request.length >
++                std::numeric_limits<uint64_t>::max() - remote_addr) {
++            return fail("coalesced region address range overflows");
++        }
++        const MusaCopySpan region{
++            local_addr,        remote_addr,        request.length,
++            request.target_id, local_buffer_index, remote_buffer_index,
++            task_index,        task_index + 1,     request.opcode};
++        if (task_index != 0) {
++            forward_contiguous_pairs +=
++                forward_contiguous_musa_spans(previous_region, region);
++            reverse_contiguous_pairs +=
++                reverse_contiguous_musa_spans(previous_region, region);
++        }
++        // Preserve order and validate every logical region before merging.
++        // No gaps, descending ranges, overlapping ranges or buffer IDs merge.
++        if (!copy_spans.empty() &&
++            forward_contiguous_musa_spans(copy_spans.back(), region) &&
++            region.length <=
++                std::numeric_limits<size_t>::max() - copy_spans.back().length) {
++            copy_spans.back().length += region.length;
++            copy_spans.back().task_end = region.task_end;
++        } else {
++            copy_spans.emplace_back(region);
++        }
++        previous_region = region;
++    }
++    // Keep all API input storage alive through the final stream/device drain.
++    // Disabled batches use the ordered v3 path without sorting or array fills.
++    const char* batch_copy_fallback = "disabled";
++    uint64_t kernel_tiles = 0;
++    size_t descriptor_upload_bytes = 0;
++#ifdef USE_MUSA_IPC_COPY_KERNEL
++    std::vector<MusaIpcCopySpan> kernel_descriptors;
++    MusaIpcCopySpan* kernel_device_descriptors = nullptr;
++#endif
++#if defined(MUSART_VERSION) && MUSART_VERSION >= 50100
++    bool use_batch_api = false;
++    std::vector<void*> batch_sources;
++    std::vector<void*> batch_destinations;
++    std::vector<size_t> batch_sizes;
++    musaMemcpyAttributes batch_attributes{};
++    batch_attributes.srcAccessOrder = musaMemcpySrcAccessOrderStream;
++    size_t batch_attribute_indices[] = {0};
++    size_t batch_fail_index = SIZE_MAX;
++#if defined(MUSA_VERSION) && MUSA_VERSION >= 50100
++    std::vector<MUdeviceptr> driver_batch_sources;
++    std::vector<MUdeviceptr> driver_batch_destinations;
++    MUmemcpyAttributes driver_batch_attributes{};
++    driver_batch_attributes.srcAccessOrder = MU_MEMCPY_SRC_ACCESS_ORDER_STREAM;
++    driver_batch_attributes.srcLocHint.type = MU_MEM_LOCATION_TYPE_INVALID;
++    driver_batch_attributes.dstLocHint.type = MU_MEM_LOCATION_TYPE_INVALID;
++    driver_batch_attributes.srcLocHint.id = 0;
++    driver_batch_attributes.dstLocHint.id = 0;
++    driver_batch_attributes.flags = MU_MEMCPY_FLAG_DEFAULT;
++#endif
++    if (musa_batch_copy_) {
++        batch_copy_fallback = musa_batch_copy_fallback_reason(
++            copy_spans, context.remote_devices_differ);
++        use_batch_api = std::strcmp(batch_copy_fallback, "none") == 0;
++        if (use_batch_api) {
++            if (musa_batch_kernel_) {
++#ifdef USE_MUSA_IPC_COPY_KERNEL
++                if (copy_spans.size() > std::numeric_limits<uint32_t>::max() ||
++                    copy_spans.size() > std::numeric_limits<size_t>::max() /
++                                            sizeof(MusaIpcCopySpan)) {
++                    return fail("kernel descriptor count overflows");
++                }
++                kernel_descriptors.reserve(copy_spans.size());
++                for (const MusaCopySpan& span : copy_spans) {
++                    const uint64_t tiles =
++                        (span.length - 1) / kMusaIpcCopyTileBytes + 1;
++                    if (tiles >
++                        std::numeric_limits<uint64_t>::max() - kernel_tiles) {
++                        return fail("kernel tile count overflows");
++                    }
++                    kernel_tiles += tiles;
++                    const uint64_t source = span.opcode == TransferRequest::READ
++                                                ? span.remote_addr
++                                                : span.local_addr;
++                    const uint64_t destination =
++                        span.opcode == TransferRequest::READ ? span.local_addr
++                                                             : span.remote_addr;
++                    kernel_descriptors.emplace_back(MusaIpcCopySpan{
++                        source, destination, span.length, kernel_tiles});
++                }
++                descriptor_upload_bytes =
++                    kernel_descriptors.size() * sizeof(MusaIpcCopySpan);
++                MusaKernelWorkspace& workspace =
++                    musa_kernel_workspaces_[device];
++                if (workspace.capacity < descriptor_upload_bytes) {
++                    void* descriptors = nullptr;
++                    const cudaError_t error =
++                        cudaMalloc(&descriptors, descriptor_upload_bytes);
++                    if (error != cudaSuccess) {
++                        return fail(
++                            std::string("kernel descriptor allocation: ") +
++                            cudaGetErrorString(error));
++                    }
++                    // Every previous submission drained under register_mutex_.
++                    // Do not replace a buffer that may still be read by a
++                    // kernel.
++                    if (workspace.descriptors != nullptr &&
++                        cudaFree(workspace.descriptors) != cudaSuccess) {
++                        LOG(FATAL) << "MUSA IPC kernel descriptor resize "
++                                      "cleanup failed";
++                    }
++                    workspace.descriptors = descriptors;
++                    workspace.capacity = descriptor_upload_bytes;
++                }
++                kernel_device_descriptors =
++                    static_cast<MusaIpcCopySpan*>(workspace.descriptors);
++#endif
++            } else if (musa_batch_transfer_) {
++#if defined(MUSA_VERSION) && MUSA_VERSION >= 50100
++                driver_batch_sources.reserve(copy_spans.size());
++                driver_batch_destinations.reserve(copy_spans.size());
++                batch_sizes.reserve(copy_spans.size());
++                // Local device bindings and imported remote PCI identities
++                // already prove device operands for these validated spans.
++                for (const MusaCopySpan& span : copy_spans) {
++                    const MUdeviceptr local =
++                        static_cast<MUdeviceptr>(span.local_addr);
++                    const MUdeviceptr remote =
++                        static_cast<MUdeviceptr>(span.remote_addr);
++                    driver_batch_sources.emplace_back(
++                        span.opcode == TransferRequest::READ ? remote : local);
++                    driver_batch_destinations.emplace_back(
++                        span.opcode == TransferRequest::READ ? local : remote);
++                    batch_sizes.emplace_back(static_cast<size_t>(span.length));
++                }
++#endif
++            } else {
++                batch_sources.reserve(copy_spans.size());
++                batch_destinations.reserve(copy_spans.size());
++                batch_sizes.reserve(copy_spans.size());
++                for (const MusaCopySpan& span : copy_spans) {
++                    void* local = reinterpret_cast<void*>(span.local_addr);
++                    void* remote = reinterpret_cast<void*>(span.remote_addr);
++                    batch_sources.emplace_back(
++                        span.opcode == TransferRequest::READ ? remote : local);
++                    batch_destinations.emplace_back(
++                        span.opcode == TransferRequest::READ ? local : remote);
++                    batch_sizes.emplace_back(static_cast<size_t>(span.length));
++                }
++            }
++        }
++    }
++#endif
++    cudaStream_t stream = nullptr;
++    auto stream_entry = musa_streams_.find(device);
++    if (stream_entry == musa_streams_.end()) {
++        const cudaError_t error =
++            cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking);
++        if (error != cudaSuccess) {
++            return fail(cudaGetErrorString(error));
++        }
++        musa_streams_.emplace(device, stream);
++    } else {
++        stream = stream_entry->second;
++    }
++    // Producer readiness is published by PD before this one-sided READ. Fence
++    // all local consumer streams before overwriting their destination buffers.
++    const uint64_t fence_start = getCurrentTimeInNano();
++    const uint64_t preflight_ns = fence_start - preflight_start;
++    const cudaError_t local_ready = cudaDeviceSynchronize();
++    const uint64_t fence_wait_ns = getCurrentTimeInNano() - fence_start;
++    if (local_ready != cudaSuccess) {
++        LOG(FATAL) << "MUSA IPC cannot fence local device: "
++                   << cudaGetErrorString(local_ready);
++    }
++    bool success = true;
++    uint64_t total_bytes = 0;
++    size_t copy_operations = 0;
++    size_t copy_api_calls = 0;
++    bool batch_path_selected = false;
++    bool batch_api_used = false;
++    bool driver_batch_api_used = false;
++    bool driver_context_valid = false;
++    bool kernel_copy_used = false;
++    size_t kernel_launches = 0;
++    size_t descriptor_uploads = 0;
++    const size_t planned_copy_operations =
++        musa_coalesce_ ? copy_spans.size() : tasks.size();
++    const uint64_t copy_start = getCurrentTimeInNano();
++#if defined(MUSART_VERSION) && MUSART_VERSION >= 50100
++    if (use_batch_api) {
++        // Selecting the path is distinct from calling its API. Context guard
++        // failures must drain and fail all tasks without ordered-copy replay.
++        batch_path_selected = true;
++        if (musa_batch_kernel_) {
++#ifdef USE_MUSA_IPC_COPY_KERNEL
++            // The upload and kernel are ordered on this same copy stream.
++            // Keep the host descriptors and device workspace alive until drain.
++            // copy_api_calls counts SDK APIs moving PD payload. Metadata
++            // uploads and accepted kernel launches have separate counters.
++            ++descriptor_uploads;
++            const cudaError_t upload_error = cudaMemcpyAsync(
++                kernel_device_descriptors, kernel_descriptors.data(),
++                descriptor_upload_bytes, cudaMemcpyHostToDevice, stream);
++            if (upload_error != cudaSuccess) {
++                LOG(ERROR) << "MUSA IPC kernel descriptor upload failed: "
++                           << cudaGetErrorString(upload_error);
++                success = false;
++            } else {
++                const musaError_t error = mooncake_musa_ipc_copy_kernel(
++                    kernel_device_descriptors,
++                    static_cast<uint32_t>(kernel_descriptors.size()),
++                    kernel_tiles, stream);
++                if (error != musaSuccess) {
++                    LOG(ERROR) << "MUSA IPC fused-copy kernel enqueue failed: "
++                               << musaGetErrorString(error);
++                    success = false;
++                } else {
++                    kernel_copy_used = true;
++                    ++kernel_launches;
++                }
++            }
++#else
++            // install() rejects this configuration before any submission.
++            LOG(ERROR) << "MUSA IPC fused-copy kernel is not compiled";
++            success = false;
++#endif
++        } else if (musa_batch_transfer_) {
++#if defined(MUSA_VERSION) && MUSA_VERSION >= 50100
++            driver_context_valid =
++                valid_musa_driver_context(stream, batch_fail_index);
++            if (!driver_context_valid) {
++                success = false;
++            } else {
++                batch_api_used = true;
++                driver_batch_api_used = true;
++                ++copy_api_calls;
++                const MUstream driver_stream = stream;
++                const MUresult error = muMemoryTransferBatchAsync(
++                    driver_batch_destinations.data(),
++                    driver_batch_sources.data(), batch_sizes.data(),
++                    copy_spans.size(), &driver_batch_attributes,
++                    batch_attribute_indices, /*numAttrs=*/1, &batch_fail_index,
++                    driver_stream);
++                if (error != MUSA_SUCCESS) {
++                    log_musa_driver_error("muMemoryTransferBatchAsync", error,
++                                          batch_fail_index);
++                    success = false;
++                }
++            }
++#else
++            // install() rejects this configuration before any submission.
++            LOG(ERROR) << "MUSA IPC driver batch is unavailable in this SDK";
++            success = false;
++#endif
++        } else {
++            batch_api_used = true;
++            ++copy_api_calls;
++            const musaError_t error = musaMemcpyBatchAsync(
++                batch_destinations.data(), batch_sources.data(),
++                batch_sizes.data(), copy_spans.size(), &batch_attributes,
++                batch_attribute_indices,
++                /*numAttrs=*/1, &batch_fail_index, stream);
++            if (error != musaSuccess) {
++                LOG(ERROR) << "MUSA IPC batch memcpy enqueue failed: error="
++                           << musaGetErrorString(error)
++                           << " failIdx=" << batch_fail_index;
++                success = false;
++            }
++        }
++        // Either API may have enqueued earlier copies before returning an
++        // error. Always use the common drain, and never replay selected work.
++        if (success) {
++            for (const MusaCopySpan& span : copy_spans) {
++                for (size_t index = span.task_begin; index < span.task_end;
++                     ++index) {
++                    tasks[index]->slice_list.back()->status = Slice::POSTED;
++                }
++                total_bytes += span.length;
++            }
++            copy_operations = copy_spans.size();
++        }
++    }
++#endif
++    if (!batch_path_selected && musa_coalesce_) {
++        for (const MusaCopySpan& span : copy_spans) {
++            void* local = reinterpret_cast<void*>(span.local_addr);
++            void* remote = reinterpret_cast<void*>(span.remote_addr);
++            void* source =
++                span.opcode == TransferRequest::READ ? remote : local;
++            void* destination =
++                span.opcode == TransferRequest::READ ? local : remote;
++            ++copy_api_calls;
++            const cudaError_t error = cudaMemcpyAsync(
++                destination, source, static_cast<size_t>(span.length),
++                cudaMemcpyDefault, stream);
++            if (error != cudaSuccess) {
++                LOG(ERROR) << "MUSA IPC coalesced memcpy enqueue failed: "
++                           << cudaGetErrorString(error);
++                success = false;
++                break;
++            }
++            for (size_t index = span.task_begin; index < span.task_end;
++                 ++index) {
++                tasks[index]->slice_list.back()->status = Slice::POSTED;
++            }
++            ++copy_operations;
++            total_bytes += span.length;
++        }
++    } else if (!batch_path_selected) {
++        for (TransferTask* task : tasks) {
++            Slice* slice = task->slice_list.back();
++            void* source = slice->opcode == TransferRequest::READ
++                               ? slice->local.dest_addr
++                               : slice->source_addr;
++            void* destination = slice->opcode == TransferRequest::READ
++                                    ? slice->source_addr
++                                    : slice->local.dest_addr;
++            ++copy_api_calls;
++            const cudaError_t error = cudaMemcpyAsync(
++                destination, source, slice->length, cudaMemcpyDefault, stream);
++            if (error != cudaSuccess) {
++                LOG(ERROR) << "MUSA IPC memcpy enqueue failed: "
++                           << cudaGetErrorString(error);
++                success = false;
++                break;
++            }
++            slice->status = Slice::POSTED;
++            ++copy_operations;
++            total_bytes += slice->length;
++        }
++    }
++    const cudaError_t drain = cudaStreamSynchronize(stream);
++    if (drain != cudaSuccess) {
++        success = false;
++        LOG(ERROR) << "MUSA IPC copy stream failed: "
++                   << cudaGetErrorString(drain);
++        // Never return a failure while siblings may still access PD buffers.
++        if (cudaDeviceSynchronize() != cudaSuccess) {
++            LOG(FATAL) << "MUSA IPC cannot drain failed GPU work";
++        }
++    }
++    if (musa_validate_bytes_ && success) {
++        success = validate_musa_copies(tasks, stream);
++    }
++    finish_musa_tasks(tasks, success);
++    const uint64_t copy_wait_ns = getCurrentTimeInNano() - copy_start;
++    LOG(INFO) << "MUSA IPC/MTLink batch: route=nvlink_intra batch_id="
++              << tasks.front()->batch_id << " regions=" << tasks.size()
++              << " bytes=" << total_bytes << " coalescing=" << musa_coalesce_
++              << " batch_copy_enabled=" << musa_batch_copy_ << " batch_engine="
++              << (musa_batch_kernel_
++                      ? "kernel"
++                      : (musa_batch_transfer_ ? "transfer" : "runtime"))
++              << " peer_policy=" << (musa_peer_unidir_ ? "unidir" : "default")
++              << " batch_path_selected=" << batch_path_selected
++              << " batch_api_used=" << batch_api_used
++              << " driver_batch_api_used=" << driver_batch_api_used
++              << " driver_context_valid=" << driver_context_valid
++              << " kernel_copy_used=" << kernel_copy_used
++              << " kernel_launches=" << kernel_launches
++              << " descriptor_uploads=" << descriptor_uploads
++              << " descriptor_upload_bytes=" << descriptor_upload_bytes
++              << " kernel_tiles=" << kernel_tiles
++              << " batch_copy_fallback=" << batch_copy_fallback
++              << " copy_api_calls=" << copy_api_calls
++              << " copy_operations=" << copy_operations
++              << " planned_copy_operations=" << planned_copy_operations
++              << " merged_regions=" << tasks.size() - planned_copy_operations
++              << " forward_contiguous_pairs=" << forward_contiguous_pairs
++              << " reverse_contiguous_pairs=" << reverse_contiguous_pairs
++              << " lock_wait_ns=" << lock_wait_ns
++              << " preflight_ns=" << preflight_ns
++              << " fence_wait_ns=" << fence_wait_ns
++              << " copy_wait_ns=" << copy_wait_ns
++              << " metadata_snapshots=" << context.segments.size()
++              << " logical_bindings=" << context.logical_bindings
++              << " payload_parses=" << context.payload_parses
++              << " import_hits=" << context.import_hits
++              << " new_imports=" << context.new_imports
++              << " drained=true success=" << success;
++    return Status::OK();
++}
++
++bool IntraNodeNvlinkTransport::validate_musa_copies(
++    const std::vector<TransferTask*>& tasks, cudaStream_t stream) {
++    uint64_t checked_regions = 0;
++    uint64_t checked_bytes = 0;
++    uint64_t mismatch_count = 0;
++    uint64_t first_offset = 0;
++    bool success = true;
++    for (TransferTask* task : tasks) {
++        const Slice* slice = task->slice_list.back();
++        const char* source = static_cast<const char*>(
++            slice->opcode == TransferRequest::READ ? slice->local.dest_addr
++                                                   : slice->source_addr);
++        const char* destination = static_cast<const char*>(
++            slice->opcode == TransferRequest::READ ? slice->source_addr
++                                                   : slice->local.dest_addr);
++        uint64_t offset = 0;
++        while (offset < slice->length) {
++            const size_t bytes = static_cast<size_t>(std::min<uint64_t>(
++                kMusaValidationChunkBytes, slice->length - offset));
++            cudaError_t copy_error =
++                cudaMemcpyAsync(musa_validation_source_.data(), source + offset,
++                                bytes, cudaMemcpyDefault, stream);
++            if (copy_error == cudaSuccess) {
++                copy_error = cudaMemcpyAsync(
++                    musa_validation_destination_.data(), destination + offset,
++                    bytes, cudaMemcpyDefault, stream);
++            }
++            const cudaError_t drain_error = cudaStreamSynchronize(stream);
++            if (drain_error != cudaSuccess &&
++                cudaDeviceSynchronize() != cudaSuccess) {
++                LOG(FATAL) << "MUSA IPC cannot drain byte-validation GPU work";
++            }
++            if (copy_error != cudaSuccess || drain_error != cudaSuccess) {
++                LOG(ERROR) << "MUSA IPC byte-validation copy failed: copy="
++                           << cudaGetErrorString(copy_error)
++                           << " drain=" << cudaGetErrorString(drain_error);
++                success = false;
++                break;
++            }
++            if (std::memcmp(musa_validation_source_.data(),
++                            musa_validation_destination_.data(), bytes) != 0) {
++                for (size_t index = 0; index < bytes; ++index) {
++                    if (musa_validation_source_[index] !=
++                        musa_validation_destination_[index]) {
++                        if (mismatch_count == 0) {
++                            first_offset = checked_bytes + index;
++                        }
++                        ++mismatch_count;
++                    }
++                }
++            }
++            checked_bytes += bytes;
++            offset += bytes;
++        }
++        if (!success) {
++            break;
++        }
++        ++checked_regions;
++    }
++    success = success && mismatch_count == 0;
++    LOG(INFO) << "MUSA IPC byte validation: route=nvlink_intra batch_id="
++              << tasks.front()->batch_id
++              << " checked_regions=" << checked_regions
++              << " checked_bytes=" << checked_bytes
++              << " mismatch_count=" << mismatch_count << " first_offset="
++              << (mismatch_count == 0 ? "none" : std::to_string(first_offset))
++              << " drained=true success=" << (success ? "true" : "false");
++    return success;
++}
++
++Status IntraNodeNvlinkTransport::submitTransfer(
++    BatchID batch_id, const std::vector<TransferRequest>& entries) {
++    auto& batch = *reinterpret_cast<BatchDesc*>(batch_id);
++    if (batch.task_list.size() > batch.batch_size ||
++        entries.size() > batch.batch_size - batch.task_list.size()) {
++        return Status::InvalidArgument("MUSA IPC batch capacity exceeded");
++    }
++    const size_t begin = batch.task_list.size();
++    batch.task_list.resize(begin + entries.size());
++    std::vector<TransferTask*> tasks;
++    tasks.reserve(entries.size());
++    for (size_t index = 0; index < entries.size(); ++index) {
++        TransferTask& task = batch.task_list[begin + index];
++        task.batch_id = batch_id;
++        task.transport_ = this;
++        task.request = &entries[index];
++        tasks.emplace_back(&task);
++    }
++    return submitTransferTask(tasks);
++}
++
++Status IntraNodeNvlinkTransport::getTransferStatus(BatchID batch_id,
++                                                   size_t task_id,
++                                                   TransferStatus& status) {
++    auto& batch = *reinterpret_cast<BatchDesc*>(batch_id);
++    if (task_id >= batch.task_list.size()) {
++        return Status::InvalidArgument("MUSA IPC task ID out of range");
++    }
++    TransferTask& task = batch.task_list[task_id];
++    status.transferred_bytes = task.transferred_bytes;
++    if (task.slice_count == 0) {
++        task.is_finished = true;
++        status.s = TransferStatusEnum::FAILED;
++    } else if (task.success_slice_count + task.failed_slice_count !=
++               task.slice_count) {
++        status.s = TransferStatusEnum::WAITING;
++    } else {
++        status.s = task.failed_slice_count ? TransferStatusEnum::FAILED
++                                           : TransferStatusEnum::COMPLETED;
++    }
++    return Status::OK();
++}
++
++int IntraNodeNvlinkTransport::registerLocalMemoryBatch(
++    const std::vector<BufferEntry>& buffers, const std::string& location) {
++    for (const BufferEntry& buffer : buffers) {
++        const int result = registerLocalMemory(buffer.addr, buffer.length,
++                                               location, true, false);
++        if (result != 0) {
++            return result;
++        }
++    }
++    return metadata_->updateLocalSegmentDesc();
++}
++
++int IntraNodeNvlinkTransport::unregisterLocalMemoryBatch(
++    const std::vector<void*>& addrs) {
++    int first_error = 0;
++    for (void* addr : addrs) {
++        const int result = unregisterLocalMemory(addr, false);
++        if (result != 0 && first_error == 0) {
++            first_error = result;
++        }
++    }
++    const int result = metadata_->updateLocalSegmentDesc();
++    return first_error != 0 ? first_error : result;
++}
++
++void* IntraNodeNvlinkTransport::allocatePinnedLocalMemory(size_t length) {
++    void* addr = nullptr;
++    return cudaMalloc(&addr, length) == cudaSuccess ? addr : nullptr;
++}
++
++void IntraNodeNvlinkTransport::freePinnedLocalMemory(void* addr) {
++    cudaFree(addr);
++}
++}  // namespace mooncake
++
++#else
++
+ static bool checkCudaErrorReturn(cudaError_t result, const char *message) {
+     if (result != cudaSuccess) {
+         LOG(ERROR) << message << " (Error code: " << result << " - "
+@@ -802,3 +2089,5 @@ void IntraNodeNvlinkTransport::freePinnedLocalMemory(void *ptr) {
+ }
+ 
+ }  // namespace mooncake
++
++#endif  // USE_MUSA
+diff --git a/mooncake-transfer-engine/src/transport/intranode_nvlink_transport/musa_ipc_copy_kernel.cu b/mooncake-transfer-engine/src/transport/intranode_nvlink_transport/musa_ipc_copy_kernel.cu
+new file mode 100644
+index 0000000000000000000000000000000000000000..9afc9b352f862189f3c58a03e71f678c0928abc4
+--- /dev/null
++++ b/mooncake-transfer-engine/src/transport/intranode_nvlink_transport/musa_ipc_copy_kernel.cu
+@@ -0,0 +1,111 @@
++/* Copyright 2026 The xLLM Authors. All Rights Reserved.
++
++Licensed under the Apache License, Version 2.0 (the "License");
++you may not use this file except in compliance with the License.
++You may obtain a copy of the License at
++
++    https://www.apache.org/licenses/LICENSE-2.0
++
++Unless required by applicable law or agreed to in writing, software
++distributed under the License is distributed on an "AS IS" BASIS,
++WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
++See the License for the specific language governing permissions and
++limitations under the License.
++==============================================================================*/
++
++#include <musa_runtime.h>
++
++#include <cstdint>
++#include <limits>
++
++#include "transport/intranode_nvlink_transport/musa_ipc_copy_kernel.h"
++
++namespace mooncake {
++namespace {
++
++constexpr uint32_t kCopyThreads = 256;
++constexpr uint32_t kMaxCopyBlocks = 1024;
++constexpr uint64_t kVectorBytes = sizeof(uint4);
++
++__global__ void musa_ipc_scatter_copy(const MusaIpcCopySpan* spans,
++                                      uint32_t span_count,
++                                      uint64_t tile_count) {
++    __shared__ MusaIpcCopySpan selected_span;
++    __shared__ uint64_t selected_tile_begin;
++
++    for (uint64_t tile = blockIdx.x; tile < tile_count; tile += gridDim.x) {
++        if (threadIdx.x == 0) {
++            uint32_t begin = 0;
++            uint32_t end = span_count;
++            while (begin < end) {
++                const uint32_t middle = begin + (end - begin) / 2;
++                if (tile < spans[middle].tile_end) {
++                    end = middle;
++                } else {
++                    begin = middle + 1;
++                }
++            }
++            selected_span = spans[begin];
++            selected_tile_begin = begin == 0 ? 0 : spans[begin - 1].tile_end;
++        }
++        __syncthreads();
++
++        const MusaIpcCopySpan span = selected_span;
++        const uint64_t offset =
++            (tile - selected_tile_begin) * kMusaIpcCopyTileBytes;
++        const uint64_t remaining = span.bytes - offset;
++        const uint64_t bytes = remaining < kMusaIpcCopyTileBytes
++                                   ? remaining
++                                   : kMusaIpcCopyTileBytes;
++        const uint64_t source_address = span.source + offset;
++        const uint64_t destination_address = span.destination + offset;
++        const uint8_t* source = reinterpret_cast<const uint8_t*>(
++            static_cast<uintptr_t>(source_address));
++        uint8_t* destination = reinterpret_cast<uint8_t*>(
++            static_cast<uintptr_t>(destination_address));
++
++        if (((source_address | destination_address) & (kVectorBytes - 1)) ==
++            0) {
++            const uint64_t vectors = bytes / kVectorBytes;
++            const uint4* source_vectors =
++                reinterpret_cast<const uint4*>(source);
++            uint4* destination_vectors = reinterpret_cast<uint4*>(destination);
++            for (uint64_t index = threadIdx.x; index < vectors;
++                 index += blockDim.x) {
++                destination_vectors[index] = source_vectors[index];
++            }
++            for (uint64_t index = vectors * kVectorBytes + threadIdx.x;
++                 index < bytes; index += blockDim.x) {
++                destination[index] = source[index];
++            }
++        } else {
++            for (uint64_t index = threadIdx.x; index < bytes;
++                 index += blockDim.x) {
++                destination[index] = source[index];
++            }
++        }
++        // Every warp must finish using shared metadata before the next tile
++        // replaces it. Endpoint data are published only after the caller's
++        // stream drain.
++        __syncthreads();
++    }
++}
++
++}  // namespace
++
++extern "C" musaError_t mooncake_musa_ipc_copy_kernel(
++    const MusaIpcCopySpan* device_spans, uint32_t span_count,
++    uint64_t tile_count, musaStream_t stream) {
++    if (device_spans == nullptr || span_count == 0 || tile_count == 0 ||
++        tile_count > std::numeric_limits<uint32_t>::max()) {
++        return musaErrorInvalidValue;
++    }
++    const uint32_t blocks = tile_count < kMaxCopyBlocks
++                                ? static_cast<uint32_t>(tile_count)
++                                : kMaxCopyBlocks;
++    musa_ipc_scatter_copy<<<blocks, kCopyThreads, 0, stream>>>(
++        device_spans, span_count, tile_count);
++    return musaGetLastError();
++}
++
++}  // namespace mooncake
