@@ -29,7 +29,6 @@ limitations under the License.
 #include "framework/state_dict/state_dict.h"
 #include "framework/state_dict/utils.h"
 #include "layers/common/attention.h"
-
 #include "layers/common/linear.h"
 #include "layers/musa/normalized_hidden_states.h"
 #include "layers/musa/rms_norm_gated.h"
@@ -38,11 +37,10 @@ namespace xllm {
 namespace layer {
 
 bool use_mate_gdn_mtp_kernel();
-void scatter_gdn_mtp_verify_ssm_states(
-    const GdnMtpVerifyCache& cache,
-    const std::vector<KVCache>& kv_caches,
-    const ModelInputParams& input_params,
-    const torch::Tensor& accepted_tokens);
+void scatter_gdn_mtp_verify_ssm_states(const GdnMtpVerifyCache& cache,
+                                       const std::vector<KVCache>& kv_caches,
+                                       const ModelInputParams& input_params,
+                                       const torch::Tensor& accepted_tokens);
 
 class GdnMtpVerifyForwardScope final {
  public:
@@ -92,6 +90,11 @@ class Qwen3GatedDeltaNetBaseImpl : public torch::nn::Module {
   virtual torch::Tensor project_qkvz(
       const NormalizedHiddenStates& hidden_states) {
     return project_flat_inputs(hidden_states).first;
+  }
+  // The ba half of project_flat_inputs().
+  virtual torch::Tensor project_ba(
+      const NormalizedHiddenStates& hidden_states) {
+    return project_flat_inputs(hidden_states).second;
   }
   // fusable_ba_weight() when this forward computes ba inside the spec-verify
   // convolution launch; undefined otherwise.

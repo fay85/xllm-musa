@@ -1645,14 +1645,16 @@ torch::Tensor causal_conv1d(
   return out_t.t().contiguous().to(x.dtype());
 }
 
-torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
-                                    const torch::Tensor& weight,
-                                    const torch::Tensor& conv_state,
-                                    const std::optional<torch::Tensor>& bias,
-                                    const torch::Tensor& query_start_loc,
-                                    const torch::Tensor& cache_indices,
-                                    const torch::Tensor& has_initial_state,
-                                    bool silu_activation) {
+torch::Tensor causal_conv1d_prefill(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    const torch::Tensor& conv_state,
+    const std::optional<torch::Tensor>& bias,
+    const torch::Tensor& query_start_loc,
+    const torch::Tensor& cache_indices,
+    const torch::Tensor& has_initial_state,
+    bool silu_activation,
+    const std::optional<torch::Tensor>& prefix_x) {
   CHECK(query_start_loc.defined() && is_torch_device(query_start_loc.device()))
       << "causal_conv1d_prefill requires device query_start_loc";
   CHECK(cache_indices.defined() && is_torch_device(cache_indices.device()))
@@ -1679,10 +1681,19 @@ torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
                                   cache_indices,
                                   has_initial_state,
                                   silu_activation,
-                                  /*pad_slot_id=*/-1);
+                                  /*pad_slot_id=*/-1,
+                                  prefix_x);
     return out;
   }
 
+  if (prefix_x.has_value() && prefix_x->defined()) {
+    CHECK_EQ(cache_indices.numel(), 1)
+        << "prefix_x fallback requires single-sequence cache_indices";
+    torch::Tensor mutable_conv_state = conv_state;
+    mutable_conv_state.index_put_(
+        {cache_indices},
+        prefix_x->t().contiguous().unsqueeze(0).to(conv_state.scalar_type()));
+  }
   auto x_t = x.t().contiguous();
   auto out_t = torch::empty_like(x_t);
   causal_conv1d_fwd(x_t,

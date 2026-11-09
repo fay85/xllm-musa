@@ -167,8 +167,7 @@ std::pair<torch::Tensor, torch::Tensor> mate_gated_delta_rule_prefill(
 torch::Tensor mate_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
-torch::Tensor mate_gated_delta_rule_mtp(
-    MateGatedDeltaRuleMtpParams& params);
+torch::Tensor mate_gated_delta_rule_mtp(MateGatedDeltaRuleMtpParams& params);
 
 std::string get_mate_gdn_mtp_uri(int64_t num_q_heads,
                                  int64_t num_v_heads,
@@ -197,16 +196,18 @@ void causal_conv1d_fwd(const torch::Tensor& x,
                        bool silu_activation,
                        int64_t pad_slot_id);
 
-void causal_conv1d_fwd_token_major(const torch::Tensor& x,
-                                   const torch::Tensor& weight,
-                                   torch::Tensor& out,
-                                   const std::optional<torch::Tensor>& bias,
-                                   const torch::Tensor& conv_states,
-                                   const torch::Tensor& query_start_loc,
-                                   const torch::Tensor& cache_indices,
-                                   const torch::Tensor& has_initial_state,
-                                   bool silu_activation,
-                                   int64_t pad_slot_id);
+void causal_conv1d_fwd_token_major(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    torch::Tensor& out,
+    const std::optional<torch::Tensor>& bias,
+    const torch::Tensor& conv_states,
+    const torch::Tensor& query_start_loc,
+    const torch::Tensor& cache_indices,
+    const torch::Tensor& has_initial_state,
+    bool silu_activation,
+    int64_t pad_slot_id,
+    const std::optional<torch::Tensor>& prefix_x = std::nullopt);
 
 torch::Tensor causal_conv1d(const torch::Tensor& x,
                             const torch::Tensor& weight,
@@ -220,18 +221,19 @@ torch::Tensor causal_conv1d(const torch::Tensor& x,
                             int64_t pad_slot_id,
                             int64_t run_mode);
 
-torch::Tensor causal_conv1d_prefill(const torch::Tensor& x,
-                                    const torch::Tensor& weight,
-                                    const torch::Tensor& conv_state,
-                                    const std::optional<torch::Tensor>& bias,
-                                    const torch::Tensor& query_start_loc,
-                                    const torch::Tensor& cache_indices,
-                                    const torch::Tensor& has_initial_state,
-                                    bool silu_activation);
+torch::Tensor causal_conv1d_prefill(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    const torch::Tensor& conv_state,
+    const std::optional<torch::Tensor>& bias,
+    const torch::Tensor& query_start_loc,
+    const torch::Tensor& cache_indices,
+    const torch::Tensor& has_initial_state,
+    bool silu_activation,
+    const std::optional<torch::Tensor>& prefix_x = std::nullopt);
 
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params);
-
 
 // Graph-safe Qwen3.5 MTP spec-verify causal conv: reads accepted counts on
 // device. x/output [B, dim, seq]; cache_indices int64 [B];

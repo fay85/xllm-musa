@@ -78,6 +78,10 @@ struct ConvParamsBase {
   int32_t* __restrict__ conv_state_indices_ptr;
 
   void* __restrict__ seq_idx_ptr;
+
+  void* __restrict__ prefix_x_ptr;
+  index_t prefix_x_l_stride;
+  index_t prefix_x_c_stride;
 };
 
 template <typename T>
@@ -544,10 +548,29 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
   float col1 = 0.0f;
   float col2 = 0.0f;
   if (token_offset == 0) {
+    input_t init1 = input_t(0.0f);
+    input_t init2 = input_t(0.0f);
     if (load_initial_state) {
-      col0 = static_cast<float>(conv_state[0 * params.conv_state_l_stride]);
-      col1 = static_cast<float>(conv_state[1 * params.conv_state_l_stride]);
-      col2 = static_cast<float>(conv_state[2 * params.conv_state_l_stride]);
+      if (params.prefix_x_ptr != nullptr) {
+        const input_t* prefix_x =
+            reinterpret_cast<const input_t*>(params.prefix_x_ptr);
+        const input_t init0 = prefix_x[0 * params.prefix_x_l_stride +
+                                       feature * params.prefix_x_c_stride];
+        init1 = prefix_x[1 * params.prefix_x_l_stride +
+                         feature * params.prefix_x_c_stride];
+        init2 = prefix_x[2 * params.prefix_x_l_stride +
+                         feature * params.prefix_x_c_stride];
+        col0 = static_cast<float>(init0);
+        col1 = static_cast<float>(init1);
+        col2 = static_cast<float>(init2);
+      } else {
+        const input_t init0 = conv_state[0 * params.conv_state_l_stride];
+        init1 = conv_state[1 * params.conv_state_l_stride];
+        init2 = conv_state[2 * params.conv_state_l_stride];
+        col0 = static_cast<float>(init0);
+        col1 = static_cast<float>(init1);
+        col2 = static_cast<float>(init2);
+      }
     }
 
     if (seq_len >= 3) {
@@ -562,19 +585,16 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
             feature * params.x_c_stride];
     } else if (seq_len == 2) {
       conv_state[0 * params.conv_state_l_stride] =
-          load_initial_state ? conv_state[2 * params.conv_state_l_stride]
-                             : input_t(0.0f);
+          load_initial_state ? init2 : input_t(0.0f);
       conv_state[1 * params.conv_state_l_stride] =
           x[seq_start * params.x_l_stride + feature * params.x_c_stride];
       conv_state[2 * params.conv_state_l_stride] =
           x[(seq_start + 1) * params.x_l_stride + feature * params.x_c_stride];
     } else {
-      const input_t previous1 = conv_state[1 * params.conv_state_l_stride];
-      const input_t previous2 = conv_state[2 * params.conv_state_l_stride];
       conv_state[0 * params.conv_state_l_stride] =
-          load_initial_state ? previous1 : input_t(0.0f);
+          load_initial_state ? init1 : input_t(0.0f);
       conv_state[1 * params.conv_state_l_stride] =
-          load_initial_state ? previous2 : input_t(0.0f);
+          load_initial_state ? init2 : input_t(0.0f);
       conv_state[2 * params.conv_state_l_stride] =
           x[seq_start * params.x_l_stride + feature * params.x_c_stride];
     }
@@ -747,7 +767,8 @@ void causal_conv1d_fwd_token_major(const at::Tensor& x,
                                    const at::Tensor& cache_indices,
                                    const at::Tensor& has_initial_state,
                                    bool silu_activation,
-                                   int64_t pad_slot_id) {
+                                   int64_t pad_slot_id,
+                                   const std::optional<at::Tensor>& prefix_x) {
   TORCH_CHECK(x.dim() == 2 && x.stride(1) == 1);
   TORCH_CHECK(out.sizes() == x.sizes() && out.is_contiguous());
   TORCH_CHECK(weight.dim() == 2 && weight.size(1) == 4);
@@ -781,6 +802,20 @@ void causal_conv1d_fwd_token_major(const at::Tensor& x,
   params.conv_state_batch_stride = conv_states.stride(0);
   params.conv_state_c_stride = conv_states.stride(-2);
   params.conv_state_l_stride = conv_states.stride(-1);
+  if (prefix_x.has_value() && prefix_x->defined()) {
+    TORCH_CHECK(params.batch == 1,
+                "prefix_x is only supported for single-sequence prefill");
+    TORCH_CHECK(prefix_x->dim() == 2 && prefix_x->size(0) == 3 &&
+                    prefix_x->size(1) == x.size(1),
+                "prefix_x must have shape [3, dim]");
+    TORCH_CHECK(prefix_x->scalar_type() == x.scalar_type(),
+                "prefix_x dtype must match x");
+    TORCH_CHECK(is_accel_device_tensor(*prefix_x),
+                "prefix_x must be a device tensor");
+    params.prefix_x_ptr = prefix_x->data_ptr();
+    params.prefix_x_l_stride = prefix_x->stride(0);
+    params.prefix_x_c_stride = prefix_x->stride(1);
+  }
 
   at::cuda::CUDAGuard device_guard{static_cast<char>(x.get_device())};
   auto stream = at::cuda::getCurrentCUDAStream().stream();
