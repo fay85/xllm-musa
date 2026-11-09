@@ -229,6 +229,10 @@ xLLM 使用 gflags 管理服务启动参数。`--model <PATH>` 是唯一必填�
 
 ## KernelConfig
 
+支持的 NPU Python DeepSeek-V4/V4.1 MoE 路径默认执行共享专家 overlap，无需启动开关。
+V4.1 W8A8 MC2 decode 按 routed 阶段安排共享专家的量化、Gate-Up、激活和 Down；
+其他支持路径使用 start/done event 同步。MX 格式及非 NPU 设备保持串行执行。
+
 | 参数名称 | 类型 | 默认值 | 参数含义 |
 |:---------|:-----|:-------|:---------|
 | `enable_customize_mla_kernel` | `bool` | `false` | 是否启用自定义 MLA kernel。 |

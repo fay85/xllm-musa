@@ -658,6 +658,128 @@ def test_mc2_dp_local_rows_no_gather_no_slice(
     assert mc2.base_calls == []
 
 
+@pytest.mark.parametrize("with_norm", [False, True])
+@pytest.mark.parametrize("scoring", ["softmax", "sigmoid", "sqrtsoftplus", "unknown"])
+@pytest.mark.parametrize("with_bias", [False, True])
+def test_staged_and_serial_mc2_preserve_global_routing(
+    monkeypatch: pytest.MonkeyPatch, mc2: _Mc2Recorder, with_norm: bool, scoring: str, with_bias: bool
+) -> None:
+    """Compare dispatch inputs, not a constant mocked top-k result.
+
+    MC2 dispatch owns EP redistribution: both branches must retain non-local
+    experts. Communication, expert kernels and shared-stream phases are
+    stubbed; normalization, router math and production top-k argument
+    preparation are exercised with input-dependent expert selection.
+    """
+    hidden = torch.tensor([[4, 3, -2, -1], [-1, -2, 3, 4], [2, -1, 4, -2]], dtype=torch.bfloat16)
+    post_norm = torch.nn.RMSNorm(_MC2_HIDDEN, eps=1e-6, dtype=torch.bfloat16) if with_norm else None
+    bias = torch.tensor([0.125, -0.25, 0.375, -0.5]) if with_bias else None
+    shared = object.__new__(v41.DeepseekV41SharedMLP)
+    torch.nn.Module.__init__(shared)
+    moe = _make_moe(dp_size=4, scoring_func=scoring, e_score_correction_bias=bias)
+    torch.nn.Module.__init__(moe)
+    moe.shared_experts = shared
+    phases: list[str] = []
+    normalized_inputs: list[torch.Tensor] = []
+    shared_inputs: list[torch.Tensor] = []
+    router_weight = torch.eye(_MC2_HIDDEN) + 0.125 * torch.ones(_MC2_HIDDEN, _MC2_HIDDEN)
+    original_post_norm = moe._apply_post_norm
+    norm_type = {"softmax": 0, "sigmoid": 1, "sqrtsoftplus": 2}.get(scoring, 2)
+
+    def normalize(value: torch.Tensor, norm: torch.nn.Module) -> tuple[torch.Tensor, torch.Tensor]:
+        phases.append("normalize")
+        normalized_inputs.append(value.clone())
+        return original_post_norm(value, norm)
+
+    def gate_logits(value: torch.Tensor, input_ids: torch.Tensor | None) -> torch.Tensor:
+        phases.append("router")
+        assert input_ids is None and value.dtype == torch.float32
+        return torch.nn.functional.linear(value, router_weight)
+
+    def select_experts(**kwargs: Any) -> tuple[torch.Tensor, torch.Tensor, None]:
+        phases.append("topk")
+        mc2.calls.append(("gating", kwargs))
+        assert kwargs["norm_type"] == norm_type
+        assert kwargs["renorm"] == (0 if norm_type == 2 else 1)
+        assert kwargs["bias"] is bias
+        logits = kwargs["x"]
+        scores = (
+            logits.softmax(-1)
+            if kwargs["norm_type"] == 0
+            else logits.sigmoid()
+            if kwargs["norm_type"] == 1
+            else torch.nn.functional.softplus(logits).sqrt()
+        )
+        corrected = scores if kwargs["bias"] is None else scores + kwargs["bias"]
+        indices = corrected.topk(kwargs["k"], dim=-1).indices
+        weights = scores.gather(-1, indices)
+        if kwargs["renorm"]:
+            weights = weights / weights.sum(-1, keepdim=True)
+        return weights * kwargs["routed_scaling_factor"], indices, None
+
+    def reject_local_mask(*args: Any) -> torch.Tensor:
+        raise AssertionError("MC2 dispatch must retain global expert routing")
+
+    def prepare_shared(value: torch.Tensor) -> SimpleNamespace:
+        phases.append("shared_quant")
+        shared_inputs.append(value.clone())
+        return SimpleNamespace(worker_input=value)
+
+    def project_shared_gate_up(state: SimpleNamespace) -> None:
+        phases.append("shared_gate_up")
+
+    def activate_shared(state: SimpleNamespace) -> None:
+        pass
+
+    def project_shared_down(state: SimpleNamespace) -> tuple[torch.Tensor, torch.Tensor]:
+        return torch.full_like(state.worker_input, 0.25), state.worker_input
+
+    monkeypatch.setattr(v41, "_rms_norm_cast_supported", lambda *args: False)
+    monkeypatch.setattr(v41, "_fused_shared_act_supported", lambda *args: True)
+    monkeypatch.setattr(kernels, "moe_gating_top_k_hash", select_experts)
+    monkeypatch.setattr(moe, "_apply_post_norm", normalize)
+    monkeypatch.setattr(moe, "_gate_logits", gate_logits)
+    monkeypatch.setattr(moe, "_ep_local_masked_weights", reject_local_mask)
+    monkeypatch.setattr(moe, "_prepare_mc2_shared_expert", prepare_shared)
+    monkeypatch.setattr(moe, "_project_mc2_shared_gate_up", project_shared_gate_up)
+    monkeypatch.setattr(moe, "_activate_mc2_shared_expert", activate_shared)
+    monkeypatch.setattr(moe, "_project_mc2_shared_down", project_shared_down)
+    monkeypatch.setattr(moe, "_finish_shared_expert_overlap", lambda state: state[0])
+
+    dispatched: list[dict[str, Any]] = []
+    gating_calls: list[dict[str, Any]] = []
+    for overlap in (False, True):
+        moe._shared_expert_overlap_enabled = overlap
+        phases.clear()
+        mc2.calls.clear()
+        with forward_context(_context(token_counts=[3, 3, 3, 3], dp_is_decode=[1, 1, 1, 1])):
+            moe._forward_mc2_decode(hidden, post_norm)
+        dispatched.append(next(kwargs for name, kwargs in mc2.calls if name == "dispatch"))
+        gating_calls.append(next(kwargs for name, kwargs in mc2.calls if name == "gating"))
+        expected_phases = ["normalize"] if with_norm else []
+        expected_phases += ["shared_quant", "router", "shared_gate_up", "topk"] if overlap else ["router", "topk"]
+        assert phases == expected_phases
+
+    serial, staged = dispatched
+    for key in ("x", "expert_ids", "expert_scales"):
+        torch.testing.assert_close(staged[key], serial[key], rtol=0, atol=0)
+    torch.testing.assert_close(shared_inputs[0], serial["x"], rtol=0, atol=0)
+    assert len(normalized_inputs) == (2 if with_norm else 0)
+    if with_norm:
+        torch.testing.assert_close(serial["x"], post_norm(hidden), rtol=0, atol=0)
+    else:
+        assert serial["x"] is hidden and staged["x"] is hidden
+    for key in gating_calls[0]:
+        if isinstance(gating_calls[0][key], torch.Tensor):
+            torch.testing.assert_close(gating_calls[1][key], gating_calls[0][key], rtol=0, atol=0)
+        else:
+            assert gating_calls[1][key] == gating_calls[0][key]
+    # Rank 1 owns experts [2, 4), yet non-local [0, 2) weights stay nonzero.
+    nonlocal_experts = serial["expert_ids"] < 2
+    assert nonlocal_experts.any()
+    assert torch.all(serial["expert_scales"][nonlocal_experts] > 0)
+
+
 def test_mc2_dp_empty_rank_falls_back_on_all_ranks(monkeypatch: pytest.MonkeyPatch, mc2: _Mc2Recorder) -> None:
     """The P0 fix: an empty DP rank makes dispatch receive ZERO rows.
     ``npu_moe_distribute_dispatch_v2`` rejects ``bs <= 0`` in infershape"""

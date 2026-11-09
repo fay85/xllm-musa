@@ -48,6 +48,7 @@ try:
 except ImportError:
     torch_npu = None  # type: ignore[assignment]
 
+from scripts.logger import logger
 from xllm.python.attention.csa_attention import (
     _get_layer_cache_tensor,
     _scatter_by_slot,
@@ -57,6 +58,7 @@ from xllm.python.layers.embedding import HiddenParallelEmbedding
 from xllm.python.layers.layernorm import RMSNorm
 from xllm.python.layers.linear import ColumnParallelLinear, RowParallelLinear
 from xllm.python.model_executor.forward_context import (
+    capturing_acl_graph,
     get_forward_context,
     in_acl_graph,
     record_layer_event,
@@ -75,6 +77,7 @@ from xllm.python.models.deepseek_v32 import (
     _tp_rank_from_device,
 )
 from xllm.python.models.weight_utils import W8A8WeightLoader
+from xllm.python.npu_streams import shared_expert_stream
 
 # MXFP8/MXFP4 modules are only reachable for FP8 checkpoints; the guarded
 # import keeps W8A8-only deployments (older CANN without the MX dtypes, or
@@ -1318,6 +1321,12 @@ def _silu_for_execution(gate: torch.Tensor) -> torch.Tensor:
     return torch_npu.npu_silu(gate)
 
 
+def _record_stream(tensor: torch.Tensor, stream: object) -> None:
+    """Record ``stream`` use of ``tensor`` when the tensor lives on a device."""
+    if tensor.device.type != "cpu":
+        tensor.record_stream(stream)
+
+
 class DeepseekV4MoE(nn.Module):
     """DeepSeek-V4 MoE with hash routing.
 
@@ -1331,6 +1340,11 @@ class DeepseekV4MoE(nn.Module):
     # subclass that can carry the grouped-clamped fused activation
     # (``deepseek_v41.DeepseekV41SharedMLP``).
     _SHARED_MLP_CLS = DeepseekV3MLP
+
+    # Construction selects overlap from device/format capabilities. Objects
+    # created without ``__init__`` have no validated device and remain serial.
+    _shared_expert_overlap_enabled = False
+    _shared_expert_graph_logged = False
 
     def __init__(self, cfg: DeepseekV4Config, layer_id: int, dtype: torch.dtype, device: torch.device) -> None:
         super().__init__()
@@ -1427,6 +1441,12 @@ class DeepseekV4MoE(nn.Module):
 
         # Shared expert uses the orthogonal MoE TP group, matching C++
         # FusedMoEImpl. skip_tp_reduce keeps collective ordering in this class.
+        # Supported NPU formats run shared experts on the dedicated side stream
+        # by default. The portable routed step is one fused op, so this path
+        # uses start/done fences; V4.1 MC2 exposes finer-grained milestones.
+        self._shared_expert_overlap_enabled = device.type in ("npu", "privateuseone") and not self.uses_mx_formats
+        self._shared_expert_start_event = None
+        self._shared_expert_done_event = None
         shared_cfg = replace(cfg, tp_size=self.moe_tp_size, tp_rank=self.moe_tp_rank)
         if self.uses_mx_formats:
             self.shared_experts = NpuDeepseekV4MLPMXFP8(
@@ -1687,6 +1707,12 @@ class DeepseekV4MoE(nn.Module):
             topk_weights = self._ep_local_masked_weights(topk_weights, topk_idx)
 
         # 3) Expert computation with pre-selected routing (EP-sharded).
+        # Shared-expert overlap: submit the shared expert to the side stream
+        # BEFORE the routed step so its Cube work covers the routed
+        # dispatch/GEMM window, then join before the reduction below.
+        shared_overlap_state = None
+        if self._shared_expert_overlap_enabled and self.cfg.n_shared_experts > 0:
+            shared_overlap_state = self._launch_shared_expert_overlap(hidden)
         if self.uses_mx_formats:
             # Official FP8: packed-fp4 experts with ue8m0 antiquant scales and
             # MXFP8 activations, dispatched through the MXFP4 grouped MoE op.
@@ -1791,7 +1817,10 @@ class DeepseekV4MoE(nn.Module):
                 self.cfg.swiglu_limit,
             )
         # 4) Shared experts + C++-ordered TP/EP reductions.
-        shared_out = self._run_gated_shared_experts(hidden)
+        if shared_overlap_state is not None:
+            shared_out = self._finish_shared_expert_overlap(shared_overlap_state)
+        else:
+            shared_out = self._run_gated_shared_experts(hidden)
 
         output = self._reduce_moe_outputs(routed_out, shared_out)
         if need_slice:
@@ -1811,6 +1840,44 @@ class DeepseekV4MoE(nn.Module):
             shared_gate = torch.sigmoid(self.shared_expert_gate(normalized))
             shared_out = shared_gate * shared_out
         return shared_out
+
+    def _launch_shared_expert_overlap(self, hidden: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Submit the shared expert to the side stream; return its join state.
+
+        Follows the DeepseekV3.2 ``_forward_parallel`` pattern: one
+        start-event on the current stream, the shared expert runs as a single
+        concurrent side-stream workload, and a done-event the routed step
+        joins on. The V4 routed step is one fused operator, so there are no
+        internal stage boundaries to fence on. The second element keeps the
+        input alive until the join. Events are created lazily on first use
+        (warmup, i.e. before or while the ACL graph is captured); the fork/join
+        uses only stream/event primitives plus capturable ops, matching the
+        ``moe.py``/``deepseek_v32.py`` capture pattern.
+        """
+        if self._shared_expert_start_event is None:
+            self._shared_expert_start_event = torch.npu.Event()
+            self._shared_expert_done_event = torch.npu.Event()
+        shared_stream = shared_expert_stream(hidden.device)
+        current_stream = torch.npu.current_stream()
+        if capturing_acl_graph() and not self._shared_expert_graph_logged:
+            self._shared_expert_graph_logged = True
+            logger.info(f"shared-expert overlap captured into the ACL graph (layer={self.layer_id})")
+
+        self._shared_expert_start_event.record(current_stream)
+        shared_stream.wait_event(self._shared_expert_start_event)
+        _record_stream(hidden, shared_stream)
+        with torch.npu.stream(shared_stream):
+            shared = self._run_gated_shared_experts(hidden)
+            self._shared_expert_done_event.record(shared_stream)
+        return shared, hidden
+
+    def _finish_shared_expert_overlap(self, state: tuple[torch.Tensor, torch.Tensor]) -> torch.Tensor:
+        """Join the side-stream shared expert while retaining its input."""
+        shared, _worker_input = state
+        current = torch.npu.current_stream()
+        current.wait_event(self._shared_expert_done_event)
+        _record_stream(shared, current)
+        return shared
 
     def _run_shared_experts(self, hidden: torch.Tensor) -> torch.Tensor:
         """Run the shared expert on the MoE input.

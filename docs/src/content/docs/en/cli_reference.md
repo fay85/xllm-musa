@@ -229,6 +229,12 @@ xLLM uses gflags to manage service startup parameters. `--model <PATH>` is the o
 
 ## KernelConfig
 
+Shared-expert overlap is automatic in supported NPU Python DeepSeek-V4/V4.1 MoE
+paths; no startup flag is required. V4.1 W8A8 MC2 decode stages shared
+quantization, Gate-Up, activation and Down alongside routed milestones.
+Other supported paths use start/done events; MX formats and non-NPU devices
+retain serial execution.
+
 | Parameter | Type | Default | Description |
 |:----------|:-----|:--------|:------------|
 | `enable_customize_mla_kernel` | `bool` | `false` | Whether to enable the customized MLA kernel. |

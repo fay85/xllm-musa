@@ -432,6 +432,21 @@ def test_on_parks_group_index_in_the_graph_buffer(
     assert other.dtype == torch.int64 and other.shape == (1,) and int(other[0]) == 2
 
 
+def test_staged_shared_mlp_preserves_the_serial_clamped_pipeline(
+    w8a8: _CpuW8A8Kernels,
+) -> None:
+    mlp = _make_mlp()
+    hidden = _boundary_hidden()
+    serial = mlp.forward_dequant_swiglu_quant(hidden, clamp_limit=_LIMIT, grouped_activation=True)
+    quantized, scale = v41.kernels.dynamic_quant(hidden)
+    gate_up = mlp.gate_up_proj.forward_accumulated(quantized)
+    activation, activation_scale = mlp.activate_quantized_gate_up(gate_up, scale, clamp_limit=_LIMIT)
+    staged = mlp.down_proj.forward_quantized(activation, activation_scale)
+    torch.testing.assert_close(staged, serial, rtol=0, atol=0)
+    assert w8a8.dequant_calls[-1]["clamp_limit"] == _LIMIT
+    assert w8a8.dequant_calls[-1]["group_index"] is not None
+
+
 def test_on_builds_group_index_inline_without_an_execution_state(
     monkeypatch: pytest.MonkeyPatch,
     w8a8: _CpuW8A8Kernels,

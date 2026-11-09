@@ -109,6 +109,7 @@ from xllm.python.models.deepseek_v4 import (
     DeepseekV4RotaryEmbedding,
     _find_checkpoint_prefix,
     _pick,
+    _record_stream,
 )
 from xllm.python.models.deepseek_v32 import DeepseekV3MLP, W8A8DynamicLinear
 from xllm.python.models.deepseek_v41_engram import (
@@ -2000,6 +2001,21 @@ class DeepseekV41SharedMLP(DeepseekV3MLP):
     ) -> torch.Tensor:
         x_int8, pertoken = kernels.dynamic_quant(x)
         gate_up = self.gate_up_proj.forward_accumulated(x_int8)
+        act_int8, act_scale = self.activate_quantized_gate_up(
+            gate_up, pertoken, clamp_limit=clamp_limit, grouped_activation=grouped_activation
+        )
+        out = self.down_proj.forward_quantized(act_int8, act_scale)
+        return self._reduce_output(out, tp_reduce_add)
+
+    def activate_quantized_gate_up(
+        self,
+        gate_up: torch.Tensor,
+        pertoken: torch.Tensor,
+        *,
+        clamp_limit: float,
+        grouped_activation: bool = True,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Apply the same clamped activation for serial and staged execution."""
         if grouped_activation:
             # One group spanning every row: ``group_index[i]`` is the row count
             # of group i, int64 and 1-D, with the scale as ``[groups, 2H]``.
@@ -2030,8 +2046,19 @@ class DeepseekV41SharedMLP(DeepseekV3MLP):
                 pertoken,
                 clamp_limit=clamp_limit,
             )
-        out = self.down_proj.forward_quantized(act_int8, act_scale)
-        return self._reduce_output(out, tp_reduce_add)
+        return act_int8, act_scale
+
+
+@dataclass
+class _Mc2SharedExpertState:
+    """Own every side-stream intermediate until the routed/shared join."""
+
+    worker_input: torch.Tensor
+    quantized_input: torch.Tensor
+    input_scale: torch.Tensor
+    gate_up: torch.Tensor | None = None
+    activation: torch.Tensor | None = None
+    activation_scale: torch.Tensor | None = None
 
 
 class DeepseekV41W8A8MoE(DeepseekV4MoE):
@@ -2256,6 +2283,11 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         else:
             gate_input = hidden.to(torch.float32)
         logits = self._gate_logits(gate_input, None)
+        topk_weights, topk_idx = self._w8a8_topk(logits)
+        return hidden, topk_weights, topk_idx
+
+    def _w8a8_topk(self, logits: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """Select experts from the already submitted router projection."""
         norm_type = {"softmax": 0, "sigmoid": 1, "sqrtsoftplus": 2}.get(self.scoring_func, 2)
         topk_weights, topk_idx, _ = kernels.moe_gating_top_k_hash(
             x=logits,
@@ -2272,7 +2304,55 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
             norm_type=norm_type,
             out_flag=False,
         )
-        return hidden, topk_weights, topk_idx
+        return topk_weights, topk_idx
+
+    def _prepare_mc2_shared_expert(self, hidden: torch.Tensor) -> _Mc2SharedExpertState:
+        """Overlap shared input quantization with the Cube-heavy router."""
+        if getattr(self, "_mc2_shared_input_ready", None) is None:
+            self._mc2_shared_input_ready = torch.npu.Event()
+            self._mc2_shared_router_ready = torch.npu.Event()
+            self._mc2_shared_dispatch_done = torch.npu.Event()
+            self._mc2_shared_combine_start = torch.npu.Event()
+            self._shared_expert_done_event = torch.npu.Event()
+        worker_input = hidden
+        current = torch.npu.current_stream()
+        side = shared_expert_stream(hidden.device)
+        self._mc2_shared_input_ready.record(current)
+        side.wait_event(self._mc2_shared_input_ready)
+        _record_stream(worker_input, side)
+        with torch.npu.stream(side):
+            quantized, scale = kernels.dynamic_quant(worker_input)
+        return _Mc2SharedExpertState(worker_input, quantized, scale)
+
+    def _project_mc2_shared_gate_up(self, state: _Mc2SharedExpertState) -> None:
+        """Submit Gate-Up before routed TopK and overlap it with dispatch."""
+        self._mc2_shared_router_ready.record(torch.npu.current_stream())
+        side = shared_expert_stream(state.worker_input.device)
+        side.wait_event(self._mc2_shared_router_ready)
+        with torch.npu.stream(side):
+            state.gate_up = self.shared_experts.gate_up_proj.forward_accumulated(state.quantized_input)
+
+    def _activate_mc2_shared_expert(self, state: _Mc2SharedExpertState) -> None:
+        """Keep shared Vector activation behind dispatch/quantization."""
+        self._mc2_shared_dispatch_done.record(torch.npu.current_stream())
+        side = shared_expert_stream(state.worker_input.device)
+        side.wait_event(self._mc2_shared_dispatch_done)
+        with torch.npu.stream(side):
+            state.activation, state.activation_scale = self.shared_experts.activate_quantized_gate_up(
+                state.gate_up, state.input_scale, clamp_limit=float(self.cfg.swiglu_limit)
+            )
+
+    def _project_mc2_shared_down(self, state: _Mc2SharedExpertState) -> tuple[torch.Tensor, torch.Tensor]:
+        """Overlap shared Down with routed combine, then expose the join."""
+        self._mc2_shared_combine_start.record(torch.npu.current_stream())
+        side = shared_expert_stream(state.worker_input.device)
+        side.wait_event(self._mc2_shared_combine_start)
+        with torch.npu.stream(side):
+            shared = self.shared_experts.down_proj.forward_quantized(state.activation, state.activation_scale)
+            if self.shared_expert_gate_is_loaded:
+                shared = torch.sigmoid(self.shared_expert_gate(state.worker_input)) * shared
+            self._shared_expert_done_event.record(side)
+        return shared, state.worker_input
 
     def _forward_flashcomm1_routed(
         self,
@@ -2577,7 +2657,27 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
 
         # 1-2) Normalize local rows and route with the same W8A8 bias top-k
         #      as FC1. Dispatch takes global expert weights without EP masking.
-        hidden, topk_weights, topk_idx = self._w8a8_bias_topk(hidden, post_norm)
+        mc2_shared_state = None
+        shared_overlap_state = None
+        staged_shared = (
+            self._shared_expert_overlap_enabled
+            and self.cfg.n_shared_experts > 0
+            and isinstance(self.shared_experts, DeepseekV41SharedMLP)
+            and _fused_shared_act_supported(hidden, self.shared_experts, float(self.cfg.swiglu_limit))
+        )
+        if staged_shared:
+            if post_norm is not None:
+                hidden, gate_input = self._apply_post_norm(hidden, post_norm)
+            else:
+                gate_input = hidden.to(torch.float32)
+            mc2_shared_state = self._prepare_mc2_shared_expert(hidden)
+            logits = self._gate_logits(gate_input, None)
+            self._project_mc2_shared_gate_up(mc2_shared_state)
+            topk_weights, topk_idx = self._w8a8_topk(logits)
+        else:
+            hidden, topk_weights, topk_idx = self._w8a8_bias_topk(hidden, post_norm)
+        if not staged_shared and self._shared_expert_overlap_enabled and self.cfg.n_shared_experts > 0:
+            shared_overlap_state = self._launch_shared_expert_overlap(hidden)
         expert_ids = topk_idx.to(torch.int32)
         expert_scales = topk_weights.to(torch.float32)
 
@@ -2659,6 +2759,8 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
                     f"(num_experts_per_rank={self.num_experts_per_rank}); the grouped GEMM would "
                     "read past the dispatched rows"
                 )
+        if mc2_shared_state is not None:
+            self._activate_mc2_shared_expert(mc2_shared_state)
         gemm1_out = _moe_mc2_grouped_matmul(
             x=[sorted_hidden_i8],
             weight=[self.experts_w13],
@@ -2696,6 +2798,8 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
             group_list=group_list,
             output_dtype=hidden.dtype,
         )
+        if mc2_shared_state is not None:
+            shared_overlap_state = self._project_mc2_shared_down(mc2_shared_state)
         routed_out = _moe_mc2_combine(
             expand_x=local_out,
             expert_ids=expert_ids,
@@ -2723,7 +2827,12 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         #    partials were already scattered-and-accumulated by ``combine_v2`` and
         #    the guard pins ``moe_tp_size == 1``, so no explicit reduction runs
         #    here (doing so would double the routed contribution).
-        shared_out = self._run_gated_shared_experts(hidden)
+        # The staged W8A8 path aligns shared Cube work with dispatch/combine
+        # and shared Vector work with routed GMM, then joins all intermediates.
+        if shared_overlap_state is not None:
+            shared_out = self._finish_shared_expert_overlap(shared_overlap_state)
+        else:
+            shared_out = self._run_gated_shared_experts(hidden)
         return routed_out + shared_out
 
 
