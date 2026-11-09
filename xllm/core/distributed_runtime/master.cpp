@@ -169,11 +169,8 @@ std::optional<std::string> validate_model_cp(const Options& options,
     }
     const int32_t tp_size =
         global_world_size / (options.dp_size() * options.cp_size());
-    const bool partitions_pcp = kv_split_size > 0 &&
-                                kv_split_size <= options.cp_size() &&
-                                options.cp_size() % kv_split_size == 0;
-    const bool spans_pcp_and_tp = kv_split_size == options.cp_size() * tp_size;
-    if (!partitions_pcp && !spans_pcp_and_tp) {
+    if (!kv_split_fits_cp_topology(options.cp_size(), tp_size, kv_split_size) &&
+        !kv_split_spans_cp_tp(options.cp_size(), tp_size, kv_split_size)) {
       return "MLU CP requires kv_split_size to divide cp_size or equal "
              "cp_size * tp_size";
     }
@@ -296,6 +293,8 @@ std::optional<std::string> validate_model_cp(const Options& options,
           static_cast<uint64_t>(global_world_size) % parallel_width != 0) {
         return "Python CP requires world_size divisible by dp_size * cp_size";
       }
+      const int32_t attn_tp_size = static_cast<int32_t>(
+          static_cast<uint64_t>(global_world_size) / parallel_width);
       const int32_t kv_split =
           ParallelConfig::get_instance().kv_split_size_effective();
       if (model_type == "glm5_next") {
@@ -371,7 +370,8 @@ std::optional<std::string> validate_model_cp(const Options& options,
           return "Python GLM-5 Next CP initially requires enable_pd_ooc=false";
         }
       }
-      if (kv_split < 1 || options.cp_size() % kv_split != 0) {
+      if (!kv_split_fits_cp_topology(
+              options.cp_size(), attn_tp_size, kv_split)) {
         return "Python CP requires kv_split_size effective value to be a "
                "positive divisor of cp_size";
       }
@@ -419,7 +419,7 @@ std::optional<std::string> validate_model_cp(const Options& options,
     }
     const int32_t kv_split =
         ParallelConfig::get_instance().kv_split_size_effective();
-    if (kv_split < 1 || options.cp_size() % kv_split != 0) {
+    if (!kv_split_fits_cp_topology(options.cp_size(), attn_tp_size, kv_split)) {
       return "NPU CP requires kv_split_size effective value to be a positive "
              "divisor of cp_size";
     }

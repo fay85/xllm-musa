@@ -26,6 +26,7 @@ limitations under the License.
 #include <unordered_set>
 #include <utility>
 
+#include "framework/config/parallel_config.h"
 #include "framework/kv_cache_transfer/mooncake_store_backend.h"
 #include "util/hash_util.h"
 #include "util/timer.h"
@@ -54,9 +55,9 @@ bool KVCacheStore::init(const KVCacheStoreInitConfig& config,
   CHECK_LT(config.cp_rank, config.cp_size);
   CHECK_GE(config.kv_split_full_domain_size, config.cp_size);
   CHECK_EQ(config.kv_split_full_domain_size % config.cp_size, 0);
-  const uint32_t workers_per_cp =
-      static_cast<uint32_t>(config.kv_split_full_domain_size / config.cp_size);
-  CHECK(config.tp_size == workers_per_cp ||
+  const int64_t workers_per_cp =
+      static_cast<int64_t>(config.kv_split_full_domain_size) / config.cp_size;
+  CHECK(static_cast<int64_t>(config.tp_size) == workers_per_cp ||
         config.tp_size ==
             static_cast<uint32_t>(config.kv_split_full_domain_size))
       << "Store TP ranks must either repeat within each CP rank or span the "
@@ -64,9 +65,12 @@ bool KVCacheStore::init(const KVCacheStoreInitConfig& config,
   CHECK_GE(config.kv_split_size, 1);
   CHECK_GE(config.kv_split_rank, 0);
   CHECK_LT(config.kv_split_rank, config.kv_split_size);
-  CHECK(config.cp_size % config.kv_split_size == 0 ||
-        config.kv_split_size == config.kv_split_full_domain_size)
-      << "kv_split_size must divide cp_size or equal the full DCP domain.";
+  CHECK(kv_split_fits_cp_topology(
+            config.cp_size, workers_per_cp, config.kv_split_size) ||
+        kv_split_spans_cp_tp(
+            config.cp_size, workers_per_cp, config.kv_split_size))
+      << "kv_split_size must divide cp_size, fit the TP group when cp_size is "
+         "1, or span the full CP x TP domain.";
   config_ = config;
   initialize_store_index(std::move(store_index));
 

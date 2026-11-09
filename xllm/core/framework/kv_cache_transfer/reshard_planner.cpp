@@ -27,6 +27,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include "framework/config/parallel_config.h"
 #include "framework/kv_cache/kv_cache_tensor_role.h"
 
 namespace xllm {
@@ -118,13 +119,18 @@ bool same_partition_sizes(const ParallelCoordinates& source,
 }
 
 bool kv_split_spans_cp_and_tp(const ParallelCoordinates& coordinates) {
-  return static_cast<int64_t>(coordinates.kv_split_size) ==
-         static_cast<int64_t>(coordinates.cp_size) * coordinates.tp_size;
+  return kv_split_spans_cp_tp(static_cast<int64_t>(coordinates.cp_size),
+                              coordinates.tp_size,
+                              coordinates.kv_split_size);
 }
 
-bool supports_kv_split_topology(const ParallelCoordinates& coordinates) {
-  return coordinates.cp_size % coordinates.kv_split_size == 0 ||
-         kv_split_spans_cp_and_tp(coordinates);
+bool coordinates_support_kv_split_topology(
+    const ParallelCoordinates& coordinates) {
+  const int64_t cp_size = static_cast<int64_t>(coordinates.cp_size);
+  const int64_t tp_size = static_cast<int64_t>(coordinates.tp_size);
+  return kv_split_fits_cp_topology(
+             cp_size, tp_size, coordinates.kv_split_size) ||
+         kv_split_spans_cp_tp(cp_size, tp_size, coordinates.kv_split_size);
 }
 
 bool supports_partition_layout(const ParallelCoordinates& source,
@@ -132,9 +138,15 @@ bool supports_partition_layout(const ParallelCoordinates& source,
   if (same_partition_sizes(source, destination)) {
     return true;
   }
+  // A DCP source keeps KV shards on the TP axis. The collapse path groups
+  // writers by CP rank and cannot merge those shards into a different split
+  // width, so only matching partition sizes are supported.
+  if (source.cp_size == 1 && source.kv_split_size > 1) {
+    return false;
+  }
   return destination.cp_size == 1 && destination.cp_rank == 0 &&
          (destination.kv_split_size == 1 ||
-          (supports_kv_split_topology(source) &&
+          (coordinates_support_kv_split_topology(source) &&
            source.kv_split_size == destination.kv_split_size));
 }
 
@@ -311,7 +323,10 @@ SpanWriters collapsed_source_writers(const WorkerCacheLayoutManifest& source,
                             ? SpanWriters::everything()
                             : source_writers(source.coordinates);
   const auto& coordinates = source.coordinates;
+  // A split at least as wide as the CP group leaves no later CP rank inside a
+  // KV shard, so the shard width would truncate to zero.
   if (has_cp_shards && !kv_split_spans_cp_and_tp(coordinates) &&
+      coordinates.kv_split_size <= coordinates.cp_size &&
       coordinates.cp_rank % (coordinates.cp_size / coordinates.kv_split_size) !=
           0) {
     // Later CP ranks still own recurrent heads, but their MLA/KPool replicas
@@ -575,19 +590,22 @@ Status validate_source_instance(
   if (!same_instance_layout(reference, destination)) {
     return invalid("source and destination instance layouts are incompatible");
   }
-  if (!supports_partition_layout(reference.coordinates,
-                                 destination.coordinates)) {
+  const ParallelCoordinates& expected = reference.coordinates;
+  if (!same_partition_sizes(expected, destination.coordinates) &&
+      expected.cp_size == 1 && expected.kv_split_size > 1) {
+    return invalid("DCP source layout requires matching cp/kv partition sizes");
+  }
+  if (!supports_partition_layout(expected, destination.coordinates)) {
     return invalid(
         "source CP/KV-split partitions can only collapse into a CP1 "
         "destination with either KV-split1 or the matching KV-split size");
   }
 
-  const ParallelCoordinates& expected = reference.coordinates;
-  if (!same_partition_sizes(expected, destination.coordinates) &&
-      !supports_kv_split_topology(expected)) {
+  if (!coordinates_support_kv_split_topology(expected)) {
     return invalid(
-        "source cp_size must be divisible by kv_split_size, or "
-        "kv_split_size must equal cp_size * tp_size");
+        "source cp_size must be divisible by kv_split_size (or the TP group "
+        "must be divisible by it when cp_size is 1), or kv_split_size must "
+        "span cp_size * tp_size");
   }
   if (multiply_overflows(static_cast<uint64_t>(expected.dp_size),
                          static_cast<uint64_t>(expected.cp_size)) ||

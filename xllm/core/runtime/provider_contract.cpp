@@ -713,8 +713,9 @@ collect_native_provider_descriptor_config(
   const uint32_t dp = static_cast<uint32_t>(parallel.dp_size());
   const uint32_t cp = static_cast<uint32_t>(parallel.cp_size());
   const int32_t kv_split_size = parallel.kv_split_size_effective();
-  if (tp == 0 || kv_split_size <= 0 ||
-      parallel.cp_size() % kv_split_size != 0) {
+  if (tp == 0 ||
+      (!kv_split_fits_cp_topology(parallel.cp_size(), tp, kv_split_size) &&
+       !kv_split_spans_cp_tp(parallel.cp_size(), tp, kv_split_size))) {
     if (error != nullptr) {
       *error = "Native V2 effective TP or KV split topology is invalid";
     }

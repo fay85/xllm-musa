@@ -93,4 +93,26 @@ class ParallelConfig final {
   }
 };
 
+// KV shards map onto the CP group, or onto the TP group when CP is disabled
+// (decode-context parallelism). Keep the engine execution path, the
+// worker-cache reshard planner and the Native V2 provider registration on
+// these predicates so the recognised layouts cannot drift apart.
+inline bool kv_split_fits_cp_topology(int64_t cp_size,
+                                      int64_t tp_size,
+                                      int32_t kv_split_size) {
+  return cp_size > 0 && tp_size > 0 && kv_split_size > 0 &&
+         (cp_size % kv_split_size == 0 ||
+          (cp_size == 1 && tp_size % kv_split_size == 0));
+}
+
+// KV shards cover the whole CP x TP domain: one shard per (cp_rank, tp_rank).
+// Only MLU executes this layout today; the platform startup gate decides
+// whether the active backend accepts it.
+inline bool kv_split_spans_cp_tp(int64_t cp_size,
+                                 int64_t tp_size,
+                                 int32_t kv_split_size) {
+  return cp_size > 0 && tp_size > 0 && kv_split_size > 0 &&
+         static_cast<int64_t>(kv_split_size) == cp_size * tp_size;
+}
+
 }  // namespace xllm

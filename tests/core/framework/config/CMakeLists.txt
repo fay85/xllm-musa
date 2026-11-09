@@ -27,6 +27,17 @@ cc_test(
 
 cc_test(
   NAME
+    parallel_config_test
+  CPU_ONLY
+  SRCS
+    parallel_config_test.cpp
+  DEPS
+    :config
+    GTest::gtest_main
+)
+
+cc_test(
+  NAME
     disagg_pd_config_test
   SRCS
     disagg_pd_config_test.cpp

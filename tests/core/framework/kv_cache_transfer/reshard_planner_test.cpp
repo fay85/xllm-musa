@@ -318,9 +318,11 @@ std::vector<WorkerCacheLayoutManifest> make_cp_instance(
   for (int32_t cp_rank = 0; cp_rank < cp_size; ++cp_rank) {
     for (int32_t tp_rank = 0; tp_rank < tp_size; ++tp_rank) {
       const int32_t worker_rank = cp_rank * tp_size + tp_rank;
-      const int32_t kv_split_rank = kv_split_size == cp_size * tp_size
-                                        ? worker_rank
-                                        : cp_rank * kv_split_size / cp_size;
+      const int32_t kv_split_rank =
+          cp_size == 1 ? tp_rank % kv_split_size
+                       : (kv_split_size == cp_size * tp_size
+                              ? worker_rank
+                              : cp_rank * kv_split_size / cp_size);
       WorkerCacheLayoutManifest manifest = make_head_manifest(
           tp_rank,
           tp_size,
@@ -1149,6 +1151,29 @@ TEST(ReshardPlannerTest, CollapsesPrefillCpAndKvSplitIntoDecodePartition) {
                               destination_bytes,
                               /*destination_resource=*/3,
                               /*source_resource=*/1);
+}
+
+TEST(ReshardPlannerTest, RejectsDecodeContextParallelCollapse) {
+  const std::vector<WorkerCacheLayoutManifest> sources = make_cp_instance(
+      /*cp_size=*/1,
+      /*kv_split_size=*/2,
+      /*tp_size=*/2,
+      /*global_heads=*/4,
+      /*first_buffer_id=*/3,
+      "source");
+  const WorkerCacheLayoutManifest destination =
+      make_head_manifest(/*tp_rank=*/0,
+                         /*tp_size=*/1,
+                         /*global_heads=*/4,
+                         /*buffer_id=*/17,
+                         "destination");
+  ReshardPlanner planner;
+
+  std::vector<size_t> selected_indices;
+  const Status status =
+      planner.select_sources(sources, destination, &selected_indices);
+  EXPECT_FALSE(status.ok());
+  EXPECT_NE(status.message().find("DCP"), std::string::npos);
 }
 
 TEST(ReshardPlannerTest, SupportsTp1SpecDraftBesideShardedMainCache) {
