@@ -191,8 +191,9 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
                             ? *graph_state_->verify_input
                             : (grouped_input ? *grouped_input : raw_input);
     std::optional<layer::mlu_v4_cp::DeepseekV4CpContext> cp_context;
-    if (cp_size_ > 1 && !input.enable_graph && !input.is_dflash_proposal &&
-        !input.is_spec_verify && input.meta.spec_verify_width <= 1 &&
+    if (cp_size_ > 1 && !input.enable_graph &&
+        !input.use_dflash_proposal_attention && !input.is_spec_verify &&
+        input.meta.spec_verify_width <= 1 &&
         input.meta.batch_forward_type.no_decode()) {
       cp_context = layer::mlu_v4_cp::build_cp_context(
           cp_size_,

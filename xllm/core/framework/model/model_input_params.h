@@ -1102,7 +1102,7 @@ struct ModelInputParams {
     params.linear_state_validity_mask_tensor =
         safe_to(linear_state_validity_mask_tensor, device, true);
     params.is_spec_verify = is_spec_verify;
-    params.is_dflash_proposal = is_dflash_proposal;
+    params.use_dflash_proposal_attention = use_dflash_proposal_attention;
     params.num_accepted_tokens = safe_to(num_accepted_tokens, device, true);
     params.num_accepted_tokens_host = num_accepted_tokens_host;
 #if defined(USE_MUSA)
@@ -1201,7 +1201,8 @@ struct ModelInputParams {
               << parallel.dp_global_token_nums
               << ", dp_is_decode: " << parallel.dp_is_decode;
     LOG(INFO) << "ModelInputParams: is_spec_verify is " << is_spec_verify
-              << ", is_dflash_proposal is " << is_dflash_proposal;
+              << ", use_dflash_proposal_attention is "
+              << use_dflash_proposal_attention;
     print_tensor(num_accepted_tokens,
                  "ModelInputParams: num_accepted_tokens",
                  /*max_elements=*/4);
@@ -1311,8 +1312,12 @@ struct ModelInputParams {
   torch::Tensor linear_state_validity_mask_tensor;
 
   bool is_spec_verify = false;
-  // DFlash2 draft query is a proposal block, not a target spec-verify.
-  bool is_dflash_proposal = false;
+  // Selects the DFlash-family (DFlash2/DSpark) proposal attention path for this
+  // batch. Set only where that path is valid: DFlash2 requires the prelaunch
+  // gate and a non-warmup batch, while DSpark sets it on every proposal. False
+  // keeps the ordinary attention path even when the forward is a draft
+  // proposal. Distinct from the target spec-verify flag.
+  bool use_dflash_proposal_attention = false;
   // Propagated to AttentionMetadata for caller-managed cacheless prefill.
   bool prefill_without_cache = false;
   torch::Tensor num_accepted_tokens;

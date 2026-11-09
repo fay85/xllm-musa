@@ -91,7 +91,7 @@ def test_host_kv_length_crosses_into_the_next_logical_block() -> None:
 def test_draft_proposal_preserves_full_block_visibility(query_width: int, device_only: bool) -> None:
     metadata = SimpleNamespace(
         expanded_decode_metadata=SimpleNamespace(enabled=False),
-        is_dflash_proposal=True,
+        use_dflash_proposal_attention=True,
         is_chunked_prefill=True,
         block_table=torch.tensor([[2, 3], [8, 9]], dtype=torch.int32),
         kv_seq_lens=torch.tensor([129, 143], dtype=torch.int32),
@@ -105,9 +105,7 @@ def test_draft_proposal_preserves_full_block_visibility(query_width: int, device
     assert resolved.paged_kv_indptr is None
     assert resolved.paged_kv_indices is None
     assert resolved.paged_kv_last_page_len is None
-    assert resolved.kv_seq_lens_host_values == (
-        None if device_only else [129] * query_width + [143] * query_width
-    )
+    assert resolved.kv_seq_lens_host_values == (None if device_only else [129] * query_width + [143] * query_width)
     metadata.kv_seq_lens.add_(1)
     updated = resolve_expanded_decode_metadata(metadata)
     assert updated is not None
@@ -116,13 +114,13 @@ def test_draft_proposal_preserves_full_block_visibility(query_width: int, device
 
 
 def test_non_proposal_chunked_prefill_is_not_expanded() -> None:
-    metadata = SimpleNamespace(is_dflash_proposal=False, is_chunked_prefill=True)
+    metadata = SimpleNamespace(use_dflash_proposal_attention=False, is_chunked_prefill=True)
     assert resolve_expanded_decode_metadata(metadata) is None
 
 
 def test_draft_proposal_rejects_incomplete_query_blocks() -> None:
     metadata = SimpleNamespace(
-        is_dflash_proposal=True,
+        use_dflash_proposal_attention=True,
         is_chunked_prefill=True,
         block_table=torch.zeros((2, 2), dtype=torch.int32),
         kv_seq_lens=torch.tensor([129, 143], dtype=torch.int32),

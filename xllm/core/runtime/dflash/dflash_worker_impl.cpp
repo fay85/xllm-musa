@@ -646,7 +646,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_empty(
           *draft_impl_, query_input, *prepare_stream_, *compute_stream_);
 
   ForwardInput validate_input = input;
-  validate_input.input_params.is_dflash_proposal = false;
+  validate_input.input_params.use_dflash_proposal_attention = false;
   validate_input.input_params.sampling.reset();
   // Idle decode joins the busy ranks' target validate. Mark the same spec
   // verify flag so every rank captures one expanded graph instead of a

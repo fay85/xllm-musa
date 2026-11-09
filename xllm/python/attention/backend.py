@@ -143,7 +143,7 @@ class AttentionMetadata(Protocol):
     is_chunked_prefill: bool
     is_mixed: bool
     is_spec_verify: bool
-    is_dflash_proposal: bool
+    use_dflash_proposal_attention: bool
     is_dummy: bool
     local_slot_mapping: torch.Tensor | None
     kv_split_size: int

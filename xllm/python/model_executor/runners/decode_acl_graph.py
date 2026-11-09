@@ -197,7 +197,7 @@ class _StaticAttentionMetadata:
     mega_moe_token_mask: torch.Tensor | None = None
     is_mixed: bool = False
     is_spec_verify: bool = False
-    is_dflash_proposal: bool = False
+    use_dflash_proposal_attention: bool = False
     is_dummy: bool = False
     # Verify group width baked into this captured graph. 0 means the KDA
     # path derives equal groups from the padded row count.
@@ -445,7 +445,7 @@ class DecodeAclGraphRunner(BaseRunner):
                 # scheduler marking the batch.
                 verify_width = packed_verify_width
                 packed_plan = True
-            elif self._is_spec_draft and local_expanded and getattr(metadata, "is_dflash_proposal", False):
+            elif self._is_spec_draft and local_expanded and getattr(metadata, "use_dflash_proposal_attention", False):
                 verify_width = self._draft_query_width
             else:
                 if local_width > 1:
@@ -1545,7 +1545,7 @@ class DecodeAclGraphRunner(BaseRunner):
             input_embedding,
             kpool_query_lens,
             verify_width=verify_width,
-            is_dflash_proposal=bool(getattr(metadata, "is_dflash_proposal", False)),
+            use_dflash_proposal_attention=bool(getattr(metadata, "use_dflash_proposal_attention", False)),
             token_capacity_bucket=token_capacity_bucket,
         )
         entry = self._graphs.get(graph_key)
@@ -1946,7 +1946,7 @@ class DecodeAclGraphRunner(BaseRunner):
         input_embedding: torch.Tensor | None,
         kpool_query_lens: tuple[int, ...] = (),
         verify_width: int = 1,
-        is_dflash_proposal: bool = False,
+        use_dflash_proposal_attention: bool = False,
         token_capacity_bucket: int = 0,
     ) -> _GraphKey:
         """Fix graph-captured attention mode as well as execution shape.
@@ -1965,7 +1965,7 @@ class DecodeAclGraphRunner(BaseRunner):
                 None,
                 None,
                 kpool_query_lens,
-                is_dflash_proposal,
+                use_dflash_proposal_attention,
                 token_capacity_bucket,
             )
         return (
@@ -1976,7 +1976,7 @@ class DecodeAclGraphRunner(BaseRunner):
             input_embedding.device,
             tuple(input_embedding.shape[1:]),
             kpool_query_lens,
-            is_dflash_proposal,
+            use_dflash_proposal_attention,
             token_capacity_bucket,
         )
 
@@ -2277,7 +2277,9 @@ class DecodeAclGraphRunner(BaseRunner):
         local_expanded = expanded_view is not None
         group_expanded = verify_width > 1 or local_expanded
         entry.static_metadata.is_spec_verify = group_expanded
-        entry.static_metadata.is_dflash_proposal = bool(getattr(metadata, "is_dflash_proposal", False))
+        entry.static_metadata.use_dflash_proposal_attention = bool(
+            getattr(metadata, "use_dflash_proposal_attention", False)
+        )
         entry.kv_seq_lens_delta = torch.empty(padded_batch_size, dtype=torch.int32, device=device)
         # The graph metadata update writes per-sequence KV lengths into this
         # buffer.  MLA/SFA consumes the same stable buffer as its key lengths.

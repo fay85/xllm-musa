@@ -129,7 +129,7 @@ class PyAttentionMetadataView final {
   bool is_chunked_prefill() const;
   bool is_mixed() const;
   bool is_spec_verify() const;
-  bool is_dflash_proposal() const;
+  bool use_dflash_proposal_attention() const;
   bool is_dummy() const;
   // Rows per logical sequence of a NON-expanded spec-verify batch (1 = plain
   // decode / expanded verify). Exported so the graph runner can key and admit

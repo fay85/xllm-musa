@@ -354,7 +354,7 @@ void disable_layerwise_split_for_draft(ParallelArgs* parallel_args) {
 void apply_idle_block_dummy_input(ModelInputParams& input_params,
                                   int32_t dummy_token_count,
                                   const torch::Device& device) {
-  const bool decode_rows = input_params.is_dflash_proposal &&
+  const bool decode_rows = input_params.use_dflash_proposal_attention &&
                            input_params.meta.batch_forward_type.is_decode();
   const int32_t row_count = decode_rows ? dummy_token_count : 1;
   const int32_t query_len = decode_rows ? 1 : dummy_token_count;
@@ -375,7 +375,7 @@ void apply_idle_block_dummy_input(ModelInputParams& input_params,
   input_params.attention.host.kv_cache_tokens_nums.assign(row_count, 0);
   input_params.attention.host.new_cache_slots.assign(dummy_token_count,
                                                      /*value=*/-1);
-  if (input_params.is_dflash_proposal) {
+  if (input_params.use_dflash_proposal_attention) {
     const auto options = torch::TensorOptions().dtype(torch::kInt32);
     input_params.attention.host.block_tables =
         torch::zeros({row_count, query_len}, options);

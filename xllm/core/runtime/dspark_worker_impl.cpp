@@ -146,7 +146,7 @@ DSparkWorkerImpl::DraftBlock DSparkWorkerImpl::run_decode_draft(
   // block N-wide and every position predicts a draft token.
   ForwardInput query_input;
   prepare_query_inputs(input, query_input);
-  query_input.input_params.is_dflash_proposal = true;
+  query_input.input_params.use_dflash_proposal_attention = true;
 
   return execute_draft_query(
       input, std::move(query_input), false, &validate_input);
@@ -365,7 +365,7 @@ DFlashWorkerImpl::DraftBlock DSparkWorkerImpl::run_decode_draft_from_pending(
     const std::vector<int64_t>& rows) {
   ForwardInput query;
   prepare_query_inputs(input, query);
-  query.input_params.is_dflash_proposal = true;
+  query.input_params.use_dflash_proposal_attention = true;
   query.skip_sampling_for_logits_only = true;
   query.return_selected_hidden = false;
   ForwardInput prepared;
@@ -564,7 +564,7 @@ std::optional<ForwardOutput> DSparkWorkerImpl::step_empty(
     return DFlashWorkerImpl::step_empty(input);
   }
   ForwardInput empty_input = input;
-  empty_input.input_params.is_dflash_proposal = true;
+  empty_input.input_params.use_dflash_proposal_attention = true;
   ModelSamplingInput sampling;
   force_greedy_draft_sampling(sampling.parameters);
   empty_input.input_params.sampling = std::move(sampling);

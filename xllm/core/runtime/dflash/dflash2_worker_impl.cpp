@@ -148,7 +148,7 @@ DFlashWorkerImpl::DraftBlock DFlash2WorkerImpl::run_decode_draft(
   // spec-verify flag. Graph-warmup batches keep the plain chunk metadata:
   // their draft forwards must not take the XFIA proposal path.
   if (prelaunch_enabled_ && !input.input_params.meta.is_graph_warmup) {
-    query_input.input_params.is_dflash_proposal = true;
+    query_input.input_params.use_dflash_proposal_attention = true;
   }
 
   const int32_t batch_size = input.input_params.meta.num_sequences;
@@ -333,7 +333,7 @@ bool DFlash2WorkerImpl::prepare_draft_prelaunch(const ForwardInput& input) {
   }
   ForwardInput query;
   prepare_query_inputs(future, query);
-  query.input_params.is_dflash_proposal = true;
+  query.input_params.use_dflash_proposal_attention = true;
   query.skip_sampling_for_logits_only = true;
   query.return_selected_hidden = true;
   prepared_prelaunch_.emplace();

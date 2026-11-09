@@ -1203,7 +1203,7 @@ class TestModelExecutorConstruction:
             is_chunked_prefill=True,
             is_mixed=False,
             is_spec_verify=False,
-            is_dflash_proposal=True,
+            use_dflash_proposal_attention=True,
             block_table=torch.tensor([[0]], dtype=torch.int32),
             kv_seq_lens=torch.tensor([4], dtype=torch.int32),
             kv_seq_lens_host_values=[4],

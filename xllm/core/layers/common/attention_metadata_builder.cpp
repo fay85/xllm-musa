@@ -350,7 +350,8 @@ AttentionMetadata build_attention_metadata(
 #endif
   attn_metadata.expanded_decode = ExpandedDecodeMetadataBuilder::build(params);
   attn_metadata.is_spec_verify = params.is_spec_verify;
-  attn_metadata.is_dflash_proposal = params.is_dflash_proposal;
+  attn_metadata.use_dflash_proposal_attention =
+      params.use_dflash_proposal_attention;
 
   // for flashinfer
   attn_metadata.paged_kv_indptr = params.attention.device.paged_kv_indptr;

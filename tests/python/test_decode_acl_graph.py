@@ -156,7 +156,7 @@ def test_expanded_draft_proposal_has_shared_plan_with_empty_dp(query_width: int)
         row_count = batch.num_tokens if num_reqs else 1
         metadata = _metadata(None if num_reqs else torch.zeros(1, dtype=torch.int32))
         metadata.is_chunked_prefill = True
-        metadata.is_dflash_proposal = True
+        metadata.use_dflash_proposal_attention = True
         metadata.is_dummy = batch.is_dummy
         metadata.num_accepted_tokens = None
         metadata.block_table = torch.zeros((row_count, query_width), dtype=torch.int32)
@@ -197,7 +197,7 @@ def test_csa2_ring_paging_admission_and_dummy_replay(
     runner.bind_execution_metadata_builders((builder,))
     batch = replace(_query_batch(1, query_width), positions=torch.arange(context_length - query_width, context_length))
     metadata = _metadata(None)
-    metadata.is_dflash_proposal = True
+    metadata.use_dflash_proposal_attention = True
     metadata.is_dummy = False
     metadata.num_accepted_tokens = None
     metadata.block_table = None
@@ -833,7 +833,7 @@ def test_dflash_proposal_mode_uses_a_distinct_graph_key() -> None:
         8,
         False,
         None,
-        is_dflash_proposal=True,
+        use_dflash_proposal_attention=True,
     )
 
     assert ordinary_key != proposal_key
@@ -2558,7 +2558,7 @@ def test_xfia_draft_proposal_graph_accepts_request_scoped_metadata(num_sequences
     metadata = _metadata(torch.arange(num_sequences, dtype=torch.int64))
     metadata.linear_state_indices = None
     metadata.is_chunked_prefill = True
-    metadata.is_dflash_proposal = True
+    metadata.use_dflash_proposal_attention = True
     metadata.slot_mapping = torch.arange(num_tokens, dtype=torch.int32)
     metadata.block_table = torch.arange(num_sequences * 2, dtype=torch.int32).reshape(num_sequences, 2)
     metadata.kv_seq_lens = torch.full((num_sequences,), 129, dtype=torch.int32)
@@ -2571,7 +2571,7 @@ def test_xfia_draft_proposal_graph_accepts_request_scoped_metadata(num_sequences
     assert table.shape == (num_tokens, 2)
     assert lengths.tolist() == [129] * num_tokens
     assert host_lengths is None
-    metadata.is_dflash_proposal = False
+    metadata.use_dflash_proposal_attention = False
     assert not runner.can_execute(ModelInput(input_ids, torch.zeros_like(input_ids), metadata))
 
 

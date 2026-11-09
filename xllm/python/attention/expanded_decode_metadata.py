@@ -58,8 +58,7 @@ def resolve_expanded_decode_metadata(
     expanded = getattr(metadata, "expanded_decode_metadata", None)
     if expanded is None or not bool(getattr(expanded, "enabled", True)):
         if not (
-            getattr(metadata, "is_dflash_proposal", False)
-            and getattr(metadata, "is_chunked_prefill", False)
+            getattr(metadata, "use_dflash_proposal_attention", False) and getattr(metadata, "is_chunked_prefill", False)
         ):
             return None
         expanded = _expand_draft_proposal(metadata)
@@ -91,9 +90,7 @@ def resolve_expanded_decode_metadata(
     _validate_expanded_decode_metadata(
         resolved,
         slot_mapping=getattr(metadata, "slot_mapping", None),
-        block_size=int(
-            getattr(metadata, "logical_block_size", 0) or block_size
-        ),
+        block_size=int(getattr(metadata, "logical_block_size", 0) or block_size),
     )
     return resolved
 
@@ -126,8 +123,7 @@ def _expand_draft_proposal(metadata: AttentionMetadata) -> ExpandedDecodeMetadat
         paged_attention_tiling_data=None,
         kv_seq_lens_host=None,
         kv_seq_lens_host_values=(
-            [length for length in host_values for _ in range(query_width)]
-            if host_values is not None else None
+            [length for length in host_values for _ in range(query_width)] if host_values is not None else None
         ),
     )
 

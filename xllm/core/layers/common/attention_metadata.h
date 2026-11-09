@@ -178,8 +178,9 @@ struct AttentionMetadata {
   ExpandedDecodeMetadata expanded_decode;
   // Shared by NPU ACL graph and MUSA FlashInfer expanded-decode routing.
   bool is_spec_verify = false;
-  // DFlash2 proposal block. Distinct from target spec-verify.
-  bool is_dflash_proposal = false;
+  // DFlash-family proposal attention mode for this batch. Distinct from target
+  // spec-verify; false means the ordinary attention path.
+  bool use_dflash_proposal_attention = false;
 
   // for mrope
   torch::Tensor mrope_cos;

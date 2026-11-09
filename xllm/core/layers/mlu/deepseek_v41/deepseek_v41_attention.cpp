@@ -236,7 +236,7 @@ torch::Tensor DeepseekV41AttentionImpl::forward(
   }
   torch::Tensor selected, lengths;
   const int64_t capacity =
-      args_.window_size() + (input.is_dflash_proposal
+      args_.window_size() + (input.use_dflash_proposal_attention
                                  ? args_.dspark_block_size()
                                  : (ratio_ > 0 ? args_.index_topk() : 0));
   if (input.enable_graph) {
@@ -246,7 +246,7 @@ torch::Tensor DeepseekV41AttentionImpl::forward(
     selected = shared.selected_kv.narrow(
         /*dim=*/0, /*start=*/0, /*length=*/q.size(0) * capacity);
     lengths = shared.selected_lengths;
-  } else if (input.is_dflash_proposal) {
+  } else if (input.use_dflash_proposal_attention) {
     selected = torch::empty({q.size(0) * capacity, 1, 1, dim}, options_);
     lengths = torch::empty({q.size(0)}, options_.dtype(torch::kInt32));
   }
@@ -387,8 +387,10 @@ void DeepseekV41AttentionImpl::forward_cached_attention(
                                  input.attention.host.kv_seq_lens[seq] - count
                            : position_cpu.data_ptr<int64_t>()[offset];
     const int64_t end = begin + count;
-    const int64_t old_begin = std::max<int64_t>(
-        0, begin - args_.window_size() + (input.is_dflash_proposal ? 0 : 1));
+    const int64_t old_begin =
+        std::max<int64_t>(0,
+                          begin - args_.window_size() +
+                              (input.use_dflash_proposal_attention ? 0 : 1));
     // Read the old ring before publishing a chunk that can wrap it.
     torch::Tensor window;
     if (!input.enable_graph) {
@@ -454,7 +456,7 @@ void DeepseekV41AttentionImpl::forward_cached_attention(
         }
       }
     }
-    if (input.is_dflash_proposal) {
+    if (input.use_dflash_proposal_attention) {
       const int64_t capacity = selected.size(0) / q.size(0);
       const int64_t visible = window.size(0);
       selected.view({q.size(0), capacity, args_.head_dim()})
@@ -529,7 +531,7 @@ void DeepseekV41AttentionImpl::forward_cached_attention(
                         output.slice(0, offset, offset + count));
     }
 
-    if (!input.enable_graph && !input.is_dflash_proposal) {
+    if (!input.enable_graph && !input.use_dflash_proposal_attention) {
       const int64_t tail = std::min<int64_t>(count, tables[0].size(1) * block);
       swa.index_copy_(
           0,

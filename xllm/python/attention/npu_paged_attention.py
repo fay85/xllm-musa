@@ -111,9 +111,9 @@ def _pad_dense_mla_queries(
     return padded
 
 
-def _is_dflash_proposal(metadata: object) -> bool:
-    """DFlash2 proposal blocks are not target spec-verify steps."""
-    return bool(getattr(metadata, "is_dflash_proposal", False))
+def _use_dflash_proposal_attention(metadata: object) -> bool:
+    """Whether this batch selects the DFlash proposal attention path."""
+    return bool(getattr(metadata, "use_dflash_proposal_attention", False))
 
 
 # Ascend FIA sparse_mode values (see CANN aclnnFusedInferAttentionScore docs).
@@ -370,7 +370,9 @@ class NpuPagedAttentionBackend(KdaLinearAttentionMixin, AttentionBackend):
             or len(q_cu_lens) != len(kv_lens) + 1
             or any(q_cu_lens[i + 1] - q_cu_lens[i] != length or length <= 0 for i, length in enumerate(kv_lens))
         ):
-            raise ValueError("bidirectional prompt attention requires every request to start at zero with q_len == kv_len")
+            raise ValueError(
+                "bidirectional prompt attention requires every request to start at zero with q_len == kv_len"
+            )
 
     def set_device_only_decode_inputs(self, enabled: bool, query_width: int) -> None:
         if self._kv_caches or self._metadata is not None:
@@ -536,7 +538,7 @@ class NpuPagedAttentionBackend(KdaLinearAttentionMixin, AttentionBackend):
         if self._prefix_bidir_enabled and (metadata.is_prefill or metadata.is_chunked_prefill or metadata.is_mixed):
             self._validate_prefix_bidir(metadata)
         self._metadata = metadata
-        if self._device_only_decode_inputs and _is_dflash_proposal(metadata):
+        if self._device_only_decode_inputs and _use_dflash_proposal_attention(metadata):
             if metadata.is_prefill:
                 raise ValueError("Device-only draft proposals cannot use prefill metadata")
             self._prepare_xfia_decode(metadata, graph_mode=graph_mode)
@@ -545,7 +547,7 @@ class NpuPagedAttentionBackend(KdaLinearAttentionMixin, AttentionBackend):
             not (metadata.is_prefill or metadata.is_chunked_prefill)
             or (
                 metadata.is_chunked_prefill
-                and _is_dflash_proposal(metadata)
+                and _use_dflash_proposal_attention(metadata)
                 and metadata.block_table is not None
                 and metadata.slot_mapping.numel() == metadata.block_table.shape[0] * self._xfia_query_width
             )
@@ -859,8 +861,10 @@ class NpuPagedAttentionBackend(KdaLinearAttentionMixin, AttentionBackend):
     ) -> torch.Tensor:
         metadata = self._metadata
         assert metadata is not None
-        if not layer.causal and self._prefix_bidir_enabled and (
-            metadata.is_chunked_prefill or metadata.is_mixed or metadata.is_spec_verify
+        if (
+            not layer.causal
+            and self._prefix_bidir_enabled
+            and (metadata.is_chunked_prefill or metadata.is_mixed or metadata.is_spec_verify)
         ):
             raise ValueError("bidirectional prompt attention does not support chunked, mixed or speculative prefill")
 
@@ -892,14 +896,14 @@ class NpuPagedAttentionBackend(KdaLinearAttentionMixin, AttentionBackend):
 
         kernels.reshape_paged_cache(metadata.slot_mapping, k_3d, v_3d, k_cache, v_cache)
 
-        if self._device_only_decode_inputs and _is_dflash_proposal(metadata):
+        if self._device_only_decode_inputs and _use_dflash_proposal_attention(metadata):
             return self._xfia_decode(q_3d, k_cache, v_cache, layer_id)
 
         if metadata.is_prefill or metadata.is_chunked_prefill:
             if (
                 self._use_xfia_decode
                 and metadata.is_chunked_prefill
-                and _is_dflash_proposal(metadata)
+                and _use_dflash_proposal_attention(metadata)
                 and metadata.block_table is not None
                 and num_tokens == metadata.block_table.shape[0] * self._xfia_query_width
             ):
