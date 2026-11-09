@@ -35,6 +35,7 @@ limitations under the License.
 #include "common/metrics.h"
 #include "common/types.h"
 #include "core/distributed_runtime/comm_channel.h"
+#include "core/distributed_runtime/pd_pull_queue_policy.h"
 #include "core/distributed_runtime/worker_prefetch_session.h"
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/speculative_config.h"
@@ -652,24 +653,36 @@ void WorkerService::PullKVCache(::google::protobuf::RpcController* controller,
                                 const proto::PullKVCacheRequest* req,
                                 proto::Status* resp,
                                 ::google::protobuf::Closure* done) {
-  threadpool_->schedule([this, controller, req, resp, done]() mutable {
-    brpc::ClosureGuard done_guard(done);
-    std::vector<KVTransferMapping> mappings;
-    mappings.reserve(req->mappings_size());
-    for (const proto::KVTransferMapping& proto_mapping : req->mappings()) {
-      KVTransferMapping mapping;
-      mapping.group_id = proto_mapping.group_id();
-      mapping.local_ids.assign(proto_mapping.local_ids().begin(),
-                               proto_mapping.local_ids().end());
-      mapping.remote_ids.assign(proto_mapping.remote_ids().begin(),
-                                proto_mapping.remote_ids().end());
-      mappings.emplace_back(std::move(mapping));
-    }
-    auto future =
-        worker_->pull_kv_blocks_async(req->cluster_id(), req->addr(), mappings);
-    bool status = std::move(future).get();
-    resp->set_ok(status);
-  });
+  ThreadPool& pull_threadpool =
+      select_pd_pull_queue(*threadpool_, *copy_threadpool_);
+  const bool use_copy_queue = &pull_threadpool == copy_threadpool_.get();
+  LOG_FIRST_N(INFO, 8) << "[PD_PULL_QUEUE] endpoint=worker_service queue="
+                       << (use_copy_queue ? "copy" : "request")
+                       << ", server_idx=" << options_.server_idx();
+  pull_threadpool.schedule(
+      [this, controller, req, resp, done, use_copy_queue]() mutable {
+        brpc::ClosureGuard done_guard(done);
+        // Unlike WorkerService.request, the existing shared copy pool has no
+        // per-thread device initializer.
+        if (use_copy_queue) {
+          device_.set_device();
+        }
+        std::vector<KVTransferMapping> mappings;
+        mappings.reserve(req->mappings_size());
+        for (const proto::KVTransferMapping& proto_mapping : req->mappings()) {
+          KVTransferMapping mapping;
+          mapping.group_id = proto_mapping.group_id();
+          mapping.local_ids.assign(proto_mapping.local_ids().begin(),
+                                   proto_mapping.local_ids().end());
+          mapping.remote_ids.assign(proto_mapping.remote_ids().begin(),
+                                    proto_mapping.remote_ids().end());
+          mappings.emplace_back(std::move(mapping));
+        }
+        auto future = worker_->pull_kv_blocks_async(
+            req->cluster_id(), req->addr(), mappings);
+        bool status = std::move(future).get();
+        resp->set_ok(status);
+      });
   return;
 }
 

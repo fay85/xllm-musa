@@ -28,6 +28,7 @@ limitations under the License.
 
 #include "common/global_flags.h"
 #include "common/metrics.h"
+#include "core/distributed_runtime/pd_pull_queue_policy.h"
 #include "core/framework/config/service_config.h"
 #include "framework/kv_cache/kv_cache.h"
 #include "framework/model/model_input_params.h"
@@ -246,11 +247,17 @@ folly::SemiFuture<bool> RemoteWorker::pull_kv_blocks_async(
     const std::vector<KVTransferMapping>& mappings) {
   folly::Promise<bool> promise;
   auto future = promise.getSemiFuture();
-  threadpool_.schedule([this,
-                        src_cluster_id,
-                        src_addr,
-                        mappings,
-                        promise = std::move(promise)]() mutable {
+  ThreadPool& pull_threadpool =
+      select_pd_pull_queue(threadpool_, copy_threadpool_);
+  LOG_FIRST_N(INFO, 8) << "[PD_PULL_QUEUE] endpoint=remote_worker queue="
+                       << (&pull_threadpool == &copy_threadpool_ ? "copy"
+                                                                 : "request")
+                       << ", global_rank=" << global_rank_;
+  pull_threadpool.schedule([this,
+                            src_cluster_id,
+                            src_addr,
+                            mappings,
+                            promise = std::move(promise)]() mutable {
     if (!channel_->pull_kv_blocks(src_cluster_id, src_addr, mappings)) {
       LOG(ERROR) << "PullKVCache failed";
       promise.setValue(false);

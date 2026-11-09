@@ -29,6 +29,7 @@ cc_library(
     remote_worker.h
     worker_server.h
     worker_service.h
+    pd_pull_queue_policy.h
     worker_prefetch_session.h
     comm_channel.h
     shm_channel.h
@@ -73,6 +74,7 @@ cc_library(
     worker_service
   HDRS
     worker_service.h
+    pd_pull_queue_policy.h
   SRCS
     worker_service.cpp
   DEPS
