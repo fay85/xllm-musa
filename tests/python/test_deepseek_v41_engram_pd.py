@@ -437,3 +437,84 @@ def test_engram_mixed_batch_late_publish_only_long_chunks(
     assert (early[long_len:] >= 0).all()
     assert (late[:long_len] >= 0).all()
     assert (late[long_len:] == -1).all()
+
+
+@pytest.mark.parametrize("prefix", [7, 127, 128, 129])
+@pytest.mark.parametrize("width", [1, 6])
+@pytest.mark.parametrize("order", [(0, 1, 2), (2, 0)])
+@pytest.mark.parametrize("device", ["cpu", "npu:0"])
+def test_model_resolves_position_shifted_history_from_slot_cache(
+    prefix: int, width: int, order: tuple[int, ...], device: str
+) -> None:
+    """Advance, unchanged and rewind rows match an independent full-token pass."""
+    if device.startswith("npu") and (not hasattr(torch, "npu") or not torch.npu.is_available()):
+        pytest.skip("NPU unavailable")
+    window = 128
+    starts = [prefix + 2, prefix, prefix - 1]
+    histories = [[(index * 7 + lane * 11) % 63 + 1 for index in range(prefix + width + 5)] for lane in range(3)]
+    state = _state().to(device)
+    state.ensure_cache(torch.zeros((5, window, 8), device=device), window)
+    state._cache.fill_(13)
+    # The unshifted row must use its explicit PD history, even with stale slots.
+    pairs = [
+        [(lane + 1) * window + index % window, histories[lane][index]]
+        for lane in order
+        if lane != 1
+        for index in range(starts[lane] - 3, starts[lane])
+    ]
+    state.restore_history(torch.tensor(pairs))
+    lookback = torch.tensor(
+        [[histories[lane][prefix - shift] for shift in range(1, 4)] for lane in order],
+        dtype=torch.int32,
+        device=device,
+    )
+    actual = state(
+        torch.tensor([histories[lane][starts[lane] : starts[lane] + width] for lane in order], device=device).flatten(),
+        torch.tensor([list(range(starts[lane], starts[lane] + width)) for lane in order], device=device).flatten(),
+        torch.arange(len(order) + 1, device=device) * width,
+        torch.zeros(len(order) * width, dtype=torch.bool, device=device),
+        lookback,
+        torch.tensor(
+            [
+                [(lane + 1) * window + index % window for index in range(starts[lane], starts[lane] + width)]
+                for lane in order
+            ],
+            device=device,
+        ).flatten(),
+        torch.tensor([[lane + 1] for lane in order], dtype=torch.int32, device=device),
+        window,
+        lookback_positions=torch.full((len(order),), prefix, dtype=torch.int32, device=device),
+    )
+    expected = []
+    for lane in order:
+        end = starts[lane] + width
+        full = _state()(
+            torch.tensor(histories[lane][:end]),
+            torch.arange(end),
+            torch.tensor([0, end]),
+            torch.zeros(end, dtype=torch.bool),
+            None,
+            None,
+            None,
+            window,
+        )
+        expected.append(full[starts[lane] : end])
+    torch.testing.assert_close(actual.cpu(), torch.cat(expected), atol=0, rtol=0)
+    # Resolving stale rows must not mutate the scheduler's explicit history.
+    assert torch.all(lookback >= 0)
+
+
+@pytest.mark.parametrize("shape", [(2,), (1, 1)])
+def test_model_rejects_misaligned_lookback_positions(shape: tuple[int, ...]) -> None:
+    with pytest.raises(ValueError, match="one position per history row"):
+        _state()(
+            torch.tensor([7]),
+            torch.tensor([3]),
+            torch.tensor([0, 1]),
+            torch.zeros(1, dtype=torch.bool),
+            torch.tensor([[6, 5, 4]]),
+            None,
+            None,
+            128,
+            lookback_positions=torch.zeros(shape, dtype=torch.int32),
+        )

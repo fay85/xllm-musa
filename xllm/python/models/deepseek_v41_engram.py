@@ -519,6 +519,7 @@ class EngramHashState(nn.Module):
         swa_block_size: int,
         *,
         max_chunk_len: int | None = None,
+        lookback_positions: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """Compute ``[T, n_engram_layers, n_hash_cols]`` int32 n-gram hashes.
 
@@ -540,6 +541,21 @@ class EngramHashState(nn.Module):
         ids = input_ids.reshape(-1).to(torch.int64)
         req = self._sequence_index(pos, query_start_loc)
         chunk_start = pos[query_start_loc.to(torch.int64)[req].clamp(0, num_tokens - 1)]
+        history_is_current = None
+        if lookback_positions is not None:
+            if (
+                lookback_token_ids is None
+                or lookback_positions.ndim != 1
+                or lookback_positions.numel() != lookback_token_ids.shape[0]
+            ):
+                raise ValueError("Engram lookback positions must contain one position per history row")
+            # Explicit history belongs to the scheduler's original chunk start.
+            # Overlapped speculative decode can advance or rewind that start;
+            # resolve shifted rows through the position-addressed slot cache.
+            history_req = req.clamp(0, lookback_positions.numel() - 1)
+            history_positions = lookback_positions[history_req]
+            # -1 marks absent history during graph warmup or padding.
+            history_is_current = (history_positions < 0) | (chunk_start == history_positions)
 
         comp = self.token_map[ids.clamp(0, self.token_map.numel() - 1)]
         comp = torch.where(dead_mask.reshape(-1), ENGRAM_DEAD_ID, comp).to(torch.int64)
@@ -576,7 +592,7 @@ class EngramHashState(nn.Module):
             known = None
             if lookback_token_ids is not None:
                 source, known = self._lookback_source(
-                    source, comp, req, lookback, in_batch, chunk_start, lookback_token_ids
+                    source, comp, req, lookback, in_batch, chunk_start, lookback_token_ids, history_is_current
                 )
             if cache is not None and block_table is not None:
                 source = self._cache_source(source, req, lookback, in_batch, known, block_table, swa_block_size)
@@ -670,6 +686,7 @@ class EngramHashState(nn.Module):
         in_batch: torch.Tensor,
         chunk_start: torch.Tensor,
         lookback_token_ids: torch.Tensor,
+        history_is_current: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Explicit-history id where the runner provided one, plus its mask.
 
@@ -685,6 +702,8 @@ class EngramHashState(nn.Module):
         req_safe = req.clamp(0, lookback_token_ids.shape[0] - 1)
         token = lookback_token_ids.to(torch.int64)[req_safe, col_safe]
         known = in_window & (token >= 0)
+        if history_is_current is not None:
+            known = known & history_is_current
         token_safe = token.clamp_min(0)
         mapped = self.token_map[token_safe.clamp(0, self.token_map.numel() - 1)]
         dead = (token_safe == ENGRAM_IMAGE_SENTINEL_BASE_ID) | (token_safe == ENGRAM_IMAGE_PAD_ID)

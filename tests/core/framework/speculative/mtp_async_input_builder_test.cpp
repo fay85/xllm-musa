@@ -402,13 +402,18 @@ TEST(MtpAsyncInputBuilderTest, V41EngramLookbackViewOwnsRequestRows) {
   metadata->slot_mapping = torch::zeros({2}, torch::kInt32);
   ModelInputParams params;
   params.execution_batch.num_reqs = 2;
+  params.execution_batch.num_computed_tokens = {25, 35};
   params.embedding.engram_lookback_token_ids = {24, 23, 34, 33};
   PyAttentionMetadataView view(metadata, params);
-  params.embedding.engram_lookback_token_ids.clear();
+  params.embedding.engram_lookback_token_ids.assign(4, -1);
+  params.execution_batch.num_computed_tokens.assign(2, -1);
   const torch::Tensor history =
       view.engram_lookback_token_ids().cast<torch::Tensor>();
+  const torch::Tensor positions =
+      view.engram_lookback_positions().cast<torch::Tensor>();
   EXPECT_TRUE(torch::equal(history,
                            torch::tensor({{24, 23}, {34, 33}}, torch::kInt32)));
+  EXPECT_TRUE(torch::equal(positions, torch::tensor({25, 35}, torch::kInt32)));
 }
 
 TEST(MtpAsyncInputBuilderTest, PybindViewOwnsGlobalDpKvMaxSequenceLengths) {

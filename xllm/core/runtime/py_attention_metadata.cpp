@@ -20,6 +20,7 @@ limitations under the License.
 
 #include <algorithm>
 #include <utility>
+#include <vector>
 
 #include "core/framework/config/kv_cache_config.h"
 #include "core/framework/config/parallel_config.h"
@@ -75,6 +76,9 @@ void register_attention_metadata_views(py::module_& module) {
       .def_property_readonly(
           "engram_lookback_token_ids",
           &PyAttentionMetadataView::engram_lookback_token_ids)
+      .def_property_readonly(
+          "engram_lookback_positions",
+          &PyAttentionMetadataView::engram_lookback_positions)
       .def_property_readonly("local_slot_mapping",
                              &PyAttentionMetadataView::local_slot_mapping)
       .def_property_readonly("logical_block_size",
@@ -266,16 +270,33 @@ PyAttentionMetadataView::PyAttentionMetadataView(
   num_accepted_tokens_ = params.num_accepted_tokens;
   if (!params.embedding.engram_lookback_token_ids.empty()) {
     CHECK_GT(params.execution_batch.num_reqs, 0);
-    torch::Tensor lookback =
-        torch::tensor(params.embedding.engram_lookback_token_ids, torch::kInt32)
-            .reshape({params.execution_batch.num_reqs, -1});
+    CHECK_EQ(params.execution_batch.num_computed_tokens.size(),
+             static_cast<size_t>(params.execution_batch.num_reqs));
+    const int64_t history_size =
+        static_cast<int64_t>(params.embedding.engram_lookback_token_ids.size());
+    // Keep history and its scheduler positions in one asynchronous upload.
+    // The model decides whether those positions still match the live query.
+    std::vector<int32_t> lookback_values;
+    lookback_values.reserve(params.embedding.engram_lookback_token_ids.size() +
+                            params.execution_batch.num_computed_tokens.size());
+    lookback_values.insert(lookback_values.end(),
+                           params.embedding.engram_lookback_token_ids.begin(),
+                           params.embedding.engram_lookback_token_ids.end());
+    lookback_values.insert(lookback_values.end(),
+                           params.execution_batch.num_computed_tokens.begin(),
+                           params.execution_batch.num_computed_tokens.end());
+    torch::Tensor lookback = torch::tensor(lookback_values, torch::kInt32);
     if (!metadata_->slot_mapping.device().is_cpu()) {
       // Retain the pinned source for the asynchronous H2D copy.
       engram_lookback_host_staging_ = lookback.pin_memory();
       lookback = engram_lookback_host_staging_;
     }
     const torch::Device& device = metadata_->slot_mapping.device();
-    engram_lookback_token_ids_ = lookback.to(device, /*non_blocking=*/true);
+    torch::Tensor payload = lookback.to(device, /*non_blocking=*/true);
+    engram_lookback_token_ids_ =
+        payload.slice(/*dim=*/0, /*start=*/0, history_size)
+            .reshape({params.execution_batch.num_reqs, -1});
+    engram_lookback_positions_ = payload.slice(/*dim=*/0, history_size);
 #if defined(USE_NPU)
     if (engram_lookback_host_staging_.defined()) {
       // CPU tensors do not implement Tensor::record_stream. Register the
@@ -328,6 +349,10 @@ PyAttentionMetadataView::PyAttentionMetadataView(
 
 py::object PyAttentionMetadataView::engram_lookback_token_ids() const {
   return optional_tensor(engram_lookback_token_ids_);
+}
+
+py::object PyAttentionMetadataView::engram_lookback_positions() const {
+  return optional_tensor(engram_lookback_positions_);
 }
 
 const torch::Tensor& PyAttentionMetadataView::slot_mapping() const {

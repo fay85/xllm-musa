@@ -3112,6 +3112,7 @@ class DeepseekV41Model(nn.Module):
             swa_group.block_table,
             swa_group.block_size,
             max_chunk_len=max_chunk_len,
+            lookback_positions=getattr(metadata, "engram_lookback_positions", None),
         )
         return hashes, ~dead
 

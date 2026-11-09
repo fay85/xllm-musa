@@ -1518,6 +1518,10 @@ void DFlashWorkerImpl::update_decode_step_input(
   input.token_ids_host = specBuilder::make_cpu_int_tensor(token_ids_vec);
   input.positions_host = specBuilder::make_cpu_int_tensor(positions_vec);
   input.input_params.attention.host.kv_seq_lens = std::move(kv_seq_lens_vec);
+  // The host fields above supersede the serialized scheduler snapshot.
+  // Re-unpacking it would restore the stale tokens, positions and KV lengths
+  // the cache correction just replaced.
+  input.input_host_buffer_has_layout = false;
   input.device_tensors_ready = false;
 }
 

@@ -943,6 +943,17 @@ void DisaggPDScheduler::prefill_send_first_generation() {
       if (!options_.disable_log_stats()) {
         request->log_prefill_statistic(request->elapsed_seconds());
       }
+      // EOS or max_tokens=1 can finish generation on Prefill. Deliver a
+      // terminal response instead of a handoff-only response: the service
+      // discards non-stream Prefill responses while waiting for Decode.
+      if (request->finished()) {
+        running_requests_[i] = nullptr;
+        release_failed_request(request);
+        response_processor_->process_completed_request(request);
+        cache_prefill_blocks(request.get());
+        kv_cache_manager_->deallocate(request.get());
+        continue;
+      }
       requests.emplace_back(request);
       if (!request->state().stream) {
         non_stream_requests.emplace_back(request);

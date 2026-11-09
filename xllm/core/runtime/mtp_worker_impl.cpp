@@ -3179,6 +3179,8 @@ void MTPWorkerImpl::update_decode_step_input(
   input.token_ids_host = specBuilder::make_cpu_int_tensor(token_ids_vec);
   input.positions_host = specBuilder::make_cpu_int_tensor(positions_vec);
   input.input_params.attention.host.kv_seq_lens = std::move(kv_seq_lens_vec);
+  // The corrected host fields supersede the serialized scheduler snapshot.
+  input.input_host_buffer_has_layout = false;
   input.device_tensors_ready = false;
 }
 

@@ -169,6 +169,7 @@ class _StaticAttentionMetadata:
     kv_seq_lens_host_values: list[int] | None = None
     new_cache_slots_host_values: list[int] | None = None
     engram_lookback_token_ids: torch.Tensor | None = None
+    engram_lookback_positions: torch.Tensor | None = None
     paged_kv_indptr_host: torch.Tensor | None = None
     paged_kv_last_page_len_host: torch.Tensor | None = None
     block_table: torch.Tensor | None = None
@@ -2228,6 +2229,9 @@ class DecodeAclGraphRunner(BaseRunner):
                 if history_depth > 0
                 else None
             ),
+            engram_lookback_positions=(
+                torch.full((padded_batch_size,), -1, dtype=torch.int32, device=device) if history_depth > 0 else None
+            ),
             block_table=static_block_table,
             # KDA (linear-attention) decode reads per-sequence conv/ssm state
             # slots from these buffers.  Static so the captured graph indexes a
@@ -2561,6 +2565,13 @@ class DecodeAclGraphRunner(BaseRunner):
                 if source_history.shape[0] > history.shape[0]:
                     raise ValueError("Engram lookback batch exceeds the captured graph batch")
                 history[: source_history.shape[0]].copy_(source_history)
+            history_positions = static_metadata.engram_lookback_positions
+            history_positions.fill_(-1)
+            source_positions = getattr(metadata, "engram_lookback_positions", None)
+            if source_positions is not None:
+                if source_history is None or source_positions.shape != (source_history.shape[0],):
+                    raise ValueError("Engram lookback positions must contain one position per history row")
+                history_positions[: source_positions.numel()].copy_(source_positions)
         src_accepted = getattr(metadata, "num_accepted_tokens", None)
         static_accepted = static_metadata.num_accepted_tokens
         if static_accepted is not None:

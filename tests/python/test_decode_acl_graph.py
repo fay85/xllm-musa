@@ -3166,20 +3166,47 @@ def test_v41_engram_lookback_refreshes_graph_buffer_without_changing_address() -
     runner = _runner()
     metadata = _metadata(torch.arange(4, dtype=torch.int32))
     metadata.engram_lookback_token_ids = torch.tensor([[4, 3], [8, 7], [12, 11], [16, 15]], dtype=torch.int32)
+    metadata.engram_lookback_positions = torch.tensor([5, 9, 13, 17], dtype=torch.int32)
     input_ids = torch.arange(4, dtype=torch.int32)
     entry = runner._allocate_entry(8, input_ids, input_ids, metadata)
     history = entry.static_metadata.engram_lookback_token_ids
     assert history is not None
     address = history.data_ptr()
+    history_positions = entry.static_metadata.engram_lookback_positions
+    positions_address = history_positions.data_ptr()
     with patch("xllm.python.model_executor.runners.decode_acl_graph.kernels.update_decode_graph_metadata", create=True):
         runner._fill_entry(entry, input_ids, input_ids, metadata, batch_size=4, input_embedding=None)
         torch.testing.assert_close(history[:4], metadata.engram_lookback_token_ids)
+        torch.testing.assert_close(history_positions[:4], metadata.engram_lookback_positions)
+        assert torch.all(history_positions[4:] == -1)
         assert torch.all(history[4:] == -1)
         metadata.engram_lookback_token_ids = torch.full((4, 2), 42, dtype=torch.int32)
         runner._fill_entry(entry, input_ids, input_ids, metadata, batch_size=4, input_embedding=None)
         assert torch.all(history[:4] == 42)
         assert torch.all(history[4:] == -1)
+        metadata.engram_lookback_positions = torch.tensor([7, 11, 15, 19], dtype=torch.int32)
+        runner._fill_entry(entry, input_ids, input_ids, metadata, batch_size=4, input_embedding=None)
+        torch.testing.assert_close(history_positions[:4], metadata.engram_lookback_positions)
+        del metadata.engram_lookback_positions
+        runner._fill_entry(entry, input_ids, input_ids, metadata, batch_size=4, input_embedding=None)
+        assert torch.all(history_positions == -1)
     assert history.data_ptr() == address
+    assert history_positions.data_ptr() == positions_address
+
+
+@pytest.mark.parametrize("shape", [(3,), (4, 1), (9,)])
+def test_v41_engram_graph_replay_rejects_misaligned_history_positions(shape: tuple[int, ...]) -> None:
+    runner = _runner()
+    metadata = _metadata(torch.arange(4, dtype=torch.int32))
+    metadata.engram_lookback_token_ids = torch.ones(4, 2, dtype=torch.int32)
+    metadata.engram_lookback_positions = torch.ones(shape, dtype=torch.int32)
+    input_ids = torch.arange(4, dtype=torch.int32)
+    entry = runner._allocate_entry(8, input_ids, input_ids, metadata)
+    with (
+        patch("xllm.python.model_executor.runners.decode_acl_graph.kernels.update_decode_graph_metadata", create=True),
+        pytest.raises(ValueError, match="one position per history row"),
+    ):
+        runner._fill_entry(entry, input_ids, input_ids, metadata, batch_size=4, input_embedding=None)
 
 
 @pytest.mark.parametrize("rows", [8, 9])

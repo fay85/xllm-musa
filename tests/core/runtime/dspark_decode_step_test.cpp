@@ -34,6 +34,8 @@ limitations under the License.
 #include "runtime/dspark_worker_impl.h"
 #include "runtime/executor.h"
 #include "runtime/llm_worker_impl.h"
+#include "runtime/mtp_worker_impl.h"
+#include "runtime/params_utils.h"
 #include "runtime/vlm_worker_impl.h"
 
 namespace xllm {
@@ -249,6 +251,7 @@ class DSparkWorkerImplTestPeer final {
       DSparkWorkerImpl& worker,
       ForwardInput input) {
     worker.prepare_decode_input(input);
+    input = input.to(worker.device_, torch::kFloat32);
     ForwardInput query;
     worker.prepare_query_inputs(input, query);
     CHECK_EQ(worker.prepare_stream_->synchronize(), 0);
@@ -265,6 +268,72 @@ class DSparkWorkerImplTestPeer final {
 };
 
 namespace {
+
+class DecodeInputMTPWorker final : public MTPWorkerImpl {
+ public:
+  using MTPWorkerImpl::MTPWorkerImpl;
+  using MTPWorkerImpl::update_decode_step_input;
+};
+
+TEST(MTPDecodeStepTest, CacheCorrectionSurvivesPackedInputMaterialization) {
+  Device device(0);
+  device.set_device();
+  device.init_device_context();
+  const ParallelArgs parallel_args(0, 1, nullptr);
+  runtime::Options options;
+  options.enable_schedule_overlap(true)
+      .enable_graph(true)
+      .speculative_algorithm("mtp")
+      .num_speculative_tokens(3)
+      .block_size(16);
+  DecodeInputMTPWorker worker(
+      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
+  ForwardInput scheduler;
+  scheduler.input_params.meta.num_sequences = 3;
+  scheduler.input_params.meta.batch_forward_type = BatchForwardType::DECODE;
+  scheduler.token_ids_host = torch::tensor({-1, 17, -1}, torch::kInt32);
+  scheduler.positions_host = torch::tensor({10, 20, 30}, torch::kInt32);
+  scheduler.input_params.attention.host.q_seq_lens = {1, 1, 1};
+  scheduler.input_params.attention.host.q_cu_seq_lens = {0, 1, 2, 3};
+  scheduler.input_params.attention.host.kv_seq_lens = {11, 21, 31};
+  scheduler.input_params.embedding.engram_lookback_token_ids = {
+      1, 2, 3, 4, 5, 6};
+  scheduler.input_params.execution_batch.num_reqs = 3;
+  scheduler.input_params.execution_batch.num_tokens = 3;
+  scheduler.input_params.execution_batch.num_scheduled_tokens = {1, 1, 1};
+  scheduler.input_params.execution_batch.num_computed_tokens = {10, 20, 30};
+  scheduler.input_params.execution_batch.is_prefilling = {0, 0, 0};
+  scheduler.input_params.execution_batch.query_start_loc = {0, 1, 2, 3};
+  proto::PackedForwardInput packed;
+  ASSERT_TRUE(forward_input_to_packed_proto(scheduler, &packed));
+  ForwardInput input;
+  packed_proto_to_forward_input(packed, input, device.unwrap(), nullptr);
+  input = input.to(device.unwrap(), torch::kFloat32);
+  ASSERT_TRUE(input.input_host_buffer_has_layout);
+
+  std::vector<EmbeddingCache::DecodeState> states(3);
+  states[0].valid = true;
+  states[0].token_id = 101;
+  states[0].position_offset = 3;
+  states[1].valid = true;
+  states[1].token_id = 102;
+  states[1].position_offset = 9;
+  states[2].token_id = 0;
+  worker.update_decode_step_input(input, states);
+  EXPECT_FALSE(input.input_host_buffer_has_layout);
+  EXPECT_FALSE(input.device_tensors_ready);
+  ForwardInput materialized = input.to(device.unwrap(), torch::kFloat32);
+  EXPECT_TRUE(torch::equal(materialized.token_ids.cpu(),
+                           torch::tensor({101, 17, 0}, torch::kInt32)));
+  EXPECT_TRUE(torch::equal(materialized.positions.cpu(),
+                           torch::tensor({13, 20, 30}, torch::kInt32)));
+  EXPECT_EQ(materialized.input_params.attention.host.kv_seq_lens,
+            (std::vector<int32_t>{14, 21, 31}));
+  EXPECT_EQ(materialized.input_params.embedding.engram_lookback_token_ids,
+            scheduler.input_params.embedding.engram_lookback_token_ids);
+  EXPECT_EQ(materialized.input_params.execution_batch.num_computed_tokens,
+            scheduler.input_params.execution_batch.num_computed_tokens);
+}
 
 class DSparkDraftInputParityTest
     : public ::testing::TestWithParam<std::tuple<int32_t, bool>> {};
@@ -372,6 +441,9 @@ TEST_P(DSparkDraftInputParityTest,
     input.token_ids = input.token_ids_host.to(device.unwrap());
     input.positions = input.positions_host.to(device.unwrap());
     input.input_params.attention.host.q_seq_lens.assign(batch_size, 1);
+    input.input_params.embedding.engram_lookback_token_ids.assign(
+        batch_size * 2, 999);
+    input.input_params.embedding.linear_state_ids.assign(batch_size, -1);
     input.input_params.attention.host.kv_seq_lens.clear();
     ExecutionBatchMetadata& execution_batch =
         input.input_params.execution_batch;
@@ -388,6 +460,8 @@ TEST_P(DSparkDraftInputParityTest,
       execution_batch.num_computed_tokens.emplace_back(host_positions[row]);
       execution_batch.query_start_loc.emplace_back(row + 1);
     }
+    input.input_params.attention.host.q_cu_seq_lens =
+        execution_batch.query_start_loc;
     input.input_params.attention.host.block_tables =
         previous.input_params.attention.host.block_tables.index_select(
             0, row_indices);
@@ -396,6 +470,14 @@ TEST_P(DSparkDraftInputParityTest,
          previous.input_params.multi_block_tables) {
       input.input_params.multi_block_tables.emplace_back(
           table.index_select(0, row_indices));
+    }
+    if (step % 2 == 1) {
+      proto::PackedForwardInput packed;
+      ASSERT_TRUE(forward_input_to_packed_proto(input, &packed));
+      ForwardInput lazy;
+      packed_proto_to_forward_input(packed, lazy, device.unwrap(), nullptr);
+      input = lazy.to(device.unwrap(), torch::kFloat32);
+      ASSERT_TRUE(input.input_host_buffer_has_layout);
     }
 
     ASSERT_EQ(DSparkWorkerImplTestPeer::pending_rows(worker, input), rows);
@@ -407,6 +489,12 @@ TEST_P(DSparkDraftInputParityTest,
         DSparkWorkerImplTestPeer::prepare_host_corrected_draft_inputs(worker,
                                                                       input);
     EXPECT_TRUE(ordinary.input_params.meta.batch_forward_type.is_decode());
+    // Runtime corrects query positions, leaving model-owned history anchored
+    // to the scheduler's original prefix. The model resolves stale rows.
+    EXPECT_EQ(ordinary.input_params.embedding.engram_lookback_token_ids,
+              input.input_params.embedding.engram_lookback_token_ids);
+    EXPECT_EQ(ordinary.input_params.execution_batch.num_computed_tokens,
+              input.input_params.execution_batch.num_computed_tokens);
     EXPECT_TRUE(torch::equal(pending.query_tokens.cpu(),
                              ordinary.token_ids.cpu().to(torch::kLong)));
     EXPECT_TRUE(torch::equal(pending.query_positions.cpu(),

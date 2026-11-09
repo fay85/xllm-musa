@@ -1204,6 +1204,63 @@ TEST(AsyncResponseProcessorTest,
   EXPECT_EQ(callbacks.load(), 1);
 }
 
+TEST(DisaggPDSchedulerTest, PrefillTerminalTokenDoesNotHandoff) {
+  for (const bool disable_log_stats : {false, true}) {
+    for (const bool stream : {false, true}) {
+      for (const bool eos : {false, true}) {
+        TerminalLogSink sink;
+        FakeEngine engine(/*num_blocks=*/16, /*block_size=*/2);
+        auto options = make_options();
+        options.enable_chunked_prefill(false)
+            .kv_cache_transfer_mode("PUSH")
+            .disable_log_stats(disable_log_stats);
+        TestDisaggPDScheduler prefill(
+            &engine, options, /*start_services=*/false);
+        auto request = make_request({11, 12}, "prefill-terminal");
+        request->state().stream = stream;
+        Sequence* sequence = request->sequences()[0].get();
+        if (eos) {
+          request->state().stopping_checker.set_ignore_eos(false);
+          request->state().stopping_checker.set_eos_token(999);
+        } else {
+          request->state().stopping_checker.set_max_generated_tokens(1);
+        }
+        std::atomic<int32_t> callbacks{0};
+        request->state().output_func =
+            [&callbacks](const RequestOutput& output) {
+              EXPECT_TRUE(output.finished);
+              EXPECT_FALSE(output.finished_on_prefill_instance);
+              EXPECT_TRUE(output.status.has_value());
+              EXPECT_TRUE(output.status->ok());
+              EXPECT_EQ(output.outputs.size(), 1u);
+              ++callbacks;
+              return true;
+            };
+        prefill.admit_prefill(request);
+        ASSERT_FALSE(prefill.prepare_batch_test()[0].empty());
+        finish_prefill(sequence);
+        ASSERT_TRUE(request->finished());
+        prefill.prefill_send_first_generation();
+        prefill.wait_responses();
+        EXPECT_EQ(callbacks.load(), 1);
+        EXPECT_TRUE(request->has_terminal_outcome());
+        EXPECT_FALSE(prefill.has_channel(request->request_id()));
+        const std::string logged = sink.messages();
+        const std::string record =
+            "record_type: pd_prefill_stage, request_id: prefill-terminal,";
+        const size_t first = logged.find(record);
+        if (disable_log_stats) {
+          EXPECT_EQ(first, std::string::npos) << logged;
+        } else {
+          ASSERT_NE(first, std::string::npos) << logged;
+          EXPECT_EQ(logged.find(record, first + 1), std::string::npos)
+              << logged;
+        }
+      }
+    }
+  }
+}
+
 TEST(DisaggPDSchedulerTest, NonStreamHandoffFailureHasOneTerminalOutcome) {
   TerminalLogSink sink;
   FakeEngine engine(
