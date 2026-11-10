@@ -52,6 +52,7 @@ limitations under the License.
 #include "core/framework/speculative/spec_input_builder.h"
 #include "core/framework/speculative/spec_verify.h"
 #include "core/platform/platform.h"
+#include "runtime/dflash/dflash_context_positions.h"
 #include "runtime/draft_model_config.h"
 #include "runtime/llm_worker_impl.h"
 #include "runtime/speculative_worker_utils.h"
@@ -89,6 +90,7 @@ runtime::Options draft_options(const runtime::Options& options,
                    options.num_speculative_tokens(), sample_from_anchor));
   runtime::Options opts = options;
   opts.enable_schedule_overlap(false)
+      .backend("llm")
       .is_draft_engine(true)
       .num_decoding_tokens(1)
       .num_speculative_tokens(draft_num_speculative_tokens)
@@ -188,6 +190,25 @@ void build_dflash_expanded_spec_verify_graph_input(
       block_size);
 }
 #endif
+
+void normalize_draft_decode_positions(ForwardInput& input) {
+  const int32_t num_sequences = input.input_params.meta.num_sequences;
+  if (!dflash_detail::is_mrope_context_positions(input.positions_host,
+                                                 num_sequences)) {
+    return;
+  }
+
+  std::vector<int32_t> positions;
+  positions.reserve(static_cast<size_t>(num_sequences));
+  for (int32_t seq_id = 0; seq_id < num_sequences; ++seq_id) {
+    const int32_t kv_len = specBuilder::calc_kv_len(
+        input.input_params.attention.host.kv_seq_lens, seq_id, /*offset=*/0);
+    positions.emplace_back(kv_len - 1);
+  }
+  // Only this draft-local copy is rewritten. The shared target input retains
+  // its original MRoPE coordinates for verification.
+  input.positions_host = specBuilder::make_cpu_int_tensor(positions);
+}
 
 void build_query_rows(const ForwardInput& input,
                       int32_t mask_token_id,
@@ -712,8 +733,39 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
 
   const torch::Tensor& embeddings = output.sample_output.embeddings;
   if (embeddings.defined()) {
-    CHECK(processed_target_input.positions_host.defined())
-        << "DFlash prefill requires processed positions_host.";
+    const int64_t num_context_tokens = embeddings.size(0);
+    const bool is_mrope_positions = dflash_detail::is_mrope_context_positions(
+        processed_target_input.positions_host, num_context_tokens);
+    if (is_mrope_positions) {
+      ModelInputParams& input_params = processed_target_input.input_params;
+      const int32_t num_sequences = input_params.meta.num_sequences;
+      CHECK_GE(num_sequences, 0);
+      std::vector<int32_t> kv_seq_lens;
+      std::vector<int32_t> q_seq_lens;
+      kv_seq_lens.reserve(static_cast<size_t>(num_sequences));
+      q_seq_lens.reserve(static_cast<size_t>(num_sequences));
+      for (int32_t seq = 0; seq < num_sequences; ++seq) {
+        kv_seq_lens.emplace_back(specBuilder::calc_kv_len(
+            input_params.attention.host.kv_seq_lens, seq, /*offset=*/0));
+        q_seq_lens.emplace_back(input_params.get_q_seq_len(seq));
+      }
+      const std::vector<int32_t> token_aligned_positions =
+          dflash_detail::build_token_aligned_context_positions(
+              kv_seq_lens, q_seq_lens, num_context_tokens);
+      torch::Tensor normalized_positions_host =
+          specBuilder::make_cpu_int_tensor(token_aligned_positions);
+      c10::StreamGuard stream_guard = compute_stream_->set_stream_guard();
+      torch::Tensor normalized_positions_device =
+          safe_to(normalized_positions_host,
+                  torch::TensorOptions().dtype(torch::kInt).device(device_),
+                  /*non_blocking=*/true);
+      // Normalize the processed input itself so every downstream consumer,
+      // including grouped SWA slot building, observes the same 1-D contract.
+      processed_target_input.positions_host =
+          std::move(normalized_positions_host);
+      processed_target_input.positions = std::move(normalized_positions_device);
+    }
+
     Slice<int32_t> positions = {
         processed_target_input.positions_host.data_ptr<int32_t>(),
         static_cast<size_t>(processed_target_input.positions_host.numel())};
@@ -1476,6 +1528,19 @@ void DFlashWorkerImpl::update_decode_step_input(
 
   const torch::Tensor& token_ids_cpu = input.token_ids_host;
   const torch::Tensor& positions_cpu = input.positions_host;
+  const bool is_mrope_positions =
+      dflash_detail::is_mrope_context_positions(positions_cpu, num_sequences);
+  torch::Tensor corrected_mrope_positions;
+  if (is_mrope_positions) {
+    // Keep the host positions pinned so the subsequent non-blocking H2D copy
+    // remains asynchronous on the target validate path.
+    corrected_mrope_positions = torch::empty(positions_cpu.sizes(),
+                                             torch::TensorOptions()
+                                                 .dtype(torch::kInt)
+                                                 .device(torch::kCPU)
+                                                 .pinned_memory(true));
+    corrected_mrope_positions.copy_(positions_cpu);
+  }
   Slice<int32_t> input_token_ids = {token_ids_cpu.data_ptr<int32_t>(),
                                     static_cast<size_t>(token_ids_cpu.numel())};
   Slice<int32_t> input_positions = {positions_cpu.data_ptr<int32_t>(),
@@ -1498,24 +1563,46 @@ void DFlashWorkerImpl::update_decode_step_input(
     const bool use_cache_correction = rewrite_fake_token && state.valid;
     const int32_t position_offset =
         use_cache_correction ? state.position_offset : 0;
-    const int32_t current_position = input_positions[seq_id] + position_offset;
     const int32_t current_kv_len = specBuilder::calc_kv_len(
         input.input_params.attention.host.kv_seq_lens, seq_id, position_offset);
-    const int32_t expected_kv_len = current_position + 1;
-
-    CHECK_EQ(expected_kv_len, current_kv_len)
-        << "DFlash decode context position/kv_len mismatch, seq_id=" << seq_id
-        << ", current_position=" << current_position
-        << ", current_kv_len=" << current_kv_len;
+    // Only text positions can be checked independently against the KV length.
+    // MRoPE's raw axis-0 value includes a request-specific delta, so leave the
+    // optional empty instead of asserting a tautological equality.
+    std::optional<int32_t> current_position;
+    if (!is_mrope_positions) {
+      current_position = input_positions[seq_id] + position_offset;
+    }
 
     token_ids_vec.emplace_back(rewrite_fake_token ? state.token_id
                                                   : input_token_id);
-    positions_vec.emplace_back(current_position);
+    if (current_position.has_value()) {
+      CHECK_EQ(*current_position + 1, current_kv_len)
+          << "DFlash decode context position/kv_len mismatch, seq_id=" << seq_id
+          << ", current_position=" << *current_position
+          << ", current_kv_len=" << current_kv_len;
+      positions_vec.emplace_back(*current_position);
+    } else {
+      // MRoPE's raw axis-0 value includes a request-specific delta and cannot
+      // be compared directly with kv_len. Check the derived draft position
+      // instead of asserting a tautological position + 1 == kv_len.
+      CHECK_GT(current_kv_len, 0)
+          << "DFlash decode requires a positive kv_len for MRoPE, seq_id="
+          << seq_id << ", current_kv_len=" << current_kv_len;
+      // Preserve all three target axes, including the request's MRoPE delta.
+      // Draft-only consumers normalize their local copies from current_kv_len.
+      // Decode emits identical positions on all three MRoPE axes. Apply the
+      // cache correction to every axis to preserve that equality.
+      corrected_mrope_positions.select(/*dim=*/1, seq_id).add_(position_offset);
+    }
     specBuilder::append_seq_len_by_layout(kv_seq_lens_vec, current_kv_len);
   }
 
   input.token_ids_host = specBuilder::make_cpu_int_tensor(token_ids_vec);
-  input.positions_host = specBuilder::make_cpu_int_tensor(positions_vec);
+  if (is_mrope_positions) {
+    input.positions_host = std::move(corrected_mrope_positions);
+  } else {
+    input.positions_host = specBuilder::make_cpu_int_tensor(positions_vec);
+  }
   input.input_params.attention.host.kv_seq_lens = std::move(kv_seq_lens_vec);
   // The host fields above supersede the serialized scheduler snapshot.
   // Re-unpacking it would restore the stale tokens, positions and KV lengths
@@ -1599,6 +1686,7 @@ void DFlashWorkerImpl::prepare_query_inputs(const ForwardInput& input,
   c10::StreamGuard stream_guard = prepare_stream_->set_stream_guard();
   query_input = input;
   query_input.device_tensors_ready = false;
+  normalize_draft_decode_positions(query_input);
   ModelInputParams& input_params = query_input.input_params;
   // DFlash-family drafts are pure full-attention models. The copied target
   // input may belong to a hybrid model, so discard its recurrent-cache state
@@ -1804,19 +1892,25 @@ std::vector<std::string> DFlashWorkerImpl::write_target_context_to_cache(
       << "DFlash accepted token/embedding width mismatch.";
 
   specBuilder::DecodeBuildBuffers buf;
-  // The accepted-context rows are addressed against the draft's own pool, so
-  // the row builder and the scatter below must both use this rank's expanded
-  // block table. Publish and PD push only read the transfer bookkeeping, which
-  // the expanded copy keeps intact. expand_draft_block_tables() is a no-op
-  // unless this draft replicates kv-split pages, so copy the input only then
-  // instead of on every decode step.
-  std::optional<ForwardInput> expanded_draft_input;
-  if (draft_replicated_block_pages() > 1) {
-    expanded_draft_input.emplace(input);
-    expand_draft_block_tables(expanded_draft_input->input_params);
+  // Accepted-context rows use draft-local token positions and the draft's own
+  // pool. Keep the shared input unchanged for target verification, and copy it
+  // only when MRoPE normalization or replicated block-table expansion is
+  // needed.
+  const bool needs_position_normalization =
+      input.positions_host.defined() &&
+      dflash_detail::is_mrope_context_positions(
+          input.positions_host, input.input_params.meta.num_sequences);
+  const int64_t replicated_block_pages = draft_replicated_block_pages();
+  std::optional<ForwardInput> processed_draft_input;
+  if (needs_position_normalization || replicated_block_pages > 1) {
+    processed_draft_input.emplace(input);
+    normalize_draft_decode_positions(*processed_draft_input);
+    if (replicated_block_pages > 1) {
+      expand_draft_block_tables(processed_draft_input->input_params);
+    }
   }
   const ForwardInput& draft_input =
-      expanded_draft_input.has_value() ? *expanded_draft_input : input;
+      processed_draft_input.has_value() ? *processed_draft_input : input;
   std::vector<int64_t> accepted_idxes = build_accepted_context_rows(
       draft_input, accepted_tokens, options_.block_size(), buf);
   torch::TensorOptions host_index_options = torch::TensorOptions()

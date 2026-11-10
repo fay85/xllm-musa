@@ -163,8 +163,10 @@ def test_context_projection_uses_tensor_parallel_output_shard(
     assert all_gather.call_args.kwargs == {"dim": -1, "world_size": 2}
 
 
+@pytest.mark.parametrize("position_dtype", [torch.int32, torch.int64])
 def test_context_projection_writes_each_layer_cache(
     monkeypatch: pytest.MonkeyPatch,
+    position_dtype: torch.dtype,
 ) -> None:
     config = _config()
     model = DFlashQwen3Model(config, torch.float32, torch.device("cpu"))
@@ -201,7 +203,7 @@ def test_context_projection_writes_each_layer_cache(
 
     projected = model.write_context_kv(
         target_hidden,
-        torch.tensor([0]),
+        torch.tensor([0], dtype=position_dtype),
         torch.tensor([0], dtype=torch.int32),
         [(key_cache, value_cache, None, None, None)],
         synchronizer,
@@ -216,6 +218,45 @@ def test_context_projection_writes_each_layer_cache(
     assert call_args[3] is key_cache
     assert call_args[4] is value_cache
     synchronizer.record_event.assert_called_once_with(0)
+
+
+def test_context_projection_rejects_mrope_positions() -> None:
+    model = DFlashQwen3Model(_config(), torch.float32, torch.device("cpu"))
+
+    with pytest.raises(ValueError, match="token-aligned 1-D"):
+        model.write_context_kv(
+            torch.zeros(2, 4),
+            torch.zeros(3, 2, dtype=torch.int32),
+            torch.zeros(2, dtype=torch.int32),
+            [],
+            None,
+        )
+
+
+def test_context_projection_rejects_position_count_mismatch() -> None:
+    model = DFlashQwen3Model(_config(), torch.float32, torch.device("cpu"))
+
+    with pytest.raises(ValueError, match="position/hidden count mismatch"):
+        model.write_context_kv(
+            torch.zeros(2, 4),
+            torch.zeros(3, dtype=torch.int32),
+            torch.zeros(2, dtype=torch.int32),
+            [],
+            None,
+        )
+
+
+def test_context_projection_rejects_float_positions() -> None:
+    model = DFlashQwen3Model(_config(), torch.float32, torch.device("cpu"))
+
+    with pytest.raises(ValueError, match="int32 or int64"):
+        model.write_context_kv(
+            torch.zeros(2, 4),
+            torch.zeros(2, dtype=torch.float32),
+            torch.zeros(2, dtype=torch.int32),
+            [],
+            None,
+        )
 
 
 def test_checkpoint_weight_names_load_into_fused_modules(monkeypatch: pytest.MonkeyPatch) -> None:

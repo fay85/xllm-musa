@@ -264,6 +264,14 @@ class DFlashQwen3Model(Qwen3Model):
         kv_caches: list[tuple[torch.Tensor | None, ...]],
         layer_synchronizer: LayerSynchronizer | None,
     ) -> torch.Tensor | None:
+        # Accept worker-produced int32 and existing int64 positions. RoPE
+        # normalizes both to torch.long; reject floats instead of truncating.
+        if positions.dtype not in (torch.int32, torch.int64):
+            raise ValueError("draft context positions must use int32 or int64")
+        if positions.dim() != 1:
+            raise ValueError("draft context positions must be token-aligned 1-D")
+        if positions.numel() != target_hidden.size(0):
+            raise ValueError("draft context position/hidden count mismatch")
         if len(kv_caches) != self.cfg.n_layers:
             raise ValueError("draft KV cache layer count mismatch")
         if cache_slots.numel() != target_hidden.size(0):

@@ -62,6 +62,18 @@ cc_test(
 
 cc_test(
   NAME
+    dflash_context_positions_test
+  CPU_ONLY
+  SRCS
+    dflash_context_positions_test.cpp
+  DEPS
+    torch
+    glog::glog
+    GTest::gtest_main
+)
+
+cc_test(
+  NAME
     forward_output_test
   CPU_ONLY
   SRCS

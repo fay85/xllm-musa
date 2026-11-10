@@ -126,6 +126,12 @@ class DFlashQwen3ModelImpl : public QWen3ModelImpl {
                                std::vector<KVCache>& kv_caches,
                                const ModelInputParams& input_params) {
     const int64_t num_layers = static_cast<int64_t>(layers_.size());
+    CHECK(positions.defined()) << "DFlash context positions are undefined.";
+    CHECK_EQ(positions.dim(), 1)
+        << "DFlash draft context positions must be token-aligned 1-D; "
+           "MRoPE [3, T] must be normalized by the worker before scatter.";
+    CHECK_EQ(positions.numel(), target_hidden.size(0))
+        << "DFlash draft context position/hidden count mismatch.";
     CHECK_EQ(static_cast<int64_t>(kv_caches.size()), num_layers);
     CHECK(device_cache_slots.defined())
         << "DFlash context K/V requires device new_cache_slots.";

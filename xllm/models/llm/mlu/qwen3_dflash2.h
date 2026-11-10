@@ -198,6 +198,12 @@ class DFlash2Qwen3ModelImpl final
                                const torch::Tensor& device_cache_slots,
                                std::vector<KVCache>& kv_caches,
                                const ModelInputParams& input_params) {
+    CHECK(positions.defined()) << "DFlash2 context positions are undefined.";
+    CHECK_EQ(positions.dim(), 1)
+        << "DFlash2 draft context positions must be token-aligned 1-D; "
+           "MRoPE [3, T] must be normalized by the worker before scatter.";
+    CHECK_EQ(positions.numel(), target_hidden.size(0))
+        << "DFlash2 draft context position/hidden count mismatch.";
     CHECK_EQ(target_hidden.dim(), 2);
     torch::Tensor hidden = fc_->forward(target_hidden);
     hidden = std::get<0>(hidden_norm_->forward(hidden));
