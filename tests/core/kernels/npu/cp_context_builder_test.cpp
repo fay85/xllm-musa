@@ -30,13 +30,71 @@ limitations under the License.
 #include <torch/torch.h>
 
 #include <cmath>
+#include <optional>
+#include <string>
 #include <tuple>
 #include <vector>
 
+#include "core/kernels/npu/npu_ops_api.h"
 #include "core/kernels/xllm_torch_ops.h"
 
 namespace xllm {
 namespace {
+
+// Reuse this CPU-only native-op target: no device/context is needed to reject
+// an unsupported bias, and the validation must precede all backend access.
+TEST(NpuMegaMoeValidation, RejectsExpertBiasBeforeBackendAccess) {
+  const torch::Tensor undefined;
+  const std::vector<torch::Tensor> empty_bias;
+  const std::vector<torch::Tensor> nonempty_bias{undefined};
+  const std::string expected =
+      "MegaMoe BF16/INT8 paths do not accept expert bias";
+  for (const int64_t mode : {kernel::npu::kMegaMoeDispatchQuantModeNone,
+                             kernel::npu::kMegaMoeDispatchQuantModeDynamic}) {
+    auto invoke = [&](const std::optional<torch::TensorList>& bias1,
+                      const std::optional<torch::TensorList>& bias2) {
+      return kernel::npu::apply_npu_mega_moe(undefined,
+                                             undefined,
+                                             undefined,
+                                             undefined,
+                                             {},
+                                             {},
+                                             /*moe_expert_num=*/2,
+                                             /*ep_world_size=*/2,
+                                             /*ccl_buffer_size=*/1024,
+                                             /*weight_scales1=*/std::nullopt,
+                                             /*weight_scales2=*/std::nullopt,
+                                             bias1,
+                                             bias2,
+                                             /*x_active_mask=*/std::nullopt,
+                                             /*max_recv_token_num=*/0,
+                                             mode);
+    };
+    try {
+      invoke(std::nullopt, std::nullopt);
+      FAIL() << "Undefined context was accepted.";
+    } catch (const c10::Error& error) {
+      const std::string no_bias_error = kernel::npu::has_mega_moe()
+                                            ? "expects a defined context"
+                                            : "is not available in libopapi";
+      EXPECT_NE(std::string(error.what()).find(no_bias_error),
+                std::string::npos);
+    }
+    for (const auto& bias : {empty_bias, nonempty_bias}) {
+      const torch::TensorList provided(bias);
+      for (const int32_t projection : {1, 2, 3}) {
+        try {
+          invoke((projection & 1) ? std::optional(provided) : std::nullopt,
+                 (projection & 2) ? std::optional(provided) : std::nullopt);
+          FAIL() << "Unsupported bias was accepted.";
+        } catch (const c10::Error& error) {
+          EXPECT_NE(std::string(error.what()).find(expected),
+                    std::string::npos);
+        }
+      }
+    }
+  }
+}
 
 // Field-named view of the op return, materialized from the boxed
 // dispatcher call so tests read like the Python CpContext.

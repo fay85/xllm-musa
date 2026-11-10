@@ -423,6 +423,11 @@ std::tuple<torch::Tensor, torch::Tensor> apply_npu_mega_moe(
     int64_t dispatch_quant_out_dtype,
     int64_t topo_type,
     int64_t rank_num_per_server) {
+  // These adapters accept BF16/INT8 weights; the A2/A3 operator requires INT4
+  // weights for bias. Reject it before backend access or resource allocation.
+  TORCH_CHECK(!bias1.has_value() && !bias2.has_value(),
+              "MegaMoe BF16/INT8 paths do not accept expert bias; "
+              "the operator requires INT4 weights for bias.");
   TORCH_CHECK(has_mega_moe(), "aclnnMegaMoe is not available in libopapi.");
   TORCH_CHECK(context.defined(), "MegaMoe expects a defined context tensor.");
   TORCH_CHECK(context.dim() == 1, "MegaMoe expects 1D context.");
@@ -548,8 +553,6 @@ std::tuple<torch::Tensor, torch::Tensor> apply_npu_mega_moe(
                 "MegaMoe W8A8 weight2 scale size mismatch.");
     TORCH_CHECK(dispatch_quant_out_dtype == kMegaMoeDtypeInt8,
                 "MegaMoe W8A8 dispatch output dtype must be ACL_INT8.");
-    TORCH_CHECK(!bias1.has_value() && !bias2.has_value(),
-                "MegaMoe W8A8 path does not accept expert bias.");
     if (x_active_mask.has_value() && x_active_mask->defined()) {
       TORCH_CHECK(x_active_mask->dim() == 1,
                   "MegaMoe W8A8 expects 1D x_active_mask.");
