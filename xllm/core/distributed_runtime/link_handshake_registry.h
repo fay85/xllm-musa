@@ -56,7 +56,7 @@ class LinkHandshakeRegistry final {
   proto::EnsureLinkResult ensure(const proto::EnsureLinkSpec& spec,
                                  const proto::InstanceClusterInfo& cluster,
                                  const std::function<bool()>& physical_link) {
-    std::unique_lock<bthread::Mutex> lock(mutex_);
+    std::unique_lock<bthread::Mutex> lock(mutex());
     const std::shared_ptr<Peer> peer = find_or_create_peer(spec);
     if (peer == nullptr) {
       return result(proto::ENSURE_LINK_DISPOSITION_DEGREE_LIMITED,
@@ -121,7 +121,7 @@ class LinkHandshakeRegistry final {
   }
 
   proto::EnsureLinkResult drain(const proto::EnsureLinkSpec& spec) {
-    std::lock_guard<bthread::Mutex> lock(mutex_);
+    std::lock_guard<bthread::Mutex> lock(mutex());
     const std::shared_ptr<Peer> peer = find_or_create_peer(spec);
     if (peer == nullptr) {
       return result(proto::ENSURE_LINK_DISPOSITION_DEGREE_LIMITED,
@@ -151,7 +151,7 @@ class LinkHandshakeRegistry final {
   }
 
   Stats stats() const {
-    std::lock_guard<bthread::Mutex> lock(mutex_);
+    std::lock_guard<bthread::Mutex> lock(mutex());
     Stats snapshot = stats_;
     snapshot.peer_records = peers_.size();
     return snapshot;
@@ -307,8 +307,19 @@ class LinkHandshakeRegistry final {
     attempt.outcome = ready_result(next_generation_, /*replayed=*/false);
   }
 
+  // butex_create during service construction runs before
+  // brpc::Server::AddService and corrupts the protobuf descriptor heap.
+  // The first EnsureLink or DrainLink happens after the server is registered.
+  bthread::Mutex& mutex() const {
+    std::call_once(mutex_once_, [this] {
+      mutex_holder_ = std::make_unique<bthread::Mutex>();
+    });
+    return *mutex_holder_;
+  }
+
   const size_t max_peer_records_;
-  mutable bthread::Mutex mutex_;
+  mutable std::once_flag mutex_once_;
+  mutable std::unique_ptr<bthread::Mutex> mutex_holder_;
   std::unordered_map<std::string, std::shared_ptr<Peer>> peers_;
   Stats stats_;
   uint64_t next_generation_ = 0;
