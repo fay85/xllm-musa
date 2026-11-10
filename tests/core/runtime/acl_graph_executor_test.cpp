@@ -34,6 +34,7 @@ limitations under the License.
 #include "core/framework/config/eplb_config.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/kernel_config.h"
+#include "core/framework/config/parallel_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/kv_cache/kv_cache.h"
 #include "core/framework/kv_cache/kv_cache_utils.h"
@@ -1361,6 +1362,76 @@ TEST_F(AclGraphExecutorTest, BatchInputCarriesLinearStateIds) {
   EXPECT_EQ(params_for_capture->linear_state_validity_mask[1], 0);
 }
 
+TEST_F(AclGraphExecutorTest,
+       HybridPreparedDecodeInputsFollowCurrentGeneration) {
+  class HybridSimpleCausalLM final : public SimpleCausalLM {
+   public:
+    using SimpleCausalLM::SimpleCausalLM;
+    bool is_hybrid_linear_attention() override { return true; }
+  };
+
+  auto batch = CreateTestBatch();
+  auto input = batch->prepare_forward_input(
+      /*num_decoding_tokens=*/1, /*min_decoding_bach_size=*/0, model_args_);
+  input = input.to(*device_, torch::kFloat32);
+  HybridSimpleCausalLM model(model_args_, *device_);
+  ExecutionConfig& config = ExecutionConfig::get_instance();
+  const bool original_double_buffer = config.enable_graph_double_buffer();
+  config.enable_graph_double_buffer(/*value=*/true);
+  npu::AclGraphExecutorImpl executor(&model, model_args_, *device_, options_);
+
+  // Capture both slots before testing prepared replay. The toy graph reads
+  // tokens, positions, KV lengths, cache slots and block tables; this verifies
+  // current device inputs. PreparedDecodeReusesCurrentFiaAndConvHostParams in
+  // acl_graph_task_update_test covers the real FIA/conv host-argument
+  // consumers.
+  for (int32_t slot = 0; slot < 2; ++slot) {
+    executor.run(
+        input.token_ids, input.positions, kv_caches_, input.input_params);
+  }
+  for (int32_t step = 0; step < 6; ++step) {
+    SCOPED_TRACE(step);
+    // Production can reuse the default batch id across decode steps.
+    // Exercise fresh metadata with id zero and retain mismatch fallbacks.
+    input.input_params.meta.batch_id = 0;
+    input.token_ids.fill_(100 + step);
+    input.positions.fill_(10 + step);
+    const int32_t kv_length = 9 + step % 3;
+    input.input_params.meta.kv_max_seq_len = kv_length;
+    input.input_params.attention.host.kv_seq_lens = {kv_length};
+    input.input_params.attention.device.kv_seq_lens.fill_(kv_length);
+    input.input_params.attention.device.new_cache_slots.fill_(20 + step);
+    input.input_params.attention.device.block_tables.fill_(1 + step);
+    input.input_params.graph.input_tokens_override = input.token_ids;
+    executor.prepare_graph_input(
+        input.token_ids, input.positions, kv_caches_, input.input_params);
+    // Simulate a discarded prepared generation on two iterations. Replay must
+    // use its supported full update when either batch or token storage moves.
+    if (step == 2) {
+      ++input.input_params.meta.batch_id;
+      input.input_params.attention.device.new_cache_slots.fill_(/*value=*/40);
+    }
+    if (step == 4) {
+      input.token_ids = input.token_ids.clone();
+      input.token_ids.fill_(/*value=*/111);
+      input.input_params.graph.input_tokens_override = input.token_ids;
+      input.input_params.attention.device.block_tables.fill_(/*value=*/9);
+    }
+    // Production waits for metadata_ready_event before replay; synchronize
+    // explicitly here because this fixture has no WorkerImpl producer stream.
+    torch::npu::synchronize();
+    const auto expected = model.forward(
+        input.token_ids, input.positions, kv_caches_, input.input_params);
+    const auto actual = executor.run(
+        input.token_ids, input.positions, kv_caches_, input.input_params);
+    EXPECT_TRUE(torch::allclose(expected.hidden_states,
+                                actual.hidden_states,
+                                /*rtol=*/1e-5,
+                                /*atol=*/1e-6));
+  }
+  config.enable_graph_double_buffer(original_double_buffer);
+}
+
 TEST_F(AclGraphExecutorTest, GraphDoubleBufferFlagControlsSlotCount) {
   ExecutionConfig& execution_config = ExecutionConfig::get_instance();
   const bool original_enable_graph_double_buffer =
@@ -1565,6 +1636,299 @@ TEST_F(AclGraphExecutorTest, Qwen35PaddedSpecVerifyBusyAndEmptyRanksUseGraph) {
     EXPECT_TRUE(model.last_forward_enabled_graph());
     EXPECT_TRUE(torch::allclose(
         expected.hidden_states, output.hidden_states, 1e-5, 1e-6));
+  }
+}
+
+class Qwen35DecodeMaskTest : public ::testing::Test {
+ protected:
+  void SetUp() override {
+    original_enable_fia_decode_ =
+        ExecutionConfig::get_instance().enable_fia_decode();
+    original_kernel_backend_ =
+        KernelConfig::get_instance().npu_kernel_backend();
+    original_kv_split_size_ = ParallelConfig::get_instance().kv_split_size();
+  }
+
+  void TearDown() override {
+    ExecutionConfig::get_instance().enable_fia_decode(
+        original_enable_fia_decode_);
+    KernelConfig::get_instance().npu_kernel_backend(original_kernel_backend_);
+    ParallelConfig::get_instance().kv_split_size(original_kv_split_size_);
+  }
+
+ private:
+  bool original_enable_fia_decode_ = false;
+  std::string original_kernel_backend_;
+  int32_t original_kv_split_size_ = 1;
+};
+
+TEST_F(Qwen35DecodeMaskTest, PaddedReplayKeepsMetadataWithoutDenseMask) {
+  ExecutionConfig::get_instance().enable_fia_decode(true);
+  KernelConfig::get_instance().npu_kernel_backend("TORCH");
+  ParallelConfig::get_instance().kv_split_size(1);
+  const torch::Device device("npu:0");
+  const torch::TensorOptions int_options =
+      torch::dtype(torch::kInt32).device(device);
+  const std::vector<std::string> model_types = {
+      "qwen3_5", "qwen3_5_moe", "qwen3_5_text", "qwen3_5_moe_text"};
+  for (const std::string& model_type : model_types) {
+    SCOPED_TRACE(model_type);
+    ModelArgs args;
+    args.model_type(model_type).dtype("float32");
+    args.hidden_size(8).n_heads(2).head_dim(4).max_position_embeddings(64);
+    runtime::Options options;
+    options.block_size(4).max_seqs_per_batch(16).max_tokens_per_batch(16);
+    options.num_decoding_tokens(1);
+    npu::GraphPersistentParam persistent_param(
+        args, device, options, true, true);
+    persistent_param.persistent_mask().fill_(7);
+    // Reuse one padded graph slot as requests finish and the KV lengths grow.
+    for (int32_t batch_size : {12, 8, 1}) {
+      SCOPED_TRACE(batch_size);
+      ModelInputParams params;
+      params.meta.batch_forward_type = BatchForwardType::DECODE;
+      params.meta.num_sequences = batch_size;
+      params.meta.q_max_seq_len = 1;
+      params.meta.kv_max_seq_len = 64;
+      params.attention.host.q_seq_lens.assign(batch_size, 1);
+      params.attention.host.kv_seq_lens.assign(batch_size, 64 - batch_size);
+      params.attention.device.q_seq_lens =
+          torch::ones({batch_size}, int_options);
+      params.attention.device.kv_seq_lens =
+          torch::full({batch_size}, 64 - batch_size, int_options);
+      params.attention.device.new_cache_slots =
+          torch::arange(batch_size, int_options);
+      params.attention.device.block_tables =
+          torch::zeros({batch_size, 16}, int_options);
+      // Captured metadata must not inherit a stale mask from the caller.
+      params.graph.attn_mask = persistent_param.persistent_mask();
+      const auto capture =
+          persistent_param.update(torch::ones({batch_size}, int_options),
+                                  torch::Tensor(),
+                                  torch::Tensor(),
+                                  torch::zeros({batch_size}, int_options),
+                                  params,
+                                  /*padded_num_tokens=*/16,
+                                  /*return_capture_params=*/true,
+                                  /*skip_token_update=*/false,
+                                  /*for_capture=*/false,
+                                  /*update_paged_attention_plan=*/false);
+      ASSERT_TRUE(capture.has_value());
+      EXPECT_FALSE(capture->graph.attn_mask.defined());
+      EXPECT_TRUE(persistent_param.persistent_mask().eq(7).all().item<bool>());
+      EXPECT_TRUE(torch::equal(
+          capture->attention.device.kv_seq_lens.narrow(0, 0, batch_size),
+          params.attention.device.kv_seq_lens));
+      EXPECT_TRUE(capture->attention.device.kv_seq_lens
+                      .narrow(0, batch_size, 16 - batch_size)
+                      .eq(1)
+                      .all()
+                      .item<bool>());
+      const auto metadata =
+          layer::AttentionMetadataBuilder::build(*capture, false);
+      EXPECT_FALSE(metadata.attn_mask.defined());
+      EXPECT_FALSE(metadata.fia_attn_mask.defined());
+    }
+  }
+}
+
+TEST_F(Qwen35DecodeMaskTest, KvLengthsRefreshAcrossBucketReuse) {
+  ExecutionConfig::get_instance().enable_fia_decode(true);
+  KernelConfig::get_instance().npu_kernel_backend("TORCH");
+  ParallelConfig::get_instance().kv_split_size(1);
+  const torch::Device device("npu:0");
+  const torch::TensorOptions int_options =
+      torch::dtype(torch::kInt32).device(device);
+  ModelArgs args;
+  args.model_type("qwen3_5_moe").dtype("float32");
+  args.hidden_size(8).n_heads(2).head_dim(4).max_position_embeddings(64);
+  runtime::Options options;
+  options.block_size(4).max_seqs_per_batch(16).max_tokens_per_batch(16);
+  options.num_decoding_tokens(1);
+  npu::GraphPersistentParam persistent_param(args, device, options, true, true);
+  int32_t step = 0;
+  for (int32_t batch_size : {12, 8, 1, 16, 12}) {
+    SCOPED_TRACE(batch_size);
+    ++step;
+    const uint32_t padded_tokens =
+        static_cast<uint32_t>(batch_size <= 8 ? batch_size : 16);
+    ModelInputParams params;
+    params.meta.batch_forward_type = BatchForwardType::DECODE;
+    params.meta.num_sequences = batch_size;
+    params.meta.q_max_seq_len = 1;
+    params.meta.kv_max_seq_len = 64;
+    params.attention.host.q_seq_lens.assign(batch_size, 1);
+    params.attention.host.kv_seq_lens.reserve(batch_size);
+    for (int32_t row = 0; row < batch_size; ++row) {
+      params.attention.host.kv_seq_lens.emplace_back(10 + step + row);
+    }
+    params.attention.device.q_seq_lens = torch::ones({batch_size}, int_options);
+    params.attention.device.kv_seq_lens =
+        torch::arange(batch_size, int_options) + 10 + step;
+    params.attention.device.new_cache_slots =
+        torch::arange(batch_size, int_options);
+    params.attention.device.block_tables =
+        torch::zeros({batch_size, 16}, int_options);
+    // Seed stale data before every replay, including shrink and growth.
+    persistent_param.kv_seq_lens().fill_(63);
+    const auto capture =
+        persistent_param.update(torch::ones({batch_size}, int_options),
+                                torch::Tensor(),
+                                torch::Tensor(),
+                                torch::zeros({batch_size}, int_options),
+                                params,
+                                padded_tokens,
+                                /*return_capture_params=*/true,
+                                /*skip_token_update=*/false,
+                                /*for_capture=*/false,
+                                /*update_paged_attention_plan=*/false);
+    ASSERT_TRUE(capture.has_value());
+    EXPECT_TRUE(torch::equal(
+        capture->attention.device.kv_seq_lens.narrow(0, 0, batch_size),
+        params.attention.device.kv_seq_lens));
+    if (padded_tokens > static_cast<uint32_t>(batch_size)) {
+      EXPECT_TRUE(capture->attention.device.kv_seq_lens
+                      .narrow(0, batch_size, padded_tokens - batch_size)
+                      .eq(1)
+                      .all()
+                      .item<bool>());
+    }
+    // The visible rows are overwritten with either implementation. The tail
+    // distinguishes skipping the default reset from resetting then rewriting.
+    const int64_t capacity = persistent_param.kv_seq_lens().size(0);
+    if (padded_tokens < capacity) {
+      EXPECT_TRUE(persistent_param.kv_seq_lens()
+                      .narrow(0, padded_tokens, capacity - padded_tokens)
+                      .eq(63)
+                      .all()
+                      .item<bool>());
+    }
+  }
+}
+
+TEST_F(Qwen35DecodeMaskTest, MissingKvRowsKeepDefaultReset) {
+  ExecutionConfig::get_instance().enable_fia_decode(true);
+  KernelConfig::get_instance().npu_kernel_backend("TORCH");
+  ParallelConfig::get_instance().kv_split_size(1);
+  const torch::Device device("npu:0");
+  const torch::TensorOptions int_options =
+      torch::dtype(torch::kInt32).device(device);
+  ModelArgs args;
+  args.model_type("qwen3_5_moe").dtype("float32");
+  args.hidden_size(8).n_heads(2).head_dim(4).max_position_embeddings(64);
+  runtime::Options options;
+  options.block_size(4).max_seqs_per_batch(16).max_tokens_per_batch(16);
+  options.num_decoding_tokens(1);
+  npu::GraphPersistentParam persistent_param(args, device, options, true, true);
+  for (int32_t supplied_rows : {3, 0}) {
+    SCOPED_TRACE(supplied_rows);
+    ModelInputParams params;
+    params.meta.batch_forward_type = BatchForwardType::DECODE;
+    params.meta.num_sequences = 12;
+    params.meta.q_max_seq_len = 1;
+    params.meta.kv_max_seq_len = 64;
+    params.attention.host.q_seq_lens.assign(12, 1);
+    params.attention.host.kv_seq_lens.assign(12, 20);
+    params.attention.device.q_seq_lens = torch::ones({12}, int_options);
+    params.attention.device.kv_seq_lens =
+        supplied_rows > 0 ? torch::full({supplied_rows}, 20, int_options)
+                          : torch::Tensor();
+    params.attention.device.new_cache_slots = torch::arange(12, int_options);
+    params.attention.device.block_tables = torch::zeros({12, 16}, int_options);
+    persistent_param.kv_seq_lens().fill_(63);
+    const auto capture =
+        persistent_param.update(torch::ones({12}, int_options),
+                                torch::Tensor(),
+                                torch::Tensor(),
+                                torch::zeros({12}, int_options),
+                                params,
+                                /*padded_num_tokens=*/16,
+                                /*return_capture_params=*/true,
+                                /*skip_token_update=*/false,
+                                /*for_capture=*/false,
+                                /*update_paged_attention_plan=*/false);
+    ASSERT_TRUE(capture.has_value());
+    const torch::Tensor expected = torch::ones({16}, int_options);
+    expected.narrow(0, 0, supplied_rows).fill_(20);
+    EXPECT_TRUE(torch::equal(capture->attention.device.kv_seq_lens, expected));
+  }
+}
+
+TEST_F(Qwen35DecodeMaskTest, OtherConsumersKeepDenseMask) {
+  struct TestCase {
+    std::string model_type = "qwen3_5_moe";
+    std::string kernel_backend = "TORCH";
+    bool enable_fia_decode = true;
+    bool is_draft_engine = false;
+    bool enable_speculative_decode = false;
+    bool is_spec_verify = false;
+    int32_t dp_size = 1;
+    int32_t cp_size = 1;
+    int32_t kv_split_size = 1;
+  };
+  std::vector<TestCase> test_cases(9);
+  test_cases[0].model_type = "qwen3_next";
+  test_cases[1].kernel_backend = "ATB";
+  test_cases[2].enable_fia_decode = false;
+  test_cases[3].is_draft_engine = true;
+  test_cases[4].enable_speculative_decode = true;
+  test_cases[5].is_spec_verify = true;
+  test_cases[6].dp_size = 2;
+  test_cases[7].cp_size = 2;
+  test_cases[8].kv_split_size = 2;
+  const torch::Device device("npu:0");
+  const torch::TensorOptions int_options =
+      torch::dtype(torch::kInt32).device(device);
+  for (size_t index = 0; index < test_cases.size(); ++index) {
+    SCOPED_TRACE(index);
+    const TestCase& test_case = test_cases[index];
+    ExecutionConfig::get_instance().enable_fia_decode(
+        test_case.enable_fia_decode);
+    KernelConfig::get_instance().npu_kernel_backend(test_case.kernel_backend);
+    ParallelConfig::get_instance().kv_split_size(test_case.kv_split_size);
+    ModelArgs args;
+    args.model_type(test_case.model_type).dtype("float32");
+    args.hidden_size(8).n_heads(2).head_dim(4).max_position_embeddings(32);
+    runtime::Options options;
+    options.world_size(2).block_size(4).max_seqs_per_batch(4);
+    options.max_tokens_per_batch(4).num_decoding_tokens(1);
+    options.dp_size(test_case.dp_size).cp_size(test_case.cp_size);
+    options.is_draft_engine(test_case.is_draft_engine);
+    options.enable_speculative_decode(test_case.enable_speculative_decode);
+    npu::GraphPersistentParam persistent_param(
+        args, device, options, true, true);
+    persistent_param.persistent_mask().fill_(7);
+    ModelInputParams params;
+    params.meta.batch_forward_type = BatchForwardType::DECODE;
+    params.meta.num_sequences = 1;
+    params.meta.q_max_seq_len = 1;
+    params.meta.kv_max_seq_len = 8;
+    params.is_spec_verify = test_case.is_spec_verify;
+    params.attention.host.q_seq_lens = {1};
+    params.attention.host.kv_seq_lens = {8};
+    params.attention.device.q_seq_lens = torch::ones({1}, int_options);
+    params.attention.device.kv_seq_lens = torch::full({1}, 8, int_options);
+    params.attention.device.new_cache_slots = torch::zeros({1}, int_options);
+    params.attention.device.block_tables = torch::zeros({1, 2}, int_options);
+    const auto capture =
+        persistent_param.update(torch::ones({1}, int_options),
+                                torch::Tensor(),
+                                torch::Tensor(),
+                                torch::zeros({1}, int_options),
+                                params,
+                                /*padded_num_tokens=*/4,
+                                /*return_capture_params=*/true,
+                                /*skip_token_update=*/false,
+                                /*for_capture=*/false,
+                                /*update_paged_attention_plan=*/false);
+    ASSERT_TRUE(capture.has_value());
+    ASSERT_TRUE(capture->graph.attn_mask.defined());
+    EXPECT_FALSE(persistent_param.persistent_mask()
+                     .slice(0, 0, 1)
+                     .slice(1, 0, 8)
+                     .eq(7)
+                     .any()
+                     .item<bool>());
   }
 }
 

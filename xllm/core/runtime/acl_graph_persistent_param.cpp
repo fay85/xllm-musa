@@ -31,6 +31,7 @@ limitations under the License.
 #include "core/common/global_flags.h"
 #include "core/framework/config/execution_config.h"
 #include "core/framework/config/kernel_config.h"
+#include "core/framework/config/parallel_config.h"
 #include "core/framework/config/speculative_config.h"
 #include "core/framework/speculative/mtp_async_state.h"
 #include "core/kernels/npu/tilelang/tilelang_ops_api.h"
@@ -210,6 +211,24 @@ bool can_skip_unused_expanded_verify_mask(const ModelInputParams& params,
          params.meta.batch_forward_type.is_chunked_prefill() &&
          is_hybrid_linear_attention &&
          params.graph.use_expanded_decode_for_spec_verify_attention;
+}
+
+bool can_skip_unused_qwen3_5_decode_mask(const ModelInputParams& params,
+                                         const ModelArgs& args,
+                                         const runtime::Options& options,
+                                         bool is_hybrid_linear_attention) {
+  // Regular TORCH FIA decode uses the KV lengths and block table, not the
+  // persistent dense mask. Keep all other attention consumers unchanged.
+  return is_hybrid_linear_attention &&
+         is_qwen3_5_target_model_type(args.model_type()) &&
+         !options.is_draft_engine() && !options.enable_speculative_decode() &&
+         options.num_decoding_tokens() == 1 && options.dp_size() == 1 &&
+         options.cp_size() == 1 &&
+         ParallelConfig::get_instance().kv_split_size_effective() == 1 &&
+         !params.is_spec_verify && params.meta.batch_forward_type.is_decode() &&
+         params.meta.q_max_seq_len == 1 &&
+         KernelConfig::get_instance().npu_kernel_backend() == "TORCH" &&
+         ExecutionConfig::get_instance().enable_fia_decode();
 }
 
 int64_t get_spec_verify_width(const ModelInputParams& params) {
@@ -1090,7 +1109,19 @@ std::optional<ModelInputParams> GraphPersistentParam::update(
                  /*non_blocking=*/true);
     }
   }
-  if (kv_seq_lens_default_.defined() &&
+  const bool is_regular_qwen3_5_fia_decode =
+      can_skip_unused_qwen3_5_decode_mask(
+          params, args_, options_, is_hybrid_linear_attention_);
+  // Actual rows and padding below fully overwrite the graph-visible range.
+  // Keep the default reset when input rows are missing or only partly present.
+  const bool overwrites_visible_kv_seq_lens =
+      is_regular_qwen3_5_fia_decode && actual_seq_len_rows > 0 &&
+      params.attention.device.kv_seq_lens.defined() &&
+      params.attention.device.kv_seq_lens.dim() == 1 &&
+      params.attention.device.kv_seq_lens.size(0) >= actual_seq_len_rows &&
+      padded_batch_size >= actual_seq_len_rows &&
+      padded_batch_size <= kv_seq_lens_.size(0);
+  if (!overwrites_visible_kv_seq_lens && kv_seq_lens_default_.defined() &&
       kv_seq_lens_default_.sizes() == kv_seq_lens_.sizes()) {
     kv_seq_lens_.copy_(kv_seq_lens_default_, /*non_blocking=*/true);
   }
@@ -1330,14 +1361,14 @@ std::optional<ModelInputParams> GraphPersistentParam::update(
     }
   }
 
-  // Expanded Qwen hybrid spec verification is represented as chunked prefill
-  // to the scheduler, but AttentionImpl routes it through decoder_forward().
-  // That path consumes expanded KV lengths, block tables and tiling data, not
-  // the dense graph attention mask. Avoid rebuilding the unused mask on every
-  // target replay while preserving all other decode/prefill paths.
-  const bool skip_unused_expanded_verify_mask =
-      can_skip_unused_expanded_verify_mask(params, is_hybrid_linear_attention_);
-  if (need_update_attn_mask_ && !skip_unused_expanded_verify_mask) {
+  // Expanded verification and regular Qwen3.5 FIA decode use KV lengths and
+  // block tables instead of this dense graph mask. Keep the existing mask
+  // updates for all other consumers, including chunked prefill.
+  const bool skip_unused_attention_mask =
+      can_skip_unused_expanded_verify_mask(params,
+                                           is_hybrid_linear_attention_) ||
+      is_regular_qwen3_5_fia_decode;
+  if (need_update_attn_mask_ && !skip_unused_attention_mask) {
     if (is_empty_qwen3_5_dp_graph_rank) {
       persistent_mask_.slice(/*dim=*/0, /*start=*/0, /*end=*/padded_num_tokens)
           .zero_();
@@ -1606,11 +1637,11 @@ std::optional<ModelInputParams> GraphPersistentParam::update(
           << "KPool graph spans must align with padded state rows";
     }
 
-    // Keep the capture contract aligned with replay: the expanded decoder does
-    // not consume graph.attn_mask, so do not capture a stale persistent mask.
-    if (need_update_attn_mask_ && !skip_unused_expanded_verify_mask) {
+    // Keep capture and replay aligned for decode paths without a dense-mask
+    // consumer; never retain an incoming mask from a previous batch.
+    if (need_update_attn_mask_ && !skip_unused_attention_mask) {
       graph_params->graph.attn_mask = persistent_mask(padded_num_tokens);
-    } else if (skip_unused_expanded_verify_mask) {
+    } else if (skip_unused_attention_mask) {
       graph_params->graph.attn_mask = torch::Tensor();
     }
     if (uses_paged_attention_tiling()) {

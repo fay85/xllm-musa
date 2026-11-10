@@ -129,7 +129,8 @@ class AclGraph {
   void prepare_replay_inputs(const torch::Tensor& tokens,
                              const torch::Tensor& positions,
                              std::vector<KVCache>& kv_cache,
-                             const ModelInputParams& params);
+                             const ModelInputParams& params,
+                             bool return_graph_params = false);
 
   bool prepare_static_mtp_graph_tasks(const SpecVerifyGraphTaskSignal& signal,
                                       const c10_npu::NPUStream& signal_stream);
@@ -181,6 +182,16 @@ class AclGraph {
   c10::DeviceIndex device_index_;
   std::shared_ptr<AclGraphTaskUpdateContext> graph_task_context_;
   std::optional<c10_npu::NPUStream> update_stream_;
+  // Own the source tokens and padded host metadata until this slot's replay
+  // consumes the release/acquire publication. Token storage/size checks bind
+  // the prepared input; batch_id is an additional consistency check, not an
+  // independent generation counter. Device ordering still requires events.
+  struct PreparedGraphInputs {
+    ModelInputParams params;
+    torch::Tensor tokens;
+    uint64_t batch_id = 0;
+  };
+  std::optional<PreparedGraphInputs> prepared_graph_inputs_;
   std::atomic<bool> replay_inputs_prepared_{false};
   bool first_hybrid_replay_after_capture_ = false;
   std::optional<StaticGraphTaskSignature> static_graph_task_signature_;

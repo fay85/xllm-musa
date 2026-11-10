@@ -1116,6 +1116,88 @@ TEST_F(AclGraphTaskUpdateTest, Qwen35DpPrepareRespectsDecodeGraphAdmission) {
   }
 }
 
+TEST_F(AclGraphTaskUpdateTest,
+       PreparedDecodeReusesCurrentFiaAndConvHostParams) {
+  ExecutionConfig::get_instance().enable_graph_double_buffer(true);
+  auto kv_graph = create_hybrid_kv_caches();
+  kv_graph[0].get_conv_cache().normal_(/*mean=*/0.0, /*std=*/0.01);
+  kv_graph[1].get_k_cache().normal_(/*mean=*/0.0, /*std=*/0.1);
+  kv_graph[1].get_v_cache().normal_(/*mean=*/0.0, /*std=*/0.1);
+  npu::AclGraphExecutorImpl executor(
+      model_.get(), model_args_, *device_, options_);
+
+  // Capture both slots for buckets 4 and 8 before exercising prepared replay.
+  for (uint32_t batch_size : {3, 3, 5, 5}) {
+    reset_sequences();
+    auto batch = create_decode_batch(batch_size);
+    auto input = batch->prepare_forward_input(
+        options_.num_decoding_tokens(), 0, model_args_);
+    input = input.to(*device_, kDtype);
+    populate_query_start_loc(input.input_params);
+    executor.run(
+        input.token_ids, input.positions, kv_graph, input.input_params);
+  }
+  ASSERT_EQ(model_->capture_forward_count(), 4);
+  ASSERT_TRUE(model_->saw_causal_conv_and_fia_graph_tasks());
+
+  int32_t step = 0;
+  for (uint32_t batch_size : {3, 5, 4, 7, 3, 5}) {
+    SCOPED_TRACE(step);
+    reset_sequences();
+    std::vector<std::vector<int32_t>> prompts;
+    prompts.reserve(batch_size);
+    for (uint32_t row = 0; row < batch_size; ++row) {
+      prompts.emplace_back(7 + step + row, 10 + step);
+    }
+    auto batch =
+        create_decode_batch_with_prompts(prompts, /*token_seed=*/100 + step);
+    auto input = batch->prepare_forward_input(
+        options_.num_decoding_tokens(), 0, model_args_);
+    input = input.to(*device_, kDtype);
+    populate_query_start_loc(input.input_params);
+    input.input_params.meta.batch_id = 0;
+    // Use different live conv-cache rows on every step, including when a graph
+    // slot/bucket is reused. Row 0 remains reserved for graph padding.
+    input.input_params.embedding.linear_state_ids.clear();
+    for (uint32_t row = 0; row < batch_size; ++row) {
+      input.input_params.embedding.linear_state_ids.emplace_back(
+          1 + step * 8 + static_cast<int32_t>(row));
+    }
+    input.input_params.embedding.linear_state_indices =
+        torch::tensor(input.input_params.embedding.linear_state_ids,
+                      torch::dtype(torch::kInt32).device(*device_));
+    input.input_params.graph.input_tokens_override = input.token_ids;
+
+    auto kv_eager = clone_kv_caches(kv_graph);
+    executor.prepare_graph_input(
+        input.token_ids, input.positions, kv_graph, input.input_params);
+    EXPECT_TRUE(executor.graph_slot_prepared_for_test(step % 2));
+    const auto expected = model_->forward(
+        input.token_ids, input.positions, kv_eager, input.input_params);
+    // Test-only discriminator: prepared replay must use the already copied
+    // positions. A full update would read 255 and disagree with eager. Host
+    // metadata stays unchanged, as in the production prepare-to-replay path.
+    input.positions.fill_(kMaxSeqLen - 1);
+    // This fixture has no Worker's metadata_ready_event producer stream.
+    torch::npu::synchronize();
+    const auto actual = executor.run(
+        input.token_ids, input.positions, kv_graph, input.input_params);
+    EXPECT_FALSE(executor.graph_slot_prepared_for_test(step % 2));
+    EXPECT_EQ(model_->capture_forward_count(), 4);
+    EXPECT_TRUE(torch::allclose(expected.hidden_states.to(torch::kFloat32),
+                                actual.hidden_states.to(torch::kFloat32),
+                                /*rtol=*/1e-2,
+                                /*atol=*/1e-2));
+    // Wrong host cache indices can preserve the output shape while modifying
+    // another request's state. Check all live and unrelated rows, excluding
+    // the reserved padding row.
+    EXPECT_TRUE(torch::equal(
+        kv_eager[0].get_conv_cache().narrow(0, 1, kNumBlocks - 1),
+        kv_graph[0].get_conv_cache().narrow(0, 1, kNumBlocks - 1)));
+    ++step;
+  }
+}
+
 TEST_F(AclGraphTaskUpdateTest, CaptureReplayVsEagerDecodeBranch) {
   auto batch = create_decode_batch(/*batch_size=*/2);
   ASSERT_FALSE(batch->empty());

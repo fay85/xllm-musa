@@ -921,9 +921,31 @@ ModelOutput AclGraph::replay(CausalLM* model,
                                     model->is_hybrid_linear_attention();
   const bool replay_inputs_prepared =
       replay_inputs_prepared_.exchange(false, std::memory_order_acq_rel);
+  std::optional<PreparedGraphInputs> prepared_graph_inputs;
+  if (replay_inputs_prepared) {
+    prepared_graph_inputs = std::move(prepared_graph_inputs_);
+    prepared_graph_inputs_.reset();
+  }
+  // Hybrid decode still refreshes FIA/conv tasks on every replay. Their host
+  // arguments can come from this input's earlier persistent update, provided
+  // the producer's ready event and the matching generation are preserved.
+  // Zero is a valid batch id. Prepare and replay normally read the same input's
+  // unchanged id, so it is only an additional consistency check. Slot
+  // publication, owned token storage and the storage/size checks below bind
+  // the prepared input; batch_id is not an independent generation counter.
+  const bool can_use_prepared_metadata =
+      prepared_graph_inputs.has_value() && actual_num_tokens > 0 &&
+      params.meta.batch_forward_type.is_decode() && !params.is_spec_verify &&
+      model->is_hybrid_linear_attention() &&
+      !model->requires_graph_forward_metadata() &&
+      prepared_graph_inputs->batch_id == params.meta.batch_id &&
+      prepared_graph_inputs->tokens.size(0) == actual_num_tokens &&
+      prepared_graph_inputs->tokens.data_ptr() == tokens.data_ptr() &&
+      params.graph.input_tokens_override.defined() &&
+      params.graph.input_tokens_override.data_ptr() == tokens.data_ptr();
   const bool can_use_prepared_inputs =
       replay_inputs_prepared && params.graph.input_tokens_override.defined() &&
-      !needs_graph_metadata;
+      (!needs_graph_metadata || can_use_prepared_metadata);
   std::optional<ModelInputParams> graph_params;
   if (graph_paged_attention_tiling_data_.defined()) {
     const auto current_addresses =
@@ -951,6 +973,9 @@ ModelOutput AclGraph::replay(CausalLM* model,
   } else if (can_use_prepared_inputs) {
     persistent_param_.update_tokens(
         tokens, params, actual_num_tokens, num_tokens_);
+    if (needs_graph_metadata) {
+      graph_params = std::move(prepared_graph_inputs->params);
+    }
   } else {
     auto [k_cache, v_cache] = find_attention_plan_kv_cache(kv_cache);
     graph_params =
@@ -1028,7 +1053,8 @@ ModelOutput AclGraph::replay(CausalLM* model,
 void AclGraph::prepare_replay_inputs(const torch::Tensor& tokens,
                                      const torch::Tensor& positions,
                                      std::vector<KVCache>& kv_cache,
-                                     const ModelInputParams& params) {
+                                     const ModelInputParams& params,
+                                     bool return_graph_params) {
   if (graph_paged_attention_tiling_data_.defined()) {
     return;
   }
@@ -1038,17 +1064,28 @@ void AclGraph::prepare_replay_inputs(const torch::Tensor& tokens,
       << "num_tokens mismatch: expected <= " << num_tokens_ << ", got "
       << actual_num_tokens;
   auto [k_cache, v_cache] = find_attention_plan_kv_cache(kv_cache);
-  persistent_param_.update(tokens,
-                           k_cache,
-                           v_cache,
-                           positions,
-                           params,
-                           num_tokens_,
-                           /*return_capture_params=*/false,
-                           /*skip_token_update=*/true,
-                           /*for_capture=*/false,
-                           /*update_paged_attention_plan=*/
-                           !has_fused_infer_attention_graph_tasks());
+  auto graph_params =
+      persistent_param_.update(tokens,
+                               k_cache,
+                               v_cache,
+                               positions,
+                               params,
+                               num_tokens_,
+                               /*return_capture_params=*/return_graph_params,
+                               /*skip_token_update=*/true,
+                               /*for_capture=*/false,
+                               /*update_paged_attention_plan=*/
+                               !has_fused_infer_attention_graph_tasks());
+  if (return_graph_params) {
+    CHECK(graph_params.has_value());
+    prepared_graph_inputs_ = PreparedGraphInputs{
+        .params = std::move(graph_params.value()),
+        .tokens = tokens,
+        .batch_id = params.meta.batch_id,
+    };
+  } else {
+    prepared_graph_inputs_.reset();
+  }
   replay_inputs_prepared_.store(true, std::memory_order_release);
 }
 
@@ -1630,7 +1667,13 @@ void AclGraphExecutorImpl::prepare_graph_input(const torch::Tensor& tokens,
     graph = it->second;
     slot.is_prepared = true;
   }
-  graph->prepare_replay_inputs(tokens, positions, kv_caches, params);
+  graph->prepare_replay_inputs(tokens,
+                               positions,
+                               kv_caches,
+                               params,
+                               /*return_graph_params=*/in_decoding_phase &&
+                                   !params.is_spec_verify &&
+                                   model_->is_hybrid_linear_attention());
 }
 
 bool AclGraphExecutorImpl::prepare_static_mtp_graph_tasks(
