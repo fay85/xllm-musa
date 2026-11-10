@@ -1,0 +1,88 @@
+{
+  "topology_name": "pd_4p4d",
+  "mode": "pd",
+  "concurrency": 16,
+  "benchmark_concurrency": 8,
+  "groups": [
+    {
+      "name": "prefill0",
+      "role": "PREFILL",
+      "visible_gpus": [
+        0
+      ],
+      "world_size": 1,
+      "dp_size": 1,
+      "cp_size": 1
+    },
+    {
+      "name": "prefill1",
+      "role": "PREFILL",
+      "visible_gpus": [
+        1
+      ],
+      "world_size": 1,
+      "dp_size": 1,
+      "cp_size": 1
+    },
+    {
+      "name": "prefill2",
+      "role": "PREFILL",
+      "visible_gpus": [
+        2
+      ],
+      "world_size": 1,
+      "dp_size": 1,
+      "cp_size": 1
+    },
+    {
+      "name": "prefill3",
+      "role": "PREFILL",
+      "visible_gpus": [
+        3
+      ],
+      "world_size": 1,
+      "dp_size": 1,
+      "cp_size": 1
+    },
+    {
+      "name": "decode0",
+      "role": "DECODE",
+      "visible_gpus": [
+        4
+      ],
+      "world_size": 1,
+      "dp_size": 1,
+      "cp_size": 1
+    },
+    {
+      "name": "decode1",
+      "role": "DECODE",
+      "visible_gpus": [
+        5
+      ],
+      "world_size": 1,
+      "dp_size": 1,
+      "cp_size": 1
+    },
+    {
+      "name": "decode2",
+      "role": "DECODE",
+      "visible_gpus": [
+        6
+      ],
+      "world_size": 1,
+      "dp_size": 1,
+      "cp_size": 1
+    },
+    {
+      "name": "decode3",
+      "role": "DECODE",
+      "visible_gpus": [
+        7
+      ],
+      "world_size": 1,
+      "dp_size": 1,
+      "cp_size": 1
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "topology_name": "pd_1p1d_dp8",
+  "mode": "pd",
+  "concurrency": 16,
+  "benchmark_concurrency": 4,
+  "groups": [
+    {
+      "name": "prefill0",
+      "role": "PREFILL",
+      "visible_gpus": [0, 1, 2, 3, 4, 5, 6, 7],
+      "world_size": 8,
+      "dp_size": 8,
+      "cp_size": 1
+    },
+    {
+      "name": "decode0",
+      "role": "DECODE",
+      "visible_gpus": [0, 1, 2, 3, 4, 5, 6, 7],
+      "world_size": 8,
+      "dp_size": 8,
+      "cp_size": 1
+    }
+  ]
+}

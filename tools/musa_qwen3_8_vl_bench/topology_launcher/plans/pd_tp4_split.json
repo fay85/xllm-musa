@@ -1,0 +1,24 @@
+{
+  "topology_name": "pd_tp4_split",
+  "mode": "pd",
+  "concurrency": 16,
+  "benchmark_concurrency": 4,
+  "groups": [
+    {
+      "name": "prefill0",
+      "role": "PREFILL",
+      "visible_gpus": [0, 1, 2, 3],
+      "world_size": 4,
+      "dp_size": 1,
+      "cp_size": 1
+    },
+    {
+      "name": "decode0",
+      "role": "DECODE",
+      "visible_gpus": [0, 1, 2, 3],
+      "world_size": 4,
+      "dp_size": 1,
+      "cp_size": 1
+    }
+  ]
+}

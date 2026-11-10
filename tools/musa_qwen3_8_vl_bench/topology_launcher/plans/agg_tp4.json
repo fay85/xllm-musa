@@ -1,0 +1,21 @@
+{
+  "topology_name": "agg_tp4",
+  "mode": "aggregate",
+  "concurrency": 16,
+  "benchmark_concurrency": 8,
+  "groups": [
+    {
+      "name": "aggregate0",
+      "role": "DEFAULT",
+      "visible_gpus": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "world_size": 4,
+      "dp_size": 1,
+      "cp_size": 1
+    }
+  ]
+}
