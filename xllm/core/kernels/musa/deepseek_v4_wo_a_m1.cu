@@ -214,8 +214,10 @@ __global__ void deepseek_v4_shared_swiglu_kernel(
   float up =
       static_cast<float>(input[input_row_offset + intermediate_size + column]);
   if (swiglu_limit > 0.0f) {
-    gate = fminf(gate, swiglu_limit);
-    up = fminf(fmaxf(up, -swiglu_limit), swiglu_limit);
+    // torch.clamp propagates NaNs; fminf/fmaxf would hide invalid inputs.
+    gate = gate > swiglu_limit ? swiglu_limit : gate;
+    up = up < -swiglu_limit ? -swiglu_limit : up;
+    up = up > swiglu_limit ? swiglu_limit : up;
   }
   output[output_index] =
       static_cast<at::BFloat16>(gate / (1.0f + expf(-gate)) * up);

@@ -75,6 +75,7 @@ from xllm.python.distributed import (
     init_engram_dp_group,
     world_topology,
 )
+from xllm.python.kernels_musa.shared_swiglu import SharedActivation, select_shared_swiglu
 from xllm.python.layers.attention import Attention
 from xllm.python.layers.embedding import HiddenParallelEmbedding
 from xllm.python.layers.linear import ColumnParallelLinear, RowParallelLinear
@@ -1663,13 +1664,17 @@ class DeepseekV41TorchMLP(nn.Module):
     ) -> None:
         super().__init__()
         self.swiglu_limit = cfg.swiglu_limit
+        self._shared_activation = select_shared_swiglu(device, dtype, self.swiglu_limit)
         inter = cfg.moe_intermediate_size
         self.w1 = nn.Linear(cfg.hidden_size, inter, bias=False, dtype=dtype, device=device)
         self.w3 = nn.Linear(cfg.hidden_size, inter, bias=False, dtype=dtype, device=device)
         self.w2 = nn.Linear(inter, cfg.hidden_size, bias=False, dtype=dtype, device=device)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return _swiglu_clamped(x, self.w1(x), self.w3(x), self.w2, self.swiglu_limit, None)
+        return _swiglu_clamped(
+            x, self.w1(x), self.w3(x), self.w2, self.swiglu_limit, None,
+            shared_activation=self._shared_activation,
+        )
 
 
 def _swiglu_clamped(
@@ -1679,12 +1684,20 @@ def _swiglu_clamped(
     w2: nn.Module,
     limit: float,
     route_weight: torch.Tensor | None,
+    *,
+    shared_activation: SharedActivation | None = None,
 ) -> torch.Tensor:
     """Reference Expert.forward (model.py:841-851).
 
     The up branch clamps both sides, the gate branch only from above; the
     routing weight (when given) multiplies the hidden before w2.
     """
+    if shared_activation is not None:
+        if route_weight is not None:
+            raise ValueError("The shared SwiGLU kernel cannot round before routing-weight multiplication")
+        if x.dtype != torch.bfloat16:
+            raise ValueError("The fused shared SwiGLU output contract requires a BF16 down projection")
+        return w2(shared_activation(gate_proj, up_proj))
     gate = gate_proj.float()
     up = up_proj.float()
     if 0.0 < limit < 1_000_000.0:
@@ -1722,6 +1735,7 @@ class DeepseekV41MoE(nn.Module):
         self.routed_scaling = cfg.routed_scaling_factor
         self.norm_topk_prob = cfg.norm_topk_prob
         self.swiglu_limit = cfg.swiglu_limit
+        self._shared_activation = select_shared_swiglu(device, dtype, self.swiglu_limit)
         self.image_token_id = cfg.image_token_id
         self.gate = nn.Linear(cfg.hidden_size, cfg.n_routed_experts, bias=False, dtype=dtype, device=device)
         self.e_score_correction_bias = nn.Parameter(
@@ -1880,7 +1894,10 @@ class DeepseekV41MoE(nn.Module):
         return y.type_as(x).view(shape)
 
     def _shared_forward(self, x: torch.Tensor) -> torch.Tensor:
-        return _swiglu_clamped(x, self.shared_w1(x), self.shared_w3(x), self.shared_w2, self.swiglu_limit, None)
+        return _swiglu_clamped(
+            x, self.shared_w1(x), self.shared_w3(x), self.shared_w2, self.swiglu_limit, None,
+            shared_activation=self._shared_activation,
+        )
 
 
 class _StackedLinear(nn.Module):

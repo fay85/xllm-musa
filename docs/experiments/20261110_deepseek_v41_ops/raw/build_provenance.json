@@ -1,0 +1,24 @@
+{
+  "base_commit": "4ade93777acdcd2d8271841b713809513c40886c",
+  "files": {
+    "xllm": {
+      "bytes": 340523464,
+      "sha256": "8d5e8c5e83227021672a472f749782b4426654abf264f10f815923e57074caa6"
+    },
+    "musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so": {
+      "bytes": 53580560,
+      "sha256": "707269bd04ee51465e104293fc0a3b72a695983060a8061cab32dc6ebf728eae"
+    }
+  },
+  "packages": {
+    "torch": "2.9.1",
+    "torch_musa": "2.9.1",
+    "mate": "0.2.7",
+    "apache-tvm-ffi": "0.1.11.post1+musa.1",
+    "tilelang-musa": "0.1.12+musa.2"
+  },
+  "container": "xiaopang1105_dsv41_build_dev6",
+  "image": "registry.mthreads.com/presale/devtech/xllm:1102-dev",
+  "image_id": "sha256:09b8f5f4a467fc73332dee57b36a2e5610ba3264357dfc87f103cf7bd7430be3",
+  "build_exit": "0"
+}

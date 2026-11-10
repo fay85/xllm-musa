@@ -1,5 +1,15 @@
 # Copyright 2026 The xLLM Authors. All Rights Reserved.
 include(cc_test)
+include(pybind_extension)
+
+pybind_extension(
+  NAME musa_python_kernel_test_module
+  SRCS musa_python_kernel_test_module.cpp
+  DEPS :cuda_kernels musa_python torch_python Python::Module torch glog::glog
+)
+target_include_directories(musa_python_kernel_test_module PRIVATE
+  "${PROJECT_SOURCE_DIR}/xllm"
+)
 
 # CPU tensors exercise ownership without running a MUSA kernel or model.
 cc_test(

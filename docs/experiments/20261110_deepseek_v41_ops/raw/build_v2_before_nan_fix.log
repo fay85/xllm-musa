@@ -1,0 +1,549 @@
+==> Logging to build_logs/build_cuda_graph_musa_20261110_112108.log
+-- Using the C++-11 ABI.
+-- VCPKG_ROOT found, using vcpkg at /workspace/vcpkg-xllm
+CMake Deprecation Warning at /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:40 (cmake_policy):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  build/cmake.linux-x86_64-cpython-310/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+  CMakeLists.txt:309 (project)
+
+
+CMake Deprecation Warning at /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:878 (cmake_policy):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  build/cmake.linux-x86_64-cpython-310/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+  CMakeLists.txt:309 (project)
+
+
+-- Found MUSA compiler: /usr/local/musa/tools/musamapping/mcc_wrapper
+CMake Warning (dev) at /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/share/boost/vcpkg-cmake-wrapper.cmake:11 (_find_package):
+  Policy CMP0167 is not set: The FindBoost module is removed.  Run "cmake
+  --help-policy CMP0167" for policy details.  Use the cmake_policy command to
+  set the policy and suppress this warning.
+
+Call Stack (most recent call first):
+  /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:813 (include)
+  CMakeLists.txt:374 (find_package)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Found Boost: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include (found version "1.84.0")
+CMake Warning (dev) at /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/share/boost/vcpkg-cmake-wrapper.cmake:11 (_find_package):
+  Policy CMP0167 is not set: The FindBoost module is removed.  Run "cmake
+  --help-policy CMP0167" for policy details.  Use the cmake_policy command to
+  set the policy and suppress this warning.
+
+Call Stack (most recent call first):
+  /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:813 (include)
+  CMakeLists.txt:375 (find_package)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Found Boost: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include (found version "1.84.0") found components: serialization
+-- Found libevent include directory: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include
+-- Found libevent component: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libevent_core.a
+-- Found libevent component: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libevent_extra.a
+-- Found libevent component: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libevent_pthreads.a
+-- Found libevent 2.2.0 in /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux
+CMake Warning (dev) at /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/share/boost/vcpkg-cmake-wrapper.cmake:11 (_find_package):
+  Policy CMP0167 is not set: The FindBoost module is removed.  Run "cmake
+  --help-policy CMP0167" for policy details.  Use the cmake_policy command to
+  set the policy and suppress this warning.
+
+Call Stack (most recent call first):
+  /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:813 (include)
+  /usr/local/lib/python3.10/dist-packages/cmake/data/share/cmake-4.3/Modules/CMakeFindDependencyMacro.cmake:93 (find_package)
+  /usr/local/lib/python3.10/dist-packages/cmake/data/share/cmake-4.3/Modules/CMakeFindDependencyMacro.cmake:125 (__find_dependency_common)
+  /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/share/folly/folly-config.cmake:84 (find_dependency)
+  /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/share/folly/vcpkg-cmake-wrapper.cmake:4 (_find_package)
+  /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:813 (include)
+  CMakeLists.txt:381 (find_package)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Found Boost: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include (found version "1.84.0") found components: context filesystem program_options regex system thread chrono atomic
+-- Found folly: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux
+-- Found ZLIB: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libz.a (found version "1.3.1")
+-- Found Protobuf: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/tools/protobuf/protoc (found version "3.21.12.0")
+-- Found RE2 via CMake.
+-- Found Python: /usr/include/python3.10 (found version "3.10.12") found components: Development Development.Module Development.Embed
+-- Found pybind11: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include (found version "2.11.1")
+CMake Warning at /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:859 (_find_package):
+  By not providing "FindJemalloc.cmake" in CMAKE_MODULE_PATH this project has
+  asked CMake to find a package configuration file provided by "Jemalloc",
+  but CMake did not find one.
+
+  Could not find a package configuration file provided by "Jemalloc" with any
+  of the following names:
+
+    Jemalloc.cps
+    jemalloc.cps
+    JemallocConfig.cmake
+    jemalloc-config.cmake
+
+  Add the installation prefix of "Jemalloc" to CMAKE_PREFIX_PATH or set
+  "Jemalloc_DIR" to a directory containing one of the above files.  If
+  "Jemalloc" provides a separate development package or SDK, be sure it has
+  been installed.
+Call Stack (most recent call first):
+  CMakeLists.txt:413 (find_package)
+
+
+CMake Warning at /usr/local/lib/python3.10/dist-packages/torch/share/cmake/Torch/TorchConfig.cmake:22 (message):
+  static library kineto_LIBRARY-NOTFOUND not found.
+Call Stack (most recent call first):
+  /usr/local/lib/python3.10/dist-packages/torch/share/cmake/Torch/TorchConfig.cmake:127 (append_torchlib_if_found)
+  /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:859 (_find_package)
+  CMakeLists.txt:447 (find_package)
+
+
+-- Using libtorch at /usr/local/lib/python3.10/dist-packages/torch
+-- Found Python: /usr/bin/python3 (found version "3.10.12") found components: Interpreter
+-- Determining MCCL version from /usr/local/musa/include/mccl.h...
+CMake Deprecation Warning at /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:40 (cmake_policy):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  /work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+  /work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/CMakeFiles/CMakeTmp/CMakeLists.txt:3 (project)
+
+
+CMake Deprecation Warning at /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:878 (cmake_policy):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+Call Stack (most recent call first):
+  /work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+  /work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/CMakeFiles/CMakeTmp/CMakeLists.txt:3 (project)
+
+
+-- MCCL version: 2.28.9
+
+-- Found MCCL (include: /usr/local/musa/include, library: /usr/local/musa/lib/libmccl.so)
+-- Found Python: /usr/bin/python3 (found version "3.10.12") found components: Interpreter Development Development.Module Development.Embed
+CMake Warning at /usr/local/lib/python3.10/dist-packages/torch/share/cmake/Torch/TorchConfig.cmake:22 (message):
+  static library kineto_LIBRARY-NOTFOUND not found.
+Call Stack (most recent call first):
+  /usr/local/lib/python3.10/dist-packages/torch/share/cmake/Torch/TorchConfig.cmake:127 (append_torchlib_if_found)
+  /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:859 (_find_package)
+  /usr/local/lib/python3.10/dist-packages/torch_musa/share/cmake/TorchMusa/TorchMusaConfig.cmake:60 (find_package)
+  /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:859 (_find_package)
+  CMakeLists.txt:634 (find_package)
+
+
+-- TORCH_CXX_FLAGS: -D_GLIBCXX_USE_CXX11_ABI=1
+-- CMAKE_CXX_FLAGS:  -fPIC -Wno-format-truncation -Wno-error=parentheses -DC10_USE_GLOG
+-- CMAKE_CXX_FLAGS_DEBUG: -g -Og
+CMake Deprecation Warning at third_party/brpc/CMakeLists.txt:18 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Found gflags: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libgflags.a
+cat: /work/repos/xllm-musa/third_party/brpc/RELEASE_VERSION: No such file or directory
+-- Found Protobuf: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libprotobuf.a (found version "3.21.12")
+CMake Deprecation Warning at third_party/smhasher/src/CMakeLists.txt:3 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Deprecation Warning at third_party/cpprestsdk/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+CMake Deprecation Warning at third_party/cpprestsdk/Release/CMakeLists.txt:2 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Setting gcc options
+CMake Warning (dev) at /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/share/boost/vcpkg-cmake-wrapper.cmake:11 (_find_package):
+  Policy CMP0167 is not set: The FindBoost module is removed.  Run "cmake
+  --help-policy CMP0167" for policy details.  Use the cmake_policy command to
+  set the policy and suppress this warning.
+
+Call Stack (most recent call first):
+  /workspace/vcpkg-xllm/scripts/buildsystems/vcpkg.cmake:813 (include)
+  third_party/cpprestsdk/Release/cmake/cpprest_find_boost.cmake:49 (find_package)
+  third_party/cpprestsdk/Release/src/CMakeLists.txt:129 (cpprest_find_boost)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Found Boost: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include (found version "1.84.0") found components: random system thread filesystem chrono atomic date_time regex
+-- Added test library httpclient_test
+-- Added test library httplistener_test
+-- Added test library json_test
+-- Added test library pplx_test
+-- Added test library streams_test
+-- Added test library uri_test
+-- Added test library utils_test
+CMake Deprecation Warning at third_party/etcd_cpp_apiv3/CMakeLists.txt:1 (cmake_minimum_required):
+  Compatibility with CMake < 3.10 will be removed from a future version of
+  CMake.
+
+  Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+  to tell CMake that the project requires at least <min> but has been updated
+  to work with policies introduced by <max> or earlier.
+
+
+-- Building etcd-cpp-apiv3 with C++20
+-- Found GRPC: gRPC::gpr;gRPC::grpc;gRPC::grpc++, /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/tools/grpc/grpc_cpp_plugin (found version: "1.51.1")
+-- xxHash: target architecture = x86_64
+-- xxHash: x86 dispatch enabled (SSE2 / AVX2 / AVX512)
+-- Build spdlog: 1.12.0
+-- Build type: Release
+CMAKE_BUILD_TYPE: Release
+-- [limit_jobs] Available memory: 1914220 MB, CPU cores: 128
+-- [limit_jobs] Compile jobs: 128 (1500 MB/job), Link jobs: 128 (4000 MB/job)
+-- [limit_jobs] Ninja job pools: compile=128, link=128
+-- Event-driven completion is disabled
+-- MUSA support is enabled
+-- Http as metadata server support is enabled
+-- metrics is enabled
+YLT is imported by find_package
+-- -------------YLT CONFIG SETTING-------------
+-- YLT_ENABLE_DL: ON
+-- YLT_ENABLE_SSL: OFF
+-- Enable ibverbs support
+-- YLT_ENABLE_PMR: OFF
+-- YLT_ENABLE_IO_URING: OFF
+-- YLT_ENABLE_STRUCT_PACK_UNPORTABLE_TYPE: OFF
+-- YLT_ENABLE_STRUCT_PACK_OPTIMIZE: OFF
+-- --------------------------------------------
+-- USE_NOF=OFF, NoF SSD pool support is disabled
+-- Found ASIO at: /usr/local/yalantinglibs/include
+-- Found ZLIB: /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libz.a (found suitable version "1.3.1", minimum required is "1")
+-- CUDA: Disabled
+-- ROCm/HIP: Disabled
+-- Sunrise/Tang: Disabled
+-- Mooncake Store will be built
+-- Store HA backends are disabled
+-- AWS SDK not found, S3 functionality will be disabled
+-- Found xxHash: include=/usr/local/include lib=/usr/local/lib/libxxhash.so
+-- io_uring: Disabled (liburing not found)
+-- Mooncake Store Rust bindings will be built
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/rust/CMakeLists.txt:9 (add_custom_command):
+  Exactly one of PRE_BUILD, PRE_LINK, or POST_BUILD must be given.  Assuming
+  POST_BUILD to preserve backward compatibility.
+
+  Policy CMP0175 is not set: add_custom_command() rejects invalid arguments.
+  Run "cmake --help-policy CMP0175" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/rust/CMakeLists.txt:27 (add_custom_command):
+  Exactly one of PRE_BUILD, PRE_LINK, or POST_BUILD must be given.  Assuming
+  POST_BUILD to preserve backward compatibility.
+
+  Policy CMP0175 is not set: add_custom_command() rejects invalid arguments.
+  Run "cmake --help-policy CMP0175" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/rust/CMakeLists.txt:41 (add_custom_command):
+  Exactly one of PRE_BUILD, PRE_LINK, or POST_BUILD must be given.  Assuming
+  POST_BUILD to preserve backward compatibility.
+
+  Policy CMP0175 is not set: add_custom_command() rejects invalid arguments.
+  Run "cmake --help-policy CMP0175" for policy details.  Use the cmake_policy
+  command to set the policy and suppress this warning.
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+/usr/local/lib/python3.10/dist-packages
+/usr/local/lib/python3.10/dist-packages
+YLT is imported by find_package
+-- -------------YLT CONFIG SETTING-------------
+-- YLT_ENABLE_DL: ON
+-- YLT_ENABLE_SSL: OFF
+-- Enable ibverbs support
+-- YLT_ENABLE_PMR: OFF
+-- YLT_ENABLE_IO_URING: OFF
+-- YLT_ENABLE_STRUCT_PACK_UNPORTABLE_TYPE: OFF
+-- YLT_ENABLE_STRUCT_PACK_OPTIMIZE: OFF
+-- --------------------------------------------
+-- Validated unchanged Rust inputs for rust_safetensors; archive SHA256=03954bb7298ad657361d134e13b3767069d24e6eb9cdb6c28c44a7d3c2f427a7
+-- Validated unchanged Rust inputs for rust_tokenizers; archive SHA256=1d60dd93baf05dc5ad09d9d3510c01cd754a86d8afc0b33819f79c466c4ed760
+-- build xllm binary and install
+-- Configuring done (14.8s)
+CMake Warning (dev) at third_party/Mooncake/mooncake-common/src/CMakeLists.txt:62 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-common/src/CMakeLists.txt:62 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-common/src/CMakeLists.txt:62 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-common/src/CMakeLists.txt:62 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/src/CMakeLists.txt:288 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/src/CMakeLists.txt:288 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/src/CMakeLists.txt:288 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/src/CMakeLists.txt:288 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-common/src/CMakeLists.txt:62 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-common/src/CMakeLists.txt:62 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/src/CMakeLists.txt:288 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/src/CMakeLists.txt:288 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-common/src/CMakeLists.txt:62 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/src/CMakeLists.txt:288 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-common/src/CMakeLists.txt:62 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-common/src/CMakeLists.txt:62 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-common/src/CMakeLists.txt:62 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-common/src/CMakeLists.txt:62 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/src/CMakeLists.txt:288 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/src/CMakeLists.txt:288 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/src/CMakeLists.txt:288 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+CMake Warning (dev) at third_party/Mooncake/mooncake-store/src/CMakeLists.txt:288 (target_link_libraries):
+  The library that is being linked to, yaml-cpp, is marked as being
+  deprecated by the owner.  The message provided by the developer is:
+
+  The target yaml-cpp is deprecated and will be removed in version 0.10.0.
+  Use the yaml-cpp::yaml-cpp target instead.
+
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Generating done (2.4s)
+-- Build files have been written to: /work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310
+ninja_guard: /work/repos/xllm-musa/scripts/ninja_guard/ninja.real -C /work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310 -j4 xllm musa_python_kernel_test_module
+ninja: Entering directory `/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310'
+[1/10] Linking CXX static library third_party/brpc/output/lib/libbrpc.a
+[2/10] Linking CXX static library third_party/Mooncake/mooncake-store/src/libmooncake_store.a
+[3/10] Linking CXX static library xllm/core/runtime/libruntime.a
+[4/10] Building CXX object tests/core/kernels/musa/CMakeFiles/musa_python_kernel_test_module.dir/musa_python_kernel_test_module.cpp.o
+checking .c
+/work/repos/xllm-musa/tests/core/kernels/musa/musa_python_kernel_test_module.cpp
+checking .cpp
+/work/repos/xllm-musa/tests/core/kernels/musa/musa_python_kernel_test_module.cpp
+mcc -DGFLAGS_IS_A_DLL=0 -DSPDLOG_COMPILED_LIB -DTORCH_CUDA=1 -DUSE_C10D_GLOO -DUSE_DISTRIBUTED -DUSE_MUSA -DUSE_RPC -DUSE_TENSORPIPE -DYLT_ENABLE_IBV -Dmusa_python_kernel_test_module_EXPORTS -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/torch_musa_codegen -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include -I/usr/local/lib/python3.10/dist-packages/torch_musa_compiled/share/torch_musa_codegen -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/musa -I/work/repos/xllm-musa/xllm -I/work/repos/xllm-musa -I/work/repos/xllm-musa/xllm/core -I/work/repos/xllm-musa/third_party/etcd_cpp_apiv3 -I/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/xllm/proto -I/work/repos/xllm-musa/third_party/smhasher/src -I/work/repos/xllm-musa/third_party/xxHash -I/work/repos/xllm-musa/third_party/spdlog/include -isystem /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include -isystem /usr/include/python3.10 -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/torch_musa_codegen -isystem /usr/local/lib/python3.10/dist-packages/torch/include -isystem /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include -isystem /work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/third_party/brpc/output/include -isystem /work/repos/xllm-musa/third_party -isystem /work/repos/xllm-musa/third_party/Mooncake/mooncake-common/include -isystem /work/repos/xllm-musa/third_party/Mooncake/mooncake-transfer-engine/include -isystem /work/repos/xllm-musa/third_party/Mooncake/mooncake-store/include -isystem /work/repos/xllm-musa/third_party/sentencepiece -isystem /work/repos/xllm-musa/third_party/minja -fPIC -Wno-error=parentheses -DC10_USE_GLOG -O3 -DNDEBUG -std=gnu++20 -fPIC -fvisibility=hidden -fdiagnostics-color=always -O3 -Wno-c++11-narrowing -D_GLIBCXX_USE_CXX11_ABI=1 -MD -MT tests/core/kernels/musa/CMakeFiles/musa_python_kernel_test_module.dir/musa_python_kernel_test_module.cpp.o -MF tests/core/kernels/musa/CMakeFiles/musa_python_kernel_test_module.dir/musa_python_kernel_test_module.cpp.o.d -o tests/core/kernels/musa/CMakeFiles/musa_python_kernel_test_module.dir/musa_python_kernel_test_module.cpp.o -c /work/repos/xllm-musa/tests/core/kernels/musa/musa_python_kernel_test_module.cpp -DCCCL_DISABLE_NVFP8_SUPPORT -std=c++20 -I/usr/local/musa/include -I/usr/local/lib/python3.10/dist-packages/tvm_ffi/include -I/usr/local/lib/python3.10/dist-packages -I/usr/local/musa/tools/mutlass/include
+[5/10] Linking CXX shared library /work/20261110_ops/artifacts/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so
+Link mode detected, using g++ link driver with MUSA library mapping.
+g++ -Wl,--allow-multiple-definition -L/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib -shared -Wl,-soname,musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so -o /work/20261110_ops/artifacts/musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so tests/core/kernels/musa/CMakeFiles/musa_python_kernel_test_module.dir/musa_python_kernel_test_module.cpp.o -L/usr/local/musa/lib -L/opt/intel/oneapi/mkl/lib/intel64 -L/opt/intel/oneapi/mkl/lib -L/usr/local/lib/python3.10/dist-packages/torch -L/usr/local/lib/python3.10/dist-packages/torch/lib -L/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/third_party/brpc/output/lib -L/opt/intel/oneapi/mkl/lib/intel64_win -L/opt/intel/oneapi/mkl/lib/win-x64 -Wl,-rpath,$ORIGIN:/usr/local/musa/lib:/opt/intel/oneapi/mkl/lib/intel64:/opt/intel/oneapi/mkl/lib:/usr/local/lib/python3.10/dist-packages/torch:/usr/local/lib/python3.10/dist-packages/torch/lib:/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/third_party/brpc/output/lib:/opt/intel/oneapi/mkl/lib/intel64_win:/opt/intel/oneapi/mkl/lib/win-x64 -Wl,--start-group xllm/core/kernels/musa/libcuda_kernels.a -Wl,--end-group -lmusa_python /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_python.so -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libglog.a -Wl,--end-group /usr/local/lib/python3.10/dist-packages/tvm_ffi/lib/libtvm_ffi.so -Wl,--start-group xllm/core/platform/libplatform.a xllm/core/framework/config/libconfig.a xllm/core/platform/libplatform.a xllm/core/framework/config/libconfig.a -Wl,--end-group -lnuma -Wl,--start-group xllm/core/util/libutil.a -Wl,--end-group /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch.so -Wl,--no-as-needed,/usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_cpu.so -Wl,--as-needed /usr/local/lib/python3.10/dist-packages/torch/lib/libc10.so -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core /usr/local/musa/lib/libiomp5.so -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libfolly.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libglog.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libfmt.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_context.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_filesystem.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_program_options.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_regex.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_system.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_thread.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_chrono.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_atomic.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libdouble-conversion.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libevent_extra.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libevent_pthreads.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libevent_core.a third_party/brpc/output/lib/libbrpc.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libprotobuf.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libleveldb.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libprotoc.a -Wl,--end-group -lz -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libssl.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libcrypto.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libglog.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libgflags.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libsnappy.a -Wl,--end-group -lrt -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libssl.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libcrypto.a -Wl,--end-group -ldl -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libleveldb.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_serialization.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_synchronization.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_graphcycles_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_kernel_timeout_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_stacktrace.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_symbolize.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_malloc_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_debugging_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_demangle_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_time.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_strings.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_string_view.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_strings_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_throw_delegate.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_base.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_spinlock_wait.a -Wl,--end-group -lrt -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_raw_logging_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_log_severity.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_int128.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_civil_time.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_time_zone.a -Wl,--end-group /usr/lib/x86_64-linux-gnu/libpython3.10.so -Wl,--start-group xllm/proto/libxllm_proto.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libprotobuf.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libz.a third_party/smhasher/src/libSMHasherSupport.a third_party/xxHash/libxxHash.a third_party/spdlog/libspdlog.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libgflags.a -Wl,--end-group /usr/lib/x86_64-linux-gnu/libmusa.so /usr/local/musa/lib/libmusart.so -L/usr/local/lib/python3.10/dist-packages/torch_musa/lib -Wl,-rpath,/usr/local/lib/python3.10/dist-packages/torch_musa/lib -Wl,--no-as-needed /usr/local/lib/python3.10/dist-packages/torch_musa/lib/libmusa_kernels.so /usr/local/lib/python3.10/dist-packages/torch_musa/lib/lib_ext_musa_kernels.so /usr/local/lib/python3.10/dist-packages/torch_musa/lib/libmusa_python.so /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_python.so /usr/lib/x86_64-linux-gnu/libpython3.10.so /usr/local/musa/lib/libmccl.so /usr/local/musa/lib/libiomp5.so -Wl,--as-needed
+[6/10] Building CXX object xllm/core/layers/musa/CMakeFiles/musa_layers.dir/deepseek_v4/deepseek_v4_moe.cpp.o
+checking .c
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe.cpp
+checking .cpp
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe.cpp
+mcc -DASIO_DYN_LINK -DASIO_SEPARATE_COMPILATION -DCPPREST_EXCLUDE_WEBSOCKETS=1 -DCPPREST_FORCE_HTTP_CLIENT_ASIO -DCPPREST_FORCE_HTTP_LISTENER_ASIO -DGFLAGS_IS_A_DLL=0 -DSPDLOG_COMPILED_LIB -DTORCH_CUDA=1 -DUSE_C10D_GLOO -DUSE_DISTRIBUTED -DUSE_MUSA -DUSE_RPC -DUSE_TENSORPIPE -DYAML_CPP_STATIC_DEFINE -DYLT_ENABLE_DL -DYLT_ENABLE_IBV -I/usr/local/lib/python3.10/dist-packages/torch_musa_compiled/share/torch_musa_codegen -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/musa -I/work/repos/xllm-musa/xllm/. -I/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/xllm -I/work/repos/xllm-musa -I/work/repos/xllm-musa/xllm/core -I/work/repos/xllm-musa/third_party/etcd_cpp_apiv3 -I/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/xllm/proto -I/work/repos/xllm-musa/third_party/smhasher/src -I/work/repos/xllm-musa/third_party/xxHash -I/work/repos/xllm-musa/third_party/spdlog/include -I/work/repos/xllm-musa/third_party/cpprestsdk/Release/include -I/work/repos/xllm-musa/third_party/minja/include -I/work/repos/xllm-musa/third_party/Mooncake/mooncake-common/src/../include -I/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/third_party/sentencepiece -I/work/repos/xllm-musa/xllm/function_call/partial_json_parser/include -isystem /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/torch_musa_codegen -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include -isystem /usr/include/python3.10 -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/torch_musa_codegen -isystem /usr/local/lib/python3.10/dist-packages/torch/include -isystem /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include -isystem /work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/third_party/brpc/output/include -isystem /work/repos/xllm-musa/third_party -isystem /work/repos/xllm-musa/third_party/Mooncake/mooncake-common/include -isystem /work/repos/xllm-musa/third_party/Mooncake/mooncake-transfer-engine/include -isystem /work/repos/xllm-musa/third_party/Mooncake/mooncake-store/include -isystem /work/repos/xllm-musa/third_party/sentencepiece -isystem /work/repos/xllm-musa/third_party/minja -isystem /usr/local/yalantinglibs/include -isystem /workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310/vcpkg_installed/x64-linux/include -fPIC -Wno-error=parentheses -DC10_USE_GLOG -O3 -DNDEBUG -std=gnu++20 -fPIC -fdiagnostics-color=always -O3 -Wno-c++11-narrowing -D_GLIBCXX_USE_CXX11_ABI=1 -Wno-defaulted-function-deleted -Wno-sign-conversion -Wno-inconsistent-missing-override -Wno-conversion -fplugin=/usr/local/musa/tools/musamapping/libMusaMapping.so -x musa -I. -MD -MT xllm/core/layers/musa/CMakeFiles/musa_layers.dir/deepseek_v4/deepseek_v4_moe.cpp.o -MF xllm/core/layers/musa/CMakeFiles/musa_layers.dir/deepseek_v4/deepseek_v4_moe.cpp.o.d -o xllm/core/layers/musa/CMakeFiles/musa_layers.dir/deepseek_v4/deepseek_v4_moe.cpp.o -c /work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe.cpp -DCCCL_DISABLE_NVFP8_SUPPORT -std=c++20 -I/usr/local/musa/include -I/usr/local/lib/python3.10/dist-packages/tvm_ffi/include -I/usr/local/lib/python3.10/dist-packages -I/usr/local/musa/tools/mutlass/include
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe.cpp:18:10/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe.cpp:18:10/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe.cpp:18:10/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe.cpp:18:10/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_moe.cpp:18:10[7/10] Building CXX object xllm/core/layers/musa/CMakeFiles/musa_layers.dir/deepseek_v4/deepseek_v4_attention.cpp.o
+
+checking .c
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp
+checking .cpp
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp
+mcc -DASIO_DYN_LINK -DASIO_SEPARATE_COMPILATION -DCPPREST_EXCLUDE_WEBSOCKETS=1 -DCPPREST_FORCE_HTTP_CLIENT_ASIO -DCPPREST_FORCE_HTTP_LISTENER_ASIO -DGFLAGS_IS_A_DLL=0 -DSPDLOG_COMPILED_LIB -DTORCH_CUDA=1 -DUSE_C10D_GLOO -DUSE_DISTRIBUTED -DUSE_MUSA -DUSE_RPC -DUSE_TENSORPIPE -DYAML_CPP_STATIC_DEFINE -DYLT_ENABLE_DL -DYLT_ENABLE_IBV -I/usr/local/lib/python3.10/dist-packages/torch_musa_compiled/share/torch_musa_codegen -I/usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/musa -I/work/repos/xllm-musa/xllm/. -I/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/xllm -I/work/repos/xllm-musa -I/work/repos/xllm-musa/xllm/core -I/work/repos/xllm-musa/third_party/etcd_cpp_apiv3 -I/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/xllm/proto -I/work/repos/xllm-musa/third_party/smhasher/src -I/work/repos/xllm-musa/third_party/xxHash -I/work/repos/xllm-musa/third_party/spdlog/include -I/work/repos/xllm-musa/third_party/cpprestsdk/Release/include -I/work/repos/xllm-musa/third_party/minja/include -I/work/repos/xllm-musa/third_party/Mooncake/mooncake-common/src/../include -I/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/third_party/sentencepiece -I/work/repos/xllm-musa/xllm/function_call/partial_json_parser/include -isystem /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/include -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/torch_musa_codegen -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include -isystem /usr/include/python3.10 -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/generated_cuda_compatible/include/torch/csrc/api/include -isystem /usr/local/lib/python3.10/dist-packages/torch_musa/share/torch_musa_codegen -isystem /usr/local/lib/python3.10/dist-packages/torch/include -isystem /usr/local/lib/python3.10/dist-packages/torch/include/torch/csrc/api/include -isystem /work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/third_party/brpc/output/include -isystem /work/repos/xllm-musa/third_party -isystem /work/repos/xllm-musa/third_party/Mooncake/mooncake-common/include -isystem /work/repos/xllm-musa/third_party/Mooncake/mooncake-transfer-engine/include -isystem /work/repos/xllm-musa/third_party/Mooncake/mooncake-store/include -isystem /work/repos/xllm-musa/third_party/sentencepiece -isystem /work/repos/xllm-musa/third_party/minja -isystem /usr/local/yalantinglibs/include -isystem /workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310/vcpkg_installed/x64-linux/include -fPIC -Wno-error=parentheses -DC10_USE_GLOG -O3 -DNDEBUG -std=gnu++20 -fPIC -fdiagnostics-color=always -O3 -Wno-c++11-narrowing -D_GLIBCXX_USE_CXX11_ABI=1 -Wno-defaulted-function-deleted -Wno-sign-conversion -Wno-inconsistent-missing-override -Wno-conversion -fplugin=/usr/local/musa/tools/musamapping/libMusaMapping.so -x musa -I. -MD -MT xllm/core/layers/musa/CMakeFiles/musa_layers.dir/deepseek_v4/deepseek_v4_attention.cpp.o -MF xllm/core/layers/musa/CMakeFiles/musa_layers.dir/deepseek_v4/deepseek_v4_attention.cpp.o.d -o xllm/core/layers/musa/CMakeFiles/musa_layers.dir/deepseek_v4/deepseek_v4_attention.cpp.o -c /work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp -DCCCL_DISABLE_NVFP8_SUPPORT -std=c++20 -I/usr/local/musa/include -I/usr/local/lib/python3.10/dist-packages/tvm_ffi/include -I/usr/local/lib/python3.10/dist-packages -I/usr/local/musa/tools/mutlass/include
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp:3644:1: warning: 'dsv4_legacy_graph_forward' has C-linkage specified, but returns user-defined type 'xllm::layer::Dsv4LegacyForwardResult' (aka 'tuple<torch::Tensor, std::optional<torch::Tensor>>') which is incompatible with C [-Wreturn-type-c-linkage]
+dsv4_legacy_graph_forward(DeepseekV4AttentionImpl*, const DSAMetadata&, torch::Tensor&, KVCache&, KVState&, bool, bool, const std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>&) __asm__(
+^
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp:19:101 warning generated when compiling for mp_21.
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp:3644:1: warning: 'dsv4_legacy_graph_forward' has C-linkage specified, but returns user-defined type 'xllm::layer::Dsv4LegacyForwardResult' (aka 'tuple<torch::Tensor, std::optional<torch::Tensor>>') which is incompatible with C [-Wreturn-type-c-linkage]
+dsv4_legacy_graph_forward(DeepseekV4AttentionImpl*, const DSAMetadata&, torch::Tensor&, KVCache&, KVState&, bool, bool, const std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>&) __asm__(
+^
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp:19:101 warning generated when compiling for mp_22.
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp:3644:1: warning: 'dsv4_legacy_graph_forward' has C-linkage specified, but returns user-defined type 'xllm::layer::Dsv4LegacyForwardResult' (aka 'tuple<torch::Tensor, std::optional<torch::Tensor>>') which is incompatible with C [-Wreturn-type-c-linkage]
+dsv4_legacy_graph_forward(DeepseekV4AttentionImpl*, const DSAMetadata&, torch::Tensor&, KVCache&, KVState&, bool, bool, const std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>&) __asm__(
+^
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp:19:101 warning generated when compiling for mp_31.
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp:3644:1: warning: 'dsv4_legacy_graph_forward' has C-linkage specified, but returns user-defined type 'xllm::layer::Dsv4LegacyForwardResult' (aka 'tuple<torch::Tensor, std::optional<torch::Tensor>>') which is incompatible with C [-Wreturn-type-c-linkage]
+dsv4_legacy_graph_forward(DeepseekV4AttentionImpl*, const DSAMetadata&, torch::Tensor&, KVCache&, KVState&, bool, bool, const std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>&) __asm__(
+^
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp:19:101 warning generated when compiling for mp_32.
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp:3644:1: warning: 'dsv4_legacy_graph_forward' has C-linkage specified, but returns user-defined type 'xllm::layer::Dsv4LegacyForwardResult' (aka 'tuple<torch::Tensor, std::optional<torch::Tensor>>') which is incompatible with C [-Wreturn-type-c-linkage]
+dsv4_legacy_graph_forward(DeepseekV4AttentionImpl*, const DSAMetadata&, torch::Tensor&, KVCache&, KVState&, bool, bool, const std::tuple<torch::Tensor, torch::Tensor, torch::Tensor, torch::Tensor>&) __asm__(
+^
+/work/repos/xllm-musa/xllm/core/layers/musa/deepseek_v4/deepseek_v4_attention.cpp:19:101 warning generated when compiling for host.
+[8/10] Linking CXX static library xllm/core/layers/musa/libmusa_layers.a
+[9/10] Linking CXX static library xllm/api_service/libapi_service.a
+[10/10] Linking CXX executable /work/20261110_ops/artifacts/xllm
+Link mode detected, using g++ link driver with MUSA library mapping.
+g++ -Wl,--allow-multiple-definition -L/usr/local/lib/python3.10/dist-packages/tvm_ffi/lib -Wl,--whole-archive,/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/xllm/core/runtime/libruntime.a,--no-whole-archive -Wl,--no-as-needed third_party/Mooncake/mooncake-transfer-engine/src/transport/tcp_transport/CMakeFiles/tcp_transport.dir/tcp_transport.cpp.o third_party/Mooncake/mooncake-transfer-engine/src/transport/device/CMakeFiles/device_transport.dir/p2p_device_transport.cpp.o third_party/Mooncake/mooncake-transfer-engine/src/transport/device/CMakeFiles/device_transport.dir/ibgda_device_transport.cpp.o third_party/Mooncake/mooncake-transfer-engine/src/transport/device/CMakeFiles/device_transport.dir/mlx5gda.cpp.o xllm/CMakeFiles/xllm.dir/xllm.cpp.o -o /work/20261110_ops/artifacts/xllm -L/usr/local/musa/lib -L/opt/intel/oneapi/mkl/lib/intel64 -L/opt/intel/oneapi/mkl/lib -L/usr/local/lib/python3.10/dist-packages/torch -L/usr/local/lib/python3.10/dist-packages/torch/lib -L/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/third_party/brpc/output/lib -L/opt/intel/oneapi/mkl/lib/intel64_win -L/opt/intel/oneapi/mkl/lib/win-x64 -Wl,-rpath,$ORIGIN:/usr/local/musa/lib:/opt/intel/oneapi/mkl/lib/intel64:/opt/intel/oneapi/mkl/lib:/usr/local/lib/python3.10/dist-packages/torch:/usr/local/lib/python3.10/dist-packages/torch/lib:/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/third_party/brpc/output/lib:/opt/intel/oneapi/mkl/lib/intel64_win:/opt/intel/oneapi/mkl/lib/win-x64:/work/repos/xllm-musa/build/cmake.linux-x86_64-cpython-310/mooncake-common:/usr/local/lib: -Wl,--start-group xllm/core/framework/config/libconfig.a xllm/server/libxllm_server.a xllm/core/distributed_runtime/libmaster.a xllm/core/util/libutil.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_strings.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_serialization.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libgflags.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libglog.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libfolly.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libglog.a third_party/brpc/output/lib/libbrpc.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libleveldb.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libprotobuf.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_calib3d4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_core4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_features2d4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_flann4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_highgui4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_imgcodecs4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_imgproc4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_ml4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_objdetect4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_photo4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_stitching4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_video4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_videoio4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libavformat.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libavcodec.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libswresample.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libswscale.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libavutil.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libx264.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libpthread.a /usr/lib/x86_64-linux-gnu/libdl.a -Wl,--end-group -pthread -lm -latomic -latomic -lmusa_python /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_cpu.so -Wl,--start-group xllm/api_service/libapi_service.a xllm/core/framework/request/librequest.a xllm/core/distributed_runtime/libdistributed_runtime.a xllm/core/scheduler/libscheduler.a xllm/core/runtime/libruntime.a xllm/models/libmodels.a xllm/core/framework/kv_cache/libkv_cache.a xllm/core/framework/block/libblock.a xllm/core/framework/xtensor/libxtensor.a xllm/core/framework/batch/libbatch.a xllm/core/scheduler/profile/libprofile.a xllm/core/framework/speculative/libspeculative.a xllm/core/framework/kv_cache_transfer/libkv_cache_transfer.a xllm/core/framework/kv_cache/liblinear_state_restore.a xllm/core/framework/libmodel_loader.a xllm/core/distributed_runtime/libworker_service.a xllm/core/framework/eplb/libeplb.a xllm/core/layers/common/libcommon_layers.a xllm/processors/libprocessors.a xllm/models/vlm/mposition/libmposition.a xllm/core/layers/liblayers.a xllm/core/framework/prefix_cache/libprefix_cache.a xllm/core/layers/musa/libmusa_layers.a xllm/core/layers/libattention_mask.a xllm/server/libxllm_server.a xllm/core/distributed_runtime/libmaster.a xllm/api_service/libapi_service.a xllm/core/framework/request/librequest.a xllm/core/distributed_runtime/libdistributed_runtime.a xllm/core/scheduler/libscheduler.a xllm/core/runtime/libruntime.a xllm/models/libmodels.a xllm/core/framework/kv_cache/libkv_cache.a xllm/core/framework/block/libblock.a xllm/core/framework/xtensor/libxtensor.a xllm/core/framework/batch/libbatch.a xllm/core/scheduler/profile/libprofile.a xllm/core/framework/speculative/libspeculative.a xllm/core/framework/kv_cache_transfer/libkv_cache_transfer.a xllm/core/framework/kv_cache/liblinear_state_restore.a xllm/core/framework/libmodel_loader.a xllm/core/distributed_runtime/libworker_service.a xllm/core/framework/eplb/libeplb.a xllm/core/layers/common/libcommon_layers.a xllm/processors/libprocessors.a xllm/models/vlm/mposition/libmposition.a xllm/core/layers/liblayers.a xllm/core/framework/prefix_cache/libprefix_cache.a xllm/core/layers/musa/libmusa_layers.a xllm/core/layers/libattention_mask.a xllm/function_call/libfunction_call.a xllm/function_call/partial_json_parser/libpartial_json_parser.a xllm/parser/libreasoning.a xllm/core/framework/request/librequest_timing.a xllm/core/framework/kv_cache_transfer/libpd_topology_guard.a xllm/core/framework/kv_cache_transfer/libkv_transfer_failure.a xllm/core/framework/dit_cache/libdit_cache.a -Wl,--end-group /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_python.so -Wl,--start-group xllm/core/framework/kv_cache/libkv_cache_estimation.a xllm/core/framework/kv_cache_transfer/libkv_transfer_completion.a xllm/core/framework/block/libblock_utils.a xllm/core/distributed_runtime/libcollective_service.a xllm/core/framework/sampling/libsampler.a xllm/core/framework/sampling/libjson_object_grammar.a third_party/Mooncake/mooncake-store/src/libmooncake_store.a -Wl,--end-group /usr/local/lib/libxxhash.so -Wl,--start-group third_party/Mooncake/mooncake-store/src/cachelib_memory_allocator/libcachelib_memory_allocator.a -Wl,--end-group /usr/local/lib/libzstd.so -Wl,--start-group third_party/Mooncake/mooncake-transfer-engine/src/libtransfer_engine.a -Wl,--end-group mooncake-common/libasio.so -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libcurl.a third_party/Mooncake/mooncake-transfer-engine/src/common/base/libbase.a -Wl,--end-group -lmlx5 -Wl,--start-group third_party/Mooncake/mooncake-common/src/libmooncake_common.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libyaml-cpp.a -Wl,--end-group -libverbs -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libjsoncpp.a -Wl,--end-group -libverbs -Wl,--start-group xllm/core/framework/kv_cache_transfer/libpush_route.a xllm/core/framework/kv_cache_transfer/libreshard_planner.a xllm/core/framework/kv_cache_transfer/libcache_layout.a xllm/core/framework/libmodel_context.a xllm/core/distributed_runtime/libworker_prefetch_session.a xllm/core/framework/chat_template/libchat_template.a xllm/core/framework/chat_template/libjinja_chat_template.a xllm/core/framework/chat_template/libdeepseek_v32_cpp_template.a xllm/core/framework/chat_template/libdeepseek_v4_cpp_template.a xllm/core/framework/chat_template/libkimi_k3_cpp_template.a xllm/core/framework/chat_template/libdeepseek_v41_cpp_template.a xllm/core/framework/tokenizer/libtokenizer.a third_party/sentencepiece/libsentencepiece.a third_party/sentencepiece/libproto_sentencepiece.a third_party/sentencepiece/libproto_sentencepiece_model.a /workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310/xllm/core/framework/tokenizer/tokenizers/x86_64-unknown-linux-gnu/release/librust_tokenizers.a -Wl,--end-group -lgflags -Wl,--start-group xllm/core/framework/prefix_cache/libblock_hasher.a xllm/core/framework/multimodal/libmultimodal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_highgui4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_ml4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_objdetect4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libquirc.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_photo4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_stitching4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_video4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_calib3d4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_features2d4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_flann4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_videoio4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_imgcodecs4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libjpeg.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libwebpdecoder.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libwebp.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libwebpdemux.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libwebpmux.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libsharpyuv.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libpng16.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libtiff.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/liblzma.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libjpeg.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libwebpdecoder.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libwebp.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libwebpdemux.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libwebpmux.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libsharpyuv.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libpng16.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libtiff.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/liblzma.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libOpenEXR-3_1.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libImath-3_1.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libIlmThread-3_1.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libIex-3_1.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_imgproc4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libopencv_core4.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libz.a -Wl,--end-group -lpthread -Wl,--start-group /usr/lib/x86_64-linux-gnu/libpthread.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libavformat.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libavcodec.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libswresample.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libswscale.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libavutil.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libx264.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libpthread.a /usr/lib/x86_64-linux-gnu/libdl.a -Wl,--end-group -lm -latomic -Wl,--start-group xllm/core/framework/encoder_cache/libencoder_cache.a xllm/processors/libprocessor_cache.a xllm/core/common/libcommon.a xllm/core/framework/parallel_state/libparallel_state.a xllm/core/common/libcommon.a xllm/core/framework/parallel_state/libparallel_state.a third_party/cpprestsdk/Release/Binaries/libcpprest.a -Wl,--end-group -pthread -L/workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/pkgconfig/../../lib -lssl -lcrypto -ldl -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_random.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_system.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_thread.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_filesystem.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_chrono.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_atomic.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_date_time.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_regex.a third_party/etcd_cpp_apiv3/src/libetcd-cpp-api.a third_party/cpprestsdk/Release/Binaries/libcpprest.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libgrpc++.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libgrpc.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libre2.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_flags.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_flags_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_flags_marshalling.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_flags_reflection.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_raw_hash_set.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_hashtablez_sampler.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_flags_config.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_flags_program_name.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_flags_private_handle_accessor.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_flags_commandlineflag.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_flags_commandlineflag_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libgpr.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_random_distributions.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_random_seed_sequences.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_random_internal_pool_urbg.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_random_internal_randen.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_random_internal_randen_hwaes.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_random_internal_randen_hwaes_impl.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_random_internal_randen_slow.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_random_internal_platform.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_random_internal_seed_material.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_random_seed_gen_exception.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_hash.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_city.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_low_level_hash.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libupb_json.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libupb_textformat.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libupb_reflection.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libupb_collections.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libupb_mini_table.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libupb.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libupb_fastdecode.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libupb_utf8_range.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libupb_extension_registry.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libdescriptor_upb_proto.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libcares.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libaddress_sorting.a -Wl,--end-group -lm -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_statusor.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_status.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_cord.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_cordz_info.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_cord_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_cordz_functions.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_exponential_biased.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_cordz_handle.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_crc_cord_state.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_crc32c.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_crc_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_crc_cpu_detect.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_bad_optional_access.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_str_format_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_strerror.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_bad_variant_access.a -Wl,--end-group /usr/local/lib/python3.10/dist-packages/torch_musa/lib/libmusa_python.so /usr/lib/x86_64-linux-gnu/libpython3.10.so -lmudnn /usr/local/musa/lib/libmccl.so /usr/local/lib/python3.10/dist-packages/torch/lib/libc10.so /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch.so /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_cpu.so /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_python.so -Wl,--start-group xllm/core/kernels/libkernels.a xllm/core/kernels/musa/libcuda_kernels.a -Wl,--end-group /usr/local/lib/python3.10/dist-packages/tvm_ffi/lib/libtvm_ffi.so -Wl,--whole-archive -Wl,--no-whole-archive -Wl,--start-group xllm/core/framework/state_dict/libstate_dict.a xllm/core/framework/config/libconfig.a xllm/core/platform/libplatform.a xllm/core/framework/config/libconfig.a xllm/core/platform/libplatform.a -Wl,--end-group -lnuma /usr/lib/x86_64-linux-gnu/libmusa.so /usr/local/musa/lib/libmusart.so -Wl,--start-group xllm/core/util/libutil.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_serialization.a third_party/brpc/output/lib/libbrpc.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libprotobuf.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libleveldb.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libprotoc.a -Wl,--end-group -lz -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libglog.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libgflags.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libsnappy.a -Wl,--end-group -lrt -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libleveldb.a xllm/proto/libxllm_proto.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libssl.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libcrypto.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_synchronization.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_graphcycles_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_kernel_timeout_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_time.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_civil_time.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_time_zone.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_stacktrace.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_symbolize.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_strings.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_string_view.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_strings_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_int128.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_throw_delegate.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_malloc_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_debugging_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_demangle_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_base.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_raw_logging_internal.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_log_severity.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libabsl_spinlock_wait.a -Wl,--end-group -lrt /usr/lib/x86_64-linux-gnu/libpython3.10.so -Wl,--start-group third_party/smhasher/src/libSMHasherSupport.a third_party/xxHash/libxxHash.a third_party/spdlog/libspdlog.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libfolly.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libglog.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libgflags.a -Wl,--end-group -ldl -Wl,--start-group /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libssl.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libcrypto.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libfmt.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_context.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_filesystem.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_program_options.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_regex.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_system.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_thread.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_chrono.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libboost_atomic.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libdouble-conversion.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libevent_extra.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libevent_pthreads.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libevent_core.a -Wl,--end-group /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch.so -Wl,--no-as-needed,/usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_cpu.so -Wl,--as-needed -Wl,--start-group /workspace/xllm-mt-main/build/cmake.linux-x86_64-cpython-310/xllm/core/framework/state_dict/safetensors/x86_64-unknown-linux-gnu/release/librust_safetensors.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libprotobuf.a /workspace/xllm-mt-main/build/reuse_prebuilt_feihu1016/vcpkg_installed/x64-linux/lib/libz.a -Wl,--end-group /usr/local/lib/python3.10/dist-packages/torch/lib/libc10.so -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core /usr/local/musa/lib/libiomp5.so -L/usr/local/lib/python3.10/dist-packages/torch_musa/lib -Wl,-rpath,/usr/local/lib/python3.10/dist-packages/torch_musa/lib -Wl,--no-as-needed /usr/local/lib/python3.10/dist-packages/torch_musa/lib/libmusa_kernels.so /usr/local/lib/python3.10/dist-packages/torch_musa/lib/lib_ext_musa_kernels.so /usr/local/lib/python3.10/dist-packages/torch_musa/lib/libmusa_python.so /usr/local/lib/python3.10/dist-packages/torch/lib/libtorch_python.so /usr/lib/x86_64-linux-gnu/libpython3.10.so /usr/local/musa/lib/libmccl.so /usr/local/musa/lib/libiomp5.so -Wl,--as-needed

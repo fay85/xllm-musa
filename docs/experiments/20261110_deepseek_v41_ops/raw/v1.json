@@ -1,0 +1,110 @@
+{
+  "status": "RUNNING",
+  "torch": "2.9.1",
+  "mate": "0.2.7",
+  "device": "MTT S5000",
+  "seed": 1110,
+  "scope": "single GPU; existing V4 kernel + production Python binding; no TP/PD/model acceptance",
+  "cases": [
+    {
+      "name": "activation_0x288",
+      "elements": 0,
+      "max_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "rtol": 0.0078125,
+      "atol": 1e-07,
+      "status": "PASS"
+    },
+    {
+      "name": "activation_0x2304",
+      "elements": 0,
+      "max_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "rtol": 0.0078125,
+      "atol": 1e-07,
+      "status": "PASS"
+    },
+    {
+      "name": "activation_1x288",
+      "elements": 288,
+      "max_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "rtol": 0.0078125,
+      "atol": 1e-07,
+      "status": "PASS"
+    },
+    {
+      "name": "activation_1x2304",
+      "elements": 2304,
+      "max_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "rtol": 0.0078125,
+      "atol": 1e-07,
+      "status": "PASS"
+    },
+    {
+      "name": "activation_17x288",
+      "elements": 4896,
+      "max_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "rtol": 0.0078125,
+      "atol": 1e-07,
+      "status": "PASS"
+    },
+    {
+      "name": "activation_17x2304",
+      "elements": 39168,
+      "max_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "rtol": 0.0078125,
+      "atol": 1e-07,
+      "status": "PASS"
+    },
+    {
+      "name": "activation_256x288",
+      "elements": 73728,
+      "max_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "rtol": 0.0078125,
+      "atol": 1e-07,
+      "status": "PASS"
+    },
+    {
+      "name": "activation_256x2304",
+      "elements": 589824,
+      "max_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "rtol": 0.0078125,
+      "atol": 1e-07,
+      "status": "PASS"
+    },
+    {
+      "name": "activation_2048x288",
+      "elements": 589824,
+      "max_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "rtol": 0.0078125,
+      "atol": 1e-07,
+      "status": "PASS"
+    },
+    {
+      "name": "activation_2048x2304",
+      "elements": 4718592,
+      "max_abs_error": 0.0,
+      "mismatched_elements": 0,
+      "rtol": 0.0078125,
+      "atol": 1e-07,
+      "status": "PASS"
+    },
+    {
+      "name": "clamp_boundaries_and_nonfinite",
+      "elements": 169,
+      "max_abs_error": 0.0,
+      "mismatched_elements": 37,
+      "rtol": 0.0078125,
+      "atol": 1e-07,
+      "status": "CHECKING"
+    }
+  ],
+  "timings": []
+}

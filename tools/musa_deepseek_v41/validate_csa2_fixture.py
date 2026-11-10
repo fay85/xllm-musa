@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 from pathlib import Path
 
 import torch
@@ -22,9 +24,16 @@ from xllm.python import initialize_runtime
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--shared-swiglu", choices=("reference", "v4_fused"), default="reference")
+    parser.add_argument("--save-tensors", type=Path)
     args = parser.parse_args()
     if torch.musa.device_count() != 1:
         raise RuntimeError("Expose exactly one idle GPU")
+    os.environ["XLLM_DSV41_MUSA_SHARED_SWIGLU"] = args.shared_swiglu
+    if args.shared_swiglu == "v4_fused":
+        import musa_python_kernel_test_module
+
+        sys.modules["xllm_runtime"] = musa_python_kernel_test_module
     initialize_runtime()
     from tests.python.test_deepseek_v41_model import (
         _DEEPSEEK_V41_FORWARD_CONFIG,
@@ -64,6 +73,7 @@ def main() -> None:
         prefill = _V41ForwardHarness(model, config, nseq, torch.bfloat16, device)
         hidden = prefill.step(ids.flatten(), torch.arange(length, device=device).repeat(nseq), [length] * nseq, [length] * nseq, is_prefill=True)
         logits = prefill.logits(hidden).reshape(nseq, length, -1)
+        saved_hidden = hidden.detach().cpu() if args.save_tensors else None
         assert hidden.device.type == "musa" and bool(torch.isfinite(logits).all())
         magnitude = logits.float().abs().max().item()
         diversity = (logits[:, 1:].float() - logits[:, :-1].float()).abs().max().item()
@@ -72,9 +82,11 @@ def main() -> None:
         logger.info("Prefill finished: magnitude=%s, adjacent-token diversity=%s", magnitude, diversity)
         decode = _V41ForwardHarness(model, config, nseq, torch.bfloat16, device)
         errors = []
+        decode_logits = []
         for pos in range(length):
             h = decode.step(ids[:, pos], torch.full((nseq,), pos, device=device), [pos + 1] * nseq, [1] * nseq, is_prefill=False)
             got = decode.logits(h)
+            decode_logits.append(got.detach().cpu())
             expected = logits[:, pos]
             error = (got - expected).abs().max().item()
             errors.append(error)
@@ -82,6 +94,10 @@ def main() -> None:
             logger.info("Decode position %s: max_abs_logits_error=%s", pos, error)
         result = {"status": "PASS", "sequences": nseq, "tokens_each": length, "layers": model.cfg.n_layers, "engram_layers": model.cfg.engram_layer_ids, "max_abs_logits": magnitude, "adjacent_token_logits_difference": diversity, "max_abs_logits_error_by_position": errors, "scope": "real single-GPU MUSA execution; random tiny weights and Engram table, synthetic page metadata, no network transfer; not full-model accuracy"}
         args.output.write_text(json.dumps(result, indent=2))
+        if args.save_tensors:
+            torch.save({"ids": ids.cpu(), "hidden": saved_hidden, "prefill_logits": logits.cpu(),
+                        "decode_logits": torch.stack(decode_logits, dim=1),
+                        "shared_swiglu": args.shared_swiglu}, args.save_tensors)
         print(json.dumps(result), flush=True)
 
 

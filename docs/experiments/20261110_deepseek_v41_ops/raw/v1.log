@@ -1,0 +1,15 @@
+I20261110 11:23:06.004777 63 shared_swiglu.py:43] V4.1 MUSA shared SwiGLU: mode=v4_fused, dtype=torch.bfloat16, clamp=10.0
+Traceback (most recent call last):
+  File "/work/repos/xllm-musa/tools/musa_deepseek_v41/validate_shared_swiglu.py", line 181, in <module>
+    main()
+  File "/work/repos/xllm-musa/tools/musa_deepseek_v41/validate_shared_swiglu.py", line 130, in main
+    check("clamp_boundaries_and_nonfinite", fused(gate, up), _reference(gate, up))
+  File "/work/repos/xllm-musa/tools/musa_deepseek_v41/validate_shared_swiglu.py", line 113, in check
+    torch.testing.assert_close(actual_cpu, expected_cpu, rtol=1 / 128, atol=1e-7, equal_nan=True)
+  File "/usr/local/lib/python3.10/dist-packages/torch/testing/_comparison.py", line 1589, in assert_close
+    raise error_metas[0].to_error(msg)
+AssertionError: Tensor-likes are not close!
+
+Mismatched elements: 24 / 169 (14.2%)
+Greatest absolute difference: nan at index (1, 12) (up to 1e-07 allowed)
+Greatest relative difference: nan at index (1, 12) (up to 0.0078125 allowed)
