@@ -658,6 +658,8 @@ MusaGraphPersistentParam::MusaGraphPersistentParam(
       {max_tokens_per_batch}, torch::dtype(torch::kInt).device(device));
   persistent_linear_state_indices_ = torch::zeros(
       {max_seqs_per_batch}, torch::dtype(torch::kInt).device(device));
+  persistent_linear_state_read_indices_ = torch::zeros(
+      {max_seqs_per_batch}, torch::dtype(torch::kInt).device(device));
   persistent_kv_cache_tokens_nums_ = torch::zeros(
       {max_seqs_per_batch}, torch::dtype(torch::kInt).device(device));
   persistent_num_accepted_tokens_ = torch::ones(
@@ -850,6 +852,27 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
               .to(device_),
           /*non_blocking=*/true);
     }
+    CHECK_LE(linear_state_rows, persistent_linear_state_read_indices_.numel());
+    torch::Tensor linear_state_read_indices =
+        persistent_linear_state_read_indices_.slice(
+            /*dim=*/0, /*start=*/0, /*end=*/linear_state_rows);
+    if (params.embedding.linear_state_read_indices.defined()) {
+      linear_state_read_indices.copy_(
+          params.embedding.linear_state_read_indices.slice(
+              /*dim=*/0, /*start=*/0, linear_state_rows),
+          /*non_blocking=*/true);
+    } else if (!params.embedding.linear_state_read_ids.empty()) {
+      CHECK_EQ(
+          static_cast<int64_t>(params.embedding.linear_state_read_ids.size()),
+          linear_state_rows);
+      linear_state_read_indices.copy_(
+          torch::tensor(params.embedding.linear_state_read_ids, torch::kInt)
+              .to(device_),
+          /*non_blocking=*/true);
+    } else {
+      linear_state_read_indices.copy_(linear_state_indices,
+                                      /*non_blocking=*/true);
+    }
   }
   const int64_t validity_rows =
       static_cast<int64_t>(params.linear_state_validity_mask.size());
@@ -955,6 +978,9 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
   if (linear_state_rows > 0) {
     params_for_capture.embedding.linear_state_indices =
         persistent_linear_state_indices(
+            static_cast<uint32_t>(linear_state_rows));
+    params_for_capture.embedding.linear_state_read_indices =
+        persistent_linear_state_read_indices(
             static_cast<uint32_t>(linear_state_rows));
   }
   if (validity_rows > 0) {
@@ -1140,6 +1166,7 @@ size_t MusaGraphPersistentParam::get_persistent_tensor_bytes() const {
   total += bytes(persistent_positions_);
   total += bytes(persistent_new_cache_slots_);
   total += bytes(persistent_linear_state_indices_);
+  total += bytes(persistent_linear_state_read_indices_);
   total += bytes(persistent_kv_cache_tokens_nums_);
   total += bytes(persistent_num_accepted_tokens_);
   total += bytes(persistent_block_tables_);

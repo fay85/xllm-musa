@@ -1019,10 +1019,21 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
           num_v_heads_ / tp_size_,
           mixed_qkv.scalar_type(),
           seq_len);
+  torch::Tensor logical_read_state_indices;
   torch::Tensor linear_state_base_indices;
+  torch::Tensor linear_state_read_base_indices;
   if (!use_mate_mtp) {
     linear_state_base_indices = build_linear_state_base_indices(
         logical_state_indices, checkpoint_stride);
+    if (!use_spec_verify && is_any_prefill) {
+      logical_read_state_indices =
+          get_linear_state_read_indices(input_params, device);
+      linear_state_read_base_indices = build_linear_state_base_indices(
+          logical_read_state_indices, checkpoint_stride);
+    } else {
+      logical_read_state_indices = logical_state_indices;
+      linear_state_read_base_indices = linear_state_base_indices;
+    }
   }
   const int32_t gdn_layer_id = attn_metadata.plan_info != nullptr
                                    ? attn_metadata.plan_info->layer_id
@@ -1087,7 +1098,8 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
                                                   logical_state_indices,
                                                   has_initial_state,
                                                   /*silu_activation=*/true,
-                                                  conv_prefix);
+                                                  conv_prefix,
+                                                  logical_read_state_indices);
 
     mixed_qkv = reshape_qkvz_with_pad(attn_metadata, mixed_qkv);
     mixed_qkv = mixed_qkv.transpose(1, 2);
@@ -1270,7 +1282,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
         initial_state = musa_pcp::take_prefix_rows(*pcp_context);
       } else {
         initial_state =
-            torch::index_select(ssm_cache, 0, linear_state_base_indices);
+            torch::index_select(ssm_cache, 0, linear_state_read_base_indices);
         initial_state.mul_(attn_metadata.has_initial_states.view({-1, 1, 1, 1})
                                .to(initial_state.scalar_type()));
       }
@@ -1472,7 +1484,7 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::forward(
              static_cast<size_t>(batch_size))
         << "q_seq_lens_vec must be populated for Qwen3.5 prefill.";
     torch::Tensor initial_state_tensor =
-        torch::index_select(ssm_cache, 0, linear_state_base_indices);
+        torch::index_select(ssm_cache, 0, linear_state_read_base_indices);
     CHECK_EQ(input_params.linear_state_validity_mask.size(),
              input_params.embedding.linear_state_ids.size())
         << "linear state validity mask must be sequence-scoped.";
@@ -1766,6 +1778,30 @@ torch::Tensor Qwen3GatedDeltaNetBaseImpl::get_linear_state_indices(
   return torch::tensor(
       input_params.embedding.linear_state_ids,
       torch::TensorOptions().dtype(torch::kInt).device(device));
+}
+
+torch::Tensor Qwen3GatedDeltaNetBaseImpl::get_linear_state_read_indices(
+    const ModelInputParams& input_params,
+    const torch::Device& device) const {
+  if (input_params.embedding.linear_state_read_indices.defined()) {
+    torch::Tensor indices = input_params.embedding.linear_state_read_indices;
+    if (indices.device() != device || indices.scalar_type() != torch::kInt) {
+      indices =
+          indices.to(torch::TensorOptions().dtype(torch::kInt).device(device),
+                     /*non_blocking=*/true,
+                     /*copy=*/true);
+    }
+    return indices.contiguous();
+  }
+  if (!input_params.embedding.linear_state_read_ids.empty()) {
+    CHECK_EQ(input_params.embedding.linear_state_read_ids.size(),
+             input_params.embedding.linear_state_ids.size())
+        << "linear_state_read_ids must match linear_state_ids size";
+    return torch::tensor(
+        input_params.embedding.linear_state_read_ids,
+        torch::TensorOptions().dtype(torch::kInt).device(device));
+  }
+  return get_linear_state_indices(input_params, device);
 }
 
 torch::Tensor Qwen3GatedDeltaNetBaseImpl::reshape_qkvz_with_pad(

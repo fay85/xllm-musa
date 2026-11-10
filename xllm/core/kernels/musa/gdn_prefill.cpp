@@ -1654,7 +1654,8 @@ torch::Tensor causal_conv1d_prefill(
     const torch::Tensor& cache_indices,
     const torch::Tensor& has_initial_state,
     bool silu_activation,
-    const std::optional<torch::Tensor>& prefix_x) {
+    const std::optional<torch::Tensor>& prefix_x,
+    const std::optional<torch::Tensor>& read_cache_indices) {
   CHECK(query_start_loc.defined() && is_torch_device(query_start_loc.device()))
       << "causal_conv1d_prefill requires device query_start_loc";
   CHECK(cache_indices.defined() && is_torch_device(cache_indices.device()))
@@ -1662,6 +1663,10 @@ torch::Tensor causal_conv1d_prefill(
   CHECK(has_initial_state.defined() &&
         is_torch_device(has_initial_state.device()))
       << "causal_conv1d_prefill requires device has_initial_state";
+  if (read_cache_indices.has_value() && read_cache_indices->defined()) {
+    CHECK(is_torch_device(read_cache_indices->device()))
+        << "causal_conv1d_prefill requires device read_cache_indices";
+  }
 
   static const bool use_token_major = [] {
     const char* env = std::getenv("XLLM_TOKEN_MAJOR_PREFILL_CONV");
@@ -1682,10 +1687,13 @@ torch::Tensor causal_conv1d_prefill(
                                   has_initial_state,
                                   silu_activation,
                                   /*pad_slot_id=*/-1,
-                                  prefix_x);
+                                  prefix_x,
+                                  read_cache_indices);
     return out;
   }
 
+  std::optional<torch::Tensor> effective_read_cache_indices =
+      read_cache_indices;
   if (prefix_x.has_value() && prefix_x->defined()) {
     CHECK_EQ(cache_indices.numel(), 1)
         << "prefix_x fallback requires single-sequence cache_indices";
@@ -1693,6 +1701,7 @@ torch::Tensor causal_conv1d_prefill(
     mutable_conv_state.index_put_(
         {cache_indices},
         prefix_x->t().contiguous().unsqueeze(0).to(conv_state.scalar_type()));
+    effective_read_cache_indices = std::nullopt;
   }
   auto x_t = x.t().contiguous();
   auto out_t = torch::empty_like(x_t);
@@ -1705,7 +1714,8 @@ torch::Tensor causal_conv1d_prefill(
                     cache_indices,
                     has_initial_state,
                     silu_activation,
-                    /*pad_slot_id=*/-1);
+                    /*pad_slot_id=*/-1,
+                    effective_read_cache_indices);
   return out_t.t().contiguous();
 }
 

@@ -185,16 +185,18 @@ bool mate_gdn_mtp_checkpoint_module_available(int64_t num_q_heads,
 torch::Tensor fused_gated_delta_rule_decode(
     MateGatedDeltaRuleDecodeParams& params);
 
-void causal_conv1d_fwd(const torch::Tensor& x,
-                       const torch::Tensor& weight,
-                       torch::Tensor& out,
-                       const std::optional<torch::Tensor>& bias,
-                       const std::optional<torch::Tensor>& conv_states,
-                       const std::optional<torch::Tensor>& query_start_loc,
-                       const std::optional<torch::Tensor>& cache_indices,
-                       const std::optional<torch::Tensor>& has_initial_state,
-                       bool silu_activation,
-                       int64_t pad_slot_id);
+void causal_conv1d_fwd(
+    const torch::Tensor& x,
+    const torch::Tensor& weight,
+    torch::Tensor& out,
+    const std::optional<torch::Tensor>& bias,
+    const std::optional<torch::Tensor>& conv_states,
+    const std::optional<torch::Tensor>& query_start_loc,
+    const std::optional<torch::Tensor>& cache_indices,
+    const std::optional<torch::Tensor>& has_initial_state,
+    bool silu_activation,
+    int64_t pad_slot_id,
+    const std::optional<torch::Tensor>& read_cache_indices = std::nullopt);
 
 void causal_conv1d_fwd_token_major(
     const torch::Tensor& x,
@@ -207,7 +209,8 @@ void causal_conv1d_fwd_token_major(
     const torch::Tensor& has_initial_state,
     bool silu_activation,
     int64_t pad_slot_id,
-    const std::optional<torch::Tensor>& prefix_x = std::nullopt);
+    const std::optional<torch::Tensor>& prefix_x = std::nullopt,
+    const std::optional<torch::Tensor>& read_cache_indices = std::nullopt);
 
 torch::Tensor causal_conv1d(const torch::Tensor& x,
                             const torch::Tensor& weight,
@@ -230,7 +233,8 @@ torch::Tensor causal_conv1d_prefill(
     const torch::Tensor& cache_indices,
     const torch::Tensor& has_initial_state,
     bool silu_activation,
-    const std::optional<torch::Tensor>& prefix_x = std::nullopt);
+    const std::optional<torch::Tensor>& prefix_x = std::nullopt,
+    const std::optional<torch::Tensor>& read_cache_indices = std::nullopt);
 
 torch::Tensor fused_sigmoid_gating_delta_rule_update(
     FusedSigmoidGatingDeltaRuleUpdateParams& params);

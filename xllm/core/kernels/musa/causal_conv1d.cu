@@ -73,6 +73,7 @@ struct ConvParamsBase {
   void* __restrict__ query_start_loc_ptr;
   void* __restrict__ has_initial_state_ptr;
   void* __restrict__ cache_indices_ptr;
+  void* __restrict__ read_cache_indices_ptr;
   int32_t* __restrict__ cache_seqlens;
 
   int32_t* __restrict__ conv_state_indices_ptr;
@@ -201,7 +202,8 @@ void set_conv_params_fwd(
     int64_t pad_slot_id,
     const std::optional<at::Tensor>& query_start_loc = std::nullopt,
     const std::optional<at::Tensor>& cache_indices = std::nullopt,
-    const std::optional<at::Tensor>& has_initial_state = std::nullopt) {
+    const std::optional<at::Tensor>& has_initial_state = std::nullopt,
+    const std::optional<at::Tensor>& read_cache_indices = std::nullopt) {
   memset(&params, 0, sizeof(params));
   params.batch = batch;
   params.dim = dim;
@@ -218,6 +220,10 @@ void set_conv_params_fwd(
                                    : nullptr;
   params.cache_indices_ptr =
       cache_indices.has_value() ? cache_indices.value().data_ptr() : nullptr;
+  params.read_cache_indices_ptr =
+      read_cache_indices.has_value() && read_cache_indices->defined()
+          ? read_cache_indices->data_ptr()
+          : params.cache_indices_ptr;
   params.has_initial_state_ptr = has_initial_state.has_value()
                                      ? has_initial_state.value().data_ptr()
                                      : nullptr;
@@ -324,11 +330,25 @@ __global__ __launch_bounds__(Ktraits::kNThreads) void causal_conv1d_fwd_kernel(
   if (cache_index == params.pad_slot_id) {
     return;
   }
+  const int* read_cache_indices =
+      params.read_cache_indices_ptr == nullptr
+          ? cache_indices
+          : reinterpret_cast<const int*>(params.read_cache_indices_ptr);
+  const int read_cache_index =
+      read_cache_indices == nullptr ? batch_id : read_cache_indices[batch_id];
   input_t* conv_states =
       params.conv_state_ptr == nullptr
           ? nullptr
           : reinterpret_cast<input_t*>(params.conv_state_ptr) +
                 cache_index * params.conv_state_batch_stride +
+                channel_id * params.conv_state_c_stride;
+  const input_t* read_conv_states =
+      params.conv_state_ptr == nullptr
+          ? nullptr
+          : reinterpret_cast<const input_t*>(params.conv_state_ptr) +
+                (read_cache_index == params.pad_slot_id ? cache_index
+                                                        : read_cache_index) *
+                    params.conv_state_batch_stride +
                 channel_id * params.conv_state_c_stride;
 
   if (tidx == 0) {
@@ -336,7 +356,7 @@ __global__ __launch_bounds__(Ktraits::kNThreads) void causal_conv1d_fwd_kernel(
     if (has_initial_state) {
 #pragma unroll
       for (int w = 0; w < kWidth - 1; ++w) {
-        initial_state[kNElts - 1 - (kWidth - 2) + w] = conv_states[w];
+        initial_state[kNElts - 1 - (kWidth - 2) + w] = read_conv_states[w];
       }
     }
     smem_exchange[kNThreads - 1] = reinterpret_cast<vec_t*>(initial_state)[0];
@@ -446,7 +466,7 @@ __global__ __launch_bounds__(Ktraits::kNThreads) void causal_conv1d_fwd_kernel(
 #pragma unroll
       for (int w = 0; w < kWidth - 1; ++w) {
         if ((w - seqlen) >= 0 && has_initial_state) {
-          conv_states[w - seqlen] = conv_states[w];
+          conv_states[w - seqlen] = read_conv_states[w];
         } else if ((w - seqlen) >= 0 && !has_initial_state) {
           conv_states[w - seqlen] = input_t(0.0f);
         }
@@ -526,6 +546,11 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
   if (cache_idx == params.pad_slot_id) {
     return;
   }
+  const int32_t* read_cache_indices =
+      params.read_cache_indices_ptr == nullptr
+          ? cache_indices
+          : reinterpret_cast<const int32_t*>(params.read_cache_indices_ptr);
+  const int read_cache_idx = read_cache_indices[seq_idx];
 
   const bool* has_initial_state =
       reinterpret_cast<const bool*>(params.has_initial_state_ptr);
@@ -538,6 +563,11 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
   input_t* conv_state = reinterpret_cast<input_t*>(params.conv_state_ptr) +
                         cache_idx * params.conv_state_batch_stride +
                         feature * params.conv_state_c_stride;
+  const input_t* read_conv_state =
+      reinterpret_cast<const input_t*>(params.conv_state_ptr) +
+      (read_cache_idx == params.pad_slot_id ? cache_idx : read_cache_idx) *
+          params.conv_state_batch_stride +
+      feature * params.conv_state_c_stride;
 
   auto load_x = [&](int token_idx) {
     return static_cast<float>(x[(seq_start + token_idx) * params.x_l_stride +
@@ -564,9 +594,9 @@ __global__ void causal_conv1d_fwd_token_major_kernel(ConvParamsBase params) {
         col1 = static_cast<float>(init1);
         col2 = static_cast<float>(init2);
       } else {
-        const input_t init0 = conv_state[0 * params.conv_state_l_stride];
-        init1 = conv_state[1 * params.conv_state_l_stride];
-        init2 = conv_state[2 * params.conv_state_l_stride];
+        const input_t init0 = read_conv_state[0 * params.conv_state_l_stride];
+        init1 = read_conv_state[1 * params.conv_state_l_stride];
+        init2 = read_conv_state[2 * params.conv_state_l_stride];
         col0 = static_cast<float>(init0);
         col1 = static_cast<float>(init1);
         col2 = static_cast<float>(init2);
@@ -663,7 +693,8 @@ void causal_conv1d_fwd(const at::Tensor& x,
                        const std::optional<at::Tensor>& cache_indices,
                        const std::optional<at::Tensor>& has_initial_state,
                        bool silu_activation,
-                       int64_t pad_slot_id) {
+                       int64_t pad_slot_id,
+                       const std::optional<at::Tensor>& read_cache_indices) {
   auto input_type = x.scalar_type();
   auto weight_type = weight.scalar_type();
   TORCH_CHECK(input_type == at::ScalarType::Float ||
@@ -720,6 +751,13 @@ void causal_conv1d_fwd(const at::Tensor& x,
                 "cache_indices must be a device tensor");
     CHECK_SHAPE(cache_indices_, batch_size);
   }
+  if (read_cache_indices.has_value() && read_cache_indices->defined()) {
+    auto read_cache_indices_ = read_cache_indices.value();
+    TORCH_CHECK(read_cache_indices_.scalar_type() == at::ScalarType::Int);
+    TORCH_CHECK(is_accel_device_tensor(read_cache_indices_),
+                "read_cache_indices must be a device tensor");
+    CHECK_SHAPE(read_cache_indices_, batch_size);
+  }
 
   ConvParamsBase params;
   set_conv_params_fwd(params,
@@ -735,7 +773,8 @@ void causal_conv1d_fwd(const at::Tensor& x,
                       pad_slot_id,
                       query_start_loc,
                       cache_indices,
-                      has_initial_state);
+                      has_initial_state,
+                      read_cache_indices);
 
   if (conv_states.has_value()) {
     auto conv_states_ = conv_states.value();
@@ -758,17 +797,19 @@ void causal_conv1d_fwd(const at::Tensor& x,
       });
 }
 
-void causal_conv1d_fwd_token_major(const at::Tensor& x,
-                                   const at::Tensor& weight,
-                                   at::Tensor& out,
-                                   const std::optional<at::Tensor>& bias,
-                                   const at::Tensor& conv_states,
-                                   const at::Tensor& query_start_loc,
-                                   const at::Tensor& cache_indices,
-                                   const at::Tensor& has_initial_state,
-                                   bool silu_activation,
-                                   int64_t pad_slot_id,
-                                   const std::optional<at::Tensor>& prefix_x) {
+void causal_conv1d_fwd_token_major(
+    const at::Tensor& x,
+    const at::Tensor& weight,
+    at::Tensor& out,
+    const std::optional<at::Tensor>& bias,
+    const at::Tensor& conv_states,
+    const at::Tensor& query_start_loc,
+    const at::Tensor& cache_indices,
+    const at::Tensor& has_initial_state,
+    bool silu_activation,
+    int64_t pad_slot_id,
+    const std::optional<at::Tensor>& prefix_x,
+    const std::optional<at::Tensor>& read_cache_indices) {
   TORCH_CHECK(x.dim() == 2 && x.stride(1) == 1);
   TORCH_CHECK(out.sizes() == x.sizes() && out.is_contiguous());
   TORCH_CHECK(weight.dim() == 2 && weight.size(1) == 4);
@@ -776,6 +817,12 @@ void causal_conv1d_fwd_token_major(const at::Tensor& x,
   TORCH_CHECK(query_start_loc.scalar_type() == at::ScalarType::Int);
   TORCH_CHECK(cache_indices.scalar_type() == at::ScalarType::Int);
   TORCH_CHECK(has_initial_state.scalar_type() == at::ScalarType::Bool);
+  if (read_cache_indices.has_value() && read_cache_indices->defined()) {
+    TORCH_CHECK(read_cache_indices->scalar_type() == at::ScalarType::Int);
+    TORCH_CHECK(read_cache_indices->sizes() == cache_indices.sizes());
+    TORCH_CHECK(is_accel_device_tensor(*read_cache_indices),
+                "read_cache_indices must be a device tensor");
+  }
 
   ConvParamsBase params;
   memset(&params, 0, sizeof(params));
@@ -791,6 +838,10 @@ void causal_conv1d_fwd_token_major(const at::Tensor& x,
   params.out_ptr = out.data_ptr();
   params.query_start_loc_ptr = query_start_loc.data_ptr();
   params.cache_indices_ptr = cache_indices.data_ptr();
+  params.read_cache_indices_ptr =
+      read_cache_indices.has_value() && read_cache_indices->defined()
+          ? read_cache_indices->data_ptr()
+          : params.cache_indices_ptr;
   params.has_initial_state_ptr = has_initial_state.data_ptr();
   params.x_c_stride = x.stride(1);
   params.x_l_stride = x.stride(0);
