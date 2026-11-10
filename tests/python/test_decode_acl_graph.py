@@ -63,7 +63,7 @@ class _SamplingModel(nn.Identity):
         return inputs.input_batch is not None and self.sampling_builder.can_execute_graph(inputs.input_batch.sampling)
 
 
-def _runner(model: nn.Module | None = None) -> DecodeAclGraphRunner:
+def _runner(model: nn.Module | None = None, max_batch: int = 8, **kwargs: Any) -> DecodeAclGraphRunner:
     attention_backend = SimpleNamespace(
         page_size=4,
         is_mla=False,
@@ -73,9 +73,46 @@ def _runner(model: nn.Module | None = None) -> DecodeAclGraphRunner:
         nn.Identity() if model is None else model,
         attention_backend,
         torch.device("cpu"),
-        max_batch=8,
+        max_batch=max_batch,
         max_model_len=8,
+        **kwargs,
     )
+
+
+def test_draft_consumes_aligned_effective_shapes() -> None:
+    width = 3
+    runner = _runner(is_spec_draft=True, draft_query_width=width, capture_sizes=(width, 2 * width, 3 * width))
+    assert runner._padded_token_rows(2 * width - 1) == 2 * width
+    assert runner._padded_token_rows(3 * width + 1) == 0
+    assert runner._engram_graph_token_capacity() == 3 * width
+    with pytest.raises(ValueError, match="aligned"):
+        _runner(is_spec_draft=True, draft_query_width=width, capture_sizes=(width + 1,))
+
+
+def test_custom_capture_selects_buckets_and_preserves_actual_sequence_capacity() -> None:
+    runner = _runner(max_batch=10, capture_sizes=(3, 7, 10))
+    for rows, bucket in ((1, 3), (3, 3), (4, 7), (7, 7), (8, 10), (10, 10), (11, 0)):
+        assert runner._padded_token_rows(rows) == bucket
+    assert runner._engram_graph_token_capacity() == 10
+    metadata = _aligned_dp_decode_metadata(9)
+    metadata.is_spec_verify = False
+    metadata.linear_state_indices = None
+    assert runner.can_execute(ModelInput(torch.arange(9), torch.arange(9), metadata))
+    runner.warmup(torch.arange(9), torch.arange(9), metadata)
+    assert not runner.can_execute(ModelInput(torch.arange(11), torch.arange(11), metadata))
+
+
+@pytest.mark.parametrize("counts,admitted,bucket", [((9, 0), True, 10), ((11, 0), False, 0), ((7, 3), True, 7)])
+def test_custom_capture_dp_ranks_choose_same_shape_and_admission(
+    counts: tuple[int, int], admitted: bool, bucket: int
+) -> None:
+    for rank in range(2):
+        runner = _runner(max_batch=16, dp_size=2, dp_rank=rank, capture_sizes=(3, 7, 10))
+        metadata = _dp_metadata(counts)
+        with patch.object(runner, "_has_compatible_decode_metadata", return_value=True):
+            input_ids = torch.arange(max(1, counts[rank]))
+            assert runner.can_execute(ModelInput(input_ids, input_ids, metadata)) == admitted
+        assert runner._padded_token_rows(max(metadata.dp_execution_token_counts)) == bucket
 
 
 def _query_batch(num_reqs: int, width: int) -> InputBatch:
@@ -640,8 +677,28 @@ def test_eplv2_graph_admission_uses_padded_token_rows_for_dflash2(limit: int, se
         )
 
 
+@pytest.mark.parametrize("capture_has_accepted_tokens", [False, True])
+def test_full_attention_graph_ignores_accepted_token_metadata(capture_has_accepted_tokens: bool) -> None:
+    runner = _runner(max_batch=10, is_spec_draft=True, capture_sizes=(3, 7, 10))
+    runner.bind_layer_caches([LayerCache(torch.zeros(1), torch.zeros(1))])
+    input_ids = torch.arange(4, dtype=torch.int32)
+    metadata = _metadata(None)
+    accepted = torch.ones(4, dtype=torch.int32)
+    metadata.num_accepted_tokens = accepted if capture_has_accepted_tokens else None
+    metadata.is_dummy = True
+    entry = runner._allocate_entry(7, input_ids, input_ids, metadata)
+    assert entry.static_metadata.num_accepted_tokens is None
+    with patch("xllm.python.model_executor.runners.decode_acl_graph.kernels.update_decode_graph_metadata", create=True):
+        for is_dummy, counts in ((True, accepted), (False, None), (False, accepted)):
+            metadata.is_dummy = is_dummy
+            metadata.num_accepted_tokens = counts
+            runner._fill_entry(entry, input_ids, input_ids, metadata, batch_size=4, input_embedding=None)
+            assert entry.static_metadata.num_accepted_tokens is None
+
+
 def test_accepted_tokens_use_live_per_sequence_graph_buffer() -> None:
     runner = _runner()
+    runner.bind_layer_caches([LayerCache(None, None, conv=torch.zeros(1), ssm=torch.zeros(1))])
     input_ids = torch.arange(4, dtype=torch.int32)
     positions = torch.arange(4, dtype=torch.int32)
     metadata = _metadata(torch.tensor([3, 3, 7, 7], dtype=torch.int32))
@@ -739,11 +796,14 @@ def test_verify_graph_key_tracks_width_not_active_sequence_count() -> None:
 def test_accepted_tokens_reject_missing_or_invalid_replay_metadata(
     accepted_counts: torch.Tensor | None, error_type: type[Exception]
 ) -> None:
-    runner = _runner()
+    runner = _runner(num_decoding_tokens=2)
+    runner.bind_layer_caches([LayerCache(None, None, conv=torch.zeros(1), ssm=torch.zeros(1))])
     input_ids = torch.arange(4, dtype=torch.int32)
     positions = torch.arange(4, dtype=torch.int32)
     metadata = _metadata(torch.tensor([3, 3, 7, 7], dtype=torch.int32))
-    metadata.num_accepted_tokens = torch.ones(2, dtype=torch.int32)
+    # An idle rank can capture without live counts, but the verify graph must
+    # still reserve the required recurrent-state buffer and reject missing data.
+    metadata.num_accepted_tokens = None
     entry = runner._allocate_entry(8, input_ids, positions, metadata)
     entry.static_metadata.is_spec_verify = True
     metadata.num_accepted_tokens = accepted_counts
@@ -767,7 +827,17 @@ def test_slice_output_preserves_aux_hidden_tuple() -> None:
 
 def test_linear_state_graph_buffers_are_stable() -> None:
     runner = _runner()
-    runner.layer_caches = [SimpleNamespace(kpool_tail=torch.zeros((1, 1, 1, 1), dtype=torch.bfloat16))]
+    runner.bind_layer_caches(
+        [
+            LayerCache(
+                None,
+                None,
+                conv=torch.zeros(1),
+                ssm=torch.zeros(1),
+                kpool_tail=torch.zeros((1, 1, 1, 1), dtype=torch.bfloat16),
+            )
+        ]
+    )
     input_ids = torch.arange(4, dtype=torch.int32)
     positions = torch.arange(4, dtype=torch.int32)
     metadata = _metadata(torch.tensor([3, 7, 11, 15], dtype=torch.int32))
@@ -909,6 +979,7 @@ def test_capture_preserves_live_state_until_first_replay(monkeypatch: pytest.Mon
 
 def test_explicit_verify_reuses_row_aligned_paging_metadata() -> None:
     runner = _runner()
+    runner.bind_layer_caches([LayerCache(None, None, conv=torch.zeros(1), ssm=torch.zeros(1))])
     runner.supports_draft_to_target_overlap = True
     metadata = _metadata(torch.tensor([1, 2], dtype=torch.int32))
     metadata.expanded_decode_metadata = ExpandedDecodeMetadata(
@@ -2826,6 +2897,7 @@ def _engram_execute_harness(
     *,
     staged: bool,
     capture_error: Exception | None = None,
+    capture_sizes: tuple[int, ...] = (),
 ) -> tuple[DecodeAclGraphRunner, Any, list[Any], Any]:
     """Wire a runner for the real ``DecodeAclGraphRunner.execute`` path.
 
@@ -2862,7 +2934,9 @@ def _engram_execute_harness(
 
     model = _EngramModel()
     backend = SimpleNamespace(page_size=4, is_mla=False, prepare=lambda *args, **kwargs: None)
-    runner = DecodeAclGraphRunner(model, backend, torch.device("cpu"), max_batch=8, max_model_len=8)
+    runner = DecodeAclGraphRunner(
+        model, backend, torch.device("cpu"), max_batch=8, max_model_len=8, capture_sizes=capture_sizes
+    )
     runner._stream = _StopAtReplayStream()
     graphs = _KeyRecordingDict()
     runner._graphs = graphs
@@ -2894,10 +2968,23 @@ def _engram_execute_harness(
     return runner, model, capture_calls, graphs
 
 
-def _engram_execute_inputs() -> tuple[torch.Tensor, torch.Tensor, Any]:
-    input_ids = torch.arange(4, dtype=torch.int64)
-    positions = torch.arange(4, dtype=torch.int64)
-    metadata = SimpleNamespace(linear_state_indices=torch.arange(4, dtype=torch.int32))
+def test_custom_capture_overflow_is_rejected_before_allocation(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner, model, captures, graphs = _engram_execute_harness(monkeypatch, staged=True, capture_sizes=(3, 6))
+    allocate = MagicMock(side_effect=AssertionError("overflow must not allocate"))
+    monkeypatch.setattr(runner, "_allocate_entry", allocate)
+    tokens, positions, metadata = _engram_execute_inputs(7)
+    with pytest.raises(ValueError, match="exceed effective graph_capture_sizes"):
+        runner.execute(tokens, positions, metadata)
+    allocate.assert_not_called()
+    assert model.stage_calls == 0
+    assert not captures
+    assert not graphs.keys_written
+
+
+def _engram_execute_inputs(rows: int = 4) -> tuple[torch.Tensor, torch.Tensor, Any]:
+    input_ids = torch.arange(rows, dtype=torch.int64)
+    positions = torch.arange(rows, dtype=torch.int64)
+    metadata = SimpleNamespace(linear_state_indices=torch.arange(rows, dtype=torch.int32))
     return input_ids, positions, metadata
 
 
@@ -2979,11 +3066,12 @@ def test_acl_runner_execute_registers_only_after_successful_capture(
     cache a half-built entry whenever the capture fails.
     """
 
-    runner, model, capture_calls, graphs = _engram_execute_harness(monkeypatch, staged=True)
-    input_ids, positions, metadata = _engram_execute_inputs()
-
-    with pytest.raises(_StoppedAfterCaptureError):
-        runner.execute(input_ids, positions, metadata)
+    runner, model, capture_calls, graphs = _engram_execute_harness(monkeypatch, staged=True, capture_sizes=(3, 6))
+    for count in (4, 5, 6):
+        input_ids, positions, metadata = _engram_execute_inputs(count)
+        with pytest.raises(_StoppedAfterCaptureError):
+            runner.execute(input_ids, positions, metadata)
+        assert runner.last_padded_batch_size == 6
 
     assert len(capture_calls) == 1
     assert len(graphs.keys_written) == 1
@@ -3010,11 +3098,11 @@ def test_acl_runner_execute_leaves_no_entry_when_capture_raises(
     runner, model, capture_calls, graphs = _engram_execute_harness(
         monkeypatch,
         staged=True,
-        capture_error=_CaptureFailedError(),
+        capture_error=_CaptureFailedError("capture sentinel"),
     )
     input_ids, positions, metadata = _engram_execute_inputs()
 
-    with pytest.raises(_CaptureFailedError):
+    with pytest.raises(_CaptureFailedError, match="capture sentinel"):
         runner.execute(input_ids, positions, metadata)
 
     assert len(capture_calls) == 1

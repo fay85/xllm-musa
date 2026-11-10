@@ -17,6 +17,7 @@ limitations under the License.
 
 #include <cstdint>
 #include <nlohmann/json_fwd.hpp>
+#include <vector>
 
 #include "core/common/macros.h"
 #include "core/framework/config/option_category.h"
@@ -36,12 +37,14 @@ class ExecutionConfig final {
   void from_json(const JsonReader& json);
   void append_config_json(nlohmann::ordered_json& config_json) const;
   void initialize();
+  void validate() const;
 
   [[nodiscard]] static const OptionCategory& option_category() {
     static const OptionCategory kOptionCategory = {
         "EXECUTION OPTIONS",
         {"enable_graph",
          "disable_graph_warmup",
+         "graph_capture_sizes",
          "enable_graph_double_buffer",
          "enable_graph_mode_decode_no_padding",
          "enable_prefill_piecewise_graph",
@@ -62,6 +65,10 @@ class ExecutionConfig final {
   PROPERTY(bool, enable_graph) = false;
 
   PROPERTY(bool, disable_graph_warmup) = false;
+
+  // Raw NPU decode token-row sizes. Each runner resolves query alignment and
+  // capacity before capture; empty keeps the existing backend policy.
+  PROPERTY(std::vector<int32_t>, graph_capture_sizes);
 
   PROPERTY(bool, enable_graph_double_buffer) = true;
 

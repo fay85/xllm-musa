@@ -58,9 +58,13 @@ int64_t get_decode_graph_capacity(const runtime::Options& options) {
   return options.max_seqs_per_batch();
 }
 
-int64_t get_decode_graph_token_capacity(const runtime::Options& options) {
+int64_t get_decode_graph_token_capacity(const runtime::Options& options,
+                                        int32_t capture_token_limit) {
   CHECK_GT(options.num_decoding_tokens(), 0)
       << "num_decoding_tokens must be > 0 for graph token capacity";
+  if (capture_token_limit > 0) {
+    return capture_token_limit;
+  }
   int64_t token_capacity = options.max_seqs_per_batch();
   if (::xllm::SpeculativeConfig::get_instance().enable_atb_spec_kernel()) {
     return runtime::get_decode_graph_token_bucket(
@@ -82,9 +86,14 @@ bool graph_mode_decode_no_padding_enabled() {
   return enabled;
 }
 
-int64_t get_hybrid_metadata_capacity(const runtime::Options& options) {
+int64_t get_hybrid_metadata_capacity(const runtime::Options& options,
+                                     int32_t capture_token_limit) {
   const int64_t seq_capacity = get_decode_graph_capacity(options);
   const int64_t num_decoding_tokens = options.num_decoding_tokens();
+  if (capture_token_limit > 0) {
+    return (capture_token_limit + num_decoding_tokens - 1) /
+           num_decoding_tokens;
+  }
   // Bucket padding rows still consume sequence-scoped metadata:
   // 4 seqs x 5 tokens = 20 rows -> bucket 32 -> 7 metadata rows.
   const int64_t bucketed_tokens = runtime::get_decode_graph_token_bucket(
@@ -96,10 +105,14 @@ int64_t get_hybrid_metadata_capacity(const runtime::Options& options) {
 }
 
 int64_t get_bucketed_decode_graph_token_capacity(
-    const runtime::Options& options) {
+    const runtime::Options& options,
+    int32_t capture_token_limit) {
+  if (capture_token_limit > 0) {
+    return capture_token_limit;
+  }
   // Token-scoped buffers are sliced to bucketed token counts: 20 rows -> 32.
   return runtime::get_decode_graph_token_bucket(
-      get_decode_graph_token_capacity(options),
+      get_decode_graph_token_capacity(options, capture_token_limit),
       graph_mode_decode_no_padding_enabled());
 }
 
@@ -122,18 +135,37 @@ float get_dp_ep_all2all_buffer_factor(int64_t length) {
 }
 
 int64_t get_dp_ep_padding_buffer_capacity(const ModelArgs& args,
-                                          const runtime::Options& options) {
+                                          const runtime::Options& options,
+                                          int32_t capture_token_limit) {
   const int64_t dp_size = std::max<int64_t>(options.dp_size(), 1);
-  const int64_t graph_capacity = get_decode_graph_token_capacity(options);
+  const int64_t graph_capacity =
+      get_decode_graph_token_capacity(options, capture_token_limit);
   const int64_t topk = std::max<int64_t>(args.num_experts_per_tok(), 1);
   const int64_t base_length = graph_capacity * topk;
   const int64_t global_length = base_length * dp_size;
   const float buffer_factor = get_dp_ep_all2all_buffer_factor(global_length);
   const int64_t moe_buffer_capacity =
       static_cast<int64_t>(std::ceil(base_length * buffer_factor));
-  const int64_t aligned_moe_buffer_capacity =
+  int64_t aligned_moe_buffer_capacity =
       ((moe_buffer_capacity + dp_size - 1) / dp_size) * dp_size;
-  return std::max(graph_capacity * dp_size, aligned_moe_buffer_capacity);
+  int64_t dp_padding_capacity = graph_capacity * dp_size;
+  if (capture_token_limit > 0) {
+    // Match the attention TP used by CollectiveCommunicator's NPU mapping:
+    // world = DP * CP * attention TP. NPU PP is not supported; MoE TP is
+    // derived independently from EP and must not be used for this alignment.
+    // Revisit this calculation if the supported attention topology changes.
+    const int64_t cp_size = std::max<int64_t>(options.cp_size(), 1);
+    const int64_t attn_tp_size =
+        std::max<int64_t>(options.world_size() / dp_size / cp_size, 1);
+    dp_padding_capacity =
+        util::align_up(graph_capacity, attn_tp_size) * dp_size;
+    // MoE all-to-all buffers are padded to EP, independently of DP.
+    const int64_t ep_size = std::max<int64_t>(options.ep_size(), 1);
+    aligned_moe_buffer_capacity =
+        std::max(aligned_moe_buffer_capacity,
+                 util::align_up(moe_buffer_capacity, ep_size));
+  }
+  return std::max(dp_padding_capacity, aligned_moe_buffer_capacity);
 }
 
 int64_t infer_actual_batch_size(const ModelInputParams& params) {
@@ -219,15 +251,19 @@ int32_t get_mla_capture_kv_seq_len_bucket(const ModelInputParams& params,
 }
 
 // GraphPersistentParam implementation
-GraphPersistentParam::GraphPersistentParam(const ModelArgs& args,
-                                           const torch::Device& device,
-                                           const runtime::Options& options,
-                                           bool need_update_attn_mask,
-                                           bool is_hybrid_linear_attention,
-                                           bool supports_mla_graph_kv_bucketing)
+GraphPersistentParam::GraphPersistentParam(
+    const ModelArgs& args,
+    const torch::Device& device,
+    const runtime::Options& options,
+    bool need_update_attn_mask,
+    bool is_hybrid_linear_attention,
+    bool supports_mla_graph_kv_bucketing,
+    const std::vector<int32_t>& graph_capture_sizes)
     : args_(args),
       device_(device),
       options_(options),
+      capture_token_limit_(
+          graph_capture_sizes.empty() ? 0 : graph_capture_sizes.back()),
       context_for_plan_(nullptr),
       custom_pa_op_for_plan_(nullptr),
       stream_for_plan_(nullptr),
@@ -245,9 +281,10 @@ GraphPersistentParam::GraphPersistentParam(const ModelArgs& args,
   // Graph-mode token capacity is narrower than max_tokens_per_batch: ACL graph
   // only serves decode / spec-verify batches, so the relevant row upper bound
   // comes from decode graph capacity instead.
-  const int64_t max_graph_tokens = get_decode_graph_token_capacity(options);
+  const int64_t max_graph_tokens =
+      get_decode_graph_token_capacity(options, capture_token_limit_);
   const int64_t bucketed_max_graph_tokens =
-      get_bucketed_decode_graph_token_capacity(options);
+      get_bucketed_decode_graph_token_capacity(options, capture_token_limit_);
   // Hybrid speculative verification normally keeps sequence-scoped metadata.
   // In DP target-MTP decode, however, an empty rank builds cold dummy metadata
   // for every proposal-token row so that its graph shape matches active ranks.
@@ -259,10 +296,12 @@ GraphPersistentParam::GraphPersistentParam(const ModelArgs& args,
       is_qwen3_5_target_model_type(args.model_type());
   const int64_t metadata_capacity =
       needs_token_scoped_empty_dp_metadata
-          ? std::max(bucketed_max_graph_tokens,
-                     get_hybrid_metadata_capacity(options))
-          : (is_hybrid_linear_attention ? get_hybrid_metadata_capacity(options)
-                                        : max_graph_tokens);
+          ? std::max(
+                bucketed_max_graph_tokens,
+                get_hybrid_metadata_capacity(options, capture_token_limit_))
+          : (is_hybrid_linear_attention
+                 ? get_hybrid_metadata_capacity(options, capture_token_limit_)
+                 : max_graph_tokens);
 
   const int64_t max_seq_len = args_.max_position_embeddings();
 
@@ -361,7 +400,7 @@ GraphPersistentParam::GraphPersistentParam(const ModelArgs& args,
 
   // Pre-allocate persistent dp/cp ep padding buffers with maximum capacity.
   const int64_t padding_buf_capacity =
-      get_dp_ep_padding_buffer_capacity(args, options);
+      get_dp_ep_padding_buffer_capacity(args, options, capture_token_limit_);
   torch::TensorOptions int_opts = torch::dtype(torch::kInt32).device(device);
 
   persistent_dp_ep_padding_
@@ -439,12 +478,15 @@ torch::Tensor slice_like_source(const torch::Tensor& persistent,
 
 int64_t get_graph_lm_head_index_length(const torch::Tensor& src,
                                        uint32_t padded_tokens,
-                                       int32_t dp_size) {
+                                       int32_t dp_size,
+                                       int32_t capture_token_limit) {
   CHECK(src.defined());
   CHECK_GT(src.numel(), 0);
-  if (dp_size > 1) {
+  if (dp_size > 1 || capture_token_limit > 0) {
     // DP padding lays out every shard at the graph width. Keep the lm-head
     // index view at that dense length even when the raw valid rows shrink.
+    // Configured EP-only decode must also use the actual capture width, not
+    // the default bucket of the valid index count.
     const int64_t graph_length =
         runtime::get_decode_graph_dp_layout_token_count(
             dp_size, static_cast<int32_t>(padded_tokens));
@@ -496,8 +538,11 @@ void GraphPersistentParam::update_persistent_dp_ep_padding(
   if (src_lm_head_indices.defined() && src_lm_head_indices.numel() > 0) {
     torch::Tensor& persistent_lm_head_indices =
         persistent_dp_ep_padding_.lm_head_skip_padding_token_indices();
-    const int64_t graph_length = get_graph_lm_head_index_length(
-        src_lm_head_indices, padded_tokens, dp_layout_size);
+    const int64_t graph_length =
+        get_graph_lm_head_index_length(src_lm_head_indices,
+                                       padded_tokens,
+                                       dp_layout_size,
+                                       capture_token_limit_);
     CHECK_LE(graph_length, persistent_lm_head_indices.size(0))
         << "lm-head index graph bucket exceeds persistent capacity";
     persistent_lm_head_indices
@@ -585,8 +630,10 @@ void GraphPersistentParam::replace_capture_dp_ep_padding(
             /*dim=*/0,
             /*start=*/0,
             /*end=*/
-            get_graph_lm_head_index_length(
-                src_lm_head_indices, padded_tokens, dp_layout_size)));
+            get_graph_lm_head_index_length(src_lm_head_indices,
+                                           padded_tokens,
+                                           dp_layout_size,
+                                           capture_token_limit_)));
   }
   dst.gather_prenorm_idx(
       slice_like_source(persistent_dp_ep_padding_.gather_prenorm_idx(),
@@ -664,7 +711,7 @@ void GraphPersistentParam::set_aux_hidden_states(const torch::Tensor& value) {
   const uint32_t result_tokens = value.size(0);
   if (aux_hidden_states_.numel() == 0) {
     const int64_t graph_token_capacity =
-        get_decode_graph_token_capacity(options_);
+        get_decode_graph_token_capacity(options_, capture_token_limit_);
     auto shape = value.sizes().vec();
     shape[0] = graph_token_capacity;
     torch::Dtype dtype = util::parse_dtype(args_.dtype(), device_);

@@ -68,7 +68,8 @@ class GraphPersistentParam final {
                        const runtime::Options& options,
                        bool need_update_attn_mask = false,
                        bool is_hybrid_linear_attention = false,
-                       bool supports_mla_graph_kv_bucketing = false);
+                       bool supports_mla_graph_kv_bucketing = false,
+                       const std::vector<int32_t>& graph_capture_sizes = {});
 
   ~GraphPersistentParam();
 
@@ -269,6 +270,8 @@ class GraphPersistentParam final {
   const ModelArgs& args_;
   const torch::Device& device_;
   const runtime::Options& options_;
+  // Buffer sizing only needs the largest configured shape, not every bucket.
+  const int32_t capture_token_limit_;
 
   // Persistent tensors
   torch::Tensor persistent_tokens_;

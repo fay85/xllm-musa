@@ -135,6 +135,7 @@ class Runner:
                 enable_mega_moe_token_mask=bool(config.get("enable_mega_moe", False) and not glm_eplv2),
                 is_spec_draft=options.is_spec_draft,
                 draft_query_width=int(config.get("draft_query_width", 1) or 1),
+                capture_sizes=config.get("graph_capture_sizes", ()),
                 **eplv2_graph_kwargs,
             )
         return None

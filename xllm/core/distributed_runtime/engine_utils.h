@@ -23,6 +23,16 @@ limitations under the License.
 
 namespace xllm {
 
+namespace runtime {
+struct Options;
+struct DecodeGraphWarmupConfig;
+}  // namespace runtime
+
+// Shared by text and multimodal engines so synthetic warmup uses the same
+// NPU decode token shapes as the executor. Other backends keep their policy.
+runtime::DecodeGraphWarmupConfig build_decode_graph_warmup_config(
+    const runtime::Options& options);
+
 // Configures `options` for the DeepSeek-V4 family (V4 and V4.1): DeepSeek-V4
 // serves its compressed KV through a composite block manager (SWA + one TOKEN
 // manager per kv-source compress ratio) plus the sliding-window pool sizing

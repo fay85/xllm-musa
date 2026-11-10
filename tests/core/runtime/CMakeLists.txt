@@ -78,7 +78,10 @@ cc_test(
   CPU_ONLY
   SRCS
     acl_graph_bucket_policy_test.cpp
+    ${PROJECT_SOURCE_DIR}/xllm/core/runtime/decode_graph_bucket.cpp
+    ${PROJECT_SOURCE_DIR}/xllm/core/scheduler/profile/decode_graph_warmup_plan.cpp
   DEPS
+    :platform
     GTest::gtest_main
 )
 

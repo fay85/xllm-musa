@@ -337,10 +337,13 @@ class ModelExecutor:
         first_parameter = next(model.parameters())
         device = first_parameter.device
         self._num_attention_layers = len(attention_layers)
+        requested_query_width = int(num_decoding_tokens)
         num_decoding_tokens = max(
-            int(num_decoding_tokens),
+            requested_query_width,
             1 if is_spec_draft and self._draft_query_width > 1 else int(config.get("num_speculative_tokens", 0)) + 1,
         )
+        if config.get("graph_capture_sizes") and not is_spec_draft and num_decoding_tokens != requested_query_width:
+            raise ValueError("effective graph_capture_sizes requires matching native and Python decode query widths")
         if "python_graph_backend" in config:
             logger.warning(
                 "python_graph_backend has been removed and is ignored. Set "

@@ -245,6 +245,9 @@ class AclGraphExecutorImpl : public ExecutorImpl {
   torch::Device device_;
   runtime::Options options_;
 
+  // Resolved once per runner; the default path keeps this empty.
+  std::vector<int32_t> graph_capture_sizes_;
+
   struct GraphSlot {
     std::unique_ptr<GraphPersistentParam> persistent_param;
     c10_npu::MempoolId_t graph_pool{0, 0};
@@ -262,9 +265,7 @@ class AclGraphExecutorImpl : public ExecutorImpl {
   int32_t next_replay_slot_ = 0;
   int32_t last_started_replay_slot_ = -1;
 
-  // Get bucket num_tokens for given num_tokens
-  // For num_tokens <= 8: use 1, 2, 4, 8
-  // For num_tokens > 8: use multiples of 16
+  // Select from effective capture sizes, or use the existing default policy.
   uint32_t get_bucket_num_tokens(uint32_t num_tokens) const;
 
   uint64_t get_graph_key(uint32_t bucket_num_tokens,

@@ -76,9 +76,44 @@ DecodeGraphWarmupPlan build_decode_graph_warmup_plan(
     const runtime::DecodeGraphWarmupConfig& warmup_config,
     int32_t max_global_batch_size,
     int32_t dp_size) {
-  DecodeGraphWarmupPlan plan = get_compatibility_decode_graph_warmup_plan(
-      max_global_batch_size, dp_size);
+  DecodeGraphWarmupPlan plan = warmup_config.graph_capture_sizes.empty()
+                                   ? get_compatibility_decode_graph_warmup_plan(
+                                         max_global_batch_size, dp_size)
+                                   : DecodeGraphWarmupPlan{};
   plan.warmup_config = warmup_config;
+
+  if (!warmup_config.graph_capture_sizes.empty()) {
+    if (max_global_batch_size <= 0 || dp_size <= 0 ||
+        warmup_config.num_decoding_tokens <= 0) {
+      return plan;
+    }
+    int64_t max_local_batch_size =
+        (static_cast<int64_t>(max_global_batch_size) + dp_size - 1) / dp_size;
+    if (warmup_config.max_graph_batch_size > 0) {
+      max_local_batch_size = std::min<int64_t>(
+          max_local_batch_size, warmup_config.max_graph_batch_size);
+    }
+    plan.batch_sizes.reserve(warmup_config.graph_capture_sizes.size());
+    for (int32_t capture_size : warmup_config.graph_capture_sizes) {
+      // Synthetic warmup constructs real sequences, not arbitrary tensors.
+      // The engine supplies normalized shapes divisible by this query width,
+      // so division is exact before the local batch capacity is applied.
+      // Use the largest reachable batch selecting this effective token shape.
+      const int64_t local_batch_size =
+          std::min(max_local_batch_size,
+                   capture_size / warmup_config.num_decoding_tokens);
+      if (local_batch_size <= 0 ||
+          runtime::get_decode_graph_token_bucket(
+              local_batch_size * warmup_config.num_decoding_tokens,
+              false,
+              warmup_config.graph_capture_sizes) != capture_size) {
+        continue;
+      }
+      plan.batch_sizes.emplace_back(static_cast<int32_t>(std::min<int64_t>(
+          local_batch_size * dp_size, max_global_batch_size)));
+    }
+    return plan;
+  }
 
   // MTP emits num_decoding_tokens rows per sequence. On supporting backends,
   // the graph cache is keyed by the padded number of rows rather than the

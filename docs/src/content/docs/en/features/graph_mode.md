@@ -56,6 +56,27 @@ If you need decode graph capture without padding, add:
 
 For a more complete description of the flags, see [CLI Reference](/en/cli_reference/).
 
+### Custom NPU decode capture buckets
+
+The native ACL executor and Python ACL runner accept `graph_capture_sizes` to replace the default decode token buckets. This does not add graph support for new models or change CUDA/MLU or prefill bucket policies.
+
+```shell
+--enable_graph=true --graph_capture_sizes=3,7,10
+```
+
+JSON configuration uses an integer array:
+
+```json
+{"enable_graph": true, "graph_capture_sizes": [3, 7, 10]}
+```
+
+- Sizes are **DP-local token rows**, not global sequence counts. Plain decode selects the smallest effective bucket covering the shared maximum row count: 4 rows select 7; 11 rows select eager before execution, without capturing a default 16-row graph.
+- Values must be positive int32 integers and are sorted/deduplicated. CLI overrides JSON. Omission or explicit `--graph_capture_sizes=` retains the old policy. An explicit empty JSON array, invalid values, or no usable shape after capacity filtering is a configuration error.
+- Uniform speculative decode rounds up to the runner's query width, deduplicates, and excludes shapes exceeding the raw maximum size, `max_tokens_per_batch`, or sequence/ACL capacity. `[1,4,8,16]` at width 3 becomes `[3,6,9]`, not 18. Target and draft resolve their own geometry.
+- The first implementation rejects decode no-padding, adaptive speculative decode, and native packed ATB speculative kernels with this option. Existing model and communication capability gates still apply.
+- Warmup maps effective token buckets to global sequence batches and captures largest first. KV-capacity-limited omissions produce a warning. `disable_graph_warmup=true` retains lazy capture only within the effective list. Slot, model variant, and attention-plan keys can create multiple graphs per bucket.
+- Startup logs show `effective capture token rows` and query width. Over-limit requests are routed before execution, logged, and counted by the existing eager execution counter. Capture/replay failures still propagate; they do not trigger failure-to-eager recovery. This option is not an alias for `max_tokens_for_graph_mode`.
+
 ## Performance Impact
 
 - With Graph Mode enabled, decode-phase throughput **improves by about 8%–10%** on models such as Qwen3-0.6B and Qwen3-1.7B.

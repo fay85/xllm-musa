@@ -97,16 +97,7 @@ VLMEngine::VLMEngine(const runtime::Options& options,
 }
 
 runtime::DecodeGraphWarmupConfig VLMEngine::decode_graph_warmup_config() const {
-  runtime::DecodeGraphWarmupConfig warmup_config;
-  warmup_config.num_decoding_tokens = options_.num_decoding_tokens();
-  warmup_config.num_speculative_tokens = options_.num_speculative_tokens();
-  warmup_config.enable_graph_mode_decode_no_padding =
-      options_.enable_graph_mode_decode_no_padding();
-  if (Platform::is_npu()) {
-    warmup_config.max_graph_batch_size =
-        ExecutionConfig::get_instance().acl_graph_decode_batch_size_limit();
-  }
-  return warmup_config;
+  return build_decode_graph_warmup_config(options_);
 }
 
 void VLMEngine::process_group_test() {

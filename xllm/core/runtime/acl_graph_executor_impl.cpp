@@ -1090,6 +1090,15 @@ AclGraphExecutorImpl::AclGraphExecutorImpl(CausalLM* model,
                                            const torch::Device& device,
                                            const runtime::Options& options)
     : model_(model), args_(args), device_(device), options_(options) {
+  const auto& raw_sizes =
+      ::xllm::ExecutionConfig::get_instance().graph_capture_sizes();
+  if (!raw_sizes.empty()) {
+    graph_capture_sizes_ = runtime::get_decode_graph_capture_sizes(
+        options_, options_.num_decoding_tokens());
+    LOG(INFO) << "ACL graph effective capture token rows="
+              << graph_capture_sizes_
+              << ", query_width=" << options_.num_decoding_tokens();
+  }
   const bool need_update_attn_mask = model->is_hybrid_linear_attention();
   const bool is_hybrid_linear_attn = model->is_hybrid_linear_attention();
   graph_slot_count_ =
@@ -1103,7 +1112,8 @@ AclGraphExecutorImpl::AclGraphExecutorImpl(CausalLM* model,
         options_,
         need_update_attn_mask,
         is_hybrid_linear_attn,
-        model_->supports_mla_graph_kv_bucketing());
+        model_->supports_mla_graph_kv_bucketing(),
+        graph_capture_sizes_);
     slot.graph_pool = c10_npu::graph_pool_handle();
   }
 }
@@ -1305,6 +1315,15 @@ ModelOutput AclGraphExecutorImpl::run(const torch::Tensor& tokens,
 
   const uint32_t bucket_num_tokens =
       get_bucket_num_tokens(max_local_num_tokens);
+  if (bucket_num_tokens == 0) {
+    LOG_FIRST_N(WARNING, 1)
+        << "Decode DP-local token rows=" << max_local_num_tokens
+        << " exceed effective graph_capture_sizes=" << graph_capture_sizes_
+        << "; selecting eager before ACL capture. Monitor "
+           "num_model_execution_total_eager for frequency.";
+    COUNTER_INC(num_model_execution_total_eager);
+    return run_eager();
+  }
 
   // Check if conditions are suitable for graph execution (replay or capture)
   const auto max_seq_len = args_.max_position_embeddings();
@@ -1574,6 +1593,9 @@ void AclGraphExecutorImpl::prepare_graph_input(const torch::Tensor& tokens,
     return;
   }
   const uint32_t bucket_num_tokens = get_bucket_num_tokens(graph_num_tokens);
+  if (bucket_num_tokens == 0) {
+    return;
+  }
   uint64_t attention_plan_class = 0;
   if (params.is_spec_verify &&
       params.meta.batch_forward_type.is_chunked_prefill() &&
@@ -1687,7 +1709,8 @@ uint32_t AclGraphExecutorImpl::get_bucket_num_tokens(
   return static_cast<uint32_t>(runtime::get_decode_graph_token_bucket(
       num_tokens,
       ::xllm::ExecutionConfig::get_instance()
-          .enable_graph_mode_decode_no_padding()));
+          .enable_graph_mode_decode_no_padding(),
+      graph_capture_sizes_));
 }
 
 std::optional<uint64_t>

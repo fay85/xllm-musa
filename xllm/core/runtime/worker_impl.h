@@ -417,6 +417,7 @@ class WorkerImpl {
 #if defined(USE_NPU)
   static constexpr size_t kDraftDpEpPaddingCacheCapacity = 2;
   DpEpPaddingCache draft_dp_ep_padding_cache_{kDraftDpEpPaddingCacheCapacity};
+  std::vector<int32_t> target_graph_capture_sizes_;
 
   bool wakeup_from_remote_weights(const WakeupOptions& options);
   // Complete rolling initialization by delegating to model-owned rolling

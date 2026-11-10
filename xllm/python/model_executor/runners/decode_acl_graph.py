@@ -31,6 +31,7 @@ logic:
 from __future__ import annotations
 
 import os
+from bisect import bisect_left
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from typing import Any
@@ -301,6 +302,7 @@ class DecodeAclGraphRunner(BaseRunner):
         is_spec_draft: bool = False,
         draft_query_width: int = 1,
         eplv2_graph_token_limit: int | None = None,
+        capture_sizes: Sequence[int] = (),
     ) -> None:
         super().__init__(model, attention_backend, device)
         self.supports_draft_to_target_overlap = bool(
@@ -326,6 +328,27 @@ class DecodeAclGraphRunner(BaseRunner):
         # Draft metadata stays one row per token. Query width defines complete
         # blocks for sequence-capacity admission and graph padding.
         self._draft_query_width = max(1, int(draft_query_width))
+        # The native bridge normalizes raw sizes using the same policy as native
+        # ACL capture and engine warmup. Python only consumes effective shapes.
+        query_width = self._draft_query_width if self._is_spec_draft else self.num_decoding_tokens
+        if any(
+            type(size) is not int or size <= 0 or size > 2**31 - 1 or size % query_width != 0 for size in capture_sizes
+        ):
+            raise ValueError("effective graph_capture_sizes must be positive integers aligned to the query width")
+        if any(left >= right for left, right in zip(capture_sizes, capture_sizes[1:])):
+            raise ValueError("effective graph_capture_sizes must be sorted and unique")
+        if capture_sizes and capture_sizes[-1] // query_width > self.max_batch:
+            raise ValueError("effective graph_capture_sizes exceeds sequence capacity")
+        if (
+            capture_sizes
+            and self.decode_batch_size_limit > 0
+            and capture_sizes[-1] // query_width > self.decode_batch_size_limit
+        ):
+            raise ValueError("effective graph_capture_sizes exceeds ACL decode batch limit")
+        self._capture_sizes = tuple(capture_sizes)
+        self._capture_size_reject_logged = False
+        if self._capture_sizes:
+            logger.info("ACL graph effective capture token rows=%s, query_width=%d", self._capture_sizes, query_width)
         self._eplv2_graph_token_limit = eplv2_graph_token_limit
         self._graphs: dict[_GraphKey, _DecodeGraphEntry] = {}
         self._graph_pool: Any | None = None
@@ -370,6 +393,8 @@ class DecodeAclGraphRunner(BaseRunner):
         the graph key's padded token-row bucket.
         """
         seq_capacity = self.max_batch
+        if self._capture_sizes:
+            return self._capture_sizes[-1]
         if self.decode_batch_size_limit > 0:
             seq_capacity = min(seq_capacity, self.decode_batch_size_limit)
         rows_per_seq = self.num_decoding_tokens
@@ -378,9 +403,31 @@ class DecodeAclGraphRunner(BaseRunner):
         return _decode_bucket(seq_capacity * rows_per_seq)
 
     def _padded_token_rows(self, token_rows: int) -> int:
+        if self._capture_sizes:
+            # Select from C++'s effective shapes; do not round or normalize
+            # them again. Constructor validation enforces the width contract.
+            index = bisect_left(self._capture_sizes, token_rows)
+            return self._capture_sizes[index] if index < len(self._capture_sizes) else 0
         query_width = self._draft_query_width if self._is_spec_draft else 1
         num_groups = (token_rows + query_width - 1) // query_width
         return _decode_bucket(num_groups) * query_width
+
+    def _sequence_capacity_bucket(self, sequence_count: int) -> int:
+        # Custom shapes pad rows separately. Capacity is in actual sequences,
+        # not the default sequence bucket (e.g. 9 -> 16 despite max_seqs=10).
+        return sequence_count if self._capture_sizes else _decode_bucket(sequence_count)
+
+    def _capture_size_admits(self, token_rows: int) -> bool:
+        if not self._capture_sizes or token_rows <= self._capture_sizes[-1]:
+            return True
+        if not self._capture_size_reject_logged:
+            logger.warning(
+                "Decode DP-local token rows=%d exceed effective graph_capture_sizes=%s; selecting eager before ACL capture",
+                token_rows,
+                self._capture_sizes,
+            )
+            self._capture_size_reject_logged = True
+        return False
 
     def _eplv2_graph_admits(self, token_rows: int) -> bool:
         """Keep MC2 capture inside the HCCL window; All-to-AllV stays eager."""
@@ -766,9 +813,11 @@ class DecodeAclGraphRunner(BaseRunner):
                     f"expected length {self.dp_size}). All DP ranks must use the same graph shape."
                 )
             _require_positive_execution_counts(execution_counts)
-            if not self._eplv2_graph_admits(max(execution_counts)):
-                return False
             if not all_decode:
+                return False
+            if not self._capture_size_admits(max(execution_counts)):
+                return False
+            if not self._eplv2_graph_admits(max(execution_counts)):
                 return False
             # MegaMoe shares one fixed graph shape across DP ranks, so the
             # local rows must equal this rank's advertised execution count;
@@ -798,7 +847,7 @@ class DecodeAclGraphRunner(BaseRunner):
                 self._require_shared_kpool_layout(
                     metadata,
                     batch_size,
-                    _decode_bucket(max_global_tokens),
+                    self._padded_token_rows(max_global_tokens),
                     verify_width,
                 )
             if input_embedding is not None and input_embedding.shape[0] != batch_size:
@@ -807,6 +856,7 @@ class DecodeAclGraphRunner(BaseRunner):
                     f"rank={self.dp_rank}, tokens={batch_size}, "
                     f"embedding_rows={int(input_embedding.shape[0])}"
                 )
+            bucket_size = self._sequence_capacity_bucket(global_batch)
             ok = (
                 self._has_compatible_decode_metadata(
                     input_ids,
@@ -816,16 +866,19 @@ class DecodeAclGraphRunner(BaseRunner):
                     expanded_view=expanded_view,
                     verify_width=verify_width,
                 )
-                and _decode_bucket(global_batch) <= self.max_batch
-                and (self.decode_batch_size_limit <= 0 or _decode_bucket(global_batch) <= self.decode_batch_size_limit)
+                and bucket_size <= self.max_batch
+                and (self.decode_batch_size_limit <= 0 or bucket_size <= self.decode_batch_size_limit)
             )
             return ok
-        bucket_size = _decode_bucket(size_check_bs)
+        if (metadata.is_prefill or metadata.is_chunked_prefill) and not is_expanded_spec_verify:
+            return False
+        bucket_size = self._sequence_capacity_bucket(size_check_bs)
+        if not self._capture_size_admits(batch_size):
+            return False
         if not self._eplv2_graph_admits(batch_size):
             return False
         ok = (
-            ((not metadata.is_prefill and not metadata.is_chunked_prefill) or is_expanded_spec_verify)
-            and self._has_compatible_decode_metadata(
+            self._has_compatible_decode_metadata(
                 input_ids,
                 metadata,
                 local_expanded=is_expanded_spec_verify,
@@ -1451,8 +1504,13 @@ class DecodeAclGraphRunner(BaseRunner):
             local_expanded=resolve_expanded_decode_metadata(metadata) is not None,
             packed_verify_width=self._spec_verify_width(batch_size, metadata),
         )
-        if admission_batch is None or _decode_bucket(admission_batch) > self.max_batch:
+        if admission_batch is None or self._sequence_capacity_bucket(admission_batch) > self.max_batch:
             raise ValueError("decode batch exceeds ACL graph capacity")
+
+        execution_counts = getattr(metadata, "dp_execution_token_counts", None)
+        token_rows = max(execution_counts) if self.dp_size > 1 and execution_counts else batch_size
+        if self._padded_token_rows(token_rows) == 0:
+            raise ValueError("decode token rows exceed effective graph_capture_sizes")
 
         # Graph capture is performed lazily by ``execute`` on the first decode
         # of each (bucket, expanded, embedding) key -- including the synthetic
@@ -1516,6 +1574,8 @@ class DecodeAclGraphRunner(BaseRunner):
             padded_batch_size = self._padded_token_rows(max_global_tokens)
         else:
             padded_batch_size = self._padded_token_rows(batch_size)
+        if padded_batch_size == 0:
+            raise ValueError("decode token rows exceed effective graph_capture_sizes")
         expanded_view = resolve_expanded_decode_metadata(metadata)
         is_expanded, verify_width, admission_batch = self._shared_graph_plan(
             metadata,
@@ -1529,7 +1589,7 @@ class DecodeAclGraphRunner(BaseRunner):
         # instead of the "most recently created" one, which an interleaved
         # 1-row forward may have replaced with a smaller buffer.
         self.last_padded_batch_size = padded_batch_size
-        if admission_batch is None or _decode_bucket(admission_batch) > self.max_batch:
+        if admission_batch is None or self._sequence_capacity_bucket(admission_batch) > self.max_batch:
             raise ValueError("decode batch exceeds ACL graph capacity")
 
         kpool_query_lens = self._graph_kpool_query_lens(
@@ -2179,13 +2239,13 @@ class DecodeAclGraphRunner(BaseRunner):
             padded_batch_size,
             verify_width,
         )
-        needs_accepted_tokens = getattr(metadata, "num_accepted_tokens", None) is not None or (
-            self.num_decoding_tokens > 1
-            and any(
-                getattr(cache, "conv", None) is not None and getattr(cache, "ssm", None) is not None
-                for cache in self.layer_caches
-            )
-        )
+        # Only recurrent layers consume accepted counts. Full-attention draft
+        # metadata may carry them on a dummy/MTP step and omit them later;
+        # that incidental field must not impose a graph replay requirement.
+        needs_accepted_tokens = any(
+            getattr(cache, "conv", None) is not None and getattr(cache, "ssm", None) is not None
+            for cache in self.layer_caches
+        ) and (self.num_decoding_tokens > 1 or getattr(metadata, "num_accepted_tokens", None) is not None)
         lookback = getattr(metadata, "engram_lookback_token_ids", None)
         cfg = getattr(self.model, "cfg", None)
         if lookback is not None and lookback.ndim != 2:

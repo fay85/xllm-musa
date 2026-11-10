@@ -21,10 +21,33 @@ limitations under the License.
 #include <limits>
 #include <vector>
 
+#include "core/framework/config/execution_config.h"
+#include "core/platform/platform.h"
+#include "core/runtime/decode_graph_bucket.h"
+#include "core/runtime/options.h"
 #include "core/util/utils.h"
 #include "framework/block/block_utils.h"
 
 namespace xllm {
+
+runtime::DecodeGraphWarmupConfig build_decode_graph_warmup_config(
+    const runtime::Options& options) {
+  runtime::DecodeGraphWarmupConfig warmup_config;
+  warmup_config.num_decoding_tokens = options.num_decoding_tokens();
+  warmup_config.num_speculative_tokens = options.num_speculative_tokens();
+  warmup_config.enable_graph_mode_decode_no_padding =
+      options.enable_graph_mode_decode_no_padding();
+  if (!Platform::is_npu()) {
+    return warmup_config;
+  }
+
+  const auto& execution_config = ExecutionConfig::get_instance();
+  warmup_config.max_graph_batch_size =
+      execution_config.acl_graph_decode_batch_size_limit();
+  warmup_config.graph_capture_sizes = runtime::get_decode_graph_capture_sizes(
+      options, options.num_decoding_tokens());
+  return warmup_config;
+}
 
 void configure_dsv4_block_manager_options(const ModelArgs& args,
                                           BlockManagerPool::Options& options,

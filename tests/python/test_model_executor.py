@@ -223,6 +223,7 @@ def test_v41_executor_preserves_csa2_dispatch_after_main_integration(
             enable_mega_moe_token_mask=False,
             is_spec_draft=False,
             draft_query_width=1,
+            capture_sizes=(),
         )
         executor.decode_graph_runner.bind_execution_metadata_builders.assert_called_once_with(())
 
@@ -1146,6 +1147,21 @@ class TestCreateAttentionBackend:
 
 
 class TestModelExecutorConstruction:
+    @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
+    def test_acl_graph_rejects_query_geometry_divergence(self) -> None:
+        with pytest.raises(ValueError, match="matching native and Python decode query widths"):
+            ModelExecutor(
+                _FakeModel(num_layers=1),
+                {
+                    "max_position_embeddings": 128,
+                    "enable_graph": True,
+                    "graph_capture_sizes": [3, 6, 9],
+                    "num_speculative_tokens": 2,
+                },
+                max_seqs_per_batch=16,
+                num_decoding_tokens=1,
+            )
+
     @pytest.mark.parametrize("use_xfia_decode", [False, True])
     @pytest.mark.parametrize(
         "model_type,jev_prompt_attention",
@@ -1706,6 +1722,7 @@ class TestModelExecutorConstruction:
             enable_mega_moe_token_mask=False,
             is_spec_draft=is_spec_draft,
             draft_query_width=1,
+            capture_sizes=(),
         )
 
     @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)
@@ -1915,6 +1932,7 @@ class TestModelExecutorConstruction:
             enable_mega_moe_token_mask=True,
             is_spec_draft=False,
             draft_query_width=1,
+            capture_sizes=(),
         )
 
     @patch("xllm.python.model_executor.executor.current_platform.is_npu", new=lambda: True)

@@ -429,6 +429,13 @@ WorkerImpl::WorkerImpl(const ParallelArgs& parallel_args,
 #endif
 
 #if defined(USE_NPU)
+  if (options_.enable_graph() && options_.enable_speculative_decode() &&
+      !options_.is_draft_engine() && !is_spec_draft_) {
+    // Get effective shapes once, not on every decode step; match the target
+    // executor's query width and capacities.
+    target_graph_capture_sizes_ = runtime::get_decode_graph_capture_sizes(
+        options_, options_.num_decoding_tokens());
+  }
   if (::xllm::KVCacheConfig::get_instance().enable_xtensor()) {
     if (!weight_transfer_) {
       weight_transfer_ = std::make_unique<MooncakeWeightTransfer>(
@@ -1221,8 +1228,11 @@ void WorkerImpl::prepare_dp_ep_padding(ModelInputParams& input_params) {
         static_cast<int32_t>(runtime::get_decode_graph_token_bucket(
             max_token_size,
             ::xllm::ExecutionConfig::get_instance()
-                .enable_graph_mode_decode_no_padding()));
-    use_graph_padding = std::any_of(token_sizes.begin(),
+                .enable_graph_mode_decode_no_padding(),
+            target_graph_capture_sizes_));
+    // Overflow stays in the original eager layout, never a zero-width graph.
+    use_graph_padding = graph_token_size > 0 &&
+                        std::any_of(token_sizes.begin(),
                                     token_sizes.end(),
                                     [graph_token_size](int32_t token_count) {
                                       return token_count != graph_token_size;

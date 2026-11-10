@@ -56,6 +56,27 @@ xLLM 支持 Graph Mode，通过预捕获计算图并在后续执行中重放，�
 
 更完整的参数说明可参考 [CLI 参数说明](/zh/cli_reference/)。
 
+### 指定 NPU decode capture buckets
+
+Native ACL executor 与 Python ACL runner 支持 `graph_capture_sizes`，用来替换默认 decode token 桶。它不增加模型的图支持，也不改变 CUDA/MLU 或 prefill 的选桶策略。
+
+```shell
+--enable_graph=true --graph_capture_sizes=3,7,10
+```
+
+JSON 配置使用整数数组：
+
+```json
+{"enable_graph": true, "graph_capture_sizes": [3, 7, 10]}
+```
+
+- 单位是 **DP-local token rows**，不是全局 sequence 数。普通 decode 请求选择不小于组内最大 token rows 的最小有效桶：例如 4 rows 选择 7，11 rows 在执行前选择 eager，不捕获默认的 16-row 图。
+- 列表必须包含正的 int32 整数，自动排序去重；CLI 优先于 JSON。未设置参数或显式 `--graph_capture_sizes=` 保留旧策略；显式 JSON 空数组、非法值、容量过滤后没有可用 shape 均报配置错误。
+- Uniform speculative decode 按对应 runner 的 query width 向上对齐，去重后排除超过原始最大 size、`max_tokens_per_batch` 或 sequence/ACL 容量的 shape。例如 `[1,4,8,16]`、width=3 得到 `[3,6,9]`，不捕获 18。Target 与 draft 按各自宽度解析，不直接共用原始数组。
+- 首版不支持与 decode no-padding、adaptive speculative decode 或 native packed ATB speculative kernel 组合。其他现有模型能力与通信限制仍然生效。
+- 预热按有效 token 桶构造全局 sequence batch，并保持从大桶到小桶捕获；受 KV 容量限制无法预热的桶会输出警告。设置 `disable_graph_warmup=true` 时仍只允许在有效列表内延迟捕获。图实例数还取决于 slot、模型 variant 和 attention plan，不等于桶数。
+- 启动日志输出 `effective capture token rows` 与 query width；超过列表时有执行前分流日志，并计入现有 eager execution counter。捕获/回放失败仍正常传播，不以失败后切 eager 掩盖错误。此参数不是 `max_tokens_for_graph_mode` 的别名。
+
 ## 性能效果
 
 - 开启 Graph Mode 后，在 Qwen3-0.6B 和 Qwen3-1.7B 等模型上，decode 阶段吞吐 **提升约 8%–10%**。

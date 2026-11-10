@@ -17,8 +17,12 @@ limitations under the License.
 
 #include <glog/logging.h>
 
+#include <algorithm>
+#include <limits>
+
 #include "core/common/global_flags.h"
 #include "core/framework/config/config_utils.h"
+#include "core/platform/platform.h"
 
 DEFINE_bool(
     enable_graph,
@@ -32,6 +36,20 @@ DEFINE_bool(disable_graph_warmup,
             false,
             "Whether to skip synthetic graph warmup during engine startup. "
             "When enabled, graphs are captured lazily by real requests.");
+
+DEFINE_string(graph_capture_sizes,
+              "",
+              "Comma-separated positive decode graph capture sizes in "
+              "DP-local token rows, e.g. 1,2,4,8,16. JSON uses an integer "
+              "array. Supported only by native and Python ACL graph "
+              "paths on NPU for LLM/VLM decode, subject to existing model "
+              "graph support. Nonempty values are rejected on other devices; "
+              "prefill graph policy is unchanged. Sizes are rounded up to each "
+              "runner's query width within "
+              "the largest configured size and existing capacity limits. "
+              "Unspecified keeps the default policy; no-padding and adaptive "
+              "speculative decode or native packed ATB speculative kernels "
+              "are not supported with this option.");
 
 DEFINE_bool(enable_graph_double_buffer,
             true,
@@ -116,10 +134,38 @@ DEFINE_bool(
     "decode_acl_graph -> executor aux publish).");
 
 namespace xllm {
+namespace {
+
+std::vector<int32_t> parse_graph_capture_sizes(const nlohmann::json& value) {
+  CHECK(value.is_array() && !value.empty())
+      << "graph_capture_sizes must be a nonempty array of positive int32 "
+         "values";
+  std::vector<int32_t> sizes;
+  sizes.reserve(value.size());
+  for (const auto& size : value) {
+    CHECK(size.is_number_integer() && size > 0 &&
+          size <= std::numeric_limits<int32_t>::max())
+        << "graph_capture_sizes must contain only positive int32 values";
+    sizes.emplace_back(size.get<int32_t>());
+  }
+  std::sort(sizes.begin(), sizes.end());
+  sizes.erase(std::unique(sizes.begin(), sizes.end()), sizes.end());
+  return sizes;
+}
+
+}  // namespace
 
 void ExecutionConfig::from_flags() {
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_graph);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(disable_graph_warmup);
+  if (FLAGS_graph_capture_sizes.empty()) {
+    graph_capture_sizes({});
+  } else {
+    graph_capture_sizes(parse_graph_capture_sizes(
+        nlohmann::json::parse("[" + FLAGS_graph_capture_sizes + "]",
+                              nullptr,
+                              /*allow_exceptions=*/false)));
+  }
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_graph_double_buffer);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_graph_mode_decode_no_padding);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_prefill_piecewise_graph);
@@ -145,6 +191,13 @@ void ExecutionConfig::from_json(const JsonReader& json) {
   }
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph);
   XLLM_CONFIG_ASSIGN_FROM_JSON(disable_graph_warmup);
+  if (!config::is_flag_specified("graph_capture_sizes") &&
+      json.contains("graph_capture_sizes")) {
+    graph_capture_sizes(
+        parse_graph_capture_sizes(*json.resolve("graph_capture_sizes")));
+    const std::string serialized = nlohmann::json(graph_capture_sizes()).dump();
+    FLAGS_graph_capture_sizes = serialized.substr(1, serialized.size() - 2);
+  }
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph_double_buffer);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_graph_mode_decode_no_padding);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_prefill_piecewise_graph);
@@ -168,6 +221,8 @@ void ExecutionConfig::append_config_json(
       config_json, default_config, enable_graph);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, disable_graph_warmup);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, graph_capture_sizes);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, enable_graph_double_buffer);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
@@ -208,7 +263,21 @@ void ExecutionConfig::initialize() {
   if (const auto& json_config = config::get_parsed_json_config()) {
     from_json(*json_config);
   }
+  validate();
+}
+
+void ExecutionConfig::validate() const {
   CHECK_GT(forward_execution_timeout_ms(), 0);
+  if (graph_capture_sizes().empty()) {
+    return;
+  }
+  // TODO: Enable MLU after its owners implement and validate
+  // configured capture buckets, graph warmup, and overflow eager routing.
+  CHECK(Platform::is_npu()) << "graph_capture_sizes is only supported on NPU";
+  CHECK(enable_graph()) << "graph_capture_sizes requires enable_graph=true";
+  CHECK(!enable_graph_mode_decode_no_padding())
+      << "graph_capture_sizes cannot be combined with "
+         "enable_graph_mode_decode_no_padding";
 }
 
 }  // namespace xllm

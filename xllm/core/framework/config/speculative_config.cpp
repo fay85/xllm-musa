@@ -19,6 +19,8 @@ limitations under the License.
 
 #include "core/common/global_flags.h"
 #include "core/framework/config/config_utils.h"
+#include "core/framework/config/execution_config.h"
+#include "core/framework/config/model_config.h"
 #include "core/platform/platform.h"
 
 DEFINE_string(draft_model, "", "draft hf model path to the model file.");
@@ -162,6 +164,19 @@ void SpeculativeConfig::initialize() {
 }
 
 void SpeculativeConfig::validate() const {
+  // ExecutionConfig and ModelConfig initialize first. Cross-config checks
+  // here use actual startup values, not SpeculativeConfig's initial defaults.
+  if (!ExecutionConfig::get_instance().graph_capture_sizes().empty()) {
+    CHECK(!enable_adaptive_speculative_decode())
+        << "graph_capture_sizes does not support adaptive speculative decode";
+    const bool native_speculative_decode =
+        num_speculative_tokens() > 0 &&
+        !ModelConfig::is_python_model_impl(
+            ModelConfig::get_instance().model_impl());
+    CHECK(!native_speculative_decode || !enable_atb_spec_kernel())
+        << "graph_capture_sizes does not support packed ATB speculative "
+           "kernels";
+  }
   if (Platform::is_mlu()) {
     CHECK(!enable_adaptive_speculative_decode())
         << "Adaptive speculative decoding is currently disabled on MLU. "

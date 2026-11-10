@@ -21,6 +21,7 @@ limitations under the License.
 #include <nlohmann/json.hpp>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "core/common/global_flags.h"
 #include "core/framework/config/config_utils.h"
@@ -35,6 +36,107 @@ limitations under the License.
 
 namespace xllm {
 namespace {
+
+TEST(GraphCaptureConfigTest, DefaultAndFlagParsing) {
+  google::FlagSaver flag_saver;
+  EXPECT_TRUE(ExecutionConfig().graph_capture_sizes().empty());
+  const auto& names = ExecutionConfig::option_category().option_names;
+  EXPECT_NE(std::find(names.begin(), names.end(), "graph_capture_sizes"),
+            names.end());
+  google::SetCommandLineOption("graph_capture_sizes", "10, 3,7,3");
+  ExecutionConfig config;
+  config.from_flags();
+  EXPECT_EQ(config.graph_capture_sizes(), (std::vector<int32_t>{3, 7, 10}));
+}
+
+TEST(GraphCaptureConfigTest, JsonRoundTripAndFlagWriteback) {
+  google::FlagSaver flag_saver;
+  ExecutionConfig config;
+  config.from_json(config::parse_json_string(
+      R"json({"graph_capture_sizes":[10,3,7,3]})json"));
+  EXPECT_EQ(config.graph_capture_sizes(), (std::vector<int32_t>{3, 7, 10}));
+  EXPECT_EQ(FLAGS_graph_capture_sizes, "3,7,10");
+  nlohmann::ordered_json output;
+  config.append_config_json(output);
+  EXPECT_EQ(output.at("graph_capture_sizes"), nlohmann::json({3, 7, 10}));
+  ExecutionConfig round_trip;
+  round_trip.from_flags();
+  round_trip.from_json(config::parse_json_string(output.dump()));
+  EXPECT_EQ(round_trip.graph_capture_sizes(), config.graph_capture_sizes());
+}
+
+TEST(GraphCaptureConfigTest, ExplicitCliOverridesJsonIncludingEmptyList) {
+  for (const std::string value : {"3,7", ""}) {
+    SCOPED_TRACE(value);
+    google::FlagSaver flag_saver;
+    google::SetCommandLineOption("graph_capture_sizes", value.c_str());
+    ExecutionConfig config;
+    config.from_flags();
+    config.from_json(config::parse_json_string(
+        R"json({"graph_capture_sizes":[1,2,4]})json"));
+    EXPECT_EQ(
+        config.graph_capture_sizes(),
+        value.empty() ? std::vector<int32_t>{} : (std::vector<int32_t>{3, 7}));
+  }
+}
+
+TEST(GraphCaptureConfigTest, RejectsInvalidJsonAndMalformedFlags) {
+  google::FlagSaver flag_saver;
+  for (const std::string value : {"[]", "4", "[0]", "[1.5]", "[2147483648]"}) {
+    SCOPED_TRACE(value);
+    const JsonReader json =
+        config::parse_json_string("{\"graph_capture_sizes\":" + value + "}");
+    ExecutionConfig config;
+    EXPECT_DEATH(config.from_json(json), "graph_capture_sizes must");
+  }
+  for (const std::string value : {"1,,4", "foo"}) {
+    SCOPED_TRACE(value);
+    google::SetCommandLineOption("graph_capture_sizes", value.c_str());
+    ExecutionConfig config;
+    EXPECT_DEATH(config.from_flags(), "graph_capture_sizes must");
+  }
+}
+
+#if defined(USE_NPU)
+TEST(GraphCaptureConfigTest, RejectsNoPaddingCombination) {
+  ExecutionConfig config;
+  config.graph_capture_sizes({3, 7, 10});
+  EXPECT_DEATH(config.validate(), "requires enable_graph=true");
+  config.enable_graph(true);
+  EXPECT_NO_FATAL_FAILURE(config.validate());
+  config.enable_graph_mode_decode_no_padding(true);
+  EXPECT_DEATH(config.validate(), "cannot be combined");
+}
+
+TEST(GraphCaptureConfigTest, ValidatesSpeculativeCombinationsAtStartup) {
+  auto& execution = ExecutionConfig::get_instance();
+  auto& model = ModelConfig::get_instance();
+  const ExecutionConfig saved_execution = execution;
+  const ModelConfig saved_model = model;
+  execution.graph_capture_sizes({3, 7, 10});
+  model.model_impl("native");
+  SpeculativeConfig config;
+  config.num_speculative_tokens(2);
+  EXPECT_NO_FATAL_FAILURE(config.validate());
+  config.enable_adaptive_speculative_decode(true);
+  EXPECT_DEATH(config.validate(), "does not support adaptive");
+  config.enable_adaptive_speculative_decode(false).enable_atb_spec_kernel(true);
+  EXPECT_DEATH(config.validate(), "does not support packed ATB");
+  model.model_impl("python");
+  EXPECT_NO_FATAL_FAILURE(config.validate());
+  model.model_impl("native");
+  config.num_speculative_tokens(0);
+  EXPECT_NO_FATAL_FAILURE(config.validate());
+  execution = saved_execution;
+  model = saved_model;
+}
+#else
+TEST(GraphCaptureConfigTest, RejectsUnsupportedPlatform) {
+  ExecutionConfig config;
+  config.graph_capture_sizes({3, 7, 10});
+  EXPECT_DEATH(config.validate(), "only supported on NPU");
+}
+#endif
 
 TEST(ModelConfigJsonTest, SwaBoundedReplayFlagAndHelp) {
   google::FlagSaver flag_saver;

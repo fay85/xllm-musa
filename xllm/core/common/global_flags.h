@@ -169,6 +169,8 @@ DECLARE_bool(enable_graph);
 
 DECLARE_bool(disable_graph_warmup);
 
+DECLARE_string(graph_capture_sizes);
+
 DECLARE_bool(enable_graph_double_buffer);
 
 DECLARE_bool(enable_graph_mode_decode_no_padding);

@@ -91,7 +91,9 @@ int32_t decode_warmup_token_bucket(const DecodeGraphWarmupPlan& plan,
       static_cast<int64_t>(local_sequence_batch_size) *
       plan.warmup_config.num_decoding_tokens;
   return static_cast<int32_t>(runtime::get_decode_graph_token_bucket(
-      num_token_rows, plan.warmup_config.enable_graph_mode_decode_no_padding));
+      num_token_rows,
+      plan.warmup_config.enable_graph_mode_decode_no_padding,
+      plan.warmup_config.graph_capture_sizes));
 }
 
 }  // namespace
@@ -1340,6 +1342,16 @@ void ProfileManager::warmup_decode_for_graph() {
             << ", configured_max_batch_size=" << max_decode_batch_size
             << ", allocatable_sequences=" << allocatable_sequences
             << ", decode_seq_len=" << decode_seq_len;
+  const auto& capture_sizes =
+      decode_graph_warmup_plan_.warmup_config.graph_capture_sizes;
+  if (!capture_sizes.empty() &&
+      decode_batch_sizes.size() < capture_sizes.size()) {
+    LOG(WARNING) << "Some effective graph_capture_sizes=" << capture_sizes
+                 << " are not reachable with warmup sequence capacity="
+                 << warmup_capacity
+                 << "; only reachable buckets are prewarmed. Other configured "
+                    "shapes remain eligible for lazy capture by real requests.";
+  }
 
   // Capture from the largest bucket down to the smallest so every smaller
   // bucket reuses the scratch blocks freed by the largest capture within the

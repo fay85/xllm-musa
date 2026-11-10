@@ -34,6 +34,7 @@ limitations under the License.
 #include "core/layers/common/attention_metadata.h"
 #include "core/layers/common/attention_metadata_builder.h"
 #include "core/layers/common/kv_shard_batch_metadata.h"
+#include "core/runtime/decode_graph_bucket.h"
 #include "core/runtime/py_attention_metadata.h"
 #include "core/runtime/py_input_batch.h"
 #include "core/util/pybind_helper.h"
@@ -69,6 +70,18 @@ PyExecutorImpl::PyExecutorImpl(CausalLM* model,
   const bool is_spec_draft =
       options_.is_draft_engine() || (options_.enable_speculative_decode() &&
                                      options_.num_decoding_tokens() == 1);
+  const auto& raw_sizes = ExecutionConfig::get_instance().graph_capture_sizes();
+  if (!raw_sizes.empty()) {
+    const py::dict& config = py_causal_lm_->config_dict();
+    const int64_t query_width =
+        is_spec_draft ? config["draft_query_width"].cast<int64_t>()
+                      : options_.num_decoding_tokens();
+    std::vector<int32_t> capture_sizes =
+        runtime::get_decode_graph_capture_sizes(options_, query_width);
+    // Pass effective shapes through the existing model config, not a second
+    // Python implementation of query rounding / capacity normalization.
+    config["graph_capture_sizes"] = std::move(capture_sizes);
+  }
   py_executor_ = executor_module.attr("ModelExecutor")(
       py_causal_lm_->python_model(),
       py_causal_lm_->config_dict(),
