@@ -21,6 +21,7 @@ limitations under the License.
 #include "framework/core/MLUStream.h"
 #include "kernels/mlu/bangc/include/bangc_kda_norm_gate_api.h"
 #include "kernels/mlu/bangc/src/kda/launchers.h"
+#include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 
 namespace xllm::kernel::mlu {
 
@@ -28,16 +29,12 @@ std::optional<torch::Tensor> bangc_kda_norm_gate(const torch::Tensor& input,
                                                  const torch::Tensor& gate,
                                                  const torch::Tensor& weight,
                                                  double eps) {
-  if (!input.defined() || !gate.defined() || !weight.defined() ||
-      !input.device().is_privateuseone() ||
-      input.scalar_type() != torch::kBFloat16 ||
-      gate.scalar_type() != torch::kBFloat16 ||
-      weight.scalar_type() != torch::kBFloat16 || input.dim() != 2 ||
-      input.size(1) != 128 || gate.sizes() != input.sizes() ||
-      weight.dim() != 1 || weight.numel() != 128 ||
-      gate.device() != input.device() || weight.device() != input.device() ||
-      !input.is_contiguous() || !gate.is_contiguous() ||
-      !weight.is_contiguous() || !std::isfinite(eps) || eps < 0.0 ||
+  if (!bangc::detail::check_tensor(input, torch::kBFloat16) ||
+      !bangc::detail::check_tensor(gate, torch::kBFloat16, input.device()) ||
+      !bangc::detail::check_tensor(weight, torch::kBFloat16, input.device()) ||
+      input.dim() != 2 || input.size(1) != 128 ||
+      gate.sizes() != input.sizes() || weight.dim() != 1 ||
+      weight.numel() != 128 || !std::isfinite(eps) || eps < 0.0 ||
       eps > std::numeric_limits<float>::max()) {
     return std::nullopt;
   }

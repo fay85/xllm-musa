@@ -37,8 +37,8 @@ fused_mhc_pre(const torch::Tensor& residual,
               int64_t sinkhorn_iter,
               double hc_eps,
               double norm_eps) {
-  CHECK(residual.defined());
-  CHECK(residual.device().is_privateuseone());
+  CHECK(detail::check_tensor(residual, torch::kBFloat16))
+      << "residual must have the expected dtype and be contiguous on MLU";
   CHECK_EQ(residual.dim(), 3);
   CHECK_GT(sinkhorn_iter, 0);
   CHECK_LE(sinkhorn_iter, std::numeric_limits<int32_t>::max());
@@ -51,15 +51,28 @@ fused_mhc_pre(const torch::Tensor& residual,
   constexpr int64_t kHc = 4;
   constexpr int64_t kDim = 5120;
   constexpr int64_t kMix = 24;
-  detail::check_tensor(
-      residual, "residual", device, torch::kBFloat16, {tokens, kHc, kDim});
-  detail::check_tensor(
-      pre_in, "pre_in", device, torch::kFloat32, {tokens, kHc});
-  detail::check_tensor(
-      hc_fn, "hc_fn", device, torch::kBFloat16, {kMix, kHc * kDim});
-  detail::check_tensor(hc_scale, "hc_scale", device, torch::kFloat32, {3});
-  detail::check_tensor(hc_base, "hc_base", device, torch::kFloat32, {kMix});
-  detail::check_tensor(gamma, "gamma", device, torch::kBFloat16, {kDim});
+  CHECK(residual.sizes() == torch::IntArrayRef({tokens, kHc, kDim}))
+      << "residual has an unexpected shape";
+  CHECK(detail::check_tensor(pre_in, torch::kFloat32, device))
+      << "pre_in must have the expected dtype/device and be contiguous";
+  CHECK(pre_in.sizes() == torch::IntArrayRef({tokens, kHc}))
+      << "pre_in has an unexpected shape";
+  CHECK(detail::check_tensor(hc_fn, torch::kBFloat16, device))
+      << "hc_fn must have the expected dtype/device and be contiguous";
+  CHECK(hc_fn.sizes() == torch::IntArrayRef({kMix, kHc * kDim}))
+      << "hc_fn has an unexpected shape";
+  CHECK(detail::check_tensor(hc_scale, torch::kFloat32, device))
+      << "hc_scale must have the expected dtype/device and be contiguous";
+  CHECK(hc_scale.sizes() == torch::IntArrayRef({3}))
+      << "hc_scale has an unexpected shape";
+  CHECK(detail::check_tensor(hc_base, torch::kFloat32, device))
+      << "hc_base must have the expected dtype/device and be contiguous";
+  CHECK(hc_base.sizes() == torch::IntArrayRef({kMix}))
+      << "hc_base has an unexpected shape";
+  CHECK(detail::check_tensor(gamma, torch::kBFloat16, device))
+      << "gamma must have the expected dtype/device and be contiguous";
+  CHECK(gamma.sizes() == torch::IntArrayRef({kDim}))
+      << "gamma has an unexpected shape";
   torch::Tensor norm_out = torch::empty({tokens, kDim}, residual.options());
   torch::Tensor new_pre = torch::empty_like(pre_in);
   torch::Tensor post = torch::empty_like(pre_in);

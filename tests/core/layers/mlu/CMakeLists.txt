@@ -389,6 +389,7 @@ add_subdirectory(deepseek_v32)
 cc_test(
   NAME deepseek_v41_graph_test
   SRCS deepseek_v41_graph_test.cpp deepseek_v41_sparse_verify_test.cpp
+       deepseek_v41_compressor_test.cpp
   DEPS :tests_utils :mlu_layers :common_layers :model_context :parallel_state
        :state_dict xllm::mlu_ops torch glog::glog GTest::gtest_main
 )

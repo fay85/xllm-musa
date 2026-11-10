@@ -46,8 +46,11 @@ void fused_mhc_decode(const torch::Tensor& x,
                       torch::Tensor& next_pre,
                       torch::Tensor& post_out,
                       torch::Tensor& comb_out) {
-  CHECK(x.defined());
-  CHECK(x.device().is_privateuseone());
+  CHECK(detail::check_tensor(x,
+                             std::nullopt,
+                             std::nullopt,
+                             /*require_contiguous=*/false))
+      << "x must be on MLU";
   CHECK_EQ(x.dim(), 2);
   CHECK_GT(sinkhorn_iter, 0);
   CHECK_LE(sinkhorn_iter, std::numeric_limits<int32_t>::max());
@@ -63,36 +66,62 @@ void fused_mhc_decode(const torch::Tensor& x,
   if (tokens == 0) {
     return;
   }
-  detail::check_tensor(x, "x", device, torch::kBFloat16, {tokens, kDim});
-  detail::check_tensor(residual_in,
-                       "residual_in",
-                       device,
-                       torch::kBFloat16,
-                       {tokens, kHc, kDim});
-  detail::check_tensor(
-      post_in, "post_in", device, torch::kFloat32, {tokens, kHc});
-  detail::check_tensor(
-      comb_in, "comb_in", device, torch::kFloat32, {tokens, kHc, kHc});
-  detail::check_tensor(
-      pre_in, "pre_in", device, torch::kFloat32, {tokens, kHc});
-  detail::check_tensor(
-      hc_fn, "hc_fn", device, torch::kBFloat16, {kMix, kHc * kDim});
-  detail::check_tensor(hc_scale, "hc_scale", device, torch::kFloat32, {3});
-  detail::check_tensor(hc_base, "hc_base", device, torch::kFloat32, {kMix});
-  detail::check_tensor(gamma, "gamma", device, torch::kBFloat16, {kDim});
-  detail::check_tensor(
-      norm_out, "norm_out", device, torch::kBFloat16, {tokens, kDim});
-  detail::check_tensor(residual_out,
-                       "residual_out",
-                       device,
-                       torch::kBFloat16,
-                       {tokens, kHc, kDim});
-  detail::check_tensor(
-      next_pre, "next_pre", device, torch::kFloat32, {tokens, kHc});
-  detail::check_tensor(
-      post_out, "post_out", device, torch::kFloat32, {tokens, kHc});
-  detail::check_tensor(
-      comb_out, "comb_out", device, torch::kFloat32, {tokens, kHc, kHc});
+  CHECK(detail::check_tensor(x, torch::kBFloat16, device))
+      << "x must have the expected dtype/device and be contiguous";
+  CHECK(x.sizes() == torch::IntArrayRef({tokens, kDim}))
+      << "x has an unexpected shape";
+  CHECK(detail::check_tensor(residual_in, torch::kBFloat16, device))
+      << "residual_in must have the expected dtype/device and be contiguous";
+  CHECK(residual_in.sizes() == torch::IntArrayRef({tokens, kHc, kDim}))
+      << "residual_in has an unexpected shape";
+  CHECK(detail::check_tensor(post_in, torch::kFloat32, device))
+      << "post_in must have the expected dtype/device and be contiguous";
+  CHECK(post_in.sizes() == torch::IntArrayRef({tokens, kHc}))
+      << "post_in has an unexpected shape";
+  CHECK(detail::check_tensor(comb_in, torch::kFloat32, device))
+      << "comb_in must have the expected dtype/device and be contiguous";
+  CHECK(comb_in.sizes() == torch::IntArrayRef({tokens, kHc, kHc}))
+      << "comb_in has an unexpected shape";
+  CHECK(detail::check_tensor(pre_in, torch::kFloat32, device))
+      << "pre_in must have the expected dtype/device and be contiguous";
+  CHECK(pre_in.sizes() == torch::IntArrayRef({tokens, kHc}))
+      << "pre_in has an unexpected shape";
+  CHECK(detail::check_tensor(hc_fn, torch::kBFloat16, device))
+      << "hc_fn must have the expected dtype/device and be contiguous";
+  CHECK(hc_fn.sizes() == torch::IntArrayRef({kMix, kHc * kDim}))
+      << "hc_fn has an unexpected shape";
+  CHECK(detail::check_tensor(hc_scale, torch::kFloat32, device))
+      << "hc_scale must have the expected dtype/device and be contiguous";
+  CHECK(hc_scale.sizes() == torch::IntArrayRef({3}))
+      << "hc_scale has an unexpected shape";
+  CHECK(detail::check_tensor(hc_base, torch::kFloat32, device))
+      << "hc_base must have the expected dtype/device and be contiguous";
+  CHECK(hc_base.sizes() == torch::IntArrayRef({kMix}))
+      << "hc_base has an unexpected shape";
+  CHECK(detail::check_tensor(gamma, torch::kBFloat16, device))
+      << "gamma must have the expected dtype/device and be contiguous";
+  CHECK(gamma.sizes() == torch::IntArrayRef({kDim}))
+      << "gamma has an unexpected shape";
+  CHECK(detail::check_tensor(norm_out, torch::kBFloat16, device))
+      << "norm_out must have the expected dtype/device and be contiguous";
+  CHECK(norm_out.sizes() == torch::IntArrayRef({tokens, kDim}))
+      << "norm_out has an unexpected shape";
+  CHECK(detail::check_tensor(residual_out, torch::kBFloat16, device))
+      << "residual_out must have the expected dtype/device and be contiguous";
+  CHECK(residual_out.sizes() == torch::IntArrayRef({tokens, kHc, kDim}))
+      << "residual_out has an unexpected shape";
+  CHECK(detail::check_tensor(next_pre, torch::kFloat32, device))
+      << "next_pre must have the expected dtype/device and be contiguous";
+  CHECK(next_pre.sizes() == torch::IntArrayRef({tokens, kHc}))
+      << "next_pre has an unexpected shape";
+  CHECK(detail::check_tensor(post_out, torch::kFloat32, device))
+      << "post_out must have the expected dtype/device and be contiguous";
+  CHECK(post_out.sizes() == torch::IntArrayRef({tokens, kHc}))
+      << "post_out has an unexpected shape";
+  CHECK(detail::check_tensor(comb_out, torch::kFloat32, device))
+      << "comb_out must have the expected dtype/device and be contiguous";
+  CHECK(comb_out.sizes() == torch::IntArrayRef({tokens, kHc, kHc}))
+      << "comb_out has an unexpected shape";
 
   const void* inputs[9] = {x.data_ptr(),
                            residual_in.data_ptr(),

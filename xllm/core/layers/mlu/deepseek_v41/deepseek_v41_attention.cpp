@@ -15,6 +15,8 @@ limitations under the License.
 
 #include "layers/mlu/deepseek_v41/deepseek_v41_attention.h"
 
+#include <ATen/ops/mm.h>
+
 #include <algorithm>
 #include <cmath>
 #include <limits>
@@ -149,9 +151,13 @@ void DeepseekV41AttentionImpl::verify_loaded_weights() const {
          {"compressor.wkv.weight", "compressor.norm.weight"}) {
       CHECK(weights_.count(name)) << "Missing weight " << prefix + name;
     }
+    CHECK(weights_.at("compressor.wkv.weight").scalar_type() ==
+          torch::kBFloat16);
     if (ratio_ == 2) {
       CHECK(weights_.count("compressor.wgate.weight"))
           << "Missing weight " << prefix + "compressor.wgate.weight";
+      CHECK(weights_.at("compressor.wgate.weight").scalar_type() ==
+            torch::kBFloat16);
     }
   }
   indexer_->verify_loaded_weights();
@@ -195,13 +201,15 @@ torch::Tensor DeepseekV41AttentionImpl::forward(
                             rope_dim);
   torch::Tensor raw, scores, iq, iw;
   if (source_ == layer_id_ && ratio_ > 0) {
-    raw = dense_projection(
-        x.to(torch::kFloat32),
-        weights_.at("compressor.wkv.weight").to(torch::kFloat32));
-    if (ratio_ == 2) {
-      scores = dense_projection(
-          x.to(torch::kFloat32),
-          weights_.at("compressor.wgate.weight").to(torch::kFloat32));
+    CHECK(x.scalar_type() == torch::kBFloat16);
+    if (ratio_ == 1) {
+      raw = dense_projection(x, weights_.at("compressor.wkv.weight"));
+    } else {
+      // Keep the BF16 operands and request FP32 output before any rounding.
+      raw = torch::mm(
+          x, weights_.at("compressor.wkv.weight").t(), torch::kFloat32);
+      scores = torch::mm(
+          x, weights_.at("compressor.wgate.weight").t(), torch::kFloat32);
     }
   }
   std::optional<parallel_state::GatherAsyncCtx> kv_gather, compressor_gather;
@@ -393,7 +401,7 @@ void DeepseekV41AttentionImpl::forward_cached_attention(
                               (input.use_dflash_proposal_attention ? 0 : 1));
     // Read the old ring before publishing a chunk that can wrap it.
     torch::Tensor window;
-    if (!input.enable_graph) {
+    if (!input.enable_graph || input.use_dflash_proposal_attention) {
       window = torch::cat(
           {swa.index_select(
                0,
@@ -563,8 +571,11 @@ void DeepseekV41AttentionImpl::update_compressed_cache(
   const int64_t first = begin / ratio_;
   const int64_t committed = end / ratio_;
   if (ratio_ == 1) {
+    CHECK(raw.scalar_type() == torch::kBFloat16);
     latent = raw;
   } else {
+    CHECK(raw.scalar_type() == torch::kFloat32);
+    CHECK(scores.scalar_type() == torch::kFloat32);
     torch::Tensor state = flat_cache(cache.get_compress_kv_state());
     torch::Tensor score_state = flat_cache(cache.get_compress_score_state());
     const int64_t state_rows =
@@ -603,8 +614,10 @@ void DeepseekV41AttentionImpl::update_compressed_cache(
     }
   }
   if (committed > first) {
-    latent = norm(latent, weights_.at("compressor.norm.weight"), eps)
-                 .to(main_cache.scalar_type());
+    // Pooling and Norm each have a BF16 rounding point; state stays FP32.
+    latent = norm(latent.to(torch::kBFloat16),
+                  weights_.at("compressor.norm.weight"),
+                  eps);
     torch::Tensor starts =
         torch::arange(first, committed, options_.dtype(torch::kInt64)) * ratio_;
     torch::Tensor target =

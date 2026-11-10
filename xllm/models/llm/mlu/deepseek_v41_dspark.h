@@ -166,6 +166,19 @@ class DeepseekV41DSparkForCausalLMImpl final
   explicit DeepseekV41DSparkForCausalLMImpl(const ModelContext& context)
       : LlmForCausalLMImplBase<DeepseekV41DSparkModel>(context) {}
 
+  bool requires_graph_forward_metadata() { return true; }
+
+  std::unique_ptr<ModelGraphMetadataState>
+  create_graph_forward_metadata_state() {
+    return std::make_unique<DeepseekV41GraphState>();
+  }
+
+  void prepare_graph_forward_metadata(ModelGraphMetadataState* state,
+                                      const torch::Tensor& positions,
+                                      ModelInputParams& input) {
+    model_->prepare_graph_forward_metadata(state, positions, input);
+  }
+
   void load_model(std::unique_ptr<ModelLoader> loader,
                   std::string /*prefix*/ = "") override {
     const int32_t last_layer = model_->last_dspark_layer_index();
@@ -210,6 +223,15 @@ class DeepseekV41DSparkForCausalLMImpl final
   dspark_detail::VocabularyWeightSelector head_source_;
 };
 TORCH_MODULE(DeepseekV41DSparkForCausalLM);
+
+const bool kDeepseekV41DSparkGraphCapabilitiesRegistered = []() {
+  MtpModelCapabilities capabilities;
+  capabilities.enable_piecewise_graph = true;
+  capabilities.supports_grouped_mtp_graph = true;
+  capabilities.graph_dynamic_multi_block_tables = true;
+  ModelRegistry::register_mtp_capabilities("deepseek_v41_dspark", capabilities);
+  return true;
+}();
 
 REGISTER_CAUSAL_MODEL_WITH_VARNAME(deepseek_v41_dspark_draft_model,
                                    deepseek_v41_dspark,

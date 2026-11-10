@@ -321,9 +321,8 @@ void configure_block_diffusion_model(ModelArgs& args,
   args.layers_to_capture({});
   args.model_type(draft_model_type);
   args.draft_query_uses_decode(false);
-  args.requires_eager_execution(
-      (Platform::is_mlu() && v41_draft) ||
-      (!is_deepseek_v4_dspark && !is_python_qwen3_dspark));
+  args.requires_eager_execution(!is_deepseek_v4_dspark &&
+                                !is_python_qwen3_dspark);
   if (is_dspark && (python_model_impl || v41_draft)) {
     args.dummy_token_count(
         std::max<int32_t>(1, options.num_speculative_tokens()));

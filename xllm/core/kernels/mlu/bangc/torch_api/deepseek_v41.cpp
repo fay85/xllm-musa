@@ -19,6 +19,7 @@ limitations under the License.
 
 #include "framework/core/MLUStream.h"
 #include "kernels/mlu/bangc/src/deepseek_v41/launch.h"
+#include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 namespace xllm::kernel::mlu::bangc {
 void deepseek_v41_decode_gather(const torch::Tensor& swa,
                                 const torch::Tensor& compressed,
@@ -30,26 +31,26 @@ void deepseek_v41_decode_gather(const torch::Tensor& swa,
                                 int32_t window,
                                 torch::Tensor output,
                                 torch::Tensor length) {
-  CHECK_EQ(swa.scalar_type(), torch::kBFloat16);
+  CHECK(detail::check_tensor(swa, torch::kBFloat16))
+      << "swa must be contiguous BF16 on MLU";
+  const torch::Device device = swa.device();
+  CHECK(detail::check_tensor(compressed, torch::kBFloat16, device))
+      << "compressed must be contiguous BF16 on the same device as swa";
+  CHECK(detail::check_tensor(current, torch::kBFloat16, device))
+      << "current must be contiguous BF16 on the same device as swa";
+  CHECK(detail::check_tensor(swa_table, torch::kInt32, device))
+      << "swa_table must be contiguous int32 on the same device as swa";
+  CHECK(detail::check_tensor(compressed_table, torch::kInt32, device))
+      << "compressed_table must be contiguous int32 on the same device as swa";
+  CHECK(detail::check_tensor(topk, torch::kInt64, device))
+      << "topk must be contiguous int64 on the same device as swa";
+  CHECK(detail::check_tensor(output, torch::kBFloat16, device))
+      << "output must be contiguous BF16 on the same device as swa";
+  CHECK(detail::check_tensor(length, torch::kInt32, device))
+      << "length must be contiguous int32 on the same device as swa";
   CHECK_EQ(swa.size(-1), 512);
-  CHECK(swa.is_contiguous() && compressed.is_contiguous() &&
-        current.is_contiguous());
-  CHECK_EQ(compressed.scalar_type(), swa.scalar_type());
-  CHECK_EQ(current.scalar_type(), swa.scalar_type());
   CHECK_EQ(current.numel(), 512);
-  CHECK(swa.device().is_privateuseone());
-  CHECK(swa_table.device() == swa.device() &&
-        compressed_table.device() == swa.device());
-  CHECK(topk.device() == swa.device() && length.device() == swa.device());
-  CHECK_EQ(swa_table.scalar_type(), torch::kInt32);
-  CHECK_EQ(compressed_table.scalar_type(), torch::kInt32);
-  CHECK_EQ(topk.scalar_type(), torch::kInt64);
-  CHECK(swa_table.is_contiguous() && compressed_table.is_contiguous() &&
-        topk.is_contiguous());
-  CHECK_EQ(length.scalar_type(), torch::kInt32);
   CHECK_EQ(length.numel(), 1);
-  CHECK(output.is_contiguous());
-  CHECK_EQ(output.scalar_type(), swa.scalar_type());
   CHECK_GE(output.numel(),
            (std::min<int64_t>(position + 1, window) + topk.numel()) * 512);
   deepseek_v41_gather_launch(torch_mlu::getCurMLUStream(),

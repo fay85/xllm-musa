@@ -21,25 +21,17 @@ limitations under the License.
 
 #include "framework/core/MLUStream.h"
 #include "kernels/mlu/bangc/src/kpool/launchers.h"
+#include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 
 namespace xllm::kernel::mlu {
 namespace {
 constexpr int64_t kMaxInt32 = std::numeric_limits<int32_t>::max();
 
-bool compatible(const torch::Tensor& tensor,
-                torch::ScalarType dtype,
-                const torch::Device& device) {
-  return tensor.defined() && device.is_privateuseone() &&
-         tensor.device() == device && tensor.scalar_type() == dtype &&
-         tensor.is_contiguous();
-}
-
 bool integer_compatible(const torch::Tensor& tensor,
                         const torch::Device& device) {
-  return tensor.defined() &&
+  return bangc::detail::check_tensor(tensor, std::nullopt, device) &&
          (tensor.scalar_type() == torch::kInt32 ||
-          tensor.scalar_type() == torch::kInt64) &&
-         compatible(tensor, tensor.scalar_type(), device);
+          tensor.scalar_type() == torch::kInt64);
 }
 
 struct CanonicalMetadata {
@@ -102,12 +94,8 @@ CanonicalMetadata prepare_metadata(void* queue,
 bool state_ids_compatible(const torch::Tensor& ids,
                           const torch::Tensor& read_ids,
                           const torch::Device& device) {
-  return ids.defined() && ids.dim() == 1 && ids.numel() > 0 &&
-         ids.numel() <= kMaxInt32 &&
-         (ids.scalar_type() == torch::kInt32 ||
-          ids.scalar_type() == torch::kInt64) &&
-         compatible(ids, ids.scalar_type(), device) &&
-         integer_compatible(read_ids, device) &&
+  return integer_compatible(ids, device) && ids.dim() == 1 && ids.numel() > 0 &&
+         ids.numel() <= kMaxInt32 && integer_compatible(read_ids, device) &&
          read_ids.sizes() == ids.sizes();
 }
 struct CanonicalStateIds {
@@ -168,22 +156,25 @@ bool bangc_kpool_update(const torch::Tensor& key,
                         int64_t pool_size,
                         bool decode,
                         bool inherit) {
+  if (!bangc::detail::check_tensor(key, torch::kBFloat16)) {
+    return false;
+  }
   const torch::Device device = key.device();
   if (block_size != 16 || pool_size != 4 || key.dim() != 2 ||
       key.size(1) != 128 || key.size(0) <= 0 || key.numel() > kMaxInt32 ||
+      !bangc::detail::check_tensor(gate, torch::kBFloat16, device) ||
       gate.sizes() != key.sizes() ||
-      !compatible(key, torch::kBFloat16, device) ||
-      !compatible(gate, torch::kBFloat16, device) ||
-      !compatible(ape, torch::kFloat32, device) || ape.dim() != 2 ||
-      ape.size(0) != 4 || ape.size(1) != 128 ||
-      !compatible(matrix, torch::kFloat32, device) || matrix.dim() != 2 ||
-      matrix.size(0) != 128 || matrix.size(1) != 128 ||
-      !compatible(cache, torch::kBFloat16, device) || cache.dim() != 4 ||
-      cache.size(1) != 1 || cache.size(2) != 4 || cache.size(3) != 128 ||
-      cache.numel() > kMaxInt32 ||
-      !compatible(tail, torch::kBFloat16, device) || tail.dim() != 4 ||
-      tail.size(1) != 2 || tail.size(2) < 4 || tail.size(2) > kMaxInt32 ||
-      tail.size(3) != 128 || !state_ids_compatible(ids, read_ids, device) ||
+      !bangc::detail::check_tensor(ape, torch::kFloat32, device) ||
+      ape.dim() != 2 || ape.size(0) != 4 || ape.size(1) != 128 ||
+      !bangc::detail::check_tensor(matrix, torch::kFloat32, device) ||
+      matrix.dim() != 2 || matrix.size(0) != 128 || matrix.size(1) != 128 ||
+      !bangc::detail::check_tensor(cache, torch::kBFloat16, device) ||
+      cache.dim() != 4 || cache.size(1) != 1 || cache.size(2) != 4 ||
+      cache.size(3) != 128 || cache.numel() > kMaxInt32 ||
+      !bangc::detail::check_tensor(tail, torch::kBFloat16, device) ||
+      tail.dim() != 4 || tail.size(1) != 2 || tail.size(2) < 4 ||
+      tail.size(2) > kMaxInt32 || tail.size(3) != 128 ||
+      !state_ids_compatible(ids, read_ids, device) ||
       !integer_compatible(table, device) || table.dim() != 2 ||
       table.size(0) != ids.numel() || table.size(1) <= 0 ||
       table.size(1) > kMaxInt32 / 16 || table.numel() > kMaxInt32 ||
@@ -327,14 +318,17 @@ bool bangc_kpool_stash(const torch::Tensor& key,
                        const torch::Tensor& read_ids,
                        const torch::Tensor& positions,
                        const torch::Tensor& starts) {
+  if (!bangc::detail::check_tensor(key, torch::kBFloat16)) {
+    return false;
+  }
   const torch::Device device = key.device();
   if (key.dim() != 2 || key.size(1) != 128 || key.numel() > kMaxInt32 ||
+      !bangc::detail::check_tensor(gate, torch::kBFloat16, device) ||
       gate.sizes() != key.sizes() ||
-      !compatible(key, torch::kBFloat16, device) ||
-      !compatible(gate, torch::kBFloat16, device) ||
-      !compatible(tail, torch::kBFloat16, device) || tail.dim() != 4 ||
-      tail.size(1) != 2 || tail.size(2) <= 0 || tail.size(2) > kMaxInt32 ||
-      tail.size(3) != 128 || !state_ids_compatible(ids, read_ids, device) ||
+      !bangc::detail::check_tensor(tail, torch::kBFloat16, device) ||
+      tail.dim() != 4 || tail.size(1) != 2 || tail.size(2) <= 0 ||
+      tail.size(2) > kMaxInt32 || tail.size(3) != 128 ||
+      !state_ids_compatible(ids, read_ids, device) ||
       !integer_compatible(positions, device) ||
       positions.numel() != key.size(0) || !integer_compatible(starts, device) ||
       starts.numel() != ids.numel() + 1) {
@@ -377,24 +371,28 @@ bool bangc_kpool_score(const torch::Tensor& query,
                        int64_t pool_size,
                        double scale,
                        const torch::Tensor& starts) {
+  if (!bangc::detail::check_tensor(query, torch::kBFloat16)) {
+    return false;
+  }
   const torch::Device device = query.device();
   if (block_size != 16 || pool_size != 4 || !(scale > 0.0) ||
       query.dim() != 3 || query.size(1) != 32 || query.size(2) != 128 ||
       query.size(0) <= 0 || query.numel() > kMaxInt32 ||
-      !compatible(query, torch::kBFloat16, device) ||
-      !compatible(weights, torch::kFloat32, device) || weights.dim() != 2 ||
-      weights.size(0) != query.size(0) || weights.size(1) != 32 ||
-      !compatible(cache, torch::kBFloat16, device) || cache.dim() != 4 ||
-      cache.size(1) != 1 || cache.size(2) != 4 || cache.size(3) != 128 ||
-      cache.size(0) > 4194304 || !integer_compatible(table, device) ||
-      table.dim() != 2 || table.size(0) <= 0 || table.size(1) <= 0 ||
-      table.numel() > kMaxInt32 || table.size(1) > kMaxInt32 / 16 ||
+      !bangc::detail::check_tensor(weights, torch::kFloat32, device) ||
+      weights.dim() != 2 || weights.size(0) != query.size(0) ||
+      weights.size(1) != 32 ||
+      !bangc::detail::check_tensor(cache, torch::kBFloat16, device) ||
+      cache.dim() != 4 || cache.size(1) != 1 || cache.size(2) != 4 ||
+      cache.size(3) != 128 || cache.size(0) > 4194304 ||
+      !integer_compatible(table, device) || table.dim() != 2 ||
+      table.size(0) <= 0 || table.size(1) <= 0 || table.numel() > kMaxInt32 ||
+      table.size(1) > kMaxInt32 / 16 ||
       !integer_compatible(positions, device) ||
       positions.numel() != query.size(0) || !integer_compatible(rows, device) ||
       rows.numel() != query.size(0) ||
-      !compatible(scores, torch::kFloat32, device) || scores.dim() != 2 ||
-      scores.size(0) != query.size(0) || scores.size(1) <= 0 ||
-      scores.numel() > kMaxInt32) {
+      !bangc::detail::check_tensor(scores, torch::kFloat32, device) ||
+      scores.dim() != 2 || scores.size(0) != query.size(0) ||
+      scores.size(1) <= 0 || scores.numel() > kMaxInt32) {
     return false;
   }
   const torch::DeviceGuard guard(device);
@@ -486,19 +484,23 @@ bool bangc_kpool_expand(const torch::Tensor& ids,
                         int64_t pool_size,
                         bool always_tail,
                         bool prefill) {
+  if (!bangc::detail::check_tensor(ids, torch::kInt64)) {
+    return false;
+  }
   const torch::Device device = ids.device();
   if (block_size != 16 || token_budget != 2048 || pool_size != 4 ||
       ids.dim() != 2 || ids.size(1) != 512 || ids.size(0) <= 0 ||
       ids.size(0) > kMaxInt32 / 2051 ||
-      !compatible(ids, torch::kInt64, device) ||
       !integer_compatible(positions, device) ||
       positions.numel() != ids.size(0) || !integer_compatible(rows, device) ||
       rows.numel() != ids.size(0) || !integer_compatible(table, device) ||
       table.dim() != 2 || table.size(0) <= 0 || table.size(0) > kMaxInt32 ||
       table.size(1) <= 0 || table.size(1) > kMaxInt32 / 16 ||
-      table.numel() > kMaxInt32 || !compatible(slots, torch::kInt32, device) ||
+      table.numel() > kMaxInt32 ||
+      !bangc::detail::check_tensor(slots, torch::kInt32, device) ||
       slots.dim() != 2 || slots.size(0) != ids.size(0) ||
-      slots.size(1) != 2051 || !compatible(lengths, torch::kInt32, device) ||
+      slots.size(1) != 2051 ||
+      !bangc::detail::check_tensor(lengths, torch::kInt32, device) ||
       lengths.numel() != ids.size(0)) {
     return false;
   }
@@ -540,16 +542,20 @@ bool bangc_kpool_cache_positions(const torch::Tensor& tail_ids,
                                  const torch::Tensor& positions,
                                  const torch::Tensor& slot_mapping,
                                  torch::Tensor& output) {
+  if (!bangc::detail::check_tensor(positions, torch::kInt32)) {
+    return false;
+  }
   const torch::Device device = positions.device();
   const int64_t tokens = positions.numel();
   if (tokens <= 0 || tokens > kMaxInt32 ||
-      !compatible(positions, torch::kInt32, device) ||
-      !compatible(rows, torch::kInt64, device) || rows.numel() != tokens ||
-      !integer_compatible(tail_ids, device) || tail_ids.dim() != 1 ||
-      tail_ids.numel() <= 0 || tail_ids.numel() > kMaxInt32 / 8 ||
+      !bangc::detail::check_tensor(rows, torch::kInt64, device) ||
+      rows.numel() != tokens || !integer_compatible(tail_ids, device) ||
+      tail_ids.dim() != 1 || tail_ids.numel() <= 0 ||
+      tail_ids.numel() > kMaxInt32 / 8 ||
       (slot_mapping.defined() && (!integer_compatible(slot_mapping, device) ||
                                   slot_mapping.numel() != tokens)) ||
-      !compatible(output, torch::kInt32, device) || output.numel() != tokens) {
+      !bangc::detail::check_tensor(output, torch::kInt32, device) ||
+      output.numel() != tokens) {
     return false;
   }
   const torch::DeviceGuard guard(device);
@@ -634,14 +640,19 @@ bool select_rows(const torch::Tensor& scores,
 }  // namespace
 
 bool bangc_kpool_select(const torch::Tensor& scores, torch::Tensor& selected) {
+  if (!bangc::detail::check_tensor(scores,
+                                   torch::kFloat32,
+                                   std::nullopt,
+                                   /*require_contiguous=*/false)) {
+    return false;
+  }
   const torch::Device device = scores.device();
-  if (scores.dim() != 2 || scores.scalar_type() != torch::kFloat32 ||
-      scores.stride(1) != 1 || scores.size(0) <= 0 || scores.size(1) <= 0 ||
-      scores.size(0) > kMaxInt32 || scores.stride(0) < scores.size(1) ||
-      scores.stride(0) > kMaxInt32 ||
-      !compatible(selected, torch::kInt64, device) || selected.dim() != 2 ||
-      selected.size(0) != scores.size(0) || selected.size(1) <= 0 ||
-      selected.size(1) > kMaxInt32) {
+  if (scores.dim() != 2 || scores.stride(1) != 1 || scores.size(0) <= 0 ||
+      scores.size(1) <= 0 || scores.size(0) > kMaxInt32 ||
+      scores.stride(0) < scores.size(1) || scores.stride(0) > kMaxInt32 ||
+      !bangc::detail::check_tensor(selected, torch::kInt64, device) ||
+      selected.dim() != 2 || selected.size(0) != scores.size(0) ||
+      selected.size(1) <= 0 || selected.size(1) > kMaxInt32) {
     return false;
   }
   return select_rows(scores, nullptr, selected);
@@ -650,30 +661,37 @@ bool bangc_kpool_select(const torch::Tensor& scores, torch::Tensor& selected) {
 bool bangc_kpool_select_live(const torch::Tensor& scores,
                              const torch::Tensor& positions,
                              torch::Tensor& selected) {
+  if (!bangc::detail::check_tensor(scores,
+                                   torch::kFloat32,
+                                   std::nullopt,
+                                   /*require_contiguous=*/false)) {
+    return false;
+  }
   const torch::Device device = scores.device();
-  if (scores.dim() != 2 || scores.scalar_type() != torch::kFloat32 ||
-      scores.stride(1) != 1 || scores.size(0) <= 0 || scores.size(1) <= 0 ||
-      scores.size(0) > kMaxInt32 || scores.stride(0) < scores.size(1) ||
-      scores.stride(0) > kMaxInt32 ||
-      !compatible(positions, torch::kInt32, device) ||
+  if (scores.dim() != 2 || scores.stride(1) != 1 || scores.size(0) <= 0 ||
+      scores.size(1) <= 0 || scores.size(0) > kMaxInt32 ||
+      scores.stride(0) < scores.size(1) || scores.stride(0) > kMaxInt32 ||
+      !bangc::detail::check_tensor(positions, torch::kInt32, device) ||
       positions.numel() != scores.size(0) ||
-      !compatible(selected, torch::kInt64, device) || selected.dim() != 2 ||
-      selected.size(0) != scores.size(0) || selected.size(1) <= 0 ||
-      selected.size(1) > kMaxInt32) {
+      !bangc::detail::check_tensor(selected, torch::kInt64, device) ||
+      selected.dim() != 2 || selected.size(0) != scores.size(0) ||
+      selected.size(1) <= 0 || selected.size(1) > kMaxInt32) {
     return false;
   }
   return select_rows(scores, positions.data_ptr(), selected);
 }
 
 bool bangc_kpool_rows(const torch::Tensor& starts, torch::Tensor& rows) {
+  if (!bangc::detail::check_tensor(starts)) {
+    return false;
+  }
   const torch::Device device = starts.device();
   const int64_t batch = starts.numel() - 1;
-  if (starts.dim() != 1 || batch <= 0 || batch > kMaxInt32 ||
+  if (!bangc::detail::check_tensor(rows, starts.scalar_type(), device) ||
+      starts.dim() != 1 || batch <= 0 || batch > kMaxInt32 ||
       rows.numel() <= 0 || rows.numel() > kMaxInt32 ||
       (starts.scalar_type() != torch::kInt32 &&
        starts.scalar_type() != torch::kInt64) ||
-      !compatible(starts, starts.scalar_type(), device) ||
-      !compatible(rows, starts.scalar_type(), device) ||
       (starts.scalar_type() == torch::kInt32 && (batch & (batch - 1)) != 0)) {
     return false;
   }
@@ -694,10 +712,12 @@ bool bangc_kpool_tail_generic(const torch::Tensor& key,
                               const torch::Tensor& positions,
                               const torch::Tensor& starts,
                               bool decode) {
+  if (!bangc::detail::check_tensor(key, torch::kBFloat16)) {
+    return false;
+  }
   const torch::Device device = key.device();
-  if (!compatible(key, torch::kBFloat16, device) ||
-      !compatible(gate, torch::kBFloat16, device) ||
-      !compatible(tail, torch::kBFloat16, device) ||
+  if (!bangc::detail::check_tensor(gate, torch::kBFloat16, device) ||
+      !bangc::detail::check_tensor(tail, torch::kBFloat16, device) ||
       !integer_compatible(ids, device) ||
       !integer_compatible(read_ids, device) || ids.dim() != 1 ||
       read_ids.dim() != 1 || ids.numel() <= 0 || ids.numel() > kMaxInt32 ||

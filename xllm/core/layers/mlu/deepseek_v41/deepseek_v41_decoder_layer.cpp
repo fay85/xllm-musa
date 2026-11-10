@@ -145,10 +145,23 @@ torch::Tensor DeepseekV41DecoderLayerImpl::forward(
     DeepseekV41EngramImpl::HashState* hash_state,
     const mlu_v4_cp::DeepseekV4CpContext* cp_context,
     torch::Tensor* attention_input) {
+  if (input.meta.q_max_seq_len == 0 || input.meta.num_sequences == 0) {
+    // No request owns this row. Participate in MoE communication without
+    // evaluating Engram or touching any attention/compressor cache slot.
+    torch::Tensor dummy = hidden.select(/*dim=*/1, /*index=*/0).contiguous();
+    if (attention_input != nullptr) {
+      *attention_input = dummy;
+    }
+    const auto route = moe_->prep_route(dummy);
+    dummy = moe_->forward_selected(
+        dummy, route.reduce_weight, route.expert_id, input);
+    return dummy.unsqueeze(1).expand_as(hidden).contiguous();
+  }
   CHECK(!engram_ || !pending.has_value())
       << "Pending MHC must be materialized before Engram";
   // Capture boundaries require the preceding layer to materialize its post.
   CHECK(attention_input == nullptr || !pending.has_value());
+  // DSpark captures the layer input before Engram injection.
   if (attention_input != nullptr) {
     *attention_input =
         hidden.to(torch::kFloat32).mean(1).to(hidden.scalar_type());

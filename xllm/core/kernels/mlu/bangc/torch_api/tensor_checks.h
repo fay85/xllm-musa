@@ -15,29 +15,22 @@ limitations under the License.
 
 #pragma once
 
-#include <glog/logging.h>
 #include <torch/types.h>
+
+#include <optional>
 
 namespace xllm::kernel::mlu::bangc::detail {
 
-inline void check_tensor_properties(const torch::Tensor& tensor,
-                                    const char* name,
-                                    const torch::Device& device,
-                                    torch::ScalarType dtype) {
-  CHECK(tensor.defined()) << name << " must be defined";
-  CHECK(tensor.device() == device) << name << " must be on " << device;
-  CHECK_EQ(tensor.scalar_type(), dtype) << name << " has an unexpected dtype";
-}
-
-inline void check_tensor(const torch::Tensor& tensor,
-                         const char* name,
-                         const torch::Device& device,
-                         torch::ScalarType dtype,
-                         torch::IntArrayRef shape) {
-  check_tensor_properties(tensor, name, device, dtype);
-  CHECK(tensor.sizes() == shape)
-      << name << " must have shape " << shape << ", got " << tensor.sizes();
-  CHECK(tensor.is_contiguous()) << name << " must be contiguous";
+// Shape, supported dtype sets and kernel-specific strides belong to the caller.
+[[nodiscard]] inline bool check_tensor(
+    const torch::Tensor& tensor,
+    std::optional<torch::ScalarType> dtype = std::nullopt,
+    std::optional<torch::Device> device = std::nullopt,
+    bool require_contiguous = true) {
+  return tensor.defined() && tensor.device().is_privateuseone() &&
+         (!dtype.has_value() || tensor.scalar_type() == *dtype) &&
+         (!device.has_value() || tensor.device() == *device) &&
+         (!require_contiguous || tensor.is_contiguous());
 }
 
 }  // namespace xllm::kernel::mlu::bangc::detail

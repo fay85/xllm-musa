@@ -38,34 +38,18 @@ struct TensorArgument {
   const char* name;
 };
 
-void check_tensor(const torch::Tensor& tensor,
-                  torch::IntArrayRef shape,
-                  torch::ScalarType dtype,
-                  const char* name,
-                  const torch::Device* device = nullptr) {
-  CHECK(tensor.defined()) << name << " must be defined";
-  CHECK(tensor.device().type() == torch::kPrivateUse1)
-      << name << " must be on MLU";
-  CHECK(tensor.layout() == torch::kStrided) << name << " must be strided";
-  detail::check_tensor(tensor,
-                       name,
-                       device != nullptr ? *device : tensor.device(),
-                       dtype,
-                       shape);
-  CHECK(!tensor.is_conj() && !tensor.is_neg())
-      << name << " must have resolved conjugate/negative bits";
-}
-
 int32_t checked_rows(const torch::Tensor& tensor,
                      int64_t columns,
                      const char* name) {
-  CHECK(tensor.defined()) << name << " must be defined";
+  CHECK(detail::check_tensor(tensor, torch::kBFloat16))
+      << name << " must be contiguous BF16 on MLU";
   CHECK_EQ(tensor.dim(), 2) << name << " must be a matrix";
   const int64_t rows = tensor.size(0);
   CHECK(rows == 4 || rows == 8 || rows == 16 || rows == 32 || rows == 64 ||
         rows == 128)
       << "PLE requires Q4 and batch in {1,2,4,8,16,32}";
-  check_tensor(tensor, {rows, columns}, torch::kBFloat16, name);
+  CHECK(tensor.sizes() == torch::IntArrayRef({rows, columns}))
+      << name << " has an unexpected shape";
   return static_cast<int32_t>(rows);
 }
 
@@ -87,10 +71,15 @@ void check_disjoint(std::initializer_list<TensorArgument> mutated,
 
 void check_projection_weights(const torch::Tensor& weight,
                               const torch::Tensor& packed_weight) {
-  check_tensor(weight, {kN, kH}, torch::kBFloat16, "weight");
+  CHECK(detail::check_tensor(weight, torch::kBFloat16))
+      << "weight must have the expected dtype/device and be contiguous";
+  CHECK(weight.sizes() == torch::IntArrayRef({kN, kH}))
+      << "weight has an unexpected shape";
   const torch::Device device = weight.device();
-  check_tensor(
-      packed_weight, {kN, kH}, torch::kBFloat16, "packed_weight", &device);
+  CHECK(detail::check_tensor(packed_weight, torch::kBFloat16, device))
+      << "packed_weight must have the expected dtype/device and be contiguous";
+  CHECK(packed_weight.sizes() == torch::IntArrayRef({kN, kH}))
+      << "packed_weight has an unexpected shape";
   check_disjoint({{&packed_weight, "packed_weight"}}, {{&weight, "weight"}});
 }
 
@@ -98,12 +87,23 @@ void check_head_weights(const torch::Tensor& key_scale,
                         const torch::Tensor& query_scale,
                         const torch::Tensor& conv_scale,
                         const torch::Tensor& affine_pair) {
-  check_tensor(key_scale, {kD}, torch::kFloat32, "key_scale");
+  CHECK(detail::check_tensor(key_scale, torch::kFloat32))
+      << "key_scale must have the expected dtype/device and be contiguous";
+  CHECK(key_scale.sizes() == torch::IntArrayRef({kD}))
+      << "key_scale has an unexpected shape";
   const torch::Device device = key_scale.device();
-  check_tensor(query_scale, {kD}, torch::kFloat32, "query_scale", &device);
-  check_tensor(conv_scale, {kD}, torch::kFloat32, "conv_scale", &device);
-  check_tensor(
-      affine_pair, {4, 2, kH}, torch::kBFloat16, "affine_pair", &device);
+  CHECK(detail::check_tensor(query_scale, torch::kFloat32, device))
+      << "query_scale must have the expected dtype/device and be contiguous";
+  CHECK(query_scale.sizes() == torch::IntArrayRef({kD}))
+      << "query_scale has an unexpected shape";
+  CHECK(detail::check_tensor(conv_scale, torch::kFloat32, device))
+      << "conv_scale must have the expected dtype/device and be contiguous";
+  CHECK(conv_scale.sizes() == torch::IntArrayRef({kD}))
+      << "conv_scale has an unexpected shape";
+  CHECK(detail::check_tensor(affine_pair, torch::kBFloat16, device))
+      << "affine_pair must have the expected dtype/device and be contiguous";
+  CHECK(affine_pair.sizes() == torch::IntArrayRef({4, 2, kH}))
+      << "affine_pair has an unexpected shape";
   check_disjoint({{&affine_pair, "affine_pair"}},
                  {{&key_scale, "key_scale"},
                   {&query_scale, "query_scale"},
@@ -115,9 +115,14 @@ int32_t check_projection(const torch::Tensor& embedding,
                          const torch::Tensor& kv) {
   const int32_t rows = checked_rows(embedding, kH, "embedding");
   const torch::Device device = embedding.device();
-  check_tensor(
-      packed_weight, {kN, kH}, torch::kBFloat16, "packed_weight", &device);
-  check_tensor(kv, {rows, kN}, torch::kBFloat16, "kv", &device);
+  CHECK(detail::check_tensor(packed_weight, torch::kBFloat16, device))
+      << "packed_weight must have the expected dtype/device and be contiguous";
+  CHECK(packed_weight.sizes() == torch::IntArrayRef({kN, kH}))
+      << "packed_weight has an unexpected shape";
+  CHECK(detail::check_tensor(kv, torch::kBFloat16, device))
+      << "kv must have the expected dtype/device and be contiguous";
+  CHECK(kv.sizes() == torch::IntArrayRef({rows, kN}))
+      << "kv has an unexpected shape";
   check_disjoint(
       {{&kv, "kv"}},
       {{&embedding, "embedding"}, {&packed_weight, "packed_weight"}});
@@ -131,11 +136,22 @@ int32_t check_head(const torch::Tensor& kv,
                    const torch::Tensor& normalized) {
   const int32_t rows = checked_rows(kv, kN, "kv");
   const torch::Device device = kv.device();
-  check_tensor(hidden, {rows, kD}, torch::kBFloat16, "hidden", &device);
-  check_tensor(
-      affine_pair, {4, 2, kH}, torch::kBFloat16, "affine_pair", &device);
-  check_tensor(values, {rows, kD}, torch::kBFloat16, "values", &device);
-  check_tensor(normalized, {rows, kD}, torch::kBFloat16, "normalized", &device);
+  CHECK(detail::check_tensor(hidden, torch::kBFloat16, device))
+      << "hidden must have the expected dtype/device and be contiguous";
+  CHECK(hidden.sizes() == torch::IntArrayRef({rows, kD}))
+      << "hidden has an unexpected shape";
+  CHECK(detail::check_tensor(affine_pair, torch::kBFloat16, device))
+      << "affine_pair must have the expected dtype/device and be contiguous";
+  CHECK(affine_pair.sizes() == torch::IntArrayRef({4, 2, kH}))
+      << "affine_pair has an unexpected shape";
+  CHECK(detail::check_tensor(values, torch::kBFloat16, device))
+      << "values must have the expected dtype/device and be contiguous";
+  CHECK(values.sizes() == torch::IntArrayRef({rows, kD}))
+      << "values has an unexpected shape";
+  CHECK(detail::check_tensor(normalized, torch::kBFloat16, device))
+      << "normalized must have the expected dtype/device and be contiguous";
+  CHECK(normalized.sizes() == torch::IntArrayRef({rows, kD}))
+      << "normalized has an unexpected shape";
   check_disjoint(
       {{&values, "values"}, {&normalized, "normalized"}},
       {{&kv, "kv"}, {&hidden, "hidden"}, {&affine_pair, "affine_pair"}});
@@ -150,12 +166,26 @@ int32_t check_tail(const torch::Tensor& values,
                    const torch::Tensor& output) {
   const int32_t rows = checked_rows(values, kD, "values");
   const torch::Device device = values.device();
-  check_tensor(normalized, {rows, kD}, torch::kBFloat16, "normalized", &device);
-  check_tensor(
-      history, {rows / kQueries, 13, kD}, torch::kBFloat16, "history", &device);
-  check_tensor(taps, {4, kD}, torch::kFloat32, "taps", &device);
-  check_tensor(hidden, {rows, kD}, torch::kBFloat16, "hidden", &device);
-  check_tensor(output, {rows, kD}, torch::kBFloat16, "output", &device);
+  CHECK(detail::check_tensor(normalized, torch::kBFloat16, device))
+      << "normalized must have the expected dtype/device and be contiguous";
+  CHECK(normalized.sizes() == torch::IntArrayRef({rows, kD}))
+      << "normalized has an unexpected shape";
+  CHECK(detail::check_tensor(history, torch::kBFloat16, device))
+      << "history must have the expected dtype/device and be contiguous";
+  CHECK(history.sizes() == torch::IntArrayRef({rows / kQueries, 13, kD}))
+      << "history has an unexpected shape";
+  CHECK(detail::check_tensor(taps, torch::kFloat32, device))
+      << "taps must have the expected dtype/device and be contiguous";
+  CHECK(taps.sizes() == torch::IntArrayRef({4, kD}))
+      << "taps has an unexpected shape";
+  CHECK(detail::check_tensor(hidden, torch::kBFloat16, device))
+      << "hidden must have the expected dtype/device and be contiguous";
+  CHECK(hidden.sizes() == torch::IntArrayRef({rows, kD}))
+      << "hidden has an unexpected shape";
+  CHECK(detail::check_tensor(output, torch::kBFloat16, device))
+      << "output must have the expected dtype/device and be contiguous";
+  CHECK(output.sizes() == torch::IntArrayRef({rows, kD}))
+      << "output has an unexpected shape";
   check_disjoint({{&history, "history"}, {&output, "output"}},
                  {{&values, "values"},
                   {&normalized, "normalized"},

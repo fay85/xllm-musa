@@ -101,8 +101,9 @@ foreach(test_target scheduler_test pd_decode_restore_test pd_inflight_lifetime_t
     # batch.cpp consumes request_timing, so that archive belongs in the rescan
     # group too; otherwise libbatch.a's later repetition reintroduces its
     # symbols after the last request_timing scan.
+    # Runtime and block objects also consume provider and prefix-cache symbols.
     target_link_libraries(${test_target} PRIVATE
-      "$<LINK_GROUP:RESCAN,xtensor,xllm_server,xgrammar_constraint,$<TARGET_FILE:runtime>,$<TARGET_FILE:batch>,$<TARGET_FILE:request>,$<TARGET_FILE:request_timing>,$<TARGET_FILE:kv_cache>,$<TARGET_FILE:block>,$<TARGET_FILE:block_hasher>>")
+      "$<LINK_GROUP:RESCAN,xtensor,xllm_server,xgrammar_constraint,$<TARGET_FILE:runtime>,$<TARGET_FILE:batch>,$<TARGET_FILE:request>,$<TARGET_FILE:request_timing>,$<TARGET_FILE:kv_cache>,$<TARGET_FILE:block>,$<TARGET_FILE:block_hasher>,$<TARGET_FILE:provider_contract>,$<TARGET_FILE:prefix_cache>,$<TARGET_FILE:prefix_cache_journal>>")
   else()
     target_link_libraries(${test_target} PRIVATE
       "$<LINK_GROUP:RESCAN,xtensor,xllm_server>")

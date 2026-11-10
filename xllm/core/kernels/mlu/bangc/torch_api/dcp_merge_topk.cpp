@@ -28,20 +28,6 @@ limitations under the License.
 
 namespace xllm::kernel::mlu::bangc {
 namespace {
-void check_tensor(const torch::Tensor& tensor,
-                  const char* name,
-                  torch::ScalarType dtype,
-                  int64_t dims,
-                  const torch::Device& device) {
-  detail::check_tensor_properties(tensor, name, device, dtype);
-  CHECK_EQ(tensor.dim(), dims);
-  CHECK(!tensor.is_conj() && !tensor.is_neg());
-  for (int64_t axis = 0; axis < dims; ++axis) {
-    CHECK(tensor.size(axis) <= 1 || tensor.stride(axis) > 0)
-        << "Expanded and negative strides are unsupported";
-  }
-}
-
 constexpr int64_t kTopk = 2048;
 constexpr int64_t kGroupShards = 4;
 
@@ -144,12 +130,25 @@ void dcp_merge_topk(const torch::Tensor& scores,
                     int64_t topk,
                     torch::Tensor& output,
                     torch::Tensor& lengths) {
-  CHECK(scores.defined());
-  CHECK(scores.device().is_privateuseone());
+  CHECK(detail::check_tensor(
+      scores, torch::kBFloat16, std::nullopt, /*require_contiguous=*/false))
+      << "scores must have the expected dtype and layout on MLU";
   const torch::Device device = scores.device();
-  check_tensor(scores, "scores", torch::kBFloat16, 3, device);
-  check_tensor(slots, "slots", torch::kInt32, 3, device);
-  check_tensor(mapping, "mapping", torch::kInt32, 1, device);
+  CHECK_EQ(scores.dim(), 3);
+  CHECK(detail::check_tensor(
+      slots, torch::kInt32, device, /*require_contiguous=*/false))
+      << "slots must be int32 on the same device as scores";
+  CHECK_EQ(slots.dim(), 3);
+  CHECK(detail::check_tensor(
+      mapping, torch::kInt32, device, /*require_contiguous=*/false))
+      << "mapping must be int32 on the same device as scores";
+  CHECK_EQ(mapping.dim(), 1);
+  for (const torch::Tensor& input : {scores, slots, mapping}) {
+    for (int64_t axis = 0; axis < input.dim(); ++axis) {
+      CHECK(input.size(axis) <= 1 || input.stride(axis) > 0)
+          << "Expanded and negative strides are unsupported";
+    }
+  }
   CHECK(scores.sizes() == slots.sizes());
   CHECK(is_supported_shards(scores.size(0)))
       << "DCP merge supports power-of-two shard counts of at least 2, got "
@@ -158,12 +157,14 @@ void dcp_merge_topk(const torch::Tensor& scores,
   CHECK_EQ(topk, kTopk);
   const int64_t rows = scores.size(1);
   CHECK_EQ(mapping.size(0), rows);
-  check_tensor(output, "output", torch::kInt32, 2, device);
-  check_tensor(lengths, "lengths", torch::kInt32, 1, device);
+  CHECK(detail::check_tensor(output, torch::kInt32, device))
+      << "output has an invalid dtype, device or contiguous layout";
+  CHECK_EQ(output.dim(), 2);
+  CHECK(detail::check_tensor(lengths, torch::kInt32, device))
+      << "lengths has an invalid dtype, device or contiguous layout";
+  CHECK_EQ(lengths.dim(), 1);
   CHECK(output.sizes() == torch::IntArrayRef({rows, topk}));
   CHECK_EQ(lengths.size(0), rows);
-  CHECK(output.is_contiguous() && lengths.is_contiguous())
-      << "Merge outputs must be contiguous";
   CHECK(!output.is_alias_of(lengths));
   for (const torch::Tensor& input : {scores, slots, mapping}) {
     CHECK(!output.is_alias_of(input));

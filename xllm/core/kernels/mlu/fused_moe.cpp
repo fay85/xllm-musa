@@ -58,22 +58,32 @@ std::tuple<torch::Tensor, torch::Tensor> moe_softplus_topk(
     const std::optional<torch::Tensor>& tid2eid,
     const std::optional<torch::Tensor>& bias,
     float route_scale) {
-  std::vector<int64_t> out_shape = input.sizes().vec();
-  out_shape.pop_back();
-  out_shape.push_back(topk);
-  auto reduce_weight = torch::empty(
-      out_shape, torch::dtype(torch::kFloat).device(input.device()));
-  auto expert_id = torch::empty(
-      out_shape, torch::dtype(torch::kInt32).device(input.device()));
-  tmo::torch_api::moe_softplus_topk(input,
-                                    input_ids,
-                                    tid2eid,
-                                    bias,
-                                    topk,
-                                    route_scale,
-                                    reduce_weight,
-                                    expert_id);
-  return std::make_tuple(reduce_weight, expert_id);
+  // The fused TMO softplus loses small negative-logit scores and can divide
+  // zero by zero when all selected experts have such scores. Keep routing in
+  // FP32 with stable softplus, including bias-steered and hash selection.
+  torch::Tensor scores = torch::softplus(input.to(torch::kFloat32)).sqrt_();
+  torch::Tensor expert_id;
+  if (tid2eid.has_value()) {
+    CHECK(input_ids.has_value()) << "Hash routing requires input token IDs";
+    // Token IDs match input's leading dimensions, or their flattened form.
+    int64_t num_tokens = 1;
+    for (int64_t dim = 0; dim < input.dim() - 1; ++dim) {
+      num_tokens *= input.size(dim);
+    }
+    CHECK_EQ(input_ids->numel(), num_tokens)
+        << "Hash routing requires one token ID per input row";
+    std::vector<int64_t> out_shape = input.sizes().vec();
+    out_shape.back() = topk;
+    expert_id = tid2eid->index_select(0, input_ids->flatten().to(torch::kLong))
+                    .view(out_shape);
+  } else {
+    torch::Tensor selection = bias.has_value() ? scores + *bias : scores;
+    expert_id = std::get<1>(selection.topk(topk, /*dim=*/-1));
+  }
+  torch::Tensor reduce_weight = scores.gather(-1, expert_id.to(torch::kLong));
+  reduce_weight.div_(reduce_weight.sum(-1, /*keepdim=*/true).add_(1e-20));
+  reduce_weight.mul_(route_scale);
+  return {reduce_weight, expert_id.to(torch::kInt32)};
 }
 
 std::vector<torch::Tensor> moe_gen_idx(const torch::Tensor& expert_id,

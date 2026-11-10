@@ -765,6 +765,9 @@ MluGraphExecutorImpl::MluGraphExecutorImpl(CausalLM* model,
   planner_config.options = options_;
   planner_config.capabilities = mtp_capabilities_;
   planner_config.state_required = model_->requires_graph_forward_metadata();
+  planner_config.linear_state_required =
+      has_linear_attention_layers(args_) ||
+      (args_.index_kpool() > 1 && args_.index_kpool_compress());
   planner_config.max_tokens = max_tokens;
   planner_ = std::make_unique<MluGraphPlanner>(std::move(planner_config));
 }

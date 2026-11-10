@@ -50,11 +50,11 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
     cp_size_ = parallel.cp_size();
     cp_group_ = parallel.cp_group_;
     if (cp_size_ > 1) {
+      CHECK_EQ(parallel.dp_size(), 1) << "V4.1 CP with DP is not supported";
       CHECK_EQ(parallel.kv_split_size_effective(), 1);
       CHECK_EQ(parallel.layerwise_split_size(), 1);
       CHECK_EQ(parallel.ep_size(), cp_size_ * parallel.tp_group_->world_size());
     }
-    CHECK_EQ(context.get_parallel_args().dp_size(), 1);
     CHECK_LE(args.num_speculative_tokens() + 1, kDsv41CompressStateRows);
     embed_tokens_ =
         register_module("embed_tokens", layer::WordEmbedding(context));
@@ -149,7 +149,9 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
           [](int32_t ratio) { return ratio > 0; });
       const int64_t capacity =
           model_args_.window_size() +
-          (has_compressed_layers ? model_args_.index_topk() : 0);
+          (metadata.use_dflash_proposal_attention
+               ? model_args_.dspark_block_size()
+               : (has_compressed_layers ? model_args_.index_topk() : 0));
       graph_state_->shared.selected_kv = torch::empty(
           {positions.numel() * capacity, 1, 1, model_args_.head_dim()},
           options_);
@@ -183,13 +185,35 @@ class DeepseekV41ModelImpl : public torch::nn::Module {
                       std::vector<KVCache>& caches,
                       const ModelInputParams& raw_input) {
     torch::NoGradGuard guard;
+    // All ranks use the configured idle width, matching WorkerImpl's dummy
+    // input, so MoE derives identical communication sizes on every DP shard.
+    // Preserve empty attention metadata so decoder layers skip cache writes.
+    const int32_t dummy_token_count = model_args_.dummy_token_count();
+    CHECK_GT(dummy_token_count, 0);
+    std::optional<ModelInputParams> dp_input;
+    const auto& counts = raw_input.parallel.dp_global_token_nums;
+    if (tokens.numel() == 0 ||
+        std::find(counts.begin(), counts.end(), 0) != counts.end()) {
+      dp_input = raw_input;
+      auto& padded_counts = dp_input->parallel.dp_global_token_nums;
+      std::replace(
+          padded_counts.begin(), padded_counts.end(), 0, dummy_token_count);
+    }
+    if (tokens.numel() == 0) {
+      dp_input->meta.q_max_seq_len = 0;
+      tokens = torch::zeros({dummy_token_count}, tokens.options());
+      positions = torch::zeros({dummy_token_count}, positions.options());
+    }
+    const auto& prepared_input = dp_input ? *dp_input : raw_input;
     std::optional<ModelInputParams> grouped_input;
-    if (!raw_input.enable_graph && raw_input.meta.spec_verify_width > 1) {
-      grouped_input = group_verify_input(raw_input);
+    if (!raw_input.enable_graph && raw_input.meta.spec_verify_width > 1 &&
+        prepared_input.meta.q_max_seq_len > 0 &&
+        prepared_input.meta.num_sequences > 0) {
+      grouped_input = group_verify_input(prepared_input);
     }
     const auto& input = raw_input.enable_graph && graph_state_->verify_input
                             ? *graph_state_->verify_input
-                            : (grouped_input ? *grouped_input : raw_input);
+                            : (grouped_input ? *grouped_input : prepared_input);
     std::optional<layer::mlu_v4_cp::DeepseekV4CpContext> cp_context;
     if (cp_size_ > 1 && !input.enable_graph &&
         !input.use_dflash_proposal_attention && !input.is_spec_verify &&

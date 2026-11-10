@@ -168,7 +168,8 @@ int32_t run_rank(int32_t rank,
                  bool with_shared,
                  bool graph_replay,
                  bool use_cp = false,
-                 bool use_deep_ep = false) {
+                 bool use_deep_ep = false,
+                 bool use_dp = false) {
   if (Platform::device_count() < world_size) {
     return kExitCodeSkip;
   }
@@ -193,6 +194,15 @@ int32_t run_rank(int32_t rank,
   if (use_cp) {
     parallel_args.tp_group_ = &single_rank;
     parallel_args.cp_group_ = collective;
+  }
+  if (use_dp) {
+    parallel_args = ParallelArgs(rank, world_size, world_size, collective);
+    parallel_args.tp_group_ = &single_rank;
+    parallel_args.single_rank_group_ = &single_rank;
+    parallel_args.moe_ep_group_ = collective;
+    parallel_args.moe_tp_group_ = &single_rank;
+    parallel_args.dp_local_process_group_ = collective;
+    parallel_args.ep_size_ = world_size;
   }
   const ParallelArgs reference_args = make_parallel_args(
       /*rank=*/0,
@@ -224,6 +234,33 @@ int32_t run_rank(int32_t rank,
   const StateDict weights = make_weights(model_args, options);
   block->load_state_dict(weights);
   reference->load_state_dict(weights);
+
+  if (use_dp) {
+    for (const std::vector<int32_t>& counts :
+         {std::vector<int32_t>{3, 5}, {1, 5}, {5, 1}}) {
+      // A count of one also represents V4.1's empty-rank collective row.
+      torch::Tensor local = make_values(counts[rank],
+                                        model_args.hidden_size(),
+                                        0.5f + static_cast<float>(rank),
+                                        options)
+                                .mul(10.0f);
+      ModelInputParams input;
+      input.parallel.dp_global_token_nums = counts;
+      const auto route = block->prep_route(local);
+      const torch::Tensor actual = block->forward_selected(
+          local, route.reduce_weight, route.expert_id, input);
+      const auto reference_route = reference->prep_route(local, std::nullopt);
+      torch::Tensor expected = reference->forward_experts(
+          local, /*enable_all2all_communication=*/false, reference_route);
+      const torch::Tensor shared = reference->forward_shared(local);
+      if (shared.defined()) {
+        expected.add_(shared);
+      }
+      check_output(actual, expected);
+    }
+    torch_mlu::synchronize();
+    return 0;
+  }
 
   if (use_deep_ep) {
     for (int64_t row_count : {8, 3, 1, 0}) {
@@ -346,6 +383,19 @@ int32_t run_rank(int32_t rank,
 
 std::vector<::xllm::test::ForkedRankSession::Case> collective_cases() {
   return {
+      {"DpEpPreservesUnevenAndDummyRows",
+       [](int32_t rank, int32_t port) {
+         torch::manual_seed(0);
+         return run_rank(rank,
+                         /*world_size=*/2,
+                         port,
+                         /*use_ep=*/true,
+                         /*with_shared=*/true,
+                         /*graph_replay=*/false,
+                         /*use_cp=*/false,
+                         /*use_deep_ep=*/false,
+                         /*use_dp=*/true);
+       }},
       {"EpSharedMatchesUnshardedReference",
        [](int32_t rank, int32_t port) {
          torch::manual_seed(0);
@@ -493,6 +543,10 @@ class SparseMoECollectiveTest : public ::testing::Test {
   inline static std::unique_ptr<::xllm::test::ForkedRankSession> session_;
   inline static bool failed_ = false;
 };
+
+TEST_F(SparseMoECollectiveTest, DpEpPreservesUnevenAndDummyRows) {
+  run_case("DpEpPreservesUnevenAndDummyRows");
+}
 
 TEST_F(SparseMoECollectiveTest, EpSharedMatchesUnshardedReference) {
   run_case("EpSharedMatchesUnshardedReference");

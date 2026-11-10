@@ -25,21 +25,6 @@ limitations under the License.
 #include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 
 namespace xllm::kernel::mlu::bangc {
-namespace {
-
-void check_tensor(const torch::Tensor& tensor,
-                  const char* name,
-                  torch::ScalarType dtype,
-                  int64_t dims,
-                  const torch::Device& device) {
-  detail::check_tensor_properties(tensor, name, device, dtype);
-  CHECK_EQ(tensor.dim(), dims);
-  CHECK(tensor.is_contiguous());
-  CHECK(!tensor.is_conj() && !tensor.is_neg());
-}
-
-}  // namespace
-
 std::tuple<torch::Tensor, torch::Tensor> dcp_indexer(
     const torch::Tensor& query,
     const torch::Tensor& k_cache,
@@ -51,16 +36,28 @@ std::tuple<torch::Tensor, torch::Tensor> dcp_indexer(
     int64_t dcp_rank,
     int64_t dcp_size,
     bool is_prefill) {
-  CHECK(query.defined());
-  CHECK(query.device().is_privateuseone());
+  CHECK(detail::check_tensor(query, torch::kBFloat16))
+      << "query must be contiguous BF16 on MLU";
   const torch::Device device = query.device();
-  check_tensor(query, "query", torch::kBFloat16, 3, device);
-  check_tensor(k_cache, "k_cache", torch::kBFloat16, 4, device);
-  check_tensor(weights, "weights", torch::kBFloat16, 2, device);
-  check_tensor(block_table, "block_table", torch::kInt32, 2, device);
-  check_tensor(q_cu_seq_lens, "q_cu_seq_lens", torch::kInt32, 1, device);
-  check_tensor(query_positions, "query_positions", torch::kInt32, 1, device);
-  check_tensor(kv_seq_lens, "kv_seq_lens", torch::kInt32, 1, device);
+  CHECK_EQ(query.dim(), 3);
+  CHECK(detail::check_tensor(k_cache, torch::kBFloat16, device))
+      << "k_cache has an invalid dtype, device or contiguous layout";
+  CHECK_EQ(k_cache.dim(), 4);
+  CHECK(detail::check_tensor(weights, torch::kBFloat16, device))
+      << "weights has an invalid dtype, device or contiguous layout";
+  CHECK_EQ(weights.dim(), 2);
+  CHECK(detail::check_tensor(block_table, torch::kInt32, device))
+      << "block_table has an invalid dtype, device or contiguous layout";
+  CHECK_EQ(block_table.dim(), 2);
+  CHECK(detail::check_tensor(q_cu_seq_lens, torch::kInt32, device))
+      << "q_cu_seq_lens has an invalid dtype, device or contiguous layout";
+  CHECK_EQ(q_cu_seq_lens.dim(), 1);
+  CHECK(detail::check_tensor(query_positions, torch::kInt32, device))
+      << "query_positions has an invalid dtype, device or contiguous layout";
+  CHECK_EQ(query_positions.dim(), 1);
+  CHECK(detail::check_tensor(kv_seq_lens, torch::kInt32, device))
+      << "kv_seq_lens has an invalid dtype, device or contiguous layout";
+  CHECK_EQ(kv_seq_lens.dim(), 1);
   CHECK_EQ(query.size(1), detail::kHeads);
   CHECK_EQ(query.size(2), detail::kDim);
   const int64_t rows = query.size(0);

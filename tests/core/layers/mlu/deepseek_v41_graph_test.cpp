@@ -27,6 +27,8 @@ limitations under the License.
 #include <fstream>
 #include <limits>
 #include <nlohmann/json.hpp>
+#include <utility>
+#include <vector>
 
 #include "kernels/mlu/bangc/include/deepseek_v41.h"
 #include "kernels/mlu/mlu_ops_api.h"
@@ -192,20 +194,28 @@ TEST(DeepseekV41GraphTest, VerifyRejectionRetainsInteriorCompressorRows) {
       {"indexer.wk.weight", random({128, 512})},
       {"indexer.k_norm.weight", torch::ones({128}, options)},
   }));
-  auto make_cache = [&]() {
+  auto make_cache = [&](bool packed) {
     DeepSeekV4KVCacheTensors tensors;
     tensors.swa_cache = torch::zeros({2, 128, 1, 512}, options);
     tensors.key_cache = torch::zeros({2, 128, 1, 512}, options);
     tensors.index_cache = torch::zeros({2, 128, 1, 128}, options);
-    tensors.compress_kv_state =
-        torch::zeros({2, 32, 512}, options.dtype(torch::kFloat32));
-    tensors.compress_score_state = torch::zeros_like(tensors.compress_kv_state);
+    if (packed) {
+      tensors.compress_state =
+          torch::zeros({2, 32, 1024}, options.dtype(torch::kFloat32));
+    } else {
+      tensors.compress_kv_state =
+          torch::zeros({2, 32, 512}, options.dtype(torch::kFloat32));
+      tensors.compress_score_state =
+          torch::zeros_like(tensors.compress_kv_state);
+    }
     std::vector<KVCache> caches;
     caches.emplace_back(tensors);
     return caches;
   };
-  auto actual = make_cache();
-  auto reference = make_cache();
+  // PD exports a packed owner; attention writes through its strided views.
+  // Compare against independent contiguous planes through verify/rejection.
+  auto actual = make_cache(/*packed=*/true);
+  auto reference = make_cache(/*packed=*/false);
   auto hidden = random({20, 32});
   auto rope =
       torch::cat({torch::ones({32, 64}, options.dtype(torch::kFloat32)),
@@ -245,8 +255,8 @@ TEST(DeepseekV41GraphTest, VerifyRejectionRetainsInteriorCompressorRows) {
   // Flat DSpark verify is regrouped into contiguous request chunks before
   // attention. Replay must refresh the chunk's positions and host KV lengths,
   // including a rejection that resumes inside the previous chunk.
-  auto graph_caches = make_cache();
-  auto eager_caches = make_cache();
+  auto graph_caches = make_cache(/*packed=*/true);
+  auto eager_caches = make_cache(/*packed=*/false);
   run(graph_caches, 0, 1);
   run(eager_caches, 0, 1);
   ModelInputParams input;
@@ -473,6 +483,98 @@ INSTANTIATE_TEST_SUITE_P(
     PageAndTopkBoundaries,
     DeepseekV41PagedIndexerTest,
     ::testing::Values(1, 127, 128, 129, 511, 512, 513, 700));
+
+TEST(DeepseekV41GatherDeathTest, RejectsCpuBuffersBeforeKernelLaunch) {
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
+  for (const int64_t index : {1, 2, 6}) {
+    SCOPED_TRACE(index);
+    EXPECT_DEATH(
+        {
+          const torch::Device device(torch::kPrivateUse1, 0);
+          const auto options =
+              torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+          std::vector<torch::Tensor> arguments(
+              {torch::zeros({128, 512}, options),
+               torch::zeros({128, 512}, options),
+               torch::ones({512}, options),
+               torch::zeros({1}, options.dtype(torch::kInt32)),
+               torch::zeros({1}, options.dtype(torch::kInt32)),
+               torch::zeros({1}, options.dtype(torch::kInt64)),
+               torch::empty({2, 512}, options),
+               torch::zeros({1}, options.dtype(torch::kInt32))});
+          arguments[index] = arguments[index].cpu();
+          kernel::mlu::bangc::deepseek_v41_decode_gather(arguments[0],
+                                                         arguments[1],
+                                                         arguments[2],
+                                                         arguments[3],
+                                                         arguments[4],
+                                                         arguments[5],
+                                                         /*position=*/0,
+                                                         /*window=*/1,
+                                                         arguments[6],
+                                                         arguments[7]);
+        },
+        "same device as swa");
+  }
+}
+
+TEST(DeepseekV41GraphTest, SparseGatherCompactsMaskedCompressedIndices) {
+  const torch::Device device(torch::kPrivateUse1, 0);
+  const torch::DeviceGuard guard(device);
+  const auto options =
+      torch::TensorOptions().device(device).dtype(torch::kBFloat16);
+  const auto integers = options.dtype(torch::kInt64);
+  auto swa = torch::arange(384 * 512, options.dtype(torch::kFloat32))
+                 .view({384, 512})
+                 .to(torch::kBFloat16);
+  auto compressed =
+      torch::full({384, 512}, std::numeric_limits<float>::quiet_NaN(), options);
+  compressed[258].fill_(2);
+  compressed[129].fill_(3);
+  auto current = torch::ones({512}, options);
+  auto page = torch::tensor({1, 0}, options.dtype(torch::kInt32));
+  auto compressed_page = torch::tensor({2, 1}, page.options());
+  struct Selection {
+    std::vector<int64_t> indices;
+    std::vector<int64_t> physical_rows;
+  };
+  std::vector<int64_t> tiled(259, -1);
+  tiled[0] = 2;
+  tiled[128] = 129;
+  tiled[258] = 2;
+  const std::vector<Selection> selections = {
+      {{-1, 2, -1, 129, -1}, {258, 129}},
+      {{-1, -1, -1, -1, -1}, {}},
+      {std::move(tiled), {258, 129, 258}}};
+  for (const auto& selection : selections) {
+    SCOPED_TRACE(selection.indices.size());
+    auto topk = torch::tensor(selection.indices, integers);
+    auto output = torch::full({4 + topk.numel(), 1, 1, 512},
+                              std::numeric_limits<float>::quiet_NaN(),
+                              options);
+    auto length = torch::zeros({1}, page.options());
+    kernel::mlu::bangc::deepseek_v41_decode_gather(swa,
+                                                   compressed,
+                                                   current,
+                                                   page,
+                                                   compressed_page,
+                                                   topk,
+                                                   /*position=*/129,
+                                                   /*window=*/4,
+                                                   output,
+                                                   length);
+    auto expected =
+        torch::cat({swa.index_select(0, torch::tensor({254, 255, 0}, integers)),
+                    current.unsqueeze(0),
+                    compressed.index_select(
+                        0, torch::tensor(selection.physical_rows, integers))},
+                   0);
+    torch_mlu::synchronize();
+    ASSERT_EQ(length.cpu().item<int32_t>(), expected.size(0));
+    EXPECT_TRUE(torch::equal(
+        output.view({-1, 512}).slice(0, 0, expected.size(0)), expected));
+  }
+}
 
 TEST(DeepseekV41GraphTest, SparseGatherAndSinkAttentionReplayUseLiveLengths) {
   const torch::Device device(torch::kPrivateUse1, 0);

@@ -26,15 +26,10 @@ limitations under the License.
 
 #include "framework/core/MLUStream.h"
 #include "kernels/mlu/bangc/src/dflash2_conv_norm/launch.h"
+#include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 
 namespace xllm::kernel::mlu::bangc {
 namespace {
-bool supported_tensor(const torch::Tensor& tensor,
-                      const torch::Device& device) {
-  return tensor.defined() && tensor.device() == device &&
-         tensor.scalar_type() == torch::kBFloat16 && tensor.is_contiguous() &&
-         !tensor.is_conj() && !tensor.is_neg();
-}
 bool may_overlap(const torch::Tensor& left, const torch::Tensor& right) {
   // A strided projection is not dense: overlap analysis may return TooHard
   // even for distinct allocations. Different storage cannot overlap.
@@ -50,8 +45,8 @@ std::optional<std::tuple<torch::Tensor, torch::Tensor>> dflash2_conv_norm(
     const torch::Tensor& weight,
     int32_t block_size,
     double eps) {
-  if (!hidden.defined() || !hidden.device().is_privateuseone() ||
-      hidden.dim() != 2 || hidden.size(1) != 4096 || hidden.size(0) <= 0 ||
+  if (!detail::check_tensor(hidden, torch::kBFloat16) || hidden.dim() != 2 ||
+      hidden.size(1) != 4096 || hidden.size(0) <= 0 ||
       hidden.size(0) > std::numeric_limits<int32_t>::max() ||
       (block_size != 4 && block_size != 6) ||
       hidden.size(0) % block_size != 0 || !std::isfinite(eps) ||
@@ -59,16 +54,18 @@ std::optional<std::tuple<torch::Tensor, torch::Tensor>> dflash2_conv_norm(
     return std::nullopt;
   }
   const torch::Device device = hidden.device();
-  if (!supported_tensor(hidden, device) || !supported_tensor(base, device) ||
-      !supported_tensor(residual, device) ||
-      !supported_tensor(weight, device) || !base.sizes().equals({2, 4096}) ||
-      residual.sizes() != hidden.sizes() || !weight.sizes().equals({4096}) ||
-      !delta.defined() || delta.device() != device ||
-      delta.scalar_type() != torch::kBFloat16 ||
+  if (!detail::check_tensor(base, torch::kBFloat16, device) ||
+      !detail::check_tensor(residual, torch::kBFloat16, device) ||
+      !detail::check_tensor(weight, torch::kBFloat16, device) ||
+      !base.sizes().equals({2, 4096}) || residual.sizes() != hidden.sizes() ||
+      !weight.sizes().equals({4096}) ||
+      !detail::check_tensor(delta,
+                            torch::kBFloat16,
+                            device,
+                            /*require_contiguous=*/false) ||
       !delta.sizes().equals({hidden.size(0), 2, 256}) ||
       delta.stride(1) != 256 || delta.stride(2) != 1 ||
-      (delta.stride(0) != 512 && delta.stride(0) != 1024) || delta.is_conj() ||
-      delta.is_neg()) {
+      (delta.stride(0) != 512 && delta.stride(0) != 1024)) {
     return std::nullopt;
   }
   // Updating residual must not overwrite any convolution input or parameter.

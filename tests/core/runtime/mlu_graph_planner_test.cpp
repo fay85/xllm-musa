@@ -274,6 +274,7 @@ TEST(MluGraphPlannerTest, ProducerDoesNotRequireTopkReuseCapability) {
 TEST(MluGraphPlannerTest, StatefulTargetGroupingDoesNotEnableTopkReuse) {
   GraphPlannerConfig config = qwen_config();
   config.state_required = true;
+  config.linear_state_required = true;
   config.capabilities.supports_grouped_mtp_graph = true;
   config.capabilities.supports_native_index_share_for_iteration = true;
   ModelInputParams params = grouped_input();
@@ -619,6 +620,33 @@ TEST(MluGraphPlannerTest, DraftAndVerifyUseCurrentStageMetadata) {
   EXPECT_TRUE(std::holds_alternative<GraphPlan>(verify.plan({3, params})));
 }
 
+TEST(MluGraphPlannerTest, DraftGraphMetadataDoesNotRequireLinearState) {
+  GraphPlannerConfig config = qwen_config();
+  config.options.is_draft_engine(true).speculative_algorithm("DSpark");
+  config.capabilities.supports_grouped_mtp_graph = true;
+  config.state_required = true;
+  ModelInputParams params = grouped_input(/*rows=*/3);
+  params.use_dflash_proposal_attention = true;
+  params.meta.q_max_seq_len = 5;
+  params.attention.host.q_seq_lens = {0, 5, 10, 15};
+  params.attention.device.new_cache_slots = torch::zeros({15}, torch::kInt32);
+  params.multi_block_tables = {params.attention.device.block_tables};
+  params.attention.device.block_tables = torch::Tensor();
+  const auto decision = MluGraphPlanner(config).plan({15, params});
+  ASSERT_TRUE(std::holds_alternative<GraphPlan>(decision));
+  const auto& plan = std::get<GraphPlan>(decision);
+  EXPECT_EQ(plan.layout.tokens_per_request, 5);
+  EXPECT_EQ(plan.layout.padded_num_reqs, 4);
+  EXPECT_EQ(plan.layout.padded_num_tokens, 20);
+
+  config.linear_state_required = true;
+  expect_eager(
+      MluGraphPlanner(config), 15, params, EagerReason::INVALID_LAYOUT);
+  params.embedding.linear_state_ids = {1, 2, 3};
+  EXPECT_TRUE(std::holds_alternative<GraphPlan>(
+      MluGraphPlanner(config).plan({15, params})));
+}
+
 TEST(MluGraphPlannerTest, NativeDraftSharingSeparatesProducerAndReuseGraphs) {
   GraphPlannerConfig config = topk_reuse_config();
   ModelInputParams params = grouped_input();
@@ -688,6 +716,7 @@ TEST(MluGraphPlannerTest, Dflash2VerifyPreservesB16GroupsAt64kHistory) {
   config.capabilities.supports_grouped_mtp_graph = true;
   config.capabilities.replay_family = MtpReplayFamily::GLM5;
   config.state_required = true;
+  config.linear_state_required = true;
   config.max_tokens = 64;
   ModelInputParams params = grouped_input(/*rows=*/16);
   params.meta.batch_forward_type = BatchForwardType::CHUNKED_PREFILL;

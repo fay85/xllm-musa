@@ -201,10 +201,9 @@ struct DeepSeekV4KVCacheTensors {
   torch::Tensor compress_score_state;
   torch::Tensor compress_index_kv_state;
   torch::Tensor compress_index_score_state;
-#if defined(USE_MLU)
+  // Packed KV and score states, populated only on MLU.
   torch::Tensor compress_state;
   torch::Tensor compress_index_state;
-#endif
   BlockType compressed_block_type = BlockType::KV;
 };
 

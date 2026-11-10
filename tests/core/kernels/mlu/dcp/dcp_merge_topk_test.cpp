@@ -327,7 +327,7 @@ TEST(DcpMergeTopkDeathTest, RejectsUnsupportedContractsAndAliasing) {
                               kTopk,
                               out.output,
                               out.lengths),
-               "scalar_type");
+               "scores.*dtype");
   for (const int64_t shards : {1, 3}) {
     EXPECT_DEATH(dcp_merge_topk(input.scores.slice(0, 0, shards),
                                 input.slots.slice(0, 0, shards),

@@ -24,6 +24,7 @@ limitations under the License.
 #include <utility>
 
 #include "kernels/mlu/bangc/src/dflash2/sample_path_launchers.h"
+#include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 namespace xllm::kernel::mlu::bangc {
 std::pair<torch::Tensor, torch::Tensor> sample_dflash2_paths(
     const torch::Tensor& candidate_ids,
@@ -31,18 +32,27 @@ std::pair<torch::Tensor, torch::Tensor> sample_dflash2_paths(
     const torch::Tensor& gumbel_noise,
     const torch::Tensor& do_sample,
     bool all_random_sample) {
-  CHECK(candidate_ids.defined() && edge_log_probs.defined() &&
-        gumbel_noise.defined());
+  CHECK(detail::check_tensor(candidate_ids,
+                             std::nullopt,
+                             std::nullopt,
+                             /*require_contiguous=*/false))
+      << "candidate_ids must be on MLU";
+  const torch::Device device = candidate_ids.device();
+  CHECK(candidate_ids.scalar_type() == torch::kLong ||
+        candidate_ids.scalar_type() == torch::kInt32);
+  CHECK(detail::check_tensor(edge_log_probs,
+                             torch::kFloat32,
+                             device,
+                             /*require_contiguous=*/false))
+      << "edge_log_probs must be float32 on the same device as candidate_ids";
+  CHECK(detail::check_tensor(gumbel_noise,
+                             torch::kFloat32,
+                             device,
+                             /*require_contiguous=*/false))
+      << "gumbel_noise must be float32 on the same device as candidate_ids";
   CHECK_EQ(candidate_ids.dim(), 3);
   CHECK_EQ(edge_log_probs.dim(), 4);
   CHECK_EQ(gumbel_noise.dim(), 3);
-  CHECK_EQ(candidate_ids.device(), edge_log_probs.device());
-  CHECK_EQ(candidate_ids.device(), gumbel_noise.device());
-  CHECK_EQ(candidate_ids.device().type(), torch::kPrivateUse1);
-  CHECK(candidate_ids.scalar_type() == torch::kLong ||
-        candidate_ids.scalar_type() == torch::kInt32);
-  CHECK_EQ(edge_log_probs.scalar_type(), torch::kFloat32);
-  CHECK_EQ(gumbel_noise.scalar_type(), torch::kFloat32);
   const int64_t batch = candidate_ids.size(0);
   const int64_t steps = candidate_ids.size(1);
   const int64_t top_k = candidate_ids.size(2);
@@ -54,9 +64,11 @@ std::pair<torch::Tensor, torch::Tensor> sample_dflash2_paths(
   CHECK_EQ(gumbel_noise.sizes(), torch::IntArrayRef({batch, steps, top_k}));
   int64_t mask_stride = 0;
   if (!all_random_sample) {
-    CHECK(do_sample.defined());
-    CHECK_EQ(do_sample.device(), candidate_ids.device());
-    CHECK_EQ(do_sample.scalar_type(), torch::kBool);
+    CHECK(detail::check_tensor(do_sample,
+                               torch::kBool,
+                               device,
+                               /*require_contiguous=*/false))
+        << "do_sample must be bool on the same device as candidate_ids";
     CHECK_EQ(do_sample.sizes(), torch::IntArrayRef({batch}));
     mask_stride = do_sample.stride(0);
   }

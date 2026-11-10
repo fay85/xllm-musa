@@ -24,13 +24,12 @@ limitations under the License.
 
 #include "framework/core/MLUStream.h"
 #include "kernels/mlu/bangc/src/fused_moe_clamp/launcher.h"
+#include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 namespace xllm::kernel::mlu::bangc {
 void fused_moe_clamp(torch::Tensor& input,
                      double limit,
                      const std::optional<torch::Tensor>& token_count) {
-  CHECK(input.defined());
-  CHECK(input.device().is_privateuseone());
-  CHECK(input.is_contiguous());
+  CHECK(detail::check_tensor(input)) << "input must be contiguous on MLU";
   CHECK_GE(input.dim(), 2);
   const torch::ScalarType dtype = input.scalar_type();
   CHECK(dtype == torch::kFloat16 || dtype == torch::kBFloat16 ||
@@ -49,8 +48,8 @@ void fused_moe_clamp(torch::Tensor& input,
   if (token_count.has_value()) {
     // Counts bound rows of the flattened 2-D group GEMM output.
     CHECK_EQ(input.dim(), 2);
-    CHECK(token_count->device() == input.device());
-    CHECK(token_count->is_contiguous());
+    CHECK(detail::check_tensor(*token_count, std::nullopt, input.device()))
+        << "token_count must be contiguous on the same device as input";
     CHECK_EQ(token_count->dim(), 1);
     CHECK(token_count->scalar_type() == torch::kInt32 ||
           token_count->scalar_type() == torch::kInt64);

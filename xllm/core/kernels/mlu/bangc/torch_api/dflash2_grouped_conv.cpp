@@ -23,29 +23,35 @@ limitations under the License.
 
 #include "framework/core/MLUStream.h"
 #include "kernels/mlu/bangc/src/dflash2_grouped_conv/launcher.h"
+#include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 namespace xllm::kernel::mlu::bangc {
 torch::Tensor dflash2_grouped_conv(const torch::Tensor& hidden,
                                    const torch::Tensor& delta,
                                    const torch::Tensor& base,
                                    int64_t block_size,
                                    int64_t group_size) {
-  CHECK(hidden.defined() && delta.defined() && base.defined());
-  CHECK(hidden.device().is_privateuseone());
+  CHECK(detail::check_tensor(hidden,
+                             std::nullopt,
+                             std::nullopt,
+                             /*require_contiguous=*/false))
+      << "hidden must be on MLU";
+  const torch::Device device = hidden.device();
+  const torch::ScalarType scalar_type = hidden.scalar_type();
+  CHECK(scalar_type == torch::kFloat16 || scalar_type == torch::kBFloat16 ||
+        scalar_type == torch::kFloat32);
+  CHECK(detail::check_tensor(delta,
+                             scalar_type,
+                             device,
+                             /*require_contiguous=*/false))
+      << "delta must have the same dtype and device as hidden";
+  CHECK(detail::check_tensor(base,
+                             scalar_type,
+                             device,
+                             /*require_contiguous=*/false))
+      << "base must have the same dtype and device as hidden";
   CHECK_EQ(hidden.dim(), 2);
   CHECK_EQ(delta.dim(), 3);
   CHECK_EQ(base.dim(), 2);
-  CHECK_EQ(delta.device(), hidden.device());
-  CHECK_EQ(base.device(), hidden.device());
-  CHECK_EQ(delta.scalar_type(), hidden.scalar_type());
-  CHECK_EQ(base.scalar_type(), hidden.scalar_type());
-  CHECK(hidden.scalar_type() == torch::kFloat16 ||
-        hidden.scalar_type() == torch::kBFloat16 ||
-        hidden.scalar_type() == torch::kFloat32);
-  CHECK(hidden.layout() == torch::kStrided &&
-        delta.layout() == torch::kStrided && base.layout() == torch::kStrided);
-  CHECK(!hidden.is_conj() && !hidden.is_neg());
-  CHECK(!delta.is_conj() && !delta.is_neg());
-  CHECK(!base.is_conj() && !base.is_neg());
   CHECK_GT(block_size, 0);
   CHECK_LE(block_size, std::numeric_limits<int32_t>::max());
   CHECK_GT(group_size, 0);

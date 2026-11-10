@@ -436,7 +436,7 @@ TEST(DcpIndexerDeathTest, RejectsUnsupportedTensorContract) {
   auto x = make_inputs({1}, {65});
   auto wrong = x;
   wrong.query = x.query.to(torch::kFloat32);
-  EXPECT_DEATH(run(wrong, /*rank=*/0, /*prefill=*/false), "scalar_type");
+  EXPECT_DEATH(run(wrong, /*rank=*/0, /*prefill=*/false), "query.*BF16");
   wrong = x;
   wrong.cache = x.cache.reshape({-1, 1, 8, 128});
   EXPECT_DEATH(run(wrong, /*rank=*/0, /*prefill=*/false),

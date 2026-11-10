@@ -133,7 +133,8 @@ TEST(DraftModelConfigTest, ConfiguresNativeV41DSparkGeometry) {
   EXPECT_EQ(args.n_activated_experts(), 3);
   EXPECT_EQ(args.compress_ratios(), (std::vector<int32_t>{0, 0, 0}));
   EXPECT_EQ(args.dspark_block_size(), 5);
-  EXPECT_TRUE(args.requires_eager_execution());
+  EXPECT_EQ(args.dummy_token_count(), 5);
+  EXPECT_FALSE(args.requires_eager_execution());
   EXPECT_TRUE(args.dspark_use_native_sas());
   EXPECT_TRUE(args.draft_query_uses_decode());
   EXPECT_TRUE(args.layers_to_capture().empty());

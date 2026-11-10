@@ -655,6 +655,7 @@ TEST(KPoolKernelTest, BangcRowsRejectDtypeLayoutAndEmptyMetadata) {
     EXPECT_FALSE(bangc_kpool_rows(metadata, output));
     EXPECT_TRUE(torch::equal(output, before));
   };
+  expect_rejected(torch::Tensor(), torch::full({1024}, -7, options));
   expect_rejected(starts.to(torch::kFloat32), torch::full({1024}, -7, options));
   expect_rejected(starts,
                   torch::full({1024}, -7, options.dtype(torch::kInt32)));
@@ -694,6 +695,11 @@ TEST(KPoolKernelTest, BangcScoresRejectUnsupportedInputsBeforeMutation) {
                                    torch::Tensor()));
     EXPECT_TRUE(torch::equal(arguments[6], before));
   };
+  for (int64_t index = 0; index < 6; ++index) {
+    SCOPED_TRACE(index);
+    expect_rejected(index, torch::Tensor());
+    expect_rejected(index, inputs[index].cpu());
+  }
   expect_rejected(0, inputs[0].to(torch::kFloat32));
   expect_rejected(1, inputs[1].to(torch::kBFloat16));
   expect_rejected(2, inputs[2].to(torch::kFloat32));
@@ -730,6 +736,27 @@ TEST(KPoolKernelTest, BangcScoresRejectUnsupportedInputsBeforeMutation) {
       6,
       torch::full({2, 10}, 97, options.dtype(torch::kFloat32)).narrow(1, 1, 8));
   expect_rejected(1, inputs[1].cpu());
+}
+
+TEST(KPoolKernelTest, BangcSelectionRejectsInvalidInputsBeforeMutation) {
+  const torch::Device device(Platform::type_torch(), 0);
+  const auto options = torch::TensorOptions().device(device);
+  const torch::Tensor scores = torch::ones({2, 8}, options);
+  const torch::Tensor positions =
+      torch::zeros({2}, options.dtype(torch::kInt32));
+  torch::Tensor selected =
+      torch::full({2, 2}, -7, options.dtype(torch::kInt64));
+  for (const torch::Tensor& invalid : {torch::Tensor(),
+                                       scores.cpu(),
+                                       scores.to(torch::kBFloat16),
+                                       scores.transpose(0, 1)}) {
+    EXPECT_FALSE(bangc_kpool_select(invalid, selected));
+    EXPECT_FALSE(bangc_kpool_select_live(invalid, positions, selected));
+    EXPECT_TRUE(selected.eq(-7).all().item<bool>());
+  }
+  EXPECT_FALSE(bangc_kpool_select_live(scores, torch::Tensor(), selected));
+  EXPECT_FALSE(bangc_kpool_select_live(scores, positions.cpu(), selected));
+  EXPECT_TRUE(selected.eq(-7).all().item<bool>());
 }
 
 TEST(KPoolKernelTest, NonVerifyRaggedQueriesKeepRequestOwnership) {

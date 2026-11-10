@@ -111,6 +111,8 @@ struct GraphPlannerConfig {
   runtime::Options options;
   MtpModelCapabilities capabilities;
   bool state_required = false;
+  // Graph metadata (for example, paged SWA tables) need not own linear state.
+  bool linear_state_required = false;
   int64_t max_tokens = 0;
 };
 

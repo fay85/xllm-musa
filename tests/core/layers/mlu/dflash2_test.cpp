@@ -1024,6 +1024,60 @@ TEST(DFlash2ConvNormTest,
   EXPECT_TRUE(torch::equal(residual, before));
 }
 
+TEST(DFlash2ConvNormTest,
+     RejectsInvalidTensorPropertiesBeforeResidualMutation) {
+  const torch::Device device(Platform::type_torch(), 0);
+  const auto options =
+      torch::TensorOptions().dtype(torch::kBFloat16).device(device);
+  const std::vector<torch::Tensor> inputs = {torch::ones({4, 4096}, options),
+                                             torch::zeros({4, 2, 256}, options),
+                                             torch::ones({2, 4096}, options),
+                                             torch::full({4, 4096}, 3, options),
+                                             torch::ones({4096}, options)};
+  for (int64_t index = 0; index < 5; ++index) {
+    SCOPED_TRACE(index);
+    for (const torch::Tensor& invalid : {torch::Tensor(),
+                                         inputs[index].cpu(),
+                                         inputs[index].to(torch::kFloat32)}) {
+      std::vector<torch::Tensor> arguments = inputs;
+      arguments[index] = invalid;
+      EXPECT_FALSE(kernel::mlu::bangc::dflash2_conv_norm(arguments[0],
+                                                         arguments[1],
+                                                         arguments[2],
+                                                         arguments[3],
+                                                         arguments[4],
+                                                         /*block_size=*/4,
+                                                         /*eps=*/1e-5)
+                       .has_value());
+      EXPECT_TRUE(inputs[3].eq(3).all().item<bool>());
+      if (arguments[3].defined()) {
+        EXPECT_TRUE(arguments[3].eq(3).all().item<bool>());
+      }
+    }
+  }
+  const torch::Tensor strided_hidden =
+      torch::ones({4, 8192}, options).slice(1, 0, 8192, 2);
+  const torch::Tensor unsupported_delta =
+      torch::zeros({4, 3, 2, 256}, options).select(/*dim=*/1, 0);
+  EXPECT_FALSE(kernel::mlu::bangc::dflash2_conv_norm(strided_hidden,
+                                                     inputs[1],
+                                                     inputs[2],
+                                                     inputs[3],
+                                                     inputs[4],
+                                                     /*block_size=*/4,
+                                                     /*eps=*/1e-5)
+                   .has_value());
+  EXPECT_FALSE(kernel::mlu::bangc::dflash2_conv_norm(inputs[0],
+                                                     unsupported_delta,
+                                                     inputs[2],
+                                                     inputs[3],
+                                                     inputs[4],
+                                                     /*block_size=*/4,
+                                                     /*eps=*/1e-5)
+                   .has_value());
+  EXPECT_TRUE(inputs[3].eq(3).all().item<bool>());
+}
+
 TEST(DFlash2ConvNormTest, TailWavesReplayUpdatedInputsOnNondefaultStream) {
   const torch::Device device(Platform::type_torch(), 0);
   const auto options =

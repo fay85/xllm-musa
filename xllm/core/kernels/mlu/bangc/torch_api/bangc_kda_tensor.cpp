@@ -23,27 +23,48 @@ limitations under the License.
 #include <cstdint>
 
 #include "kernels/mlu/bangc/src/kda/launchers.h"
+#include "kernels/mlu/bangc/torch_api/tensor_checks.h"
 namespace xllm::kernel::mlu {
 namespace {
 bool integer_metadata(const torch::Tensor& tensor) {
   return tensor.scalar_type() == torch::kInt32 ||
          tensor.scalar_type() == torch::kInt64;
 }
-void same_device(const torch::Tensor& tensor, const torch::Device& device) {
-  CHECK(tensor.defined());
-  CHECK_EQ(tensor.device(), device);
-}
 }  // namespace
 std::pair<torch::Tensor, torch::Tensor> bangc_kda_forward(
     const BangcKdaTensorParams& p) {
-  CHECK(p.q.defined());
+  CHECK(bangc::detail::check_tensor(p.q,
+                                    std::nullopt,
+                                    std::nullopt,
+                                    /*require_contiguous=*/false))
+      << "q must be on MLU";
   const torch::Device device = p.q.device();
   const torch::DeviceGuard device_guard(device);
-  same_device(p.k, device);
-  same_device(p.v, device);
-  same_device(p.gate, device);
-  same_device(p.beta, device);
-  same_device(p.initial_state, device);
+  CHECK(bangc::detail::check_tensor(p.k,
+                                    std::nullopt,
+                                    device,
+                                    /*require_contiguous=*/false))
+      << "p.k must be on the same MLU device as q";
+  CHECK(bangc::detail::check_tensor(p.v,
+                                    std::nullopt,
+                                    device,
+                                    /*require_contiguous=*/false))
+      << "p.v must be on the same MLU device as q";
+  CHECK(bangc::detail::check_tensor(p.gate,
+                                    std::nullopt,
+                                    device,
+                                    /*require_contiguous=*/false))
+      << "p.gate must be on the same MLU device as q";
+  CHECK(bangc::detail::check_tensor(p.beta,
+                                    std::nullopt,
+                                    device,
+                                    /*require_contiguous=*/false))
+      << "p.beta must be on the same MLU device as q";
+  CHECK(bangc::detail::check_tensor(p.initial_state,
+                                    std::nullopt,
+                                    device,
+                                    /*require_contiguous=*/false))
+      << "p.initial_state must be on the same MLU device as q";
   CHECK_EQ(p.q.dim(), 4);
   CHECK_EQ(p.q.sizes(), p.k.sizes());
   CHECK_EQ(p.v.dim(), 4);
@@ -72,8 +93,16 @@ std::pair<torch::Tensor, torch::Tensor> bangc_kda_forward(
   const int64_t value_dimension = p.v.size(3);
   CHECK_EQ(p.gate.numel(), tokens * heads * key_dimension);
   CHECK_EQ(p.beta.numel(), tokens * heads);
-  same_device(p.a_log, device);
-  same_device(p.bias, device);
+  CHECK(bangc::detail::check_tensor(p.a_log,
+                                    std::nullopt,
+                                    device,
+                                    /*require_contiguous=*/false))
+      << "p.a_log must be on the same MLU device as q";
+  CHECK(bangc::detail::check_tensor(p.bias,
+                                    std::nullopt,
+                                    device,
+                                    /*require_contiguous=*/false))
+      << "p.bias must be on the same MLU device as q";
   CHECK_EQ(p.a_log.numel(), heads);
   CHECK_EQ(p.bias.numel(), heads * key_dimension);
   torch::Tensor cu =
@@ -82,7 +111,11 @@ std::pair<torch::Tensor, torch::Tensor> bangc_kda_forward(
                                      (batch + 1) * std::max<int64_t>(length, 1),
                                      std::max<int64_t>(length, 1),
                                      p.q.options().dtype(torch::kInt64));
-  same_device(cu, device);
+  CHECK(bangc::detail::check_tensor(cu,
+                                    std::nullopt,
+                                    device,
+                                    /*require_contiguous=*/false))
+      << "cu must be on the same MLU device as q";
   CHECK_EQ(cu.dim(), 1);
   CHECK_GE(cu.numel(), 1);
   CHECK(integer_metadata(cu));
@@ -98,7 +131,11 @@ std::pair<torch::Tensor, torch::Tensor> bangc_kda_forward(
   int64_t index_sequence_stride = 1;
   int64_t index_token_stride = 1;
   if (indices.defined()) {
-    same_device(indices, device);
+    CHECK(bangc::detail::check_tensor(indices,
+                                      std::nullopt,
+                                      device,
+                                      /*require_contiguous=*/false))
+        << "indices must be on the same MLU device as q";
     CHECK(integer_metadata(indices));
     CHECK(indices.dim() == 1 || indices.dim() == 2);
     CHECK_GE(indices.size(0), sequences);
@@ -110,7 +147,11 @@ std::pair<torch::Tensor, torch::Tensor> bangc_kda_forward(
     }
   }
   if (accepted.defined()) {
-    same_device(accepted, device);
+    CHECK(bangc::detail::check_tensor(accepted,
+                                      std::nullopt,
+                                      device,
+                                      /*require_contiguous=*/false))
+        << "accepted must be on the same MLU device as q";
     CHECK(integer_metadata(accepted));
     CHECK_EQ(accepted.dim(), 1);
     CHECK_GE(accepted.numel(), sequences);

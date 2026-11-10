@@ -278,6 +278,37 @@ if(USE_NPU OR USE_MLU)
 endif()
 
 if(USE_MLU)
+  # Fork ranks before device initialization to exercise real TP/DP/EP groups.
+  cc_test(
+    NAME
+      deepseek_v41_dp_decode_test
+    SRCS
+      deepseek_v41_dp_decode_test.cpp
+    DEPS
+      :runtime
+      :model_loader
+      :platform
+      :util
+      :parallel_state
+      GTest::gtest_main
+      torch_mlu
+      glog::glog
+  )
+
+  cc_test(
+    NAME
+      deepseek_v41_dspark_graph_test
+    SRCS
+      deepseek_v41_dspark_graph_test.cpp
+    DEPS
+      :runtime
+      :model_loader
+      :tests_utils
+      :platform
+      GTest::gtest_main
+      torch_mlu
+  )
+
   cc_test(
     NAME
       mlu_dflash2_sampling_test

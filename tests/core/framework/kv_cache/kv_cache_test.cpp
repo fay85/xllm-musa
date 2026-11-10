@@ -471,6 +471,37 @@ TEST(KVCacheTest, DeepSeekV41TokenGroupsUseModelDtypeIndexCache) {
                 kSwaCount, xllm::kDsv41CompressStateRows, kHeadDim}));
   EXPECT_EQ(caches[2].get_compress_kv_state().dtype(), torch::kFloat32);
   EXPECT_EQ(caches[2].get_compress_score_state().dtype(), torch::kFloat32);
+#if defined(USE_MLU)
+  // The real allocator must expose both state planes to PD, not only SWA/KV.
+  const auto exported = caches[2].get_cache_tensors();
+  const auto state = std::find_if(
+      exported.begin(), exported.end(), [](const KVCacheTensor& tensor) {
+        return tensor.role == KVCacheTensorRole::COMPRESS_STATE;
+      });
+  ASSERT_NE(state, exported.end());
+  EXPECT_EQ(state->group_id, cache_group_id(BlockType::SWA));
+  EXPECT_EQ(
+      shape_vec(state->tensor),
+      (std::vector<int64_t>{kSwaCount, kDsv41CompressStateRows, 2 * kHeadDim}));
+  caches[2].get_compress_kv_state().fill_(3.0F);
+  caches[2].get_compress_score_state().fill_(7.0F);
+  EXPECT_TRUE(state->tensor.narrow(2, 0, kHeadDim).eq(3.0F).all().item<bool>());
+  EXPECT_TRUE(
+      state->tensor.narrow(2, kHeadDim, kHeadDim).eq(7.0F).all().item<bool>());
+  // Receiver-side writes into the transferred owner feed the next compressor.
+  state->tensor[1].fill_(11.0F);
+  EXPECT_TRUE(
+      caches[2].get_compress_kv_state()[1].eq(11.0F).all().item<bool>());
+  EXPECT_TRUE(
+      caches[2].get_compress_score_state()[1].eq(11.0F).all().item<bool>());
+  torch::Tensor src = torch::tensor({1}, torch::kLong);
+  torch::Tensor dst = torch::tensor({2}, torch::kLong);
+  caches[2].swap_blocks(src, dst);
+  EXPECT_TRUE(
+      caches[2].get_compress_kv_state()[2].eq(11.0F).all().item<bool>());
+  EXPECT_TRUE(
+      caches[2].get_compress_score_state()[2].eq(11.0F).all().item<bool>());
+#endif
   // The V4.1 index plane follows the platform policy: int8 + fp16 per-token
   // scale on NPU, model dtype with no scale on MLU. The key plane stays in the
   // model dtype on every platform.

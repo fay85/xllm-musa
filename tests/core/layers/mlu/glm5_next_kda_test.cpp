@@ -634,6 +634,30 @@ TEST(Glm5NextKDATest, BangcNormGateRejectsUnsupportedMetadataBeforeLaunch) {
           .has_value());
 }
 
+TEST(Glm5NextKDATest, BangcNormGateRejectsMissingAndWrongDeviceInputs) {
+  const torch::Device device(torch::kPrivateUse1, 0);
+  const auto options =
+      torch::TensorOptions().dtype(torch::kBFloat16).device(device);
+  const std::vector<torch::Tensor> inputs = {torch::ones({2, 128}, options),
+                                             torch::zeros({2, 128}, options),
+                                             torch::ones({128}, options)};
+  for (int64_t index = 0; index < 3; ++index) {
+    SCOPED_TRACE(index);
+    for (const torch::Tensor& invalid : {torch::Tensor(),
+                                         inputs[index].cpu(),
+                                         inputs[index].to(torch::kFloat32)}) {
+      std::vector<torch::Tensor> arguments = inputs;
+      arguments[index] = invalid;
+      EXPECT_FALSE(kernel::mlu::bangc_kda_norm_gate(
+                       arguments[0], arguments[1], arguments[2], /*eps=*/1e-5)
+                       .has_value());
+    }
+  }
+  EXPECT_TRUE(inputs[0].eq(1).all().item<bool>());
+  EXPECT_TRUE(inputs[1].eq(0).all().item<bool>());
+  EXPECT_TRUE(inputs[2].eq(1).all().item<bool>());
+}
+
 TEST(Glm5NextKDATest, EagerRecurrencePreservesStateAcrossSegments) {
   torch::manual_seed(20260827);
   constexpr int64_t kTokens = 5;

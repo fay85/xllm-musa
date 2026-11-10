@@ -18,6 +18,10 @@ limitations under the License.
 #include <gtest/gtest.h>
 #include <torch/torch.h>
 
+#include <algorithm>
+#include <cmath>
+#include <vector>
+
 #include "framework/model/model_args.h"
 #include "framework/parallel_state/parallel_args.h"
 #include "framework/parallel_state/parallel_state.h"
@@ -266,6 +270,63 @@ TEST_F(MoEGateTest, SigmoidTopkGroup1) {
                          /*expert_id*/ 0.0,
                          1.0,
                          128.0);
+}
+
+TEST_F(MoEGateTest, SqrtSoftplusKeepsNegativeRoutingScores) {
+  constexpr int64_t kExperts = 256;
+  constexpr int64_t kTopk = 8;
+  constexpr float kRouteScale = 1.5f;
+  MOESoftPlusTopK gate(kExperts, kTopk, kRouteScale, 1, false, options_);
+  torch::Tensor bias = torch::arange(kExperts, torch::kFloat32) * 1000;
+  gate->load_state_dict(StateDict({{"bias", bias}}));
+  torch::Tensor scores = torch::empty({4, kExperts}, torch::kFloat32);
+  scores[0].copy_(-20 + torch::arange(kExperts, torch::kFloat32) / 64);
+  scores[1].copy_(-50 + torch::arange(kExperts, torch::kFloat32) / 64);
+  scores[2].fill_(-1000);
+  scores[3].copy_(1000 + torch::arange(kExperts, torch::kFloat32));
+  scores = scores.to(torch::kBFloat16);
+  auto [weights, indices] = gate->forward(scores.to(options_.device()));
+  weights = weights.to(torch::kCPU);
+  indices = indices.to(torch::kCPU);
+  ASSERT_TRUE(torch::isfinite(weights).all().item<bool>());
+  for (int64_t row = 0; row < scores.size(0); ++row) {
+    std::vector<double> expected;
+    expected.reserve(kTopk);
+    double sum = 1e-20;
+    for (int64_t col = 0; col < kTopk; ++col) {
+      const int64_t expert = kExperts - col - 1;
+      EXPECT_EQ(indices[row][col].item<int32_t>(), expert);
+      const double logit = scores[row][expert].item<double>();
+      const double score = std::sqrt(std::max(logit, 0.0) +
+                                     std::log1p(std::exp(-std::abs(logit))));
+      expected.emplace_back(score);
+      sum += score;
+    }
+    for (int64_t col = 0; col < kTopk; ++col) {
+      EXPECT_NEAR(weights[row][col].item<float>(),
+                  expected[col] / sum * kRouteScale,
+                  1e-6);
+    }
+  }
+}
+
+TEST_F(MoEGateTest, SqrtSoftplusHashRoutingPreservesTokenExpertMapping) {
+  constexpr int64_t kExperts = 256;
+  constexpr int64_t kTopk = 8;
+  constexpr int64_t kVocab = 3;
+  MOESoftPlusTopK gate(kExperts, kTopk, 1.5f, kVocab, true, options_);
+  torch::Tensor mapping =
+      torch::arange(kVocab * kTopk, torch::kInt32).view({kVocab, kTopk});
+  gate->load_state_dict(StateDict({{"tid2eid", mapping}}));
+  torch::Tensor tokens = torch::tensor({2, 0, 1}, torch::kInt32);
+  torch::Tensor scores = torch::full({3, kExperts}, -20, options_);
+  auto [weights, indices] = gate->forward(scores, tokens.to(options_.device()));
+  EXPECT_TRUE(torch::equal(indices.to(torch::kCPU),
+                           mapping.index_select(0, tokens.to(torch::kLong))));
+  EXPECT_TRUE(torch::allclose(weights.to(torch::kCPU),
+                              torch::full({3, kTopk}, 1.5f / kTopk),
+                              1e-6,
+                              1e-6));
 }
 
 }  // namespace layer

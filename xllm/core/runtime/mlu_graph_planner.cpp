@@ -201,7 +201,7 @@ std::optional<GraphLayout> get_graph_layout(
     const xllm::ModelInputParams& params,
     const xllm::runtime::Options& options,
     bool grouped,
-    bool state_required) {
+    bool linear_state_required) {
   const auto& offsets = params.attention.host.q_seq_lens;
   if (tokens <= 0 || offsets.size() < 2 || offsets.front() != 0 ||
       offsets.back() != tokens) {
@@ -261,7 +261,7 @@ std::optional<GraphLayout> get_graph_layout(
     layout.padded_num_reqs = layout.padded_num_tokens / tokens_per_request;
   }
   if (grouped &&
-      ((state_required && params.embedding.linear_state_ids.empty()) ||
+      ((linear_state_required && params.embedding.linear_state_ids.empty()) ||
        (!params.embedding.linear_state_ids.empty() &&
         params.embedding.linear_state_ids.size() != layout.num_reqs) ||
        (params.is_spec_verify &&
@@ -343,7 +343,7 @@ GraphDecision MluGraphPlanner::plan(const GraphStepMetadata& step) const {
     return EagerReason::UNSUPPORTED_INPUT;
   }
   std::optional<GraphLayout> layout = get_graph_layout(
-      step.tokens, params, options, grouped, config_.state_required);
+      step.tokens, params, options, grouped, config_.linear_state_required);
   if (!layout) {
     return EagerReason::INVALID_LAYOUT;
   }
