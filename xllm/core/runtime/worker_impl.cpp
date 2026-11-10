@@ -494,6 +494,25 @@ bool WorkerImpl::allocate_kv_cache_storage(
   // "auto" (default): cache dtype aligns with model dtype (no quantization)
   // "int8": enables INT8 quantization
   const bool enable_kv_cache_quant = options_.kv_cache_dtype() == "int8";
+  const std::string& kv_dtype_name = options_.kv_cache_dtype();
+  bool fp8_kv_cache = false;
+  torch::ScalarType fp8_kv_dtype = torch::kFloat8_e4m3fn;
+  if (kv_dtype_name == "fp8_e4m3") {
+    fp8_kv_cache = true;
+    fp8_kv_dtype = torch::kFloat8_e4m3fn;
+  } else if (kv_dtype_name == "fp8_e5m2") {
+    LOG(FATAL) << "fp8_e5m2 KV cache is recognized but the MUSA FA3 kernels "
+                  "built here are fp8_e4m3 only.";
+  } else if (kv_dtype_name != "auto" && kv_dtype_name != "int8") {
+    LOG(FATAL) << "Unsupported --kv_cache_dtype=" << kv_dtype_name
+               << ". Expected auto, int8, or fp8_e4m3.";
+  }
+  if (fp8_kv_cache) {
+    LOG(INFO) << "FP8 KV cache enabled for full-attention K/V, storage="
+              << kv_dtype_name
+              << ". Query and newly written K/V are cast to FP8 at the FA3 "
+                 "boundary with descale 1.";
+  }
 
   const bool enable_indexer_cache_quant =
       ::xllm::KVCacheConfig::get_instance().indexer_cache_dtype() == "int8";
@@ -545,6 +564,8 @@ bool WorkerImpl::allocate_kv_cache_storage(
       .layer_cache_owned(std::move(layer_cache_owned))
       .indexer_cache_enabled_layers(std::move(indexer_cache_enabled_layers))
       .enable_kv_cache_quant(enable_kv_cache_quant)
+      .fp8_kv_cache(fp8_kv_cache)
+      .fp8_kv_dtype(fp8_kv_dtype)
       .enable_indexer_cache_quant(enable_indexer_cache_quant)
       .tensor_allocator(std::move(tensor_allocator))
       .block_size(options_.block_size())
@@ -1324,12 +1345,14 @@ void WorkerImpl::prepare_work_before_execute_on_stream(
         context_.get_model_args().dummy_token_count();
     const bool idle_block_input =
         input_params.meta.num_sequences == 0 && dummy_token_count > 1;
+    const bool need_cross_dp_fake_input =
+        context_.get_parallel_args().ep_size() > 1 ||
+        context_.get_model_args().n_routed_experts() > 0 ||
+        !context_.get_parallel_args().mapping_data().empty();
     const bool need_fake_input_for_empty_shard =
         (empty_shard || idle_block_input) &&
         !input_params.meta.batch_forward_type.is_empty() &&
-        ((context_.get_parallel_args().dp_size() > 1 ||
-          context_.get_parallel_args().ep_size() > 1 ||
-          !context_.get_parallel_args().mapping_data().empty()));
+        need_cross_dp_fake_input;
     if (need_fake_input_for_empty_shard) {
       auto token_options = processed_input.token_ids.defined()
                                ? processed_input.token_ids.options()

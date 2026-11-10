@@ -99,6 +99,9 @@ void populate_fa3_attention_metadata(
     AttentionMetadata& attn_metadata,
     const ModelInputParams& params,
     const std::optional<torch::Tensor>& attn_mask) {
+  if (attn_metadata.is_dummy) {
+    return;
+  }
   const bool q_lengths_are_cumulative =
       params.attention.host.q_seq_lens.size() > 1 &&
       params.attention.host.q_seq_lens.front() == 0;
@@ -490,10 +493,13 @@ AttentionMetadata build_attention_metadata(
                            params.attention.device.q_seq_lens);
     if (!params.attention.device.new_cache_slots.defined() &&
         !params.attention.device.q_seq_lens.defined()) {
-      CHECK(device.has_value())
-          << "dummy attention requires device when new_cache_slots is "
-             "undefined";
-      options = options.device(device.value());
+      if (device.has_value()) {
+        options = options.device(device.value());
+      } else if (params.embedding.input_embedding.defined()) {
+        options = options.device(params.embedding.input_embedding.device());
+      } else {
+        options = options.device(torch::Device(torch::kPrivateUse1, 0));
+      }
     }
     attn_metadata.slot_mapping = torch::tensor({0}, options);
     attn_metadata.q_cu_seq_lens = torch::tensor({0, 1}, options);

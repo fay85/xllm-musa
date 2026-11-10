@@ -2414,6 +2414,20 @@ inline void initialize_device_buffer_session(ReadContext& context,
 #endif
 
   auto& session = *context.device_session;
+#if defined(USE_NPU)
+  if (stream != nullptr) {
+    auto& capture_lock =
+        ::xllm::npu::DeviceCaptureLock::get_instance().get_lock(device.index());
+    session.capture_lock_guard.emplace(capture_lock);
+  }
+#elif defined(USE_CUDA) || defined(USE_MUSA)
+  if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
+    auto& replay_lock =
+        ::xllm::cuda::DeviceCaptureLock::get_instance().get_read_lock(
+            device.index());
+    session.capture_lock_guard.emplace(replay_lock);
+  }
+#endif
   // POSIX shared-memory pages are not pinned merely because TensorOptions says
   // so. Own a genuinely pinned staging copy and keep it alive with ForwardInput
   // until the asynchronous H2D has completed. When unpacking from an already
@@ -2439,21 +2453,6 @@ inline void initialize_device_buffer_session(ReadContext& context,
 
   auto device_options =
       torch::TensorOptions().dtype(torch::kUInt8).device(device);
-
-#if defined(USE_NPU)
-  if (stream != nullptr) {
-    auto& capture_lock =
-        ::xllm::npu::DeviceCaptureLock::get_instance().get_lock(device.index());
-    session.capture_lock_guard.emplace(capture_lock);
-  }
-#elif defined(USE_CUDA) || defined(USE_MUSA)
-  if (::xllm::ExecutionConfig::get_instance().enable_graph()) {
-    auto& replay_lock =
-        ::xllm::cuda::DeviceCaptureLock::get_instance().get_read_lock(
-            device.index());
-    session.capture_lock_guard.emplace(replay_lock);
-  }
-#endif
   if (stream != nullptr) {
     c10::StreamGuard stream_guard = stream->set_stream_guard();
     forward_input.device_input_buffer =
@@ -2772,12 +2771,24 @@ void packed_proto_to_forward_input_impl(
     ForwardInput& forward_input,
     const torch::Device& device,
     Stream* stream) {
-  (void)device;
   (void)stream;
   const std::string& payload = packed_forward_input.payload();
   if (payload.empty()) {
     return;
   }
+
+#if defined(USE_CUDA) || defined(USE_MUSA)
+  std::optional<std::shared_lock<std::shared_mutex>> capture_lock_guard;
+  if (::xllm::ExecutionConfig::get_instance().enable_graph() &&
+      device.index() >= 0) {
+    auto& replay_lock =
+        ::xllm::cuda::DeviceCaptureLock::get_instance().get_read_lock(
+            device.index());
+    capture_lock_guard.emplace(replay_lock);
+  }
+#else
+  (void)device;
+#endif
 
   forward_input.input_host_buffer =
       torch::empty({static_cast<int64_t>(payload.size())},

@@ -771,7 +771,10 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update_prefill(
   // Runners read this metadata on replay. It is built from the live inputs.
   std::shared_ptr<layer::AttentionMetadata> attn_metadata =
       std::make_shared<layer::AttentionMetadata>(
-          layer::AttentionMetadataBuilder::build(params, args_.enable_mla()));
+          layer::AttentionMetadataBuilder::build(params,
+                                                 args_.enable_mla(),
+                                                 /*attn_mask=*/std::nullopt,
+                                                 /*device=*/device_));
   CHECK(attn_metadata) << "attn_metadata should not be null";
   attn_metadata->fa3_metadata.share_fa3_scheduler_metadata = true;
 
@@ -1189,7 +1192,8 @@ torch::Tensor MusaGraphPersistentParam::fa3_scheduler_metadata(
     int32_t max_seqlen_k,
     int32_t window_size_left,
     const torch::Tensor& cu_seqlens_q,
-    const torch::Tensor& seqused_k) {
+    const torch::Tensor& seqused_k,
+    torch::ScalarType kv_dtype) {
   const auto generate = [&]() {
     return xllm::kernel::musa::fa3_decode_scheduler_metadata(
         device_,
@@ -1203,12 +1207,15 @@ torch::Tensor MusaGraphPersistentParam::fa3_scheduler_metadata(
         window_size_left,
         /*window_size_right=*/0,
         cu_seqlens_q,
-        seqused_k);
+        seqused_k,
+        kv_dtype);
   };
   if (batch_size != 1) {
     return generate();
   }
-  const int64_t kv_tile = xllm::kernel::musa::fa3_decode_kv_tile_size();
+  const int64_t kv_tile = kv_dtype == torch::kFloat8_e4m3fn
+                                 ? 128
+                                 : xllm::kernel::musa::fa3_decode_kv_tile_size();
   const int64_t kv_blocks = (max_seqlen_k + kv_tile - 1) / kv_tile;
   const int64_t key = (static_cast<int64_t>(max_seqlen_q) << 32) | kv_blocks;
   auto it = single_sequence_fa3_metadata_.find(key);
@@ -1254,7 +1261,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
           layer::AttentionMetadataBuilder::build(params,
                                                  args_.enable_mla(),
                                                  /*attn_mask=*/std::nullopt,
-                                                 /*device=*/std::nullopt,
+                                                 /*device=*/device_,
                                                  metadata_build_options));
   CHECK(attn_metadata) << "attn_metadata should not be null";
   if (linear_state_validity.defined()) {
@@ -2106,8 +2113,10 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   // cached_ops tree, not the legacy FlashInfer FA2 batch_decode module.
   // Avoid creating an FA2 plan for supported BF16 graph shapes; the FA3
   // scheduler metadata below is prepared before capture instead.
+  const bool fa3_cache_dtype = dtype == torch::ScalarType::BFloat16 ||
+                               dtype == torch::ScalarType::Float8_e4m3fn;
   const bool fa3_graph_decode =
-      s_use_fa3_decode(gqa_ratio) && dtype == torch::ScalarType::BFloat16 &&
+      s_use_fa3_decode(gqa_ratio) && fa3_cache_dtype &&
       head_dim == 256 && (gqa_ratio == 6 || gqa_ratio == 8) &&
       !attn_metadata->is_prefill && !attn_metadata->is_chunked_prefill &&
       attn_metadata->block_table.defined();
@@ -2118,8 +2127,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
     // Update plan_info
     // Note: plan_info is only updated at layer 0, so we set layer_id to 0
     attn_metadata->plan_info->layer_id = 0;
-    CHECK_EQ(dtype, torch::ScalarType::BFloat16)
-        << "only support bf16 kvcache for now";
+    CHECK(fa3_cache_dtype)
+        << "only support bf16 or fp8_e4m3 kvcache for now, got " << dtype;
 
     VLOG(kGraphExecutorLogVerboseLevel)
         << "MusaGraphPersistentParam::update() calling update_plan_info: "
@@ -2190,7 +2199,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
               std::max<int32_t>(attn_metadata->max_seq_len, 1),
               sliding_window,
               cu_seqlens_q,
-              attn_metadata->kv_seq_lens);
+              attn_metadata->kv_seq_lens,
+              k_cache.scalar_type());
     }
   }
 
@@ -2198,7 +2208,7 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
   // layers, generated outside capture and copied into the captured address on
   // replay (same contract as ordinary decode above).
   if (use_expanded_spec_verify && s_use_fa3_decode(gqa_ratio) &&
-      dtype == torch::ScalarType::BFloat16 && head_dim == 256 &&
+      fa3_cache_dtype && head_dim == 256 &&
       (gqa_ratio == 6 || gqa_ratio == 8) && expanded_rows > 0) {
     attn_metadata->fa3_metadata.share_fa3_scheduler_metadata = true;
     attn_metadata->fa3_metadata.fa3_scheduler_metadata =
@@ -2214,10 +2224,11 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
             sliding_window,
             /*window_size_right=*/0,
             persistent_expanded_qo_indptr_.slice(0, 0, expanded_rows + 1),
-            attn_metadata->expanded_decode.kv_seq_lens);
+            attn_metadata->expanded_decode.kv_seq_lens,
+            k_cache.scalar_type());
   } else if (params.is_spec_verify && attn_metadata->is_chunked_prefill &&
              s_use_fa3_decode(gqa_ratio) &&
-             dtype == torch::ScalarType::BFloat16 && head_dim == 256 &&
+             fa3_cache_dtype && head_dim == 256 &&
              (gqa_ratio == 6 || gqa_ratio == 8) &&
              attn_metadata->block_table.defined() &&
              attn_metadata->kv_seq_lens.defined()) {
@@ -2238,7 +2249,8 @@ std::optional<ModelInputParams> MusaGraphPersistentParam::update(
         std::max<int32_t>(attn_metadata->max_seq_len, 1),
         sliding_window,
         cu_seqlens_q,
-        attn_metadata->kv_seq_lens);
+        attn_metadata->kv_seq_lens,
+        k_cache.scalar_type());
   }
 
   // Return ModelInputParams with persistent buffer references if requested
@@ -2548,7 +2560,8 @@ bool MusaGraph::capture(CausalLM* model,
     xllm::kernel::musa::deepseek_v4_set_graph_capture_warmup(true);
     const int num_warmup_iters =
         skip_graph_warmup ? 0 : (is_piecewise_ ? 2 : 1);
-    for (int warmup_iter = 0; warmup_iter < num_warmup_iters; ++warmup_iter) {
+    for (int warmup_iter = 0; warmup_iter < num_warmup_iters;
+         ++warmup_iter) {
       capture_stream.synchronize();
       {
         xllm::kernel::musa::TvmffiPreparationSyncGuard ffi_sync_guard;
@@ -3301,6 +3314,17 @@ ModelOutput MusaGraphExecutorImpl::run(const torch::Tensor& tokens,
     }
   }
 
+  // Dummy/empty DP shard (step_empty): skip graph capture/replay in both
+  // prefill and decode so undefined device attention tensors are not sliced
+  // into persistent graph buffers.
+  if (params.meta.q_max_seq_len == 0 || params.meta.num_sequences == 0) {
+    ModelInputParams eager_params = params;
+    eager_params.enable_graph = false;
+    eager_params.attn_metadata.reset();
+    COUNTER_INC(num_model_execution_total_eager);
+    return model_->forward(tokens, positions, kv_caches, eager_params);
+  }
+
   // Get actual num_tokens from tokens shape
   const uint32_t n_tokens = tokens.size(/*dim=*/0);
   const int64_t effective_num_sequences = params.meta.actual_num_sequences > 0
@@ -3695,6 +3719,9 @@ bool MusaGraphExecutorImpl::use_prefill_piecewise_graph(
   const auto& execution_config = ::xllm::ExecutionConfig::get_instance();
   if (!execution_config.enable_graph() ||
       !execution_config.enable_prefill_piecewise_graph()) {
+    return false;
+  }
+  if (params.meta.q_max_seq_len == 0 || params.meta.num_sequences == 0) {
     return false;
   }
   const auto& forward_type = params.meta.batch_forward_type;

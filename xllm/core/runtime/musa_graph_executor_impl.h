@@ -254,7 +254,8 @@ class MusaGraphPersistentParam final {
                                        int32_t max_seqlen_k,
                                        int32_t window_size_left,
                                        const torch::Tensor& cu_seqlens_q,
-                                       const torch::Tensor& seqused_k);
+                                       const torch::Tensor& seqused_k,
+                                       torch::ScalarType kv_dtype = torch::kBFloat16);
 
   bool can_use_llm_decode_fast_path(const torch::Tensor& tokens,
                                     const torch::Tensor& positions,

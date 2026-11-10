@@ -115,11 +115,11 @@ bool limit_prefill_to_one_sequence(const SchedulerState& state) {
          has_linear_attention_layers(state.model_args);
 }
 
-bool has_prefill_sequence(const std::vector<Sequence*>& sequences) {
-  return std::any_of(
+size_t count_prefill_sequences(const std::vector<Sequence*>& sequences) {
+  return static_cast<size_t>(std::count_if(
       sequences.begin(), sequences.end(), [](const Sequence* sequence) {
         return sequence != nullptr && sequence->is_prefill_stage();
-      });
+      }));
 }
 #endif
 
@@ -135,14 +135,24 @@ SchedulerPolicy::SchedulerPolicy(const BatchMode& mode,
 
 bool SchedulerPolicy::should_limit_prefill_requests(
     const SchedulerState& state) const {
+#if defined(USE_MUSA)
+  if (limit_prefill_to_one_sequence(state)) {
+    return true;
+  }
+#endif
   return state.model_args.max_concurrent_prefills_per_dp() > 0;
 }
 
 int32_t SchedulerPolicy::select_prefill_dp_rank(
     const Sequence* sequence,
     const SchedulerState& state) const {
-  const size_t cap =
+  size_t cap =
       static_cast<size_t>(state.model_args.max_concurrent_prefills_per_dp());
+#if defined(USE_MUSA)
+  if (limit_prefill_to_one_sequence(state)) {
+    cap = cap > 0 ? std::min<size_t>(cap, 1) : 1;
+  }
+#endif
   const int32_t dp_size = state.options.dp_size();
   std::vector<size_t> per_dp_counts(dp_size, 0);
   for (const auto& request : state.running_requests) {
@@ -167,21 +177,36 @@ int32_t SchedulerPolicy::select_prefill_dp_rank(
     return per_dp_counts[current_dp_rank] < cap ? current_dp_rank : -1;
   }
 
-  const std::vector<size_t> free_blocks =
-      state.kv_cache_manager->num_free_blocks();
-  int32_t selected_dp_rank = -1;
-  size_t selected_free_blocks = 0;
+  const size_t total_blocks =
+      static_cast<size_t>(state.kv_cache_manager->num_blocks());
+  const std::vector<size_t> used_blocks =
+      state.kv_cache_manager->num_used_blocks();
+  size_t max_available = 0;
+  std::vector<int32_t> candidates;
+  candidates.reserve(dp_size);
   for (int32_t dp_rank = 0; dp_rank < dp_size; ++dp_rank) {
-    if (static_cast<size_t>(dp_rank) >= free_blocks.size() ||
+    if (static_cast<size_t>(dp_rank) >= used_blocks.size() ||
         per_dp_counts[dp_rank] >= cap) {
       continue;
     }
-    if (selected_dp_rank < 0 || free_blocks[dp_rank] > selected_free_blocks) {
-      selected_dp_rank = dp_rank;
-      selected_free_blocks = free_blocks[dp_rank];
+    const size_t avail = total_blocks >= used_blocks[dp_rank]
+                             ? total_blocks - used_blocks[dp_rank]
+                             : 0;
+    if (candidates.empty() || avail > max_available) {
+      max_available = avail;
+      candidates.clear();
+      candidates.push_back(dp_rank);
+    } else if (avail == max_available) {
+      candidates.push_back(dp_rank);
     }
   }
-  return selected_dp_rank;
+  if (candidates.empty()) {
+    return -1;
+  }
+  static std::atomic<size_t> rr_cursor{0};
+  const size_t idx =
+      rr_cursor.fetch_add(1, std::memory_order_relaxed) % candidates.size();
+  return candidates[idx];
 }
 
 void SchedulerPolicy::adjust_latency_budget_and_reorder(
@@ -296,7 +321,8 @@ void SchedulerPolicy::schedule_prefill_from_queue(
          budget.latency_budget > budget.estimate_latency) {
 #if defined(USE_MUSA)
     if (limit_prefill_to_one_sequence(state) &&
-        has_prefill_sequence(state.running_sequences)) {
+        count_prefill_sequences(state.running_sequences) >=
+            static_cast<size_t>(std::max<int32_t>(state.options.dp_size(), 1))) {
       break;
     }
 #endif
@@ -364,7 +390,13 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       // allocation reuses the same rank. This keeps the admission check
       // consistent with the allocation path (same available-blocks metric
       // and round-robin tie-break, see KVCacheManager::select_dp_rank).
-      const int32_t dp_rank = state.kv_cache_manager->select_dp_rank();
+      const int32_t dp_rank = should_limit_prefill_requests(state)
+                                  ? select_prefill_dp_rank(
+                                        request->sequences()[0].get(), state)
+                                  : state.kv_cache_manager->select_dp_rank();
+      if (dp_rank < 0) {
+        break;
+      }
       request->sequences()[0]->set_dp_rank(dp_rank);
       if (reserved_full_footprint[dp_rank] + full_footprint > total_blocks) {
         blocks_exhausted = true;
@@ -390,10 +422,12 @@ void SchedulerPolicy::schedule_prefill_from_queue(
         const int32_t dp_rank =
             select_prefill_dp_rank(prefill_sequence.get(), state);
         if (dp_rank < 0) {
-          LOG_EVERY_N(INFO, 100)
-              << "[prefill_cap] no eligible DP rank is below the cap of "
-              << state.model_args.max_concurrent_prefills_per_dp()
-              << " prefill requests; deferring remaining prefills";
+          if (prefill_sequence->kv_state().has_any_blocks()) {
+            // In-flight chunked prefill whose assigned DP rank is already busy
+            // in this step: skip this request so other idle DP ranks can still
+            // schedule requests from the queue.
+            break;
+          }
           can_schedule = false;
           break;
         }

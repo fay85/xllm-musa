@@ -1665,6 +1665,25 @@ std::optional<ForwardOutput> MTPWorkerImpl::step_empty(
   }
   flush_pending_target_context();
 
+  const bool need_cross_dp_forward =
+      parallel_args_.ep_size() > 1 ||
+      context_.get_model_args().n_routed_experts() > 0 ||
+      !parallel_args_.mapping_data().empty() ||
+      (adaptive_spec_controller_ != nullptr &&
+       adaptive_spec_controller_->enabled());
+  if (!need_cross_dp_forward) {
+    if (pending_draft_context_.output.has_value()) {
+      const int32_t ret = compute_stream_->synchronize();
+      CHECK_EQ(ret, 0) << "failed to drain final MTP draft prelaunch, ret="
+                       << ret;
+      pending_draft_context_ = PendingDraftContext();
+    }
+    ForwardOutput output;
+    finalize_output_on_stream(
+        output, *compute_stream_, enable_schedule_overlap());
+    return output;
+  }
+
   if (!input.input_params.meta.batch_forward_type.is_decode()) {
     ForwardInput target_prepared;
     ForwardInput draft_prepared;

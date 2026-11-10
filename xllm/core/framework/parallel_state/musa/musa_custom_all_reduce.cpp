@@ -441,6 +441,19 @@ std::optional<torch::Tensor> MusaCustomAllReduce::allreduce(
   if (!should_use(input)) {
     return std::nullopt;
   }
+  // MUSA runs kernels launched during stream capture. Custom all-reduce
+  // peer pointers are published only after capture ends, so the barrier
+  // spins and capture_stream.synchronize() never returns. Capture MCCL
+  // instead. Eager calls still use this kernel.
+  {
+    musaStreamCaptureStatus capture_status = musaStreamCaptureStatusNone;
+    const musaError_t capture_err = musaStreamIsCapturing(
+        c10::musa::getCurrentMUSAStream(device_.index()), &capture_status);
+    if (capture_err == musaSuccess &&
+        capture_status == musaStreamCaptureStatusActive) {
+      return std::nullopt;
+    }
+  }
   torch::Tensor output = output_workspace.has_value()
                              ? *output_workspace
                              : torch::empty_like(input);
@@ -637,6 +650,9 @@ void MusaCustomAllReduce::finalize_graph_buffers() {
   const c10::DeviceGuard device_guard(device_);
   auto [local_handles, local_offsets] =
       op_get_graph_buffer_ipc_meta(custom_ar_handle_);
+  if (local_handles.empty() && local_offsets.empty()) {
+    return;
+  }
   const std::string key_prefix = "xllm_custom_ar/" + group_name_ + "/graph/" +
                                  std::to_string(graph_capture_generation_) +
                                  "/";

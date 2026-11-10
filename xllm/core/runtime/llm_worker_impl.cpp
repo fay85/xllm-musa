@@ -294,6 +294,22 @@ std::optional<ForwardOutput> LLMWorkerImpl::step_internal(
                                   device_);
     kv_push_waited = true;
   };
+  const bool empty_shard =
+      input.input_params.meta.num_sequences == 0 &&
+      (!input.token_ids.defined() || input.token_ids.numel() == 0);
+  if (empty_shard) {
+    wait_kv_push();
+    if (!failed_request_ids.empty()) {
+      return make_failed_output(std::move(failed_request_ids));
+    }
+    ForwardOutput output;
+    if (sync_policy == ForwardSyncPolicy::NO_SYNC && record_ready_event &&
+        enable_schedule_overlap()) {
+      output.ready_event = record_current_stream_event(device_);
+    }
+    return output;
+  }
+
   if (eplb_executor_ != nullptr) {
     eplb_executor_->start_eplb_step(input.input_params.expert.eplb_info);
   }

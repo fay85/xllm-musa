@@ -202,7 +202,7 @@ FlashInferAttentionImpl::forward(const AttentionMetadata& attn_metadata,
                                  torch::Tensor& output,
                                  KVCache& kv_cache) {
   std::optional<torch::Tensor> output_lse = std::nullopt;
-  if (attn_metadata.max_seq_len == 0) {
+  if (attn_metadata.is_dummy || attn_metadata.max_seq_len == 0) {
     output = output.view({-1, num_heads_ * head_size_});
     return std::make_tuple(output, output_lse);
   }
@@ -437,7 +437,8 @@ void FlashInferAttentionImpl::prefill_forward(
             /*window_size_right=*/0,
             cu_seqlens_q,
             cu_seqlens_k_new,
-            seqused_k);
+            seqused_k,
+            k_cache.scalar_type());
         if (fa3_metadata.share_fa3_scheduler_metadata) {
           fa3_metadata.fa3_scheduler_metadata = scheduler_metadata;
         }
@@ -637,7 +638,8 @@ void FlashInferAttentionImpl::chunked_prefill_forward(
           /*window_size_right=*/0,
           cu_seqlens_q,
           cu_seqlens_k_new,
-          seqused_k);
+          seqused_k,
+          k_cache.scalar_type());
 
   torch::Tensor lse_tensor;
   if (output_lse.has_value() && output_lse->defined()) {
@@ -771,7 +773,8 @@ void FlashInferAttentionImpl::decoder_forward(
             /*window_size_left=*/static_cast<int32_t>(sliding_window_),
             /*window_size_right=*/0,
             /*cu_seqlens_q=*/cu_seqlens_q,
-            /*seqused_k=*/seqused_k);
+            /*seqused_k=*/seqused_k,
+            /*kv_dtype=*/k_cache.scalar_type());
         if (fa3_metadata.share_fa3_scheduler_metadata) {
           fa3_metadata.fa3_scheduler_metadata = scheduler_metadata;
         }
