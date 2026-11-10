@@ -3159,15 +3159,40 @@ TEST(AuxHiddenCaptureTest, PreservesConfiguredLayerOrderAndResidual) {
                            torch::full({3, 2}, 20.0f)));
 }
 
-TEST(DSparkWorkerInputTest, InvalidatesTargetAttentionMetadataOnly) {
-  ModelInputParams params;
-  params.attn_metadata = std::make_shared<layer::AttentionMetadata>();
-  params.multi_block_tables.resize(3);
+TEST(DSparkWorkerInputTest, ClearsTargetMetadataForDraftWithoutChangingTarget) {
+  ModelInputParams target_params;
+  target_params.attn_metadata = std::make_shared<layer::AttentionMetadata>();
+  target_params.multi_block_tables.resize(3);
+  target_params.embedding.linear_state_ids = {0};
+  target_params.embedding.linear_state_indices =
+      torch::zeros({1}, torch::kInt32);
+  target_params.embedding.linear_state_read_ids = {0};
+  target_params.embedding.linear_state_read_indices =
+      torch::zeros({1}, torch::kInt32);
+  target_params.linear_state_validity_mask = {0};
+  target_params.linear_state_validity_mask_tensor =
+      torch::zeros({1}, torch::kInt32);
+  target_params.num_accepted_tokens_host = {1};
+  target_params.num_accepted_tokens = torch::ones({1}, torch::kInt32);
 
-  dflash_detail::invalidate_draft_model_geometry(params);
+  ModelInputParams draft_params = target_params;
+  dflash_detail::reset_draft_model_metadata(draft_params);
 
-  EXPECT_EQ(params.attn_metadata, nullptr);
-  EXPECT_EQ(params.multi_block_tables.size(), 3);
+  EXPECT_EQ(draft_params.attn_metadata, nullptr);
+  EXPECT_EQ(draft_params.multi_block_tables.size(), 3);
+  EXPECT_TRUE(draft_params.embedding.linear_state_ids.empty());
+  EXPECT_FALSE(draft_params.embedding.linear_state_indices.defined());
+  EXPECT_TRUE(draft_params.embedding.linear_state_read_ids.empty());
+  EXPECT_FALSE(draft_params.embedding.linear_state_read_indices.defined());
+  EXPECT_TRUE(draft_params.linear_state_validity_mask.empty());
+  EXPECT_FALSE(draft_params.linear_state_validity_mask_tensor.defined());
+  EXPECT_TRUE(draft_params.num_accepted_tokens_host.empty());
+  EXPECT_FALSE(draft_params.num_accepted_tokens.defined());
+  EXPECT_NE(target_params.attn_metadata, nullptr);
+  EXPECT_TRUE(target_params.embedding.linear_state_indices.defined());
+  EXPECT_TRUE(target_params.embedding.linear_state_read_indices.defined());
+  EXPECT_EQ(target_params.num_accepted_tokens_host, std::vector<int64_t>{1});
+  EXPECT_EQ(target_params.num_accepted_tokens.item<int32_t>(), 1);
 }
 
 TEST(DSparkWorkerInputTest, ScalesPaddedAndRawDpTokenCountsTogether) {

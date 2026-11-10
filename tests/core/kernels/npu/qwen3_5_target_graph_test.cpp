@@ -23,6 +23,7 @@ limitations under the License.
 #include <filesystem>
 
 #include "core/kernels/xllm_torch_ops.h"
+#include "core/runtime/py_runtime_module.h"
 
 namespace py = pybind11;
 
@@ -39,6 +40,7 @@ TEST(Qwen35TargetGraphTest, DSparkPythonTargetAclGraphMatchesEager) {
   ASSERT_TRUE(Py_IsInitialized());
   py::gil_scoped_acquire gil;
   try {
+    ensure_xllm_runtime_module();
     std::filesystem::path root(__FILE__);
     for (int32_t depth = 0; depth < 5; ++depth) {
       root = root.parent_path();

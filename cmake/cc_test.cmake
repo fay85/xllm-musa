@@ -137,8 +137,21 @@ function(cc_test)
       WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
       SKIP_RETURN_CODE 77)
   else()
+    set(_cc_test_scan_contents "")
+    foreach(source IN LISTS _CC_TEST_SRCS)
+      get_filename_component(source_path "${source}" ABSOLUTE
+        BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+      set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${source_path}")
+      file(READ "${source_path}" source_contents)
+      string(APPEND _cc_test_scan_contents "${source_contents}\n")
+    endforeach()
+    string(REGEX REPLACE "[\r\n\t]" " " _cc_test_scan_contents "${_cc_test_scan_contents}")
+    set(_cc_test_scan_file "${CMAKE_CURRENT_BINARY_DIR}/${CC_TEST_NAME}_gtest_scan.txt")
+    file(WRITE "${_cc_test_scan_file}" "${_cc_test_scan_contents}")
     gtest_add_tests(
       TARGET ${CC_TEST_NAME}
+      SOURCES "${_cc_test_scan_file}"
+      SKIP_DEPENDENCY
       EXTRA_ARGS ${CC_TEST_ARGS}
       TEST_LIST _cc_test_${CC_TEST_NAME}_tests
     )

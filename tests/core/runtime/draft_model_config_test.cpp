@@ -300,7 +300,8 @@ TEST_F(DraftCaptureConfigTest, BlockSizeMissingEverywhereStaysZero) {
 }
 
 #if defined(USE_NPU)
-TEST(DraftModelConfigTest, AllowsPythonDSparkGraphsWithoutChangingOtherDrafts) {
+TEST(DraftModelConfigTest,
+     AllowsPythonPipelineGraphsWithoutChangingOtherDrafts) {
   auto& model_config = ModelConfig::get_instance();
   const std::string original_model_impl = model_config.model_impl();
   for (const std::string& model_impl : {"python", "native"}) {
@@ -318,7 +319,7 @@ TEST(DraftModelConfigTest, AllowsPythonDSparkGraphsWithoutChangingOtherDrafts) {
       configure_block_diffusion_model(args, options);
 
       EXPECT_EQ(args.requires_eager_execution(),
-                model_impl != "python" || algorithm != "DSpark");
+                model_impl != "python" || algorithm == "DFlash");
       EXPECT_FALSE(args.draft_query_uses_decode());
       if (algorithm == "DSpark") {
         EXPECT_EQ(args.dummy_token_count(), model_impl == "python" ? 6 : 1);

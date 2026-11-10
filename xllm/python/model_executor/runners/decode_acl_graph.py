@@ -62,7 +62,7 @@ from xllm.python.model_executor.forward_context import (
 )
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
-from xllm.python.model_executor.runners.acl_graph_capture import capture_acl_graph
+from xllm.python.model_executor.runners.acl_graph_capture import capture_acl_graph, device_capture_lock
 from xllm.python.model_executor.runners.base import (
     BaseRunner,
     GraphInputPreparation,
@@ -700,6 +700,8 @@ class DecodeAclGraphRunner(BaseRunner):
         batch_size = input_ids.numel()
         expanded_view = resolve_expanded_decode_metadata(metadata)
         is_expanded_spec_verify = expanded_view is not None
+        if self._is_spec_draft and not is_expanded_spec_verify and (metadata.is_prefill or metadata.is_chunked_prefill):
+            return False
         marked_spec_verify = bool(getattr(metadata, "is_spec_verify", False))
         # Non-expanded packed spec-verify width (V4.1 DSpark), resolved by
         # ``_spec_verify_width``. Expanded (chunked-typed) and scheduler-marked
@@ -1012,21 +1014,21 @@ class DecodeAclGraphRunner(BaseRunner):
             row_offset = row * table_width
             flat_page_indices.extend(row_offset + page for page in range(page_count))
 
-        flat_page_indices_tensor = torch.tensor(
-            flat_page_indices,
-            dtype=torch.int64,
-            device=block_table.device,
+        flat_page_indices_tensor = self._stage_metadata_tensor(
+            torch.tensor(flat_page_indices, dtype=torch.int64, device="cpu"),
+            block_table.device,
+            torch.int64,
         )
         paged_kv_indices = block_table.reshape(-1).index_select(0, flat_page_indices_tensor).contiguous()
-        paged_kv_indptr = torch.tensor(
-            paged_kv_indptr_values,
-            dtype=torch.int32,
-            device=block_table.device,
+        paged_kv_indptr = self._stage_metadata_tensor(
+            torch.tensor(paged_kv_indptr_values, dtype=torch.int32, device="cpu"),
+            block_table.device,
+            torch.int32,
         )
-        paged_kv_last_page_len = torch.tensor(
-            paged_kv_last_page_len_values,
-            dtype=torch.int32,
-            device=block_table.device,
+        paged_kv_last_page_len = self._stage_metadata_tensor(
+            torch.tensor(paged_kv_last_page_len_values, dtype=torch.int32, device="cpu"),
+            block_table.device,
+            torch.int32,
         )
         return (
             paged_kv_indptr.contiguous(),
@@ -2959,30 +2961,31 @@ class DecodeAclGraphRunner(BaseRunner):
         # Metadata was filled on the caller stream; warmup must consume the
         # completed padding indices and checkpoint tables.
         self._stream.wait_stream(torch.npu.current_stream())
-        with forward_context(context), torch.npu.stream(self._stream):
-            for _ in range(_CAPTURE_WARMUP_STEPS):
-                self._forward_static(entry)
-        torch.npu.synchronize()
-        capture_context = AclGraphCaptureContext(self._stream, [])
-        context = ForwardContext(
-            self.attention_backend,
-            self.device,
-            entry.static_metadata,
-            self.layer_caches,
-            acl_graph=capture_context,
-            execution_state=entry.execution_state,
-            eplb=getattr(entry, "eplb", None),
-            execution_contexts=entry.execution_contexts,
-        )
-        # Every graph replays serially on ``self._stream``, so one shared pool
-        # lets capture scratch reach a high-water mark instead of accumulating
-        # one live pool per graph key.
-        if self._graph_pool is None:
-            self._graph_pool = torch.npu.graph_pool_handle()
-        with forward_context(context):
-            entry.graph, entry.static_output = capture_acl_graph(
-                lambda: self._forward_static(entry), self._stream, pool=self._graph_pool
+        with device_capture_lock(self.device):
+            with forward_context(context), torch.npu.stream(self._stream):
+                for _ in range(_CAPTURE_WARMUP_STEPS):
+                    self._forward_static(entry)
+            torch.npu.synchronize()
+            capture_context = AclGraphCaptureContext(self._stream, [])
+            context = ForwardContext(
+                self.attention_backend,
+                self.device,
+                entry.static_metadata,
+                self.layer_caches,
+                acl_graph=capture_context,
+                execution_state=entry.execution_state,
+                eplb=getattr(entry, "eplb", None),
+                execution_contexts=entry.execution_contexts,
             )
+            # Every graph replays serially on ``self._stream``, so one shared pool
+            # lets capture scratch reach a high-water mark instead of accumulating
+            # one live pool per graph key.
+            if self._graph_pool is None:
+                self._graph_pool = torch.npu.graph_pool_handle()
+            with forward_context(context):
+                entry.graph, entry.static_output = capture_acl_graph(
+                    lambda: self._forward_static(entry), self._stream, pool=self._graph_pool
+                )
         entry.graph_tasks = capture_context.tasks
 
     def _forward_static(self, entry: _DecodeGraphEntry) -> ModelExecutionOutput:

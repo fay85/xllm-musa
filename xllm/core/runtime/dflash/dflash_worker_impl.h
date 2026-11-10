@@ -23,6 +23,7 @@ limitations under the License.
 #include <vector>
 
 #include "core/framework/config/speculative_config.h"
+#include "core/framework/speculative/dflash_async_input_builder.h"
 #include "core/framework/speculative/embedding_cache.h"
 #include "framework/kv_cache_transfer/kv_cache_transfer.h"
 #include "framework/model/model_args.h"
@@ -41,7 +42,10 @@ inline int32_t decode_draft_width(int32_t num_speculative_tokens,
                             : num_speculative_tokens + 1;
 }
 
-inline void invalidate_draft_model_geometry(ModelInputParams& input_params) {
+inline void reset_draft_model_metadata(ModelInputParams& input_params) {
+  input_params.clear_linear_attention_state();
+  input_params.num_accepted_tokens = torch::Tensor();
+  input_params.num_accepted_tokens_host.clear();
   // Attention metadata is model-owned: DeepSeek-V4 bakes DSA group layout and
   // sparse tiling values such as ori_win_left into opaque tensors. A draft
   // input copied from the target must rebuild those tensors for draft geometry.
@@ -137,26 +141,14 @@ class DFlashWorkerImpl : public DraftModelSpecWorkerImpl {
   virtual DraftBlock run_decode_draft(const ForwardInput& input,
                                       ForwardInput& validate_input);
 
-  virtual void prepare_validate_output_async(const ForwardInput&) {}
-
-  virtual void finalize_validate_output_async(const ForwardInput&,
-                                              const SampleOutput&,
-                                              ForwardOutput&) {
-    LOG(FATAL) << "Asynchronous validate output was not implemented";
-  }
-
-  virtual bool prepare_draft_prelaunch(const ForwardInput& /*input*/) {
-    return false;
-  }
-  virtual void launch_draft_prelaunch(const ForwardInput& /*input*/,
-                                      const SampleOutput& /*output*/,
-                                      const torch::Tensor& /*accepted_host*/) {
-    LOG(FATAL) << "Draft prelaunch was not implemented";
-  }
-  virtual void discard_draft_prelaunch() {}
-  // Finish host preparation, then retire writes to scheduler-owned KV blocks
-  // before publishing tokens that may terminate a request.
-  virtual void finish_draft_prelaunch(const ForwardInput& /*input*/) {}
+  virtual void prepare_validate_output_async(const ForwardInput& input);
+  virtual void finalize_validate_output_async(const ForwardInput& input,
+                                              const SampleOutput& output,
+                                              ForwardOutput& target_output);
+  std::vector<int64_t> build_batch_to_pending_row_mapping(
+      const ForwardInput& input) const;
+  void commit_pending_context();
+  void retire_async_output();
 
   // Block layout hook: false (DFlash) -> query_width N+1, slot 0 is the
   // un-selected anchor; true (DSpark) -> query_width N, every position predicts
@@ -195,6 +187,26 @@ class DFlashWorkerImpl : public DraftModelSpecWorkerImpl {
   // draft's flat cache index (logical_block * kv_split + page_in_block).
   // No-op when the draft follows the target's kv_split sharding.
   void expand_draft_block_tables(ModelInputParams& input_params) const;
+
+  struct PendingContext {
+    ForwardInput identity;
+    torch::Tensor accepted_device;
+    torch::Tensor accepted_host;
+    torch::Tensor embeddings;
+    torch::Tensor base_positions;
+    StreamEventPtr d2h_ready;
+    StreamEventPtr context_ready;
+  };
+
+  bool async_output_enabled_ = false;
+  bool draft_prelaunch_enabled_for_init_ = false;
+  std::optional<PendingContext> pending_context_;
+  // One idle step's inputs; retired only after the following step is queued.
+  ForwardOutput idle_decode_output_;
+  torch::Tensor prepared_base_positions_;
+  dflash_async::DraftCacheBlockTable prepared_context_block_table_;
+  StreamEventPtr prepared_context_ready_;
+  std::vector<torch::Tensor> consumed_context_tensors_;
 
  private:
   bool draft_use_block_parallel_rows() const {

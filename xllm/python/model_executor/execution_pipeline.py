@@ -57,6 +57,7 @@ class ExecutionPipeline(ABC):
         *,
         attention_backend: AttentionBackend | None = None,
         restore_history: Callable[[AttentionMetadata], None] | None = None,
+        coordinate_graph_execution: bool = False,
     ) -> Runner:
         runner = Runner(
             model,
@@ -64,6 +65,7 @@ class ExecutionPipeline(ABC):
             self._runner_config,
             attention_backend=attention_backend,
             restore_history=restore_history,
+            coordinate_graph_execution=coordinate_graph_execution,
         )
         self.runners.append(runner)
         return runner

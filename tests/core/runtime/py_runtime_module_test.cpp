@@ -20,7 +20,10 @@ limitations under the License.
 #include <pybind11/stl.h>
 #include <torch/python.h>
 
+#include <chrono>
 #include <cstdint>
+#include <future>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -28,6 +31,7 @@ limitations under the License.
 #include "core/framework/state_dict/state_dict.h"
 #include "core/runtime/py_input_batch.h"
 #include "models/py_model_helper.h"
+#include "platform/npu/device_capture_lock.h"
 
 namespace py = pybind11;
 
@@ -73,6 +77,74 @@ TEST_F(PyRuntimeModuleTest, RegistersInRunningInterpreterAndPreservesIdentity) {
   EXPECT_TRUE(py::hasattr(module, "AttentionMetadataView"));
   EXPECT_TRUE(py::hasattr(module, "ExpandedDecodeMetadataView"));
   EXPECT_TRUE(py::hasattr(module, "LayerLoadSynchronizer"));
+}
+
+TEST_F(PyRuntimeModuleTest,
+       CaptureGuardSharesDeviceLockAndReleasesOnException) {
+  py::gil_scoped_acquire gil;
+  ensure_xllm_runtime_module();
+  constexpr c10::DeviceIndex kDeviceIndex = 0;
+  auto& capture_mutex =
+      npu::DeviceCaptureLock::get_instance().get_lock(kDeviceIndex);
+  py::dict globals;
+  globals["guard"] = py::module_::import("xllm_runtime")
+                         .attr("DeviceCaptureGuard")(kDeviceIndex);
+  globals["try_prepare_lock"] = py::cpp_function([&capture_mutex]() {
+    return std::async(std::launch::async,
+                      [&capture_mutex]() {
+                        std::unique_lock<std::mutex> lock(capture_mutex,
+                                                          std::try_to_lock);
+                        return lock.owns_lock();
+                      })
+        .get();
+  });
+  py::exec(R"(
+assert try_prepare_lock()
+with guard:
+    assert not try_prepare_lock()
+assert try_prepare_lock()
+try:
+    with guard:
+        assert not try_prepare_lock()
+        raise ValueError("capture failed")
+except ValueError:
+    pass
+assert try_prepare_lock()
+)",
+           globals);
+}
+
+TEST_F(PyRuntimeModuleTest, CaptureGuardReleasesGilWhileWaitingForPreparation) {
+  py::gil_scoped_acquire gil;
+  ensure_xllm_runtime_module();
+  constexpr c10::DeviceIndex kDeviceIndex = 0;
+  auto& capture_mutex =
+      npu::DeviceCaptureLock::get_instance().get_lock(kDeviceIndex);
+  py::object guard = py::module_::import("xllm_runtime")
+                         .attr("DeviceCaptureGuard")(kDeviceIndex);
+  std::promise<void> prepare_started;
+  auto prepare_started_future = prepare_started.get_future();
+  std::promise<void> gil_available;
+  auto gil_available_future = gil_available.get_future();
+  auto prepare = std::async(std::launch::async, [&]() {
+    std::unique_lock<std::mutex> lock(capture_mutex);
+    prepare_started.set_value();
+    return gil_available_future.wait_for(std::chrono::seconds(5)) ==
+           std::future_status::ready;
+  });
+  prepare_started_future.wait();
+  auto python_thread = std::async(std::launch::async, [&gil_available]() {
+    py::gil_scoped_acquire thread_gil;
+    gil_available.set_value();
+  });
+  guard.attr("__enter__")();
+  guard.attr("__exit__")(py::none(), py::none(), py::none());
+  const bool released_gil = prepare.get();
+  {
+    py::gil_scoped_release release;
+    python_thread.get();
+  }
+  EXPECT_TRUE(released_gil);
 }
 
 TEST_F(PyRuntimeModuleTest, CollectivesWithoutActiveModelReturnNone) {

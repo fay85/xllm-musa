@@ -297,7 +297,8 @@ Runner 不再在 `can_execute` 之外维护另一组否决条件。对实现了 
 `dp_size > 1` 时通过 `dp_all_true` 汇总本 rank 的完整准入结果，所有 rank 同意才执行图；本 rank 拒绝也必须参与，
 不能提前返回让其他 rank 等不到票。全局 token counts 仍负责共享 bucket 的选择，不能代替动态能力投票。
 只有接入新接口的 DP backbone 增加这次准入 collective；未迁移的旧模型沿用原有共享布局准入，
-不因这次接口改造额外增加投票。proposal 的本地 `AclGraphRunner` 也不增加 DP 投票。
+不因这次接口改造额外增加投票。proposal 的 `AclGraphRunner` 默认仍只做本地准入；DFlash2 sampling
+通过 Runner 显式启用 DP 协调，见第 7 节。
 
 ### 5. 异步编排的封装
 
@@ -328,3 +329,74 @@ Runner 不再在 `can_execute` 之外维护另一组否决条件。对实现了 
 
 总体原则是：**统一执行入口，但不强求统一执行方式；把业务差异留在具体 Pipeline，
 把执行差异留在 Runner，把资源管理留给实际拥有资源的模块。**
+
+### 7. DFlash2 的逐 step 编排
+
+DFlash2 与 DSpark 采用同一种跨 step 生命周期，而不是在上一轮预测下一批请求并缓存完整 draft：
+
+- 第 `n-1` 轮完成 target verify 后，提交 accepted tokens 的 D2H，并在本轮提交 context KV 写入。
+  异步输出携带覆盖 context 写入的完成事件，资源和块的释放必须等待该事件；最后一轮也不例外。
+- 第 `n` 轮拿到实际 batch 后，再决定是否 prelaunch。用请求、sequence 和 embedding slot 身份映射
+  上一轮 pending context，支持继续请求的重排与缩批；使用本轮 block table 和采样参数。
+- 可以 prelaunch 时，先用设备侧 accepted tokens 构造并提交本轮 draft，再等待上一轮 D2H、
+  更新 host decode 状态和准备本轮 target verify。
+- 不能 prelaunch 时，先提交上一轮 host decode 状态，再沿普通 draft 路径执行。
+  新请求、JSON 状态、KV swap/copy 等不满足条件的 batch 不会消费预测的 draft。
+- 关闭异步调度时，沿用同步收尾；context 写入仍属于当前轮，不依赖下一轮是否存在。
+
+公共 pending-context 提交、异步收尾和空 DP rank 的生命周期由已有 `DFlashWorkerImpl` 承担，
+DSpark 和 DFlash2 各自保留具体 draft 计算和逐 batch 准入条件。
+异步收尾与 prelaunch 是不同决定：CP/KV split 等 prelaunch 限制不关闭异步收尾。
+本轮 DFlash2 的非空 KV transfer batch 暂时保留原同步收尾，避免绕过既有 draft PUSH completion 协议。
+prelaunch 的容量检查包含尚未确认的接受长度上界；普通路径完成 host 修正后，仍可独立选择 draft graph。
+
+Python DFlash2 通过 `DFlash2ExecutionPipeline` 编排两个 Runner：
+
+```text
+C++ worker：构造本轮 query、准备并跨 TP 同步 Gumbel noise
+  → Python ExecutionPipeline
+      → decoder Runner：backbone → lm_head → candidate selector
+      → proposal Runner：path sampling
+  → ModelOutput.draft_proposal → C++ target verify / context 收尾
+```
+
+DFlash2 的 query 包含一个 anchor 和 N 个 proposal 位置。`DFlash2DecoderModel` 在同一个 forward 中
+执行 backbone、选取 proposal 位置的 hidden states、计算 lm_head 和 candidate selector；
+lm_head 仍不计算 anchor logits，selector 仍以该请求的 anchor token 构造首步 predecessor。
+这三部分共用一个 Runner 和一张图，不再把 hidden states 拷贝到独立 candidate Runner 的固定输入。
+decoder 通过内部阶段输出 `DraftDecoderOutput.candidates` 返回 `[batch, N, K]` candidate ids 和
+`[batch, N, K, K]` edge logits，公共输出裁剪按请求数截取候选结果，hidden states 仍按 token 数裁剪。
+Pipeline 将候选结果展平为每请求 N 行，交给独立的 proposal Runner；对外的 `ModelOutput` 与 C++ 契约不变。
+proposal 模块输出 request 对齐的 `[batch, N]` token ids 和 `[batch, N, vocab]` dense draft probabilities。
+两个阶段独立选择 eager/graph；sampling fallback 不影响整个 decoder 的图执行。
+`DFlash2DecoderMetadataBuilder` 在 eager 的无采样调用中保留 backbone-only 执行；完整 query block 的图
+始终捕获整个 decoder，避免无采样 warmup 缓存的图在后续 proposal 请求中漏掉 lm_head 和 selector。
+无采样或 dummy 调用对外仍只返回 backbone hidden states。这里不修改 attention Runner 的输入管理或捕获逻辑。
+
+`DFlash2Qwen3ForCausalLM` 仍持有原有 backbone、lm_head 和 selector，保留 checkpoint 路径和共享权重规则，
+通过 provider 接口创建 Pipeline。Executor 优先消费外层模型的 provider，其他模型继续使用 `model.model`。
+`DFlash2SamplingMetadataBuilder` 保留原始采样模式与可选温度参数，仅允许无温度修正的全 greedy 请求入图，
+并管理 candidate ids 和 noise 的持久 buffer，每步在 capture/replay 外更新。
+随机数生成与 TP 同步保持在 C++ prepare 阶段，避免捕获固定噪声。
+随机、混合或需要温度修正的请求走 sampling eager，保留动态分支：greedy 不计算 `exp`，
+全随机不构造 one-hot，只有混合 batch 使用 `where`，无温度 tensor 时不做温度修正。
+penalty、filter 和 JSON grammar 仍在 target verification 应用，不重复应用到 selector 分布。
+
+多 DP 不引入上游执行计划或新的 RPC 字段，执行方式仍由 Python Runner 决定：
+
+- DFlash2 decoder Model 只允许带 `is_dflash_proposal` 标记的展开输入入图。backend 对 draft 的非展开 prefill
+  输入正常返回不支持，启动期 warmup 因而走 eager，不会把 16 个请求、128 个 token 的输入误送进普通 decode
+  行校验。target 的严格布局校验和原有 backend/Model 短路顺序不变。
+- decoder 沿用已有 DP token counts 选择共享 bucket，并保留原有 DP 准入协调。
+- sampling Runner 单独汇总本地准入结果；任一有效 shard 不满足 greedy/温度等条件时，所有有效 shard 的
+  sampling 都走 eager，decoder 的选择不受影响。没有采样任务的 shard 通过 `skip_execution` 投赞成票，
+  但不检查无效的采样输入，也不调用 eager forward 或 graph replay。
+- 协调复用 `dp_all_true` 的 host store rendezvous，不新增 NPU collective 或设备标量回读；它仍有主机等待开销，
+  不能据此宣称对 prelaunch 重叠或吞吐没有影响。其他 Pipeline 默认不启用这项 sampling 协调。
+
+C++ worker 不再持有 DFlash2 draft ACL Graph；Python 路径直接消费 proposal，非 Python 路径保留原生采样。
+NPU Python DFlash2 不再被启动期 `requires_eager_execution` 强制关闭 graph，普通 DFlash 与 native 路径保持原门控。
+backbone 复用 `DecodeAclGraphRunner` 的输入管理与捕获逻辑；XFIA 通过 proposal 标记保持展开后逐 token 的 sliding-window
+左边界，不把图中的逐 token block table 误当成互相独立的单 token 请求。
+上一轮 context KV 写入与本轮设备输入准备均不在 draft 图内。
+捕获范围是独立优化，不决定 context 的提交时机，也不要求将 context 后移到下一轮。

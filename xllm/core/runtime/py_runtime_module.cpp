@@ -22,6 +22,7 @@ limitations under the License.
 
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <vector>
 
 #include "core/framework/model/model_sampling_input.h"
@@ -36,6 +37,7 @@ limitations under the License.
 #include <torch_npu/csrc/core/npu/NPUStream.h>
 
 #include "core/kernels/npu/utils.h"
+#include "platform/npu/device_capture_lock.h"
 #include "platform/npu/npu_layer_synchronizer.h"
 #endif
 
@@ -43,6 +45,21 @@ namespace py = pybind11;
 
 namespace xllm {
 namespace {
+
+#if defined(USE_NPU)
+class DeviceCaptureGuard final {
+ public:
+  explicit DeviceCaptureGuard(c10::DeviceIndex device_index)
+      : lock_(npu::DeviceCaptureLock::get_instance().get_lock(device_index),
+              std::defer_lock) {}
+
+  void acquire() { lock_.lock(); }
+  void release() { lock_.unlock(); }
+
+ private:
+  std::unique_lock<std::mutex> lock_;
+};
+#endif
 
 bool is_unconstrained_greedy(const ModelSamplingInput& input) {
   const auto& sampling = input.parameters;
@@ -57,6 +74,9 @@ bool is_unconstrained_greedy(const ModelSamplingInput& input) {
 void register_xllm_runtime_module(py::module_& m) {
   py::class_<SamplingParameters>(m, "SamplingParameters")
       .def_readonly("all_greedy_sample", &SamplingParameters::all_greedy_sample)
+      .def_readonly("all_random_sample", &SamplingParameters::all_random_sample)
+      .def_readonly("do_sample", &SamplingParameters::do_sample)
+      .def_readonly("temperatures", &SamplingParameters::temperatures)
       .def_readwrite("selected_token_idxes",
                      &SamplingParameters::selected_token_idxes)
       .def_readwrite("sample_idxes", &SamplingParameters::sample_idxes)
@@ -68,6 +88,7 @@ void register_xllm_runtime_module(py::module_& m) {
       .def(py::init<const ModelSamplingInput&>())
       .def_readwrite("parameters", &ModelSamplingInput::parameters)
       .def_readonly("return_confidence", &ModelSamplingInput::return_confidence)
+      .def_readonly("gumbel_noise", &ModelSamplingInput::gumbel_noise)
       .def_property_readonly("return_probs",
                              [](const ModelSamplingInput& input) {
                                return input.parameters.return_probs;
@@ -200,6 +221,16 @@ void register_xllm_runtime_module(py::module_& m) {
   });
 
 #if defined(USE_NPU)
+  py::class_<DeviceCaptureGuard>(m, "DeviceCaptureGuard")
+      .def(py::init<c10::DeviceIndex>())
+      .def("__enter__",
+           &DeviceCaptureGuard::acquire,
+           py::call_guard<py::gil_scoped_release>())
+      .def("__exit__",
+           [](DeviceCaptureGuard& guard,
+              const py::object&,
+              const py::object&,
+              const py::object&) { guard.release(); });
   m.def("is_ascend_a3", &kernel::npu::is_ascend_a3);
   py::class_<NPULayerSynchronizerImpl,
              std::shared_ptr<NPULayerSynchronizerImpl>>(m, "LayerSynchronizer")

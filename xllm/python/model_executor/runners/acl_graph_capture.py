@@ -16,11 +16,18 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, ContextManager
 
 import torch
 
 from xllm.python.model_executor.runners.base import ModelExecutionOutput
+
+
+def device_capture_lock(device: torch.device) -> ContextManager[None]:
+    import xllm_runtime
+
+    device_index = device.index if device.index is not None else torch.npu.current_device()
+    return xllm_runtime.DeviceCaptureGuard(device_index)
 
 
 def capture_acl_graph(

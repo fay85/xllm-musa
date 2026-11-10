@@ -14,7 +14,9 @@
 
 from __future__ import annotations
 
-from contextlib import nullcontext
+import sys
+from collections.abc import Iterator
+from contextlib import contextmanager, nullcontext
 from dataclasses import fields, is_dataclass, replace
 from importlib import import_module
 from inspect import signature
@@ -52,6 +54,7 @@ from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.model_executor.model_output import ModelOutput
 from xllm.python.model_executor.runner import Runner, RunnerConfig
 from xllm.python.model_executor.runners.acl_graph import AclGraphRunner
+from xllm.python.model_executor.runners.decode_acl_graph import DecodeAclGraphRunner
 from xllm.python.model_executor.runners.eager import EagerRunner
 from xllm.python.model_executor.sampling_metadata import ModelSamplingMetadataBuilder
 from xllm.python.models.dspark_model import DSparkDecoderModel, ProposalMetadata, ProposalMetadataBuilder
@@ -79,7 +82,27 @@ def _copy_output(destination: Any, source: Any) -> None:
 
 
 @pytest.fixture
-def acl_graph_runtime(monkeypatch: pytest.MonkeyPatch) -> list[SimpleNamespace]:
+def capture_lock_state(monkeypatch: pytest.MonkeyPatch) -> SimpleNamespace:
+    state = SimpleNamespace(held=False, acquisitions=0, releases=0)
+
+    @contextmanager
+    def lock(device: torch.device) -> Iterator[None]:
+        assert not state.held
+        state.held = True
+        state.acquisitions += 1
+        try:
+            yield
+        finally:
+            state.held = False
+            state.releases += 1
+
+    for runner_type in (AclGraphRunner, DecodeAclGraphRunner):
+        monkeypatch.setattr(import_module(runner_type.__module__), "device_capture_lock", lock)
+    return state
+
+
+@pytest.fixture
+def acl_graph_runtime(monkeypatch: pytest.MonkeyPatch, capture_lock_state: SimpleNamespace) -> list[SimpleNamespace]:
     """Exercise runner storage/order on CPU, not real ACL capture support."""
     captures: list[SimpleNamespace] = []
     caller = Mock()
@@ -87,15 +110,22 @@ def acl_graph_runtime(monkeypatch: pytest.MonkeyPatch) -> list[SimpleNamespace]:
         current_stream=Mock(return_value=caller),
         Stream=Mock(side_effect=lambda **kwargs: Mock()),
         stream=lambda stream: nullcontext(),
+        synchronize=Mock(),
         graph_pool_handle=Mock(side_effect=object),
     )
     monkeypatch.setattr(torch, "npu", npu, raising=False)
     monkeypatch.setattr(torch.Tensor, "record_stream", Mock())
 
     def capture(forward: Any, stream: Any, *, pool: Any | None = None) -> tuple[Mock, Any]:
+        assert capture_lock_state.held
         output = forward()
         graph = Mock()
-        graph.replay.side_effect = lambda: _copy_output(output, forward())
+
+        def replay() -> None:
+            assert not capture_lock_state.held
+            _copy_output(output, forward())
+
+        graph.replay.side_effect = replay
         captures.append(SimpleNamespace(graph=graph, output=output, stream=stream, pool=pool))
         return graph, output
 
@@ -141,6 +171,77 @@ def _model_inputs(hidden: torch.Tensor, *, width: int = 1) -> ModelInput:
     token_ids = torch.arange(hidden.shape[0])
     inputs = _pipeline_inputs(token_ids, token_ids.clone(), None, width=width)
     return replace(inputs, input_embedding=hidden)
+
+
+@pytest.mark.parametrize("device", [torch.device("cpu", 2), torch.device("cpu")])
+def test_device_capture_lock_uses_native_device_guard(monkeypatch: pytest.MonkeyPatch, device: torch.device) -> None:
+    module = import_module("xllm.python.model_executor.runners.acl_graph_capture")
+    guard = nullcontext()
+    factory = Mock(return_value=guard)
+    monkeypatch.setitem(sys.modules, "xllm_runtime", SimpleNamespace(DeviceCaptureGuard=factory))
+    monkeypatch.setattr(torch, "npu", SimpleNamespace(current_device=lambda: 3), raising=False)
+    assert module.device_capture_lock(device) is guard
+    factory.assert_called_once_with(2 if device.index is not None else 3)
+
+
+def test_graph_capture_lock_covers_warmup_but_not_replay(
+    acl_graph_runtime: list[SimpleNamespace], capture_lock_state: SimpleNamespace
+) -> None:
+    model = _ScaleModel()
+    pipeline = _make_model_pipeline(model, max_requests=8)
+    forward_lock_states: list[bool] = []
+
+    def record_lock(model: torch.nn.Module, inputs: tuple[torch.Tensor, ...]) -> None:
+        forward_lock_states.append(capture_lock_state.held)
+
+    model.register_forward_pre_hook(record_lock)
+    for rows, first_capture in ((3, True), (3, False), (5, True)):
+        forward_lock_states.clear()
+        pipeline.execute(_model_inputs(torch.ones(rows, 2)))
+        assert any(forward_lock_states) == first_capture
+        assert all(forward_lock_states[:-1])
+        assert not forward_lock_states[-1]
+        assert not capture_lock_state.held
+    assert len(acl_graph_runtime) == 2
+    assert capture_lock_state.acquisitions == capture_lock_state.releases == 2
+
+
+@pytest.mark.parametrize("fail_capture", [False, True])
+def test_backbone_capture_lock_covers_warmup_and_capture(
+    acl_graph_runtime: list[SimpleNamespace],
+    capture_lock_state: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    fail_capture: bool,
+) -> None:
+    runner = DecodeAclGraphRunner(
+        torch.nn.Identity(),
+        SimpleNamespace(page_size=4, is_mla=False, graph_uses_dsa_metadata=lambda metadata: False),
+        torch.device("cpu"),
+        max_batch=4,
+        max_model_len=8,
+    )
+    runner._stream = Mock()
+    entry = SimpleNamespace(static_metadata=SimpleNamespace(), execution_state=None, execution_contexts={})
+
+    def forward(entry: Any) -> torch.Tensor:
+        assert capture_lock_state.held
+        return torch.ones(1)
+
+    def synchronize() -> None:
+        assert capture_lock_state.held
+
+    monkeypatch.setattr(runner, "_forward_static", forward)
+    torch.npu.synchronize.side_effect = synchronize
+    capture = (
+        Mock(side_effect=RuntimeError("capture failed"))
+        if fail_capture
+        else import_module(AclGraphRunner.__module__).capture_acl_graph
+    )
+    monkeypatch.setattr(import_module(DecodeAclGraphRunner.__module__), "capture_acl_graph", capture)
+    with pytest.raises(RuntimeError, match="capture failed") if fail_capture else nullcontext():
+        runner._capture(entry)
+    assert not capture_lock_state.held
+    assert capture_lock_state.acquisitions == capture_lock_state.releases == 1
 
 
 def test_runner_is_ready_for_eager_execution_after_construction() -> None:
@@ -575,19 +676,27 @@ def test_graph_failure_is_not_retried_as_eager() -> None:
     assert model.calls == 0
 
 
+@pytest.mark.parametrize("failure_stage", ["warmup", "capture"])
 def test_failed_capture_does_not_publish_an_entry(
-    acl_graph_runtime: list[SimpleNamespace], monkeypatch: pytest.MonkeyPatch
+    acl_graph_runtime: list[SimpleNamespace],
+    capture_lock_state: SimpleNamespace,
+    monkeypatch: pytest.MonkeyPatch,
+    failure_stage: str,
 ) -> None:
     model = _ScaleModel()
     pipeline = _make_model_pipeline(model)
-    monkeypatch.setattr(
-        import_module(AclGraphRunner.__module__), "capture_acl_graph", Mock(side_effect=RuntimeError("capture failed"))
-    )
-    with pytest.raises(RuntimeError, match="capture failed"):
+    failure = Mock(side_effect=RuntimeError(f"{failure_stage} failed"))
+    if failure_stage == "warmup":
+        monkeypatch.setattr(model, "forward", failure)
+    else:
+        monkeypatch.setattr(import_module(AclGraphRunner.__module__), "capture_acl_graph", failure)
+    with pytest.raises(RuntimeError, match=f"{failure_stage} failed"):
         pipeline.execute(_model_inputs(torch.ones(2, 2)))
     assert pipeline.entry_runner.graph_runner._graphs == {}
-    assert model.calls == 3
+    assert model.calls == (3 if failure_stage == "capture" else 0)
     assert get_forward_context_or_none() is None
+    assert not capture_lock_state.held
+    assert capture_lock_state.acquisitions == capture_lock_state.releases == 1
 
 
 def test_graph_keeps_complete_query_blocks_and_trims_token_rows(acl_graph_runtime: list[SimpleNamespace]) -> None:

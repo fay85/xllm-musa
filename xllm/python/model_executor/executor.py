@@ -32,7 +32,7 @@ from xllm.python.layers.attention import Attention
 from xllm.python.model_executor.execution_context import (
     LayerCacheAwareExecutionMetadataBuilder,
 )
-from xllm.python.model_executor.execution_pipeline import create_execution_pipeline
+from xllm.python.model_executor.execution_pipeline import ExecutionPipelineProvider, create_execution_pipeline
 from xllm.python.model_executor.forward_context import (
     EplbRuntimeState,
     LayerLoadContext,
@@ -366,7 +366,7 @@ class ModelExecutor:
             else None
         )
         self.execution_pipeline = create_execution_pipeline(
-            model.model,
+            model if isinstance(model, ExecutionPipelineProvider) else model.model,
             execution_metadata_builders,
             runner_config,
             attention_backend=self.attention_backend,

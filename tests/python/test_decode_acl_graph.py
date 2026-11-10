@@ -18,6 +18,7 @@ import logging
 import os
 from contextlib import nullcontext
 from dataclasses import replace
+from importlib import import_module
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -913,6 +914,9 @@ def test_dflash_proposal_mode_uses_a_distinct_graph_key() -> None:
 def test_capture_preserves_live_state_until_first_replay(monkeypatch: pytest.MonkeyPatch, verify_width: int) -> None:
     npu = MagicMock()
     monkeypatch.setattr(torch, "npu", npu, raising=False)
+    monkeypatch.setattr(
+        import_module(DecodeAclGraphRunner.__module__), "device_capture_lock", lambda device: nullcontext()
+    )
     runner = _runner()
     slots = torch.arange(1, 5, verify_width)
     metadata = _metadata(slots)
@@ -3411,6 +3415,30 @@ def test_dsa_host_tables_are_staged_before_device_copy(async_graph_inputs: bool)
 
     runner._stage_block_table.assert_called_once_with(source, target.device)
     target.__getitem__.return_value.copy_.assert_called_once_with(staged.__getitem__.return_value)
+
+
+def test_row_aligned_paging_stages_all_host_metadata() -> None:
+    runner = _runner()
+    runner.attention_backend.page_size = 128
+    block_table = torch.tensor([[10, 11], [20, 21], [30, 31]], dtype=torch.int32)
+
+    with patch.object(runner, "_stage_metadata_tensor", wraps=runner._stage_metadata_tensor) as stage:
+        indptr, indices, last_page_len = runner._build_row_aligned_paged_kv_metadata(
+            block_table,
+            [0, 128, 129],
+        )
+
+    assert stage.call_count == 3
+    for call, dtype in zip(stage.call_args_list, (torch.int64, torch.int32, torch.int32)):
+        source, device, target_dtype = call.args
+        assert source.device.type == "cpu"
+        assert source.dtype == dtype
+        assert device == block_table.device
+        assert target_dtype == dtype
+    assert indptr.dtype == indices.dtype == last_page_len.dtype == torch.int32
+    assert indptr.tolist() == [0, 1, 2, 4]
+    assert indices.tolist() == [10, 20, 30, 31]
+    assert last_page_len.tolist() == [1, 128, 1]
 
 
 @pytest.mark.parametrize("dp_size", [1, 2])

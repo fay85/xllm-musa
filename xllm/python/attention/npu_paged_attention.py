@@ -2459,7 +2459,7 @@ class NpuPagedAttentionBackend(KdaLinearAttentionMixin, AttentionBackend):
         self._xfia_query_ends = self._xfia_row_ends[rows]
         if self.sliding_window <= 0:
             self._xfia_kv_starts = torch.zeros_like(self._xfia_kv_lengths)
-        elif rows == sequences:
+        elif rows == sequences and not _use_dflash_proposal_attention(metadata):
             # A configured proposal width does not make single-token decode
             # rows part of a proposal. Each row uses its own sequence window.
             self._xfia_kv_starts = (self._xfia_kv_lengths - self.sliding_window).clamp_min(0)

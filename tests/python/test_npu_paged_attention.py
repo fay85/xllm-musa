@@ -370,7 +370,10 @@ def test_xfia_single_token_decode_uses_actual_window(
 
 @pytest.mark.parametrize("sliding_window", [0, 2048])
 @pytest.mark.parametrize("proposal_width", [8, 15])
-def test_xfia_dflash2_chunked_query_keeps_band_window(sliding_window: int, proposal_width: int) -> None:
+@pytest.mark.parametrize("expanded_graph", [False, True])
+def test_xfia_dflash2_chunked_query_keeps_band_window(
+    sliding_window: int, proposal_width: int, expanded_graph: bool
+) -> None:
     backend = NpuPagedAttentionBackend(
         num_heads=4,
         num_kv_heads=1,
@@ -395,7 +398,20 @@ def test_xfia_dflash2_chunked_query_keeps_band_window(sliding_window: int, propo
         kv_seq_lens=torch.tensor([2055, 2305], dtype=torch.int32),
         slot_mapping=torch.arange(2 * proposal_width),
     )
-    backend.prepare(metadata)
+    if expanded_graph:
+        metadata.is_chunked_prefill = False
+        metadata.is_spec_verify = True
+        metadata.block_table = table.repeat_interleave(proposal_width, dim=0)
+        metadata.kv_seq_lens = metadata.kv_seq_lens.repeat_interleave(proposal_width)
+    context = ForwardContext(
+        attention_backend=backend,
+        device=torch.device("cpu"),
+        metadata=metadata,
+        layer_caches=[LayerCache(key=cache, value=cache)],
+        execution_state=AclGraphExecutionState(persistent_buffers={}) if expanded_graph else None,
+    )
+    with forward_context(context):
+        backend.prepare(metadata, graph_mode=expanded_graph)
     assert backend._xfia_query_ends.tolist() == list(range(1, 2 * proposal_width + 1))
     assert backend._xfia_kv_lengths.tolist() == [2055] * proposal_width + [2305] * proposal_width
     expected_starts = [

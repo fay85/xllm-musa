@@ -124,6 +124,7 @@ if(USE_NPU)
 
   cc_test(
     NAME dflash2_prelaunch_lifecycle_test
+    RUN_SERIAL
     SRCS dflash2_prelaunch_lifecycle_test.cpp
     DEPS :runtime :models :batch :block :platform GTest::gtest_main
   )

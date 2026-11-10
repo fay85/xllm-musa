@@ -297,10 +297,9 @@ void configure_block_diffusion_model(ModelArgs& args,
       ModelConfig::get_instance().model_impl());
   const bool v41_draft =
       is_deepseek_v41_dspark && (python_model_impl || Platform::is_mlu());
-  const bool is_python_qwen3_dspark =
-      is_dspark && args.model_type() == "qwen3" && Platform::is_npu() &&
-      ModelConfig::is_python_model_impl(
-          ModelConfig::get_instance().model_impl());
+  const bool is_python_qwen3_pipeline =
+      (is_dspark || SpeculativeConfig::is_dflash2_algorithm(algorithm)) &&
+      args.model_type() == "qwen3" && Platform::is_npu() && python_model_impl;
   std::string draft_model_type = std::string(kDFlashDraftModelType);
   if (is_dspark) {
     draft_model_type = std::string(kDSparkDraftModelType);
@@ -322,7 +321,7 @@ void configure_block_diffusion_model(ModelArgs& args,
   args.model_type(draft_model_type);
   args.draft_query_uses_decode(false);
   args.requires_eager_execution(!is_deepseek_v4_dspark &&
-                                !is_python_qwen3_dspark);
+                                !is_python_qwen3_pipeline);
   if (is_dspark && (python_model_impl || v41_draft)) {
     args.dummy_token_count(
         std::max<int32_t>(1, options.num_speculative_tokens()));

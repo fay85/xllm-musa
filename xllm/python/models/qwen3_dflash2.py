@@ -24,6 +24,7 @@ states, and the QuaRot adaptation are inherited unchanged from DFlash.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import cast
 
@@ -31,6 +32,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from xllm.python.attention.backend import AttentionBackend, AttentionMetadata
+from xllm.python.model_executor.execution_context import ExecutionMetadataBuilder
+from xllm.python.model_executor.execution_pipeline import ExecutionPipeline
+from xllm.python.model_executor.runner import RunnerConfig
 from xllm.python.model_loader import ParallelLoadContext, ScopedWeightLoader
 from xllm.python.models.qwen3 import Qwen3DecoderLayer
 from xllm.python.models.qwen3_dflash import (
@@ -313,6 +318,20 @@ class DFlash2Qwen3Model(DFlashQwen3Model):
 class DFlash2Qwen3ForCausalLM(DFlashQwen3ForCausalLM):
     config_cls = DFlash2Qwen3Config
     model_cls = DFlash2Qwen3Model
+
+    def create_execution_pipeline(
+        self,
+        builders: Sequence[ExecutionMetadataBuilder],
+        runner_config: RunnerConfig,
+        *,
+        attention_backend: AttentionBackend | None = None,
+        restore_history: Callable[[AttentionMetadata], None] | None = None,
+    ) -> ExecutionPipeline:
+        from xllm.python.pipelines.dflash2_pipeline import DFlash2ExecutionPipeline
+
+        return DFlash2ExecutionPipeline(
+            self, builders, runner_config, attention_backend=attention_backend, restore_history=restore_history
+        )
 
     def dflash2_candidates(
         self,

@@ -1854,7 +1854,7 @@ TEST_P(HostOffloadCompletionTest,
     }
   }
   EXPECT_FALSE(pool.has_pending_async_block_release());
-  pool.reset_prefix_cache();
+  pool.BlockManagerPool::reset_prefix_cache();
   EXPECT_EQ(pool.num_free_blocks().front(), initial_device_free);
   EXPECT_EQ(host_leaf->num_blocks_in_prefix_cache(),
             outcome.publish_ ? 1U : 0U);
@@ -1863,6 +1863,11 @@ TEST_P(HostOffloadCompletionTest,
   std::vector<Block> matched = host_leaf->allocate_shared(tokens);
   EXPECT_EQ(matched.size(), outcome.publish_ ? 1U : 0U);
   matched.clear();
+
+  pool.reset_prefix_cache();
+  EXPECT_EQ(host_leaf->num_blocks_in_prefix_cache(), 0U);
+  EXPECT_EQ(host_leaf->num_free_blocks(), initial_free);
+  EXPECT_TRUE(host_leaf->allocate_shared(tokens).empty());
 }
 
 INSTANTIATE_TEST_SUITE_P(

@@ -351,7 +351,8 @@ local admission result. Graph execution requires every rank to agree. A rejectin
 than return early and leave other ranks waiting for its vote. Global token counts still determine shared buckets;
 they do not replace dynamic capability voting. Only DP backbones adopting the new interface gain this admission
 collective. Unmigrated models retain their existing shared-layout admission without an additional vote, and the
-Proposal stage's local `AclGraphRunner` does not add DP voting either.
+Proposal stage's `AclGraphRunner` remains local by default. DFlash2 explicitly enables DP coordination in its sampling
+Runner, as described in section 7.
 
 ### 5. Encapsulating Asynchronous Orchestration
 
@@ -386,3 +387,86 @@ The intended adaptation for DSV4.1 is:
 The overall principle is: **unify the execution entry point without forcing a single execution mode; keep
 application-specific composition in the concrete Pipeline, execution-mode differences in Runner, and resource
 management in the modules that actually own the resources.**
+
+### 7. Step-local DFlash2 Orchestration
+
+DFlash2 and DSpark use the same cross-step lifecycle instead of predicting the next batch and caching a complete draft:
+
+- After target verification in step `n-1`, enqueue the accepted-token D2H copy and context KV writes in that step.
+  Asynchronous outputs carry a completion event covering the context writes; resource and block retirement must wait
+  for it, including on the final step.
+- Once the actual batch for step `n` arrives, decide whether to prelaunch. Match pending context by request, sequence,
+  and embedding-slot identity, allowing continuing requests to shrink or reorder. Use the current block tables and
+  sampling parameters.
+- When eligible, build and submit the current draft from device-side accepted tokens before waiting for the previous
+  D2H copy, committing host decode state, and preparing the current target verification.
+- Otherwise, commit the previous host decode state before executing the ordinary draft path. Ineligible batches,
+  including new requests, JSON state, or KV swap/copy, do not consume a predicted draft.
+- With schedule overlap disabled, retain synchronous finalization. Context writes still belong to the current step
+  and do not depend on another step being scheduled.
+
+The existing `DFlashWorkerImpl` owns shared pending-context commit, asynchronous finalization, and idle DP-rank
+lifetimes. DSpark and DFlash2 retain their own draft computation and batch admission rules. Asynchronous finalization
+and prelaunch remain separate decisions: prelaunch restrictions such as CP/KV split do not disable asynchronous
+finalization. DFlash2 batches with nonempty KV transfers currently retain synchronous finalization to preserve the
+existing draft PUSH completion protocol.
+Prelaunch capacity checks include the upper bound of the still-unconfirmed accepted prefix. After host correction,
+the ordinary path can independently select the draft graph.
+
+Python DFlash2 uses `DFlash2ExecutionPipeline` with two independently dispatched Runners:
+
+```text
+C++ worker: prepare the current query and TP-agreed Gumbel noise
+  -> Python ExecutionPipeline
+       -> decoder Runner: backbone -> lm_head -> candidate selector
+       -> proposal Runner: path sampling
+  -> ModelOutput.draft_proposal -> C++ target verification / context finalization
+```
+
+The query contains one anchor and N proposal positions. `DFlash2DecoderModel` executes the backbone, selects proposal
+hidden-state rows, and runs LM head and candidate selector in one forward. LM head still skips anchor logits, and the
+selector still uses each request's anchor token as the first predecessor. These operations share one Runner and graph,
+without copying backbone hidden states into a separate candidate Runner's persistent input.
+The internal stage output `DraftDecoderOutput.candidates` carries `[batch, N, K]` candidate IDs and `[batch, N, K, K]`
+edge logits. Shared output
+slicing trims candidates by request count while retaining token-based hidden-state slicing. The Pipeline flattens
+candidates to N rows per request for the independent proposal Runner; the public `ModelOutput` and native contract stay
+unchanged. Sampling returns request-aligned `[batch, N]`
+tokens and `[batch, N, vocab]` dense draft probabilities. Each of the two stages selects eager or graph independently;
+sampling fallback does not disable the decoder graph.
+`DFlash2DecoderMetadataBuilder` preserves eager backbone-only calls without sampling. Graphs with complete query blocks
+always capture the whole decoder, so a sampling-free warmup cannot cache a graph that omits LM head or selector for
+later proposal requests. Calls without sampling and dummy calls still return only backbone hidden states to their caller.
+Attention Runner input management and capture logic remain unchanged.
+
+`DFlash2Qwen3ForCausalLM` retains module ownership, checkpoint paths, and weight-sharing behavior, and exposes a Pipeline
+provider. Executor prefers an outer-model provider when available; other models continue using `model.model`.
+`DFlash2SamplingMetadataBuilder` preserves sampling modes and optional temperatures. Only all-greedy requests without
+temperature scaling use the sampling graph, with persistent candidate-id and noise buffers updated outside capture/replay.
+Noise generation and TP agreement remain in C++ preparation so replay never freezes the random input. Random, mixed, and
+temperature-scaled sampling uses eager execution with the native fast paths: greedy skips `exp`, all-random skips one-hot
+construction, only mixed batches use `where`, and absent temperatures skip scaling. Penalties, filters, and JSON grammar
+remain target-verification responsibilities.
+
+Multi-DP support does not introduce upstream execution plans or new RPC fields. Python Runners still choose execution modes:
+
+- The DFlash2 decoder Model admits only expanded inputs marked `is_dflash_proposal`. The backend rejects non-expanded
+  draft prefill inputs as unsupported, so startup warmup runs eagerly rather than sending 16-request, 128-token inputs
+  through the ordinary decode row-layout check. Strict target layout validation and the existing backend/Model
+  short-circuit order remain unchanged.
+- The decoder retains existing DP token counts for shared bucket selection and the existing DP admission agreement.
+- The sampling Runner coordinates its own admission. If any active shard fails the greedy, temperature, or other
+  sampling conditions, sampling runs eagerly on every active shard without changing decoder admission. A shard with
+  no sampling work uses `skip_execution` to vote yes without validating absent sampling inputs or launching either
+  eager forward or graph replay.
+- Agreement reuses the host-store rendezvous in `dp_all_true`, not a new NPU collective or device-scalar readback.
+  Host waiting still has a cost, so this does not establish unchanged prelaunch overlap or throughput. Other Pipelines
+  do not enable this sampling coordination by default.
+
+The worker no longer owns a DFlash2 draft ACL Graph. Python execution returns proposals directly; non-Python models retain
+native sampling. NPU Python DFlash2 is no longer pinned to eager by `requires_eager_execution`; ordinary DFlash and native
+paths retain their existing gates. The decoder reuses `DecodeAclGraphRunner` input management and capture logic. XFIA uses the proposal
+marker to retain per-position sliding-window boundaries after graph metadata expands block tables to token rows, rather
+than treating those rows as independent single-token requests.
+Previous-step context writes and current-step device input preparation remain outside the draft graph.
+Capture boundaries are a separate optimization, not a reason to defer context writes to the next step.

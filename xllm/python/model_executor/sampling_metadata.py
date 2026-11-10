@@ -29,6 +29,9 @@ if TYPE_CHECKING:
 
 class SamplingParameters(Protocol):
     all_greedy_sample: bool
+    all_random_sample: bool
+    do_sample: torch.Tensor | None
+    temperatures: torch.Tensor | None
     selected_token_idxes: torch.Tensor | None
     sample_idxes: torch.Tensor | None
     logprobs: bool
@@ -41,6 +44,7 @@ class ModelSamplingInput(Protocol):
     return_probs: bool
     return_confidence: bool
     is_unconstrained_greedy: bool
+    gumbel_noise: torch.Tensor | None
 
 
 def prepare_sampling_input(

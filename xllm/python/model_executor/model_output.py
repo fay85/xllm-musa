@@ -26,6 +26,22 @@ class DraftProposal:
 
 
 @dataclass
+class DraftCandidates:
+    """Request-major candidate IDs and transition scores before path sampling."""
+
+    token_ids: torch.Tensor
+    edge_logits: torch.Tensor
+
+
+@dataclass
+class DraftDecoderOutput:
+    """Internal decoder-stage output; not the native worker's ModelOutput."""
+
+    hidden_states: torch.Tensor
+    candidates: DraftCandidates | None = None
+
+
+@dataclass
 class ModelOutput:
     draft_proposal: DraftProposal | None = None
     draft_confidence_probs: torch.Tensor | None = None

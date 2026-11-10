@@ -8,6 +8,76 @@ from pathlib import Path
 
 @unittest.skipUnless(shutil.which("cmake") and shutil.which("ctest"), "CMake and CTest are required")
 class CpuOnlyTestRegistrationTest(unittest.TestCase):
+    def test_multiline_cases_are_registered_and_refreshed_after_source_changes(self) -> None:
+        repo_root = Path(__file__).resolve().parents[2]
+        with tempfile.TemporaryDirectory() as temp_dir:
+            source = Path(temp_dir)
+            build = source / "build"
+            test_source = source / "multiline_test.cpp"
+            declarations = """#define TEST(...)
+#define TEST_F(...)
+#define TEST_P(...)
+#define TYPED_TEST(...)
+#define TYPED_TEST_P(...)
+TEST(
+    MultilineSuite,
+    Basic)
+TEST_F(MultilineFixture,
+       Fixture)
+TEST_P(MultilineParam,
+       Parameter)
+TYPED_TEST(MultilineTyped,
+           Typed)
+TYPED_TEST_P(MultilineTypedParam,
+             TypedParameter)
+TEST(DisabledSuite,
+     DISABLED_Basic)
+int main() { return 0; }
+"""
+            test_source.write_bytes(declarations.replace("\n", "\r\n").replace("    ", "\t").encode())
+            (source / "CMakeLists.txt").write_text(
+                f"""cmake_minimum_required(VERSION 3.18)
+project(multiline_test_contract LANGUAGES CXX)
+enable_testing()
+include(GoogleTest)
+list(APPEND CMAKE_MODULE_PATH "{repo_root / "cmake"}")
+include(cc_test)
+set(BUILD_TESTING ON)
+add_custom_target(all_tests)
+cc_test(NAME multiline_test CPU_ONLY RUN_SERIAL SRCS multiline_test.cpp ENVIRONMENT "EXAMPLE=value")
+"""
+            )
+            subprocess.run(["cmake", "-S", str(source), "-B", str(build)], check=True, capture_output=True, text=True)
+            expected = {
+                "MultilineSuite.Basic",
+                "MultilineFixture.Fixture",
+                "*/MultilineParam.Parameter/*",
+                "MultilineTyped/*.Typed",
+                "*/MultilineTypedParam/*.TypedParameter",
+                "DisabledSuite.Basic",
+            }
+            for updated in (False, True):
+                with self.subTest(updated=updated):
+                    if updated:
+                        with test_source.open("a") as output:
+                            output.write("TEST(MultilineSuite,\n     AddedAfterConfigure)\n")
+                        expected.add("MultilineSuite.AddedAfterConfigure")
+                        subprocess.run(["cmake", "--build", str(build)], check=True, capture_output=True, text=True)
+                    result = subprocess.run(
+                        ["ctest", "--test-dir", str(build), "--show-only=json-v1"],
+                        check=True,
+                        capture_output=True,
+                        text=True,
+                    )
+                    tests = {test["name"]: test for test in json.loads(result.stdout)["tests"]}
+                    self.assertEqual(set(tests), expected)
+                    for name, test in tests.items():
+                        properties = {item["name"]: item["value"] for item in test["properties"]}
+                        self.assertEqual(properties["LABELS"], ["cpu", "target:multiline_test"])
+                        self.assertEqual(properties["ENVIRONMENT"], ["EXAMPLE=value"])
+                        self.assertTrue(properties["RUN_SERIAL"])
+                        self.assertEqual(properties.get("DISABLED", False), name == "DisabledSuite.Basic")
+
     def test_cpu_only_preserves_cases_without_npu_bootstrap(self) -> None:
         repo_root = Path(__file__).resolve().parents[2]
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -214,6 +284,7 @@ endforeach()
         repo_root = Path(__file__).resolve().parents[2]
         cpu_target = "qwen3_5_gated_delta_net_indices_test"
         cpu_layer_targets = (
+            "npu_attention_test",
             "deepseek_v4_eplb_load_utils_test",
             "deepseek_v4_eplb_test",
         )
@@ -284,7 +355,9 @@ file(WRITE "${{CMAKE_BINARY_DIR}}/npu_layers.links" "${{links}}")
                     if test in indices_tests:
                         self.assertIn("cpu", properties.get("LABELS", []))
                         self.assertTrue(properties.get("RUN_SERIAL"))
-                    elif test["name"].startswith(("DeepseekV4EplbTest.", "DeepseekV4EplbLoadUtilsTest.")):
+                    elif test["name"].startswith(
+                        ("AttentionTest.", "DeepseekV4EplbTest.", "DeepseekV4EplbLoadUtilsTest.")
+                    ):
                         self.assertIn("cpu", properties.get("LABELS", []))
                         self.assertFalse(properties.get("RUN_SERIAL", False))
                     else:
@@ -424,10 +497,19 @@ file(WRITE "${{CMAKE_BINARY_DIR}}/npu_layers.links" "${{links}}")
                 test_source = source / "xllm/core/framework" / relative_source
                 test_source.parent.mkdir(parents=True, exist_ok=True)
                 test_source.touch()
-            for relative_source in ("encoder_executor.cpp", "draft_model_config.cpp"):
+            for relative_source in (
+                "encoder_executor.cpp",
+                "dit_executor.cpp",
+                "draft_model_config.cpp",
+                "decode_graph_bucket.cpp",
+            ):
                 runtime_source = source / "xllm/core/runtime" / relative_source
                 runtime_source.parent.mkdir(parents=True, exist_ok=True)
                 runtime_source.touch()
+            for relative_source in ("async_response_processor.cpp", "profile/decode_graph_warmup_plan.cpp"):
+                scheduler_source = source / "xllm/core/scheduler" / relative_source
+                scheduler_source.parent.mkdir(parents=True, exist_ok=True)
+                scheduler_source.touch()
             (source / "CMakeLists.txt").write_text(
                 f"""cmake_minimum_required(VERSION 3.24)
 project(host_metadata_test_contract LANGUAGES CXX)
@@ -439,6 +521,11 @@ set(USE_NPU ON)
 set(XLLM_TESTS_DIR "{repo_root / "tests"}")
 add_custom_target(all_tests)
 add_custom_target(brpc-static)
+foreach(dependency runtime batch request request_timing kv_cache block block_hasher
+    provider_contract prefix_cache prefix_cache_journal)
+  add_library(${{dependency}} STATIC IMPORTED)
+  set_target_properties(${{dependency}} PROPERTIES IMPORTED_LOCATION "${{CMAKE_BINARY_DIR}}/lib${{dependency}}.a")
+endforeach()
 foreach(dependency GTest::gtest GTest::gtest_main glog::glog Python::Python
     proto::xllm_proto nlohmann_json::nlohmann_json absl::strings absl::time
     absl::synchronization absl::random_random OpenSSL::SSL OpenSSL::Crypto

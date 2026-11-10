@@ -32,7 +32,7 @@ from xllm.python.model_executor.forward_context import (
 )
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
-from xllm.python.model_executor.runners.acl_graph_capture import capture_acl_graph
+from xllm.python.model_executor.runners.acl_graph_capture import capture_acl_graph, device_capture_lock
 from xllm.python.model_executor.runners.base import BaseRunner, ModelExecutionOutput
 
 
@@ -121,43 +121,46 @@ class AclGraphRunner(BaseRunner):
                     tensor.record_stream(self._stream)
             entry = self._graphs.get(key)
             if entry is None:
-                static_batch = input_batch.bind_graph_inputs(
-                    input_ids.new_zeros(rows),
-                    positions.new_zeros(rows),
-                    torch.zeros(rows, dtype=torch.bool, device=self.device),
-                )
-                static_embedding = (
-                    input_embedding.new_zeros((rows, *input_embedding.shape[1:]))
-                    if input_embedding is not None
-                    else None
-                )
-                contexts = {}
-                for builder in self.execution_metadata_builders:
-                    if builder.metadata_type in contexts:
-                        raise RuntimeError(f"duplicate execution metadata builder for {builder.metadata_type.__name__}")
-                    contexts[builder.metadata_type] = builder.allocate_persistent(static_batch, metadata)
-                context = ForwardContext(
-                    None,
-                    self.device,
-                    metadata,
-                    [],
-                    execution_contexts=contexts,
-                    execution_state=AclGraphExecutionState({}),
-                    eplb=eplb,
-                )
-                self._update_inputs(static_batch, context, input_batch, metadata, static_embedding, input_embedding)
-                for _ in range(3):
-                    self._forward(static_batch, context, static_embedding)
-                self._stream.synchronize()
-                if self._graph_pool is None:
-                    self._graph_pool = torch.npu.graph_pool_handle()
-                tasks: list[AclGraphTask] = []
-                capture_context = replace(context, acl_graph=AclGraphCaptureContext(self._stream, tasks))
-                graph, output = capture_acl_graph(
-                    lambda: self._forward(static_batch, capture_context, static_embedding),
-                    self._stream,
-                    pool=self._graph_pool,
-                )
+                with device_capture_lock(self.device):
+                    static_batch = input_batch.bind_graph_inputs(
+                        input_ids.new_zeros(rows),
+                        positions.new_zeros(rows),
+                        torch.zeros(rows, dtype=torch.bool, device=self.device),
+                    )
+                    static_embedding = (
+                        input_embedding.new_zeros((rows, *input_embedding.shape[1:]))
+                        if input_embedding is not None
+                        else None
+                    )
+                    contexts = {}
+                    for builder in self.execution_metadata_builders:
+                        if builder.metadata_type in contexts:
+                            raise RuntimeError(
+                                f"duplicate execution metadata builder for {builder.metadata_type.__name__}"
+                            )
+                        contexts[builder.metadata_type] = builder.allocate_persistent(static_batch, metadata)
+                    context = ForwardContext(
+                        None,
+                        self.device,
+                        metadata,
+                        [],
+                        execution_contexts=contexts,
+                        execution_state=AclGraphExecutionState({}),
+                        eplb=eplb,
+                    )
+                    self._update_inputs(static_batch, context, input_batch, metadata, static_embedding, input_embedding)
+                    for _ in range(3):
+                        self._forward(static_batch, context, static_embedding)
+                    self._stream.synchronize()
+                    if self._graph_pool is None:
+                        self._graph_pool = torch.npu.graph_pool_handle()
+                    tasks: list[AclGraphTask] = []
+                    capture_context = replace(context, acl_graph=AclGraphCaptureContext(self._stream, tasks))
+                    graph, output = capture_acl_graph(
+                        lambda: self._forward(static_batch, capture_context, static_embedding),
+                        self._stream,
+                        pool=self._graph_pool,
+                    )
                 static_batch = replace(static_batch, hidden_states=None)
                 entry = _GraphEntry(static_batch, static_embedding, context, graph, output, tasks)
                 self._graphs[key] = entry

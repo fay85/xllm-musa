@@ -103,18 +103,20 @@ def test_speculative_linear_graph_rejects_missing_acceptance_on_first_real_batch
         runner._fill_entry(entry, input_ids, input_ids, metadata, batch_size=1, input_embedding=None)
 
 
-@pytest.mark.parametrize("num_decoding_tokens,linear", [(1, True), (4, False)])
-def test_empty_non_recurrent_or_non_speculative_graph_does_not_require_acceptance(
-    num_decoding_tokens: int, linear: bool
+@pytest.mark.parametrize("num_decoding_tokens,linear", [(1, True), (4, False), (8, False)])
+@pytest.mark.parametrize("starts_empty", [True, False])
+def test_non_recurrent_or_non_speculative_graph_does_not_require_acceptance_across_dp_transitions(
+    num_decoding_tokens: int, linear: bool, starts_empty: bool
 ) -> None:
     runner = _linear_runner(num_decoding_tokens, linear)
     input_ids = torch.ones(1, dtype=torch.int32)
-    metadata = _decode_metadata(True)
+    metadata = _decode_metadata(starts_empty)
     entry = runner._allocate_entry(4, input_ids, input_ids, metadata)
     assert entry.static_metadata.num_accepted_tokens is None
     with patch("xllm.python.model_executor.runners.decode_acl_graph.kernels.update_decode_graph_metadata", create=True):
-        for metadata in (_decode_metadata(True), _decode_metadata(False)):
-            runner._fill_entry(entry, input_ids, input_ids, metadata, batch_size=1, input_embedding=None)
+        for current_metadata in (metadata, _decode_metadata(False), _decode_metadata(True), _decode_metadata(False)):
+            runner._fill_entry(entry, input_ids, input_ids, current_metadata, batch_size=1, input_embedding=None)
+            assert entry.static_metadata.num_accepted_tokens is None
 
 
 def test_dsa_graph_empty_rank_uses_reserved_block_zero() -> None:

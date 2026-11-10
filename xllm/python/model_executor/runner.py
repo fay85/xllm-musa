@@ -21,6 +21,7 @@ import torch
 import torch.nn as nn
 
 from scripts.logger import logger
+from xllm.python import distributed
 from xllm.python.attention.backend import AttentionBackend, AttentionMetadata
 from xllm.python.model_executor.execution_context import ExecutionMetadataBuilder
 from xllm.python.model_executor.model_input import ModelInput
@@ -51,6 +52,7 @@ class Runner:
         *,
         attention_backend: AttentionBackend | None = None,
         restore_history: Callable[[AttentionMetadata], None] | None = None,
+        coordinate_graph_execution: bool = False,
     ) -> None:
         self.model = model
         self.metadata_builders = tuple(metadata_builders)
@@ -65,6 +67,7 @@ class Runner:
         self.execution_mode: str | None = None
         self.last_graph_rows: int | None = None
         self.restore_history = restore_history
+        self._graph_dp_size = int(config.model_config.get("dp_size", 1)) if coordinate_graph_execution else 1
 
     def _create_graph_runner(
         self, options: RunnerConfig, attention_backend: AttentionBackend | None
@@ -140,10 +143,17 @@ class Runner:
             )
         return None
 
-    def execute(self, inputs: ModelInput) -> ModelExecutionOutput:
+    def execute(self, inputs: ModelInput, *, skip_execution: bool = False) -> ModelExecutionOutput:
+        """Run a stage, or only join its admission when the pipeline has no local work."""
         self.last_graph_rows = None
         graph = self.graph_runner
-        if graph is not None and graph.can_execute(inputs):
+        use_graph = graph is not None and (skip_execution or graph.can_execute(inputs))
+        if graph is not None and self._graph_dp_size > 1:
+            use_graph = distributed.dp_all_true(use_graph, graph.device, self._graph_dp_size)
+        if skip_execution:
+            self.execution_mode = None
+            return inputs.input_ids
+        if use_graph:
             if inputs.layer_load_context is not None:
                 inputs.layer_load_context.synchronize_all_layers()
             graph.warmup(inputs.input_ids, inputs.positions, inputs.metadata, inputs.input_embedding)

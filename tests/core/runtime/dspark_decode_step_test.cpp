@@ -30,6 +30,7 @@ limitations under the License.
 #include "core/framework/parallel_state/process_group.h"
 #include "core/framework/sampling/json_object_grammar.h"
 #include "core/framework/speculative/spec_input_builder.h"
+#include "layers/common/attention_metadata.h"
 #include "platform/device.h"
 #include "runtime/dflash/dflash2_worker_impl.h"
 #include "runtime/dspark_worker_impl.h"
@@ -55,6 +56,10 @@ ConstraintState make_json_state(const JsonObjectGrammar& grammar) {
 
 class DFlashWorkerImplTestPeer final {
  public:
+  static void set_context_hidden_size(DFlashWorkerImpl& worker, int32_t size) {
+    worker.expected_context_hidden_size_ = size;
+  }
+
   static ForwardInput prepare_query(DFlashWorkerImpl& worker,
                                     const ForwardInput& input) {
     worker.mask_token_id_ = 4;
@@ -74,6 +79,73 @@ class DFlashWorkerImplTestPeer final {
         input, tokens_host, ready, validation);
     CHECK_EQ(worker.compute_stream_->synchronize(), 0);
     return validation;
+  }
+};
+
+class DFlash2WorkerImplTestPeer final {
+ public:
+  static void configure_execution(DFlash2WorkerImpl& worker,
+                                  std::unique_ptr<LLMWorkerImpl> draft,
+                                  std::unique_ptr<WorkerImpl> target,
+                                  std::shared_ptr<EmbeddingCache> cache) {
+    worker.draft_impl_ = std::move(draft);
+    worker.impl_ = std::move(target);
+    worker.context_ = worker.impl_->context_;
+    worker.dtype_ = worker.impl_->dtype();
+    worker.embedding_cache_ = std::move(cache);
+    worker.mask_token_id_ = 31;
+    worker.enable_fused_kernel_ = false;
+    worker.async_output_enabled_ =
+        worker.enable_schedule_overlap() &&
+        !worker.options_.enable_adaptive_speculative_decode();
+    worker.draft_prelaunch_enabled_for_init_ = worker.async_output_enabled_;
+    worker.proposal_xfia_enabled_ = true;
+  }
+
+  static void set_prelaunch_enabled(DFlash2WorkerImpl& worker, bool enabled) {
+    worker.draft_prelaunch_enabled_for_init_ = enabled;
+  }
+
+  static bool can_prelaunch_draft_for_this_step(const DFlash2WorkerImpl& worker,
+                                                const ForwardInput& input) {
+    return worker.can_prelaunch_draft_for_this_step(input);
+  }
+
+  static std::optional<ForwardOutput> run_decode_step(
+      DFlash2WorkerImpl& worker,
+      const ForwardInput& input) {
+    return worker.step_decode(input);
+  }
+
+  static void install_pending_context(DFlash2WorkerImpl& worker,
+                                      ForwardInput identity,
+                                      const torch::Tensor& accepted_device,
+                                      const torch::Tensor& accepted_host,
+                                      const torch::Tensor& embeddings,
+                                      const torch::Tensor& positions,
+                                      StreamEventPtr ready,
+                                      std::shared_ptr<EmbeddingCache> cache) {
+    worker.embedding_cache_ = std::move(cache);
+    worker.pending_context_.emplace();
+    worker.pending_context_->identity = std::move(identity);
+    worker.pending_context_->accepted_device = accepted_device;
+    worker.pending_context_->accepted_host = accepted_host;
+    worker.pending_context_->embeddings = embeddings;
+    worker.pending_context_->base_positions = positions;
+    worker.pending_context_->d2h_ready = ready;
+    worker.pending_context_->context_ready = std::move(ready);
+  }
+
+  static bool has_pending(const DFlash2WorkerImpl& worker) {
+    return worker.pending_context_.has_value();
+  }
+
+  static bool async_output_enabled(const DFlash2WorkerImpl& worker) {
+    return worker.async_output_enabled_;
+  }
+
+  static void commit_pending_context(DFlash2WorkerImpl& worker) {
+    worker.commit_pending_context();
   }
 };
 
@@ -991,17 +1063,17 @@ TEST(DSparkDecodeStepTest, PrepareQueryClearsXgrammarDraftMaskLikeJsonStates) {
         .block_size(16);
     std::unique_ptr<DFlashWorkerImpl> worker;
     if (algorithm == "DSpark") {
-      worker = std::make_unique<DSparkWorkerImpl>(
-          parallel_args,
-          device.unwrap(),
-          options,
-          /*worker_type=*/WorkerType::LLM);
+      worker =
+          std::make_unique<DSparkWorkerImpl>(parallel_args,
+                                             device.unwrap(),
+                                             options,
+                                             /*worker_type=*/WorkerType::LLM);
     } else {
-      worker = std::make_unique<DFlash2WorkerImpl>(
-          parallel_args,
-          device.unwrap(),
-          options,
-          /*worker_type=*/WorkerType::LLM);
+      worker =
+          std::make_unique<DFlash2WorkerImpl>(parallel_args,
+                                              device.unwrap(),
+                                              options,
+                                              /*worker_type=*/WorkerType::LLM);
     }
     // An XGrammar batch carries its constraint as an installed bitmask with
     // no builtin JSON states; the draft query must drop it exactly like the
@@ -1163,21 +1235,25 @@ class ContextOnlyWorker final : public LLMWorkerImpl {
 };
 
 struct DecodeStepTrace {
+  bool pipeline_output = false;
   std::vector<bool> pending_at_draft;
   std::vector<torch::Tensor> draft_tokens;
   std::vector<torch::Tensor> draft_positions;
   std::vector<torch::Tensor> draft_slots;
   std::vector<torch::Tensor> context_slots;
+  std::vector<std::shared_ptr<layer::AttentionMetadata>> target_metadata;
 };
 
 class DecodeStepDraftModel final : public CausalLM {
  public:
   DecodeStepDraftModel(torch::TensorOptions options,
                        std::shared_ptr<DecodeStepTrace> trace,
-                       std::function<bool()> has_pending)
+                       std::function<bool()> has_pending,
+                       bool dflash2 = false)
       : options_(std::move(options)),
         trace_(std::move(trace)),
-        has_pending_(std::move(has_pending)) {}
+        has_pending_(std::move(has_pending)),
+        dflash2_(dflash2) {}
 
   ModelOutput forward(const torch::Tensor& token_ids,
                       const torch::Tensor& positions,
@@ -1188,17 +1264,56 @@ class DecodeStepDraftModel final : public CausalLM {
     trace_->draft_positions.emplace_back(positions.clone());
     trace_->draft_slots.emplace_back(
         params.attention.device.new_cache_slots.clone());
+    if (dflash2_ && !trace_->pipeline_output) {
+      return ModelOutput(token_ids.to(torch::kFloat)
+                             .unsqueeze(1)
+                             .expand({-1, 4})
+                             .contiguous());
+    }
     torch::Tensor anchors =
         token_ids.view({params.meta.num_sequences, -1}).select(1, 0);
     ModelOutput output;
     output.draft_proposal.emplace(
         torch::stack({anchors + 1, anchors + 2}, 1).to(torch::kLong));
+    if (dflash2_) {
+      CHECK(params.sampling.has_value());
+      CHECK(params.sampling->parameters.return_probs);
+      CHECK_EQ(params.sampling->gumbel_noise.sizes(),
+               torch::IntArrayRef({anchors.numel(), 2, 1}));
+      auto tokens = output.draft_proposal->token_ids();
+      auto probabilities = torch::zeros({anchors.numel(), 2, 64},
+                                        tokens.options().dtype(torch::kFloat));
+      probabilities.scatter_(2, tokens.unsqueeze(2), 1.0);
+      output.draft_proposal.emplace(std::move(tokens),
+                                    std::move(probabilities));
+    }
     return output;
   }
 
-  torch::Tensor logits(const torch::Tensor&, const torch::Tensor&) override {
-    LOG(FATAL) << "The test draft returns a completed proposal.";
-    return {};
+  torch::Tensor logits(const torch::Tensor& hidden,
+                       const torch::Tensor& selected) override {
+    CHECK(dflash2_);
+    CHECK(!trace_->pipeline_output);
+    return torch::zeros({selected.numel(), 64}, hidden.options());
+  }
+
+  torch::Tensor logits(const torch::Tensor& hidden,
+                       const torch::Tensor& selected,
+                       torch::Tensor& out_hidden) override {
+    out_hidden = hidden.index_select(0, selected.to(torch::kLong));
+    return logits(hidden, selected);
+  }
+
+  DFlash2CandidateOutput dflash2_candidates(
+      const torch::Tensor& hidden,
+      const torch::Tensor& logits,
+      const torch::Tensor& anchors) override {
+    CHECK(!trace_->pipeline_output);
+    const int64_t batch_size = anchors.numel();
+    const int64_t num_steps = logits.size(1);
+    torch::Tensor offsets = torch::arange(1, num_steps + 1, anchors.options());
+    return {(anchors.unsqueeze(1) + offsets).unsqueeze(2),
+            torch::zeros({batch_size, num_steps, 1, 1}, hidden.options())};
   }
 
   ModelOutput write_context_kv(const torch::Tensor& hidden,
@@ -1220,6 +1335,7 @@ class DecodeStepDraftModel final : public CausalLM {
   torch::TensorOptions options_;
   std::shared_ptr<DecodeStepTrace> trace_;
   std::function<bool()> has_pending_;
+  bool dflash2_ = false;
 };
 
 class DecodeStepDraftWorker final : public LLMWorkerImpl {
@@ -1228,7 +1344,8 @@ class DecodeStepDraftWorker final : public LLMWorkerImpl {
                         const torch::Device& device,
                         const runtime::Options& options,
                         std::shared_ptr<DecodeStepTrace> trace,
-                        std::function<bool()> has_pending)
+                        std::function<bool()> has_pending,
+                        bool dflash2 = false)
       : LLMWorkerImpl(parallel_args, device, options) {
     dtype_ = torch::kFloat;
     auto tensor_options = torch::TensorOptions().device(device).dtype(dtype_);
@@ -1236,10 +1353,12 @@ class DecodeStepDraftWorker final : public LLMWorkerImpl {
     args.model_type("dspark_decode_step_test")
         .n_layers(1)
         .hidden_size(4)
-        .draft_query_uses_decode(true);
+        .draft_query_uses_decode(!dflash2)
+        .dflash2_selector_top_k(1)
+        .max_position_embeddings(8192);
     context_ = ModelContext(parallel_args, args, QuantArgs(), tensor_options);
     model_ = std::make_unique<DecodeStepDraftModel>(
-        tensor_options, std::move(trace), std::move(has_pending));
+        tensor_options, std::move(trace), std::move(has_pending), dflash2);
     model_executor_ =
         std::make_unique<Executor>(model_.get(), args, device, options);
     is_spec_draft_ = true;
@@ -1252,8 +1371,10 @@ class DecodeStepTargetWorker final : public LLMWorkerImpl {
  public:
   DecodeStepTargetWorker(const ParallelArgs& parallel_args,
                          const torch::Device& device,
-                         const runtime::Options& options)
-      : LLMWorkerImpl(parallel_args, device, options) {
+                         const runtime::Options& options,
+                         std::shared_ptr<DecodeStepTrace> trace = nullptr)
+      : LLMWorkerImpl(parallel_args, device, options),
+        trace_(std::move(trace)) {
     dtype_ = torch::kFloat;
     ModelArgs args;
     args.model_type("dspark_decode_step_test").n_layers(1).hidden_size(4);
@@ -1271,6 +1392,9 @@ class DecodeStepTargetWorker final : public LLMWorkerImpl {
       Stream& compute_stream) override {
     auto guard = compute_stream.set_stream_guard();
     CHECK(compute_stream.wait_event(input.metadata_ready_event));
+    if (trace_ != nullptr) {
+      trace_->target_metadata.emplace_back(input.input_params.attn_metadata);
+    }
     ForwardOutput output;
     output.sample_output.next_tokens = input.token_ids.to(torch::kLong) + 1;
     output.logits =
@@ -1286,6 +1410,9 @@ class DecodeStepTargetWorker final : public LLMWorkerImpl {
     output.ready_event = compute_stream.record_event();
     return output;
   }
+
+ private:
+  std::shared_ptr<DecodeStepTrace> trace_;
 };
 
 class DSparkDecodeExecutionTest : public ::testing::Test {
@@ -1497,6 +1624,298 @@ TEST_F(DSparkDecodeExecutionTest, PrelaunchFallsBackForPenaltyAndRecovers) {
   EXPECT_EQ(states[1].token_id, 23);
   DSparkWorkerImplTestPeer::commit_pending_context(worker);
   EXPECT_EQ(trace->context_slots.size(), 3);
+}
+
+class DFlash2DecodeExecutionTest : public DSparkDecodeExecutionTest,
+                                   public ::testing::WithParamInterface<bool> {
+};
+
+TEST_P(DFlash2DecodeExecutionTest, PrelaunchFallbackAndReorderedBatch) {
+  const ParallelArgs parallel_args(0, 1, nullptr);
+  runtime::Options options;
+  options.enable_graph(false)
+      .backend("llm")
+      .enable_schedule_overlap(true)
+      .enable_speculative_decode(true)
+      .speculative_algorithm("dflash2")
+      .draft_sampling_mode("greedy")
+      .num_speculative_tokens(2)
+      .block_size(4);
+  DFlash2WorkerImpl worker(parallel_args,
+                           device_.unwrap(),
+                           options,
+                           /*worker_type=*/WorkerType::LLM);
+  auto cache = std::make_shared<EmbeddingCache>(2, true);
+  auto trace = std::make_shared<DecodeStepTrace>();
+  trace->pipeline_output = GetParam();
+  trace->pending_at_draft.reserve(3);
+  trace->draft_tokens.reserve(3);
+  trace->draft_positions.reserve(3);
+  trace->draft_slots.reserve(3);
+  trace->context_slots.reserve(3);
+  runtime::Options leaf_options = options;
+  leaf_options.enable_schedule_overlap(false);
+  trace->target_metadata.reserve(3);
+  DFlash2WorkerImplTestPeer::configure_execution(
+      worker,
+      std::make_unique<DecodeStepDraftWorker>(
+          parallel_args,
+          device_.unwrap(),
+          leaf_options,
+          trace,
+          [&worker]() {
+            return DFlash2WorkerImplTestPeer::has_pending(worker);
+          },
+          true),
+      std::make_unique<DecodeStepTargetWorker>(
+          parallel_args, device_.unwrap(), leaf_options, trace),
+      cache);
+
+  ForwardInput previous;
+  previous.input_params.meta.num_sequences = 2;
+  previous.input_params.meta.batch_forward_type = BatchForwardType::DECODE;
+  previous.input_params.embedding.embedding_ids = {0, 1};
+  previous.input_params.embedding.request_ids = {"first", "second"};
+  previous.sample_sequence_ids = {"first-sequence", "second-sequence"};
+  previous.positions_host = torch::tensor({2, 10}, torch::kInt);
+  previous.input_params.attention.host.block_tables = torch::tensor(
+      {{1, 3, 5, 7, 9, 11, 13, 15}, {2, 4, 6, 8, 10, 12, 14, 16}}, torch::kInt);
+  torch::Tensor accepted_host =
+      torch::tensor({{2, 3, 4}, {12, 13, 14}}, torch::kLong);
+  torch::Tensor accepted_device = accepted_host.to(device_.unwrap());
+  torch::Tensor embeddings =
+      torch::zeros({2, 3, 4}, torch::TensorOptions().device(device_.unwrap()));
+  torch::Tensor base_positions = previous.positions_host.to(device_.unwrap());
+  auto ready = device_.current_stream()->record_event();
+  ASSERT_NE(ready, nullptr);
+  DFlash2WorkerImplTestPeer::install_pending_context(worker,
+                                                     previous,
+                                                     accepted_device,
+                                                     accepted_host,
+                                                     embeddings,
+                                                     base_positions,
+                                                     ready,
+                                                     cache);
+
+  const std::vector<torch::Tensor> scheduler_positions = {
+      torch::tensor({3, 11}, torch::kInt),
+      torch::tensor({6, 14}, torch::kInt),
+      torch::tensor({17, 9}, torch::kInt)};
+  const std::vector<torch::Tensor> expected_anchors = {
+      torch::tensor({4, 14}, torch::kLong),
+      torch::tensor({7, 17}, torch::kLong),
+      torch::tensor({20, 10}, torch::kLong)};
+  std::vector<ForwardInput> step_inputs;
+  std::vector<ForwardOutput> outputs;
+  step_inputs.reserve(scheduler_positions.size());
+  outputs.reserve(scheduler_positions.size());
+  for (size_t step = 0; step < scheduler_positions.size(); ++step) {
+    SCOPED_TRACE(step);
+    ForwardInput input = previous;
+    input.input_params.meta.batch_id = static_cast<uint64_t>(step + 1);
+    input.token_ids_host = torch::full({2}, -1, torch::kInt);
+    input.positions_host = scheduler_positions[step];
+    input.token_ids = input.token_ids_host.to(device_.unwrap());
+    input.positions = input.positions_host.to(device_.unwrap());
+    input.input_params.attention.host.q_seq_lens = {1, 1};
+    input.input_params.attention.host.kv_seq_lens = {
+        input.positions_host[0].item<int32_t>() + 1,
+        input.positions_host[1].item<int32_t>() + 1};
+    input.input_params.meta.kv_max_seq_len =
+        input.positions_host.max().item<int32_t>() + 1;
+    ExecutionBatchMetadata& execution_batch =
+        input.input_params.execution_batch;
+    execution_batch.num_reqs = 2;
+    execution_batch.num_tokens = 2;
+    execution_batch.num_scheduled_tokens = {1, 1};
+    execution_batch.num_computed_tokens = {
+        input.positions_host[0].item<int32_t>(),
+        input.positions_host[1].item<int32_t>()};
+    execution_batch.query_start_loc = {0, 1, 2};
+    execution_batch.is_prefilling = {0, 0};
+    input.sampling_params.all_greedy_sample = true;
+    input.sampling_params.do_sample =
+        torch::zeros({2}, input.token_ids.options().dtype(torch::kBool));
+    DFlash2WorkerImplTestPeer::set_prelaunch_enabled(worker, step != 1);
+    if (step == 2) {
+      input.input_params.embedding.embedding_ids = {1, 0};
+      input.input_params.embedding.request_ids = {"second", "first"};
+      input.sample_sequence_ids = {"second-sequence", "first-sequence"};
+      input.input_params.attention.host.block_tables =
+          previous.input_params.attention.host.block_tables.flip({0});
+    }
+    input.input_params.attention.device.block_tables =
+        input.input_params.attention.host.block_tables.to(device_.unwrap());
+    input.metadata_ready_event = device_.current_stream()->record_event();
+    EXPECT_EQ(DFlash2WorkerImplTestPeer::can_prelaunch_draft_for_this_step(
+                  worker, input),
+              step != 1);
+    auto output = DFlash2WorkerImplTestPeer::run_decode_step(worker, input);
+    ASSERT_TRUE(output.has_value());
+    ASSERT_NE(output->ready_event, nullptr);
+    EXPECT_TRUE(output->requires_host_retirement);
+    EXPECT_TRUE(output->sample_output.next_tokens.device().is_cpu());
+    ASSERT_EQ(trace->pending_at_draft.size(), step + 1);
+    EXPECT_EQ(trace->pending_at_draft.back(), step != 1);
+    ASSERT_EQ(trace->context_slots.size(), step + 1);
+    ASSERT_EQ(trace->target_metadata.size(), step + 1);
+    EXPECT_EQ(trace->target_metadata.back() != nullptr, step != 1);
+    EXPECT_TRUE(DFlash2WorkerImplTestPeer::has_pending(worker));
+    EXPECT_TRUE(DFlash2WorkerImplTestPeer::async_output_enabled(worker));
+    const auto states =
+        cache->read_decode_states(input.input_params.embedding.embedding_ids,
+                                  input.input_params.embedding.request_ids);
+    ASSERT_EQ(states.size(), 2);
+    for (size_t row = 0; row < states.size(); ++row) {
+      EXPECT_EQ(states[row].token_id,
+                expected_anchors[step][row].item<int64_t>());
+      EXPECT_EQ(states[row].position_offset, 2);
+    }
+    step_inputs.emplace_back(std::move(input));
+    outputs.emplace_back(std::move(*output));
+  }
+  for (size_t step = 0; step < outputs.size(); ++step) {
+    SCOPED_TRACE(step);
+    ASSERT_TRUE(outputs[step].ready_event->synchronize());
+    torch::Tensor actual_tokens = trace->draft_tokens[step].to(torch::kCPU);
+    EXPECT_TRUE(
+        torch::equal(actual_tokens.view({2, 3}).select(1, 0).to(torch::kLong),
+                     expected_anchors[step]));
+    torch::Tensor expected_positions =
+        (scheduler_positions[step] + 2).unsqueeze(1) +
+        torch::arange(3, torch::kInt).unsqueeze(0);
+    EXPECT_TRUE(
+        torch::equal(trace->draft_positions[step].to(torch::kCPU).view({2, 3}),
+                     expected_positions));
+    torch::Tensor block_indices =
+        torch::floor_divide(expected_positions, 4).to(torch::kLong);
+    const torch::Tensor& block_table =
+        step_inputs[step].input_params.attention.host.block_tables;
+    torch::Tensor expected_slots = block_table.gather(1, block_indices) * 4 +
+                                   expected_positions.remainder(4);
+    EXPECT_TRUE(torch::equal(
+        trace->draft_slots[step].to(torch::kCPU).view({2, 3}), expected_slots));
+    if (trace->target_metadata[step] != nullptr) {
+      EXPECT_TRUE(torch::equal(trace->target_metadata[step]
+                                   ->slot_mapping.to(torch::kCPU)
+                                   .view({2, 3}),
+                               expected_slots));
+      EXPECT_TRUE(torch::equal(trace->target_metadata[step]
+                                   ->kv_seq_lens.to(torch::kCPU)
+                                   .view({2, 3}),
+                               expected_positions + 1));
+    }
+    torch::Tensor context_positions =
+        (scheduler_positions[step] + 2).unsqueeze(1) +
+        torch::arange(3, torch::kInt).unsqueeze(0);
+    torch::Tensor context_block_indices =
+        torch::floor_divide(context_positions, 4).to(torch::kLong);
+    torch::Tensor expected_context_slots =
+        block_table.gather(1, context_block_indices) * 4 +
+        context_positions.remainder(4);
+    EXPECT_TRUE(
+        torch::equal(trace->context_slots[step].to(torch::kCPU).view({2, 3}),
+                     expected_context_slots));
+    torch::Tensor expected_accepted =
+        expected_anchors[step].unsqueeze(1) + torch::arange(1, 4, torch::kLong);
+    EXPECT_TRUE(
+        torch::equal(outputs[step].sample_output.next_tokens.to(torch::kLong),
+                     expected_accepted));
+  }
+  DFlash2WorkerImplTestPeer::commit_pending_context(worker);
+  EXPECT_FALSE(DFlash2WorkerImplTestPeer::has_pending(worker));
+  const auto states = cache->read_decode_states({0, 1}, {"first", "second"});
+  ASSERT_EQ(states.size(), 2);
+  EXPECT_EQ(states[0].token_id, 13);
+  EXPECT_EQ(states[1].token_id, 23);
+  DFlash2WorkerImplTestPeer::commit_pending_context(worker);
+  EXPECT_EQ(trace->context_slots.size(), 3);
+}
+
+TEST_P(DFlash2DecodeExecutionTest, LastStepWritesContextWithoutPrelaunch) {
+  const ParallelArgs parallel_args(0, 1, nullptr);
+  for (const bool overlap : {false, true}) {
+    SCOPED_TRACE(overlap);
+    runtime::Options options;
+    options.enable_graph(false)
+        .backend("llm")
+        .enable_schedule_overlap(overlap)
+        .enable_speculative_decode(true)
+        .speculative_algorithm("dflash2")
+        .draft_sampling_mode("greedy")
+        .num_speculative_tokens(2)
+        .block_size(4);
+    DFlash2WorkerImpl worker(
+        parallel_args, device_.unwrap(), options, WorkerType::LLM);
+    auto cache = std::make_shared<EmbeddingCache>(1, true);
+    auto trace = std::make_shared<DecodeStepTrace>();
+    trace->pipeline_output = GetParam();
+    runtime::Options leaf_options = options;
+    leaf_options.enable_schedule_overlap(false);
+    DFlash2WorkerImplTestPeer::configure_execution(
+        worker,
+        std::make_unique<DecodeStepDraftWorker>(
+            parallel_args,
+            device_.unwrap(),
+            leaf_options,
+            trace,
+            [&worker]() {
+              return DFlash2WorkerImplTestPeer::has_pending(worker);
+            },
+            true),
+        std::make_unique<DecodeStepTargetWorker>(
+            parallel_args, device_.unwrap(), leaf_options),
+        cache);
+    DFlash2WorkerImplTestPeer::set_prelaunch_enabled(worker, false);
+    DFlashWorkerImplTestPeer::set_context_hidden_size(worker, 4);
+    cache->write_mtp_bootstrap_context(
+        0,
+        "request",
+        4,
+        torch::zeros({4}, torch::TensorOptions().device(device_.unwrap())));
+    ForwardInput input;
+    input.token_ids_host = torch::tensor({4}, torch::kInt);
+    input.positions_host = torch::tensor({2}, torch::kInt);
+    input.token_ids = input.token_ids_host.to(device_.unwrap());
+    input.positions = input.positions_host.to(device_.unwrap());
+    input.input_params.meta.batch_forward_type = BatchForwardType::DECODE;
+    input.input_params.meta.num_sequences = 1;
+    input.input_params.meta.q_max_seq_len = 1;
+    input.input_params.meta.kv_max_seq_len = 3;
+    input.input_params.embedding.embedding_ids = {0};
+    input.input_params.embedding.request_ids = {"request"};
+    input.sample_sequence_ids = {"sequence"};
+    input.input_params.attention.host.q_seq_lens = {1};
+    input.input_params.attention.host.kv_seq_lens = {3};
+    input.input_params.attention.host.block_tables =
+        torch::tensor({{1, 2}}, torch::kInt);
+    input.input_params.attention.device.block_tables =
+        input.input_params.attention.host.block_tables.to(device_.unwrap());
+    auto& execution = input.input_params.execution_batch;
+    execution.num_reqs = 1;
+    execution.num_tokens = 1;
+    execution.num_scheduled_tokens = {1};
+    execution.num_computed_tokens = {2};
+    execution.query_start_loc = {0, 1};
+    execution.is_prefilling = {0};
+    input.sampling_params.all_greedy_sample = true;
+    input.sampling_params.do_sample =
+        torch::zeros({1}, input.token_ids.options().dtype(torch::kBool));
+    input.metadata_ready_event = device_.current_stream()->record_event();
+    auto output = DFlash2WorkerImplTestPeer::run_decode_step(worker, input);
+    ASSERT_TRUE(output.has_value());
+    EXPECT_EQ(output->requires_host_retirement, overlap);
+    EXPECT_EQ(DFlash2WorkerImplTestPeer::has_pending(worker), overlap);
+    ASSERT_EQ(trace->pending_at_draft, std::vector<bool>({false}));
+    ASSERT_EQ(trace->context_slots.size(), 1);
+    if (output->ready_event != nullptr) {
+      EXPECT_TRUE(output->ready_event->synchronize());
+    }
+    EXPECT_TRUE(torch::equal(output->sample_output.next_tokens,
+                             torch::tensor({{5, 6, 7}}, torch::kLong)));
+    EXPECT_TRUE(torch::equal(trace->context_slots.front().to(torch::kCPU),
+                             torch::tensor({6, 7, 8}, torch::kInt)));
+  }
 }
 
 TEST(DSparkDecodeStepTest, AsyncAcceptedOutputReplaysJsonForMixedRows) {
@@ -1782,6 +2201,10 @@ TEST(DSparkDecodeStepTest, TextTargetBuildsLlmWorker) {
   EXPECT_NE(dynamic_cast<LLMWorkerImpl*>(target), nullptr);
   EXPECT_EQ(dynamic_cast<VLMWorkerImpl*>(target), nullptr);
 }
+
+INSTANTIATE_TEST_SUITE_P(NativeAndPipeline,
+                         DFlash2DecodeExecutionTest,
+                         ::testing::Bool());
 
 }  // namespace
 }  // namespace xllm

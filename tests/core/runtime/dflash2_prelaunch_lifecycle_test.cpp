@@ -16,6 +16,7 @@ limitations under the License.
 #include <gtest/gtest.h>
 #include <torch/torch.h>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -46,45 +47,45 @@ class DFlash2WorkerImplTestPeer final {
  public:
   static void install_pending(DFlash2WorkerImpl& worker,
                               const torch::Tensor& accepted,
-                              StreamEventPtr ready,
-                              bool graph_enabled) {
-    worker.prelaunch_graph_enabled_ = graph_enabled;
-    worker.pending_draft_.emplace();
-    worker.pending_draft_->accepted_host = accepted;
-    worker.pending_draft_->ready = std::move(ready);
+                              StreamEventPtr ready) {
+    worker.pending_context_.emplace();
+    worker.pending_context_->accepted_host = accepted;
+    worker.pending_context_->d2h_ready = ready;
+    worker.pending_context_->context_ready = std::move(ready);
   }
 
   static WorkerImpl* target_impl(DFlash2WorkerImpl& worker) {
     return worker.impl_.get();
   }
 
-  static void finish(DFlash2WorkerImpl& worker, const ForwardInput& input) {
-    worker.finish_draft_prelaunch(input);
-  }
-
   static void install_identity(DFlash2WorkerImpl& worker,
                                ForwardInput identity,
-                               const torch::Tensor& accepted,
                                StreamEventPtr ready) {
-    install_pending(
-        worker, accepted, std::move(ready), /*graph_enabled=*/false);
-    worker.prelaunch_enabled_ = true;
-    worker.pending_draft_->identity = std::move(identity);
+    install_pending(worker, torch::Tensor(), std::move(ready));
+    worker.draft_prelaunch_enabled_for_init_ = true;
+    worker.proposal_xfia_enabled_ = true;
+    worker.pending_context_->identity = std::move(identity);
+    ModelArgs args;
+    args.max_position_embeddings(8192);
+    worker.draft_impl_->context_ =
+        ModelContext(worker.parallel_args_,
+                     args,
+                     QuantArgs(),
+                     torch::TensorOptions().device(worker.device_.unwrap()));
   }
 
-  static bool matches(const DFlash2WorkerImpl& worker,
-                      const ForwardInput& input) {
-    return worker.pending_draft_matches(input);
+  static bool can_prelaunch(const DFlash2WorkerImpl& worker,
+                            const ForwardInput& input) {
+    return worker.can_prelaunch_draft_for_this_step(input);
   }
 
-  static ForwardInput consume_target(DFlash2WorkerImpl& worker,
-                                     const ForwardInput& input,
-                                     ForwardInput target) {
-    worker.pending_draft_->target_input = std::move(target);
-    ForwardInput refreshed;
-    worker.run_decode_draft(input, refreshed);
-    CHECK_EQ(worker.prepare_stream_->synchronize(), 0);
-    return refreshed;
+  static std::vector<int64_t> pending_rows(const DFlash2WorkerImpl& worker,
+                                           const ForwardInput& input) {
+    return worker.build_batch_to_pending_row_mapping(input);
+  }
+
+  static bool async_output_enabled(const DFlash2WorkerImpl& worker) {
+    return worker.async_output_enabled_;
   }
 };
 
@@ -492,7 +493,6 @@ TEST(DSparkPrelaunchDeviceInputTest, EagerUsesCurrentDeviceAcceptanceAndPages) {
       torch::equal(result.query_positions.cpu(), expected.query_positions));
   EXPECT_TRUE(torch::equal(result.query_slots.cpu(), expected.query_slots));
   EXPECT_TRUE(torch::equal(result.kv_lengths.cpu(), expected.kv_lengths));
-  EXPECT_TRUE(torch::equal(result.context_slots.cpu(), expected.context_slots));
 }
 
 Sequence make_overlap_sequence(int32_t prompt_token,
@@ -548,80 +548,61 @@ TEST(DFlash2PrelaunchTransferTest, NonSendingPushCompletionIsGraphCapturable) {
   }
 }
 
-class DFlash2PrelaunchLifecycleTest : public ::testing::TestWithParam<bool> {};
-
-TEST(DFlash2PrelaunchIdentityTest, ReusesTargetAfterLinearSlotRotation) {
-  Device device(/*device_index=*/0);
+TEST(DFlash2StepLocalLifecycleTest, PendingRowsFollowTheActualBatch) {
+  Device device(0);
   device.set_device();
   device.init_device_context();
-  const ParallelArgs parallel_args(
-      /*rank=*/0, /*world_size=*/1, /*process_group=*/nullptr);
+  const ParallelArgs parallel_args(0, 1, nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(7).block_size(
       128);
   DFlash2WorkerImpl worker(
-      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
+      parallel_args, device.unwrap(), options, WorkerType::LLM);
   ForwardInput previous;
-  previous.token_ids_host = torch::tensor({11}, torch::kInt32);
-  previous.positions_host = torch::tensor({2048}, torch::kInt32);
-  previous.input_params.meta.num_sequences = 1;
+  previous.token_ids_host = torch::tensor({11, 21, 31}, torch::kInt);
+  previous.positions_host = torch::tensor({16, 32, 48}, torch::kInt);
+  previous.input_params.attention.host.kv_seq_lens = {17, 33, 49};
+  previous.input_params.meta.num_sequences = 3;
   previous.input_params.meta.batch_forward_type = BatchForwardType::DECODE;
-  previous.input_params.embedding.embedding_ids = {1};
-  previous.input_params.embedding.request_ids = {"continuing-request"};
-  previous.input_params.embedding.linear_state_ids = {2};
-  previous.input_params.embedding.linear_state_read_ids = {1};
-  previous.input_params.attention.host.kv_seq_lens = {2049};
+  previous.input_params.embedding.embedding_ids = {4, 5, 6};
+  previous.input_params.embedding.request_ids = {"first", "second", "third"};
+  previous.sample_sequence_ids = {"sequence-0", "sequence-1", "sequence-2"};
   previous.input_params.attention.host.block_tables =
-      torch::arange(32, torch::kInt32).view({1, 32});
-  const torch::Tensor accepted =
-      torch::tensor({{31, -1, -1, -1, -1, -1, -1, -1}}, torch::kLong);
+      torch::tensor({{1, 2}, {3, 4}, {5, 6}}, torch::kInt);
   DFlash2WorkerImplTestPeer::install_identity(
-      worker,
-      previous,
-      accepted,
-      device.current_stream()->record_event_or_sync());
+      worker, previous, device.current_stream()->record_event());
   ForwardInput current = previous;
-  current.token_ids_host = torch::tensor({31}, torch::kInt32);
-  current.positions_host = torch::tensor({2049}, torch::kInt32);
-  current.input_params.attention.host.kv_seq_lens = {2050};
-  ASSERT_TRUE(DFlash2WorkerImplTestPeer::matches(worker, current));
-  ForwardInput target = previous;
-  target.input_params.embedding.linear_state_indices = torch::tensor(
-      {2}, torch::TensorOptions().dtype(torch::kInt32).device(device.unwrap()));
-  target.input_params.embedding.linear_state_read_indices = torch::tensor(
-      {1}, target.input_params.embedding.linear_state_indices.options());
-  target.input_params.attn_metadata =
-      std::make_shared<layer::AttentionMetadata>();
-  target.input_params.attn_metadata->linear_state_indices =
-      target.input_params.embedding.linear_state_indices;
-  target.metadata_ready_event = device.current_stream()->record_event_or_sync();
-  const auto metadata = target.input_params.attn_metadata;
-  const torch::Tensor token_ids = target.token_ids_host;
-  // Read-only checkpoint rotation and write-slot rotation both preserve the
-  // proposal. Only the confirmed target's state addressing needs refreshing.
-  current.input_params.embedding.linear_state_read_ids = {2};
-  EXPECT_TRUE(DFlash2WorkerImplTestPeer::matches(worker, current));
-  current.input_params.embedding.linear_state_read_ids = {3};
-  current.input_params.embedding.linear_state_ids = {4};
-  ASSERT_TRUE(DFlash2WorkerImplTestPeer::matches(worker, current));
-  ForwardInput refreshed = DFlash2WorkerImplTestPeer::consume_target(
-      worker, current, std::move(target));
-  EXPECT_EQ(refreshed.input_params.embedding.linear_state_ids,
-            std::vector<int32_t>({4}));
-  EXPECT_EQ(refreshed.input_params.embedding.linear_state_read_ids,
-            std::vector<int32_t>({3}));
-  EXPECT_EQ(refreshed.input_params.attn_metadata, metadata);
-  EXPECT_EQ(refreshed.token_ids_host.data_ptr(), token_ids.data_ptr());
-  EXPECT_EQ(
-      refreshed.input_params.embedding.linear_state_indices.item<int32_t>(), 4);
-  EXPECT_EQ(refreshed.input_params.embedding.linear_state_read_indices
-                .item<int32_t>(),
-            3);
-  EXPECT_EQ(metadata->linear_state_indices.item<int32_t>(), 4);
+  current.token_ids_host = torch::tensor({-1, -1}, torch::kInt);
+  current.positions_host = torch::tensor({49, 17}, torch::kInt);
+  current.input_params.attention.host.kv_seq_lens = {50, 18};
+  current.input_params.meta.num_sequences = 2;
+  current.input_params.embedding.embedding_ids = {6, 4};
+  current.input_params.embedding.request_ids = {"third", "first"};
+  current.sample_sequence_ids = {"sequence-2", "sequence-0"};
+  current.input_params.attention.host.block_tables =
+      torch::tensor({{7, 8}, {9, 10}}, torch::kInt);
+  EXPECT_TRUE(DFlash2WorkerImplTestPeer::can_prelaunch(worker, current));
+  EXPECT_EQ(DFlash2WorkerImplTestPeer::pending_rows(worker, current),
+            (std::vector<int64_t>{2, 0}));
+  current.input_params.embedding.linear_state_ids = {4, 5};
+  current.input_params.embedding.linear_state_read_ids = {2, 3};
+  EXPECT_EQ(DFlash2WorkerImplTestPeer::pending_rows(worker, current),
+            (std::vector<int64_t>{2, 0}));
+  current.input_params.embedding.embedding_ids[0] = 9;
+  EXPECT_TRUE(DFlash2WorkerImplTestPeer::pending_rows(worker, current).empty());
+  current.input_params.embedding.embedding_ids[0] = 6;
+  current.sample_sequence_ids[0] = "replacement-sequence";
+  EXPECT_TRUE(DFlash2WorkerImplTestPeer::pending_rows(worker, current).empty());
+  current.sample_sequence_ids[0] = "sequence-2";
+  current.json_object_state_snapshots.emplace_back();
+  EXPECT_FALSE(DFlash2WorkerImplTestPeer::can_prelaunch(worker, current));
+  EXPECT_TRUE(DFlash2WorkerImplTestPeer::async_output_enabled(worker));
+  current.json_object_state_snapshots.clear();
+  EXPECT_TRUE(DFlash2WorkerImplTestPeer::can_prelaunch(worker, current));
 }
 
-TEST_P(DFlash2PrelaunchLifecycleTest,
-       MixedEosBatchRetiresWritesBeforeBlockReuse) {
+TEST(DFlash2PrelaunchLifecycleTest,
+     DestructionRetiresLastContextBeforeBlockReuse) {
   Device device(/*device_index=*/0);
   device.set_device();
   device.init_device_context();
@@ -629,8 +610,8 @@ TEST_P(DFlash2PrelaunchLifecycleTest,
       /*rank=*/0, /*world_size=*/1, /*process_group=*/nullptr);
   runtime::Options options;
   options.enable_schedule_overlap(true).num_speculative_tokens(7);
-  DFlash2WorkerImpl worker(
-      parallel_args, device.unwrap(), options, /*worker_type=*/WorkerType::LLM);
+  auto worker = std::make_unique<DFlash2WorkerImpl>(
+      parallel_args, device.unwrap(), options, WorkerType::LLM);
   constexpr std::array<BlockType, 6> kBlockTypes = {BlockType::KV,
                                                     BlockType::SWA,
                                                     BlockType::C4,
@@ -660,8 +641,6 @@ TEST_P(DFlash2PrelaunchLifecycleTest,
                                      std::move(continuing_blocks));
   }
   ASSERT_EQ(manager.num_free_blocks(), 0u);
-  // Both the result batch and the next dispatched batch still reference these
-  // sequences. Neither batch owns aliases that can delay block reuse.
   Batch result_batch(std::vector<Sequence*>{&ending, &continuing});
   Batch inflight_batch(std::vector<Sequence*>{&ending, &continuing});
   for (Sequence* sequence : result_batch.get_sequences()) {
@@ -694,16 +673,11 @@ TEST_P(DFlash2PrelaunchLifecycleTest,
   const auto accepted = torch::tensor(
       {{2, -1, -1, -1, -1, -1, -1, -1}, {31, 32, -1, -1, -1, -1, -1, -1}},
       torch::kLong);
-  DFlash2WorkerImplTestPeer::install_pending(
-      worker, accepted, ready, GetParam());
-  ForwardInput input;
-  // Graph mode can also skip next-target preparation (e.g. token filters).
-  // That early return must not bypass retirement of the pending KV writes.
-  input.sampling_params.filter_mask = torch::ones({2, 1}, torch::kBool);
+  DFlash2WorkerImplTestPeer::install_pending(*worker, accepted, ready);
   aclrtEventRecordedStatus before;
   ASSERT_EQ(aclrtQueryEventStatus(ready->npu_event(), &before), ACL_SUCCESS);
   ASSERT_EQ(before, ACL_EVENT_RECORDED_STATUS_NOT_READY);
-  DFlash2WorkerImplTestPeer::finish(worker, input);
+  worker.reset();
   aclrtEventRecordedStatus after;
   ASSERT_EQ(aclrtQueryEventStatus(ready->npu_event(), &after), ACL_SUCCESS);
   EXPECT_EQ(after, ACL_EVENT_RECORDED_STATUS_COMPLETE);
@@ -715,17 +689,31 @@ TEST_P(DFlash2PrelaunchLifecycleTest,
                                     /*token_offset=*/1);
   ASSERT_TRUE(ending.finished());
   ASSERT_FALSE(continuing.finished());
-  for (size_t i = 0; i < kBlockTypes.size(); ++i) {
-    SCOPED_TRACE(static_cast<int32_t>(kBlockTypes[i]));
-    (void)ending.kv_state().take_blocks(kBlockTypes[i]);
-    auto blocks = manager.allocate(1);
-    ASSERT_EQ(blocks.size(), 1u);
-    ASSERT_EQ(blocks.front().id(), ending_ids[i]);
-    replacement.kv_state().add_blocks(kBlockTypes[i], std::move(blocks));
-    EXPECT_EQ(continuing.kv_state().blocks(kBlockTypes[i]).front().ref_count(),
-              1u);
+  for (const BlockType type : kBlockTypes) {
+    (void)ending.kv_state().take_blocks(type);
   }
   EXPECT_FALSE(inflight_batch.get_sequences().front()->has_any_blocks());
+  EXPECT_EQ(manager.num_free_blocks(), 0u);
+  result_batch = Batch{};
+  EXPECT_EQ(manager.num_free_blocks(), 0u);
+  inflight_batch = Batch{};
+  ASSERT_EQ(manager.num_free_blocks(), kBlockTypes.size());
+
+  std::array<int32_t, kBlockTypes.size()> reused_ids;
+  for (size_t index = 0; index < kBlockTypes.size(); ++index) {
+    SCOPED_TRACE(static_cast<int32_t>(kBlockTypes[index]));
+    auto blocks = manager.allocate(1);
+    ASSERT_EQ(blocks.size(), 1u);
+    reused_ids[index] = blocks.front().id();
+    replacement.kv_state().add_blocks(kBlockTypes[index], std::move(blocks));
+    EXPECT_EQ(
+        continuing.kv_state().blocks(kBlockTypes[index]).front().ref_count(),
+        1u);
+  }
+  auto expected_ids = ending_ids;
+  std::sort(expected_ids.begin(), expected_ids.end());
+  std::sort(reused_ids.begin(), reused_ids.end());
+  EXPECT_EQ(reused_ids, expected_ids);
   auto reuse_stream = device.get_stream_from_pool();
   {
     auto guard = reuse_stream->set_stream_guard();
@@ -745,10 +733,6 @@ TEST_P(DFlash2PrelaunchLifecycleTest,
   }
   EXPECT_EQ(manager.num_free_blocks(), 12u);
 }
-
-INSTANTIATE_TEST_SUITE_P(EagerAndGraph,
-                         DFlash2PrelaunchLifecycleTest,
-                         ::testing::Bool());
 
 TEST(DSparkStepLocalLifecycleTest, DestructionRetiresPendingContextWrites) {
   Device device(0);

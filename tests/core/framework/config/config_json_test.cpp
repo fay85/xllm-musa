@@ -501,6 +501,9 @@ TEST(ModelConfigValidationTest, Qwen35PythonDFlash2FollowsBackendSupport) {
         EXPECT_TRUE(error.has_value());
 #endif
       }
+      EXPECT_TRUE(ModelConfig::validate_python_speculative_decode(
+                      model_impl, model_type, "DFlash", 7)
+                      .has_value());
     }
   }
 }

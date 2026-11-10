@@ -894,7 +894,7 @@ TEST_P(HostRestoreInputTest,
   source.kv_state().set_kv_cache_tokens_num(4);
   pool.deallocate(&source);
   pool.transfer_blocks();
-  pool.reset_prefix_cache();
+  pool.BlockManagerPool::reset_prefix_cache();
 
   Sequence restored = make_basic_sequence(tokens);
   pool.allocate_shared(&restored);

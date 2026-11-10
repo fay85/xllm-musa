@@ -22,6 +22,7 @@ namespace xllm {
 struct ModelSamplingInput {
   SamplingParameters parameters;
   bool return_confidence = false;
+  torch::Tensor gumbel_noise;
 };
 
 }  // namespace xllm

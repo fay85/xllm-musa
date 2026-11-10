@@ -15,6 +15,7 @@ limitations under the License.
 
 #include <gflags/gflags.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <cstring>
@@ -2627,14 +2628,21 @@ inline void deserialize_forward_input_payload(
                              input_params.meta.num_sequences);
   if (materialize_device_buffer &&
       !input_params.embedding.linear_state_ids.empty()) {
+    const auto host_options = torch::TensorOptions()
+                                  .dtype(torch::kInt)
+                                  .device(torch::kCPU)
+                                  .pinned_memory(!device.is_cpu());
+    const auto upload_state_indices = [&](const std::vector<int32_t>& ids) {
+      torch::Tensor host_indices =
+          torch::empty({static_cast<int64_t>(ids.size())}, host_options);
+      std::copy(ids.begin(), ids.end(), host_indices.data_ptr<int32_t>());
+      return host_indices.to(device, /*non_blocking=*/true);
+    };
     input_params.embedding.linear_state_indices =
-        torch::tensor(input_params.embedding.linear_state_ids, torch::kInt)
-            .to(device, /*non_blocking=*/true);
+        upload_state_indices(input_params.embedding.linear_state_ids);
     if (!input_params.embedding.linear_state_read_ids.empty()) {
       input_params.embedding.linear_state_read_indices =
-          torch::tensor(input_params.embedding.linear_state_read_ids,
-                        torch::kInt)
-              .to(device, true);
+          upload_state_indices(input_params.embedding.linear_state_read_ids);
     }
   }
   read_string_vector(context, input_params.embedding.request_ids);

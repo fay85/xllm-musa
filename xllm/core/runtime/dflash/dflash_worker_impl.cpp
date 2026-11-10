@@ -23,6 +23,7 @@ limitations under the License.
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -621,7 +622,6 @@ std::tuple<int64_t, int64_t> DFlashWorkerImpl::estimate_kv_cache_capacity() {
 
 std::optional<ForwardOutput> DFlashWorkerImpl::step_empty(
     const ForwardInput& input) {
-  discard_draft_prelaunch();
   if (!input.input_params.meta.batch_forward_type.is_decode()) {
     std::optional<ForwardOutput> output =
         speculative_worker::run_worker_no_sync(
@@ -643,8 +643,7 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_empty(
       options_.num_speculative_tokens(), sample_from_anchor());
   const bool use_block_parallel_rows = draft_use_block_parallel_rows();
   ForwardInput query_input = input;
-  query_input.input_params.clear_linear_attention_state();
-  dflash_detail::invalidate_draft_model_geometry(query_input.input_params);
+  dflash_detail::reset_draft_model_metadata(query_input.input_params);
   query_input.input_params.meta.batch_forward_type = draft_batch_forward_type();
   if (draft_impl_->context_.get_model_args().dummy_token_count() == 1) {
     // The metadata builder uses zero query length to materialize a dummy row.
@@ -709,16 +708,34 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_empty(
 }
 
 void DFlashWorkerImpl::finish_empty_decode(
-    const ForwardInput& /*input*/,
-    ForwardOutput& /*output*/,
-    std::optional<ForwardOutput>& /*draft_output*/) {
-  // See above: sync the no-sync draft and target forwards before returning.
-  compute_stream_->synchronize();
+    const ForwardInput& input,
+    ForwardOutput& output,
+    std::optional<ForwardOutput>& draft_output) {
+  if (!draft_prelaunch_enabled_for_init_ ||
+      input.input_params.meta.is_graph_warmup) {
+    compute_stream_->synchronize();
+    return;
+  }
+  StreamEventPtr ready = compute_stream_->record_event();
+  CHECK(ready != nullptr);
+  // The next draft must reach DP graph admission while the current target is
+  // running, including on idle ranks. Retire the previous idle inputs only
+  // after this step's draft and target have both been submitted.
+  if (idle_decode_output_.ready_event != nullptr) {
+    CHECK(idle_decode_output_.ready_event->synchronize());
+  }
+  idle_decode_output_.ready_event = std::move(ready);
+  idle_decode_output_.retained_inputs = take_retained_inputs(output);
+  output.ready_event.reset();
+  if (draft_output.has_value()) {
+    transfer_retained_inputs(idle_decode_output_, draft_output.value());
+  }
+  // This worker owns retirement. The empty output carries no token that the
+  // generic scheduler must wait to read, and no input it must keep alive.
 }
 
 std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
     const ForwardInput& input) {
-  discard_draft_prelaunch();
   Timer timer;
   ForwardInput processed_target_input;
   ForwardOutput output =
@@ -833,6 +850,192 @@ std::optional<ForwardOutput> DFlashWorkerImpl::step_prefill(
     return make_failed_output(std::move(output.failed_request_ids));
   }
   return output;
+}
+
+void DFlashWorkerImpl::retire_async_output() {
+  if (idle_decode_output_.ready_event != nullptr) {
+    CHECK(idle_decode_output_.ready_event->synchronize());
+  }
+  if (pending_context_.has_value()) {
+    CHECK(pending_context_->context_ready->synchronize());
+  }
+  if (!consumed_context_tensors_.empty()) {
+    compute_stream_->synchronize();
+  }
+}
+
+std::vector<int64_t> DFlashWorkerImpl::build_batch_to_pending_row_mapping(
+    const ForwardInput& input) const {
+  if (!pending_context_.has_value()) {
+    return {};
+  }
+  const ForwardInput& previous = pending_context_->identity;
+  const auto& previous_requests = previous.input_params.embedding.request_ids;
+  const auto& current_requests = input.input_params.embedding.request_ids;
+  const auto& previous_embeddings =
+      previous.input_params.embedding.embedding_ids;
+  const auto& current_embeddings = input.input_params.embedding.embedding_ids;
+  const bool use_sequence_ids = !previous.sample_sequence_ids.empty() ||
+                                !input.sample_sequence_ids.empty();
+  if (use_sequence_ids &&
+      (previous.sample_sequence_ids.size() != previous_requests.size() ||
+       input.sample_sequence_ids.size() != current_requests.size())) {
+    return {};
+  }
+  std::unordered_map<std::string, int64_t> previous_rows;
+  previous_rows.reserve(previous_requests.size());
+  for (size_t row = 0; row < previous_requests.size(); ++row) {
+    const std::string& identity = use_sequence_ids
+                                      ? previous.sample_sequence_ids[row]
+                                      : previous_requests[row];
+    if (!previous_rows.emplace(identity, static_cast<int64_t>(row)).second) {
+      return {};
+    }
+  }
+  std::vector<int64_t> rows;
+  rows.reserve(current_requests.size());
+  for (size_t row = 0; row < current_requests.size(); ++row) {
+    const std::string& identity = use_sequence_ids
+                                      ? input.sample_sequence_ids[row]
+                                      : current_requests[row];
+    const auto found = previous_rows.find(identity);
+    if (found == previous_rows.end()) {
+      return {};
+    }
+    const size_t previous_row = static_cast<size_t>(found->second);
+    if (previous_requests[previous_row] != current_requests[row] ||
+        previous_embeddings[previous_row] != current_embeddings[row]) {
+      return {};
+    }
+    rows.emplace_back(found->second);
+  }
+  return rows;
+}
+
+void DFlashWorkerImpl::commit_pending_context() {
+  if (!pending_context_.has_value()) {
+    return;
+  }
+  CHECK(pending_context_->d2h_ready->synchronize())
+      << "Failed to synchronize DFlash accepted tokens";
+  c10::StreamGuard compute_guard = compute_stream_->set_stream_guard();
+  embedding_cache_->write_target_context(
+      pending_context_->identity.input_params.embedding.embedding_ids,
+      pending_context_->identity.input_params.embedding.request_ids,
+      pending_context_->accepted_host,
+      pending_context_->embeddings,
+      options_.num_speculative_tokens());
+  consumed_context_tensors_.reserve(consumed_context_tensors_.size() + 3);
+  consumed_context_tensors_.emplace_back(pending_context_->accepted_device);
+  consumed_context_tensors_.emplace_back(pending_context_->embeddings);
+  consumed_context_tensors_.emplace_back(pending_context_->base_positions);
+  pending_context_.reset();
+}
+
+void DFlashWorkerImpl::prepare_validate_output_async(
+    const ForwardInput& input) {
+  c10::StreamGuard prepare_guard = prepare_stream_->set_stream_guard();
+  torch::Tensor host_base_positions = torch::empty(
+      input.positions_host.sizes(),
+      input.positions_host.options().dtype(torch::kLong).pinned_memory(true));
+  host_base_positions.copy_(input.positions_host);
+  prepared_base_positions_ = host_base_positions.to(device_, true);
+  std::optional<ModelInputParams> expanded_draft_params;
+  if (draft_replicated_block_pages() > 1) {
+    expanded_draft_params.emplace(input.input_params);
+    expand_draft_block_tables(*expanded_draft_params);
+  }
+  const ModelInputParams& params = expanded_draft_params.has_value()
+                                       ? *expanded_draft_params
+                                       : input.input_params;
+  prepared_context_block_table_ = dflash_async::prepare_draft_cache_block_table(
+      params.attention.device.block_tables,
+      params.multi_block_tables,
+      params.meta.num_sequences,
+      device_);
+  prepared_context_ready_ = prepare_stream_->record_event();
+  CHECK(prepared_context_ready_ != nullptr);
+}
+
+void DFlashWorkerImpl::finalize_validate_output_async(
+    const ForwardInput& input,
+    const SampleOutput& output,
+    ForwardOutput& target_output) {
+  CHECK(!pending_context_.has_value());
+  CHECK(prepared_context_ready_ != nullptr);
+  c10::StreamGuard compute_guard = compute_stream_->set_stream_guard();
+  CHECK(compute_stream_->wait_event(prepared_context_ready_));
+  PendingContext pending;
+  pending.identity = input;
+  pending.accepted_device = output.next_tokens;
+  pending.embeddings = output.embeddings;
+  pending.base_positions = std::move(prepared_base_positions_);
+  pending.accepted_host = torch::empty(
+      output.next_tokens.sizes(),
+      output.next_tokens.options().device(torch::kCPU).pinned_memory(true));
+  pending.accepted_host.copy_(pending.accepted_device, true);
+  pending.d2h_ready = compute_stream_->record_event();
+  CHECK(pending.d2h_ready != nullptr);
+  dflash_async::ContextKvInputs context =
+      dflash_async::prepare_context_kv(pending.accepted_device,
+                                       pending.base_positions,
+                                       prepared_context_block_table_,
+                                       options_.block_size());
+#if defined(USE_MLU)
+  ModelInputParams draft_input_params = input.input_params;
+  draft_input_params.parallel.layer_synchronizer.reset();
+  const ModelInputParams& context_input_params = draft_input_params;
+#else
+  const ModelInputParams& context_input_params = input.input_params;
+#endif
+  ModelOutput written = draft_impl_->write_context_kv(
+      output.embeddings.reshape({output.next_tokens.numel(), -1}),
+      context.positions,
+      context.slots,
+      context_input_params);
+  CHECK(written.hidden_states.defined());
+  pending.context_ready = compute_stream_->record_event();
+  CHECK(pending.context_ready != nullptr);
+
+  if (!input.json_object_states.empty()) {
+    // Replay only after the asynchronous accepted-token copy is visible on
+    // host. The context KV write can finish independently through
+    // context_ready.
+    CHECK(pending.d2h_ready->synchronize());
+    verify_json_accepted_tokens(
+        input,
+        pending.accepted_host.to(torch::kInt64).contiguous(),
+        target_output);
+  }
+
+  auto retained = std::make_shared<ForwardInput>(input);
+  retained->retained_device_tensors.reserve(
+      retained->retained_device_tensors.size() + 6 +
+      consumed_context_tensors_.size());
+  retained->retained_device_tensors.emplace_back(
+      std::move(prepared_context_block_table_.blocks));
+  retained->retained_device_tensors.emplace_back(pending.accepted_device);
+  retained->retained_device_tensors.emplace_back(pending.embeddings);
+  retained->retained_device_tensors.emplace_back(pending.base_positions);
+  retained->retained_device_tensors.emplace_back(std::move(context.positions));
+  retained->retained_device_tensors.emplace_back(std::move(context.slots));
+  retained->retained_device_tensors.insert(
+      retained->retained_device_tensors.end(),
+      std::make_move_iterator(consumed_context_tensors_.begin()),
+      std::make_move_iterator(consumed_context_tensors_.end()));
+  consumed_context_tensors_.clear();
+  target_output.retained_inputs.emplace_back(std::move(retained));
+  target_output.sample_output = output;
+  target_output.sample_output.next_tokens = pending.accepted_host;
+  target_output.sample_output.embeddings = torch::Tensor();
+  target_output.ready_event = pending.context_ready;
+  target_output.requires_host_retirement = true;
+  target_output.defer_block_speculative_metrics = true;
+  pending_context_ = std::move(pending);
+  prepared_context_ready_.reset();
+  VLOG(1) << "DFlash step-local output submitted: batch_id="
+          << input.input_params.meta.batch_id
+          << ", sequences=" << input.input_params.meta.num_sequences;
 }
 
 std::optional<ForwardOutput> DFlashWorkerImpl::step_decode(
@@ -1163,8 +1366,6 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
   if (async_output) {
     prepare_validate_output_async(input);
   }
-  const bool prelaunch =
-      !async_output && !did_prune && prepare_draft_prelaunch(input);
   ForwardOutput target_output =
       speculative_worker::run_worker_no_sync(
           *impl_, validate_input, *prepare_stream_, *compute_stream_)
@@ -1251,53 +1452,20 @@ std::optional<ForwardOutput> DFlashWorkerImpl::run_validate(
     }
     return target_output;
   }
-  if (prelaunch) {
-    torch::Tensor accepted_host = torch::empty(val_output.next_tokens.sizes(),
-                                               val_output.next_tokens.options()
-                                                   .device(torch::kCPU)
-                                                   .pinned_memory(true));
-    StreamEventPtr accepted_ready;
-    {
-      c10::StreamGuard guard = compute_stream_->set_stream_guard();
-      accepted_host.copy_(val_output.next_tokens, /*non_blocking=*/true);
-      accepted_ready = compute_stream_->record_event();
-      CHECK(accepted_ready != nullptr);
-      // Context projection, device input preparation and the entire next
-      // draft are submitted before any accepted-token host wait.
-      launch_draft_prelaunch(input, val_output, accepted_host);
-    }
-    CHECK(accepted_ready->synchronize())
-        << "DFlash2 accepted-token copy failed";
-    val_output.next_tokens = std::move(accepted_host);
-  } else {
-    compute_stream_->synchronize();
-    val_output.next_tokens = val_output.next_tokens.to(torch::kCPU);
-  }
+  compute_stream_->synchronize();
+  val_output.next_tokens = val_output.next_tokens.to(torch::kCPU);
   // Precise adaptive-aware metrics on the already-CPU tensor: static path
   // passes an empty per_seq_val_tokens and every row counts full width;
   // adaptive passes the per-seq widths so padded tail slots aren't counted
   // as rejections. Zero extra device sync — we're already on CPU.
   record_validate_metrics(
       val_output, did_prune ? per_seq_val_tokens : std::vector<int32_t>{});
-  if (prelaunch) {
-    // The projected context KV has already been enqueued on device. Only
-    // commit the small host decode state used by schedule-overlap correction.
-    // Prelaunch excludes inputs with KV transfers; those use the path below.
-    embedding_cache_->write_target_context(
-        input.input_params.embedding.embedding_ids,
-        input.input_params.embedding.request_ids,
-        val_output.next_tokens,
-        val_output.embeddings,
-        options_.num_speculative_tokens());
-    finish_draft_prelaunch(input);
-  } else {
-    std::vector<std::string> failed_request_ids =
-        write_target_context_to_cache(input, val_output);
-    target_output.failed_request_ids.insert(
-        target_output.failed_request_ids.end(),
-        std::make_move_iterator(failed_request_ids.begin()),
-        std::make_move_iterator(failed_request_ids.end()));
-  }
+  std::vector<std::string> failed_request_ids =
+      write_target_context_to_cache(input, val_output);
+  target_output.failed_request_ids.insert(
+      target_output.failed_request_ids.end(),
+      std::make_move_iterator(failed_request_ids.begin()),
+      std::make_move_iterator(failed_request_ids.end()));
   if (has_json_states) {
     verify_json_accepted_tokens(
         input,
@@ -1455,9 +1623,9 @@ void DFlashWorkerImpl::prepare_json_validation_states(
            static_cast<size_t>(batch_size) * (num_speculative_tokens + 1))
       << "DFlash JSON validation states must cover every verify row";
   install_filter_bitmask(validate_input.sampling_params,
-                        validate_input.json_object_states,
-                        device_,
-                        JsonObjectMaskBuildPhase::TARGET);
+                         validate_input.json_object_states,
+                         device_,
+                         JsonObjectMaskBuildPhase::TARGET);
 }
 
 void DFlashWorkerImpl::verify_json_accepted_tokens(
@@ -1691,7 +1859,7 @@ void DFlashWorkerImpl::prepare_query_inputs(const ForwardInput& input,
   // DFlash-family drafts are pure full-attention models. The copied target
   // input may belong to a hybrid model, so discard its recurrent-cache state
   // before rebuilding the draft query geometry.
-  input_params.clear_linear_attention_state();
+  dflash_detail::reset_draft_model_metadata(input_params);
   input_params.embedding.input_embedding = torch::Tensor();
   if (!input.json_object_states.empty() ||
       input.sampling_params.filter_bitmask.defined() ||
@@ -1703,7 +1871,6 @@ void DFlashWorkerImpl::prepare_query_inputs(const ForwardInput& input,
     query_input.sampling_params.filter_bitmask = torch::Tensor();
     query_input.sampling_params.filter_mask = torch::Tensor();
   }
-  dflash_detail::invalidate_draft_model_geometry(input_params);
   // The draft addresses its own pool, so both the row builder below and the
   // draft's attention must see this rank's expanded block table. Expand before
   // building the rows: calc_slot_id indexes it with the physical block size.

@@ -59,6 +59,7 @@ cc_test(
   SRCS
     qwen3_5_target_graph_test.cpp
   DEPS
+    :runtime
     ascendcl
     torch
     torch_npu

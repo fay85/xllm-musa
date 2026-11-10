@@ -140,10 +140,6 @@ NextDraftInputs prepare_next_draft(const torch::Tensor& accepted_tokens,
   CHECK_GT(block_size, 0);
   CHECK_GT(query_width, 0);
   const int64_t accepted_width = accepted_tokens.size(1);
-  torch::Tensor context_offsets =
-      torch::arange(accepted_width,
-                    base_positions.options().dtype(torch::kLong))
-          .view({1, accepted_width});
   torch::Tensor valid = accepted_tokens.ge(0).to(torch::kLong).cumprod(1);
   NextDraftInputs result;
   result.accepted_counts = valid.sum(1);
@@ -151,11 +147,8 @@ NextDraftInputs prepare_next_draft(const torch::Tensor& accepted_tokens,
   torch::Tensor last = (result.accepted_counts - 1).clamp_min(0).unsqueeze(1);
   result.anchor_tokens = accepted_tokens.gather(1, last).reshape({-1});
   torch::Tensor query_offsets =
-      query_width == accepted_width
-          ? context_offsets
-          : torch::arange(query_width,
-                          base_positions.options().dtype(torch::kLong))
-                .view({1, query_width});
+      torch::arange(query_width, base_positions.options().dtype(torch::kLong))
+          .view({1, query_width});
   result.query_tokens =
       torch::where(query_offsets.eq(0),
                    result.anchor_tokens.unsqueeze(1),
@@ -173,13 +166,6 @@ NextDraftInputs prepare_next_draft(const torch::Tensor& accepted_tokens,
   result.kv_lengths =
       (base_positions.to(torch::kLong) + result.accepted_counts + query_width)
           .to(torch::kInt32);
-  torch::Tensor context_positions = base + context_offsets;
-  result.context_positions = context_positions.reshape({-1});
-  torch::Tensor context_slots =
-      map_cache_slots(block_table, context_positions, block_size);
-  result.context_slots = torch::where(valid.reshape({-1}).ne(0),
-                                      context_slots,
-                                      torch::full_like(context_slots, -1));
   return result;
 }
 }  // namespace xllm::dflash_async

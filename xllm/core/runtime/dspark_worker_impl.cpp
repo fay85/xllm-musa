@@ -19,9 +19,7 @@ limitations under the License.
 #include <glog/logging.h>
 
 #include <algorithm>
-#include <iterator>
 #include <optional>
-#include <unordered_map>
 #include <utility>
 
 #include "common/metrics.h"
@@ -44,17 +42,7 @@ DSparkWorkerImpl::DSparkWorkerImpl(const ParallelArgs& parallel_args,
                                   ? parallel_args.tp_group_
                                   : parallel_args.process_group_) {}
 
-DSparkWorkerImpl::~DSparkWorkerImpl() {
-  if (idle_decode_output_.ready_event != nullptr) {
-    CHECK(idle_decode_output_.ready_event->synchronize());
-  }
-  if (pending_context_.has_value()) {
-    CHECK(pending_context_->context_ready->synchronize());
-  }
-  if (!consumed_context_tensors_.empty()) {
-    compute_stream_->synchronize();
-  }
-}
+DSparkWorkerImpl::~DSparkWorkerImpl() { retire_async_output(); }
 
 bool DSparkWorkerImpl::init_model(const std::string& model_weights_path,
                                   int32_t random_seed,
@@ -309,74 +297,6 @@ bool DSparkWorkerImpl::can_prelaunch_draft_for_this_step(
          !sampling.repetition_penalties.defined();
 }
 
-std::vector<int64_t> DSparkWorkerImpl::build_batch_to_pending_row_mapping(
-    const ForwardInput& input) const {
-  if (!pending_context_.has_value()) {
-    return {};
-  }
-  const ForwardInput& previous = pending_context_->identity;
-  const auto& previous_requests = previous.input_params.embedding.request_ids;
-  const auto& current_requests = input.input_params.embedding.request_ids;
-  const auto& previous_embeddings =
-      previous.input_params.embedding.embedding_ids;
-  const auto& current_embeddings = input.input_params.embedding.embedding_ids;
-  const bool use_sequence_ids = !previous.sample_sequence_ids.empty() ||
-                                !input.sample_sequence_ids.empty();
-  if (use_sequence_ids &&
-      (previous.sample_sequence_ids.size() != previous_requests.size() ||
-       input.sample_sequence_ids.size() != current_requests.size())) {
-    return {};
-  }
-  std::unordered_map<std::string, int64_t> previous_rows;
-  previous_rows.reserve(previous_requests.size());
-  for (size_t row = 0; row < previous_requests.size(); ++row) {
-    const std::string& identity = use_sequence_ids
-                                      ? previous.sample_sequence_ids[row]
-                                      : previous_requests[row];
-    if (!previous_rows.emplace(identity, static_cast<int64_t>(row)).second) {
-      return {};
-    }
-  }
-  std::vector<int64_t> rows;
-  rows.reserve(current_requests.size());
-  for (size_t row = 0; row < current_requests.size(); ++row) {
-    const std::string& identity = use_sequence_ids
-                                      ? input.sample_sequence_ids[row]
-                                      : current_requests[row];
-    const auto found = previous_rows.find(identity);
-    if (found == previous_rows.end()) {
-      return {};
-    }
-    const size_t previous_row = static_cast<size_t>(found->second);
-    if (previous_requests[previous_row] != current_requests[row] ||
-        previous_embeddings[previous_row] != current_embeddings[row]) {
-      return {};
-    }
-    rows.emplace_back(found->second);
-  }
-  return rows;
-}
-
-void DSparkWorkerImpl::commit_pending_context() {
-  if (!pending_context_.has_value()) {
-    return;
-  }
-  CHECK(pending_context_->d2h_ready->synchronize())
-      << "Failed to synchronize DSpark accepted tokens";
-  c10::StreamGuard compute_guard = compute_stream_->set_stream_guard();
-  embedding_cache_->write_target_context(
-      pending_context_->identity.input_params.embedding.embedding_ids,
-      pending_context_->identity.input_params.embedding.request_ids,
-      pending_context_->accepted_host,
-      pending_context_->embeddings,
-      options_.num_speculative_tokens());
-  consumed_context_tensors_.reserve(consumed_context_tensors_.size() + 3);
-  consumed_context_tensors_.emplace_back(pending_context_->accepted_device);
-  consumed_context_tensors_.emplace_back(pending_context_->embeddings);
-  consumed_context_tensors_.emplace_back(pending_context_->base_positions);
-  pending_context_.reset();
-}
-
 DFlashWorkerImpl::DraftBlock DSparkWorkerImpl::run_decode_draft_from_pending(
     const ForwardInput& input,
     const std::vector<int64_t>& rows) {
@@ -475,97 +395,6 @@ DFlashWorkerImpl::DraftBlock DSparkWorkerImpl::run_decode_draft_from_pending(
   return block;
 }
 
-void DSparkWorkerImpl::prepare_validate_output_async(
-    const ForwardInput& input) {
-  c10::StreamGuard prepare_guard = prepare_stream_->set_stream_guard();
-  torch::Tensor host_base_positions = torch::empty(
-      input.positions_host.sizes(),
-      input.positions_host.options().dtype(torch::kLong).pinned_memory(true));
-  host_base_positions.copy_(input.positions_host);
-  prepared_base_positions_ = host_base_positions.to(device_, true);
-  prepared_context_block_table_ = dflash_async::prepare_draft_cache_block_table(
-      input.input_params.attention.device.block_tables,
-      input.input_params.multi_block_tables,
-      input.input_params.meta.num_sequences,
-      device_);
-  prepared_context_ready_ = prepare_stream_->record_event();
-  CHECK(prepared_context_ready_ != nullptr);
-}
-
-void DSparkWorkerImpl::finalize_validate_output_async(
-    const ForwardInput& input,
-    const SampleOutput& output,
-    ForwardOutput& target_output) {
-  CHECK(!pending_context_.has_value());
-  CHECK(prepared_context_ready_ != nullptr);
-  c10::StreamGuard compute_guard = compute_stream_->set_stream_guard();
-  CHECK(compute_stream_->wait_event(prepared_context_ready_));
-  PendingContext pending;
-  pending.identity = input;
-  pending.accepted_device = output.next_tokens;
-  pending.embeddings = output.embeddings;
-  pending.base_positions = std::move(prepared_base_positions_);
-  pending.accepted_host = torch::empty(
-      output.next_tokens.sizes(),
-      output.next_tokens.options().device(torch::kCPU).pinned_memory(true));
-  pending.accepted_host.copy_(pending.accepted_device, true);
-  pending.d2h_ready = compute_stream_->record_event();
-  CHECK(pending.d2h_ready != nullptr);
-  dflash_async::ContextKvInputs context =
-      dflash_async::prepare_context_kv(pending.accepted_device,
-                                       pending.base_positions,
-                                       prepared_context_block_table_,
-                                       options_.block_size());
-  ModelOutput written = draft_impl_->write_context_kv(
-      output.embeddings.reshape({output.next_tokens.numel(), -1}),
-      context.positions,
-      context.slots,
-      input.input_params);
-  CHECK(written.hidden_states.defined());
-  pending.context_ready = compute_stream_->record_event();
-  CHECK(pending.context_ready != nullptr);
-
-  if (!input.json_object_states.empty()) {
-    // Replay only after the asynchronous accepted-token copy is visible on
-    // host. The context KV write can finish independently through
-    // context_ready.
-    CHECK(pending.d2h_ready->synchronize());
-    verify_json_accepted_tokens(
-        input,
-        pending.accepted_host.to(torch::kInt64).contiguous(),
-        target_output);
-  }
-
-  auto retained = std::make_shared<ForwardInput>(input);
-  retained->retained_device_tensors.reserve(
-      retained->retained_device_tensors.size() + 6 +
-      consumed_context_tensors_.size());
-  retained->retained_device_tensors.emplace_back(
-      std::move(prepared_context_block_table_.blocks));
-  retained->retained_device_tensors.emplace_back(pending.accepted_device);
-  retained->retained_device_tensors.emplace_back(pending.embeddings);
-  retained->retained_device_tensors.emplace_back(pending.base_positions);
-  retained->retained_device_tensors.emplace_back(std::move(context.positions));
-  retained->retained_device_tensors.emplace_back(std::move(context.slots));
-  retained->retained_device_tensors.insert(
-      retained->retained_device_tensors.end(),
-      std::make_move_iterator(consumed_context_tensors_.begin()),
-      std::make_move_iterator(consumed_context_tensors_.end()));
-  consumed_context_tensors_.clear();
-  target_output.retained_inputs.emplace_back(std::move(retained));
-  target_output.sample_output = output;
-  target_output.sample_output.next_tokens = pending.accepted_host;
-  target_output.sample_output.embeddings = torch::Tensor();
-  target_output.ready_event = pending.context_ready;
-  target_output.requires_host_retirement = true;
-  target_output.defer_block_speculative_metrics = true;
-  pending_context_ = std::move(pending);
-  prepared_context_ready_.reset();
-  VLOG(1) << "DSpark step-local output submitted: batch_id="
-          << input.input_params.meta.batch_id
-          << ", sequences=" << input.input_params.meta.num_sequences;
-}
-
 std::optional<ForwardOutput> DSparkWorkerImpl::step_prefill(
     const ForwardInput& input) {
   commit_pending_context();
@@ -586,33 +415,6 @@ std::optional<ForwardOutput> DSparkWorkerImpl::step_empty(
   force_greedy_draft_sampling(sampling.parameters);
   empty_input.input_params.sampling = std::move(sampling);
   return DFlashWorkerImpl::step_empty(empty_input);
-}
-
-void DSparkWorkerImpl::finish_empty_decode(
-    const ForwardInput& input,
-    ForwardOutput& output,
-    std::optional<ForwardOutput>& draft_output) {
-  if (!draft_prelaunch_enabled_for_init_ ||
-      input.input_params.meta.is_graph_warmup) {
-    DFlashWorkerImpl::finish_empty_decode(input, output, draft_output);
-    return;
-  }
-  StreamEventPtr ready = compute_stream_->record_event();
-  CHECK(ready != nullptr);
-  // The next draft must reach DP graph admission while the current target is
-  // running, including on idle ranks. Retire the previous idle inputs only
-  // after this step's draft and target have both been submitted.
-  if (idle_decode_output_.ready_event != nullptr) {
-    CHECK(idle_decode_output_.ready_event->synchronize());
-  }
-  idle_decode_output_.ready_event = std::move(ready);
-  idle_decode_output_.retained_inputs = take_retained_inputs(output);
-  output.ready_event.reset();
-  if (draft_output.has_value()) {
-    transfer_retained_inputs(idle_decode_output_, draft_output.value());
-  }
-  // This worker owns retirement. The empty output carries no token that the
-  // generic scheduler must wait to read, and no input it must keep alive.
 }
 
 DSparkWorkerImpl::BlockSample DSparkWorkerImpl::sample_block(

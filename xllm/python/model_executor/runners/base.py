@@ -36,9 +36,9 @@ from xllm.python.model_executor.execution_context import (
 from xllm.python.model_executor.forward_context import EplbRuntimeState, LayerSynchronizer
 from xllm.python.model_executor.input_batch import InputBatch
 from xllm.python.model_executor.model_input import ModelInput
-from xllm.python.model_executor.model_output import DraftProposal, ModelOutput
+from xllm.python.model_executor.model_output import DraftCandidates, DraftDecoderOutput, DraftProposal, ModelOutput
 
-ModelExecutionOutput = torch.Tensor | tuple[torch.Tensor, torch.Tensor] | ModelOutput
+ModelExecutionOutput = torch.Tensor | tuple[torch.Tensor, torch.Tensor] | DraftDecoderOutput | ModelOutput
 
 
 @dataclass(frozen=True)
@@ -112,8 +112,18 @@ class BaseRunner(ABC):
             return _trim(output[0], num_tokens), _trim(output[1], num_tokens)
         if isinstance(output, torch.Tensor):
             return _trim(output, num_tokens)
+        if isinstance(output, DraftDecoderOutput):
+            candidates = None
+            if output.candidates is not None:
+                if num_reqs is None:
+                    raise ValueError("Decoder output with request-scoped candidates requires num_reqs")
+                candidates = DraftCandidates(
+                    token_ids=_trim(output.candidates.token_ids, num_reqs),
+                    edge_logits=_trim(output.candidates.edge_logits, num_reqs),
+                )
+            return DraftDecoderOutput(_trim(output.hidden_states, num_tokens), candidates)
         if not isinstance(output, ModelOutput):
-            raise TypeError("Graph output must be a Tensor, a tuple of Tensors, or ModelOutput")
+            raise TypeError("Graph output must be a Tensor, a tuple of Tensors, DraftDecoderOutput, or ModelOutput")
 
         def _trim_optional(tensor: torch.Tensor | None, count: int) -> torch.Tensor | None:
             return _trim(tensor, count) if tensor is not None else None
