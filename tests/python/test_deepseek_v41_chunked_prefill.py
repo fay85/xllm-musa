@@ -749,6 +749,34 @@ def test_last_cache_writes_rejects_misaligned_values() -> None:
         last_ring_writes(torch.tensor([1, 2]), torch.ones(1, 4))
 
 
+def test_swa_write_plan_reuses_rows_but_not_layer_values_or_next_forward(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = 0
+
+    def select(slots: torch.Tensor, values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        nonlocal calls
+        calls += 1
+        return last_ring_writes(slots, values)
+
+    monkeypatch.setattr(csa2, "last_ring_writes", select)
+    slots = torch.tensor([3, 1, 3, -1, 1], dtype=torch.int32)
+    values = torch.arange(15, dtype=torch.float32).reshape(5, 3)
+    context = ForwardContext(_make_swa_backend(4, 3, 1), torch.device("cpu"), SimpleNamespace(), [])
+    with forward_context(context):
+        first_slots, first = csa2._cached_swa_ring_writes(slots, values)
+        second_slots, second = csa2._cached_swa_ring_writes(slots, values + 100)
+        assert calls == 1
+        assert second_slots is first_slots
+        torch.testing.assert_close(first, values[[4, 2]], atol=0, rtol=0)
+        torch.testing.assert_close(second, values[[4, 2]] + 100, atol=0, rtol=0)
+    # A new step may reuse the same tensor address with new slot contents.
+    slots.fill_(2)
+    with forward_context(replace(context, layer_shared_cache={})):
+        next_slots, next_values = csa2._cached_swa_ring_writes(slots, values)
+        assert calls == 2
+        assert next_slots.tolist() == [2]
+        torch.testing.assert_close(next_values, values[-1:], atol=0, rtol=0)
+
+
 @pytest.mark.parametrize("prefix", [15, 31, 255, 511])
 def test_decode_drops_released_oldest_window_candidate(prefix: int) -> None:
     """The oldest ring candidate is outside the window and may be released.
@@ -892,10 +920,10 @@ def test_dummy_model_forward_keeps_positions_safe_and_caches_inert(
 def test_dummy_model_triton_compressor_keeps_ring_states_inert(
     graph_metadata: bool, dtype: torch.dtype, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Real empty-DP builder tables reach Triton as block 0 with start=-1.
+    """Empty-DP rows preserve every state page in eager and batched decode.
 
-    The observer delegates to the real kernel; fallback cannot satisfy the
-    successful-launch assertions. Graph metadata is covered, not capture.
+    Eager rows launch the real Triton kernel with block 0/start=-1; graph
+    rows use the batched compressor. Both paths must leave padding inert.
     """
     device = _active_device()
     lm = _make_forward_lm(dtype, seed=101, device=device)
@@ -936,6 +964,15 @@ def test_dummy_model_triton_compressor_keeps_ring_states_inert(
         return result
 
     monkeypatch.setattr(module, "compressor_from_projected", observe_launch)
+    batched_calls: list[int] = []
+    compress_decode = backend._compress_decode_rows
+
+    def observe_decode(*args: Any, **kwargs: Any) -> tuple[torch.Tensor, ...]:
+        result = compress_decode(*args, **kwargs)
+        batched_calls.append(args[0].mode.compress_ratio)
+        return result
+
+    monkeypatch.setattr(backend, "_compress_decode_rows", observe_decode)
     with torch.inference_mode(), forward_context(ForwardContext(backend, device, metadata, caches)):
         output = lm.model(torch.tensor([1], device=device), torch.tensor([0], device=device))
     torch.npu.synchronize()
@@ -949,7 +986,8 @@ def test_dummy_model_triton_compressor_keeps_ring_states_inert(
     assert all((table <= 0).all() for tables in dsa.block_tables for table in tables)
     expected_launches = sum(layer.mode.is_full and layer.mode.compress_ratio == 2 for layer in lm.model.layers)
     assert expected_launches > 0
-    assert len(launches) == expected_launches
+    assert len(launches) == (0 if graph_metadata else expected_launches)
+    assert batched_calls.count(2) == (expected_launches if graph_metadata else 0)
     for controls, pooled in launches:
         assert controls[:, 0].tolist() == [-1, 1, 0, 0, 0]
         torch.testing.assert_close(pooled, torch.zeros_like(pooled), atol=0, rtol=0)
@@ -1208,3 +1246,117 @@ def test_hc_projection_keeps_fp32_geometry_across_chunks(
                 [hc._project_mixes(hidden[start : start + 5], weight) for start in range(0, rows, 5)]
             )
             torch.testing.assert_close(partitioned, actual, atol=2e-5, rtol=2e-5)
+
+
+@pytest.mark.parametrize("ratio", [1, 2])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+@pytest.mark.parametrize("layout", ["independent", "verify", "interleaved", "wrap", "padded"])
+def test_decode_compressor_batching_preserves_cache_and_ring_order(
+    ratio: int, dtype: torch.dtype, layout: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Compare every cache plane, including verify rows sharing a state ring."""
+    lm = _make_forward_lm(dtype, seed=417)
+    batch = 40 if layout == "wrap" else 8
+    layer_id = 4 if ratio == 1 else 2
+    reference = _CompressorHarness(lm, batch=batch, layer_id=layer_id, dtype=dtype)
+    captured = _CompressorHarness(lm, batch=batch, layer_id=layer_id, dtype=dtype)
+    tables = [torch.arange(batch * 2, dtype=torch.int32).view(batch, 2)]
+    tables += [torch.arange(batch, dtype=torch.int32).view(batch, 1)] * 2
+    tables = tables[: len(reference.backend._builder.group_infos)]
+    if layout in ("verify", "wrap"):
+        tables = [table[:1].expand_as(table).contiguous() for table in tables]
+    elif layout == "interleaved":
+        tables = [table[: batch // 2].repeat(2, 1) for table in tables]
+    projection_rows: list[int] = []
+    normalization_rows: list[int] = []
+    project = captured.layer.compress_kv_score
+    normalize = captured.layer.compress_rmsnorm
+
+    def project_rows(value: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor | None]:
+        projection_rows.append(value.shape[0])
+        return project(value)
+
+    def normalize_rows(value: torch.Tensor) -> torch.Tensor:
+        normalization_rows.append(value.shape[0])
+        return normalize(value)
+
+    monkeypatch.setattr(captured.layer, "compress_kv_score", project_rows)
+    monkeypatch.setattr(captured.layer, "compress_rmsnorm", normalize_rows)
+    for step in range(1 if layout == "wrap" else 3):
+        if layout in ("verify", "wrap"):
+            positions = torch.arange(batch) + step * batch
+        elif layout == "interleaved":
+            positions = torch.arange(batch) // (batch // 2) + step * 2
+        else:
+            positions = torch.full((batch,), step)
+            if layout == "padded":
+                positions[-2:] = -1
+        values = torch.randn(batch, lm.cfg.hidden_size).to(dtype)
+        ctx = Csa2LayerContext(
+            values, torch.zeros(batch, lm.cfg.q_lora_rank).to(dtype), positions.clamp_min(0), reference.cos_sin
+        )
+        for harness, is_graph in ((reference, False), (captured, True)):
+            dsa = harness.backend._builder.build(
+                tables, (positions + 1).tolist(), [1] * batch, ctx.positions, None, False, False
+            )
+            dsa.is_acl_graph = is_graph
+            projection_rows.clear()
+            normalization_rows.clear()
+            harness.backend._run_compressor(
+                harness.layer, ctx, dsa, harness.cache, harness.mapping, [1] * batch, dsa.seq_lens, harness.shared
+            )
+            assert projection_rows == ([batch] if is_graph else [1] * batch)
+            assert normalization_rows == ([batch] if is_graph else [1] * batch)
+        for name in ("key", "index", "indexer_scale", "compress_kv_state", "compress_score_state"):
+            expected = getattr(reference.cache, name)
+            actual = getattr(captured.cache, name)
+            if expected is not None:
+                torch.testing.assert_close(actual, expected, rtol=2e-5, atol=2e-6)
+
+
+@npu_only
+@pytest.mark.parametrize("shared_rows", [False, True])
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_batched_decode_matches_npu_compressor_ring(shared_rows: bool, dtype: torch.dtype) -> None:
+    """Compare the batched path with the real Triton pooling/state updates."""
+    device = _active_device()
+    lm = _make_forward_lm(dtype, seed=731, device=device)
+    batch = 8
+    layer = lm.model.layers[2].self_attn
+    backends = [_make_csa2_backend(lm.cfg, device=device) for _ in range(2)]
+    caches = [
+        _with_ring32_compressor_states(
+            _allocate_v41_layer_caches(lm.cfg, batch, dtype, device=device, reserve_token_sink=True)
+        )
+        for _ in backends
+    ]
+    for backend, planes in zip(backends, caches, strict=True):
+        backend.bind_kv_caches(planes)
+    tables = [torch.arange(1, batch + 1, device=device, dtype=torch.int32).unsqueeze(1)] * 3
+    if shared_rows:
+        tables = [table[:1].expand_as(table).contiguous() for table in tables]
+    for step in range(3):
+        positions = (
+            torch.arange(batch, device=device) + step * batch
+            if shared_rows
+            else torch.full((batch,), step, device=device)
+        )
+        values = torch.randn(batch, lm.cfg.hidden_size, device=device).to(dtype)
+        ctx = Csa2LayerContext(
+            values, values[:, : lm.cfg.q_lora_rank], positions, lm.model.compress_rotary.cos_sin_cache
+        )
+        for backend, planes, is_graph in zip(backends, caches, (False, True), strict=True):
+            dsa = backend._builder.build(tables, (positions + 1).tolist(), [1] * batch, positions, None, False, False)
+            backend._move_metadata_to_device(dsa)
+            dsa.is_acl_graph = is_graph
+            mapping = backend._resolve_cache_mapping(2, 2)
+            backend._run_compressor(layer, ctx, dsa, planes[2], mapping, [1] * batch, dsa.seq_lens, CSA2SharedRuntime())
+        torch.npu.synchronize()
+        for name in ("key", "index", "indexer_scale", "compress_kv_state", "compress_score_state"):
+            actual, expected = getattr(caches[1][2], name), getattr(caches[0][2], name)
+            if name in ("compress_kv_state", "compress_score_state"):
+                # Triton parks completed odd members too. Ratio-2 pooling
+                # only reads even members from history; the batched path,
+                # like the torch reference, stores only those pending rows.
+                actual, expected = actual[:, ::2], expected[:, ::2]
+            torch.testing.assert_close(actual, expected, rtol=2e-5, atol=2e-6)

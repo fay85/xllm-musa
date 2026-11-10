@@ -320,3 +320,71 @@ def test_parity_ring_boundaries_and_padding(output_dtype: torch.dtype) -> None:
     used = [32, 8, 4, 7, 0, 5]
     blocks = [1, 2, 3, 4, 5, 0]
     _run_parity_case(starts, used, blocks, seed=3, output_dtype=output_dtype)
+
+
+@pytest.mark.skipif(not _npu_ready(), reason="requires an NPU")
+@pytest.mark.parametrize(
+    "layout", ["single_even", "single_odd", "independent", "verify", "interleaved", "wrap", "padded", "released"]
+)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_decode_pool_matches_serial_reference(layout: str, dtype: torch.dtype) -> None:
+    """Compare pooled rows bitwise with the existing vLLM-derived kernel.
+
+    Read-after-read verification rows and wrapping duplicate slots must use
+    this batch's preceding projection, while padded/null pages remain inert.
+    """
+    from xllm.python.kernels_npu.triton import compressor
+
+    device = torch.device("npu:0")
+    rows = 1 if layout.startswith("single_") else 40 if layout == "wrap" else 8
+    generator = torch.Generator().manual_seed(1927)
+    kv = torch.randn(rows, WIDTH, generator=generator).to(device)
+    scores = torch.randn(rows, WIDTH, generator=generator).to(device)
+    states = torch.randn(rows + 2, RING_ROWS, WIDTH, generator=generator).to(device)
+    gates = torch.randn(rows + 2, RING_ROWS, WIDTH, generator=generator).to(device)
+    actual_states, actual_gates = states.clone(), gates.clone()
+    if layout in ("verify", "wrap"):
+        positions = torch.arange(rows, device=device) + 31
+        blocks = torch.ones(rows, dtype=torch.int32, device=device)
+    elif layout == "interleaved":
+        positions = torch.arange(rows, device=device) // (rows // 2) + 32
+        blocks = torch.arange(rows, dtype=torch.int32, device=device) % (rows // 2) + 1
+    else:
+        positions = torch.arange(rows, device=device) % 2 + 32
+        blocks = torch.arange(1, rows + 1, dtype=torch.int32, device=device)
+    if layout == "single_odd":
+        positions += 1
+    if layout == "padded":
+        positions[-2] = -1
+        blocks[-1] = 0
+    table = blocks[:, None].contiguous()
+    if layout == "released":
+        table = torch.stack((torch.full_like(blocks, -1), blocks), dim=1)
+        positions += 128
+    lengths = positions.to(torch.int32) + 1
+    expected = torch.zeros_like(kv, dtype=dtype)
+    # The serial reference launches K2 before K3 for each single-token row.
+    for row in range(rows):
+        meta = torch.stack(
+            (positions[row].int(), (lengths[row] > 0).int(), lengths.new_tensor(0), lengths.new_tensor(0), blocks[row])
+        ).reshape(5, 1)
+        compressor.compressor_from_projected(
+            kv[row : row + 1],
+            scores[row : row + 1],
+            states,
+            gates,
+            meta,
+            expected[row : row + 1],
+            max_query_len=1,
+            num_cores=compressor._cube_core_num(),
+        )
+    actual = compressor.compressor_decode_from_projected(
+        kv, scores, actual_states, actual_gates, lengths, table, block_size=128, output_dtype=dtype
+    )
+    torch.npu.synchronize()
+    torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+    # Only unfinished even members are semantically live across calls.
+    torch.testing.assert_close(actual_states[:, ::2], states[:, ::2], atol=0, rtol=0)
+    torch.testing.assert_close(actual_gates[:, ::2], gates[:, ::2], atol=0, rtol=0)
+    torch.testing.assert_close(actual_states[0], states[0], atol=0, rtol=0)
+    torch.testing.assert_close(actual_gates[0], gates[0], atol=0, rtol=0)

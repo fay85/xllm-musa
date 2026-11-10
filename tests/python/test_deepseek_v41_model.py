@@ -346,6 +346,28 @@ def test_dsa_cp_replicates_query_weights_and_keeps_output_sharded() -> None:
     assert attn.o_b_proj.weight.shape[1] == cfg.o_groups * cfg.o_lora_rank // cfg.tp_size
 
 
+@pytest.mark.parametrize("tp_size", [1, 2])
+def test_attention_output_projection_weight_packing_preserves_groups(tp_size: int) -> None:
+    config = {**_DEEPSEEK_V41_TINY_CONFIG, "tp_size": tp_size, "engram_layer_ids": []}
+    cfg = DeepseekV41Config.from_dict(config)
+    model = DeepseekV41Model(cfg, torch.float32, torch.device("cpu"), config=config)
+    attention = model.layers[0].self_attn
+    with torch.no_grad():
+        attention.o_a_proj.weight.normal_()
+    original = attention.o_a_proj.weight.detach().view(attention.n_local_groups, cfg.o_lora_rank, -1).clone()
+    inputs = torch.randn(3, attention.n_local_groups, original.size(-1))
+    expected = torch.einsum("tgd,grd->tgr", inputs, original)
+
+    attention._prepare_o_a_bmm_weight()
+    packed = attention.o_a_proj.weight
+    assert packed.is_contiguous()
+    assert packed.shape == (attention.n_local_groups, original.size(-1), cfg.o_lora_rank)
+    actual = torch.bmm(inputs.transpose(0, 1), packed).transpose(0, 1)
+    torch.testing.assert_close(actual, expected)
+    attention._prepare_o_a_bmm_weight()
+    assert attention.o_a_proj.weight.data_ptr() == packed.data_ptr()
+
+
 def test_dsa_cp_rejects_pcp_topology() -> None:
     config = {**_DEEPSEEK_V41_TINY_CONFIG, "enable_dsa_cp": True, "cp_size": 2, "engram_layer_ids": []}
     cfg = DeepseekV41Config.from_dict(config)
@@ -412,7 +434,7 @@ def test_dsa_cp_all_batch_types_match_original_tp(
     def _execute(q: torch.Tensor, kv: torch.Tensor, layer: dq.DeepseekV41Attention) -> torch.Tensor:
         nonlocal reference
         runtime = get_current_dsa_cp_runtime()
-        if layer is enabled:
+        if layer is enabled and batch_kind != "decode_graph":
             assert runtime is not None
             assert q.shape == (runtime.plan.end - runtime.plan.start, enabled.cfg.n_heads, enabled.head_dim)
             ctx = layer._csa2_ctx
@@ -483,7 +505,7 @@ def test_dsa_cp_all_batch_types_match_original_tp(
     with torch.no_grad(), forward_context(context):
         actual = enabled(hidden, positions, cos_sin_cache, sp_metadata=layout)
         torch.testing.assert_close(actual, sp_shard(expected, layout) if fc1 else expected)
-    assert exchange_calls == 1
+    assert exchange_calls == int(batch_kind != "decode_graph")
     assert len(projection_layouts) == int(fc1)
 
 
@@ -979,6 +1001,47 @@ def test_registry_resolves_deepseek_v41() -> None:
     for name in names:
         with pytest.raises(NotImplementedError, match="supported platforms: \\['npu'\\]"):
             get_model_class(name)
+
+
+@pytest.mark.parametrize("model_type", ["deepseek_v41", "deepseek_v41_dspark"])
+@pytest.mark.parametrize("enable_dsa_cp", [False, True])
+@pytest.mark.parametrize("tp_size", [1, 2])
+def test_csa2_factory_uses_model_decode_geometry(
+    model_type: str, enable_dsa_cp: bool, tp_size: int, tmp_path: Path
+) -> None:
+    config = {
+        **_DEEPSEEK_V41_TINY_CONFIG,
+        "model_type": model_type,
+        "model_path": str(tmp_path),
+        "enable_dsa_cp": enable_dsa_cp,
+        "tp_size": tp_size,
+        "tp_rank": 0,
+        "engram_layer_ids": [],
+        "draft_query_width": 5,
+        "num_hidden_layers": 1,
+        "compress_ratios": [0],
+        "kv_source_layer_ids": [],
+        "index_source_layer_ids": [],
+        "candidate_source_layer_id": -1,
+        "candidate_topk_blocks": 0,
+        "candidate_block_size": 0,
+        "max_position_embeddings": 1024,
+    }
+    cfg = DeepseekV41Config.from_dict(config)
+    attention = dq.DeepseekV41Attention(
+        cfg,
+        0,
+        torch.bfloat16,
+        torch.device("cpu"),
+        CSA2LayerMode(layer_id=0, mode=CSA2_MODE_SWA, compress_ratio=0, main_kv_source_layer=-1),
+    )
+    backend = Csa2AttentionBackend.from_model_config(attention, config, torch.device("cpu"), torch.bfloat16)
+    expected_heads = cfg.n_heads // tp_size
+    assert attention.decode_num_heads == expected_heads
+    assert backend.num_heads == expected_heads
+    assert backend._block_query_width == (5 if model_type == "deepseek_v41_dspark" else 0)
+    assert backend.quant_mode == V41_QUANT_NONE
+    assert backend.moe_graph_capturable is False
 
 
 def test_attention_backend_rejects_v41_off_npu(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2270,7 +2333,7 @@ def test_swa_chunk_reads_history_before_overwriting_ring(query_len: int) -> None
         layer_id=0,
         mode=CSA2LayerMode(0, CSA2_MODE_SWA, 0, -1),
         attn_sink=torch.tensor([-100.0]),
-        _csa2_ctx=SimpleNamespace(x=torch.zeros(query_len, 1)),
+        _csa2_ctx=Csa2LayerContext(torch.zeros(query_len, 1), torch.empty(0), positions, torch.empty(0)),
     )
     q = torch.zeros(query_len, 1, 1)
     kv = (100 + torch.arange(query_len, dtype=torch.float32)).view(query_len, 1)
@@ -3714,7 +3777,8 @@ def _quarot_gate_reference(
     return (h + gate.unsqueeze(-1) * value.unsqueeze(1)).to(hidden.dtype)
 
 
-def test_engram_gate_quarot_unrotation() -> None:
+@pytest.mark.parametrize("repeated_block", [False, True])
+def test_engram_gate_quarot_unrotation(repeated_block: bool) -> None:
     """With gate_unrotate the gate dot runs on h_rot @ Q.T; V stays rotated-basis."""
     layout = EngramLayout(
         layer_ids=[1],
@@ -3726,9 +3790,11 @@ def test_engram_gate_quarot_unrotation() -> None:
         compressed_vocab_size=16,
         pad_token_id=0,
     )
-    dim, hc_mult = 48, 2
+    dim, hc_mult = (64 if repeated_block else 48), 2
     g = torch.Generator().manual_seed(99)
-    q_orth = torch.linalg.qr(torch.randn(dim, dim, generator=g))[0]
+    block_dim = 32 if repeated_block else dim
+    block = torch.linalg.qr(torch.randn(block_dim, block_dim, generator=g))[0]
+    q_orth = torch.block_diag(block, block) if repeated_block else block
 
     def make(gate_unrotate: torch.Tensor | None) -> Engram:
         eng = Engram(
@@ -3759,7 +3825,7 @@ def test_engram_gate_quarot_unrotation() -> None:
     out_plain = plain(hidden, torch.zeros(t, n_hash_cols, dtype=torch.int64))
     assert torch.equal(out_plain, _quarot_gate_reference(plain, hidden, staged, None))
 
-    rotated = make(q_orth.t().contiguous())
+    rotated = make(block.t().contiguous())
     rotated.wkv.load_state_dict(plain.wkv.state_dict())
     with torch.no_grad():
         rotated.q_weight.copy_(plain.q_weight)
@@ -3827,6 +3893,29 @@ def test_load_quarot_gate_unrotate(tmp_path, monkeypatch) -> None:
     (model_path / "optional" / "quarot.safetensors").write_bytes(b"garbage-bytes")
     with pytest.raises(SafetensorError):
         load_quarot_gate_unrotate(str(model_path), torch.device("cpu"))
+
+
+@pytest.mark.parametrize("layout", ["repeated", "off_diagonal", "different_block"])
+def test_load_quarot_gate_unrotate_compacts_only_exact_repeated_blocks(tmp_path, layout: str) -> None:
+    """Compression must preserve every checkpoint entry, including off-block ones."""
+    import json
+
+    import safetensors.torch as st
+
+    (tmp_path / "optional").mkdir()
+    (tmp_path / "config.json").write_text(json.dumps({"engram_rotation_config": {"value_projection_rotated": True}}))
+    block = torch.randn(32, 32, generator=torch.Generator().manual_seed(17))
+    rotation = torch.block_diag(block, block)
+    if layout == "off_diagonal":
+        rotation[0, 32] = 1e-7
+    elif layout == "different_block":
+        rotation[32, 32] += 1e-4
+    st.save_file({"global_rotation": rotation}, str(tmp_path / "optional/quarot.safetensors"))
+
+    loaded = load_quarot_gate_unrotate(str(tmp_path), torch.device("cpu"))
+
+    expected = block.T.contiguous() if layout == "repeated" else rotation.T.contiguous()
+    assert torch.equal(loaded, expected)
 
 
 def test_engram_gate_math_and_mask_passthrough() -> None:

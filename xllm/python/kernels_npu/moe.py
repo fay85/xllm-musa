@@ -43,6 +43,41 @@ def _enable_internal_format() -> None:
     torch.npu.config.allow_internal_format = True
 
 
+def has_dispatch_ffn_combine() -> bool:
+    """Whether the installed operator package supplies fused W8A8 MoE."""
+    return torch.ops.xllm_ops.has_dispatch_ffn_combine()
+
+
+def dispatch_ffn_combine(
+    hidden: torch.Tensor,
+    expert_ids: torch.Tensor,
+    weights: torch.Tensor,
+    weight1: torch.Tensor,
+    weight2: torch.Tensor,
+    scale1: torch.Tensor,
+    scale2: torch.Tensor,
+    active_mask: torch.Tensor,
+    group: str,
+    max_output_size: int,
+    swiglu_limit: float,
+) -> torch.Tensor:
+    """Dispatch, run clamped W8A8 experts and combine to each source row."""
+    output, _ = torch.ops.xllm_ops.dispatch_ffn_combine(
+        hidden,
+        weight1,
+        weight2,
+        expert_ids,
+        scale1,
+        scale2,
+        weights,
+        active_mask,
+        group,
+        max_output_size,
+        swiglu_limit,
+    )
+    return output
+
+
 def encode_mega_moe_scale(scale: torch.Tensor, offset: torch.Tensor) -> torch.Tensor:
     """Pack caller-prepared FP32 scale/offset into aclnnMegaMoe's int64 encoding."""
     if scale.shape != offset.shape:
@@ -1950,6 +1985,8 @@ __all__ = [
     "grouped_moe",
     "moe_gate_routing",
     "mega_moe",
+    "has_dispatch_ffn_combine",
+    "dispatch_ffn_combine",
     "encode_mega_moe_scale",
     "moe_expert_compute",
     "grouped_moe_with_selected_experts",

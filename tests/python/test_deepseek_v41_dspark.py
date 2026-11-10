@@ -237,6 +237,7 @@ def _with_patched_forward_context(monkeypatch: pytest.MonkeyPatch, backend) -> N
     context = SimpleNamespace(attention_backend=backend, metadata=SimpleNamespace(), execution_contexts={})
 
     monkeypatch.setattr(v41, "get_forward_context", lambda: context)
+    monkeypatch.setattr(dsp, "get_forward_context", lambda: context)
 
 
 # ---------------------------------------------------------------------------
@@ -1014,7 +1015,7 @@ def test_draft_token_rows_are_grouped_before_attention(graph: bool) -> None:
     )
     backend._current_forward_metadata = lambda: SimpleNamespace(dsa_metadata=dsa)
     mode = SimpleNamespace(compress_ratio=0, is_full=False, is_reindex=False, is_reuse=False)
-    layer = SimpleNamespace(layer_id=0, mode=mode, _csa2_ctx=SimpleNamespace(x=torch.zeros(6, 4)))
+    layer = SimpleNamespace(layer_id=0, mode=mode, _csa2_ctx=SimpleNamespace(x=torch.zeros(6, 4), attn_sink=None))
     seen = {}
 
     def attention(
@@ -1113,7 +1114,7 @@ def _draft_ring_attention() -> SimpleNamespace:
         layer_id=0,
         mode=SimpleNamespace(compress_ratio=0, is_full=False, is_reindex=False, is_reuse=False),
         attn_sink=torch.zeros(1),
-        _csa2_ctx=SimpleNamespace(x=torch.zeros(width, dim)),
+        _csa2_ctx=SimpleNamespace(x=torch.zeros(width, dim), attn_sink=None),
     )
     kv = torch.zeros(width, dim)
     kv[-1] = torch.tensor([64.0, -32.0])

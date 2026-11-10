@@ -144,17 +144,45 @@ class FlashComm1Config(Protocol):
 
 
 def build_flashcomm1_layout(cfg: FlashComm1Config, context: ForwardContext, execution_rows: int) -> SpMetadata | None:
-    """Choose an EP-symmetric eager prefill path, including idle DP replicas.
+    """Choose an EP-symmetric prefill or fixed-capacity decode layout.
 
     Re-evaluate on SWA's compact metadata: short consumer suffixes can retain
     the original layout while the source layers use sequence parallelism.
-    Graph warmup/capture, decode and verification keep their existing path.
+    Target decode graphs use uniform DP capacities and retain padded rows.
+    DSpark's eager query blocks keep their host-planned variable capacities.
     DecodeAclGraphRunner requires all DP decode flags for graph admission;
     a mixed prefill/decode step therefore runs eagerly on every replica.
     """
-    if not cfg.enable_flashcomm1 or context.acl_graph is not None or context.execution_state is not None:
+    if not cfg.enable_flashcomm1:
         return None
     metadata = context.metadata
+    graph = context.acl_graph is not None or context.execution_state is not None
+    draft = bool(getattr(metadata, "is_dflash_proposal", False))
+    if graph or draft:
+        counts = tuple(metadata.dp_execution_token_counts)
+        flags = tuple(metadata.dp_is_decode)
+        if (
+            cfg.tp_size <= 1
+            or len(counts) != cfg.dp_size
+            or counts[cfg.dp_rank] != execution_rows
+            or execution_rows == 0
+            or (cfg.dp_size > 1 and (len(flags) != cfg.dp_size or any(int(flag) != 1 for flag in flags)))
+        ):
+            return None
+        if graph and not draft and (execution_rows % cfg.tp_size or any(count != execution_rows for count in counts)):
+            return None
+        # Graph token validity is refreshed on device; only bucket capacity is
+        # static. Routing padding preserves the same contract as decode MC2.
+        ep_layout = EpSpTokenLayout.from_token_counts(
+            counts,
+            counts,
+            tp_size=cfg.tp_size,
+            tp_rank=cfg.tp_rank,
+            dp_size=cfg.dp_size,
+            dp_rank=cfg.dp_rank,
+            compacted=False,
+        )
+        return SpMetadata.from_execution_rows(execution_rows, cfg.tp_size, cfg.tp_rank, ep_layout=ep_layout)
     if getattr(metadata, "is_spec_verify", False):
         return None
     flags = tuple(getattr(metadata, "dp_is_decode", ()))

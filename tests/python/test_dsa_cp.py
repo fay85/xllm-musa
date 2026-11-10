@@ -291,3 +291,50 @@ def test_compressed_picks_use_global_chunk_offset(
         plan,
     )
     torch.testing.assert_close(local, plan.shard(reference))
+
+
+@pytest.mark.parametrize("rank", range(4))
+@pytest.mark.parametrize("quantized", (False, True))
+def test_decode_projection_uses_only_its_tp_head_slice(
+    monkeypatch: pytest.MonkeyPatch, rank: int, quantized: bool
+) -> None:
+    """Replicated prefill weights produce the same local decode projection."""
+    from xllm.python.models import deepseek_v41 as v41
+
+    torch.manual_seed(61)
+    attention = object.__new__(v41.DeepseekV41Attention)
+    torch.nn.Module.__init__(attention)
+    attention.cfg = SimpleNamespace(tp_rank=rank)
+    attention.decode_num_heads, attention.head_dim = 2, 4
+    attention.quant_mode = v41.V41_QUANT_ASCEND if quantized else v41.V41_QUANT_NONE
+    projection = torch.nn.Linear(16, 32, bias=False)
+    attention.q_b_proj = projection
+    latent = torch.randn(3, 16)
+    if quantized:
+        projection.weight.requires_grad_(False)
+        projection.weight.data = torch.randint(-5, 6, projection.weight.shape, dtype=torch.int8)
+        projection.register_buffer("weight_scale", torch.rand(32))
+        codes = torch.randint(-10, 11, latent.shape, dtype=torch.int8)
+        pertoken = torch.rand(3)
+        monkeypatch.setattr(v41.kernels, "dynamic_quant", lambda _: (codes, pertoken), raising=False)
+
+        def _matmul(
+            inputs: torch.Tensor,
+            weight: torch.Tensor,
+            transpose: bool,
+            scale: torch.Tensor,
+            offset: object,
+            token_scale: torch.Tensor,
+            bias: object,
+            dtype: torch.dtype,
+        ) -> torch.Tensor:
+            assert transpose and weight.shape == (8, 16)
+            assert weight.untyped_storage().data_ptr() == projection.weight.untyped_storage().data_ptr()
+            return ((inputs.float() @ weight.float().T) * scale * token_scale[:, None]).to(dtype)
+
+        monkeypatch.setattr(v41.kernels, "quant_matmul", _matmul, raising=False)
+        full = ((codes.float() @ projection.weight.float().T) * projection.weight_scale * pertoken[:, None]).bfloat16()
+    else:
+        full = projection(latent)
+    actual = attention._q_b_proj_forward(latent, None, head_parallel=True)
+    torch.testing.assert_close(actual, full[:, rank * 8 : (rank + 1) * 8], rtol=0, atol=0)

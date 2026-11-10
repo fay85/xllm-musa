@@ -48,29 +48,71 @@ from xllm.python.model_executor.forward_context import (
 
 
 @pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
-def test_rms_norm_uses_batch_stable_fp32_kernel(dtype: torch.dtype, monkeypatch: pytest.MonkeyPatch) -> None:
-    """V4.1 RMSNorm delegates FP32 inputs/weights and casts exactly once."""
+@pytest.mark.parametrize("device", ["cpu", "npu"])
+def test_rms_norm_kernel_dtypes(dtype: torch.dtype, device: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """NPU BF16 stays native; other inputs use the FP32 kernel contract."""
+    if device == "npu":
+        torch_npu = pytest.importorskip("torch_npu")
+        if not torch_npu.npu.is_available():
+            pytest.skip("requires an NPU")
     calls: list[tuple[torch.Tensor, torch.Tensor, float]] = []
 
     def fake_rms_norm(value: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
         calls.append((value.clone(), weight.clone(), eps))
-        return value * weight + eps
+        return (value.float() * weight.float() + eps).to(value.dtype)
 
     monkeypatch.setattr(kernels, "rms_norm", fake_rms_norm)
-    norm = v41.DeepseekV41RMSNorm(8, 1e-5, dtype, "cpu")
+    norm = v41.DeepseekV41RMSNorm(8, 1e-5, dtype, device)
     with torch.no_grad():
         norm.weight.copy_(torch.linspace(0.5, 1.2, 8, dtype=dtype))
-    value = torch.linspace(-1.0, 1.0, 24, dtype=dtype).reshape(3, 8)
+    value = torch.linspace(-1.0, 1.0, 24, dtype=dtype, device=device).reshape(3, 8)
 
     actual = norm(value)
 
     assert len(calls) == 1
     kernel_value, kernel_weight, kernel_eps = calls[0]
-    assert kernel_value.dtype == torch.float32
-    assert kernel_weight.dtype == torch.float32
+    kernel_dtype = torch.bfloat16 if device == "npu" and dtype == torch.bfloat16 else torch.float32
+    assert kernel_value.dtype == kernel_dtype
+    assert kernel_weight.dtype == kernel_dtype
     assert kernel_eps == norm.eps
     expected = (value.float() * norm.weight.float() + norm.eps).to(dtype)
     torch.testing.assert_close(actual, expected, atol=0, rtol=0)
+
+
+@pytest.mark.parametrize("width", [128, 512, 1024, 4096])
+@pytest.mark.parametrize("rows", [1, 6, 32])
+@pytest.mark.parametrize("scale", [1e-3, 1.0, 100.0])
+def test_npu_bf16_rms_norm_matches_fp32_path(
+    width: int, rows: int, scale: float, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise the native NPU op used by the C++ rms_norm wrapper, not the CPU stub."""
+    torch_npu = pytest.importorskip("torch_npu")
+    if not torch_npu.npu.is_available():
+        pytest.skip("requires an NPU")
+
+    def native_rms_norm(value: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
+        return torch_npu.npu_rms_norm(value, weight, epsilon=eps)[0]
+
+    monkeypatch.setattr(kernels, "rms_norm", native_rms_norm)
+    generator = torch.Generator().manual_seed(2026)
+    value = (torch.randn(rows, width, generator=generator) * scale).to(device="npu", dtype=torch.bfloat16)
+    norm = v41.DeepseekV41RMSNorm(width, 1e-6, torch.bfloat16, "npu")
+    with torch.no_grad():
+        norm.weight.copy_(torch.linspace(0.5, 1.5, width, device="npu", dtype=torch.bfloat16))
+
+    actual = norm(value)
+    expected = native_rms_norm(value.float(), norm.weight.float(), norm.eps).to(torch.bfloat16)
+    # Check both the old widened native path and an independent FP32 formula.
+    value_fp32 = value.cpu().float()
+    reference = (
+        value_fp32 * torch.rsqrt(value_fp32.square().mean(-1, keepdim=True) + norm.eps) * norm.weight.cpu().float()
+    ).to(torch.bfloat16)
+    assert actual.dtype == torch.bfloat16
+    torch.testing.assert_close(actual.cpu(), expected.cpu(), rtol=2**-8, atol=1.5e-3)
+    torch.testing.assert_close(actual.cpu(), reference, rtol=2**-8, atol=1.5e-3)
+    repeated = value[:1].expand(rows, -1).contiguous()
+    single = norm(value[:1]).cpu()
+    torch.testing.assert_close(norm(repeated).cpu(), single.expand(rows, -1), rtol=0, atol=0)
 
 
 # ---------------------------------------------------------------------------

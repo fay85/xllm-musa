@@ -109,7 +109,6 @@ from xllm.python.models.deepseek_v4 import (
     DeepseekV4RotaryEmbedding,
     _find_checkpoint_prefix,
     _pick,
-    _record_stream,
 )
 from xllm.python.models.deepseek_v32 import DeepseekV3MLP, W8A8DynamicLinear
 from xllm.python.models.deepseek_v41_engram import (
@@ -652,8 +651,25 @@ def _make_v41_linear(
 # ---------------------------------------------------------------------------
 
 
+_ATTENTION_KV_STREAMS: dict[torch.device, Any] = {}
+
+
+def _attention_kv_stream(device: torch.device) -> Any:
+    """Share one KV-projection stream across V4.1 layers on this device."""
+    stream = _ATTENTION_KV_STREAMS.get(device)
+    if stream is None:
+        stream = torch.npu.Stream(device=device)
+        _ATTENTION_KV_STREAMS[device] = stream
+    return stream
+
+
 def _rms_norm(x: torch.Tensor, weight: torch.Tensor, eps: float) -> torch.Tensor:
-    """Normalize in FP32 with the existing native row reduction, then cast once."""
+    """Use native BF16 RMSNorm on NPU; explicitly widen other inputs."""
+    if x.dtype == weight.dtype == torch.bfloat16 and x.device.type in ("npu", "privateuseone"):
+        # Native BF16 RMSNorm already accumulates in FP32 and rounds the final
+        # product once. Numerical and batch-invariance coverage against the
+        # widened path lives in test_deepseek_v41_rms_norm.py.
+        return kernels.rms_norm(x, weight, eps)
     return kernels.rms_norm(x.float(), weight.float(), eps).to(x.dtype)
 
 
@@ -857,15 +873,7 @@ _moe_mc2_collective_warned = False
 
 
 def _moe_mc2_allow_draft() -> bool:
-    """Whether the draft MC2 veto is waived (it never is in production).
-
-    Deliberate invariant, not a disabled feature: the DSpark draft's per-rank
-    row counts are structurally uneven (a busy rank sees one sequence's whole
-    block; an empty DP shard sees a single dummy row), while ``global_bs=0``
-    means "every rank has the same row count". The two are incompatible, so the
-    guard always declines the draft; the static form exists as the test escape
-    hatch only.
-    """
+    """Test seam for bypassing the eager draft's uneven-row veto."""
     return False
 
 
@@ -916,6 +924,37 @@ def _moe_mc2_all_dp_ranks_decode(metadata: Any) -> bool:
     return not token_counts or len(token_counts) <= 1
 
 
+def _moe_mc2_graph_active_mask(
+    hidden: torch.Tensor,
+    sp_metadata: SpMetadata | None,
+) -> torch.Tensor | None:
+    """Drop ACL graph padding using the runner's replay-updated slot sentinel."""
+    if not in_acl_graph():
+        return None
+    context = get_forward_context_or_none()
+    slots = getattr(context.metadata, "slot_mapping", None) if context is not None else None
+    if slots is None:
+        return None
+    masks = context.layer_shared_cache.setdefault(_moe_mc2_graph_active_mask, {})
+    offset = sp_metadata.local_offset if sp_metadata is not None else 0
+    padded_rows = sp_metadata.padded_rows if sp_metadata is not None else hidden.shape[0]
+    key = (id(slots), hidden.shape[0], offset, padded_rows)
+    if key in masks:
+        return masks[key][1]
+    original_slots = slots
+    if sp_metadata is not None:
+        padding = sp_metadata.padded_rows - slots.numel()
+        if padding:
+            slots = F.pad(slots, (0, padding), value=-1)
+        slots = slots.narrow(0, sp_metadata.local_offset, sp_metadata.local_rows)
+    if slots.numel() != hidden.shape[0]:
+        raise ValueError("MC2 graph slot mapping must match the local token rows")
+    mask = slots >= 0
+    # Retain the source slot tensor: temporary views must not reuse its key.
+    masks[key] = (original_slots, mask)
+    return mask
+
+
 def _moe_mc2_dispatch(**kwargs: Any) -> tuple:
     """The dispatch kernel, behind a seam so tests can substitute a fake."""
     import torch_npu
@@ -942,7 +981,7 @@ def _log_moe_mc2_active(ep_rank: int, ep_size: int) -> None:
         _moe_mc2_active_logged = True
         logger.info(
             f"MoE MC2 decode path active (ep_rank={ep_rank} ep_size={ep_size}, "
-            "chain=dispatch_v2->dynamic_quant->grouped_matmul->dequant_swiglu_quant->grouped_matmul->combine_v2)"
+            "chain=dispatch_v2_int8->grouped_matmul->dequant_swiglu_quant->grouped_matmul->combine_v2)"
         )
 
 
@@ -960,14 +999,13 @@ def _log_moe_mc2_fallback(reason: str, enabled: bool) -> None:
 
 
 def _moe_mc2_draft_veto_applies(moe: Any) -> bool:
-    """Whether the DSpark-draft MC2 veto (Fix-1) is what declines ``moe``.
+    """Keep uneven eager draft rows away from auto-capacity MC2.
 
-    Single source of truth shared by ``_mc2_guard_reason`` and the fallback-log
-    routing so the decision and its log can never drift: when this is ``True``
-    the guard returns the draft clause ahead of every other probe, so ``reason``
-    is always the draft one. Static module state, identical on every rank.
+    ACL graphs publish uniform padded DP counts and refresh the active-token
+    mask on replay. Their draft can use the same MC2 chain as the target;
+    ``_mc2_guard_reason`` still validates those counts before dispatch.
     """
-    return not _moe_mc2_allow_draft() and bool(getattr(moe, "_moe_is_dspark_draft", False))
+    return not _moe_mc2_allow_draft() and bool(getattr(moe, "_moe_is_dspark_draft", False)) and not in_acl_graph()
 
 
 def _log_moe_mc2_draft_fallback(reason: str, enabled: bool) -> None:
@@ -1516,6 +1554,7 @@ class DeepseekV41Attention(Attention):
         self.mode = mode
         self.quant_mode = quant_mode
         self.num_heads_local = num_heads
+        self.decode_num_heads = cfg.n_heads // tp
         self.head_dim = head_dim
         # Attention sink (learnable logit bias per head); contributes to the
         # softmax normalizer only.
@@ -1594,6 +1633,7 @@ class DeepseekV41Attention(Attention):
         # Per-forward hand-off to the backend.
         self._csa2_ctx: Csa2LayerContext | None = None
         self._csa2_used_topk: torch.Tensor | None = None
+        self._o_a_bmm_weight_prepared = False
 
     def process_weights_after_loading(self) -> None:
         if self.quant_mode == V41_QUANT_ASCEND:
@@ -1604,6 +1644,17 @@ class DeepseekV41Attention(Attention):
                 self.o_a_proj.process_weights_after_loading()
             if self.indexer is not None:
                 self.indexer.process_weights_after_loading()
+            if self.o_a_proj.weight.device.type in ("npu", "privateuseone"):
+                self._prepare_o_a_bmm_weight()
+
+    def _prepare_o_a_bmm_weight(self) -> None:
+        """Pack each output group as [input, rank] for the fused transpose BMM."""
+        if self._o_a_bmm_weight_prepared:
+            return
+        weight = self.o_a_proj.weight
+        # Replace the checkpoint layout instead of retaining a second weight copy.
+        weight.data = weight.view(self.n_local_groups, self.o_lora_rank, -1).transpose(1, 2).contiguous()
+        self._o_a_bmm_weight_prepared = True
 
     # -- forward ---------------------------------------------------------------
 
@@ -1629,7 +1680,13 @@ class DeepseekV41Attention(Attention):
         num_tokens = hidden.size(0)
         cp_context = None
         query_positions = positions
-        if self.enable_dsa_cp:
+        # Captured decode has one query per request row. Keep heads sharded
+        # there: token CP would add an AllToAll per layer and bypass the
+        # persistent-cache SMLA decode kernel. Prefill still uses token CP.
+        head_parallel = self.enable_dsa_cp and getattr(
+            get_forward_context().metadata.dsa_metadata, "is_acl_graph", False
+        )
+        if self.enable_dsa_cp and not head_parallel:
             from xllm.python.model_executor.dsa_cp import get_dsa_cp_runtime
 
             runtime = get_dsa_cp_runtime(num_tokens, self.cfg.tp_size, self.cfg.tp_rank)
@@ -1642,6 +1699,7 @@ class DeepseekV41Attention(Attention):
         # feeds both projections (bitwise-identical to the per-projection
         # quant; saves 40 dynamic_quant calls per prefill step, each over
         # [tokens, hidden]).
+        kv_stream = None
         if (
             isinstance(self.q_a_proj, W8A8DynamicLinear)
             and isinstance(self.kv_proj, W8A8DynamicLinear)
@@ -1650,8 +1708,17 @@ class DeepseekV41Attention(Attention):
             from xllm.python import kernels as _kernels
 
             hidden_int8, hidden_pertoken = _kernels.dynamic_quant(hidden)
+            if in_acl_graph() and hidden.device.type == "npu":
+                kv_stream = _attention_kv_stream(hidden.device)
+                current_stream = torch.npu.current_stream(hidden.device)
+                kv_stream.wait_stream(current_stream)
+                hidden_int8.record_stream(kv_stream)
+                hidden_pertoken.record_stream(kv_stream)
+                with torch.npu.stream(kv_stream):
+                    kv = self.kv_a_layernorm(self.kv_proj.forward_quantized(hidden_int8, hidden_pertoken))
+            else:
+                kv = self.kv_a_layernorm(self.kv_proj.forward_quantized(hidden_int8, hidden_pertoken))
             q_a = self.q_a_proj.forward_quantized(hidden_int8, hidden_pertoken)
-            kv = self.kv_a_layernorm(self.kv_proj.forward_quantized(hidden_int8, hidden_pertoken))
         else:
             q_a = self.q_a_proj(hidden)
             kv = self.kv_a_layernorm(self.kv_proj(hidden))
@@ -1661,13 +1728,20 @@ class DeepseekV41Attention(Attention):
         # run on the unquantized latent.
         qr, qr_scale = self._q_norm_quant(q_a)
         query_qr = cp_context.shard(qr) if cp_context is not None else qr
+        query_heads = self.decode_num_heads if head_parallel else self.num_heads_local
         if query_qr.size(0) == 0:
-            q = hidden.new_empty((0, self.num_heads_local, self.head_dim))
+            q = hidden.new_empty((0, query_heads, self.head_dim))
         else:
-            q = self._q_b_proj_forward(query_qr, qr_scale).view(-1, self.num_heads_local, self.head_dim)
+            q = self._q_b_proj_forward(query_qr, qr_scale, head_parallel=head_parallel).view(
+                -1, query_heads, self.head_dim
+            )
             q = apply_interleaved_rope(q, query_positions, cos_sin_cache)
         # SWA KV path: kv_norm -> RoPE over the whole post-RoPE vector
         # (model.py:700-720). The KV stays in bf16, aligned with vllm-ascend.
+        if kv_stream is not None:
+            current_stream.wait_stream(kv_stream)
+            kv.record_stream(current_stream)
+        # RoPE's gathered rows are shared by Q and KV on the caller stream.
         kv = apply_interleaved_rope(kv, positions, cos_sin_cache)
         self._csa2_ctx = Csa2LayerContext(
             x=hidden,
@@ -1675,6 +1749,11 @@ class DeepseekV41Attention(Attention):
             positions=positions,
             cos_sin_cache=cos_sin_cache,
             qr_scale=qr_scale,
+            attn_sink=(
+                self.attn_sink.narrow(0, self.cfg.tp_rank * query_heads, query_heads)
+                if head_parallel
+                else self.attn_sink
+            ),
         )
         try:
             attn_out = execute_csa2(q, kv, self)
@@ -1691,8 +1770,13 @@ class DeepseekV41Attention(Attention):
             attn_out = cp_context.restore_tp_heads(attn_out)
         # O path: grouped LoRA projection (model.py:783-789).
         out = attn_out.view(num_tokens, self.n_local_groups, -1)
-        wo_a = self.o_a_proj.weight.view(self.n_local_groups, self.o_lora_rank, -1)
-        o_low = torch.einsum("tgd,grd->tgr", out, wo_a)
+        if self._o_a_bmm_weight_prepared and num_tokens > 0:
+            o_low = kernels.batch_matmul_transpose(out, self.o_a_proj.weight)
+        elif self._o_a_bmm_weight_prepared:
+            o_low = out.new_empty((0, self.n_local_groups, self.o_lora_rank))
+        else:
+            wo_a = self.o_a_proj.weight.view(self.n_local_groups, self.o_lora_rank, -1)
+            o_low = torch.einsum("tgd,grd->tgr", out, wo_a)
         projection_input = o_low.reshape(num_tokens, -1)
         if sp_metadata is not None:
             return sp_row_parallel_projection(self.o_b_proj, projection_input, sp_metadata)
@@ -1726,8 +1810,31 @@ class DeepseekV41Attention(Attention):
         """q_a -> (normed bf16 latent, None); the fused INT8 path is disabled."""
         return self.q_a_layernorm(q_a), None
 
-    def _q_b_proj_forward(self, qr: torch.Tensor, qr_scale: torch.Tensor | None) -> torch.Tensor:
+    def _q_b_proj_forward(
+        self, qr: torch.Tensor, qr_scale: torch.Tensor | None, *, head_parallel: bool = False
+    ) -> torch.Tensor:
         """q_b_proj over the shared latent, reusing fused codes when present."""
+        if head_parallel:
+            # DSA CP loads all heads for prefill. Decode reads a contiguous
+            # output-row view of those same weights, without a second copy or
+            # projecting the other ranks' heads.
+            width = self.decode_num_heads * self.head_dim
+            start = self.cfg.tp_rank * width
+            weight = self.q_b_proj.weight.narrow(0, start, width)
+            if self.quant_mode == V41_QUANT_ASCEND:
+                if qr_scale is None:
+                    qr, qr_scale = kernels.dynamic_quant(qr)
+                return kernels.quant_matmul(
+                    qr,
+                    weight,
+                    True,
+                    self.q_b_proj.weight_scale.flatten().narrow(0, start, width),
+                    None,
+                    qr_scale.view(-1),
+                    None,
+                    torch.bfloat16,
+                )
+            return torch.nn.functional.linear(qr, weight)
         if qr_scale is not None:
             return self.q_b_proj.forward_quantized(qr, qr_scale)
         return self.q_b_proj(qr)
@@ -2049,18 +2156,6 @@ class DeepseekV41SharedMLP(DeepseekV3MLP):
         return act_int8, act_scale
 
 
-@dataclass
-class _Mc2SharedExpertState:
-    """Own every side-stream intermediate until the routed/shared join."""
-
-    worker_input: torch.Tensor
-    quantized_input: torch.Tensor
-    input_scale: torch.Tensor
-    gate_up: torch.Tensor | None = None
-    activation: torch.Tensor | None = None
-    activation_scale: torch.Tensor | None = None
-
-
 class DeepseekV41W8A8MoE(DeepseekV4MoE):
     """Ascend W8A8-export MoE (existing V4 kernel path, NPU-only).
 
@@ -2091,6 +2186,12 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         # decode MC2 dispatch/combine path; guard declines log one-shot.
         self.enable_fused_mc2 = cfg.enable_fused_mc2
         self._eplv2_mega_moe_enabled = cfg.enable_mega_moe and cfg.expert_parallel_degree == 2
+        self._eplv2_ffn_combine_enabled = (
+            cfg.expert_parallel_degree == 2
+            and self.enable_fused_mc2
+            and not cfg.enable_mega_moe
+            and kernels.has_dispatch_ffn_combine()
+        )
         self._mega_moe_num_max_tokens_per_rank = cfg.mega_moe_num_max_tokens_per_rank
         self._mega_moe_ccl_buffer_size = cfg.mega_moe_ccl_buffer_size
         if self._eplv2_mega_moe_enabled:
@@ -2103,6 +2204,10 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
             self.register_buffer("mega_moe_context", torch.empty(0, dtype=torch.int32, device=device), persistent=False)
         self.register_buffer("mega_moe_w13_scale", torch.empty(0, dtype=torch.int64, device=device), persistent=False)
         self.register_buffer("mega_moe_w2_scale", torch.empty(0, dtype=torch.int64, device=device), persistent=False)
+        self.register_buffer(
+            "ffn_combine_w13_scale", torch.empty(0, dtype=torch.int64, device=device), persistent=False
+        )
+        self.register_buffer("ffn_combine_w2_scale", torch.empty(0, dtype=torch.int64, device=device), persistent=False)
         # Deferred until the vision phase: the W8A8 expert path never reads
         # image_token_id or gate_bias_vl; both are staged for the torch-MoE
         # multimodal path only (see the class docstring).
@@ -2177,15 +2282,20 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         return super()._run_shared_experts(hidden)
 
     def process_weights_after_loading(self) -> None:
-        if self._eplv2_mega_moe_enabled and getattr(self, "_mega_moe_scales_encoded", False):
+        if getattr(self, "_fused_ep_weights_prepared", False):
             return
         super().process_weights_after_loading()
-        if not self._eplv2_mega_moe_enabled:
+        if not (self._eplv2_mega_moe_enabled or self._eplv2_ffn_combine_enabled):
             return
         for parameter in (self.experts_w13, self.experts_w2):
             plain = parameter.data
             parameter.data = torch.empty(0, dtype=plain.dtype, device=plain.device)
             parameter.data = kernels.format_cast_nz(plain)
+        if self._eplv2_ffn_combine_enabled:
+            self.ffn_combine_w13_scale = self.experts_w13_scale.float().view(torch.int32).to(torch.int64).contiguous()
+            self.ffn_combine_w2_scale = self.experts_w2_scale.float().view(torch.int32).to(torch.int64).contiguous()
+            self._fused_ep_weights_prepared = True
+            return
         self.mega_moe_w13_scale = kernels.encode_mega_moe_scale(
             self.experts_w13_scale,
             self.experts_w13_offset.squeeze(-1),
@@ -2195,6 +2305,7 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
             self.experts_w2_offset.squeeze(-1),
         )
         self._mega_moe_scales_encoded = True
+        self._fused_ep_weights_prepared = True
 
     def _mc2_ep_size(self) -> int:
         return self.cfg.ep_size if self.cfg.ep_size > 0 else self.cfg.tp_size
@@ -2221,8 +2332,8 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         and shared expert all see the local row set, and ``combine_v2`` scatters
         each source rank's partial back to the target rank (it is not an EP
         all-reduce). ``global_bs=0`` matches C++ for ``dp>1`` and no
-        ``x_active_mask`` is passed, because every dispatched row is a real local
-        token (there is no fake pad row to drop).
+        DP gather is needed. Captured graphs use the runner's slot sentinel to
+        mask padding rows in both dispatch and combine.
 
         The guard is evaluated identically on every rank (it keys on host-planned
         metadata and static module state, never a rank-local tensor value), which
@@ -2232,6 +2343,10 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         if self.cfg.expert_parallel_degree == 2 and _eplv2_prefill_step(self.cfg):
             return self._forward_eplv2(hidden, post_norm, sp_metadata)
         if sp_metadata is not None:
+            if self.enable_fused_mc2 and in_acl_graph() and self._mc2_guard_reason(hidden) is None:
+                # The decoder already owns disjoint TP rows; MC2 combines
+                # directly to those owners and keeps the residual stream local.
+                return self._forward_mc2_decode(hidden, post_norm, sp_metadata=sp_metadata)
             return self._forward_flashcomm1(hidden, post_norm, sp_metadata)
         if self.enable_fused_mc2:
             reason = self._mc2_guard_reason(hidden)
@@ -2306,54 +2421,6 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         )
         return topk_weights, topk_idx
 
-    def _prepare_mc2_shared_expert(self, hidden: torch.Tensor) -> _Mc2SharedExpertState:
-        """Overlap shared input quantization with the Cube-heavy router."""
-        if getattr(self, "_mc2_shared_input_ready", None) is None:
-            self._mc2_shared_input_ready = torch.npu.Event()
-            self._mc2_shared_router_ready = torch.npu.Event()
-            self._mc2_shared_dispatch_done = torch.npu.Event()
-            self._mc2_shared_combine_start = torch.npu.Event()
-            self._shared_expert_done_event = torch.npu.Event()
-        worker_input = hidden
-        current = torch.npu.current_stream()
-        side = shared_expert_stream(hidden.device)
-        self._mc2_shared_input_ready.record(current)
-        side.wait_event(self._mc2_shared_input_ready)
-        _record_stream(worker_input, side)
-        with torch.npu.stream(side):
-            quantized, scale = kernels.dynamic_quant(worker_input)
-        return _Mc2SharedExpertState(worker_input, quantized, scale)
-
-    def _project_mc2_shared_gate_up(self, state: _Mc2SharedExpertState) -> None:
-        """Submit Gate-Up before routed TopK and overlap it with dispatch."""
-        self._mc2_shared_router_ready.record(torch.npu.current_stream())
-        side = shared_expert_stream(state.worker_input.device)
-        side.wait_event(self._mc2_shared_router_ready)
-        with torch.npu.stream(side):
-            state.gate_up = self.shared_experts.gate_up_proj.forward_accumulated(state.quantized_input)
-
-    def _activate_mc2_shared_expert(self, state: _Mc2SharedExpertState) -> None:
-        """Keep shared Vector activation behind dispatch/quantization."""
-        self._mc2_shared_dispatch_done.record(torch.npu.current_stream())
-        side = shared_expert_stream(state.worker_input.device)
-        side.wait_event(self._mc2_shared_dispatch_done)
-        with torch.npu.stream(side):
-            state.activation, state.activation_scale = self.shared_experts.activate_quantized_gate_up(
-                state.gate_up, state.input_scale, clamp_limit=float(self.cfg.swiglu_limit)
-            )
-
-    def _project_mc2_shared_down(self, state: _Mc2SharedExpertState) -> tuple[torch.Tensor, torch.Tensor]:
-        """Overlap shared Down with routed combine, then expose the join."""
-        self._mc2_shared_combine_start.record(torch.npu.current_stream())
-        side = shared_expert_stream(state.worker_input.device)
-        side.wait_event(self._mc2_shared_combine_start)
-        with torch.npu.stream(side):
-            shared = self.shared_experts.down_proj.forward_quantized(state.activation, state.activation_scale)
-            if self.shared_expert_gate_is_loaded:
-                shared = torch.sigmoid(self.shared_expert_gate(state.worker_input)) * shared
-            self._shared_expert_done_event.record(side)
-        return shared, state.worker_input
-
     def _forward_flashcomm1_routed(
         self,
         hidden: torch.Tensor,
@@ -2426,7 +2493,8 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
                 shared = self._run_gated_shared_experts(normalized)
         dispatch_rows = max(1, (max(metadata.dp_execution_token_counts) + self.cfg.tp_size - 1) // self.cfg.tp_size)
         use_mega_moe = self._eplv2_mega_moe_enabled and dispatch_rows <= self._mega_moe_num_max_tokens_per_rank
-        if use_mega_moe:
+        use_ffn_combine = self._eplv2_ffn_combine_enabled
+        if use_mega_moe or use_ffn_combine:
             # Fixed-capacity dispatch requires identical source extents on
             # every EP peer. Idle DP replicas retain a false-masked dummy row.
             padding = dispatch_rows - normalized.shape[0]
@@ -2434,22 +2502,42 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
             dispatch_indices = F.pad(indices, (0, 0, 0, padding)) if padding else indices
             dispatch_weights = F.pad(weights, (0, 0, 0, padding)) if padding else weights
             dispatch_mask = F.pad(mask, (0, padding)) if padding else mask
-            routed = kernels.mega_moe(
-                self.mega_moe_context,
-                dispatch_hidden.contiguous(),
-                dispatch_indices,
-                dispatch_weights.float(),
-                self.experts_w13,
-                self.experts_w2,
-                self.mega_moe_w13_scale,
-                self.mega_moe_w2_scale,
-                self.num_total_experts,
-                self.cfg.ep_size,
-                self._mega_moe_ccl_buffer_size,
-                self._mega_moe_num_max_tokens_per_rank,
-                x_active_mask=dispatch_mask,
-                swiglu_limit=self.cfg.swiglu_limit,
-            )
+            if use_ffn_combine:
+                from xllm.python import distributed as _distributed
+
+                group = _distributed.moe_ep_comm_name(hidden.device)
+                if group is None:
+                    raise RuntimeError("DispatchFFNCombine requires the native EP communicator")
+                routed = kernels.dispatch_ffn_combine(
+                    dispatch_hidden.contiguous(),
+                    dispatch_indices,
+                    dispatch_weights.float(),
+                    self.experts_w13,
+                    self.experts_w2,
+                    self.ffn_combine_w13_scale,
+                    self.ffn_combine_w2_scale,
+                    dispatch_mask,
+                    group,
+                    dispatch_rows * self.topk * self.cfg.ep_size,
+                    self.cfg.swiglu_limit,
+                )
+            else:
+                routed = kernels.mega_moe(
+                    self.mega_moe_context,
+                    dispatch_hidden.contiguous(),
+                    dispatch_indices,
+                    dispatch_weights.float(),
+                    self.experts_w13,
+                    self.experts_w2,
+                    self.mega_moe_w13_scale,
+                    self.mega_moe_w2_scale,
+                    self.num_total_experts,
+                    self.cfg.ep_size,
+                    self._mega_moe_ccl_buffer_size,
+                    self._mega_moe_num_max_tokens_per_rank,
+                    x_active_mask=dispatch_mask,
+                    swiglu_limit=self.cfg.swiglu_limit,
+                )
             routed = routed[: normalized.shape[0]]
         else:
             routed = kernels.ep_moe_w8a8_alltoall(
@@ -2475,7 +2563,7 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
             logger.info(
                 f"EPLV2_ACTIVE layer={self.layer_id} source_rows={layout.local_rows} "
                 f"active_rows={layout.ep_layout.active_rows} fc1={sp_metadata is not None} "
-                f"backend={'megamoe' if use_mega_moe else 'alltoall'}"
+                f"backend={'dispatch_ffn_combine' if use_ffn_combine else 'megamoe' if use_mega_moe else 'alltoall'}"
             )
             self._eplv2_logged = True
         return sp_all_gather(output, layout) if sp_metadata is None else output
@@ -2507,14 +2595,8 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         the local ``is_dummy`` decide would make that rank fall back while its
         peers dispatch/combine -- a collective split and a hang.
         """
-        # Static module state, all-rank identical: the DSpark draft's row
-        # counts are uneven by construction (busy rank = one sequence's whole
-        # block; empty DP shard = one dummy row), but ``global_bs=0`` asserts
-        # equal rows per rank, so each rank would infer a different window slot
-        # stride/capacity and the cross-rank writes corrupt memory (UB in the
-        # downstream grouped ops). The draft instance is marked at construction
-        # (``DeepseekV41DSparkModel``); the target never is. Kept ahead of every
-        # probe so the reason is observable on a CPU-only host.
+        # Eager draft counts can differ across DP replicas. Graph execution
+        # pads them uniformly and is admitted by the shared count checks below.
         if _moe_mc2_draft_veto_applies(self):
             return "DSpark draft MoE (uneven per-rank rows break global_bs=0)"
         ctx = get_forward_context_or_none()
@@ -2607,12 +2689,13 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         self,
         hidden: torch.Tensor,
         post_norm: nn.Module | None = None,
+        sp_metadata: SpMetadata | None = None,
     ) -> torch.Tensor:
         """Decode expert step through the MC2 all-to-all dispatch/combine kernels.
 
-        The local expert math is the SAME W8A8 chain the portable path runs
-        (``kernels_npu/moe.py:_grouped_moe_with_selected_experts_impl``) --
-        ``dynamic_quant`` -> int32 gate-up grouped GEMM -> fused
+        Dispatch quantizes each source row before communication and returns
+        int8 expert inputs plus their per-token scales. Local expert math is
+        int32 gate-up grouped GEMM -> fused
         ``dequant_swiglu_quant`` -> grouped down GEMM -- but the token routing is
         the ``*_distribute_*_v2`` pair instead of
         ``npu_moe_init_routing_v2``/``npu_moe_token_unpermute``:
@@ -2624,12 +2707,9 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
             all-reduce of full rows), so this path must NOT also call
             ``moe_ep_all_reduce``.
 
-        The dispatch/combine kwargs mirror the validated reference chain in
-        ``xllm_ops/test/python_test/test_dispatch_gmm_combine_decode.py`` and the
-        independently verified probe (``quant_mode=0``: the dispatch carries
-        bf16 activations and the explicit ``dynamic_quant`` below produces the
-        per-token scale), with ``group_tp=""``/``tp_world_size=1`` because MC2
-        requires ``moe_tp_size == 1``.
+        Quantizing before dispatch halves activation communication and avoids
+        quantizing the entire receive-capacity buffer, including unused rows.
+        ``group_tp=""``/``tp_world_size=1`` requires ``moe_tp_size == 1``.
         """
         from xllm.python import distributed as _distributed
         from xllm.python import kernels
@@ -2641,45 +2721,30 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         if group_ep is None:
             raise RuntimeError("MC2 decode path entered without a moe_ep communicator name")
 
-        # 0) Batch layout. ``dp == 1`` keeps the established single-replica call:
-        #    the whole batch is local and C++ derives the global batch as
-        #    ``local_bs * ep_world_size`` (an explicit value, ``fused_moe.cpp``
-        #    :2652). Under ``dp > 1`` we do NOT pad/all-gather: like the C++
-        #    mode-0 EP2 branch (``fused_moe.cpp:2853-2874``) each rank dispatches
-        #    exactly its own rows, and ``global_bs = 0`` (auto) matches C++
-        #    (``fused_moe.cpp:2653-2659``), which prefers the operator's inferred
-        #    global batch over an explicit sum that is wrong for uneven DP
-        #    batches. No ``x_active_mask`` is passed: every dispatched row is a
-        #    real local token, and C++ only sets the mask for EPLB
-        #    (``fused_moe.cpp:2635-2645``), which this path does not use.
+        # The operators infer a uniform fixed capacity under DP. ACL graph
+        # padding still occupies source rows, but must not route to real experts.
+        # The runner refreshes slot_mapping on replay and marks padding with -1;
+        # slice that device tensor to the same TP owners as the hidden rows.
+        # Keep dispatch/combine capacities unchanged and pass the SAME mask to
+        # both operators. Eager execution retains its existing unmasked layout.
         global_bs = hidden.shape[0] * ep_size if self.dp_size == 1 else 0
-        x_active_mask: torch.Tensor | None = None
+        x_active_mask = _moe_mc2_graph_active_mask(hidden, sp_metadata)
 
         # 1-2) Normalize local rows and route with the same W8A8 bias top-k
         #      as FC1. Dispatch takes global expert weights without EP masking.
-        mc2_shared_state = None
-        shared_overlap_state = None
-        staged_shared = (
-            self._shared_expert_overlap_enabled
-            and self.cfg.n_shared_experts > 0
-            and isinstance(self.shared_experts, DeepseekV41SharedMLP)
-            and _fused_shared_act_supported(hidden, self.shared_experts, float(self.cfg.swiglu_limit))
-        )
-        if staged_shared:
-            if post_norm is not None:
-                hidden, gate_input = self._apply_post_norm(hidden, post_norm)
-            else:
-                gate_input = hidden.to(torch.float32)
-            mc2_shared_state = self._prepare_mc2_shared_expert(hidden)
-            logits = self._gate_logits(gate_input, None)
-            self._project_mc2_shared_gate_up(mc2_shared_state)
-            topk_weights, topk_idx = self._w8a8_topk(logits)
-        else:
-            hidden, topk_weights, topk_idx = self._w8a8_bias_topk(hidden, post_norm)
-        if not staged_shared and self._shared_expert_overlap_enabled and self.cfg.n_shared_experts > 0:
-            shared_overlap_state = self._launch_shared_expert_overlap(hidden)
+        hidden, topk_weights, topk_idx = self._w8a8_bias_topk(hidden, post_norm)
         expert_ids = topk_idx.to(torch.int32)
         expert_scales = topk_weights.to(torch.float32)
+        # Submit the whole shared MLP before dispatch. Per-phase waits behind
+        # dispatch and routed GEMMs regress captured V4.1 decode latency.
+        shared_stream = None
+        if self.cfg.eplv2_shared_overlap and device.type in ("npu", "privateuseone"):
+            shared_stream = shared_expert_stream(device)
+            current = torch.npu.current_stream(device)
+            shared_stream.wait_stream(current)
+            hidden.record_stream(shared_stream)
+            with torch.npu.stream(shared_stream):
+                shared_out = self._run_gated_shared_experts(hidden)
 
         # 3) Dispatch -> local grouped W8A8 experts -> combine, on this rank's
         #    own rows. ``expert_token_nums`` is the per-expert received count the
@@ -2713,12 +2778,11 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
             expert_shard_type=0,
             shared_expert_num=int(self.cfg.n_shared_experts),
             shared_expert_rank_num=0,
-            quant_mode=0,
+            quant_mode=2,
             global_bs=global_bs,
             expert_token_nums_type=1,
         )
-        del dynamic_scales  # unused: quant_mode=0 leaves the dispatch in bf16.
-        sorted_hidden_i8, pertoken_scale = kernels.dynamic_quant(expand_x)
+        sorted_hidden_i8, pertoken_scale = expand_x, dynamic_scales
         group_list = expert_token_nums[: self.num_experts_per_rank].to(torch.int64)
         # M4: the same shape contract the portable chain enforces in
         # ``kernels_npu/moe.py:_grouped_moe_with_selected_experts_impl``. The
@@ -2759,8 +2823,6 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
                     f"(num_experts_per_rank={self.num_experts_per_rank}); the grouped GEMM would "
                     "read past the dispatched rows"
                 )
-        if mc2_shared_state is not None:
-            self._activate_mc2_shared_expert(mc2_shared_state)
         gemm1_out = _moe_mc2_grouped_matmul(
             x=[sorted_hidden_i8],
             weight=[self.experts_w13],
@@ -2798,8 +2860,6 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
             group_list=group_list,
             output_dtype=hidden.dtype,
         )
-        if mc2_shared_state is not None:
-            shared_overlap_state = self._project_mc2_shared_down(mc2_shared_state)
         routed_out = _moe_mc2_combine(
             expand_x=local_out,
             expert_ids=expert_ids,
@@ -2827,12 +2887,11 @@ class DeepseekV41W8A8MoE(DeepseekV4MoE):
         #    partials were already scattered-and-accumulated by ``combine_v2`` and
         #    the guard pins ``moe_tp_size == 1``, so no explicit reduction runs
         #    here (doing so would double the routed contribution).
-        # The staged W8A8 path aligns shared Cube work with dispatch/combine
-        # and shared Vector work with routed GMM, then joins all intermediates.
-        if shared_overlap_state is not None:
-            shared_out = self._finish_shared_expert_overlap(shared_overlap_state)
-        else:
+        if shared_stream is None:
             shared_out = self._run_gated_shared_experts(hidden)
+        else:
+            current.wait_stream(shared_stream)
+            shared_out.record_stream(current)
         return routed_out + shared_out
 
 
@@ -3489,6 +3548,22 @@ class DeepseekV41Model(nn.Module):
                 failures.append(f"layer {layer_id}: {type(exc).__name__}: {exc}")
         if failures:
             raise RuntimeError("engram host-table close failed for " + "; ".join(failures))
+
+    @staticmethod
+    def decode_graph_token_bucket(token_rows: int, verify_width: int) -> int | None:
+        """Avoid power-of-two padding for small packed verification batches.
+
+        A DSpark verification contains complete query blocks. Keeping one
+        bucket per sequence count up to eight avoids almost doubling the work
+        for three or five sequences. Larger batches use the runner's bounded
+        bucket policy to limit graph memory.
+        """
+        if verify_width <= 1 or token_rows <= 0:
+            return None
+        sequences = (token_rows + verify_width - 1) // verify_width
+        if sequences > 8:
+            return None
+        return sequences * verify_width
 
     def configure_engram_graph_capacity(self, max_decode_tokens: int) -> bool:
         """Pre-size every graph-visible engram staging block to the largest bucket.

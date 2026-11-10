@@ -1182,6 +1182,13 @@ const CpPlanRuntimeConfig& WorkerImpl::npu_cp_plan_runtime_config() const {
 
 #if defined(USE_NPU)
 bool WorkerImpl::uses_npu_dp_ep_padding() const {
+  // Python models build their token layouts from host DP counts. They do not
+  // consume the ATB padding tensors, whose pageable uploads can serialize
+  // preparation with the preceding speculative forward.
+  if (ModelConfig::is_python_model_impl(
+          ModelConfig::get_instance().model_impl())) {
+    return false;
+  }
   const ParallelArgs& parallel_args = context_.get_parallel_args();
   return !parallel_args.mapping_data().empty() &&
          parallel_args.cp_size() <= 1 &&

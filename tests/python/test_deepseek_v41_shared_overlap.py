@@ -12,66 +12,65 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Staged MC2 shared-expert dependencies and lifetime ownership."""
+"""MC2 overlaps the complete shared MLP with one fork/join dependency."""
 
-from types import SimpleNamespace
+from typing import Any
 
 import pytest
 import torch
 
-from tests.python.test_deepseek_v4_shared_expert import _install_fake_npu, _owner
+from xllm.python.model_executor.forward_context import forward_context
 from xllm.python.models import deepseek_v41 as v41
 
+from .test_deepseek_v41_mc2 import (
+    _context,
+    _install_mc2_streams,
+    _make_moe,
+    _StreamTestTensor,
+    mc2,
+)
 
-def test_staged_shared_events_fence_vector_and_cube_phases(monkeypatch: pytest.MonkeyPatch) -> None:
-    fake = _install_fake_npu(monkeypatch)
-    monkeypatch.setattr(v41, "shared_expert_stream", lambda device: fake.side)
-    phases: list[str] = []
-    hidden = torch.randn(8, 4)
 
-    def quantize(value: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        phases.append("quantize")
-        return value, torch.ones(value.shape[0])
+@pytest.mark.usefixtures("mc2")
+@pytest.mark.parametrize("overlap", [False, True])
+def test_mc2_shared_mlp_is_submitted_once_before_dispatch_and_joined_after_combine(
+    monkeypatch: pytest.MonkeyPatch, overlap: bool
+) -> None:
+    events: list[str] = []
+    streams = _install_mc2_streams(monkeypatch, events)
+    hidden = torch.randn(3, 4, dtype=torch.bfloat16).as_subclass(_StreamTestTensor)
+    moe = _make_moe(dp_size=4)
+    moe.cfg.eplv2_shared_overlap = overlap
+    dispatch = v41._moe_mc2_dispatch
+    combine = v41._moe_mc2_combine
 
-    def gate_up(value: torch.Tensor) -> torch.Tensor:
-        phases.append("gate_up")
-        return value * 2
+    def record_stream(value: torch.Tensor, stream: object) -> None:
+        assert stream is (streams.side if value is hidden else streams.current)
+        events.append("retain_input" if value is hidden else "retain_output")
 
-    def activate(value: torch.Tensor, scale: torch.Tensor, *, clamp_limit: float) -> tuple[torch.Tensor, torch.Tensor]:
-        phases.append("activate")
-        assert clamp_limit == 10.0
-        return value.clamp_max(clamp_limit), scale
+    def shared(value: torch.Tensor) -> torch.Tensor:
+        assert value is hidden
+        events.append("shared_mlp")
+        return torch.full_like(value, 0.25)
 
-    def down(value: torch.Tensor, scale: torch.Tensor) -> torch.Tensor:
-        phases.append("down")
-        return value + 1
+    def routed_dispatch(**kwargs: Any) -> tuple:
+        events.append("dispatch")
+        return dispatch(**kwargs)
 
-    monkeypatch.setattr(v41.kernels, "dynamic_quant", quantize, raising=False)
-    owner = _owner(
-        cfg=SimpleNamespace(swiglu_limit=10.0),
-        shared_experts=SimpleNamespace(
-            gate_up_proj=SimpleNamespace(forward_accumulated=gate_up),
-            activate_quantized_gate_up=activate,
-            down_proj=SimpleNamespace(forward_quantized=down),
-        ),
-        shared_expert_gate_is_loaded=False,
+    def routed_combine(**kwargs: Any) -> torch.Tensor:
+        events.append("combine")
+        return combine(**kwargs)
+
+    monkeypatch.setattr(_StreamTestTensor, "record_stream", record_stream)
+    monkeypatch.setattr(moe, "_run_shared_experts", shared)
+    monkeypatch.setattr(v41, "_moe_mc2_dispatch", routed_dispatch)
+    monkeypatch.setattr(v41, "_moe_mc2_combine", routed_combine)
+    with forward_context(_context(token_counts=[3] * 4, dp_is_decode=[1] * 4)):
+        output = moe._forward_mc2_decode(hidden)
+
+    assert events == (
+        ["wait_input", "retain_input", "shared_mlp", "dispatch", "combine", "join_shared", "retain_output"]
+        if overlap
+        else ["dispatch", "combine", "shared_mlp"]
     )
-    state = v41.DeepseekV41W8A8MoE._prepare_mc2_shared_expert(owner, hidden)
-    assert phases == ["quantize"]
-    v41.DeepseekV41W8A8MoE._project_mc2_shared_gate_up(owner, state)
-    assert phases == ["quantize", "gate_up"]
-    v41.DeepseekV41W8A8MoE._activate_mc2_shared_expert(owner, state)
-    result = v41.DeepseekV41W8A8MoE._project_mc2_shared_down(owner, state)
-    assert phases == ["quantize", "gate_up", "activate", "down"]
-    assert fake.side.waited == [
-        owner._mc2_shared_input_ready,
-        owner._mc2_shared_router_ready,
-        owner._mc2_shared_dispatch_done,
-        owner._mc2_shared_combine_start,
-    ]
-    assert all(event.recorded_on is fake.current for event in fake.side.waited)
-    assert owner._shared_expert_done_event.recorded_on is fake.side
-    assert state.quantized_input is hidden
-    assert state.gate_up is not None and state.activation is not None
-    assert result[1] is hidden
-    torch.testing.assert_close(result[0], (hidden * 2).clamp_max(10.0) + 1)
+    torch.testing.assert_close(output, torch.full_like(output, 0.75), rtol=0, atol=0)

@@ -59,11 +59,13 @@ from xllm.python.attention.dsa_metadata import (
     build_cache_specs_v41,
     last_ring_writes,
 )
+from xllm.python.layers.attention import Attention
 from xllm.python.model_executor.dsa_cp import DsaCpContext, get_current_dsa_cp_runtime
 from xllm.python.model_executor.forward_context import get_forward_context, get_forward_context_or_none
 from xllm.python.models.deepseek_v41 import (
     V41_QUANT_ASCEND,
     V41_QUANT_NONE,
+    _detect_v41_quant_mode,
 )
 
 # Softmax-scale exponent base of the sparse kernel's running-max floor.
@@ -91,6 +93,33 @@ class _SwaGroupMetadata:
     block_table: torch.Tensor
     block_size: int
     cache: torch.Tensor
+
+
+@dataclass
+class _SwaRingWritePlan:
+    """Latest-writer selection shared by layers using one immutable slot map."""
+
+    slot_mapping: torch.Tensor
+    slots: torch.Tensor
+    rows: torch.Tensor
+
+
+def _cached_swa_ring_writes(slots: torch.Tensor, values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    context = get_forward_context_or_none()
+    if context is None:
+        return last_ring_writes(slots, values)
+    if slots.numel() != values.size(0):
+        raise ValueError("cache slot and value row counts must match")
+    plans = context.layer_shared_cache.setdefault(_SwaRingWritePlan, {})
+    plan = plans.get(id(slots))
+    if plan is None:
+        # The stable sort and boolean compaction depend only on the slot map.
+        # Boolean indexing synchronizes NPU execution: perform it once per
+        # forward, rather than draining the stream again for every layer.
+        selected_slots, rows = last_ring_writes(slots, torch.arange(slots.numel(), device=slots.device))
+        plan = _SwaRingWritePlan(slots, selected_slots, rows)
+        plans[id(slots)] = plan
+    return plan.slots, values.index_select(0, plan.rows)
 
 
 _SMLA_CMP_TOPK_BLOCK = 512
@@ -133,6 +162,7 @@ class Csa2LayerContext:
     positions: torch.Tensor
     cos_sin_cache: torch.Tensor
     qr_scale: torch.Tensor | None = None
+    attn_sink: torch.Tensor | None = None
 
 
 @dataclass(frozen=True)
@@ -393,6 +423,44 @@ def _expanded_rope_tables(
     return pair
 
 
+@dataclass
+class _ForwardRopeRows:
+    """Retain immutable forward inputs with their gathered rotary rows."""
+
+    positions: torch.Tensor
+    table: torch.Tensor
+    cos: torch.Tensor
+    sin: torch.Tensor
+
+
+def _forward_rope_rows(
+    positions: torch.Tensor,
+    cos_sin_cache: torch.Tensor,
+    dtype: torch.dtype,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Share graph-forward gathers; each replay still reads updated positions."""
+    context = get_forward_context_or_none()
+    graph_forward = context is not None and (context.acl_graph is not None or context.execution_state is not None)
+    # Eager CP creates temporary position views per layer. Retaining their rows
+    # would grow prefill memory without sharing the gathers across layers.
+    rows_cache = context.layer_shared_cache.setdefault(_ForwardRopeRows, {}) if graph_forward else None
+    key = (id(positions), id(cos_sin_cache), dtype)
+    if rows_cache is not None and key in rows_cache:
+        rows = rows_cache[key]
+        return rows.cos, rows.sin
+    pos = positions.reshape(-1).to(torch.int64)
+    expanded = _expanded_rope_tables(cos_sin_cache, dtype)
+    if expanded is not None:
+        cos = expanded[0].index_select(0, pos)
+        sin = expanded[1].index_select(0, pos)
+    else:
+        cos, sin = _expand_rope_rows(cos_sin_cache.index_select(0, pos), dtype)
+    if rows_cache is not None:
+        # Holding the inputs prevents identity reuse for temporary CP/SWA views.
+        rows_cache[key] = _ForwardRopeRows(positions, cos_sin_cache, cos, sin)
+    return cos, sin
+
+
 def _apply_interleaved_rope_fused(
     x: torch.Tensor,
     positions: torch.Tensor,
@@ -412,21 +480,12 @@ def _apply_interleaved_rope_fused(
     the caller keeps passing the unmodified table.
 
     The expansion is served from the whole-table cache
-    (``_expanded_rope_tables``): per call only two index_select ops gather
-    the already-expanded bf16 rows (bitwise identical to expanding the
-    gathered rows). A cache miss (tagging failure / build OOM / build under
-    capture) falls back to the original per-call expansion.
+    (``_expanded_rope_tables``). Graph layers share two index_select ops over
+    the already-expanded rows; eager execution gathers per call. A whole-table
+    cache miss uses the original row expansion. Both produce identical rows.
     """
     half = cos_sin_cache.size(-1) // 2
-    pos = positions.reshape(-1).to(torch.int64)
-    expanded = _expanded_rope_tables(cos_sin_cache, x.dtype)
-    if expanded is not None:
-        cos = expanded[0].index_select(0, pos)
-        sin = expanded[1].index_select(0, pos)
-    else:
-        rows = cos_sin_cache.index_select(0, pos)
-        cos = rows[..., :half].repeat_interleave(2, dim=-1).to(x.dtype).contiguous()
-        sin = rows[..., half:].repeat_interleave(2, dim=-1).to(x.dtype).contiguous()
+    cos, sin = _forward_rope_rows(positions, cos_sin_cache, x.dtype)
     dim = x.size(-1)
     # The kernel contract is 3D [M, n_head, head_dim]; a 2D latent gets a
     # singleton head axis (a view, so the in-place write still lands in x).
@@ -757,10 +816,11 @@ def _indexer_topk(
 
 
 # The rebase ascending sort runs its FP32 kernel instead of INT32 for the
-# eager prefill hand-off: the sentinel (``_QLI_V3_REBASE_FP32_SENTINEL`` =
+# decode/prefill hand-off: the sentinel (``_QLI_V3_REBASE_FP32_SENTINEL`` =
 # 1 << 24) is exactly representable in FP32 and strictly above every valid
 # compressed row index, so the FP32 sort matches the INT32 one bit for bit.
-# The decode call site keeps the INT32 kernel (captured path unchanged).
+# Decode and prefill both use this exact FP32 representation to avoid the
+# much slower NPU INT32 sort kernel as the batch grows.
 _QLI_V3_REBASE_FP32_SENTINEL = float(1 << 24)
 
 
@@ -791,9 +851,8 @@ def _rebase_qli_picks(
 
     ``fp32_sort`` swaps only the *kernel* the ascending sort runs on (INT32 ->
     FP32); the output is bit-identical for the compressed-row index range (see
-    ``_QLI_V3_REBASE_FP32_SENTINEL``). The eager prefill call site passes the
-    FP32 kernel, while the decode call site keeps the INT32 kernel of its
-    captured ACL-graph path.
+    ``_QLI_V3_REBASE_FP32_SENTINEL``). Both production call sites use the
+    FP32 kernel; the INT32 path remains the numerical reference.
     """
     valid = (picks >= 0) & (picks < visible)
     if fp32_sort:
@@ -1181,6 +1240,48 @@ class Csa2AttentionBackend(DsaAttentionBackend):
     verdict (derived from the shared model config) for the decode-graph
     admission; :attr:`acl_graph_enabled` gates the startup capacity check.
     """
+
+    @classmethod
+    def from_model_config(
+        cls,
+        first_attention: Attention,
+        config: dict[str, Any],
+        device: torch.device,
+        dtype: torch.dtype,
+        *,
+        acl_graph_enabled: bool = False,
+    ) -> Csa2AttentionBackend:
+        """Build CSA2 geometry and graph capability from the model contract."""
+        # CP prefill loads all heads; the model already owns the decode TP
+        # slice. Do not re-derive it in the executor from parallelism flags.
+        decode_heads = getattr(first_attention, "decode_num_heads", first_attention.num_heads)
+        # Checkpoint mode is shared across ranks so graph admission agrees
+        # across DP/TP, including fp8/none MoE paths that require eager mode.
+        quant_mode = _detect_v41_quant_mode(config)
+        return cls(
+            compress_ratios=list(config.get("compress_ratios", [])),
+            window_size=int(config.get("window_size", 128)),
+            n_layers=int(config.get("n_layers", config.get("num_hidden_layers", 0))),
+            num_heads=decode_heads,
+            attn_head_dim=first_attention.head_dim,
+            index_topk=int(config.get("index_topk", 512)),
+            index_n_heads=int(config.get("index_n_heads", 32)),
+            index_head_dim=int(config.get("index_head_dim", 128)),
+            rope_head_dim=int(config.get("qk_rope_head_dim", 64)),
+            device=device,
+            dtype=dtype,
+            kv_source_layer_ids=list(config.get("kv_source_layer_ids", [])),
+            index_source_layer_ids=list(config.get("index_source_layer_ids", [])),
+            candidate_source_layer_id=int(config.get("candidate_source_layer_id", -1)),
+            candidate_topk_blocks=int(config.get("candidate_topk_blocks", 0)),
+            candidate_block_size=int(config.get("candidate_block_size", 0)),
+            max_model_len=int(config.get("max_position_embeddings", 0) or 0),
+            quant_mode=quant_mode,
+            acl_graph_enabled=acl_graph_enabled,
+            block_query_width=int(config.get("draft_query_width", 1))
+            if config.get("model_type") == "deepseek_v41_dspark"
+            else 0,
+        )
 
     def __init__(
         self,
@@ -1626,7 +1727,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         if defer_swa_write and layer_cache.swa is not None and swa_slot is not None:
             # Captured blocks keep fixed row counts; eager chunks may wrap
             # the ring and must select the latest write for each slot.
-            slots, values = (swa_slot, kv) if dsa.is_acl_graph else last_ring_writes(swa_slot, kv)
+            slots, values = (swa_slot, kv) if dsa.is_acl_graph else _cached_swa_ring_writes(swa_slot, kv)
             _scatter_by_slot(layer_cache.swa, slots, values)
         return output
 
@@ -1653,6 +1754,95 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         return output
 
     # -- compressor ---------------------------------------------------------
+
+    def _compress_decode_rows(
+        self,
+        layer: Any,
+        ctx: Csa2LayerContext,
+        dsa: DsaMetadata,
+        layer_cache: Any,
+        mapping: _CompressedAttentionCacheMapping,
+        ctx_lens: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Batch single-token rows while preserving ordered state-ring reads.
+
+        Speculative verification flattens a request into several rows sharing
+        one ring. A completed pair reads its preceding projection from this
+        batch when present, otherwise from the old ring. All reads precede
+        parking, with only the last writer for each physical slot retained.
+        """
+        kv, scores = layer.compress_kv_score(ctx.x)
+        rows = torch.arange(ctx.x.size(0), device=ctx.x.device)
+        valid = ctx_lens > 0
+        positions = ctx_lens.to(torch.int64) - 1
+        ratio = layer.mode.compress_ratio
+        group_rows = torch.div(positions, ratio, rounding_mode="floor")
+        if ratio == 1:
+            return layer.compress_rmsnorm(kv), ctx.positions.to(torch.int64), group_rows, rows, valid
+
+        kv_state = layer_cache.compress_kv_state
+        score_state = layer_cache.compress_score_state
+        if _v41_compressor_triton_reason(ratio, kv_state, score_state) is None:
+            block_table, reason = _v41_compressor_swa_gate(
+                dsa, layer.layer_id, mapping.ori_cache_idx, self._swa_ring_blocks
+            )
+            if reason is None:
+                pooled = _get_v41_compressor_module().compressor_decode_from_projected(
+                    kv,
+                    scores,
+                    kv_state,
+                    score_state,
+                    ctx_lens,
+                    block_table,
+                    block_size=layer_cache.swa.size(1),
+                    output_dtype=ctx.x.dtype,
+                )
+                starts = (group_rows * ratio).clamp(0, ctx.cos_sin_cache.size(0) - 1)
+                return layer.compress_rmsnorm(pooled), starts, group_rows, rows, valid & (ctx_lens % ratio == 0)
+        if kv_state is None or score_state is None:
+            previous_kv, previous_scores = kv, scores
+        else:
+            state_rows = kv_state.size(1)
+            block_table = _get_layer_cache_tensor(dsa.block_tables, layer.layer_id, mapping.ori_cache_idx)
+            if block_table is None:
+                blocks = torch.zeros_like(positions)
+            else:
+                block_size = layer_cache.swa.size(1)
+                cols = torch.div(positions, block_size, rounding_mode="floor") % block_table.size(1)
+                blocks = block_table[rows, cols].to(torch.int64).clamp_min(0)
+            slots = blocks * state_rows + positions % state_rows
+            previous_slots = blocks * state_rows + (positions - 1) % state_rows
+            # Search only earlier rows of the same request/ring. This also
+            # handles interleaved requests and a ring wrapping inside a batch.
+            preceding = (
+                (blocks[:, None] == blocks[None, :])
+                & (positions[:, None] - 1 == positions[None, :])
+                & (rows[:, None] > rows[None, :])
+                & valid[None, :]
+            )
+            previous_rows = torch.where(preceding, rows[None, :], -1).amax(dim=1)
+            in_batch = (previous_rows >= 0).unsqueeze(-1)
+            previous_kv = torch.where(
+                in_batch, kv[previous_rows.clamp_min(0)], kv_state.view(-1, kv.size(-1))[previous_slots]
+            )
+            previous_scores = torch.where(
+                in_batch, scores[previous_rows.clamp_min(0)], score_state.view(-1, scores.size(-1))[previous_slots]
+            )
+
+        members = torch.stack((previous_kv, kv), dim=1)
+        gates = torch.stack((previous_scores, scores), dim=1).softmax(dim=1)
+        pooled = (members * gates).sum(dim=1).to(ctx.x.dtype)
+        if kv_state is not None and score_state is not None:
+            park = valid & (positions % ratio == 0)
+            overwritten = ((slots[:, None] == slots[None, :]) & (rows[:, None] < rows[None, :]) & park[None, :]).any(
+                dim=1
+            )
+            park_slots = torch.where(park & ~overwritten, slots, -1)
+            _scatter_by_slot(kv_state.view(-1, kv.size(-1)), park_slots, kv)
+            _scatter_by_slot(score_state.view(-1, scores.size(-1)), park_slots, scores)
+        starts = (group_rows * ratio).clamp(0, ctx.cos_sin_cache.size(0) - 1)
+        commit = valid & (ctx_lens % ratio == 0)
+        return layer.compress_rmsnorm(pooled), starts, group_rows, rows, commit
 
     def _run_compressor(
         self,
@@ -1696,8 +1886,19 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         slot_rows: list[torch.Tensor] = []
         slot_seqs: list[torch.Tensor] = []
         slot_masks: list[torch.Tensor] = []
+        batched_decode = dsa.is_acl_graph and ratio in (1, 2) and bool(q_lens) and all(q == 1 for q in q_lens)
+        if batched_decode:
+            latent, starts, rows, seqs, mask = self._compress_decode_rows(
+                layer, ctx, dsa, layer_cache, mapping, ctx_lens
+            )
+            latent_rows.append(latent)
+            group_starts.append(starts)
+            slot_rows.append(rows)
+            slot_seqs.append(seqs)
+            slot_masks.append(mask)
+        prefill_rows = () if batched_decode else enumerate(q_lens)
         token_offset = 0
-        for seq, q_len in enumerate(q_lens):
+        for seq, q_len in prefill_rows:
             if q_len == 0:
                 # No chunk members exist to pool or park for this request.
                 # Decode graphs retain one synthetic row instead.
@@ -2454,7 +2655,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         offset = self.window_size + 1
         picks = sparse_indices[:, 0, :]
         visible = state.seqused_k[ratio].unsqueeze(-1)
-        rows_out = _rebase_qli_picks(picks, visible, offset)
+        rows_out = _rebase_qli_picks(picks, visible, offset, fp32_sort=True)
         topk = rows_out.unsqueeze(1)
         shared.topk_idxs = topk
         shared.topk_layer = layer.layer_id
@@ -2686,11 +2887,10 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         # Native SMLA is selected only for the validated V4.1 Flash dimensions.
         # The fused decode-graph tail and the reference tail share this single
         # capability predicate, so the fused path can never outrun the shapes it
-        # was validated for. SMLA uses a causal window; shared-window blocks also
-        # need future rows within the block and keep the non-causal reference.
+        # was validated for. Draft blocks supply explicit non-causal indices
+        # instead of the target's causal window mask.
         use_smla = (
-            not shared_window
-            and q.device.type == "npu"
+            q.device.type == "npu"
             and head_dim == 512
             and q.dtype == torch.bfloat16
             and win == 128
@@ -2699,6 +2899,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         if (
             use_smla
             and getattr(dsa, "is_acl_graph", False)
+            and not shared_window
             and cp_context is None
             and all(int(length) == 1 for length in q_lens)
         ):
@@ -2716,7 +2917,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
 
         # Pure-torch tail only: the fused path reads the persistent caches
         # directly and never materializes these.
-        sinks = layer.attn_sink.to(torch.float32)
+        sinks = self._attention_sinks(layer).to(torch.float32)
         swa_flat = layer_cache.swa.view(-1, head_dim) if layer_cache.swa is not None else None
         out = torch.empty_like(q)
         token_offset = 0
@@ -2736,7 +2937,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             # Window rows at fixed capacity: [win ring candidates ; chunk].
             # Ring candidate c sits at absolute position prev - win + c; which
             # candidates a given query may read is decided per query below.
-            if use_smla and global_q_len == 1 and swa_flat is not None and swa_bt is not None:
+            if use_smla and not shared_window and global_q_len == 1 and swa_flat is not None and swa_bt is not None:
                 from xllm.python.kernels_npu.triton.smla_window_pack import (
                     can_pack_smla_window,
                     pack_smla_window,
@@ -2788,6 +2989,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
                     topk,
                     shared,
                     sinks,
+                    shared_window=shared_window,
                 )
                 token_offset += q_len
                 continue
@@ -2892,6 +3094,8 @@ class Csa2AttentionBackend(DsaAttentionBackend):
         topk: torch.Tensor | None,
         shared: CSA2SharedRuntime,
         sinks: torch.Tensor,
+        *,
+        shared_window: bool = False,
     ) -> torch.Tensor:
         """Run the vLLM DSV4.1 SMLA kernel with the existing cache layout.
 
@@ -2939,6 +3143,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             ratio,
             compressed_width,
             compressed_capacity,
+            shared_window,
             ctx_lens,
             global_ctx_lens,
             None if torch.is_inference(ctx_lens) else ctx_lens._version,
@@ -2956,6 +3161,22 @@ class Csa2AttentionBackend(DsaAttentionBackend):
                 .clamp(min=0, max=self.window_size)
                 .view(-1, 1)
             )
+            ori_indices = None
+            ori_mask_mode = _SMLA_ORI_MASK_MODE
+            ori_win_left, ori_win_right = self.window_size - 1, 0
+            ori_topk = 0
+            if shared_window:
+                # All draft queries read the trailing context plus the whole
+                # block. Pack valid logical rows first: an early short context
+                # has a masked prefix in the temporary [window; block] cache.
+                ori_topk = ((window_kv.size(0) + 127) // 128) * 128
+                first = (self.window_size - previous).clamp(min=0, max=self.window_size)
+                cols = first.to(torch.int32) + torch.arange(ori_topk, device=q.device, dtype=torch.int32)
+                valid = (cols < window_kv.size(0)) & (local_end > 0)
+                ori_indices = torch.where(valid, cols, -1).view(1, 1, -1).expand(q_len, 1, -1).contiguous()
+                visible = torch.where(local_end > 0, window_kv.size(0) - first, 0).view(1, 1).expand(q_len, 1)
+                ori_mask_mode = 0
+                ori_win_left, ori_win_right = self.window_size, q_len - 1
             dropped_rows = getattr(context.metadata, "swa_bounded_replay_dropped_rows", ())
             if seq < len(dropped_rows) and dropped_rows[seq] > 0:
                 # The retained suffix has no preceding consumer-layer rows.
@@ -2982,17 +3203,19 @@ class Csa2AttentionBackend(DsaAttentionBackend):
                 max_seqlen_q=q_len,
                 max_seqlen_ori_kv=window_kv.size(0),
                 max_seqlen_cmp_kv=compressed_capacity,
+                ori_topk=ori_topk,
                 cmp_topk=compressed_width,
                 cmp_ratio=ratio,
-                ori_mask_mode=_SMLA_ORI_MASK_MODE,
+                ori_mask_mode=ori_mask_mode,
                 cmp_mask_mode=_SMLA_CMP_MASK_MODE if ratio else _SMLA_NO_MASK_MODE,
-                ori_win_left=self.window_size - 1,
-                ori_win_right=0,
+                ori_win_left=ori_win_left,
+                ori_win_right=ori_win_right,
                 layout_q="TND",
                 layout_kv="PA_BBND",
                 has_ori_kv=True,
                 has_cmp_kv=has_compressed,
             )
+            inputs["ori_sparse_indices"] = ori_indices
             state[key] = inputs
         block_size = self.window_size
         padding = (-window_kv.size(0)) % block_size
@@ -3034,16 +3257,22 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             sinks=sinks,
             softmax_scale=self.scale,
             cmp_ratio=ratio,
-            ori_mask_mode=_SMLA_ORI_MASK_MODE,
+            ori_mask_mode=0 if shared_window else _SMLA_ORI_MASK_MODE,
             cmp_mask_mode=_SMLA_CMP_MASK_MODE if ratio else _SMLA_NO_MASK_MODE,
-            ori_win_left=self.window_size - 1,
-            ori_win_right=0,
+            ori_win_left=self.window_size if shared_window else self.window_size - 1,
+            ori_win_right=q_len - 1 if shared_window else 0,
             layout_q="TND",
             layout_kv="PA_BBND",
         )
         return output
 
     # -- smla_va fused tail ------------------------------------------------
+
+    @staticmethod
+    def _attention_sinks(layer: Any) -> torch.Tensor:
+        """Use the head layout selected by this layer's current forward."""
+        ctx = getattr(layer, "_csa2_ctx", None)
+        return ctx.attn_sink if ctx is not None and ctx.attn_sink is not None else layer.attn_sink
 
     def _csa2_attention_smla(
         self,
@@ -3097,7 +3326,7 @@ class Csa2AttentionBackend(DsaAttentionBackend):
             seqused_ori_kv=dsa.seq_lens,
             seqused_cmp_kv=seqused_cmp,
             cmp_residual_kv=cmp_residual,
-            sinks=layer.attn_sink,
+            sinks=self._attention_sinks(layer),
             metadata=state.metadata[ratio],
             softmax_scale=self.scale,
             cmp_ratio=ratio,  # aclnnSmlaVa contract: 0 when no cmp_kv is fed

@@ -926,22 +926,19 @@ class DsaMetadataBuilder:
 
         out_slot_rows = max(graph_slot_capacity, committed_rows) if graph_slot_capacity > 0 else committed_rows
         use_dst_slots = self._slot_dst_ok(dst_slots, raw_bt, out_slot_rows)
-        if use_dst_slots:
-            # In-place: seed the host list directly (no device ``torch.full`` +
-            # ``.tolist()`` D2H) and write once into the captured buffer.
-            slots_list = [-1] * out_slot_rows
-        else:
-            out_slots = torch.full((out_slot_rows,), -1, dtype=torch.int32, device=raw_bt.device)
-            slots_list = out_slots.tolist()
+        slots_list = [-1] * out_slot_rows
         semantic_cols = int(raw_bt.size(1))
+        # Host planning reuses each block ID for many tokens. Read the table
+        # once instead of issuing a Tensor select/item pair for every slot.
+        block_ids = raw_bt.tolist() if committed_rows else []
 
         def slot_for_compressed_index(seq: int, compressed_idx: int) -> int:
-            if seq >= raw_bt.size(0) or semantic_cols <= 0:
+            if seq >= len(block_ids) or semantic_cols <= 0:
                 return -1
             block_idx = compressed_idx // block_size
             if block_idx >= semantic_cols:
                 return -1
-            block_id = int(raw_bt[seq, block_idx].item())
+            block_id = int(block_ids[seq][block_idx])
             if block_id < 0:
                 return -1
             block_offset = compressed_idx % block_size
@@ -1022,29 +1019,14 @@ class DsaMetadataBuilder:
                 dst_slots=dst_slots if use_dst_slots else None,
             )
         else:
-            if use_dst_slots:
-                out_slots = dst_slots
-                out_slots.fill_(-1)
-                slots_list = [-1] * out_slot_rows
-            else:
-                out_slots = torch.full((out_slot_rows,), -1, dtype=torch.int32, device=raw_bt.device)
-                slots_list = out_slots.tolist()
-
-            def slot_for_position(seq: int, pos: int) -> int:
-                if semantic_cols <= 0 or seq >= raw_bt.size(0):
-                    return -1
-                block_idx = (pos // block_size) % semantic_cols
-                block_id = int(raw_bt[seq, block_idx].item())
-                if block_id < 0:
-                    return -1
-                block_offset = pos % block_size
-                return block_id * block_size + block_offset
+            slots_list = [-1] * out_slot_rows
 
             write_idx = 0
             if new_cache_slots is not None and len(new_cache_slots) == query_total_tokens:
                 slots_list[:query_total_tokens] = [int(slot) for slot in new_cache_slots]
                 write_idx = query_total_tokens
             else:
+                block_ids = raw_bt.tolist() if query_total_tokens else []
                 for seq in range(batch_size):
                     ctx_len = int(ctx_lens[seq])
                     q_len = max(0, min(int(q_lens[seq]), ctx_len))
@@ -1053,9 +1035,14 @@ class DsaMetadataBuilder:
                         continue
                     q_start = ctx_len - q_len
                     for i in range(q_len):
-                        slots_list[write_idx] = slot_for_position(seq, q_start + i)
+                        pos = q_start + i
+                        if semantic_cols > 0:
+                            block_id = int(block_ids[seq][(pos // block_size) % semantic_cols])
+                            if block_id >= 0:
+                                slots_list[write_idx] = block_id * block_size + pos % block_size
                         write_idx += 1
             if use_dst_slots:
+                out_slots = dst_slots
                 self._copy_to_destination(out_slots, torch.tensor(slots_list, dtype=torch.int32))
             else:
                 out_slots = torch.tensor(slots_list, dtype=torch.int32, device=raw_bt.device)

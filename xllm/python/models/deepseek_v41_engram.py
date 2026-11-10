@@ -951,7 +951,8 @@ def load_quarot_gate_unrotate(model_path: str, device: torch.device) -> torch.Te
     engram gate in the rotated basis while q/k/wkv-K stay in the original
     basis. The gate dot therefore needs ``h_rot @ Q.T``; the V half of ``wkv``
     is pre-folded (Q.T @ Wv) and must NOT be rotated again. Returns ``Q.T``
-    ([hidden, hidden] fp32) or None when the checkpoint is not rotated. The
+    or its repeated 32-channel diagonal block when exactly representable,
+    in fp32, or None when the checkpoint is not rotated. The
     safetensors payload may be saved as F64/F32/F16/BF16; the dtype is read
     from the file header and the result is converted to fp32 on return.
     """
@@ -996,6 +997,12 @@ def load_quarot_gate_unrotate(model_path: str, device: torch.device) -> torch.Te
             handle.seek(offset)
             raw = handle.read(numel * itemsize)
         q = torch.frombuffer(bytearray(raw), dtype=q_dtype).reshape(meta["shape"])
+    # Validate the checkpoint on CPU before selecting the compact layout.
+    # Arbitrary rotations retain the dense implementation.
+    if q.ndim == 2 and q.shape[0] == q.shape[1] and q.shape[0] > 32 and q.shape[0] % 32 == 0:
+        block = q[:32, :32].contiguous()
+        if torch.equal(q, torch.block_diag(*[block] * (q.shape[0] // 32))):
+            q = block
     return q.t().contiguous().to(device=device, dtype=torch.float32)
 
 
@@ -1960,7 +1967,8 @@ class Engram(nn.Module):
         # residual update below must NOT rotate the increment again.
         gate_hidden = hidden
         if self.gate_unrotate is not None:
-            gate_hidden = hidden @ self.gate_unrotate
+            rotation_width = self.gate_unrotate.shape[0]
+            gate_hidden = (hidden.reshape(-1, rotation_width) @ self.gate_unrotate).reshape_as(hidden)
         hidden_rms = torch.rsqrt(gate_hidden.square().mean(-1) + self.eps)
         key_rms = torch.rsqrt(keys.square().mean(-1) + self.eps)
         dot = (gate_hidden * self.q_weight.float() * self.k_weight.float() * keys).sum(-1)

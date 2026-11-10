@@ -519,6 +519,38 @@ std::tuple<torch::Tensor, torch::Tensor> mega_moe_npu(
                : xllm::kernel::npu::kMegaMoeDtypeBFloat16);
 }
 
+std::tuple<torch::Tensor, torch::Tensor> dispatch_ffn_combine_npu(
+    const torch::Tensor& input,
+    const torch::Tensor& weight1,
+    const torch::Tensor& weight2,
+    const torch::Tensor& expert_ids,
+    const torch::Tensor& scale1,
+    const torch::Tensor& scale2,
+    const torch::Tensor& probs,
+    const torch::Tensor& active_mask,
+    const std::string& group,
+    int64_t max_output_size,
+    double swiglu_limit) {
+  const std::vector<torch::Tensor> weights1 = {weight1};
+  const std::vector<torch::Tensor> weights2 = {weight2};
+  const std::vector<torch::Tensor> scales1 = {scale1};
+  const std::vector<torch::Tensor> scales2 = {scale2};
+  return xllm::kernel::npu::apply_npu_dispatch_ffn_combine(
+      input,
+      weights1,
+      weights2,
+      expert_ids,
+      scales1,
+      scales2,
+      probs,
+      active_mask,
+      group,
+      max_output_size,
+      swiglu_limit,
+      /*output=*/std::nullopt,
+      /*expert_token_nums=*/std::nullopt);
+}
+
 void inplace_partial_rotary_mul_npu(torch::Tensor& input,
                                     const torch::Tensor& cosine,
                                     const torch::Tensor& sine,
@@ -910,6 +942,12 @@ TORCH_LIBRARY(xllm_ops, m) {
       "npu_inplace_partial_rotary_mul(Tensor(a!) x, Tensor r1, Tensor r2, "
       "str rotary_mode, int[] partial_slice) -> ()");
   m.def("silu_and_mul(Tensor input) -> Tensor");
+  m.def("has_dispatch_ffn_combine() -> bool");
+  m.def(
+      "dispatch_ffn_combine(Tensor input, Tensor weight1, Tensor weight2, "
+      "Tensor expert_ids, Tensor scale1, Tensor scale2, Tensor probs, "
+      "Tensor active_mask, str group, int max_output_size, "
+      "float swiglu_limit) -> (Tensor, Tensor)");
   m.def(
       "mega_moe(Tensor context, Tensor x, Tensor(a!) topk_ids, Tensor "
       "topk_weights, Tensor[] weight1, Tensor[] weight2, Tensor[] "
@@ -1166,6 +1204,7 @@ TORCH_LIBRARY_IMPL(xllm_ops, PrivateUse1, m) {
   m.impl("npu_inplace_partial_rotary_mul",
          TORCH_FN(xllm::kernel::npu::npu_inplace_partial_rotary_mul));
   m.impl("silu_and_mul", TORCH_FN(xllm::silu_and_mul_npu));
+  m.impl("dispatch_ffn_combine", TORCH_FN(xllm::dispatch_ffn_combine_npu));
   m.impl("mega_moe", TORCH_FN(xllm::mega_moe_npu));
   m.impl("inplace_partial_rotary_mul",
          TORCH_FN(xllm::inplace_partial_rotary_mul_npu));
@@ -1216,6 +1255,8 @@ TORCH_LIBRARY_IMPL(xllm_ops, PrivateUse1, m) {
 // runs only on the eager prefill path, so it needs no fake/meta registration;
 // decode graph capture is phase-disjoint.
 TORCH_LIBRARY_IMPL(xllm_ops, CompositeExplicitAutograd, m) {
+  m.impl("has_dispatch_ffn_combine",
+         TORCH_FN(xllm::kernel::npu::has_dispatch_ffn_combine));
   m.impl("build_cp_context", TORCH_FN(xllm::build_cp_context_npu));
   m.impl("has_split_qkv_rmsnorm_mrope_specialization",
          TORCH_FN(xllm::has_split_qkv_rmsnorm_mrope_specialization_npu));

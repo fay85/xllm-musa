@@ -349,6 +349,7 @@ class DecodeAclGraphRunner(BaseRunner):
         self._capture_size_reject_logged = False
         if self._capture_sizes:
             logger.info("ACL graph effective capture token rows=%s, query_width=%d", self._capture_sizes, query_width)
+        self._model_decode_graph_bucket = getattr(model, "decode_graph_token_bucket", None)
         self._eplv2_graph_token_limit = eplv2_graph_token_limit
         self._graphs: dict[_GraphKey, _DecodeGraphEntry] = {}
         self._graph_pool: Any | None = None
@@ -402,12 +403,17 @@ class DecodeAclGraphRunner(BaseRunner):
             rows_per_seq = max(rows_per_seq, self._draft_query_width)
         return _decode_bucket(seq_capacity * rows_per_seq)
 
-    def _padded_token_rows(self, token_rows: int) -> int:
+    def _padded_token_rows(self, token_rows: int, verify_width: int = 1) -> int:
         if self._capture_sizes:
             # Select from C++'s effective shapes; do not round or normalize
             # them again. Constructor validation enforces the width contract.
             index = bisect_left(self._capture_sizes, token_rows)
             return self._capture_sizes[index] if index < len(self._capture_sizes) else 0
+        if self._model_decode_graph_bucket is not None:
+            block_width = self._draft_query_width if self._is_spec_draft else verify_width
+            model_bucket = self._model_decode_graph_bucket(token_rows, block_width)
+            if model_bucket is not None:
+                return model_bucket
         query_width = self._draft_query_width if self._is_spec_draft else 1
         num_groups = (token_rows + query_width - 1) // query_width
         return _decode_bucket(num_groups) * query_width
@@ -429,10 +435,13 @@ class DecodeAclGraphRunner(BaseRunner):
             self._capture_size_reject_logged = True
         return False
 
-    def _eplv2_graph_admits(self, token_rows: int) -> bool:
+    def _eplv2_graph_admits(self, token_rows: int, verify_width: int = 1) -> bool:
         """Keep MC2 capture inside the HCCL window; All-to-AllV stays eager."""
         limit = self._eplv2_graph_token_limit
-        if limit is None or self._padded_token_rows(token_rows) <= limit:
+        if limit is None:
+            return True
+        padded_rows = self._padded_token_rows(token_rows, verify_width)
+        if padded_rows <= limit:
             return True
         # Latch one debug line per runner instead of one per rejected step:
         # the fallback itself is by design (over-capacity buckets run the
@@ -441,7 +450,7 @@ class DecodeAclGraphRunner(BaseRunner):
         if not getattr(self, "_eplv2_reject_logged", False):
             logger.debug(
                 "EPLv2 graph window exceeded: bucket=%d limit=%d -> eager AllToAllV",
-                self._padded_token_rows(token_rows),
+                padded_rows,
                 limit,
             )
             self._eplv2_reject_logged = True
@@ -817,8 +826,6 @@ class DecodeAclGraphRunner(BaseRunner):
                 return False
             if not self._capture_size_admits(max(execution_counts)):
                 return False
-            if not self._eplv2_graph_admits(max(execution_counts)):
-                return False
             # MegaMoe shares one fixed graph shape across DP ranks, so the
             # local rows must equal this rank's advertised execution count;
             # a mismatch would dispatch the wrong shape and desync the EP
@@ -838,6 +845,8 @@ class DecodeAclGraphRunner(BaseRunner):
             if global_batch is None:
                 return False
             max_global_tokens = max(int(c) for c in execution_counts)
+            if not self._eplv2_graph_admits(max_global_tokens, verify_width):
+                return False
             if self._is_spec_draft and verify_width <= 1 and self._draft_query_width > 1:
                 raw_counts = getattr(metadata, "raw_dp_execution_token_counts", None)
                 active_counts = _dp_active_execution_counts(execution_counts, raw_counts)
@@ -847,7 +856,7 @@ class DecodeAclGraphRunner(BaseRunner):
                 self._require_shared_kpool_layout(
                     metadata,
                     batch_size,
-                    self._padded_token_rows(max_global_tokens),
+                    self._padded_token_rows(max_global_tokens, verify_width),
                     verify_width,
                 )
             if input_embedding is not None and input_embedding.shape[0] != batch_size:
@@ -875,7 +884,7 @@ class DecodeAclGraphRunner(BaseRunner):
         bucket_size = self._sequence_capacity_bucket(size_check_bs)
         if not self._capture_size_admits(batch_size):
             return False
-        if not self._eplv2_graph_admits(batch_size):
+        if not self._eplv2_graph_admits(batch_size, verify_width):
             return False
         ok = (
             self._has_compatible_decode_metadata(
@@ -1571,11 +1580,9 @@ class DecodeAclGraphRunner(BaseRunner):
                     "by the shared counts so they must agree per rank."
                 )
             max_global_tokens = max(int(c) for c in execution_counts)
-            padded_batch_size = self._padded_token_rows(max_global_tokens)
+            graph_token_rows = max_global_tokens
         else:
-            padded_batch_size = self._padded_token_rows(batch_size)
-        if padded_batch_size == 0:
-            raise ValueError("decode token rows exceed effective graph_capture_sizes")
+            graph_token_rows = batch_size
         expanded_view = resolve_expanded_decode_metadata(metadata)
         is_expanded, verify_width, admission_batch = self._shared_graph_plan(
             metadata,
@@ -1583,6 +1590,9 @@ class DecodeAclGraphRunner(BaseRunner):
             local_expanded=expanded_view is not None,
             packed_verify_width=self._spec_verify_width(batch_size, metadata),
         )
+        padded_batch_size = self._padded_token_rows(graph_token_rows, verify_width)
+        if padded_batch_size == 0:
+            raise ValueError("decode token rows exceed effective graph_capture_sizes")
         # The persistent aux-hidden buffer an ACL-graph replay writes into is
         # the one its captured forward allocated, i.e. the buffer keyed by this
         # bucket's row count. Expose it so the executor can pick that buffer
@@ -2815,8 +2825,10 @@ class DecodeAclGraphRunner(BaseRunner):
                 # Uploading the intermediate manager tables as well would
                 # write storage that no captured consumer reads.
                 continue
-            if self.supports_draft_to_target_overlap:
-                source = self._stage_block_table(source, target.device)
+            # Draft graphs also inherit host manager tables. Stage those on
+            # the caller's stream: a blocking CPU-to-device copy here waits
+            # for the preceding target even when graph overlap is disabled.
+            source = self._stage_block_table(source, target.device)
             if is_swa and source.shape[1] > 0:
                 # DSA interprets the table width as the physical ring period.
                 # Capacity padding must repeat that ring; zero-filled columns

@@ -454,3 +454,175 @@ def compressor_from_projected(kv, scores, kv_state, score_state, metadata, out, 
         NUM_CACHE_BLOCKS=kv_state.shape[0],
     )
     return out
+
+
+@triton.jit
+def _decode_pool_kernel(
+    kv_ptr,
+    score_ptr,
+    kv_state_ptr,
+    score_state_ptr,
+    lengths_ptr,
+    table_ptr,
+    out_ptr,
+    ROWS: tl.constexpr,
+    ROWS_PAD: tl.constexpr,
+    TABLE_COLS: tl.constexpr,
+    TABLE_ROW_STRIDE: tl.constexpr,
+    TABLE_COL_STRIDE: tl.constexpr,
+    LENGTH_STRIDE: tl.constexpr,
+    BLOCK_SIZE: tl.constexpr,
+    CACHE_BLOCKS: tl.constexpr,
+    WIDTH: tl.constexpr,
+):
+    """The reference two-member softmax, including in-batch verify history."""
+    row = tl.program_id(0)
+    pos = tl.load(lengths_ptr + row * LENGTH_STRIDE) - 1
+    col = tl.maximum(pos, 0) // BLOCK_SIZE % TABLE_COLS
+    block = tl.load(table_ptr + row * TABLE_ROW_STRIDE + col * TABLE_COL_STRIDE)
+    live = (pos >= 0) & (block > 0) & (block < CACHE_BLOCKS)
+    members = tl.arange(0, 2)
+    features = tl.arange(0, WIDTH)
+    others = tl.arange(0, ROWS_PAD)
+    other_pos = tl.load(lengths_ptr + others * LENGTH_STRIDE, others < ROWS, other=0) - 1
+    other_col = tl.maximum(other_pos, 0) // BLOCK_SIZE % TABLE_COLS
+    other_block = tl.load(table_ptr + others * TABLE_ROW_STRIDE + other_col * TABLE_COL_STRIDE, others < ROWS, other=0)
+    preceding = (others < row) & (other_pos == pos - 1) & (other_pos >= 0) & (other_block == block)
+    previous_row = tl.max(tl.where(preceding, others, -1), 0)
+    complete = live & (pos % 2 == 1)
+    # Both member loads use the same [2, width] reduction as vLLM's C2
+    # pooling. Mask ring addresses before loading reserved/padded rows.
+    projection_row = tl.where(members == 1, row, tl.maximum(previous_row, 0))
+    from_projection = (members == 1) | (previous_row >= 0)
+    kv = tl.load(
+        kv_ptr + projection_row[:, None] * WIDTH + features[None, :],
+        complete & from_projection[:, None],
+        other=0.0,
+    )
+    scores = tl.load(
+        score_ptr + projection_row[:, None] * WIDTH + features[None, :],
+        complete & from_projection[:, None],
+        other=0.0,
+    )
+    previous_slot = block * 32 + (pos - 1) % 32
+    old_kv = tl.load(kv_state_ptr + previous_slot * WIDTH + features, complete & (previous_row < 0), other=0.0)
+    old_scores = tl.load(score_state_ptr + previous_slot * WIDTH + features, complete & (previous_row < 0), other=0.0)
+    kv = tl.where(from_projection[:, None], kv, old_kv[None, :])
+    scores = tl.where(from_projection[:, None], scores, old_scores[None, :])
+    exponent = tl.exp(scores - tl.max(scores, 0)[None, :])
+    probability = exponent / tl.sum(exponent, 0)[None, :]
+    pooled = tl.sum(probability * kv, 0)
+    tl.store(out_ptr + row * WIDTH + features, tl.where(complete, pooled, 0.0))
+
+
+@triton.jit
+def _decode_park_kernel(
+    kv_ptr,
+    score_ptr,
+    kv_state_ptr,
+    score_state_ptr,
+    lengths_ptr,
+    table_ptr,
+    ROWS: tl.constexpr,
+    ROWS_PAD: tl.constexpr,
+    TABLE_COLS: tl.constexpr,
+    TABLE_ROW_STRIDE: tl.constexpr,
+    TABLE_COL_STRIDE: tl.constexpr,
+    LENGTH_STRIDE: tl.constexpr,
+    BLOCK_SIZE: tl.constexpr,
+    CACHE_BLOCKS: tl.constexpr,
+    WIDTH: tl.constexpr,
+):
+    """Park unfinished even members after every row has read the old ring."""
+    row = tl.program_id(0)
+    pos = tl.load(lengths_ptr + row * LENGTH_STRIDE) - 1
+    col = tl.maximum(pos, 0) // BLOCK_SIZE % TABLE_COLS
+    block = tl.load(table_ptr + row * TABLE_ROW_STRIDE + col * TABLE_COL_STRIDE)
+    live = (pos >= 0) & (pos % 2 == 0) & (block > 0) & (block < CACHE_BLOCKS)
+    others = tl.arange(0, ROWS_PAD)
+    other_pos = tl.load(lengths_ptr + others * LENGTH_STRIDE, others < ROWS, other=0) - 1
+    other_col = tl.maximum(other_pos, 0) // BLOCK_SIZE % TABLE_COLS
+    other_block = tl.load(table_ptr + others * TABLE_ROW_STRIDE + other_col * TABLE_COL_STRIDE, others < ROWS, other=0)
+    overwritten = (
+        tl.sum(
+            (
+                (others > row)
+                & (others < ROWS)
+                & (other_pos >= 0)
+                & (other_pos % 32 == pos % 32)
+                & (other_block == block)
+            ).to(tl.int32),
+            0,
+        )
+        > 0
+    )
+    features = tl.arange(0, WIDTH)
+    values = tl.load(kv_ptr + row * WIDTH + features)
+    scores = tl.load(score_ptr + row * WIDTH + features)
+    slot = block * 32 + pos % 32
+    tl.store(kv_state_ptr + slot * WIDTH + features, values, live & ~overwritten)
+    tl.store(score_state_ptr + slot * WIDTH + features, scores, live & ~overwritten)
+
+
+def compressor_decode_from_projected(
+    kv: torch.Tensor,
+    scores: torch.Tensor,
+    kv_state: torch.Tensor,
+    score_state: torch.Tensor,
+    lengths: torch.Tensor,
+    block_table: torch.Tensor,
+    *,
+    block_size: int,
+    output_dtype: torch.dtype,
+) -> torch.Tensor:
+    """Batch flattened single-token rows with vLLM's FP32 C2 pooling math.
+
+    Verification rows may share a ring, so a completed pair first looks for
+    its preceding member in this projection batch. All reads finish before
+    the second kernel parks pending members; duplicate slots retain the last
+    writer. No metadata values are copied to the host during graph capture.
+    """
+    rows, width = kv.shape
+    out = torch.empty_like(kv, dtype=output_dtype)
+    if rows == 0:
+        return out
+    if (
+        kv.dtype != torch.float32
+        or scores.shape != kv.shape
+        or scores.dtype != torch.float32
+        or kv_state.shape[1:] != (32, width)
+        or score_state.shape != kv_state.shape
+        or kv_state.dtype != torch.float32
+        or score_state.dtype != torch.float32
+        or lengths.numel() != rows
+        or block_table.ndim != 2
+        or block_table.size(0) != rows
+        or block_table.size(1) == 0
+        or block_size <= 0
+        or width <= 0
+        or width & (width - 1)
+        or lengths.ndim != 1
+        or output_dtype not in (torch.float32, torch.bfloat16)
+    ):
+        raise ValueError("Invalid batched ratio-2 compressor shapes or dtypes")
+    tensors = (kv, scores, kv_state, score_state)
+    if not all(value.is_contiguous() for value in tensors):
+        raise ValueError("Batched compressor projections and state must be contiguous")
+    if not all(value.device == kv.device for value in (*tensors, lengths, block_table)):
+        raise ValueError("Batched compressor operands must share one device")
+    launch = dict(
+        ROWS=rows,
+        # Ascend's reduction lowering requires more than one candidate lane,
+        # even for a single live or padded decode row.
+        ROWS_PAD=max(8, triton.next_power_of_2(rows)),
+        TABLE_COLS=block_table.size(1),
+        TABLE_ROW_STRIDE=block_table.stride(0),
+        TABLE_COL_STRIDE=block_table.stride(1),
+        LENGTH_STRIDE=lengths.stride(0),
+        BLOCK_SIZE=block_size,
+        CACHE_BLOCKS=kv_state.size(0),
+        WIDTH=width,
+    )
+    _decode_pool_kernel[(rows,)](kv, scores, kv_state, score_state, lengths, block_table, out, **launch)
+    _decode_park_kernel[(rows,)](kv, scores, kv_state, score_state, lengths, block_table, **launch)
+    return out

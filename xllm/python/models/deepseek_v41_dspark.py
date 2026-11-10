@@ -51,7 +51,9 @@ from scripts.logger import logger
 from xllm.python import distributed
 from xllm.python.layers.embedding import HiddenParallelEmbedding
 from xllm.python.layers.linear import ColumnParallelLinear
-from xllm.python.model_executor.forward_context import LayerSynchronizer
+from xllm.python.layers.sequence_parallel import sp_all_gather, sp_shard
+from xllm.python.layers.sequence_parallel_metadata import build_flashcomm1_layout
+from xllm.python.model_executor.forward_context import LayerSynchronizer, get_forward_context
 from xllm.python.model_loader.module_loaders import checkpoint_weight_is_quantized
 from xllm.python.models.deepseek_v4 import DeepseekV4ForCausalLM, DeepseekV4MoE
 from xllm.python.models.deepseek_v32 import W8A8DynamicLinear
@@ -64,6 +66,7 @@ from xllm.python.models.deepseek_v41 import (
     DeepseekV41DecoderLayer,
     DeepseekV41ForCausalLM,
     DeepseekV41HyperConnection,
+    DeepseekV41Model,
     DeepseekV41MoE,
     DeepseekV41RMSNorm,
     _detect_v41_quant_mode,
@@ -298,6 +301,10 @@ class DSparkMainProjection(nn.Module):
 class DeepseekV41DSparkModel(nn.Module):
     """DSpark draft body: context projection + 3 pure-SWA layers + output norm."""
 
+    # Target and draft both contain complete query blocks. Avoid padding small
+    # draft batches to the next power of two, as on the target verification path.
+    decode_graph_token_bucket = staticmethod(DeepseekV41Model.decode_graph_token_bucket)
+
     def __init__(
         self,
         cfg: DeepseekV41DSparkConfig,
@@ -421,9 +428,14 @@ class DeepseekV41DSparkModel(nn.Module):
         # one-hot mix on copy 0 for the first block.
         hidden = hidden.unsqueeze(1).expand(-1, self.cfg.hc_mult, -1).contiguous()
         pre_mix = DeepseekV41HyperConnection.make_identity_pre_mix(hidden, self.cfg.hc_mult)
+        sp_metadata = build_flashcomm1_layout(self.layer_cfg, get_forward_context(), hidden.size(0))
+        if sp_metadata is not None:
+            hidden = sp_shard(hidden, sp_metadata)
+            pre_mix = sp_shard(pre_mix, sp_metadata)
         for layer in self.layers:
-            hidden, pre_mix = layer(hidden, positions, cos_sin_cache, input_ids, pre_mix)
-        return self.norm(self._collapse_last_hidden(hidden, pre_mix))
+            hidden, pre_mix = layer(hidden, positions, cos_sin_cache, input_ids, pre_mix, sp_metadata=sp_metadata)
+        result = self.norm(self._collapse_last_hidden(hidden, pre_mix))
+        return sp_all_gather(result, sp_metadata) if sp_metadata is not None else result
 
     def _collapse_last_hidden(self, hidden: torch.Tensor, pre_mix: torch.Tensor) -> torch.Tensor:
         """Last-block merge: learned hc_head when present, else the V4.1 collapse."""

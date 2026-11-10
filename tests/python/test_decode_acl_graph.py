@@ -3389,6 +3389,30 @@ def test_metadata_staging_preserves_values_dtype_and_layout_on_cpu() -> None:
     torch.testing.assert_close(actual, expected)
 
 
+@pytest.mark.parametrize("async_graph_inputs", [False, True])
+def test_dsa_host_tables_are_staged_before_device_copy(async_graph_inputs: bool) -> None:
+    runner = _runner()
+    runner.supports_draft_to_target_overlap = async_graph_inputs
+    source = torch.tensor([[10, 11], [20, 21]], dtype=torch.int32)
+    target = MagicMock()
+    target.shape = (4, 4)
+    target.device = torch.device("npu")
+    target.dtype = torch.int32
+    staged = MagicMock()
+    staged.shape = source.shape
+    runner._stage_block_table = MagicMock(return_value=staged)
+
+    runner._fill_dsa_block_tables(
+        SimpleNamespace(multi_block_tables=(target,)),
+        SimpleNamespace(multi_block_tables=(source,)),
+        torch.empty(0, dtype=torch.int32),
+        batch_size=2,
+    )
+
+    runner._stage_block_table.assert_called_once_with(source, target.device)
+    target.__getitem__.return_value.copy_.assert_called_once_with(staged.__getitem__.return_value)
+
+
 @pytest.mark.parametrize("dp_size", [1, 2])
 def test_graph_admission_preserves_short_circuit(
     monkeypatch: pytest.MonkeyPatch,

@@ -59,7 +59,7 @@ def _context(counts: tuple[int, ...], raw: tuple[int, ...], flags: tuple[int, ..
     return ForwardContext(None, torch.device("cpu"), metadata, [])
 
 
-def test_admission_is_global_and_graph_decode_is_unchanged() -> None:
+def test_eager_admission_is_global() -> None:
     cfg = _config()
     _validate_flashcomm1(cfg, "ascend")
     # C++ reflects frequency=0 for this checkpoint; the decoder treats 0/1
@@ -80,6 +80,34 @@ def test_admission_is_global_and_graph_decode_is_unchanged() -> None:
     assert build_flashcomm1_layout(cfg, context, 7) is None
     with pytest.raises(ValueError, match="execution rows"):
         build_flashcomm1_layout(cfg, _context((7, 1), (7, 0), (0, 1)), 6)
+
+
+@pytest.mark.parametrize("rank", range(4))
+@pytest.mark.parametrize("capture", [False, True])
+def test_decode_graph_admission_keeps_uniform_capacity(rank: int, capture: bool) -> None:
+    dp, tp = divmod(rank, 2)
+    cfg = _config(dp_rank=dp, tp_rank=tp, ep_rank=rank)
+    context = _context((8, 8), (), (1, 1))
+    context.metadata.is_spec_verify = True
+    context = replace(context, **({"acl_graph": object()} if capture else {"execution_state": object()}))
+    layout = build_flashcomm1_layout(cfg, context, 8)
+    assert layout is not None and layout.local_rows == 4
+    assert layout.ep_layout.dispatch_counts == (4, 4, 4, 4)
+    assert not layout.ep_layout.compacted
+    for counts in [(8, 1), (7, 7), (0, 0)]:
+        context.metadata.dp_execution_token_counts = counts
+        assert build_flashcomm1_layout(cfg, context, counts[dp]) is None
+
+
+@pytest.mark.parametrize("rank", range(4))
+def test_draft_block_admission_preserves_uneven_capacities(rank: int) -> None:
+    dp, tp = divmod(rank, 2)
+    cfg = _config(dp_rank=dp, tp_rank=tp, ep_rank=rank)
+    context = _context((5, 1), (5, 0), (1, 1))
+    context.metadata.is_dflash_proposal = True
+    layout = build_flashcomm1_layout(cfg, context, (5, 1)[dp])
+    assert layout is not None and layout.local_rows == (3, 1)[dp]
+    assert layout.ep_layout.dispatch_counts == (3, 3, 1, 1)
 
 
 @pytest.mark.parametrize("rank", range(4))
@@ -227,6 +255,7 @@ def test_ep_experts_sum_to_token_owners_without_padding_leaks(
 @pytest.mark.parametrize("with_norm", [False, True])
 @pytest.mark.parametrize("scoring", ["softmax", "sigmoid", "sqrtsoftplus"])
 @pytest.mark.parametrize("ep_rank", [0, 1])
+@torch.inference_mode()
 def test_v41_local_experts_match_unchanged_v4_path(
     with_norm: bool, scoring: str, ep_rank: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:

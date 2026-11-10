@@ -154,6 +154,31 @@ class LLMWorkerOutputTest : public ::testing::TestWithParam<bool> {
   bool saved_manual_loader_ = false;
 };
 
+#if defined(USE_NPU)
+TEST_P(LLMWorkerOutputTest, PythonModelsSkipNativeParallelPadding) {
+  const auto tensor_options =
+      torch::TensorOptions().device(device_.unwrap()).dtype(torch::kFloat);
+  auto model = std::make_unique<OutputTestModel>(ModelOutput{}, tensor_options);
+  ParallelArgs parallel_args(/*rank=*/0,
+                             /*world_size=*/2,
+                             /*process_group=*/nullptr);
+  parallel_args.dp_size(2).ep_size(2);
+  parallel_args.mapping_data({{"attnDp", {{"rank", 0}}}});
+  OutputTestWorker worker(
+      parallel_args, device_.unwrap(), options_, std::move(model));
+
+  EXPECT_TRUE(worker.uses_npu_dp_ep_padding());
+  ModelInputParams params;
+  for (const std::string& implementation : {"python", "py"}) {
+    ModelConfig::get_instance().model_impl(implementation);
+    EXPECT_FALSE(worker.uses_npu_dp_ep_padding());
+    worker.prepare_dp_ep_padding(params);
+    EXPECT_FALSE(
+        params.parallel.dp_ep_padding_data.attn_padding_idx().defined());
+  }
+}
+#endif
+
 TEST_P(LLMWorkerOutputTest,
        CompletedProposalSkipsLogitsAndKeepsCommonRetirement) {
   const auto tensor_options =

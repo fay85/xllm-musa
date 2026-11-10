@@ -45,6 +45,7 @@ from xllm.python.attention.backend import (  # noqa: E402
     LayerCache,
     normalize_layer_caches,
 )
+from xllm.python.attention.csa2_attention import Csa2AttentionBackend  # noqa: E402
 from xllm.python.attention.sfa_dcp_backend import dcp_layer_options  # noqa: E402
 from xllm.python.layers.attention import Attention  # noqa: E402
 from xllm.python.layers.moe_parallel import Eplv2CommPolicy  # noqa: E402
@@ -110,6 +111,11 @@ class StubAttentionBackend(AttentionBackend):
     @property
     def page_size(self) -> int:
         return 1
+
+
+class _Csa2StubAttentionBackend(StubAttentionBackend):
+    # Exercise the real configuration adapter while stubbing device execution.
+    from_model_config = classmethod(Csa2AttentionBackend.from_model_config.__func__)
 
 
 class _PagedStubAttentionBackend(StubAttentionBackend):
@@ -734,7 +740,7 @@ class TestCreateAttentionBackend:
     def test_deepseek_v41_creates_csa2_backend(self, _mock_is_npu):
         attn = _make_attention_layer(head_dim=512)
         module = types.ModuleType("xllm.python.attention.csa2_attention")
-        module.Csa2AttentionBackend = StubAttentionBackend
+        module.Csa2AttentionBackend = _Csa2StubAttentionBackend
         config = {
             "model_type": "deepseek_v41",
             "compress_ratios": [0, 2, 1],
@@ -773,7 +779,7 @@ class TestCreateAttentionBackend:
         """
         attn = _make_attention_layer(head_dim=512)
         module = types.ModuleType("xllm.python.attention.csa2_attention")
-        module.Csa2AttentionBackend = StubAttentionBackend
+        module.Csa2AttentionBackend = _Csa2StubAttentionBackend
         config = {
             "model_type": "deepseek_v41_dspark",
             "compress_ratios": [0, 0, 0],

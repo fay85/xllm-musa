@@ -108,6 +108,29 @@ def _make_builder(
     )
 
 
+@pytest.mark.parametrize("in_place", [False, True])
+def test_host_slot_planning_avoids_per_token_tensor_reads(monkeypatch: pytest.MonkeyPatch, in_place: bool) -> None:
+    """Strided tables, missing blocks and ring wrap need no scalar Tensor reads."""
+    builder, _, _ = _make_builder()
+    raw = torch.tensor([[2, 99, -1, 99, 7, 99], [9, 99, 10, 99, 11, 99]], dtype=torch.int32)[:, ::2]
+    token_dst = torch.empty(9, dtype=torch.int32) if in_place else None
+    swa_dst = torch.empty(16, dtype=torch.int32) if in_place else None
+
+    def reject_scalar_read(_tensor: torch.Tensor) -> None:
+        raise AssertionError("slot planning must read the block table in one batch")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(torch.Tensor, "item", reject_scalar_read)
+        _, token_slots = builder._process_token_group(raw, 2, 2, [10, 7], [8, 5], 2, 9, 0, dst_slots=token_dst)
+        _, swa_slots = builder._process_swa_group(raw, 2, [10, 7], [8, 5], 2, 16, 0, None, dst_slots=swa_dst)
+
+    assert token_slots.tolist() == [5, -1, -1, 14, 19, 20, -1, -1, -1]
+    assert swa_slots.tolist() == [-1, -1, 14, 15, 4, 5, -1, -1, 20, 21, 22, 23, 18, -1, -1, -1]
+    if in_place:
+        assert token_slots is token_dst
+        assert swa_slots is swa_dst
+
+
 def test_build_seq_lengths_and_start_pos() -> None:
     """start_pos = kv_len - q_len per sequence."""
     builder, _, _ = _make_builder()

@@ -43,6 +43,9 @@ limitations under the License.
 #include "framework/batch/batch.h"
 #include "framework/block/block_manager_impl.h"
 #include "framework/block/block_manager_pool.h"
+#include "framework/config/disagg_pd_config.h"
+#include "framework/config/model_config.h"
+#include "framework/config/parallel_config.h"
 #include "framework/config/rec_config.h"
 #include "framework/config/scheduler_config.h"
 #include "framework/config/service_config.h"
@@ -51,6 +54,7 @@ limitations under the License.
 #include "framework/request/request.h"
 #include "framework/request/request_state.h"
 #include "framework/tokenizer/tokenizer.h"
+#include "runtime/provider_contract.h"
 #include "runtime/xservice_client.h"
 #include "scheduler/async_response_processor.h"
 #include "scheduler/pd_ooc_scheduler.h"
@@ -173,7 +177,10 @@ class FakeEngine final : public Engine {
     model_args_ = std::move(model_args);
   }
 
-  const TokenizerArgs& tokenizer_args() const override { NOT_IMPLEMENTED(); }
+  const TokenizerArgs& tokenizer_args() const override {
+    static const TokenizerArgs args;
+    return args;
+  }
 
   std::vector<int64_t> get_active_activation_memory() const override {
     return {0};
@@ -3213,5 +3220,55 @@ TEST(PDOOCSchedulerTest, BlockedResponseDoesNotDelayAnotherReadyHandoff) {
   EXPECT_EQ(engine.block_manager_pool()->num_used_blocks()[0], 0u);
   server.Stop(0);
   server.Join();
+}
+TEST(DisaggPDSchedulerTest,
+     NativeDescriptorUsesDistinctGroupedCacheIdentities) {
+  auto& disagg = DisaggPDConfig::get_instance();
+  auto& parallel = ParallelConfig::get_instance();
+  auto& model = ModelConfig::get_instance();
+  const DisaggPDConfig previous_disagg = disagg;
+  const ParallelConfig previous_parallel = parallel;
+  const ModelConfig previous_model = model;
+  ScopeGuard restore([&] {
+    disagg = previous_disagg;
+    parallel = previous_parallel;
+    model = previous_model;
+  });
+  disagg.enable_disagg_pd() = true;
+  disagg.kv_cache_transfer_mode() = "PUSH";
+  parallel.tp_size() = 2;
+  parallel.dp_size() = 1;
+  parallel.cp_size() = 1;
+  model.backend() = "llm";
+  model.model_id() = "grouped-cache-regression";
+
+  FakeEngine engine(/*num_blocks=*/128, /*block_size=*/128);
+  BlockManagerPool::Options options;
+  options.num_blocks(128)
+      .block_size(128)
+      .model_type("deepseek_v41")
+      .manager_types({1, 0, 0})
+      .compress_ratios({0, 2, 1})
+      .sliding_window_size(128)
+      .swa_blocks_per_seq(2)
+      .swa_num_blocks(128)
+      .max_tokens_per_batch(512)
+      .max_seqs_per_batch(8)
+      .num_speculative_tokens(5)
+      .num_embedding_blocks(16)
+      .enable_prefix_cache(false);
+  BlockManagerPool pool(options);
+  InstanceInfo info;
+  info.name = "127.0.0.1:28104";
+  info.type = "PREFILL";
+  info.cluster_ids = {0, 1};
+  std::string error;
+  const auto config =
+      collect_native_provider_descriptor_config(info, engine, pool, &error);
+  ASSERT_TRUE(config.has_value()) << error;
+  EXPECT_EQ(config->cache_groups,
+            (std::vector<std::string>{"group:1", "group:6", "group:7"}));
+  EXPECT_TRUE(build_native_provider_descriptor(*config, &error).has_value())
+      << error;
 }
 }  // namespace xllm

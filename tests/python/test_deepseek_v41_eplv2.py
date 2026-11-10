@@ -109,12 +109,14 @@ def test_transport_decision_matches_on_all_peers(
 @pytest.mark.parametrize("fc1", [False, True])
 @pytest.mark.parametrize("mega_capacity", [0, 1, 8])
 @pytest.mark.parametrize("execution_padding", [0, 5])
+@pytest.mark.parametrize("ffn_combine", [False, True])
 def test_source_rows_are_dispatched_once_and_shared_expert_is_not_reduced(
     raw: tuple[int, int],
     rank: int,
     fc1: bool,
     mega_capacity: int,
     execution_padding: int,
+    ffn_combine: bool,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     cfg = _config(rank)
@@ -139,14 +141,18 @@ def test_source_rows_are_dispatched_once_and_shared_expert_is_not_reduced(
     module.cfg = cfg
     module.layer_id = 0
     module.num_total_experts = 4
+    module.topk = 2
     for name in ("experts_w13", "experts_w2", "experts_w13_scale", "experts_w2_scale"):
         setattr(module, name, torch.empty(0))
     module._eplv2_mega_moe_enabled = mega_capacity > 0
+    module._eplv2_ffn_combine_enabled = ffn_combine
     module._mega_moe_num_max_tokens_per_rank = mega_capacity
     module._mega_moe_ccl_buffer_size = 8192
     module.mega_moe_context = torch.zeros(8, dtype=torch.int32)
     module.mega_moe_w13_scale = torch.ones(1, dtype=torch.int64)
     module.mega_moe_w2_scale = torch.ones(1, dtype=torch.int64)
+    module.ffn_combine_w13_scale = torch.ones(1, dtype=torch.int64)
+    module.ffn_combine_w2_scale = torch.ones(1, dtype=torch.int64)
     module.shared_expert_gate_is_loaded = False
     module._run_shared_experts = lambda value: value * 0.125
 
@@ -192,6 +198,31 @@ def test_source_rows_are_dispatched_once_and_shared_expert_is_not_reduced(
         return value * (0.25 + 0.75 * 4)
 
     monkeypatch.setattr(kernels, "mega_moe", mega_experts, raising=False)
+
+    def fused_experts(
+        value: torch.Tensor,
+        indices: torch.Tensor,
+        weights: torch.Tensor,
+        w1: torch.Tensor,
+        w2: torch.Tensor,
+        s1: torch.Tensor,
+        s2: torch.Tensor,
+        mask: torch.Tensor,
+        group: str,
+        max_output_size: int,
+        limit: float,
+    ) -> torch.Tensor:
+        calls.append(value)
+        assert value.shape[0] == dispatch_rows
+        torch.testing.assert_close(value[: source.shape[0]], source * 2)
+        assert mask.tolist() == [i < ep.active_rows for i in range(dispatch_rows)]
+        assert group == "ep-test"
+        assert max_output_size == dispatch_rows * 2 * cfg.ep_size
+        assert limit == cfg.swiglu_limit
+        return value * (0.25 + 0.75 * 4)
+
+    monkeypatch.setattr(kernels, "dispatch_ffn_combine", fused_experts, raising=False)
+    monkeypatch.setattr(distributed, "moe_ep_comm_name", lambda device: "ep-test", raising=False)
     expected = hidden * 2 * (0.25 + 0.75 * 4 + 0.125)
     expected[raw[cfg.dp_rank] :] = 0
     # Restore the other TP owner's independently computed source rows.

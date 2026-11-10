@@ -129,39 +129,13 @@ def _create_attention_backend(
             # runs eagerly on NPU, and the decode ACL-graph path can route
             # its indexer chain through the official QLI v3 op.
             from xllm.python.attention.csa2_attention import Csa2AttentionBackend
-            from xllm.python.models.deepseek_v41 import _detect_v41_quant_mode
 
-            # Derive the served context length here so the backend can derive
-            # its ACL-graph token-capacity granularity. Same source as the
-            # decode graph runner's max_model_len below.
-            serving_len = int(config.get("max_position_embeddings", 0) or 0)
-            # Register the checkpoint's quantization mode so the backend can
-            # reject the fp8/none torch MoE from ACL-graph capture (51361671).
-            # The value comes from the shared model config, so every DP/TP rank
-            # derives the same capability and the whole DP group agrees on the
-            # graph-vs-eager decision; no per-rank env is consulted.
-            quant_mode = _detect_v41_quant_mode(config)
-            return Csa2AttentionBackend(
-                compress_ratios=list(config.get("compress_ratios", [])),
-                window_size=int(config.get("window_size", 128)),
-                n_layers=int(config.get("n_layers", config.get("num_hidden_layers", 0))),
-                num_heads=first_attention.num_heads,
-                attn_head_dim=first_attention.head_dim,
-                index_topk=int(config.get("index_topk", 512)),
-                index_n_heads=int(config.get("index_n_heads", 32)),
-                index_head_dim=int(config.get("index_head_dim", 128)),
-                rope_head_dim=int(config.get("qk_rope_head_dim", 64)),
-                device=device,
-                dtype=dtype,
-                kv_source_layer_ids=list(config.get("kv_source_layer_ids", [])),
-                index_source_layer_ids=list(config.get("index_source_layer_ids", [])),
-                candidate_source_layer_id=int(config.get("candidate_source_layer_id", -1)),
-                candidate_topk_blocks=int(config.get("candidate_topk_blocks", 0)),
-                candidate_block_size=int(config.get("candidate_block_size", 0)),
-                max_model_len=serving_len,
-                quant_mode=quant_mode,
+            return Csa2AttentionBackend.from_model_config(
+                first_attention,
+                config,
+                device,
+                dtype,
                 acl_graph_enabled=acl_graph_enabled,
-                block_query_width=int(config.get("draft_query_width", 1)) if model_type == "deepseek_v41_dspark" else 0,
             )
         from xllm.python.attention.dsa_attention import DsaAttentionBackend
 

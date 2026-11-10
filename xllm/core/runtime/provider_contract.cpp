@@ -606,18 +606,20 @@ std::string kv_layout_contract(const ModelArgs& args,
   return contract;
 }
 
-std::vector<std::string> cache_groups(
-    const BlockManagerPool::Options& options) {
-  if (options.manager_types().empty()) {
-    return {"group:" + std::to_string(cache_group_id(BlockType::KV))};
-  }
+std::vector<std::string> cache_groups(const BlockManagerPool& pool) {
+  const auto utilization = pool.block_utilization_by_type_per_dp();
+  CHECK(!utilization.empty());
   std::vector<std::string> groups;
-  groups.reserve(options.manager_types().size());
-  for (size_t index = 0; index < options.manager_types().size(); ++index) {
-    const BlockType block_type =
-        static_cast<BlockType>(options.manager_types()[index]);
+  groups.reserve(utilization.front().size());
+  // Manager kinds select allocator implementations, not cache identities:
+  // V4.1 uses kinds [1, 0, 0] for distinct SWA, C2 and C1 pools.
+  for (const auto& [block_type, occupancy] : utilization.front()) {
+    if (block_type == BlockType::EMBEDDING) {
+      continue;
+    }
     groups.emplace_back("group:" + std::to_string(cache_group_id(block_type)));
   }
+  std::sort(groups.begin(), groups.end());
   return groups;
 }
 
@@ -786,7 +788,7 @@ collect_native_provider_descriptor_config(
       .kv_cache_dtype = kv_cache.kv_cache_dtype(),
       .block_size = static_cast<uint32_t>(block_manager_pool.block_size()),
       .hash_seed = kv_cache.xxh3_128bits_seed(),
-      .cache_groups = cache_groups(block_manager_pool.options()),
+      .cache_groups = cache_groups(block_manager_pool),
       .head_shard_mapping_contract = head_shard_mapping_contract(
           model_args, tp, dp, cp, static_cast<uint32_t>(kv_split_size)),
       .connector = connector,

@@ -35,6 +35,8 @@ import torch.nn as nn
 from xllm.python.model_executor.model_input import ModelInput
 from xllm.python.model_executor.runners.decode_acl_graph import DecodeAclGraphRunner
 from xllm.python.model_executor.runners.decode_cuda_graph import _decode_bucket
+from xllm.python.models.deepseek_v41 import DeepseekV41Model
+from xllm.python.models.deepseek_v41_dspark import DeepseekV41DSparkModel
 
 
 def _runner(
@@ -201,3 +203,116 @@ def test_graph_key_separates_plain_decode_from_verify() -> None:
     key_plain = DecodeAclGraphRunner._graph_key(48, False, None, (), verify_width=1, token_capacity_bucket=0)
     key_verify = DecodeAclGraphRunner._graph_key(48, False, None, (), verify_width=6, token_capacity_bucket=0)
     assert key_plain != key_verify
+
+
+@pytest.mark.parametrize("rows,expected", [(6, 6), (18, 18), (30, 30), (48, 48), (54, 64)])
+def test_v41_small_verify_buckets_preserve_complete_query_groups(rows: int, expected: int) -> None:
+    runner = _runner()
+    runner._model_decode_graph_bucket = DeepseekV41Model.decode_graph_token_bucket
+    assert runner._padded_token_rows(rows, verify_width=6) == expected
+    assert runner._padded_token_rows(rows, verify_width=1) == _decode_bucket(rows)
+    assert runner._engram_graph_token_capacity() >= expected
+
+
+def test_v41_verify_bucket_is_shared_with_empty_dp_ranks() -> None:
+    counts = (18, 1, 12, 6)
+    buckets = []
+    for rank, rows in enumerate(counts):
+        runner = _runner(dp_size=4, dp_rank=rank)
+        runner._model_decode_graph_bucket = DeepseekV41Model.decode_graph_token_bucket
+        metadata = _metadata(rows, counts=counts, dp_size=4)
+        _, width, admission = runner._shared_graph_plan(metadata, rows, packed_verify_width=6)
+        assert admission == 3
+        buckets.append(runner._padded_token_rows(max(counts), width))
+    assert buckets == [18] * 4
+
+
+@pytest.mark.parametrize("limit,expected", [(19, False), (20, True), (31, True)])
+@pytest.mark.parametrize("dp_size", [1, 4])
+def test_v41_verify_window_admission_uses_the_capture_bucket(limit: int, expected: bool, dp_size: int) -> None:
+    counts = (20,) if dp_size == 1 else (20, 1, 10, 5)
+    decisions = []
+    for rank, rows in enumerate(counts):
+        runner = _runner(dp_size=dp_size, dp_rank=rank, num_decoding_tokens=5)
+        runner._model_decode_graph_bucket = DeepseekV41Model.decode_graph_token_bucket
+        runner._eplv2_graph_token_limit = limit
+        metadata = _metadata(rows, spec_verify_width=5, counts=counts, dp_size=dp_size)
+        _, width, _ = runner._shared_graph_plan(metadata, rows, packed_verify_width=5)
+        assert runner._padded_token_rows(max(counts), width) == 20
+        assert _decode_bucket(max(counts)) == 32
+        tokens = torch.zeros(rows, dtype=torch.int32)
+        decisions.append(runner.can_execute(ModelInput(tokens, torch.zeros_like(tokens), metadata)))
+    assert decisions == [expected] * dp_size
+
+
+def test_generic_verify_window_keeps_the_generic_capture_bucket() -> None:
+    runner = _runner(num_decoding_tokens=5)
+    runner._eplv2_graph_token_limit = 20
+    metadata = _metadata(20, spec_verify_width=5)
+    tokens = torch.zeros(20, dtype=torch.int32)
+    assert not runner.can_execute(ModelInput(tokens, torch.zeros_like(tokens), metadata))
+
+
+@pytest.mark.parametrize("limit,expected", [(20, False), (30, True)])
+def test_explicit_capture_sizes_override_v41_small_buckets(limit: int, expected: bool) -> None:
+    runner = _runner(num_decoding_tokens=5)
+    runner._model_decode_graph_bucket = DeepseekV41Model.decode_graph_token_bucket
+    runner._capture_sizes = (10, 30)
+    runner._eplv2_graph_token_limit = limit
+    metadata = _metadata(20, spec_verify_width=5)
+    tokens = torch.zeros(20, dtype=torch.int32)
+    assert runner._padded_token_rows(20, verify_width=5) == 30
+    assert runner.can_execute(ModelInput(tokens, torch.zeros_like(tokens), metadata)) is expected
+
+
+def test_model_bucket_does_not_change_other_models() -> None:
+    runner = _runner()
+    assert runner._padded_token_rows(18, verify_width=6) == 32
+    runner._is_spec_draft = True
+    runner._draft_query_width = 5
+    assert runner._padded_token_rows(15, verify_width=6) == 20
+
+
+@pytest.mark.parametrize("sequences", [1, 2, 3, 5, 7, 8, 9])
+def test_v41_draft_bucket_uses_draft_query_width(sequences: int) -> None:
+    runner = _runner()
+    runner._model_decode_graph_bucket = DeepseekV41DSparkModel.decode_graph_token_bucket
+    runner._is_spec_draft = True
+    runner._draft_query_width = 6
+    expected = sequences * 6 if sequences <= 8 else _decode_bucket(sequences) * 6
+    # Draft carries per-token metadata (verify width 1), while the model must
+    # retain complete six-query blocks and use the same bucket on every DP rank.
+    assert runner._padded_token_rows(sequences * 6, verify_width=1) == expected
+    assert runner._engram_graph_token_capacity() >= expected
+
+
+def test_v41_draft_active_and_empty_ranks_share_the_same_bucket() -> None:
+    counts = (30, 1, 18, 12)
+    for rank, rows in enumerate(counts):
+        runner = _runner(dp_size=4, dp_rank=rank)
+        runner._is_spec_draft = True
+        runner._draft_query_width = 6
+        runner._model_decode_graph_bucket = DeepseekV41DSparkModel.decode_graph_token_bucket
+        metadata = _metadata(rows, spec_verify_width=1, counts=counts, dp_size=4)
+        metadata.raw_dp_execution_token_counts = (30, 0, 18, 12)
+        expanded, width, admission = runner._shared_graph_plan(metadata, rows)
+        assert not expanded
+        assert width == 1
+        assert admission == 5
+        assert runner._padded_token_rows(max(counts), width) == 30
+
+
+@pytest.mark.parametrize("limit,expected", [(29, False), (30, True)])
+@pytest.mark.parametrize("dp_size", [1, 4])
+def test_v41_draft_window_admission_uses_query_blocks(limit: int, expected: bool, dp_size: int) -> None:
+    counts = (30,) if dp_size == 1 else (30, 1, 18, 12)
+    for rank, rows in enumerate(counts):
+        runner = _runner(dp_size=dp_size, dp_rank=rank, num_decoding_tokens=1)
+        runner._is_spec_draft = True
+        runner._draft_query_width = 6
+        runner._model_decode_graph_bucket = DeepseekV41DSparkModel.decode_graph_token_bucket
+        runner._eplv2_graph_token_limit = limit
+        metadata = _metadata(rows, spec_verify_width=1, counts=counts, dp_size=dp_size)
+        metadata.raw_dp_execution_token_counts = tuple(0 if count == 1 else count for count in counts)
+        tokens = torch.zeros(rows, dtype=torch.int32)
+        assert runner.can_execute(ModelInput(tokens, torch.zeros_like(tokens), metadata)) is expected

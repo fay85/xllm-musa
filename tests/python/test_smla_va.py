@@ -104,16 +104,18 @@ def _context(backend: Csa2AttentionBackend, dsa: Any) -> ForwardContext:
 
 
 @pytest.mark.parametrize("shared_window", [False, True])
+@pytest.mark.parametrize("history", [0, 12, 140])
+@pytest.mark.parametrize("query_width", [1, 3, 6])
 def test_smla_dispatch_preserves_non_causal_block_attention(
-    shared_window: bool, monkeypatch: pytest.MonkeyPatch
+    shared_window: bool, history: int, query_width: int, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    query_lens = [3]
+    query_lens = [query_width]
 
     def make_case(device: str) -> tuple[Any, ...]:
-        backend, layer, dsa, shared, q, kv, _ = _case(query_lens, device, ratio=1)
+        backend, layer, dsa, shared, q, kv, _ = _case(query_lens, device, ratio=1, history=history)
         layer.mode.compress_ratio = 0
         dsa.is_acl_graph = False
-        shared.query_layout = Csa2QueryLayout(3, shared_window=shared_window)
+        shared.query_layout = Csa2QueryLayout(query_width, shared_window=shared_window)
         return backend, layer, dsa, shared, q, kv
 
     backend, layer, dsa, shared, q, kv = make_case("cpu")
@@ -130,7 +132,7 @@ def test_smla_dispatch_preserves_non_causal_block_attention(
     with forward_context(_context(backend, dsa)):
         actual = backend._csa2_attention(q, kv, layer, dsa, query_lens, dsa.seq_lens, None, shared)
     torch.npu.synchronize()
-    assert len(calls) == (0 if shared_window else 1)
+    assert len(calls) == 1
     torch.testing.assert_close(actual.cpu(), expected, rtol=0.02, atol=0.003)
 
 
@@ -495,6 +497,7 @@ def test_smla_fused_tail_only_on_validated_decode_graph(
     torch.npu.synchronize()
     assert bool(calls) is expected
     assert actual.shape == q.shape
+
 
 @pytest.mark.parametrize("ratio", [1, 2])
 def test_smla_replayed_suffix_masks_uncomputed_ring(ratio: int, monkeypatch: pytest.MonkeyPatch) -> None:

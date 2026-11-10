@@ -437,6 +437,29 @@ def test_qli_rebase_fp32_sort_is_bitwise_equal_to_int32_sort() -> None:
         assert torch.equal(fp32_out, int32_out)
 
 
+def test_qli_rebase_fp32_sort_preserves_the_full_v41_context_range() -> None:
+    """Released V4.1 contexts fit exactly in FP32, including invalid sentinels."""
+    picks = torch.tensor([[1048575, 0, 524287, -1, torch.iinfo(torch.int32).max]], dtype=torch.int32)
+    visible = torch.tensor([[1048576]], dtype=torch.int32)
+    expected = csa2._rebase_qli_picks(picks, visible, 129, fp32_sort=False)
+    actual = csa2._rebase_qli_picks(picks, visible, 129, fp32_sort=True)
+    assert torch.equal(actual, expected)
+
+
+def test_qli_decode_uses_the_exact_fp32_sort(monkeypatch: pytest.MonkeyPatch) -> None:
+    _stub_qli(monkeypatch)
+    real = csa2._rebase_qli_picks
+    seen: list[bool] = []
+
+    def rebase(picks: torch.Tensor, visible: torch.Tensor, offset: int, *, fp32_sort: bool = False) -> torch.Tensor:
+        seen.append(fp32_sort)
+        return real(picks, visible, offset, fp32_sort=fp32_sort)
+
+    monkeypatch.setattr(csa2, "_rebase_qli_picks", rebase)
+    _drive(_make_backend(), _StubIndexerLayer(1, 2), _make_dsa(), _make_shared(2))
+    assert seen == [True]
+
+
 def test_qli_rebase_fp32_sort_handles_the_topk_width_boundary() -> None:
     """A row whose picks fill the whole width matches the INT32 sort exactly."""
     picks = torch.tensor([[5, 2, 9, 0, 3, 1, 8, 7]], dtype=torch.int32)

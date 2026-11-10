@@ -19,6 +19,7 @@ Extracted from the monolithic ``test_deepseek_v41_fused_ops.py``.
 
 from __future__ import annotations
 
+import contextlib
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Sequence, cast
@@ -55,6 +56,30 @@ _LOCAL_EXPERTS = 2
 _TOTAL_EXPERTS = 4
 _MC2_INTER = 3
 _DISPATCH_ROWS = 5
+
+
+class _StreamTestTensor(torch.Tensor):
+    """CPU storage with the Python NPU stream surface for dependency tests."""
+
+    @property
+    def device(self) -> torch.device:
+        return torch.device("privateuseone")
+
+    def record_stream(self, stream: object) -> None:
+        pass
+
+
+def _install_mc2_streams(monkeypatch: pytest.MonkeyPatch, events: list[str]) -> SimpleNamespace:
+    current = SimpleNamespace(wait_stream=lambda stream: events.append("join_shared"))
+    side = SimpleNamespace(wait_stream=lambda stream: events.append("wait_input"))
+    monkeypatch.setattr(
+        torch,
+        "npu",
+        SimpleNamespace(current_stream=lambda device: current, stream=lambda stream: contextlib.nullcontext()),
+        raising=False,
+    )
+    monkeypatch.setattr(v41, "shared_expert_stream", lambda device: side)
+    return SimpleNamespace(current=current, side=side)
 
 
 def _mc2_hidden(dtype: torch.dtype = torch.bfloat16) -> torch.Tensor:
@@ -124,8 +149,8 @@ def mc2(monkeypatch: pytest.MonkeyPatch) -> _Mc2Recorder:
         rec.calls.append(("dispatch", kwargs))
         rec.dispatch_rows = int(kwargs["x"].shape[0])
         return (
-            torch.randn(_DISPATCH_ROWS, _MC2_HIDDEN, dtype=torch.bfloat16),
-            None,
+            torch.zeros(_DISPATCH_ROWS, _MC2_HIDDEN, dtype=torch.int8),
+            torch.full((_DISPATCH_ROWS,), 0.125, dtype=torch.float32),
             torch.zeros(rec.dispatch_rows * _TOPK, dtype=torch.int32),
             torch.tensor([2, 3], dtype=torch.int64),
             torch.tensor([2], dtype=torch.int64),
@@ -203,7 +228,18 @@ def mc2(monkeypatch: pytest.MonkeyPatch) -> _Mc2Recorder:
 
 def _make_moe(**overrides: Any) -> v41.DeepseekV41W8A8MoE:
     moe = object.__new__(v41.DeepseekV41W8A8MoE)
-    moe.cfg = SimpleNamespace(ep_size=2, tp_size=1, n_shared_experts=1, swiglu_limit=10.0, expert_parallel_degree=0)
+    moe.cfg = SimpleNamespace(
+        ep_size=2,
+        tp_size=1,
+        tp_rank=0,
+        dp_size=1,
+        enable_flashcomm1=False,
+        n_shared_experts=1,
+        swiglu_limit=10.0,
+        expert_parallel_degree=0,
+        eplv2_shared_overlap=True,
+    )
+    moe.layer_id = 0
     moe.hash_layer = False
     moe.w4a8_dynamic = False
     moe.moe_tp_size = 1
@@ -257,7 +293,6 @@ def test_on_runs_mc2_chain_in_order(monkeypatch: pytest.MonkeyPatch, mc2: _Mc2Re
     assert _names(mc2) == [
         "gating",
         "dispatch",
-        "dynamic_quant",
         "grouped_matmul",
         "dequant_swiglu_quant",
         "grouped_matmul",
@@ -269,7 +304,7 @@ def test_on_runs_mc2_chain_in_order(monkeypatch: pytest.MonkeyPatch, mc2: _Mc2Re
     assert dispatch["ep_world_size"] == 2
     assert dispatch["ep_rank_id"] == 1
     assert dispatch["moe_expert_num"] == _TOTAL_EXPERTS
-    assert dispatch["quant_mode"] == 0
+    assert dispatch["quant_mode"] == 2
     assert dispatch["global_bs"] == _TOKENS * 2
     assert dispatch["expert_token_nums_type"] == 1
     assert dispatch["group_tp"] == "" and dispatch["tp_world_size"] == 1
@@ -277,25 +312,27 @@ def test_on_runs_mc2_chain_in_order(monkeypatch: pytest.MonkeyPatch, mc2: _Mc2Re
     assert dispatch["expert_ids"].dtype == torch.int32
     assert dispatch["expert_scales"].dtype == torch.float32
 
-    gemm1 = mc2.calls[3][1]
+    gemm1 = mc2.calls[2][1]
+    assert gemm1["x"][0].dtype == torch.int8
     assert gemm1["output_dtype"] == torch.int32
     assert gemm1["split_item"] == 2 and gemm1["group_list_type"] == 1
     assert gemm1["group_list"].tolist() == [2, 3]
     assert gemm1["weight"][0] is moe.experts_w13
 
-    dequant = mc2.calls[4][1]
+    dequant = mc2.calls[3][1]
     assert dequant["clamp_limit"] == 10.0
     assert dequant["quant_mode"] == 1 and dequant["swiglu_mode"] == 1
     assert dequant["activate_left"] is True
     assert dequant["group_index"].tolist() == [2, 3]
     assert dequant["weight_scale"] is moe.experts_w13_scale
+    assert torch.equal(dequant["activation_scale"], torch.full((_DISPATCH_ROWS,), 0.125))
 
-    gemm2 = mc2.calls[5][1]
+    gemm2 = mc2.calls[4][1]
     assert gemm2["output_dtype"] == torch.bfloat16
     assert gemm2["scale"][0] is moe.experts_w2_scale
     assert gemm2["per_token_scale"] is not None
 
-    combine = mc2.calls[6][1]
+    combine = mc2.calls[5][1]
     assert combine["group_ep"] == "hccl-ep0"
     assert combine["ep_send_counts"] is not None
     assert combine["tp_send_counts"] is not None
@@ -307,6 +344,38 @@ def test_on_runs_mc2_chain_in_order(monkeypatch: pytest.MonkeyPatch, mc2: _Mc2Re
     assert mc2.ep_reduces == []
     expected = torch.full((_TOKENS, _MC2_HIDDEN), 0.5, dtype=torch.bfloat16) + 0.25
     assert torch.equal(out, expected)
+
+
+@pytest.mark.parametrize("tp_rank", range(4))
+def test_mc2_graph_sp_dispatches_disjoint_rows(
+    tp_rank: int, monkeypatch: pytest.MonkeyPatch, mc2: _Mc2Recorder
+) -> None:
+    moe = _make_moe(dp_size=2)
+    moe.cfg.enable_flashcomm1 = True
+    moe.cfg.tp_size = 4
+    moe.cfg.tp_rank = tp_rank
+    moe.cfg.dp_size = 2
+    hidden = torch.arange(32, dtype=torch.bfloat16).reshape(8, 4)
+    context = _capture_context()
+    context.metadata.dp_execution_token_counts = [8, 8]
+    context.metadata.dp_is_decode = [1, 1]
+    shared_inputs: list[torch.Tensor] = []
+
+    def shared_forward(value: torch.Tensor) -> torch.Tensor:
+        shared_inputs.append(value)
+        return value
+
+    moe._run_shared_experts = shared_forward
+    layout = v41.SpMetadata.from_execution_rows(8, 4, tp_rank)
+    local = hidden[2 * tp_rank : 2 * tp_rank + 2]
+    with forward_context(context):
+        result = moe.forward(local, sp_metadata=layout)
+    dispatch = next(kwargs for name, kwargs in mc2.calls if name == "dispatch")
+    torch.testing.assert_close(dispatch["x"], hidden[2 * tp_rank : 2 * tp_rank + 2])
+    torch.testing.assert_close(shared_inputs[0], dispatch["x"])
+    torch.testing.assert_close(result, local + 0.5)
+    assert dispatch["global_bs"] == 0
+    assert mc2.ep_reduces == []
 
 
 @pytest.mark.parametrize(
@@ -622,7 +691,6 @@ def test_mc2_dp_local_rows_no_gather_no_slice(
     assert _names(mc2) == [
         "gating",
         "dispatch",
-        "dynamic_quant",
         "grouped_matmul",
         "dequant_swiglu_quant",
         "grouped_matmul",
@@ -661,7 +729,7 @@ def test_mc2_dp_local_rows_no_gather_no_slice(
 @pytest.mark.parametrize("with_norm", [False, True])
 @pytest.mark.parametrize("scoring", ["softmax", "sigmoid", "sqrtsoftplus", "unknown"])
 @pytest.mark.parametrize("with_bias", [False, True])
-def test_staged_and_serial_mc2_preserve_global_routing(
+def test_overlapped_and_serial_mc2_preserve_global_routing(
     monkeypatch: pytest.MonkeyPatch, mc2: _Mc2Recorder, with_norm: bool, scoring: str, with_bias: bool
 ) -> None:
     """Compare dispatch inputs, not a constant mocked top-k result.
@@ -671,14 +739,14 @@ def test_staged_and_serial_mc2_preserve_global_routing(
     stubbed; normalization, router math and production top-k argument
     preparation are exercised with input-dependent expert selection.
     """
-    hidden = torch.tensor([[4, 3, -2, -1], [-1, -2, 3, 4], [2, -1, 4, -2]], dtype=torch.bfloat16)
+    _install_mc2_streams(monkeypatch, [])
+    hidden = torch.tensor([[4, 3, -2, -1], [-1, -2, 3, 4], [2, -1, 4, -2]], dtype=torch.bfloat16).as_subclass(
+        _StreamTestTensor
+    )
     post_norm = torch.nn.RMSNorm(_MC2_HIDDEN, eps=1e-6, dtype=torch.bfloat16) if with_norm else None
     bias = torch.tensor([0.125, -0.25, 0.375, -0.5]) if with_bias else None
-    shared = object.__new__(v41.DeepseekV41SharedMLP)
-    torch.nn.Module.__init__(shared)
     moe = _make_moe(dp_size=4, scoring_func=scoring, e_score_correction_bias=bias)
     torch.nn.Module.__init__(moe)
-    moe.shared_experts = shared
     phases: list[str] = []
     normalized_inputs: list[torch.Tensor] = []
     shared_inputs: list[torch.Tensor] = []
@@ -720,36 +788,22 @@ def test_staged_and_serial_mc2_preserve_global_routing(
     def reject_local_mask(*args: Any) -> torch.Tensor:
         raise AssertionError("MC2 dispatch must retain global expert routing")
 
-    def prepare_shared(value: torch.Tensor) -> SimpleNamespace:
-        phases.append("shared_quant")
+    def shared_forward(value: torch.Tensor) -> torch.Tensor:
+        phases.append("shared")
         shared_inputs.append(value.clone())
-        return SimpleNamespace(worker_input=value)
-
-    def project_shared_gate_up(state: SimpleNamespace) -> None:
-        phases.append("shared_gate_up")
-
-    def activate_shared(state: SimpleNamespace) -> None:
-        pass
-
-    def project_shared_down(state: SimpleNamespace) -> tuple[torch.Tensor, torch.Tensor]:
-        return torch.full_like(state.worker_input, 0.25), state.worker_input
+        return torch.full_like(value, 0.25)
 
     monkeypatch.setattr(v41, "_rms_norm_cast_supported", lambda *args: False)
-    monkeypatch.setattr(v41, "_fused_shared_act_supported", lambda *args: True)
     monkeypatch.setattr(kernels, "moe_gating_top_k_hash", select_experts)
     monkeypatch.setattr(moe, "_apply_post_norm", normalize)
     monkeypatch.setattr(moe, "_gate_logits", gate_logits)
     monkeypatch.setattr(moe, "_ep_local_masked_weights", reject_local_mask)
-    monkeypatch.setattr(moe, "_prepare_mc2_shared_expert", prepare_shared)
-    monkeypatch.setattr(moe, "_project_mc2_shared_gate_up", project_shared_gate_up)
-    monkeypatch.setattr(moe, "_activate_mc2_shared_expert", activate_shared)
-    monkeypatch.setattr(moe, "_project_mc2_shared_down", project_shared_down)
-    monkeypatch.setattr(moe, "_finish_shared_expert_overlap", lambda state: state[0])
+    monkeypatch.setattr(moe, "_run_shared_experts", shared_forward)
 
     dispatched: list[dict[str, Any]] = []
     gating_calls: list[dict[str, Any]] = []
     for overlap in (False, True):
-        moe._shared_expert_overlap_enabled = overlap
+        moe.cfg.eplv2_shared_overlap = overlap
         phases.clear()
         mc2.calls.clear()
         with forward_context(_context(token_counts=[3, 3, 3, 3], dp_is_decode=[1, 1, 1, 1])):
@@ -757,18 +811,19 @@ def test_staged_and_serial_mc2_preserve_global_routing(
         dispatched.append(next(kwargs for name, kwargs in mc2.calls if name == "dispatch"))
         gating_calls.append(next(kwargs for name, kwargs in mc2.calls if name == "gating"))
         expected_phases = ["normalize"] if with_norm else []
-        expected_phases += ["shared_quant", "router", "shared_gate_up", "topk"] if overlap else ["router", "topk"]
+        expected_phases += ["router", "topk", "shared"]
         assert phases == expected_phases
 
-    serial, staged = dispatched
+    serial, overlapped = dispatched
     for key in ("x", "expert_ids", "expert_scales"):
-        torch.testing.assert_close(staged[key], serial[key], rtol=0, atol=0)
+        torch.testing.assert_close(overlapped[key], serial[key], rtol=0, atol=0)
     torch.testing.assert_close(shared_inputs[0], serial["x"], rtol=0, atol=0)
+    assert len(shared_inputs) == 2
     assert len(normalized_inputs) == (2 if with_norm else 0)
     if with_norm:
         torch.testing.assert_close(serial["x"], post_norm(hidden), rtol=0, atol=0)
     else:
-        assert serial["x"] is hidden and staged["x"] is hidden
+        assert serial["x"] is hidden and overlapped["x"] is hidden
     for key in gating_calls[0]:
         if isinstance(gating_calls[0][key], torch.Tensor):
             torch.testing.assert_close(gating_calls[1][key], gating_calls[0][key], rtol=0, atol=0)
@@ -984,13 +1039,40 @@ def test_mc2_draft_veto_waived_by_escape_hatch(monkeypatch: pytest.MonkeyPatch, 
     assert _names(mc2) == [
         "gating",
         "dispatch",
-        "dynamic_quant",
         "grouped_matmul",
         "dequant_swiglu_quant",
         "grouped_matmul",
         "combine",
     ]
     assert torch.equal(out, torch.full((_TOKENS, _MC2_HIDDEN), 0.5, dtype=torch.bfloat16) + 0.25)
+
+
+def test_mc2_graph_draft_uses_uniform_rows_and_replay_mask(mc2: _Mc2Recorder) -> None:
+    moe = _make_moe(dp_size=2, _moe_is_dspark_draft=True)
+    ctx = _capture_context()
+    ctx.metadata.dp_execution_token_counts = [_TOKENS, _TOKENS]
+    ctx.metadata.dp_is_decode = [1, 1]
+    ctx.metadata.slot_mapping = torch.tensor([10, 11, -1], dtype=torch.int32)
+    with forward_context(ctx):
+        assert moe._mc2_guard_reason(_mc2_hidden()) is None
+        moe.forward(_mc2_hidden())
+    dispatch = next(kwargs for name, kwargs in mc2.calls if name == "dispatch")
+    combine = next(kwargs for name, kwargs in mc2.calls if name == "combine")
+    assert dispatch["global_bs"] == combine["global_bs"] == 0
+    assert torch.equal(dispatch["x_active_mask"], torch.tensor([True, True, False]))
+    assert torch.equal(combine["x_active_mask"], dispatch["x_active_mask"])
+    assert mc2.base_calls == []
+
+
+def test_mc2_graph_draft_still_rejects_uneven_counts(mc2: _Mc2Recorder) -> None:
+    moe = _make_moe(dp_size=2, _moe_is_dspark_draft=True)
+    ctx = _capture_context()
+    ctx.metadata.dp_execution_token_counts = [_TOKENS, 1]
+    ctx.metadata.dp_is_decode = [1, 1]
+    with forward_context(ctx):
+        reason = moe._mc2_guard_reason(_mc2_hidden())
+    assert reason is not None and "uneven DP rows" in reason
+    assert mc2.calls == []
 
 
 def test_mc2_forward_asserts_local_expert_count(monkeypatch: pytest.MonkeyPatch, mc2: _Mc2Recorder) -> None:
@@ -1128,3 +1210,64 @@ def test_draft_marking_is_instance_scoped() -> None:
     """The flag is a per-instance attribute, never a class attribute.
     The draft reuses the target's MoE classes, so a class attribute would veto the target too."""
     assert not hasattr(v41.DeepseekV4MoE, "_moe_is_dspark_draft")
+
+
+@pytest.mark.parametrize("tp_size", [1, 2, 4])
+def test_mc2_graph_mask_tracks_replay_padding_and_tp_owners(tp_size: int) -> None:
+    """The same captured slot buffer can change active rows between replays."""
+    context = _capture_context()
+    slots = torch.tensor([0, 0, 0, -1, -1, -1, -1, -1], dtype=torch.int32)
+    context.metadata.slot_mapping = slots
+    for tp_rank in range(tp_size):
+        layout = v41.SpMetadata.from_execution_rows(8, tp_size, tp_rank)
+        hidden = torch.zeros(layout.local_rows, _MC2_HIDDEN)
+        with forward_context(context):
+            mask = v41._moe_mc2_graph_active_mask(hidden, layout)
+        expected = (slots >= 0)[layout.local_offset : layout.local_offset + layout.local_rows]
+        assert torch.equal(mask, expected)
+    slots.fill_(-1)
+    context = _capture_context()
+    context.metadata.slot_mapping = slots
+    with forward_context(context):
+        assert not v41._moe_mc2_graph_active_mask(torch.zeros(8, _MC2_HIDDEN), None).any()
+
+
+def test_mc2_graph_mask_is_shared_within_one_forward() -> None:
+    slots = torch.tensor([0, -1, 2, -1], dtype=torch.int32)
+    context = _capture_context()
+    context.metadata.slot_mapping = slots
+    hidden = torch.zeros(2, _MC2_HIDDEN)
+    with forward_context(context):
+        left_layout = v41.SpMetadata.from_execution_rows(4, 2, 0)
+        left = v41._moe_mc2_graph_active_mask(hidden, left_layout)
+        assert left is v41._moe_mc2_graph_active_mask(hidden, left_layout)
+        right = v41._moe_mc2_graph_active_mask(hidden, v41.SpMetadata.from_execution_rows(4, 2, 1))
+        assert right is not left
+        assert torch.equal(left, torch.tensor([True, False]))
+        assert torch.equal(right, torch.tensor([True, False]))
+
+    slots.fill_(-1)
+    fresh_context = _capture_context()
+    fresh_context.metadata.slot_mapping = slots
+    with forward_context(fresh_context):
+        assert not v41._moe_mc2_graph_active_mask(hidden, left_layout).any()
+
+
+def test_mc2_graph_mask_pads_extra_tp_lanes() -> None:
+    context = _capture_context()
+    context.metadata.slot_mapping = torch.tensor([0, 0, 0], dtype=torch.int32)
+    layout = v41.SpMetadata.from_execution_rows(3, 4, 3)
+    with forward_context(context):
+        mask = v41._moe_mc2_graph_active_mask(torch.zeros(1, _MC2_HIDDEN), layout)
+    assert torch.equal(mask, torch.tensor([False]))
+
+
+def test_mc2_dispatch_and_combine_share_graph_padding_mask(mc2: _Mc2Recorder) -> None:
+    context = _capture_context()
+    context.metadata.slot_mapping = torch.tensor([0, -1, -1], dtype=torch.int32)
+    with forward_context(context):
+        _make_moe().forward(_mc2_hidden())
+    dispatch = next(args for name, args in mc2.calls if name == "dispatch")
+    combine = next(args for name, args in mc2.calls if name == "combine")
+    assert dispatch["x_active_mask"] is combine["x_active_mask"]
+    assert torch.equal(dispatch["x_active_mask"], torch.tensor([True, False, False]))

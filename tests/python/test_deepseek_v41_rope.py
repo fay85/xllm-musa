@@ -19,6 +19,8 @@ Extracted from the monolithic ``test_deepseek_v41_fused_ops.py``.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import pytest
 import torch
 
@@ -92,9 +94,7 @@ def test_interleaved_rope_fused_matches_eager(monkeypatch: pytest.MonkeyPatch) -
     inv_ref = csa2.apply_interleaved_rope(x.clone(), positions, cache, inverse=True)
     monkeypatch.setattr(csa2, "_get_partial_rotary_op", real_get_op)
     diff = (inv.float() - inv_ref.float()).abs()
-    assert (diff <= 2**-6 + 2**-6 * inv_ref.float().abs()).all(), (
-        f"inverse max_abs={diff.max().item():.3e}"
-    )
+    assert (diff <= 2**-6 + 2**-6 * inv_ref.float().abs()).all(), f"inverse max_abs={diff.max().item():.3e}"
 
 
 @pytest.mark.skipif(not _npu_ready() or not _load_fused_ops_lib(), reason="needs NPU + fused ops lib")
@@ -276,3 +276,60 @@ def test_interleaved_rope_preexpand_graph_replay(monkeypatch: pytest.MonkeyPatch
     expected = csa2.apply_interleaved_rope(x2.clone(), pos2, cache)
     monkeypatch.setattr(csa2, "_expanded_rope_tables", real_expanded_tables)
     assert torch.equal(x, expected)
+
+
+def test_forward_rope_rows_share_only_immutable_forward_inputs(monkeypatch: pytest.MonkeyPatch) -> None:
+    context = SimpleNamespace(layer_shared_cache={}, acl_graph=object(), execution_state=None)
+    monkeypatch.setattr(csa2, "get_forward_context_or_none", lambda: context)
+    cache = _build_cache(64, 64, "cpu")
+    positions = torch.tensor([3, 1, 3], dtype=torch.int32)
+    first = csa2._forward_rope_rows(positions, cache, torch.bfloat16)
+    again = csa2._forward_rope_rows(positions, cache, torch.bfloat16)
+    assert all(a is b for a, b in zip(first, again))
+    for actual, expected in zip(first, _per_call_expansion(cache, positions, torch.bfloat16)):
+        assert torch.equal(actual, expected)
+
+    other_positions = positions.flip(0).clone()
+    other = csa2._forward_rope_rows(other_positions, cache, torch.bfloat16)
+    assert other[0] is not first[0]
+    other_table = csa2._forward_rope_rows(positions, cache.clone(), torch.bfloat16)
+    assert other_table[0] is not first[0]
+    widened = csa2._forward_rope_rows(positions, cache, torch.float32)
+    assert widened[0].dtype == torch.float32
+
+    positions.add_(7)
+    context = SimpleNamespace(layer_shared_cache={}, acl_graph=object(), execution_state=None)
+    fresh = csa2._forward_rope_rows(positions, cache, torch.bfloat16)
+    for actual, expected in zip(fresh, _per_call_expansion(cache, positions, torch.bfloat16)):
+        assert torch.equal(actual, expected)
+    assert not torch.equal(fresh[0], first[0])
+
+    context = SimpleNamespace(layer_shared_cache={}, acl_graph=None, execution_state=None)
+    eager = csa2._forward_rope_rows(positions, cache, torch.bfloat16)
+    positions.add_(1)
+    updated = csa2._forward_rope_rows(positions, cache, torch.bfloat16)
+    assert not context.layer_shared_cache
+    assert not torch.equal(eager[0], updated[0])
+
+
+@pytest.mark.skipif(not _npu_ready() or not _load_fused_ops_lib(), reason="needs NPU + fused ops lib")
+def test_forward_rope_rows_graph_replay_refreshes_shared_positions(monkeypatch: pytest.MonkeyPatch) -> None:
+    cache = _build_cache(4096, 64, "npu")
+    positions = torch.arange(8, dtype=torch.int32, device="npu")
+    x = torch.randn(8, 4, 512, dtype=torch.bfloat16, device="npu")
+    csa2._expanded_rope_tables(cache, x.dtype)
+    context = SimpleNamespace(layer_shared_cache={}, acl_graph=object(), execution_state=None)
+    monkeypatch.setattr(csa2, "get_forward_context_or_none", lambda: context)
+    graph = torch.npu.NPUGraph()
+    with torch.npu.graph(graph):
+        first = csa2.apply_interleaved_rope(x.clone(), positions, cache)
+        second = csa2.apply_interleaved_rope(x.clone(), positions, cache)
+    for start in (100, 700):
+        positions.copy_(torch.arange(8, dtype=torch.int32, device="npu") + start)
+        graph.replay()
+        torch.npu.synchronize()
+        with monkeypatch.context() as patch:
+            patch.setattr(csa2, "get_forward_context_or_none", lambda: None)
+            expected = csa2.apply_interleaved_rope(x.clone(), positions, cache)
+        assert torch.equal(first, expected)
+        assert torch.equal(second, expected)

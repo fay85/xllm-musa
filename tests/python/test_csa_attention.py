@@ -2204,27 +2204,23 @@ def test_capture_path_never_uses_inplace_target() -> None:
         assert getattr(fresh, name) is not getattr(captured, name), name
 
 
-# -- (g) known boundary: host-path .item() D2H -------------------------------
+# -- (g) host planning avoids per-slot tensor reads -------------------------
 
 
-def test_host_path_item_d2h_is_a_known_boundary(monkeypatch) -> None:
-    # The candidate removes allocations/copies, not the per-row ``.item()`` on
-    # the host SWA/token slot loop (the device slot path is what removes that).
-    # This pins the boundary so a later reader does not mis-attribute the win.
+def test_host_slot_planning_avoids_per_row_item(monkeypatch: pytest.MonkeyPatch) -> None:
     backend = _inplace_make_backend()
     capture_meta, replay_meta = _paired_metadata(seed=0)
     persistent = backend._build_dsa_metadata_for_forward(capture_meta)  # noqa: SLF001
+    expected = backend._build_dsa_metadata_for_forward(replay_meta)  # noqa: SLF001
 
-    original_item = torch.Tensor.item
-    calls: list[int] = []
+    def reject_item(self: torch.Tensor) -> object:
+        raise AssertionError("host planning must read block tables in bulk")
 
-    def counting_item(self):  # type: ignore[no-untyped-def]
-        calls.append(1)
-        return original_item(self)
-
-    monkeypatch.setattr(torch.Tensor, "item", counting_item)
-    backend._build_dsa_metadata_for_forward(replay_meta, inplace_target=persistent)  # noqa: SLF001
-    assert calls, "expected the host slot loop to keep its per-row .item()"
+    monkeypatch.setattr(torch.Tensor, "item", reject_item)
+    actual = backend._build_dsa_metadata_for_forward(replay_meta, inplace_target=persistent)  # noqa: SLF001
+    expected_fields = _persistent_field_tensors(expected)
+    for name, value in _persistent_field_tensors(actual).items():
+        assert torch.equal(value, expected_fields[name]), name
 
 
 def test_replay_copy_guard_skips_alias_and_copies_disjoint(monkeypatch) -> None:
