@@ -1,0 +1,208 @@
+{
+  "source": "/data/nfs_shared/models/DeepSeek-V4.1-Flash-1017",
+  "model_commit": "1bae0e1088993b9b82de08f59de5be5a34e42170",
+  "tensors": [
+    {
+      "tensor": "layers.0.hc_attn_fn",
+      "shard": "model-00003-of-00048.safetensors",
+      "shape": [
+        24,
+        20480
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.0.hc_attn_scale",
+      "shard": "model-00003-of-00048.safetensors",
+      "shape": [
+        3
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.0.hc_attn_base",
+      "shard": "model-00003-of-00048.safetensors",
+      "shape": [
+        24
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.0.hc_ffn_fn",
+      "shard": "model-00003-of-00048.safetensors",
+      "shape": [
+        24,
+        20480
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.0.hc_ffn_scale",
+      "shard": "model-00003-of-00048.safetensors",
+      "shape": [
+        3
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.0.hc_ffn_base",
+      "shard": "model-00003-of-00048.safetensors",
+      "shape": [
+        24
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.1.hc_attn_fn",
+      "shard": "model-00004-of-00048.safetensors",
+      "shape": [
+        24,
+        20480
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.1.hc_attn_scale",
+      "shard": "model-00004-of-00048.safetensors",
+      "shape": [
+        3
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.1.hc_attn_base",
+      "shard": "model-00004-of-00048.safetensors",
+      "shape": [
+        24
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.1.hc_ffn_fn",
+      "shard": "model-00004-of-00048.safetensors",
+      "shape": [
+        24,
+        20480
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.1.hc_ffn_scale",
+      "shard": "model-00004-of-00048.safetensors",
+      "shape": [
+        3
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.1.hc_ffn_base",
+      "shard": "model-00004-of-00048.safetensors",
+      "shape": [
+        24
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.14.hc_attn_fn",
+      "shard": "model-00017-of-00048.safetensors",
+      "shape": [
+        24,
+        20480
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.14.hc_attn_scale",
+      "shard": "model-00017-of-00048.safetensors",
+      "shape": [
+        3
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.14.hc_attn_base",
+      "shard": "model-00017-of-00048.safetensors",
+      "shape": [
+        24
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.14.hc_ffn_fn",
+      "shard": "model-00017-of-00048.safetensors",
+      "shape": [
+        24,
+        20480
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.14.hc_ffn_scale",
+      "shard": "model-00017-of-00048.safetensors",
+      "shape": [
+        3
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.14.hc_ffn_base",
+      "shard": "model-00017-of-00048.safetensors",
+      "shape": [
+        24
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.39.hc_attn_fn",
+      "shard": "model-00042-of-00048.safetensors",
+      "shape": [
+        24,
+        20480
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.39.hc_attn_scale",
+      "shard": "model-00042-of-00048.safetensors",
+      "shape": [
+        3
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.39.hc_attn_base",
+      "shard": "model-00042-of-00048.safetensors",
+      "shape": [
+        24
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.39.hc_ffn_fn",
+      "shard": "model-00042-of-00048.safetensors",
+      "shape": [
+        24,
+        20480
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.39.hc_ffn_scale",
+      "shard": "model-00042-of-00048.safetensors",
+      "shape": [
+        3
+      ],
+      "dtype": "torch.float32"
+    },
+    {
+      "tensor": "layers.39.hc_ffn_base",
+      "shard": "model-00042-of-00048.safetensors",
+      "shape": [
+        24
+      ],
+      "dtype": "torch.float32"
+    }
+  ],
+  "sha256": "fae7ae678b5847c2282720fcfcce1109c836db5c86f95e25b54801aa0504e4b8",
+  "bytes": 15731608
+}

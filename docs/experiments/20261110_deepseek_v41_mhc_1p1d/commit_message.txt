@@ -1,0 +1,37 @@
+接入 V4.1 三项 mHC GPU 原语，完成 1017 双机逐项测速并保留数值缺口
+
+家明，我继续在基于 1103 的 xiaopangDeepseeekV41Flash 上推进，
+复用 V4 已有 MUSA kernel，补上 mHC post、pre-combine、metadata/Sinkhorn
+的 C++ 绑定与 V4.1 Python 调用，保留 shifted pre_mix 顺序。
+模型主体仍是 Python forward；这次不是完整 Mega-mHC 或原生 C++ 模型。
+
+我在 sj9(P)/sj10(D) 使用原版 1017、两端各八卡，eager、并发 1，
+Attention TP8、路由专家 EP8/专家内 TP1、共享专家复制。
+每项接入均测 256/256 和 2048/256，各暖机 1 次、正式 5 次；
+五种累计配置共 50 次正式请求，用未修改的 EvalScope 1.14.1 验收。
+
+只接 D 共享 SwiGLU，TPOT 分别改善 0.73%/0.61%，输出文本一致。
+post/pre 单算子更快，但整模型没有增量收益；负结果也保留。
+最后加入 metadata 后，相对 post+pre 配置，256/256、2048/256 的 TPOT 分别下降 3.55%、4.23%（负值表示变慢）。
+三项 mHC 全开：
+- 256/256：TTFT 6246.94 ms，TPOT 1061.41 ms/token，端到端 276.9067 s，输出吞吐 0.9245 token/s，QPS 0.003611。
+- 2048/256：TTFT 29224.05 ms，TPOT 1054.26 ms/token，端到端 298.0593 s，输出吞吐 0.8589 token/s，QPS 0.003355。
+
+我完成了 sj9 上 79 项原语/真实层参数检查、六层小模型对照、
+各配置两道基础题；但部分全模型回答文本发生变化。
+Completion 的 V2 correlation 和 Chat 的原始 token 输入控制未通过，
+所以真实整模型同前缀数值检查尚未完成，不能称为完整精度验收。
+融合保持显式开关，reference 默认不变；本轮没有抓新 trace。
+
+下一步先补同前缀验证和差异定位，再确认 FP4 group32 + block32 GEMM，
+接 GPU 路由/grouped GEMM/combine，随后 CSA2、Engram/CED、完整 mHC，
+最后 Graph/MTP；C++ 路线在相同算子和模型语义下单独对照。
+
+代码、完整性能报告、原始 SQLite/HTML/rank 日志压缩包、失败证据及计划：
+docs/experiments/20261110_deepseek_v41_mhc_1p1d/
+原始 NFS 根目录：/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/
+256/256 E 报告：03_benchmarks/stage2_all/input256_output256/measured/
+deepseek-v4.1-flash-1017/
+
+所有实验 rank/控制进程正常退出；未改驱动、未重启、未操作他人容器。
+只提交共同仓库个人分支，不创建 MR/PR。

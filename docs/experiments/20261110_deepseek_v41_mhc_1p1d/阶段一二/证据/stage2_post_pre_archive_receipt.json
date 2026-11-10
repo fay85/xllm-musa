@@ -1,0 +1,18 @@
+{
+  "archive_name": "stage2_post_pre",
+  "validation_status": "PASS",
+  "run": "stage2_post_pre",
+  "benchmark": "stage2_post_pre",
+  "items": [
+    "03_benchmarks/stage2_post_pre",
+    "runs/stage2_post_pre",
+    "artifacts/prepared/stage2_post_pre",
+    "02_correctness/stage2_post_pre"
+  ],
+  "bytes": 558306,
+  "sha256": "acb760de02b129d83e65d6f0c1025eab670f6c6ac996f83a253d5cbeca186767",
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/incoming/completed_stage2_post_pre.tar.gz",
+  "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/证据/完整实验/stage2_post_pre",
+  "verified_at": "2026-11-10T21:20:13.607749+08:00",
+  "local_transfer_archive_removed": true
+}

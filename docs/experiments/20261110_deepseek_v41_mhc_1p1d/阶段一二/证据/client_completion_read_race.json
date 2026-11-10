@@ -1,0 +1,7 @@
+{
+  "at": "2026-11-10T21:15:42.259285+08:00",
+  "run": "stage2_post_pre",
+  "issue": "Finished marker absent on first read, acceptance exit0 visible on later read; client finished between queries. Remote benchmark has both 5/5 groups completed.",
+  "change": "Re-read client_runs_finished marker after observing client exit before declaring missing-marker failure. A CLI zero remains insufficient.",
+  "action": "Resume from existing completed stage2_post_pre, no new inference requests."
+}

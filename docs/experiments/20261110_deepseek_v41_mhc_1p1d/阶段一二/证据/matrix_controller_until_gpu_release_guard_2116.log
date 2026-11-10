@@ -1,0 +1,22 @@
+{"at": "2026-11-10T21:15:42.841485+08:00", "phase": "RESUME_STAGE2_EXISTING_RUN", "run": "stage2_post_pre"}
+{"at": "2026-11-10T21:15:42.846430+08:00", "phase": "WAIT_BENCHMARK", "run": "stage2_post_pre", "benchmark": "stage2_post_pre"}
+{"at": "2026-11-10T21:15:43.871210+08:00", "phase": "VALIDATE", "run": "stage2_post_pre"}
+{"at": "2026-11-10T21:15:46.854658+08:00", "phase": "CHAT_PREFIX_SKIPPED_KNOWN_PROTOCOL_FAILURE", "run": "stage2_post_pre", "reference": "stage2_post_chat_prefix_result.json"}
+{"at": "2026-11-10T21:15:46.861044+08:00", "phase": "NORMAL_TERM", "run": "stage2_post_pre"}
+{"at": "2026-11-10T21:15:58.137250+08:00", "phase": "RANKS_EXITED", "run": "stage2_post_pre", "result": [{"exit_codes": [0, 0, 0, 0, 0, 0, 0, 0], "control_exit": null, "stopping": true, "automatic_kill": false}, {"exit_codes": [0, 0, 0, 0, 0, 0, 0, 0], "control_exit": 0, "stopping": true, "automatic_kill": false}]}
+{"at": "2026-11-10T21:15:58.148392+08:00", "phase": "LAUNCH", "run": "stage2_all"}
+('sj10', {'exit_status': 0, 'stdout': '{"host": "sj10", "run": "stage2_all", "exit": 0, "stderr": ""}\n', 'stderr': ''})
+('sj9', {'exit_status': 1, 'stdout': '', 'stderr': 'Traceback (most recent call last):\n  File "<string>", line 5, in <module>\nAssertionError: GPU already in use\n'})
+Traceback (most recent call last):
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/start_sj_roles.py", line 38, in <module>
+    if any(r['exit_status'] for _,r in results):raise RuntimeError('Role launch failed; inspect both host receipts before acceptance')
+RuntimeError: Role launch failed; inspect both host receipts before acceptance
+{"at": "2026-11-10T21:16:58.584143+08:00", "phase": "NEEDS_REVIEW", "error": "CalledProcessError(1, ['/usr/bin/python3', '/home/xiaopang/\u684c\u9762/Albert\u5206\u4eab/20261021\u4ecexllm\u5f00\u59cb/\u738b\u5bb6\u660e/20261110\u8865\u9f50V41\u7b97\u5b50/\u9636\u6bb5\u4e00\u4e8c/\u811a\u672c/start_sj_roles.py', '--run', 'stage2_all'])"}
+Traceback (most recent call last):
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 82, in <module>
+    if index:launch(run)
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 51, in launch
+    subprocess.run([sys.executable,str(b/'脚本/start_sj_roles.py'),'--run',run],check=True)
+  File "/usr/lib/python3.10/subprocess.py", line 526, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['/usr/bin/python3', '/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/start_sj_roles.py', '--run', 'stage2_all']' returned non-zero exit status 1.

@@ -1,0 +1,2974 @@
+{
+  "status": "PASS_EXPECTED_CONFIGURATION_DIFFERENCES_ONLY",
+  "at": "2026-11-10T19:25:42.692654+08:00",
+  "scope": "Prepared configurations; use run role_config.json and runtime selection records for execution proof.",
+  "binary_by_run": {
+    "stage1_ref": "8d5e8c5e83227021672a472f749782b4426654abf264f10f815923e57074caa6",
+    "stage1_swiglu_d_v2": "8d5e8c5e83227021672a472f749782b4426654abf264f10f815923e57074caa6",
+    "stage2_post": "862d3ab3a8a1eab99326c353782af0b7a170041e53174063735a27051ae0a5af",
+    "stage2_post_pre": "862d3ab3a8a1eab99326c353782af0b7a170041e53174063735a27051ae0a5af",
+    "stage2_all": "862d3ab3a8a1eab99326c353782af0b7a170041e53174063735a27051ae0a5af"
+  },
+  "differences": [
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 0,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj9/resolved_rank0.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank0.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 0,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 0,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 0,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 1,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj9/resolved_rank1.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank1.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 1,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 1,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 1,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 2,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj9/resolved_rank2.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank2.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 2,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 2,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 2,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 3,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj9/resolved_rank3.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank3.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 3,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 3,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 3,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 4,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj9/resolved_rank4.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank4.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 4,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 4,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 4,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 5,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj9/resolved_rank5.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank5.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 5,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 5,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 5,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 6,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj9/resolved_rank6.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank6.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 6,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 6,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 6,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 7,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj9/resolved_rank7.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank7.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 7,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 7,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 7,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj9",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 0,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj10/resolved_rank0.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank0.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 0,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 0,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 0,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 1,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj10/resolved_rank1.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank1.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 1,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 1,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 1,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 2,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj10/resolved_rank2.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank2.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 2,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 2,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 2,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 3,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj10/resolved_rank3.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank3.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 3,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 3,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 3,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 4,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj10/resolved_rank4.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank4.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 4,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 4,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 4,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 5,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj10/resolved_rank5.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank5.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 5,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 5,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 5,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 6,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj10/resolved_rank6.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank6.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 6,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 6,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 6,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 7,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_ref/sj10/resolved_rank7.json",
+      "new": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank7.json"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 7,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_ref",
+      "new": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 7,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 7,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/repos/xllm-musa",
+      "new": "/work/01_sources/34815f6a"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": null,
+      "new": "reference"
+    },
+    {
+      "before": "stage1_ref",
+      "after": "stage1_swiglu_d_v2",
+      "host": "sj10",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 0,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank0.json",
+      "new": "/work/runs/stage2_post/sj9/resolved_rank0.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 0,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 0,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 0,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 1,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank1.json",
+      "new": "/work/runs/stage2_post/sj9/resolved_rank1.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 1,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 1,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 1,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 2,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank2.json",
+      "new": "/work/runs/stage2_post/sj9/resolved_rank2.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 2,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 2,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 2,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 3,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank3.json",
+      "new": "/work/runs/stage2_post/sj9/resolved_rank3.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 3,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 3,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 3,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 4,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank4.json",
+      "new": "/work/runs/stage2_post/sj9/resolved_rank4.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 4,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 4,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 4,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 5,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank5.json",
+      "new": "/work/runs/stage2_post/sj9/resolved_rank5.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 5,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 5,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 5,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 6,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank6.json",
+      "new": "/work/runs/stage2_post/sj9/resolved_rank6.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 6,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 6,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 6,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 7,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank7.json",
+      "new": "/work/runs/stage2_post/sj9/resolved_rank7.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 7,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 7,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 7,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj9",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 0,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank0.json",
+      "new": "/work/runs/stage2_post/sj10/resolved_rank0.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 0,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 0,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 0,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 1,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank1.json",
+      "new": "/work/runs/stage2_post/sj10/resolved_rank1.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 1,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 1,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 1,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 2,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank2.json",
+      "new": "/work/runs/stage2_post/sj10/resolved_rank2.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 2,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 2,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 2,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 3,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank3.json",
+      "new": "/work/runs/stage2_post/sj10/resolved_rank3.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 3,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 3,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 3,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 4,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank4.json",
+      "new": "/work/runs/stage2_post/sj10/resolved_rank4.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 4,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 4,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 4,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 5,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank5.json",
+      "new": "/work/runs/stage2_post/sj10/resolved_rank5.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 5,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 5,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 5,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 6,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank6.json",
+      "new": "/work/runs/stage2_post/sj10/resolved_rank6.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 6,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 6,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 6,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 7,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank7.json",
+      "new": "/work/runs/stage2_post/sj10/resolved_rank7.json"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 7,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage1_swiglu_d_v2",
+      "new": "xiaopang1110-dsv41-stage2_post"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 7,
+      "category": "flags",
+      "key": "python_model_path",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 7,
+      "category": "environment",
+      "key": "PYTHONPATH",
+      "old": "/work/01_sources/34815f6a",
+      "new": "/work/01_sources/stage2_mhc"
+    },
+    {
+      "before": "stage1_swiglu_d_v2",
+      "after": "stage2_post",
+      "host": "sj10",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_POST",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 0,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj9/resolved_rank0.json",
+      "new": "/work/runs/stage2_post_pre/sj9/resolved_rank0.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 0,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 1,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj9/resolved_rank1.json",
+      "new": "/work/runs/stage2_post_pre/sj9/resolved_rank1.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 1,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 2,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj9/resolved_rank2.json",
+      "new": "/work/runs/stage2_post_pre/sj9/resolved_rank2.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 2,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 3,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj9/resolved_rank3.json",
+      "new": "/work/runs/stage2_post_pre/sj9/resolved_rank3.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 3,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 4,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj9/resolved_rank4.json",
+      "new": "/work/runs/stage2_post_pre/sj9/resolved_rank4.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 4,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 5,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj9/resolved_rank5.json",
+      "new": "/work/runs/stage2_post_pre/sj9/resolved_rank5.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 5,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 6,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj9/resolved_rank6.json",
+      "new": "/work/runs/stage2_post_pre/sj9/resolved_rank6.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 6,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 7,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj9/resolved_rank7.json",
+      "new": "/work/runs/stage2_post_pre/sj9/resolved_rank7.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 7,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj9",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 0,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj10/resolved_rank0.json",
+      "new": "/work/runs/stage2_post_pre/sj10/resolved_rank0.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 0,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 1,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj10/resolved_rank1.json",
+      "new": "/work/runs/stage2_post_pre/sj10/resolved_rank1.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 1,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 2,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj10/resolved_rank2.json",
+      "new": "/work/runs/stage2_post_pre/sj10/resolved_rank2.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 2,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 3,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj10/resolved_rank3.json",
+      "new": "/work/runs/stage2_post_pre/sj10/resolved_rank3.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 3,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 4,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj10/resolved_rank4.json",
+      "new": "/work/runs/stage2_post_pre/sj10/resolved_rank4.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 4,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 5,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj10/resolved_rank5.json",
+      "new": "/work/runs/stage2_post_pre/sj10/resolved_rank5.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 5,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 6,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj10/resolved_rank6.json",
+      "new": "/work/runs/stage2_post_pre/sj10/resolved_rank6.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 6,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 7,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post/sj10/resolved_rank7.json",
+      "new": "/work/runs/stage2_post_pre/sj10/resolved_rank7.json"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 7,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post",
+      "new": "xiaopang1110-dsv41-stage2_post_pre"
+    },
+    {
+      "before": "stage2_post",
+      "after": "stage2_post_pre",
+      "host": "sj10",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_PRE",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 0,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj9/resolved_rank0.json",
+      "new": "/work/runs/stage2_all/sj9/resolved_rank0.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 0,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 1,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj9/resolved_rank1.json",
+      "new": "/work/runs/stage2_all/sj9/resolved_rank1.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 1,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 2,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj9/resolved_rank2.json",
+      "new": "/work/runs/stage2_all/sj9/resolved_rank2.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 2,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 3,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj9/resolved_rank3.json",
+      "new": "/work/runs/stage2_all/sj9/resolved_rank3.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 3,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 4,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj9/resolved_rank4.json",
+      "new": "/work/runs/stage2_all/sj9/resolved_rank4.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 4,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 5,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj9/resolved_rank5.json",
+      "new": "/work/runs/stage2_all/sj9/resolved_rank5.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 5,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 6,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj9/resolved_rank6.json",
+      "new": "/work/runs/stage2_all/sj9/resolved_rank6.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 6,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 7,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj9/resolved_rank7.json",
+      "new": "/work/runs/stage2_all/sj9/resolved_rank7.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 7,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj9",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 0,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj10/resolved_rank0.json",
+      "new": "/work/runs/stage2_all/sj10/resolved_rank0.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 0,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 0,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 1,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj10/resolved_rank1.json",
+      "new": "/work/runs/stage2_all/sj10/resolved_rank1.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 1,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 1,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 2,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj10/resolved_rank2.json",
+      "new": "/work/runs/stage2_all/sj10/resolved_rank2.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 2,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 2,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 3,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj10/resolved_rank3.json",
+      "new": "/work/runs/stage2_all/sj10/resolved_rank3.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 3,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 3,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 4,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj10/resolved_rank4.json",
+      "new": "/work/runs/stage2_all/sj10/resolved_rank4.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 4,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 4,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 5,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj10/resolved_rank5.json",
+      "new": "/work/runs/stage2_all/sj10/resolved_rank5.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 5,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 5,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 6,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj10/resolved_rank6.json",
+      "new": "/work/runs/stage2_all/sj10/resolved_rank6.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 6,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 6,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 7,
+      "category": "flags",
+      "key": "dump_config_json_file",
+      "old": "/work/runs/stage2_post_pre/sj10/resolved_rank7.json",
+      "new": "/work/runs/stage2_all/sj10/resolved_rank7.json"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 7,
+      "category": "flags",
+      "key": "etcd_namespace",
+      "old": "xiaopang1110-dsv41-stage2_post_pre",
+      "new": "xiaopang1110-dsv41-stage2_all"
+    },
+    {
+      "before": "stage2_post_pre",
+      "after": "stage2_all",
+      "host": "sj10",
+      "rank": 7,
+      "category": "environment",
+      "key": "XLLM_DSV41_MUSA_HC_METADATA",
+      "old": "reference",
+      "new": "v4_fused"
+    }
+  ]
+}

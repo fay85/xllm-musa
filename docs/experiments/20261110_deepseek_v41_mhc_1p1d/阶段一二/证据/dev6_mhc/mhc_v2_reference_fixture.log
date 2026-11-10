@@ -1,0 +1,30 @@
+I20261110 16:24:00.095539 274 hyper_connection.py:51] V4.1 MUSA mHC: {'pre': 'reference', 'post': 'reference', 'metadata': 'reference'}
+I20261110 16:24:01.798290 274 shared_swiglu.py:43] V4.1 MUSA shared SwiGLU: mode=reference, dtype=torch.bfloat16, clamp=10.0
+I20261110 16:24:01.799066 274 hyper_connection.py:51] V4.1 MUSA mHC: {'pre': 'reference', 'post': 'reference', 'metadata': 'reference'}
+I20261110 16:24:01.800171 274 shared_swiglu.py:43] V4.1 MUSA shared SwiGLU: mode=reference, dtype=torch.bfloat16, clamp=10.0
+I20261110 16:24:01.800586 274 hyper_connection.py:51] V4.1 MUSA mHC: {'pre': 'reference', 'post': 'reference', 'metadata': 'reference'}
+I20261110 16:24:01.802187 274 shared_swiglu.py:43] V4.1 MUSA shared SwiGLU: mode=reference, dtype=torch.bfloat16, clamp=10.0
+I20261110 16:24:01.802633 274 hyper_connection.py:51] V4.1 MUSA mHC: {'pre': 'reference', 'post': 'reference', 'metadata': 'reference'}
+I20261110 16:24:01.803269 274 shared_swiglu.py:43] V4.1 MUSA shared SwiGLU: mode=reference, dtype=torch.bfloat16, clamp=10.0
+I20261110 16:24:01.803664 274 hyper_connection.py:51] V4.1 MUSA mHC: {'pre': 'reference', 'post': 'reference', 'metadata': 'reference'}
+I20261110 16:24:01.804517 274 shared_swiglu.py:43] V4.1 MUSA shared SwiGLU: mode=reference, dtype=torch.bfloat16, clamp=10.0
+I20261110 16:24:01.804943 274 hyper_connection.py:51] V4.1 MUSA mHC: {'pre': 'reference', 'post': 'reference', 'metadata': 'reference'}
+I20261110 16:24:01.805658 274 shared_swiglu.py:43] V4.1 MUSA shared SwiGLU: mode=reference, dtype=torch.bfloat16, clamp=10.0
+I20261110 16:24:01.838628 274 validate_csa2_fixture.py:74] Fixture initialized
+I20261110 16:24:01.866692 274 csa2_attention.py:1257] DeepSeek-V4.1 CSA2 graph_token_capacity_granularity=1024 (derived from max_model_len=64)
+W20261110 16:24:06.074227 274 csa2_attention.py:319] the fused partial rotary op is unavailable (device=musa dtype=torch.bfloat16 dim=3 inverse=False cache_dtype=torch.float32 op_registered=False); staying on the eager path
+W20261110 16:24:06.125746 274 deepseek_v41.py:1079] the fused hc_post op is unavailable (device=musa dtype=torch.bfloat16 x_dim=2 residual_dim=3 post_dtype=torch.float32 comb_dtype=torch.float32 hc_mult=4 op_registered=False); staying on the eager path
+W20261110 16:24:07.178063 274 csa2_attention.py:520] fused V4.1 compressor is inactive (ring rows != 32); staying on the pure-torch pooling path
+W20261110 16:24:07.672685 274 csa2_attention.py:1099] the QLI v3 indexer path is inactive (unsupported index head dim 32 (op requires 128)); staying on the pure-torch indexer
+I20261110 16:24:07.945990 274 validate_csa2_fixture.py:86] Prefill finished: magnitude=1.109375, adjacent-token diversity=0.34765625
+I20261110 16:24:07.947546 274 csa2_attention.py:1257] DeepSeek-V4.1 CSA2 graph_token_capacity_granularity=1024 (derived from max_model_len=64)
+I20261110 16:24:08.146302 274 validate_csa2_fixture.py:98] Decode position 0: max_abs_logits_error=0.0
+I20261110 16:24:08.250611 274 validate_csa2_fixture.py:98] Decode position 1: max_abs_logits_error=0.0
+I20261110 16:24:08.350514 274 validate_csa2_fixture.py:98] Decode position 2: max_abs_logits_error=0.0
+I20261110 16:24:08.450412 274 validate_csa2_fixture.py:98] Decode position 3: max_abs_logits_error=0.0
+I20261110 16:24:08.551929 274 validate_csa2_fixture.py:98] Decode position 4: max_abs_logits_error=0.0
+I20261110 16:24:08.653275 274 validate_csa2_fixture.py:98] Decode position 5: max_abs_logits_error=0.0
+I20261110 16:24:08.753501 274 validate_csa2_fixture.py:98] Decode position 6: max_abs_logits_error=0.0
+I20261110 16:24:08.853635 274 validate_csa2_fixture.py:98] Decode position 7: max_abs_logits_error=0.0
+I20261110 16:24:08.952164 274 validate_csa2_fixture.py:98] Decode position 8: max_abs_logits_error=0.0
+{"status": "PASS", "sequences": 2, "tokens_each": 9, "layers": 6, "engram_layers": [1], "max_abs_logits": 1.109375, "adjacent_token_logits_difference": 0.34765625, "max_abs_logits_error_by_position": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], "scope": "real single-GPU MUSA execution; random tiny weights and Engram table, synthetic page metadata, no network transfer; not full-model accuracy", "mhc": "reference"}

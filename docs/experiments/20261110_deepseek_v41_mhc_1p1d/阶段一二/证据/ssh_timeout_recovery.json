@@ -1,0 +1,7 @@
+{
+  "at": "2026-11-10T19:36:49.768173+08:00",
+  "last_error": "Authentication timeout at 19:33:52; subsequent connect timeout",
+  "recovered_at": "19:36:01",
+  "observed": "C 256 group completed 5/5 and 2048 warmup in progress, all ranks alive",
+  "action": "No VPN restart, no model restart. Resume local controller from existing stage2_post; retry only idempotent reads on transient connection failures."
+}

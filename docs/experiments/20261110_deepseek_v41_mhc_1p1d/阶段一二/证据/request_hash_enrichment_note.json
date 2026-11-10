@@ -1,0 +1,4 @@
+{
+  "status": "METRICS_AND_RAW_REQUESTS_UNCHANGED",
+  "explanation": "After the A snapshot archive was verified, canonical request body SHA256 annotations were added to the live A summary, derived solely from its existing raw request JSONL. The old summary was preserved as validated_summary_before_request_hash_enrichment.json. The original archived database and server logs remain unchanged; the archive is the historical snapshot identified by its receipt, not a claim to match later derived annotations byte for byte."
+}

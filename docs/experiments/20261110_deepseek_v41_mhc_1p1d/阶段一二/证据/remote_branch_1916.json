@@ -1,0 +1,8 @@
+{
+  "checked_at": "2026-11-10T19:17:04.199675+08:00",
+  "remote": "git@github.com:fay85/xllm-musa.git",
+  "branch": "xiaopangDeepseeekV41Flash",
+  "head": "34815f6ac23de6c3145a3392b7649874a37d4f27",
+  "source": "git ls-remote origin refs/heads/xiaopangDeepseeekV41Flash",
+  "mhc_worktree": "not committed yet"
+}

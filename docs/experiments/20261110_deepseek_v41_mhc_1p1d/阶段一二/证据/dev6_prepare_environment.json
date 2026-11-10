@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "total 838M\n-rwxr-xr-x 1 root root  79M Nov  5 18:04 concurrent_block_manager_test\n-rwxr-xr-x 1 root root  22M Nov  5 18:04 deepseek_v41_cpp_template_test\n-rwxr-xr-x 1 root root  19M Nov  5 18:04 draft_model_config_test\n-rwxr-xr-x 1 root root 6.5M Nov  5 18:04 folly_bthread_compat_test\n-rwxr-xr-x 1 root root  88M Nov  5 18:04 mtp_prefix_cache_test\n-rwxr-xr-x 1 root root 144M Nov  5 18:04 native_provider_cache_groups_test\n-rwxr-xr-x 1 root root 325M Nov  5 18:05 xllm\n-rwxr-xr-x 1 root root 157M Nov  5 18:04 xservice_client_lifecycle_test\ntotal 376M\n-rwxr-xr-x 1 root root  52M Nov 10 11:25 musa_python_kernel_test_module.cpython-310-x86_64-linux-gnu.so\n-rwxr-xr-x 1 root root 325M Nov 10 11:26 xllm\nName: clang-format\nVersion: 20.1.6\nSummary: Clang-Format is an LLVM-based code formatting tool\n",
+  "stderr": ""
+}

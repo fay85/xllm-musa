@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "stage1_swiglu_d prepared, not launched\nstage2_post prepared, not launched\nstage2_post_pre prepared, not launched\nstage2_all prepared, not launched\n",
+  "stderr": ""
+}

@@ -643,7 +643,10 @@ def test_hc_pre_stream_reduction_is_partition_invariant(dtype: torch.dtype, hc_m
             dtype=torch.float32,
             device=device,
         )
-    hc = object.__new__(DeepseekV41HyperConnection)
+    # Dispatch is fixed by the constructor, including the MUSA opt-in path.
+    # Exercise the real module instead of bypassing its initialized state.
+    cfg = DeepseekV41Config(hidden_size=128, hc_mult=hc_mult)
+    hc = DeepseekV41HyperConnection(cfg, dtype, device)
     contributions = (pre_mix.unsqueeze(-1) * hidden.float()).unbind(dim=-2)
     expected = contributions[0]
     for contribution in contributions[1:]:

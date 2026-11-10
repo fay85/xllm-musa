@@ -1,0 +1,5 @@
+{
+  "at": "2026-11-10T17:42:36.617338+08:00",
+  "phase": "NEEDS_REVIEW",
+  "error": "RuntimeError('stage1_swiglu_d exited before completed benchmark: 1\\n')"
+}

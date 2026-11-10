@@ -1,0 +1,14 @@
+[
+  {
+    "file": "source_stage1_34815f6a.tar.gz",
+    "bytes": 15994010,
+    "sha256": "67abda03395f2dc62d189365f25b99852db494883927465b053eaff720626be3",
+    "upload_seconds": 11.250380765995942
+  },
+  {
+    "file": "stage1_runtime.tar.gz",
+    "bytes": 111956725,
+    "sha256": "fd6a2da5c997a2df1daafab2e5c7e8e675069c29240e77d14940380be36b5b52",
+    "upload_seconds": 90.70563253201544
+  }
+]

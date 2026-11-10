@@ -1,0 +1,17 @@
+{
+  "run": "stage1_ref",
+  "benchmark": "stage1_ref_v2",
+  "items": [
+    "03_benchmarks/stage1_ref_v2",
+    "runs/stage1_ref",
+    "artifacts/prepared/stage1_ref",
+    "02_correctness/stage1_ref",
+    "02_correctness/stage1_ref_prefix"
+  ],
+  "bytes": 430315,
+  "sha256": "8af3a6579693add93840d7ce0fb55df04cf78c2a1a4b9580e65205fd51be2e42",
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/incoming/completed_stage1_ref.tar.gz",
+  "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/证据/完整实验/stage1_ref",
+  "verified_at": "2026-11-10T17:39:24.710699+08:00",
+  "local_transfer_archive_removed": true
+}

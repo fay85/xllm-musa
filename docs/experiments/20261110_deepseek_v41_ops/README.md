@@ -1,5 +1,7 @@
 # V4.1：保留 Python 模型入口，逐项复用已有 MUSA 算子
 
+> 本页记录共享 SwiGLU 提交 `34815f6a` 的阶段状态；后续三项 mHC 接入、1017 双机测试与新发现见 [后续实验记录](../20261110_deepseek_v41_mhc_1p1d/README.md)。
+
 ## 1. 本轮边界与基线
 
 按照 11 月 10 日确认的方向，继续在共同仓库 `fay85/xllm-musa` 的个人分支 `xiaopangDeepseeekV41Flash` 上开发，暂不重写整套 C++ 模型。起点为 `4ade93777acdcd2d8271841b713809513c40886c`，其共同基线为 `1103-merged-dev` 的 `0cfd82700e164e8aa7951064b652925dd6b24d18`。只提交个人分支，不发 MR/PR。

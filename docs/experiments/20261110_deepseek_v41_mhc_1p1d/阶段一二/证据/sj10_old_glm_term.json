@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"time\": \"2026-11-10T16:01:26.942892+08:00\", \"name\": \"xiaopang1105_glm_decode_sj10\", \"signal\": \"SIGTERM\", \"pids\": [16977, 16978, 16979, 16980, 16981, 16982, 16983, 16984], \"no_sigkill\": true}\n",
+  "stderr": ""
+}

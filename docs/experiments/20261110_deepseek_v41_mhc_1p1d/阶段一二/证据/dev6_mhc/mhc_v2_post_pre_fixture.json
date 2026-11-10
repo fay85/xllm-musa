@@ -1,0 +1,24 @@
+{
+  "status": "PASS",
+  "sequences": 2,
+  "tokens_each": 9,
+  "layers": 6,
+  "engram_layers": [
+    1
+  ],
+  "max_abs_logits": 1.109375,
+  "adjacent_token_logits_difference": 0.34765625,
+  "max_abs_logits_error_by_position": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+  ],
+  "scope": "real single-GPU MUSA execution; random tiny weights and Engram table, synthetic page metadata, no network transfer; not full-model accuracy",
+  "mhc": "post_pre"
+}

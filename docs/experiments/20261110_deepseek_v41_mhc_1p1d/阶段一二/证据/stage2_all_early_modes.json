@@ -1,0 +1,198 @@
+{
+  "status": "PASS_ALL_16_RANKS_40_LAYERS",
+  "at": "2026-11-10T21:21:07.498026+08:00",
+  "rows": [
+    {
+      "host": "sj9",
+      "rank": 0,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "reference",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj9",
+      "rank": 1,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "reference",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj9",
+      "rank": 2,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "reference",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj9",
+      "rank": 3,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "reference",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj9",
+      "rank": 4,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "reference",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj9",
+      "rank": 5,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "reference",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj9",
+      "rank": 6,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "reference",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj9",
+      "rank": 7,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "reference",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj10",
+      "rank": 0,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "v4_fused",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj10",
+      "rank": 1,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "v4_fused",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj10",
+      "rank": 2,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "v4_fused",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj10",
+      "rank": 3,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "v4_fused",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj10",
+      "rank": 4,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "v4_fused",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj10",
+      "rank": 5,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "v4_fused",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj10",
+      "rank": 6,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "v4_fused",
+      "mhc_records": 40,
+      "shared_records": 40
+    },
+    {
+      "host": "sj10",
+      "rank": 7,
+      "mhc": {
+        "pre": "v4_fused",
+        "post": "v4_fused",
+        "metadata": "v4_fused"
+      },
+      "shared": "v4_fused",
+      "mhc_records": 40,
+      "shared_records": 40
+    }
+  ]
+}

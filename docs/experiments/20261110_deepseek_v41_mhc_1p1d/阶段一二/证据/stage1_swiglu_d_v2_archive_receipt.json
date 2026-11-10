@@ -1,0 +1,18 @@
+{
+  "archive_name": "stage1_swiglu_d_v2",
+  "validation_status": "PASS",
+  "run": "stage1_swiglu_d_v2",
+  "benchmark": "stage1_swiglu_d_v2",
+  "items": [
+    "03_benchmarks/stage1_swiglu_d_v2",
+    "runs/stage1_swiglu_d_v2",
+    "artifacts/prepared/stage1_swiglu_d_v2",
+    "02_correctness/stage1_swiglu_d_v2"
+  ],
+  "bytes": 509693,
+  "sha256": "ad723a07a05d60ba2a177ad2715597fa2637257edfabaabaa0f1d2cf8fa57efc",
+  "path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/incoming/completed_stage1_swiglu_d_v2.tar.gz",
+  "local_path": "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/证据/完整实验/stage1_swiglu_d_v2",
+  "verified_at": "2026-11-10T18:59:06.814604+08:00",
+  "local_transfer_archive_removed": true
+}

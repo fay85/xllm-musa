@@ -1,0 +1,31 @@
+{
+  "at": "2026-11-10T16:53:05.876757+08:00",
+  "deleted_after_verified_remote_copy": [
+    {
+      "path": "\u738b\u5bb6\u660e/20261110\u8865\u9f50V41\u7b97\u5b50/\u9636\u6bb5\u4e00\u4e8c/\u4f20\u8f93\u7f13\u5b58/source_stage1_34815f6a.tar.gz",
+      "bytes": 15994010,
+      "sha256": "67abda03395f2dc62d189365f25b99852db494883927465b053eaff720626be3"
+    },
+    {
+      "path": "\u738b\u5bb6\u660e/20261110\u8865\u9f50V41\u7b97\u5b50/\u9636\u6bb5\u4e00\u4e8c/\u4f20\u8f93\u7f13\u5b58/stage1_runtime.tar.gz",
+      "bytes": 111956725,
+      "sha256": "fd6a2da5c997a2df1daafab2e5c7e8e675069c29240e77d14940380be36b5b52"
+    },
+    {
+      "path": "\u738b\u5bb6\u660e/20261110\u8865\u9f50V41\u7b97\u5b50/\u9636\u6bb5\u4e00\u4e8c/\u4f20\u8f93\u7f13\u5b58/source_stage2_mhc.tar.gz",
+      "bytes": 16065037,
+      "sha256": "291f05b07d6afdf4fd5b134b6d2f2b0ede48e44f500c9526e889a9af03156fb2"
+    },
+    {
+      "path": "\u738b\u5bb6\u660e/20261110\u8865\u9f50V41\u7b97\u5b50/\u9636\u6bb5\u4e00\u4e8c/\u4f20\u8f93\u7f13\u5b58/stage2_runtime.tar.gz",
+      "bytes": 119000714,
+      "sha256": "ccdf620ea5c8f745c3c4a4ffb0e0f7261b041b6bdd3794eb575e1167826d6761"
+    },
+    {
+      "path": "\u738b\u5bb6\u660e/20261110\u8865\u9f50V41\u7b97\u5b50/\u9636\u6bb5\u4e00\u4e8c/\u4f20\u8f93\u7f13\u5b58/hc_1017_subset/hc.safetensors",
+      "bytes": 15731608,
+      "sha256": "fae7ae678b5847c2282720fcfcce1109c836db5c86f95e25b54801aa0504e4b8"
+    }
+  ],
+  "bytes": 278748094
+}

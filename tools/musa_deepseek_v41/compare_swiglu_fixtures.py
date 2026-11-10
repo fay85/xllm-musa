@@ -20,10 +20,16 @@ def main() -> None:
     parser.add_argument("reference", type=Path)
     parser.add_argument("fused", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--axis", choices=("shared_swiglu", "mhc"), default="shared_swiglu")
     args = parser.parse_args()
     reference = torch.load(args.reference, map_location="cpu", weights_only=True)
     fused = torch.load(args.fused, map_location="cpu", weights_only=True)
-    assert reference["shared_swiglu"] == "reference" and fused["shared_swiglu"] == "v4_fused"
+    if args.axis == "shared_swiglu":
+        assert reference["shared_swiglu"] == "reference" and fused["shared_swiglu"] == "v4_fused"
+        assert reference.get("mhc", "reference") == fused.get("mhc", "reference")
+    else:
+        assert reference["shared_swiglu"] == fused["shared_swiglu"]
+        assert (reference["mhc"], fused["mhc"]) in (("reference", "post"), ("post", "post_pre"), ("post_pre", "all"))
     torch.testing.assert_close(reference["ids"], fused["ids"], rtol=0, atol=0)
     rows = []
     for key in ("hidden", "prefill_logits", "decode_logits"):

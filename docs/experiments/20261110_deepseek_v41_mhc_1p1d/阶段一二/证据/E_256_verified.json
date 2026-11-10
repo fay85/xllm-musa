@@ -1,0 +1,16 @@
+{
+  "status": "PASS_PARTIAL_256_GROUP_ONLY",
+  "at": "2026-11-10T21:55:12.112313+08:00",
+  "configuration": "stage2_all",
+  "warmup_excluded": true,
+  "repeats": 5,
+  "input_tokens": 256,
+  "output_tokens": 256,
+  "ttft_ms": 6246.939259022474,
+  "tpot_ms": 1061.4109956801815,
+  "latency_s": 276.9067431574687,
+  "qps": 0.0036113205075118714,
+  "output_tokens_s": 0.9244980499230391,
+  "database_sha256": "289b752500afa89b3fe8d02b2d7f48499beabd7b24aed368a0367f2f674aa25b",
+  "tpot_sample_stddev_ms": 1.9988123435734684
+}

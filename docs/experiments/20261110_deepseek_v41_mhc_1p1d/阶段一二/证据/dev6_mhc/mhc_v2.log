@@ -1,0 +1,7 @@
+I20261110 16:23:45.890421 73 hyper_connection.py:51] V4.1 MUSA mHC: {'pre': 'reference', 'post': 'reference', 'metadata': 'reference'}
+I20261110 16:23:45.954738 73 hyper_connection.py:51] V4.1 MUSA mHC: {'pre': 'v4_fused', 'post': 'v4_fused', 'metadata': 'v4_fused'}
+W20261110 16:23:46.013026 73 deepseek_v41.py:1079] the fused hc_post op is unavailable (device=musa dtype=torch.bfloat16 x_dim=2 residual_dim=3 post_dtype=torch.float32 comb_dtype=torch.float32 hc_mult=4 op_registered=False); staying on the eager path
+I20261110 16:23:54.619716 73 hyper_connection.py:51] V4.1 MUSA mHC: {'pre': 'v4_fused', 'post': 'v4_fused', 'metadata': 'v4_fused'}
+I20261110 16:23:54.632636 73 hyper_connection.py:51] V4.1 MUSA mHC: {'pre': 'v4_fused', 'post': 'v4_fused', 'metadata': 'v4_fused'}
+I20261110 16:23:54.644027 73 hyper_connection.py:51] V4.1 MUSA mHC: {'pre': 'v4_fused', 'post': 'v4_fused', 'metadata': 'v4_fused'}
+I20261110 16:23:54.798780 73 validate_hyper_connection.py:168] mHC validation passed: 39 checks, 9 performance comparisons

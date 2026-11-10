@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\n  \"status\": \"PASS_PARTIAL_256_GROUP_ONLY\",\n  \"at\": \"2026-11-10T17:13:06.328297+08:00\",\n  \"configuration\": \"stage1_ref; P/D shared SwiGLU reference; all mHC reference\",\n  \"warmup_excluded\": true,\n  \"repeats\": 5,\n  \"input_tokens\": 256,\n  \"output_tokens\": 256,\n  \"ttft_ms\": 6383.207470364869,\n  \"tpot_ms\": 1102.9481158339802,\n  \"latency_s\": 287.6349770080298,\n  \"qps\": 0.0034766249814695885,\n  \"output_tokens_s\": 0.8900159952562147,\n  \"database_sha256\": \"500206ec52d063da7fddad76a57921d693fa44c0af89dab01d13cbaf209b3390\"\n}\n",
+  "stderr": ""
+}

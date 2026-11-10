@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"Status\":\"exited\",\"Running\":false,\"Paused\":false,\"Restarting\":false,\"OOMKilled\":false,\"Dead\":false,\"Pid\":0,\"ExitCode\":143,\"Error\":\"\",\"StartedAt\":\"2026-11-04T14:10:10.16201191Z\",\"FinishedAt\":\"2026-11-10T08:04:02.592721914Z\"}\n",
+  "stderr": ""
+}

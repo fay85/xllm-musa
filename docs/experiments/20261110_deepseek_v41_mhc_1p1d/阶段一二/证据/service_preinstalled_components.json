@@ -1,0 +1,25 @@
+{
+  "status": "RECORDED_IMAGE_PREINSTALLED_COMPONENTS",
+  "container": "xiaopang1110_v41_decode_sj10",
+  "image": "registry.mthreads.com/presale/devtech/xllm:1102-dev",
+  "files": [
+    {
+      "path": "/opt/xllm_service/bin/xllm_master_serving",
+      "bytes": 116257504,
+      "sha256": "5ade8b09391c7fced1f286ef83d4f078d668c3e83b4f21f6b3ebeae724c45ee5",
+      "source": "preinstalled in image; not rebuilt in this mHC experiment"
+    },
+    {
+      "path": "/opt/xllm_service/bin/etcd",
+      "bytes": 23625880,
+      "sha256": "17d19f93c2919f9f40f650521a56417508770ea1a658e62ef80919286a7ee79d",
+      "source": "preinstalled in image; not rebuilt in this mHC experiment"
+    },
+    {
+      "path": "/workspace/artifacts/libmusa_backend_init.so",
+      "bytes": 162712,
+      "sha256": "5a1d6db0c1f7f78cb96f8afcdd20d13712fe0006e2f90561dfc918ae58e2d9aa",
+      "source": "preinstalled in image; not rebuilt in this mHC experiment"
+    }
+  ]
+}

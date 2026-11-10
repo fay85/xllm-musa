@@ -1,0 +1,20 @@
+{"at": "2026-11-10T16:43:49.646067+08:00", "phase": "WAIT_BENCHMARK", "run": "stage1_ref", "benchmark": "stage1_ref_v2"}
+{"at": "2026-11-10T17:30:22.770244+08:00", "phase": "VALIDATE", "run": "stage1_ref"}
+{"at": "2026-11-10T17:30:24.744466+08:00", "phase": "PREFIX_PARITY_PROBE", "run": "stage1_ref"}
+{"at": "2026-11-10T17:30:27.439515+08:00", "phase": "NORMAL_TERM", "run": "stage1_ref"}
+{"at": "2026-11-10T17:30:39.986183+08:00", "phase": "RANKS_EXITED", "run": "stage1_ref", "result": [{"exit_codes": [0, 0, 0, 0, 0, 0, 0, 0], "control_exit": null, "stopping": true, "automatic_kill": false}, {"exit_codes": [0, 0, 0, 0, 0, 0, 0, 0], "control_exit": 0, "stopping": true, "automatic_kill": false}]}
+{"at": "2026-11-10T17:30:39.987000+08:00", "phase": "LAUNCH", "run": "stage1_swiglu_d"}
+SJ operator preflight started with no inference ranks running
+
+SJ operator validation passed
+('sj10', {'exit_status': 1, 'stdout': '', 'stderr': 'Traceback (most recent call last):\n  File "<string>", line 11, in <module>\nOSError: [Errno 98] Address already in use\n'})
+('sj9', {'exit_status': 1, 'stdout': '', 'stderr': 'Traceback (most recent call last):\n  File "<string>", line 11, in <module>\nOSError: [Errno 98] Address already in use\n'})
+{"at": "2026-11-10T17:31:20.421914+08:00", "phase": "WAIT_BENCHMARK", "run": "stage1_swiglu_d", "benchmark": "stage1_swiglu_d"}
+{"at": "2026-11-10T17:42:36.617338+08:00", "phase": "NEEDS_REVIEW", "error": "RuntimeError('stage1_swiglu_d exited before completed benchmark: 1\\n')"}
+Traceback (most recent call last):
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 57, in <module>
+    stop('stage1_ref');launch('stage1_swiglu_d');wait_finished('stage1_swiglu_d','stage1_swiglu_d');candidate=validate('stage1_swiglu_d','stage1_swiglu_d')
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 21, in wait_finished
+    if status is not None:raise RuntimeError(f'{run} exited before completed benchmark: {status}')
+RuntimeError: stage1_swiglu_d exited before completed benchmark: 1
+

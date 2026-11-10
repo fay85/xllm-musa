@@ -1,0 +1,48 @@
+{
+  "status": "PASS_PARTIAL_256_GROUP_ONLY",
+  "at": "2026-11-10T18:29:33.384358+08:00",
+  "configuration": "stage1_swiglu_d_v2",
+  "warmup_excluded": true,
+  "repeats": 5,
+  "input_tokens": 256,
+  "output_tokens": 256,
+  "ttft_ms": 6466.773131676018,
+  "tpot_ms": 1094.9470196226064,
+  "latency_s": 285.67826313544066,
+  "qps": 0.00350043818485198,
+  "output_tokens_s": 0.8961121753221069,
+  "checks": [
+    {
+      "request_id": "chatcmpl-6914083946013764753-SjDLQbDsxdyX96S5dpWxpN",
+      "prefill": "I20261110 18:03:23.295271 22031 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-6914083946013764753-SjDLQbDsxdyX96S5dpWxpN, x-request-id: 01a1c4e9-759e-71d1-a5c2-c4aa853c7a12, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.5ms, ttft: 6503.0ms, total_latency: 6503.9ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "decode": "I20261110 18:08:02.670199 22786 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-6914083946013764753-SjDLQbDsxdyX96S5dpWxpN, x-request-id: 01a1c4e9-759e-71d1-a5c2-c4aa853c7a12, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 6512.2ms, ttft: 6503.0ms, total_latency: 285877.5ms, avg tpot: 1095.6ms, generation speed: 0.9 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "success": "I20261110 18:08:02.670145 22786 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-6914083946013764753-SjDLQbDsxdyX96S5dpWxpN, x-request-id: 01a1c4e9-759e-71d1-a5c2-c4aa853c7a12, outcome: success, status_code: 0"
+    },
+    {
+      "request_id": "chatcmpl-6914083946013764753-HaFV6hgScXPDWLYXXXi7n2",
+      "prefill": "I20261110 18:08:09.022200 22031 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-6914083946013764753-HaFV6hgScXPDWLYXXXi7n2, x-request-id: 01a1c4ed-d272-74a1-9481-c40400af397d, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.9ms, ttft: 6335.0ms, total_latency: 6335.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "decode": "I20261110 18:12:48.631560 22783 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-6914083946013764753-HaFV6hgScXPDWLYXXXi7n2, x-request-id: 01a1c4ed-d272-74a1-9481-c40400af397d, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 6339.4ms, ttft: 6335.0ms, total_latency: 285943.6ms, avg tpot: 1096.5ms, generation speed: 0.9 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "success": "I20261110 18:12:48.631505 22783 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-6914083946013764753-HaFV6hgScXPDWLYXXXi7n2, x-request-id: 01a1c4ed-d272-74a1-9481-c40400af397d, outcome: success, status_code: 0"
+    },
+    {
+      "request_id": "chatcmpl-6914083946013764753-vHrZV79ApmM9CpmLD2EyFV",
+      "prefill": "I20261110 18:12:55.223212 22031 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-6914083946013764753-vHrZV79ApmM9CpmLD2EyFV, x-request-id: 01a1c4f2-2f7c-7198-b784-e1a8819c037f, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.7ms, ttft: 6385.0ms, total_latency: 6385.5ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "decode": "I20261110 18:17:34.385385 22784 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-6914083946013764753-vHrZV79ApmM9CpmLD2EyFV, x-request-id: 01a1c4f2-2f7c-7198-b784-e1a8819c037f, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 6389.8ms, ttft: 6385.0ms, total_latency: 285546.2ms, avg tpot: 1094.7ms, generation speed: 0.9 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "success": "I20261110 18:17:34.385324 22784 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-6914083946013764753-vHrZV79ApmM9CpmLD2EyFV, x-request-id: 01a1c4f2-2f7c-7198-b784-e1a8819c037f, outcome: success, status_code: 0"
+    },
+    {
+      "request_id": "chatcmpl-6914083946013764753-ikv45qcyddyHV5qPMBjMC9",
+      "prefill": "I20261110 18:17:40.642382 22031 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-6914083946013764753-ikv45qcyddyHV5qPMBjMC9, x-request-id: 01a1c4f6-8bb6-7fda-8d51-e59be4aa826c, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.8ms, ttft: 6240.0ms, total_latency: 6240.3ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "decode": "I20261110 18:22:19.613718 22785 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-6914083946013764753-ikv45qcyddyHV5qPMBjMC9, x-request-id: 01a1c4f6-8bb6-7fda-8d51-e59be4aa826c, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 6245.0ms, ttft: 6240.0ms, total_latency: 285210.2ms, avg tpot: 1094.0ms, generation speed: 0.9 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "success": "I20261110 18:22:19.613663 22785 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-6914083946013764753-ikv45qcyddyHV5qPMBjMC9, x-request-id: 01a1c4f6-8bb6-7fda-8d51-e59be4aa826c, outcome: success, status_code: 0"
+    },
+    {
+      "request_id": "chatcmpl-6914083946013764753-BR95xx98bNxrX29jui4g5N",
+      "prefill": "I20261110 18:22:26.202816 22031 request.cpp:587] record_type: pd_prefill_stage, request_id: chatcmpl-6914083946013764753-BR95xx98bNxrX29jui4g5N, x-request-id: 01a1c4fa-e5e1-7bbd-9560-ed86c31f42cd, sequence: 0, prompt_tokens: 256, generated_tokens: 1, queue_to_batch: 1.8ms, ttft: 6375.0ms, total_latency: 6375.9ms, avg tpot: 0.0ms, generation speed: 0.0 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "decode": "I20261110 18:27:05.153736 22786 request.cpp:587] record_type: sequence_terminal, request_id: chatcmpl-6914083946013764753-BR95xx98bNxrX29jui4g5N, x-request-id: 01a1c4fa-e5e1-7bbd-9560-ed86c31f42cd, sequence: 0, finish_reason: length, prompt_tokens: 256, generated_tokens: 256, queue_to_batch: 6380.3ms, ttft: 6375.0ms, total_latency: 285325.6ms, avg tpot: 1093.9ms, generation speed: 0.9 tokens/s, max_tokens: 256, temperature: 0, num_prefix_cache_tokens: 0",
+      "success": "I20261110 18:27:05.153677 22786 request.cpp:505] record_type: request_terminal, request_id: chatcmpl-6914083946013764753-BR95xx98bNxrX29jui4g5N, x-request-id: 01a1c4fa-e5e1-7bbd-9560-ed86c31f42cd, outcome: success, status_code: 0"
+    }
+  ],
+  "database_sha256": "d71bbaabfe93fabd76d428d215e21ada0128f33e358ba6cf4236be60cc72ff9c",
+  "tpot_sample_stddev_ms": 1.0950180968834933
+}

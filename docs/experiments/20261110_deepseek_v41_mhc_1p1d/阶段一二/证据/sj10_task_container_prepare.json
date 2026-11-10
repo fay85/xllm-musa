@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"name\": \"xiaopang1110_v41_decode_sj10\", \"versions\": \"{'torch': '2.9.1', 'torch_musa': '2.9.1', 'mate': '0.2.7', 'apache-tvm-ffi': '0.1.11.post1+musa.1', 'tilelang-musa': '0.1.12+musa.2'}\\n\", \"errors\": \"\", \"exit\": 0}\n",
+  "stderr": ""
+}

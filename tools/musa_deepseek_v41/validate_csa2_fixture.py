@@ -26,11 +26,15 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--shared-swiglu", choices=("reference", "v4_fused"), default="reference")
     parser.add_argument("--save-tensors", type=Path)
+    parser.add_argument("--mhc", choices=("reference", "post", "post_pre", "all"), default="reference")
     args = parser.parse_args()
     if torch.musa.device_count() != 1:
         raise RuntimeError("Expose exactly one idle GPU")
     os.environ["XLLM_DSV41_MUSA_SHARED_SWIGLU"] = args.shared_swiglu
-    if args.shared_swiglu == "v4_fused":
+    for part in ("POST", "PRE", "METADATA"):
+        enabled = args.mhc == "all" or part == "POST" and args.mhc in ("post", "post_pre") or part == "PRE" and args.mhc == "post_pre"
+        os.environ[f"XLLM_DSV41_MUSA_HC_{part}"] = "v4_fused" if enabled else "reference"
+    if args.shared_swiglu == "v4_fused" or args.mhc != "reference":
         import musa_python_kernel_test_module
 
         sys.modules["xllm_runtime"] = musa_python_kernel_test_module
@@ -93,11 +97,12 @@ def main() -> None:
             torch.testing.assert_close(got, expected, rtol=0, atol=0.02)
             logger.info("Decode position %s: max_abs_logits_error=%s", pos, error)
         result = {"status": "PASS", "sequences": nseq, "tokens_each": length, "layers": model.cfg.n_layers, "engram_layers": model.cfg.engram_layer_ids, "max_abs_logits": magnitude, "adjacent_token_logits_difference": diversity, "max_abs_logits_error_by_position": errors, "scope": "real single-GPU MUSA execution; random tiny weights and Engram table, synthetic page metadata, no network transfer; not full-model accuracy"}
+        result["mhc"] = args.mhc
         args.output.write_text(json.dumps(result, indent=2))
         if args.save_tensors:
             torch.save({"ids": ids.cpu(), "hidden": saved_hidden, "prefill_logits": logits.cpu(),
                         "decode_logits": torch.stack(decode_logits, dim=1),
-                        "shared_swiglu": args.shared_swiglu}, args.save_tensors)
+                        "shared_swiglu": args.shared_swiglu, "mhc": args.mhc}, args.save_tensors)
         print(json.dumps(result), flush=True)
 
 

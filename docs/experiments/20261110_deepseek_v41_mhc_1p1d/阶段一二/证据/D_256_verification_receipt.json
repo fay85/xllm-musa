@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\n  \"status\": \"PASS_PARTIAL_256_GROUP_ONLY\",\n  \"at\": \"2026-11-10T20:43:39.008651+08:00\",\n  \"configuration\": \"stage2_post_pre\",\n  \"warmup_excluded\": true,\n  \"repeats\": 5,\n  \"input_tokens\": 256,\n  \"output_tokens\": 256,\n  \"ttft_ms\": 6308.027051016688,\n  \"tpot_ms\": 1100.4558550858615,\n  \"latency_s\": 286.92427009791135,\n  \"qps\": 0.0034852371627214014,\n  \"output_tokens_s\": 0.8922207136566788,\n  \"database_sha256\": \"72d0ddc69c281bb1fd3f13265d774afd4835a0190406cb7aa135589014b2fc43\",\n  \"tpot_sample_stddev_ms\": 4.35572436853281\n}\n",
+  "stderr": ""
+}

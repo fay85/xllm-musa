@@ -1,0 +1,144 @@
+{
+  "status": "PASS",
+  "results": [
+    {
+      "input_tokens": 256,
+      "output_tokens": 256,
+      "repeats": 5,
+      "concurrency": 1,
+      "mode": "1P1D_attentionTP8_routedEP8_MoETP1_sharedReplicated_eager",
+      "metrics": {
+        "ttft_s": {
+          "mean": 6.246939259022474,
+          "median": 6.169752523303032,
+          "min": 6.135334906168282,
+          "max": 6.459179145283997,
+          "sample_stddev": 0.13818861081650977
+        },
+        "tpot_ms": {
+          "mean": 1061.4109956801815,
+          "median": 1060.7070937898814,
+          "min": 1058.9085838447015,
+          "max": 1063.9497064674895,
+          "sample_stddev": 1.9988123435734684
+        },
+        "latency_s": {
+          "mean": 276.9067431574687,
+          "median": 276.62642646674067,
+          "min": 276.3364347172901,
+          "max": 277.7663542944938,
+          "sample_stddev": 0.5716395769999224
+        },
+        "end_to_end_output_tokens_s": {
+          "mean": 0.924502122433662,
+          "median": 0.9254358062235944,
+          "min": 0.9216379019345999,
+          "max": 0.9264069729418939,
+          "sample_stddev": 0.0019062844391248544
+        },
+        "decode_tokens_s": {
+          "mean": 0.9421447871133707,
+          "median": 0.9427673349737143,
+          "min": 0.9398940513082951,
+          "max": 0.9443685840841753,
+          "sample_stddev": 0.001773908149892059
+        }
+      },
+      "output_tokens_over_sum_request_latency": 0.9244989742067072,
+      "tool_test_duration_s": 1384.5351,
+      "request_qps": 0.0036113205075118714,
+      "output_tokens_over_test_duration": 0.9244980499230391,
+      "distinct_request_body_hashes": [
+        "d915f09d3f2594b6f37f0024d5c3f2a08514d8af28d9be759afe00b62288ac15"
+      ],
+      "distinct_response_text_hashes": [
+        "a4627e142fb3b261f60ea10c53e69f6423f2ecc14a8a8c3ee29db7a71dddde14"
+      ]
+    },
+    {
+      "input_tokens": 2048,
+      "output_tokens": 256,
+      "repeats": 5,
+      "concurrency": 1,
+      "mode": "1P1D_attentionTP8_routedEP8_MoETP1_sharedReplicated_eager",
+      "metrics": {
+        "ttft_s": {
+          "mean": 29.224052406847477,
+          "median": 29.219898007810116,
+          "min": 29.108979692682624,
+          "max": 29.337790314108133,
+          "sample_stddev": 0.08294158002127477
+        },
+        "tpot_ms": {
+          "mean": 1054.2559723263862,
+          "median": 1053.3537640327625,
+          "min": 1052.137246158193,
+          "max": 1058.6815107540756,
+          "sample_stddev": 2.56073316414786
+        },
+        "latency_s": {
+          "mean": 298.05932535007594,
+          "median": 297.886604831554,
+          "min": 297.4039774630219,
+          "max": 299.1836832500994,
+          "sample_stddev": 0.6657957719506835
+        },
+        "end_to_end_output_tokens_s": {
+          "mean": 0.8588928376253213,
+          "median": 0.8593874173857545,
+          "min": 0.8556616364201904,
+          "max": 0.8607820318470021,
+          "sample_stddev": 0.0019144985807611652
+        },
+        "decode_tokens_s": {
+          "mean": 0.9485407086579557,
+          "median": 0.949348674818897,
+          "min": 0.9445711385737925,
+          "max": 0.950446344953029,
+          "sample_stddev": 0.002297731459656728
+        }
+      },
+      "output_tokens_over_sum_request_latency": 0.8588894163915974,
+      "tool_test_duration_s": 1490.2981,
+      "request_qps": 0.0033550334661233213,
+      "output_tokens_over_test_duration": 0.8588885673275702,
+      "distinct_request_body_hashes": [
+        "fee749a284d8674e2dfbd4b81c50af004dcb1d178adbb0448dab44f931e24ef7"
+      ],
+      "distinct_response_text_hashes": [
+        "af7f33daee9668fad782a2b04fa21c9d44e12b8c968690f0018a3b1b5916ff26"
+      ]
+    }
+  ],
+  "errors": [],
+  "database_provenance": [
+    {
+      "path": "input256_output256/measured/deepseek-v4.1-flash-1017/parallel_1_number_5/benchmark_data.db",
+      "sha256": "289b752500afa89b3fe8d02b2d7f48499beabd7b24aed368a0367f2f674aa25b"
+    },
+    {
+      "path": "input2048_output256/measured/deepseek-v4.1-flash-1017/parallel_1_number_5/benchmark_data.db",
+      "sha256": "3f8ab227f0f171a8ed775a34eda369bdb36dee0435fb827709f58f52ce61677c"
+    }
+  ],
+  "server_log_provenance": [
+    {
+      "snapshot_path": "server_logs_at_validation/sj9_rank0.log",
+      "source_live_path": "/work/runs/stage2_all/sj9/rank0.log",
+      "sha256": "9ba02942b5dbf4f574f3a30bb610f7b2dc94075e70c6f62388af86999a17a99d"
+    },
+    {
+      "snapshot_path": "server_logs_at_validation/sj10_rank0.log",
+      "source_live_path": "/work/runs/stage2_all/sj10/rank0.log",
+      "sha256": "878d8654d6f074022284f78c9cd85045e42b9ba05f11a305e0e0b2c9e5430d0c"
+    }
+  ],
+  "native_usage_verification": "Native request ID matched between official response chunks, P prefill record, D successful terminal and D sequence token counts. EvalScope omits standalone usage packets from response_messages.",
+  "definitions": {
+    "ttft": "request start to first generated content chunk",
+    "tpot": "(request latency - TTFT)/(native completion tokens - 1), official EvalScope formula",
+    "end_to_end_output_tokens_s": "native completion tokens / full request latency",
+    "decode_tokens_s": "1 / TPOT; not end-to-end rate"
+  },
+  "scope": "Two elementary questions and ten performance requests do not establish general accuracy; inspect PD server evidence separately."
+}

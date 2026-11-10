@@ -1,0 +1,7 @@
+{"at": "2026-11-10T21:20:09.455156+08:00", "phase": "RESUME_STAGE2_EXISTING_RUN", "run": "stage2_all"}
+{"at": "2026-11-10T21:20:09.455750+08:00", "phase": "WAIT_BENCHMARK", "run": "stage2_all", "benchmark": "stage2_all"}
+{"at": "2026-11-10T22:23:54.747485+08:00", "phase": "VALIDATE", "run": "stage2_all"}
+{"at": "2026-11-10T22:23:56.248969+08:00", "phase": "CHAT_PREFIX_SKIPPED_KNOWN_PROTOCOL_FAILURE", "run": "stage2_all", "reference": "stage2_post_chat_prefix_result.json"}
+{"at": "2026-11-10T22:23:56.249466+08:00", "phase": "NORMAL_TERM", "run": "stage2_all"}
+{"at": "2026-11-10T22:24:29.031047+08:00", "phase": "RANKS_EXITED", "run": "stage2_all", "result": [{"exit_codes": [0, 0, 0, 0, 0, 0, 0, 0], "control_exit": null, "stopping": true, "automatic_kill": false}, {"exit_codes": [0, 0, 0, 0, 0, 0, 0, 0], "control_exit": 0, "stopping": true, "automatic_kill": false}]}
+{"at": "2026-11-10T22:24:29.031901+08:00", "phase": "ALL_BENCHMARKS_VALIDATED_AND_RANKS_STOPPED"}

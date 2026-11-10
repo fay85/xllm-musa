@@ -1,0 +1,20 @@
+{
+  "D_shared_swiglu": "v4_fused",
+  "criteria": "Both groups improve TPOT beyond two combined standard errors and 0.2%; otherwise retain reference for mHC tests. This is a practical decision rule, not a universal statistical claim.",
+  "comparisons": [
+    {
+      "tokens": 256,
+      "old_ms": 1102.9481158339802,
+      "new_ms": 1094.9470196226064,
+      "threshold_ms": 2.2058962316679604,
+      "clear_improvement": true
+    },
+    {
+      "tokens": 2048,
+      "old_ms": 1103.8861582771528,
+      "new_ms": 1097.2046335384834,
+      "threshold_ms": 2.2077723165543057,
+      "clear_improvement": true
+    }
+  ]
+}

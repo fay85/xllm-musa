@@ -1,0 +1,32 @@
+{
+  "status": "PASS",
+  "cases": [
+    {
+      "tensor": "hidden",
+      "elements": 1152,
+      "max_abs_error": 0.0,
+      "bitwise_equal": true,
+      "atol": 0.02,
+      "rtol": 0
+    },
+    {
+      "tensor": "prefill_logits",
+      "elements": 1152,
+      "max_abs_error": 0.0,
+      "bitwise_equal": true,
+      "atol": 0.02,
+      "rtol": 0,
+      "argmax_agreement": 1.0
+    },
+    {
+      "tensor": "decode_logits",
+      "elements": 1152,
+      "max_abs_error": 0.0,
+      "bitwise_equal": true,
+      "atol": 0.02,
+      "rtol": 0,
+      "argmax_agreement": 1.0
+    }
+  ],
+  "scope": "random tiny-model A/B; not checkpoint or 1P1D acceptance"
+}

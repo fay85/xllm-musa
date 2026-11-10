@@ -1,0 +1,4 @@
+{
+  "at": "2026-11-10T21:20:09.064584+08:00",
+  "reason": "sj9 initial zero-memory guard failed immediately after D normal exits; later 8 GPUs had 0 MiB and 0% with no processes. No other processes stopped. sj10 already started E; launched only missing sj9 once, then client. Added bounded 60s read-only release wait."
+}

@@ -1,0 +1,32 @@
+{"at": "2026-11-10T17:52:39.851743+08:00", "phase": "WAIT_BENCHMARK", "run": "stage1_swiglu_d_v2", "benchmark": "stage1_swiglu_d_v2"}
+{"at": "2026-11-10T18:58:20.273217+08:00", "phase": "VALIDATE", "run": "stage1_swiglu_d_v2"}
+{"at": "2026-11-10T18:58:22.437658+08:00", "phase": "SWIGLU_BASELINE_SELECTED", "decision": {"D_shared_swiglu": "v4_fused", "criteria": "Both groups improve TPOT beyond two combined standard errors and 0.2%; otherwise retain reference for mHC tests. This is a practical decision rule, not a universal statistical claim.", "comparisons": [{"tokens": 256, "old_ms": 1102.9481158339802, "new_ms": 1094.9470196226064, "threshold_ms": 2.2058962316679604, "clear_improvement": true}, {"tokens": 2048, "old_ms": 1103.8861582771528, "new_ms": 1097.2046335384834, "threshold_ms": 2.2077723165543057, "clear_improvement": true}]}}
+{"at": "2026-11-10T18:58:23.539350+08:00", "phase": "NORMAL_TERM", "run": "stage1_swiglu_d_v2"}
+{"at": "2026-11-10T18:58:34.300273+08:00", "phase": "RANKS_EXITED", "run": "stage1_swiglu_d_v2", "result": [{"exit_codes": [0, 0, 0, 0, 0, 0, 0, 0], "control_exit": null, "stopping": true, "automatic_kill": false}, {"exit_codes": [0, 0, 0, 0, 0, 0, 0, 0], "control_exit": 0, "stopping": true, "automatic_kill": false}]}
+{"at": "2026-11-10T18:58:34.302595+08:00", "phase": "LAUNCH", "run": "stage2_post"}
+('sj10', {'exit_status': 0, 'stdout': '{"host": "sj10", "run": "stage2_post", "exit": 0, "stderr": ""}\n', 'stderr': ''})
+('sj9', {'exit_status': 0, 'stdout': '{"host": "sj9", "run": "stage2_post", "exit": 0, "stderr": ""}\n', 'stderr': ''})
+{"at": "2026-11-10T18:59:33.322891+08:00", "phase": "WAIT_BENCHMARK", "run": "stage2_post", "benchmark": "stage2_post"}
+{"at": "2026-11-10T19:33:52.668431+08:00", "phase": "NEEDS_REVIEW", "error": "AuthenticationException('Authentication timeout.')"}
+Traceback (most recent call last):
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 72, in <module>
+    launch(run);wait_finished(run,run);validate(run,run);stop(run)
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 20, in wait_finished
+    status=read(exitpath)
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 13, in read
+    return json.loads(remote(f'from pathlib import Path;import json;p=Path({str(root+"/"+path)!r});print(json.dumps(p.read_text() if p.exists() else None))'))
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 7, in remote
+    with sj_access.ssh_client('sj10') as c:r=sj_access.execute(c,'sj10','python3 -c '+shlex.quote(code),root=True,timeout=timeout)
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/sj9_12_登陆工具/sj_access.py", line 85, in ssh_client
+    client.connect(row[3], username=row[4], password=row[5], sock=sock,
+  File "/usr/lib/python3/dist-packages/paramiko/client.py", line 435, in connect
+    self._auth(
+  File "/usr/lib/python3/dist-packages/paramiko/client.py", line 766, in _auth
+    raise saved_exception
+  File "/usr/lib/python3/dist-packages/paramiko/client.py", line 753, in _auth
+    self._transport.auth_password(username, password)
+  File "/usr/lib/python3/dist-packages/paramiko/transport.py", line 1593, in auth_password
+    return self.auth_handler.wait_for_response(my_event)
+  File "/usr/lib/python3/dist-packages/paramiko/auth_handler.py", line 248, in wait_for_response
+    raise AuthenticationException("Authentication timeout.")
+paramiko.ssh_exception.AuthenticationException: Authentication timeout.

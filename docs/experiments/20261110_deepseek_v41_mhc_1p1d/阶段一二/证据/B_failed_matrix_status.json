@@ -1,0 +1,5 @@
+{
+  "at": "2026-11-10T17:47:34.726769+08:00",
+  "phase": "NEEDS_REVIEW",
+  "error": "RuntimeError('Traceback (most recent call last):\\n  File \"<string>\", line 1, in <module>\\n  File \"/usr/lib/python3.10/subprocess.py\", line 526, in run\\n    raise CalledProcessError(retcode, process.args,\\nsubprocess.CalledProcessError: Command \\'[\\'docker\\', \\'exec\\', \\'-e\\', \\'MUSA_VISIBLE_DEVICES=-1\\', \\'xiaopang1110_v41_decode_sj10\\', \\'bash\\', \\'-c\\', \\'python3 /work/scripts/summarize_performance.py --run /work/03_benchmarks/stage1_swiglu_d --server-run /work/runs/stage1_swiglu_d > /work/03_benchmarks/stage1_swiglu_d/validation.log 2>&1\\']\\' returned non-zero exit status 1.\\n')"
+}

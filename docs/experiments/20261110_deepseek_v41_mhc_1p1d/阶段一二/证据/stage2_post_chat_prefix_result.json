@@ -1,0 +1,7 @@
+{
+  "at": "2026-11-10T20:06:02.603098+08:00",
+  "status": "PROBE_FAILED",
+  "checks": [],
+  "scope": "Requested raw IDs, returned token counts and semantic control; not a wire capture, hidden-state dump or full-vocabulary logit comparison.",
+  "error": "AssertionError('Raw input IDs were not honored, or input counting differs')"
+}

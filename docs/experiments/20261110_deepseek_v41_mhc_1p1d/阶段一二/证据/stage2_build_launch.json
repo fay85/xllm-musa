@@ -1,0 +1,5 @@
+{
+  "exit_status": 1,
+  "stdout": "",
+  "stderr": "/usr/bin/python3: No module named clang_format.__main__; 'clang_format' is a package and cannot be directly executed\n/usr/bin/python3: No module named clang_format.__main__; 'clang_format' is a package and cannot be directly executed\n"
+}

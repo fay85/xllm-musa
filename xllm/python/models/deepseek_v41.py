@@ -75,6 +75,7 @@ from xllm.python.distributed import (
     init_engram_dp_group,
     world_topology,
 )
+from xllm.python.kernels_musa.hyper_connection import select_hyper_connection_ops
 from xllm.python.kernels_musa.shared_swiglu import SharedActivation, select_shared_swiglu
 from xllm.python.layers.attention import Attention
 from xllm.python.layers.embedding import HiddenParallelEmbedding
@@ -1206,6 +1207,9 @@ class DeepseekV41HyperConnection(nn.Module):
         self.hc_eps = cfg.hc_eps
         self.norm_eps = cfg.rms_norm_eps
         self.sinkhorn_iters = cfg.hc_sinkhorn_iters
+        self._musa_hc_ops = select_hyper_connection_ops(
+            device, dtype, self.hc_mult, self.sinkhorn_iters, self.hc_eps
+        )
         # Two-state hc_pre decision is static (hc_mult + dtype/device +
         # op registration) and taken once here so the forward stays
         # branch-free with respect to tensor values.
@@ -1253,6 +1257,8 @@ class DeepseekV41HyperConnection(nn.Module):
         flattened = x.flatten(-2).float()
         rsqrt = torch.rsqrt(flattened.square().mean(-1, keepdim=True) + self.norm_eps)
         mixes = self._project_mixes(flattened, hc_fn) * rsqrt
+        if self._musa_hc_ops.metadata is not None:
+            return self._musa_hc_ops.metadata(mixes, hc_scale, hc_base)
         return _hc_split_sinkhorn(mixes, hc_scale, hc_base, self.hc_mult, self.sinkhorn_iters, self.hc_eps)
 
     def hc_pre_fused(
@@ -1291,6 +1297,8 @@ class DeepseekV41HyperConnection(nn.Module):
 
     def hc_pre(self, x: torch.Tensor, pre_mix: torch.Tensor) -> torch.Tensor:
         """Collapse the hc copies: ``sum_j pre[j] * x[j]`` (model.py:957-960)."""
+        if self._musa_hc_ops.pre is not None:
+            return self._musa_hc_ops.pre(x, pre_mix)
         # A fixed FP32 order avoids token-count-dependent BF16 rounding.
         contributions = (pre_mix.unsqueeze(-1) * x.float()).unbind(dim=-2)
         y = contributions[0]
@@ -1307,6 +1315,8 @@ class DeepseekV41HyperConnection(nn.Module):
     ) -> torch.Tensor:
         """Expand back: ``out[j] = post[j] * x + sum_k comb[k, j] * res[k]``
         (i.e. ``out = x * post + comb^T @ residual``)."""
+        if self._musa_hc_ops.post is not None:
+            return self._musa_hc_ops.post(x, residual, post, comb)
         if _hc_post_fused_supported(x, residual, post, comb, self.hc_mult):
             # The kernel expects [bs, seq, ...] 4D operands. It consumes the
             # natural [out, in] comb as comb^T @ residual, so no transpose is

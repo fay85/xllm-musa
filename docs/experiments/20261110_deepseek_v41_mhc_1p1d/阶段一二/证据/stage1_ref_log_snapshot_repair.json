@@ -1,0 +1,21 @@
+{
+  "at": "2026-11-10T17:37:43.224002+08:00",
+  "reason": "The initial validator hashed live logs. Subsequent diagnostic requests and normal shutdown appended to them. Exact original byte prefixes have been recovered and verified against the previously recorded SHA256 values; metrics and raw requests are unchanged.",
+  "status": "EXACT_HASHED_PREFIXES_RECOVERED",
+  "logs": [
+    {
+      "snapshot_path": "server_logs_at_validation/sj9_rank0.log",
+      "source_live_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/stage1_ref/sj9/rank0.log",
+      "sha256": "0b21dfad84dfb9be69902f47a65a580b615a9491af926bcfa9f52a73e2f78b66",
+      "snapshot_bytes": 52682,
+      "source_bytes_at_recovery": 54035
+    },
+    {
+      "snapshot_path": "server_logs_at_validation/sj10_rank0.log",
+      "source_live_path": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/runs/stage1_ref/sj10/rank0.log",
+      "sha256": "0058f8db7a37ac2f750ae0cfd96f68ee5499fdd009589881792a4b1d928e3156",
+      "snapshot_bytes": 83032,
+      "source_bytes_at_recovery": 84124
+    }
+  ]
+}

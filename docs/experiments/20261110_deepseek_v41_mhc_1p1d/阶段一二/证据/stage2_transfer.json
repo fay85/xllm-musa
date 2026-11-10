@@ -1,0 +1,14 @@
+[
+  {
+    "file": "source_stage2_mhc.tar.gz",
+    "bytes": 16065037,
+    "sha256": "291f05b07d6afdf4fd5b134b6d2f2b0ede48e44f500c9526e889a9af03156fb2",
+    "upload_seconds": 20.77713748399401
+  },
+  {
+    "file": "stage2_runtime.tar.gz",
+    "bytes": 119000714,
+    "sha256": "ccdf620ea5c8f745c3c4a4ffb0e0f7261b041b6bdd3794eb575e1167826d6761",
+    "upload_seconds": 167.1312494740123
+  }
+]

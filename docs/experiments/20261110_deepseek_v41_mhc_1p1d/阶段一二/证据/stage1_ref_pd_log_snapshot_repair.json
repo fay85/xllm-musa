@@ -1,0 +1,103 @@
+{
+  "at": "2026-11-10T18:32:29.172079+08:00",
+  "status": "EXACT_SIXTEEN_HASHED_PREFIXES_RECOVERED",
+  "rows": [
+    {
+      "host": "sj9",
+      "rank": 0,
+      "sha256": "0b21dfad84dfb9be69902f47a65a580b615a9491af926bcfa9f52a73e2f78b66",
+      "snapshot_bytes": 52682
+    },
+    {
+      "host": "sj9",
+      "rank": 1,
+      "sha256": "6640203d7a6d5f289d47a7f479b2063d3e7b2c4d6f4f8a4e39e5d01d972c894a",
+      "snapshot_bytes": 26903
+    },
+    {
+      "host": "sj9",
+      "rank": 2,
+      "sha256": "bddefbd6cf2cf45b208a596e6dedff155f7dd2bf264d368b6f985d847b8fab2b",
+      "snapshot_bytes": 26903
+    },
+    {
+      "host": "sj9",
+      "rank": 3,
+      "sha256": "2538deda69cc99ed190e7367aa58fcf7a5792a49d3f5d5a6f522b81dde572637",
+      "snapshot_bytes": 26903
+    },
+    {
+      "host": "sj9",
+      "rank": 4,
+      "sha256": "613889808c17dcb7af70b6d6e48237bbd144c89733afbd17b532f47609d3caa9",
+      "snapshot_bytes": 26903
+    },
+    {
+      "host": "sj9",
+      "rank": 5,
+      "sha256": "688706076e1b09f122ddf4f9836e774871b0251e11e9984a4a60249a13a4c73a",
+      "snapshot_bytes": 26903
+    },
+    {
+      "host": "sj9",
+      "rank": 6,
+      "sha256": "e492e8189aaea585fda3b063d7b37183c2850557fc8c60d7f266740ab357dc4a",
+      "snapshot_bytes": 26903
+    },
+    {
+      "host": "sj9",
+      "rank": 7,
+      "sha256": "0547162ae435450f3439e8f76c0e7e01dc499b7cc16653deee14983c975be6ee",
+      "snapshot_bytes": 26903
+    },
+    {
+      "host": "sj10",
+      "rank": 0,
+      "sha256": "0058f8db7a37ac2f750ae0cfd96f68ee5499fdd009589881792a4b1d928e3156",
+      "snapshot_bytes": 83032
+    },
+    {
+      "host": "sj10",
+      "rank": 1,
+      "sha256": "577a9c8aa62be22023ca231d88ac1af654ec72b4a1b39ac4aefaca39895defd7",
+      "snapshot_bytes": 56655
+    },
+    {
+      "host": "sj10",
+      "rank": 2,
+      "sha256": "2fe7b1206c8733320c276a0f73e139a3f919bdb4d7a7e40f92c52e9052a67724",
+      "snapshot_bytes": 56647
+    },
+    {
+      "host": "sj10",
+      "rank": 3,
+      "sha256": "e59e8da8ca3227b19a571d81a9ef3a8892bedef06baa9ef8acca6f7a2e7f75a7",
+      "snapshot_bytes": 56634
+    },
+    {
+      "host": "sj10",
+      "rank": 4,
+      "sha256": "1e281705fd4a7e26681283503371f70819ab31b2028986c95e5120f4b83aa601",
+      "snapshot_bytes": 56649
+    },
+    {
+      "host": "sj10",
+      "rank": 5,
+      "sha256": "f0859aabeabe1cadc24c643abd37763fedacc258048a225a1e3b8b0bd4309f7b",
+      "snapshot_bytes": 56649
+    },
+    {
+      "host": "sj10",
+      "rank": 6,
+      "sha256": "4f78b20a5ae5bdd7886061b12c2c16259cd3538657c9e96bbf2b94c8e4cbf5e8",
+      "snapshot_bytes": 56642
+    },
+    {
+      "host": "sj10",
+      "rank": 7,
+      "sha256": "6a528201a525bd2139d9c9d902e6f57955c991f2020e41530706f66855a46794",
+      "snapshot_bytes": 56641
+    }
+  ],
+  "reason": "Normal shutdown appended to live logs after PD transfer validation. Preserve exactly the byte prefixes corresponding to the previously recorded hashes."
+}

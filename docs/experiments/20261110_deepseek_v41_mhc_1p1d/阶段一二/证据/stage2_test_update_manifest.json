@@ -1,0 +1,8 @@
+{
+  "note": "Additional test coverage after runtime source snapshot; production model, binding and kernel unchanged",
+  "files": {
+    "tools/musa_deepseek_v41/validate_hyper_connection.py": "9c2c244c9c3cfcfea8238b5702ea9e0a0a5dd8ef3afb15c684eca72192ec1e98",
+    "tests/python/test_deepseek_v41_chunked_prefill.py": "8d05b696f4c2c4c05644dccec3f26d63cdc8ab49cde716419700f3312ee52639"
+  },
+  "checks": 79
+}

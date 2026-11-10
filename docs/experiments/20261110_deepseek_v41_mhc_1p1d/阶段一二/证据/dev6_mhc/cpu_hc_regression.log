@@ -1,0 +1,9 @@
+.......s.s.s.s.s.s..............                                         [100%]
+=============================== warnings summary ===============================
+../../../usr/local/lib/python3.10/dist-packages/torch_musa/core/device.py:134
+  /usr/local/lib/python3.10/dist-packages/torch_musa/core/device.py:134: UserWarning: MUSA initialization: MUSA driver initialization failed, you might not have a Mthreads GPU. (Triggered internally at /home/torch_musa/torch_musa/csrc/core/MUSAFunctions.cpp:93.)
+    return torch_musa._MUSAC._musa_getDeviceCount() > 0
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+26 passed, 6 skipped, 258 deselected, 1 warning in 2.77s
+CreatePlatform failed!

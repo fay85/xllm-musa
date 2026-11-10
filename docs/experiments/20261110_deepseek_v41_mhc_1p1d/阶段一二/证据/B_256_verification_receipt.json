@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\n  \"status\": \"PASS_PARTIAL_256_GROUP_ONLY\",\n  \"at\": \"2026-11-10T18:29:33.384358+08:00\",\n  \"configuration\": \"stage1_swiglu_d_v2\",\n  \"warmup_excluded\": true,\n  \"repeats\": 5,\n  \"input_tokens\": 256,\n  \"output_tokens\": 256,\n  \"ttft_ms\": 6466.773131676018,\n  \"tpot_ms\": 1094.9470196226064,\n  \"latency_s\": 285.67826313544066,\n  \"qps\": 0.00350043818485198,\n  \"output_tokens_s\": 0.8961121753221069,\n  \"database_sha256\": \"d71bbaabfe93fabd76d428d215e21ada0128f33e358ba6cf4236be60cc72ff9c\",\n  \"tpot_sample_stddev_ms\": 1.0950180968834933\n}\n",
+  "stderr": ""
+}

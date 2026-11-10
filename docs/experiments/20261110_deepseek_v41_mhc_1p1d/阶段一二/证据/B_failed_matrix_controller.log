@@ -1,0 +1,16 @@
+{"at": "2026-11-10T17:43:54.245765+08:00", "phase": "WAIT_BENCHMARK", "run": "stage1_swiglu_d", "benchmark": "stage1_swiglu_d"}
+{"at": "2026-11-10T17:47:33.726677+08:00", "phase": "VALIDATE", "run": "stage1_swiglu_d"}
+{"at": "2026-11-10T17:47:34.726769+08:00", "phase": "NEEDS_REVIEW", "error": "RuntimeError('Traceback (most recent call last):\\n  File \"<string>\", line 1, in <module>\\n  File \"/usr/lib/python3.10/subprocess.py\", line 526, in run\\n    raise CalledProcessError(retcode, process.args,\\nsubprocess.CalledProcessError: Command \\'[\\'docker\\', \\'exec\\', \\'-e\\', \\'MUSA_VISIBLE_DEVICES=-1\\', \\'xiaopang1110_v41_decode_sj10\\', \\'bash\\', \\'-c\\', \\'python3 /work/scripts/summarize_performance.py --run /work/03_benchmarks/stage1_swiglu_d --server-run /work/runs/stage1_swiglu_d > /work/03_benchmarks/stage1_swiglu_d/validation.log 2>&1\\']\\' returned non-zero exit status 1.\\n')"}
+Traceback (most recent call last):
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 62, in <module>
+    wait_finished('stage1_swiglu_d','stage1_swiglu_d');candidate=validate('stage1_swiglu_d','stage1_swiglu_d')
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 28, in validate
+    remote('import subprocess;subprocess.run('+repr(cmd)+',check=True)',timeout=40)
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 8, in remote
+    if r['exit_status']:raise RuntimeError(r['stderr'] or r['stdout'])
+RuntimeError: Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+  File "/usr/lib/python3.10/subprocess.py", line 526, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['docker', 'exec', '-e', 'MUSA_VISIBLE_DEVICES=-1', 'xiaopang1110_v41_decode_sj10', 'bash', '-c', 'python3 /work/scripts/summarize_performance.py --run /work/03_benchmarks/stage1_swiglu_d --server-run /work/runs/stage1_swiglu_d > /work/03_benchmarks/stage1_swiglu_d/validation.log 2>&1']' returned non-zero exit status 1.
+

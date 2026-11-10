@@ -1,0 +1,3 @@
+I20261110 17:30:51.584620 7938 shared_swiglu.py:43] V4.1 MUSA shared SwiGLU: mode=v4_fused, dtype=torch.bfloat16, clamp=10.0
+I20261110 17:30:54.035782 7938 shared_swiglu.py:43] V4.1 MUSA shared SwiGLU: mode=v4_fused, dtype=torch.bfloat16, clamp=10.0
+I20261110 17:30:58.165383 7938 validate_shared_swiglu.py:193] Shared SwiGLU numerical checks and timings saved to /work/02_correctness/sj9_operator_preflight/swiglu.json

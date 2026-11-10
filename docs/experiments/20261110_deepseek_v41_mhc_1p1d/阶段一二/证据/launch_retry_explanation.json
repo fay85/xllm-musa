@@ -1,0 +1,12 @@
+{
+  "issue": "Role launcher port precheck failed immediately after previous ranks exited, but local launcher failed to propagate remote nonzero result. No new role started, no benchmark request sent.",
+  "evidence": [
+    "matrix_controller.log (original failed launches)",
+    "stage1_swiglu_d_launch_retry.log (successful retry)",
+    "sj9_stage1_swiglu_d_launch.json (successful retry)",
+    "sj10_stage1_swiglu_d_launch.json (successful retry)"
+  ],
+  "resolution": "Bounded retry of port bind checks up to 180 seconds; remote timeout 220 seconds; propagate remote failures to local status; both role launches succeeded on retry. Acceptance waits for supervisor status creation. Matrix controller continued from B without rerunning A.",
+  "limitations": "The original failing port number was not recorded, so TIME_WAIT is a plausible explanation, not a conclusively identified socket state. No listening task was stopped.",
+  "recorded_at": "2026-11-10T17:41:51.173308+08:00"
+}

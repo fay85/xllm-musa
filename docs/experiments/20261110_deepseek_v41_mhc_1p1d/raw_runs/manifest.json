@@ -1,0 +1,64 @@
+{
+  "archives": [
+    {
+      "file": "stage1_ref.tar.gz",
+      "sha256": "8af3a6579693add93840d7ce0fb55df04cf78c2a1a4b9580e65205fd51be2e42",
+      "bytes": 430315,
+      "validation_status": "PASS",
+      "remote_archive": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/incoming/completed_stage1_ref.tar.gz",
+      "snapshot_verified_at": "2026-11-10T17:39:24.710699+08:00",
+      "preferred_evidence_archive": "stage1_ref_proofs.tar.gz",
+      "note": "Earlier historical snapshot. Performance data are valid; use the proofs archive for all 16 immutable PD log snapshots and canonical request hashes."
+    },
+    {
+      "file": "stage1_ref_proofs.tar.gz",
+      "sha256": "3e920be4d918c8c9f550af9504d485dee1dda300592996be06a08b9352278318",
+      "bytes": 513952,
+      "validation_status": "PASS",
+      "remote_archive": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/incoming/completed_stage1_ref_proofs.tar.gz",
+      "snapshot_verified_at": "2026-11-10T18:34:06.487594+08:00"
+    },
+    {
+      "file": "stage1_swiglu_d.tar.gz",
+      "sha256": "e3e096fec44c4bad702b44796a3038414d28305867dd970d346d88037b0fb875",
+      "bytes": 275112,
+      "validation_status": "FAIL",
+      "remote_archive": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/incoming/completed_stage1_swiglu_d.tar.gz",
+      "snapshot_verified_at": "2026-11-10T17:52:04.243932+08:00",
+      "note": "Failed experiment retained for diagnosis; never use as a valid performance sample."
+    },
+    {
+      "file": "stage1_swiglu_d_v2.tar.gz",
+      "sha256": "ad723a07a05d60ba2a177ad2715597fa2637257edfabaabaa0f1d2cf8fa57efc",
+      "bytes": 509693,
+      "validation_status": "PASS",
+      "remote_archive": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/incoming/completed_stage1_swiglu_d_v2.tar.gz",
+      "snapshot_verified_at": "2026-11-10T18:59:06.814604+08:00"
+    },
+    {
+      "file": "stage2_all.tar.gz",
+      "sha256": "fd94c6072e89f2f703a0a94de42b9807665208a86870e1bcd63beabd60b77499",
+      "bytes": 575186,
+      "validation_status": "PASS",
+      "remote_archive": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/incoming/completed_stage2_all.tar.gz",
+      "snapshot_verified_at": "2026-11-10T22:25:05.530047+08:00"
+    },
+    {
+      "file": "stage2_post.tar.gz",
+      "sha256": "1ed2ea1e841a674b41b43a1821ad6b417cb56e3046759370770f3bd916bd91e1",
+      "bytes": 564053,
+      "validation_status": "PASS",
+      "remote_archive": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/incoming/completed_stage2_post.tar.gz",
+      "snapshot_verified_at": "2026-11-10T20:08:34.244293+08:00"
+    },
+    {
+      "file": "stage2_post_pre.tar.gz",
+      "sha256": "acb760de02b129d83e65d6f0c1025eab670f6c6ac996f83a253d5cbeca186767",
+      "bytes": 558306,
+      "validation_status": "PASS",
+      "remote_archive": "/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/incoming/completed_stage2_post_pre.tar.gz",
+      "snapshot_verified_at": "2026-11-10T21:20:13.607749+08:00"
+    }
+  ],
+  "scope": "Historical verified snapshots; later derived summary annotations may be stored separately. Raw SQLite and logs are preserved. No model weights or binaries are bundled."
+}

@@ -1,0 +1,49 @@
+{
+  "at": "2026-11-10T18:16:17.555020+08:00",
+  "status": "PRODUCTION_FILES_MATCH_FROZEN_SOURCE",
+  "files": [
+    {
+      "file": "tools/musa_deepseek_v41/compare_swiglu_fixtures.py",
+      "frozen_sha256": "0b1d1356c8dfb90c191dbaab4fec7873ebbfe76a1ce539447dbd7c894472ae4a",
+      "current_sha256": "0b1d1356c8dfb90c191dbaab4fec7873ebbfe76a1ce539447dbd7c894472ae4a",
+      "equal": true,
+      "production": false
+    },
+    {
+      "file": "tools/musa_deepseek_v41/validate_csa2_fixture.py",
+      "frozen_sha256": "8908018a5637c57843d89ec1e18f6cd3340f10997a390cd82901b326ecc2cbe7",
+      "current_sha256": "8908018a5637c57843d89ec1e18f6cd3340f10997a390cd82901b326ecc2cbe7",
+      "equal": true,
+      "production": false
+    },
+    {
+      "file": "xllm/core/runtime/py_musa_kernel_bindings.h",
+      "frozen_sha256": "dce7efe17be2505d6f3fb1e329862cf9cf35a117d2d21ac06ab0e966e7315489",
+      "current_sha256": "dce7efe17be2505d6f3fb1e329862cf9cf35a117d2d21ac06ab0e966e7315489",
+      "equal": true,
+      "production": true
+    },
+    {
+      "file": "xllm/python/models/deepseek_v41.py",
+      "frozen_sha256": "8bb745a90a2b189fc65f1bd7acfaab3abbe90b7f5b15d6e86be1b8c4e237b340",
+      "current_sha256": "8bb745a90a2b189fc65f1bd7acfaab3abbe90b7f5b15d6e86be1b8c4e237b340",
+      "equal": true,
+      "production": true
+    },
+    {
+      "file": "tools/musa_deepseek_v41/validate_hyper_connection.py",
+      "frozen_sha256": "f2874fbb2a15958f961ac99dc87a2b9894bac05bced6e521e9a036e55280b39d",
+      "current_sha256": "9c2c244c9c3cfcfea8238b5702ea9e0a0a5dd8ef3afb15c684eca72192ec1e98",
+      "equal": false,
+      "production": false
+    },
+    {
+      "file": "xllm/python/kernels_musa/hyper_connection.py",
+      "frozen_sha256": "4acacae1d7a5ad1f0693f3daadf8fb4abce8120bb252eb025172c72f3d5349f2",
+      "current_sha256": "4acacae1d7a5ad1f0693f3daadf8fb4abce8120bb252eb025172c72f3d5349f2",
+      "equal": true,
+      "production": true
+    }
+  ],
+  "note": "Later changes to validation-only files are recorded separately and do not change the running model."
+}

@@ -1,0 +1,11 @@
+{
+  "at": "2026-11-10T21:31:08.079037+08:00",
+  "archive_members_checked": 736,
+  "credential_pattern_hits": [],
+  "production_matches_compiled_snapshot": {
+    "xllm/core/runtime/py_musa_kernel_bindings.h": "dce7efe17be2505d6f3fb1e329862cf9cf35a117d2d21ac06ab0e966e7315489",
+    "xllm/python/models/deepseek_v41.py": "8bb745a90a2b189fc65f1bd7acfaab3abbe90b7f5b15d6e86be1b8c4e237b340",
+    "xllm/python/kernels_musa/hyper_connection.py": "4acacae1d7a5ad1f0693f3daadf8fb4abce8120bb252eb025172c72f3d5349f2"
+  },
+  "scope": "Raw archives through stage2_post_pre; repeat scan once E archive is added. No production code modified after build."
+}

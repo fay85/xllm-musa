@@ -1,0 +1,962 @@
+[
+  {
+    "host": "sj9",
+    "rank": 0,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj9/resolved_rank0.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank0.json"
+  },
+  {
+    "host": "sj9",
+    "rank": 0,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj9",
+    "rank": 0,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 0,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 0,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 0,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 0,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 1,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj9/resolved_rank1.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank1.json"
+  },
+  {
+    "host": "sj9",
+    "rank": 1,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj9",
+    "rank": 1,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 1,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 1,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 1,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 1,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 2,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj9/resolved_rank2.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank2.json"
+  },
+  {
+    "host": "sj9",
+    "rank": 2,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj9",
+    "rank": 2,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 2,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 2,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 2,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 2,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 3,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj9/resolved_rank3.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank3.json"
+  },
+  {
+    "host": "sj9",
+    "rank": 3,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj9",
+    "rank": 3,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 3,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 3,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 3,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 3,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 4,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj9/resolved_rank4.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank4.json"
+  },
+  {
+    "host": "sj9",
+    "rank": 4,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj9",
+    "rank": 4,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 4,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 4,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 4,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 4,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 5,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj9/resolved_rank5.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank5.json"
+  },
+  {
+    "host": "sj9",
+    "rank": 5,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj9",
+    "rank": 5,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 5,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 5,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 5,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 5,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 6,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj9/resolved_rank6.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank6.json"
+  },
+  {
+    "host": "sj9",
+    "rank": 6,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj9",
+    "rank": 6,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 6,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 6,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 6,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 6,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 7,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj9/resolved_rank7.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj9/resolved_rank7.json"
+  },
+  {
+    "host": "sj9",
+    "rank": 7,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj9",
+    "rank": 7,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 7,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj9",
+    "rank": 7,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 7,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj9",
+    "rank": 7,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 0,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj10/resolved_rank0.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank0.json"
+  },
+  {
+    "host": "sj10",
+    "rank": 0,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj10",
+    "rank": 0,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 0,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 0,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 0,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 0,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 0,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+    "A": "reference",
+    "B": "v4_fused"
+  },
+  {
+    "host": "sj10",
+    "rank": 1,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj10/resolved_rank1.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank1.json"
+  },
+  {
+    "host": "sj10",
+    "rank": 1,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj10",
+    "rank": 1,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 1,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 1,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 1,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 1,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 1,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+    "A": "reference",
+    "B": "v4_fused"
+  },
+  {
+    "host": "sj10",
+    "rank": 2,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj10/resolved_rank2.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank2.json"
+  },
+  {
+    "host": "sj10",
+    "rank": 2,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj10",
+    "rank": 2,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 2,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 2,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 2,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 2,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 2,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+    "A": "reference",
+    "B": "v4_fused"
+  },
+  {
+    "host": "sj10",
+    "rank": 3,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj10/resolved_rank3.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank3.json"
+  },
+  {
+    "host": "sj10",
+    "rank": 3,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj10",
+    "rank": 3,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 3,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 3,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 3,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 3,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 3,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+    "A": "reference",
+    "B": "v4_fused"
+  },
+  {
+    "host": "sj10",
+    "rank": 4,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj10/resolved_rank4.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank4.json"
+  },
+  {
+    "host": "sj10",
+    "rank": 4,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj10",
+    "rank": 4,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 4,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 4,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 4,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 4,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 4,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+    "A": "reference",
+    "B": "v4_fused"
+  },
+  {
+    "host": "sj10",
+    "rank": 5,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj10/resolved_rank5.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank5.json"
+  },
+  {
+    "host": "sj10",
+    "rank": 5,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj10",
+    "rank": 5,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 5,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 5,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 5,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 5,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 5,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+    "A": "reference",
+    "B": "v4_fused"
+  },
+  {
+    "host": "sj10",
+    "rank": 6,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj10/resolved_rank6.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank6.json"
+  },
+  {
+    "host": "sj10",
+    "rank": 6,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj10",
+    "rank": 6,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 6,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 6,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 6,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 6,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 6,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+    "A": "reference",
+    "B": "v4_fused"
+  },
+  {
+    "host": "sj10",
+    "rank": 7,
+    "category": "flags",
+    "key": "dump_config_json_file",
+    "A": "/work/runs/stage1_ref/sj10/resolved_rank7.json",
+    "B": "/work/runs/stage1_swiglu_d_v2/sj10/resolved_rank7.json"
+  },
+  {
+    "host": "sj10",
+    "rank": 7,
+    "category": "flags",
+    "key": "etcd_namespace",
+    "A": "xiaopang1110-dsv41-stage1_ref",
+    "B": "xiaopang1110-dsv41-stage1_swiglu_d_v2"
+  },
+  {
+    "host": "sj10",
+    "rank": 7,
+    "category": "flags",
+    "key": "python_model_path",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 7,
+    "category": "env",
+    "key": "PYTHONPATH",
+    "A": "/work/repos/xllm-musa",
+    "B": "/work/01_sources/34815f6a"
+  },
+  {
+    "host": "sj10",
+    "rank": 7,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_METADATA",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 7,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_POST",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 7,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_HC_PRE",
+    "A": null,
+    "B": "reference"
+  },
+  {
+    "host": "sj10",
+    "rank": 7,
+    "category": "env",
+    "key": "XLLM_DSV41_MUSA_SHARED_SWIGLU",
+    "A": "reference",
+    "B": "v4_fused"
+  }
+]

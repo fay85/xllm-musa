@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"binary_sha256\": \"862d3ab3a8a1eab99326c353782af0b7a170041e53174063735a27051ae0a5af\", \"binary_bytes\": 340550952, \"source\": \"/data/nfs_shared/xiaopang/deepseek_v41_flash_1p1d/20261110_1103_ops/01_sources/stage2_mhc\"}\n",
+  "stderr": ""
+}

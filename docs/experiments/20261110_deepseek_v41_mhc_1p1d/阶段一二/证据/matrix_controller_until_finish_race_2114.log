@@ -1,0 +1,19 @@
+{"at": "2026-11-10T20:01:38.413085+08:00", "phase": "RESUME_STAGE2_EXISTING_RUN", "run": "stage2_post"}
+{"at": "2026-11-10T20:01:38.413705+08:00", "phase": "WAIT_BENCHMARK", "run": "stage2_post", "benchmark": "stage2_post"}
+{"at": "2026-11-10T20:06:00.295494+08:00", "phase": "VALIDATE", "run": "stage2_post"}
+{"at": "2026-11-10T20:06:01.757774+08:00", "phase": "CHAT_PREFIX_POST_BENCHMARK", "run": "stage2_post"}
+{"at": "2026-11-10T20:06:10.320293+08:00", "phase": "CHAT_PREFIX_RESULT", "run": "stage2_post", "result": {"at": "2026-11-10T20:06:02.603098+08:00", "status": "PROBE_FAILED", "checks": [], "scope": "Requested raw IDs, returned token counts and semantic control; not a wire capture, hidden-state dump or full-vocabulary logit comparison.", "error": "AssertionError('Raw input IDs were not honored, or input counting differs')"}}
+{"at": "2026-11-10T20:06:10.320673+08:00", "phase": "NORMAL_TERM", "run": "stage2_post"}
+{"at": "2026-11-10T20:06:47.322321+08:00", "phase": "RANKS_EXITED", "run": "stage2_post", "result": [{"exit_codes": [0, 0, 0, 0, 0, 0, 0, 0], "control_exit": null, "stopping": true, "automatic_kill": false}, {"exit_codes": [0, 0, 0, 0, 0, 0, 0, 0], "control_exit": 0, "stopping": true, "automatic_kill": false}]}
+{"at": "2026-11-10T20:06:47.324156+08:00", "phase": "LAUNCH", "run": "stage2_post_pre"}
+('sj10', {'exit_status': 0, 'stdout': '{"host": "sj10", "run": "stage2_post_pre", "exit": 0, "stderr": ""}\n', 'stderr': ''})
+('sj9', {'exit_status': 0, 'stdout': '{"host": "sj9", "run": "stage2_post_pre", "exit": 0, "stderr": ""}\n', 'stderr': ''})
+{"at": "2026-11-10T20:07:19.944362+08:00", "phase": "WAIT_BENCHMARK", "run": "stage2_post_pre", "benchmark": "stage2_post_pre"}
+{"at": "2026-11-10T21:13:40.307431+08:00", "phase": "NEEDS_REVIEW", "error": "RuntimeError('stage2_post_pre exited before completed benchmark: 0\\n')"}
+Traceback (most recent call last):
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 79, in <module>
+    wait_finished(run,run);validate(run,run);probe_chat_after_performance(run);stop(run)
+  File "/home/xiaopang/桌面/Albert分享/20261021从xllm开始/王家明/20261110补齐V41算子/阶段一二/脚本/run_matrix.py", line 26, in wait_finished
+    if status is not None:raise RuntimeError(f'{run} exited before completed benchmark: {status}')
+RuntimeError: stage2_post_pre exited before completed benchmark: 0
+

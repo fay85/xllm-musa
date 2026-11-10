@@ -1,0 +1,5 @@
+{
+  "exit_status": 0,
+  "stdout": "{\"prepared\": \"/work/artifacts/prepared/stage1_ref\", \"prefill\": \"sj9\", \"decode\": \"sj10\", \"status\": \"not_launched\"}\n \n[{\"file\": \"input256_output256.jsonl\", \"input_tokens\": 256, \"requested_output_tokens\": 256, \"sha256\": \"08fc9be80799e1a4b9b39eb7a2d22293fa652d73599ff883dffcb58fdc1d7462\"}, {\"file\": \"input2048_output256.jsonl\", \"input_tokens\": 2048, \"requested_output_tokens\": 256, \"sha256\": \"5454bc24c2545508e21f61c81c7fbe14137a815d5f9462d97bd90513a577e047\"}]\n \nprepared\n",
+  "stderr": ""
+}
