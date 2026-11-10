@@ -47,6 +47,9 @@ const char* block_type_label(BlockType type) {
   return "";
 }
 
+Block::Block(Placeholder placeholder)
+    : id_(placeholder == Placeholder::VALID ? 0 : -1), hash_value_{} {}
+
 Block::Block(int32_t id, BlockManager* manager) : id_(id), manager_(manager) {
   // A block with no manager is an id holder. It has no shared refcount.
   if (manager_ != nullptr) {

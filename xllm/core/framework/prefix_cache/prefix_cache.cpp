@@ -78,6 +78,21 @@ void PrefixCache::claim_matched_block(Node* node) {
   release_evictable_slot();
 }
 
+std::vector<uint8_t> PrefixCache::probe(const Slice<XXH3Key>& hashes) const {
+  std::vector<uint8_t> hits;
+  hits.reserve(hashes.size());
+  for (const auto& hash : hashes) {
+    const auto iter = cached_blocks_.find(hash);
+    const bool hit =
+        iter != cached_blocks_.end() && iter->second->block.is_valid();
+    if (!hit) {
+      break;
+    }
+    hits.emplace_back(hit ? 1 : 0);
+  }
+  return hits;
+}
+
 std::vector<Block> PrefixCache::match(const Slice<int32_t>& token_ids,
                                       const Slice<Block>& existed_shared_blocks,
                                       const MMData& mm_data,

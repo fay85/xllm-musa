@@ -142,6 +142,7 @@ void report_kv_cache_metrics(const KVCacheManager& kv_cache_manager) {
 
 ContinuousScheduler::ContinuousScheduler(Engine* engine, const Options& options)
     : options_(options),
+      dp_request_load_(options.dp_size()),
       server_label_(std::to_string(options.server_idx())),
       batch_mode_(resolve_batch_mode(options)),
       engine_(engine),
@@ -610,6 +611,7 @@ SchedulerState ContinuousScheduler::make_state() {
           },
       .decode_admission = decode_admission_.get(),
       .scheduled_timestamp = scheduled_timestamp_,
+      .dp_request_load = &dp_request_load_,
   };
 }
 
@@ -660,6 +662,7 @@ void ContinuousScheduler::apply_cancel_requests() {
     if (!request->has_terminal_outcome()) {
       request->set_cancel();
     }
+    dp_request_load_.remove(request);
   }
 }
 
@@ -854,6 +857,10 @@ void ContinuousScheduler::process_batch_output(bool enable_schedule_overlap) {
     request->update_timing_after_execution(
         /*generation_terminal=*/!options_.enable_disagg_pd() ||
         options_.instance_role() == InstanceRole::DECODE);
+    if (request->finished() || request->cancelled() ||
+        request->error_status().has_value()) {
+      dp_request_load_.remove(request);
+    }
     if (request->cancelled() || request->error_status().has_value()) {
       release_failed_request(request);
       continue;
@@ -1017,7 +1024,7 @@ bool ContinuousScheduler::try_complete_pause() {
   // WAIT mode: do not preempt. Let already-running requests finish naturally,
   // and only transition to PAUSED once nothing is left running/in-flight. We
   // return false here so step() proceeds with normal scheduling to drain them.
-  // (Matches vLLM "wait": ongoing requests complete before the engine pauses.)
+  // Ongoing requests complete before the engine pauses.
   if (mode == PauseMode::WAIT) {
     const bool last_batch_in_flight =
         options_.enable_schedule_overlap() && !is_first_step_ &&
@@ -1187,6 +1194,7 @@ void ContinuousScheduler::preempt_all_running_requests() {
 
     // Skip already finished requests
     if (request->finished()) {
+      dp_request_load_.remove(request);
       return;
     }
 
@@ -1196,6 +1204,7 @@ void ContinuousScheduler::preempt_all_running_requests() {
 
     // Mark as preempted
     request->set_preempted();
+    dp_request_load_.mark_waiting(request);
 
     // Push back to prefill queue (will need re-prefill on resume)
     prefill_queue_->push(request);
@@ -1252,12 +1261,14 @@ void ContinuousScheduler::abort_all_running_requests() {
       return;
     }
     if (request->finished()) {
+      dp_request_load_.remove(request);
       return;
     }
 
     clear_mtp_bootstrap(request.get());
     kv_cache_manager_->deallocate(request.get());
     request->set_cancel();
+    dp_request_load_.remove(request);
     response_processor_->process_failed_request(
         request,
         {StatusCode::CANCELLED, "Request aborted due to scheduler pause"});

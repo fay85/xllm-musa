@@ -119,6 +119,25 @@ TEST(ConcurrentBlockManagerTest, ContinuesPrefixCacheFromExistingBlocks) {
   EXPECT_EQ(manager.num_free_blocks(), manager.num_total_blocks());
 }
 
+TEST(ConcurrentBlockManagerTest, ReadOnlyProbeDoesNotPinEvictableBlocks) {
+  BlockManager::Options options;
+  options.num_blocks(5).block_size(2).enable_prefix_cache(true);
+  ConcurrentBlockManagerImpl manager(
+      std::make_unique<BlockManagerImpl>(options));
+  const std::vector<int32_t> tokens{11, 12, 13, 14};
+  auto blocks = manager.allocate(2);
+  PrefixCache::compute_hash_keys(tokens, blocks);
+  manager.cache(blocks);
+  blocks.clear();
+  std::vector<XXH3Key> hashes;
+  extend_prefix_hashes(BlockHasherType::TEXT, MMData(), tokens, 2, 2, hashes);
+  const size_t evictable = manager.num_evictable_blocks();
+  EXPECT_EQ(manager.probe_prefix_hits(hashes), (std::vector<uint8_t>{1, 1}));
+  EXPECT_EQ(manager.num_evictable_blocks(), evictable);
+  EXPECT_EQ(manager.num_used_blocks(), 0u);
+  release_prefix_cache(&manager);
+}
+
 TEST(ConcurrentBlockManagerTest, AllocatesWhileBlocksReleaseConcurrently) {
   BlockManager::Options options;
   options.num_blocks(65).block_size(2).enable_prefix_cache(false);

@@ -713,9 +713,9 @@ std::optional<ProbeResult> take_probe(std::vector<ProbeResult>& probes,
                                       BlockType type) {
   for (auto it = probes.begin(); it != probes.end(); ++it) {
     if (it->type == type) {
-      ProbeResult r = std::move(*it);
+      ProbeResult probe = std::move(*it);
       probes.erase(it);
-      return r;
+      return probe;
     }
   }
   return std::nullopt;
@@ -778,7 +778,7 @@ TrimOutcome trim_flat_kv_linear(std::vector<ProbeResult> probes) {
       // A linear model keeps only the deepest checkpoint. Logical placeholders
       // before that checkpoint must not stay on the sequence: allocate_prefill
       // allows at most two LINEAR blocks.
-      std::vector<Block> source_blocks(1);
+      decltype(linear->blocks) source_blocks(1);
       source_blocks.front() = std::move(linear->blocks[source_index]);
       out.to_mount.emplace_back(ProbeResult{linear->type,
                                             linear->leaf,
@@ -831,7 +831,7 @@ TrimOutcome trim_swa_compressed(std::vector<ProbeResult> probes,
     const size_t swa_block_size = swa_it->block_size;
     const size_t window_blocks =
         static_cast<size_t>(swa_it->leaf->options().swa_blocks_per_seq());
-    const std::vector<Block>& swa_vector = swa_it->blocks;
+    const auto& swa_vector = swa_it->blocks;
     if (swa_block_size > 0 && window_blocks > 0) {
       while (safe_hit_tokens >= cache_unit_size) {
         const size_t trimmed_len = safe_hit_tokens / swa_block_size;
@@ -888,6 +888,77 @@ TrimOutcome trim_swa_compressed(std::vector<ProbeResult> probes,
 }
 
 }  // namespace
+
+size_t CompositeBlockManager::prefix_hit_tokens(
+    const Sequence& sequence) const {
+  PrefixHashCache hashes;
+  return prefix_hit_tokens(sequence, hashes);
+}
+
+size_t CompositeBlockManager::prefix_hit_tokens(
+    const Sequence& sequence,
+    PrefixHashCache& hash_cache) const {
+  if (combination_ == LeafCombination::UNSUPPORTED ||
+      sequence.num_tokens() == 0) {
+    return 0;
+  }
+  PrefixCacheAdapterIdScope adapter_scope(sequence.adapter_id());
+  std::vector<ProbeResult> probes;
+  probes.reserve(leaves_.size());
+  for (const auto& [type, entry] : leaves_) {
+    if (!entry.supports_prefix_cache || entry.leaf == nullptr) {
+      continue;
+    }
+    const BlockManager& leaf = *entry.leaf;
+    const size_t block_size = leaf.block_size();
+    if (block_size == 0) {
+      return 0;
+    }
+    const auto tokens = sequence.hash_tokens(leaf.options().hasher_type());
+    const size_t token_count = type == BlockType::LINEAR && !tokens.empty()
+                                   ? tokens.size() - 1
+                                   : tokens.size();
+    auto& hashes = hash_cache[{leaf.options().hasher_type(), block_size}];
+    extend_prefix_hashes(
+        leaf.options().hasher_type(),
+        sequence.mm_data(),
+        tokens.slice(0, token_count),
+        block_size,
+        num_hash_blocks(leaf.options().hasher_type(), token_count, block_size),
+        hashes);
+    const size_t hash_count =
+        num_hash_blocks(leaf.options().hasher_type(), token_count, block_size);
+    const auto hits =
+        leaf.probe_prefix_hits(Slice<XXH3Key>(hashes).slice(0, hash_count));
+    ProbeResult probe{type, entry.leaf.get(), {}, block_size};
+    probe.blocks.reserve(hits.size());
+    for (uint8_t hit : hits) {
+      probe.blocks.emplace_back(hit != 0 ? Block::Placeholder::VALID
+                                         : Block::Placeholder::INVALID);
+    }
+    probes.emplace_back(std::move(probe));
+  }
+  if (probes.empty()) {
+    return 0;
+  }
+  if (combination_ == LeafCombination::SWA_COMPRESSED) {
+    size_t max_tokens = sequence.num_tokens() - 1;
+    for (const SampleSlot& slot : sequence.sample_slots()) {
+      max_tokens = std::min(
+          max_tokens, slot.token_position == 0 ? 0 : slot.token_position - 1);
+    }
+    return trim_swa_compressed(std::move(probes), max_tokens).safe_hit_tokens;
+  }
+  if (combination_ == LeafCombination::FLAT_KV_LINEAR) {
+    return trim_flat_kv_linear(std::move(probes)).safe_hit_tokens;
+  }
+  const ProbeResult& probe = probes.front();
+  size_t tokens = probe.blocks.size() * probe.block_size;
+  if (tokens == sequence.num_tokens() && tokens > 0) {
+    tokens -= probe.block_size;
+  }
+  return tokens;
+}
 
 void CompositeBlockManager::allocate_shared_for_sequence(Sequence* seq) {
   if (seq == nullptr) {

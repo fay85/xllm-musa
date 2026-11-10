@@ -51,6 +51,7 @@ void UnifiedPolicy::drain_request_queue(
     if (!state.enable_prefix_cache) {
       request->expand_sequences(/*force=*/false);
     }
+    track_dp_request(request, state);
     state.unified_queue.push_back(request);
   }
 }
@@ -77,6 +78,12 @@ void UnifiedPolicy::schedule(SchedulerState& state,
 
   // Allocate prefix cache ahead for all requests.
   for (auto& request : state.unified_queue) {
+    if (request->finished() || request->cancelled()) {
+      continue;
+    }
+    if (!bind_prefill_dp(request, state)) {
+      continue;
+    }
     auto& sequence = request->sequences()[0];
     allocate_shared_blocks_for(sequence.get(), state);
   }
@@ -123,11 +130,16 @@ void UnifiedPolicy::schedule_from_unified_queue(
     }
 
     if (request->finished() || request->cancelled()) {
+      remove_dp_request(request, state);
       clear_mtp_bootstrap(request.get(), state);
       state.kv_cache_manager->deallocate(request.get());
       finished.emplace_back(request);
       unified.pop_front();
       continue;
+    }
+
+    if (!bind_prefill_dp(request, state)) {
+      break;
     }
 
     const size_t num_sequences = request->sequences().size();
@@ -290,6 +302,7 @@ void UnifiedPolicy::schedule_from_unified_queue(
         request->mark_first_scheduled(state.scheduled_timestamp);
       }
       state.running_requests.emplace_back(request);
+      mark_dp_running(request, state);
       state.running_sequences.insert(state.running_sequences.end(),
                                      candidate_sequences.begin(),
                                      candidate_sequences.end());
@@ -313,6 +326,7 @@ void UnifiedPolicy::schedule_from_unified_queue(
                    << " is too long, please set a larger "
                       "max_tokens value via --max_tokens_per_batch.";
         unified.pop_front();
+        remove_dp_request(request, state);
         clear_mtp_bootstrap(request.get(), state);
         state.kv_cache_manager->deallocate(request.get());
         state.response_processor->process_failed_request(
@@ -342,6 +356,7 @@ void UnifiedPolicy::schedule_from_unified_queue(
           preempt_iterator--;
           unified.erase(prev);
           request_to_preempt->set_preempted();
+          mark_dp_waiting(request_to_preempt, state);
           preempted_request_vec.push_back(request_to_preempt);
           find_preempt = true;
           break;
@@ -366,6 +381,7 @@ void UnifiedPolicy::schedule_from_unified_queue(
             << "Request prompt is too long, no enough memory to schedule "
             << "a single sequence.";
         unified.pop_front();
+        remove_dp_request(request, state);
         clear_mtp_bootstrap(request.get(), state);
         state.kv_cache_manager->deallocate(request.get());
         state.response_processor->process_failed_request(

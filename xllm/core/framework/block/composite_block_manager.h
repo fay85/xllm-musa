@@ -87,6 +87,11 @@ class CompositeBlockManager : public BlockManager {
                          size_t num_tokens);
   void deallocate_for_sequence(Sequence* seq);
   void deallocate_for_sequence(Sequence* seq, KVCacheState& kv_state);
+  using PrefixHashCache =
+      std::map<std::pair<BlockHasherType, size_t>, std::vector<XXH3Key>>;
+  size_t prefix_hit_tokens(const Sequence& sequence) const;
+  size_t prefix_hit_tokens(const Sequence& sequence,
+                           PrefixHashCache& hashes) const;
   void allocate_shared_for_sequence(Sequence* seq);
   void allocate_shared_for_sequence(Sequence* seq, KVCacheState& kv_state);
   void cache_for_sequence(Sequence* seq);

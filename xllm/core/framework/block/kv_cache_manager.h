@@ -57,6 +57,19 @@ class KVCacheManager {
   virtual void deallocate(Sequence* sequence) = 0;
 
   virtual void allocate_shared(Sequence* sequence) = 0;
+
+  virtual size_t prefix_hit_tokens(const Sequence&, int32_t) const { return 0; }
+  virtual std::vector<size_t> prefix_hit_tokens_per_dp(
+      const Sequence& sequence,
+      const std::vector<size_t>& ranks) const {
+    std::vector<size_t> hits;
+    hits.reserve(ranks.size());
+    for (size_t rank : ranks) {
+      hits.emplace_back(
+          prefix_hit_tokens(sequence, static_cast<int32_t>(rank)));
+    }
+    return hits;
+  }
   // Whether shared matching is needed before sizing the next prefill chunk.
   virtual bool needs_shared_reprobe(Sequence* sequence) const {
     return sequence->kv_state().num_blocks(BlockType::KV) == 0;

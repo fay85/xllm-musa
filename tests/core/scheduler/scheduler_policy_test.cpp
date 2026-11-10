@@ -542,6 +542,503 @@ bool prefill_prompt(LinearPrefixTestScheduler& scheduler,
   return true;
 }
 
+class RoutingTestPolicy final : public PrefillFirstPolicy {
+ public:
+  using PrefillFirstPolicy::PrefillFirstPolicy;
+  using SchedulerPolicy::bind_prefill_dp;
+  using SchedulerPolicy::mark_dp_running;
+  using SchedulerPolicy::mark_dp_waiting;
+  using SchedulerPolicy::remove_dp_request;
+  using SchedulerPolicy::track_dp_request;
+};
+
+class RoutingTestPool final : public BlockManagerPool {
+ public:
+  RoutingTestPool() : BlockManagerPool(make_options(), /*dp_size=*/2) {}
+
+  std::vector<double> kv_cache_utilization_per_dp() const override {
+    return usage;
+  }
+
+  std::vector<size_t> prefix_hit_tokens_per_dp(
+      const Sequence& sequence,
+      const std::vector<size_t>& ranks) const override {
+    return KVCacheManager::prefix_hit_tokens_per_dp(sequence, ranks);
+  }
+
+  size_t prefix_hit_tokens(const Sequence&, int32_t rank) const override {
+    ++probe_calls;
+    return hits.at(rank);
+  }
+  std::vector<size_t> hits{0, 0};
+  mutable size_t probe_calls = 0;
+  std::vector<double> usage{0.0, 0.0};
+  bool host_restore = false;
+
+  bool supports_host_cache_restore() const override { return host_restore; }
+
+ private:
+  static Options make_options() {
+    Options options;
+    options.num_blocks(100).block_size(16).max_seqs_per_batch(16);
+    return options;
+  }
+};
+
+class LoadAwareRoutingTest : public ::testing::Test {
+ protected:
+  LoadAwareRoutingTest()
+      : options_(create_scheduler_options(1024, 16, 0, 256, 2)),
+        policy_(BatchMode{}, options_),
+        state_{.prefill_queue = prefill_,
+               .chunk_queue = chunk_,
+               .decode_queue = decode_,
+               .unified_queue = unified_,
+               .decode_restore_waiting = restores_,
+               .running_requests = running_,
+               .running_sequences = sequences_,
+               .running_sequences_budgets = budgets_,
+               .kv_cache_manager = &pool_,
+               .profile_manager = nullptr,
+               .response_processor = nullptr,
+               .model_args = model_args_,
+               .last_step_prefill = last_prefill_,
+               .options = options_,
+               .min_speculative_tokens_required = 0,
+               .enable_prefix_cache = false,
+               .dp_request_load = &load_} {}
+
+  std::shared_ptr<Request> add_request(int32_t rank = -1) {
+    auto request =
+        generate_request({32}, {8}, std::nullopt, std::nullopt, 10000).front();
+    request->sequences().front()->set_dp_rank(rank);
+    prefill_.push(request);
+    policy_.track_dp_request(request, state_);
+    return request;
+  }
+
+  ContinuousScheduler::Options options_;
+  DPRequestLoad load_{2};
+  RoutingTestPolicy policy_;
+  RoutingTestPool pool_;
+  DequeQueue prefill_;
+  DequeQueue chunk_;
+  DequeQueue decode_;
+  std::list<std::shared_ptr<Request>> unified_;
+  std::deque<DecodeRestoreEntry> restores_;
+  std::vector<std::shared_ptr<Request>> running_;
+  std::vector<Sequence*> sequences_;
+  std::vector<size_t> budgets_;
+  ModelArgs model_args_;
+  bool last_prefill_ = false;
+  SchedulerState state_;
+};
+
+class CacheAwareRoutingTest : public LoadAwareRoutingTest {
+ protected:
+  void SetUp() override {
+    saved_config_ = SchedulerConfig::get_instance();
+    SchedulerConfig::get_instance()
+        .dp_balance_abs_threshold(10)
+        .dp_balance_rel_threshold(1.5)
+        .dp_cache_threshold(0.5);
+    state_.enable_prefix_cache = true;
+  }
+  void TearDown() override { SchedulerConfig::get_instance() = saved_config_; }
+  SchedulerConfig saved_config_;
+};
+
+TEST_F(CacheAwareRoutingTest, BalancedLoadPrefersPrefixHit) {
+  add_request(1);
+  pool_.hits = {0, 24};
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 1);
+}
+
+TEST_F(CacheAwareRoutingTest, ImbalanceOverridesHitAndSkipsProbe) {
+  for (size_t index = 0; index < 11; ++index) {
+    add_request(1);
+  }
+  pool_.hits = {0, 24};
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 0);
+  EXPECT_EQ(pool_.probe_calls, 0u);
+}
+
+TEST_F(CacheAwareRoutingTest, AbsoluteBoundaryDoesNotTriggerImbalance) {
+  for (size_t index = 0; index < 10; ++index) {
+    add_request(1);
+  }
+  pool_.hits = {0, 24};
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 1);
+}
+
+TEST_F(CacheAwareRoutingTest, RelativeConditionIsAlsoRequired) {
+  for (size_t index = 0; index < 100; ++index) {
+    add_request(0);
+  }
+  for (size_t index = 0; index < 115; ++index) {
+    add_request(1);
+  }
+  pool_.hits = {0, 24};
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 1);
+}
+
+TEST_F(CacheAwareRoutingTest, ExactHitThresholdFallsBackToLoad) {
+  add_request(1);
+  pool_.hits = {0, 16};
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 0);
+}
+
+TEST_F(CacheAwareRoutingTest, CacheDisabledSkipsProbe) {
+  state_.enable_prefix_cache = false;
+  pool_.hits = {0, 24};
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 0);
+  EXPECT_EQ(pool_.probe_calls, 0u);
+}
+
+TEST_F(CacheAwareRoutingTest, EqualHitsPreferLowerLoad) {
+  add_request(0);
+  pool_.hits = {24, 24};
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 1);
+}
+
+TEST_F(CacheAwareRoutingTest, FootprintExcludesCacheAffinityTarget) {
+  pool_.hits = {24, 0};
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_, {100, 0}));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 1);
+  EXPECT_EQ(pool_.probe_calls, 0u);
+}
+
+TEST_F(CacheAwareRoutingTest, NoHitsUseLoadInsteadOfKvPenalty) {
+  add_request(0);
+  add_request(0);
+  add_request(1);
+  add_request(1);
+  add_request(1);
+  pool_.usage = {1.0, 0.0};
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 0);
+}
+
+TEST_F(CacheAwareRoutingTest, PrefillCapExcludesCacheAffinityTarget) {
+  model_args_.max_concurrent_prefills_per_dp(1);
+  auto running = add_request(1);
+  running_.emplace_back(running);
+  pool_.hits = {0, 24};
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 0);
+}
+
+TEST_F(CacheAwareRoutingTest, FixedAndSpecialRequestsKeepOriginalPlacement) {
+  pool_.hits = {0, 24};
+  auto fixed = add_request(0);
+  ASSERT_TRUE(policy_.bind_prefill_dp(fixed, state_));
+  EXPECT_EQ(fixed->sequences().front()->dp_rank(), 0);
+  for (const bool beam_search : {false, true}) {
+    auto original = add_request();
+    RequestState request_state = original->state().clone();
+    request_state.best_of = 2;
+    request_state.sampling_param.beam_width = beam_search ? 2 : 1;
+    auto request = std::make_shared<Request>(
+        "multi-output", "multi-output", "", std::move(request_state), "");
+    ASSERT_TRUE(policy_.bind_prefill_dp(request, state_));
+    EXPECT_LT(request->sequences().front()->dp_rank(), 0);
+  }
+  options_.enable_disagg_pd(true);
+  auto pd_request = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(pd_request, state_));
+  EXPECT_LT(pd_request->sequences().front()->dp_rank(), 0);
+  EXPECT_EQ(pool_.probe_calls, 0u);
+}
+
+TEST_F(LoadAwareRoutingTest,
+       ConsecutiveAssignmentsStayBalancedWithoutQueueScanning) {
+  auto first = add_request();
+  auto second = add_request();
+  auto third = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(first, state_));
+  ASSERT_TRUE(policy_.bind_prefill_dp(second, state_));
+  EXPECT_EQ(first->sequences().front()->dp_rank(), 0);
+  EXPECT_EQ(second->sequences().front()->dp_rank(), 1);
+  chunk_.push(first);
+  ASSERT_TRUE(policy_.bind_prefill_dp(third, state_));
+  EXPECT_EQ(third->sequences().front()->dp_rank(), 0);
+}
+
+TEST_F(LoadAwareRoutingTest, CountersTrackTransitionsWithoutScanningQueues) {
+  auto request = add_request(0);
+  EXPECT_EQ(load_.waiting(), (std::vector<size_t>{1, 0}));
+  policy_.track_dp_request(request, state_);
+  chunk_.push(request);
+  EXPECT_EQ(load_.waiting()[0], 1);
+  policy_.mark_dp_running(request, state_);
+  policy_.mark_dp_running(request, state_);
+  EXPECT_EQ(load_.waiting()[0], 0);
+  EXPECT_EQ(load_.running()[0], 1);
+  policy_.mark_dp_waiting(request, state_);
+  policy_.mark_dp_waiting(request, state_);
+  EXPECT_EQ(load_.waiting()[0], 1);
+  EXPECT_EQ(load_.running()[0], 0);
+  request->set_cancel();
+  policy_.remove_dp_request(request, state_);
+  policy_.remove_dp_request(request, state_);
+  EXPECT_EQ(load_.waiting()[0], 0);
+  EXPECT_EQ(load_.running()[0], 0);
+}
+
+TEST_F(LoadAwareRoutingTest, HistoricalBatchTimeDoesNotDetermineLoadState) {
+  auto request = add_request(0);
+  load_.remove(request);
+  request->record_first_batched_time();
+  ASSERT_TRUE(pool_.allocate(request->sequences().front().get(), 32));
+  ASSERT_GE(request->queue_to_batch_latency_ms(), 0);
+  ASSERT_TRUE(request->sequences().front()->has_any_blocks());
+  load_.track_waiting(request);
+  EXPECT_EQ(load_.waiting()[0], 1);
+  EXPECT_EQ(load_.running()[0], 0);
+  load_.mark_running(request);
+  request->set_preempted();
+  load_.mark_waiting(request);
+  load_.track_waiting(request);
+  EXPECT_EQ(load_.waiting()[0], 1);
+  EXPECT_EQ(load_.running()[0], 0);
+  load_.mark_running(request);
+  load_.track_waiting(request);
+  EXPECT_EQ(load_.waiting()[0], 0);
+  EXPECT_EQ(load_.running()[0], 1);
+  pool_.deallocate(request.get());
+}
+
+TEST_F(LoadAwareRoutingTest, RunningEventRegistersAnUntrackedRequest) {
+  auto request = add_request(1);
+  load_.remove(request);
+  load_.mark_running(request);
+  load_.mark_running(request);
+  EXPECT_EQ(load_.waiting()[1], 0);
+  EXPECT_EQ(load_.running()[1], 1);
+}
+
+TEST_F(LoadAwareRoutingTest, UnboundRequestsAreNotCountedUntilBinding) {
+  auto request = add_request();
+  EXPECT_EQ(load_.waiting(), (std::vector<size_t>{0, 0}));
+  ASSERT_TRUE(policy_.bind_prefill_dp(request, state_));
+  EXPECT_EQ(load_.waiting()[request->sequences().front()->dp_rank()], 1);
+}
+
+TEST_F(LoadAwareRoutingTest, CollectFinishedRemovesLoadWithoutRefresh) {
+  auto request = add_request(0);
+  policy_.mark_dp_running(request, state_);
+  running_.push_back(request);
+  request->set_cancel();
+  auto finished = policy_.collect_finished(state_);
+  ASSERT_EQ(finished.size(), 1);
+  EXPECT_EQ(load_.waiting()[0], 0);
+  EXPECT_EQ(load_.running()[0], 0);
+  policy_.remove_dp_request(request, state_);
+  EXPECT_EQ(load_.running()[0], 0);
+}
+
+TEST_F(LoadAwareRoutingTest, HighKvPressureDoesNotOverrideRequestLoad) {
+  add_request(0);
+  add_request(1);
+  add_request(1);
+  auto incoming = add_request();
+  pool_.usage = {1.0, 0.0};
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 0);
+}
+
+TEST_F(LoadAwareRoutingTest, LowKvPressureDoesNotPenalizeWaitingRequests) {
+  add_request(0);
+  add_request(1);
+  add_request(1);
+  auto incoming = add_request();
+  pool_.usage = {0.5, 0.0};
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 0);
+}
+
+TEST_F(LoadAwareRoutingTest, RunningWaitingAndRemovalUpdateScoresImmediately) {
+  auto existing = add_request(0);
+  add_request(1);
+  add_request(1);
+  auto incoming = add_request();
+  pool_.usage = {1.0, 0.0};
+  policy_.mark_dp_running(existing, state_);
+  policy_.mark_dp_running(existing, state_);
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 0);
+  policy_.mark_dp_waiting(existing, state_);
+  policy_.mark_dp_waiting(existing, state_);
+  auto next = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(next, state_));
+  EXPECT_EQ(next->sequences().front()->dp_rank(), 1);
+  policy_.remove_dp_request(existing, state_);
+  policy_.remove_dp_request(existing, state_);
+  policy_.remove_dp_request(incoming, state_);
+  auto last = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(last, state_));
+  EXPECT_EQ(last->sequences().front()->dp_rank(), 0);
+}
+
+TEST_F(LoadAwareRoutingTest, FootprintFiltersRankBeforeBinding) {
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_, {100, 0}));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 1);
+  auto blocked = add_request();
+  EXPECT_FALSE(policy_.bind_prefill_dp(blocked, state_, {100, 100}));
+  EXPECT_EQ(blocked->sequences().front()->dp_rank(), -1);
+}
+
+TEST_F(LoadAwareRoutingTest, PrefillCapFiltersRankBeforeBinding) {
+  model_args_.max_concurrent_prefills_per_dp(1);
+  running_.push_back(add_request(0));
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 1);
+}
+
+TEST_F(LoadAwareRoutingTest, PrefillCapSkipsNullSequencesAndDeduplicatesRanks) {
+  model_args_.max_concurrent_prefills_per_dp(2);
+  auto active = add_request(0);
+  auto extra = add_request(0);
+  active->sequences().push_back(std::move(extra->sequences().front()));
+  active->sequences().push_back(nullptr);
+  running_.push_back(nullptr);
+  running_.push_back(active);
+  add_request(1);
+  add_request(1);
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 0);
+  active->sequences().pop_back();
+}
+
+TEST_F(LoadAwareRoutingTest, RoutingDoesNotDependOnKvUsage) {
+  add_request(0);
+  for (const auto& usage : std::vector<std::vector<double>>{
+           {},
+           {0.0},
+           {0.0, std::numeric_limits<double>::quiet_NaN()},
+           {0.0, 1.1},
+           {-0.1, 0.0}}) {
+    pool_.usage = usage;
+    auto incoming = add_request();
+    EXPECT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+    EXPECT_EQ(incoming->sequences().front()->dp_rank(), 1);
+    policy_.remove_dp_request(incoming, state_);
+  }
+}
+
+TEST_F(LoadAwareRoutingTest, BeamAndBestOfKeepOriginalPlacement) {
+  for (const bool beam_search : {false, true}) {
+    auto original = add_request();
+    RequestState request_state = original->state().clone();
+    request_state.best_of = 2;
+    request_state.sampling_param.beam_width = beam_search ? 2 : 1;
+    auto request = std::make_shared<Request>(
+        "multi-output", "multi-output", "", std::move(request_state), "");
+    ASSERT_TRUE(policy_.bind_prefill_dp(request, state_));
+    EXPECT_EQ(request->sequences().front()->dp_rank(), -1);
+    EXPECT_EQ(load_.waiting(), (std::vector<size_t>{0, 0}));
+    request->sequences().front()->set_dp_rank(1);
+    ASSERT_TRUE(policy_.bind_prefill_dp(request, state_));
+    EXPECT_EQ(request->sequences().front()->dp_rank(), 1);
+  }
+}
+
+TEST_F(LoadAwareRoutingTest, HostAndStoreDoNotDisableLoadAwareRouting) {
+  ScopedConfigValue<bool> store_guard(
+      KVCacheStoreConfig::get_instance().enable_kvcache_store(), true);
+  pool_.host_restore = true;
+  add_request(0);
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 1);
+  EXPECT_EQ(load_.waiting(), (std::vector<size_t>{1, 1}));
+}
+
+TEST_F(LoadAwareRoutingTest,
+       PrefetchAssignedRankRemainsPinnedWithStoreEnabled) {
+  ScopedConfigValue<bool> store_guard(
+      KVCacheStoreConfig::get_instance().enable_kvcache_store(), true);
+  pool_.host_restore = true;
+  add_request(0);
+  auto prefetched = add_request(0);
+  ASSERT_TRUE(policy_.bind_prefill_dp(prefetched, state_));
+  EXPECT_EQ(prefetched->sequences().front()->dp_rank(), 0);
+  EXPECT_EQ(load_.waiting(), (std::vector<size_t>{2, 0}));
+  policy_.mark_dp_running(prefetched, state_);
+  EXPECT_EQ(load_.waiting()[0], 1);
+  EXPECT_EQ(load_.running()[0], 1);
+  policy_.mark_dp_waiting(prefetched, state_);
+  policy_.remove_dp_request(prefetched, state_);
+  EXPECT_EQ(load_.waiting()[0], 1);
+  EXPECT_EQ(load_.running()[0], 0);
+}
+
+TEST_F(LoadAwareRoutingTest, ExistingRankIsPreserved) {
+  auto fixed = add_request(1);
+  ASSERT_TRUE(policy_.bind_prefill_dp(fixed, state_));
+  EXPECT_EQ(fixed->sequences().front()->dp_rank(), 1);
+}
+
+TEST_F(LoadAwareRoutingTest, TerminalRequestsDoNotContributeToLoad) {
+  auto first = add_request(0);
+  auto second = add_request(0);
+  first->set_cancel();
+  second->set_cancel();
+  policy_.remove_dp_request(first, state_);
+  policy_.remove_dp_request(second, state_);
+  add_request(1);
+  auto incoming = add_request();
+  ASSERT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), 0);
+}
+
+TEST_F(LoadAwareRoutingTest, PrefillScheduleUsesRoutingBeforeAllocation) {
+  auto first = add_request();
+  auto second = add_request();
+  ScheduleBudget budget{
+      .remaining_token_budget = 1024,
+      .remaining_seq_budget = 16,
+      .latency_budget = std::numeric_limits<double>::max(),
+      .estimate_latency = 0,
+      .num_preempted_requests = 0,
+  };
+  std::vector<std::shared_ptr<Request>> finished;
+  RoutingTestPolicy policy(BatchMode{.enable_chunked_prefill = true}, options_);
+  policy.schedule(state_, budget, finished);
+  ASSERT_EQ(running_.size(), 2);
+  EXPECT_EQ(first->sequences().front()->dp_rank(), 0);
+  EXPECT_EQ(second->sequences().front()->dp_rank(), 1);
+  EXPECT_TRUE(first->sequences().front()->has_any_blocks());
+  EXPECT_TRUE(second->sequences().front()->has_any_blocks());
+}
+
+TEST_F(LoadAwareRoutingTest, DisaggregatedModeKeepsLegacyRouting) {
+  options_.enable_disagg_pd(true);
+  auto incoming = add_request();
+  EXPECT_TRUE(policy_.bind_prefill_dp(incoming, state_));
+  EXPECT_EQ(incoming->sequences().front()->dp_rank(), -1);
+}
+
 // dont not consider speculative decoding.
 void update_requests(std::vector<std::shared_ptr<Request>> requests) {
   for (auto req : requests) {

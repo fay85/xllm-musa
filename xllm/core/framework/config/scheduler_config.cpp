@@ -15,8 +15,22 @@ limitations under the License.
 
 #include "core/framework/config/scheduler_config.h"
 
+#include <glog/logging.h>
+
+#include <cmath>
+
 #include "core/common/global_flags.h"
 #include "core/framework/config/config_utils.h"
+
+DEFINE_int32(dp_balance_abs_threshold,
+             10,
+             "Absolute request-load imbalance threshold.");
+DEFINE_double(dp_balance_rel_threshold,
+              1.5,
+              "Relative request-load imbalance threshold.");
+DEFINE_double(dp_cache_threshold,
+              0.5,
+              "Minimum prefix hit fraction for cache affinity.");
 
 DEFINE_int32(max_tokens_per_batch, 10240, "Max number of tokens per batch.");
 
@@ -89,6 +103,9 @@ DEFINE_bool(enable_dp_fair_token_budget,
 namespace xllm {
 
 void SchedulerConfig::from_flags() {
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(dp_balance_abs_threshold);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(dp_balance_rel_threshold);
+  XLLM_CONFIG_ASSIGN_FROM_FLAG(dp_cache_threshold);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(max_tokens_per_batch);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(max_seqs_per_batch);
   XLLM_CONFIG_ASSIGN_FROM_FLAG(enable_schedule_overlap);
@@ -109,6 +126,9 @@ void SchedulerConfig::from_flags() {
 }
 
 void SchedulerConfig::from_json(const JsonReader& json) {
+  XLLM_CONFIG_ASSIGN_FROM_JSON(dp_balance_abs_threshold);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(dp_balance_rel_threshold);
+  XLLM_CONFIG_ASSIGN_FROM_JSON(dp_cache_threshold);
   XLLM_CONFIG_ASSIGN_FROM_JSON(max_tokens_per_batch);
   XLLM_CONFIG_ASSIGN_FROM_JSON(max_seqs_per_batch);
   XLLM_CONFIG_ASSIGN_FROM_JSON(enable_schedule_overlap);
@@ -131,6 +151,12 @@ void SchedulerConfig::from_json(const JsonReader& json) {
 void SchedulerConfig::append_config_json(
     nlohmann::ordered_json& config_json) const {
   const SchedulerConfig default_config;
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, dp_balance_abs_threshold);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, dp_balance_rel_threshold);
+  APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
+      config_json, default_config, dp_cache_threshold);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
       config_json, default_config, max_tokens_per_batch);
   APPEND_CONFIG_JSON_VALUE_IF_NOT_DEFAULT(
@@ -177,6 +203,11 @@ void SchedulerConfig::initialize() {
   if (const auto& json_config = config::get_parsed_json_config()) {
     from_json(*json_config);
   }
+  CHECK_GE(dp_balance_abs_threshold(), 0);
+  CHECK(std::isfinite(dp_balance_rel_threshold()) &&
+        dp_balance_rel_threshold() >= 1.0);
+  CHECK(std::isfinite(dp_cache_threshold()) && dp_cache_threshold() >= 0.0 &&
+        dp_cache_threshold() <= 1.0);
 }
 
 }  // namespace xllm

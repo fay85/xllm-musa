@@ -156,6 +156,8 @@ class Block final {
   ~Block();
 
   Block() = default;
+  enum class Placeholder : uint8_t { INVALID, VALID };
+  explicit Block(Placeholder placeholder);
   Block(int32_t id, BlockManager* allocator);
 
   Block(const Block& other);

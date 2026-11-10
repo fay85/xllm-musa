@@ -85,6 +85,7 @@ struct SchedulerState {
   // Freeze ingress before reading the round clock. Later arrivals must not
   // acquire a SCHEDULED timestamp earlier than their QUEUED event.
   size_t ingress_request_count = std::numeric_limits<size_t>::max();
+  DPRequestLoad* dp_request_load = nullptr;
 };
 
 // ScheduleBudget tracks the remaining resources for the current scheduling
@@ -170,6 +171,18 @@ class SchedulerPolicy {
   // Called after policy requeue; reset batch state and append new FCFS decode
   // handoffs behind all existing waiters and requeued requests.
   void reset_batch_state(SchedulerState& state);
+  void track_dp_request(const std::shared_ptr<Request>& request,
+                        const SchedulerState& state);
+  bool supports_load_aware_routing(const SchedulerState& state) const;
+  bool bind_prefill_dp(const std::shared_ptr<Request>& request,
+                       const SchedulerState& state,
+                       const std::vector<size_t>& reserved_footprint = {});
+  void mark_dp_running(const std::shared_ptr<Request>& request,
+                       const SchedulerState& state);
+  void mark_dp_waiting(const std::shared_ptr<Request>& request,
+                       const SchedulerState& state);
+  void remove_dp_request(const std::shared_ptr<Request>& request,
+                         const SchedulerState& state);
 
   // ===== Running request state update =====
   void handle_running_requests(const std::shared_ptr<Request>& request,
@@ -296,6 +309,7 @@ class SchedulerPolicy {
   };
 
   BatchMode batch_mode_;
+  size_t dp_routing_cursor_ = 0;
   const ContinuousScheduler::Options& options_;
   // Restored requests still in prefill stage. Admission stays paused until
   // they reach decode so new arrivals cannot take their blocks.

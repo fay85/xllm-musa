@@ -186,6 +186,32 @@ BlockManagerPool::Options make_linear_state_pool_options(
 
 }  // namespace
 
+TEST(BlockManagerTest, PlaceholderBlocksHaveNoOwnership) {
+  Block valid(Block::Placeholder::VALID);
+  Block invalid(Block::Placeholder::INVALID);
+  EXPECT_TRUE(valid.is_valid());
+  EXPECT_FALSE(invalid.is_valid());
+  for (const Block* block : {&valid, &invalid}) {
+    EXPECT_EQ(block->manager(), nullptr);
+    EXPECT_EQ(block->ref_count(), 0u);
+    EXPECT_EQ(block->owner_count(), 0u);
+    EXPECT_EQ(block->size(), 0u);
+  }
+  Block copied = valid;
+  Block moved = std::move(copied);
+  EXPECT_FALSE(copied.is_valid());
+  EXPECT_TRUE(moved.is_valid());
+  EXPECT_EQ(moved.ref_count(), 0u);
+  EXPECT_EQ(moved.manager(), nullptr);
+  invalid = valid;
+  EXPECT_TRUE(invalid.is_valid());
+  invalid = Block(Block::Placeholder::INVALID);
+  EXPECT_FALSE(invalid.is_valid());
+  moved = valid.retain_for_inflight();
+  EXPECT_TRUE(moved.is_valid());
+  EXPECT_EQ(moved.owner_count(), 0u);
+}
+
 TEST(BlockManagerTest, Basic) {
   const uint32_t n_blocks = 10;
   const uint32_t block_size = 2;

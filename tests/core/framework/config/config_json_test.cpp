@@ -1012,4 +1012,23 @@ TEST(ConfigJsonTest, DumpStartupConfigWritesNonDefaultValuesOnly) {
 }
 
 }  // namespace
+TEST(SchedulerRoutingConfigTest, ReadsCacheAwareOptions) {
+  google::FlagSaver flag_saver;
+  SchedulerConfig defaults;
+  EXPECT_EQ(defaults.dp_balance_abs_threshold(), 10);
+  EXPECT_DOUBLE_EQ(defaults.dp_balance_rel_threshold(), 1.5);
+  EXPECT_DOUBLE_EQ(defaults.dp_cache_threshold(), 0.5);
+  SchedulerConfig configured;
+  configured.from_json(config::parse_json_string(
+      R"json({"dp_balance_abs_threshold":7,
+              "dp_balance_rel_threshold":1.25,"dp_cache_threshold":0.75})json"));
+  EXPECT_EQ(configured.dp_balance_abs_threshold(), 7);
+  EXPECT_DOUBLE_EQ(configured.dp_balance_rel_threshold(), 1.25);
+  EXPECT_DOUBLE_EQ(configured.dp_cache_threshold(), 0.75);
+  nlohmann::ordered_json output;
+  configured.append_config_json(output);
+  EXPECT_FALSE(output.contains("dp_routing_policy"));
+  EXPECT_EQ(output.at("dp_balance_abs_threshold"), 7);
+}
+
 }  // namespace xllm

@@ -57,9 +57,16 @@ class SchedulerConfig final {
          "aggressive_coeff",
          "starve_threshold",
          "enable_starve_prevent",
-         "enable_dp_fair_token_budget"}};
+         "enable_dp_fair_token_budget",
+         "dp_balance_abs_threshold",
+         "dp_balance_rel_threshold",
+         "dp_cache_threshold"}};
     return kOptionCategory;
   }
+
+  PROPERTY(int32_t, dp_balance_abs_threshold) = 10;
+  PROPERTY(double, dp_balance_rel_threshold) = 1.5;
+  PROPERTY(double, dp_cache_threshold) = 0.5;
 
   PROPERTY(int32_t, max_tokens_per_batch) = 10240;
 

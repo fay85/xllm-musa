@@ -184,7 +184,8 @@ inline size_t ExpectedSwaLogicalBlocks(size_t num_tokens) {
 Sequence MakeTestSequence(size_t index,
                           const std::vector<int32_t>& prompt_token_ids,
                           const std::vector<SampleSlot>* sample_slots = nullptr,
-                          const MMData* input_mm_data = nullptr) {
+                          const MMData* input_mm_data = nullptr,
+                          uint64_t adapter_id = 0) {
   torch::Device device(Platform::type_torch(), 0);
   // Sequence keeps non-owning pointers to these parameters after this helper
   // returns, so they must outlive every sequence created here.
@@ -195,6 +196,7 @@ Sequence MakeTestSequence(size_t index,
     return checker;
   }();
   SequenceParams seq_params;
+  seq_params.adapter_id = adapter_id;
   // Large enough to hold DSV4-scale prompts (>= a full compressed block = 2048
   // tokens). Individual tests can still use short prompts; sequence capacity
   // just has to bound `num_tokens + max_generated_tokens`.
@@ -220,6 +222,38 @@ Sequence MakeTestSequence(size_t index,
                   seq_params);
 }
 
+TEST(CompositeBlockManagerTest,
+     PerDpProbeUsesResidentCacheWithoutMutatingSequence) {
+  BlockManagerPool::Options options;
+  options.num_blocks(32)
+      .block_size(2)
+      .max_seqs_per_batch(4)
+      .enable_prefix_cache(true);
+  BlockManagerPool pool(options, 2);
+  Sequence producer = MakeTestSequence(0, std::vector<int32_t>(8, 7));
+  producer.set_dp_rank(1);
+  ASSERT_TRUE(pool.allocate(&producer));
+  producer.kv_state().incr_kv_cache_tokens_num(8);
+  pool.deallocate(&producer);
+  Sequence consumer = MakeTestSequence(1, std::vector<int32_t>(8, 7));
+  const auto free_before = pool.num_free_blocks();
+  const auto used_before = pool.num_used_blocks();
+  EXPECT_EQ(pool.prefix_hit_tokens_per_dp(consumer, {0, 1}),
+            (std::vector<size_t>{0, 6}));
+  EXPECT_EQ(pool.num_free_blocks(), free_before);
+  EXPECT_EQ(pool.num_used_blocks(), used_before);
+  EXPECT_LT(consumer.dp_rank(), 0);
+  EXPECT_FALSE(consumer.has_any_blocks());
+  Sequence other_adapter =
+      MakeTestSequence(2, std::vector<int32_t>(8, 7), nullptr, nullptr, 42);
+  EXPECT_EQ(pool.prefix_hit_tokens_per_dp(other_adapter, {0, 1}),
+            (std::vector<size_t>{0, 0}));
+  consumer.set_dp_rank(1);
+  pool.allocate_shared(&consumer);
+  EXPECT_EQ(consumer.kv_cache_tokens_num(), 6u);
+  pool.deallocate(&consumer);
+}
+
 TEST(CompositeBlockManagerTest, SampleSelectorsRetainRequiredHiddenPositions) {
   for (const size_t position : {0u, 1u, 2048u, 2049u, 4096u, 4097u}) {
     SCOPED_TRACE(position);
@@ -240,7 +274,9 @@ TEST(CompositeBlockManagerTest, SampleSelectorsRetainRequiredHiddenPositions) {
     const std::vector<SampleSlot> slots = {{"sample", 0, 4097},
                                            {"sample", 1, position}};
     Sequence selected = MakeTestSequence(/*index=*/1, prompt, &slots);
+    const size_t forecast = manager.prefix_hit_tokens(selected);
     manager.allocate_shared_for_sequence(&selected);
+    EXPECT_EQ(forecast, selected.kv_cache_tokens_num());
     const size_t source_position = position == 0 ? 0 : position - 1;
     const size_t expected =
         source_position / kCompressedBlockTokenSize * kCompressedBlockTokenSize;
@@ -1087,7 +1123,11 @@ TEST(CompositeBlockManagerTest, Dsv4PrefixCacheHitOnRepeatedPrefix) {
   // blocks. On a second sequence with the same prompt, admission mounts from
   // all three leaves and pins kv_cache_tokens_num to the safe min hit.
   Sequence seq_hit = MakeTestSequence(1, prompt);
+  const size_t forecast = manager.prefix_hit_tokens(seq_hit);
+  EXPECT_FALSE(seq_hit.has_any_blocks());
+  EXPECT_EQ(seq_hit.kv_state().kv_cache_tokens_num(), 0u);
   manager.allocate_shared_for_sequence(&seq_hit);
+  EXPECT_EQ(forecast, seq_hit.kv_state().kv_cache_tokens_num());
   EXPECT_GT(seq_hit.kv_state().shared_blocks_num(BlockType::SWA), 0u);
   EXPECT_GT(seq_hit.kv_state().shared_blocks_num(BlockType::C4), 0u);
   EXPECT_GT(seq_hit.kv_state().shared_blocks_num(BlockType::C128), 0u);
@@ -1144,7 +1184,11 @@ TEST(CompositeBlockManagerTest,
               published_units);
 
     Sequence hot = MakeTestSequence(1, std::vector<int32_t>(prompt_tokens, 7));
+    const size_t forecast = manager.prefix_hit_tokens(hot);
+    EXPECT_FALSE(hot.has_any_blocks());
+    EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
     manager.allocate_shared_for_sequence(&hot);
+    EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
     EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), expected_hit_tokens);
     EXPECT_EQ(hot.kv_state().shared_blocks_num(BlockType::C4),
               expected_hit_tokens / unit_tokens);
@@ -1252,7 +1296,11 @@ TEST(CompositeBlockManagerTest, SlidingWindowSlidOutBlocksEnterPrefixCache) {
 
   // A second sequence with the same prompt should hit the cached SWA tail.
   Sequence seq_hit = MakeTestSequence(1, prompt);
+  const size_t forecast = manager.prefix_hit_tokens(seq_hit);
+  EXPECT_FALSE(seq_hit.has_any_blocks());
+  EXPECT_EQ(seq_hit.kv_state().kv_cache_tokens_num(), 0u);
   manager.allocate_shared_for_sequence(&seq_hit);
+  EXPECT_EQ(forecast, seq_hit.kv_state().kv_cache_tokens_num());
   EXPECT_GT(seq_hit.kv_state().shared_blocks_num(BlockType::SWA), 0u);
   EXPECT_GT(seq_hit.kv_state().shared_blocks_num(BlockType::C4), 0u);
   EXPECT_GT(seq_hit.kv_state().shared_blocks_num(BlockType::C128), 0u);
@@ -1414,7 +1462,11 @@ TEST(CompositeBlockManagerTest, Dsv4PrefixCacheExactRepeatPopsOneC128) {
   seq_first.reset();
 
   Sequence seq_hit = MakeTestSequence(1, prompt);
+  const size_t forecast = manager.prefix_hit_tokens(seq_hit);
+  EXPECT_FALSE(seq_hit.has_any_blocks());
+  EXPECT_EQ(seq_hit.kv_state().kv_cache_tokens_num(), 0u);
   manager.allocate_shared_for_sequence(&seq_hit);
+  EXPECT_EQ(forecast, seq_hit.kv_state().kv_cache_tokens_num());
   // Full-length hit → pop one c128 block. Expect kv = num_tokens - c128.
   EXPECT_EQ(seq_hit.kv_state().kv_cache_tokens_num(),
             num_tokens - kCompressedUnitTokens);
@@ -2585,7 +2637,11 @@ TEST_P(LinearStateWindowTest, FlatPrefixMountRestoresCachedTokens) {
   finish_input(producer, 8);
   manager.deallocate_for_sequence(&producer);
   Sequence consumer = make_sequence(1, std::vector<int32_t>(8, 7));
+  const size_t forecast = manager.prefix_hit_tokens(consumer);
+  EXPECT_FALSE(consumer.has_any_blocks());
+  EXPECT_EQ(consumer.kv_cache_tokens_num(), 0u);
   manager.allocate_shared_for_sequence(&consumer);
+  EXPECT_EQ(forecast, consumer.kv_cache_tokens_num());
   EXPECT_EQ(consumer.kv_cache_tokens_num(), GetParam() ? 6u : 0u);
   manager.deallocate_for_sequence(&consumer);
 }
@@ -2599,7 +2655,11 @@ TEST_P(LinearStateWindowTest, PrefixMountIsSparseAndMatchedOnlyOnce) {
   }
   manager->deallocate_for_sequence(&producer);
   Sequence consumer = make_sequence(1, std::vector<int32_t>(13, 7));
+  const size_t forecast = manager->prefix_hit_tokens(consumer);
+  EXPECT_FALSE(consumer.has_any_blocks());
+  EXPECT_EQ(consumer.kv_cache_tokens_num(), 0u);
   manager->allocate_shared_for_sequence(&consumer);
+  EXPECT_EQ(forecast, consumer.kv_cache_tokens_num());
   EXPECT_EQ(consumer.kv_cache_tokens_num(), GetParam() ? 12u : 0u);
   EXPECT_EQ(consumer.kv_state().kv_cache_tokens_num(), GetParam() ? 12u : 0u);
   // A linear mount keeps one restore source, the deepest checkpoint.
@@ -2837,7 +2897,11 @@ TEST_F(V41PrefixCacheTest, V41PrefixCacheDefaultsOnLikeV4) {
   publish_v41_prompt(manager, std::vector<int32_t>(769, /*value=*/7));
   Sequence hot =
       MakeTestSequence(/*index=*/1, std::vector<int32_t>(769, /*value=*/7));
+  const size_t forecast = manager.prefix_hit_tokens(hot);
+  EXPECT_FALSE(hot.has_any_blocks());
+  EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
   manager.allocate_shared_for_sequence(&hot);
+  EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
   EXPECT_EQ(hot.kv_cache_tokens_num(), 768u);
   manager.deallocate_for_sequence(&hot);
 }
@@ -2926,7 +2990,9 @@ TEST_F(V41PrefixCacheTest, V41SingleTokenGroupUsesItsOwnRestoreUnit) {
     publish_v41_prompt(manager, tokens);
 
     Sequence repeat = MakeTestSequence(/*index=*/1, tokens);
+    const size_t repeat_forecast = manager.prefix_hit_tokens(repeat);
     manager.allocate_shared_for_sequence(&repeat);
+    EXPECT_EQ(repeat_forecast, repeat.kv_cache_tokens_num());
     EXPECT_EQ(repeat.kv_cache_tokens_num(), prompt_tokens - unit);
     EXPECT_EQ(repeat.kv_state().shared_blocks_num(type), 3u);
     EXPECT_EQ(repeat.kv_state().shared_blocks_num(BlockType::SWA),
@@ -2936,7 +3002,9 @@ TEST_F(V41PrefixCacheTest, V41SingleTokenGroupUsesItsOwnRestoreUnit) {
     std::vector<int32_t> extended = tokens;
     extended.emplace_back(11);
     Sequence suffix = MakeTestSequence(/*index=*/2, std::move(extended));
+    const size_t suffix_forecast = manager.prefix_hit_tokens(suffix);
     manager.allocate_shared_for_sequence(&suffix);
+    EXPECT_EQ(suffix_forecast, suffix.kv_cache_tokens_num());
     EXPECT_EQ(suffix.kv_cache_tokens_num(), prompt_tokens);
     EXPECT_EQ(suffix.kv_state().shared_blocks_num(type), 4u);
     manager.deallocate_for_sequence(&suffix);
@@ -2978,7 +3046,11 @@ TEST_F(V41PrefixCacheTest, V41DisabledPrefixCacheDoesNotPublishOrMount) {
   publish_v41_prompt(manager, std::vector<int32_t>(/*count=*/769, /*value=*/7));
   EXPECT_EQ(manager.num_blocks_in_prefix_cache(), 0u);
   Sequence hot = MakeTestSequence(/*index=*/1, std::vector<int32_t>(769, 7));
+  const size_t forecast = manager.prefix_hit_tokens(hot);
+  EXPECT_FALSE(hot.has_any_blocks());
+  EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
   manager.allocate_shared_for_sequence(&hot);
+  EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
   EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
   manager.deallocate_for_sequence(&hot);
 }
@@ -3002,7 +3074,11 @@ TEST_F(V41PrefixCacheTest, V41PrefixCacheUsesCommonTokenBoundary) {
                        std::vector<int32_t>(prompt_tokens + 1, /*value=*/7));
     Sequence hot = MakeTestSequence(
         /*index=*/1, std::vector<int32_t>(prompt_tokens, /*value=*/7));
+    const size_t forecast = manager.prefix_hit_tokens(hot);
+    EXPECT_FALSE(hot.has_any_blocks());
+    EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
     manager.allocate_shared_for_sequence(&hot);
+    EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
     EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), expected_hit);
     EXPECT_EQ(hot.kv_state().shared_blocks_num(BlockType::C1),
               expected_hit / kBaseBlockSize);
@@ -3033,7 +3109,11 @@ TEST_F(V41PrefixCacheTest, V41PrefixCachePublishesOnlyCompletedUnits) {
                 .leaf->num_blocks_in_prefix_cache(),
             1u);
   Sequence hot = MakeTestSequence(/*index=*/1, std::vector<int32_t>(769, 7));
+  const size_t forecast = manager.prefix_hit_tokens(hot);
+  EXPECT_FALSE(hot.has_any_blocks());
+  EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
   manager.allocate_shared_for_sequence(&hot);
+  EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
   EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 256u);
   manager.deallocate_for_sequence(&hot);
   manager.deallocate_for_sequence(&cold);
@@ -3068,7 +3148,11 @@ TEST_F(V41PrefixCacheTest, V41ChunkedPrefillSharesPrefixWithStandardSwitch) {
 
         const std::vector<int32_t> extended(1537, /*value=*/7);
         Sequence hot = MakeTestSequence(/*index=*/1, extended);
+        const size_t forecast = manager.prefix_hit_tokens(hot);
+        EXPECT_FALSE(hot.has_any_blocks());
+        EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
         manager.allocate_shared_for_sequence(&hot);
+        EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
         const size_t expected_hit = enabled ? 1024 : 0;
         ASSERT_EQ(hot.kv_cache_tokens_num(), expected_hit);
         EXPECT_EQ(hot.kv_state().shared_blocks_num(BlockType::C1),
@@ -3120,7 +3204,11 @@ TEST_F(V41PrefixCacheTest, V41PrefixCacheUsesLargestParticipatingBlock) {
             2u);
 
   Sequence hot = MakeTestSequence(/*index=*/1, tokens);
+  const size_t forecast = manager.prefix_hit_tokens(hot);
+  EXPECT_FALSE(hot.has_any_blocks());
+  EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
   manager.allocate_shared_for_sequence(&hot);
+  EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
   EXPECT_EQ(hot.kv_cache_tokens_num(), unit_tokens);
   EXPECT_EQ(hot.kv_state().shared_blocks_num(BlockType::C1), 1u);
   EXPECT_EQ(hot.kv_state().shared_blocks_num(BlockType::C2), 2u);
@@ -3140,7 +3228,11 @@ TEST_F(V41PrefixCacheTest, V41PrefixCacheMissesIfAnyRequiredGroupIsGone) {
     publish_v41_prompt(manager, std::vector<int32_t>(769, 7));
     BlockManagerPoolTestPeer::leaf_of(manager, missing)->reset_prefix_cache();
     Sequence hot = MakeTestSequence(/*index=*/1, std::vector<int32_t>(769, 7));
+    const size_t forecast = manager.prefix_hit_tokens(hot);
+    EXPECT_FALSE(hot.has_any_blocks());
+    EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
     manager.allocate_shared_for_sequence(&hot);
+    EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
     EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
     for (const BlockType type :
          {BlockType::SWA, BlockType::C2, BlockType::C1}) {
@@ -3196,7 +3288,11 @@ TEST_F(V41PrefixCacheTest, V41PrefixCacheRequiresCompleteSwaWindow) {
     CompositeBlockManager manager(build_composite_leaves(options), options);
     publish_v41_prompt(manager, std::vector<int32_t>(769, 7));
     Sequence hot = MakeTestSequence(/*index=*/1, std::vector<int32_t>(513, 7));
+    const size_t forecast = manager.prefix_hit_tokens(hot);
+    EXPECT_FALSE(hot.has_any_blocks());
+    EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
     manager.allocate_shared_for_sequence(&hot);
+    EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
     ASSERT_EQ(hot.kv_state().kv_cache_tokens_num(), 512u);
     const Slice<Block> swa = hot.kv_state().blocks(BlockType::SWA);
     ASSERT_GE(swa.size(), options.swa_blocks_per_seq());
@@ -3224,7 +3320,11 @@ TEST_F(V41PrefixCacheTest, V41ShortPrefixRestoresAvailableSwaHistory) {
     publish_v41_prompt(manager, std::vector<int32_t>(prefix_tokens, 7));
     Sequence hot = MakeTestSequence(
         /*index=*/1, std::vector<int32_t>(prefix_tokens + 1, 7));
+    const size_t forecast = manager.prefix_hit_tokens(hot);
+    EXPECT_FALSE(hot.has_any_blocks());
+    EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
     manager.allocate_shared_for_sequence(&hot);
+    EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
     EXPECT_EQ(hot.kv_cache_tokens_num(), prefix_tokens);
     const Slice<Block> swa = hot.kv_state().blocks(BlockType::SWA);
     ASSERT_EQ(swa.size(), prefix_tokens / kBaseBlockSize);
@@ -3264,7 +3364,11 @@ TEST_F(V41PrefixCacheTest, V41PrefixCacheRejectsHoleInsideRequiredSwaTail) {
   retained.clear();
 
   Sequence hot = MakeTestSequence(/*index=*/1, tokens);
+  const size_t forecast = manager.prefix_hit_tokens(hot);
+  EXPECT_FALSE(hot.has_any_blocks());
+  EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
   manager.allocate_shared_for_sequence(&hot);
+  EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
   // Both the 768- and 512-token windows need the missing fourth SWA block.
   // The first 256 tokens have complete history and remain recoverable.
   EXPECT_EQ(hot.kv_cache_tokens_num(), 256u);
@@ -3507,7 +3611,11 @@ TEST_F(V41PrefixCacheTest, V41MMPrefixCacheHitsSameImageAndTextOnly) {
     publish_v41_prompt(manager, tokens, mm_data);
     Sequence hot = MakeTestSequence(
         /*index=*/1, tokens, /*sample_slots=*/nullptr, &mm_data);
+    const size_t forecast = manager.prefix_hit_tokens(hot);
+    EXPECT_FALSE(hot.has_any_blocks());
+    EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
     manager.allocate_shared_for_sequence(&hot);
+    EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
     EXPECT_EQ(hot.kv_cache_tokens_num(), 768u);
     EXPECT_EQ(hot.kv_state().shared_blocks_num(BlockType::C1), 6u);
     EXPECT_EQ(hot.kv_state().shared_blocks_num(BlockType::C2), 3u);
@@ -3537,7 +3645,11 @@ TEST_F(V41PrefixCacheTest, V41MMPrefixCacheUsesImageIdentityAtBlockBoundary) {
         make_image_mm_data(test.offset, test.length, /*key_byte=*/4);
     Sequence hot = MakeTestSequence(
         /*index=*/1, tokens, /*sample_slots=*/nullptr, &changed);
+    const size_t forecast = manager.prefix_hit_tokens(hot);
+    EXPECT_FALSE(hot.has_any_blocks());
+    EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
     manager.allocate_shared_for_sequence(&hot);
+    EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
     EXPECT_EQ(hot.kv_cache_tokens_num(), test.expected_hit);
     EXPECT_EQ(hot.kv_state().shared_blocks_num(BlockType::C2),
               test.expected_hit / (2 * kBaseBlockSize));
@@ -3556,7 +3668,11 @@ TEST_F(V41PrefixCacheTest, V41MMPrefixCacheStillHashesTextSuffix) {
   divergent[600] = 11;
   Sequence hot = MakeTestSequence(
       /*index=*/1, divergent, /*sample_slots=*/nullptr, &mm_data);
+  const size_t forecast = manager.prefix_hit_tokens(hot);
+  EXPECT_FALSE(hot.has_any_blocks());
+  EXPECT_EQ(hot.kv_state().kv_cache_tokens_num(), 0u);
   manager.allocate_shared_for_sequence(&hot);
+  EXPECT_EQ(forecast, hot.kv_state().kv_cache_tokens_num());
   EXPECT_EQ(hot.kv_cache_tokens_num(), 512u);
   EXPECT_EQ(hot.kv_state().shared_blocks_num(BlockType::C2), 2u);
   manager.deallocate_for_sequence(&hot);

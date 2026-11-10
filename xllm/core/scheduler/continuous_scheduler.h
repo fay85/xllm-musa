@@ -45,6 +45,7 @@ limitations under the License.
 #include "runtime/xservice_client.h"
 #include "scheduler.h"
 #include "scheduler/decode_admission.h"
+#include "scheduler/dp_request_load.h"
 #include "scheduler/profile/profile_manager.h"
 #include "scheduler/request_priority_queue.h"
 
@@ -242,6 +243,8 @@ class ContinuousScheduler : public Scheduler {
 
   ProfileManager* get_profile_manager() { return profile_manager_.get(); }
 
+  const DPRequestLoad& get_dp_request_load() const { return dp_request_load_; }
+
   void get_latency_metrics(std::vector<int64_t>& ttft,
                            std::vector<int64_t>& tbt) override {}
 
@@ -256,7 +259,7 @@ class ContinuousScheduler : public Scheduler {
     PAUSED = 2    // Fully paused
   };
 
-  // How to handle in-flight requests when pausing (vLLM-compatible).
+  // How to handle in-flight requests when pausing.
   enum class PauseMode {
     KEEP = 0,   // Preempt running requests, free KV cache, push back to waiting
                 // queue; recomputed (re-prefill) on resume. Default for RL.
@@ -314,6 +317,7 @@ class ContinuousScheduler : public Scheduler {
   static int64_t amortized_token_latency(int64_t latency, size_t num_tokens);
 
   const Options options_;
+  DPRequestLoad dp_request_load_;
 
   const std::string server_label_;
   std::vector<std::pair<std::string, size_t>> request_queue_samples_;

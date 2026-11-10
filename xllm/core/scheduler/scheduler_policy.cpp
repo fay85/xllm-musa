@@ -43,6 +43,28 @@ namespace xllm {
 
 namespace {
 
+std::vector<size_t> count_prefill_requests_per_dp(const SchedulerState& state) {
+  const size_t dp_size = state.options.dp_size();
+  std::vector<size_t> counts(dp_size, 0);
+  for (const auto& request : state.running_requests) {
+    if (!request) {
+      continue;
+    }
+    std::vector<uint8_t> counted(dp_size, 0);
+    for (const auto& sequence : request->sequences()) {
+      if (!sequence || !sequence->is_prefill_stage()) {
+        continue;
+      }
+      const int32_t rank = sequence->dp_rank();
+      if (rank >= 0 && static_cast<size_t>(rank) < dp_size && !counted[rank]) {
+        ++counts[rank];
+        counted[rank] = 1;
+      }
+    }
+  }
+  return counts;
+}
+
 // Align chunk down to kv_split_size*block_size.
 // TODO: refactor kv-split block mapping to remove this limitation.
 inline size_t maybe_align_cp_chunk_tokens(size_t num_tokens,
@@ -185,6 +207,148 @@ SchedulerPolicy::SchedulerPolicy(const BatchMode& mode,
                                  const ContinuousScheduler::Options& options)
     : batch_mode_(mode), options_(options) {}
 
+bool SchedulerPolicy::supports_load_aware_routing(
+    const SchedulerState& state) const {
+  return !state.options.enable_disagg_pd();
+}
+
+void SchedulerPolicy::track_dp_request(const std::shared_ptr<Request>& request,
+                                       const SchedulerState& state) {
+  if (supports_load_aware_routing(state) && state.dp_request_load != nullptr) {
+    state.dp_request_load->track_waiting(request);
+  }
+}
+
+bool SchedulerPolicy::bind_prefill_dp(
+    const std::shared_ptr<Request>& request,
+    const SchedulerState& state,
+    const std::vector<size_t>& reserved_footprint) {
+  if (!supports_load_aware_routing(state) || request->sequences().size() != 1 ||
+      request->check_beam_search() || request->best_of() != 1) {
+    return true;
+  }
+  Sequence* sequence = request->sequences().front().get();
+  if (sequence->dp_rank() >= 0 || sequence->has_any_blocks()) {
+    return true;
+  }
+  if (state.dp_request_load == nullptr) {
+    return true;
+  }
+  const auto& dp_waiting = state.dp_request_load->waiting();
+  const auto& dp_running = state.dp_request_load->running();
+  const auto& routing_config = SchedulerConfig::get_instance();
+  const size_t dp_size = dp_waiting.size();
+  if (dp_size == 0 || dp_running.size() != dp_size) {
+    return false;
+  }
+  const auto prefills = should_limit_prefill_requests(state)
+                            ? count_prefill_requests_per_dp(state)
+                            : std::vector<size_t>(dp_size, 0);
+  std::vector<size_t> candidates;
+  candidates.reserve(dp_size);
+  int32_t selected = -1;
+  size_t best_load = std::numeric_limits<size_t>::max();
+  for (size_t offset = 0; offset < dp_size; ++offset) {
+    const size_t rank = (dp_routing_cursor_ + offset) % dp_size;
+    if (!reserved_footprint.empty()) {
+      const size_t total = state.kv_cache_manager->num_blocks();
+      const size_t footprint = util::ceil_div(
+          sequence->num_tokens(),
+          static_cast<size_t>(state.kv_cache_manager->block_size()));
+      if (rank >= reserved_footprint.size() || footprint > total ||
+          reserved_footprint[rank] > total - footprint) {
+        continue;
+      }
+    }
+    if (should_limit_prefill_requests(state) &&
+        prefills[rank] >=
+            static_cast<size_t>(
+                state.model_args.max_concurrent_prefills_per_dp())) {
+      continue;
+    }
+    candidates.emplace_back(rank);
+    const size_t load = dp_waiting[rank] + dp_running[rank];
+    if (load < best_load) {
+      selected = static_cast<int32_t>(rank);
+      best_load = load;
+    }
+  }
+  if (selected < 0) {
+    return false;
+  }
+  bool imbalanced = false;
+  size_t selected_hit_tokens = 0;
+  if (candidates.size() > 1) {
+    size_t min_load = std::numeric_limits<size_t>::max();
+    size_t max_load = 0;
+    for (size_t rank : candidates) {
+      const size_t load = dp_waiting[rank] + dp_running[rank];
+      min_load = std::min(min_load, load);
+      max_load = std::max(max_load, load);
+    }
+    imbalanced =
+        max_load - min_load >
+            static_cast<size_t>(routing_config.dp_balance_abs_threshold()) &&
+        static_cast<double>(max_load) >
+            static_cast<double>(min_load) *
+                routing_config.dp_balance_rel_threshold();
+    if (!imbalanced && state.enable_prefix_cache &&
+        sequence->num_tokens() > 0) {
+      int32_t hit_rank = -1;
+      size_t best_hit = 0;
+      size_t hit_load = std::numeric_limits<size_t>::max();
+      const auto hits = state.kv_cache_manager->prefix_hit_tokens_per_dp(
+          *sequence, candidates);
+      for (size_t index = 0; index < candidates.size(); ++index) {
+        const size_t rank = candidates[index];
+        const size_t hit = index < hits.size() ? hits[index] : 0;
+        const size_t load = dp_waiting[rank] + dp_running[rank];
+        if (hit > best_hit || (hit > 0 && hit == best_hit && load < hit_load)) {
+          best_hit = hit;
+          hit_load = load;
+          hit_rank = static_cast<int32_t>(rank);
+        }
+      }
+      if (hit_rank >= 0 && static_cast<double>(best_hit) /
+                                   static_cast<double>(sequence->num_tokens()) >
+                               routing_config.dp_cache_threshold()) {
+        selected = hit_rank;
+        selected_hit_tokens = best_hit;
+      }
+    }
+  }
+  sequence->set_dp_rank(selected);
+  track_dp_request(request, state);
+  VLOG(1) << "[DPRouting] rank=" << selected << " min_load=" << best_load
+          << " imbalanced=" << imbalanced
+          << " hit_tokens=" << selected_hit_tokens
+          << " waiting=" << dp_waiting[selected]
+          << " running=" << dp_running[selected];
+  dp_routing_cursor_ = (dp_routing_cursor_ + 1) % dp_size;
+  return true;
+}
+
+void SchedulerPolicy::mark_dp_running(const std::shared_ptr<Request>& request,
+                                      const SchedulerState& state) {
+  if (supports_load_aware_routing(state) && state.dp_request_load != nullptr) {
+    state.dp_request_load->mark_running(request);
+  }
+}
+
+void SchedulerPolicy::mark_dp_waiting(const std::shared_ptr<Request>& request,
+                                      const SchedulerState& state) {
+  if (state.dp_request_load != nullptr) {
+    state.dp_request_load->mark_waiting(request);
+  }
+}
+
+void SchedulerPolicy::remove_dp_request(const std::shared_ptr<Request>& request,
+                                        const SchedulerState& state) {
+  if (state.dp_request_load != nullptr) {
+    state.dp_request_load->remove(request);
+  }
+}
+
 bool SchedulerPolicy::should_limit_prefill_requests(
     const SchedulerState& state) const {
   return state.model_args.max_concurrent_prefills_per_dp() > 0;
@@ -196,23 +360,7 @@ int32_t SchedulerPolicy::select_prefill_dp_rank(
   const size_t cap =
       static_cast<size_t>(state.model_args.max_concurrent_prefills_per_dp());
   const int32_t dp_size = state.options.dp_size();
-  std::vector<size_t> per_dp_counts(dp_size, 0);
-  for (const auto& request : state.running_requests) {
-    if (request == nullptr) {
-      continue;
-    }
-    std::vector<bool> counted_dp_ranks(dp_size, false);
-    for (const auto& running_sequence : request->sequences()) {
-      if (!running_sequence || !running_sequence->is_prefill_stage()) {
-        continue;
-      }
-      const int32_t dp_rank = running_sequence->dp_rank();
-      if (dp_rank >= 0 && dp_rank < dp_size && !counted_dp_ranks[dp_rank]) {
-        ++per_dp_counts[dp_rank];
-        counted_dp_ranks[dp_rank] = true;
-      }
-    }
-  }
+  const auto per_dp_counts = count_prefill_requests_per_dp(state);
 
   const int32_t current_dp_rank = sequence->dp_rank();
   if (current_dp_rank >= 0 && current_dp_rank < dp_size) {
@@ -291,6 +439,7 @@ void SchedulerPolicy::drain_request_queue(
       queued->expand_sequences(/*force=*/false);
     }
 
+    track_dp_request(queued, state);
     if (queued->sequences()[0]->kv_state().kv_cache_tokens_num() == 0) {
       // New request goes to waiting queue (back = FIFO from MPMC).
       state.prefill_queue.push(std::move(queued), /*if_back=*/true);
@@ -328,6 +477,7 @@ bool SchedulerPolicy::collect_terminal(
   if (state.release_failed_request) {
     state.release_failed_request(request);
   }
+  remove_dp_request(request, state);
   clear_mtp_bootstrap(request.get(), state);
   state.kv_cache_manager->deallocate(request.get());
   // Moving leaves running/handoff slots null, marking them collected.
@@ -457,6 +607,22 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       continue;
     }
 
+    const bool check_footprint =
+        batch_mode_.enable_chunked_prefill &&
+        request->sequences()[0]->kv_state().kv_cache_tokens_num() == 0;
+    if (!bind_prefill_dp(request,
+                         state,
+                         check_footprint ? reserved_full_footprint
+                                         : std::vector<size_t>{})) {
+      if (should_limit_prefill_requests(state) &&
+          select_prefill_dp_rank(request->sequences()[0].get(), state) < 0) {
+        skipped.emplace_back(request);
+        queue->pop_top();
+        continue;
+      }
+      blocks_exhausted = true;
+      break;
+    }
     const size_t num_sequences = request->sequences().size();
     if (!request->preempted()) {
       CHECK(num_sequences == 1 || num_sequences == request->best_of())
@@ -480,7 +646,10 @@ void SchedulerPolicy::schedule_prefill_from_queue(
       // metric and round-robin tie-break as KVCacheManager::select_dp_rank.
       Sequence* sequence = request->sequences()[0].get();
       int32_t dp_rank = sequence->dp_rank();
-      if (!sequence->has_any_blocks()) {
+      if (!sequence->has_any_blocks() &&
+          (!supports_load_aware_routing(state) ||
+           request->sequences().size() != 1 || request->check_beam_search() ||
+           request->best_of() != 1 || dp_rank < 0)) {
         dp_rank = state.kv_cache_manager->select_dp_rank();
         sequence->set_dp_rank(dp_rank);
       }
@@ -602,6 +771,7 @@ void SchedulerPolicy::schedule_prefill_from_queue(
     request->record_first_batched_time();
     request->mark_first_scheduled(state.scheduled_timestamp);
     state.running_requests.emplace_back(request);
+    mark_dp_running(request, state);
     request->record_num_prefix_cache_tokens();
     state.running_sequences.insert(state.running_sequences.end(),
                                    prefill_sequences.begin(),
@@ -1147,6 +1317,7 @@ void SchedulerPolicy::schedule_decode_from_queue(
           state.kv_cache_manager->deallocate(request.get());
           queue->pop_top();
           request->set_preempted();
+          mark_dp_waiting(request, state);
           state.prefill_queue.push(request);
           continue;
         }
@@ -1232,6 +1403,7 @@ void SchedulerPolicy::schedule_decode_from_queue(
       request->record_first_batched_time();
       request->mark_first_scheduled(state.scheduled_timestamp);
       state.running_requests.emplace_back(request);
+      mark_dp_running(request, state);
       if (gate.enabled) {
         const uint64_t admitted_aid =
             !request->sequences().empty() && request->sequences()[0]
@@ -1372,6 +1544,7 @@ void SchedulerPolicy::enqueue_decode_restore(
   }
   state.kv_cache_manager->deallocate(request.get());
   request->set_preempted();
+  mark_dp_waiting(request, state);
   if (should_wait) {
     DecodeRestoreEntry entry{request, absl::Now()};
     if (to_front) {
@@ -1408,6 +1581,7 @@ void SchedulerPolicy::handle_abnormal_decode_request(
     request->record_first_batched_time();
     request->mark_first_scheduled(state.scheduled_timestamp);
     state.running_requests.emplace_back(request);
+    mark_dp_running(request, state);
     state.running_sequences.insert(state.running_sequences.end(),
                                    candidate_sequences.begin(),
                                    candidate_sequences.end());
@@ -1422,6 +1596,7 @@ void SchedulerPolicy::handle_abnormal_decode_request(
     // Nothing scheduled at all -- request is unschedulable.
     queue->pop_top();
     forget_inflight_restore(request.get());
+    remove_dp_request(request, state);
     clear_mtp_bootstrap(request.get(), state);
     state.kv_cache_manager->deallocate(request.get());
     if (budget_exhausted) {
@@ -1460,6 +1635,7 @@ void SchedulerPolicy::handle_unschedulable_head(
       return;
     }
     forget_inflight_restore(request.get());
+    remove_dp_request(request, state);
     if (state.release_failed_request) {
       state.release_failed_request(request);
     }

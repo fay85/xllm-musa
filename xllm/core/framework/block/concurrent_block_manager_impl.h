@@ -45,6 +45,9 @@ class ConcurrentBlockManagerImpl : public BlockManager {
   void free(Block* block) override;
   size_t num_evictable_blocks() const override;
 
+  std::vector<uint8_t> probe_prefix_hits(
+      const Slice<XXH3Key>& hashes) const override;
+
   std::vector<Block> allocate_shared(
       const Slice<int32_t>& token_ids,
       const Slice<Block>& existed_shared_blocks = {},

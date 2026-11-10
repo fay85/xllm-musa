@@ -131,6 +131,10 @@ class BlockManager {
 
   virtual std::vector<Block> allocate(size_t num_blocks) = 0;
 
+  virtual std::vector<uint8_t> probe_prefix_hits(const Slice<XXH3Key>&) const {
+    return {};
+  }
+
   // Wrapper calls this after it owns the leaf. BlockManagerImpl and
   // XTensorBlockManagerImpl route their own allocate calls through it.
   virtual void set_block_allocator(BlockManager* /*allocator*/) {}

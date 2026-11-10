@@ -61,6 +61,12 @@ size_t ConcurrentBlockManagerImpl::num_evictable_blocks() const {
   return inner_->num_evictable_blocks();
 }
 
+std::vector<uint8_t> ConcurrentBlockManagerImpl::probe_prefix_hits(
+    const Slice<XXH3Key>& hashes) const {
+  std::lock_guard<std::recursive_mutex> lock(mutex_);
+  return inner_->probe_prefix_hits(hashes);
+}
+
 std::vector<Block> ConcurrentBlockManagerImpl::allocate_shared(
     const Slice<int32_t>& token_ids,
     const Slice<Block>& existed_shared_blocks,

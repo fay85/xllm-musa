@@ -45,6 +45,9 @@ class BlockManagerImpl : public BlockManager {
   void trim_prefetch_blocks(Sequence* seq, size_t max_hit_tokens) override;
 
   // allocate shared blocks when enable prefix cache
+  std::vector<uint8_t> probe_prefix_hits(
+      const Slice<XXH3Key>& hashes) const override;
+
   std::vector<Block> allocate_shared(
       const Slice<int32_t>& token_ids,
       const Slice<Block>& existed_shared_blocks = {},

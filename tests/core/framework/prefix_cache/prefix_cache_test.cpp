@@ -26,6 +26,31 @@ xllm::PrefixCache::Options prefix_cache_options(
 #include "util/hash_util.h"
 namespace xllm {
 
+TEST(PrefixCacheProbeTest, ProbeDoesNotPinOrPromoteBlocks) {
+  BlockManager::Options options;
+  options.num_blocks(8).block_size(16);
+  BlockManagerImpl allocator(options);
+  PrefixCache cache(prefix_cache_options(16));
+  const std::vector<int32_t> first(16, 7);
+  const std::vector<int32_t> second(16, 8);
+  auto first_blocks = allocator.allocate(1);
+  auto second_blocks = allocator.allocate(1);
+  cache.insert(first, first_blocks);
+  cache.insert(second, second_blocks);
+  std::vector<XXH3Key> hashes;
+  extend_prefix_hashes(BlockHasherType::TEXT, MMData(), first, 16, 1, hashes);
+  const uint32_t references = first_blocks.front().ref_count();
+  const float match_rate = cache.block_match_rate();
+  EXPECT_EQ(cache.probe(hashes), (std::vector<uint8_t>{1}));
+  EXPECT_EQ(first_blocks.front().ref_count(), references);
+  EXPECT_EQ(cache.block_match_rate(), match_rate);
+  first_blocks.clear();
+  second_blocks.clear();
+  ASSERT_EQ(cache.evict(1), 1u);
+  EXPECT_TRUE(cache.probe(hashes).empty());
+  EXPECT_EQ(cache.match(second).size(), 1u);
+}
+
 TEST(PrefixCacheMtpTest, DifferentNextTokenCannotReuseFirstBlock) {
   BlockManager::Options options;
   options.num_blocks(8).block_size(16);

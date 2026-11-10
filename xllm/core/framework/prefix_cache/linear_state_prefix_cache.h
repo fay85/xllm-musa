@@ -35,6 +35,8 @@ class LinearStatePrefixCache final : public PrefixCache {
   explicit LinearStatePrefixCache(const Options& options)
       : PrefixCache(options) {}
 
+  std::vector<uint8_t> probe(const Slice<XXH3Key>& hashes) const override;
+
   // Walks the chain per block position: hit -> emplace + LRU-promote; miss
   // -> emplace invalid placeholder. Trims trailing misses. Reach in tokens
   // is `returned.size() * options_.block_size()`.

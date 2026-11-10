@@ -154,6 +154,14 @@ bool BlockManagerImpl::has_enough_blocks(uint32_t num_blocks) {
   return false;
 }
 
+std::vector<uint8_t> BlockManagerImpl::probe_prefix_hits(
+    const Slice<XXH3Key>& hashes) const {
+  if (!options_.enable_prefix_cache() || prefix_cache_ == nullptr) {
+    return {};
+  }
+  return prefix_cache_->probe(hashes);
+}
+
 std::vector<Block> BlockManagerImpl::allocate_shared(
     const Slice<int32_t>& token_ids,
     const Slice<Block>& existed_shared_blocks,

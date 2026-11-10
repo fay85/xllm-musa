@@ -22,6 +22,22 @@ limitations under the License.
 
 namespace xllm {
 
+std::vector<uint8_t> LinearStatePrefixCache::probe(
+    const Slice<XXH3Key>& hashes) const {
+  std::vector<uint8_t> hits;
+  hits.reserve(hashes.size());
+  for (const auto& hash : hashes) {
+    const auto iter = cached_blocks_.find(hash);
+    const bool hit =
+        iter != cached_blocks_.end() && iter->second->block.is_valid();
+    hits.emplace_back(hit ? 1 : 0);
+  }
+  while (!hits.empty() && hits.back() == 0) {
+    hits.pop_back();
+  }
+  return hits;
+}
+
 std::vector<Block> LinearStatePrefixCache::match(
     const Slice<int32_t>& token_ids,
     const Slice<Block>& existed_shared_blocks,

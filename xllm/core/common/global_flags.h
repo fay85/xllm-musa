@@ -79,6 +79,10 @@ DECLARE_int64(max_processor_cache_items);
 
 DECLARE_uint32(xxh3_128bits_seed);
 
+DECLARE_int32(dp_balance_abs_threshold);
+DECLARE_double(dp_balance_rel_threshold);
+DECLARE_double(dp_cache_threshold);
+
 DECLARE_int32(max_tokens_per_batch);
 
 DECLARE_int32(max_seqs_per_batch);

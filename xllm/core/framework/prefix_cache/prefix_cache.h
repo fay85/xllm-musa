@@ -63,6 +63,8 @@ class PrefixCache {
 
   virtual ~PrefixCache();
 
+  virtual std::vector<uint8_t> probe(const Slice<XXH3Key>& hashes) const;
+
   // Solid-prefix probe: walks the chain per block position, stops on the
   // first miss. Reach in tokens is `returned.size() * options_.block_size()`.
   // When `block_hashes` covers all matchable blocks it is consumed as-is;

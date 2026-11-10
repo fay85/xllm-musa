@@ -113,7 +113,12 @@ class BlockManagerPool : public KVCacheManager {
   void deallocate(std::vector<Sequence*>& sequences) override;
   void deallocate(Sequence* sequence) override;
 
+  std::vector<size_t> prefix_hit_tokens_per_dp(
+      const Sequence& sequence,
+      const std::vector<size_t>& ranks) const override;
   void allocate_shared(Sequence* sequence) override;
+  size_t prefix_hit_tokens(const Sequence& sequence,
+                           int32_t rank) const override;
   void cache(Sequence* sequence) override;
   void cache(Sequence* sequence, size_t num_tokens) override;
 

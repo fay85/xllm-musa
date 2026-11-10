@@ -320,6 +320,35 @@ bool BlockManagerPool::process_beam_search(Sequence* sequence, bool need_swap) {
   return true;
 }
 
+size_t BlockManagerPool::prefix_hit_tokens(const Sequence& sequence,
+                                           int32_t rank) const {
+  if (!options_.enable_prefix_cache() || rank < 0 ||
+      static_cast<size_t>(rank) >= block_managers_.size()) {
+    return 0;
+  }
+  const auto* composite =
+      static_cast<const CompositeBlockManager*>(block_managers_[rank].get());
+  return composite->prefix_hit_tokens(sequence);
+}
+
+std::vector<size_t> BlockManagerPool::prefix_hit_tokens_per_dp(
+    const Sequence& sequence,
+    const std::vector<size_t>& ranks) const {
+  CompositeBlockManager::PrefixHashCache hashes;
+  std::vector<size_t> hits;
+  hits.reserve(ranks.size());
+  for (size_t rank : ranks) {
+    if (!options_.enable_prefix_cache() || rank >= block_managers_.size()) {
+      hits.emplace_back(0);
+      continue;
+    }
+    const auto* composite =
+        static_cast<const CompositeBlockManager*>(block_managers_[rank].get());
+    hits.emplace_back(composite->prefix_hit_tokens(sequence, hashes));
+  }
+  return hits;
+}
+
 void BlockManagerPool::allocate_shared(Sequence* sequence) {
   if (!options_.enable_prefix_cache()) {
     return;

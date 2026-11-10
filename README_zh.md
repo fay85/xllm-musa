@@ -80,6 +80,46 @@ limitations under the License. -->
 * [模型支持](https://docs.xllm-ai.com/zh/supported_models/)
 
 
+## DP 请求路由策略
+
+普通一体化推理的新请求使用缓存感知 DP 路由，仅保留原方案 B。
+不再提供策略切换开关，也不再使用剩余 block 数或 KV 压力惩罚进行选路评分。
+旧启动脚本需移除 `--dp_routing_policy`，JSON 配置也应移除同名字段。
+
+每 DP 的 waiting/running 请求数由 scheduler 持有的 `DPRequestLoad` 在请求
+绑定、入 batch、抢占、完成和取消时增量维护，不再为选路重复遍历请求队列。
+可通过 `get_dp_request_load().waiting()` / `.running()` 获取计数；这些接口与
+更新操作仅在调度线程使用，不提供跨线程快照。未绑定 DP 的全局等待请求仍不
+计入 per-DP waiting，本次不改变请求绑定时机。
+
+```text
+load = waiting + running
+```
+
+请求数按请求去重，派发后立即记账，不迁移已绑定请求。
+
+一体化推理的新请求选路不依赖 cache 类型，启用 Host Cache 或 KV Store 不会
+禁用缓存感知选路，但只查询设备端命中。PD 以及新建的 beam/多 sequence 请求保留原放置方式。
+现有准入、预算和分配检查保持不变。已经绑定 DP 或持有缓存资源的请求不重新
+选路；Store 预取在进入调度队列前确定 DP，该归属保持不变，本次不调整预取时机。
+因此开启 Store 不代表预取阶段也使用缓存感知选路。持有 Host block 不代表已入 batch。
+首次登记显式记为 waiting，入 batch 和抢占分别通过状态事件切换 running/waiting，
+不使用首次入 batch 时间或 block 持有情况推断当前执行状态。
+使用 `waiting + running` 衡量负载。候选 DP 的最大/最小负载同时超过
+绝对差阈值 `--dp_balance_abs_threshold=10` 和比例阈值
+`--dp_balance_rel_threshold=1.5` 时，选择最低负载 DP；否则比较当前请求的
+实际可复用前缀，最长命中占输入比例严格大于 `--dp_cache_threshold=0.5`
+时选择缓存亲和 DP，命中不足或未启用 prefix cache 时选择最低负载 DP。
+命中并列先按低负载，再轮转；最低负载并列轮转。
+
+只读查询覆盖普通 KV、KV + LINEAR 和 SWA + 压缩/TOKEN cache，复用现有恢复
+边界规则，不分配 blocks、不修改引用计数或 LRU，也不查询 Host/Store 命中收益。
+原有固定归属、特殊请求与资源检查保持不变。
+
+使用 `--v=1` 可查看 `[DPRouting]` 选择日志。历史 A/B 对照结果见
+`docs/zh/cache_aware_dp_routing_results.md`。后续压力测试应同时比较 TTFT、
+TPOT、吞吐、真实命中率和错误率，不能假设新策略必然降低 TTFT。
+
 ## 社区支持
 
 <div align="center">
