@@ -374,7 +374,7 @@ def _stage_mooncake_runtime_binaries(cmake_dir: str, extdir: str) -> None:
     must carry its soname for deployment on images without liburing installed.
     The binaries' ``$ORIGIN`` rpath resolves these copies beside them.
     """
-    uring_library = _get_cmake_library(cmake_dir, "URING_LIB")
+    uring_library = _get_cmake_library(cmake_dir, "MOONCAKE_LIBURING_LIBRARY")
     resolved_uring_library = os.path.realpath(uring_library)
     if not os.path.basename(resolved_uring_library).startswith("liburing.so.2"):
         raise RuntimeError(

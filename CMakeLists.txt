@@ -13,6 +13,8 @@ option(USE_CUDA "Enable CUDA support" OFF)
 option(USE_MUSA "Enable MUSA support" OFF)
 option(USE_DCU "Enable DCU support" OFF)
 option(USE_MACA "Enable MACA support" OFF)
+set(SPDLOG_FMT_EXTERNAL ON CACHE BOOL
+    "Use external fmt for Mooncake/Folly compatibility" FORCE)
 set(USE_ETCD ON CACHE BOOL "Build Mooncake etcd support" FORCE)
 set(STORE_USE_ETCD ON CACHE BOOL "Build Mooncake Store etcd support" FORCE)
 add_compile_definitions(YLT_ENABLE_IBV)
@@ -373,6 +375,7 @@ find_package(Threads REQUIRED)
 set(GFLAGS_USE_TARGET_NAMESPACE TRUE)
 find_package(gflags CONFIG REQUIRED)
 find_package(glog CONFIG REQUIRED)
+find_package(fmt 10.2.1 CONFIG REQUIRED)
 find_package(folly CONFIG REQUIRED)
 find_package(leveldb CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -504,6 +507,9 @@ if(USE_NPU)
     "${CMAKE_BINARY_DIR}/xllm_atb_layers"
   )
   message(STATUS "Configured xllm_atb_layers from source: ${XLLM_ATB_LAYERS_SOURCE_DIR}")
+  # Keep PyTorch's bundled fmt behind the shared dependency.
+  target_include_directories(xllm_atb_layers SYSTEM PRIVATE
+    "$ENV{PYTORCH_INSTALL_PATH}/include")
 
   if(EXISTS "$ENV{NPU_HOME_PATH}/include/aclnnop")
     target_include_directories(xllm_atb_layers SYSTEM PRIVATE

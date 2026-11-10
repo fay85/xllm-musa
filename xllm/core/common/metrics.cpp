@@ -184,6 +184,8 @@ DEFINE_COUNTER(mooncake_transfer_bytes_total_write,
                "Total bytes completed by MoonCake WRITE transfers");
 DEFINE_COUNTER(mooncake_transfer_failed_total,
                "Total number of failed MoonCake transfers");
+DEFINE_COUNTER(mooncake_transfer_batch_cleanup_deferred_total,
+               "Total number of MoonCake batches with deferred cleanup");
 DEFINE_HISTOGRAM(mooncake_transfer_latency_microseconds_read,
                  "MoonCake READ transfer latency in microseconds");
 DEFINE_HISTOGRAM(mooncake_transfer_latency_microseconds_write,

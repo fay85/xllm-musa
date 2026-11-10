@@ -23,6 +23,15 @@
       "version>=": "1.84.0"
     },
     {
+      "name": "boost-locale",
+      "version>=": "1.84.0",
+      "default-features": false
+    },
+    {
+      "name": "boost-property-tree",
+      "version>=": "1.84.0"
+    },
+    {
       "name": "benchmark",
       "version>=": "1.8.0"
     },
@@ -35,6 +44,10 @@
       "name": "folly",
       "version>=": "2024.01.01.00",
       "default-features": false
+    },
+    {
+      "name": "fmt",
+      "version>=": "10.2.1"
     },
     {
       "name": "gflags",

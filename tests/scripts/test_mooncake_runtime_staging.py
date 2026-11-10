@@ -50,7 +50,7 @@ class MooncakeRuntimeStagingTest(unittest.TestCase):
             uring_link = os.path.join(library_dir, "liburing.so")
             os.symlink(os.path.basename(versioned_uring), uring_link)
             with open(os.path.join(cmake_dir, "CMakeCache.txt"), "w", encoding="utf-8") as cache:
-                cache.write(f"URING_LIB:FILEPATH={uring_link}\n")
+                cache.write(f"MOONCAKE_LIBURING_LIBRARY:FILEPATH={uring_link}\n")
 
             self.setup._stage_mooncake_runtime_binaries(cmake_dir, extdir)
 
@@ -62,9 +62,9 @@ class MooncakeRuntimeStagingTest(unittest.TestCase):
     def test_fails_when_cmake_did_not_resolve_liburing(self) -> None:
         with tempfile.TemporaryDirectory() as cmake_dir, tempfile.TemporaryDirectory() as extdir:
             with open(os.path.join(cmake_dir, "CMakeCache.txt"), "w", encoding="utf-8") as cache:
-                cache.write("URING_LIB:FILEPATH=URING_LIB-NOTFOUND\n")
+                cache.write("MOONCAKE_LIBURING_LIBRARY:FILEPATH=MOONCAKE_LIBURING_LIBRARY-NOTFOUND\n")
 
-            with self.assertRaisesRegex(RuntimeError, "CMake did not resolve URING_LIB"):
+            with self.assertRaisesRegex(RuntimeError, "CMake did not resolve MOONCAKE_LIBURING_LIBRARY"):
                 self.setup._stage_mooncake_runtime_binaries(cmake_dir, extdir)
 
     def test_fails_when_resolved_liburing_is_missing(self) -> None:
@@ -74,7 +74,7 @@ class MooncakeRuntimeStagingTest(unittest.TestCase):
             open(os.path.join(asio_dir, "libasio.so"), "w", encoding="utf-8").close()
             missing_library = os.path.join(cmake_dir, "liburing.so.2")
             with open(os.path.join(cmake_dir, "CMakeCache.txt"), "w", encoding="utf-8") as cache:
-                cache.write(f"URING_LIB:FILEPATH={missing_library}\n")
+                cache.write(f"MOONCAKE_LIBURING_LIBRARY:FILEPATH={missing_library}\n")
 
             with self.assertRaisesRegex(RuntimeError, missing_library):
                 self.setup._stage_mooncake_runtime_binaries(cmake_dir, extdir)
@@ -88,7 +88,7 @@ class MooncakeRuntimeStagingTest(unittest.TestCase):
             incompatible_library = os.path.join(library_dir, "liburing.so.1")
             open(incompatible_library, "w", encoding="utf-8").close()
             with open(os.path.join(cmake_dir, "CMakeCache.txt"), "w", encoding="utf-8") as cache:
-                cache.write(f"URING_LIB:FILEPATH={incompatible_library}\n")
+                cache.write(f"MOONCAKE_LIBURING_LIBRARY:FILEPATH={incompatible_library}\n")
 
             with self.assertRaisesRegex(RuntimeError, "incompatible library"):
                 self.setup._stage_mooncake_runtime_binaries(cmake_dir, extdir)

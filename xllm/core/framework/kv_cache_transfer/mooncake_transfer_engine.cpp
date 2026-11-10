@@ -1160,7 +1160,19 @@ bool MooncakeTransferEngine::move_memory_regions(
     }
     const bool transfer_success = wait_batch(engine, batch_id);
     const mooncake::Status free_status = engine->freeBatchID(batch_id);
-    if (!free_status.ok() || !transfer_success) {
+    const bool free_ok = free_status.ok();
+    const bool cleanup_deferred =
+        !free_ok && free_status.IsBatchCleanupDeferred();
+    if (cleanup_deferred) {
+      LOG_EVERY_N(WARNING, 100)
+          << "MoonCake batch cleanup deferred, batch_id=" << batch_id
+          << ", status=" << free_status.message();
+      COUNTER_INC(mooncake_transfer_batch_cleanup_deferred_total);
+    } else if (!free_ok) {
+      LOG(ERROR) << "MoonCake freeBatchID failed, batch_id=" << batch_id
+                 << ", status=" << free_status.message();
+    }
+    if ((!free_ok && !cleanup_deferred) || !transfer_success) {
       LOG(ERROR) << "MoonCake byte-region batch failed";
       COUNTER_INC(mooncake_transfer_failed_total);
       return false;

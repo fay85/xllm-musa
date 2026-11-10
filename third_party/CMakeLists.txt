@@ -37,13 +37,26 @@ add_subdirectory(spdlog)
 if(USE_NPU)
   add_subdirectory(torch_npu_ops)
 endif()
+# CI cannot fetch the upstream archive; keep the SDK-pinned YLT bugfix revision.
+include(FetchContent)
+FetchContent_Declare(yalantinglibs
+  GIT_REPOSITORY "https://gitee.com/alibaba/yalantinglibs.git"
+  GIT_TAG "54f9c0642386e7860e8e11ada698c484dc562d7d")
 add_subdirectory(Mooncake)
+
+# Prefer the shared dependency headers over allocator-bundled fallbacks.
+get_target_property(allocator_include_dirs cachelib_memory_allocator
+                    INTERFACE_INCLUDE_DIRECTORIES)
+target_include_directories(cachelib_memory_allocator SYSTEM PUBLIC
+                           ${allocator_include_dirs})
 
 target_include_directories(mooncake_store PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}/Mooncake/mooncake-transfer-engine/include
 )
 
-find_package(yalantinglibs CONFIG REQUIRED)
+if(NOT TARGET yalantinglibs::yalantinglibs)
+  find_package(yalantinglibs CONFIG REQUIRED)
+endif()
 if(TARGET ascend_transport)
   target_link_libraries(ascend_transport PUBLIC yalantinglibs::yalantinglibs)
 endif()

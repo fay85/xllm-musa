@@ -15,7 +15,6 @@ limitations under the License.
 
 #include "framework/kv_cache_transfer/kv_cache_store.h"
 
-#include <Mooncake/mooncake-store/include/utils.h>
 #include <glog/logging.h>
 
 #include <algorithm>

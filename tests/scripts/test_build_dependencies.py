@@ -12,6 +12,7 @@
 # limitations under the License.
 
 import os
+import shlex
 import tempfile
 import unittest
 from unittest import mock
@@ -75,6 +76,33 @@ class BuildDependenciesTest(unittest.TestCase):
             cwd="/repo/third_party/Mooncake",
             passthrough_output=True,
         )
+
+    def test_dependency_failures_print_repository_override(self) -> None:
+        for repo_url in (None, "", "https://mirror.example/msgpack-c.git?name=a b&tag='c'"):
+            for script_succeeds in (False, True):
+                environment = {} if repo_url is None else {"MSGPACK_CXX_REPO_URL": repo_url}
+                with (
+                    self.subTest(repo_url=repo_url, script_succeeds=script_succeeds),
+                    mock.patch.dict(os.environ, environment, clear=True),
+                    mock.patch.object(utils, "_run_shell_command", return_value=script_succeeds),
+                    mock.patch.object(utils, "_get_required_dependency_files", return_value={}),
+                    mock.patch.object(utils, "_export_mooncake_go_path"),
+                    mock.patch.object(utils, "_is_mooncake_go_ready", return_value=False),
+                    mock.patch.object(utils, "_print_manual_check_commands") as manual,
+                ):
+                    with self.assertRaises(SystemExit):
+                        utils._ensure_prebuild_dependencies_installed("/repo with spaces")
+
+                    effective_repo_url = repo_url or utils._MSGPACK_CXX_REPO_URL_DEFAULT
+                    self.assertEqual(os.environ["MSGPACK_CXX_REPO_URL"], effective_repo_url)
+                    manual.assert_called_once()
+                    commands = manual.call_args.args[0]
+                    self.assertEqual(shlex.split(commands[0]), ["cd", "/repo with spaces/third_party/Mooncake"])
+                    self.assertEqual(
+                        shlex.split(commands[1]),
+                        [f"MSGPACK_CXX_REPO_URL={effective_repo_url}", "bash", "dependencies.sh", "-y"],
+                    )
+                    self.assertEqual(commands[2:], ["go version"] if script_succeeds else [])
 
     def test_prebuild_skips_installed_mooncake_dependencies(self) -> None:
         with (
